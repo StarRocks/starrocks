@@ -20,6 +20,7 @@ import com.google.common.util.concurrent.Uninterruptibles;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.Table;
+import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.StarRocksException;
@@ -48,6 +49,7 @@ import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.Logger;
 
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
@@ -297,6 +299,10 @@ public class MVTaskRunProcessor extends BaseTaskRunProcessor implements MVRefres
 
     public BaseMVRefreshProcessor getMVRefreshProcessor() {
         return this.mvRefreshProcessor;
+    }
+
+    public Set<String> getPCTMVToRefreshedPartitions(TaskRunContext context) throws AnalysisException, LockTimeoutException {
+        return this.mvRefreshProcessor.getPCTMVToRefreshedPartitions(context, true);
     }
 
     @VisibleForTesting
