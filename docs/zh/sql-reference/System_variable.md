@@ -590,7 +590,7 @@ ALTER USER 'jack' SET PROPERTIES ('session.query_timeout' = '600');
 ### enable_lake_tablet_internal_parallel
 
 * 描述：是否开启存算分离集群内云原生表的 Tablet 并行 Scan.
-* 默认值：false
+* 默认值：true
 * 类型：Boolean
 * 引入版本：v3.3.0
 
