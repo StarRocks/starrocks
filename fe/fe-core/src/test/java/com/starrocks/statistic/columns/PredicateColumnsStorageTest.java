@@ -40,13 +40,13 @@ import java.util.List;
 
 class PredicateColumnsStorageTest extends PlanTestBase {
 
-    private static String feName;
+    private static int feName;
 
     @BeforeAll
     public static void beforeAll() throws Exception {
         StatisticsMetaManager m = new StatisticsMetaManager();
         m.createStatisticsTablesForTest();
-        feName = GlobalStateMgr.getCurrentState().getNodeMgr().getNodeName();
+        feName = GlobalStateMgr.getCurrentState().getNodeMgr().getMySelf().getFid();
     }
 
     @Test
@@ -99,7 +99,7 @@ class PredicateColumnsStorageTest extends PlanTestBase {
         // TODO: vacuum
         instance.vacuum(lastPersist);
         Mockito.verify(repo).executeDML("DELETE FROM _statistics_.predicate_columns " +
-                "WHERE fe_id=" + Strings.quote(feName) +
+                "WHERE fe_id=" + Strings.quote(Integer.toString(feName)) +
                 " AND last_used < '2024-11-10 01:00:00'");
 
         guard.close();
