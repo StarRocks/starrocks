@@ -722,12 +722,12 @@ public:
     DEFINE_VECTORIZED_FN(from_unix_to_datetime_ms_64);
 
     // TODO
-    // DEFINE_VECTORIZED_FN(year_from_unixtime);
-    // DEFINE_VECTORIZED_FN(month_from_unixtime);
-    // DEFINE_VECTORIZED_FN(day_from_unixtime);
+    DEFINE_VECTORIZED_FN(year_from_unixtime);
+    DEFINE_VECTORIZED_FN(month_from_unixtime);
+    DEFINE_VECTORIZED_FN(day_from_unixtime);
     DEFINE_VECTORIZED_FN(hour_from_unixtime);
-    // DEFINE_VECTORIZED_FN(minute_from_unixtime);
-    // DEFINE_VECTORIZED_FN(second_from_unixtime);
+    DEFINE_VECTORIZED_FN(minute_from_unixtime);
+    DEFINE_VECTORIZED_FN(second_from_unixtime);
 
     // from_unix_datetime with format's auxiliary method
     static Status from_unix_prepare(FunctionContext* context, FunctionContext::FunctionStateScope scope);

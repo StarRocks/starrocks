@@ -214,4 +214,57 @@ public class SimplifiedPredicateRuleTest {
         ScalarOperator result4 = rule.apply(hourCall4, null);
         assertEquals(hourCall4, result4);
     }
+
+    @Test
+    public void applyExtractFromUnixTime() {
+        ColumnRefOperator tsColumn = new ColumnRefOperator(1, Type.BIGINT, "ts", true);
+
+        CallOperator fromUnixTimeCall = new CallOperator(FunctionSet.FROM_UNIXTIME, Type.VARCHAR,
+                Lists.newArrayList(tsColumn), null);
+
+        // year(from_unixtime(ts)) -> year_from_unixtime(ts)
+        CallOperator yearCall = new CallOperator(FunctionSet.YEAR, Type.INT,
+                Lists.newArrayList(fromUnixTimeCall), null);
+        ScalarOperator yearResult = rule.apply(yearCall, null);
+        assertEquals(OperatorType.CALL, yearResult.getOpType());
+        CallOperator yearResultCall = (CallOperator) yearResult;
+        assertEquals(FunctionSet.YEAR_FROM_UNIXTIME, yearResultCall.getFnName());
+        assertEquals(tsColumn, yearResultCall.getChild(0));
+
+        // month(from_unixtime(ts)) -> month_from_unixtime(ts)
+        CallOperator monthCall = new CallOperator(FunctionSet.MONTH, Type.INT,
+                Lists.newArrayList(fromUnixTimeCall), null);
+        ScalarOperator monthResult = rule.apply(monthCall, null);
+        assertEquals(OperatorType.CALL, monthResult.getOpType());
+        CallOperator monthResultCall = (CallOperator) monthResult;
+        assertEquals(FunctionSet.MONTH_FROM_UNIXTIME, monthResultCall.getFnName());
+        assertEquals(tsColumn, monthResultCall.getChild(0));
+
+        // day(from_unixtime(ts)) -> day_from_unixtime(ts)
+        CallOperator dayCall = new CallOperator(FunctionSet.DAY, Type.INT,
+                Lists.newArrayList(fromUnixTimeCall), null);
+        ScalarOperator dayResult = rule.apply(dayCall, null);
+        assertEquals(OperatorType.CALL, dayResult.getOpType());
+        CallOperator dayResultCall = (CallOperator) dayResult;
+        assertEquals(FunctionSet.DAY_FROM_UNIXTIME, dayResultCall.getFnName());
+        assertEquals(tsColumn, dayResultCall.getChild(0));
+
+        // minute(from_unixtime(ts)) -> minute_from_unixtime(ts)
+        CallOperator minuteCall = new CallOperator(FunctionSet.MINUTE, Type.INT,
+                Lists.newArrayList(fromUnixTimeCall), null);
+        ScalarOperator minuteResult = rule.apply(minuteCall, null);
+        assertEquals(OperatorType.CALL, minuteResult.getOpType());
+        CallOperator minuteResultCall = (CallOperator) minuteResult;
+        assertEquals(FunctionSet.MINUTE_FROM_UNIXTIME, minuteResultCall.getFnName());
+        assertEquals(tsColumn, minuteResultCall.getChild(0));
+
+        // second(from_unixtime(ts)) -> second_from_unixtime(ts)
+        CallOperator secondCall = new CallOperator(FunctionSet.SECOND, Type.INT,
+                Lists.newArrayList(fromUnixTimeCall), null);
+        ScalarOperator secondResult = rule.apply(secondCall, null);
+        assertEquals(OperatorType.CALL, secondResult.getOpType());
+        CallOperator secondResultCall = (CallOperator) secondResult;
+        assertEquals(FunctionSet.SECOND_FROM_UNIXTIME, secondResultCall.getFnName());
+        assertEquals(tsColumn, secondResultCall.getChild(0));
+    }
 }
