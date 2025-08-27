@@ -673,6 +673,7 @@ public abstract class MVTestBase extends StarRocksTestBase {
         StatementBase stmt = getAnalyzedPlan(explainQuery, connectContext);
         Assertions.assertTrue(stmt != null, "Expected a valid StatementBase but got null:" + explainQuery);
         ExecuteOption executeOption = new ExecuteOption(70, false, new HashMap<>());
-        return taskManager.getMVRefreshExecPlan(task, executeOption, stmt);
+        TaskRun taskRun = taskManager.buildTaskRun(task, executeOption);
+        return taskManager.getMVRefreshExecPlan(taskRun, task, executeOption, stmt);
     }
 }

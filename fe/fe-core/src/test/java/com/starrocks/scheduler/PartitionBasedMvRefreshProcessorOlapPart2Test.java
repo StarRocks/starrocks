@@ -847,6 +847,10 @@ public class PartitionBasedMvRefreshProcessorOlapPart2Test extends MVTestBase {
             String plan = explainMVRefreshExecPlan(mv, query);
             PlanTestBase.assertContains(plan, "  OLAP TABLE SINK\n" +
                     "    TABLE: test_mv1");
+
+            if (query.contains("verbose")) {
+                PlanTestBase.assertContains(plan, "MVToRefreshedPartitions", "p202006");
+            }
         }
         for (String query : traceQueries) {
             String plan = explainMVRefreshExecPlan(mv, query);
