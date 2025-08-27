@@ -215,6 +215,18 @@ ALTER USER 'jack' SET PROPERTIES ('session.query_timeout' = '600');
 * 类型：String
 * 引入版本：v2.5.14
 
+### cbo_json_v2_dict_opt
+
+* 描述：是否为 JSON v2 路径改写生成的 Flat JSON 字符串子列启用低基数字典优化。开启后，优化器可以为这些子列构建并使用全局字典，从而加速字符串表达式、GROUP BY、JOIN 等操作。
+* 默认值：true
+* 类型：Boolean
+
+### cbo_json_v2_rewrite
+
+* 描述：是否在优化器中启用 JSON v2 路径改写。开启后，会将 JSON 函数（如 `get_json_*`）改写为直接访问 Flat JSON 子列，从而启用谓词下推、列裁剪以及字典优化。
+* 默认值：true
+* 类型：Boolean
+
 ### cbo_materialized_view_rewrite_related_mvs_limit
 
 * 描述：用于指定查询在 Plan 阶段最多拥有的候选物化视图个数。
