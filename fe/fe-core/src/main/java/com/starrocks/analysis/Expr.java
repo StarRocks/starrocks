@@ -568,6 +568,7 @@ public abstract class Expr extends TreeNode<Expr> implements ParseNode, Cloneabl
      */
     @Deprecated
     public String toSql() {
+        Preconditions.checkState(!printSqlInParens);
         return (printSqlInParens) ? "(" + toSqlImpl() + ")" : toSqlImpl();
     }
 
@@ -581,6 +582,7 @@ public abstract class Expr extends TreeNode<Expr> implements ParseNode, Cloneabl
     }
 
     public String explain() {
+        Preconditions.checkState(!printSqlInParens);
         return (printSqlInParens) ? "(" + explainImpl() + ")" : explainImpl();
     }
 

@@ -20,6 +20,7 @@ import com.google.common.io.BaseEncoding;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.sql.ast.AstVisitor;
+import com.starrocks.sql.ast.AstVisitorExtendInterface;
 import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.sql.parser.ParsingException;
 import com.starrocks.thrift.TBinaryLiteral;
@@ -177,7 +178,7 @@ public class VarBinaryLiteral extends LiteralExpr {
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitVarBinaryLiteral(this, context);
+        return ((AstVisitorExtendInterface<R, C>) visitor).visitVarBinaryLiteral(this, context);
     }
 
 }
