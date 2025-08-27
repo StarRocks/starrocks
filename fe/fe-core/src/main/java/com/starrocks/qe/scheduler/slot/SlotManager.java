@@ -14,6 +14,7 @@
 
 package com.starrocks.qe.scheduler.slot;
 
+import com.starrocks.common.util.DebugUtil;
 import com.starrocks.metric.MetricVisitor;
 import com.starrocks.thrift.TStatus;
 import com.starrocks.thrift.TStatusCode;
@@ -57,6 +58,22 @@ public class SlotManager extends BaseSlotManager {
         // do nothing
     }
 
+<<<<<<< HEAD
+=======
+    @Override
+    public void onQueryFinished(LogicalSlot slot, ConnectContext context) {
+        // do nothing
+    }
+
+    public String getExecStateByQueryId(String queryId) {
+        return getSlots().stream()
+                .filter(slot -> queryId.equals(DebugUtil.printId(slot.getSlotId())))
+                .map(slot -> slot.getState().toQueryStateString())
+                .findFirst()
+                .orElse("");
+    }
+
+>>>>>>> 7a3e5e2cef ([Enhancement] add ExecState into /current_queries cmd result to distinguish running/pending query (#62261))
     private class RequestWorker extends Thread {
         public RequestWorker() {
             super("slot-mgr-req");
