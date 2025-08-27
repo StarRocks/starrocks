@@ -70,7 +70,7 @@ struct HashJoinerParam {
                     const RowDescriptor& build_row_descriptor, const RowDescriptor& probe_row_descriptor,
                     TPlanNodeType::type build_node_type, TPlanNodeType::type probe_node_type,
                     bool build_conjunct_ctxs_is_empty, std::list<RuntimeFilterBuildDescriptor*> build_runtime_filters,
-                    std::set<SlotId> build_output_slots, std::set<SlotId> probe_output_slots,
+                    std::set<SlotId> build_output_slots, std::set<SlotId> probe_output_slots, size_t max_dop,
                     const TJoinDistributionMode::type distribution_mode, bool enable_late_materialization,
                     bool enable_partition_hash_join, bool is_skew_join)
             : _pool(pool),
@@ -88,6 +88,7 @@ struct HashJoinerParam {
               _build_runtime_filters(std::move(build_runtime_filters)),
               _build_output_slots(std::move(build_output_slots)),
               _probe_output_slots(std::move(probe_output_slots)),
+              _max_dop(max_dop),
               _distribution_mode(distribution_mode),
               _enable_late_materialization(enable_late_materialization),
               _enable_partition_hash_join(enable_partition_hash_join),
@@ -112,6 +113,8 @@ struct HashJoinerParam {
     std::list<RuntimeFilterBuildDescriptor*> _build_runtime_filters;
     std::set<SlotId> _build_output_slots;
     std::set<SlotId> _probe_output_slots;
+
+    size_t _max_dop;
 
     const TJoinDistributionMode::type _distribution_mode;
     const bool _enable_late_materialization;
@@ -205,7 +208,7 @@ public:
 
     void enter_eos_phase() { _phase = HashJoinPhase::EOS; }
     // build phase
-    Status append_chunk_to_ht(const ChunkPtr& chunk);
+    Status append_chunk_to_ht(RuntimeState* state, const ChunkPtr& chunk);
 
     Status append_chunk_to_spill_buffer(RuntimeState* state, const ChunkPtr& chunk);
 
@@ -343,6 +346,9 @@ public:
         return DeferOp([this]() { _probe_observable.notify_source_observers(); });
     }
 
+    size_t max_dop() const { return _max_dop; }
+    TJoinDistributionMode::type distribution_mode() const { return _hash_join_node.distribution_mode; }
+
 private:
     static bool _has_null(const ColumnPtr& column);
 
@@ -361,7 +367,7 @@ private:
                 const_column->data_column()->assign(chunk->num_rows(), 0);
                 key_columns.emplace_back(const_column->data_column());
             } else {
-                key_columns.emplace_back(column_ptr);
+                key_columns.emplace_back(std::move(column_ptr));
             }
         }
         return Status::OK();
@@ -482,6 +488,8 @@ private:
     // probe side notify build observe
     pipeline::Observable _builder_observable;
     pipeline::Observable _probe_observable;
+
+    size_t _max_dop = 0;
 
     bool _is_skew_join = false;
 };
