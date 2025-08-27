@@ -162,9 +162,9 @@ public class PartitionBasedMvRefreshProcessorHiveTest extends MVTestBase {
         initAndExecuteTaskRun(taskRun);
         Assertions.assertEquals(1, materializedView.getPartition("p19980101").getDefaultPhysicalPartition()
                 .getVisibleVersion());
-        Assertions.assertEquals(1, materializedView.getPartition("p19980102").getDefaultPhysicalPartition()
+        Assertions.assertEquals(2, materializedView.getPartition("p19980102").getDefaultPhysicalPartition()
                 .getVisibleVersion());
-        Assertions.assertEquals(1, materializedView.getPartition("p19980103").getDefaultPhysicalPartition()
+        Assertions.assertEquals(2, materializedView.getPartition("p19980103").getDefaultPhysicalPartition()
                 .getVisibleVersion());
         Assertions.assertEquals(2, materializedView.getPartition("p19980104").getDefaultPhysicalPartition()
                 .getVisibleVersion());

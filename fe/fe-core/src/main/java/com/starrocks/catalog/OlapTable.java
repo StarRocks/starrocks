@@ -37,7 +37,6 @@ package com.starrocks.catalog;
 import com.google.common.base.Joiner;
 import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
-import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Multimap;
@@ -107,12 +106,10 @@ import com.starrocks.sql.analyzer.Scope;
 import com.starrocks.sql.analyzer.SelectAnalyzer;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.IndexDef.IndexType;
-import com.starrocks.sql.ast.PartitionValue;
 import com.starrocks.sql.common.MetaUtils;
 import com.starrocks.sql.common.PCell;
 import com.starrocks.sql.common.PListCell;
 import com.starrocks.sql.common.PRangeCell;
-import com.starrocks.sql.common.SyncPartitionUtils;
 import com.starrocks.sql.optimizer.rule.mv.MVUtils;
 import com.starrocks.sql.optimizer.statistics.IDictManager;
 import com.starrocks.system.SystemInfoService;
@@ -1742,90 +1739,6 @@ public class OlapTable extends Table {
         return nameToPartition.keySet().stream()
                 .filter(n -> !n.startsWith(ExpressionRangePartitionInfo.SHADOW_PARTITION_PREFIX))
                 .collect(Collectors.toSet());
-    }
-
-    public Map<String, Range<PartitionKey>> getValidRangePartitionMap(int lastPartitionNum) throws AnalysisException {
-        Map<String, Range<PartitionKey>> rangePartitionMap = getRangePartitionMap();
-        // less than 0 means not set
-        if (lastPartitionNum < 0) {
-            return rangePartitionMap;
-        }
-
-        int partitionNum = rangePartitionMap.size();
-        if (lastPartitionNum > partitionNum) {
-            return rangePartitionMap;
-        }
-
-        List<Column> partitionColumns = partitionInfo.getPartitionColumns(this.idToColumn);
-        Column partitionColumn = partitionColumns.get(0);
-        Type partitionType = partitionColumn.getType();
-
-        List<Range<PartitionKey>> sortedRange = rangePartitionMap.values().stream()
-                .sorted(RangeUtils.RANGE_COMPARATOR).collect(Collectors.toList());
-        int startIndex;
-        if (partitionType.isNumericType()) {
-            startIndex = partitionNum - lastPartitionNum;
-        } else if (partitionType.isDateType()) {
-            LocalDateTime currentDateTime = LocalDateTime.now();
-            PartitionValue currentPartitionValue = new PartitionValue(
-                    currentDateTime.format(DateUtils.DATE_FORMATTER_UNIX));
-            PartitionKey currentPartitionKey = PartitionKey.createPartitionKey(
-                    ImmutableList.of(currentPartitionValue), partitionColumns);
-            // For date types, ttl number should not consider future time
-            int futurePartitionNum = 0;
-            for (int i = sortedRange.size(); i > 0; i--) {
-                PartitionKey lowerEndpoint = sortedRange.get(i - 1).lowerEndpoint();
-                if (lowerEndpoint.compareTo(currentPartitionKey) > 0) {
-                    futurePartitionNum++;
-                } else {
-                    break;
-                }
-            }
-
-            if (partitionNum - lastPartitionNum - futurePartitionNum <= 0) {
-                return rangePartitionMap;
-            } else {
-                startIndex = partitionNum - lastPartitionNum - futurePartitionNum;
-            }
-        } else {
-            throw new AnalysisException("Unsupported partition type: " + partitionType);
-        }
-
-        PartitionKey lowerEndpoint = sortedRange.get(startIndex).lowerEndpoint();
-        PartitionKey upperEndpoint = sortedRange.get(partitionNum - 1).upperEndpoint();
-        String start = AnalyzerUtils.parseLiteralExprToDateString(lowerEndpoint, 0);
-        String end = AnalyzerUtils.parseLiteralExprToDateString(upperEndpoint, 0);
-
-        Map<String, Range<PartitionKey>> result = Maps.newHashMap();
-        Range<PartitionKey> rangeToInclude = SyncPartitionUtils.createRange(start, end, partitionColumn);
-        for (Map.Entry<String, Range<PartitionKey>> entry : rangePartitionMap.entrySet()) {
-            Range<PartitionKey> rangeToCheck = entry.getValue();
-            int lowerCmp = rangeToInclude.lowerEndpoint().compareTo(rangeToCheck.upperEndpoint());
-            int upperCmp = rangeToInclude.upperEndpoint().compareTo(rangeToCheck.lowerEndpoint());
-            if (!(lowerCmp >= 0 || upperCmp <= 0)) {
-                result.put(entry.getKey(), entry.getValue());
-            }
-        }
-        return result;
-    }
-
-    // partitionName -> formatValue 1:1/1:N
-    public Map<String, PListCell> getValidListPartitionMap(int lastPartitionNum) {
-        Map<String, PListCell> listPartitionMap = getListPartitionItems();
-        // less than 0 means not set
-        if (lastPartitionNum < 0) {
-            return listPartitionMap;
-        }
-
-        int partitionNum = listPartitionMap.size();
-        if (lastPartitionNum > partitionNum) {
-            return listPartitionMap;
-        }
-
-        return listPartitionMap.entrySet().stream()
-                .sorted(Map.Entry.comparingByValue(PListCell::compareTo))
-                .skip(Math.max(0, partitionNum - lastPartitionNum))
-                .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
     }
 
     public Set<ColumnId> getBfColumnIds() {

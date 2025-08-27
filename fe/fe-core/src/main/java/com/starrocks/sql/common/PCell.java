@@ -20,7 +20,9 @@ package com.starrocks.sql.common;
  * For range partition, it can be {@code Range<PartitionKey>} to represent the range of the partition.
  * For list partition, it can be {@code List<List<String>>} to represent the list values of the partition.
  */
-public abstract class PCell {
+public abstract class PCell implements Comparable<PCell> {
 
     public abstract  boolean isIntersected(PCell o);
+
+    public abstract int compareTo(PCell o);
 }

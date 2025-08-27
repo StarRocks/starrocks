@@ -47,7 +47,7 @@ import static com.starrocks.sql.ast.PartitionValue.STARROCKS_DEFAULT_PARTITION_V
  * with multi partition columns
  *  partitionItems  : ((1, 'a'), (2, 'b'))
  */
-public final class PListCell extends PCell implements Comparable<PListCell> {
+public final class PListCell extends PCell {
     // default partition values which may contain null value, and should be compared in the end
     public static Set<String> DEFAULT_PARTITION_VALUES = new ImmutableSortedSet.Builder<>(String.CASE_INSENSITIVE_ORDER)
             .add(PartitionValue.STARROCKS_DEFAULT_PARTITION_VALUE)
@@ -145,9 +145,12 @@ public final class PListCell extends PCell implements Comparable<PListCell> {
     }
 
     @Override
-    public int compareTo(PListCell o) {
+    public int compareTo(PCell other) {
+        Preconditions.checkArgument(other instanceof PListCell,
+                "Cannot compare PListCell with other type: %s", other.getClass().getSimpleName());
+        PListCell otherPCell = (PListCell) other;
         int len1 = partitionItems.size();
-        int len2 = o.partitionItems.size();
+        int len2 = otherPCell.partitionItems.size();
         int len = Math.min(len1, len2);
         int ans = 0;
         // compare each partition item by item's value
@@ -160,7 +163,7 @@ public final class PListCell extends PCell implements Comparable<PListCell> {
         for (int i = 0; i < len; i++) {
             // prefer the partition item with greater values
             List<String> atom1 = partitionItems.get(i);
-            List<String> atom2 = o.partitionItems.get(i);
+            List<String> atom2 = otherPCell.partitionItems.get(i);
             if (atom1.size() != atom2.size()) {
                 return Integer.compare(atom1.size(), atom2.size());
             }
