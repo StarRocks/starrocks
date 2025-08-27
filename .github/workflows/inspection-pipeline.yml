@@ -111,12 +111,17 @@ jobs:
             echo "ALL_LINUX=${{ inputs.ALL_LINUX }}" >> $GITHUB_OUTPUT
             echo "WITH_FEATURE_COV=${{ inputs.WITH_FEATURE_COV }}" >> $GITHUB_OUTPUT
             echo "IS_ARM=${{ inputs.IS_ARM }}" >> $GITHUB_OUTPUT
-            echo "INCLUDE_ADMIT=false" >> $GITHUB_OUTPUT
+            
           
             # check cov params
-            if [[ "${{ inputs.WITH_FEATURE_COV }}" == "true" && "${{ inputs.COV_BASE_COMMIT }}" == "" ]]; then
-              echo "::error::[Coverage] Base commit is missing!"
-              exit 1
+            if [[ "${{ inputs.WITH_FEATURE_COV }}" == "true" ]]; then
+              echo "INCLUDE_ADMIT=true" >> $GITHUB_OUTPUT
+              if [[ "${{ inputs.COV_BASE_COMMIT }}" == "" ]]; then
+                echo "::error::[Coverage] Base commit is missing!"
+                exit 1
+              fi
+            else
+              echo "INCLUDE_ADMIT=false" >> $GITHUB_OUTPUT
             fi
           fi
           

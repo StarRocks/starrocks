@@ -230,7 +230,12 @@ jobs:
         run: |
           rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull && source lib/init.sh
           [[ "${WITH_FEATURE_COV}" != "true" ]] && skip_gcov="--skip-gcov"
-          ./bin/system-cov-be.sh --pr ${PR_NUMBER} --branch ${BRANCH} --repository ${{ github.repository }} ${skip_gcov}
+          ./bin/system-cov-be.sh \
+            --pr ${PR_NUMBER} \
+            --branch ${BRANCH} \
+            --build Release \
+            --repository ${{ github.repository }} \
+            --gcov_next_suffix admit ${skip_gcov}
 
       - name: Clean ENV
         if: always()
@@ -293,6 +298,69 @@ jobs:
       - name: Clean ENV
         if: always()
         run: rm -rf ${{ github.workspace }}/*
+  
+  restart-fe-after-admit:
+    runs-on: [self-hosted, normal]
+    name: Restart FE(Admit)
+    needs: [deploy, admit]
+    if: always() && needs.admit.result == 'success'
+    timeout-minutes: 20
+    env:
+      FE_NODE: ${{ needs.deploy.outputs.fe }}
+      BE_NODE: ${{ needs.deploy.outputs.be }}
+      BE_LIST: ${{ needs.deploy.outputs.be_list }}
+    steps:
+      - name: CLEAN
+        run: |
+          rm -rf ${{ github.workspace }} && mkdir -p ${{ github.workspace }}
+
+      - name: Restart FE (${{needs.deploy.outputs.be_list}})
+        run: |
+          rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull && source lib/init.sh
+          ./bin/restart-fe.sh \
+            --pr ${PR_NUMBER} \
+            --branch ${BRANCH} \
+            --build Release \
+            --exec-module admit \
+            --repository ${{ github.repository }} \
+            --exec-module admit
+
+      - name: Clean ENV
+        if: always()
+        run: |
+          rm -rf ${{ github.workspace }}/*
+
+  restart-be-after-admit:
+    runs-on: [self-hosted, normal]
+    name: Restart BE(Admit)
+    needs: [deploy, admit]
+    if: always() && needs.admit.result == 'success'
+    timeout-minutes: 20
+    env:
+      PR_NUMBER: ${{ github.event.number }}
+      FE_NODE: ${{ needs.deploy.outputs.fe }}
+      BE_NODE: ${{ needs.deploy.outputs.be }}
+      BE_LIST: ${{ needs.deploy.outputs.be_list }}
+    steps:
+      - name: CLEAN
+        run: |
+          rm -rf ${{ github.workspace }} && mkdir -p ${{ github.workspace }}
+
+      - name: Restart BE (${{needs.deploy.outputs.fe}})
+        run: |
+          rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull && source lib/init.sh
+          [[ "${WITH_FEATURE_COV}" != "true" ]] && skip_gcov="--skip-gcov"
+          ./bin/system-cov-be.sh \
+            --pr ${PR_NUMBER} \
+            --branch ${BRANCH} \
+            --build Release \
+            --repository ${{ github.repository }} \
+            --gcov_pre_suffix admit --restart-without-gcov ${skip_gcov}
+
+      - name: Clean ENV
+        if: always()
+        run: |
+          rm -rf ${{ github.workspace }}/*
 
   clean:
     runs-on: [self-hosted, normal]
@@ -301,6 +369,8 @@ jobs:
       - deploy
       - admit
       - SQL-Tester
+      - restart-fe-after-admit
+      - restart-be-after-admit
     if: always()
     env:
       conf_file: ${{ needs.deploy.outputs.deploy_conf_file }}
