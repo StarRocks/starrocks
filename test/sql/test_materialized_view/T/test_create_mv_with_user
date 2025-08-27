@@ -74,13 +74,8 @@ GROUP BY id, name;
 
 REFRESH MATERIALIZED VIEW test_mv_async WITH SYNC MODE;
 
-EXECUTE AS root with no revert;
-DROP MATERIALIZED VIEW test_mv_async;
-DROP TABLE test_mv_table;
-
 -- Test Case 2: Creator-based authorization with default role
 SET DEFAULT ROLE role_with_refresh TO mv_multi_role_user@'${ip[1]}';
-EXECUTE AS mv_multi_role_user@'${ip[1]}' with no revert;
 SET ROLE role_with_refresh;
 
 CREATE TABLE test_mv_table2(id int, name varchar(20), value int);
@@ -94,13 +89,8 @@ GROUP BY id, name;
 REFRESH MATERIALIZED VIEW test_mv_async2 WITH SYNC MODE;
 SELECT * FROM test_mv_async2 ORDER BY id;
 
-EXECUTE AS root with no revert;
-DROP MATERIALIZED VIEW test_mv_async2;
-DROP TABLE test_mv_table2;
-
 -- Test Case 3: Creator-based authorization with insufficient default role
 SET DEFAULT ROLE role_without_refresh TO mv_multi_role_user@'${ip[1]}';
-EXECUTE AS mv_multi_role_user@'${ip[1]}' with no revert;
 SET ROLE role_with_refresh;
 
 CREATE TABLE test_mv_table3(id int, name varchar(20), value int);
@@ -114,16 +104,12 @@ GROUP BY id, name;
 REFRESH MATERIALIZED VIEW test_mv_async3 WITH SYNC MODE;
 SELECT * FROM test_mv_async3 ORDER BY id;
 
-EXECUTE AS root with no revert;
-DROP MATERIALIZED VIEW test_mv_async3;
-DROP TABLE test_mv_table3;
-
 -- Test Case 4: Root-based authorization (mv_use_creator_based_authorization=false)
 -- This tests when MV refresh always uses ROOT user regardless of creator
 EXECUTE AS root with no revert;
-REVOKE role_with_refresh, role_without_refresh FROM mv_multi_role_user@'${ip[1]}';
+REVOKE role_with_refresh FROM mv_multi_role_user@'${ip[1]}';
 SET DEFAULT ROLE NONE TO mv_multi_role_user@'${ip[1]}';
-SET ROLE ALL;
+EXECUTE AS mv_multi_role_user@'${ip[1]}' with no revert;
 
 CREATE TABLE test_mv_table4(id int, name varchar(20), value int);
 INSERT INTO test_mv_table4 VALUES (1, 'test1', 100), (2, 'test2', 200);
@@ -133,16 +119,13 @@ SELECT id, name, SUM(value) as total_value
 FROM test_mv_table4 
 GROUP BY id, name;
 
+EXECUTE AS root with no revert;
 ADMIN SET FRONTEND CONFIG('mv_use_creator_based_authorization' = 'true');
 REFRESH MATERIALIZED VIEW test_mv_async4 WITH SYNC MODE;
 ADMIN SET FRONTEND CONFIG('mv_use_creator_based_authorization' = 'false');
 REFRESH MATERIALIZED VIEW test_mv_async4 WITH SYNC MODE;
 -- Reset to creator-based authorization for cleanup
 ADMIN SET FRONTEND CONFIG('mv_use_creator_based_authorization' = 'true');
-
-EXECUTE AS root with no revert;
-DROP MATERIALIZED VIEW test_mv_async4;
-DROP TABLE test_mv_table4;
 
 -- Cleanup all created objects
 DROP ROLE role_with_refresh;

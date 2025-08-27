@@ -133,19 +133,7 @@ GROUP BY id, name;
 -- result:
 -- !result
 REFRESH MATERIALIZED VIEW test_mv_async WITH SYNC MODE;
-EXECUTE AS root with no revert;
--- result:
--- !result
-DROP MATERIALIZED VIEW test_mv_async;
--- result:
--- !result
-DROP TABLE test_mv_table;
--- result:
--- !result
 SET DEFAULT ROLE role_with_refresh TO mv_multi_role_user@'${ip[1]}';
--- result:
--- !result
-EXECUTE AS mv_multi_role_user@'${ip[1]}' with no revert;
 -- result:
 -- !result
 SET ROLE role_with_refresh;
@@ -169,19 +157,7 @@ SELECT * FROM test_mv_async2 ORDER BY id;
 1	test1	100
 2	test2	200
 -- !result
-EXECUTE AS root with no revert;
--- result:
--- !result
-DROP MATERIALIZED VIEW test_mv_async2;
--- result:
--- !result
-DROP TABLE test_mv_table2;
--- result:
--- !result
 SET DEFAULT ROLE role_without_refresh TO mv_multi_role_user@'${ip[1]}';
--- result:
--- !result
-EXECUTE AS mv_multi_role_user@'${ip[1]}' with no revert;
 -- result:
 -- !result
 SET ROLE role_with_refresh;
@@ -208,22 +184,13 @@ SELECT * FROM test_mv_async3 ORDER BY id;
 EXECUTE AS root with no revert;
 -- result:
 -- !result
-DROP MATERIALIZED VIEW test_mv_async3;
--- result:
--- !result
-DROP TABLE test_mv_table3;
--- result:
--- !result
-EXECUTE AS root with no revert;
--- result:
--- !result
-REVOKE role_with_refresh, role_without_refresh FROM mv_multi_role_user@'${ip[1]}';
+REVOKE role_with_refresh FROM mv_multi_role_user@'${ip[1]}';
 -- result:
 -- !result
 SET DEFAULT ROLE NONE TO mv_multi_role_user@'${ip[1]}';
 -- result:
 -- !result
-SET ROLE ALL;
+EXECUTE AS mv_multi_role_user@'${ip[1]}' with no revert;
 -- result:
 -- !result
 CREATE TABLE test_mv_table4(id int, name varchar(20), value int);
@@ -238,6 +205,9 @@ FROM test_mv_table4
 GROUP BY id, name;
 -- result:
 -- !result
+EXECUTE AS root with no revert;
+-- result:
+-- !result
 ADMIN SET FRONTEND CONFIG('mv_use_creator_based_authorization' = 'true');
 -- result:
 -- !result
@@ -247,15 +217,6 @@ ADMIN SET FRONTEND CONFIG('mv_use_creator_based_authorization' = 'false');
 -- !result
 REFRESH MATERIALIZED VIEW test_mv_async4 WITH SYNC MODE;
 ADMIN SET FRONTEND CONFIG('mv_use_creator_based_authorization' = 'true');
--- result:
--- !result
-EXECUTE AS root with no revert;
--- result:
--- !result
-DROP MATERIALIZED VIEW test_mv_async4;
--- result:
--- !result
-DROP TABLE test_mv_table4;
 -- result:
 -- !result
 DROP ROLE role_with_refresh;
