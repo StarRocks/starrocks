@@ -48,6 +48,7 @@ public class CurrentGlobalQueryStatisticsProcDirTest {
             .withCpuCostNs(97323000)
             .withExecTime(3533000)
             .withExecProgress("100%")
+            .withExecState("FINISHED")
             .withWareHouseName("default_warehouse")
             .withCustomQueryId("")
             .withResourceGroupName("wg1");
@@ -67,6 +68,7 @@ public class CurrentGlobalQueryStatisticsProcDirTest {
             .withCpuCostNs(96576000)
             .withExecTime(2086000)
             .withExecProgress("100%")
+            .withExecState("FINISHED")
             .withWareHouseName("default_warehouse")
             .withCustomQueryId("")
             .withResourceGroupName("wg2");
@@ -85,6 +87,7 @@ public class CurrentGlobalQueryStatisticsProcDirTest {
             .withCpuCostNs(97456000)
             .withExecTime(3687000)
             .withExecProgress("100%")
+            .withExecState("FINISHED")
             .withWareHouseName("default_warehouse")
             .withCustomQueryId("")
             .withResourceGroupName("wg3");
@@ -104,6 +107,7 @@ public class CurrentGlobalQueryStatisticsProcDirTest {
             .withCpuCostNs(96686000)
             .withExecTime(2196000)
             .withExecProgress("100%")
+            .withExecState("FINISHED")
             .withWareHouseName("default_warehouse")
             .withCustomQueryId("")
             .withResourceGroupName("wg");

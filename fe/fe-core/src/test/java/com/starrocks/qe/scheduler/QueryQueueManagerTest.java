@@ -16,11 +16,13 @@ package com.starrocks.qe.scheduler;
 
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
+import com.google.common.collect.Maps;
 import com.starrocks.catalog.ResourceGroup;
 import com.starrocks.common.Config;
 import com.starrocks.common.ExceptionChecker;
 import com.starrocks.common.Pair;
 import com.starrocks.common.StarRocksException;
+import com.starrocks.common.util.DebugUtil;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.DefaultCoordinator;
@@ -1666,5 +1668,68 @@ public class QueryQueueManagerTest extends SchedulerTestBase {
 
             coord.onFinished();
         }
+    }
+
+    @Test
+    public void testShowProcGlobalCurrentQueries() throws Exception {
+        final int concurrencyLimit = 2;
+
+        GlobalVariable.setEnableQueryQueueSelect(true);
+        GlobalVariable.setQueryQueueConcurrencyLimit(concurrencyLimit);
+
+        TWorkGroup group0 = new TWorkGroup().setId(0L).setConcurrency_limit(concurrencyLimit - 1);
+        List<TWorkGroup> groups = ImmutableList.of(group0);
+
+        final int numPendingCoords = groups.size() * concurrencyLimit;
+
+        // 1. Run `concurrencyLimit` queries.
+        List<DefaultCoordinator> runningCoords = new ArrayList<>();
+        mockResourceGroup(null);
+        runningCoords.add(runNoPendingQuery());
+        mockResourceGroup(group0);
+        runningCoords.add(runNoPendingQuery());
+
+        // 2. Set group has `concurrencyLimit` pending queries.
+        List<DefaultCoordinator> coords = new ArrayList<>();
+        List<Thread> threads = new ArrayList<>();
+        for (int i = 0; i < concurrencyLimit; i++) {
+            for (TWorkGroup group : groups) {
+                if (group.getId() == LogicalSlot.ABSENT_GROUP_ID) {
+                    mockResourceGroup(null);
+                } else {
+                    mockResourceGroup(group);
+                }
+                DefaultCoordinator coord = getSchedulerWithQueryId("select count(1) from lineitem");
+                coords.add(coord);
+
+                threads.add(new Thread(() -> Assertions.assertThrows(StarRocksException.class,
+                        () -> manager.maybeWait(connectContext, coord),
+                        "Cancelled")));
+            }
+        }
+        threads.forEach(Thread::start);
+        Awaitility.await().atMost(5, TimeUnit.SECONDS)
+                .until(() -> numPendingCoords == MetricRepo.COUNTER_QUERY_QUEUE_PENDING.getValue());
+        coords.forEach(coord -> Assertions.assertEquals(LogicalSlot.State.REQUIRING, coord.getSlot().getState()));
+        Awaitility.await().atMost(5, TimeUnit.SECONDS)
+                .until(() -> GlobalStateMgr.getCurrentState().getSlotManager().getSlots().size() ==
+                        numPendingCoords + concurrencyLimit);
+
+        // 3. Get ExecState(RUNNING/PENDING) via SlotManager.getExecStateByQueryId().
+        List<LogicalSlot> slots = GlobalStateMgr.getCurrentState().getSlotManager().getSlots();
+        Map<String, String> queryStateMap = Maps.newHashMap();
+        SlotManager slotManager = (SlotManager) GlobalStateMgr.getCurrentState().getSlotManager();
+        for (LogicalSlot slot : slots) {
+            String queryId = DebugUtil.printId(slot.getSlotId());
+            String state = slotManager.getExecStateByQueryId(queryId);
+            queryStateMap.put(queryId, state);
+        }
+        long runningCnt = queryStateMap.values().stream().filter("RUNNING"::equals).count();
+        long pendingCnt = queryStateMap.values().stream().filter("PENDING"::equals).count();
+        Assertions.assertEquals(runningCnt, 2L);
+        Assertions.assertEquals(pendingCnt, 2L);
+
+        coords.forEach(coor -> coor.cancel("Cancel by test"));
+        runningCoords.forEach(DefaultCoordinator::onFinished);
     }
 }
