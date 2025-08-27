@@ -217,6 +217,18 @@ Used for MySQL client compatibility. No practical usage.
 * **Data type**: String
 * **Introduced in**: v2.5.14
 
+### cbo_json_v2_dict_opt
+
+* **Description**: Whether to enable low-cardinality dictionary optimization for Flat JSON (JSON v2) extended string subcolumns created by JSON path rewrite. When enabled, the optimizer may build and use global dictionaries for those subcolumns to accelerate string expressions, GROUP BY, and JOIN operations.
+* **Default**: true
+* **Data type**: Boolean
+
+### cbo_json_v2_rewrite
+
+* **Description**: Whether to enable JSON v2 path rewrite in the optimizer. When enabled, JSON functions (such as `get_json_*`) can be rewritten to direct access of Flat JSON subcolumns, enabling predicate pushdown, column pruning, and dictionary optimization.
+* **Default**: true
+* **Data type**: Boolean
+
 ### cbo_materialized_view_rewrite_related_mvs_limit
 
 * **Description**: Specifies the maximum number of candidate materialized views allowed during query planning.
