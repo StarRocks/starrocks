@@ -36,6 +36,7 @@
 
 #include <event2/buffer.h>
 #include <event2/bufferevent.h>
+#include <event2/bufferevent_ssl.h>
 #include <event2/event.h>
 #include <event2/http.h>
 #include <event2/http_struct.h>
@@ -45,6 +46,7 @@
 #include <sstream>
 #include <utility>
 
+#include "common/config.h"
 #include "common/logging.h"
 #include "http/http_channel.h"
 #include "http/http_handler.h"
@@ -108,9 +110,42 @@ EvHttpServer::~EvHttpServer() {
     pthread_rwlock_destroy(&_rw_lock);
 }
 
+void EvHttpServer::_Init() {
+    SSL_library_init();
+    SSL_load_error_strings();
+    OpenSSL_add_all_algorithms();
+    m_ctx = SSL_CTX_new(SSLv23_server_method());
+    SSL_CTX_set_options(m_ctx,
+                        SSL_OP_SINGLE_DH_USE |
+                        SSL_OP_SINGLE_ECDH_USE |
+                        SSL_OP_NO_SSLv2);
+    m_ecdh = EC_KEY_new_by_curve_name(NID_X9_62_prime256v1);
+    if (!m_ecdh) {
+        LOG(WARNING) << "EC_KEY_new_by_curve_name fail";
+        return;
+    }
+    if (1 != SSL_CTX_set_tmp_ecdh(m_ctx, m_ecdh)) {
+        LOG(WARNING) << "SSL_CTX_set_tmp_ecdh fail";
+        return;
+    }
+    int ret = _ServerSetCerts();
+    CHECK(ret >= 0) << "SetCerts failed code=" << ret;
+}
+
+static struct bufferevent*  bevcb(struct event_base *base, void *arg) {
+    struct bufferevent* r;
+    SSL_CTX *ctx = (SSL_CTX *) arg;
+    r = bufferevent_openssl_socket_new(base, -1, SSL_new(ctx), BUFFEREVENT_SSL_ACCEPTING, BEV_OPT_CLOSE_ON_FREE);
+    return r;
+}
+
 Status EvHttpServer::start() {
     // bind to
     RETURN_IF_ERROR(_bind());
+    if (config::enable_https) {
+        LOG(INFO) << "BE webServer using https";
+        _Init();
+    }
     for (int i = 0; i < _num_workers; ++i) {
         auto worker = [this]() {
             struct event_base* base = event_base_new();
@@ -133,6 +168,9 @@ Status EvHttpServer::start() {
             _https.push_back(http);
             pthread_rwlock_unlock(&_rw_lock);
 
+            if (config::enable_https) {
+                evhttp_set_bevcb(http, bevcb, m_ctx);
+            }
             auto res = evhttp_accept_socket(http, _server_fd);
             if (res < 0) {
                 LOG(WARNING) << "evhttp accept socket failed"
@@ -155,6 +193,13 @@ void EvHttpServer::stop() {
     // break the base to stop the event
     for (auto base : _event_bases) {
         event_base_loopbreak(base);
+    }
+    if (m_ctx != NULL) {
+        SSL_CTX_free(m_ctx);
+    }
+
+    if (m_ecdh != NULL) {
+        EC_KEY_free(m_ecdh);
     }
 
     // shutdown the socket to wake up the epoll_wait
@@ -329,6 +374,22 @@ HttpHandler* EvHttpServer::_find_handler(HttpRequest* req) {
     }
     pthread_rwlock_unlock(&_rw_lock);
     return handler;
+}
+
+int EvHttpServer::_ServerSetCerts() {
+    if (1 != SSL_CTX_use_certificate_chain_file(m_ctx, config::ssl_certificate_path.c_str())) {
+        LOG(WARNING) << "SSL_CTX_use_certificate_chain_file fail";
+        return -1;
+    }
+    if (1 != SSL_CTX_use_PrivateKey_file(m_ctx, config::ssl_private_key_path.c_str(), SSL_FILETYPE_PEM)) {
+        LOG(WARNING) << "SSL_CTX_use_PrivateKey_file fail";
+        return -2;
+    }
+    if (1 != SSL_CTX_check_private_key(m_ctx)) {
+        LOG(WARNING) << "SSL_CTX_check_private_key fail";
+        return -3;
+    }
+    return 0;
 }
 
 } // namespace starrocks
