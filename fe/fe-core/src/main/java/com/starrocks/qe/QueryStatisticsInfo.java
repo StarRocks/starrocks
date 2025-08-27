@@ -401,7 +401,7 @@ public class QueryStatisticsInfo {
                     .withExecTime(item.getQueryExecTime())
                     .withExecProgress(getExecProgress(FrontendOptions.getLocalHostAddress(), 
                                                       item.getQueryId(), httpClient))
-                    .withExecState(slotManager.getExecStateByQueryId(item.getQueryId()))
+                    .withExecState(item.getExecState())
                     .withWareHouseName(item.getWarehouseName())
                     .withCustomQueryId(item.getCustomQueryId())
                     .withResourceGroupName(item.getResourceGroupName());
