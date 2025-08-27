@@ -1245,8 +1245,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     private boolean cboPruneSubfield = true;
 
     // it's need BE to enable flat json, else will take a poor performance
-    @VarAttr(name = CBO_PRUNE_JSON_SUBFIELD)
-    private boolean cboPruneJsonSubfield = false;
+    @VarAttr(name = CBO_PRUNE_JSON_SUBFIELD + "_v2", alias = CBO_PRUNE_JSON_SUBFIELD, show = CBO_PRUNE_JSON_SUBFIELD)
+    private boolean cboPruneJsonSubfield = true;
 
     @VarAttr(name = CBO_PRUNE_JSON_SUBFIELD_DEPTH, flag = VariableMgr.INVISIBLE)
     private int cboPruneJsonSubfieldDepth = 20;
