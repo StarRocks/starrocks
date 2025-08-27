@@ -1048,7 +1048,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     private boolean enableTabletInternalParallel = true;
 
     @VariableMgr.VarAttr(name = ENABLE_LAKE_TABLET_INTERNAL_PARALLEL)
-    private boolean enableLakeTabletInternalParallel = false;
+    private boolean enableLakeTabletInternalParallel = true;
 
     // The strategy mode of TabletInternalParallel, which is effective only when enableTabletInternalParallel is true.
     // The optional values are "auto" and "force_split".
