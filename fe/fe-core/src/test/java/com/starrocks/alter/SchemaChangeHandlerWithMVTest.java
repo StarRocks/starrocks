@@ -28,6 +28,7 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.junit.Assert;
 import org.junit.FixMethodOrder;
+import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 import org.junit.runners.MethodSorters;
 
@@ -216,15 +217,9 @@ public class SchemaChangeHandlerWithMVTest extends TestWithFeService {
                             "group by timestamp",
                     "alter table sc_dup3 drop column error_code");
         } catch (Exception e) {
-<<<<<<< HEAD
-            Assert.assertTrue(e.getMessage().contains("Can not drop/modify the column mv_count_error_code, because the column " +
-                    "is used in the related rollup mv1 with the define expr:" +
-                    "CASE WHEN `test`.`sc_dup3`.`error_code` IS NULL THEN 0 ELSE 1 END, please drop the rollup index first."));
-=======
             Assertions.assertTrue(
                     e.getMessage().contains("Can not drop/modify the column error_code, " +
                             "because the column is used in the related rollup mv1 with the define exp"), e.getMessage());
->>>>>>> a73bcec2d8 ([BugFix] Fix possible NPE in alter table (#62321))
         }
     }
 
@@ -237,14 +232,8 @@ public class SchemaChangeHandlerWithMVTest extends TestWithFeService {
                             "group by timestamp",
                     "alter table sc_dup3 modify column error_code BIGINT");
         } catch (Exception e) {
-<<<<<<< HEAD
-            Assert.assertTrue(e.getMessage().contains("Can not drop/modify the column mv_count_error_code, because " +
-                    "the column is used in the related rollup mv1 with the define expr:" +
-                    "CASE WHEN `test`.`sc_dup3`.`error_code` IS NULL THEN 0 ELSE 1 END, please drop the rollup index first."));
-=======
             Assertions.assertTrue(e.getMessage().contains("Can not drop/modify the column error_code, because " +
                     "the column is used in the related rollup mv1 with the define expr"), e.getMessage());
->>>>>>> a73bcec2d8 ([BugFix] Fix possible NPE in alter table (#62321))
         }
     }
 
