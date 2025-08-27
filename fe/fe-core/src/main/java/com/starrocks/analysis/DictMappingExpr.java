@@ -15,6 +15,7 @@
 
 package com.starrocks.analysis;
 
+import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.thrift.TExprNode;
 import com.starrocks.thrift.TExprNodeType;
 
@@ -64,5 +65,10 @@ public class DictMappingExpr extends Expr {
     @Override
     public Expr clone() {
         return new DictMappingExpr(this);
+    }
+
+    @Override
+    public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
+        return visitor.visitDictMappingExpr(this, context);
     }
 }

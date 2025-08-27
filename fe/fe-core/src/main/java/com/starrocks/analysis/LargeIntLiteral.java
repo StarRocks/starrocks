@@ -38,6 +38,7 @@ import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.NotImplementedException;
 import com.starrocks.common.io.Text;
+import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.thrift.TExprNode;
 import com.starrocks.thrift.TExprNodeType;
@@ -256,5 +257,10 @@ public class LargeIntLiteral extends LiteralExpr {
     public int hashCode() {
         // IntLiteral(0) equals to LargeIntLiteral(0), so their hash codes must equal.
         return Objects.hash(getLongValue());
+    }
+
+    @Override
+    public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
+        return visitor.visitLargeIntLiteral(this, context);
     }
 }

@@ -37,6 +37,7 @@ package com.starrocks.analysis;
 import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
+import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.thrift.TBoolLiteral;
 import com.starrocks.thrift.TExprNode;
@@ -151,6 +152,11 @@ public class BoolLiteral extends LiteralExpr {
     protected void toThrift(TExprNode msg) {
         msg.node_type = TExprNodeType.BOOL_LITERAL;
         msg.bool_literal = new TBoolLiteral(value);
+    }
+
+    @Override
+    public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
+        return visitor.visitBoolLiteral(this, context);
     }
 
     @Override
