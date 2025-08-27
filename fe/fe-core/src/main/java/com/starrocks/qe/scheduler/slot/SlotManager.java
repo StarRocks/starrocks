@@ -14,9 +14,11 @@
 
 package com.starrocks.qe.scheduler.slot;
 
+import com.google.common.base.Preconditions;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.metric.MetricVisitor;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.TStatus;
 import com.starrocks.thrift.TStatusCode;
 import org.apache.commons.compress.utils.Lists;
@@ -64,7 +66,9 @@ public class SlotManager extends BaseSlotManager {
         // do nothing
     }
 
+    // It works only if's the leader node
     public String getExecStateByQueryId(String queryId) {
+        Preconditions.checkState(GlobalStateMgr.getCurrentState().isLeader());
         return getSlots().stream()
                 .filter(slot -> queryId.equals(DebugUtil.printId(slot.getSlotId())))
                 .map(slot -> slot.getState().toQueryStateString())
