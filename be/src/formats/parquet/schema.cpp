@@ -130,13 +130,14 @@ Status SchemaDescriptor::leaf_to_field(const tparquet::SchemaElement* t_schema, 
 
 // Special case mentioned in the format spec:
 // https://github.com/apache/parquet-format/blob/master/LogicalTypes.md
-//   If the name is array or ends in _tuple, this should be a list of struct
-//   even for single child elements.
-bool has_struct_list_name(const std::string& name) {
+//   If the name is array or uses the parent's name with `_tuple` appended,
+//   this should be:
+//   - a list of list or map type if the repeated group node is LIST- or MAP-annotated.
+//   - otherwise, a list of struct even for single child elements.
+bool has_list_element_name(const std::string& name, const std::string& parent) {
     static const Slice array_slice("array", 5);
-    static const Slice tuple_slice("_tuple", 6);
     Slice slice(name);
-    return slice == array_slice || slice.ends_with(tuple_slice);
+    return slice == array_slice || name == (parent + "_tuple");
 }
 
 Status SchemaDescriptor::list_to_field(const std::vector<tparquet::SchemaElement>& t_schemas, size_t pos,
@@ -148,6 +149,7 @@ Status SchemaDescriptor::list_to_field(const std::vector<tparquet::SchemaElement
     if (is_repeated(group_schema)) {
         return Status::InvalidArgument("LIST-annotated groups must not be repeated.");
     }
+
     _increment(group_schema, &cur_level_info);
 
     field->children.resize(1);
@@ -160,32 +162,64 @@ Status SchemaDescriptor::list_to_field(const std::vector<tparquet::SchemaElement
 
     int16_t last_immediate_repeated_ancestor_def_level = cur_level_info.increment_repeated();
     if (is_group(list_node_schema)) {
-        // Resolve 3-level encoding
-        //
-        // required/optional group name=whatever {
-        //   repeated group name=list {
-        //     required/optional TYPE item;
-        //   }
-        // }
-        //
-        // yields list<item: TYPE ?nullable> ?nullable
-        //
-        // We distinguish the special case that we have
-        //
-        // required/optional group name=whatever {
-        //   repeated group name=array or $SOMETHING_tuple {
-        //     required/optional TYPE item;
-        //   }
-        // }
-        //
-        // In this latter case, the inner type of the list should be a struct
-        // rather than a primitive value
-        //
-        // yields list<item: struct<item: TYPE ?nullable> not null> ?nullable
-        if (list_node_schema->num_children == 1 && !has_struct_list_name(list_node_schema->name)) {
-            RETURN_IF_ERROR(node_to_field(t_schemas, pos + 2, cur_level_info, child_field, next_pos));
-        } else {
+        if (list_node_schema->num_children > 1) {
+            // The inner type of the list should be a struct when there are multiple fields
+            // in the repeated group
             RETURN_IF_ERROR(group_to_struct_field(t_schemas, pos + 1, cur_level_info, child_field, next_pos));
+        } else if (list_node_schema->num_children == 1) {
+            ASSIGN_OR_RETURN(const auto* repeated_field, _get_schema_element(t_schemas, pos + 2));
+            if (is_repeated(repeated_field)) {
+                // Special case where the inner type might be a list with two-level encoding
+                // like below:
+                //
+                // required/optional group name=SOMETHING (LIST) {
+                //   repeated group array (LIST) {
+                //     repeated TYPE item;
+                //   }
+                // }
+                //
+                // yields list<item: list<item: TYPE not null> not null> ?nullable
+                if (!is_list(list_node_schema)) {
+                    return Status::InvalidArgument("Group with one repeated child must be LIST-annotated.");
+                }
+                // LIST-annotated group with three-level encoding cannot be repeated.
+                if (is_group(repeated_field)) {
+                    ASSIGN_OR_RETURN(const auto* repeated_group_field, _get_schema_element(t_schemas, pos + 3));
+                    if (repeated_group_field->num_children == 0) {
+                        return Status::InvalidArgument("LIST-annotated groups must have at least one child.");
+                    }
+                    if (is_repeated(repeated_group_field)) {
+                        return Status::InvalidArgument("LIST-annotated groups must not be repeated.");
+                    }
+                }
+                RETURN_IF_ERROR(node_to_field(t_schemas, pos + 2, cur_level_info, child_field, next_pos));
+            } else if (has_list_element_name(list_node_schema->name, group_schema->name)) {
+                // We distinguish the special case that we have
+                //
+                // required/optional group name=SOMETHING {
+                //   repeated group name=array or $SOMETHING_tuple {
+                //     required/optional TYPE item;
+                //   }
+                // }
+                //
+                // The inner type of the list should be a struct rather than a primitive value
+                //
+                // yields list<item: struct<item: TYPE ?nullable> not null> ?nullable
+                RETURN_IF_ERROR(group_to_struct_field(t_schemas, pos + 1, cur_level_info, child_field, next_pos));
+            } else {
+                // Resolve 3-level encoding
+                //
+                // required/optional group name=whatever {
+                //   repeated group name=list {
+                //     required/optional TYPE item;
+                //   }
+                // }
+                //
+                // yields list<item: TYPE ?nullable> ?nullable
+                RETURN_IF_ERROR(node_to_field(t_schemas, pos + 2, cur_level_info, child_field, next_pos));
+            }
+        } else {
+            return Status::InvalidArgument("Group must have at least one child.");
         }
     } else {
         // Two-level list encoding
@@ -193,6 +227,10 @@ Status SchemaDescriptor::list_to_field(const std::vector<tparquet::SchemaElement
         // required/optional group LIST {
         //   repeated TYPE;
         // }
+        //
+        // TYPE is a primitive type
+        //
+        // yields list<item: TYPE not null> ?nullable
         RETURN_IF_ERROR(leaf_to_field(list_node_schema, cur_level_info, false, child_field));
         *next_pos = pos + 2;
     }
@@ -252,7 +290,7 @@ Status SchemaDescriptor::map_to_field(const std::vector<tparquet::SchemaElement>
     auto value_field = &field->children[1];
 
     // required/optional group name=whatever {
-    //   repeated group name=key_values{
+    //   repeated group name=key_values {
     //     required TYPE key;
     //     required/optional TYPE value;
     //   }

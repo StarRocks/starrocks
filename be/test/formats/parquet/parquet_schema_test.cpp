@@ -1256,6 +1256,55 @@ TEST_F(ParquetSchemaTest, ParquetLists) {
                 "name", false, ColumnType::ARRAY, {PrimitiveNode::make_field("name", false, Type::type::INT32)}));
     }
 
+    // Two-level encoding List<List<Integer>>:
+    // optional group my_list (LIST) {
+    //   repeated group array (LIST) {
+    //     repeated int32 array;
+    //   }
+    // }
+    {
+        t_schemas.emplace_back(
+                GroupNode::make("my_list_8", FieldRepetitionType::OPTIONAL, ConvertedType::type::LIST, 1));
+        t_schemas.emplace_back(GroupNode::make("array", FieldRepetitionType::REPEATED, ConvertedType::type::LIST, 1));
+        t_schemas.emplace_back(PrimitiveNode::make("array", FieldRepetitionType::type::REPEATED, Type::type::INT32,
+                                                           ConvertedType::type::INT_32));
+
+        expected_fields.emplace_back(GroupNode::make_field(
+                "my_list_8", true, ColumnType::ARRAY,
+                {GroupNode::make_field("array", false, ColumnType::STRUCT,
+                                       {PrimitiveNode::make_field("array", false, Type::type::INT32)})}));
+    }
+
+    // List<Map<String, String>> in three-level list encoding:
+    // optional group my_list (LIST) {
+    //   repeated group list {
+    //     required group element (MAP) {
+    //       repeated group key_value {
+    //         required binary key (STRING);
+    //         optional binary value (STRING);
+    //       }
+    //     }
+    //   }
+    // }
+    {
+        t_schemas.emplace_back(
+                        GroupNode::make("my_list_9", FieldRepetitionType::OPTIONAL, ConvertedType::type::LIST, 1));
+        t_schemas.emplace_back(GroupNode::make("list", FieldRepetitionType::REPEATED, 1));
+        t_schemas.emplace_back(GroupNode::make("element", FieldRepetitionType::REQUIRED, ConvertedType::type::MAP, 1));
+        t_schemas.emplace_back(GroupNode::make("key_value", FieldRepetitionType::REPEATED, 2));
+        t_schemas.emplace_back(PrimitiveNode::make("key", FieldRepetitionType::type::REQUIRED, Type::type::BYTE_ARRAY,
+                                                           ConvertedType::type::UTF8));
+        t_schemas.emplace_back(PrimitiveNode::make("value", FieldRepetitionType::type::OPTIONAL, Type::type::BYTE_ARRAY,
+                                                           ConvertedType::type::UTF8));
+
+        expected_fields.emplace_back(GroupNode::make_field(
+                "my_list_9", true, ColumnType::ARRAY,
+                {GroupNode::make_field("list", false, ColumnType::STRUCT,
+                                       {GroupNode::make_field("element", false, ColumnType::MAP,
+                                                              {PrimitiveNode::make_field("key", false, Type::type::BYTE_ARRAY),
+                                                                PrimitiveNode::make_field("value", true, Type::type::BYTE_ARRAY)}));
+    }
+
     SchemaDescriptor desc;
     auto st = desc.from_thrift(t_schemas, true);
     ASSERT_TRUE(st.ok()) << st.message();
