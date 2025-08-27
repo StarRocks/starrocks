@@ -129,7 +129,7 @@ void EvHttpServer::_Init() {
     CHECK(ret >= 0) << "SetCerts failed code=" << ret;
 }
 
-static struct bufferevent* bevcb(struct event_base *base, void *arg) {
+static struct bufferevent* bevcb(struct event_base* base, void* arg) {
     struct bufferevent* r;
     SSL_CTX* ctx = (SSL_CTX*)arg;
     r = bufferevent_openssl_socket_new(base, -1, SSL_new(ctx), BUFFEREVENT_SSL_ACCEPTING, BEV_OPT_CLOSE_ON_FREE);
