@@ -28,6 +28,7 @@
 #include "exec/chunks_sorter_heap_sort.h"
 #include "exec/chunks_sorter_topn.h"
 #include "exec/sorting/merge.h"
+#include "exec/sorting/sort_permute.h"
 #include "exec/sorting/sorting.h"
 #include "exprs/column_ref.h"
 #include "runtime/chunk_cursor.h"
@@ -445,6 +446,65 @@ static void do_merge_columnwise(benchmark::State& state, int num_runs, bool null
     suite.TearDown();
 }
 
+static void do_bench_materialize(benchmark::State& state, LogicalType data_type, int num_chunks, int num_columns,
+                                 bool nullable) {
+    ChunkSorterBase suite;
+    suite.SetUp();
+
+    TypeDescriptor type_desc;
+    if (data_type == TYPE_INT) {
+        type_desc = TypeDescriptor(TYPE_INT);
+    } else if (data_type == TYPE_VARCHAR) {
+        type_desc = TypeDescriptor::create_varchar_type(TypeDescriptor::MAX_VARCHAR_LENGTH);
+    } else if (data_type == TYPE_DOUBLE) {
+        type_desc = TypeDescriptor(TYPE_DOUBLE);
+    } else {
+        ASSERT_TRUE(false) << "not support type: " << data_type;
+    }
+
+    Columns columns;
+    Chunk::SlotHashMap map;
+
+    for (int i = 0; i < num_columns; i++) {
+        auto [column, expr] = suite.build_column(type_desc, i, false, nullable);
+        columns.push_back(column);
+        map[i] = i;
+    }
+    auto template_chunk = std::make_shared<Chunk>(columns, map);
+
+    std::vector<ChunkPtr> chunks;
+    std::vector<PermutationItem> perm;
+
+    for (size_t i = 0; i < num_chunks; ++i) {
+        // Ensure a deep copy
+        ChunkPtr clone = template_chunk->clone_empty();
+        clone->append_safe(*template_chunk);
+        const size_t num_rows = clone->num_rows();
+        for (size_t inner_idx = 0; inner_idx < num_rows; ++inner_idx) {
+            perm.emplace_back(i, inner_idx);
+        }
+        chunks.push_back(std::move(clone));
+    }
+
+    std::mt19937 rng(42);
+    std::shuffle(std::begin(perm), std::end(perm), rng);
+
+    constexpr size_t output_chunk_size = 4096;
+    const size_t num_output_chunks = (perm.size() + output_chunk_size - 1) / output_chunk_size;
+
+    for (auto _ : state) {
+        for (size_t i = 0; i < num_output_chunks; ++i) {
+            ChunkPtr dst = template_chunk->clone_empty();
+            PermutationView curr_view{perm.data() + i * output_chunk_size,
+                                      std::min(output_chunk_size, perm.size() - i * output_chunk_size)};
+            materialize_by_permutation(dst.get(), chunks, curr_view);
+            ASSERT_EQ(dst->num_rows(), std::min(output_chunk_size, perm.size() - i * output_chunk_size));
+        }
+    }
+
+    suite.TearDown();
+}
+
 // Sort full data: ORDER BY
 static void BM_fullsort_notnull(benchmark::State& state) {
     do_bench(state, FullSort, TYPE_INT, state.range(0), state.range(1));
@@ -505,6 +565,23 @@ static void BM_merge_columnwise_nullable(benchmark::State& state) {
     do_merge_columnwise(state, state.range(0), true);
 }
 
+// Test materialize_by_premutation
+static void BM_materialize_nullable(benchmark::State& state) {
+    do_bench_materialize(state, TYPE_INT, state.range(0), state.range(1), true);
+}
+
+static void BM_materialize_non_null(benchmark::State& state) {
+    do_bench_materialize(state, TYPE_INT, state.range(0), state.range(1), false);
+}
+
+static void BM_materialize_strings_nullable(benchmark::State& state) {
+    do_bench_materialize(state, TYPE_VARCHAR, state.range(0), state.range(1), true);
+}
+
+static void BM_materialize_strings_non_null(benchmark::State& state) {
+    do_bench_materialize(state, TYPE_VARCHAR, state.range(0), state.range(1), false);
+}
+
 static void CustomArgsFull(benchmark::internal::Benchmark* b) {
     // num_chunks
     for (int num_chunks = 64; num_chunks <= 32768; num_chunks *= 8) {
@@ -516,16 +593,25 @@ static void CustomArgsFull(benchmark::internal::Benchmark* b) {
 }
 static void CustomArgsLimit(benchmark::internal::Benchmark* b) {
     // num_chunks
-    for (int num_chunks = 1024; num_chunks <= 32768; num_chunks *= 4) {
+    for (int num_chunks = 1024; num_chunks <= 32768; num_chunks *= 8) {
         // num_columns
-        for (int num_columns = 1; num_columns <= 4; num_columns++) {
+        for (int num_columns = 1; num_columns <= 4; num_columns += 3) {
             // limit
-            for (int limit = 1; limit <= num_chunks * kTestChunkSize / 8; limit *= 8) {
+            for (int limit = 1; limit <= num_chunks * kTestChunkSize / 8; limit *= 16) {
                 b->Args({num_chunks, num_columns, limit});
             }
         }
     }
 }
+
+BENCHMARK(BM_materialize_nullable)->ArgsProduct({{1, 16, 256, 4096, 8192}, {1, 2, 4}})->Unit(benchmark::kMillisecond);
+BENCHMARK(BM_materialize_non_null)->ArgsProduct({{1, 16, 256, 4096, 8192}, {1, 2, 4}})->Unit(benchmark::kMillisecond);
+BENCHMARK(BM_materialize_strings_nullable)
+        ->ArgsProduct({{1, 16, 256, 4096, 8192}, {1, 2, 4}})
+        ->Unit(benchmark::kMillisecond);
+BENCHMARK(BM_materialize_strings_non_null)
+        ->ArgsProduct({{1, 16, 256, 4096, 8192}, {1, 2, 4}})
+        ->Unit(benchmark::kMillisecond);
 
 // Full sort
 BENCHMARK(BM_fullsort_notnull)->Apply(CustomArgsFull);
