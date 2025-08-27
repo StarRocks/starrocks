@@ -14,6 +14,8 @@
 
 #include "exec/sorting/sort_permute.h"
 
+#include <span>
+
 #include "column/array_column.h"
 #include "column/binary_column.h"
 #include "column/column.h"
@@ -64,11 +66,30 @@ bool TieIterator::next() {
     return true;
 }
 
+// Traits to access permutation items uniformly
+template <typename PermItem>
+struct PermutationTraits;
+
+template <>
+struct PermutationTraits<PermutationItem> {
+    static inline uint32_t chunk(const PermutationItem& p) { return p.chunk_index; }
+    static inline uint32_t index(const PermutationItem& p) { return p.index_in_chunk; }
+};
+
+template <>
+struct PermutationTraits<SmallPermuteItem> {
+    static inline uint32_t chunk(const SmallPermuteItem& /*p*/) { return uint32_t{0}; }
+    static inline uint32_t index(const SmallPermuteItem& p) { return p.index_in_chunk; }
+};
+
 // Append permutation to column, implements `materialize_by_permutation` function
-class ColumnAppendPermutation final : public ColumnVisitorMutableAdapter<ColumnAppendPermutation> {
+template <typename PermRange>
+class ColumnAppendPermutation final : public ColumnVisitorMutableAdapter<ColumnAppendPermutation<PermRange>> {
 public:
-    explicit ColumnAppendPermutation(const std::vector<const Column*>& columns, const PermutationView& perm)
-            : ColumnVisitorMutableAdapter(this), _columns(columns), _perm(perm) {}
+    using PermTraits = PermutationTraits<typename PermRange::value_type>;
+
+    explicit ColumnAppendPermutation(const std::span<const Column* const> columns, const PermRange& perm)
+            : ColumnVisitorMutableAdapter<ColumnAppendPermutation<PermRange>>(this), _columns(columns), _perm(perm) {}
 
     Status do_visit(NullableColumn* dst) {
         if (_columns.empty() || _perm.empty()) {
@@ -85,14 +106,14 @@ public:
             data_columns.push_back(src_column->data_column());
         }
         if (_columns[0]->is_nullable()) {
-            materialize_column_by_permutation(dst->null_column().get(), null_columns, _perm);
-            materialize_column_by_permutation(dst->data_column().get(), data_columns, _perm);
+            materialize_column_by_permutation_impl(dst->null_column().get(), null_columns, _perm);
+            materialize_column_by_permutation_impl(dst->data_column().get(), data_columns, _perm);
             if (!dst->has_null()) {
                 dst->set_has_null(SIMD::count_nonzero(&dst->null_column()->get_data()[orig_size], _perm.size()));
             }
         } else {
             dst->null_column()->resize(orig_size + _perm.size());
-            materialize_column_by_permutation(dst->data_column().get(), data_columns, _perm);
+            materialize_column_by_permutation_impl(dst->data_column().get(), data_columns, _perm);
         }
         DCHECK_EQ(dst->null_column()->size(), dst->data_column()->size());
 
@@ -109,8 +130,8 @@ public:
         data.resize(output + _perm.size());
 
         for (auto& p : _perm) {
-            const Container& container = down_cast<const ColumnType*>(_columns[p.chunk_index])->get_data();
-            data[output++] = container[p.index_in_chunk];
+            const Container& container = down_cast<const ColumnType*>(_columns[PermTraits::chunk(p)])->get_data();
+            data[output++] = container[PermTraits::index(p)];
         }
 
         return Status::OK();
@@ -126,8 +147,8 @@ public:
         data.resize(output + _perm.size());
 
         for (auto& p : _perm) {
-            const Container& container = down_cast<const ColumnType*>(_columns[p.chunk_index])->get_data();
-            data[output++] = container[p.index_in_chunk];
+            const Container& container = down_cast<const ColumnType*>(_columns[PermTraits::chunk(p)])->get_data();
+            data[output++] = container[PermTraits::index(p)];
         }
 
         return Status::OK();
@@ -138,7 +159,7 @@ public:
             return Status::OK();
         }
         for (auto& p : _perm) {
-            dst->append(*_columns[p.chunk_index], p.index_in_chunk, 1);
+            dst->append(*_columns[PermTraits::chunk(p)], PermTraits::index(p), 1);
         }
 
         return Status::OK();
@@ -150,7 +171,7 @@ public:
         }
 
         for (auto& p : _perm) {
-            dst->append(*_columns[p.chunk_index], p.index_in_chunk, 1);
+            dst->append(*_columns[PermTraits::chunk(p)], PermTraits::index(p), 1);
         }
 
         return Status::OK();
@@ -162,7 +183,7 @@ public:
         }
 
         for (auto& p : _perm) {
-            dst->append(*_columns[p.chunk_index], p.index_in_chunk, 1);
+            dst->append(*_columns[PermTraits::chunk(p)], PermTraits::index(p), 1);
         }
 
         return Status::OK();
@@ -175,7 +196,7 @@ public:
         }
 
         for (auto& p : _perm) {
-            dst->append(*_columns[p.chunk_index], p.index_in_chunk, 1);
+            dst->append(*_columns[PermTraits::chunk(p)], PermTraits::chunk(p), 1);
         }
 
         return Status::OK();
@@ -193,7 +214,8 @@ public:
         size_t added_bytes = 0;
 
         for (auto& p : _perm) {
-            Slice slice = down_cast<const BinaryColumnBase<T>*>(_columns[p.chunk_index])->get_slice(p.index_in_chunk);
+            Slice slice = down_cast<const BinaryColumnBase<T>*>(_columns[PermTraits::chunk(p)])
+                                  ->get_slice(PermTraits::index(p));
             added_bytes += slice.get_size();
             slices.push_back(slice);
         }
@@ -219,7 +241,7 @@ public:
     template <typename T>
     Status do_visit(ObjectColumn<T>* dst) {
         for (auto& p : _perm) {
-            dst->append(*_columns[p.chunk_index], p.index_in_chunk, 1);
+            dst->append(*_columns[PermTraits::chunk(p)], PermTraits::index(p), 1);
         }
 
         return Status::OK();
@@ -227,25 +249,37 @@ public:
 
     Status do_visit(JsonColumn* dst) {
         for (auto& p : _perm) {
-            dst->append(*_columns[p.chunk_index], p.index_in_chunk, 1);
+            dst->append(*_columns[PermTraits::chunk(p)], PermTraits::index(p), 1);
         }
 
         return Status::OK();
     }
 
 private:
-    const std::vector<const Column*>& _columns;
-    const PermutationView& _perm;
+    const std::span<const Column* const> _columns;
+    const PermRange _perm;
 };
 
-void materialize_column_by_permutation(Column* dst, const std::vector<const Column*>& columns,
-                                       const PermutationView& perm) {
-    ColumnAppendPermutation visitor(columns, perm);
+// Internal generic implementor
+template <typename PermRange>
+static inline void materialize_column_by_permutation_impl(Column* dst, std::span<const Column* const> columns,
+                                                          const PermRange& perm) {
+    ColumnAppendPermutation<PermRange> visitor(columns, perm);
     Status st = dst->accept_mutable(&visitor);
     CHECK(st.ok());
 }
 
-void materialize_by_permutation(Chunk* dst, const std::vector<ChunkPtr>& chunks, const PermutationView& perm) {
+void materialize_column_by_permutation(Column* dst, const std::vector<const Column*>& columns, PermutationView perm) {
+    materialize_column_by_permutation_impl<PermutationView>(dst, std::span<const Column* const>{columns}, perm);
+}
+
+void materialize_column_by_permutation_single(Column* dst, const Column* column, SmallPermutationView perm) {
+    // A pointer is a span with one element
+    std::span<const Column* const> col_span{&column, 1};
+    materialize_column_by_permutation_impl<SmallPermutationView>(dst, col_span, perm);
+}
+
+void materialize_by_permutation(Chunk* dst, const std::vector<ChunkPtr>& chunks, const PermutationView perm) {
     if (chunks.empty() || perm.empty()) {
         return;
     }
@@ -263,6 +297,19 @@ void materialize_by_permutation(Chunk* dst, const std::vector<ChunkPtr>& chunks,
             tmp_columns.push_back(chunk->get_column_by_index(col_index));
         }
         materialize_column_by_permutation(dst->get_column_by_index(col_index).get(), tmp_columns, perm);
+    }
+}
+
+void materialize_by_permutation_single(Chunk* dst, const ChunkPtr& chunk, SmallPermutationView perm) {
+    if (perm.empty()) {
+        return;
+    }
+
+    DCHECK_EQ(dst->num_columns(), chunk->columns().size());
+
+    for (size_t col_index = 0; col_index < dst->num_columns(); col_index++) {
+        materialize_column_by_permutation_single(dst->get_column_by_index(col_index).get(),
+                                                 chunk->get_column_by_index(col_index).get(), perm);
     }
 }
 } // namespace starrocks
