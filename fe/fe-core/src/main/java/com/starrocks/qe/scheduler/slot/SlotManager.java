@@ -14,8 +14,14 @@
 
 package com.starrocks.qe.scheduler.slot;
 
+<<<<<<< HEAD
+=======
+import com.google.common.base.Preconditions;
+import com.starrocks.common.util.DebugUtil;
+>>>>>>> 24dc95b47c ([BugFix] fix the execState of multiple fe (#62376))
 import com.starrocks.metric.MetricVisitor;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.TStatus;
 import com.starrocks.thrift.TStatusCode;
 import org.apache.commons.compress.utils.Lists;
@@ -63,6 +69,19 @@ public class SlotManager extends BaseSlotManager {
         // do nothing
     }
 
+<<<<<<< HEAD
+=======
+    // It works only if's the leader node
+    public String getExecStateByQueryId(String queryId) {
+        Preconditions.checkState(GlobalStateMgr.getCurrentState().isLeader());
+        return getSlots().stream()
+                .filter(slot -> queryId.equals(DebugUtil.printId(slot.getSlotId())))
+                .map(slot -> slot.getState().toQueryStateString())
+                .findFirst()
+                .orElse("");
+    }
+
+>>>>>>> 24dc95b47c ([BugFix] fix the execState of multiple fe (#62376))
     private class RequestWorker extends Thread {
         public RequestWorker() {
             super("slot-mgr-req");

@@ -382,6 +382,10 @@ public class QueryStatisticsInfo {
                     .withExecTime(item.getQueryExecTime())
                     .withExecProgress(getExecProgress(FrontendOptions.getLocalHostAddress(), 
                                                       item.getQueryId(), httpClient))
+<<<<<<< HEAD
+=======
+                    .withExecState(item.getExecState())
+>>>>>>> 24dc95b47c ([BugFix] fix the execState of multiple fe (#62376))
                     .withWareHouseName(item.getWarehouseName())
                     .withCustomQueryId(item.getCustomQueryId())
                     .withResourceGroupName(item.getResourceGroupName());
