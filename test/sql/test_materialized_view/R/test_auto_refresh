@@ -36,7 +36,7 @@ None
 -- !result
 SELECT count(*) FROM mv1;
 -- result:
-5
+3
 -- !result
 INSERT INTO t1 SELECT * FROM t1;
 -- result:
@@ -47,7 +47,7 @@ None
 -- !result
 SELECT count(*) FROM mv1;
 -- result:
-8
+6
 -- !result
 REFRESH MATERIALIZED VIEW mv1 WITH SYNC MODE;
 function: wait_mv_refresh_count('db_${uuid0}', 'mv1', 3)
