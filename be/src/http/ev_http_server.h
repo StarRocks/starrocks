@@ -20,9 +20,9 @@
 #endif
 #pragma once
 
+#include <event2/bufferevent_ssl.h>
 #include <event2/event.h>
 #include <openssl/ssl.h>
-#include <event2/bufferevent_ssl.h>
 
 #include <string>
 #include <thread>

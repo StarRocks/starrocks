@@ -115,10 +115,7 @@ void EvHttpServer::_Init() {
     SSL_load_error_strings();
     OpenSSL_add_all_algorithms();
     m_ctx = SSL_CTX_new(SSLv23_server_method());
-    SSL_CTX_set_options(m_ctx,
-                        SSL_OP_SINGLE_DH_USE |
-                        SSL_OP_SINGLE_ECDH_USE |
-                        SSL_OP_NO_SSLv2);
+    SSL_CTX_set_options(m_ctx, SSL_OP_SINGLE_DH_USE | SSL_OP_SINGLE_ECDH_USE | SSL_OP_NO_SSLv2);
     m_ecdh = EC_KEY_new_by_curve_name(NID_X9_62_prime256v1);
     if (!m_ecdh) {
         LOG(WARNING) << "EC_KEY_new_by_curve_name fail";
@@ -132,9 +129,9 @@ void EvHttpServer::_Init() {
     CHECK(ret >= 0) << "SetCerts failed code=" << ret;
 }
 
-static struct bufferevent*  bevcb(struct event_base *base, void *arg) {
+static struct bufferevent* bevcb(struct event_base *base, void *arg) {
     struct bufferevent* r;
-    SSL_CTX *ctx = (SSL_CTX *) arg;
+    SSL_CTX *ctx = (SSL_CTX *)arg;
     r = bufferevent_openssl_socket_new(base, -1, SSL_new(ctx), BUFFEREVENT_SSL_ACCEPTING, BEV_OPT_CLOSE_ON_FREE);
     return r;
 }
