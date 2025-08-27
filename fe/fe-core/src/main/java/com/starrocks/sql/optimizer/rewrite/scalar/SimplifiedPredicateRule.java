@@ -608,24 +608,44 @@ public class SimplifiedPredicateRule extends BottomUpScalarOperatorRewriteRule {
         // Case 2: hour(to_datetime(ts)) or hour(to_datetime(ts, 0)) -> hour_from_unixtime(ts)
         if (FunctionSet.TO_DATETIME.equalsIgnoreCase(childFnName)) {
             List<ScalarOperator> args = childCall.getChildren();
-            // Accept single argument, or two arguments with constant scale 0
-            boolean acceptable;
-            if (args.size() == 1) {
-                acceptable = true;
-            } else if (args.size() == 2 && args.get(1) instanceof ConstantOperator) {
-                ConstantOperator scale = (ConstantOperator) args.get(1);
-                acceptable = Type.INT.equals(scale.getType()) && !scale.isNull() && scale.getInt() == 0;
-            } else {
-                acceptable = false;
-            }
+            ScalarOperator tsArg;
+            ScalarOperator unixtimeArgForHour;
 
-            if (!acceptable) {
+            if (args.size() == 1) {
+                // Implicit seconds
+                tsArg = args.get(0);
+                unixtimeArgForHour = tsArg;
+            } else if (args.size() == 2) {
+                tsArg = args.get(0);
+                ScalarOperator scaleOp = args.get(1);
+                if (!(scaleOp instanceof ConstantOperator)) {
+                    return call;
+                }
+                ConstantOperator scale = (ConstantOperator) scaleOp;
+                if (!Type.INT.equals(scale.getType()) || scale.isNull()) {
+                    return call;
+                }
+                int scaleVal = scale.getInt();
+                if (scaleVal == 0) {
+                    unixtimeArgForHour = tsArg;
+                } else if (scaleVal == 3) {
+                    // milliseconds -> seconds
+                    unixtimeArgForHour = new CallOperator(FunctionSet.DIVIDE, Type.BIGINT,
+                            Lists.newArrayList(tsArg, ConstantOperator.createInt(1000)), null);
+                } else if (scaleVal == 6) {
+                    // microseconds -> seconds
+                    unixtimeArgForHour = new CallOperator(FunctionSet.DIVIDE, Type.BIGINT,
+                            Lists.newArrayList(tsArg, ConstantOperator.createInt(1_000_000)), null);
+                } else {
+                    // Unsupported scale
+                    return call;
+                }
+            } else {
                 return call;
             }
 
-            // Build hour_from_unixtime(ts) with only the first argument
-            ScalarOperator tsArg = args.get(0);
-            Type[] argTypes = new Type[] { tsArg.getType() };
+            // Build hour_from_unixtime(...) with the converted unix time argument
+            Type[] argTypes = new Type[] { unixtimeArgForHour.getType() };
             Function fn =
                     Expr.getBuiltinFunction(FunctionSet.HOUR_FROM_UNIXTIME, argTypes, Function.CompareMode.IS_IDENTICAL);
 
@@ -633,7 +653,8 @@ public class SimplifiedPredicateRule extends BottomUpScalarOperatorRewriteRule {
                 return call;
             }
 
-            return new CallOperator(FunctionSet.HOUR_FROM_UNIXTIME, call.getType(), Lists.newArrayList(tsArg), fn);
+            return new CallOperator(FunctionSet.HOUR_FROM_UNIXTIME, call.getType(),
+                    Lists.newArrayList(unixtimeArgForHour), fn);
         }
 
         return call;
