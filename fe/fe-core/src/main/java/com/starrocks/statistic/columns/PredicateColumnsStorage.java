@@ -259,9 +259,19 @@ public class PredicateColumnsStorage {
      * Remove all records if the lastUsed < ttlTime
      */
     public void vacuum(LocalDateTime ttlTime) {
-        VelocityContext context = new VelocityContext();
         String selfName = String.valueOf(GlobalStateMgr.getCurrentState().getNodeMgr().getMySelf().getFid());
-        context.put("feId", selfName);
+        vacuum(ttlTime, selfName);
+        // compatible with old version fe name
+        // previously we use the fe_name as the feId, we also need to vacuum it otherwise nobody care about it
+        String oldName = GlobalStateMgr.getCurrentState().getNodeMgr().getNodeName();
+        vacuum(ttlTime, oldName);
+
+        LOG.info("vacuum column usage from storage before {}", ttlTime);
+    }
+
+    private void vacuum(LocalDateTime ttlTime, String feName) {
+        VelocityContext context = new VelocityContext();
+        context.put("feId", feName);
         context.put("lastUsed", DateUtils.formatDateTimeUnix(ttlTime));
 
         StringWriter sw = new StringWriter();
@@ -269,7 +279,6 @@ public class PredicateColumnsStorage {
 
         String sql = sw.toString();
         executor.executeDML(sql);
-        LOG.info("vacuum column usage from storage before {}", ttlTime);
     }
 
     public boolean isSystemTableReady() {
