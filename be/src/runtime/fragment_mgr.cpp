@@ -61,6 +61,7 @@
 #include "service/backend_options.h"
 #include "util/misc.h"
 #include "util/network_util.h"
+#include "common/status.h"
 #include "util/starrocks_metrics.h"
 #include "util/stopwatch.hpp"
 #include "util/thread.h"
@@ -76,8 +77,23 @@ std::string to_load_error_http_path(const std::string& file_name) {
     if (file_name.empty()) {
         return "";
     }
+
+    std::string host = BackendOptions::get_localhost();
+    std::string resolved_ip = host;
+
+    // if host is not ip, then DNS parse
+    if (host.find('.') != std::string::npos &&
+        (host.find(':') == std::string::npos || host.find(':') > host.find('.'))) {
+        std::string ip;
+        Status status = hostname_to_ip(host, ip);
+        if (status.ok()) {
+            resolved_ip = ip;
+        }
+        // if parse failed then keep the org value
+    }
+
     std::stringstream url;
-    url << "http://" << get_host_port(BackendOptions::get_localhost(), config::be_http_port) << "/api/_load_error_log?"
+    url << "http://" << get_host_port(resolved_ip, config::be_http_port) << "/api/_load_error_log?"
         << "file=" << file_name;
     return url.str();
 }
