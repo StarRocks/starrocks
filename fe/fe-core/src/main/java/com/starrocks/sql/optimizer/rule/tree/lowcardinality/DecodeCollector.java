@@ -953,9 +953,8 @@ public class DecodeCollector extends OptExpressionVisitor<DecodeInfo, DecodeInfo
                     stringRefToDefineExprMap.put(key.getId(), value);
                     expressionStringRefCounter.putIfAbsent(key.getId(), 0);
                     info.outputStringColumns.union(key.getId());
-                } else {
-                    info.usedStringColumns.union(c);
                 }
+                info.usedStringColumns.union(c);
             });
             matchChildren.union(dictExpressionCollector.matchChildren);
         }
