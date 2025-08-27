@@ -39,6 +39,8 @@ public final class QueryStatisticsItem {
     private final TUniqueId executionId;
     private final String warehouseName;
     private final String resourceGroupName;
+    // PENDING/RUNNING/FINISHED
+    private final String execState;
 
     private QueryStatisticsItem(Builder builder) {
         this.customQueryId = builder.customQueryId;
@@ -53,6 +55,7 @@ public final class QueryStatisticsItem {
         this.executionId = builder.executionId;
         this.warehouseName = builder.warehouseName;
         this.resourceGroupName = builder.resourceGroupName;
+        this.execState = builder.execState;
     }
 
     public String getDb() {
@@ -108,6 +111,10 @@ public final class QueryStatisticsItem {
         return resourceGroupName;
     }
 
+    public String getExecState() {
+        return execState;
+    }
+
     public static final class Builder {
         private String customQueryId;
         private String queryId;
@@ -121,6 +128,7 @@ public final class QueryStatisticsItem {
         private TUniqueId executionId;
         private String warehouseName;
         private String resourceGroupName;
+        private String execState;
 
         public Builder() {
             fragmentInstanceInfos = Lists.newArrayList();
@@ -183,6 +191,11 @@ public final class QueryStatisticsItem {
 
         public Builder resourceGroupName(String resourceGroupName) {
             this.resourceGroupName = resourceGroupName;
+            return this;
+        }
+
+        public Builder execState(String state) {
+            this.execState = state;
             return this;
         }
 
