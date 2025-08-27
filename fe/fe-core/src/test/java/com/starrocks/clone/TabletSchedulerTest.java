@@ -596,7 +596,7 @@ public class TabletSchedulerTest {
         Replica replica = new Replica(replicaId, beId, 0, Replica.ReplicaState.NORMAL);
         LocalTablet tablet = new LocalTablet(tabletId, Lists.newArrayList(replica));
         MaterializedIndex index = new MaterializedIndex(indexId);
-        index.addTablet(tablet, new TabletMeta(dbId, tblId, physicalPartitionId, indexId, TStorageMedium.HDD));
+        index.addTablet(tablet, new TabletMeta(dbId, tblId, physicalPartitionId, indexId, 0, TStorageMedium.HDD));
         PhysicalPartition physicalPartition = new PhysicalPartition(physicalPartitionId, "physical_part", partitionId, index);
 
         new Expectations() {
