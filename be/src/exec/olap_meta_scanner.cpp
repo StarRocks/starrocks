@@ -72,7 +72,8 @@ Status OlapMetaScanner::_init_meta_reader_params() {
             column.set_type(path->value_type().type);
             column.set_length(path->value_type().len);
             column.set_is_nullable(true);
-            column.set_extended_info(std::make_unique<ExtendedColumnInfo>(path.get(), root_column_index));
+            int32_t root_uid = tmp_schema->column(static_cast<size_t>(root_column_index)).unique_id();
+            column.set_extended_info(std::make_unique<ExtendedColumnInfo>(path.get(), root_uid));
 
             tmp_schema->append_column(column);
             VLOG(2) << "extend the tablet-schema: " << column.debug_string();
