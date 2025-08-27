@@ -1693,7 +1693,8 @@ public class SchemaChangeHandler extends AlterHandler {
         for (int i = 0; i < originShortKeyColumns.size(); i++) {
             Column originColumn = originShortKeyColumns.get(i);
             Column newColumn = newShortKeyColumns.get(i);
-            if (!originColumn.equals(newColumn)) {
+            if (!originColumn.getName().equalsIgnoreCase(newColumn.getName())
+                    || !originColumn.getType().equals(newColumn.getType())) {
                 return true;
             }
         }
