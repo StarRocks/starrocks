@@ -4734,12 +4734,12 @@ TEST_F(TimeFunctionsTest, minuteFromUnixTime) {
     DeferOp defer([&]() { state->set_timezone(prev_timezone); });
 
     Int64Column::Ptr tc = Int64Column::create();
-    tc->append(0);        // 00:00:00 -> 0
-    tc->append(59);       // 00:00:59 -> 0
-    tc->append(60);       // 00:01:00 -> 1
-    tc->append(3599);     // 00:59:59 -> 59
-    tc->append(3600);     // 01:00:00 -> 0
-    tc->append(3723);     // 01:02:03 -> 2
+    tc->append(0);    // 00:00:00 -> 0
+    tc->append(59);   // 00:00:59 -> 0
+    tc->append(60);   // 00:01:00 -> 1
+    tc->append(3599); // 00:59:59 -> 59
+    tc->append(3600); // 01:00:00 -> 0
+    tc->append(3723); // 01:02:03 -> 2
 
     int expected[] = {0, 0, 1, 59, 0, 2};
     Columns columns;
@@ -4758,11 +4758,11 @@ TEST_F(TimeFunctionsTest, secondFromUnixTime) {
     DeferOp defer([&]() { state->set_timezone(prev_timezone); });
 
     Int64Column::Ptr tc = Int64Column::create();
-    tc->append(0);        // -> 0
-    tc->append(59);       // -> 59
-    tc->append(60);       // -> 0
-    tc->append(61);       // -> 1
-    tc->append(3723);     // 01:02:03 -> 3
+    tc->append(0);    // -> 0
+    tc->append(59);   // -> 59
+    tc->append(60);   // -> 0
+    tc->append(61);   // -> 1
+    tc->append(3723); // 01:02:03 -> 3
 
     int expected[] = {0, 59, 0, 1, 3};
     Columns columns;
@@ -4781,11 +4781,11 @@ TEST_F(TimeFunctionsTest, ymdFromUnixTime) {
     DeferOp defer([&]() { state->set_timezone(prev_timezone); });
 
     Int64Column::Ptr tc = Int64Column::create();
-    tc->append(0);              // 1970-01-01
-    tc->append(86399);          // 1970-01-01
-    tc->append(86400);          // 1970-01-02
-    tc->append(946684800);      // 2000-01-01 00:00:00
-    tc->append(951868800);      // 2000-03-01 00:00:00 (leap year)
+    tc->append(0);         // 1970-01-01
+    tc->append(86399);     // 1970-01-01
+    tc->append(86400);     // 1970-01-02
+    tc->append(946684800); // 2000-01-01 00:00:00
+    tc->append(951868800); // 2000-03-01 00:00:00 (leap year)
 
     Columns columns;
     columns.emplace_back(tc);
@@ -4798,9 +4798,21 @@ TEST_F(TimeFunctionsTest, ymdFromUnixTime) {
     auto months = ColumnHelper::cast_to<TYPE_INT>(monthCol);
     auto days = ColumnHelper::cast_to<TYPE_INT>(dayCol);
 
-    EXPECT_EQ(1970, years->get_data()[0]); EXPECT_EQ(1, months->get_data()[0]); EXPECT_EQ(1, days->get_data()[0]);
-    EXPECT_EQ(1970, years->get_data()[1]); EXPECT_EQ(1, months->get_data()[1]); EXPECT_EQ(1, days->get_data()[1]);
-    EXPECT_EQ(1970, years->get_data()[2]); EXPECT_EQ(1, months->get_data()[2]); EXPECT_EQ(2, days->get_data()[2]);
-    EXPECT_EQ(2000, years->get_data()[3]); EXPECT_EQ(1, months->get_data()[3]); EXPECT_EQ(1, days->get_data()[3]);
-    EXPECT_EQ(2000, years->get_data()[4]); EXPECT_EQ(3, months->get_data()[4]); EXPECT_EQ(1, days->get_data()[4]);
+    EXPECT_EQ(1970, years->get_data()[0]);
+    EXPECT_EQ(1, months->get_data()[0]);
+    EXPECT_EQ(1, days->get_data()[0]);
+    EXPECT_EQ(1970, years->get_data()[1]);
+    EXPECT_EQ(1, months->get_data()[1]);
+    EXPECT_EQ(1, days->get_data()[1]);
+    EXPECT_EQ(1970, years->get_data()[2]);
+    EXPECT_EQ(1, months->get_data()[2]);
+    EXPECT_EQ(2, days->get_data()[2]);
+    EXPECT_EQ(2000, years->get_data()[3]);
+    EXPECT_EQ(1, months->get_data()[3]);
+    EXPECT_EQ(1, days->get_data()[3]);
+    EXPECT_EQ(2000, years->get_data()[4]);
+    EXPECT_EQ(3, months->get_data()[4]);
+    EXPECT_EQ(1, days->get_data()[4]);
 }
+
+} //namespace starrocks
