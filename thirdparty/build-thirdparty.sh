@@ -341,14 +341,19 @@ check_if_archieve_exist() {
 build_libevent() {
     check_if_source_exist $LIBEVENT_SOURCE
     cd $TP_SOURCE_DIR/$LIBEVENT_SOURCE
-    if [ ! -f configure ]; then
-        ./autogen.sh
-    fi
 
-    LDFLAGS="-L${TP_LIB_DIR}" \
-    ./configure --prefix=$TP_INSTALL_DIR --enable-shared=no --disable-samples --disable-libevent-regress
-    make -j$PARALLEL
-    make install
+    mkdir -p ${BUILD_DIR}
+    cd ${BUILD_DIR}
+    CFLAGS="-std=c99 -D_BSD_SOURCE -fno-omit-frame-pointer -g -ggdb -O2 -I${TP_INCLUDE_DIR}" \
+	    CPPFLAGS="-I${TP_INCLUDE_DIR}" \
+	    LDFLAGS="-L${TP_LIB_DIR}" \
+	    ${CMAKE_CMD} -G "${CMAKE_GENERATOR}" -DCMAKE_INSTALL_PREFIX="${TP_INSTALL_DIR}" -DEVENT__DISABLE_TESTS=ON \
+            -DEVENT__DISABLE_OPENSSL=OFF -DEVENT__DISABLE_SAMPLES=ON -DEVENT__DISABLE_REGRESS=ON \
+	    -DOPENSSL_ROOT_DIR=${TP_LIB_DIR} -DOPENSSL_INCLUDE_DIR=${TP_INCLUDE_DIR} \
+	    -DOPENSSL_CRYPTO_LIBRARY="${TP_LIB_DIR}/libcrypto.a" -DOPENSSL_SSL_LIBRARY="${TP_LIB_DIR}/libssl.a" ..
+
+    ${BUILD_SYSTEM} -j$PARALLEL
+    ${BUILD_SYSTEM} install
 }
 
 build_openssl() {
@@ -1661,12 +1666,12 @@ export CFLAGS=$GLOBAL_CFLAGS
 
 # Define default build order
 declare -a all_packages=(
-    libevent
     zlib
     lz4
     lzo2
     bzip
     openssl
+    libevent # must build after openssl
     boost # must before thrift
     protobuf
     gflags

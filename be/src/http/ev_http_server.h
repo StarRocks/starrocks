@@ -15,9 +15,14 @@
 // specific language governing permissions and limitations
 // under the License.
 
+#ifndef EVENT_HAVE_OPENSSL
+#define EVENT_HAVE_OPENSSL
+#endif
 #pragma once
 
 #include <event2/event.h>
+#include <openssl/ssl.h>
+#include <event2/bufferevent_ssl.h>
 
 #include <string>
 #include <thread>
@@ -56,6 +61,8 @@ public:
 private:
     Status _bind();
     HttpHandler* _find_handler(HttpRequest* req);
+    void _Init();
+    int _ServerSetCerts();
 
 private:
     // input param
@@ -79,6 +86,8 @@ private:
     PathTrie<HttpHandler*> _options_handlers;
     std::vector<struct event_base*> _event_bases;
     std::vector<struct evhttp*> _https;
+    SSL_CTX* m_ctx;
+    EC_KEY* m_ecdh;
 };
 
 } // namespace starrocks
