@@ -6020,8 +6020,7 @@ TEST_F(ArrayFunctionsTest, null_or_empty) {
     {
         auto array = ColumnHelper::create_column(TYPE_ARRAY_INT, false);
         array->append_datum(DatumArray{{1, 2}});
-        auto literal = ConstColumn::create(std::move(array), chunk_size);
-        auto result = ArrayFunctions::null_or_empty(nullptr, {std::move(literal)}).value();
+        auto result = ArrayFunctions::null_or_empty(nullptr, {std::move(array)}).value();
         EXPECT_EQ("0", result->debug_item(0));
     }
     {
@@ -6032,7 +6031,7 @@ TEST_F(ArrayFunctionsTest, null_or_empty) {
         EXPECT_EQ("0", result->debug_item(0));
     }
     {
-        auto null_col = create_const_null_column(10);
+        auto null_col = ColumnHelper::create_const_null_column(10);
         auto result = ArrayFunctions::null_or_empty(nullptr, {std::move(null_col)}).value();
         EXPECT_EQ("1", result->debug_item(0));
     }
