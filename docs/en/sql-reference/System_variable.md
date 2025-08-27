@@ -605,7 +605,7 @@ Default value: `true`.
 ### enable_lake_tablet_internal_parallel
 
 * **Description**: Whether to enable Parallel Scan for Cloud-native tables in a shared-data cluster.
-* **Default**: false
+* **Default**: true
 * **Data type**: Boolean
 * **Introduced in**: v3.3.0
 
