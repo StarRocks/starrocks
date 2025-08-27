@@ -51,9 +51,9 @@ private:
 // Test helper functions for StateUnionFunction
 template <typename T>
 ColumnPtr create_agg_state_column(const AggregateFunction* func, FunctionContext* ctx, const ColumnPtr& input_column,
-                                  bool is_nullable, const TypeDescriptor& immediate_type) {
+                                  bool is_nullable, const TypeDescriptor& intermediate_type) {
     VLOG_ROW << "create_agg_state_column: " << func->get_name() << " is_nullable: " << is_nullable;
-    auto result_column = ColumnHelper::create_column(immediate_type, is_nullable);
+    auto result_column = ColumnHelper::create_column(intermediate_type, is_nullable);
     auto state = ManagedAggrState::create(ctx, func);
 
     const Column* row_column = input_column.get();
@@ -73,7 +73,7 @@ std::string get_func_name(const std::string& func_name) {
 template <typename T>
 void test_agg_state_union_basic(FunctionContext* ctx, const AggregateFunction* func, const std::string& func_name,
                                 const std::vector<TypeDescriptor>& arg_types, const TypeDescriptor& ret_type,
-                                const TypeDescriptor& immediate_type, bool is_result_nullable = false) {
+                                const TypeDescriptor& intermediate_type, bool is_result_nullable = false) {
     VLOG_ROW << "test_agg_state_union_basic: " << func_name << " is_result_nullable: " << is_result_nullable;
 
     // Create AggStateDesc
@@ -88,9 +88,9 @@ void test_agg_state_union_basic(FunctionContext* ctx, const AggregateFunction* f
 
     // Convert input data to aggregate state columns (intermediate format)
     ColumnPtr agg_state_column1 =
-            create_agg_state_column<T>(func, ctx, input_column1, is_result_nullable, immediate_type);
+            create_agg_state_column<T>(func, ctx, input_column1, is_result_nullable, intermediate_type);
     ColumnPtr agg_state_column2 =
-            create_agg_state_column<T>(func, ctx, input_column2, is_result_nullable, immediate_type);
+            create_agg_state_column<T>(func, ctx, input_column2, is_result_nullable, intermediate_type);
 
     // Test union operation by creating a state and merging the aggregate state columns
     auto state = ManagedAggrState::create(ctx, &union_func);
@@ -106,7 +106,7 @@ void test_agg_state_union_basic(FunctionContext* ctx, const AggregateFunction* f
     }
 
     // Serialize result
-    ColumnPtr result_column = ColumnHelper::create_column(immediate_type, is_result_nullable);
+    ColumnPtr result_column = ColumnHelper::create_column(intermediate_type, is_result_nullable);
     union_func.finalize_to_column(ctx, state->state(), result_column.get());
 
     // Verify result
@@ -117,7 +117,7 @@ void test_agg_state_union_basic(FunctionContext* ctx, const AggregateFunction* f
 template <typename T>
 void test_agg_state_union_nullable(FunctionContext* ctx, const AggregateFunction* func, const std::string& func_name,
                                    const std::vector<TypeDescriptor>& arg_types, const TypeDescriptor& ret_type,
-                                   const TypeDescriptor& immediate_type, bool is_result_nullable = true) {
+                                   const TypeDescriptor& intermediate_type, bool is_result_nullable = true) {
     VLOG_ROW << "test_agg_state_union_nullable: " << func_name << " is_result_nullable: " << is_result_nullable;
 
     // Create AggStateDesc
@@ -136,9 +136,9 @@ void test_agg_state_union_nullable(FunctionContext* ctx, const AggregateFunction
 
     // Convert input data to aggregate state columns (intermediate format)
     ColumnPtr agg_state_column1 =
-            create_agg_state_column<T>(func, ctx, nullable_column1, is_result_nullable, immediate_type);
+            create_agg_state_column<T>(func, ctx, nullable_column1, is_result_nullable, intermediate_type);
     ColumnPtr agg_state_column2 =
-            create_agg_state_column<T>(func, ctx, nullable_column2, is_result_nullable, immediate_type);
+            create_agg_state_column<T>(func, ctx, nullable_column2, is_result_nullable, intermediate_type);
 
     // Test union operation by creating a state and merging the aggregate state columns
     auto state = ManagedAggrState::create(ctx, &union_func);
@@ -154,7 +154,7 @@ void test_agg_state_union_nullable(FunctionContext* ctx, const AggregateFunction
     }
 
     // Serialize result
-    ColumnPtr result_column = ColumnHelper::create_column(immediate_type, is_result_nullable);
+    ColumnPtr result_column = ColumnHelper::create_column(intermediate_type, is_result_nullable);
     union_func.finalize_to_column(ctx, state->state(), result_column.get());
 
     // Verify result
@@ -165,7 +165,7 @@ void test_agg_state_union_nullable(FunctionContext* ctx, const AggregateFunction
 template <typename T>
 void test_agg_state_union_empty_column(FunctionContext* ctx, const AggregateFunction* func,
                                        const std::string& func_name, const std::vector<TypeDescriptor>& arg_types,
-                                       const TypeDescriptor& ret_type, const TypeDescriptor& immediate_type,
+                                       const TypeDescriptor& ret_type, const TypeDescriptor& intermediate_type,
                                        bool is_result_nullable = false) {
     VLOG_ROW << "test_agg_state_union_empty_column: " << func_name << " is_result_nullable: " << is_result_nullable;
 
@@ -195,7 +195,7 @@ void test_agg_state_union_empty_column(FunctionContext* ctx, const AggregateFunc
     }
 
     // Serialize result
-    ColumnPtr result_column = ColumnHelper::create_column(immediate_type, is_result_nullable);
+    ColumnPtr result_column = ColumnHelper::create_column(intermediate_type, is_result_nullable);
     union_func.finalize_to_column(ctx, state->state(), result_column.get());
 
     ASSERT_NE(result_column, nullptr);
@@ -354,7 +354,7 @@ TEST_F(AggStateFunctionsTest, test_agg_state_union_avg) {
 template <typename T>
 void test_agg_state_merge_basic(FunctionContext* ctx, const AggregateFunction* func, const std::string& func_name,
                                 const std::vector<TypeDescriptor>& arg_types, const TypeDescriptor& ret_type,
-                                const TypeDescriptor& immediate_type, bool is_result_nullable = false) {
+                                const TypeDescriptor& intermediate_type, bool is_result_nullable = false) {
     VLOG_ROW << "test_agg_state_merge_basic: " << func_name << " is_result_nullable: " << is_result_nullable;
 
     // Create AggStateDesc
@@ -369,9 +369,9 @@ void test_agg_state_merge_basic(FunctionContext* ctx, const AggregateFunction* f
 
     // Convert input data to aggregate state columns (intermediate format)
     ColumnPtr agg_state_column1 =
-            create_agg_state_column<T>(func, ctx, input_column1, is_result_nullable, immediate_type);
+            create_agg_state_column<T>(func, ctx, input_column1, is_result_nullable, intermediate_type);
     ColumnPtr agg_state_column2 =
-            create_agg_state_column<T>(func, ctx, input_column2, is_result_nullable, immediate_type);
+            create_agg_state_column<T>(func, ctx, input_column2, is_result_nullable, intermediate_type);
 
     // Test merge operation by creating a state and merging the aggregate state columns
     auto state = ManagedAggrState::create(ctx, &merge_func);
@@ -400,7 +400,7 @@ void test_agg_state_merge_basic(FunctionContext* ctx, const AggregateFunction* f
 template <typename T>
 void test_agg_state_merge_nullable(FunctionContext* ctx, const AggregateFunction* func, const std::string& func_name,
                                    const std::vector<TypeDescriptor>& arg_types, const TypeDescriptor& ret_type,
-                                   const TypeDescriptor& immediate_type, bool is_result_nullable = true) {
+                                   const TypeDescriptor& intermediate_type, bool is_result_nullable = true) {
     VLOG_ROW << "test_agg_state_merge_nullable: " << func_name << " is_result_nullable: " << is_result_nullable;
 
     // Create AggStateDesc
@@ -419,9 +419,9 @@ void test_agg_state_merge_nullable(FunctionContext* ctx, const AggregateFunction
 
     // Convert input data to aggregate state columns (intermediate format)
     ColumnPtr agg_state_column1 =
-            create_agg_state_column<T>(func, ctx, nullable_column1, is_result_nullable, immediate_type);
+            create_agg_state_column<T>(func, ctx, nullable_column1, is_result_nullable, intermediate_type);
     ColumnPtr agg_state_column2 =
-            create_agg_state_column<T>(func, ctx, nullable_column2, is_result_nullable, immediate_type);
+            create_agg_state_column<T>(func, ctx, nullable_column2, is_result_nullable, intermediate_type);
 
     // Test merge operation by creating a state and merging the aggregate state columns
     auto state = ManagedAggrState::create(ctx, &merge_func);
@@ -448,7 +448,7 @@ void test_agg_state_merge_nullable(FunctionContext* ctx, const AggregateFunction
 template <typename T>
 void test_agg_state_merge_empty_column(FunctionContext* ctx, const AggregateFunction* func,
                                        const std::string& func_name, const std::vector<TypeDescriptor>& arg_types,
-                                       const TypeDescriptor& ret_type, const TypeDescriptor& immediate_type,
+                                       const TypeDescriptor& ret_type, const TypeDescriptor& intermediate_type,
                                        bool is_result_nullable = false) {
     VLOG_ROW << "test_agg_state_merge_empty_column: " << func_name << " is_result_nullable: " << is_result_nullable;
 
@@ -466,9 +466,9 @@ void test_agg_state_merge_empty_column(FunctionContext* ctx, const AggregateFunc
 
     // Convert input data to aggregate state columns (intermediate format)
     ColumnPtr agg_state_column1 =
-            create_agg_state_column<T>(func, ctx, empty_column1, is_result_nullable, immediate_type);
+            create_agg_state_column<T>(func, ctx, empty_column1, is_result_nullable, intermediate_type);
     ColumnPtr agg_state_column2 =
-            create_agg_state_column<T>(func, ctx, empty_column2, is_result_nullable, immediate_type);
+            create_agg_state_column<T>(func, ctx, empty_column2, is_result_nullable, intermediate_type);
 
     // Test merge operation by creating a state and merging the aggregate state columns
     auto state = ManagedAggrState::create(ctx, &merge_func);
@@ -644,7 +644,7 @@ TEST_F(AggStateFunctionsTest, test_agg_state_merge_count) {
 template <typename T>
 void test_state_function_basic(FunctionContext* ctx, const AggregateFunction* func, const std::string& func_name,
                                const std::vector<TypeDescriptor>& arg_types, const TypeDescriptor& ret_type,
-                               const TypeDescriptor& immediate_type, bool is_result_nullable = false) {
+                               const TypeDescriptor& intermediate_type, bool is_result_nullable = false) {
     VLOG_ROW << "test_state_function_basic: " << func_name << " is_result_nullable: " << is_result_nullable;
 
     // Create AggStateDesc
@@ -654,7 +654,7 @@ void test_state_function_basic(FunctionContext* ctx, const AggregateFunction* fu
     std::vector<bool> arg_nullables(arg_types.size(), is_result_nullable);
 
     // Create StateFunction
-    StateFunction state_func(agg_state_desc, immediate_type, arg_nullables);
+    StateFunction state_func(agg_state_desc, intermediate_type, arg_nullables);
 
     // Create test data
     ColumnPtr input_column = gen_input_column1<T>();
@@ -673,7 +673,7 @@ void test_state_function_basic(FunctionContext* ctx, const AggregateFunction* fu
 template <typename T>
 void test_state_function_nullable(FunctionContext* ctx, const AggregateFunction* func, const std::string& func_name,
                                   const std::vector<TypeDescriptor>& arg_types, const TypeDescriptor& ret_type,
-                                  const TypeDescriptor& immediate_type, bool is_result_nullable = true) {
+                                  const TypeDescriptor& intermediate_type, bool is_result_nullable = true) {
     VLOG_ROW << "test_state_function_nullable: " << func_name << " is_result_nullable: " << is_result_nullable;
 
     // Create AggStateDesc
@@ -683,7 +683,7 @@ void test_state_function_nullable(FunctionContext* ctx, const AggregateFunction*
     std::vector<bool> arg_nullables(arg_types.size(), is_result_nullable);
 
     // Create StateFunction
-    StateFunction state_func(agg_state_desc, immediate_type, arg_nullables);
+    StateFunction state_func(agg_state_desc, intermediate_type, arg_nullables);
 
     // Create test data with nullable columns
     ColumnPtr input_column = gen_input_column1<T>();
@@ -705,7 +705,7 @@ void test_state_function_nullable(FunctionContext* ctx, const AggregateFunction*
 template <typename T>
 void test_state_function_empty_column(FunctionContext* ctx, const AggregateFunction* func, const std::string& func_name,
                                       const std::vector<TypeDescriptor>& arg_types, const TypeDescriptor& ret_type,
-                                      const TypeDescriptor& immediate_type, bool is_result_nullable = false) {
+                                      const TypeDescriptor& intermediate_type, bool is_result_nullable = false) {
     VLOG_ROW << "test_state_function_empty_column: " << func_name << " is_result_nullable: " << is_result_nullable;
 
     // Create AggStateDesc
@@ -715,7 +715,7 @@ void test_state_function_empty_column(FunctionContext* ctx, const AggregateFunct
     std::vector<bool> arg_nullables(arg_types.size(), is_result_nullable);
 
     // Create StateFunction
-    StateFunction state_func(agg_state_desc, immediate_type, arg_nullables);
+    StateFunction state_func(agg_state_desc, intermediate_type, arg_nullables);
 
     // Create empty column
     auto empty_column =
@@ -831,7 +831,7 @@ TEST_F(AggStateFunctionsTest, test_state_function_avg) {
 template <typename T>
 void test_agg_state_union_function_basic(FunctionContext* ctx, const AggregateFunction* func,
                                          const std::string& func_name, const std::vector<TypeDescriptor>& arg_types,
-                                         const TypeDescriptor& ret_type, const TypeDescriptor& immediate_type,
+                                         const TypeDescriptor& ret_type, const TypeDescriptor& intermediate_type,
                                          bool is_result_nullable = false) {
     VLOG_ROW << "test_agg_state_union_function_basic: " << func_name << " is_result_nullable: " << is_result_nullable;
 
@@ -841,16 +841,16 @@ void test_agg_state_union_function_basic(FunctionContext* ctx, const AggregateFu
 
     // Create agg state columns
     ColumnPtr agg_state_column1 =
-            create_agg_state_column<T>(func, ctx, input_column1, is_result_nullable, immediate_type);
+            create_agg_state_column<T>(func, ctx, input_column1, is_result_nullable, intermediate_type);
     ColumnPtr agg_state_column2 =
-            create_agg_state_column<T>(func, ctx, input_column2, is_result_nullable, immediate_type);
+            create_agg_state_column<T>(func, ctx, input_column2, is_result_nullable, intermediate_type);
 
     // Create AggStateDesc
     AggStateDesc agg_state_desc(func_name, ret_type, arg_types, is_result_nullable, 1);
 
     // Create StateUnionFunction
     std::vector<bool> arg_nullables = {false, false};
-    StateUnionFunction union_func(agg_state_desc, immediate_type, arg_nullables);
+    StateUnionFunction union_func(agg_state_desc, intermediate_type, arg_nullables);
 
     // Test prepare
     Status status = union_func.prepare(ctx, FunctionContext::FRAGMENT_LOCAL);
@@ -872,7 +872,7 @@ void test_agg_state_union_function_basic(FunctionContext* ctx, const AggregateFu
 template <typename T>
 void test_agg_state_union_function_nullable(FunctionContext* ctx, const AggregateFunction* func,
                                             const std::string& func_name, const std::vector<TypeDescriptor>& arg_types,
-                                            const TypeDescriptor& ret_type, const TypeDescriptor& immediate_type,
+                                            const TypeDescriptor& ret_type, const TypeDescriptor& intermediate_type,
                                             bool is_result_nullable = true) {
     VLOG_ROW << "test_agg_state_union_function_nullable: " << func_name
              << " is_result_nullable: " << is_result_nullable;
@@ -887,16 +887,16 @@ void test_agg_state_union_function_nullable(FunctionContext* ctx, const Aggregat
 
     // Create agg state columns
     ColumnPtr agg_state_column1 =
-            create_agg_state_column<T>(func, ctx, nullable_column1, is_result_nullable, immediate_type);
+            create_agg_state_column<T>(func, ctx, nullable_column1, is_result_nullable, intermediate_type);
     ColumnPtr agg_state_column2 =
-            create_agg_state_column<T>(func, ctx, nullable_column2, is_result_nullable, immediate_type);
+            create_agg_state_column<T>(func, ctx, nullable_column2, is_result_nullable, intermediate_type);
 
     // Create AggStateDesc
     AggStateDesc agg_state_desc(func_name, ret_type, arg_types, is_result_nullable, 1);
 
     // Create StateUnionFunction with nullable arguments
     std::vector<bool> arg_nullables = {true, true};
-    StateUnionFunction union_func(agg_state_desc, immediate_type, arg_nullables);
+    StateUnionFunction union_func(agg_state_desc, intermediate_type, arg_nullables);
 
     // Test prepare
     Status status = union_func.prepare(ctx, FunctionContext::FRAGMENT_LOCAL);
@@ -1000,20 +1000,20 @@ TEST_F(AggStateFunctionsTest, test_agg_state_union_function_avg) {
     auto arg_type = TYPE_INT;
     TypeDescriptor return_type_desc = TypeDescriptor(return_type);
     std::vector<TypeDescriptor> arg_type_descs = {TypeDescriptor(arg_type)};
-    TypeDescriptor immediate_type_desc = TypeDescriptor(TYPE_VARBINARY);
+    TypeDescriptor intermediate_type_desc = TypeDescriptor(TYPE_VARBINARY);
     auto utils = std::make_unique<FunctionUtils>(nullptr, return_type_desc, arg_type_descs);
     auto ctx = utils->get_fn_ctx();
     {
         auto func = get_aggregate_function("avg", {arg_type}, return_type, false);
         ASSERT_NE(func, nullptr);
         test_agg_state_union_function_basic<int32_t>(ctx, func, "avg", arg_type_descs, return_type_desc,
-                                                     immediate_type_desc, false);
+                                                     intermediate_type_desc, false);
     }
     {
         auto func = get_aggregate_function("avg", {arg_type}, return_type, true);
         ASSERT_NE(func, nullptr);
         test_agg_state_union_function_nullable<int32_t>(ctx, func, "avg", arg_type_descs, return_type_desc,
-                                                        immediate_type_desc, true);
+                                                        intermediate_type_desc, true);
     }
 }
 
@@ -1108,7 +1108,7 @@ TEST_F(AggStateFunctionsTest, test_agg_state_union_function_date) {
 template <typename T>
 void test_agg_state_merge_function_basic(FunctionContext* ctx, const AggregateFunction* func,
                                          const std::string& func_name, const std::vector<TypeDescriptor>& arg_types,
-                                         const TypeDescriptor& ret_type, const TypeDescriptor& immediate_type,
+                                         const TypeDescriptor& ret_type, const TypeDescriptor& intermediate_type,
                                          bool is_nullable = false) {
     VLOG_ROW << "test_agg_state_merge_function_basic: " << func_name << " is_nullable: " << is_nullable;
 
@@ -1116,14 +1116,14 @@ void test_agg_state_merge_function_basic(FunctionContext* ctx, const AggregateFu
     ColumnPtr input_column = gen_input_column1<T>();
 
     // Create agg state column
-    ColumnPtr agg_state_column = create_agg_state_column<T>(func, ctx, input_column, is_nullable, immediate_type);
+    ColumnPtr agg_state_column = create_agg_state_column<T>(func, ctx, input_column, is_nullable, intermediate_type);
 
     // Create AggStateDesc
     AggStateDesc agg_state_desc(func_name, ret_type, arg_types, is_nullable, 1);
 
     // Create StateMergeFunction
     std::vector<bool> arg_nullables = {is_nullable};
-    StateMergeFunction merge_func(agg_state_desc, immediate_type, arg_nullables);
+    StateMergeFunction merge_func(agg_state_desc, intermediate_type, arg_nullables);
 
     // Test prepare
     Status status = merge_func.prepare(ctx, FunctionContext::FRAGMENT_LOCAL);
@@ -1145,7 +1145,7 @@ void test_agg_state_merge_function_basic(FunctionContext* ctx, const AggregateFu
 template <typename T>
 void test_agg_state_merge_function_nullable(FunctionContext* ctx, const AggregateFunction* func,
                                             const std::string& func_name, const std::vector<TypeDescriptor>& arg_types,
-                                            const TypeDescriptor& ret_type, const TypeDescriptor& immediate_type,
+                                            const TypeDescriptor& ret_type, const TypeDescriptor& intermediate_type,
                                             bool is_nullable = true) {
     VLOG_ROW << "test_agg_state_merge_function_nullable: " << func_name << " is_nullable: " << is_nullable;
 
@@ -1156,14 +1156,14 @@ void test_agg_state_merge_function_nullable(FunctionContext* ctx, const Aggregat
     auto nullable_column = ColumnHelper::cast_to_nullable_column(input_column);
 
     // Create agg state column
-    ColumnPtr agg_state_column = create_agg_state_column<T>(func, ctx, nullable_column, is_nullable, immediate_type);
+    ColumnPtr agg_state_column = create_agg_state_column<T>(func, ctx, nullable_column, is_nullable, intermediate_type);
 
     // Create AggStateDesc
     AggStateDesc agg_state_desc(func_name, ret_type, arg_types, is_nullable, 1);
 
     // Create StateMergeFunction with nullable arguments
     std::vector<bool> arg_nullables = {is_nullable};
-    StateMergeFunction merge_func(agg_state_desc, immediate_type, arg_nullables);
+    StateMergeFunction merge_func(agg_state_desc, intermediate_type, arg_nullables);
 
     // Test prepare
     Status status = merge_func.prepare(ctx, FunctionContext::FRAGMENT_LOCAL);
@@ -1270,7 +1270,7 @@ TEST_F(AggStateFunctionsTest, test_agg_state_merge_function_avg) {
     auto arg_type = TYPE_INT;
     TypeDescriptor return_type_desc = TypeDescriptor(return_type);
     std::vector<TypeDescriptor> arg_type_descs = {TypeDescriptor(arg_type)};
-    TypeDescriptor immediate_type_desc = TypeDescriptor(TYPE_VARBINARY);
+    TypeDescriptor intermediate_type_desc = TypeDescriptor(TYPE_VARBINARY);
     auto utils = std::make_unique<FunctionUtils>(nullptr, return_type_desc, arg_type_descs);
     auto ctx = utils->get_fn_ctx();
     {
@@ -1278,13 +1278,13 @@ TEST_F(AggStateFunctionsTest, test_agg_state_merge_function_avg) {
         ASSERT_NE(func, nullptr);
 
         test_agg_state_merge_function_basic<int32_t>(ctx, func, "avg", arg_type_descs, return_type_desc,
-                                                     immediate_type_desc);
+                                                     intermediate_type_desc);
     }
     {
         auto func = get_aggregate_function("avg", {arg_type}, return_type, true);
         ASSERT_NE(func, nullptr);
         test_agg_state_merge_function_nullable<int32_t>(ctx, func, "avg", arg_type_descs, return_type_desc,
-                                                        immediate_type_desc);
+                                                        intermediate_type_desc);
     }
 }
 
@@ -1389,13 +1389,14 @@ TEST_F(AggStateFunctionsTest, test_agg_state_merge_function_memory_allocation) {
     AggStateDesc agg_state_desc(func->get_name(), return_type_desc, arg_type_descs, true, 1);
 
     // Create StateMergeFunction
-    TypeDescriptor immediate_type = return_type_desc;
+    TypeDescriptor intermediate_type = return_type_desc;
     std::vector<bool> arg_nullables = {false};
-    StateMergeFunction merge_func(agg_state_desc, immediate_type, arg_nullables);
+    StateMergeFunction merge_func(agg_state_desc, intermediate_type, arg_nullables);
 
     // Test with large dataset
     auto large_input_column = gen_input_column1<int32_t>();
-    ColumnPtr agg_state_column = create_agg_state_column<int32_t>(func, ctx, large_input_column, false, immediate_type);
+    ColumnPtr agg_state_column =
+            create_agg_state_column<int32_t>(func, ctx, large_input_column, false, intermediate_type);
 
     // Test prepare
     Status status = merge_func.prepare(ctx, FunctionContext::FRAGMENT_LOCAL);
@@ -1411,7 +1412,7 @@ TEST_F(AggStateFunctionsTest, test_agg_state_merge_function_memory_allocation) {
 template <typename T>
 void test_agg_state_combine_basic(FunctionContext* ctx, const AggregateFunction* base_func,
                                   const std::string& func_name, const std::vector<TypeDescriptor>& arg_types,
-                                  const TypeDescriptor& ret_type, const TypeDescriptor& immediate_type,
+                                  const TypeDescriptor& ret_type, const TypeDescriptor& intermediate_type,
                                   bool is_nullable = false) {
     VLOG_ROW << "test_agg_state_combine_basic: " << func_name << " is_nullable: " << is_nullable;
 
@@ -1440,7 +1441,7 @@ void test_agg_state_combine_basic(FunctionContext* ctx, const AggregateFunction*
     combine_func.update_batch_single_state(ctx, row_column->size(), &row_column, combine_state->state());
 
     // Get result from combine function (should be serialized state)
-    auto combine_result_column = ColumnHelper::create_column(immediate_type, is_nullable);
+    auto combine_result_column = ColumnHelper::create_column(intermediate_type, is_nullable);
     combine_func.finalize_to_column(ctx, combine_state->state(), combine_result_column.get());
 
     // Test with base function for comparison
@@ -1448,7 +1449,7 @@ void test_agg_state_combine_basic(FunctionContext* ctx, const AggregateFunction*
     base_func->update_batch_single_state(ctx, row_column->size(), &row_column, base_state->state());
 
     // Get serialized state from base function
-    auto base_serialized_column = ColumnHelper::create_column(immediate_type, is_nullable);
+    auto base_serialized_column = ColumnHelper::create_column(intermediate_type, is_nullable);
     base_func->serialize_to_column(ctx, base_state->state(), base_serialized_column.get());
 
     // Get final result from base function
@@ -1467,7 +1468,7 @@ void test_agg_state_combine_basic(FunctionContext* ctx, const AggregateFunction*
 template <typename T>
 void test_agg_state_combine_merge(FunctionContext* ctx, const AggregateFunction* base_func,
                                   const std::string& func_name, const std::vector<TypeDescriptor>& arg_types,
-                                  const TypeDescriptor& ret_type, const TypeDescriptor& immediate_type,
+                                  const TypeDescriptor& ret_type, const TypeDescriptor& intermediate_type,
                                   bool is_nullable = false) {
     VLOG_ROW << "test_agg_state_combine_merge: " << func_name << " is_nullable: " << is_nullable;
 
@@ -1498,14 +1499,14 @@ void test_agg_state_combine_merge(FunctionContext* ctx, const AggregateFunction*
     combine_func.update_batch_single_state(ctx, row_column2->size(), &row_column2, state2->state());
 
     // Serialize first state for merging
-    auto serialize_column = ColumnHelper::create_column(immediate_type, is_nullable);
+    auto serialize_column = ColumnHelper::create_column(intermediate_type, is_nullable);
     combine_func.serialize_to_column(ctx, state1->state(), serialize_column.get());
 
     // Merge first state into second state
     combine_func.merge(ctx, serialize_column.get(), state2->state(), 0);
 
     // Get final result
-    auto result_column = ColumnHelper::create_column(immediate_type, is_nullable);
+    auto result_column = ColumnHelper::create_column(intermediate_type, is_nullable);
     combine_func.finalize_to_column(ctx, state2->state(), result_column.get());
 
     // Verify merge worked (result should contain combined data)
@@ -1515,7 +1516,7 @@ void test_agg_state_combine_merge(FunctionContext* ctx, const AggregateFunction*
 template <typename T>
 void test_agg_state_combine_convert_format(FunctionContext* ctx, const AggregateFunction* base_func,
                                            const std::string& func_name, const std::vector<TypeDescriptor>& arg_types,
-                                           const TypeDescriptor& ret_type, const TypeDescriptor& immediate_type,
+                                           const TypeDescriptor& ret_type, const TypeDescriptor& intermediate_type,
                                            bool is_nullable = false) {
     VLOG_ROW << "test_agg_state_combine_convert_format: " << func_name << " is_nullable: " << is_nullable;
 
@@ -1636,10 +1637,10 @@ TEST_F(AggStateFunctionsTest, test_agg_state_combine_count) {
 TEST_F(AggStateFunctionsTest, test_agg_state_combine_avg) {
     auto return_type = TYPE_DOUBLE;
     auto arg_type = TYPE_INT;
-    auto immediate_type = TYPE_VARBINARY;
+    auto intermediate_type = TYPE_VARBINARY;
     TypeDescriptor return_type_desc = TypeDescriptor(return_type);
     TypeDescriptor arg_type_desc = TypeDescriptor(arg_type);
-    TypeDescriptor immediate_type_desc = TypeDescriptor(immediate_type);
+    TypeDescriptor intermediate_type_desc = TypeDescriptor(intermediate_type);
     std::vector<TypeDescriptor> arg_type_descs = {arg_type_desc};
     auto utils = std::make_unique<FunctionUtils>(nullptr, return_type_desc, arg_type_descs);
     auto ctx = utils->get_fn_ctx();
@@ -1649,22 +1650,22 @@ TEST_F(AggStateFunctionsTest, test_agg_state_combine_avg) {
         ASSERT_NE(func, nullptr);
         // For avg, the immediate type might be different from return type (contains count and sum)
         // Use the function's return type as immediate type for simplicity
-        test_agg_state_combine_basic<int32_t>(ctx, func, "avg", arg_type_descs, return_type_desc, immediate_type_desc,
-                                              false);
-        test_agg_state_combine_merge<int32_t>(ctx, func, "avg", arg_type_descs, return_type_desc, immediate_type_desc,
-                                              false);
+        test_agg_state_combine_basic<int32_t>(ctx, func, "avg", arg_type_descs, return_type_desc,
+                                              intermediate_type_desc, false);
+        test_agg_state_combine_merge<int32_t>(ctx, func, "avg", arg_type_descs, return_type_desc,
+                                              intermediate_type_desc, false);
         test_agg_state_combine_convert_format<int32_t>(ctx, func, "avg", arg_type_descs, return_type_desc,
-                                                       immediate_type_desc, false);
+                                                       intermediate_type_desc, false);
     }
     {
         auto func = get_aggregate_function("avg", {arg_type}, return_type, true);
         ASSERT_NE(func, nullptr);
-        test_agg_state_combine_basic<int32_t>(ctx, func, "avg", arg_type_descs, return_type_desc, immediate_type_desc,
-                                              true);
-        test_agg_state_combine_merge<int32_t>(ctx, func, "avg", arg_type_descs, return_type_desc, immediate_type_desc,
-                                              true);
+        test_agg_state_combine_basic<int32_t>(ctx, func, "avg", arg_type_descs, return_type_desc,
+                                              intermediate_type_desc, true);
+        test_agg_state_combine_merge<int32_t>(ctx, func, "avg", arg_type_descs, return_type_desc,
+                                              intermediate_type_desc, true);
         test_agg_state_combine_convert_format<int32_t>(ctx, func, "avg", arg_type_descs, return_type_desc,
-                                                       immediate_type_desc, true);
+                                                       intermediate_type_desc, true);
     }
 }
 

@@ -21,6 +21,7 @@
 #include "common/status.h"
 #include "exprs/agg/aggregate.h"
 #include "exprs/agg/aggregate_state_allocator.h"
+#include "exprs/agg/combinator/agg_state_utils.h"
 #include "exprs/agg/combinator/state_combinator.h"
 #include "exprs/function_context.h"
 #include "runtime/agg_state_desc.h"
@@ -30,14 +31,14 @@ namespace starrocks {
 
 // A state union function that combines intermediate states into a single intermediate state.
 //
-// DESC: immediate_type {agg_func}_state_union(immediate_type, immediate_type)
-//  input type  : (immediate type, immediate type)
-//  return type : immediate type
+// DESC: intermediate_type {agg_func}_state_union(intermediate_type, intermediate_type)
+//  input type  : (intermediate type, intermediate type)
+//  return type : intermediate type
 class StateUnionFunction final : public StateCombinator {
 public:
-    StateUnionFunction(AggStateDesc agg_state_desc, TypeDescriptor immediate_type, std::vector<bool> arg_nullables)
-            : StateCombinator(std::move(agg_state_desc), std::move(immediate_type), std::move(arg_nullables)) {
-        VLOG_ROW << "StateUnionFunction constructor:" << _agg_state_desc.debug_string();
+    StateUnionFunction(AggStateDesc agg_state_desc, TypeDescriptor intermediate_type, std::vector<bool> arg_nullables)
+            : StateCombinator(std::move(agg_state_desc), std::move(intermediate_type), std::move(arg_nullables)) {
+        DCHECK(_function != nullptr);
     }
 
     ~StateUnionFunction() {
@@ -47,9 +48,6 @@ public:
     }
 
     virtual Status prepare(FunctionContext* context, FunctionContext::FunctionStateScope scope) {
-        if (_function == nullptr) {
-            return Status::InternalError("AggStateBaseFunction is nullptr  for " + _agg_state_desc.get_func_name());
-        }
         _nested_ctx =
                 FunctionContext::create_context(context->state(), context->mem_pool(),
                                                 _agg_state_desc.get_return_type(), _agg_state_desc.get_arg_types());
@@ -57,13 +55,10 @@ public:
     }
 
     StatusOr<ColumnPtr> execute(FunctionContext* context, const Columns& columns) override {
-        if (columns.size() != 2) {
-            return Status::InternalError("StateUnionFunction execute columns is not 2");
-        }
-        if (columns.size() != _arg_nullables.size()) {
-            return Status::InternalError("StateUnionFunction execute columns size " + std::to_string(columns.size()) +
-                                         " not match with arg_nullables size " + std::to_string(_arg_nullables.size()));
-        }
+        RETURN_IF_UNLIKELY(
+                columns.size() != _arg_nullables.size(),
+                Status::InternalError("StateMergeFunction execute columns size " + std::to_string(columns.size()) +
+                                      " not match with arg_nullables size " + std::to_string(_arg_nullables.size())));
 
         SCOPED_THREAD_LOCAL_AGG_STATE_ALLOCATOR_SETTER(&kDefaultAggStateMergeFunctionAllocator);
 
@@ -78,16 +73,16 @@ public:
         auto chunk_size = columns[0]->size();
         auto align_size = _function->alignof_size();
         auto state_size = align_to(_function->size(), align_size);
-        ColumnPtr result = ColumnHelper::create_column(_immediate_type, _agg_state_desc.is_result_nullable());
+        auto result = ColumnHelper::create_column(_intermediate_type, _agg_state_desc.is_result_nullable());
         // allocate the agg_state
-        AggDataPtr agg_state = reinterpret_cast<AggDataPtr>(std::aligned_alloc(align_size, state_size));
-        if (UNLIKELY(agg_state == nullptr)) {
-            return Status::InternalError("Failed to allocate memory for aggregate state");
-        }
+        AlignedMemoryGuard guard(align_size, state_size);
+        RETURN_IF_ERROR(guard.allocate());
+        AggDataPtr agg_state = guard.get();
 
         // `count` is a special case because `CountNullableAggregateFunction` is used to handle nullable column
         // and its serialize/finalize is meant to not nullable.
-        if (_function->get_name() == "count" || _function->get_name() == "count_nullable") {
+        if (_function->get_name() == AggStateUtils::FUNCTION_COUNT ||
+            _function->get_name() == AggStateUtils::FUNCTION_COUNT_NULLABLE) {
             std::vector<Column*> data_columns;
             data_columns.reserve(new_columns.size());
             for (size_t i = 0; i < new_columns.size(); i++) {
@@ -122,7 +117,6 @@ public:
                 _function->destroy(_nested_ctx, agg_state);
             }
         }
-        std::free(agg_state);
 
         return result;
     }

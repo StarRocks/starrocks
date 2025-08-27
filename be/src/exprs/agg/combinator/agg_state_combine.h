@@ -18,28 +18,28 @@
 #include "column/vectorized_fwd.h"
 #include "exprs/agg/aggregate.h"
 #include "exprs/agg/combinator/agg_state_combinator.h"
+#include "exprs/agg/combinator/agg_state_utils.h"
 #include "runtime/agg_state_desc.h"
 
 namespace starrocks {
 struct AggStateCombineState {};
 
-// An aggregate combine combinator that combines aggregate inputs to compute immediate results.
+// An aggregate combine combinator that combines aggregate inputs to compute intermediate results.
 // This combinator is equivalent to calling `{agg_func}_union({agg_func}_state(arg_types))` in SQL,
 // but with reduced function call overhead and memory allocation for better performance.
 // eg:
 // - SQL: sum_union(sum_state(col))
 // - This combinator: sum_combine(col)
 //
-// DESC: immediate_type {agg_func}_combine(arg types)
+// DESC: intermediate_type {agg_func}_combine(arg types)
 //  input type          : aggregate function's arg types
-//  intermediate type   : aggregate function's immediate_type
-//  return type         : aggregate function's immediate_type
+//  intermediate type   : aggregate function's intermediate_type
+//  return type         : aggregate function's intermediate_type
 class AggStateCombine final : public AggStateCombinator<AggStateCombineState, AggStateCombine> {
 public:
     AggStateCombine(AggStateDesc agg_state_desc, const AggregateFunction* function)
             : AggStateCombinator(agg_state_desc, function) {
         DCHECK(_function != nullptr);
-        VLOG_ROW << "AggStateCombine constructor:" << _agg_state_desc.debug_string();
     }
 
     void update(FunctionContext* ctx, const Column** columns, AggDataPtr __restrict state,
@@ -74,7 +74,8 @@ private:
                                               Column* to) const {
         // `count` is a special case because `CountNullableAggregateFunction` is used to handle nullable column
         // and its serialize/finalize is meant to not nullable.
-        if (_function->get_name() == "count" || _function->get_name() == "count_nullable") {
+        if (_function->get_name() == AggStateUtils::FUNCTION_COUNT ||
+            _function->get_name() == AggStateUtils::FUNCTION_COUNT_NULLABLE) {
             if (LIKELY(to->is_nullable())) {
                 auto* nullable_column = down_cast<NullableColumn*>(to);
                 _function->serialize_to_column(ctx, state, nullable_column->mutable_data_column());

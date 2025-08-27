@@ -22,10 +22,12 @@
 #include "common/status.h"
 #include "exprs/agg/aggregate.h"
 #include "exprs/agg/aggregate_state_allocator.h"
+#include "exprs/agg/combinator/agg_state_utils.h"
 #include "exprs/agg/combinator/state_combinator.h"
 #include "exprs/function_context.h"
 #include "runtime/agg_state_desc.h"
 #include "runtime/mem_pool.h"
+#include "util/defer_op.h"
 
 namespace starrocks {
 
@@ -36,9 +38,9 @@ namespace starrocks {
 //  return type : return type
 class StateMergeFunction final : public StateCombinator {
 public:
-    StateMergeFunction(AggStateDesc agg_state_desc, TypeDescriptor immediate_type, std::vector<bool> arg_nullables)
-            : StateCombinator(std::move(agg_state_desc), std::move(immediate_type), std::move(arg_nullables)) {
-        VLOG_ROW << "StateMergeFunction constructor:" << _agg_state_desc.debug_string();
+    StateMergeFunction(AggStateDesc agg_state_desc, TypeDescriptor intermediate_type, std::vector<bool> arg_nullables)
+            : StateCombinator(std::move(agg_state_desc), std::move(intermediate_type), std::move(arg_nullables)) {
+        DCHECK(_function != nullptr);
     }
 
     ~StateMergeFunction() {
@@ -58,13 +60,10 @@ public:
     }
 
     StatusOr<ColumnPtr> execute(FunctionContext* context, const Columns& columns) override {
-        if (columns.size() != 1) {
-            return Status::InternalError("StateMergeFunction execute columns is not 1");
-        }
-        if (columns.size() != _arg_nullables.size()) {
-            return Status::InternalError("StateMergeFunction execute columns size " + std::to_string(columns.size()) +
-                                         " not match with arg_nullables size " + std::to_string(_arg_nullables.size()));
-        }
+        RETURN_IF_UNLIKELY(
+                columns.size() != _arg_nullables.size(),
+                Status::InternalError("StateMergeFunction execute columns size " + std::to_string(columns.size()) +
+                                      " not match with arg_nullables size " + std::to_string(_arg_nullables.size())));
 
         SCOPED_THREAD_LOCAL_AGG_STATE_ALLOCATOR_SETTER(&kDefaultAggStateMergeFunctionAllocator);
 
@@ -79,16 +78,15 @@ public:
         // finalize agg states into result
         auto align_size = _function->alignof_size();
         auto state_size = align_to(_function->size(), align_size);
-        AggDataPtr agg_state = reinterpret_cast<AggDataPtr>(std::aligned_alloc(align_size, state_size));
-        if (UNLIKELY(agg_state == nullptr)) {
-            return Status::InternalError("Failed to allocate memory for aggregate state");
-        }
+        AlignedMemoryGuard guard(align_size, state_size);
+        RETURN_IF_ERROR(guard.allocate());
+        AggDataPtr agg_state = guard.get();
 
         // `count` is a special case because `CountNullableAggregateFunction` is used to handle nullable column
         // and its serialize/finalize is meant to not nullable.
         DCHECK_EQ(is_result_nullable, new_column->is_nullable());
         std::string function_name = _function->get_name();
-        if (function_name == "count" || function_name == "count_nullable") {
+        if (function_name == AggStateUtils::FUNCTION_COUNT || function_name == AggStateUtils::FUNCTION_COUNT_NULLABLE) {
             auto* data_column = ColumnHelper::get_data_column(new_column.get());
             for (size_t i = 0; i < chunk_size; i++) {
                 if (new_column->is_null(i)) {
@@ -112,7 +110,6 @@ public:
                 _function->destroy(_nested_ctx, agg_state);
             }
         }
-        std::free(agg_state);
         return result;
     }
 
