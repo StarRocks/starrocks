@@ -27,6 +27,8 @@
 #include "storage/tablet.h"
 #include "storage/tablet_manager.h"
 #include "storage/txn_manager.h"
+#include "util/countdown_latch.h"
+#include "util/defer_op.h"
 #include "util/starrocks_metrics.h"
 #include "util/threadpool.h"
 #include "util/time.h"
@@ -124,12 +126,14 @@ void run_publish_version_task(ThreadPoolToken* token, const TPublishVersionReque
     span->SetAttribute("num_tablet", num_active_tablet);
 
     std::mutex affected_dirs_lock;
+    CountDownLatch latch(static_cast<int>(tablet_tasks.size()));
     for (auto& tablet_task : tablet_tasks) {
         uint32_t retry_time = 0;
         Status st;
         while (retry_time++ < PUBLISH_VERSION_SUBMIT_MAX_RETRY) {
             auto task = std::make_shared<CancellableRunnable>(
                     [&]() {
+                        DeferOp defer([&] { latch.count_down(); });
                         auto& task = tablet_task;
                         auto tablet_span = Tracer::Instance().add_span("tablet_publish_txn", span);
                         auto scoped_tablet_span = trace::Scope(tablet_span);
@@ -209,10 +213,11 @@ void run_publish_version_task(ThreadPoolToken* token, const TPublishVersionReque
                         }
                     },
                     [&]() {
-                        tablet_task.st = st = Status::Cancelled(fmt::format(
-                                "publish version task has been cancelled, tablet_id={}, version={}",
-                                    tablet_task.tablet_id, tablet_task.version));
+                        tablet_task.st = Status::Cancelled(
+                                fmt::format("publish version task has been cancelled, tablet_id={}, version={}",
+                                            tablet_task.tablet_id, tablet_task.version));
                         VLOG(1) << tablet_task.st;
+                        latch.count_down();
                     });
 
             st = token->submit(std::move(task));
@@ -230,10 +235,11 @@ void run_publish_version_task(ThreadPoolToken* token, const TPublishVersionReque
         }
         if (!st.ok()) {
             tablet_task.st = std::move(st);
+            latch.count_down();
         }
     }
     span->AddEvent("all_task_submitted");
-    token->wait();
+    latch.wait();
     span->AddEvent("all_task_finished");
 
     Status st;

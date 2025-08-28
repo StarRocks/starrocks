@@ -441,7 +441,6 @@ TEST_F(PublishVersionTaskTest, test_publish_version_cancellation) {
                         .set_max_queue_size(128)
                         .build(&pool)
                         .ok());
-    auto token = pool->new_token(ThreadPool::ExecutionMode::SERIAL);
 
     // Submit a blocking task to occupy the only worker thread so that publish tasks queue up
     std::mutex mu;
@@ -457,7 +456,7 @@ TEST_F(PublishVersionTaskTest, test_publish_version_cancellation) {
             [&]() {
                 // no-op for blocker cancel
             });
-    ASSERT_TRUE(token->submit(blocker).ok());
+    ASSERT_TRUE(pool->submit(std::move(blocker)).ok());
 
     // Prepare publish request
     std::unordered_set<DataDir*> affected_dirs;
@@ -476,6 +475,7 @@ TEST_F(PublishVersionTaskTest, test_publish_version_cancellation) {
     }));
 
     // Run publish in a separate thread so we can shutdown the pool to trigger cancellation
+    auto token = pool->new_token(ThreadPool::ExecutionMode::CONCURRENT);
     std::thread t([&]() {
         run_publish_version_task(token.get(), publish_version_req, finish_task_request, affected_dirs, 0);
     });
@@ -485,6 +485,8 @@ TEST_F(PublishVersionTaskTest, test_publish_version_cancellation) {
 
     // Shutdown the pool in a separate thread, then release the blocker so shutdown can complete
     std::thread shutdown_th([&]() { pool->shutdown(); });
+    // Wait until the token has been shutdown
+    ASSERT_TRUE(token->wait_for(MonoDelta::FromSeconds(60)));
     {
         std::lock_guard<std::mutex> lk(mu);
         release_blocker = true;
