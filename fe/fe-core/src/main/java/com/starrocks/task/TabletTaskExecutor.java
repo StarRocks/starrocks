@@ -462,7 +462,7 @@ public class TabletTaskExecutor {
                                 batchTaskMap.put(backendId, batchTask);
                             }
                             batchTask.addTask(dropTask);
-                            LOG.info("delete tablet[{}] from backend[{}] because table {}-{} is dropped",
+                            LOG.debug("delete tablet[{}] from backend[{}] because table {}-{} is dropped",
                                     tabletId, backendId, olapTable.getId(), olapTable.getName());
                         } // end for replicas
                     } // end for tablets

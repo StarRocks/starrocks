@@ -342,7 +342,7 @@ public class CheckConsistencyJob {
                 }
 
                 if (isConsistent) {
-                    LOG.info("tablet[{}] is consistent: {}", tabletId, checksumMap.keySet());
+                    LOG.debug("tablet[{}] is consistent: {}", tabletId, checksumMap.keySet());
                 } else {
                     StringBuilder sb = new StringBuilder();
                     sb.append("tablet[").append(tabletId).append("] is not consistent: ");

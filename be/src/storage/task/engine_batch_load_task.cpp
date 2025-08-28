@@ -272,7 +272,7 @@ Status EngineBatchLoadTask::_push(const TPushReq& request, std::vector<TTabletIn
 }
 
 Status EngineBatchLoadTask::_delete_data(const TPushReq& request, std::vector<TTabletInfo>* tablet_info_vec) {
-    LOG(INFO) << "begin to process delete data. request=" << ThriftDebugString(request);
+    VLOG(3) << "begin to process delete data. request=" << ThriftDebugString(request);
     StarRocksMetrics::instance()->delete_requests_total.increment(1);
 
     if (tablet_info_vec == nullptr) {
@@ -297,7 +297,7 @@ Status EngineBatchLoadTask::_delete_data(const TPushReq& request, std::vector<TT
         return res;
     }
 
-    LOG(INFO) << "Finish to delete data. tablet:" << tablet->full_name();
+    VLOG(3) << "Finish to delete data. tablet:" << tablet->full_name();
     return res;
 }
 
