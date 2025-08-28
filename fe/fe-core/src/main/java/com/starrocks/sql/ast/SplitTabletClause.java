@@ -14,11 +14,7 @@
 
 package com.starrocks.sql.ast;
 
-<<<<<<< HEAD
-import com.google.common.collect.Maps;
 import com.starrocks.alter.AlterOpType;
-=======
->>>>>>> e965b06611 ([Feature] Support automatic creating split tablet job (#61650))
 import com.starrocks.common.Config;
 import com.starrocks.common.util.PrintableMap;
 import com.starrocks.sql.parser.NodePosition;
