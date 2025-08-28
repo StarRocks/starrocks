@@ -1,0 +1,118 @@
+-- name: test_agg_compressed_key2
+CREATE TABLE t3 (
+    c_2_0 LARGEINT NOT NULL,
+    c_2_1 LARGEINT NOT NULL,
+    c_2_2 LARGEINT NOT NULL,
+    c_2_3 LARGEINT NOT NULL,
+    c_2_4 LARGEINT NOT NULL,
+    c_2_5 LARGEINT NOT NULL,
+    c_2_6 LARGEINT NOT NULL,
+    c_2_7 LARGEINT NOT NULL,
+    c_2_8 LARGEINT NOT NULL,
+    c_2_9 LARGEINT NOT NULL,
+    c_2_10 LARGEINT NOT NULL,
+    c_2_11 LARGEINT NOT NULL,
+    c_2_12 LARGEINT NOT NULL,
+    c_2_13 LARGEINT NOT NULL,
+    c_2_14 LARGEINT NOT NULL,
+    c_2_15 LARGEINT NOT NULL
+) DUPLICATE KEY (c_2_0) DISTRIBUTED BY HASH (c_2_0) properties("replication_num" = "1");
+-- result:
+-- !result
+insert into t3 values (0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0);
+-- result:
+-- !result
+insert into t3 values (128, 128, 128, 128, 128, 128, 128, 128, 128, 128, 128, 128, 128, 128, 128, 128);
+-- result:
+-- !result
+insert into t3 values (1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1);
+-- result:
+-- !result
+function: wait_min_max_stat_ready('c_2_0', 't3') 
+-- result:
+
+-- !result
+function: wait_min_max_stat_ready('c_2_1', 't3') 
+-- result:
+
+-- !result
+function: wait_min_max_stat_ready('c_2_2', 't3') 
+-- result:
+
+-- !result
+function: wait_min_max_stat_ready('c_2_3', 't3') 
+-- result:
+
+-- !result
+function: wait_min_max_stat_ready('c_2_4', 't3') 
+-- result:
+
+-- !result
+function: wait_min_max_stat_ready('c_2_5', 't3') 
+-- result:
+
+-- !result
+function: wait_min_max_stat_ready('c_2_6', 't3') 
+-- result:
+
+-- !result
+function: wait_min_max_stat_ready('c_2_7', 't3') 
+-- result:
+
+-- !result
+function: wait_min_max_stat_ready('c_2_8', 't3') 
+-- result:
+
+-- !result
+function: wait_min_max_stat_ready('c_2_9', 't3') 
+-- result:
+
+-- !result
+function: wait_min_max_stat_ready('c_2_10', 't3') 
+-- result:
+
+-- !result
+function: wait_min_max_stat_ready('c_2_11', 't3') 
+-- result:
+
+-- !result
+function: wait_min_max_stat_ready('c_2_12', 't3') 
+-- result:
+
+-- !result
+function: wait_min_max_stat_ready('c_2_13', 't3') 
+-- result:
+
+-- !result
+function: wait_min_max_stat_ready('c_2_14', 't3') 
+-- result:
+
+-- !result
+function: wait_min_max_stat_ready('c_2_15', 't3') 
+-- result:
+
+-- !result
+select distinct c_2_0, c_2_1, c_2_2, c_2_3, c_2_4, c_2_5, c_2_6, c_2_7, c_2_8, c_2_9, c_2_10, c_2_11, c_2_12, c_2_13, c_2_14, c_2_15 from t3 order by 1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16;
+-- result:
+0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0
+1	1	1	1	1	1	1	1	1	1	1	1	1	1	1	1
+128	128	128	128	128	128	128	128	128	128	128	128	128	128	128	128
+-- !result
+CREATE TABLE t4 (
+    c_2_0 LARGEINT NOT NULL
+) DUPLICATE KEY (c_2_0) 
+DISTRIBUTED BY HASH (c_2_0) 
+properties("replication_num" = "1");
+-- result:
+-- !result
+insert into t4 values (1024), (-2139922094);
+-- result:
+-- !result
+function: wait_min_max_stat_ready('c_2_0', 't4') 
+-- result:
+
+-- !result
+select distinct c_2_0 from t4 order by t4;
+-- result:
+E: (1064, "Getting analyzing error. Detail message: Column 't4' cannot be resolved.")
+-- !result
