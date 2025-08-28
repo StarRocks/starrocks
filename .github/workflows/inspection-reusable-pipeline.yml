@@ -337,7 +337,6 @@ jobs:
     if: always() && needs.admit.result == 'success'
     timeout-minutes: 20
     env:
-      PR_NUMBER: ${{ github.event.number }}
       FE_NODE: ${{ needs.deploy.outputs.fe }}
       BE_NODE: ${{ needs.deploy.outputs.be }}
       BE_LIST: ${{ needs.deploy.outputs.be_list }}
