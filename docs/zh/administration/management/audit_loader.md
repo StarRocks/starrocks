@@ -69,7 +69,7 @@ SHOW PARTITIONS FROM starrocks_audit_db__.starrocks_audit_tbl__;
 
 ## 下载并配置 AuditLoader
 
-1. [下载](https://releases.mirrorship.cn/resources/AuditLoader.zip) AuditLoader 安装包。该插件兼容目前在维护的所有 StarRocks 版本。
+1. [下载](https://releases.mirrorship.cn/resources/auditloader.zip) AuditLoader 安装包。该插件兼容目前在维护的所有 StarRocks 版本。
 
 2. 解压安装包。
 
