@@ -255,7 +255,7 @@ public class SyncPartitionUtilsTest {
         addIntoListPartitionMap(mvListMap, "p20230621", "2023-06-21");
         addIntoListPartitionMap(mvListMap, "p20230620", "2023-06-20");
 
-        Map<String, PListCell> diff = ListPartitionDiffer.diffList(baseListMap, mvListMap);
+        Map<String, PListCell> diff = ListPartitionDiffer.diffList(baseListMap, mvListMap, null);
         Assert.assertEquals(0, diff.size());
 
         baseListMap = Maps.newHashMap();
@@ -265,7 +265,7 @@ public class SyncPartitionUtilsTest {
         mvListMap = Maps.newHashMap();
         addIntoListPartitionMap(mvListMap, "p20230619", "2023-06-19");
 
-        diff = ListPartitionDiffer.diffList(baseListMap, mvListMap);
+        diff = ListPartitionDiffer.diffList(baseListMap, mvListMap, null);
         Assert.assertEquals(1, diff.size());
         Assert.assertEquals("2023-06-20", diff.get("p20230620").getPartitionItems().iterator().next().get(0));
 
@@ -276,7 +276,7 @@ public class SyncPartitionUtilsTest {
         addIntoListPartitionMap(mvListMap, "p20230619", "2023-06-19");
         addIntoListPartitionMap(mvListMap, "p20230620", "2023-06-20");
 
-        diff = ListPartitionDiffer.diffList(baseListMap, mvListMap);
+        diff = ListPartitionDiffer.diffList(baseListMap, mvListMap, null);
         Assert.assertEquals(0, diff.size());
     }
 

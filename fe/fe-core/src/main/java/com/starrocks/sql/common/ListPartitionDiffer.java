@@ -23,6 +23,8 @@ import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.connector.PartitionUtil;
+import com.starrocks.sql.analyzer.AnalyzerUtils;
+import org.apache.commons.collections4.CollectionUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -45,45 +47,71 @@ public final class ListPartitionDiffer extends PartitionDiffer {
      * @return the list partition diff between the base table and the mv
      */
     public static ListPartitionDiff getListPartitionDiff(Map<String, PListCell> baseItems,
-                                                         Map<String, PListCell> mvItems) {
+                                                         Map<String, PListCell> mvItems,
+                                                         Set<String> uniqueResultNames) {
         // This synchronization method has a one-to-one correspondence
         // between the base table and the partition of the mv.
-        Map<String, PListCell> adds = diffList(baseItems, mvItems);
-        Map<String, PListCell> deletes = diffList(mvItems, baseItems);
+        // for addition, we need to ensure the partition name is unique in case-insensitive
+        Map<String, PListCell> adds = diffList(baseItems, mvItems, uniqueResultNames);
+        // for deletion, we don't need to ensure the partition name is unique since mvItems is used as the reference
+        Map<String, PListCell> deletes = diffList(mvItems, baseItems, null);
         return new ListPartitionDiff(adds, deletes);
     }
 
     /**
      * Iterate srcListMap, if the partition name is not in dstListMap or the partition value is different, add into result.
-     * @param srcListMap src partition list map
-     * @param dstListMap dst partition list map
-     * @return the different partition list map
+     * When `uniqueResultNames` is set, use it to ensure the output partition name is unique in case-insensitive.
+     * NOTE: Ensure output map keys are distinct in case-insensitive which is because the key is used for partition name,
+     * and StarRocks partition name is case-insensitive.
      */
     public static Map<String, PListCell> diffList(Map<String, PListCell> srcListMap,
-                                                  Map<String, PListCell> dstListMap) {
-        Map<String, PListCell> result = Maps.newTreeMap();
+                                                  Map<String, PListCell> dstListMap,
+                                                  Set<String> uniqueResultNames) {
+        if (CollectionUtils.sizeIsEmpty(srcListMap)) {
+            return Maps.newHashMap();
+        }
+
         // PListCell may contain multi values, we need to ensure they are not duplicated from each other
+        // NOTE: dstListMap's partition items may be duplicated, we need to collect them first
         Map<PListAtom, PListCell> dstAtomMaps = Maps.newHashMap();
-        dstListMap.values().stream()
-                .forEach(l -> l.toAtoms().stream().forEach(x -> dstAtomMaps.put(x, l)));
+        for (PCell l : dstListMap.values()) {
+            PListCell pListCell = (PListCell) l;
+            pListCell.toAtoms().stream().forEach(x -> dstAtomMaps.put(x, pListCell));
+        }
+
+        Map<String, PListCell> result = Maps.newTreeMap(String.CASE_INSENSITIVE_ORDER);
         for (Map.Entry<String, PListCell> srcEntry : srcListMap.entrySet()) {
-            String key = srcEntry.getKey();
+            String pName = srcEntry.getKey();
             PListCell srcItem = srcEntry.getValue();
-            if (srcItem.equals(dstListMap.get(key))) {
+
+            if (srcItem.equals(dstListMap.get(pName))) {
                 continue;
             }
+
             // distinct atoms
-            Set<PListAtom> srcAtoms = srcItem.toAtoms();
-            List<PListAtom> srcDistinctAtoms = srcAtoms.stream()
-                            .filter(x -> !dstAtomMaps.containsKey(x))
-                                    .collect(Collectors.toList());
-            if (srcDistinctAtoms.isEmpty()) {
-                continue;
+            List<PListAtom> srcDistinctAtoms = srcItem.toAtoms().stream()
+                    .filter(atom -> !dstAtomMaps.containsKey(atom))
+                    .collect(Collectors.toList());
+            if (!srcDistinctAtoms.isEmpty()) {
+                srcDistinctAtoms.forEach(atom -> dstAtomMaps.put(atom, srcItem));
+                PListCell newValue = new PListCell(
+                        srcDistinctAtoms.stream().map(PListAtom::getPartitionItem).collect(Collectors.toList()));
+
+                // ensure the partition name is unique
+                if (uniqueResultNames != null) {
+                    if (uniqueResultNames.contains(pName)) {
+                        try {
+                            // it's fine to use result to keep it unique here, since we always
+                            pName = AnalyzerUtils.calculateUniquePartitionName(pName, newValue, result);
+                        } catch (Exception e) {
+                            throw new RuntimeException("Fail to calculate unique partition name: " + e.getMessage());
+                        }
+                    }
+                    uniqueResultNames.add(pName);
+                }
+
+                result.put(pName, newValue);
             }
-            dstAtomMaps.putAll(srcDistinctAtoms.stream().collect(Collectors.toMap(x -> x, x -> srcItem)));
-            PListCell newValue =
-                    new PListCell(srcDistinctAtoms.stream().map(x -> x.getPartitionItem()).collect(Collectors.toList()));
-            result.put(key, newValue);
         }
         return result;
     }
@@ -270,6 +298,22 @@ public final class ListPartitionDiffer extends PartitionDiffer {
         return true;
     }
 
+    public static Map<String, PCell> collectBasePartitionCells(Map<Table, Map<String, PCell>> basePartitionMaps) {
+        Map<String, PCell> allBasePartitionItems = Maps.newHashMap();
+        // NOTE: how to handle the partition name conflict between different base tables?
+        // case1: partition name not equal but partition value equal, it's ok
+        // case2: partition name is equal, but partition value is different,
+        // merge into a total map to compute the difference
+        basePartitionMaps.values().forEach(partitionMap ->
+                partitionMap.forEach((key, value) -> {
+                    PListCell cell = (PListCell) allBasePartitionItems
+                            .computeIfAbsent(key, k -> new PListCell(Lists.newArrayList()));
+                    cell.addItems(((PListCell) value).getPartitionItems());
+                })
+        );
+        return allBasePartitionItems;
+    }
+
     public static ListPartitionDiffResult computeListPartitionDiff(MaterializedView mv,
                                                                    boolean isQueryRewrite) {
         // table -> map<partition name -> partition cell>
@@ -293,8 +337,13 @@ public final class ListPartitionDiffer extends PartitionDiffer {
         // generate the reference map between the base table and the mv
         // TODO: prune the partitions based on ttl
         Map<String, PListCell> mvPartitionNameToListMap = mv.getListPartitionItems();
+
+        // ensure the result partition name is unique in case-insensitive
+        Set<String> uniqueResultNames = Sets.newTreeSet(String.CASE_INSENSITIVE_ORDER);
+        uniqueResultNames.addAll(mvPartitionNameToListMap.keySet());
+
         ListPartitionDiff diff = ListPartitionDiffer.getListPartitionDiff(
-                allBasePartitionItems, mvPartitionNameToListMap);
+                allBasePartitionItems, mvPartitionNameToListMap, uniqueResultNames);
 
         // collect external partition column mapping
         Map<Table, Map<String, Set<String>>> externalPartitionMaps = Maps.newHashMap();

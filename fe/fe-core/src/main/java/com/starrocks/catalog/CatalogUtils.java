@@ -88,6 +88,10 @@ public class CatalogUtils {
                 if (partitionDesc.isSetIfNotExists()) {
                     existPartitionNameSet.add(partitionName);
                 } else {
+                    // add more information for user
+                    Partition existedPartition = olapTable.getPartition(partitionName);
+                    LOG.warn("Duplicate partition name {}, existed partition:{}, current partition:{}", partitionName,
+                            existedPartition, partitionDesc);
                     ErrorReport.reportDdlException(ErrorCode.ERR_SAME_NAME_PARTITION, partitionName);
                 }
             }

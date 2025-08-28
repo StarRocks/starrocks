@@ -22,34 +22,26 @@ import com.starrocks.catalog.ListPartitionInfo;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionInfo;
-import com.starrocks.qe.StmtExecutor;
 import com.starrocks.scheduler.persist.MVTaskRunExtraMessage;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.common.PListCell;
-import com.starrocks.sql.parser.SqlParser;
+import com.starrocks.sql.optimizer.rule.transformation.materialization.MVTestBase;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.sql.plan.PlanTestBase;
 import com.starrocks.thrift.TExplainLevel;
-import org.junit.After;
-import org.junit.AfterClass;
 import org.junit.Assert;
-import org.junit.Before;
 import org.junit.BeforeClass;
 import org.junit.FixMethodOrder;
 import org.junit.Test;
 import org.junit.runners.MethodSorters;
 
-import java.time.Instant;
 import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
 
-import static com.starrocks.sql.plan.PlanTestBase.cleanupEphemeralMVs;
-
 @FixMethodOrder(MethodSorters.NAME_ASCENDING)
-public class PCTRefreshListPartitionOlapTest extends MVRefreshTestBase {
+public class PCTRefreshListPartitionOlapTest extends MVTestBase {
     private static String T1;
     private static String T2;
     private static String T3;
@@ -60,7 +52,7 @@ public class PCTRefreshListPartitionOlapTest extends MVRefreshTestBase {
 
     @BeforeClass
     public static void beforeClass() throws Exception {
-        MVRefreshTestBase.beforeClass();
+        MVTestBase.beforeClass();
         // table whose partitions have multiple values
         T1 = "CREATE TABLE t1 (\n" +
                 "      id BIGINT,\n" +
@@ -148,21 +140,6 @@ public class PCTRefreshListPartitionOlapTest extends MVRefreshTestBase {
                 "DISTRIBUTED BY RANDOM\n";
     }
 
-    @AfterClass
-    public static void afterClass() throws Exception {
-        cleanupEphemeralMVs(starRocksAssert, startSuiteTime);
-    }
-
-    @Before
-    public void before() {
-        startCaseTime = Instant.now().getEpochSecond();
-    }
-
-    @After
-    public void after() throws Exception {
-        cleanupEphemeralMVs(starRocksAssert, startCaseTime);
-    }
-
     private ExecPlan getExecPlan(TaskRun taskRun) {
         try {
             PartitionBasedMvRefreshProcessor processor = getProcessor(taskRun);
@@ -197,31 +174,6 @@ public class PCTRefreshListPartitionOlapTest extends MVRefreshTestBase {
         ExecPlan execPlan = getExecPlan(taskRun);
         Assert.assertTrue(execPlan != null);
         return execPlan;
-    }
-
-    private void addListPartition(String tbl, String pName, String pVal) {
-        String addPartitionSql = String.format("ALTER TABLE %s ADD PARTITION %s VALUES IN ('%s')", tbl, pName, pVal);
-        StatementBase stmt = SqlParser.parseSingleStatement(addPartitionSql, connectContext.getSessionVariable().getSqlMode());
-        try {
-            new StmtExecutor(connectContext, stmt).execute();
-        } catch (Exception e) {
-            Assert.fail("add partition failed:" + e);
-        }
-    }
-
-    private String toPartitionVal(String val) {
-        return val == null ?  "NULL" : String.format("'%s'", val);
-    }
-
-    private void addListPartition(String tbl, String pName, String pVal1, String pVal2) {
-        String addPartitionSql = String.format("ALTER TABLE %s ADD PARTITION %s VALUES IN ((%s, %s))", tbl, pName,
-                toPartitionVal(pVal1), toPartitionVal(pVal2));
-        StatementBase stmt = SqlParser.parseSingleStatement(addPartitionSql, connectContext.getSessionVariable().getSqlMode());
-        try {
-            new StmtExecutor(connectContext, stmt).execute();
-        } catch (Exception e) {
-            Assert.fail("add partition failed:" + e);
-        }
     }
 
     @Test
@@ -1278,5 +1230,62 @@ public class PCTRefreshListPartitionOlapTest extends MVRefreshTestBase {
         } catch (Exception e) {
             Assert.fail(e.getMessage());
         }
+    }
+
+    private void testMVWithDuplicatedPartitionNames(String sql1,
+                                                    String sql2,
+                                                    String mvName) throws Exception {
+        starRocksAssert.withTable("CREATE TABLE `s1` (\n" +
+                "  `col1` varchar(100),\n"  +
+                "  `col2` varchar(100),\n" +
+                "  `col3` bigint(20) \n" +
+                ") PARTITION BY (`col1`)");
+        starRocksAssert.withTable("CREATE TABLE `s2` (\n" +
+                "  `col1` varchar(100),\n"  +
+                "  `col2` varchar(100),\n" +
+                "  `col3` bigint(20) \n" +
+                ") PARTITION BY (`col1`)");
+        executeInsertSql(sql1);
+        executeInsertSql(sql2);
+
+        List<String> s1PartitionNames = extractColumnValues(sql1, 0);
+        System.out.println(s1PartitionNames);
+        addListPartition("s1", s1PartitionNames);
+
+        List<String> s2PartitionNames = extractColumnValues(sql2, 0);
+        System.out.println(s2PartitionNames);
+        addListPartition("s2", s2PartitionNames);
+        starRocksAssert.withRefreshedMaterializedView(String.format("CREATE MATERIALIZED VIEW %s\n" +
+                        "PARTITION BY col1\n" +
+                        "REFRESH DEFERRED MANUAL \n" +
+                        "PROPERTIES (\n" +
+                        "    \"partition_refresh_number\" = \"-1\"\n" +
+                        ")\n" +
+                        "AS\n" +
+                        "select t1.col1, t1.col2 from s1 as t1 left join s2 as t2 on t1.col1 = t2.col1;\n",
+                mvName));
+        starRocksAssert.dropTable("s1");
+        starRocksAssert.dropTable("s2");
+        starRocksAssert.dropMaterializedView(mvName);
+    }
+
+    @Test
+    public void testCreateMVWithDuplicatedPartitionNames1() throws Exception {
+        String query1 = "insert into s1 values('demo-diu.com', 'b', 2), " +
+                "('demo-dIu.com', 'a', 1) , ('demo-Diu.com', 'b', 2), ('demo-DIU.com', 'a', 1), " +
+                "('demo-diu.com', 'b', 2);";
+        String query2 = "insert into s2 values('demo-DIU.com', 'a', 1) , ('demo-diu.com', 'b', 2), " +
+                "('demo-dIU.com', 'a', 1) , ('demo-Diu.com', 'b', 2);";
+        testMVWithDuplicatedPartitionNames(query1, query2, "test_mv1");
+    }
+
+    @Test
+    public void testCreateMVWithDuplicatedPartitionNames2() throws Exception {
+        String query1 = "insert into s1 values('demo-diu.com', 'b', 2), " +
+                "('demo-DIU.com', 'a', 1) , ('demo-diu.com', 'b', 2);";
+        String query2 = "insert into s2 values('demo-diu.com', 'b', 2), " +
+                "('demo-dIu.com', 'a', 1) , ('demo-Diu.com', 'b', 2), ('demo-DIU.com', 'a', 1), " +
+                "('demo-diu.com', 'b', 2);";
+        testMVWithDuplicatedPartitionNames(query1, query2, "test_mv2");
     }
 }
