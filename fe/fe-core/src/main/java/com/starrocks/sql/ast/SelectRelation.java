@@ -229,7 +229,7 @@ public class SelectRelation extends QueryRelation {
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitSelect(this, context);
+        return ((AstVisitorExtendInterface<R, C>) visitor).visitSelect(this, context);
     }
 
     public void setOutputExpr(List<Expr> outputExpr) {

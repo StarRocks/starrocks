@@ -32,6 +32,6 @@ public class AddBackendBlackListStmt extends StatementBase {
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitAddBackendBlackListStatement(this, context);
+        return ((AstVisitorExtendInterface<R, C>) visitor).visitAddBackendBlackListStatement(this, context);
     }
 }

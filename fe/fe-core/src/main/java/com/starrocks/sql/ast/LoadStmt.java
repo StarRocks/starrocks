@@ -343,6 +343,6 @@ public class LoadStmt extends DdlStmt {
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitLoadStatement(this, context);
+        return ((AstVisitorExtendInterface<R, C>) visitor).visitLoadStatement(this, context);
     }
 }

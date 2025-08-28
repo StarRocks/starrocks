@@ -39,7 +39,6 @@ import com.starrocks.analysis.IntLiteral;
 import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.analysis.MaxLiteral;
 import com.starrocks.analysis.OrderByElement;
-import com.starrocks.analysis.ParseNode;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.StringLiteral;
 import com.starrocks.analysis.Subquery;
@@ -84,7 +83,7 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.service.PartitionMeasure;
 import com.starrocks.sql.ast.AddPartitionClause;
 import com.starrocks.sql.ast.AstTraverser;
-import com.starrocks.sql.ast.AstVisitor;
+import com.starrocks.sql.ast.AstVisitorExtendInterface;
 import com.starrocks.sql.ast.CTERelation;
 import com.starrocks.sql.ast.ColumnDef;
 import com.starrocks.sql.ast.DeleteStmt;
@@ -97,6 +96,7 @@ import com.starrocks.sql.ast.JoinRelation;
 import com.starrocks.sql.ast.ListPartitionDesc;
 import com.starrocks.sql.ast.MultiItemListPartitionDesc;
 import com.starrocks.sql.ast.NormalizedTableFunctionRelation;
+import com.starrocks.sql.ast.ParseNode;
 import com.starrocks.sql.ast.PartitionDesc;
 import com.starrocks.sql.ast.PartitionKeyDesc;
 import com.starrocks.sql.ast.PartitionValue;
@@ -374,7 +374,7 @@ public class AnalyzerUtils {
         return copiedTable;
     }
 
-    private static class DBCollector implements AstVisitor<Void, Void> {
+    private static class DBCollector implements AstVisitorExtendInterface<Void, Void> {
         private final Map<String, Database> dbs;
         private final ConnectContext session;
 

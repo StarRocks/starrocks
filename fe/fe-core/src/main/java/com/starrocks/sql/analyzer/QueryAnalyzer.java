@@ -28,12 +28,10 @@ import com.starrocks.analysis.CaseWhenClause;
 import com.starrocks.analysis.CompoundPredicate;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.FunctionCallExpr;
-import com.starrocks.analysis.HintNode;
 import com.starrocks.analysis.IntLiteral;
 import com.starrocks.analysis.JoinOperator;
 import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.analysis.OrderByElement;
-import com.starrocks.analysis.ParseNode;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.TableName;
 import com.starrocks.authorization.SecurityPolicyRewriteRule;
@@ -62,14 +60,16 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.MetadataMgr;
 import com.starrocks.sql.ast.AstTraverser;
-import com.starrocks.sql.ast.AstVisitor;
+import com.starrocks.sql.ast.AstVisitorExtendInterface;
 import com.starrocks.sql.ast.CTERelation;
 import com.starrocks.sql.ast.ExceptRelation;
 import com.starrocks.sql.ast.FieldReference;
 import com.starrocks.sql.ast.FileTableFunctionRelation;
+import com.starrocks.sql.ast.HintNode;
 import com.starrocks.sql.ast.IntersectRelation;
 import com.starrocks.sql.ast.JoinRelation;
 import com.starrocks.sql.ast.NormalizedTableFunctionRelation;
+import com.starrocks.sql.ast.ParseNode;
 import com.starrocks.sql.ast.PartitionNames;
 import com.starrocks.sql.ast.PivotAggregation;
 import com.starrocks.sql.ast.PivotRelation;
@@ -129,7 +129,7 @@ public class QueryAnalyzer {
         new Visitor().process(node, parent);
     }
 
-    private class GeneratedColumnExprMappingCollector implements AstVisitor<Void, Scope> {
+    private class GeneratedColumnExprMappingCollector implements AstVisitorExtendInterface<Void, Scope> {
         public GeneratedColumnExprMappingCollector() {
         }
 
@@ -284,7 +284,7 @@ public class QueryAnalyzer {
         }
     }
 
-    private class Visitor implements AstVisitor<Scope, Scope> {
+    private class Visitor implements AstVisitorExtendInterface<Scope, Scope> {
         public Visitor() {
         }
 
@@ -1556,7 +1556,7 @@ public class QueryAnalyzer {
     // eg: select trim(c1) as a, trim(c2) as b, concat(a,',', b) from t1
     // Note: alias in where clause is not handled now
     // eg: select trim(c1) as a, trim(c2) as b, concat(a,',', b) from t1 where a != 'x'
-    private static class RewriteAliasVisitor implements AstVisitor<Expr, Void> {
+    private static class RewriteAliasVisitor implements AstVisitorExtendInterface<Expr, Void> {
         private final Map<String, Expr> aliases = new HashMap<>();
         private final Set<String> aliasesMaybeAmbiguous = new HashSet<>();
         private final Map<String, Expr> resolvedAliases = new HashMap<>();

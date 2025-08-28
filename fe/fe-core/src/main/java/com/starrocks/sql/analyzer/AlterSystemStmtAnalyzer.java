@@ -26,7 +26,7 @@ import com.starrocks.sql.ast.AddComputeNodeClause;
 import com.starrocks.sql.ast.AddFollowerClause;
 import com.starrocks.sql.ast.AddObserverClause;
 import com.starrocks.sql.ast.AlterSystemStmt;
-import com.starrocks.sql.ast.AstVisitor;
+import com.starrocks.sql.ast.AstVisitorExtendInterface;
 import com.starrocks.sql.ast.BackendClause;
 import com.starrocks.sql.ast.CancelAlterSystemStmt;
 import com.starrocks.sql.ast.CleanTabletSchedQClause;
@@ -49,7 +49,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.regex.Pattern;
 
-public class AlterSystemStmtAnalyzer implements AstVisitor<Void, ConnectContext> {
+public class AlterSystemStmtAnalyzer implements AstVisitorExtendInterface<Void, ConnectContext> {
     public static final String PROP_KEY_LOCATION = PropertyAnalyzer.PROPERTIES_LABELS_LOCATION;
     private static final Set<String> PROPS_SUPPORTED = new HashSet<>();
 

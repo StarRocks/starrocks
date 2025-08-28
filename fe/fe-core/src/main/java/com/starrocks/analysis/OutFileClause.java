@@ -52,6 +52,7 @@ import com.starrocks.fs.HdfsUtil;
 import com.starrocks.sql.analyzer.Field;
 import com.starrocks.sql.analyzer.Scope;
 import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.sql.ast.ParseNode;
 import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.thrift.TCompressionType;
 import com.starrocks.thrift.TFileFormatType;

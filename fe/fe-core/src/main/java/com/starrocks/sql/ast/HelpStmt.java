@@ -47,6 +47,6 @@ public class HelpStmt extends ShowStmt {
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitHelpStatement(this, context);
+        return ((AstVisitorExtendInterface<R, C>) visitor).visitHelpStatement(this, context);
     }
 }

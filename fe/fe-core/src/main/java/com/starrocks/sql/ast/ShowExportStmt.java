@@ -163,6 +163,6 @@ public class ShowExportStmt extends ShowStmt {
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitShowExportStatement(this, context);
+        return ((AstVisitorExtendInterface<R, C>) visitor).visitShowExportStatement(this, context);
     }
 }

@@ -57,6 +57,6 @@ public abstract class SetOperationRelation extends QueryRelation {
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitSetOp(this, context);
+        return ((AstVisitorExtendInterface<R, C>) visitor).visitSetOp(this, context);
     }
 }

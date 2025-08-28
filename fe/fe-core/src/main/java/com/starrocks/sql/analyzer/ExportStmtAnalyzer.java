@@ -35,7 +35,7 @@ import com.starrocks.common.util.OrderByPair;
 import com.starrocks.load.ExportJob;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.sql.ast.AstVisitor;
+import com.starrocks.sql.ast.AstVisitorExtendInterface;
 import com.starrocks.sql.ast.CancelExportStmt;
 import com.starrocks.sql.ast.ExportStmt;
 import com.starrocks.sql.ast.PartitionNames;
@@ -57,7 +57,7 @@ public class ExportStmtAnalyzer {
     }
 
 
-    static class ExportAnalyzerVisitor implements AstVisitor<Void, ConnectContext> {
+    static class ExportAnalyzerVisitor implements AstVisitorExtendInterface<Void, ConnectContext> {
 
         public void analyze(StatementBase statement, ConnectContext session) {
             visit(statement, session);

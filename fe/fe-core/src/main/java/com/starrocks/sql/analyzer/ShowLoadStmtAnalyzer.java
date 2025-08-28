@@ -30,7 +30,7 @@ import com.starrocks.common.proc.LoadProcDir;
 import com.starrocks.common.util.OrderByPair;
 import com.starrocks.load.loadv2.JobState;
 import com.starrocks.qe.ConnectContext;
-import com.starrocks.sql.ast.AstVisitor;
+import com.starrocks.sql.ast.AstVisitorExtendInterface;
 import com.starrocks.sql.ast.ShowLoadStmt;
 
 import java.util.ArrayList;
@@ -42,7 +42,7 @@ public class ShowLoadStmtAnalyzer {
         new ShowLoadStmtAnalyzerVisitor().visit(statement, context);
     }
 
-    static class ShowLoadStmtAnalyzerVisitor implements AstVisitor<Void, ConnectContext> {
+    static class ShowLoadStmtAnalyzerVisitor implements AstVisitorExtendInterface<Void, ConnectContext> {
 
         private boolean isAccurateMatch;
         private String labelValue;

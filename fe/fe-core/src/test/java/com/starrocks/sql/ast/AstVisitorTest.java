@@ -22,14 +22,14 @@ public class AstVisitorTest {
     
     @Test
     public void testVisitModifyFrontendHostClause() {
-        AstVisitor<String, String> visitor = new AstVisitor<String, String>() {};
+        AstVisitorExtendInterface<String, String> visitor = new AstVisitorExtendInterface<String, String>() {};
         Object ret = visitor.visitModifyFrontendHostClause(null, null);
         Assertions.assertNull(ret);
     }
 
     @Test
     public void testVisitModifyBackendClause() {
-        AstVisitor<String, String> visitor = new AstVisitor<String, String>() {};
+        AstVisitorExtendInterface<String, String> visitor = new AstVisitorExtendInterface<String, String>() {};
         Object ret = visitor.visitModifyBackendClause(null, null);
         Assertions.assertNull(ret);
     }

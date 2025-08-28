@@ -51,6 +51,6 @@ public class ShowResourceGroupStmt extends ShowStmt {
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitShowResourceGroupStatement(this, context);
+        return ((AstVisitorExtendInterface<R, C>) visitor).visitShowResourceGroupStatement(this, context);
     }
 }

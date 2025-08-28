@@ -38,6 +38,7 @@ import com.google.common.base.Preconditions;
 import com.starrocks.common.Pair;
 import com.starrocks.common.io.Writable;
 import com.starrocks.sql.ast.AstVisitor;
+import com.starrocks.sql.ast.AstVisitorExtendInterface;
 import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.thrift.TExprNode;
 import com.starrocks.thrift.TExprNodeType;
@@ -197,7 +198,7 @@ public class BinaryPredicate extends Predicate implements Writable {
      */
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitBinaryPredicate(this, context);
+        return ((AstVisitorExtendInterface<R, C>) visitor).visitBinaryPredicate(this, context);
     }
 
     @Override

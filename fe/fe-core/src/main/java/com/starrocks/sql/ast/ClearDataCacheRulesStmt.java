@@ -24,6 +24,6 @@ public class ClearDataCacheRulesStmt extends DdlStmt {
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitClearDataCacheRulesStatement(this, context);
+        return ((AstVisitorExtendInterface<R, C>) visitor).visitClearDataCacheRulesStatement(this, context);
     }
 }

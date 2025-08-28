@@ -47,5 +47,6 @@ public class HudiScanNodeTest {
         TupleDescriptor desc = new TupleDescriptor(new TupleId(0));
         desc.setTable(table);
         HudiScanNode scanNode = new HudiScanNode(new PlanNodeId(0), desc, "XXX");
+        scanNode.setReachLimit();
     }
 }

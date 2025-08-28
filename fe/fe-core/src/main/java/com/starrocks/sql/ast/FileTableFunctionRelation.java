@@ -49,6 +49,6 @@ public class FileTableFunctionRelation extends TableRelation {
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitFileTableFunction(this, context);
+        return ((AstVisitorExtendInterface<R, C>) visitor).visitFileTableFunction(this, context);
     }
 }

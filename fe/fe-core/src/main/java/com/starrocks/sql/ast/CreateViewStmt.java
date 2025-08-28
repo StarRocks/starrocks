@@ -109,6 +109,6 @@ public class CreateViewStmt extends DdlStmt {
     }
 
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitCreateViewStatement(this, context);
+        return ((AstVisitorExtendInterface<R, C>) visitor).visitCreateViewStatement(this, context);
     }
 }

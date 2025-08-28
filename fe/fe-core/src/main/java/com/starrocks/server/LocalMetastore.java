@@ -50,7 +50,6 @@ import com.starrocks.alter.AlterJobExecutor;
 import com.starrocks.alter.AlterMVJobExecutor;
 import com.starrocks.alter.MaterializedViewHandler;
 import com.starrocks.analysis.Expr;
-import com.starrocks.analysis.HintNode;
 import com.starrocks.analysis.IntLiteral;
 import com.starrocks.analysis.SetVarHint;
 import com.starrocks.analysis.SlotRef;
@@ -213,6 +212,7 @@ import com.starrocks.sql.ast.DropMaterializedViewStmt;
 import com.starrocks.sql.ast.DropPartitionClause;
 import com.starrocks.sql.ast.DropTableStmt;
 import com.starrocks.sql.ast.ExpressionPartitionDesc;
+import com.starrocks.sql.ast.HintNode;
 import com.starrocks.sql.ast.IncrementalRefreshSchemeDesc;
 import com.starrocks.sql.ast.IntervalLiteral;
 import com.starrocks.sql.ast.ManualRefreshSchemeDesc;
@@ -3751,6 +3751,14 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
                         ImmutableMap.of(key, propertiesToPersist.get(key)));
                 GlobalStateMgr.getCurrentState().getEditLog().logAlterTableProperties(info);
             }
+            if (propertiesToPersist.containsKey(PropertyAnalyzer.PROPERTIES_ENABLE_DYNAMIC_TABLET)) {
+                String enableDynamicTablet = propertiesToPersist.get(PropertyAnalyzer.PROPERTIES_ENABLE_DYNAMIC_TABLET);
+                tableProperty.getProperties().put(PropertyAnalyzer.PROPERTIES_ENABLE_DYNAMIC_TABLET, enableDynamicTablet);
+                tableProperty.buildEnableDynamicTablet();
+                ModifyTablePropertyOperationLog info = new ModifyTablePropertyOperationLog(db.getId(), table.getId(),
+                        ImmutableMap.of(key, propertiesToPersist.get(key)));
+                GlobalStateMgr.getCurrentState().getEditLog().logAlterTableProperties(info);
+            }
         }
     }
 
@@ -3830,6 +3838,14 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
             }
             String locations = PropertyAnalyzer.analyzeLocation(properties, true);
             results.put(PropertyAnalyzer.PROPERTIES_LABELS_LOCATION, locations);
+        }
+        if (properties.containsKey(PropertyAnalyzer.PROPERTIES_ENABLE_DYNAMIC_TABLET)) {
+            try {
+                Boolean enableDynamicTablet = PropertyAnalyzer.analyzeEnableDynamicTablet(properties, true);
+                results.put(PropertyAnalyzer.PROPERTIES_ENABLE_DYNAMIC_TABLET, enableDynamicTablet);
+            } catch (AnalysisException e) {
+                throw new RuntimeException(e.getMessage());
+            }
         }
         if (!properties.isEmpty()) {
             throw new DdlException("Modify failed because unknown properties: " + properties);

@@ -52,6 +52,6 @@ public class ExecuteAsStmt extends StatementBase {
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitExecuteAsStatement(this, context);
+        return ((AstVisitorExtendInterface<R, C>) visitor).visitExecuteAsStatement(this, context);
     }
 }

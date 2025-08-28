@@ -66,6 +66,7 @@ import com.starrocks.server.LocalMetastore;
 import com.starrocks.server.MetadataMgr;
 import com.starrocks.server.TemporaryTableMgr;
 import com.starrocks.sql.analyzer.AnalyzeTestUtil;
+import com.starrocks.sql.analyzer.AstToStringBuilder;
 import com.starrocks.sql.ast.AddColumnClause;
 import com.starrocks.sql.ast.AddColumnsClause;
 import com.starrocks.sql.ast.AlterClause;
@@ -109,7 +110,10 @@ import org.apache.iceberg.DataFile;
 import org.apache.iceberg.DataFiles;
 import org.apache.iceberg.FileScanTask;
 import org.apache.iceberg.MetricsModes;
+import org.apache.iceberg.NullOrder;
+import org.apache.iceberg.Schema;
 import org.apache.iceberg.Snapshot;
+import org.apache.iceberg.SortOrder;
 import org.apache.iceberg.TableMetadata;
 import org.apache.iceberg.TableProperties;
 import org.apache.iceberg.TableScan;
@@ -284,6 +288,78 @@ public class IcebergMetadataTest extends TableTestBase {
         Assertions.assertEquals("db", icebergTable.getCatalogDBName());
         Assertions.assertEquals("tbl", icebergTable.getCatalogTableName());
         Assertions.assertEquals(ICEBERG, icebergTable.getType());
+    }
+
+    @Test
+    public void testShowCreateTableWithSortOrder(@Mocked IcebergHiveCatalog icebergHiveCatalog,
+                                                 @Mocked HiveTableOperations hiveTableOperations) {
+        new Expectations() {
+            {
+                icebergHiveCatalog.getIcebergCatalogType();
+                result = IcebergCatalogType.HIVE_CATALOG;
+                minTimes = 0;
+
+                icebergHiveCatalog.getTable(connectContext, "DB", "TBL");
+                result = new BaseTable(hiveTableOperations, "tbl");
+                minTimes = 0;
+            }
+        };
+
+        new MockUp<Table>() {
+            @Mock
+            public List<Column> getFullSchema() {
+                return ImmutableList.of(new Column("c1", Type.INT), new Column("c2", STRING));
+            }
+
+            @Mock
+            public Table.TableType getType() {
+                return ICEBERG;
+            }
+        };
+
+        new MockUp<IcebergTable>() {
+            @Mock
+            public boolean isUnPartitioned() {
+                return true;
+            }
+
+            @Mock
+            public List<Integer> getSortKeyIndexes() {
+                return ImmutableList.of(0, 1);
+            }
+        };
+
+        IcebergMetadata metadata = new IcebergMetadata(CATALOG_NAME, HDFS_ENVIRONMENT, icebergHiveCatalog,
+                Executors.newSingleThreadExecutor(), Executors.newSingleThreadExecutor(), null);
+        Table actual = metadata.getTable(new ConnectContext(), "DB", "TBL");
+        Assertions.assertTrue(actual instanceof IcebergTable);
+        IcebergTable icebergTable = (IcebergTable) actual;
+
+        Schema schema = IcebergApiConverter.toIcebergApiSchema(actual.getFullSchema());
+        SortOrder.Builder builder = SortOrder.builderFor(schema);
+        builder.asc("c1", NullOrder.NULLS_FIRST);
+        builder.desc("c2", NullOrder.NULLS_LAST);
+        SortOrder sortOrder = builder.build();
+
+        org.apache.iceberg.Table nativeTable = icebergTable.getNativeTable();
+
+        new Expectations() {
+            {
+                nativeTable.sortOrder();
+                result = sortOrder;
+                minTimes = 0;
+            }
+        };
+
+        Assertions.assertEquals("db", icebergTable.getCatalogDBName());
+        Assertions.assertEquals("tbl", icebergTable.getCatalogTableName());
+        String createSql = AstToStringBuilder.getExternalCatalogTableDdlStmt(actual);
+        Assertions.assertEquals("CREATE TABLE `tbl` (\n" +
+                "  `c1` int(11) DEFAULT NULL,\n" +
+                "  `c2` varchar(1048576) DEFAULT NULL\n" +
+                ")\n" +
+                "ORDER BY (c1 ASC NULLS FIRST,c2 DESC NULLS LAST);",
+                createSql);
     }
 
     @Test

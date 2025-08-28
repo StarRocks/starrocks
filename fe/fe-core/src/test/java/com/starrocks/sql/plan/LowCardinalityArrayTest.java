@@ -780,4 +780,15 @@ public class LowCardinalityArrayTest extends PlanTestBase {
                 "  |  <slot 9> : CAST(7: S_COMMENT AS ARRAY<ARRAY<VARCHAR(65533)>>)\n" +
                 "  |  limit: 1"), plan);
     }
+
+    @Test
+    public void testUnnestStringToArray() throws Exception {
+        String sql = "select concat(t.a, 'xxx') as name from s2, unnest(s2.a1) as t(a) "
+                + "union all "
+                + "select concat(v1, 'yyy') as name from s1 as b;";
+        String plan = getVerboseExplain(sql);
+        Assertions.assertTrue(plan.contains("Global Dict Exprs:\n"
+                + "    14: DictDefine(13: a1, [<place-holder>])\n"
+                + "    15: DictDefine(13: a1, [concat(<place-holder>, 'xxx')])"), plan);
+    }
 }

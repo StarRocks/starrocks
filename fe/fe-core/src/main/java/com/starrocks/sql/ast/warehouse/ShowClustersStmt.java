@@ -15,6 +15,7 @@
 package com.starrocks.sql.ast.warehouse;
 
 import com.starrocks.sql.ast.AstVisitor;
+import com.starrocks.sql.ast.AstVisitorExtendInterface;
 import com.starrocks.sql.ast.ShowStmt;
 import com.starrocks.sql.parser.NodePosition;
 
@@ -37,6 +38,6 @@ public class ShowClustersStmt extends ShowStmt {
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitShowClusterStatement(this, context);
+        return ((AstVisitorExtendInterface<R, C>) visitor).visitShowClusterStatement(this, context);
     }
 }

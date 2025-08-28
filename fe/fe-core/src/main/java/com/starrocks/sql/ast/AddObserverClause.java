@@ -29,6 +29,6 @@ public class AddObserverClause extends FrontendClause {
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitAddObserverClause(this, context);
+        return ((AstVisitorExtendInterface<R, C>) visitor).visitAddObserverClause(this, context);
     }
 }

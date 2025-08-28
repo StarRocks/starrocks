@@ -101,6 +101,6 @@ public class AddRollupClause extends AlterTableClause {
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitAddRollupClause(this, context);
+        return ((AstVisitorExtendInterface<R, C>) visitor).visitAddRollupClause(this, context);
     }
 }

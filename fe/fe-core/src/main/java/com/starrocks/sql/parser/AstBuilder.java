@@ -47,7 +47,6 @@ import com.starrocks.analysis.FunctionName;
 import com.starrocks.analysis.FunctionParams;
 import com.starrocks.analysis.GroupByClause;
 import com.starrocks.analysis.GroupingFunctionCallExpr;
-import com.starrocks.analysis.HintNode;
 import com.starrocks.analysis.InPredicate;
 import com.starrocks.analysis.InformationFunction;
 import com.starrocks.analysis.IntLiteral;
@@ -65,7 +64,6 @@ import com.starrocks.analysis.OdbcScalarFunctionCall;
 import com.starrocks.analysis.OrderByElement;
 import com.starrocks.analysis.OutFileClause;
 import com.starrocks.analysis.Parameter;
-import com.starrocks.analysis.ParseNode;
 import com.starrocks.analysis.Predicate;
 import com.starrocks.analysis.ProcedureArgument;
 import com.starrocks.analysis.RoutineLoadDataSourceProperties;
@@ -103,13 +101,11 @@ import com.starrocks.common.CsvFormat;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.NotImplementedException;
 import com.starrocks.common.Pair;
-import com.starrocks.common.profile.Tracers;
 import com.starrocks.common.util.DateUtils;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.mysql.MysqlPassword;
 import com.starrocks.mysql.privilege.AuthPlugin;
 import com.starrocks.qe.ConnectContext;
-import com.starrocks.qe.OriginStatement;
 import com.starrocks.qe.SqlModeHelper;
 import com.starrocks.scheduler.persist.TaskSchedule;
 import com.starrocks.server.StorageVolumeMgr;
@@ -285,6 +281,7 @@ import com.starrocks.sql.ast.GrantRoleStmt;
 import com.starrocks.sql.ast.GrantType;
 import com.starrocks.sql.ast.HashDistributionDesc;
 import com.starrocks.sql.ast.HelpStmt;
+import com.starrocks.sql.ast.HintNode;
 import com.starrocks.sql.ast.Identifier;
 import com.starrocks.sql.ast.ImportColumnDesc;
 import com.starrocks.sql.ast.ImportColumnsStmt;
@@ -319,6 +316,8 @@ import com.starrocks.sql.ast.MultiRangePartitionDesc;
 import com.starrocks.sql.ast.NormalizedTableFunctionRelation;
 import com.starrocks.sql.ast.OptimizeClause;
 import com.starrocks.sql.ast.OptimizeRange;
+import com.starrocks.sql.ast.OriginStatement;
+import com.starrocks.sql.ast.ParseNode;
 import com.starrocks.sql.ast.PartitionDesc;
 import com.starrocks.sql.ast.PartitionKeyDesc;
 import com.starrocks.sql.ast.PartitionNames;
@@ -5577,19 +5576,19 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         return queryStatement;
     }
 
-    private Tracers.Mode getTraceMode(StarRocksParser.OptimizerTraceContext context) {
+    private String getTraceMode(StarRocksParser.OptimizerTraceContext context) {
         if (context.LOGS() != null) {
-            return Tracers.Mode.LOGS;
+            return "LOGS";
         } else if (context.VALUES() != null) {
-            return Tracers.Mode.VARS;
+            return "VARS";
         } else if (context.TIMES() != null) {
-            return Tracers.Mode.TIMER;
+            return "TIMER";
         } else if (context.ALL() != null) {
-            return Tracers.Mode.TIMING;
+            return "TIMING";
         } else if (context.REASON() != null) {
-            return Tracers.Mode.REASON;
+            return "REASON";
         } else {
-            return Tracers.Mode.NONE;
+            return "NONE";
         }
     }
 

@@ -65,6 +65,6 @@ public class ShowCreateTableStmt extends ShowStmt {
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitShowCreateTableStatement(this, context);
+        return ((AstVisitorExtendInterface<R, C>) visitor).visitShowCreateTableStatement(this, context);
     }
 }

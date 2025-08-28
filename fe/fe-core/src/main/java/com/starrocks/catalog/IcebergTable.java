@@ -47,14 +47,18 @@ import com.starrocks.thrift.THdfsPartition;
 import com.starrocks.thrift.TIcebergPartitionInfo;
 import com.starrocks.thrift.TIcebergTable;
 import com.starrocks.thrift.TPartitionMap;
+import com.starrocks.thrift.TSortOrder;
 import com.starrocks.thrift.TTableDescriptor;
 import com.starrocks.thrift.TTableType;
 import org.apache.iceberg.BaseTable;
+import org.apache.iceberg.NullOrder;
 import org.apache.iceberg.PartitionField;
 import org.apache.iceberg.PartitionSpec;
 import org.apache.iceberg.Partitioning;
 import org.apache.iceberg.Schema;
+import org.apache.iceberg.SortDirection;
 import org.apache.iceberg.SortField;
+import org.apache.iceberg.SortOrder;
 import org.apache.iceberg.types.Types;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -470,6 +474,23 @@ public class IcebergTable extends Table {
             } catch (TException | IOException ignore) {
                 tIcebergTable.setPartitions(tPartitionMap.getPartitions());
             }
+        }
+
+        SortOrder sortOrder = nativeTable.sortOrder();
+        if (sortOrder != null && sortOrder.isSorted()) {
+            TSortOrder tSortOrder = new TSortOrder();
+            List<Integer> sortKeyIndexes = getSortKeyIndexes();
+            for (int idx = 0; idx < sortKeyIndexes.size(); ++idx) {
+                int sortKeyIndex = sortKeyIndexes.get(idx);
+                SortField sortField = sortOrder.fields().get(idx);
+                if (!sortField.transform().isIdentity()) {
+                    continue;
+                }
+                tSortOrder.addToSort_key_idxes(sortKeyIndex);
+                tSortOrder.addToIs_ascs(sortField.direction() == SortDirection.ASC);
+                tSortOrder.addToIs_null_firsts(sortField.nullOrder() == NullOrder.NULLS_FIRST);
+            }
+            tIcebergTable.setSort_order(tSortOrder);
         }
 
         TTableDescriptor tTableDescriptor = new TTableDescriptor(id, TTableType.ICEBERG_TABLE,

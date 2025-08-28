@@ -131,6 +131,6 @@ public class ShowPartitionsStmt extends ShowStmt {
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitShowPartitionsStatement(this, context);
+        return ((AstVisitorExtendInterface<R, C>) visitor).visitShowPartitionsStatement(this, context);
     }
 }

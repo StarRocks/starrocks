@@ -141,6 +141,6 @@ public class DictionaryGetExpr extends Expr {
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitDictionaryGetExpr(this, context);
+        return ((AstVisitorExtendInterface<R, C>) visitor).visitDictionaryGetExpr(this, context);
     }
 }

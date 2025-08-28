@@ -93,7 +93,7 @@ import com.starrocks.qe.SqlModeHelper;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
 import com.starrocks.sql.ast.ArrayExpr;
-import com.starrocks.sql.ast.AstVisitor;
+import com.starrocks.sql.ast.AstVisitorExtendInterface;
 import com.starrocks.sql.ast.DefaultValueExpr;
 import com.starrocks.sql.ast.DictionaryGetExpr;
 import com.starrocks.sql.ast.FieldReference;
@@ -373,7 +373,7 @@ public class ExpressionAnalyzer {
         }
     }
 
-    public static class Visitor implements AstVisitor<Void, Scope> {
+    public static class Visitor implements AstVisitorExtendInterface<Void, Scope> {
         private static final List<String> ADD_DATE_FUNCTIONS = Lists.newArrayList(FunctionSet.DATE_ADD,
                 FunctionSet.ADDDATE, FunctionSet.DAYS_ADD, FunctionSet.TIMESTAMPADD);
         private static final List<String> SUB_DATE_FUNCTIONS =

@@ -17,6 +17,7 @@ package com.starrocks.sql.ast.pipe;
 import com.starrocks.analysis.TableName;
 import com.starrocks.load.pipe.FilePipeSource;
 import com.starrocks.sql.ast.AstVisitor;
+import com.starrocks.sql.ast.AstVisitorExtendInterface;
 import com.starrocks.sql.ast.DdlStmt;
 import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.parser.NodePosition;
@@ -102,7 +103,7 @@ public class CreatePipeStmt extends DdlStmt {
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitCreatePipeStatement(this, context);
+        return ((AstVisitorExtendInterface<R, C>) visitor).visitCreatePipeStatement(this, context);
     }
 
 }

@@ -119,6 +119,6 @@ public class ShowAlterStmt extends ShowStmt {
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitShowAlterStatement(this, context);
+        return ((AstVisitorExtendInterface<R, C>) visitor).visitShowAlterStatement(this, context);
     }
 }

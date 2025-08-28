@@ -204,13 +204,14 @@ public:
     /// A counter that keeps track of the highest/lowest value seen (reporting that
     /// as value()) and the current value.
     template <bool is_high>
-    class WaterMarkCounter : public Counter {
+    class WaterMarkCounter final : public Counter {
     public:
         explicit WaterMarkCounter(TUnit::type type, int64_t value = 0) : Counter(type, value) { _set_init_value(); }
         explicit WaterMarkCounter(TUnit::type type, const TCounterStrategy& strategy, int64_t value = 0)
                 : Counter(type, strategy, value) {
             _set_init_value();
         }
+        ~WaterMarkCounter() override = default;
 
         virtual void add(int64_t delta) {
             int64_t new_val = current_value_.fetch_add(delta, std::memory_order_relaxed) + delta;

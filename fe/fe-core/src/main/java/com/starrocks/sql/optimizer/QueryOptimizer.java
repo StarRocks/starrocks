@@ -76,6 +76,7 @@ import com.starrocks.sql.optimizer.rule.transformation.PushDownTopNBelowUnionRul
 import com.starrocks.sql.optimizer.rule.transformation.PushLimitAndFilterToCTEProduceRule;
 import com.starrocks.sql.optimizer.rule.transformation.RemoveAggregationFromAggTable;
 import com.starrocks.sql.optimizer.rule.transformation.RewriteGroupingSetsByCTERule;
+import com.starrocks.sql.optimizer.rule.transformation.RewriteMinMaxByMonotonicFunctionRule;
 import com.starrocks.sql.optimizer.rule.transformation.RewriteMultiDistinctRule;
 import com.starrocks.sql.optimizer.rule.transformation.RewriteSimpleAggToHDFSScanRule;
 import com.starrocks.sql.optimizer.rule.transformation.RewriteUnnestBitmapRule;
@@ -248,10 +249,6 @@ public class QueryOptimizer extends Optimizer {
 
         Preconditions.checkNotNull(memo);
         memo.init(logicOperatorTree);
-        if (mvRewriteStrategy.enableViewBasedRewrite && context.getQueryMaterializationContext() != null) {
-            // LogicalTreeWithView is logically equivalent to logicOperatorTree
-            addViewBasedPlanIntoMemo(context.getQueryMaterializationContext().getQueryOptPlanWithView());
-        }
         OptimizerTraceUtil.log("after logical rewrite, root group:\n%s", memo.getRootGroup());
 
         // Currently, we cache output columns in logic property.
@@ -320,14 +317,6 @@ public class QueryOptimizer extends Optimizer {
             mvRewriteValidator.auditMv(connectContext, finalPlan, rootTaskContext);
             return finalPlan;
         }
-    }
-
-    private void addViewBasedPlanIntoMemo(OptExpression logicalTreeWithView) {
-        if (logicalTreeWithView == null) {
-            return;
-        }
-        Memo memo = context.getMemo();
-        memo.copyIn(memo.getRootGroup(), logicalTreeWithView);
     }
 
     private void prepareMvRewrite(ConnectContext connectContext, OptExpression logicOperatorTree,
@@ -696,8 +685,6 @@ public class QueryOptimizer extends Optimizer {
         // After this rule, we shouldn't generate logical project operator
         scheduler.rewriteIterative(tree, rootTaskContext, new MergeProjectWithChildRule());
 
-        scheduler.rewriteOnce(tree, rootTaskContext, JsonPathRewriteRule.createForOlapScan());
-
         scheduler.rewriteOnce(tree, rootTaskContext, new EliminateSortColumnWithEqualityPredicateRule());
         scheduler.rewriteOnce(tree, rootTaskContext, new PushDownTopNBelowOuterJoinRule());
         // intersect rewrite depend on statistics
@@ -711,7 +698,9 @@ public class QueryOptimizer extends Optimizer {
         // rule based materialized view rewrite
         ruleBasedMaterializedViewRewriteStage2(tree, rootTaskContext, requiredColumns);
 
-        // this rewrite rule should be after mv.
+        // =============================== Rules after the MV rewrite ===============================
+        scheduler.rewriteOnce(tree, rootTaskContext, JsonPathRewriteRule.createForOlapScan());
+        scheduler.rewriteIterative(tree, rootTaskContext, new RewriteMinMaxByMonotonicFunctionRule());
         scheduler.rewriteOnce(tree, rootTaskContext, RewriteSimpleAggToHDFSScanRule.SCAN_NO_PROJECT);
 
         // NOTE: This rule should be after MV Rewrite because MV Rewrite cannot handle
@@ -765,6 +754,7 @@ public class QueryOptimizer extends Optimizer {
         try (Timer ignored = Tracers.watchScope("MVViewRewrite")) {
             OptimizerTraceUtil.logMVRewriteRule("VIEW_BASED_MV_REWRITE", "try VIEW_BASED_MV_REWRITE");
             OptExpression treeWithView = queryMaterializationContext.getQueryOptPlanWithView();
+            OptimizerTraceUtil.logOptExpression("before ViewBasedMvRuleRewrite:\n%s", tree);
             // should add a LogicalTreeAnchorOperator for rewrite
             treeWithView = OptExpression.create(new LogicalTreeAnchorOperator(), treeWithView);
             if (mvRewriteStrategy.enableMultiTableRewrite) {
@@ -791,6 +781,7 @@ public class QueryOptimizer extends Optimizer {
             }
             OptimizerTraceUtil.logMVRewriteRule("VIEW_BASED_MV_REWRITE", "original view scans size: {}, " +
                     "left view scans size: {}", origQueryViewScanOperators.size(), leftViewScanOperators.size());
+            OptimizerTraceUtil.logOptExpression("after ViewBasedMvRuleRewrite:\n%s", tree);
         } catch (Exception e) {
             OptimizerTraceUtil.logMVRewriteRule("VIEW_BASED_MV_REWRITE",
                     "single table view based mv rule rewrite failed.", e);
@@ -954,7 +945,7 @@ public class QueryOptimizer extends Optimizer {
             context.getRuleSet().addRealtimeMVRules();
         }
 
-        if (mvRewriteStrategy.enableMultiTableRewrite) {
+        if (mvRewriteStrategy.enableCBOBasedMvRewrite && mvRewriteStrategy.enableMultiTableRewrite) {
             context.getRuleSet().addSingleTableMvRewriteRule();
             context.getRuleSet().addMultiTableMvRewriteRule();
         }

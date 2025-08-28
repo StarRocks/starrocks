@@ -82,6 +82,6 @@ public class ShowDbStmt extends ShowStmt {
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitShowDatabasesStatement(this, context);
+        return ((AstVisitorExtendInterface<R, C>) visitor).visitShowDatabasesStatement(this, context);
     }
 }

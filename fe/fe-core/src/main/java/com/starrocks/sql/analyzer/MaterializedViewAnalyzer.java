@@ -79,7 +79,7 @@ import com.starrocks.qe.SqlModeHelper;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
 import com.starrocks.sql.ast.AlterMaterializedViewStmt;
-import com.starrocks.sql.ast.AstVisitor;
+import com.starrocks.sql.ast.AstVisitorExtendInterface;
 import com.starrocks.sql.ast.CancelRefreshMaterializedViewStmt;
 import com.starrocks.sql.ast.ColWithComment;
 import com.starrocks.sql.ast.ColumnDef;
@@ -285,7 +285,7 @@ public class MaterializedViewAnalyzer {
                 .collect(Collectors.toList());
     }
 
-    static class MaterializedViewAnalyzerVisitor implements AstVisitor<Void, ConnectContext> {
+    static class MaterializedViewAnalyzerVisitor implements AstVisitorExtendInterface<Void, ConnectContext> {
 
         public enum RefreshTimeUnit {
             DAY,

@@ -55,7 +55,7 @@ public class BinaryPredicateOperator extends PredicateOperator {
 
     @Override
     public <R, C> R accept(ScalarOperatorVisitor<R, C> visitor, C context) {
-        return visitor.visitBinaryPredicate(this, context);
+        return  visitor.visitBinaryPredicate(this, context);
     }
 
     public BinaryPredicateOperator commutative() {

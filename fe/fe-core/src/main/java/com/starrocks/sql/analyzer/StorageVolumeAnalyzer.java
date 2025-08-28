@@ -20,7 +20,7 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.StorageVolumeMgr;
 import com.starrocks.sql.ast.AlterStorageVolumeStmt;
-import com.starrocks.sql.ast.AstVisitor;
+import com.starrocks.sql.ast.AstVisitorExtendInterface;
 import com.starrocks.sql.ast.CreateStorageVolumeStmt;
 import com.starrocks.sql.ast.DescStorageVolumeStmt;
 import com.starrocks.sql.ast.DropStorageVolumeStmt;
@@ -36,7 +36,7 @@ public class StorageVolumeAnalyzer {
         new StorageVolumeAnalyzer.StorageVolumeAnalyzerVisitor().visit(stmt, session);
     }
 
-    static class StorageVolumeAnalyzerVisitor implements AstVisitor<Void, ConnectContext> {
+    static class StorageVolumeAnalyzerVisitor implements AstVisitorExtendInterface<Void, ConnectContext> {
         public void analyze(ShowStmt statement, ConnectContext session) {
             visit(statement, session);
         }

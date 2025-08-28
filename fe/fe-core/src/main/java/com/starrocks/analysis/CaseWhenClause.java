@@ -34,6 +34,7 @@
 
 package com.starrocks.analysis;
 
+import com.starrocks.sql.ast.ParseNode;
 import com.starrocks.sql.parser.NodePosition;
 
 /**

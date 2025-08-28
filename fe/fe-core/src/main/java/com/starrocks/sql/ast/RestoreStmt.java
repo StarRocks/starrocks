@@ -67,7 +67,7 @@ public class RestoreStmt extends AbstractBackupStmt {
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitRestoreStatement(this, context);
+        return ((AstVisitorExtendInterface<R, C>) visitor).visitRestoreStatement(this, context);
     }
 
     public void setTimeoutMs(long timeoutMs) {

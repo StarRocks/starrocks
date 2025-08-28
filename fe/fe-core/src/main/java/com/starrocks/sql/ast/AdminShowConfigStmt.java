@@ -44,6 +44,6 @@ public class AdminShowConfigStmt extends ShowStmt {
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitAdminShowConfigStatement(this, context);
+        return ((AstVisitorExtendInterface<R, C>) visitor).visitAdminShowConfigStatement(this, context);
     }
 }

@@ -50,6 +50,7 @@ import Beta from '../../../../_assets/commonMarkdown/_beta.mdx'
 | aws.s3.secret_key                   | The Secret Access Key used to access your S3 bucket.         |
 | aws.s3.iam_role_arn                 | The ARN of the IAM role that has privileges on your S3 bucket in which your data files are stored. |
 | aws.s3.external_id                  | The external ID of the AWS account that is used for cross-account access to your S3 bucket. |
+| aws.s3.enable_ssl                   | Specifies whether to enable SSL connection.<br />Valid values: `true` and `false`. Default value: `true`. |
 | azure.blob.endpoint                 | The endpoint of your Azure Blob Storage Account, for example, `https://test.blob.core.windows.net`. |
 | azure.blob.shared_key               | The Shared Key used to authorize requests for your Azure Blob Storage. |
 | azure.blob.sas_token                | The shared access signatures (SAS) used to authorize requests for your Azure Blob Storage. |

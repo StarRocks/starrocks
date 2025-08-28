@@ -45,6 +45,7 @@ import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.sql.ast.AstVisitor;
+import com.starrocks.sql.ast.AstVisitorExtendInterface;
 import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.thrift.TAggregateExpr;
 import com.starrocks.thrift.TExprNode;
@@ -432,7 +433,7 @@ public class FunctionCallExpr extends Expr {
      */
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitFunctionCall(this, context);
+        return ((AstVisitorExtendInterface<R, C>) visitor).visitFunctionCall(this, context);
     }
 
     public void setMergeAggFn() {

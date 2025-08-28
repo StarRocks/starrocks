@@ -158,7 +158,7 @@ public class IcebergConnectorScanRangeSource extends ConnectorScanRangeSource {
 
     @Override
     public boolean sourceHasMoreOutput() {
-        try (Timer ignored = Tracers.watchScope(EXTERNAL, "ICEBERG.getScanFiles")) {
+        try (Timer ignored = Tracers.watchScope(EXTERNAL, "ICEBERG.hasMoreOutput")) {
             return remoteFileInfoSource.hasMoreOutput();
         }
     }

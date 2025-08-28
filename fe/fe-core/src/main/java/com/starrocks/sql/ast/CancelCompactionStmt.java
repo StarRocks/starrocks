@@ -47,6 +47,6 @@ public class CancelCompactionStmt extends DdlStmt {
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitCancelCompactionStatement(this, context);
+        return ((AstVisitorExtendInterface<R, C>) visitor).visitCancelCompactionStatement(this, context);
     }
 }

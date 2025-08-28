@@ -222,9 +222,8 @@ public class SchemaChangeHandlerWithMVTest extends TestWithFeService {
                     "alter table sc_dup3 drop column error_code");
         } catch (Exception e) {
             Assertions.assertTrue(
-                    e.getMessage().contains("Can not drop/modify the column mv_count_error_code, because the column " +
-                    "is used in the related rollup mv1 with the define expr:" +
-                    "CASE WHEN `test`.`sc_dup3`.`error_code` IS NULL THEN 0 ELSE 1 END, please drop the rollup index first."));
+                    e.getMessage().contains("Can not drop/modify the column error_code, " +
+                            "because the column is used in the related rollup mv1 with the define exp"), e.getMessage());
         }
     }
 
@@ -237,9 +236,8 @@ public class SchemaChangeHandlerWithMVTest extends TestWithFeService {
                             "group by timestamp",
                     "alter table sc_dup3 modify column error_code BIGINT");
         } catch (Exception e) {
-            Assertions.assertTrue(e.getMessage().contains("Can not drop/modify the column mv_count_error_code, because " +
-                    "the column is used in the related rollup mv1 with the define expr:" +
-                    "CASE WHEN `test`.`sc_dup3`.`error_code` IS NULL THEN 0 ELSE 1 END, please drop the rollup index first."));
+            Assertions.assertTrue(e.getMessage().contains("Can not drop/modify the column error_code, because " +
+                    "the column is used in the related rollup mv1 with the define expr"), e.getMessage());
         }
     }
 

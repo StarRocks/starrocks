@@ -17,6 +17,7 @@ package com.starrocks.sql.ast.pipe;
 import com.starrocks.analysis.TableName;
 import com.starrocks.load.pipe.Pipe;
 import com.starrocks.sql.ast.AstVisitor;
+import com.starrocks.sql.ast.AstVisitorExtendInterface;
 import com.starrocks.sql.ast.ShowStmt;
 import com.starrocks.sql.parser.NodePosition;
 
@@ -48,6 +49,6 @@ public class DescPipeStmt extends ShowStmt {
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitDescPipeStatement(this, context);
+        return ((AstVisitorExtendInterface<R, C>) visitor).visitDescPipeStatement(this, context);
     }
 }

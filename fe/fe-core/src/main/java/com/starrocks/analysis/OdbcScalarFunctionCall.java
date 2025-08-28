@@ -15,6 +15,7 @@
 package com.starrocks.analysis;
 
 import com.google.common.collect.ImmutableSortedSet;
+import com.starrocks.sql.ast.ParseNode;
 import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.sql.parser.ParsingException;
 

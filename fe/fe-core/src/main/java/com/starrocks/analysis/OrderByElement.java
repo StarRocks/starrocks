@@ -37,6 +37,8 @@ package com.starrocks.analysis;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.starrocks.sql.ast.AstVisitor;
+import com.starrocks.sql.ast.AstVisitorExtendInterface;
+import com.starrocks.sql.ast.ParseNode;
 import com.starrocks.sql.parser.NodePosition;
 
 import java.util.List;
@@ -207,6 +209,6 @@ public class OrderByElement implements ParseNode {
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitOrderByElement(this, context);
+        return ((AstVisitorExtendInterface<R, C>) visitor).visitOrderByElement(this, context);
     }
 }

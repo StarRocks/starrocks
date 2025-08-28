@@ -15,7 +15,6 @@
 package com.starrocks.service.arrow.flight.sql;
 
 import com.google.protobuf.ByteString;
-import com.starrocks.analysis.ParseNode;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.common.util.ArrowUtil;
@@ -27,7 +26,6 @@ import com.starrocks.proto.PFetchArrowSchemaResult;
 import com.starrocks.proto.PUniqueId;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.DefaultCoordinator;
-import com.starrocks.qe.OriginStatement;
 import com.starrocks.qe.QueryState;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.qe.scheduler.dag.ExecutionDAG;
@@ -35,6 +33,8 @@ import com.starrocks.qe.scheduler.dag.ExecutionFragment;
 import com.starrocks.qe.scheduler.dag.FragmentInstance;
 import com.starrocks.rpc.BackendServiceClient;
 import com.starrocks.service.arrow.flight.sql.session.ArrowFlightSqlSessionManager;
+import com.starrocks.sql.ast.OriginStatement;
+import com.starrocks.sql.ast.ParseNode;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.common.AuditEncryptionChecker;
 import com.starrocks.system.ComputeNode;

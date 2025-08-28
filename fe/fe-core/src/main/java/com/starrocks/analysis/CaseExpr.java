@@ -38,6 +38,7 @@ import com.google.common.base.Objects;
 import com.google.common.base.Preconditions;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AstVisitor;
+import com.starrocks.sql.ast.AstVisitorExtendInterface;
 import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.thrift.TCaseExpr;
 import com.starrocks.thrift.TExprNode;
@@ -163,6 +164,6 @@ public class CaseExpr extends Expr {
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) throws SemanticException {
-        return visitor.visitCaseWhenExpr(this, context);
+        return ((AstVisitorExtendInterface<R, C>) visitor).visitCaseWhenExpr(this, context);
     }
 }

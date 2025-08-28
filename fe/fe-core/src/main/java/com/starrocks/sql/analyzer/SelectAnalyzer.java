@@ -27,7 +27,6 @@ import com.starrocks.analysis.GroupingFunctionCallExpr;
 import com.starrocks.analysis.IntLiteral;
 import com.starrocks.analysis.LimitElement;
 import com.starrocks.analysis.OrderByElement;
-import com.starrocks.analysis.ParseNode;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.UserVariableExpr;
 import com.starrocks.catalog.FunctionSet;
@@ -36,8 +35,9 @@ import com.starrocks.catalog.Type;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.TreeNode;
 import com.starrocks.qe.ConnectContext;
-import com.starrocks.sql.ast.AstVisitor;
+import com.starrocks.sql.ast.AstVisitorExtendInterface;
 import com.starrocks.sql.ast.FieldReference;
+import com.starrocks.sql.ast.ParseNode;
 import com.starrocks.sql.ast.Relation;
 import com.starrocks.sql.ast.SelectList;
 import com.starrocks.sql.ast.SelectListItem;
@@ -638,7 +638,7 @@ public class SelectAnalyzer {
 
     // If alias is same with table column name, we directly use table name.
     // otherwise, we use output expression according to the alias
-    public static class RewriteAliasVisitor implements AstVisitor<Expr, Void> {
+    public static class RewriteAliasVisitor implements AstVisitorExtendInterface<Expr, Void> {
         private final Scope sourceScope;
         private final Scope outputScope;
         private final List<Expr> outputExprs;
@@ -686,7 +686,7 @@ public class SelectAnalyzer {
      * it's safe to remove the alias table name to avoid ambiguous semantics in the analyzer stage.
      * Note: This cleaner will change the input expr directly instead of cloning a new expr.
      */
-    public static class SlotRefTableNameCleaner implements AstVisitor<Expr, Void> {
+    public static class SlotRefTableNameCleaner implements AstVisitorExtendInterface<Expr, Void> {
         private final Scope sourceScope;
         private final ConnectContext session;
 
@@ -719,7 +719,7 @@ public class SelectAnalyzer {
         }
     }
 
-    private static class NotFullGroupByRewriter implements AstVisitor<Expr, Void> {
+    private static class NotFullGroupByRewriter implements AstVisitorExtendInterface<Expr, Void> {
         private final Map<Expr, Expr> columnsNotInGroupBy;
 
         public NotFullGroupByRewriter(Map<Expr, Expr> columnsNotInGroupBy) {

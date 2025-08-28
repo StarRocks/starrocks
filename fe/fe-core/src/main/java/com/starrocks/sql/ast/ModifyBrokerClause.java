@@ -82,6 +82,6 @@ public class ModifyBrokerClause extends AlterClause {
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitModifyBrokerClause(this, context);
+        return ((AstVisitorExtendInterface<R, C>) visitor).visitModifyBrokerClause(this, context);
     }
 }

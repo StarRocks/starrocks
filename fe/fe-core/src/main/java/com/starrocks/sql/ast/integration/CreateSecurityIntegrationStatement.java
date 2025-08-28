@@ -15,6 +15,7 @@
 package com.starrocks.sql.ast.integration;
 
 import com.starrocks.sql.ast.AstVisitor;
+import com.starrocks.sql.ast.AstVisitorExtendInterface;
 import com.starrocks.sql.ast.DdlStmt;
 import com.starrocks.sql.parser.NodePosition;
 
@@ -40,6 +41,6 @@ public class CreateSecurityIntegrationStatement extends DdlStmt {
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitCreateSecurityIntegrationStatement(this, context);
+        return ((AstVisitorExtendInterface<R, C>) visitor).visitCreateSecurityIntegrationStatement(this, context);
     }
 }

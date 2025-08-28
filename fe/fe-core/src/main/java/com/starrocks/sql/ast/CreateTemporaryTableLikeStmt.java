@@ -42,6 +42,6 @@ public class CreateTemporaryTableLikeStmt extends CreateTableLikeStmt {
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitCreateTemporaryTableLikeStatement(this, context);
+        return ((AstVisitorExtendInterface<R, C>) visitor).visitCreateTemporaryTableLikeStatement(this, context);
     }
 }

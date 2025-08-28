@@ -909,7 +909,7 @@ public class ReplayFromDumpTest extends ReplayFromDumpTestBase {
     @Test
     public void testTimeoutDeepJoinCostPrune() throws Exception {
         Tracers.register(connectContext);
-        Tracers.init(connectContext, Tracers.Mode.TIMER, "optimizer");
+        Tracers.init(connectContext, "TIMER", "optimizer");
         connectContext.getSessionVariable().setOptimizerExecuteTimeout(-1);
 
         Pair<QueryDumpInfo, String> replayPair =

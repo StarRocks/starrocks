@@ -103,7 +103,7 @@ public class ValuesRelation extends QueryRelation {
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitValues(this, context);
+        return ((AstVisitorExtendInterface<R, C>) visitor).visitValues(this, context);
     }
 
     @Override

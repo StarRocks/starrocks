@@ -37,7 +37,7 @@ public class DropStorageVolumeStmt extends DdlStmt {
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitDropStorageVolumeStatement(this, context);
+        return ((AstVisitorExtendInterface<R, C>) visitor).visitDropStorageVolumeStatement(this, context);
     }
 
     @Override

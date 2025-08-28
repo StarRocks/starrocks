@@ -40,3 +40,4 @@ The following fields are provided in `partitions_meta`:
 | STORAGE_PATH                  | Storage path of the partition.                               |
 | STORAGE_SIZE                  | Storage size of the partition.                               |
 | METADATA_SWITCH_VERSION       | Metadata switch version of the partition.                    |
+| TABLET_BALANCED               | Whether the tablet distribution is balanced in the partition. |

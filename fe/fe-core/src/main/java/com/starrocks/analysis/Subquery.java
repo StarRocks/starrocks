@@ -38,6 +38,7 @@ import com.google.common.base.Objects;
 import com.starrocks.sql.analyzer.AstToStringBuilder;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AstVisitor;
+import com.starrocks.sql.ast.AstVisitorExtendInterface;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.thrift.TExprNode;
@@ -122,6 +123,6 @@ public class Subquery extends Expr {
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) throws SemanticException {
-        return visitor.visitSubqueryExpr(this, context);
+        return ((AstVisitorExtendInterface<R, C>) visitor).visitSubqueryExpr(this, context);
     }
 }

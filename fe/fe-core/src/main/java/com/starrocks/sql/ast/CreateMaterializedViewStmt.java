@@ -283,7 +283,7 @@ public class CreateMaterializedViewStmt extends DdlStmt {
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitCreateMaterializedViewStmt(this, context);
+        return ((AstVisitorExtendInterface<R, C>) visitor).visitCreateMaterializedViewStmt(this, context);
     }
 
     public void analyze(ConnectContext context) {

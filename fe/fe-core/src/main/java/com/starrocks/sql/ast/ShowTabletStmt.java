@@ -208,7 +208,7 @@ public class ShowTabletStmt extends ShowStmt {
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitShowTabletStatement(this, context);
+        return ((AstVisitorExtendInterface<R, C>) visitor).visitShowTabletStatement(this, context);
     }
 
     public ImmutableList<String> getTitleNames() {

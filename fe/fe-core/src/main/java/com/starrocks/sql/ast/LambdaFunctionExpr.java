@@ -128,7 +128,7 @@ public class LambdaFunctionExpr extends Expr {
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitLambdaFunctionExpr(this, context);
+        return ((AstVisitorExtendInterface<R, C>) visitor).visitLambdaFunctionExpr(this, context);
     }
 
 }

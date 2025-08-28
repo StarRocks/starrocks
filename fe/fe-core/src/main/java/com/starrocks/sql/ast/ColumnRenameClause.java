@@ -42,6 +42,6 @@ public class ColumnRenameClause extends AlterTableClause {
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitColumnRenameClause(this, context);
+        return ((AstVisitorExtendInterface<R, C>) visitor).visitColumnRenameClause(this, context);
     }
 }

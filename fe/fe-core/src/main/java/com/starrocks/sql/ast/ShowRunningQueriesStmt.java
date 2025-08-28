@@ -77,7 +77,7 @@ public class ShowRunningQueriesStmt extends ShowStmt {
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitShowRunningQueriesStatement(this, context);
+        return ((AstVisitorExtendInterface<R, C>) visitor).visitShowRunningQueriesStatement(this, context);
     }
 
     public int getLimit() {

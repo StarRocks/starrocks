@@ -43,6 +43,6 @@ public class ShowCreateRoutineLoadStmt extends ShowStmt {
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitShowCreateRoutineLoadStatement(this, context);
+        return ((AstVisitorExtendInterface<R, C>) visitor).visitShowCreateRoutineLoadStatement(this, context);
     }
 }

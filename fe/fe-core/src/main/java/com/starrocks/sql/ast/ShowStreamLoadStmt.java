@@ -143,6 +143,6 @@ public class ShowStreamLoadStmt extends ShowStmt {
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitShowStreamLoadStatement(this, context);
+        return ((AstVisitorExtendInterface<R, C>) visitor).visitShowStreamLoadStatement(this, context);
     }
 }

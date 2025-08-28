@@ -21,7 +21,7 @@ import com.starrocks.qe.ShowResultSet;
 import com.starrocks.qe.ShowResultSetMetaData;
 import com.starrocks.qe.StmtExecutor;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.sql.ast.AstVisitor;
+import com.starrocks.sql.ast.AstVisitorExtendInterface;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.feedback.AddPlanAdvisorStmt;
 import com.starrocks.sql.ast.feedback.ClearPlanAdvisorStmt;
@@ -54,7 +54,7 @@ public class PlanAdvisorExecutor {
         return INSTANCE.visit(stmt, context);
     }
 
-    public static final class PlanAdvisorExecutorVisitor implements AstVisitor<ShowResultSet, ConnectContext> {
+    public static final class PlanAdvisorExecutorVisitor implements AstVisitorExtendInterface<ShowResultSet, ConnectContext> {
 
         @Override
         public ShowResultSet visitAddPlanAdvisorStatement(AddPlanAdvisorStmt stmt, ConnectContext context) {

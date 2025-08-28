@@ -1229,6 +1229,11 @@ Status ChunkPredicateBuilder<E, Type>::build_column_expr_predicates() {
             continue;
         }
 
+        // string column may use local dict optimiztion, throw exception will take unexcept result
+        if (is_string_type(ltype) && _opts.runtime_state->query_options().allow_throw_exception) {
+            continue;
+        }
+
         auto iter = slot_index_to_expr_ctxs.find(index);
         if (iter == slot_index_to_expr_ctxs.end()) {
             slot_index_to_expr_ctxs.insert(make_pair(index, std::vector<ExprContext*>{}));

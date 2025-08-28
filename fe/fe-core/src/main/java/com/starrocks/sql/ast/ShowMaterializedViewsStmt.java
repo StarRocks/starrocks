@@ -163,6 +163,6 @@ public class ShowMaterializedViewsStmt extends ShowStmt {
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitShowMaterializedViewStatement(this, context);
+        return ((AstVisitorExtendInterface<R, C>) visitor).visitShowMaterializedViewStatement(this, context);
     }
 }

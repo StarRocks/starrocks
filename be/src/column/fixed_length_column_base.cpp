@@ -37,28 +37,36 @@ StatusOr<ColumnPtr> FixedLengthColumnBase<T>::upgrade_if_overflow() {
 
 template <typename T>
 void FixedLengthColumnBase<T>::append(const Column& src, size_t offset, size_t count) {
-    const auto& num_src = down_cast<const FixedLengthColumnBase<T>&>(src);
-    _data.insert(_data.end(), num_src._data.begin() + offset, num_src._data.begin() + offset + count);
+    DCHECK(this != &src);
+
+    const size_t orig_size = _data.size();
+    raw::stl_vector_resize_uninitialized(&_data, orig_size + count);
+
+    const T* src_data = reinterpret_cast<const T*>(src.raw_data());
+    strings::memcpy_inlined(_data.data() + orig_size, src_data + offset, count * sizeof(T));
 }
 
 template <typename T>
 void FixedLengthColumnBase<T>::append_selective(const Column& src, const uint32_t* indexes, uint32_t from,
                                                 uint32_t size) {
+    DCHECK(this != &src);
     indexes += from;
-    const T* src_data = reinterpret_cast<const T*>(src.raw_data());
 
     const size_t orig_size = _data.size();
-    _data.resize(orig_size + size);
+    raw::stl_vector_resize_uninitialized(&_data, orig_size + size);
     auto* dest_data = _data.data() + orig_size;
 
+    const T* src_data = reinterpret_cast<const T*>(src.raw_data());
     SIMDGather::gather(dest_data, src_data, indexes, size);
 }
 
 template <typename T>
 void FixedLengthColumnBase<T>::append_value_multiple_times(const Column& src, uint32_t index, uint32_t size) {
-    const T* src_data = reinterpret_cast<const T*>(src.raw_data());
+    DCHECK(this != &src);
     size_t orig_size = _data.size();
     _data.resize(orig_size + size);
+
+    const T* src_data = reinterpret_cast<const T*>(src.raw_data());
     for (size_t i = 0; i < size; ++i) {
         _data[orig_size + i] = src_data[index];
     }

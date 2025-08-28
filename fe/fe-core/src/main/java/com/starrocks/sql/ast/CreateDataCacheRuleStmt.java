@@ -53,6 +53,6 @@ public class CreateDataCacheRuleStmt extends DdlStmt {
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitCreateDataCacheRuleStatement(this, context);
+        return ((AstVisitorExtendInterface<R, C>) visitor).visitCreateDataCacheRuleStatement(this, context);
     }
 }

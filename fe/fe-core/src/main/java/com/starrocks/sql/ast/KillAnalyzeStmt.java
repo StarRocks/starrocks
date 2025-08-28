@@ -39,6 +39,6 @@ public class KillAnalyzeStmt extends StatementBase {
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitKillAnalyzeStatement(this, context);
+        return ((AstVisitorExtendInterface<R, C>) visitor).visitKillAnalyzeStatement(this, context);
     }
 }

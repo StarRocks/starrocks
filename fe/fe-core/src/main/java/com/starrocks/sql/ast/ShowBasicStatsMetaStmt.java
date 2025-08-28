@@ -128,7 +128,7 @@ public class ShowBasicStatsMetaStmt extends ShowStmt {
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitShowBasicStatsMetaStatement(this, context);
+        return ((AstVisitorExtendInterface<R, C>) visitor).visitShowBasicStatsMetaStatement(this, context);
     }
 }
 

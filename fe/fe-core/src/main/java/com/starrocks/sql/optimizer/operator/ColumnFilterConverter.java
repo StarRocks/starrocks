@@ -46,7 +46,7 @@ import com.starrocks.connector.PartitionUtil;
 import com.starrocks.planner.PartitionColumnFilter;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.analyzer.SemanticException;
-import com.starrocks.sql.ast.AstVisitor;
+import com.starrocks.sql.ast.AstVisitorExtendInterface;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
@@ -82,7 +82,7 @@ public class ColumnFilterConverter {
     private static final ColumnFilterVisitor COLUMN_FILTER_VISITOR = new ColumnFilterVisitor();
 
     // replaces a field in an expression with a constant
-    private static class ExprRewriter implements AstVisitor<Boolean, Void> {
+    private static class ExprRewriter implements AstVisitorExtendInterface<Boolean, Void> {
 
         private final ColumnRefOperator columnRef;
         private final ConstantOperator constant;

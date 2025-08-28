@@ -55,7 +55,7 @@ public class MatchExprOperator extends ArgsScalarOperator {
 
     @Override
     public <R, C> R accept(ScalarOperatorVisitor<R, C> visitor, C context) {
-        return visitor.visitMatchExprOperator(this, context);
+        return  visitor.visitMatchExprOperator(this, context);
     }
 
     @Override

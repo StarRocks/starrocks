@@ -434,7 +434,15 @@ Status LakeDataSource::_extend_schema_by_access_paths() {
         column.set_type(value_type);
         column.set_length(path->value_type().len);
         column.set_is_nullable(true);
-        column.set_extended_info(std::make_unique<ExtendedColumnInfo>(path.get(), root_column_index));
+        int32_t root_uid = _tablet_schema->column(static_cast<size_t>(root_column_index)).unique_id();
+        column.set_extended_info(std::make_unique<ExtendedColumnInfo>(path.get(), root_uid));
+
+        // For UNIQUE/AGG tables, extended flat JSON subcolumns behave like value columns
+        // and must carry a valid aggregation for pre-aggregation. Use REPLACE.
+        auto keys_type = _tablet_schema->keys_type();
+        if (keys_type == KeysType::UNIQUE_KEYS || keys_type == KeysType::AGG_KEYS) {
+            column.set_aggregation(StorageAggregateType::STORAGE_AGGREGATE_REPLACE);
+        }
 
         tmp_schema->append_column(column);
         VLOG(2) << "extend the access path column: " << path->linear_path();

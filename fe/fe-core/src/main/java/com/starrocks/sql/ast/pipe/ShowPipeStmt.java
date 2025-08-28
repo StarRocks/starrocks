@@ -27,6 +27,7 @@ import com.starrocks.common.util.OrderByPair;
 import com.starrocks.load.pipe.Pipe;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.AstVisitor;
+import com.starrocks.sql.ast.AstVisitorExtendInterface;
 import com.starrocks.sql.ast.ShowStmt;
 import com.starrocks.sql.parser.NodePosition;
 
@@ -135,6 +136,6 @@ public class ShowPipeStmt extends ShowStmt {
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitShowPipeStatement(this, context);
+        return ((AstVisitorExtendInterface<R, C>) visitor).visitShowPipeStatement(this, context);
     }
 }

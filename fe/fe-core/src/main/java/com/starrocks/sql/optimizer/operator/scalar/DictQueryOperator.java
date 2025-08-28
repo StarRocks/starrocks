@@ -36,7 +36,7 @@ public class DictQueryOperator extends CallOperator {
 
     @Override
     public <R, C> R accept(ScalarOperatorVisitor<R, C> visitor, C context) {
-        return visitor.visitDictQueryOperator(this, context);
+        return  visitor.visitDictQueryOperator(this, context);
     }
 
     public TDictQueryExpr getDictQueryExpr() {

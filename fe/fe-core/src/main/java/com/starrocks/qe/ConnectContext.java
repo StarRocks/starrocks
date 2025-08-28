@@ -74,6 +74,7 @@ import com.starrocks.sql.analyzer.Authorizer;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.CleanTemporaryTableStmt;
 import com.starrocks.sql.ast.ExecuteStmt;
+import com.starrocks.sql.ast.OriginStatement;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.SetListItem;
 import com.starrocks.sql.ast.SetStmt;

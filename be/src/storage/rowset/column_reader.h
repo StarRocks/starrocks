@@ -197,6 +197,7 @@ public:
 
     const std::vector<std::unique_ptr<ColumnReader>>* sub_readers() const { return _sub_readers.get(); }
 
+    bool is_flat_json() const { return _is_flat_json; }
     bool has_remain_json() const { return _has_remain; }
 
     // Return the pointer to the remain filter if it exists, otherwise return nullptr.

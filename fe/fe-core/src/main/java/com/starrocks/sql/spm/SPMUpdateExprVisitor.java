@@ -17,10 +17,10 @@ package com.starrocks.sql.spm;
 import com.google.common.base.Preconditions;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.OrderByElement;
-import com.starrocks.analysis.ParseNode;
-import com.starrocks.sql.ast.AstVisitor;
+import com.starrocks.sql.ast.AstVisitorExtendInterface;
 import com.starrocks.sql.ast.CTERelation;
 import com.starrocks.sql.ast.JoinRelation;
+import com.starrocks.sql.ast.ParseNode;
 import com.starrocks.sql.ast.QueryRelation;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.SelectRelation;
@@ -31,7 +31,7 @@ import com.starrocks.sql.ast.ValuesRelation;
 import java.util.List;
 import java.util.stream.Collectors;
 
-public class SPMUpdateExprVisitor<C> implements AstVisitor<ParseNode, C> {
+public class SPMUpdateExprVisitor<C> implements AstVisitorExtendInterface<ParseNode, C> {
     protected Expr visitExpr(Expr node, C context) {
         if (node == null) {
             return null;

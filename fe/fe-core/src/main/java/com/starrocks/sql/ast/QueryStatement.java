@@ -24,7 +24,6 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.Pair;
-import com.starrocks.qe.OriginStatement;
 import com.starrocks.thrift.TExprOpcode;
 
 import java.util.HashMap;
@@ -68,7 +67,7 @@ public class QueryStatement extends StatementBase {
     }
 
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitQueryStatement(this, context);
+        return ((AstVisitorExtendInterface<R, C>) visitor).visitQueryStatement(this, context);
     }
 
     public int getQueryStartIndex() {

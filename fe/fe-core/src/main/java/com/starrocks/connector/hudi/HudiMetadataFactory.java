@@ -40,7 +40,8 @@ public class HudiMetadataFactory {
     private final IHiveMetastore metastore;
     private final RemoteFileIO remoteFileIO;
     private final long perQueryMetastoreMaxNum;
-    private final long perQueryCacheRemotePathMaxNum;
+    private final long perQueryCacheRemotePathMaxNum; //deprecated
+    private final double perQueryCacheRemotePathMaxMemoryRatio;
     private final ExecutorService pullRemoteFileExecutor;
     private final boolean isRecursive;
     private final HdfsEnvironment hdfsEnvironment;
@@ -62,6 +63,7 @@ public class HudiMetadataFactory {
         this.remoteFileIO = remoteFileIO;
         this.perQueryMetastoreMaxNum = hmsConf.getPerQueryCacheMaxNum();
         this.perQueryCacheRemotePathMaxNum = fileConf.getPerQueryCacheMaxSize();
+        this.perQueryCacheRemotePathMaxMemoryRatio = 0.0; //It is duplicated with Catalog level CachingRemoteFileIO, set as 0.
         this.pullRemoteFileExecutor = pullRemoteFileExecutor;
         this.isRecursive = isRecursive;
         this.hdfsEnvironment = hdfsEnvironment;
@@ -75,7 +77,7 @@ public class HudiMetadataFactory {
                 metastore instanceof CachingHiveMetastore,
                 hdfsEnvironment.getConfiguration(), metastoreType, catalogName);
         RemoteFileOperations remoteFileOperations = new RemoteFileOperations(
-                CachingRemoteFileIO.createQueryLevelInstance(remoteFileIO, perQueryCacheRemotePathMaxNum),
+                CachingRemoteFileIO.createQueryLevelInstance(remoteFileIO, perQueryCacheRemotePathMaxMemoryRatio),
                 pullRemoteFileExecutor,
                 pullRemoteFileExecutor,
                 isRecursive,
