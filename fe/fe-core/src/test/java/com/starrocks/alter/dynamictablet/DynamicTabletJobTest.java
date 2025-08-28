@@ -190,7 +190,7 @@ public class DynamicTabletJobTest {
 
         Map<String, String> properties = Map.of(PropertyAnalyzer.PROPERTIES_DYNAMIC_TABLET_SPLIT_SIZE, "-2");
         SplitTabletClause clause = new SplitTabletClause(null, tabletList, properties);
-        clause.analyze();
+        clause.setDynamicTabletSplitSize(-2);
 
         DynamicTabletJobFactory factory = new SplitTabletJobFactory(db, table, clause);
         return factory.createDynamicTabletJob();

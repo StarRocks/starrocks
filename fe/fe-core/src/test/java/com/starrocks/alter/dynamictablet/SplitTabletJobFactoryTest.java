@@ -62,7 +62,7 @@ public class SplitTabletJobFactoryTest {
         {
             Map<String, String> properties = Map.of(PropertyAnalyzer.PROPERTIES_DYNAMIC_TABLET_SPLIT_SIZE, "-1");
             SplitTabletClause clause = new SplitTabletClause(null, null, properties);
-            clause.analyze();
+            clause.setDynamicTabletSplitSize(-1);
 
             DynamicTabletJobFactory factory = new SplitTabletJobFactory(db, table, clause);
             Assertions.assertThrows(IllegalStateException.class, () -> factory.createDynamicTabletJob());
@@ -71,7 +71,7 @@ public class SplitTabletJobFactoryTest {
         {
             Map<String, String> properties = Map.of(PropertyAnalyzer.PROPERTIES_DYNAMIC_TABLET_SPLIT_SIZE, "1");
             SplitTabletClause clause = new SplitTabletClause(null, null, properties);
-            clause.analyze();
+            clause.setDynamicTabletSplitSize(1);
 
             DynamicTabletJobFactory factory = new SplitTabletJobFactory(db, table, clause);
             Assertions.assertThrows(StarRocksException.class, () -> factory.createDynamicTabletJob());
@@ -85,7 +85,7 @@ public class SplitTabletJobFactoryTest {
 
             Map<String, String> properties = Map.of(PropertyAnalyzer.PROPERTIES_DYNAMIC_TABLET_SPLIT_SIZE, "-2");
             SplitTabletClause clause = new SplitTabletClause(null, tabletList, properties);
-            clause.analyze();
+            clause.setDynamicTabletSplitSize(-2);
 
             DynamicTabletJobFactory factory = new SplitTabletJobFactory(db, table, clause);
             DynamicTabletJob dynamicTabletJob = factory.createDynamicTabletJob();
