@@ -23,6 +23,7 @@ StarRocks クラスター内にデータベースとテーブルを作成し、�
 CREATE DATABASE starrocks_audit_db__;
 
 CREATE TABLE starrocks_audit_db__.starrocks_audit_tbl__ (
+<<<<<<< HEAD
   `queryId`           VARCHAR(64)                COMMENT "Unique query ID",
   `timestamp`         DATETIME         NOT NULL  COMMENT "Query start time",
   `queryType`         VARCHAR(12)                COMMENT "Query type (query, slow_query, connection）",
@@ -47,6 +48,36 @@ CREATE TABLE starrocks_audit_db__.starrocks_audit_tbl__ (
   `digest`            VARCHAR(32)                COMMENT "Slow SQL fingerprint",
   `planCpuCosts`      DOUBLE                     COMMENT "CPU resources consumption time for planning in nanoseconds",
   `planMemCosts`      DOUBLE                     COMMENT "Memory cost for planning in bytes"
+=======
+  `queryId` VARCHAR(64) COMMENT "クエリの一意ID",
+  `timestamp` DATETIME NOT NULL COMMENT "クエリ開始時間",
+  `queryType` VARCHAR(12) COMMENT "クエリタイプ（query、slow_query、connection）",
+  `clientIp` VARCHAR(32) COMMENT "クライアントIP",
+  `user` VARCHAR(64) COMMENT "クエリユーザー名",
+  `authorizedUser` VARCHAR(64) COMMENT "ユーザーの一意識別子、すなわち user_identity",
+  `resourceGroup` VARCHAR(64) COMMENT "リソースグループ名",
+  `catalog` VARCHAR(32) COMMENT "カタログ名",
+  `db` VARCHAR(96) COMMENT "クエリが実行されるデータベース",
+  `state` VARCHAR(8) COMMENT "クエリ状態（EOF、ERR、OK）",
+  `errorCode` VARCHAR(512) COMMENT "エラーコード",
+  `queryTime` BIGINT COMMENT "クエリ実行時間（ミリ秒）",
+  `scanBytes` BIGINT COMMENT "クエリでスキャンされたバイト数",
+  `scanRows` BIGINT COMMENT "クエリでスキャンされた行数",
+  `returnRows` BIGINT COMMENT "クエリが返す結果行数",
+  `cpuCostNs` BIGINT COMMENT "クエリのCPU消費時間（ナノ秒）",
+  `memCostBytes` BIGINT COMMENT "クエリのメモリ使用量（バイト）",
+  `stmtId` INT COMMENT "SQL文の増分ID",
+  `isQuery` TINYINT COMMENT "SQLがクエリかどうか（1または0）",
+  `feIp` VARCHAR(128) COMMENT "この文を実行したFE IP",
+  `stmt` VARCHAR(1048576) COMMENT "SQL元文",
+  `digest` VARCHAR(32) COMMENT "スロークエリのフィンガープリント",
+  `planCpuCosts` DOUBLE COMMENT "クエリ計画段階のCPU使用量（ナノ秒）",
+  `planMemCosts` DOUBLE COMMENT "クエリ計画段階のメモリ使用量（バイト）",
+  `pendingTimeMs` BIGINT COMMENT "クエリがキューで待機した時間（ミリ秒）",
+  `candidateMVs` VARCHAR(65533) NULL COMMENT "候補マテリアライズドビューのリスト",
+  `hitMvs` VARCHAR(65533) NULL COMMENT "ヒットしたマテリアライズドビューのリスト",
+  `warehouse` VARCHAR(32) NULL COMMENT "Warehouse名"
+>>>>>>> cd764aee6e ([Doc] Updated documentation to align with Auditloader 5.0 (#62419))
 ) ENGINE = OLAP
 DUPLICATE KEY (`queryId`, `timestamp`, `queryType`)
 COMMENT "Audit log table"
@@ -94,9 +125,14 @@ SHOW PARTITIONS FROM starrocks_audit_db__.starrocks_audit_tbl__;
     - `table`: 監査ログをホストするために作成したテーブルの名前。
     - `user`: クラスターのユーザー名。テーブルにデータをロードする権限 (LOAD_PRIV) を持っている必要があります。
     - `password`: ユーザーパスワード。
+<<<<<<< HEAD
     - `secret_key`: パスワードを暗号化するために使用されるキー（文字列、16 バイトを超えてはならない）。このパラメータが設定されていない場合、**plugin.conf** 内のパスワードは暗号化されず、`password` に平文のパスワードを指定するだけで済みます。このパラメータが指定されている場合、パスワードはこのキーで暗号化されていることを示し、`password` に暗号化された文字列を指定する必要があります。暗号化されたパスワードは、StarRocks で `AES_ENCRYPT` 関数を使用して生成できます: `SELECT TO_BASE64(AES_ENCRYPT('password','secret_key'));`。
     - `enable_compute_all_query_digest`: すべてのクエリに対して Hash SQL フィンガープリントを生成するかどうか（StarRocks はデフォルトで遅いクエリに対してのみ SQL フィンガープリントを有効にしています）。プラグイン内のフィンガープリント計算は FE のものとは異なり、[SQL ステートメントを正規化](../Query_planning.md#sql-fingerprint) しますが、プラグインはしません。この機能を有効にすると、フィンガープリント計算は追加の計算リソースを消費します。
     - `filter`: 監査ログロードのフィルター条件。このパラメータは、Stream Load の [WHERE パラメータ](../../sql-reference/sql-statements/loading_unloading/STREAM_LOAD.md#opt_properties) に基づいており、デフォルトでは空の文字列です。例: `filter=isQuery=1 and clientIp like '127.0.0.1%' and user='root'`。
+=======
+    - `secret_key`: パスワードを暗号化するために使用されるキー（文字列、16 バイトを超えてはならない）。このパラメータが設定されていない場合、**plugin.conf** 内のパスワードは暗号化されず、`password` に平文のパスワードを指定するだけで済みます。このパラメータが指定されている場合、パスワードはこのキーで暗号化されていることを示し、`password` に暗号化された文字列を指定する必要があります。暗号化されたパスワードは、StarRocks で `AES_ENCRYPT` 関数を使用して生成できます：`SELECT TO_BASE64(AES_ENCRYPT('password','secret_key'));`。
+    - `filter`: 監査ログロードのフィルター条件。このパラメータは Stream Load の [WHERE パラメータ](../../sql-reference/sql-statements/loading_unloading/STREAM_LOAD.md#opt_properties) に基づいており、`-H “where: <condition>”` として指定され、デフォルトは空の文字列です。例：`filter=isQuery=1 and clientIp like '127.0.0.1%' and user='root'`。
+>>>>>>> cd764aee6e ([Doc] Updated documentation to align with Auditloader 5.0 (#62419))
 
 4. ファイルを再びパッケージに圧縮します。
 
@@ -156,9 +192,9 @@ INSTALL PLUGIN FROM "http://xx.xx.xxx.xxx/extra/auditloader.zip" PROPERTIES("md5
     *************************** 2. row ***************************
         Name: AuditLoader
         Type: AUDIT
-    Description: Available for versions 2.5+. Load audit log to starrocks, and user can view the statistic of queries
-        Version: 4.2.1
-    JavaVersion: 1.8.0
+    Description: Available for versions 3.3.11+. Load audit log to starrocks, and user can view the statistic of queries
+        Version: 5.0.0
+    JavaVersion: 11
     ClassName: com.starrocks.plugin.audit.AuditLoaderPlugin
         SoName: NULL
         Sources: /x/xx/xxx/xxxxx/auditloader.zip
@@ -204,7 +240,11 @@ INSTALL PLUGIN FROM "http://xx.xx.xxx.xxx/extra/auditloader.zip" PROPERTIES("md5
           digest:
     planCpuCosts: 0
     planMemCosts: 0
+<<<<<<< HEAD
     1 row in set (0.01 sec)
+=======
+    …………
+>>>>>>> cd764aee6e ([Doc] Updated documentation to align with Auditloader 5.0 (#62419))
     ```
 
 ## トラブルシューティング
@@ -215,4 +255,8 @@ INSTALL PLUGIN FROM "http://xx.xx.xxx.xxx/extra/auditloader.zip" PROPERTIES("md5
 UNINSTALL PLUGIN AuditLoader;
 ```
 
+<<<<<<< HEAD
 AuditLoader のログは各 FE の **fe.log** に出力されます。**fe.log** 内のキーワード `audit` を検索して取得できます。すべての設定が正しく行われた後、上記の手順に従って再度 AuditLoader をインストールできます。
+=======
+AuditLoader のログは **fe.log** に出力されます。**fe.log** 内で `audit` というキーワードを検索することで取得できます。すべての設定が正しく行われた後、上記の手順に従って再度 AuditLoader をインストールできます。
+>>>>>>> cd764aee6e ([Doc] Updated documentation to align with Auditloader 5.0 (#62419))
