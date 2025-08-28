@@ -11,6 +11,26 @@ displayed_sidebar: docs
 
 :::
 
+## 3.3.18
+
+Release Date: August 28, 2025
+
+### Bug Fixes
+
+The following issues have been fixed:
+
+- BE crashes when `LakePersistentIndex` initialization failed due to cleanup of `_memtable`. [#62279](https://github.com/StarRocks/starrocks/pull/62279)
+- A concurrency issue caused by missing locks when retrieving the maximum Tablet version in the replication transaction manager. [#62238](https://github.com/StarRocks/starrocks/pull/62238)
+- A hang issue in the phased scheduler, which waited indefinitely during synchronous Profile collection (after the fix, the system correctly terminates Profile collection when scheduling errors occur). [#62140](https://github.com/StarRocks/starrocks/pull/62140)
+- Exception handling issues in low-cardinality optimization under the `ALLOW_THROW_EXCEPTION` mode (after the fix, exceptions in expression evaluation are properly caught and returned). [#62098](https://github.com/StarRocks/starrocks/pull/62098)
+- FThe system failed to compute nested CTE statistics outside of the memo during table pruning when `enable_rbo_table_prune` was set to `false`. [#62070](https://github.com/StarRocks/starrocks/pull/62070)
+- CVE-2025-55163 issue. [#62041](https://github.com/StarRocks/starrocks/pull/62041)
+- An issue where `split_morsel_queue` nested inside `partition_morsel_queue` failed to correctly receive the Tablet Schema. [#62034](https://github.com/StarRocks/starrocks/pull/62034)
+- Incorrect handling of `NULL` arrays during Parquet writes, which could cause data inconsistency or crashes (after the fix, the system ensures the `split` function can correctly handle `NULL` input strings). [#61999](https://github.com/StarRocks/starrocks/pull/61999)
+- Failure when creating materialized views using `CASE WHEN` expressions due to incompatible return types of VARCHAR (after the fix, the system ensures consistency before and after refresh). [#61996](https://github.com/StarRocks/starrocks/pull/61996)
+- A concurrency safety issue caused by long operations holding shard-level locks while calculating compression scores. [#61899](https://github.com/StarRocks/starrocks/pull/61899)
+- An incomplete table pruning issue in CBO caused by pruning logic not considering all relevant predicates. [#61881](https://github.com/StarRocks/starrocks/pull/61881)
+
 ## 3.3.17
 
 Release Date: July 30, 2025
