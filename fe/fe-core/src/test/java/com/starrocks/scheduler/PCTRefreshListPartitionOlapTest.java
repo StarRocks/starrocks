@@ -1506,4 +1506,112 @@ public class PCTRefreshListPartitionOlapTest extends MVTestBase {
                     testMVRefreshWithLooseMode(tableName);
                 });
     }
+<<<<<<< HEAD
+=======
+
+    @Test
+    public void testMVRefreshWithOnePartitionAndOneUnPartitionTable1() throws Exception {
+        String partitionTable = "CREATE TABLE partition_table (dt1 date, int1 int)\n" +
+                "PARTITION BY list(dt1) (\n" +
+                "     PARTITION p1 VALUES IN (\"2025-05-16\") ,\n" +
+                "     PARTITION p2 VALUES IN (\"2025-05-17\") \n" +
+                ")\n";
+        String partitionTableValue = "insert into partition_table partition(p1) values('2025-05-16', 1);";
+        String mvQuery = "CREATE MATERIALIZED VIEW test_mv1 " +
+                "PARTITION BY (dt1) " +
+                "REFRESH DEFERRED MANUAL PROPERTIES (\"partition_refresh_number\"=\"1\")\n" +
+                "AS SELECT dt1,sum(int1) from partition_table group by dt1 union all\n" +
+                "SELECT dt2,sum(int2) from non_partition_table group by dt2;";
+        testMVRefreshWithOnePartitionAndOneUnPartitionTable(partitionTable, partitionTableValue, mvQuery,
+                "     TABLE: partition_table\n" +
+                        "     PREAGGREGATION: ON\n" +
+                        "     PREDICATES: 1: dt1 = '2025-05-17'\n" +
+                        "     partitions=1/2",
+                "     TABLE: non_partition_table\n" +
+                        "     PREAGGREGATION: ON\n" +
+                        "     PREDICATES: 4: dt2 = '2025-05-17'\n" +
+                        "     partitions=1/1");
+    }
+
+    @Test
+    public void testMVRefreshWithOnePartitionAndOneUnPartitionTable2() throws Exception {
+        String partitionTable = "CREATE TABLE partition_table (dt1 date, int1 int, str1 string)\n" +
+                "PARTITION BY list(dt1, str1) (\n" +
+                "     PARTITION p1 VALUES IN ((\"2025-05-16\", \"hangzhou\")),\n" +
+                "     PARTITION p2 VALUES IN ((\"2025-05-17\", \"guangzhou\")) \n" +
+                ")\n";
+        String partitionTableValue = "insert into partition_table partition(p1) values('2025-05-16', 1, 'hangzhou');";
+        String mvQuery = "CREATE MATERIALIZED VIEW test_mv1 " +
+                "PARTITION BY (dt1) " +
+                "REFRESH DEFERRED MANUAL PROPERTIES (\"partition_refresh_number\"=\"1\")\n" +
+                "AS SELECT dt1,sum(int1) from partition_table group by dt1 union all\n" +
+                "SELECT dt2,sum(int2) from non_partition_table group by dt2;";
+        testMVRefreshWithOnePartitionAndOneUnPartitionTable(partitionTable, partitionTableValue, mvQuery,
+                "     TABLE: partition_table\n" +
+                        "     PREAGGREGATION: ON\n" +
+                        "     PREDICATES: 1: dt1 = '2025-05-17'\n" +
+                        "     partitions=1/2",
+                "     TABLE: non_partition_table\n" +
+                        "     PREAGGREGATION: ON\n" +
+                        "     PREDICATES: 5: dt2 = '2025-05-17'\n" +
+                        "     partitions=1/1");
+    }
+
+    private void testMVWithDuplicatedPartitionNames(String sql1,
+                                                    String sql2,
+                                                    String mvName) throws Exception {
+        starRocksAssert.withTable("CREATE TABLE `s1` (\n" +
+                "  `col1` varchar(100),\n"  +
+                "  `col2` varchar(100),\n" +
+                "  `col3` bigint(20) \n" +
+                ") PARTITION BY (`col1`)");
+        starRocksAssert.withTable("CREATE TABLE `s2` (\n" +
+                "  `col1` varchar(100),\n"  +
+                "  `col2` varchar(100),\n" +
+                "  `col3` bigint(20) \n" +
+                ") PARTITION BY (`col1`)");
+        executeInsertSql(sql1);
+        executeInsertSql(sql2);
+
+        List<String> s1PartitionNames = extractColumnValues(sql1, 0);
+        System.out.println(s1PartitionNames);
+        addListPartition("s1", s1PartitionNames);
+
+        List<String> s2PartitionNames = extractColumnValues(sql2, 0);
+        System.out.println(s2PartitionNames);
+        addListPartition("s2", s2PartitionNames);
+        starRocksAssert.withRefreshedMaterializedView(String.format("CREATE MATERIALIZED VIEW %s\n" +
+                        "PARTITION BY col1\n" +
+                        "REFRESH DEFERRED MANUAL \n" +
+                        "PROPERTIES (\n" +
+                        "    \"partition_refresh_number\" = \"-1\"\n" +
+                        ")\n" +
+                        "AS\n" +
+                        "select t1.col1, t1.col2 from s1 as t1 left join s2 as t2 on t1.col1 = t2.col1;\n",
+                mvName));
+        starRocksAssert.dropTable("s1");
+        starRocksAssert.dropTable("s2");
+        starRocksAssert.dropMaterializedView(mvName);
+    }
+
+    @Test
+    public void testCreateMVWithDuplicatedPartitionNames1() throws Exception {
+        String query1 = "insert into s1 values('demo-diu.com', 'b', 2), " +
+                "('demo-dIu.com', 'a', 1) , ('demo-Diu.com', 'b', 2), ('demo-DIU.com', 'a', 1), " +
+                "('demo-diu.com', 'b', 2);";
+        String query2 = "insert into s2 values('demo-DIU.com', 'a', 1) , ('demo-diu.com', 'b', 2), " +
+                "('demo-dIU.com', 'a', 1) , ('demo-Diu.com', 'b', 2);";
+        testMVWithDuplicatedPartitionNames(query1, query2, "test_mv1");
+    }
+
+    @Test
+    public void testCreateMVWithDuplicatedPartitionNames2() throws Exception {
+        String query1 = "insert into s1 values('demo-diu.com', 'b', 2), " +
+                "('demo-DIU.com', 'a', 1) , ('demo-diu.com', 'b', 2);";
+        String query2 = "insert into s2 values('demo-diu.com', 'b', 2), " +
+                "('demo-dIu.com', 'a', 1) , ('demo-Diu.com', 'b', 2), ('demo-DIU.com', 'a', 1), " +
+                "('demo-diu.com', 'b', 2);";
+        testMVWithDuplicatedPartitionNames(query1, query2, "test_mv2");
+    }
+>>>>>>> 416ca516cd ([BugFix] Fix mv refresh bug with case-insensitive partition names (#62389))
 }

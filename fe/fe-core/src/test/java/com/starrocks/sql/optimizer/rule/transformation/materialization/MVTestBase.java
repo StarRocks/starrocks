@@ -17,6 +17,7 @@ package com.starrocks.sql.optimizer.rule.transformation.materialization;
 import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
+import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.starrocks.analysis.StringLiteral;
 import com.starrocks.analysis.TableName;
@@ -46,11 +47,14 @@ import com.starrocks.scheduler.TaskRun;
 import com.starrocks.scheduler.TaskRunBuilder;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.Analyzer;
+import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.ast.CreateMaterializedViewStatement;
 import com.starrocks.sql.ast.QueryRelation;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.SystemVariable;
+import com.starrocks.sql.common.PCell;
+import com.starrocks.sql.common.PListCell;
 import com.starrocks.sql.optimizer.CachingMvPlanContextBuilder;
 import com.starrocks.sql.optimizer.MaterializedViewOptimizer;
 import com.starrocks.sql.optimizer.OptExpression;
@@ -82,9 +86,16 @@ import org.junit.ClassRule;
 import org.junit.rules.TemporaryFolder;
 
 import java.sql.SQLException;
+<<<<<<< HEAD
+=======
+import java.util.ArrayList;
+import java.util.HashMap;
+>>>>>>> 416ca516cd ([BugFix] Fix mv refresh bug with case-insensitive partition names (#62389))
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 /**
@@ -565,4 +576,158 @@ public class MVTestBase extends StarRocksTestBase {
             }
         }
     }
+<<<<<<< HEAD
+=======
+
+    protected void testMVRefreshWithOnePartitionAndOneUnPartitionTable(String t1,
+                                                                       String s1,
+                                                                       String mvQuery,
+                                                                       String... expect) throws Exception {
+        String t2 = "CREATE TABLE non_partition_table (dt2 date, int2 int);";
+        String s2 = "INSERT INTO non_partition_table VALUES (\"2020-06-23\",1),(\"2020-07-23\",1),(\"2020-07-23\",1)" +
+                ",(\"2020-08-23\",1),(null,null);\n";
+        if (!Strings.isNullOrEmpty(t1)) {
+            starRocksAssert.withTable(t1);
+        }
+        starRocksAssert.withTable(t2);
+        executeInsertSql(s1);
+        executeInsertSql(s2);
+        starRocksAssert.withMaterializedView(mvQuery, (obj) -> {
+            String mvName = (String) obj;
+            MaterializedView mv = starRocksAssert.getMv("test", mvName);
+            ExecuteOption executeOption = new ExecuteOption(70, false, new HashMap<>());
+            Database testDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+            Task task = TaskBuilder.buildMvTask(mv, testDb.getFullName());
+            TaskRun taskRun = TaskRunBuilder.newBuilder(task).setExecuteOption(executeOption).build();
+            initAndExecuteTaskRun(taskRun);
+            MVPCTBasedRefreshProcessor processor = getPartitionBasedRefreshProcessor(taskRun);
+            MvTaskRunContext mvTaskRunContext = processor.getMvContext();
+            ExecPlan execPlan = mvTaskRunContext.getExecPlan();
+            Assertions.assertTrue(execPlan != null);
+            for (String expectStr : expect) {
+                assertPlanContains(execPlan, expectStr);
+            }
+        });
+    }
+
+    public static MVTaskRunProcessor getMVTaskRunProcessor(TaskRun taskRun) {
+        Assertions.assertTrue(taskRun.getProcessor() instanceof MVTaskRunProcessor);
+        return (MVTaskRunProcessor) taskRun.getProcessor();
+    }
+
+    public static MVPCTBasedRefreshProcessor getPartitionBasedRefreshProcessor(TaskRun taskRun) {
+        Assertions.assertTrue(taskRun.getProcessor() instanceof MVTaskRunProcessor);
+        MVTaskRunProcessor mvTaskRunProcessor = (MVTaskRunProcessor) taskRun.getProcessor();
+        return (MVPCTBasedRefreshProcessor) mvTaskRunProcessor.getMVRefreshProcessor();
+    }
+
+    protected void withMVQuery(String mvQuery,
+                               MVActionRunner runner) throws Exception {
+        String ddl = String.format("CREATE MATERIALIZED VIEW `test`.`test_mv1` " +
+                "REFRESH DEFERRED MANUAL\n" +
+                "PROPERTIES (\n" +
+                "\"refresh_mode\" = \"incremental\"" +
+                ")\n" +
+                "AS %s;", mvQuery);
+        starRocksAssert.withMaterializedView(ddl);
+        MaterializedView mv = getMv("test_mv1");
+        runner.run(mv);
+    }
+
+    /**
+     * Get the explain plan for the MV refresh task.
+     */
+    protected String explainMVRefreshExecPlan(MaterializedView mv, String explainQuery) {
+        TaskManager taskManager = GlobalStateMgr.getCurrentState().getTaskManager();
+        Task task = taskManager.getTask(TaskBuilder.getMvTaskName(mv.getId()));
+        Assertions.assertTrue(task != null, "Task for MV " + mv.getName() + " not found:" + explainQuery);
+        StatementBase stmt = getAnalyzedPlan(explainQuery, connectContext);
+        Assertions.assertTrue(stmt != null, "Expected a valid StatementBase but got null:" + explainQuery);
+        ExecuteOption executeOption = new ExecuteOption(70, false, new HashMap<>());
+        return taskManager.getMVRefreshExplain(task, executeOption, stmt);
+    }
+
+    /**
+     * Get the execution plan for the MV refresh task.
+     */
+    protected ExecPlan getMVRefreshExecPlan(MaterializedView mv, String explainQuery) {
+        TaskManager taskManager = GlobalStateMgr.getCurrentState().getTaskManager();
+        Task task = taskManager.getTask(TaskBuilder.getMvTaskName(mv.getId()));
+        Assertions.assertTrue(task != null, "Task for MV " + mv.getName() + " not found:" + explainQuery);
+        StatementBase stmt = getAnalyzedPlan(explainQuery, connectContext);
+        Assertions.assertTrue(stmt != null, "Expected a valid StatementBase but got null:" + explainQuery);
+        ExecuteOption executeOption = new ExecuteOption(70, false, new HashMap<>());
+        TaskRun taskRun = taskManager.buildTaskRun(task, executeOption);
+        return taskManager.getMVRefreshExecPlan(taskRun, task, executeOption, stmt);
+    }
+
+    public static List<String> extractColumnValues(String sql, int columnIndex) {
+        List<String> result = new ArrayList<>();
+
+        // Regex pattern to match the VALUES clause and all parenthesized value groups
+        Pattern pattern = Pattern.compile("(?i)values\\s*([^)]+)(?:\\s*,\\s*([^)]+))*\\s*;?");
+        Matcher matcher = pattern.matcher(sql);
+
+        if (matcher.find()) {
+            // Process first set of values
+            processValueGroup(matcher.group(1), columnIndex, result);
+
+            // Process subsequent value groups
+            for (int i = 2; i <= matcher.groupCount(); i++) {
+                if (matcher.group(i) != null) {
+                    processValueGroup(matcher.group(i), columnIndex, result);
+                }
+            }
+        }
+
+        return result;
+    }
+
+    private static void processValueGroup(String valueGroup, int columnIndex, List<String> result) {
+        // Split by commas but ignore commas inside quotes
+        String[] values = valueGroup.split(",(?=(?:[^']*'[^']*')*[^']*$)");
+
+        if (columnIndex < values.length) {
+            String value = values[columnIndex].trim();
+            // Remove surrounding quotes if present
+            value = cleanSqlValue(value);
+            result.add(value);
+        }
+    }
+
+    public static String cleanSqlValue(String input) {
+        if (input == null) {
+            return null;
+        }
+        String result = input.trim();
+        int len = result.length();
+        StringBuilder sb = new StringBuilder();
+        for (int i = 0; i < len; i++) {
+            if (result.charAt(i) == '\'' || result.charAt(i) == '\"' || result.charAt(i) == '`' ||
+                    result.charAt(i) == '(' || result.charAt(i) == ')') {
+                continue;
+            } else {
+                sb.append(result.charAt(i));
+            }
+        }
+        return sb.toString();
+    }
+
+    protected void addListPartition(String tbl, List<String> values) {
+        Map<String, PCell> partitions = Maps.newTreeMap(String.CASE_INSENSITIVE_ORDER);
+        for (String val : values) {
+            PListCell pListCell = new PListCell(val);
+            String pName = AnalyzerUtils.getFormatPartitionValue(val);
+            if (partitions.containsKey(pName)) {
+                try {
+                    pName = AnalyzerUtils.calculateUniquePartitionName(pName, pListCell, partitions);
+                } catch (Exception e) {
+                    Assertions.fail("add partition failed:" + e);
+                }
+            }
+            partitions.put(pName, pListCell);
+            addListPartition(tbl, pName, val);
+        }
+    }
+>>>>>>> 416ca516cd ([BugFix] Fix mv refresh bug with case-insensitive partition names (#62389))
 }
