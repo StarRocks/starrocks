@@ -12,27 +12,21 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.persist;
 
-import com.google.common.collect.Sets;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.common.io.Writable;
 
-import java.util.Set;
+public class NextIdLog implements Writable {
 
-@Deprecated
-public class ShardInfo implements Writable {
+    @SerializedName(value = "id")
+    private long id;
 
-    @SerializedName(value = "shardIds")
-    private Set<Long> shardIds;
-
-    public ShardInfo() {
-        this.shardIds = Sets.newHashSet();
+    public NextIdLog(long id) {
+        this.id = id;
     }
 
+    public long getId() {
+        return id;
+    }
 }
-
-
-
-

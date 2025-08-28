@@ -36,7 +36,7 @@ public class WarehouseInternalOpLogTest {
         WarehouseInternalOpLog log = new WarehouseInternalOpLog(warehouseName, payload);
 
         DataOutputStream dataOutStream = new DataOutputStream(os);
-        log.write(dataOutStream);
+        Text.writeString(dataOutStream, GsonUtils.GSON.toJson(log, WarehouseInternalOpLog.class));
 
         DataInputStream dataInputStream = new DataInputStream(new ByteArrayInputStream(os.toByteArray()));
         String json = Text.readString(dataInputStream);
