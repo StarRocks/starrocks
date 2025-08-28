@@ -120,7 +120,9 @@ import io.netty.handler.codec.http.HttpResponse;
 import io.netty.handler.codec.http.HttpServerCodec;
 import io.netty.handler.ssl.SslContext;
 import io.netty.handler.stream.ChunkedWriteHandler;
+import io.netty.util.NettyRuntime;
 import io.netty.util.concurrent.EventExecutor;
+import io.netty.util.internal.SystemPropertyUtil;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -334,7 +336,7 @@ public class HttpServer {
                 Channel ch = serverBootstrap.bind(port).sync().channel();
 
                 isStarted.set(true);
-                registerMetrics(workerGroup);
+                registerMetrics(workerGroup, numWorkerThreads);
                 LOG.info("HttpServer/HttpsServer started with port {}", port);
                 // block until server is closed
                 ch.closeFuture().sync();
@@ -348,12 +350,14 @@ public class HttpServer {
         }
     }
 
-    private void registerMetrics(NioEventLoopGroup workerGroup) {
+    private void registerMetrics(NioEventLoopGroup workerGroup, int numWorkerThreads) {
         HttpMetricRegistry httpMetricRegistry = HttpMetricRegistry.getInstance();
 
         GaugeMetricImpl<Long> httpWorkersNum = new GaugeMetricImpl<>(
                 HTTP_WORKERS_NUM, Metric.MetricUnit.NOUNIT, "the number of http workers");
-        httpWorkersNum.setValue(0L);
+        int defaultNumWorkers = Math.max(1, SystemPropertyUtil.getInt(
+                "io.netty.eventLoopThreads", NettyRuntime.availableProcessors() * 2));
+        httpWorkersNum.setValue(numWorkerThreads == 0 ? (long) defaultNumWorkers : (long) numWorkerThreads);
         httpMetricRegistry.registerGauge(httpWorkersNum);
 
         GaugeMetric<Long> pendingTasks = new GaugeMetric<>(HTTP_WORKER_PENDING_TASKS_NUM, Metric.MetricUnit.NOUNIT,
