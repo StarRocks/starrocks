@@ -128,16 +128,22 @@ public class LDAPGroupProvider extends GroupProvider {
     }
 
     @Override
-    public void destory() {
+    public void destroy() {
         scheduleTask.cancel(true);
     }
 
     @Override
-    public Set<String> getGroup(UserIdentity userIdentity) {
-        return userToGroupCache.getOrDefault(userIdentity.getUser(), Set.of());
+    public Set<String> getGroup(UserIdentity userIdentity, String distinguishedName) {
+        String ldapUserSearchAttr = getLdapUserSearchAttr();
+        if (ldapUserSearchAttr != null) {
+            return userToGroupCache.getOrDefault(userIdentity.getUser(), Set.of());
+        } else {
+            return userToGroupCache.getOrDefault(distinguishedName, Set.of());
+        }
     }
 
     public void refreshGroups() {
+        LOG.info("refresh ldap group cache for group provider: {}", name);
         Map<String, Set<String>> groups = new ConcurrentHashMap<>();
         try {
             DirContext ctx = createDirContextOnConnection(getLdapBindRootDn(), getLdapBindRootPwd());

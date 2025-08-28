@@ -80,9 +80,9 @@ public class LDAPAuthProvider implements AuthenticationProvider {
 
         try {
             if (!Strings.isNullOrEmpty(ldapUserDN)) {
-                checkPassword(ldapUserDN, new String(clearPassword, StandardCharsets.UTF_8));
+                checkPassword(authContext, ldapUserDN, new String(clearPassword, StandardCharsets.UTF_8));
             } else {
-                checkPasswordByRoot(userIdentity.getUser(), new String(clearPassword, StandardCharsets.UTF_8));
+                checkPasswordByRoot(authContext, userIdentity.getUser(), new String(clearPassword, StandardCharsets.UTF_8));
             }
         } catch (Exception e) {
             LOG.warn("check password failed for user: {}", userIdentity.getUser(), e);
@@ -110,7 +110,7 @@ public class LDAPAuthProvider implements AuthenticationProvider {
     }
 
     //bind to ldap server to check password
-    public void checkPassword(String dn, String password) throws Exception {
+    public void checkPassword(AuthenticationContext context, String dn, String password) throws Exception {
         if (Strings.isNullOrEmpty(password)) {
             throw new AuthenticationException("empty password is not allowed for simple authentication");
         }
@@ -138,12 +138,14 @@ public class LDAPAuthProvider implements AuthenticationProvider {
                 }
             }
         }
+
+        context.setDistinguishedName(dn);
     }
 
     //1. bind ldap server by root dn
     //2. search user
     //3. if match exactly one, check password
-    public void checkPasswordByRoot(String user, String password) throws Exception {
+    public void checkPasswordByRoot(AuthenticationContext context, String user, String password) throws Exception {
         if (Strings.isNullOrEmpty(ldapBindRootPwd)) {
             throw new AuthenticationException("empty password is not allowed for simple authentication");
         }
@@ -197,7 +199,7 @@ public class LDAPAuthProvider implements AuthenticationProvider {
                 throw new AuthenticationException("ldap search matched user count " + matched);
             }
 
-            checkPassword(userDN, password);
+            checkPassword(context, userDN, password);
         } finally {
             if (ctx != null) {
                 try {

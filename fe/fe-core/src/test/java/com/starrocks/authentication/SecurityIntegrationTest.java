@@ -143,7 +143,7 @@ public class SecurityIntegrationTest {
         FileGroupProvider fileGroupProvider = new FileGroupProvider(groupName, properties);
         fileGroupProvider.init();
 
-        Set<String> groups = fileGroupProvider.getGroup(new UserIdentity("harbor", "127.0.0.1"));
+        Set<String> groups = fileGroupProvider.getGroup(new UserIdentity("harbor", "%"), "harbor");
         Assertions.assertTrue(groups.contains("group1"));
         Assertions.assertTrue(groups.contains("group2"));
     }
@@ -260,7 +260,6 @@ public class SecurityIntegrationTest {
                 ShowExecutor.execute(new ShowCreateSecurityIntegrationStatement("ldap", NodePosition.ZERO), null);
         Assert.assertTrue(
                 resultSet.getResultRows().get(0).get(1).contains("\"authentication_ldap_simple_bind_root_pwd\" = \"***\""));
-
 
         properties = new HashMap<>();
         properties.put(SecurityIntegration.SECURITY_INTEGRATION_PROPERTY_TYPE_KEY, "authentication_oauth2");

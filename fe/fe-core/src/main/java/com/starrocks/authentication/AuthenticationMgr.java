@@ -631,7 +631,7 @@ public class AuthenticationMgr {
 
     public void dropGroupProviderStatement(DropGroupProviderStmt stmt, ConnectContext context) {
         GroupProvider groupProvider = this.nameToGroupProviderMap.remove(stmt.getName());
-        groupProvider.destory();
+        groupProvider.destroy();
 
         GlobalStateMgr.getCurrentState().getEditLog().logJsonObject(OperationType.OP_DROP_GROUP_PROVIDER,
                 new GroupProviderLog(stmt.getName(), null));
@@ -639,7 +639,7 @@ public class AuthenticationMgr {
 
     public void replayDropGroupProvider(String name) {
         GroupProvider groupProvider = this.nameToGroupProviderMap.remove(name);
-        groupProvider.destory();
+        groupProvider.destroy();
     }
 
     public List<GroupProvider> getAllGroupProviders() {
