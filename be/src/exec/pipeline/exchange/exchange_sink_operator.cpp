@@ -581,9 +581,17 @@ Status ExchangeSinkOperator::push_chunk(RuntimeState* state, const ChunkPtr& chu
 
             // Compute hash for each partition column
             if (_part_type == TPartitionType::HASH_PARTITIONED) {
-                _hash_values.assign(num_rows, HashUtil::FNV_SEED);
-                for (const ColumnPtr& column : _partitions_columns) {
-                    column->fnv_hash(&_hash_values[0], 0, num_rows);
+                // Check if we should use crc32_hash instead of fnv_hash based on session variable
+                if (runtime_state()->use_crc32_hash_for_exchange()) {
+                    _hash_values.assign(num_rows, 0);
+                    for (const ColumnPtr& column : _partitions_columns) {
+                        column->crc32_hash(&_hash_values[0], 0, num_rows);
+                    }
+                } else {
+                    _hash_values.assign(num_rows, HashUtil::FNV_SEED);
+                    for (const ColumnPtr& column : _partitions_columns) {
+                        column->fnv_hash(&_hash_values[0], 0, num_rows);
+                    }
                 }
             } else if (_bucket_properties.empty()) {
                 // The data distribution was calculated using CRC32_HASH,

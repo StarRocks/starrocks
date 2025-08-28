@@ -349,6 +349,9 @@ struct TQueryOptions {
   191: optional i64 column_view_concat_bytes_limit;
 
   200: optional bool enable_full_sort_use_german_string;
+  
+  // whether use crc32_hash instead of fnv_hash for exchange sink operator hash partitioning
+  201: optional bool use_crc32_hash_for_exchange;
 }
 
 // A scan range plus the parameters needed to execute that scan.
