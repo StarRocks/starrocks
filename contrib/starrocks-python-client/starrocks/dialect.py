@@ -312,7 +312,11 @@ class StarRocksDDLCompiler(MySQLDDLCompiler):
             colspec.append("AUTO_INCREMENT")
         else:
             default = self.get_column_default_string(column)
-            if default is not None:
+            if default == "AUTO_INCREMENT":
+                colspec[1] = "BIGINT"
+                colspec.append("AUTO_INCREMENT")
+
+            elif default is not None:
                 colspec.append("DEFAULT " + default)
         return " ".join(colspec)
 
