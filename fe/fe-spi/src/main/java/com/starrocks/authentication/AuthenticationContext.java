@@ -98,33 +98,4 @@ public class AuthenticationContext {
     public void setAuthDataSalt(byte[] authDataSalt) {
         this.authDataSalt = authDataSalt;
     }
-
-    /**
-     * Reset the authentication context to initial state
-     */
-    public void reset() {
-        this.qualifiedUser = null;
-        this.currentUserIdentity = null;
-        this.authToken = null;
-        this.authenticationProvider = null;
-        this.authPlugin = null;
-        this.authDataSalt = null;
-    }
-
-    /**
-     * Check if the authentication context is properly initialized
-     */
-    public boolean isInitialized() {
-        return qualifiedUser != null && currentUserIdentity != null;
-    }
-
-    @Override
-    public String toString() {
-        return "AuthenticationContext{" +
-                "qualifiedUser='" + qualifiedUser + '\'' +
-                ", currentUserIdentity=" + currentUserIdentity +
-                ", authenticationProvider=" + authenticationProvider +
-                ", authPlugin='" + authPlugin + '\'' +
-                '}';
-    }
 }

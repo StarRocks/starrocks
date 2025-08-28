@@ -15,7 +15,6 @@
 package com.starrocks.authentication;
 
 import com.google.common.base.Joiner;
-import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.UserIdentity;
 import com.starrocks.common.Config;
@@ -103,7 +102,12 @@ public class AuthenticationHandler {
                         matchedUserIdentity.getValue().getAuthPlugin(), matchedUserIdentity.getValue().getAuthString());
             }
 
-            Preconditions.checkState(provider != null);
+            if (provider == null) {
+                LOG.warn("authentication provider is null for user {}@{}, auth plugin: {}", user, remoteHost,
+                        matchedUserIdentity.getValue().getAuthPlugin());
+                throw new AuthenticationException(ErrorCode.ERR_AUTHENTICATION_FAIL, user,
+                        authResponse.length == 0 ? "NO" : "YES");
+            }
             authContext.setAuthenticationProvider(provider);
 
             if (Config.enable_auth_check) {
@@ -140,6 +144,11 @@ public class AuthenticationHandler {
             }
 
             AuthenticationProvider provider = securityIntegration.getAuthenticationProvider();
+            if (provider == null) {
+                LOG.warn("authentication provider is null for security integration: {}", authMechanism);
+                continue;
+            }
+
             try {
                 authContext.setAuthenticationProvider(provider);
                 provider.authenticate(authContext, UserIdentity.createEphemeralUserIdent(user, remoteHost), authResponse);
