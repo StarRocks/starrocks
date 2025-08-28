@@ -39,6 +39,8 @@ namespace starrocks {
 
 const static std::string JINDO_AGENT_FEATURE_OPTION = "fs.oss.user.agent.features";
 const static std::string ENGINE_NAME = "StarRocks";
+const static std::string BACKUP_SECRET_PATH = "PRODUCE_OSS_AK_SECRET_PATH";
+const static std::string BACKUP_BUCKET_NAME = "SERVERLESS_STARROCKS_BACKUP_BUCKET";
 
 int JindoSdkConfig::loadConfig(const std::string& config) {
     std::ifstream infile{config};
@@ -151,6 +153,15 @@ JdoOptions_t JindoClientFactory::get_or_create_jindo_opts(const S3URI& uri, cons
     JdoOptions_t jdo_options = jdo_createOptions();
     for (auto& kv : _jindo_config_map) {
         jdo_setOption(jdo_options, kv.first.c_str(), kv.second.c_str());
+    }
+
+    const char* serverless_backup_secret_path = std::getenv(BACKUP_SECRET_PATH.c_str());
+    const char* serverless_backup_bucket = std::getenv(BACKUP_BUCKET_NAME.c_str());
+    if (serverless_backup_secret_path && serverless_backup_bucket) {
+        std::string bucket_provider_endpoint =
+                fmt::format("fs.oss.bucket.{}.provider.endpoint", std::string(serverless_backup_bucket));
+        VLOG(2) << "get config from env: " << bucket_provider_endpoint << " " << serverless_backup_secret_path;
+        jdo_setOption(jdo_options, bucket_provider_endpoint.c_str(), serverless_backup_secret_path);
     }
 
     // Just for oss-hdfs to distinguish the engines

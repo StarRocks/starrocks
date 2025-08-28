@@ -21,6 +21,7 @@ import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import com.starrocks.common.Config;
+import com.starrocks.common.FeConstants;
 import com.starrocks.common.NotImplementedException;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.connector.share.credential.CloudConfigurationConstants;
@@ -315,6 +316,9 @@ public class HdfsFsManager {
     protected static final String FS_OSS_CONNECTION_SSL_ENABLED = "fs.oss.connection.secure.enabled";
     protected static final String FS_OSS_IMPL = "fs.oss.impl";
 
+    // for serveless backup
+    protected static final String FS_ALIYUN_OSS_PROVIDER_URL = "aliyun.oss.provider.url";
+
     // arguments for cos
     public static final String FS_COS_ACCESS_KEY = "fs.cosn.userinfo.secretId";
     public static final String FS_COS_SECRET_KEY = "fs.cosn.userinfo.secretKey";
@@ -420,7 +424,7 @@ public class HdfsFsManager {
     }
 
     /**
-     * visible for test
+     *      * visible for test
      * <p>
      * file system handle is cached, the identity is host + username_password
      * it will have safety problem if only hostname is used because one user may
@@ -976,6 +980,7 @@ public class HdfsFsManager {
         String endpoint = loadProperties.getOrDefault(FS_OSS_ENDPOINT, "").replaceFirst("^https?://", "");
         String disableCache = loadProperties.getOrDefault(FS_OSS_IMPL_DISABLE_CACHE, "true");
         String connectionSSLEnabled = loadProperties.getOrDefault(FS_OSS_CONNECTION_SSL_ENABLED, "false");
+        String ossSource = loadProperties.getOrDefault(FeConstants.SERVERLESS_OSS_REQUEST_SOURCE, "");
         // endpoint is the server host, pathUri.getUri().getHost() is the bucket
         // we should use these two params as the host identity, because FileSystem will
         // cache both.
@@ -1010,6 +1015,19 @@ public class HdfsFsManager {
                 if (!endpoint.isEmpty()) {
                     conf.set(FS_OSS_ENDPOINT, endpoint);
                 }
+
+                if (!ossSource.isEmpty()) {
+                    String secretPath = System.getenv("PRODUCE_OSS_AK_SECRET_PATH");
+                    String backupBucket = System.getenv("SERVERLESS_STARROCKS_BACKUP_BUCKET");
+
+                    // Check if the environment variables are available
+                    if (secretPath != null && backupBucket != null) {
+                        conf.set(FS_ALIYUN_OSS_PROVIDER_URL, secretPath);
+                    } else {
+                        LOG.warn("can not get ak config from env");
+                    }
+                }
+
                 conf.set(FS_OSS_IMPL, "org.apache.hadoop.fs.aliyun.oss.AliyunOSSFileSystem");
                 conf.set(FS_OSS_IMPL_DISABLE_CACHE, disableCache);
                 conf.set(FS_OSS_CONNECTION_SSL_ENABLED, connectionSSLEnabled);

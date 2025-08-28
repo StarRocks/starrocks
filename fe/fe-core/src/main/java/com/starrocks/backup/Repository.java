@@ -159,6 +159,10 @@ public class Repository implements Writable, GsonPostProcessable {
         return isReadOnly;
     }
 
+    public boolean isServerlessBackupRepo() {
+        return storage.getProperties().containsKey(FeConstants.SERVERLESS_OSS_REQUEST_SOURCE);
+    }
+
     public String getLocation() {
         return location;
     }

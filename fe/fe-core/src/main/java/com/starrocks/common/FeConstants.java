@@ -117,6 +117,8 @@ public class FeConstants {
 
     public static final int MAX_LIST_PARTITION_NAME_LENGTH = 50;
 
+    public static final String SERVERLESS_OSS_REQUEST_SOURCE = "fs.oss.request.source";
+
     public static final String DOCUMENT_SHOW_ALTER =
             "https://docs.starrocks.io/docs/sql-reference/sql-statements/table_bucket_part_index/SHOW_ALTER";
     public static final String DOCUMENT_SHOW_ALTER_MATERIALIZED_VIEW =

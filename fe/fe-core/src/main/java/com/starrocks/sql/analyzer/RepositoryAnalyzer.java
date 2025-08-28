@@ -15,10 +15,12 @@
 package com.starrocks.sql.analyzer;
 
 import com.google.common.base.Strings;
+import com.starrocks.authentication.AuthenticationMgr;
 import com.starrocks.backup.Repository;
 import com.starrocks.catalog.FsBroker;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
+import com.starrocks.common.FeConstants;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.AstVisitor;
@@ -65,6 +67,13 @@ public class RepositoryAnalyzer {
                 }
             }
 
+            if (createRepositoryStmt.getProperties().containsKey(FeConstants.SERVERLESS_OSS_REQUEST_SOURCE)) {
+                if (!context.getCurrentUserIdentity().getUser().equals(AuthenticationMgr.ROOT_USER)) {
+                    ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR,
+                            FeConstants.SERVERLESS_OSS_REQUEST_SOURCE + " property can only be specified by root");
+                }
+            }
+
             return null;
         }
 
@@ -76,6 +85,13 @@ public class RepositoryAnalyzer {
                     GlobalStateMgr.getCurrentState().getBackupHandler().getRepoMgr().getRepo(repoName);
             if (repo == null) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR, "Repository does not exist");
+            }
+
+            if (repo.isServerlessBackupRepo()) {
+                if (!context.getCurrentUserIdentity().getUser().equals(AuthenticationMgr.ROOT_USER)) {
+                    ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR,
+                            "serveless backup repo can only be dropped by root");
+                }
             }
 
             return null;
