@@ -18,15 +18,11 @@ import com.google.common.collect.Lists;
 import com.starrocks.analysis.LimitElement;
 import com.starrocks.analysis.OrderByElement;
 import com.starrocks.analysis.Predicate;
-import com.starrocks.analysis.RedirectStatus;
 import com.starrocks.authorization.AccessDeniedException;
-import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
-import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.qe.ConnectContext;
-import com.starrocks.qe.ShowResultSetMetaData;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.Authorizer;
 import com.starrocks.sql.parser.NodePosition;
@@ -44,17 +40,6 @@ public class ShowMultiColumnStatsMetaStmt extends ShowStmt {
         this.limitElement = limitElement;
         this.orderByElements = orderByElements;
     }
-
-    private static final ShowResultSetMetaData META_DATA =
-            ShowResultSetMetaData.builder()
-                    .addColumn(new Column("Database", ScalarType.createVarchar(60)))
-                    .addColumn(new Column("Table", ScalarType.createVarchar(60)))
-                    .addColumn(new Column("Columns", ScalarType.createVarchar(1000)))
-                    .addColumn(new Column("Type", ScalarType.createVarchar(20)))
-                    .addColumn(new Column("StatisticsTypes", ScalarType.createVarchar(200)))
-                    .addColumn(new Column("UpdateTime", ScalarType.createVarchar(60)))
-                    .addColumn(new Column("Properties", ScalarType.createVarchar(200)))
-                    .build();
 
     public static List<String> showMultiColumnStatsMeta(ConnectContext context, MultiColumnStatsMeta meta)
             throws MetaNotFoundException {
@@ -89,17 +74,7 @@ public class ShowMultiColumnStatsMetaStmt extends ShowStmt {
     }
 
     @Override
-    public ShowResultSetMetaData getMetaData() {
-        return META_DATA;
-    }
-
-    @Override
-    public RedirectStatus getRedirectStatus() {
-        return RedirectStatus.FORWARD_NO_SYNC;
-    }
-
-    @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitShowMultiColumnsStatsMetaStatement(this, context);
+        return ((AstVisitorExtendInterface<R, C>) visitor).visitShowMultiColumnsStatsMetaStatement(this, context);
     }
 }

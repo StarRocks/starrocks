@@ -179,6 +179,14 @@ public class Utils {
         return count;
     }
 
+    public static int countOptExpressionNodes(OptExpression node) {
+        int count = 1;
+        for (OptExpression child : node.getInputs()) {
+            count += countOptExpressionNodes(child);
+        }
+        return count;
+    }
+
     public static void extractOlapScanOperator(GroupExpression groupExpression, List<LogicalOlapScanOperator> list) {
         extractOperator(groupExpression, list, p -> OperatorType.LOGICAL_OLAP_SCAN.equals(p.getOpType()));
     }
@@ -189,11 +197,13 @@ public class Utils {
         return list;
     }
 
+    /**
+     * Extract all operators satisfied the predicate
+     */
     public static <E extends Operator> void extractOperator(OptExpression root, List<E> list,
                                                             Predicate<Operator> lambda) {
         if (lambda.test(root.getOp())) {
             list.add((E) root.getOp());
-            return;
         }
 
         List<OptExpression> inputs = root.getInputs();
@@ -202,11 +212,13 @@ public class Utils {
         }
     }
 
+    /**
+     * Extract all operators satisfied the predicate
+     */
     private static <E extends Operator> void extractOperator(GroupExpression root, List<E> list,
                                                              Predicate<Operator> lambda) {
         if (lambda.test(root.getOp())) {
             list.add((E) root.getOp());
-            return;
         }
 
         List<Group> groups = root.getInputs();

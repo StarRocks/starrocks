@@ -28,33 +28,16 @@ import static com.starrocks.sql.optimizer.operator.OperatorType.MAP;
  * MapOperator corresponds to MapExpr at the syntax level.
  * (k,v) -> map(k1,v1) a new map will created.
  */
-public class MapOperator extends ScalarOperator {
-    protected List<ScalarOperator> arguments;
-
+public class MapOperator extends ArgsScalarOperator {
     public MapOperator(Type type, List<ScalarOperator> arguments) {
         super(MAP, type);
         this.arguments = arguments;
-        this.incrDepth(arguments);
+        incrDepth(arguments);
     }
 
     @Override
     public boolean isNullable() {
         return true;
-    }
-
-    @Override
-    public List<ScalarOperator> getChildren() {
-        return arguments;
-    }
-
-    @Override
-    public ScalarOperator getChild(int index) {
-        return arguments.get(index);
-    }
-
-    @Override
-    public void setChild(int index, ScalarOperator child) {
-        arguments.set(index, child);
     }
 
     @Override
@@ -81,23 +64,11 @@ public class MapOperator extends ScalarOperator {
 
     @Override
     public <R, C> R accept(ScalarOperatorVisitor<R, C> visitor, C context) {
-        return visitor.visitMap(this, context);
+        return  visitor.visitMap(this, context);
     }
 
     @Override
-    public boolean equals(Object o) {
-        if (this == o) {
-            return true;
-        }
-        if (o == null || getClass() != o.getClass()) {
-            return false;
-        }
-        MapOperator that = (MapOperator) o;
-        return Objects.equals(type, that.type) && Objects.equals(arguments, that.arguments);
-    }
-
-    @Override
-    public int hashCode() {
-        return Objects.hash(type, arguments);
+    public int hashCodeSelf() {
+        return Objects.hash(type);
     }
 }

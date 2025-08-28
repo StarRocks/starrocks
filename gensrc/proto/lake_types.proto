@@ -130,6 +130,11 @@ enum PersistentIndexTypePB {
     CLOUD_NATIVE = 1;
 }
 
+enum CompactionStrategyPB {
+    DEFAULT = 0;
+    REAL_TIME = 1;
+}
+
 message TabletMetadataPB {
     optional int64 id = 1;
     optional int64 version = 2;
@@ -166,6 +171,10 @@ message TabletMetadataPB {
     map<uint32, int64> rowset_to_schema = 18;
     // global transaction id
     optional int64 gtid = 19 [default=0];
+    // compaction strategy
+    optional CompactionStrategyPB compaction_strategy = 20;
+    // flat json
+    optional FlatJsonConfigPB flat_json_config = 21;
 }
 
 message MetadataUpdateInfoPB {
@@ -174,6 +183,8 @@ message MetadataUpdateInfoPB {
     optional TabletSchemaPB tablet_schema = 2;
     optional PersistentIndexTypePB persistent_index_type = 3;
     optional bool bundle_tablet_metadata = 4;
+    optional CompactionStrategyPB compaction_strategy = 5;
+    optional FlatJsonConfigPB flat_json_config = 6;
 }
 
 message BundleTabletMetadataPB {
@@ -272,4 +283,15 @@ message SplittingTabletInfoPB {
 message MergingTabletInfoPB {
     repeated int64 old_tablet_ids = 1;
     optional int64 new_tablet_id = 2;
+}
+
+message IdenticalTabletInfoPB {
+    optional int64 old_tablet_id = 1;
+    optional int64 new_tablet_id = 2;
+}
+
+message DynamicTabletsInfoPB {
+    repeated SplittingTabletInfoPB splitting_tablet_infos = 1;
+    repeated MergingTabletInfoPB merging_tablet_infos = 2;
+    repeated IdenticalTabletInfoPB identical_tablet_infos = 3;
 }

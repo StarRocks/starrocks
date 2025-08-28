@@ -28,7 +28,7 @@ import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CompoundPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
-import com.starrocks.sql.optimizer.rule.tree.ScalarOperatorsReuse;
+import com.starrocks.sql.optimizer.rule.tree.exprreuse.ScalarOperatorsReuse;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.junit.jupiter.api.BeforeEach;
@@ -335,7 +335,7 @@ public class ScalarOperatorsReuseTest {
 
         Map<Integer, Map<ScalarOperator, ColumnRefOperator>> commonSubScalarOperators =
                 ScalarOperatorsReuse.collectCommonSubScalarOperators(null, oldOperators, columnRefFactory);
-        assertTrue(commonSubScalarOperators.size() == Config.max_scalar_operator_optimize_depth - 1);
+        assertEquals(0, commonSubScalarOperators.size());
         Config.max_scalar_operator_flat_children = prev;
     }
 

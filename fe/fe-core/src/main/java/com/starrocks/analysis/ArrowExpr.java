@@ -16,8 +16,8 @@
 package com.starrocks.analysis;
 
 import com.google.common.base.Preconditions;
-import com.starrocks.common.AnalysisException;
 import com.starrocks.sql.ast.AstVisitor;
+import com.starrocks.sql.ast.AstVisitorExtendInterface;
 import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.parser.NodePosition;
@@ -54,11 +54,6 @@ public class ArrowExpr extends Expr {
     }
 
     @Override
-    protected void analyzeImpl(Analyzer analyzer) throws AnalysisException {
-        Preconditions.checkState(false, "unreachable");
-    }
-
-    @Override
     protected String toSqlImpl() {
         return String.format("%s->%s", getItem().toSqlImpl(), getKey().toSqlImpl());
     }
@@ -75,6 +70,6 @@ public class ArrowExpr extends Expr {
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitArrowExpr(this, context);
+        return ((AstVisitorExtendInterface<R, C>) visitor).visitArrowExpr(this, context);
     }
 }

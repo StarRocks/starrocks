@@ -405,12 +405,12 @@ public final class ConstantOperator extends ScalarOperator implements Comparable
     }
 
     @Override
-    public int hashCode() {
+    public int hashCodeSelf() {
         return Objects.hash(value, type.getPrimitiveType(), isNull);
     }
 
     @Override
-    public boolean equals(Object obj) {
+    public boolean equalsSelf(Object obj) {
         if (this == obj) {
             return true;
         }
@@ -424,8 +424,13 @@ public final class ConstantOperator extends ScalarOperator implements Comparable
     }
 
     @Override
+    public boolean equals(Object obj) {
+        return equalsSelf(obj);
+    }
+
+    @Override
     public <R, C> R accept(ScalarOperatorVisitor<R, C> visitor, C context) {
-        return visitor.visitConstant(this, context);
+        return  visitor.visitConstant(this, context);
     }
 
     @Override

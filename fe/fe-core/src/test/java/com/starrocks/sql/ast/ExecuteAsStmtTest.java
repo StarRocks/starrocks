@@ -19,6 +19,7 @@ import com.starrocks.authentication.AuthenticationMgr;
 import com.starrocks.authentication.UserProperty;
 import com.starrocks.authorization.AuthorizationMgr;
 import com.starrocks.authorization.PrivilegeException;
+import com.starrocks.catalog.UserIdentity;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ExecuteAsExecutor;
 import com.starrocks.server.GlobalStateMgr;
@@ -27,8 +28,6 @@ import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.parser.AstBuilder;
 import com.starrocks.sql.parser.SqlParser;
 import mockit.Expectations;
-import mockit.Mock;
-import mockit.MockUp;
 import mockit.Mocked;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
@@ -51,7 +50,10 @@ public class ExecuteAsStmtTest {
 
     @BeforeEach
     public void setUp() throws PrivilegeException {
-        new Expectations(globalStateMgr) {
+
+        SqlParser sqlParser = new SqlParser(AstBuilder.getInstance());
+        Analyzer analyzer = new Analyzer(Analyzer.AnalyzerVisitor.getInstance());
+        new Expectations() {
             {
                 GlobalStateMgr.getCurrentState().getAuthenticationMgr();
                 minTimes = 0;
@@ -63,25 +65,15 @@ public class ExecuteAsStmtTest {
             }
         };
 
-        new Expectations(ctx) {
+        new Expectations() {
             {
-                ctx.getGlobalStateMgr();
+                globalStateMgr.getSqlParser();
                 minTimes = 0;
-                result = globalStateMgr;
-            }
-        };
+                result = sqlParser;
 
-        SqlParser sqlParser = new SqlParser(AstBuilder.getInstance());
-        Analyzer analyzer = new Analyzer(Analyzer.AnalyzerVisitor.getInstance());
-        new MockUp<GlobalStateMgr>() {
-            @Mock
-            public SqlParser getSqlParser() {
-                return sqlParser;
-            }
-
-            @Mock
-            public Analyzer getAnalyzer() {
-                return analyzer;
+                globalStateMgr.getAnalyzer();
+                minTimes = 0;
+                result = analyzer;
             }
         };
     }
@@ -107,6 +99,7 @@ public class ExecuteAsStmtTest {
                 minTimes = 0;
             }
         };
+        ctx.setGlobalStateMgr(globalStateMgr);
 
         ExecuteAsStmt stmt = (ExecuteAsStmt) com.starrocks.sql.parser.SqlParser.parse(
                 "execute as user1 with no revert", 1).get(0);

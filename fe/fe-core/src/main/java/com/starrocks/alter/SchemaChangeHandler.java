@@ -45,7 +45,6 @@ import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.starrocks.analysis.BloomFilterIndexUtil;
 import com.starrocks.analysis.ColumnPosition;
-import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.binlog.BinlogConfig;
 import com.starrocks.catalog.AggregateType;
@@ -1402,6 +1401,16 @@ public class SchemaChangeHandler extends AlterHandler {
             hasIndexChange = true;
         }
 
+        // check gin index
+        // if there are gin index in table, set replicated_storage to false.
+        boolean disableReplicatedStorageForGIN = false;
+        for (Index index : indexes) {
+            if (index.getIndexType() == IndexType.GIN && olapTable.enableReplicatedStorage()) {
+                disableReplicatedStorageForGIN = true;
+                break;
+            }
+        }
+
         // property 2. bloom filter
         // eg. "bloom_filter_columns" = "k1,k2", "bloom_filter_fpp" = "0.05"
         Set<String> bfColumns = null;
@@ -1489,7 +1498,8 @@ public class SchemaChangeHandler extends AlterHandler {
                 .withTimeoutInSeconds(timeoutSecond)
                 .withAlterIndexInfo(hasIndexChange, indexes)
                 .withBloomFilterColumns(bfColumnIds, bfFpp)
-                .withBloomFilterColumnsChanged(hasBfChange);
+                .withBloomFilterColumnsChanged(hasBfChange)
+                .withDisableReplicatedStorageForGIN(disableReplicatedStorageForGIN);
 
         if (RunMode.isSharedDataMode()) {
             // check warehouse
@@ -1921,7 +1931,7 @@ public class SchemaChangeHandler extends AlterHandler {
                 DropColumnClause dropColumnClause = (DropColumnClause) alterClause;
                 // check relative mvs with the modified column
                 Set<String> modifiedColumns = Set.of(dropColumnClause.getColName());
-                checkModifiedColumWithMaterializedViews(olapTable, modifiedColumns);
+                AlterMVJobExecutor.checkModifiedColumWithMaterializedViews(olapTable, modifiedColumns);
 
                 // drop column and drop indexes on this column
                 fastSchemaEvolution &=
@@ -1932,7 +1942,7 @@ public class SchemaChangeHandler extends AlterHandler {
 
                 // check relative mvs with the modified column
                 Set<String> modifiedColumns = Set.of(modifyColumnClause.getColumn().getName());
-                checkModifiedColumWithMaterializedViews(olapTable, modifiedColumns);
+                AlterMVJobExecutor.checkModifiedColumWithMaterializedViews(olapTable, modifiedColumns);
 
                 // modify column
                 fastSchemaEvolution &= processModifyColumn(modifyColumnClause, olapTable, indexSchemaMap);
@@ -1950,7 +1960,7 @@ public class SchemaChangeHandler extends AlterHandler {
                 }
                 AddFieldClause addFieldClause = (AddFieldClause) alterClause;
                 modifyFieldColumns = Set.of(addFieldClause.getColName());
-                checkModifiedColumWithMaterializedViews(olapTable, modifyFieldColumns);
+                AlterMVJobExecutor.checkModifiedColumWithMaterializedViews(olapTable, modifyFieldColumns);
                 int id = colUniqueIdSupplier.getAsInt();
                 processAddField((AddFieldClause) alterClause, olapTable, indexSchemaMap, id, newIndexes);
             } else if (alterClause instanceof DropFieldClause) {
@@ -1964,7 +1974,7 @@ public class SchemaChangeHandler extends AlterHandler {
                 }
                 DropFieldClause dropFieldClause = (DropFieldClause) alterClause;
                 modifyFieldColumns = Set.of(dropFieldClause.getColName());
-                checkModifiedColumWithMaterializedViews(olapTable, modifyFieldColumns);
+                AlterMVJobExecutor.checkModifiedColumWithMaterializedViews(olapTable, modifyFieldColumns);
                 processDropField((DropFieldClause) alterClause, olapTable, indexSchemaMap, newIndexes);
             } else if (alterClause instanceof ReorderColumnsClause) {
                 // reorder column
@@ -2022,68 +2032,6 @@ public class SchemaChangeHandler extends AlterHandler {
         }
     }
 
-    /**
-     * Check related synchronous materialized views before modified columns, throw exceptions
-     * if modified columns affect the related rollup/synchronous mvs.
-     */
-    public void checkModifiedColumWithMaterializedViews(OlapTable olapTable,
-                                                        Set<String> modifiedColumns) throws DdlException {
-        if (modifiedColumns == null || modifiedColumns.isEmpty()) {
-            return;
-        }
-
-        // If there is synchronized materialized view referring the column, throw exception.
-        if (olapTable.getIndexNameToId().size() > 1) {
-            Map<Long, MaterializedIndexMeta> metaMap = olapTable.getIndexIdToMeta();
-            for (Map.Entry<Long, MaterializedIndexMeta> entry : metaMap.entrySet()) {
-                Long id = entry.getKey();
-                if (id == olapTable.getBaseIndexId()) {
-                    continue;
-                }
-                MaterializedIndexMeta meta = entry.getValue();
-                List<Column> schema = meta.getSchema();
-                // ignore agg_keys type because it's like duplicated without agg functions
-                boolean hasAggregateFunction = olapTable.getKeysType() != KeysType.AGG_KEYS &&
-                        schema.stream().anyMatch(x -> x.isAggregated());
-                if (hasAggregateFunction) {
-                    for (Column rollupCol : schema) {
-                        if (modifiedColumns.contains(rollupCol.getName())) {
-                            throw new DdlException(String.format("Can not drop/modify the column %s, " +
-                                            "because the column is used in the related rollup %s, " +
-                                            "please drop the rollup index first.",
-                                    rollupCol.getName(), olapTable.getIndexNameById(meta.getIndexId())));
-                        }
-                        if (rollupCol.getRefColumns() != null) {
-                            for (SlotRef refColumn : rollupCol.getRefColumns()) {
-                                if (modifiedColumns.contains(refColumn.getColumnName())) {
-                                    throw new DdlException(String.format("Can not drop/modify the column %s, " +
-                                                    "because the column is used in the related rollup %s " +
-                                                    "with the define expr:%s, please drop the rollup index first.",
-                                            rollupCol.getName(), olapTable.getIndexNameById(meta.getIndexId()),
-                                            rollupCol.getDefineExpr().toSql()));
-                                }
-                            }
-                        }
-                    }
-                }
-                if (meta.getWhereClause() != null) {
-                    Expr whereExpr = meta.getWhereClause();
-                    List<SlotRef> whereSlots = new ArrayList<>();
-                    whereExpr.collect(SlotRef.class, whereSlots);
-                    for (SlotRef refColumn : whereSlots) {
-                        if (modifiedColumns.contains(refColumn.getColumnName())) {
-                            throw new DdlException(String.format("Can not drop/modify the column %s, " +
-                                            "because the column is used in the related rollup %s " +
-                                            "with the where expr:%s, please drop the rollup index first.",
-                                    refColumn.getColumn().getName(), olapTable.getIndexNameById(meta.getIndexId()),
-                                    meta.getWhereClause().toSql()));
-                        }
-                    }
-                }
-            }
-        }
-    }
-
     @Override
     public ShowResultSet process(List<AlterClause> alterClauses, Database db, OlapTable olapTable)
             throws StarRocksException {
@@ -2123,6 +2071,7 @@ public class SchemaChangeHandler extends AlterHandler {
             String persistentIndexType = "";
             boolean enableFileBundling = false;
             TTabletMetaType metaType = TTabletMetaType.ENABLE_PERSISTENT_INDEX;
+            String compactionStrategy = "";
             if (properties.containsKey(PropertyAnalyzer.PROPERTIES_ENABLE_PERSISTENT_INDEX)) {
                 enablePersistentIndex = PropertyAnalyzer.analyzeBooleanProp(properties,
                         PropertyAnalyzer.PROPERTIES_ENABLE_PERSISTENT_INDEX, false);
@@ -2165,6 +2114,10 @@ public class SchemaChangeHandler extends AlterHandler {
                     return null;
                 }
                 metaType = TTabletMetaType.ENABLE_FILE_BUNDLING;
+            } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_COMPACTION_STRATEGY)) {
+                compactionStrategy = properties.getOrDefault(PropertyAnalyzer.PROPERTIES_COMPACTION_STRATEGY,
+                        TableProperty.DEFAULT_COMPACTION_STRATEGY);
+                metaType = TTabletMetaType.COMPACTION_STRATEGY;
             } else {
                 throw new DdlException("does not support alter " + properties.entrySet().iterator().next().getKey() +
                         " in shared_data mode");
@@ -2174,7 +2127,7 @@ public class SchemaChangeHandler extends AlterHandler {
             alterMetaJob = new LakeTableAlterMetaJob(GlobalStateMgr.getCurrentState().getNextId(),
                     db.getId(),
                     olapTable.getId(), olapTable.getName(), timeoutSecond * 1000 /* should be ms*/,
-                    metaType, enablePersistentIndex, persistentIndexType, enableFileBundling);
+                    metaType, enablePersistentIndex, persistentIndexType, enableFileBundling, compactionStrategy);
         } else {
             // shouldn't happen
             throw new DdlException("only support alter enable_persistent_index in shared_data mode");
@@ -2272,6 +2225,10 @@ public class SchemaChangeHandler extends AlterHandler {
             }
         } else if (metaType == TTabletMetaType.BUCKET_SIZE) {
             long bucketSize = Long.parseLong(properties.get(PropertyAnalyzer.PROPERTIES_BUCKET_SIZE));
+            if (!olapTable.allowBucketSizeSetting()) {
+                throw new DdlException("Setting bucket size is not allowed: only supported for tables with RANDOM distribution " +
+                        "and when 'enable_automatic_bucket' is enabled.");
+            }
             if (bucketSize == olapTable.getAutomaticBucketSize()) {
                 return;
             }
@@ -2337,13 +2294,23 @@ public class SchemaChangeHandler extends AlterHandler {
         } finally {
             locker.unLockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(olapTable.getId()), LockType.READ);
         }
+        // First check if flat_json.enable is being set to false
+        boolean flatJsonEnabled = newFlatJsonConfig.getFlatJsonEnable();
         if (properties.containsKey(PropertyAnalyzer.PROPERTIES_FLAT_JSON_ENABLE)) {
-            boolean flatJsonEnabled = PropertyAnalyzer.analyzeFlatJsonEnabled(properties);
+            flatJsonEnabled = PropertyAnalyzer.analyzeFlatJsonEnabled(properties);
             if (flatJsonEnabled != newFlatJsonConfig.getFlatJsonEnable()) {
                 newFlatJsonConfig.setFlatJsonEnable(flatJsonEnabled);
                 hasChanged = true;
             }
         }
+        
+        // Check if other flat JSON properties are set when flat_json.enable is false
+        if (!flatJsonEnabled && (properties.containsKey(PropertyAnalyzer.PROPERTIES_FLAT_JSON_NULL_FACTOR) ||
+                properties.containsKey(PropertyAnalyzer.PROPERTIES_FLAT_JSON_SPARSITY_FACTOR) ||
+                properties.containsKey(PropertyAnalyzer.PROPERTIES_FLAT_JSON_COLUMN_MAX))) {
+            throw new RuntimeException("flat JSON configuration must be set after enabling flat JSON.");
+        }
+        
         if (properties.containsKey(PropertyAnalyzer.PROPERTIES_FLAT_JSON_NULL_FACTOR)) {
             double flatJsonNullFactor = PropertyAnalyzer.analyzeFlatJsonNullFactor(properties);
             if (flatJsonNullFactor != newFlatJsonConfig.getFlatJsonNullFactor()) {
@@ -2845,8 +2812,12 @@ public class SchemaChangeHandler extends AlterHandler {
             return;
         }
 
-        if (newIndex.getIndexType() == IndexType.GIN && olapTable.enableReplicatedStorage()) {
-            throw new SemanticException("GIN does not support replicated mode");
+        if (newIndex.getIndexType() == IndexType.GIN) {
+            for (Column col : olapTable.getFullSchema()) {
+                if (col.isAutoIncrement()) {
+                    throw new DdlException("Table with AUTO_INCREMENT column can not add GIN Index");
+                }
+            }
         }
 
         if (newIndex.getIndexType() == IndexType.VECTOR) {
@@ -3126,6 +3097,7 @@ public class SchemaChangeHandler extends AlterHandler {
                 .withSortKeyUniqueIds(schemaChangeData.getSortKeyUniqueIds())
                 .withNewIndexSchema(schemaChangeData.getNewIndexSchema())
                 .withComputeResource(schemaChangeData.getComputeResource())
+                .withDisableReplicatedStorageForGIN(schemaChangeData.isDisableReplicatedStorageForGIN())
                 .build();
     }
 }

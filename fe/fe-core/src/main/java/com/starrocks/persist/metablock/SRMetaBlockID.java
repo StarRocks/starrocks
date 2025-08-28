@@ -103,6 +103,8 @@ public class SRMetaBlockID {
 
     public static final SRMetaBlockID HISTORICAL_NODE_MGR = new SRMetaBlockID(35);
 
+    public static final SRMetaBlockID DYNAMIC_TABLET_JOB_MGR = new SRMetaBlockID(36);
+
     /**
      * NOTICE: SRMetaBlockID cannot use a value exceeding 20000, please follow the above sequence number
      */

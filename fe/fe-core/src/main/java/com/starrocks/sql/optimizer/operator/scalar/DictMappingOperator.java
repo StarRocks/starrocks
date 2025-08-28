@@ -35,6 +35,7 @@ public class DictMappingOperator extends ScalarOperator {
         super(OperatorType.DICT_MAPPING, retType);
         this.dictColumn = dictColumn;
         this.originScalaOperator = originScalaOperator;
+        incrDepth(originScalaOperator);
     }
 
     public DictMappingOperator(Type type, ColumnRefOperator dictColumn, ScalarOperator originScalaOperator,
@@ -43,6 +44,7 @@ public class DictMappingOperator extends ScalarOperator {
         this.dictColumn = dictColumn;
         this.originScalaOperator = originScalaOperator;
         this.stringProvideOperator = stringScalarOperator;
+        incrDepth(originScalaOperator, stringScalarOperator);
     }
 
     public ColumnRefOperator getDictColumn() {
@@ -83,12 +85,12 @@ public class DictMappingOperator extends ScalarOperator {
     }
 
     @Override
-    public int hashCode() {
+    public int hashCodeSelf() {
         return Objects.hash(getType(), dictColumn, originScalaOperator);
     }
 
     @Override
-    public boolean equals(Object o) {
+    public boolean equalsSelf(Object o) {
         if (this == o) {
             return true;
         }
@@ -97,14 +99,15 @@ public class DictMappingOperator extends ScalarOperator {
         }
 
         DictMappingOperator that = (DictMappingOperator) o;
-        return Objects.equals(dictColumn, that.dictColumn) &&
+        return Objects.equals(getType(), that.getType()) &&
+                Objects.equals(dictColumn, that.dictColumn) &&
                 Objects.equals(originScalaOperator, that.originScalaOperator) &&
                 Objects.equals(stringProvideOperator, that.stringProvideOperator);
     }
 
     @Override
     public <R, C> R accept(ScalarOperatorVisitor<R, C> visitor, C context) {
-        return visitor.visitDictMappingOperator(this, context);
+        return  visitor.visitDictMappingOperator(this, context);
     }
 
     @Override

@@ -14,17 +14,14 @@
 
 package com.starrocks.planner;
 
-import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
-import com.starrocks.analysis.Analyzer;
 import com.starrocks.analysis.DescriptorTable;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.SlotId;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.TupleDescriptor;
 import com.starrocks.common.Pair;
-import com.starrocks.common.StarRocksException;
 import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.thrift.TNormalPlanNode;
 import com.starrocks.thrift.TNormalProjectNode;
@@ -68,13 +65,6 @@ public class ProjectNode extends PlanNode {
         msg.project_node = new TProjectNode();
         slotMap.forEach((key, value) -> msg.project_node.putToSlot_map(key.asInt(), value.treeToThrift()));
         commonSlotMap.forEach((key, value) -> msg.project_node.putToCommon_slot_map(key.asInt(), value.treeToThrift()));
-    }
-
-    @Override
-    public void init(Analyzer analyzer) throws StarRocksException {
-        Preconditions.checkState(conjuncts.isEmpty());
-        computeStats(analyzer);
-        createDefaultSmap(analyzer);
     }
 
     @Override

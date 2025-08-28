@@ -44,7 +44,6 @@ import com.starrocks.planner.ScanNode;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.DefaultCoordinator;
 import com.starrocks.qe.DmlType;
-import com.starrocks.qe.OriginStatement;
 import com.starrocks.qe.QeProcessorImpl;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.qe.scheduler.Coordinator;
@@ -56,6 +55,8 @@ import com.starrocks.sql.ast.CreateTableAsSelectStmt;
 import com.starrocks.sql.ast.DeleteStmt;
 import com.starrocks.sql.ast.DmlStmt;
 import com.starrocks.sql.ast.InsertStmt;
+import com.starrocks.sql.ast.LoadStmt;
+import com.starrocks.sql.ast.OriginStatement;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.UpdateStmt;
 import com.starrocks.sql.ast.txn.BeginStmt;
@@ -155,6 +156,29 @@ public class TransactionStmtExecutor {
         }
     }
 
+    public static void loadData(long dbId, long tableId, ExplicitTxnState.ExplicitTxnStateItem item,
+            ConnectContext context) throws StarRocksException {
+        GlobalTransactionMgr globalTransactionMgr = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr();
+        ExplicitTxnState explicitTxnState = globalTransactionMgr.getExplicitTxnState(context.getTxnId());
+        TransactionState transactionState = explicitTxnState.getTransactionState();
+
+        if (transactionState.getDbId() == 0) {
+            transactionState.setDbId(dbId);
+            DatabaseTransactionMgr databaseTransactionMgr = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr()
+                    .getDatabaseTransactionMgr(dbId);
+            databaseTransactionMgr.upsertTransactionState(transactionState);
+        }
+
+        transactionState.addTableIdList(tableId);
+
+        explicitTxnState.addTransactionItem(item);
+
+        context.getState().setOk(item.getLoadedRows(), Ints.saturatedCast(item.getFilteredRows()),
+                buildMessage(transactionState.getLabel(), TransactionStatus.PREPARE,
+                        transactionState.getTransactionId(), dbId));
+        LOG.info("load database {} table {} item {} txn {}", dbId, tableId, item, context.getTxnId());
+    }
+
     public static void commitStmt(ConnectContext context, CommitStmt stmt) {
         GlobalTransactionMgr globalTransactionMgr = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr();
         ExplicitTxnState explicitTxnState = globalTransactionMgr.getExplicitTxnState(context.getTxnId());
@@ -218,30 +242,32 @@ public class TransactionStmtExecutor {
             List<ExplicitTxnState.ExplicitTxnStateItem> explicitTxnStateItems
                     = explicitTxnState.getTransactionStateItems();
             List<Long> callbackIds = transactionState.getCallbackId();
-            Preconditions.checkArgument(explicitTxnStateItems.size() == callbackIds.size());
 
             for (int i = 0; i < explicitTxnStateItems.size(); i++) {
                 ExplicitTxnState.ExplicitTxnStateItem item = explicitTxnStateItems.get(i);
 
                 DmlStmt dmlStmt = item.getDmlStmt();
-                Table targetTable = GlobalStateMgr.getCurrentState().getLocalMetastore()
-                        .getTable(database.getFullName(), dmlStmt.getTableName().getTbl());
+                if (dmlStmt instanceof InsertStmt) {
+                    Preconditions.checkArgument(explicitTxnStateItems.size() == callbackIds.size());
 
+                    Table targetTable = GlobalStateMgr.getCurrentState().getLocalMetastore()
+                            .getTable(database.getFullName(), dmlStmt.getTableName().getTbl());
+                    // collect table-level metrics
+                    TableMetricsEntity entity = TableMetricsRegistry.getInstance().getMetricsEntity(targetTable.getId());
+                    entity.counterInsertLoadFinishedTotal.increase(1L);
+                    entity.counterInsertLoadRowsTotal.increase(item.getLoadedRows());
+                    entity.counterInsertLoadBytesTotal.increase(item.getLoadedBytes());
+
+                    GlobalStateMgr.getCurrentState().getOperationListenerBus()
+                            .onDMLStmtJobTransactionFinish(transactionState, database, targetTable, DmlType.fromStmt(dmlStmt));
+
+                    context.getGlobalStateMgr().getLoadMgr().recordFinishedOrCancelledLoadJob(
+                            callbackIds.get(i),
+                            EtlJobType.INSERT,
+                            "",
+                            "");
+                }
                 MetricRepo.COUNTER_LOAD_FINISHED.increase(1L);
-                // collect table-level metrics
-                TableMetricsEntity entity = TableMetricsRegistry.getInstance().getMetricsEntity(targetTable.getId());
-                entity.counterInsertLoadFinishedTotal.increase(1L);
-                entity.counterInsertLoadRowsTotal.increase(item.getLoadedRows());
-                entity.counterInsertLoadBytesTotal.increase(item.getLoadedBytes());
-
-                GlobalStateMgr.getCurrentState().getOperationListenerBus()
-                        .onDMLStmtJobTransactionFinish(transactionState, database, targetTable, DmlType.fromStmt(dmlStmt));
-
-                context.getGlobalStateMgr().getLoadMgr().recordFinishedOrCancelledLoadJob(
-                        callbackIds.get(i),
-                        EtlJobType.INSERT,
-                        "",
-                        "");
             }
 
             context.getState().setOk(0, 0,
@@ -290,13 +316,16 @@ public class TransactionStmtExecutor {
             List<ExplicitTxnState.ExplicitTxnStateItem> explicitTxnStateItems
                     = explicitTxnState.getTransactionStateItems();
             List<Long> callbackIds = transactionState.getCallbackId();
-            Preconditions.checkArgument(explicitTxnStateItems.size() == callbackIds.size());
 
             for (int i = 0; i < explicitTxnStateItems.size(); i++) {
                 ExplicitTxnState.ExplicitTxnStateItem item = explicitTxnStateItems.get(i);
+                DmlStmt dmlStmt = item.getDmlStmt();
                 commitInfos.addAll(item.getTabletCommitInfos());
                 failInfos.addAll(item.getTabletFailInfos());
-                loadMgr.recordFinishedOrCancelledLoadJob(callbackIds.get(i), EtlJobType.INSERT, "", "");
+                if (dmlStmt instanceof InsertStmt) {
+                    Preconditions.checkArgument(explicitTxnStateItems.size() == callbackIds.size());
+                    loadMgr.recordFinishedOrCancelledLoadJob(callbackIds.get(i), EtlJobType.INSERT, "", "");
+                }
             }
 
             transactionMgr.abortTransaction(
@@ -462,7 +491,7 @@ public class TransactionStmtExecutor {
 
             // insert will fail if 'filtered rows / total rows' exceeds max_filter_ratio
             // for native table and external catalog table(without insert load job)
-            if (filteredRows > (filteredRows + loadedRows) * dmlStmt.getMaxFilterRatio()) {
+            if (filteredRows > (filteredRows + loadedRows) * getMaxFilterRatio(dmlStmt)) {
                 String trackingSql = "select tracking_log from information_schema.load_tracking_logs where job_id=" + jobId;
                 throw new LoadException(ErrorCode.ERR_LOAD_HAS_FILTERED_DATA,
                         "txn_id = " + transactionId + ", tracking sql = " + trackingSql);
@@ -531,5 +560,17 @@ public class TransactionStmtExecutor {
         } else {
             return "Query";
         }
+    }
+
+    public static double getMaxFilterRatio(DmlStmt dmlStmt) {
+        Map<String, String> properties = dmlStmt.getProperties();
+        if (properties.containsKey(LoadStmt.MAX_FILTER_RATIO_PROPERTY)) {
+            try {
+                return Double.parseDouble(properties.get(LoadStmt.MAX_FILTER_RATIO_PROPERTY));
+            } catch (NumberFormatException e) {
+                // ignore
+            }
+        }
+        return ConnectContext.get().getSessionVariable().getInsertMaxFilterRatio();
     }
 }

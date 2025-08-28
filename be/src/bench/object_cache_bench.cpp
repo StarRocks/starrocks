@@ -208,7 +208,6 @@ void ObjectCacheBench::random_insert_multi_threads(benchmark::State* state, Stor
     thread_local std::mt19937 gen(std::random_device{}());
     thread_local std::uniform_int_distribution<> dis(1, 1073741824);
 
-    auto deleter = [](const starrocks::CacheKey& key, void* value) { free(value); };
     for (size_t i = 0; i < count; i++) {
         std::string key = "str:" + std::to_string(dis(gen));
         auto* ptr = new std::vector<uint8_t>(page_size);

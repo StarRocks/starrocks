@@ -77,7 +77,6 @@ import com.starrocks.common.ErrorReport;
 import com.starrocks.common.InternalErrorCode;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.Status;
-import com.starrocks.lake.LakeTablet;
 import com.starrocks.lake.qe.scheduler.DefaultSharedDataWorkerProvider;
 import com.starrocks.load.Load;
 import com.starrocks.qe.ConnectContext;
@@ -804,7 +803,7 @@ public class OlapTableSink extends DataSink {
                     Tablet tablet = index.getTablets().get(idx);
                     if (table.isCloudNativeTableOrMaterializedView()) {
                         long computeNodeId =
-                                warehouseManager.getComputeNodeAssignedToTablet(computeResource, (LakeTablet) tablet).getId();
+                                warehouseManager.getComputeNodeAssignedToTablet(computeResource, tablet.getId()).getId();
                         locationParam.addToTablets(new TTabletLocation(tablet.getId(), Lists.newArrayList(computeNodeId)));
                     } else {
                         // we should ensure the replica backend is alive

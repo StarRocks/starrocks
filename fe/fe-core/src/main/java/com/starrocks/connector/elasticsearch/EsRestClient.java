@@ -232,7 +232,7 @@ public class EsRestClient {
             }
             selectNextNode();
         }
-        LOG.warn("try all nodes [{}],no other nodes left", nodes);
+        LOG.warn("try all nodes [{}],no other nodes left", (Object) nodes);
         if (scratchExceptionForThrow != null) {
             throw scratchExceptionForThrow;
         }

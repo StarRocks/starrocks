@@ -53,14 +53,17 @@ import com.starrocks.planner.FragmentNormalizer;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
-import com.starrocks.sql.analyzer.AstToSQLBuilder;
 import com.starrocks.sql.analyzer.ExpressionAnalyzer;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AstVisitor;
+import com.starrocks.sql.ast.AstVisitorExtendInterface;
 import com.starrocks.sql.ast.LambdaFunctionExpr;
+import com.starrocks.sql.ast.ParseNode;
 import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.common.UnsupportedException;
+import com.starrocks.sql.formatter.AST2SQLVisitor;
+import com.starrocks.sql.formatter.FormatOptions;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rewrite.ScalarOperatorRewriter;
@@ -73,22 +76,16 @@ import com.starrocks.thrift.TExprOpcode;
 import com.starrocks.thrift.TFunction;
 import org.roaringbitmap.RoaringBitmap;
 
-import java.io.DataInput;
-import java.io.DataOutput;
-import java.io.IOException;
 import java.lang.reflect.Method;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
-import java.util.Iterator;
 import java.util.LinkedList;
 import java.util.List;
-import java.util.ListIterator;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Queue;
 import java.util.stream.Collectors;
-import java.util.stream.IntStream;
 
 /**
  * Root of the expr node hierarchy.
@@ -97,9 +94,6 @@ public abstract class Expr extends TreeNode<Expr> implements ParseNode, Cloneabl
     // Name of the function that needs to be implemented by every Expr that
     // supports negation.
     private static final String NEGATE_FN = "negate";
-
-    // to be used where we can't come up with a better estimate
-    protected static final double DEFAULT_SELECTIVITY = 0.1;
 
     public static final float FUNCTION_CALL_COST = 10;
 
@@ -127,14 +121,6 @@ public abstract class Expr extends TreeNode<Expr> implements ParseNode, Cloneabl
                 @Override
                 public boolean apply(Expr arg) {
                     return arg instanceof NullLiteral;
-                }
-            };
-
-    public static final com.google.common.base.Predicate<Expr> IS_LITERAL =
-            new com.google.common.base.Predicate<Expr>() {
-                @Override
-                public boolean apply(Expr arg) {
-                    return arg instanceof LiteralExpr;
                 }
             };
 
@@ -369,19 +355,6 @@ public abstract class Expr extends TreeNode<Expr> implements ParseNode, Cloneabl
     }
 
     /**
-     * Perform semantic analysis of node and all of its children.
-     * Throws exception if any errors found.
-     */
-    public final void analyze(Analyzer analyzer) throws AnalysisException {
-    }
-
-    /**
-     * Does subclass-specific analysis. Subclasses should override analyzeImpl().
-     */
-    protected void analyzeImpl(Analyzer analyzer) throws AnalysisException {
-    }
-
-    /**
      * Set the expr to be analyzed and computes isConstant_.
      */
     protected void analysisDone() {
@@ -445,31 +418,6 @@ public abstract class Expr extends TreeNode<Expr> implements ParseNode, Cloneabl
             }
         }
         return false;
-    }
-
-    /**
-     * Return true if l1[i].equals(l2[i]) for all i.
-     */
-    public static <C extends Expr> boolean equalLists(List<C> l1, List<C> l2) {
-        if (l1.size() != l2.size()) {
-            return false;
-        }
-        Iterator<C> l1Iter = l1.iterator();
-        Iterator<C> l2Iter = l2.iterator();
-        while (l1Iter.hasNext()) {
-            if (!l1Iter.next().equals(l2Iter.next())) {
-                return false;
-            }
-        }
-        return true;
-    }
-
-    public void analyzeNoThrow(Analyzer analyzer) {
-        try {
-            analyze(analyzer);
-        } catch (AnalysisException e) {
-            throw new IllegalStateException(e);
-        }
     }
 
     public static Expr compoundAnd(Collection<Expr> conjuncts) {
@@ -615,135 +563,6 @@ public abstract class Expr extends TreeNode<Expr> implements ParseNode, Cloneabl
     }
 
     /**
-     * Returns an analyzed clone of 'this' with exprs substituted according to smap.
-     * Removes implicit casts and analysis state while cloning/substituting exprs within
-     * this tree, such that the returned result has minimal implicit casts and types.
-     * Throws if analyzing the post-substitution expr tree failed.
-     * If smap is null, this function is equivalent to clone().
-     * If preserveRootType is true, the resulting expr tree will be cast if necessary to
-     * the type of 'this'.
-     */
-    public Expr trySubstitute(ExprSubstitutionMap smap, Analyzer analyzer,
-                              boolean preserveRootType) throws AnalysisException {
-        Expr result = clone();
-        // Return clone to avoid removing casts.
-        if (smap == null) {
-            return result;
-        }
-        result = result.substituteImpl(smap, analyzer);
-        result.analyze(analyzer);
-        if (preserveRootType && !type.isInvalid() && !type.equals(result.getType())) {
-            result = result.castTo(type);
-        }
-        return result;
-    }
-
-    /**
-     * Returns an analyzed clone of 'this' with exprs substituted according to smap.
-     * Removes implicit casts and analysis state while cloning/substituting exprs within
-     * this tree, such that the returned result has minimal implicit casts and types.
-     * Expects the analysis of the post-substitution expr to succeed.
-     * If smap is null, this function is equivalent to clone().
-     * If preserveRootType is true, the resulting expr tree will be cast if necessary to
-     * the type of 'this'.
-     *
-     * @throws AnalysisException
-     */
-    public Expr substitute(ExprSubstitutionMap smap, Analyzer analyzer, boolean preserveRootType)
-            throws AnalysisException {
-        try {
-            return trySubstitute(smap, analyzer, preserveRootType);
-        } catch (AnalysisException e) {
-            throw e;
-        } catch (Exception e) {
-            throw new IllegalStateException("Failed analysis after expr substitution.", e);
-        }
-    }
-
-    public static ArrayList<Expr> trySubstituteList(Iterable<? extends Expr> exprs,
-                                                    ExprSubstitutionMap smap, Analyzer analyzer,
-                                                    boolean preserveRootTypes)
-            throws AnalysisException {
-        if (exprs == null) {
-            return null;
-        }
-        ArrayList<Expr> result = new ArrayList<Expr>();
-        for (Expr e : exprs) {
-            result.add(e.trySubstitute(smap, analyzer, preserveRootTypes));
-        }
-        return result;
-    }
-
-    public static ArrayList<Expr> substituteList(
-            Iterable<? extends Expr> exprs,
-            ExprSubstitutionMap smap, Analyzer analyzer, boolean preserveRootTypes) {
-        try {
-            return trySubstituteList(exprs, smap, analyzer, preserveRootTypes);
-        } catch (Exception e) {
-            throw new IllegalStateException("Failed analysis after expr substitution.", e);
-        }
-    }
-
-    /**
-     * Recursive method that performs the actual substitution for try/substitute() while
-     * removing implicit casts. Resets the analysis state in all non-SlotRef expressions.
-     * Exprs that have non-child exprs which should be affected by substitutions must
-     * override this method and apply the substitution to such exprs as well.
-     */
-    protected Expr substituteImpl(ExprSubstitutionMap smap, Analyzer analyzer)
-            throws AnalysisException {
-        if (isImplicitCast()) {
-            return getChild(0).substituteImpl(smap, analyzer);
-        }
-        if (smap != null) {
-            Expr substExpr = smap.get(this);
-            if (substExpr != null) {
-                return substExpr.clone();
-            }
-        }
-        for (int i = 0; i < children.size(); ++i) {
-            children.set(i, children.get(i).substituteImpl(smap, analyzer));
-        }
-        // SlotRefs must remain analyzed to support substitution across query blocks. All
-        // other exprs must be analyzed again after the substitution to add implicit casts
-        // and for resolving their correct function signature.
-        if (!(this instanceof SlotRef)) {
-            resetAnalysisState();
-        }
-        return this;
-    }
-
-    /**
-     * Removes duplicate exprs (according to equals()).
-     */
-    public static <C extends Expr> void removeDuplicates(List<C> l) {
-        if (l == null) {
-            return;
-        }
-        ListIterator<C> it1 = l.listIterator();
-        while (it1.hasNext()) {
-            C e1 = it1.next();
-            ListIterator<C> it2 = l.listIterator();
-            boolean duplicate = false;
-            while (it2.hasNext()) {
-                C e2 = it2.next();
-                if (e1 == e2) {
-                    // only check up to but excluding e1
-                    break;
-                }
-                if (e1.equals(e2)) {
-                    duplicate = true;
-                    break;
-                }
-            }
-            if (duplicate) {
-                it1.remove();
-            }
-        }
-    }
-
-
-    /**
      * toSql is an obsolete interface, because of historical reasons, the implementation of toSql is not rigorous enough.
      * Newly developed code should use AstToSQLBuilder::toSQL instead
      */
@@ -756,7 +575,9 @@ public abstract class Expr extends TreeNode<Expr> implements ParseNode, Cloneabl
      * `toSqlWithoutTbl` will return sql without table name for column name, so it can be easier to compare two expr.
      */
     public String toSqlWithoutTbl() {
-        return new AstToSQLBuilder.AST2SQLBuilderVisitor(false, true, true).visit(this);
+        return AST2SQLVisitor.withOptions(
+                FormatOptions.allEnable().setColumnSimplifyTableName(false).setColumnWithTableName(false)
+                        .setEnableDigest(false)).visit(this);
     }
 
     public String explain() {
@@ -1316,14 +1137,8 @@ public abstract class Expr extends TreeNode<Expr> implements ParseNode, Cloneabl
         return pos;
     }
 
-    @Override
-    public void write(DataOutput out) throws IOException {
-        throw new IOException("Not implemented serializable ");
-    }
 
-    public void readFields(DataInput in) throws IOException {
-        throw new IOException("Not implemented serializable ");
-    }
+
 
     enum ExprSerCode {
         SLOT_REF(1),
@@ -1362,76 +1177,6 @@ public abstract class Expr extends TreeNode<Expr> implements ParseNode, Cloneabl
         }
     }
 
-    public static void writeTo(Expr expr, DataOutput output) throws IOException {
-        if (expr instanceof SlotRef) {
-            output.writeInt(ExprSerCode.SLOT_REF.getCode());
-        } else if (expr instanceof NullLiteral) {
-            output.writeInt(ExprSerCode.NULL_LITERAL.getCode());
-        } else if (expr instanceof BoolLiteral) {
-            output.writeInt(ExprSerCode.BOOL_LITERAL.getCode());
-        } else if (expr instanceof IntLiteral) {
-            output.writeInt(ExprSerCode.INT_LITERAL.getCode());
-        } else if (expr instanceof LargeIntLiteral) {
-            output.writeInt(ExprSerCode.LARGE_INT_LITERAL.getCode());
-        } else if (expr instanceof FloatLiteral) {
-            output.writeInt(ExprSerCode.FLOAT_LITERAL.getCode());
-        } else if (expr instanceof DecimalLiteral) {
-            output.writeInt(ExprSerCode.DECIMAL_LITERAL.getCode());
-        } else if (expr instanceof StringLiteral) {
-            output.writeInt(ExprSerCode.STRING_LITERAL.getCode());
-        } else if (expr instanceof MaxLiteral) {
-            output.writeInt(ExprSerCode.MAX_LITERAL.getCode());
-        } else if (expr instanceof BinaryPredicate) {
-            output.writeInt(ExprSerCode.BINARY_PREDICATE.getCode());
-        } else if (expr instanceof FunctionCallExpr) {
-            output.writeInt(ExprSerCode.FUNCTION_CALL.getCode());
-        } else {
-            throw new IOException("Unknown class " + expr.getClass().getName());
-        }
-        expr.write(output);
-    }
-
-    /**
-     * The expr result may be null
-     *
-     * @param in
-     * @return
-     * @throws IOException
-     */
-    public static Expr readIn(DataInput in) throws IOException {
-        int code = in.readInt();
-        ExprSerCode exprSerCode = ExprSerCode.fromCode(code);
-        if (exprSerCode == null) {
-            throw new IOException("Unknown code: " + code);
-        }
-        switch (exprSerCode) {
-            case SLOT_REF:
-                return SlotRef.read(in);
-            case NULL_LITERAL:
-                return NullLiteral.read(in);
-            case BOOL_LITERAL:
-                return BoolLiteral.read(in);
-            case INT_LITERAL:
-                return IntLiteral.read(in);
-            case LARGE_INT_LITERAL:
-                return LargeIntLiteral.read(in);
-            case FLOAT_LITERAL:
-                return FloatLiteral.read(in);
-            case DECIMAL_LITERAL:
-                return DecimalLiteral.read(in);
-            case STRING_LITERAL:
-                return StringLiteral.read(in);
-            case MAX_LITERAL:
-                return MaxLiteral.read(in);
-            case BINARY_PREDICATE:
-                return BinaryPredicate.read(in);
-            case FUNCTION_CALL:
-                return FunctionCallExpr.read(in);
-            default:
-                throw new IOException("Unknown code: " + code);
-        }
-    }
-
     // If this expr can serialize and deserialize,
     // Expr will be serialized when this in load statement.
     // If one expr implement write/readFields, must override this function
@@ -1442,8 +1187,9 @@ public abstract class Expr extends TreeNode<Expr> implements ParseNode, Cloneabl
     /**
      * Below function is added by new analyzer
      */
+    @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitExpression(this, context);
+        return ((AstVisitorExtendInterface<R, C>) visitor).visitExpression(this, context);
     }
 
     public void setFn(Function fn) {

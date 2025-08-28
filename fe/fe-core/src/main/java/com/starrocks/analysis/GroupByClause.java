@@ -40,6 +40,8 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Table;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.sql.ast.AstVisitor;
+import com.starrocks.sql.ast.AstVisitorExtendInterface;
+import com.starrocks.sql.ast.ParseNode;
 import com.starrocks.sql.parser.NodePosition;
 import org.apache.commons.collections.CollectionUtils;
 import org.apache.logging.log4j.LogManager;
@@ -196,10 +198,6 @@ public class GroupByClause implements ParseNode {
     }
 
     @Override
-    public void analyze(Analyzer analyzer) throws AnalysisException {
-    }
-
-    @Override
     public String toSql() {
         if (needToSql) {
             return toViewSql();
@@ -332,6 +330,6 @@ public class GroupByClause implements ParseNode {
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitGroupByClause(this, context);
+        return ((AstVisitorExtendInterface<R, C>) visitor).visitGroupByClause(this, context);
     }
 }

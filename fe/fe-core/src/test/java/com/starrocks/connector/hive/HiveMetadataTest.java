@@ -26,10 +26,12 @@ import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AlreadyExistsException;
 import com.starrocks.common.AnalysisException;
+import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ExceptionChecker;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.MetaNotFoundException;
+import com.starrocks.common.tvr.TvrTableSnapshot;
 import com.starrocks.connector.CachingRemoteFileIO;
 import com.starrocks.connector.ConnectorMetadatRequestContext;
 import com.starrocks.connector.ConnectorProperties;
@@ -44,7 +46,6 @@ import com.starrocks.connector.RemoteFileDesc;
 import com.starrocks.connector.RemoteFileInfo;
 import com.starrocks.connector.RemoteFileOperations;
 import com.starrocks.connector.RemotePathKey;
-import com.starrocks.connector.TableVersionRange;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.analyzer.AnalyzeTestUtil;
@@ -125,7 +126,7 @@ public class HiveMetadataTest {
         FileSystem fs = new MockedRemoteFileSystem(HDFS_HIVE_TABLE);
         hiveRemoteFileIO.setFileSystem(fs);
         cachingRemoteFileIO = CachingRemoteFileIO.createCatalogLevelInstance(
-                hiveRemoteFileIO, executorForRemoteFileRefresh, 100, 10, 10);
+                hiveRemoteFileIO, executorForRemoteFileRefresh, 100, 10, 0.1);
         fileOps = new RemoteFileOperations(cachingRemoteFileIO, executorForPullFiles, executorForPullFiles,
                 false, true, new Configuration());
         statisticsProvider = new HiveStatisticsProvider(hmsOps, fileOps);
@@ -277,8 +278,8 @@ public class HiveMetadataTest {
         columns.put(partColumnRefOperator, null);
         columns.put(dataColumnRefOperator, null);
         Statistics statistics = hiveMetadata.getTableStatistics(optimizerContext, hiveTable, columns,
-                Lists.newArrayList(hivePartitionKey1, hivePartitionKey2), null, -1, TableVersionRange.empty());
-        Assertions.assertEquals(1, statistics.getOutputRowCount(), 0.001);
+                Lists.newArrayList(hivePartitionKey1, hivePartitionKey2), null, -1, TvrTableSnapshot.empty());
+        Assertions.assertEquals(Config.default_statistics_output_row_count, statistics.getOutputRowCount(), 0.001);
         Assertions.assertEquals(2, statistics.getColumnStatistics().size());
         Assertions.assertTrue(statistics.getColumnStatistics().get(partColumnRefOperator).isUnknown());
         Assertions.assertTrue(statistics.getColumnStatistics().get(dataColumnRefOperator).isUnknown());
@@ -292,12 +293,10 @@ public class HiveMetadataTest {
                         "  `col1` int(11) DEFAULT NULL\n" +
                         ")\n" +
                         "PARTITION BY (col1)\n" +
-                        "PROPERTIES (\"hive.table.serde.lib\" = \"org.apache.hadoop.hive.ql.io.orc.OrcSerde\",\"totalSize\" = " +
-                        "\"100\"," +
-                        "\"hive.table.column.names\" = \"col2\",\"numRows\" = \"50\",\"hive.table.column.types\" = \"INT\"," +
-                        "\"hive.table" +
-                        ".input.format\" = \"org.apache.hadoop.hive.ql.io.orc.OrcInputFormat\",\"location\" = \"hdfs://127.0.0" +
-                        ".1:10000/hive\");",
+                        "PROPERTIES (\"hive.table.serde.lib\" = \"org.apache.hadoop.hive.ql.io.orc.OrcSerde\", \"totalSize\" = " +
+                        "\"100\", \"hive.table.column.names\" = \"col2\", \"numRows\" = \"50\", \"hive.table.column.types\" = " +
+                        "\"INT\", \"hive.table.input.format\" = \"org.apache.hadoop.hive.ql.io.orc.OrcInputFormat\", " +
+                        "\"location\" = \"hdfs://127.0.0.1:10000/hive\");",
                 AstToStringBuilder.getExternalCatalogTableDdlStmt(hiveTable));
     }
 
@@ -316,13 +315,13 @@ public class HiveMetadataTest {
 
         Statistics statistics = hiveMetadata.getTableStatistics(
                 optimizerContext, hiveTable, columns, Lists.newArrayList(hivePartitionKey1, hivePartitionKey2),
-                null, -1, TableVersionRange.empty());
+                null, -1, TvrTableSnapshot.empty());
         Assertions.assertEquals(1, statistics.getOutputRowCount(), 0.001);
         Assertions.assertEquals(2, statistics.getColumnStatistics().size());
 
         cachingHiveMetastore.getPartitionStatistics(hiveTable, Lists.newArrayList("col1=1", "col1=2"));
         statistics = hiveMetadata.getTableStatistics(optimizerContext, hiveTable, columns,
-                Lists.newArrayList(hivePartitionKey1, hivePartitionKey2), null, -1, TableVersionRange.empty());
+                Lists.newArrayList(hivePartitionKey1, hivePartitionKey2), null, -1, TvrTableSnapshot.empty());
 
         Assertions.assertEquals(100, statistics.getOutputRowCount(), 0.001);
         Map<ColumnRefOperator, ColumnStatistic> columnStatistics = statistics.getColumnStatistics();
@@ -504,7 +503,7 @@ public class HiveMetadataTest {
             new MockUp<HiveMetastoreOperations>() {
                 @Mock
                 public void updatePartitionStatistics(String dbName, String tableName, String partitionName,
-                        Function<HivePartitionStats, HivePartitionStats> update) {
+                                                      Function<HivePartitionStats, HivePartitionStats> update) {
                     throw new StarRocksConnectorException("ERROR");
                 }
             };

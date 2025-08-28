@@ -38,13 +38,16 @@ import com.starrocks.pseudocluster.PseudoCluster;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.StmtExecutor;
 import com.starrocks.scheduler.ExecuteOption;
+import com.starrocks.scheduler.MVTaskRunProcessor;
 import com.starrocks.scheduler.MvTaskRunContext;
-import com.starrocks.scheduler.PartitionBasedMvRefreshProcessor;
-import com.starrocks.scheduler.TableSnapshotInfo;
 import com.starrocks.scheduler.Task;
 import com.starrocks.scheduler.TaskBuilder;
+import com.starrocks.scheduler.TaskManager;
 import com.starrocks.scheduler.TaskRun;
 import com.starrocks.scheduler.TaskRunBuilder;
+import com.starrocks.scheduler.TaskRunProcessor;
+import com.starrocks.scheduler.mv.BaseTableSnapshotInfo;
+import com.starrocks.scheduler.mv.MVPCTBasedRefreshProcessor;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.Analyzer;
 import com.starrocks.sql.ast.CreateMaterializedViewStatement;
@@ -94,7 +97,20 @@ import java.util.stream.Collectors;
 /**
  * Base class for materialized view tests.
  */
-public class MVTestBase extends StarRocksTestBase {
+public abstract class MVTestBase extends StarRocksTestBase {
+
+    public interface ExceptionRunnable {
+        void run() throws Exception;
+    }
+
+    public interface ExecPlanChecker {
+        void check(ExecPlan execPlan) throws Exception;
+    }
+
+    public interface MVActionRunner {
+        void run(MaterializedView mv) throws Exception;
+    }
+
     protected static final Logger LOG = LogManager.getLogger(MVTestBase.class);
     protected static ConnectContext connectContext;
     protected static PseudoCluster cluster;
@@ -235,19 +251,23 @@ public class MVTestBase extends StarRocksTestBase {
         return getOptimizedPlan(sql, connectContext, OptimizerOptions.defaultOpt());
     }
 
-    public static OptExpression getOptimizedPlan(String sql, ConnectContext connectContext,
-                                                 OptimizerOptions optimizerOptions) {
-        StatementBase mvStmt;
+    public static StatementBase getAnalyzedPlan(String sql, ConnectContext connectContext) {
+        StatementBase statementBase;
         try {
             List<StatementBase> statementBases =
                     com.starrocks.sql.parser.SqlParser.parse(sql, connectContext.getSessionVariable());
             Preconditions.checkState(statementBases.size() == 1);
-            mvStmt = statementBases.get(0);
+            statementBase = statementBases.get(0);
         } catch (Exception e) {
             return null;
         }
-        Preconditions.checkState(mvStmt instanceof QueryStatement);
-        Analyzer.analyze(mvStmt, connectContext);
+        Analyzer.analyze(statementBase, connectContext);
+        return statementBase;
+    }
+
+    public static OptExpression getOptimizedPlan(String sql, ConnectContext connectContext,
+                                                 OptimizerOptions optimizerOptions) {
+        StatementBase mvStmt = getAnalyzedPlan(sql, connectContext);
         QueryRelation query = ((QueryStatement) mvStmt).getQueryRelation();
         ColumnRefFactory columnRefFactory = new ColumnRefFactory();
         LogicalPlan logicalPlan =
@@ -349,14 +369,24 @@ public class MVTestBase extends StarRocksTestBase {
         refreshMVRange(mvName, null, null, force);
     }
 
-    protected PartitionBasedMvRefreshProcessor refreshMV(String dbName, MaterializedView mv) throws Exception {
+    protected TaskRun withMVRefreshTaskRun(String dbName, MaterializedView mv) throws Exception {
         Task task = TaskBuilder.buildMvTask(mv, dbName);
         Map<String, String> testProperties = task.getProperties();
         testProperties.put(TaskRun.IS_TEST, "true");
         TaskRun taskRun = TaskRunBuilder.newBuilder(task).build();
         taskRun.initStatus(UUIDUtil.genUUID().toString(), System.currentTimeMillis());
         taskRun.executeTaskRun();
-        return (PartitionBasedMvRefreshProcessor) taskRun.getProcessor();
+        return taskRun;
+    }
+
+    protected MVTaskRunProcessor getMVTaskRunProcessor(String dbName, MaterializedView mv) throws Exception {
+        TaskRun taskRun = withMVRefreshTaskRun(dbName, mv);
+        return getMVTaskRunProcessor(taskRun);
+    }
+
+    protected MVPCTBasedRefreshProcessor refreshMV(String dbName, MaterializedView mv) throws Exception {
+        TaskRun taskRun = withMVRefreshTaskRun(dbName, mv);
+        return getPartitionBasedRefreshProcessor(taskRun);
     }
 
     protected void refreshMVRange(String mvName, String start, String end, boolean force) throws Exception {
@@ -381,9 +411,9 @@ public class MVTestBase extends StarRocksTestBase {
                 QueryMaterializationContext.QueryCacheStats.class);
     }
 
-    protected Map<Table, Set<String>> getRefTableRefreshedPartitions(PartitionBasedMvRefreshProcessor processor) {
-        Map<TableSnapshotInfo, Set<String>> baseTables = processor
-                .getRefTableRefreshPartitions(Sets.newHashSet("p20220101"));
+    protected Map<Table, Set<String>> getRefTableRefreshedPartitions(MVPCTBasedRefreshProcessor processor) {
+        Map<BaseTableSnapshotInfo, Set<String>> baseTables = processor
+                .getPCTRefTableRefreshPartitions(Sets.newHashSet("p20220101"));
         Assertions.assertEquals(2, baseTables.size());
         return baseTables.entrySet().stream().collect(Collectors.toMap(x -> x.getKey().getBaseTable(), x -> x.getValue()));
     }
@@ -399,9 +429,10 @@ public class MVTestBase extends StarRocksTestBase {
 
     protected static ExecPlan getMVRefreshExecPlan(TaskRun taskRun) throws Exception {
         initAndExecuteTaskRun(taskRun);
-        PartitionBasedMvRefreshProcessor processor = (PartitionBasedMvRefreshProcessor)
-                taskRun.getProcessor();
-        MvTaskRunContext mvTaskRunContext = processor.getMvContext();
+        TaskRunProcessor processor = taskRun.getProcessor();
+        Assertions.assertTrue(processor instanceof MVTaskRunProcessor);
+        MVTaskRunProcessor mvTaskRunProcessor = (MVTaskRunProcessor) processor;
+        MvTaskRunContext mvTaskRunContext = mvTaskRunProcessor.getMvTaskRunContext();
         return mvTaskRunContext.getExecPlan();
     }
 
@@ -549,9 +580,7 @@ public class MVTestBase extends StarRocksTestBase {
         }
     }
 
-    public interface ExceptionRunnable {
-        public abstract void run() throws Exception;
-    }
+
 
     protected void doTest(List<TestListener> listeners, ExceptionRunnable testCase) {
         for (TestListener listener : listeners) {
@@ -587,8 +616,7 @@ public class MVTestBase extends StarRocksTestBase {
             Task task = TaskBuilder.buildMvTask(mv, testDb.getFullName());
             TaskRun taskRun = TaskRunBuilder.newBuilder(task).setExecuteOption(executeOption).build();
             initAndExecuteTaskRun(taskRun);
-            PartitionBasedMvRefreshProcessor processor =
-                    (PartitionBasedMvRefreshProcessor) taskRun.getProcessor();
+            MVPCTBasedRefreshProcessor processor = getPartitionBasedRefreshProcessor(taskRun);
             MvTaskRunContext mvTaskRunContext = processor.getMvContext();
             ExecPlan execPlan = mvTaskRunContext.getExecPlan();
             Assertions.assertTrue(execPlan != null);
@@ -596,5 +624,56 @@ public class MVTestBase extends StarRocksTestBase {
                 assertPlanContains(execPlan, expectStr);
             }
         });
+    }
+
+    public static MVTaskRunProcessor getMVTaskRunProcessor(TaskRun taskRun) {
+        Assertions.assertTrue(taskRun.getProcessor() instanceof MVTaskRunProcessor);
+        return (MVTaskRunProcessor) taskRun.getProcessor();
+    }
+
+    public static MVPCTBasedRefreshProcessor getPartitionBasedRefreshProcessor(TaskRun taskRun) {
+        Assertions.assertTrue(taskRun.getProcessor() instanceof MVTaskRunProcessor);
+        MVTaskRunProcessor mvTaskRunProcessor = (MVTaskRunProcessor) taskRun.getProcessor();
+        return (MVPCTBasedRefreshProcessor) mvTaskRunProcessor.getMVRefreshProcessor();
+    }
+
+    protected void withMVQuery(String mvQuery,
+                               MVActionRunner runner) throws Exception {
+        String ddl = String.format("CREATE MATERIALIZED VIEW `test`.`test_mv1` " +
+                "REFRESH DEFERRED MANUAL\n" +
+                "PROPERTIES (\n" +
+                "\"refresh_mode\" = \"incremental\"" +
+                ")\n" +
+                "AS %s;", mvQuery);
+        starRocksAssert.withMaterializedView(ddl);
+        MaterializedView mv = getMv("test_mv1");
+        runner.run(mv);
+    }
+
+    /**
+     * Get the explain plan for the MV refresh task.
+     */
+    protected String explainMVRefreshExecPlan(MaterializedView mv, String explainQuery) {
+        TaskManager taskManager = GlobalStateMgr.getCurrentState().getTaskManager();
+        Task task = taskManager.getTask(TaskBuilder.getMvTaskName(mv.getId()));
+        Assertions.assertTrue(task != null, "Task for MV " + mv.getName() + " not found:" + explainQuery);
+        StatementBase stmt = getAnalyzedPlan(explainQuery, connectContext);
+        Assertions.assertTrue(stmt != null, "Expected a valid StatementBase but got null:" + explainQuery);
+        ExecuteOption executeOption = new ExecuteOption(70, false, new HashMap<>());
+        return taskManager.getMVRefreshExplain(task, executeOption, stmt);
+    }
+
+    /**
+     * Get the execution plan for the MV refresh task.
+     */
+    protected ExecPlan getMVRefreshExecPlan(MaterializedView mv, String explainQuery) {
+        TaskManager taskManager = GlobalStateMgr.getCurrentState().getTaskManager();
+        Task task = taskManager.getTask(TaskBuilder.getMvTaskName(mv.getId()));
+        Assertions.assertTrue(task != null, "Task for MV " + mv.getName() + " not found:" + explainQuery);
+        StatementBase stmt = getAnalyzedPlan(explainQuery, connectContext);
+        Assertions.assertTrue(stmt != null, "Expected a valid StatementBase but got null:" + explainQuery);
+        ExecuteOption executeOption = new ExecuteOption(70, false, new HashMap<>());
+        TaskRun taskRun = taskManager.buildTaskRun(task, executeOption);
+        return taskManager.getMVRefreshExecPlan(taskRun, task, executeOption, stmt);
     }
 }

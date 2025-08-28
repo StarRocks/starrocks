@@ -17,6 +17,8 @@ package com.starrocks.sql.ast;
 
 import com.starrocks.sql.parser.NodePosition;
 
+import static com.starrocks.common.util.Util.normalizeName;
+
 // ToDo(zhuodong): to support internal catalog in the future
 public class DropCatalogStmt extends DdlStmt {
 
@@ -34,7 +36,7 @@ public class DropCatalogStmt extends DdlStmt {
 
     public DropCatalogStmt(String name, boolean ifExists, NodePosition pos) {
         super(pos);
-        this.name = name;
+        this.name = normalizeName(name);
         this.ifExists = ifExists;
     }
 
@@ -48,7 +50,7 @@ public class DropCatalogStmt extends DdlStmt {
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitDropCatalogStatement(this, context);
+        return ((AstVisitorExtendInterface<R, C>) visitor).visitDropCatalogStatement(this, context);
     }
 
     @Override

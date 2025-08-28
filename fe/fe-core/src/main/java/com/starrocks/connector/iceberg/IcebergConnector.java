@@ -27,6 +27,8 @@ import com.starrocks.connector.iceberg.glue.IcebergGlueCatalog;
 import com.starrocks.connector.iceberg.hadoop.IcebergHadoopCatalog;
 import com.starrocks.connector.iceberg.hive.IcebergHiveCatalog;
 import com.starrocks.connector.iceberg.jdbc.IcebergJdbcCatalog;
+import com.starrocks.connector.iceberg.procedure.IcebergProcedureRegistry;
+import com.starrocks.connector.iceberg.procedure.RegisterTableProcedure;
 import com.starrocks.connector.iceberg.rest.IcebergRESTCatalog;
 import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.credential.CloudConfigurationFactory;
@@ -55,6 +57,7 @@ public class IcebergConnector implements Connector {
     private ExecutorService refreshOtherFeExecutor;
     private final IcebergCatalogProperties icebergCatalogProperties;
     private final ConnectorProperties connectorProperties;
+    private final IcebergProcedureRegistry procedureRegistry;
 
     public IcebergConnector(ConnectorContext context) {
         this.catalogName = context.getCatalogName();
@@ -63,6 +66,10 @@ public class IcebergConnector implements Connector {
         this.hdfsEnvironment = new HdfsEnvironment(cloudConfiguration);
         this.icebergCatalogProperties = new IcebergCatalogProperties(properties);
         this.connectorProperties = new ConnectorProperties(ConnectorType.ICEBERG, properties);
+        this.procedureRegistry = new IcebergProcedureRegistry();
+        if (!isResourceMappingCatalog(this.catalogName)) {
+            registerProcedures();
+        }
     }
 
     private IcebergCatalog buildIcebergNativeCatalog() {
@@ -94,7 +101,8 @@ public class IcebergConnector implements Connector {
     @Override
     public ConnectorMetadata getMetadata() {
         return new IcebergMetadata(catalogName, hdfsEnvironment, getNativeCatalog(),
-                buildIcebergJobPlanningExecutor(), buildRefreshOtherFeExecutor(), icebergCatalogProperties, connectorProperties);
+                buildIcebergJobPlanningExecutor(), buildRefreshOtherFeExecutor(), icebergCatalogProperties,
+                connectorProperties, procedureRegistry);
     }
 
     // In order to be compatible with the catalog created with the wrong configuration,
@@ -134,6 +142,10 @@ public class IcebergConnector implements Connector {
     private ExecutorService buildBackgroundJobPlanningExecutor() {
         return newWorkerPool(catalogName + "-background-iceberg-worker-pool",
                 icebergCatalogProperties.getBackgroundIcebergJobPlanningThreadNum());
+    }
+
+    private void registerProcedures() {
+        this.procedureRegistry.register(new RegisterTableProcedure(catalogName, getNativeCatalog()));
     }
 
     @Override

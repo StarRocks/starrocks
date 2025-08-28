@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "exec/join_hash_map.h"
+#include "exec/join/join_hash_map.h"
 
 #include <gtest/gtest.h>
 
@@ -22,6 +22,9 @@
 #include "testutil/assert.h"
 
 namespace starrocks {
+
+#define JoinHashMapForOneKey(LT) JoinHashMap<LT, JoinKeyConstructorType::ONE_KEY, JoinHashMapMethodType::BUCKET_CHAINED>
+
 class JoinHashMapTest : public ::testing::Test {
 protected:
     void SetUp() override {
@@ -995,7 +998,7 @@ TEST_F(JoinHashMapTest, JoinKeyHash) {
     }
 
     auto v3 = JoinKeyHash<Slice>()(Slice{"abcd", 4}, num_buckets, log_num_buckets);
-    ASSERT_EQ(v3, 2777932099l % num_buckets);
+    ASSERT_EQ(v3, 11538);
 }
 
 // NOLINTNEXTLINE
@@ -1143,10 +1146,20 @@ TEST_F(JoinHashMapTest, JoinBuildProbeFunc) {
     Columns probe_columns{probe_column};
     probe_state.key_columns = &probe_columns;
 
-    JoinBuildFunc<LogicalType::TYPE_INT>::prepare(nullptr, &table_items);
-    JoinProbeFunc<LogicalType::TYPE_INT>::prepare(_runtime_state.get(), &probe_state);
-    JoinBuildFunc<LogicalType::TYPE_INT>::construct_hash_table(_runtime_state.get(), &table_items, &probe_state);
-    JoinProbeFunc<LogicalType::TYPE_INT>::lookup_init(table_items, &probe_state);
+    using BuildKeyConstructor = BuildKeyConstructorForOneKey<LogicalType::TYPE_INT>;
+    using ProbeKeyConstructor = ProbeKeyConstructorForOneKey<LogicalType::TYPE_INT>;
+    using JoinHashMapMethod = BucketChainedJoinHashMap<LogicalType::TYPE_INT>;
+
+    BuildKeyConstructor::prepare(nullptr, &table_items);
+    BuildKeyConstructor::build_key(nullptr, &table_items);
+    JoinHashMapMethod::build_prepare(nullptr, &table_items);
+    JoinHashMapMethod::construct_hash_table(&table_items, BuildKeyConstructor::get_key_data(table_items),
+                                            BuildKeyConstructor::get_is_nulls(table_items));
+
+    ProbeKeyConstructor::prepare(nullptr, &probe_state);
+    ProbeKeyConstructor::build_key(table_items, &probe_state);
+    JoinHashMapMethod::lookup_init(table_items, &probe_state, BuildKeyConstructor().get_key_data(table_items),
+                                   ProbeKeyConstructor().get_key_data(probe_state), probe_state.null_array);
 
     for (size_t i = 0; i < 10; i++) {
         size_t found_count = 0;
@@ -1183,10 +1196,20 @@ TEST_F(JoinHashMapTest, JoinBuildProbeFuncNullable) {
     Columns probe_columns{probe_column};
     probe_state.key_columns = &probe_columns;
 
-    JoinBuildFunc<TYPE_INT>::prepare(nullptr, &table_items);
-    JoinProbeFunc<TYPE_INT>::prepare(_runtime_state.get(), &probe_state);
-    JoinBuildFunc<TYPE_INT>::construct_hash_table(_runtime_state.get(), &table_items, &probe_state);
-    JoinProbeFunc<TYPE_INT>::lookup_init(table_items, &probe_state);
+    using BuildKeyConstructor = BuildKeyConstructorForOneKey<LogicalType::TYPE_INT>;
+    using ProbeKeyConstructor = ProbeKeyConstructorForOneKey<LogicalType::TYPE_INT>;
+    using JoinHashMapMethod = BucketChainedJoinHashMap<LogicalType::TYPE_INT>;
+
+    BuildKeyConstructor::prepare(nullptr, &table_items);
+    BuildKeyConstructor::build_key(nullptr, &table_items);
+    JoinHashMapMethod::build_prepare(nullptr, &table_items);
+    JoinHashMapMethod::construct_hash_table(&table_items, BuildKeyConstructor::get_key_data(table_items),
+                                            BuildKeyConstructor::get_is_nulls(table_items));
+
+    ProbeKeyConstructor::prepare(nullptr, &probe_state);
+    ProbeKeyConstructor::build_key(table_items, &probe_state);
+    JoinHashMapMethod::lookup_init(table_items, &probe_state, BuildKeyConstructor().get_key_data(table_items),
+                                   ProbeKeyConstructor().get_key_data(probe_state), probe_state.null_array);
 
     for (size_t i = 0; i < 10; i++) {
         size_t found_count = 0;
@@ -1346,10 +1369,20 @@ TEST_F(JoinHashMapTest, FixedSizeJoinBuildProbeFunc) {
     Columns probe_columns{probe_column1, probe_column2};
     probe_state.key_columns = &probe_columns;
 
-    FixedSizeJoinBuildFunc<TYPE_BIGINT>::prepare(_runtime_state.get(), &table_items);
-    FixedSizeJoinProbeFunc<TYPE_BIGINT>::prepare(_runtime_state.get(), &probe_state);
-    FixedSizeJoinBuildFunc<TYPE_BIGINT>::construct_hash_table(_runtime_state.get(), &table_items, &probe_state);
-    FixedSizeJoinProbeFunc<TYPE_BIGINT>::lookup_init(table_items, &probe_state);
+    using BuildKeyConstructor = BuildKeyConstructorForSerializedFixedSize<LogicalType::TYPE_BIGINT>;
+    using ProbeKeyConstructor = ProbeKeyConstructorForSerializedFixedSize<LogicalType::TYPE_BIGINT>;
+    using JoinHashMapMethod = BucketChainedJoinHashMap<LogicalType::TYPE_BIGINT>;
+
+    BuildKeyConstructor::prepare(_runtime_state.get(), &table_items);
+    BuildKeyConstructor::build_key(_runtime_state.get(), &table_items);
+    JoinHashMapMethod::build_prepare(_runtime_state.get(), &table_items);
+    JoinHashMapMethod::construct_hash_table(&table_items, BuildKeyConstructor::get_key_data(table_items),
+                                            BuildKeyConstructor::get_is_nulls(table_items));
+
+    ProbeKeyConstructor::prepare(_runtime_state.get(), &probe_state);
+    ProbeKeyConstructor::build_key(table_items, &probe_state);
+    JoinHashMapMethod::lookup_init(table_items, &probe_state, BuildKeyConstructor().get_key_data(table_items),
+                                   ProbeKeyConstructor().get_key_data(probe_state), probe_state.null_array);
 
     for (size_t i = 0; i < 10; i++) {
         size_t found_count = 0;
@@ -1396,10 +1429,20 @@ TEST_F(JoinHashMapTest, FixedSizeJoinBuildProbeFuncNullable) {
     Columns probe_columns{probe_column1, probe_column2};
     probe_state.key_columns = &probe_columns;
 
-    FixedSizeJoinBuildFunc<TYPE_BIGINT>::prepare(_runtime_state.get(), &table_items);
-    FixedSizeJoinProbeFunc<TYPE_BIGINT>::prepare(_runtime_state.get(), &probe_state);
-    FixedSizeJoinBuildFunc<TYPE_BIGINT>::construct_hash_table(_runtime_state.get(), &table_items, &probe_state);
-    FixedSizeJoinProbeFunc<TYPE_BIGINT>::lookup_init(table_items, &probe_state);
+    using BuildKeyConstructor = BuildKeyConstructorForSerializedFixedSize<LogicalType::TYPE_BIGINT>;
+    using ProbeKeyConstructor = ProbeKeyConstructorForSerializedFixedSize<LogicalType::TYPE_BIGINT>;
+    using JoinHashMapMethod = BucketChainedJoinHashMap<LogicalType::TYPE_BIGINT>;
+
+    BuildKeyConstructor::prepare(_runtime_state.get(), &table_items);
+    BuildKeyConstructor::build_key(_runtime_state.get(), &table_items);
+    JoinHashMapMethod::build_prepare(_runtime_state.get(), &table_items);
+    JoinHashMapMethod::construct_hash_table(&table_items, BuildKeyConstructor::get_key_data(table_items),
+                                            BuildKeyConstructor::get_is_nulls(table_items));
+
+    ProbeKeyConstructor::prepare(_runtime_state.get(), &probe_state);
+    ProbeKeyConstructor::build_key(table_items, &probe_state);
+    JoinHashMapMethod::lookup_init(table_items, &probe_state, BuildKeyConstructor().get_key_data(table_items),
+                                   ProbeKeyConstructor().get_key_data(probe_state), probe_state.null_array);
 
     for (size_t i = 0; i < 10; i++) {
         size_t found_count = 0;
@@ -1453,10 +1496,20 @@ TEST_F(JoinHashMapTest, SerializedJoinBuildProbeFunc) {
     probe_state.key_columns = &probe_columns;
     Buffer<uint8_t> buffer(1024);
 
-    SerializedJoinBuildFunc::prepare(_runtime_state.get(), &table_items);
-    SerializedJoinProbeFunc::prepare(_runtime_state.get(), &probe_state);
-    SerializedJoinBuildFunc::construct_hash_table(_runtime_state.get(), &table_items, &probe_state);
-    SerializedJoinProbeFunc::lookup_init(table_items, &probe_state);
+    using BuildKeyConstructor = BuildKeyConstructorForSerialized;
+    using ProbeKeyConstructor = ProbeKeyConstructorForSerialized;
+    using JoinHashMapMethod = BucketChainedJoinHashMap<LogicalType::TYPE_VARCHAR>;
+
+    BuildKeyConstructor::prepare(_runtime_state.get(), &table_items);
+    BuildKeyConstructor::build_key(_runtime_state.get(), &table_items);
+    JoinHashMapMethod::build_prepare(_runtime_state.get(), &table_items);
+    JoinHashMapMethod::construct_hash_table(&table_items, BuildKeyConstructor::get_key_data(table_items),
+                                            BuildKeyConstructor::get_is_nulls(table_items));
+
+    ProbeKeyConstructor::prepare(_runtime_state.get(), &probe_state);
+    ProbeKeyConstructor::build_key(table_items, &probe_state);
+    JoinHashMapMethod::lookup_init(table_items, &probe_state, BuildKeyConstructor().get_key_data(table_items),
+                                   ProbeKeyConstructor().get_key_data(probe_state), probe_state.null_array);
 
     for (size_t i = 0; i < 10; i++) {
         size_t found_count = 0;
@@ -1507,10 +1560,20 @@ TEST_F(JoinHashMapTest, SerializedJoinBuildProbeFuncNullable) {
     probe_state.key_columns = &probe_columns;
     Buffer<uint8_t> buffer(1024);
 
-    SerializedJoinBuildFunc::prepare(_runtime_state.get(), &table_items);
-    SerializedJoinProbeFunc::prepare(_runtime_state.get(), &probe_state);
-    SerializedJoinBuildFunc::construct_hash_table(_runtime_state.get(), &table_items, &probe_state);
-    SerializedJoinProbeFunc::lookup_init(table_items, &probe_state);
+    using BuildKeyConstructor = BuildKeyConstructorForSerialized;
+    using ProbeKeyConstructor = ProbeKeyConstructorForSerialized;
+    using JoinHashMapMethod = BucketChainedJoinHashMap<LogicalType::TYPE_VARCHAR>;
+
+    BuildKeyConstructor::prepare(_runtime_state.get(), &table_items);
+    BuildKeyConstructor::build_key(_runtime_state.get(), &table_items);
+    JoinHashMapMethod::build_prepare(_runtime_state.get(), &table_items);
+    JoinHashMapMethod::construct_hash_table(&table_items, BuildKeyConstructor::get_key_data(table_items),
+                                            BuildKeyConstructor::get_is_nulls(table_items));
+
+    ProbeKeyConstructor::prepare(_runtime_state.get(), &probe_state);
+    ProbeKeyConstructor::build_key(table_items, &probe_state);
+    JoinHashMapMethod::lookup_init(table_items, &probe_state, BuildKeyConstructor().get_key_data(table_items),
+                                   ProbeKeyConstructor().get_key_data(probe_state), probe_state.null_array);
 
     Columns probe_data_columns;
     probe_data_columns.emplace_back(
@@ -1545,7 +1608,7 @@ TEST_F(JoinHashMapTest, SerializedJoinBuildProbeFuncNullable) {
         probe_state.build_index.assign(4096 + 8, 0);                                                           \
         probe_state.probe_match_index.assign(4096 + 8, 0);                                                     \
         if (group == 0) {                                                                                      \
-            join_hash_map->FUNC<FIRST>(_runtime_state.get(), build_data, probe_data);                          \
+            join_hash_map->FUNC<FIRST, false>(_runtime_state.get(), build_data, probe_data);                   \
         } else {                                                                                               \
             probe_state.handles.clear();                                                                       \
             for (int i = 0; i < group; ++i) {                                                                  \
@@ -1558,7 +1621,7 @@ TEST_F(JoinHashMapTest, SerializedJoinBuildProbeFuncNullable) {
 
 #define DO_TEST_PROBE_MID(FUNC)                                                                           \
     if (group == 0) {                                                                                     \
-        join_hash_map->FUNC<false>(_runtime_state.get(), build_data, probe_data);                         \
+        join_hash_map->FUNC<false, false>(_runtime_state.get(), build_data, probe_data);                  \
     } else {                                                                                              \
         join_hash_map->_probe_coroutine<false>(_runtime_state.get(), build_data, probe_data);             \
         sort_results_from_coroutine(probe_state.probe_index, probe_state.build_index, probe_state.count); \
@@ -1817,7 +1880,7 @@ TEST_F(JoinHashMapTest, ProbeFromHtForLeftJoinNextEmpty) {
     this->prepare_probe_data(&probe_data, probe_row_count);
 
     auto join_hash_map = std::make_unique<JoinHashMapForOneKey(TYPE_INT)>(&table_items, &probe_state);
-    join_hash_map->_probe_from_ht_for_left_outer_left_anti_full_outer_join_with_other_conjunct<true>(
+    join_hash_map->_probe_from_ht_for_left_outer_left_anti_full_outer_join_with_other_conjunct<true, false>(
             _runtime_state.get(), build_data, probe_data);
     this->check_probe_state(table_items, probe_state, JoinMatchFlag::NORMAL, 0, match_count, probe_row_count);
     this->check_match_index(probe_state.probe_match_index, 0, config::vector_chunk_size, match_count);
@@ -1839,7 +1902,7 @@ TEST_F(JoinHashMapTest, ProbeFromHtForLeftJoinNextEmptyMore) {
     this->prepare_probe_data(&probe_data, probe_row_count);
 
     auto join_hash_map = std::make_unique<JoinHashMapForOneKey(TYPE_INT)>(&table_items, &probe_state);
-    join_hash_map->_probe_from_ht_for_left_outer_left_anti_full_outer_join_with_other_conjunct<true>(
+    join_hash_map->_probe_from_ht_for_left_outer_left_anti_full_outer_join_with_other_conjunct<true, false>(
             _runtime_state.get(), build_data, probe_data);
     std::vector<std::pair<uint32_t, uint32_t>> results;
     ASSERT_EQ(probe_state.match_flag, JoinMatchFlag::NORMAL);
@@ -1848,7 +1911,7 @@ TEST_F(JoinHashMapTest, ProbeFromHtForLeftJoinNextEmptyMore) {
         results.push_back(std::make_pair(probe_state.probe_index[i], probe_state.build_index[i]));
     }
 
-    join_hash_map->_probe_from_ht_for_left_outer_left_anti_full_outer_join_with_other_conjunct<false>(
+    join_hash_map->_probe_from_ht_for_left_outer_left_anti_full_outer_join_with_other_conjunct<false, false>(
             _runtime_state.get(), build_data, probe_data);
     ASSERT_EQ(probe_state.match_flag, JoinMatchFlag::NORMAL);
     ASSERT_FALSE(probe_state.has_remain);
@@ -1897,13 +1960,13 @@ TEST_F(JoinHashMapTest, ProbeFromHtForRightXXXJoinWithOtherConjunct) {
 
         // first probe
         auto join_hash_map = std::make_unique<JoinHashMapForOneKey(TYPE_INT)>(&table_items, &probe_state);
-        join_hash_map->_probe_from_ht_for_right_outer_right_semi_right_anti_join_with_other_conjunct<true>(
+        join_hash_map->_probe_from_ht_for_right_outer_right_semi_right_anti_join_with_other_conjunct<true, false>(
                 _runtime_state.get(), build_data, probe_data);
         this->check_probe_state(table_items, probe_state, JoinMatchFlag::NORMAL, 0, match_count, probe_row_count);
 
         // second probe
         join_hash_map = std::make_unique<JoinHashMapForOneKey(TYPE_INT)>(&table_items, &probe_state);
-        join_hash_map->_probe_from_ht_for_right_outer_right_semi_right_anti_join_with_other_conjunct<false>(
+        join_hash_map->_probe_from_ht_for_right_outer_right_semi_right_anti_join_with_other_conjunct<false, false>(
                 _runtime_state.get(), build_data, probe_data);
         this->check_probe_state(table_items, probe_state, JoinMatchFlag::NORMAL, 1, match_count, probe_row_count);
     }
@@ -1925,7 +1988,7 @@ TEST_F(JoinHashMapTest, ProbeFromHtForRightXXXJoinWithOtherConjunctMore) {
         this->prepare_probe_data(&probe_data, probe_row_count);
 
         auto join_hash_map = std::make_unique<JoinHashMapForOneKey(TYPE_INT)>(&table_items, &probe_state);
-        join_hash_map->_probe_from_ht_for_right_outer_right_semi_right_anti_join_with_other_conjunct<true>(
+        join_hash_map->_probe_from_ht_for_right_outer_right_semi_right_anti_join_with_other_conjunct<true, false>(
                 _runtime_state.get(), build_data, probe_data);
         std::vector<std::pair<uint32_t, uint32_t>> results;
         ASSERT_EQ(probe_state.match_flag, JoinMatchFlag::NORMAL);
@@ -1934,7 +1997,7 @@ TEST_F(JoinHashMapTest, ProbeFromHtForRightXXXJoinWithOtherConjunctMore) {
             results.push_back(std::make_pair(probe_state.probe_index[i], probe_state.build_index[i]));
         }
 
-        join_hash_map->_probe_from_ht_for_right_outer_right_semi_right_anti_join_with_other_conjunct<false>(
+        join_hash_map->_probe_from_ht_for_right_outer_right_semi_right_anti_join_with_other_conjunct<false, false>(
                 _runtime_state.get(), build_data, probe_data);
         ASSERT_EQ(probe_state.match_flag, JoinMatchFlag::NORMAL);
         ASSERT_FALSE(probe_state.has_remain);
@@ -2166,7 +2229,7 @@ TEST_F(JoinHashMapTest, SerializeJoinHashTable) {
 }
 
 // NOLINTNEXTLINE
-TEST_F(JoinHashMapTest, FixedSizeJoinBuildFuncForNotNullableColumn) {
+TEST_F(JoinHashMapTest, BuildKeyConstructorForSerializedFixedSizeForNotNullableColumn) {
     JoinHashTableItems table_items;
     HashTableProbeState probe_state;
     uint32_t build_row_count = 9000;
@@ -2190,8 +2253,14 @@ TEST_F(JoinHashMapTest, FixedSizeJoinBuildFuncForNotNullableColumn) {
     table_items.join_keys.emplace_back(JoinKeyDesc{&_int_type, false, nullptr});
 
     // Construct Hash Table
-    FixedSizeJoinBuildFunc<TYPE_BIGINT>::prepare(_runtime_state.get(), &table_items);
-    FixedSizeJoinBuildFunc<TYPE_BIGINT>::construct_hash_table(_runtime_state.get(), &table_items, &probe_state);
+    using BuildKeyConstructor = BuildKeyConstructorForSerializedFixedSize<LogicalType::TYPE_BIGINT>;
+    using JoinHashMapMethod = BucketChainedJoinHashMap<LogicalType::TYPE_BIGINT>;
+
+    BuildKeyConstructor::prepare(_runtime_state.get(), &table_items);
+    BuildKeyConstructor::build_key(_runtime_state.get(), &table_items);
+    JoinHashMapMethod::build_prepare(_runtime_state.get(), &table_items);
+    JoinHashMapMethod::construct_hash_table(&table_items, BuildKeyConstructor::get_key_data(table_items),
+                                            BuildKeyConstructor::get_is_nulls(table_items));
 
     // Check
     check_build_index(table_items.first, table_items.next, build_row_count);
@@ -2199,7 +2268,7 @@ TEST_F(JoinHashMapTest, FixedSizeJoinBuildFuncForNotNullableColumn) {
 }
 
 // NOLINTNEXTLINE
-TEST_F(JoinHashMapTest, FixedSizeJoinBuildFuncForNullableColumn) {
+TEST_F(JoinHashMapTest, BuildKeyConstructorForSerializedFixedSizeForNullableColumn) {
     JoinHashTableItems table_items;
     HashTableProbeState probe_state;
     uint32_t build_row_count = 9000;
@@ -2225,8 +2294,14 @@ TEST_F(JoinHashMapTest, FixedSizeJoinBuildFuncForNullableColumn) {
     table_items.join_keys.emplace_back(JoinKeyDesc{&_int_type, false, nullptr});
 
     // Construct Hash Table
-    FixedSizeJoinBuildFunc<TYPE_BIGINT>::prepare(_runtime_state.get(), &table_items);
-    FixedSizeJoinBuildFunc<TYPE_BIGINT>::construct_hash_table(_runtime_state.get(), &table_items, &probe_state);
+    using BuildKeyConstructor = BuildKeyConstructorForSerializedFixedSize<LogicalType::TYPE_BIGINT>;
+    using JoinHashMapMethod = BucketChainedJoinHashMap<LogicalType::TYPE_BIGINT>;
+
+    BuildKeyConstructor::prepare(_runtime_state.get(), &table_items);
+    BuildKeyConstructor::build_key(_runtime_state.get(), &table_items);
+    JoinHashMapMethod::build_prepare(_runtime_state.get(), &table_items);
+    JoinHashMapMethod::construct_hash_table(&table_items, BuildKeyConstructor::get_key_data(table_items),
+                                            BuildKeyConstructor::get_is_nulls(table_items));
 
     // Check
     check_build_index(table_items.first, table_items.next, build_row_count);
@@ -2234,7 +2309,7 @@ TEST_F(JoinHashMapTest, FixedSizeJoinBuildFuncForNullableColumn) {
 }
 
 // NOLINTNEXTLINE
-TEST_F(JoinHashMapTest, FixedSizeJoinBuildFuncForPartialNullableColumn) {
+TEST_F(JoinHashMapTest, BuildKeyConstructorForSerializedFixedSizeForPartialNullableColumn) {
     JoinHashTableItems table_items;
     HashTableProbeState probe_state;
     uint32_t build_row_count = 9000;
@@ -2260,8 +2335,14 @@ TEST_F(JoinHashMapTest, FixedSizeJoinBuildFuncForPartialNullableColumn) {
     table_items.join_keys.emplace_back(JoinKeyDesc{&_int_type, false, nullptr});
 
     // Construct Hash Table
-    FixedSizeJoinBuildFunc<TYPE_BIGINT>::prepare(_runtime_state.get(), &table_items);
-    FixedSizeJoinBuildFunc<TYPE_BIGINT>::construct_hash_table(_runtime_state.get(), &table_items, &probe_state);
+    using BuildKeyConstructor = BuildKeyConstructorForSerializedFixedSize<LogicalType::TYPE_BIGINT>;
+    using JoinHashMapMethod = BucketChainedJoinHashMap<LogicalType::TYPE_BIGINT>;
+
+    BuildKeyConstructor::prepare(_runtime_state.get(), &table_items);
+    BuildKeyConstructor::build_key(_runtime_state.get(), &table_items);
+    JoinHashMapMethod::build_prepare(_runtime_state.get(), &table_items);
+    JoinHashMapMethod::construct_hash_table(&table_items, BuildKeyConstructor::get_key_data(table_items),
+                                            BuildKeyConstructor::get_is_nulls(table_items));
 
     // Check
     auto nulls = create_bools(build_row_count, 4);
@@ -2270,7 +2351,7 @@ TEST_F(JoinHashMapTest, FixedSizeJoinBuildFuncForPartialNullableColumn) {
 }
 
 // NOLINTNEXTLINE
-TEST_F(JoinHashMapTest, SerializedJoinBuildFuncForNotNullableColumn) {
+TEST_F(JoinHashMapTest, BuildKeyConstructorForSerializedForNotNullableColumn) {
     JoinHashTableItems table_items;
     HashTableProbeState probe_state;
     uint32_t build_row_count = 9000;
@@ -2294,8 +2375,14 @@ TEST_F(JoinHashMapTest, SerializedJoinBuildFuncForNotNullableColumn) {
     table_items.join_keys.emplace_back(JoinKeyDesc{&_int_type, false, nullptr});
 
     // Construct Hash Table
-    SerializedJoinBuildFunc::prepare(_runtime_state.get(), &table_items);
-    SerializedJoinBuildFunc::construct_hash_table(_runtime_state.get(), &table_items, &probe_state);
+    using BuildKeyConstructor = BuildKeyConstructorForSerialized;
+    using JoinHashMapMethod = BucketChainedJoinHashMap<LogicalType::TYPE_VARCHAR>;
+
+    BuildKeyConstructor::prepare(_runtime_state.get(), &table_items);
+    BuildKeyConstructor::build_key(_runtime_state.get(), &table_items);
+    JoinHashMapMethod::build_prepare(_runtime_state.get(), &table_items);
+    JoinHashMapMethod::construct_hash_table(&table_items, BuildKeyConstructor::get_key_data(table_items),
+                                            BuildKeyConstructor::get_is_nulls(table_items));
 
     // Check
     check_build_index(table_items.first, table_items.next, build_row_count);
@@ -2303,7 +2390,7 @@ TEST_F(JoinHashMapTest, SerializedJoinBuildFuncForNotNullableColumn) {
 }
 
 // NOLINTNEXTLINE
-TEST_F(JoinHashMapTest, SerializedJoinBuildFuncForNullableColumn) {
+TEST_F(JoinHashMapTest, BuildKeyConstructorForSerializedForNullableColumn) {
     JoinHashTableItems table_items;
     HashTableProbeState probe_state;
     uint32_t build_row_count = 9000;
@@ -2329,8 +2416,14 @@ TEST_F(JoinHashMapTest, SerializedJoinBuildFuncForNullableColumn) {
     table_items.join_keys.emplace_back(JoinKeyDesc{&_int_type, false, nullptr});
 
     // Construct Hash Table
-    SerializedJoinBuildFunc::prepare(_runtime_state.get(), &table_items);
-    SerializedJoinBuildFunc::construct_hash_table(_runtime_state.get(), &table_items, &probe_state);
+    using BuildKeyConstructor = BuildKeyConstructorForSerialized;
+    using JoinHashMapMethod = BucketChainedJoinHashMap<LogicalType::TYPE_VARCHAR>;
+
+    BuildKeyConstructor::prepare(_runtime_state.get(), &table_items);
+    BuildKeyConstructor::build_key(_runtime_state.get(), &table_items);
+    JoinHashMapMethod::build_prepare(_runtime_state.get(), &table_items);
+    JoinHashMapMethod::construct_hash_table(&table_items, BuildKeyConstructor::get_key_data(table_items),
+                                            BuildKeyConstructor::get_is_nulls(table_items));
 
     // Check
     check_build_index(table_items.first, table_items.next, build_row_count);
@@ -2338,7 +2431,7 @@ TEST_F(JoinHashMapTest, SerializedJoinBuildFuncForNullableColumn) {
 }
 
 // NOLINTNEXTLINE
-TEST_F(JoinHashMapTest, SerializedJoinBuildFuncForPartialNullColumn) {
+TEST_F(JoinHashMapTest, BuildKeyConstructorForSerializedForPartialNullColumn) {
     JoinHashTableItems table_items;
     HashTableProbeState probe_state;
     uint32_t build_row_count = 9000;
@@ -2364,8 +2457,14 @@ TEST_F(JoinHashMapTest, SerializedJoinBuildFuncForPartialNullColumn) {
     table_items.join_keys.emplace_back(JoinKeyDesc{&_int_type, false, nullptr});
 
     // Construct Hash Table
-    SerializedJoinBuildFunc::prepare(_runtime_state.get(), &table_items);
-    SerializedJoinBuildFunc::construct_hash_table(_runtime_state.get(), &table_items, &probe_state);
+    using BuildKeyConstructor = BuildKeyConstructorForSerialized;
+    using JoinHashMapMethod = BucketChainedJoinHashMap<LogicalType::TYPE_VARCHAR>;
+
+    BuildKeyConstructor::prepare(_runtime_state.get(), &table_items);
+    BuildKeyConstructor::build_key(_runtime_state.get(), &table_items);
+    JoinHashMapMethod::build_prepare(_runtime_state.get(), &table_items);
+    JoinHashMapMethod::construct_hash_table(&table_items, BuildKeyConstructor::get_key_data(table_items),
+                                            BuildKeyConstructor::get_is_nulls(table_items));
 
     // Check
     auto nulls = create_bools(build_row_count, 4);
@@ -2777,8 +2876,8 @@ TEST_F(JoinHashMapTest, NullAwareAntiJoinTest) {
     this->prepare_probe_data(&probe_data, probe_row_count);
 
     auto join_hash_map = std::make_unique<JoinHashMapForOneKey(TYPE_INT)>(&table_items, &probe_state);
-    join_hash_map->_probe_from_ht_for_null_aware_anti_join_with_other_conjunct<true>(_runtime_state.get(), build_data,
-                                                                                     probe_data);
+    join_hash_map->_probe_from_ht_for_null_aware_anti_join_with_other_conjunct<true, false>(_runtime_state.get(),
+                                                                                            build_data, probe_data);
 
     // null in probe table match all build table rows
     ASSERT_EQ(probe_state.probe_match_index[0], build_row_count);
@@ -2929,4 +3028,336 @@ TEST_F(JoinHashMapTest, TestLazyPredicateSlotsNormal) {
     check_lazy_build_output_slot_ids(*ht.table_items(), {4});
     check_not_output_slot_ids(*ht.table_items(), {0, 3});
 }
+
+TEST_F(JoinHashMapTest, TestBuildKeyConstructorForOneKeyNonNullable) {
+    using BuildKeyBuilder = BuildKeyConstructorForOneKey<LogicalType::TYPE_INT>;
+
+    const auto int_type = TypeDescriptor::from_logical_type(LogicalType::TYPE_INT);
+
+    JoinHashTableItems table_items;
+    table_items.row_count = 10;
+    table_items.join_keys.emplace_back(JoinKeyDesc{&int_type, false, nullptr});
+
+    auto build_column = ColumnHelper::create_column(int_type, false);
+    build_column->append_datum(Datum(0));
+    build_column->append(*JoinHashMapTest::create_int32_column(10, 0), 0, 10);
+    table_items.key_columns.emplace_back(std::move(build_column));
+
+    BuildKeyBuilder::prepare(nullptr, &table_items);
+    BuildKeyBuilder::build_key(nullptr, &table_items);
+
+    const auto& keys = BuildKeyBuilder::get_key_data(table_items);
+    ASSERT_EQ(keys.size(), 11);
+    for (uint32_t i = 0; i < 10; ++i) {
+        ASSERT_EQ(keys[1 + i], i);
+    }
+
+    const auto* is_nulls = BuildKeyBuilder::get_is_nulls(table_items);
+    ASSERT_EQ(is_nulls, nullptr);
+}
+
+TEST_F(JoinHashMapTest, TestBuildKeyConstructorForOneKeyNullable) {
+    using BuildKeyBuilder = BuildKeyConstructorForOneKey<LogicalType::TYPE_INT>;
+
+    const auto int_type = TypeDescriptor::from_logical_type(LogicalType::TYPE_INT);
+
+    JoinHashTableItems table_items;
+    table_items.join_keys.emplace_back(JoinKeyDesc{&int_type, false, nullptr});
+
+    auto build_column = ColumnHelper::create_column(int_type, true);
+    build_column->append_datum(Datum(0));
+    build_column->append(*JoinHashMapTest::create_int32_column(10, 0), 0, 10);
+    table_items.key_columns.emplace_back(build_column);
+
+    BuildKeyBuilder::prepare(nullptr, &table_items);
+
+    {
+        table_items.row_count = 10;
+        BuildKeyBuilder::build_key(nullptr, &table_items);
+
+        const auto& keys = BuildKeyBuilder::get_key_data(table_items);
+        ASSERT_EQ(keys.size(), 11);
+        for (uint32_t i = 0; i < 10; ++i) {
+            ASSERT_EQ(keys[1 + i], i);
+        }
+
+        const auto* is_nulls = BuildKeyBuilder::get_is_nulls(table_items);
+        ASSERT_EQ(is_nulls, nullptr);
+    }
+
+    {
+        build_column->append_nulls(3);
+        table_items.row_count = 13;
+        BuildKeyBuilder::build_key(nullptr, &table_items);
+
+        const auto& keys = BuildKeyBuilder::get_key_data(table_items);
+        ASSERT_EQ(keys.size(), 14);
+        for (uint32_t i = 0; i < 10; ++i) {
+            ASSERT_EQ(keys[1 + i], i);
+        }
+
+        const auto* is_nulls = BuildKeyBuilder::get_is_nulls(table_items);
+        for (uint32_t i = 0; i < 13; ++i) {
+            ASSERT_EQ((*is_nulls)[1 + i] != 0, i >= 10);
+        }
+    }
+}
+
+TEST_F(JoinHashMapTest, TestBuildKeyConstructorForSerializedFixedSizeNonNullable) {
+    using BuildKeyBuilder = BuildKeyConstructorForSerializedFixedSize<LogicalType::TYPE_BIGINT>;
+
+    const auto int_type = TypeDescriptor::from_logical_type(LogicalType::TYPE_INT);
+
+    JoinHashTableItems table_items;
+    table_items.row_count = 10;
+    table_items.join_keys.emplace_back(JoinKeyDesc{&int_type, false, nullptr});
+    table_items.join_keys.emplace_back(JoinKeyDesc{&int_type, false, nullptr});
+
+    auto build_column1 = ColumnHelper::create_column(int_type, false);
+    build_column1->append_datum(Datum(0));
+    build_column1->append(*JoinHashMapTest::create_int32_column(10, 0), 0, 10);
+    table_items.key_columns.emplace_back(build_column1);
+    auto build_column2 = ColumnHelper::create_column(int_type, false);
+    build_column2->append_datum(Datum(0));
+    build_column2->append(*JoinHashMapTest::create_int32_column(10, 100), 0, 10);
+    table_items.key_columns.emplace_back(build_column2);
+
+    BuildKeyBuilder::prepare(nullptr, &table_items);
+    BuildKeyBuilder::build_key(nullptr, &table_items);
+
+    const auto& keys = BuildKeyBuilder::get_key_data(table_items);
+    ASSERT_EQ(keys.size(), 11);
+    for (uint64_t i = 0; i < 10; ++i) {
+        const uint64_t expected_value = ((100 + i) << 32) | i;
+        ASSERT_EQ(keys[1 + i], expected_value);
+    }
+
+    const auto* is_nulls = BuildKeyBuilder::get_is_nulls(table_items);
+    ASSERT_EQ(is_nulls, nullptr);
+}
+
+TEST_F(JoinHashMapTest, TestBuildKeyConstructorForSerializedFixedSizeNullable) {
+    using BuildKeyBuilder = BuildKeyConstructorForSerializedFixedSize<LogicalType::TYPE_BIGINT>;
+
+    const auto int_type = TypeDescriptor::from_logical_type(LogicalType::TYPE_INT);
+
+    JoinHashTableItems table_items;
+    table_items.join_keys.emplace_back(JoinKeyDesc{&int_type, false, nullptr});
+    table_items.join_keys.emplace_back(JoinKeyDesc{&int_type, false, nullptr});
+
+    auto build_column1 = ColumnHelper::create_column(int_type, true);
+    build_column1->append_datum(Datum(0));
+    build_column1->append(*JoinHashMapTest::create_int32_column(10, 0), 0, 10);
+    table_items.key_columns.emplace_back(build_column1);
+    auto build_column2 = ColumnHelper::create_column(int_type, true);
+    build_column2->append_datum(Datum(0));
+    build_column2->append(*JoinHashMapTest::create_int32_column(10, 100), 0, 10);
+    table_items.key_columns.emplace_back(build_column2);
+
+    {
+        table_items.row_count = 10;
+        BuildKeyBuilder::prepare(nullptr, &table_items);
+        BuildKeyBuilder::build_key(nullptr, &table_items);
+
+        const auto& keys = BuildKeyBuilder::get_key_data(table_items);
+        ASSERT_EQ(keys.size(), 11);
+        for (uint64_t i = 0; i < 10; ++i) {
+            const uint64_t expected_value = ((100 + i) << 32) | i;
+            ASSERT_EQ(keys[1 + i], expected_value);
+        }
+
+        const auto* is_nulls = BuildKeyBuilder::get_is_nulls(table_items);
+        ASSERT_EQ(is_nulls, nullptr);
+    }
+
+    {
+        build_column1->append_nulls(3);
+        build_column2->append_datum(Datum(1));
+        build_column2->append_nulls(2);
+        table_items.row_count = 13;
+        BuildKeyBuilder::prepare(nullptr, &table_items);
+        BuildKeyBuilder::build_key(nullptr, &table_items);
+
+        const auto& keys = BuildKeyBuilder::get_key_data(table_items);
+        ASSERT_EQ(keys.size(), 14);
+        for (uint64_t i = 0; i < 10; ++i) {
+            const uint64_t expected_value = ((100 + i) << 32) | i;
+            ASSERT_EQ(keys[1 + i], expected_value);
+        }
+
+        const auto* is_nulls = BuildKeyBuilder::get_is_nulls(table_items);
+        for (uint32_t i = 0; i < 13; ++i) {
+            ASSERT_EQ((*is_nulls)[1 + i] != 0, i >= 10);
+        }
+    }
+}
+
+TEST_F(JoinHashMapTest, TestProbeKeyConstructorForSerializedFixedSizeNullable) {
+    using ProbeKeyBuilder = ProbeKeyConstructorForSerializedFixedSize<LogicalType::TYPE_BIGINT>;
+
+    const auto int_type = TypeDescriptor::from_logical_type(LogicalType::TYPE_INT);
+    JoinHashTableItems table_items;
+    table_items.join_keys.emplace_back(JoinKeyDesc{&int_type, false, nullptr});
+    table_items.join_keys.emplace_back(JoinKeyDesc{&int_type, false, nullptr});
+
+    HashTableProbeState probe_state;
+
+    auto probe_column1 = ColumnHelper::create_column(int_type, true);
+    probe_column1->append(*JoinHashMapTest::create_int32_column(10, 0), 0, 10);
+    auto probe_column2 = ColumnHelper::create_column(int_type, true);
+    probe_column2->append(*JoinHashMapTest::create_int32_column(10, 100), 0, 10);
+
+    Columns probe_columns{probe_column1, probe_column2};
+    probe_state.key_columns = &probe_columns;
+
+    ProbeKeyBuilder::prepare(_runtime_state.get(), &probe_state);
+
+    {
+        probe_state.probe_row_count = 10;
+        ProbeKeyBuilder::build_key(table_items, &probe_state);
+
+        const auto& keys = ProbeKeyBuilder::get_key_data(probe_state);
+        for (uint64_t i = 0; i < 10; ++i) {
+            const uint64_t expected_value = ((100 + i) << 32) | i;
+            ASSERT_EQ(keys[i], expected_value);
+        }
+
+        const auto* is_nulls = probe_state.null_array;
+        ASSERT_EQ(is_nulls, nullptr);
+    }
+
+    {
+        probe_column1->append_nulls(3);
+        probe_column2->append_datum(Datum(1));
+        probe_column2->append_nulls(2);
+        probe_state.probe_row_count = 13;
+        ProbeKeyBuilder::build_key(table_items, &probe_state);
+
+        const auto& keys = ProbeKeyBuilder::get_key_data(probe_state);
+        for (uint64_t i = 0; i < 10; ++i) {
+            const uint64_t expected_value = ((100 + i) << 32) | i;
+            ASSERT_EQ(keys[i], expected_value);
+        }
+
+        const auto* is_nulls = probe_state.null_array;
+        for (uint32_t i = 0; i < 13; ++i) {
+            ASSERT_EQ((*is_nulls)[i] != 0, i >= 10);
+        }
+    }
+}
+
+TEST_F(JoinHashMapTest, TestBuildKeyConstructorForSerializedNullable) {
+    using BuildKeyBuilder = BuildKeyConstructorForSerialized;
+
+    const auto int_type = TypeDescriptor::from_logical_type(LogicalType::TYPE_INT);
+
+    JoinHashTableItems table_items;
+    table_items.join_keys.emplace_back(JoinKeyDesc{&int_type, false, nullptr});
+    table_items.join_keys.emplace_back(JoinKeyDesc{&int_type, false, nullptr});
+
+    auto build_column1 = ColumnHelper::create_column(int_type, true);
+    build_column1->append_datum(Datum(0));
+    build_column1->append(*JoinHashMapTest::create_int32_column(10, 0), 0, 10);
+    table_items.key_columns.emplace_back(build_column1);
+    auto build_column2 = ColumnHelper::create_column(int_type, true);
+    build_column2->append_datum(Datum(0));
+    build_column2->append(*JoinHashMapTest::create_int32_column(10, 100), 0, 10);
+    table_items.key_columns.emplace_back(build_column2);
+
+    {
+        table_items.row_count = 10;
+        BuildKeyBuilder::prepare(_runtime_state.get(), &table_items);
+        BuildKeyBuilder::build_key(_runtime_state.get(), &table_items);
+
+        const auto& keys = BuildKeyBuilder::get_key_data(table_items);
+        ASSERT_EQ(keys.size(), 11);
+        for (uint64_t i = 0; i < 10; ++i) {
+            const uint64_t expected_value = ((100 + i) << 32) | i;
+            Slice expected_slice(reinterpret_cast<const char*>(&expected_value), sizeof(expected_value));
+            ASSERT_EQ(keys[1 + i], expected_slice);
+        }
+
+        const auto* is_nulls = BuildKeyBuilder::get_is_nulls(table_items);
+        ASSERT_EQ(is_nulls, nullptr);
+    }
+
+    {
+        build_column1->append_nulls(3);
+        build_column2->append_datum(Datum(1));
+        build_column2->append_nulls(2);
+        table_items.row_count = 13;
+        BuildKeyBuilder::prepare(_runtime_state.get(), &table_items);
+        BuildKeyBuilder::build_key(_runtime_state.get(), &table_items);
+
+        const auto& keys = BuildKeyBuilder::get_key_data(table_items);
+        ASSERT_EQ(keys.size(), 14);
+        for (uint64_t i = 0; i < 10; ++i) {
+            const uint64_t expected_value = ((100 + i) << 32) | i;
+            Slice expected_slice(reinterpret_cast<const char*>(&expected_value), sizeof(expected_value));
+            ASSERT_EQ(keys[1 + i], expected_slice);
+        }
+
+        const auto* is_nulls = BuildKeyBuilder::get_is_nulls(table_items);
+        for (uint32_t i = 0; i < 13; ++i) {
+            ASSERT_EQ((*is_nulls)[1 + i] != 0, i >= 10);
+        }
+    }
+}
+
+TEST_F(JoinHashMapTest, TestProbeKeyConstructorForSerializedNullable) {
+    using ProbeKeyBuilder = ProbeKeyConstructorForSerialized;
+
+    const auto int_type = TypeDescriptor::from_logical_type(LogicalType::TYPE_INT);
+    JoinHashTableItems table_items;
+    table_items.join_keys.emplace_back(JoinKeyDesc{&int_type, false, nullptr});
+    table_items.join_keys.emplace_back(JoinKeyDesc{&int_type, false, nullptr});
+
+    HashTableProbeState probe_state;
+
+    auto probe_column1 = ColumnHelper::create_column(int_type, true);
+    probe_column1->append(*JoinHashMapTest::create_int32_column(10, 0), 0, 10);
+    auto probe_column2 = ColumnHelper::create_column(int_type, true);
+    probe_column2->append(*JoinHashMapTest::create_int32_column(10, 100), 0, 10);
+
+    Columns probe_columns{probe_column1, probe_column2};
+    probe_state.key_columns = &probe_columns;
+
+    ProbeKeyBuilder::prepare(_runtime_state.get(), &probe_state);
+
+    {
+        probe_state.probe_row_count = 10;
+        ProbeKeyBuilder::build_key(table_items, &probe_state);
+
+        const auto& keys = ProbeKeyBuilder::get_key_data(probe_state);
+        for (uint64_t i = 0; i < 10; ++i) {
+            const uint64_t expected_value = ((100 + i) << 32) | i;
+            Slice expected_slice(reinterpret_cast<const char*>(&expected_value), sizeof(expected_value));
+            ASSERT_EQ(keys[i], expected_slice);
+        }
+
+        const auto* is_nulls = probe_state.null_array;
+        ASSERT_EQ(is_nulls, nullptr);
+    }
+
+    {
+        probe_column1->append_nulls(3);
+        probe_column2->append_datum(Datum(1));
+        probe_column2->append_nulls(2);
+        probe_state.probe_row_count = 13;
+        ProbeKeyBuilder::build_key(table_items, &probe_state);
+
+        const auto& keys = ProbeKeyBuilder::get_key_data(probe_state);
+        for (uint64_t i = 0; i < 10; ++i) {
+            const uint64_t expected_value = ((100 + i) << 32) | i;
+            Slice expected_slice(reinterpret_cast<const char*>(&expected_value), sizeof(expected_value));
+            ASSERT_EQ(keys[i], expected_slice);
+        }
+
+        const auto* is_nulls = probe_state.null_array;
+        for (uint32_t i = 0; i < 13; ++i) {
+            ASSERT_EQ((*is_nulls)[i] != 0, i >= 10);
+        }
+    }
+}
+
 } // namespace starrocks

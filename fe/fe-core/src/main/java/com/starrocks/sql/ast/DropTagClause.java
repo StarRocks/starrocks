@@ -14,7 +14,6 @@
 
 package com.starrocks.sql.ast;
 
-import com.starrocks.alter.AlterOpType;
 import com.starrocks.sql.parser.NodePosition;
 
 public class DropTagClause extends AlterTableClause {
@@ -23,7 +22,7 @@ public class DropTagClause extends AlterTableClause {
     private final boolean ifExists;
 
     public DropTagClause(NodePosition pos, String tag, boolean ifExists) {
-        super(AlterOpType.ALTER_TAG, pos);
+        super(pos);
         this.tag = tag;
         this.ifExists = ifExists;
     }
@@ -38,6 +37,6 @@ public class DropTagClause extends AlterTableClause {
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitDropTagClause(this, context);
+        return ((AstVisitorExtendInterface<R, C>) visitor).visitDropTagClause(this, context);
     }
 }

@@ -17,13 +17,13 @@ package com.starrocks.sql.spm;
 import com.starrocks.analysis.AnalyticExpr;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.OrderByElement;
-import com.starrocks.analysis.ParseNode;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.Subquery;
-import com.starrocks.sql.ast.AstVisitor;
+import com.starrocks.sql.ast.AstVisitorExtendInterface;
 import com.starrocks.sql.ast.CTERelation;
 import com.starrocks.sql.ast.FieldReference;
 import com.starrocks.sql.ast.JoinRelation;
+import com.starrocks.sql.ast.ParseNode;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.SelectRelation;
 import com.starrocks.sql.ast.SetOperationRelation;
@@ -37,7 +37,7 @@ import java.util.Objects;
 /*
  * This class is used to compare two ASTs
  */
-public class SPMAstCheckVisitor implements AstVisitor<Boolean, ParseNode> {
+public class SPMAstCheckVisitor implements AstVisitorExtendInterface<Boolean, ParseNode> {
     protected static <T> T cast(ParseNode node) {
         return (T) node;
     }

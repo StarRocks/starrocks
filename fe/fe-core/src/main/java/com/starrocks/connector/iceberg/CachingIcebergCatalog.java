@@ -14,6 +14,9 @@
 
 package com.starrocks.connector.iceberg;
 
+import com.github.benmanes.caffeine.cache.Caffeine;
+import com.github.benmanes.caffeine.cache.RemovalCause;
+import com.github.benmanes.caffeine.cache.Weigher;
 import com.google.common.cache.Cache;
 import com.google.common.cache.CacheBuilder;
 import com.google.common.cache.CacheLoader;
@@ -38,6 +41,7 @@ import org.apache.iceberg.DeleteFile;
 import org.apache.iceberg.ManifestFile;
 import org.apache.iceberg.PartitionSpec;
 import org.apache.iceberg.Schema;
+import org.apache.iceberg.SortOrder;
 import org.apache.iceberg.StarRocksIcebergTableScan;
 import org.apache.iceberg.Table;
 import org.apache.iceberg.TableMetadata;
@@ -46,6 +50,7 @@ import org.apache.iceberg.view.View;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.apache.parquet.Strings;
+import org.apache.spark.util.SizeEstimator;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -73,8 +78,8 @@ public class CachingIcebergCatalog implements IcebergCatalog {
     private final ExecutorService backgroundExecutor;
 
     private final IcebergCatalogProperties icebergProperties;
-    private final Cache<String, Set<DataFile>> dataFileCache;
-    private final Cache<String, Set<DeleteFile>> deleteFileCache;
+    private final com.github.benmanes.caffeine.cache.Cache<String, Set<DataFile>> dataFileCache;
+    private final com.github.benmanes.caffeine.cache.Cache<String, Set<DeleteFile>> deleteFileCache;
     private final Map<IcebergTableName, Long> tableLatestAccessTime = new ConcurrentHashMap<>();
     private final Map<IcebergTableName, Long> tableLatestRefreshTime = new ConcurrentHashMap<>();
 
@@ -99,14 +104,49 @@ public class CachingIcebergCatalog implements IcebergCatalog {
                                     .setNativeTable(nativeTable).build();
                     return delegate.getPartitions(icebergTable, key.snapshotId, null);
                 }));
-        this.dataFileCache = enableCache ?
-                newCacheBuilder(
-                        icebergProperties.getIcebergMetaCacheTtlSec(), icebergProperties.getIcebergManifestCacheMaxNum()).build()
-                : null;
-        this.deleteFileCache = enableCache ?
-                newCacheBuilder(
-                        icebergProperties.getIcebergMetaCacheTtlSec(), icebergProperties.getIcebergManifestCacheMaxNum()).build()
-                : null;
+
+        long dataFileCacheSize = Math.round(Runtime.getRuntime().maxMemory() *
+                icebergProperties.getIcebergDataFileCacheMemoryUsageRatio());
+        long deleteFileCacheSize = Math.round(Runtime.getRuntime().maxMemory() *
+                icebergProperties.getIcebergDeleteFileCacheMemoryUsageRatio());
+
+        this.dataFileCache = enableCache ? Caffeine.newBuilder()
+                .executor(executorService)
+                .expireAfterWrite(icebergProperties.getIcebergMetaCacheTtlSec(), SECONDS)
+                .weigher((Weigher<String, Set<DataFile>>) (String key, Set<DataFile> files) -> {
+                    long size = SizeEstimator.estimate(key);
+                    if (!files.isEmpty()) {
+                        size += 1L * SizeEstimator.estimate(files.iterator().next()) * files.size();
+                    }
+                    return (size > Integer.MAX_VALUE) ? Integer.MAX_VALUE : (int) size;
+                })
+                .maximumWeight(dataFileCacheSize)
+                .removalListener((String key, Set<DataFile> value, RemovalCause cause) -> {
+                    LOG.debug(String.format("Key=%s, Value.size=%d, Cause=%s",
+                            key,
+                            value != null ? value.size() : 0,
+                            cause));
+                })
+                .build() : null;
+        this.deleteFileCache = enableCache ? Caffeine.newBuilder()
+                .executor(executorService)
+                .expireAfterWrite(icebergProperties.getIcebergMetaCacheTtlSec(), SECONDS)
+                .weigher((Weigher<String, Set<DeleteFile>>) (String key, Set<DeleteFile> files) -> {
+                    long size = SizeEstimator.estimate(key);
+                    if (!files.isEmpty()) {
+                        size += 1L * SizeEstimator.estimate(files.iterator().next()) * files.size();
+                    }
+                    return (size > Integer.MAX_VALUE) ? Integer.MAX_VALUE : (int) size;
+                })
+                .maximumWeight(deleteFileCacheSize)
+                .removalListener((String key, Set<DeleteFile> value, RemovalCause cause) -> {
+                    LOG.debug(String.format("Key=%s, Value.size=%d, Cause=%s",
+                            key,
+                            value != null ? value.size() : 0,
+                            cause));
+                })
+                .build() : null;
+
         this.backgroundExecutor = executorService;
     }
 
@@ -177,8 +217,9 @@ public class CachingIcebergCatalog implements IcebergCatalog {
                                Schema schema,
                                PartitionSpec partitionSpec,
                                String location,
+                               SortOrder sortOrder,
                                Map<String, String> properties) {
-        return delegate.createTable(connectContext, dbName, tableName, schema, partitionSpec, location, properties);
+        return delegate.createTable(connectContext, dbName, tableName, schema, partitionSpec, location, sortOrder, properties);
     }
 
     @Override
@@ -211,6 +252,11 @@ public class CachingIcebergCatalog implements IcebergCatalog {
     @Override
     public boolean dropView(ConnectContext connectContext, String dbName, String viewName) {
         return delegate.dropView(connectContext, dbName, viewName);
+    }
+
+    @Override
+    public boolean registerTable(ConnectContext context, String dbName, String tableName, String metadataFileLocation) {
+        return delegate.registerTable(context, dbName, tableName, metadataFileLocation);
     }
 
     public View getView(ConnectContext connectContext, String dbName, String viewName) {

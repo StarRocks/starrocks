@@ -15,7 +15,6 @@
 
 package com.starrocks.sql.ast;
 
-import com.starrocks.analysis.RedirectStatus;
 import com.starrocks.sql.parser.NodePosition;
 
 import java.util.List;
@@ -54,12 +53,7 @@ public class AdminCheckTabletsStmt extends DdlStmt {
     }
 
     @Override
-    public RedirectStatus getRedirectStatus() {
-        return RedirectStatus.FORWARD_NO_SYNC;
-    }
-
-    @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitAdminCheckTabletsStatement(this, context);
+        return ((AstVisitorExtendInterface<R, C>) visitor).visitAdminCheckTabletsStatement(this, context);
     }
 }

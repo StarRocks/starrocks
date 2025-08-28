@@ -33,6 +33,7 @@ public class IsNullPredicateOperator extends PredicateOperator {
         super(OperatorType.IS_NULL, arguments);
         this.isNotNull = isNotNull;
         this.isRedundant = isRedundant;
+        incrDepth(arguments);
     }
 
     public boolean isNotNull() {
@@ -55,18 +56,18 @@ public class IsNullPredicateOperator extends PredicateOperator {
 
     @Override
     public <R, C> R accept(ScalarOperatorVisitor<R, C> visitor, C context) {
-        return visitor.visitIsNullPredicate(this, context);
+        return  visitor.visitIsNullPredicate(this, context);
     }
 
     @Override
-    public boolean equals(Object o) {
+    public boolean equalsSelf(Object o) {
         if (this == o) {
             return true;
         }
         if (o == null || getClass() != o.getClass()) {
             return false;
         }
-        if (!super.equals(o)) {
+        if (!super.equalsSelf(o)) {
             return false;
         }
         IsNullPredicateOperator that = (IsNullPredicateOperator) o;
@@ -74,7 +75,7 @@ public class IsNullPredicateOperator extends PredicateOperator {
     }
 
     @Override
-    public int hashCode() {
-        return Objects.hash(super.hashCode(), isNotNull);
+    public int hashCodeSelf() {
+        return Objects.hash(super.hashCodeSelf(), isNotNull);
     }
 }

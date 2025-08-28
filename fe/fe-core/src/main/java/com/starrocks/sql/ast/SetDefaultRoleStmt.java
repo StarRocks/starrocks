@@ -14,7 +14,6 @@
 
 package com.starrocks.sql.ast;
 
-import com.starrocks.analysis.RedirectStatus;
 import com.starrocks.sql.parser.NodePosition;
 
 import java.util.ArrayList;
@@ -22,23 +21,23 @@ import java.util.List;
 
 public class SetDefaultRoleStmt extends StatementBase {
 
-    private final UserIdentity userIdentity;
+    private final UserRef user;
     private final List<String> roles = new ArrayList<>();
     private final SetRoleType setRoleType;
 
-    public SetDefaultRoleStmt(UserIdentity userIdentity, SetRoleType setRoleType, List<String> roles) {
-        this(userIdentity, setRoleType, roles, NodePosition.ZERO);
+    public SetDefaultRoleStmt(UserRef user, SetRoleType setRoleType, List<String> roles) {
+        this(user, setRoleType, roles, NodePosition.ZERO);
     }
 
-    public SetDefaultRoleStmt(UserIdentity userIdentity, SetRoleType setRoleType, List<String> roles, NodePosition pos) {
+    public SetDefaultRoleStmt(UserRef user, SetRoleType setRoleType, List<String> roles, NodePosition pos) {
         super(pos);
-        this.userIdentity = userIdentity;
+        this.user = user;
         this.roles.addAll(roles);
         this.setRoleType = setRoleType;
     }
 
-    public UserIdentity getUserIdentity() {
-        return userIdentity;
+    public UserRef getUser() {
+        return user;
     }
 
     public SetRoleType getSetRoleType() {
@@ -51,11 +50,6 @@ public class SetDefaultRoleStmt extends StatementBase {
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitSetDefaultRoleStatement(this, context);
-    }
-
-    @Override
-    public RedirectStatus getRedirectStatus() {
-        return RedirectStatus.FORWARD_WITH_SYNC;
+        return ((AstVisitorExtendInterface<R, C>) visitor).visitSetDefaultRoleStatement(this, context);
     }
 }

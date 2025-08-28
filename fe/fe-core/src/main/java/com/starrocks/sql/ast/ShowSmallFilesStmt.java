@@ -12,26 +12,13 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.sql.ast;
 
-import com.starrocks.catalog.Column;
-import com.starrocks.catalog.ScalarType;
-import com.starrocks.qe.ShowResultSetMetaData;
 import com.starrocks.sql.parser.NodePosition;
 
-public class ShowSmallFilesStmt extends ShowStmt {
-    private static final ShowResultSetMetaData META_DATA =
-            ShowResultSetMetaData.builder()
-                    .addColumn(new Column("Id", ScalarType.createVarchar(32)))
-                    .addColumn(new Column("DbName", ScalarType.createVarchar(256)))
-                    .addColumn(new Column("GlobalStateMgr", ScalarType.createVarchar(32)))
-                    .addColumn(new Column("FileName", ScalarType.createVarchar(16)))
-                    .addColumn(new Column("FileSize", ScalarType.createVarchar(16)))
-                    .addColumn(new Column("IsContent", ScalarType.createVarchar(16)))
-                    .addColumn(new Column("MD5", ScalarType.createVarchar(16)))
-                    .build();
+import static com.starrocks.common.util.Util.normalizeName;
 
+public class ShowSmallFilesStmt extends ShowStmt {
     private String dbName;
 
     public ShowSmallFilesStmt(String dbName) {
@@ -40,7 +27,7 @@ public class ShowSmallFilesStmt extends ShowStmt {
 
     public ShowSmallFilesStmt(String dbName, NodePosition pos) {
         super(pos);
-        this.dbName = dbName;
+        this.dbName = normalizeName(dbName);
     }
 
     public String getDbName() {
@@ -48,16 +35,11 @@ public class ShowSmallFilesStmt extends ShowStmt {
     }
 
     public void setDbName(String dbName) {
-        this.dbName = dbName;
-    }
-
-    @Override
-    public ShowResultSetMetaData getMetaData() {
-        return META_DATA;
+        this.dbName = normalizeName(dbName);
     }
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitShowSmallFilesStatement(this, context);
+        return ((AstVisitorExtendInterface<R, C>) visitor).visitShowSmallFilesStatement(this, context);
     }
 }

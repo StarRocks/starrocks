@@ -15,11 +15,13 @@
 package com.starrocks.statistic.columns;
 
 import com.google.common.base.Splitter;
+import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.MetaNotFoundException;
+import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.scheduler.history.TableKeeper;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.AnalyzeTestUtil;
@@ -123,19 +125,6 @@ class ColumnUsageTest extends PlanTestBase {
                     "|analyze table t0 predicate columns|v1",
             "select v1, count(v2) from (select * from t0 order by v1 limit 100) r group by v1" +
                     "|analyze table t0 predicate columns|v1",
-            "select case when get_json_string(v_json, 'a') > 1 " +
-                    "   then get_json_string(v_json, 'b') else 'small' end as v1_case, " +
-                    "count(*) from tjson " +
-                    "group by 1" +
-                    "|analyze table tjson predicate columns|v_json",
-            "select case when get_json_string(vvv, 'a') > 1 " +
-                    "   then get_json_string(vvv, 'b') else 'small' end as v1_case, " +
-                    "count(*) from (" +
-                    "   select json_object('a', get_json_string(v_json, 'a'), " +
-                    "               'b', get_json_int(v_json, 'b')) as vvv " +
-                    "   from tjson) r " +
-                    "group by 1" +
-                    "|analyze table tjson predicate columns|v_json",
 
             // with join
             "select * from t0 join t1 on t0.v1 = t1.v4" +
@@ -256,6 +245,46 @@ class ColumnUsageTest extends PlanTestBase {
             Assertions.assertEquals(List.of("v1", "v2", "v3"), job0.getColumnNames());
             Config.statistic_auto_collect_small_table_size = defaultSmallTableSize;
             Config.statistic_auto_collect_max_predicate_column_size_on_sample_strategy = defaultPredicateColumnSize;
+        }
+    }
+
+    @Test
+    public void testColumnUsagePersist() {
+        // invalid column
+        {
+            String json = "{\"data\": [\"fe_id\", 1, 1, 1, \"NORMAL\", \"2025-01-01 00:00:00\", \"2025-01-01 " +
+                    "00:00:00\"]}";
+            Assertions.assertThrows(IllegalStateException.class,
+                    () -> PredicateColumnsStorage.ColumnUsageJsonRecord.fromJson(json));
+        }
+
+        // valid column
+        {
+            Table table = starRocksAssert.getTable(connectContext.getDatabase(), "t0");
+            String json = String.format("{\"data\": [\"fe_id\", %d, %d, %d, \"NORMAL\", \"2025-01-01 00:00:00\", " +
+                            "\"2025-01-01 00:00:00\"]}",
+                    starRocksAssert.getDb(connectContext.getDatabase()).getId(),
+                    table.getId(),
+                    table.getColumns().get(0).getUniqueId());
+            PredicateColumnsStorage.ColumnUsageJsonRecord record =
+                    PredicateColumnsStorage.ColumnUsageJsonRecord.fromJson(json);
+            Assertions.assertEquals(1, record.data.size());
+            Assertions.assertEquals(starRocksAssert.getDb(connectContext.getDatabase()).getId(),
+                    record.data.get(0).getColumnFullId().getDbId());
+            Assertions.assertEquals(table.getId(), record.data.get(0).getColumnFullId().getTableId());
+            Assertions.assertEquals(0, record.data.get(0).getColumnFullId().getColumnUniqueId());
+        }
+
+        {
+            ColumnUsage usage = new ColumnUsage(
+                    new ColumnFullId(1, 1, 1),
+                    new TableName("default_catalog", "d1", "t1"),
+                    ColumnUsage.UseCase.PREDICATE
+            );
+            String json = usage.toJson();
+
+            ColumnUsage restored = GsonUtils.GSON.fromJson(json, ColumnUsage.class);
+            Assertions.assertEquals(usage, restored);
         }
     }
 }

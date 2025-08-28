@@ -15,7 +15,6 @@
 
 package com.starrocks.sql.ast;
 
-import com.starrocks.analysis.RedirectStatus;
 import com.starrocks.sql.parser.NodePosition;
 
 // admin set frontend config ("key" = "value");
@@ -50,12 +49,7 @@ public class AdminSetConfigStmt extends DdlStmt {
     }
 
     @Override
-    public RedirectStatus getRedirectStatus() {
-        return RedirectStatus.FORWARD_NO_SYNC;
-    }
-
-    @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitAdminSetConfigStatement(this, context);
+        return ((AstVisitorExtendInterface<R, C>) visitor).visitAdminSetConfigStatement(this, context);
     }
 }

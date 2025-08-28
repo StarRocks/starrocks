@@ -2,7 +2,7 @@
 #include <cstddef>
 #include <cstdint>
 
-#include "util/hash_util.hpp"
+#include "util/hash_fwd.h"
 #include "util/slice.h"
 #include "util/unaligned_access.h"
 #if defined(__aarch64__)
@@ -44,8 +44,6 @@ public:
         return static_cast<size_t>(h + l);
     }
 };
-
-enum PhmapSeed { PhmapSeed1, PhmapSeed2 };
 
 template <int n, PhmapSeed seed>
 class phmap_mix_with_seed {
@@ -128,12 +126,13 @@ inline uint32_t crc_hash_32(const void* data, int32_t bytes, uint32_t hash) {
 
     // The lower half of the CRC hash has has poor uniformity, so swap the halves
     // for anyone who only uses the first several bits of the hash.
-    hash = (hash << 16u) | (hash >> 16u);
+    hash = phmap_mix<4>()(hash);
     return hash;
 #endif
 }
 
-inline uint64_t crc_hash_64(const void* data, int32_t length, uint64_t hash) {
+// NOTE: don't use it, only for test purpose. please use the crc_hash_64 instead
+inline uint64_t crc_hash_64_unmixed(const void* data, int32_t length, uint64_t hash) {
 #if defined(__x86_64__) && !defined(__SSE4_2__)
     return crc32(hash, (const unsigned char*)data, length);
 #else
@@ -163,16 +162,15 @@ inline uint64_t crc_hash_64(const void* data, int32_t length, uint64_t hash) {
 #else
 #error "Not supported architecture"
 #endif
-    p += sizeof(uint64_t);
+
     return hash;
 #endif
 }
 
-struct CRC_HASH_SEEDS {
-    // TODO: 0x811C9DC5 is not prime number
-    static const uint32_t CRC_HASH_SEED1 = 0x811C9DC5;
-    static const uint32_t CRC_HASH_SEED2 = 0x811C9DD7;
-};
+inline uint64_t crc_hash_64(const void* data, int32_t length, uint64_t hash) {
+    // Apply a mixing function to the hash value to improve its distribution for SwissTable, which relies on the lowest 7 bits as a fingerprint
+    return phmap_mix<8>()(crc_hash_64_unmixed(data, length, hash));
+}
 
 class SliceHash {
 public:

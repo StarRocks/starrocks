@@ -16,12 +16,9 @@
 package com.starrocks.sql.ast;
 
 import com.starrocks.analysis.Expr;
-import com.starrocks.analysis.RedirectStatus;
-import com.starrocks.catalog.Column;
-import com.starrocks.catalog.ScalarType;
-import com.starrocks.common.proc.TransProcDir;
-import com.starrocks.qe.ShowResultSetMetaData;
 import com.starrocks.sql.parser.NodePosition;
+
+import static com.starrocks.common.util.Util.normalizeName;
 
 // syntax:
 //      SHOW TRANSACTION  WHERE id=123
@@ -37,7 +34,7 @@ public class ShowTransactionStmt extends ShowStmt {
 
     public ShowTransactionStmt(String dbName, Expr whereClause, NodePosition pos) {
         super(pos);
-        this.dbName = dbName;
+        this.dbName = normalizeName(dbName);
         this.whereClause = whereClause;
     }
 
@@ -54,7 +51,7 @@ public class ShowTransactionStmt extends ShowStmt {
     }
 
     public void setDbName(String dbName) {
-        this.dbName = dbName;
+        this.dbName = normalizeName(dbName);
     }
 
     public void setTxnId(long txnId) {
@@ -62,21 +59,7 @@ public class ShowTransactionStmt extends ShowStmt {
     }
 
     @Override
-    public ShowResultSetMetaData getMetaData() {
-        ShowResultSetMetaData.Builder builder = ShowResultSetMetaData.builder();
-        for (String title : TransProcDir.TITLE_NAMES) {
-            builder.addColumn(new Column(title, ScalarType.createVarchar(30)));
-        }
-        return builder.build();
-    }
-
-    @Override
-    public RedirectStatus getRedirectStatus() {
-        return RedirectStatus.FORWARD_NO_SYNC;
-    }
-
-    @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitShowTransactionStatement(this, context);
+        return ((AstVisitorExtendInterface<R, C>) visitor).visitShowTransactionStatement(this, context);
     }
 }

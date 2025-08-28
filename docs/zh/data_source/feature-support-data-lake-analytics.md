@@ -172,6 +172,17 @@ Iceberg Catalog 支持 HMS、Glue 和 Tabular 作为其元数据服务。大多�
 | Distributed metadata plan (推荐在元数据体量较大的场景使用)   | v3.3+    |
 | Manifest Cache (推荐在元数据体量较小但对返回时延较为敏感的场景使用) | v3.3+    |
 
+自 v3.3.0 起，StarRocks 支持上述的元数据读取和缓存策略。策略的选择会根据您集群的机器情况来自动调整，通常您不需要进行修改。由于开启了元数据缓存，有可能因性能牺牲了元数据新鲜度，您可以根据具体的查询要求进行调整：
+
+- **[默认设置 推荐] 性能最佳，可以容忍分钟级别的数据不一致**
+  - **设置**：无需设置，默认情况下，10 分钟内更新的数据不可见。在此期间，查询将返回旧数据。
+  - **优点**：查询性能最佳
+  - **缺点**：延迟引起的数据不一致
+- **数据导入（产生新文件）立即可见，或者分区增减立即可见，不依赖手动 Refresh**
+  - **设置**：通过将 Catalog 属性 `iceberg_table_cache_ttl_sec` 设置为 `0``，使 StarRocks 每次查询都去获取新的 snapshot。
+  - **优点**：文件和分区变更无延迟可见
+  - **缺点**：由于每次查询必须查找新的 snapshot，导致性能较低。
+
 ### File formats
 
 | 特性 | 支持的文件格式 |
@@ -200,7 +211,7 @@ StarRocks 从 v3.3.2 版本开始支持查询 Iceberg 视图。目前仅支持�
 | 特性                   | 支持版本 | 备注                                                         |
 | :--------------------- | :------- | :----------------------------------------------------------- |
 | CREATE DATABASE        | v3.1+    | 可以选择为在 Iceberg 中创建的数据库指定 Location。如果未指定数据库的 Location，则在该数据库下建表时需要指定 Location，否则将返回错误。如果已指定数据库的 Location，则建表时未指定 Location 将继承数据库的 Location。如果同时指定了数据库和表的 Location，最终生效的是表的 Location。 |
-| CREATE TABLE           | v3.1+    | 支持分区表和非分区表。                                       |
+| CREATE TABLE           | v3.1+    | 支持分区表和非分区表。v4.0 起支持创建隐藏分区（Hidden Partition）的表。          |
 | CREATE TABLE AS SELECT | v3.1+    |                                                              |
 | INSERT INTO/OVERWRITE  | v3.1+    | 支持分区表和非分区表。                                       |
 
@@ -270,7 +281,7 @@ StarRocks 从 v3.3.2 版本开始支持查询 Iceberg 视图。目前仅支持�
 
 #### 数据类型对应关系
 
-| MySQL     | StarRocks           | 支持版本 |
+| PGGSQL     | StarRocks           | 支持版本 |
 | :-------- | :------------------ | :------- |
 | BIT       | BOOLEAN             | v2.3+    |
 | SMALLINT  | SMALLINT            | v2.3+    |
@@ -284,6 +295,7 @@ StarRocks 从 v3.3.2 版本开始支持查询 Iceberg 视图。目前仅支持�
 | TEXT      | VARCHAR(columnsize) | v2.3+    |
 | DATE      | DATE                | v2.3+    |
 | TIMESTAMP | DATETIME            | v2.3+    |
+| UUID      | VARBINARY           | v3.5.3+  |
 
 ### ClickHouse 
 

@@ -15,9 +15,9 @@
 package com.starrocks.authentication;
 
 import com.google.common.base.Strings;
+import com.starrocks.catalog.UserIdentity;
 import com.starrocks.common.util.NetUtils;
 import com.starrocks.qe.ConnectContext;
-import com.starrocks.sql.ast.UserIdentity;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -28,6 +28,7 @@ import java.util.Hashtable;
 import java.util.Optional;
 import javax.naming.Context;
 import javax.naming.NamingEnumeration;
+import javax.naming.PartialResultException;
 import javax.naming.directory.DirContext;
 import javax.naming.directory.InitialDirContext;
 import javax.naming.directory.SearchControls;
@@ -178,8 +179,9 @@ public class LDAPAuthProvider implements AuthenticationProvider {
 
             String userDN = null;
             int matched = 0;
-            for (; ; ) {
-                if (results.hasMore()) {
+
+            try {
+                while (results.hasMore()) {
                     matched++;
                     if (matched > 1) {
                         throw new AuthenticationException("searched more than one entry from ldap server for user " + user);
@@ -187,9 +189,9 @@ public class LDAPAuthProvider implements AuthenticationProvider {
 
                     SearchResult result = results.next();
                     userDN = result.getNameInNamespace();
-                } else {
-                    break;
                 }
+            } catch (PartialResultException e) {
+                LOG.warn("ldap search partial result exception", e);
             }
 
             if (matched != 1) {

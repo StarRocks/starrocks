@@ -21,11 +21,13 @@ public class DropTaskStmt extends DdlStmt {
 
     private final TaskName taskName;
     private final boolean force;
+    private final boolean ifExists;
 
-    public DropTaskStmt(TaskName taskName, boolean force, NodePosition pos) {
+    public DropTaskStmt(TaskName taskName, boolean ifExists, boolean force, NodePosition pos) {
         super(pos);
         this.taskName = taskName;
         this.force = force;
+        this.ifExists = ifExists;
     }
 
     public TaskName getTaskName() {
@@ -36,9 +38,13 @@ public class DropTaskStmt extends DdlStmt {
         return force;
     }
 
+    public boolean isSetIfExists() {
+        return ifExists;
+    }
+
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitDropTaskStmt(this, context);
+        return ((AstVisitorExtendInterface<R, C>) visitor).visitDropTaskStmt(this, context);
     }
 
 }

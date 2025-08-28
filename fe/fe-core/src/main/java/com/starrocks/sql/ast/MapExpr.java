@@ -16,7 +16,6 @@ package com.starrocks.sql.ast;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
-import com.starrocks.analysis.Analyzer;
 import com.starrocks.analysis.Expr;
 import com.starrocks.catalog.MapType;
 import com.starrocks.catalog.Type;
@@ -69,10 +68,6 @@ public class MapExpr extends Expr {
         return TypeManager.getCommonSuperType(valueExprsType);
     }
 
-    @Override
-    protected void analyzeImpl(Analyzer analyzer) throws AnalysisException {
-    }
-
     public boolean isExplicitType() {
         return explicitType;
     }
@@ -122,6 +117,6 @@ public class MapExpr extends Expr {
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitMapExpr(this, context);
+        return ((AstVisitorExtendInterface<R, C>) visitor).visitMapExpr(this, context);
     }
 }

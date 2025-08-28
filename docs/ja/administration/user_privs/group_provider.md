@@ -89,7 +89,7 @@ PROPERTIES (
 - `unix`: Unix group provider を作成します。
 - `file`: File group provider を作成します。この値が設定されている場合、`group_file_url` を指定する必要があります。
 
-#### `ldap_info`
+#### `ldap_info` パラメーターグループ
 
 LDAP サービスに接続するために使用される情報。
 
@@ -111,7 +111,7 @@ LDAP サービスの管理者パスワード。
 
 ##### `ldap_conn_timeout`
 
-LDAP サービスへの接続のタイムアウト時間。
+オプション。LDAP サービスへの接続のタイムアウト時間。
 
 ##### `ldap_conn_read_timeout`
 
@@ -130,7 +130,7 @@ LDAP サービスへの接続のタイムアウト時間。
 オプション。LDAP サーバーのローカルに保存された SSL CA 証明書にアクセスするために使用されるパスワード。pem 形式の証明書にはパスワードは必要ありません。パスワードが必要なのは jsk 形式の証明書だけです。
 
 
-#### `ldap_search_group_arg`
+#### `ldap_search_group_arg` パラメーターグループ
 
 StarRocks がグループを検索する方法を制御するために使用される引数。
 
@@ -150,7 +150,7 @@ LDAP サーバーによって認識されるカスタマイズされたグルー
 
 グループ名の識別子として使用される属性。
 
-#### `ldap_search_user_arg`
+#### `ldap_search_user_arg` パラメーターグループ
 
 StarRocks がグループ内のユーザーを識別する方法を制御するために使用される引数。
 
@@ -162,7 +162,7 @@ StarRocks がグループ内のユーザーを識別する方法を制御する�
 
 メンバー属性値からユーザー識別子を抽出する方法を指定します。明示的に属性を定義することも（例: `cn` または `uid`）、正規表現を使用することもできます。
 
-#### `ldap_cache_arg`
+#### `ldap_cache_arg` パラメーターグループ
 
 LDAP グループ情報のキャッシュ動作を定義するために使用される引数。
 
@@ -232,7 +232,7 @@ Group Provider を作成した後、セキュリティインテグレーショ�
 ALTER SECURITY INTEGRATION <security_integration_name> SET
 (
     "group_provider" = "",
-    "authenticated_group_list" = ""
+    "permitted_groups" = ""
 )
 ```
 
@@ -242,7 +242,7 @@ ALTER SECURITY INTEGRATION <security_integration_name> SET
 
 セキュリティインテグレーションと組み合わせる Group Provider の名前。複数の Group Provider はカンマで区切られます。設定されると、StarRocks はログイン時に各指定されたプロバイダーの下でユーザーのグループ情報を記録します。
 
-#### `authenticated_group_list`
+#### `permitted_groups`
 
 オプション。StarRocks にログインすることが許可されているグループの名前。複数のグループはカンマで区切られます。指定されたグループが組み合わせた Group Provider によって取得できることを確認してください。
 
@@ -252,7 +252,7 @@ ALTER SECURITY INTEGRATION <security_integration_name> SET
 ALTER SECURITY INTEGRATION LDAP SET
 (
         "group_provider"="ldap_group_provider",
-        "authenticated_group_list"="testgroup"
+        "permitted_groups"="testgroup"
 );
 ```
 

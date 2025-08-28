@@ -88,12 +88,24 @@ Status ShufflePartitioner::shuffle_channel_ids(const ChunkPtr& chunk, int32_t nu
         for (const ColumnPtr& column : _partitions_columns) {
             column->fnv_hash(&_hash_values[0], 0, num_rows);
         }
-    } else {
+    } else if (_bucket_properties.empty()) {
         // The data distribution was calculated using CRC32_HASH,
         // and bucket shuffle need to use the same hash function when sending data
         _hash_values.assign(num_rows, 0);
         for (const ColumnPtr& column : _partitions_columns) {
             column->crc32_hash(&_hash_values[0], 0, num_rows);
+        }
+    } else {
+        _hash_values.assign(num_rows, 0);
+        // TODO, enhance it if we try to support more bucket functions.
+        for (int i = 0; i < _partitions_columns.size(); ++i) {
+            DCHECK(_bucket_properties[i].bucket_func == TBucketFunction::MURMUR3_X86_32);
+            _round_hashes.assign(num_rows, 0);
+            _partitions_columns[i]->murmur_hash3_x86_32(&_round_hashes[0], 0, num_rows);
+            // carefully keep same with exchange node
+            for (int j = 0; j < num_rows; j++) {
+                _hash_values[j] ^= _round_hashes[j];
+            }
         }
     }
 
@@ -124,14 +136,17 @@ Status RandomPartitioner::shuffle_channel_ids(const ChunkPtr& chunk, int32_t num
 
 PartitionExchanger::PartitionExchanger(const std::shared_ptr<ChunkBufferMemoryManager>& memory_manager,
                                        LocalExchangeSourceOperatorFactory* source, const TPartitionType::type part_type,
-                                       std::vector<ExprContext*> partition_expr_ctxs)
+                                       std::vector<ExprContext*> partition_expr_ctxs,
+                                       std::vector<TBucketProperty> bucket_properties)
         : LocalExchanger(strings::Substitute("Partition($0)", to_string(part_type)), memory_manager, source),
           _part_type(part_type),
-          _partition_exprs(std::move(partition_expr_ctxs)) {}
+          _partition_exprs(std::move(partition_expr_ctxs)),
+          _bucket_properties(std::move(bucket_properties)) {}
 
 void PartitionExchanger::incr_sinker() {
     LocalExchanger::incr_sinker();
-    _partitioners.emplace_back(std::make_unique<ShufflePartitioner>(_source, _part_type, _partition_exprs));
+    _partitioners.emplace_back(
+            std::make_unique<ShufflePartitioner>(_source, _part_type, _partition_exprs, _bucket_properties));
 }
 
 Status PartitionExchanger::prepare(RuntimeState* state) {

@@ -15,7 +15,6 @@
 
 package com.starrocks.sql.ast;
 
-import com.starrocks.analysis.RedirectStatus;
 import com.starrocks.plugin.DynamicPluginLoader;
 import com.starrocks.sql.parser.NodePosition;
 
@@ -49,13 +48,8 @@ public class InstallPluginStmt extends DdlStmt {
     }
 
     @Override
-    public RedirectStatus getRedirectStatus() {
-        return RedirectStatus.FORWARD_WITH_SYNC;
-    }
-
-    @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitInstallPluginStatement(this, context);
+        return ((AstVisitorExtendInterface<R, C>) visitor).visitInstallPluginStatement(this, context);
     }
 }
 

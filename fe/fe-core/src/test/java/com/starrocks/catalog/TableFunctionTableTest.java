@@ -113,11 +113,11 @@ public class TableFunctionTableTest {
 
         TableFunctionTable t = new TableFunctionTable(newProperties());
 
-        Method method = TableFunctionTable.class.getDeclaredMethod("getFileSchema", null);
+        Method method = TableFunctionTable.class.getDeclaredMethod("getFileSchema", (Class<?>[]) null);
         method.setAccessible(true);
 
         try {
-            method.invoke(t, null);
+            method.invoke(t, (Object[]) null);
         } catch (Exception e) {
             Assertions.assertTrue(e.getCause().getMessage().contains("Failed to send proxy request. No alive backends"));
         }
@@ -130,7 +130,7 @@ public class TableFunctionTableTest {
         };
 
         try {
-            method.invoke(t, null);
+            method.invoke(t, (Object[]) null);
         } catch (Exception e) {
             Assertions.assertTrue(e.getCause().getMessage().
                     contains("Failed to send proxy request. No alive backends or compute nodes"));
@@ -159,7 +159,7 @@ public class TableFunctionTableTest {
         };
 
         try {
-            method.invoke(t, null);
+            method.invoke(t, (Object[]) null);
         } catch (Exception e) {
             Assertions.assertFalse(false);
         }
@@ -335,6 +335,27 @@ public class TableFunctionTableTest {
         properties.put("csv.column_separator", "");
         ExceptionChecker.expectThrowsWithMsg(SemanticException.class,
                 "Delimiter cannot be empty or null",
+                () -> new TableFunctionTable(new ArrayList<>(), properties, new SessionVariable()));
+    }
+
+    @Test
+    public void testParquetVersion() {
+        Map<String, String> properties = new HashMap<>();
+        properties.put("path", "file://path");
+        properties.put("format", "parquet");
+
+        // normal
+        TableFunctionTable table = new TableFunctionTable(new ArrayList<>(), properties, new SessionVariable());
+        Assertions.assertEquals("2.6", Deencapsulation.getField(table, "parquetVersion"));
+
+        properties.put("parquet.version", "1.0");
+        table = new TableFunctionTable(new ArrayList<>(), properties, new SessionVariable());
+        Assertions.assertEquals("1.0", Deencapsulation.getField(table, "parquetVersion"));
+
+        // abnormal
+        properties.put("parquet.version", "2.0");
+        ExceptionChecker.expectThrowsWithMsg(SemanticException.class,
+                "Invalid parquet.version: '2.0'. Expected values should be 2.4, 2.6, 1.0",
                 () -> new TableFunctionTable(new ArrayList<>(), properties, new SessionVariable()));
     }
 }

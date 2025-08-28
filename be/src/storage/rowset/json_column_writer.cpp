@@ -52,7 +52,9 @@ FlatJsonColumnWriter::FlatJsonColumnWriter(const ColumnWriterOptions& opts, Type
           _json_meta(opts.meta),
           _wfile(wfile),
           _json_writer(std::move(json_writer)),
-          _flat_json_config(opts.flat_json_config) {}
+          _flat_json_config(opts.flat_json_config),
+          _global_dict(opts.flat_json_dicts),
+          _column_name(opts.field_name) {}
 
 Status FlatJsonColumnWriter::init() {
     _json_meta->mutable_json_meta()->set_format_version(kJsonMetaDefaultFormatVersion);
@@ -191,6 +193,22 @@ Status FlatJsonColumnWriter::_init_flat_writers() {
 
         opts.meta->set_name(_flat_paths[i]);
         opts.need_flat = false;
+        opts.need_zone_map = config::json_flat_create_zonemap && is_zone_map_key_type(_flat_types[i]);
+        opts.need_zone_map |= config::enable_string_prefix_zonemap && is_string_type(_flat_types[i]);
+        opts.zone_map_truncate_string = config::enable_string_prefix_zonemap && is_string_type(_flat_types[i]);
+
+        // Set global dict for sub-columns that support it
+        if (is_string_type(_flat_types[i])) {
+            std::string sub_column_key = _column_name + "." + _flat_paths[i];
+            auto it = _global_dict.find(sub_column_key);
+            if (it != _global_dict.end()) {
+                const GlobalDictMap& sub_map = it->second;
+                opts.global_dict = &sub_map;
+                _subcolumn_dict_valid[sub_column_key] = true;
+            } else {
+                _subcolumn_dict_valid[sub_column_key] = false;
+            }
+        }
 
         TabletColumn col(StorageAggregateType::STORAGE_AGGREGATE_NONE, _flat_types[i], true);
         ASSIGN_OR_RETURN(auto fw, ColumnWriter::create(opts, &col, _wfile));
@@ -212,6 +230,23 @@ Status FlatJsonColumnWriter::_write_flat_column() {
     return Status::OK();
 }
 
+const std::map<std::string, bool>& FlatJsonColumnWriter::get_subcolumn_dict_valid() const {
+    return _subcolumn_dict_valid;
+}
+
+bool FlatJsonColumnWriter::is_global_dict_valid() {
+    // If any value in _subcolumn_dict_valid is true, return true
+    if (_subcolumn_dict_valid.empty()) {
+        return false;
+    }
+    for (const auto& kv : _subcolumn_dict_valid) {
+        if (kv.second) {
+            return true;
+        }
+    }
+    return false;
+}
+
 Status FlatJsonColumnWriter::finish() {
     auto st = _flat_column(_json_datas);
     _is_flat = st.ok();
@@ -221,11 +256,21 @@ Status FlatJsonColumnWriter::finish() {
         }
     }
     _json_datas.clear(); // release after write
-    // flat datas
+
+    RETURN_IF_ERROR(_json_writer->finish());
+
     for (size_t i = 0; i < _flat_writers.size(); i++) {
         RETURN_IF_ERROR(_flat_writers[i]->finish());
+        std::string sub_column_key = _column_name + "." + _flat_paths[i];
+
+        // Record dict validity for each sub-column
+        if (_subcolumn_dict_valid[sub_column_key]) {
+            bool sub_dict_valid = _flat_writers[i]->is_global_dict_valid();
+            _subcolumn_dict_valid[sub_column_key] = sub_dict_valid;
+        }
     }
-    return _json_writer->finish();
+
+    return Status::OK();
 }
 
 ordinal_t FlatJsonColumnWriter::get_next_rowid() const {

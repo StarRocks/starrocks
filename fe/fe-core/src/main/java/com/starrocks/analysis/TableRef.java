@@ -37,17 +37,11 @@ package com.starrocks.analysis;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.gson.annotations.SerializedName;
-import com.starrocks.common.AnalysisException;
-import com.starrocks.common.ErrorCode;
-import com.starrocks.common.ErrorReport;
-import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
+import com.starrocks.sql.ast.ParseNode;
 import com.starrocks.sql.ast.PartitionNames;
 import com.starrocks.sql.parser.NodePosition;
 
-import java.io.DataInput;
-import java.io.DataOutput;
-import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -215,16 +209,6 @@ public class TableRef implements ParseNode, Writable {
         return pos;
     }
 
-    /**
-     * Creates and returns a empty TupleDescriptor registered with the analyzer. The
-     * returned tuple descriptor must have its source table set via descTbl.setTable()).
-     * This method is called from the analyzer when registering this table reference.
-     */
-    public TupleDescriptor createTupleDescriptor(Analyzer analyzer) throws AnalysisException {
-        ErrorReport.reportAnalysisException(ErrorCode.ERR_UNRESOLVED_TABLE_REF, tableRefToSql());
-        return null;
-    }
-
     public List<Long> getTabletIds() {
         return tabletIds;
     }
@@ -385,34 +369,6 @@ public class TableRef implements ParseNode, Writable {
         return sb.toString();
     }
 
-    @Override
-    public void write(DataOutput out) throws IOException {
-        name.write(out);
-        if (partitionNames == null) {
-            out.writeBoolean(false);
-        } else {
-            out.writeBoolean(true);
-            partitionNames.write(out);
-        }
 
-        if (hasExplicitAlias()) {
-            out.writeBoolean(true);
-            Text.writeString(out, getExplicitAlias());
-        } else {
-            out.writeBoolean(false);
-        }
-    }
 
-    public void readFields(DataInput in) throws IOException {
-        name = new TableName();
-        name.readFields(in);
-        if (in.readBoolean()) {
-            partitionNames = PartitionNames.read(in);
-        }
-
-        if (in.readBoolean()) {
-            String alias = Text.readString(in);
-            aliases_ = new String[] {alias};
-        }
-    }
 }

@@ -45,14 +45,12 @@ import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.sql.ast.AstVisitor;
+import com.starrocks.sql.ast.AstVisitorExtendInterface;
 import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.thrift.TAggregateExpr;
 import com.starrocks.thrift.TExprNode;
 import com.starrocks.thrift.TExprNodeType;
 
-import java.io.DataInput;
-import java.io.DataOutput;
-import java.io.IOException;
 import java.util.List;
 import java.util.Objects;
 import java.util.Set;
@@ -327,10 +325,6 @@ public class FunctionCallExpr extends Expr {
         }
     }
 
-    @Override
-    public void analyzeImpl(Analyzer analyzer) throws AnalysisException {
-    }
-
     public void setMergeAggFnHasNullableChild(boolean value) {
         this.mergeAggFnHasNullableChild = value;
     }
@@ -366,29 +360,8 @@ public class FunctionCallExpr extends Expr {
         return true;
     }
 
-    @Override
-    public void write(DataOutput out) throws IOException {
-        fnName.write(out);
-        fnParams.write(out);
-        out.writeBoolean(isAnalyticFnCall);
-        out.writeBoolean(isMergeAggFn);
-    }
 
-    public void readFields(DataInput in) throws IOException {
-        fnName = FunctionName.read(in);
-        fnParams = FunctionParams.read(in);
-        if (fnParams.exprs() != null) {
-            children.addAll(fnParams.exprs());
-        }
-        isAnalyticFnCall = in.readBoolean();
-        isMergeAggFn = in.readBoolean();
-    }
 
-    public static FunctionCallExpr read(DataInput in) throws IOException {
-        FunctionCallExpr func = new FunctionCallExpr();
-        func.readFields(in);
-        return func;
-    }
 
     // Used for store load
     public boolean supportSerializable() {
@@ -460,7 +433,7 @@ public class FunctionCallExpr extends Expr {
      */
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitFunctionCall(this, context);
+        return ((AstVisitorExtendInterface<R, C>) visitor).visitFunctionCall(this, context);
     }
 
     public void setMergeAggFn() {

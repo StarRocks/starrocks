@@ -367,7 +367,7 @@ build_openssl() {
 
     LDFLAGS="-L${TP_LIB_DIR}" \
     LIBDIR="lib" \
-    ./Configure --prefix=$TP_INSTALL_DIR -lz -no-shared ${OPENSSL_PLATFORM}
+    ./Configure --prefix=$TP_INSTALL_DIR -lz -no-shared ${OPENSSL_PLATFORM} --libdir=lib
     make -j$PARALLEL
     make install_sw
 
@@ -527,7 +527,7 @@ build_gflags() {
     cd $BUILD_DIR
     rm -rf CMakeCache.txt CMakeFiles/
     $CMAKE_CMD -G "${CMAKE_GENERATOR}" -DCMAKE_INSTALL_PREFIX=$TP_INSTALL_DIR \
-    -DCMAKE_POSITION_INDEPENDENT_CODE=On ../
+    -DCMAKE_POSITION_INDEPENDENT_CODE=ON ../
     ${BUILD_SYSTEM} -j$PARALLEL
     ${BUILD_SYSTEM} install
 }
@@ -552,7 +552,7 @@ build_gtest() {
     cd $BUILD_DIR
     rm -rf CMakeCache.txt CMakeFiles/
     $CMAKE_CMD -G "${CMAKE_GENERATOR}" -DCMAKE_INSTALL_PREFIX=$TP_INSTALL_DIR -DCMAKE_INSTALL_LIBDIR=lib \
-    -DCMAKE_POSITION_INDEPENDENT_CODE=On ../
+    -DCMAKE_POSITION_INDEPENDENT_CODE=ON ../
     ${BUILD_SYSTEM} -j$PARALLEL
     ${BUILD_SYSTEM} install
 }
@@ -607,7 +607,7 @@ build_snappy() {
     $CMAKE_CMD -DCMAKE_INSTALL_PREFIX=$TP_INSTALL_DIR \
     -G "${CMAKE_GENERATOR}" \
     -DCMAKE_INSTALL_LIBDIR=lib64 \
-    -DCMAKE_POSITION_INDEPENDENT_CODE=On \
+    -DCMAKE_POSITION_INDEPENDENT_CODE=ON \
     -DCMAKE_INSTALL_INCLUDEDIR=$TP_INCLUDE_DIR/snappy \
     -DSNAPPY_BUILD_TESTS=0 ../
     ${BUILD_SYSTEM} -j$PARALLEL
@@ -768,7 +768,7 @@ build_rocksdb() {
 build_kerberos() {
     check_if_source_exist $KRB5_SOURCE
     cd $TP_SOURCE_DIR/$KRB5_SOURCE/src
-    CFLAGS="-fcommon -fPIC ${FILE_PREFIX_MAP_OPTION}" LDFLAGS="-L$TP_INSTALL_DIR/lib -pthread -ldl" \
+    CFLAGS="-std=gnu17 -fcommon -fPIC ${FILE_PREFIX_MAP_OPTION}" LDFLAGS="-L$TP_INSTALL_DIR/lib -pthread -ldl" \
     ./configure --prefix=$TP_INSTALL_DIR --enable-static --disable-shared --with-spake-openssl=$TP_INSTALL_DIR
     make -j$PARALLEL
     make install
@@ -863,6 +863,16 @@ build_arrow() {
     export ARROW_FLATBUFFERS_URL=${TP_SOURCE_DIR}/${FLATBUFFERS_NAME}
     export ARROW_ZSTD_URL=${TP_SOURCE_DIR}/${ZSTD_NAME}
     export LDFLAGS="-L${TP_LIB_DIR} -static-libstdc++ -static-libgcc"
+    if [[ "$THIRD_PARTY_BUILD_WITH_AVX2" == "OFF" ]] ; then
+        # https://github.com/apache/arrow/blob/main/cpp/cmake_modules/DefineOptions.cmake#L179
+        # default to SSE4_2 on x86 and NEON on Arm
+        arrow_simd_level=DEFAULT
+        arrow_runtime_simd_level=SSE4_2
+    else
+        # TODO: what's the correct level setting for ARM arch?
+        arrow_simd_level=AVX2
+        arrow_runtime_simd_level=AVX2
+    fi
 
     # https://github.com/apache/arrow/blob/apache-arrow-5.0.0/cpp/src/arrow/memory_pool.cc#L286
     #
@@ -875,8 +885,8 @@ build_arrow() {
     -DARROW_WITH_BROTLI=ON -DARROW_WITH_LZ4=ON -DARROW_WITH_SNAPPY=ON -DARROW_WITH_ZLIB=ON -DARROW_WITH_ZSTD=ON \
     -DARROW_WITH_UTF8PROC=OFF -DARROW_WITH_RE2=OFF \
     -DARROW_JEMALLOC=OFF -DARROW_MIMALLOC=OFF \
-    -DARROW_SIMD_LEVEL=AVX2 \
-    -DARROW_RUNTIME_SIMD_LEVEL=AVX2 \
+    -DARROW_SIMD_LEVEL=$arrow_simd_level \
+    -DARROW_RUNTIME_SIMD_LEVEL=$arrow_runtime_simd_level \
     -DCMAKE_INSTALL_PREFIX=$TP_INSTALL_DIR \
     -DCMAKE_INSTALL_LIBDIR=lib64 \
     -DARROW_GFLAGS_USE_SHARED=OFF \
@@ -1275,8 +1285,8 @@ build_benchmark() {
     cd $BUILD_DIR
     rm -rf CMakeCache.txt CMakeFiles/
     # https://github.com/google/benchmark/issues/773
-    cmake -DBENCHMARK_DOWNLOAD_DEPENDENCIES=off \
-          -DBENCHMARK_ENABLE_GTEST_TESTS=off \
+    cmake -DBENCHMARK_DOWNLOAD_DEPENDENCIES=OFF \
+          -DBENCHMARK_ENABLE_GTEST_TESTS=OFF \
           -DCMAKE_INSTALL_PREFIX=$TP_INSTALL_DIR \
           -DCMAKE_INSTALL_LIBDIR=lib64 \
           -DRUN_HAVE_STD_REGEX=0 \
@@ -1614,6 +1624,12 @@ build_azure() {
     unset PKG_CONFIG_LIBDIR
 }
 
+build_libdivide() {
+    check_if_source_exist $LIBDIVIDE_SOURCE
+    cd $TP_SOURCE_DIR/$LIBDIVIDE_SOURCE
+    cp libdivide.h $TP_INSTALL_DIR/include/
+}
+
 # restore cxxflags/cppflags/cflags to default one
 restore_compile_flags() {
     # c preprocessor flags
@@ -1634,9 +1650,8 @@ strip_binary() {
 # strip `$TP_SOURCE_DIR` and `$TP_INSTALL_DIR` from source code file path
 export FILE_PREFIX_MAP_OPTION="-ffile-prefix-map=${TP_SOURCE_DIR}=. -ffile-prefix-map=${TP_INSTALL_DIR}=."
 # set GLOBAL_C*FLAGS for easy restore in each sub build process
-export GLOBAL_CPPFLAGS="-I ${TP_INCLUDE_DIR}"
-# https://stackoverflow.com/questions/42597685/storage-size-of-timespec-isnt-known
-export GLOBAL_CFLAGS="-O3 -fno-omit-frame-pointer -std=c99 -fPIC -g -D_POSIX_C_SOURCE=200112L -gz=zlib ${FILE_PREFIX_MAP_OPTION}"
+export GLOBAL_CPPFLAGS="-I${TP_INCLUDE_DIR} "
+export GLOBAL_CFLAGS="-O3 -fno-omit-frame-pointer -std=gnu17 -fPIC -g -gz=zlib ${FILE_PREFIX_MAP_OPTION}"
 export GLOBAL_CXXFLAGS="-O3 -fno-omit-frame-pointer -Wno-class-memaccess -fPIC -g -gz=zlib ${FILE_PREFIX_MAP_OPTION}"
 
 # set those GLOBAL_*FLAGS to the CFLAGS/CXXFLAGS/CPPFLAGS
@@ -1715,6 +1730,7 @@ declare -a all_packages=(
     xsimd
     libxml2
     azure
+    libdivide
 )
 
 # Machine specific packages

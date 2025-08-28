@@ -12,23 +12,14 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.sql.ast;
 
 import com.google.common.base.Strings;
-import com.starrocks.catalog.Column;
-import com.starrocks.catalog.ScalarType;
-import com.starrocks.qe.ShowResultSetMetaData;
 import com.starrocks.sql.parser.NodePosition;
 
 public class ShowStorageVolumesStmt extends ShowStmt {
     private final String pattern;
-    private static final String SV_COL = "Storage Volume";
 
-    private static final ShowResultSetMetaData META_DATA =
-            ShowResultSetMetaData.builder()
-                    .addColumn(new Column(SV_COL, ScalarType.createVarchar(256)))
-                    .build();
 
     public ShowStorageVolumesStmt(String pattern, NodePosition pos) {
         super(pos);
@@ -41,13 +32,8 @@ public class ShowStorageVolumesStmt extends ShowStmt {
     }
 
     @Override
-    public ShowResultSetMetaData getMetaData() {
-        return META_DATA;
-    }
-
-    @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitShowStorageVolumesStatement(this, context);
+        return ((AstVisitorExtendInterface<R, C>) visitor).visitShowStorageVolumesStatement(this, context);
     }
 
     @Override

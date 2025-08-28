@@ -19,7 +19,6 @@ import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.analysis.AggregateInfo;
-import com.starrocks.analysis.Analyzer;
 import com.starrocks.analysis.BinaryType;
 import com.starrocks.analysis.BrokerDesc;
 import com.starrocks.analysis.DescriptorTable;
@@ -68,6 +67,8 @@ import com.starrocks.common.IdGenerator;
 import com.starrocks.common.LocalExchangerType;
 import com.starrocks.common.Pair;
 import com.starrocks.common.StarRocksException;
+import com.starrocks.common.tvr.TvrVersionRange;
+import com.starrocks.connector.BucketProperty;
 import com.starrocks.connector.metadata.MetadataTable;
 import com.starrocks.load.BrokerFileGroup;
 import com.starrocks.planner.AggregationNode;
@@ -145,6 +146,7 @@ import com.starrocks.sql.optimizer.base.DistributionCol;
 import com.starrocks.sql.optimizer.base.DistributionSpec;
 import com.starrocks.sql.optimizer.base.EquivalentDescriptor;
 import com.starrocks.sql.optimizer.base.HashDistributionDesc;
+import com.starrocks.sql.optimizer.base.HashDistributionDescBP;
 import com.starrocks.sql.optimizer.base.HashDistributionSpec;
 import com.starrocks.sql.optimizer.base.OrderSpec;
 import com.starrocks.sql.optimizer.base.Ordering;
@@ -197,14 +199,9 @@ import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CastOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
-import com.starrocks.sql.optimizer.operator.scalar.CompoundPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
-import com.starrocks.sql.optimizer.operator.scalar.InPredicateOperator;
-import com.starrocks.sql.optimizer.operator.scalar.IsNullPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.LikePredicateOperator;
-import com.starrocks.sql.optimizer.operator.scalar.MatchExprOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
-import com.starrocks.sql.optimizer.operator.scalar.ScalarOperatorVisitor;
 import com.starrocks.sql.optimizer.operator.stream.PhysicalStreamAggOperator;
 import com.starrocks.sql.optimizer.operator.stream.PhysicalStreamJoinOperator;
 import com.starrocks.sql.optimizer.operator.stream.PhysicalStreamScanOperator;
@@ -240,7 +237,6 @@ import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 import java.util.stream.Stream;
 
-import static com.starrocks.analysis.BinaryType.EQ_FOR_NULL;
 import static com.starrocks.catalog.Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF;
 import static com.starrocks.sql.common.ErrorType.INTERNAL_ERROR;
 import static com.starrocks.sql.common.UnsupportedException.unsupportedException;
@@ -574,155 +570,52 @@ public class PlanFragmentBuilder {
             }
 
             // ------------------------------------------------------------------------------------
-            // Get outputColumnIds.
+            // Get outputColumns.
             // ------------------------------------------------------------------------------------
-            Set<Integer> outputColumnIds = node.getOutputColumns().stream()
+            Set<Integer> requiredColumns = node.getOutputColumns().stream()
                     .map(ColumnRefOperator::getId)
                     .collect(Collectors.toSet());
             // Empty outputColumnIds means that the expression after ScanNode does not need any column from ScanNode.
             // However, at least one column needs to be output, so choose any column as the output column.
-            if (outputColumnIds.isEmpty()) {
+            if (requiredColumns.isEmpty()) {
                 if (!scanNode.getSlots().isEmpty()) {
-                    outputColumnIds.add(scanNode.getSlots().get(0).getId().asInt());
+                    requiredColumns.add(scanNode.getSlots().get(0).getId().asInt());
                 }
             }
 
             // ------------------------------------------------------------------------------------
-            // Get nonPushdownColumnIds.
+            // Get mv use columns
             // ------------------------------------------------------------------------------------
-            Set<Integer> nonPushdownColumnIds = Collections.emptySet();
             if (materializedIndexMeta.getKeysType().isAggregationFamily() ||
                     materializedIndexMeta.getKeysType() == KeysType.PRIMARY_KEYS) {
                 Map<String, Integer> columnNameToId = scanNode.getSlots().stream().collect(Collectors.toMap(
                         slot -> slot.getColumn().getName(),
                         slot -> slot.getId().asInt()
                 ));
-                nonPushdownColumnIds = materializedIndexMeta.getSchema().stream()
+                materializedIndexMeta.getSchema().stream()
                         .filter(col -> !col.isKey())
                         .map(Column::getName)
                         .map(columnNameToId::get)
-                        .collect(Collectors.toSet());
+                        .forEach(requiredColumns::add);
             }
 
             // ------------------------------------------------------------------------------------
-            // Get pushdownPredUsedColumnIds and nonPushdownPredUsedColumnIds.
+            // Get predicate use columns
             // ------------------------------------------------------------------------------------
-            Set<Integer> pushdownPredUsedColumnIds = new HashSet<>();
-            Set<Integer> nonPushdownPredUsedColumnIds = new HashSet<>();
-            IsSimpleStrictPredicateVisitor checkVistor = new IsSimpleStrictPredicateVisitor(sessionVariable);
+            ColumnRefSet predicateColumns = new ColumnRefSet();
             for (ScalarOperator predicate : predicates) {
-                ColumnRefSet usedColumns = predicate.getUsedColumns();
-                boolean isPushdown = predicate.accept(checkVistor, null)
-                                && Arrays.stream(usedColumns.getColumnIds()).noneMatch(nonPushdownColumnIds::contains);
-                if (isPushdown) {
-                    for (int cid : usedColumns.getColumnIds()) {
-                        pushdownPredUsedColumnIds.add(cid);
-                    }
-                } else {
-                    for (int cid : usedColumns.getColumnIds()) {
-                        nonPushdownPredUsedColumnIds.add(cid);
-                    }
-                }
+                predicateColumns.union(predicate.getUsedColumns());
             }
 
+
             // ------------------------------------------------------------------------------------
-            // Get unUsedOutputColumnIds which are in pushdownPredUsedColumnIds
-            // but not in nonPushdownPredUsedColumnIds and outputColumnIds.
+            // unused Columns = required columns - predicate columns.
+            // be will prune columns by predicate push down
             // ------------------------------------------------------------------------------------
-            Set<Integer> unUsedOutputColumnIds = pushdownPredUsedColumnIds.stream()
-                    .filter(cid -> !nonPushdownPredUsedColumnIds.contains(cid) && !outputColumnIds.contains(cid))
+            Set<Integer> unUsedOutputColumnIds = Arrays.stream(predicateColumns.getColumnIds())
+                    .boxed().filter(c -> !requiredColumns.contains(c))
                     .collect(Collectors.toSet());
             scanNode.setUnUsedOutputStringColumns(unUsedOutputColumnIds);
-        }
-
-        // The predicate no function all, this implementation is consistent with BE olap scan node
-        private static class IsSimpleStrictPredicateVisitor extends ScalarOperatorVisitor<Boolean, Void> {
-
-            private final boolean enablePushDownOrPredicate;
-
-            private final boolean enablePushDownExprPredicate;
-
-            public IsSimpleStrictPredicateVisitor(SessionVariable variable) {
-                this.enablePushDownOrPredicate = variable.isEnablePushdownOrPredicate();
-                this.enablePushDownExprPredicate = variable.isEnableColumnExprPredicate();
-            }
-
-            @Override
-            public Boolean visit(ScalarOperator scalarOperator, Void context) {
-                return false;
-            }
-
-            @Override
-            public Boolean visitCompoundPredicate(CompoundPredicateOperator predicate, Void context) {
-                if (!enablePushDownOrPredicate) {
-                    return false;
-                }
-
-                if (predicate.isNot() && enablePushDownExprPredicate) {
-                    if (predicate.getUsedColumns().cardinality() <= 1) {
-                        return predicate.getChildren().stream().allMatch(child -> child.accept(this, context));
-                    }
-                    return false;
-                }
-
-                if (!predicate.isAnd() && !predicate.isOr()) {
-                    return false;
-                }
-
-                return predicate.getChildren().stream().allMatch(child -> child.accept(this, context));
-            }
-
-            @Override
-            public Boolean visitBinaryPredicate(BinaryPredicateOperator predicate, Void context) {
-                if (predicate.getBinaryType() == EQ_FOR_NULL) {
-                    return false;
-                }
-                if (predicate.getUsedColumns().cardinality() > 1) {
-                    return false;
-                }
-                if (!predicate.getChild(1).isConstant()) {
-                    return false;
-                }
-
-                if (!checkTypeCanPushDown(predicate)) {
-                    return false;
-                }
-
-                return predicate.getChild(0).isColumnRef();
-            }
-
-            @Override
-            public Boolean visitInPredicate(InPredicateOperator predicate, Void context) {
-                if (!checkTypeCanPushDown(predicate)) {
-                    return false;
-                }
-
-                return predicate.getChild(0).isColumnRef() && predicate.allValuesMatch(ScalarOperator::isConstantRef);
-            }
-
-            @Override
-            public Boolean visitIsNullPredicate(IsNullPredicateOperator predicate, Void context) {
-                if (!checkTypeCanPushDown(predicate)) {
-                    return false;
-                }
-
-                return predicate.getChild(0).isColumnRef();
-            }
-
-            @Override
-            public Boolean visitMatchExprOperator(MatchExprOperator predicate, Void context) {
-                // match expression is always satisfy the following format:
-                // SlotRef MATCH StringLiteral which is always SimpleStrictPredicate
-                return true;
-            }
-
-            // These type predicates couldn't be pushed down to storage engine,
-            // which are consistent with BE implementations.
-            private boolean checkTypeCanPushDown(ScalarOperator scalarOperator) {
-                Type leftType = scalarOperator.getChild(0).getType();
-                return !leftType.isFloatingPointType() && !leftType.isComplexType() && !leftType.isJsonType() &&
-                        !leftType.isTime();
-            }
         }
 
         @Override
@@ -933,7 +826,8 @@ public class PlanFragmentBuilder {
                     .collect(Collectors.toSet());
             if (scan.getPredicate() == null) {
                 // remove path which has pruned
-                return scan.getColumnAccessPaths().stream().filter(p -> checkNames.contains(p.getPath()))
+                return scan.getColumnAccessPaths().stream()
+                        .filter(p -> checkNames.contains(p.getPath()) || p.isExtended())
                         .collect(Collectors.toList());
             }
 
@@ -1139,6 +1033,7 @@ public class PlanFragmentBuilder {
                     scan.getSelectPartitionNames(),
                     context.getConnectContext().getCurrentComputeResource());
 
+            scanNode.setColumnAccessPaths(scan.getColumnAccessPaths());
             scanNode.computeRangeLocations(computeResource);
             scanNode.computeStatistics(optExpression.getStatistics());
             currentExecGroup.add(scanNode, true);
@@ -1603,6 +1498,7 @@ public class PlanFragmentBuilder {
             icebergScanNode.setScanOptimizeOption(node.getScanOptimizeOption());
             icebergScanNode.computeStatistics(expression.getStatistics());
             currentExecGroup.add(icebergScanNode, true);
+            TvrVersionRange tvrVersionRange = node.getTvrVersionRange();
             try {
                 // set predicate
                 ScalarOperatorToExpr.FormatterContext formatterContext =
@@ -1616,7 +1512,18 @@ public class PlanFragmentBuilder {
                 ScalarOperator icebergPredicate = !isEqDeleteScan ? node.getPredicate() :
                         ((PhysicalIcebergEqualityDeleteScanOperator) node).getOriginPredicate();
                 icebergScanNode.preProcessIcebergPredicate(icebergPredicate);
-                icebergScanNode.setSnapshotId(node.getTableVersionRange().end());
+                icebergScanNode.setTvrVersionRange(node.getTvrVersionRange());
+                // setting bucket properties before setting scan range locations
+                if (expression.getOutputProperty().getDistributionProperty().isShuffle()) {
+                    DistributionSpec distributionSpec = expression.getOutputProperty().getDistributionProperty().getSpec();
+                    if (distributionSpec instanceof HashDistributionSpec spec) {
+                        HashDistributionDesc desc = spec.getHashDistributionDesc();
+                        LOG.debug("Iceberg scan node distribution spec: " + spec.toString() + ", desc: " + desc.toString());
+                        if (desc instanceof HashDistributionDescBP descBP) {
+                            icebergScanNode.setBucketProperties(descBP.getBucketProperties());
+                        }
+                    }
+                }
                 icebergScanNode.setupScanRangeLocations(
                         context.getConnectContext().getSessionVariable().isEnableConnectorIncrementalScanRanges());
                 if (!isEqDeleteScan) {
@@ -1674,7 +1581,7 @@ public class PlanFragmentBuilder {
 
             IcebergMetadataScanNode metadataScanNode =
                     new IcebergMetadataScanNode(context.getNextNodeId(), tupleDescriptor,
-                            "IcebergMetadataScanNode", node.getTableVersionRange());
+                            "IcebergMetadataScanNode", node.getTvrVersionRange());
             try {
                 ScalarOperatorToExpr.FormatterContext formatterContext =
                         new ScalarOperatorToExpr.FormatterContext(context.getColRefToExpr());
@@ -2359,7 +2266,7 @@ public class PlanFragmentBuilder {
 
                 // Check colocate for the first phase in three/four-phase agg whose second phase is pruned.
                 if (!withLocalShuffle && node.isMergedLocalAgg() &&
-                        hasColocateOlapScanChildInFragment(aggregationNode)) {
+                        hasColocateScanChildInFragment(aggregationNode)) {
                     aggregationNode.setColocate(!node.isWithoutColocateRequirement());
                 }
                 aggregationNode.setLimit(node.getLimit());
@@ -2410,7 +2317,7 @@ public class PlanFragmentBuilder {
                 aggregationNode.setLimit(node.getLimit());
 
                 // Check colocate for one-phase local agg.
-                if (!withLocalShuffle && hasColocateOlapScanChildInFragment(aggregationNode)) {
+                if (!withLocalShuffle && hasColocateScanChildInFragment(aggregationNode)) {
                     aggregationNode.setColocate(!node.isWithoutColocateRequirement());
                 }
             } else if (node.getType().isDistinctGlobal()) {
@@ -2425,7 +2332,7 @@ public class PlanFragmentBuilder {
                 aggregationNode.unsetNeedsFinalize();
                 aggregationNode.setIntermediateTuple();
 
-                if (!withLocalShuffle && hasColocateOlapScanChildInFragment(aggregationNode)) {
+                if (!withLocalShuffle && hasColocateScanChildInFragment(aggregationNode)) {
                     aggregationNode.setColocate(!node.isWithoutColocateRequirement());
                 }
             } else if (node.getType().isDistinctLocal()) {
@@ -2453,6 +2360,7 @@ public class PlanFragmentBuilder {
             aggregationNode.setStreamingPreaggregationMode(node.getNeededPreaggregationMode());
             aggregationNode.setHasNullableGenerateChild();
             aggregationNode.computeStatistics(optExpr.getStatistics());
+            aggregationNode.setGroupByMinMaxStats(node.getGroupByMinMaxStatistic());
 
             if (node.isOnePhaseAgg() || node.isMergedLocalAgg() || node.getType().isDistinctGlobal()) {
                 // For ScanNode->LocalShuffle->AggNode, we needn't assign scan ranges per driver sequence.
@@ -2484,22 +2392,26 @@ public class PlanFragmentBuilder {
         }
 
         // Check whether colocate Table exists in the same Fragment
-        public boolean hasColocateOlapScanChildInFragment(PlanNode node) {
-            if (node instanceof OlapScanNode) {
+        public boolean hasColocateScanChildInFragment(PlanNode node) {
+            if (node instanceof OlapScanNode scanNode) {
                 ColocateTableIndex colocateIndex = GlobalStateMgr.getCurrentState().getColocateTableIndex();
-                OlapScanNode scanNode = (OlapScanNode) node;
                 if (colocateIndex.isColocateTable(scanNode.getOlapTable().getId())) {
+                    return true;
+                }
+            }
+            if (node instanceof IcebergScanNode icebergScanNode) {
+                if (icebergScanNode.getBucketProperties().isPresent()) {
                     return true;
                 }
             }
             if (node instanceof ExchangeNode) {
                 return false;
             }
-            boolean hasOlapScanChild = false;
+            boolean hasColocateChild = false;
             for (PlanNode child : node.getChildren()) {
-                hasOlapScanChild |= hasColocateOlapScanChildInFragment(child);
+                hasColocateChild |= hasColocateScanChildInFragment(child);
             }
-            return hasOlapScanChild;
+            return hasColocateChild;
         }
 
         public void rewriteAggDistinctFirstStageFunction(List<FunctionCallExpr> aggregateExprList) {
@@ -3087,9 +2999,11 @@ public class PlanFragmentBuilder {
                                                              PlanFragment removeFragment, JoinNode hashJoinNode) {
             hashJoinNode.setLocalHashBucket(true);
             hashJoinNode.setPartitionExprs(removeFragment.getDataPartition().getPartitionExprs());
+
+            Optional<List<BucketProperty>> extractBucketProperties = stayFragment.extractBucketProperties();
             removeFragment.getChild(0)
                     .setOutputPartition(new DataPartition(TPartitionType.BUCKET_SHUFFLE_HASH_PARTITIONED,
-                            removeFragment.getDataPartition().getPartitionExprs()));
+                            removeFragment.getDataPartition().getPartitionExprs(), extractBucketProperties));
 
             // Currently, we always generate new fragment for PhysicalDistribution.
             // So we need to remove exchange node only fragment for Join.
@@ -3201,7 +3115,7 @@ public class PlanFragmentBuilder {
             analyticEvalNode.setHasNullableGenerateChild();
             analyticEvalNode.computeStatistics(optExpr.getStatistics());
             currentExecGroup.add(analyticEvalNode);
-            if (hasColocateOlapScanChildInFragment(analyticEvalNode)) {
+            if (hasColocateScanChildInFragment(analyticEvalNode)) {
                 analyticEvalNode.setColocate(true);
             }
 
@@ -3260,6 +3174,16 @@ public class PlanFragmentBuilder {
                 // If the data is skewed, we prefer to perform the standard sort-merge process to enhance performance.
                 sortNode.setAnalyticPartitionSkewed(isSkewed);
             }
+        }
+
+        private Optional<List<BucketProperty>> extractBucketProperties(List<PlanFragment> inputFragments) {
+            List<List<BucketProperty>> bucketProperties = inputFragments.stream()
+                    .filter(inputFragment -> !(inputFragment.getPlanRoot() instanceof ExchangeNode))
+                    .map(PlanFragment::extractBucketProperties)
+                    .filter(Optional::isPresent)
+                    .map(Optional::get)
+                    .toList();
+            return BucketProperty.checkAndGetBucketProperties(bucketProperties);
         }
 
         private PlanFragment buildSetOperation(OptExpression optExpr, ExecPlan context, OperatorType operatorType) {
@@ -3389,6 +3313,7 @@ public class PlanFragmentBuilder {
             //  if colocate set operator has bucket-shuffle branch, BE need tackle this situation to avoid
             //  query hanging forever.
             boolean canExecGroup = true;
+            Optional<List<BucketProperty>> extractedBP = extractBucketProperties(inputFragments);
             for (int i = 0; i < optExpr.arity(); ++i) {
                 PlanFragment inputFragment = inputFragments.get(i);
                 context.getFragments().remove(inputFragment);
@@ -3403,7 +3328,7 @@ public class PlanFragmentBuilder {
                         inputFragment.getChildren().forEach(fragment -> {
                             fragment.setOutputPartition(
                                     new DataPartition(TPartitionType.BUCKET_SHUFFLE_HASH_PARTITIONED,
-                                            fragment.getOutputPartition().getPartitionExprs()));
+                                            fragment.getOutputPartition().getPartitionExprs(), extractedBP));
                         });
                     }
                 } else {
@@ -4057,18 +3982,18 @@ public class PlanFragmentBuilder {
         }
 
         @Override
-        public PlanFragment visitPhysicalTableFunctionTableScan(OptExpression optExpression, ExecPlan context) {
+        public PlanFragment visitPhysicalTableFunctionTableScan(OptExpression optExpression, ExecPlan execPlan) {
             PhysicalTableFunctionTableScanOperator node = (PhysicalTableFunctionTableScanOperator) optExpression.getOp();
 
             TableFunctionTable table = (TableFunctionTable) node.getTable();
 
-            TupleDescriptor tupleDesc = context.getDescTbl().createTupleDescriptor();
-            prepareContextSlots(node, context, tupleDesc);
+            TupleDescriptor tupleDesc = execPlan.getDescTbl().createTupleDescriptor();
+            prepareContextSlots(node, execPlan, tupleDesc);
 
             List<List<TBrokerFileStatus>> files = new ArrayList<>();
             files.add(table.loadFileList());
-            ComputeResource computeResource = context.getConnectContext().getCurrentComputeResource();
-            FileScanNode scanNode = new FileScanNode(context.getNextNodeId(), tupleDesc,
+            ComputeResource computeResource = execPlan.getConnectContext().getCurrentComputeResource();
+            FileScanNode scanNode = new FileScanNode(execPlan.getNextNodeId(), tupleDesc,
                     "FileScanNode", files, table.loadFileList().size(), computeResource);
 
             Set<String> scanColumns = tupleDesc.getSlots().stream().map(SlotDescriptor::getColumn).map(Column::getName).collect(
@@ -4089,11 +4014,9 @@ public class PlanFragmentBuilder {
             scanNode.setFlexibleColumnMapping(table.isFlexibleColumnMapping());
             scanNode.setFileScanType(table.isLoadType() ? TFileScanType.FILES_INSERT : TFileScanType.FILES_QUERY);
 
-            Analyzer analyzer = new Analyzer(GlobalStateMgr.getCurrentState(), context.getConnectContext());
-            analyzer.setDescTbl(context.getDescTbl());
             try {
-                scanNode.init(analyzer);
-                scanNode.finalizeStats(analyzer);
+                scanNode.init(execPlan.getDescTbl());
+                scanNode.finalizeStats();
             } catch (StarRocksException e) {
                 throw new StarRocksPlannerException(
                         "Build Exec FileScanNode fail, scan info is invalid," + e.getMessage(),
@@ -4103,7 +4026,7 @@ public class PlanFragmentBuilder {
             // set predicate
             List<ScalarOperator> predicates = Utils.extractConjuncts(node.getPredicate());
             ScalarOperatorToExpr.FormatterContext formatterContext =
-                    new ScalarOperatorToExpr.FormatterContext(context.getColRefToExpr());
+                    new ScalarOperatorToExpr.FormatterContext(execPlan.getColRefToExpr());
             for (ScalarOperator predicate : predicates) {
                 scanNode.getConjuncts().add(ScalarOperatorToExpr.buildExecExpression(predicate, formatterContext));
             }
@@ -4112,10 +4035,10 @@ public class PlanFragmentBuilder {
             scanNode.computeStatistics(optExpression.getStatistics());
             currentExecGroup.add(scanNode, true);
 
-            context.getScanNodes().add(scanNode);
+            execPlan.getScanNodes().add(scanNode);
             PlanFragment fragment =
-                    new PlanFragment(context.getNextFragmentId(), scanNode, DataPartition.RANDOM);
-            context.getFragments().add(fragment);
+                    new PlanFragment(execPlan.getNextFragmentId(), scanNode, DataPartition.RANDOM);
+            execPlan.getFragments().add(fragment);
             return fragment;
         }
 

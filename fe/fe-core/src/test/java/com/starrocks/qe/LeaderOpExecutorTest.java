@@ -14,7 +14,7 @@
 
 package com.starrocks.qe;
 
-import com.starrocks.analysis.RedirectStatus;
+import com.starrocks.catalog.UserIdentity;
 import com.starrocks.common.Config;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReportException;
@@ -25,8 +25,8 @@ import com.starrocks.rpc.ThriftConnectionPool;
 import com.starrocks.rpc.ThriftRPCRequestExecutor;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.service.FrontendServiceImpl;
+import com.starrocks.sql.ast.OriginStatement;
 import com.starrocks.sql.ast.StatementBase;
-import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.thrift.FrontendService;
 import com.starrocks.thrift.TMasterOpRequest;
 import com.starrocks.thrift.TMasterOpResult;
@@ -93,7 +93,7 @@ public class LeaderOpExecutorTest {
         String sql = "insert into t1 select * from t1";
         StatementBase stmtBase = UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
         LeaderOpExecutor executor =
-                new LeaderOpExecutor(stmtBase, stmtBase.getOrigStmt(), connectContext, RedirectStatus.FORWARD_NO_SYNC);
+                new LeaderOpExecutor(stmtBase, stmtBase.getOrigStmt(), connectContext, RedirectStatus.FORWARD_NO_SYNC, false);
 
         mockFrontendService(new MockFrontendServiceClient());
         executor.execute();
@@ -174,7 +174,7 @@ public class LeaderOpExecutorTest {
                             -> ThriftRPCRequestExecutor.call(Mockito.any(), Mockito.any(), Mockito.anyInt(), Mockito.any()))
                     .thenReturn(tMasterOpResult);
             LeaderOpExecutor executor =
-                    new LeaderOpExecutor(stmtBase, stmtBase.getOrigStmt(), connectContext, RedirectStatus.FORWARD_NO_SYNC);
+                    new LeaderOpExecutor(stmtBase, stmtBase.getOrigStmt(), connectContext, RedirectStatus.FORWARD_NO_SYNC, false);
             executor.execute();
 
             Assertions.assertEquals(1, connectContext.getTxnId());

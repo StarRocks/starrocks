@@ -102,6 +102,9 @@ public:
     static StatusOr<BundleTabletMetadataPtr> parse_bundle_tablet_metadata(const std::string& path,
                                                                           const std::string& serialized_string);
 
+    static StatusOr<TabletMetadataPtrs> get_metas_from_bundle_tablet_metadata(const std::string& location,
+                                                                              FileSystem* input_fs = nullptr);
+
     TabletMetadataPtr get_latest_cached_tablet_metadata(int64_t tablet_id);
 
     StatusOr<TabletMetadataIter> list_tablet_metadata(int64_t tablet_id);
@@ -253,6 +256,7 @@ private:
 
     bthreads::singleflight::Group<std::string, StatusOr<TabletSchemaPtr>> _schema_group;
     bthreads::singleflight::Group<std::string, StatusOr<CombinedTxnLogPtr>> _combined_txn_log_group;
+    bthreads::singleflight::Group<std::string, StatusOr<std::string>> _bundle_tablet_metadata_group;
 };
 
 } // namespace starrocks::lake

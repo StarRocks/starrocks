@@ -26,6 +26,7 @@ import com.starrocks.persist.EditLog;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.NodeMgr;
+import com.starrocks.server.WarehouseManager;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.transaction.GlobalTransactionMgr;
 import com.starrocks.transaction.TransactionState;
@@ -209,7 +210,7 @@ public class StreamLoadManagerTest {
         streamLoadManager.beginLoadTaskFromFrontend(
                 dbName, tableName, labelName, "", "", timeoutMillis, channelNum, channelId, resp);
 
-        List<StreamLoadTask> tasks = streamLoadManager.getTaskByName(labelName);
+        List<AbstractStreamLoadTask> tasks = streamLoadManager.getTaskByName(labelName);
         Assertions.assertEquals(1, tasks.size());
         Assertions.assertEquals("label1", tasks.get(0).getLabel());
         Assertions.assertEquals("test_db", tasks.get(0).getDBName());
@@ -235,7 +236,7 @@ public class StreamLoadManagerTest {
         streamLoadManager.beginLoadTaskFromFrontend(
                 dbName, tableName, labelName2, "", "", timeoutMillis, channelNum, channelId, resp);
 
-        List<StreamLoadTask> tasks = streamLoadManager.getTaskByName(null);
+        List<AbstractStreamLoadTask> tasks = streamLoadManager.getTaskByName(null);
         Assertions.assertEquals(2, tasks.size());
         Assertions.assertEquals("label1", tasks.get(0).getLabel());
         Assertions.assertEquals("label2", tasks.get(1).getLabel());
@@ -292,11 +293,10 @@ public class StreamLoadManagerTest {
         String tableName = "test_tbl";
         String labelName = "label2";
         long timeoutMillis = 100000;
-        long warehouseId = 0;
 
         TransactionResult resp = new TransactionResult();
         streamLoadManager.beginLoadTaskFromBackend(
-                dbName, tableName, labelName, null, "", "", timeoutMillis, resp, false, warehouseId);
+                dbName, tableName, labelName, null, "", "", timeoutMillis, resp, false, WarehouseManager.DEFAULT_RESOURCE, 10001);
 
         Map<String, StreamLoadTask> idToStreamLoadTask =
                 Deencapsulation.getField(streamLoadManager, "idToStreamLoadTask");

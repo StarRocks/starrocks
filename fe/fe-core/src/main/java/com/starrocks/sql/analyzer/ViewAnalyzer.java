@@ -23,7 +23,7 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.AlterClause;
 import com.starrocks.sql.ast.AlterViewClause;
 import com.starrocks.sql.ast.AlterViewStmt;
-import com.starrocks.sql.ast.AstVisitor;
+import com.starrocks.sql.ast.AstVisitorExtendInterface;
 import com.starrocks.sql.ast.ColWithComment;
 import com.starrocks.sql.ast.CreateViewStmt;
 import com.starrocks.sql.ast.QueryRelation;
@@ -39,7 +39,7 @@ public class ViewAnalyzer {
         new ViewAnalyzer.ViewAnalyzerVisitor().visit(statement, context);
     }
 
-    static class ViewAnalyzerVisitor implements AstVisitor<Void, ConnectContext> {
+    static class ViewAnalyzerVisitor implements AstVisitorExtendInterface<Void, ConnectContext> {
         @Override
         public Void visitCreateViewStatement(CreateViewStmt stmt, ConnectContext context) {
             // normalize & validate view name

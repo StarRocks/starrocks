@@ -24,7 +24,7 @@
 #include "common/status.h"
 #include "common/statusor.h"
 #include "exec/hash_join_components.h"
-#include "exec/join_hash_map.h"
+#include "exec/join/join_hash_map.h"
 #include "exec/spill/spiller.hpp"
 #include "exprs/column_ref.h"
 #include "exprs/expr.h"
@@ -60,6 +60,8 @@ void HashJoinBuildMetrics::prepare(RuntimeProfile* runtime_profile) {
     partial_runtime_bloom_filter_bytes =
             ADD_COUNTER(runtime_profile, "PartialRuntimeMembershipFilterBytes", TUnit::BYTES);
     partition_nums = ADD_COUNTER(runtime_profile, "PartitionNums", TUnit::UNIT);
+    runtime_profile->add_info_string("HashMapType", "NONE");
+    hash_map_type_info = runtime_profile->get_info_string("HashMapType");
 }
 
 HashJoiner::HashJoiner(const HashJoinerParam& param)
@@ -80,6 +82,7 @@ HashJoiner::HashJoiner(const HashJoinerParam& param)
           _probe_output_slots(param._probe_output_slots),
           _build_runtime_filters(param._build_runtime_filters.begin(), param._build_runtime_filters.end()),
           _enable_late_materialization(param._enable_late_materialization),
+          _max_dop(param._max_dop),
           _is_skew_join(param._is_skew_join) {
     _is_push_down = param._hash_join_node.is_push_down;
     if (_join_type == TJoinOp::LEFT_ANTI_JOIN && param._hash_join_node.is_rewritten_from_not_in) {
@@ -176,7 +179,7 @@ void HashJoiner::_init_hash_table_param(HashTableParam* param, RuntimeState* sta
         }
     }
 }
-Status HashJoiner::append_chunk_to_ht(const ChunkPtr& chunk) {
+Status HashJoiner::append_chunk_to_ht(RuntimeState* state, const ChunkPtr& chunk) {
     if (_phase != HashJoinPhase::BUILD) {
         return Status::OK();
     }
@@ -185,7 +188,7 @@ Status HashJoiner::append_chunk_to_ht(const ChunkPtr& chunk) {
     }
 
     update_build_rows(chunk->num_rows());
-    return _hash_join_builder->append_chunk(chunk);
+    return _hash_join_builder->append_chunk(state, chunk);
 }
 
 Status HashJoiner::append_chunk_to_spill_buffer(RuntimeState* state, const ChunkPtr& chunk) {
@@ -217,9 +220,11 @@ Status HashJoiner::build_ht(RuntimeState* state) {
 
         size_t bucket_size = 0;
         float avg_keys_per_bucket = 0;
-        _hash_join_builder->get_build_info(&bucket_size, &avg_keys_per_bucket);
+        std::string hash_map_type;
+        _hash_join_builder->get_build_info(&bucket_size, &avg_keys_per_bucket, &hash_map_type);
         COUNTER_SET(build_metrics().build_buckets_counter, static_cast<int64_t>(bucket_size));
         COUNTER_SET(build_metrics().build_keys_per_bucket, static_cast<int64_t>(100 * avg_keys_per_bucket));
+        *(build_metrics().hash_map_type_info) = std::move(hash_map_type);
     }
 
     return Status::OK();
@@ -360,7 +365,8 @@ void HashJoiner::decr_prober(RuntimeState* state) {
 float HashJoiner::avg_keys_per_bucket() const {
     size_t bucket_size = 0;
     float avg_keys_per_bucket = 0;
-    _hash_join_builder->get_build_info(&bucket_size, &avg_keys_per_bucket);
+    std::string hash_map_type;
+    _hash_join_builder->get_build_info(&bucket_size, &avg_keys_per_bucket, &hash_map_type);
     return avg_keys_per_bucket;
 }
 

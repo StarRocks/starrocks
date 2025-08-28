@@ -1763,3 +1763,5 @@ StatusOr<ColumnPtr> ArrayFunctions::array_flatten(FunctionContext* ctx, const Co
     return result;
 }
 } // namespace starrocks
+
+#include "gen_cpp/opcode/ArrayFunctions.inc"

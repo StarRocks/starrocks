@@ -14,7 +14,7 @@
 
 package com.starrocks.sql.ast;
 
-import com.starrocks.alter.AlterOpType;
+import com.starrocks.common.Config;
 import com.starrocks.common.util.PrintableMap;
 import com.starrocks.sql.parser.NodePosition;
 
@@ -28,6 +28,13 @@ public class SplitTabletClause extends AlterTableClause {
 
     private final Map<String, String> properties;
 
+    private long dynamicTabletSplitSize;
+
+    public SplitTabletClause() {
+        this(null, null, null);
+        this.dynamicTabletSplitSize = Config.dynamic_tablet_split_size;
+    }
+
     public SplitTabletClause(
             PartitionNames partitionNames,
             TabletList tabletList,
@@ -40,7 +47,7 @@ public class SplitTabletClause extends AlterTableClause {
             TabletList tabletList,
             Map<String, String> properties,
             NodePosition pos) {
-        super(AlterOpType.SPLIT_TABLET, pos);
+        super(pos);
         this.partitionNames = partitionNames;
         this.tabletList = tabletList;
         this.properties = properties;
@@ -56,6 +63,14 @@ public class SplitTabletClause extends AlterTableClause {
 
     public Map<String, String> getProperties() {
         return properties;
+    }
+
+    public long getDynamicTabletSplitSize() {
+        return dynamicTabletSplitSize;
+    }
+
+    public void setDynamicTabletSplitSize(long dynamicTabletSplitSize) {
+        this.dynamicTabletSplitSize = dynamicTabletSplitSize;
     }
 
     @Override
@@ -78,6 +93,6 @@ public class SplitTabletClause extends AlterTableClause {
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitSplitTabletClause(this, context);
+        return ((AstVisitorExtendInterface<R, C>) visitor).visitSplitTabletClause(this, context);
     }
 }

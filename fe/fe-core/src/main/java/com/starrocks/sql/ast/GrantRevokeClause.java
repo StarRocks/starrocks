@@ -15,7 +15,6 @@
 
 package com.starrocks.sql.ast;
 
-import com.starrocks.analysis.ParseNode;
 import com.starrocks.sql.parser.NodePosition;
 
 /**
@@ -24,23 +23,23 @@ import com.starrocks.sql.parser.NodePosition;
  * ;
  */
 public class GrantRevokeClause implements ParseNode {
-    private final UserIdentity userIdentity;
+    private final UserRef user;
     private final String roleName;
 
     private final NodePosition pos;
 
-    public GrantRevokeClause(UserIdentity userIdentifier, String roleName) {
-        this(userIdentifier, roleName, NodePosition.ZERO);
+    public GrantRevokeClause(UserRef user, String roleName) {
+        this(user, roleName, NodePosition.ZERO);
     }
 
-    public GrantRevokeClause(UserIdentity userIdentifier, String roleName, NodePosition pos) {
+    public GrantRevokeClause(UserRef user, String roleName, NodePosition pos) {
         this.pos = pos;
-        this.userIdentity = userIdentifier;
+        this.user = user;
         this.roleName = roleName;
     }
 
-    public UserIdentity getUserIdentity() {
-        return userIdentity;
+    public UserRef getUser() {
+        return user;
     }
 
     public String getRoleName() {

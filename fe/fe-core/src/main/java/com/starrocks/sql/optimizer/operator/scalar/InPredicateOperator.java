@@ -29,24 +29,28 @@ public class InPredicateOperator extends PredicateOperator {
         super(OperatorType.IN, arguments);
         this.isNotIn = false;
         this.isSubquery = false;
+        incrDepth(arguments);
     }
 
     public InPredicateOperator(boolean isNotIn, ScalarOperator... arguments) {
         super(OperatorType.IN, arguments);
         this.isNotIn = isNotIn;
         this.isSubquery = false;
+        incrDepth(arguments);
     }
 
     public InPredicateOperator(boolean isNotIn, boolean isSubquery, ScalarOperator... arguments) {
         super(OperatorType.IN, arguments);
         this.isNotIn = isNotIn;
         this.isSubquery = isSubquery;
+        incrDepth(arguments);
     }
 
     public InPredicateOperator(boolean isNotIn, List<ScalarOperator> arguments) {
         super(OperatorType.IN, arguments);
         this.isNotIn = isNotIn;
         this.isSubquery = false;
+        incrDepth(arguments);
     }
 
     public boolean isSubquery() {
@@ -86,7 +90,7 @@ public class InPredicateOperator extends PredicateOperator {
 
     @Override
     public <R, C> R accept(ScalarOperatorVisitor<R, C> visitor, C context) {
-        return visitor.visitInPredicate(this, context);
+        return  visitor.visitInPredicate(this, context);
     }
 
     @Override
@@ -104,14 +108,8 @@ public class InPredicateOperator extends PredicateOperator {
     }
 
     @Override
-    public boolean equals(Object o) {
-        if (this == o) {
-            return true;
-        }
-        if (o == null || getClass() != o.getClass()) {
-            return false;
-        }
-        if (!super.equals(o)) {
+    public boolean equalsSelf(Object o) {
+        if (!super.equalsSelf(o)) {
             return false;
         }
         InPredicateOperator that = (InPredicateOperator) o;
@@ -119,7 +117,7 @@ public class InPredicateOperator extends PredicateOperator {
     }
 
     @Override
-    public int hashCode() {
-        return Objects.hash(super.hashCode(), isNotIn, isSubquery);
+    public int hashCodeSelf() {
+        return Objects.hash(super.hashCodeSelf(), isNotIn, isSubquery);
     }
 }

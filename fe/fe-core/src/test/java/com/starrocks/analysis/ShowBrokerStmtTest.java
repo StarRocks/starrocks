@@ -15,6 +15,7 @@
 package com.starrocks.analysis;
 
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.ShowResultMetaFactory;
 import com.starrocks.qe.ShowResultSetMetaData;
 import com.starrocks.sql.ast.ShowBrokerStmt;
 import com.starrocks.utframe.UtFrameUtils;
@@ -33,7 +34,7 @@ public class ShowBrokerStmtTest {
     @Test
     public void testNormal() throws Exception {
         ShowBrokerStmt stmt = (ShowBrokerStmt)UtFrameUtils.parseStmtWithNewParser("show broker", connectContext);
-        ShowResultSetMetaData metaData = stmt.getMetaData();
+        ShowResultSetMetaData metaData = new ShowResultMetaFactory().getMetadata(stmt);
         Assertions.assertNotNull(metaData);
         Assertions.assertEquals(7, metaData.getColumnCount());
         Assertions.assertEquals("Name", metaData.getColumn(0).getName());

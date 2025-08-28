@@ -23,7 +23,7 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ColumnId;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.InternalCatalog;
-import com.starrocks.catalog.OlapTable;
+import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AuditLog;
@@ -47,6 +47,7 @@ import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.MetaUtils;
 import com.starrocks.sql.common.StarRocksPlannerException;
+import com.starrocks.sql.optimizer.rule.tree.prunesubfield.SubfieldAccessPathNormalizer;
 import com.starrocks.sql.optimizer.statistics.CacheDictManager;
 import com.starrocks.sql.optimizer.statistics.IRelaxDictManager;
 import com.starrocks.sql.parser.SqlParser;
@@ -321,15 +322,46 @@ public class StatisticExecutor {
                     table.getName());
         }
 
-        OlapTable olapTable = (OlapTable) table;
-        long version = olapTable.getPartitions().stream().map(p -> p.getDefaultPhysicalPartition().getVisibleVersionTime())
-                .max(Long::compareTo).orElse(0L);
-        String columnName = MetaUtils.getColumnNameByColumnId(dbId, tableId, columnId);
+        long version = table.getPartitions().stream().flatMap(p -> p.getSubPartitions().stream()).map(
+                PhysicalPartition::getVisibleVersionTime).max(Long::compareTo).orElse(0L);
+        List<String> pieces = SubfieldAccessPathNormalizer.parseSimpleJsonPath(columnId.getId());
+        if (pieces.size() == 1) {
+            String columnName = MetaUtils.getColumnNameByColumnId(dbId, tableId, columnId);
+            String catalogName = InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME;
+            String sql = "select cast(" + StatsConstants.STATISTIC_DICT_VERSION + " as Int), " +
+                    "cast(" + version + " as bigint), " +
+                    "dict_merge(" + StatisticUtils.quoting(columnName) + ", " +
+                    CacheDictManager.LOW_CARDINALITY_THRESHOLD + ") as _dict_merge_" + columnName +
+                    " from " + StatisticUtils.quoting(catalogName, db.getOriginName(), table.getName()) + " [_META_]";
+            return executeStatisticDQLWithoutContext(sql);
+        } else {
+            return queryDictSyncForJson(dbId, tableId, columnId, version, db, table);
+        }
+    }
+
+    private static Pair<List<TStatisticData>, Status> queryDictSyncForJson(Long dbId, Long tableId,
+                                                                           ColumnId columnId,
+                                                                           long version,
+                                                                           Database db, Table table) throws TException {
+        List<String> pieces = SubfieldAccessPathNormalizer.parseSimpleJsonPath(columnId.getId());
+        if (pieces.isEmpty()) {
+            throw new RuntimeException("invalid json path: " + columnId);
+        }
+        ColumnId realColumnId = ColumnId.create(pieces.get(0));
+        Column column = MetaUtils.getColumnByColumnId(dbId, tableId, realColumnId);
+        if (!column.getType().equals(Type.JSON)) {
+            throw new SemanticException("Column '%s' is not a JSON type", column.getName());
+        }
+        String fullPath = String.join(".", pieces);
+        String path = pieces.stream().skip(1).collect(Collectors.joining("."));
+        String columnRef = String.format("get_json_string(%s, '%s')", StatisticUtils.quoting(column.getName()), path);
         String catalogName = InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME;
+        String columnAlias = fullPath.replace(".", "_");
+
         String sql = "select cast(" + StatsConstants.STATISTIC_DICT_VERSION + " as Int), " +
                 "cast(" + version + " as bigint), " +
-                "dict_merge(" + StatisticUtils.quoting(columnName) + ", " +
-                CacheDictManager.LOW_CARDINALITY_THRESHOLD + ") as _dict_merge_" + columnName +
+                "dict_merge(" + columnRef + ", " +
+                CacheDictManager.LOW_CARDINALITY_THRESHOLD + ") as _dict_merge_" + columnAlias +
                 " from " + StatisticUtils.quoting(catalogName, db.getOriginName(), table.getName()) + " [_META_]";
 
         return executeStatisticDQLWithoutContext(sql);
@@ -638,9 +670,7 @@ public class StatisticExecutor {
         // copy
         executeDML(context, sqlList.get(0));
 
-        // delete
-        executeDML(context, sqlList.get(1));
-
+        GlobalStateMgr.getCurrentState().getAnalyzeMgr().recordDropPartition(sourcePartition);
         // NOTE: why don't we refresh the statistics cache ?
         // OVERWRITE will create a new partition and delete the existing one, so next time when consulting the stats
         // cache, it would get a cache-miss so reload the cache. and also the cache of deleted partition would be

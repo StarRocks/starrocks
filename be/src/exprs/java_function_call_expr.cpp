@@ -219,6 +219,9 @@ Status JavaFunctionCallExpr::open(RuntimeState* state, ExprContext* context,
             const_columns.emplace_back(std::move(child_col));
         }
     }
+
+    UserFunctionCache::FunctionCacheDesc func_cache_desc(_fn.fid, _fn.hdfs_location, _fn.checksum,
+                                                         TFunctionBinaryType::SRJAR);
     // cacheable
     if (scope == FunctionContext::FRAGMENT_LOCAL) {
         auto get_func_desc = [this, scope, state](const std::string& lib) -> StatusOr<std::any> {
@@ -233,12 +236,11 @@ Status JavaFunctionCallExpr::open(RuntimeState* state, ExprContext* context,
 
         auto function_cache = UserFunctionCache::instance();
         if (_fn.__isset.isolated && !_fn.isolated) {
-            ASSIGN_OR_RETURN(auto desc, function_cache->load_cacheable_java_udf(_fn.fid, _fn.hdfs_location,
-                                                                                _fn.checksum, get_func_desc));
+            ASSIGN_OR_RETURN(auto desc, function_cache->load_cacheable_java_udf(func_cache_desc, get_func_desc));
             _func_desc = std::any_cast<std::shared_ptr<JavaUDFContext>>(desc);
         } else {
             std::string libpath;
-            RETURN_IF_ERROR(function_cache->get_libpath(_fn.fid, _fn.hdfs_location, _fn.checksum, &libpath));
+            RETURN_IF_ERROR(function_cache->get_libpath(func_cache_desc, &libpath));
             ASSIGN_OR_RETURN(auto desc, get_func_desc(libpath));
             _func_desc = std::any_cast<std::shared_ptr<JavaUDFContext>>(desc);
         }

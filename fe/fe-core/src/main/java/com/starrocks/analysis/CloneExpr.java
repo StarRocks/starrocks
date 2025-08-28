@@ -16,8 +16,8 @@
 package com.starrocks.analysis;
 
 import com.starrocks.catalog.Type;
-import com.starrocks.common.AnalysisException;
 import com.starrocks.sql.ast.AstVisitor;
+import com.starrocks.sql.ast.AstVisitorExtendInterface;
 import com.starrocks.thrift.TExprNode;
 import com.starrocks.thrift.TExprNodeType;
 
@@ -26,10 +26,6 @@ public class CloneExpr extends Expr {
         super();
         this.addChild(child);
         setType(child.getType());
-    }
-
-    @Override
-    protected void analyzeImpl(Analyzer analyzer) throws AnalysisException {
     }
 
     @Override
@@ -65,6 +61,6 @@ public class CloneExpr extends Expr {
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitCloneExpr(this, context);
+        return ((AstVisitorExtendInterface<R, C>) visitor).visitCloneExpr(this, context);
     }
 }

@@ -282,11 +282,32 @@ public class DecodeRewriter extends OptExpressionVisitor<OptExpression, ColumnRe
                             .collect(Collectors.toList());
         }
 
+        Map<ColumnRefOperator, CallOperator> preAggCall = null;
+        if (topN.getPreAggCall() != null) {
+            preAggCall = Maps.newHashMap();
+            for (ColumnRefOperator aggRef : topN.getPreAggCall().keySet()) {
+                CallOperator aggFn = topN.getPreAggCall().get(aggRef);
+                if (!context.stringExprToDictExprMap.containsKey(aggFn)) {
+                    preAggCall.put(aggRef, aggFn);
+                    continue;
+                }
+
+                // merge stage is different from update stage
+                if (FunctionSet.MAX.equals(aggFn.getFnName()) || FunctionSet.MIN.equals(aggFn.getFnName())) {
+                    ColumnRefOperator newAggRef = context.stringRefToDictRefMap.getOrDefault(aggRef, aggRef);
+                    preAggCall.put(newAggRef, context.stringExprToDictExprMap.get(aggFn).cast());
+                } else {
+                    preAggCall.put(aggRef, context.stringExprToDictExprMap.get(aggFn).cast());
+                }
+            }
+        }
+
         ScalarOperator predicate = rewritePredicate(topN.getPredicate(), info.inputStringColumns);
         Projection projection = rewriteProjection(topN.getProjection(), info.inputStringColumns);
         PhysicalTopNOperator newOp =
                 PhysicalTopNOperator.builder().withOperator(topN).setOrderSpec(new OrderSpec(newOrdering))
                         .setPartitionByColumns(newPartitionByColumns).setPredicate(predicate).setProjection(projection)
+                        .setPreAggregate(preAggCall)
                         .build();
         return rewriteOptExpression(optExpression, newOp, info.outputStringColumns);
     }
@@ -313,8 +334,11 @@ public class DecodeRewriter extends OptExpressionVisitor<OptExpression, ColumnRe
                 }
 
                 inputStringRefs.union(fnOutputs.get(i));
-                fnInputs.set(i, context.stringRefToDictRefMap.getOrDefault(fnInputs.get(i), fnInputs.get(i)));
-                fnOutputs.set(i, context.stringRefToDictRefMap.getOrDefault(fnOutputs.get(i), fnOutputs.get(i)));
+                ColumnRefOperator input = context.stringRefToDictRefMap.getOrDefault(fnInputs.get(i), fnInputs.get(i));
+                ColumnRefOperator output = context.stringRefToDictRefMap.getOrDefault(fnOutputs.get(i), fnOutputs.get(i));
+                fnInputs.set(i, input);
+                fnOutputs.set(i, output);
+                fragmentUseDictExprs.union(input);
             }
             function = (TableFunction) Expr.getBuiltinFunction(FunctionSet.UNNEST,
                     fnInputs.stream().map(ScalarOperator::getType).toArray(Type[]::new), function.getArgNames(),

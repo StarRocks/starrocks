@@ -34,8 +34,8 @@
 
 package com.starrocks.analysis;
 
-import com.starrocks.common.AnalysisException;
 import com.starrocks.sql.ast.AstVisitor;
+import com.starrocks.sql.ast.AstVisitorExtendInterface;
 import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.thrift.TExprNode;
 import com.starrocks.thrift.TExprNodeType;
@@ -80,10 +80,6 @@ public class InformationFunction extends Expr {
         return new InformationFunction(this);
     }
 
-    @Override
-    protected void analyzeImpl(Analyzer analyzer) throws AnalysisException {
-    }
-
     public String getFuncType() {
         return funcType;
     }
@@ -120,6 +116,6 @@ public class InformationFunction extends Expr {
      */
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitInformationFunction(this, context);
+        return ((AstVisitorExtendInterface<R, C>) visitor).visitInformationFunction(this, context);
     }
 }

@@ -66,6 +66,7 @@ import com.starrocks.common.ErrorReport;
 import com.starrocks.common.FeConstants;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
+import com.starrocks.sql.analyzer.AggregateTypeAnalyzer;
 import com.starrocks.sql.analyzer.AnalyzeState;
 import com.starrocks.sql.analyzer.Analyzer;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
@@ -282,7 +283,7 @@ public class CreateMaterializedViewStmt extends DdlStmt {
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitCreateMaterializedViewStmt(this, context);
+        return ((AstVisitorExtendInterface<R, C>) visitor).visitCreateMaterializedViewStmt(this, context);
     }
 
     public void analyze(ConnectContext context) {
@@ -693,7 +694,7 @@ public class CreateMaterializedViewStmt extends DdlStmt {
         }
 
         // If isReplay, don't check compatibility because materialized view maybe already created before.
-        if (!isReplay && !mvAggregateType.checkCompatibility(type)) {
+        if (!isReplay && !AggregateTypeAnalyzer.checkCompatibility(mvAggregateType, type)) {
             throw new SemanticException(
                     String.format("Invalid aggregate function '%s' for '%s'", mvAggregateType, type));
         }

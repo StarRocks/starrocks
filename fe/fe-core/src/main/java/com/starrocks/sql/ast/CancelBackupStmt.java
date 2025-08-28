@@ -17,6 +17,8 @@ package com.starrocks.sql.ast;
 
 import com.starrocks.sql.parser.NodePosition;
 
+import static com.starrocks.common.util.Util.normalizeName;
+
 public class CancelBackupStmt extends CancelStmt {
 
     private String dbName;
@@ -34,7 +36,7 @@ public class CancelBackupStmt extends CancelStmt {
     public CancelBackupStmt(String dbName, boolean isRestore, boolean isExternalCatalog,
                             NodePosition pos) {
         super(pos);
-        this.dbName = dbName;
+        this.dbName = normalizeName(dbName);
         this.isRestore = isRestore;
         this.isExternalCatalog = isExternalCatalog;
     }
@@ -44,7 +46,7 @@ public class CancelBackupStmt extends CancelStmt {
     }
 
     public void setDbName(String dbName) {
-        this.dbName = dbName;
+        this.dbName = normalizeName(dbName);
     }
 
     public boolean isRestore() {
@@ -57,6 +59,6 @@ public class CancelBackupStmt extends CancelStmt {
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitCancelBackupStatement(this, context);
+        return ((AstVisitorExtendInterface<R, C>) visitor).visitCancelBackupStatement(this, context);
     }
 }

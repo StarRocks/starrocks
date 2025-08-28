@@ -24,5 +24,6 @@ using TabletMetadata = TabletMetadataPB;
 using TabletMetadataPtr = std::shared_ptr<const TabletMetadata>;
 using MutableTabletMetadataPtr = std::shared_ptr<TabletMetadata>;
 using BundleTabletMetadataPtr = std::shared_ptr<BundleTabletMetadataPB>;
+using TabletMetadataPtrs = std::vector<TabletMetadataPtr>;
 
 } // namespace starrocks

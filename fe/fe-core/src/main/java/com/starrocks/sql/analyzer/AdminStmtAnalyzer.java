@@ -34,7 +34,7 @@ import com.starrocks.sql.ast.AdminSetPartitionVersionStmt;
 import com.starrocks.sql.ast.AdminSetReplicaStatusStmt;
 import com.starrocks.sql.ast.AdminShowReplicaDistributionStmt;
 import com.starrocks.sql.ast.AdminShowReplicaStatusStmt;
-import com.starrocks.sql.ast.AstVisitor;
+import com.starrocks.sql.ast.AstVisitorExtendInterface;
 import com.starrocks.sql.ast.PartitionNames;
 import com.starrocks.sql.ast.Property;
 import com.starrocks.sql.ast.StatementBase;
@@ -51,7 +51,7 @@ public class AdminStmtAnalyzer {
         new AdminStmtAnalyzerVisitor().analyze(statementBase, session);
     }
 
-    static class AdminStmtAnalyzerVisitor implements AstVisitor<Void, ConnectContext> {
+    static class AdminStmtAnalyzerVisitor implements AstVisitorExtendInterface<Void, ConnectContext> {
         public void analyze(StatementBase statementBase, ConnectContext session) {
             visit(statementBase, session);
         }
@@ -233,35 +233,34 @@ public class AdminStmtAnalyzer {
 
         private boolean analyzeWhere(AdminShowReplicaStatusStmt adminShowReplicaStatusStmt) {
             Expr where = adminShowReplicaStatusStmt.getWhere();
-            Replica.ReplicaStatus statusFilter = null;
 
             // analyze where clause if not null
             if (where == null) {
                 return true;
             }
 
-            if (!(where instanceof BinaryPredicate)) {
+            if (!(where instanceof BinaryPredicate binaryPredicate)) {
                 return false;
             }
 
-            BinaryPredicate binaryPredicate = (BinaryPredicate) where;
             BinaryType op = binaryPredicate.getOp();
             if (op != BinaryType.EQ && op != BinaryType.NE) {
                 return false;
             }
-            adminShowReplicaStatusStmt.setOp(op);
 
             Expr leftChild = binaryPredicate.getChild(0);
             Expr rightChild = binaryPredicate.getChild(1);
-            String leftKey = ((SlotRef) leftChild).getColumnName();
-            if (!(rightChild instanceof StringLiteral) || !leftKey.equalsIgnoreCase("status")) {
+
+            if (!(leftChild instanceof SlotRef) || !(rightChild instanceof StringLiteral)) {
                 return false;
             }
-            statusFilter = Enums.getIfPresent(Replica.ReplicaStatus.class,
-                            ((StringLiteral) rightChild).getStringValue().toUpperCase())
-                    .orNull();
 
-            adminShowReplicaStatusStmt.setStatusFilter(statusFilter);
+            String leftKey = ((SlotRef) leftChild).getColumnName();
+            if (!leftKey.equalsIgnoreCase("status")) {
+                return false;
+            }
+            Replica.ReplicaStatus statusFilter = Enums.getIfPresent(Replica.ReplicaStatus.class,
+                    ((StringLiteral) rightChild).getStringValue().toUpperCase()).orNull();
             return statusFilter != null;
         }
     }

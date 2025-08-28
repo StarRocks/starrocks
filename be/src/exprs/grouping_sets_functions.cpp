@@ -30,3 +30,5 @@ StatusOr<ColumnPtr> GroupingSetsFunctions::grouping(FunctionContext* context, co
 }
 
 } // namespace starrocks
+
+#include "gen_cpp/opcode/GroupingSetsFunctions.inc"

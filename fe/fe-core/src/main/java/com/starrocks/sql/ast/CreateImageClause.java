@@ -14,7 +14,6 @@
 
 package com.starrocks.sql.ast;
 
-import com.starrocks.alter.AlterOpType;
 import com.starrocks.sql.parser.NodePosition;
 
 public class CreateImageClause extends AlterClause {
@@ -23,11 +22,11 @@ public class CreateImageClause extends AlterClause {
     }
 
     public CreateImageClause(NodePosition pos) {
-        super(AlterOpType.ALTER_OTHER, pos);
+        super(pos);
     }
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitCreateImageClause(this, context);
+        return ((AstVisitorExtendInterface<R, C>) visitor).visitCreateImageClause(this, context);
     }
 }

@@ -26,12 +26,12 @@ import com.starrocks.catalog.Table;
 import com.starrocks.common.AlreadyExistsException;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.MetaNotFoundException;
+import com.starrocks.common.tvr.TvrTableSnapshot;
 import com.starrocks.connector.ConnectorMetadatRequestContext;
 import com.starrocks.connector.GetRemoteFilesParams;
 import com.starrocks.connector.MetaPreparationItem;
 import com.starrocks.connector.PartitionInfo;
 import com.starrocks.connector.RemoteFileInfo;
-import com.starrocks.connector.TableVersionRange;
 import com.starrocks.connector.delta.DeltaLakeMetadata;
 import com.starrocks.connector.hive.HiveMetadata;
 import com.starrocks.connector.hudi.HudiMetadata;
@@ -107,7 +107,7 @@ public class UnifiedMetadataTest {
         )
         );
         this.getRemoteFilesParams = GetRemoteFilesParams.newBuilder().setPartitionKeys(ImmutableList.of())
-                .setTableVersionRange(TableVersionRange.empty()).build();
+                .setTableVersionRange(TvrTableSnapshot.empty()).build();
     }
 
     @Test
@@ -326,7 +326,7 @@ public class UnifiedMetadataTest {
         createTableStmt.setEngineName("iceberg");
         assertTrue(unifiedMetadata.createTable(connectContext, createTableStmt));
         Assert.assertTrue(unifiedMetadata.prepareMetadata(new MetaPreparationItem(icebergTable, null,
-                -1, TableVersionRange.empty()), null, null));
+                -1, TvrTableSnapshot.empty()), null, null));
         Assert.assertNotNull(unifiedMetadata.getSerializedMetaSpec("test_db", "test_tbl", -1, null, null));
     }
 

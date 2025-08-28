@@ -93,7 +93,7 @@ constexpr int64_t kRpcHttpMinSize = ((1L << 31) - (1L << 10));
 class RuntimeState {
 public:
     // for ut only
-    RuntimeState() = default;
+    RuntimeState();
     // for ut only
     RuntimeState(const TUniqueId& fragment_instance_id, const TQueryOptions& query_options,
                  const TQueryGlobals& query_globals, ExecEnv* exec_env);
@@ -137,6 +137,7 @@ public:
     int64_t timestamp_us() const { return _timestamp_us; }
     const std::string& timezone() const { return _timezone; }
     const cctz::time_zone& timezone_obj() const { return _timezone_obj; }
+    bool set_timezone(const std::string& tz);
     const std::string& user() const { return _user; }
     const std::string& last_query_id() const { return _last_query_id; }
     const TUniqueId& query_id() const { return _query_id; }
@@ -429,6 +430,16 @@ public:
 
     bool enable_column_view() const {
         return column_view_concat_bytes_limit() > 0 || column_view_concat_rows_limit() > 0;
+    }
+
+    bool enable_hash_join_range_direct_mapping_opt() const {
+        return _query_options.__isset.enable_hash_join_range_direct_mapping_opt &&
+               _query_options.enable_hash_join_range_direct_mapping_opt;
+    }
+
+    bool enable_hash_join_linear_chained_opt() const {
+        return _query_options.__isset.enable_hash_join_linear_chained_opt &&
+               _query_options.enable_hash_join_linear_chained_opt;
     }
 
     const std::vector<TTabletCommitInfo>& tablet_commit_infos() const { return _tablet_commit_infos; }

@@ -1176,6 +1176,8 @@ public class NodeMgr {
     @VisibleForTesting
     public void setMySelf(Frontend frontend) {
         selfNode = Pair.create(frontend.getHost(), frontend.getRpcPort());
+        nodeName = frontend.getNodeName();
+        role = frontend.getRole();
     }
 
     public ConcurrentHashMap<String, Frontend> getFrontends() {
@@ -1188,6 +1190,7 @@ public class NodeMgr {
 
         int fid = allocateNextFrontendId();
         Frontend self = new Frontend(fid, role, nodeName, selfNode.first, selfNode.second);
+        self.setAlive(true);
         frontends.put(self.getNodeName(), self);
         frontendIds.put(fid, self);
         // reset helper nodes
@@ -1275,5 +1278,12 @@ public class NodeMgr {
 
     public static boolean isFeNodeNameValid(String nodeName, String host, int port) {
         return nodeName.startsWith(host + "_" + port);
+    }
+
+    public long getTotalCpuCores() {
+        return frontends.values()
+                .stream()
+                .mapToLong(Frontend::getCpuCores)
+                .sum() + systemInfo.getTotalCpuCores();
     }
 }

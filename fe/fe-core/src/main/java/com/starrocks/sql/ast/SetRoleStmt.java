@@ -14,7 +14,6 @@
 
 package com.starrocks.sql.ast;
 
-import com.starrocks.analysis.RedirectStatus;
 import com.starrocks.sql.parser.NodePosition;
 
 import java.util.ArrayList;
@@ -47,12 +46,7 @@ public class SetRoleStmt extends StatementBase {
     }
 
     @Override
-    public RedirectStatus getRedirectStatus() {
-        return RedirectStatus.NO_FORWARD;
-    }
-
-    @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitSetRoleStatement(this, context);
+        return ((AstVisitorExtendInterface<R, C>) visitor).visitSetRoleStatement(this, context);
     }
 }

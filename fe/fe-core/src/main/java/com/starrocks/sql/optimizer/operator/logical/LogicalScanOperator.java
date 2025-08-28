@@ -21,7 +21,8 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ColumnAccessPath;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.AnalysisException;
-import com.starrocks.connector.TableVersionRange;
+import com.starrocks.common.tvr.TvrTableSnapshot;
+import com.starrocks.common.tvr.TvrVersionRange;
 import com.starrocks.planner.PartitionColumnFilter;
 import com.starrocks.sql.optimizer.ExpressionContext;
 import com.starrocks.sql.optimizer.OptExpression;
@@ -64,7 +65,7 @@ public abstract class LogicalScanOperator extends LogicalOperator {
     protected Set<String> partitionColumns = Sets.newHashSet();
     protected ImmutableList<ColumnAccessPath> columnAccessPaths;
     protected ScanOptimizeOption scanOptimizeOption;
-    protected TableVersionRange tableVersionRange;
+    protected TvrVersionRange tvrVersionRange;
 
     public LogicalScanOperator(
             OperatorType type,
@@ -74,7 +75,8 @@ public abstract class LogicalScanOperator extends LogicalOperator {
             long limit,
             ScalarOperator predicate,
             Projection projection) {
-        this(type, table, colRefToColumnMetaMap, columnMetaToColRefMap, limit, predicate, projection, TableVersionRange.empty());
+        this(type, table, colRefToColumnMetaMap, columnMetaToColRefMap, limit, predicate,
+                projection, TvrTableSnapshot.empty());
     }
 
     public LogicalScanOperator(
@@ -85,14 +87,14 @@ public abstract class LogicalScanOperator extends LogicalOperator {
             long limit,
             ScalarOperator predicate,
             Projection projection,
-            TableVersionRange tableVersionRange) {
+            TvrVersionRange tvrVersionRange) {
         super(type, limit, predicate, projection);
         this.table = Objects.requireNonNull(table, "table is null");
         this.colRefToColumnMetaMap = ImmutableMap.copyOf(colRefToColumnMetaMap);
         this.columnMetaToColRefMap = ImmutableMap.copyOf(columnMetaToColRefMap);
         this.columnAccessPaths = ImmutableList.of();
         this.scanOptimizeOption = new ScanOptimizeOption();
-        this.tableVersionRange = tableVersionRange;
+        this.tvrVersionRange = tvrVersionRange;
         buildColumnFilters(predicate);
     }
 
@@ -102,7 +104,7 @@ public abstract class LogicalScanOperator extends LogicalOperator {
         this.columnMetaToColRefMap = ImmutableMap.of();
         this.columnAccessPaths = ImmutableList.of();
         this.scanOptimizeOption = new ScanOptimizeOption();
-        this.tableVersionRange = TableVersionRange.empty();
+        this.tvrVersionRange = TvrTableSnapshot.empty();
     }
 
     public Table getTable() {
@@ -141,12 +143,12 @@ public abstract class LogicalScanOperator extends LogicalOperator {
         this.scanOptimizeOption = scanOptimizeOption;
     }
 
-    public TableVersionRange getTableVersionRange() {
-        return tableVersionRange;
+    public TvrVersionRange getTvrVersionRange() {
+        return tvrVersionRange;
     }
 
-    public void setTableVersionRange(TableVersionRange tableVersionRange) {
-        this.tableVersionRange = tableVersionRange;
+    public void setTvrVersionRange(TvrVersionRange tvrVersionRange) {
+        this.tvrVersionRange = tvrVersionRange;
     }
 
     // for mark empty partitions/empty tablet
@@ -255,7 +257,7 @@ public abstract class LogicalScanOperator extends LogicalOperator {
             builder.columnAccessPaths = scanOperator.columnAccessPaths;
             builder.scanOptimizeOption = scanOperator.scanOptimizeOption;
             builder.partitionColumns = scanOperator.partitionColumns;
-            builder.tableVersionRange = scanOperator.tableVersionRange;
+            builder.tvrVersionRange = scanOperator.tvrVersionRange;
             return (B) this;
         }
 
@@ -282,13 +284,21 @@ public abstract class LogicalScanOperator extends LogicalOperator {
             return (B) this;
         }
 
+        public B addColumnAccessPaths(List<ColumnAccessPath> paths) {
+            builder.columnAccessPaths = ImmutableList.<ColumnAccessPath>builder()
+                    .addAll(paths)
+                    .addAll(builder.columnAccessPaths)
+                    .build();
+            return (B) this;
+        }
+
         public B setTable(Table table) {
             builder.table = table;
             return (B) this;
         }
 
-        public B setTableVersionRange(TableVersionRange tableVersionRange) {
-            builder.tableVersionRange = tableVersionRange;
+        public B setTableVersionRange(TvrVersionRange tableVersionRange) {
+            builder.tvrVersionRange = tableVersionRange;
             return (B) this;
         }
     }

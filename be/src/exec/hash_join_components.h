@@ -19,7 +19,7 @@
 
 #include "column/vectorized_fwd.h"
 #include "common/object_pool.h"
-#include "exec/join_hash_map.h"
+#include "exec/join/join_hash_map.h"
 #include "runtime/runtime_state.h"
 
 namespace starrocks {
@@ -92,11 +92,11 @@ public:
     virtual void create(const HashTableParam& param) = 0;
 
     // append chunk to hash table
-    Status append_chunk(const ChunkPtr& chunk) {
+    Status append_chunk(RuntimeState* state, const ChunkPtr& chunk) {
         _inc_row_count(chunk->num_rows());
-        return do_append_chunk(chunk);
+        return do_append_chunk(state, chunk);
     }
-    virtual Status do_append_chunk(const ChunkPtr& chunk) = 0;
+    virtual Status do_append_chunk(RuntimeState* state, const ChunkPtr& chunk) = 0;
 
     virtual Status build(RuntimeState* state) = 0;
 
@@ -116,7 +116,7 @@ public:
     virtual size_t get_output_probe_column_count() const = 0;
     virtual size_t get_output_build_column_count() const = 0;
 
-    virtual void get_build_info(size_t* bucket_size, float* avg_keys_per_bucket) = 0;
+    virtual void get_build_info(size_t* bucket_size, float* avg_keys_per_bucket, std::string* hash_map_type) = 0;
 
     virtual void visitHt(const std::function<void(JoinHashTable*)>& visitor) = 0;
 
@@ -125,6 +125,7 @@ public:
     // clone readable to to builder
     virtual void clone_readable(HashJoinBuilder* builder) = 0;
 
+    virtual Status prepare_for_spill_start(RuntimeState* state) { return Status::OK(); }
     virtual ChunkPtr convert_to_spill_schema(const ChunkPtr& chunk) const = 0;
 
 protected:
@@ -149,7 +150,7 @@ public:
 
     void reset(const HashTableParam& param) override;
 
-    Status do_append_chunk(const ChunkPtr& chunk) override;
+    Status do_append_chunk(RuntimeState* state, const ChunkPtr& chunk) override;
 
     Status build(RuntimeState* state) override;
 
@@ -157,9 +158,10 @@ public:
 
     int64_t ht_mem_usage() const override { return _ht.mem_usage(); }
 
-    void get_build_info(size_t* bucket_size, float* avg_keys_per_bucket) override {
+    void get_build_info(size_t* bucket_size, float* avg_keys_per_bucket, std::string* hash_map_type) override {
         *bucket_size = _ht.get_bucket_size();
         *avg_keys_per_bucket = _ht.get_keys_per_bucket();
+        *hash_map_type = _ht.get_hash_map_type();
     }
 
     size_t get_output_probe_column_count() const override { return _ht.get_output_probe_column_count(); }

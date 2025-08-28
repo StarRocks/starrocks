@@ -15,23 +15,9 @@
 
 package com.starrocks.sql.ast;
 
-import com.starrocks.catalog.Column;
-import com.starrocks.catalog.ScalarType;
-import com.starrocks.qe.ShowResultSetMetaData;
 import com.starrocks.sql.parser.NodePosition;
 
 public class ShowRolesStmt extends ShowStmt {
-    private static final ShowResultSetMetaData META_DATA;
-
-    static {
-        ShowResultSetMetaData.Builder builder = ShowResultSetMetaData.builder();
-
-        builder.addColumn(new Column("Name", ScalarType.createVarchar(100)));
-        builder.addColumn(new Column("Builtin", ScalarType.createVarchar(30)));
-        builder.addColumn(new Column("Comment", ScalarType.createVarchar(300)));
-
-        META_DATA = builder.build();
-    }
 
     public ShowRolesStmt() {
         this(NodePosition.ZERO);
@@ -42,13 +28,8 @@ public class ShowRolesStmt extends ShowStmt {
     }
 
     @Override
-    public ShowResultSetMetaData getMetaData() {
-        return META_DATA;
-    }
-
-    @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitShowRolesStatement(this, context);
+        return ((AstVisitorExtendInterface<R, C>) visitor).visitShowRolesStatement(this, context);
     }
 
 }

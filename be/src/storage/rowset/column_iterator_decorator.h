@@ -108,6 +108,8 @@ public:
         return _parent->fetch_subfield_by_rowid(rowids, size, values);
     }
 
+    std::string name() const override { return "ColumnIteratorDecorator"; }
+
 protected:
     ColumnIterator* _parent;
     std::unique_ptr<ColumnIterator> _release_guard;

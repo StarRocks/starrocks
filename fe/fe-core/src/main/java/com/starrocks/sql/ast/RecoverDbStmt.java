@@ -17,6 +17,8 @@ package com.starrocks.sql.ast;
 
 import com.starrocks.sql.parser.NodePosition;
 
+import static com.starrocks.common.util.Util.normalizeName;
+
 public class RecoverDbStmt extends DdlStmt {
     private String catalog;
     private String dbName;
@@ -27,7 +29,7 @@ public class RecoverDbStmt extends DdlStmt {
 
     public RecoverDbStmt(String dbName, NodePosition pos) {
         super(pos);
-        this.dbName = dbName;
+        this.dbName = normalizeName(dbName);
     }
 
     public String getDbName() {
@@ -35,7 +37,7 @@ public class RecoverDbStmt extends DdlStmt {
     }
 
     public void setDbName(String dbname) {
-        this.dbName = dbname;
+        this.dbName = normalizeName(dbname);
     }
 
     public String getCatalogName() {
@@ -43,11 +45,11 @@ public class RecoverDbStmt extends DdlStmt {
     }
 
     public void setCatalogName(String catalogName) {
-        this.catalog = catalogName;
+        this.catalog = normalizeName(catalogName);
     }
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitRecoverDbStatement(this, context);
+        return ((AstVisitorExtendInterface<R, C>) visitor).visitRecoverDbStatement(this, context);
     }
 }

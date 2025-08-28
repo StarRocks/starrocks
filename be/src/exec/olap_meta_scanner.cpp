@@ -14,6 +14,8 @@
 
 #include "exec/olap_meta_scanner.h"
 
+#include <memory>
+
 #include "exec/olap_meta_scan_node.h"
 #include "storage/storage_engine.h"
 #include "storage/tablet.h"
@@ -53,7 +55,34 @@ Status OlapMetaScanner::_init_meta_reader_params() {
     } else {
         _reader_params.tablet_schema = _tablet->tablet_schema();
     }
+    if (_parent->_meta_scan_node.__isset.column_access_paths && !_parent->_column_access_paths.empty()) {
+        _reader_params.column_access_paths = &_parent->_column_access_paths;
+    }
+    // add the extended column access paths into tablet_schema
+    {
+        TabletSchemaSPtr tmp_schema = TabletSchema::copy(*_reader_params.tablet_schema);
+        int field_number = tmp_schema->num_columns();
+        for (auto& path : _parent->_column_access_paths) {
+            int root_column_index = tmp_schema->field_index(path->path());
+            RETURN_IF(root_column_index < 0, Status::RuntimeError("unknown access path: " + path->path()));
+
+            TabletColumn column;
+            column.set_name(path->linear_path());
+            column.set_unique_id(++field_number);
+            column.set_type(path->value_type().type);
+            column.set_length(path->value_type().len);
+            column.set_is_nullable(true);
+            int32_t root_uid = tmp_schema->column(static_cast<size_t>(root_column_index)).unique_id();
+            column.set_extended_info(std::make_unique<ExtendedColumnInfo>(path.get(), root_uid));
+
+            tmp_schema->append_column(column);
+            VLOG(2) << "extend the tablet-schema: " << column.debug_string();
+        }
+        _reader_params.tablet_schema = tmp_schema;
+    }
     _reader_params.desc_tbl = &_parent->_desc_tbl;
+
+    VLOG(2) << "init_meta_reader schema: " << _reader_params.tablet_schema->debug_string();
 
     return Status::OK();
 }

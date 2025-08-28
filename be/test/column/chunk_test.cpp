@@ -299,10 +299,10 @@ TEST_F(ChunkTest, test_append_chunk_safe) {
 
     auto c1 = make_column(0);
 
-    chunk_1->append_column(c1, 0);
-    chunk_1->append_column(c1, 1);
-    chunk_2->append_column(c1, 0);
-    chunk_2->append_column(c1, 1);
+    chunk_1->append_column(c1->clone(), 0);
+    chunk_1->append_column(c1->clone(), 1);
+    chunk_2->append_column(c1->clone(), 0);
+    chunk_2->append_column(c1->clone(), 1);
 
     chunk_1->append_safe(*chunk_2);
 

@@ -15,9 +15,7 @@
 
 package com.starrocks.sql.ast;
 
-import com.starrocks.analysis.Analyzer;
 import com.starrocks.analysis.Expr;
-import com.starrocks.common.AnalysisException;
 import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.thrift.TExprNode;
 
@@ -25,10 +23,6 @@ public class DefaultValueExpr extends Expr {
 
     public DefaultValueExpr(NodePosition pos) {
         super(pos);
-    }
-
-    @Override
-    protected void analyzeImpl(Analyzer analyzer) throws AnalysisException {
     }
 
     @Override
@@ -48,6 +42,6 @@ public class DefaultValueExpr extends Expr {
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitDefaultValueExpr(this, context);
+        return ((AstVisitorExtendInterface<R, C>) visitor).visitDefaultValueExpr(this, context);
     }
 }

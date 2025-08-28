@@ -158,7 +158,7 @@ public class ClusterSnapshotMgr implements GsonPostProcessable {
         return GlobalStateMgr.getCurrentState().getStorageVolumeMgr().getStorageVolumeByName(job.getStorageVolumeName());
     }
 
-    public ClusterSnapshotJob getClusterSnapshotByName(String snapshotName) {
+    public ClusterSnapshotJob getClusterSnapshotJobByName(String snapshotName) {
         for (ClusterSnapshotJob job : automatedSnapshotJobs.values()) {
             if (job.getSnapshotName().equals(snapshotName)) {
                 return job;
@@ -269,7 +269,7 @@ public class ClusterSnapshotMgr implements GsonPostProcessable {
             return;
         }
 
-        ClusterSnapshotJob job = getClusterSnapshotByName(restoredSnapshotName);
+        ClusterSnapshotJob job = getClusterSnapshotJobByName(restoredSnapshotName);
         // snapshot job may in init state, because it does not include the
         // editlog for the state transtition after ClusterSnapshotJobState.INITIALIZING
         if (job != null && job.isInitializing()) {
@@ -321,24 +321,46 @@ public class ClusterSnapshotMgr implements GsonPostProcessable {
         }
     }
 
+    // keep this interface and do not remove it
+    public List<Long> getVacuumRetainVersions(long dbId, long tableId, long partId, long physicalPartId) {
+        List<Long> versions = Lists.newArrayList();
+        return versions;
+    }
+
+    // keep this interface and do not remove it
     public boolean isDbInClusterSnapshotInfo(long dbId) {
         return false;
     }
 
+    // keep this interface and do not remove it
     public boolean isTableInClusterSnapshotInfo(long dbId, long tableId) {
         return false;
     }
 
+    // keep this interface and do not remove it
     public boolean isPartitionInClusterSnapshotInfo(long dbId, long tableId, long partId) {
         return false;
     }
 
+    // keep this interface and do not remove it
     public boolean isMaterializedIndexInClusterSnapshotInfo(long dbId, long tableId, long partId, long indexId) {
         return false;
     }
 
+    // keep this interface and do not remove it
     public boolean isMaterializedIndexInClusterSnapshotInfo(
                    long dbId, long tableId, long partId, long physicalPartId, long indexId) {
+        return false;
+    }
+
+    // keep this interface and do not remove it
+    public boolean isShardGroupIdInClusterSnapshotInfo(long dbId, long tableId, long partId, long shardGroupId) {
+        return false;
+    }
+
+    // keep this interface and do not remove it
+    public boolean isShardGroupIdInClusterSnapshotInfo(
+                   long dbId, long tableId, long partId, long physicalPartId, long shardGroupId) {
         return false;
     }
 

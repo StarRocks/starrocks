@@ -393,6 +393,8 @@ public class SimplifiedPredicateRule extends BottomUpScalarOperatorRewriteRule {
             return simplifiedCoalesce(call);
         } else if (FunctionSet.JSON_QUERY.equalsIgnoreCase(call.getFnName())) {
             return simplifiedJsonQuery(call);
+        } else if (FunctionSet.HOUR.equalsIgnoreCase(call.getFnName())) {
+            return simplifiedHourFromUnixTime(call);
         }
         return call;
     }
@@ -572,5 +574,89 @@ public class SimplifiedPredicateRule extends BottomUpScalarOperatorRewriteRule {
         String mergePath = path1 + (StringUtils.isBlank(path2) ? "" : "." + path2);
         return new CallOperator(child.getFnName(), call.getType(), Lists.newArrayList(child.getChild(0),
                 ConstantOperator.createVarchar(mergePath)), child.getFunction());
+    }
+
+    // Simplify hour(from_unixtime(ts)) to hour_from_unixtime(ts)
+    // Also simplify hour(to_datetime(ts)) and hour(to_datetime(ts, 0)) to hour_from_unixtime(ts)
+    private static ScalarOperator simplifiedHourFromUnixTime(CallOperator call) {
+        if (call.getChildren().size() != 1) {
+            return call;
+        }
+
+        ScalarOperator child = call.getChild(0);
+        if (!(child instanceof CallOperator)) {
+            return call;
+        }
+
+        CallOperator childCall = (CallOperator) child;
+        String childFnName = childCall.getFnName();
+
+        // Case 1: hour(from_unixtime(ts)) -> hour_from_unixtime(ts)
+        if (FunctionSet.FROM_UNIXTIME.equalsIgnoreCase(childFnName)) {
+            // Keep original behavior: only succeeds when argument list matches hour_from_unixtime signature
+            Type[] argTypes = childCall.getChildren().stream().map(ScalarOperator::getType).toArray(Type[]::new);
+            Function fn =
+                    Expr.getBuiltinFunction(FunctionSet.HOUR_FROM_UNIXTIME, argTypes, Function.CompareMode.IS_IDENTICAL);
+
+            if (fn == null) {
+                return call;
+            }
+
+            return new CallOperator(FunctionSet.HOUR_FROM_UNIXTIME, call.getType(), childCall.getChildren(), fn);
+        }
+
+        // Case 2: hour(to_datetime(ts)) or hour(to_datetime(ts, 0)) -> hour_from_unixtime(ts)
+        if (FunctionSet.TO_DATETIME.equalsIgnoreCase(childFnName)) {
+            List<ScalarOperator> args = childCall.getChildren();
+            ScalarOperator tsArg;
+            ScalarOperator unixtimeArgForHour;
+
+            if (args.size() == 1) {
+                // Implicit seconds
+                tsArg = args.get(0);
+                unixtimeArgForHour = tsArg;
+            } else if (args.size() == 2) {
+                tsArg = args.get(0);
+                ScalarOperator scaleOp = args.get(1);
+                if (!(scaleOp instanceof ConstantOperator)) {
+                    return call;
+                }
+                ConstantOperator scale = (ConstantOperator) scaleOp;
+                if (!Type.INT.equals(scale.getType()) || scale.isNull()) {
+                    return call;
+                }
+                int scaleVal = scale.getInt();
+                if (scaleVal == 0) {
+                    unixtimeArgForHour = tsArg;
+                } else if (scaleVal == 3) {
+                    // milliseconds -> seconds
+                    unixtimeArgForHour = new CallOperator(FunctionSet.DIVIDE, Type.BIGINT,
+                            Lists.newArrayList(tsArg, ConstantOperator.createInt(1000)), null);
+                } else if (scaleVal == 6) {
+                    // microseconds -> seconds
+                    unixtimeArgForHour = new CallOperator(FunctionSet.DIVIDE, Type.BIGINT,
+                            Lists.newArrayList(tsArg, ConstantOperator.createInt(1_000_000)), null);
+                } else {
+                    // Unsupported scale
+                    return call;
+                }
+            } else {
+                return call;
+            }
+
+            // Build hour_from_unixtime(...) with the converted unix time argument
+            Type[] argTypes = new Type[] { unixtimeArgForHour.getType() };
+            Function fn =
+                    Expr.getBuiltinFunction(FunctionSet.HOUR_FROM_UNIXTIME, argTypes, Function.CompareMode.IS_IDENTICAL);
+
+            if (fn == null) {
+                return call;
+            }
+
+            return new CallOperator(FunctionSet.HOUR_FROM_UNIXTIME, call.getType(),
+                    Lists.newArrayList(unixtimeArgForHour), fn);
+        }
+
+        return call;
     }
 }

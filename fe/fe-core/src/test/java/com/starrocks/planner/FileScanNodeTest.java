@@ -18,7 +18,6 @@ import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
-import com.starrocks.analysis.Analyzer;
 import com.starrocks.analysis.BrokerDesc;
 import com.starrocks.analysis.DescriptorTable;
 import com.starrocks.analysis.TupleDescriptor;
@@ -32,7 +31,6 @@ import com.starrocks.common.ExceptionChecker;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.load.BrokerFileGroup;
-import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
 import com.starrocks.server.WarehouseManager;
@@ -153,14 +151,14 @@ public class FileScanNodeTest {
         fileStatusList.add(new TBrokerFileStatus("hdfs://127.0.0.1:9001/file2", false, 268435400, true));
         fileStatusesList.add(fileStatusList);
 
-        Analyzer analyzer = new Analyzer(GlobalStateMgr.getCurrentState(), new ConnectContext());
-        DescriptorTable descTable = analyzer.getDescTbl();
+        
+        DescriptorTable descTable = new DescriptorTable();
         TupleDescriptor tupleDesc = descTable.createTupleDescriptor("DestTableTuple");
         FileScanNode scanNode = new FileScanNode(new PlanNodeId(0), tupleDesc, "FileScanNode", fileStatusesList,
                 2, WarehouseManager.DEFAULT_RESOURCE);
         scanNode.setLoadInfo(jobId, txnId, table, brokerDesc, fileGroups, true, loadParallelInstanceNum);
-        scanNode.init(analyzer);
-        scanNode.finalizeStats(analyzer);
+        scanNode.init(descTable);
+        scanNode.finalizeStats();
 
         // check
         List<TScanRangeLocations> locationsList = scanNode.getScanRangeLocations(0);
@@ -214,14 +212,14 @@ public class FileScanNodeTest {
         fileStatusList.add(new TBrokerFileStatus("hdfs://127.0.0.1:9001/file4", false, 268435451, false));
         fileStatusesList.add(fileStatusList);
 
-        analyzer = new Analyzer(GlobalStateMgr.getCurrentState(), new ConnectContext());
-        descTable = analyzer.getDescTbl();
+        
+        descTable = new DescriptorTable();
         tupleDesc = descTable.createTupleDescriptor("DestTableTuple");
         scanNode = new FileScanNode(new PlanNodeId(0), tupleDesc, "FileScanNode", fileStatusesList, 4,
                 WarehouseManager.DEFAULT_RESOURCE);
         scanNode.setLoadInfo(jobId, txnId, table, brokerDesc, fileGroups, true, loadParallelInstanceNum);
-        scanNode.init(analyzer);
-        scanNode.finalizeStats(analyzer);
+        scanNode.init(descTable);
+        scanNode.finalizeStats();
 
         // check
         locationsList = scanNode.getScanRangeLocations(0);
@@ -267,14 +265,14 @@ public class FileScanNodeTest {
         fileStatusList2.add(new TBrokerFileStatus("hdfs://127.0.0.1:9001/file5", false, 10, true));
         fileStatusesList.add(fileStatusList2);
 
-        analyzer = new Analyzer(GlobalStateMgr.getCurrentState(), new ConnectContext());
-        descTable = analyzer.getDescTbl();
+        
+        descTable = new DescriptorTable();
         tupleDesc = descTable.createTupleDescriptor("DestTableTuple");
         scanNode = new FileScanNode(new PlanNodeId(0), tupleDesc, "FileScanNode", fileStatusesList, 5,
                 WarehouseManager.DEFAULT_RESOURCE);
         scanNode.setLoadInfo(jobId, txnId, table, brokerDesc, fileGroups, true, loadParallelInstanceNum);
-        scanNode.init(analyzer);
-        scanNode.finalizeStats(analyzer);
+        scanNode.init(descTable);
+        scanNode.finalizeStats();
 
         // check
         locationsList = scanNode.getScanRangeLocations(0);
@@ -316,14 +314,14 @@ public class FileScanNodeTest {
         fileStatusList.add(new TBrokerFileStatus("hdfs://127.0.0.1:9001/file2", false, 10, false));
         fileStatusesList.add(fileStatusList);
 
-        analyzer = new Analyzer(GlobalStateMgr.getCurrentState(), new ConnectContext());
-        descTable = analyzer.getDescTbl();
+        
+        descTable = new DescriptorTable();
         tupleDesc = descTable.createTupleDescriptor("DestTableTuple");
         scanNode = new FileScanNode(new PlanNodeId(0), tupleDesc, "FileScanNode", fileStatusesList, 2,
                 WarehouseManager.DEFAULT_RESOURCE);
         scanNode.setLoadInfo(jobId, txnId, table, brokerDesc, fileGroups, true, loadParallelInstanceNum);
-        scanNode.init(analyzer);
-        scanNode.finalizeStats(analyzer);
+        scanNode.init(descTable);
+        scanNode.finalizeStats();
 
         // check
         locationsList = scanNode.getScanRangeLocations(0);
@@ -350,14 +348,14 @@ public class FileScanNodeTest {
         fileStatusList.add(new TBrokerFileStatus("hdfs://127.0.0.1:9001/file1", false, 0, false));
         fileStatusesList.add(fileStatusList);
 
-        analyzer = new Analyzer(GlobalStateMgr.getCurrentState(), new ConnectContext());
-        descTable = analyzer.getDescTbl();
+        
+        descTable = new DescriptorTable();
         tupleDesc = descTable.createTupleDescriptor("DestTableTuple");
         scanNode = new FileScanNode(new PlanNodeId(0), tupleDesc, "FileScanNode", fileStatusesList, 1,
                 WarehouseManager.DEFAULT_RESOURCE);
         scanNode.setLoadInfo(jobId, txnId, table, brokerDesc, fileGroups, true, loadParallelInstanceNum);
-        scanNode.init(analyzer);
-        scanNode.finalizeStats(analyzer);
+        scanNode.init(descTable);
+        scanNode.finalizeStats();
 
         // check
         locationsList = scanNode.getScanRangeLocations(0);
@@ -387,14 +385,14 @@ public class FileScanNodeTest {
         fileStatusList.add(new TBrokerFileStatus("hdfs://127.0.0.1:9001/file1", false, 0, false));
         fileStatusesList.add(fileStatusList);
 
-        analyzer = new Analyzer(GlobalStateMgr.getCurrentState(), new ConnectContext());
-        descTable = analyzer.getDescTbl();
+        
+        descTable = new DescriptorTable();
         tupleDesc = descTable.createTupleDescriptor("DestTableTuple");
         scanNode = new FileScanNode(new PlanNodeId(0), tupleDesc, "FileScanNode", fileStatusesList, 1,
                 WarehouseManager.DEFAULT_RESOURCE);
         scanNode.setLoadInfo(jobId, txnId, table, brokerDesc, fileGroups, true, loadParallelInstanceNum);
-        scanNode.init(analyzer);
-        scanNode.finalizeStats(analyzer);
+        scanNode.init(descTable);
+        scanNode.finalizeStats();
 
         // check
         locationsList = scanNode.getScanRangeLocations(0);
@@ -429,14 +427,14 @@ public class FileScanNodeTest {
         }
         fileStatusesList.add(fileStatusList);
 
-        analyzer = new Analyzer(GlobalStateMgr.getCurrentState(), new ConnectContext());
-        descTable = analyzer.getDescTbl();
+        
+        descTable = new DescriptorTable();
         tupleDesc = descTable.createTupleDescriptor("DestTableTuple");
         scanNode = new FileScanNode(new PlanNodeId(0), tupleDesc, "FileScanNode", fileStatusesList, 2,
                 WarehouseManager.DEFAULT_RESOURCE);
         scanNode.setLoadInfo(jobId, txnId, table, brokerDesc, fileGroups, true, loadParallelInstanceNum);
-        scanNode.init(analyzer);
-        scanNode.finalizeStats(analyzer);
+        scanNode.init(descTable);
+        scanNode.finalizeStats();
 
         // check
         locationsList = scanNode.getScanRangeLocations(0);
@@ -462,8 +460,8 @@ public class FileScanNodeTest {
 
     @Test
     public void testNoFilesFound() {
-        Analyzer analyzer = new Analyzer(GlobalStateMgr.getCurrentState(), new ConnectContext());
-        DescriptorTable descTable = analyzer.getDescTbl();
+
+        DescriptorTable descTable = new DescriptorTable();
         TupleDescriptor tupleDesc = descTable.createTupleDescriptor("DestTableTuple");
         List<List<TBrokerFileStatus>> fileStatusesList = Lists.newArrayList();
         fileStatusesList.add(Lists.newArrayList());
@@ -487,8 +485,8 @@ public class FileScanNodeTest {
 
     @Test
     public void testNoFilesFoundOnePath() {
-        Analyzer analyzer = new Analyzer(GlobalStateMgr.getCurrentState(), new ConnectContext());
-        DescriptorTable descTable = analyzer.getDescTbl();
+        
+        DescriptorTable descTable = new DescriptorTable();
         TupleDescriptor tupleDesc = descTable.createTupleDescriptor("DestTableTuple");
         List<List<TBrokerFileStatus>> fileStatusesList = Lists.newArrayList();
         fileStatusesList.add(Lists.newArrayList());
@@ -550,15 +548,15 @@ public class FileScanNodeTest {
         List<TBrokerFileStatus> fileStatusList = Lists.newArrayList();
         fileStatusesList.add(fileStatusList);
 
-        Analyzer analyzer = new Analyzer(GlobalStateMgr.getCurrentState(), new ConnectContext());
-        DescriptorTable descTable = analyzer.getDescTbl();
+        
+        DescriptorTable descTable = new DescriptorTable();
         TupleDescriptor tupleDesc = descTable.createTupleDescriptor("DestTableTuple");
         FileScanNode scanNode = new FileScanNode(new PlanNodeId(0), tupleDesc, "FileScanNode", fileStatusesList,
                 2, WarehouseManager.DEFAULT_RESOURCE);
         scanNode.setLoadInfo(jobId, txnId, table, brokerDesc, fileGroups, true, loadParallelInstanceNum);
         ExceptionChecker.expectThrowsWithMsg(StarRocksException.class,
                 "The valid bytes length for 'column separator' is [1, 50]",
-                () -> scanNode.init(analyzer));
+                () -> scanNode.init(descTable));
     }
     @Test
     public void testIllegalRowDelimiter(@Mocked GlobalStateMgr globalStateMgr, @Mocked SystemInfoService systemInfoService,
@@ -602,14 +600,14 @@ public class FileScanNodeTest {
         List<TBrokerFileStatus> fileStatusList = Lists.newArrayList();
         fileStatusesList.add(fileStatusList);
 
-        Analyzer analyzer = new Analyzer(GlobalStateMgr.getCurrentState(), new ConnectContext());
-        DescriptorTable descTable = analyzer.getDescTbl();
+        
+        DescriptorTable descTable = new DescriptorTable();
         TupleDescriptor tupleDesc = descTable.createTupleDescriptor("DestTableTuple");
         FileScanNode scanNode = new FileScanNode(new PlanNodeId(0), tupleDesc, "FileScanNode", fileStatusesList,
                 2, WarehouseManager.DEFAULT_RESOURCE);
         scanNode.setLoadInfo(jobId, txnId, table, brokerDesc, fileGroups, true, loadParallelInstanceNum);
         ExceptionChecker.expectThrowsWithMsg(StarRocksException.class,
                 "The valid bytes length for 'row delimiter' is [1, 50]",
-                () -> scanNode.init(analyzer));
+                () -> scanNode.init(descTable));
     }
 }

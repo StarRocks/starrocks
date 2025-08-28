@@ -47,6 +47,7 @@ import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.RunMode;
+import com.starrocks.thrift.TCompactionStrategy;
 import com.starrocks.thrift.TCompressionType;
 import com.starrocks.thrift.TPersistentIndexType;
 import com.starrocks.thrift.TStorageMedium;
@@ -332,5 +333,28 @@ public class PropertyAnalyzerTest {
                 "Does not support the table property \"version_info\" in share data mode, please remove " +
                         "it from the statement", () ->
                     PropertyAnalyzer.analyzeVersionInfo(properties));
+    }
+
+    @Test
+    public void testAnalyzeCompactionStrategy() {
+        // empty property
+        try {
+            Map<String, String> property = new HashMap<>();
+            Assertions.assertEquals(TCompactionStrategy.DEFAULT, PropertyAnalyzer.analyzecompactionStrategy(property));
+
+            Map<String, String> property2 = new HashMap<>();
+            property2.put(PropertyAnalyzer.PROPERTIES_COMPACTION_STRATEGY, "DEFAULT");
+            Assertions.assertEquals(TCompactionStrategy.DEFAULT, PropertyAnalyzer.analyzecompactionStrategy(property2));
+
+            Map<String, String> property3 = new HashMap<>();
+            property3.put(PropertyAnalyzer.PROPERTIES_COMPACTION_STRATEGY, "REAL_TIME");
+            Assertions.assertEquals(TCompactionStrategy.REAL_TIME, PropertyAnalyzer.analyzecompactionStrategy(property3));
+
+            Map<String, String> property4 = new HashMap<>();
+            property4.put(PropertyAnalyzer.PROPERTIES_COMPACTION_STRATEGY, "BATCH");
+            TCompactionStrategy strategy = PropertyAnalyzer.analyzecompactionStrategy(property4);
+        } catch (AnalysisException e) {
+            Assertions.assertTrue(e.getMessage().contains("Invalid compaction strategy: BATCH"));
+        }
     }
 }

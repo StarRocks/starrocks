@@ -36,8 +36,8 @@ package com.starrocks.analysis;
 
 import com.google.common.base.Preconditions;
 import com.starrocks.analysis.ArithmeticExpr.Operator;
-import com.starrocks.common.AnalysisException;
 import com.starrocks.sql.ast.AstVisitor;
+import com.starrocks.sql.ast.AstVisitorExtendInterface;
 import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.thrift.TExprNode;
 import com.starrocks.thrift.TExprNodeType;
@@ -115,10 +115,6 @@ public class TimestampArithmeticExpr extends Expr {
     @Override
     public Expr clone() {
         return new TimestampArithmeticExpr(this);
-    }
-
-    @Override
-    public void analyzeImpl(Analyzer analyzer) throws AnalysisException {
     }
 
     @Override
@@ -229,6 +225,6 @@ public class TimestampArithmeticExpr extends Expr {
      */
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitTimestampArithmeticExpr(this, context);
+        return ((AstVisitorExtendInterface<R, C>) visitor).visitTimestampArithmeticExpr(this, context);
     }
 }

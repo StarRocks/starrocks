@@ -45,6 +45,7 @@ import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
@@ -118,6 +119,11 @@ public class SelectStmtTest {
                 .withTable(createTable1)
                 .withTable(createTableWithPrimaryKey);
         FeConstants.enablePruneEmptyOutputScan = false;
+    }
+
+    @BeforeEach
+    public void beforeEach() {
+        FeConstants.runningUnitTest = true;
     }
 
     @Test
@@ -692,9 +698,14 @@ public class SelectStmtTest {
                 "FROM db1.t_with_pk " +
                 "GROUP BY 1";
 
+        // SELECT CASE WHEN (`db1`.`t_with_pk`.`value` = 1) THEN 'A' ELSE 'B' END AS `flag`, count(DISTINCT `db1`
+        // .`t_with_pk`.`user_id`) AS `count(DISTINCT user_id)`
+        //FROM `db1`.`t_with_pk`
+        //GROUP BY 1
         String plan = starRocksAssert.query(sql).explainQuery();
 
-        Assertions.assertTrue(plan.contains("2:AGGREGATE (update finalize)\n" +
+        Assertions.assertTrue(plan.contains("2:AGGREGATE (update serialize)\n" +
+                "  |  STREAMING\n" +
                 "  |  output: count(1: user_id)\n" +
                 "  |  group by: 3: case\n" +
                 "  |  \n" +

@@ -15,7 +15,6 @@
 
 package com.starrocks.sql.ast;
 
-import com.starrocks.analysis.RedirectStatus;
 import com.starrocks.catalog.Replica.ReplicaStatus;
 import com.starrocks.sql.parser.NodePosition;
 
@@ -71,12 +70,7 @@ public class AdminSetReplicaStatusStmt extends DdlStmt {
     }
 
     @Override
-    public RedirectStatus getRedirectStatus() {
-        return RedirectStatus.FORWARD_WITH_SYNC;
-    }
-
-    @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitAdminSetReplicaStatusStatement(this, context);
+        return ((AstVisitorExtendInterface<R, C>) visitor).visitAdminSetReplicaStatusStatement(this, context);
     }
 }

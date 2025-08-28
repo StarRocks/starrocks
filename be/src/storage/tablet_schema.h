@@ -40,6 +40,7 @@
 #include <vector>
 
 #include "column/chunk.h"
+#include "column/column_access_path.h"
 #include "gen_cpp/Descriptors_types.h"
 #include "gen_cpp/descriptors.pb.h"
 #include "gen_cpp/olap_file.pb.h"
@@ -47,7 +48,6 @@
 #include "storage/aggregate_type.h"
 #include "storage/olap_define.h"
 #include "storage/tablet_index.h"
-#include "storage/type_utils.h"
 #include "storage/types.h"
 #include "util/c_string.h"
 #include "util/once.h"
@@ -59,6 +59,16 @@ class MemTracker;
 class SegmentReaderWriterTest;
 class POlapTableIndexSchema;
 class TColumn;
+
+struct ExtendedColumnInfo {
+    ExtendedColumnInfo(ColumnAccessPath* access_path, int32_t source_column_uid)
+            : access_path(access_path), source_column_uid(source_column_uid) {
+        DCHECK(access_path != nullptr);
+    }
+
+    ColumnAccessPath* access_path = nullptr;
+    int32_t source_column_uid = -1;
+};
 
 class TabletColumn {
     struct ExtraFields {
@@ -197,6 +207,11 @@ public:
 
     bool is_support_checksum() const;
 
+    // Extended column from the access path
+    bool is_extended() const { return !!_extended_info; }
+    void set_extended_info(std::unique_ptr<ExtendedColumnInfo> info) { _extended_info = std::move(info); }
+    const ExtendedColumnInfo* extended_info() const { return _extended_info.get(); }
+
 private:
     inline static const std::string kEmptyDefaultValue;
     constexpr static uint8_t kIsKeyShift = 0;
@@ -240,6 +255,9 @@ private:
     ColumnIndexLength _index_length = 0;
     ColumnPrecision _precision = 0;
     ColumnScale _scale = 0;
+
+    // Extended access path column
+    std::unique_ptr<ExtendedColumnInfo> _extended_info;
 
     uint8_t _flags = 0;
 

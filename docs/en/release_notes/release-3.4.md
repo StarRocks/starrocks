@@ -4,6 +4,52 @@ displayed_sidebar: docs
 
 # StarRocks version 3.4
 
+## 3.4.6
+
+Release Date: August 7, 2025
+
+### Improvements
+
+- When exporting data to Parquet files using `INSERT INTO FILES`, you can now specify the Parquet version via the [`parquet.version`](https://docs.starrocks.io/docs/sql-reference/sql-functions/table-functions/files.md#parquetversion) property to improve compatibility with other tools when reading the exported files. [#60843](https://github.com/StarRocks/starrocks/pull/60843)
+
+### Bug Fixes
+
+The following issues have been fixed:
+
+- Loading jobs failed due to overly coarse lock granularity in `TableMetricsManager`. [#58911](https://github.com/StarRocks/starrocks/pull/58911)
+- Case sensitivity issue in column names when loading Parquet data via `FILES()`. [#61059](https://github.com/StarRocks/starrocks/pull/61059)
+- Cache did not take effect after upgrading a shared-data cluster from v3.3 to v3.4 or later. [#60973](https://github.com/StarRocks/starrocks/pull/60973)
+- A division-by-zero error occurred when the partition ID was null, causing a BE crash. [#60842](https://github.com/StarRocks/starrocks/pull/60842)
+- Broker Load jobs failed during BE scaling. [#60224](https://github.com/StarRocks/starrocks/pull/60224)
+
+### Behavior Changes
+
+- The `keyword` column in the `information_schema.keywords` view has been renamed to `word` to align with the MySQL definition. [#60863](https://github.com/StarRocks/starrocks/pull/60863)
+
+## 3.4.5
+
+Release Date: July 10, 2025
+
+### Improvements
+
+- Enhanced observability of loading job execution: Unified the runtime information of loading tasks into the `information_schema.loads` view. Users can view the execution details of all INSERT, Broker Load, Stream Load, and Routine Load subtasks in this view. Additional fields have been added to help users better understand the status of loading tasks and the association with parent jobs (PIPES, Routine Load Jobs).
+- Support modifying `kafka_broker_list` via the `ALTER ROUTINE LOAD` statement.
+
+### Bug Fixes
+
+The following issues have been fixed:
+
+- Under high-frequency loading scenarios, Compaction could be delayed. [#59998](https://github.com/StarRocks/starrocks/pull/59998)
+- Querying Iceberg external tables via Unified Catalog would throw an error: `not support getting unified metadata table factory`. [#59412](https://github.com/StarRocks/starrocks/pull/59412)
+- When using `DESC FILES()` to view CSV files in remote storage, incorrect results were returned because the system mistakenly inferred `xinf` as the FLOAT type. [#59574](https://github.com/StarRocks/starrocks/pull/59574)
+- `INSERT INTO` could cause BE to crash when encountering empty partitions. [#59553](https://github.com/StarRocks/starrocks/pull/59553)
+- When StarRocks reads Equality Delete files in Iceberg, it could still access deleted data if the data had already been removed from the Iceberg table. [#59709](https://github.com/StarRocks/starrocks/pull/59709)
+- Query failures caused by renaming columns. [#59178](https://github.com/StarRocks/starrocks/pull/59178)
+
+### Behavior Changes
+
+- The default value of the BE configuration item `skip_pk_preload` has been changed from `false` to `true`. As a result, the system will skip preloading Primary Key Indexes for Primary Key tables to reduce the likelihood of `Reached Timeout` errors. This change may increase query latency for operations that require loading Primary Key Indexes.
+
 ## 3.4.4
 
 Release Date: June 10, 2025

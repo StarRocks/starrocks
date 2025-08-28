@@ -15,8 +15,6 @@
 
 package com.starrocks.sql.ast;
 
-import com.starrocks.catalog.ResourceGroup;
-import com.starrocks.qe.ShowResultSetMetaData;
 import com.starrocks.sql.parser.NodePosition;
 
 // Show ResourceGroups
@@ -47,20 +45,12 @@ public class ShowResourceGroupStmt extends ShowStmt {
         return verbose;
     }
 
-    @Override
-    public ShowResultSetMetaData getMetaData() {
-        if (verbose) {
-            return ResourceGroup.VERBOSE_META_DATA;
-        }
-        return ResourceGroup.META_DATA;
-    }
-
     public String getName() {
         return name;
     }
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitShowResourceGroupStatement(this, context);
+        return ((AstVisitorExtendInterface<R, C>) visitor).visitShowResourceGroupStatement(this, context);
     }
 }

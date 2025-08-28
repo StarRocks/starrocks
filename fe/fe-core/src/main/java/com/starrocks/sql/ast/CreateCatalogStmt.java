@@ -19,6 +19,8 @@ import com.starrocks.sql.parser.NodePosition;
 
 import java.util.Map;
 
+import static com.starrocks.common.util.Util.normalizeName;
+
 public class CreateCatalogStmt extends DdlStmt {
     public static final String TYPE = "type";
 
@@ -36,7 +38,7 @@ public class CreateCatalogStmt extends DdlStmt {
     public CreateCatalogStmt(String catalogName, String comment, Map<String, String> properties,
                              boolean ifNotExists, NodePosition pos) {
         super(pos);
-        this.catalogName = catalogName;
+        this.catalogName = normalizeName(catalogName);
         this.comment = comment;
         this.properties = properties;
         this.ifNotExists = ifNotExists;
@@ -68,7 +70,7 @@ public class CreateCatalogStmt extends DdlStmt {
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitCreateCatalogStatement(this, context);
+        return ((AstVisitorExtendInterface<R, C>) visitor).visitCreateCatalogStatement(this, context);
     }
 
     @Override

@@ -19,13 +19,8 @@ import com.google.common.base.Strings;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.LimitElement;
 import com.starrocks.analysis.OrderByElement;
-import com.starrocks.analysis.RedirectStatus;
-import com.starrocks.catalog.Column;
-import com.starrocks.catalog.ScalarType;
-import com.starrocks.common.proc.ExportProcNode;
 import com.starrocks.common.util.OrderByPair;
 import com.starrocks.load.ExportJob.JobState;
-import com.starrocks.qe.ShowResultSetMetaData;
 import com.starrocks.sql.parser.NodePosition;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -33,6 +28,8 @@ import org.apache.logging.log4j.Logger;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
+
+import static com.starrocks.common.util.Util.normalizeName;
 
 // SHOW EXPORT STATUS statement used to get status of load job.
 //
@@ -62,7 +59,7 @@ public class ShowExportStmt extends ShowStmt {
     public ShowExportStmt(String db, Expr whereExpr, List<OrderByElement> orderByElements,
                           LimitElement limitElement, NodePosition pos) {
         super(pos);
-        this.dbName = db;
+        this.dbName = normalizeName(db);
         this.whereClause = whereExpr;
         this.orderByElements = orderByElements;
         this.limitElement = limitElement;
@@ -85,7 +82,7 @@ public class ShowExportStmt extends ShowStmt {
     }
 
     public void setDbName(String dbName) {
-        this.dbName = dbName;
+        this.dbName = normalizeName(dbName);
     }
 
     public void setOrderByPairs(ArrayList<OrderByPair> orderByPairs) {
@@ -165,21 +162,7 @@ public class ShowExportStmt extends ShowStmt {
     }
 
     @Override
-    public ShowResultSetMetaData getMetaData() {
-        ShowResultSetMetaData.Builder builder = ShowResultSetMetaData.builder();
-        for (String title : ExportProcNode.TITLE_NAMES) {
-            builder.addColumn(new Column(title, ScalarType.createVarchar(30)));
-        }
-        return builder.build();
-    }
-
-    @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitShowExportStatement(this, context);
-    }
-
-    @Override
-    public RedirectStatus getRedirectStatus() {
-        return RedirectStatus.FORWARD_NO_SYNC;
+        return ((AstVisitorExtendInterface<R, C>) visitor).visitShowExportStatement(this, context);
     }
 }

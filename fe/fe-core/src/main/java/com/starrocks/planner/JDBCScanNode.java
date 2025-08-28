@@ -18,7 +18,6 @@ package com.starrocks.planner;
 import com.google.common.base.Joiner;
 import com.google.common.base.MoreObjects;
 import com.google.common.collect.Lists;
-import com.starrocks.analysis.Analyzer;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.ExprSubstitutionMap;
 import com.starrocks.analysis.SlotDescriptor;
@@ -63,10 +62,10 @@ public class JDBCScanNode extends ScanNode {
     }
 
     @Override
-    public void finalizeStats(Analyzer analyzer) throws StarRocksException {
+    public void finalizeStats() throws StarRocksException {
         createJDBCTableColumns();
         createJDBCTableFilters();
-        computeStats(analyzer);
+        computeStats();
     }
 
     public void computeColumnsAndFilters() {
@@ -167,8 +166,8 @@ public class JDBCScanNode extends ScanNode {
     }
 
     @Override
-    public void computeStats(Analyzer analyzer) {
-        super.computeStats(analyzer);
+    public void computeStats() {
+        super.computeStats();
     }
 
 }

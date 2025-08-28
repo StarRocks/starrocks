@@ -1226,6 +1226,8 @@ int meta_tool_main(int argc, char** argv) {
             return -1;
         }
         const auto& bundle_metadata = bundle_metadata_or.value();
+        // print bundle metadata proto as string
+        std::cout << "Bundle Metadata: " << bundle_metadata->Utf8DebugString() << '\n';
         // foreach tablet_meta from bundle_metadata.tablet_meta_pages
         for (const auto& page : bundle_metadata->tablet_meta_pages()) {
             const starrocks::PagePointerPB& page_pointer = page.second;

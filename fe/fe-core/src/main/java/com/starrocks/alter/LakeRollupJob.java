@@ -39,14 +39,14 @@ import com.starrocks.common.FeConstants;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.common.util.concurrent.MarkedCountDownLatch;
 import com.starrocks.lake.LakeTableHelper;
-import com.starrocks.lake.LakeTablet;
 import com.starrocks.lake.Utils;
+import com.starrocks.persist.OriginStatementInfo;
 import com.starrocks.proto.AggregatePublishVersionRequest;
 import com.starrocks.proto.TxnInfoPB;
 import com.starrocks.proto.TxnTypePB;
-import com.starrocks.qe.OriginStatement;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.WarehouseManager;
+import com.starrocks.sql.ast.OriginStatement;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.task.AgentBatchTask;
 import com.starrocks.task.AgentTask;
@@ -109,7 +109,7 @@ public class LakeRollupJob extends LakeTableSchemaChangeJobBase {
     @SerializedName(value = "rollupShortKeyColumnCount")
     protected short rollupShortKeyColumnCount;
     @SerializedName(value = "origStmt")
-    protected OriginStatement origStmt;
+    protected OriginStatementInfo origStmt;
 
     @SerializedName(value = "viewDefineSql")
     protected String viewDefineSql;
@@ -138,7 +138,9 @@ public class LakeRollupJob extends LakeTableSchemaChangeJobBase {
         this.rollupSchemaHash = rollupSchemaHash;
         this.rollupKeysType = rollupKeysType;
         this.rollupShortKeyColumnCount = rollupShortKeyColumnCount;
-        this.origStmt = origStmt;
+        if (origStmt != null) {
+            this.origStmt = new OriginStatementInfo(origStmt.getOrigStmt(), origStmt.getIdx());
+        }
         this.viewDefineSql = viewDefineSql;
         this.isColocateMVIndex = isColocateMVIndex;
     }
@@ -203,7 +205,7 @@ public class LakeRollupJob extends LakeTableSchemaChangeJobBase {
                     long rollupTabletId = rollupTablet.getId();
                     ComputeNode computeNode = null;
                     try {
-                        computeNode = warehouseManager.getComputeNodeAssignedToTablet(computeResource, (LakeTablet) rollupTablet);
+                        computeNode = warehouseManager.getComputeNodeAssignedToTablet(computeResource, rollupTabletId);
                     } catch (ErrorReportException e) {
                         // computeNode is null
                     }
@@ -231,6 +233,7 @@ public class LakeRollupJob extends LakeTableSchemaChangeJobBase {
                             .setTabletSchema(tabletSchema)
                             .setEnableTabletCreationOptimization(enableTabletCreationOptimization)
                             .setGtid(gtid)
+                            .setCompactionStrategy(table.getCompactionStrategy())
                             .build();
 
                     // For each partition, the schema file is created only when the first Tablet is created
@@ -322,7 +325,7 @@ public class LakeRollupJob extends LakeTableSchemaChangeJobBase {
 
                     ComputeNode computeNode = null;
                     try {
-                        computeNode = warehouseManager.getComputeNodeAssignedToTablet(computeResource, (LakeTablet) rollupTablet);
+                        computeNode = warehouseManager.getComputeNodeAssignedToTablet(computeResource, rollupTabletId);
                     } catch (ErrorReportException e) {
                         // computeNode is null
                     }
@@ -682,8 +685,8 @@ public class LakeRollupJob extends LakeTableSchemaChangeJobBase {
         try (ReadLockedDatabase db = getReadLockedDatabase(dbId)) {
             OlapTable table = getTableOrThrow(db, tableId);
             boolean useAggregatePublish = table.isFileBundling();
-            AggregatePublishVersionRequest request = new AggregatePublishVersionRequest();
             for (long partitionId : physicalPartitionIdToRollupIndex.keySet()) {
+                AggregatePublishVersionRequest request = new AggregatePublishVersionRequest();
                 PhysicalPartition physicalPartition = table.getPhysicalPartition(partitionId);
                 Preconditions.checkState(physicalPartition != null, partitionId);
                 List<MaterializedIndex> allMaterializedIndex = physicalPartition
@@ -723,9 +726,10 @@ public class LakeRollupJob extends LakeTableSchemaChangeJobBase {
                     Utils.createSubRequestForAggregatePublish(allOtherPartitionTablets, Lists.newArrayList(originTxnInfo), 
                             commitVersion - 1, commitVersion, null, computeResource, request);
                 }
-            }
-            if (useAggregatePublish) {
-                Utils.sendAggregatePublishVersionRequest(request, 1, computeResource, null, null);
+
+                if (useAggregatePublish) {
+                    Utils.sendAggregatePublishVersionRequest(request, 1, computeResource, null, null);
+                }
             }
             return true;
         } catch (Exception e) {
@@ -778,7 +782,7 @@ public class LakeRollupJob extends LakeTableSchemaChangeJobBase {
             PhysicalPartition physicalPartition = tbl.getPhysicalPartition(partitionId);
             TStorageMedium medium = tbl.getPartitionInfo().getDataProperty(physicalPartition.getParentId()).getStorageMedium();
             TabletMeta rollupTabletMeta = new TabletMeta(dbId, tableId, partitionId, rollupIndexId,
-                    rollupSchemaHash, medium);
+                    medium);
 
             for (Tablet rollupTablet : rollupIndex.getTablets()) {
                 invertedIndex.addTablet(rollupTablet.getId(), rollupTabletMeta);

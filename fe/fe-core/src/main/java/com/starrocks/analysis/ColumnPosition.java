@@ -19,6 +19,7 @@ package com.starrocks.analysis;
 
 import com.google.common.base.Strings;
 import com.starrocks.common.AnalysisException;
+import com.starrocks.sql.ast.ParseNode;
 import com.starrocks.sql.parser.NodePosition;
 
 // Column position used when add column

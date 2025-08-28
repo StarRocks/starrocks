@@ -32,12 +32,12 @@ import com.starrocks.common.DdlException;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.qe.ConnectContext;
-import com.starrocks.qe.OriginStatement;
 import com.starrocks.qe.QueryState;
 import com.starrocks.qe.StmtExecutor;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.ColumnDef;
 import com.starrocks.sql.ast.InsertStmt;
+import com.starrocks.sql.ast.OriginStatement;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.ValuesRelation;
@@ -92,9 +92,6 @@ public class FullStatisticsCollectJob extends StatisticsCollectJob {
                     "   table_id, $targetPartitionId, column_name, db_id, table_name, \n" +
                     "   partition_name, row_count, data_size, ndv, null_count, max, min, update_time, collection_size \n" +
                     "FROM " + TABLE_NAME + "\n" +
-                    "WHERE `table_id`=$tableId AND `partition_id`=$sourcePartitionId";
-    private static final String DELETE_PARTITION_TEMPLATE =
-            "DELETE FROM " + TABLE_NAME + "\n" +
                     "WHERE `table_id`=$tableId AND `partition_id`=$sourcePartitionId";
 
     private final List<Long> partitionIdList;
@@ -380,11 +377,6 @@ public class FullStatisticsCollectJob extends StatisticsCollectJob {
         {
             StringWriter sw = new StringWriter();
             DEFAULT_VELOCITY_ENGINE.evaluate(context, sw, "", OVERWRITE_PARTITION_TEMPLATE);
-            result.add(sw.toString());
-        }
-        {
-            StringWriter sw = new StringWriter();
-            DEFAULT_VELOCITY_ENGINE.evaluate(context, sw, "", DELETE_PARTITION_TEMPLATE);
             result.add(sw.toString());
         }
         return result;

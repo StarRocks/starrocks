@@ -35,8 +35,8 @@
 package com.starrocks.analysis;
 
 import com.starrocks.catalog.Type;
-import com.starrocks.common.AnalysisException;
 import com.starrocks.sql.ast.AstVisitor;
+import com.starrocks.sql.ast.AstVisitorExtendInterface;
 import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.thrift.TExprNode;
 import com.starrocks.thrift.TExprNodeType;
@@ -72,10 +72,6 @@ public class CollectionElementExpr extends Expr {
     }
 
     @Override
-    protected void analyzeImpl(Analyzer analyzer) throws AnalysisException {
-    }
-
-    @Override
     protected String toSqlImpl() {
         Expr expr = this.children.get(0);
         Expr subscript = this.children.get(1);
@@ -99,7 +95,7 @@ public class CollectionElementExpr extends Expr {
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitCollectionElementExpr(this, context);
+        return ((AstVisitorExtendInterface<R, C>) visitor).visitCollectionElementExpr(this, context);
     }
 
     @Override

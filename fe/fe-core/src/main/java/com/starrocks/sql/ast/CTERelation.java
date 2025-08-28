@@ -19,6 +19,8 @@ import com.starrocks.sql.parser.NodePosition;
 
 import java.util.List;
 
+import static com.starrocks.common.util.Util.normalizeName;
+
 public class CTERelation extends Relation {
     private final int cteMouldId;
     private final String name;
@@ -35,7 +37,7 @@ public class CTERelation extends Relation {
                        QueryStatement cteQueryStatement, NodePosition pos) {
         super(pos);
         this.cteMouldId = cteMouldId;
-        this.name = name;
+        this.name = normalizeName(name);
         this.explicitColumnNames = columnOutputNames;
         this.cteQueryStatement = cteQueryStatement;
         this.refs = 0;
@@ -76,7 +78,7 @@ public class CTERelation extends Relation {
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitCTE(this, context);
+        return ((AstVisitorExtendInterface<R, C>) visitor).visitCTE(this, context);
     }
 
     @Override

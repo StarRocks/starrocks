@@ -14,12 +14,14 @@
 
 package com.starrocks.sql.ast.pipe;
 
-import com.starrocks.analysis.RedirectStatus;
 import com.starrocks.sql.ast.AstVisitor;
+import com.starrocks.sql.ast.AstVisitorExtendInterface;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.parser.NodePosition;
 
 import java.util.Objects;
+
+import static com.starrocks.common.util.Util.normalizeName;
 
 public class PipeName extends StatementBase {
 
@@ -34,18 +36,18 @@ public class PipeName extends StatementBase {
 
     public PipeName(String dbName, String pipeName) {
         super(NodePosition.ZERO);
-        this.dbName = dbName;
+        this.dbName = normalizeName(dbName);
         this.pipeName = pipeName;
     }
 
     public PipeName(NodePosition pos, String dbName, String pipeName) {
         super(pos);
-        this.dbName = dbName;
+        this.dbName = normalizeName(dbName);
         this.pipeName = pipeName;
     }
 
     public void setDbName(String dbName) {
-        this.dbName = dbName;
+        this.dbName = normalizeName(dbName);
     }
 
     public String getDbName() {
@@ -63,12 +65,7 @@ public class PipeName extends StatementBase {
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitPipeName(this, context);
-    }
-
-    @Override
-    public RedirectStatus getRedirectStatus() {
-        return RedirectStatus.NO_FORWARD;
+        return ((AstVisitorExtendInterface<R, C>) visitor).visitPipeName(this, context);
     }
 
     @Override

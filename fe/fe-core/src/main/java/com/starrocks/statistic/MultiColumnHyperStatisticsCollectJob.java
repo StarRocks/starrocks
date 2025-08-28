@@ -18,9 +18,9 @@ import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
-import com.starrocks.qe.OriginStatement;
 import com.starrocks.sql.ast.ColumnDef;
 import com.starrocks.sql.ast.InsertStmt;
+import com.starrocks.sql.ast.OriginStatement;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.ValuesRelation;
@@ -37,7 +37,8 @@ public class MultiColumnHyperStatisticsCollectJob extends HyperStatisticsCollect
                                                 StatsConstants.ScheduleType scheduleType, Map<String, String> properties,
                                                 List<StatsConstants.StatisticsType> statsTypes,
                                                 List<List<String>> columnGroups) {
-        super(db, table, partitionIdList, columnNames, columnTypes, type, scheduleType, properties, statsTypes, columnGroups);
+        super(db, table, partitionIdList, columnNames, columnTypes, type, scheduleType,
+                properties, statsTypes, columnGroups, false);
     }
 
     public StatementBase createInsertStmt() {

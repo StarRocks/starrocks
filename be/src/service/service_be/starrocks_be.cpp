@@ -27,13 +27,12 @@
 #include "common/daemon.h"
 #include "common/process_exit.h"
 #include "common/status.h"
-#include "exec/pipeline/query_context.h"
 #include "fs/s3/poco_common.h"
-#include "gutil/strings/join.h"
 #include "runtime/exec_env.h"
 #include "runtime/fragment_mgr.h"
 #include "runtime/global_variables.h"
 #include "runtime/jdbc_driver_manager.h"
+#include "service/backend_options.h"
 #include "service/brpc.h"
 #include "service/service.h"
 #include "service/service_be/arrow_flight_sql_service.h"
@@ -126,7 +125,7 @@ void start_be(const std::vector<StorePath>& paths, bool as_cn) {
 
 #ifdef USE_STAROS
     auto* local_cache = cache_env->local_cache();
-    if (config::datacache_unified_instance_enable && local_cache->is_initialized()) {
+    if (config::datacache_unified_instance_enable && local_cache && local_cache->is_initialized()) {
         auto* starcache = reinterpret_cast<StarCacheEngine*>(local_cache);
         init_staros_worker(starcache->starcache_instance());
     } else {

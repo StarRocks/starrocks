@@ -105,7 +105,7 @@ download_func() {
             rm -f "$DESC_DIR/$FILENAME"
         else
             echo "Downloading $FILENAME from $DOWNLOAD_URL to $DESC_DIR"
-            wget --no-check-certificate $DOWNLOAD_URL -O $DESC_DIR/$FILENAME
+            wget --progress=dot:mega --tries=3 --no-check-certificate $DOWNLOAD_URL -O $DESC_DIR/$FILENAME
             if [ "$?"x == "0"x ]; then
                 if md5sum_func $FILENAME $DESC_DIR $MD5SUM; then
                     SUCCESS=1
@@ -203,14 +203,14 @@ do
                 exit 1
             fi
         elif [[ "${!NAME}" =~ $SUFFIX_ZIP ]]; then
-            if ! $UNZIP_CMD "$TP_SOURCE_DIR/${!NAME}" -d $TP_SOURCE_DIR/tmp_dir; then
+            if ! $UNZIP_CMD -q "$TP_SOURCE_DIR/${!NAME}" -d $TP_SOURCE_DIR/tmp_dir; then
                 echo "Failed to unzip ${!NAME}"
                 exit 1
             fi
         elif [[ "${!NAME}" =~ $SUFFIX_BZ2 ]]; then
             echo "$TP_SOURCE_DIR/${!NAME}"
             echo "$TP_SOURCE_DIR/${!SOURCE}"
-            if ! $TAR_CMD jxvf "$TP_SOURCE_DIR/${!NAME}" -C $TP_SOURCE_DIR/tmp_dir; then
+            if ! $TAR_CMD xjf "$TP_SOURCE_DIR/${!NAME}" -C $TP_SOURCE_DIR/tmp_dir; then
                 echo "Failed to untar ${!NAME}"
                 exit 1
             fi
@@ -378,7 +378,7 @@ echo "Finished patching $GPERFTOOLS_SOURCE"
 
 # patch librdkafka
 cd $TP_SOURCE_DIR/$LIBRDKAFKA_SOURCE
-if [ ! -f $PATCHED_MARK ] && [ $LIBRDKAFKA_SOURCE = "librdkafka-2.0.2" ]; then
+if [ ! -f $PATCHED_MARK ] && [ $LIBRDKAFKA_SOURCE = "librdkafka-2.11.0" ]; then
     patch -p0 < $TP_PATCH_DIR/librdkafka.patch
     touch $PATCHED_MARK
 fi
@@ -420,6 +420,8 @@ fi
 cd $TP_SOURCE_DIR/$AWS_SDK_CPP_SOURCE
 if [ $AWS_SDK_CPP_SOURCE = "aws-sdk-cpp-1.11.267" ]; then
     if [ ! -f prefetch_crt_dep_ok ]; then
+        # make prefetch_crt_dependency.sh less chatty
+        patch -p1 < $TP_PATCH_DIR/aws-cpp-sdk-1.11.267-quiet-unzip-dependencies.patch || true
         bash ./prefetch_crt_dependency.sh
         touch prefetch_crt_dep_ok
     fi
@@ -524,7 +526,7 @@ if [[ -d $TP_SOURCE_DIR/$ARROW_SOURCE ]] ; then
     fi
     if [ ! -f $PATCHED_MARK ] && [ $ARROW_SOURCE = "arrow-apache-arrow-16.1.0" ] ; then
         patch -p1 < $TP_PATCH_DIR/arrow-16.1.0-parquet-map-key.patch
-        patch -p1 < $TP_PATCH_DIR/arrow-16.1.0-use-zstd-1.5.0.patch
+        patch -p1 < $TP_PATCH_DIR/arrow-16.1.0-use-zstd-1.5.7.patch
         touch $PATCHED_MARK
     fi
     cd -
@@ -613,4 +615,16 @@ if [[ -d $TP_SOURCE_DIR/$AZURE_SOURCE ]] ; then
     fi
     cd -
     echo "Finished patching $AZURE_SOURCE"
+fi
+
+#patch cctz
+if [[ -d $TP_SOURCE_DIR/$CCTZ_SOURCE ]] ; then
+    cd $TP_SOURCE_DIR/$CCTZ_SOURCE
+    if [ ! -f "$PATCHED_MARK" ] && [[ $CCTZ_SOURCE == "cctz-2.3" ]] ; then
+        patch -p1 < "$TP_PATCH_DIR/cctz_civil_cache.patch"
+        patch -p1 < "$TP_PATCH_DIR/cctz_02_lookup_offset.patch"
+        touch "$PATCHED_MARK"
+    fi
+    cd -
+    echo "Finished patching $CCTZ_SOURCE"
 fi

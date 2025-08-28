@@ -315,6 +315,20 @@ public class ScanPredicateExprReuseTest extends PlanTestBase {
                     "     Pruned type: 7 <-> [MAP<INT,INT>]\n" +
                     "     ColumnAccessPath: [/v1/OFFSET, /v5/b/a/OFFSET, /v6/OFFSET]");
         }
+    }
 
+    @Test
+    public void testWithoutEnablePredicateExprReuse() throws Exception {
+        {
+            // if we disable predicate expr reuse, ScanPredicateExprReuse should not take effect.
+            connectContext.getSessionVariable().setEnablePredicateExprReuse(false);
+            String sql = "select * from t0 where v1 + v2 > 10 and v1 + v2 + v3 > 20 and v1 = 5";
+            String plan = getFragmentPlan(sql);
+            assertContains(plan, "  0:OlapScanNode\n" +
+                    "     TABLE: t0\n" +
+                    "     PREAGGREGATION: ON\n" +
+                    "     PREDICATES: 1: v1 + 2: v2 > 10, 1: v1 + 2: v2 + 3: v3 > 20, 1: v1 = 5");
+            connectContext.getSessionVariable().setEnablePredicateExprReuse(true);
+        }
     }
 }

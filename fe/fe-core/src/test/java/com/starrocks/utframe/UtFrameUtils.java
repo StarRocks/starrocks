@@ -42,7 +42,6 @@ import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.google.gson.stream.JsonReader;
 import com.staros.starlet.StarletAgentFactory;
-import com.starrocks.analysis.HintNode;
 import com.starrocks.analysis.SetVarHint;
 import com.starrocks.analysis.StringLiteral;
 import com.starrocks.analysis.TableName;
@@ -61,6 +60,7 @@ import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Replica;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Tablet;
+import com.starrocks.catalog.UserIdentity;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
@@ -109,12 +109,12 @@ import com.starrocks.sql.ast.CreateMaterializedViewStatement;
 import com.starrocks.sql.ast.CreateViewStmt;
 import com.starrocks.sql.ast.DeleteStmt;
 import com.starrocks.sql.ast.DmlStmt;
+import com.starrocks.sql.ast.HintNode;
 import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.SystemVariable;
 import com.starrocks.sql.ast.TableRelation;
-import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.sql.ast.UserVariable;
 import com.starrocks.sql.optimizer.LogicalPlanPrinter;
 import com.starrocks.sql.optimizer.OptExpression;
@@ -302,6 +302,10 @@ public class UtFrameUtils {
     }
 
     public static synchronized void createMinStarRocksCluster(boolean startBDB, RunMode runMode) {
+        createMinStarRocksCluster(startBDB, runMode, "fe/mocked/test/" + UUID.randomUUID().toString() + "/");
+    }
+
+    public static synchronized void createMinStarRocksCluster(boolean startBDB, RunMode runMode, String runningDir) {
         // to avoid call createMinStarRocksCluster multiple times
         if (CREATED_MIN_CLUSTER.get()) {
             return;
@@ -310,7 +314,7 @@ public class UtFrameUtils {
             ThriftConnectionPool.beHeartbeatPool = new MockGenericPool.HeatBeatPool("heartbeat");
             ThriftConnectionPool.backendPool = new MockGenericPool.BackendThriftPool("backend");
 
-            startFEServer("fe/mocked/test/" + UUID.randomUUID().toString() + "/", startBDB, runMode);
+            startFEServer(runningDir, startBDB, runMode);
 
             addMockBackend(10001);
 
@@ -344,21 +348,21 @@ public class UtFrameUtils {
 
     public static Backend addMockBackend(int backendId, String host, int beThriftPort) throws Exception {
         // start be
-        MockedBackend backend = new MockedBackend(host, beThriftPort);
+        MockedBackend backend = new MockedBackend(backendId, host, beThriftPort);
         // add be
         return addMockBackend(backend, backendId);
     }
 
     public static Backend addMockBackend(int backendId) throws Exception {
         // start be
-        MockedBackend backend = new MockedBackend("127.0.0.1");
+        MockedBackend backend = new MockedBackend(backendId, "127.0.0.1");
         // add be
         return addMockBackend(backend, backendId);
     }
 
     public static ComputeNode addMockComputeNode(int backendId) throws Exception {
         // start be
-        MockedBackend backend = new MockedBackend("127.0.108.1");
+        MockedBackend backend = new MockedBackend(backendId, "127.0.108.1");
         // add be
         return addMockComputeNode(backend, backendId);
     }
@@ -573,7 +577,7 @@ public class UtFrameUtils {
             return Pair.create(planPair.first, planAndTrace);
         } else {
             Tracers.register(connectContext);
-            Tracers.init(connectContext, Tracers.Mode.LOGS, module);
+            Tracers.init(connectContext, "LOGS", module);
             try {
                 Pair<String, ExecPlan> planPair = UtFrameUtils.getPlanAndFragment(connectContext, sql);
                 String pr = Tracers.printLogs();
@@ -1319,6 +1323,7 @@ public class UtFrameUtils {
 
         FeConstants.enablePruneEmptyOutputScan = false;
         FeConstants.runningUnitTest = true;
+        Config.mv_refresh_default_planner_optimize_timeout = 300 * 1000; // 5min
 
         if (connectContext != null) {
             // 300s: 5min

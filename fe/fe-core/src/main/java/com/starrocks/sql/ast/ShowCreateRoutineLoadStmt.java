@@ -14,18 +14,9 @@
 
 package com.starrocks.sql.ast;
 
-import com.starrocks.analysis.LabelName;
-import com.starrocks.catalog.Column;
-import com.starrocks.catalog.ScalarType;
-import com.starrocks.qe.ShowResultSetMetaData;
 import com.starrocks.sql.parser.NodePosition;
 
 public class ShowCreateRoutineLoadStmt extends ShowStmt {
-    private static final ShowResultSetMetaData META_DATA =
-            ShowResultSetMetaData.builder()
-                    .addColumn(new Column("Job", ScalarType.createVarchar(20)))
-                    .addColumn(new Column("Create Job", ScalarType.createVarchar(30)))
-                    .build();
 
     private LabelName labelName;
 
@@ -51,12 +42,7 @@ public class ShowCreateRoutineLoadStmt extends ShowStmt {
     }
 
     @Override
-    public ShowResultSetMetaData getMetaData() {
-        return META_DATA;
-    }
-
-    @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitShowCreateRoutineLoadStatement(this, context);
+        return ((AstVisitorExtendInterface<R, C>) visitor).visitShowCreateRoutineLoadStatement(this, context);
     }
 }

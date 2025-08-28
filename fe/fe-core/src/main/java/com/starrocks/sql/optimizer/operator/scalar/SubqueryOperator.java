@@ -79,8 +79,13 @@ public class SubqueryOperator extends ScalarOperator {
     }
 
     @Override
-    public int hashCode() {
+    public int hashCodeSelf() {
         return Objects.hash(queryStatement, applyOperator);
+    }
+
+    @Override
+    public boolean equalsSelf(Object other) {
+        return this == other;
     }
 
     @Override
@@ -90,7 +95,7 @@ public class SubqueryOperator extends ScalarOperator {
 
     @Override
     public <R, C> R accept(ScalarOperatorVisitor<R, C> visitor, C context) {
-        return visitor.visitSubqueryOperator(this, context);
+        return  visitor.visitSubqueryOperator(this, context);
     }
 
     @Override

@@ -14,8 +14,8 @@
 
 package com.starrocks.sql.ast.translate;
 
-import com.starrocks.analysis.RedirectStatus;
 import com.starrocks.sql.ast.AstVisitor;
+import com.starrocks.sql.ast.AstVisitorExtendInterface;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.parser.NodePosition;
 
@@ -30,13 +30,8 @@ public class TranslateStmt extends StatementBase {
     }
 
     @Override
-    public RedirectStatus getRedirectStatus() {
-        return RedirectStatus.NO_FORWARD;
-    }
-
-    @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitTranslateStatement(this, context);
+        return ((AstVisitorExtendInterface<R, C>) visitor).visitTranslateStatement(this, context);
     }
 
     public String getDialect() {

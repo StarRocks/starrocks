@@ -41,6 +41,7 @@ import com.starrocks.common.AnalysisException;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AstVisitor;
+import com.starrocks.sql.ast.AstVisitorExtendInterface;
 import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.thrift.TExprNode;
 import com.starrocks.thrift.TExprNodeType;
@@ -182,14 +183,6 @@ public class CastExpr extends Expr {
     }
 
     @Override
-    public void analyzeImpl(Analyzer analyzer) throws AnalysisException {
-        Preconditions.checkState(!isImplicit);
-        targetTypeDef.analyze(analyzer);
-        type = targetTypeDef.getType();
-        analyze();
-    }
-
-    @Override
     public Expr reset() {
         Expr e = super.reset();
         if (noOp && !getChild(0).getType().matchesType(this.type)) {
@@ -237,7 +230,7 @@ public class CastExpr extends Expr {
      */
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) throws SemanticException {
-        return visitor.visitCastExpr(this, context);
+        return ((AstVisitorExtendInterface<R, C>) visitor).visitCastExpr(this, context);
     }
 
     @Override

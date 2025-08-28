@@ -20,7 +20,10 @@ package com.starrocks.qe.scheduler.warehouse;
 import com.google.common.collect.ImmutableList;
 import com.starrocks.metric.Metric;
 import com.starrocks.metric.PrometheusMetricVisitor;
+import com.starrocks.qe.scheduler.slot.BaseSlotManager;
 import com.starrocks.qe.scheduler.slot.DefaultSlotSelectionStrategy;
+import com.starrocks.qe.scheduler.slot.ResourceUsageMonitor;
+import com.starrocks.qe.scheduler.slot.SlotManager;
 import com.starrocks.qe.scheduler.slot.SlotTracker;
 import com.starrocks.server.WarehouseManager;
 import org.junit.jupiter.api.Assertions;
@@ -31,9 +34,11 @@ import java.util.List;
 public class WarehouseMetricEntityTest {
     @Test
     public void testBasic() {
+        ResourceUsageMonitor resourceUsageMonitor = new ResourceUsageMonitor();
+        BaseSlotManager slotManager = new SlotManager(resourceUsageMonitor);
         DefaultSlotSelectionStrategy strategy =
                 new DefaultSlotSelectionStrategy(() -> false, (groupId) -> false);
-        SlotTracker slotTracker = new SlotTracker(ImmutableList.of(strategy));
+        SlotTracker slotTracker = new SlotTracker(slotManager, ImmutableList.of(strategy));
         WarehouseMetricEntity entity = new WarehouseMetricEntity(slotTracker);
 
         List<Metric> metrics = entity.getMetrics();

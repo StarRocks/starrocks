@@ -124,9 +124,9 @@ bool OlapPredicateParser::can_pushdown(const ConstPredicateNodePtr& pred_tree) c
 }
 
 template <typename ConditionType>
-ColumnPredicate* OlapPredicateParser::t_parse_thrift_cond(const ConditionType& condition) const {
+StatusOr<ColumnPredicate*> OlapPredicateParser::t_parse_thrift_cond(const ConditionType& condition) const {
     const size_t index = _schema->field_index(condition.column_name);
-    RETURN_IF(index >= _schema->num_columns(), nullptr);
+    RETURN_IF(index >= _schema->num_columns(), Status::Unknown("unknown column " + condition.column_name));
     const TabletColumn& col = _schema->column(index);
     auto precision = col.precision();
     auto scale = col.scale();
@@ -134,7 +134,7 @@ ColumnPredicate* OlapPredicateParser::t_parse_thrift_cond(const ConditionType& c
     auto&& type_info = get_type_info(type, precision, scale);
 
     ColumnPredicate* pred = create_column_predicate(condition, type_info, index);
-    RETURN_IF(pred == nullptr, nullptr);
+    RETURN_IF(pred == nullptr, Status::Unknown("unknown condition"));
 
     if (type == TYPE_CHAR) {
         pred->padding_zeros(col.length());
@@ -142,11 +142,11 @@ ColumnPredicate* OlapPredicateParser::t_parse_thrift_cond(const ConditionType& c
     return pred;
 }
 
-ColumnPredicate* OlapPredicateParser::parse_thrift_cond(const TCondition& condition) const {
+StatusOr<ColumnPredicate*> OlapPredicateParser::parse_thrift_cond(const TCondition& condition) const {
     return t_parse_thrift_cond(condition);
 }
 
-ColumnPredicate* OlapPredicateParser::parse_thrift_cond(const GeneralCondition& condition) const {
+StatusOr<ColumnPredicate*> OlapPredicateParser::parse_thrift_cond(const GeneralCondition& condition) const {
     return t_parse_thrift_cond(condition);
 }
 
@@ -202,11 +202,11 @@ ColumnPredicate* ConnectorPredicateParser::t_parse_thrift_cond(const ConditionTy
     return create_column_predicate(condition, type_info, index);
 }
 
-ColumnPredicate* ConnectorPredicateParser::parse_thrift_cond(const TCondition& condition) const {
+StatusOr<ColumnPredicate*> ConnectorPredicateParser::parse_thrift_cond(const TCondition& condition) const {
     return t_parse_thrift_cond(condition);
 }
 
-ColumnPredicate* ConnectorPredicateParser::parse_thrift_cond(const GeneralCondition& condition) const {
+StatusOr<ColumnPredicate*> ConnectorPredicateParser::parse_thrift_cond(const GeneralCondition& condition) const {
     return t_parse_thrift_cond(condition);
 }
 

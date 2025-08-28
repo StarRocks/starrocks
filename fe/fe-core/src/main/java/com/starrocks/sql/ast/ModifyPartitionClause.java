@@ -16,7 +16,6 @@
 package com.starrocks.sql.ast;
 
 import com.google.common.collect.Lists;
-import com.starrocks.alter.AlterOpType;
 import com.starrocks.sql.parser.NodePosition;
 
 import java.util.List;
@@ -42,7 +41,7 @@ public class ModifyPartitionClause extends AlterTableClause {
     }
 
     public ModifyPartitionClause(List<String> partitionNames, Map<String, String> properties, NodePosition pos) {
-        super(AlterOpType.MODIFY_PARTITION, pos);
+        super(pos);
         this.partitionNames = partitionNames;
         this.properties = properties;
         this.needExpand = false;
@@ -50,7 +49,7 @@ public class ModifyPartitionClause extends AlterTableClause {
 
     // c'tor for 'Modify Partition(*)' clause
     private ModifyPartitionClause(Map<String, String> properties, NodePosition pos) {
-        super(AlterOpType.MODIFY_PARTITION, pos);
+        super(pos);
         this.partitionNames = Lists.newArrayList();
         this.properties = properties;
         this.needExpand = true;
@@ -75,6 +74,6 @@ public class ModifyPartitionClause extends AlterTableClause {
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitModifyPartitionClause(this, context);
+        return ((AstVisitorExtendInterface<R, C>) visitor).visitModifyPartitionClause(this, context);
     }
 }

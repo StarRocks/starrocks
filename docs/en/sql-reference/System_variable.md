@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+keywords: ['session variable']
 ---
 
 # System variables
@@ -114,13 +115,13 @@ SELECT /*+ SET_VAR(query_mem_limit = 8589934592) */ name FROM people ORDER BY na
 
 SELECT /*+ SET_VAR(query_timeout = 1) */ sleep(3);
 
-UPDATE /*+ SET_VAR(query_timeout=100) */ tbl SET c1 = 2 WHERE c1 = 1;
+UPDATE /*+ SET_VAR(insert_timeout=100) */ tbl SET c1 = 2 WHERE c1 = 1;
 
 DELETE /*+ SET_VAR(query_mem_limit = 8589934592) */
 FROM my_table PARTITION p1
 WHERE k1 = 3;
 
-INSERT /*+ SET_VAR(query_timeout = 10000000) */
+INSERT /*+ SET_VAR(insert_timeout = 10000000) */
 INTO insert_wiki_edit
     SELECT * FROM FILES(
         "path" = "s3://inserttest/parquet/insert_wiki_edit_append.parquet",
@@ -212,9 +213,21 @@ Used for MySQL client compatibility. No practical usage.
 
 ### cbo_eq_base_type
 
-* **Description**: Specifies the data type used for data comparison between DECIMAL data and STRING data. The default value is `VARCHAR`, and DECIMAL is also a valid value. **This variable takes effect only for `=` and `!=` comparison.**
+* **Description**: Specifies the data type used for data comparison between DECIMAL data and STRING data. The default value is `DECIMAL`, and VARCHAR is also a valid value. **This variable takes effect only for `=` and `!=` comparison.**
 * **Data type**: String
 * **Introduced in**: v2.5.14
+
+### cbo_json_v2_dict_opt
+
+* **Description**: Whether to enable low-cardinality dictionary optimization for Flat JSON (JSON v2) extended string subcolumns created by JSON path rewrite. When enabled, the optimizer may build and use global dictionaries for those subcolumns to accelerate string expressions, GROUP BY, and JOIN operations.
+* **Default**: true
+* **Data type**: Boolean
+
+### cbo_json_v2_rewrite
+
+* **Description**: Whether to enable JSON v2 path rewrite in the optimizer. When enabled, JSON functions (such as `get_json_*`) can be rewritten to direct access of Flat JSON subcolumns, enabling predicate pushdown, column pruning, and dictionary optimization.
+* **Default**: true
+* **Data type**: Boolean
 
 ### cbo_materialized_view_rewrite_related_mvs_limit
 
@@ -304,6 +317,12 @@ Used for MySQL client compatibility. No practical usage.
 * **Description**: Whether to enable materialized view plan cache, which can optimize the automatic rewrite performance of materialized views. Setting it to `true` indicates enabling it.
 * **Default**: true
 * **Introduced in**: v2.5.13, v3.0.7, v3.1.4, v3.2.0, v3.3.0
+
+### enable_cbo_based_mv_rewrite
+
+* **Description**: Whether to enable materialized view rewrite in CBO phase which can maximize the likelihood of successful query rewriting (e.g., when the join order differs between materialized views and queries), but it will increase the execution time of the optimizer phase.
+* **Default**: true
+* **Introduced in**: v3.5.5, v4.0.1
 
 ### enable_parquet_reader_bloom_filter
 
@@ -474,7 +493,7 @@ Default value: `true`.
 
 ### enable_metadata_profile
 
-* **Description**: 是否为 Iceberg Catalog 的元数据收集查询开启 Profile。
+* **Description**: Whether to enabled Profile for Iceberg Catalog metadata.
 * **Default**: true
 * **Introduced in**: v3.3.3
 
@@ -486,6 +505,12 @@ Default value: `true`.
   * `distributed`: Use the distributed plan.
 * **Default**: auto
 * **Introduced in**: v3.3.3
+
+#### enable_iceberg_column_statistics
+
+* **Description**: Whether to obtain column statistics, such as `min`, `max`, `null count`, `row size`, and `ndv` (if a puffin file exists). When this item is set to `false`, only the row count information will be collected.
+* **Default**: false
+* **Introduced in**: v3.4
 
 ### metadata_collect_query_timeout
 
@@ -528,6 +553,11 @@ Default value: `true`.
 * **Description**: Whether to enable short circuiting for queries. Default: `false`. If it is set to `true`, when the query meets the criteria (to evaluate whether the query is a point query): the conditional columns in the WHERE clause include all primary key columns, and the operators in the WHERE clause are `=` or `IN`, the query takes the short circuit.
 * **Default**: false
 * **Introduced in**: v3.2.3
+
+### enable_spm_rewrite
+
+* **Description**: Whether to enable SQL Plan Manager (SPM) query rewrite. When enabled, StarRocks automatically rewrites queries to use bound query plans, improving query performance and stability.
+* **Default**: false
 
 ### enable_spill
 
@@ -587,7 +617,7 @@ Default value: `true`.
 ### enable_lake_tablet_internal_parallel
 
 * **Description**: Whether to enable Parallel Scan for Cloud-native tables in a shared-data cluster.
-* **Default**: false
+* **Default**: true
 * **Data type**: Boolean
 * **Introduced in**: v3.3.0
 
@@ -627,6 +657,32 @@ Default value: `true`.
 * **Default**: true
 * **Introduced in**: v3.3.0
 
+### enable_file_pagecache
+
+* **Description**: Whether to enable Page Cache for files in remote storage. Setting this to `true` enables the feature. Page Cache stores decompressed Parquet page data in memory. When the same page is accessed in subsequent queries, the data can be obtained directly from the cache, avoiding repetitive I/O operations and decompression. This feature works together with the Data Cache and uses the same memory module. When enabled, Page Caache can significantly improve query performance for workloads with repetitive page access patterns.
+* **Default**: true
+* **Introduced in**: v4.0
+
+### enable_datacache_sharing
+
+* **Description**: Whether to enable Cache Sharing. Setting this to `true` enables the feature. Cache Sharing is used to support accessing cache data from other nodes through the network, which can help to reduce performance jitter caused by cache invalidation during cluster scaling. This variable takes effect only when the FE parameter `enable_trace_historical_node` is set to `true`.
+* **Default**: true
+* **Introduced in**: v3.5.1
+
+### datacache_sharing_work_period
+
+* **Description**: The period of time that Cache Sharing takes effect. After each cluster scaling operation, only the requests within this period of time will try to access the cache data from other nodes if the Cache Sharing feature is enabled.
+* **Default**: 600
+* **Unit**: Seconds
+* **Introduced in**: v3.5.1
+
+### historical_nodes_min_update_interval
+
+* **Description**: The minimum interval between two updates of historical node records. If the nodes of a cluster change frequently in a short period of time (that is, less than the value set in this variable), some intermediate states will not be recorded as valid historical node snapshots. The historical nodes are the main basis for the Cache Sharing feature to choose the right cache nodes during cluster scaling.
+* **Default**: 600
+* **Unit**: Seconds
+* **Introduced in**: v3.5.1
+
 ### enable_tablet_internal_parallel
 
 * **Description**: Whether to enable adaptive parallel scanning of tablets. After this feature is enabled, multiple threads can be used to scan one tablet by segment, increasing the scan concurrency.
@@ -644,6 +700,22 @@ Default value: `true`.
 * **Description**: Specifies whether to enable adaptive parallelism for data loading. After this feature is enabled, the system automatically sets load parallelism for INSERT INTO and Broker Load jobs, which is equivalent to the mechanism of `pipeline_dop`. For a newly deployed v2.5 StarRocks cluster, the value is `true` by default. For a v2.5 cluster upgraded from v2.4, the value is `false`.
 * **Default**: false
 * **Introduced in**: v2.5
+
+### enable_bucket_aware_execution_on_lake
+
+* **Description**: Whether to enable bucket-aware execution for queries against data lakes (such as Iceberg tables). When this feature is enabled, the system optimizes query execution by leveraging bucketing information to reduce data shuffling and improve performance. This optimization is particularly effective for join operations and aggregations on bucketed tables.
+* **Default**: true
+* **Data type**: Boolean
+* **Introduced in**: v4.0
+
+### lake_bucket_assign_mode
+
+* **Description**: The bucket assignment mode for queries against tables in data lakes. This variable controls how buckets are distributed among worker nodes when bucket-aware execution takes effect during query execution. Valid values:
+  * `balance`: Distributes buckets evenly across worker nodes to achieve balanced workload and better performance.
+  * `elastic`: Uses consistent hashing to assign buckets to worker nodes, which can provide better load distribution in elastic environments.
+* **Default**: balance
+* **Data type**: String
+* **Introduced in**: v4.0
 
 ### enable_pipeline_engine
 
@@ -997,7 +1069,7 @@ Used for compatibility with JDBC connection pool C3P0. No practical use.
 
 ### query_timeout
 
-* **Description**: Used to set the query timeout in "seconds". This variable will act on all query statements in the current connection. The default value is 300 seconds. From v3.4.0 onwards, `query_timeout` does not apply to INSERT statements.
+* **Description**: Used to set the query timeout in "seconds". This variable will act on all query statements in the current connection. The default value is 300 seconds. From v3.4.0 onwards, `query_timeout` does not apply to operations involved INSERT (for example, UPDATE, DELETE, CTAS, materialized view refresh, statistics collection, and PIPE).
 * **Value range**: [1, 259200]
 * **Default**: 300
 * **Data type**: Int
@@ -1199,3 +1271,45 @@ The StarRocks version. Cannot be changed.
 * **Description**: Used to specify how columns are matched when StarRocks reads ORC files from Hive. The default value is `false`, which means columns in ORC files are read based on their ordinal positions in the Hive table definition. If this variable is set to `true`, columns are read based on their names.
 * **Default**: false
 * **Introduced in**: v3.1.10
+
+### enable_phased_scheduler
+
+* **Description**: Whether to enable multi-phased scheduling. When multi-phased scheduling is enabled, it will schedule fragments according to their dependencies. For example, the system will first schedule the fragment on the build side of a Shuffle Join, and then the fragment on the probe side (Note that, unlike stage-by-stage scheduling, phased scheduling is still under the MPP execution mode). Enabling multi-phased scheduling can significantly reduce memory usage for a large number of UNION ALL queries.
+* **Default**: false
+* **Introduced in**: v3.3
+
+### phased_scheduler_max_concurrency
+
+* **Description**: The concurrency for phased scheduler scheduling leaf node fragments. For example, the default value means that, in a large number of UNION ALL Scan queries, at most two scan fragments are allowed to be scheduled at the same time.
+* **Default**: 2
+* **Introduced in**: v3.3
+
+### enable_wait_dependent_event
+
+* **Description**: Whether Pipeline waits for a dependent operator to finish execution before continuing within the same fragment. For example, in a left join query, when this feature is enabled, the probe-side operator waits for the build-side operator to finish before it starts executing. Enabling this feature can reduce memory usage, but may increase the query latency. However, for queries reused in CTE, enabling this feature may increase memory usage.
+* **Default**: false
+* **Introduced in**: v3.3
+
+### enable_topn_runtime_filter
+
+* **Description**: Whether to enable TopN Runtime Filter. If this feature is enabled, a runtime filter will be dynamically constructed for ORDER BY LIMIT queries and pushed down to the scan for filtering.
+* **Default**: true
+* **Introduced in**: v3.3
+
+### enable_partition_hash_join
+
+* **Description**: Whether to enable adaptive Partition Hash Join.
+* **Default**: true
+* **Introduced in**: v3.4
+
+### spill_enable_direct_io
+
+* **Description**: Whether to skip Page Cache when reading or writing files for Spilling. If this feature is enabled, Spilling will use direct I/O mode to read or write files directly. Direct I/O mode can reduce the impact on the OS Page Cache, but it may cause increases in disk read/write time.
+* **Default**: false
+* **Introduced in**: v3.4
+
+### spill_enable_compaction
+
+* **Description**: Whether to enable Compaction for small files from Spilling. When this feature is enabled, it reduces memory usage for aggregation and sorting.
+* **Default**: true
+* **Introduced in**: v3.4

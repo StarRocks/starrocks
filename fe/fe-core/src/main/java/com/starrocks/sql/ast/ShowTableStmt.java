@@ -23,11 +23,10 @@ import com.starrocks.analysis.ExprSubstitutionMap;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.StringLiteral;
 import com.starrocks.analysis.TableName;
-import com.starrocks.catalog.Column;
-import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.system.information.InfoSchemaDb;
-import com.starrocks.qe.ShowResultSetMetaData;
 import com.starrocks.sql.parser.NodePosition;
+
+import static com.starrocks.common.util.Util.normalizeName;
 
 // SHOW TABLES
 public class ShowTableStmt extends ShowStmt {
@@ -55,11 +54,11 @@ public class ShowTableStmt extends ShowStmt {
     public ShowTableStmt(String db, boolean isVerbose, String pattern, Expr where,
                          String catalogName, NodePosition pos) {
         super(pos);
-        this.db = db;
+        this.db = normalizeName(db);
         this.isVerbose = isVerbose;
         this.pattern = pattern;
         this.where = where;
-        this.catalogName = catalogName;
+        this.catalogName = normalizeName(catalogName);
     }
 
     public String getDb() {
@@ -111,23 +110,12 @@ public class ShowTableStmt extends ShowStmt {
                 finalWhere, null, null), this.origStmt);
     }
 
-    @Override
-    public ShowResultSetMetaData getMetaData() {
-        ShowResultSetMetaData.Builder builder = ShowResultSetMetaData.builder();
-        builder.addColumn(
-                new Column(NAME_COL_PREFIX + db, ScalarType.createVarchar(20)));
-        if (isVerbose) {
-            builder.addColumn(new Column(TYPE_COL, ScalarType.createVarchar(20)));
-        }
-        return builder.build();
-    }
-
     public void setDb(String db) {
-        this.db = db;
+        this.db = normalizeName(db);
     }
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitShowTableStatement(this, context);
+        return ((AstVisitorExtendInterface<R, C>) visitor).visitShowTableStatement(this, context);
     }
 }

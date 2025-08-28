@@ -15,7 +15,6 @@
 
 package com.starrocks.sql.ast;
 
-import com.starrocks.alter.AlterOpType;
 import com.starrocks.catalog.Index;
 import com.starrocks.sql.parser.NodePosition;
 
@@ -30,7 +29,7 @@ public class CreateIndexClause extends AlterTableClause {
     }
 
     public CreateIndexClause(IndexDef indexDef, NodePosition pos) {
-        super(AlterOpType.SCHEMA_CHANGE, pos);
+        super(pos);
         this.indexDef = indexDef;
     }
 
@@ -48,6 +47,6 @@ public class CreateIndexClause extends AlterTableClause {
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitCreateIndexClause(this, context);
+        return ((AstVisitorExtendInterface<R, C>) visitor).visitCreateIndexClause(this, context);
     }
 }

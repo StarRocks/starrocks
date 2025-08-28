@@ -113,6 +113,8 @@ CONF_Int32(push_worker_count_high_priority, "3");
 
 // The count of thread to publish version per transaction
 CONF_mInt32(transaction_publish_version_worker_count, "0");
+// The idle time of transaction publish version thread pool, default 60 seconds.
+CONF_Int32(transaction_publish_version_thread_pool_idle_time_ms, "60000");
 // The min count of thread to publish version per transaction
 CONF_mInt32(transaction_publish_version_thread_pool_num_min, "0");
 
@@ -321,6 +323,20 @@ CONF_mBool(enable_zonemap_index_memory_page_cache, "true");
 // whether to enable the ordinal index memory cache
 CONF_mBool(enable_ordinal_index_memory_page_cache, "true");
 
+// ========================== ZONEMAP BEGIN ===================================
+// Enable ZoneMap for string (CHAR/VARCHAR) columns using prefix-based min/max
+CONF_mBool(enable_string_prefix_zonemap, "true");
+// Prefix length used for string ZoneMap min/max when enabled
+CONF_mInt32(string_prefix_zonemap_prefix_len, "16");
+// Adaptive creation of string zonemap index based on page overlap quality.
+// If the estimated overlap ratio across consecutive pages is greater than this threshold,
+// skip writing the page-level string zonemap index. Range: [0.0, 1.0].
+CONF_mDouble(string_zonemap_overlap_threshold, "0.8");
+// Minimum number of non-empty pages before applying the adaptive check.
+CONF_mInt32(string_zonemap_min_pages_for_adaptive_check, "16");
+
+// ========================== ZONEMAP END ===================================
+
 CONF_mInt32(base_compaction_check_interval_seconds, "60");
 CONF_mInt64(min_base_compaction_num_singleton_deltas, "5");
 CONF_mInt64(max_base_compaction_num_singleton_deltas, "100");
@@ -396,6 +412,10 @@ CONF_Bool(enable_event_based_compaction_framework, "true");
 
 CONF_Bool(enable_size_tiered_compaction_strategy, "true");
 CONF_mBool(enable_pk_size_tiered_compaction_strategy, "true");
+// We support real-time compaction strategy for primary key tables in shared-data mode.
+// This real-time compaction strategy enables compacting rowsets across multiple levels simultaneously.
+// The parameter `size_tiered_max_compaction_level` defines the maximum compaction level allowed in a single compaction task.
+CONF_mInt32(size_tiered_max_compaction_level, "3");
 CONF_mInt64(size_tiered_min_level_size, "131072");
 CONF_mInt64(size_tiered_level_multiple, "5");
 CONF_mInt64(size_tiered_level_multiple_dupkey, "10");
@@ -1125,6 +1145,7 @@ CONF_Alias(object_storage_request_timeout_ms, starlet_fslib_s3client_request_tim
 CONF_mInt32(starlet_delete_files_max_key_in_batch, "1000");
 CONF_mInt32(starlet_filesystem_instance_cache_capacity, "10000");
 CONF_mInt32(starlet_filesystem_instance_cache_ttl_sec, "86400");
+CONF_mBool(starlet_write_file_with_tag, "false");
 #endif
 
 CONF_mInt64(lake_metadata_cache_limit, /*2GB=*/"2147483648");
@@ -1313,7 +1334,7 @@ CONF_mInt64(datacache_mem_adjust_period, "20");
 // Sleep time in seconds between datacache adjust iterations.
 CONF_mInt64(datacache_mem_adjust_interval_seconds, "10");
 
-CONF_Int32(datacache_inline_item_count_limit, "130172");
+CONF_mInt32(datacache_inline_item_count_limit, "130172");
 // Whether use an unified datacache instance.
 CONF_Bool(datacache_unified_instance_enable, "true");
 // The eviction policy for datacache, alternatives: [lru, slru].
@@ -1504,8 +1525,10 @@ CONF_mBool(lake_enable_vertical_compaction_fill_data_cache, "true");
 
 CONF_mInt32(dictionary_cache_refresh_timeout_ms, "60000"); // 1 min
 CONF_mInt32(dictionary_cache_refresh_threadpool_size, "8");
+
+// ======================= FLAT JSON start ==============================================
 // json flat flag
-CONF_mBool(enable_json_flat, "false");
+CONF_mBool(enable_json_flat, "true");
 
 // enable compaction is base on flat json, not whole json
 CONF_mBool(enable_compaction_flat_json, "true");
@@ -1522,6 +1545,9 @@ CONF_mBool(enable_json_flat_complex_type, "false");
 // flat json use dict-encoding
 CONF_mBool(json_flat_use_dict_encoding, "true");
 
+// enable flat json create zonemap
+CONF_mBool(json_flat_create_zonemap, "true");
+
 // if disable flat complex type, check complex type rate in hyper-type column
 CONF_mDouble(json_flat_complex_type_factor, "0.3");
 
@@ -1536,6 +1562,7 @@ CONF_mInt32(json_flat_column_max, "100");
 
 // for whitelist on flat json remain data, max set 1kb
 CONF_mInt32(json_flat_remain_filter_max_bytes, "1024");
+// ======================= FLAT JSON end ==============================================
 
 // Allowable intervals for continuous generation of pk dumps
 // Disable when pk_dump_interval_seconds <= 0
@@ -1553,10 +1580,15 @@ CONF_mInt32(olap_string_max_length, "1048576");
 // Skip get from pk index when light pk compaction publish is enabled
 CONF_mBool(enable_light_pk_compaction_publish, "true");
 
+// jit LRU object cache size for total 32 shards, it will be an auto value if it < 0
+// mem_limit = system memory or process memory limit if set.
+// if mem_limit < 16 GB, disable JIT.
+// else it  = min(mem_limit*0.01, 4MB);
+CONF_mInt64(jit_lru_object_cache_size, "0");
 // jit LRU cache size for total 32 shards, it will be an auto value if it <=0:
 // mem_limit = system memory or process memory limit if set.
 // if mem_limit < 16 GB, disable JIT.
-// else it = min(mem_limit*0.01, 1GB)
+// else it = min(mem_limit*0.01, 4MB)
 CONF_mInt64(jit_lru_cache_size, "0");
 
 CONF_mInt64(arrow_io_coalesce_read_max_buffer_size, "8388608");
@@ -1574,6 +1606,8 @@ CONF_mBool(apply_del_vec_after_all_index_filter, "true");
 CONF_mDouble(connector_sink_mem_high_watermark_ratio, "0.3");
 CONF_mDouble(connector_sink_mem_low_watermark_ratio, "0.1");
 CONF_mDouble(connector_sink_mem_urgent_space_ratio, "0.1");
+// Whether enable spill intermediate data for connector sink.
+CONF_mBool(enable_connector_sink_spill, "true");
 
 // .crm file can be removed after 1day.
 CONF_mInt32(unused_crm_file_threshold_second, "86400" /** 1day **/);
@@ -1696,6 +1730,12 @@ CONF_mInt32(put_combined_txn_log_thread_pool_num_max, "64");
 CONF_mBool(enable_put_combinded_txn_log_parallel, "false");
 // used to control whether the metrics/ interface collects table metrics
 CONF_mBool(enable_collect_table_metrics, "true");
+// use to decide whether to enable the collection of table metrics
+CONF_Bool(enable_table_metrics, "false");
+// Used to limit the number of tables in table metrics.
+// the metrics/ interface returns metrics for at most max_table_metrics_num tables
+// to avoid including too much data in the response
+CONF_Int64(max_table_metrics_num, "100");
 // some internal parameters are used to control the execution strategy of join runtime filter pushdown.
 // Do not modify them unless necessary.
 CONF_mInt64(rf_sample_rows, "1024");
@@ -1708,4 +1748,5 @@ CONF_mInt64(split_exchanger_buffer_chunk_num, "1000");
 
 // when to split hashmap/hashset into two level hashmap/hashset, negative number means use default value
 CONF_mInt64(two_level_memory_threshold, "-1");
+
 } // namespace starrocks::config

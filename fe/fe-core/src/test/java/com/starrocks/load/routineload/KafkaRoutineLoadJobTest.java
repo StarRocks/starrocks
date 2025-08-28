@@ -38,8 +38,6 @@ import com.google.common.base.Joiner;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
-import com.starrocks.analysis.LabelName;
-import com.starrocks.analysis.ParseNode;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.common.LoadException;
@@ -49,13 +47,17 @@ import com.starrocks.common.StarRocksException;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.common.util.KafkaUtil;
 import com.starrocks.load.RoutineLoadDesc;
+import com.starrocks.persist.OriginStatementInfo;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.qe.ConnectContext;
-import com.starrocks.qe.OriginStatement;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.ColumnSeparator;
 import com.starrocks.sql.ast.CreateRoutineLoadStmt;
+import com.starrocks.sql.ast.LabelName;
+import com.starrocks.sql.ast.ParseNode;
 import com.starrocks.sql.ast.PartitionNames;
+import com.starrocks.sql.parser.AstBuilder;
+import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.TResourceInfo;
 import com.starrocks.transaction.GlobalTransactionMgr;
@@ -377,6 +379,8 @@ public class KafkaRoutineLoadJobTest {
         jobProperties.put("enclose", "'");
         jobProperties.put("escape", "\\");
         jobProperties.put("timezone", "Asia/Shanghai");
+        jobProperties.put("max_filter_ratio", "0");
+        jobProperties.put("max_error_number", "10");
         createRoutineLoadStmt.checkJobProperties();
 
         RoutineLoadDesc routineLoadDesc = new RoutineLoadDesc(columnSeparator, null, null, null, partitionNames);
@@ -405,6 +409,9 @@ public class KafkaRoutineLoadJobTest {
                 table.isOlapOrCloudNativeTable();
                 minTimes = 0;
                 result = true;
+                globalStateMgr.getSqlParser();
+                minTimes = 0;
+                result = new SqlParser(AstBuilder.getInstance());
             }
         };
 
@@ -418,10 +425,10 @@ public class KafkaRoutineLoadJobTest {
         };
 
         String createSQL = "CREATE ROUTINE LOAD db1.job1 ON table1 " +
-                "PROPERTIES('format' = 'csv', 'trim_space' = 'true') " +
+                "PROPERTIES('format' = 'csv', 'trim_space' = 'true', 'max_filter_ratio' = '0', 'max_error_number' = '10') " +
                 "FROM KAFKA('kafka_broker_list' = 'http://127.0.0.1:8080','kafka_topic' = 'topic1');";
         KafkaRoutineLoadJob job = KafkaRoutineLoadJob.fromCreateStmt(createRoutineLoadStmt);
-        job.setOrigStmt(new OriginStatement(createSQL, 0));
+        job.setOrigStmt(new OriginStatementInfo(createSQL, 0));
         Assertions.assertEquals("csv", job.getFormat());
         Assertions.assertTrue(job.isTrimspace());
         Assertions.assertEquals((byte) "'".charAt(0), job.getEnclose());
@@ -433,6 +440,8 @@ public class KafkaRoutineLoadJobTest {
         Assertions.assertTrue(newJob.isTrimspace());
         Assertions.assertEquals((byte) "'".charAt(0), newJob.getEnclose());
         Assertions.assertEquals((byte) "\\".charAt(0), newJob.getEscape());
+        Assertions.assertEquals(0, newJob.getMaxFilterRatio());
+        Assertions.assertEquals(10, newJob.maxErrorNum);
     }
 
     @Test
@@ -474,6 +483,9 @@ public class KafkaRoutineLoadJobTest {
                 table.isOlapOrCloudNativeTable();
                 minTimes = 0;
                 result = true;
+                globalStateMgr.getSqlParser();
+                minTimes = 0;
+                result = new SqlParser(AstBuilder.getInstance());
             }
         };
 
@@ -490,7 +502,7 @@ public class KafkaRoutineLoadJobTest {
                 "PROPERTIES('format' = 'json', 'strip_outer_array' = 'true') " +
                 "FROM KAFKA('kafka_broker_list' = 'http://127.0.0.1:8080','kafka_topic' = 'topic1');";
         KafkaRoutineLoadJob job = KafkaRoutineLoadJob.fromCreateStmt(createRoutineLoadStmt);
-        job.setOrigStmt(new OriginStatement(createSQL, 0));
+        job.setOrigStmt(new OriginStatementInfo(createSQL, 0));
         Assertions.assertEquals("json", job.getFormat());
         Assertions.assertTrue(job.isStripOuterArray());
         Assertions.assertEquals("['$.category','$.price','$.author']", job.getJsonPaths());

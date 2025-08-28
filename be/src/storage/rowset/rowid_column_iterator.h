@@ -102,6 +102,8 @@ public:
         return Status::NotSupported("Not supported by RowIdColumnIterator: decode_dict_codes");
     }
 
+    std::string name() const override { return "RowIdColumnIterator"; }
+
 private:
     ColumnIteratorOptions _opts;
     ordinal_t _current_rowid = 0;

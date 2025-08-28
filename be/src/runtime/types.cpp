@@ -38,7 +38,6 @@
 
 #include "gutil/strings/substitute.h"
 #include "runtime/datetime_value.h"
-#include "runtime/string_value.h"
 #include "storage/types.h"
 #include "types/array_type_info.h"
 #include "types/logical_type.h"
@@ -323,7 +322,7 @@ int TypeDescriptor::get_slot_size() const {
     case TYPE_PERCENTILE:
     case TYPE_JSON:
     case TYPE_VARBINARY:
-        return sizeof(StringValue);
+        return sizeof(Slice);
 
     case TYPE_NULL:
     case TYPE_BOOLEAN:

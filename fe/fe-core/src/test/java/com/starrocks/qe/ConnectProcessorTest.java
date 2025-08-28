@@ -39,6 +39,7 @@ import com.google.common.collect.Sets;
 import com.starrocks.analysis.AccessTestUtil;
 import com.starrocks.authentication.AuthenticationMgr;
 import com.starrocks.authorization.PrivilegeBuiltinConstants;
+import com.starrocks.catalog.UserIdentity;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.mysql.MysqlCapability;
@@ -53,8 +54,10 @@ import com.starrocks.proto.PQueryStatistics;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.DDLTestBase;
 import com.starrocks.sql.ast.StatementBase;
-import com.starrocks.sql.ast.UserIdentity;
+import com.starrocks.thrift.TMasterOpRequest;
+import com.starrocks.thrift.TMasterOpResult;
 import com.starrocks.thrift.TUniqueId;
+import com.starrocks.thrift.TUserIdentity;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Expectations;
 import mockit.Mock;
@@ -68,6 +71,7 @@ import org.xnio.StreamConnection;
 
 import java.io.IOException;
 import java.nio.ByteBuffer;
+import java.util.UUID;
 import java.util.concurrent.atomic.AtomicReference;
 
 public class ConnectProcessorTest extends DDLTestBase {
@@ -624,5 +628,42 @@ public class ConnectProcessorTest extends DDLTestBase {
         Assertions.assertFalse(Strings.isNullOrEmpty(QueryDetailQueue.getQueryDetailsAfterTime(0).get(0).getSql()));
     }
 
+    @Test
+    public void testProxyExecute() throws Exception {
+        TMasterOpRequest request = new TMasterOpRequest();
+        request.setCatalog("default");
+        request.setDb("testDb1");
+        request.setUser("root");
+        request.setSql("select 1");
+        request.setIsInternalStmt(true);
+        request.setModified_variables_sql("set query_timeout = 10");
+        request.setCurrent_user_ident(new TUserIdentity().setUsername("root").setHost("127.0.0.1"));
+        request.setQueryId(UUIDUtil.genTUniqueId());
+        request.setSession_id(UUID.randomUUID().toString());
+        request.setIsLastStmt(true);
 
+        // mock context
+        ConnectContext ctx = UtFrameUtils.initCtxForNewPrivilege(UserIdentity.ROOT);
+        ctx.setCurrentCatalog("default");
+        ctx.setDatabase("testDb1");
+        ctx.setQualifiedUser("root");
+        ctx.setGlobalStateMgr(GlobalStateMgr.getCurrentState());
+        ctx.setCurrentUserIdentity(UserIdentity.ROOT);
+        ctx.setCurrentRoleIds(UserIdentity.ROOT);
+        ctx.setSessionId(java.util.UUID.randomUUID());
+        ctx.setThreadLocalInfo();
+
+        ConnectProcessor processor = new ConnectProcessor(ctx);
+        new mockit.MockUp<StmtExecutor>() {
+            @mockit.Mock
+            public void execute() {}
+            @mockit.Mock
+            public PQueryStatistics getQueryStatisticsForAuditLog() {
+                return null;
+            }
+        };
+
+        TMasterOpResult result = processor.proxyExecute(request);
+        Assertions.assertNotNull(result);
+    }
 }

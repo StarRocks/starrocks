@@ -18,13 +18,13 @@
 
 #include "common/config.h"
 #include "connector/hive_chunk_sink.h"
-#include "exec/cache_select_scanner.h"
 #include "exec/exec_node.h"
-#include "exec/hdfs_scanner_orc.h"
-#include "exec/hdfs_scanner_parquet.h"
-#include "exec/hdfs_scanner_partition.h"
-#include "exec/hdfs_scanner_text.h"
-#include "exec/jni_scanner.h"
+#include "exec/hdfs_scanner/cache_select_scanner.h"
+#include "exec/hdfs_scanner/hdfs_scanner_orc.h"
+#include "exec/hdfs_scanner/hdfs_scanner_parquet.h"
+#include "exec/hdfs_scanner/hdfs_scanner_partition.h"
+#include "exec/hdfs_scanner/hdfs_scanner_text.h"
+#include "exec/hdfs_scanner/jni_scanner.h"
 #include "exprs/expr.h"
 #include "storage/chunk_helper.h"
 
@@ -44,7 +44,11 @@ std::unique_ptr<ConnectorChunkSinkProvider> HiveConnector::create_data_sink_prov
 // ================================
 
 HiveDataSourceProvider::HiveDataSourceProvider(ConnectorScanNode* scan_node, const TPlanNode& plan_node)
-        : _scan_node(scan_node), _hdfs_scan_node(plan_node.hdfs_scan_node) {}
+        : _scan_node(scan_node), _hdfs_scan_node(plan_node.hdfs_scan_node) {
+    if (_hdfs_scan_node.__isset.bucket_properties) {
+        _bucket_properties = _hdfs_scan_node.bucket_properties;
+    }
+}
 
 DataSourcePtr HiveDataSourceProvider::create_data_source(const TScanRange& scan_range) {
     return std::make_unique<HiveDataSource>(this, scan_range);

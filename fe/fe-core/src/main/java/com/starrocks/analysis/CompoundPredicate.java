@@ -35,9 +35,9 @@
 package com.starrocks.analysis;
 
 import com.google.common.base.Preconditions;
-import com.starrocks.common.AnalysisException;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AstVisitor;
+import com.starrocks.sql.ast.AstVisitorExtendInterface;
 import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.thrift.TExprNode;
 import com.starrocks.thrift.TExprNodeType;
@@ -100,10 +100,6 @@ public class CompoundPredicate extends Predicate {
         msg.setOpcode(op.toThrift());
     }
 
-    @Override
-    public void analyzeImpl(Analyzer analyzer) throws AnalysisException {
-    }
-
     public enum Operator {
         AND("AND", TExprOpcode.COMPOUND_AND),
         OR("OR", TExprOpcode.COMPOUND_OR),
@@ -151,7 +147,7 @@ public class CompoundPredicate extends Predicate {
      */
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) throws SemanticException {
-        return visitor.visitCompoundPredicate(this, context);
+        return ((AstVisitorExtendInterface<R, C>) visitor).visitCompoundPredicate(this, context);
     }
 
     @Override

@@ -37,14 +37,9 @@ package com.starrocks.load;
 import com.google.common.base.MoreObjects;
 import com.google.common.base.MoreObjects.ToStringHelper;
 import com.google.common.base.Preconditions;
-import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
-
-import java.io.DataInput;
-import java.io.DataOutput;
-import java.io.IOException;
 
 @Deprecated
 public abstract class LoadErrorHub {
@@ -125,40 +120,8 @@ public abstract class LoadErrorHub {
             return helper.toString();
         }
 
-        @Override
-        public void write(DataOutput out) throws IOException {
-            Text.writeString(out, type.name());
-            switch (type) {
-                case MYSQL_TYPE:
-                    mysqlParam.write(out);
-                    break;
-                case BROKER_TYPE:
-                    brokerParam.write(out);
-                    break;
-                case NULL_TYPE:
-                    break;
-                default:
-                    Preconditions.checkState(false, "unknown hub type");
-            }
-        }
 
-        public void readFields(DataInput in) throws IOException {
-            type = HubType.valueOf(Text.readString(in));
-            switch (type) {
-                case MYSQL_TYPE:
-                    mysqlParam = new MysqlLoadErrorHub.MysqlParam();
-                    mysqlParam.readFields(in);
-                    break;
-                case BROKER_TYPE:
-                    brokerParam = new BrokerLoadErrorHub.BrokerParam();
-                    brokerParam.readFields(in);
-                    break;
-                case NULL_TYPE:
-                    break;
-                default:
-                    Preconditions.checkState(false, "unknown hub type");
-            }
-        }
+
     }
 
     public abstract boolean prepare();

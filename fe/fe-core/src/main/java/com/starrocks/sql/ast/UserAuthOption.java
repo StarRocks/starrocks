@@ -14,7 +14,6 @@
 
 package com.starrocks.sql.ast;
 
-import com.starrocks.analysis.ParseNode;
 import com.starrocks.sql.parser.NodePosition;
 
 public class UserAuthOption implements ParseNode {

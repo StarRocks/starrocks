@@ -54,6 +54,10 @@ class PERCENTILE(sqltypes.Numeric):
 class ARRAY(TypeEngine):
     __visit_name__ = "ARRAY"
 
+    def __init__(self, item_type, **kwargs):
+        self.item_type = item_type
+        super().__init__(**kwargs)
+
     @property
     def python_type(self) -> Optional[Type[List[Any]]]:
         return list

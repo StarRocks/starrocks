@@ -18,6 +18,7 @@ import com.google.common.base.Joiner;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Maps;
+import com.google.common.collect.Streams;
 import com.starrocks.analysis.FunctionParams;
 import com.starrocks.catalog.AggregateFunction;
 import com.starrocks.catalog.AnyArrayType;
@@ -46,7 +47,6 @@ import com.starrocks.sql.plan.PlanTestBase;
 import com.starrocks.statistic.StatisticsMetaManager;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
-import org.apache.kudu.shaded.com.google.common.collect.Streams;
 import org.assertj.core.util.Sets;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
@@ -104,8 +104,7 @@ public class AggStateCombinatorTest extends MVTestBase {
             if (!(func instanceof AggregateFunction)) {
                 continue;
             }
-            if ((func instanceof AggStateMergeCombinator) || (func instanceof AggStateUnionCombinator) ||
-                    (func instanceof AggStateIf)) {
+            if (AggStateUtils.isAggStateCombinator(func)) {
                 continue;
             }
             builtInAggregateFunctions.add((AggregateFunction) func);
@@ -367,7 +366,7 @@ public class AggStateCombinatorTest extends MVTestBase {
             supportedAggFunctions.add(aggFunc.functionName());
             Function result = getAggStateFunc(aggFunc);
             Assertions.assertNotNull(result);
-            Assertions.assertTrue(result instanceof AggStateCombinator);
+            Assertions.assertTrue(result instanceof StateFunctionCombinator);
             Assertions.assertFalse(result.getReturnType().isWildcardDecimal());
             Assertions.assertFalse(result.getReturnType().isPseudoType());
         }

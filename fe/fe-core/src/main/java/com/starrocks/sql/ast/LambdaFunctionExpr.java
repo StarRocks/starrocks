@@ -16,10 +16,8 @@
 package com.starrocks.sql.ast;
 
 import com.google.common.base.Preconditions;
-import com.starrocks.analysis.Analyzer;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.SlotRef;
-import com.starrocks.common.AnalysisException;
 import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.thrift.TExprNode;
 import com.starrocks.thrift.TExprNodeType;
@@ -54,11 +52,6 @@ public class LambdaFunctionExpr extends Expr {
     public LambdaFunctionExpr(LambdaFunctionExpr rhs) {
         super(rhs);
         this.commonSubOperatorNum = rhs.commonSubOperatorNum;
-    }
-
-    @Override
-    protected void analyzeImpl(Analyzer analyzer) throws AnalysisException {
-        Preconditions.checkState(false, "unreachable");
     }
 
     @Override
@@ -135,7 +128,7 @@ public class LambdaFunctionExpr extends Expr {
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitLambdaFunctionExpr(this, context);
+        return ((AstVisitorExtendInterface<R, C>) visitor).visitLambdaFunctionExpr(this, context);
     }
 
 }

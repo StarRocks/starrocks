@@ -15,10 +15,11 @@
 package com.starrocks.sql.analyzer;
 
 import com.google.common.collect.Lists;
+import com.starrocks.catalog.UserIdentity;
 import com.starrocks.common.Config;
+import com.starrocks.common.util.UDFInternalClassLoader;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.CreateFunctionStmt;
-import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Mock;
@@ -47,6 +48,30 @@ public class CreateFunctionStmtAnalyzerTest {
     private CreateFunctionStmt createStmt(String symbol, String type) {
         String createFunctionSql = String.format("CREATE %s FUNCTION ABC.MY_UDF_JSON_GET(string, string) \n"
                 + "RETURNS string \n"
+                + "properties (\n"
+                + "    \"symbol\" = \"%s\",\n"
+                + "    \"type\" = \"StarrocksJar\",\n"
+                + "    \"file\" = \"http://localhost:8080/\"\n"
+                + ");", type, symbol);
+        return (CreateFunctionStmt) com.starrocks.sql.parser.SqlParser.parse(
+                createFunctionSql, 32).get(0);
+    }
+
+    private CreateFunctionStmt createMapStmt(String symbol, String type) {
+        String createFunctionSql = String.format("CREATE %s FUNCTION ABC.MY_UDAF_MAP(map<string,string>) \n"
+                + "RETURNS map<string,string> \n"
+                + "properties (\n"
+                + "    \"symbol\" = \"%s\",\n"
+                + "    \"type\" = \"StarrocksJar\",\n"
+                + "    \"file\" = \"http://localhost:8080/\"\n"
+                + ");", type, symbol);
+        return (CreateFunctionStmt) com.starrocks.sql.parser.SqlParser.parse(
+                createFunctionSql, 32).get(0);
+    }
+
+    private CreateFunctionStmt createListStmt(String symbol, String type) {
+        String createFunctionSql = String.format("CREATE %s FUNCTION ABC.MY_UDAF_LIST(array<string>) \n"
+                + "RETURNS array<string> \n"
                 + "properties (\n"
                 + "    \"symbol\" = \"%s\",\n"
                 + "    \"type\" = \"StarrocksJar\",\n"
@@ -101,7 +126,7 @@ public class CreateFunctionStmtAnalyzerTest {
                     return "0xff";
                 }
             };
-            new MockUp<CreateFunctionAnalyzer.UDFInternalClassLoader>() {
+            new MockUp<UDFInternalClassLoader>() {
                 @Mock
                 public final Class<?> loadClass(String name, boolean resolve)
                         throws ClassNotFoundException {
@@ -132,7 +157,7 @@ public class CreateFunctionStmtAnalyzerTest {
                     return "0xff";
                 }
             };
-            new MockUp<CreateFunctionAnalyzer.UDFInternalClassLoader>() {
+            new MockUp<UDFInternalClassLoader>() {
                 @Mock
                 public final Class<?> loadClass(String name, boolean resolve)
                         throws ClassNotFoundException {
@@ -167,6 +192,7 @@ public class CreateFunctionStmtAnalyzerTest {
                 + ");", args, ret);
         return sql;
     }
+
     void mockClazz(Class<?> clazz) {
         new MockUp<CreateFunctionAnalyzer>() {
             @Mock
@@ -174,7 +200,7 @@ public class CreateFunctionStmtAnalyzerTest {
                 return "0xff";
             }
         };
-        new MockUp<CreateFunctionAnalyzer.UDFInternalClassLoader>() {
+        new MockUp<UDFInternalClassLoader>() {
             @Mock
             public final Class<?> loadClass(String name, boolean resolve)
                     throws ClassNotFoundException {
@@ -248,6 +274,66 @@ public class CreateFunctionStmtAnalyzerTest {
         }
     }
 
+    public static class EmptyAggMapEval {
+        public static class State {
+            public int serializeLength() {
+                return 0;
+            }
+        }
+
+        public State create() {
+            return new State();
+        }
+
+        public void destroy(State state) {
+        }
+
+        public final void update(State state, Map<String, String> val) {
+        }
+
+        public void serialize(State state, java.nio.ByteBuffer buff) {
+
+        }
+
+        public void merge(State state, java.nio.ByteBuffer buffer) {
+
+        }
+
+        public Map<String, String> finalize(State state) {
+            return null;
+        }
+    }
+
+    public static class EmptyAggListEval {
+        public static class State {
+            public int serializeLength() {
+                return 0;
+            }
+        }
+
+        public State create() {
+            return new State();
+        }
+
+        public void destroy(State state) {
+        }
+
+        public final void update(State state, List<String> val) {
+        }
+
+        public void serialize(State state, java.nio.ByteBuffer buff) {
+
+        }
+
+        public void merge(State state, java.nio.ByteBuffer buffer) {
+
+        }
+
+        public List<String> finalize(State state) {
+            return null;
+        }
+    }
+
     @Test
     public void testJUDAF() {
         try {
@@ -258,7 +344,7 @@ public class CreateFunctionStmtAnalyzerTest {
                     return "0xff";
                 }
             };
-            new MockUp<CreateFunctionAnalyzer.UDFInternalClassLoader>() {
+            new MockUp<UDFInternalClassLoader>() {
                 @Mock
                 public final Class<?> loadClass(String name, boolean resolve)
                         throws ClassNotFoundException {
@@ -269,6 +355,62 @@ public class CreateFunctionStmtAnalyzerTest {
                 }
             };
             CreateFunctionStmt stmt = createStmt("symbol", "AGGREGATE");
+            new CreateFunctionAnalyzer().analyze(stmt, connectContext);
+            Assertions.assertEquals("0xff", stmt.getFunction().getChecksum());
+        } finally {
+            Config.enable_udf = false;
+        }
+    }
+
+    @Test
+    public void testJUDAFMap() {
+        try {
+            Config.enable_udf = true;
+            new MockUp<CreateFunctionAnalyzer>() {
+                @Mock
+                public String computeMd5(CreateFunctionStmt stmt) {
+                    return "0xff";
+                }
+            };
+            new MockUp<UDFInternalClassLoader>() {
+                @Mock
+                public final Class<?> loadClass(String name, boolean resolve)
+                        throws ClassNotFoundException {
+                    if (name.contains("$")) {
+                        return EmptyAggMapEval.State.class;
+                    }
+                    return EmptyAggMapEval.class;
+                }
+            };
+            CreateFunctionStmt stmt = createMapStmt("symbol", "AGGREGATE");
+            new CreateFunctionAnalyzer().analyze(stmt, connectContext);
+            Assertions.assertEquals("0xff", stmt.getFunction().getChecksum());
+        } finally {
+            Config.enable_udf = false;
+        }
+    }
+
+    @Test
+    public void testJUDAFList() {
+        try {
+            Config.enable_udf = true;
+            new MockUp<CreateFunctionAnalyzer>() {
+                @Mock
+                public String computeMd5(CreateFunctionStmt stmt) {
+                    return "0xff";
+                }
+            };
+            new MockUp<UDFInternalClassLoader>() {
+                @Mock
+                public final Class<?> loadClass(String name, boolean resolve)
+                        throws ClassNotFoundException {
+                    if (name.contains("$")) {
+                        return EmptyAggListEval.State.class;
+                    }
+                    return EmptyAggListEval.class;
+                }
+            };
+            CreateFunctionStmt stmt = createListStmt("symbol", "AGGREGATE");
             new CreateFunctionAnalyzer().analyze(stmt, connectContext);
             Assertions.assertEquals("0xff", stmt.getFunction().getChecksum());
         } finally {
@@ -292,7 +434,7 @@ public class CreateFunctionStmtAnalyzerTest {
                     return "0xff";
                 }
             };
-            new MockUp<CreateFunctionAnalyzer.UDFInternalClassLoader>() {
+            new MockUp<UDFInternalClassLoader>() {
                 @Mock
                 public final Class<?> loadClass(String name, boolean resolve)
                         throws ClassNotFoundException {

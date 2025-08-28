@@ -15,7 +15,6 @@
 
 package com.starrocks.sql.ast;
 
-import com.starrocks.alter.AlterOpType;
 import com.starrocks.sql.parser.NodePosition;
 
 // rename table
@@ -28,7 +27,7 @@ public class PartitionRenameClause extends AlterTableClause {
     }
 
     public PartitionRenameClause(String partitionName, String newPartitionName, NodePosition pos) {
-        super(AlterOpType.RENAME, pos);
+        super(pos);
         this.partitionName = partitionName;
         this.newPartitionName = newPartitionName;
     }
@@ -43,6 +42,6 @@ public class PartitionRenameClause extends AlterTableClause {
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitPartitionRenameClause(this, context);
+        return ((AstVisitorExtendInterface<R, C>) visitor).visitPartitionRenameClause(this, context);
     }
 }

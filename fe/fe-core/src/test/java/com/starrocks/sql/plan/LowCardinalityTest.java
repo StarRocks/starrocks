@@ -167,6 +167,7 @@ public class LowCardinalityTest extends PlanTestBase {
         connectContext.getSessionVariable().setEnableLowCardinalityOptimize(true);
         connectContext.getSessionVariable().setCboCteReuse(false);
         connectContext.getSessionVariable().setEnableEliminateAgg(false);
+        FeConstants.runningUnitTest = true;
     }
 
     @AfterAll
@@ -244,7 +245,7 @@ public class LowCardinalityTest extends PlanTestBase {
     public void testDecodeNodeRewrite3() throws Exception {
         String sql = "select L_COMMENT from lineitem group by L_COMMENT";
         String plan = getFragmentPlan(sql);
-        Assertions.assertTrue(plan.contains("  2:Decode\n" +
+        Assertions.assertTrue(plan.contains("  4:Decode\n" +
                 "  |  <dict id 18> : <string id 16>\n"));
     }
 
@@ -279,10 +280,10 @@ public class LowCardinalityTest extends PlanTestBase {
     public void testDecodeNodeRewrite4() throws Exception {
         String sql = "select dept_name from dept group by dept_name,state";
         String plan = getFragmentPlan(sql);
-        Assertions.assertTrue(plan.contains("  3:Decode\n" +
+        Assertions.assertTrue(plan.contains("  5:Decode\n" +
                 "  |  <dict id 4> : <string id 2>\n" +
                 "  |  \n" +
-                "  2:Project\n" +
+                "  4:Project\n" +
                 "  |  <slot 4> : 4: dept_name"));
     }
 
@@ -1986,6 +1987,35 @@ public class LowCardinalityTest extends PlanTestBase {
                 "     probe runtime filters:\n" +
                 "     - filter_id = 0, probe_expr = (<slot 12>)");
         System.out.println(plan);
+    }
+
+    @Test
+    public void testWindowFunction() throws Exception {
+        String sql = "SELECT\n" +
+                "    t.S_ADDRESS,\n" +
+                "    t.min_date_create\n" +
+                "FROM\n" +
+                "    (\n" +
+                "        SELECT\n" +
+                "            tt.S_ADDRESS,\n" +
+                "            MIN(tt.S_ADDRESS) OVER (PARTITION BY tt.S_ADDRESS) AS min_date_create,\n" +
+                "            ROW_NUMBER () OVER (\n" +
+                "                PARTITION BY tt.S_ADDRESS\n" +
+                "                ORDER BY\n" +
+                "                    tt.S_ADDRESS\n" +
+                "            ) AS row_num\n" +
+                "        FROM\n" +
+                "            supplier tt\n" +
+                "    ) t\n" +
+                "WHERE\n" +
+                "    t.row_num = 1;";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "  1:PARTITION-TOP-N\n" +
+                "  |  partition by: 3: S_ADDRESS \n" +
+                "  |  partition limit: 1\n" +
+                "  |  order by: <slot 3> 3: S_ADDRESS ASC\n" +
+                "  |  pre agg functions: [, min(3: S_ADDRESS), ]\n" +
+                "  |  offset: 0");
     }
 
 }

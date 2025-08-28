@@ -15,14 +15,12 @@
 package com.starrocks.planner;
 
 import com.google.common.collect.Lists;
-import com.starrocks.analysis.Analyzer;
 import com.starrocks.analysis.DescriptorTable;
 import com.starrocks.analysis.SlotDescriptor;
 import com.starrocks.analysis.SlotId;
 import com.starrocks.analysis.TupleDescriptor;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.KuduTable;
-import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.NodeMgr;
 import com.starrocks.server.RunMode;
@@ -133,8 +131,7 @@ public class KuduScanNodeTest {
     }
 
     private TupleDescriptor setupDescriptorTable(KuduTable kuduTable, List<Column> columns) {
-        Analyzer analyzer = new Analyzer(GlobalStateMgr.getCurrentState(), new ConnectContext());
-        DescriptorTable descTable = analyzer.getDescTbl();
+        DescriptorTable descTable = new DescriptorTable();
         TupleDescriptor tupleDesc = descTable.createTupleDescriptor("DestTableTuple");
         tupleDesc.setTable(kuduTable);
         SlotDescriptor slotDescriptor = new SlotDescriptor(new SlotId(0), null);

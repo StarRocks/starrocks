@@ -65,14 +65,8 @@ public class CastOperator extends CallOperator {
     }
 
     @Override
-    public boolean equals(Object o) {
-        if (this == o) {
-            return true;
-        }
-        if (o == null || getClass() != o.getClass()) {
-            return false;
-        }
-        if (!super.equals(o)) {
+    public boolean equalsSelf(Object o) {
+        if (!super.equalsSelf(o)) {
             return false;
         }
         CastOperator that = (CastOperator) o;
@@ -80,12 +74,12 @@ public class CastOperator extends CallOperator {
     }
 
     @Override
-    public int hashCode() {
-        return Objects.hash(super.hashCode(), isImplicit, type);
+    public int hashCodeSelf() {
+        return Objects.hash(super.hashCodeSelf(), isImplicit, type);
     }
 
     @Override
     public <R, C> R accept(ScalarOperatorVisitor<R, C> visitor, C context) {
-        return visitor.visitCastOperator(this, context);
+        return  visitor.visitCastOperator(this, context);
     }
 }

@@ -18,6 +18,7 @@ import com.google.common.base.Objects;
 import com.google.common.base.Preconditions;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AstVisitor;
+import com.starrocks.sql.ast.AstVisitorExtendInterface;
 import com.starrocks.sql.parser.NodePosition;
 
 import java.util.List;
@@ -108,6 +109,6 @@ public class MultiInPredicate extends Predicate {
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) throws SemanticException {
-        return visitor.visitMultiInPredicate(this, context);
+        return ((AstVisitorExtendInterface<R, C>) visitor).visitMultiInPredicate(this, context);
     }
 }

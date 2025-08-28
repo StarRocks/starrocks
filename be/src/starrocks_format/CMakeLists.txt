@@ -26,7 +26,7 @@ set(STARROCKS_LIBS
     Column
     Connector
     Exec
-    Exprs
+    -Wl,--whole-archive Exprs -Wl,--no-whole-archive
     FileSystem
     Formats
     Gutil
@@ -41,6 +41,7 @@ set(STARROCKS_LIBS
     StarRocksGen
     Webserver
     TestUtil
+    Simd
     Cache
     ${WL_END_GROUP}
 )
