@@ -1376,7 +1376,7 @@ public class AnalyzerUtils {
             String partitionPrefix = "p";
 
             // table partitions for check
-            TreeMap<String, PCell> tablePartitions = Maps.newTreeMap(String.CASE_INSENSITIVE_ORDER);
+            TreeMap<String, PListCell> tablePartitions = Maps.newTreeMap(String.CASE_INSENSITIVE_ORDER);
             tablePartitions.putAll(olapTable.getListPartitionItems());
             List<String> partitionColNames = Lists.newArrayList();
             List<PartitionDesc> partitionDescs = Lists.newArrayList();
@@ -1418,7 +1418,7 @@ public class AnalyzerUtils {
      * Calculate the unique partition name for list partition.
      */
     public static String calculateUniquePartitionName(String partitionName, PCell cell,
-                                                      Map<String, PCell> tablePartitions) throws AnalysisException {
+                                                      Map<String, PListCell> tablePartitions) throws AnalysisException {
         String orignialPartitionName = partitionName;
         int i = 0;
         // If the partition name already exists and their partition values are different, change the partition name.

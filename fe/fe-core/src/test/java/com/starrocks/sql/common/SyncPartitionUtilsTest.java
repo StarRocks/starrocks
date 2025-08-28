@@ -172,28 +172,9 @@ public class SyncPartitionUtilsTest {
         Assert.assertEquals(1, partitionRefMap.get("p202011_202012").size());
         Assert.assertEquals(1, partitionRefMap.get("p202012_202101").size());
 
-<<<<<<< HEAD
         Assert.assertTrue(partitionRefMap.get("p202010_202011").contains("p202010_202011"));
         Assert.assertTrue(partitionRefMap.get("p202011_202012").contains("p202011_202012"));
         Assert.assertTrue(partitionRefMap.get("p202012_202101").contains("p202012_202101"));
-=======
-        Assertions.assertTrue(partitionRefMap.get("p202010_202011").contains("p202010_202011"));
-        Assertions.assertTrue(partitionRefMap.get("p202011_202012").contains("p202011_202012"));
-        Assertions.assertTrue(partitionRefMap.get("p202012_202101").contains("p202012_202101"));
-    }
-
-    private Map<String, Range<PartitionKey>> diffRange(Map<String, Range<PartitionKey>> srcRange,
-                                                       Map<String, Range<PartitionKey>> dstRange) {
-        Map<String, PCell> result = RangePartitionDiffer.diffRange(srcRange, dstRange);
-        return toRangeMap(result);
-    }
-
-    private Map<String, PListCell> diffList(Map<String, PCell> baseListMap,
-                                            Map<String, PCell> mvListMap) {
-        Map<String, PCell> result = ListPartitionDiffer.diffList(baseListMap, mvListMap,
-                mvListMap.keySet().stream().collect(Collectors.toSet()));
-        return result.entrySet().stream().collect(Collectors.toMap(Map.Entry::getKey, entry -> (PListCell) entry.getValue()));
->>>>>>> 416ca516cd ([BugFix] Fix mv refresh bug with case-insensitive partition names (#62389))
     }
 
     @Test
@@ -274,7 +255,7 @@ public class SyncPartitionUtilsTest {
         addIntoListPartitionMap(mvListMap, "p20230621", "2023-06-21");
         addIntoListPartitionMap(mvListMap, "p20230620", "2023-06-20");
 
-        Map<String, PListCell> diff = ListPartitionDiffer.diffList(baseListMap, mvListMap);
+        Map<String, PListCell> diff = ListPartitionDiffer.diffList(baseListMap, mvListMap, null);
         Assert.assertEquals(0, diff.size());
 
         baseListMap = Maps.newHashMap();
@@ -284,7 +265,7 @@ public class SyncPartitionUtilsTest {
         mvListMap = Maps.newHashMap();
         addIntoListPartitionMap(mvListMap, "p20230619", "2023-06-19");
 
-        diff = ListPartitionDiffer.diffList(baseListMap, mvListMap);
+        diff = ListPartitionDiffer.diffList(baseListMap, mvListMap, null);
         Assert.assertEquals(1, diff.size());
         Assert.assertEquals("2023-06-20", diff.get("p20230620").getPartitionItems().iterator().next().get(0));
 
@@ -295,7 +276,7 @@ public class SyncPartitionUtilsTest {
         addIntoListPartitionMap(mvListMap, "p20230619", "2023-06-19");
         addIntoListPartitionMap(mvListMap, "p20230620", "2023-06-20");
 
-        diff = ListPartitionDiffer.diffList(baseListMap, mvListMap);
+        diff = ListPartitionDiffer.diffList(baseListMap, mvListMap, null);
         Assert.assertEquals(0, diff.size());
     }
 

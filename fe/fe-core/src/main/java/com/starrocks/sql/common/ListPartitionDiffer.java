@@ -46,26 +46,16 @@ public final class ListPartitionDiffer extends PartitionDiffer {
      * @param mvItems the partition name to its list partition cell of the mv
      * @return the list partition diff between the base table and the mv
      */
-<<<<<<< HEAD
     public static ListPartitionDiff getListPartitionDiff(Map<String, PListCell> baseItems,
-                                                         Map<String, PListCell> mvItems) {
-        // This synchronization method has a one-to-one correspondence
-        // between the base table and the partition of the mv.
-        Map<String, PListCell> adds = diffList(baseItems, mvItems);
-        Map<String, PListCell> deletes = diffList(mvItems, baseItems);
-        return new ListPartitionDiff(adds, deletes);
-=======
-    public static PartitionDiff getListPartitionDiff(Map<String, PCell> baseItems,
-                                                     Map<String, PCell> mvItems,
-                                                     Set<String> uniqueResultNames) {
+                                                         Map<String, PListCell> mvItems,
+                                                         Set<String> uniqueResultNames) {
         // This synchronization method has a one-to-one correspondence
         // between the base table and the partition of the mv.
         // for addition, we need to ensure the partition name is unique in case-insensitive
-        Map<String, PCell> adds = diffList(baseItems, mvItems, uniqueResultNames);
+        Map<String, PListCell> adds = diffList(baseItems, mvItems, uniqueResultNames);
         // for deletion, we don't need to ensure the partition name is unique since mvItems is used as the reference
-        Map<String, PCell> deletes = diffList(mvItems, baseItems, null);
-        return new PartitionDiff(adds, deletes);
->>>>>>> 416ca516cd ([BugFix] Fix mv refresh bug with case-insensitive partition names (#62389))
+        Map<String, PListCell> deletes = diffList(mvItems, baseItems, null);
+        return new ListPartitionDiff(adds, deletes);
     }
 
     /**
@@ -74,43 +64,27 @@ public final class ListPartitionDiffer extends PartitionDiffer {
      * NOTE: Ensure output map keys are distinct in case-insensitive which is because the key is used for partition name,
      * and StarRocks partition name is case-insensitive.
      */
-<<<<<<< HEAD
     public static Map<String, PListCell> diffList(Map<String, PListCell> srcListMap,
-                                                  Map<String, PListCell> dstListMap) {
-        Map<String, PListCell> result = Maps.newTreeMap();
-=======
-    public static Map<String, PCell> diffList(Map<String, PCell> srcListMap,
-                                              Map<String, PCell> dstListMap,
-                                              Set<String> uniqueResultNames) {
+                                                  Map<String, PListCell> dstListMap,
+                                                  Set<String> uniqueResultNames) {
         if (CollectionUtils.sizeIsEmpty(srcListMap)) {
             return Maps.newHashMap();
         }
 
->>>>>>> 416ca516cd ([BugFix] Fix mv refresh bug with case-insensitive partition names (#62389))
         // PListCell may contain multi values, we need to ensure they are not duplicated from each other
         // NOTE: dstListMap's partition items may be duplicated, we need to collect them first
         Map<PListAtom, PListCell> dstAtomMaps = Maps.newHashMap();
-<<<<<<< HEAD
-        dstListMap.values().stream()
-                .forEach(l -> l.toAtoms().stream().forEach(x -> dstAtomMaps.put(x, l)));
-        for (Map.Entry<String, PListCell> srcEntry : srcListMap.entrySet()) {
-            String key = srcEntry.getKey();
-            PListCell srcItem = srcEntry.getValue();
-            if (srcItem.equals(dstListMap.get(key))) {
-=======
         for (PCell l : dstListMap.values()) {
-            Preconditions.checkArgument(l instanceof PListCell, "PListCell expected");
             PListCell pListCell = (PListCell) l;
             pListCell.toAtoms().stream().forEach(x -> dstAtomMaps.put(x, pListCell));
         }
 
-        Map<String, PCell> result = Maps.newTreeMap(String.CASE_INSENSITIVE_ORDER);
-        for (Map.Entry<String, PCell> srcEntry : srcListMap.entrySet()) {
+        Map<String, PListCell> result = Maps.newTreeMap(String.CASE_INSENSITIVE_ORDER);
+        for (Map.Entry<String, PListCell> srcEntry : srcListMap.entrySet()) {
             String pName = srcEntry.getKey();
-            PListCell srcItem = (PListCell) srcEntry.getValue();
+            PListCell srcItem = srcEntry.getValue();
 
             if (srcItem.equals(dstListMap.get(pName))) {
->>>>>>> 416ca516cd ([BugFix] Fix mv refresh bug with case-insensitive partition names (#62389))
                 continue;
             }
 
@@ -324,10 +298,6 @@ public final class ListPartitionDiffer extends PartitionDiffer {
         return true;
     }
 
-<<<<<<< HEAD
-    public static ListPartitionDiffResult computeListPartitionDiff(MaterializedView mv,
-                                                                   boolean isQueryRewrite) {
-=======
     public static Map<String, PCell> collectBasePartitionCells(Map<Table, Map<String, PCell>> basePartitionMaps) {
         Map<String, PCell> allBasePartitionItems = Maps.newHashMap();
         // NOTE: how to handle the partition name conflict between different base tables?
@@ -344,9 +314,8 @@ public final class ListPartitionDiffer extends PartitionDiffer {
         return allBasePartitionItems;
     }
 
-    @Override
-    public PartitionDiffResult computePartitionDiff(Range<PartitionKey> rangeToInclude) {
->>>>>>> 416ca516cd ([BugFix] Fix mv refresh bug with case-insensitive partition names (#62389))
+    public static ListPartitionDiffResult computeListPartitionDiff(MaterializedView mv,
+                                                                   boolean isQueryRewrite) {
         // table -> map<partition name -> partition cell>
         Map<Table, Map<String, PListCell>> refBaseTablePartitionMap = Maps.newHashMap();
         // merge all base table partition cells
@@ -367,23 +336,14 @@ public final class ListPartitionDiffer extends PartitionDiffer {
             boolean isQueryRewrite) {
         // generate the reference map between the base table and the mv
         // TODO: prune the partitions based on ttl
-<<<<<<< HEAD
         Map<String, PListCell> mvPartitionNameToListMap = mv.getListPartitionItems();
-        ListPartitionDiff diff = ListPartitionDiffer.getListPartitionDiff(
-                allBasePartitionItems, mvPartitionNameToListMap);
-=======
-        Map<String, PCell> mvPartitionNameToListMap = mv.getPartitionCells(Optional.empty());
-
-        // collect all base table partition cells
-        Map<String, PCell> allBasePartitionItems = collectBasePartitionCells(refBaseTablePartitionMap);
 
         // ensure the result partition name is unique in case-insensitive
         Set<String> uniqueResultNames = Sets.newTreeSet(String.CASE_INSENSITIVE_ORDER);
         uniqueResultNames.addAll(mvPartitionNameToListMap.keySet());
 
-        PartitionDiff diff = ListPartitionDiffer.getListPartitionDiff(allBasePartitionItems,
-                mvPartitionNameToListMap, uniqueResultNames);
->>>>>>> 416ca516cd ([BugFix] Fix mv refresh bug with case-insensitive partition names (#62389))
+        ListPartitionDiff diff = ListPartitionDiffer.getListPartitionDiff(
+                allBasePartitionItems, mvPartitionNameToListMap, uniqueResultNames);
 
         // collect external partition column mapping
         Map<Table, Map<String, Set<String>>> externalPartitionMaps = Maps.newHashMap();
