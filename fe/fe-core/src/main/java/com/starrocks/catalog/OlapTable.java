@@ -3198,6 +3198,39 @@ public class OlapTable extends Table {
         tableProperty.buildUseFastSchemaEvolution();
     }
 
+    public Boolean getEnableDynamicTablet() {
+        if (tableProperty != null) {
+            return tableProperty.getEnableDynamicTablet();
+        }
+        return null;
+    }
+
+    public boolean isEnableDynamicTablet() {
+        if (!isCloudNativeTableOrMaterializedView()) {
+            return false;
+        }
+
+        if (defaultDistributionInfo.getType() != DistributionInfoType.HASH) {
+            return false;
+        }
+
+        Boolean enableDynamicTablet = getEnableDynamicTablet();
+        if (enableDynamicTablet == null) {
+            return false;
+        }
+
+        return enableDynamicTablet;
+    }
+
+    public void setEnableDynamicTablet(Boolean enableDynamicTablet) {
+        if (tableProperty == null) {
+            tableProperty = new TableProperty(new HashMap<>());
+        }
+        tableProperty.modifyTableProperties(PropertyAnalyzer.PROPERTIES_ENABLE_DYNAMIC_TABLET,
+                enableDynamicTablet != null ? enableDynamicTablet.toString() : "");
+        tableProperty.buildEnableDynamicTablet();
+    }
+
     public void setSessionId(UUID sessionId) {
         this.sessionId = sessionId;
     }
