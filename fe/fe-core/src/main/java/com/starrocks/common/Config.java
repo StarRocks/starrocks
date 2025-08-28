@@ -3411,6 +3411,13 @@ public class Config extends ConfigBase {
     public static boolean mv_auto_analyze_async = true;
 
     /**
+     * Creator-based: record the creator(user) of MV, refresh the MV with same user
+     * Root-based: always use the ROOT to refresh the MV
+     */
+    @ConfField(mutable = true, comment = "Whether to use the creator-based authorization or root for MV refresh")
+    public static boolean mv_use_creator_based_authorization = true;
+
+    /**
      * To prevent the external catalog from displaying too many entries in the grantsTo system table,
      * you can use this variable to ignore the entries in the external catalog
      */
@@ -3797,6 +3804,12 @@ public class Config extends ConfigBase {
     public static long default_statistics_output_row_count = 1L * 1000 * 1000 * 1000;
 
     /**
+     * Whether enable dynamic tablet.
+     */
+    @ConfField(mutable = true, comment = "Whether enable dynamic tablet.")
+    public static boolean enable_dynamic_tablet = false;
+
+    /**
      * The default scheduler interval for dynamic tablet jobs.
      */
     @ConfField(mutable = false, comment = "The default scheduler interval for dynamic tablet jobs.")
@@ -3824,7 +3837,7 @@ public class Config extends ConfigBase {
      * The max number of new tablets that an old tablet can be split into.
      */
     @ConfField(mutable = true, comment = "The max number of new tablets that an old tablet can be split into.")
-    public static int dynamic_tablet_max_split_count = 1024;
+    public static int dynamic_tablet_max_split_count = 8;
 
     /**
      * Whether to enable tracing historical nodes when cluster scale
