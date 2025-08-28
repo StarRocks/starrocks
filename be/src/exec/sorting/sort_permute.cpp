@@ -154,52 +154,15 @@ public:
         return Status::OK();
     }
 
-    Status do_visit(ConstColumn* dst) {
-        if (_columns.empty() || _perm.empty()) {
-            return Status::OK();
-        }
-        for (auto& p : _perm) {
-            dst->append(*_columns[PermTraits::chunk(p)], PermTraits::index(p), 1);
-        }
+    Status do_visit(ConstColumn* dst) { return generic_visit(dst); }
 
-        return Status::OK();
-    }
+    Status do_visit(ArrayColumn* dst) { return generic_visit(dst); }
 
-    Status do_visit(ArrayColumn* dst) {
-        if (_columns.empty() || _perm.empty()) {
-            return Status::OK();
-        }
-
-        for (auto& p : _perm) {
-            dst->append(*_columns[PermTraits::chunk(p)], PermTraits::index(p), 1);
-        }
-
-        return Status::OK();
-    }
-
-    Status do_visit(MapColumn* dst) {
-        if (_columns.empty() || _perm.empty()) {
-            return Status::OK();
-        }
-
-        for (auto& p : _perm) {
-            dst->append(*_columns[PermTraits::chunk(p)], PermTraits::index(p), 1);
-        }
-
-        return Status::OK();
-    }
+    Status do_visit(MapColumn* dst) { return generic_visit(dst); }
 
     Status do_visit(StructColumn* dst) {
         // TODO(SmithCruise) Not tested.
-        if (_columns.empty() || _perm.empty()) {
-            return Status::OK();
-        }
-
-        for (auto& p : _perm) {
-            dst->append(*_columns[PermTraits::chunk(p)], PermTraits::chunk(p), 1);
-        }
-
-        return Status::OK();
+        return generic_visit(dst);
     }
 
     template <typename T>
@@ -240,27 +203,29 @@ public:
 
     template <typename T>
     Status do_visit(ObjectColumn<T>* dst) {
-        for (auto& p : _perm) {
-            dst->append(*_columns[PermTraits::chunk(p)], PermTraits::index(p), 1);
-        }
-
-        return Status::OK();
+        return generic_visit(dst);
     }
 
-    Status do_visit(JsonColumn* dst) {
-        for (auto& p : _perm) {
-            dst->append(*_columns[PermTraits::chunk(p)], PermTraits::index(p), 1);
-        }
-
-        return Status::OK();
-    }
+    Status do_visit(JsonColumn* dst) { return generic_visit(dst); }
 
 private:
+    template <class COL_TYPE>
+    Status generic_visit(COL_TYPE* dst) {
+        if (_columns.empty() || _perm.empty()) {
+            return Status::OK();
+        }
+
+        for (auto& p : _perm) {
+            dst->append(*_columns[PermTraits::chunk(p)], PermTraits::index(p), 1);
+        }
+
+        return Status::OK();
+    }
+
     const std::span<const Column* const> _columns;
     const PermRange _perm;
 };
 
-// Internal generic implementor
 template <typename PermRange>
 static inline void materialize_column_by_permutation_impl(Column* dst, std::span<const Column* const> columns,
                                                           const PermRange& perm) {
