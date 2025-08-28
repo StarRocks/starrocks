@@ -33,6 +33,7 @@ import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.lake.LakeAggregator;
 import com.starrocks.lake.LakeTablet;
 import com.starrocks.lake.snapshot.ClusterSnapshotMgr;
+import com.starrocks.metric.MetricRepo;
 import com.starrocks.proto.TabletInfoPB;
 import com.starrocks.proto.VacuumRequest;
 import com.starrocks.proto.VacuumResponse;
@@ -329,6 +330,8 @@ public class AutovacuumDaemon extends FrontendDaemon {
                 locker.unLockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(table.getId()), LockType.WRITE);
             }
         }
+        MetricRepo.COUNTER_VACUUM_FILES_NUMBER.increase(vacuumedFiles);
+        MetricRepo.COUNTER_VACUUM_FILES_BYTES.increase(vacuumedFileSize);
         LOG.info("Vacuumed {}.{}.{} hasError={} vacuumedFiles={} vacuumedFileSize={} " +
                         "visibleVersion={} minRetainVersion={} minActiveTxnId={} vacuumVersion={} extraFileSize={} cost={}ms",
                 db.getFullName(), table.getName(), partition.getId(), hasError, vacuumedFiles, vacuumedFileSize,
