@@ -22,6 +22,9 @@
 #include "testutil/assert.h"
 
 namespace starrocks {
+
+#define JoinHashMapForOneKey(LT) JoinHashMap<LT, JoinKeyConstructorType::ONE_KEY, JoinHashMapMethodType::BUCKET_CHAINED>
+
 class JoinHashMapTest : public ::testing::Test {
 protected:
     void SetUp() override {
@@ -1155,8 +1158,8 @@ TEST_F(JoinHashMapTest, JoinBuildProbeFunc) {
 
     ProbeKeyConstructor::prepare(nullptr, &probe_state);
     ProbeKeyConstructor::build_key(table_items, &probe_state);
-    JoinHashMapMethod::lookup_init(table_items, &probe_state, ProbeKeyConstructor().get_key_data(probe_state),
-                                   probe_state.null_array);
+    JoinHashMapMethod::lookup_init(table_items, &probe_state, BuildKeyConstructor().get_key_data(table_items),
+                                   ProbeKeyConstructor().get_key_data(probe_state), probe_state.null_array);
 
     for (size_t i = 0; i < 10; i++) {
         size_t found_count = 0;
@@ -1205,8 +1208,8 @@ TEST_F(JoinHashMapTest, JoinBuildProbeFuncNullable) {
 
     ProbeKeyConstructor::prepare(nullptr, &probe_state);
     ProbeKeyConstructor::build_key(table_items, &probe_state);
-    JoinHashMapMethod::lookup_init(table_items, &probe_state, ProbeKeyConstructor().get_key_data(probe_state),
-                                   probe_state.null_array);
+    JoinHashMapMethod::lookup_init(table_items, &probe_state, BuildKeyConstructor().get_key_data(table_items),
+                                   ProbeKeyConstructor().get_key_data(probe_state), probe_state.null_array);
 
     for (size_t i = 0; i < 10; i++) {
         size_t found_count = 0;
@@ -1378,8 +1381,8 @@ TEST_F(JoinHashMapTest, FixedSizeJoinBuildProbeFunc) {
 
     ProbeKeyConstructor::prepare(_runtime_state.get(), &probe_state);
     ProbeKeyConstructor::build_key(table_items, &probe_state);
-    JoinHashMapMethod::lookup_init(table_items, &probe_state, ProbeKeyConstructor().get_key_data(probe_state),
-                                   probe_state.null_array);
+    JoinHashMapMethod::lookup_init(table_items, &probe_state, BuildKeyConstructor().get_key_data(table_items),
+                                   ProbeKeyConstructor().get_key_data(probe_state), probe_state.null_array);
 
     for (size_t i = 0; i < 10; i++) {
         size_t found_count = 0;
@@ -1438,8 +1441,8 @@ TEST_F(JoinHashMapTest, FixedSizeJoinBuildProbeFuncNullable) {
 
     ProbeKeyConstructor::prepare(_runtime_state.get(), &probe_state);
     ProbeKeyConstructor::build_key(table_items, &probe_state);
-    JoinHashMapMethod::lookup_init(table_items, &probe_state, ProbeKeyConstructor().get_key_data(probe_state),
-                                   probe_state.null_array);
+    JoinHashMapMethod::lookup_init(table_items, &probe_state, BuildKeyConstructor().get_key_data(table_items),
+                                   ProbeKeyConstructor().get_key_data(probe_state), probe_state.null_array);
 
     for (size_t i = 0; i < 10; i++) {
         size_t found_count = 0;
@@ -1505,8 +1508,8 @@ TEST_F(JoinHashMapTest, SerializedJoinBuildProbeFunc) {
 
     ProbeKeyConstructor::prepare(_runtime_state.get(), &probe_state);
     ProbeKeyConstructor::build_key(table_items, &probe_state);
-    JoinHashMapMethod::lookup_init(table_items, &probe_state, ProbeKeyConstructor().get_key_data(probe_state),
-                                   probe_state.null_array);
+    JoinHashMapMethod::lookup_init(table_items, &probe_state, BuildKeyConstructor().get_key_data(table_items),
+                                   ProbeKeyConstructor().get_key_data(probe_state), probe_state.null_array);
 
     for (size_t i = 0; i < 10; i++) {
         size_t found_count = 0;
@@ -1569,8 +1572,8 @@ TEST_F(JoinHashMapTest, SerializedJoinBuildProbeFuncNullable) {
 
     ProbeKeyConstructor::prepare(_runtime_state.get(), &probe_state);
     ProbeKeyConstructor::build_key(table_items, &probe_state);
-    JoinHashMapMethod::lookup_init(table_items, &probe_state, ProbeKeyConstructor().get_key_data(probe_state),
-                                   probe_state.null_array);
+    JoinHashMapMethod::lookup_init(table_items, &probe_state, BuildKeyConstructor().get_key_data(table_items),
+                                   ProbeKeyConstructor().get_key_data(probe_state), probe_state.null_array);
 
     Columns probe_data_columns;
     probe_data_columns.emplace_back(
