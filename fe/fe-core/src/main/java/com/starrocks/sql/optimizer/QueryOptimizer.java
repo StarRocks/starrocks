@@ -696,11 +696,6 @@ public class QueryOptimizer extends Optimizer {
         // After this rule, we shouldn't generate logical project operator
         scheduler.rewriteIterative(tree, rootTaskContext, new MergeProjectWithChildRule());
 
-<<<<<<< HEAD
-        scheduler.rewriteOnce(tree, rootTaskContext, JsonPathRewriteRule.createForOlapScan());
-
-=======
->>>>>>> 7d45558eb5 ([Enhancement] enable flat json by default (backport #62097) (#62354))
         scheduler.rewriteOnce(tree, rootTaskContext, new EliminateSortColumnWithEqualityPredicateRule());
         scheduler.rewriteOnce(tree, rootTaskContext, new PushDownTopNBelowOuterJoinRule());
         // intersect rewrite depend on statistics
