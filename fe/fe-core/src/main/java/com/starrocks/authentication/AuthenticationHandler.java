@@ -188,7 +188,12 @@ public class AuthenticationHandler {
         }
         context.setQualifiedUser(user);
 
-        Set<String> groups = getGroups(authenticationResult.authenticatedUser, authenticationResult.groupProviderName);
+        if (context.getDistinguishedName().isEmpty()) {
+            context.setDistinguishedName(user);
+        }
+
+        Set<String> groups = getGroups(context.getCurrentUserIdentity(), context.getDistinguishedName(),
+                authenticationResult.groupProviderName);
         context.setGroups(groups);
 
         if (authenticationResult.authenticatedGroupList != null && !authenticationResult.authenticatedGroupList.isEmpty()) {
@@ -214,7 +219,7 @@ public class AuthenticationHandler {
         }
     }
 
-    public static Set<String> getGroups(UserIdentity userIdentity, List<String> groupProviderList) {
+    public static Set<String> getGroups(UserIdentity userIdentity, String distinguishedName, List<String> groupProviderList) {
         AuthenticationMgr authenticationMgr = GlobalStateMgr.getCurrentState().getAuthenticationMgr();
 
         HashSet<String> groups = new HashSet<>();
@@ -223,7 +228,7 @@ public class AuthenticationHandler {
             if (groupProvider == null) {
                 continue;
             }
-            groups.addAll(groupProvider.getGroup(userIdentity));
+            groups.addAll(groupProvider.getGroup(userIdentity, distinguishedName));
         }
 
         return groups;

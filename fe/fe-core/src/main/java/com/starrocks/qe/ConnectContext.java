@@ -473,6 +473,14 @@ public class ConnectContext {
         authenticationContext.setCurrentUserIdentity(currentUserIdentity);
     }
 
+    public void setDistinguishedName(String distinguishedName) {
+        authenticationContext.setDistinguishedName(distinguishedName);
+    }
+
+    public String getDistinguishedName() {
+        return authenticationContext.getDistinguishedName();
+    }
+
     public Set<Long> getCurrentRoleIds() {
         return currentRoleIds;
     }

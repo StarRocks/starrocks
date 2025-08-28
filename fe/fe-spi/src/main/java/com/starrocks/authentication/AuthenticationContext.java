@@ -32,6 +32,8 @@ public class AuthenticationContext {
     // but currentUserIdentity may be modified by execute as statement.
     private UserIdentity currentUserIdentity;
 
+    protected String distinguishedName = "";
+
     // The Token in the OpenIDConnect authentication method is obtained
     // from the authentication logic and stored in the AuthenticationContext.
     // If the downstream system needs it, it needs to be obtained from the AuthenticationContext.
@@ -65,6 +67,14 @@ public class AuthenticationContext {
 
     public void setCurrentUserIdentity(UserIdentity currentUserIdentity) {
         this.currentUserIdentity = currentUserIdentity;
+    }
+
+    public void setDistinguishedName(String distinguishedName) {
+        this.distinguishedName = distinguishedName;
+    }
+
+    public String getDistinguishedName() {
+        return distinguishedName;
     }
 
     public String getAuthToken() {
