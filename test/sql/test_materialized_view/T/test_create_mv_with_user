@@ -46,8 +46,8 @@ GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN DATABASE test_create_mv_wi
 GRANT CREATE TABLE, CREATE MATERIALIZED VIEW ON DATABASE test_create_mv_with_user TO ROLE role_with_refresh;
 
 CREATE ROLE role_without_refresh;
-GRANT SELECT, DROP, ALTER ON ALL MATERIALIZED VIEWS IN DATABASE test_create_mv_with_user TO ROLE role_without_refresh;
-GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN DATABASE test_create_mv_with_user TO ROLE role_without_refresh;
+GRANT SELECT, DROP ON ALL MATERIALIZED VIEWS IN DATABASE test_create_mv_with_user TO ROLE role_without_refresh;
+GRANT SELECT  ON ALL TABLES IN DATABASE test_create_mv_with_user TO ROLE role_without_refresh;
 GRANT CREATE TABLE, CREATE MATERIALIZED VIEW ON DATABASE test_create_mv_with_user TO ROLE role_without_refresh;
 
 CREATE USER mv_multi_role_user@'${ip[1]}';
@@ -55,8 +55,8 @@ GRANT role_with_refresh, role_without_refresh TO USER mv_multi_role_user@'${ip[1
 GRANT IMPERSONATE ON USER root TO mv_multi_role_user@'${ip[1]}';
 
 -- Grant direct privileges to user so they can create tables even with default_role=none
-GRANT CREATE TABLE, CREATE MATERIALIZED VIEW ON DATABASE test_create_mv_with_user TO USER mv_multi_role_user@'${ip[1]}';
-GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN DATABASE test_create_mv_with_user TO USER mv_multi_role_user@'${ip[1]}';
+-- GRANT CREATE TABLE, CREATE MATERIALIZED VIEW ON DATABASE test_create_mv_with_user TO USER mv_multi_role_user@'${ip[1]}';
+-- GRANT SELECT ON ALL TABLES IN DATABASE test_create_mv_with_user TO USER mv_multi_role_user@'${ip[1]}';
 
 -- Test Case 1: Creator-based authorization (mv_use_creator_based_authorization=true)
 -- This tests the default behavior where MV refresh uses the creator's context
@@ -72,7 +72,10 @@ SELECT id, name, SUM(value) as total_value
 FROM test_mv_table 
 GROUP BY id, name;
 
-REFRESH MATERIALIZED VIEW test_mv_async WITH SYNC MODE;
+SET ROLE role_with_refresh;
+function: refresh_mv_manual('test_create_mv_with_user', 'test_mv_async')
+SET ROLE role_without_refresh;
+function: refresh_mv_manual('test_create_mv_with_user', 'test_mv_async')
 
 -- Test Case 2: Creator-based authorization with default role
 SET DEFAULT ROLE role_with_refresh TO mv_multi_role_user@'${ip[1]}';
@@ -86,8 +89,9 @@ SELECT id, name, SUM(value) as total_value
 FROM test_mv_table2 
 GROUP BY id, name;
 
-REFRESH MATERIALIZED VIEW test_mv_async2 WITH SYNC MODE;
-SELECT * FROM test_mv_async2 ORDER BY id;
+function: refresh_mv_manual('test_create_mv_with_user', 'test_mv_async2')
+SET ROLE role_without_refresh;
+function: refresh_mv_manual('test_create_mv_with_user', 'test_mv_async2')
 
 -- Test Case 3: Creator-based authorization with insufficient default role
 SET DEFAULT ROLE role_without_refresh TO mv_multi_role_user@'${ip[1]}';
@@ -101,8 +105,9 @@ SELECT id, name, SUM(value) as total_value
 FROM test_mv_table3 
 GROUP BY id, name;
 
-REFRESH MATERIALIZED VIEW test_mv_async3 WITH SYNC MODE;
-SELECT * FROM test_mv_async3 ORDER BY id;
+function: refresh_mv_manual('test_create_mv_with_user', 'test_mv_async3')
+SET ROLE role_without_refresh;
+function: refresh_mv_manual('test_create_mv_with_user', 'test_mv_async3')
 
 -- Test Case 4: Root-based authorization (mv_use_creator_based_authorization=false)
 -- This tests when MV refresh always uses ROOT user regardless of creator
@@ -110,24 +115,28 @@ EXECUTE AS root with no revert;
 REVOKE role_with_refresh FROM mv_multi_role_user@'${ip[1]}';
 SET DEFAULT ROLE NONE TO mv_multi_role_user@'${ip[1]}';
 EXECUTE AS mv_multi_role_user@'${ip[1]}' with no revert;
+SET ROLE role_without_refresh;
 
 CREATE TABLE test_mv_table4(id int, name varchar(20), value int);
-INSERT INTO test_mv_table4 VALUES (1, 'test1', 100), (2, 'test2', 200);
-
-CREATE MATERIALIZED VIEW test_mv_async4 REFRESH MANUAL AS 
+CREATE MATERIALIZED VIEW test_mv_async4 REFRESH DEFERRED MANUAL AS 
 SELECT id, name, SUM(value) as total_value 
 FROM test_mv_table4 
 GROUP BY id, name;
 
 EXECUTE AS root with no revert;
+INSERT INTO test_mv_table4 VALUES (1, 'test1', 100), (2, 'test2', 200);
+
 ADMIN SET FRONTEND CONFIG('mv_use_creator_based_authorization' = 'true');
-REFRESH MATERIALIZED VIEW test_mv_async4 WITH SYNC MODE;
+SELECT count(*) from test_mv_async4;
+function: refresh_mv_manual('test_create_mv_with_user', 'test_mv_async4')
+SELECT count(*) from test_mv_async4;
+
 ADMIN SET FRONTEND CONFIG('mv_use_creator_based_authorization' = 'false');
-REFRESH MATERIALIZED VIEW test_mv_async4 WITH SYNC MODE;
--- Reset to creator-based authorization for cleanup
-ADMIN SET FRONTEND CONFIG('mv_use_creator_based_authorization' = 'true');
+function: refresh_mv_manual('test_create_mv_with_user', 'test_mv_async4')
+SELECT count(*) from test_mv_async4;
 
 -- Cleanup all created objects
+ADMIN SET FRONTEND CONFIG('mv_use_creator_based_authorization' = 'true');
 DROP ROLE role_with_refresh;
 DROP ROLE role_without_refresh;
 DROP USER mv_multi_role_user@'${ip[1]}';
