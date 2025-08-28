@@ -172,9 +172,28 @@ public class SyncPartitionUtilsTest {
         Assert.assertEquals(1, partitionRefMap.get("p202011_202012").size());
         Assert.assertEquals(1, partitionRefMap.get("p202012_202101").size());
 
+<<<<<<< HEAD
         Assert.assertTrue(partitionRefMap.get("p202010_202011").contains("p202010_202011"));
         Assert.assertTrue(partitionRefMap.get("p202011_202012").contains("p202011_202012"));
         Assert.assertTrue(partitionRefMap.get("p202012_202101").contains("p202012_202101"));
+=======
+        Assertions.assertTrue(partitionRefMap.get("p202010_202011").contains("p202010_202011"));
+        Assertions.assertTrue(partitionRefMap.get("p202011_202012").contains("p202011_202012"));
+        Assertions.assertTrue(partitionRefMap.get("p202012_202101").contains("p202012_202101"));
+    }
+
+    private Map<String, Range<PartitionKey>> diffRange(Map<String, Range<PartitionKey>> srcRange,
+                                                       Map<String, Range<PartitionKey>> dstRange) {
+        Map<String, PCell> result = RangePartitionDiffer.diffRange(srcRange, dstRange);
+        return toRangeMap(result);
+    }
+
+    private Map<String, PListCell> diffList(Map<String, PCell> baseListMap,
+                                            Map<String, PCell> mvListMap) {
+        Map<String, PCell> result = ListPartitionDiffer.diffList(baseListMap, mvListMap,
+                mvListMap.keySet().stream().collect(Collectors.toSet()));
+        return result.entrySet().stream().collect(Collectors.toMap(Map.Entry::getKey, entry -> (PListCell) entry.getValue()));
+>>>>>>> 416ca516cd ([BugFix] Fix mv refresh bug with case-insensitive partition names (#62389))
     }
 
     @Test

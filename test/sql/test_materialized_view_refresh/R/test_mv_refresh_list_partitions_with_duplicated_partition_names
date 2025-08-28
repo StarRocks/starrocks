@@ -1,0 +1,103 @@
+-- name: test_mv_refresh_list_partitions_with_duplicated_partition_names
+create database db_${uuid0};
+-- result:
+-- !result
+use db_${uuid0};
+-- result:
+-- !result
+CREATE TABLE `t1` (
+  `col1` varchar(100) NOT NULL COMMENT "",
+  `col2` varchar(100) NULL COMMENT "",
+  `col3` bigint(20) NULL COMMENT ""
+) ENGINE=OLAP
+PRIMARY KEY(`col1`)
+PARTITION BY (`col1`)
+DISTRIBUTED BY HASH(`col1`) BUCKETS 5
+ORDER BY(`col2`)
+PROPERTIES (
+"compression" = "LZ4",
+"enable_persistent_index" = "true",
+"fast_schema_evolution" = "true",
+"replicated_storage" = "true",
+"replication_num" = "1"
+);
+-- result:
+-- !result
+insert into t1 values('demo-diu.com', 'b', 2), ('demo-DIU.com', 'a', 1) , ('demo-diu.com', 'b', 2);
+-- result:
+-- !result
+insert into t1 values('demo-dIU.com', 'a', 1) , ('demo-Diu.com', 'b', 2);
+-- result:
+-- !result
+CREATE TABLE `t2` (
+  `col1` varchar(100) NOT NULL COMMENT "",
+  `col2` varchar(100) NULL COMMENT "",
+  `col3` bigint(20) NULL COMMENT ""
+) ENGINE=OLAP
+PRIMARY KEY(`col1`)
+PARTITION BY (`col1`)
+DISTRIBUTED BY HASH(`col1`) BUCKETS 5
+ORDER BY(`col2`)
+PROPERTIES (
+"compression" = "LZ4",
+"enable_persistent_index" = "true",
+"fast_schema_evolution" = "true",
+"replicated_storage" = "true",
+"replication_num" = "1"
+);
+-- result:
+-- !result
+insert into t2 values('demo-DIU.com', 'a', 1) , ('demo-diu.com', 'b', 2), ('demo-dIU.com', 'a', 1) , ('demo-Diu.com', 'b', 2);
+-- result:
+-- !result
+CREATE MATERIALIZED VIEW test_mv1
+PARTITION BY col1
+DISTRIBUTED BY HASH(col1) BUCKETS 5
+REFRESH DEFERRED MANUAL 
+PROPERTIES (
+    "partition_refresh_number" = "-1"
+)
+AS
+select t1.col1, t1.col2 from t1 left join t2 on t1.col1 = t2.col1;
+-- result:
+-- !result
+REFRESH MATERIALIZED VIEW test_mv1 WITH SYNC MODE;
+SELECT * FROM test_mv1 ORDER BY col1, col2;
+-- result:
+demo-DIU.com	a
+demo-Diu.com	b
+demo-dIU.com	a
+demo-diu.com	b
+-- !result
+insert into t1 values('demo-diu.com', 'b', 2), ('demo-DIU.com', 'a', 1) , ('demo-diu.com', 'b', 2);
+-- result:
+-- !result
+REFRESH MATERIALIZED VIEW test_mv1 WITH SYNC MODE;
+SELECT * FROM test_mv1 ORDER BY col1, col2;
+-- result:
+demo-DIU.com	a
+demo-Diu.com	b
+demo-dIU.com	a
+demo-diu.com	b
+-- !result
+insert into t1 values('demo-DIU.com', 'a', 1) , ('demo-DiU.com', 'b', 2);
+-- result:
+-- !result
+insert into t2 values('demo-DIU.com', 'a', 1) , ('demo-dIu.com', 'b', 2), ('demo-dIU.com', 'a', 1) , ('demo-DIu.com', 'b', 2);
+-- result:
+-- !result
+insert into t1 values('demo-diu.com', 'b', 2), ('demo-DIU.com', 'a', 1) , ('demo-diu.com', 'b', 2);
+-- result:
+-- !result
+REFRESH MATERIALIZED VIEW test_mv1 WITH SYNC MODE;
+SELECT * FROM test_mv1 ORDER BY col1, col2;
+-- result:
+demo-DIU.com	a
+demo-DiU.com	b
+demo-Diu.com	b
+demo-dIU.com	a
+demo-diu.com	b
+-- !result
+DROP database db_${uuid0};
+-- result:
+-- !result
