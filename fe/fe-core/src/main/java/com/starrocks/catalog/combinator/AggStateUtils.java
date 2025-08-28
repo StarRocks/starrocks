@@ -272,9 +272,8 @@ public class AggStateUtils {
                                                          Function inputFunc,
                                                          Type[] argumentTypes,
                                                          NodePosition pos) {
-        // TODO: add more restrictions
         Preconditions.checkArgument(argumentTypes.length >= 1,
-                "AggState's AggFunc should have only one argument");
+                "AggState's AggFunc should have at least one argument");
         Type arg0Type = argumentTypes[0];
         if (arg0Type.getAggStateDesc() == null) {
             String functionName = inputFunc.functionName();

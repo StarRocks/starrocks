@@ -57,7 +57,7 @@ public:
     StatusOr<ColumnPtr> execute(FunctionContext* context, const Columns& columns) override {
         RETURN_IF_UNLIKELY(
                 columns.size() != _arg_nullables.size(),
-                Status::InternalError("StateMergeFunction execute columns size " + std::to_string(columns.size()) +
+                Status::InternalError("StateUnionFunction execute columns size " + std::to_string(columns.size()) +
                                       " not match with arg_nullables size " + std::to_string(_arg_nullables.size())));
 
         SCOPED_THREAD_LOCAL_AGG_STATE_ALLOCATOR_SETTER(&kDefaultAggStateMergeFunctionAllocator);
