@@ -83,14 +83,11 @@ import org.junit.AfterClass;
 import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.ClassRule;
+import org.junit.jupiter.api.Assertions;
 import org.junit.rules.TemporaryFolder;
 
 import java.sql.SQLException;
-<<<<<<< HEAD
-=======
 import java.util.ArrayList;
-import java.util.HashMap;
->>>>>>> 416ca516cd ([BugFix] Fix mv refresh bug with case-insensitive partition names (#62389))
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -576,90 +573,6 @@ public class MVTestBase extends StarRocksTestBase {
             }
         }
     }
-<<<<<<< HEAD
-=======
-
-    protected void testMVRefreshWithOnePartitionAndOneUnPartitionTable(String t1,
-                                                                       String s1,
-                                                                       String mvQuery,
-                                                                       String... expect) throws Exception {
-        String t2 = "CREATE TABLE non_partition_table (dt2 date, int2 int);";
-        String s2 = "INSERT INTO non_partition_table VALUES (\"2020-06-23\",1),(\"2020-07-23\",1),(\"2020-07-23\",1)" +
-                ",(\"2020-08-23\",1),(null,null);\n";
-        if (!Strings.isNullOrEmpty(t1)) {
-            starRocksAssert.withTable(t1);
-        }
-        starRocksAssert.withTable(t2);
-        executeInsertSql(s1);
-        executeInsertSql(s2);
-        starRocksAssert.withMaterializedView(mvQuery, (obj) -> {
-            String mvName = (String) obj;
-            MaterializedView mv = starRocksAssert.getMv("test", mvName);
-            ExecuteOption executeOption = new ExecuteOption(70, false, new HashMap<>());
-            Database testDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
-            Task task = TaskBuilder.buildMvTask(mv, testDb.getFullName());
-            TaskRun taskRun = TaskRunBuilder.newBuilder(task).setExecuteOption(executeOption).build();
-            initAndExecuteTaskRun(taskRun);
-            MVPCTBasedRefreshProcessor processor = getPartitionBasedRefreshProcessor(taskRun);
-            MvTaskRunContext mvTaskRunContext = processor.getMvContext();
-            ExecPlan execPlan = mvTaskRunContext.getExecPlan();
-            Assertions.assertTrue(execPlan != null);
-            for (String expectStr : expect) {
-                assertPlanContains(execPlan, expectStr);
-            }
-        });
-    }
-
-    public static MVTaskRunProcessor getMVTaskRunProcessor(TaskRun taskRun) {
-        Assertions.assertTrue(taskRun.getProcessor() instanceof MVTaskRunProcessor);
-        return (MVTaskRunProcessor) taskRun.getProcessor();
-    }
-
-    public static MVPCTBasedRefreshProcessor getPartitionBasedRefreshProcessor(TaskRun taskRun) {
-        Assertions.assertTrue(taskRun.getProcessor() instanceof MVTaskRunProcessor);
-        MVTaskRunProcessor mvTaskRunProcessor = (MVTaskRunProcessor) taskRun.getProcessor();
-        return (MVPCTBasedRefreshProcessor) mvTaskRunProcessor.getMVRefreshProcessor();
-    }
-
-    protected void withMVQuery(String mvQuery,
-                               MVActionRunner runner) throws Exception {
-        String ddl = String.format("CREATE MATERIALIZED VIEW `test`.`test_mv1` " +
-                "REFRESH DEFERRED MANUAL\n" +
-                "PROPERTIES (\n" +
-                "\"refresh_mode\" = \"incremental\"" +
-                ")\n" +
-                "AS %s;", mvQuery);
-        starRocksAssert.withMaterializedView(ddl);
-        MaterializedView mv = getMv("test_mv1");
-        runner.run(mv);
-    }
-
-    /**
-     * Get the explain plan for the MV refresh task.
-     */
-    protected String explainMVRefreshExecPlan(MaterializedView mv, String explainQuery) {
-        TaskManager taskManager = GlobalStateMgr.getCurrentState().getTaskManager();
-        Task task = taskManager.getTask(TaskBuilder.getMvTaskName(mv.getId()));
-        Assertions.assertTrue(task != null, "Task for MV " + mv.getName() + " not found:" + explainQuery);
-        StatementBase stmt = getAnalyzedPlan(explainQuery, connectContext);
-        Assertions.assertTrue(stmt != null, "Expected a valid StatementBase but got null:" + explainQuery);
-        ExecuteOption executeOption = new ExecuteOption(70, false, new HashMap<>());
-        return taskManager.getMVRefreshExplain(task, executeOption, stmt);
-    }
-
-    /**
-     * Get the execution plan for the MV refresh task.
-     */
-    protected ExecPlan getMVRefreshExecPlan(MaterializedView mv, String explainQuery) {
-        TaskManager taskManager = GlobalStateMgr.getCurrentState().getTaskManager();
-        Task task = taskManager.getTask(TaskBuilder.getMvTaskName(mv.getId()));
-        Assertions.assertTrue(task != null, "Task for MV " + mv.getName() + " not found:" + explainQuery);
-        StatementBase stmt = getAnalyzedPlan(explainQuery, connectContext);
-        Assertions.assertTrue(stmt != null, "Expected a valid StatementBase but got null:" + explainQuery);
-        ExecuteOption executeOption = new ExecuteOption(70, false, new HashMap<>());
-        TaskRun taskRun = taskManager.buildTaskRun(task, executeOption);
-        return taskManager.getMVRefreshExecPlan(taskRun, task, executeOption, stmt);
-    }
 
     public static List<String> extractColumnValues(String sql, int columnIndex) {
         List<String> result = new ArrayList<>();
@@ -729,5 +642,4 @@ public class MVTestBase extends StarRocksTestBase {
             addListPartition(tbl, pName, val);
         }
     }
->>>>>>> 416ca516cd ([BugFix] Fix mv refresh bug with case-insensitive partition names (#62389))
 }

@@ -1506,56 +1506,6 @@ public class PCTRefreshListPartitionOlapTest extends MVTestBase {
                     testMVRefreshWithLooseMode(tableName);
                 });
     }
-<<<<<<< HEAD
-=======
-
-    @Test
-    public void testMVRefreshWithOnePartitionAndOneUnPartitionTable1() throws Exception {
-        String partitionTable = "CREATE TABLE partition_table (dt1 date, int1 int)\n" +
-                "PARTITION BY list(dt1) (\n" +
-                "     PARTITION p1 VALUES IN (\"2025-05-16\") ,\n" +
-                "     PARTITION p2 VALUES IN (\"2025-05-17\") \n" +
-                ")\n";
-        String partitionTableValue = "insert into partition_table partition(p1) values('2025-05-16', 1);";
-        String mvQuery = "CREATE MATERIALIZED VIEW test_mv1 " +
-                "PARTITION BY (dt1) " +
-                "REFRESH DEFERRED MANUAL PROPERTIES (\"partition_refresh_number\"=\"1\")\n" +
-                "AS SELECT dt1,sum(int1) from partition_table group by dt1 union all\n" +
-                "SELECT dt2,sum(int2) from non_partition_table group by dt2;";
-        testMVRefreshWithOnePartitionAndOneUnPartitionTable(partitionTable, partitionTableValue, mvQuery,
-                "     TABLE: partition_table\n" +
-                        "     PREAGGREGATION: ON\n" +
-                        "     PREDICATES: 1: dt1 = '2025-05-17'\n" +
-                        "     partitions=1/2",
-                "     TABLE: non_partition_table\n" +
-                        "     PREAGGREGATION: ON\n" +
-                        "     PREDICATES: 4: dt2 = '2025-05-17'\n" +
-                        "     partitions=1/1");
-    }
-
-    @Test
-    public void testMVRefreshWithOnePartitionAndOneUnPartitionTable2() throws Exception {
-        String partitionTable = "CREATE TABLE partition_table (dt1 date, int1 int, str1 string)\n" +
-                "PARTITION BY list(dt1, str1) (\n" +
-                "     PARTITION p1 VALUES IN ((\"2025-05-16\", \"hangzhou\")),\n" +
-                "     PARTITION p2 VALUES IN ((\"2025-05-17\", \"guangzhou\")) \n" +
-                ")\n";
-        String partitionTableValue = "insert into partition_table partition(p1) values('2025-05-16', 1, 'hangzhou');";
-        String mvQuery = "CREATE MATERIALIZED VIEW test_mv1 " +
-                "PARTITION BY (dt1) " +
-                "REFRESH DEFERRED MANUAL PROPERTIES (\"partition_refresh_number\"=\"1\")\n" +
-                "AS SELECT dt1,sum(int1) from partition_table group by dt1 union all\n" +
-                "SELECT dt2,sum(int2) from non_partition_table group by dt2;";
-        testMVRefreshWithOnePartitionAndOneUnPartitionTable(partitionTable, partitionTableValue, mvQuery,
-                "     TABLE: partition_table\n" +
-                        "     PREAGGREGATION: ON\n" +
-                        "     PREDICATES: 1: dt1 = '2025-05-17'\n" +
-                        "     partitions=1/2",
-                "     TABLE: non_partition_table\n" +
-                        "     PREAGGREGATION: ON\n" +
-                        "     PREDICATES: 5: dt2 = '2025-05-17'\n" +
-                        "     partitions=1/1");
-    }
 
     private void testMVWithDuplicatedPartitionNames(String sql1,
                                                     String sql2,
@@ -1613,5 +1563,4 @@ public class PCTRefreshListPartitionOlapTest extends MVTestBase {
                 "('demo-diu.com', 'b', 2);";
         testMVWithDuplicatedPartitionNames(query1, query2, "test_mv2");
     }
->>>>>>> 416ca516cd ([BugFix] Fix mv refresh bug with case-insensitive partition names (#62389))
 }
