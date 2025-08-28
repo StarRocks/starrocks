@@ -37,8 +37,12 @@ StatusOr<ColumnPtr> FixedLengthColumnBase<T>::upgrade_if_overflow() {
 
 template <typename T>
 void FixedLengthColumnBase<T>::append(const Column& src, size_t offset, size_t count) {
-    const auto& num_src = down_cast<const FixedLengthColumnBase<T>&>(src);
-    _data.insert(_data.end(), num_src._data.begin() + offset, num_src._data.begin() + offset + count);
+    const T* src_data = reinterpret_cast<const T*>(src.raw_data());
+
+    const size_t orig_size = _data.size();
+    raw::stl_vector_resize_uninitialized(&_data, orig_size + count);
+
+    strings::memcpy_inlined(_data.data() + orig_size, src_data + offset, count * sizeof(T));
 }
 
 template <typename T>
@@ -48,7 +52,7 @@ void FixedLengthColumnBase<T>::append_selective(const Column& src, const uint32_
     const T* src_data = reinterpret_cast<const T*>(src.raw_data());
 
     const size_t orig_size = _data.size();
-    _data.resize(orig_size + size);
+    raw::stl_vector_resize_uninitialized(&_data, orig_size + size);
     auto* dest_data = _data.data() + orig_size;
 
     SIMDGather::gather(dest_data, src_data, indexes, size);

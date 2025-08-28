@@ -85,6 +85,7 @@ Status SpillableHashJoinBuildOperator::set_finishing(RuntimeState* state) {
     if (!_join_builder->spiller()->spilled()) {
         DCHECK(_is_first_time_spill);
         _is_first_time_spill = false;
+        RETURN_IF_ERROR(_join_builder->hash_join_builder()->prepare_for_spill_start(runtime_state()));
         RETURN_IF_ERROR(init_spiller_partitions(state, _join_builder->hash_join_builder()));
         ASSIGN_OR_RETURN(_hash_table_slice_iterator, _convert_hash_map_to_chunk());
         RETURN_IF_ERROR(_join_builder->append_spill_task(state, _hash_table_slice_iterator));
@@ -201,6 +202,7 @@ Status SpillableHashJoinBuildOperator::push_chunk(RuntimeState* state, const Chu
 
     // Estimate the appropriate number of partitions
     if (_is_first_time_spill) {
+        RETURN_IF_ERROR(_join_builder->hash_join_builder()->prepare_for_spill_start(runtime_state()));
         RETURN_IF_ERROR(init_spiller_partitions(state, _join_builder->hash_join_builder()));
     }
 

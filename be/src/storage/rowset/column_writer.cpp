@@ -390,8 +390,6 @@ Status ScalarColumnWriter::init() {
     if (_opts.need_zone_map) {
         _has_index_builder = true;
         _zone_map_index_builder = ZoneMapIndexWriter::create(type_info());
-<<<<<<< HEAD
-=======
         if (_opts.zone_map_truncate_string) {
             _zone_map_index_builder->enable_truncate_string();
         }
@@ -400,7 +398,6 @@ Status ScalarColumnWriter::init() {
                     ZoneMapIndexQualityJudger::create(_type_info.get(), config::string_zonemap_overlap_threshold,
                                                       config::string_zonemap_min_pages_for_adaptive_check);
         }
->>>>>>> f4ee640fc7 ([Enhancement] create adaptive zonemap index for strings (backport #61965) (#62361))
     }
     if (_opts.need_bitmap_index) {
         _has_index_builder = true;

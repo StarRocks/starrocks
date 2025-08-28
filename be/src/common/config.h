@@ -323,8 +323,6 @@ CONF_mBool(enable_zonemap_index_memory_page_cache, "true");
 // whether to enable the ordinal index memory cache
 CONF_mBool(enable_ordinal_index_memory_page_cache, "true");
 
-<<<<<<< HEAD
-=======
 // ========================== ZONEMAP BEGIN ===================================
 // Enable ZoneMap for string (CHAR/VARCHAR) columns using prefix-based min/max
 CONF_mBool(enable_string_prefix_zonemap, "true");
@@ -339,7 +337,6 @@ CONF_mInt32(string_zonemap_min_pages_for_adaptive_check, "16");
 
 // ========================== ZONEMAP END ===================================
 
->>>>>>> f4ee640fc7 ([Enhancement] create adaptive zonemap index for strings (backport #61965) (#62361))
 CONF_mInt32(base_compaction_check_interval_seconds, "60");
 CONF_mInt64(min_base_compaction_num_singleton_deltas, "5");
 CONF_mInt64(max_base_compaction_num_singleton_deltas, "100");
