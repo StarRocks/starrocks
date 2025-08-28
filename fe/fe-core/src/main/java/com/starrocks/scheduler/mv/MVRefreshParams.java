@@ -101,6 +101,7 @@ public class MVRefreshParams {
         return "{rangeStart='" + rangeStart + '\'' +
                 ", rangeEnd='" + rangeEnd + '\'' +
                 ", isForce=" + isForce +
+                ", isTentative=" + isTentative +
                 ", listValues=" + listValues +
                 '}';
     }
