@@ -60,7 +60,7 @@ COMMENT "Audit log table"
 PARTITION BY date_trunc('day', `timestamp`)
 PROPERTIES (
   "replication_num" = "1",
-  "partition_live_number"="30"
+  "partition_live_number" = "30"
 );
 ```
 
