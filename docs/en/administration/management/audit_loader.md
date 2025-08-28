@@ -23,32 +23,6 @@ Because the fields of audit logs vary among different StarRocks versions, you mu
 CREATE DATABASE starrocks_audit_db__;
 
 CREATE TABLE starrocks_audit_db__.starrocks_audit_tbl__ (
-<<<<<<< HEAD
-  `queryId`           VARCHAR(64)                COMMENT "Unique query ID",
-  `timestamp`         DATETIME         NOT NULL  COMMENT "Query start time",
-  `queryType`         VARCHAR(12)                COMMENT "Query type (query, slow_query, connection）",
-  `clientIp`          VARCHAR(32)                COMMENT "Client IP address",
-  `user`              VARCHAR(64)                COMMENT "User who initiates the query",
-  `authorizedUser`    VARCHAR(64)                COMMENT "user_identity",
-  `resourceGroup`     VARCHAR(64)                COMMENT "Resource group name",
-  `catalog`           VARCHAR(32)                COMMENT "Catalog name",
-  `db`                VARCHAR(96)                COMMENT "Database that the query scans",
-  `state`             VARCHAR(8)                 COMMENT "Query state (EOF, ERR, OK)",
-  `errorCode`         VARCHAR(512)               COMMENT "Error code",
-  `queryTime`         BIGINT                     COMMENT "Query latency in milliseconds",
-  `scanBytes`         BIGINT                     COMMENT "Size of the scanned data in bytes",
-  `scanRows`          BIGINT                     COMMENT "Row count of the scanned data",
-  `returnRows`        BIGINT                     COMMENT "Row count of the result",
-  `cpuCostNs`         BIGINT                     COMMENT "CPU resources consumption time for query in nanoseconds",
-  `memCostBytes`      BIGINT                     COMMENT "Memory cost for query in bytes",
-  `stmtId`            INT                        COMMENT "Incremental SQL statement ID",
-  `isQuery`           TINYINT                    COMMENT "If the SQL is a query (0 and 1)",
-  `feIp`              VARCHAR(128)               COMMENT "IP address of FE that executes the SQL",
-  `stmt`              VARCHAR(1048576)           COMMENT "Original SQL statement",
-  `digest`            VARCHAR(32)                COMMENT "Slow SQL fingerprint",
-  `planCpuCosts`      DOUBLE                     COMMENT "CPU resources consumption time for planning in nanoseconds",
-  `planMemCosts`      DOUBLE                     COMMENT "Memory cost for planning in bytes"
-=======
   `queryId` VARCHAR(64) COMMENT "Unique ID of the query",
   `timestamp` DATETIME NOT NULL COMMENT "Query start time",
   `queryType` VARCHAR(12) COMMENT "Query type (query, slow_query, connection)",
@@ -77,7 +51,6 @@ CREATE TABLE starrocks_audit_db__.starrocks_audit_tbl__ (
   `candidateMVs` VARCHAR(65533) NULL COMMENT "List of candidate materialized views",
   `hitMvs` VARCHAR(65533) NULL COMMENT "List of matched materialized views",
   `warehouse` VARCHAR(32) NULL COMMENT "Warehouse name"
->>>>>>> cd764aee6e ([Doc] Updated documentation to align with Auditloader 5.0 (#62419))
 ) ENGINE = OLAP
 DUPLICATE KEY (`queryId`, `timestamp`, `queryType`)
 COMMENT "Audit log table"
@@ -210,27 +183,6 @@ See [INSTALL PLUGIN](../../sql-reference/sql-statements/cluster-management/plugi
         clientIp: xxx.xx.xxx.xx:65283
             user: root
     authorizedUser: 'root'@'%'
-<<<<<<< HEAD
-    resourceGroup: default_wg
-         catalog: default_catalog
-              db: 
-           state: EOF
-       errorCode:
-       queryTime: 3
-       scanBytes: 0
-        scanRows: 0
-      returnRows: 1
-       cpuCostNs: 33711
-    memCostBytes: 4200
-          stmtId: 102
-         isQuery: 1
-            feIp: xxx.xx.xxx.xx
-            stmt: SELECT * FROM starrocks_audit_db__.starrocks_audit_tbl__
-          digest:
-    planCpuCosts: 0
-    planMemCosts: 0
-    1 row in set (0.01 sec)
-=======
      resourceGroup: default_wg
            catalog: default_catalog
                 db: 
@@ -253,7 +205,6 @@ See [INSTALL PLUGIN](../../sql-reference/sql-statements/cluster-management/plugi
       candidateMvs: null
             hitMVs: null
     …………
->>>>>>> cd764aee6e ([Doc] Updated documentation to align with Auditloader 5.0 (#62419))
     ```
 
 ## Troubleshooting
