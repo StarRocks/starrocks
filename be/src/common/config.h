@@ -1590,7 +1590,7 @@ CONF_mDouble(connector_sink_mem_high_watermark_ratio, "0.3");
 CONF_mDouble(connector_sink_mem_low_watermark_ratio, "0.1");
 CONF_mDouble(connector_sink_mem_urgent_space_ratio, "0.1");
 // Whether enable spill intermediate data for connector sink.
-CONF_mBool(enable_connector_sink_spill, "true");
+CONF_mBool(enable_connector_sink_spill, "false");
 
 // .crm file can be removed after 1day.
 CONF_mInt32(unused_crm_file_threshold_second, "86400" /** 1day **/);
