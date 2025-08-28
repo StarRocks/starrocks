@@ -188,7 +188,8 @@ public class SyncPartitionUtilsTest {
 
     private Map<String, PListCell> diffList(Map<String, PCell> baseListMap,
                                             Map<String, PCell> mvListMap) {
-        Map<String, PCell> result = ListPartitionDiffer.diffList(baseListMap, mvListMap);
+        Map<String, PCell> result = ListPartitionDiffer.diffList(baseListMap, mvListMap,
+                mvListMap.keySet().stream().collect(Collectors.toSet()));
         return result.entrySet().stream().collect(Collectors.toMap(Map.Entry::getKey, entry -> (PListCell) entry.getValue()));
     }
 
