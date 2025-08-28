@@ -159,6 +159,19 @@ struct ZoneMap {
         dst->set_has_null(has_null);
         dst->set_has_not_null(has_not_null);
     }
+
+    void from_proto(const ZoneMapPB& src, TypeInfo* type_info) {
+        Slice min_slice(src.min());
+        min_value.resize_container_for_fit(type_info, &min_slice);
+        type_info->direct_copy(&min_value.value, &min_slice);
+
+        Slice max_slice(src.max());
+        max_value.resize_container_for_fit(type_info, &max_slice);
+        type_info->direct_copy(&max_value.value, &max_slice);
+
+        has_null = src.has_null();
+        has_not_null = src.has_not_null();
+    }
 };
 
 template <LogicalType type>
@@ -178,6 +191,8 @@ public:
 
     // mark the end of one data page so that we can finalize the corresponding zone map
     Status flush() override;
+
+    std::optional<ZoneMapPB> get_last_zonemap() override;
 
     Status finish(WritableFile* wfile, ColumnIndexMetaPB* index_meta) override;
 
@@ -308,6 +323,18 @@ Status ZoneMapIndexWriterImpl<type>::flush() {
     return Status::OK();
 }
 
+template <LogicalType type>
+std::optional<ZoneMapPB> ZoneMapIndexWriterImpl<type>::get_last_zonemap() {
+    if (_values.empty()) {
+        return std::nullopt;
+    }
+    ZoneMapPB zone_map_pb;
+    if (!zone_map_pb.ParseFromString(_values.back())) {
+        return std::nullopt;
+    }
+    return zone_map_pb;
+}
+
 struct ZoneMapIndexWriterBuilder {
     template <LogicalType ftype>
     std::unique_ptr<ZoneMapIndexWriter> operator()(TypeInfo* type_info) {
@@ -411,8 +438,6 @@ size_t ZoneMapIndexReader::mem_usage() const {
     return size;
 }
 
-<<<<<<< HEAD
-=======
 template <LogicalType type>
 class ZoneMapIndexQualityJudgerImpl final : public ZoneMapIndexQualityJudger {
 public:
@@ -502,5 +527,4 @@ CreateIndexDecision ZoneMapIndexQualityJudgerImpl<type>::make_decision() const {
     }
 }
 
->>>>>>> a823459549 ([BugFix] fix the overlap check of zonemap (#62369))
 } // namespace starrocks
