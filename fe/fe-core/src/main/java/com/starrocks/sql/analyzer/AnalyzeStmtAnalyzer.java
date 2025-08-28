@@ -37,7 +37,7 @@ import com.starrocks.sql.ast.AnalyzeHistogramDesc;
 import com.starrocks.sql.ast.AnalyzeMultiColumnDesc;
 import com.starrocks.sql.ast.AnalyzeStmt;
 import com.starrocks.sql.ast.AnalyzeTypeDesc;
-import com.starrocks.sql.ast.AstVisitor;
+import com.starrocks.sql.ast.AstVisitorExtendInterface;
 import com.starrocks.sql.ast.CreateAnalyzeJobStmt;
 import com.starrocks.sql.ast.DropHistogramStmt;
 import com.starrocks.sql.ast.DropStatsStmt;
@@ -105,7 +105,7 @@ public class AnalyzeStmtAnalyzer {
         return table.isNativeTableOrMaterializedView() || table.isHiveTable();
     }
 
-    static class AnalyzeStatementAnalyzerVisitor implements AstVisitor<Void, ConnectContext> {
+    static class AnalyzeStatementAnalyzerVisitor implements AstVisitorExtendInterface<Void, ConnectContext> {
         public void analyze(StatementBase statement, ConnectContext session) {
             visit(statement, session);
         }

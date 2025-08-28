@@ -66,6 +66,7 @@ import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Executors;
@@ -363,22 +364,46 @@ public class TaskManager implements MemoryTrackable {
         if (statement == null || !statement.isExplain()) {
             return null;
         }
-        ExecPlan execPlan = getMVRefreshExecPlan(task, option, statement);
-        return StmtExecutor.buildExplainString(execPlan, statement,
+        TaskRun taskRun = buildTaskRun(task, option);
+        ExecPlan execPlan = getMVRefreshExecPlan(taskRun, task, option, statement);
+        String explainString = StmtExecutor.buildExplainString(execPlan, statement,
                 ConnectContext.get(), ResourceGroupClassifier.QueryType.MV, statement.getExplainLevel());
+
+        // append pctmvToRefreshedPartitions
+        if (statement.getExplainLevel() == StatementBase.ExplainLevel.VERBOSE) {
+            Optional<Set<String>> pctmvToRefreshedPartitions = getPCTMVToRefreshedPartitions(taskRun);
+            if (pctmvToRefreshedPartitions.isPresent()) {
+                explainString += "\n" + "MVToRefreshedPartitions: " + pctmvToRefreshedPartitions.get();
+            }
+        }
+        return explainString;
+    }
+
+
+    public TaskRun buildTaskRun(Task task, ExecuteOption option) {
+        return TaskRunBuilder.newBuilder(task)
+                .properties(option.getTaskRunProperties())
+                .setExecuteOption(option)
+                .setConnectContext(ConnectContext.get()).build();
+    }
+
+    private Optional<Set<String>> getPCTMVToRefreshedPartitions(TaskRun taskRun) {
+        MVTaskRunProcessor mvRefreshProcessor = (MVTaskRunProcessor) taskRun.getProcessor();
+        try {
+            return Optional.of(mvRefreshProcessor.getPCTMVToRefreshedPartitions(taskRun.buildTaskRunContext()));
+        } catch (Exception e) {
+            LOG.error("Failed to get PCTMVToRefreshedPartitions", e);
+            return Optional.empty();
+        }
     }
 
     /**
      * Get the MV refresh execution plan for the given task.
      */
-    public ExecPlan getMVRefreshExecPlan(Task task, ExecuteOption option, StatementBase statement) {
+    public ExecPlan getMVRefreshExecPlan(TaskRun taskRun, Task task, ExecuteOption option, StatementBase statement) {
         if (statement == null || !statement.isExplain()) {
             return null;
         }
-        TaskRun taskRun = TaskRunBuilder.newBuilder(task)
-                .properties(option.getTaskRunProperties())
-                .setExecuteOption(option)
-                .setConnectContext(ConnectContext.get()).build();
         // init task run
         String queryId = UUIDUtil.genUUID().toString();
         TaskRunStatus status = taskRun.initStatus(queryId, System.currentTimeMillis());

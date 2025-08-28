@@ -15,7 +15,6 @@
 package com.starrocks.sql.ast;
 
 import com.starrocks.analysis.Expr;
-import com.starrocks.analysis.ParseNode;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.TableName;
 import com.starrocks.sql.analyzer.RelationFields;
@@ -129,6 +128,6 @@ public abstract class Relation implements ParseNode {
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitRelation(this, context);
+        return ((AstVisitorExtendInterface<R, C>) visitor).visitRelation(this, context);
     }
 }

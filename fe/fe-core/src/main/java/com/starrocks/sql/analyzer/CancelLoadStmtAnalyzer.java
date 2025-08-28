@@ -23,7 +23,7 @@ import com.starrocks.analysis.StringLiteral;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.qe.ConnectContext;
-import com.starrocks.sql.ast.AstVisitor;
+import com.starrocks.sql.ast.AstVisitorExtendInterface;
 import com.starrocks.sql.ast.CancelLoadStmt;
 
 public class CancelLoadStmtAnalyzer {
@@ -32,7 +32,7 @@ public class CancelLoadStmtAnalyzer {
         new CancelLoadStmtAnalyzerVisitor().analyze(statement, context);
     }
 
-    static class CancelLoadStmtAnalyzerVisitor implements AstVisitor<Void, ConnectContext> {
+    static class CancelLoadStmtAnalyzerVisitor implements AstVisitorExtendInterface<Void, ConnectContext> {
 
         private String label;
 

@@ -93,7 +93,7 @@ constexpr int64_t kRpcHttpMinSize = ((1L << 31) - (1L << 10));
 class RuntimeState {
 public:
     // for ut only
-    RuntimeState() = default;
+    RuntimeState();
     // for ut only
     RuntimeState(const TUniqueId& fragment_instance_id, const TQueryOptions& query_options,
                  const TQueryGlobals& query_globals, ExecEnv* exec_env);
@@ -435,6 +435,11 @@ public:
     bool enable_hash_join_range_direct_mapping_opt() const {
         return _query_options.__isset.enable_hash_join_range_direct_mapping_opt &&
                _query_options.enable_hash_join_range_direct_mapping_opt;
+    }
+
+    bool enable_hash_join_linear_chained_opt() const {
+        return _query_options.__isset.enable_hash_join_linear_chained_opt &&
+               _query_options.enable_hash_join_linear_chained_opt;
     }
 
     const std::vector<TTabletCommitInfo>& tablet_commit_infos() const { return _tablet_commit_infos; }

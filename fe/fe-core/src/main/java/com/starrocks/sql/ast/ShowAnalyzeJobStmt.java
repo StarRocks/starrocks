@@ -110,6 +110,6 @@ public class ShowAnalyzeJobStmt extends ShowStmt {
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitShowAnalyzeJobStatement(this, context);
+        return ((AstVisitorExtendInterface<R, C>) visitor).visitShowAnalyzeJobStatement(this, context);
     }
 }

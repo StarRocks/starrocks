@@ -35,6 +35,7 @@
 package com.starrocks.analysis;
 
 import com.starrocks.sql.ast.AstVisitor;
+import com.starrocks.sql.ast.AstVisitorExtendInterface;
 import com.starrocks.thrift.TExprNode;
 import com.starrocks.thrift.TExprNodeType;
 
@@ -67,6 +68,6 @@ public class ArraySliceExpr extends Expr {
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitArraySliceExpr(this, context);
+        return ((AstVisitorExtendInterface<R, C>) visitor).visitArraySliceExpr(this, context);
     }
 }

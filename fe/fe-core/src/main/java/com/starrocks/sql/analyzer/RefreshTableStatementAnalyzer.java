@@ -21,7 +21,7 @@ import com.starrocks.common.ErrorReport;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.MetadataMgr;
-import com.starrocks.sql.ast.AstVisitor;
+import com.starrocks.sql.ast.AstVisitorExtendInterface;
 import com.starrocks.sql.ast.DdlStmt;
 import com.starrocks.sql.ast.RefreshTableStmt;
 
@@ -30,7 +30,7 @@ public class RefreshTableStatementAnalyzer {
         new RefreshTableStatementAnalyzer.RefreshTableStatementAnalyzerVisitor().visit(statement, context);
     }
 
-    static class RefreshTableStatementAnalyzerVisitor implements AstVisitor<Void, ConnectContext> {
+    static class RefreshTableStatementAnalyzerVisitor implements AstVisitorExtendInterface<Void, ConnectContext> {
         private final MetadataMgr metadataMgr;
 
         public RefreshTableStatementAnalyzerVisitor() {

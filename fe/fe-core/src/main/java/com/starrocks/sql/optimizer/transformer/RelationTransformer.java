@@ -56,7 +56,7 @@ import com.starrocks.sql.analyzer.RelationFields;
 import com.starrocks.sql.analyzer.RelationId;
 import com.starrocks.sql.analyzer.Scope;
 import com.starrocks.sql.analyzer.SemanticException;
-import com.starrocks.sql.ast.AstVisitor;
+import com.starrocks.sql.ast.AstVisitorExtendInterface;
 import com.starrocks.sql.ast.CTERelation;
 import com.starrocks.sql.ast.ExceptRelation;
 import com.starrocks.sql.ast.FileTableFunctionRelation;
@@ -158,7 +158,7 @@ import static com.starrocks.sql.common.ErrorMsgProxy.PARSER_ERROR_MSG;
 import static com.starrocks.sql.common.ErrorType.INTERNAL_ERROR;
 import static com.starrocks.sql.common.UnsupportedException.unsupportedException;
 
-public class RelationTransformer implements AstVisitor<LogicalPlan, ExpressionMapping> {
+public class RelationTransformer implements AstVisitorExtendInterface<LogicalPlan, ExpressionMapping> {
     private static final Logger LOG = LogManager.getLogger(RelationTransformer.class);
 
     private final ColumnRefFactory columnRefFactory;
@@ -952,7 +952,7 @@ public class RelationTransformer implements AstVisitor<LogicalPlan, ExpressionMa
 
         LogicalViewScanOperator scanOperator = new LogicalViewScanOperator(relationId,
                 node.getView(), columnRefOperatorToColumn, columnMetaToColRefMap,
-                new ColumnRefSet(logicalPlan.getOutputColumn()), newExprMapping);
+                new ColumnRefSet(logicalPlan.getOutputColumn()), newExprMapping, projectionMap);
         if (inlineView) {
             // add a projection to make sure output columns keep the same,
             // because LogicalViewScanOperator should be logically equivalent to logicalPlan

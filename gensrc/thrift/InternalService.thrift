@@ -337,7 +337,8 @@ struct TQueryOptions {
 
   160: optional bool enable_join_runtime_filter_pushdown;
   161: optional bool enable_join_runtime_bitset_filter;
-  162: optional bool enable_hash_join_range_direct_mapping_opt
+  162: optional bool enable_hash_join_range_direct_mapping_opt;
+  163: optional bool enable_hash_join_linear_chained_opt;
 
   170: optional bool enable_parquet_reader_bloom_filter;
   171: optional bool enable_parquet_reader_page_index;
@@ -519,6 +520,10 @@ struct TExecPlanFragmentParams {
 struct TExecPlanFragmentResult {
   // required in V1
   1: optional Status.TStatus status
+
+  // short circuit optimization on `select limit`
+  // scan nodes that don't need any scan ranges.
+  2: optional list<i32> closed_scan_nodes;
 }
 
 struct TExecBatchPlanFragmentsParams {

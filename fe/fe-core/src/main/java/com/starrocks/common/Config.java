@@ -1307,6 +1307,11 @@ public class Config extends ConfigBase {
     public static long check_consistency_default_timeout_second = 600; // 10 min
     @ConfField(mutable = true)
     public static long consistency_tablet_meta_check_interval_ms = 2 * 3600 * 1000L; // every 2 hours
+    /**
+     * tablet can be checked only one time on one day, to avoid too many disk io in be
+     */
+    @ConfField(mutable = true)
+    public static long consistency_check_cooldown_time_second = 24 * 3600L; // every 1 day
 
     // Configurations for query engine
     /**
@@ -2501,10 +2506,10 @@ public class Config extends ConfigBase {
     public static String iceberg_metadata_cache_disk_path = StarRocksFE.STARROCKS_HOME_DIR + "/caches/iceberg";
 
     /**
-     * iceberg metadata memory cache total size, default 512MB
+     * iceberg metadata memory cache total size, default 0MB (turn off)
      */
     @ConfField(mutable = true)
-    public static long iceberg_metadata_memory_cache_capacity = 536870912L;
+    public static long iceberg_metadata_memory_cache_capacity = 0L;
 
     /**
      * iceberg metadata memory cache expiration time, default 86500s
@@ -2531,10 +2536,10 @@ public class Config extends ConfigBase {
     public static long iceberg_metadata_disk_cache_expiration_seconds = 7L * 24L * 60L * 60L;
 
     /**
-     * iceberg metadata cache max entry size, default 8MB
+     * iceberg metadata cache max entry size, default 0L (turn off)
      */
     @ConfField(mutable = true)
-    public static long iceberg_metadata_cache_max_entry_size = 8388608L;
+    public static long iceberg_metadata_cache_max_entry_size = 0L;
 
     /**
      * paimon metadata cache preheat, default false
@@ -3406,6 +3411,13 @@ public class Config extends ConfigBase {
     public static boolean mv_auto_analyze_async = true;
 
     /**
+     * Creator-based: record the creator(user) of MV, refresh the MV with same user
+     * Root-based: always use the ROOT to refresh the MV
+     */
+    @ConfField(mutable = true, comment = "Whether to use the creator-based authorization or root for MV refresh")
+    public static boolean mv_use_creator_based_authorization = true;
+
+    /**
      * To prevent the external catalog from displaying too many entries in the grantsTo system table,
      * you can use this variable to ignore the entries in the external catalog
      */
@@ -3792,6 +3804,12 @@ public class Config extends ConfigBase {
     public static long default_statistics_output_row_count = 1L * 1000 * 1000 * 1000;
 
     /**
+     * Whether enable dynamic tablet.
+     */
+    @ConfField(mutable = true, comment = "Whether enable dynamic tablet.")
+    public static boolean enable_dynamic_tablet = false;
+
+    /**
      * The default scheduler interval for dynamic tablet jobs.
      */
     @ConfField(mutable = false, comment = "The default scheduler interval for dynamic tablet jobs.")
@@ -3819,7 +3837,7 @@ public class Config extends ConfigBase {
      * The max number of new tablets that an old tablet can be split into.
      */
     @ConfField(mutable = true, comment = "The max number of new tablets that an old tablet can be split into.")
-    public static int dynamic_tablet_max_split_count = 1024;
+    public static int dynamic_tablet_max_split_count = 8;
 
     /**
      * Whether to enable tracing historical nodes when cluster scale

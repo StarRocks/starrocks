@@ -56,7 +56,6 @@ import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.NotImplementedException;
-import com.starrocks.common.StarRocksException;
 import com.starrocks.common.util.DynamicPartitionUtil;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.common.util.TimeUtils;
@@ -75,7 +74,7 @@ import com.starrocks.sql.ast.AddRollupClause;
 import com.starrocks.sql.ast.AlterClause;
 import com.starrocks.sql.ast.AlterMaterializedViewStatusClause;
 import com.starrocks.sql.ast.AlterTableOperationClause;
-import com.starrocks.sql.ast.AstVisitor;
+import com.starrocks.sql.ast.AstVisitorExtendInterface;
 import com.starrocks.sql.ast.AsyncRefreshSchemeDesc;
 import com.starrocks.sql.ast.ColumnDef;
 import com.starrocks.sql.ast.ColumnRenameClause;
@@ -137,7 +136,7 @@ import java.util.stream.Collectors;
 
 import static com.starrocks.sql.common.ErrorMsgProxy.PARSER_ERROR_MSG;
 
-public class AlterTableClauseAnalyzer implements AstVisitor<Void, ConnectContext> {
+public class AlterTableClauseAnalyzer implements AstVisitorExtendInterface<Void, ConnectContext> {
     private final Table table;
 
     public AlterTableClauseAnalyzer(Table table) {
@@ -442,6 +441,14 @@ public class AlterTableClauseAnalyzer implements AstVisitor<Void, ConnectContext
             if (olapTable.getKeysType() != KeysType.PRIMARY_KEYS) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR, "The compaction strategy can be only " +
                         "update for a primary key table. ");
+            }
+        } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_ENABLE_DYNAMIC_TABLET)) {
+            try {
+                PropertyAnalyzer.analyzeEnableDynamicTablet(properties, false);
+            } catch (Exception e) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR,
+                        "Property " + PropertyAnalyzer.PROPERTIES_ENABLE_DYNAMIC_TABLET +
+                                " must be bool type(false/true)");
             }
         } else {
             ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR, "Unknown properties: " + properties);
@@ -1243,10 +1250,34 @@ public class AlterTableClauseAnalyzer implements AstVisitor<Void, ConnectContext
             throw new SemanticException("Split tablet only support cloud native tables");
         }
 
+        if (clause.getPartitionNames() != null && clause.getTabletList() != null) {
+            throw new SemanticException("Partitions and tablets cannot be specified at the same time");
+        }
+
+        if (clause.getPartitionNames() != null) {
+            if (clause.getPartitionNames().isTemp()) {
+                throw new SemanticException("Cannot split tablet in temp partition");
+            }
+            if (clause.getPartitionNames().getPartitionNames().isEmpty()) {
+                throw new SemanticException("Empty partitions");
+            }
+        }
+
+        if (clause.getTabletList() != null && clause.getTabletList().getTabletIds().isEmpty()) {
+            throw new SemanticException("Empty tablets");
+        }
+
+        Map<String, String> copiedProperties = clause.getProperties() == null ? Maps.newHashMap()
+                : Maps.newHashMap(clause.getProperties());
         try {
-            clause.analyze();
-        } catch (StarRocksException e) {
-            throw new SemanticException(e.getMessage());
+            long dynamicTabletSplitSize = PropertyAnalyzer.analyzeDynamicTabletSplitSize(copiedProperties, true);
+            clause.setDynamicTabletSplitSize(dynamicTabletSplitSize);
+        } catch (Exception e) {
+            throw new SemanticException(e.getMessage(), e);
+        }
+
+        if (!copiedProperties.isEmpty()) {
+            throw new SemanticException("Unknown properties: " + copiedProperties);
         }
 
         return null;

@@ -38,6 +38,6 @@ public class ShowCreateExternalCatalogStmt extends ShowStmt {
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitShowCreateExternalCatalogStatement(this, context);
+        return ((AstVisitorExtendInterface<R, C>) visitor).visitShowCreateExternalCatalogStatement(this, context);
     }
 }

@@ -56,7 +56,7 @@ public class DropHistogramStmt extends StatementBase {
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitDropHistogramStatement(this, context);
+        return ((AstVisitorExtendInterface<R, C>) visitor).visitDropHistogramStatement(this, context);
     }
 
     public boolean isExternal() {

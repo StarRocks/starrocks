@@ -141,7 +141,7 @@ public:
                 .format = formats::PARQUET,
                 .file_statistics =
                         {
-                                .record_count = num_rows,
+                                .record_count = static_cast<int64_t>(num_rows),
                         },
                 .location = "path/to/directory/data.parquet",
         };
@@ -477,6 +477,389 @@ TEST_F(PartitionChunkWriterTest, sort_column_asc) {
             last_row = cur_row;
         }
     }
+
+    std::filesystem::remove_all(fs_base_path);
+}
+
+TEST_F(PartitionChunkWriterTest, sort_column_desc) {
+    std::string fs_base_path = "base_path";
+    std::filesystem::create_directories(fs_base_path + "/c1");
+
+    parquet::Utils::SlotDesc slot_descs[] = {{"c1", TYPE_VARCHAR_DESC}, {""}};
+    TupleDescriptor* tuple_desc =
+            parquet::Utils::create_tuple_descriptor(_fragment_context->runtime_state(), &_pool, slot_descs);
+
+    auto writer_helper = WriterHelper::instance();
+    bool commited = false;
+    Status status;
+
+    // Create partition writer
+    auto mock_writer_factory = std::make_shared<MockFileWriterFactory>();
+    auto location_provider = std::make_shared<LocationProvider>(fs_base_path, "ffffff", 0, 0, "parquet");
+    EXPECT_CALL(*mock_writer_factory, create(::testing::_)).WillRepeatedly([](const std::string&) {
+        WriterAndStream ws;
+        ws.writer = std::make_unique<MockWriter>();
+        ws.stream = std::make_unique<Stream>(std::make_unique<MockFile>(), nullptr, nullptr);
+        return ws;
+    });
+
+    auto sort_ordering = std::make_shared<SortOrdering>();
+    sort_ordering->sort_key_idxes = {0};
+    sort_ordering->sort_descs.descs.emplace_back(false, false);
+    const size_t max_file_size = 1073741824; // 1GB
+    auto partition_chunk_writer_ctx = std::make_shared<SpillPartitionChunkWriterContext>(
+            SpillPartitionChunkWriterContext{mock_writer_factory, location_provider, max_file_size, false,
+                                             _fragment_context.get(), tuple_desc, sort_ordering});
+    auto partition_chunk_writer_factory =
+            std::make_unique<SpillPartitionChunkWriterFactory>(partition_chunk_writer_ctx);
+    std::vector<int8_t> partition_field_null_list;
+    auto partition_writer = std::dynamic_pointer_cast<SpillPartitionChunkWriter>(
+            partition_chunk_writer_factory->create("c1", partition_field_null_list));
+    auto commit_callback = [&commited](const CommitResult& r) { commited = true; };
+    auto error_handler = [&status](const Status& s) { status = s; };
+    auto poller = MockPoller();
+    partition_writer->set_io_poller(&poller);
+    partition_writer->set_commit_callback(commit_callback);
+    partition_writer->set_error_handler(error_handler);
+    EXPECT_OK(partition_writer->init());
+
+    // Normal write and flush to file
+    {
+        writer_helper->reset();
+
+        for (size_t i = 0; i < 3; ++i) {
+            // Create a chunk
+            ChunkPtr chunk = ChunkHelper::new_chunk(*tuple_desc, 3);
+            std::string suffix = std::to_string(3 - i);
+            chunk->get_column_by_index(0)->append_datum(Slice("ccc" + suffix));
+            chunk->get_column_by_index(0)->append_datum(Slice("bbb" + suffix));
+            chunk->get_column_by_index(0)->append_datum(Slice("aaa" + suffix));
+
+            // Write chunk
+            auto ret = partition_writer->write(chunk.get());
+            EXPECT_EQ(ret.ok(), true);
+            EXPECT_GT(partition_writer->get_written_bytes(), 0);
+        }
+
+        // Flush chunks directly
+        auto ret = partition_writer->finish();
+        EXPECT_EQ(ret.ok(), true);
+        EXPECT_EQ(commited, true);
+        EXPECT_EQ(status.ok(), true);
+        EXPECT_EQ(writer_helper->written_rows(), 0);
+        EXPECT_EQ(writer_helper->result_rows(), 9);
+        EXPECT_EQ(writer_helper->result_chunks().size(), 1);
+
+        // Check the result order
+        auto result_chunk = writer_helper->result_chunks()[0];
+        auto column = result_chunk->get_column_by_index(0);
+        std::string last_row;
+        for (size_t i = 0; i < column->size(); ++i) {
+            std::string cur_row = column->get(i).get_slice().to_string();
+            LOG(INFO) << "(" << i << "): " << cur_row;
+            if (!last_row.empty()) {
+                EXPECT_LT(cur_row, last_row);
+            }
+            last_row = cur_row;
+        }
+    }
+
+    // Write and spill multiple chunks
+    {
+        writer_helper->reset();
+        commited = false;
+        status = Status::OK();
+
+        for (size_t i = 0; i < 3; ++i) {
+            // Create a chunk
+            ChunkPtr chunk = ChunkHelper::new_chunk(*tuple_desc, 3);
+            std::string suffix = std::to_string(3 - i);
+            chunk->get_column_by_index(0)->append_datum(Slice("ccc" + suffix));
+            chunk->get_column_by_index(0)->append_datum(Slice("bbb" + suffix));
+            chunk->get_column_by_index(0)->append_datum(Slice("aaa" + suffix));
+
+            // Write chunk
+            auto ret = partition_writer->write(chunk.get());
+            EXPECT_EQ(ret.ok(), true);
+            EXPECT_GT(partition_writer->get_written_bytes(), 0);
+
+            // Flush chunk
+            ret = partition_writer->_spill();
+            EXPECT_EQ(ret.ok(), true);
+            Awaitility()
+                    .timeout(3 * 1000 * 1000) // 3s
+                    .interval(300 * 1000)     // 300ms
+                    .until([partition_writer]() {
+                        return partition_writer->_spilling_bytes_usage.load(std::memory_order_relaxed) == 0;
+                    });
+
+            EXPECT_EQ(partition_writer->_spilling_bytes_usage.load(std::memory_order_relaxed), 0);
+            EXPECT_EQ(status.ok(), true);
+        }
+
+        // Merge spill blocks
+        auto ret = partition_writer->finish();
+        EXPECT_EQ(ret.ok(), true);
+        Awaitility()
+                .timeout(3 * 1000 * 1000) // 3s
+                .interval(300 * 1000)     // 300ms
+                .until([&commited]() { return commited; });
+
+        EXPECT_EQ(commited, true);
+        EXPECT_EQ(status.ok(), true);
+        EXPECT_EQ(writer_helper->written_rows(), 0);
+        EXPECT_EQ(writer_helper->result_rows(), 9);
+        EXPECT_EQ(writer_helper->result_chunks().size(), 1);
+
+        // Check the result order
+        auto result_chunk = writer_helper->result_chunks()[0];
+        auto column = result_chunk->get_column_by_index(0);
+        std::string last_row;
+        for (size_t i = 0; i < column->size(); ++i) {
+            std::string cur_row = column->get(i).get_slice().to_string();
+            LOG(INFO) << "(" << i << "): " << cur_row;
+            if (!last_row.empty()) {
+                EXPECT_LT(cur_row, last_row);
+            }
+            last_row = cur_row;
+        }
+    }
+
+    std::filesystem::remove_all(fs_base_path);
+}
+
+TEST_F(PartitionChunkWriterTest, sort_multiple_columns) {
+    std::string fs_base_path = "base_path";
+    std::filesystem::create_directories(fs_base_path + "/c1");
+
+    parquet::Utils::SlotDesc slot_descs[] = {{"c1", TYPE_VARCHAR_DESC}, {"c2", TYPE_VARCHAR_DESC}, {""}};
+    TupleDescriptor* tuple_desc =
+            parquet::Utils::create_tuple_descriptor(_fragment_context->runtime_state(), &_pool, slot_descs);
+
+    auto writer_helper = WriterHelper::instance();
+    bool commited = false;
+    Status status;
+
+    // Create partition writer
+    auto mock_writer_factory = std::make_shared<MockFileWriterFactory>();
+    auto location_provider = std::make_shared<LocationProvider>(fs_base_path, "ffffff", 0, 0, "parquet");
+    EXPECT_CALL(*mock_writer_factory, create(::testing::_)).WillRepeatedly([](const std::string&) {
+        WriterAndStream ws;
+        ws.writer = std::make_unique<MockWriter>();
+        ws.stream = std::make_unique<Stream>(std::make_unique<MockFile>(), nullptr, nullptr);
+        return ws;
+    });
+
+    auto sort_ordering = std::make_shared<SortOrdering>();
+    sort_ordering->sort_key_idxes = {0, 1};
+    sort_ordering->sort_descs.descs.emplace_back(true, false);
+    sort_ordering->sort_descs.descs.emplace_back(false, false);
+    const size_t max_file_size = 1073741824; // 1GB
+    auto partition_chunk_writer_ctx = std::make_shared<SpillPartitionChunkWriterContext>(
+            SpillPartitionChunkWriterContext{mock_writer_factory, location_provider, max_file_size, false,
+                                             _fragment_context.get(), tuple_desc, sort_ordering});
+    auto partition_chunk_writer_factory =
+            std::make_unique<SpillPartitionChunkWriterFactory>(partition_chunk_writer_ctx);
+    std::vector<int8_t> partition_field_null_list;
+    auto partition_writer = std::dynamic_pointer_cast<SpillPartitionChunkWriter>(
+            partition_chunk_writer_factory->create("c1", partition_field_null_list));
+    auto commit_callback = [&commited](const CommitResult& r) { commited = true; };
+    auto error_handler = [&status](const Status& s) { status = s; };
+    auto poller = MockPoller();
+    partition_writer->set_io_poller(&poller);
+    partition_writer->set_commit_callback(commit_callback);
+    partition_writer->set_error_handler(error_handler);
+    EXPECT_OK(partition_writer->init());
+
+    // Write and spill multiple chunks
+    {
+        writer_helper->reset();
+
+        for (size_t i = 0; i < 3; ++i) {
+            // Create a chunk
+            ChunkPtr chunk = ChunkHelper::new_chunk(*tuple_desc, 3);
+            std::string suffix = std::to_string(3 - i);
+            chunk->get_column_by_index(0)->append_datum(Slice("ccc" + suffix));
+            chunk->get_column_by_index(1)->append_datum(Slice("222" + suffix));
+            chunk->get_column_by_index(0)->append_datum(Slice("ccc" + suffix));
+            chunk->get_column_by_index(1)->append_datum(Slice("111" + suffix));
+            chunk->get_column_by_index(0)->append_datum(Slice("bbb" + suffix));
+            chunk->get_column_by_index(1)->append_datum(Slice("222" + suffix));
+            chunk->get_column_by_index(0)->append_datum(Slice("bbb" + suffix));
+            chunk->get_column_by_index(1)->append_datum(Slice("111" + suffix));
+            chunk->get_column_by_index(0)->append_datum(Slice("aaa" + suffix));
+            chunk->get_column_by_index(1)->append_datum(Slice("222" + suffix));
+            chunk->get_column_by_index(0)->append_datum(Slice("aaa" + suffix));
+            chunk->get_column_by_index(1)->append_datum(Slice("111" + suffix));
+
+            // Write chunk
+            auto ret = partition_writer->write(chunk.get());
+            EXPECT_EQ(ret.ok(), true);
+            EXPECT_GT(partition_writer->get_written_bytes(), 0);
+
+            // Flush chunk
+            ret = partition_writer->_spill();
+            EXPECT_EQ(ret.ok(), true);
+            Awaitility()
+                    .timeout(3 * 1000 * 1000) // 3s
+                    .interval(300 * 1000)     // 300ms
+                    .until([partition_writer]() {
+                        return partition_writer->_spilling_bytes_usage.load(std::memory_order_relaxed) == 0;
+                    });
+
+            EXPECT_EQ(partition_writer->_spilling_bytes_usage.load(std::memory_order_relaxed), 0);
+            EXPECT_EQ(status.ok(), true);
+        }
+
+        // Merge spill blocks
+        auto ret = partition_writer->finish();
+        EXPECT_EQ(ret.ok(), true);
+        Awaitility()
+                .timeout(3 * 1000 * 1000) // 3s
+                .interval(300 * 1000)     // 300ms
+                .until([&commited]() { return commited; });
+
+        EXPECT_EQ(commited, true);
+        EXPECT_EQ(status.ok(), true);
+        EXPECT_EQ(writer_helper->written_rows(), 0);
+        EXPECT_EQ(writer_helper->result_rows(), 18);
+        EXPECT_EQ(writer_helper->result_chunks().size(), 1);
+
+        // Check the result order
+        auto result_chunk = writer_helper->result_chunks()[0];
+        auto c1 = result_chunk->get_column_by_index(0);
+        auto c2 = result_chunk->get_column_by_index(1);
+        std::string c1_last_row;
+        std::string c2_last_row;
+        for (size_t i = 0; i < c1->size(); ++i) {
+            std::string c1_cur_row = c1->get(i).get_slice().to_string();
+            std::string c2_cur_row = c2->get(i).get_slice().to_string();
+            LOG(INFO) << "(" << i << "): " << c1_cur_row << ", " << c2_cur_row;
+            if (!c1_last_row.empty()) {
+                EXPECT_GE(c1_cur_row, c1_last_row);
+            }
+            if (!c2_last_row.empty() && c1_cur_row == c1_last_row) {
+                EXPECT_LE(c2_cur_row, c2_last_row);
+            }
+            c1_last_row = c1_cur_row;
+            c2_last_row = c2_cur_row;
+        }
+    }
+
+    std::filesystem::remove_all(fs_base_path);
+}
+
+TEST_F(PartitionChunkWriterTest, sort_column_with_schema_chunk) {
+    std::string fs_base_path = "base_path";
+    std::filesystem::create_directories(fs_base_path + "/c1");
+
+    parquet::Utils::SlotDesc slot_descs[] = {{"c1", TYPE_VARCHAR_DESC}, {""}};
+    TupleDescriptor* tuple_desc =
+            parquet::Utils::create_tuple_descriptor(_fragment_context->runtime_state(), &_pool, slot_descs);
+
+    Fields fields;
+    for (auto& slot : tuple_desc->slots()) {
+        TypeDescriptor type_desc = slot->type();
+        TypeInfoPtr type_info = get_type_info(type_desc.type, type_desc.precision, type_desc.scale);
+        auto field = std::make_shared<Field>(slot->id(), slot->col_name(), type_info, slot->is_nullable());
+        fields.push_back(field);
+    }
+    auto schema = std::make_shared<Schema>(std::move(fields), KeysType::DUP_KEYS, std::vector<uint32_t>(), nullptr);
+
+    auto writer_helper = WriterHelper::instance();
+    bool commited = false;
+    Status status;
+
+    // Create partition writer
+    auto mock_writer_factory = std::make_shared<MockFileWriterFactory>();
+    auto location_provider = std::make_shared<LocationProvider>(fs_base_path, "ffffff", 0, 0, "parquet");
+    EXPECT_CALL(*mock_writer_factory, create(::testing::_)).WillRepeatedly([](const std::string&) {
+        WriterAndStream ws;
+        ws.writer = std::make_unique<MockWriter>();
+        ws.stream = std::make_unique<Stream>(std::make_unique<MockFile>(), nullptr, nullptr);
+        return ws;
+    });
+
+    auto sort_ordering = std::make_shared<SortOrdering>();
+    sort_ordering->sort_key_idxes = {0};
+    sort_ordering->sort_descs.descs.emplace_back(true, false);
+    const size_t max_file_size = 1073741824; // 1GB
+    auto partition_chunk_writer_ctx = std::make_shared<SpillPartitionChunkWriterContext>(
+            SpillPartitionChunkWriterContext{mock_writer_factory, location_provider, max_file_size, false,
+                                             _fragment_context.get(), tuple_desc, sort_ordering});
+    auto partition_chunk_writer_factory =
+            std::make_unique<SpillPartitionChunkWriterFactory>(partition_chunk_writer_ctx);
+    std::vector<int8_t> partition_field_null_list;
+    auto partition_writer = std::dynamic_pointer_cast<SpillPartitionChunkWriter>(
+            partition_chunk_writer_factory->create("c1", partition_field_null_list));
+    auto commit_callback = [&commited](const CommitResult& r) { commited = true; };
+    auto error_handler = [&status](const Status& s) { status = s; };
+    auto poller = MockPoller();
+    partition_writer->set_io_poller(&poller);
+    partition_writer->set_commit_callback(commit_callback);
+    partition_writer->set_error_handler(error_handler);
+    EXPECT_OK(partition_writer->init());
+
+    // Write and spill multiple chunks
+    {
+        writer_helper->reset();
+
+        for (size_t i = 0; i < 3; ++i) {
+            // Create a chunk
+            ChunkPtr chunk = ChunkHelper::new_chunk(*schema, 3);
+            std::string suffix = std::to_string(3 - i);
+            chunk->get_column_by_index(0)->append_datum(Slice("ccc" + suffix));
+            chunk->get_column_by_index(0)->append_datum(Slice("bbb" + suffix));
+            chunk->get_column_by_index(0)->append_datum(Slice("aaa" + suffix));
+
+            // Write chunk
+            auto ret = partition_writer->write(chunk.get());
+            EXPECT_EQ(ret.ok(), true);
+            EXPECT_GT(partition_writer->get_written_bytes(), 0);
+
+            // Flush chunk
+            ret = partition_writer->_spill();
+            EXPECT_EQ(ret.ok(), true);
+            Awaitility()
+                    .timeout(3 * 1000 * 1000) // 3s
+                    .interval(300 * 1000)     // 300ms
+                    .until([partition_writer]() {
+                        return partition_writer->_spilling_bytes_usage.load(std::memory_order_relaxed) == 0;
+                    });
+
+            EXPECT_EQ(partition_writer->_spilling_bytes_usage.load(std::memory_order_relaxed), 0);
+            EXPECT_EQ(status.ok(), true);
+        }
+
+        // Merge spill blocks
+        auto ret = partition_writer->finish();
+        EXPECT_EQ(ret.ok(), true);
+        Awaitility()
+                .timeout(3 * 1000 * 1000) // 3s
+                .interval(300 * 1000)     // 300ms
+                .until([&commited]() { return commited; });
+
+        EXPECT_EQ(commited, true);
+        EXPECT_EQ(status.ok(), true);
+        EXPECT_EQ(writer_helper->written_rows(), 0);
+        EXPECT_EQ(writer_helper->result_rows(), 9);
+        EXPECT_EQ(writer_helper->result_chunks().size(), 1);
+
+        // Check the result order
+        auto result_chunk = writer_helper->result_chunks()[0];
+        auto column = result_chunk->get_column_by_index(0);
+        std::string last_row;
+        for (size_t i = 0; i < column->size(); ++i) {
+            std::string cur_row = column->get(i).get_slice().to_string();
+            LOG(INFO) << "(" << i << "): " << cur_row;
+            if (!last_row.empty()) {
+                EXPECT_GT(cur_row, last_row);
+            }
+            last_row = cur_row;
+        }
+    }
+
+    std::filesystem::remove_all(fs_base_path);
 }
 
 } // namespace

@@ -19,7 +19,6 @@ import com.google.common.base.Strings;
 import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
-import com.starrocks.analysis.ParseNode;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.ErrorCode;
@@ -34,8 +33,8 @@ import com.starrocks.load.routineload.KafkaProgress;
 import com.starrocks.load.routineload.LoadDataSourceType;
 import com.starrocks.load.routineload.PulsarRoutineLoadJob;
 import com.starrocks.load.routineload.RoutineLoadJob;
+import com.starrocks.persist.OriginStatementInfo;
 import com.starrocks.qe.ConnectContext;
-import com.starrocks.qe.OriginStatement;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.sql.parser.NodePosition;
 import org.apache.logging.log4j.LogManager;
@@ -459,7 +458,7 @@ public class CreateRoutineLoadStmt extends DdlStmt {
         return dataSourceProperties;
     }
 
-    public static RoutineLoadDesc getLoadDesc(OriginStatement origStmt, Map<String, String> sessionVariables) {
+    public static RoutineLoadDesc getLoadDesc(OriginStatementInfo origStmt, Map<String, String> sessionVariables) {
 
         // parse the origin stmt to get routine load desc
         try {
@@ -1018,6 +1017,6 @@ public class CreateRoutineLoadStmt extends DdlStmt {
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) throws RuntimeException {
-        return visitor.visitCreateRoutineLoadStatement(this, context);
+        return ((AstVisitorExtendInterface<R, C>) visitor).visitCreateRoutineLoadStatement(this, context);
     }
 }

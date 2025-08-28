@@ -41,7 +41,7 @@ import com.starrocks.common.Pair;
 import com.starrocks.common.util.UnionFind;
 import com.starrocks.rpc.ConfigurableSerDesFactory;
 import com.starrocks.server.RunMode;
-import com.starrocks.sql.ast.AstVisitor;
+import com.starrocks.sql.ast.AstVisitorExtendInterface;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.thrift.TCacheParam;
 import com.starrocks.thrift.TExpr;
@@ -243,7 +243,7 @@ public class FragmentNormalizer {
         return null;
     }
 
-    public static class SimpleRangePredicateVisitor implements AstVisitor<String, Void> {
+    public static class SimpleRangePredicateVisitor implements AstVisitorExtendInterface<String, Void> {
         @Override
         public String visitBinaryPredicate(BinaryPredicate node, Void context) {
             String lhs = visit(node.getChild(0), context);

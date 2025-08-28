@@ -50,7 +50,7 @@ public class DropCatalogStmt extends DdlStmt {
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitDropCatalogStatement(this, context);
+        return ((AstVisitorExtendInterface<R, C>) visitor).visitDropCatalogStatement(this, context);
     }
 
     @Override

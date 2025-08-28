@@ -29,11 +29,14 @@ under the License.
     <packaging>pom</packaging>
 
     <modules>
-        <module>plugin-common</module>
-        <module>fe-common</module>
-        <module>spark-dpp</module>
+        <module>fe-grammar</module>
+        <module>fe-parser</module>
+        <module>fe-spi</module>
+        <module>fe-utils</module>
+        <module>fe-testing</module>
+        <module>plugin/spark-dpp</module>
+        <module>plugin/hive-udf</module>
         <module>fe-core</module>
-        <module>hive-udf</module>
     </modules>
 
     <name>starrocks-fe</name>
@@ -177,7 +180,7 @@ under the License.
 
             <dependency>
                 <groupId>com.starrocks</groupId>
-                <artifactId>plugin-common</artifactId>
+                <artifactId>fe-utils</artifactId>
                 <version>1.0.0</version>
             </dependency>
 
@@ -189,7 +192,7 @@ under the License.
 
             <dependency>
                 <groupId>com.starrocks</groupId>
-                <artifactId>fe-common</artifactId>
+                <artifactId>fe-testing</artifactId>
                 <version>1.0.0</version>
             </dependency>
 
