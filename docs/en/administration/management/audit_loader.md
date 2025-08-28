@@ -26,36 +26,6 @@ Because the fields of audit logs vary among different StarRocks versions, it is 
 CREATE DATABASE starrocks_audit_db__;
 
 CREATE TABLE starrocks_audit_db__.starrocks_audit_tbl__ (
-<<<<<<< HEAD
-  `queryId`                       VARCHAR(36)                COMMENT "Unique query ID",
-  `timestamp`                     DATETIME         NOT NULL  COMMENT "Query start time",
-  `queryType`                     VARCHAR(12)                COMMENT "Query type (query, slow_query, connection)",
-  `clientIp`                      STRING                     COMMENT "Client IP address and optional port number",
-  `user`                          STRING                     COMMENT "User who initiates the query",
-  `authorizedUser`                STRING                     COMMENT "user_identity in MySQL format ('user'@'host', 'user'@'%')",
-  `resourceGroup`                 STRING                     COMMENT "Resource group name",
-  `catalog`                       STRING                     COMMENT "Catalog name",
-  `db`                            STRING                     COMMENT "Database that the query scans",
-  `state`                         VARCHAR(8)                 COMMENT "Query state (EOF, ERR, OK)",
-  `errorCode`                     STRING                     COMMENT "Error code",
-  `queryTime`                     BIGINT                     COMMENT "Query time in milliseconds",
-  `scanBytes`                     BIGINT                     COMMENT "Size of the scanned data in bytes",
-  `scanRows`                      BIGINT                     COMMENT "Row count of the scanned data",
-  `returnRows`                    BIGINT                     COMMENT "Row count of the result",
-  `cpuCostNs`                     BIGINT                     COMMENT "CPU resources consumption time, in nanoseconds",
-  `memCostBytes`                  BIGINT                     COMMENT "Memory cost in bytes",
-  `stmtId`                        BIGINT                     COMMENT "Incremental SQL statement ID",
-  `isQuery`                       TINYINT                    COMMENT "If the SQL is a query (0 and 1)",
-  `feIp`                          STRING                     COMMENT "IP address of FE that executes the SQL",
-  `stmt`                          VARCHAR(1048576)           COMMENT "Original SQL statement. Since AuditLoader v3.0.1",
-  `digest`                        VARCHAR(32)                COMMENT "Slow SQL fingerprint, calculated only if enable_compute_all_query_digest=true. Since AuditLoader v3.0.1",
-  `planCpuCosts`                  DOUBLE                     COMMENT "CPU resources consumption time for planning in nanoseconds. Since AuditLoader v3.0.1",
-  `planMemCosts`                  DOUBLE                     COMMENT "Memory cost for planning in bytes. Since AuditLoader v3.0.1",
-  `pendingTimeMs`                 BIGINT                     COMMENT "Time spent in query queue if query_queue_enable=true, in milliseconds. Since AuditLoader v4.2.0",
-  `candidateMvs`                  STRING                     COMMENT "Names of Materialized Views marked as candidates, separated with comma. Since StarRocks v3.2.0 and AuditLoader v4.2.0",
-  `hitMVs`                        STRING                     COMMENT "Names of Materialized Views rewritten by query optimizer, separated with comma. Since StarRocks v3.2.0 and AuditLoader v4.2.0",
-  `warehouse`                     STRING                     COMMENT "Warehouse name. Since StarRocks v3.3.0 and AuditLoader v4.2.1"
-=======
   `queryId` VARCHAR(64) COMMENT "Unique ID of the query",
   `timestamp` DATETIME NOT NULL COMMENT "Query start time",
   `queryType` VARCHAR(12) COMMENT "Query type (query, slow_query, connection)",
@@ -84,7 +54,6 @@ CREATE TABLE starrocks_audit_db__.starrocks_audit_tbl__ (
   `candidateMVs` VARCHAR(65533) NULL COMMENT "List of candidate materialized views",
   `hitMvs` VARCHAR(65533) NULL COMMENT "List of matched materialized views",
   `warehouse` VARCHAR(32) NULL COMMENT "Warehouse name"
->>>>>>> cd764aee6e ([Doc] Updated documentation to align with Auditloader 5.0 (#62419))
 ) ENGINE = OLAP
 DUPLICATE KEY (`queryId`, `timestamp`, `queryType`)
 COMMENT "Audit log table"
@@ -238,12 +207,7 @@ See [INSTALL PLUGIN](../../sql-reference/sql-statements/cluster-management/plugi
      pendingTimeMs: -1
       candidateMvs: null
             hitMVs: null
-<<<<<<< HEAD
-         warehouse: default_warehouse
-      1 row in set (0.01 sec)
-=======
     …………
->>>>>>> cd764aee6e ([Doc] Updated documentation to align with Auditloader 5.0 (#62419))
     ```
 
 ## Troubleshooting
