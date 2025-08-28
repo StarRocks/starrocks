@@ -253,9 +253,6 @@ public class TaskRun implements Comparable<TaskRun> {
         return context;
     }
 
-<<<<<<< HEAD
-    public boolean executeTaskRun() throws Exception {
-=======
     /**
      * Creator-based: record the creator(user) of MV, refresh the MV with same user
      * - It's suitable for most scenarios, especially for the sql needs proper user
@@ -288,7 +285,6 @@ public class TaskRun implements Comparable<TaskRun> {
     }
 
     public TaskRunContext buildTaskRunContext() {
->>>>>>> 99150da713 ([BugFix] fix the privilege issue of refresh mv (#62396))
         TaskRunContext taskRunContext = new TaskRunContext();
 
         // Definition will cause a lot of repeats and cost a lot of metadata memory resources, so
