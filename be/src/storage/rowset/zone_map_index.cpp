@@ -493,10 +493,8 @@ struct ZoneMapWrapper {
         }
 
         // For non-null zones, check value range overlap
-        return (other.zone_map.min_value.value >= zone_map.min_value.value &&
-                other.zone_map.min_value.value <= zone_map.max_value.value) ||
-               (other.zone_map.max_value.value >= zone_map.min_value.value &&
-                other.zone_map.max_value.value <= zone_map.max_value.value);
+        return std::max(zone_map.min_value.value, other.zone_map.min_value.value) <=
+               std::min(zone_map.max_value.value, other.zone_map.max_value.value);
     }
 };
 
