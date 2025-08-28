@@ -90,11 +90,11 @@ void CompactionManager::submit_compaction_task(const CompactionCandidate& compac
         StarRocksMetrics::instance()->tablet_cumulative_max_compaction_score.set_value(compaction_candidate.score);
     }
     auto task_id = next_compaction_task_id();
-    LOG(INFO) << "submit task to compaction pool"
-              << ", task_id:" << task_id << ", tablet_id:" << compaction_candidate.tablet->tablet_id()
-              << ", compaction_type:" << starrocks::to_string(compaction_candidate.type)
-              << ", compaction_score:" << compaction_candidate.score << " for round:" << _round
-              << ", candidates_size:" << candidates_size();
+    VLOG(2) << "submit task to compaction pool"
+            << ", task_id:" << task_id << ", tablet_id:" << compaction_candidate.tablet->tablet_id()
+            << ", compaction_type:" << starrocks::to_string(compaction_candidate.type)
+            << ", compaction_score:" << compaction_candidate.score << " for round:" << _round
+            << ", candidates_size:" << candidates_size();
     auto manager = this;
     auto tablet = std::move(compaction_candidate.tablet);
     auto type = compaction_candidate.type;

@@ -401,8 +401,8 @@ void* DeleteTaskWorkerPool::_worker_thread_callback(void* arg_this) {
 
             int num_of_remove_task = 0;
             if (push_req.push_type == TPushType::CANCEL_DELETE) {
-                LOG(INFO) << "get delete push task. remove delete task txn_id: " << push_req.transaction_id
-                          << " priority: " << priority << " push_type: " << push_req.push_type;
+                VLOG(3) << "get delete push task. remove delete task txn_id: " << push_req.transaction_id
+                        << " priority: " << priority << " push_type: " << push_req.push_type;
 
                 std::lock_guard l(worker_pool_this->_worker_thread_lock);
                 auto& tasks = worker_pool_this->_tasks;
@@ -435,8 +435,8 @@ void* DeleteTaskWorkerPool::_worker_thread_callback(void* arg_this) {
         }
         auto& push_req = agent_task_req->task_req;
 
-        LOG(INFO) << "get delete push task. signature: " << agent_task_req->signature << " priority: " << priority
-                  << " push_type: " << push_req.push_type;
+        VLOG(3) << "get delete push task. signature: " << agent_task_req->signature << " priority: " << priority
+                << " push_type: " << push_req.push_type;
         std::vector<TTabletInfo> tablet_infos;
         EngineBatchLoadTask engine_task(push_req, &tablet_infos, agent_task_req->signature, &status,
                                         GlobalEnv::GetInstance()->load_mem_tracker());
