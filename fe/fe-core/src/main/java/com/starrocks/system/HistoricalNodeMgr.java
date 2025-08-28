@@ -49,21 +49,20 @@ public class HistoricalNodeMgr {
         computeResourceToNodeSet = new ConcurrentHashMap<>();
     }
 
-    public void updateHistoricalBackendIds(long warehouseId, long workerGroupId, List<Long> backendIds, long currentTime) {
-        String resourceKey = computeResourceIdToStr(warehouseId, workerGroupId);
+    public void updateHistoricalBackendIds(ComputeResource computeResource, List<Long> backendIds, long currentTime) {
+        String resourceKey = computeResourceToStr(computeResource);
         HistoricalNodeSet nodeSet = computeResourceToNodeSet.computeIfAbsent(resourceKey, k -> new HistoricalNodeSet());
         nodeSet.updateHistoricalBackendIds(backendIds, currentTime);
     }
 
-    public void updateHistoricalComputeNodeIds(long warehouseId, long workerGroupId, List<Long> computeNodeIds,
-                                               long currentTime) {
-        String resourceKey = computeResourceIdToStr(warehouseId, workerGroupId);
+    public void updateHistoricalComputeNodeIds(ComputeResource computeResource, List<Long> computeNodeIds, long currentTime) {
+        String resourceKey = computeResourceToStr(computeResource);
         HistoricalNodeSet nodeSet = computeResourceToNodeSet.computeIfAbsent(resourceKey, k -> new HistoricalNodeSet());
         nodeSet.updateHistoricalComputeNodeIds(computeNodeIds, currentTime);
     }
 
-    public ImmutableList<Long> getHistoricalBackendIds(long warehouseId, long workerGroupId) {
-        String resourceKey = computeResourceIdToStr(warehouseId, workerGroupId);
+    public ImmutableList<Long> getHistoricalBackendIds(ComputeResource computeResource) {
+        String resourceKey = computeResourceToStr(computeResource);
         HistoricalNodeSet nodeSet = computeResourceToNodeSet.get(resourceKey);
         if (nodeSet == null) {
             return ImmutableList.of();
@@ -71,8 +70,8 @@ public class HistoricalNodeMgr {
         return nodeSet.getHistoricalBackendIds();
     }
 
-    public ImmutableList<Long> getHistoricalComputeNodeIds(long warehouseId, long workerGroupId) {
-        String resourceKey = computeResourceIdToStr(warehouseId, workerGroupId);
+    public ImmutableList<Long> getHistoricalComputeNodeIds(ComputeResource computeResource) {
+        String resourceKey = computeResourceToStr(computeResource);
         HistoricalNodeSet nodeSet = computeResourceToNodeSet.get(resourceKey);
         if (nodeSet == null) {
             return ImmutableList.of();
@@ -80,8 +79,8 @@ public class HistoricalNodeMgr {
         return nodeSet.getHistoricalComputeNodeIds();
     }
 
-    public long getLastUpdateTime(long warehouseId, long workerGroupId) {
-        String resourceKey = computeResourceIdToStr(warehouseId, workerGroupId);
+    public long getLastUpdateTime(ComputeResource computeResource) {
+        String resourceKey = computeResourceToStr(computeResource);
         HistoricalNodeSet nodeSet = computeResourceToNodeSet.get(resourceKey);
         if (nodeSet == null) {
             return 0;
@@ -89,20 +88,19 @@ public class HistoricalNodeMgr {
         return nodeSet.getLastUpdateTime();
     }
 
-    public ConcurrentHashMap<Pair<Long, Long>, HistoricalNodeSet> getAllHistoricalNodeSet() {
-        ConcurrentHashMap<Pair<Long, Long>, HistoricalNodeSet> allHistoricalNodeSet = new ConcurrentHashMap<>();
-        for (String resourceKey : computeResourceToNodeSet.keySet()) {
-            Pair<Long, Long> resourceId = strToComputeResourceId(resourceKey);
-            HistoricalNodeSet nodeSet = computeResourceToNodeSet.get(resourceKey);
-            if (resourceId != null && nodeSet != null) {
-                allHistoricalNodeSet.put(resourceId, nodeSet);
+    public ConcurrentHashMap<ComputeResource, HistoricalNodeSet> getAllHistoricalNodeSet() {
+        ConcurrentHashMap<ComputeResource, HistoricalNodeSet> allHistoricalNodeSet = new ConcurrentHashMap<>();
+        for (Map.Entry<String, HistoricalNodeSet> entry : computeResourceToNodeSet.entrySet()) {
+            ComputeResource computeResource = strToComputeResource(entry.getKey());
+            HistoricalNodeSet nodeSet = entry.getValue();
+            if (computeResource != null && nodeSet != null) {
+                allHistoricalNodeSet.put(computeResource, nodeSet);
             }
         }
         return allHistoricalNodeSet;
     }
 
     public void save(ImageWriter imageWriter) throws IOException, SRMetaBlockException {
-        WarehouseManager warehouseManager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
         Map<String, HistoricalNodeSet> serializedHistoricalNodes = computeResourceToNodeSet.entrySet().stream()
                 .filter(entry -> isResourceAvailable(entry.getKey()))
                 .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
@@ -122,12 +120,19 @@ public class HistoricalNodeMgr {
     public void load(SRMetaBlockReader reader) throws SRMetaBlockEOFException, IOException, SRMetaBlockException {
         reader.readMap(String.class, HistoricalNodeSet.class,
                 (MapEntryConsumer<String, HistoricalNodeSet>) (resourceKey, nodeSet) -> {
-                    // Check and convert the resouce key.
+                    // Check and convert the resource key.
                     // Mainly for compatibility with old image data, the early warehouse name will be converted into
                     // the new resource key format.
-                    Pair<Long, Long> resourceId = strToComputeResourceId(resourceKey);
-                    if (resourceId != null) {
-                        computeResourceToNodeSet.put(computeResourceIdToStr(resourceId), nodeSet);
+                    // Loading historical node metadata failed usually is not critical because it only affects the
+                    // cache sharing performance in a short time, and will be corrected once the cluster nodes changed.
+                    // So we ignore the exception when loading historical node metadata to avoid affecting the overall process.
+                    try {
+                        Pair<Long, Long> resourceId = strToComputeResourceId(resourceKey);
+                        if (resourceId != null) {
+                            computeResourceToNodeSet.put(computeResourceIdToStr(resourceId), nodeSet);
+                        }
+                    } catch (Exception e) {
+                        LOG.error("fail to load image for historical node manager, resouceKey: {}", resourceKey);
                     }
                 });
         LOG.info("load image for historical node manager, nodeSetSize: {}", computeResourceToNodeSet.size());
@@ -137,8 +142,19 @@ public class HistoricalNodeMgr {
         computeResourceToNodeSet.clear();
     }
 
-    private String computeResourceIdToStr(long warehouseId, long workerGroupId) {
-        return warehouseId + "-" + workerGroupId;
+    private String computeResourceToStr(ComputeResource computeResource) {
+        return computeResource.getWarehouseId() + "-" + computeResource.getWorkerGroupId();
+    }
+
+    private ComputeResource strToComputeResource(String computeResourceKey) {
+        ComputeResource computeResource = null;
+        Pair<Long, Long> resourceId = strToComputeResourceId(computeResourceKey);
+        if (resourceId != null) {
+            final WarehouseManager warehouseManager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
+            ComputeResourceProvider computeResourceProvider = warehouseManager.getComputeResourceProvider();
+            computeResource = computeResourceProvider.ofComputeResource(resourceId.first, resourceId.second);
+        }
+        return computeResource;
     }
 
     private String computeResourceIdToStr(Pair<Long, Long> resouceId) {
@@ -169,15 +185,19 @@ public class HistoricalNodeMgr {
 
     @VisibleForTesting
     public boolean isResourceAvailable(String computeResourceKey) {
-        Pair<Long, Long> computeResourceId = strToComputeResourceId(computeResourceKey);
-        if (computeResourceId == null) {
+        try {
+            Pair<Long, Long> computeResourceId = strToComputeResourceId(computeResourceKey);
+            if (computeResourceId == null) {
+                return false;
+            }
+            final WarehouseManager warehouseManager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
+            ComputeResourceProvider computeResourceProvider = warehouseManager.getComputeResourceProvider();
+            ComputeResource computeResource = computeResourceProvider.ofComputeResource(computeResourceId.first,
+                    computeResourceId.second);
+            return computeResourceProvider.isResourceAvailable(computeResource);
+        } catch (Exception e) {
+            LOG.warn("fail to check compute resource {} availability", computeResourceKey);
             return false;
         }
-
-        final WarehouseManager warehouseManager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
-        ComputeResourceProvider computeResourceProvider = warehouseManager.getComputeResourceProvider();
-        ComputeResource computeResource = computeResourceProvider.ofComputeResource(computeResourceId.first,
-                computeResourceId.second);
-        return computeResourceProvider.isResourceAvailable(computeResource);
     }
 }

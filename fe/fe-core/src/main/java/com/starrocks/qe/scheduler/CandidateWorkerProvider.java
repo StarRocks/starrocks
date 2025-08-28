@@ -139,8 +139,7 @@ public class CandidateWorkerProvider extends DefaultWorkerProvider implements Wo
             HistoricalNodeMgr historicalNodeMgr,
             ComputeResource computeResource) {
         ImmutableMap.Builder<Long, ComputeNode> builder = ImmutableMap.builder();
-        ImmutableList<Long> backendIds = historicalNodeMgr.getHistoricalBackendIds(computeResource.getWarehouseId(),
-                computeResource.getWorkerGroupId());
+        ImmutableList<Long> backendIds = historicalNodeMgr.getHistoricalBackendIds(computeResource);
         for (long nodeId : backendIds) {
             ComputeNode backend = systemInfoService.getBackendOrComputeNode(nodeId);
             if (backend != null) {
@@ -155,8 +154,7 @@ public class CandidateWorkerProvider extends DefaultWorkerProvider implements Wo
             HistoricalNodeMgr historicalNodeMgr,
             ComputeResource computeResource) {
         ImmutableMap.Builder<Long, ComputeNode> builder = ImmutableMap.builder();
-        ImmutableList<Long> computeNodeIds = historicalNodeMgr.getHistoricalComputeNodeIds(computeResource.getWarehouseId(),
-                computeResource.getWorkerGroupId());
+        ImmutableList<Long> computeNodeIds = historicalNodeMgr.getHistoricalComputeNodeIds(computeResource);
         for (long nodeId : computeNodeIds) {
             ComputeNode computeNode = systemInfoService.getBackendOrComputeNode(nodeId);
             if (computeNode != null) {
