@@ -153,8 +153,6 @@ public abstract class MVPCTRefreshPartitioner {
 
     /**
      * Get mv partition names with TTL based on the ref base table partitions.
-     *
-     * @param materializedView: materialized view to check.
      * @param isAutoRefresh:    is auto refresh or not.
      * @throws AnalysisException
      * @return: mv to refresh partition names with TTL based on the ref base table partitions.

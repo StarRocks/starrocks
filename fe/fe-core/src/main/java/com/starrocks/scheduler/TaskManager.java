@@ -368,7 +368,7 @@ public class TaskManager implements MemoryTrackable {
         String explainString = StmtExecutor.buildExplainString(execPlan, statement,
                 ConnectContext.get(), ResourceGroupClassifier.QueryType.MV, statement.getExplainLevel());
         // add extra info
-        String extraInfo = getExtraExplainInfo(taskRun);
+        String extraInfo = getExtraExplainInfo(taskRun, statement);
         if (!Strings.isNullOrEmpty(extraInfo)) {
             explainString += "\n" + extraInfo;
         }
@@ -382,7 +382,8 @@ public class TaskManager implements MemoryTrackable {
                 .setConnectContext(ConnectContext.get()).build();
     }
 
-    private String getExtraExplainInfo(TaskRun taskRun) {
+    private String getExtraExplainInfo(TaskRun taskRun,
+                                       StatementBase statement) {
         TaskRunProcessor taskRunProcessor = taskRun.getProcessor();
         if (taskRunProcessor == null) {
             return "";
@@ -390,7 +391,7 @@ public class TaskManager implements MemoryTrackable {
         try {
             if (taskRunProcessor instanceof MVTaskRunProcessor) {
                 MVTaskRunProcessor mvRefreshProcessor = (MVTaskRunProcessor) taskRun.getProcessor();
-                return mvRefreshProcessor.getExtraExplainInfo();
+                return mvRefreshProcessor.getExtraExplainInfo(statement);
             } else {
                 return "";
             }

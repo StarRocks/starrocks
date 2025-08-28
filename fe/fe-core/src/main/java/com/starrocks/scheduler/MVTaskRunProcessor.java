@@ -40,6 +40,7 @@ import com.starrocks.scheduler.persist.MVTaskRunExtraMessage;
 import com.starrocks.scheduler.persist.TaskRunStatus;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.InsertStmt;
+import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.common.DmlException;
 import com.starrocks.sql.common.QueryDebugOptions;
 import com.starrocks.sql.optimizer.QueryMaterializationContext;
@@ -306,9 +307,12 @@ public class MVTaskRunProcessor extends BaseTaskRunProcessor implements MVRefres
     /**
      * Get extra explain info for the mv refresh task run which is used for explain task run.
      */
-    public String getExtraExplainInfo() {
+    public String getExtraExplainInfo(StatementBase statement) {
         StringBuilder sb = new StringBuilder();
-        if (mvRefreshProcessor != null) {
+        if (mvRefreshProcessor != null && statement.isExplain()) {
+            if (statement.isExplainTrace() || statement.isExplainAnalyze()) {
+                return "";
+            }
             try {
                 TaskRunStatus status = mvTaskRunContext.getStatus();
                 if (status != null && status.getMvTaskRunExtraMessage() != null) {

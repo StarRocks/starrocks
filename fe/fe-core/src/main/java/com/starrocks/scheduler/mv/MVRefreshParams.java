@@ -54,6 +54,10 @@ public class MVRefreshParams {
         return isForce() && isCompleteRefresh();
     }
 
+    public boolean isNonTentativeForce() {
+        return isForce && !isTentative;
+    }
+
     public boolean isForce() {
         return isForce || isTentative;
     }
