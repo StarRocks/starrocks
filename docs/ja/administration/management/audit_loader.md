@@ -77,7 +77,11 @@ SHOW PARTITIONS FROM starrocks_audit_db__.starrocks_audit_tbl__;
 
 ## AuditLoader のダウンロードと設定
 
+<<<<<<< HEAD
 1. [Download](https://releases.starrocks.io/resources/AuditLoader.zip) AuditLoader インストールパッケージをダウンロードします。このパッケージは、すべての利用可能な StarRocks バージョンと互換性があります。
+=======
+1. [AuditLoader インストールパッケージ](https://releases.starrocks.io/resources/auditloader.zip) をダウンロードします。このパッケージは、利用可能なすべての StarRocks バージョンと互換性があります。
+>>>>>>> a715c0a268 ([Doc] Update auditloder download url (#62452))
 
 2. インストールパッケージを解凍します。
 
