@@ -408,7 +408,7 @@ public class ConsistencyChecker extends FrontendDaemon {
             if (jobs.containsKey(job.getTabletId())) {
                 return false;
             } else {
-                LOG.info("add tablet[{}] to check consistency", job.getTabletId());
+                LOG.debug("add tablet[{}] to check consistency", job.getTabletId());
                 jobs.put(job.getTabletId(), job);
                 return true;
             }
