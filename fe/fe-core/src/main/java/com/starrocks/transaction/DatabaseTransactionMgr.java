@@ -2090,7 +2090,8 @@ public class DatabaseTransactionMgr {
                         if (partition == null) {
                             continue;
                         }
-                        if (partition.getVisibleVersion() + 1 != currTxnInfo.getVersion()) {
+                        if (partition.getVisibleVersion() + 1 != currTxnInfo.getVersion() &&
+                                state.getSourceType() != TransactionState.LoadJobSourceType.REPLICATION) {
                             // should't happen
                             String errMsg =
                                     String.format(
