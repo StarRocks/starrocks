@@ -115,8 +115,9 @@ StatusOr<ColumnPtr> ArrayMapExpr::evaluate_lambda_expr(ExprContext* context, Chu
     // 2. check captured columns' size
     for (auto slot_id : capture_slot_ids) {
         DCHECK(slot_id > 0);
-        auto captured_column = chunk->is_slot_exist(slot_id) ? chunk->get_column_by_slot_id(slot_id)
-                                                             : tmp_chunk->get_column_by_slot_id(slot_id);
+        auto captured_column = tmp_chunk->is_slot_exist(slot_id) ? tmp_chunk->get_column_by_slot_id(slot_id)
+                                                                 : chunk->get_column_by_slot_id(slot_id);
+
         if (UNLIKELY(captured_column->size() < input_elements[0]->size())) {
             return Status::InternalError(fmt::format("The size of the captured column {} is less than array's size.",
                                                      captured_column->get_name()));
@@ -176,8 +177,8 @@ StatusOr<ColumnPtr> ArrayMapExpr::evaluate_lambda_expr(ExprContext* context, Chu
 
     // 4. prepare capture columns
     for (auto slot_id : capture_slot_ids) {
-        auto captured_column = chunk->is_slot_exist(slot_id) ? chunk->get_column_by_slot_id(slot_id)
-                                                             : tmp_chunk->get_column_by_slot_id(slot_id);
+        auto captured_column = tmp_chunk->is_slot_exist(slot_id) ? tmp_chunk->get_column_by_slot_id(slot_id)
+                                                                 : chunk->get_column_by_slot_id(slot_id);
         if constexpr (independent_lambda_expr) {
             cur_chunk->append_column(captured_column, slot_id);
         } else {
