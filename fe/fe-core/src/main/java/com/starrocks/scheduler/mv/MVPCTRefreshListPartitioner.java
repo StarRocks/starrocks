@@ -80,8 +80,9 @@ public final class MVPCTRefreshListPartitioner extends MVPCTRefreshPartitioner {
     public MVPCTRefreshListPartitioner(MvTaskRunContext mvContext,
                                        TaskRunContext context,
                                        Database db,
-                                       MaterializedView mv) {
-        super(mvContext, context, db, mv);
+                                       MaterializedView mv,
+                                       MVRefreshParams mvRefreshParams) {
+        super(mvContext, context, db, mv, mvRefreshParams);
         this.differ = new ListPartitionDiffer(mv, false);
         this.logger = MVTraceUtils.getLogger(mv, MVPCTRefreshListPartitioner.class);
     }
@@ -345,11 +346,10 @@ public final class MVPCTRefreshListPartitioner extends MVPCTRefreshPartitioner {
     @Override
     public PCellSortedSet getMVPartitionsToRefresh(PartitionInfo mvPartitionInfo,
                                                    Map<Long, BaseTableSnapshotInfo> snapshotBaseTables,
-                                                   MVRefreshParams mvRefreshParams,
                                                    Set<String> mvPotentialPartitionNames) {
         // list partitioned materialized view
         boolean isAutoRefresh = mvContext.getTaskType().isAutoRefresh();
-        PCellSortedSet mvListPartitionNames = getMVPartitionNamesWithTTL(mv, mvRefreshParams, isAutoRefresh);
+        PCellSortedSet mvListPartitionNames = getMVPartitionNamesWithTTL(isAutoRefresh);
 
         // check non-ref base tables
         if (mvRefreshParams.isForce() || needsRefreshBasedOnNonRefTables(snapshotBaseTables)) {
@@ -414,9 +414,7 @@ public final class MVPCTRefreshListPartitioner extends MVPCTRefreshPartitioner {
     }
 
     @Override
-    public PCellSortedSet getMVPartitionNamesWithTTL(MaterializedView mv,
-                                                     MVRefreshParams mvRefreshParams,
-                                                     boolean isAutoRefresh) {
+    public PCellSortedSet getMVPartitionNamesWithTTL(boolean isAutoRefresh) {
         // if the user specifies the start and end ranges, only refresh the specified partitions
         boolean isCompleteRefresh = mvRefreshParams.isCompleteRefresh();
         Map<String, PCell> mvListPartitionMap = Maps.newHashMap();
@@ -447,23 +445,20 @@ public final class MVPCTRefreshListPartitioner extends MVPCTRefreshPartitioner {
 
     @Override
     public void filterPartitionByRefreshNumber(PCellSortedSet mvPartitionsToRefresh,
-                                               Set<String> mvPotentialPartitionNames,
-                                               boolean tentative) {
-        filterPartitionByRefreshNumberInternal(mvPartitionsToRefresh, mvPotentialPartitionNames, tentative,
+                                               Set<String> mvPotentialPartitionNames) {
+        filterPartitionByRefreshNumberInternal(mvPartitionsToRefresh, mvPotentialPartitionNames,
                 MaterializedView.PartitionRefreshStrategy.STRICT);
     }
 
     @Override
     public void filterPartitionByAdaptiveRefreshNumber(PCellSortedSet mvPartitionsToRefresh,
-                                                       Set<String> mvPotentialPartitionNames,
-                                                       boolean tentative) {
-        filterPartitionByRefreshNumberInternal(mvPartitionsToRefresh, mvPotentialPartitionNames, tentative,
+                                                       Set<String> mvPotentialPartitionNames) {
+        filterPartitionByRefreshNumberInternal(mvPartitionsToRefresh, mvPotentialPartitionNames,
                 MaterializedView.PartitionRefreshStrategy.ADAPTIVE);
     }
 
     public void filterPartitionByRefreshNumberInternal(PCellSortedSet toRefreshPartitions,
                                                        Set<String> mvPotentialPartitionNames,
-                                                       boolean tentative,
                                                        MaterializedView.PartitionRefreshStrategy refreshStrategy) {
 
         // filter by partition ttl
@@ -491,7 +486,7 @@ public final class MVPCTRefreshListPartitioner extends MVPCTRefreshPartitioner {
         if (CollectionUtils.isEmpty(nextPartitionValues)) {
             return;
         }
-        if (!tentative) {
+        if (!mvRefreshParams.isTentative()) {
             // partitionNameIter has just been traversed, and endPartitionName is not updated
             // will cause endPartitionName == null
             mvContext.setNextPartitionValues(PListCell.batchSerialize(nextPartitionValues));

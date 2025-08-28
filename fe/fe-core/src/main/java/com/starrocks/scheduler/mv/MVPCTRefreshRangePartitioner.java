@@ -83,8 +83,9 @@ public final class MVPCTRefreshRangePartitioner extends MVPCTRefreshPartitioner 
     public MVPCTRefreshRangePartitioner(MvTaskRunContext mvContext,
                                         TaskRunContext context,
                                         Database db,
-                                        MaterializedView mv) {
-        super(mvContext, context, db, mv);
+                                        MaterializedView mv,
+                                        MVRefreshParams mvRefreshParams) {
+        super(mvContext, context, db, mv, mvRefreshParams);
         this.differ = new RangePartitionDiffer(mv, false, null);
         this.logger = MVTraceUtils.getLogger(mv, MVPCTRefreshRangePartitioner.class);
     }
@@ -243,22 +244,20 @@ public final class MVPCTRefreshRangePartitioner extends MVPCTRefreshPartitioner 
     @Override
     public PCellSortedSet getMVPartitionsToRefresh(PartitionInfo mvPartitionInfo,
                                                    Map<Long, BaseTableSnapshotInfo> snapshotBaseTables,
-                                                   MVRefreshParams mvRefreshParams,
                                                    Set<String> mvPotentialPartitionNames) throws AnalysisException {
         // range partitioned materialized views
         boolean isAutoRefresh = mvContext.getTaskType().isAutoRefresh();
         boolean isRefreshMvBaseOnNonRefTables = needsRefreshBasedOnNonRefTables(snapshotBaseTables);
-        PCellSortedSet result = getMVPartitionsToRefreshImpl(mvRefreshParams, isRefreshMvBaseOnNonRefTables, isAutoRefresh);
+        PCellSortedSet result = getMVPartitionsToRefreshImpl(isRefreshMvBaseOnNonRefTables, isAutoRefresh);
         logger.info("get mv partition to refresh, refresh params:{}, " +
                         "isAutoRefresh: {}, isRefreshMvBaseOnNonRefTables:{}, result:{}",
                 mvRefreshParams, isAutoRefresh, isRefreshMvBaseOnNonRefTables, result);
         return result;
     }
 
-    public PCellSortedSet getMVPartitionsToRefreshImpl(MVRefreshParams mvRefreshParams,
-                                                       boolean isRefreshMvBaseOnNonRefTables,
+    public PCellSortedSet getMVPartitionsToRefreshImpl(boolean isRefreshMvBaseOnNonRefTables,
                                                        boolean isAutoRefresh) throws AnalysisException {
-        PCellSortedSet mvPCellWithNames = getMVPartitionNamesWithTTL(mv, mvRefreshParams, isAutoRefresh);
+        PCellSortedSet mvPCellWithNames = getMVPartitionNamesWithTTL(isAutoRefresh);
         if (mvRefreshParams.isForce() || isRefreshMvBaseOnNonRefTables) {
             if (mvRefreshParams.isCompleteRefresh()) {
                 // if non-partition table changed, should refresh all partitions of materialized view
@@ -294,8 +293,7 @@ public final class MVPCTRefreshRangePartitioner extends MVPCTRefreshPartitioner 
     }
 
     @Override
-    public void filterMVToRefreshPartitionsByProperty(PCellSortedSet mvToRefreshedPartitions,
-                                                      MVRefreshParams mvRefreshParams) {
+    public void filterMVToRefreshPartitionsByProperty(PCellSortedSet mvToRefreshedPartitions) {
         // filter partitions by refresh partition limit
         int refreshPartitionLimit = getRefreshPartitionLimit();
         if (mvRefreshParams.isCompleteRefresh() &&
@@ -361,8 +359,7 @@ public final class MVPCTRefreshRangePartitioner extends MVPCTRefreshPartitioner 
     }
 
     @Override
-    public PCellSortedSet getMVPartitionNamesWithTTL(MaterializedView mv, MVRefreshParams mvRefreshParams,
-                                                     boolean isAutoRefresh) throws AnalysisException {
+    public PCellSortedSet getMVPartitionNamesWithTTL(boolean isAutoRefresh) throws AnalysisException {
         PCellSortedSet mvPartitionCells = PCellSortedSet.of();
         int partitionTTLNumber = getPartitionTTLLimit();
         boolean hasPartitionRange = !mvRefreshParams.isCompleteRefresh();
@@ -433,23 +430,20 @@ public final class MVPCTRefreshRangePartitioner extends MVPCTRefreshPartitioner 
 
     @Override
     public void filterPartitionByRefreshNumber(PCellSortedSet mvPartitionsToRefresh,
-                                               Set<String> mvPotentialPartitionNames,
-                                               boolean tentative) {
-        filterPartitionByRefreshNumberInternal(mvPartitionsToRefresh, mvPotentialPartitionNames, tentative,
+                                               Set<String> mvPotentialPartitionNames) {
+        filterPartitionByRefreshNumberInternal(mvPartitionsToRefresh, mvPotentialPartitionNames,
                 MaterializedView.PartitionRefreshStrategy.STRICT);
     }
 
     @Override
     public void filterPartitionByAdaptiveRefreshNumber(PCellSortedSet mvPartitionsToRefresh,
-                                                       Set<String> mvPotentialPartitionNames,
-                                                       boolean tentative) {
-        filterPartitionByRefreshNumberInternal(mvPartitionsToRefresh, mvPotentialPartitionNames, tentative,
+                                                       Set<String> mvPotentialPartitionNames) {
+        filterPartitionByRefreshNumberInternal(mvPartitionsToRefresh, mvPotentialPartitionNames,
                 MaterializedView.PartitionRefreshStrategy.ADAPTIVE);
     }
 
     public void filterPartitionByRefreshNumberInternal(PCellSortedSet mvPartitionsToRefresh,
                                                        Set<String> mvPotentialPartitionNames,
-                                                       boolean tentative,
                                                        MaterializedView.PartitionRefreshStrategy refreshStrategy) {
         int partitionRefreshNumber = mv.getTableProperty().getPartitionRefreshNumber();
         Map<String, Range<PartitionKey>> mvRangePartitionMap = mv.getRangePartitionMap();
@@ -510,7 +504,7 @@ public final class MVPCTRefreshRangePartitioner extends MVPCTRefreshPartitioner 
         if (!Config.materialized_view_refresh_ascending) {
             sortedIterator = sortedPartition.iterator();
         }
-        setNextPartitionStartAndEnd(mvPartitionsToRefresh, sortedIterator, tentative);
+        setNextPartitionStartAndEnd(mvPartitionsToRefresh, sortedIterator);
     }
 
     public int getAdaptivePartitionRefreshNumber(
@@ -537,8 +531,7 @@ public final class MVPCTRefreshRangePartitioner extends MVPCTRefreshPartitioner 
     }
 
     private void setNextPartitionStartAndEnd(PCellSortedSet partitionsToRefresh,
-                                             Iterator<PCellWithName> iterator,
-                                             boolean tentative) {
+                                             Iterator<PCellWithName> iterator) {
         String nextPartitionStart = null;
         PCellWithName end = null;
         if (iterator.hasNext()) {
@@ -555,7 +548,7 @@ public final class MVPCTRefreshRangePartitioner extends MVPCTRefreshPartitioner 
             partitionsToRefresh.remove(end);
         }
 
-        if (!tentative) {
+        if (!mvRefreshParams.isTentative()) {
             mvContext.setNextPartitionStart(nextPartitionStart);
 
             if (end != null) {

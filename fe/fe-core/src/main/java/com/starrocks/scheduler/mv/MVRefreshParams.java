@@ -34,6 +34,10 @@ public class MVRefreshParams {
     private final Set<PListCell> listValues;
     private final PartitionInfo mvPartitionInfo;
 
+    // whether the refresh is tentative, when it's true, it means the refresh is triggered temporarily and used for
+    // find candidate partitions to refresh.
+    private boolean isTentative = false;
+
     public MVRefreshParams(PartitionInfo partitionInfo,
                            Map<String, String> properties,
                            boolean tentative) {
@@ -47,11 +51,19 @@ public class MVRefreshParams {
     }
 
     public boolean isForceCompleteRefresh() {
-        return isForce && isCompleteRefresh();
+        return isForce() && isCompleteRefresh();
     }
 
     public boolean isForce() {
-        return isForce;
+        return isForce || isTentative;
+    }
+
+    public void setIsTentative(boolean tentative) {
+        this.isTentative = tentative;
+    }
+
+    public boolean isTentative() {
+        return isTentative;
     }
 
     public boolean isCompleteRefresh() {
