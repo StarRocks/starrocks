@@ -70,6 +70,9 @@
 namespace starrocks {
 
 // for ut only
+RuntimeState::RuntimeState() : _obj_pool(new ObjectPool()) {}
+
+// for ut only
 RuntimeState::RuntimeState(const TUniqueId& fragment_instance_id, const TQueryOptions& query_options,
                            const TQueryGlobals& query_globals, ExecEnv* exec_env)
         : _unreported_error_idx(0),
