@@ -35,7 +35,8 @@
 namespace starrocks {
 
 std::vector<std::string> SegmentMetaCollecter::support_collect_fields = {
-        META_FLAT_JSON_META, META_DICT_MERGE, META_MAX, META_MIN, META_COUNT_ROWS, META_COUNT_COL};
+        META_FLAT_JSON_META,       META_DICT_MERGE,          META_MAX,           META_MIN,
+        META_COUNT_ROWS,           META_COUNT_COL,           META_COLUMN_SIZE,   META_COLUMN_COMPRESSED_SIZE};
 
 Status SegmentMetaCollecter::parse_field_and_colname(const std::string& item, std::string* field,
                                                      std::string* col_name) {
@@ -140,6 +141,11 @@ Status MetaReader::_fill_result_chunk(Chunk* chunk) {
             desc.children.emplace_back(item_desc);
             MutableColumnPtr column = ColumnHelper::create_column(desc, false);
             chunk->append_column(std::move(column), slot->id());
+        } else if (field == META_COLUMN_SIZE || field == META_COLUMN_COMPRESSED_SIZE) {
+            TypeDescriptor desc;
+            desc.type = TYPE_BIGINT;
+            MutableColumnPtr column = ColumnHelper::create_column(desc, true);
+            chunk->append_column(std::move(column), slot->id());
         } else {
             MutableColumnPtr column = ColumnHelper::create_column(slot->type(), true);
             chunk->append_column(std::move(column), slot->id());
@@ -236,6 +242,10 @@ Status SegmentMetaCollecter::_collect(const std::string& name, ColumnId cid, Col
         return _collect_flat_json(cid, column);
     } else if (name == META_COUNT_COL) {
         return _collect_count(cid, column, type);
+    } else if (name == META_COLUMN_SIZE) {
+        return _collect_column_size(cid, column, type);
+    } else if (name == META_COLUMN_COMPRESSED_SIZE) {
+        return _collect_column_compressed_size(cid, column, type);
     }
     return Status::NotSupported("Not Support Collect Meta: " + name);
 }
@@ -457,6 +467,53 @@ Status SegmentMetaCollecter::_collect_count(ColumnId cid, Column* column, Logica
     RETURN_IF_ERROR(_column_iterators[cid]->null_count(&nulls));
     column->append_datum(int64_t(num_rows - nulls));
 
+    return Status::OK();
+}
+
+Status SegmentMetaCollecter::_collect_column_size(ColumnId cid, Column* column, LogicalType type) {
+    // Uncompressed size: not directly stored per page; we estimate using num_rows * avg_value_size when applicable
+    // Prefer metadata footprint when available
+    const ColumnReader* col_reader = _segment->column(cid);
+    if (col_reader == nullptr) {
+        return Status::NotFound("");
+    }
+    // Use total_mem_footprint recorded in ColumnMeta as proxy for uncompressed size
+    column->append_datum(int64_t(col_reader->total_mem_footprint()));
+    return Status::OK();
+}
+
+Status SegmentMetaCollecter::_collect_column_compressed_size(ColumnId cid, Column* column, LogicalType type) {
+    // Compressed size estimation: sum of data page sizes via ordinal index ranges
+    const ColumnReader* col_reader = _segment->column(cid);
+    if (col_reader == nullptr) {
+        return Status::NotFound("");
+    }
+    // Create a lightweight iterator to access page pointers
+    ASSIGN_OR_RETURN(auto iter, col_reader->new_iterator());
+    ColumnIteratorOptions iter_opts;
+    iter_opts.check_dict_encoding = false;
+    iter_opts.read_file = _read_file.get();
+    iter_opts.stats = &_stats;
+    RETURN_IF_ERROR(iter->init(iter_opts));
+
+    int64_t total_bytes = 0;
+    // Access reader to locate number of pages and accumulate sizes
+    // Seek to first to ensure ordinal index is loaded
+    RETURN_IF_ERROR(iter->seek_to_first());
+    // We don't have direct API to iterate pages count from iterator here,
+    // so compute by probing page indices using page ranges from iterator's reader
+    // Use underlying ColumnReader's ordinal index accessors via seek_by_page_index
+    // Estimate: binary search last page index by increasing until fail
+    int page_index = 0;
+    while (true) {
+        OrdinalPageIndexIterator piter;
+        Status st = col_reader->seek_by_page_index(page_index, &piter);
+        if (!st.ok()) break;
+        auto pp = piter.page();
+        total_bytes += static_cast<int64_t>(pp.size);
+        page_index++;
+    }
+    column->append_datum(total_bytes);
     return Status::OK();
 }
 
