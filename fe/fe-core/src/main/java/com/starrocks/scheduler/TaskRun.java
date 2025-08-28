@@ -22,8 +22,6 @@ import com.google.common.collect.Sets;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.analysis.StringLiteral;
 import com.starrocks.authentication.AuthenticationMgr;
-import com.starrocks.authorization.PrivilegeBuiltinConstants;
-import com.starrocks.authorization.PrivilegeException;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.Table;
@@ -32,6 +30,8 @@ import com.starrocks.common.DdlException;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.load.loadv2.InsertLoadJob;
+import com.starrocks.privilege.PrivilegeBuiltinConstants;
+import com.starrocks.privilege.PrivilegeException;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.QueryState;
 import com.starrocks.qe.StmtExecutor;
@@ -284,7 +284,7 @@ public class TaskRun implements Comparable<TaskRun> {
         }
     }
 
-    public TaskRunContext buildTaskRunContext() {
+    public boolean executeTaskRun() throws Exception {
         TaskRunContext taskRunContext = new TaskRunContext();
 
         // Definition will cause a lot of repeats and cost a lot of metadata memory resources, so
