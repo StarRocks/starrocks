@@ -6028,12 +6028,12 @@ TEST_F(ArrayFunctionsTest, null_or_empty) {
         array->append_datum(DatumArray{{1, 2}});
         auto literal = ConstColumn::create(std::move(array), 10);
         auto result = ArrayFunctions::null_or_empty(nullptr, {std::move(literal)}).value();
-        EXPECT_EQ("0", result->debug_item(0));
+        EXPECT_EQ("CONST: 0", result->debug_item(0));
     }
     {
         auto null_col = ColumnHelper::create_const_null_column(10);
         auto result = ArrayFunctions::null_or_empty(nullptr, {std::move(null_col)}).value();
-        EXPECT_EQ("1", result->debug_item(0));
+        EXPECT_EQ("CONST: 1", result->debug_item(0));
     }
 }
 } // namespace starrocks
