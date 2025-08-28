@@ -23,33 +23,6 @@ StarRocks クラスター内にデータベースとテーブルを作成し、�
 CREATE DATABASE starrocks_audit_db__;
 
 CREATE TABLE starrocks_audit_db__.starrocks_audit_tbl__ (
-<<<<<<< HEAD
-  `queryId`           VARCHAR(64)                COMMENT "一意のクエリ ID",
-  `timestamp`         DATETIME         NOT NULL  COMMENT "クエリ開始時間",
-  `queryType`         VARCHAR(12)                COMMENT "クエリタイプ (query, slow_query, connection）",
-  `clientIp`          VARCHAR(32)                COMMENT "クライアント IP アドレス",
-  `user`              VARCHAR(64)                COMMENT "クエリを開始したユーザー",
-  `authorizedUser`    VARCHAR(64)                COMMENT "user_identity",
-  `resourceGroup`     VARCHAR(64)                COMMENT "リソースグループ名",
-  `catalog`           VARCHAR(32)                COMMENT "カタログ名",
-  `db`                VARCHAR(96)                COMMENT "クエリがスキャンするデータベース",
-  `state`             VARCHAR(8)                 COMMENT "クエリ状態 (EOF, ERR, OK)",
-  `errorCode`         VARCHAR(512)               COMMENT "エラーコード",
-  `queryTime`         BIGINT                     COMMENT "クエリの遅延時間 (ミリ秒単位)",
-  `scanBytes`         BIGINT                     COMMENT "スキャンされたデータのサイズ (バイト単位)",
-  `scanRows`          BIGINT                     COMMENT "スキャンされたデータの行数",
-  `returnRows`        BIGINT                     COMMENT "結果の行数",
-  `cpuCostNs`         BIGINT                     COMMENT "クエリの CPU リソース消費時間 (ナノ秒単位)",
-  `memCostBytes`      BIGINT                     COMMENT "クエリのメモリコスト (バイト単位)",
-  `stmtId`            INT                        COMMENT "インクリメンタル SQL ステートメント ID",
-  `isQuery`           TINYINT                    COMMENT "SQL がクエリかどうか (0 または 1)",
-  `feIp`              VARCHAR(128)               COMMENT "SQL を実行する FE の IP アドレス",
-  `stmt`              VARCHAR(1048576)           COMMENT "元の SQL ステートメント",
-  `digest`            VARCHAR(32)                COMMENT "スロー SQL フィンガープリント",
-  `planCpuCosts`      DOUBLE                     COMMENT "プランニングの CPU リソース消費時間 (ナノ秒単位)",
-  `planMemCosts`      DOUBLE                     COMMENT "プランニングのメモリコスト (バイト単位)",
-  `warehouse`         VARCHAR(128)               COMMENT "ウェアハウス名"
-=======
   `queryId` VARCHAR(64) COMMENT "クエリの一意ID",
   `timestamp` DATETIME NOT NULL COMMENT "クエリ開始時間",
   `queryType` VARCHAR(12) COMMENT "クエリタイプ（query、slow_query、connection）",
@@ -78,7 +51,6 @@ CREATE TABLE starrocks_audit_db__.starrocks_audit_tbl__ (
   `candidateMVs` VARCHAR(65533) NULL COMMENT "候補マテリアライズドビューのリスト",
   `hitMvs` VARCHAR(65533) NULL COMMENT "ヒットしたマテリアライズドビューのリスト",
   `warehouse` VARCHAR(32) NULL COMMENT "Warehouse名"
->>>>>>> cd764aee6e ([Doc] Updated documentation to align with Auditloader 5.0 (#62419))
 ) ENGINE = OLAP
 DUPLICATE KEY (`queryId`, `timestamp`, `queryType`)
 COMMENT "監査ログテーブル"
@@ -229,12 +201,7 @@ INSTALL PLUGIN FROM "http://xx.xx.xxx.xxx/extra/auditloader.zip" PROPERTIES("md5
           digest:
     planCpuCosts: 0
     planMemCosts: 0
-<<<<<<< HEAD
-       warehouse: default_warehouse
-    1 row in set (0.01 sec)
-=======
     …………
->>>>>>> cd764aee6e ([Doc] Updated documentation to align with Auditloader 5.0 (#62419))
     ```
 
 ## トラブルシューティング
