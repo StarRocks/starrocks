@@ -11,6 +11,26 @@ displayed_sidebar: docs
 
 :::
 
+## 3.3.18
+
+发布日期：2025 年 8 月 28 日
+
+### 问题修复
+
+修复了如下问题：
+
+- BE 在 `LakePersistentIndex` 初始化失败时因清理 `_memtable` 而崩溃。[#62279](https://github.com/StarRocks/starrocks/pull/62279)
+- 因在复制事务管理器中获取 Tablet 的最大版本时缺少锁而导致的并发问题。[#62238](https://github.com/StarRocks/starrocks/pull/62238)
+- 分阶段调度器因同步收集 Profile 时始终等待而导致的挂起问题（修复后，系统在调度出错时会正确结束 Profile 收集）。[#62140](https://github.com/StarRocks/starrocks/pull/62140)
+- 低基数优化中 `ALLOW_THROW_EXCEPTION` 模式下的异常处理问题（修复后，表达式计算中的异常会被捕获并正确返回）。 [#62098](https://github.com/StarRocks/starrocks/pull/62098)
+- 当 `enable_rbo_table_prune` 为 `false` 时，在表裁剪时系统无法在 memo 之外计算嵌套 CTE 统计信息的问题。[#62070](https://github.com/StarRocks/starrocks/pull/62070)
+- CVE‑2025‑55163 问题。 [#62041](https://github.com/StarRocks/starrocks/pull/62041)
+- `partition_morsel_queue` 中包含嵌套 `split_morsel_queue` 时，后者未能正确接收 Tablet Schema 的问题。[#62034](https://github.com/StarRocks/starrocks/pull/62034) 
+- Parquet 写入中对 `NULL` 数组的错误处理导致数据不一致或崩溃（修复后系统确保 `split` 函数能够正确处理 `NULL` 输入字符串）。[#61999](https://github.com/StarRocks/starrocks/pull/61999)
+- 创建使用 `CASE WHEN `表达式的物化视图时，因 VARCHAR 类型返回不兼容导致的失败（修复后系统确保刷新前后一致性）。 [#61996](https://github.com/StarRocks/starrocks/pull/61996) 
+- 因在计算压缩分数时持有分片级别的锁，导致长时间操作而引发并发安全性问题。[#61899](https://github.com/StarRocks/starrocks/pull/61899)  
+- 因 CBO 的表裁剪逻辑未考虑所有相关谓词导致的裁剪不完整问题。[#61881](https://github.com/StarRocks/starrocks/pull/61881) 
+
 ## 3.3.17
 
 发布日期：2025 年 7 月 30 日
