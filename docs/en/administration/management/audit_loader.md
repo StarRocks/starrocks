@@ -74,7 +74,7 @@ After a partition is created, you can move on to the next step.
 
 ## Download and configure AuditLoader
 
-1. [Download](https://releases.starrocks.io/resources/AuditLoader.zip) the AuditLoader installation package. The package is compatible with all available versions of StarRocks.
+1. [Download](https://releases.starrocks.io/resources/auditloader.zip) the AuditLoader installation package. The package is compatible with all available versions of StarRocks.
 
 2. Unzip the installation package.
 
