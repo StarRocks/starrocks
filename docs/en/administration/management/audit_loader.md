@@ -23,32 +23,6 @@ Because the fields of audit logs vary among different StarRocks versions, you mu
 CREATE DATABASE starrocks_audit_db__;
 
 CREATE TABLE starrocks_audit_db__.starrocks_audit_tbl__ (
-<<<<<<< HEAD
-  `queryId`           VARCHAR(64)                COMMENT "Unique query ID",
-  `timestamp`         DATETIME         NOT NULL  COMMENT "Query start time",
-  `queryType`         VARCHAR(12)                COMMENT "Query type (query, slow_query, connection）",
-  `clientIp`          VARCHAR(32)                COMMENT "Client IP address",
-  `user`              VARCHAR(64)                COMMENT "User who initiates the query",
-  `authorizedUser`    VARCHAR(64)                COMMENT "user_identity",
-  `resourceGroup`     VARCHAR(64)                COMMENT "Resource group name",
-  `catalog`           VARCHAR(32)                COMMENT "Catalog name",
-  `db`                VARCHAR(96)                COMMENT "Database that the query scans",
-  `state`             VARCHAR(8)                 COMMENT "Query state (EOF, ERR, OK)",
-  `errorCode`         VARCHAR(512)               COMMENT "Error code",
-  `queryTime`         BIGINT                     COMMENT "Query latency in milliseconds",
-  `scanBytes`         BIGINT                     COMMENT "Size of the scanned data in bytes",
-  `scanRows`          BIGINT                     COMMENT "Row count of the scanned data",
-  `returnRows`        BIGINT                     COMMENT "Row count of the result",
-  `cpuCostNs`         BIGINT                     COMMENT "CPU resources consumption time for query in nanoseconds",
-  `memCostBytes`      BIGINT                     COMMENT "Memory cost for query in bytes",
-  `stmtId`            INT                        COMMENT "Incremental SQL statement ID",
-  `isQuery`           TINYINT                    COMMENT "If the SQL is a query (0 and 1)",
-  `feIp`              VARCHAR(128)               COMMENT "IP address of FE that executes the SQL",
-  `stmt`              VARCHAR(1048576)           COMMENT "Original SQL statement",
-  `digest`            VARCHAR(32)                COMMENT "Slow SQL fingerprint",
-  `planCpuCosts`      DOUBLE                     COMMENT "CPU resources consumption time for planning in nanoseconds",
-  `planMemCosts`      DOUBLE                     COMMENT "Memory cost for planning in bytes"
-=======
   `queryId` VARCHAR(64) COMMENT "Unique ID of the query",
   `timestamp` DATETIME NOT NULL COMMENT "Query start time",
   `queryType` VARCHAR(12) COMMENT "Query type (query, slow_query, connection)",
@@ -77,7 +51,6 @@ CREATE TABLE starrocks_audit_db__.starrocks_audit_tbl__ (
   `candidateMVs` VARCHAR(65533) NULL COMMENT "List of candidate materialized views",
   `hitMvs` VARCHAR(65533) NULL COMMENT "List of matched materialized views",
   `warehouse` VARCHAR(32) NULL COMMENT "Warehouse name"
->>>>>>> cd764aee6e ([Doc] Updated documentation to align with Auditloader 5.0 (#62419))
 ) ENGINE = OLAP
 DUPLICATE KEY (`queryId`, `timestamp`, `queryType`)
 COMMENT "Audit log table"
@@ -126,10 +99,6 @@ After a partition is created, you can move on to the next step.
     - `user`: your cluster username. You MUST have the privilege to load data (LOAD_PRIV) into the table.
     - `password`: your user password.
     - `secret_key`: the key (string, must not be longer than 16 bytes) used to encrypt the password. If this parameter is not set, it indicates that the password in **plugin.conf** will not be encrypted, and you only need to specify the plaintext password in `password`. If this parameter is specified, it indicates that the password is encrypted by this key, and you need to specify the encrypted string in `password`. The encrypted password can be generated in StarRocks using the `AES_ENCRYPT` function: `SELECT TO_BASE64(AES_ENCRYPT('password','secret_key'));`.
-<<<<<<< HEAD
-    - `enable_compute_all_query_digest`: whether to generate Hash SQL fingerprint for all queries (StarRocks only enable SQL fingerprint for slow queries by default). Note that the fingerprint calculation in the plugin is different from that of FE, which will [normalize the SQL statement](../Query_planning.md#sql-fingerprint), while the plugin does not. The fingerprint calculation will consume additional computing resources if this feature is enabled.
-=======
->>>>>>> cd764aee6e ([Doc] Updated documentation to align with Auditloader 5.0 (#62419))
     - `filter`: the filter conditions for audit log loading. This parameter is based on the [WHERE parameter](../../sql-reference/sql-statements/loading_unloading/STREAM_LOAD.md#opt_properties)  in Stream Load, i.e. `-H “where: <condition>”`, defaults to an empty string. Example: `filter=isQuery=1 and clientIp like '127.0.0.1%' and user='root'`.
 
 4. Zip the files back into a package.
@@ -220,27 +189,6 @@ See [INSTALL PLUGIN](../../sql-reference/sql-statements/cluster-management/plugi
         clientIp: xxx.xx.xxx.xx:65283
             user: root
     authorizedUser: 'root'@'%'
-<<<<<<< HEAD
-    resourceGroup: default_wg
-         catalog: default_catalog
-              db: 
-           state: EOF
-       errorCode:
-       queryTime: 3
-       scanBytes: 0
-        scanRows: 0
-      returnRows: 1
-       cpuCostNs: 33711
-    memCostBytes: 4200
-          stmtId: 102
-         isQuery: 1
-            feIp: xxx.xx.xxx.xx
-            stmt: SELECT * FROM starrocks_audit_db__.starrocks_audit_tbl__
-          digest:
-    planCpuCosts: 0
-    planMemCosts: 0
-    1 row in set (0.01 sec)
-=======
      resourceGroup: default_wg
            catalog: default_catalog
                 db: 
@@ -263,7 +211,6 @@ See [INSTALL PLUGIN](../../sql-reference/sql-statements/cluster-management/plugi
       candidateMvs: null
             hitMVs: null
     …………
->>>>>>> cd764aee6e ([Doc] Updated documentation to align with Auditloader 5.0 (#62419))
     ```
 
 ## Troubleshooting
