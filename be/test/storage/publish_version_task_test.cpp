@@ -14,6 +14,9 @@
 
 #include <gtest/gtest.h>
 
+#include <atomic>
+#include <thread>
+
 #include "agent/agent_common.h"
 #include "agent/agent_server.h"
 #include "agent/publish_version.h"
@@ -41,10 +44,13 @@
 #include "storage/txn_manager.h"
 #include "storage/update_manager.h"
 #include "testutil/assert.h"
+#include "util/await.h"
 #include "util/cpu_info.h"
 #include "util/disk_info.h"
 #include "util/logging.h"
 #include "util/mem_info.h"
+#include "util/threadpool.h"
+#include "util/time.h"
 #include "util/timezone_utils.h"
 
 namespace starrocks {
@@ -384,6 +390,113 @@ TEST_F(PublishVersionTaskTest, test_publish_version2) {
         ASSERT_EQ(12345, finish_task_request.tablet_versions[0].tablet_id);
         ASSERT_EQ(0, affected_dirs.size());
     }
+}
+
+TEST_F(PublishVersionTaskTest, test_publish_version_cancellation) {
+    // Prepare a transaction with data (similar to previous tests)
+    DeltaWriterOptions writer_options;
+    writer_options.tablet_id = 12345;
+    writer_options.schema_hash = 1111;
+    writer_options.txn_id = 4445;
+    writer_options.partition_id = 10;
+    writer_options.load_id.set_hi(3000);
+    writer_options.load_id.set_lo(4445);
+    writer_options.replica_state = Primary;
+    TupleDescriptor* tuple_desc = _create_tuple_desc();
+    writer_options.slots = &tuple_desc->slots();
+
+    {
+        MemTracker mem_checker(1024 * 1024 * 1024);
+        auto writer_status = DeltaWriter::open(writer_options, &mem_checker);
+        ASSERT_TRUE(writer_status.ok()) << writer_status.status().to_string();
+        auto delta_writer = std::move(writer_status.value());
+        ASSERT_TRUE(delta_writer != nullptr);
+
+        std::vector<std::string> test_data;
+        auto chunk = ChunkHelper::new_chunk(tuple_desc->slots(), 128);
+        std::vector<uint32_t> indexes;
+        indexes.reserve(128);
+        for (size_t i = 0; i < 128; ++i) {
+            indexes.push_back(i);
+            test_data.push_back("well" + std::to_string(i));
+            auto& cols = chunk->columns();
+            cols[0]->append_datum(Datum(static_cast<int32_t>(i)));
+            Slice field_1(test_data[i]);
+            cols[1]->append_datum(Datum(field_1));
+            cols[2]->append_datum(Datum(static_cast<int32_t>(10000 + i)));
+        }
+        auto st = delta_writer->write(*chunk, indexes.data(), 0, indexes.size());
+        ASSERT_TRUE(st.ok()) << st.to_string();
+        st = delta_writer->close();
+        ASSERT_TRUE(st.ok()) << st.to_string();
+        st = delta_writer->commit();
+        ASSERT_TRUE(st.ok()) << st.to_string();
+    }
+
+    // Build a dedicated thread pool with a single worker
+    std::unique_ptr<ThreadPool> pool;
+    ASSERT_TRUE(ThreadPoolBuilder("publish-cancel-test")
+                        .set_min_threads(1)
+                        .set_max_threads(1)
+                        .set_max_queue_size(128)
+                        .build(&pool)
+                        .ok());
+    auto token = pool->new_token(ThreadPool::ExecutionMode::SERIAL);
+
+    // Submit a blocking task to occupy the only worker thread so that publish tasks queue up
+    std::mutex mu;
+    std::condition_variable cv;
+    bool release_blocker = false;
+    std::atomic<bool> blocker_started{false};
+    auto blocker = std::make_shared<CancellableRunnable>(
+            [&]() {
+                blocker_started.store(true, std::memory_order_release);
+                std::unique_lock<std::mutex> lk(mu);
+                cv.wait(lk, [&] { return release_blocker; });
+            },
+            [&]() {
+                // no-op for blocker cancel
+            });
+    ASSERT_TRUE(token->submit(blocker).ok());
+
+    // Prepare publish request
+    std::unordered_set<DataDir*> affected_dirs;
+    TFinishTaskRequest finish_task_request;
+    TPublishVersionRequest publish_version_req;
+    publish_version_req.transaction_id = 4445;
+    TPartitionVersionInfo pvinfo;
+    pvinfo.partition_id = 10;
+    pvinfo.version = 3;
+    publish_version_req.partition_version_infos.push_back(pvinfo);
+    publish_version_req.enable_sync_publish = true;
+
+    // Ensure the blocker has started running before submitting publish tasks
+    ASSERT_TRUE(Awaitility().timeout(60 * 1000 * 1000).until([&]() {
+        return blocker_started.load(std::memory_order_acquire);
+    }));
+
+    // Run publish in a separate thread so we can shutdown the pool to trigger cancellation
+    std::thread t([&]() {
+        run_publish_version_task(token.get(), publish_version_req, finish_task_request, affected_dirs, 0);
+    });
+
+    // Wait until at least one publish task is queued behind the blocker (or timeout)
+    ASSERT_TRUE(Awaitility().timeout(60 * 1000 * 1000).until([&]() { return pool->num_queued_tasks() > 0; }));
+
+    // Shutdown the pool in a separate thread, then release the blocker so shutdown can complete
+    std::thread shutdown_th([&]() { pool->shutdown(); });
+    {
+        std::lock_guard<std::mutex> lk(mu);
+        release_blocker = true;
+    }
+    cv.notify_one();
+
+    shutdown_th.join();
+    t.join();
+
+    // Expect that publish reports error for the tablet due to cancellation
+    ASSERT_EQ(finish_task_request.error_tablet_ids.size(), 1);
+    ASSERT_EQ(finish_task_request.error_tablet_ids[0], 12345);
 }
 
 } // namespace starrocks
