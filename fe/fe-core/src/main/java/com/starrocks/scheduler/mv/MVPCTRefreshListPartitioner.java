@@ -363,40 +363,45 @@ public final class MVPCTRefreshListPartitioner extends MVPCTRefreshPartitioner {
             }
         } else {
             // check the ref base table
-            PCellSortedSet result = getMvPartitionNamesToRefresh(mvListPartitionNames);
-            Map<Table, Set<String>> baseChangedPartitionNames =
-                    getBasePartitionNamesByMVPartitionNames(result);
-            if (baseChangedPartitionNames.isEmpty()) {
-                logger.info("Cannot get associated base table change partitions from mv's refresh partitions {}",
-                        result);
-                return result;
-            }
-            // because the relation of partitions between materialized view and base partition table is n : m,
-            // should calculate the candidate partitions recursively.
-            if (isCalcPotentialRefreshPartition()) {
-                logger.info("Start calcPotentialRefreshPartition, result: {}," +
-                        " baseChangedPartitionNames: {}", result, baseChangedPartitionNames);
-                Set<String> mvToRefreshPartitionNames = result.getPartitionNames();
-                Set<String> tmpMvPotentialPartitionNames = Sets.newHashSet(mvToRefreshPartitionNames);
-                SyncPartitionUtils.calcPotentialRefreshPartition(tmpMvPotentialPartitionNames, baseChangedPartitionNames,
-                        mvContext.getRefBaseTableMVIntersectedPartitions(),
-                        mvContext.getMvRefBaseTableIntersectedPartitions(),
-                        mvPotentialPartitionNames);
-                Map<String, PCell> mvCellMap = mvContext.getMVToCellMap();
-                Set<String> addedPartitions = Sets.difference(tmpMvPotentialPartitionNames, mvToRefreshPartitionNames);
-                for (String partition : addedPartitions) {
-                    PCell pCell = mvCellMap.get(partition);
-                    if (pCell == null) {
-                        logger.warn("Cannot find mv partition name range cell:{}", partition);
-                        continue;
-                    }
-                    result.add(PCellWithName.of(partition, pCell));
-                }
-                logger.info("Finish calcPotentialRefreshPartition, result: {}," +
-                        " baseChangedPartitionNames: {}", result, baseChangedPartitionNames);
-            }
+            return getMvPartitionNamesToRefresh(mvListPartitionNames);
+        }
+    }
+
+    @Override
+    public PCellSortedSet calcPotentialMVRefreshPartitions(Set<String> mvPotentialPartitionNames,
+                                                           PCellSortedSet result) {
+        Map<Table, Set<String>> baseChangedPartitionNames =
+                getBasePartitionNamesByMVPartitionNames(result);
+        if (baseChangedPartitionNames.isEmpty()) {
+            logger.info("Cannot get associated base table change partitions from mv's refresh partitions {}",
+                    result);
             return result;
         }
+        // because the relation of partitions between materialized view and base partition table is n : m,
+        // should calculate the candidate partitions recursively.
+        if (isCalcPotentialRefreshPartition()) {
+            logger.info("Start calcPotentialRefreshPartition, result: {}," +
+                    " baseChangedPartitionNames: {}", result, baseChangedPartitionNames);
+            Set<String> mvToRefreshPartitionNames = result.getPartitionNames();
+            Set<String> tmpMvPotentialPartitionNames = Sets.newHashSet(mvToRefreshPartitionNames);
+            SyncPartitionUtils.calcPotentialRefreshPartition(tmpMvPotentialPartitionNames, baseChangedPartitionNames,
+                    mvContext.getRefBaseTableMVIntersectedPartitions(),
+                    mvContext.getMvRefBaseTableIntersectedPartitions(),
+                    mvPotentialPartitionNames);
+            Map<String, PCell> mvCellMap = mvContext.getMVToCellMap();
+            Set<String> addedPartitions = Sets.difference(tmpMvPotentialPartitionNames, mvToRefreshPartitionNames);
+            for (String partition : addedPartitions) {
+                PCell pCell = mvCellMap.get(partition);
+                if (pCell == null) {
+                    logger.warn("Cannot find mv partition name range cell:{}", partition);
+                    continue;
+                }
+                result.add(PCellWithName.of(partition, pCell));
+            }
+            logger.info("Finish calcPotentialRefreshPartition, result: {}," +
+                    " baseChangedPartitionNames: {}", result, baseChangedPartitionNames);
+        }
+        return result;
     }
 
     public boolean isCalcPotentialRefreshPartition() {

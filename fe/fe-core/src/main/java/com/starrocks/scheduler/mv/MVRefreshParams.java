@@ -83,4 +83,13 @@ public class MVRefreshParams {
     public Set<PListCell> getListValues() {
         return listValues;
     }
+
+    @Override
+    public String toString() {
+        return "{rangeStart='" + rangeStart + '\'' +
+                ", rangeEnd='" + rangeEnd + '\'' +
+                ", isForce=" + isForce +
+                ", listValues=" + listValues +
+                '}';
+    }
 }

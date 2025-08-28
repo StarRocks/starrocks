@@ -21,7 +21,7 @@ thirdparty/installed
 core.*
 extension/spark-doris-connector/.classpath
 extension/spark-doris-connector/target
-contrib/.*/target/
+contrib/*/target/
 fe/log
 **/ut_ports
 venv/

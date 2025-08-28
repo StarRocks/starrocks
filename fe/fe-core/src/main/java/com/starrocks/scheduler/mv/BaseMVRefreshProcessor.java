@@ -571,7 +571,7 @@ public abstract class BaseMVRefreshProcessor {
 
         final Set<String> mvPotentialPartitionNames = Sets.newHashSet();
         final PCellSortedSet mvToRefreshedPartitions = mvRefreshPartitioner.getMVToRefreshedPartitions(
-                snapshotBaseTables, mvRefreshParams, partitionRefreshStrategy, mvPotentialPartitionNames, tentative);
+                snapshotBaseTables, mvRefreshParams, mvPotentialPartitionNames, tentative);
         // update mv extra message
         if (!tentative) {
             updateTaskRunStatus(status -> {

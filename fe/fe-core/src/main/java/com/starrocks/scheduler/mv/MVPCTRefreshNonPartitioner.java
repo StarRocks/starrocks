@@ -88,6 +88,12 @@ public final class MVPCTRefreshNonPartitioner extends MVPCTRefreshPartitioner {
     }
 
     @Override
+    public PCellSortedSet calcPotentialMVRefreshPartitions(Set<String> mvPotentialPartitionNames,
+                                                           PCellSortedSet result) {
+        return result;
+    }
+
+    @Override
     public PCellSortedSet getMVPartitionNamesWithTTL(MaterializedView materializedView,
                                                      MVRefreshParams mvRefreshParams,
                                                      boolean isAutoRefresh) {
