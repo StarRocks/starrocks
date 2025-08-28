@@ -168,6 +168,11 @@ public class LakeTable extends OlapTable {
             properties.put(PropertyAnalyzer.PROPERTIES_PERSISTENT_INDEX_TYPE, getPersistentIndexTypeString());
         }
 
+        Boolean enableDynamicTablet = getEnableDynamicTablet();
+        if (enableDynamicTablet != null && enableDynamicTablet) {
+            properties.put(PropertyAnalyzer.PROPERTIES_ENABLE_DYNAMIC_TABLET, enableDynamicTablet.toString());
+        }
+
         return properties;
     }
 
