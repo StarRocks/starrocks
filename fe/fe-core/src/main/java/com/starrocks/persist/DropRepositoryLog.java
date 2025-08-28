@@ -12,23 +12,21 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package com.starrocks.lake;
+package com.starrocks.persist;
 
+import com.google.gson.annotations.SerializedName;
 import com.starrocks.common.io.Writable;
 
-import java.io.DataOutputStream;
-import java.io.IOException;
+public class DropRepositoryLog implements Writable {
 
-/**
- * Deprecated class, keep only for backward compatible purpose.
- */
-@Deprecated
-public class ShardManager implements Writable {
+    @SerializedName(value = "repositoryName")
+    private String repositoryName;
 
-    @Deprecated
-    public long saveShardManager(DataOutputStream out, long checksum) throws IOException {
-        write(out);
-        return checksum;
+    public DropRepositoryLog(String repositoryName) {
+        this.repositoryName = repositoryName;
     }
 
+    public String getRepositoryName() {
+        return repositoryName;
+    }
 }
