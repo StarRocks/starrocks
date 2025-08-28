@@ -35,12 +35,9 @@
 package com.starrocks.qe;
 
 import com.google.common.base.Strings;
-import com.starrocks.authentication.OAuth2Context;
-import com.starrocks.analysis.Expr;
-import com.starrocks.analysis.LiteralExpr;
-import com.starrocks.analysis.NullLiteral;
 import com.starrocks.authentication.AuthenticationException;
 import com.starrocks.authentication.AuthenticationProvider;
+import com.starrocks.authentication.UserIdentityUtils;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Table;
@@ -400,8 +397,14 @@ public class ConnectProcessor {
                     return;
                 }
 
-                AuthenticationProvider authenticationProvider = ctx.getAuthenticationProvider();
                 try {
+                    AuthenticationProvider authenticationProvider = ctx.getAuthenticationProvider();
+                    if (authenticationProvider == null) {
+                        ErrorReport.report("Unknown authentication method");
+                        ctx.getState().setErrType(QueryState.ErrType.ANALYSIS_ERR);
+                        return;
+                    }
+
                     authenticationProvider.checkLoginSuccess(ctx.getConnectionId(), ctx.getAuthenticationContext());
                 } catch (AuthenticationException authenticationException) {
                     ErrorReport.report(authenticationException.getMessage());
@@ -781,7 +784,7 @@ public class ConnectProcessor {
             ctx.getSessionVariable().setEnableInsertStrict(request.enableStrictMode);
         }
         if (request.isSetCurrent_user_ident()) {
-            UserIdentity currentUserIdentity = UserIdentity.fromThrift(request.getCurrent_user_ident());
+            UserIdentity currentUserIdentity = UserIdentityUtils.fromThrift(request.getCurrent_user_ident());
             ctx.setCurrentUserIdentity(currentUserIdentity);
         }
 

@@ -39,7 +39,6 @@ import com.google.gson.annotations.SerializedName;
 import com.starrocks.cluster.ClusterNamespace;
 import com.starrocks.common.io.Writable;
 import com.starrocks.persist.gson.GsonPostProcessable;
-import com.starrocks.thrift.TUserIdentity;
 
 import java.io.IOException;
 
@@ -98,11 +97,6 @@ public class UserIdentity implements Writable, GsonPostProcessable {
         return new UserIdentity(user, domain, true);
     }
 
-    public static UserIdentity fromThrift(TUserIdentity tUserIdent) {
-        return new UserIdentity(tUserIdent.getUsername(), tUserIdent.getHost(), tUserIdent.is_domain,
-                tUserIdent.is_ephemeral);
-    }
-
     public static UserIdentity createEphemeralUserIdent(String user, String host) {
         return new UserIdentity(true, user, host);
     }
@@ -121,41 +115,6 @@ public class UserIdentity implements Writable, GsonPostProcessable {
 
     public boolean isEphemeral() {
         return ephemeral;
-    }
-
-    public static UserIdentity fromString(String userIdentStr) {
-        if (Strings.isNullOrEmpty(userIdentStr)) {
-            return null;
-        }
-
-        String[] parts = userIdentStr.split("@");
-        if (parts.length != 2) {
-            return null;
-        }
-
-        String user = parts[0];
-        if (!user.startsWith("'") || !user.endsWith("'")) {
-            return null;
-        }
-
-        String host = parts[1];
-        if (host.startsWith("['") && host.endsWith("']")) {
-            return new UserIdentity(user.substring(1, user.length() - 1),
-                    host.substring(2, host.length() - 2), true);
-        } else if (host.startsWith("'") && host.endsWith("'")) {
-            return new UserIdentity(user.substring(1, user.length() - 1),
-                    host.substring(1, host.length() - 1));
-        }
-
-        return null;
-    }
-
-    public TUserIdentity toThrift() {
-        TUserIdentity tUserIdent = new TUserIdentity();
-        tUserIdent.setHost(host);
-        tUserIdent.setUsername(user);
-        tUserIdent.setIs_domain(isDomain);
-        return tUserIdent;
     }
 
     @Override

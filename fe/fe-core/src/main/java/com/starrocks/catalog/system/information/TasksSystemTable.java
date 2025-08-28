@@ -14,6 +14,7 @@
 package com.starrocks.catalog.system.information;
 
 import com.google.common.collect.Lists;
+import com.starrocks.authentication.UserIdentityUtils;
 import com.starrocks.authorization.AccessDeniedException;
 import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.catalog.PrimitiveType;
@@ -71,7 +72,7 @@ public class TasksSystemTable {
         List<TTaskInfo> result = Lists.newArrayList();
         UserIdentity currentUser = null;
         if (params.isSetCurrent_user_ident()) {
-            currentUser = UserIdentity.fromThrift(params.current_user_ident);
+            currentUser = UserIdentityUtils.fromThrift(params.current_user_ident);
         }
 
         for (Task task : taskList) {

@@ -81,8 +81,16 @@ public class OAuth2Action extends RestBaseAction {
             return;
         }
 
+        AuthenticationProvider authenticationProvider = context.getAuthenticationProvider();
+        if (!(authenticationProvider instanceof OAuth2AuthenticationProvider)) {
+            response.appendContent(OAuth2ResultMessage.generateLoginSuccessPage(
+                    "Failed", "The authentication type is not OAuth2",
+                    context.getQualifiedUser(), String.valueOf(connectionId)));
+            sendResult(request, response);
+            return;
+        }
+
         try {
-            AuthenticationProvider authenticationProvider = context.getAuthenticationProvider();
             OAuth2Context oAuth2Context = ((OAuth2AuthenticationProvider) authenticationProvider).getoAuth2Context();
 
             String oidcToken = getToken(authorizationCode, oAuth2Context, connectionId);

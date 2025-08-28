@@ -14,6 +14,7 @@
 
 package com.starrocks.catalog.system.sys;
 
+import com.starrocks.authentication.UserIdentityUtils;
 import com.starrocks.authorization.AccessDeniedException;
 import com.starrocks.authorization.PrivilegeType;
 import com.starrocks.catalog.PrimitiveType;
@@ -53,7 +54,7 @@ public class SysFeMemoryUsage {
         TAuthInfo auth = request.getAuth_info();
         UserIdentity currentUser;
         if (auth.isSetCurrent_user_ident()) {
-            currentUser = UserIdentity.fromThrift(auth.getCurrent_user_ident());
+            currentUser = UserIdentityUtils.fromThrift(auth.getCurrent_user_ident());
         } else {
             currentUser = UserIdentity.createAnalyzedUserIdentWithIp(auth.getUser(), auth.getUser_ip());
         }

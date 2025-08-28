@@ -40,11 +40,9 @@ import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
-import com.starrocks.authentication.OAuth2Context;
-import com.starrocks.analysis.StringLiteral;
-import com.starrocks.analysis.VariableExpr;
 import com.starrocks.authentication.AuthenticationContext;
 import com.starrocks.authentication.AuthenticationProvider;
+import com.starrocks.authentication.UserIdentityUtils;
 import com.starrocks.authentication.UserProperty;
 import com.starrocks.authorization.AccessDeniedException;
 import com.starrocks.authorization.ObjectType;
@@ -507,7 +505,7 @@ public class ConnectContext {
     }
 
     public void setAuthInfoFromThrift(TUserIdentity tUserIdent) {
-        setCurrentUserIdentity(UserIdentity.fromThrift(tUserIdent));
+        setCurrentUserIdentity(UserIdentityUtils.fromThrift(tUserIdent));
         if (tUserIdent.isSetCurrent_role_ids()) {
             setCurrentRoleIds(new HashSet<>(tUserIdent.current_role_ids.getRole_id_list()));
         } else {
@@ -531,10 +529,6 @@ public class ConnectContext {
         authenticationContext.setAuthToken(authToken);
     }
 
-    public void setAuthenticationProvider(AuthenticationProvider authenticationProvider) {
-        authenticationContext.setAuthenticationProvider(authenticationProvider);
-    }
-
     public AuthenticationProvider getAuthenticationProvider() {
         return authenticationContext.getAuthenticationProvider();
     }
@@ -549,10 +543,6 @@ public class ConnectContext {
 
     public void setAuthDataSalt(byte[] authDataSalt) {
         authenticationContext.setAuthDataSalt(authDataSalt);
-    }
-
-    public byte[] getAuthDataSalt() {
-        return authenticationContext.getAuthDataSalt();
     }
 
     /**
