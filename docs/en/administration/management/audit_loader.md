@@ -145,9 +145,9 @@ See [INSTALL PLUGIN](../../sql-reference/sql-statements/cluster-management/plugi
     *************************** 1. row ***************************
         Name: __builtin_AuditLogBuilder
         Type: AUDIT
-    Description: Available for versions 3.3.11+. Load audit log to starrocks, and user can view the statistic of queries
-        Version: 5.0.0
-    JavaVersion: 11
+    Description: builtin audit logger
+        Version: 0.12.0
+    JavaVersion: 1.8.31
     ClassName: com.starrocks.qe.AuditLogBuilder
         SoName: NULL
         Sources: Builtin
@@ -156,9 +156,9 @@ See [INSTALL PLUGIN](../../sql-reference/sql-statements/cluster-management/plugi
     *************************** 2. row ***************************
         Name: AuditLoader
         Type: AUDIT
-    Description: Available for versions 2.5+. Load audit log to starrocks, and user can view the statistic of queries
-        Version: 4.2.1
-    JavaVersion: 1.8.0
+    Description: Available for versions 3.3.11+. Load audit log to starrocks, and user can view the statistic of queries
+        Version: 5.0.0
+    JavaVersion: 11
     ClassName: com.starrocks.plugin.audit.AuditLoaderPlugin
         SoName: NULL
         Sources: /x/xx/xxx/xxxxx/auditloader.zip
@@ -207,9 +207,6 @@ See [INSTALL PLUGIN](../../sql-reference/sql-statements/cluster-management/plugi
      pendingTimeMs: -1
       candidateMvs: null
             hitMVs: null
-         warehouse: default_warehouse
-           cngroup: 
-      1 row in set (0.01 sec)
     …………
     ```
 
