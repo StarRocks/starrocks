@@ -926,8 +926,8 @@ public class AggStateCombinatorTest extends MVTestBase {
                     + " from test_agg_state_table group by k1;";
             String plan = UtFrameUtils.getVerboseFragmentPlan(starRocksAssert.getCtx(), sql1);
             PlanTestBase.assertContains(plan, "|  aggregate: array_agg_union[([2: v0, " +
-                    "struct<col1 array<varchar(100)>>, true]); args: INVALID_TYPE; result: " +
-                    "struct<col1 array<varchar(100)>>; args nullable: true; result nullable: true]");
+                    "struct<col1 array<varchar(1048576)>>, true]); args: INVALID_TYPE; " +
+                    "result: struct<col1 array<varchar(100)>>; args nullable: true; result nullable: true]");
             PlanTestBase.assertContains(plan, " 0:OlapScanNode\n" +
                     "     table: test_agg_state_table, rollup: test_agg_state_table");
         }
@@ -937,8 +937,8 @@ public class AggStateCombinatorTest extends MVTestBase {
             String sql1 = "select k1, " + Joiner.on(", ").join(mergeColumns)
                     + " from test_agg_state_table group by k1;";
             String plan = UtFrameUtils.getVerboseFragmentPlan(starRocksAssert.getCtx(), sql1);
-            PlanTestBase.assertContains(plan, "|  aggregate: " +
-                    "array_agg_merge[([2: v0, struct<col1 array<varchar(100)>>, true]); args: INVALID_TYPE; " +
+            PlanTestBase.assertContains(plan, "|  aggregate: array_agg_merge[([2: v0, " +
+                    "struct<col1 array<varchar(1048576)>>, true]); args: INVALID_TYPE; " +
                     "result: ARRAY<VARCHAR(100)>; args nullable: true; result nullable: true]");
             PlanTestBase.assertContains(plan, " 0:OlapScanNode\n" +
                     "     table: test_agg_state_table, rollup: test_agg_state_table");
