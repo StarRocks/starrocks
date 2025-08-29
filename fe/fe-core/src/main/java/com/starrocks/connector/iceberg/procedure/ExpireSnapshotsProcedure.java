@@ -25,7 +25,6 @@ import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 
 public class ExpireSnapshotsProcedure extends IcebergTableProcedure {
     private static final String PROCEDURE_NAME = "expire_snapshots";
@@ -55,12 +54,11 @@ public class ExpireSnapshotsProcedure extends IcebergTableProcedure {
         }
 
         long olderThanMillis;
-        if (args.isEmpty()) {
+        ConstantOperator olderThanArg = args.get(OLDER_THAN);
+        if (olderThanArg == null) {
             olderThanMillis = -1L;
         } else {
-            ConstantOperator olderThanArg = args.get(OLDER_THAN);
-            LocalDateTime time = Optional.ofNullable(olderThanArg)
-                    .flatMap(arg -> arg.castTo(Type.DATETIME).map(ConstantOperator::getDatetime))
+            LocalDateTime time = olderThanArg.castTo(Type.DATETIME).map(ConstantOperator::getDatetime)
                     .orElseThrow(() ->
                             new StarRocksConnectorException("invalid argument type for %s, expected DATETIME", OLDER_THAN));
             olderThanMillis = Duration.ofSeconds(time.atZone(TimeUtils.getTimeZone().toZoneId()).toEpochSecond()).toMillis();

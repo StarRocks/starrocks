@@ -44,7 +44,6 @@ import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 import java.util.Set;
 
 import static com.starrocks.connector.iceberg.IcebergUtil.fileName;
@@ -85,14 +84,13 @@ public class RemoveOrphanFilesProcedure extends IcebergTableProcedure {
         }
 
         long olderThanMillis;
-        if (args.isEmpty()) {
+        ConstantOperator olderThanArg = args.get(OLDER_THAN);
+        if (olderThanArg == null) {
             LocalDateTime time = LocalDateTime.now(TimeUtils.getTimeZone().toZoneId());
             olderThanMillis = time.minus(DEFAULT_RETENTION_THRESHOLD).toInstant(ZoneOffset.UTC).toEpochMilli();
         } else {
-            LocalDateTime time = Optional.ofNullable(args.get(OLDER_THAN))
-                    .flatMap(arg -> arg.castTo(Type.DATETIME)
-                            .map(ConstantOperator::getDatetime))
-                    .orElseThrow(() ->
+            LocalDateTime time = olderThanArg.castTo(Type.DATETIME).
+                    map(ConstantOperator::getDatetime).orElseThrow(() ->
                             new StarRocksConnectorException("invalid argument type for %s, expected DATETIME", OLDER_THAN));
             olderThanMillis = Duration.ofSeconds(time.atZone(TimeUtils.getTimeZone().toZoneId()).toEpochSecond()).toMillis();
         }

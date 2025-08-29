@@ -553,22 +553,15 @@ public class IcebergTable extends Table {
         if (op == IcebergTableOperation.UNKNOWN) {
             throw new StarRocksConnectorException("Unknown iceberg table operation : %s", procedureName);
         }
-        switch (op) {
-            case FAST_FORWARD:
-                return FastForwardProcedure.getInstance();
-            case CHERRYPICK_SNAPSHOT:
-                return CherryPickSnapshotProcedure.getInstance();
-            case EXPIRE_SNAPSHOTS:
-                return ExpireSnapshotsProcedure.getInstance();
-            case REMOVE_ORPHAN_FILES:
-                return RemoveOrphanFilesProcedure.getInstance();
-            case ROLLBACK_TO_SNAPSHOT:
-                return RollbackToSnapshotProcedure.getInstance();
-            case REWRITE_DATA_FILES:
-                return RewriteDataFilesProcedure.getInstance();
-            default:
-                throw new StarRocksConnectorException("Unsupported table operation %s", op);
-        }
+        return switch (op) {
+            case FAST_FORWARD -> FastForwardProcedure.getInstance();
+            case CHERRYPICK_SNAPSHOT -> CherryPickSnapshotProcedure.getInstance();
+            case EXPIRE_SNAPSHOTS -> ExpireSnapshotsProcedure.getInstance();
+            case REMOVE_ORPHAN_FILES -> RemoveOrphanFilesProcedure.getInstance();
+            case ROLLBACK_TO_SNAPSHOT -> RollbackToSnapshotProcedure.getInstance();
+            case REWRITE_DATA_FILES -> RewriteDataFilesProcedure.getInstance();
+            default -> throw new StarRocksConnectorException("Unsupported table operation %s", op);
+        };
     }
 
     public static Builder builder() {
