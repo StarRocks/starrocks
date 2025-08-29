@@ -478,7 +478,13 @@ Status SegmentMetaCollecter::_collect_column_size(ColumnId cid, Column* column, 
         return Status::NotFound("");
     }
     // Use total_mem_footprint recorded in ColumnMeta as proxy for uncompressed size
-    column->append_datum(int64_t(col_reader->total_mem_footprint()));
+    size_t total_mem_footprint = col_reader->total_mem_footprint();
+    if (col_reader->sub_readers() != nullptr) {
+        for (const auto& sub_reader : *col_reader->sub_readers()) {
+            total_mem_footprint += sub_reader->total_mem_footprint();
+        }
+    }
+    column->append_datum(int64_t(total_mem_footprint));
     return Status::OK();
 }
 
@@ -490,30 +496,40 @@ Status SegmentMetaCollecter::_collect_column_compressed_size(ColumnId cid, Colum
     }
     // Create a lightweight iterator to access page pointers
     ASSIGN_OR_RETURN(auto iter, col_reader->new_iterator());
-    ColumnIteratorOptions iter_opts;
-    iter_opts.check_dict_encoding = false;
-    iter_opts.read_file = _read_file.get();
-    iter_opts.stats = &_stats;
-    RETURN_IF_ERROR(iter->init(iter_opts));
 
-    int64_t total_bytes = 0;
-    // Access reader to locate number of pages and accumulate sizes
-    // Seek to first to ensure ordinal index is loaded
-    RETURN_IF_ERROR(iter->seek_to_first());
-    // We don't have direct API to iterate pages count from iterator here,
-    // so compute by probing page indices using page ranges from iterator's reader
-    // Use underlying ColumnReader's ordinal index accessors via seek_by_page_index
-    // Estimate: binary search last page index by increasing until fail
-    int page_index = 0;
-    while (true) {
-        OrdinalPageIndexIterator piter;
-        Status st = col_reader->seek_by_page_index(page_index, &piter);
-        if (!st.ok()) break;
-        auto pp = piter.page();
-        total_bytes += static_cast<int64_t>(pp.size);
-        page_index++;
+    auto read_compressed_size = [&](ColumnReader* col_reader, ColumnIterator* iter) -> StatusOr<int64_t> {
+        ColumnIteratorOptions iter_opts;
+        iter_opts.check_dict_encoding = false;
+        iter_opts.read_file = _read_file.get();
+        iter_opts.stats = &_stats;
+        RETURN_IF_ERROR(iter->init(iter_opts));
+
+        int64_t total_bytes = 0;
+        // Access reader to locate number of pages and accumulate sizes
+        // Seek to first to ensure ordinal index is loaded
+        RETURN_IF_ERROR(iter->seek_to_first());
+        int page_index = 0;
+        while (true) {
+            OrdinalPageIndexIterator piter;
+            Status st = col_reader->seek_by_page_index(page_index, &piter);
+            if (!st.ok()) break;
+            auto pp = piter.page();
+            total_bytes += static_cast<int64_t>(pp.size);
+            page_index++;
+        }
+        return total_bytes;
+    };
+
+    ASSIGN_OR_RETURN(int64_t total, read_compressed_size(col_reader, iter.get()));
+    if (col_reader->sub_readers() != nullptr) {
+        for (const auto& sub_reader : *col_reader->sub_readers()) {
+            ASSIGN_OR_RETURN(auto sub_iter, sub_reader->new_iterator());
+            ASSIGN_OR_RETURN(auto sub_total, read_compressed_size(sub_reader.get(), sub_iter.get()));
+            total += sub_total;
+        }
     }
-    column->append_datum(total_bytes);
+
+    column->append_datum(total);
     return Status::OK();
 }
 
