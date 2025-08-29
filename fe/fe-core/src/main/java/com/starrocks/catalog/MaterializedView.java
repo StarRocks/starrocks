@@ -21,6 +21,7 @@ import com.google.common.base.Strings;
 import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+import com.google.common.collect.Range;
 import com.google.common.collect.Sets;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.analysis.DescriptorTable.ReferencedPartitionInfo;
@@ -553,6 +554,12 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
     // and in each round of checkpoint
     private boolean reloaded = false;
 
+    // This is used to store the virtual partition of union expressions.
+    private transient Map<String, Range<PartitionKey>> virtualPartitionMapping;
+    private transient List<Expr> unionOtherOutputExpression;
+    @SerializedName(value = "serializedUnionOtherOutputExprs")
+    private List<ExpressionSerializedObject> serializedUnionOtherOutputExprs;
+
     public MaterializedView() {
         super(TableType.MATERIALIZED_VIEW);
         this.tableProperty = null;
@@ -789,6 +796,23 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
 
     public void setReloaded(boolean reloaded) {
         this.reloaded = reloaded;
+    }
+
+    public List<Expr> getUnionOtherOutputExpression() {
+        return unionOtherOutputExpression;
+    }
+
+    public void setUnionOtherOutputExpression(List<Expr> unionOtherOutputExpression) {
+        this.unionOtherOutputExpression = unionOtherOutputExpression;
+    }
+
+    public Map<String, Range<PartitionKey>> getVirtualPartitionMapping() {
+        return virtualPartitionMapping;
+    }
+
+    public void setVirtualPartitionMapping(
+            Map<String, Range<PartitionKey>> virtualPartitionMapping) {
+        this.virtualPartitionMapping = virtualPartitionMapping;
     }
 
     /**
@@ -1946,6 +1970,15 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
                 }
             }
         }
+        this.serializedUnionOtherOutputExprs = new ArrayList<>();
+        if (unionOtherOutputExpression != null) {
+            for (Expr unionOtherOutputExpr : unionOtherOutputExpression) {
+                if (unionOtherOutputExpr != null) {
+                    serializedUnionOtherOutputExprs.add(
+                            new ExpressionSerializedObject(unionOtherOutputExpr.toSql()));
+                }
+            }
+        }
     }
 
     @Override
@@ -1989,6 +2022,18 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
                     SlotRef partitionSlotRef = getMvPartitionSlotRef(partitionExpr);
                     partitionExprMaps.put(partitionExpr, partitionSlotRef);
                 }
+            }
+        }
+
+        if (serializedUnionOtherOutputExprs != null) {
+            unionOtherOutputExpression = new ArrayList<>();
+            for (ExpressionSerializedObject expressionSql : serializedUnionOtherOutputExprs) {
+                Expr unionOtherOutputExpr = parsePartitionExpr(expressionSql.getExpressionSql());
+                if (unionOtherOutputExpr == null) {
+                    LOG.warn("parse union other output expr failed, sql: {}", expressionSql.getExpressionSql());
+                    continue;
+                }
+                unionOtherOutputExpression.add(unionOtherOutputExpr);
             }
         }
     }
