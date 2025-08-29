@@ -2732,6 +2732,7 @@ public class PlanFragmentBuilder {
             rightFragment.getPlanRoot().forceCollectExecStats();
             this.currentExecGroup = leftExecGroup;
 
+            Map<SlotId, Expr> commonSubExprMap = buildCommonSubExprMap(node.getPredicateCommonOperators(), context);
             List<Expr> conjuncts = extractConjuncts(node.getPredicate(), context);
             List<Expr> joinOnConjuncts = extractConjuncts(node.getOnPredicate(), context);
             List<Expr> probePartitionByExprs = Lists.newArrayList();
@@ -2749,6 +2750,7 @@ public class PlanFragmentBuilder {
             NestLoopJoinNode joinNode = new NestLoopJoinNode(context.getNextNodeId(),
                     leftFragment.getPlanRoot(), rightFragment.getPlanRoot(),
                     null, node.getJoinType(), Lists.newArrayList(), joinOnConjuncts);
+            joinNode.setCommonSlotMap(commonSubExprMap);
 
             joinNode.setLimit(node.getLimit());
             joinNode.computeStatistics(optExpr.getStatistics());
@@ -2863,6 +2865,7 @@ public class PlanFragmentBuilder {
             List<Expr> eqJoinConjuncts = joinExpr.eqJoinConjuncts;
             List<Expr> otherJoinConjuncts = joinExpr.otherJoin;
             List<Expr> conjuncts = joinExpr.conjuncts;
+            Map<SlotId, Expr> commonSlotMap = joinExpr.commonSubOperatorMap;
 
             setNullableForJoin(joinOperator, leftFragment, rightFragment, context);
 
@@ -2880,6 +2883,7 @@ public class PlanFragmentBuilder {
                         joinNode.setUkfkProperty(joinProperty);
                     }
                 }
+                joinNode.setCommonSlotMap(commonSlotMap);
                 // set skew join, this is used by runtime filter
                 PhysicalHashJoinOperator physicalHashJoinOperator = (PhysicalHashJoinOperator) node;
                 boolean isSkewJoin = physicalHashJoinOperator.getSkewColumn() != null;
@@ -3414,23 +3418,8 @@ public class PlanFragmentBuilder {
 
             TupleDescriptor tupleDescriptor = context.getDescTbl().createTupleDescriptor();
 
-            Map<SlotId, Expr> commonSubOperatorMap = Maps.newHashMap();
-            if (filter.getPredicateCommonOperators() != null) {
-                for (Map.Entry<ColumnRefOperator, ScalarOperator> entry : filter.getPredicateCommonOperators().entrySet()) {
-                    Expr expr = ScalarOperatorToExpr.buildExecExpression(entry.getValue(),
-                            new ScalarOperatorToExpr.FormatterContext(context.getColRefToExpr(),
-                                    filter.getPredicateCommonOperators()));
+            Map<SlotId, Expr> commonSubOperatorMap = buildCommonSubExprMap(filter.getPredicateCommonOperators(), context);
 
-                    commonSubOperatorMap.put(new SlotId(entry.getKey().getId()), expr);
-
-                    SlotDescriptor slotDescriptor =
-                            context.getDescTbl().addSlotDescriptor(tupleDescriptor, new SlotId(entry.getKey().getId()));
-                    slotDescriptor.setIsNullable(expr.isNullable());
-                    slotDescriptor.setIsMaterialized(false);
-                    slotDescriptor.setType(expr.getType());
-                    context.getColRefToExpr().put(entry.getKey(), new SlotRef(entry.getKey().toString(), slotDescriptor));
-                }
-            }
 
             List<Expr> predicates = Utils.extractConjuncts(filter.getPredicate()).stream()
                     .map(d -> ScalarOperatorToExpr.buildExecExpression(d,
@@ -3648,12 +3637,38 @@ public class PlanFragmentBuilder {
             public final List<Expr> eqJoinConjuncts;
             public final List<Expr> otherJoin;
             public final List<Expr> conjuncts;
+            public final Map<SlotId, Expr> commonSubOperatorMap;
 
-            public JoinExprInfo(List<Expr> eqJoinConjuncts, List<Expr> otherJoin, List<Expr> conjuncts) {
+            public JoinExprInfo(List<Expr> eqJoinConjuncts, List<Expr> otherJoin, List<Expr> conjuncts,
+                                Map<SlotId, Expr> commonSubOperatorMap) {
                 this.eqJoinConjuncts = eqJoinConjuncts;
                 this.otherJoin = otherJoin;
                 this.conjuncts = conjuncts;
+                this.commonSubOperatorMap = commonSubOperatorMap;
             }
+
+        }
+
+        private Map<SlotId, Expr> buildCommonSubExprMap(
+                Map<ColumnRefOperator, ScalarOperator> commonSubOperators, ExecPlan context) {
+            Map<SlotId, Expr> commonSubExprMap = Maps.newHashMap();
+            if (commonSubOperators != null && !commonSubOperators.isEmpty()) {
+                TupleDescriptor tupleDescriptor = context.getDescTbl().createTupleDescriptor();
+                for (Map.Entry<ColumnRefOperator, ScalarOperator> entry : commonSubOperators.entrySet()) {
+                    Expr expr = ScalarOperatorToExpr.buildExecExpression(entry.getValue(),
+                            new ScalarOperatorToExpr.FormatterContext(context.getColRefToExpr(), commonSubOperators));
+
+                    commonSubExprMap.put(new SlotId(entry.getKey().getId()), expr);
+
+                    SlotDescriptor slotDescriptor =
+                            context.getDescTbl().addSlotDescriptor(tupleDescriptor, new SlotId(entry.getKey().getId()));
+                    slotDescriptor.setIsNullable(expr.isNullable());
+                    slotDescriptor.setIsMaterialized(false);
+                    slotDescriptor.setType(expr.getType());
+                    context.getColRefToExpr().put(entry.getKey(), new SlotRef(entry.getKey().toString(), slotDescriptor));
+                }
+            }
+            return commonSubExprMap;
         }
 
         private JoinExprInfo buildJoinExpr(OptExpression optExpr, ExecPlan context) {
@@ -3699,13 +3714,18 @@ public class PlanFragmentBuilder {
             List<Expr> otherJoinConjuncts = otherJoin.stream().map(e -> ScalarOperatorToExpr.buildExecExpression(e,
                             new ScalarOperatorToExpr.FormatterContext(context.getColRefToExpr())))
                     .collect(Collectors.toList());
+            Map<SlotId, Expr> commonSubExprMap = Maps.newHashMap();
+            if (optExpr.getOp() instanceof PhysicalJoinOperator) {
+                PhysicalJoinOperator joinOperator = (PhysicalJoinOperator) optExpr.getOp();
+                commonSubExprMap = buildCommonSubExprMap(joinOperator.getPredicateCommonOperators(), context);
+            }
 
             List<ScalarOperator> predicates = Utils.extractConjuncts(predicate);
             List<Expr> conjuncts = predicates.stream().map(e -> ScalarOperatorToExpr.buildExecExpression(e,
                             new ScalarOperatorToExpr.FormatterContext(context.getColRefToExpr())))
                     .collect(Collectors.toList());
 
-            return new JoinExprInfo(eqJoinConjuncts, otherJoinConjuncts, conjuncts);
+            return new JoinExprInfo(eqJoinConjuncts, otherJoinConjuncts, conjuncts, commonSubExprMap);
         }
 
         // TODO(murphy) consider state distribution

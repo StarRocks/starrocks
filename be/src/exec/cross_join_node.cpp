@@ -88,6 +88,13 @@ Status CrossJoinNode::init(const TPlanNode& tnode, RuntimeState* state) {
                 _build_runtime_filters.emplace_back(rf_desc);
             }
         }
+        if (tnode.nestloop_join_node.__isset.common_slot_map) {
+            for (const auto& [key, val] : tnode.nestloop_join_node.common_slot_map) {
+                ExprContext* context;
+                RETURN_IF_ERROR(Expr::create_expr_tree(_pool, val, &context, state, true));
+                _common_expr_ctxs.insert({key, context});
+            }
+        }
         return Status::OK();
     }
 
@@ -608,10 +615,10 @@ std::vector<std::shared_ptr<pipeline::OperatorFactory>> CrossJoinNode::_decompos
 
     OpFactories left_ops = _children[0]->decompose_to_pipeline(context);
     // communication with CrossJoinRight through shared_data.
-    auto left_factory =
-            std::make_shared<ProbeFactory>(context->next_operator_id(), id(), _row_descriptor, child(0)->row_desc(),
-                                           child(1)->row_desc(), _sql_join_conjuncts, std::move(_join_conjuncts),
-                                           std::move(_conjunct_ctxs), std::move(cross_join_context), _join_op);
+    auto left_factory = std::make_shared<ProbeFactory>(
+            context->next_operator_id(), id(), _row_descriptor, child(0)->row_desc(), child(1)->row_desc(),
+            _sql_join_conjuncts, std::move(_join_conjuncts), std::move(_conjunct_ctxs), std::move(_common_expr_ctxs),
+            std::move(cross_join_context), _join_op);
     // Initialize OperatorFactory's fields involving runtime filters.
     this->init_runtime_filter_for_operator(left_factory.get(), context, rc_rf_probe_collector);
     if (!context->is_colocate_group()) {
