@@ -19,17 +19,13 @@ import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
-import com.starrocks.analysis.BinaryPredicate;
-import com.starrocks.analysis.BinaryType;
-import com.starrocks.analysis.BoolLiteral;
 import com.starrocks.analysis.ColumnPosition;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.FunctionCallExpr;
 import com.starrocks.analysis.IntLiteral;
-import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.analysis.OrderByElement;
+import com.starrocks.analysis.ProcedureArgument;
 import com.starrocks.analysis.SlotRef;
-import com.starrocks.analysis.StringLiteral;
 import com.starrocks.analysis.TableName;
 import com.starrocks.analysis.TypeDef;
 import com.starrocks.catalog.AggregateType;
@@ -60,7 +56,8 @@ import com.starrocks.common.util.DynamicPartitionUtil;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.common.util.WriteQuorum;
-import com.starrocks.connector.iceberg.IcebergTableOperation;
+import com.starrocks.connector.iceberg.procedure.IcebergTableProcedure;
+import com.starrocks.connector.iceberg.procedure.NamedArgument;
 import com.starrocks.lake.LakeTable;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
@@ -129,6 +126,8 @@ import org.apache.commons.collections4.CollectionUtils;
 import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -1547,88 +1546,100 @@ public class AlterTableClauseAnalyzer implements AstVisitorExtendInterface<Void,
     public Void visitAlterTableOperationClause(AlterTableOperationClause clause, ConnectContext context) {
         String tableOperationName = clause.getTableOperationName();
         if (tableOperationName == null) {
-            throw new SemanticException("Table operation name should be null");
+            throw new SemanticException("Table operation name should not be null");
         }
 
-        List<ConstantOperator> args = new ArrayList<>();
-        for (Expr expr : clause.getExprs()) {
+        if (!(table instanceof IcebergTable icebergTable)) {
+            throw new SemanticException("Alter table operation is only supported for Iceberg tables");
+        }
+
+        IcebergTableProcedure icebergTableProcedure = icebergTable.getTableProcedure(tableOperationName);
+        if (icebergTableProcedure == null) {
+            throw new SemanticException("Unknown table operation: " + tableOperationName);
+        }
+        clause.setTableProcedure(icebergTableProcedure);
+
+        // check named and unnamed arguments are mixing used.
+        List<ProcedureArgument> tableOperationArgs = clause.getArguments();
+        boolean anyNamedArgs = tableOperationArgs.stream().anyMatch(arg -> arg.getName().isPresent());
+        boolean allNamedArgs = tableOperationArgs.stream().allMatch(arg -> arg.getName().isPresent());
+        if (anyNamedArgs && !allNamedArgs) {
+            throw new SemanticException("Mixing named and positional arguments is not allowed");
+        }
+        List<ProcedureArgument> lowerTableOperationArgs = tableOperationArgs.stream().map(arg -> {
+            if (arg.getName().isPresent()) {
+                return new ProcedureArgument(arg.getName().get().toLowerCase(), arg.getValue());
+            } else {
+                return arg;
+            }
+        }).toList();
+
+        List<NamedArgument> procedureArgs = icebergTableProcedure.getArguments();
+        Map<String, NamedArgument> tableProcedureArgumentMap = new HashMap<>();
+        for (NamedArgument procedureArg : procedureArgs) {
+            tableProcedureArgumentMap.put(procedureArg.getName(), procedureArg);
+        }
+
+        // convert table operation arguments to named arguments
+        LinkedHashMap<String, ProcedureArgument> tableOperationNamedArgs = new LinkedHashMap<>();
+        for (int index = 0; index < lowerTableOperationArgs.size(); ++index) {
+            ProcedureArgument tableOperationArgument = lowerTableOperationArgs.get(index);
+            if (tableOperationArgument.getName().isPresent()) {
+                String name = tableOperationArgument.getName().get();
+                NamedArgument argument = tableProcedureArgumentMap.get(name);
+                if (argument == null) {
+                    throw new SemanticException("Unknown argument name: " + name);
+                }
+                if (tableOperationNamedArgs.put(name, tableOperationArgument) != null) {
+                    throw new SemanticException("Duplicate argument name: " + name);
+                }
+            } else if (index < procedureArgs.size()) {
+                tableOperationNamedArgs.put(procedureArgs.get(index).getName(), tableOperationArgument);
+            } else {
+                throw new SemanticException("Too many arguments provided, expected at most %d, got %d",
+                        procedureArgs.size(), lowerTableOperationArgs.size());
+            }
+        }
+
+        // check if all required arguments are provided
+        procedureArgs.forEach(arg -> {
+            if (arg.isRequired() && !tableOperationNamedArgs.containsKey(arg.getName())) {
+                throw new SemanticException("Missing required argument: " + arg.getName());
+            }
+        });
+
+        // check arguments values
+        Map<String, ConstantOperator> constantArgs = new HashMap<>();
+        for (Map.Entry<String, ProcedureArgument> entry : tableOperationNamedArgs.entrySet()) {
+            Expr tableOperationArgumentValue = entry.getValue().getValue();
+            NamedArgument procedureArgument = tableProcedureArgumentMap.get(entry.getKey());
+            // check call argument is constant
             ScalarOperator result;
             try {
-                if (IcebergTableOperation.fromString(clause.getTableOperationName())
-                        == IcebergTableOperation.REWRITE_DATA_FILES) {
-                    if (!(expr instanceof BinaryPredicate)) {
-                        throw new SemanticException("Invalid parameter format: expected 'param = value', but got: " + expr);
+                Scope scope = new Scope(RelationId.anonymous(), new RelationFields());
+                ExpressionAnalyzer.analyzeExpression(tableOperationArgumentValue, new AnalyzeState(), scope, context);
+                ExpressionMapping expressionMapping = new ExpressionMapping(scope);
+                result = SqlToScalarOperatorTranslator.translate(tableOperationArgumentValue, expressionMapping,
+                        new ColumnRefFactory());
+                if (result instanceof ConstantOperator resConstantOperator) {
+                    // check if constant argument type is compatible with procedure argument type
+                    if (resConstantOperator.castTo(procedureArgument.getType()).isEmpty()) {
+                        throw new SemanticException("Argument '%s' has invalid type %s, expected %s",
+                                entry.getKey(), result.getType(), procedureArgument.getType());
                     }
-                    BinaryPredicate binExpr = (BinaryPredicate) expr;
-                    if (binExpr.getOp() != BinaryType.EQ) {
-                        throw new SemanticException("Invalid expression:" +
-                                "only equality comparisons ('param = value') are supported, but got: " + expr);
-                    } else if (!(binExpr.getChild(0) instanceof LiteralExpr) ||
-                            !(binExpr.getChild(1) instanceof LiteralExpr)) {
-                        throw new SemanticException("Invalid expression:" +
-                                "both sides of the predicate must be literals, but got: " + expr);
-                    }
-                    LiteralExpr constExpr = (LiteralExpr) binExpr.getChild(0);
-                    if (!(constExpr instanceof StringLiteral)) {
-                        throw new SemanticException("Invalid expression:" +
-                                "the left side of the predicate must be a string literal, but got: " + constExpr);
-                    }
-                    IcebergTableOperation.RewriteFileOption option =
-                            IcebergTableOperation.RewriteFileOption.fromString(((StringLiteral) constExpr).getValue());
-                    LiteralExpr valExpr = (LiteralExpr) binExpr.getChild(1);
-                    switch (option) {
-                        case REWRITE_ALL:
-                            if (valExpr instanceof BoolLiteral) {
-                                clause.setRewriteAll(((BoolLiteral) valExpr).getValue());
-                            } else {
-                                throw new SemanticException("Rewrite all arg should be boolean value");
-                            }
-                            break;
-                        case MIN_FILE_SIZE_BYTES:
-                            if (valExpr instanceof IntLiteral) {
-                                long size = ((IntLiteral) valExpr).getValue();
-                                if (size < 0) {
-                                    throw new SemanticException("min file size arg should be non-negative integer");
-                                }
-                                clause.setMinFileSizeBytes(size);
-                            } else {
-                                throw new SemanticException("min file size arg should be integer value");
-                            }
-                            break;
-                        case BATCH_SIZE:
-                            if (valExpr instanceof IntLiteral) {
-                                long size = ((IntLiteral) valExpr).getValue();
-                                if (size < 0) {
-                                    throw new SemanticException("batch size arg should be non-negative integer");
-                                }
-                                clause.setBatchSize(((IntLiteral) valExpr).getValue());
-                            } else {
-                                throw new SemanticException("min file size arg should be integer value");
-                            }
-                            break;
-                        default:
-                            throw new SemanticException("Unknown key:" + expr);
-                    }
+                    constantArgs.put(entry.getKey(), resConstantOperator);
                 } else {
-                    Scope scope = new Scope(RelationId.anonymous(), new RelationFields());
-                    ExpressionAnalyzer.analyzeExpression(expr, new AnalyzeState(), scope, context);
-                    ExpressionMapping expressionMapping = new ExpressionMapping(scope);
-                    result = SqlToScalarOperatorTranslator.translate(expr, expressionMapping, new ColumnRefFactory());
-                    if (result instanceof ConstantOperator) {
-                        args.add((ConstantOperator) result);
-                    }
+                    throw new SemanticException("Argument '%s' must be a constant, got %s",
+                            entry.getKey(), result);
                 }
             } catch (Exception e) {
-                throw new SemanticException("Failed to resolve table operation args %s. msg: %s", expr, e.getMessage());
+                throw new SemanticException("Failed to resolve table procedure args: %s. msg: %s, " +
+                        "expected const argument", tableOperationArgumentValue, e.getMessage());
             }
         }
+        clause.setAnalyzedArgs(constantArgs);
 
         if (clause.getWhere() != null) {
-            if (!(table instanceof IcebergTable)) {
-                throw new SemanticException("rewrite table is not an iceberg table");
-            }
-            IcebergTable icebergTable = (IcebergTable) table;
-
             ColumnRefFactory columnRefFactory = new ColumnRefFactory();
             List<ColumnRefOperator> columnRefOperators = table.getBaseSchema()
                     .stream()
@@ -1649,8 +1660,6 @@ public class AlterTableClauseAnalyzer implements AstVisitorExtendInterface<Void,
                 throw new SemanticException("Partition filter contains columns that are not partition columns");
             }
         }
-
-        clause.setArgs(args);
         return null;
     }
 }

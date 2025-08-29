@@ -1163,7 +1163,7 @@ tableOperationClause
     ;
 
 tableOperationArg
-    : functionCall (WHERE expression)?
+    : identifier '(' (argumentList)? ')' (WHERE expression)?
     ;
 
 tagOptions
