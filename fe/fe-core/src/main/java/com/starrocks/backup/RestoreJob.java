@@ -1678,7 +1678,7 @@ public class RestoreJob extends AbstractJob {
                                 LOG.warn(" drop materialized view {} partitions because doAfterRestore failed",
                                         olapTable.getName());
                                 MaterializedView mv = (MaterializedView) olapTable;
-                                MaterializedViewExceptions.inactiveReasonForMetadataTableRestoreFailed(mv.getName());
+                                MaterializedViewExceptions.inactiveReasonForMetadataTableRestoreCorrupted(mv.getName());
                                 // drop all partitions
                                 Collection<Partition> partitions = mv.getPartitions();
                                 for (Partition partition : partitions) {

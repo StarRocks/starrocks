@@ -355,7 +355,7 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
                         recreateOlapTableTabletInvertIndex(dbId, mv, invertedIndex);
                     } catch (Exception e) {
                         LOG.error("recreate inverted index for metadata table {} failed", mv.getName(), e);
-                        mv.setInactiveAndReason(MaterializedViewExceptions.inactiveReasonForMetadataTableRestoreFailed(
+                        mv.setInactiveAndReason(MaterializedViewExceptions.inactiveReasonForMetadataTableRestoreCorrupted(
                                 mv.getName()));
                     }
                 } else {
@@ -373,10 +373,10 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
             long partitionId = partition.getParentId();
             TStorageMedium medium = olapTable.getPartitionInfo().getDataProperty(
                     partitionId).getStorageMedium();
+            long physicalPartitionId = partition.getId();
             for (MaterializedIndex index : partition
                     .getMaterializedIndices(MaterializedIndex.IndexExtState.ALL)) {
                 long indexId = index.getId();
-                long physicalPartitionId = partition.getId();
                 TabletMeta tabletMeta = new TabletMeta(dbId, tableId, physicalPartitionId,
                         indexId, medium, olapTable.isCloudNativeTableOrMaterializedView());
                 for (Tablet tablet : index.getTablets()) {
