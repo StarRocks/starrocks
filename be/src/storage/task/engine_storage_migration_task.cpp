@@ -611,22 +611,23 @@ void EngineStorageMigrationTask::_generate_new_header(DataDir* store, const uint
     // remove old meta after the new tablet is loaded successfully
 }
 
-Status EngineStorageMigrationTask::_copy_index_and_data_files(
-        const string& schema_hash_path, const TabletSharedPtr& ref_tablet,
-        const std::vector<RowsetSharedPtr>& consistent_rowsets) const {
-    Status status = Status::OK();
+Status EngineStorageMigrationTask::_copy_index_and_data_files(const string& schema_hash_path,
+                                                              const TabletSharedPtr& ref_tablet,
+                                                              const std::vector<RowsetSharedPtr>& consistent_rowsets) {
+    MonotonicStopWatch watch;
+    watch.start();
     for (const auto& rs : consistent_rowsets) {
         bool bg_worker_stopped = StorageEngine::instance()->bg_worker_stopped();
         if (bg_worker_stopped) {
-            status = Status::InternalError("Process is going to quit.");
-            break;
+            return Status::InternalError("Process is going to quit.");
         }
-        status = rs->copy_files_to(ref_tablet->data_dir()->get_meta(), schema_hash_path);
-        if (!status.ok()) {
-            break;
-        }
+
+        ASSIGN_OR_RETURN(auto copy_size, rs->copy_files_to(ref_tablet->data_dir()->get_meta(), schema_hash_path));
+        _copy_size += copy_size;
     }
-    return status;
+    uint64_t total_time_ms = watch.elapsed_time() / 1000 / 1000;
+    _copy_time_ms = (int64_t)total_time_ms;
+    return Status::OK();
 }
 
 } // namespace starrocks
