@@ -141,7 +141,7 @@ void run_publish_version_task(ThreadPoolToken* token, const TPublishVersionReque
                         tablet_span->SetAttribute("tablet_id", task.tablet_id);
                         tablet_span->SetAttribute("version", task.version);
                         if (!is_replication_txn && !task.rowset) {
-                            task.st = Status::NotFound(fmt::format("rowset not found  of tablet: {}, txn_id: {}",
+                            task.st = Status::NotFound(fmt::format("rowset not found of tablet: {}, txn_id: {}",
                                                                    task.tablet_id, task.txn_id));
                             LOG(WARNING) << task.st;
                             return;

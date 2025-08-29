@@ -454,7 +454,7 @@ TEST_F(PublishVersionTaskTest, test_publish_version_cancellation) {
                 cv.wait(lk, [&] { return release_blocker; });
             },
             [&]() {
-                // no-op for blocker cancel
+                // Cancel is a no-op since the blocker task is released via condition variable, not by cancellation.
             });
     ASSERT_TRUE(pool->submit(std::move(blocker)).ok());
 
