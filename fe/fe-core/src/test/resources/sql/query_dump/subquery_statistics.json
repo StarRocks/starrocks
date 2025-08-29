@@ -97,6 +97,7 @@
       "activity_id": "[779.0, 128763.0, 6.0638523654077434E-5, 4.0, 98347.0] ESTIMATE"
     }
   },
+  "histogram_statistics": {},
   "be_number": 3,
   "be_core_stat": {
     "numOfHardwareCoresPerBe": "{\"10003\":4,\"10004\":4,\"10005\":4}",

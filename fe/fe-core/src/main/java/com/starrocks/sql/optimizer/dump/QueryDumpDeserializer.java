@@ -113,6 +113,15 @@ public class QueryDumpDeserializer implements JsonDeserializer<QueryDumpInfo> {
                 dumpInfo.addTableStatistics(tableKey, columnKey, ColumnStatistic.buildFrom(columnStatistic).build());
             }
         }
+        // histogram statistics
+        JsonObject tableColumnHistogramStatistics = dumpJsonObject.getAsJsonObject("histogram_statistics");
+        for (String tableKey : tableColumnHistogramStatistics.keySet()) {
+            JsonObject columnHistogramStatistics = tableColumnHistogramStatistics.get(tableKey).getAsJsonObject();
+            for (String columnKey : columnHistogramStatistics.keySet()) {
+                String columnStatistic = columnHistogramStatistics.get(columnKey).getAsString();
+                dumpInfo.addTableHistogramStatistics(tableKey, columnKey, ColumnStatistic.buildFrom(columnStatistic).build());
+            }
+        }
         // BE number
         int beNum = dumpJsonObject.get("be_number").getAsInt();
         dumpInfo.setBeNum(beNum);

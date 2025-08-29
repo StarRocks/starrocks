@@ -151,6 +151,7 @@
       "reship_fba_product_sale_refunds": "[0.0, 0.0, 0.0, 8.0, 1.0] ESTIMATE"
     }
   },
+  "histogram_statistics": {},
   "be_number": 3,
   "be_core_stat": {
     "numOfHardwareCoresPerBe": "{\"32068493\":16,\"32068492\":16,\"32068494\":16}",
