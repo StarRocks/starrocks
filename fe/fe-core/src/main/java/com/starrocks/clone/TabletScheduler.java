@@ -1839,7 +1839,7 @@ public class TabletScheduler extends FrontendDaemon {
 
         Preconditions.checkState(tabletCtx.getState() == TabletSchedCtx.State.RUNNING, tabletCtx.getState());
         try {
-            tabletCtx.finishCloneTask(cloneTask, request);
+            tabletCtx.finishCloneTask(cloneTask, request, stat);
         } catch (SchedException e) {
             tabletCtx.increaseFailedRunningCounter();
             tabletCtx.setErrMsg(e.getMessage());
@@ -2160,8 +2160,16 @@ public class TabletScheduler extends FrontendDaemon {
         return pendingTablets.size();
     }
 
+    public synchronized long getPendingNum(Type type) {
+        return pendingTablets.stream().filter(t -> t.getType() == type).count();
+    }
+
     public synchronized int getRunningNum() {
         return runningTablets.size();
+    }
+
+    public synchronized long getRunningNum(Type type) {
+        return runningTablets.values().stream().filter(t -> t.getType() == type).count();
     }
 
     public synchronized int getHistoryNum() {
