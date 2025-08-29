@@ -33,12 +33,16 @@ Status JsonDocumentStreamParser::parse(char* data, size_t len, size_t allocated)
         _data = data;
         _len = len;
 
+        LOG(ERROR) << "LXH: PARSE_1: " << len;
         _doc_stream = _parser->iterate_many(
                 data, len, config::enable_dynamic_batch_size_for_json_parse_many ? std::min(_batch_size, _len) : _len);
 
+        LOG(ERROR) << "LXH: PARSE_2: " << len;
         _doc_stream_itr = _doc_stream.begin();
+        LOG(ERROR) << "LXH: PARSE_3: " << len;
 
     } catch (simdjson::simdjson_error& e) {
+        LOG(ERROR) << "LXH: PARSE_4: " << e.error() << ":" << e.what();
         auto err_msg = strings::Substitute("Failed to parse json as document stream. error: $0",
                                            simdjson::error_message(e.error()));
         return status_from_json_parse_error(err_msg);
@@ -79,7 +83,9 @@ Status JsonDocumentStreamParser::_get_current_impl(simdjson::ondemand::object* r
     while (true) {
         try {
             if (_doc_stream_itr != _doc_stream.end()) {
+                LOG(ERROR) << "LXH: IMPL: 1.1";
                 simdjson::ondemand::document_reference doc = *_doc_stream_itr;
+                LOG(ERROR) << "LXH: IMPL: 1.2";
                 // simdjson version 3.9.4 and JsonFunctions::to_json_string may crash when json is invalid.
                 // TODO: add value in error message
                 if (doc.type() == simdjson::ondemand::json_type::array) {
@@ -91,7 +97,9 @@ Status JsonDocumentStreamParser::_get_current_impl(simdjson::ondemand::object* r
                     return status_from_json_parse_error("The value should be object type in json document stream");
                 }
 
+                LOG(ERROR) << "LXH: IMPL: 2";
                 _curr = doc.get_object();
+                LOG(ERROR) << "LXH: IMPL: 3";
                 *row = _curr;
                 _curr_ready = true;
 
@@ -103,9 +111,11 @@ Status JsonDocumentStreamParser::_get_current_impl(simdjson::ondemand::object* r
 
                 return Status::OK();
             }
+            LOG(ERROR) << "LXH: IMPL: 4";
             _left_bytes = _doc_stream.truncated_bytes();
             return Status::EndOfFile("all documents of the stream are iterated");
         } catch (simdjson::simdjson_error& e) {
+            LOG(ERROR) << "LXH: IMPL: " << e.error() << ":" << e.what();
             /*
              * The worst-case here is the exception is not cause by the size of batch_size
              * and the following function will try to reset the batch_size until _len - _last_begin_offset.
@@ -127,6 +137,7 @@ Status JsonDocumentStreamParser::get_current(simdjson::ondemand::object* row) no
     try {
         return _get_current_impl(row);
     } catch (simdjson::simdjson_error& e) {
+        LOG(ERROR) << "LXH: ERROR: " << e.error() << ":" << e.what();
         std::string err_msg;
         if (e.error() == simdjson::CAPACITY) {
             // It's necessary to tell the user when they try to load json array whose payload size is beyond the simdjson::ondemand::parser's buffer.

@@ -1733,4 +1733,5 @@ CONF_mInt64(two_level_memory_threshold, "-1");
 // 128M
 CONF_mInt64(json_read_buf_size, "134217728");
 CONF_mBool(json_scanner_use_jni, "false");
+CONF_mBool(topn_passthrough, "false");
 } // namespace starrocks::config

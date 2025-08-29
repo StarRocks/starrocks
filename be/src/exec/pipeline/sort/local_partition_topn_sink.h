@@ -49,7 +49,7 @@ public:
 
     Status set_finishing(RuntimeState* state) override;
 
-    bool releaseable() const override { return true; }
+    bool releaseable() const override { return config::topn_passthrough; }
     void set_execute_mode(int performance_level) override;
 
 private:

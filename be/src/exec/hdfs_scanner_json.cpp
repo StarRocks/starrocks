@@ -98,7 +98,7 @@ Status HdfsScannerJsonReader::_construct_row_without_jsonpath(simdjson::ondemand
                     LOG(ERROR) << "LXH: key not found: " << key;
                     key = iter->second;
                 } else {
-                    LOG(ERROR) << "LXH: key found: " << key;
+                    LOG(ERROR) << "LXH: key not found: " << key;
                 }
             }
             if (_prev_parsed_position.size() > key_index && _prev_parsed_position[key_index].key == key) {
@@ -185,7 +185,7 @@ bool parseToMap(const std::string& str1, std::string& str2,
     }
 
     // 存入map
-    boost::algorithm::to_lower(str2);
+    //boost::algorithm::to_lower(str2);
     result[str2] = key;
     return true;
 }
@@ -354,6 +354,7 @@ HdfsJsonScanner::HdfsJsonScanner(std::map<std::string, std::string> name_map) {
     }
     for (const auto& item : _old_name_map) {
         _name_map[item.first] = item.second;
+        LOG(ERROR) << "LXH: MAP: " << item.first << ":" << item.second;
     }
 }
 
