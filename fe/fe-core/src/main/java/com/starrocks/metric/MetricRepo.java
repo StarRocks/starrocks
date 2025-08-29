@@ -48,6 +48,8 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TabletInvertedIndex;
+import com.starrocks.clone.BalanceStat;
+import com.starrocks.clone.TabletSchedCtx;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.StarRocksException;
@@ -323,16 +325,6 @@ public final class MetricRepo {
             }
         };
         STARROCKS_METRIC_REGISTER.addMetric(metaLogCount);
-
-        // scheduled tablet num
-        Metric<Long> scheduledTabletNum = new LeaderAwareGaugeMetricLong(
-                "scheduled_tablet_num", MetricUnit.NOUNIT, "number of tablets being scheduled") {
-            @Override
-            public Long getValueLeader() {
-                return (long) GlobalStateMgr.getCurrentState().getTabletScheduler().getTotalNum();
-            }
-        };
-        STARROCKS_METRIC_REGISTER.addMetric(scheduledTabletNum);
 
         // routine load jobs
         for (RoutineLoadJob.JobState state : RoutineLoadJob.JobState.values()) {
@@ -631,6 +623,9 @@ public final class MetricRepo {
         // init system metrics
         initSystemMetrics();
 
+        // init clone metrics
+        initCloneMetrics();
+
         updateMetrics();
         hasInit = true;
 
@@ -683,6 +678,111 @@ public final class MetricRepo {
         };
         tpcOutSegs.addLabel(new MetricLabel("name", "tcp_out_segs"));
         STARROCKS_METRIC_REGISTER.addMetric(tpcOutSegs);
+    }
+
+    private static void initCloneMetrics() {
+        // gauge metrics
+        // scheduled tablet num
+        Metric<Long> scheduledTabletNum = new LeaderAwareGaugeMetricLong(
+                "scheduled_tablet_num", MetricUnit.NOUNIT, "number of tablets being scheduled") {
+            @Override
+            public Long getValueLeader() {
+                return (long) GlobalStateMgr.getCurrentState().getTabletScheduler().getTotalNum();
+            }
+        };
+        STARROCKS_METRIC_REGISTER.addMetric(scheduledTabletNum);
+
+        // scheduled pending tablet num
+        for (TabletSchedCtx.Type schedType : TabletSchedCtx.Type.values()) {
+            Metric<Long> scheduledPendingTabletNum = new LeaderAwareGaugeMetricLong(
+                    "scheduled_pending_tablet_num", MetricUnit.NOUNIT, "number of pending tablets being scheduled") {
+                @Override
+                public Long getValueLeader() {
+                    return GlobalStateMgr.getCurrentState().getTabletScheduler().getPendingNum(schedType);
+                }
+            };
+            scheduledPendingTabletNum.addLabel(new MetricLabel("type", schedType.name()));
+            STARROCKS_METRIC_REGISTER.addMetric(scheduledPendingTabletNum);
+        }
+
+        // scheduled running tablet num
+        for (TabletSchedCtx.Type schedType : TabletSchedCtx.Type.values()) {
+            Metric<Long> scheduledRunningTabletNum = new LeaderAwareGaugeMetricLong(
+                    "scheduled_running_tablet_num", MetricUnit.NOUNIT, "number of running tablets being scheduled") {
+                @Override
+                public Long getValueLeader() {
+                    return GlobalStateMgr.getCurrentState().getTabletScheduler().getRunningNum(schedType);
+                }
+            };
+            scheduledRunningTabletNum.addLabel(new MetricLabel("type", schedType.name()));
+            STARROCKS_METRIC_REGISTER.addMetric(scheduledRunningTabletNum);
+        }
+
+        // counter metrics
+        // clone task total
+        LongCounterMetric cloneTaskTotal = new LongCounterMetric("clone_task_total", MetricUnit.REQUESTS, "total clone task") {
+            @Override
+            public Long getValue() {
+                return GlobalStateMgr.getCurrentState().getTabletScheduler().getStat().counterCloneTask.longValue();
+            }
+        };
+        STARROCKS_METRIC_REGISTER.addMetric(cloneTaskTotal);
+
+        // clone task success
+        LongCounterMetric cloneTaskSuccess = new LongCounterMetric(
+                "clone_task_success", MetricUnit.REQUESTS, "success clone task") {
+            @Override
+            public Long getValue() {
+                return GlobalStateMgr.getCurrentState().getTabletScheduler().getStat().counterCloneTaskSucceeded.longValue();
+            }
+        };
+        STARROCKS_METRIC_REGISTER.addMetric(cloneTaskSuccess);
+
+        // clone task copy bytes
+        LongCounterMetric cloneTaskInterNodeCopyBytes = new LongCounterMetric(
+                "clone_task_copy_bytes", MetricUnit.BYTES, "clone task copy bytes") {
+            @Override
+            public Long getValue() {
+                return GlobalStateMgr.getCurrentState().getTabletScheduler().getStat().counterCloneTaskInterNodeCopyBytes
+                        .longValue();
+            }
+        };
+        cloneTaskInterNodeCopyBytes.addLabel(new MetricLabel("type", BalanceStat.INTER_NODE));
+        STARROCKS_METRIC_REGISTER.addMetric(cloneTaskInterNodeCopyBytes);
+
+        LongCounterMetric cloneTaskIntraNodeCopyBytes = new LongCounterMetric(
+                "clone_task_copy_bytes", MetricUnit.BYTES, "clone task copy bytes") {
+            @Override
+            public Long getValue() {
+                return GlobalStateMgr.getCurrentState().getTabletScheduler().getStat().counterCloneTaskIntraNodeCopyBytes
+                        .longValue();
+            }
+        };
+        cloneTaskIntraNodeCopyBytes.addLabel(new MetricLabel("type", BalanceStat.INTRA_NODE));
+        STARROCKS_METRIC_REGISTER.addMetric(cloneTaskIntraNodeCopyBytes);
+
+        // clone task copy duration
+        LongCounterMetric cloneTaskInterNodeCopyDurationMs = new LongCounterMetric(
+                "clone_task_copy_duration_ms", MetricUnit.MILLISECONDS, "clone task copy duration ms") {
+            @Override
+            public Long getValue() {
+                return GlobalStateMgr.getCurrentState().getTabletScheduler().getStat().counterCloneTaskInterNodeCopyDurationMs
+                        .longValue();
+            }
+        };
+        cloneTaskInterNodeCopyDurationMs.addLabel(new MetricLabel("type", BalanceStat.INTER_NODE));
+        STARROCKS_METRIC_REGISTER.addMetric(cloneTaskInterNodeCopyDurationMs);
+
+        LongCounterMetric cloneTaskIntraNodeCopyDurationMs = new LongCounterMetric(
+                "clone_task_copy_duration_ms", MetricUnit.MILLISECONDS, "clone task copy duration ms") {
+            @Override
+            public Long getValue() {
+                return GlobalStateMgr.getCurrentState().getTabletScheduler().getStat().counterCloneTaskIntraNodeCopyDurationMs
+                        .longValue();
+            }
+        };
+        cloneTaskIntraNodeCopyDurationMs.addLabel(new MetricLabel("type", BalanceStat.INTRA_NODE));
+        STARROCKS_METRIC_REGISTER.addMetric(cloneTaskIntraNodeCopyDurationMs);
     }
 
     // to generate the metrics related to tablets of each backend
