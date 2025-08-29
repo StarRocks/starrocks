@@ -43,9 +43,9 @@ public class RegisterTableProcedure extends Procedure {
                 SYSTEM_DATABASE,
                 PROCEDURE_NAME,
                 Arrays.asList(
-                        new Argument(DATABASE_NAME, Type.VARCHAR, false),
-                        new Argument(TABLE_NAME, Type.VARCHAR, true),
-                        new Argument(METADATA_FILE, Type.VARCHAR, true)
+                        new NamedArgument(DATABASE_NAME, Type.VARCHAR, false),
+                        new NamedArgument(TABLE_NAME, Type.VARCHAR, true),
+                        new NamedArgument(METADATA_FILE, Type.VARCHAR, true)
                 )
         );
         this.catalogName = catalogName;

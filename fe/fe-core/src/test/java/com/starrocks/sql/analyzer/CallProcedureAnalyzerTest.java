@@ -20,6 +20,7 @@ import com.starrocks.analysis.IntLiteral;
 import com.starrocks.analysis.ProcedureArgument;
 import com.starrocks.analysis.StringLiteral;
 import com.starrocks.connector.Procedure;
+import com.starrocks.connector.iceberg.procedure.NamedArgument;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.MetadataMgr;
@@ -59,8 +60,8 @@ public class CallProcedureAnalyzerTest {
     private Procedure mockProcedure() {
         return new Procedure("test_db", "test_proc",
                 Arrays.asList(
-                        new Procedure.Argument("a", com.starrocks.catalog.Type.INT, true),
-                        new Procedure.Argument("b", com.starrocks.catalog.Type.VARCHAR, true)
+                        new NamedArgument("a", com.starrocks.catalog.Type.INT, true),
+                        new NamedArgument("b", com.starrocks.catalog.Type.VARCHAR, true)
                 )) {
             @Override
             public void execute(ConnectContext context, Map<String, ConstantOperator> args) {

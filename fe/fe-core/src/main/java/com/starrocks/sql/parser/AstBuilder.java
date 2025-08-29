@@ -1599,13 +1599,43 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
 
     @Override
     public ParseNode visitTableOperationClause(StarRocksParser.TableOperationClauseContext context) {
-        StarRocksParser.TableOperationArgContext arg = context.tableOperationArg();
-        FunctionCallExpr fun = (FunctionCallExpr) visit(arg.functionCall());
+        StarRocksParser.TableOperationArgContext tableOperation = context.tableOperationArg();
+        String operationName = getIdentifierName(tableOperation.identifier());
+
         Expr where = null;
-        if (arg.WHERE() != null) {
-            where = (Expr) visit(arg.expression());
+        if (tableOperation.WHERE() != null) {
+            where = (Expr) visit(tableOperation.expression());
         }
-        return new AlterTableOperationClause(createPos(context), fun.getFnName().getFunction(), fun.getParams().exprs(), where);
+
+        List<Expr> parameters;
+        List<ProcedureArgument> procedureArguments = new ArrayList<>();
+        boolean useNamedArgs = false;
+
+        if (tableOperation.argumentList() == null) {
+            return new AlterTableOperationClause(createPos(context), operationName, Collections.emptyList(), where);
+        }
+
+        if (tableOperation.argumentList().expressionList() != null) {
+            parameters = visit(tableOperation.argumentList().expressionList().expression(), Expr.class);
+        } else {
+            parameters = visit(tableOperation.argumentList().namedArgumentList().namedArgument(), Expr.class);
+            useNamedArgs = true;
+        }
+        int namedArgNum = parameters.stream().filter(f -> f instanceof NamedArgument).toList().size();
+        if (namedArgNum > 0 && namedArgNum < parameters.size()) {
+            throw new SemanticException("All arguments must be passed by name or all must be passed positionally");
+        }
+
+        if (useNamedArgs) {
+            parameters.forEach(v -> {
+                NamedArgument namedArgument = (NamedArgument) v;
+                procedureArguments.add(new ProcedureArgument(namedArgument.getName(), namedArgument.getExpr()));
+            });
+        } else {
+            parameters.forEach(v -> procedureArguments.add(new ProcedureArgument(null, v)));
+        }
+
+        return new AlterTableOperationClause(createPos(context), operationName, procedureArguments, where);
     }
 
     @Override
