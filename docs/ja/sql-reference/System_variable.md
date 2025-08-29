@@ -457,6 +457,12 @@ MySQL クライアント互換性のために使用されます。実際の用�
 * **デフォルト**: false、つまりこの機能は無効です。
 * **導入バージョン**: v2.5
 
+### enable_group_by_compressed_key
+
+* **説明**: GROUP BY キー列を圧縮するために正確な統計情報を使用するかどうか。有効な値: `true` と `false`。
+* **デフォルト**: true
+* **導入バージョン**: v4.0
+
 ### enable_gin_filter
 
 * **説明**: クエリ中に[全文逆インデックス](../table_design/indexes/inverted_index.md)を利用するかどうか。
