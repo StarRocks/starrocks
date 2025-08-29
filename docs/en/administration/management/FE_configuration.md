@@ -5017,8 +5017,6 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Description:
 - Introduced in: -
 -->
-<<<<<<< HEAD
-=======
 
 ##### mv_refresh_fail_on_filter_data
 
@@ -5111,33 +5109,4 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Description: Whether to enable rewrite query during materialized view refresh so that the query can use the rewritten mv directly rather than the base table to improve query performance.
 - Introduced in: v3.3
 
-##### enable_mv_refresh_extra_prefix_logging
-
-- Default: true
-- Type: Boolean
-- Unit: -
-- Is mutable: Yes
-- Description: Whether to enable prefixes with materialized view names in logs for better debug.
-- Introduced in: v3.4.0
-
-
-##### enable_mv_post_image_reload_cache
-
-- Default: true
-- Type: Boolean
-- Unit: -
-- Is mutable: Yes
-- Description: Whether to perform reload flag check after FE loaded an image. If the check is performed for a base materialized view, it is not needed for other materialized views that related to it.
-- Introduced in: v3.5.0
-
-##### enable_trace_historical_node
-
-- Default: false
-- Type: Boolean
-- Unit: -
-- Is mutable: Yes
-- Description: Whether to allow the system to trace the historical nodes. By setting this item to `true`, you can enable the Cache Sharing feature and allow the system to choose the right cache nodes during elastic scaling.
-- Introduced in: v3.5.1
-
 <EditionSpecificFEItem />
->>>>>>> ccf0a33ba2 ([Doc] Categorize enable_auth_check (#62517))
