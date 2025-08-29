@@ -138,6 +138,8 @@ public class DecodeCollector extends OptExpressionVisitor<DecodeInfo, DecodeInfo
 
     private final Map<Integer, List<CallOperator>> stringAggregateExpressions = Maps.newHashMap();
 
+    private final Map<Integer, Integer> tableFunctionDependencies = Maps.newHashMap();
+
     private final Map<Integer, ScalarOperator> stringRefToDefineExprMap = Maps.newHashMap();
 
     // string column use counter, 0 meanings decoded immediately after it was generated.
@@ -206,6 +208,10 @@ public class DecodeCollector extends OptExpressionVisitor<DecodeInfo, DecodeInfo
                     }
                 }
             }
+        });
+
+        this.tableFunctionDependencies.forEach((k, v) -> {
+            dependencyStringIds.computeIfAbsent(v, x -> Sets.newHashSet()).add(k);
         });
         // build relation groups. The same closure is built into the same group
         // eg:
@@ -655,6 +661,7 @@ public class DecodeCollector extends OptExpressionVisitor<DecodeInfo, DecodeInfo
                 stringRefToDefineExprMap.put(unnestOutput.getId(), unnestInput);
                 expressionStringRefCounter.put(unnestOutput.getId(), 1);
                 info.outputStringColumns.union(unnestOutput);
+                tableFunctionDependencies.put(unnestInput.getId(), unnestOutput.getId());
             }
         }
         return info;
