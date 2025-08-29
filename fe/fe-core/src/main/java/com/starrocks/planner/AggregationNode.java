@@ -181,7 +181,7 @@ public class AggregationNode extends PlanNode implements RuntimeFilterBuildNode 
 
     @Override
     public void disablePhysicalPropertyOptimize() {
-        setUseSortAgg(false);
+        // setUseSortAgg(false);
         setUsePerBucketOptimize(false);
     }
 
