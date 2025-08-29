@@ -44,4 +44,5 @@ add_library(Column STATIC
         stream_chunk.cpp
         column_view/column_view_base.cpp
         column_view/column_view_helper.cpp
+        variant_column.cpp
 )
