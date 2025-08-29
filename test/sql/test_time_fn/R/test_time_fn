@@ -985,3 +985,29 @@ select  timestampdiff(MILLISECOND, '2003-02-01 00:00:00', '2003-05-01 12:05:55')
 -- result:
 7733155000
 -- !result
+
+-- name: test_str_to_date
+select str_to_date('2024', '%Y');
+-- result:
+2024-01-01
+-- !result
+
+select str_to_date('2024-08', '%Y-%m');
+-- result:
+2024-08-01
+-- !result
+
+select str_to_date('20141221','%Y%m%d');
+-- result:
+2014-12-21
+-- !result
+
+select str_to_date('2014-12-21 12:34:56', '%Y-%m-%d %H:%i:%s');
+-- result:
+2014-12-21 12:34:56
+-- !result
+
+select str_to_date('200442 Monday', '%X%V %W');
+-- result:
+2004-10-18
+-- !result
