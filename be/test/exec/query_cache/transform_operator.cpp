@@ -116,7 +116,7 @@ Status ReduceSinkOperator::push_chunk(starrocks::RuntimeState* state, const Chun
     auto column = chunk->get_column_by_slot_id(SlotId(1));
     const auto* col = dynamic_cast<const DoubleColumn*>(column.get());
     DCHECK(col != nullptr);
-    const auto& data = col->get_data();
+    const auto& data = col->immutable_data();
     const auto num_rows = data.size();
     auto reduce_func = _reducer->reduce_func();
     for (auto i = 0; i < num_rows; ++i) {

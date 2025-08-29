@@ -40,6 +40,7 @@
 
 #include "column/column_helper.h"
 #include "column/column_viewer.h"
+#include "runtime/exec_env.h"
 #include "storage/chunk_helper.h"
 #include "storage/range.h"
 #include "storage/types.h"

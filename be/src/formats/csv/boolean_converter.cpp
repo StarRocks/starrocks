@@ -25,10 +25,11 @@ Status BooleanConverter::write_string(OutputStream* os, const Column& column, si
     const static Slice kTrue("true");
     const static Slice kFalse("false");
     auto boolean_col = down_cast<const FixedLengthColumn<uint8_t>*>(&column);
+    const auto bool_data = boolean_col->immutable_data();
     if (LIKELY(options.bool_alpha)) {
-        return os->write(boolean_col->get_data()[row_num] ? kTrue : kFalse);
+        return os->write(bool_data[row_num] ? kTrue : kFalse);
     } else {
-        return os->write<int16_t>(boolean_col->get_data()[row_num]);
+        return os->write<int16_t>(bool_data[row_num]);
     }
 }
 

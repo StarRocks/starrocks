@@ -17,6 +17,7 @@
 #include <limits>
 #include <type_traits>
 
+#include "column/column_helper.h"
 #include "column/fixed_length_column.h"
 #include "column/type_traits.h"
 #include "column/vectorized_fwd.h"
@@ -385,9 +386,9 @@ public:
         RunTimeCppType<LT> rhs;
         auto* data_col1 = down_cast<const InputColumnType*>(ColumnHelper::get_data_column(columns[1]));
         if (columns[1]->is_constant()) {
-            rhs = data_col1->get_data()[0];
+            rhs = data_col1->immutable_data()[0];
         } else {
-            rhs = data_col1->get_data()[row_num];
+            rhs = data_col1->immutable_data()[row_num];
         }
         OP()(this->data(state), (Column*)columns[0], row_num, rhs);
     }
@@ -491,14 +492,15 @@ public:
         }
 
         const auto* col_maxmin = down_cast<const InputColumnType*>(ColumnHelper::get_data_column(src[1].get()));
+        const auto maxmin_datas = col_maxmin->immutable_data();
         BinaryColumn* result = nullptr;
         if ((*dst)->is_nullable()) {
             auto* dst_nullable_column = down_cast<NullableColumn*>((*dst).get());
             result = down_cast<BinaryColumn*>(dst_nullable_column->data_column().get());
 
             if (src[1]->is_nullable()) {
-                dst_nullable_column->null_column_data() =
-                        down_cast<const NullableColumn*>(src[1].get())->immutable_null_column_data();
+                auto null_column_data = down_cast<const NullableColumn*>(src[1].get())->immutable_null_column_data();
+                dst_nullable_column->null_column_data().assign(null_column_data.begin(), null_column_data.end());
             } else {
                 dst_nullable_column->null_column_data().resize(chunk_size, 0);
             }
@@ -518,7 +520,7 @@ public:
                 down_cast<NullableColumn*>((*dst).get())->set_has_null(true);
             } else {
                 auto is_null = src[0]->only_null() || src[0]->is_null(i);
-                T value = col_maxmin->get_data()[i];
+                T value = maxmin_datas[i];
                 if (is_null) {
                     if constexpr (State::not_filter_nulls_flag) {
                         new_size = old_size + sizeof(T) + 1;
@@ -751,8 +753,9 @@ public:
             result = down_cast<BinaryColumn*>(dst_nullable_column->data_column().get());
 
             if (src[1]->is_nullable()) {
-                dst_nullable_column->null_column_data() =
-                        down_cast<const NullableColumn*>(src[1].get())->immutable_null_column_data();
+                auto null_datas = down_cast<const NullableColumn*>(src[1].get())->immutable_null_column_data();
+                dst_nullable_column->null_column_data().assign(null_datas.begin(), null_datas.end());
+
             } else {
                 dst_nullable_column->null_column_data().resize(chunk_size, 0);
             }
@@ -774,7 +777,7 @@ public:
                 auto is_null = src[0]->only_null() || src[0]->is_null(i);
                 if (is_null) {
                     if constexpr (State::not_filter_nulls_flag) {
-                        Slice value = col_maxmin->get(i).get_slice();
+                        Slice value = col_maxmin->get_slice(i);
                         size_t value_size = value.size;
                         new_size = old_size + sizeof(size_t) + value_size + 1;
                         bytes.resize(new_size);
@@ -791,7 +794,7 @@ public:
                         dst_nullable_column->set_has_null(true);
                     }
                 } else {
-                    Slice value = col_maxmin->get(i).get_slice();
+                    Slice value = col_maxmin->get_slice(i);
                     size_t value_size = value.size;
                     auto* data_column = ColumnHelper::get_data_column(src[0].get());
                     size_t serde_size = data_column->serialize_size(i);

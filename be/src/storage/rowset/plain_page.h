@@ -35,6 +35,7 @@
 #pragma once
 
 #include "column/column.h"
+#include "column/container_resource.h"
 #include "storage/olap_common.h"
 #include "storage/range.h"
 #include "storage/rowset/options.h"
@@ -240,8 +241,9 @@ public:
             _cur_idx = iter.begin();
             Range<> r = iter.next(to_read);
             uint32_t max_fetch = std::min(r.span_size(), _num_elems - _cur_idx);
-            int n = dst->append_numbers(&_data[PLAIN_PAGE_HEADER_SIZE + _cur_idx * SIZE_OF_TYPE],
-                                        max_fetch * SIZE_OF_TYPE);
+            const void* data = &_data[PLAIN_PAGE_HEADER_SIZE + _cur_idx * SIZE_OF_TYPE];
+            ContainerResource container(_page_handle, data, max_fetch * SIZE_OF_TYPE);
+            int n = dst->append_numbers(container);
             DCHECK_EQ(max_fetch, n);
             _cur_idx += max_fetch;
         }

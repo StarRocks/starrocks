@@ -21,6 +21,7 @@
 #include "fmt/format.h"
 #include "gen_cpp/AgentService_types.h"
 #include "gutil/strings/join.h"
+#include "runtime/exec_env.h"
 #include "storage/data_dir.h"
 #include "storage/replication_txn_manager.h"
 #include "storage/storage_engine.h"

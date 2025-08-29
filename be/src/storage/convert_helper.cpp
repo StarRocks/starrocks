@@ -1574,7 +1574,7 @@ public:
         if constexpr (is_directly_copyable<SrcType, DstType>) {
             if (!src.is_nullable() && !src.is_constant()) {
                 auto* dst_column = down_cast<DstColumnType*>(dst.get());
-                auto* src_column = down_cast<const SrcColumnType*>(&src);
+                auto* src_column = down_cast<SrcColumnType*>(const_cast<Column*>(&src));
                 // TODO (by satanson): unsafe abstraction leak
                 //  swap std::vector<DecimalV2Value> and std::vector<int128_t>,
                 //  raw memory copy is more sound.

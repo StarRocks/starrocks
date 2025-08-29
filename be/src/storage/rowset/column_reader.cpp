@@ -50,6 +50,8 @@
 #include "common/status.h"
 #include "common/statusor.h"
 #include "gen_cpp/segment.pb.h"
+#include "runtime/current_thread.h"
+#include "runtime/exec_env.h"
 #include "runtime/types.h"
 #include "storage/column_predicate.h"
 #include "storage/index/index_descriptor.h"
