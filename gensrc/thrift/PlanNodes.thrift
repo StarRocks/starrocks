@@ -766,6 +766,8 @@ struct THashJoinNode {
   56: optional bool late_materialization = false
   57: optional bool enable_partition_hash_join = false
   58: optional bool is_skew_join = false
+
+  59: optional map<Types.TSlotId, Exprs.TExpr> common_slot_map
 }
 
 struct TMergeJoinNode {
@@ -805,6 +807,7 @@ struct TNestLoopJoinNode {
     3: optional list<Exprs.TExpr> join_conjuncts
     4: optional string sql_join_conjuncts
     5: optional bool interpolate_passthrough = false
+    6: optional map<Types.TSlotId, Exprs.TExpr> common_slot_map
 }
 
 enum TAggregationOp {
