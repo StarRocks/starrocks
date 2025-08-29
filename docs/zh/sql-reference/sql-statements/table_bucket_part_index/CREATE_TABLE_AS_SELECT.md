@@ -56,7 +56,7 @@ CREATE TABLE AS SELECT（简称 CTAS）语句可用于同步或异步查询原�
 | partition_desc    | 否       | 新表的分区方式。如不指定该参数，则默认新表为无分区。更多有关分区的设置，参见 [CREATE TABLE](CREATE_TABLE.md#partition_desc)。 |
 | distribution_desc | 否       | 新表的分桶方式。如不指定该参数，则默认新表的分桶列为使用 CBO 优化器采集的统计信息中基数最高的列，且分桶数量默认为 10。如果 CBO 优化器没有采集基数信息，则默认新表的第一列为分桶列。更多有关分桶的设置，参见 [CREATE TABLE](CREATE_TABLE.md#distribution_desc)。 |
 | ORDER BY| 否       |自 v3.1.8 版本以来，如果新表是主键表，则可以为新表指定排序键。排序键可以是任意列的组合。主键表是指在创建表时指定了 `PRIMARY KEY (xxx)` 的表。| 
-| Properties        | 否       | 新表的属性。                                                 |
+| Properties        | 否       | 新表的属性，使用 `unified` 类型的Catalog时 `CTAS` 方式建表，`unified_ctas_engine`指定引擎名称，默认为 `hive`                                                  |
 | AS SELECT query   | 是       | 查询结果。该参数支持如下值： 列。比如 `... AS SELECT a, b, c FROM table_a;`，其中 `a`、`b` 和 `c` 为原表的列名。如果您没有为新表指定列名，那么新表的列名也为 `a`、`b` 和 `c`。 表达式。比如 `... AS SELECT a+1 AS x, b+2 AS y, c*c AS z FROM table_a;`，其中 `a+1`、`b+2` 和 `c*c` 为原表的列名，`x`、`y` 和 `z` 为新表的列名。 说明： 新表的列数需要与 `AS SELECT query` 中指定的列数保持一致。 建议您为新表的列设置具有业务意义的列名，便于后续识别使用。 |
 
 ## 注意事项
