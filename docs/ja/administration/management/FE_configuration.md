@@ -8,13 +8,9 @@ import AdminSetFrontendNote from '../../_assets/commonMarkdown/FE_config_note.md
 
 import StaticFEConfigNote from '../../_assets/commonMarkdown/StaticFE_config_note.md'
 
-<<<<<<< HEAD
-# FE Configuration
-=======
 import EditionSpecificFEItem from '../../_assets/commonMarkdown/Edition_Specific_FE_Item.md'
 
 # FE 設定
->>>>>>> ccf0a33ba2 ([Doc] Categorize enable_auth_check (#62517))
 
 <FEConfigMethod />
 
@@ -2620,9 +2616,6 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 単位: -
 - 変更可能: はい
 - 説明: EXPLAIN ステートメントによって返されるクエリプランの詳細レベル。有効な値: COSTS, NORMAL, VERBOSE。
-<<<<<<< HEAD
-- 導入バージョン: v3.2.12, v3.3.5
-=======
 - 導入バージョン: v3.2.12, v3.3.5
 
 ##### mv_plan_cache_expire_interval_sec
@@ -2651,15 +2644,6 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 変更可能: はい
 - 説明: 実体化されたビューの書き換えに使用されるプランキャッシュの最大サイズ。クエリ書き換えに使用される実体化ビューが多い場合は、この値を大きくすることができます。
 - 導入バージョン: v3.2
-
-##### enable_materialized_view_concurrent_prepare
-
-- デフォルト: true
-- タイプ: Boolean
-- 単位:
-- 変更可能: はい
-- 説明: パフォーマンスを向上させるために、マテリアライズドビューを同時に準備するかどうか。
-- 導入バージョン: v3.4.4
 
 ##### enable_mv_query_context_cache
 
@@ -2769,33 +2753,4 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 説明: クエリのパフォーマンスを向上させるために、ベーステーブルではなく書き換えられたマテリアライズドビューを直接使用できるように、マテリアライズドビューの更新時に書き換えクエリを有効にするかどうか。
 - 導入バージョン: v3.3
 
-##### enable_mv_refresh_extra_prefix_logging
-
-- デフォルト: true
-- タイプ: Boolean
-- 単位: -
-- 変更可能: はい
-- 説明: より良いデバッグのために、ログでマテリアライズドビュー名の接頭辞を有効にするかどうか。
-- 導入バージョン: v3.4.0
-
-
-##### enable_mv_post_image_reload_cache
-
-- デフォルト: true
-- タイプ: Boolean
-- 単位: -
-- 変更可能: はい
-- 説明: FEが Image をロードした後に、再ロードのフラグチェックを行うかどうか。ベースとなるマテリアライズドビューに対してチェックを行う場合、それに関連する他のマテリアライズドビューに対しては必要ありません。
-- 導入バージョン: v3.5.0
-
-##### enable_mv_post_image_reload_cache
-
-- デフォルト: false
-- タイプ: Boolean
-- 単位: -
-- 変更可能: はい
-- 説明: システムがヒストリカルノードをトレースすることを許可するかどうか。この項目を `true` に設定することで、キャッシュ共有機能を有効にし、エラスティックなスケーリング時にシステムが適切なキャッシュノードを選択できるようにすることができる。
-- 導入バージョン: v3.5.1
-
 <EditionSpecificFEItem />
->>>>>>> ccf0a33ba2 ([Doc] Categorize enable_auth_check (#62517))
