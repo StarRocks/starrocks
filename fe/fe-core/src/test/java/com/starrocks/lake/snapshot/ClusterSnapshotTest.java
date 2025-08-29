@@ -49,6 +49,7 @@ import com.starrocks.server.LocalMetastore;
 import com.starrocks.server.RunMode;
 import com.starrocks.server.StorageVolumeMgr;
 import com.starrocks.sql.analyzer.AnalyzeTestUtil;
+import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AdminSetAutomatedSnapshotOffStmt;
 import com.starrocks.sql.ast.AdminSetAutomatedSnapshotOnStmt;
 import com.starrocks.sql.ast.CreateClusterSnapshotStmt;
@@ -689,6 +690,13 @@ public class ClusterSnapshotTest {
                 }
             }
         }
+
+        manualJob.setState(ClusterSnapshotJobState.UPLOADING);
+        final DropClusterSnapshotStmt exceptionDropStmt = new DropClusterSnapshotStmt(manualJob.getSnapshotName(), true);
+        ExceptionChecker.expectThrowsWithMsg(SemanticException.class,
+                "Cannot drop cluster snapshot 'testSnapshotName' because snapshot job is " +
+                "still running with state: UPLOADING. Please wait for the job to complete.",
+                () -> localClusterSnapshotMgr.dropClusterSnapshot(exceptionDropStmt));
 
         Assertions.assertTrue(localClusterSnapshotMgr.getAllSnapshotJobsInfo().getItems().size() == 1);
         manualJob.setState(ClusterSnapshotJobState.FINISHED);

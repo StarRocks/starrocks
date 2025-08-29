@@ -55,7 +55,7 @@ public class ClusterSnapshotMgrEPack extends ClusterSnapshotMgr {
                 LOG.warn("Manual Cluster Snapshot Job has existed, snapshot name: " + snapshotName);
                 return;
             } else {
-                throw new SemanticException("Manual Cluster Snapshot Job has existed, snapshot name: {}", snapshotName);
+                throw new SemanticException("Manual Cluster Snapshot Job has existed, snapshot name: %s", snapshotName);
             }
         }
 
@@ -81,6 +81,16 @@ public class ClusterSnapshotMgrEPack extends ClusterSnapshotMgr {
             } else {
                 throw new SemanticException("Manual Snapshot: %s doest not exist", snapshotName);
             }
+        }
+
+        // Reject drop request if the snapshot job is still running
+        if (job.isUnFinishedState()) {
+            throw new SemanticException(
+                    "Cannot drop cluster snapshot '%s' because snapshot job is still running with state: %s. " +
+                            "Please wait for the job to complete.",
+                    snapshotName, job.getState().name());
+        // TODO: Support CANCEL CLUSTER SNAPSHOT statement to allow users to cancel
+        // running snapshot jobs
         }
 
         try {
