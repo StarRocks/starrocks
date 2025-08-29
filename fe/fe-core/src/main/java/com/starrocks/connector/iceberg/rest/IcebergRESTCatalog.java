@@ -108,7 +108,7 @@ public class IcebergRESTCatalog implements IcebergCatalog {
             restCatalogProperties.put("header.X-Iceberg-Access-Delegation", "vended-credentials");
         }
         restCatalogProperties.put(AwsProperties.CLIENT_FACTORY, IcebergAwsClientFactory.class.getName());
-        restCatalogProperties.put(USER_AGENT, "StarRocks-Iceberg-Connector/" +
+        restCatalogProperties.put(USER_AGENT, "CelerData-Iceberg-Connector/" +
                 GlobalStateMgr.getCurrentState().getNodeMgr().getMySelf().getFeVersion());
 
         nestedNamespaceEnabled = PropertyUtil.propertyAsBoolean(restCatalogProperties, KEY_NESTED_NAMESPACE_ENABLED, false);
