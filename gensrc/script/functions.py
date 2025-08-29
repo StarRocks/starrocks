@@ -275,6 +275,7 @@ vectorized_functions = [
     [30050, 'starts_with', True, False, 'BOOLEAN', ['VARCHAR', 'VARCHAR'], 'StringFunctions::starts_with'],
 
     [30060, 'null_or_empty', True, False, 'BOOLEAN', ['VARCHAR'], 'StringFunctions::null_or_empty'],
+    [30061, 'null_or_empty', True, False, 'BOOLEAN', ['ANY_ARRAY'], 'ArrayFunctions::null_or_empty'],
 
     [30070, 'space', True, True, 'VARCHAR', ['INT'], 'StringFunctions::space'],
     [30080, 'repeat', True, True, 'VARCHAR', ['VARCHAR', 'INT'], 'StringFunctions::repeat'],

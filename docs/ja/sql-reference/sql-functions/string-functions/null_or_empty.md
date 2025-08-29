@@ -10,6 +10,7 @@ displayed_sidebar: docs
 
 ```Haskell
 BOOLEAN NULL_OR_EMPTY (VARCHAR str)
+BOOLEAN NULL_OR_EMPTY (any_array)
 ```
 
 ## 例
@@ -30,6 +31,20 @@ MySQL > select null_or_empty("");
 +-------------------+
 
 MySQL > select null_or_empty("a");
++--------------------+
+| null_or_empty('a') |
++--------------------+
+|                  0 |
++--------------------+
+
+MySQL > select null_or_empty([]);
++-------------------+
+| null_or_empty('') |
++-------------------+
+|                 1 |
++-------------------+
+
+MySQL > select null_or_empty([1]);
 +--------------------+
 | null_or_empty('a') |
 +--------------------+
