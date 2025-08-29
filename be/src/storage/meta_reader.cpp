@@ -421,7 +421,7 @@ Status SegmentMetaCollecter::__collect_max_or_min(ColumnId cid, Column* column, 
     if (cid >= _segment->num_columns()) {
         return Status::NotFound("");
     }
-    const ColumnReader* col_reader = _segment->column(cid);
+    ColumnReader* col_reader = const_cast<ColumnReader*>(_segment->column(cid));
     if (col_reader == nullptr || col_reader->segment_zone_map() == nullptr) {
         return Status::NotFound("");
     }
@@ -473,7 +473,7 @@ Status SegmentMetaCollecter::_collect_count(ColumnId cid, Column* column, Logica
 Status SegmentMetaCollecter::_collect_column_size(ColumnId cid, Column* column, LogicalType type) {
     // Uncompressed size: not directly stored per page; we estimate using num_rows * avg_value_size when applicable
     // Prefer metadata footprint when available
-    const ColumnReader* col_reader = _segment->column(cid);
+    ColumnReader* col_reader = const_cast<ColumnReader*>(_segment->column(cid));
     if (col_reader == nullptr) {
         return Status::NotFound("");
     }
@@ -484,7 +484,7 @@ Status SegmentMetaCollecter::_collect_column_size(ColumnId cid, Column* column, 
 
 Status SegmentMetaCollecter::_collect_column_compressed_size(ColumnId cid, Column* column, LogicalType type) {
     // Compressed size estimation: sum of data page sizes via ordinal index ranges
-    const ColumnReader* col_reader = _segment->column(cid);
+    ColumnReader* col_reader = const_cast<ColumnReader*>(_segment->column(cid));
     if (col_reader == nullptr) {
         return Status::NotFound("");
     }
