@@ -38,11 +38,14 @@ import com.starrocks.catalog.StructField;
 import com.starrocks.catalog.StructType;
 import com.starrocks.catalog.TableFunction;
 import com.starrocks.catalog.Type;
+import com.starrocks.catalog.combinator.AggStateCombineCombinator;
 import com.starrocks.catalog.combinator.AggStateIf;
 import com.starrocks.catalog.combinator.AggStateMergeCombinator;
 import com.starrocks.catalog.combinator.AggStateUnionCombinator;
 import com.starrocks.catalog.combinator.AggStateUtils;
 import com.starrocks.catalog.combinator.StateFunctionCombinator;
+import com.starrocks.catalog.combinator.StateMergeCombinator;
+import com.starrocks.catalog.combinator.StateUnionCombinator;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.Pair;
 import com.starrocks.qe.ConnectContext;
@@ -160,6 +163,19 @@ public class FunctionAnalyzer {
             // analyze `_state` combinator function by using its arg function
             FunctionName argFuncName = new FunctionName(AggStateUtils.getAggFuncNameOfCombinator(fnName.getFunction()));
             analyzeBuiltinAggFunction(argFuncName, functionCallExpr.getParams(), functionCallExpr);
+        } else if (fn instanceof AggStateCombineCombinator) {
+            // analyze `_state` combinator function by using its arg function
+            FunctionName argFuncName = new FunctionName(AggStateUtils.getAggFuncNameOfCombinator(fnName.getFunction()));
+            analyzeBuiltinAggFunction(argFuncName, functionCallExpr.getParams(), functionCallExpr);
+        } else if (fn instanceof StateMergeCombinator || fn instanceof StateUnionCombinator) {
+            if (Arrays.stream(fn.getArgs()).anyMatch(Type::isWildcardDecimal)) {
+                throw new SemanticException(String.format("Resolved function %s has no wildcard decimal as argument type",
+                        fn.functionName()), functionCallExpr.getPos());
+            }
+            if (fn.getReturnType().isWildcardDecimal()) {
+                throw new SemanticException(String.format("Resolved function %s has no wildcard decimal as return type",
+                        fn.functionName()), functionCallExpr.getPos());
+            }
         } else if (fn instanceof AggStateUnionCombinator) {
             AggStateUnionCombinator unionCombinator = (AggStateUnionCombinator) fn;
             if (Arrays.stream(fn.getArgs()).anyMatch(Type::isWildcardDecimal)) {

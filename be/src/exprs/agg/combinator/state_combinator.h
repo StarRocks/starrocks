@@ -14,6 +14,7 @@
 
 #pragma once
 
+#include <memory>
 #include <string>
 #include <utility>
 
@@ -33,11 +34,12 @@ static MemHookAllocator kDefaultAggStateMergeFunctionAllocator = MemHookAllocato
 // A base class for all state combinators which is a scalar function.
 class StateCombinator {
 public:
-    StateCombinator(AggStateDesc agg_state_desc, TypeDescriptor immediate_type, std::vector<bool> arg_nullables)
+    StateCombinator(AggStateDesc agg_state_desc, TypeDescriptor intermediate_type, std::vector<bool> arg_nullables)
             : _agg_state_desc(std::move(agg_state_desc)),
-              _immediate_type(std::move(immediate_type)),
+              _intermediate_type(std::move(intermediate_type)),
               _arg_nullables(std::move(arg_nullables)) {
         _function = AggStateDesc::get_agg_state_func(&_agg_state_desc);
+        VLOG_ROW << "StateCombinator constructor:" << _agg_state_desc.debug_string();
     }
 
     ~StateCombinator() = default;
@@ -57,6 +59,40 @@ public:
     static size_t align_to(size_t size, size_t align) noexcept { return (size + align - 1) / align * align; }
 
 protected:
+    // AlignedMemoryGuard is a helper class to allocate aligned memory.
+    // It is used to allocate memory for aggregate state.
+    class AlignedMemoryGuard {
+    public:
+        AlignedMemoryGuard(size_t alignment, size_t size) : _ptr(nullptr), _alignment(alignment), _size(size) {}
+
+        ~AlignedMemoryGuard() noexcept {
+            if (_ptr) {
+                std::free(_ptr);
+            }
+        }
+        Status allocate() {
+            _ptr = reinterpret_cast<AggDataPtr>(std::aligned_alloc(_alignment, _size));
+            if (_ptr == nullptr) {
+                return Status::MemoryAllocFailed("Failed to allocate aligned memory");
+            }
+            return Status::OK();
+        }
+
+        AggDataPtr get() const noexcept { return _ptr; }
+
+        // Non-copyable, movable
+        AlignedMemoryGuard(const AlignedMemoryGuard&) = delete;
+        AlignedMemoryGuard& operator=(const AlignedMemoryGuard&) = delete;
+        AlignedMemoryGuard(AlignedMemoryGuard&&) = default;
+        AlignedMemoryGuard& operator=(AlignedMemoryGuard&&) = default;
+
+    private:
+        AggDataPtr _ptr;
+        size_t _alignment;
+        size_t _size;
+    };
+
+protected:
     // convert the column to the nullable column if the arg is nullable and the column is not nullable
     StatusOr<ColumnPtr> _convert_to_nullable_column(const ColumnPtr& column, bool arg_nullable,
                                                     bool is_unpack_column) const {
@@ -74,7 +110,7 @@ protected:
 
 protected:
     const AggStateDesc _agg_state_desc;
-    const TypeDescriptor _immediate_type;
+    const TypeDescriptor _intermediate_type;
     const std::vector<bool> _arg_nullables;
     const AggregateFunction* _function;
 };
