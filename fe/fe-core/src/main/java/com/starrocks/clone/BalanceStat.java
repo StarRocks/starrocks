@@ -21,6 +21,9 @@ import java.util.Map;
 import java.util.Set;
 
 public abstract class BalanceStat {
+    public static final String INTER_NODE = "INTER_NODE";
+    public static final String INTRA_NODE = "INTRA_NODE";
+
     public enum BalanceType {
         INTER_NODE_DISK_USAGE("inter-node disk usage"),
         INTER_NODE_TABLET_DISTRIBUTION("inter-node tablet distribution"),

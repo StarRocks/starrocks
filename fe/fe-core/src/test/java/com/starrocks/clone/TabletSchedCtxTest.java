@@ -303,6 +303,7 @@ public class TabletSchedCtxTest {
         Assertions.assertEquals("1001", results.get(0));
         Assertions.assertEquals("BALANCE", results.get(1));
         Assertions.assertEquals("INTER_NODE_TABLET_DISTRIBUTION", results.get(3));
+        Assertions.assertFalse(ctx.isIntraNodeBalance());
     }
 
     @Test
