@@ -1871,6 +1871,9 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true, comment = "Whether to enable the collection of tablet numbers"
             + " for each disk in the 'SHOW PROC /BACKENDS/{id}' command")
     public static boolean enable_collect_tablet_num_in_show_proc_backend_disk_path = true;
+    
+    @ConfField(mutable = true)
+    public static boolean enable_ignore_backup_task_info = true;
 
     /**
      * If set to true, metric collector will be run as a daemon timer to collect metrics at fix interval
