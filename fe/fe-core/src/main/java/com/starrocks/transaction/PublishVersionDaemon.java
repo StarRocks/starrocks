@@ -616,6 +616,15 @@ public class PublishVersionDaemon extends FrontendDaemon {
                 stateBatch.putBeTablets(partitionId, nodeToTablets);
             }
         } catch (Exception e) {
+            for (int i = 0; i < transactionStates.size(); i++) {
+                TransactionState txnState = transactionStates.get(i);
+                txnState.writeLock();
+                try {
+                    txnState.setErrorMsg("Fail to publish partition " + partitionId + " error " + e.getMessage());
+                } finally {
+                    txnState.writeUnlock();
+                }
+            }
             LOG.error("Fail to publish partition {} of txnIds {}:", partitionId,
                     txnInfos.stream().map(i -> i.txnId).collect(Collectors.toList()), e);
             return false;
