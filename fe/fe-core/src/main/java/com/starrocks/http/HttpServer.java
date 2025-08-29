@@ -334,7 +334,7 @@ public class HttpServer {
                 Channel ch = serverBootstrap.bind(port).sync().channel();
 
                 isStarted.set(true);
-                registerMetrics(workerGroup, numWorkerThreads);
+                registerMetrics(workerGroup);
                 LOG.info("HttpServer/HttpsServer started with port {}", port);
                 // block until server is closed
                 ch.closeFuture().sync();
@@ -348,13 +348,12 @@ public class HttpServer {
         }
     }
 
-    private void registerMetrics(NioEventLoopGroup workerGroup, int numWorkerThreads) {
+    private void registerMetrics(NioEventLoopGroup workerGroup) {
         HttpMetricRegistry httpMetricRegistry = HttpMetricRegistry.getInstance();
 
         GaugeMetricImpl<Long> httpWorkersNum = new GaugeMetricImpl<>(
                 HTTP_WORKERS_NUM, Metric.MetricUnit.NOUNIT, "the number of http workers");
-        int defaultNumWorkers = workerGroup.executorCount();
-        httpWorkersNum.setValue(numWorkerThreads == 0 ? (long) defaultNumWorkers : (long) numWorkerThreads);
+        httpWorkersNum.setValue((long) workerGroup.executorCount());
         httpMetricRegistry.registerGauge(httpWorkersNum);
 
         GaugeMetric<Long> pendingTasks = new GaugeMetric<>(HTTP_WORKER_PENDING_TASKS_NUM, Metric.MetricUnit.NOUNIT,
