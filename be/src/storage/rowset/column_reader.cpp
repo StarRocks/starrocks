@@ -565,7 +565,6 @@ std::pair<ordinal_t, ordinal_t> ColumnReader::get_page_range(size_t page_index) 
 
 // Iterate the oridinal index to get the total size of all data pages
 int64_t ColumnReader::data_page_footprint() const {
-    DCHECK(_ordinal_index);
     RETURN_IF(_ordinal_index == nullptr, 0);
     int64_t total_size = 0;
     auto iter = _ordinal_index->begin();

@@ -471,13 +471,9 @@ Status SegmentMetaCollecter::_collect_count(ColumnId cid, Column* column, Logica
 }
 
 Status SegmentMetaCollecter::_collect_column_size(ColumnId cid, Column* column, LogicalType type) {
-    // Uncompressed size: not directly stored per page; we estimate using num_rows * avg_value_size when applicable
-    // Prefer metadata footprint when available
     ColumnReader* col_reader = const_cast<ColumnReader*>(_segment->column(cid));
-    if (col_reader == nullptr) {
-        return Status::NotFound("");
-    }
-    // Use total_mem_footprint recorded in ColumnMeta as proxy for uncompressed size
+    RETURN_IF(col_reader == nullptr, Status::NotFound("column not found: " + std::to_string(cid)));
+
     size_t total_mem_footprint = col_reader->total_mem_footprint();
     if (col_reader->sub_readers() != nullptr) {
         for (const auto& sub_reader : *col_reader->sub_readers()) {
@@ -493,9 +489,16 @@ Status SegmentMetaCollecter::_collect_column_compressed_size(ColumnId cid, Colum
     ColumnReader* col_reader = const_cast<ColumnReader*>(_segment->column(cid));
     RETURN_IF(col_reader == nullptr, Status::NotFound("column not found: " + std::to_string(cid)));
 
+    OlapReaderStatistics stats;
+    IndexReadOptions opts;
+    opts.use_page_cache = false;
+    opts.read_file = _read_file.get();
+    opts.stats = &stats;
+    RETURN_IF_ERROR(col_reader->load_ordinal_index(opts));
     int64_t total = col_reader->data_page_footprint();
     if (col_reader->sub_readers() != nullptr) {
         for (const auto& sub_reader : *col_reader->sub_readers()) {
+            RETURN_IF_ERROR(sub_reader->load_ordinal_index(opts));
             int64_t sub_total = sub_reader->data_page_footprint();
             total += sub_total;
         }

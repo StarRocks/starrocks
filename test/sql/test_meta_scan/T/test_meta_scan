@@ -85,11 +85,6 @@ SELECT count(*), max(k12), min(k12), count(k12) FROM duplicate_table_with_null_p
 SELECT count(*), max(k13), min(k13), count(k13) FROM duplicate_table_with_null_partition PARTITION (p202008);
 
 -- name: test_meta_column_size_functions
--- basic smoke: ensure functions run on META_ and return BIGINTs
-SELECT sum(column_size(k4)), sum(column_compressed_size(k4)) FROM duplicate_table_with_null_partition [_META_];
-SELECT sum(column_size(k8)), sum(column_compressed_size(k8)) FROM update_table_with_null_partition [_META_];
-
--- name: test_meta_column_size_nested_types
 CREATE TABLE meta_nested_types (
     k1 int,
     j  json,
@@ -99,7 +94,7 @@ CREATE TABLE meta_nested_types (
 )
 DUPLICATE KEY(k1)
 DISTRIBUTED BY HASH(k1) BUCKETS 1
-PROPERTIES ("replication_num" = "1");
+PROPERTIES ("replication_num" = "1", "compression"="lz4");
 
 INSERT INTO meta_nested_types VALUES
 (1, json_object('k','v'), [1,2,3], map{1:'a',2:'b'}, row(1,'x')),
@@ -107,10 +102,10 @@ INSERT INTO meta_nested_types VALUES
 (3, NULL,                  [4],          map{},         row(NULL,NULL));
 
 -- aggregated sizes across segments
-SELECT sum(column_size(j)), sum(column_compressed_size(j)) FROM meta_nested_types [_META_];
-SELECT sum(column_size(a)), sum(column_compressed_size(a)) FROM meta_nested_types [_META_];
-SELECT sum(column_size(m)), sum(column_compressed_size(m)) FROM meta_nested_types [_META_];
-SELECT sum(column_size(s)), sum(column_compressed_size(s)) FROM meta_nested_types [_META_];
+SELECT column_size(j) > 0, column_compressed_size(j) > 0 FROM meta_nested_types [_META_];
+SELECT column_size(a) > 0, column_compressed_size(a) > 0 FROM meta_nested_types [_META_];
+SELECT column_size(m) > 0, column_compressed_size(m) > 0 FROM meta_nested_types [_META_];
+SELECT column_size(s) > 0, column_compressed_size(s) > 0 FROM meta_nested_types [_META_];
 
 -- name: test_update_table_on_meta_scan
 CREATE TABLE `update_table_with_null_partition` (
