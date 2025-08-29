@@ -12,17 +12,13 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.sql.ast;
 
-import com.starrocks.catalog.Index;
 import com.starrocks.sql.parser.NodePosition;
 
 public class CreateIndexClause extends AlterTableClause {
     // index definition class
     private final IndexDef indexDef;
-    // index internal class
-    private Index index;
 
     public CreateIndexClause(IndexDef indexDef) {
         this(indexDef, NodePosition.ZERO);
@@ -33,20 +29,12 @@ public class CreateIndexClause extends AlterTableClause {
         this.indexDef = indexDef;
     }
 
-    public Index getIndex() {
-        return index;
-    }
-
-    public void setIndex(Index index) {
-        this.index = index;
-    }
-
     public IndexDef getIndexDef() {
         return indexDef;
     }
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return ((AstVisitorExtendInterface<R, C>) visitor).visitCreateIndexClause(this, context);
+        return visitor.visitCreateIndexClause(this, context);
     }
 }

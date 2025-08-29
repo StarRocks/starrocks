@@ -836,7 +836,7 @@ public class CreateTableAnalyzer {
             Set<List<String>> distinctCol = new HashSet<>();
 
             for (IndexDef indexDef : indexDefs) {
-                indexDef.analyze();
+                IndexAnalyzer.analyze(indexDef);
                 if (!statement.isOlapEngine()) {
                     throw new SemanticException("index only support in olap engine at current version", indexDef.getPos());
                 }
@@ -845,7 +845,8 @@ public class CreateTableAnalyzer {
                     boolean found = false;
                     for (Column column : columns) {
                         if (column.getName().equalsIgnoreCase(indexColName)) {
-                            indexDef.checkColumn(column, keysDesc.getKeysType());
+                            IndexAnalyzer.checkColumn(column, indexDef.getIndexType(), indexDef.getProperties(),
+                                    keysDesc.getKeysType());
                             found = true;
                             columnIds.add(column.getColumnId());
                             break;
