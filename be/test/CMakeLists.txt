@@ -121,6 +121,7 @@ set(EXEC_FILES
         ./exprs/agg/aggregate_test.cpp
         ./exprs/agg/agg_compressed_key_test.cpp
         ./exprs/agg/agg_state_functions_test.cpp
+        ./exprs/ai_functions_test.cpp
         ./exprs/arithmetic_expr_test.cpp
         ./exprs/arithmetic_operation_test.cpp
         ./exprs/array_element_expr_test.cpp
@@ -571,6 +572,8 @@ set(EXEC_FILES
         ./udf/java/java_data_converter_test.cpp
         ./udf/java/java_udf_test.cpp
         ./util/table_metrics_mgr_test.cpp
+        ./util/llm_cache_test.cpp
+        ./util/llm_query_service_test.cpp
         )
 
 if (${USE_AVX512})
