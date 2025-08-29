@@ -9,6 +9,8 @@ import AdminSetFrontendNote from '../../_assets/commonMarkdown/FE_config_note.md
 
 import StaticFEConfigNote from '../../_assets/commonMarkdown/StaticFE_config_note.md'
 
+import EditionSpecificFEItem from '../../_assets/commonMarkdown/Edition_Specific_FE_Item.md'
+
 # FE 配置项
 
 <FEConfigMethod />
@@ -3581,15 +3583,6 @@ Compaction Score 代表了一个表分区是否值得进行 Compaction 的评分
 - 描述：小文件的根目录。
 - 引入版本：-
 
-##### enable_auth_check
-
-- 默认值：true
-- 类型：Boolean
-- 单位：-
-- 是否动态：否
-- 描述：是否开启鉴权检查功能。取值范围：`TRUE` 和 `FALSE`。`TRUE` 表示开启该功能。`FALSE`表示关闭该功能。
-- 引入版本：-
-
 <!--
 ##### enable_starrocks_external_table_auth_check
 
@@ -4999,3 +4992,93 @@ Compaction Score 代表了一个表分区是否值得进行 Compaction 的评分
 - 描述：
 - 引入版本：-
 -->
+
+##### mv_refresh_fail_on_filter_data
+- 默认值：true
+- 类型：布尔值
+- 单位：-
+- 是否动态：是
+- 描述：当物化视图刷新过程中存在被过滤的数据时，刷新会失败（默认值为 true）。如果设置为 false，则会忽略被过滤的数据并返回刷新成功。
+- 引入版本：-
+
+##### mv_create_partition_batch_interval_ms
+- 默认值：1000
+- 类型：布尔值
+- 单位：ms
+- 是否动态：是
+- 描述：在物化视图刷新时，如果需要一次性创建多个分区，系统将每 64 个分区划分为一个批次进行创建。为了降低因频繁创建导致失败的风险，系统在不同批次之间设置了默认的间隔时间（单位为毫秒），用于控制创建频率。
+- 引入版本：v3.3
+
+##### max_mv_refresh_failure_retry_times
+- 默认值：1
+- 类型：整数
+- 单位：-
+- 是否动态：是
+- 描述：物化视图刷新失败时的最大重试次数。
+- 引入版本：v3.3.0
+
+##### max_mv_refresh_try_lock_failure_retry_times
+- 默认值：3
+- 类型：整数
+- 单位：-
+- 是否动态：是
+- 描述：物化视图刷新过程中尝试加锁失败时的最大重试次数。
+- 引入版本：v3.3.0
+
+##### mv_refresh_try_lock_timeout_ms
+- 默认值：30000
+- 类型：整数
+- 单位：ms
+- 是否动态：是
+- 描述：物化视图刷新尝试获取基表或物化视图数据库锁的默认超时时间（单位为毫秒）。
+- 引入版本：v3.3.0
+
+##### enable_mv_refresh_collect_profile
+- 默认值：false
+- 类型：布尔值
+- 单位：-
+- 是否动态：是
+- 描述：是否为所有物化视图默认启用刷新时的 Profile 信息收集。
+- 引入版本：v3.3.0
+
+##### max_mv_task_run_meta_message_values_length
+- 默认值：16
+- 类型：整数
+- 单位：-
+- 是否动态：是
+- 描述：控制物化视图任务运行时附加信息中 set/map 类型字段值的最大长度，避免占用过多元数据内存。
+- 引入版本：v3.3.0
+
+##### max_mv_check_base_table_change_retry_times
+- 默认值：10
+- 类型：整数
+- 单位：-
+- 是否动态：是
+- 描述：刷新物化视图时，检测基表变更的最大重试次数。
+- 引入版本：v3.3.0
+
+##### mv_refresh_default_planner_optimize_timeout
+- 默认值：30000
+- 类型：整数
+- 单位：ms
+- 是否动态：是
+- 描述：刷新物化视图时优化器规划阶段的默认超时时间（单位为毫秒），默认 30 秒。
+- 引入版本：v3.3.0
+
+##### enable_mv_refresh_query_rewrite
+- 默认值：false
+- 类型：布尔值
+- 单位：-
+- 是否动态：是
+- 描述：是否开启物化视图刷新时的查询改写功能，从而可以使用重写后的物化视图代替原始基表以提升性能。
+- 引入版本：v3.3.0
+
+##### mv_create_partition_batch_interval_ms
+- 默认值：1000
+- 类型：布尔值
+- 单位：ms
+- 是否动态：是
+- 描述：在物化视图刷新时，如果需要一次性创建多个分区，系统将每 64 个分区划分为一个批次进行创建。为了降低因频繁创建导致失败的风险，系统在不同批次之间设置了默认的间隔时间（单位为毫秒），用于控制创建频率。
+- 引入版本：v3.3.0
+
+<EditionSpecificFEItem />
