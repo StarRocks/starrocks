@@ -192,6 +192,9 @@ public class HashJoinNode extends JoinNode {
         if (isSkewJoin) {
             msg.hash_join_node.setIs_skew_join(isSkewJoin);
         }
+        if (commonSlotMap != null) {
+            commonSlotMap.forEach((key, value) -> msg.hash_join_node.putToCommon_slot_map(key.asInt(), value.treeToThrift()));
+        }
     }
 
     @Override
