@@ -8,6 +8,8 @@ import AdminSetFrontendNote from '../../_assets/commonMarkdown/FE_config_note.md
 
 import StaticFEConfigNote from '../../_assets/commonMarkdown/StaticFE_config_note.md'
 
+import EditionSpecificFEItem from '../../_assets/commonMarkdown/Edition_Specific_FE_Item.md'
+
 # FE Configuration
 
 <FEConfigMethod />
@@ -3875,15 +3877,6 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 - Description: The root directory of small files.
 - Introduced in: -
 
-##### enable_auth_check
-
-- Default: true
-- Type: Boolean
-- Unit: -
-- Is mutable: No
-- Description: Specifies whether to enable the authentication check feature. Valid values: `TRUE` and `FALSE`. `TRUE` specifies to enable this feature, and `FALSE` specifies to disable this feature.
-- Introduced in: -
-
 <!--
 ##### enable_starrocks_external_table_auth_check
 
@@ -5572,3 +5565,5 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 - Is mutable: Yes
 - Description: Whether to allow the system to trace the historical nodes. By setting this item to `true`, you can enable the Cache Sharing feature and allow the system to choose the right cache nodes during elastic scaling.
 - Introduced in: v3.5.1
+
+<EditionSpecificFEItem />
