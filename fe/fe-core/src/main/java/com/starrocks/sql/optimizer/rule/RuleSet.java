@@ -383,7 +383,9 @@ public class RuleSet {
                     new PruneEmptyUnionRule(),
                     new PruneEmptyIntersectRule(),
                     new PruneEmptyExceptRule(),
-                    new PruneEmptyWindowRule()
+                    new PruneEmptyWindowRule(),
+                    new PruneCTEProduceRule(),
+                    new InlineOneCTEConsumeRule()
             ));
 
     public static final Rule SHORT_CIRCUIT_SET_RULES =

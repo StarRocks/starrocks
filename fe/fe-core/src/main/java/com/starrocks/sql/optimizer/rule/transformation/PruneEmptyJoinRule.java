@@ -18,9 +18,11 @@ import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.analysis.JoinOperator;
+import com.starrocks.sql.optimizer.CTEContext;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.operator.OperatorType;
+import com.starrocks.sql.optimizer.operator.logical.LogicalCTEConsumeOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalFilterOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalJoinOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalProjectOperator;
@@ -131,5 +133,13 @@ public class PruneEmptyJoinRule extends TransformationRule {
         List<ColumnRefOperator> refs =
                 input.getOutputColumns().getColumnRefOperators(context.getColumnRefFactory());
         return Lists.newArrayList(OptExpression.create(new LogicalValuesOperator(refs)));
+    }
+
+    public void decCTEConsume(OptExpression input, CTEContext cteContext) {
+        input.getInputs().forEach(child -> decCTEConsume(child, cteContext));
+
+        if (OperatorType.LOGICAL_CTE_CONSUME.equals(input.getOp().getOpType())) {
+            cteContext.decCTEConsume(((LogicalCTEConsumeOperator) input.getOp()).getCteId());
+        }
     }
 }
