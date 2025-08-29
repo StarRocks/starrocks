@@ -195,6 +195,8 @@ public:
 
     DEFINE_VECTORIZED_FN(array_sortby_multi);
 
+    DEFINE_VECTORIZED_FN(null_or_empty);
+
     DEFINE_VECTORIZED_FN(array_flatten);
 };
 

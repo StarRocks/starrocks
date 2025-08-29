@@ -185,3 +185,12 @@ INSERT INTO flatten_one_layer_arr_test (COLA, COLB) VALUES (1, [1, 2, 3]);
 SELECT array_flatten(COLB) FROM flatten_one_layer_arr_test ORDER BY COLA;
 SELECT array_slice(array_flatten(COLB), 1, 2) FROM flatten_one_layer_arr_test ORDER BY COLA;
 SELECT array_flatten(array_slice(COLB, 1, 2)) FROM flatten_one_layer_arr_test ORDER BY COLA;
+
+-- name: test_null_or_empty
+select null_or_empty([1, 2]);
+select null_or_empty(null);
+select null_or_empty([]);
+select null_or_empty([[1,2],[1]]);
+CREATE TABLE IF NOT EXISTS null_or_empty_test (COLA INT, COLB ARRAY<INT>) PROPERTIES ("replication_num"="1");
+INSERT INTO null_or_empty_test (COLA, COLB) VALUES (1, []), (2, NULL), (3, [1,2]);
+SELECT null_or_empty(COLB) FROM flatten_test ORDER BY COLA;

@@ -5991,4 +5991,49 @@ TEST_F(ArrayFunctionsTest, array_flatten_int) {
         EXPECT_EQ("[1,2,3]", result->debug_item(2));
     }
 }
+
+TEST_F(ArrayFunctionsTest, null_or_empty) {
+    // null_or_empty(NULL): 1
+    // null_or_empty([1,2]): 0
+    // null_or_empty([]): 1
+    {
+        auto array = ColumnHelper::create_column(TYPE_ARRAY_INT, true);
+        array->append_nulls(1);
+        array->append_datum(DatumArray{{1, 2}});
+        array->append_datum(DatumArray{});
+
+        auto result = ArrayFunctions::null_or_empty(nullptr, {std::move(array)}).value();
+        EXPECT_EQ(3, result->size());
+        EXPECT_EQ("1", result->debug_item(0));
+        EXPECT_EQ("0", result->debug_item(1));
+        EXPECT_EQ("1", result->debug_item(2));
+    }
+    {
+        auto array = ColumnHelper::create_column(TYPE_ARRAY_INT, false);
+        array->append_datum(DatumArray{{1, 2}});
+        array->append_datum(DatumArray{});
+
+        auto result = ArrayFunctions::null_or_empty(nullptr, {std::move(array)}).value();
+        EXPECT_EQ("0", result->debug_item(0));
+        EXPECT_EQ("1", result->debug_item(1));
+    }
+    {
+        auto array = ColumnHelper::create_column(TYPE_ARRAY_INT, false);
+        array->append_datum(DatumArray{{1, 2}});
+        auto result = ArrayFunctions::null_or_empty(nullptr, {std::move(array)}).value();
+        EXPECT_EQ("0", result->debug_item(0));
+    }
+    {
+        auto array = ColumnHelper::create_column(TYPE_ARRAY_INT, false);
+        array->append_datum(DatumArray{{1, 2}});
+        auto literal = ConstColumn::create(std::move(array), 10);
+        auto result = ArrayFunctions::null_or_empty(nullptr, {std::move(literal)}).value();
+        EXPECT_EQ("CONST: 0", result->debug_item(0));
+    }
+    {
+        auto null_col = ColumnHelper::create_const_null_column(10);
+        auto result = ArrayFunctions::null_or_empty(nullptr, {std::move(null_col)}).value();
+        EXPECT_EQ("CONST: 1", result->debug_item(0));
+    }
+}
 } // namespace starrocks

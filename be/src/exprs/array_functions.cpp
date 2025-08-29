@@ -1762,6 +1762,43 @@ StatusOr<ColumnPtr> ArrayFunctions::array_flatten(FunctionContext* ctx, const Co
     }
     return result;
 }
+
+StatusOr<ColumnPtr> ArrayFunctions::null_or_empty(FunctionContext* context, const starrocks::Columns& columns) {
+    DCHECK_EQ(columns.size(), 1);
+
+    auto size = columns[0]->size();
+    if (columns[0]->only_null()) {
+        return ColumnHelper::create_const_column<TYPE_BOOLEAN>(1, size);
+    }
+    if (columns[0]->is_constant()) {
+        auto* array_column = down_cast<const ArrayColumn*>(ColumnHelper::get_data_column(columns[0].get()));
+        return ColumnHelper::create_const_column<TYPE_BOOLEAN>(array_column->get_element_size(0) == 0, size);
+    }
+    auto* array_column = down_cast<const ArrayColumn*>(ColumnHelper::get_data_column(columns[0].get()));
+
+    ColumnBuilder<TYPE_BOOLEAN> result(size);
+    if (columns[0]->is_nullable()) {
+        auto* nullable_column = down_cast<const NullableColumn*>(columns[0].get());
+        const auto& null_data = nullable_column->null_column_data();
+        for (size_t i = 0; i < size; ++i) {
+            if (null_data[i] || array_column->get_element_size(i) == 0) {
+                result.append(true);
+            } else {
+                result.append(false);
+            }
+        }
+        return result.build(ColumnHelper::is_all_const(columns));
+    }
+
+    for (int i = 0; i < size; ++i) {
+        if (array_column->get_element_size(i) == 0) {
+            result.append(true);
+        } else {
+            result.append(false);
+        }
+    }
+    return result.build(ColumnHelper::is_all_const(columns));
+}
 } // namespace starrocks
 
 #include "gen_cpp/opcode/ArrayFunctions.inc"
