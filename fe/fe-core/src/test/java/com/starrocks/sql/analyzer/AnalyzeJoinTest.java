@@ -26,6 +26,7 @@ import org.junit.jupiter.api.Test;
 
 import static com.starrocks.sql.analyzer.AnalyzeTestUtil.analyzeFail;
 import static com.starrocks.sql.analyzer.AnalyzeTestUtil.analyzeSuccess;
+import static com.starrocks.sql.analyzer.AnalyzeTestUtil.analyzeWithoutTestView;
 
 public class AnalyzeJoinTest {
 
@@ -197,7 +198,7 @@ public class AnalyzeJoinTest {
         analyzeFail(sql, "Not unique table/alias: 'a'");
 
         sql = "select * from (t0 a, (select * from t1))";
-        analyzeFail(sql, "Every derived table must have its own alias");
+        analyzeWithoutTestView(sql);
 
         sql = "select * from t0, t0";
         analyzeFail(sql, "Not unique table/alias: 't0'");

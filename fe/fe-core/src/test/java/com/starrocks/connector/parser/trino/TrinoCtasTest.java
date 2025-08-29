@@ -53,7 +53,7 @@ public class TrinoCtasTest extends TrinoTestBase {
             analyzeSuccess(ctasSql);
 
             connectContext.getSessionVariable().setSqlDialect("starrocks");
-            analyzeFail(ctasSql, "Every derived table must have its own alias");
+            analyzeSuccess(ctasSql);
         } finally {
             connectContext.getSessionVariable().setSqlDialect("trino");
         }

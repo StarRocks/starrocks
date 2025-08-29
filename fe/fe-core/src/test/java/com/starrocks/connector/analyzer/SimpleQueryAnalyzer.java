@@ -27,8 +27,7 @@ import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.TableFunction;
 import com.starrocks.catalog.Type;
-import com.starrocks.common.ErrorCode;
-import com.starrocks.common.ErrorReport;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.analyzer.AnalyzeState;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.analyzer.Field;
@@ -196,7 +195,8 @@ public class SimpleQueryAnalyzer {
         @Override
         public Void visitSubqueryRelation(SubqueryRelation subquery, Void context) {
             if (subquery.getResolveTableName() != null && subquery.getResolveTableName().getTbl() == null) {
-                ErrorReport.reportSemanticException(ErrorCode.ERR_DERIVED_MUST_HAVE_ALIAS);
+                String catalog = ConnectContext.get().getCurrentCatalog();
+                subquery.setAlias(new TableName(catalog, "alias_db", "alias_" + System.nanoTime()));
             }
 
             process(subquery.getQueryStatement());
