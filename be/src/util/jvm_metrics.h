@@ -9,7 +9,7 @@ namespace starrocks {
 
 struct MemoryUsage {
     MemoryUsage(int64_t init, int64_t used, int64_t committed, int64_t max)
-        : init(init), used(used), committed(committed), max(max) {}
+            : init(init), used(used), committed(committed), max(max) {}
 
     int64_t init;
     int64_t used;
@@ -19,7 +19,7 @@ struct MemoryUsage {
 
 struct MemoryPool {
     MemoryPool(std::string name, MemoryUsage usage, MemoryUsage peak_usage)
-        : name(std::move(name)), usage(usage), peak_usage(peak_usage) {}
+            : name(std::move(name)), usage(usage), peak_usage(peak_usage) {}
 
     std::string name;
     MemoryUsage usage;
@@ -80,7 +80,6 @@ private:
     jmethodID _get_usage = nullptr;
     jmethodID _get_peak_usage = nullptr;
     jmethodID _get_name = nullptr;
-
 };
 
 } // namespace starrocks

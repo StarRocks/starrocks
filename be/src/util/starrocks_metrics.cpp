@@ -259,8 +259,8 @@ StarRocksMetrics::StarRocksMetrics() : _metrics(_s_registry_name) {
     REGISTER_STARROCKS_METRIC(short_circuit_request_duration_us);
 }
 
-void StarRocksMetrics::initialize(const std::vector<std::string>& paths, bool init_system_metrics, bool init_jvm_metrics,
-                                  const std::set<std::string>& disk_devices,
+void StarRocksMetrics::initialize(const std::vector<std::string>& paths, bool init_system_metrics,
+                                  bool init_jvm_metrics, const std::set<std::string>& disk_devices,
                                   const std::vector<std::string>& network_interfaces) {
     // disk usage
     for (auto& path : paths) {

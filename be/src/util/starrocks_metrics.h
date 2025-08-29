@@ -411,8 +411,7 @@ public:
 
     // not thread-safe, call before calling metrics
     void initialize(const std::vector<std::string>& paths = std::vector<std::string>(),
-                    bool init_system_metrics = false,
-                    bool init_jvm_metrics = false,
+                    bool init_system_metrics = false, bool init_jvm_metrics = false,
                     const std::set<std::string>& disk_devices = std::set<std::string>(),
                     const std::vector<std::string>& network_interfaces = std::vector<std::string>());
 

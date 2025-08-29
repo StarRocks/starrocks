@@ -230,7 +230,8 @@ static void init_starrocks_metrics(const std::vector<StorePath>& store_paths) {
             return;
         }
     }
-    StarRocksMetrics::instance()->initialize(paths, init_system_metrics, init_jvm_metrics, disk_devices, network_interfaces);
+    StarRocksMetrics::instance()->initialize(paths, init_system_metrics, init_jvm_metrics, disk_devices,
+                                             network_interfaces);
 }
 
 void sigterm_handler(int signo, siginfo_t* info, void* context) {
