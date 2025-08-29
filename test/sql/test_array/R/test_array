@@ -401,3 +401,34 @@ SELECT array_flatten(array_slice(COLB, 1, 2)) FROM flatten_one_layer_arr_test OR
 -- result:
 E: (1064, 'Getting analyzing error from line 1, column 7 to line 1, column 44. Detail message: The only one input of array_flatten should be an array of arrays, rather than array<int(11)>.')
 -- !result
+
+
+-- name: null_or_empty
+select null_or_empty([1, 2]);
+-- result:
+0
+-- !result
+select null_or_empty(null);
+-- result:
+1
+-- !result
+select null_or_empty([]);
+-- result:
+0
+-- !result
+select null_or_empty([[1,2],[1]]);
+-- result:
+1
+-- !result
+CREATE TABLE IF NOT EXISTS null_or_empty_test (COLA INT, COLB ARRAY<INT>) PROPERTIES ("replication_num"="1");
+-- result:
+-- !result
+INSERT INTO null_or_empty_test (COLA, COLB) VALUES (1, []), (2, NULL), (3, [1,2]);
+-- result:
+-- !result
+SELECT null_or_empty(COLB) FROM flatten_test ORDER BY COLA;
+-- result:
+1
+1
+0
+-- !result

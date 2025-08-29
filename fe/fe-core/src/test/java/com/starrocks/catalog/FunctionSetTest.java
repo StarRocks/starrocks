@@ -294,6 +294,30 @@ public class FunctionSetTest {
         Assertions.assertEquals(VARCHAR_ARRAY, fn.getReturnType());
         Assertions.assertEquals(VARCHAR_ARRAY_ARRAY, fn.getArgs()[0]);
 
+        // null_or_empty(null)
+        argTypes = new Type[] {Type.NULL};
+        desc = new Function(new FunctionName("null_or_empty"), argTypes, Type.INVALID, false);
+        fn = functionSet.getFunction(desc, Function.CompareMode.IS_SUPERTYPE_OF);
+        Assertions.assertNotNull(fn);
+        Assertions.assertEquals(Type.BOOLEAN, fn.getReturnType());
+        Assertions.assertEquals(Type.VARCHAR, fn.getArgs()[0]);
+
+        // null_or_empty(ARRAY<INT>)
+        argTypes = new Type[] {INT_ARRAY};
+        desc = new Function(new FunctionName("null_or_empty"), argTypes, Type.INVALID, false);
+        fn = functionSet.getFunction(desc, Function.CompareMode.IS_SUPERTYPE_OF);
+        Assertions.assertNotNull(fn);
+        Assertions.assertEquals(Type.BOOLEAN, fn.getReturnType());
+        Assertions.assertEquals(INT_ARRAY, fn.getArgs()[0]);
+
+        // null_or_empty(ARRAY<ARRAY<INT>>)
+        argTypes = new Type[] {INT_ARRAY_ARRAY};
+        desc = new Function(new FunctionName("null_or_empty"), argTypes, Type.INVALID, false);
+        fn = functionSet.getFunction(desc, Function.CompareMode.IS_SUPERTYPE_OF);
+        Assertions.assertNotNull(fn);
+        Assertions.assertEquals(Type.BOOLEAN, fn.getReturnType());
+        Assertions.assertEquals(INT_ARRAY_ARRAY, fn.getArgs()[0]);
+
         // coalesce
         argTypes = new Type[] {INT_ARRAY_ARRAY, DOUBLE_ARRAY};
         desc = new Function(new FunctionName("coalesce"), argTypes, Type.INVALID, false);
