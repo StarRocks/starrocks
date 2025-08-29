@@ -4727,4 +4727,92 @@ TEST_F(TimeFunctionsTest, hourFromUnixTime) {
     }
 }
 
-} // namespace starrocks
+TEST_F(TimeFunctionsTest, minuteFromUnixTime) {
+    RuntimeState* state = _utils->get_fn_ctx()->state();
+    std::string prev_timezone = state->timezone();
+    ASSERT_TRUE(state->set_timezone("UTC"));
+    DeferOp defer([&]() { state->set_timezone(prev_timezone); });
+
+    Int64Column::Ptr tc = Int64Column::create();
+    tc->append(0);    // 00:00:00 -> 0
+    tc->append(59);   // 00:00:59 -> 0
+    tc->append(60);   // 00:01:00 -> 1
+    tc->append(3599); // 00:59:59 -> 59
+    tc->append(3600); // 01:00:00 -> 0
+    tc->append(3723); // 01:02:03 -> 2
+
+    int expected[] = {0, 0, 1, 59, 0, 2};
+    Columns columns;
+    columns.emplace_back(tc);
+    ColumnPtr result = TimeFunctions::minute_from_unixtime(_utils->get_fn_ctx(), columns).value();
+    auto mins = ColumnHelper::cast_to<TYPE_INT>(result);
+    for (size_t i = 0; i < sizeof(expected) / sizeof(expected[0]); ++i) {
+        EXPECT_EQ(expected[i], mins->get_data()[i]);
+    }
+}
+
+TEST_F(TimeFunctionsTest, secondFromUnixTime) {
+    RuntimeState* state = _utils->get_fn_ctx()->state();
+    std::string prev_timezone = state->timezone();
+    ASSERT_TRUE(state->set_timezone("UTC"));
+    DeferOp defer([&]() { state->set_timezone(prev_timezone); });
+
+    Int64Column::Ptr tc = Int64Column::create();
+    tc->append(0);    // -> 0
+    tc->append(59);   // -> 59
+    tc->append(60);   // -> 0
+    tc->append(61);   // -> 1
+    tc->append(3723); // 01:02:03 -> 3
+
+    int expected[] = {0, 59, 0, 1, 3};
+    Columns columns;
+    columns.emplace_back(tc);
+    ColumnPtr result = TimeFunctions::second_from_unixtime(_utils->get_fn_ctx(), columns).value();
+    auto secs = ColumnHelper::cast_to<TYPE_INT>(result);
+    for (size_t i = 0; i < sizeof(expected) / sizeof(expected[0]); ++i) {
+        EXPECT_EQ(expected[i], secs->get_data()[i]);
+    }
+}
+
+TEST_F(TimeFunctionsTest, ymdFromUnixTime) {
+    RuntimeState* state = _utils->get_fn_ctx()->state();
+    std::string prev_timezone = state->timezone();
+    ASSERT_TRUE(state->set_timezone("UTC"));
+    DeferOp defer([&]() { state->set_timezone(prev_timezone); });
+
+    Int64Column::Ptr tc = Int64Column::create();
+    tc->append(0);         // 1970-01-01
+    tc->append(86399);     // 1970-01-01
+    tc->append(86400);     // 1970-01-02
+    tc->append(946684800); // 2000-01-01 00:00:00
+    tc->append(951868800); // 2000-03-01 00:00:00 (leap year)
+
+    Columns columns;
+    columns.emplace_back(tc);
+
+    ColumnPtr yearCol = TimeFunctions::year_from_unixtime(_utils->get_fn_ctx(), columns).value();
+    ColumnPtr monthCol = TimeFunctions::month_from_unixtime(_utils->get_fn_ctx(), columns).value();
+    ColumnPtr dayCol = TimeFunctions::day_from_unixtime(_utils->get_fn_ctx(), columns).value();
+
+    auto years = ColumnHelper::cast_to<TYPE_INT>(yearCol);
+    auto months = ColumnHelper::cast_to<TYPE_INT>(monthCol);
+    auto days = ColumnHelper::cast_to<TYPE_INT>(dayCol);
+
+    EXPECT_EQ(1970, years->get_data()[0]);
+    EXPECT_EQ(1, months->get_data()[0]);
+    EXPECT_EQ(1, days->get_data()[0]);
+    EXPECT_EQ(1970, years->get_data()[1]);
+    EXPECT_EQ(1, months->get_data()[1]);
+    EXPECT_EQ(1, days->get_data()[1]);
+    EXPECT_EQ(1970, years->get_data()[2]);
+    EXPECT_EQ(1, months->get_data()[2]);
+    EXPECT_EQ(2, days->get_data()[2]);
+    EXPECT_EQ(2000, years->get_data()[3]);
+    EXPECT_EQ(1, months->get_data()[3]);
+    EXPECT_EQ(1, days->get_data()[3]);
+    EXPECT_EQ(2000, years->get_data()[4]);
+    EXPECT_EQ(3, months->get_data()[4]);
+    EXPECT_EQ(1, days->get_data()[4]);
+}
+
+} //namespace starrocks
