@@ -189,8 +189,6 @@ public class AuditLogBuilder extends Plugin implements AuditPlugin {
                 } else {
                     AuditLog.getQueryAudit().log(sb.toString());
                 }
-
-
             }
         } catch (Exception e) {
             LOG.warn("failed to process audit event", e);
