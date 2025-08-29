@@ -2812,8 +2812,6 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 変更可能: はい
 - 説明: EXPLAIN ステートメントによって返されるクエリプランの詳細レベル。有効な値: COSTS, NORMAL, VERBOSE。
 - 導入バージョン: v3.2.12, v3.3.5
-<<<<<<< HEAD
-=======
 
 ##### mv_plan_cache_expire_interval_sec
 
@@ -2968,24 +2966,4 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 説明: より良いデバッグのために、ログでマテリアライズドビュー名の接頭辞を有効にするかどうか。
 - 導入バージョン: v3.4.0
 
-
-##### enable_mv_post_image_reload_cache
-
-- デフォルト: true
-- タイプ: Boolean
-- 単位: -
-- 変更可能: はい
-- 説明: FEが Image をロードした後に、再ロードのフラグチェックを行うかどうか。ベースとなるマテリアライズドビューに対してチェックを行う場合、それに関連する他のマテリアライズドビューに対しては必要ありません。
-- 導入バージョン: v3.5.0
-
-##### enable_mv_post_image_reload_cache
-
-- デフォルト: false
-- タイプ: Boolean
-- 単位: -
-- 変更可能: はい
-- 説明: システムがヒストリカルノードをトレースすることを許可するかどうか。この項目を `true` に設定することで、キャッシュ共有機能を有効にし、エラスティックなスケーリング時にシステムが適切なキャッシュノードを選択できるようにすることができる。
-- 導入バージョン: v3.5.1
-
 <EditionSpecificFEItem />
->>>>>>> ccf0a33ba2 ([Doc] Categorize enable_auth_check (#62517))
