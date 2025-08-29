@@ -65,6 +65,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.stream.Collectors;
 
 /**
  * Internal representation of table-related metadata. A table contains several partitions.
@@ -443,6 +444,10 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable, 
 
     public List<Column> getFullSchema() {
         return fullSchema;
+    }
+
+    public List<Column> getFullVisibleSchema() {
+        return fullSchema.stream().filter(column -> !column.isHidden()).collect(Collectors.toList());
     }
 
     // should override in subclass if necessary
