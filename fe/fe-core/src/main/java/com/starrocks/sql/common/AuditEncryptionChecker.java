@@ -40,6 +40,7 @@ import com.starrocks.sql.ast.SetOperationRelation;
 import com.starrocks.sql.ast.SetPassVar;
 import com.starrocks.sql.ast.SetStmt;
 import com.starrocks.sql.ast.StatementBase;
+import com.starrocks.sql.ast.SubmitTaskStmt;
 import com.starrocks.sql.ast.SubqueryRelation;
 import com.starrocks.sql.ast.integration.ShowCreateSecurityIntegrationStatement;
 import com.starrocks.sql.ast.pipe.CreatePipeStmt;
@@ -82,6 +83,11 @@ public class AuditEncryptionChecker implements AstVisitorExtendInterface<Boolean
     public Boolean visitQueryStatement(QueryStatement statement, Void context) {
         QueryRelation queryRelation = statement.getQueryRelation();
         return visit(queryRelation);
+    }
+
+    @Override
+    public Boolean visitSubmitTaskStatement(SubmitTaskStmt statement, Void context) {
+        return true;
     }
 
     @Override

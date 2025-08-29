@@ -418,6 +418,11 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true)
     public static boolean enable_task_run_fe_evaluation = true;
 
+    // whether mask credential info in `information_schema.tasks` and `information_schema.task_runs`
+    // if task count is big, mask process can be time consuming
+    @ConfField(mutable = true)
+    public static boolean enable_task_info_mask_credential = true;
+
     /**
      * The max keep time of some kind of jobs.
      * like schema change job and rollup job.
