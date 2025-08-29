@@ -35,8 +35,8 @@
 namespace starrocks {
 
 std::vector<std::string> SegmentMetaCollecter::support_collect_fields = {
-        META_FLAT_JSON_META,       META_DICT_MERGE,          META_MAX,           META_MIN,
-        META_COUNT_ROWS,           META_COUNT_COL,           META_COLUMN_SIZE,   META_COLUMN_COMPRESSED_SIZE};
+        META_FLAT_JSON_META, META_DICT_MERGE, META_MAX,         META_MIN,
+        META_COUNT_ROWS,     META_COUNT_COL,  META_COLUMN_SIZE, META_COLUMN_COMPRESSED_SIZE};
 
 Status SegmentMetaCollecter::parse_field_and_colname(const std::string& item, std::string* field,
                                                      std::string* col_name) {
