@@ -91,6 +91,7 @@ import com.starrocks.sql.analyzer.RelationId;
 import com.starrocks.sql.analyzer.Scope;
 import com.starrocks.sql.analyzer.SelectAnalyzer;
 import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.sql.ast.IndexDef.IndexType;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.TColumn;
 import com.starrocks.thrift.TDataSink;
@@ -205,7 +206,10 @@ public class OlapTableSink extends DataSink {
                 dstTable.isOlapExternalTable() && ((ExternalOlapTable) dstTable).isSourceTableCloudNativeTableOrMaterializedView());
         tSink.setKeys_type(dstTable.getKeysType().toThrift());
         tSink.setWrite_quorum_type(writeQuorum);
-        tSink.setEnable_replicated_storage(enableReplicatedStorage);
+        // If table has Gin index, do not allow replicated storage
+        boolean hasGin = dstTable.getIndexes().stream()
+                .anyMatch(index -> index.getIndexType() == IndexType.GIN);
+        tSink.setEnable_replicated_storage(enableReplicatedStorage && !hasGin);
         tSink.setAutomatic_bucket_size(automaticBucketSize);
         tSink.setEncryption_meta(GlobalStateMgr.getCurrentState().getKeyMgr().getCurrentKEKAsEncryptionMeta());
         tSink.setEnable_data_file_bundling(dstTable.isFileBundling());
