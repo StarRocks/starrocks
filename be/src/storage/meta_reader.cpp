@@ -491,40 +491,12 @@ Status SegmentMetaCollecter::_collect_column_size(ColumnId cid, Column* column, 
 Status SegmentMetaCollecter::_collect_column_compressed_size(ColumnId cid, Column* column, LogicalType type) {
     // Compressed size estimation: sum of data page sizes via ordinal index ranges
     ColumnReader* col_reader = const_cast<ColumnReader*>(_segment->column(cid));
-    if (col_reader == nullptr) {
-        return Status::NotFound("");
-    }
-    // Create a lightweight iterator to access page pointers
-    ASSIGN_OR_RETURN(auto iter, col_reader->new_iterator());
+    RETURN_IF(col_reader == nullptr, Status::NotFound("column not found: " + std::to_string(cid)));
 
-    auto read_compressed_size = [&](ColumnReader* col_reader, ColumnIterator* iter) -> StatusOr<int64_t> {
-        ColumnIteratorOptions iter_opts;
-        iter_opts.check_dict_encoding = false;
-        iter_opts.read_file = _read_file.get();
-        iter_opts.stats = &_stats;
-        RETURN_IF_ERROR(iter->init(iter_opts));
-
-        int64_t total_bytes = 0;
-        // Access reader to locate number of pages and accumulate sizes
-        // Seek to first to ensure ordinal index is loaded
-        RETURN_IF_ERROR(iter->seek_to_first());
-        int page_index = 0;
-        while (true) {
-            OrdinalPageIndexIterator piter;
-            Status st = col_reader->seek_by_page_index(page_index, &piter);
-            if (!st.ok()) break;
-            auto pp = piter.page();
-            total_bytes += static_cast<int64_t>(pp.size);
-            page_index++;
-        }
-        return total_bytes;
-    };
-
-    ASSIGN_OR_RETURN(int64_t total, read_compressed_size(col_reader, iter.get()));
+    int64_t total = col_reader->data_page_footprint();
     if (col_reader->sub_readers() != nullptr) {
         for (const auto& sub_reader : *col_reader->sub_readers()) {
-            ASSIGN_OR_RETURN(auto sub_iter, sub_reader->new_iterator());
-            ASSIGN_OR_RETURN(auto sub_total, read_compressed_size(sub_reader.get(), sub_iter.get()));
+            int64_t sub_total = sub_reader->data_page_footprint();
             total += sub_total;
         }
     }
