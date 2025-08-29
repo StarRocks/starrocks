@@ -18,7 +18,7 @@ displayed_sidebar: docs
 - [修改表的属性](#修改表的属性)
 - [对表进行原子替换](#swap-将两个表原子替换)
 - [手动执行 Compaction 合并表数据](#手动-compaction31-版本起)
-- [删除主键索引](#删除主键索引-339-版本起))
+- [删除主键索引](#删除主键索引-339-版本起)
 
 :::tip
 此操作需要对目标表具有ALTER权限。
@@ -108,7 +108,12 @@ ALTER TABLE [<db_name>.]<tbl_name> COMMENT = "<new table comment>";
 
 #### 添加分区
 
-可以选择添加Range分区或List分区。不支持添加表达式分区。
+您必须严格遵循相应的语法来添加 Range 分区或 List 分区。
+
+:::note
+- 不支持添加表达式分区。
+- 请注意，尽管 `PARTITION BY date_trunc(column)` 和 `PARTITION BY time_slice(column)` 的格式为表达式分区，两者都属于属于 Range 分区。因此，您可以使用以下 Range 分区的语法，为采用此类分区策略的表添加新分区。
+:::
 
 语法：
 
@@ -264,8 +269,19 @@ ALTER TABLE t1 DROP PARTITIONS WHERE dt < CURRENT_DATE() - INTERVAL 3 MONTH;
 ```sql
 ALTER TABLE [<db_name>.]<tbl_name> 
 ADD TEMPORARY PARTITION [IF NOT EXISTS] <partition_name>
-partition_desc ["key"="value"]
+{ single_range_partition | multi_range_partitions | list_partitions }
 [DISTRIBUTED BY HASH (k1[,k2 ...]) [BUCKETS num]]
+
+-- 有关 single_range_partition 和 multi_range_partitions 的详细信息，请参阅本页面中的“添加分区”部分。
+
+list_partitions::= 
+    PARTITION <partition_name> VALUES IN (value_list)
+
+value_list ::=
+    value_item [, ...]
+
+value_item ::=
+    { <value> | ( <value> [, ...] ) }
 ```
 
 #### 使用临时分区替换当前分区
