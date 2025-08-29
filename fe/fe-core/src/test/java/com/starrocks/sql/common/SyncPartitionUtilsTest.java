@@ -29,13 +29,16 @@ import com.starrocks.analysis.StringLiteral;
 import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.FunctionSet;
+import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.ScalarType;
+import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Pair;
 import com.starrocks.common.util.DateUtils;
+import com.starrocks.scheduler.TableWithPartitions;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.PartitionValue;
 import com.starrocks.sql.common.mv.MVEagerRangePartitionMapper;
@@ -112,7 +115,7 @@ public class SyncPartitionUtilsTest {
     }
 
     private static PartitionDiff getRangePartitionDiffOfSlotRef(Map<String, Range<PartitionKey>> baseRangeMap,
-                                                                     Map<String, Range<PartitionKey>> mvRangeMap) {
+                                                                Map<String, Range<PartitionKey>> mvRangeMap) {
         return SyncPartitionUtils.getRangePartitionDiffOfSlotRef(baseRangeMap, mvRangeMap, null);
     }
 
@@ -965,5 +968,148 @@ public class SyncPartitionUtilsTest {
                 result.lowerEndpoint().getKeys().get(0).getStringValue());
         Assertions.assertEquals("9999-12-31 00:00:00",
                 result.upperEndpoint().getKeys().get(0).getStringValue());
+    }
+
+    // Helper method to create PRangeCell from date strings
+    private PRangeCell createPRangeCell(String lowerBound, String upperBound) throws AnalysisException {
+        Range<PartitionKey> range = createRange(lowerBound, upperBound);
+        return new PRangeCell(range);
+    }
+
+    @Test
+    public void testIsManyToManyPartitionRangeMapping() throws AnalysisException {
+        // Test case 1: Empty destination ranges
+        PRangeCell srcRange = createPRangeCell("2023-07-27", "2023-07-30");
+        List<PRangeCell> emptyDstRanges = Lists.newArrayList();
+        boolean result = SyncPartitionUtils.isManyToManyPartitionRangeMapping(srcRange, emptyDstRanges);
+        Assertions.assertFalse(result, "Empty destination ranges should return false");
+
+        // Test case 2: Single destination range with intersection
+        List<PRangeCell> singleDstRanges = Lists.newArrayList(
+                createPRangeCell("2023-07-01", "2023-08-01")
+        );
+        result = SyncPartitionUtils.isManyToManyPartitionRangeMapping(srcRange, singleDstRanges);
+        Assertions.assertFalse(result, "Single intersecting range should return true");
+
+        // Test case 3: Single destination range without intersection
+        List<PRangeCell> nonIntersectingDstRanges = Lists.newArrayList(
+                createPRangeCell("2023-08-01", "2023-09-01")
+        );
+        result = SyncPartitionUtils.isManyToManyPartitionRangeMapping(srcRange, nonIntersectingDstRanges);
+        Assertions.assertFalse(result, "Non-intersecting single range should return false");
+
+        // Test case 4: Multiple destination ranges with intersections (many-to-many scenario)
+        List<PRangeCell> multiDstRanges = Lists.newArrayList(
+                createPRangeCell("2023-07-01", "2023-07-28"),  // intersects
+                createPRangeCell("2023-07-29", "2023-08-01"),  // intersects
+                createPRangeCell("2023-08-01", "2023-09-01")   // doesn't intersect
+        );
+        result = SyncPartitionUtils.isManyToManyPartitionRangeMapping(srcRange, multiDstRanges);
+        Assertions.assertTrue(result, "Multiple intersecting ranges should return true");
+
+        // Test case 5: Adjacent ranges (edge case)
+        PRangeCell adjacentSrcRange = createPRangeCell("2023-07-30", "2023-08-02");
+        List<PRangeCell> adjacentDstRanges = Lists.newArrayList(
+                createPRangeCell("2023-07-01", "2023-07-30"),  // adjacent but not intersecting
+                createPRangeCell("2023-08-02", "2023-09-01")   // adjacent but not intersecting
+        );
+        result = SyncPartitionUtils.isManyToManyPartitionRangeMapping(adjacentSrcRange, adjacentDstRanges);
+        Assertions.assertFalse(result, "Adjacent non-intersecting ranges should return false");
+
+        // Test case 6: Exact overlap with one range
+        PRangeCell exactSrcRange = createPRangeCell("2023-07-01", "2023-08-01");
+        List<PRangeCell> exactDstRanges = Lists.newArrayList(
+                createPRangeCell("2023-07-01", "2023-08-01")
+        );
+        result = SyncPartitionUtils.isManyToManyPartitionRangeMapping(exactSrcRange, exactDstRanges);
+        Assertions.assertFalse(result, "Exact overlap should return true");
+    }
+
+    @Test
+    public void testIsCalcPotentialRefreshPartition() throws AnalysisException {
+        // Test case 1: One-to-One mapping (should return false)
+        Table mockTable1 = new OlapTable();
+        Map<String, PCell> basePartitionMap = Maps.newHashMap();
+        basePartitionMap.put("p1", createPRangeCell("2023-07-27", "2023-07-28"));
+        basePartitionMap.put("p2", createPRangeCell("2023-07-28", "2023-07-29"));
+
+        Map<String, PCell> mvPartitionMap = Maps.newHashMap();
+        mvPartitionMap.put("mv_p1", createPRangeCell("2023-07-27", "2023-07-28"));
+        mvPartitionMap.put("mv_p2", createPRangeCell("2023-07-28", "2023-07-29"));
+
+        List<TableWithPartitions> baseChangedPartitions = Lists.newArrayList(
+                new TableWithPartitions(mockTable1, ImmutableSet.of("p1"))
+        );
+
+        Map<Table, Map<String, PCell>> refBaseTablePartitionToCells = Maps.newHashMap();
+        refBaseTablePartitionToCells.put(mockTable1, basePartitionMap);
+
+        Set<String> mvPartitions = ImmutableSet.of("mv_p1", "mv_p2");
+
+        boolean result = SyncPartitionUtils.isCalcPotentialRefreshPartition(
+                baseChangedPartitions, refBaseTablePartitionToCells, mvPartitions, mvPartitionMap);
+        Assertions.assertFalse(result, "One-to-one mapping should return false");
+
+        // Test case 2: Many-to-One mapping (should return false)
+        Map<String, PCell> manyToOneBasePartitionMap = Maps.newHashMap();
+        manyToOneBasePartitionMap.put("p1", createPRangeCell("2023-07-01", "2023-07-15"));
+        manyToOneBasePartitionMap.put("p2", createPRangeCell("2023-07-15", "2023-07-31"));
+
+        Map<String, PCell> manyToOneMvPartitionMap = Maps.newHashMap();
+        manyToOneMvPartitionMap.put("mv_p1", createPRangeCell("2023-07-01", "2023-08-01"));
+
+        List<TableWithPartitions> manyToOneBaseChangedPartitions = Lists.newArrayList(
+                new TableWithPartitions(mockTable1, ImmutableSet.of("p1"))
+        );
+
+        Map<Table, Map<String, PCell>> manyToOneRefBaseTablePartitionToCells = Maps.newHashMap();
+        manyToOneRefBaseTablePartitionToCells.put(mockTable1, manyToOneBasePartitionMap);
+
+        Set<String> manyToOneMvPartitions = ImmutableSet.of("mv_p1");
+
+        result = SyncPartitionUtils.isCalcPotentialRefreshPartition(
+                manyToOneBaseChangedPartitions, manyToOneRefBaseTablePartitionToCells,
+                manyToOneMvPartitions, manyToOneMvPartitionMap);
+        Assertions.assertFalse(result, "Many-to-one mapping should return false");
+
+        // Test case 3: Many-to-Many mapping (should return true)
+        // Base table partitions: 3-day intervals
+        // MV partitions: monthly intervals
+        Map<String, PCell> manyToManyBasePartitionMap = Maps.newHashMap();
+        manyToManyBasePartitionMap.put("p1", createPRangeCell("2023-07-27", "2023-07-30"));
+        manyToManyBasePartitionMap.put("p2", createPRangeCell("2023-07-30", "2023-08-02"));
+        manyToManyBasePartitionMap.put("p3", createPRangeCell("2023-08-02", "2023-08-05"));
+
+        Map<String, PCell> manyToManyMvPartitionMap = Maps.newHashMap();
+        manyToManyMvPartitionMap.put("mv_p1", createPRangeCell("2023-07-01", "2023-08-01"));
+        manyToManyMvPartitionMap.put("mv_p2", createPRangeCell("2023-08-01", "2023-09-01"));
+
+        List<TableWithPartitions> manyToManyBaseChangedPartitions = Lists.newArrayList(
+                new TableWithPartitions(mockTable1, ImmutableSet.of("p2"))
+        );
+
+        Map<Table, Map<String, PCell>> manyToManyRefBaseTablePartitionToCells = Maps.newHashMap();
+        manyToManyRefBaseTablePartitionToCells.put(mockTable1, manyToManyBasePartitionMap);
+
+        Set<String> manyToManyMvPartitions = ImmutableSet.of("mv_p1", "mv_p2");
+
+        result = SyncPartitionUtils.isCalcPotentialRefreshPartition(
+                manyToManyBaseChangedPartitions, manyToManyRefBaseTablePartitionToCells,
+                manyToManyMvPartitions, manyToManyMvPartitionMap);
+        Assertions.assertTrue(result, "Many-to-many mapping should return true");
+
+        // Test case 4: Empty base changed partitions (should return false)
+        List<TableWithPartitions> emptyBaseChangedPartitions = Lists.newArrayList();
+        result = SyncPartitionUtils.isCalcPotentialRefreshPartition(
+                emptyBaseChangedPartitions, refBaseTablePartitionToCells, mvPartitions, mvPartitionMap);
+        Assertions.assertFalse(result, "Empty base changed partitions should return false");
+
+        // Test case 5: Base partition not found in reference map (should return false)
+        List<TableWithPartitions> nonExistentBaseChangedPartitions = Lists.newArrayList(
+                new TableWithPartitions(mockTable1, ImmutableSet.of("non_existent_partition"))
+        );
+        result = SyncPartitionUtils.isCalcPotentialRefreshPartition(
+                nonExistentBaseChangedPartitions, refBaseTablePartitionToCells, mvPartitions, mvPartitionMap);
+        Assertions.assertFalse(result, "Non-existent base partition should return false");
     }
 }

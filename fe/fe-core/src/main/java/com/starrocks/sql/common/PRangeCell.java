@@ -82,6 +82,36 @@ public final class PRangeCell extends PCell {
                 this.range.lowerEndpoint().compareTo(other.range.upperEndpoint()) < 0;
     }
 
+    /**
+     * Check two partition ranges are `overlapped`, which means they are intersected and not equal.
+     * eg:
+     * this is not unligned with other:
+     * this :     |--------------|
+     * other:     |----|
+     * this :     |--------------|
+     * other:     |--------------|
+     * this is unaligned with other:
+     * this :     |--------------|
+     * other:  |----|
+     */
+    public boolean isUnAligned(PCell o) {
+        return isIntersected(o) && !isContains(o) && !((PRangeCell) o).isContains(this);
+    }
+
+    /**
+     * Whether this partition range contains another partition range.
+     * this :     |--------------|
+     * other:      |----|
+     */
+    public boolean isContains(PCell o) {
+        if (!(o instanceof PRangeCell)) {
+            return false;
+        }
+        PRangeCell other = (PRangeCell) o;
+        return this.range.lowerEndpoint().compareTo(other.range.lowerEndpoint()) <= 0 &&
+                this.range.upperEndpoint().compareTo(other.range.upperEndpoint()) >= 0;
+    }
+
     @Override
     public boolean equals(Object o) {
         if (o == this) {
