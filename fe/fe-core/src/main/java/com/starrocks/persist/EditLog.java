@@ -1299,15 +1299,6 @@ public class EditLog {
         waitInfinity(task);
     }
 
-    /**
-     * Apply the in-memory change in WALApplier.
-     */
-    public void logEdit(short op, Writable writable, WALApplier applier) {
-        JournalTask task = submitLog(op, writable, -1);
-        waitInfinity(task);
-        applier.apply(writable);
-    }
-
     public void logJsonObject(short op, Object obj) {
         logEdit(op, new Writable() {
             @Override
@@ -1317,14 +1308,17 @@ public class EditLog {
         });
     }
 
+    /**
+     * Apply the in-memory change in WALApplier.
+     */
     public void logJsonObject(short op, Object obj, WALApplier applier) {
-        Writable writable = new Writable() {
+        logEdit(op, new Writable() {
             @Override
             public void write(DataOutput out) throws IOException {
                 Text.writeString(out, GsonUtils.GSON.toJson(obj));
             }
-        };
-        logEdit(op, writable, applier);
+        });
+        applier.apply(obj);
     }
 
     /**
@@ -1653,11 +1647,11 @@ public class EditLog {
     }
 
     public void logAddBroker(ModifyBrokerInfo info, WALApplier applier) {
-        logEdit(OperationType.OP_ADD_BROKER_V2, info, applier);
+        logJsonObject(OperationType.OP_ADD_BROKER_V2, info, applier);
     }
 
     public void logDropBroker(ModifyBrokerInfo info, WALApplier applier) {
-        logEdit(OperationType.OP_DROP_BROKER_V2, info, applier);
+        logJsonObject(OperationType.OP_DROP_BROKER_V2, info, applier);
     }
 
     public void logDropAllBroker(String brokerName, WALApplier applier) {

@@ -17,6 +17,7 @@ package com.starrocks.catalog;
 import com.google.common.collect.ArrayListMultimap;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.Pair;
+import com.starrocks.persist.DropBrokerLog;
 import com.starrocks.persist.EditLog;
 import com.starrocks.persist.ModifyBrokerInfo;
 import com.starrocks.persist.OperationType;
@@ -438,11 +439,11 @@ public class BrokerMgrEditLogTest {
         followerBrokerMgr.addBrokers(brokerName, addAddresses);
         Assertions.assertEquals(3, followerBrokerMgr.getAllBrokers().size());
 
-        String replayBrokerName = UtFrameUtils.PseudoJournalReplayer
-                .replayNextJournal(OperationType.OP_DROP_ALL_BROKER).toString();
+        DropBrokerLog dropBrokerLog = (DropBrokerLog) UtFrameUtils
+                .PseudoJournalReplayer.replayNextJournal(OperationType.OP_DROP_ALL_BROKER_V2);
         
         // Execute follower replay
-        followerBrokerMgr.replayDropAllBroker(replayBrokerName);
+        followerBrokerMgr.replayDropAllBroker(dropBrokerLog.getBrokerName());
 
         // 6. Verify follower state is consistent with master
         Assertions.assertFalse(followerBrokerMgr.containsBroker(brokerName));
