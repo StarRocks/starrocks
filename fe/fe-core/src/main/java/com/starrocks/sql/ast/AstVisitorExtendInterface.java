@@ -1449,7 +1449,7 @@ public interface AstVisitorExtendInterface<R, C> extends AstVisitor<R, C> {
 
     // ------------------------------------------- Expression ----------------------------------------
     default R visitExpression(Expr node, C context) {
-        return visit(node, context);
+        return visitNode(node, context);
     }
 
     // ------------------------------------------- References ----------------------------------------
