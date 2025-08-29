@@ -4,12 +4,12 @@ displayed_sidebar: docs
 
 # bitmap_hash64
 
-任意のタイプの入力に対して64ビットのハッシュ値を計算し、そのハッシュ値を含むビットマップを返します。これは主に、StarRocks テーブルのビットマップフィールドに非整数フィールドをインポートするための stream load タスクに使用されます。例えば：
+任意の入力データに対して64ビットのハッシュ値を計算し、そのハッシュ値を含むビットマップを返します。主に、Stream Load 経由で StarRocks テーブルの BITMAP フィールドに整数以外のデータをロードするために使用されます。例：
 
 ```bash
 cat data | curl --location-trusted -u user:passwd -T - \
     -H "columns: dt,page,device_id, device_id=bitmap_hash64(device_id)" \
-    http://host:8410/api/test/testDb/_stream_load
+    http://<fe_host>:8030/api/test_db/tbl1/_stream_load
 ```
 
 ## 構文
@@ -17,6 +17,14 @@ cat data | curl --location-trusted -u user:passwd -T - \
 ```Haskell
 BITMAP BITMAP_HASH64(expr)
 ```
+
+## パラメータ
+
+`expr`: 入力は任意のデータ型であることができます。
+
+## 戻り値
+
+BITMAP データ型の値を返します。
 
 ## 例
 
