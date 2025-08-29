@@ -717,6 +717,12 @@ public class Function implements Writable {
                 optSuffix = Optional.of(FunctionSet.AGG_STATE_UNION_SUFFIX);
             } else if (s.endsWith(FunctionSet.AGG_STATE_IF_SUFFIX)) {
                 optSuffix = Optional.of(FunctionSet.AGG_STATE_IF_SUFFIX);
+            } else if (s.endsWith(FunctionSet.AGG_STATE_COMBINE_SUFFIX)) {
+                optSuffix = Optional.of(FunctionSet.AGG_STATE_COMBINE_SUFFIX);
+            } else if (s.endsWith(FunctionSet.STATE_UNION_SUFFIX)) {
+                optSuffix = Optional.of(FunctionSet.STATE_UNION_SUFFIX);
+            } else if (s.endsWith(FunctionSet.STATE_MERGE_SUFFIX)) {
+                optSuffix = Optional.of(FunctionSet.STATE_MERGE_SUFFIX);
             }
             if (optSuffix.isEmpty()) {
                 return s;

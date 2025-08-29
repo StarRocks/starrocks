@@ -14,10 +14,7 @@
 
 #pragma once
 
-#include "exprs/agg/combinator/agg_state_if.h"
-#include "exprs/agg/combinator/agg_state_merge.h"
-#include "exprs/agg/combinator/agg_state_union.h"
-#include "exprs/agg/combinator/state_function.h"
+#include "exprs/agg/combinator/state_combinator.h"
 #include "runtime/agg_state_desc.h"
 
 namespace starrocks {
@@ -28,15 +25,27 @@ class AggStateUtils {
 public:
     // scalar function: suffix for aggregate state combinator functions
     static constexpr const char* STATE_FUNCTION_SUFFIX = "_state";
+    static constexpr const char* STATE_UNION_FUNCTION_SUFFIX = "_state_union";
+    static constexpr const char* STATE_MERGE_FUNCTION_SUFFIX = "_state_merge";
 
     // aggregate function: suffixes for aggregate state combinator functions
     static constexpr const char* AGG_STATE_UNION_SUFFIX = "_union";
     static constexpr const char* AGG_STATE_MERGE_SUFFIX = "_merge";
+    static constexpr const char* AGG_STATE_COMBINE_SUFFIX = "_combine";
     static constexpr const char* AGG_STATE_IF_SUFFIX = "_if";
     static constexpr std::string FUNCTION_COUNT = "count";
+    static constexpr std::string FUNCTION_COUNT_NULLABLE = "count_nullable";
 
     static bool is_agg_state_function(const std::string& func_name) noexcept {
         return !func_name.empty() && func_name.ends_with(STATE_FUNCTION_SUFFIX);
+    }
+
+    static bool is_agg_state_union_function(const std::string& func_name) noexcept {
+        return !func_name.empty() && func_name.ends_with(STATE_UNION_FUNCTION_SUFFIX);
+    }
+
+    static bool is_agg_state_merge_function(const std::string& func_name) noexcept {
+        return !func_name.empty() && func_name.ends_with(STATE_MERGE_FUNCTION_SUFFIX);
     }
 
     static bool is_agg_state_if(const std::string& func_name) noexcept {
@@ -51,90 +60,30 @@ public:
         return nested_func_name + AGG_STATE_MERGE_SUFFIX == func_name;
     }
 
+    static bool is_agg_state_combine(const std::string& nested_func_name, const std::string& func_name) noexcept {
+        return nested_func_name + AGG_STATE_COMBINE_SUFFIX == func_name;
+    }
+
     static bool is_agg_state_if(const std::string& nested_func_name, const std::string& func_name) noexcept {
         return nested_func_name + AGG_STATE_IF_SUFFIX == func_name;
     }
 
-    static bool is_count_function(const std::string& func_name) noexcept {
-        return func_name == FUNCTION_COUNT || func_name == (FUNCTION_COUNT + AGG_STATE_IF_SUFFIX) ||
-               func_name == (FUNCTION_COUNT + AGG_STATE_UNION_SUFFIX) ||
-               func_name == (FUNCTION_COUNT + AGG_STATE_MERGE_SUFFIX);
-    }
+    static bool is_count_function(const std::string& func_name) noexcept;
 
     // Get the aggregate state descriptor from the aggregate function.
-    static const AggStateDesc* get_agg_state_desc(const AggregateFunction* agg_func) {
-        if (dynamic_cast<const AggStateUnion*>(agg_func)) {
-            auto* agg_state_union = down_cast<const AggStateUnion*>(agg_func);
-            return agg_state_union->get_agg_state_desc();
-        } else if (dynamic_cast<const AggStateMerge*>(agg_func)) {
-            auto* agg_state_merge = down_cast<const AggStateMerge*>(agg_func);
-            return agg_state_merge->get_agg_state_desc();
-        } else if (dynamic_cast<const AggStateIf*>(agg_func)) {
-            auto* agg_state_if = down_cast<const AggStateIf*>(agg_func);
-            return agg_state_if->get_agg_state_desc();
-        }
-        return nullptr;
-    }
+    static const AggStateDesc* get_agg_state_desc(const AggregateFunction* agg_func);
 
     // Get the aggregate state function according to the agg_state_desc and function name.
     // If the function is not an aggregate state function, return nullptr.
     static StatusOr<AggregateFunctionPtr> get_agg_state_function(const AggStateDesc& agg_state_desc,
                                                                  const std::string& func_name,
-                                                                 const std::vector<TypeDescriptor>& arg_types) {
-        auto nested_func_name = agg_state_desc.get_func_name();
-        bool is_merge_or_union = AggStateUtils::is_agg_state_merge(nested_func_name, func_name) ||
-                                 AggStateUtils::is_agg_state_union(nested_func_name, func_name);
-        if (is_merge_or_union && arg_types.size() != 1) {
-            return Status::InternalError(strings::Substitute("Invalid agg function plan: $0 with (arg type $1)",
-                                                             func_name, arg_types.size()));
-        }
-
-        if (AggStateUtils::is_agg_state_merge(nested_func_name, func_name)) {
-            // aggregate _merge combinator
-            auto* nested_func = AggStateDesc::get_agg_state_func(&agg_state_desc);
-            if (nested_func == nullptr) {
-                return Status::InternalError(
-                        strings::Substitute("Merge combinator function $0 fails to get the nested agg func: $1 ",
-                                            func_name, nested_func_name));
-            }
-            return std::make_shared<AggStateMerge>(std::move(agg_state_desc), nested_func);
-        } else if (AggStateUtils::is_agg_state_union(nested_func_name, func_name)) {
-            // aggregate _union combinator
-            auto* nested_func = AggStateDesc::get_agg_state_func(&agg_state_desc);
-            if (nested_func == nullptr) {
-                return Status::InternalError(
-                        strings::Substitute("Union combinator function $0 fails to get the nested agg func: $1 ",
-                                            func_name, nested_func_name));
-            }
-            return std::make_shared<AggStateUnion>(std::move(agg_state_desc), nested_func);
-        } else if (AggStateUtils::is_agg_state_if(nested_func_name, func_name)) {
-            // aggregate _if combinator
-            auto* nested_func = AggStateDesc::get_agg_state_func(&agg_state_desc);
-            if (nested_func == nullptr) {
-                return Status::InternalError(
-                        strings::Substitute("if combinator function $0 fails to get the nested agg func: $1 ",
-                                            func_name, nested_func_name));
-            }
-            return std::make_shared<AggStateIf>(std::move(agg_state_desc), nested_func);
-        } else {
-            return Status::InternalError(
-                    strings::Substitute("Agg function combinator is not implemented: $0 ", func_name));
-        }
-    }
+                                                                 const std::vector<TypeDescriptor>& arg_types);
 
     // Get the aggregate state function according to the TAggStateDesc and function name.
     // If the function is not an aggregate state function, return nullptr.
     static StateCombinatorPtr get_agg_state_function(const TAggStateDesc& desc, const std::string& func_name,
                                                      const TypeDescriptor& return_type,
-                                                     std::vector<bool> arg_nullables) {
-        if (is_agg_state_function(func_name)) {
-            auto agg_state_desc = AggStateDesc::from_thrift(desc);
-            // For _state combinator function, it's created according to the agg_state_desc rather than fid.
-            return std::make_shared<StateFunction>(agg_state_desc, return_type, std::move(arg_nullables));
-        } else {
-            return nullptr;
-        }
-    }
+                                                     std::vector<bool> arg_nullables);
 };
 
 } // namespace starrocks

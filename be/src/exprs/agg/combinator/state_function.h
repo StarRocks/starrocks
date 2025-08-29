@@ -28,17 +28,15 @@
 
 namespace starrocks {
 
-// A state function that computes the immediate result of aggregate function.
+// A state function that computes the intermediate result of aggregate function.
 //
-// DESC: immediate_type {agg_func}_state(arg_types)
+// DESC: intermediate_type {agg_func}_state(arg_types)
 //  input type  : aggregate function's argument types
-//  return type : aggregate function's immediate type (e.g. sum_state(col) -> int)
+//  return type : aggregate function's intermediate type (e.g. sum_state(col) -> int)
 class StateFunction final : public StateCombinator {
 public:
-    StateFunction(AggStateDesc agg_state_desc, TypeDescriptor immediate_type, std::vector<bool> arg_nullables)
-            : StateCombinator(std::move(agg_state_desc), std::move(immediate_type), std::move(arg_nullables)) {
-        VLOG_ROW << "StateFunction constructor:" << _agg_state_desc.debug_string();
-    }
+    StateFunction(AggStateDesc agg_state_desc, TypeDescriptor intermediate_type, std::vector<bool> arg_nullables)
+            : StateCombinator(std::move(agg_state_desc), std::move(intermediate_type), std::move(arg_nullables)) {}
 
     StatusOr<ColumnPtr> execute(FunctionContext* context, const Columns& columns) override {
         DCHECK_GT(columns.size(), 0);
@@ -54,7 +52,7 @@ public:
         }
 
         // TODO: use mutable ptr as result
-        ColumnPtr result = ColumnHelper::create_column(_immediate_type, _agg_state_desc.is_result_nullable());
+        ColumnPtr result = ColumnHelper::create_column(_intermediate_type, _agg_state_desc.is_result_nullable());
         auto chunk_size = columns[0]->size();
         _function->convert_to_serialize_format(context, new_columns, chunk_size, &result);
 

@@ -23,9 +23,9 @@ struct AggStateMergeState {};
 
 // An aggregate merge combinator that merges aggregate intermediate states to compute the final result of aggregate function.
 //
-// DESC: return_type {agg_func}_merge(immediate_type)
-//  input type          : aggregate function's immediate_type
-//  intermediate type   : aggregate function's immediate_type
+// DESC: return_type {agg_func}_merge(intermediate_type)
+//  input type          : aggregate function's intermediate_type
+//  intermediate type   : aggregate function's intermediate_type
 //  return type         : aggregate function's return type
 class AggStateMerge final : public AggStateCombinator<AggStateMergeState, AggStateMerge> {
 public:
