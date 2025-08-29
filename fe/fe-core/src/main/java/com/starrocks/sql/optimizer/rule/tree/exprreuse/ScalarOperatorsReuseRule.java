@@ -20,7 +20,7 @@ import com.starrocks.sql.optimizer.OptExpressionVisitor;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.Projection;
-import com.starrocks.sql.optimizer.operator.physical.PhysicalFilterOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rule.tree.TreeRewriteRule;
@@ -49,10 +49,10 @@ public class ScalarOperatorsReuseRule implements TreeRewriteRule {
             if (shouldRewritePredicate(opt, context)) {
                 Projection result = rewritePredicate(opt, context);
                 if (!result.getCommonSubOperatorMap().isEmpty()) {
-                    PhysicalFilterOperator filter = (PhysicalFilterOperator) opt.getOp();
+                    PhysicalOperator op = (PhysicalOperator) opt.getOp();
                     ScalarOperator newPredicate = result.getColumnRefMap().values().iterator().next();
-                    filter.setPredicate(newPredicate);
-                    filter.setPredicateCommonOperators(result.getCommonSubOperatorMap());
+                    op.setPredicate(newPredicate);
+                    op.setPredicateCommonOperators(result.getCommonSubOperatorMap());
                 }
             }
 
@@ -89,8 +89,9 @@ public class ScalarOperatorsReuseRule implements TreeRewriteRule {
                     || input.getOp().getPredicate() == null) {
                 return false;
             }
-            // for now, only support rewrite predicates in PhysicalFilterOperator
-            if (input.getOp().getOpType() == OperatorType.PHYSICAL_FILTER) {
+            if (input.getOp().getOpType() == OperatorType.PHYSICAL_FILTER ||
+                    input.getOp().getOpType() == OperatorType.PHYSICAL_HASH_JOIN ||
+                    input.getOp().getOpType() == OperatorType.PHYSICAL_NESTLOOP_JOIN) {
                 return true;
             }
             return false;

@@ -3326,12 +3326,11 @@ public class JoinTest extends PlanTestBase {
                 "  |  colocate: false, reason: \n" +
                 "  |  equal join conjunct: 1: v1 = 5: v4\n" +
                 "  |  equal join conjunct: 4: count = 8: count\n" +
-                "  |  other predicates: ((1: v1 != 1) AND (if(8: count = 1, 'a', 'b') = 'b')) OR ((1: v1 = 1) AND " +
-                "(if(8: count = 1, 'a', 'b') = 'b')), if(8: count = 1, 'a', 'b') = 'b'\n" +
-                "  |  \n" +
-                "  |----5:EXCHANGE\n" +
-                "  |    \n" +
-                "  2:EXCHANGE");
+                "  |  other predicates: ((1: v1 != 1) AND (31: expr)) OR ((1: v1 = 1) AND (31: expr)), 31: expr\n" +
+                "  |    common sub expr:\n" +
+                "  |    <slot 29> : 8: count = 1\n" +
+                "  |    <slot 30> : if(29: expr, 'a', 'b')\n" +
+                "  |    <slot 31> : 30: if = 'b'");
     }
 
 }

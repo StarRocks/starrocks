@@ -22,6 +22,7 @@
 #include "runtime/current_thread.h"
 #include "runtime/descriptors.h"
 #include "simd/simd.h"
+#include "storage/chunk_helper.h"
 
 namespace starrocks::pipeline {
 
@@ -30,6 +31,7 @@ NLJoinProbeOperator::NLJoinProbeOperator(OperatorFactory* factory, int32_t id, i
                                          const std::string& sql_join_conjuncts,
                                          const std::vector<ExprContext*>& join_conjuncts,
                                          const std::vector<ExprContext*>& conjunct_ctxs,
+                                         const std::map<SlotId, ExprContext*>& common_expr_ctxs,
                                          const std::vector<SlotDescriptor*>& col_types, size_t probe_column_count,
                                          const std::shared_ptr<NLJoinContext>& cross_join_context)
         : OperatorWithDependency(factory, id, "nestloop_join_probe", plan_node_id, false, driver_sequence),
@@ -39,6 +41,7 @@ NLJoinProbeOperator::NLJoinProbeOperator(OperatorFactory* factory, int32_t id, i
           _sql_join_conjuncts(sql_join_conjuncts),
           _join_conjuncts(join_conjuncts),
           _conjunct_ctxs(conjunct_ctxs),
+          _common_expr_ctxs(common_expr_ctxs),
           _cross_join_context(cross_join_context) {}
 
 Status NLJoinProbeOperator::prepare(RuntimeState* state) {
@@ -309,6 +312,9 @@ Status NLJoinProbeOperator::_eval_nullaware_anti_conjuncts(const ChunkPtr& chunk
         // for null-aware left anti join, join_conjunct[0] is on-predicate
         // others are other-conjuncts
         // process on conjuncts
+        CommonExprEvalScopeGuard guard(chunk, _common_expr_ctxs);
+        RETURN_IF_ERROR(guard.evaluate());
+
         {
             ASSIGN_OR_RETURN(ColumnPtr column, _join_conjuncts[0]->evaluate(chunk.get()));
             size_t num_false = ColumnHelper::count_false_with_notnull(column);
@@ -354,6 +360,8 @@ Status NLJoinProbeOperator::_eval_nullaware_anti_conjuncts(const ChunkPtr& chunk
 
 Status NLJoinProbeOperator::_probe_for_inner_join(const ChunkPtr& chunk) {
     if (!_join_conjuncts.empty() && chunk && !chunk->is_empty()) {
+        CommonExprEvalScopeGuard guard(chunk, _common_expr_ctxs);
+        RETURN_IF_ERROR(guard.evaluate());
         RETURN_IF_ERROR(eval_conjuncts_and_in_filters(_join_conjuncts, chunk.get(), nullptr, true));
     }
     return Status::OK();
@@ -374,7 +382,10 @@ Status NLJoinProbeOperator::_probe_for_other_join(const ChunkPtr& chunk) {
         if (_is_null_aware_left_anti_join()) {
             RETURN_IF_ERROR(_eval_nullaware_anti_conjuncts(chunk, &filter));
         } else {
+            CommonExprEvalScopeGuard guard(chunk, _common_expr_ctxs);
+            RETURN_IF_ERROR(guard.evaluate());
             RETURN_IF_ERROR(eval_conjuncts_and_in_filters(_join_conjuncts, chunk.get(), &filter, apply_filter));
+            chunk->check_or_die();
         }
         DCHECK(!!filter);
         // The filter has not been assigned if no rows matched
@@ -652,8 +663,11 @@ Status NLJoinProbeOperator::_permute_right_join(size_t chunk_size) {
             }
         }
         permute_rows += chunk->num_rows();
-
-        RETURN_IF_ERROR(eval_conjuncts(_conjunct_ctxs, chunk.get(), nullptr));
+        {
+            CommonExprEvalScopeGuard guard(chunk, _common_expr_ctxs);
+            RETURN_IF_ERROR(guard.evaluate());
+            RETURN_IF_ERROR(eval_conjuncts(_conjunct_ctxs, chunk.get(), nullptr));
+        }
         RETURN_IF_ERROR(_output_accumulator.push(std::move(chunk)));
         match_flag_index += cur_chunk_size;
     }
@@ -703,7 +717,11 @@ StatusOr<ChunkPtr> NLJoinProbeOperator::_pull_chunk_for_other_join(size_t chunk_
         ASSIGN_OR_RETURN(ChunkPtr chunk, _permute_chunk_for_other_join(chunk_size));
         DCHECK(chunk);
         RETURN_IF_ERROR(_probe_for_other_join(chunk));
-        RETURN_IF_ERROR(eval_conjuncts(_conjunct_ctxs, chunk.get(), nullptr));
+        {
+            CommonExprEvalScopeGuard guard(chunk, _common_expr_ctxs);
+            RETURN_IF_ERROR(guard.evaluate());
+            RETURN_IF_ERROR(eval_conjuncts(_conjunct_ctxs, chunk.get(), nullptr));
+        }
 
         RETURN_IF_ERROR(_output_accumulator.push(std::move(chunk)));
         if (ChunkPtr res = _output_accumulator.pull()) {
@@ -800,9 +818,9 @@ void NLJoinProbeOperatorFactory::_init_row_desc() {
 }
 
 OperatorPtr NLJoinProbeOperatorFactory::create(int32_t degree_of_parallelism, int32_t driver_sequence) {
-    return std::make_shared<NLJoinProbeOperator>(this, _id, _plan_node_id, driver_sequence, _join_op,
-                                                 _sql_join_conjuncts, _join_conjuncts, _conjunct_ctxs, _col_types,
-                                                 _probe_column_count, _cross_join_context);
+    return std::make_shared<NLJoinProbeOperator>(
+            this, _id, _plan_node_id, driver_sequence, _join_op, _sql_join_conjuncts, _join_conjuncts, _conjunct_ctxs,
+            _common_expr_ctxs, _col_types, _probe_column_count, _cross_join_context);
 }
 
 Status NLJoinProbeOperatorFactory::prepare(RuntimeState* state) {
@@ -812,6 +830,9 @@ Status NLJoinProbeOperatorFactory::prepare(RuntimeState* state) {
     _cross_join_context->ref();
 
     _init_row_desc();
+
+    RETURN_IF_ERROR(Expr::prepare(_common_expr_ctxs, state));
+    RETURN_IF_ERROR(Expr::open(_common_expr_ctxs, state));
     RETURN_IF_ERROR(Expr::prepare(_join_conjuncts, state));
     RETURN_IF_ERROR(Expr::open(_join_conjuncts, state));
     RETURN_IF_ERROR(Expr::prepare(_conjunct_ctxs, state));
@@ -821,6 +842,7 @@ Status NLJoinProbeOperatorFactory::prepare(RuntimeState* state) {
 }
 
 void NLJoinProbeOperatorFactory::close(RuntimeState* state) {
+    Expr::close(_common_expr_ctxs, state);
     Expr::close(_join_conjuncts, state);
     Expr::close(_conjunct_ctxs, state);
 
