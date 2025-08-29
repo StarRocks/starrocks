@@ -355,8 +355,7 @@ public class HttpServer {
 
         GaugeMetricImpl<Long> httpWorkersNum = new GaugeMetricImpl<>(
                 HTTP_WORKERS_NUM, Metric.MetricUnit.NOUNIT, "the number of http workers");
-        int defaultNumWorkers = Math.max(1, SystemPropertyUtil.getInt(
-                "io.netty.eventLoopThreads", NettyRuntime.availableProcessors() * 2));
+        int defaultNumWorkers = workerGroup.executorCount();
         httpWorkersNum.setValue(numWorkerThreads == 0 ? (long) defaultNumWorkers : (long) numWorkerThreads);
         httpMetricRegistry.registerGauge(httpWorkersNum);
 
