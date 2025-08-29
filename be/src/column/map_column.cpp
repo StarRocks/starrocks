@@ -567,7 +567,8 @@ int64_t MapColumn::xor_checksum(uint32_t from, uint32_t to) const {
     return (xor_checksum ^ _values->xor_checksum(element_from, element_to));
 }
 
-void MapColumn::put_mysql_row_buffer(MysqlRowBuffer* buf, size_t idx, bool is_binary_protocol) const {
+void MapColumn::put_mysql_row_buffer(MysqlRowBuffer* buf, size_t idx, bool is_binary_protocol,
+                                     bool is_inf_nan_convert_to_null) const {
     DCHECK_LT(idx, size());
     const size_t offset = _offsets->get_data()[idx];
     const size_t map_size = _offsets->get_data()[idx + 1] - offset;
@@ -576,15 +577,15 @@ void MapColumn::put_mysql_row_buffer(MysqlRowBuffer* buf, size_t idx, bool is_bi
     auto* keys = _keys.get();
     auto* values = _values.get();
     if (map_size > 0) {
-        keys->put_mysql_row_buffer(buf, offset);
+        keys->put_mysql_row_buffer(buf, offset, false, is_inf_nan_convert_to_null);
         buf->separator(':');
-        values->put_mysql_row_buffer(buf, offset);
+        values->put_mysql_row_buffer(buf, offset, false, is_inf_nan_convert_to_null);
     }
     for (size_t i = 1; i < map_size; i++) {
         buf->separator(',');
-        keys->put_mysql_row_buffer(buf, offset + i);
+        keys->put_mysql_row_buffer(buf, offset + i, false, is_inf_nan_convert_to_null);
         buf->separator(':');
-        values->put_mysql_row_buffer(buf, offset + i);
+        values->put_mysql_row_buffer(buf, offset + i, false, is_inf_nan_convert_to_null);
     }
     buf->finish_push_bracket();
 }
