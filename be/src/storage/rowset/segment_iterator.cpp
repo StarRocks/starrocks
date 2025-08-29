@@ -1374,7 +1374,7 @@ Status SegmentIterator::_lookup_ordinal(const Slice& index_key, const Schema& sh
 }
 
 Status SegmentIterator::_seek_columns(const Schema& schema, rowid_t pos) {
-    // SCOPED_RAW_TIMER(&_opts.stats->block_seek_ns);
+    SCOPED_RAW_TIMER(&_opts.stats->block_seek_ns);
     for (const FieldPtr& f : schema.fields()) {
         RETURN_IF_ERROR(_column_iterators[f->id()]->seek_to_ordinal(pos));
     }
@@ -1389,10 +1389,7 @@ Status SegmentIterator::_read_columns(const Schema& schema, Chunk* chunk, size_t
         ColumnId cid = schema.field(i)->id();
         ColumnPtr& column = chunk->get_column_by_index(i);
         size_t nread = nrows;
-        {
-            SCOPED_RAW_TIMER(&_opts.stats->io_ns);
-            RETURN_IF_ERROR(_column_iterators[cid]->next_batch(&nread, column.get()));
-        }
+        RETURN_IF_ERROR(_column_iterators[cid]->next_batch(&nread, column.get()));
         may_has_del_row = may_has_del_row | (column->delete_state() != DEL_NOT_SATISFIED);
         DCHECK_EQ(nrows, nread);
     }

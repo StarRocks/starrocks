@@ -85,7 +85,7 @@ public:
             bool has_null = false;
             // For trino, null row's any element is still null
             // We only check has_null when set _check_is_out_of_bounds = true
-            if (_check_is_out_of_bounds && map_nulls_view.empty() && map_nulls_view[map_idx]) {
+            if (_check_is_out_of_bounds && !map_nulls_view.empty() && map_nulls_view[map_idx]) {
                 has_null = true;
             }
 

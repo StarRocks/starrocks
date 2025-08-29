@@ -1555,11 +1555,9 @@ static Status sort_multi_array_column(FunctionContext* ctx, const Column* src_co
         offsets_per_key_col[i] = key_array_offsets;
     }
 
-    const auto src_null_data = src_null_column->immutable_data();
-
     // Check if the number of elements in each array column of each row is exactly the same.
     for (size_t row_i = 0; row_i < num_rows; ++row_i) {
-        if (src_null_column != nullptr && src_null_data[row_i]) {
+        if (src_null_column != nullptr && src_null_column->immutable_data()[row_i]) {
             continue;
         }
 

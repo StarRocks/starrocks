@@ -160,7 +160,7 @@ public:
 private:
     const ColumnPtr& _first_column;
     std::vector<uint8_t>& _cmp_vector;
-    const NullMasks& _null_masks;
+    const NullMasks _null_masks;
 };
 
 // append the result by selector

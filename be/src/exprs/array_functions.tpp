@@ -270,7 +270,7 @@ class ArrayOverlap {
 public:
     using CppType = RunTimeCppType<LT>;
     using ColumnType = RunTimeColumnType<LT>;
-    using DataArray = RunTimeTypeTraits<LT>::ProxyContainerType;
+    using DataArray = typename RunTimeTypeTraits<LT>::ProxyContainerType;
     using HashFunc = PhmapDefaultHashFunc<LT, PhmapSeed1>;
     using HashSet = phmap::flat_hash_set<CppType, HashFunc>;
 

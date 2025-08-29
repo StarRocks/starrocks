@@ -50,10 +50,6 @@ public:
                 page_slice->size + data_size - (compressed_size - BITSHUFFLE_PAGE_HEADER_SIZE));
         memcpy(decompressed_page.get()->data(), page_slice->data, header_size);
 
-        // decompressed page format
-        // header: |reserved|BITSHUFFLE_PAGE_HEADER_SIZE|
-        // |header|raw_datas|null_datas|footers|
-
         Slice compressed_body(page_slice->data + header_size, compressed_size - BITSHUFFLE_PAGE_HEADER_SIZE);
         Slice decompressed_body(decompressed_page->data() + header_size, data_size);
         int64_t bytes = bitshuffle::decompress_lz4(compressed_body.data, decompressed_body.data,

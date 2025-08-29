@@ -75,7 +75,7 @@ public:
         // but they can not be compiled into SIMD instructions.
 
         // Use lambdas to make the compiler to better analyze code within smaller scopes, thereby ensuring vectorization.
-        using ImmutableContainer = RunTimeColumnType<Type>::ImmContainer;
+        using ImmutableContainer = typename RunTimeColumnType<Type>::ImmContainer;
         auto check_range = [](uint8_t* __restrict__ local_res, ImmutableContainer local_values, const size_t local_size,
                               const CppType min_value, const CppType max_value) {
             for (int i = 0; i < local_size; i++) {
@@ -104,7 +104,7 @@ public:
             const uint8_t* null_data = tmp->null_column_data().data();
             merge_null(res, null_data, size, _has_null);
         } else {
-            const auto data = GetContainer<Type>::get_data(col);
+            const auto data = GetContainer<Type>::get_data(ColumnHelper::get_data_column(col));
             check_range(res, data, size, _min_value, _max_value);
         }
 
