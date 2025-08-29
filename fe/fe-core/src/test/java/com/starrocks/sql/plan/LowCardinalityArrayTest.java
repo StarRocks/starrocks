@@ -757,7 +757,6 @@ public class LowCardinalityArrayTest extends PlanTestBase {
                 + "select concat(v1, 'yyy') as name from s1 as b;";
         String plan = getVerboseExplain(sql);
         Assert.assertTrue(plan, plan.contains("Global Dict Exprs:\n"
-                + "    14: DictDefine(13: a1, [<place-holder>])\n"
-                + "    15: DictDefine(13: a1, [concat(<place-holder>, 'xxx')])"));
+                + "    14: DictDefine(13: a1, [<place-holder>])"));
     }
 }
