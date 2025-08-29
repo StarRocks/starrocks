@@ -250,7 +250,7 @@ StarRocksMetrics::StarRocksMetrics() : _metrics(_s_registry_name) {
 }
 
 void StarRocksMetrics::initialize(const std::vector<std::string>& paths, bool init_system_metrics,
-                                  const std::set<std::string>& disk_devices,
+                                  bool init_jvm_metrics, const std::set<std::string>& disk_devices,
                                   const std::vector<std::string>& network_interfaces) {
     // disk usage
     for (auto& path : paths) {
@@ -266,6 +266,10 @@ void StarRocksMetrics::initialize(const std::vector<std::string>& paths, bool in
 
     if (init_system_metrics) {
         _system_metrics.install(&_metrics, disk_devices, network_interfaces);
+    }
+
+    if (init_jvm_metrics && _jvm_metrics.init().ok()) {
+        _jvm_metrics.install(&_metrics);
     }
 }
 
