@@ -2363,18 +2363,6 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 説明: 小さなファイルのルートディレクトリ。
 - 導入バージョン: -
 
-<<<<<<< HEAD
-##### enable_auth_check
-
-- デフォルト: true
-- タイプ: Boolean
-- 単位: -
-- 変更可能: いいえ
-- 説明: 認証チェック機能を有効にするかどうかを指定します。有効な値: `TRUE` と `FALSE`。`TRUE` はこの機能を有効にすることを指定し、`FALSE` はこの機能を無効にすることを指定します。
-- 導入バージョン: -
-
-=======
->>>>>>> ccf0a33ba2 ([Doc] Categorize enable_auth_check (#62517))
 ##### authentication_ldap_simple_server_host
 
 - デフォルト: 空の文字列
