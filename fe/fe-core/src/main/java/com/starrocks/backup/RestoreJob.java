@@ -82,6 +82,7 @@ import com.starrocks.catalog.Tablet;
 import com.starrocks.catalog.TabletMeta;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
+import com.starrocks.common.MaterializedViewExceptions;
 import com.starrocks.common.Pair;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.util.DynamicPartitionUtil;
@@ -114,6 +115,7 @@ import com.starrocks.warehouse.WarehouseIdleChecker;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
@@ -1672,6 +1674,17 @@ public class RestoreJob extends AbstractJob {
                         } catch (Exception e) {
                             // no throw exceptions
                             LOG.warn(String.format("rebuild olap table %s failed: ", olapTable.getName()), e);
+                            if (olapTable.isMaterializedView()) {
+                                LOG.warn(" drop materialized view {} partitions because doAfterRestore failed",
+                                        olapTable.getName());
+                                MaterializedView mv = (MaterializedView) olapTable;
+                                MaterializedViewExceptions.inactiveReasonForMetadataTableRestoreFailed(mv.getName());
+                                // drop all partitions
+                                Collection<Partition> partitions = mv.getPartitions();
+                                for (Partition partition : partitions) {
+                                    mv.dropPartition(dbId, partition.getName(), false);
+                                }
+                            }
                         }
                     }
                 }
@@ -1780,6 +1793,19 @@ public class RestoreJob extends AbstractJob {
         return Status.OK;
     }
 
+    private void dropPhysicalPartitions(Table restoreTbl) {
+        for (Partition part : restoreTbl.getPartitions()) {
+            // ensure clear all physical partitions, not only for the first one (default physical partition)
+            for (PhysicalPartition physicalPartition : part.getSubPartitions()) {
+                for (MaterializedIndex idx : physicalPartition.getMaterializedIndices(IndexExtState.VISIBLE)) {
+                    for (Tablet tablet : idx.getTablets()) {
+                        globalStateMgr.getTabletInvertedIndex().deleteTablet(tablet.getId());
+                    }
+                }
+            }
+        }
+    }
+
     public void cancelInternal(boolean isReplay) {
         // We need to clean the residual due to current state
         if (!isReplay) {
@@ -1819,15 +1845,12 @@ public class RestoreJob extends AbstractJob {
                 // remove restored tbls
                 for (Table restoreTbl : restoredTbls) {
                     LOG.info("remove restored table when cancelled: {}", restoreTbl.getName());
-                    for (Partition part : restoreTbl.getPartitions()) {
-                        // ensure clear all physical partitions, not only for the first one (default physical partition)
-                        for (PhysicalPartition physicalPartition : part.getSubPartitions()) {
-                            for (MaterializedIndex idx : physicalPartition.getMaterializedIndices(IndexExtState.VISIBLE)) {
-                                for (Tablet tablet : idx.getTablets()) {
-                                    globalStateMgr.getTabletInvertedIndex().deleteTablet(tablet.getId());
-                                }
-                            }
-                        }
+                    // ensure clear all physical partitions even if exception happens
+                    try {
+                        dropPhysicalPartitions(restoreTbl);
+                    } catch (Exception e) {
+                        LOG.warn("drop physical partitions of table {} failed when cancelling restore job",
+                                restoreTbl.getName(), e);
                     }
                     db.dropTable(restoreTbl.getName());
                 }
