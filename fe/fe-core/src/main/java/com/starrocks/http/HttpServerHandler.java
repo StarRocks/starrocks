@@ -104,8 +104,7 @@ public class HttpServerHandler extends ChannelInboundHandlerAdapter {
                 if (LOG.isDebugEnabled()) {
                     LOG.debug("action: {} ", action.getClass().getName());
                 }
-                // Health Action need to be handled synchronously
-                if (action.supportAsyncHandler() && !(action instanceof HealthAction)) {
+                if (action.supportAsyncHandler()) {
                     handleActionAsync(req);
                 } else {
                     handleActionSync(req);

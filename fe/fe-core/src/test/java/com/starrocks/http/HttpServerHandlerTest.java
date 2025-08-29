@@ -251,11 +251,6 @@ public class HttpServerHandlerTest {
         }
 
         @Override
-        public boolean supportAsyncHandler() {
-            return true;
-        }
-
-        @Override
         public void handleRequest(BaseRequest request) {
             executeCount.incrementAndGet();
         }
