@@ -115,7 +115,6 @@ import com.starrocks.warehouse.WarehouseIdleChecker;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
@@ -1672,17 +1671,25 @@ public class RestoreJob extends AbstractJob {
                         try {
                             olapTable.doAfterRestore(mvRestoreContext);
                         } catch (Exception e) {
-                            // no throw exceptions
                             LOG.warn(String.format("rebuild olap table %s failed: ", olapTable.getName()), e);
+
+                            // for mv, set mv to inactive state and drop all partitions to avoid metadata corruption.
+                            // it's safe for mv since users can refresh mv after restore to rebuild mv's data.
                             if (olapTable.isMaterializedView()) {
-                                LOG.warn(" drop materialized view {} partitions because doAfterRestore failed",
+                                LOG.warn("drop materialized view {} partitions because doAfterRestore failed",
                                         olapTable.getName());
-                                MaterializedView mv = (MaterializedView) olapTable;
-                                MaterializedViewExceptions.inactiveReasonForMetadataTableRestoreCorrupted(mv.getName());
-                                // drop all partitions
-                                Collection<Partition> partitions = mv.getPartitions();
-                                for (Partition partition : partitions) {
-                                    mv.dropPartition(dbId, partition.getName(), false);
+                                try {
+                                    MaterializedView mv = (MaterializedView) olapTable;
+                                    mv.setInactiveAndReason(MaterializedViewExceptions
+                                                    .inactiveReasonForMetadataTableRestoreCorrupted(mv.getName()));
+                                    // drop all partitions
+                                    Set<String> partitionNames = mv.getPartitionNames();
+                                    for (String partitionName : partitionNames) {
+                                        mv.dropPartition(dbId, partitionName, false);
+                                    }
+                                } catch (Exception mvException) {
+                                    LOG.warn("failed to drop partitions of materialized view {}",
+                                            olapTable.getName(), mvException);
                                 }
                             }
                         }
