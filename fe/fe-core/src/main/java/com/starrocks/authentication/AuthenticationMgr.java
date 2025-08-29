@@ -615,7 +615,7 @@ public class AuthenticationMgr {
         groupProvider.init();
         this.nameToGroupProviderMap.put(stmt.getName(), groupProvider);
 
-        GlobalStateMgr.getCurrentState().getEditLog().logEdit(OperationType.OP_CREATE_GROUP_PROVIDER,
+        GlobalStateMgr.getCurrentState().getEditLog().logJsonObject(OperationType.OP_CREATE_GROUP_PROVIDER,
                 new GroupProviderLog(stmt.getName(), stmt.getPropertyMap()));
     }
 
@@ -633,7 +633,7 @@ public class AuthenticationMgr {
         GroupProvider groupProvider = this.nameToGroupProviderMap.remove(stmt.getName());
         groupProvider.destory();
 
-        GlobalStateMgr.getCurrentState().getEditLog().logEdit(OperationType.OP_DROP_GROUP_PROVIDER,
+        GlobalStateMgr.getCurrentState().getEditLog().logJsonObject(OperationType.OP_DROP_GROUP_PROVIDER,
                 new GroupProviderLog(stmt.getName(), null));
     }
 

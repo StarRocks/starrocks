@@ -155,7 +155,7 @@ Status SnapshotManager::release_snapshot(const string& snapshot_path) {
         if (snapshot_path.compare(0, abs_path.size(), abs_path) == 0 &&
             snapshot_path.compare(abs_path.size(), SNAPSHOT_PREFIX.size(), SNAPSHOT_PREFIX) == 0) {
             (void)fs::remove_all(snapshot_path);
-            LOG(INFO) << "success to release snapshot path. [path='" << snapshot_path << "']";
+            VLOG(2) << "success to release snapshot path. [path='" << snapshot_path << "']";
             return Status::OK();
         }
     }

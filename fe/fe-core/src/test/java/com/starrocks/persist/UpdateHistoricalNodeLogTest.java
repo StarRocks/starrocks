@@ -57,7 +57,7 @@ public class UpdateHistoricalNodeLogTest {
         DataOutputStream out = new DataOutputStream(Files.newOutputStream(file.toPath()));
         UpdateHistoricalNodeLog writeLog =
                 new UpdateHistoricalNodeLog(warehouseId, workerGroupId, updateTime, backendIds, computeNodeIds);
-        writeLog.write(out);
+        Text.writeString(out, GsonUtils.GSON.toJson(writeLog, UpdateHistoricalNodeLog.class));
         out.flush();
         out.close();
 
