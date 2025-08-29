@@ -147,7 +147,7 @@ public class ColumnDefAnalyzer {
                                     aggregateType, name, type, aggFunc.getReturnType()));
                 }
             }
-        } else if (type.isBitmapType() || type.isHllType() || type.isPercentile()) {
+        } else if (type.isBitmapType() || type.isPercentile()) {
             throw new AnalysisException(String.format("No aggregate function specified for '%s'", name));
         }
 
