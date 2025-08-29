@@ -319,10 +319,10 @@ public class Backend extends ComputeNode {
             Backend copiedBackend = this.clonePersistentProperties();
             copiedBackend.setDisks(ImmutableMap.copyOf(newDiskInfos));
             SystemInfoService systemInfoService = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
-            systemInfoService.updatePathInfo(addedDisks, removedDisks);
             // log disk changing
             GlobalStateMgr.getCurrentState().getEditLog().logBackendStateChange(
                     copiedBackend, wal -> systemInfoService.replayBackendStateChange((Backend) wal));
+            systemInfoService.updatePathInfo(addedDisks, removedDisks);
         }
     }
 
@@ -331,8 +331,8 @@ public class Backend extends ComputeNode {
         if (diskInfo == null) {
             throw new DdlException("Disk: " + rootPath + " does not exist");
         }
-        if (diskInfo.getState() == DiskState.DECOMMISSIONED) {
-            throw new DdlException("Disk " + rootPath + " is in DECOMMISSIONED state, can not decommission");
+        if (diskInfo.getState() == DiskState.DISABLED) {
+            throw new DdlException("Disk " + rootPath + " is in DISABLED state, can not decommission");
         }
     }
 
@@ -349,9 +349,6 @@ public class Backend extends ComputeNode {
         DiskInfo diskInfo = disksRef.get(rootPath);
         if (diskInfo == null) {
             throw new DdlException("Disk: " + rootPath + " does not exist");
-        }
-        if (diskInfo.getState() != DiskState.DECOMMISSIONED) {
-            throw new DdlException("Disk " + rootPath + " is not in DECOMMISSIONED state, can not cancel decommission");
         }
     }
 
@@ -383,16 +380,6 @@ public class Backend extends ComputeNode {
         }
         diskInfo.setState(DiskState.DISABLED);
         LOG.info("disk {} is set to DISABLED", rootPath);
-    }
-
-    public void checkCancelDisableDisk(String rootPath) throws DdlException {
-        DiskInfo diskInfo = disksRef.get(rootPath);
-        if (diskInfo == null) {
-            throw new DdlException("Disk: " + rootPath + " does not exist");
-        }
-        if (diskInfo.getState() != DiskState.DISABLED) {
-            throw new DdlException("Disk " + rootPath + " is not in DISABLED state, can not cancel disable");
-        }
     }
 
     public String getDiskRootPath(long pathHash) {
