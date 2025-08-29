@@ -133,8 +133,8 @@ import com.starrocks.load.pipe.Pipe;
 import com.starrocks.load.pipe.PipeManager;
 import com.starrocks.load.routineload.RoutineLoadFunctionalExprProvider;
 import com.starrocks.load.routineload.RoutineLoadJob;
+import com.starrocks.load.streamload.AbstractStreamLoadTask;
 import com.starrocks.load.streamload.StreamLoadFunctionalExprProvider;
-import com.starrocks.load.streamload.StreamLoadTask;
 import com.starrocks.meta.BlackListSql;
 import com.starrocks.proto.FailPointTriggerModeType;
 import com.starrocks.proto.PFailPointInfo;
@@ -1374,7 +1374,7 @@ public class ShowExecutor {
         public ShowResultSet visitShowStreamLoadStatement(ShowStreamLoadStmt statement, ConnectContext context) {
             List<List<String>> rows = Lists.newArrayList();
             // if task exists
-            List<StreamLoadTask> streamLoadTaskList;
+            List<AbstractStreamLoadTask> streamLoadTaskList;
             try {
                 streamLoadTaskList = GlobalStateMgr.getCurrentState().getStreamLoadMgr()
                         .getTask(statement.getDbFullName(),
@@ -1388,13 +1388,15 @@ public class ShowExecutor {
             if (streamLoadTaskList != null) {
                 StreamLoadFunctionalExprProvider fProvider =
                         statement.getFunctionalExprProvider(context);
-                rows = streamLoadTaskList.parallelStream()
+                List<AbstractStreamLoadTask> tasks = streamLoadTaskList.parallelStream()
                         .filter(fProvider.getPredicateChain())
                         .sorted(fProvider.getOrderComparator())
                         .skip(fProvider.getSkipCount())
                         .limit(fProvider.getLimitCount())
-                        .map(StreamLoadTask::getShowInfo)
                         .collect(Collectors.toList());
+                for (AbstractStreamLoadTask task : tasks) {
+                    rows.addAll(task.getShowInfo());
+                }
             }
 
             if (!Strings.isNullOrEmpty(statement.getName()) && rows.isEmpty()) {
