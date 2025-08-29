@@ -38,8 +38,9 @@ public final class MVPCTRefreshNonPartitioner extends MVPCTRefreshPartitioner {
     public MVPCTRefreshNonPartitioner(MvTaskRunContext mvContext,
                                       TaskRunContext context,
                                       Database db,
-                                      MaterializedView mv) {
-        super(mvContext, context, db, mv);
+                                      MaterializedView mv,
+                                      MVRefreshParams mvRefreshParams) {
+        super(mvContext, context, db, mv, mvRefreshParams);
     }
 
     @Override
@@ -78,7 +79,6 @@ public final class MVPCTRefreshNonPartitioner extends MVPCTRefreshPartitioner {
     @Override
     public PCellSortedSet getMVPartitionsToRefresh(PartitionInfo mvPartitionInfo,
                                                    Map<Long, BaseTableSnapshotInfo> snapshotBaseTables,
-                                                   MVRefreshParams mvRefreshParams,
                                                    Set<String> mvPotentialPartitionNames) {
         // non-partitioned materialized view
         if (mvRefreshParams.isForce() || isNonPartitionedMVNeedToRefresh(snapshotBaseTables, mv)) {
@@ -88,20 +88,25 @@ public final class MVPCTRefreshNonPartitioner extends MVPCTRefreshPartitioner {
     }
 
     @Override
-    public PCellSortedSet getMVPartitionNamesWithTTL(MaterializedView materializedView,
-                                                     MVRefreshParams mvRefreshParams,
-                                                     boolean isAutoRefresh) {
+    public PCellSortedSet calcPotentialMVRefreshPartitions(Set<String> mvPotentialPartitionNames,
+                                                           PCellSortedSet result) {
+        return result;
+    }
+
+    @Override
+    public PCellSortedSet getMVPartitionNamesWithTTL(boolean isAutoRefresh) {
         return PCellSortedSet.of();
     }
 
+    @Override
     public void filterPartitionByRefreshNumber(PCellSortedSet mvPartitionsToRefresh,
-                                               Set<String> mvPotentialPartitionNames, boolean tentative) {
+                                               Set<String> mvPotentialPartitionNames) {
         // do nothing
     }
 
     @Override
     public void filterPartitionByAdaptiveRefreshNumber(PCellSortedSet mvPartitionsToRefresh,
-                                                       Set<String> mvPotentialPartitionNames, boolean tentative) {
+                                                       Set<String> mvPotentialPartitionNames) {
         // do nothing
     }
 

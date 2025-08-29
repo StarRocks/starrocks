@@ -20,7 +20,6 @@ import com.google.common.util.concurrent.Uninterruptibles;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.Table;
-import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.StarRocksException;
@@ -37,14 +36,18 @@ import com.starrocks.scheduler.mv.BaseMVRefreshProcessor;
 import com.starrocks.scheduler.mv.MVRefreshExecutor;
 import com.starrocks.scheduler.mv.MVRefreshProcessorFactory;
 import com.starrocks.scheduler.mv.MVTraceUtils;
+import com.starrocks.scheduler.persist.MVTaskRunExtraMessage;
+import com.starrocks.scheduler.persist.TaskRunStatus;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.InsertStmt;
+import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.common.DmlException;
 import com.starrocks.sql.common.QueryDebugOptions;
 import com.starrocks.sql.optimizer.QueryMaterializationContext;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.thrift.TUniqueId;
+import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.Logger;
 
@@ -301,8 +304,60 @@ public class MVTaskRunProcessor extends BaseTaskRunProcessor implements MVRefres
         return this.mvRefreshProcessor;
     }
 
-    public Set<String> getPCTMVToRefreshedPartitions(TaskRunContext context) throws AnalysisException, LockTimeoutException {
-        return this.mvRefreshProcessor.getPCTMVToRefreshedPartitions(context, true);
+    /**
+     * Get extra explain info for the mv refresh task run which is used for explain task run.
+     */
+    public String getExtraExplainInfo(StatementBase statement) {
+        StringBuilder sb = new StringBuilder();
+        if (mvRefreshProcessor != null && statement.isExplain()) {
+            if (statement.isExplainTrace() || statement.isExplainAnalyze()) {
+                return "";
+            }
+            try {
+                TaskRunStatus status = mvTaskRunContext.getStatus();
+                if (status != null && status.getMvTaskRunExtraMessage() != null) {
+                    MVTaskRunExtraMessage extraMessage = status.getMvTaskRunExtraMessage();
+
+                    // mv partitions to refresh
+                    Set<String> mvPartitionsToRefresh = extraMessage.getMvPartitionsToRefresh();
+                    if (!CollectionUtils.isEmpty(mvPartitionsToRefresh)) {
+                        sb.append("\n");
+                        sb.append("MVToRefreshedPartitions: " + mvPartitionsToRefresh);
+                    }
+                    // base partitions to refresh
+                    Map<String, Set<String>> basePartitionsToRefreshMap = extraMessage.getBasePartitionsToRefreshMap();
+                    if (!basePartitionsToRefreshMap.isEmpty()) {
+                        sb.append("\n");
+                        sb.append("BasePartitionsToRefreshed: " + basePartitionsToRefreshMap);
+                    }
+                    // plan builder message
+                    Map<String, String> planBuilderMessage = extraMessage.getPlanBuilderMessage();
+                    if (!planBuilderMessage.isEmpty()) {
+                        sb.append("\n");
+                        sb.append("PlanBuilderMessage: " + extraMessage.getPlanBuilderMessage());
+                    }
+                    // next start partition
+                    String nextPartition = extraMessage.getNextPartitionStart();
+                    if (!StringUtils.isEmpty(nextPartition)) {
+                        sb.append("\n");
+                        sb.append("NextPartition: " + nextPartition);
+                    }
+                    // next end partition
+                    if (!StringUtils.isEmpty(extraMessage.getNextPartitionEnd())) {
+                        sb.append("\n");
+                        sb.append("NextPartitionEnd: " + extraMessage.getNextPartitionEnd());
+                    }
+                    // next partition values
+                    if (!StringUtils.isEmpty(extraMessage.getNextPartitionValues())) {
+                        sb.append("\n");
+                        sb.append("NextPartitionValues: " + extraMessage.getNextPartitionValues());
+                    }
+                }
+            } catch (Exception e) {
+                logger.warn("failed to get pct mv to refreshed partitions", e);
+            }
+        }
+        return sb.toString();
     }
 
     @VisibleForTesting

@@ -179,6 +179,10 @@ public class MVTaskRunExtraMessage implements Writable {
                 Config.max_mv_task_run_meta_message_values_length);
     }
 
+    public Map<String, String> getPlanBuilderMessage() {
+        return planBuilderMessage;
+    }
+
     @Override
     public String toString() {
         return GsonUtils.GSON.toJson(this);
