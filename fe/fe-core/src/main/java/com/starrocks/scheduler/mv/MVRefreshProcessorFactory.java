@@ -18,6 +18,7 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.metric.IMaterializedViewMetricsEntity;
 import com.starrocks.scheduler.MvTaskRunContext;
+import com.starrocks.scheduler.mv.ivm.MVIVMBasedMVRefreshProcessor;
 
 public class MVRefreshProcessorFactory {
     public static final MVRefreshProcessorFactory INSTANCE = new MVRefreshProcessorFactory();
@@ -25,6 +26,12 @@ public class MVRefreshProcessorFactory {
     public BaseMVRefreshProcessor newProcessor(Database db, MaterializedView mv,
                                                MvTaskRunContext mvContext,
                                                IMaterializedViewMetricsEntity mvEntity) {
-        return new MVPCTBasedRefreshProcessor(db, mv, mvContext, mvEntity);
+        MaterializedView.RefreshMode refreshMode = mv.getRefreshMode();
+        switch (refreshMode) {
+            case INCREMENTAL:
+                return new MVIVMBasedMVRefreshProcessor(db, mv, mvContext, mvEntity);
+            default:
+                return new MVPCTBasedRefreshProcessor(db, mv, mvContext, mvEntity);
+        }
     }
 }

@@ -149,8 +149,6 @@ public class RowOutputInfo {
         return ColumnRefSet.createByIds(chooseOutputMap().keySet());
     }
 
-
-
     // used to obtain all the used cols from the children of an optExpression.
     public ColumnRefSet getUsedColumnRefSet() {
         ColumnRefSet columnRefSet = new ColumnRefSet();

@@ -26,6 +26,7 @@ import com.starrocks.sql.optimizer.property.DomainProperty;
 import com.starrocks.sql.optimizer.rule.mv.KeyInference;
 import com.starrocks.sql.optimizer.rule.mv.MVOperatorProperty;
 import com.starrocks.sql.optimizer.rule.mv.ModifyInference;
+import com.starrocks.sql.optimizer.rule.tvr.common.TvrOptMeta;
 import com.starrocks.sql.optimizer.statistics.Statistics;
 
 import java.util.List;
@@ -66,6 +67,9 @@ public class OptExpression {
     // the flag if its parent has required data distribution property for this expression
     private boolean existRequiredDistribution = true;
 
+    // the TvrOptMeta of this expression
+    private TvrOptMeta tvrOptMeta;
+
     private OptExpression() {
     }
 
@@ -74,16 +78,34 @@ public class OptExpression {
         this.inputs = Lists.newArrayList();
     }
 
-    public static OptExpression create(Operator op, OptExpression... inputs) {
+    public static OptExpression create(Operator op, TvrOptMeta tvrOptMeta, OptExpression... inputs) {
         OptExpression expr = new OptExpression(op);
         expr.inputs = Lists.newArrayList(inputs);
+        expr.tvrOptMeta = tvrOptMeta;
+        return expr;
+    }
+
+    public static OptExpression createWithoutTvr(Operator op, OptExpression... inputs) {
+        return create(op, TvrOptMeta.UNSUPPORTED, inputs);
+    }
+
+    public static OptExpression createWithoutTvr(Operator op, List<OptExpression> inputs) {
+        return create(op, TvrOptMeta.UNSUPPORTED, inputs);
+    }
+
+    public static OptExpression create(Operator op, OptExpression... inputs) {
+        return create(op, null, inputs);
+    }
+
+    public static OptExpression create(Operator op, TvrOptMeta tvrOptMeta, List<OptExpression> inputs) {
+        OptExpression expr = new OptExpression(op);
+        expr.inputs = inputs;
+        expr.tvrOptMeta = tvrOptMeta;
         return expr;
     }
 
     public static OptExpression create(Operator op, List<OptExpression> inputs) {
-        OptExpression expr = new OptExpression(op);
-        expr.inputs = inputs;
-        return expr;
+        return create(op, null, inputs);
     }
 
     public OptExpression(GroupExpression groupExpression, List<OptExpression> inputs) {
@@ -241,6 +263,10 @@ public class OptExpression {
 
     public void setExistRequiredDistribution(boolean existRequiredDistribution) {
         this.existRequiredDistribution = existRequiredDistribution;
+    }
+
+    public TvrOptMeta getTvrMeta() {
+        return tvrOptMeta;
     }
 
     private String debugString(String headlinePrefix, String detailPrefix, int limitLine) {
