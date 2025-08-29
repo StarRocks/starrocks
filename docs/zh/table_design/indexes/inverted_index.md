@@ -12,7 +12,9 @@ import Beta from '../../_assets/commonMarkdown/_beta.mdx'
 
 从版本 3.3.0 开始，StarRocks 支持全文倒排索引，可以将文本拆分成更小的词，并为每个词创建一个索引条目，显示该词与数据文件中对应行号之间的映射关系。对于全文搜索，StarRocks 根据搜索关键词查询倒排索引，快速定位匹配关键词的数据行。
 
-全文倒排索引尚不支持主键表和存算分离集群。
+主键表自 v4.0 起支持全文倒排索引。
+
+全文倒排索引尚不支持存算分离集群。
 
 ## 概述
 
@@ -32,7 +34,11 @@ StarRocks 将其底层数据存储在按列组织的数据文件中。每个数�
 ADMIN SET FRONTEND CONFIG ("enable_experimental_gin" = "true");
 ```
 
-此外，全文倒排索引只能在明细表中创建，并且表属性 `replicated_storage` 需要为 `false`。
+:::note
+在为表创建全文倒排索引时，必须禁用该表的 `replicated_storage` 功能。
+- 对于 v4.0 及更高版本，创建索引时该功能会自动禁用。
+- 对于 v4.0 之前的版本，必须手动将表属性 `replicated_storage` 设置为 `false`。
+:::
 
 #### 在创建表时创建全文倒排索引
 
