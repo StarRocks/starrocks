@@ -372,6 +372,12 @@ public class TaskRun implements Comparable<TaskRun> {
 
         // post process task run
         try (Timer ignored = Tracers.watchScope("TaskRunPostProcess")) {
+            // record the final status of task run
+            if (taskRunContext != null && taskRunContext.getStatus() != null) {
+                Tracers.record("TaskRunStatus", taskRunContext.getStatus().toJSON());
+            }
+
+            // post process the task run
             processor.postTaskRun(taskRunContext);
         } catch (Exception e) {
             LOG.warn("Failed to post task run, task_id: {}, task_run_id: {}, error: {}",
