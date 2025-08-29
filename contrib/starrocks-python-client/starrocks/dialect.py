@@ -232,8 +232,16 @@ class StarRocksDDLCompiler(MySQLDDLCompiler):
         if 'PRIMARY_KEY' in opts:
             table_opts.append(f'PRIMARY KEY({opts["PRIMARY_KEY"]})')
 
+        if "PARTITION_BY" in opts:
+            table_opts.append(f"PARTITION BY ({opts['PARTITION_BY']})")
+
         if 'DISTRIBUTED_BY' in opts:
             table_opts.append(f'DISTRIBUTED BY HASH({opts["DISTRIBUTED_BY"]})')
+            if 'DISTRIBUTED_BY_BUCKETS' in opts:
+                table_opts.append(f'BUCKETS {opts["DISTRIBUTED_BY_BUCKETS"]}')
+        elif 'DISTRIBUTED_BY_BUCKETS' in opts:
+            # TODO: issue a warning/error?
+            pass
 
         if "COMMENT" in opts:
             comment = self.sql_compiler.render_literal_value(
