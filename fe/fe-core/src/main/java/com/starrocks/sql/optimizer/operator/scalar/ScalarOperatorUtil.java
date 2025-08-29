@@ -26,6 +26,8 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.rewrite.ScalarOperatorRewriter;
 
+import java.util.stream.Stream;
+
 import static com.starrocks.catalog.Function.CompareMode.IS_IDENTICAL;
 import static com.starrocks.catalog.Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF;
 import static com.starrocks.sql.optimizer.rewrite.ScalarOperatorRewriter.DEFAULT_TYPE_CAST_RULE;
@@ -89,5 +91,10 @@ public class ScalarOperatorUtil {
         return Utils.downcast(op, CompoundPredicateOperator.class)
                 .map(compOp -> compOp.isNot() && isSimpleLike(compOp.getChild(0)))
                 .orElse(false);
+    }
+
+    public static Stream<ScalarOperator> getStream(ScalarOperator operator) {
+        return Stream.concat(Stream.of(operator),
+                operator.getChildren().stream().flatMap(ScalarOperatorUtil::getStream));
     }
 }
