@@ -55,7 +55,6 @@ class BrpcStubCache {
 public:
     BrpcStubCache() {
         _stub_map.init(239);
-        _endpoint_to_last_access_time.init(239);
         REGISTER_GAUGE_STARROCKS_METRIC(brpc_endpoint_stub_count, [this]() {
             std::lock_guard<SpinLock> l(_lock);
             return _stub_map.size();
@@ -69,18 +68,8 @@ public:
 
     std::shared_ptr<PInternalService_RecoverableStub> get_stub(const butil::EndPoint& endpoint) {
         std::lock_guard<SpinLock> l(_lock);
-        const auto current_time_ms = MonotonicMillis();
         auto stub_pool = _stub_map.seek(endpoint);
-        auto last_access_time = _endpoint_to_last_access_time[endpoint];
-        _endpoint_to_last_access_time.insert(endpoint, current_time_ms);
-        if (stub_pool == nullptr || (config::brpc_stub_cache_expire_s > 0 &&
-                                     last_access_time + config::brpc_stub_cache_expire_s * 1000 < current_time_ms)) {
-            // If the stub is not used for a long time, we can assume that all the stubs in that stub pool is invalid.
-            // Recreate a stub pool for easier maintenance.
-            if (stub_pool != nullptr) {
-                // should release old one.
-                delete stub_pool;
-            }
+        if (stub_pool == nullptr) {
             StubPool* pool = new StubPool();
             _stub_map.insert(endpoint, pool);
             return pool->get_or_create(endpoint);
@@ -117,7 +106,27 @@ private:
     // brpc_max_connections_per_server single connections with each server.
     // These connections will be created during the first few accesses and will be reused later.
     struct StubPool {
-        StubPool() { _stubs.reserve(config::brpc_max_connections_per_server); }
+        StubPool() {
+            _stubs.reserve(config::brpc_max_connections_per_server);
+            _id_to_last_access_time.reserve(config::brpc_max_connections_per_server);
+        }
+
+        bool is_stub_expired_unlocked(int64_t idx) {
+            if (config::brpc_stub_cache_expire_s <= 0) {
+                // always not expired when this is not enabled.
+                return false;
+            }
+
+            const auto current_time_ms = MonotonicMillis();
+            const auto it = _id_to_last_access_time.find(idx);
+            _id_to_last_access_time.emplace(idx, current_time_ms);
+            if (it != _id_to_last_access_time.end()) {
+                const auto last_access_time = it->second;
+                return last_access_time + config::brpc_stub_cache_expire_s * 1000 < current_time_ms;
+            }
+            // no record, should treat as expired.
+            return true;
+        }
 
         std::shared_ptr<PInternalService_RecoverableStub> get_or_create(const butil::EndPoint& endpoint) {
             if (UNLIKELY(_stubs.size() < config::brpc_max_connections_per_server)) {
@@ -125,22 +134,33 @@ private:
                 if (!stub->reset_channel().ok()) {
                     return nullptr;
                 }
+                if (config::brpc_stub_cache_expire_s > 0) {
+                    _id_to_last_access_time.emplace(_stubs.size(), MonotonicMillis());
+                }
                 _stubs.push_back(stub);
                 return stub;
             }
             if (++_idx >= config::brpc_max_connections_per_server) {
                 _idx = 0;
             }
+            if (is_stub_expired_unlocked(_idx)) {
+                LOG(INFO) << "stub(" << endpoint << ") is expired, create a new one";
+                auto stub = std::make_shared<PInternalService_RecoverableStub>(endpoint, "");
+                if (!stub->reset_channel().ok()) {
+                    return nullptr;
+                }
+                _stubs[_idx] = stub;
+            }
             return _stubs[_idx];
         }
 
         std::vector<std::shared_ptr<PInternalService_RecoverableStub>> _stubs;
+        std::unordered_map<int64_t, int64_t> _id_to_last_access_time;
         int64_t _idx = -1;
     };
 
     SpinLock _lock;
     butil::FlatMap<butil::EndPoint, StubPool*> _stub_map;
-    butil::FlatMap<butil::EndPoint, int64_t> _endpoint_to_last_access_time;
 };
 
 class HttpBrpcStubCache {
