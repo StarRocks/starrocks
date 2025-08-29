@@ -148,7 +148,9 @@ public:
 
     uint64_t total_mem_footprint() const { return _total_mem_footprint; }
 
-    int32_t num_data_pages() { return _ordinal_index ? _ordinal_index->num_data_pages() : 0; }
+    int32_t num_data_pages() const { return _ordinal_index ? _ordinal_index->num_data_pages() : 0; }
+    // Return the total size of all data pages
+    int64_t data_page_footprint() const;
 
     // Return the ordinal range of a page
     std::pair<ordinal_t, ordinal_t> get_page_range(size_t page_index);

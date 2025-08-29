@@ -35,7 +35,8 @@
 namespace starrocks {
 
 std::vector<std::string> SegmentMetaCollecter::support_collect_fields = {
-        META_FLAT_JSON_META, META_DICT_MERGE, META_MAX, META_MIN, META_COUNT_ROWS, META_COUNT_COL};
+        META_FLAT_JSON_META, META_DICT_MERGE, META_MAX,         META_MIN,
+        META_COUNT_ROWS,     META_COUNT_COL,  META_COLUMN_SIZE, META_COLUMN_COMPRESSED_SIZE};
 
 Status SegmentMetaCollecter::parse_field_and_colname(const std::string& item, std::string* field,
                                                      std::string* col_name) {
@@ -140,6 +141,11 @@ Status MetaReader::_fill_result_chunk(Chunk* chunk) {
             desc.children.emplace_back(item_desc);
             MutableColumnPtr column = ColumnHelper::create_column(desc, false);
             chunk->append_column(std::move(column), slot->id());
+        } else if (field == META_COLUMN_SIZE || field == META_COLUMN_COMPRESSED_SIZE) {
+            TypeDescriptor desc;
+            desc.type = TYPE_BIGINT;
+            MutableColumnPtr column = ColumnHelper::create_column(desc, true);
+            chunk->append_column(std::move(column), slot->id());
         } else {
             MutableColumnPtr column = ColumnHelper::create_column(slot->type(), true);
             chunk->append_column(std::move(column), slot->id());
@@ -236,6 +242,10 @@ Status SegmentMetaCollecter::_collect(const std::string& name, ColumnId cid, Col
         return _collect_flat_json(cid, column);
     } else if (name == META_COUNT_COL) {
         return _collect_count(cid, column, type);
+    } else if (name == META_COLUMN_SIZE) {
+        return _collect_column_size(cid, column, type);
+    } else if (name == META_COLUMN_COMPRESSED_SIZE) {
+        return _collect_column_compressed_size(cid, column, type);
     }
     return Status::NotSupported("Not Support Collect Meta: " + name);
 }
@@ -411,7 +421,7 @@ Status SegmentMetaCollecter::__collect_max_or_min(ColumnId cid, Column* column, 
     if (cid >= _segment->num_columns()) {
         return Status::NotFound("");
     }
-    const ColumnReader* col_reader = _segment->column(cid);
+    ColumnReader* col_reader = const_cast<ColumnReader*>(_segment->column(cid));
     if (col_reader == nullptr || col_reader->segment_zone_map() == nullptr) {
         return Status::NotFound("");
     }
@@ -457,6 +467,44 @@ Status SegmentMetaCollecter::_collect_count(ColumnId cid, Column* column, Logica
     RETURN_IF_ERROR(_column_iterators[cid]->null_count(&nulls));
     column->append_datum(int64_t(num_rows - nulls));
 
+    return Status::OK();
+}
+
+Status SegmentMetaCollecter::_collect_column_size(ColumnId cid, Column* column, LogicalType type) {
+    ColumnReader* col_reader = const_cast<ColumnReader*>(_segment->column(cid));
+    RETURN_IF(col_reader == nullptr, Status::NotFound("column not found: " + std::to_string(cid)));
+
+    size_t total_mem_footprint = col_reader->total_mem_footprint();
+    if (col_reader->sub_readers() != nullptr) {
+        for (const auto& sub_reader : *col_reader->sub_readers()) {
+            total_mem_footprint += sub_reader->total_mem_footprint();
+        }
+    }
+    column->append_datum(int64_t(total_mem_footprint));
+    return Status::OK();
+}
+
+Status SegmentMetaCollecter::_collect_column_compressed_size(ColumnId cid, Column* column, LogicalType type) {
+    // Compressed size estimation: sum of data page sizes via ordinal index ranges
+    ColumnReader* col_reader = const_cast<ColumnReader*>(_segment->column(cid));
+    RETURN_IF(col_reader == nullptr, Status::NotFound("column not found: " + std::to_string(cid)));
+
+    OlapReaderStatistics stats;
+    IndexReadOptions opts;
+    opts.use_page_cache = false;
+    opts.read_file = _read_file.get();
+    opts.stats = &stats;
+    RETURN_IF_ERROR(col_reader->load_ordinal_index(opts));
+    int64_t total = col_reader->data_page_footprint();
+    if (col_reader->sub_readers() != nullptr) {
+        for (const auto& sub_reader : *col_reader->sub_readers()) {
+            RETURN_IF_ERROR(sub_reader->load_ordinal_index(opts));
+            int64_t sub_total = sub_reader->data_page_footprint();
+            total += sub_total;
+        }
+    }
+
+    column->append_datum(total);
     return Status::OK();
 }
 

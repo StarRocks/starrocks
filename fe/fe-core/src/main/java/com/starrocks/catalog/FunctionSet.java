@@ -312,6 +312,8 @@ public class FunctionSet {
     public static final String DISTINCT_PCSA = "distinct_pcsa";
     public static final String HISTOGRAM = "histogram";
     public static final String FLAT_JSON_META = "flat_json_meta";
+    public static final String COLUMN_SIZE = "column_size";
+    public static final String COLUMN_COMPRESSED_SIZE = "column_compressed_size";
     public static final String MANN_WHITNEY_U_TEST = "mann_whitney_u_test";
 
     // Bitmap functions:
@@ -1374,6 +1376,12 @@ public class FunctionSet {
                 Type.ARRAY_VARCHAR, Type.ARRAY_VARCHAR, false, false, false));
         addBuiltin(AggregateFunction.createBuiltin(FLAT_JSON_META, Lists.newArrayList(Type.ANY_ARRAY),
                 Type.ARRAY_VARCHAR, Type.ARRAY_VARCHAR, false, false, false));
+
+        // column meta size inspectors (used only in META_SCAN)
+        addBuiltin(AggregateFunction.createBuiltin(COLUMN_SIZE, Lists.newArrayList(Type.ANY_ELEMENT),
+                Type.BIGINT, Type.BIGINT, false, false, false));
+        addBuiltin(AggregateFunction.createBuiltin(COLUMN_COMPRESSED_SIZE, Lists.newArrayList(Type.ANY_ELEMENT),
+                Type.BIGINT, Type.BIGINT, false, false, false));
 
         for (Type t : Type.getSupportedTypes()) {
             // null/char/time is handled through type promotion

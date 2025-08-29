@@ -105,6 +105,8 @@ static const std::string META_MAX = "max";
 static const std::string META_DICT_MERGE = "dict_merge";
 static const std::string META_FLAT_JSON_META = "flat_json_meta";
 static const std::string META_COUNT_COL = "count";
+static const std::string META_COLUMN_SIZE = "column_size";
+static const std::string META_COLUMN_COMPRESSED_SIZE = "column_compressed_size";
 
 class SegmentMetaCollecter {
 public:
@@ -135,6 +137,8 @@ private:
     Status _collect_count(ColumnId cid, Column* column, LogicalType type);
     Status _collect_rows(Column* column, LogicalType type);
     Status _collect_flat_json(ColumnId cid, Column* column);
+    Status _collect_column_size(ColumnId cid, Column* column, LogicalType type);
+    Status _collect_column_compressed_size(ColumnId cid, Column* column, LogicalType type);
     template <bool is_max>
     Status __collect_max_or_min(ColumnId cid, Column* column, LogicalType type);
     SegmentSharedPtr _segment;
