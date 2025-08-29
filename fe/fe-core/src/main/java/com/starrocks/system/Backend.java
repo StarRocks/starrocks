@@ -45,6 +45,7 @@ import com.starrocks.catalog.DiskInfo;
 import com.starrocks.catalog.DiskInfo.DiskState;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.Pair;
+import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.TDisk;
 import com.starrocks.thrift.TStorageMedium;
@@ -315,15 +316,17 @@ public class Backend extends ComputeNode {
         }
 
         if (isChanged) {
-            // update disksRef
-            disksRef = new ConcurrentHashMap<>(newDiskInfos);
-            GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().updatePathInfo(addedDisks, removedDisks);
+            Backend copiedBackend = this.clonePersistentProperties();
+            copiedBackend.setDisks(ImmutableMap.copyOf(newDiskInfos));
+            SystemInfoService systemInfoService = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
             // log disk changing
-            GlobalStateMgr.getCurrentState().getEditLog().logBackendStateChange(this);
+            GlobalStateMgr.getCurrentState().getEditLog().logBackendStateChange(
+                    copiedBackend, wal -> systemInfoService.replayBackendStateChange((Backend) wal));
+            systemInfoService.updatePathInfo(addedDisks, removedDisks);
         }
     }
 
-    public void decommissionDisk(String rootPath) throws DdlException {
+    public void checkDecommissionDisk(String rootPath) throws DdlException {
         DiskInfo diskInfo = disksRef.get(rootPath);
         if (diskInfo == null) {
             throw new DdlException("Disk: " + rootPath + " does not exist");
@@ -331,14 +334,28 @@ public class Backend extends ComputeNode {
         if (diskInfo.getState() == DiskState.DISABLED) {
             throw new DdlException("Disk " + rootPath + " is in DISABLED state, can not decommission");
         }
+    }
+
+    public void decommissionDisk(String rootPath) throws DdlException {
+        DiskInfo diskInfo = disksRef.get(rootPath);
+        if (diskInfo == null) {
+            return;
+        }
         diskInfo.setState(DiskState.DECOMMISSIONED);
         LOG.info("disk {} is set to DECOMMISSIONED", rootPath);
+    }
+
+    public void checkCancelDecommissionDisk(String rootPath) throws DdlException {
+        DiskInfo diskInfo = disksRef.get(rootPath);
+        if (diskInfo == null) {
+            throw new DdlException("Disk: " + rootPath + " does not exist");
+        }
     }
 
     public void cancelDecommissionDisk(String rootPath) throws DdlException {
         DiskInfo diskInfo = disksRef.get(rootPath);
         if (diskInfo == null) {
-            throw new DdlException("Disk: " + rootPath + " does not exist");
+            return;
         }
         if (diskInfo.getState() == DiskState.DECOMMISSIONED) {
             diskInfo.setState(DiskState.ONLINE);
@@ -346,7 +363,7 @@ public class Backend extends ComputeNode {
         }
     }
 
-    public void disableDisk(String rootPath) throws DdlException {
+    public void checkDisableDisk(String rootPath) throws DdlException {
         DiskInfo diskInfo = disksRef.get(rootPath);
         if (diskInfo == null) {
             throw new DdlException("Disk: " + rootPath + " does not exist");
@@ -354,19 +371,15 @@ public class Backend extends ComputeNode {
         if (diskInfo.getState() == DiskState.DECOMMISSIONED) {
             throw new DdlException("Disk " + rootPath + " is in DECOMMISSIONED state, can not disable");
         }
-        diskInfo.setState(DiskState.DISABLED);
-        LOG.info("disk {} is set to DISABLED", rootPath);
     }
 
-    public void cancelDisableDisk(String rootPath) throws DdlException {
+    public void disableDisk(String rootPath) throws DdlException {
         DiskInfo diskInfo = disksRef.get(rootPath);
         if (diskInfo == null) {
-            throw new DdlException("Disk: " + rootPath + " does not exist");
+            return;
         }
-        if (diskInfo.getState() == DiskState.DISABLED) {
-            diskInfo.setState(DiskState.ONLINE);
-            LOG.info("disk {} is recovered to ONLINE, previous state is DISABLED", rootPath);
-        }
+        diskInfo.setState(DiskState.DISABLED);
+        LOG.info("disk {} is set to DISABLED", rootPath);
     }
 
     public String getDiskRootPath(long pathHash) {
@@ -488,6 +501,10 @@ public class Backend extends ComputeNode {
     public static class BackendStatus {
         // this will be output as json, so not using FeConstants.null_string;
         public String lastSuccessReportTabletsTime = "N/A";
+    }
+
+    public Backend clonePersistentProperties() {
+        return GsonUtils.GSON.fromJson(GsonUtils.GSON.toJson(this), Backend.class);
     }
 }
 

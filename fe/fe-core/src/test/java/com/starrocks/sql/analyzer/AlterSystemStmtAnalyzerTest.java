@@ -186,7 +186,7 @@ public class AlterSystemStmtAnalyzerTest {
         nodeMgrFollower.load(initialImage.getMetaBlockReader());
         Backend persistentState =
                 (Backend) UtFrameUtils.PseudoJournalReplayer.replayNextJournal(OperationType.OP_BACKEND_STATE_CHANGE_V2);
-        nodeMgrFollower.getClusterInfo().updateInMemoryStateBackend(persistentState);
+        nodeMgrFollower.getClusterInfo().replayBackendStateChange(persistentState);
         Assertions.assertEquals("{c=d}",
                 nodeMgrFollower.getClusterInfo().getBackend(persistentState.getId()).getLocation().toString());
 

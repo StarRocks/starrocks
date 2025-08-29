@@ -24,9 +24,8 @@ public class FrontendTest {
     @Test
     public void testFeUpdate() {
         Frontend fe = new Frontend(FrontendNodeType.FOLLOWER, "name", "testHost", 1110);
-        fe.updateHostAndEditLogPort("modifiedHost", 2110);
+        fe.updateHost("modifiedHost");
         Assertions.assertEquals("modifiedHost", fe.getHost());
-        Assertions.assertTrue(fe.getEditLogPort() == 2110);
     }
 
     @Test

@@ -148,7 +148,7 @@ public class SystemInfoServiceTest {
     public void testUpdateBackend() throws Exception {
         Backend be = new Backend(10001, "newHost", 1000);
         service.addBackend(be);
-        service.updateInMemoryStateBackend(be);
+        service.replayBackendStateChange(be);
         Backend newBe = service.getBackend(10001);
         Assertions.assertTrue(newBe.getHost().equals("newHost"));
     }
