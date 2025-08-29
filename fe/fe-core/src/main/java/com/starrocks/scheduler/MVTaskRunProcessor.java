@@ -324,11 +324,17 @@ public class MVTaskRunProcessor extends BaseTaskRunProcessor implements MVRefres
                         sb.append("\n");
                         sb.append("MVToRefreshedPartitions: " + mvPartitionsToRefresh);
                     }
+                    // ref base table partitions to refresh
+                    Map<String, Set<String>> refBasePartitionsToRefreshMap = extraMessage.getRefBasePartitionsToRefreshMap();
+                    if (!refBasePartitionsToRefreshMap.isEmpty()) {
+                        sb.append("\n");
+                        sb.append("RefBasePartitionsToRefreshMap(plan): " + refBasePartitionsToRefreshMap);
+                    }
                     // base partitions to refresh
                     Map<String, Set<String>> basePartitionsToRefreshMap = extraMessage.getBasePartitionsToRefreshMap();
                     if (!basePartitionsToRefreshMap.isEmpty()) {
                         sb.append("\n");
-                        sb.append("BasePartitionsToRefreshed: " + basePartitionsToRefreshMap);
+                        sb.append("BasePartitionsToRefreshed(exec): " + basePartitionsToRefreshMap);
                     }
                     // plan builder message
                     Map<String, String> planBuilderMessage = extraMessage.getPlanBuilderMessage();

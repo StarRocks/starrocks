@@ -1747,10 +1747,10 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
      * So ref table's p1 has been changed, materialized view to refresh partition: p0, p1. And when we refresh p0,p1
      * we also need to consider other ref table partitions(p0); otherwise, the mv's final result will lose data.
      */
-    public boolean isCalcPotentialRefreshPartition(List<TableWithPartitions> baseChangedPartitionNames,
-                                                   Map<Table, Map<String, PCell>> refBaseTablePartitionToCells,
-                                                   Set<String> mvPartitions,
-                                                   Map<String, PCell> mvPartitionToCells) {
+    public static boolean isCalcPotentialRefreshPartition(List<TableWithPartitions> baseChangedPartitionNames,
+                                                          Map<Table, Map<String, PCell>> refBaseTablePartitionToCells,
+                                                          Set<String> mvPartitions,
+                                                          Map<String, PCell> mvPartitionToCells) {
         List<PRangeCell> mvSortedPartitionRanges =
                 TableWithPartitions.getSortedPartitionRanges(mvPartitionToCells, mvPartitions);
         for (TableWithPartitions baseTableWithPartition : baseChangedPartitionNames) {
@@ -1770,10 +1770,13 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
     /**
      * Whether srcRange is intersected with many dest ranges.
      */
-    private boolean isManyToManyPartitionRangeMapping(PRangeCell srcRange,
+    public static boolean isManyToManyPartitionRangeMapping(PRangeCell srcRange,
                                                       List<PRangeCell> dstRanges) {
         if (dstRanges.isEmpty()) {
             return false;
+        }
+        if (dstRanges.size() == 1) {
+            return srcRange.isIntersected(dstRanges.get(0));
         }
         List<PartitionKey> lowerPoints = dstRanges.stream().map(
                 dstRange -> dstRange.getRange().lowerEndpoint()).toList();
@@ -1796,7 +1799,7 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
                 ++matched;
             }
         }
-        return matched > 1;
+        return matched >= 1;
     }
 
     private Map<Table, List<Column>> getBaseTablePartitionColumnMapImpl() {
