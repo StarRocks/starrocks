@@ -42,6 +42,7 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Multimap;
 import com.google.common.collect.Sets;
+import com.starrocks.authentication.UserIdentityUtils;
 import com.starrocks.catalog.CatalogRecycleBin;
 import com.starrocks.catalog.ColocateTableIndex.GroupId;
 import com.starrocks.catalog.DataProperty;
@@ -2231,7 +2232,7 @@ public class TabletScheduler extends FrontendDaemon {
         List<TabletSchedCtx> tabletCtxs;
         UserIdentity currentUser = null;
         if (request.isSetCurrent_user_ident()) {
-            currentUser = UserIdentity.fromThrift(request.current_user_ident);
+            currentUser = UserIdentityUtils.fromThrift(request.current_user_ident);
         }
         synchronized (this) {
             Stream<TabletSchedCtx> all;
