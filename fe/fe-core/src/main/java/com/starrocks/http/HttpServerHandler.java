@@ -37,6 +37,7 @@ package com.starrocks.http;
 import com.starrocks.common.Config;
 import com.starrocks.http.action.IndexAction;
 import com.starrocks.http.action.NotFoundAction;
+import com.starrocks.http.rest.HealthAction;
 import io.netty.buffer.Unpooled;
 import io.netty.channel.ChannelFutureListener;
 import io.netty.channel.ChannelHandlerContext;
@@ -103,7 +104,8 @@ public class HttpServerHandler extends ChannelInboundHandlerAdapter {
                 if (LOG.isDebugEnabled()) {
                     LOG.debug("action: {} ", action.getClass().getName());
                 }
-                if (action.supportAsyncHandler()) {
+                // Health Action need to be handled synchronously
+                if (action.supportAsyncHandler() && !(action instanceof HealthAction)) {
                     handleActionAsync(req);
                 } else {
                     handleActionSync(req);

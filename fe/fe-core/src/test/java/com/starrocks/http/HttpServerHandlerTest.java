@@ -14,6 +14,8 @@
 
 package com.starrocks.http;
 
+import com.starrocks.http.rest.HealthAction;
+import com.starrocks.http.rest.RestBaseAction;
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelFuture;
 import io.netty.channel.ChannelHandlerContext;
@@ -169,6 +171,28 @@ public class HttpServerHandlerTest {
         }
     }
 
+    @Test
+    public void testAsyncHandleHealth() throws Exception {
+        String uri = "/api/health";
+        ActionController controller = new ActionController();
+        MockHealthAction action = new MockHealthAction(controller);
+        controller.registerHandler(HttpMethod.GET, uri, action);
+        MockExecutor executor = new MockExecutor();
+
+        executor.setRejectExecute(false);
+        MockChannelHandlerContext context = createChannelHandlerContext();
+        DefaultFullHttpRequest request = new DefaultFullHttpRequest(HttpVersion.HTTP_1_1, HttpMethod.GET, uri);
+        HttpServerHandler handler = new HttpServerHandler(controller, executor);
+        assertEquals(1, ReferenceCountUtil.refCnt(request));
+        assertEquals(0, action.executeCount());
+        handler.channelRead(context, request);
+        assertEquals(1, action.executeCount());
+        assertEquals(0, ReferenceCountUtil.refCnt(request));
+        assertEquals(0, executor.pendingTaskCount());
+        assertEquals(0, context.numResponses());
+        assertFalse(context.isFlushed());
+    }
+
     private void verifyResponse(Object response, HttpResponseStatus expectStatus, String expectContent) {
         assertInstanceOf(DefaultFullHttpResponse.class, response);
         DefaultFullHttpResponse httpResponse = (DefaultFullHttpResponse) response;
@@ -214,6 +238,27 @@ public class HttpServerHandlerTest {
         @Override
         public void execute(BaseRequest request, BaseResponse response) {
             throw new UnsupportedOperationException();
+        }
+
+        int executeCount() {
+            return executeCount.get();
+        }
+    }
+
+    private static class MockHealthAction extends HealthAction {
+        private final AtomicInteger executeCount = new AtomicInteger(0);
+        public MockHealthAction(ActionController controller) {
+            super(controller);
+        }
+
+        @Override
+        public boolean supportAsyncHandler() {
+            return true;
+        }
+
+        @Override
+        public void handleRequest(BaseRequest request) {
+            executeCount.incrementAndGet();
         }
 
         int executeCount() {
