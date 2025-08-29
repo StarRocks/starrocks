@@ -322,7 +322,7 @@ public final class MVPCTRefreshRangePartitioner extends MVPCTRefreshPartitioner 
                 mvContext.getRefBaseTableToCellMap();
         Map<String, PCell> mvRangePartitionMap = mvContext.getMVToCellMap();
         Set<String> mvToRefreshPartitionNames = result.getPartitionNames();
-        if (mv.isCalcPotentialRefreshPartition(baseTableWithPartitions,
+        if (SyncPartitionUtils.isCalcPotentialRefreshPartition(baseTableWithPartitions,
                 refBaseTableRangePartitionMap, mvToRefreshPartitionNames, mvRangePartitionMap)) {
             // because the relation of partitions between materialized view and base partition table is n : m,
             // should calculate the candidate partitions recursively.

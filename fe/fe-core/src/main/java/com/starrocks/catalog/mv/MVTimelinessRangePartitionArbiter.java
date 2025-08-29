@@ -148,7 +148,7 @@ public final class MVTimelinessRangePartitionArbiter extends MVTimelinessArbiter
             List<TableWithPartitions> baseTableWithPartitions = baseChangedPartitionNames.entrySet().stream()
                     .map(e -> new TableWithPartitions(e.getKey(), e.getValue()))
                     .collect(Collectors.toList());
-            if (mv.isCalcPotentialRefreshPartition(baseTableWithPartitions,
+            if (SyncPartitionUtils.isCalcPotentialRefreshPartition(baseTableWithPartitions,
                     basePartitionNameToRangeMap, mvToRefreshPartitionNames, mvPartitionToCells)) {
                 // because the relation of partitions between materialized view and base partition table is n: m,
                 // should calculate the candidate partitions recursively.
