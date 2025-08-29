@@ -294,7 +294,10 @@ private:
 
 class StarletFileSystem : public FileSystem {
 public:
-    StarletFileSystem() { staros::starlet::fslib::register_builtin_filesystems(); }
+    StarletFileSystem(std::shared_ptr<staros::starlet::fslib::FileSystem> shard_fs = nullptr)
+            : _shard_fs(std::move(shard_fs)) {
+        staros::starlet::fslib::register_builtin_filesystems();
+    }
     ~StarletFileSystem() override = default;
 
     StarletFileSystem(const StarletFileSystem&) = delete;
@@ -613,15 +616,59 @@ public:
 
 private:
     absl::StatusOr<std::shared_ptr<staros::starlet::fslib::FileSystem>> get_shard_filesystem(int64_t shard_id) {
+        if (_shard_fs != nullptr) {
+            return _shard_fs;
+        }
         return g_worker->get_shard_filesystem(shard_id, _conf);
     }
 
 private:
     staros::starlet::fslib::Configuration _conf;
+    std::shared_ptr<staros::starlet::fslib::FileSystem> _shard_fs;
 };
 
 std::unique_ptr<FileSystem> new_fs_starlet() {
     return std::make_unique<StarletFileSystem>();
+}
+
+static std::mutex g_shard_fs_cache_mtx;
+static std::unordered_map<int64_t, std::weak_ptr<staros::starlet::fslib::FileSystem>> g_shard_fs_cache;
+
+std::shared_ptr<FileSystem> new_fs_starlet(int64_t shard_id) {
+    std::shared_ptr<staros::starlet::fslib::FileSystem> shard_fs;
+
+    {
+        std::lock_guard<std::mutex> l(g_shard_fs_cache_mtx);
+        auto it = g_shard_fs_cache.find(shard_id);
+        if (it != g_shard_fs_cache.end()) {
+            if (auto fs = it->second.lock(); fs != nullptr) {
+                LOG(INFO) << "Get shard filesystem from cache, shard_id: " << shard_id;
+                shard_fs = fs;
+            } else {
+                g_shard_fs_cache.erase(it);
+            }
+        }
+    }
+
+    if (!shard_fs) {
+        staros::starlet::fslib::Configuration conf;
+        absl::StatusOr<std::shared_ptr<staros::starlet::fslib::FileSystem>> fs_st =
+                g_worker->get_shard_filesystem(shard_id, conf);
+        if (!fs_st.ok()) {
+            LOG(WARNING) << "Failed to get shard filesystem, shard_id: " << shard_id << ", " << fs_st.status();
+            return nullptr;
+        }
+
+        shard_fs = fs_st.value();
+        LOG(INFO) << "Get shard filesystem succeed, shard_id: " << shard_id;
+
+        {
+            std::lock_guard<std::mutex> l(g_shard_fs_cache_mtx);
+            g_shard_fs_cache[shard_id] = shard_fs;
+        }
+    }
+
+    return std::make_shared<StarletFileSystem>(shard_fs);
 }
 } // namespace starrocks
 
