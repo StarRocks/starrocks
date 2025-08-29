@@ -4992,8 +4992,6 @@ Compaction Score 代表了一个表分区是否值得进行 Compaction 的评分
 - 描述：
 - 引入版本：-
 -->
-<<<<<<< HEAD
-=======
 
 ##### mv_refresh_fail_on_filter_data
 - 默认值：true
@@ -5083,29 +5081,4 @@ Compaction Score 代表了一个表分区是否值得进行 Compaction 的评分
 - 描述：在物化视图刷新时，如果需要一次性创建多个分区，系统将每 64 个分区划分为一个批次进行创建。为了降低因频繁创建导致失败的风险，系统在不同批次之间设置了默认的间隔时间（单位为毫秒），用于控制创建频率。
 - 引入版本：v3.3.0
 
-##### enable_mv_refresh_extra_prefix_logging
-- 默认值：true
-- 类型：布尔值
-- 单位：-
-- 是否动态：是
-- 描述：是否启用附加物化视图名称前缀的日志记录，用于提升调试能力。
-- 引入版本：v3.4.0
-
-##### enable_mv_post_image_reload_cache
-- 默认值：true
-- 类型：布尔值
-- 单位：-
-- 是否动态：是
-- 描述：FE 加载镜像后是否进行重载标志检测。如果某个 Base MV 已完成重载，其他依赖它的 MV 则无需再次重载。
-- 引入版本：v3.5.0
-
-##### enable_trace_historical_node
-- 默认值：false
-- 类型：布尔值
-- 单位：-
-- 是否动态：是
-- 描述：是否允许系统跟踪历史节点。将此项设置为 `true`，就可以启用 Cache Sharing 功能，并允许系统在弹性扩展过程中选择正确的缓存节点。
-- 引入版本：v3.5.1
-
 <EditionSpecificFEItem />
->>>>>>> ccf0a33ba2 ([Doc] Categorize enable_auth_check (#62517))
