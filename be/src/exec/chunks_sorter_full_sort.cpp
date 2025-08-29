@@ -108,11 +108,11 @@ Status ChunksSorterFullSort::_partial_sort(RuntimeState* state, bool done) {
 
         SCOPED_TIMER(_sort_timer);
         DataSegment segment(_sort_exprs, _unsorted_chunk);
-        _sort_permutation.resize(0);
+        SmallPermutation permutation = create_small_permutation(_staging_unsorted_rows);
         RETURN_IF_ERROR(
-                sort_and_tie_columns(state->cancelled_ref(), segment.order_by_columns, _sort_desc, &_sort_permutation));
+                sort_and_tie_columns(state->cancelled_ref(), segment.order_by_columns, _sort_desc, permutation));
         auto sorted_chunk = _unsorted_chunk->clone_empty_with_slot(_unsorted_chunk->num_rows());
-        materialize_by_permutation(sorted_chunk.get(), {_unsorted_chunk}, _sort_permutation);
+        materialize_by_permutation_single(sorted_chunk.get(), _unsorted_chunk, permutation);
         RETURN_IF_ERROR(sorted_chunk->upgrade_if_overflow());
 
         _sorted_chunks.emplace_back(std::move(sorted_chunk));
@@ -252,10 +252,7 @@ starrocks::ChunkPtr ChunksSorterFullSort::_late_materialize_tmpl(const starrocks
 }
 Status ChunksSorterFullSort::do_done(RuntimeState* state) {
     RETURN_IF_ERROR(_partial_sort(state, true));
-    {
-        _sort_permutation = {};
-        _unsorted_chunk.reset();
-    }
+    _unsorted_chunk.reset();
     RETURN_IF_ERROR(_merge_sorted(state));
 
     return Status::OK();
