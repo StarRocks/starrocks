@@ -8,6 +8,8 @@ import AdminSetFrontendNote from '../../_assets/commonMarkdown/FE_config_note.md
 
 import StaticFEConfigNote from '../../_assets/commonMarkdown/StaticFE_config_note.md'
 
+import EditionSpecificFEItem from '../../_assets/commonMarkdown/Edition_Specific_FE_Item.md'
+
 # FE Configuration
 
 <FEConfigMethod />
@@ -3726,15 +3728,6 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Description: The root directory of small files.
 - Introduced in: -
 
-##### enable_auth_check
-
-- Default: true
-- Type: Boolean
-- Unit: -
-- Is mutable: No
-- Description: Specifies whether to enable the authentication check feature. Valid values: `TRUE` and `FALSE`. `TRUE` specifies to enable this feature, and `FALSE` specifies to disable this feature.
-- Introduced in: -
-
 <!--
 ##### enable_starrocks_external_table_auth_check
 
@@ -5177,3 +5170,127 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Description:
 - Introduced in: -
 -->
+<<<<<<< HEAD
+=======
+
+##### mv_refresh_fail_on_filter_data
+
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Mv refresh fails if there is filtered data in refreshing, true by default, otherwise return success by ignoring the filtered data.
+- Introduced in: -
+
+##### mv_create_partition_batch_interval_ms
+
+- Default: 1000
+- Type: Int
+- Unit: ms
+- Is mutable: Yes
+- Description: During materialized view refresh, if multiple partitions need to be created in bulk, the system divides them into batches of 64 partitions each. To reduce the risk of failures caused by frequent partition creation, a default interval (in milliseconds) is set between each batch to control the creation frequency.
+- Introduced in: v3.3
+
+##### max_mv_refresh_failure_retry_times
+
+- Default: 1
+- Type: Int
+- Unit: -
+- Is mutable: Yes
+- Description: The maximum retry times when materialized view fails to refresh.
+- Introduced in: v3.3.0
+
+##### max_mv_refresh_try_lock_failure_retry_times
+
+- Default: 3
+- Type: Int
+- Unit: -
+- Is mutable: Yes
+- Description: The maximum retry times of try lock when materialized view fails to refresh.
+- Introduced in: v3.3.0
+
+
+##### mv_refresh_try_lock_timeout_ms
+
+- Default: 30000
+- Type: Int
+- Unit: Milliseconds
+- Is mutable: Yes
+- Description: The default try lock timeout for materialized view refresh to try the DB lock of its base table/materialized view.
+- Introduced in: v3.3.0
+
+##### enable_mv_refresh_collect_profile
+
+- Default: false
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Whether to enable profile in refreshing materialized view by default for all materialized views.
+- Introduced in: v3.3.0
+
+##### max_mv_task_run_meta_message_values_length
+
+- Default: 16
+- Type: Int
+- Unit: -
+- Is mutable: Yes
+- Description: The maximum length for the "extra message" values (in set or map) in materialized view task run. You can set this item to avoid occupying too much meta memory.
+- Introduced in: v3.3.0
+
+##### max_mv_check_base_table_change_retry_times
+
+- Default: 10
+- Type: -
+- Unit: -
+- Is mutable: Yes
+- Description: The maximum retry times for detecting base table change when refreshing materialized views.
+- Introduced in: v3.3.0
+
+##### mv_refresh_default_planner_optimize_timeout
+
+- Default: 30000
+- Type: -
+- Unit: -
+- Is mutable: Yes
+- Description: The default timeout for the planning phase of the optimizer when refresh materialized views.
+- Introduced in: v3.3.0
+
+##### enable_mv_refresh_query_rewrite
+
+- Default: false
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Whether to enable rewrite query during materialized view refresh so that the query can use the rewritten mv directly rather than the base table to improve query performance.
+- Introduced in: v3.3
+
+##### enable_mv_refresh_extra_prefix_logging
+
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Whether to enable prefixes with materialized view names in logs for better debug.
+- Introduced in: v3.4.0
+
+
+##### enable_mv_post_image_reload_cache
+
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Whether to perform reload flag check after FE loaded an image. If the check is performed for a base materialized view, it is not needed for other materialized views that related to it.
+- Introduced in: v3.5.0
+
+##### enable_trace_historical_node
+
+- Default: false
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Whether to allow the system to trace the historical nodes. By setting this item to `true`, you can enable the Cache Sharing feature and allow the system to choose the right cache nodes during elastic scaling.
+- Introduced in: v3.5.1
+
+<EditionSpecificFEItem />
+>>>>>>> ccf0a33ba2 ([Doc] Categorize enable_auth_check (#62517))
