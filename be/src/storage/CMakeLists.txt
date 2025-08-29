@@ -197,6 +197,7 @@ set(STORAGE_FILES
     lake/pk_tablet_sst_writer.cpp
     lake/primary_key_compaction_policy.cpp
     lake/replication_txn_manager.cpp
+    lake/lake_replication_txn_manager.cpp
     lake/rowset.cpp
     lake/schema_change.cpp
     lake/starlet_location_provider.cpp
