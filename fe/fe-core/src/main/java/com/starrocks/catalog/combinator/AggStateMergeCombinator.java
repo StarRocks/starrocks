@@ -29,8 +29,8 @@ import java.util.Optional;
 /**
  * Merge combinator for aggregate function to merge the agg state to return the final result of aggregate function.
  * DESC: return_type {agg_func}_merge(immediate_type)
- *  input type          : aggregate function's immediate_type
- *  intermediate type   : aggregate function's immediate_type
+ *  input type          : aggregate function's intermediate_type
+ *  intermediate type   : aggregate function's intermediate_type
  *  return type         : aggregate function's return type
  */
 public final class AggStateMergeCombinator extends AggregateFunction {
