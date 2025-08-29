@@ -48,7 +48,10 @@
 #include "storage/type_traits.h"
 #include "storage/types.h"
 #include "util/faststring.h"
+#include "util/phmap/btree.h"
+#include "util/phmap/phmap.h"
 #include "util/slice.h"
+#include "util/xxh3.h"
 
 namespace starrocks {
 
@@ -121,6 +124,16 @@ private:
 class BitmapUpdateContextRefOrSingleValue {
 public:
     BitmapUpdateContextRefOrSingleValue(const BitmapUpdateContextRefOrSingleValue& rhs) = delete;
+    BitmapUpdateContextRefOrSingleValue& operator=(const BitmapUpdateContextRefOrSingleValue& rhs) = delete;
+    BitmapUpdateContextRefOrSingleValue(BitmapUpdateContextRefOrSingleValue&& rhs) noexcept {
+        _value = rhs._value;
+        rhs._value = 1; // reset
+    }
+    BitmapUpdateContextRefOrSingleValue& operator=(BitmapUpdateContextRefOrSingleValue&& rhs) noexcept {
+        this->_value = rhs._value;
+        rhs._value = 1; // reset
+        return *this;
+    }
     BitmapUpdateContextRefOrSingleValue(uint32_t value) { _value = (value << 1) | 1; }
     ~BitmapUpdateContextRefOrSingleValue() {
         if (is_context()) {
@@ -166,14 +179,20 @@ private:
     uint64_t _value;
 };
 
+struct BitmapIndexSliceHash {
+    inline size_t operator()(const Slice& v) const { return XXH3_64bits(v.data, v.size); }
+};
+
 template <typename CppType>
 struct BitmapIndexTraits {
-    using MemoryIndexType = std::map<CppType, BitmapUpdateContextRefOrSingleValue>;
+    using UnorderedMemoryIndexType = phmap::flat_hash_map<CppType, BitmapUpdateContextRefOrSingleValue>;
+    using OrderedMemoryIndexType = std::map<CppType, BitmapUpdateContextRefOrSingleValue>;
 };
 
 template <>
 struct BitmapIndexTraits<Slice> {
-    using MemoryIndexType = std::map<Slice, BitmapUpdateContextRefOrSingleValue, Slice::Comparator>;
+    using UnorderedMemoryIndexType = phmap::flat_hash_map<Slice, BitmapUpdateContextRefOrSingleValue, BitmapIndexSliceHash, std::equal_to<Slice>>;
+    using OrderedMemoryIndexType = std::map<Slice, BitmapUpdateContextRefOrSingleValue, Slice::Comparator>;
 };
 
 // Builder for bitmap index. Bitmap index is comprised of two parts
@@ -193,7 +212,8 @@ template <LogicalType field_type>
 class BitmapIndexWriterImpl : public BitmapIndexWriter {
 public:
     using CppType = typename CppTypeTraits<field_type>::CppType;
-    using MemoryIndexType = typename BitmapIndexTraits<CppType>::MemoryIndexType;
+    using UnorderedMemoryIndexType = typename BitmapIndexTraits<CppType>::UnorderedMemoryIndexType;
+    using OrderedMemoryIndexType = typename BitmapIndexTraits<CppType>::OrderedMemoryIndexType;
 
     explicit BitmapIndexWriterImpl(TypeInfoPtr type_info) : _typeinfo(std::move(type_info)) {}
 
@@ -202,22 +222,26 @@ public:
     void add_values(const void* values, size_t count) override {
         auto p = reinterpret_cast<const CppType*>(values);
         for (size_t i = 0; i < count; ++i) {
-            const CppType& value = unaligned_load<CppType>(p);
-            auto it = _mem_index.find(value);
-            if (it != _mem_index.end()) {
-                it->second.add(_rid);
-                if (it->second.update_estimate_size(&_reverted_index_size)) {
-                    _late_update_context_vector.push_back(&(it->second));
-                }
-            } else {
-                // new value, copy value and insert new key->bitmap pair
-                CppType new_value;
-                _typeinfo->deep_copy(&new_value, &value, &_pool);
-                _mem_index.emplace(new_value, _rid);
-                BitmapUpdateContext::init_estimate_size(&_reverted_index_size);
-            }
+            add_value_with_current_rowid(p);
             _rid++;
             p++;
+        }
+    }
+
+    inline void add_value_with_current_rowid(const void* vptr) override {
+        const CppType& value = *(reinterpret_cast<const CppType*>(vptr));
+        auto it = _mem_index.find(value);
+        if (it != _mem_index.end()) {
+            it->second.add(_rid);
+            if (it->second.update_estimate_size(&_reverted_index_size)) {
+                _late_update_context_vector.push_back(&(it->second));
+            }
+        } else {
+            // new value, copy value and insert new key->bitmap pair
+            CppType new_value;
+            _typeinfo->deep_copy(&new_value, &value, &_pool);
+            _mem_index.emplace(new_value, _rid);
+            BitmapUpdateContext::init_estimate_size(&_reverted_index_size);
         }
     }
 
@@ -229,27 +253,48 @@ public:
     Status finish(WritableFile* wfile, ColumnIndexMetaPB* index_meta) override {
         index_meta->set_type(BITMAP_INDEX);
         BitmapIndexPB* meta = index_meta->mutable_bitmap_index();
+        return finish(wfile, meta);
+    }
 
+    uint64_t size() const override {
+        uint64_t size = 0;
+        size += _null_bitmap.getSizeInBytes(false);
+        for (BitmapUpdateContextRefOrSingleValue* update_context : _late_update_context_vector) {
+            update_context->late_update_size(&_reverted_index_size);
+        }
+        _late_update_context_vector.clear();
+        size += _reverted_index_size;
+        size += _mem_index.size() * sizeof(CppType);
+        size += _pool.total_allocated_bytes();
+        return size;
+    }
+
+    Status finish(WritableFile* wfile, BitmapIndexPB* meta) override {
         meta->set_bitmap_type(BitmapIndexPB::ROARING_BITMAP);
         meta->set_has_null(!_null_bitmap.isEmpty());
+
+        OrderedMemoryIndexType ordered_mem_index;
+        for (auto& p : _mem_index) {
+            ordered_mem_index.insert(std::move(p));
+        }
 
         { // write dictionary
             IndexedColumnWriterOptions options;
             options.write_ordinal_index = false;
             options.write_value_index = true;
             options.encoding = EncodingInfo::get_default_encoding(_typeinfo->type(), true);
-            options.compression = CompressionTypePB::LZ4;
+            options.compression = CompressionTypePB::ZSTD;
 
             IndexedColumnWriter dict_column_writer(options, _typeinfo, wfile);
             RETURN_IF_ERROR(dict_column_writer.init());
-            for (auto const& it : _mem_index) {
+            for (auto const& it : ordered_mem_index) {
                 RETURN_IF_ERROR(dict_column_writer.add(&(it.first)));
             }
             RETURN_IF_ERROR(dict_column_writer.finish(meta->mutable_dict_column()));
         }
         { // write bitmaps
             std::vector<BitmapUpdateContextRefOrSingleValue*> bitmaps;
-            for (auto& it : _mem_index) {
+            for (auto& it : ordered_mem_index) {
                 bitmaps.push_back(&(it.second));
             }
 
@@ -307,18 +352,7 @@ public:
         return Status::OK();
     }
 
-    uint64_t size() const override {
-        uint64_t size = 0;
-        size += _null_bitmap.getSizeInBytes(false);
-        for (BitmapUpdateContextRefOrSingleValue* update_context : _late_update_context_vector) {
-            update_context->late_update_size(&_reverted_index_size);
-        }
-        _late_update_context_vector.clear();
-        size += _reverted_index_size;
-        size += _mem_index.size() * sizeof(CppType);
-        size += _pool.total_allocated_bytes();
-        return size;
-    }
+    inline void incre_rowid() override { _rid++; }
 
 private:
     TypeInfoPtr _typeinfo;
@@ -327,7 +361,7 @@ private:
     // row id list for null value
     Roaring _null_bitmap;
     // unique value to its row id list
-    MemoryIndexType _mem_index;
+    UnorderedMemoryIndexType _mem_index;
     MemPool _pool;
 
     // roaring bitmap size
