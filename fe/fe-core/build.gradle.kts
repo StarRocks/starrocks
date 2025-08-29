@@ -47,6 +47,8 @@ java {
 dependencies {
     // Internal project dependencies
     implementation(project(":fe-grammar"))
+    implementation(project(":fe-parser"))
+    implementation(project(":fe-spi"))
     implementation(project(":fe-testing"))
     implementation(project(":fe-utils"))
     implementation(project(":plugin:hive-udf"))

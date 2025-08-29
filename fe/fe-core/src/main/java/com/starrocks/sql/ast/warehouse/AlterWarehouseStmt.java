@@ -14,7 +14,6 @@
 
 package com.starrocks.sql.ast.warehouse;
 
-import com.starrocks.common.util.PrintableMap;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.AstVisitorExtendInterface;
 import com.starrocks.sql.ast.DdlStmt;
@@ -23,7 +22,7 @@ import com.starrocks.sql.parser.NodePosition;
 import java.util.Map;
 
 public class AlterWarehouseStmt extends DdlStmt {
-    private String warehouseName;
+    private final String warehouseName;
     private Map<String, String> properties;
 
     public AlterWarehouseStmt(String warehouseName,
@@ -54,15 +53,6 @@ public class AlterWarehouseStmt extends DdlStmt {
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
         return ((AstVisitorExtendInterface<R, C>) visitor).visitAlterWarehouseStatement(this, context);
-    }
-
-    @Override
-    public String toSql() {
-        StringBuilder sb = new StringBuilder();
-        sb.append("ALTER WAREHOUSE ");
-        sb.append("'").append(warehouseName).append("' ");
-        sb.append("SET (").append(new PrintableMap<>(properties, " = ", true, false)).append(")");
-        return sb.toString();
     }
 }
 

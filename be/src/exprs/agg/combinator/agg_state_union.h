@@ -21,12 +21,12 @@
 namespace starrocks {
 struct AggStateUnionState {};
 
-// An aggregate union combinator that combines intermediate states to compute the immediate result of aggregate function.
+// An aggregate union combinator that combines intermediate states to compute the intermediate result of aggregate function.
 //
-// DESC: immediate_type {agg_func}_union(immediate_type)
-//  input type          : aggregate function's immediate_type
-//  intermediate type   : aggregate function's immediate_type
-//  return type         : aggregate function's immediate_type
+// DESC: intermediate_type {agg_func}_union(intermediate_type)
+//  input type          : aggregate function's intermediate_type
+//  intermediate type   : aggregate function's intermediate_type
+//  return type         : aggregate function's intermediate_type
 class AggStateUnion final : public AggStateCombinator<AggStateUnionState, AggStateUnion> {
 public:
     AggStateUnion(AggStateDesc agg_state_desc, const AggregateFunction* function)
