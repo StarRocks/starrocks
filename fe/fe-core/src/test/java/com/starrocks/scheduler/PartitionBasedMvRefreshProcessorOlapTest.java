@@ -989,7 +989,7 @@ public class PartitionBasedMvRefreshProcessorOlapTest extends MVTestBase {
         MVPCTRefreshPartitioner partitioner = processor.getMvRefreshPartitioner();
         PCellSortedSet mvToRefreshPartitionNames = getMVPCellWithNames(mv, mv.getPartitionNames());
         partitioner.filterPartitionByAdaptiveRefreshNumber(mvToRefreshPartitionNames,
-                Sets.newHashSet(), mv);
+                Sets.newHashSet());
         MvTaskRunContext mvContext = processor.getMvContext();
         Assertions.assertNull(mvContext.getNextPartitionStart());
         Assertions.assertNull(mvContext.getNextPartitionEnd());
@@ -1020,7 +1020,7 @@ public class PartitionBasedMvRefreshProcessorOlapTest extends MVTestBase {
         MVPCTBasedRefreshProcessor processor = getPartitionBasedRefreshProcessor(taskRun);
         MVPCTRefreshPartitioner partitioner = processor.getMvRefreshPartitioner();
         partitioner.filterPartitionByAdaptiveRefreshNumber(getMVPCellWithNames(mv, mv.getPartitionNames()),
-                Sets.newHashSet(), mv);
+                Sets.newHashSet());
         MvTaskRunContext mvContext = processor.getMvContext();
         Assertions.assertNull(mvContext.getNextPartitionStart());
         Assertions.assertNull(mvContext.getNextPartitionEnd());
@@ -1064,7 +1064,7 @@ public class PartitionBasedMvRefreshProcessorOlapTest extends MVTestBase {
         MVPCTBasedRefreshProcessor processor = getPartitionBasedRefreshProcessor(taskRun);
         MVPCTRefreshPartitioner partitioner = processor.getMvRefreshPartitioner();
         partitioner.filterPartitionByAdaptiveRefreshNumber(getMVPCellWithNames(mv, mv.getPartitionNames()),
-                Sets.newHashSet(), mv);
+                Sets.newHashSet());
         MvTaskRunContext mvContext = processor.getMvContext();
         Assertions.assertNull(mvContext.getNextPartitionStart());
         Assertions.assertNull(mvContext.getNextPartitionEnd());
@@ -1123,19 +1123,19 @@ public class PartitionBasedMvRefreshProcessorOlapTest extends MVTestBase {
 
             // round 1
             PCellSortedSet toRefresh = getMVPCellWithNames(mv, allPartitions);
-            partitioner.filterPartitionByRefreshNumber(toRefresh, Sets.newHashSet(), mv);
+            partitioner.filterPartitionByRefreshNumber(toRefresh, Sets.newHashSet());
             assertPCellNameEquals("p0", toRefresh);
             refreshedPartitions.addAll(getPartitionNames(toRefresh));
 
             // round 2
             toRefresh = getMVPCellWithNames(mv, SetUtils.disjunction(allPartitions, refreshedPartitions));
-            partitioner.filterPartitionByRefreshNumber(toRefresh, Sets.newHashSet(), mv);
+            partitioner.filterPartitionByRefreshNumber(toRefresh, Sets.newHashSet());
             assertPCellNameEquals("p1", toRefresh);
             refreshedPartitions.addAll(getPartitionNames(toRefresh));
 
             // round 3
             toRefresh = getMVPCellWithNames(mv, SetUtils.disjunction(allPartitions, refreshedPartitions));
-            partitioner.filterPartitionByRefreshNumber(toRefresh, Sets.newHashSet(), mv);
+            partitioner.filterPartitionByRefreshNumber(toRefresh, Sets.newHashSet());
             assertPCellNameEquals("p2", toRefresh);
             refreshedPartitions.addAll(getPartitionNames(toRefresh));
         }
@@ -1147,31 +1147,31 @@ public class PartitionBasedMvRefreshProcessorOlapTest extends MVTestBase {
 
             // round 1
             PCellSortedSet toRefresh = getMVPCellWithNames(mv, allPartitions);
-            partitioner.filterPartitionByRefreshNumber(toRefresh, Sets.newHashSet(), mv);
+            partitioner.filterPartitionByRefreshNumber(toRefresh, Sets.newHashSet());
             assertPCellNameEquals("p4", toRefresh);
             refreshedPartitions.addAll(getPartitionNames(toRefresh));
 
             // round 2
             toRefresh = getMVPCellWithNames(mv, SetUtils.disjunction(allPartitions, refreshedPartitions));
-            partitioner.filterPartitionByRefreshNumber(toRefresh, Sets.newHashSet(), mv);
+            partitioner.filterPartitionByRefreshNumber(toRefresh, Sets.newHashSet());
             assertPCellNameEquals("p3", toRefresh);
             refreshedPartitions.addAll(getPartitionNames(toRefresh));
 
             // round 3
             toRefresh = getMVPCellWithNames(mv, SetUtils.disjunction(allPartitions, refreshedPartitions));
-            partitioner.filterPartitionByRefreshNumber(toRefresh, Sets.newHashSet(), mv);
+            partitioner.filterPartitionByRefreshNumber(toRefresh, Sets.newHashSet());
             assertPCellNameEquals("p2", toRefresh);
             refreshedPartitions.addAll(getPartitionNames(toRefresh));
 
             // round 4
             toRefresh = getMVPCellWithNames(mv, SetUtils.disjunction(allPartitions, refreshedPartitions));
-            partitioner.filterPartitionByRefreshNumber(toRefresh, Sets.newHashSet(), mv);
+            partitioner.filterPartitionByRefreshNumber(toRefresh, Sets.newHashSet());
             assertPCellNameEquals("p1", toRefresh);
             refreshedPartitions.addAll(getPartitionNames(toRefresh));
 
             // round 5
             toRefresh = getMVPCellWithNames(mv, SetUtils.disjunction(allPartitions, refreshedPartitions));
-            partitioner.filterPartitionByRefreshNumber(toRefresh, Sets.newHashSet(), mv);
+            partitioner.filterPartitionByRefreshNumber(toRefresh, Sets.newHashSet());
             assertPCellNameEquals("p0", toRefresh);
             refreshedPartitions.addAll(getPartitionNames(toRefresh));
             Config.materialized_view_refresh_ascending = true;
@@ -2816,7 +2816,7 @@ public class PartitionBasedMvRefreshProcessorOlapTest extends MVTestBase {
                     MVPCTBasedRefreshProcessor processor =
                             (MVPCTBasedRefreshProcessor) mvTaskRunProcessor.getMVRefreshProcessor();
 
-                    Set<String> result = processor.getPCTMVToRefreshedPartitions(mvTaskRunContext, false);
+                    Set<String> result = processor.getPCTMVToRefreshedPartitions(false);
                     Assertions.assertTrue(result.isEmpty());
                 });
     }
@@ -2859,7 +2859,7 @@ public class PartitionBasedMvRefreshProcessorOlapTest extends MVTestBase {
                     MVPCTBasedRefreshProcessor mvRefreshProcessor =
                             (MVPCTBasedRefreshProcessor) processor.getMVRefreshProcessor();
                     MvTaskRunContext mvTaskRunContext = new MvTaskRunContext(taskRunContext);
-                    Set<String> result = mvRefreshProcessor.getPCTMVToRefreshedPartitions(mvTaskRunContext, false);
+                    Set<String> result = mvRefreshProcessor.getPCTMVToRefreshedPartitions(false);
                     Assertions.assertFalse(result.isEmpty());
                     Set<String> expect = ImmutableSet.of("p0", "p1", "p2", "p3", "p4");
                     Assertions.assertEquals(expect, result);
