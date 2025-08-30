@@ -31,6 +31,13 @@ import static org.hamcrest.CoreMatchers.containsString;
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
+import com.starrocks.sql.optimizer.statistics.EmptyStatisticStorage;
+import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
+import com.starrocks.sql.optimizer.statistics.Histogram;
+import com.starrocks.catalog.Table;
+import com.starrocks.sql.optimizer.statistics.StatisticStorage;
+import java.util.Collections;
+
 public class SkewJoinTest extends PlanTestBase {
 
     @TempDir
@@ -322,6 +329,57 @@ public class SkewJoinTest extends PlanTestBase {
         String sql = "select * from test.customer join test.part on P_SIZE = C_NATIONKEY and p_partkey = c_custkey";
         String sqlPlan = getFragmentPlan(sql);
         assertCContains(sqlPlan, "C_NATIONKEY IN (22, 23, 24, 10, 11)");
+    }
+
+    @Test
+    public void testSkewJoinWithNullOnlySkewByStats() throws Exception {
+        // Save original statistics storage and replace with one that reports high NULL fraction for t0.v1
+        StatisticStorage original = connectContext.getGlobalStateMgr().getStatisticStorage();
+        try {
+            connectContext.getGlobalStateMgr().setStatisticStorage(new EmptyStatisticStorage() {
+                @Override
+                public ColumnStatistic getColumnStatistic(Table table, String column) {
+                    // Provide histogram (non-null) and high NULL fraction only for left join column
+                    if (table.getName().equalsIgnoreCase("t0") && column.equalsIgnoreCase("v1")) {
+                        ColumnStatistic.Builder b = ColumnStatistic.builder();
+                        b.setNullsFraction(0.8);
+                        b.setAverageRowSize(1);
+                        b.setDistinctValuesCount(10);
+                        b.setHistogram(new Histogram(Collections.emptyList(), Collections.emptyMap()));
+                        return b.build();
+                    }
+                    if (table.getName().equalsIgnoreCase("t1") && column.equalsIgnoreCase("v4")) {
+                        ColumnStatistic.Builder b = ColumnStatistic.builder();
+                        b.setNullsFraction(0.0);
+                        b.setAverageRowSize(1);
+                        b.setDistinctValuesCount(10);
+                        b.setHistogram(new Histogram(Collections.emptyList(), Collections.emptyMap()));
+                        return b.build();
+                    }
+                    return ColumnStatistic.unknown();
+                }
+            });
+            // Ensure stats-based skew optimization is enabled and threshold allows triggering on 0.8 nullsFraction
+            double oldThreshold = connectContext.getSessionVariable().getSkewJoinDataSkewThreshold();
+            connectContext.getSessionVariable().setEnableStatsToOptimizeSkewJoin(true);
+            connectContext.getSessionVariable().setEnableOptimizerSkewJoinByQueryRewrite(true);
+            connectContext.getSessionVariable().setSkewJoinDataSkewThreshold(0.1);
+
+            String sql = "select v2, v5 from t0 join t1 on v1 = v4";
+            String plan = getFragmentPlan(sql);
+
+            // Rewrite should add rand_col equality and build skew value salt infra
+            assertCContains(plan, "rand_col = ");
+            assertCContains(plan, "unnest");
+            assertCContains(plan, "generate_serials");
+            // Left side should include CASE WHEN <col> IS NULL THEN round(...)
+            assertCContains(plan, "IS NULL THEN");
+
+            // Restore threshold
+            connectContext.getSessionVariable().setSkewJoinDataSkewThreshold(oldThreshold);
+        } finally {
+            connectContext.getGlobalStateMgr().setStatisticStorage(original);
+        }
     }
 
     private static File newFolder(File root, String... subDirs) throws IOException {

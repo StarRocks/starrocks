@@ -167,7 +167,9 @@ public class SkewJoinOptimizeRule extends TransformationRule {
                     forEach(entry -> {
                         leftChildMCV.add(Pair.create(entry.getKey(), entry.getValue()));
                     });
-            if (isDataSkew(leftChildMCV, leftRowCount, context.getSessionVariable())) {
+            // Get NULL fraction for NULL skew detection
+            double nullsFraction = leftColumnStats.getNullsFraction();
+            if (isDataSkew(leftChildMCV, leftRowCount, nullsFraction, context.getSessionVariable())) {
                 joinOperator.setSkewColumn(skewJoinColumn);
                 joinOperator.setSkewValues(leftChildMCV.stream().map(pair -> ConstantOperator.createVarchar(pair.first)).
                         collect(Collectors.toList()));
@@ -177,12 +179,19 @@ public class SkewJoinOptimizeRule extends TransformationRule {
         return false;
     }
 
-    private boolean isDataSkew(List<Pair<String, Long>> mcvList, double rowCount, SessionVariable sessionVariable) {
+    private boolean isDataSkew(List<Pair<String, Long>> mcvList, double rowCount, double nullsFraction, SessionVariable sessionVariable) {
         if (rowCount < 1) {
             return false;
         }
+        
+        // Check MCV-based skew
         long mcvRowCount = mcvList.stream().mapToLong(pair -> pair.second).sum();
-        return ((double) mcvRowCount / rowCount) > sessionVariable.getSkewJoinDataSkewThreshold();
+        boolean mcvSkew = ((double) mcvRowCount / rowCount) > sessionVariable.getSkewJoinDataSkewThreshold();
+        
+        // Check NULL-based skew - treat high NULL concentration as skew
+        boolean nullSkew = nullsFraction > sessionVariable.getSkewJoinDataSkewThreshold();
+        
+        return mcvSkew || nullSkew;
     }
 
     @Override
@@ -309,15 +318,20 @@ public class SkewJoinOptimizeRule extends TransformationRule {
 
         List<ScalarOperator> inPredicateArgs = Lists.newArrayList();
         inPredicateArgs.add(skewColumn);
-        skewValues.remove(ConstantOperator.createNull(ScalarType.NULL));
-        inPredicateArgs.addAll(skewValues);
+        // build a defensive copy and remove NULL from it
+        List<ScalarOperator> nonNullSkewValues = Lists.newArrayList(skewValues);
+        nonNullSkewValues.remove(ConstantOperator.createNull(ScalarType.NULL));
+        inPredicateArgs.addAll(nonNullSkewValues);
         InPredicateOperator inPredicateOperator = new InPredicateOperator(false, inPredicateArgs);
 
         List<ScalarOperator> when = Lists.newArrayList();
         when.add(isNullPredicateOperator);
         when.add(roundFnOperator);
-        when.add(inPredicateOperator);
-        when.add(roundFnOperator);
+        // only add IN branch when we indeed have non-null skew values
+        if (!nonNullSkewValues.isEmpty()) {
+            when.add(inPredicateOperator);
+            when.add(roundFnOperator);
+        }
         ScalarOperator caseWhenOperator = new CaseWhenOperator(roundFnOperator.getType(), null,
                 ConstantOperator.createBigint(0), when);
         ScalarOperatorRewriter rewriter = new ScalarOperatorRewriter();
@@ -416,6 +430,10 @@ public class SkewJoinOptimizeRule extends TransformationRule {
     private OptExpression addSaltForRightChild(LogicalJoinOperator oldJoinOperator, OptExpression input,
                                                ScalarOperator rightSkewColumn, OptimizerContext context) {
         List<ScalarOperator> skewValues = oldJoinOperator.getSkewValues();
+        // If skew values is empty or contains only NULL, still proceed to create salt table.
+        if (skewValues == null || skewValues.isEmpty()) {
+            skewValues = Lists.newArrayList(ConstantOperator.createNull(ScalarType.NULL));
+        }
         OptExpression skewValueSaltOpt = createSkewValueSaltTable(skewValues, context);
         Map<ColumnRefOperator, ScalarOperator> skewValueSaltProjects =
                 ((LogicalProjectOperator) skewValueSaltOpt.getOp()).getColumnRefMap();
