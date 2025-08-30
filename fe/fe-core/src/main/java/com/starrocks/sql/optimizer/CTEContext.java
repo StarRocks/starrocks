@@ -96,6 +96,12 @@ public class CTEContext {
         this.consumeNums.put(cteId, i + 1);
     }
 
+    public void decCTEConsume(int cteId) {
+        int i = this.consumeNums.getOrDefault(cteId, 0) - 1;
+        Preconditions.checkState(i >= 0);
+        this.consumeNums.put(cteId, i);
+    }
+
     public void addCTEStatistics(int cteId, Statistics statistics) {
         produceStatistics.put(cteId, statistics);
     }
@@ -156,7 +162,7 @@ public class CTEContext {
      */
     public boolean needInline(int cteId) {
         // 0. All CTEConsumer been pruned
-        if (!consumeNums.containsKey(cteId)) {
+        if (consumeNums.getOrDefault(cteId, 0) == 0) {
             return true;
         }
 

@@ -27,6 +27,7 @@ import com.starrocks.catalog.Type;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.DecimalV3FunctionAnalyzer;
 import com.starrocks.sql.ast.HintNode;
+import com.starrocks.sql.optimizer.CTEContext;
 import com.starrocks.sql.optimizer.ExpressionContext;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
@@ -127,8 +128,10 @@ public class MultiDistinctByCTERewriter {
 
     public List<OptExpression> transformImpl(OptExpression input, OptimizerContext context) {
         ColumnRefFactory columnRefFactory = context.getColumnRefFactory();
+        CTEContext cteContext = context.getCteContext();
         // define cteId
         int cteId = context.getCteContext().getNextCteId();
+        cteContext.addCTEProduce(cteId);
 
         // build logic cte produce operator
         OptExpression cteProduce = OptExpression.create(new LogicalCTEProduceOperator(cteId), input.getInputs());
@@ -145,12 +148,12 @@ public class MultiDistinctByCTERewriter {
 
         Map<ColumnRefOperator, ScalarOperator> columnRefMap = Maps.newHashMap();
         LinkedList<OptExpression> allCteConsumes = buildDistinctAggCTEConsume(aggregate, distinctAggList, cteProduce,
-                columnRefFactory, columnRefMap);
+                columnRefFactory, columnRefMap, cteContext);
 
         if (otherAggregate.size() > 0) {
             allCteConsumes.offer(
                     buildOtherAggregateCTEConsume(otherAggregate, aggregate, cteProduce, columnRefFactory,
-                            columnRefMap));
+                            columnRefMap, cteContext));
         }
 
         // left deep join tree
@@ -234,7 +237,8 @@ public class MultiDistinctByCTERewriter {
                                                                  List<ColumnRefOperator> distinctAggList,
                                                                  OptExpression cteProduce,
                                                                  ColumnRefFactory factory,
-                                                                 Map<ColumnRefOperator, ScalarOperator> projectionMap) {
+                                                                 Map<ColumnRefOperator, ScalarOperator> projectionMap,
+                                                                 CTEContext cteContext) {
         LinkedList<OptExpression> allCteConsumes = Lists.newLinkedList();
         Map<CallOperator, ColumnRefOperator> consumeAggCallMap = Maps.newHashMap();
         for (ColumnRefOperator distinctAggRef : distinctAggList) {
@@ -244,7 +248,7 @@ public class MultiDistinctByCTERewriter {
                     aggCallOperator.getFnName().equalsIgnoreCase(FunctionSet.ARRAY_AGG) ||
                     aggCallOperator.getFnName().equalsIgnoreCase(FunctionSet.GROUP_CONCAT)) {
                 allCteConsumes.offer(buildCountSumDistinctCTEConsume(distinctAggRef, aggCallOperator,
-                        aggregate, cteProduce, factory));
+                        aggregate, cteProduce, factory, cteContext));
                 consumeAggCallMap.put(aggCallOperator, distinctAggRef);
                 projectionMap.put(distinctAggRef, distinctAggRef);
             } else if (!aggCallOperator.getFnName().equals(FunctionSet.AVG)) {
@@ -270,12 +274,12 @@ public class MultiDistinctByCTERewriter {
                 if (sumColumnRef == null) {
                     sumColumnRef = factory.create(sumOperator, sumOperator.getType(), sumOperator.isNullable());
                     allCteConsumes.offer(buildCountSumDistinctCTEConsume(sumColumnRef, sumOperator, aggregate,
-                            cteProduce, factory));
+                            cteProduce, factory, cteContext));
                 }
                 if (countColumnRef == null) {
                     countColumnRef = factory.create(countOperator, countOperator.getType(), countOperator.isNullable());
                     allCteConsumes.offer(buildCountSumDistinctCTEConsume(countColumnRef, countOperator, aggregate,
-                            cteProduce, factory));
+                            cteProduce, factory, cteContext));
                 }
 
                 CallOperator distinctAvgCallOperator = new CallOperator(FunctionSet.DIVIDE, avgCallOperator.getType(),
@@ -327,14 +331,16 @@ public class MultiDistinctByCTERewriter {
                                                         LogicalAggregationOperator aggregate,
                                                         OptExpression cteProduce,
                                                         ColumnRefFactory factory,
-                                                        Map<ColumnRefOperator, ScalarOperator> projectionMap) {
+                                                        Map<ColumnRefOperator, ScalarOperator> projectionMap,
+                                                        CTEContext cteContext) {
         ColumnRefSet allCteConsumeRequiredColumns = new ColumnRefSet();
         otherAggregateRef.stream().map(k -> aggregate.getAggregations().get(k).getUsedColumns())
                 .forEach(allCteConsumeRequiredColumns::union);
         List<ColumnRefOperator> groupingKeys = aggregate.getGroupingKeys();
         allCteConsumeRequiredColumns.union(groupingKeys);
 
-        LogicalCTEConsumeOperator cteConsume = buildCteConsume(cteProduce, allCteConsumeRequiredColumns, factory);
+        LogicalCTEConsumeOperator cteConsume = buildCteConsume(cteProduce, allCteConsumeRequiredColumns, factory,
+                cteContext);
         // rewrite aggregate
         Map<ColumnRefOperator, ScalarOperator> rewriteMap = Maps.newHashMap();
         cteConsume.getCteOutputColumnRefMap().forEach((k, v) -> rewriteMap.put(v, k));
@@ -368,12 +374,14 @@ public class MultiDistinctByCTERewriter {
     private OptExpression buildCountSumDistinctCTEConsume(ColumnRefOperator aggDistinctRef,
                                                           CallOperator aggDistinctCall,
                                                           LogicalAggregationOperator aggregate,
-                                                          OptExpression cteProduce, ColumnRefFactory factory) {
+                                                          OptExpression cteProduce, ColumnRefFactory factory,
+                                                          CTEContext cteContext) {
         ColumnRefSet cteConsumeRequiredColumns = aggDistinctCall.getUsedColumns();
         List<ColumnRefOperator> groupingKeys = aggregate.getGroupingKeys();
         cteConsumeRequiredColumns.union(groupingKeys);
 
-        LogicalCTEConsumeOperator cteConsume = buildCteConsume(cteProduce, cteConsumeRequiredColumns, factory);
+        LogicalCTEConsumeOperator cteConsume = buildCteConsume(cteProduce, cteConsumeRequiredColumns, factory,
+                cteContext);
 
         // rewrite aggregate count distinct
         Map<ColumnRefOperator, ScalarOperator> rewriteMap = Maps.newHashMap();
@@ -396,9 +404,10 @@ public class MultiDistinctByCTERewriter {
     }
 
     private LogicalCTEConsumeOperator buildCteConsume(OptExpression cteProduce, ColumnRefSet requiredColumns,
-                                                      ColumnRefFactory factory) {
+                                                      ColumnRefFactory factory, CTEContext cteContext) {
         LogicalCTEProduceOperator produceOperator = (LogicalCTEProduceOperator) cteProduce.getOp();
         int cteId = produceOperator.getCteId();
+        cteContext.addCTEConsume(cteId);
 
         // create cte consume, cte output columns
         Map<ColumnRefOperator, ColumnRefOperator> consumeOutputMap = Maps.newHashMap();
