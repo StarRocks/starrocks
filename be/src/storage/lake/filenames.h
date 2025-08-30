@@ -19,6 +19,7 @@
 #include <optional>
 #include <string_view>
 
+#include "gen_cpp/Types_types.h" // for PUniqueId
 #include "gutil/strings/util.h"
 #include "util/string_parser.hpp"
 #include "util/uid_util.h"
@@ -87,6 +88,10 @@ inline std::string gen_delvec_filename(int64_t txn_id) {
 
 inline std::string txn_log_filename(int64_t tablet_id, int64_t txn_id) {
     return fmt::format("{:016X}_{:016X}.log", tablet_id, txn_id);
+}
+
+inline std::string txn_log_filename(int64_t tablet_id, int64_t txn_id, const PUniqueId& load_id) {
+    return fmt::format("{:016X}_{:016X}_{:016X}_{:016X}.log", tablet_id, txn_id, load_id.hi(), load_id.lo());
 }
 
 inline std::string txn_slog_filename(int64_t tablet_id, int64_t txn_id) {
@@ -166,7 +171,6 @@ inline std::pair<int64_t, int64_t> parse_tablet_metadata_filename(std::string_vi
 // Return value: <tablet id, txn id>
 inline std::pair<int64_t, int64_t> parse_txn_log_filename(std::string_view file_name) {
     constexpr static int kBase = 16;
-    CHECK_EQ(kTxnLogFilenameLength, file_name.size()) << file_name;
     StringParser::ParseResult res;
     auto tablet_id = StringParser::string_to_int<int64_t>(file_name.data(), 16, kBase, &res);
     CHECK_EQ(StringParser::PARSE_SUCCESS, res) << file_name;

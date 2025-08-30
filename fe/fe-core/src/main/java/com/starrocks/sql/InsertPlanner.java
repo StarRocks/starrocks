@@ -393,6 +393,9 @@ public class InsertPlanner {
                 if (insertStmt.isFromOverwrite()) {
                     ((OlapTableSink) dataSink).setIsFromOverwrite(true);
                 }
+                if (session.getTxnId() != 0) {
+                    ((OlapTableSink) dataSink).setIsMultiStatementsTxn(true);
+                }
 
                 // if sink is OlapTableSink Assigned to Be execute this sql [cn execute OlapTableSink will crash]
                 session.getSessionVariable().setPreferComputeNode(false);

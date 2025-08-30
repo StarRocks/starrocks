@@ -49,6 +49,15 @@ public:
     void apply_opcompaction(const TxnLogPB_OpCompaction& op_compaction, uint32_t max_compact_input_rowset_id,
                             int64_t output_rowset_schema_id);
     void apply_opcompaction_with_conflict(const TxnLogPB_OpCompaction& op_compaction);
+
+    // batch processing functions for merging multiple opwrites into one rowset
+    void batch_apply_opwrite(const TxnLogPB_OpWrite& op_write, const std::map<int, FileInfo>& replace_segments,
+                             const std::vector<FileMetaPB>& orphan_files);
+    void add_rowset(const RowsetMetadataPB& rowset_pb, const std::map<int, FileInfo>& replace_segments,
+                    const std::vector<FileMetaPB>& orphan_files, const std::vector<std::string>& dels,
+                    const std::vector<std::string>& del_encryption_metas);
+    void set_final_rowset();
+
     // finalize will generate and sync final meta state to storage.
     // |txn_id| the maximum applied transaction ID, used to construct the delvec file name, and
     // the garbage collection module relies on this value to check if a delvec file can be safely
@@ -81,6 +90,14 @@ private:
     void _sstable_meta_clean_after_alter_type();
 
 private:
+    struct PendingRowsetData {
+        RowsetMetadataPB rowset_pb;
+        std::map<int, FileInfo> replace_segments;
+        std::vector<FileMetaPB> orphan_files;
+        std::vector<std::string> dels;
+        std::vector<std::string> del_encryption_metas;
+    };
+
     Tablet _tablet;
     std::shared_ptr<TabletMetadata> _tablet_meta;
     UpdateManager* _update_mgr;
@@ -92,6 +109,8 @@ private:
     std::unordered_map<std::string, uint32_t> _cache_key_to_segment_id;
     // When recover flag isn't ok, need recover later
     RecoverFlag _recover_flag = RecoverFlag::OK;
+    // Pending rowset data for batch processing
+    PendingRowsetData _pending_rowset_data;
 };
 
 Status get_del_vec(TabletManager* tablet_mgr, const TabletMetadata& metadata, uint32_t segment_id, bool fill_cache,

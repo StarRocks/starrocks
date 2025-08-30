@@ -145,6 +145,10 @@ public class UpdatePlanner {
                     // using column mode partial update in UPDATE stmt
                     ((OlapTableSink) dataSink).setPartialUpdateMode(TPartialUpdateMode.COLUMN_UPDATE_MODE);
                 }
+                if (session.getTxnId() != 0) {
+                    ((OlapTableSink) dataSink).setIsMultiStatementsTxn(true);
+                }
+
                 execPlan.getFragments().get(0).setSink(dataSink);
                 execPlan.getFragments().get(0).setLoadGlobalDicts(globalDicts);
 
