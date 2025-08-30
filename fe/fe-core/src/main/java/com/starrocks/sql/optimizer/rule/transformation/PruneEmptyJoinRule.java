@@ -130,6 +130,7 @@ public class PruneEmptyJoinRule extends TransformationRule {
     }
 
     public List<OptExpression> transToEmpty(OptExpression input, OptimizerContext context) {
+        decCTEConsume(input.inputAt(1 - emptyIndex), context.getCteContext());
         List<ColumnRefOperator> refs =
                 input.getOutputColumns().getColumnRefOperators(context.getColumnRefFactory());
         return Lists.newArrayList(OptExpression.create(new LogicalValuesOperator(refs)));
