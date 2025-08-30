@@ -15,6 +15,7 @@
 package com.starrocks.sql.optimizer.skew;
 
 import com.google.crypto.tink.subtle.Random;
+import com.starrocks.common.Pair;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.statistics.Bucket;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
@@ -27,6 +28,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -123,6 +125,48 @@ public class DataSkewTest {
         // WHEN / THEN
         assertTrue(DataSkew.isColumnSkewed(stats, skewedColStats));
         assertFalse(DataSkew.isColumnSkewed(stats, nonSkewedColStats));
+    }
+
+    @Test
+    void itShouldReturnMoreSkewedMetric() {
+        // GIVEN
+        final var skewedHistogram = getSkewedHistogram();
+        final var nullAndMcvButMoreNullSkewedCol = createNewTestColumn();
+        final var nullAndMcvButMoreNullSkewedStats = ColumnStatistic.builder()
+                .setNullsFraction(99) //
+                .setHistogram(skewedHistogram) //
+                .build();
+
+        final var nullAndMcvButMoreMcvSkewedCol = createNewTestColumn();
+        final var nullAndMcvButMoreMcvSkewedStats = ColumnStatistic.builder()
+                .setNullsFraction(0.6) //
+                .setHistogram(skewedHistogram) //
+                .build();
+
+        final var stats = new Statistics.Builder()
+                .setOutputRowCount(100_000)
+                .addColumnStatistic(nullAndMcvButMoreNullSkewedCol, nullAndMcvButMoreNullSkewedStats) //
+                .addColumnStatistic(nullAndMcvButMoreMcvSkewedCol, nullAndMcvButMoreMcvSkewedStats) //
+                .build();
+
+        // WHEN / THEN
+        final var nullAndMcvButMoreNullSkewInfo = DataSkew.getColumnSkewInfo(stats, nullAndMcvButMoreNullSkewedStats);
+        assertTrue(nullAndMcvButMoreNullSkewInfo.isSkewed());
+        assertEquals(DataSkew.SkewType.SKEWED_NULL, nullAndMcvButMoreNullSkewInfo.type());
+        assertFalse(nullAndMcvButMoreNullSkewInfo.maybeMcvs().isPresent());
+
+        final var nullAndMcvButMoreMcvSkewInfo = DataSkew.getColumnSkewInfo(stats, nullAndMcvButMoreMcvSkewedStats);
+        assertTrue(nullAndMcvButMoreMcvSkewInfo.isSkewed());
+        assertEquals(DataSkew.SkewType.SKEWED_MCV, nullAndMcvButMoreMcvSkewInfo.type());
+        assertTrue(nullAndMcvButMoreMcvSkewInfo.maybeMcvs().isPresent());
+
+        final var expectedMcvs =
+                List.of(Pair.create("1", 50000), Pair.create("2", 20000), Pair.create("3", 10000), Pair.create("4", 5000),
+                        Pair.create("5", 500));
+        assertEquals(expectedMcvs.size(), nullAndMcvButMoreMcvSkewInfo.maybeMcvs().get().size());
+        for (final var value : expectedMcvs) {
+            nullAndMcvButMoreMcvSkewInfo.maybeMcvs().get().contains(value);
+        }
     }
 
     private static Histogram getSkewedHistogram() {
