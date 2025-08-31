@@ -17,6 +17,7 @@ package com.starrocks.authentication;
 import com.google.common.base.Joiner;
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.UserIdentity;
+import com.starrocks.catalog.UserIdentityWithDnName;
 import com.starrocks.common.Config;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.Pair;
@@ -149,16 +150,17 @@ public class AuthenticationHandler {
                 continue;
             }
 
+            UserIdentity userIdentity = UserIdentityWithDnName.createEphemeralUserIdent(user, remoteHost);
+
             try {
                 authContext.setAuthenticationProvider(provider);
-                provider.authenticate(authContext, UserIdentity.createEphemeralUserIdent(user, remoteHost), authResponse);
+                provider.authenticate(authContext, userIdentity, authResponse);
             } catch (AuthenticationException e) {
                 exceptions.add(new Pair<>(authMechanism, e));
                 continue;
             }
 
-            authenticationResult = new AuthenticationResult(
-                    UserIdentity.createEphemeralUserIdent(user, remoteHost),
+            authenticationResult = new AuthenticationResult(userIdentity,
                     securityIntegration.getGroupProviderName() == null ?
                             List.of(Config.group_provider) : securityIntegration.getGroupProviderName(),
                     securityIntegration.getGroupAllowedLoginList());
