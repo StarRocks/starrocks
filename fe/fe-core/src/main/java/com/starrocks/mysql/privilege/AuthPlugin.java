@@ -33,6 +33,7 @@ public class AuthPlugin {
     public enum Server {
         MYSQL_NATIVE_PASSWORD,
         AUTHENTICATION_LDAP_SIMPLE,
+        SECURITY_INTEGRATION,   // To pass auth call to SECURITY_INTEGRATION
         AUTHENTICATION_JWT,
         AUTHENTICATION_OAUTH2;
 
@@ -58,6 +59,9 @@ public class AuthPlugin {
                             authString);
                 }
 
+                case SECURITY_INTEGRATION -> {
+                    return null;
+                }
                 case AUTHENTICATION_JWT -> {
                     JSONObject authStringJSON = new JSONObject(authString == null ? "{}" : authString);
 

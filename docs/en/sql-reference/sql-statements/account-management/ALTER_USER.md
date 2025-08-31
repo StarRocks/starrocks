@@ -32,7 +32,7 @@ ALTER USER user_identity
         IDENTIFIED WITH mysql_native_password BY 'auth_string'
         IDENTIFIED WITH mysql_native_password AS 'auth_string'
         IDENTIFIED WITH authentication_ldap_simple AS 'auth_string'
-        
+        IDENTIFIED WITH security_integration AS 'auth_string'
     }
     ```
 
@@ -42,6 +42,7 @@ ALTER USER user_identity
     | `mysql_native_password BY`   | Plaintext                      | Plaintext              |
     | `mysql_native_password WITH` | Ciphertext                     | Plaintext              |
     | `authentication_ldap_simple` | Plaintext                      | Plaintext              |
+    | `security_integration`       | Plaintext                      | Plaintext              |
 
 > Note: StarRocks encrypts users' passwords before storing them.
 

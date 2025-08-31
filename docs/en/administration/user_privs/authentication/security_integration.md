@@ -135,6 +135,11 @@ For more details, see the DN matching mechanism in [Authenticate User Groups](..
 - Required: No
 - Description: The description of the security integration.
 
+## Add a User with Security Integration
+```SQL
+CREATE USER testuser IDENTIFIED WITH security_integration;
+```
+
 <SecurityIntegrationJWT />
 
 <SecurityIntegrationOAuth />
