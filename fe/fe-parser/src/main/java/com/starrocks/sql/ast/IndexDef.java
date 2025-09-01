@@ -14,28 +14,15 @@
 
 package com.starrocks.sql.ast;
 
-import com.google.common.base.Strings;
-import com.starrocks.analysis.BloomFilterIndexUtil;
-import com.starrocks.analysis.InvertedIndexUtil;
-import com.starrocks.analysis.VectorIndexUtil;
-import com.starrocks.catalog.Column;
-import com.starrocks.catalog.KeysType;
-import com.starrocks.catalog.PrimitiveType;
-import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.parser.NodePosition;
-import com.starrocks.sql.parser.ParsingException;
-import com.starrocks.sql.parser.StarRocksParser.IndexTypeContext;
 import org.apache.commons.lang3.StringUtils;
 
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
-import java.util.TreeSet;
 
 public class IndexDef implements ParseNode {
-
-    private static final int MAX_INDEX_NAME_LENGTH = 64;
 
     private final String indexName;
     private final List<String> columns;
@@ -61,28 +48,6 @@ public class IndexDef implements ParseNode {
         this.indexType = Optional.ofNullable(indexType).orElse(IndexType.BITMAP);
         this.comment = Optional.ofNullable(comment).orElse(StringUtils.EMPTY);
         this.properties = Optional.ofNullable(properties).orElse(Collections.emptyMap());
-    }
-
-    public void analyze() {
-        if (columns == null) {
-            throw new SemanticException("Index can not accept null column.");
-        }
-        if (Strings.isNullOrEmpty(indexName)) {
-            throw new SemanticException("index name cannot be blank.");
-        }
-        if (indexName.length() > MAX_INDEX_NAME_LENGTH) {
-            throw new SemanticException("index name too long, the index name length at most is 64.");
-        }
-        TreeSet<String> distinct = new TreeSet<>(String.CASE_INSENSITIVE_ORDER);
-        distinct.addAll(columns);
-        if (columns.size() != distinct.size()) {
-            throw new SemanticException("columns of index has duplicated.");
-        }
-
-        // right now only support single column index
-        if (columns.size() != 1) {
-            throw new SemanticException(indexName + " index can only apply to a single column.");
-        }
     }
 
     @Override
@@ -159,31 +124,6 @@ public class IndexDef implements ParseNode {
         return properties;
     }
 
-    public void checkColumn(Column column, KeysType keysType) {
-        if (indexType == IndexType.BITMAP) {
-            String indexColName = column.getName();
-            PrimitiveType colType = column.getPrimitiveType();
-            if (!(colType.isDateType() ||
-                    colType.isFixedPointType() || colType.isDecimalV3Type() ||
-                    colType.isStringType() || colType == PrimitiveType.BOOLEAN)) {
-                throw new SemanticException(colType + " is not supported in bitmap index. "
-                        + "invalid column: " + indexColName);
-            } else if ((keysType == KeysType.AGG_KEYS || keysType == KeysType.UNIQUE_KEYS) && !column.isKey()) {
-                throw new SemanticException(
-                        "BITMAP index only used in columns of DUP_KEYS/PRIMARY_KEYS table or key columns of"
-                                + " UNIQUE_KEYS/AGG_KEYS table. invalid column: " + indexColName);
-            }
-        } else if (indexType == IndexType.GIN) {
-            InvertedIndexUtil.checkInvertedIndexValid(column, properties, keysType);
-        } else if (indexType == IndexType.NGRAMBF) {
-            BloomFilterIndexUtil.checkNgramBloomFilterIndexValid(column, properties, keysType);
-        } else if (indexType == IndexType.VECTOR) {
-            VectorIndexUtil.checkVectorIndexValid(column, properties, keysType);
-        } else {
-            throw new SemanticException("Unsupported index type: " + indexType);
-        }
-    }
-
     public enum IndexType {
         BITMAP,
         GIN("GIN"),
@@ -200,22 +140,6 @@ public class IndexDef implements ParseNode {
 
         public String getDisplayName() {
             return displayName;
-        }
-
-        public static IndexDef.IndexType getIndexType(IndexTypeContext indexTypeContext) {
-            IndexDef.IndexType index;
-            if (indexTypeContext == null || indexTypeContext.BITMAP() != null) {
-                index = IndexDef.IndexType.BITMAP;
-            } else if (indexTypeContext.GIN() != null) {
-                index = IndexDef.IndexType.GIN;
-            } else if (indexTypeContext.NGRAMBF() != null) {
-                index = IndexType.NGRAMBF;
-            } else if (indexTypeContext.VECTOR() != null) {
-                index = IndexType.VECTOR;
-            } else {
-                throw new ParsingException("Not specify index type");
-            }
-            return index;
         }
 
         // Whether the index type is compatible with the new metadata

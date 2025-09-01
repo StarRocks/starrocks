@@ -43,7 +43,6 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Multimap;
 import com.google.common.collect.Sets;
 import com.google.common.collect.Streams;
-import com.starrocks.analysis.BloomFilterIndexUtil;
 import com.starrocks.analysis.DateLiteral;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.StringLiteral;
@@ -80,6 +79,7 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
 import com.starrocks.server.StorageVolumeMgr;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
+import com.starrocks.sql.analyzer.IndexAnalyzer;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.analyzer.SetStmtAnalyzer;
 import com.starrocks.sql.ast.Property;
@@ -960,7 +960,7 @@ public class PropertyAnalyzer {
     public static double analyzeBloomFilterFpp(Map<String, String> properties) throws AnalysisException {
         double bfFpp = 0;
         if (properties != null && properties.containsKey(PROPERTIES_BF_FPP)) {
-            bfFpp = BloomFilterIndexUtil.analyzeBloomFilterFpp(properties);
+            bfFpp = IndexAnalyzer.analyzeBloomFilterFpp(properties);
             // have to remove this from properties, which means it's valid and checked already
             properties.remove(PROPERTIES_BF_FPP);
         }
