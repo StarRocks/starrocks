@@ -268,18 +268,6 @@ public class TableRef implements ParseNode, Writable {
         }
     }
 
-    /**
-     * Return the table ref presentation to be used in the toSql string
-     */
-    public String tableRefToSql() {
-        String aliasSql = null;
-        String alias = getExplicitAlias();
-        if (alias != null) {
-            aliasSql = ToSqlUtils.getIdentSql(alias);
-        }
-        return name.toSql() + ((aliasSql != null) ? " " + aliasSql : "");
-    }
-
     public String getAlias() {
         if (!hasExplicitAlias()) {
             return name.toString();

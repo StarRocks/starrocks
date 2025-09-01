@@ -17,7 +17,6 @@ package com.starrocks.server;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
-import com.starrocks.analysis.BloomFilterIndexUtil;
 import com.starrocks.analysis.OrderByElement;
 import com.starrocks.binlog.BinlogConfig;
 import com.starrocks.catalog.ColocateTableIndex;
@@ -57,6 +56,7 @@ import com.starrocks.lake.LakeTable;
 import com.starrocks.lake.StorageInfo;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.analyzer.FeNameFormat;
+import com.starrocks.sql.analyzer.IndexAnalyzer;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AddRollupClause;
 import com.starrocks.sql.ast.AlterClause;
@@ -322,7 +322,7 @@ public class OlapTableFactory implements AbstractTableFactory {
                 }
                 table.setBloomFilterInfo(bfColumnIds, bfFpp);
 
-                BloomFilterIndexUtil.analyseBfWithNgramBf(table, new HashSet<>(stmt.getIndexes()), bfColumnIds);
+                IndexAnalyzer.analyseBfWithNgramBf(table, new HashSet<>(stmt.getIndexes()), bfColumnIds);
             } catch (AnalysisException e) {
                 throw new DdlException(e.getMessage());
             }

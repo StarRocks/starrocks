@@ -562,7 +562,6 @@ import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
 import static com.starrocks.catalog.FunctionSet.ARRAY_AGG_DISTINCT;
-import static com.starrocks.sql.ast.IndexDef.IndexType.getIndexType;
 import static com.starrocks.sql.common.ErrorMsgProxy.PARSER_ERROR_MSG;
 import static java.lang.String.format;
 import static java.util.stream.Collectors.toList;
@@ -9307,5 +9306,21 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         }
         Collections.sort(res);
         return res;
+    }
+
+    public static IndexDef.IndexType getIndexType(StarRocksParser.IndexTypeContext indexTypeContext) {
+        IndexDef.IndexType index;
+        if (indexTypeContext == null || indexTypeContext.BITMAP() != null) {
+            index = IndexDef.IndexType.BITMAP;
+        } else if (indexTypeContext.GIN() != null) {
+            index = IndexDef.IndexType.GIN;
+        } else if (indexTypeContext.NGRAMBF() != null) {
+            index = IndexDef.IndexType.NGRAMBF;
+        } else if (indexTypeContext.VECTOR() != null) {
+            index = IndexDef.IndexType.VECTOR;
+        } else {
+            throw new ParsingException("Not specify index type");
+        }
+        return index;
     }
 }

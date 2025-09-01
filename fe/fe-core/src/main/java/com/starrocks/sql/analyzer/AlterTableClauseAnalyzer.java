@@ -84,7 +84,6 @@ import com.starrocks.sql.ast.DropPartitionClause;
 import com.starrocks.sql.ast.DropRollupClause;
 import com.starrocks.sql.ast.ExpressionPartitionDesc;
 import com.starrocks.sql.ast.HashDistributionDesc;
-import com.starrocks.sql.ast.IndexDef;
 import com.starrocks.sql.ast.IndexDef.IndexType;
 import com.starrocks.sql.ast.IntervalLiteral;
 import com.starrocks.sql.ast.KeysDesc;
@@ -148,21 +147,7 @@ public class AlterTableClauseAnalyzer implements AstVisitorExtendInterface<Void,
 
     @Override
     public Void visitCreateIndexClause(CreateIndexClause clause, ConnectContext context) {
-        IndexDef indexDef = clause.getIndexDef();
-        indexDef.analyze();
-        Index index;
-        // Only assign meaningful indexId for OlapTable
-        if (table.isOlapTableOrMaterializedView()) {
-            long indexId = IndexType.isCompatibleIndex(indexDef.getIndexType()) ? ((OlapTable) table).incAndGetMaxIndexId() : -1;
-            index = new Index(indexId, indexDef.getIndexName(),
-                    MetaUtils.getColumnIdsByColumnNames(table, indexDef.getColumns()),
-                    indexDef.getIndexType(), indexDef.getComment(), indexDef.getProperties());
-        } else {
-            index = new Index(indexDef.getIndexName(),
-                    MetaUtils.getColumnIdsByColumnNames(table, indexDef.getColumns()),
-                    indexDef.getIndexType(), indexDef.getComment(), indexDef.getProperties());
-        }
-        clause.setIndex(index);
+        IndexAnalyzer.analyze(clause.getIndexDef());
         return null;
     }
 
