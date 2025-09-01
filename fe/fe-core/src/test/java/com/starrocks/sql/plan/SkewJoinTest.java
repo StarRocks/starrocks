@@ -15,9 +15,14 @@
 package com.starrocks.sql.plan;
 
 import com.starrocks.catalog.OlapTable;
+import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.common.StarRocksPlannerException;
+import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
+import com.starrocks.sql.optimizer.statistics.EmptyStatisticStorage;
+import com.starrocks.sql.optimizer.statistics.Histogram;
+import com.starrocks.sql.optimizer.statistics.StatisticStorage;
 import com.starrocks.statistic.MockHistogramStatisticStorage;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
@@ -26,17 +31,11 @@ import org.junit.jupiter.api.io.TempDir;
 
 import java.io.File;
 import java.io.IOException;
+import java.util.Collections;
 
 import static org.hamcrest.CoreMatchers.containsString;
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.junit.jupiter.api.Assertions.assertThrows;
-
-import com.starrocks.sql.optimizer.statistics.EmptyStatisticStorage;
-import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
-import com.starrocks.sql.optimizer.statistics.Histogram;
-import com.starrocks.catalog.Table;
-import com.starrocks.sql.optimizer.statistics.StatisticStorage;
-import java.util.Collections;
 
 public class SkewJoinTest extends PlanTestBase {
 
@@ -348,15 +347,14 @@ public class SkewJoinTest extends PlanTestBase {
                         b.setHistogram(new Histogram(Collections.emptyList(), Collections.emptyMap()));
                         return b.build();
                     }
-                    if (table.getName().equalsIgnoreCase("t1") && column.equalsIgnoreCase("v4")) {
+                    //                    if (table.getName().equalsIgnoreCase("t1") && column.equalsIgnoreCase("v4")) {
                         ColumnStatistic.Builder b = ColumnStatistic.builder();
                         b.setNullsFraction(0.0);
                         b.setAverageRowSize(1);
                         b.setDistinctValuesCount(10);
                         b.setHistogram(new Histogram(Collections.emptyList(), Collections.emptyMap()));
                         return b.build();
-                    }
-                    return ColumnStatistic.unknown();
+                    //                    }
                 }
             });
             // Ensure stats-based skew optimization is enabled and threshold allows triggering on 0.8 nullsFraction

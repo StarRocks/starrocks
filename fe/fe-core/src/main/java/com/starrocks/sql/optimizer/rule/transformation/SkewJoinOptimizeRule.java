@@ -171,8 +171,19 @@ public class SkewJoinOptimizeRule extends TransformationRule {
             double nullsFraction = leftColumnStats.getNullsFraction();
             if (isDataSkew(leftChildMCV, leftRowCount, nullsFraction, context.getSessionVariable())) {
                 joinOperator.setSkewColumn(skewJoinColumn);
-                joinOperator.setSkewValues(leftChildMCV.stream().map(pair -> ConstantOperator.createVarchar(pair.first)).
-                        collect(Collectors.toList()));
+
+                // Handle NULL-only skew case: when MCV is empty but NULL fraction indicates skew
+                List<ScalarOperator> skewValues;
+                if (leftChildMCV.isEmpty() &&
+                        nullsFraction > context.getSessionVariable().getSkewJoinDataSkewThreshold()) {
+                    // Create a special NULL skew value for NULL-only skew cases
+                    skewValues = Lists.newArrayList(ConstantOperator.createNull(skewJoinColumn.getType()));
+                } else {
+                    // Use MCV-based skew values
+                    skewValues = leftChildMCV.stream().map(pair -> ConstantOperator.createVarchar(pair.first)).
+                            collect(Collectors.toList());
+                }
+                joinOperator.setSkewValues(skewValues);
                 return true;
             }
         }
@@ -320,7 +331,7 @@ public class SkewJoinOptimizeRule extends TransformationRule {
         inPredicateArgs.add(skewColumn);
         // build a defensive copy and remove NULL from it
         List<ScalarOperator> nonNullSkewValues = Lists.newArrayList(skewValues);
-        nonNullSkewValues.remove(ConstantOperator.createNull(ScalarType.NULL));
+        nonNullSkewValues.removeIf(value -> value instanceof ConstantOperator && ((ConstantOperator) value).isNull());
         inPredicateArgs.addAll(nonNullSkewValues);
         InPredicateOperator inPredicateOperator = new InPredicateOperator(false, inPredicateArgs);
 
