@@ -129,6 +129,10 @@ std::shared_future<StatusOr<std::string>> LLMQueryService::async_query(const std
     auto status = _thread_pool->submit_func(
             [task = std::move(task), promise_ptr]() mutable { promise_ptr->set_value(task()); });
     if (!status.ok()) {
+        {
+            std::lock_guard<std::mutex> lock(_mutex);
+            _pending_queries.erase(cache_key);
+        }
         std::promise<StatusOr<std::string>> error_promise;
         error_promise.set_value(
                 Status::InternalError(strings::Substitute("Submit to thread pool failed, $0", status.to_string())));
