@@ -313,19 +313,7 @@ public final class MVPCTRefreshRangePartitioner extends MVPCTRefreshPartitioner 
     public boolean isCalcPotentialRefreshPartition(Map<Table, PCellSortedSet> baseChangedPartitionNames,
                                                    PCellSortedSet mvPartitions) {
         // add potential partitions to refresh into mvPartitions
-        PCellSortedSet cellSortedSet = PCellSortedSet.of(mvPartitions);
-        if (!mvToRefreshPotentialPartitions.isEmpty()) {
-            Map<String, PCell> mvPartitionCellMap = mvContext.getMVToCellMap();
-            for (String partitionName : mvToRefreshPotentialPartitions) {
-                if (mvPartitionCellMap.containsKey(partitionName)) {
-                    PCell pCell = mvPartitionCellMap.get(partitionName);
-                    cellSortedSet.add(PCellWithName.of(partitionName, pCell));
-                } else {
-                    logger.warn("Cannot find partition {} in mv {}'s partition map", partitionName, mv.getName());
-                }
-            }
-        }
-        return SyncPartitionUtils.isCalcPotentialRefreshPartition(baseChangedPartitionNames, cellSortedSet);
+        return SyncPartitionUtils.isCalcPotentialRefreshPartition(baseChangedPartitionNames, mvPartitions);
     }
 
     @Override

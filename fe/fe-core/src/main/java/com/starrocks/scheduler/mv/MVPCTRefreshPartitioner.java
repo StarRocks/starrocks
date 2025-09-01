@@ -254,7 +254,6 @@ public abstract class MVPCTRefreshPartitioner {
                 logger.info("no partitions to refresh for materialized view");
                 return mvToRefreshedPartitions;
             }
-            mvToRefreshPotentialPartitions.addAll(mvToRefreshedPartitions.getPartitionNames());
             // filter partitions to avoid refreshing too many partitions
             filterMVToRefreshPartitions(mvToRefreshedPartitions);
 
