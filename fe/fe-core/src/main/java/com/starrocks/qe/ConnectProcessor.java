@@ -42,6 +42,7 @@ import com.starrocks.authentication.OAuth2Context;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Table;
+import com.starrocks.catalog.UserIdentity;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.ErrorCode;
@@ -76,18 +77,17 @@ import com.starrocks.sql.ast.AstTraverser;
 import com.starrocks.sql.ast.DmlStmt;
 import com.starrocks.sql.ast.ExecuteStmt;
 import com.starrocks.sql.ast.InsertStmt;
+import com.starrocks.sql.ast.OriginStatement;
 import com.starrocks.sql.ast.PrepareStmt;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.Relation;
 import com.starrocks.sql.ast.SetStmt;
 import com.starrocks.sql.ast.StatementBase;
-import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.sql.ast.txn.BeginStmt;
 import com.starrocks.sql.ast.txn.CommitStmt;
 import com.starrocks.sql.ast.txn.RollbackStmt;
 import com.starrocks.sql.common.AuditEncryptionChecker;
 import com.starrocks.sql.common.ErrorType;
-import com.starrocks.sql.common.SqlDigestBuilder;
 import com.starrocks.sql.parser.ParsingException;
 import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.thrift.TMasterOpRequest;
@@ -301,7 +301,7 @@ public class ConnectProcessor {
         }
 
         try {
-            String digest = SqlDigestBuilder.build(queryStmt);
+            String digest = AstToSQLBuilder.toDigest(queryStmt);
             MessageDigest md = MessageDigest.getInstance("MD5");
             md.reset();
             md.update(digest.getBytes());
@@ -441,13 +441,14 @@ public class ConnectProcessor {
                 }
             }
         } catch (AnalysisException e) {
-            LOG.warn("Failed to parse SQL: " + originStmt + ", because.", e);
+            LOG.warn("Failed to parse SQL: " + SqlCredentialRedactor.redact(originStmt) + ", because.", e);
             ctx.getState().setError(e.getMessage());
             ctx.getState().setErrType(QueryState.ErrType.ANALYSIS_ERR);
         } catch (Throwable e) {
             // Catch all throwable.
             // If reach here, maybe StarRocks bug.
-            LOG.warn("Process one query failed. SQL: " + originStmt + ", because unknown reason: ", e);
+            LOG.warn("Process one query failed. SQL: " + SqlCredentialRedactor.redact(originStmt) +
+                    ", because unknown reason: ", e);
             ctx.getState().setError(e.getMessage());
             ctx.getState().setErrType(QueryState.ErrType.INTERNAL_ERR);
         } finally {

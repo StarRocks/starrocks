@@ -90,6 +90,10 @@ void SharedMorselQueueFactory::set_has_more(bool v) {
     _queue->set_has_more(v);
 }
 
+bool SharedMorselQueueFactory::reach_limit() const {
+    return _queue->reach_limit();
+}
+
 size_t IndividualMorselQueueFactory::num_original_morsels() const {
     size_t total = 0;
     for (const auto& queue : _queue_per_driver_seq) {
@@ -144,6 +148,15 @@ void IndividualMorselQueueFactory::set_has_more(bool v) {
     for (auto& q : _queue_per_driver_seq) {
         q->set_has_more(v);
     }
+}
+
+bool IndividualMorselQueueFactory::reach_limit() const {
+    for (const auto& p : _queue_per_driver_seq) {
+        if (p->reach_limit()) {
+            return true;
+        }
+    }
+    return false;
 }
 
 BucketSequenceMorselQueueFactory::BucketSequenceMorselQueueFactory(std::map<int, MorselQueuePtr>&& queue_per_driver_seq,
@@ -251,6 +264,9 @@ StatusOr<MorselPtr> BucketSequenceMorselQueue::try_get() {
     }
     ASSIGN_OR_RETURN(auto morsel, _morsel_queue->try_get());
     auto* m = down_cast<ScanMorsel*>(morsel.get());
+    if (m == nullptr) {
+        return nullptr;
+    }
     DCHECK(m->has_owner_id());
     auto owner_id = m->owner_id();
     ASSIGN_OR_RETURN(int64_t next_owner_id, _peek_sequence_id());
@@ -309,10 +325,10 @@ void PhysicalSplitMorselQueue::set_key_ranges(const std::vector<std::unique_ptr<
     }
 }
 
-void PhysicalSplitMorselQueue::set_key_ranges(TabletReaderParams::RangeStartOperation range_start_op,
-                                              TabletReaderParams::RangeEndOperation range_end_op,
-                                              std::vector<OlapTuple> range_start_key,
-                                              std::vector<OlapTuple> range_end_key) {
+void PhysicalSplitMorselQueue::set_key_ranges(const TabletReaderParams::RangeStartOperation& range_start_op,
+                                              const TabletReaderParams::RangeEndOperation& range_end_op,
+                                              const std::vector<OlapTuple>& range_start_key,
+                                              const std::vector<OlapTuple>& range_end_key) {
     _range_start_op = range_start_op;
     _range_end_op = range_end_op;
     _range_start_key = range_start_key;
@@ -575,10 +591,10 @@ void LogicalSplitMorselQueue::set_key_ranges(const std::vector<std::unique_ptr<O
     }
 }
 
-void LogicalSplitMorselQueue::set_key_ranges(TabletReaderParams::RangeStartOperation range_start_op,
-                                             TabletReaderParams::RangeEndOperation range_end_op,
-                                             std::vector<OlapTuple> range_start_key,
-                                             std::vector<OlapTuple> range_end_key) {
+void LogicalSplitMorselQueue::set_key_ranges(const TabletReaderParams::RangeStartOperation& range_start_op,
+                                             const TabletReaderParams::RangeEndOperation& range_end_op,
+                                             const std::vector<OlapTuple>& range_start_key,
+                                             const std::vector<OlapTuple>& range_end_key) {
     _range_start_op = range_start_op;
     _range_end_op = range_end_op;
     _range_start_key = range_start_key;

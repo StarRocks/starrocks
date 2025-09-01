@@ -39,7 +39,6 @@ import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.analysis.MatchExpr;
 import com.starrocks.analysis.OrderByElement;
 import com.starrocks.analysis.Parameter;
-import com.starrocks.analysis.ParseNode;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.Subquery;
 import com.starrocks.analysis.TimestampArithmeticExpr;
@@ -48,10 +47,11 @@ import com.starrocks.catalog.AggregateFunction;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SqlModeHelper;
 import com.starrocks.sql.ast.ArrayExpr;
-import com.starrocks.sql.ast.AstVisitor;
+import com.starrocks.sql.ast.AstVisitorExtendInterface;
 import com.starrocks.sql.ast.DictionaryGetExpr;
 import com.starrocks.sql.ast.FieldReference;
 import com.starrocks.sql.ast.LambdaFunctionExpr;
+import com.starrocks.sql.ast.ParseNode;
 import com.starrocks.sql.ast.QueryStatement;
 
 import java.util.List;
@@ -111,7 +111,7 @@ public class AggregationAnalyzer {
     /**
      * visitor returns true if all expressions are constant with respect to the group.
      */
-    private class VerifyExpressionVisitor implements AstVisitor<Boolean, Void> {
+    private class VerifyExpressionVisitor implements AstVisitorExtendInterface<Boolean, Void> {
         @Override
         public Boolean visit(ParseNode expr) {
             if (groupingExpressions.stream().anyMatch(expr::equals)) {

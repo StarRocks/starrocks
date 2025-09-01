@@ -126,6 +126,14 @@ Status HashJoinNode::init(const TPlanNode& tnode, RuntimeState* state) {
         _build_equivalence_partition_expr_ctxs = _build_expr_ctxs;
     }
 
+    if (tnode.__isset.hash_join_node && tnode.hash_join_node.__isset.common_slot_map) {
+        for (const auto& [key, val] : tnode.hash_join_node.common_slot_map) {
+            ExprContext* context;
+            RETURN_IF_ERROR(Expr::create_expr_tree(_pool, val, &context, state, true));
+            _common_expr_ctxs.insert({key, context});
+        }
+    }
+
     RETURN_IF_ERROR(Expr::create_expr_trees(_pool, tnode.hash_join_node.other_join_conjuncts,
                                             &_other_join_conjunct_ctxs, state));
 
@@ -483,8 +491,8 @@ pipeline::OpFactories HashJoinNode::_decompose_to_pipeline(pipeline::PipelineBui
     HashJoinerParam param(pool, _hash_join_node, _is_null_safes, _build_expr_ctxs, _probe_expr_ctxs,
                           _other_join_conjunct_ctxs, _conjunct_ctxs, child(1)->row_desc(), child(0)->row_desc(),
                           child(1)->type(), child(0)->type(), child(1)->conjunct_ctxs().empty(), _build_runtime_filters,
-                          _output_slots, _output_slots, _distribution_mode, _enable_late_materialization,
-                          _enable_partition_hash_join, _is_skew_join);
+                          _output_slots, _output_slots, context->degree_of_parallelism(), _distribution_mode,
+                          _enable_late_materialization, _enable_partition_hash_join, _is_skew_join, _common_expr_ctxs);
     auto hash_joiner_factory = std::make_shared<starrocks::pipeline::HashJoinerFactory>(param);
 
     // Create a shared RefCountedRuntimeFilterCollector

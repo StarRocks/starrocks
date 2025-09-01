@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+keywords: ['chuang jian']
 ---
 
 # CREATE TABLE
@@ -670,7 +671,8 @@ PROPERTIES (
 PROPERTIES (
     "storage_volume" = "<storage_volume_name>",
     "datacache.enable" = "{ true | false }",
-    "datacache.partition_duration" = "<string_value>"
+    "datacache.partition_duration" = "<string_value>",
+    "file_bundling" = "{ true | false }"
 )
 ```
 
@@ -689,6 +691,26 @@ PROPERTIES (
 
   :::note
   此属性仅在 `datacache.enable` 设置为 `true` 时可用。
+  :::
+
+- `file_bundling`（可选）：是否为云原生表启用 File Bundling 优化功能。该功能自 v4.0 版本起支持。当启用该功能（设置为 `true`）时，系统会自动将导入、Compaction 或 Publish 操作生成的数据文件进行打包，从而减少因频繁访问外部存储系统而产生的 API 成本。
+
+  :::note
+  - File Bundling 功能仅适用于使用 StarRocks v4.0 或更高版本的存算分离集群。
+  - File Bundling 功能在 v4.0 或更高版本中创建的表格中默认启用，由 FE 配置项 `enable_file_bundling` (默认值：true) 控制。
+  - 启用 File Bundling 功能后，您只能将集群降级到 v3.5.2 或更高版本。如果您想降级到 v3.5.2 之前的版本，必须先删除已启用 File Bundling 功能的表。
+  - 对集群中已有的表，在集群升级至 v4.0 后，File Bundling 功能仍默认处于禁用状态。
+  - 您可以通过 [ALTER TABLE](ALTER_TABLE.md) 语句手动为已有的表启用 File Bundling 功能，但仍存在以下限制：
+    - 对于带有在 v4.0 版本之前创建的 Rollup Index 的表，您无法为其启用 File Bundling 功能。您可以在 v4.0 或更高版本中删除并重新创建这些索引，然后为这些表启用 File Bundling 功能。
+    - 您无法在特定时间段内**多次**修改 `file_bundling` 属性。否则，系统将返回错误。您可以通过执行以下 SQL 语句来检查 `file_bundling` 属性是否可修改：
+
+      ```SQL
+      SELECT METADATA_SWITCH_VERSION FROM information_schema.partitions_meta WHERE TABLE_NAME = '<table_name>';
+      ```
+
+      您仅可在返回值为 `0` 时修改 `file_bundling` 属性。非零值表示与 `METADATA_SWITCH_VERSION` 对应的数据版本尚未被 GC 机制回收。您必须等待该数据版本被回收后再进行操作。
+
+      您可以通过将 FE 动态配置 `lake_autovacuum_grace_period_minutes` 的值设置为较小的数值来缩短此间隔。但在修改 `file_bundling` 属性后，请务必将该配置恢复为原始值。
   :::
 
 ### 快速模式架构演进
@@ -763,27 +785,25 @@ crontab ::= * <hour> <day-of-the-month> <month> <day-of-the-week>
 ALTER TABLE tbl SET('partition_retention_condition' = '');
 ```
 
-### 配置 Flat JSON 配置（目前仅支持存算一体集群）
+### 在表级别设置 Flat JSON 属性
 
-如果您想使用 Flat JSON 属性，请在 properties 中指定。有关更多信息，请参见 [Flat JSON](../../../using_starrocks/Flat_json.md)。
+在 v3.3 版本中，StarRocks 引入了 [Flat JSON](../../../using_starrocks/Flat_json.md) 功能，以提升 JSON 数据查询效率并简化 JSON 的使用复杂度。该功能通过特定的 BE 配置项和系统变量进行控制，因此只能全局启用（或禁用）。
+
+从 v4.0 开始，您可以在表级别设置与 Flat JSON 相关的属性。
 
 ```SQL
 PROPERTIES (
-    "flat_json.enable" = "true|false",
-    "flat_json.null.factor" = "0-1",
-    "flat_json.sparsity.factor" = "0-1",
-    "flat_json.column.max" = "${integer_value}"
+    "flat_json.enable" = "{ true | false }",
+    "flat_json.null.factor" = "",
+    "flat_json.sparsity.factor" = "",
+    "flat_json.column.max" = ""
 )
 ```
 
-**属性**
-
-| 属性                    | 必需 | 描述                                                                                                                                                                                                                                                       |
-| --------------------------- |----------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| `flat_json.enable`    | 否       | 是否启用 Flat JSON 功能。启用此功能后，新加载的 JSON 数据将自动扁平化，提高 JSON 查询性能。                                                                                                 |
-| `flat_json.null.factor` | 否      | Flat JSON 提取的列中 NULL 值的比例。如果列中 NULL 值的比例高于此阈值，则不会提取该列。此参数仅在 `flat_json.enable` 设置为 true 时生效。默认值：0.3。 |
-| `flat_json.sparsity.factor`     | 否      | Flat JSON 中同名列的比例。如果同名列的比例低于此值，则不进行提取。此参数仅在 `flat_json.enable` 设置为 true 时生效。默认值：0.9。    |
-| `flat_json.column.max`       | 否      | Flat JSON 可以提取的子字段的最大数量。此参数仅在 `flat_json.enable` 设置为 true 时生效。默认值：100。 |
+- `flat_json.enable`（可选）：是否启用 Flat JSON 功能。启用此功能后，新导入的 JSON 数据将自动进行扁平化处理，从而提升 JSON 查询性能。
+- `flat_json.null.factor`（可选）：列中 NULL 值的比例阈值。如果某列的 NULL 值比例高于此阈值，则该列不会被 Flat JSON 提取。此参数仅在 `flat_json.enable` 设置为 `true` 时生效。默认值：`0.3`。
+- `flat_json.sparsity.factor`（可选）：具有相同名称的列的比例阈值。如果具有相同名称的列的比例低于此值，则 Flat JSON 不会提取该列。此参数仅在 `flat_json.enable` 设置为 `true` 时生效。默认值：`0.9`。
+- `flat_json.column.max`（可选）：Flat JSON 可提取的子字段最大数量。此参数仅在 `flat_json.enable` 设置为 `true` 时生效。默认值：`100`。
 
 ## 示例
 
@@ -1127,11 +1147,7 @@ PARTITION BY RANGE (k1)
 DISTRIBUTED BY HASH(k2);
 ```
 
-### 支持 Flat JSON 的表
-
-:::note
-Flat JSON 目前仅支持存算一体集群。
-:::
+### 带有 Flat JSON 属性的表
 
 ```SQL
 CREATE TABLE example_db.example_table

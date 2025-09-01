@@ -15,7 +15,7 @@
 #include <iostream>
 #include <memory>
 
-#include "exec/file_scanner.h"
+#include "exec/file_scanner/file_scanner.h"
 #include "formats/csv/csv_reader.h"
 #include "fs/fs.h"
 #include "runtime/mem_tracker.h"

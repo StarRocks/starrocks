@@ -225,6 +225,14 @@ public class GroupExecutionPlanTest extends PlanTestBase {
             querys.add("select distinct tb.k1,tb.k2,tb.k3,tb.k4 from (select l.k1 k1, l.k2 k2,r.k1 k3,r.k2 k4 " +
                     "from (select k1, k2 from colocate1 l) l join [bucket] colocate2 r on l.k1 = r.k1 and l.k2 = r.k2) tb " +
                     "join colocate1 z;");
+            //                                      Colocate Join
+            //                                      /          \
+            //                        Bucket Shuffle Join      Scan
+            //                          /          \
+            //                       Scan           Exchange
+            //                                      Scan
+            querys.add("select * from colocate1 l left join [bucket] colocate2 r on l.k1=r.k1 and l.k2=r.k2 " +
+                    "join [colocate] colocate2 z on l.k1=z.k1 and l.k2=z.k2;");
             // CTE as probe runtime filter probe side
             querys.add("with a as (select distinct k1, k2 from colocate1) " +
                     "select distinct l.k1,r.k2 from colocate1 l join [broadcast] a r on l.k1=r.k1 and l.k2=r.k2 " +

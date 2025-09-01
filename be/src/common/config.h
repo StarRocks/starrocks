@@ -323,6 +323,20 @@ CONF_mBool(enable_zonemap_index_memory_page_cache, "true");
 // whether to enable the ordinal index memory cache
 CONF_mBool(enable_ordinal_index_memory_page_cache, "true");
 
+// ========================== ZONEMAP BEGIN ===================================
+// Enable ZoneMap for string (CHAR/VARCHAR) columns using prefix-based min/max
+CONF_mBool(enable_string_prefix_zonemap, "true");
+// Prefix length used for string ZoneMap min/max when enabled
+CONF_mInt32(string_prefix_zonemap_prefix_len, "16");
+// Adaptive creation of string zonemap index based on page overlap quality.
+// If the estimated overlap ratio across consecutive pages is greater than this threshold,
+// skip writing the page-level string zonemap index. Range: [0.0, 1.0].
+CONF_mDouble(string_zonemap_overlap_threshold, "0.8");
+// Minimum number of non-empty pages before applying the adaptive check.
+CONF_mInt32(string_zonemap_min_pages_for_adaptive_check, "16");
+
+// ========================== ZONEMAP END ===================================
+
 CONF_mInt32(base_compaction_check_interval_seconds, "60");
 CONF_mInt64(min_base_compaction_num_singleton_deltas, "5");
 CONF_mInt64(max_base_compaction_num_singleton_deltas, "100");
@@ -1131,6 +1145,7 @@ CONF_Alias(object_storage_request_timeout_ms, starlet_fslib_s3client_request_tim
 CONF_mInt32(starlet_delete_files_max_key_in_batch, "1000");
 CONF_mInt32(starlet_filesystem_instance_cache_capacity, "10000");
 CONF_mInt32(starlet_filesystem_instance_cache_ttl_sec, "86400");
+CONF_mBool(starlet_write_file_with_tag, "false");
 #endif
 
 CONF_mInt64(lake_metadata_cache_limit, /*2GB=*/"2147483648");
@@ -1319,7 +1334,7 @@ CONF_mInt64(datacache_mem_adjust_period, "20");
 // Sleep time in seconds between datacache adjust iterations.
 CONF_mInt64(datacache_mem_adjust_interval_seconds, "10");
 
-CONF_Int32(datacache_inline_item_count_limit, "130172");
+CONF_mInt32(datacache_inline_item_count_limit, "130172");
 // Whether use an unified datacache instance.
 CONF_Bool(datacache_unified_instance_enable, "true");
 // The eviction policy for datacache, alternatives: [lru, slru].
@@ -1510,8 +1525,10 @@ CONF_mBool(lake_enable_vertical_compaction_fill_data_cache, "true");
 
 CONF_mInt32(dictionary_cache_refresh_timeout_ms, "60000"); // 1 min
 CONF_mInt32(dictionary_cache_refresh_threadpool_size, "8");
+
+// ======================= FLAT JSON start ==============================================
 // json flat flag
-CONF_mBool(enable_json_flat, "false");
+CONF_mBool(enable_json_flat, "true");
 
 // enable compaction is base on flat json, not whole json
 CONF_mBool(enable_compaction_flat_json, "true");
@@ -1545,6 +1562,7 @@ CONF_mInt32(json_flat_column_max, "100");
 
 // for whitelist on flat json remain data, max set 1kb
 CONF_mInt32(json_flat_remain_filter_max_bytes, "1024");
+// ======================= FLAT JSON end ==============================================
 
 // Allowable intervals for continuous generation of pk dumps
 // Disable when pk_dump_interval_seconds <= 0
@@ -1588,6 +1606,8 @@ CONF_mBool(apply_del_vec_after_all_index_filter, "true");
 CONF_mDouble(connector_sink_mem_high_watermark_ratio, "0.3");
 CONF_mDouble(connector_sink_mem_low_watermark_ratio, "0.1");
 CONF_mDouble(connector_sink_mem_urgent_space_ratio, "0.1");
+// Whether enable spill intermediate data for connector sink.
+CONF_mBool(enable_connector_sink_spill, "true");
 
 // .crm file can be removed after 1day.
 CONF_mInt32(unused_crm_file_threshold_second, "86400" /** 1day **/);
@@ -1728,4 +1748,5 @@ CONF_mInt64(split_exchanger_buffer_chunk_num, "1000");
 
 // when to split hashmap/hashset into two level hashmap/hashset, negative number means use default value
 CONF_mInt64(two_level_memory_threshold, "-1");
+
 } // namespace starrocks::config

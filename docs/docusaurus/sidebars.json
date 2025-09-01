@@ -472,6 +472,7 @@
                         "id": "administration/management/management"
                     },
                     "items": [
+                        "administration/management/logs",
                         "administration/management/Scale_up_down",
                         "administration/management/BE_blacklist",
                         "administration/management/Backup_and_restore",
@@ -514,6 +515,7 @@
                 "administration/Meta_recovery",
                 "administration/data_migration_tool",
                 "administration/http_interface",
+                "administration/sql_digest",
         {
             "type": "category",
             "label": "User Privileges and Authentication",

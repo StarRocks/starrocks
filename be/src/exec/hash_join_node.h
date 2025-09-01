@@ -63,7 +63,7 @@ private:
     Status _create_implicit_local_join_runtime_filters(RuntimeState* state);
     void _final_update_profile() {
         if (_probe_chunk_count > 0) {
-            COUNTER_SET(_avg_input_probe_chunk_size, int64_t(_probe_rows_counter->value() / _probe_chunk_count));
+            COUNTER_SET(_avg_input_probe_chunk_size, int64_t(COUNTER_VALUE(_probe_rows_counter) / _probe_chunk_count));
         } else {
             COUNTER_SET(_avg_input_probe_chunk_size, int64_t(0));
         }
@@ -139,6 +139,8 @@ private:
     bool _right_table_has_remain = true;
     bool _probe_eos = false; // probe table scan finished;
     size_t _runtime_join_filter_pushdown_limit = 1024000;
+
+    std::map<SlotId, ExprContext*> _common_expr_ctxs;
 
     RuntimeProfile::Counter* _build_timer = nullptr;
     RuntimeProfile::Counter* _build_ht_timer = nullptr;

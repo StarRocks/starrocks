@@ -18,6 +18,7 @@
 #include <vector>
 
 #include "agent/master_info.h"
+#include "common/status.h"
 #include "exec/pipeline/fragment_context.h"
 #include "exec/pipeline/pipeline_fwd.h"
 #include "exec/pipeline/scan/connector_scan_operator.h"
@@ -29,6 +30,7 @@
 #include "runtime/exec_env.h"
 #include "runtime/query_statistics.h"
 #include "runtime/runtime_filter_cache.h"
+#include "util/defer_op.h"
 #include "util/thread.h"
 #include "util/thrift_rpc_helper.h"
 
@@ -83,7 +85,7 @@ QueryContext::~QueryContext() noexcept {
     }
 }
 
-void QueryContext::count_down_fragments() {
+void QueryContext::count_down_fragments(QueryContextManager* query_context_mgr) {
     size_t old = _num_active_fragments.fetch_sub(1);
     DCHECK_GE(old, 1);
     bool all_fragments_finished = old == 1;
@@ -93,13 +95,17 @@ void QueryContext::count_down_fragments() {
 
     // Acquire the pointer to avoid be released when removing query
     auto query_trace = shared_query_trace();
-    ExecEnv::GetInstance()->query_context_mgr()->remove(_query_id);
+    query_context_mgr->remove(_query_id);
     // @TODO(silverbullet233): if necessary, remove the dump from the execution thread
     // considering that this feature is generally used for debugging,
     // I think it should not have a big impact now
     if (query_trace != nullptr) {
         (void)query_trace->dump();
     }
+}
+
+void QueryContext::count_down_fragments() {
+    return this->count_down_fragments(ExecEnv::GetInstance()->query_context_mgr());
 }
 
 FragmentContextManager* QueryContext::fragment_mgr() {
@@ -129,7 +135,7 @@ void QueryContext::init_mem_tracker(int64_t query_mem_limit, MemTracker* parent,
         _profile = std::make_shared<RuntimeProfile>("Query" + print_id(_query_id));
         auto* mem_tracker_counter =
                 ADD_COUNTER_SKIP_MERGE(_profile.get(), "MemoryLimit", TUnit::BYTES, TCounterMergeType::SKIP_ALL);
-        mem_tracker_counter->set(query_mem_limit);
+        COUNTER_SET(mem_tracker_counter, query_mem_limit);
         size_t lowest_limit = parent->lowest_limit();
         size_t tracker_reserve_limit = -1;
 
@@ -417,10 +423,20 @@ StatusOr<QueryContext*> QueryContextManager::get_or_register(const TUniqueId& qu
             // lookup query context for the second chance in sc_map
             if (sc_it != sc_map.end()) {
                 auto ctx = std::move(sc_it->second);
-                sc_map.erase(sc_it);
-                RETURN_CANCELLED_STATUS_IF_CTX_CANCELLED(ctx);
                 auto* raw_ctx_ptr = ctx.get();
-                context_map.emplace(query_id, std::move(ctx));
+                sc_map.erase(sc_it);
+                auto cancel_status = [ctx]() -> Status {
+                    RETURN_CANCELLED_STATUS_IF_CTX_CANCELLED(ctx);
+                    return Status::OK();
+                }();
+                // If there are still active fragments, we cannot directly remove the query context
+                // because the operator is still executing.
+                // We need to wait until the fragment execution is complete,
+                // then call QueryContextManager::remove to safely remove this query context.
+                if (cancel_status.ok() || !ctx->has_no_active_instances()) {
+                    context_map.emplace(query_id, std::move(ctx));
+                }
+                RETURN_IF_ERROR(cancel_status);
                 return raw_ctx_ptr;
             }
         }

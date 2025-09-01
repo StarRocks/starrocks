@@ -14,31 +14,15 @@
 
 package com.starrocks.sql.ast;
 
-import com.starrocks.catalog.Column;
-import com.starrocks.catalog.ScalarType;
-import com.starrocks.qe.ShowResultSetMetaData;
 import com.starrocks.sql.parser.NodePosition;
 
 public class ShowComputeNodeBlackListStmt extends ShowStmt {
-    private static final ShowResultSetMetaData META_DATA = ShowResultSetMetaData.builder()
-            .addColumn(new Column("ComputeNodeId", ScalarType.createVarchar(20)))
-            .addColumn(new Column("AddBlackListType", ScalarType.createVarchar(20)))
-            .addColumn(new Column("LostConnectionTime", ScalarType.createVarchar(20)))
-            .addColumn(new Column("LostConnectionNumberInPeriod", ScalarType.createVarchar(10)))
-            .addColumn(new Column("CheckTimePeriod(s)", ScalarType.createVarchar(10)))
-            .build();
-
     public ShowComputeNodeBlackListStmt(NodePosition pos) {
         super(pos);
     }
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitShowComputeNodeBlackListStatement(this, context);
-    }
-
-    @Override
-    public ShowResultSetMetaData getMetaData() {
-        return META_DATA;
+        return ((AstVisitorExtendInterface<R, C>) visitor).visitShowComputeNodeBlackListStatement(this, context);
     }
 }

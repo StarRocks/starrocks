@@ -6,9 +6,30 @@ displayed_sidebar: docs
 
 :::warning
 
-StarRocks を v3.3 にアップグレードした後、直接 v3.2.0、v3.2.1、または v3.2.2 にダウングレードしないでください。そうしないとメタデータが失われます。問題を防ぐために、クラスタを v3.2.3 以降にダウングレードする必要があります。
+- StarRocks を v3.3 にアップグレードした後、直接 v3.2.0、v3.2.1、または v3.2.2 にダウングレードしないでください。そうしないとメタデータが失われます。問題を防ぐために、クラスタを v3.2.3 以降にダウングレードする必要があります。
+- StarRocks を v3.3.9 にアップグレードした後、ダウングレードできるのは v3.2.11 以降のみです。
 
 :::
+
+## 3.3.18
+
+リリース日： 2025年8月28日
+
+### バグ修正
+
+以下の問題を修正しました：
+
+- `LakePersistentIndex` の初期化に失敗した際、`_memtable` のクリーンアップにより BE がクラッシュする問題を修正しました。 [#62279](https://github.com/StarRocks/starrocks/pull/62279)
+- レプリケーショントランザクションマネージャーで Tablet の最大バージョンを取得する際にロックが不足していたため発生した並行性の問題を修正しました。 [#62238](https://github.com/StarRocks/starrocks/pull/62238)
+- ステージスケジューラが同期的な Profile 収集で無限に待機してしまうハング問題を修正しました（修正後は、スケジューリングエラー発生時に Profile 収集が正しく終了するようになりました）。 [#62140](https://github.com/StarRocks/starrocks/pull/62140)
+- 低カーディナリティ最適化において `ALLOW_THROW_EXCEPTION` モードでの例外処理の問題を修正しました（修正後は、式評価中の例外が正しく捕捉され返されるようになりました）。 [#62098](https://github.com/StarRocks/starrocks/pull/62098)
+- `enable_rbo_table_prune` が `false` の場合、テーブルプルーニング時に memo 外でネストされた CTE 統計情報を計算できない問題を修正しました。 [#62070](https://github.com/StarRocks/starrocks/pull/62070)
+- CVE-2025-55163 の問題を修正しました。 [#62041](https://github.com/StarRocks/starrocks/pull/62041)
+- `partition_morsel_queue` 内にネストされた `split_morsel_queue` が Tablet Schema を正しく受け取れない問題を修正しました。 [#62034](https://github.com/StarRocks/starrocks/pull/62034)
+- Parquet 書き込み時に `NULL` 配列を誤って処理することでデータ不整合やクラッシュが発生する問題を修正しました（修正後は、`split` 関数が `NULL` 入力文字列を正しく処理できるようになりました）。 [#61999](https://github.com/StarRocks/starrocks/pull/61999)
+- `CASE WHEN` 式を使用したマテリアライズドビュー作成時に、VARCHAR 型の非互換な戻り値により失敗する問題を修正しました（修正後はリフレッシュ前後で一貫性が確保されます）。 [#61996](https://github.com/StarRocks/starrocks/pull/61996)
+- 圧縮スコア計算時にシャードレベルのロックを保持したまま長時間の処理が行われ、並行性の安全性に問題が発生する不具合を修正しました。 [#61899](https://github.com/StarRocks/starrocks/pull/61899)
+- CBO のテーブルプルーニングロジックがすべての関連述語を考慮していなかったために発生する不完全なプルーニングの問題を修正しました。 [#61881](https://github.com/StarRocks/starrocks/pull/61881)
 
 ## 3.3.17
 

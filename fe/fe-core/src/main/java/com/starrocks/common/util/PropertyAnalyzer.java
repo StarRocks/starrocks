@@ -57,6 +57,7 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.MaterializedView;
+import com.starrocks.catalog.MaterializedViewRefreshType;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Table;
@@ -260,6 +261,8 @@ public class PropertyAnalyzer {
     public static final String PROPERTIES_FILE_BUNDLING = "file_bundling";
 
     public static final String PROPERTIES_COMPACTION_STRATEGY = "compaction_strategy";
+
+    public static final String PROPERTIES_ENABLE_DYNAMIC_TABLET = "enable_dynamic_tablet";
 
     public static final String PROPERTIES_DYNAMIC_TABLET_SPLIT_SIZE = "dynamic_tablet_split_size";
 
@@ -623,7 +626,7 @@ public class PropertyAnalyzer {
     }
 
     public static int analyzeAutoRefreshPartitionsLimit(Map<String, String> properties, MaterializedView mv) {
-        if (mv.getRefreshScheme().getType() == MaterializedView.RefreshType.MANUAL) {
+        if (mv.getRefreshScheme().getType() == MaterializedViewRefreshType.MANUAL) {
             throw new SemanticException(
                     "The auto_refresh_partitions_limit property does not support manual refresh mode.");
         }
@@ -676,7 +679,7 @@ public class PropertyAnalyzer {
     public static List<TableName> analyzeExcludedTables(Map<String, String> properties,
                                                         String propertiesKey,
                                                         MaterializedView mv) {
-        if (mv.getRefreshScheme().getType() != MaterializedView.RefreshType.ASYNC) {
+        if (mv.getRefreshScheme().getType() != MaterializedViewRefreshType.ASYNC) {
             throw new SemanticException("The " + propertiesKey + " property only applies to asynchronous refreshes.");
         }
         List<TableName> tables = Lists.newArrayList();
@@ -1269,7 +1272,7 @@ public class PropertyAnalyzer {
     }
 
     public static double analyzerDoubleProp(Map<String, String> properties, String propKey, double defaultVal)
-        throws AnalysisException {
+            throws AnalysisException {
         double val = defaultVal;
         if (properties != null && properties.containsKey(propKey)) {
             String valStr = properties.get(propKey);
@@ -1568,6 +1571,42 @@ public class PropertyAnalyzer {
             }
         }
         return TCompactionStrategy.DEFAULT;
+    }
+
+    public static Boolean analyzeEnableDynamicTablet(Map<String, String> properties, boolean removeProperties)
+            throws AnalysisException {
+        Boolean enableDynamicTablet = Config.enable_dynamic_tablet;
+        if (properties != null) {
+            String value = removeProperties ? properties.remove(PROPERTIES_ENABLE_DYNAMIC_TABLET)
+                    : properties.get(PROPERTIES_ENABLE_DYNAMIC_TABLET);
+            if (value != null) {
+                try {
+                    enableDynamicTablet = parseBoolean(value);
+                } catch (Exception e) {
+                    ErrorReport.reportAnalysisException(ErrorCode.ERR_INVALID_VALUE,
+                            PROPERTIES_ENABLE_DYNAMIC_TABLET, value, "`true` or `false`");
+                }
+            }
+        }
+        return enableDynamicTablet;
+    }
+
+    public static long analyzeDynamicTabletSplitSize(Map<String, String> properties, boolean removeProperties)
+            throws AnalysisException {
+        long dynamicTabletSplitSize = Config.dynamic_tablet_split_size;
+        if (properties != null) {
+            String value = removeProperties ? properties.remove(PROPERTIES_DYNAMIC_TABLET_SPLIT_SIZE)
+                    : properties.get(PROPERTIES_DYNAMIC_TABLET_SPLIT_SIZE);
+            if (value != null) {
+                try {
+                    dynamicTabletSplitSize = Long.parseLong(value);
+                } catch (Exception e) {
+                    ErrorReport.reportAnalysisException(ErrorCode.ERR_INVALID_VALUE,
+                            PROPERTIES_DYNAMIC_TABLET_SPLIT_SIZE, value, "a positive integer");
+                }
+            }
+        }
+        return dynamicTabletSplitSize;
     }
 
     public static PeriodDuration analyzeStorageCoolDownTTL(Map<String, String> properties,
@@ -1956,5 +1995,15 @@ public class PropertyAnalyzer {
         }
         sb.append(")");
         return sb.toString();
+    }
+
+    public static boolean parseBoolean(String value) {
+        if (value.equalsIgnoreCase("true")) {
+            return true;
+        }
+        if (value.equalsIgnoreCase("false")) {
+            return false;
+        }
+        throw new IllegalArgumentException("Illegal boolean value: " + value);
     }
 }

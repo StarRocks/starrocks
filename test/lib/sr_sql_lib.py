@@ -919,7 +919,7 @@ class StarrocksSQLApiLib(object):
 
         record_container.append(RESULT_FLAG)
         # return code
-        record_container.append("%s" % shell_res[0])
+        record_container.append(str(shell_res[0]))
 
         if shell_cmd.endswith("_stream_load"):
             self_print(shell_res[1])
@@ -948,7 +948,7 @@ class StarrocksSQLApiLib(object):
             return
 
         result_container.append(RESULT_FLAG)
-        result_container.append("%s" % func_res)
+        result_container.append(str(func_res))
         result_container.append(RESULT_END_FLAT)
 
     @staticmethod
@@ -1914,6 +1914,29 @@ class StarrocksSQLApiLib(object):
             count += 1
         tools.assert_equal("FINISHED", status, "wait alter table finish error")
 
+    """
+        Return True or error message if refresh mv failed
+        The difference between this function with regular REFRESH command is, the result of regular REFRESH
+        would be ignored, but this result of this function can be asserted
+    """
+    def refresh_mv_manual(self, db_name, mv_name):
+        """
+        Refresh a materialized view manually.
+        Returns True if refresh is successful, otherwise returns the error message.
+        """
+        sql = f"REFRESH MATERIALIZED VIEW {db_name}.{mv_name} WITH SYNC MODE"
+        try:
+            res = self.execute_sql(sql, True)
+            if res["status"]:
+                return "True"
+            else:
+                # Try to extract error message from result or use a default message
+                error_msg = res.get("msg") or res.get("error") or str(res)
+                return error_msg
+        except Exception as e:
+            # Catch any exception raised by execute_sql and return its string representation
+            return str(e)
+            
     def wait_materialized_view_cancel(self, check_count=60):
         """
         wait materialized view job cancel and return status
@@ -2325,6 +2348,23 @@ out.append("${{dictMgr.NO_DICT_STRING_COLUMNS.contains(cid)}}")
         res = self.execute_sql(sql, True)
         print("scirpt output:" + str(res))
         tools.assert_true(str(res["result"][0][0]).strip() == "true", "column still could collect dictionary")
+
+    def wait_min_max_stat_ready(self, column_name, table_name):
+        """
+        wait min max stats ready
+        """
+        status = ""
+        count = 0
+        while True:
+            if count > 60:
+                tools.assert_true(False, "acquire min-max timeout for 60s")
+            sql = "explain verbose select distinct %s from %s" % (column_name, table_name)
+            res = self.execute_sql(sql, True)
+            if not res["status"]:
+                tools.assert_true(False, "acquire min-max error")
+            if str(res["result"]).find("min-max stats") > 0:
+                return ""
+            time.sleep(1)
 
     def wait_submit_task_ready(self, task_name):
         """
@@ -2752,6 +2792,17 @@ out.append("${{dictMgr.NO_DICT_STRING_COLUMNS.contains(cid)}}")
             res1 == res2, "assert two plans are different, plan1: {}, plan2: {}".format(res1["result"], res2["result"])
         )
 
+    def assert_query_contains(self, query, *expects):
+        """
+        assert explain result contains expect string
+        """
+        res = self.execute_sql(query, True)
+        for expect in expects:
+            tools.assert_true(
+                str(res["result"]).find(expect) > 0,
+                "assert expect {} is not found in plan {}".format(expect, res["result"]),
+            )
+
     def assert_explain_contains(self, query, *expects):
         """
         assert explain result contains expect string
@@ -2971,3 +3022,82 @@ out.append("${{dictMgr.NO_DICT_STRING_COLUMNS.contains(cid)}}")
             return True
 
         return False
+
+    def get_transaction_meta(self, db_name, label, column_separator, *column_names):
+        """
+        Get transaction metadata by label and column names.
+        :param db_name: database name
+        :param label: transaction label
+        :param column_separator: separator for concatenating column values
+        :param column_names: column names to retrieve
+        :return: concatenated column values or error message if not found
+        """
+        # Column name to index mapping based on show proc output
+        column_mapping = {
+            'TransactionId': 0,
+            'Label': 1,
+            'Coordinator': 2,
+            'TransactionStatus': 3,
+            'LoadJobSourceType': 4,
+            'PrepareTime': 5,
+            'PreparedTime': 6,
+            'CommitTime': 7,
+            'PublishTime': 8,
+            'FinishTime': 9,
+            'Reason': 10,
+            'ErrorReplicasCount': 11,
+            'ListenerId': 12,
+            'TimeoutMs': 13,
+            'PreparedTimeoutMs': 14,
+            'ErrMsg': 15
+        }
+        
+        sql = f"show proc '/transactions/{db_name}/finished'"
+        log.info(f"Executing SQL: {sql}")
+        result = self.execute_sql(sql, True)
+        
+        if not result["status"]:
+            error_msg = f"Failed to execute SQL: {result}"
+            log.error(error_msg)
+            return error_msg
+            
+        if "result" not in result or len(result["result"]) == 0:
+            error_msg = f"No transactions found in database {db_name}"
+            log.info(error_msg)
+            return error_msg
+            
+        log.info(f"Found {len(result['result'])} transactions in database {db_name}")
+        
+        # Find the row matching the label
+        target_row = None
+        for row in result["result"]:
+            if len(row) > 1 and row[1] == label:  # Label is at index 1
+                target_row = row
+                log.info(f"Found transaction with label '{label}'")
+                break
+                
+        if target_row is None:
+            error_msg = f"No transaction found with label '{label}' in database {db_name}"
+            log.info(error_msg)
+            return error_msg
+            
+        # Extract column values
+        column_values = []
+        for column_name in column_names:
+            if column_name not in column_mapping:
+                error_msg = f"Unknown column name: {column_name}"
+                log.error(error_msg)
+                return error_msg
+                
+            column_index = column_mapping[column_name]
+            if column_index >= len(target_row):
+                error_msg = f"Column index {column_index} out of range for column {column_name}"
+                log.error(error_msg)
+                return error_msg
+                
+            column_values.append(str(target_row[column_index]))
+            log.info(f"Column {column_name} = {target_row[column_index]}")
+            
+        result_str = column_separator.join(column_values)
+        log.info(f"Final result: {result_str}")
+        return result_str

@@ -39,9 +39,9 @@ import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TableFunction;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.Pair;
+import com.starrocks.common.tvr.TvrVersionRange;
 import com.starrocks.connector.ConnectorTableVersion;
 import com.starrocks.connector.PointerType;
-import com.starrocks.connector.TableVersionRange;
 import com.starrocks.connector.elasticsearch.EsTablePartitions;
 import com.starrocks.connector.metadata.MetadataTable;
 import com.starrocks.qe.ConnectContext;
@@ -56,7 +56,7 @@ import com.starrocks.sql.analyzer.RelationFields;
 import com.starrocks.sql.analyzer.RelationId;
 import com.starrocks.sql.analyzer.Scope;
 import com.starrocks.sql.analyzer.SemanticException;
-import com.starrocks.sql.ast.AstVisitor;
+import com.starrocks.sql.ast.AstVisitorExtendInterface;
 import com.starrocks.sql.ast.CTERelation;
 import com.starrocks.sql.ast.ExceptRelation;
 import com.starrocks.sql.ast.FileTableFunctionRelation;
@@ -158,7 +158,7 @@ import static com.starrocks.sql.common.ErrorMsgProxy.PARSER_ERROR_MSG;
 import static com.starrocks.sql.common.ErrorType.INTERNAL_ERROR;
 import static com.starrocks.sql.common.UnsupportedException.unsupportedException;
 
-public class RelationTransformer implements AstVisitor<LogicalPlan, ExpressionMapping> {
+public class RelationTransformer implements AstVisitorExtendInterface<LogicalPlan, ExpressionMapping> {
     private static final Logger LOG = LogManager.getLogger(RelationTransformer.class);
 
     private final ColumnRefFactory columnRefFactory;
@@ -615,16 +615,22 @@ public class RelationTransformer implements AstVisitor<LogicalPlan, ExpressionMa
                     new ExpressionMapping(node.getScope(), outputVariables), columnRefFactory);
         }
 
-        QueryPeriod queryPeriod = node.getQueryPeriod();
-        Optional<ConnectorTableVersion> startVersion = Optional.empty();
-        Optional<ConnectorTableVersion> endVersion = Optional.empty();
-        if (queryPeriod != null) {
-            QueryPeriod.PeriodType periodType = queryPeriod.getPeriodType();
-            startVersion = resolveQueryPeriod(queryPeriod.getStart(), periodType);
-            endVersion = resolveQueryPeriod(queryPeriod.getEnd(), periodType);
+        // TODO: merge with tableVersionRange
+        TvrVersionRange tableVersionRange;
+        if (node.getTvrVersionRange() != null) {
+            tableVersionRange = node.getTvrVersionRange();
+        } else {
+            QueryPeriod queryPeriod = node.getQueryPeriod();
+            Optional<ConnectorTableVersion> startVersion = Optional.empty();
+            Optional<ConnectorTableVersion> endVersion = Optional.empty();
+            if (queryPeriod != null) {
+                QueryPeriod.PeriodType periodType = queryPeriod.getPeriodType();
+                startVersion = resolveQueryPeriod(queryPeriod.getStart(), periodType);
+                endVersion = resolveQueryPeriod(queryPeriod.getEnd(), periodType);
+            }
+            tableVersionRange = GlobalStateMgr.getCurrentState().getMetadataMgr()
+                    .getTableVersionRange(node.getName().getDb(), node.getTable(), startVersion, endVersion);
         }
-        TableVersionRange tableVersionRange = GlobalStateMgr.getCurrentState().getMetadataMgr()
-                .getTableVersionRange(node.getName().getDb(), node.getTable(), startVersion, endVersion);
 
         LogicalScanOperator scanOperator;
         if (node.getTable().isNativeTableOrMaterializedView()) {
@@ -946,7 +952,7 @@ public class RelationTransformer implements AstVisitor<LogicalPlan, ExpressionMa
 
         LogicalViewScanOperator scanOperator = new LogicalViewScanOperator(relationId,
                 node.getView(), columnRefOperatorToColumn, columnMetaToColRefMap,
-                new ColumnRefSet(logicalPlan.getOutputColumn()), newExprMapping);
+                new ColumnRefSet(logicalPlan.getOutputColumn()), newExprMapping, projectionMap);
         if (inlineView) {
             // add a projection to make sure output columns keep the same,
             // because LogicalViewScanOperator should be logically equivalent to logicalPlan

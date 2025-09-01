@@ -20,6 +20,8 @@
 #include "column/column_helper.h"
 #include "column/const_column.h"
 #include "column/vectorized_fwd.h"
+#include "exprs/agg/combinator/agg_state_utils.h"
+#include "exprs/agg/combinator/state_function.h"
 #include "exprs/builtin_functions.h"
 #include "exprs/expr_context.h"
 #include "gutil/strings/substitute.h"
@@ -59,17 +61,22 @@ const FunctionDescriptor* VectorizedFunctionCallExpr::_get_function(const TFunct
                                                                     const TypeDescriptor& return_type,
                                                                     std::vector<bool> arg_nullables) {
     if (fn.__isset.agg_state_desc) {
-        // For _state combinator function, it's created according to the agg_state_desc rather than fid.
-        auto agg_state_desc = AggStateDesc::from_thrift(fn.agg_state_desc);
-        _agg_state_func = std::make_shared<AggStateFunction>(agg_state_desc, return_type, std::move(arg_nullables));
-        auto execute_func = std::bind(&AggStateFunction::execute, _agg_state_func.get(), std::placeholders::_1,
+        const auto& func_name = fn.name.function_name;
+        this->_agg_state_func = AggStateUtils::get_agg_state_function(fn.agg_state_desc, func_name, return_type,
+                                                                      std::move(arg_nullables));
+        if (_agg_state_func == nullptr) {
+            LOG(WARNING) << "VectorizedFunctionCallExpr::_get_function: "
+                         << "failed to create agg state combinator function: " << func_name;
+            return nullptr;
+        }
+        auto execute_func = std::bind(&StateCombinator::execute, _agg_state_func.get(), std::placeholders::_1,
                                       std::placeholders::_2);
-        auto prepare_func = std::bind(&AggStateFunction::prepare, _agg_state_func.get(), std::placeholders::_1,
+        auto prepare_func = std::bind(&StateCombinator::prepare, _agg_state_func.get(), std::placeholders::_1,
                                       std::placeholders::_2);
-        auto close_func = std::bind(&AggStateFunction::close, _agg_state_func.get(), std::placeholders::_1,
-                                    std::placeholders::_2);
-        _agg_func_desc = std::make_shared<FunctionDescriptor>(fn.name.function_name, arg_types.size(), execute_func,
-                                                              prepare_func, close_func, true, false);
+        auto close_func =
+                std::bind(&StateCombinator::close, _agg_state_func.get(), std::placeholders::_1, std::placeholders::_2);
+        this->_agg_func_desc = std::make_shared<FunctionDescriptor>(func_name, arg_types.size(), execute_func,
+                                                                    prepare_func, close_func, true, false);
         return _agg_func_desc.get();
     } else {
         return _get_function_by_fid(fn);
@@ -103,6 +110,7 @@ Status VectorizedFunctionCallExpr::prepare(starrocks::RuntimeState* state, starr
                                                          _fn.name.function_name, _fn_desc->args_nums,
                                                          _children.size()));
     }
+    VLOG_ROW << "VectorizedFunctionCallExpr::prepare: " << _fn.name.function_name << ", fn:" << _fn.name.function_name;
 
     FAIL_POINT_TRIGGER_RETURN_ERROR(random_error);
     FAIL_POINT_TRIGGER_RETURN_ERROR(expr_prepare_failed);

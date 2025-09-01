@@ -1062,6 +1062,8 @@ struct TLoadTxnCommitRequest {
     11: optional TTxnCommitAttachment txnCommitAttachment
     12: optional i64 thrift_rpc_timeout_ms
     13: optional list<Types.TTabletFailInfo> failInfos
+    // The timeout for prepared transaction. Only valid if this requerst is sent by rpc loadTxnPrepare
+    14: optional i32 prepared_timeout_second
 }
 
 struct TLoadTxnCommitResult {
@@ -1518,8 +1520,9 @@ struct TPartitionMetaInfo {
     27: optional i64 version_epoch
     28: optional Types.TTxnType version_txn_type = Types.TTxnType.TXN_NORMAL
     29: optional i64 storage_size
-    30: optional i64 metadata_switch_version
-    31: optional bool tablet_balanced
+    30: optional bool tablet_balanced
+    31: optional i64 metadata_switch_version
+    32: optional i64 path_id
 }
 
 struct TGetPartitionsMetaResponse {
@@ -1580,15 +1583,26 @@ struct TTabletSchedule {
     4: optional string type
     5: optional string priority
     6: optional string state
-    7: optional string tablet_status
+    7: optional string schedule_reason
     8: optional double create_time
     9: optional double schedule_time
     10: optional double finish_time
-    11: optional i64 clone_src
-    12: optional i64 clone_dest
+    11: optional i64 src_be_id
+    12: optional i64 dest_be_id
     13: optional i64 clone_bytes
     14: optional double clone_duration
     15: optional string error_msg
+    16: optional double clone_rate
+    17: optional i64 timeout
+    18: optional string medium
+    19: optional string src_path
+    20: optional string dest_path
+    21: optional string orig_priority
+    22: optional i64 last_priority_adjust_time
+    23: optional i64 visible_version
+    24: optional i64 committed_version
+    25: optional i32 failed_schedule_count
+    26: optional i32 failed_running_count
 }
 
 struct TGetTabletScheduleRequest {
@@ -1634,6 +1648,7 @@ struct TQueryStatisticsInfo {
     14: optional string customQueryId
     15: optional string resourceGroupName
     16: optional string execProgress
+    17: optional string execState
 }
 
 struct TGetQueryStatisticsResponse {

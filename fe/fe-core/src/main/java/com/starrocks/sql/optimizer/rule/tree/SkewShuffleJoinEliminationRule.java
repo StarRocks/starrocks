@@ -15,9 +15,9 @@ package com.starrocks.sql.optimizer.rule.tree;
 
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
-import com.starrocks.analysis.HintNode;
 import com.starrocks.common.LocalExchangerType;
 import com.starrocks.common.Pair;
+import com.starrocks.sql.ast.HintNode;
 import com.starrocks.sql.optimizer.JoinHelper;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptExpressionVisitor;

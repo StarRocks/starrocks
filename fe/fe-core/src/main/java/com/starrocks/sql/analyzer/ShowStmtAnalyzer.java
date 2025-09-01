@@ -50,10 +50,12 @@ import com.starrocks.common.util.OrderByPair;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.ShowResultMetaFactory;
+import com.starrocks.qe.ShowResultSetMetaData;
 import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ShowTemporaryTableStmt;
-import com.starrocks.sql.ast.AstVisitor;
+import com.starrocks.sql.ast.AstVisitorExtendInterface;
 import com.starrocks.sql.ast.DescribeStmt;
 import com.starrocks.sql.ast.ShowAlterStmt;
 import com.starrocks.sql.ast.ShowAnalyzeJobStmt;
@@ -105,7 +107,7 @@ public class ShowStmtAnalyzer {
         new ShowStmtAnalyzerVisitor().analyze(stmt, session);
     }
 
-    static class ShowStmtAnalyzerVisitor implements AstVisitor<Void, ConnectContext> {
+    static class ShowStmtAnalyzerVisitor implements AstVisitorExtendInterface<Void, ConnectContext> {
 
         private static final Logger LOGGER = LoggerFactory.getLogger(ShowStmtAnalyzerVisitor.class);
 
@@ -798,6 +800,7 @@ public class ShowStmtAnalyzer {
         }
 
         public void analyzeOrderByItems(ShowStmt node) {
+            ShowResultSetMetaData metaData = new ShowResultMetaFactory().getMetadata(node);
             List<OrderByElement> orderByElements = node.getOrderByElements();
             if (orderByElements != null && !orderByElements.isEmpty()) {
                 List<OrderByPair> orderByPairs = new ArrayList<>();
@@ -806,7 +809,7 @@ public class ShowStmtAnalyzer {
                         ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR, "Should order by column");
                     }
                     SlotRef slotRef = (SlotRef) orderByElement.getExpr();
-                    int index = node.getMetaData().getColumnIdx(slotRef.getColumnName());
+                    int index = metaData.getColumnIdx(slotRef.getColumnName());
                     OrderByPair orderByPair = new OrderByPair(index, !orderByElement.getIsAsc());
                     orderByPairs.add(orderByPair);
                 }

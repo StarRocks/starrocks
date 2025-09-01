@@ -50,6 +50,6 @@ public class TruncateTableStmt extends DdlStmt {
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitTruncateTableStatement(this, context);
+        return ((AstVisitorExtendInterface<R, C>) visitor).visitTruncateTableStatement(this, context);
     }
 }

@@ -31,11 +31,6 @@ import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
-import java.io.ByteArrayInputStream;
-import java.io.ByteArrayOutputStream;
-import java.io.DataInputStream;
-import java.io.DataOutputStream;
-import java.io.IOException;
 import java.util.List;
 
 public class InsertOverwriteJobManagerTest {
@@ -139,27 +134,5 @@ public class InsertOverwriteJobManagerTest {
                 InsertOverwriteJobState.OVERWRITE_RUNNING, InsertOverwriteJobState.OVERWRITE_SUCCESS,
                 sourcePartitionNames, null, newPartitionNames);
         insertOverwriteJobManager.replayInsertOverwriteStateChange(stateChangeInfo2);
-    }
-
-    @Test
-    public void testSerialization() throws IOException {
-        InsertOverwriteJob insertOverwriteJob1 = new InsertOverwriteJob(1000L, 100L, 110L, targetPartitionIds, false);
-        insertOverwriteJobManager.registerOverwriteJob(insertOverwriteJob1);
-        Assertions.assertEquals(1, insertOverwriteJobManager.getJobNum());
-
-        ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
-        DataOutputStream dataOutputStream = new DataOutputStream(outputStream);
-        insertOverwriteJobManager.write(dataOutputStream);
-
-        ByteArrayInputStream inputStream = new ByteArrayInputStream(outputStream.toByteArray());
-        DataInputStream dataInputStream = new DataInputStream(inputStream);
-        InsertOverwriteJobMgr newInsertOverwriteJobManager = InsertOverwriteJobMgr.read(dataInputStream);
-        Assertions.assertEquals(1, newInsertOverwriteJobManager.getJobNum());
-        InsertOverwriteJob newJob = insertOverwriteJobManager.getInsertOverwriteJob(1000L);
-        Assertions.assertEquals(insertOverwriteJob1, newJob);
-        Assertions.assertEquals(1000L, newJob.getJobId());
-        Assertions.assertEquals(100L, newJob.getTargetDbId());
-        Assertions.assertEquals(110L, newJob.getTargetTableId());
-        Assertions.assertEquals(targetPartitionIds, newJob.getSourcePartitionIds());
     }
 }

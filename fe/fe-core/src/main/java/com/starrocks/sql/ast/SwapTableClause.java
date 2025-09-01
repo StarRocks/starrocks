@@ -15,7 +15,6 @@
 
 package com.starrocks.sql.ast;
 
-import com.starrocks.alter.AlterOpType;
 import com.starrocks.sql.parser.NodePosition;
 
 import static com.starrocks.common.util.Util.normalizeName;
@@ -31,7 +30,7 @@ public class SwapTableClause extends AlterTableClause {
     }
 
     public SwapTableClause(String tblName, NodePosition pos) {
-        super(AlterOpType.SWAP, pos);
+        super(pos);
         this.tblName = normalizeName(tblName);
     }
 
@@ -41,6 +40,6 @@ public class SwapTableClause extends AlterTableClause {
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitSwapTableClause(this, context);
+        return ((AstVisitorExtendInterface<R, C>) visitor).visitSwapTableClause(this, context);
     }
 }

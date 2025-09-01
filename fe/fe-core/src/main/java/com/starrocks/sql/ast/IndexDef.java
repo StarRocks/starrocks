@@ -17,7 +17,6 @@ package com.starrocks.sql.ast;
 import com.google.common.base.Strings;
 import com.starrocks.analysis.BloomFilterIndexUtil;
 import com.starrocks.analysis.InvertedIndexUtil;
-import com.starrocks.analysis.ParseNode;
 import com.starrocks.analysis.VectorIndexUtil;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.KeysType;

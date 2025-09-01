@@ -14,10 +14,10 @@
 
 package com.starrocks.authentication;
 
+import com.starrocks.catalog.UserIdentity;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.mysql.MysqlPassword;
 import com.starrocks.qe.ConnectContext;
-import com.starrocks.sql.ast.UserIdentity;
 import org.apache.commons.lang3.StringUtils;
 
 import java.nio.charset.StandardCharsets;

@@ -45,7 +45,14 @@ public class ExecGroupSets {
                 return execGroup;
             }
         }
-        Preconditions.checkState(false, "not found exec group node: %d", nodeId);
         return null;
+    }
+
+    public ExecGroupId getExecGroupId(int nodeId) {
+        ExecGroup group = getExecGroup(nodeId);
+        if (group != null) {
+            return group.getGroupId();
+        }
+        return new ExecGroupId(-1);
     }
 }

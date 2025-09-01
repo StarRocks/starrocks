@@ -16,6 +16,8 @@ package com.starrocks.analysis;
 
 import com.starrocks.qe.SqlModeHelper;
 import com.starrocks.sql.ast.AstVisitor;
+import com.starrocks.sql.ast.AstVisitorExtendInterface;
+import com.starrocks.sql.ast.HintNode;
 import com.starrocks.sql.parser.NodePosition;
 
 import java.util.Map;
@@ -51,6 +53,6 @@ public class SetVarHint extends HintNode {
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitSetVarHint(this, context);
+        return ((AstVisitorExtendInterface<R, C>) visitor).visitSetVarHint(this, context);
     }
 }

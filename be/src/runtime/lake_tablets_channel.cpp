@@ -876,16 +876,16 @@ void LakeTabletsChannel::update_profile() {
     if (!tablets_profile.empty()) {
         auto* merged_profile = RuntimeProfile::merge_isomorphic_profiles(&obj_pool, tablets_profile);
         RuntimeProfile* final_profile = _profile->create_child("PeerReplicas");
-        auto* tablets_counter = ADD_COUNTER(final_profile, "TabletsNum", TUnit::UNIT);
-        COUNTER_SET(tablets_counter, static_cast<int64_t>(tablets_profile.size()));
+        COUNTER_SET(ADD_COUNTER(final_profile, "TabletsNum", TUnit::UNIT),
+                    static_cast<int64_t>(tablets_profile.size()));
         final_profile->copy_all_info_strings_from(merged_profile);
         final_profile->copy_all_counters_from(merged_profile);
     }
 }
 
-#define ADD_AND_SET_COUNTER(profile, name, type, val) (ADD_COUNTER(profile, name, type))->set(val)
-#define ADD_AND_UPDATE_COUNTER(profile, name, type, val) (ADD_COUNTER(profile, name, type))->update(val)
-#define ADD_AND_UPDATE_TIMER(profile, name, val) (ADD_TIMER(profile, name))->update(val)
+#define ADD_AND_SET_COUNTER(profile, name, type, val) COUNTER_SET(ADD_COUNTER(profile, name, type), val)
+#define ADD_AND_UPDATE_COUNTER(profile, name, type, val) COUNTER_UPDATE(ADD_COUNTER(profile, name, type), val)
+#define ADD_AND_UPDATE_TIMER(profile, name, val) COUNTER_UPDATE(ADD_TIMER(profile, name), val)
 #define DEFAULT_IF_NULL(ptr, value, default_value) ((ptr) ? (value) : (default_value))
 
 void LakeTabletsChannel::_update_tablet_profile(DeltaWriter* writer, RuntimeProfile* profile) {

@@ -12,34 +12,14 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.sql.ast;
 
-import com.starrocks.catalog.Column;
-import com.starrocks.catalog.ScalarType;
-import com.starrocks.qe.ShowResultSetMetaData;
 import com.starrocks.sql.parser.NodePosition;
 
 import java.util.LinkedList;
 import java.util.List;
 
 public class ShowDataStmt extends ShowStmt {
-    private static final ShowResultSetMetaData SHOW_TABLE_DATA_META_DATA =
-            ShowResultSetMetaData.builder()
-                    .addColumn(new Column("TableName", ScalarType.createVarchar(20)))
-                    .addColumn(new Column("Size", ScalarType.createVarchar(30)))
-                    .addColumn(new Column("ReplicaCount", ScalarType.createVarchar(20)))
-                    .build();
-
-    private static final ShowResultSetMetaData SHOW_INDEX_DATA_META_DATA =
-            ShowResultSetMetaData.builder()
-                    .addColumn(new Column("TableName", ScalarType.createVarchar(20)))
-                    .addColumn(new Column("IndexName", ScalarType.createVarchar(20)))
-                    .addColumn(new Column("Size", ScalarType.createVarchar(30)))
-                    .addColumn(new Column("ReplicaCount", ScalarType.createVarchar(20)))
-                    .addColumn(new Column("RowCount", ScalarType.createVarchar(20)))
-                    .build();
-
     private String dbName;
     private final String tableName;
     private final List<List<String>> totalRows;
@@ -77,17 +57,8 @@ public class ShowDataStmt extends ShowStmt {
     }
 
     @Override
-    public ShowResultSetMetaData getMetaData() {
-        if (tableName != null) {
-            return SHOW_INDEX_DATA_META_DATA;
-        } else {
-            return SHOW_TABLE_DATA_META_DATA;
-        }
-    }
-
-    @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitShowDataStatement(this, context);
+        return ((AstVisitorExtendInterface<R, C>) visitor).visitShowDataStatement(this, context);
     }
 }
 

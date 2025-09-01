@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.scheduler.persist;
 
 import com.google.common.base.Joiner;
@@ -20,16 +19,14 @@ import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.common.Config;
-import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.scheduler.Constants;
 import com.starrocks.scheduler.ExecuteOption;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;
+import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.lang3.StringUtils;
 
-import java.io.DataInput;
-import java.io.IOException;
 import java.util.Map;
 import java.util.Set;
 
@@ -103,7 +100,7 @@ public class MVTaskRunExtraMessage implements Writable {
     }
 
     public void setMvPartitionsToRefresh(Set<String> mvPartitionsToRefresh) {
-        if (mvPartitionsToRefresh == null) {
+        if (CollectionUtils.isEmpty(mvPartitionsToRefresh)) {
             return;
         }
         this.mvPartitionsToRefresh = Sets.newHashSet(MvUtils.shrinkToSize(mvPartitionsToRefresh,
@@ -117,7 +114,6 @@ public class MVTaskRunExtraMessage implements Writable {
     public Map<String, Set<String>> getRefBasePartitionsToRefreshMap() {
         return refBasePartitionsToRefreshMap;
     }
-
 
     public void setRefBasePartitionsToRefreshMap(Map<String, Set<String>> refBasePartitionsToRefreshMap) {
         this.refBasePartitionsToRefreshMap = MvUtils.shrinkToSize(refBasePartitionsToRefreshMap,
@@ -133,23 +129,9 @@ public class MVTaskRunExtraMessage implements Writable {
         }
     }
 
-    public String getBasePartitionsToRefreshMapString() {
-        if (basePartitionsToRefreshMap != null) {
-            String basePartitionToRefresh = basePartitionsToRefreshMap.toString();
-            return StringUtils.substring(basePartitionToRefresh, 0, 1024);
-        } else {
-            return "";
-        }
-    }
-
     public void setBasePartitionsToRefreshMap(Map<String, Set<String>> basePartitionsToRefreshMap) {
         this.basePartitionsToRefreshMap = MvUtils.shrinkToSize(basePartitionsToRefreshMap,
                 Config.max_mv_task_run_meta_message_values_length);
-    }
-
-    public static MVTaskRunExtraMessage read(DataInput in) throws IOException {
-        String json = Text.readString(in);
-        return GsonUtils.GSON.fromJson(json, MVTaskRunExtraMessage.class);
     }
 
     public ExecuteOption getExecuteOption() {
@@ -197,7 +179,9 @@ public class MVTaskRunExtraMessage implements Writable {
                 Config.max_mv_task_run_meta_message_values_length);
     }
 
-
+    public Map<String, String> getPlanBuilderMessage() {
+        return planBuilderMessage;
+    }
 
     @Override
     public String toString() {

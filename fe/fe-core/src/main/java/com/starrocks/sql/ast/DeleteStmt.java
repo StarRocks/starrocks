@@ -143,6 +143,6 @@ public class DeleteStmt extends DmlStmt {
     }
 
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitDeleteStatement(this, context);
+        return ((AstVisitorExtendInterface<R, C>) visitor).visitDeleteStatement(this, context);
     }
 }

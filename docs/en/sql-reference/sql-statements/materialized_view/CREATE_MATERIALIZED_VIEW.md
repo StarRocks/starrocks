@@ -123,6 +123,30 @@ The following table shows the correspondence between the aggregate function in t
 | hll_raw_agg, hll_union_agg, ndv, approx_count_distinct | hll_union                                       |
 | percentile_approx, percentile_union                    | percentile_union                                |
 
+In addition to the above functions, starting from StarRocks v3.4.0, synchronous materialized views also support generic aggregate functions. For more information about generic aggregate functions, see [Generic aggregate function states](../../../table_design/table_types/aggregate_table.md#use-generic-aggregate-states-in-materialized-views).
+
+```SQL
+-- Create a synchronous materialized view test_mv1 to store aggregate states.
+CREATE MATERIALIZED VIEW test_mv1 
+AS
+SELECT 
+    dt,
+    -- Original aggregate functions.
+    min(id) AS min_id,
+    max(id) AS max_id,
+    sum(id) AS sum_id,
+    bitmap_union(to_bitmap(id)) AS bitmap_union_id,
+    hll_union(hll_hash(id)) AS hll_union_id,
+    percentile_union(percentile_hash(id)) AS percentile_union_id,
+    -- Generic aggregate state functions.
+    ds_hll_count_distinct_union(ds_hll_count_distinct_state(id)) AS hll_id,
+    avg_union(avg_state(id)) AS avg_id,
+    array_agg_union(array_agg_state(id)) AS array_agg_id,
+    min_by_union(min_by_state(province, id)) AS min_by_province_id
+FROM t1
+GROUP BY dt;
+```
+
 ## Asynchronous materialized view
 
 ### Syntax
@@ -272,6 +296,11 @@ See [Example -5](#examples) for detailed instructions on multi-column partition 
 **order_by_expression** (optional)
 
 The sort key of the asynchronous materialized view. If you do not specify the sort key, StarRocks chooses some of the prefix columns from SELECT columns as the sort keys. For example, in `select a, b, c, d`, sort keys can be `a` and `b`. This parameter is supported from StarRocks v3.0 onwards.
+
+> **NOTE**
+> There are two different uses of `ORDER BY` in materialized views:
+> - `ORDER BY` in the CREATE MATERIALIZED VIEW statement defines the sort key of the materialized view, which helps accelerate queries based on the sort key. This does not affect the materialized view's SPJG-based transparent acceleration capability but does not guarantee global ordering of the materialized view's query results.
+> - `ORDER BY` in the materialized view's query definition guarantees global ordering of the query results, but prevents the materialized view from being used for SPJG-based transparent query rewrite. Therefore, `ORDER BY` should not be used in the materialized view's query definition if the MV is used for query rewrite usage.
 
 **INDEX** (optional)
 
@@ -794,8 +823,10 @@ PROPERTIES (
 Example 1: Create a non-partitioned materialized view.
 
 ```SQL
+-- create an unpartitioned materialized view sorted by lo_custkey
 CREATE MATERIALIZED VIEW lo_mv1
 DISTRIBUTED BY HASH(`lo_orderkey`)
+ORDER BY `lo_custkey`
 REFRESH ASYNC
 AS
 select
@@ -805,16 +836,17 @@ select
     sum(lo_revenue) as total_revenue, 
     count(lo_shipmode) as shipmode_count
 from lineorder 
-group by lo_orderkey, lo_custkey 
-order by lo_orderkey;
+group by lo_orderkey, lo_custkey;
 ```
 
 Example 2: Create a partitioned materialized view.
 
 ```SQL
+-- create a partitioned materialized view partitioned by `lo_orderdate` and sorted by `lo_custkey`.
 CREATE MATERIALIZED VIEW lo_mv2
 PARTITION BY `lo_orderdate`
 DISTRIBUTED BY HASH(`lo_orderkey`)
+ORDER BY `lo_custkey`
 REFRESH ASYNC START('2023-07-01 10:00:00') EVERY (interval 1 day)
 AS
 select
@@ -825,8 +857,7 @@ select
     sum(lo_revenue) as total_revenue, 
     count(lo_shipmode) as shipmode_count
 from lineorder 
-group by lo_orderkey, lo_orderdate, lo_custkey
-order by lo_orderkey;
+group by lo_orderkey, lo_orderdate, lo_custkey;
 
 -- Use the date_trunc() function to partition the materialized view by month.
 CREATE MATERIALIZED VIEW order_mv1
@@ -997,4 +1028,23 @@ PROPERTIES (
     "query_rewrite_consistency" = "force_mv"
 )
 AS SELECT * from t1;
+```
+
+Example 7: Create a partition materialized view with a specific sort key:
+```SQL
+CREATE MATERIALIZED VIEW lo_mv2
+PARTITION BY `lo_orderdate`
+DISTRIBUTED BY HASH(`lo_orderkey`)
+ORDER BY `lo_custkey`
+REFRESH ASYNC START('2023-07-01 10:00:00') EVERY (interval 1 day)
+AS
+select
+    lo_orderkey,
+    lo_orderdate,
+    lo_custkey, 
+    sum(lo_quantity) as total_quantity, 
+    sum(lo_revenue) as total_revenue, 
+    count(lo_shipmode) as shipmode_count
+from lineorder 
+group by lo_orderkey, lo_orderdate, lo_custkey;
 ```

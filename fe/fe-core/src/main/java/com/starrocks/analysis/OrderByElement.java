@@ -36,11 +36,11 @@ package com.starrocks.analysis;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
-import com.starrocks.common.AnalysisException;
 import com.starrocks.sql.ast.AstVisitor;
+import com.starrocks.sql.ast.AstVisitorExtendInterface;
+import com.starrocks.sql.ast.ParseNode;
 import com.starrocks.sql.parser.NodePosition;
 
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 
@@ -143,6 +143,19 @@ public class OrderByElement implements ParseNode {
         return pos;
     }
 
+    /**
+     * Try to extract the column name from the `expr`.
+     * If the `expr` represents a valid column, the column name will be returned.
+     * Otherwise, it will return null.
+     */
+    public String castAsSlotRef() {
+        if (!(expr instanceof SlotRef)) {
+            return null;
+        }
+        SlotRef slotRef = (SlotRef) expr;
+        return slotRef.getColumnName();
+    }
+
     public String explain() {
         StringBuilder strBuilder = new StringBuilder();
         strBuilder.append(expr.explain());
@@ -196,6 +209,6 @@ public class OrderByElement implements ParseNode {
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitOrderByElement(this, context);
+        return ((AstVisitorExtendInterface<R, C>) visitor).visitOrderByElement(this, context);
     }
 }

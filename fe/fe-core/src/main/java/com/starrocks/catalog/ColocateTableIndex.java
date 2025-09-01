@@ -44,7 +44,6 @@ import com.google.common.collect.Multimap;
 import com.google.common.collect.Sets;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.common.DdlException;
-import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.common.util.LogUtil;
 import com.starrocks.common.util.PropertyAnalyzer;
@@ -66,11 +65,8 @@ import com.starrocks.sql.common.MetaUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import java.io.DataInput;
-import java.io.DataOutput;
 import java.io.IOException;
 import java.util.ArrayList;
-import java.util.Collection;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -101,22 +97,8 @@ public class ColocateTableIndex implements Writable {
             this.grpId = grpId;
         }
 
-        public static GroupId read(DataInput in) throws IOException {
-            GroupId groupId = new GroupId();
-            groupId.readFields(in);
-            return groupId;
-        }
 
-        @Override
-        public void write(DataOutput out) throws IOException {
-            out.writeLong(dbId);
-            out.writeLong(grpId);
-        }
 
-        public void readFields(DataInput in) throws IOException {
-            dbId = in.readLong();
-            grpId = in.readLong();
-        }
 
         @Override
         public boolean equals(Object obj) {
@@ -719,73 +701,8 @@ public class ColocateTableIndex implements Writable {
         return infos;
     }
 
-    @Override
-    public void write(DataOutput out) throws IOException {
-        int size = groupName2Id.size();
-        out.writeInt(size);
-        for (Map.Entry<String, GroupId> entry : groupName2Id.entrySet()) {
-            Text.writeString(out, entry.getKey()); // group name
-            entry.getValue().write(out); // group id
-            Collection<Long> tableIds = group2Tables.get(entry.getValue());
-            out.writeInt(tableIds.size());
-            for (Long tblId : tableIds) {
-                out.writeLong(tblId); // table ids
-            }
-            ColocateGroupSchema groupSchema = group2Schema.get(entry.getValue());
-            groupSchema.write(out); // group schema
 
-            // backend seq
-            List<List<Long>> backendsPerBucketSeq = group2BackendsPerBucketSeq.get(entry.getValue());
-            out.writeInt(backendsPerBucketSeq.size());
-            for (List<Long> bucket2BEs : backendsPerBucketSeq) {
-                out.writeInt(bucket2BEs.size());
-                for (Long be : bucket2BEs) {
-                    out.writeLong(be);
-                }
-            }
-        }
 
-        size = unstableGroups.size();
-        out.writeInt(size);
-        for (GroupId groupId : unstableGroups) {
-            groupId.write(out);
-        }
-    }
-
-    public void readFields(DataInput in) throws IOException {
-        int size = in.readInt();
-        for (int i = 0; i < size; i++) {
-            String fullGrpName = Text.readString(in);
-            GroupId grpId = GroupId.read(in);
-            groupName2Id.put(fullGrpName, grpId);
-            int tableSize = in.readInt();
-            for (int j = 0; j < tableSize; j++) {
-                long tblId = in.readLong();
-                group2Tables.put(grpId, tblId);
-                table2Group.put(tblId, grpId);
-            }
-            ColocateGroupSchema groupSchema = ColocateGroupSchema.read(in);
-            group2Schema.put(grpId, groupSchema);
-
-            List<List<Long>> backendsPerBucketSeq = Lists.newArrayList();
-            int beSize = in.readInt();
-            for (int j = 0; j < beSize; j++) {
-                int seqSize = in.readInt();
-                List<Long> seq = Lists.newArrayList();
-                for (int k = 0; k < seqSize; k++) {
-                    long beId = in.readLong();
-                    seq.add(beId);
-                }
-                backendsPerBucketSeq.add(seq);
-            }
-            group2BackendsPerBucketSeq.put(grpId, backendsPerBucketSeq);
-        }
-
-        size = in.readInt();
-        for (int i = 0; i < size; i++) {
-            unstableGroups.add(GroupId.read(in));
-        }
-    }
 
     public void setBackendsSetByIdxForGroup(GroupId groupId, int tabletOrderIdx, Set<Long> newBackends) {
         writeLock();

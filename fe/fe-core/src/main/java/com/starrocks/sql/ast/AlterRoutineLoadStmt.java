@@ -17,8 +17,6 @@ package com.starrocks.sql.ast;
 
 import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Maps;
-import com.starrocks.analysis.LabelName;
-import com.starrocks.analysis.ParseNode;
 import com.starrocks.analysis.RoutineLoadDataSourceProperties;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.StarRocksException;
@@ -295,7 +293,7 @@ public class AlterRoutineLoadStmt extends DdlStmt {
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitAlterRoutineLoadStatement(this, context);
+        return ((AstVisitorExtendInterface<R, C>) visitor).visitAlterRoutineLoadStatement(this, context);
     }
 
 }

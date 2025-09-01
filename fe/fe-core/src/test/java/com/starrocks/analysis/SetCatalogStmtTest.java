@@ -16,12 +16,12 @@ package com.starrocks.analysis;
 
 import com.google.common.collect.Sets;
 import com.starrocks.authorization.PrivilegeBuiltinConstants;
+import com.starrocks.catalog.UserIdentity;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.StmtExecutor;
 import com.starrocks.server.CatalogMgr;
 import com.starrocks.sql.analyzer.AnalyzeTestUtil;
-import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;

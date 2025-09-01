@@ -17,7 +17,6 @@ package com.starrocks.sql.ast;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableSortedMap;
 import com.starrocks.analysis.FunctionName;
-import com.starrocks.analysis.RedirectStatus;
 import com.starrocks.analysis.TypeDef;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.PrimitiveType;
@@ -164,11 +163,6 @@ public class CreateFunctionStmt extends DdlStmt {
         this.function = function;
     }
 
-    @Override
-    public RedirectStatus getRedirectStatus() {
-        return RedirectStatus.FORWARD_WITH_SYNC;
-    }
-
     public boolean shouldReplaceIfExists() {
         return shouldReplaceIfExists;
     }
@@ -179,6 +173,6 @@ public class CreateFunctionStmt extends DdlStmt {
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitCreateFunctionStatement(this, context);
+        return ((AstVisitorExtendInterface<R, C>) visitor).visitCreateFunctionStatement(this, context);
     }
 }

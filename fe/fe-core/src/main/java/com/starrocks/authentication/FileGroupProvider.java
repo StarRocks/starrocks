@@ -16,9 +16,9 @@ package com.starrocks.authentication;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.starrocks.StarRocksFE;
+import com.starrocks.catalog.UserIdentity;
 import com.starrocks.common.DdlException;
 import com.starrocks.sql.analyzer.SemanticException;
-import com.starrocks.sql.ast.UserIdentity;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 

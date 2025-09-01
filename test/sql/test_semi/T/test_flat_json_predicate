@@ -1,0 +1,194 @@
+-- name: test_normal_flat_json_predicate @sequential
+
+update information_schema.be_configs set value = 'true' where name = 'enable_json_flat';
+CREATE TABLE js2 (
+    v1 BIGINT NULL,
+    j1 JSON NULL
+)
+DUPLICATE KEY (v1)
+DISTRIBUTED BY HASH(`v1`) BUCKETS 1
+PROPERTIES ( "replication_num" = "1" );
+
+CREATE TABLE js3 (
+    v1 BIGINT NULL,
+    j1 JSON NULL
+)
+DUPLICATE KEY (v1)
+DISTRIBUTED BY HASH(`v1`) BUCKETS 1
+PROPERTIES ( "replication_num" = "1" );
+
+
+-- setup variables
+set enable_profile = true;
+set enable_async_profile = false;
+set cbo_json_v2_rewrite = true;
+
+
+-- profile checkers
+create view profile_late_materialize as
+select trim(unnest) 
+from table(unnest(split(get_query_profile(last_query_id()), '\n')))
+where unnest like '%LateMaterializeRows%' 
+order by unnest;
+
+create view profile_filter_rows as
+select trim(unnest) 
+from table(unnest(split(get_query_profile(last_query_id()), '\n')))
+where unnest like '%FilterRows%'
+order by unnest;
+
+create view profile_dict as
+select trim(unnest) 
+from table(unnest(split(get_query_profile(last_query_id()), '\n')))
+where unnest like '%DictDecodeCount%'
+order by unnest;
+
+create view profile_access_path as
+select trim(unnest) 
+from table(unnest(split(get_query_profile(last_query_id()), '\n')))
+where unnest like '%AccessPath%'
+order by unnest;
+
+-- integer type: zonemap index
+
+insert into js2 
+select 
+    generate_series, 
+    json_object('f1', generate_series)
+from (table(generate_series(1, 1000)));
+
+select * from js2 where get_json_int(j1, '$.f1') = -1;
+select * from profile_filter_rows;
+select * from js2 where get_json_int(j1, '$.f1') = 1;
+select * from profile_filter_rows;
+select * from js2 where get_json_int(j1, '$.f1') = 1 or get_json_int(j1, '$.f1') = 2;
+select * from profile_filter_rows;
+select * from js2 where get_json_int(j1, '$.f1') in (1, 2, 3, 4);
+select * from profile_filter_rows;
+select get_json_int(j1, '$.f1') from js2 where get_json_int(j1, '$.f1') = -1;
+select get_json_int(j1, '$.f1') from js2 where get_json_int(j1, '$.f1') = 1;
+select get_json_int(j1, '$.f1') from js2 where get_json_int(j1, '$.f1') = 1 or get_json_int(j1, '$.f1') = 2;
+select get_json_int(j1, '$.f1') from js2 where get_json_int(j1, '$.f1') in (1, 2, 3, 4);
+
+insert into js2 
+select 
+    generate_series, 
+    json_object('f2', generate_series)
+from (table(generate_series(1, 1000)));
+
+-- use various iterators
+select get_json_int(j1, '$.f1') from js2 where get_json_int(j1, '$.f1') = 1;
+select * from profile_access_path;
+select get_json_int(j1, '$.f2') from js2 where get_json_int(j1, '$.f1') = 1;
+select * from profile_access_path;
+select get_json_int(j1, '$.f1') from js2 where get_json_int(j1, '$.f2') = 1;
+select * from profile_access_path;
+select get_json_int(j1, '$.f2'), j1 from js2 where get_json_int(j1, '$.f1') = 1;
+select * from profile_access_path;
+select get_json_int(j1, '$.f2'), j1 from js2 where get_json_int(j1, '$.f3') = 1;
+select * from profile_access_path;
+select get_json_int(j1, '$.f2'), get_json_int(j1, '$.f2') from js2 where get_json_int(j1, '$.f1') = 1;
+select * from profile_access_path;
+select count(get_json_int(j1, '$.f2')) from js2 ;
+select * from profile_access_path;
+select count(get_json_int(j1, '$.f3')) from js2 ;
+select * from profile_access_path;
+
+select * from js2 where get_json_int(j1, '$.f1') = -1;
+select * from profile_filter_rows;
+select * from js2 where get_json_int(j1, '$.f1') = 1;
+select * from profile_filter_rows;
+select * from js2 where get_json_int(j1, '$.f1') = 1 or get_json_int(j1, '$.f1') = 2;
+select * from profile_filter_rows;
+select * from js2 where get_json_int(j1, '$.f1') in (1, 2, 3, 4);
+select * from profile_filter_rows;
+
+select * from js2 where get_json_int(j1, '$.f2') = -1;
+select * from profile_filter_rows;
+select * from js2 where get_json_int(j1, '$.f2') = 1;
+select * from profile_filter_rows;
+select * from js2 where get_json_int(j1, '$.f2') = 1 or get_json_int(j1, '$.f2') = 2;
+select * from profile_filter_rows;
+select * from js2 where get_json_int(j1, '$.f2') in (1, 2, 3, 4);
+select * from profile_filter_rows;
+
+-- different projection and predicate
+select get_json_int(j1, '$.f2') from js2 where get_json_int(j1, '$.f2') = 1;
+select get_json_int(j1, '$.f1'), get_json_int(j1, '$.f2') from js2 where get_json_int(j1, '$.f2') = 1;
+select get_json_int(j1, '$.f1'), get_json_int(j1, '$.f1') from js2 where get_json_int(j1, '$.f2') = 1;
+select get_json_int(j1, '$.f1'), get_json_int(j1, '$.f2'), get_json_int(j1, '$.f1') from js2 where get_json_int(j1, '$.f2') = 1;
+select j1, get_json_int(j1, '$.f2') from js2 where get_json_int(j1, '$.f2') = 1;
+select j1 from js2 where get_json_int(j1, '$.f2') = 1;
+
+-- string type: Dict Decode
+insert into js3
+select 
+    generate_series, 
+    json_object('f1', concat('a', generate_series%10))
+from (table(generate_series(1, 1000)));
+
+-- No need to decode dict
+select count(v1) from js3 where get_json_string(j1, 'f1') = 'a0';
+select * from profile_dict;
+select count(v1) from js3 where get_json_string(j1, 'f1') = 'a10';
+select * from profile_dict;
+
+-- Need to decode dict
+select count(get_json_string(j1, 'f1')) from js3 where get_json_string(j1, 'f1') = 'a0';
+select * from profile_dict;
+select count(get_Json_string(j1, 'f1')) from js3 where get_json_string(j1, 'f1') = 'a10';
+select * from profile_dict;
+
+-- late materialization
+insert into js2 
+select 
+    generate_series, 
+    json_object('f1', generate_series, 'f2', generate_series)
+from (table(generate_series(1, 1000)));
+
+select count(get_json_int(j1, '$.f2')) from js2 where get_json_int(j1, '$.f1') < 100;
+select * from profile_late_materialize;
+select count(get_json_int(j1, '$.f2')) from js2 where get_json_int(j1, '$.f1') < 200;
+select * from profile_late_materialize;
+
+
+-- various types
+insert into js3
+select generate_series, json_object(
+        'f_bool', cast(generate_series % 2 = 0 as boolean),
+        'f_int', generate_series,
+        'f_int1', generate_series,
+        'f_int2', generate_series,
+        'f_double', cast(generate_series as double) * 1.0
+        )
+from (table(generate_series(1, 1000)));
+
+-- unmatched type
+select count(*) from js3 where get_json_bool(j1, 'f_bool') = true;
+select count(*) from js3 where get_json_int(j1, 'f_bool') = 1;
+select count(*) from js3 where get_json_string(j1, 'f_bool') = '1';
+select count(*) from js3 where get_json_string(j1, 'f_bool') = 'true';
+select count(*) from js3 where get_json_string(j1, 'f_bool') = 'false';
+select count(*) from js3 where get_json_string(j1, 'f_bool') = 'none';
+select count(*) from js3 where get_json_double(j1, 'f_bool') = 1.0;
+select * from profile_access_path;
+
+select count(*) from js3 where get_json_int(j1, 'f_int') < 500;
+select count(*) from js3 where get_json_bool(j1, 'f_int') = true;
+select count(*) from js3 where get_json_string(j1, 'f_int') < 500;
+select count(*) from js3 where get_json_double(j1, 'f_int') < 500;
+select * from profile_access_path;
+
+select count(*) from js3 where get_json_double(j1, 'f_double') < 500.0;
+select count(*) from js3 where get_json_bool(j1, 'f_double') = true;
+select count(*) from js3 where get_json_int(j1, 'f_double') < 500;
+select count(*) from js3 where get_json_string(j1, 'f_double') < '500';
+select * from profile_access_path;
+
+select count(*) from js3 where get_json_int(j1, 'f_none') IS NULL;
+select count(*) from js3 where get_json_int(j1, 'f_none') IS NOT NULL;
+select count(*) from js3 where get_json_int(j1, 'f_none') < 500;
+select count(*) from js3 where get_json_bool(j1, 'f_none') = true;
+select count(*) from js3 where get_json_string(j1, 'f_none') < 500;
+select count(*) from js3 where get_json_double(j1, 'f_none') < 500;
+select * from profile_access_path;

@@ -18,6 +18,7 @@ import com.google.common.base.Preconditions;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.starrocks.analysis.BloomFilterIndexUtil;
+import com.starrocks.analysis.OrderByElement;
 import com.starrocks.binlog.BinlogConfig;
 import com.starrocks.catalog.ColocateTableIndex;
 import com.starrocks.catalog.Column;
@@ -25,6 +26,7 @@ import com.starrocks.catalog.ColumnId;
 import com.starrocks.catalog.DataProperty;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.DistributionInfo;
+import com.starrocks.catalog.DistributionInfoBuilder;
 import com.starrocks.catalog.ExpressionRangePartitionInfo;
 import com.starrocks.catalog.ExternalOlapTable;
 import com.starrocks.catalog.FlatJsonConfig;
@@ -34,6 +36,7 @@ import com.starrocks.catalog.ListPartitionInfo;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionInfo;
+import com.starrocks.catalog.PartitionInfoBuilder;
 import com.starrocks.catalog.PartitionType;
 import com.starrocks.catalog.RangePartitionInfo;
 import com.starrocks.catalog.SinglePartitionInfo;
@@ -145,7 +148,7 @@ public class OlapTableFactory implements AbstractTableFactory {
             } else {
                 throw new DdlException("Currently only support range or list partition with engine type olap");
             }
-            partitionInfo = partitionDesc.toPartitionInfo(baseSchema, partitionNameToId, false);
+            partitionInfo = PartitionInfoBuilder.build(partitionDesc, baseSchema, partitionNameToId, false);
 
             // Automatic partitioning needs to ensure that at least one tablet is opened.
             if (partitionInfo.isAutomaticPartition()) {
@@ -177,14 +180,18 @@ public class OlapTableFactory implements AbstractTableFactory {
         // create distribution info
         DistributionDesc distributionDesc = stmt.getDistributionDesc();
         Preconditions.checkNotNull(distributionDesc);
-        DistributionInfo distributionInfo = distributionDesc.toDistributionInfo(baseSchema);
+        DistributionInfo distributionInfo = DistributionInfoBuilder.build(distributionDesc, baseSchema);
 
         short shortKeyColumnCount = 0;
         List<Integer> sortKeyIdxes = new ArrayList<>();
-        if (stmt.getSortKeys() != null) {
+        if (stmt.getOrderByElements() != null) {
             Set<Integer> addedSortKey = new HashSet<>();
             List<String> baseSchemaNames = baseSchema.stream().map(Column::getName).collect(Collectors.toList());
-            for (String column : stmt.getSortKeys()) {
+            for (OrderByElement orderByElement : stmt.getOrderByElements()) {
+                String column = orderByElement.castAsSlotRef();
+                if (column == null) {
+                    throw new DdlException("Unknown column '" + orderByElement.getExpr().toSql() + "' in order by clause");
+                }
                 int idx = IntStream.range(0, baseSchemaNames.size())
                         .filter(i -> baseSchemaNames.get(i).equalsIgnoreCase(column))
                         .findFirst().orElse(-1);
@@ -487,6 +494,13 @@ public class OlapTableFactory implements AbstractTableFactory {
                 throw new DdlException(e.getMessage());
             }
 
+            try {
+                Boolean enableDynamicTablet = PropertyAnalyzer.analyzeEnableDynamicTablet(properties, true);
+                table.setEnableDynamicTablet(enableDynamicTablet);
+            } catch (Exception e) {
+                throw new DdlException(e.getMessage());
+            }
+
             // write quorum
             try {
                 table.setWriteQuorum(PropertyAnalyzer.analyzeWriteQuorum(properties));
@@ -633,7 +647,7 @@ public class OlapTableFactory implements AbstractTableFactory {
             Util.checkColumnSupported(baseSchema);
             int schemaHash = Util.schemaHash(schemaVersion, baseSchema, bfColumns, bfFpp);
 
-            if (stmt.getSortKeys() != null) {
+            if (stmt.getOrderByElements() != null) {
                 table.setIndexMeta(baseIndexId, tableName, baseSchema, schemaVersion, schemaHash,
                         shortKeyColumnCount, baseIndexStorageType, keysType, null, sortKeyIdxes,
                         sortKeyUniqueIds);
@@ -852,9 +866,11 @@ public class OlapTableFactory implements AbstractTableFactory {
             boolean enableFlatJson = PropertyAnalyzer.analyzeBooleanProp(properties,
                     PropertyAnalyzer.PROPERTIES_FLAT_JSON_ENABLE, false);
 
-            if (!enableFlatJson) {
-                throw new DdlException(
-                        "flat_json.enable must be set to true in order to set flat-json related configurations.");
+            // Check if other flat JSON properties are set when flat_json.enable is false
+            if (!enableFlatJson && (properties.containsKey(PropertyAnalyzer.PROPERTIES_FLAT_JSON_NULL_FACTOR) ||
+                    properties.containsKey(PropertyAnalyzer.PROPERTIES_FLAT_JSON_SPARSITY_FACTOR) ||
+                    properties.containsKey(PropertyAnalyzer.PROPERTIES_FLAT_JSON_COLUMN_MAX))) {
+                throw new DdlException("flat JSON configuration must be set after enabling flat JSON.");
             }
 
             double flatJsonNullFactor = PropertyAnalyzer.analyzerDoubleProp(properties,

@@ -15,6 +15,7 @@
 
 package com.starrocks.sql.analyzer;
 
+import com.starrocks.catalog.UserIdentity;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.persist.OperationType;
 import com.starrocks.qe.ConnectContext;
@@ -27,7 +28,6 @@ import com.starrocks.sql.ast.CancelAlterSystemStmt;
 import com.starrocks.sql.ast.ModifyBackendClause;
 import com.starrocks.sql.ast.ModifyFrontendAddressClause;
 import com.starrocks.sql.ast.ShowBackendsStmt;
-import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.system.Backend;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.utframe.StarRocksAssert;

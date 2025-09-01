@@ -15,9 +15,6 @@
 package com.starrocks.sql.ast;
 
 import com.google.common.collect.ImmutableList;
-import com.starrocks.catalog.Column;
-import com.starrocks.catalog.ScalarType;
-import com.starrocks.qe.ShowResultSetMetaData;
 import com.starrocks.sql.parser.NodePosition;
 
 public class ShowDictionaryStmt extends ShowStmt {
@@ -38,16 +35,7 @@ public class ShowDictionaryStmt extends ShowStmt {
     }
 
     @Override
-    public ShowResultSetMetaData getMetaData() {
-        ShowResultSetMetaData.Builder builder = ShowResultSetMetaData.builder();
-        for (String title : TITLE_NAMES) {
-            builder.addColumn(new Column(title, ScalarType.createVarchar(30)));
-        }
-        return builder.build();
-    }
-
-    @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitShowDictionaryStatement(this, context);
+        return ((AstVisitorExtendInterface<R, C>) visitor).visitShowDictionaryStatement(this, context);
     }
 }

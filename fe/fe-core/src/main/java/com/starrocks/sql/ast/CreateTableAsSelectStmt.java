@@ -15,7 +15,6 @@
 
 package com.starrocks.sql.ast;
 
-import com.starrocks.analysis.RedirectStatus;
 import com.starrocks.sql.parser.NodePosition;
 
 import java.util.List;
@@ -65,22 +64,12 @@ public class CreateTableAsSelectStmt extends StatementBase {
     }
 
     @Override
-    public RedirectStatus getRedirectStatus() {
-        return RedirectStatus.FORWARD_WITH_SYNC;
-    }
-
-    @Override
     public String toSql() {
         return createTableStmt.toSql() + " AS " + queryStatement.toSql();
     }
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitCreateTableAsSelectStatement(this, context);
-    }
-
-    @Override
-    public int getTimeout() {
-        return insertStmt.getTimeout();
+        return ((AstVisitorExtendInterface<R, C>) visitor).visitCreateTableAsSelectStatement(this, context);
     }
 }

@@ -27,11 +27,11 @@ import java.util.List;
 import java.util.Optional;
 
 /**
- * Union combinator for aggregate function to union the agg state to return the immediate result of aggregate function.
- * DESC: immediate_type {agg_func}_union(immediate_type)
- *  input type          : aggregate function's immediate_type
- *  intermediate type   : aggregate function's immediate_type
- *  return type         : aggregate function's immediate_type
+ * Union combinator for aggregate function to union the agg state to return the intermediate result of aggregate function.
+ * DESC: immediate_type {agg_func}_union(intermediate_type)
+ *  input type          : aggregate function's intermediate_type
+ *  intermediate type   : aggregate function's intermediate_type
+ *  return type         : aggregate function's intermediate_type
  */
 public final class AggStateUnionCombinator extends AggregateFunction {
     private static final Logger LOG = LogManager.getLogger(AggStateUnionCombinator.class);

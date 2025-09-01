@@ -18,10 +18,6 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.system.SystemId;
 
-import java.io.DataInput;
-import java.io.DataOutput;
-import java.io.IOException;
-
 import static com.starrocks.catalog.InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME;
 import static com.starrocks.server.CatalogMgr.isInternalCatalog;
 import static java.util.Objects.requireNonNull;
@@ -105,14 +101,10 @@ public class InfoSchemaDb extends Database {
         return null;
     }
 
-    @Override
-    public void write(DataOutput out) throws IOException {
-        // Do nothing
-    }
 
-    public void readFields(DataInput in) throws IOException {
-        throw new IOException("Not support.");
-    }
+
+
+
 
     @Override
     public Table getTable(String name) {

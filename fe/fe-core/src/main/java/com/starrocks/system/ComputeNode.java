@@ -21,12 +21,10 @@ import com.starrocks.alter.DecommissionType;
 import com.starrocks.catalog.ResourceGroup;
 import com.starrocks.common.Config;
 import com.starrocks.common.Pair;
-import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.common.util.DnsCache;
 import com.starrocks.datacache.DataCacheMetrics;
 import com.starrocks.persist.gson.GsonPostProcessable;
-import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.qe.CoordinatorMonitor;
 import com.starrocks.qe.GlobalVariable;
 import com.starrocks.server.GlobalStateMgr;
@@ -38,8 +36,6 @@ import com.starrocks.thrift.TStatusCode;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import java.io.DataInput;
-import java.io.IOException;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.List;
@@ -460,11 +456,6 @@ public class ComputeNode implements IComputable, Writable, GsonPostProcessable {
     }
 
 
-
-    public static ComputeNode read(DataInput in) throws IOException {
-        String json = Text.readString(in);
-        return GsonUtils.GSON.fromJson(json, ComputeNode.class);
-    }
 
     @Override
     public int hashCode() {

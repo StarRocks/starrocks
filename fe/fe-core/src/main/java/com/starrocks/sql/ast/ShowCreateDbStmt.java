@@ -12,12 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.sql.ast;
 
-import com.starrocks.catalog.Column;
-import com.starrocks.catalog.ScalarType;
-import com.starrocks.qe.ShowResultSetMetaData;
 import com.starrocks.sql.parser.NodePosition;
 
 import static com.starrocks.common.util.Util.normalizeName;
@@ -26,11 +22,6 @@ import static com.starrocks.common.util.Util.normalizeName;
 //  Syntax:
 //      SHOW CREATE DATABASE db
 public class ShowCreateDbStmt extends ShowStmt {
-    private static final ShowResultSetMetaData META_DATA =
-            ShowResultSetMetaData.builder()
-                    .addColumn(new Column("Database", ScalarType.createVarchar(20)))
-                    .addColumn(new Column("Create Database", ScalarType.createVarchar(30)))
-                    .build();
 
     private String catalog;
     private String db;
@@ -66,12 +57,7 @@ public class ShowCreateDbStmt extends ShowStmt {
     }
 
     @Override
-    public ShowResultSetMetaData getMetaData() {
-        return META_DATA;
-    }
-
-    @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitShowCreateDbStatement(this, context);
+        return ((AstVisitorExtendInterface<R, C>) visitor).visitShowCreateDbStatement(this, context);
     }
 }

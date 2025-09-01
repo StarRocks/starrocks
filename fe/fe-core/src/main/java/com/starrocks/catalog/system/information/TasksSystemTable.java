@@ -19,16 +19,18 @@ import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Table;
+import com.starrocks.catalog.UserIdentity;
 import com.starrocks.catalog.system.SystemId;
 import com.starrocks.catalog.system.SystemTable;
 import com.starrocks.cluster.ClusterNamespace;
+import com.starrocks.common.Config;
+import com.starrocks.common.util.SqlCredentialRedactor;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.scheduler.Constants;
 import com.starrocks.scheduler.Task;
 import com.starrocks.scheduler.TaskManager;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.Authorizer;
-import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.thrift.TGetTasksParams;
 import com.starrocks.thrift.TSchemaTableType;
 import com.starrocks.thrift.TTaskInfo;
@@ -96,12 +98,16 @@ public class TasksSystemTable {
                 scheduleStr = task.getType().name();
             }
             if (task.getType() == Constants.TaskType.PERIODICAL) {
-                scheduleStr += task.getSchedule();
+                scheduleStr += " " + task.getSchedule();
             }
             info.setSchedule(scheduleStr);
             info.setCatalog(task.getCatalogName());
             info.setDatabase(ClusterNamespace.getNameFromFullName(task.getDbName()));
-            info.setDefinition(task.getDefinition());
+            if (Config.enable_task_info_mask_credential) {
+                info.setDefinition(SqlCredentialRedactor.redact(task.getDefinition()));
+            } else {
+                info.setDefinition(task.getDefinition());
+            }
             info.setExpire_time(task.getExpireTime() / 1000);
             info.setProperties(task.getPropertiesString());
             if (task.getUserIdentity() != null) {

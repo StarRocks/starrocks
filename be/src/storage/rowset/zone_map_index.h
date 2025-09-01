@@ -62,12 +62,17 @@ public:
 
     virtual ~ZoneMapIndexWriter() = default;
 
+    virtual void enable_truncate_string() = 0;
+
     virtual void add_values(const void* values, size_t count) = 0;
 
     virtual void add_nulls(uint32_t count) = 0;
 
     // mark the end of one data page so that we can finalize the corresponding zone map
     virtual Status flush() = 0;
+
+    // Return the zonemap of last page
+    virtual std::optional<ZoneMapPB> get_last_zonemap() = 0;
 
     virtual Status finish(WritableFile* wfile, ColumnIndexMetaPB* index_meta) = 0;
 
@@ -106,6 +111,38 @@ private:
 
     OnceFlag _load_once;
     std::vector<ZoneMapPB> _page_zone_maps;
+};
+
+enum CreateIndexDecision {
+    Unknown,
+    Good, // It deserves to create the index
+    Bad,  // It's a bad index
+};
+
+// ZoneMapIndexQualityJudger is used to judge whether to write index for string types based on overlap quality.
+//
+// Greater overlap implies reduced clustering. Therefore, clustering can be quantified using the overlap ratio of zonemaps.
+// To calculate:
+// 1. s_k(i): Sum of overlaps with page(i) across all pages.
+// 2. overlap_ratio: Total sum of s_k divided by the square of the number of pages: (Σ s_k) / (num_pages²).
+// 3. Quality: Defined as 1 - overlap_ratio, where higher values indicate better clustering.
+// 4. If pages are perfectly separated: Quality ≈ 1.
+// 5. If all pages overlap completely: Quality = 0.
+class ZoneMapIndexQualityJudger {
+public:
+    static std::unique_ptr<ZoneMapIndexQualityJudger> create(TypeInfo* type_info, double overlap_threshold,
+                                                             int32_t sample_pages);
+
+    virtual ~ZoneMapIndexQualityJudger() = default;
+
+    // Feed the zonemap into this judger, it will be buffered until it can make a decision
+    virtual void feed(const ZoneMapPB& page_zone_map) = 0;
+
+    // Make a decision based on the overlap quality.
+    // If the overlap quality is good, return Good.
+    // If the overlap quality is bad, return Bad.
+    // If the sampled pages are not enough, return Unknown.
+    virtual CreateIndexDecision make_decision() const = 0;
 };
 
 } // namespace starrocks

@@ -38,12 +38,12 @@ public class CreateUserStmt extends BaseCreateAlterUserStmt {
     protected SetRoleType setRoleType;
     protected List<String> defaultRoles;
 
-    public CreateUserStmt(UserIdentity userIdentity, boolean ifNotExists,
+    public CreateUserStmt(UserRef user, boolean ifNotExists,
                           UserAuthOption authOption,
                           List<String> defaultRoles,
                           Map<String, String> properties,
                           NodePosition pos) {
-        super(userIdentity, authOption, properties, pos);
+        super(user, authOption, properties, pos);
         this.ifNotExists = ifNotExists;
         this.setRoleType = SetRoleType.ROLE;
         this.defaultRoles = defaultRoles;
@@ -59,6 +59,6 @@ public class CreateUserStmt extends BaseCreateAlterUserStmt {
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitCreateUserStatement(this, context);
+        return ((AstVisitorExtendInterface<R, C>) visitor).visitCreateUserStatement(this, context);
     }
 }

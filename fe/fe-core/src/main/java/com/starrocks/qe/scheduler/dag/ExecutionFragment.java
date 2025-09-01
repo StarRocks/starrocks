@@ -19,9 +19,9 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.util.DebugUtil;
+import com.starrocks.connector.BucketProperty;
 import com.starrocks.planner.ExchangeNode;
 import com.starrocks.planner.JoinNode;
-import com.starrocks.planner.OlapScanNode;
 import com.starrocks.planner.PlanFragment;
 import com.starrocks.planner.PlanFragmentId;
 import com.starrocks.planner.PlanNode;
@@ -46,6 +46,7 @@ import java.util.Collections;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Random;
 import java.util.stream.Collectors;
 
@@ -77,6 +78,7 @@ public class ExecutionFragment {
         public List<Integer> bucketSeqToInstance;
         public List<Integer> bucketSeqToDriverSeq;
         public List<Integer> bucketSeqToPartition;
+        public Optional<List<BucketProperty>> bucketProperties;
     }
     private BucketSeqAssignment cachedBucketSeqAssignment = null;
     private boolean bucketSeqToInstanceForFilterIsSet = false;
@@ -157,6 +159,7 @@ public class ExecutionFragment {
             rf.setBucketSeqToInstance(bucketSeqAssignment.bucketSeqToInstance);
             rf.setBucketSeqToDriverSeq(bucketSeqAssignment.bucketSeqToDriverSeq);
             rf.setBucketSeqToPartition(bucketSeqAssignment.bucketSeqToPartition);
+            bucketSeqAssignment.bucketProperties.ifPresent(rf::setBucketProperties);
         }
     }
 
@@ -172,15 +175,10 @@ public class ExecutionFragment {
             throws StarRocksException {
         if (colocatedAssignment == null) {
             final int numScanNodes = scanNodes.size();
-            ColocatedBackendSelector.Assignment.ScanRangeType type;
-            if (scanNode instanceof OlapScanNode olapScanNode) {
-                type = ColocatedBackendSelector.Assignment.ScanRangeType.NATIVE;
-            } else {
-                type = ColocatedBackendSelector.Assignment.ScanRangeType.NONNATIVE;
-            }
 
             int bucketNum = scanNode.getBucketNums();
-            colocatedAssignment = new ColocatedBackendSelector.Assignment(bucketNum, numScanNodes, type);
+            colocatedAssignment = new ColocatedBackendSelector.Assignment(bucketNum, numScanNodes,
+                    scanNode.getBucketProperties());
         }
         return colocatedAssignment;
     }
@@ -244,6 +242,7 @@ public class ExecutionFragment {
             cachedBucketSeqAssignment.bucketSeqToDriverSeq = Arrays.asList(bucketSeqToDriverSeq);
             cachedBucketSeqAssignment.bucketSeqToPartition = Arrays.asList(bucketSeqToPartition);
         }
+        cachedBucketSeqAssignment.bucketProperties = colocatedAssignment.getBucketProperties();
         return cachedBucketSeqAssignment;
     }
 

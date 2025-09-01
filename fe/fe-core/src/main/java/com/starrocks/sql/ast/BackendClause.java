@@ -15,7 +15,6 @@
 
 package com.starrocks.sql.ast;
 
-import com.starrocks.alter.AlterOpType;
 import com.starrocks.common.Pair;
 import com.starrocks.sql.parser.NodePosition;
 
@@ -27,7 +26,7 @@ public class BackendClause extends AlterClause {
     protected List<Pair<String, Integer>> hostPortPairs;
 
     protected BackendClause(List<String> hostPortsUnResolved, NodePosition pos) {
-        super(AlterOpType.ALTER_OTHER, pos);
+        super(pos);
         this.hostPortsUnResolved = hostPortsUnResolved;
         this.hostPortPairs = new LinkedList<>();
     }
@@ -46,6 +45,6 @@ public class BackendClause extends AlterClause {
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitBackendClause(this, context);
+        return ((AstVisitorExtendInterface<R, C>) visitor).visitBackendClause(this, context);
     }
 }

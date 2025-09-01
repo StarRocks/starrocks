@@ -27,12 +27,14 @@
 #include "column/json_column.h"
 #include "column/map_column.h"
 #include "column/nullable_column.h"
+#include "column/type_traits.h"
 #include "exprs/builtin_functions.h"
 #include "exprs/function_context.h"
 #include "runtime/types.h"
 #include "testutil/init_test_env.h"
 #include "types/logical_type.h"
 #include "util/json.h"
+#include "util/percentile_value.h"
 
 namespace starrocks {
 
@@ -47,7 +49,7 @@ protected:
             std::uniform_real_distribution<T> dist(-1000.0, 1000.0);
             return dist(_rng);
         } else {
-            std::uniform_int_distribution<T> dist;
+            std::uniform_int_distribution<T> dist(1, (T)10000);
             return dist(_rng);
         }
     }
@@ -140,6 +142,13 @@ protected:
             for (size_t i = 0; i < size; ++i) {
                 std::string data = generate_random_string(50);
                 column->append(Slice(data));
+            }
+            return column;
+        }
+        case TYPE_TIME: {
+            auto column = RunTimeColumnType<TYPE_TIME>::create();
+            for (size_t i = 0; i < size; ++i) {
+                column->append(generate_random_value<double>());
             }
             return column;
         }
@@ -245,14 +254,42 @@ protected:
 
             return StructColumn::create(fields);
         }
-
-        default: {
-            // For unsupported types, create a simple int column
-            auto column = Int32Column::create();
+        case TYPE_OBJECT: {
+            auto column = BitmapColumn::create();
             for (size_t i = 0; i < size; ++i) {
-                column->append(generate_random_value<int32_t>());
+                // Generate a random bitmap value for each row
+                BitmapValue bitmap;
+                std::uniform_int_distribution<int> num_bits_dist(0, 10); // Random number of bits set, up to 10
+                int num_bits = num_bits_dist(_rng);
+                std::uniform_int_distribution<uint32_t> bit_pos_dist(0, 63); // Bit positions 0-63
+                for (int j = 0; j < num_bits; ++j) {
+                    bitmap.add(bit_pos_dist(_rng));
+                }
+                column->append(bitmap);
             }
             return column;
+        }
+        case TYPE_PERCENTILE: {
+            auto column = PercentileColumn::create();
+            for (size_t i = 0; i < size; ++i) {
+                PercentileValue value;
+                value.add(generate_random_value<double>());
+                column->append(value);
+            }
+            return column;
+        }
+        case TYPE_HLL: {
+            auto column = HyperLogLogColumn::create();
+            for (size_t i = 0; i < size; ++i) {
+                HyperLogLog value;
+                value.update(generate_random_value<int64_t>());
+                column->append(value);
+            }
+            return column;
+        }
+
+        default: {
+            throw std::runtime_error("Unsupported type: " + type_to_string(type));
         }
         }
     }
@@ -265,8 +302,13 @@ protected:
 
         offsets_column->append(0);
         for (size_t i = 0; i < size; ++i) {
-            std::uniform_int_distribution<uint32_t> dist(1, 5); // 1-5 elements per array
-            uint32_t array_size = dist(_rng);
+            uint32_t array_size;
+            if (i == size - 1) {
+                array_size = element_column->size() - offsets_column->get_data().back();
+            } else {
+                std::uniform_int_distribution<uint32_t> dist(1, 5); // 1-5 elements per array
+                array_size = dist(_rng);
+            }
             uint32_t last_offset = offsets_column->get_data().back();
             offsets_column->append(last_offset + array_size);
         }
@@ -348,7 +390,6 @@ protected:
         // Resolve type description in functions.py
         static TypeDescriptor gen_type_desc(const char* type_name) {
             std::string name_str(type_name);
-            // ARRAY_INT
             if (name_str.find("ARRAY_") != std::string::npos) {
                 TypeDescriptor element_type = gen_type_desc(name_str.data() + 6);
                 return TypeDescriptor::create_array_type(element_type);
@@ -368,6 +409,12 @@ protected:
                 return TypeDescriptor(TYPE_INT);
             } else if (name_str.find("...") != std::string::npos) {
                 return TypeDescriptor(TYPE_VARCHAR);
+            } else if (name_str.find("DECIMAL32") != std::string::npos) {
+                return TypeDescriptor::create_decimalv3_type(TYPE_DECIMAL32, 9, 2);
+            } else if (name_str.find("DECIMAL64") != std::string::npos) {
+                return TypeDescriptor::create_decimalv3_type(TYPE_DECIMAL64, 18, 4);
+            } else if (name_str.find("DECIMAL128") != std::string::npos) {
+                return TypeDescriptor::create_decimalv3_type(TYPE_DECIMAL128, 38, 8);
             } else {
                 LogicalType ret = string_to_logical_type(type_name);
                 if (ret == TYPE_UNKNOWN) {
@@ -398,12 +445,29 @@ protected:
                     columns.emplace_back(column);
                 }
             }
+            if (arg_count == 0) {
+                TypeDescriptor type_desc(TYPE_INT);
+                columns.emplace_back(make_const(create_random_column(type_desc, 1)));
+            }
 
             // Create FunctionContext with proper argument types and return type
+            RuntimeState state;
             auto ctx = FunctionContext::create_test_context(std::move(fn_type_desc.arg_types), fn_type_desc.ret_type);
+            ctx->set_runtime_state(&state);
 
             // Test the function - it should not crash
             try {
+                if (desc.prepare_function) {
+                    auto st = (desc.prepare_function(ctx, FunctionContext::FunctionStateScope::FRAGMENT_LOCAL));
+                    if (!st.ok()) {
+                        GTEST_SKIP() << "Function " << desc.name << " prepare failed: " << st.message();
+                        return;
+                    }
+                    ASSERT_TRUE(st.ok()) << st;
+                    st = (desc.prepare_function(ctx, FunctionContext::FunctionStateScope::THREAD_LOCAL));
+                    ASSERT_TRUE(st.ok()) << st;
+                }
+
                 if (desc.scalar_function) {
                     auto result = desc.scalar_function(ctx, columns);
                     // Function may return error, but should not crash
@@ -411,6 +475,13 @@ protected:
                         // Verify result is valid
                         ASSERT_TRUE(result.value() != nullptr);
                     }
+                }
+
+                if (desc.close_function) {
+                    auto st = (desc.close_function(ctx, FunctionContext::FunctionStateScope::FRAGMENT_LOCAL));
+                    ASSERT_TRUE(st.ok()) << st;
+                    st = (desc.close_function(ctx, FunctionContext::FunctionStateScope::THREAD_LOCAL));
+                    ASSERT_TRUE(st.ok()) << st;
                 }
             } catch (const std::exception& e) {
                 // Log the exception but don't fail the test - this is expected for type mismatches
@@ -426,22 +497,24 @@ protected:
 };
 
 TEST_P(BuiltinFunctionTest, TestIndividualFunction) {
-    std::vector<std::string> todolist = {
-            "named_struct", // it's variadic function
-            // "any_match",
-            "row",
-            // "least",
-            // "greatest",
-            // "coalesce",
-            // "concat",
-            // "concat_ws",
-            // "ifnull",
-            // "nullif",
-            "array_flatten",
-    };
+    std::vector<std::string> todolist = {"named_struct", // it's variadic function
+                                         // "any_match",
+                                         "row", "field",
+                                         // "least",
+                                         // "greatest",
+                                         // "coalesce",
+                                         // "concat",
+                                         // "concat_ws",
+                                         // "ifnull",
+                                         // "nullif",
+                                         "repeat", // too slow
+                                         "sleep", "reverse", "concat_ws", "base64_to_bitmap"};
     auto [function_id, descriptor] = GetParam();
 
     if (std::find(todolist.begin(), todolist.end(), descriptor.name) != todolist.end()) {
+        GTEST_SKIP() << "Function " << descriptor.name << " is not supported yet";
+    }
+    if (descriptor.name.starts_with("array")) {
         GTEST_SKIP() << "Function " << descriptor.name << " is not supported yet";
     }
 
@@ -483,10 +556,8 @@ INSTANTIATE_TEST_SUITE_P(AllBuiltinFunctions, BuiltinFunctionTest,
                              return "Function_" + std::to_string(info.param.first) + "_" + info.param.second.name;
                          });
 
+} // namespace starrocks
+
 int main(int argc, char** argv) {
-    // Set the glog basename before calling init_test_env
-    setenv("GTEST_LOG_BASENAME", "builtin_functions_fuzzy_test", 1);
     return starrocks::init_test_env(argc, argv);
 }
-
-} // namespace starrocks

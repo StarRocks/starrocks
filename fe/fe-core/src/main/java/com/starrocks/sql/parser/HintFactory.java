@@ -20,11 +20,11 @@ import com.google.common.collect.Maps;
 import com.starrocks.analysis.BinaryPredicate;
 import com.starrocks.analysis.BinaryType;
 import com.starrocks.analysis.Expr;
-import com.starrocks.analysis.HintNode;
 import com.starrocks.analysis.SetVarHint;
 import com.starrocks.analysis.UserVariableExpr;
 import com.starrocks.analysis.UserVariableHint;
 import com.starrocks.qe.SessionVariable;
+import com.starrocks.sql.ast.HintNode;
 import com.starrocks.sql.ast.UserVariable;
 import org.antlr.v4.runtime.Token;
 

@@ -43,11 +43,13 @@ import com.sleepycat.je.Environment;
 import com.sleepycat.je.EnvironmentConfig;
 import com.sleepycat.je.OperationStatus;
 import com.starrocks.common.io.DataOutputBuffer;
+import com.starrocks.common.io.Text;
 import com.starrocks.journal.JournalEntity;
 import com.starrocks.journal.bdbje.BDBTool;
 import com.starrocks.journal.bdbje.BDBToolOptions;
 import com.starrocks.persist.OperationType;
 import com.starrocks.persist.ReplicaPersistInfo;
+import com.starrocks.persist.gson.GsonUtils;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
@@ -90,7 +92,7 @@ public class BDBToolTest {
 
             // write something
             ReplicaPersistInfo info = ReplicaPersistInfo.createForAdd(1, 2, 3, 4, 5, 6, 7, 8, 0, 10, 11, 12, 14, 0);
-            JournalEntity entity = new JournalEntity(OperationType.OP_ADD_REPLICA, info);
+            JournalEntity entity = new JournalEntity(OperationType.OP_ADD_REPLICA_V2, info);
 
             // id is the key
             Long journalId = 23456L;
@@ -102,7 +104,7 @@ public class BDBToolTest {
             DataOutputBuffer buffer = new DataOutputBuffer(128);
             try {
                 buffer.writeShort(entity.opCode());
-                entity.data().write(buffer);
+                Text.writeString(buffer, GsonUtils.GSON.toJson(entity.data(), ReplicaPersistInfo.class));
             } catch (IOException e) {
                 e.printStackTrace();
             }

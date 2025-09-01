@@ -14,7 +14,6 @@
 
 package com.starrocks.sql.ast;
 
-import com.starrocks.analysis.RedirectStatus;
 import com.starrocks.sql.parser.NodePosition;
 
 import java.util.List;
@@ -36,22 +35,8 @@ public class SetStmt extends StatementBase {
     }
 
     @Override
-    public RedirectStatus getRedirectStatus() {
-        if (setListItems != null) {
-            for (SetListItem var : setListItems) {
-                if (var instanceof SetPassVar) {
-                    return RedirectStatus.FORWARD_WITH_SYNC;
-                } else if (var instanceof SystemVariable && ((SystemVariable) var).getType() == SetType.GLOBAL) {
-                    return RedirectStatus.FORWARD_WITH_SYNC;
-                }
-            }
-        }
-        return RedirectStatus.NO_FORWARD;
-    }
-
-    @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitSetStatement(this, context);
+        return ((AstVisitorExtendInterface<R, C>) visitor).visitSetStatement(this, context);
     }
 }
 

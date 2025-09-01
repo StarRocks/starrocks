@@ -14,7 +14,6 @@
 package com.starrocks.sql.ast;
 
 import com.google.common.collect.Sets;
-import com.starrocks.alter.AlterOpType;
 import com.starrocks.sql.parser.NodePosition;
 
 import java.util.Set;
@@ -32,7 +31,7 @@ public class AlterMaterializedViewStatusClause extends AlterTableClause {
     private final String status;
 
     public AlterMaterializedViewStatusClause(String status, NodePosition pos) {
-        super(AlterOpType.ALTER_MV_STATUS, pos);
+        super(pos);
         this.status = status;
     }
 
@@ -42,6 +41,6 @@ public class AlterMaterializedViewStatusClause extends AlterTableClause {
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitAlterMaterializedViewStatusClause(this, context);
+        return ((AstVisitorExtendInterface<R, C>) visitor).visitAlterMaterializedViewStatusClause(this, context);
     }
 }

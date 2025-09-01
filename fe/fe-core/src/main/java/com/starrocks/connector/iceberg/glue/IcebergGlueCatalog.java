@@ -33,6 +33,7 @@ import org.apache.iceberg.CatalogProperties;
 import org.apache.iceberg.CatalogUtil;
 import org.apache.iceberg.PartitionSpec;
 import org.apache.iceberg.Schema;
+import org.apache.iceberg.SortOrder;
 import org.apache.iceberg.Table;
 import org.apache.iceberg.aws.AwsProperties;
 import org.apache.iceberg.aws.glue.GlueCatalog;
@@ -155,6 +156,7 @@ public class IcebergGlueCatalog implements IcebergCatalog {
             Schema schema,
             PartitionSpec partitionSpec,
             String location,
+            SortOrder sortOrder,
             Map<String, String> properties) {
         if (Strings.isNullOrEmpty(location)) {
             String dbLocation = getDB(context, dbName).getLocation();
@@ -169,6 +171,7 @@ public class IcebergGlueCatalog implements IcebergCatalog {
         Table nativeTable = delegate.buildTable(TableIdentifier.of(dbName, tableName), schema)
                 .withLocation(location)
                 .withPartitionSpec(partitionSpec)
+                .withSortOrder(sortOrder)
                 .withProperties(properties)
                 .create();
 
@@ -201,6 +204,20 @@ public class IcebergGlueCatalog implements IcebergCatalog {
             }
         } catch (Exception e) {
             LOG.error("Failed to delete uncommitted files", e);
+        }
+    }
+
+    @Override
+    public boolean registerTable(ConnectContext context, String dbName, String tableName, 
+                                 String metadataFileLocation) {
+        try {
+            TableIdentifier tableIdentifier = TableIdentifier.of(dbName, tableName);
+            Table table = delegate.registerTable(tableIdentifier, metadataFileLocation);
+            return table != null;
+        } catch (Exception e) {
+            LOG.error("Failed to register table {}.{} with metadata file location {}", 
+                    dbName, tableName, metadataFileLocation, e);
+            throw new StarRocksConnectorException("Failed to register table: " + e.getMessage(), e);
         }
     }
 

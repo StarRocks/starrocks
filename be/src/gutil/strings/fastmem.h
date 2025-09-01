@@ -19,6 +19,9 @@
 #ifdef __SSE2__
 #include <emmintrin.h>
 #include <immintrin.h>
+#elif defined(__ARM_NEON) && defined(__aarch64__)
+#include <arm_acle.h>
+#include <arm_neon.h>
 #endif
 
 #include <cstddef>
@@ -188,4 +191,25 @@ ALWAYS_INLINE inline void memcpy_inlined(void* __restrict _dst, const void* __re
 #endif
     }
 }
+
+ALWAYS_INLINE inline void memcpy_inlined_overflow16(void* __restrict _dst, const void* __restrict _src, ssize_t size) {
+    auto* __restrict dst = static_cast<uint8_t*>(_dst);
+    const auto* __restrict src = static_cast<const uint8_t*>(_src);
+
+    while (size > 0) {
+#ifdef __SSE2__
+        _mm_storeu_si128(reinterpret_cast<__m128i*>(dst), _mm_loadu_si128(reinterpret_cast<const __m128i*>(src)));
+#elif defined(__ARM_NEON) && defined(__aarch64__)
+        vst1q_u8(dst, vld1q_u8(src));
+#else
+        std::memcpy(dst, src, 16);
+#endif
+        dst += 16;
+        src += 16;
+        size -= 16;
+        // Inhibit loop-idiom optimization of compilers, which would collapse the per-16B copies into a single memcpy.
+        __asm__ __volatile__("" : : : "memory");
+    }
+}
+
 } // namespace strings

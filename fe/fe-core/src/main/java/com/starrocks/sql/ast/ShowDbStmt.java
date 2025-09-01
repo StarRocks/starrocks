@@ -19,10 +19,7 @@ import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.ExprSubstitutionMap;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.TableName;
-import com.starrocks.catalog.Column;
-import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.system.information.InfoSchemaDb;
-import com.starrocks.qe.ShowResultSetMetaData;
 import com.starrocks.sql.parser.NodePosition;
 
 import static com.starrocks.common.util.Util.normalizeName;
@@ -31,10 +28,6 @@ import static com.starrocks.common.util.Util.normalizeName;
 public class ShowDbStmt extends ShowStmt {
     private static final TableName TABLE_NAME = new TableName(InfoSchemaDb.DATABASE_NAME, "schemata");
     private static final String DB_COL = "Database";
-    private static final ShowResultSetMetaData META_DATA =
-            ShowResultSetMetaData.builder()
-                    .addColumn(new Column(DB_COL, ScalarType.createVarchar(20)))
-                    .build();
     private final String pattern;
     private Expr where;
 
@@ -88,12 +81,7 @@ public class ShowDbStmt extends ShowStmt {
     }
 
     @Override
-    public ShowResultSetMetaData getMetaData() {
-        return META_DATA;
-    }
-
-    @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitShowDatabasesStatement(this, context);
+        return ((AstVisitorExtendInterface<R, C>) visitor).visitShowDatabasesStatement(this, context);
     }
 }

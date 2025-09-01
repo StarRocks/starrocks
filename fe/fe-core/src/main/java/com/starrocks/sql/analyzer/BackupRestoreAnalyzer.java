@@ -34,7 +34,7 @@ import com.starrocks.common.ErrorReport;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
-import com.starrocks.sql.ast.AstVisitor;
+import com.starrocks.sql.ast.AstVisitorExtendInterface;
 import com.starrocks.sql.ast.BackupStmt;
 import com.starrocks.sql.ast.CancelBackupStmt;
 import com.starrocks.sql.ast.CatalogRef;
@@ -63,7 +63,7 @@ public class BackupRestoreAnalyzer {
         new BackupRestoreStmtAnalyzerVisitor().analyze(statement, session);
     }
 
-    public static class BackupRestoreStmtAnalyzerVisitor implements AstVisitor<Void, ConnectContext> {
+    public static class BackupRestoreStmtAnalyzerVisitor implements AstVisitorExtendInterface<Void, ConnectContext> {
 
         private static final String PROP_TIMEOUT = "timeout";
         private static final long MIN_TIMEOUT_MS = 600_000L; // 10 min

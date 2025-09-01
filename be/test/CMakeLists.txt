@@ -33,7 +33,10 @@ set(EXEC_FILES
         ./connector_sink/hive_chunk_sink_test.cpp
         ./connector_sink/iceberg_chunk_sink_test.cpp
         ./connector_sink/file_chunk_sink_test.cpp
+        ./connector_sink/partition_chunk_writer_test.cpp
         ./connector_sink/async_flush_output_stream_test.cpp
+        ./connector_sink/iceberg_table_sink_test.cpp
+        ./connector_sink/sink_memory_manager_test.cpp
         ./fs/azure/azblob_uri_test.cpp
         ./fs/azure/fs_azblob_test.cpp
         ./fs/azure/utils_test.cpp
@@ -89,33 +92,35 @@ set(EXEC_FILES
         ./exec/analytor_test.cpp
         ./exec/analytor_test.cpp
         ./exec/arrow_converter_test.cpp
-        ./exec/cache_select_scanner_test.cpp
         ./exec/chunks_sorter_heap_sort_test.cpp
         ./exec/chunks_sorter_test.cpp
         ./exec/connector_scan_node_test.cpp
-        ./exec/csv_scanner_test.cpp
-        ./exec/orc_scanner_test.cpp
-        ./exec/file_scanner_test.cpp
         ./exec/file_scan_node_test.cpp
-        ./exec/hdfs_scanner_test.cpp
         ./exec/hdfs_scan_node_test.cpp
-        ./exec/jni_scanner_test.cpp
         ./exec/join_hash_map_test.cpp
         ./exec/json_parser_test.cpp
-        ./exec/json_scanner_test.cpp
         ./exec/lake_meta_scanner_test.cpp
         ./exec/multi_olap_table_sink_test.cpp
-        ./exec/avro_scanner_test.cpp
-        ./exec/avro_cpp_scanner_test.cpp
-        ./exec/parquet_scanner_test.cpp
         ./exec/repeat_node_test.cpp
         ./exec/sorting_test.cpp
         ./exec/tablet_sink_index_channel_test.cpp
         ./exec/table_function_node_test.cpp
         ./exec/olap_scan_prepare_test.cpp
+        ./exec/file_scanner/avro_cpp_scanner_test.cpp
+        ./exec/file_scanner/avro_scanner_test.cpp
+        ./exec/file_scanner/csv_scanner_test.cpp
+        ./exec/file_scanner/file_scanner_test.cpp
+        ./exec/file_scanner/json_scanner_test.cpp
+        ./exec/file_scanner/orc_scanner_test.cpp
+        ./exec/file_scanner/parquet_scanner_test.cpp
+        ./exec/hdfs_scanner/cache_select_scanner_test.cpp
+        ./exec/hdfs_scanner/hdfs_scanner_test.cpp
+        ./exec/hdfs_scanner/jni_scanner_test.cpp
         ./exprs/agg/data_sketch/ds_theta_test.cpp
         ./exprs/agg/json_each_test.cpp
         ./exprs/agg/aggregate_test.cpp
+        ./exprs/agg/agg_compressed_key_test.cpp
+        ./exprs/agg/agg_state_functions_test.cpp
         ./exprs/arithmetic_expr_test.cpp
         ./exprs/arithmetic_operation_test.cpp
         ./exprs/array_element_expr_test.cpp
@@ -183,6 +188,7 @@ set(EXEC_FILES
         ./exprs/min_max_predicate_test.cpp
         ./exprs/in_const_predicate_test.cpp
         ./exprs/table_function/test_list_rowsets.cpp
+        ./exprs/dict_expr_test.cpp
         ./formats/csv/array_converter_test.cpp
         ./formats/csv/boolean_converter_test.cpp
         ./formats/csv/csv_file_writer_test.cpp
@@ -304,8 +310,8 @@ set(EXEC_FILES
         ./storage/lake/compaction_scheduler_test.cpp
         ./storage/lake/compaction_task_context_test.cpp
         ./storage/lake/lake_primary_key_consistency_test.cpp
-        ./storage/lake/load_spill_block_manager_test.cpp
         ./storage/lake/spill_mem_table_sink_test.cpp
+        ./storage/load_spill_block_manager_test.cpp
         ./storage/rowset_update_state_test.cpp
         ./storage/rowset_column_update_state_test.cpp
         ./storage/rowset_column_partial_update_test.cpp
@@ -563,6 +569,7 @@ set(EXEC_FILES
         ./util/thrift_client_test.cpp
         ./udf/java/java_native_method_test.cpp
         ./udf/java/java_data_converter_test.cpp
+        ./udf/java/java_udf_test.cpp
         ./util/table_metrics_mgr_test.cpp
         )
 

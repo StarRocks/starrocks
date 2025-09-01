@@ -34,7 +34,7 @@ import com.starrocks.common.proc.ProcService;
 import com.starrocks.common.proc.SchemaChangeProcDir;
 import com.starrocks.common.util.OrderByPair;
 import com.starrocks.qe.ConnectContext;
-import com.starrocks.sql.ast.AstVisitor;
+import com.starrocks.sql.ast.AstVisitorExtendInterface;
 import com.starrocks.sql.ast.ShowAlterStmt;
 
 import java.util.ArrayList;
@@ -48,7 +48,7 @@ public class ShowAlterStmtAnalyzer {
         new ShowAlterStmtAnalyzerVisitor().visit(statement, context);
     }
 
-    static class ShowAlterStmtAnalyzerVisitor implements AstVisitor<Void, ConnectContext> {
+    static class ShowAlterStmtAnalyzerVisitor implements AstVisitorExtendInterface<Void, ConnectContext> {
 
         private final HashMap<String, Expr> filterMap = new HashMap<>();
 

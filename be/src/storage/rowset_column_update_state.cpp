@@ -688,7 +688,22 @@ Status RowsetColumnUpdateState::finalize(Tablet* tablet, Rowset* rowset, uint32_
     std::vector<ColumnUID> update_column_uids;
     std::vector<ColumnUID> unique_update_column_ids;
     const auto& tschema = rowset->schema();
+    /* 
+      * skip overwrite the auto increment column using data in .upt files if user partially update it for the existed keys
+
+      * In current implementation, if user partially update the auto increment column, it will also be included in partial schema
+      * in writing phrase. Because we need to allocate the id in this phrase. It means that .upt files will contains auto increment
+      * column data even it is partially updated (does not specfied by user).
+      * 
+      * For the keys which have already existed in the tablet, we will write "0" in .upt file. In the apply phrase, such "0" data is not
+      * used and we need to discard the column for the keys which have already existed in the tablet.
+    */
     for (ColumnId cid : txn_meta.partial_update_column_ids()) {
+        if (txn_meta.has_auto_increment_partial_update_column_id() &&
+            cid == txn_meta.auto_increment_partial_update_column_id()) {
+            // skip auto increment column if it is being used for partial update
+            continue;
+        }
         if (cid >= tschema->num_key_columns()) {
             update_column_ids.push_back(cid);
             update_column_uids.push_back((ColumnUID)cid);
@@ -702,7 +717,12 @@ Status RowsetColumnUpdateState::finalize(Tablet* tablet, Rowset* rowset, uint32_
             LOG(ERROR) << msg;
             return Status::InternalError(msg);
         }
-        if (!tschema->column(cid).is_key()) {
+        const auto& column = tschema->column(cid);
+        if (txn_meta.has_auto_increment_partial_update_column_id() && column.is_auto_increment()) {
+            // skip auto increment column if it is being used for partial update
+            continue;
+        }
+        if (!column.is_key()) {
             unique_update_column_ids.push_back(uid);
         }
     }
@@ -741,6 +761,7 @@ Status RowsetColumnUpdateState::finalize(Tablet* tablet, Rowset* rowset, uint32_
     // It means column_1 and column_2 are stored in aaa.cols, and column_3 and column_4 are stored in bbb.cols
     std::map<uint32_t, std::vector<std::vector<ColumnUID>>> dcg_column_ids;
     std::map<uint32_t, std::vector<std::string>> dcg_column_files;
+    std::map<uint32_t, int64_t> rssid_to_segment_file_size;
     // 3. read from raw segment file and update file, and generate `.col` files one by one
     int idx = 0; // It is used for generate different .cols filename
     for (uint32_t col_index = 0; col_index < update_column_ids.size(); col_index += BATCH_HANDLE_COLUMN_CNT) {
@@ -794,6 +815,7 @@ Status RowsetColumnUpdateState::finalize(Tablet* tablet, Rowset* rowset, uint32_
             dcg_column_ids[each.first].push_back(selective_unique_update_column_ids);
             dcg_column_files[each.first].push_back(file_name(delta_column_group_writer->segment_path()));
             handle_cnt++;
+            rssid_to_segment_file_size[each.first] += segment_file_size;
         }
         idx++;
     }
@@ -801,7 +823,8 @@ Status RowsetColumnUpdateState::finalize(Tablet* tablet, Rowset* rowset, uint32_
     for (const auto& each : rss_upt_id_to_rowid_pairs) {
         _rssid_to_delta_column_group[each.first] = std::make_shared<DeltaColumnGroup>();
         _rssid_to_delta_column_group[each.first]->init(latest_applied_version.major_number() + 1,
-                                                       dcg_column_ids[each.first], dcg_column_files[each.first]);
+                                                       dcg_column_ids[each.first], dcg_column_files[each.first], {},
+                                                       rssid_to_segment_file_size[each.first]);
     }
     cost_str << " [generate delta column group] " << watch.elapsed_time();
     watch.reset();

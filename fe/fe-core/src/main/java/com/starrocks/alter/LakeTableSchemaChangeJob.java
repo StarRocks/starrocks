@@ -51,14 +51,12 @@ import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.MaterializedViewExceptions;
 import com.starrocks.common.Status;
-import com.starrocks.common.io.Text;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.common.util.concurrent.MarkedCountDownLatch;
 import com.starrocks.journal.JournalTask;
 import com.starrocks.lake.LakeTableHelper;
 import com.starrocks.lake.Utils;
 import com.starrocks.persist.EditLog;
-import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.proto.AggregatePublishVersionRequest;
 import com.starrocks.proto.TxnInfoPB;
 import com.starrocks.proto.TxnTypePB;
@@ -95,8 +93,6 @@ import io.opentelemetry.api.trace.StatusCode;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import java.io.DataOutput;
-import java.io.IOException;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Date;
@@ -843,8 +839,8 @@ public class LakeTableSchemaChangeJob extends LakeTableSchemaChangeJobBase {
                 }
 
                 if (!isFileBundling) {
-                    Utils.publishVersion(allOtherPartitionTablets, originTxnInfo, 1, commitVersion, computeResource,
-                            isFileBundling);
+                    Utils.publishVersion(allOtherPartitionTablets, originTxnInfo, commitVersion - 1, commitVersion, 
+                            computeResource, isFileBundling);
                 } else {
                     Utils.createSubRequestForAggregatePublish(allOtherPartitionTablets, Lists.newArrayList(originTxnInfo),
                             commitVersion - 1, commitVersion, null, computeResource, request);
@@ -1216,9 +1212,6 @@ public class LakeTableSchemaChangeJob extends LakeTableSchemaChangeJobBase {
         }
     }
 
-    @Override
-    public void write(DataOutput out) throws IOException {
-        String json = GsonUtils.GSON.toJson(this, AlterJobV2.class);
-        Text.writeString(out, json);
-    }
+
+
 }

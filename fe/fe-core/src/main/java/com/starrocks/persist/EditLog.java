@@ -54,10 +54,9 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Dictionary;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSearchDesc;
-import com.starrocks.catalog.MetaVersion;
 import com.starrocks.catalog.Resource;
+import com.starrocks.catalog.UserIdentity;
 import com.starrocks.common.Config;
-import com.starrocks.common.FeConstants;
 import com.starrocks.common.Pair;
 import com.starrocks.common.io.DataOutputBuffer;
 import com.starrocks.common.io.Text;
@@ -78,6 +77,7 @@ import com.starrocks.load.MultiDeleteInfo;
 import com.starrocks.load.loadv2.LoadJob.LoadJobStateUpdateInfo;
 import com.starrocks.load.loadv2.LoadJobFinalOperation;
 import com.starrocks.load.routineload.RoutineLoadJob;
+import com.starrocks.load.streamload.StreamLoadMultiStmtTask;
 import com.starrocks.load.streamload.StreamLoadTask;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.persist.gson.GsonUtils;
@@ -96,7 +96,6 @@ import com.starrocks.scheduler.persist.TaskRunStatusChange;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.LocalMetastore;
 import com.starrocks.server.WarehouseManager;
-import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.sql.spm.BaselinePlan;
 import com.starrocks.staros.StarMgrJournal;
 import com.starrocks.staros.StarMgrServer;
@@ -159,6 +158,11 @@ public class EditLog {
                     globalStateMgr.setNextId(id + 1);
                     break;
                 }
+                case OperationType.OP_SAVE_NEXTID_V2: {
+                    NextIdLog nextIdLog = (NextIdLog) journal.data();
+                    globalStateMgr.setNextId(nextIdLog.getId() + 1);
+                    break;
+                }
                 case OperationType.OP_SAVE_TRANSACTION_ID_V2: {
                     TransactionIdInfo idInfo = (TransactionIdInfo) journal.data();
                     GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().getTransactionIDGenerator()
@@ -196,6 +200,11 @@ public class EditLog {
                 case OperationType.OP_ERASE_DB: {
                     Text dbId = (Text) journal.data();
                     globalStateMgr.getLocalMetastore().replayEraseDatabase(Long.parseLong(dbId.toString()));
+                    break;
+                }
+                case OperationType.OP_ERASE_DB_V2: {
+                    EraseDbLog eraseDbLog = (EraseDbLog) journal.data();
+                    globalStateMgr.getLocalMetastore().replayEraseDatabase(eraseDbLog.getDbId());
                     break;
                 }
                 case OperationType.OP_RECOVER_DB_V2: {
@@ -303,6 +312,11 @@ public class EditLog {
                 case OperationType.OP_ERASE_PARTITION: {
                     Text partitionId = (Text) journal.data();
                     globalStateMgr.getLocalMetastore().replayErasePartition(Long.parseLong(partitionId.toString()));
+                    break;
+                }
+                case OperationType.OP_ERASE_PARTITION_V2: {
+                    ErasePartitionLog erasePartitionLog = (ErasePartitionLog) journal.data();
+                    globalStateMgr.getLocalMetastore().replayErasePartition(erasePartitionLog.getPartitionId());
                     break;
                 }
                 case OperationType.OP_RECOVER_TABLE_V2: {
@@ -421,7 +435,6 @@ public class EditLog {
                     deleteHandler.replayMultiDelete(info, globalStateMgr);
                     break;
                 }
-                case OperationType.OP_ADD_REPLICA:
                 case OperationType.OP_ADD_REPLICA_V2: {
                     ReplicaPersistInfo info = (ReplicaPersistInfo) journal.data();
                     globalStateMgr.getLocalMetastore().replayAddReplica(info);
@@ -507,15 +520,6 @@ public class EditLog {
                     globalStateMgr.setLeader(info);
                     break;
                 }
-                case OperationType.OP_META_VERSION_V2: {
-                    MetaVersion metaVersion = (MetaVersion) journal.data();
-                    if (!MetaVersion.isCompatible(metaVersion.getStarRocksVersion(), FeConstants.STARROCKS_META_VERSION)) {
-                        throw new JournalInconsistentException("Not compatible with meta version "
-                                + metaVersion.getStarRocksVersion()
-                                + ", current version is " + FeConstants.STARROCKS_META_VERSION);
-                    }
-                    break;
-                }
                 case OperationType.OP_ADD_BROKER_V2: {
                     final ModifyBrokerInfo param = (ModifyBrokerInfo) journal.data();
                     globalStateMgr.getBrokerMgr().replayAddBrokers(param.brokerName, param.brokerAddresses);
@@ -529,6 +533,11 @@ public class EditLog {
                 case OperationType.OP_DROP_ALL_BROKER: {
                     final String param = journal.data().toString();
                     globalStateMgr.getBrokerMgr().replayDropAllBroker(param);
+                    break;
+                }
+                case OperationType.OP_DROP_ALL_BROKER_V2: {
+                    DropBrokerLog dropBrokerLog = (DropBrokerLog) journal.data();
+                    globalStateMgr.getBrokerMgr().replayDropAllBroker(dropBrokerLog.getBrokerName());
                     break;
                 }
                 case OperationType.OP_UPSERT_TRANSACTION_STATE_V2: {
@@ -551,6 +560,11 @@ public class EditLog {
                 case OperationType.OP_DROP_REPOSITORY: {
                     String repoName = ((Text) journal.data()).toString();
                     globalStateMgr.getBackupHandler().getRepoMgr().removeRepo(repoName, true);
+                    break;
+                }
+                case OperationType.OP_DROP_REPOSITORY_V2: {
+                    DropRepositoryLog dropRepositoryLog = (DropRepositoryLog) journal.data();
+                    globalStateMgr.getBackupHandler().getRepoMgr().removeRepo(dropRepositoryLog.getRepositoryName(), true);
                     break;
                 }
                 case OperationType.OP_TRUNCATE_TABLE: {
@@ -623,6 +637,11 @@ public class EditLog {
                 }
                 case OperationType.OP_CREATE_STREAM_LOAD_TASK_V2: {
                     StreamLoadTask streamLoadTask = (StreamLoadTask) journal.data();
+                    globalStateMgr.getStreamLoadMgr().replayCreateLoadTask(streamLoadTask);
+                    break;
+                }
+                case OperationType.OP_CREATE_MULTI_STMT_STREAM_LOAD_TASK: {
+                    StreamLoadMultiStmtTask streamLoadTask = (StreamLoadMultiStmtTask) journal.data();
                     globalStateMgr.getStreamLoadMgr().replayCreateLoadTask(streamLoadTask);
                     break;
                 }
@@ -1289,6 +1308,15 @@ public class EditLog {
         applier.apply(writable);
     }
 
+    public void logJsonObject(short op, Object obj) {
+        logEdit(op, new Writable() {
+            @Override
+            public void write(DataOutput out) throws IOException {
+                Text.writeString(out, GsonUtils.GSON.toJson(obj));
+            }
+        });
+    }
+
     /**
      * submit log in queue and return immediately
      */
@@ -1321,7 +1349,7 @@ public class EditLog {
         JournalTask task = new JournalTask(startTimeNano, buffer, maxWaitIntervalMs);
 
         /*
-         * for historical reasons, logEdit is not allowed to raise Exception, which is really unreasonable to me.
+         * for historical reasons, logJsonObject is not allowed to raise Exception, which is really unreasonable to me.
          * This PR will continue to swallow exception and retry till the end of the world like before.
          * Hope some day we'll fix it.
          */
@@ -1380,7 +1408,7 @@ public class EditLog {
     }
 
     public void logSaveNextId(long nextId) {
-        logEdit(OperationType.OP_SAVE_NEXTID, new Text(Long.toString(nextId)));
+        logJsonObject(OperationType.OP_SAVE_NEXTID_V2, new NextIdLog(nextId));
     }
 
     public void logSaveTransactionId(long transactionId) {
@@ -1388,11 +1416,11 @@ public class EditLog {
     }
 
     public void logSaveAutoIncrementId(AutoIncrementInfo info) {
-        logEdit(OperationType.OP_SAVE_AUTO_INCREMENT_ID, info);
+        logJsonObject(OperationType.OP_SAVE_AUTO_INCREMENT_ID, info);
     }
 
     public void logSaveDeleteAutoIncrementId(AutoIncrementInfo info) {
-        logEdit(OperationType.OP_DELETE_AUTO_INCREMENT_ID, info);
+        logJsonObject(OperationType.OP_DELETE_AUTO_INCREMENT_ID, info);
     }
 
     public void logCreateDb(Database db, String storageVolumeId) {
@@ -1402,11 +1430,11 @@ public class EditLog {
     }
 
     public void logDropDb(DropDbInfo dropDbInfo) {
-        logEdit(OperationType.OP_DROP_DB, dropDbInfo);
+        logJsonObject(OperationType.OP_DROP_DB, dropDbInfo);
     }
 
     public void logEraseDb(long dbId) {
-        logEdit(OperationType.OP_ERASE_DB, new Text(Long.toString(dbId)));
+        logJsonObject(OperationType.OP_ERASE_DB_V2, new EraseDbLog(dbId));
     }
 
     public void logRecoverDb(RecoverInfo info) {
@@ -1422,55 +1450,55 @@ public class EditLog {
     }
 
     public void logResourceGroupOp(ResourceGroupOpEntry op) {
-        logEdit(OperationType.OP_RESOURCE_GROUP, op);
+        logJsonObject(OperationType.OP_RESOURCE_GROUP, op);
     }
 
     public void logCreateTask(Task info) {
-        logEdit(OperationType.OP_CREATE_TASK, info);
+        logJsonObject(OperationType.OP_CREATE_TASK, info);
     }
 
     public void logDropTasks(List<Long> taskIdList) {
-        logEdit(OperationType.OP_DROP_TASKS, new DropTasksLog(taskIdList));
+        logJsonObject(OperationType.OP_DROP_TASKS, new DropTasksLog(taskIdList));
     }
 
     public void logTaskRunCreateStatus(TaskRunStatus status) {
-        logEdit(OperationType.OP_CREATE_TASK_RUN, status);
+        logJsonObject(OperationType.OP_CREATE_TASK_RUN, status);
     }
 
     public void logUpdateTaskRun(TaskRunStatusChange statusChange) {
-        logEdit(OperationType.OP_UPDATE_TASK_RUN, statusChange);
+        logJsonObject(OperationType.OP_UPDATE_TASK_RUN, statusChange);
     }
 
     public void logArchiveTaskRuns(ArchiveTaskRunsLog log) {
-        logEdit(OperationType.OP_ARCHIVE_TASK_RUNS, log);
+        logJsonObject(OperationType.OP_ARCHIVE_TASK_RUNS, log);
     }
 
     public void logAlterRunningTaskRunProgress(TaskRunPeriodStatusChange info) {
-        logEdit(OperationType.OP_UPDATE_TASK_RUN_STATE, info);
+        logJsonObject(OperationType.OP_UPDATE_TASK_RUN_STATE, info);
     }
 
     public void logAddPartition(PartitionPersistInfoV2 info) {
-        logEdit(OperationType.OP_ADD_PARTITION_V2, info);
+        logJsonObject(OperationType.OP_ADD_PARTITION_V2, info);
     }
 
     public void logAddPartitions(AddPartitionsInfoV2 info) {
-        logEdit(OperationType.OP_ADD_PARTITIONS_V2, info);
+        logJsonObject(OperationType.OP_ADD_PARTITIONS_V2, info);
     }
 
     public void logAddSubPartitions(AddSubPartitionsInfoV2 info) {
-        logEdit(OperationType.OP_ADD_SUB_PARTITIONS_V2, info);
+        logJsonObject(OperationType.OP_ADD_SUB_PARTITIONS_V2, info);
     }
 
     public void logDropPartition(DropPartitionInfo info) {
-        logEdit(OperationType.OP_DROP_PARTITION, info);
+        logJsonObject(OperationType.OP_DROP_PARTITION, info);
     }
 
     public void logDropPartitions(DropPartitionsInfo info) {
-        logEdit(OperationType.OP_DROP_PARTITIONS, info);
+        logJsonObject(OperationType.OP_DROP_PARTITIONS, info);
     }
 
     public void logErasePartition(long partitionId) {
-        logEdit(OperationType.OP_ERASE_PARTITION, new Text(Long.toString(partitionId)));
+        logJsonObject(OperationType.OP_ERASE_PARTITION_V2, new ErasePartitionLog(partitionId));
     }
 
     public void logRecoverPartition(RecoverInfo info) {
@@ -1482,7 +1510,7 @@ public class EditLog {
     }
 
     public void logBatchModifyPartition(BatchModifyPartitionsInfo info) {
-        logEdit(OperationType.OP_BATCH_MODIFY_PARTITION, info);
+        logJsonObject(OperationType.OP_BATCH_MODIFY_PARTITION, info);
     }
 
     public void logDropTable(DropInfo info) {
@@ -1490,15 +1518,15 @@ public class EditLog {
     }
 
     public void logDisablePartitionRecovery(long partitionId) {
-        logEdit(OperationType.OP_DISABLE_PARTITION_RECOVERY, new DisablePartitionRecoveryInfo(partitionId));
+        logJsonObject(OperationType.OP_DISABLE_PARTITION_RECOVERY, new DisablePartitionRecoveryInfo(partitionId));
     }
 
     public void logDisableTableRecovery(List<Long> tableIds) {
-        logEdit(OperationType.OP_DISABLE_TABLE_RECOVERY, new DisableTableRecoveryInfo(tableIds));
+        logJsonObject(OperationType.OP_DISABLE_TABLE_RECOVERY, new DisableTableRecoveryInfo(tableIds));
     }
 
     public void logEraseMultiTables(List<Long> tableIds) {
-        logEdit(OperationType.OP_ERASE_MULTI_TABLES, new MultiEraseTableInfo(tableIds));
+        logJsonObject(OperationType.OP_ERASE_MULTI_TABLES, new MultiEraseTableInfo(tableIds));
     }
 
     public void logRecoverTable(RecoverInfo info) {
@@ -1510,19 +1538,20 @@ public class EditLog {
     }
 
     public void logBatchDropRollup(BatchDropInfo batchDropInfo) {
-        logEdit(OperationType.OP_BATCH_DROP_ROLLUP, batchDropInfo);
+        logJsonObject(OperationType.OP_BATCH_DROP_ROLLUP, batchDropInfo);
     }
 
-    public void logFinishConsistencyCheck(ConsistencyCheckInfo info) {
-        logJsonObject(OperationType.OP_FINISH_CONSISTENCY_CHECK_V2, info);
-    }
-
-    public JournalTask logFinishConsistencyCheckNoWait(ConsistencyCheckInfo info) {
-        return submitLog(OperationType.OP_FINISH_CONSISTENCY_CHECK, info, -1);
+    public JournalTask logFinishConsistencyCheck(ConsistencyCheckInfo info) {
+        return submitLog(OperationType.OP_FINISH_CONSISTENCY_CHECK_V2, new Writable() {
+            @Override
+            public void write(DataOutput out) throws IOException {
+                Text.writeString(out, GsonUtils.GSON.toJson(info));
+            }
+        }, -1);
     }
 
     public void logAddComputeNode(ComputeNode computeNode) {
-        logEdit(OperationType.OP_ADD_COMPUTE_NODE, computeNode);
+        logJsonObject(OperationType.OP_ADD_COMPUTE_NODE, computeNode);
     }
 
     public void logAddBackend(Backend be) {
@@ -1530,7 +1559,7 @@ public class EditLog {
     }
 
     public void logDropComputeNode(DropComputeNodeLog log) {
-        logEdit(OperationType.OP_DROP_COMPUTE_NODE, log);
+        logJsonObject(OperationType.OP_DROP_COMPUTE_NODE, log);
     }
 
     public void logDropBackend(Backend be) {
@@ -1538,7 +1567,7 @@ public class EditLog {
     }
 
     public void logUpdateHistoricalNode(UpdateHistoricalNodeLog log) {
-        logEdit(OperationType.OP_UPDATE_HISTORICAL_NODE, log);
+        logJsonObject(OperationType.OP_UPDATE_HISTORICAL_NODE, log);
     }
 
     public void logAddFrontend(Frontend fe) {
@@ -1558,7 +1587,7 @@ public class EditLog {
     }
 
     public void logFinishMultiDelete(MultiDeleteInfo info) {
-        logEdit(OperationType.OP_FINISH_MULTI_DELETE, info);
+        logJsonObject(OperationType.OP_FINISH_MULTI_DELETE, info);
     }
 
     public void logAddReplica(ReplicaPersistInfo info) {
@@ -1574,7 +1603,7 @@ public class EditLog {
     }
 
     public void logBatchDeleteReplica(BatchDeleteReplicaInfo info) {
-        logEdit(OperationType.OP_BATCH_DELETE_REPLICA, info);
+        logJsonObject(OperationType.OP_BATCH_DELETE_REPLICA, info);
     }
 
     public void logAddKey(EncryptionKeyPB key) {
@@ -1590,11 +1619,7 @@ public class EditLog {
     }
 
     public void logResetFrontends(Frontend frontend) {
-        logEdit(OperationType.OP_RESET_FRONTENDS, frontend);
-    }
-
-    public void logMetaVersion(MetaVersion metaVersion) {
-        logEdit(OperationType.OP_META_VERSION_V2, metaVersion);
+        logJsonObject(OperationType.OP_RESET_FRONTENDS, frontend);
     }
 
     public void logBackendStateChange(Backend be) {
@@ -1610,7 +1635,7 @@ public class EditLog {
     }
 
     public void logModifyViewDef(AlterViewInfo alterViewInfo) {
-        logEdit(OperationType.OP_MODIFY_VIEW_DEF, alterViewInfo);
+        logJsonObject(OperationType.OP_MODIFY_VIEW_DEF, alterViewInfo);
     }
 
     public void logRollupRename(TableInfo tableInfo) {
@@ -1630,7 +1655,7 @@ public class EditLog {
     }
 
     public void logDropAllBroker(String brokerName) {
-        logEdit(OperationType.OP_DROP_ALL_BROKER, new Text(brokerName));
+        logJsonObject(OperationType.OP_DROP_ALL_BROKER_V2, new DropBrokerLog(brokerName));
     }
 
     public void logExportCreate(ExportJob job) {
@@ -1663,7 +1688,7 @@ public class EditLog {
     }
 
     public void logDropRepository(String repoName) {
-        logEdit(OperationType.OP_DROP_REPOSITORY, new Text(repoName));
+        logJsonObject(OperationType.OP_DROP_REPOSITORY_V2, new DropRepositoryLog(repoName));
     }
 
     public void logRestoreJob(RestoreJob job) {
@@ -1671,7 +1696,7 @@ public class EditLog {
     }
 
     public void logTruncateTable(TruncateTableInfo info) {
-        logEdit(OperationType.OP_TRUNCATE_TABLE, info);
+        logJsonObject(OperationType.OP_TRUNCATE_TABLE, info);
     }
 
     public void logColocateAddTable(ColocatePersistInfo info) {
@@ -1695,7 +1720,7 @@ public class EditLog {
     }
 
     public void logHeartbeat(HbPackage hbPackage) {
-        logEdit(OperationType.OP_HEARTBEAT_V2, hbPackage);
+        logJsonObject(OperationType.OP_HEARTBEAT_V2, hbPackage);
     }
 
     public void logAddFunction(Function function) {
@@ -1707,11 +1732,11 @@ public class EditLog {
     }
 
     public void logSetHasForbiddenGlobalDict(ModifyTablePropertyOperationLog info) {
-        logEdit(OperationType.OP_SET_FORBIDDEN_GLOBAL_DICT, info);
+        logJsonObject(OperationType.OP_SET_FORBIDDEN_GLOBAL_DICT, info);
     }
 
     public void logSetHasDelete(ModifyTablePropertyOperationLog info) {
-        logEdit(OperationType.OP_SET_HAS_DELETE, info);
+        logJsonObject(OperationType.OP_SET_HAS_DELETE, info);
     }
 
     public void logBackendTabletsInfo(BackendTabletsInfo backendTabletsInfo) {
@@ -1730,6 +1755,10 @@ public class EditLog {
         logJsonObject(OperationType.OP_CREATE_STREAM_LOAD_TASK_V2, streamLoadTask);
     }
 
+    public void logCreateMultiStmtStreamLoadJob(StreamLoadMultiStmtTask streamLoadTask) {
+        logJsonObject(OperationType.OP_CREATE_MULTI_STMT_STREAM_LOAD_TASK, streamLoadTask);
+    }
+
     public void logCreateLoadJob(com.starrocks.load.loadv2.LoadJob loadJob) {
         logJsonObject(OperationType.OP_CREATE_LOAD_JOB_V2, loadJob);
     }
@@ -1739,15 +1768,15 @@ public class EditLog {
     }
 
     public void logUpdateLoadJob(LoadJobStateUpdateInfo info) {
-        logEdit(OperationType.OP_UPDATE_LOAD_JOB, info);
+        logJsonObject(OperationType.OP_UPDATE_LOAD_JOB, info);
     }
 
     public void logCreateResource(Resource resource) {
-        logEdit(OperationType.OP_CREATE_RESOURCE, resource);
+        logJsonObject(OperationType.OP_CREATE_RESOURCE, resource);
     }
 
     public void logDropResource(DropResourceOperationLog operationLog) {
-        logEdit(OperationType.OP_DROP_RESOURCE, operationLog);
+        logJsonObject(OperationType.OP_DROP_RESOURCE, operationLog);
     }
 
     public void logCreateSmallFile(SmallFile info) {
@@ -1759,11 +1788,16 @@ public class EditLog {
     }
 
     public void logAlterJob(AlterJobV2 alterJob) {
-        logEdit(OperationType.OP_ALTER_JOB_V2, alterJob);
+        logJsonObject(OperationType.OP_ALTER_JOB_V2, alterJob);
     }
 
     public JournalTask logAlterJobNoWait(AlterJobV2 alterJob) {
-        return submitLog(OperationType.OP_ALTER_JOB_V2, alterJob, -1);
+        return submitLog(OperationType.OP_ALTER_JOB_V2, new Writable() {
+            @Override
+            public void write(DataOutput out) throws IOException {
+                Text.writeString(out, GsonUtils.GSON.toJson(alterJob));
+            }
+        }, -1);
     }
 
     public void logBatchAlterJob(BatchAlterJobPersistInfo batchAlterJobV2) {
@@ -1775,79 +1809,79 @@ public class EditLog {
     }
 
     public void logDynamicPartition(ModifyTablePropertyOperationLog info) {
-        logEdit(OperationType.OP_DYNAMIC_PARTITION, info);
+        logJsonObject(OperationType.OP_DYNAMIC_PARTITION, info);
     }
 
     public void logModifyReplicationNum(ModifyTablePropertyOperationLog info) {
-        logEdit(OperationType.OP_MODIFY_REPLICATION_NUM, info);
+        logJsonObject(OperationType.OP_MODIFY_REPLICATION_NUM, info);
     }
 
     public void logModifyInMemory(ModifyTablePropertyOperationLog info) {
-        logEdit(OperationType.OP_MODIFY_IN_MEMORY, info);
+        logJsonObject(OperationType.OP_MODIFY_IN_MEMORY, info);
     }
 
     public void logModifyConstraint(ModifyTablePropertyOperationLog info) {
-        logEdit(OperationType.OP_MODIFY_TABLE_CONSTRAINT_PROPERTY, info);
+        logJsonObject(OperationType.OP_MODIFY_TABLE_CONSTRAINT_PROPERTY, info);
     }
 
     public void logModifyEnablePersistentIndex(ModifyTablePropertyOperationLog info) {
-        logEdit(OperationType.OP_MODIFY_ENABLE_PERSISTENT_INDEX, info);
+        logJsonObject(OperationType.OP_MODIFY_ENABLE_PERSISTENT_INDEX, info);
     }
 
     public void logModifyPrimaryIndexCacheExpireSec(ModifyTablePropertyOperationLog info) {
-        logEdit(OperationType.OP_MODIFY_PRIMARY_INDEX_CACHE_EXPIRE_SEC, info);
+        logJsonObject(OperationType.OP_MODIFY_PRIMARY_INDEX_CACHE_EXPIRE_SEC, info);
     }
 
     public void logModifyWriteQuorum(ModifyTablePropertyOperationLog info) {
-        logEdit(OperationType.OP_MODIFY_WRITE_QUORUM, info);
+        logJsonObject(OperationType.OP_MODIFY_WRITE_QUORUM, info);
     }
 
     public void logModifyReplicatedStorage(ModifyTablePropertyOperationLog info) {
-        logEdit(OperationType.OP_MODIFY_REPLICATED_STORAGE, info);
+        logJsonObject(OperationType.OP_MODIFY_REPLICATED_STORAGE, info);
     }
 
     public void logModifyBucketSize(ModifyTablePropertyOperationLog info) {
-        logEdit(OperationType.OP_MODIFY_BUCKET_SIZE, info);
+        logJsonObject(OperationType.OP_MODIFY_BUCKET_SIZE, info);
     }
 
     public void logModifyMutableBucketNum(ModifyTablePropertyOperationLog info) {
-        logEdit(OperationType.OP_MODIFY_MUTABLE_BUCKET_NUM, info);
+        logJsonObject(OperationType.OP_MODIFY_MUTABLE_BUCKET_NUM, info);
     }
 
     public void logModifyEnableLoadProfile(ModifyTablePropertyOperationLog info) {
-        logEdit(OperationType.OP_MODIFY_ENABLE_LOAD_PROFILE, info);
+        logJsonObject(OperationType.OP_MODIFY_ENABLE_LOAD_PROFILE, info);
     }
 
     public void logModifyBaseCompactionForbiddenTimeRanges(ModifyTablePropertyOperationLog info) {
-        logEdit(OperationType.OP_MODIFY_BASE_COMPACTION_FORBIDDEN_TIME_RANGES, info);
+        logJsonObject(OperationType.OP_MODIFY_BASE_COMPACTION_FORBIDDEN_TIME_RANGES, info);
     }
 
     public void logReplaceTempPartition(ReplacePartitionOperationLog info) {
-        logEdit(OperationType.OP_REPLACE_TEMP_PARTITION, info);
+        logJsonObject(OperationType.OP_REPLACE_TEMP_PARTITION, info);
     }
 
     public void logInstallPlugin(PluginInfo plugin) {
-        logEdit(OperationType.OP_INSTALL_PLUGIN, plugin);
+        logJsonObject(OperationType.OP_INSTALL_PLUGIN, plugin);
     }
 
     public void logUninstallPlugin(PluginInfo plugin) {
-        logEdit(OperationType.OP_UNINSTALL_PLUGIN, plugin);
+        logJsonObject(OperationType.OP_UNINSTALL_PLUGIN, plugin);
     }
 
     public void logSetReplicaStatus(SetReplicaStatusOperationLog log) {
-        logEdit(OperationType.OP_SET_REPLICA_STATUS, log);
+        logJsonObject(OperationType.OP_SET_REPLICA_STATUS, log);
     }
 
     public void logRemoveExpiredAlterJobV2(RemoveAlterJobV2OperationLog log) {
-        logEdit(OperationType.OP_REMOVE_ALTER_JOB_V2, log);
+        logJsonObject(OperationType.OP_REMOVE_ALTER_JOB_V2, log);
     }
 
     public void logAlterRoutineLoadJob(AlterRoutineLoadJobOperationLog log) {
-        logEdit(OperationType.OP_ALTER_ROUTINE_LOAD_JOB, log);
+        logJsonObject(OperationType.OP_ALTER_ROUTINE_LOAD_JOB, log);
     }
 
     public void logAlterLoadJob(AlterLoadJobOperationLog log) {
-        logEdit(OperationType.OP_ALTER_LOAD_JOB, log);
+        logJsonObject(OperationType.OP_ALTER_LOAD_JOB, log);
     }
 
     public void logGlobalVariableV2(GlobalVarPersistInfo info) {
@@ -1855,137 +1889,136 @@ public class EditLog {
     }
 
     public void logSwapTable(SwapTableOperationLog log) {
-        logEdit(OperationType.OP_SWAP_TABLE, log);
+        logJsonObject(OperationType.OP_SWAP_TABLE, log);
     }
 
     public void logAddAnalyzeJob(AnalyzeJob job) {
         if (job.isNative()) {
-            logEdit(OperationType.OP_ADD_ANALYZER_JOB, (NativeAnalyzeJob) job);
+            logJsonObject(OperationType.OP_ADD_ANALYZER_JOB, (NativeAnalyzeJob) job);
         } else {
-            logEdit(OperationType.OP_ADD_EXTERNAL_ANALYZER_JOB, (ExternalAnalyzeJob) job);
+            logJsonObject(OperationType.OP_ADD_EXTERNAL_ANALYZER_JOB, (ExternalAnalyzeJob) job);
         }
     }
 
     public void logRemoveAnalyzeJob(AnalyzeJob job) {
         if (job.isNative()) {
-            logEdit(OperationType.OP_REMOVE_ANALYZER_JOB, (NativeAnalyzeJob) job);
+            logJsonObject(OperationType.OP_REMOVE_ANALYZER_JOB, (NativeAnalyzeJob) job);
         } else {
-            logEdit(OperationType.OP_REMOVE_EXTERNAL_ANALYZER_JOB, (ExternalAnalyzeJob) job);
+            logJsonObject(OperationType.OP_REMOVE_EXTERNAL_ANALYZER_JOB, (ExternalAnalyzeJob) job);
         }
     }
 
     public void logAddAnalyzeStatus(AnalyzeStatus status) {
         if (status.isNative()) {
-            logEdit(OperationType.OP_ADD_ANALYZE_STATUS, (NativeAnalyzeStatus) status);
+            logJsonObject(OperationType.OP_ADD_ANALYZE_STATUS, (NativeAnalyzeStatus) status);
         } else {
-            logEdit(OperationType.OP_ADD_EXTERNAL_ANALYZE_STATUS, (ExternalAnalyzeStatus) status);
+            logJsonObject(OperationType.OP_ADD_EXTERNAL_ANALYZE_STATUS, (ExternalAnalyzeStatus) status);
         }
     }
 
     public void logRemoveAnalyzeStatus(AnalyzeStatus status) {
         if (status.isNative()) {
-            logEdit(OperationType.OP_REMOVE_ANALYZE_STATUS, (NativeAnalyzeStatus) status);
+            logJsonObject(OperationType.OP_REMOVE_ANALYZE_STATUS, (NativeAnalyzeStatus) status);
         } else {
-            logEdit(OperationType.OP_REMOVE_EXTERNAL_ANALYZE_STATUS, (ExternalAnalyzeStatus) status);
+            logJsonObject(OperationType.OP_REMOVE_EXTERNAL_ANALYZE_STATUS, (ExternalAnalyzeStatus) status);
         }
     }
 
     public void logAddBasicStatsMeta(BasicStatsMeta meta) {
-        logEdit(OperationType.OP_ADD_BASIC_STATS_META, meta);
+        logJsonObject(OperationType.OP_ADD_BASIC_STATS_META, meta);
     }
 
     public void logRemoveBasicStatsMeta(BasicStatsMeta meta) {
-        logEdit(OperationType.OP_REMOVE_BASIC_STATS_META, meta);
+        logJsonObject(OperationType.OP_REMOVE_BASIC_STATS_META, meta);
     }
 
     public void logAddHistogramStatsMeta(HistogramStatsMeta meta) {
-        logEdit(OperationType.OP_ADD_HISTOGRAM_STATS_META, meta);
+        logJsonObject(OperationType.OP_ADD_HISTOGRAM_STATS_META, meta);
     }
 
     public void logRemoveHistogramStatsMeta(HistogramStatsMeta meta) {
-        logEdit(OperationType.OP_REMOVE_HISTOGRAM_STATS_META, meta);
+        logJsonObject(OperationType.OP_REMOVE_HISTOGRAM_STATS_META, meta);
     }
 
     public void logAddMultiColumnStatsMeta(MultiColumnStatsMeta meta) {
-        logEdit(OperationType.OP_ADD_MULTI_COLUMN_STATS_META, meta);
+        logJsonObject(OperationType.OP_ADD_MULTI_COLUMN_STATS_META, meta);
     }
 
     public void logRemoveMultiColumnStatsMeta(MultiColumnStatsMeta meta) {
-        logEdit(OperationType.OP_REMOVE_MULTI_COLUMN_STATS_META, meta);
+        logJsonObject(OperationType.OP_REMOVE_MULTI_COLUMN_STATS_META, meta);
     }
 
     public void logAddExternalBasicStatsMeta(ExternalBasicStatsMeta meta) {
-        logEdit(OperationType.OP_ADD_EXTERNAL_BASIC_STATS_META, meta);
+        logJsonObject(OperationType.OP_ADD_EXTERNAL_BASIC_STATS_META, meta);
     }
 
     public void logRemoveExternalBasicStatsMeta(ExternalBasicStatsMeta meta) {
-        logEdit(OperationType.OP_REMOVE_EXTERNAL_BASIC_STATS_META, meta);
+        logJsonObject(OperationType.OP_REMOVE_EXTERNAL_BASIC_STATS_META, meta);
     }
 
     public void logAddExternalHistogramStatsMeta(ExternalHistogramStatsMeta meta) {
-        logEdit(OperationType.OP_ADD_EXTERNAL_HISTOGRAM_STATS_META, meta);
+        logJsonObject(OperationType.OP_ADD_EXTERNAL_HISTOGRAM_STATS_META, meta);
     }
 
     public void logRemoveExternalHistogramStatsMeta(ExternalHistogramStatsMeta meta) {
-        logEdit(OperationType.OP_REMOVE_EXTERNAL_HISTOGRAM_STATS_META, meta);
+        logJsonObject(OperationType.OP_REMOVE_EXTERNAL_HISTOGRAM_STATS_META, meta);
     }
 
     public void logModifyTableColumn(ModifyTableColumnOperationLog log) {
-        logEdit(OperationType.OP_MODIFY_HIVE_TABLE_COLUMN, log);
+        logJsonObject(OperationType.OP_MODIFY_HIVE_TABLE_COLUMN, log);
     }
 
     public void logModifyColumnComment(ModifyColumnCommentLog log) {
-        logEdit(OperationType.OP_MODIFY_COLUMN_COMMENT, log);
+        logJsonObject(OperationType.OP_MODIFY_COLUMN_COMMENT, log);
     }
 
     public void logCreateCatalog(Catalog log) {
-        logEdit(OperationType.OP_CREATE_CATALOG, log);
+        logJsonObject(OperationType.OP_CREATE_CATALOG, log);
     }
 
     public void logDropCatalog(DropCatalogLog log) {
-        logEdit(OperationType.OP_DROP_CATALOG, log);
+        logJsonObject(OperationType.OP_DROP_CATALOG, log);
     }
 
     public void logAlterCatalog(AlterCatalogLog log) {
-        logEdit(OperationType.OP_ALTER_CATALOG, log);
+        logJsonObject(OperationType.OP_ALTER_CATALOG, log);
     }
 
     public void logCreateInsertOverwrite(CreateInsertOverwriteJobLog info) {
-        logEdit(OperationType.OP_CREATE_INSERT_OVERWRITE, info);
+        logJsonObject(OperationType.OP_CREATE_INSERT_OVERWRITE, info);
     }
 
     public void logInsertOverwriteStateChange(InsertOverwriteStateChangeInfo info) {
-        logEdit(OperationType.OP_INSERT_OVERWRITE_STATE_CHANGE, info);
+        logJsonObject(OperationType.OP_INSERT_OVERWRITE_STATE_CHANGE, info);
     }
 
     public void logAlterMvStatus(AlterMaterializedViewStatusLog log) {
-        logEdit(OperationType.OP_ALTER_MATERIALIZED_VIEW_STATUS, log);
+        logJsonObject(OperationType.OP_ALTER_MATERIALIZED_VIEW_STATUS, log);
     }
 
     public void logAlterMvBaseTableInfos(AlterMaterializedViewBaseTableInfosLog log) {
-        logEdit(OperationType.OP_ALTER_MATERIALIZED_VIEW_BASE_TABLE_INFOS, log);
+        logJsonObject(OperationType.OP_ALTER_MATERIALIZED_VIEW_BASE_TABLE_INFOS, log);
     }
 
     public void logMvRename(RenameMaterializedViewLog log) {
-        logEdit(OperationType.OP_RENAME_MATERIALIZED_VIEW, log);
+        logJsonObject(OperationType.OP_RENAME_MATERIALIZED_VIEW, log);
     }
 
     public void logMvChangeRefreshScheme(ChangeMaterializedViewRefreshSchemeLog log) {
-        logEdit(OperationType.OP_CHANGE_MATERIALIZED_VIEW_REFRESH_SCHEME, log);
+        logJsonObject(OperationType.OP_CHANGE_MATERIALIZED_VIEW_REFRESH_SCHEME, log);
     }
 
     public void logAlterMaterializedViewProperties(ModifyTablePropertyOperationLog log) {
-        logEdit(OperationType.OP_ALTER_MATERIALIZED_VIEW_PROPERTIES, log);
+        logJsonObject(OperationType.OP_ALTER_MATERIALIZED_VIEW_PROPERTIES, log);
     }
 
     public void logAddSQLBlackList(SqlBlackListPersistInfo addBlackList) {
-        logEdit(OperationType.OP_ADD_SQL_QUERY_BLACK_LIST, addBlackList);
+        logJsonObject(OperationType.OP_ADD_SQL_QUERY_BLACK_LIST, addBlackList);
     }
 
     public void logDeleteSQLBlackList(DeleteSqlBlackLists deleteBlacklists) {
-        logEdit(OperationType.OP_DELETE_SQL_QUERY_BLACK_LIST, deleteBlacklists);
+        logJsonObject(OperationType.OP_DELETE_SQL_QUERY_BLACK_LIST, deleteBlacklists);
     }
-
 
     public void logStarMgrOperation(StarMgrJournal journal) {
         logEdit(OperationType.OP_STARMGR, journal);
@@ -2004,13 +2037,13 @@ public class EditLog {
             short pluginVersion) {
         CreateUserInfo info = new CreateUserInfo(
                 userIdentity, authenticationInfo, userProperty, privilegeCollection, pluginId, pluginVersion);
-        logEdit(OperationType.OP_CREATE_USER_V2, info);
+        logJsonObject(OperationType.OP_CREATE_USER_V2, info);
     }
 
     public void logAlterUser(UserIdentity userIdentity, UserAuthenticationInfo authenticationInfo,
                              Map<String, String> properties) {
         AlterUserInfo info = new AlterUserInfo(userIdentity, authenticationInfo, properties);
-        logEdit(OperationType.OP_ALTER_USER_V2, info);
+        logJsonObject(OperationType.OP_ALTER_USER_V2, info);
     }
 
     public void logUpdateUserPropertyV2(UserPropertyInfo propertyInfo) {
@@ -2028,7 +2061,7 @@ public class EditLog {
             short pluginVersion) {
         UserPrivilegeCollectionInfo info = new UserPrivilegeCollectionInfo(
                 userIdentity, privilegeCollection, pluginId, pluginVersion);
-        logEdit(OperationType.OP_UPDATE_USER_PRIVILEGE_V2, info);
+        logJsonObject(OperationType.OP_UPDATE_USER_PRIVILEGE_V2, info);
     }
 
     public void logUpdateRolePrivilege(
@@ -2040,7 +2073,7 @@ public class EditLog {
     }
 
     public void logUpdateRolePrivilege(RolePrivilegeCollectionInfo info) {
-        logEdit(OperationType.OP_UPDATE_ROLE_PRIVILEGE_V2, info);
+        logJsonObject(OperationType.OP_UPDATE_ROLE_PRIVILEGE_V2, info);
     }
 
     public void logDropRole(
@@ -2048,97 +2081,88 @@ public class EditLog {
             short pluginId,
             short pluginVersion) {
         RolePrivilegeCollectionInfo info = new RolePrivilegeCollectionInfo(rolePrivCollectionModified, pluginId, pluginVersion);
-        logEdit(OperationType.OP_DROP_ROLE_V2, info);
+        logJsonObject(OperationType.OP_DROP_ROLE_V2, info);
     }
 
     public void logCreateSecurityIntegration(String name, Map<String, String> propertyMap) {
         SecurityIntegrationPersistInfo info = new SecurityIntegrationPersistInfo(name, propertyMap);
-        logEdit(OperationType.OP_CREATE_SECURITY_INTEGRATION, info);
+        logJsonObject(OperationType.OP_CREATE_SECURITY_INTEGRATION, info);
     }
 
     public void logAlterSecurityIntegration(String name, Map<String, String> alterProps) {
         SecurityIntegrationPersistInfo info = new SecurityIntegrationPersistInfo(name, alterProps);
-        logEdit(OperationType.OP_ALTER_SECURITY_INTEGRATION, info);
+        logJsonObject(OperationType.OP_ALTER_SECURITY_INTEGRATION, info);
     }
 
     public void logDropSecurityIntegration(String name) {
         SecurityIntegrationPersistInfo info = new SecurityIntegrationPersistInfo(name, null);
-        logEdit(OperationType.OP_DROP_SECURITY_INTEGRATION, info);
+        logJsonObject(OperationType.OP_DROP_SECURITY_INTEGRATION, info);
     }
 
     public void logModifyBinlogConfig(ModifyTablePropertyOperationLog log) {
-        logEdit(OperationType.OP_MODIFY_BINLOG_CONFIG, log);
+        logJsonObject(OperationType.OP_MODIFY_BINLOG_CONFIG, log);
     }
 
     public void logModifyFlatJsonConfig(ModifyTablePropertyOperationLog log) {
-        logEdit(OperationType.OP_MODIFY_FLAT_JSON_CONFIG, log);
+        logJsonObject(OperationType.OP_MODIFY_FLAT_JSON_CONFIG, log);
     }
 
     public void logModifyBinlogAvailableVersion(ModifyTablePropertyOperationLog log) {
-        logEdit(OperationType.OP_MODIFY_BINLOG_AVAILABLE_VERSION, log);
+        logJsonObject(OperationType.OP_MODIFY_BINLOG_AVAILABLE_VERSION, log);
     }
 
     public void logMVJobState(MVMaintenanceJob job) {
-        logEdit(OperationType.OP_MV_JOB_STATE, job);
+        logJsonObject(OperationType.OP_MV_JOB_STATE, job);
     }
 
     public void logMVEpochChange(MVEpoch epoch) {
-        logEdit(OperationType.OP_MV_EPOCH_UPDATE, epoch);
+        logJsonObject(OperationType.OP_MV_EPOCH_UPDATE, epoch);
     }
 
     public void logAlterTableProperties(ModifyTablePropertyOperationLog info) {
-        logEdit(OperationType.OP_ALTER_TABLE_PROPERTIES, info);
+        logJsonObject(OperationType.OP_ALTER_TABLE_PROPERTIES, info);
     }
 
     public void logPipeOp(PipeOpEntry opEntry) {
-        logEdit(OperationType.OP_PIPE, opEntry);
-    }
-
-    public void logJsonObject(short op, Object obj) {
-        logEdit(op, new Writable() {
-            @Override
-            public void write(DataOutput out) throws IOException {
-                Text.writeString(out, GsonUtils.GSON.toJson(obj));
-            }
-        });
+        logJsonObject(OperationType.OP_PIPE, opEntry);
     }
 
     public void logModifyTableAddOrDrop(TableAddOrDropColumnsInfo info) {
-        logEdit(OperationType.OP_MODIFY_TABLE_ADD_OR_DROP_COLUMNS, info);
+        logJsonObject(OperationType.OP_MODIFY_TABLE_ADD_OR_DROP_COLUMNS, info);
     }
 
     public void logAlterTask(Task changedTask) {
-        logEdit(OperationType.OP_ALTER_TASK, changedTask);
+        logJsonObject(OperationType.OP_ALTER_TASK, changedTask);
     }
 
     public void logSetDefaultStorageVolume(SetDefaultStorageVolumeLog log) {
-        logEdit(OperationType.OP_SET_DEFAULT_STORAGE_VOLUME, log);
+        logJsonObject(OperationType.OP_SET_DEFAULT_STORAGE_VOLUME, log);
     }
 
     public void logCreateStorageVolume(StorageVolume storageVolume) {
-        logEdit(OperationType.OP_CREATE_STORAGE_VOLUME, storageVolume);
+        logJsonObject(OperationType.OP_CREATE_STORAGE_VOLUME, storageVolume);
     }
 
     public void logUpdateStorageVolume(StorageVolume storageVolume) {
-        logEdit(OperationType.OP_UPDATE_STORAGE_VOLUME, storageVolume);
+        logJsonObject(OperationType.OP_UPDATE_STORAGE_VOLUME, storageVolume);
     }
 
     public void logDropStorageVolume(DropStorageVolumeLog log) {
-        logEdit(OperationType.OP_DROP_STORAGE_VOLUME, log);
+        logJsonObject(OperationType.OP_DROP_STORAGE_VOLUME, log);
     }
 
     public void logUpdateTableStorageInfos(TableStorageInfos tableStorageInfos) {
-        logEdit(OperationType.OP_UPDATE_TABLE_STORAGE_INFOS, tableStorageInfos);
+        logJsonObject(OperationType.OP_UPDATE_TABLE_STORAGE_INFOS, tableStorageInfos);
     }
 
     public void logReplicationJob(ReplicationJob replicationJob) {
         ReplicationJobLog replicationJobLog = new ReplicationJobLog(replicationJob);
-        logEdit(OperationType.OP_REPLICATION_JOB, replicationJobLog);
+        logJsonObject(OperationType.OP_REPLICATION_JOB, replicationJobLog);
     }
 
     public void logDeleteReplicationJob(ReplicationJob replicationJob) {
         ReplicationJobLog replicationJobLog = new ReplicationJobLog(replicationJob);
-        logEdit(OperationType.OP_DELETE_REPLICATION_JOB, replicationJobLog);
+        logJsonObject(OperationType.OP_DELETE_REPLICATION_JOB, replicationJobLog);
     }
 
     public void logColumnRename(ColumnRenameInfo columnRenameInfo) {
@@ -2146,58 +2170,58 @@ public class EditLog {
     }
 
     public void logCreateDictionary(Dictionary info) {
-        logEdit(OperationType.OP_CREATE_DICTIONARY, info);
+        logJsonObject(OperationType.OP_CREATE_DICTIONARY, info);
     }
 
     public void logDropDictionary(DropDictionaryInfo info) {
-        logEdit(OperationType.OP_DROP_DICTIONARY, info);
+        logJsonObject(OperationType.OP_DROP_DICTIONARY, info);
     }
 
     public void logModifyDictionaryMgr(DictionaryMgrInfo info) {
-        logEdit(OperationType.OP_MODIFY_DICTIONARY_MGR, info);
+        logJsonObject(OperationType.OP_MODIFY_DICTIONARY_MGR, info);
     }
 
     public void logDecommissionDisk(DecommissionDiskInfo info) {
-        logEdit(OperationType.OP_DECOMMISSION_DISK, info);
+        logJsonObject(OperationType.OP_DECOMMISSION_DISK, info);
     }
 
     public void logCancelDecommissionDisk(CancelDecommissionDiskInfo info) {
-        logEdit(OperationType.OP_CANCEL_DECOMMISSION_DISK, info);
+        logJsonObject(OperationType.OP_CANCEL_DECOMMISSION_DISK, info);
     }
 
     public void logDisableDisk(DisableDiskInfo info) {
-        logEdit(OperationType.OP_DISABLE_DISK, info);
+        logJsonObject(OperationType.OP_DISABLE_DISK, info);
     }
 
     public void logRecoverPartitionVersion(PartitionVersionRecoveryInfo info) {
-        logEdit(OperationType.OP_RECOVER_PARTITION_VERSION, info);
+        logJsonObject(OperationType.OP_RECOVER_PARTITION_VERSION, info);
     }
 
     public void logClusterSnapshotLog(ClusterSnapshotLog info) {
-        logEdit(OperationType.OP_CLUSTER_SNAPSHOT_LOG, info);
+        logJsonObject(OperationType.OP_CLUSTER_SNAPSHOT_LOG, info);
     }
 
     public void logCreateSPMBaseline(BaselinePlan.Info info) {
-        logEdit(OperationType.OP_CREATE_SPM_BASELINE_LOG, info);
+        logJsonObject(OperationType.OP_CREATE_SPM_BASELINE_LOG, info);
     }
 
     public void logDropSPMBaseline(BaselinePlan.Info info) {
-        logEdit(OperationType.OP_DROP_SPM_BASELINE_LOG, info);
+        logJsonObject(OperationType.OP_DROP_SPM_BASELINE_LOG, info);
     }
 
     public void logUpdateSPMBaseline(BaselinePlan.Info info, boolean isEnable) {
         if (isEnable) {
-            logEdit(OperationType.OP_ENABLE_SPM_BASELINE_LOG, info);
+            logJsonObject(OperationType.OP_ENABLE_SPM_BASELINE_LOG, info);
         } else {
-            logEdit(OperationType.OP_DISABLE_SPM_BASELINE_LOG, info);
+            logJsonObject(OperationType.OP_DISABLE_SPM_BASELINE_LOG, info);
         }
     }
 
     public void logUpdateDynamicTabletJob(DynamicTabletJob job) {
-        logEdit(OperationType.OP_UPDATE_DYNAMIC_TABLET_JOB_LOG, job);
+        logJsonObject(OperationType.OP_UPDATE_DYNAMIC_TABLET_JOB_LOG, job);
     }
 
     public void logRemoveDynamicTabletJob(long jobId) {
-        logEdit(OperationType.OP_REMOVE_DYNAMIC_TABLET_JOB_LOG, new RemoveDynamicTabletJobLog(jobId));
+        logJsonObject(OperationType.OP_REMOVE_DYNAMIC_TABLET_JOB_LOG, new RemoveDynamicTabletJobLog(jobId));
     }
 }

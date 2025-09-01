@@ -40,8 +40,8 @@ namespace starrocks {
 //           very useful in rollup action.
 Status PushHandler::process_streaming_ingestion(const TabletSharedPtr& tablet, const TPushReq& request,
                                                 PushType push_type, std::vector<TTabletInfo>* tablet_info_vec) {
-    LOG(INFO) << "begin to realtime vectorized push. tablet=" << tablet->full_name()
-              << ", txn_id: " << request.transaction_id;
+    VLOG(3) << "begin to realtime vectorized push. tablet=" << tablet->full_name()
+            << ", txn_id: " << request.transaction_id;
 
     _request = request;
     std::vector<TabletVars> tablet_vars(1);
@@ -52,9 +52,9 @@ Status PushHandler::process_streaming_ingestion(const TabletSharedPtr& tablet, c
         if (tablet_info_vec != nullptr) {
             _get_tablet_infos(tablet_vars, tablet_info_vec);
         }
-        LOG(INFO) << "process realtime vectorized push successfully. "
-                  << "tablet=" << tablet->full_name() << ", partition_id=" << request.partition_id
-                  << ", txn_id: " << request.transaction_id;
+        VLOG(3) << "process realtime vectorized push successfully. "
+                << "tablet=" << tablet->full_name() << ", partition_id=" << request.partition_id
+                << ", txn_id: " << request.transaction_id;
     }
 
     return st;
@@ -167,7 +167,7 @@ Status PushHandler::_do_streaming_ingestion(TabletSharedPtr tablet, const TPushR
         }
         Status commit_status = StorageEngine::instance()->txn_manager()->commit_txn(
                 request.partition_id, tablet_var.tablet, request.transaction_id, load_id, tablet_var.rowset_to_add,
-                false);
+                false, false);
         if (!commit_status.ok() && !commit_status.is_already_exist()) {
             LOG(WARNING) << "fail to commit txn. res=" << commit_status << ", table=" << tablet->full_name()
                          << ", txn_id: " << request.transaction_id;
