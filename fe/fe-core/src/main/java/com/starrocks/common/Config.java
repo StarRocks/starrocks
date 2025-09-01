@@ -2127,7 +2127,7 @@ public class Config extends ConfigBase {
      * The size of the thread-pool which will be used to refresh statistic caches
      */
     @ConfField
-    public static int statistic_cache_thread_pool_size = 10;
+    public static int statistic_cache_thread_pool_size = 5;
 
     @ConfField
     public static int slot_manager_response_thread_pool_size = 16;
@@ -2149,6 +2149,9 @@ public class Config extends ConfigBase {
      */
     @ConfField(mutable = true)
     public static long statistic_update_interval_sec = 24L * 60L * 60L;
+
+    @ConfField(mutable = true)
+    public static boolean enable_statistic_cache_refresh_after_write = false;
 
     @ConfField(mutable = true)
     public static long statistic_collect_too_many_version_sleep = 600000; // 10min
