@@ -20,6 +20,7 @@ import com.starrocks.analysis.ParseNode;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Table;
+<<<<<<< HEAD
 import com.starrocks.catalog.Type;
 import com.starrocks.common.util.ParseUtil;
 import com.starrocks.sql.ast.ArrayExpr;
@@ -30,6 +31,10 @@ import com.starrocks.sql.ast.NormalizedTableFunctionRelation;
 import com.starrocks.sql.ast.SelectList;
 import com.starrocks.sql.ast.SelectListItem;
 import com.starrocks.sql.ast.SelectRelation;
+=======
+import com.starrocks.common.util.SqlCredentialRedactor;
+import com.starrocks.sql.ast.ParseNode;
+>>>>>>> 9ac2e641e1 ([Enhancement] mask crendential info in submit task (#62311))
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.SubqueryRelation;
 import com.starrocks.sql.ast.TableFunctionRelation;
@@ -82,7 +87,7 @@ public class AstToSQLBuilder {
             return toSQL(statement);
         } catch (Exception e) {
             LOG.info("Ast to sql failed.", e);
-            return defaultSql;
+            return SqlCredentialRedactor.redact(defaultSql);
         }
     }
 
