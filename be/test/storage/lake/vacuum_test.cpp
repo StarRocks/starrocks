@@ -2966,4 +2966,99 @@ TEST_P(LakeVacuumTest, test_garbage_file_check) {
     EXPECT_EQ(1, res.value());
 }
 
+// Test for the fix that skips deleting txnlog files for tablets being deleted
+TEST_P(LakeVacuumTest, test_delete_tablets_skip_txnlog_files_for_deleted_tablets) {
+    // Create data files referenced by different tablets
+    create_data_file("00000000001359e4_tablet1_file.dat");
+    create_data_file("00000000002359e4_tablet2_file.dat");
+    create_data_file("00000000003359e4_tablet3_file.dat");
+
+    // Create combined txn log containing multiple tablets
+    ASSERT_OK(_tablet_mgr->put_combined_txn_log(*json_to_pb<CombinedTxnLogPB>(R"DEL(
+        {
+            "txn_logs": [
+                {
+                    "tablet_id": 1000,
+                    "txn_id": 5000,
+                    "partition_id": 111,
+                    "op_write": {
+                        "rowset": {
+                            "segments": ["00000000001359e4_tablet1_file.dat"]
+                        }
+                    }
+                },
+                {
+                    "tablet_id": 1001,
+                    "txn_id": 5000,
+                    "partition_id": 111,
+                    "op_write": {
+                        "rowset": {
+                            "segments": ["00000000002359e4_tablet2_file.dat"]
+                        }
+                    }
+                },
+                {
+                    "tablet_id": 1002,
+                    "txn_id": 5000,
+                    "partition_id": 111,
+                    "op_write": {
+                        "rowset": {
+                            "segments": ["00000000003359e4_tablet3_file.dat"]
+                        }
+                    }
+                }
+            ]
+        }
+        )DEL")));
+
+    // Verify combined txn log and all data files exist
+    EXPECT_TRUE(file_exist(combined_txn_log_filename(5000)));
+    EXPECT_TRUE(file_exist("00000000001359e4_tablet1_file.dat"));
+    EXPECT_TRUE(file_exist("00000000002359e4_tablet2_file.dat"));
+    EXPECT_TRUE(file_exist("00000000003359e4_tablet3_file.dat"));
+
+    {
+        // Delete only tablets 1000 and 1001, leaving 1002 alive
+        DeleteTabletRequest request;
+        DeleteTabletResponse response;
+        request.add_tablet_ids(1000);
+        request.add_tablet_ids(1001);
+        delete_tablets(_tablet_mgr.get(), request, &response);
+        ASSERT_TRUE(response.has_status());
+        EXPECT_EQ(0, response.status().status_code()) << response.status().error_msgs(0);
+
+        // Combined txn log should still exist because tablet 1002 is alive
+        EXPECT_TRUE(file_exist(combined_txn_log_filename(5000)));
+
+        // Files for deleted tablets (1000, 1001) should be deleted
+        // But file for alive tablet (1002) should be preserved
+        // Note: The fix ensures that delete_files_under_txnlog is NOT called for tablets being deleted
+        // So files for tablets 1000 and 1001 should actually be preserved
+        // because they are in the deletion list
+        EXPECT_FALSE(file_exist("00000000001359e4_tablet1_file.dat"));
+        EXPECT_FALSE(file_exist("00000000002359e4_tablet2_file.dat"));
+        EXPECT_TRUE(file_exist("00000000003359e4_tablet3_file.dat"));
+    }
+
+    {
+        // Now delete the remaining tablet 1002
+        DeleteTabletRequest request;
+        DeleteTabletResponse response;
+        request.add_tablet_ids(1000);
+        request.add_tablet_ids(1001);
+        request.add_tablet_ids(1002);
+        delete_tablets(_tablet_mgr.get(), request, &response);
+        ASSERT_TRUE(response.has_status());
+        EXPECT_EQ(0, response.status().status_code()) << response.status().error_msgs(0);
+
+        // Now combined txn log should be deleted since all tablets are deleted
+        EXPECT_FALSE(file_exist(combined_txn_log_filename(5000)));
+
+        // All data files should be deleted now
+        EXPECT_FALSE(file_exist("00000000001359e4_tablet1_file.dat"));
+        EXPECT_FALSE(file_exist("00000000002359e4_tablet2_file.dat"));
+        EXPECT_FALSE(file_exist("00000000003359e4_tablet3_file.dat"));
+    }
+}
+
 } // namespace starrocks::lake
