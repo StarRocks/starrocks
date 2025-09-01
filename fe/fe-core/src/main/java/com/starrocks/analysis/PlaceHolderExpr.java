@@ -17,6 +17,8 @@ package com.starrocks.analysis;
 
 import com.starrocks.catalog.Type;
 import com.starrocks.planner.FragmentNormalizer;
+import com.starrocks.sql.ast.AstVisitor;
+import com.starrocks.sql.ast.AstVisitorExtendInterface;
 import com.starrocks.thrift.TExprNode;
 import com.starrocks.thrift.TExprNodeType;
 import com.starrocks.thrift.TPlaceHolder;
@@ -68,5 +70,9 @@ public class PlaceHolderExpr extends Expr {
     @Override
     public Expr clone() {
         return new PlaceHolderExpr(slotId, nullable, type);
+    }
+
+    public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
+        return ((AstVisitorExtendInterface<R, C>) visitor).visitPlaceHolderExpr(this, context);
     }
 }

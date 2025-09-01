@@ -35,6 +35,7 @@ fe/ut_ports
 fe/*/target
 fe/plugin/*/target/
 fe/fe-core/gen
+fe/fe-grammar/gen
 fe/fe-common/.classpath
 fe/fe-core/src/main/java/com/starrocks/sql/parser/gen
 fe/fe-core/src/main/java/com/starrocks/builtins

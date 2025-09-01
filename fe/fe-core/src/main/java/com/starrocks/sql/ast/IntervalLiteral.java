@@ -68,4 +68,9 @@ public class IntervalLiteral extends LiteralExpr {
     public int compareLiteral(LiteralExpr expr) {
         return 0;
     }
+
+    @Override
+    public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
+        return ((AstVisitorExtendInterface<R, C>) visitor).visitIntervalLiteral(this, context);
+    }
 }

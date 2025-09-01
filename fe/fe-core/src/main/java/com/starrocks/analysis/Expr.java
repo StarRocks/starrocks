@@ -82,9 +82,9 @@ import java.util.Collection;
 import java.util.Collections;
 import java.util.LinkedList;
 import java.util.List;
-import java.util.Map;
 import java.util.Optional;
 import java.util.Queue;
+import java.util.function.BiConsumer;
 import java.util.stream.Collectors;
 
 /**
@@ -568,6 +568,7 @@ public abstract class Expr extends TreeNode<Expr> implements ParseNode, Cloneabl
      */
     @Deprecated
     public String toSql() {
+        Preconditions.checkState(!printSqlInParens);
         return (printSqlInParens) ? "(" + toSqlImpl() + ")" : toSqlImpl();
     }
 
@@ -581,6 +582,7 @@ public abstract class Expr extends TreeNode<Expr> implements ParseNode, Cloneabl
     }
 
     public String explain() {
+        Preconditions.checkState(!printSqlInParens);
         return (printSqlInParens) ? "(" + explainImpl() + ")" : explainImpl();
     }
 
@@ -597,10 +599,6 @@ public abstract class Expr extends TreeNode<Expr> implements ParseNode, Cloneabl
     }
 
     public String toMySql() {
-        return toSql();
-    }
-
-    public String toJDBCSQL() {
         return toSql();
     }
 
@@ -621,15 +619,11 @@ public abstract class Expr extends TreeNode<Expr> implements ParseNode, Cloneabl
         return result;
     }
 
-    public interface ExprVisitor {
-        void visit(Expr expr, TExprNode texprNode);
-    }
-
     // Append a flattened version of this expr, including all children, to 'container'.
-    final void treeToThriftHelper(TExpr container, ExprVisitor visitor) {
+    final void treeToThriftHelper(TExpr container, BiConsumer<Expr, TExprNode> consumer) {
         if (type.isNull()) {
             Preconditions.checkState(this instanceof NullLiteral || this instanceof SlotRef);
-            NullLiteral.create(ScalarType.BOOLEAN).treeToThriftHelper(container, visitor);
+            NullLiteral.create(ScalarType.BOOLEAN).treeToThriftHelper(container, consumer);
             return;
         }
 
@@ -653,10 +647,10 @@ public abstract class Expr extends TreeNode<Expr> implements ParseNode, Cloneabl
         msg.output_scale = getOutputScale();
         msg.setIs_monotonic(isMonotonic());
         msg.setIs_index_only_filter(isIndexOnlyFilter());
-        visitor.visit(this, msg);
+        consumer.accept(this, msg);
         container.addToNodes(msg);
         for (Expr child : children) {
-            child.treeToThriftHelper(container, visitor);
+            child.treeToThriftHelper(container, consumer);
         }
     }
 
@@ -1135,46 +1129,6 @@ public abstract class Expr extends TreeNode<Expr> implements ParseNode, Cloneabl
     @Override
     public NodePosition getPos() {
         return pos;
-    }
-
-
-
-
-    enum ExprSerCode {
-        SLOT_REF(1),
-        NULL_LITERAL(2),
-        BOOL_LITERAL(3),
-        INT_LITERAL(4),
-        LARGE_INT_LITERAL(5),
-        FLOAT_LITERAL(6),
-        DECIMAL_LITERAL(7),
-        STRING_LITERAL(8),
-        DATE_LITERAL(9),
-        MAX_LITERAL(10),
-        BINARY_PREDICATE(11),
-        FUNCTION_CALL(12);
-
-        private static Map<Integer, ExprSerCode> codeMap = Maps.newHashMap();
-
-        static {
-            for (ExprSerCode item : ExprSerCode.values()) {
-                codeMap.put(item.code, item);
-            }
-        }
-
-        private int code;
-
-        ExprSerCode(int code) {
-            this.code = code;
-        }
-
-        public int getCode() {
-            return code;
-        }
-
-        public static ExprSerCode fromCode(int code) {
-            return codeMap.get(code);
-        }
     }
 
     // If this expr can serialize and deserialize,
