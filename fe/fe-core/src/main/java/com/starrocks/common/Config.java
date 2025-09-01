@@ -1486,7 +1486,7 @@ public class Config extends ConfigBase {
 
     @ConfField(mutable = true, comment = "Whether to prefer string type for fixed length varchar column " +
             "in materialized view creation/ctas")
-    public static boolean transform_type_prefer_string_for_varchar = false;
+    public static boolean transform_type_prefer_string_for_varchar = true;
 
     /**
      * The number of query retries.
