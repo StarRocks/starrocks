@@ -369,7 +369,7 @@ Status GroupReader::_create_column_readers() {
         }
     }
 
-    if (!_param.reserved_field_slots->empty()) {
+    if (_param.reserved_field_slots != nullptr && !_param.reserved_field_slots->empty()) {
         for (const auto* slot : *_param.reserved_field_slots) {
             if (slot->col_name() == HdfsScanner::ICEBERG_ROW_ID) {
                 _column_readers.emplace(slot->id(), std::make_unique<IcebergRowIdReader>(_row_group_first_row_id));
