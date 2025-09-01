@@ -28,6 +28,7 @@ namespace starrocks {
 class InvertedIndexIterator;
 enum class InvertedIndexReaderType;
 enum class InvertedIndexQueryType;
+class IndexReadOptions;
 
 class InvertedReader {
 public:
@@ -37,7 +38,8 @@ public:
     virtual ~InvertedReader() = default;
 
     // create a new column iterator. Client should delete returned iterator
-    virtual Status new_iterator(const std::shared_ptr<TabletIndex> index_meta, InvertedIndexIterator** iterator) = 0;
+    virtual Status new_iterator(const std::shared_ptr<TabletIndex> index_meta, InvertedIndexIterator** iterator,
+                                const IndexReadOptions& index_opt) = 0;
 
     virtual Status query(OlapReaderStatistics* stats, const std::string& column_name, const void* query_value,
                          InvertedIndexQueryType query_type, roaring::Roaring* bit_map) = 0;
@@ -46,6 +48,8 @@ public:
                               roaring::Roaring* bit_map) = 0;
 
     virtual InvertedIndexReaderType get_inverted_index_reader_type() = 0;
+
+    virtual Status load(const IndexReadOptions& opt, void* meta) { return Status::OK(); }
 
     bool index_exists(const std::string& index_file_path) { return fs::path_exist(index_file_path); }
 
