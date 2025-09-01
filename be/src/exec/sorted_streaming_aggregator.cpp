@@ -106,7 +106,7 @@ public:
             for (size_t i = 1; i < num_rows; ++i) {
                 if (_cmp_vector[i]) continue;
                 if (_null_masks[i - 1] == 0 && _null_masks[i] == 0) {
-                    _cmp_vector[i] |= column.get_slice(i - 1) == (column.get_slice(i));
+                    _cmp_vector[i] |= column.get_slice(i - 1) != (column.get_slice(i));
                 } else {
                     _cmp_vector[i] |= _null_masks[i - 1] != _null_masks[i];
                 }
@@ -114,7 +114,7 @@ public:
         } else {
             for (size_t i = 1; i < num_rows; ++i) {
                 if (_cmp_vector[i]) continue;
-                _cmp_vector[i] |= column.get_slice(i - 1) == (column.get_slice(i));
+                _cmp_vector[i] |= column.get_slice(i - 1) != (column.get_slice(i));
             }
         }
         return Status::OK();
