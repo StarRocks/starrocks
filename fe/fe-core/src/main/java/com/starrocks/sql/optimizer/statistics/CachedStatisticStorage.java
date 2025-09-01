@@ -668,4 +668,22 @@ public class CachedStatisticStorage implements StatisticStorage, MemoryTrackable
                 sampleFromCache(connectorTableCachedStatistics)
         );
     }
+<<<<<<< HEAD
+=======
+
+    private <K, V> AsyncLoadingCache<K, V> createAsyncLoadingCache(AsyncCacheLoader<K, V> cacheLoader) {
+        Caffeine<Object, Object> cacheBuilder = Caffeine.newBuilder()
+                .expireAfterWrite(Config.statistic_update_interval_sec * 2, TimeUnit.SECONDS)
+                .maximumSize(Config.statistic_cache_columns)
+                .executor(statsCacheRefresherExecutor);
+        
+        // Only enable refreshAfterWrite if the config is enabled
+        if (Config.enable_statistic_cache_refresh_after_write) {
+            cacheBuilder.refreshAfterWrite(Config.statistic_update_interval_sec, TimeUnit.SECONDS);
+        }
+        
+        return cacheBuilder.buildAsync(cacheLoader);
+    }
+
+>>>>>>> 62fd6e3985 ([Enhancement] Add config to disable statistics cache lazy refresh by default (#62518))
 }
