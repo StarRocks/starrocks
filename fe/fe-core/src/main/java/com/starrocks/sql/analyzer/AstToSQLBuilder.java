@@ -22,6 +22,7 @@ import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.util.ParseUtil;
+import com.starrocks.common.util.SqlCredentialRedactor;
 import com.starrocks.sql.ast.ArrayExpr;
 import com.starrocks.sql.ast.CTERelation;
 import com.starrocks.sql.ast.FieldReference;
@@ -82,7 +83,7 @@ public class AstToSQLBuilder {
             return toSQL(statement);
         } catch (Exception e) {
             LOG.info("Ast to sql failed.", e);
-            return defaultSql;
+            return SqlCredentialRedactor.redact(defaultSql);
         }
     }
 
