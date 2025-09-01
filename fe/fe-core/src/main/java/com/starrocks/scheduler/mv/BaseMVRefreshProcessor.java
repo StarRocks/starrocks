@@ -577,9 +577,7 @@ public abstract class BaseMVRefreshProcessor {
         // change mv refresh params if needed
         mvRefreshParams.setIsTentative(tentative);
 
-        final Set<String> mvPotentialPartitionNames = Sets.newHashSet();
-        final PCellSortedSet mvToRefreshedPartitions = mvRefreshPartitioner.getMVToRefreshedPartitions(
-                snapshotBaseTables, mvPotentialPartitionNames);
+        final PCellSortedSet mvToRefreshedPartitions = mvRefreshPartitioner.getMVToRefreshedPartitions(snapshotBaseTables);
         // update mv extra message
         if (!mvRefreshParams.isTentative()) {
             updateTaskRunStatus(status -> {
