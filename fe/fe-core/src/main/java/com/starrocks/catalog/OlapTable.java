@@ -1053,6 +1053,24 @@ public class OlapTable extends Table {
     }
 
     public Status doAfterRestore(MvRestoreContext mvRestoreContext) throws DdlException {
+        // check table's partition existence, otherwise return error
+        for (PhysicalPartition partition : getAllPhysicalPartitions()) {
+            long physicalPartitionId = partition.getParentId();
+            if (partitionInfo.getDataProperty(physicalPartitionId) == null) {
+                LOG.warn("physical partition id {} has no data property in table:{}", physicalPartitionId, name);
+                throw new DdlException("physical partition id " + physicalPartitionId
+                        + " has no data property: " + name);
+            }
+            for (MaterializedIndex index : partition
+                    .getMaterializedIndices(MaterializedIndex.IndexExtState.ALL)) {
+                for (Tablet tablet : index.getTablets()) {
+                    if (tablet == null) {
+                        throw new DdlException("tablet is null in table: " + name);
+                    }
+                }
+            }
+        }
+
         if (relatedMaterializedViews == null || relatedMaterializedViews.isEmpty()) {
             return Status.OK;
         }

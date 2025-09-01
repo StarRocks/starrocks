@@ -348,30 +348,48 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
                 }
 
                 OlapTable olapTable = (OlapTable) table;
-                long tableId = olapTable.getId();
-                for (PhysicalPartition partition : olapTable.getAllPhysicalPartitions()) {
-                    long physicalPartitionId = partition.getId();
-                    TStorageMedium medium = olapTable.getPartitionInfo().getDataProperty(
-                            partition.getParentId()).getStorageMedium();
-                    for (MaterializedIndex index : partition
-                            .getMaterializedIndices(MaterializedIndex.IndexExtState.ALL)) {
-                        long indexId = index.getId();
-                        int schemaHash = olapTable.getSchemaHashByIndexId(indexId);
-                        TabletMeta tabletMeta = new TabletMeta(dbId, tableId, physicalPartitionId,
-                                indexId, medium, table.isCloudNativeTableOrMaterializedView());
-                        for (Tablet tablet : index.getTablets()) {
-                            long tabletId = tablet.getId();
-                            invertedIndex.addTablet(tabletId, tabletMeta);
-                            if (table.isOlapTableOrMaterializedView()) {
-                                for (Replica replica : ((LocalTablet) tablet).getImmutableReplicas()) {
-                                    invertedIndex.addReplica(tabletId, replica);
-                                }
-                            }
-                        }
-                    } // end for indices
-                } // end for partitions
+                if (olapTable.isMaterializedView()) {
+                    // For mv, this may throw exception in mv backup/restore case, we should catch it and set mv to inactive
+                    MaterializedView mv = (MaterializedView) olapTable;
+                    try {
+                        recreateOlapTableTabletInvertIndex(dbId, mv, invertedIndex);
+                    } catch (Exception e) {
+                        LOG.error("recreate inverted index for metadata table {} failed", mv.getName(), e);
+                        mv.setInactiveAndReason(MaterializedViewExceptions.inactiveReasonForMetadataTableRestoreCorrupted(
+                                mv.getName()));
+                    }
+                } else {
+                    recreateOlapTableTabletInvertIndex(dbId, olapTable, invertedIndex);
+                }
             } // end for tables
         } // end for dbs
+    }
+
+    private void recreateOlapTableTabletInvertIndex(long dbId,
+                                                    OlapTable olapTable,
+                                                    TabletInvertedIndex invertedIndex) {
+        long tableId = olapTable.getId();
+        for (PhysicalPartition partition : olapTable.getAllPhysicalPartitions()) {
+            long partitionId = partition.getParentId();
+            TStorageMedium medium = olapTable.getPartitionInfo().getDataProperty(
+                    partitionId).getStorageMedium();
+            long physicalPartitionId = partition.getId();
+            for (MaterializedIndex index : partition
+                    .getMaterializedIndices(MaterializedIndex.IndexExtState.ALL)) {
+                long indexId = index.getId();
+                TabletMeta tabletMeta = new TabletMeta(dbId, tableId, physicalPartitionId,
+                        indexId, medium, olapTable.isCloudNativeTableOrMaterializedView());
+                for (Tablet tablet : index.getTablets()) {
+                    long tabletId = tablet.getId();
+                    invertedIndex.addTablet(tabletId, tabletMeta);
+                    if (olapTable.isOlapTableOrMaterializedView()) {
+                        for (Replica replica : ((LocalTablet) tablet).getImmutableReplicas()) {
+                            invertedIndex.addReplica(tabletId, replica);
+                        }
+                    }
+                }
+            } // end for indices
+        }
     }
 
     public void createDb(String dbName) throws DdlException, AlreadyExistsException {
