@@ -500,32 +500,38 @@ PROPERTIES
   "aws.s3.region" = "<aws_s3_region>"
   ```
 
+- 要选择基于 REST Catalog 的 Vended Credential（自 v4.0 起支持），请按以下方式配置 `StorageCredentialParams`：
+
+  ```SQL
+  "aws.s3.region" = "<aws_s3_region>"
+  ```
+
 AWS S3 的 `StorageCredentialParams`：
 
 ###### aws.s3.use_instance_profile
 
-必需：是
-描述：指定是否启用基于实例配置文件的身份验证方法和基于假设角色的身份验证方法。有效值：`true` 和 `false`。默认值：`false`。
+- 必需：是
+- 描述：指定是否启用基于实例配置文件的身份验证方法和基于假设角色的身份验证方法。有效值：`true` 和 `false`。默认值：`false`。
 
 ###### aws.s3.iam_role_arn
 
-必需：否
-描述：在您的 AWS S3 存储桶上具有权限的 IAM 角色的 ARN。如果使用基于假设角色的身份验证方法访问 AWS S3，则必须指定此参数。
+- 必需：否
+- 描述：在您的 AWS S3 存储桶上具有权限的 IAM 角色的 ARN。如果使用基于假设角色的身份验证方法访问 AWS S3，则必须指定此参数。
 
 ###### aws.s3.region
 
-必需：是
-描述：您的 AWS S3 存储桶所在的区域。例如：`us-west-1`。
+- 必需：是
+- 描述：您的 AWS S3 存储桶所在的区域。例如：`us-west-1`。
 
 ###### aws.s3.access_key
 
-必需：否
-描述：您的 IAM 用户的访问密钥。如果使用基于 IAM 用户的身份验证方法访问 AWS S3，则必须指定此参数。
+- 必需：否
+- 描述：您的 IAM 用户的访问密钥。如果使用基于 IAM 用户的身份验证方法访问 AWS S3，则必须指定此参数。
 
 ###### aws.s3.secret_key
 
-必需：否
-描述：您的 IAM 用户的秘密密钥。如果使用基于 IAM 用户的身份验证方法访问 AWS S3，则必须指定此参数。
+- 必需：否
+- 描述：您的 IAM 用户的秘密密钥。如果使用基于 IAM 用户的身份验证方法访问 AWS S3，则必须指定此参数。
 
 有关如何选择访问 AWS S3 的身份验证方法以及如何在 AWS IAM 控制台中配置访问控制策略的信息，请参见 [访问 AWS S3 的身份验证参数](../../../integrations/authenticate_to_aws_resources.md#authentication-parameters-for-accessing-aws-s3)。
 
@@ -557,28 +563,28 @@ MinIO 和其他 S3 兼容系统的 `StorageCredentialParams`：
 
 ###### aws.s3.enable_ssl
 
-必需：是
-描述：指定是否启用 SSL 连接。<br />有效值：`true` 和 `false`。默认值：`true`。
+- 必需：是
+- 描述：指定是否启用 SSL 连接。<br />有效值：`true` 和 `false`。默认值：`true`。
 
 ###### aws.s3.enable_path_style_access
 
-必需：是
-描述：指定是否启用路径样式访问。<br />有效值：`true` 和 `false`。默认值：`false`。对于 MinIO，您必须将值设置为 `true`。<br />路径样式 URL 使用以下格式：`https://s3.<region_code>.amazonaws.com/<bucket_name>/<key_name>`。例如，如果您在美国西部（俄勒冈）区域创建了一个名为 `DOC-EXAMPLE-BUCKET1` 的存储桶，并且您想要访问该存储桶中的 `alice.jpg` 对象，可以使用以下路径样式 URL：`https://s3.us-west-2.amazonaws.com/DOC-EXAMPLE-BUCKET1/alice.jpg`。
+- 必需：是
+- 描述：指定是否启用路径样式访问。<br />有效值：`true` 和 `false`。默认值：`false`。对于 MinIO，您必须将值设置为 `true`。<br />路径样式 URL 使用以下格式：`https://s3.<region_code>.amazonaws.com/<bucket_name>/<key_name>`。例如，如果您在美国西部（俄勒冈）区域创建了一个名为 `DOC-EXAMPLE-BUCKET1` 的存储桶，并且您想要访问该存储桶中的 `alice.jpg` 对象，可以使用以下路径样式 URL：`https://s3.us-west-2.amazonaws.com/DOC-EXAMPLE-BUCKET1/alice.jpg`。
 
 ###### aws.s3.endpoint
 
-必需：是
-描述：用于连接到您的 S3 兼容存储系统而不是 AWS S3 的端点。
+- 必需：是
+- 描述：用于连接到您的 S3 兼容存储系统而不是 AWS S3 的端点。
 
 ###### aws.s3.access_key
 
-必需：是
-描述：您的 IAM 用户的访问密钥。
+- 必需：是
+- 描述：您的 IAM 用户的访问密钥。
 
 ###### aws.s3.secret_key
 
-必需：是
-描述：您的 IAM 用户的秘密密钥。
+- 必需：是
+- 描述：您的 IAM 用户的秘密密钥。
 
 </TabItem>
 
@@ -607,32 +613,34 @@ MinIO 和其他 S3 兼容系统的 `StorageCredentialParams`：
   "azure.blob.sas_token" = "<storage_account_SAS_token>"
   ```
 
+- 要选择基于 REST Catalog 的 Vended Credential（自 v4.0 起支持），则无需配置 `StorageCredentialParams`。
+
 Microsoft Azure 的 `StorageCredentialParams`：
 
 ###### azure.blob.storage_account
 
-必需：是
-描述：您的 Blob Storage 账户的用户名。
+- 必需：是
+- 描述：您的 Blob Storage 账户的用户名。
 
 ###### azure.blob.shared_key
 
-必需：是
-描述：您的 Blob Storage 账户的共享密钥。
+- 必需：是
+- 描述：您的 Blob Storage 账户的共享密钥。
 
 ###### azure.blob.account_name
 
-必需：是
-描述：您的 Blob Storage 账户的用户名。
+- 必需：是
+- 描述：您的 Blob Storage 账户的用户名。
 
 ###### azure.blob.container
 
-必需：是
-描述：存储数据的 blob 容器的名称。
+- 必需：是
+- 描述：存储数据的 blob 容器的名称。
 
 ###### azure.blob.sas_token
 
-必需：是
-描述：用于访问您的 Blob Storage 账户的 SAS 令牌。
+- 必需：是
+- 描述：用于访问您的 Blob Storage 账户的 SAS 令牌。
 
 ###### Azure Data Lake Storage Gen1
 
@@ -685,6 +693,8 @@ Microsoft Azure 的 `StorageCredentialParams`：
   "azure.adls2.oauth2_client_endpoint" = "<service_principal_client_endpoint>"
   ```
 
+- 要选择基于 REST Catalog 的 Vended Credential（自 v4.0 起支持），则无需配置 `StorageCredentialParams`。
+
 </TabItem>
 
 <TabItem value="GCS" label="Google GCS" >
@@ -727,31 +737,33 @@ Microsoft Azure 的 `StorageCredentialParams`：
     "gcp.gcs.impersonation_service_account" = "<data_google_service_account_email>"
     ```
 
+- 要选择基于 REST Catalog 的 Vended Credential（自 v4.0 起支持），则无需配置 `StorageCredentialParams`。
+
 Google GCS 的 `StorageCredentialParams`：
 
 ###### gcp.gcs.service_account_email
 
-默认值： ""
-示例： "[user@hello.iam.gserviceaccount.com](mailto:user@hello.iam.gserviceaccount.com)"
-描述：在创建服务账户时生成的 JSON 文件中的电子邮件地址。
+- 默认值： ""
+- 示例： "[user@hello.iam.gserviceaccount.com](mailto:user@hello.iam.gserviceaccount.com)"
+- 描述：在创建服务账户时生成的 JSON 文件中的电子邮件地址。
 
 ###### gcp.gcs.service_account_private_key_id
 
-默认值： ""
-示例： "61d257bd8479547cb3e04f0b9b6b9ca07af3b7ea"
-描述：在创建服务账户时生成的 JSON 文件中的私钥 ID。
+- 默认值： ""
+- 示例： "61d257bd8479547cb3e04f0b9b6b9ca07af3b7ea"
+- 描述：在创建服务账户时生成的 JSON 文件中的私钥 ID。
 
 ###### gcp.gcs.service_account_private_key
 
-默认值： ""
-示例： "-----BEGIN PRIVATE KEY----xxxx-----END PRIVATE KEY-----\n"  
-描述：在创建服务账户时生成的 JSON 文件中的私钥。
+- 默认值： ""
+- 示例： "-----BEGIN PRIVATE KEY----xxxx-----END PRIVATE KEY-----\n"  
+- 描述：在创建服务账户时生成的 JSON 文件中的私钥。
 
 ###### gcp.gcs.impersonation_service_account
 
-默认值： ""  
-示例： "hello"  
-描述：您要模拟的服务账户。
+- 默认值： ""  
+- 示例： "hello"  
+- 描述：您要模拟的服务账户。
 
 </TabItem>
 
@@ -888,6 +900,27 @@ Google GCS 的 `StorageCredentialParams`：
       "aws.s3.region" = "us-west-2"
   );
   ```
+
+##### 如果选择 Vended Credential
+
+如果基于 REST Catalog 使用 Vended Credential，请运行如下命令：
+
+```SQL
+CREATE EXTERNAL CATALOG polaris_s3
+PROPERTIES
+(
+    "type" = "iceberg",
+    "iceberg.catalog.uri" = "http://xxx:xxx/api/catalog",
+    "iceberg.catalog.type" = "rest",
+    "iceberg.catalog.rest.nested-namespace-enabled"="true",
+    "iceberg.catalog.security" = "oauth2",
+    "iceberg.catalog.oauth2.credential" = "xxxxx:xxxx",
+    "iceberg.catalog.oauth2.scope"='PRINCIPAL_ROLE:ALL',
+    "iceberg.catalog.warehouse" = "iceberg_catalog",
+    "aws.s3.region" = "us-west-2"
+);
+```
+
 </TabItem>
 
 <TabItem value="HDFS" label="HDFS" >
@@ -962,6 +995,22 @@ PROPERTIES
       "azure.blob.storage_account" = "<blob_storage_account_name>",
       "azure.blob.container" = "<blob_container_name>",
       "azure.blob.sas_token" = "<blob_storage_account_SAS_token>"
+  );
+  ```
+
+- 如果基于 REST Catalog 使用 Vended Credential，请运行如下命令：
+
+  ```SQL
+  CREATE EXTERNAL CATALOG polaris_azure
+  PROPERTIES (   
+      "type"  =  "iceberg",   
+      "iceberg.catalog.uri"  = "http://xxx:xxx/api/catalog",
+      "iceberg.catalog.type"  =  "rest",
+      "iceberg.catalog.rest.nested-namespace-enabled"="true", 
+      "iceberg.catalog.security" = "oauth2",
+      "iceberg.catalog.oauth2.credential" = "xxxxx:xxxx",
+      "iceberg.catalog.oauth2.scope"='PRINCIPAL_ROLE:ALL',
+      "iceberg.catalog.warehouse" = "iceberg_catalog"
   );
   ```
 
@@ -1041,6 +1090,22 @@ PROPERTIES
   );
   ```
 
+- 如果基于 REST Catalog 使用 Vended Credential，请运行如下命令：
+
+  ```SQL
+  CREATE EXTERNAL CATALOG polaris_azure
+  PROPERTIES (   
+      "type"  =  "iceberg",   
+      "iceberg.catalog.uri"  = "http://xxx:xxx/api/catalog",
+      "iceberg.catalog.type"  =  "rest",
+      "iceberg.catalog.rest.nested-namespace-enabled"="true", 
+      "iceberg.catalog.security" = "oauth2",
+      "iceberg.catalog.oauth2.credential" = "xxxxx:xxxx",
+      "iceberg.catalog.oauth2.scope"='PRINCIPAL_ROLE:ALL',
+      "iceberg.catalog.warehouse" = "iceberg_catalog"
+  );
+  ```
+
 </TabItem>
 
 <TabItem value="GCS" label="Google GCS" >
@@ -1106,6 +1171,23 @@ PROPERTIES
         "gcp.gcs.impersonation_service_account" = "<data_google_service_account_email>"
     );
     ```
+
+- 如果基于 REST Catalog 使用 Vended Credential，请运行如下命令：
+
+  ```SQL
+  CREATE EXTERNAL CATALOG polaris_gcp
+  PROPERTIES (   
+      "type"  =  "iceberg",   
+      "iceberg.catalog.uri"  = "http://xxx:xxx/api/catalog",
+      "iceberg.catalog.type"  =  "rest",
+      "iceberg.catalog.rest.nested-namespace-enabled"="true", 
+      "iceberg.catalog.security" = "oauth2",
+      "iceberg.catalog.oauth2.credential" = "xxxxx:xxxx",
+      "iceberg.catalog.oauth2.scope"='PRINCIPAL_ROLE:ALL',
+      "iceberg.catalog.warehouse" = "iceberg_catalog"
+  );
+  ```
+
 </TabItem>
 
 </Tabs>
