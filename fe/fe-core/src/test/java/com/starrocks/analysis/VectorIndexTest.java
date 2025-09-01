@@ -28,6 +28,7 @@ import com.starrocks.common.VectorIndexParams.IndexParamsKey;
 import com.starrocks.common.VectorIndexParams.MetricsType;
 import com.starrocks.common.VectorIndexParams.VectorIndexType;
 import com.starrocks.server.RunMode;
+import com.starrocks.sql.analyzer.IndexAnalyzer;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.IndexDef.IndexType;
 import com.starrocks.sql.plan.PlanTestBase;
@@ -70,33 +71,33 @@ public class VectorIndexTest extends PlanTestBase {
 
         Assertions.assertThrows(
                 SemanticException.class,
-                () -> VectorIndexUtil.checkVectorIndexValid(c1, null, KeysType.AGG_KEYS),
+                () -> IndexAnalyzer.checkVectorIndexValid(c1, null, KeysType.AGG_KEYS),
                 "The vector index can only build on DUPLICATE or PRIMARY table");
 
         Column c2 = new Column("f2", Type.VARCHAR, false);
 
         Assertions.assertThrows(
                 SemanticException.class,
-                () -> VectorIndexUtil.checkVectorIndexValid(c2, null, KeysType.DUP_KEYS),
+                () -> IndexAnalyzer.checkVectorIndexValid(c2, null, KeysType.DUP_KEYS),
                 "The vector index can only be build on column with type of array<float>.");
 
         Column c3 = new Column("f3", Type.ARRAY_FLOAT, true);
         Assertions.assertThrows(
                 SemanticException.class,
-                () -> VectorIndexUtil.checkVectorIndexValid(c3, Collections.emptyMap(), KeysType.DUP_KEYS),
+                () -> IndexAnalyzer.checkVectorIndexValid(c3, Collections.emptyMap(), KeysType.DUP_KEYS),
                 "You should set index_type at least to add a vector index.");
 
         Column c4 = new Column("f4", Type.ARRAY_FLOAT, false);
         Assertions.assertThrows(
                 SemanticException.class,
-                () -> VectorIndexUtil.checkVectorIndexValid(c4, new HashMap<>() {{
+                () -> IndexAnalyzer.checkVectorIndexValid(c4, new HashMap<>() {{
                     put(CommonIndexParamKey.INDEX_TYPE.name(), "???");
                 }}, KeysType.DUP_KEYS));
 
         // INDEX_TYPE error
         Assertions.assertThrows(
                 SemanticException.class,
-                () -> VectorIndexUtil.checkVectorIndexValid(c4, new HashMap<>() {{
+                () -> IndexAnalyzer.checkVectorIndexValid(c4, new HashMap<>() {{
                     put(CommonIndexParamKey.INDEX_TYPE.name(), "???");
                     put(CommonIndexParamKey.DIM.name(), "1024");
                 }}, KeysType.DUP_KEYS));
@@ -104,7 +105,7 @@ public class VectorIndexTest extends PlanTestBase {
         // missing METRICS_TYPE
         Assertions.assertThrows(
                 SemanticException.class,
-                () -> VectorIndexUtil.checkVectorIndexValid(c4, new HashMap<>() {{
+                () -> IndexAnalyzer.checkVectorIndexValid(c4, new HashMap<>() {{
                     put(CommonIndexParamKey.INDEX_TYPE.name(), VectorIndexType.HNSW.name());
                     put(CommonIndexParamKey.DIM.name(), "1024");
                 }}, KeysType.DUP_KEYS));
@@ -112,7 +113,7 @@ public class VectorIndexTest extends PlanTestBase {
         // wrong NBITS index params with HNSW
         Assertions.assertThrows(
                 SemanticException.class,
-                () -> VectorIndexUtil.checkVectorIndexValid(c4, new HashMap<>() {{
+                () -> IndexAnalyzer.checkVectorIndexValid(c4, new HashMap<>() {{
                     put(CommonIndexParamKey.INDEX_TYPE.name(), VectorIndexType.HNSW.name());
                     put(CommonIndexParamKey.DIM.name(), "1024");
                     put(CommonIndexParamKey.METRIC_TYPE.name(), MetricsType.L2_DISTANCE.name());
@@ -126,7 +127,7 @@ public class VectorIndexTest extends PlanTestBase {
         // wrong NPROBE search params with HNSW
         Assertions.assertThrows(
                 SemanticException.class,
-                () -> VectorIndexUtil.checkVectorIndexValid(c4, new HashMap<>() {{
+                () -> IndexAnalyzer.checkVectorIndexValid(c4, new HashMap<>() {{
                     put(CommonIndexParamKey.INDEX_TYPE.name(), VectorIndexType.HNSW.name());
                     put(CommonIndexParamKey.DIM.name(), "1024");
                     put(CommonIndexParamKey.METRIC_TYPE.name(), MetricsType.L2_DISTANCE.name());
@@ -139,7 +140,7 @@ public class VectorIndexTest extends PlanTestBase {
         );
 
         Assertions.assertDoesNotThrow(
-                () -> VectorIndexUtil.checkVectorIndexValid(c4, new HashMap<>() {{
+                () -> IndexAnalyzer.checkVectorIndexValid(c4, new HashMap<>() {{
                     put(CommonIndexParamKey.INDEX_TYPE.name(), VectorIndexType.HNSW.name());
                     put(CommonIndexParamKey.DIM.name(), "1024");
                     put(CommonIndexParamKey.METRIC_TYPE.name(), MetricsType.L2_DISTANCE.name());
@@ -161,7 +162,7 @@ public class VectorIndexTest extends PlanTestBase {
         // Add default properties
         IndexParamItem m = IndexParamsKey.M.getIndexParamItem();
         IndexParamItem efConstruction = VectorIndexParams.IndexParamsKey.EFCONSTRUCTION.getIndexParamItem();
-        Assertions.assertDoesNotThrow(() -> VectorIndexUtil.checkVectorIndexValid(c4, paramItemMap, KeysType.DUP_KEYS));
+        Assertions.assertDoesNotThrow(() -> IndexAnalyzer.checkVectorIndexValid(c4, paramItemMap, KeysType.DUP_KEYS));
         Assertions.assertTrue(m.getDefaultValue()
                 .equalsIgnoreCase(paramItemMap.get(m.getParamKey().name().toLowerCase(Locale.ROOT))));
         Assertions.assertTrue(efConstruction.getDefaultValue()
@@ -175,7 +176,7 @@ public class VectorIndexTest extends PlanTestBase {
         };
         Assertions.assertThrows(
                 SemanticException.class,
-                () -> VectorIndexUtil.checkVectorIndexValid(c4, null, KeysType.DUP_KEYS),
+                () -> IndexAnalyzer.checkVectorIndexValid(c4, null, KeysType.DUP_KEYS),
                 "The vector index does not support shared data mode");
     }
 
