@@ -2954,6 +2954,12 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true)
     public static String lake_background_warehouse = "default_warehouse";
 
+    /**
+     * whether to rollback default warehouse when warehouse is not exists
+     */
+    @ConfField(mutable = true)
+    public static boolean enable_rollback_default_warehouse = true;
+
     @ConfField(mutable = true)
     public static int lake_warehouse_max_compute_replica = 3;
 
