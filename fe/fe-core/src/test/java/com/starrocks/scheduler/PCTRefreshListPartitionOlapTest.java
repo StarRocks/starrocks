@@ -33,11 +33,13 @@ import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.FixMethodOrder;
 import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
 import org.junit.runners.MethodSorters;
 
 import java.util.Collection;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 @FixMethodOrder(MethodSorters.NAME_ASCENDING)
@@ -1287,5 +1289,49 @@ public class PCTRefreshListPartitionOlapTest extends MVTestBase {
                 "('demo-dIu.com', 'a', 1) , ('demo-Diu.com', 'b', 2), ('demo-DIU.com', 'a', 1), " +
                 "('demo-diu.com', 'b', 2);";
         testMVWithDuplicatedPartitionNames(query1, query2, "test_mv2");
+    }
+
+    @Test
+    public void testMVDropPartitions() throws Exception {
+        starRocksAssert.withTable("CREATE TABLE t1 (\n" +
+                "    dt varchar(20),\n" +
+                "    province string,\n" +
+                "    num int\n" +
+                ")\n" +
+                "DUPLICATE KEY(dt)\n" +
+                "PARTITION BY LIST(`dt`, `province`)\n" +
+                "(\n" +
+                "    PARTITION `p1` VALUES IN ((\"2020-07-01\", \"beijing\"), (\"2020-07-02\", \"beijing\")),\n" +
+                "    PARTITION `p2` VALUES IN ((\"2020-07-01\", \"chengdu\"), (\"2020-07-03\", \"chengdu\")),\n" +
+                "    PARTITION `p3` VALUES IN ((\"2020-07-02\", \"hangzhou\"), (\"2020-07-04\", \"hangzhou\"))\n" +
+                ");");
+        executeInsertSql("INSERT INTO t1 VALUES \n" +
+                "    (\"2020-07-01\", \"beijing\",  1), (\"2020-07-01\", \"chengdu\",  2),\n" +
+                "    (\"2020-07-02\", \"beijing\",  3), (\"2020-07-02\", \"hangzhou\", 4),\n" +
+                "    (\"2020-07-03\", \"chengdu\",  1),\n" +
+                "    (\"2020-07-04\", \"hangzhou\", 1)\n" +
+                ";");
+        starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW mv1 \n" +
+                "    PARTITION BY dt\n" +
+                "    REFRESH DEFERRED MANUAL \n" +
+                "    PROPERTIES (\n" +
+                "        'partition_refresh_number' = '-1',\n" +
+                "        \"replication_num\" = \"1\"\n" +
+                "    )\n" +
+                "    AS SELECT dt,province,sum(num) FROM t1 GROUP BY dt,province;\n");
+        starRocksAssert.refreshMV("REFRESH MATERIALIZED VIEW mv1 WITH SYNC MODE;");
+        MaterializedView mv = getMv("mv1");
+        Assertions.assertEquals(3, mv.getPartitions().size());
+        PartitionInfo partitionInfo = mv.getPartitionInfo();
+        Assertions.assertTrue(partitionInfo instanceof ListPartitionInfo);
+        ListPartitionInfo listPartitionInfo = (ListPartitionInfo) partitionInfo;
+        Map<Long, List<List<String>>> idToMultiValues = listPartitionInfo.getIdToMultiValues();
+        Assertions.assertEquals(3, idToMultiValues.size());
+        Set<String> partitionNames = mv.getPartitionNames();
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+        for (String partitionName : partitionNames) {
+            mv.dropPartition(db.getId(), partitionName, false);
+        }
+        Assertions.assertEquals(0, mv.getPartitions().size());
     }
 }
