@@ -32,7 +32,10 @@ public class AwsCloudConfiguration extends CloudConfiguration {
 
     private final AwsCloudCredential awsCloudCredential;
 
-    private boolean enablePathStyleAccess = false;
+    // shared-data cluster uses 3 methods to determine whether enable path style access,
+    // if is null, BE/CN will auto-determine whether use path style access, otherwise it will
+    // be determined by corresponding value
+    private Boolean enablePathStyleAccess = null;
 
     private boolean enableSSL = true;
 
@@ -49,7 +52,7 @@ public class AwsCloudConfiguration extends CloudConfiguration {
     }
 
     public boolean getEnablePathStyleAccess() {
-        return this.enablePathStyleAccess;
+        return this.enablePathStyleAccess == null ? false : this.enablePathStyleAccess;
     }
 
     public void setEnableSSL(boolean enableSSL) {
@@ -85,7 +88,7 @@ public class AwsCloudConfiguration extends CloudConfiguration {
         // Default value is 20
         configuration.set(Constants.MAX_ERROR_RETRIES, "5");
 
-        configuration.set(Constants.PATH_STYLE_ACCESS, String.valueOf(enablePathStyleAccess));
+        configuration.set(Constants.PATH_STYLE_ACCESS, String.valueOf(getEnablePathStyleAccess()));
         configuration.set(Constants.SECURE_CONNECTIONS, String.valueOf(enableSSL));
         awsCloudCredential.applyToConfiguration(configuration);
     }
@@ -117,6 +120,10 @@ public class AwsCloudConfiguration extends CloudConfiguration {
                 }
             }
         }
+        if (properties.containsKey(CloudConfigurationConstants.AWS_S3_ENABLE_PATH_STYLE_ACCESS)) {
+            enablePathStyleAccess = Boolean.parseBoolean(
+                properties.get(CloudConfigurationConstants.AWS_S3_ENABLE_PATH_STYLE_ACCESS));
+        }
     }
 
     @Override
@@ -125,7 +132,7 @@ public class AwsCloudConfiguration extends CloudConfiguration {
         tCloudConfiguration.setCloud_type(TCloudType.AWS);
         Map<String, String> properties = tCloudConfiguration.getCloud_properties();
         properties.put(CloudConfigurationConstants.AWS_S3_ENABLE_PATH_STYLE_ACCESS,
-                String.valueOf(enablePathStyleAccess));
+                String.valueOf(getEnablePathStyleAccess()));
         properties.put(CloudConfigurationConstants.AWS_S3_ENABLE_SSL, String.valueOf(enableSSL));
         awsCloudCredential.toThrift(properties);
     }
@@ -142,6 +149,13 @@ public class AwsCloudConfiguration extends CloudConfiguration {
         builder.getS3FsInfoBuilder()
                 .setPartitionedPrefixEnabled(enablePartitionedPrefix)
                 .setNumPartitionedPrefix(numOfPartitionedPrefix);
+        if (enablePathStyleAccess == null) {
+            builder.getS3FsInfoBuilder().setPathStyleAccess(0 /* auto */);
+        } else if (enablePathStyleAccess) {
+            builder.getS3FsInfoBuilder().setPathStyleAccess(1 /* path style */);
+        } else {
+            builder.getS3FsInfoBuilder().setPathStyleAccess(2 /* virtual host */);
+        }
         return builder.build();
     }
 
@@ -150,7 +164,7 @@ public class AwsCloudConfiguration extends CloudConfiguration {
         // TODO: add enable_partitioned_prefix, num_partitioned_prefix output
         return "AWSCloudConfiguration{" + getCommonFieldsString() +
                 ", cred=" + awsCloudCredential.toCredString() +
-                ", enablePathStyleAccess=" + enablePathStyleAccess +
+                ", enablePathStyleAccess=" + getEnablePathStyleAccess() +
                 ", enableSSL=" + enableSSL +
                 '}';
     }
