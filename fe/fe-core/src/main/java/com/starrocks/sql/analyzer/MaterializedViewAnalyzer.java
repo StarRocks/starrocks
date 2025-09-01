@@ -1081,7 +1081,7 @@ public class MaterializedViewAnalyzer {
             } else {
                 List<Column> refPartitionCols = refBaseTable.getPartitionColumns();
                 Optional<Column> refPartitionColOpt = refPartitionCols.stream()
-                        .filter(col -> col.getName().equals(slotRef.getColumnName()))
+                        .filter(col -> col.getName().equalsIgnoreCase(slotRef.getColumnName()))
                         .findFirst();
                 if (refPartitionColOpt.isEmpty()) {
                     throw new SemanticException("Materialized view partition column in partition exp " +
