@@ -392,6 +392,8 @@ class CancelableAnalyzeTaskTest {
                 analyzeStatus.setProgress(75);
                 allowTaskToContinue.await();
                 analyzeStatus.setProgress(100);
+                // Simulate StatisticsExecutor setting status to FINISH
+                analyzeStatus.setStatus(StatsConstants.ScheduleStatus.FINISH);
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
                 throw new RuntimeException("Task interrupted", e);
@@ -429,7 +431,14 @@ class CancelableAnalyzeTaskTest {
                 Maps.newHashMap(), LocalDateTime.now()
         );
 
-        task = new CancelableAnalyzeTask(createSimpleTask(), scheduleStatus);
+        // Create a task that sets FINISH status to simulate StatisticsExecutor behavior
+        Runnable taskWithStatusUpdate = () -> {
+            taskExecuted.set(true);
+            executionCount.incrementAndGet();
+            scheduleStatus.setStatus(StatsConstants.ScheduleStatus.FINISH);
+        };
+        
+        task = new CancelableAnalyzeTask(taskWithStatusUpdate, scheduleStatus);
         executeTaskInThread();
 
         assertEquals(StatsConstants.ScheduleStatus.FINISH, scheduleStatus.getStatus());
@@ -452,12 +461,29 @@ class CancelableAnalyzeTaskTest {
         );
     }
 
+    @Test
+    void shouldNotOverrideFailedStatusSetInternallyByTask() throws Exception {
+        task = new CancelableAnalyzeTask(createTaskThatSetsFailedStatus(), analyzeStatus);
+
+        executeTaskInThread();
+
+        assertAll("Internal FAILED status preservation",
+                () -> assertTrue(task.isDone(), "Task should be done"),
+                () -> assertFalse(task.isCancelled(), "Task should not be cancelled"),
+                () -> assertTrue(taskExecuted.get(), "Original task should have executed"),
+                () -> assertEquals(StatsConstants.ScheduleStatus.FAILED, analyzeStatus.getStatus(),
+                        "Status should remain FAILED set by StatisticsExecutor")
+        );
+    }
+
     private Runnable createSimpleTask() {
         return () -> {
             taskExecuted.set(true);
             executionCount.incrementAndGet();
             try {
                 Thread.sleep(50);
+                // Simulate StatisticsExecutor setting status to FINISH
+                analyzeStatus.setStatus(StatsConstants.ScheduleStatus.FINISH);
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
                 throw new RuntimeException("Task interrupted", e);
@@ -505,6 +531,15 @@ class CancelableAnalyzeTaskTest {
             taskExecuted.set(true);
             executionCount.incrementAndGet();
             throw new RuntimeException("Task failed intentionally");
+        };
+    }
+
+    private Runnable createTaskThatSetsFailedStatus() {
+        return () -> {
+            taskExecuted.set(true);
+            executionCount.incrementAndGet();
+            // Simulate StatisticsExecutor setting FAILED status internally
+            analyzeStatus.setStatus(StatsConstants.ScheduleStatus.FAILED);
         };
     }
 
