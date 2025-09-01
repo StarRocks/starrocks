@@ -158,6 +158,7 @@ public class MVRewriteWithSchemaChangeTest extends MVTestBase {
 
     @Test
     public void testMVWithSchemaChangeInStrictMode() throws Exception {
+        Config.transform_type_prefer_string_for_varchar = false;
         starRocksAssert.withTable("\n" +
                 "CREATE TABLE test_base_tbl(\n" +
                 "  `dt` datetime DEFAULT NULL,\n" +
@@ -204,6 +205,7 @@ public class MVRewriteWithSchemaChangeTest extends MVTestBase {
 
         starRocksAssert.dropTable("test_base_tbl");
         starRocksAssert.dropMaterializedView("test_mv1");
+        Config.transform_type_prefer_string_for_varchar = true;
     }
 
     @Test
