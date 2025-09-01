@@ -141,15 +141,28 @@ public abstract class MVPCTRefreshPartitioner {
                                                       Set<String> mvPartitionNames) throws AnalysisException;
 
     /**
+     * Get mv partition names to refresh based on the mv refresh params.
+     */
+    public abstract PCellSortedSet getMVPartitionsToRefreshByParams() throws AnalysisException;
+
+    /**
      * Get mv partitions to refresh based on the ref base table partitions.
      * @param snapshotBaseTables:        snapshot base tables to check.
      * @throws AnalysisException
      * @return: Return mv partitions to refresh based on the ref base table partitions.
      */
-    public abstract PCellSortedSet getMVPartitionsToRefresh(
+    public abstract PCellSortedSet getMVPartitionsToRefreshWithCheck(
             Map<Long, BaseTableSnapshotInfo> snapshotBaseTables) throws AnalysisException;
 
-    public abstract PCellSortedSet getMVPartitionsToRefreshWithForce() throws AnalysisException;
+    /**
+     * Get mv partitions to refresh with force, filter partitions by ttl.
+     * @return : mv partitions to refresh with force.
+     */
+    public PCellSortedSet getMVPartitionsToRefreshWithForce() throws AnalysisException {
+        PCellSortedSet sortedSet = getMVPartitionsToRefreshByParams();
+        filterPartitionsByTTL(sortedSet, false);
+        return sortedSet;
+    }
 
     /**
      * Get mv partition names with TTL based on the ref base table partitions.
@@ -165,9 +178,17 @@ public abstract class MVPCTRefreshPartitioner {
      */
     public abstract void filterPartitionByAdaptiveRefreshNumber(PCellSortedSet mvPartitionsToRefresh);
 
+    /**
+     * Filter to refresh partitions by partition refresh number.
+     * @param partitionsToRefresh: partitions to refresh.
+     */
     @VisibleForTesting
     public abstract void filterPartitionByRefreshNumber(PCellSortedSet partitionsToRefresh);
 
+    /**
+     * Check whether to calculate the potential partitions to refresh or not. When the base table changed partitions
+     * contain many-to-many relation partitions with mv partitions, should calculate the potential partitions to refresh.
+     */
     public abstract boolean isCalcPotentialRefreshPartition(Map<Table, PCellSortedSet> baseChangedPartitionNames,
                                                             PCellSortedSet mvPartitions);
     /**
@@ -216,6 +237,10 @@ public abstract class MVPCTRefreshPartitioner {
         return result;
     }
 
+    /**
+     * Filter mv to refresh partitions by some properties, like auto_partition_refresh_number.
+     * @param mvToRefreshedPartitions: partitions to refresh for materialized view
+     */
     public void filterMVToRefreshPartitionsByProperty(PCellSortedSet mvToRefreshedPartitions) {
         // do nothing by default
     }
@@ -223,13 +248,13 @@ public abstract class MVPCTRefreshPartitioner {
     /**
      * @return the partitions to refresh for materialized view
      */
-    private PCellSortedSet getPartitionsToRefreshForMaterializedView(Map<Long, BaseTableSnapshotInfo> snapshotBaseTables)
+    private PCellSortedSet getMVPartitionsToRefresh(Map<Long, BaseTableSnapshotInfo> snapshotBaseTables)
             throws AnalysisException {
-        if (mvRefreshParams.isForceCompleteRefresh()) {
+        if (mvRefreshParams.isForce()) {
             // Force refresh
             return getMVPartitionsToRefreshWithForce();
         } else {
-            return getMVPartitionsToRefresh(snapshotBaseTables);
+            return getMVPartitionsToRefreshWithCheck(snapshotBaseTables);
         }
     }
 
@@ -249,7 +274,7 @@ public abstract class MVPCTRefreshPartitioner {
         }
 
         try {
-            mvToRefreshedPartitions = getPartitionsToRefreshForMaterializedView(snapshotBaseTables);
+            mvToRefreshedPartitions = getMVPartitionsToRefresh(snapshotBaseTables);
             if (mvToRefreshedPartitions == null || mvToRefreshedPartitions.isEmpty()) {
                 logger.info("no partitions to refresh for materialized view");
                 return mvToRefreshedPartitions;
