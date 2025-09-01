@@ -327,14 +327,6 @@ public class SlotRef extends Expr {
         return label;
     }
 
-    @Override
-    public String toJDBCSQL() {
-        if (label == null) {
-            throw new IllegalArgumentException("should set label for cols in JDBCScanNode. SlotRef: " + debugString());
-        }
-        return label;
-    }
-
     public TableName getTableName() {
         Preconditions.checkState(isAnalyzed);
         Preconditions.checkNotNull(desc);
