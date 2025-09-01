@@ -61,7 +61,7 @@ public:
 
     // Calculate the size of the serialized VariantValue.
     // 4 bytes for value size + metadata size + value size
-    uint64_t serialize_size() const;
+    uint32_t serialize_size() const;
 
     uint64_t mem_usage() const { return serialize_size(); }
 

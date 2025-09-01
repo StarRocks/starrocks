@@ -161,7 +161,7 @@ size_t VariantValue::serialize(uint8_t* dst) const {
     return offset;
 }
 
-uint64_t VariantValue::serialize_size() const {
+uint32_t VariantValue::serialize_size() const {
     return sizeof(uint32_t) + _metadata.size() + _value.size();
 }
 
