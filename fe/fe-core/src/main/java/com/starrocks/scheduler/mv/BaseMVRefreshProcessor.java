@@ -129,10 +129,7 @@ public abstract class BaseMVRefreshProcessor {
         this.mvContext = mvContext;
         this.mvEntity = mvEntity;
         this.logger = MVTraceUtils.getLogger(mv, clazz);
-        // init mv refresh params
-        MaterializedView.PartitionRefreshStrategy partitionRefreshStrategy = mv.getPartitionRefreshStrategy();
-        boolean isForce = partitionRefreshStrategy == MaterializedView.PartitionRefreshStrategy.FORCE;
-        this.mvRefreshParams = new MVRefreshParams(mv.getPartitionInfo(), mvContext.getProperties(), isForce);
+        this.mvRefreshParams = new MVRefreshParams(mv, mvContext.getProperties());
         // prepare mv refresh partitioner
         this.mvRefreshPartitioner = buildMvRefreshPartitioner(mv, mvContext, mvRefreshParams);
     }
