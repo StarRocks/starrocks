@@ -101,7 +101,7 @@ public:
             uint32_t& poison_value = *reinterpret_cast<uint32_t*>(ptr + pos);
             uint32_t& prefix = *reinterpret_cast<uint32_t*>(long_rep.prefix);
             prefix ^= poison_value; // XOR the prefix with the poison value
-            strings::memcpy_inlined(ptr, &prefix, sizeof(uint32_t));
+            //strings::memcpy_inlined(ptr, &prefix, sizeof(uint32_t));
         }
     }
 

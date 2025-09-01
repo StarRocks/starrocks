@@ -997,7 +997,7 @@ struct AggHashMapWithSerializedGermanStringKey
         }
 
         for (const auto& key_col : key_columns) {
-            key_col->serialize_batch_gs(german_strings, german_string_sizes, chunk_size);
+            key_col->serialize_batch_gs(german_strings.data(), german_string_sizes.data(), chunk_size);
         }
 
         if (config::poison_german_string) {

@@ -189,10 +189,10 @@ private:
 template <LogicalType LT, JoinKeyConstructorType CT, JoinHashMapMethodType MT>
 class JoinHashMap {
 public:
-    using CppType = typename RunTimeTypeTraits<LT>::CppType;
     using BuildKeyConstructor = typename JoinKeyConstructorTypeTraits<CT, LT>::BuildType;
     using ProbeKeyConstructor = typename JoinKeyConstructorTypeTraits<CT, LT>::ProbeType;
     using HashMapMethod = typename JoinHashMapMethodTypeTraits<MT, LT>::MapType;
+    using CppType = typename HashMapMethod::CppType;
 
     explicit JoinHashMap(JoinHashTableItems* table_items, HashTableProbeState* probe_state)
             : _table_items(table_items), _probe_state(probe_state) {}
@@ -347,6 +347,13 @@ private:
 #define JoinHashMapForFixedSizeKeyDenseRangeDirectMapping(LT) \
     JoinHashMap<LT, JoinKeyConstructorType::SERIALIZED_FIXED_SIZE, JoinHashMapMethodType::DENSE_RANGE_DIRECT_MAPPING>
 
+#define JoinHashMapForOneGermanStringKey()                                   \
+    JoinHashMap<TYPE_VARCHAR, JoinKeyConstructorType::ONE_KEY_GERMAN_STRING, \
+                JoinHashMapMethodType::GERMAN_STRING_BUCKET_CHAINED>
+
+#define JoinHashMapForSerializedGermanStringKey()                               \
+    JoinHashMap<TYPE_VARCHAR, JoinKeyConstructorType::SERIALIZED_GERMAN_STRING, \
+                JoinHashMapMethodType::GERMAN_STRING_BUCKET_CHAINED>
 // ------------------------------------------------------------------------------------
 // JoinHashTable
 // ------------------------------------------------------------------------------------
@@ -420,42 +427,42 @@ private:
     void _remove_duplicate_index_for_right_anti_join(Filter* filter);
     void _remove_duplicate_index_for_full_outer_join(Filter* filter);
 
-    using JoinHashMapVariant =
-            std::variant<std::unique_ptr<JoinHashMapForEmpty>, //
-                         std::unique_ptr<JoinHashMapForDirectMapping(TYPE_BOOLEAN)>,
-                         std::unique_ptr<JoinHashMapForDirectMapping(TYPE_TINYINT)>,
-                         std::unique_ptr<JoinHashMapForDirectMapping(TYPE_SMALLINT)>,
+    using JoinHashMapVariant = std::variant<
+            std::unique_ptr<JoinHashMapForEmpty>, //
+            std::unique_ptr<JoinHashMapForDirectMapping(TYPE_BOOLEAN)>,
+            std::unique_ptr<JoinHashMapForDirectMapping(TYPE_TINYINT)>,
+            std::unique_ptr<JoinHashMapForDirectMapping(TYPE_SMALLINT)>,
 
-                         std::unique_ptr<JoinHashMapForOneKey(TYPE_INT)>, //
-                         std::unique_ptr<JoinHashMapForOneKey(TYPE_BIGINT)>,
-                         std::unique_ptr<JoinHashMapForOneKey(TYPE_LARGEINT)>, //
-                         std::unique_ptr<JoinHashMapForOneKey(TYPE_FLOAT)>,
-                         std::unique_ptr<JoinHashMapForOneKey(TYPE_DOUBLE)>, //
-                         std::unique_ptr<JoinHashMapForOneKey(TYPE_VARCHAR)>,
-                         std::unique_ptr<JoinHashMapForOneKey(TYPE_DATE)>, //
-                         std::unique_ptr<JoinHashMapForOneKey(TYPE_DATETIME)>,
-                         std::unique_ptr<JoinHashMapForOneKey(TYPE_DECIMALV2)>,
-                         std::unique_ptr<JoinHashMapForOneKey(TYPE_DECIMAL32)>,
-                         std::unique_ptr<JoinHashMapForOneKey(TYPE_DECIMAL64)>,
-                         std::unique_ptr<JoinHashMapForOneKey(TYPE_DECIMAL128)>,
+            std::unique_ptr<JoinHashMapForOneKey(TYPE_INT)>, //
+            std::unique_ptr<JoinHashMapForOneKey(TYPE_BIGINT)>,
+            std::unique_ptr<JoinHashMapForOneKey(TYPE_LARGEINT)>, //
+            std::unique_ptr<JoinHashMapForOneKey(TYPE_FLOAT)>,
+            std::unique_ptr<JoinHashMapForOneKey(TYPE_DOUBLE)>, //
+            std::unique_ptr<JoinHashMapForOneKey(TYPE_VARCHAR)>, std::unique_ptr<JoinHashMapForOneGermanStringKey()>,
+            std::unique_ptr<JoinHashMapForOneKey(TYPE_DATE)>, //
+            std::unique_ptr<JoinHashMapForOneKey(TYPE_DATETIME)>, std::unique_ptr<JoinHashMapForOneKey(TYPE_DECIMALV2)>,
+            std::unique_ptr<JoinHashMapForOneKey(TYPE_DECIMAL32)>,
+            std::unique_ptr<JoinHashMapForOneKey(TYPE_DECIMAL64)>,
+            std::unique_ptr<JoinHashMapForOneKey(TYPE_DECIMAL128)>,
 
-                         std::unique_ptr<JoinHashMapForSerializedKey(TYPE_VARCHAR)>,
-                         std::unique_ptr<JoinHashMapForFixedSizeKey(TYPE_INT)>,
-                         std::unique_ptr<JoinHashMapForFixedSizeKey(TYPE_BIGINT)>,
-                         std::unique_ptr<JoinHashMapForFixedSizeKey(TYPE_LARGEINT)>,
+            std::unique_ptr<JoinHashMapForSerializedKey(TYPE_VARCHAR)>,
+            std::unique_ptr<JoinHashMapForSerializedGermanStringKey()>,
+            std::unique_ptr<JoinHashMapForFixedSizeKey(TYPE_INT)>,
+            std::unique_ptr<JoinHashMapForFixedSizeKey(TYPE_BIGINT)>,
+            std::unique_ptr<JoinHashMapForFixedSizeKey(TYPE_LARGEINT)>,
 
-                         std::unique_ptr<JoinHashMapForOneKeyRangeDirectMapping(TYPE_INT)>,
-                         std::unique_ptr<JoinHashMapForOneKeyRangeDirectMapping(TYPE_BIGINT)>,
-                         std::unique_ptr<JoinHashSetForOneKeyRangeDirectMapping(TYPE_INT)>,
-                         std::unique_ptr<JoinHashSetForOneKeyRangeDirectMapping(TYPE_BIGINT)>,
-                         std::unique_ptr<JoinHashMapForOneKeyDenseRangeDirectMapping(TYPE_INT)>,
-                         std::unique_ptr<JoinHashMapForOneKeyDenseRangeDirectMapping(TYPE_BIGINT)>,
-                         std::unique_ptr<JoinHashMapForFixedSizeKeyRangeDirectMapping(TYPE_INT)>,
-                         std::unique_ptr<JoinHashMapForFixedSizeKeyRangeDirectMapping(TYPE_BIGINT)>,
-                         std::unique_ptr<JoinHashSetForFixedSizeKeyRangeDirectMapping(TYPE_INT)>,
-                         std::unique_ptr<JoinHashSetForFixedSizeKeyRangeDirectMapping(TYPE_BIGINT)>,
-                         std::unique_ptr<JoinHashMapForFixedSizeKeyDenseRangeDirectMapping(TYPE_INT)>,
-                         std::unique_ptr<JoinHashMapForFixedSizeKeyDenseRangeDirectMapping(TYPE_BIGINT)>>;
+            std::unique_ptr<JoinHashMapForOneKeyRangeDirectMapping(TYPE_INT)>,
+            std::unique_ptr<JoinHashMapForOneKeyRangeDirectMapping(TYPE_BIGINT)>,
+            std::unique_ptr<JoinHashSetForOneKeyRangeDirectMapping(TYPE_INT)>,
+            std::unique_ptr<JoinHashSetForOneKeyRangeDirectMapping(TYPE_BIGINT)>,
+            std::unique_ptr<JoinHashMapForOneKeyDenseRangeDirectMapping(TYPE_INT)>,
+            std::unique_ptr<JoinHashMapForOneKeyDenseRangeDirectMapping(TYPE_BIGINT)>,
+            std::unique_ptr<JoinHashMapForFixedSizeKeyRangeDirectMapping(TYPE_INT)>,
+            std::unique_ptr<JoinHashMapForFixedSizeKeyRangeDirectMapping(TYPE_BIGINT)>,
+            std::unique_ptr<JoinHashSetForFixedSizeKeyRangeDirectMapping(TYPE_INT)>,
+            std::unique_ptr<JoinHashSetForFixedSizeKeyRangeDirectMapping(TYPE_BIGINT)>,
+            std::unique_ptr<JoinHashMapForFixedSizeKeyDenseRangeDirectMapping(TYPE_INT)>,
+            std::unique_ptr<JoinHashMapForFixedSizeKeyDenseRangeDirectMapping(TYPE_BIGINT)>>;
 
     bool _is_empty_map = true;
     JoinKeyConstructorUnaryType _key_constructor_type;

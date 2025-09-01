@@ -190,9 +190,9 @@ void FixedLengthColumnBase<T>::serialize_batch_with_null_masks(uint8_t* __restri
 }
 
 template <typename T>
-void FixedLengthColumnBase<T>::serialize_batch_gs(Buffer<GermanString>& german_strings,
-                                                  Buffer<uint32_t>& german_string_sizes, size_t chunk_size) const {
-    uint32_t* sizes = german_string_sizes.data();
+void FixedLengthColumnBase<T>::serialize_batch_gs(GermanString* german_strings, uint32_t* german_string_sizes,
+                                                  size_t chunk_size) const {
+    auto*& sizes = german_string_sizes;
     const T* __restrict__ src = _data.data();
 
     for (size_t i = 0; i < chunk_size; ++i) {
@@ -207,11 +207,10 @@ void FixedLengthColumnBase<T>::serialize_batch_gs(Buffer<GermanString>& german_s
 }
 
 template <typename T>
-void FixedLengthColumnBase<T>::serialize_batch_with_null_masks_gs(Buffer<GermanString>& german_strings,
-                                                                  Buffer<uint32_t>& german_string_sizes,
-                                                                  size_t chunk_size, const uint8_t* null_masks,
-                                                                  bool has_null) const {
-    uint32_t* sizes = german_string_sizes.data();
+void FixedLengthColumnBase<T>::serialize_batch_with_null_masks_gs(GermanString* german_strings,
+                                                                  uint32_t* german_string_sizes, size_t chunk_size,
+                                                                  const uint8_t* null_masks, bool has_null) const {
+    auto*& sizes = german_string_sizes;
     const T* __restrict__ src = _data.data();
 
     if (!has_null) {

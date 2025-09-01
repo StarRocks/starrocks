@@ -49,18 +49,44 @@ private:
                                                                                      JoinHashTableItems* table_items);
 };
 
+JoinKeyConstructorUnaryType rectify_join_key_ctor_if_necessary(JoinKeyConstructorUnaryType type,
+                                                               bool use_german_string) {
+    if (!use_german_string) {
+        return type;
+    }
+    if (type == JoinKeyConstructorUnaryType::ONE_KEY_VARCHAR) {
+        return JoinKeyConstructorUnaryType::ONE_KEY_GERMAN_STRING;
+    } else if (type == JoinKeyConstructorUnaryType::SERIALIZED_VARCHAR) {
+        return JoinKeyConstructorUnaryType::SERIALIZED_GERMAN_STRING;
+    } else {
+        return type;
+    }
+}
+
+JoinHashMapMethodUnaryType rectify_hash_join_method_if_necessary(JoinHashMapMethodUnaryType type,
+                                                                 bool use_german_string) {
+    if (use_german_string && type == JoinHashMapMethodUnaryType::BUCKET_CHAINED_VARCHAR) {
+        return JoinHashMapMethodUnaryType::GERMAN_STRING_BUCKET_CHAINED;
+    } else {
+        return type;
+    }
+}
+
 std::tuple<JoinKeyConstructorUnaryType, JoinHashMapMethodUnaryType>
 JoinHashMapSelector::construct_key_and_determine_hash_map(RuntimeState* state, JoinHashTableItems* table_items) {
     DCHECK_GT(table_items->row_count, 0);
+    const auto use_german_string = state->enable_german_string_used_by_hash_join();
 
-    const auto key_constructor_type = _determine_key_constructor(table_items);
+    const auto key_constructor_type =
+            rectify_join_key_ctor_if_necessary(_determine_key_constructor(table_items), use_german_string);
     dispatch_join_key_constructor_unary(key_constructor_type, [&]<JoinKeyConstructorUnaryType CT> {
         using KeyConstructor = typename JoinKeyConstructorUnaryTypeTraits<CT>::BuildType;
         KeyConstructor().prepare(state, table_items);
         KeyConstructor().build_key(state, table_items);
     });
 
-    const auto method_type = _determine_hash_map_method(state, table_items, key_constructor_type);
+    const auto method_type = rectify_hash_join_method_if_necessary(
+            _determine_hash_map_method(state, table_items, key_constructor_type), use_german_string);
     return {key_constructor_type, method_type};
 }
 
@@ -502,6 +528,26 @@ int64_t JoinHashTable::mem_usage() const {
     return usage;
 }
 
+template <JoinKeyConstructorUnaryType CUT, JoinHashMapMethodUnaryType MUT>
+constexpr bool is_legal_combination() {
+    if constexpr (CUT == JoinKeyConstructorUnaryType::ONE_KEY_GERMAN_STRING &&
+                  MUT == JoinHashMapMethodUnaryType::GERMAN_STRING_BUCKET_CHAINED) {
+        return true;
+    } else if constexpr (CUT == JoinKeyConstructorUnaryType::SERIALIZED_GERMAN_STRING &&
+                         MUT == JoinHashMapMethodUnaryType::GERMAN_STRING_BUCKET_CHAINED) {
+        return true;
+    } else if constexpr (CUT == JoinKeyConstructorUnaryType::ONE_KEY_GERMAN_STRING) {
+        return false;
+    } else if constexpr (CUT == JoinKeyConstructorUnaryType::SERIALIZED_GERMAN_STRING) {
+        return false;
+    } else if constexpr (MUT == JoinHashMapMethodUnaryType::GERMAN_STRING_BUCKET_CHAINED) {
+        return false;
+    } else {
+        return JoinKeyConstructorUnaryTypeTraits<CUT>::logical_type ==
+               JoinHashMapMethodUnaryTypeTraits<MUT>::logical_type;
+    }
+}
+
 Status JoinHashTable::build(RuntimeState* state) {
     RETURN_IF_ERROR(_table_items->build_chunk->upgrade_if_overflow());
     _table_items->has_large_column = _table_items->build_chunk->has_large_column();
@@ -525,12 +571,12 @@ Status JoinHashTable::build(RuntimeState* state) {
         std::tie(_key_constructor_type, _hash_map_method_type) =
                 JoinHashMapSelector::construct_key_and_determine_hash_map(state, _table_items.get());
         auto create_hash_map = [&]<JoinKeyConstructorUnaryType CUT, JoinHashMapMethodUnaryType MUT>() {
-            static constexpr auto LT = JoinKeyConstructorUnaryTypeTraits<CUT>::logical_type;
-            if constexpr (LT != JoinHashMapMethodUnaryTypeTraits<MUT>::logical_type) {
+            if constexpr (!is_legal_combination<CUT, MUT>()) {
                 return Status::InvalidArgument(
                         strings::Substitute("Join key logical type {} does not match hash map logical type {}",
                                             static_cast<int>(CUT), static_cast<int>(MUT)));
             } else {
+                static constexpr auto LT = JoinKeyConstructorUnaryTypeTraits<CUT>::logical_type;
                 static constexpr auto CT = JoinKeyConstructorUnaryTypeTraits<CUT>::key_constructor_type;
                 static constexpr auto MT = JoinHashMapMethodUnaryTypeTraits<MUT>::map_method_type;
                 _hash_map = std::make_unique<JoinHashMap<LT, CT, MT>>(_table_items.get(), _probe_state.get());

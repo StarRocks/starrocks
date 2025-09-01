@@ -380,6 +380,10 @@ public:
                _query_options.enable_german_string_mask & (1 << 4);
     }
 
+    bool enable_german_string_used_by_hash_join() const {
+        return _query_options.__isset.enable_german_string_mask && _query_options.enable_german_string_mask & (1 << 5);
+    }
+
     int32_t spill_mem_table_size() const {
         return EXTRACE_SPILL_PARAM(_query_options, _spill_options, spill_mem_table_size);
     }

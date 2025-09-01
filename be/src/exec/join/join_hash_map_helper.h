@@ -14,6 +14,7 @@
 
 #pragma once
 
+#include "column/german_string.h"
 #include "join_hash_map_helper.h"
 #include "join_hash_table_descriptor.h"
 
@@ -57,6 +58,16 @@ struct JoinKeyHash<Slice> {
     static const uint32_t CRC_SEED = 0x811C9DC5;
     uint32_t operator()(const Slice& slice, uint32_t num_buckets, uint32_t num_log_buckets) const {
         const size_t hash = crc_hash_32(slice.data, slice.size, CRC_SEED);
+        return hash & (num_buckets - 1);
+    }
+};
+
+template <>
+struct JoinKeyHash<GermanString> {
+    static const uint32_t CRC_SEED = 0x811C9DC5;
+    uint32_t operator()(const GermanString& gs, uint32_t num_buckets, uint32_t num_log_buckets) const {
+        const auto* p = gs.is_inline() ? gs.short_rep.str : reinterpret_cast<const char*>(gs.long_rep.ptr);
+        const size_t hash = crc_hash_32(p, gs.len, CRC_SEED);
         return hash & (num_buckets - 1);
     }
 };

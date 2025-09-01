@@ -63,6 +63,30 @@ public:
     static const Buffer<CppType>& get_key_data(const HashTableProbeState& probe_state);
 };
 
+class BuildKeyConstructorForOneGermanStringKey {
+public:
+    using CppType = GermanString;
+    using ColumnType = BinaryColumn;
+
+    static void prepare(RuntimeState* state, JoinHashTableItems* table_items) {}
+    static void build_key(RuntimeState* state, JoinHashTableItems* table_items) {}
+    static size_t get_key_column_bytes(const JoinHashTableItems& table_items) {
+        return table_items.key_columns[0]->byte_size();
+    }
+    static const Buffer<CppType>& get_key_data(const JoinHashTableItems& table_items);
+    static const Buffer<uint8_t>* get_is_nulls(const JoinHashTableItems& table_items);
+};
+
+class ProbeKeyConstructorForOneGermanStringKey {
+public:
+    using CppType = GermanString;
+    using ColumnType = BinaryColumn;
+
+    static void prepare(RuntimeState* state, HashTableProbeState* probe_state) {}
+    static void build_key(const JoinHashTableItems& table_items, HashTableProbeState* probe_state);
+    static const Buffer<CppType>& get_key_data(const HashTableProbeState& probe_state);
+};
+
 // ------------------------------------------------------------------------------------
 // KeyConstructorForSerializedFixedSize
 // ------------------------------------------------------------------------------------
@@ -134,6 +158,43 @@ public:
     static void build_key(const JoinHashTableItems& table_items, HashTableProbeState* probe_state);
 
     static const Buffer<Slice>& get_key_data(const HashTableProbeState& probe_state) { return probe_state.probe_slice; }
+
+private:
+    static void _probe_column(const JoinHashTableItems& table_items, HashTableProbeState* probe_state,
+                              const Columns& data_columns, uint8_t* ptr);
+    static void _probe_nullable_column(const JoinHashTableItems& table_items, HashTableProbeState* probe_state,
+                                       const Columns& data_columns, const NullColumns& null_columns, uint8_t* ptr);
+};
+
+class BuildKeyConstructorForGermanStringSerialized {
+public:
+    static void prepare(RuntimeState* state, JoinHashTableItems* table_items);
+    static void build_key(RuntimeState* state, JoinHashTableItems* table_items);
+
+    static size_t get_key_column_bytes(const JoinHashTableItems& table_items) {
+        return table_items.build_pool->total_allocated_bytes();
+    }
+    static const Buffer<GermanString>& get_key_data(const JoinHashTableItems& table_items) {
+        return table_items.build_german_string;
+    }
+    static const Buffer<uint8_t>* get_is_nulls(const JoinHashTableItems& table_items) {
+        return table_items.build_key_nulls.empty() ? nullptr : &table_items.build_key_nulls;
+    }
+};
+
+class ProbeKeyConstructorForGermanStringSerialized {
+public:
+    static void prepare(RuntimeState* state, HashTableProbeState* probe_state) {
+        probe_state->is_nulls.resize(state->chunk_size());
+        probe_state->probe_pool = std::make_unique<MemPool>();
+        probe_state->probe_german_string.resize(state->chunk_size());
+    }
+
+    static void build_key(const JoinHashTableItems& table_items, HashTableProbeState* probe_state);
+
+    static const Buffer<GermanString>& get_key_data(const HashTableProbeState& probe_state) {
+        return probe_state.probe_german_string;
+    }
 
 private:
     static void _probe_column(const JoinHashTableItems& table_items, HashTableProbeState* probe_state,

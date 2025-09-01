@@ -325,14 +325,13 @@ public:
                                                  uint32_t max_one_row_size, const uint8_t* null_masks,
                                                  bool has_null) const;
 
-    virtual void serialize_batch_gs(Buffer<GermanString>& german_strings, Buffer<uint32_t>& german_string_sizes,
+    virtual void serialize_batch_gs(GermanString* german_strings, uint32_t* german_string_sizes,
                                     size_t chunk_size) const {
         NOT_SUPPORT();
     }
 
-    virtual void serialize_batch_with_null_masks_gs(Buffer<GermanString>& german_strings,
-                                                    Buffer<uint32_t>& german_string_sizes, size_t chunk_size,
-                                                    const uint8_t* null_masks, bool has_null) const {
+    virtual void serialize_batch_with_null_masks_gs(GermanString* german_strings, uint32_t* german_string_sizes,
+                                                    size_t chunk_size, const uint8_t* null_masks, bool has_null) const {
         NOT_SUPPORT();
     }
 

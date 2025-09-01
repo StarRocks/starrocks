@@ -72,6 +72,7 @@ struct JoinHashTableItems {
     Buffer<DenseGroup> dense_groups;
 
     Buffer<Slice> build_slice;
+    Buffer<GermanString> build_german_string;
     ColumnPtr build_key_column = nullptr;
     Buffer<uint8_t> build_key_nulls;
 
@@ -97,7 +98,6 @@ struct JoinHashTableItems {
     bool cache_miss_serious = false;
     bool enable_late_materialization = false;
     bool is_collision_free_and_unique = false;
-
     float get_keys_per_bucket() const { return keys_per_bucket; }
     bool ht_cache_miss_serious() const { return cache_miss_serious; }
 
@@ -134,6 +134,7 @@ struct HashTableProbeState {
     Buffer<uint32_t> buckets;
     Buffer<uint32_t> next;
     Buffer<Slice> probe_slice;
+    Buffer<GermanString> probe_german_string;
     const Buffer<uint8_t>* null_array = nullptr;
     ColumnPtr probe_key_column;
     const Columns* key_columns = nullptr;
@@ -211,6 +212,7 @@ struct HashTableProbeState {
               buckets(rhs.buckets),
               next(rhs.next),
               probe_slice(rhs.probe_slice),
+              probe_german_string(rhs.probe_german_string),
               null_array(rhs.null_array),
               probe_key_column(rhs.probe_key_column == nullptr ? nullptr : rhs.probe_key_column->clone()),
               key_columns(rhs.key_columns),

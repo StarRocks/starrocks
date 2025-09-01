@@ -247,10 +247,10 @@ public:
                                          uint32_t max_one_row_size, const uint8_t* null_masks,
                                          bool has_null) const override;
 
-    void serialize_batch_gs(Buffer<GermanString>& german_strings, Buffer<uint32_t>& german_string_sizes,
+    void serialize_batch_gs(GermanString* german_strings, uint32_t* german_string_sizes,
                             size_t chunk_size) const override;
 
-    void serialize_batch_with_null_masks_gs(Buffer<GermanString>& german_strings, Buffer<uint32_t>& german_string_sizes,
+    void serialize_batch_with_null_masks_gs(GermanString* german_strings, uint32_t* german_string_sizes,
                                             size_t chunk_size, const uint8_t* null_masks, bool has_null) const override;
 
     const uint8_t* deserialize_and_append(const uint8_t* pos) override;
@@ -308,9 +308,9 @@ public:
         return _slices;
     }
 
-    GermanStringContainer& get_german_strings() {
+    GermanStringContainer& get_german_strings(bool poison = false) {
         if (!_german_strings_cache) {
-            _build_german_strings();
+            _build_german_strings(poison);
         }
         return _german_strings;
     }
@@ -322,9 +322,9 @@ public:
         return _slices;
     }
 
-    const GermanStringContainer& get_german_strings() const {
+    const GermanStringContainer& get_german_strings(bool poison = false) const {
         if (!_german_strings_cache) {
-            _build_german_strings();
+            _build_german_strings(poison);
         }
         return _german_strings;
     }
@@ -396,7 +396,7 @@ public:
 
 private:
     void _build_slices() const;
-    void _build_german_strings() const;
+    void _build_german_strings(bool poison) const;
 
     Bytes _bytes;
     Offsets _offsets;

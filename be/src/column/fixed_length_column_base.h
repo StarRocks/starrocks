@@ -183,10 +183,10 @@ public:
                                          uint32_t max_one_row_size, const uint8_t* null_masks,
                                          bool has_null) const override;
 
-    void serialize_batch_gs(Buffer<GermanString>& german_strings, Buffer<uint32_t>& german_string_sizes,
+    void serialize_batch_gs(GermanString* german_strings, uint32_t* german_string_sizes,
                             size_t chunk_size) const override;
 
-    void serialize_batch_with_null_masks_gs(Buffer<GermanString>& german_strings, Buffer<uint32_t>& german_string_sizes,
+    void serialize_batch_with_null_masks_gs(GermanString* german_strings, uint32_t* german_string_sizes,
                                             size_t chunk_size, const uint8_t* null_masks, bool has_null) const override;
 
     size_t serialize_batch_at_interval(uint8_t* dst, size_t byte_offset, size_t byte_interval, size_t start,

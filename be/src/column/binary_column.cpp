@@ -355,7 +355,7 @@ void BinaryColumnBase<T>::_build_slices() const {
 }
 
 template <typename T>
-void BinaryColumnBase<T>::_build_german_strings() const {
+void BinaryColumnBase<T>::_build_german_strings(bool poison) const {
     DCHECK(_offsets.size() > 0);
     _german_strings_cache = false;
     _german_strings.clear();
@@ -366,6 +366,7 @@ void BinaryColumnBase<T>::_build_german_strings() const {
     const auto* base = _bytes.data();
     for (auto i = 0; i < num_rows; ++i) {
         _german_strings[i] = GermanString(base + _offsets[i], _offsets[i + 1] - _offsets[i]);
+        _german_strings[i].poison();
     }
     _german_strings_cache = true;
 }
@@ -644,28 +645,27 @@ void BinaryColumnBase<T>::serialize_batch_with_null_masks(uint8_t* dst, Buffer<u
 }
 
 template <typename T>
-void BinaryColumnBase<T>::serialize_batch_gs(Buffer<GermanString>& german_strings,
-                                             Buffer<uint32_t>& german_string_sizes, size_t chunk_size) const {
+void BinaryColumnBase<T>::serialize_batch_gs(GermanString* german_strings, uint32_t* german_string_sizes,
+                                             size_t chunk_size) const {
     const auto* off = _offsets.data();
     const auto* bytes = _bytes.data();
-    auto* sizes = german_string_sizes.data();
     for (auto i = 0; i < chunk_size; ++i) {
         auto& gs = german_strings[i];
         auto len = static_cast<uint32_t>(off[i + 1] - off[i]);
         const auto* p = bytes + off[i];
-        gs.append(sizes[i], &len, sizeof(uint32_t));
-        gs.append(sizes[i] + sizeof(uint32_t), p, len);
-        sizes[i] += sizeof(uint32_t) + len;
+        gs.append(german_string_sizes[i], &len, sizeof(uint32_t));
+        gs.append(german_string_sizes[i] + sizeof(uint32_t), p, len);
+        german_string_sizes[i] += sizeof(uint32_t) + len;
     }
 }
 
 template <typename T>
-void BinaryColumnBase<T>::serialize_batch_with_null_masks_gs(Buffer<GermanString>& german_strings,
-                                                             Buffer<uint32_t>& german_string_sizes, size_t chunk_size,
+void BinaryColumnBase<T>::serialize_batch_with_null_masks_gs(GermanString* german_strings,
+                                                             uint32_t* german_string_sizes, size_t chunk_size,
                                                              const uint8_t* null_masks, bool has_null) const {
     const auto* off = _offsets.data();
     const auto* bytes = _bytes.data();
-    auto* sizes = german_string_sizes.data();
+    auto*& sizes = german_string_sizes;
 
     if (!has_null) {
         for (auto i = 0; i < chunk_size; ++i) {

@@ -194,7 +194,7 @@ public:
     void serialize_batch(uint8_t* dst, Buffer<uint32_t>& slice_sizes, size_t chunk_size,
                          uint32_t max_one_row_size) const override;
 
-    void serialize_batch_gs(Buffer<GermanString>& german_strings, Buffer<uint32_t>& german_string_sizes,
+    void serialize_batch_gs(GermanString* german_strings, uint32_t* german_string_sizes,
                             size_t chunk_size) const override;
 
     const uint8_t* deserialize_and_append(const uint8_t* pos) override;

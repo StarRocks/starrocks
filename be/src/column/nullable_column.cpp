@@ -323,7 +323,7 @@ void NullableColumn::serialize_batch(uint8_t* dst, Buffer<uint32_t>& slice_sizes
                                                   _null_column->get_data().data(), _has_null);
 }
 
-void NullableColumn::serialize_batch_gs(Buffer<GermanString>& german_strings, Buffer<uint32_t>& german_string_sizes,
+void NullableColumn::serialize_batch_gs(GermanString* german_strings, uint32_t* german_string_sizes,
                                         size_t chunk_size) const {
     _data_column->serialize_batch_with_null_masks_gs(german_strings, german_string_sizes, chunk_size,
                                                      _null_column->get_data().data(), _has_null);
