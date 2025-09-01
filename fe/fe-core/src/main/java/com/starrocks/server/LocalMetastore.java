@@ -386,7 +386,6 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
         createDb(dbName, new HashMap<>());
     }
 
->>>>>>> 54b8ebf45d ([BugFix] Fix possible NPE in mv backup restore (#62514))
     @Override
     public void createDb(String dbName, Map<String, String> properties) throws DdlException, AlreadyExistsException {
         long id = 0L;
