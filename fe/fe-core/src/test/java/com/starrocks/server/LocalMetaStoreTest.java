@@ -17,14 +17,20 @@ package com.starrocks.server;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
+<<<<<<< HEAD
 import com.starrocks.analysis.TableName;
 import com.starrocks.analysis.TableRef;
 import com.starrocks.catalog.DataProperty;
+=======
+>>>>>>> 17659ec2dd ([UT] Fix unstable case testCreateTableIfNotExists (#62566))
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.HiveTable;
 import com.starrocks.catalog.LocalTablet;
 import com.starrocks.catalog.MaterializedIndex;
+<<<<<<< HEAD
 import com.starrocks.catalog.MaterializedView;
+=======
+>>>>>>> 17659ec2dd ([UT] Fix unstable case testCreateTableIfNotExists (#62566))
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionInfo;
@@ -45,14 +51,13 @@ import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
-import com.starrocks.persist.EditLog;
-import com.starrocks.persist.ModifyPartitionInfo;
 import com.starrocks.persist.PhysicalPartitionPersistInfoV2;
 import com.starrocks.persist.TruncateTableInfo;
 import com.starrocks.persist.metablock.SRMetaBlockReader;
 import com.starrocks.persist.metablock.SRMetaBlockReaderV2;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.ColumnRenameClause;
+<<<<<<< HEAD
 import com.starrocks.sql.ast.TruncateTableStmt;
 import com.starrocks.sql.optimizer.CachingMvPlanContextBuilder;
 import com.starrocks.thrift.TStorageMedium;
@@ -62,6 +67,11 @@ import mockit.Expectations;
 import mockit.Invocation;
 import mockit.Mock;
 import mockit.MockUp;
+=======
+import com.starrocks.utframe.StarRocksAssert;
+import com.starrocks.utframe.UtFrameUtils;
+import mockit.Expectations;
+>>>>>>> 17659ec2dd ([UT] Fix unstable case testCreateTableIfNotExists (#62566))
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
@@ -127,6 +137,7 @@ public class LocalMetaStoreTest {
     }
 
     @Test
+<<<<<<< HEAD
     public void testGetPartitionIdToStorageMediumMap() throws Exception {
         // Mock the cacheMaterializedView method to avoid actual caching in the background
         new MockUp<CachingMvPlanContextBuilder>() {
@@ -170,6 +181,8 @@ public class LocalMetaStoreTest {
     }
 
     @Test
+=======
+>>>>>>> 17659ec2dd ([UT] Fix unstable case testCreateTableIfNotExists (#62566))
     public void testLoadClusterV2() throws Exception {
         LocalMetastore localMetaStore = new LocalMetastore(GlobalStateMgr.getCurrentState(),
                     GlobalStateMgr.getCurrentState().getRecycleBin(),
