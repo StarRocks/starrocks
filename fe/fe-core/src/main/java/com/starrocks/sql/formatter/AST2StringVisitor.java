@@ -57,6 +57,7 @@ import com.starrocks.catalog.FunctionSet;
 import com.starrocks.common.Pair;
 import com.starrocks.common.util.ParseUtil;
 import com.starrocks.common.util.PrintableMap;
+import com.starrocks.common.util.SqlCredentialRedactor;
 import com.starrocks.sql.ast.AlterStorageVolumeStmt;
 import com.starrocks.sql.ast.AlterUserStmt;
 import com.starrocks.sql.ast.ArrayExpr;
@@ -108,6 +109,7 @@ import com.starrocks.sql.ast.SetQualifier;
 import com.starrocks.sql.ast.SetStmt;
 import com.starrocks.sql.ast.SetType;
 import com.starrocks.sql.ast.SetUserPropertyStmt;
+import com.starrocks.sql.ast.SubmitTaskStmt;
 import com.starrocks.sql.ast.SubqueryRelation;
 import com.starrocks.sql.ast.SystemVariable;
 import com.starrocks.sql.ast.TableFunctionRelation;
@@ -1570,4 +1572,22 @@ public class AST2StringVisitor implements AstVisitorExtendInterface<String, Void
         return hintBuilder.toString();
     }
 
+    @Override
+    public String visitSubmitTaskStatement(SubmitTaskStmt stmt, Void context) {
+        StringBuilder sb = new StringBuilder();
+        sb.append("SUBMIT TASK ");
+        sb.append(stmt.getTaskName());
+        if (stmt.getSchedule() != null) {
+            sb.append(" ");
+            sb.append(stmt.getSchedule().toString());
+        }
+        if (!stmt.getProperties().isEmpty()) {
+            sb.append(" PROPERTIES (")
+                    .append(new PrintableMap<>(stmt.getProperties(), "=", true, false, false)).append(")");
+        }
+        sb.append(" AS ");
+        sb.append(SqlCredentialRedactor.redact(stmt.getSqlText()));
+
+        return sb.toString();
+    }
 }
