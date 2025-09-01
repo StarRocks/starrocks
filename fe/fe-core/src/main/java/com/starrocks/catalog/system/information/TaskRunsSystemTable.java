@@ -27,6 +27,7 @@ import com.starrocks.catalog.system.SystemId;
 import com.starrocks.catalog.system.SystemTable;
 import com.starrocks.cluster.ClusterNamespace;
 import com.starrocks.common.Config;
+import com.starrocks.common.util.SqlCredentialRedactor;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.scheduler.Task;
 import com.starrocks.scheduler.TaskManager;
@@ -198,13 +199,21 @@ public class TaskRunsSystemTable extends SystemTable {
             info.setCatalog(status.getCatalogName());
             info.setDatabase(ClusterNamespace.getNameFromFullName(status.getDbName()));
             if (!Strings.isEmpty(status.getDefinition())) {
-                info.setDefinition(status.getDefinition());
+                if (Config.enable_task_info_mask_credential) {
+                    info.setDefinition(SqlCredentialRedactor.redact(status.getDefinition()));
+                } else {
+                    info.setDefinition(status.getDefinition());
+                }
             } else {
                 try {
                     // NOTE: use task's definition to display task-run's definition here
                     Task task = taskManager.getTaskWithoutLock(taskName);
                     if (task != null) {
-                        info.setDefinition(task.getDefinition());
+                        if (Config.enable_task_info_mask_credential) {
+                            info.setDefinition(SqlCredentialRedactor.redact(task.getDefinition()));
+                        } else {
+                            info.setDefinition(task.getDefinition());
+                        }
                     }
                 } catch (Exception e) {
                     LOG.warn("Get taskName {} definition failed: {}", taskName, e);
