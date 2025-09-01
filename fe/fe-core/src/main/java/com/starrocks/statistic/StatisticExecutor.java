@@ -16,6 +16,7 @@ package com.starrocks.statistic;
 
 import com.google.common.base.Preconditions;
 import com.google.common.base.Stopwatch;
+import com.google.common.base.Strings;
 import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
@@ -694,8 +695,12 @@ public class StatisticExecutor {
         context.getSessionVariable().setEnableMaterializedViewRewrite(false);
         Pair<List<TResultBatch>, Status> sqlResult = executor.executeStmtWithExecPlan(context, execPlan);
         if (!sqlResult.second.ok()) {
+            String errorMsg = context.getState().getErrorMessage();
+            if (Strings.isNullOrEmpty(errorMsg) && executor.getCoordinator() != null) {
+                errorMsg = executor.getCoordinator().getExecStatus().getErrorMsg();
+            }
             throw new SemanticException("Statistics query fail | Error Message [%s] | QueryId [%s] | SQL [%s]",
-                    context.getState().getErrorMessage(), DebugUtil.printId(context.getQueryId()), sql);
+                    errorMsg, DebugUtil.printId(context.getQueryId()), sql);
         } else {
             AuditLog.getStatisticAudit().info("statistic execute query | QueryId [{}] | SQL: {}",
                     DebugUtil.printId(context.getQueryId()), sql);
