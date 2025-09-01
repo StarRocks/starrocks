@@ -576,7 +576,9 @@ fromRollup
     ;
 
 withMaskingPolicy
-    : WITH MASKING POLICY policyName=qualifiedName (USING identifierList)?
+    : WITH 
+    
+    POLICY policyName=qualifiedName (USING identifierList)?
     ;
 
 withRowAccessPolicy
@@ -796,7 +798,7 @@ alterMaterializedViewStatement
     ;
 
 refreshMaterializedViewStatement
-    : REFRESH MATERIALIZED VIEW mvName=qualifiedName (PARTITION (partitionRangeDesc | listPartitionValues))? FORCE? (WITH (SYNC | ASYNC) MODE)? (WITH PRIORITY priority=INTEGER_VALUE)?
+    : (explainDesc | optimizerTrace) ? REFRESH MATERIALIZED VIEW mvName=qualifiedName (PARTITION (partitionRangeDesc | listPartitionValues))? FORCE? (WITH (SYNC | ASYNC) MODE)? (WITH PRIORITY priority=INTEGER_VALUE)?
     ;
 
 cancelRefreshMaterializedViewStatement
