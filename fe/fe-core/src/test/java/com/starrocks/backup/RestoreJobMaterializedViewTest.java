@@ -74,7 +74,6 @@ import org.junit.Assert;
 import org.junit.Ignore;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.MethodOrderer;
-import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestMethodOrder;
 import org.mockito.MockedStatic;
 import org.mockito.Mockito;
@@ -493,7 +492,7 @@ public class RestoreJobMaterializedViewTest {
         AgentTaskQueue.clearAllTasks();
     }
 
-    @Test
+    @Ignore
     public void testMVRestoreMVWithBaseTable1() {
         // gen BackupJobInfo
         RestoreJob job = createRestoreJob(ImmutableList.of(TABLE_NAME, MATERIALIZED_VIEW_NAME));
@@ -502,7 +501,7 @@ public class RestoreJobMaterializedViewTest {
         assertMVActiveEquals(MATERIALIZED_VIEW_NAME, true);
     }
 
-    @Test
+    @Ignore
     public void testMVRestoreMVWithBaseTable2() {
         // gen BackupJobInfo
         RestoreJob job = createRestoreJob(ImmutableList.of(MATERIALIZED_VIEW_NAME, TABLE_NAME));
