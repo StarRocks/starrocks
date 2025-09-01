@@ -36,7 +36,7 @@ public class LocalMetaStoreWithMaterializedViewTest extends MVTestBase  {
 
     @BeforeAll
     public static void beforeClass() throws Exception {
-        MVTestBase.beforeClass();;
+        MVTestBase.beforeClass();
     }
 
     @Test
