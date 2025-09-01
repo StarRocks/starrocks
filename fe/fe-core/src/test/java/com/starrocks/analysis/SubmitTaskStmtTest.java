@@ -32,6 +32,8 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.SubmitTaskStmt;
+import com.starrocks.sql.common.AuditEncryptionChecker;
+import com.starrocks.sql.formatter.AST2StringVisitor;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MVTestBase;
 import com.starrocks.sql.parser.ParsingException;
 import com.starrocks.utframe.UtFrameUtils;
@@ -111,6 +113,16 @@ public class SubmitTaskStmtTest extends MVTestBase {
         Assertions.assertEquals(submitTaskStmt4.getDbName(), "test");
         Assertions.assertEquals(submitTaskStmt4.getTaskName(), "task_name");
         Assertions.assertEquals(submitTaskStmt4.getProperties().size(), 0);
+
+        String submitSQL5 = "submit /*+ SET_VAR(query_timeout = 1) */ task as " +
+                "insert into files(\"path\"=\"data\", \"format\"=\"csv\", \"aws.s3.access_key\"=\"aaa\", " +
+                "\"aws.s3.secret_key\"=\"bbb\") select * from tbl1";
+        SubmitTaskStmt submitTaskStmt5 = (SubmitTaskStmt) UtFrameUtils.parseStmtWithNewParser(submitSQL5, ctx);
+        AuditEncryptionChecker.getInstance().visitSubmitTaskStatement(submitTaskStmt5, null);
+        AST2StringVisitor visitor = new AST2StringVisitor();
+        String str = visitor.visitSubmitTaskStatement(submitTaskStmt5, null);
+        Assertions.assertFalse(str.contains("aaa"));
+        Assertions.assertFalse(str.contains("bbb"));
     }
 
     @Test
@@ -245,7 +257,7 @@ public class SubmitTaskStmtTest extends MVTestBase {
                     "as insert overwrite tbl1 select * from tbl1");
             Task task = tm.getTask("t2");
             Assertions.assertNotNull(task);
-            Assertions.assertEquals(" START(1997-01-01T00:00) EVERY(1 MINUTES)", task.getSchedule().toString());
+            Assertions.assertEquals("START(1997-01-01T00:00) EVERY(1 MINUTES)", task.getSchedule().toString());
             Assertions.assertEquals(Constants.TaskSource.INSERT, task.getSource());
             Assertions.assertEquals(Constants.TaskType.PERIODICAL, task.getType());
             connectContext.executeSql("drop task t2");
@@ -268,7 +280,7 @@ public class SubmitTaskStmtTest extends MVTestBase {
                     "as insert overwrite tbl1 select * from tbl1");
             Task task = tm.getTask("t4");
             Assertions.assertNotNull(task);
-            Assertions.assertEquals(" START(1997-01-01T00:00) EVERY(1 MINUTES)", task.getSchedule().toString());
+            Assertions.assertEquals("START(1997-01-01T00:00) EVERY(1 MINUTES)", task.getSchedule().toString());
             Assertions.assertEquals(Constants.TaskSource.INSERT, task.getSource());
             Assertions.assertEquals(Constants.TaskType.PERIODICAL, task.getType());
             connectContext.executeSql("drop task t4");
@@ -281,7 +293,7 @@ public class SubmitTaskStmtTest extends MVTestBase {
                     "as insert overwrite tbl1 select * from tbl1");
             Task task = tm.getTask("t4");
             Assertions.assertNotNull(task);
-            Assertions.assertEquals(" START(1997-01-01T00:00) EVERY(1 MINUTES)", task.getSchedule().toString());
+            Assertions.assertEquals("START(1997-01-01T00:00) EVERY(1 MINUTES)", task.getSchedule().toString());
             Assertions.assertEquals(Constants.TaskSource.INSERT, task.getSource());
             Assertions.assertEquals(Constants.TaskType.PERIODICAL, task.getType());
             connectContext.executeSql("drop task t4");

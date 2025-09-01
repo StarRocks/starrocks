@@ -67,7 +67,7 @@ public class TaskSchedule {
 
     public String toString() {
         if (startTime > 0) {
-            return " START(" + Utils.getDatetimeFromLong(startTime)
+            return "START(" + Utils.getDatetimeFromLong(startTime)
                     + ") EVERY(" + period + " " + timeUnit + ")";
         }
         return "EVERY(" + period + " " + timeUnit + ")";
