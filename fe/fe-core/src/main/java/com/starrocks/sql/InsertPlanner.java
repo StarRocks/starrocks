@@ -393,6 +393,9 @@ public class InsertPlanner {
                 if (insertStmt.isFromOverwrite()) {
                     ((OlapTableSink) dataSink).setIsFromOverwrite(true);
                 }
+                if (insertStmt.useMergingCondition()) {
+                    ((OlapTableSink) dataSink).complete(insertStmt.getMergingCondition());
+                }
 
                 // if sink is OlapTableSink Assigned to Be execute this sql [cn execute OlapTableSink will crash]
                 session.getSessionVariable().setPreferComputeNode(false);
@@ -470,6 +473,8 @@ public class InsertPlanner {
             sinkFragment.setSink(dataSink);
             sinkFragment.setLoadGlobalDicts(globalDicts);
             return execPlan;
+        } catch (StarRocksException e) {
+            throw new RuntimeException(e);
         }
     }
 
