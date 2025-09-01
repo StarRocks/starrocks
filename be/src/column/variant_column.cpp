@@ -37,11 +37,16 @@ uint32_t VariantColumn::serialize_size(size_t idx) const {
 const uint8_t* VariantColumn::deserialize_and_append(const uint8_t* pos) {
     // Read the first 4 bytes to get the size of the variant
     uint32_t variant_length = *reinterpret_cast<const uint32_t*>(pos);
-    auto variant = VariantValue::create(Slice(pos, variant_length + sizeof(uint32_t)));
+    auto variant_result = VariantValue::create(Slice(pos, variant_length + sizeof(uint32_t)));
 
-    append(std::move(*variant));
+    if (!variant_result.ok()) {
+        throw std::runtime_error("Failed to deserialize variant: " + variant_result.status().to_string());
+    }
 
-    return pos + variant->serialize_size();
+    uint32_t serialize_size = variant_result->serialize_size();
+    append(std::move(*variant_result));
+
+    return pos + serialize_size;
 }
 
 void VariantColumn::put_mysql_row_buffer(MysqlRowBuffer* buf, size_t idx, bool is_binary_protocol) const {
