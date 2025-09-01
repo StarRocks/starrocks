@@ -59,6 +59,7 @@ import com.starrocks.sql.common.RangePartitionDiffer;
 import com.starrocks.sql.common.SyncPartitionUtils;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;
 import org.apache.commons.collections4.ListUtils;
+import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.Logger;
 
 import java.util.Collections;
@@ -86,6 +87,39 @@ public final class MVPCTRefreshRangePartitioner extends MVPCTRefreshPartitioner 
         super(mvContext, context, db, mv, mvRefreshParams);
         this.differ = new RangePartitionDiffer(mv, false, null);
         this.logger = MVTraceUtils.getLogger(mv, MVPCTRefreshRangePartitioner.class);
+    }
+
+    public PCellSortedSet getMVPartitionsToRefreshByParams() throws AnalysisException {
+        if (mvRefreshParams.isCompleteRefresh()) {
+            Map<String, Range<PartitionKey>> rangePartitionMap = mv.getRangePartitionMap();
+            if (rangePartitionMap.isEmpty()) {
+                return PCellSortedSet.of();
+            }
+            return PCellSortedSet.of(rangePartitionMap.entrySet()
+                    .stream()
+                    .collect(Collectors.toMap(Map.Entry::getKey, e -> new PRangeCell(e.getValue()))));
+        } else {
+            String start = mvRefreshParams.getRangeStart();
+            String end = mvRefreshParams.getRangeEnd();
+            if (StringUtils.isEmpty(start) && StringUtils.isEmpty(end)) {
+                return PCellSortedSet.of();
+            }
+            // range partition must have partition column, and its column size must be 1
+            Column partitionColumn = mv.getRangePartitionFirstColumn().get();
+            Range<PartitionKey> rangeToInclude = createRange(start, end, partitionColumn);
+            Map<String, Range<PartitionKey>> rangePartitionMap = mv.getRangePartitionMap();
+            if (rangePartitionMap.isEmpty()) {
+                return PCellSortedSet.of();
+            }
+            PCellSortedSet result = PCellSortedSet.of();
+            for (Map.Entry<String, Range<PartitionKey>> entry : rangePartitionMap.entrySet()) {
+                Range<PartitionKey> rangeToCheck = entry.getValue();
+                if (RangePartitionDiffer.isRangeIncluded(rangeToInclude, rangeToCheck)) {
+                    result.add(new PCellWithName(entry.getKey(), new PRangeCell(rangeToCheck)));
+                }
+            }
+            return result;
+        }
     }
 
     @Override
@@ -240,7 +274,7 @@ public final class MVPCTRefreshRangePartitioner extends MVPCTRefreshPartitioner 
     }
 
     @Override
-    public PCellSortedSet getMVPartitionsToRefresh(Map<Long, BaseTableSnapshotInfo> snapshotBaseTables)
+    public PCellSortedSet getMVPartitionsToRefreshWithCheck(Map<Long, BaseTableSnapshotInfo> snapshotBaseTables)
             throws AnalysisException {
         // range partitioned materialized views
         boolean isAutoRefresh = mvContext.getTaskType().isAutoRefresh();
@@ -299,14 +333,6 @@ public final class MVPCTRefreshRangePartitioner extends MVPCTRefreshPartitioner 
             int toRemoveNum = mvToRefreshedPartitions.size() - refreshPartitionLimit;
             mvToRefreshedPartitions.removeWithSize(toRemoveNum);
         }
-    }
-
-    @Override
-    public PCellSortedSet getMVPartitionsToRefreshWithForce() throws AnalysisException {
-        int partitionTTLNumber = mvContext.getPartitionTTLNumber();
-        PCellSortedSet inputRanges = getValidRangePartitionMap(partitionTTLNumber);
-        filterPartitionsByTTL(inputRanges, false);
-        return inputRanges;
     }
 
     @Override

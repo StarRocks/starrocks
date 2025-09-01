@@ -59,6 +59,7 @@ import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.PartitionNames;
 import com.starrocks.sql.common.DmlException;
 import com.starrocks.sql.common.PCellSortedSet;
+import com.starrocks.sql.common.PCellWithName;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;
 import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.sql.plan.ExecPlan;
@@ -329,6 +330,18 @@ public abstract class BaseMVRefreshProcessor {
         final Stopwatch stopwatch = Stopwatch.createStarted();
         // collect base table snapshot infos
         this.snapshotBaseTables = collectBaseTableSnapshotInfos();
+
+        if (!mvContext.isExplain() && mvRefreshParams.isNonTentativeForce() && mv.isPartitionedTable()) {
+            // drop existing partitions for force refresh
+            PCellSortedSet toRefreshPartitions = mvRefreshPartitioner.getMVPartitionsToRefreshByParams();
+            if (toRefreshPartitions != null && !toRefreshPartitions.isEmpty()) {
+                logger.info("force refresh, drop partitions: [{}]",
+                        Joiner.on(",").join(toRefreshPartitions.getPartitionNames()));
+                for (PCellWithName partName : toRefreshPartitions.partitions()) {
+                    mv.dropPartition(db.getId(), partName.name(), false);
+                }
+            }
+        }
         // do sync partitions (add or drop partitions) for materialized view
         boolean result = mvRefreshPartitioner.syncAddOrDropPartitions();
         logger.info("finish sync partitions, cost(ms): {}", stopwatch.elapsed(TimeUnit.MILLISECONDS));

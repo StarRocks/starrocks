@@ -199,7 +199,7 @@ public final class RangePartitionDiffer extends PartitionDiffer {
      * @param rangeToInclude range to check whether the to be checked range is in
      * @return true if included, else false
      */
-    private static boolean isRangeIncluded(Range<PartitionKey> rangeToCheck, Range<PartitionKey> rangeToInclude) {
+    public static boolean isRangeIncluded(Range<PartitionKey> rangeToCheck, Range<PartitionKey> rangeToInclude) {
         if (rangeToInclude == null) {
             return true;
         }
