@@ -980,7 +980,7 @@ public class ShowExecutorSimpleTest {
                 "CREATE MATERIALIZED VIEW, CREATE PIPE ON ALL DATABASES TO ROLE 'root'";
         Assertions.assertTrue(resultSet.getResultRows().stream().anyMatch(l -> l.toString().contains(expectString1)));
         String expectString2 = "root, null, GRANT DELETE, DROP, INSERT, SELECT, ALTER, EXPORT, " +
-                "UPDATE ON ALL TABLES IN ALL DATABASES TO ROLE 'root'";
+                "UPDATE, REFRESH ON ALL TABLES IN ALL DATABASES TO ROLE 'root'";
         Assertions.assertTrue(resultSet.getResultRows().stream().anyMatch(l -> l.toString().contains(expectString2)));
     }
 
