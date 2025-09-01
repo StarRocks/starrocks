@@ -38,6 +38,8 @@ import com.google.common.base.Preconditions;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.NotImplementedException;
+import com.starrocks.sql.ast.AstVisitor;
+import com.starrocks.sql.ast.AstVisitorExtendInterface;
 import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.optimizer.validate.ValidateException;
@@ -414,5 +416,10 @@ public class IntLiteral extends LiteralExpr {
             default:
                 throw new ValidateException("unknown binary data for type:" + type.getPrimitiveType(), ErrorType.INTERNAL_ERROR);
         }
+    }
+
+    @Override
+    public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
+        return ((AstVisitorExtendInterface<R, C>) visitor).visitIntLiteral(this, context);
     }
 }

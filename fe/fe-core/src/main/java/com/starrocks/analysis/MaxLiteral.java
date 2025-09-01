@@ -17,6 +17,8 @@
 
 package com.starrocks.analysis;
 
+import com.starrocks.sql.ast.AstVisitor;
+import com.starrocks.sql.ast.AstVisitorExtendInterface;
 import com.starrocks.thrift.TExprNode;
 
 public final class MaxLiteral extends LiteralExpr {
@@ -56,5 +58,10 @@ public final class MaxLiteral extends LiteralExpr {
     @Override
     public String toString() {
         return toSql();
+    }
+
+    @Override
+    public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
+        return ((AstVisitorExtendInterface<R, C>) visitor).visitMaxLiteral(this, context);
     }
 }
