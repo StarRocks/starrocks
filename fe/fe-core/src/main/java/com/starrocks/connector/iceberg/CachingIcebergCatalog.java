@@ -215,6 +215,11 @@ public class CachingIcebergCatalog implements IcebergCatalog {
         return delegate.dropView(connectContext, dbName, viewName);
     }
 
+    @Override
+    public boolean registerTable(ConnectContext context, String dbName, String tableName, String metadataFileLocation) {
+        return delegate.registerTable(context, dbName, tableName, metadataFileLocation);
+    }
+
     public View getView(ConnectContext connectContext, String dbName, String viewName) {
         return delegate.getView(connectContext, dbName, viewName);
     }

@@ -55,6 +55,7 @@ import com.starrocks.common.FeConstants;
 import com.starrocks.common.proc.ReplicasProcNode;
 import com.starrocks.common.util.KafkaUtil;
 import com.starrocks.connector.exception.StarRocksConnectorException;
+import com.starrocks.connector.iceberg.hive.IcebergHiveCatalog;
 import com.starrocks.epack.failover.FailoverGroup;
 import com.starrocks.epack.failover.FailoverGroupMgr;
 import com.starrocks.epack.lake.StarOSAgentEpack;
@@ -511,7 +512,7 @@ public class PrivilegeCheckerTest {
     }
 
     @Test
-    public void testCatalogStatement() throws Exception {
+    public void testCatalogStatement(@Mocked IcebergHiveCatalog hiveCatalog) throws Exception {
         starRocksAssert.withCatalog("create external catalog test_ex_catalog properties (" +
                 "\"type\"=\"iceberg\", \"iceberg.catalog.type\"=\"hive\")");
         ConnectContext ctx = starRocksAssert.getCtx();
@@ -565,7 +566,7 @@ public class PrivilegeCheckerTest {
     }
 
     @Test
-    public void testExternalDBAndTablePEntryObject() throws Exception {
+    public void testExternalDBAndTablePEntryObject(@Mocked IcebergHiveCatalog hiveCatalog) throws Exception {
         starRocksAssert.withCatalog("create external catalog test_iceberg properties (" +
                 "\"type\"=\"iceberg\", \"iceberg.catalog.type\"=\"hive\")");
         DbPEntryObject dbPEntryObject =

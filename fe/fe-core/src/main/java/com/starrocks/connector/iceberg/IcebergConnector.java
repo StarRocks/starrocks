@@ -143,7 +143,7 @@ public class IcebergConnector implements Connector {
     }
 
     private void registerProcedures() {
-        this.procedureRegistry.register(RegisterTableProcedure.getInstance());
+        this.procedureRegistry.register(new RegisterTableProcedure(catalogName, getNativeCatalog()));
     }
 
     @Override

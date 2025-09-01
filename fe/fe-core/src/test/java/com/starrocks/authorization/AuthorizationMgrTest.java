@@ -25,6 +25,7 @@ import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorReportException;
 import com.starrocks.common.StarRocksException;
+import com.starrocks.connector.iceberg.hive.IcebergHiveCatalog;
 import com.starrocks.epack.authorization.AuthorizationMgrEPack;
 import com.starrocks.epack.authorization.AuthorizationProviderEPack;
 import com.starrocks.epack.authorization.PrivilegeTypeEPack;
@@ -64,6 +65,7 @@ import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Mock;
 import mockit.MockUp;
+import mockit.Mocked;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
@@ -1564,7 +1566,7 @@ public class AuthorizationMgrTest {
     }
 
     @Test
-    public void testGrantOnCatalog() throws Exception {
+    public void testGrantOnCatalog(@Mocked IcebergHiveCatalog hiveCatalog) throws Exception {
         DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
                 "create external catalog test_catalog properties (" +
                         "\"type\"=\"iceberg\", \"iceberg.catalog.type\"=\"hive\")", ctx), ctx);
