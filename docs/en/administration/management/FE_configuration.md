@@ -3837,6 +3837,7 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 - Description: Whether to enable the collection of tablet numbers for each disk in the `SHOW PROC /BACKENDS/{id}` command
 - Introduced in: v4.0.1, v3.5.8
 
+<<<<<<< HEAD
 ##### `enable_colocate_restore`
 
 - Default: false
@@ -3874,6 +3875,9 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 - Introduced in: -
 
 ##### `enable_mv_post_image_reload_cache`
+=======
+##### enable_mv_post_image_reload_cache
+>>>>>>> 6faba17ef6 ([Enhancement] Change transform type prefer string for fixed length varchar (#62476))
 
 - Default: true
 - Type: Boolean
@@ -3927,6 +3931,7 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 - Description: Whether to allow the system to trace the historical nodes. By setting this item to `true`, you can enable the Cache Sharing feature and allow the system to choose the right cache nodes during elastic scaling.
 - Introduced in: v3.5.1
 
+<<<<<<< HEAD
 ##### `es_state_sync_interval_second`
 
 - Default: 10
@@ -4180,11 +4185,15 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 - Introduced in: v3.3.0
 
 ##### `mv_refresh_fail_on_filter_data`
+=======
+##### transform_type_prefer_string_for_varchar
+>>>>>>> 6faba17ef6 ([Enhancement] Change transform type prefer string for fixed length varchar (#62476))
 
 - Default: true
 - Type: Boolean
 - Unit: -
 - Is mutable: Yes
+<<<<<<< HEAD
 - Description: Mv refresh fails if there is filtered data in refreshing, true by default, otherwise return success by ignoring the filtered data.
 - Introduced in: -
 
@@ -4405,3 +4414,9 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 - Introduced in: -
 
 <EditionSpecificFEItem />
+=======
+- Description: Whether to prefer string type for fixed length varchar columns in materialized view creation and CTAS operations.
+- Introduced in: v4.0.0
+
+<EditionSpecificFEItem />
+>>>>>>> 6faba17ef6 ([Enhancement] Change transform type prefer string for fixed length varchar (#62476))
