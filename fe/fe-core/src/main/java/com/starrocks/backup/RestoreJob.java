@@ -79,6 +79,11 @@ import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.catalog.TabletMeta;
 import com.starrocks.common.Config;
+<<<<<<< HEAD
+=======
+import com.starrocks.common.DdlException;
+import com.starrocks.common.MaterializedViewExceptions;
+>>>>>>> 54b8ebf45d ([BugFix] Fix possible NPE in mv backup restore (#62514))
 import com.starrocks.common.Pair;
 import com.starrocks.common.UserException;
 import com.starrocks.common.io.Text;
@@ -1566,8 +1571,27 @@ public class RestoreJob extends AbstractJob {
                         try {
                             olapTable.doAfterRestore(mvRestoreContext);
                         } catch (Exception e) {
-                            // no throw exceptions
                             LOG.warn(String.format("rebuild olap table %s failed: ", olapTable.getName()), e);
+
+                            // for mv, set mv to inactive state and drop all partitions to avoid metadata corruption.
+                            // it's safe for mv since users can refresh mv after restore to rebuild mv's data.
+                            if (olapTable.isMaterializedView()) {
+                                LOG.warn("drop materialized view {} partitions because doAfterRestore failed",
+                                        olapTable.getName());
+                                try {
+                                    MaterializedView mv = (MaterializedView) olapTable;
+                                    mv.setInactiveAndReason(MaterializedViewExceptions
+                                                    .inactiveReasonForMetadataTableRestoreCorrupted(mv.getName()));
+                                    // drop all partitions
+                                    Set<String> partitionNames = mv.getPartitionNames();
+                                    for (String partitionName : partitionNames) {
+                                        mv.dropPartition(dbId, partitionName, false);
+                                    }
+                                } catch (Exception mvException) {
+                                    LOG.warn("failed to drop partitions of materialized view {}",
+                                            olapTable.getName(), mvException);
+                                }
+                            }
                         }
                     }
                 }
@@ -1671,6 +1695,19 @@ public class RestoreJob extends AbstractJob {
         return Status.OK;
     }
 
+    private void dropPhysicalPartitions(Table restoreTbl) {
+        for (Partition part : restoreTbl.getPartitions()) {
+            // ensure clear all physical partitions, not only for the first one (default physical partition)
+            for (PhysicalPartition physicalPartition : part.getSubPartitions()) {
+                for (MaterializedIndex idx : physicalPartition.getMaterializedIndices(IndexExtState.VISIBLE)) {
+                    for (Tablet tablet : idx.getTablets()) {
+                        globalStateMgr.getTabletInvertedIndex().deleteTablet(tablet.getId());
+                    }
+                }
+            }
+        }
+    }
+
     public void cancelInternal(boolean isReplay) {
         // We need to clean the residual due to current state
         if (!isReplay) {
@@ -1710,12 +1747,21 @@ public class RestoreJob extends AbstractJob {
                 // remove restored tbls
                 for (Table restoreTbl : restoredTbls) {
                     LOG.info("remove restored table when cancelled: {}", restoreTbl.getName());
+<<<<<<< HEAD
                     for (Partition part : restoreTbl.getPartitions()) {
                         for (MaterializedIndex idx : part.getMaterializedIndices(IndexExtState.VISIBLE)) {
                             for (Tablet tablet : idx.getTablets()) {
                                 GlobalStateMgr.getCurrentState().getTabletInvertedIndex().deleteTablet(tablet.getId());
                             }
                         }
+=======
+                    // ensure clear all physical partitions even if exception happens
+                    try {
+                        dropPhysicalPartitions(restoreTbl);
+                    } catch (Exception e) {
+                        LOG.warn("drop physical partitions of table {} failed when cancelling restore job",
+                                restoreTbl.getName(), e);
+>>>>>>> 54b8ebf45d ([BugFix] Fix possible NPE in mv backup restore (#62514))
                     }
                     db.dropTable(restoreTbl.getName());
                 }
