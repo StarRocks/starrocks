@@ -3084,23 +3084,15 @@ public class AggregateTest extends PlanTestBase {
 
     @Test
     public void testAggregateFilterBooleanTypeValidation() throws Exception {
-        // Test that non-boolean expressions in FILTER throw semantic exceptions
+        // Test that numeric expressions in FILTER are now allowed (can be cast to boolean)
         String sql = "select count(*) filter (where v1) from t0";
-        try {
-            getFragmentPlan(sql);
-            Assertions.fail("Expected semantic exception for non-boolean filter condition");
-        } catch (Exception e) {
-            assertContains(e.getMessage(), "The condition expression in count_if function must be boolean type, but got bigint");
-        }
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "count_if");
 
-        // Test that string expressions in FILTER throw semantic exceptions
+        // Test that string expressions in FILTER are also allowed (can be cast to boolean) 
         sql = "select sum(v2) filter (where 'true') from t0";
-        try {
-            getFragmentPlan(sql);
-            Assertions.fail("Expected semantic exception for string filter condition");
-        } catch (Exception e) {
-            assertContains(e.getMessage(), "The condition expression in sum_if function must be boolean type, but got varchar");
-        }
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "sum_if");
     }
 
     @Test
@@ -3115,22 +3107,19 @@ public class AggregateTest extends PlanTestBase {
         plan = getFragmentPlan(sql);
         assertContains(plan, "count_if");
 
-        // Test that non-boolean condition in sum_if throws exception
+        // Test that numeric conditions in sum_if are now allowed (can be cast to boolean)
         sql = "select sum_if(v2, v1) from t0";
-        try {
-            getFragmentPlan(sql);
-            Assertions.fail("Expected semantic exception for non-boolean condition in sum_if");
-        } catch (Exception e) {
-            assertContains(e.getMessage(), "The condition expression in sum_if function must be boolean type, but got bigint");
-        }
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "sum_if");
 
-        // Test that numeric condition in count_if throws exception
+        // Test that numeric conditions in count_if are now allowed (can be cast to boolean)
         sql = "select count_if(v2) from t0";
-        try {
-            getFragmentPlan(sql);
-            Assertions.fail("Expected semantic exception for non-boolean condition in count_if");
-        } catch (Exception e) {
-            assertContains(e.getMessage(), "The condition expression in count_if function must be boolean type, but got bigint");
-        }
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "count_if");
+
+        // Test string conditions are also allowed
+        sql = "select sum_if(v2, 'true') from t0";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "sum_if");
     }
 }
