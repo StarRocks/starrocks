@@ -992,7 +992,7 @@ Used for compatibility with MySQL JDBC versions 8.0.16 and above. No practical u
 
 ### pipeline_sink_dop
 
-* **Description**: The parallelism of sink for loading into Iceberg tables, Hive tables, and file external tables. It is used to adjust the concurrency of these loading jobs. Default value: 0, indicating the system automatically adjusts the parallelism. You can also set this variable to a value greater than 0.
+* **Description**: The parallelism of sink for loading data into Iceberg tables and Hive tables, and unloading data using INSERT INTO FILES(). It is used to adjust the concurrency of these loading jobs. Default value: 0, indicating the system automatically adjusts the parallelism. You can also set this variable to a value greater than 0.
 * **Default**: 0
 * **Data type**: Int
 
