@@ -1008,13 +1008,16 @@ public class IcebergMetadata implements ConnectorMetadata {
                     incrementalAppendScan.fromSnapshotExclusive(tvrVersionRange.from.getVersion());
             incrementalAppendScan =
                     incrementalAppendScan.toSnapshot(snapshotId);
-            scan = incrementalAppendScan;
+            scan = incrementalAppendScan
+                    .metricsReporter(metricsReporter)
+                    .planWith(jobPlanningExecutor);
         } else {
             scan = icebergCatalog.getTableScan(nativeTbl, scanContext)
                     .useSnapshot(snapshotId)
                     .metricsReporter(metricsReporter)
                     .planWith(jobPlanningExecutor);
         }
+
         if (enableCollectColumnStats) {
             scan = (Scan) scan.includeColumnStats();
         }

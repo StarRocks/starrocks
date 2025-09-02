@@ -570,7 +570,7 @@ public class TableProperty implements Writable, GsonPostProcessable {
     }
 
     public TableProperty buildMVRefreshMode() {
-        mvRefreshMode = properties.getOrDefault(PropertyAnalyzer.PROPERTIES_REFRESH_MODE,
+        mvRefreshMode = properties.getOrDefault(PropertyAnalyzer.PROPERTIES_MV_REFRESH_MODE,
                 Config.default_mv_refresh_mode);
         return this;
     }

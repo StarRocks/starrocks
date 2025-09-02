@@ -215,7 +215,7 @@ public class PropertyAnalyzer {
     public static final String PROPERTIES_PARTITION_REFRESH_NUMBER = "partition_refresh_number";
     public static final String PROPERTIES_EXCLUDED_TRIGGER_TABLES = "excluded_trigger_tables";
     public static final String PROPERTIES_EXCLUDED_REFRESH_TABLES = "excluded_refresh_tables";
-    public static final String PROPERTIES_REFRESH_MODE = "refresh_mode";
+    public static final String PROPERTIES_MV_REFRESH_MODE = "refresh_mode";
 
     // 1. `force_external_table_query_rewrite` is used to control whether external table can be rewritten or not
     // 2. external table can be rewritten by default if not specific.
@@ -680,8 +680,8 @@ public class PropertyAnalyzer {
 
     public static String analyzeRefreshMode(Map<String, String> properties) {
         String refreshMode = null;
-        if (properties != null && properties.containsKey(PROPERTIES_REFRESH_MODE)) {
-            refreshMode = properties.get(PROPERTIES_REFRESH_MODE);
+        if (properties != null && properties.containsKey(PROPERTIES_MV_REFRESH_MODE)) {
+            refreshMode = properties.get(PROPERTIES_MV_REFRESH_MODE);
             try {
                 MaterializedView.RefreshMode.valueOf(refreshMode.toUpperCase());
             } catch (IllegalArgumentException e) {
@@ -691,7 +691,7 @@ public class PropertyAnalyzer {
                                 .collect(Collectors.joining(", ")) +
                         " are supported.");
             }
-            properties.remove(PROPERTIES_REFRESH_MODE);
+            properties.remove(PROPERTIES_MV_REFRESH_MODE);
         }
         return refreshMode;
     }
@@ -1762,10 +1762,10 @@ public class PropertyAnalyzer {
                 materializedView.getTableProperty().setPartitionRefreshStrategy(strategy);
             }
             // refresh mode
-            if (properties.containsKey(PropertyAnalyzer.PROPERTIES_REFRESH_MODE)) {
+            if (properties.containsKey(PropertyAnalyzer.PROPERTIES_MV_REFRESH_MODE)) {
                 String mvRefreshMode = PropertyAnalyzer.analyzeRefreshMode(properties);
                 materializedView.getTableProperty().getProperties()
-                        .put(PropertyAnalyzer.PROPERTIES_REFRESH_MODE, mvRefreshMode);
+                        .put(PropertyAnalyzer.PROPERTIES_MV_REFRESH_MODE, mvRefreshMode);
                 materializedView.getTableProperty().setMvRefreshMode(mvRefreshMode);
             }
             // exclude trigger tables

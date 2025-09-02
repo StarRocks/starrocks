@@ -549,9 +549,6 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
     // This is the original user's view define SQL which can be used to generate ast key in text based rewrite.
     @SerializedName(value = "originalViewDefineSql")
     private String originalViewDefineSql;
-    // This is the rewritten view define SQL which is used to generate IVM refresh tasks.
-    @SerializedName(value = "ivmDefineSql")
-    private String ivmDefineSql;
     // This is the original database name when the mv is created.
     private String originalDBName;
     // Deprecated field which is used to store single partition ref table exprs of the mv in old version.
@@ -740,15 +737,6 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
         this.originalViewDefineSql = originalViewDefineSql;
     }
 
-    public String setIvmDefineSql(String ivmDefineSql) {
-        this.ivmDefineSql = ivmDefineSql;
-        return this.ivmDefineSql;
-    }
-
-    public String getIvmDefineSql() {
-        return ivmDefineSql;
-    }
-
     public String getOriginalDBName() {
         return originalDBName;
     }
@@ -762,11 +750,7 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
     }
 
     public String getIVMTaskDefinition() {
-        String ivmDefineSql = getIvmDefineSql();
-        if (Strings.isNullOrEmpty(ivmDefineSql)) {
-            ivmDefineSql = getViewDefineSql();
-        }
-        return String.format("INSERT INTO `%s` %s", getName(), ivmDefineSql);
+        return String.format("INSERT INTO `%s` %s", getName(), getViewDefineSql());
     }
 
     /**
