@@ -7,7 +7,7 @@ sidebar_position: 50
 
 In addition to native password-based authentication, StarRocks also supports the LDAP authentication.
 
-This topic describes how to manually create and authenticate users using LDAP in StarRocks. For instructions on how to integrate StarRocks with your LDAP service using security integration, see [Authenticate with Security Integration](./security_integration.md). For more information on how to authenticate user groups in your LDAP service, see [Authenticate User Groups](../group_provider.md).
+This topic describes how to manually create and authenticate users using LDAP in StarRocks.
 
 ## Enable LDAD authentication
 
@@ -80,7 +80,7 @@ mysql -utom -P8030 -h127.0.0.1 -p --default-auth mysql_clear_password --enable-c
 
 - **JDBC**
 
-Note that when you use JDBC connections, you must enable SSL on the server side. For more information, see [SSL Authentication](../ssl_authentication.md).
+Note that when you use JDBC connections, you must enable SSL on the server side. For more information, see [SSL Authentication](./ssl_authentication.md).
 
 JDBC 5:
 
