@@ -59,7 +59,6 @@ import com.starrocks.persist.gson.GsonPreProcessable;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SqlModeHelper;
-import com.starrocks.scheduler.TableWithPartitions;
 import com.starrocks.scheduler.Task;
 import com.starrocks.scheduler.TaskBuilder;
 import com.starrocks.scheduler.TaskManager;
@@ -76,8 +75,6 @@ import com.starrocks.sql.analyzer.RelationId;
 import com.starrocks.sql.analyzer.Scope;
 import com.starrocks.sql.analyzer.SelectAnalyzer;
 import com.starrocks.sql.ast.ParseNode;
-import com.starrocks.sql.common.PCell;
-import com.starrocks.sql.common.PRangeCell;
 import com.starrocks.sql.optimizer.CachingMvPlanContextBuilder;
 import com.starrocks.sql.optimizer.MvRewritePreprocessor;
 import com.starrocks.sql.optimizer.Utils;
@@ -1709,94 +1706,6 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
         } else {
             return refreshBaseTable(refBaseTablePartitionColumnsOpt.orElse(Maps.newHashMap()));
         }
-    }
-
-    /**
-     * According base table and materialized view's partition range, we can define those mappings from base to mv:
-     * <p>
-     * One-to-One
-     * src:     |----|    |----|
-     * dst:     |----|    |----|
-     * eg: base table is partitioned by one day, and mv is partition by one day
-     * </p>
-     * <p>
-     * Many-to-One
-     * src:     |----|    |----|     |----|    |----|
-     * dst:     |--------------|     |--------------|
-     * eg: base table is partitioned by one day, and mv is partition by date_trunc('month', dt)
-     * <p>
-     * One/Many-to-Many
-     * src:     |----| |----| |----| |----| |----| |----|
-     * dst:     |--------------| |--------------| |--------------|
-     * eg: base table is partitioned by three days, and mv is partition by date_trunc('month', dt)
-     * </p>
-     * <p>
-     * For one-to-one or many-to-one we can trigger to refresh by materialized view's partition, but for many-to-many
-     * we need also consider affected materialized view partitions also.
-     * <p>
-     * eg:
-     * ref table's partitions:
-     * p0:   [2023-07-27, 2023-07-30)
-     * p1:   [2023-07-30, 2023-08-02)
-     * p2:   [2023-08-02, 2023-08-05)
-     * materialized view's partition:
-     * p0:   [2023-07-01, 2023-08-01)
-     * p1:   [2023-08-01, 2023-09-01)
-     * p2:   [2023-09-01, 2023-10-01)
-     * <p>
-     * So ref table's p1 has been changed, materialized view to refresh partition: p0, p1. And when we refresh p0,p1
-     * we also need to consider other ref table partitions(p0); otherwise, the mv's final result will lose data.
-     */
-    public boolean isCalcPotentialRefreshPartition(List<TableWithPartitions> baseChangedPartitionNames,
-                                                   Map<Table, Map<String, PCell>> refBaseTablePartitionToCells,
-                                                   Set<String> mvPartitions,
-                                                   Map<String, PCell> mvPartitionToCells) {
-        List<PRangeCell> mvSortedPartitionRanges =
-                TableWithPartitions.getSortedPartitionRanges(mvPartitionToCells, mvPartitions);
-        for (TableWithPartitions baseTableWithPartition : baseChangedPartitionNames) {
-            Map<String, PCell> baseRangePartitionMap =
-                    refBaseTablePartitionToCells.get(baseTableWithPartition.getTable());
-            List<PRangeCell> baseSortedPartitionRanges =
-                    baseTableWithPartition.getSortedPartitionRanges(baseRangePartitionMap);
-            for (PRangeCell basePartitionRange : baseSortedPartitionRanges) {
-                if (isManyToManyPartitionRangeMapping(basePartitionRange, mvSortedPartitionRanges)) {
-                    return true;
-                }
-            }
-        }
-        return false;
-    }
-
-    /**
-     * Whether srcRange is intersected with many dest ranges.
-     */
-    private boolean isManyToManyPartitionRangeMapping(PRangeCell srcRange,
-                                                      List<PRangeCell> dstRanges) {
-        if (dstRanges.isEmpty()) {
-            return false;
-        }
-        List<PartitionKey> lowerPoints = dstRanges.stream().map(
-                dstRange -> dstRange.getRange().lowerEndpoint()).toList();
-        List<PartitionKey> upperPoints = dstRanges.stream().map(
-                dstRange -> dstRange.getRange().upperEndpoint()).toList();
-
-        PartitionKey lower = srcRange.getRange().lowerEndpoint();
-        PartitionKey upper = srcRange.getRange().upperEndpoint();
-
-        // For an interval [l, r], if there exists another interval [li, ri] that intersects with it, this interval
-        // must satisfy l ≤ ri and r ≥ li. Therefore, if there exists a pos_a such that for all k < pos_a,
-        // ri[k] < l, and there exists a pos_b such that for all k > pos_b, li[k] > r, then all intervals between
-        // pos_a and pos_b might potentially intersect with the interval [l, r].
-        int posA = PartitionKey.findLastLessEqualInOrderedList(lower, upperPoints);
-        int posB = PartitionKey.findLastLessEqualInOrderedList(upper, lowerPoints);
-
-        int matched = 0;
-        for (int i = posA; i <= posB && matched <= 1; ++i) {
-            if (dstRanges.get(i).isIntersected(srcRange)) {
-                ++matched;
-            }
-        }
-        return matched > 1;
     }
 
     private Map<Table, List<Column>> getBaseTablePartitionColumnMapImpl() {

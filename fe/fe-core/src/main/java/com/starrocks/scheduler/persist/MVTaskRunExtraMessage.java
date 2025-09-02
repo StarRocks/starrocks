@@ -42,9 +42,11 @@ public class MVTaskRunExtraMessage implements Writable {
     // refreshed partitions of materialized view in this task run
     @SerializedName("mvPartitionsToRefresh")
     private Set<String> mvPartitionsToRefresh = Sets.newHashSet();
+    // NOTE: This is set in mv's plan schdduler stage and are partitions which should be refreshed.
     // refreshed partitions of the ref base table in this task run which should only have one table for now.
     @SerializedName("refBasePartitionsToRefreshMap")
     private Map<String, Set<String>> refBasePartitionsToRefreshMap = Maps.newHashMap();
+    // NOTE: This is only set after mv's version map has been committed and it's from final task run exec plan.
     // refreshed partitions of all the base tables which are optimized by optimizer and the real partitions in executing.
     @SerializedName("basePartitionsToRefreshMap")
     private Map<String, Set<String>> basePartitionsToRefreshMap = Maps.newHashMap();

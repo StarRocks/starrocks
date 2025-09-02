@@ -52,6 +52,13 @@ public record PCellSortedSet(SortedSet<PCellWithName> partitions) {
         return new PCellSortedSet(partitions);
     }
 
+    public static PCellSortedSet of(PCellSortedSet other) {
+        if (other == null || other.isEmpty()) {
+            return new PCellSortedSet(new TreeSet<>());
+        }
+        return new PCellSortedSet(new TreeSet<>(other.partitions));
+    }
+
     public void add(PCellWithName partition) {
         partitions.add(partition);
     }
@@ -139,6 +146,13 @@ public record PCellSortedSet(SortedSet<PCellWithName> partitions) {
 
     public Set<String> getPartitionNames() {
         return partitions.stream().map(PCellWithName::name).collect(java.util.stream.Collectors.toSet());
+    }
+
+    public void addAll(PCellSortedSet other) {
+        if (other == null || other.isEmpty()) {
+            return;
+        }
+        partitions.addAll(other.partitions);
     }
 
     @Override
