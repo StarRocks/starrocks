@@ -1,6 +1,5 @@
 ---
 displayed_sidebar: docs
-sidebar_position: 30
 ---
 
 # LDAP 认证
@@ -103,3 +102,4 @@ properties.put("disabledAuthenticationPlugins", "com.mysql.cj.protocol.a.authent
 - **ODBC**
 
 在 ODBC 的 DSN 中添加 `default\_auth=mysql_clear_password` 和 `ENABLE_CLEARTEXT\_PLUGIN=1`，以及用户名和密码。
+
