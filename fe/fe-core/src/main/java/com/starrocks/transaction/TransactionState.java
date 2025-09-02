@@ -262,6 +262,9 @@ public class TransactionState implements Writable, GsonPreProcessable {
     @SerializedName("ctl")
     private boolean useCombinedTxnLog;
 
+    @SerializedName("loadIds")
+    private List<TUniqueId> loadIds;
+
     private final CountDownLatch latch;
 
     // these states need not be serialized
@@ -1223,8 +1226,16 @@ public class TransactionState implements Writable, GsonPreProcessable {
         return this.isCreatePartitionFailed.get();
     }
 
+    public void addLoadId(TUniqueId loadId) {
+        if (this.loadIds == null) {
+            this.loadIds = new ArrayList<>();
+        }
+        this.loadIds.add(loadId);
+    }
 
-
+    public List<TUniqueId> getLoadIds() {
+        return loadIds;
+    }
 
     @Override
     public void gsonPreProcess() throws IOException {

@@ -266,6 +266,11 @@ public:
         return *this;
     }
 
+    DeltaWriterBuilder& set_is_multi_statements_txn(bool is_multi_statements_txn) {
+        _is_multi_statements_txn = is_multi_statements_txn;
+        return *this;
+    }
+
     StatusOr<DeltaWriterPtr> build();
 
 private:
@@ -287,6 +292,7 @@ private:
     RuntimeProfile* _profile{nullptr};
     BundleWritableFileContext* _bundle_writable_file_context{nullptr};
     GlobalDictByNameMaps* _global_dicts = nullptr;
+    bool _is_multi_statements_txn = false;
 };
 
 } // namespace starrocks::lake

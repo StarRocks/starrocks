@@ -256,6 +256,7 @@ message TxnLogPB {
     optional OpAlterMetadata op_alter_metadata = 6;
     optional OpReplication op_replication = 7;
     optional int64 partition_id = 8;
+    optional PUniqueId load_id = 9;
 }
 
 message CombinedTxnLogPB {
@@ -273,6 +274,7 @@ message TxnInfoPB {
     optional bool force_publish = 5; // only used for compaction
     optional bool rebuild_pindex = 6;
     optional int64 gtid = 7 [default=0];
+    repeated PUniqueId load_ids = 8;
 }
 
 message SplittingTabletInfoPB {

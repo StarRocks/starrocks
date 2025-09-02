@@ -25,5 +25,7 @@ using TxnLogPtr = std::shared_ptr<const TxnLog>;
 using MutableTxnLogPtr = std::shared_ptr<TxnLog>;
 using CombinedTxnLog = CombinedTxnLogPB;
 using CombinedTxnLogPtr = std::shared_ptr<const CombinedTxnLog>;
+using TxnLogVector = std::vector<TxnLogPtr>;
+using TxnLogVectorPtr = std::shared_ptr<TxnLogVector>;
 
 } // namespace starrocks
