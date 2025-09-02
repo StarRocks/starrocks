@@ -220,6 +220,8 @@ private:
 
     bool _is_data_file_bundle_enabled(const PTabletWriterOpenRequest& params);
 
+    bool _is_multi_statements_txn(const PTabletWriterOpenRequest& params);
+
     LoadChannel* _load_channel;
     lake::TabletManager* _tablet_manager;
 
@@ -682,6 +684,11 @@ bool LakeTabletsChannel::_is_data_file_bundle_enabled(const PTabletWriterOpenReq
            params.lake_tablet_params().enable_data_file_bundling();
 }
 
+bool LakeTabletsChannel::_is_multi_statements_txn(const PTabletWriterOpenRequest& params) {
+    return params.has_lake_tablet_params() && params.lake_tablet_params().has_is_multi_statements_txn() &&
+           params.lake_tablet_params().is_multi_statements_txn();
+}
+
 Status LakeTabletsChannel::_create_delta_writers(const PTabletWriterOpenRequest& params, bool is_incremental) {
     int64_t schema_id = 0;
     std::vector<SlotDescriptor*>* slots = nullptr;
@@ -748,6 +755,7 @@ Status LakeTabletsChannel::_create_delta_writers(const PTabletWriterOpenRequest&
                                               .set_profile(_profile)
                                               .set_bundle_writable_file_context(bundle_writable_file_context)
                                               .set_global_dicts(&_global_dicts)
+                                              .set_is_multi_statements_txn(_is_multi_statements_txn(params))
                                               .build());
         _delta_writers.emplace(tablet.tablet_id(), std::move(writer));
         tablet_ids.emplace_back(tablet.tablet_id());
