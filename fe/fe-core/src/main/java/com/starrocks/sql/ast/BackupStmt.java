@@ -15,7 +15,6 @@
 
 package com.starrocks.sql.ast;
 
-import com.starrocks.analysis.LabelName;
 import com.starrocks.analysis.TableRef;
 import com.starrocks.sql.parser.NodePosition;
 
