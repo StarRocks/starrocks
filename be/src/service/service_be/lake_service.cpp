@@ -1087,6 +1087,7 @@ void LakeServiceImpl::compact(::google::protobuf::RpcController* controller, con
 struct AggregateCompactContext {
     bthread::Mutex response_mtx;
     Status final_status = Status::OK();
+    CompactResponse* final_response;
     std::unique_ptr<BThreadCountDownLatch> latch;
     CombinedTxnLogPB combined_txn_log;
     int64_t begin_us = 0;
@@ -1113,6 +1114,14 @@ struct AggregateCompactContext {
             auto* next_txn_log = combined_txn_log.add_txn_logs();
             next_txn_log->CopyFrom(log);
             next_txn_log->set_partition_id(partition_id);
+        }
+    }
+
+    void collect_compact_stats(CompactResponse* response) {
+        std::lock_guard l(response_mtx);
+        for (const auto& stat : response->compact_stats()) {
+            auto compact_stat = final_response->add_compact_stats();
+            compact_stat->CopyFrom(stat);
         }
     }
 
@@ -1188,6 +1197,9 @@ static void aggregate_compact_cb(brpc::Controller* cntl, CompactResponse* respon
 
     // 3. collect txn logs
     ac_context->collect_txnlogs(response);
+
+    // 4. collect compact stats
+    ac_context->collect_compact_stats(response);
 }
 
 void LakeServiceImpl::aggregate_compact(::google::protobuf::RpcController* controller,
@@ -1207,6 +1219,7 @@ void LakeServiceImpl::aggregate_compact(::google::protobuf::RpcController* contr
 
     AggregateCompactContext ac_context(request->partition_id());
     ac_context.latch = std::make_unique<BThreadCountDownLatch>(request->requests_size());
+    ac_context.final_response = response;
 
     for (int i = 0; i < request->requests_size(); i++) {
         if (!ac_context.final_status.ok()) {
