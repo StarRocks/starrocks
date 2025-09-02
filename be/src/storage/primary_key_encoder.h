@@ -114,13 +114,14 @@ public:
     static LogicalType encoded_primary_key_type(const Schema& schema, const std::vector<ColumnId>& key_idxes);
 
     // Return -1 if encoded key is not fixed size
-    static size_t get_encoded_fixed_size(const Schema& schema);
+    static size_t get_encoded_fixed_size(const Schema& schema, bool enable_null_primary_key);
 
     // create suitable column to hold encoded key
     //   schema: schema of the table
     //   pcolumn: output column
     //   large_column: some usage may fill the column with more than uint32_max elements, set true to support this
-    static Status create_column(const Schema& schema, MutableColumnPtr* pcolumn, bool large_column = false);
+    static Status create_column(const Schema& schema, MutableColumnPtr* pcolumn, bool enable_null_primary_key,
+                                bool large_column = false);
 
     // create suitable column to hold encoded key
     //   schema: schema of the table
@@ -128,20 +129,22 @@ public:
     //   key_idxes: indexes of columns for encoding
     //   large_column: some usage may fill the column with more than uint32_max elements, set true to support this
     static Status create_column(const Schema& schema, MutableColumnPtr* pcolumn, const std::vector<ColumnId>& key_idxes,
-                                bool large_column = false);
+                                bool enable_null_primary_key, bool large_column = false);
 
-    static void encode(const Schema& schema, const Chunk& chunk, size_t offset, size_t len, Column* dest);
+    static void encode(const Schema& schema, const Chunk& chunk, size_t offset, size_t len, Column* dest,
+                       bool enable_null_primary_key);
 
-    static Status encode_sort_key(const Schema& schema, const Chunk& chunk, size_t offset, size_t len, Column* dest);
+    static Status encode_sort_key(const Schema& schema, const Chunk& chunk, size_t offset, size_t len, Column* dest,
+                                  bool enable_null_primary_key);
 
     static void encode_selective(const Schema& schema, const Chunk& chunk, const uint32_t* indexes, size_t len,
-                                 Column* dest);
+                                 Column* dest, bool enable_null_primary_key);
 
     static bool encode_exceed_limit(const Schema& schema, const Chunk& chunk, size_t offset, size_t len,
                                     size_t limit_size);
 
     static Status decode(const Schema& schema, const Column& keys, size_t offset, size_t len, Chunk* dest,
-                         std::vector<uint8_t>* value_encode_flags = nullptr);
+                         bool enable_null_primary_key, std::vector<uint8_t>* value_encode_flags = nullptr);
 };
 
 } // namespace starrocks

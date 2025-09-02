@@ -278,6 +278,7 @@ public class TabletTaskExecutor {
                         .setTabletId(tablet.getId())
                         .setVersion(physicalPartition.getVisibleVersion())
                         .setStorageMedium(storageMedium)
+                        .setEnableNullPrimaryKey(table.enableNullPrimaryKey())
                         .setEnablePersistentIndex(table.enablePersistentIndex())
                         .setPersistentIndexType(table.getPersistentIndexType())
                         .setPrimaryIndexCacheExpireSec(table.primaryIndexCacheExpireSec())

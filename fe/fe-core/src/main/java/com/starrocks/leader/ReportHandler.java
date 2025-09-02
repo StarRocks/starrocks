@@ -1222,6 +1222,7 @@ public class ReportHandler extends Daemon implements MemoryTrackable {
                                             .setIndexId(indexId)
                                             .setVersion(partition.getVisibleVersion())
                                             .setStorageMedium(TStorageMedium.HDD)
+                                            .setEnableNullPrimaryKey(olapTable.enableNullPrimaryKey())
                                             .setEnablePersistentIndex(olapTable.enablePersistentIndex())
                                             .setPrimaryIndexCacheExpireSec(olapTable.primaryIndexCacheExpireSec())
                                             .setTabletType(olapTable.getPartitionInfo().getTabletType(partitionId))

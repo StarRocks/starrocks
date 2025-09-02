@@ -28,7 +28,7 @@ class Rowset;
 
 class CompactionState {
 public:
-    CompactionState();
+    CompactionState(bool enable_null_primary_key);
     ~CompactionState();
 
     CompactionState(const CompactionState&) = delete;
@@ -50,6 +50,7 @@ private:
     std::once_flag _load_once_flag;
     Status _status;
     size_t _memory_usage = 0;
+    bool _enable_null_primary_key = false;
 };
 
 } // namespace starrocks

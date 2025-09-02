@@ -46,7 +46,7 @@ static unique_ptr<Schema> create_key_schema(const vector<LogicalType>& types) {
 TEST(PrimaryKeyEncoderTest, testEncodeInt32) {
     auto sc = create_key_schema({TYPE_INT});
     MutableColumnPtr dest;
-    PrimaryKeyEncoder::create_column(*sc, &dest);
+    PrimaryKeyEncoder::create_column(*sc, &dest, false);
     const int n = 1000;
     auto pchunk = ChunkHelper::new_chunk(*sc, n);
     for (int i = 0; i < n; i++) {
@@ -54,9 +54,9 @@ TEST(PrimaryKeyEncoderTest, testEncodeInt32) {
         tmp.set_int32(i * 2343);
         pchunk->columns()[0]->append_datum(tmp);
     }
-    PrimaryKeyEncoder::encode(*sc, *pchunk, 0, n, dest.get());
+    PrimaryKeyEncoder::encode(*sc, *pchunk, 0, n, dest.get(), false);
     auto dchunk = pchunk->clone_empty_with_schema();
-    PrimaryKeyEncoder::decode(*sc, *dest, 0, n, dchunk.get());
+    PrimaryKeyEncoder::decode(*sc, *dest, 0, n, dchunk.get(), false);
     ASSERT_EQ(pchunk->num_rows(), dchunk->num_rows());
     for (int i = 0; i < n; i++) {
         ASSERT_EQ(pchunk->get_column_by_index(0)->get(i).get_int32(),
@@ -67,7 +67,7 @@ TEST(PrimaryKeyEncoderTest, testEncodeInt32) {
 TEST(PrimaryKeyEncoderTest, testEncodeInt128) {
     auto sc = create_key_schema({TYPE_LARGEINT});
     MutableColumnPtr dest;
-    PrimaryKeyEncoder::create_column(*sc, &dest);
+    PrimaryKeyEncoder::create_column(*sc, &dest, false);
     const int n = 1000;
     auto pchunk = ChunkHelper::new_chunk(*sc, n);
     for (int i = 0; i < n; i++) {
@@ -79,9 +79,9 @@ TEST(PrimaryKeyEncoderTest, testEncodeInt128) {
     for (int i = 0; i < n; i++) {
         indexes.emplace_back(i);
     }
-    PrimaryKeyEncoder::encode_selective(*sc, *pchunk, indexes.data(), n, dest.get());
+    PrimaryKeyEncoder::encode_selective(*sc, *pchunk, indexes.data(), n, dest.get(), false);
     auto dchunk = pchunk->clone_empty_with_schema();
-    PrimaryKeyEncoder::decode(*sc, *dest, 0, n, dchunk.get());
+    PrimaryKeyEncoder::decode(*sc, *dest, 0, n, dchunk.get(), false);
     ASSERT_EQ(pchunk->num_rows(), dchunk->num_rows());
     for (int i = 0; i < n; i++) {
         ASSERT_EQ(pchunk->get_column_by_index(0)->get(i).get_int128(),
@@ -92,7 +92,7 @@ TEST(PrimaryKeyEncoderTest, testEncodeInt128) {
 TEST(PrimaryKeyEncoderTest, testEncodeComposite) {
     auto sc = create_key_schema({TYPE_INT, TYPE_VARCHAR, TYPE_SMALLINT, TYPE_BOOLEAN});
     MutableColumnPtr dest;
-    PrimaryKeyEncoder::create_column(*sc, &dest);
+    PrimaryKeyEncoder::create_column(*sc, &dest, false);
     const int n = 1;
     auto pchunk = ChunkHelper::new_chunk(*sc, n);
     for (int i = 0; i < n; i++) {
@@ -115,9 +115,9 @@ TEST(PrimaryKeyEncoderTest, testEncodeComposite) {
     for (int i = 0; i < n; i++) {
         indexes.emplace_back(i);
     }
-    PrimaryKeyEncoder::encode_selective(*sc, *pchunk, indexes.data(), n, dest.get());
+    PrimaryKeyEncoder::encode_selective(*sc, *pchunk, indexes.data(), n, dest.get(), false);
     auto dchunk = pchunk->clone_empty_with_schema();
-    PrimaryKeyEncoder::decode(*sc, *dest, 0, n, dchunk.get());
+    PrimaryKeyEncoder::decode(*sc, *dest, 0, n, dchunk.get(), false);
     ASSERT_EQ(pchunk->num_rows(), dchunk->num_rows());
     for (int i = 0; i < n; i++) {
         ASSERT_EQ(pchunk->get_column_by_index(0)->get(i).get_int32(),

@@ -376,8 +376,8 @@ PARALLEL_TEST(PrimaryIndexTest, test_composite_key) {
     }
 
     MutableColumnPtr pk_column;
-    PrimaryKeyEncoder::create_column(*schema, &pk_column);
-    PrimaryKeyEncoder::encode(*schema, *chunk, 0, chunk->num_rows(), pk_column.get());
+    PrimaryKeyEncoder::create_column(*schema, &pk_column, false);
+    PrimaryKeyEncoder::encode(*schema, *chunk, 0, chunk->num_rows(), pk_column.get(), false);
 
     ASSERT_TRUE(pk_index->insert(0, 0, *pk_column).ok());
     LOG(INFO) << "pk_index memory:" << pk_index->memory_usage();

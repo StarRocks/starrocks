@@ -18,9 +18,10 @@
 
 namespace starrocks::sstable {
 
-StatusOr<SstablePredicateUPtr> SstablePredicate::create(const TabletSchemaPB& tablet_schema_pb,
+StatusOr<SstablePredicateUPtr> SstablePredicate::create(bool enable_null_primary_key,
+                                                        const TabletSchemaPB& tablet_schema_pb,
                                                         const PersistentIndexSstablePredicatePB& sstable_predicate_pb) {
-    ASSIGN_OR_RETURN(auto converter, KeyToChunkConverter::create(tablet_schema_pb));
+    ASSIGN_OR_RETURN(auto converter, KeyToChunkConverter::create(enable_null_primary_key, tablet_schema_pb));
     auto predicate = std::make_unique<SstablePredicate>();
     RETURN_IF_ERROR(predicate->_init(sstable_predicate_pb, converter));
     return predicate;

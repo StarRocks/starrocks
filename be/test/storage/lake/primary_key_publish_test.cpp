@@ -190,7 +190,7 @@ TEST_P(LakePrimaryKeyPublishTest, test_write_read_success) {
     int64_t txn_id = next_id();
     ASSIGN_OR_ABORT(auto tablet, _tablet_mgr->get_tablet(_tablet_metadata->id()));
     std::shared_ptr<const TabletSchema> const_schema = _tablet_schema;
-    ASSIGN_OR_ABORT(auto writer, tablet.new_writer(kHorizontal, txn_id));
+    ASSIGN_OR_ABORT(auto writer, tablet.new_writer(kHorizontal, txn_id, false));
     ASSERT_OK(writer->open());
 
     // write segment #1

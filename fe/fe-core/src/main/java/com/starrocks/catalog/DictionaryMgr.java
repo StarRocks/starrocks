@@ -700,6 +700,7 @@ public class DictionaryMgr implements Writable, GsonPostProcessable {
             request.dictId = dictionary.getDictionaryId();
             request.txnId = txnId;
             request.type = PProcessDictionaryCacheRequestType.COMMIT;
+            request.enableNullPrimaryKey = dictionary.isEnableNullPrimaryKey();
 
             Pair<Boolean, String> ret = DictionaryMgr.processDictionaryCacheInteranl(request, beNodes, null);
             error = ret.first;

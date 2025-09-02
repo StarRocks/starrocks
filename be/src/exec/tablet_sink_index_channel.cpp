@@ -217,6 +217,7 @@ void NodeChannel::_open(int64_t index_id, RefCountClosure<PTabletWriterOpenResul
     request.set_is_vectorized(true);
     request.set_timeout_ms(std::min(_rpc_timeout_ms, config::tablet_writer_open_rpc_timeout_sec * 1000));
     request.mutable_load_channel_profile_config()->CopyFrom(_parent->_load_channel_profile_config);
+    request.set_enable_null_primary_key(_parent->_enable_null_primary_key);
 
     // set global dict
     const auto& global_dict = _runtime_state->get_load_global_dict_map();

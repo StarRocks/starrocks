@@ -21,7 +21,8 @@
 
 namespace starrocks::sstable {
 
-StatusOr<KeyToChunkConverterUPtr> KeyToChunkConverter::create(const TabletSchemaPB& tablet_schema_pb) {
+StatusOr<KeyToChunkConverterUPtr> KeyToChunkConverter::create(bool enable_null_primary_key,
+                                                              const TabletSchemaPB& tablet_schema_pb) {
     // convert context for key
     std::shared_ptr<TabletSchema> tablet_schema = std::make_shared<TabletSchema>(tablet_schema_pb);
     std::vector<ColumnId> pk_columns(tablet_schema->num_key_columns());
@@ -31,9 +32,9 @@ StatusOr<KeyToChunkConverterUPtr> KeyToChunkConverter::create(const TabletSchema
     auto pkey_schema = ChunkHelper::convert_schema(tablet_schema, pk_columns);
     auto pk_chunk = ChunkHelper::new_chunk(pkey_schema, 1);
     MutableColumnPtr pk_column;
-    RETURN_IF_ERROR(PrimaryKeyEncoder::create_column(pkey_schema, &pk_column));
+    RETURN_IF_ERROR(PrimaryKeyEncoder::create_column(pkey_schema, &pk_column, enable_null_primary_key));
 
-    auto converter = std::make_unique<KeyToChunkConverter>(pkey_schema, pk_chunk, pk_column);
+    auto converter = std::make_unique<KeyToChunkConverter>(enable_null_primary_key, pkey_schema, pk_chunk, pk_column);
     return converter;
 }
 
@@ -50,7 +51,8 @@ StatusOr<ChunkUniquePtr> KeyToChunkConverter::convert_to_chunk(const std::string
     } else {
         _pk_column->deserialize_and_append(reinterpret_cast<const uint8_t*>(key.data()));
     }
-    RETURN_IF_ERROR(PrimaryKeyEncoder::decode(_pkey_schema, *_pk_column, 0, 1, chunk.get(), nullptr));
+    RETURN_IF_ERROR(
+            PrimaryKeyEncoder::decode(_pkey_schema, *_pk_column, 0, 1, chunk.get(), _enable_null_primary_key, nullptr));
     return chunk;
 }
 

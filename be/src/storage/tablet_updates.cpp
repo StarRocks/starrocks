@@ -2178,7 +2178,7 @@ Status TabletUpdates::_commit_compaction(std::unique_ptr<CompactionInfo>* pinfo,
                                          EditVersion* commit_version) {
     auto span = Tracer::Instance().start_trace_tablet("commit_compaction", _tablet.tablet_id());
     auto scoped_span = trace::Scope(span);
-    _compaction_state = std::make_unique<CompactionState>();
+    _compaction_state = std::make_unique<CompactionState>(_tablet.get_enable_null_primary_key());
     if (!config::enable_light_pk_compaction_publish) {
         // Skip load compaction state when enable light pk compaction
         auto status = _compaction_state->load(rowset.get());
@@ -2341,7 +2341,7 @@ Status TabletUpdates::_apply_compaction_commit(const EditVersionInfo& version_in
     // if compaction_state == null, it must be the case that BE restarted
     // need to rebuild/load state from disk
     if (!_compaction_state) {
-        _compaction_state = std::make_unique<CompactionState>();
+        _compaction_state = std::make_unique<CompactionState>(_tablet.get_enable_null_primary_key());
     }
     auto failure_handler = [&](const std::string& msg, TStatusCode::type code) {
         _compaction_state.reset();
