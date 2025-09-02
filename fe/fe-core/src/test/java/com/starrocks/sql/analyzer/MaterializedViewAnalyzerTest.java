@@ -536,4 +536,10 @@ public class MaterializedViewAnalyzerTest {
 
         Config.default_replication_num = defaultReplication;
     }
+
+    @Test
+    public void testCreateMVCheckPartitionNameIgnoreCaseSensitive() {
+        analyzeSuccess("create materialized view mv_hive_0 partition by str2date(L_SHIPDATE, '%Y%m%d') refresh manual as " +
+                "SELECT l_partkey, L_SHIPDATE  FROM hive0.partitioned_db.lineitem_mul_par3 as a");
+    }
 }
