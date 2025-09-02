@@ -76,29 +76,28 @@ LDAP 认证要求客户端将明文密码传递给 StarRocks。有三种方式�
 mysql -utom -P8030 -h127.0.0.1 -p --default-auth mysql_clear_password --enable-cleartext-plugin
 ```
 
-### 从 JDBC 客户端连接 LDAP
+### 从 JDBC/ODBC 客户端连接 LDAP
 
 - **JDBC**
 
-由于 JDBC 的默认 MysqlClearPasswordPlugin 需要 SSL 传输，因此需要自定义插件。
+注意：使用JDBC链接时，Server 端必须要启用 SSL。SSL 配置请参考 [SSL 认证](../ssl_authentication.md)。
+
+JDBC 5：
 
 ```java
-public class MysqlClearPasswordPluginWithoutSSL extends MysqlClearPasswordPlugin {
-    @Override  
-    public boolean requiresConfidentiality() {
-        return false;
-    }
-}
+Properties properties = new Properties();
+properties.put("authenticationPlugins", "com.mysql.jdbc.authentication.MysqlClearPasswordPlugin");
+properties.put("defaultAuthenticationPlugin", "com.mysql.jdbc.authentication.MysqlClearPasswordPlugin");
+properties.put("disabledAuthenticationPlugins", "com.mysql.jdbc.authentication.MysqlNativePasswordPlugin");
 ```
 
-连接后，将自定义插件配置到属性中。
+JDBC 8：
 
 ```java
-...
-Properties properties = new Properties();// 将 xxx.xxx.xxx 替换为您的包名
-properties.put("authenticationPlugins", "xxx.xxx.xxx.MysqlClearPasswordPluginWithoutSSL");
-properties.put("defaultAuthenticationPlugin", "xxx.xxx.xxx.MysqlClearPasswordPluginWithoutSSL");
-properties.put("disabledAuthenticationPlugins", "com.mysql.jdbc.authentication.MysqlNativePasswordPlugin");DriverManager.getConnection(url, properties);
+Properties properties = new Properties();
+properties.put("authenticationPlugins", "com.mysql.cj.protocol.a.authentication.MysqlClearPasswordPlugin");
+properties.put("defaultAuthenticationPlugin", "com.mysql.cj.protocol.a.authentication.MysqlClearPasswordPlugin");
+properties.put("disabledAuthenticationPlugins", "com.mysql.cj.protocol.a.authentication.MysqlNativePasswordPlugin");
 ```
 
 - **ODBC**
