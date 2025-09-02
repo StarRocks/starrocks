@@ -623,10 +623,8 @@ TEST_F(LakeTabletsChannelTest, test_tablet_not_existed) {
 
     add_chunk_request.add_tablet_ids(10000); // Not existed tablet id
 
-    bool close_channel;
-    _tablets_channel->add_chunk(&chunk, add_chunk_request, &add_chunk_response, &close_channel);
+    _tablets_channel->add_chunk(&chunk, add_chunk_request, &add_chunk_response);
     ASSERT_NE(TStatusCode::INTERNAL_ERROR, add_chunk_response.status().status_code());
-    ASSERT_FALSE(close_channel);
 
     _tablets_channel->abort();
 
