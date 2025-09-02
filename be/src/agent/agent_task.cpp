@@ -161,8 +161,6 @@ static void unify_finish_agent_task(TStatusCode::type status_code, const std::ve
 }
 
 void run_drop_tablet_task(const std::shared_ptr<DropTabletAgentTaskRequest>& agent_task_req, ExecEnv* exec_env) {
-    StarRocksMetrics::instance()->clone_requests_total.increment(1);
-
     const TDropTabletReq& drop_tablet_req = agent_task_req->task_req;
 
     bool force_drop = drop_tablet_req.__isset.force && drop_tablet_req.force;
@@ -348,6 +346,7 @@ void run_clear_transaction_task(const std::shared_ptr<ClearTransactionAgentTaskR
 }
 
 void run_clone_task(const std::shared_ptr<CloneAgentTaskRequest>& agent_task_req, ExecEnv* exec_env) {
+    StarRocksMetrics::instance()->clone_requests_total.increment(1);
     const TCloneReq& clone_req = agent_task_req->task_req;
     AgentStatus status = STARROCKS_SUCCESS;
 
@@ -366,6 +365,7 @@ void run_clone_task(const std::shared_ptr<CloneAgentTaskRequest>& agent_task_req
     if (clone_req.__isset.is_local && clone_req.is_local) {
         DataDir* dest_store = StorageEngine::instance()->get_store(clone_req.dest_path_hash);
         if (dest_store == nullptr) {
+            StarRocksMetrics::instance()->clone_requests_failed.increment(1);
             LOG(WARNING) << "fail to get dest store. path_hash:" << clone_req.dest_path_hash;
             status_code = TStatusCode::RUNTIME_ERROR;
         } else {
@@ -374,6 +374,7 @@ void run_clone_task(const std::shared_ptr<CloneAgentTaskRequest>& agent_task_req
                                                    need_rebuild_pk_index);
             Status res = StorageEngine::instance()->execute_task(&engine_task);
             if (!res.ok()) {
+                StarRocksMetrics::instance()->clone_requests_failed.increment(1);
                 status_code = TStatusCode::RUNTIME_ERROR;
                 LOG(WARNING) << "local tablet migration failed. status: " << res
                              << ", signature: " << agent_task_req->signature;
@@ -392,6 +393,14 @@ void run_clone_task(const std::shared_ptr<CloneAgentTaskRequest>& agent_task_req
                     tablet_infos.push_back(tablet_info);
                 }
                 finish_task_request.__set_finish_tablet_infos(tablet_infos);
+
+                int64_t copy_size = engine_task.get_copy_size();
+                finish_task_request.__set_copy_size(copy_size);
+                StarRocksMetrics::instance()->clone_task_intra_node_copy_bytes.increment(copy_size);
+
+                int64_t copy_time_ms = engine_task.get_copy_time_ms();
+                finish_task_request.__set_copy_time_ms(copy_time_ms);
+                StarRocksMetrics::instance()->clone_task_intra_node_copy_duration_ms.increment(copy_time_ms);
             }
         }
     } else {
@@ -399,6 +408,7 @@ void run_clone_task(const std::shared_ptr<CloneAgentTaskRequest>& agent_task_req
                                     &error_msgs, &tablet_infos, &status);
         Status res = StorageEngine::instance()->execute_task(&engine_task);
         if (!res.ok()) {
+            StarRocksMetrics::instance()->clone_requests_failed.increment(1);
             status_code = TStatusCode::RUNTIME_ERROR;
             LOG(WARNING) << "clone failed. status:" << res << ", signature:" << agent_task_req->signature;
             error_msgs.emplace_back("clone failed.");
@@ -412,8 +422,14 @@ void run_clone_task(const std::shared_ptr<CloneAgentTaskRequest>& agent_task_req
                 LOG(INFO) << "clone success, set tablet infos. status:" << status
                           << ", signature:" << agent_task_req->signature;
                 finish_task_request.__set_finish_tablet_infos(tablet_infos);
-                finish_task_request.__set_copy_size(engine_task.get_copy_size());
-                finish_task_request.__set_copy_time_ms(engine_task.get_copy_time_ms());
+
+                int64_t copy_size = engine_task.get_copy_size();
+                finish_task_request.__set_copy_size(copy_size);
+                StarRocksMetrics::instance()->clone_task_inter_node_copy_bytes.increment(copy_size);
+
+                int64_t copy_time_ms = engine_task.get_copy_time_ms();
+                finish_task_request.__set_copy_time_ms(copy_time_ms);
+                StarRocksMetrics::instance()->clone_task_inter_node_copy_duration_ms.increment(copy_time_ms);
             }
         }
     }

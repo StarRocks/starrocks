@@ -347,10 +347,14 @@ public:
         }
         EngineStorageMigrationTask migration_task(tablet_id, schema_hash, dest_path, false);
         ASSERT_OK(migration_task.execute());
+        ASSERT_GT(migration_task.get_copy_size(), 0);
+        ASSERT_GE(migration_task.get_copy_time_ms(), 0);
         // sleep 2 second for add latency for load
         sleep(2);
         EngineStorageMigrationTask migration_task_2(tablet_id, schema_hash, source_path, false);
         ASSERT_OK(migration_task_2.execute());
+        ASSERT_GT(migration_task_2.get_copy_size(), 0);
+        ASSERT_GE(migration_task_2.get_copy_time_ms(), 0);
     }
 
     void do_chain_path_migration(int64_t tablet_id, int32_t schema_hash) {
