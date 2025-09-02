@@ -7,7 +7,7 @@ sidebar_position: 50
 
 StarRocks は、ネイティブなパスワードベースの認証に加えて、LDAP 認証もサポートしています。
 
-このトピックでは、StarRocks で LDAP を使用してユーザーを手動で作成し、認証する方法について説明します。セキュリティインテグレーションを使用して StarRocks を LDAP サービスと統合する方法については、[Authenticate with Security Integration](./security_integration.md) を参照してください。LDAP サービスでユーザーグループを認証する方法については、[Authenticate User Groups](../group_provider.md) を参照してください。
+このトピックでは、StarRocks で LDAP を使用してユーザーを手動で作成し、認証する方法について説明します。
 
 ## LDAP 認証を有効にする
 
@@ -80,7 +80,7 @@ mysql -utom -P8030 -h127.0.0.1 -p --default-auth mysql_clear_password --enable-c
 
 - **JDBC**
 
-JDBC 接続を使用する場合、サーバー側で SSL を有効にする必要があることに注意してください。詳細については、[SSL 認証](../ssl_authentication.md)を参照してください。
+JDBC 接続を使用する場合、サーバー側で SSL を有効にする必要があることに注意してください。詳細については、[SSL 認証](./ssl_authentication.md)を参照してください。
 
 JDBC 5:
 
