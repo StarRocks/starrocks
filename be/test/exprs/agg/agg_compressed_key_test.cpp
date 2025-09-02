@@ -44,7 +44,7 @@ TEST(AggCompressedKey, could_bound) {
         used_bytes.resize(1);
 
         auto type1 = TypeDescriptor(TYPE_INT);
-        groupby.emplace_back(type1, false);
+        groupby.emplace_back(ColumnType{type1, false});
         std::vector<std::optional<std::pair<VectorizedLiteral*, VectorizedLiteral*>>> ranges;
         auto* min = pool.add(new VectorizedLiteral(ColumnHelper::create_const_column<TYPE_INT>(0, 1), type1));
         auto* max = pool.add(new VectorizedLiteral(ColumnHelper::create_const_column<TYPE_INT>(100, 1), type1));
@@ -70,8 +70,8 @@ TEST(AggCompressedKey, could_bound) {
         used_bytes.resize(2);
 
         auto type1 = TypeDescriptor(TYPE_INT);
-        groupby.emplace_back(type1, false);
-        groupby.emplace_back(type1, true);
+        groupby.emplace_back(ColumnType{type1, false});
+        groupby.emplace_back(ColumnType{type1, true});
         std::vector<std::optional<std::pair<VectorizedLiteral*, VectorizedLiteral*>>> ranges;
         auto* min = pool.add(new VectorizedLiteral(ColumnHelper::create_const_column<TYPE_INT>(0, 1), type1));
         auto* max = pool.add(new VectorizedLiteral(ColumnHelper::create_const_column<TYPE_INT>(100, 1), type1));
@@ -98,8 +98,8 @@ TEST(AggCompressedKey, could_bound) {
         used_bytes.resize(2);
 
         auto type1 = TypeDescriptor::create_decimalv3_type(TYPE_DECIMAL128, 8, 4);
-        groupby.emplace_back(type1, false);
-        groupby.emplace_back(type1, true);
+        groupby.emplace_back(ColumnType{type1, false});
+        groupby.emplace_back(ColumnType{type1, true});
         std::vector<std::optional<std::pair<VectorizedLiteral*, VectorizedLiteral*>>> ranges;
         auto* min = pool.add(
                 new VectorizedLiteral(ColumnHelper::create_const_decimal_column<TYPE_DECIMAL128>(0, 8, 4, 1), type1));
