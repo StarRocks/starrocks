@@ -80,9 +80,9 @@ mysql -utom -P8030 -h127.0.0.1 -p --default-auth mysql_clear_password --enable-c
 
 - **JDBC**
 
-注意：使用JDBC链接时，server端必须要启用ssl。ssl配置请参考[SSL 认证](../ssl_authentication.md)
+注意：使用JDBC链接时，Server 端必须要启用 SSL。SSL 配置请参考 [SSL 认证](../ssl_authentication.md)。
 
-JDBC5
+JDBC 5：
 
 ```java
 Properties properties = new Properties();
@@ -91,7 +91,7 @@ properties.put("defaultAuthenticationPlugin", "com.mysql.jdbc.authentication.Mys
 properties.put("disabledAuthenticationPlugins", "com.mysql.jdbc.authentication.MysqlNativePasswordPlugin");
 ```
 
-JDBC8
+JDBC 8：
 
 ```java
 Properties properties = new Properties();
