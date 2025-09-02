@@ -214,6 +214,17 @@ public class FunctionAnalyzer {
             FunctionName argFuncNameWithoutIf =
                     new FunctionName(AggStateUtils.getAggFuncNameOfCombinator(fnName.getFunction()));
             FunctionParams params = functionCallExpr.getParams();
+            
+            // Validate that the condition parameter (last parameter) is boolean type
+            if (!params.exprs().isEmpty()) {
+                Expr conditionExpr = params.exprs().get(params.exprs().size() - 1);
+                if (!conditionExpr.getType().isBoolean()) {
+                    throw new SemanticException(String.format(
+                        "The condition expression in %s function must be boolean type, but got %s",
+                        fnName.getFunction(), conditionExpr.getType().toSql()), functionCallExpr.getPos());
+                }
+            }
+            
             FunctionParams functionParamsWithOutIf =
                     new FunctionParams(params.isStar(), params.exprs().subList(0, params.exprs().size() - 1),
                             params.getExprsNames() == null ? null :
