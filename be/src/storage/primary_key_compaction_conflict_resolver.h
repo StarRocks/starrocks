@@ -51,6 +51,7 @@ public:
             const std::function<
                     Status(const CompactConflictResolveParams&, const std::vector<std::shared_ptr<Segment>>&,
                            const std::function<void(uint32_t, const DelVectorPtr&, uint32_t)>&)>& handler) = 0;
+    virtual bool enable_null_primary_key() = 0;
 
     Status execute();
 

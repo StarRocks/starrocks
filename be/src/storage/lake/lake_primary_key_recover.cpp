@@ -131,4 +131,11 @@ int64_t LakePrimaryKeyRecover::tablet_id() {
     return _tablet->id();
 }
 
+bool LakePrimaryKeyRecover::enable_null_primary_key() {
+    if (_metadata->has_enable_null_primary_key()) {
+        return _metadata->enable_null_primary_key();
+    }
+    return config::enable_null_primary_key;
+}
+
 } // namespace starrocks::lake

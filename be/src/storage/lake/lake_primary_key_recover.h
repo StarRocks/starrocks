@@ -55,6 +55,8 @@ public:
 
     int64_t tablet_id() override;
 
+    bool enable_null_primary_key() override;
+
     // Sorrt rowset by rowsetid
     // also consider sorting in data loading and compact concurrency scenarios
     static Status sort_rowsets(std::vector<RowsetPtr>* rowsets);

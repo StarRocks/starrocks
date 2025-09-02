@@ -174,6 +174,7 @@ private:
     std::vector<MutableColumnPtr> _deletes;
     size_t _memory_usage = 0;
     int64_t _tablet_id = 0;
+    bool _enable_null_primary_key = false;
     TabletSchemaCSPtr _tablet_schema = nullptr;
 
     // column_with_row partial update states

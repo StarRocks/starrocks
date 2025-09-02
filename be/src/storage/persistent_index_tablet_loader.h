@@ -45,6 +45,8 @@ public:
 
     void set_write_amp_score(double score) override;
 
+    bool enable_null_primary_key() override { return _tablet->get_enable_null_primary_key(); }
+
 private:
     Tablet* _tablet;
 };

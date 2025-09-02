@@ -32,7 +32,8 @@ class TabletManager;
 class LakePrimaryIndex : public PrimaryIndex {
 public:
     LakePrimaryIndex() : PrimaryIndex() {}
-    LakePrimaryIndex(const Schema& pk_schema) : PrimaryIndex(pk_schema) {}
+    LakePrimaryIndex(const Schema& pk_schema, bool enable_null_primary_key)
+            : PrimaryIndex(pk_schema, enable_null_primary_key) {}
     ~LakePrimaryIndex() override;
 
     // Fetch all primary keys from the tablet associated with this index into memory

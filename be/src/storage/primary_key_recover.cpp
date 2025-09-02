@@ -25,15 +25,16 @@ Status PrimaryKeyRecover::recover() {
     RETURN_IF_ERROR(pre_cleanup());
     LOG(INFO) << "PrimaryKeyRecover pre clean up finish. tablet_id: " << tablet_id();
 
+    bool enable_null_pk = enable_null_primary_key();
     // 2. generate primary key schema
     MutableColumnPtr pk_column;
     auto pkey_schema = generate_pkey_schema();
-    if (!PrimaryKeyEncoder::create_column(pkey_schema, &pk_column).ok()) {
+    if (!PrimaryKeyEncoder::create_column(pkey_schema, &pk_column, enable_null_pk).ok()) {
         CHECK(false) << "create column for primary key encoder failed";
     }
 
     // For simplicity, we use temp pk index for generate delvec, and then rebuild real pk index when retry publish
-    PrimaryIndex index(pkey_schema);
+    PrimaryIndex index(pkey_schema, enable_null_pk);
 
     OlapReaderStatistics stats;
     std::vector<uint32_t> rowids;
@@ -90,7 +91,8 @@ Status PrimaryKeyRecover::recover() {
                                 return st;
                             } else {
                                 pk_column->reset_column();
-                                PrimaryKeyEncoder::encode(pkey_schema, *chunk, 0, chunk->num_rows(), pk_column.get());
+                                PrimaryKeyEncoder::encode(pkey_schema, *chunk, 0, chunk->num_rows(), pk_column.get(),
+                                                          enable_null_pk);
                                 // upsert and generate new deletes
                                 RETURN_IF_ERROR(index.upsert(rssid, row_id_start, *pk_column, &new_deletes));
                                 row_id_start += pk_column->size();
