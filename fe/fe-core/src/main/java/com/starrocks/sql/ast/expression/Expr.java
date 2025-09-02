@@ -574,6 +574,7 @@ public abstract class Expr extends TreeNode<Expr> implements ParseNode, Cloneabl
         Preconditions.checkState(!printSqlInParens);
         ExprExplainVisitor explain = new ExprExplainVisitor();
         return explain.visit(this);
+        //        return toSqlImpl();
     }
 
     /**

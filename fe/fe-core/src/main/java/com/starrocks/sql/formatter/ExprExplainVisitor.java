@@ -55,6 +55,7 @@ import com.starrocks.analysis.UserVariableExpr;
 import com.starrocks.analysis.VarBinaryLiteral;
 import com.starrocks.analysis.VariableExpr;
 import com.starrocks.catalog.FunctionSet;
+import com.starrocks.sql.analyzer.AstToStringBuilder;
 import com.starrocks.sql.ast.ArrayExpr;
 import com.starrocks.sql.ast.AstVisitorExtendInterface;
 import com.starrocks.sql.ast.DefaultValueExpr;
@@ -347,7 +348,7 @@ public class ExprExplainVisitor implements AstVisitorExtendInterface<String, Voi
 
     @Override
     public String visitSubqueryExpr(Subquery node, Void context) {
-        return "(" + node.getQueryStatement().accept(new com.starrocks.sql.formatter.AST2SQLVisitor(), context) + ")";
+        return "(" + AstToStringBuilder.toString(node.getQueryStatement()) + ")";
     }
 
     // ========================================= Multi-Value Predicates =========================================

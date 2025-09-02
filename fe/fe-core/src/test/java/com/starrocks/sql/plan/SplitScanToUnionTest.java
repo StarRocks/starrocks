@@ -119,8 +119,8 @@ class SplitScanToUnionTest extends DistributedEnvPlanTestBase {
                 "  |  child exprs:\n" +
                 "  |      [4: v1, BIGINT, true] | [5: v2, BIGINT, true] | [6: v3, BIGINT, true]\n" +
                 "  |      [7: v1, BIGINT, true] | [8: v2, BIGINT, true] | [9: v3, BIGINT, true]");
-        assertContains(plan, "Predicates: 4: v1 IN (0, 1, 2, 3, 4)");
-        assertContains(plan, "Predicates: 7: v1 IN (5, 6, 7, 8, 9)");
+        assertContains(plan, "Predicates: [4: v1, BIGINT, true] IN (0, 1, 2, 3, 4)");
+        assertContains(plan, "Predicates: [7: v1, BIGINT, true] IN (5, 6, 7, 8, 9)");
     }
 
     private static Stream<Arguments> testSplitUnionSqls() {
