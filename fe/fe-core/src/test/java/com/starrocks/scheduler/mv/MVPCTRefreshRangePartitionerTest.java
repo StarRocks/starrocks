@@ -68,7 +68,7 @@ public class MVPCTRefreshRangePartitionerTest {
         List<PCellWithName> partitions = Arrays.asList(PCellWithName.of("mv_p1", new PCellNone()),
                 PCellWithName.of("mv_p2", new PCellNone()));
         Iterator<PCellWithName> iter = partitions.iterator();
-        MVRefreshParams mvRefreshParams = new MVRefreshParams(mv.getPartitionInfo(), new HashMap<>(), false);
+        MVRefreshParams mvRefreshParams = new MVRefreshParams(mv, new HashMap<>());
         MVPCTRefreshRangePartitioner partitioner = new MVPCTRefreshRangePartitioner(mvContext, null,
                 null, mv, mvRefreshParams);
         MVAdaptiveRefreshException exception = Assertions.assertThrows(MVAdaptiveRefreshException.class,
@@ -86,7 +86,7 @@ public class MVPCTRefreshRangePartitionerTest {
         when(mv.getPartitionInfo()).thenReturn(mock(PartitionInfo.class));
         when(mv.getTableProperty().getPartitionTTLNumber()).thenReturn(2);
 
-        MVRefreshParams mvRefreshParams = new MVRefreshParams(mv.getPartitionInfo(), new HashMap<>(), false);
+        MVRefreshParams mvRefreshParams = new MVRefreshParams(mv, new HashMap<>());
         MVPCTRefreshRangePartitioner partitioner = new MVPCTRefreshRangePartitioner(mvContext, null, null, mv,
                 mvRefreshParams);
 

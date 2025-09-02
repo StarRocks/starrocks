@@ -129,10 +129,7 @@ public abstract class BaseMVRefreshProcessor {
         this.mvContext = mvContext;
         this.mvEntity = mvEntity;
         this.logger = MVTraceUtils.getLogger(mv, clazz);
-        // init mv refresh params
-        MaterializedView.PartitionRefreshStrategy partitionRefreshStrategy = mv.getPartitionRefreshStrategy();
-        boolean isForce = partitionRefreshStrategy == MaterializedView.PartitionRefreshStrategy.FORCE;
-        this.mvRefreshParams = new MVRefreshParams(mv.getPartitionInfo(), mvContext.getProperties(), isForce);
+        this.mvRefreshParams = new MVRefreshParams(mv, mvContext.getProperties());
         // prepare mv refresh partitioner
         this.mvRefreshPartitioner = buildMvRefreshPartitioner(mv, mvContext, mvRefreshParams);
     }
@@ -577,9 +574,7 @@ public abstract class BaseMVRefreshProcessor {
         // change mv refresh params if needed
         mvRefreshParams.setIsTentative(tentative);
 
-        final Set<String> mvPotentialPartitionNames = Sets.newHashSet();
-        final PCellSortedSet mvToRefreshedPartitions = mvRefreshPartitioner.getMVToRefreshedPartitions(
-                snapshotBaseTables, mvPotentialPartitionNames);
+        final PCellSortedSet mvToRefreshedPartitions = mvRefreshPartitioner.getMVToRefreshedPartitions(snapshotBaseTables);
         // update mv extra message
         if (!mvRefreshParams.isTentative()) {
             updateTaskRunStatus(status -> {

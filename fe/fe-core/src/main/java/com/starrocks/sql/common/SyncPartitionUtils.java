@@ -826,4 +826,91 @@ public class SyncPartitionUtils {
         dropBaseVersionMetaForOlapTable(mv, mvPartitionName, partitionRange, refreshContext, tableName);
         dropBaseVersionMetaForExternalTable(mv, mvPartitionName, refreshContext, tableName);
     }
+
+    /**
+     * According base table and materialized view's partition range, we can define those mappings from base to mv:
+     * <p>
+     * One-to-One
+     * src:     |----|    |----|
+     * dst:     |----|    |----|
+     * eg: base table is partitioned by one day, and mv is partition by one day
+     * </p>
+     * <p>
+     * Many-to-One
+     * src:     |----|    |----|     |----|    |----|
+     * dst:     |--------------|     |--------------|
+     * eg: base table is partitioned by one day, and mv is partition by date_trunc('month', dt)
+     * <p>
+     * One/Many-to-Many
+     * src:     |----| |----| |----| |----| |----| |----|
+     * dst:     |--------------| |--------------| |--------------|
+     * eg: base table is partitioned by three days, and mv is partition by date_trunc('month', dt)
+     * </p>
+     * <p>
+     * For one-to-one or many-to-one we can trigger to refresh by materialized view's partition, but for many-to-many
+     * we need also consider affected materialized view partitions also.
+     * <p>
+     * eg:
+     * ref table's partitions:
+     * p0:   [2023-07-27, 2023-07-30)
+     * p1:   [2023-07-30, 2023-08-02)
+     * p2:   [2023-08-02, 2023-08-05)
+     * materialized view's partition:
+     * p0:   [2023-07-01, 2023-08-01)
+     * p1:   [2023-08-01, 2023-09-01)
+     * p2:   [2023-09-01, 2023-10-01)
+     * <p>
+     * So ref table's p1 has been changed, materialized view to refresh partition: p0, p1. And when we refresh p0,p1
+     * we also need to consider other ref table partitions(p0); otherwise, the mv's final result will lose data.
+     */
+    public static boolean isCalcPotentialRefreshPartition(Map<Table, PCellSortedSet> baseChangedPartitionNames,
+                                                          PCellSortedSet mvPartitions) {
+        List<PRangeCell> mvSortedPartitionRanges = mvPartitions.partitions().stream()
+                .map(p -> (PRangeCell) p.cell())
+                .collect(Collectors.toList());
+        for (PCellSortedSet baseTableSortedSet : baseChangedPartitionNames.values()) {
+            for (PCellWithName basePartitionRange : baseTableSortedSet.partitions()) {
+                PRangeCell pRangeCell = (PRangeCell) basePartitionRange.cell();
+                if (isManyToManyPartitionRangeMapping(pRangeCell, mvSortedPartitionRanges)) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    /**
+     * Whether srcRange is intersected with many dest ranges.
+     */
+    public static boolean isManyToManyPartitionRangeMapping(PRangeCell srcRange,
+                                                            List<PRangeCell> dstRanges) {
+        if (dstRanges.isEmpty()) {
+            return false;
+        }
+        // quickly check if dst ranges only contain one range
+        if (dstRanges.size() == 1) {
+            return srcRange.isUnAligned(dstRanges.get(0));
+        }
+        List<PartitionKey> lowerPoints = dstRanges.stream().map(
+                dstRange -> dstRange.getRange().lowerEndpoint()).toList();
+        List<PartitionKey> upperPoints = dstRanges.stream().map(
+                dstRange -> dstRange.getRange().upperEndpoint()).toList();
+
+        PartitionKey lower = srcRange.getRange().lowerEndpoint();
+        PartitionKey upper = srcRange.getRange().upperEndpoint();
+
+        // For an interval [l, r], if there exists another interval [li, ri] that intersects with it, this interval
+        // must satisfy l ≤ ri and r ≥ li. Therefore, if there exists a pos_a such that for all k < pos_a,
+        // ri[k] < l, and there exists a pos_b such that for all k > pos_b, li[k] > r, then all intervals between
+        // pos_a and pos_b might potentially intersect with the interval [l, r].
+        int posA = PartitionKey.findLastLessEqualInOrderedList(lower, upperPoints);
+        int posB = PartitionKey.findLastLessEqualInOrderedList(upper, lowerPoints);
+
+        for (int i = posA; i <= posB; ++i) {
+            if (dstRanges.get(i).isUnAligned(srcRange)) {
+                return true;
+            }
+        }
+        return false;
+    }
 }
