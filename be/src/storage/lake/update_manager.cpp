@@ -210,12 +210,20 @@ DEFINE_FAIL_POINT(hook_publish_primary_key_tablet);
 Status UpdateManager::publish_primary_key_tablet(const TxnLogPB_OpWrite& op_write, int64_t txn_id,
                                                  const TabletMetadataPtr& metadata, Tablet* tablet,
                                                  IndexEntry* index_entry, MetaFileBuilder* builder,
-                                                 int64_t base_version) {
+                                                 int64_t base_version, bool batch_apply) {
     FAIL_POINT_TRIGGER_EXECUTE(hook_publish_primary_key_tablet, {
-        builder->apply_opwrite(op_write, {}, {});
+        if (batch_apply) {
+            builder->batch_apply_opwrite(op_write, {}, {});
+        } else {
+            builder->apply_opwrite(op_write, {}, {});
+        }
         return Status::OK();
     });
     auto& index = index_entry->value();
+    VLOG(2) << strings::Substitute(
+            "[publish_pk_tablet][begin] tablet:$0 txn:$1 base_version:$2 new_version:$3 segments:$4 dels:$5 batch:$6",
+            tablet->id(), txn_id, base_version, metadata->version(), op_write.rowset().segments_size(),
+            op_write.dels_size(), batch_apply);
     // 1. load rowset update data to cache, get upsert and delete list
     const uint32_t rowset_id = metadata->next_rowset_id();
     auto tablet_schema = std::make_shared<TabletSchema>(metadata->schema());
@@ -349,7 +357,19 @@ Status UpdateManager::publish_primary_key_tablet(const TxnLogPB_OpWrite& op_writ
     for (auto&& each : new_del_vecs) {
         builder->append_delvec(each.second, each.first);
     }
-    builder->apply_opwrite(op_write, replace_segments, orphan_files);
+
+    if (batch_apply) {
+        VLOG(1) << strings::Substitute(
+                "[publish_pk_tablet][apply_opwrite_batch] tablet:$0 txn:$1 replace_segments:$2 orphan_files:$3",
+                tablet->id(), txn_id, replace_segments.size(), orphan_files.size());
+        builder->batch_apply_opwrite(op_write, replace_segments, orphan_files);
+    } else {
+        VLOG(1) << strings::Substitute(
+                "[publish_pk_tablet][apply_opwrite_single] tablet:$0 txn:$1 replace_segments:$2 orphan_files:$3",
+                tablet->id(), txn_id, replace_segments.size(), orphan_files.size());
+        builder->apply_opwrite(op_write, replace_segments, orphan_files);
+    }
+
     RETURN_IF_ERROR(builder->update_num_del_stat(segment_id_to_add_dels));
 
     TRACE_COUNTER_INCREMENT("rowsetid", rowset_id);
@@ -359,6 +379,11 @@ Status UpdateManager::publish_primary_key_tablet(const TxnLogPB_OpWrite& op_writ
     TRACE_COUNTER_INCREMENT("total_del", total_del);
     TRACE_COUNTER_INCREMENT("upsert_rows", op_write.rowset().num_rows());
     TRACE_COUNTER_INCREMENT("base_version", base_version);
+    VLOG(1) << strings::Substitute(
+            "[publish_pk_tablet][end] tablet:$0 txn:$1 rowset_id:$2 upsert_segments:$3 dels:$4 new_del:$5 total_del:$6 "
+            "upsert_rows:$7 base_version:$8 new_version:$9",
+            tablet->id(), txn_id, rowset_id, op_write.rowset().segments_size(), op_write.dels_size(), new_del,
+            total_del, op_write.rowset().num_rows(), base_version, metadata->version());
     _print_memory_stats();
     return Status::OK();
 }
