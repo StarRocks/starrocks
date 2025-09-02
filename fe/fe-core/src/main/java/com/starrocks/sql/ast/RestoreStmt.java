@@ -15,8 +15,8 @@
 
 package com.starrocks.sql.ast;
 
-import com.starrocks.analysis.TableRef;
 import com.starrocks.server.RunMode;
+import com.starrocks.sql.ast.expression.TableRef;
 import com.starrocks.sql.parser.NodePosition;
 
 import java.util.List;

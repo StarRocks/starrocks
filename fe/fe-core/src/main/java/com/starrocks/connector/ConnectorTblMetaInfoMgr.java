@@ -19,7 +19,7 @@ import com.google.common.collect.Ordering;
 import com.google.common.collect.Table;
 import com.google.common.collect.TreeBasedTable;
 import com.google.gson.JsonObject;
-import com.starrocks.analysis.TableName;
+import com.starrocks.sql.ast.expression.TableName;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 

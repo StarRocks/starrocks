@@ -14,7 +14,6 @@
 
 package com.starrocks.sql.ast;
 
-import com.starrocks.analysis.ColumnPosition;
 import com.starrocks.catalog.Type;
 import com.starrocks.sql.parser.NodePosition;
 

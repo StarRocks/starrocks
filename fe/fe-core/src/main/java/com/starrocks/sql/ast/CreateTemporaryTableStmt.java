@@ -14,8 +14,7 @@
 
 package com.starrocks.sql.ast;
 
-import com.starrocks.analysis.OrderByElement;
-import com.starrocks.analysis.TableName;
+import com.starrocks.sql.ast.expression.TableName;
 import com.starrocks.sql.parser.NodePosition;
 
 import java.util.List;

@@ -14,7 +14,7 @@
 
 package com.starrocks.sql.optimizer.rule.join;
 
-import com.starrocks.analysis.JoinOperator;
+import com.starrocks.sql.ast.expression.JoinOperator;
 
 /**
  * ref: On the Correct and Complete Enumeration of the Core Search Space

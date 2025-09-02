@@ -14,15 +14,15 @@
 
 package com.starrocks.sql.analyzer;
 
-import com.starrocks.analysis.Expr;
-import com.starrocks.analysis.ProcedureArgument;
 import com.starrocks.connector.Procedure;
 import com.starrocks.connector.iceberg.procedure.NamedArgument;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.AstVisitorExtendInterface;
 import com.starrocks.sql.ast.CallProcedureStatement;
+import com.starrocks.sql.ast.ProcedureArgument;
 import com.starrocks.sql.ast.QualifiedName;
+import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;

@@ -15,10 +15,10 @@
 package com.starrocks.sql.optimizer.cost.feature;
 
 import com.google.common.collect.Lists;
-import com.starrocks.analysis.JoinOperator;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.TreeNode;
+import com.starrocks.sql.ast.expression.JoinOperator;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.base.DistributionSpec;

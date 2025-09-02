@@ -15,8 +15,6 @@
 package com.starrocks.sql.optimizer.rule.transformation;
 
 import com.google.common.collect.ImmutableMap;
-import com.starrocks.analysis.BinaryType;
-import com.starrocks.analysis.JoinOperator;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.Type;
@@ -28,6 +26,8 @@ import com.starrocks.connector.iceberg.IcebergMORParams;
 import com.starrocks.connector.iceberg.IcebergTableMORParams;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.HintNode;
+import com.starrocks.sql.ast.expression.BinaryType;
+import com.starrocks.sql.ast.expression.JoinOperator;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.Utils;

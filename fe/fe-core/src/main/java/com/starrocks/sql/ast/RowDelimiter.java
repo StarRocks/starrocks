@@ -15,7 +15,7 @@
 
 package com.starrocks.sql.ast;
 
-import com.starrocks.analysis.Delimiter;
+import com.starrocks.sql.ast.expression.Delimiter;
 import com.starrocks.sql.parser.NodePosition;
 
 public class RowDelimiter implements ParseNode {

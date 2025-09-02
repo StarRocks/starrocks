@@ -15,8 +15,6 @@
 package com.starrocks.planner;
 
 import com.google.common.base.MoreObjects;
-import com.starrocks.analysis.SlotDescriptor;
-import com.starrocks.analysis.TupleDescriptor;
 import com.starrocks.catalog.FileTable;
 import com.starrocks.catalog.Type;
 import com.starrocks.connector.RemoteFileBlockDesc;
