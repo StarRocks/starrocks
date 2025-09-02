@@ -151,6 +151,7 @@ public class OlapTableSink extends DataSink {
     private long automaticBucketSize = 0;
     private boolean enableDynamicOverwrite = false;
     private boolean isFromOverwrite = false;
+    private boolean isMultiStatementTxn = false;
 
     public OlapTableSink(OlapTable dstTable, TupleDescriptor tupleDescriptor, List<Long> partitionIds,
                          TWriteQuorumType writeQuorum, boolean enableReplicatedStorage,
@@ -249,6 +250,10 @@ public class OlapTableSink extends DataSink {
         this.isFromOverwrite = isFromOverwrite;
     }
 
+    public void setIsMultiStatementsTxn(boolean isMultiStatementTxn) {
+        this.isMultiStatementTxn = isMultiStatementTxn;
+    }
+
     public void complete(String mergeCondition) throws StarRocksException {
         TOlapTableSink tSink = tDataSink.getOlap_table_sink();
         if (mergeCondition != null && !mergeCondition.isEmpty()) {
@@ -290,6 +295,7 @@ public class OlapTableSink extends DataSink {
         tSink.setTable_id(dstTable.getId());
         tSink.setTable_name(dstTable.getName());
         tSink.setTuple_id(tupleDescriptor.getId().asInt());
+        tSink.setIs_multi_statements_txn(isMultiStatementTxn);
         int numReplicas = 1;
         Optional<Partition> optionalPartition = dstTable.getPartitions().stream().findFirst();
         if (optionalPartition.isPresent()) {

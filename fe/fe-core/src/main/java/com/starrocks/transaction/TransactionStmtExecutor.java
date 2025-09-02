@@ -137,12 +137,23 @@ public class TransactionStmtExecutor {
 
             Map<TableName, Table> m = AnalyzerUtils.collectAllTable(dmlStmt);
             for (Table table : m.values()) {
-                if (transactionState.getTableIdList().contains(table.getId())) {
+                if (transactionState.getTableIdList().contains(table.getId()) && !table.isCloudNativeTableOrMaterializedView()) {
                     throw ErrorReportException.report(ErrorCode.ERR_TXN_IMPORT_SAME_TABLE);
                 }
             }
 
-            transactionState.addTableIdList(targetTable.getId());
+            if (!transactionState.getTableIdList().contains(targetTable.getId())) {
+                transactionState.addTableIdList(targetTable.getId());
+            }
+
+            for (TableName tableName : m.keySet()) {
+                if (explicitTxnState.getTableHasExplicitStmt(tableName.getTbl())) {
+                    if (dmlStmt instanceof DeleteStmt || dmlStmt instanceof UpdateStmt) {
+                        throw ErrorReportException.report(ErrorCode.ERR_EXPLICIT_TXN_NOT_SUPPORT_STMT_ORDER);
+                    }
+                }
+                explicitTxnState.setTableHasExplicitStmt(tableName.getTbl(), true);
+            }
 
             ExplicitTxnState.ExplicitTxnStateItem item =
                     load(database, targetTable, execPlan, dmlStmt, originStmt, context, coordinator);
@@ -218,6 +229,7 @@ public class TransactionStmtExecutor {
                 commitInfos.addAll(item.getTabletCommitInfos());
                 failInfos.addAll(item.getTabletFailInfos());
                 loadedRows += item.getLoadedRows();
+                transactionState.addLoadId(item.getLoadId());
             }
 
             TxnCommitAttachment txnCommitAttachment = new InsertTxnCommitAttachment(loadedRows);
@@ -509,6 +521,7 @@ public class TransactionStmtExecutor {
             item.addLoadedRows(loadedRows);
             item.addFilteredRows(filteredRows);
             item.addLoadedBytes(loadedBytes);
+            item.setLoadId(context.getExecutionId());
             return item;
         } catch (StarRocksException | RpcException | InterruptedException e) {
             if (jobId != -1) {

@@ -111,6 +111,9 @@ public class DeletePlanner {
                     table.enableReplicatedStorage(), false, false,
                     session.getCurrentComputeResource());
             execPlan.getFragments().get(0).setSink(dataSink);
+            if (session.getTxnId() != 0) {
+                ((OlapTableSink) dataSink).setIsMultiStatementsTxn(true);
+            }
 
             // if sink is OlapTableSink Assigned to Be execute this sql [cn execute OlapTableSink will crash]
             session.getSessionVariable().setPreferComputeNode(false);

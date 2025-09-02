@@ -235,6 +235,106 @@ TEST_F(LakeAsyncDeltaWriterTest, test_write) {
     check_segment(seg0);
 }
 
+TEST_F(LakeAsyncDeltaWriterTest, test_write_with_load_id) {
+    // Prepare data for writing
+    static const int kChunkSize = 128;
+    auto chunk0 = generate_data(kChunkSize);
+    auto indexes = std::vector<uint32_t>(kChunkSize);
+    for (int i = 0; i < kChunkSize; i++) {
+        indexes[i] = i;
+    }
+
+    // Create and open DeltaWriter
+    auto txn_id = next_id();
+    auto tablet_id = _tablet_metadata->id();
+    PUniqueId load_id;
+    load_id.set_hi(123);
+    load_id.set_lo(456);
+    ASSIGN_OR_ABORT(auto delta_writer, AsyncDeltaWriterBuilder()
+                                               .set_tablet_manager(_tablet_mgr.get())
+                                               .set_tablet_id(tablet_id)
+                                               .set_txn_id(txn_id)
+                                               .set_partition_id(_partition_id)
+                                               .set_mem_tracker(_mem_tracker.get())
+                                               .set_schema_id(_tablet_schema->id())
+                                               .set_load_id(load_id)
+                                               .set_is_multi_statements_txn(true) // Enable multi-statements transaction
+                                               .build());
+    ASSERT_OK(delta_writer->open());
+
+    CountDownLatch latch(1);
+    // Write
+    delta_writer->write(&chunk0, indexes.data(), indexes.size(), [&](const Status& st) { ASSERT_OK(st); });
+    // finish
+    delta_writer->finish([&](StatusOr<TxnLogPtr> res) {
+        ASSERT_TRUE(res.ok()) << res.ok();
+        ASSERT_TRUE(res.value()->has_load_id());
+        ASSERT_EQ(123, res.value()->load_id().hi());
+        ASSERT_EQ(456, res.value()->load_id().lo());
+        latch.count_down();
+    });
+
+    latch.wait();
+
+    // close
+    delta_writer->close();
+
+    // Check TxnLog
+    ASSIGN_OR_ABORT(auto txnlog, _tablet_mgr->get_txn_log(tablet_id, txn_id, load_id));
+    ASSERT_TRUE(txnlog->has_load_id());
+    ASSERT_EQ(123, txnlog->load_id().hi());
+    ASSERT_EQ(456, txnlog->load_id().lo());
+}
+
+TEST_F(LakeAsyncDeltaWriterTest, test_write_without_multi_statements_txn) {
+    // Prepare data for writing
+    static const int kChunkSize = 128;
+    auto chunk0 = generate_data(kChunkSize);
+    auto indexes = std::vector<uint32_t>(kChunkSize);
+    for (int i = 0; i < kChunkSize; i++) {
+        indexes[i] = i;
+    }
+
+    // Create and open DeltaWriter
+    auto txn_id = next_id();
+    auto tablet_id = _tablet_metadata->id();
+    PUniqueId load_id;
+    load_id.set_hi(123);
+    load_id.set_lo(456);
+    ASSIGN_OR_ABORT(auto delta_writer,
+                    AsyncDeltaWriterBuilder()
+                            .set_tablet_manager(_tablet_mgr.get())
+                            .set_tablet_id(tablet_id)
+                            .set_txn_id(txn_id)
+                            .set_partition_id(_partition_id)
+                            .set_mem_tracker(_mem_tracker.get())
+                            .set_schema_id(_tablet_schema->id())
+                            .set_load_id(load_id)
+                            .set_is_multi_statements_txn(false) // Disable multi-statements transaction
+                            .build());
+    ASSERT_OK(delta_writer->open());
+
+    CountDownLatch latch(1);
+    // Write
+    delta_writer->write(&chunk0, indexes.data(), indexes.size(), [&](const Status& st) { ASSERT_OK(st); });
+    // finish
+    delta_writer->finish([&](StatusOr<TxnLogPtr> res) {
+        ASSERT_TRUE(res.ok()) << res.ok();
+        ASSERT_FALSE(res.value()->has_load_id());
+        latch.count_down();
+    });
+
+    latch.wait();
+
+    // close
+    delta_writer->close();
+
+    // Check TxnLog
+    ASSIGN_OR_ABORT(auto tablet, _tablet_mgr->get_tablet(tablet_id));
+    ASSIGN_OR_ABORT(auto txnlog, tablet.get_txn_log(txn_id));
+    ASSERT_FALSE(txnlog->has_load_id());
+}
+
 TEST_F(LakeAsyncDeltaWriterTest, test_write_concurrently) {
     // Prepare data for writing
     static const int kChunkSize = 128;
