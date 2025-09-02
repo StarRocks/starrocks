@@ -474,12 +474,7 @@ Status SegmentMetaCollecter::_collect_column_size(ColumnId cid, Column* column, 
     ColumnReader* col_reader = const_cast<ColumnReader*>(_segment->column(cid));
     RETURN_IF(col_reader == nullptr, Status::NotFound("column not found: " + std::to_string(cid)));
 
-    size_t total_mem_footprint = col_reader->total_mem_footprint();
-    if (col_reader->sub_readers() != nullptr) {
-        for (const auto& sub_reader : *col_reader->sub_readers()) {
-            total_mem_footprint += sub_reader->total_mem_footprint();
-        }
-    }
+    size_t total_mem_footprint = _collect_column_size_recursive(col_reader);
     column->append_datum(int64_t(total_mem_footprint));
     return Status::OK();
 }
@@ -489,23 +484,44 @@ Status SegmentMetaCollecter::_collect_column_compressed_size(ColumnId cid, Colum
     ColumnReader* col_reader = const_cast<ColumnReader*>(_segment->column(cid));
     RETURN_IF(col_reader == nullptr, Status::NotFound("column not found: " + std::to_string(cid)));
 
+    int64_t total = _collect_column_compressed_size_recursive(col_reader);
+    column->append_datum(total);
+    return Status::OK();
+}
+
+size_t SegmentMetaCollecter::_collect_column_size_recursive(ColumnReader* col_reader) {
+    size_t total_mem_footprint = col_reader->total_mem_footprint();
+
+    if (col_reader->sub_readers() != nullptr) {
+        for (const auto& sub_reader : *col_reader->sub_readers()) {
+            total_mem_footprint += _collect_column_size_recursive(sub_reader.get());
+        }
+    }
+
+    return total_mem_footprint;
+}
+
+int64_t SegmentMetaCollecter::_collect_column_compressed_size_recursive(ColumnReader* col_reader) {
     OlapReaderStatistics stats;
     IndexReadOptions opts;
     opts.use_page_cache = false;
     opts.read_file = _read_file.get();
     opts.stats = &stats;
-    RETURN_IF_ERROR(col_reader->load_ordinal_index(opts));
+
+    Status status = col_reader->load_ordinal_index(opts);
+    if (!status.ok()) {
+        return 0; // Return 0 on error, caller should handle the error
+    }
+
     int64_t total = col_reader->data_page_footprint();
+
     if (col_reader->sub_readers() != nullptr) {
         for (const auto& sub_reader : *col_reader->sub_readers()) {
-            RETURN_IF_ERROR(sub_reader->load_ordinal_index(opts));
-            int64_t sub_total = sub_reader->data_page_footprint();
-            total += sub_total;
+            total += _collect_column_compressed_size_recursive(sub_reader.get());
         }
     }
 
-    column->append_datum(total);
-    return Status::OK();
+    return total;
 }
 
 } // namespace starrocks

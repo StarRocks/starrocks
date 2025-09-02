@@ -141,6 +141,10 @@ private:
     Status _collect_column_compressed_size(ColumnId cid, Column* column, LogicalType type);
     template <bool is_max>
     Status __collect_max_or_min(ColumnId cid, Column* column, LogicalType type);
+
+    // Recursive helper methods for collecting column sizes
+    size_t _collect_column_size_recursive(ColumnReader* col_reader);
+    int64_t _collect_column_compressed_size_recursive(ColumnReader* col_reader);
     SegmentSharedPtr _segment;
     std::vector<std::unique_ptr<ColumnIterator>> _column_iterators;
     const SegmentMetaCollecterParams* _params = nullptr;
