@@ -15,6 +15,7 @@
 
 package com.starrocks.sql.common;
 
+import com.google.common.collect.Maps;
 import com.google.common.collect.Range;
 import com.google.common.collect.RangeMap;
 import com.google.common.collect.TreeRangeMap;
@@ -29,6 +30,7 @@ import java.util.Map;
 public class PartitionDiff {
     private final Map<String, PCell> adds;
     private final Map<String, PCell> deletes;
+    private Map<String, Range<PartitionKey>> virtualPartitionMapping = Maps.newHashMap();
 
     public PartitionDiff(Map<String, PCell> adds, Map<String, PCell> deletes) {
         this.adds = adds;
@@ -37,6 +39,16 @@ public class PartitionDiff {
 
     public Map<String, PCell> getAdds() {
         return adds;
+    }
+
+
+    public Map<String, Range<PartitionKey>> getVirtualPartitionMapping() {
+        return virtualPartitionMapping;
+    }
+
+    public void setVirtualPartitionMapping(
+            Map<String, Range<PartitionKey>> virtualPartitionMapping) {
+        this.virtualPartitionMapping = virtualPartitionMapping;
     }
 
     public Map<String, PCell> getDeletes() {
