@@ -57,6 +57,13 @@ public:
 
     void set_write_amp_score(double score) override;
 
+    bool enable_null_primary_key() override {
+        if (_metadata->has_enable_null_primary_key()) {
+            return _metadata->enable_null_primary_key();
+        }
+        return config::enable_null_primary_key;
+    }
+
 private:
     TabletManager* _tablet_mgr;
     const TabletMetadataPtr _metadata;

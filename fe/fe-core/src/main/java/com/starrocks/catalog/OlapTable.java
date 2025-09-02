@@ -2116,6 +2116,13 @@ public class OlapTable extends Table {
         return false;
     }
 
+    public Boolean enableNullPrimaryKey() {
+        if (tableProperty != null) {
+            return tableProperty.enableNullPrimaryKey();
+        }
+        return false;
+    }
+
     public int primaryIndexCacheExpireSec() {
         if (tableProperty != null) {
             return tableProperty.primaryIndexCacheExpireSec();
@@ -2197,6 +2204,15 @@ public class OlapTable extends Table {
                 .modifyTableProperties(PropertyAnalyzer.PROPERTIES_ENABLE_PERSISTENT_INDEX,
                         Boolean.valueOf(enablePersistentIndex).toString());
         tableProperty.buildEnablePersistentIndex();
+    }
+
+    public void setEnableNullPrimaryKey(boolean enableNullPrimaryKey) {
+        if (tableProperty == null) {
+            tableProperty = new TableProperty(new HashMap<>());
+        }
+        tableProperty.modifyTableProperties(PropertyAnalyzer.PROPERTIES_ENABLE_NULL_PRIMARY_KEY,
+                Boolean.valueOf(enableNullPrimaryKey).toString());
+        tableProperty.buildEnableNullPrimaryKey();
     }
 
     public void setPrimaryIndexCacheExpireSec(int primaryIndexCacheExpireSec) {
@@ -3187,6 +3203,7 @@ public class OlapTable extends Table {
         if (keysType == KeysType.PRIMARY_KEYS) {
             // persistent index
             properties.put(PropertyAnalyzer.PROPERTIES_ENABLE_PERSISTENT_INDEX, enablePersistentIndex().toString());
+            properties.put(PropertyAnalyzer.PROPERTIES_ENABLE_NULL_PRIMARY_KEY, enableNullPrimaryKey().toString());
 
             // index cache expire
             int indexCacheExpireSec = primaryIndexCacheExpireSec();

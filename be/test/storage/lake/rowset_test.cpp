@@ -75,7 +75,7 @@ public:
         {
             int64_t txn_id = next_id();
             // write rowset 1 with 2 segments
-            ASSIGN_OR_ABORT(auto writer, tablet.new_writer(kHorizontal, txn_id));
+            ASSIGN_OR_ABORT(auto writer, tablet.new_writer(kHorizontal, txn_id, false));
             ASSERT_OK(writer->open());
 
             // write rowset data
@@ -215,7 +215,7 @@ TEST_F(LakeRowsetTest, test_partial_compaction) {
 
     ASSIGN_OR_ABORT(auto tablet, _tablet_mgr->get_tablet(_tablet_metadata->id()));
     int64_t txn_id = next_id();
-    ASSIGN_OR_ABORT(auto writer, tablet.new_writer(kHorizontal, txn_id));
+    ASSIGN_OR_ABORT(auto writer, tablet.new_writer(kHorizontal, txn_id, false));
 
     // prepare writer
     {

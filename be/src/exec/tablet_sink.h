@@ -191,6 +191,7 @@ private:
     bool _is_multi_statements_txn = false;
 
     TKeysType::type _keys_type;
+    bool _enable_null_primary_key = false;
 
     // TODO(zc): think about cache this data
     std::shared_ptr<OlapTableSchemaParam> _schema;

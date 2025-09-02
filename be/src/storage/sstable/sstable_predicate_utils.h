@@ -25,15 +25,21 @@ namespace sstable {
 
 class KeyToChunkConverter {
 public:
-    KeyToChunkConverter(Schema pkey_schema, ChunkUniquePtr& pk_chunk, MutableColumnPtr& pk_column)
-            : _pkey_schema(pkey_schema), _pk_chunk(std::move(pk_chunk)), _pk_column(std::move(pk_column)) {}
+    KeyToChunkConverter(bool enable_null_primary_key, Schema pkey_schema, ChunkUniquePtr& pk_chunk,
+                        MutableColumnPtr& pk_column)
+            : _enable_null_primary_key(enable_null_primary_key),
+              _pkey_schema(pkey_schema),
+              _pk_chunk(std::move(pk_chunk)),
+              _pk_column(std::move(pk_column)) {}
     ~KeyToChunkConverter() = default;
 
-    static StatusOr<KeyToChunkConverterUPtr> create(const TabletSchemaPB& tablet_schema_pb);
+    static StatusOr<KeyToChunkConverterUPtr> create(bool enable_null_primary_key,
+                                                    const TabletSchemaPB& tablet_schema_pb);
     // Convert key from sstable to a chunk
     StatusOr<ChunkUniquePtr> convert_to_chunk(const std::string& key);
 
 private:
+    bool _enable_null_primary_key;
     // convert context for key
     Schema _pkey_schema;
     ChunkUniquePtr _pk_chunk;

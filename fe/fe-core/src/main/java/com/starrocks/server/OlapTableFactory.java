@@ -401,6 +401,8 @@ public class OlapTableFactory implements AbstractTableFactory {
                 table.setCompactionStrategy(compactionStrategy);
             }
 
+            table.setEnableNullPrimaryKey(PropertyAnalyzer.analyzeEnableNullPrimaryKey(properties));
+
             try {
                 table.setPrimaryIndexCacheExpireSec(PropertyAnalyzer.analyzePrimaryIndexCacheExpireSecProp(properties,
                         PropertyAnalyzer.PROPERTIES_PRIMARY_INDEX_CACHE_EXPIRE_SEC, 0));

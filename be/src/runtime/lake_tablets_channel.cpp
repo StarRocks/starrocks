@@ -820,6 +820,7 @@ Status LakeTabletsChannel::_create_delta_writers(const PTabletWriterOpenRequest&
                                               .set_bundle_writable_file_context(bundle_writable_file_context)
                                               .set_global_dicts(&_global_dicts)
                                               .set_is_multi_statements_txn(multi_stmt)
+                                              .set_enable_null_primary_key(params.enable_null_primary_key())
                                               .build());
         mutable_delta_writers()->emplace(tablet.tablet_id(), std::move(writer));
         tablet_ids.emplace_back(tablet.tablet_id());

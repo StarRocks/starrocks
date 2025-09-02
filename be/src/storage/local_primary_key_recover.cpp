@@ -143,4 +143,8 @@ int64_t LocalPrimaryKeyRecover::tablet_id() {
     return _tablet->tablet_id();
 }
 
+bool LocalPrimaryKeyRecover::enable_null_primary_key() {
+    return _tablet->get_enable_null_primary_key();
+}
+
 } // namespace starrocks

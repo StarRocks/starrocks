@@ -223,6 +223,11 @@ public:
         return *this;
     }
 
+    AsyncDeltaWriterBuilder& set_enable_null_primary_key(bool enable_null_primary_key) {
+        _enable_null_primary_key = enable_null_primary_key;
+        return *this;
+    }
+
     StatusOr<AsyncDeltaWriterPtr> build();
 
 private:
@@ -244,6 +249,7 @@ private:
     BundleWritableFileContext* _bundle_writable_file_context{nullptr};
     GlobalDictByNameMaps* _global_dicts = nullptr;
     bool _is_multi_statements_txn = false;
+    bool _enable_null_primary_key = false;
 };
 
 } // namespace starrocks::lake

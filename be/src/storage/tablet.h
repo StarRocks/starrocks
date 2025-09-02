@@ -302,6 +302,12 @@ public:
         return _tablet_meta->set_enable_persistent_index(enable_persistent_index);
     }
 
+    bool get_enable_null_primary_key() { return _tablet_meta->get_enable_null_primary_key(); }
+
+    void set_enable_null_primary_key(bool enable_null_primary_key) {
+        return _tablet_meta->set_enable_null_primary_key(enable_null_primary_key);
+    }
+
     Status support_binlog();
 
     // This will modify the TabletMeta, and save_meta() will be called outside

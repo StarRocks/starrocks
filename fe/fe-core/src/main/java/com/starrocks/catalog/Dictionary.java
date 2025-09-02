@@ -26,6 +26,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicLong;
 
+import static com.starrocks.common.util.PropertyAnalyzer.PROPERTIES_ENABLE_NULL_PRIMARY_KEY;
+
 public class Dictionary implements Writable {
     // Dictionary properties
     public static final String PROPERTIES_DICTIONARY_WARM_UP = "dictionary_warm_up";
@@ -52,6 +54,8 @@ public class Dictionary implements Writable {
     private String dbName;
     @SerializedName(value = "queryableObject")
     private String queryableObject;
+    @SerializedName(value = "enable_null_primary_key")
+    private boolean enableNullPrimaryKey;
 
     @SerializedName(value = "dictionaryKeys")
     private List<String> dictionaryKeys = Lists.newArrayList();
@@ -136,6 +140,10 @@ public class Dictionary implements Writable {
         return dictionaryValues;
     }
 
+    public boolean isEnableNullPrimaryKey() {
+        return enableNullPrimaryKey;
+    }
+
     public boolean needWarmUp() {
         return warmUp;
     }
@@ -164,6 +172,17 @@ public class Dictionary implements Writable {
 
     public boolean getIgnoreFailedRefresh() {
         return ignoreFailedRefresh;
+    }
+
+    private void buildEnableNullPrimaryKey(String value) throws DdlException {
+        if (value.equalsIgnoreCase("TRUE")) {
+            enableNullPrimaryKey = true;
+        } else if (value.equalsIgnoreCase("FALSE")) {
+            enableNullPrimaryKey = false;
+        } else {
+            throw new DdlException("parse " + PROPERTIES_ENABLE_NULL_PRIMARY_KEY + " failed" +
+                    ", given parameter: " + value);
+        }
     }
 
     private void buildWarmUp(String value) throws DdlException {
@@ -267,6 +286,9 @@ public class Dictionary implements Writable {
             String value = entry.getValue();
 
             switch (key) {
+                case PROPERTIES_ENABLE_NULL_PRIMARY_KEY:
+                    buildEnableNullPrimaryKey(value);
+                    break;
                 case PROPERTIES_DICTIONARY_WARM_UP:
                     buildWarmUp(value);
                     break;

@@ -90,7 +90,8 @@ public:
                              const PartialUpdateMode& partial_update_mode,
                              const std::map<string, string>* column_to_expr_value, PUniqueId load_id,
                              RuntimeProfile* profile, BundleWritableFileContext* bundle_writable_file_context,
-                             GlobalDictByNameMaps* global_dicts, bool is_multi_statements_txn)
+                             GlobalDictByNameMaps* global_dicts, bool is_multi_statements_txn,
+                             bool enable_null_primary_key)
             : _tablet_manager(tablet_manager),
               _tablet_id(tablet_id),
               _txn_id(txn_id),
@@ -109,7 +110,8 @@ public:
               _profile(profile),
               _bundle_writable_file_context(bundle_writable_file_context),
               _global_dicts(global_dicts),
-              _is_multi_statements_txn(is_multi_statements_txn) {}
+              _is_multi_statements_txn(is_multi_statements_txn),
+              _enable_null_primary_key(enable_null_primary_key) {}
 
     ~DeltaWriterImpl() = default;
 
@@ -255,6 +257,8 @@ private:
 
     GlobalDictByNameMaps* _global_dicts = nullptr;
     bool _is_multi_statements_txn = false;
+
+    bool _enable_null_primary_key = false;
 };
 
 bool DeltaWriterImpl::is_immutable() const {
@@ -296,13 +300,13 @@ Status DeltaWriterImpl::build_schema_and_writer() {
         RETURN_IF_ERROR(init_tablet_schema());
         RETURN_IF_ERROR(init_write_schema());
         if (_tablet_schema->keys_type() == KeysType::PRIMARY_KEYS) {
-            _tablet_writer = std::make_unique<HorizontalPkTabletWriter>(_tablet_manager, _tablet_id, _write_schema,
-                                                                        _txn_id, nullptr, false /** no compaction**/,
-                                                                        _bundle_writable_file_context, _global_dicts);
+            _tablet_writer = std::make_unique<HorizontalPkTabletWriter>(
+                    _tablet_manager, _tablet_id, _write_schema, _txn_id, nullptr, false /** no compaction**/,
+                    _enable_null_primary_key, _bundle_writable_file_context, _global_dicts);
         } else {
             _tablet_writer = std::make_unique<HorizontalGeneralTabletWriter>(
-                    _tablet_manager, _tablet_id, _write_schema, _txn_id, false, nullptr, _bundle_writable_file_context,
-                    _global_dicts);
+                    _tablet_manager, _tablet_id, _write_schema, _txn_id, false, _enable_null_primary_key, nullptr,
+                    _bundle_writable_file_context, _global_dicts);
         }
         RETURN_IF_ERROR(_tablet_writer->open());
         if (config::enable_load_spill &&
@@ -750,12 +754,12 @@ Status DeltaWriterImpl::fill_auto_increment_id(const Chunk& chunk) {
     }
     Schema pkey_schema = ChunkHelper::convert_schema(_write_schema, pk_columns);
     MutableColumnPtr pk_column;
-    if (!PrimaryKeyEncoder::create_column(pkey_schema, &pk_column).ok()) {
+    if (!PrimaryKeyEncoder::create_column(pkey_schema, &pk_column, _enable_null_primary_key).ok()) {
         CHECK(false) << "create column for primary key encoder failed";
     }
     auto col = pk_column->clone();
 
-    PrimaryKeyEncoder::encode(pkey_schema, chunk, 0, chunk.num_rows(), col.get());
+    PrimaryKeyEncoder::encode(pkey_schema, chunk, 0, chunk.num_rows(), col.get(), _enable_null_primary_key);
     MutableColumns upserts;
     upserts.resize(1);
     upserts[0] = std::move(col);
@@ -999,7 +1003,8 @@ StatusOr<DeltaWriterBuilder::DeltaWriterPtr> DeltaWriterBuilder::build() {
     auto impl = new DeltaWriterImpl(_tablet_mgr, _tablet_id, _txn_id, _partition_id, _slots, _merge_condition,
                                     _miss_auto_increment_column, _table_id, _immutable_tablet_size, _mem_tracker,
                                     _max_buffer_size, _schema_id, _partial_update_mode, _column_to_expr_value, _load_id,
-                                    _profile, _bundle_writable_file_context, _global_dicts, _is_multi_statements_txn);
+                                    _profile, _bundle_writable_file_context, _global_dicts, _is_multi_statements_txn,
+                                    _enable_null_primary_key);
     return std::make_unique<DeltaWriter>(impl);
 }
 

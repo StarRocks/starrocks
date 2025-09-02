@@ -27,7 +27,7 @@ public:
     SstablePredicate() : _record_predicate(nullptr), _converter(nullptr) {}
     ~SstablePredicate() = default;
 
-    static StatusOr<SstablePredicateUPtr> create(const TabletSchemaPB& tablet_schema_pb,
+    static StatusOr<SstablePredicateUPtr> create(bool enable_null_primary_key, const TabletSchemaPB& tablet_schema_pb,
                                                  const PersistentIndexSstablePredicatePB& predicate_pb);
 
     Status evaluate(const std::string& row, uint8_t* selection);

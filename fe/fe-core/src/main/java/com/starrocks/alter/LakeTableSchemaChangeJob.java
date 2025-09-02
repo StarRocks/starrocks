@@ -431,6 +431,7 @@ public class LakeTableSchemaChangeJob extends LakeTableSchemaChangeJobBase {
                                 .setVersion(Partition.PARTITION_INIT_VERSION)
                                 .setStorageMedium(storageMedium)
                                 .setLatch(countDownLatch)
+                                .setEnableNullPrimaryKey(table.enableNullPrimaryKey())
                                 .setEnablePersistentIndex(table.enablePersistentIndex())
                                 .setPersistentIndexType(table.getPersistentIndexType())
                                 .setPrimaryIndexCacheExpireSec(table.primaryIndexCacheExpireSec())

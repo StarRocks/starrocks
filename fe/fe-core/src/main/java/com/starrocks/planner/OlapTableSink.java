@@ -189,6 +189,7 @@ public class OlapTableSink extends DataSink {
     public void init(TUniqueId loadId, long txnId, long dbId, long loadChannelTimeoutS)
             throws AnalysisException {
         TOlapTableSink tSink = new TOlapTableSink();
+        tSink.setEnable_null_primary_key(dstTable.enableNullPrimaryKey());
         tSink.setLoad_id(loadId);
         tSink.setTxn_id(txnId);
         tSink.setNull_expr_in_auto_increment(nullExprInAutoIncrement);

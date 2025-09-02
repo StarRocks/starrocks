@@ -332,6 +332,7 @@ public class RollupJobV2 extends AlterJobV2 implements GsonPostProcessable {
                                 .setVersion(Partition.PARTITION_INIT_VERSION)
                                 .setStorageMedium(storageMedium)
                                 .setLatch(countDownLatch)
+                                .setEnableNullPrimaryKey(tbl.enableNullPrimaryKey())
                                 .setEnablePersistentIndex(tbl.enablePersistentIndex())
                                 .setPrimaryIndexCacheExpireSec(tbl.primaryIndexCacheExpireSec())
                                 .setTabletType(tabletType)

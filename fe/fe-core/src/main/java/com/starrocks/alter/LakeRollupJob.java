@@ -225,6 +225,7 @@ public class LakeRollupJob extends LakeTableSchemaChangeJobBase {
                             .setVersion(Partition.PARTITION_INIT_VERSION)
                             .setStorageMedium(storageMedium)
                             .setLatch(countDownLatch)
+                            .setEnableNullPrimaryKey(table.enableNullPrimaryKey())
                             .setEnablePersistentIndex(table.enablePersistentIndex())
                             .setPrimaryIndexCacheExpireSec(table.primaryIndexCacheExpireSec())
                             .setTabletType(TTabletType.TABLET_TYPE_LAKE)

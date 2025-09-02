@@ -236,6 +236,7 @@ private:
 
 private:
     int64_t _tablet_id = 0;
+    bool _enable_null_primary_key = false;
     std::once_flag _load_once_flag;
     Status _status;
     // it contains primary key seriable column for each update segment file

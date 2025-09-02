@@ -25,7 +25,7 @@
 
 namespace starrocks {
 
-CompactionState::CompactionState() = default;
+CompactionState::CompactionState(bool enable_null_primary_key) : _enable_null_primary_key(enable_null_primary_key) {}
 
 CompactionState::~CompactionState() {
     StorageEngine::instance()->update_manager()->compaction_state_mem_tracker()->release(_memory_usage);
@@ -77,7 +77,7 @@ Status CompactionState::_load_segments(Rowset* rowset, uint32_t segment_id) {
     Schema pkey_schema = ChunkHelper::convert_schema(schema, pk_columns);
 
     MutableColumnPtr pk_column;
-    RETURN_IF_ERROR(PrimaryKeyEncoder::create_column(pkey_schema, &pk_column, true));
+    RETURN_IF_ERROR(PrimaryKeyEncoder::create_column(pkey_schema, &pk_column, _enable_null_primary_key, true));
 
     RowsetReleaseGuard guard(rowset->shared_from_this());
     OlapReaderStatistics stats;
@@ -114,7 +114,8 @@ Status CompactionState::_load_segments(Rowset* rowset, uint32_t segment_id) {
             } else if (!st.ok()) {
                 return st;
             } else {
-                TRY_CATCH_BAD_ALLOC(PrimaryKeyEncoder::encode(pkey_schema, *chunk, 0, chunk->num_rows(), col.get()));
+                TRY_CATCH_BAD_ALLOC(PrimaryKeyEncoder::encode(pkey_schema, *chunk, 0, chunk->num_rows(), col.get(),
+                                                              _enable_null_primary_key));
             }
         }
         itr->close();

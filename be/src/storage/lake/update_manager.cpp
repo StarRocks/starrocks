@@ -536,8 +536,13 @@ Status UpdateManager::_handle_upsert_index_conflicts(const TabletMetadataPtr& me
                                                      std::map<uint32_t, size_t>* segment_id_to_add_dels_new_acc) {
     PrimaryIndex::DeletesMap new_deletes;
     MutableColumnPtr pk_column;
-    RETURN_IF_ERROR(PrimaryKeyEncoder::create_column(pkey_schema, &pk_column));
-    PrimaryKeyEncoder::encode(pkey_schema, *full_chunk, 0, full_chunk->num_rows(), pk_column.get());
+    bool enable_null_primary_key = config::enable_null_primary_key;
+    if (metadata->has_enable_null_primary_key()) {
+        enable_null_primary_key = metadata->enable_null_primary_key();
+    }
+    RETURN_IF_ERROR(PrimaryKeyEncoder::create_column(pkey_schema, &pk_column, enable_null_primary_key));
+    PrimaryKeyEncoder::encode(pkey_schema, *full_chunk, 0, full_chunk->num_rows(), pk_column.get(),
+                              enable_null_primary_key);
     RETURN_IF_ERROR(
             index.upsert(rowset_id + (uint32_t)new_rows_op.rowset().segments_size() - 1, 0, *pk_column, &new_deletes));
     for (auto& [rssid, del_ids] : new_deletes) {
@@ -1284,6 +1289,7 @@ Status UpdateManager::publish_primary_compaction(const TxnLogPB_OpCompaction& op
     // only use state entry once, remove it when publish finish or fail
     DeferOp remove_state_entry([&] { _compaction_cache.remove(compaction_entry); });
     auto& compaction_state = compaction_entry->value();
+    compaction_state.set_enable_null_primary_key(metadata.enable_null_primary_key());
     size_t total_deletes = 0;
     size_t total_rows = 0;
     vector<std::pair<uint32_t, DelVectorPtr>> delvecs;
@@ -1529,7 +1535,7 @@ void UpdateManager::preload_update_state(const TxnLog& txnlog, Tablet* tablet) {
 }
 
 void UpdateManager::preload_compaction_state(const TxnLog& txnlog, const Tablet& tablet,
-                                             const TabletSchemaCSPtr& tablet_schema) {
+                                             const TabletSchemaCSPtr& tablet_schema, bool enable_null_primary_key) {
     // use process mem tracker instread of load mem tracker here.
     SCOPED_THREAD_LOCAL_MEM_SETTER(GlobalEnv::GetInstance()->process_mem_tracker(), true);
     SCOPED_THREAD_LOCAL_SINGLETON_CHECK_MEM_TRACKER_SETTER(config::enable_pk_strict_memcheck ? _update_mem_tracker
@@ -1547,6 +1553,7 @@ void UpdateManager::preload_compaction_state(const TxnLog& txnlog, const Tablet&
     auto compaction_entry = _compaction_cache.get_or_create(cache_key(tablet.id(), txnlog.txn_id()));
     compaction_entry->update_expire_time(MonotonicMillis() + get_cache_expire_ms());
     auto& compaction_state = compaction_entry->value();
+    compaction_state.set_enable_null_primary_key(enable_null_primary_key);
     // preload compaction state, only load first output segment, to avoid too much memory cost
     auto st = Status::OK();
     // skip preload if memory limit exceed

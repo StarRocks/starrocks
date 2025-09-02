@@ -154,6 +154,8 @@ public class PropertyAnalyzer {
 
     public static final String PROPERTIES_INMEMORY = "in_memory";
 
+    public static final String PROPERTIES_ENABLE_NULL_PRIMARY_KEY = "enable_null_primary_key";
+
     public static final String PROPERTIES_ENABLE_PERSISTENT_INDEX = "enable_persistent_index";
 
     public static final String PROPERTIES_LABELS_LOCATION = "labels.location";
@@ -1560,6 +1562,15 @@ public class PropertyAnalyzer {
         } catch (DateTimeParseException ex) {
             throw new AnalysisException(ex.getMessage());
         }
+    }
+
+    public static boolean analyzeEnableNullPrimaryKey(Map<String, String> properties) {
+        boolean enableNullPrimaryKey = Config.enable_null_primary_key;
+        if (properties != null && properties.containsKey(PropertyAnalyzer.PROPERTIES_ENABLE_NULL_PRIMARY_KEY)) {
+            enableNullPrimaryKey = Boolean.parseBoolean(
+                    properties.remove(PropertyAnalyzer.PROPERTIES_ENABLE_NULL_PRIMARY_KEY));
+        }
+        return enableNullPrimaryKey;
     }
 
     public static TPersistentIndexType analyzePersistentIndexType(Map<String, String> properties) throws AnalysisException {

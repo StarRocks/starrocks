@@ -56,6 +56,13 @@ public:
                                        const std::function<void(uint32_t, const DelVectorPtr&, uint32_t)>&)>& handler)
             override;
 
+    bool enable_null_primary_key() override {
+        if (_metadata->has_enable_null_primary_key()) {
+            return _metadata->enable_null_primary_key();
+        }
+        return config::enable_null_primary_key;
+    }
+
 private:
     // input
     const TabletMetadata* _metadata = nullptr;

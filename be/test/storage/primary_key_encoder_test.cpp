@@ -19,6 +19,7 @@
 #include <memory>
 
 #include "column/chunk.h"
+#include "column/column_helper.h"
 #include "column/datum.h"
 #include "column/schema.h"
 #include "gutil/stringprintf.h"
@@ -28,12 +29,12 @@ using namespace std;
 
 namespace starrocks {
 
-static unique_ptr<Schema> create_key_schema(const vector<LogicalType>& types) {
+static unique_ptr<Schema> create_key_schema(const vector<LogicalType>& types, bool nullable = false) {
     Fields fields;
     std::vector<ColumnId> sort_key_idxes(types.size());
     for (int i = 0; i < types.size(); i++) {
         string name = StringPrintf("col%d", i);
-        auto fd = new Field(i, name, types[i], false);
+        auto fd = new Field(i, name, types[i], nullable);
         fd->set_is_key(true);
         fd->set_aggregate_method(STORAGE_AGGREGATE_NONE);
         fd->set_uid(i);
@@ -43,10 +44,65 @@ static unique_ptr<Schema> create_key_schema(const vector<LogicalType>& types) {
     return std::make_unique<Schema>(std::move(fields), PRIMARY_KEYS, sort_key_idxes);
 }
 
-TEST(PrimaryKeyEncoderTest, testEncodeInt32) {
+struct TestParam {
+    bool enable_null_primary_key;
+};
+
+class PrimaryKeyEncoderTest : public testing::TestWithParam<TestParam> {};
+
+TEST(PrimaryKeyEncoderTest, testEncodeFixedSize) {
+    const auto sc = create_key_schema({TYPE_INT});
+    ASSERT_EQ(4, PrimaryKeyEncoder::get_encoded_fixed_size(*sc, false));
+    ASSERT_EQ(5, PrimaryKeyEncoder::get_encoded_fixed_size(*sc, true));
+    const auto two_column_sc = create_key_schema({TYPE_INT, TYPE_INT});
+    ASSERT_EQ(8, PrimaryKeyEncoder::get_encoded_fixed_size(*two_column_sc, false));
+    ASSERT_EQ(10, PrimaryKeyEncoder::get_encoded_fixed_size(*two_column_sc, true));
+    const auto column_sc_with_varchar = create_key_schema({TYPE_INT, TYPE_VARCHAR});
+    ASSERT_EQ(0, PrimaryKeyEncoder::get_encoded_fixed_size(*column_sc_with_varchar, false));
+    ASSERT_EQ(0, PrimaryKeyEncoder::get_encoded_fixed_size(*column_sc_with_varchar, true));
+}
+
+TEST(PrimaryKeyEncoderTest, testEncodeNull) {
+    const auto sc = create_key_schema({TYPE_INT}, true);
+    MutableColumnPtr dest;
+    PrimaryKeyEncoder::create_column(*sc, &dest, true);
+
+    const int n = 1000;
+    auto pchunk = ChunkHelper::new_chunk(*sc, n);
+    auto pcolumn = pchunk->get_column_by_index(0);
+    auto nullable_column = down_cast<NullableColumn*>(pcolumn.get());
+    ASSERT_EQ(nullable_column != nullptr, true);
+
+    for (int i = 0; i < n; i++) {
+        if (i % 3 == 0) {
+            nullable_column->set_null(i);
+        } else {
+            Datum tmp;
+            tmp.set_int32(i * 2343);
+            nullable_column->append_datum(tmp);
+        }
+    }
+
+    PrimaryKeyEncoder::encode(*sc, *pchunk, 0, n, dest.get(), true);
+    auto dchunk = pchunk->clone_empty_with_schema();
+    PrimaryKeyEncoder::decode(*sc, *dest, 0, n, dchunk.get(), true);
+    ASSERT_EQ(pchunk->num_rows(), dchunk->num_rows());
+    for (int i = 0; i < n; i++) {
+        if (i % 3 == 0) {
+            ASSERT_EQ(pchunk->get_column_by_index(0)->is_null(i), true);
+            ASSERT_EQ(dchunk->get_column_by_index(0)->is_null(i), true);
+        } else {
+            ASSERT_EQ(pchunk->get_column_by_index(0)->get(i).get_int32(),
+                      dchunk->get_column_by_index(0)->get(i).get_int32());
+        }
+    }
+}
+
+TEST_P(PrimaryKeyEncoderTest, testEncodeInt32) {
+    const auto [enable_null_primary_key] = GetParam();
     auto sc = create_key_schema({TYPE_INT});
     MutableColumnPtr dest;
-    PrimaryKeyEncoder::create_column(*sc, &dest);
+    PrimaryKeyEncoder::create_column(*sc, &dest, enable_null_primary_key);
     const int n = 1000;
     auto pchunk = ChunkHelper::new_chunk(*sc, n);
     for (int i = 0; i < n; i++) {
@@ -54,9 +110,9 @@ TEST(PrimaryKeyEncoderTest, testEncodeInt32) {
         tmp.set_int32(i * 2343);
         pchunk->columns()[0]->append_datum(tmp);
     }
-    PrimaryKeyEncoder::encode(*sc, *pchunk, 0, n, dest.get());
+    PrimaryKeyEncoder::encode(*sc, *pchunk, 0, n, dest.get(), enable_null_primary_key);
     auto dchunk = pchunk->clone_empty_with_schema();
-    PrimaryKeyEncoder::decode(*sc, *dest, 0, n, dchunk.get());
+    PrimaryKeyEncoder::decode(*sc, *dest, 0, n, dchunk.get(), enable_null_primary_key);
     ASSERT_EQ(pchunk->num_rows(), dchunk->num_rows());
     for (int i = 0; i < n; i++) {
         ASSERT_EQ(pchunk->get_column_by_index(0)->get(i).get_int32(),
@@ -64,10 +120,11 @@ TEST(PrimaryKeyEncoderTest, testEncodeInt32) {
     }
 }
 
-TEST(PrimaryKeyEncoderTest, testEncodeInt128) {
+TEST_P(PrimaryKeyEncoderTest, testEncodeInt128) {
+    const auto [enable_null_primary_key] = GetParam();
     auto sc = create_key_schema({TYPE_LARGEINT});
     MutableColumnPtr dest;
-    PrimaryKeyEncoder::create_column(*sc, &dest);
+    PrimaryKeyEncoder::create_column(*sc, &dest, enable_null_primary_key);
     const int n = 1000;
     auto pchunk = ChunkHelper::new_chunk(*sc, n);
     for (int i = 0; i < n; i++) {
@@ -79,9 +136,9 @@ TEST(PrimaryKeyEncoderTest, testEncodeInt128) {
     for (int i = 0; i < n; i++) {
         indexes.emplace_back(i);
     }
-    PrimaryKeyEncoder::encode_selective(*sc, *pchunk, indexes.data(), n, dest.get());
+    PrimaryKeyEncoder::encode_selective(*sc, *pchunk, indexes.data(), n, dest.get(), enable_null_primary_key);
     auto dchunk = pchunk->clone_empty_with_schema();
-    PrimaryKeyEncoder::decode(*sc, *dest, 0, n, dchunk.get());
+    PrimaryKeyEncoder::decode(*sc, *dest, 0, n, dchunk.get(), enable_null_primary_key);
     ASSERT_EQ(pchunk->num_rows(), dchunk->num_rows());
     for (int i = 0; i < n; i++) {
         ASSERT_EQ(pchunk->get_column_by_index(0)->get(i).get_int128(),
@@ -89,10 +146,11 @@ TEST(PrimaryKeyEncoderTest, testEncodeInt128) {
     }
 }
 
-TEST(PrimaryKeyEncoderTest, testEncodeComposite) {
+TEST_P(PrimaryKeyEncoderTest, testEncodeComposite) {
+    const auto [enable_null_primary_key] = GetParam();
     auto sc = create_key_schema({TYPE_INT, TYPE_VARCHAR, TYPE_SMALLINT, TYPE_BOOLEAN});
     MutableColumnPtr dest;
-    PrimaryKeyEncoder::create_column(*sc, &dest);
+    PrimaryKeyEncoder::create_column(*sc, &dest, enable_null_primary_key);
     const int n = 1;
     auto pchunk = ChunkHelper::new_chunk(*sc, n);
     for (int i = 0; i < n; i++) {
@@ -115,9 +173,9 @@ TEST(PrimaryKeyEncoderTest, testEncodeComposite) {
     for (int i = 0; i < n; i++) {
         indexes.emplace_back(i);
     }
-    PrimaryKeyEncoder::encode_selective(*sc, *pchunk, indexes.data(), n, dest.get());
+    PrimaryKeyEncoder::encode_selective(*sc, *pchunk, indexes.data(), n, dest.get(), enable_null_primary_key);
     auto dchunk = pchunk->clone_empty_with_schema();
-    PrimaryKeyEncoder::decode(*sc, *dest, 0, n, dchunk.get());
+    PrimaryKeyEncoder::decode(*sc, *dest, 0, n, dchunk.get(), enable_null_primary_key);
     ASSERT_EQ(pchunk->num_rows(), dchunk->num_rows());
     for (int i = 0; i < n; i++) {
         ASSERT_EQ(pchunk->get_column_by_index(0)->get(i).get_int32(),
@@ -131,7 +189,7 @@ TEST(PrimaryKeyEncoderTest, testEncodeComposite) {
     }
 }
 
-TEST(PrimaryKeyEncoderTest, testEncodeCompositeLimit) {
+TEST_P(PrimaryKeyEncoderTest, testEncodeCompositeLimit) {
     {
         auto sc = create_key_schema({TYPE_INT, TYPE_VARCHAR, TYPE_SMALLINT, TYPE_BOOLEAN});
         const int n = 1;
@@ -170,7 +228,7 @@ TEST(PrimaryKeyEncoderTest, testEncodeCompositeLimit) {
     }
 }
 
-TEST(PrimaryKeyEncoderTest, testEncodeVarcharLimit) {
+TEST_P(PrimaryKeyEncoderTest, testEncodeVarcharLimit) {
     auto sc = create_key_schema({TYPE_VARCHAR});
     const int n = 2;
     {
@@ -198,5 +256,8 @@ TEST(PrimaryKeyEncoderTest, testEncodeVarcharLimit) {
         EXPECT_FALSE(PrimaryKeyEncoder::encode_exceed_limit(*sc, *pchunk, 0, n, 128));
     }
 }
+
+INSTANTIATE_TEST_SUITE_P(PrimaryKeyEncoderTest, PrimaryKeyEncoderTest,
+                         testing::Values(TestParam{false}, TestParam{true}));
 
 } // namespace starrocks
