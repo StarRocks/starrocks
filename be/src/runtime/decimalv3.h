@@ -165,6 +165,12 @@ public:
         T abs_value = value;
 
         if (value < 0) {
+            // Special handling for INT256_MIN to avoid double negative signs
+            if constexpr (std::is_same_v<ST, int256_t>) {
+                if (value == INT256_MIN) {
+                    return "-57896044618658097711785492504343953926634992332820282019728792003956564819968";
+                }
+            }
             abs_value = -value;
             str_decimal[len++] = '-';
         }
