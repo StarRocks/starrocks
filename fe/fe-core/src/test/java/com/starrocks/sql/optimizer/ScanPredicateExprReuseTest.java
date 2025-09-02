@@ -170,15 +170,15 @@ public class ScanPredicateExprReuseTest extends PlanTestBase {
         {
             String sql = "select k from complex_t where v1[0] > v2[3]";
             String plan = getVerboseExplain(sql);
-            assertContains(plan, "  2:SELECT\n" +
-                    "  |  predicates: 11: element_at > 12: element_at\n" +
-                    "  |  cardinality: 1\n" +
-                    "  |  \n" +
-                    "  1:Project\n" +
-                    "  |  output columns:\n" +
-                    "  |  1 <-> [1: k, BIGINT, false]\n" +
-                    "  |  11 <-> 2: v1[0]\n" +
-                    "  |  12 <-> 3: v2[3]");
+            assertContains(plan, "  2:SELECT\n"
+                    + "  |  predicates: 11: element_at > 12: element_at\n"
+                    + "  |  cardinality: 1\n"
+                    + "  |  \n"
+                    + "  1:Project\n"
+                    + "  |  output columns:\n"
+                    + "  |  1 <-> [1: k, BIGINT, false]\n"
+                    + "  |  11 <-> [2: v1, ARRAY<BIGINT>, true][0]\n"
+                    + "  |  12 <-> [3: v2, ARRAY<BIGINT>, true][3]");
             assertContains(plan, "     Pruned type: 2 <-> [ARRAY<BIGINT>]\n" +
                     "     Pruned type: 3 <-> [ARRAY<BIGINT>]\n" +
                     "     ColumnAccessPath: [/v1/INDEX, /v2/INDEX]");
@@ -205,15 +205,15 @@ public class ScanPredicateExprReuseTest extends PlanTestBase {
         {
             String sql = "select k from complex_t where array_length(array_map(x->x+10, v5.b.a)) > 10";
             String plan = getVerboseExplain(sql);
-            assertContains(plan, "  2:SELECT\n" +
-                    "  |  predicates: array_length(array_map(<slot 11> -> <slot 11> + 10, 12: subfield)) > 10\n" +
-                    "  |  cardinality: 1\n" +
-                    "  |  \n" +
-                    "  1:Project\n" +
-                    "  |  output columns:\n" +
-                    "  |  1 <-> [1: k, BIGINT, false]\n" +
-                    "  |  12 <-> 6: v5.b.a[false]\n" +
-                    "  |  cardinality: 1");
+            assertContains(plan, "2:SELECT\n"
+                    + "  |  predicates: array_length(array_map(<slot 11> -> <slot 11> + 10, 12: subfield)) > 10\n"
+                    + "  |  cardinality: 1\n"
+                    + "  |  \n"
+                    + "  1:Project\n"
+                    + "  |  output columns:\n"
+                    + "  |  1 <-> [1: k, BIGINT, false]\n"
+                    + "  |  12 <-> [6: v5, struct<a int(11), b struct<a array<bigint(20)>>>, true].b.a[false]\n"
+                    + "  |  cardinality: 1");
             assertContains(plan, "ColumnAccessPath: [/v5/b/a]");
         }
         {
@@ -275,15 +275,15 @@ public class ScanPredicateExprReuseTest extends PlanTestBase {
         {
             String sql = "select k from complex_t where v6[0] > v7[1]";
             String plan = getVerboseExplain(sql);
-            assertContains(plan, "  2:SELECT\n" +
-                    "  |  predicates: 11: element_at > 12: element_at\n" +
-                    "  |  cardinality: 1\n" +
-                    "  |  \n" +
-                    "  1:Project\n" +
-                    "  |  output columns:\n" +
-                    "  |  1 <-> [1: k, BIGINT, false]\n" +
-                    "  |  11 <-> 7: v6[0]\n" +
-                    "  |  12 <-> 8: v7[1]");
+            assertContains(plan, "  2:SELECT\n"
+                    + "  |  predicates: 11: element_at > 12: element_at\n"
+                    + "  |  cardinality: 1\n"
+                    + "  |  \n"
+                    + "  1:Project\n"
+                    + "  |  output columns:\n"
+                    + "  |  1 <-> [1: k, BIGINT, false]\n"
+                    + "  |  11 <-> [7: v6, MAP<INT,INT>, true][0]\n"
+                    + "  |  12 <-> [8: v7, MAP<INT,INT>, true][1]");
             assertContains(plan, "     Pruned type: 7 <-> [MAP<INT,INT>]\n" +
                     "     Pruned type: 8 <-> [MAP<INT,INT>]\n" +
                     "     ColumnAccessPath: [/v6/INDEX, /v7/INDEX]");
@@ -292,24 +292,24 @@ public class ScanPredicateExprReuseTest extends PlanTestBase {
             String sql = "select k from complex_t where cardinality(v1) + cardinality(v5.b.a) > 3 and " +
                     "cardinality(v1) + cardinality(v5.b.a) + cardinality(v6) >5";
             String plan = getVerboseExplain(sql);
-            assertContains(plan, "  2:SELECT\n" +
-                    "  |  predicates: 16: add > 3, 16: add + CAST(13: cardinality AS BIGINT) > 5\n" +
-                    "  |    common sub expr:\n" +
-                    "  |    <slot 16> : 14: cast + 15: cast\n" +
-                    "  |    <slot 14> : CAST(11: cardinality AS BIGINT)\n" +
-                    "  |    <slot 15> : CAST(12: cardinality AS BIGINT)\n" +
-                    "  |  cardinality: 1\n" +
-                    "  |  \n" +
-                    "  1:Project\n" +
-                    "  |  output columns:\n" +
-                    "  |  1 <-> [1: k, BIGINT, false]\n" +
-                    "  |  11 <-> cardinality[([2: v1, ARRAY<BIGINT>, true]); args: INVALID_TYPE; " +
-                    "result: INT; args nullable: true; result nullable: true]\n" +
-                    "  |  12 <-> cardinality[(6: v5.b.a[true]); args: INVALID_TYPE; result: INT; " +
-                    "args nullable: true; result nullable: true]\n" +
-                    "  |  13 <-> cardinality[([7: v6, MAP<INT,INT>, true]); args: INVALID_TYPE; " +
-                    "result: INT; args nullable: true; result nullable: true]\n" +
-                    "  |  cardinality: 1");
+            assertContains(plan, "  2:SELECT\n"
+                    + "  |  predicates: 16: add > 3, 16: add + CAST(13: cardinality AS BIGINT) > 5\n"
+                    + "  |    common sub expr:\n"
+                    + "  |    <slot 16> : 14: cast + 15: cast\n"
+                    + "  |    <slot 14> : CAST(11: cardinality AS BIGINT)\n"
+                    + "  |    <slot 15> : CAST(12: cardinality AS BIGINT)\n"
+                    + "  |  cardinality: 1\n"
+                    + "  |  \n"
+                    + "  1:Project\n"
+                    + "  |  output columns:\n"
+                    + "  |  1 <-> [1: k, BIGINT, false]\n"
+                    + "  |  11 <-> cardinality[([2: v1, ARRAY<BIGINT>, true]); args: INVALID_TYPE; result: INT; args nullable: "
+                    + "true; result nullable: true]\n"
+                    + "  |  12 <-> cardinality[([6: v5, struct<a int(11), b struct<a array<bigint(20)>>>, true].b.a[true]); "
+                    + "args: INVALID_TYPE; result: INT; args nullable: true; result nullable: true]\n"
+                    + "  |  13 <-> cardinality[([7: v6, MAP<INT,INT>, true]); args: INVALID_TYPE; result: INT; args nullable: "
+                    + "true; result nullable: true]\n"
+                    + "  |  cardinality: 1");
             assertContains(plan, "     Pruned type: 2 <-> [ARRAY<BIGINT>]\n" +
                     "     Pruned type: 6 <-> [struct<a int(11), b struct<a array<bigint(20)>>>]\n" +
                     "     Pruned type: 7 <-> [MAP<INT,INT>]\n" +

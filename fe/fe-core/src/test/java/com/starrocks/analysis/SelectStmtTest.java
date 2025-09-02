@@ -451,8 +451,8 @@ public class SelectStmtTest {
 
         try {
             String sql = "select *, (select a.k1 from db1.tbl1 a where a.k4 = b.k1) as r from db1.baseall b;";
-            String plan = UtFrameUtils.getVerboseFragmentPlan(starRocksAssert.getCtx(), sql);
-            Assertions.assertTrue(plan.contains("assert_true[((7: countRows IS NULL) OR (7: countRows <= 1)"), plan);
+            String plan = UtFrameUtils.getFragmentPlan(starRocksAssert.getCtx(), sql);
+            Assertions.assertTrue(plan.contains("assert_true((7: countRows IS NULL) OR (7: countRows <= 1)"), plan);
         } catch (Exception e) {
             Assertions.fail("Should not throw an exception");
         }
@@ -556,7 +556,7 @@ public class SelectStmtTest {
             String sql =
                     "select * from db1.t where dt = \"2022-01-02\" or dt = cast(substring(\"2022-01-03\", 1, 10) as date);";
             String plan = UtFrameUtils.getVerboseFragmentPlan(starRocksAssert.getCtx(), sql);
-            Assertions.assertTrue(plan.contains("dt IN ('2022-01-02', '2022-01-03')"), plan);
+            Assertions.assertTrue(plan.contains("[2: dt, DATE, true] IN ('2022-01-02', '2022-01-03')"), plan);
         } catch (Exception e) {
             Assertions.fail("Should not throw an exception");
         }
@@ -631,11 +631,10 @@ public class SelectStmtTest {
         try {
             String sql = "select str_to_map('age=18&sex=1&gender=1','&','=')['age'] AS age, " +
                     "str_to_map('age=18&sex=1&gender=1','&','=')['sex'] AS sex;";
-            String plan = UtFrameUtils.getVerboseFragmentPlan(starRocksAssert.getCtx(), sql);
-            Assertions.assertTrue(plan.contains("1:Project\n" +
-                    "  |  output columns:\n" +
-                    "  |  2 <-> str_to_map('age=18&sex=1&gender=1', '&', '=')['age']\n" +
-                    "  |  3 <-> str_to_map('age=18&sex=1&gender=1', '&', '=')['sex']"), plan);
+            String plan = UtFrameUtils.getFragmentPlan(starRocksAssert.getCtx(), sql);
+            Assertions.assertTrue(plan.contains("1:Project\n"
+                    + "  |  <slot 2> : str_to_map('age=18&sex=1&gender=1', '&', '=')['age']\n"
+                    + "  |  <slot 3> : str_to_map('age=18&sex=1&gender=1', '&', '=')['sex']"), plan);
         } catch (Exception e) {
             Assertions.fail("Should not throw an exception");
         }
