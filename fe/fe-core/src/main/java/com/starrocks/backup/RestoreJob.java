@@ -1682,6 +1682,8 @@ public class RestoreJob extends AbstractJob {
                                     MaterializedView mv = (MaterializedView) olapTable;
                                     mv.setInactiveAndReason(MaterializedViewExceptions
                                                     .inactiveReasonForMetadataTableRestoreCorrupted(mv.getName()));
+                                    // clear version map so can be refreshed later
+                                    mv.getRefreshScheme().getAsyncRefreshContext().clearVisibleVersionMap();
                                     // drop all partitions
                                     Set<String> partitionNames = mv.getPartitionNames();
                                     for (String partitionName : partitionNames) {
