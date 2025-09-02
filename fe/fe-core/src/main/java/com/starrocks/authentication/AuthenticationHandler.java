@@ -156,16 +156,10 @@ public class AuthenticationHandler {
         String user = authenticationResult.authenticatedUser.getUser();
 
         context.setCurrentUserIdentity(authenticationResult.authenticatedUser);
-        if (!authenticationResult.authenticatedUser.isEphemeral()) {
-            UserProperty userProperty = GlobalStateMgr.getCurrentState().getAuthenticationMgr()
-                    .getUserProperty(authenticationResult.authenticatedUser.getUser());
-            context.updateByUserProperty(userProperty);
-        }
         context.setQualifiedUser(user);
 
         Set<String> groups = getGroups(authenticationResult.authenticatedUser, authenticationResult.groupProviderName);
         context.setGroups(groups);
-
         context.setCurrentRoleIds(context.getCurrentUserIdentity(), groups);
 
         if (authenticationResult.authenticatedGroupList != null && !authenticationResult.authenticatedGroupList.isEmpty()) {
@@ -174,6 +168,12 @@ public class AuthenticationHandler {
             if (intersection.isEmpty()) {
                 throw new AuthenticationException(ErrorCode.ERR_GROUP_ACCESS_DENY, user, Joiner.on(",").join(groups));
             }
+        }
+
+        if (!authenticationResult.authenticatedUser.isEphemeral()) {
+            UserProperty userProperty = GlobalStateMgr.getCurrentState().getAuthenticationMgr()
+                    .getUserProperty(authenticationResult.authenticatedUser.getUser());
+            context.updateByUserProperty(userProperty);
         }
     }
 

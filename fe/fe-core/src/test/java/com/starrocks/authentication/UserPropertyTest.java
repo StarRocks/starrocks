@@ -510,4 +510,114 @@ public class UserPropertyTest {
         Map<String, String> sessionVariables = userProperty.getSessionVariables();
         Assertions.assertEquals(0, sessionVariables.size());
     }
+
+    @Test
+    public void testAuthenticationAppliesUserPropertyAfterRoles() throws Exception {
+        // Preparation: create internal database, role, user, grant permissions and set default role
+        String db = "auth_db";
+        starRocksAssert.withDatabase(db);
+
+        AuthorizationMgr authorizationMgr = starRocksAssert.getCtx().getGlobalStateMgr().getAuthorizationMgr();
+        AuthenticationMgr authenticationMgr = starRocksAssert.getCtx().getGlobalStateMgr().getAuthenticationMgr();
+
+        // Create role r_auth
+        CreateRoleStmt createRoleStmt = (CreateRoleStmt) UtFrameUtils.parseStmtWithNewParser(
+                "CREATE ROLE r_auth", starRocksAssert.getCtx());
+        authorizationMgr.createRole(createRoleStmt);
+
+        // Grant role USAGE privilege on database to ensure database switching permission check passes
+        GrantPrivilegeStmt grantUsageOnDb = (GrantPrivilegeStmt) UtFrameUtils.parseStmtWithNewParser(
+                "GRANT CREATE TABLE ON DATABASE " + db + " TO ROLE r_auth", starRocksAssert.getCtx());
+        authorizationMgr.grant(grantUsageOnDb);
+
+        // Create user u_auth with empty password
+        CreateUserStmt createUserStmt = (CreateUserStmt) UtFrameUtils.parseStmtWithNewParser(
+                "CREATE USER 'u_auth' IDENTIFIED BY ''", starRocksAssert.getCtx());
+        authenticationMgr.createUser(createUserStmt);
+
+        // Set user properties: default database auth_db (catalog uses default internal)
+        UserProperty up = authenticationMgr.getUserProperty("u_auth");
+        List<Pair<String, String>> props = UserProperty.changeToPairList(up.getSessionVariables());
+        props.add(new Pair<>(UserProperty.PROP_DATABASE, db));
+        authenticationMgr.updateUserProperty("u_auth", props);
+
+        // Grant role to user and set as default role
+        GrantRoleStmt grantRoleStmt = (GrantRoleStmt) UtFrameUtils.parseStmtWithNewParser(
+                "GRANT r_auth TO USER u_auth", starRocksAssert.getCtx());
+        authorizationMgr.grantRole(grantRoleStmt);
+        UserIdentity uauth = authenticationMgr.getUserIdentityByName("u_auth");
+        authorizationMgr.setUserDefaultRole(authorizationMgr.getAllRoleIds(uauth), uauth);
+
+        // Login via AuthenticationHandler.authenticate, verify order: roles first, then properties
+        ConnectContext loginCtx = UtFrameUtils.createDefaultCtx();
+        loginCtx.setRemoteIP("127.0.0.1");
+        boolean old = com.starrocks.common.Config.enable_auth_check;
+        com.starrocks.common.Config.enable_auth_check = false; // Skip password verification, focus on order logic
+        try {
+            AuthenticationHandler.authenticate(loginCtx, "u_auth", loginCtx.getRemoteIP(), new byte[0]);
+        } finally {
+            com.starrocks.common.Config.enable_auth_check = old;
+        }
+
+        // Assertion: after login, session has selected the default database
+        Assertions.assertEquals(db, loginCtx.getDatabase());
+        Assertions.assertEquals(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME, loginCtx.getCurrentCatalog());
+    }
+
+    @Test
+    public void testAuthenticationAppliesCatalogPropertyAfterRolesExternal() throws Exception {
+        // Preparation: create external catalog, role, user, grant catalog USAGE and set as default role
+        String ec = "auth_ec";
+        String createExternalCatalog = "CREATE EXTERNAL CATALOG " + ec + " PROPERTIES( " +
+                "\"type\"=\"hive\", " +
+                "\"hive.metastore.uris\"=\"thrift://xx.xx.xx.xx:9083\" " +
+                ");";
+        starRocksAssert.withCatalog(createExternalCatalog);
+
+        AuthorizationMgr authorizationMgr = starRocksAssert.getCtx().getGlobalStateMgr().getAuthorizationMgr();
+        AuthenticationMgr authenticationMgr = starRocksAssert.getCtx().getGlobalStateMgr().getAuthenticationMgr();
+
+        // Create role r_auth_ec
+        CreateRoleStmt createRoleStmt = (CreateRoleStmt) UtFrameUtils.parseStmtWithNewParser(
+                "CREATE ROLE r_auth_ec", starRocksAssert.getCtx());
+        authorizationMgr.createRole(createRoleStmt);
+
+        // Grant role USAGE privilege on external catalog
+        GrantPrivilegeStmt grantUsageOnCatalog = (GrantPrivilegeStmt) UtFrameUtils.parseStmtWithNewParser(
+                "GRANT USAGE ON CATALOG " + ec + " TO ROLE r_auth_ec", starRocksAssert.getCtx());
+        authorizationMgr.grant(grantUsageOnCatalog);
+
+        // Create user u_auth_ec
+        CreateUserStmt createUserStmt = (CreateUserStmt) UtFrameUtils.parseStmtWithNewParser(
+                "CREATE USER 'u_auth_ec' IDENTIFIED BY ''", starRocksAssert.getCtx());
+        authenticationMgr.createUser(createUserStmt);
+
+        // Set user properties: catalog = auth_ec (database left empty)
+        UserProperty up = authenticationMgr.getUserProperty("u_auth_ec");
+        List<Pair<String, String>> props = UserProperty.changeToPairList(up.getSessionVariables());
+        props.add(new Pair<>(UserProperty.PROP_CATALOG, ec));
+        authenticationMgr.updateUserProperty("u_auth_ec", props);
+
+        // Grant role to user and set as default role
+        GrantRoleStmt grantRoleStmt = (GrantRoleStmt) UtFrameUtils.parseStmtWithNewParser(
+                "GRANT r_auth_ec TO USER u_auth_ec", starRocksAssert.getCtx());
+        authorizationMgr.grantRole(grantRoleStmt);
+        UserIdentity uae = authenticationMgr.getUserIdentityByName("u_auth_ec");
+        authorizationMgr.setUserDefaultRole(authorizationMgr.getAllRoleIds(uae), uae);
+
+        // Login via AuthenticationHandler.authenticate
+        ConnectContext loginCtx = UtFrameUtils.createDefaultCtx();
+        loginCtx.setRemoteIP("127.0.0.1");
+        boolean old = com.starrocks.common.Config.enable_auth_check;
+        com.starrocks.common.Config.enable_auth_check = false;
+        try {
+            AuthenticationHandler.authenticate(loginCtx, "u_auth_ec", loginCtx.getRemoteIP(), new byte[0]);
+        } finally {
+            com.starrocks.common.Config.enable_auth_check = old;
+        }
+
+        // Assertion: after login, session has switched to external catalog, database is empty
+        Assertions.assertEquals(ec, loginCtx.getCurrentCatalog());
+        Assertions.assertEquals(UserProperty.DATABASE_DEFAULT_VALUE, loginCtx.getDatabase());
+    }
 }
