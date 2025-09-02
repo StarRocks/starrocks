@@ -992,6 +992,12 @@ Used for compatibility with MySQL JDBC versions 8.0.16 and above. No practical u
 * **Default**: 0
 * **Data type**: Int
 
+### pipeline_sink_dop
+
+* **Description**: The parallelism of loading sink, which is used to adjust the concurrency of loading jobs. Default value: 0, indicating the system automatically adjusts the parallelism. You can also set this variable to a value greater than 0.
+* **Default**: 0
+* **Data type**: Int
+
 ### pipeline_profile_level
 
 * **Description**: Controls the level of the query profile. A query profile often has five layers: Fragment, FragmentInstance, Pipeline, PipelineDriver, and Operator. Different levels provide different details of the profile:

@@ -988,6 +988,12 @@ ALTER USER 'jack' SET PROPERTIES ('session.query_timeout' = '600');
 * 默认值：0
 * 类型：Int
 
+### pipeline_sink_dop
+
+* 描述：导入 Sink 的并行数量，用于调整导入任务的并发性。默认值：0，表示系统自动调整并发度。您也可以将此变量设置为大于 0 的值。
+* 默认值：0
+* 类型：整数
+
 ### pipeline_profile_level
 
 * 描述：用于控制 profile 的等级。一个 profile 通常有 5 个层级：Fragment、FragmentInstance、Pipeline、PipelineDriver、Operator。不同等级下，profile 的详细程度有所区别：
