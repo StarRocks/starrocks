@@ -292,8 +292,8 @@ public:
     // `version` is used for link col files, default using INT64_MAX means link all col files
     Status link_files_to(KVStore* kvstore, const std::string& dir, RowsetId new_rowset_id, int64_t version = INT64_MAX);
 
-    // copy all files to `dir`
-    Status copy_files_to(KVStore* kvstore, const std::string& dir);
+    // copy all files to `dir`, returns total copy bytes
+    StatusOr<int64_t> copy_files_to(KVStore* kvstore, const std::string& dir);
 
     static std::string segment_file_path(const std::string& segment_dir, const RowsetId& rowset_id, int segment_id);
     static std::string segment_temp_file_path(const std::string& dir, const RowsetId& rowset_id, int segment_id);
@@ -430,7 +430,7 @@ private:
 
     Status _link_delta_column_group_files(KVStore* kvstore, const std::string& dir, int64_t version);
 
-    Status _copy_delta_column_group_files(KVStore* kvstore, const std::string& dir, int64_t version);
+    StatusOr<int64_t> _copy_delta_column_group_files(KVStore* kvstore, const std::string& dir, int64_t version);
 
     StatusOr<std::shared_ptr<Segment>> _load_segment(int32_t idx, const TabletSchemaCSPtr& schema,
                                                      std::shared_ptr<FileSystem>& fs,

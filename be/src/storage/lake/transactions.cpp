@@ -468,7 +468,7 @@ Status publish_log_version(TabletManager* tablet_mgr, int64_t tablet_id, std::sp
             auto txn_log_path = tablet_mgr->txn_log_location(tablet_id, txn_id);
             auto txn_vlog_path = tablet_mgr->txn_vlog_location(tablet_id, log_version);
             // TODO: use rename() API if supported by the underlying filesystem.
-            auto st = fs::copy_file(txn_log_path, txn_vlog_path);
+            auto st = fs::copy_file(txn_log_path, txn_vlog_path).status();
             if (st.is_not_found()) {
                 ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(txn_vlog_path));
                 auto check_st = fs->path_exists(txn_vlog_path);
