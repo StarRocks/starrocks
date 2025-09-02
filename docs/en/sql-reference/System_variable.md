@@ -985,16 +985,14 @@ Used for compatibility with MySQL JDBC versions 8.0.16 and above. No practical u
 
 ### pipeline_dop
 
-* **Description**: The parallelism of a pipeline instance, which is used to adjust the query concurrency. Default value: 0, indicating the system automatically adjusts the parallelism of each pipeline instance. You can also set this variable to a value greater than 0. Generally, set the value to half the number of physical CPU cores.
-
-  From v3.0 onwards, StarRocks adaptively adjusts this variable based on query parallelism.
+* **Description**: The parallelism of a pipeline instance, which is used to adjust the query concurrency. Default value: 0, indicating the system automatically adjusts the parallelism of each pipeline instance. This variable also controls the parallelism of loading jobs on OLAP tables. You can also set this variable to a value greater than 0. Generally, set the value to half the number of physical CPU cores. From v3.0 onwards, StarRocks adaptively adjusts this variable based on query parallelism.
 
 * **Default**: 0
 * **Data type**: Int
 
 ### pipeline_sink_dop
 
-* **Description**: The parallelism of loading sink, which is used to adjust the concurrency of loading jobs. Default value: 0, indicating the system automatically adjusts the parallelism. You can also set this variable to a value greater than 0.
+* **Description**: The parallelism of sink for loading into Iceberg tables, Hive tables, and file external tables. It is used to adjust the concurrency of these loading jobs. Default value: 0, indicating the system automatically adjusts the parallelism. You can also set this variable to a value greater than 0.
 * **Default**: 0
 * **Data type**: Int
 
