@@ -34,6 +34,8 @@
 
 #pragma once
 
+#include <exec/pipeline/schedule/pipeline_timer.h>
+
 #include <memory>
 #include <mutex>
 #include <vector>
@@ -48,26 +50,33 @@
 
 namespace starrocks {
 
+class ExecEnv;
+class EndpointCleanupTask;
+
 class BrpcStubCache {
 public:
-    BrpcStubCache();
+    BrpcStubCache(ExecEnv* exec_env);
     ~BrpcStubCache();
 
     std::shared_ptr<PInternalService_RecoverableStub> get_stub(const butil::EndPoint& endpoint);
     std::shared_ptr<PInternalService_RecoverableStub> get_stub(const TNetworkAddress& taddr);
     std::shared_ptr<PInternalService_RecoverableStub> get_stub(const std::string& host, int port);
+    void cleanup_expired(const butil::EndPoint& endpoint);
 
 private:
     struct StubPool {
         StubPool();
+        ~StubPool();
         std::shared_ptr<PInternalService_RecoverableStub> get_or_create(const butil::EndPoint& endpoint);
 
         std::vector<std::shared_ptr<PInternalService_RecoverableStub>> _stubs;
         int64_t _idx;
+        EndpointCleanupTask* _cleanup_task = nullptr;
     };
 
     SpinLock _lock;
-    butil::FlatMap<butil::EndPoint, StubPool*> _stub_map;
+    butil::FlatMap<butil::EndPoint, std::shared_ptr<StubPool>> _stub_map;
+    pipeline::PipelineTimer* _pipeline_timer;
 };
 
 class HttpBrpcStubCache {
@@ -96,6 +105,16 @@ private:
 
     SpinLock _lock;
     butil::FlatMap<butil::EndPoint, std::shared_ptr<LakeService_RecoverableStub>> _stub_map;
+};
+
+class EndpointCleanupTask : public starrocks::pipeline::PipelineTimerTask {
+public:
+    EndpointCleanupTask(BrpcStubCache* cache, const butil::EndPoint& endpoint) : _cache(cache), _endpoint(endpoint){};
+    void Run() override;
+
+private:
+    BrpcStubCache* _cache;
+    butil::EndPoint _endpoint;
 };
 
 } // namespace starrocks

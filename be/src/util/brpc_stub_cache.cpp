@@ -14,6 +14,8 @@
 
 #include "util/brpc_stub_cache.h"
 
+#include <runtime/exec_env.h>
+
 #include "common/config.h"
 #include "gen_cpp/internal_service.pb.h"
 #include "gen_cpp/lake_service.pb.h"
@@ -22,8 +24,9 @@
 
 namespace starrocks {
 
-BrpcStubCache::BrpcStubCache() {
+BrpcStubCache::BrpcStubCache(ExecEnv* exec_env) {
     _stub_map.init(239);
+    _pipeline_timer = exec_env->pipeline_timer();
     REGISTER_GAUGE_STARROCKS_METRIC(brpc_endpoint_stub_count, [this]() {
         std::lock_guard<SpinLock> l(_lock);
         return _stub_map.size();
@@ -31,19 +34,40 @@ BrpcStubCache::BrpcStubCache() {
 }
 
 BrpcStubCache::~BrpcStubCache() {
-    for (auto& stub : _stub_map) {
-        delete stub.second;
+    std::vector<std::shared_ptr<StubPool>> pools_to_cleanup;
+    {
+        std::lock_guard<SpinLock> l(_lock);
+
+        for (auto& stub : _stub_map) {
+            pools_to_cleanup.push_back(stub.second);
+        }
     }
+
+    for (auto& pool : pools_to_cleanup) {
+        pool->_cleanup_task->unschedule(_pipeline_timer);
+    }
+
+    _stub_map.clear();
 }
 
 std::shared_ptr<PInternalService_RecoverableStub> BrpcStubCache::get_stub(const butil::EndPoint& endpoint) {
     std::lock_guard<SpinLock> l(_lock);
+
     auto stub_pool = _stub_map.seek(endpoint);
     if (stub_pool == nullptr) {
-        StubPool* pool = new StubPool();
-        _stub_map.insert(endpoint, pool);
-        return pool->get_or_create(endpoint);
+        auto new_pool = std::make_shared<StubPool>();
+        new_pool->_cleanup_task = new EndpointCleanupTask(this, endpoint);
+        _stub_map.insert(endpoint, new_pool);
+        stub_pool = _stub_map.seek(endpoint);
     }
+
+    _pipeline_timer->unschedule((*stub_pool)->_cleanup_task);
+    timespec tm = butil::seconds_from_now(config::brpc_stub_expire_s);
+    auto status = _pipeline_timer->schedule((*stub_pool)->_cleanup_task, tm);
+    if (!status.ok()) {
+        LOG(WARNING) << "Failed to schedule endpoint: " << endpoint;
+    }
+
     return (*stub_pool)->get_or_create(endpoint);
 }
 
@@ -71,8 +95,23 @@ std::shared_ptr<PInternalService_RecoverableStub> BrpcStubCache::get_stub(const 
     return get_stub(endpoint);
 }
 
+void BrpcStubCache::cleanup_expired(const butil::EndPoint& endpoint) {
+    std::lock_guard<SpinLock> l(_lock);
+
+    LOG(INFO) << "cleanup stubs from endpoint:" << endpoint;
+    auto pool = _stub_map.seek(endpoint);
+    if (pool != nullptr) {
+        _stub_map.erase(endpoint);
+    }
+}
+
 BrpcStubCache::StubPool::StubPool() : _idx(-1) {
     _stubs.reserve(config::brpc_max_connections_per_server);
+}
+
+BrpcStubCache::StubPool::~StubPool() {
+    _stubs.clear();
+    SAFE_DELETE(_cleanup_task);
 }
 
 std::shared_ptr<PInternalService_RecoverableStub> BrpcStubCache::StubPool::get_or_create(
@@ -170,6 +209,10 @@ StatusOr<std::shared_ptr<starrocks::LakeService_RecoverableStub>> LakeServiceBrp
     }
     _stub_map.insert(endpoint, stub);
     return stub;
+}
+
+void EndpointCleanupTask::Run() {
+    _cache->cleanup_expired(_endpoint);
 }
 
 } // namespace starrocks

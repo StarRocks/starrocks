@@ -18,7 +18,9 @@
 #include "util/brpc_stub_cache.h"
 
 #include <gtest/gtest.h>
+#include <testutil/assert.h>
 
+#include "runtime/exec_env.h"
 #include "util/failpoint/fail_point.h"
 
 namespace starrocks {
@@ -27,10 +29,22 @@ class BrpcStubCacheTest : public testing::Test {
 public:
     BrpcStubCacheTest() = default;
     ~BrpcStubCacheTest() override = default;
+    void SetUp() override {
+        _env._pipeline_timer = new pipeline::PipelineTimer();
+        ASSERT_OK(_env._pipeline_timer->start());
+    }
+    void TearDown() override {
+        delete _env._pipeline_timer;
+        _env._pipeline_timer = nullptr;
+        config::brpc_stub_expire_s = 3600;
+    }
+
+private:
+    ExecEnv _env;
 };
 
 TEST_F(BrpcStubCacheTest, normal) {
-    BrpcStubCache cache;
+    BrpcStubCache cache(&_env);
     TNetworkAddress address;
     address.hostname = "127.0.0.1";
     address.port = 123;
@@ -46,7 +60,7 @@ TEST_F(BrpcStubCacheTest, normal) {
 }
 
 TEST_F(BrpcStubCacheTest, invalid) {
-    BrpcStubCache cache;
+    BrpcStubCache cache(&_env);
     TNetworkAddress address;
     address.hostname = "invalid.cm.invalid";
     address.port = 123;
@@ -55,7 +69,7 @@ TEST_F(BrpcStubCacheTest, invalid) {
 }
 
 TEST_F(BrpcStubCacheTest, reset) {
-    BrpcStubCache cache;
+    BrpcStubCache cache(&_env);
     TNetworkAddress address;
     address.hostname = "127.0.0.1";
     address.port = 123;
@@ -106,6 +120,22 @@ TEST_F(BrpcStubCacheTest, test_http_stub) {
     address.hostname = "invalid.cm.invalid";
     auto stub4 = cache.get_http_stub(address);
     ASSERT_EQ(nullptr, *stub4);
+}
+
+TEST_F(BrpcStubCacheTest, test_cleanup) {
+    config::brpc_stub_expire_s = 1;
+    BrpcStubCache cache(&_env);
+    TNetworkAddress address;
+    address.hostname = "127.0.0.1";
+    address.port = 123;
+    auto stub1 = cache.get_stub(address);
+    ASSERT_NE(nullptr, stub1);
+    auto stub2 = cache.get_stub(address);
+    ASSERT_EQ(stub2, stub1);
+
+    sleep(2);
+    auto stub3 = cache.get_stub(address);
+    ASSERT_NE(stub3, stub1);
 }
 
 } // namespace starrocks
