@@ -40,7 +40,7 @@ public:
     using tablet_rowid_t = uint64_t;
 
     PrimaryIndex();
-    PrimaryIndex(const Schema& pk_schema);
+    PrimaryIndex(const Schema& pk_schema, bool enable_null_primary_key);
     virtual ~PrimaryIndex();
 
     // Fetch all primary keys from the tablet associated with this index into memory
@@ -170,7 +170,7 @@ public:
                                               std::vector<Slice>* key_slices);
 
 protected:
-    void _set_schema(const Schema& pk_schema);
+    void _set_schema(const Schema& pk_schema, bool enable_null_primary_key);
 
 private:
     Status _do_load(Tablet* tablet);

@@ -61,6 +61,7 @@ struct MergeEntry {
     // rssid_rowids will be empty, when `need_rssid_rowids` is false.
     bool need_rssid_rowids = false;
     std::vector<uint64_t> rssid_rowids;
+    bool enable_null_pk = false;
 
     MergeEntry() = default;
     ~MergeEntry() { close(); }
@@ -117,7 +118,7 @@ struct MergeEntry {
                 // need to encode
                 chunk_pk_column->reset_column();
                 RETURN_IF_ERROR(PrimaryKeyEncoder::encode_sort_key(*encode_schema, *chunk, 0, chunk->num_rows(),
-                                                                   chunk_pk_column.get()));
+                                                                   chunk_pk_column.get(), enable_null_pk));
             } else {
                 // just use chunk's first column
                 chunk_pk_column = chunk->get_column_by_index(chunk->schema()->sort_key_idxes()[0]);
@@ -335,7 +336,9 @@ private:
                                   std::vector<std::unique_ptr<RowSourceMaskBuffer>>* rowsets_mask_buffer = nullptr) {
         MutableColumnPtr sort_column;
         if (schema.sort_key_idxes().size() > 1) {
-            if (!PrimaryKeyEncoder::create_column(schema, &sort_column, schema.sort_key_idxes()).ok()) {
+            if (!PrimaryKeyEncoder::create_column(schema, &sort_column, schema.sort_key_idxes(),
+                                                  tablet.get_enable_null_primary_key())
+                         .ok()) {
                 LOG(FATAL) << "create column for primary key encoder failed";
             }
         } else if (schema.sort_key_idxes().size() == 1 && schema.field(schema.sort_key_idxes()[0])->is_nullable()) {
@@ -353,6 +356,7 @@ private:
             *total_input_size += rowset->data_disk_size();
             _entries.emplace_back(new MergeEntry<T>());
             MergeEntry<T>& entry = *_entries.back();
+            entry.enable_null_pk = tablet.get_enable_null_primary_key();
             entry.rowset_release_guard = std::make_unique<RowsetReleaseGuard>(rowset);
             auto res = rowset->get_segment_iterators2(schema, tablet_schema, tablet.data_dir()->get_meta(), version,
                                                       stats, nullptr, _chunk_size);
@@ -533,6 +537,7 @@ private:
                 RETURN_IF_ERROR(rowsets_mask_buffer[j]->flip_to_read());
                 _entries.emplace_back(new MergeEntry<T>());
                 MergeEntry<T>& entry = *_entries.back();
+                entry.enable_null_pk = tablet.get_enable_null_primary_key();
                 entry.rowset_release_guard = std::make_unique<RowsetReleaseGuard>(rowset);
                 auto res = rowset->get_segment_iterators2(schema, tablet_schema, tablet.data_dir()->get_meta(), version,
                                                           &non_key_stats, nullptr, _chunk_size);

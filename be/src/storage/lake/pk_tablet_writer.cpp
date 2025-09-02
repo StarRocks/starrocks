@@ -33,10 +33,11 @@ namespace starrocks::lake {
 HorizontalPkTabletWriter::HorizontalPkTabletWriter(TabletManager* tablet_mgr, int64_t tablet_id,
                                                    std::shared_ptr<const TabletSchema> schema, int64_t txn_id,
                                                    ThreadPool* flush_pool, bool is_compaction,
+                                                   bool enable_null_primary_key,
                                                    BundleWritableFileContext* bundle_file_context,
                                                    GlobalDictByNameMaps* global_dicts)
-        : HorizontalGeneralTabletWriter(tablet_mgr, tablet_id, std::move(schema), txn_id, is_compaction, flush_pool,
-                                        bundle_file_context, global_dicts),
+        : HorizontalGeneralTabletWriter(tablet_mgr, tablet_id, std::move(schema), txn_id, is_compaction,
+                                        enable_null_primary_key, flush_pool, bundle_file_context, global_dicts),
           _rowset_txn_meta(std::make_unique<RowsetTxnMetaPB>()) {
     if (is_compaction) {
         auto rows_mapper_filename = lake_rows_mapper_filename(tablet_id, txn_id);
@@ -95,9 +96,10 @@ Status HorizontalPkTabletWriter::reset_segment_writer(bool eos) {
     // reset sst file writer
     if (_pk_sst_writer == nullptr) {
         if (enable_pk_parallel_execution()) {
-            _pk_sst_writer = std::make_unique<PkTabletSSTWriter>(tablet_schema(), _tablet_mgr, _tablet_id);
+            _pk_sst_writer = std::make_unique<PkTabletSSTWriter>(_enable_null_primary_key, tablet_schema(), _tablet_mgr,
+                                                                 _tablet_id);
         } else {
-            _pk_sst_writer = std::make_unique<DefaultSSTWriter>();
+            _pk_sst_writer = std::make_unique<DefaultSSTWriter>(_enable_null_primary_key);
         }
     }
     RETURN_IF_ERROR(_pk_sst_writer->reset_sst_writer(_location_provider, _fs));
@@ -150,9 +152,9 @@ Status HorizontalPkTabletWriter::finish(SegmentPB* segment) {
 VerticalPkTabletWriter::VerticalPkTabletWriter(TabletManager* tablet_mgr, int64_t tablet_id,
                                                std::shared_ptr<const TabletSchema> schema, int64_t txn_id,
                                                uint32_t max_rows_per_segment, ThreadPool* flush_pool,
-                                               bool is_compaction)
+                                               bool is_compaction, bool enable_null_primary_key)
         : VerticalGeneralTabletWriter(tablet_mgr, tablet_id, std::move(schema), txn_id, max_rows_per_segment,
-                                      is_compaction, flush_pool) {
+                                      is_compaction, enable_null_primary_key, flush_pool) {
     if (is_compaction) {
         auto rows_mapper_filename = lake_rows_mapper_filename(tablet_id, txn_id);
         if (rows_mapper_filename.ok()) {
@@ -171,9 +173,10 @@ Status VerticalPkTabletWriter::write_columns(const Chunk& data, const std::vecto
     if (_pk_sst_writers.size() <= _current_writer_index) {
         std::unique_ptr<DefaultSSTWriter> sst_writer;
         if (enable_pk_parallel_execution()) {
-            sst_writer = std::make_unique<PkTabletSSTWriter>(tablet_schema(), _tablet_mgr, _tablet_id);
+            sst_writer = std::make_unique<PkTabletSSTWriter>(_enable_null_primary_key, tablet_schema(), _tablet_mgr,
+                                                             _tablet_id);
         } else {
-            sst_writer = std::make_unique<DefaultSSTWriter>();
+            sst_writer = std::make_unique<DefaultSSTWriter>(_enable_null_primary_key);
         }
         RETURN_IF_ERROR(sst_writer->reset_sst_writer(_location_provider, _fs));
         _pk_sst_writers.emplace_back(std::move(sst_writer));

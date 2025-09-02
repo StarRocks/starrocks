@@ -3149,6 +3149,9 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true)
     public static boolean enable_sync_publish = true;
 
+    @ConfField(mutable = true)
+    public static boolean enable_null_primary_key = false;
+
     /**
      * Normally FE will quit when replaying a bad journal. This configuration provides a bypass mechanism.
      * If this was set to a positive value, FE will skip the corresponding bad journals before it quits.

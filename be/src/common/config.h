@@ -1412,6 +1412,9 @@ CONF_mBool(enable_pindex_compression, "true");
 // filter bytes is less or equal than 10% of pindex bytes, we will use bloom filter to filter some records
 CONF_mInt32(max_bf_read_bytes_percent, "10");
 
+// set true to use different encoding to support null primary keys.
+CONF_mBool(enable_null_primary_key, "false");
+
 // If primary compaction pick all rowsets, we could rebuild pindex directly and skip read from index.
 CONF_mBool(enable_pindex_rebuild_in_compaction, "true");
 

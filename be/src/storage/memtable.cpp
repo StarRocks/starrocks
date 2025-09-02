@@ -481,7 +481,7 @@ Status MemTable::_split_upserts_deletes(ChunkPtr& src, ChunkPtr* upserts, Mutabl
     *upserts = src->clone_empty_with_schema(nupsert);
     (*upserts)->append_selective(*src, indexes[TOpType::UPSERT].data(), 0, nupsert);
     if (!(*deletes)) {
-        auto st = PrimaryKeyEncoder::create_column(*_vectorized_schema, deletes);
+        auto st = PrimaryKeyEncoder::create_column(*_vectorized_schema, deletes, _enable_null_primary_key);
         if (!st.ok()) {
             LOG(ERROR) << "create column for primary key encoder failed, schema:" << *_vectorized_schema
                        << ", status:" << st.to_string();
@@ -494,7 +494,8 @@ Status MemTable::_split_upserts_deletes(ChunkPtr& src, ChunkPtr* upserts, Mutabl
         (*deletes)->reset_column();
     }
     auto& delidx = indexes[TOpType::DELETE];
-    PrimaryKeyEncoder::encode_selective(*_vectorized_schema, *src, delidx.data(), delidx.size(), deletes->get());
+    PrimaryKeyEncoder::encode_selective(*_vectorized_schema, *src, delidx.data(), delidx.size(), deletes->get(),
+                                        _enable_null_primary_key);
     return Status::OK();
 }
 

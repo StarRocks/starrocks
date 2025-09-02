@@ -102,7 +102,7 @@ public:
         {
             int64_t txn_id = next_id();
             // write rowset 1 with 2 segments
-            ASSIGN_OR_ABORT(auto writer, tablet.new_writer(kHorizontal, txn_id));
+            ASSIGN_OR_ABORT(auto writer, tablet.new_writer(kHorizontal, txn_id, false));
             ASSERT_OK(writer->open());
 
             // write rowset data

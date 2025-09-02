@@ -42,6 +42,7 @@ Status DictionaryCacheManager::refresh(const PProcessDictionaryCacheRequest* req
     const auto& pchunk = request->chunk();
     const auto& pschema = request->schema();
     const auto& memory_limit = request->memory_limit();
+    const auto enable_null_primary_key = request->enable_null_primary_key();
 
     // 1. uncompress and deserialize chunk
     faststring uncompressed_buffer;
@@ -114,7 +115,8 @@ Status DictionaryCacheManager::refresh(const PProcessDictionaryCacheRequest* req
     }
 
     // 3. encode key / value chunk without any nullable attribute
-    auto encoded_key_column = DictionaryCacheUtil::encode_columns(*key_schema.get(), key_chunk.get());
+    auto encoded_key_column =
+            DictionaryCacheUtil::encode_columns(*key_schema.get(), key_chunk.get(), enable_null_primary_key);
     if (encoded_key_column == nullptr) {
         return Status::InternalError(
                 fmt::format("encode key chunk failed when refreshing dictionary cache, dictionary id: {}, txn id: {}",
@@ -126,7 +128,8 @@ Status DictionaryCacheManager::refresh(const PProcessDictionaryCacheRequest* req
         DictionaryCacheUtil::precheck_value_encode(value_chunk.get(), value_encode_flags);
     }
 
-    auto encoded_value_column = DictionaryCacheUtil::encode_columns(*value_schema.get(), value_chunk.get());
+    auto encoded_value_column =
+            DictionaryCacheUtil::encode_columns(*value_schema.get(), value_chunk.get(), enable_null_primary_key);
     if (encoded_value_column == nullptr) {
         return Status::InternalError(
                 fmt::format("encode value chunk failed when refreshing dictionary cache, dictionary id: {}, txn id: {}",
@@ -142,15 +145,15 @@ Status DictionaryCacheManager::refresh(const PProcessDictionaryCacheRequest* req
     return _refresh_encoded_chunk(dict_id, txn_id, encoded_key_column.get(), encoded_value_column.get(),
                                   dictionary_schema, DictionaryCacheUtil::get_encoded_type(*key_schema.get()),
                                   DictionaryCacheUtil::get_encoded_type(*value_schema.get()), memory_limit,
-                                  value_encode_flags);
+                                  value_encode_flags, enable_null_primary_key);
 }
 
 Status DictionaryCacheManager::_refresh_encoded_chunk(DictionaryId dict_id, DictionaryCacheTxnId txn_id,
                                                       const Column* encoded_key_column,
                                                       const Column* encoded_value_column, const SchemaPtr& schema,
                                                       LogicalType key_encoded_type, LogicalType value_encoded_type,
-                                                      long memory_limit,
-                                                      const std::vector<uint8_t>& value_encode_flags) {
+                                                      long memory_limit, const std::vector<uint8_t>& value_encode_flags,
+                                                      bool enable_null_primary_key) {
     DCHECK(key_encoded_type != TYPE_NONE);
     DCHECK(value_encoded_type != TYPE_NONE);
 
@@ -171,7 +174,8 @@ Status DictionaryCacheManager::_refresh_encoded_chunk(DictionaryId dict_id, Dict
                    _mutable_dict_caches[dict_id]->find(txn_id) != _mutable_dict_caches[dict_id]->end())) {
             if ((*_mutable_dict_caches[dict_id])[txn_id] == nullptr) {
                 DictionaryCachePtr p = DictionaryCacheUtil::create_dictionary_cache(
-                        std::pair<LogicalType, LogicalType>(key_encoded_type, value_encoded_type));
+                        std::pair<LogicalType, LogicalType>(key_encoded_type, value_encoded_type),
+                        enable_null_primary_key);
                 if (p == nullptr) {
                     return Status::InternalError("Invalid dictionary type");
                 }

@@ -103,7 +103,7 @@ public:
 
     // `segment_max_rows` is used in vertical writer
     // NOTE: This method may update the version hint
-    StatusOr<std::unique_ptr<TabletWriter>> new_writer(WriterType type, int64_t txn_id,
+    StatusOr<std::unique_ptr<TabletWriter>> new_writer(WriterType type, int64_t txn_id, bool enable_null_primary_key,
                                                        uint32_t max_rows_per_segment = 0,
                                                        ThreadPool* flush_pool = nullptr, bool is_compaction = false);
 

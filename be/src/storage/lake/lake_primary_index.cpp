@@ -76,7 +76,13 @@ Status LakePrimaryIndex::_do_lake_load(TabletManager* tablet_mgr, const TabletMe
         pk_columns[i] = (ColumnId)i;
     }
     auto pkey_schema = ChunkHelper::convert_schema(tablet_schema, pk_columns);
-    _set_schema(pkey_schema);
+
+    bool enable_null_primary_key = config::enable_null_primary_key;
+    if (metadata->has_enable_null_primary_key()) {
+        enable_null_primary_key = metadata->enable_null_primary_key();
+    }
+
+    _set_schema(pkey_schema, enable_null_primary_key);
 
     // load persistent index if enable persistent index meta
 
@@ -122,10 +128,11 @@ Status LakePrimaryIndex::_do_lake_load(TabletManager* tablet_mgr, const TabletMe
 
     OlapReaderStatistics stats;
     MutableColumnPtr pk_column;
-    if (pk_columns.size() > 1) {
-        // more than one key column
-        RETURN_IF_ERROR(PrimaryKeyEncoder::create_column(pkey_schema, &pk_column));
+    if (pk_columns.size() > 1 || enable_null_primary_key) {
+        // more than one key column or has enabled null primary key
+        RETURN_IF_ERROR(PrimaryKeyEncoder::create_column(pkey_schema, &pk_column, enable_null_primary_key));
     }
+
     vector<uint32_t> rowids;
     rowids.reserve(4096);
     auto chunk_shared_ptr = ChunkHelper::new_chunk(pkey_schema, 4096);
@@ -158,7 +165,8 @@ Status LakePrimaryIndex::_do_lake_load(TabletManager* tablet_mgr, const TabletMe
                     Column* pkc = nullptr;
                     if (pk_column) {
                         pk_column->reset_column();
-                        PrimaryKeyEncoder::encode(pkey_schema, *chunk, 0, chunk->num_rows(), pk_column.get());
+                        PrimaryKeyEncoder::encode(pkey_schema, *chunk, 0, chunk->num_rows(), pk_column.get(),
+                                                  enable_null_primary_key);
                         pkc = pk_column.get();
                     } else {
                         pkc = chunk->columns()[0].get();

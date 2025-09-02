@@ -108,6 +108,10 @@ public:
 
     void set_write_buffer_row(size_t max_buffer_row) { _max_buffer_row = max_buffer_row; }
 
+    void set_enable_null_primary_key(size_t enable_null_primary_key) {
+        _enable_null_primary_key = enable_null_primary_key;
+    }
+
     static Schema convert_schema(const TabletSchemaCSPtr& tablet_schema,
                                  const std::vector<SlotDescriptor*>* slot_descs);
 
@@ -154,6 +158,7 @@ private:
 
     std::string _merge_condition;
 
+    bool _enable_null_primary_key = false;
     int64_t _max_buffer_size = config::write_buffer_size;
     // initial value is max size
     size_t _max_buffer_row = std::numeric_limits<size_t>::max();

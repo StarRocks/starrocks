@@ -464,6 +464,9 @@ public class AlterJobExecutor implements AstVisitorExtendInterface<Void, Connect
             } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_PRIMARY_INDEX_CACHE_EXPIRE_SEC)) {
                 schemaChangeHandler.updateTableMeta(db, tableName.getTbl(), properties,
                         TTabletMetaType.PRIMARY_INDEX_CACHE_EXPIRE_SEC);
+            } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_ENABLE_NULL_PRIMARY_KEY)) {
+                throw new DdlException("Property " + PropertyAnalyzer.PROPERTIES_ENABLE_NULL_PRIMARY_KEY
+                        + " cannot be modified.");
             } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_ENABLE_PERSISTENT_INDEX)
                     || properties.containsKey(PropertyAnalyzer.PROPERTIES_PERSISTENT_INDEX_TYPE)
                     || properties.containsKey(PropertyAnalyzer.PROPERTIES_FILE_BUNDLING)

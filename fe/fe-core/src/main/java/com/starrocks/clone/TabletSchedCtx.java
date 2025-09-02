@@ -978,6 +978,7 @@ public class TabletSchedCtx implements Comparable<TabletSchedCtx> {
                     .setTabletId(tabletId)
                     .setVersion(visibleVersion)
                     .setStorageMedium(TStorageMedium.HDD)
+                    .setEnableNullPrimaryKey(olapTable.enableNullPrimaryKey())
                     .setEnablePersistentIndex(olapTable.enablePersistentIndex())
                     .setPrimaryIndexCacheExpireSec(olapTable.primaryIndexCacheExpireSec())
                     .setTabletType(olapTable.getPartitionInfo().getTabletType(physicalPartition.getParentId()))
