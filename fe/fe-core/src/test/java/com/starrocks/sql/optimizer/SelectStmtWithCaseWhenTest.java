@@ -375,40 +375,48 @@ class SelectStmtWithCaseWhenTest {
                 "   when ship_mode >= 70 then 'C'\n" +
                 "   when ship_mode >= 60 then 'D'\n" +
                 "   else 'E' end)  %s";
-        String[][] testCases =
-                new String[][] {{"= 'A'", "4: ship_mode >= 90"}, {"= 'B'", "4: ship_mode >= 80, 4: ship_mode < 90"},
-                        {"= 'C'", "4: ship_mode >= 70, 4: ship_mode < 80"}, {"= 'D'", "4: ship_mode >= 60, 4: ship_mode < 70"},
-                        {"= 'E'", "4: ship_mode < 60"}, {"<> 'A'", "4: ship_mode < 90"},
+        String[][] testCases = new String[][] {
+                {"= 'A'", "4: ship_mode >= 90"},
+                {"= 'B'", "4: ship_mode >= 80, 4: ship_mode < 90"},
+                {"= 'C'", "4: ship_mode >= 70, 4: ship_mode < 80"},
+                {"= 'D'", "4: ship_mode >= 60, 4: ship_mode < 70"},
+                {"= 'E'", "4: ship_mode < 60"}, {"<> 'A'", "4: ship_mode < 90"},
                 {"<> 'B'", "(4: ship_mode < 80) OR (4: ship_mode >= 90)"},
-                        {"<> 'C'", "(4: ship_mode < 70) OR ((4: ship_mode >= 90) OR (4: ship_mode >= 80))"}, {"<> 'D'",
+                {"<> 'C'", "(4: ship_mode < 70) OR ((4: ship_mode >= 90) OR (4: ship_mode >= 80))"}, {"<> 'D'",
                         "(4: ship_mode < 60) OR (((4: ship_mode >= 90) OR (4: ship_mode >= 80)) OR (4: ship_mode >= 70))"},
-                        {"<> 'E'",
-                                "((4: ship_mode >= 90) OR ((4: ship_mode >= 80) AND (4: ship_mode < 90))) OR (((4: ship_mode < "
+                {"<> 'E'", "((4: ship_mode >= 90) OR ((4: ship_mode >= 80) AND (4: ship_mode < 90))) OR (((4: ship_mode < "
                                         + "90) AND "
                                         + "(4: ship_mode < 80)) AND ((4: ship_mode >= 70) OR ((4: ship_mode >= 60) AND (4: "
                                         + "ship_mode < "
                                         + "70)))), 4: ship_mode >= 60"}, {"in ('A','B')",
                         "(4: ship_mode >= 90) OR ((4: ship_mode >= 80) AND (4: ship_mode < 90)), 4: ship_mode >= 80"},
-                        {"in ('A','B', 'C')",
-                                "((4: ship_mode >= 90) OR ((4: ship_mode >= 80) AND (4: ship_mode < 90))) OR ((4: ship_mode >= "
+                {"in ('A','B', 'C')",
+                        "((4: ship_mode >= 90) OR ((4: ship_mode >= 80) AND (4: ship_mode < 90))) OR ((4: ship_mode >= "
                                         + "70) AND "
                                         + "((4: ship_mode < 90) AND (4: ship_mode < 80))), 4: ship_mode >= 70"}, {"in ('D','E')",
                         "4: ship_mode < 90, 4: ship_mode < 80, 4: ship_mode < 70, (4: ship_mode >= 60) OR (4: ship_mode < 60)"},
-                        {"in ('E')", "4: ship_mode < 60"}, {"in (NULL)", ""}, {"in ('F')", ""}, {"in ('A','B','C','D','E')", ""},
-                        {"in ('A','B','C','D','E','F')", ""},
-                        {"not in ('A','B')", "4: ship_mode < 90, (4: ship_mode < 80) OR (4: ship_mode >= 90)"},
-                        {"not in ('A','B', 'C')",
-                                "4: ship_mode < 90, 4: ship_mode < 80, 4: ship_mode < 70, (4: ship_mode >= 60) OR (4: ship_mode"
+                {"in ('E')", "4: ship_mode < 60"},
+                {"in (NULL)", ""},
+                {"in ('F')", ""},
+                {"in ('A','B','C','D','E')", ""},
+                {"in ('A','B','C','D','E','F')", ""},
+                {"not in ('A','B')", "4: ship_mode < 90, (4: ship_mode < 80) OR (4: ship_mode >= 90)"},
+                {"not in ('A','B', 'C')",
+                        "4: ship_mode < 90, 4: ship_mode < 80, 4: ship_mode < 70, (4: ship_mode >= 60) OR (4: ship_mode"
                                         + " < 60)"},
-                        {"not in ('D','E')",
-                                "((4: ship_mode >= 90) OR ((4: ship_mode >= 80) AND (4: ship_mode < 90))) OR ((4: ship_mode >= "
+                {"not in ('D','E')",
+                        "((4: ship_mode >= 90) OR ((4: ship_mode >= 80) AND (4: ship_mode < 90))) OR ((4: ship_mode >= "
                                         + "70) AND "
-                                        + "((4: ship_mode < 90) AND (4: ship_mode < 80))), 4: ship_mode >= 70"}, {"not in ('E')",
+                                + "((4: ship_mode < 90) AND (4: ship_mode < 80))), 4: ship_mode >= 70"},
+                {"not in ('E')",
                         "((4: ship_mode >= 90) OR ((4: ship_mode >= 80) AND (4: ship_mode < 90))) OR (((4: ship_mode < 90) AND "
                                 + "(4: ship_mode < 80)) AND ((4: ship_mode >= 70) OR ((4: ship_mode >= 60) AND (4: ship_mode < "
-                                + "70)))), 4: ship_mode >= 60"}, {"not in (NULL)", ""}, {"not in ('A','B','C','D','E')", ""},
-                        {"not in ('A','B','C','D','E','F')", ""}, {"is NULL", ""}, {"is NOT NULL", ""},
-
+                                + "70)))), 4: ship_mode >= 60"},
+                {"not in (NULL)", ""},
+                {"not in ('A','B','C','D','E')", ""},
+                {"not in ('A','B','C','D','E','F')", ""},
+                {"is NULL", ""},
+                {"is NOT NULL", ""},
         };
 
         List<Arguments> argumentsList = Lists.newArrayList();
@@ -486,7 +494,8 @@ class SelectStmtWithCaseWhenTest {
     }
 
     private static Stream<Arguments> ifTests() {
-        String[][] testCases = new String[][] {{"select * from test.t0 where if(region='USA', 1, 0) = 1", "1: region = 'USA'"},
+        String[][] testCases = new String[][] {
+                {"select * from test.t0 where if(region='USA', 1, 0) = 1", "1: region = 'USA'"},
                 {"select * from test.t0 where if(region='USA', 1, 0) = 0", "1: region != 'USA'"},
                 {"select * from test.t0 where if(region='USA', 1, 0) = 2", ""},
                 {"select * from test.t0 where if(region='USA', 1, 0) <> 1", "1: region != 'USA'"},

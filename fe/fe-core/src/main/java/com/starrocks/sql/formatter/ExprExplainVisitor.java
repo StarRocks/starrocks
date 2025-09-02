@@ -334,7 +334,7 @@ public class ExprExplainVisitor implements AstVisitorExtendInterface<String, Voi
             String value = children.get(i + 1).accept(this, context);
             pairs.add(key + ":" + value);
         }
-        return "map{" + Joiner.on(", ").join(pairs) + "}";
+        return "map{" + Joiner.on(",").join(pairs) + "}";
     }
 
     @Override
