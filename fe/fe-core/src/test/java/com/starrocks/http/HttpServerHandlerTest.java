@@ -14,7 +14,6 @@
 
 package com.starrocks.http;
 
-import com.starrocks.http.rest.HealthAction;
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelFuture;
 import io.netty.channel.ChannelHandlerContext;
