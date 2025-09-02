@@ -15,6 +15,7 @@
 package com.starrocks.scheduler.mv;
 
 import com.google.common.base.Preconditions;
+import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.scheduler.TaskRun;
 import com.starrocks.sql.common.PListCell;
@@ -28,30 +29,57 @@ import java.util.Set;
  * MVRefreshParams is used to store the parameters for refreshing a materialized view.
  */
 public class MVRefreshParams {
+    private final MaterializedView mv;
+    private final Map<String, String> properties;
+
     private final String rangeStart;
     private final String rangeEnd;
-    private final boolean isForce;
     private final Set<PListCell> listValues;
     private final PartitionInfo mvPartitionInfo;
 
-    public MVRefreshParams(PartitionInfo partitionInfo,
-                           Map<String, String> properties,
-                           boolean tentative) {
-        Preconditions.checkArgument(partitionInfo != null, "MaterializedView's partition info is null");
+    // whether the refresh is tentative, when it's true, it means the refresh is triggered temporarily and used for
+    // find candidate partitions to refresh.
+    private boolean isTentative = false;
+
+    public MVRefreshParams(MaterializedView mv,
+                           Map<String, String> properties) {
+        Preconditions.checkArgument(mv != null, "MaterializedView is null");
         Preconditions.checkArgument(properties != null, "Properties is null");
+        this.mv = mv;
+        this.properties = properties;
+
         this.rangeStart = properties.get(TaskRun.PARTITION_START);
         this.rangeEnd = properties.get(TaskRun.PARTITION_END);
-        this.isForce = tentative | Boolean.parseBoolean(properties.get(TaskRun.FORCE));
         this.listValues = PListCell.batchDeserialize(properties.get(TaskRun.PARTITION_VALUES));
-        this.mvPartitionInfo = partitionInfo;
-    }
-
-    public boolean isForceCompleteRefresh() {
-        return isForce && isCompleteRefresh();
+        this.mvPartitionInfo = mv.getPartitionInfo();
     }
 
     public boolean isForce() {
-        return isForce;
+        if (this.isTentative) {
+            return true;
+        }
+        if (Boolean.parseBoolean(properties.get(TaskRun.FORCE))) {
+            return true;
+        }
+        MaterializedView.PartitionRefreshStrategy partitionRefreshStrategy =
+                mv.getPartitionRefreshStrategy();
+        return partitionRefreshStrategy == MaterializedView.PartitionRefreshStrategy.FORCE;
+    }
+
+    public boolean isForceCompleteRefresh() {
+        return isForce() && isCompleteRefresh();
+    }
+
+    public boolean isNonTentativeForce() {
+        return isForce() && !isTentative;
+    }
+
+    public void setIsTentative(boolean tentative) {
+        this.isTentative = tentative;
+    }
+
+    public boolean isTentative() {
+        return isTentative;
     }
 
     public boolean isCompleteRefresh() {
@@ -82,5 +110,14 @@ public class MVRefreshParams {
 
     public Set<PListCell> getListValues() {
         return listValues;
+    }
+
+    @Override
+    public String toString() {
+        return "{rangeStart='" + rangeStart + '\'' +
+                ", rangeEnd='" + rangeEnd + '\'' +
+                ", isTentative=" + isTentative +
+                ", listValues=" + listValues +
+                '}';
     }
 }

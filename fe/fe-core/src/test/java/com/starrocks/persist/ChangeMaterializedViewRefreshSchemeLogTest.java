@@ -32,6 +32,7 @@ import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.SinglePartitionInfo;
 import com.starrocks.common.Config;
 import com.starrocks.common.io.Text;
+import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.TTabletType;
 import mockit.Expectations;
@@ -89,7 +90,7 @@ public class ChangeMaterializedViewRefreshSchemeLogTest {
                 partitionInfo, distributionInfo, refreshScheme);
         ChangeMaterializedViewRefreshSchemeLog changeLog =
                 new ChangeMaterializedViewRefreshSchemeLog(materializedView);
-        changeLog.write(out);
+        Text.writeString(out, GsonUtils.GSON.toJson(changeLog, ChangeMaterializedViewRefreshSchemeLog.class));
         out.flush();
         out.close();
 

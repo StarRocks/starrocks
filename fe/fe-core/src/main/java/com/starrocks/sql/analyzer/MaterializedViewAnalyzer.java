@@ -669,13 +669,14 @@ public class MaterializedViewAnalyzer {
                 Multimap<String, Integer> colMultiMap = ArrayListMultimap.create();
 
                 for (IndexDef indexDef : indexDefs) {
-                    indexDef.analyze();
+                    IndexAnalyzer.analyze(indexDef);
                     List<ColumnId> columnIds = new ArrayList<>(indexDef.getColumns().size());
                     for (String indexColName : indexDef.getColumns()) {
                         boolean found = false;
                         for (Column column : columns) {
                             if (column.getName().equalsIgnoreCase(indexColName)) {
-                                indexDef.checkColumn(column, statement.getKeysType());
+                                IndexAnalyzer.checkColumn(column, indexDef.getIndexType(), indexDef.getProperties(),
+                                        statement.getKeysType());
                                 found = true;
                                 columnIds.add(column.getColumnId());
                                 break;

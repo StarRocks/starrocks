@@ -720,12 +720,17 @@ public class CachedStatisticStorage implements StatisticStorage, MemoryTrackable
     }
 
     private <K, V> AsyncLoadingCache<K, V> createAsyncLoadingCache(AsyncCacheLoader<K, V> cacheLoader) {
-        return Caffeine.newBuilder()
+        Caffeine<Object, Object> cacheBuilder = Caffeine.newBuilder()
                 .expireAfterWrite(Config.statistic_update_interval_sec * 2, TimeUnit.SECONDS)
-                .refreshAfterWrite(Config.statistic_update_interval_sec, TimeUnit.SECONDS)
                 .maximumSize(Config.statistic_cache_columns)
-                .executor(statsCacheRefresherExecutor)
-                .buildAsync(cacheLoader);
+                .executor(statsCacheRefresherExecutor);
+        
+        // Only enable refreshAfterWrite if the config is enabled
+        if (Config.enable_statistic_cache_refresh_after_write) {
+            cacheBuilder.refreshAfterWrite(Config.statistic_update_interval_sec, TimeUnit.SECONDS);
+        }
+        
+        return cacheBuilder.buildAsync(cacheLoader);
     }
 
 }

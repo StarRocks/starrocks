@@ -74,6 +74,7 @@ import com.starrocks.server.WarehouseManager;
 import com.starrocks.service.FrontendOptions;
 import com.starrocks.sql.analyzer.AstToSQLBuilder;
 import com.starrocks.sql.ast.AstTraverser;
+import com.starrocks.sql.ast.DeleteStmt;
 import com.starrocks.sql.ast.DmlStmt;
 import com.starrocks.sql.ast.ExecuteStmt;
 import com.starrocks.sql.ast.InsertStmt;
@@ -83,6 +84,7 @@ import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.Relation;
 import com.starrocks.sql.ast.SetStmt;
 import com.starrocks.sql.ast.StatementBase;
+import com.starrocks.sql.ast.UpdateStmt;
 import com.starrocks.sql.ast.txn.BeginStmt;
 import com.starrocks.sql.ast.txn.CommitStmt;
 import com.starrocks.sql.ast.txn.RollbackStmt;
@@ -347,6 +349,7 @@ public class ConnectProcessor {
         boolean onlySetStmt = true;
         try {
             ctx.setQueryId(UUIDUtil.genUUID());
+            ctx.setExecutionId(UUIDUtil.toTUniqueId(ctx.getQueryId()));
             if (Config.enable_print_sql) {
                 LOG.info("Begin to execute sql, type: query, query id:{}, sql:{}", ctx.getQueryId(), originStmt);
             }
@@ -385,6 +388,8 @@ public class ConnectProcessor {
                         !((parsedStmt instanceof InsertStmt && !((InsertStmt) parsedStmt).isOverwrite()) ||
                                 parsedStmt instanceof BeginStmt ||
                                 parsedStmt instanceof CommitStmt ||
+                                parsedStmt instanceof UpdateStmt ||
+                                parsedStmt instanceof DeleteStmt ||
                                 parsedStmt instanceof RollbackStmt)) {
                     ErrorReport.report(ErrorCode.ERR_EXPLICIT_TXN_NOT_SUPPORT_STMT);
                     ctx.getState().setErrType(QueryState.ErrType.ANALYSIS_ERR);

@@ -72,7 +72,8 @@ struct HashJoinerParam {
                     bool build_conjunct_ctxs_is_empty, std::list<RuntimeFilterBuildDescriptor*> build_runtime_filters,
                     std::set<SlotId> build_output_slots, std::set<SlotId> probe_output_slots, size_t max_dop,
                     const TJoinDistributionMode::type distribution_mode, bool enable_late_materialization,
-                    bool enable_partition_hash_join, bool is_skew_join)
+                    bool enable_partition_hash_join, bool is_skew_join,
+                    const std::map<SlotId, ExprContext*>& common_expr_ctxs)
             : _pool(pool),
               _hash_join_node(hash_join_node),
               _is_null_safes(std::move(is_null_safes)),
@@ -92,7 +93,8 @@ struct HashJoinerParam {
               _distribution_mode(distribution_mode),
               _enable_late_materialization(enable_late_materialization),
               _enable_partition_hash_join(enable_partition_hash_join),
-              _is_skew_join(is_skew_join) {}
+              _is_skew_join(is_skew_join),
+              _common_expr_ctxs(common_expr_ctxs) {}
 
     HashJoinerParam(HashJoinerParam&&) = default;
     HashJoinerParam(HashJoinerParam&) = default;
@@ -120,6 +122,7 @@ struct HashJoinerParam {
     const bool _enable_late_materialization;
     const bool _enable_partition_hash_join;
     const bool _is_skew_join;
+    const std::map<SlotId, ExprContext*> _common_expr_ctxs;
 };
 
 inline bool could_short_circuit(TJoinOp::type join_type) {
@@ -439,6 +442,7 @@ private:
     const std::vector<ExprContext*>& _other_join_conjunct_ctxs;
     // Conjuncts in Join followed by a filter predicate, usually in Where and Having.
     const std::vector<ExprContext*>& _conjunct_ctxs;
+    const std::map<SlotId, ExprContext*>& _common_expr_ctxs;
     const RowDescriptor& _build_row_descriptor;
     const RowDescriptor& _probe_row_descriptor;
     const TPlanNodeType::type _build_node_type;

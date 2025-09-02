@@ -119,7 +119,7 @@ static void alter_tablet(const TAlterTabletReqV2& agent_task_req, int64_t signat
     if (status == STARROCKS_SUCCESS) {
         swap(finish_tablet_infos, finish_task_request->finish_tablet_infos);
         finish_task_request->__isset.finish_tablet_infos = true;
-        LOG(INFO) << alter_msg_head << "alter success. signature: " << signature;
+        VLOG(2) << alter_msg_head << "alter success. signature: " << signature;
         error_msgs.emplace_back("alter success");
         task_status.__set_status_code(TStatusCode::OK);
     } else if (status == STARROCKS_TASK_REQUEST_ERROR) {
@@ -156,13 +156,11 @@ static void unify_finish_agent_task(TStatusCode::type status_code, const std::ve
 
     finish_task(finish_task_request);
     size_t task_queue_size = remove_task_info(task_type, signature);
-    LOG(INFO) << "Remove task success. type=" << task_type << ", signature=" << signature
-              << ", task_count_in_queue=" << task_queue_size;
+    VLOG(1) << "Remove task success. type=" << task_type << ", signature=" << signature
+            << ", task_count_in_queue=" << task_queue_size;
 }
 
 void run_drop_tablet_task(const std::shared_ptr<DropTabletAgentTaskRequest>& agent_task_req, ExecEnv* exec_env) {
-    StarRocksMetrics::instance()->clone_requests_total.increment(1);
-
     const TDropTabletReq& drop_tablet_req = agent_task_req->task_req;
 
     bool force_drop = drop_tablet_req.__isset.force && drop_tablet_req.force;
@@ -348,6 +346,7 @@ void run_clear_transaction_task(const std::shared_ptr<ClearTransactionAgentTaskR
 }
 
 void run_clone_task(const std::shared_ptr<CloneAgentTaskRequest>& agent_task_req, ExecEnv* exec_env) {
+    StarRocksMetrics::instance()->clone_requests_total.increment(1);
     const TCloneReq& clone_req = agent_task_req->task_req;
     AgentStatus status = STARROCKS_SUCCESS;
 
@@ -366,6 +365,7 @@ void run_clone_task(const std::shared_ptr<CloneAgentTaskRequest>& agent_task_req
     if (clone_req.__isset.is_local && clone_req.is_local) {
         DataDir* dest_store = StorageEngine::instance()->get_store(clone_req.dest_path_hash);
         if (dest_store == nullptr) {
+            StarRocksMetrics::instance()->clone_requests_failed.increment(1);
             LOG(WARNING) << "fail to get dest store. path_hash:" << clone_req.dest_path_hash;
             status_code = TStatusCode::RUNTIME_ERROR;
         } else {
@@ -374,6 +374,7 @@ void run_clone_task(const std::shared_ptr<CloneAgentTaskRequest>& agent_task_req
                                                    need_rebuild_pk_index);
             Status res = StorageEngine::instance()->execute_task(&engine_task);
             if (!res.ok()) {
+                StarRocksMetrics::instance()->clone_requests_failed.increment(1);
                 status_code = TStatusCode::RUNTIME_ERROR;
                 LOG(WARNING) << "local tablet migration failed. status: " << res
                              << ", signature: " << agent_task_req->signature;
@@ -392,6 +393,14 @@ void run_clone_task(const std::shared_ptr<CloneAgentTaskRequest>& agent_task_req
                     tablet_infos.push_back(tablet_info);
                 }
                 finish_task_request.__set_finish_tablet_infos(tablet_infos);
+
+                int64_t copy_size = engine_task.get_copy_size();
+                finish_task_request.__set_copy_size(copy_size);
+                StarRocksMetrics::instance()->clone_task_intra_node_copy_bytes.increment(copy_size);
+
+                int64_t copy_time_ms = engine_task.get_copy_time_ms();
+                finish_task_request.__set_copy_time_ms(copy_time_ms);
+                StarRocksMetrics::instance()->clone_task_intra_node_copy_duration_ms.increment(copy_time_ms);
             }
         }
     } else {
@@ -399,6 +408,7 @@ void run_clone_task(const std::shared_ptr<CloneAgentTaskRequest>& agent_task_req
                                     &error_msgs, &tablet_infos, &status);
         Status res = StorageEngine::instance()->execute_task(&engine_task);
         if (!res.ok()) {
+            StarRocksMetrics::instance()->clone_requests_failed.increment(1);
             status_code = TStatusCode::RUNTIME_ERROR;
             LOG(WARNING) << "clone failed. status:" << res << ", signature:" << agent_task_req->signature;
             error_msgs.emplace_back("clone failed.");
@@ -412,8 +422,14 @@ void run_clone_task(const std::shared_ptr<CloneAgentTaskRequest>& agent_task_req
                 LOG(INFO) << "clone success, set tablet infos. status:" << status
                           << ", signature:" << agent_task_req->signature;
                 finish_task_request.__set_finish_tablet_infos(tablet_infos);
-                finish_task_request.__set_copy_size(engine_task.get_copy_size());
-                finish_task_request.__set_copy_time_ms(engine_task.get_copy_time_ms());
+
+                int64_t copy_size = engine_task.get_copy_size();
+                finish_task_request.__set_copy_size(copy_size);
+                StarRocksMetrics::instance()->clone_task_inter_node_copy_bytes.increment(copy_size);
+
+                int64_t copy_time_ms = engine_task.get_copy_time_ms();
+                finish_task_request.__set_copy_time_ms(copy_time_ms);
+                StarRocksMetrics::instance()->clone_task_inter_node_copy_duration_ms.increment(copy_time_ms);
             }
         }
     }
@@ -710,8 +726,7 @@ void run_upload_task(const std::shared_ptr<UploadAgentTaskRequest>& agent_task_r
     finish_task(finish_task_request);
     remove_task_info(agent_task_req->task_type, agent_task_req->signature);
 
-    LOG(INFO) << "Finished uploaded task signature=" << agent_task_req->signature
-              << " job id=" << upload_request.job_id;
+    VLOG(1) << "Finished uploaded task signature=" << agent_task_req->signature << " job id=" << upload_request.job_id;
 }
 
 void run_download_task(const std::shared_ptr<DownloadAgentTaskRequest>& agent_task_req, ExecEnv* exec_env) {
@@ -746,8 +761,8 @@ void run_download_task(const std::shared_ptr<DownloadAgentTaskRequest>& agent_ta
     finish_task(finish_task_request);
     remove_task_info(agent_task_req->task_type, agent_task_req->signature);
 
-    LOG(INFO) << "Finished downloaded task signature=" << agent_task_req->signature
-              << " job id=" << download_request.job_id;
+    VLOG(1) << "Finished downloaded task signature=" << agent_task_req->signature
+            << " job id=" << download_request.job_id;
 }
 
 void run_make_snapshot_task(const std::shared_ptr<SnapshotAgentTaskRequest>& agent_task_req, ExecEnv* exec_env) {
@@ -768,9 +783,9 @@ void run_make_snapshot_task(const std::shared_ptr<SnapshotAgentTaskRequest>& age
                      << " status=" << st.to_string();
         error_msgs.push_back("make_snapshot failed. status: " + st.to_string());
     } else {
-        LOG(INFO) << "Created snapshot tablet_id=" << snapshot_request.tablet_id
-                  << " schema_hash=" << snapshot_request.schema_hash << " version=" << snapshot_request.version
-                  << " snapshot_path=" << snapshot_path;
+        VLOG(1) << "Created snapshot tablet_id=" << snapshot_request.tablet_id
+                << " schema_hash=" << snapshot_request.schema_hash << " version=" << snapshot_request.version
+                << " snapshot_path=" << snapshot_path;
         if (snapshot_request.__isset.list_files) {
             // list and save all snapshot files
             // snapshot_path like: data/snapshot/20180417205230.1.86400
@@ -820,7 +835,7 @@ void run_release_snapshot_task(const std::shared_ptr<ReleaseSnapshotAgentTaskReq
         error_msgs.push_back("release_snapshot failed. status: " +
                              boost::lexical_cast<std::string>(release_snapshot_status));
     } else {
-        LOG(INFO) << "Released snapshot path=" << snapshot_path << " status=" << release_snapshot_status;
+        VLOG(1) << "Released snapshot path=" << snapshot_path << " status=" << release_snapshot_status;
     }
 
     unify_finish_agent_task(status_code, error_msgs, agent_task_req->task_type, agent_task_req->signature);
@@ -1047,8 +1062,8 @@ void run_remote_snapshot_task(const std::shared_ptr<RemoteSnapshotAgentTaskReque
     finish_task(finish_task_request);
 #endif
     auto task_queue_size = remove_task_info(agent_task_req->task_type, agent_task_req->signature);
-    LOG(INFO) << "Remove task success. type=" << agent_task_req->task_type
-              << ", signature=" << agent_task_req->signature << ", task_count_in_queue=" << task_queue_size;
+    VLOG(1) << "Remove task success. type=" << agent_task_req->task_type << ", signature=" << agent_task_req->signature
+            << ", task_count_in_queue=" << task_queue_size;
 }
 
 void run_replicate_snapshot_task(const std::shared_ptr<ReplicateSnapshotAgentTaskRequest>& agent_task_req,
@@ -1092,8 +1107,8 @@ void run_replicate_snapshot_task(const std::shared_ptr<ReplicateSnapshotAgentTas
     finish_task(finish_task_request);
 #endif
     auto task_queue_size = remove_task_info(agent_task_req->task_type, agent_task_req->signature);
-    LOG(INFO) << "Remove task success. type=" << agent_task_req->task_type
-              << ", signature=" << agent_task_req->signature << ", task_count_in_queue=" << task_queue_size;
+    VLOG(1) << "Remove task success. type=" << agent_task_req->task_type << ", signature=" << agent_task_req->signature
+            << ", task_count_in_queue=" << task_queue_size;
 }
 
 } // namespace starrocks

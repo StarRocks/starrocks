@@ -106,22 +106,30 @@ public class StorageVolumeAnalysisTest {
                 "SET (\"aws.s3.region\"=\"us-west-2\", \"enabled\"=\"false\")";
         StatementBase stmt = AnalyzeTestUtil.analyzeSuccess(sql);
         Assertions.assertTrue(stmt instanceof AlterStorageVolumeStmt);
-        Assertions.assertEquals("ALTER STORAGE VOLUME storage_volume_1 COMMENT = 'comment' SET " +
-                "(\"aws.s3.region\" = \"us-west-2\", \"enabled\" = \"false\")", stmt.toSql());
+        AlterStorageVolumeStmt alterStmt = (AlterStorageVolumeStmt) stmt;
+        Assertions.assertEquals("storage_volume_1", alterStmt.getName());
+        Assertions.assertEquals("comment", alterStmt.getComment());
+        Assertions.assertEquals("us-west-2", alterStmt.getProperties().get("aws.s3.region"));
+        Assertions.assertEquals("false", alterStmt.getProperties().get("enabled"));
         Assertions.assertEquals(false, AuditEncryptionChecker.needEncrypt(stmt));
 
         sql = "ALTER STORAGE VOLUME storage_volume_1 COMMENT = 'comment'";
         stmt = AnalyzeTestUtil.analyzeSuccess(sql);
         Assertions.assertTrue(stmt instanceof AlterStorageVolumeStmt);
-        Assertions.assertEquals("ALTER STORAGE VOLUME storage_volume_1 COMMENT = 'comment'",
-                stmt.toSql());
+        alterStmt = (AlterStorageVolumeStmt) stmt;
+        Assertions.assertEquals("storage_volume_1", alterStmt.getName());
+        Assertions.assertEquals("comment", alterStmt.getComment());
+        Assertions.assertTrue(alterStmt.getProperties() == null || alterStmt.getProperties().isEmpty());
 
         sql = "ALTER STORAGE VOLUME storage_volume_1 SET (\"aws.s3.region\"=\"us-west-2\", " +
                 "\"aws.s3.endpoint\"=\"endpoint\")";
         stmt = AnalyzeTestUtil.analyzeSuccess(sql);
         Assertions.assertTrue(stmt instanceof AlterStorageVolumeStmt);
-        Assertions.assertEquals("ALTER STORAGE VOLUME storage_volume_1 SET (\"aws.s3.endpoint\" = \"endpoint\", " +
-                        "\"aws.s3.region\" = \"us-west-2\")", stmt.toSql());
+        alterStmt = (AlterStorageVolumeStmt) stmt;
+        Assertions.assertEquals("storage_volume_1", alterStmt.getName());
+        Assertions.assertEquals("us-west-2", alterStmt.getProperties().get("aws.s3.region"));
+        Assertions.assertEquals("endpoint", alterStmt.getProperties().get("aws.s3.endpoint"));
+        Assertions.assertTrue(alterStmt.getComment().isEmpty());
 
         sql = "ALTER STORAGE VOLUME storage_volume_1 SET (\"aws.s3.access_key\"=\"access_key\", " +
                 "\"aws.s3.secret_key\"=\"secret_key\", \"azure.blob.shared_key\"=\"shared_key\", \"azure.blob.sas_token\"=\"sas_token\")";

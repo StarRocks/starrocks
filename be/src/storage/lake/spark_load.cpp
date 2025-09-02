@@ -27,7 +27,7 @@ using PushBrokerReader = starrocks::PushBrokerReader;
 
 Status SparkLoadHandler::process_streaming_ingestion(VersionedTablet& tablet, const TPushReq& request,
                                                      PushType push_type, std::vector<TTabletInfo>* tablet_info_vec) {
-    LOG(INFO) << "begin to realtime vectorized push. tablet=" << tablet.id() << ", txn_id=" << request.transaction_id;
+    VLOG(3) << "begin to realtime vectorized push. tablet=" << tablet.id() << ", txn_id=" << request.transaction_id;
     DCHECK_EQ(push_type, PUSH_NORMAL_V2);
 
     _request = request;

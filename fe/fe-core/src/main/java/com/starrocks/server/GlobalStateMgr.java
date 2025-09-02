@@ -136,7 +136,6 @@ import com.starrocks.journal.JournalInconsistentException;
 import com.starrocks.journal.JournalTask;
 import com.starrocks.journal.JournalWriter;
 import com.starrocks.journal.bdbje.Timestamp;
-import com.starrocks.lake.ShardManager;
 import com.starrocks.lake.StarMgrMetaSyncer;
 import com.starrocks.lake.StarOSAgent;
 import com.starrocks.lake.compaction.CompactionControlScheduler;
@@ -458,9 +457,6 @@ public class GlobalStateMgr {
     private LocalMetastore localMetastore;
     private final GlobalFunctionMgr globalFunctionMgr;
 
-    @Deprecated
-    private final ShardManager shardManager;
-
     private final StateChangeExecution execution;
 
     private TaskRunStateSynchronizer taskRunStateSynchronizer;
@@ -766,7 +762,6 @@ public class GlobalStateMgr {
 
         this.taskManager = new TaskManager();
         this.insertOverwriteJobMgr = new InsertOverwriteJobMgr();
-        this.shardManager = new ShardManager();
         this.compactionMgr = new CompactionMgr();
         this.compactionControlScheduler = new CompactionControlScheduler();
         this.configRefreshDaemon = new ConfigRefreshDaemon();

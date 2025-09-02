@@ -16,6 +16,7 @@ package com.starrocks.sql.analyzer;
 
 import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Table;
+import com.starrocks.common.util.SqlCredentialRedactor;
 import com.starrocks.sql.ast.ParseNode;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.formatter.AST2SQLVisitor;
@@ -64,7 +65,7 @@ public class AstToSQLBuilder {
             return toSQL(statement);
         } catch (Exception e) {
             LOG.info("Ast to sql failed.", e);
-            return defaultSql;
+            return SqlCredentialRedactor.redact(defaultSql);
         }
     }
 

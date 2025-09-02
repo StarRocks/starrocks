@@ -623,7 +623,7 @@ public class AlterJobMgr {
         }
 
         if (!isReplay) {
-            GlobalStateMgr.getCurrentState().getEditLog().logEdit(OperationType.OP_SET_VIEW_SECURITY_LOG, alterViewInfo);
+            GlobalStateMgr.getCurrentState().getEditLog().logJsonObject(OperationType.OP_SET_VIEW_SECURITY_LOG, alterViewInfo);
         }
     }
 

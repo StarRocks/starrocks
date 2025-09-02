@@ -88,7 +88,7 @@ public:
     // publish primary key tablet, update primary index and delvec, then update meta file
     Status publish_primary_key_tablet(const TxnLogPB_OpWrite& op_write, int64_t txn_id,
                                       const TabletMetadataPtr& metadata, Tablet* tablet, IndexEntry* index_entry,
-                                      MetaFileBuilder* builder, int64_t base_version);
+                                      MetaFileBuilder* builder, int64_t base_version, bool batch_apply = false);
 
     Status publish_column_mode_partial_update(const TxnLogPB_OpWrite& op_write, int64_t txn_id,
                                               const TabletMetadataPtr& metadata, Tablet* tablet,

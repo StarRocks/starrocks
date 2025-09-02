@@ -18,6 +18,8 @@
 package com.starrocks.persist;
 
 import com.starrocks.catalog.FsBroker;
+import com.starrocks.common.io.Text;
+import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.system.BrokerHbResponse;
 import com.starrocks.system.HeartbeatResponse;
 import org.junit.jupiter.api.AfterAll;
@@ -52,7 +54,7 @@ public class FsBrokerTest {
         long time = System.currentTimeMillis();
         BrokerHbResponse hbResponse = new BrokerHbResponse("broker", "127.0.0.1", 8118, time);
         fsBroker.handleHbResponse(hbResponse, false);
-        fsBroker.write(dos);
+        Text.writeString(dos, GsonUtils.GSON.toJson(fsBroker, FsBroker.class));
         dos.flush();
         dos.close();
 
@@ -80,7 +82,7 @@ public class FsBrokerTest {
         long time = System.currentTimeMillis();
         BrokerHbResponse hbResponse = new BrokerHbResponse("broker", "127.0.0.1", 8118, "got exception");
         fsBroker.handleHbResponse(hbResponse, false);
-        fsBroker.write(dos);
+        Text.writeString(dos, GsonUtils.GSON.toJson(fsBroker, FsBroker.class));
         dos.flush();
         dos.close();
 

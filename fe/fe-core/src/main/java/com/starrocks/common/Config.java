@@ -418,6 +418,11 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true)
     public static boolean enable_task_run_fe_evaluation = true;
 
+    // whether mask credential info in `information_schema.tasks` and `information_schema.task_runs`
+    // if task count is big, mask process can be time consuming
+    @ConfField(mutable = true)
+    public static boolean enable_task_info_mask_credential = true;
+
     /**
      * The max keep time of some kind of jobs.
      * like schema change job and rollup job.
@@ -1481,7 +1486,7 @@ public class Config extends ConfigBase {
 
     @ConfField(mutable = true, comment = "Whether to prefer string type for fixed length varchar column " +
             "in materialized view creation/ctas")
-    public static boolean transform_type_prefer_string_for_varchar = false;
+    public static boolean transform_type_prefer_string_for_varchar = true;
 
     /**
      * The number of query retries.
@@ -2122,7 +2127,7 @@ public class Config extends ConfigBase {
      * The size of the thread-pool which will be used to refresh statistic caches
      */
     @ConfField
-    public static int statistic_cache_thread_pool_size = 10;
+    public static int statistic_cache_thread_pool_size = 5;
 
     @ConfField
     public static int slot_manager_response_thread_pool_size = 16;
@@ -2144,6 +2149,9 @@ public class Config extends ConfigBase {
      */
     @ConfField(mutable = true)
     public static long statistic_update_interval_sec = 24L * 60L * 60L;
+
+    @ConfField(mutable = true)
+    public static boolean enable_statistic_cache_refresh_after_write = false;
 
     @ConfField(mutable = true)
     public static long statistic_collect_too_many_version_sleep = 600000; // 10min
@@ -3409,6 +3417,13 @@ public class Config extends ConfigBase {
      */
     @ConfField(mutable = true)
     public static boolean mv_auto_analyze_async = true;
+
+    /**
+     * Creator-based: record the creator(user) of MV, refresh the MV with same user
+     * Root-based: always use the ROOT to refresh the MV
+     */
+    @ConfField(mutable = true, comment = "Whether to use the creator-based authorization or root for MV refresh")
+    public static boolean mv_use_creator_based_authorization = true;
 
     /**
      * To prevent the external catalog from displaying too many entries in the grantsTo system table,

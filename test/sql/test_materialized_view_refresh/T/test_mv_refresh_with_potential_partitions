@@ -1,0 +1,64 @@
+-- name: test_mv_refresh_with_potential_partitions
+
+create database db_${uuid0};
+use db_${uuid0};
+
+
+CREATE TABLE `t1` (
+    `k1` date,
+    `k2` datetime,
+    `k3` char(20),
+    `k4` varchar(20),
+    `k5` boolean,
+    `k6` tinyint,
+    `k7` smallint,
+    `k8` int,
+    `k9` bigint,
+    `k10` largeint,
+    `k11` float,
+    `k12` double,
+    `k13` decimal(27,9)
+)
+DUPLICATE KEY(`k1`, `k2`, `k3`, `k4`, `k5`)
+COMMENT "OLAP"
+PARTITION BY RANGE (k1) (
+    START ("2020-06-01") END ("2020-09-01") EVERY (INTERVAL 3 day)
+    )
+DISTRIBUTED BY HASH(`k1`, `k2`, `k3`, `k4`, `k5`) BUCKETS 3
+PROPERTIES (
+    "replication_num" = "1"
+);
+INSERT INTO t1 
+SELECT 
+    date_add('2020-06-01', INTERVAL (series_id) DAY) as k1,
+    date_add('2020-06-01 12:12:12', INTERVAL (series_id) DAY) as k2,
+    'k3' as k3,
+    'k4' as k4,
+    (series_id % 2 = 0) as k5,
+    (series_id % 3 + 1) as k6,
+    2 as k7,
+    3 as k8,
+    4 as k9,
+    5 as k10,
+    1.1 as k11,
+    1.12 as k12,
+    2.889 as k13
+FROM TABLE(generate_series(0, 37)) t(series_id)
+WHERE date_add('2020-06-01', INTERVAL (series_id) DAY) <= '2020-08-31';
+
+
+CREATE MATERIALIZED VIEW test_mv1
+PARTITION BY date_trunc('month',k1)
+DISTRIBUTED BY HASH(k1) BUCKETS 10
+REFRESH DEFERRED ASYNC
+AS SELECT k1,k6,k7,k8,k9,k10,k11,k12,k13 FROM t1;
+
+REFRESH MATERIALIZED VIEW test_mv1 WITH SYNC MODE;
+
+function: check_hit_materialized_view("SELECT k1,k6,k7,k8,k9,k10,k11,k12,k13 FROM t1", "test_mv1")
+SELECT COUNT(1) FROM test_mv1;
+SELECT COUNT(1) FROM t1;
+SELECT * FROM test_mv1 ORDER BY 1,2,3,4,5,6 LIMIT 5;
+SELECT * FROM t1 ORDER BY 1,2,3,4,5,6 LIMIT 5;
+
+drop database db_${uuid0};

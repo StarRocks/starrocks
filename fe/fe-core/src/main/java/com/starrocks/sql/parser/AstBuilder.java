@@ -562,7 +562,6 @@ import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
 import static com.starrocks.catalog.FunctionSet.ARRAY_AGG_DISTINCT;
-import static com.starrocks.sql.ast.IndexDef.IndexType.getIndexType;
 import static com.starrocks.sql.common.ErrorMsgProxy.PARSER_ERROR_MSG;
 import static java.lang.String.format;
 import static java.util.stream.Collectors.toList;
@@ -1599,13 +1598,43 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
 
     @Override
     public ParseNode visitTableOperationClause(StarRocksParser.TableOperationClauseContext context) {
-        StarRocksParser.TableOperationArgContext arg = context.tableOperationArg();
-        FunctionCallExpr fun = (FunctionCallExpr) visit(arg.functionCall());
+        StarRocksParser.TableOperationArgContext tableOperation = context.tableOperationArg();
+        String operationName = getIdentifierName(tableOperation.identifier());
+
         Expr where = null;
-        if (arg.WHERE() != null) {
-            where = (Expr) visit(arg.expression());
+        if (tableOperation.WHERE() != null) {
+            where = (Expr) visit(tableOperation.expression());
         }
-        return new AlterTableOperationClause(createPos(context), fun.getFnName().getFunction(), fun.getParams().exprs(), where);
+
+        List<Expr> parameters;
+        List<ProcedureArgument> procedureArguments = new ArrayList<>();
+        boolean useNamedArgs = false;
+
+        if (tableOperation.argumentList() == null) {
+            return new AlterTableOperationClause(createPos(context), operationName, Collections.emptyList(), where);
+        }
+
+        if (tableOperation.argumentList().expressionList() != null) {
+            parameters = visit(tableOperation.argumentList().expressionList().expression(), Expr.class);
+        } else {
+            parameters = visit(tableOperation.argumentList().namedArgumentList().namedArgument(), Expr.class);
+            useNamedArgs = true;
+        }
+        int namedArgNum = parameters.stream().filter(f -> f instanceof NamedArgument).toList().size();
+        if (namedArgNum > 0 && namedArgNum < parameters.size()) {
+            throw new SemanticException("All arguments must be passed by name or all must be passed positionally");
+        }
+
+        if (useNamedArgs) {
+            parameters.forEach(v -> {
+                NamedArgument namedArgument = (NamedArgument) v;
+                procedureArguments.add(new ProcedureArgument(namedArgument.getName(), namedArgument.getExpr()));
+            });
+        } else {
+            parameters.forEach(v -> procedureArguments.add(new ProcedureArgument(null, v)));
+        }
+
+        return new AlterTableOperationClause(createPos(context), operationName, procedureArguments, where);
     }
 
     @Override
@@ -9277,5 +9306,21 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         }
         Collections.sort(res);
         return res;
+    }
+
+    public static IndexDef.IndexType getIndexType(StarRocksParser.IndexTypeContext indexTypeContext) {
+        IndexDef.IndexType index;
+        if (indexTypeContext == null || indexTypeContext.BITMAP() != null) {
+            index = IndexDef.IndexType.BITMAP;
+        } else if (indexTypeContext.GIN() != null) {
+            index = IndexDef.IndexType.GIN;
+        } else if (indexTypeContext.NGRAMBF() != null) {
+            index = IndexDef.IndexType.NGRAMBF;
+        } else if (indexTypeContext.VECTOR() != null) {
+            index = IndexDef.IndexType.VECTOR;
+        } else {
+            throw new ParsingException("Not specify index type");
+        }
+        return index;
     }
 }

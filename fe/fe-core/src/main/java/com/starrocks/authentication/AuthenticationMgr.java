@@ -57,7 +57,7 @@ import java.util.concurrent.locks.ReentrantReadWriteLock;
 public class AuthenticationMgr {
     private static final Logger LOG = LogManager.getLogger(AuthenticationMgr.class);
     public static final String ROOT_USER = "root";
-    public static final long DEFAULT_MAX_CONNECTION_FOR_EXTERNAL_USER = 100;
+    public static final long DEFAULT_MAX_CONNECTION_FOR_EXTERNAL_USER = 1000;
 
     // core data structure
     // user identity -> all the authentication information
@@ -615,7 +615,7 @@ public class AuthenticationMgr {
         groupProvider.init();
         this.nameToGroupProviderMap.put(stmt.getName(), groupProvider);
 
-        GlobalStateMgr.getCurrentState().getEditLog().logEdit(OperationType.OP_CREATE_GROUP_PROVIDER,
+        GlobalStateMgr.getCurrentState().getEditLog().logJsonObject(OperationType.OP_CREATE_GROUP_PROVIDER,
                 new GroupProviderLog(stmt.getName(), stmt.getPropertyMap()));
     }
 
@@ -633,7 +633,7 @@ public class AuthenticationMgr {
         GroupProvider groupProvider = this.nameToGroupProviderMap.remove(stmt.getName());
         groupProvider.destory();
 
-        GlobalStateMgr.getCurrentState().getEditLog().logEdit(OperationType.OP_DROP_GROUP_PROVIDER,
+        GlobalStateMgr.getCurrentState().getEditLog().logJsonObject(OperationType.OP_DROP_GROUP_PROVIDER,
                 new GroupProviderLog(stmt.getName(), null));
     }
 

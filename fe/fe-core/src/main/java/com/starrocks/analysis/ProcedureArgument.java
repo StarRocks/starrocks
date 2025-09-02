@@ -19,16 +19,16 @@ import com.starrocks.sql.analyzer.AstToSQLBuilder;
 import java.util.Optional;
 
 public class ProcedureArgument {
-    private final Optional<String> name;
+    private final String name;
     private final Expr value;
 
     public ProcedureArgument(String name, Expr value) {
-        this.name = Optional.ofNullable(name);
+        this.name = name;
         this.value = value;
     }
 
     public Optional<String> getName() {
-        return name;
+        return Optional.ofNullable(name);
     }
 
     public Expr getValue() {
@@ -38,6 +38,6 @@ public class ProcedureArgument {
     @Override
     public String toString() {
         String valueSql = AstToSQLBuilder.toSQL(value);
-        return name.map(n -> n + " => " + valueSql).orElse(valueSql);
+        return getName().map(n -> n + " => " + valueSql).orElse(valueSql);
     }
 }
