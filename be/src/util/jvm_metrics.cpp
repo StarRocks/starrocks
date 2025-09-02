@@ -22,17 +22,25 @@ namespace starrocks {
 Status JVMMetrics::init() {
     RETURN_IF_ERROR(detect_java_runtime());
 
+    // check JNIEnv before calling JVMFunctionHelper::getInstance() to avoid crash
+    if (getJNIEnv() == nullptr) {
+        return Status::InternalError("get JNIEnv failed");
+    }
+
     JNIEnv* env = JVMFunctionHelper::getInstance().getEnv();
 
     jclass management_factory_cls = env->FindClass("java/lang/management/ManagementFactory");
+    CHECK_JNI_EXCEPTION(env, "find class ManagementFactory failed")
     _management_factory_cls = std::make_unique<JVMClass>(env->NewGlobalRef(management_factory_cls));
     LOCAL_REF_GUARD_ENV(env, management_factory_cls);
 
     jclass memory_mxbean_cls = env->FindClass("java/lang/management/MemoryMXBean");
+    CHECK_JNI_EXCEPTION(env, "find class MemoryMXBean failed")
     LOCAL_REF_GUARD_ENV(env, memory_mxbean_cls);
 
     _get_memory_mxbean =
             env->GetStaticMethodID(management_factory_cls, "getMemoryMXBean", "()Ljava/lang/management/MemoryMXBean;");
+    CHECK_JNI_EXCEPTION(env, "get method getMemoryMXBean failed")
     jobject memory_mxbean_obj = env->CallStaticObjectMethod(management_factory_cls, _get_memory_mxbean);
     CHECK_JNI_EXCEPTION(env, "get memory mxbean failed")
     _memory_mxbean_obj = JavaGlobalRef(env->NewGlobalRef(memory_mxbean_obj));
@@ -46,6 +54,7 @@ Status JVMMetrics::init() {
     CHECK_JNI_EXCEPTION(env, "get method getNonHeapMemoryUsage failed")
 
     jclass memory_usage_cls = env->FindClass("java/lang/management/MemoryUsage");
+    CHECK_JNI_EXCEPTION(env, "find class MemoryUsage failed")
     LOCAL_REF_GUARD_ENV(env, memory_usage_cls);
     _get_init = env->GetMethodID(memory_usage_cls, "getInit", "()J");
     CHECK_JNI_EXCEPTION(env, "get method getInit failed")
@@ -61,6 +70,7 @@ Status JVMMetrics::init() {
     CHECK_JNI_EXCEPTION(env, "get method getMemoryPoolMXBeans failed")
 
     jclass memory_pool_mxbean_cls = env->FindClass("java/lang/management/MemoryPoolMXBean");
+    CHECK_JNI_EXCEPTION(env, "find class MemoryPoolMXBean failed")
     LOCAL_REF_GUARD_ENV(env, memory_pool_mxbean_cls);
     _get_usage = env->GetMethodID(memory_pool_mxbean_cls, "getUsage", "()Ljava/lang/management/MemoryUsage;");
     CHECK_JNI_EXCEPTION(env, "get method getUsage failed")
