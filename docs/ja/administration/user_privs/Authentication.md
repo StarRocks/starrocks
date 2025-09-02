@@ -1,6 +1,5 @@
 ---
 displayed_sidebar: docs
-sidebar_position: 30
 ---
 
 # LDAP 認証
