@@ -182,9 +182,11 @@ public class ExprExplainVisitor implements AstVisitorExtendInterface<String, Voi
                 return node.getLabel();
             }
         } else if (node.getDesc().getSourceExprs() != null) {
-            sb.append("<slot ").append(node.getDesc().getId().asInt()).append("> ");
-            sb.append(node.getDesc().getSourceExprs().stream()
-                    .map(this::visit).collect(Collectors.joining(" ")));
+            sb.append("<slot ").append(node.getDesc().getId().asInt()).append(">");
+            for (Expr expr : node.getDesc().getSourceExprs()) {
+                sb.append(" ");
+                sb.append(visit(expr));
+            }
             return sb.toString();
         } else {
             return "<slot " + node.getDesc().getId().asInt() + ">";
@@ -196,7 +198,7 @@ public class ExprExplainVisitor implements AstVisitorExtendInterface<String, Voi
     @Override
     public String visitArithmeticExpr(ArithmeticExpr node, Void context) {
         if (node.getChildren().size() == 1) {
-            return node.getOp().toString() + node.getChild(0).accept(this, context);
+            return node.getOp().toString() + " " + node.getChild(0).accept(this, context);
         } else {
             String left = node.getChild(0).accept(this, context);
             String right = node.getChild(1).accept(this, context);
@@ -216,7 +218,7 @@ public class ExprExplainVisitor implements AstVisitorExtendInterface<String, Voi
         String operator = node.getOp().toString();
 
         if (node.getOp() == CompoundPredicate.Operator.NOT) {
-            return "NOT " + node.getChild(0).accept(this, context);
+            return "NOT (" + node.getChild(0).accept(this, context) + ")";
         } else {
             String left = node.getChild(0).accept(this, context);
             String right = node.getChild(1).accept(this, context);
@@ -318,7 +320,7 @@ public class ExprExplainVisitor implements AstVisitorExtendInterface<String, Voi
 
     @Override
     public String visitArrayExpr(ArrayExpr node, Void context) {
-        return "[" + Joiner.on(", ").join(visitChildren(node.getChildren())) + "]";
+        return "[" + Joiner.on(",").join(visitChildren(node.getChildren())) + "]";
     }
 
     @Override
@@ -329,7 +331,7 @@ public class ExprExplainVisitor implements AstVisitorExtendInterface<String, Voi
         for (int i = 0; i < children.size(); i += 2) {
             String key = children.get(i).accept(this, context);
             String value = children.get(i + 1).accept(this, context);
-            pairs.add(key + " : " + value);
+            pairs.add(key + ":" + value);
         }
         return "map{" + Joiner.on(", ").join(pairs) + "}";
     }

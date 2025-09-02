@@ -30,7 +30,7 @@ OutPut Partition: UNPARTITIONED
 OutPut Exchange Id: 07
 
 6:AGGREGATE (update serialize)
-|  aggregate: sum[(if[(22: P_TYPE LIKE 'PROMO%', [34: multiply, DOUBLE, false], 0.0); args: BOOLEAN,DOUBLE,DOUBLE; result: DOUBLE; args nullable: true; result nullable: true]); args: DOUBLE; result: DOUBLE; args nullable: true; result nullable: true], sum[([29: expr, DOUBLE, true]); args: DOUBLE; result: DOUBLE; args nullable: true; result nullable: true]
+|  aggregate: sum[(if[([22: P_TYPE, VARCHAR, false] LIKE 'PROMO%', [34: multiply, DOUBLE, false], 0.0); args: BOOLEAN,DOUBLE,DOUBLE; result: DOUBLE; args nullable: true; result nullable: true]); args: DOUBLE; result: DOUBLE; args nullable: true; result nullable: true], sum[([29: expr, DOUBLE, true]); args: DOUBLE; result: DOUBLE; args nullable: true; result nullable: true]
 |  cardinality: 1
 |  column statistics:
 |  * sum-->[0.0, 104949.5, 0.0, 8.0, 1.0] ESTIMATE
