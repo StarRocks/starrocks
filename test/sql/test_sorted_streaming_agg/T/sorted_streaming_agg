@@ -178,47 +178,47 @@ select c0, max(c1), max(c2), count(*) from t8 group by c0 order by c0;
 
 -- Test complex multi-column grouping scenarios
 create table t9(
-    c0 INT,
     c1 STRING,
+    c0 INT,
     c2 DECIMAL(10,2),
     c3 DATETIME,
     c4 BOOLEAN
-) DUPLICATE KEY(c0, c1) DISTRIBUTED BY HASH(c0) BUCKETS 3 PROPERTIES('replication_num' = '1');
+) DUPLICATE KEY(c1, c0) DISTRIBUTED BY HASH(c1) BUCKETS 3 PROPERTIES('replication_num' = '1');
 
-insert into t9 values(1, 'group1', 100.50, '2023-01-01 10:00:00', true);
-insert into t9 values(1, 'group1', 100.50, '2023-01-01 10:00:00', true);
-insert into t9 values(1, 'group1', 200.75, '2023-01-01 11:00:00', false);
-insert into t9 values(1, 'group2', 300.25, '2023-01-02 10:00:00', true);
-insert into t9 values(2, 'group3', 400.00, '2023-01-03 10:00:00', false);
-insert into t9 values(2, 'group3', 500.99, '2023-01-03 11:00:00', true);
-insert into t9 values(3, 'group4', 600.50, '2023-01-04 10:00:00', true);
+insert into t9 values('group1', 1, 100.50, '2023-01-01 10:00:00', true);
+insert into t9 values('group1', 1, 100.50, '2023-01-01 10:00:00', true);
+insert into t9 values('group1', 1, 200.75, '2023-01-01 11:00:00', false);
+insert into t9 values('group2', 1, 300.25, '2023-01-02 10:00:00', true);
+insert into t9 values('group3', 2, 400.00, '2023-01-03 10:00:00', false);
+insert into t9 values('group3', 2, 500.99, '2023-01-03 11:00:00', true);
+insert into t9 values('group4', 3, 600.50, '2023-01-04 10:00:00', true);
 
 -- Test complex multi-column grouping
-select c0, c1, c2, count(*) from t9 group by c0, c1, c2 order by c0, c1, c2;
-select c0, c1, sum(c2), count(*) from t9 group by c0, c1 order by c0, c1;
-select c0, c1, c2, c3, count(*) from t9 group by c0, c1, c2, c3 order by c0, c1, c2, c3;
-select c0, c1, c2, c4, count(*) from t9 group by c0, c1, c2, c4 order by c0, c1, c2, c4;
+select c1, c0, c2, count(*) from t9 group by c1, c0, c2 order by c1, c0, c2;
+select c1, c0, sum(c2), count(*) from t9 group by c1, c0 order by c1, c0;
+select c1, c0, c2, c3, count(*) from t9 group by c1, c0, c2, c3 order by c1, c0, c2, c3;
+select c1, c0, c2, c4, count(*) from t9 group by c1, c0, c2, c4 order by c1, c0, c2, c4;
 
 -- Test with NULL values in multiple columns
 create table t10(
-    c0 INT NULL,
     c1 STRING NULL,
+    c0 INT NULL,
     c2 DECIMAL(10,2) NULL,
     c3 DATETIME NULL
-) DUPLICATE KEY(c0, c1) DISTRIBUTED BY HASH(c0) BUCKETS 2 PROPERTIES('replication_num' = '1');
+) DUPLICATE KEY(c1, c0) DISTRIBUTED BY HASH(c1) BUCKETS 2 PROPERTIES('replication_num' = '1');
 
-insert into t10 values(1, 'valid1', 100.50, '2023-01-01 10:00:00');
-insert into t10 values(1, null, 200.75, '2023-01-01 11:00:00');
-insert into t10 values(1, 'valid1', null, '2023-01-01 12:00:00');
-insert into t10 values(1, 'valid1', 100.50, null);
-insert into t10 values(null, 'valid2', 300.25, '2023-01-02 10:00:00');
-insert into t10 values(2, 'valid3', null, null);
+insert into t10 values('valid1', 1, 100.50, '2023-01-01 10:00:00');
+insert into t10 values(null, 1, 200.75, '2023-01-01 11:00:00');
+insert into t10 values('valid1', 1, null, '2023-01-01 12:00:00');
+insert into t10 values('valid1', 1, 100.50, null);
+insert into t10 values('valid2', null, 300.25, '2023-01-02 10:00:00');
+insert into t10 values('valid3', 2, null, null);
 insert into t10 values(null, null, null, null);
 
 -- Test NULL handling in multi-column grouping
-select c0, c1, count(*) from t10 group by c0, c1 order by c0, c1;
-select c0, c1, c2, count(*) from t10 group by c0, c1, c2 order by c0, c1, c2;
-select c0, c1, c2, c3, count(*) from t10 group by c0, c1, c2, c3 order by c0, c1, c2, c3;
+select c1, c0, count(*) from t10 group by c1, c0 order by c1, c0;
+select c1, c0, c2, count(*) from t10 group by c1, c0, c2 order by c1, c0, c2;
+select c1, c0, c2, c3, count(*) from t10 group by c1, c0, c2, c3 order by c1, c0, c2, c3;
 
 -- Test edge cases with empty groups and single values
 create table t11(
