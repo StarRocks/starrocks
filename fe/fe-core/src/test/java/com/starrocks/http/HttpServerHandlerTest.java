@@ -170,28 +170,6 @@ public class HttpServerHandlerTest {
         }
     }
 
-    @Test
-    public void testAsyncHandleHealth() throws Exception {
-        String uri = "/api/health";
-        ActionController controller = new ActionController();
-        MockHealthAction action = new MockHealthAction(controller);
-        controller.registerHandler(HttpMethod.GET, uri, action);
-        MockExecutor executor = new MockExecutor();
-
-        executor.setRejectExecute(false);
-        MockChannelHandlerContext context = createChannelHandlerContext();
-        DefaultFullHttpRequest request = new DefaultFullHttpRequest(HttpVersion.HTTP_1_1, HttpMethod.GET, uri);
-        HttpServerHandler handler = new HttpServerHandler(controller, executor);
-        assertEquals(1, ReferenceCountUtil.refCnt(request));
-        assertEquals(0, action.executeCount());
-        handler.channelRead(context, request);
-        assertEquals(1, action.executeCount());
-        assertEquals(0, ReferenceCountUtil.refCnt(request));
-        assertEquals(0, executor.pendingTaskCount());
-        assertEquals(0, context.numResponses());
-        assertFalse(context.isFlushed());
-    }
-
     private void verifyResponse(Object response, HttpResponseStatus expectStatus, String expectContent) {
         assertInstanceOf(DefaultFullHttpResponse.class, response);
         DefaultFullHttpResponse httpResponse = (DefaultFullHttpResponse) response;
@@ -199,7 +177,7 @@ public class HttpServerHandlerTest {
         assertTrue(httpResponse.content().toString(StandardCharsets.UTF_8).contains(expectContent));
     }
 
-    private MockChannelHandlerContext createChannelHandlerContext() {
+    protected MockChannelHandlerContext createChannelHandlerContext() {
         return mock(MockChannelHandlerContext.class,
                 withSettings()
                         .useConstructor()
@@ -244,23 +222,7 @@ public class HttpServerHandlerTest {
         }
     }
 
-    private static class MockHealthAction extends HealthAction {
-        private final AtomicInteger executeCount = new AtomicInteger(0);
-        public MockHealthAction(ActionController controller) {
-            super(controller);
-        }
-
-        @Override
-        public void handleRequest(BaseRequest request) {
-            executeCount.incrementAndGet();
-        }
-
-        int executeCount() {
-            return executeCount.get();
-        }
-    }
-
-    private static class MockExecutor implements Executor {
+    protected static class MockExecutor implements Executor {
 
         private boolean rejectExecute = false;
         private final LinkedList<Runnable> pendingTasks = new LinkedList<>();
@@ -288,7 +250,7 @@ public class HttpServerHandlerTest {
         }
     }
 
-    private abstract static class MockChannelHandlerContext implements ChannelHandlerContext {
+    protected abstract static class MockChannelHandlerContext implements ChannelHandlerContext {
 
         private final Channel channel;
         private final ChannelFuture channelFuture;
