@@ -1,0 +1,48 @@
+-- name: test_limit_offset_edge_cases
+-- Test edge cases for LIMIT OFFSET syntax
+
+CREATE DATABASE db_${uuid0};
+USE db_${uuid0};
+
+-- Create test table
+CREATE TABLE test_table (
+    id INT,
+    value VARCHAR(50)
+) DUPLICATE KEY(id)
+DISTRIBUTED BY HASH(id) BUCKETS 1;
+
+-- Insert test data
+INSERT INTO test_table VALUES 
+(1, 'a'), (2, 'b'), (3, 'c'), (4, 'd'), (5, 'e');
+
+-- Test with user variables
+SET @my_limit = 2;
+SET @my_offset = 1;
+
+-- Test 1: Standard syntax with user variables
+SELECT id, value FROM test_table ORDER BY id LIMIT @my_limit OFFSET @my_offset;
+
+-- Test 2: StarRocks syntax with user variables
+SELECT id, value FROM test_table ORDER BY id LIMIT @my_offset, @my_limit;
+
+-- Test 3: Mixed - literal limit, variable offset
+SELECT id, value FROM test_table ORDER BY id LIMIT 3 OFFSET @my_offset;
+
+-- Test 4: Mixed - variable limit, literal offset  
+SELECT id, value FROM test_table ORDER BY id LIMIT @my_limit OFFSET 3;
+
+-- Test 5: Zero offset (standard syntax)
+SELECT id, value FROM test_table ORDER BY id LIMIT 2 OFFSET 0;
+
+-- Test 6: Zero offset (StarRocks syntax)
+SELECT id, value FROM test_table ORDER BY id LIMIT 0, 2;
+
+-- Test 7: Large offset that exceeds table size
+SELECT id, value FROM test_table ORDER BY id LIMIT 2 OFFSET 10;
+
+-- Test 8: Large offset that exceeds table size (StarRocks syntax)
+SELECT id, value FROM test_table ORDER BY id LIMIT 10, 2;
+
+-- Clean up
+DROP TABLE test_table;
+DROP DATABASE db_${uuid0};

@@ -5974,15 +5974,17 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         Expr limit;
         Expr offset = new IntLiteral(0);
 
-        if (context.limit.INTEGER_VALUE() != null) {
-            limit = new IntLiteral(Long.parseLong(context.limit.INTEGER_VALUE().getText()));
-        } else if (context.limit.userVariable() != null) {
-            limit = (UserVariableExpr) visit(context.limit.userVariable());
-        } else {
-            throw new ParsingException("unsupported invalid limit value", createPos(context.limit));
+        // Check if this is the comma-separated syntax: LIMIT offset, limit
+        boolean isCommaSyntax = false;
+        for (int i = 0; i < context.getChildCount(); ++i) {
+            if (context.getChild(i).getText().equals(",")) {
+                isCommaSyntax = true;
+                break;
+            }
         }
 
-        if (context.offset != null) {
+        if (isCommaSyntax) {
+            // Handle LIMIT offset, limit syntax (current StarRocks style)
             if (context.offset.INTEGER_VALUE() != null) {
                 offset = new IntLiteral(Long.parseLong(context.offset.INTEGER_VALUE().getText()));
             } else if (context.offset.userVariable() != null) {
@@ -5990,7 +5992,35 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             } else {
                 throw new ParsingException("unsupported invalid offset value", createPos(context.offset));
             }
+
+            if (context.limit.INTEGER_VALUE() != null) {
+                limit = new IntLiteral(Long.parseLong(context.limit.INTEGER_VALUE().getText()));
+            } else if (context.limit.userVariable() != null) {
+                limit = (UserVariableExpr) visit(context.limit.userVariable());
+            } else {
+                throw new ParsingException("unsupported invalid limit value", createPos(context.limit));
+            }
+        } else {
+            // Handle LIMIT limit [OFFSET offset] syntax (standard SQL style)
+            if (context.limit.INTEGER_VALUE() != null) {
+                limit = new IntLiteral(Long.parseLong(context.limit.INTEGER_VALUE().getText()));
+            } else if (context.limit.userVariable() != null) {
+                limit = (UserVariableExpr) visit(context.limit.userVariable());
+            } else {
+                throw new ParsingException("unsupported invalid limit value", createPos(context.limit));
+            }
+
+            if (context.offset != null) {
+                if (context.offset.INTEGER_VALUE() != null) {
+                    offset = new IntLiteral(Long.parseLong(context.offset.INTEGER_VALUE().getText()));
+                } else if (context.offset.userVariable() != null) {
+                    offset = (UserVariableExpr) visit(context.offset.userVariable());
+                } else {
+                    throw new ParsingException("unsupported invalid offset value", createPos(context.offset));
+                }
+            }
         }
+        
         return new LimitElement(offset, limit, createPos(context));
     }
 

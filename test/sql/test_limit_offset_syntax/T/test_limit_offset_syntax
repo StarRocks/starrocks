@@ -1,0 +1,62 @@
+-- name: test_limit_offset_syntax
+-- Test both LIMIT syntaxes to ensure they work correctly after the fix
+
+-- Create test database
+CREATE DATABASE db_${uuid0};
+USE db_${uuid0};
+
+-- Create test table
+CREATE TABLE test_table (
+    id INT,
+    name VARCHAR(50)
+) DUPLICATE KEY(id)
+DISTRIBUTED BY HASH(id) BUCKETS 1;
+
+-- Insert test data
+INSERT INTO test_table VALUES 
+(1, 'row1'),
+(2, 'row2'), 
+(3, 'row3'),
+(4, 'row4'),
+(5, 'row5'),
+(6, 'row6'),
+(7, 'row7'),
+(8, 'row8'),
+(9, 'row9'),
+(10, 'row10');
+
+-- Test 1: Standard SQL syntax - LIMIT count OFFSET offset
+-- Should return rows with id 3, 4, 5 (3 rows starting from offset 2)
+SELECT id, name FROM test_table ORDER BY id LIMIT 3 OFFSET 2;
+
+-- Test 2: StarRocks syntax - LIMIT offset, count  
+-- Should return the same rows with id 3, 4, 5
+SELECT id, name FROM test_table ORDER BY id LIMIT 2, 3;
+
+-- Test 3: LIMIT without OFFSET (standard syntax)
+-- Should return first 2 rows
+SELECT id, name FROM test_table ORDER BY id LIMIT 2;
+
+-- Test 4: LIMIT with OFFSET 0 (standard syntax)  
+-- Should return first 3 rows
+SELECT id, name FROM test_table ORDER BY id LIMIT 3 OFFSET 0;
+
+-- Test 5: Large offset (standard syntax)
+-- Should return rows 8, 9, 10
+SELECT id, name FROM test_table ORDER BY id LIMIT 3 OFFSET 7;
+
+-- Test 6: Large offset (StarRocks syntax)
+-- Should return the same rows 8, 9, 10
+SELECT id, name FROM test_table ORDER BY id LIMIT 7, 3;
+
+-- Test 7: Edge case - LIMIT 1 OFFSET 9
+-- Should return only row 10
+SELECT id, name FROM test_table ORDER BY id LIMIT 1 OFFSET 9;
+
+-- Test 8: Edge case - LIMIT 9, 1 (equivalent to above)
+-- Should return only row 10
+SELECT id, name FROM test_table ORDER BY id LIMIT 9, 1;
+
+-- Clean up
+DROP TABLE test_table;
+DROP DATABASE db_${uuid0};

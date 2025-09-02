@@ -1,0 +1,76 @@
+-- name: test_limit_offset_syntax
+CREATE DATABASE db_${uuid0};
+-- result:
+-- !result
+USE db_${uuid0};
+-- result:
+-- !result
+CREATE TABLE test_table (
+    id INT,
+    name VARCHAR(50)
+) DUPLICATE KEY(id)
+DISTRIBUTED BY HASH(id) BUCKETS 1;
+-- result:
+-- !result
+INSERT INTO test_table VALUES 
+(1, 'row1'),
+(2, 'row2'), 
+(3, 'row3'),
+(4, 'row4'),
+(5, 'row5'),
+(6, 'row6'),
+(7, 'row7'),
+(8, 'row8'),
+(9, 'row9'),
+(10, 'row10');
+-- result:
+-- !result
+SELECT id, name FROM test_table ORDER BY id LIMIT 3 OFFSET 2;
+-- result:
+3	row3
+4	row4
+5	row5
+-- !result
+SELECT id, name FROM test_table ORDER BY id LIMIT 2, 3;
+-- result:
+3	row3
+4	row4
+5	row5
+-- !result
+SELECT id, name FROM test_table ORDER BY id LIMIT 2;
+-- result:
+1	row1
+2	row2
+-- !result
+SELECT id, name FROM test_table ORDER BY id LIMIT 3 OFFSET 0;
+-- result:
+1	row1
+2	row2
+3	row3
+-- !result
+SELECT id, name FROM test_table ORDER BY id LIMIT 3 OFFSET 7;
+-- result:
+8	row8
+9	row9
+10	row10
+-- !result
+SELECT id, name FROM test_table ORDER BY id LIMIT 7, 3;
+-- result:
+8	row8
+9	row9
+10	row10
+-- !result
+SELECT id, name FROM test_table ORDER BY id LIMIT 1 OFFSET 9;
+-- result:
+10	row10
+-- !result
+SELECT id, name FROM test_table ORDER BY id LIMIT 9, 1;
+-- result:
+10	row10
+-- !result
+DROP TABLE test_table;
+-- result:
+-- !result
+DROP DATABASE db_${uuid0};
+-- result:
+-- !result
