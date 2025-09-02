@@ -62,6 +62,8 @@ public class InvertedIndexUtil {
      */
     public static String INVERTED_INDEX_PARSER_CHINESE = "chinese";
 
+    public static String INVERTED_INDEX_PARSER_BUILTIN_ENGLISH = "builtin_english";
+
     public static String getInvertedIndexParser(Map<String, String> properties) {
         String parser = properties == null ? null : properties.get(INVERTED_INDEX_PARSER_KEY);
         // default is "none" if not set
@@ -118,7 +120,8 @@ public class InvertedIndexUtil {
             if (!(parser.equals(INVERTED_INDEX_PARSER_NONE)
                     || parser.equals(INVERTED_INDEX_PARSER_STANDARD)
                     || parser.equals(INVERTED_INDEX_PARSER_ENGLISH)
-                    || parser.equals(INVERTED_INDEX_PARSER_CHINESE))) {
+                    || parser.equals(INVERTED_INDEX_PARSER_CHINESE)
+                    || parser.equals(INVERTED_INDEX_PARSER_BUILTIN_ENGLISH))) {
                 throw new SemanticException("INVERTED index parser: " + parser
                         + " is invalid for column: " + indexColName + " of type " + colType);
             }

@@ -14,6 +14,8 @@
 
 #include "storage/index/inverted/builtin/builtin_inverted_writer.h"
 
+#include <vector>
+
 #include <CLucene.h>
 #include <CLucene/analysis/LanguageBasedAnalyzer.h>
 #include <CLucene/util/Misc.h>
@@ -23,6 +25,7 @@
 
 #include "common/status.h"
 #include "gen_cpp/segment.pb.h"
+#include "storage/index/inverted/builtin/builtin_simple_analyzer.h"
 #include "storage/index/inverted/inverted_index_option.h"
 #include "storage/rowset/bitmap_index_writer.h"
 #include "storage/tablet_index.h"
@@ -61,6 +64,8 @@ private:
     std::unique_ptr<lucene::analysis::Analyzer> _analyzer{};
     std::unique_ptr<lucene::util::StringReader> _char_string_reader{};
 
+    std::unique_ptr<SimpleAnalyzer> _builtin_analyzer{};
+
     InvertedIndexParserType _parser_type;
 };
 
@@ -76,6 +81,8 @@ Status BuiltinInvertedWriterImpl<field_type>::init() {
         auto chinese_analyzer = _CLNEW lucene::analysis::LanguageBasedAnalyzer();
         chinese_analyzer->setLanguage(L"cjk");
         _analyzer.reset(chinese_analyzer);
+    } else if (_parser_type == InvertedIndexParserType::PARSER_BUILTIN_ENGLISH) {
+        _builtin_analyzer = std::make_unique<SimpleAnalyzer>();
     } else {
         // ANALYSER_NOT_SET, ANALYSER_NONE use default SimpleAnalyzer
         _analyzer = std::make_unique<lucene::analysis::SimpleAnalyzer>();
@@ -89,20 +96,29 @@ void BuiltinInvertedWriterImpl<field_type>::add_values(const void* values, size_
     for (int i = 0; i < count; ++i) {
         const char* s = val->data;
         size_t size = val->size;
-        // Data in Slice does not contained any null-terminated. Any api in Boost/std
-        // which write the result into a given memory area does not fit in this case.
-        // So we still use boost::locale::conv::utf_to_utf<TCHAR> to construct a new
-        // wstring in every loop for the correctness.
-        std::wstring tchar = boost::locale::conv::utf_to_utf<TCHAR>(s, s + size);
-
-        _char_string_reader->init(tchar.c_str(), tchar.size(), false);
-        auto stream = _analyzer->reusableTokenStream(L"", _char_string_reader.get());
-        lucene::analysis::Token token;
-        while (stream->next(&token)) {
-            if (token.termLength() != 0) {
-                std::string str = boost::locale::conv::utf_to_utf<char>(token.termBuffer(), token.termBuffer() + token.termLength());
-                Slice s(str);
-                _builtin_writer->add_value_with_current_rowid((void*) &s);
+        if (_parser_type == InvertedIndexParserType::PARSER_BUILTIN_ENGLISH) {
+            std::string mutable_text(val->data, val->size);
+            std::vector<SliceToken> tokens;
+            _builtin_analyzer->tokenize(mutable_text.data(), mutable_text.length(), tokens);
+            for (const auto& token : tokens) {
+                _builtin_writer->add_value_with_current_rowid((void*) &(token.text));
+            }
+        } else {
+            // Data in Slice does not contained any null-terminated. Any api in Boost/std
+            // which write the result into a given memory area does not fit in this case.
+            // So we still use boost::locale::conv::utf_to_utf<TCHAR> to construct a new
+            // wstring in every loop for the correctness.
+            std::wstring tchar = boost::locale::conv::utf_to_utf<TCHAR>(s, s + size);
+    
+            _char_string_reader->init(tchar.c_str(), tchar.size(), false);
+            auto stream = _analyzer->reusableTokenStream(L"", _char_string_reader.get());
+            lucene::analysis::Token token;
+            while (stream->next(&token)) {
+                if (token.termLength() != 0) {
+                    std::string str = boost::locale::conv::utf_to_utf<char>(token.termBuffer(), token.termBuffer() + token.termLength());
+                    Slice s(str);
+                    _builtin_writer->add_value_with_current_rowid((void*) &s);
+                }
             }
         }
 
