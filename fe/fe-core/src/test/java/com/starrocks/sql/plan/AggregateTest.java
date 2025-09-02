@@ -3058,4 +3058,5 @@ public class AggregateTest extends PlanTestBase {
         plan = getThriftPlan(sql);
         assertContains(plan, "group_by_min_max:[TExpr(");
     }
+
 }
