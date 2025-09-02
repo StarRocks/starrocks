@@ -196,6 +196,7 @@ jobs:
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       BRANCH: ${{ needs.info.outputs.BRANCH }}
       PR_NUMBER: ${{ needs.info.outputs.PR_NUMBER }}
+      WITH_FEATURE_COV: ${{ needs.info.outputs.WITH_FEATURE_COV }}
     steps:
       - name: clean
         run: |
