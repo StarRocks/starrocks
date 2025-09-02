@@ -45,11 +45,6 @@ public class CloneExpr extends Expr {
     }
 
     @Override
-    protected String explainImpl() {
-        return "clone(" + getChild(0).explain() + ")";
-    }
-
-    @Override
     protected void toThrift(TExprNode msg) {
         msg.setNode_type(TExprNodeType.CLONE_EXPR);
     }

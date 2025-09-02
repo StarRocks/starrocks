@@ -601,7 +601,9 @@ class SelectStmtWithCaseWhenTest {
                 "   else 'E' end)  %s";
         String[][] testCases = new String[][] {
                 {"= 'A'", "[5: ship_code, INT, true] >= 90"},
-                {"= 'B'", "[5: ship_code, INT, true] >= 80, (5: ship_code < 90) OR (5: ship_code IS NULL)"},
+                {"= 'B'",
+                        "[5: ship_code, INT, true] >= 80, ([5: ship_code, INT, true] < 90) OR ([5: ship_code, INT, true] IS "
+                                + "NULL"},
                 {"= 'C'", "[5: ship_code, INT, true] >= 70, (5: ship_code < 90) OR (5: ship_code IS NULL), " +
                         "(5: ship_code < 80) OR (5: ship_code IS NULL)"},
                 {"<> 'D'", "Predicates: CASE WHEN 5:"},

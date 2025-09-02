@@ -204,6 +204,10 @@ public class AnalyticExpr extends Expr {
         return isSkewed;
     }
 
+    public String getSqlString() {
+        return sqlString;
+    }
+
     @Override
     public boolean equalsWithoutChild(Object obj) {
         if (!super.equalsWithoutChild(obj)) {

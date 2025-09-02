@@ -214,6 +214,10 @@ public class FunctionCallExpr extends Expr {
         }
     }
 
+    public FunctionParams getFnParams() {
+        return fnParams;
+    }
+
     // TODO: process order by
     @Override
     public String toSqlImpl() {
@@ -233,54 +237,6 @@ public class FunctionCallExpr extends Expr {
         }
         sb.append(')');
         return sb.toString();
-    }
-
-    @Override
-    public String explainImpl() {
-        StringBuilder sb = new StringBuilder();
-        sb.append(fnName);
-
-        sb.append("[");
-        sb.append("(");
-        if (fnParams.isStar()) {
-            sb.append("*");
-        }
-        if (fnParams.isDistinct()) {
-            sb.append("distinct ");
-        }
-        if (fnParams.getOrderByElements() == null) {
-            sb.append(Joiner.on(", ").join(firstNChildrenToExplain(children.size()))).append(");");
-        } else {
-            sb.append(Joiner.on(", ").join(firstNChildrenToExplain(
-                    children.size() - fnParams.getOrderByElements().size())));
-            sb.append(fnParams.getOrderByStringToExplain());
-            sb.append(')');
-        }
-        if (fn != null) {
-            sb.append(" args: ");
-            for (int i = 0; i < fn.getArgs().length; ++i) {
-                if (i != 0) {
-                    sb.append(',');
-                }
-                sb.append(fn.getArgs()[i].getPrimitiveType().toString());
-            }
-            sb.append(";");
-            sb.append(" result: ").append(type).append(";");
-        }
-        sb.append(" args nullable: ").append(hasNullableChild()).append(";");
-        sb.append(" result nullable: ").append(isNullable());
-        sb.append("]");
-        return sb.toString();
-    }
-
-    // explain the first N children
-    public List<String> firstNChildrenToExplain(int n) {
-        Preconditions.checkState(n <= children.size());
-        List<String> result = Lists.newArrayList();
-        for (int i = 0; i < n; i++) {
-            result.add(children.get(i).explain());
-        }
-        return result;
     }
 
     public List<String> firstNChildrenToSql(int n) {

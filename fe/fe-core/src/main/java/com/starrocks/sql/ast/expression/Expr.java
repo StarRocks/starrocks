@@ -64,6 +64,8 @@ import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.common.UnsupportedException;
 import com.starrocks.sql.formatter.AST2SQLVisitor;
+import com.starrocks.sql.formatter.ExprExplainVisitor;
+import com.starrocks.sql.formatter.ExprVerboseVisitor;
 import com.starrocks.sql.formatter.FormatOptions;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
@@ -570,7 +572,8 @@ public abstract class Expr extends TreeNode<Expr> implements ParseNode, Cloneabl
     @Deprecated
     public String toSql() {
         Preconditions.checkState(!printSqlInParens);
-        return (printSqlInParens) ? "(" + toSqlImpl() + ")" : toSqlImpl();
+        ExprExplainVisitor explain = new ExprExplainVisitor();
+        return explain.visit(this);
     }
 
     /**
@@ -584,7 +587,8 @@ public abstract class Expr extends TreeNode<Expr> implements ParseNode, Cloneabl
 
     public String explain() {
         Preconditions.checkState(!printSqlInParens);
-        return (printSqlInParens) ? "(" + explainImpl() + ")" : explainImpl();
+        ExprVerboseVisitor explain = new ExprVerboseVisitor();
+        return explain.visit(this);
     }
 
     /**
@@ -593,10 +597,6 @@ public abstract class Expr extends TreeNode<Expr> implements ParseNode, Cloneabl
      */
     protected String toSqlImpl() {
         throw new StarRocksPlannerException("Not implement toSqlImpl function", ErrorType.INTERNAL_ERROR);
-    }
-
-    protected String explainImpl() {
-        return toSqlImpl();
     }
 
     public String toMySql() {

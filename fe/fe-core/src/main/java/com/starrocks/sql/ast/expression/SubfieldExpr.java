@@ -77,6 +77,10 @@ public class SubfieldExpr extends Expr {
         return fieldNames;
     }
 
+    public boolean isCopyFlag() {
+        return copyFlag;
+    }
+
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
         return ((AstVisitorExtendInterface<R, C>) visitor).visitSubfieldExpr(this, context);
     }
