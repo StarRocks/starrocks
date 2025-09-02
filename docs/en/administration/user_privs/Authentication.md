@@ -1,6 +1,5 @@
 ---
 displayed_sidebar: docs
-sidebar_position: 50
 ---
 
 # LDAP Authentication
