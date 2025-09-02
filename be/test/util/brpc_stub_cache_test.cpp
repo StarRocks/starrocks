@@ -138,4 +138,37 @@ TEST_F(BrpcStubCacheTest, test_cleanup) {
     ASSERT_NE(stub3, stub1);
 }
 
+TEST_F(BrpcStubCacheTest, test_lake_cleanup) {
+    config::brpc_stub_expire_s = 1;
+    LakeServiceBrpcStubCache cache;
+    std::string hostname = "127.0.0.1";
+    int32_t port = 123;
+    auto stub1 = cache.get_stub(hostname, port);
+    ASSERT_TRUE(stub1.ok());
+    ASSERT_NE(nullptr, *stub1);
+    auto stub2 = cache.get_stub(hostname, port);
+    ASSERT_TRUE(stub1.ok());
+    ASSERT_EQ(*stub2, *stub1);
+
+    sleep(2);
+    auto stub3 = cache.get_stub(hostname, port);
+    ASSERT_NE(*stub3, *stub1);
+}
+
+TEST_F(BrpcStubCacheTest, test_http_cleanup) {
+    config::brpc_stub_expire_s = 1;
+    HttpBrpcStubCache cache;
+    TNetworkAddress address;
+    address.hostname = "127.0.0.1";
+    address.port = 123;
+    auto stub1 = cache.get_http_stub(address);
+    ASSERT_NE(nullptr, *stub1);
+    auto stub2 = cache.get_http_stub(address);
+    ASSERT_EQ(*stub2, *stub1);
+
+    sleep(2);
+    auto stub3 = cache.get_http_stub(address);
+    ASSERT_NE(*stub3, *stub1);
+}
+
 } // namespace starrocks

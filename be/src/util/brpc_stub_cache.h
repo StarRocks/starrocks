@@ -52,6 +52,8 @@ namespace starrocks {
 
 class ExecEnv;
 class EndpointCleanupTask;
+class HttpEndpointCleanupTask;
+class LakeEndpointCleanupTask;
 
 class BrpcStubCache {
 public:
@@ -83,28 +85,36 @@ class HttpBrpcStubCache {
 public:
     static HttpBrpcStubCache* getInstance();
     StatusOr<std::shared_ptr<PInternalService_RecoverableStub>> get_http_stub(const TNetworkAddress& taddr);
+    void cleanup_expired(const butil::EndPoint& endpoint);
 
 private:
     HttpBrpcStubCache();
     HttpBrpcStubCache(const HttpBrpcStubCache&) = delete;
     HttpBrpcStubCache& operator=(const HttpBrpcStubCache&) = delete;
+    ~HttpBrpcStubCache();
 
     SpinLock _lock;
     butil::FlatMap<butil::EndPoint, std::shared_ptr<PInternalService_RecoverableStub>> _stub_map;
+    butil::FlatMap<butil::EndPoint, std::shared_ptr<HttpEndpointCleanupTask>> _task_map;
+    pipeline::PipelineTimer* _pipeline_timer;
 };
 
 class LakeServiceBrpcStubCache {
 public:
     static LakeServiceBrpcStubCache* getInstance();
     StatusOr<std::shared_ptr<starrocks::LakeService_RecoverableStub>> get_stub(const std::string& host, int port);
+    void cleanup_expired(const butil::EndPoint& endpoint);
 
 private:
     LakeServiceBrpcStubCache();
     LakeServiceBrpcStubCache(const LakeServiceBrpcStubCache&) = delete;
     LakeServiceBrpcStubCache& operator=(const LakeServiceBrpcStubCache&) = delete;
+    ~LakeServiceBrpcStubCache();
 
     SpinLock _lock;
     butil::FlatMap<butil::EndPoint, std::shared_ptr<LakeService_RecoverableStub>> _stub_map;
+    butil::FlatMap<butil::EndPoint, std::shared_ptr<LakeEndpointCleanupTask>> _task_map;
+    pipeline::PipelineTimer* _pipeline_timer;
 };
 
 class EndpointCleanupTask : public starrocks::pipeline::PipelineTimerTask {
@@ -114,6 +124,28 @@ public:
 
 private:
     BrpcStubCache* _cache;
+    butil::EndPoint _endpoint;
+};
+
+class HttpEndpointCleanupTask : public starrocks::pipeline::PipelineTimerTask {
+public:
+    HttpEndpointCleanupTask(HttpBrpcStubCache* cache, const butil::EndPoint& endpoint)
+            : _cache(cache), _endpoint(endpoint){};
+    void Run() override;
+
+private:
+    HttpBrpcStubCache* _cache;
+    butil::EndPoint _endpoint;
+};
+
+class LakeEndpointCleanupTask : public starrocks::pipeline::PipelineTimerTask {
+public:
+    LakeEndpointCleanupTask(LakeServiceBrpcStubCache* cache, const butil::EndPoint& endpoint)
+            : _cache(cache), _endpoint(endpoint){};
+    void Run() override;
+
+private:
+    LakeServiceBrpcStubCache* _cache;
     butil::EndPoint _endpoint;
 };
 
