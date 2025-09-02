@@ -45,6 +45,7 @@ import com.starrocks.analysis.NamedArgument;
 import com.starrocks.analysis.NullLiteral;
 import com.starrocks.analysis.OrderByElement;
 import com.starrocks.analysis.Parameter;
+import com.starrocks.analysis.PlaceHolderExpr;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.StringLiteral;
 import com.starrocks.analysis.SubfieldExpr;
@@ -608,5 +609,10 @@ public class ExprExplainVisitor implements AstVisitorExtendInterface<String, Voi
     @Override
     public String visitParameterExpr(Parameter node, Void context) {
         return "?";
+    }
+
+    @Override
+    public String visitPlaceHolderExpr(PlaceHolderExpr node, Void context) {
+        return "<place-holder>";
     }
 }

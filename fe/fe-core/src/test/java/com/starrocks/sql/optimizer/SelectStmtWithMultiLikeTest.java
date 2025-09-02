@@ -90,10 +90,8 @@ public class SelectStmtWithMultiLikeTest {
                         "2: order_date > '2024-01-01', 3: site = 'ABC', CAST(4: income AS DECIMAL64(8,1)) = 10.0, 5: ship_mode "
                                 + "= 3, 6: ship_code = 3, NOT (1: region REGEXP '^((.*ABC.*)|(.*DEF.*))$')"
                 },
-                {"region like '%ABC' or region like 'DEF_G'",
-                                "1: region REGEXP '^((.*ABC)|(DEF.G))$'"},
-                {"region like '%ABC'",
-                                "1: region LIKE '%ABC'"},
+                {"region like '%ABC' or region like 'DEF_G'", "1: region REGEXP '^((.*ABC)|(DEF.G))$'"},
+                {"region like '%ABC'", "1: region LIKE '%ABC'"},
                 {"region like '%ABC' or order_date between '2012-01-01' and '2023-01-01'",
                         "region LIKE '%ABC'"
                 },
@@ -110,15 +108,13 @@ public class SelectStmtWithMultiLikeTest {
                         "region REGEXP '^((.*ABC)|(DEF.G))$'"
                 },
                 {"region not like '%ABC' and region not like 'DEF_G'",
-                                "NOT (1: region REGEXP '^((.*ABC)|(DEF.G))$')"
+                        "NOT (1: region REGEXP '^((.*ABC)|(DEF.G))$')"
                 },
                 {"region like '^$%ABC\n' or region like '%BC[]\r' or region like '\t%AC{}' ",
-                                "1: region REGEXP " +
-                                "'^((\\\\^\\\\$.*ABC\\\\n)|(.*BC\\\\[\\\\]\\\\r)|(\\\\t.*AC\\\\{\\\\}))$'"
+                        "1: region REGEXP '^((\\\\^\\\\$.*ABC\\\\n)|(.*BC\\\\[\\\\]\\\\r)|(\\\\t.*AC\\\\{\\\\}))$'"
                 },
                 {"region not like '^$%ABC\n' and region not like '%BC[]\r' and region not like '\t%AC{}' ",
-                                "NOT (1: region REGEXP " +
-                                "'^((\\\\^\\\\$.*ABC\\\\n)|(.*BC\\\\[\\\\]\\\\r)|(\\\\t.*AC\\\\{\\\\}))$')"
+                        "NOT (1: region REGEXP '^((\\\\^\\\\$.*ABC\\\\n)|(.*BC\\\\[\\\\]\\\\r)|(\\\\t.*AC\\\\{\\\\}))$')"
                 },
                 {"region like '甲乙.子丑%' or " +
                         "region like '丙丁.寅卯%' or " +
