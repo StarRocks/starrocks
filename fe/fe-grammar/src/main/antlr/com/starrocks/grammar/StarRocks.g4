@@ -576,9 +576,7 @@ fromRollup
     ;
 
 withMaskingPolicy
-    : WITH 
-    
-    POLICY policyName=qualifiedName (USING identifierList)?
+    : WITH MASKING POLICY policyName=qualifiedName (USING identifierList)?
     ;
 
 withRowAccessPolicy
