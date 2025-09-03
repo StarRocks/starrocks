@@ -3058,4 +3058,68 @@ public class AggregateTest extends PlanTestBase {
         plan = getThriftPlan(sql);
         assertContains(plan, "group_by_min_max:[TExpr(");
     }
+
+    @Test
+    public void testAggregateFilterSyntax() throws Exception {
+        // Test basic FILTER syntax with boolean expression
+        String sql = "select count(*) filter (where v1 > 5) from t0";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "count_if");
+
+        // Test FILTER with complex boolean expression
+        sql = "select sum(v2) filter (where v1 > 5 and v2 < 10) from t0";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "sum_if");
+
+        // Test FILTER with logical operators
+        sql = "select avg(v3) filter (where v1 = 1 or v2 = 2) from t0";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "avg_if");
+
+        // Test FILTER with NOT operator
+        sql = "select max(v1) filter (where not (v2 > 10)) from t0";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "max_if");
+    }
+
+    @Test
+    public void testAggregateFilterBooleanTypeValidation() throws Exception {
+        // Test that numeric expressions in FILTER are now allowed (can be cast to boolean)
+        String sql = "select count(*) filter (where v1) from t0";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "count_if");
+
+        // Test that string expressions in FILTER are also allowed (can be cast to boolean) 
+        sql = "select sum(v2) filter (where 'true') from t0";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "sum_if");
+    }
+
+    @Test
+    public void testAggIfFunctionBooleanTypeValidation() throws Exception {
+        // Test sum_if with correct boolean condition
+        String sql = "select sum_if(v2, v1 > 5) from t0";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "sum_if");
+
+        // Test count_if with correct boolean condition
+        sql = "select count_if(v1 > 0 and v2 < 100) from t0";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "count_if");
+
+        // Test that numeric conditions in sum_if are now allowed (can be cast to boolean)
+        sql = "select sum_if(v2, v1) from t0";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "sum_if");
+
+        // Test that numeric conditions in count_if are now allowed (can be cast to boolean)
+        sql = "select count_if(v2) from t0";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "count_if");
+
+        // Test string conditions are also allowed
+        sql = "select sum_if(v2, 'true') from t0";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "sum_if");
+    }
 }
