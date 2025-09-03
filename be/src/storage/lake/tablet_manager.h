@@ -101,7 +101,8 @@ public:
                                                            const std::shared_ptr<FileSystem>& fs = nullptr);
 
     static StatusOr<BundleTabletMetadataPtr> parse_bundle_tablet_metadata(const std::string& path,
-                                                                          const std::string& serialized_string);
+                                                                          const std::string& serialized_string,
+                                                                          const std::string& real_path = "");
 
     static StatusOr<TabletMetadataPtrs> get_metas_from_bundle_tablet_metadata(const std::string& location,
                                                                               FileSystem* input_fs = nullptr);
@@ -149,7 +150,9 @@ public:
 #if !defined(BUILD_FORMAT_LIB)
     bool is_tablet_in_worker(int64_t tablet_id);
 #else
-    bool is_tablet_in_worker(int64_t tablet_id) { return true; }
+    bool is_tablet_in_worker(int64_t tablet_id) {
+        return true;
+    }
 #endif
 #endif // USE_STAROS
 
@@ -188,17 +191,23 @@ public:
 
     std::string delvec_location(int64_t tablet_id, std::string_view delvec_filename) const;
 
-    const std::shared_ptr<LocationProvider> location_provider() { return _location_provider; }
+    const std::shared_ptr<LocationProvider> location_provider() {
+        return _location_provider;
+    }
     std::string sst_location(int64_t tablet_id, std::string_view sst_filename) const;
 
     UpdateManager* update_mgr();
 
-    CompactionScheduler* compaction_scheduler() { return _compaction_scheduler.get(); }
+    CompactionScheduler* compaction_scheduler() {
+        return _compaction_scheduler.get();
+    }
 
     void update_metacache_limit(size_t limit);
 
     // The return value will never be null.
-    Metacache* metacache() { return _metacache.get(); }
+    Metacache* metacache() {
+        return _metacache.get();
+    }
 
     StatusOr<int64_t> get_tablet_data_size(int64_t tablet_id, int64_t* version_hint);
 

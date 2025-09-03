@@ -488,14 +488,16 @@ StatusOr<TabletMetadataPtr> TabletManager::get_tablet_metadata(const string& pat
 }
 
 StatusOr<BundleTabletMetadataPtr> TabletManager::parse_bundle_tablet_metadata(const std::string& path,
-                                                                              const std::string& serialized_string) {
+                                                                              const std::string& serialized_string,
+                                                                              const std::string& real_path) {
     auto file_size = serialized_string.size();
     auto footer_size = sizeof(uint64_t);
     auto bundle_metadata_size = decode_fixed64_le((uint8_t*)(serialized_string.data() + file_size - footer_size));
-    RETURN_IF(file_size < footer_size + bundle_metadata_size,
-              Status::Corruption(strings::Substitute(
-                      "deserialized shared metadata($0) failed, file_size($1) < bundle_metadata_size($2)", path,
-                      file_size, bundle_metadata_size + footer_size)));
+    RETURN_IF(
+            file_size < footer_size + bundle_metadata_size,
+            Status::Corruption(strings::Substitute(
+                    "deserialized shared metadata($0) failed, file_size($1) < bundle_metadata_size($2), real path($3)",
+                    path, file_size, bundle_metadata_size + footer_size, real_path)));
 
     auto bundle_metadata = std::make_shared<BundleTabletMetadataPB>();
     std::string_view bundle_metadata_str =
@@ -581,7 +583,7 @@ StatusOr<TabletMetadataPtr> TabletManager::get_single_tablet_metadata(int64_t ta
     g_read_bundle_tablet_meta_latency << (butil::gettimeofday_us() - t0);
 
     auto file_size = serialized_string.size();
-    ASSIGN_OR_RETURN(auto bundle_metadata, parse_bundle_tablet_metadata(path, serialized_string));
+    ASSIGN_OR_RETURN(auto bundle_metadata, parse_bundle_tablet_metadata(path, serialized_string, real_path));
 
     auto meta_it = bundle_metadata->tablet_meta_pages().find(tablet_id);
     size_t offset = 0;
