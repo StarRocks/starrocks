@@ -747,4 +747,98 @@ TEST_F(TypeDescriptorTest, test_promote_types) {
     }
 }
 
+// params: [LogicalType, expected length, logical_type_string, is_scalar_logical_type, is_huge_type]
+class FromLogicalTypeTest : public ::testing::TestWithParam<std::tuple<LogicalType, int, std::string, bool, bool>> {
+public:
+};
+
+// NOLINTNEXTLINE
+TEST_P(FromLogicalTypeTest, test_from_logical_type) {
+    auto param = GetParam();
+    LogicalType logical_type = std::get<0>(param);
+    int expected_len = std::get<1>(param);
+    std::string expected_lts = std::get<2>(param);
+    bool is_slt = std::get<3>(param);
+    bool is_ht = std::get<4>(param);
+
+    ASSERT_EQ(expected_lts, logical_type_to_string(logical_type));
+    ASSERT_EQ(is_slt, is_scalar_logical_type(logical_type));
+    ASSERT_EQ(logical_type, string_to_logical_type(expected_lts));
+
+    auto type_desc = TypeDescriptor::from_logical_type(logical_type);
+    ASSERT_EQ(logical_type, type_desc.type);
+    ASSERT_EQ(expected_len, type_desc.len);
+
+    if (logical_type == TYPE_DECIMAL || logical_type == TYPE_DECIMALV2 || logical_type == TYPE_DECIMAL32 ||
+        logical_type == TYPE_DECIMAL64 || logical_type == TYPE_DECIMAL128) {
+        ASSERT_EQ(type_desc.precision, 27); // default precision for decimal types
+        ASSERT_EQ(type_desc.scale, 9);      // default scale for decimal types
+    } else {
+        ASSERT_EQ(-1, type_desc.precision);
+        ASSERT_EQ(-1, type_desc.scale);
+    }
+
+    ASSERT_EQ(is_ht, type_desc.is_huge_type());
+}
+
+// clang-format off
+INSTANTIATE_TEST_SUITE_P(
+    LogicalTypes,
+    FromLogicalTypeTest,
+    ::testing::Values(
+        // Basic types
+        std::make_tuple(LogicalType::TYPE_BOOLEAN, -1, "BOOLEAN", true, false),
+        std::make_tuple(LogicalType::TYPE_TINYINT, -1, "TINYINT", true, false),
+        std::make_tuple(LogicalType::TYPE_SMALLINT, -1, "SMALLINT", true, false),
+        std::make_tuple(LogicalType::TYPE_INT, -1, "INT", true, false),
+        std::make_tuple(LogicalType::TYPE_BIGINT, -1, "BIGINT", true, false),
+        std::make_tuple(LogicalType::TYPE_LARGEINT, -1, "LARGEINT", true, false),
+        std::make_tuple(LogicalType::TYPE_FLOAT, -1, "FLOAT", true, false),
+        std::make_tuple(LogicalType::TYPE_DOUBLE, -1, "DOUBLE", true, false),
+
+        // string/binary types
+        std::make_tuple(LogicalType::TYPE_CHAR, TypeDescriptor::MAX_CHAR_LENGTH, "CHAR", true, false),
+        std::make_tuple(LogicalType::TYPE_VARCHAR, TypeDescriptor::MAX_VARCHAR_LENGTH, "VARCHAR", true, false),
+        std::make_tuple(LogicalType::TYPE_BINARY, -1, "BINARY", true, false),
+        std::make_tuple(LogicalType::TYPE_VARBINARY, -1, "VARBINARY", true, false),
+
+        // decimal types
+        std::make_tuple(LogicalType::TYPE_DECIMAL, -1, "DECIMAL", true, false),
+        std::make_tuple(LogicalType::TYPE_DECIMALV2, -1, "DECIMAL_V2", true, false),
+        std::make_tuple(LogicalType::TYPE_DECIMAL32, -1, "DECIMAL32", true, false),
+        std::make_tuple(LogicalType::TYPE_DECIMAL64, -1, "DECIMAL64", true, false),
+        std::make_tuple(LogicalType::TYPE_DECIMAL128, -1, "DECIMAL128", true, false),
+
+        std::make_tuple(LogicalType::TYPE_HLL, HLL_COLUMN_DEFAULT_LEN, "HLL", false, true),
+        std::make_tuple(LogicalType::TYPE_JSON, kJsonDefaultSize, "JSON", true, true),
+        std::make_tuple(LogicalType::TYPE_VARIANT, 128, "VARIANT", true, true),
+        std::make_tuple(LogicalType::TYPE_OBJECT, TypeDescriptor::DEFAULT_BITMAP_LENGTH, "OBJECT", false, true)
+    )
+);
+// clang-format on
+
+TEST_F(TypeDescriptorTest, test_create_variant_type) {
+    // Test create_variant_type() static method
+    TypeDescriptor variant_desc = TypeDescriptor::create_variant_type();
+
+    ASSERT_EQ(LogicalType::TYPE_VARIANT, variant_desc.type);
+
+    ASSERT_EQ(128, variant_desc.len);
+
+    // Verify other default fields are properly initialized
+    ASSERT_EQ(-1, variant_desc.precision);
+    ASSERT_EQ(-1, variant_desc.scale);
+    ASSERT_TRUE(variant_desc.children.empty());
+
+    // Verify the type descriptor is valid
+    ASSERT_TRUE(variant_desc.is_huge_type());
+    ASSERT_FALSE(variant_desc.is_complex_type());
+    ASSERT_EQ("VARIANT", variant_desc.debug_string());
+
+    // Test that multiple calls return equivalent objects
+    TypeDescriptor variant_desc2 = TypeDescriptor::create_variant_type();
+    ASSERT_EQ(variant_desc.type, variant_desc2.type);
+    ASSERT_EQ(variant_desc.len, variant_desc2.len);
+}
+
 } // namespace starrocks
