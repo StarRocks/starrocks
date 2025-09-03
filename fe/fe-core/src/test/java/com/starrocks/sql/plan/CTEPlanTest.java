@@ -1086,4 +1086,14 @@ public class CTEPlanTest extends PlanTestBase {
                 "  1:Project\n" +
                 "  |  <slot 2> : rand()");
     }
+
+    @ParameterizedTest
+    @ValueSource(ints = {0, 1})
+    public void testPruneCTEWhenPruneEmptyJoin(int forceReuseNodeCount) throws Exception {
+        connectContext.getSessionVariable().setCboCTEForceReuseNodeCount(forceReuseNodeCount);
+        String sql = "with cte as (select v1 from t0 where v1 = 1 and v1 = 2)" +
+                " select v1 from cte where v1 in (select v1 from t0) or v1 in (select v1 from t0);";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "0:EMPTYSET");
+    }
 }
