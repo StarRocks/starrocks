@@ -915,7 +915,7 @@ public class FunctionAnalyzer {
             Type returnType = Type.INT;
             if (targetType.isNull()) {
                 targetType = Type.INT;
-            } else {      
+            } else {
                 for (int i = 1; i < argumentTypes.length; i++) {
                     if (argumentTypes[i].isNull()) {
                         //do nothing
@@ -1110,6 +1110,12 @@ public class FunctionAnalyzer {
             ((AggregateFunction) fn).setNullsFirst(nullsFirst);
             boolean outputConst = true;
             if (fnName.equals(FunctionSet.ARRAY_AGG)) {
+                // Check if the first argument is DECIMAL256 type and disable array_agg for it
+                if (argsTypes.length != 0 && argsTypes[0].isArrayType() &&
+                        ((ArrayType) argsTypes[0]).getItemType().isDecimal256()) {
+                    throw new SemanticException("Array function 'array_agg' is not supported for DECIMAL256 type");
+                }
+
                 fn.setRetType(new ArrayType(argsTypes[0]));     // return null if scalar agg with empty input
                 outputConst = argumentIsConstants[0];
             } else {
