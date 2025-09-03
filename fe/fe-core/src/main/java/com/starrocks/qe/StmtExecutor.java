@@ -1522,6 +1522,9 @@ public class StmtExecutor {
         ResourceGroup resourceGroup = GlobalStateMgr.getCurrentState()
                 .getResourceGroupMgr()
                 .chooseResourceGroup(context, context.getCurrentSqlDbIds());
+        if (resourceGroup == null) {
+            return;
+        }
         Integer partitionLimit = resourceGroup.getPartitionNum();
         if (partitionLimit == null || partitionLimit <= 0) {
             return;
