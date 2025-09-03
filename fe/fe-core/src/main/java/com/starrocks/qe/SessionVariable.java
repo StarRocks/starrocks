@@ -1538,7 +1538,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     private boolean alwaysCollectDict = false;
 
     @VariableMgr.VarAttr(name = ALWAYS_COLLECT_LOW_CARD_DICT_ON_LAKE, flag = VariableMgr.INVISIBLE)
-    private boolean alwaysCollectDictOnLake = true;
+    private boolean alwaysCollectDictOnLake = false;
 
     @VariableMgr.VarAttr(name = CBO_ENABLE_LOW_CARDINALITY_OPTIMIZE)
     private boolean enableLowCardinalityOptimize = true;
@@ -1547,7 +1547,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     private boolean useLowCardinalityOptimizeV2 = true;
 
     @VariableMgr.VarAttr(name = LOW_CARDINALITY_OPTIMIZE_ON_LAKE)
-    private boolean useLowCardinalityOptimizeOnLake = true;
+    private boolean useLowCardinalityOptimizeOnLake = false;
 
     @VarAttr(name = ARRAY_LOW_CARDINALITY_OPTIMIZE)
     private boolean enableArrayLowCardinalityOptimize = true;
