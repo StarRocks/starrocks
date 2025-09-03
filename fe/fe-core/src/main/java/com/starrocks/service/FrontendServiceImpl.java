@@ -43,6 +43,7 @@ import com.google.common.collect.Range;
 import com.google.common.collect.Sets;
 import com.starrocks.authentication.AuthenticationException;
 import com.starrocks.authentication.AuthenticationHandler;
+import com.starrocks.authentication.UserIdentityUtils;
 import com.starrocks.authorization.AccessDeniedException;
 import com.starrocks.authorization.PrivilegeType;
 import com.starrocks.catalog.CatalogUtils;
@@ -436,7 +437,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
 
         UserIdentity currentUser;
         if (params.isSetCurrent_user_ident()) {
-            currentUser = UserIdentity.fromThrift(params.current_user_ident);
+            currentUser = UserIdentityUtils.fromThrift(params.current_user_ident);
         } else {
             currentUser = UserIdentity.createAnalyzedUserIdentWithIp(params.user, params.user_ip);
         }
@@ -492,7 +493,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
 
         UserIdentity currentUser = null;
         if (params.isSetCurrent_user_ident()) {
-            currentUser = UserIdentity.fromThrift(params.current_user_ident);
+            currentUser = UserIdentityUtils.fromThrift(params.current_user_ident);
         } else {
             currentUser = UserIdentity.createAnalyzedUserIdentWithIp(params.user, params.user_ip);
         }
@@ -553,7 +554,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             throw new TException("missed user_identity");
         }
         // TODO: check privilege
-        UserIdentity userIdentity = UserIdentity.fromThrift(params.getUser_ident());
+        UserIdentity userIdentity = UserIdentityUtils.fromThrift(params.getUser_ident());
 
         PipeManager pm = GlobalStateMgr.getCurrentState().getPipeManager();
         Map<PipeId, Pipe> pipes = pm.getPipesUnlock();
@@ -591,7 +592,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         }
         LOG.info("listPipeFiles params={}", params);
         // TODO: check privilege
-        UserIdentity userIdentity = UserIdentity.fromThrift(params.getUser_ident());
+        UserIdentity userIdentity = UserIdentityUtils.fromThrift(params.getUser_ident());
         TListPipeFilesResult result = new TListPipeFilesResult();
         PipeManager pm = GlobalStateMgr.getCurrentState().getPipeManager();
         Map<PipeId, Pipe> pipes = pm.getPipesUnlock();
@@ -650,7 +651,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
 
     @Override
     public TColumnStatsUsageRes getColumnStatsUsage(TColumnStatsUsageReq request) throws TException {
-        UserIdentity currentUser = UserIdentity.fromThrift(request.getAuth_info().getCurrent_user_ident());
+        UserIdentity currentUser = UserIdentityUtils.fromThrift(request.getAuth_info().getCurrent_user_ident());
 
         TColumnStatsUsageRes result = ColumnStatsUsageSystemTable.query(request);
         result.getItems().removeIf(item -> {
@@ -675,7 +676,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
     @Override
     public TAnalyzeStatusRes getAnalyzeStatus(TAnalyzeStatusReq request) throws TException {
         TAnalyzeStatusRes res = AnalyzeStatusSystemTable.query(request);
-        UserIdentity currentUser = UserIdentity.fromThrift(request.getAuth_info().getCurrent_user_ident());
+        UserIdentity currentUser = UserIdentityUtils.fromThrift(request.getAuth_info().getCurrent_user_ident());
         res.getItems().removeIf(item -> {
             try {
                 ConnectContext context = new ConnectContext();
@@ -785,7 +786,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         // database privs should be checked in analysis phrase
         UserIdentity currentUser = null;
         if (params.isSetCurrent_user_ident()) {
-            currentUser = UserIdentity.fromThrift(params.current_user_ident);
+            currentUser = UserIdentityUtils.fromThrift(params.current_user_ident);
         } else {
             currentUser = UserIdentity.createAnalyzedUserIdentWithIp(params.user, params.user_ip);
         }

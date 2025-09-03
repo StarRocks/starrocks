@@ -17,6 +17,7 @@
 
 package com.starrocks.mysql.privilege;
 
+import com.starrocks.authentication.UserIdentityUtils;
 import com.starrocks.catalog.UserIdentity;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
@@ -30,11 +31,11 @@ public class UserIdentityTest {
         String str = "'" + "cmy" + "'@'192.%'";
         Assertions.assertEquals(str, userIdent.toString());
 
-        UserIdentity userIdent2 = UserIdentity.fromString(str);
+        UserIdentity userIdent2 = UserIdentityUtils.fromString(str);
         Assertions.assertEquals(userIdent2.toString(), userIdent.toString());
 
         String str2 = "'walletdc_write'@['cluster-leida.orp.all']";
-        userIdent = UserIdentity.fromString(str2);
+        userIdent = UserIdentityUtils.fromString(str2);
         Assertions.assertNotNull(userIdent);
         Assertions.assertTrue(userIdent.isDomain());
         Assertions.assertEquals(str2, userIdent.toString());
