@@ -3493,7 +3493,7 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 
 ##### lake_enable_balance_tablets_between_workers
 
-- Default: false
+- Default: true
 - Type: Boolean
 - Unit: -
 - Is mutable: Yes
