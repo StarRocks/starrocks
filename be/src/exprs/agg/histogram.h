@@ -25,6 +25,7 @@
 #include "gutil/casts.h"
 #include "simdjson.h"
 #include "storage/types.h"
+#include "util/ndv_estimator.h"
 
 namespace starrocks {
 
@@ -88,6 +89,8 @@ struct Bucket {
     int64_t upper_repeats;
     // total value count in this bucket
     int64_t count_in_bucket;
+    // distinct value count estimation in this bucket
+    int64_t distinct_count;
 };
 
 template <LogicalType LT>
@@ -146,8 +149,26 @@ public:
                            (int64_t)(upper_repeats * sample_ratio));
     }
 
+    std::string toBucketJson(const std::string& lower, const std::string& upper, size_t count, size_t upper_repeats,
+                             int64_t distinct_count, double sample_ratio) const {
+        return fmt::format(R"(["{}","{}","{}","{}","{}"])", lower, upper, (int64_t)(count * sample_ratio),
+                           (int64_t)(upper_repeats * sample_ratio), distinct_count);
+    }
+
     void finalize_to_column(FunctionContext* ctx __attribute__((unused)), ConstAggDataPtr __restrict state,
                             Column* to) const override {
+        if (ctx->get_num_args() == 4) {
+            finalize_to_column_with_ndv(ctx, state, to);
+        } else {
+            finalize_to_column_without_ndv(ctx, state, to);
+        }
+    }
+
+    std::string get_name() const override { return "histogram"; }
+
+private:
+    void finalize_to_column_without_ndv(FunctionContext* ctx __attribute__((unused)), ConstAggDataPtr __restrict state,
+                                        Column* to) const {
         auto bucket_num = ColumnHelper::get_const_value<TYPE_INT>(ctx->get_constant_column(1));
         [[maybe_unused]] double sample_ratio =
                 1 / ColumnHelper::get_const_value<TYPE_DOUBLE>(ctx->get_constant_column(2));
@@ -208,7 +229,95 @@ public:
         to->append_datum(slice);
     }
 
-    std::string get_name() const override { return "histogram"; }
+    void finalize_to_column_with_ndv(FunctionContext* ctx __attribute__((unused)), ConstAggDataPtr __restrict state,
+                                     Column* to) const {
+        auto bucket_num = ColumnHelper::get_const_value<TYPE_INT>(ctx->get_constant_column(1));
+        auto sample_ratio = ColumnHelper::get_const_value<TYPE_DOUBLE>(ctx->get_constant_column(2));
+        auto ndv_estimator_name = ColumnHelper::get_const_value<TYPE_VARCHAR>(ctx->get_constant_column(3)).to_string();
+        [[maybe_unused]] double sample_factor = 1 / sample_ratio;
+        int bucket_size = this->data(state).column->size() / bucket_num;
+
+        // prepare ndv estimation
+        auto ndv_estimator = NDVEstimatorBuilder::build(ndv_estimator_name);
+        int64_t sample_distinct = 0;
+        int64_t count_once = 0;
+        bool new_upper = false;
+
+        // Build bucket
+        std::vector<Bucket<LT>> buckets;
+        ColumnViewer<LT> viewer(this->data(state).column);
+        for (size_t i = 0; i < viewer.size(); ++i) {
+            auto v = viewer.value(i);
+            if (viewer.is_null(i)) {
+                continue;
+            }
+            if (buckets.empty()) {
+                Bucket<LT> bucket(v, v, 1, 1);
+                buckets.emplace_back(bucket);
+                sample_distinct = 1;
+                count_once = 1;
+                new_upper = true;
+            } else {
+                Bucket<LT>* last_bucket = &buckets.back();
+
+                if (last_bucket->is_equals_to_upper(v)) {
+                    last_bucket->count++;
+                    last_bucket->count_in_bucket++;
+                    last_bucket->upper_repeats++;
+                    if (new_upper) {
+                        count_once--;
+                        new_upper = false;
+                    }
+                } else {
+                    if (last_bucket->count_in_bucket >= bucket_size) {
+                        int64_t last_ndv = ndv_estimator->estimate(last_bucket->count_in_bucket, sample_distinct,
+                                                                  count_once, sample_ratio);
+                        last_bucket->distinct_count = last_ndv;
+                        Bucket<LT> bucket(v, v, last_bucket->count + 1, 1);
+                        buckets.emplace_back(bucket);
+                        sample_distinct = 1;
+                        count_once = 1;
+                        new_upper = true;
+                    } else {
+                        last_bucket->update_upper(v);
+                        last_bucket->count++;
+                        last_bucket->count_in_bucket++;
+                        last_bucket->upper_repeats = 1;
+                        sample_distinct++;
+                        count_once++;
+                    }
+                }
+            }
+        }
+
+        Bucket<LT>* last_bucket = &buckets.back();
+        double last_ndv = ndv_estimator->estimate(last_bucket->count_in_bucket, sample_distinct, count_once,
+                                                  sample_ratio);
+        last_bucket->distinct_count = last_ndv;
+
+        const auto& type_desc = ctx->get_arg_type(0);
+        TypeInfoPtr type_info = get_type_info(LT, type_desc->precision, type_desc->scale);
+        std::string bucket_json;
+        if (buckets.empty()) {
+            bucket_json = "[]";
+        } else {
+            bucket_json = "[";
+
+            for (int i = 0; i < buckets.size(); ++i) {
+                std::string lower_str = datum_to_string(type_info.get(), buckets[i].get_lower_datum());
+                std::string upper_str = datum_to_string(type_info.get(), buckets[i].get_upper_datum());
+                bucket_json +=
+                        toBucketJson(lower_str, upper_str, buckets[i].count, buckets[i].upper_repeats,
+                        buckets[i].distinct_count, sample_factor) +
+                        ",";
+            }
+
+            bucket_json[bucket_json.size() - 1] = ']';
+        }
+
+        Slice slice(bucket_json);
+        to->append_datum(slice);
+    }
 };
 
 } // namespace starrocks

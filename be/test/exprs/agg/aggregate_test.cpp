@@ -1419,10 +1419,10 @@ ColumnPtr gen_histogram_column() {
     return column;
 }
 
-TEST_F(AggregateTest, test_histogram) {
+TEST_F(AggregateTest, test_histogram_none) {
     std::vector<TypeDescriptor> arg_types = {
             TypeDescriptor::from_logical_type(TYPE_BIGINT), TypeDescriptor::from_logical_type(TYPE_INT),
-            TypeDescriptor::from_logical_type(TYPE_DOUBLE), TypeDescriptor::from_logical_type(TYPE_INT)};
+            TypeDescriptor::from_logical_type(TYPE_DOUBLE)};
     auto return_type = TypeDescriptor::from_logical_type(TYPE_VARCHAR);
     std::unique_ptr<FunctionContext> local_ctx(FunctionContext::create_test_context(std::move(arg_types), return_type));
 
@@ -1432,26 +1432,20 @@ TEST_F(AggregateTest, test_histogram) {
     auto data_column = gen_histogram_column<int64_t>();
     auto const1 = ColumnHelper::create_const_column<TYPE_INT>(10, data_column->size());
     auto const2 = ColumnHelper::create_const_column<TYPE_DOUBLE>(1, data_column->size());
-    auto const3 = ColumnHelper::create_const_column<TYPE_INT>(2, data_column->size());
 
     Columns const_columns;
     const_columns.emplace_back(data_column);
-    const_columns.emplace_back(const1); // first column
+    const_columns.emplace_back(const1);
     const_columns.emplace_back(const2);
-    const_columns.emplace_back(const3); // 3rd const column
     local_ctx->set_constant_columns(const_columns);
 
     std::vector<const Column*> raw_columns;
-    raw_columns.resize(4);
+    raw_columns.resize(3);
     raw_columns[0] = data_column.get();
     raw_columns[1] = const1.get();
     raw_columns[2] = const2.get();
-    raw_columns[3] = const3.get();
     histogram_function->update_batch_single_state(local_ctx.get(), data_column->size(), raw_columns.data(),
                                                   state->state());
-    // for (int i = 0; i < data_column->size(); ++i) {
-    //     histogram_function->update(local_ctx.get(), raw_columns.data(), state->state(), i);
-    // }
 
     NullableColumn::Ptr result_column = NullableColumn::create(BinaryColumn::create(), NullColumn::create());
     histogram_function->finalize_to_column(local_ctx.get(), state->state(), result_column.get());
@@ -1461,6 +1455,53 @@ TEST_F(AggregateTest, test_histogram) {
             "\"714\",\"1\"],[\"712\",\"813\",\"816\",\"1\"],[\"814\",\"915\",\"918\",\"1\"],[\"916\",\"1017\",\"1020\","
             "\"1\"],[\"1018\",\"1023\",\"1026\",\"1\"]]']",
             result_column->debug_string());
+}
+
+TEST_F(AggregateTest, test_histogram_sample) {
+    std::vector<std::string> estimators = {"DUJ1", "LINEAR", "POLYNOMIAL", "GEE"};
+    for (const std::string& estimator : estimators) {
+        std::vector<TypeDescriptor> arg_types = {
+                TypeDescriptor::from_logical_type(TYPE_BIGINT), TypeDescriptor::from_logical_type(TYPE_INT),
+                TypeDescriptor::from_logical_type(TYPE_DOUBLE), TypeDescriptor::from_logical_type(TYPE_VARCHAR)};
+        auto return_type = TypeDescriptor::from_logical_type(TYPE_VARCHAR);
+        std::unique_ptr<FunctionContext> local_ctx(FunctionContext::create_test_context(std::move(arg_types),
+                return_type));
+
+        const AggregateFunction* histogram_function = get_aggregate_function("histogram", TYPE_BIGINT, TYPE_VARCHAR,
+                true);
+        auto state = ManagedAggrState::create(ctx, histogram_function);
+
+        auto data_column = gen_histogram_column<int64_t>();
+        auto const1 = ColumnHelper::create_const_column<TYPE_INT>(10, data_column->size());
+        auto const2 = ColumnHelper::create_const_column<TYPE_DOUBLE>(1, data_column->size());
+        auto const3 = ColumnHelper::create_const_column<TYPE_VARCHAR>(estimator, data_column->size());
+
+        Columns const_columns;
+        const_columns.emplace_back(data_column);
+        const_columns.emplace_back(const1);
+        const_columns.emplace_back(const2);
+        const_columns.emplace_back(const3);
+        local_ctx->set_constant_columns(const_columns);
+
+        std::vector<const Column*> raw_columns;
+        raw_columns.resize(4);
+        raw_columns[0] = data_column.get();
+        raw_columns[1] = const1.get();
+        raw_columns[2] = const2.get();
+        raw_columns[3] = const3.get();
+        histogram_function->update_batch_single_state(local_ctx.get(), data_column->size(), raw_columns.data(),
+                                                      state->state());
+
+        NullableColumn::Ptr result_column = NullableColumn::create(BinaryColumn::create(), NullColumn::create());
+        histogram_function->finalize_to_column(local_ctx.get(), state->state(), result_column.get());
+        ASSERT_EQ(
+                "['[[\"0\",\"100\",\"102\",\"2\",\"101\"],[\"101\",\"201\",\"204\",\"1\",\"101\"],[\"202\",\"303\""
+                ",\"306\",\"1\",\"102\"],[\"304\",\"405\",\"408\",\"1\",\"102\"],[\"406\",\"507\",\"510\",\"1\""
+                ",\"102\"],[\"508\",\"609\",\"612\",\"1\",\"102\"],[\"610\",\"711\",\"714\",\"1\",\"102\"],[\"712\""
+                ",\"813\",\"816\",\"1\",\"102\"],[\"814\",\"915\",\"918\",\"1\",\"102\"],[\"916\",\"1017\",\"1020\""
+                ",\"1\",\"102\"],[\"1018\",\"1023\",\"1026\",\"1\",\"6\"]]']",
+                result_column->debug_string());
+    }
 }
 
 TEST_F(AggregateTest, test_histogram_hll_ndv) {
