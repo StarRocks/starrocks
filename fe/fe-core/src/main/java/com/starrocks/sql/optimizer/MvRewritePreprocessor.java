@@ -827,8 +827,8 @@ public class MvRewritePreprocessor {
         
         // Log summary
         int successCount = mvInfos.size() - timeoutMvNames.size() - failedMvNames.size();
-        logMVPrepare(connectContext, "MV preparation summary: {} successful, {} timeout, {} failed out of {} total",
-                successCount, timeoutMvNames.size(), failedMvNames.size(), mvInfos.size());
+        logMVPrepare(connectContext, "MV preparation summary: {} successful, {} timeout, {} failed out of {} total: {}",
+                successCount, timeoutMvNames.size(), failedMvNames.size(), mvInfos.size(), failedMvNames);
     }
 
     /**
@@ -925,7 +925,7 @@ public class MvRewritePreprocessor {
         LogicalOlapScanOperator scanMvOp;
         synchronized (materializationContext.getQueryRefFactory()) {
             scanMvOp = createScanMvOperator(mv, materializationContext.getQueryRefFactory(),
-                    mvUpdateInfo.getMvToRefreshPartitionNames());
+                    mvUpdateInfo.getMvToRefreshPartitionNames(), false);
         }
         materializationContext.setScanMvOperator(scanMvOp);
         // should keep the sequence of schema
@@ -957,9 +957,10 @@ public class MvRewritePreprocessor {
      * - original MV's predicates which can be deduced from MV opt expression and be used
      * for partition/distribution pruning.
      */
-    public static LogicalOlapScanOperator createScanMvOperator(MaterializedView mv,
+    public static LogicalOlapScanOperator createScanMvOperator(OlapTable mv,
                                                                ColumnRefFactory columnRefFactory,
-                                                               Set<String> excludedPartitions) {
+                                                               Set<String> excludedPartitions,
+                                                               boolean isWithHiddenColumns) {
         final ImmutableMap.Builder<ColumnRefOperator, Column> colRefToColumnMetaMapBuilder = ImmutableMap.builder();
         final ImmutableMap.Builder<Column, ColumnRefOperator> columnMetaToColRefMapBuilder = ImmutableMap.builder();
 
@@ -967,7 +968,9 @@ public class MvRewritePreprocessor {
 
         // first add base schema to avoid replaced in full schema.
         Set<String> columnNames = Sets.newHashSet();
-        for (Column column : mv.getBaseSchemaWithoutGeneratedColumn()) {
+        List<Column> baseSchema = isWithHiddenColumns ? mv.getBaseSchemaWithoutGeneratedColumn()
+                : mv.getVisibleColumnsWithoutGeneratedColumn();
+        for (Column column : baseSchema) {
             ColumnRefOperator columnRef = columnRefFactory.create(column.getName(),
                     column.getType(),
                     column.isAllowNull());
@@ -1023,7 +1026,7 @@ public class MvRewritePreprocessor {
                 .build();
     }
 
-    private static DistributionSpec getTableDistributionSpec(MaterializedView mv,
+    private static DistributionSpec getTableDistributionSpec(OlapTable mv,
                                                              Map<Column, ColumnRefOperator> columnMetaToColRefMap) {
         DistributionSpec distributionSpec = null;
         // construct distribution
