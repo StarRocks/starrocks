@@ -110,19 +110,19 @@ public class SlotRef extends Expr {
         this.qualifiedName = QualifiedName.of(qualifiedName.getParts(), qualifiedName.getPos());
         if (parts.size() == 1) {
             this.colName = parts.get(0);
-            this.label = parts.get(0);
+            this.label = "`" + parts.get(0) + "`";
         } else if (parts.size() == 2) {
             this.tblName = new TableName(null, null, parts.get(0), qualifiedName.getPos());
             this.colName = parts.get(1);
-            this.label = parts.get(1);
+            this.label = "`" + parts.get(1) + "`";
         } else if (parts.size() == 3) {
             this.tblName = new TableName(null, parts.get(0), parts.get(1), qualifiedName.getPos());
             this.colName = parts.get(2);
-            this.label = parts.get(2);
+            this.label = "`" + parts.get(2) + "`";
         } else if (parts.size() == 4) {
             this.tblName = new TableName(parts.get(0), parts.get(1), parts.get(2), qualifiedName.getPos());
             this.colName = parts.get(3);
-            this.label = parts.get(3);
+            this.label = "`" + parts.get(3) + "`";
         } else {
             // If parts.size() > 4, it must refer to a struct subfield name, so we set SlotRef's TableName null value,
             // set col, label a qualified name here[Of course it's a wrong value].
