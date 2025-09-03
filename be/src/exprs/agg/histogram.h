@@ -271,7 +271,7 @@ private:
                 } else {
                     if (last_bucket->count_in_bucket >= bucket_size) {
                         int64_t last_ndv = ndv_estimator->estimate(last_bucket->count_in_bucket, sample_distinct,
-                                                                  count_once, sample_ratio);
+                                                                   count_once, sample_ratio);
                         last_bucket->distinct_count = last_ndv;
                         Bucket<LT> bucket(v, v, last_bucket->count + 1, 1);
                         buckets.emplace_back(bucket);
@@ -291,8 +291,8 @@ private:
         }
 
         Bucket<LT>* last_bucket = &buckets.back();
-        double last_ndv = ndv_estimator->estimate(last_bucket->count_in_bucket, sample_distinct, count_once,
-                                                  sample_ratio);
+        double last_ndv =
+                ndv_estimator->estimate(last_bucket->count_in_bucket, sample_distinct, count_once, sample_ratio);
         last_bucket->distinct_count = last_ndv;
 
         const auto& type_desc = ctx->get_arg_type(0);
@@ -306,10 +306,9 @@ private:
             for (int i = 0; i < buckets.size(); ++i) {
                 std::string lower_str = datum_to_string(type_info.get(), buckets[i].get_lower_datum());
                 std::string upper_str = datum_to_string(type_info.get(), buckets[i].get_upper_datum());
-                bucket_json +=
-                        toBucketJson(lower_str, upper_str, buckets[i].count, buckets[i].upper_repeats,
-                        buckets[i].distinct_count, sample_factor) +
-                        ",";
+                bucket_json += toBucketJson(lower_str, upper_str, buckets[i].count, buckets[i].upper_repeats,
+                                            buckets[i].distinct_count, sample_factor) +
+                               ",";
             }
 
             bucket_json[bucket_json.size() - 1] = ']';

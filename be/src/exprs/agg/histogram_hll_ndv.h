@@ -83,9 +83,9 @@ public:
         if constexpr (lt_is_string<LT>) {
             Slice s = column->get_slice(row_num);
             bucket_it = std::upper_bound(buckets.begin(), buckets.end(), s, [](auto& s, Bucket<LT>& bucket) {
-                return bucket.is_less_equal_to_upper(s.data);
+                return bucket.is_less_equal_to_upper(s);
             });
-            if (bucket_it != buckets.end() && !bucket_it->is_greater_equal_to_lower(s.data)) {
+            if (bucket_it != buckets.end() && !bucket_it->is_greater_equal_to_lower(s)) {
                 bucket_it = buckets.end();
             }
 
