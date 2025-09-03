@@ -1749,8 +1749,9 @@ public class ExpressionAnalyzer {
                         + "invalid parameter: " + params.get(params.size() - 1).toString());
             }
 
+            TableName queryableObject = dictionary.getQueryableObject();
             Table table = GlobalStateMgr.getCurrentState().getMetadataMgr().getTable(
-                    session, dictionary.getCatalogName(), dictionary.getDbName(), dictionary.getQueryableObject());
+                    session, queryableObject.getCatalog(), queryableObject.getDb(), queryableObject.getTbl());
             if (table == null) {
                 throw new SemanticException("dict table %s is not found", table.getName());
             }

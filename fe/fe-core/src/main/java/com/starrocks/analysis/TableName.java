@@ -59,6 +59,7 @@ import static com.starrocks.common.util.Util.normalizeName;
 public class TableName implements Writable, GsonPreProcessable, GsonPostProcessable {
     public static final String LAMBDA_FUNC_TABLE = "__LAMBDA_TABLE";
 
+    @SerializedName(value = "catalog")
     private String catalog;
     @SerializedName(value = "tbl")
     private String tbl;

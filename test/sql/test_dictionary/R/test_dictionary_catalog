@@ -1,0 +1,50 @@
+-- name: test_dict_catalog_operation
+create database db_${uuid0};
+-- result:
+-- !result
+use db_${uuid0};
+-- result:
+-- !result
+CREATE TABLE `t_basic_operation` (
+  `id1` BIGINT NOT NULL COMMENT "",
+  `id2` BIGINT NOT NULL COMMENT "",
+  `id3` BIGINT NOT NULL COMMENT ""
+) ENGINE=OLAP
+PRIMARY KEY(`id1`)
+DISTRIBUTED BY HASH(`id1`) BUCKETS 1
+PROPERTIES (
+"replication_num" = "1",
+"enable_persistent_index" = "true",
+"replicated_storage" = "true",
+"compression" = "LZ4"
+);
+-- result:
+-- !result
+INSERT INTO t_basic_operation VALUES (1, 2, 3);
+-- result:
+-- !result
+DROP DICTIONARY test_dict_basic_operation;
+-- result:
+E: (1064, 'Getting analyzing error. Detail message: dictionary: test_dict_basic_operation does not exist.')
+-- !result
+CREATE DICTIONARY test_dict_basic_operation USING default_catalog.db_${uuid0}.t_basic_operation (id1 KEY, id2 VALUE);
+-- result:
+-- !result
+function: wait_refresh_dictionary_finish("test_dict_basic_operation", "FINISHED")
+-- result:
+None
+-- !result
+SELECT dictionary_get("test_dict_basic_operation", id1) FROM default_catalog.db_${uuid0}.t_basic_operation;
+-- result:
+{"id2":2}
+-- !result
+SELECT dictionary_get("test_dict_basic_operation", 1);
+-- result:
+{"id2":2}
+-- !result
+DROP DICTIONARY test_dict_basic_operation;
+-- result:
+-- !result
+DROP TABLE t_basic_operation;
+-- result:
+-- !result

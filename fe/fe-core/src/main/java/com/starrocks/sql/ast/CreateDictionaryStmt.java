@@ -14,18 +14,19 @@
 
 package com.starrocks.sql.ast;
 
+import com.starrocks.analysis.TableName;
 import com.starrocks.sql.parser.NodePosition;
 
 import java.util.List;
 import java.util.Map;
 public class CreateDictionaryStmt extends DdlStmt {
     private final String dictionaryName;
-    private final String queryableObject;
+    private final TableName queryableObject;
     private final List<String> dictionaryKeys;
     private final List<String> dictionaryValues;
     private final Map<String, String> properties;
 
-    public CreateDictionaryStmt(String dictionaryName, String queryableObject, List<String> dictionaryKeys,
+    public CreateDictionaryStmt(String dictionaryName, TableName queryableObject, List<String> dictionaryKeys,
                                 List<String> dictionaryValues, Map<String, String> properties, NodePosition pos) {
         super(pos);
         this.dictionaryName = dictionaryName;
@@ -39,7 +40,7 @@ public class CreateDictionaryStmt extends DdlStmt {
         return dictionaryName;
     }
 
-    public String getQueryableObject() {
+    public TableName getQueryableObject() {
         return queryableObject;
     }
 
