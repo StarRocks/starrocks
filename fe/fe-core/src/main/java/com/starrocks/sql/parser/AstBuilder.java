@@ -7672,7 +7672,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             if (isCountFunc && isDistinct) {
                 throw new ParsingException("Aggregation filter does not support COUNT DISTINCT");
             }
-            Expr booleanExpr = (Expr) visit(context.filter().booleanExpression());
+            Expr booleanExpr = (Expr) visit(context.filter().expression());
             functionName = functionName + FunctionSet.AGG_STATE_IF_SUFFIX;
             exprs.add(booleanExpr);
 
