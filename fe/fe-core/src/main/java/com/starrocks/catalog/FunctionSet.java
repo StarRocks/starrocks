@@ -1353,6 +1353,9 @@ public class FunctionSet {
             addBuiltin(AggregateFunction.createBuiltin(HISTOGRAM,
                     Lists.newArrayList(t, Type.INT, Type.DOUBLE), Type.VARCHAR, Type.VARCHAR,
                     false, false, false));
+            addBuiltin(AggregateFunction.createBuiltin(HISTOGRAM,
+                    Lists.newArrayList(t, Type.INT, Type.DOUBLE, Type.VARCHAR), Type.VARCHAR, Type.VARCHAR,
+                    false, false, false));
             addBuiltin(AggregateFunction.createBuiltin(HISTOGRAM_HLL_NDV,
                     Lists.newArrayList(t, Type.VARCHAR), Type.VARCHAR, Type.VARCHAR,
                     false, false, false));
