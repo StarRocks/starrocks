@@ -541,6 +541,16 @@ public class DecimalV3FunctionAnalyzer {
     private static Function getArrayDecimalFunction(Function fn, Type[] argumentTypes) {
         Function newFn = fn.copy();
         Preconditions.checkState(argumentTypes.length > 0);
+
+        // Check if the first argument contains DECIMAL256 type and disable array functions for it
+        if (argumentTypes[0] instanceof ArrayType) {
+            Type itemType = ((ArrayType) argumentTypes[0]).getItemType();
+            if (itemType.isDecimal256()) {
+                throw new SemanticException(String.format(
+                        "Array function '%s' is not supported for DECIMAL256 type", fn.functionName()));
+            }
+        }
+
         switch (fn.functionName()) {
             case FunctionSet.ARRAY_DISTINCT:
             case FunctionSet.ARRAY_SORT:
