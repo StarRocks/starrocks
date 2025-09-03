@@ -495,9 +495,10 @@ public class AuthorizationAnalyzer {
                     UserIdentity userIdentity = session.getCurrentUserIdentity();
                     UserRef user = new UserRef(userIdentity.getUser(), userIdentity.getHost(), userIdentity.isDomain());
                     stmt.setUser(user);
+                } else {
+                    AuthenticationAnalyzer.analyzeUser(stmt.getUser());
+                    AuthenticationAnalyzer.checkUserExist(stmt.getUser(), true);
                 }
-                AuthenticationAnalyzer.analyzeUser(stmt.getUser());
-                AuthenticationAnalyzer.checkUserExist(stmt.getUser(), true);
             } else if (stmt.getGrantType() == GrantType.ROLE) {
                 validRoleName(stmt.getGroupOrRole(), "There is no such grant defined for role " + stmt.getGroupOrRole(), true);
             }
