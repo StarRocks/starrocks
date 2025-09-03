@@ -35,7 +35,9 @@
 package com.starrocks.qe;
 
 import com.google.common.base.Strings;
-import com.starrocks.authentication.OAuth2Context;
+import com.starrocks.authentication.AuthenticationException;
+import com.starrocks.authentication.AuthenticationProvider;
+import com.starrocks.authentication.UserIdentityUtils;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Table;
@@ -103,7 +105,6 @@ import org.apache.logging.log4j.Logger;
 import java.io.IOException;
 import java.lang.management.ManagementFactory;
 import java.lang.management.ThreadMXBean;
-import java.net.URLEncoder;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.nio.channels.AsynchronousCloseException;
@@ -396,16 +397,17 @@ public class ConnectProcessor {
                     return;
                 }
 
-                if (ctx.getOAuth2Context() != null && ctx.getAuthToken() == null) {
-                    OAuth2Context oAuth2Context = ctx.getOAuth2Context();
-                    String authUrl = oAuth2Context.authServerUrl() +
-                            "?response_type=code" +
-                            "&client_id=" + URLEncoder.encode(oAuth2Context.clientId(), StandardCharsets.UTF_8) +
-                            "&redirect_uri=" + URLEncoder.encode(oAuth2Context.redirectUrl(), StandardCharsets.UTF_8) +
-                            "&state=" + ctx.getConnectionId() +
-                            "&scope=openid";
+                try {
+                    AuthenticationProvider authenticationProvider = ctx.getAuthenticationProvider();
+                    if (authenticationProvider == null) {
+                        ErrorReport.report("Unknown authentication method");
+                        ctx.getState().setErrType(QueryState.ErrType.ANALYSIS_ERR);
+                        return;
+                    }
 
-                    ErrorReport.report(ErrorCode.ERR_OAUTH2_NOT_AUTHENTICATED, authUrl);
+                    authenticationProvider.checkLoginSuccess(ctx.getConnectionId(), ctx.getAuthenticationContext());
+                } catch (AuthenticationException authenticationException) {
+                    ErrorReport.report(authenticationException.getMessage());
                     ctx.getState().setErrType(QueryState.ErrType.ANALYSIS_ERR);
                     return;
                 }
@@ -709,7 +711,8 @@ public class ConnectProcessor {
                 }
             } else {
                 ShowResultSet resultSet = executor.getShowResultSet();
-                // for lower version fe, all forwarded command is OK or EOF State, so we prefer to use remote packet for compatible
+                // for lower version fe, all forwarded command is OK or EOF State, so we prefer to use remote packet for
+                // compatible
                 // ShowResultSet is null means this is not ShowStmt, use remote packet(executor.getOutputPacket())
                 // or use local packet (getResultPacket())
                 if (resultSet == null) {
@@ -781,7 +784,7 @@ public class ConnectProcessor {
             ctx.getSessionVariable().setEnableInsertStrict(request.enableStrictMode);
         }
         if (request.isSetCurrent_user_ident()) {
-            UserIdentity currentUserIdentity = UserIdentity.fromThrift(request.getCurrent_user_ident());
+            UserIdentity currentUserIdentity = UserIdentityUtils.fromThrift(request.getCurrent_user_ident());
             ctx.setCurrentUserIdentity(currentUserIdentity);
         }
 

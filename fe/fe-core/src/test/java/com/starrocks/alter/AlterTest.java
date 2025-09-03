@@ -2072,7 +2072,6 @@ public class AlterTest {
                     starRocksAssert.getCtx());
 
         UserIdentity testUser = new UserIdentity("testuser", "%");
-        testUser.analyze();
 
         starRocksAssert.getCtx().setQualifiedUser("testuser");
         starRocksAssert.getCtx().setCurrentUserIdentity(testUser);

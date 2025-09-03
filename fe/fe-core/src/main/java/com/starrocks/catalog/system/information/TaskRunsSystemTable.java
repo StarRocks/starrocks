@@ -15,6 +15,7 @@ package com.starrocks.catalog.system.information;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
+import com.starrocks.authentication.UserIdentityUtils;
 import com.starrocks.authorization.AccessDeniedException;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.InternalCatalog;
@@ -138,7 +139,7 @@ public class TaskRunsSystemTable extends SystemTable {
         }
 
         ConnectContext context = Preconditions.checkNotNull(ConnectContext.get(), "not a valid connection");
-        TUserIdentity userIdentity = context.getCurrentUserIdentity().toThrift();
+        TUserIdentity userIdentity = UserIdentityUtils.toThrift(context.getCurrentUserIdentity());
         params.setCurrent_user_ident(userIdentity);
         // Evaluate result
         TGetTaskRunInfoResult info = query(params);
@@ -167,7 +168,7 @@ public class TaskRunsSystemTable extends SystemTable {
 
         UserIdentity currentUser = null;
         if (params.isSetCurrent_user_ident()) {
-            currentUser = UserIdentity.fromThrift(params.current_user_ident);
+            currentUser = UserIdentityUtils.fromThrift(params.current_user_ident);
         }
         GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
         TaskManager taskManager = globalStateMgr.getTaskManager();

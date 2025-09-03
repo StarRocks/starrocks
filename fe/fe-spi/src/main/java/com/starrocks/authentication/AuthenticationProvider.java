@@ -15,25 +15,26 @@
 package com.starrocks.authentication;
 
 import com.starrocks.catalog.UserIdentity;
-import com.starrocks.qe.ConnectContext;
 
 public interface AuthenticationProvider {
 
     /**
      * Attempt to authentication
      *
-     * @param context      connection context
+     * @param authContext  authentication context
      * @param userIdentity best matched user
      * @param authResponse auth response received by mysql protocol
      * @throws AuthenticationException when authentication fail
      */
-    void authenticate(ConnectContext context, UserIdentity userIdentity, byte[] authResponse) throws AuthenticationException;
+    void authenticate(AuthenticationContext authContext, UserIdentity userIdentity, byte[] authResponse)
+            throws AuthenticationException;
 
     /**
      * Some special Authentication Methods need to pass more information, and authMoreDataPacket is a unified interface.
      * <a href="https://dev.mysql.com/doc/dev/mysql-server/latest/page_protocol_connection_phase_packets_protocol_auth_more_data.html">...</a>
      */
-    default byte[] authMoreDataPacket(ConnectContext context, String user, String host) throws AuthenticationException {
+    default byte[] authMoreDataPacket(AuthenticationContext authContext, String user, String host)
+            throws AuthenticationException {
         return null;
     }
 
@@ -43,8 +44,12 @@ public interface AuthenticationProvider {
      * server can send this packet tp ask client to use another authentication method.
      * <a href="https://dev.mysql.com/doc/dev/mysql-server/latest/page_protocol_connection_phase_packets_protocol_auth_switch_request.html">...</a>
      */
-    default byte[] authSwitchRequestPacket(ConnectContext context, String user, String host)
+    default byte[] authSwitchRequestPacket(AuthenticationContext authContext, String user, String host)
             throws AuthenticationException {
         return null;
+    }
+
+    default void checkLoginSuccess(int connectionId, AuthenticationContext authContext) throws AuthenticationException {
+        // do nothing
     }
 }
