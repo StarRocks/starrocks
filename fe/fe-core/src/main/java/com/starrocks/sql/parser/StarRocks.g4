@@ -2741,7 +2741,7 @@ whenClause
     ;
 
 filter
-    : FILTER '(' WHERE booleanExpression ')'
+    : FILTER '(' WHERE expression ')'
     ;
 
 over
