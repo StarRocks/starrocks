@@ -26,7 +26,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 
-public class HealthActionTest extends HttpServerHandlerTest {
+public class HealthActionTest extends HttpServerTestUtils {
 
     @Test
     public void testAsyncHandleHealth() throws Exception {
@@ -34,10 +34,10 @@ public class HealthActionTest extends HttpServerHandlerTest {
         ActionController controller = new ActionController();
         MockHealthAction action = new MockHealthAction(controller);
         controller.registerHandler(HttpMethod.GET, uri, action);
-        HttpServerHandlerTest.MockExecutor executor = new HttpServerHandlerTest.MockExecutor();
+        HttpServerTestUtils.MockExecutor executor = new HttpServerTestUtils.MockExecutor();
 
         executor.setRejectExecute(false);
-        HttpServerHandlerTest.MockChannelHandlerContext context = createChannelHandlerContext();
+        MockChannelHandlerContext context = createChannelHandlerContext();
         DefaultFullHttpRequest request = new DefaultFullHttpRequest(HttpVersion.HTTP_1_1, HttpMethod.GET, uri);
         HttpServerHandler handler = new HttpServerHandler(controller, executor);
         assertEquals(1, ReferenceCountUtil.refCnt(request));
