@@ -82,9 +82,8 @@ public:
         // find the correct bucket for the current value.
         if constexpr (lt_is_string<LT>) {
             Slice s = column->get_slice(row_num);
-            bucket_it = std::upper_bound(buckets.begin(), buckets.end(), s, [](auto& s, Bucket<LT>& bucket) {
-                return bucket.is_less_equal_to_upper(s);
-            });
+            bucket_it = std::upper_bound(buckets.begin(), buckets.end(), s,
+                                         [](auto& s, Bucket<LT>& bucket) { return bucket.is_less_equal_to_upper(s); });
             if (bucket_it != buckets.end() && !bucket_it->is_greater_equal_to_lower(s)) {
                 bucket_it = buckets.end();
             }
