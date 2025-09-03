@@ -1,0 +1,37 @@
+-- name: test_dict_merge
+select dict_merge(
+[
+    'val_001', 'val_002', 'val_003', 'val_004', 'val_005', 'val_006', 'val_007', 'val_008', 'val_009', 'val_010',
+    'val_011', 'val_012', 'val_013', 'val_014', 'val_015', 'val_016', 'val_017', 'val_018', 'val_019', 'val_020',
+    'val_021', 'val_022', 'val_023', 'val_024', 'val_025', 'val_026', 'val_027', 'val_028', 'val_029', 'val_030',
+    'val_031', 'val_032', 'val_033', 'val_034', 'val_035', 'val_036', 'val_037', 'val_038', 'val_039', 'val_040',
+    'val_041', 'val_042', 'val_043', 'val_044', 'val_045', 'val_046', 'val_047', 'val_048', 'val_049', 'val_050',
+    'val_051', 'val_052', 'val_053', 'val_054', 'val_055', 'val_056', 'val_057', 'val_058', 'val_059', 'val_060',
+    'val_061', 'val_062', 'val_063', 'val_064', 'val_065', 'val_066', 'val_067', 'val_068', 'val_069', 'val_070',
+    'val_071', 'val_072', 'val_073', 'val_074', 'val_075', 'val_076', 'val_077', 'val_078', 'val_079', 'val_080',
+    'val_081', 'val_082', 'val_083', 'val_084', 'val_085', 'val_086', 'val_087', 'val_088', 'val_089', 'val_090',
+    'val_091', 'val_092', 'val_093', 'val_094', 'val_095', 'val_096', 'val_097', 'val_098', 'val_099', 'val_100',
+    'val_101', 'val_102', 'val_103', 'val_104', 'val_105', 'val_106', 'val_107', 'val_108', 'val_109', 'val_110',
+    'val_111', 'val_112', 'val_113', 'val_114', 'val_115', 'val_116', 'val_117', 'val_118', 'val_119', 'val_120',
+    'val_121', 'val_122', 'val_123', 'val_124', 'val_125', 'val_126', 'val_127', 'val_128', 'val_129', 'val_130',
+    'val_131', 'val_132', 'val_133', 'val_134', 'val_135', 'val_136', 'val_137', 'val_138', 'val_139', 'val_140',
+    'val_141', 'val_142', 'val_143', 'val_144', 'val_145', 'val_146', 'val_147', 'val_148', 'val_149', 'val_150',
+    'val_151', 'val_152', 'val_153', 'val_154', 'val_155', 'val_156', 'val_157', 'val_158', 'val_159', 'val_160',
+    'val_161', 'val_162', 'val_163', 'val_164', 'val_165', 'val_166', 'val_167', 'val_168', 'val_169', 'val_170',
+    'val_171', 'val_172', 'val_173', 'val_174', 'val_175', 'val_176', 'val_177', 'val_178', 'val_179', 'val_180',
+    'val_181', 'val_182', 'val_183', 'val_184', 'val_185', 'val_186', 'val_187', 'val_188', 'val_189', 'val_190',
+    'val_191', 'val_192', 'val_193', 'val_194', 'val_195', 'val_196', 'val_197', 'val_198', 'val_199', 'val_200',
+    'val_201', 'val_202', 'val_203', 'val_204', 'val_205', 'val_206', 'val_207', 'val_208', 'val_209', 'val_210',
+    'val_211', 'val_212', 'val_213', 'val_214', 'val_215', 'val_216', 'val_217', 'val_218', 'val_219', 'val_220',
+    'val_221', 'val_222', 'val_223', 'val_224', 'val_225', 'val_226', 'val_227', 'val_228', 'val_229', 'val_230',
+    'val_231', 'val_232', 'val_233', 'val_234', 'val_235', 'val_236', 'val_237', 'val_238', 'val_239', 'val_240',
+    'val_241', 'val_242', 'val_243', 'val_244', 'val_245', 'val_246', 'val_247', 'val_248', 'val_249', 'val_250',
+    'val_251', 'val_252', 'val_253', 'val_254', 'val_255', 'val_256', 'val_257', 'val_258', 'val_259', 'val_260',
+    'val_261', 'val_262', 'val_263', 'val_264', 'val_265', 'val_266', 'val_267', 'val_268', 'val_269', 'val_270',
+    'val_271', 'val_272', 'val_273', 'val_274', 'val_275', 'val_276', 'val_277', 'val_278', 'val_279', 'val_280',
+    'val_281', 'val_282', 'val_283', 'val_284', 'val_285', 'val_286', 'val_287', 'val_288', 'val_289', 'val_290',
+    'val_291', 'val_292', 'val_293', 'val_294', 'val_295', 'val_296', 'val_297', 'val_298', 'val_299', 'val_300'
+]);
+-- result:
+{"2":{"lst":["str",257,"MA","MQ","MTA","MTAw","MTAx","MTAy","MTAz","MTA0","MTA1","MTA2","MTA3","MTA4","MTA5","MTE","MTEw","MTEx","MTEy","MTEz","MTE0","MTE1","MTE2","MTE3","MTE4","MTE5","MTI","MTIw","MTIx","MTIy","MTIz","MTI0","MTI1","MTI2","MTI3","MTI4","MTI5","MTM","MTMw","MTMx","MTMy","MTMz","MTM0","MTM1","MTM2","MTM3","MTM4","MTM5","MTQ","MTQw","MTQx","MTQy","MTQz","MTQ0","MTQ1","MTQ2","MTQ3","MTQ4","MTQ5","MTU","MTUw","MTUx","MTUy","MTUz","MTU0","MTU1","MTU2","MTU3","MTU4","MTU5","MTY","MTYw","MTYx","MTYy","MTYz","MTY0","MTY1","MTY2","MTY3","MTY4","MTY5","MTc","MTcw","MTcx","MTcy","MTcz","MTc0","MTc1","MTc2","MTc3","MTc4","MTc5","MTg","MTgw","MTgx","MTgy","MTgz","MTg0","MTg1","MTg2","MTg3","MTg4","MTg5","MTk","MTkw","MTkx","MTky","MTkz","MTk0","MTk1","MTk2","MTk3","MTk4","MTk5","Mg","MjA","MjAw","MjAx","MjAy","MjAz","MjA0","MjA1","MjA2","MjA3","MjA4","MjA5","MjE","MjEw","MjEx","MjEy","MjEz","MjE0","MjE1","MjE2","MjE3","MjE4","MjE5","MjI","MjIw","MjIx","MjIy","MjIz","MjI0","MjI1","MjI2","MjI3","MjI4","MjI5","MjM","MjMw","MjMx","MjMy","MjMz","MjM0","MjM1","MjM2","MjM3","MjM4","MjM5","MjQ","MjQw","MjQx","MjQy","MjQz","MjQ0","MjQ1","MjQ2","MjQ3","MjQ4","MjQ5","MjU","MjUw","MjUx","MjUy","MjUz","MjU0","MjU1","MjU2","MjY","Mjc","Mjg","Mjk","Mw","MzA","MzE","MzI","MzM","MzQ","MzU","MzY","Mzc","Mzg","Mzk","NA","NDA","NDE","NDI","NDM","NDQ","NDU","NDY","NDc","NDg","NDk","NQ","NTA","NTE","NTI","NTM","NTQ","NTU","NTY","NTc","NTg","NTk","Ng","NjA","NjE","NjI","NjM","NjQ","NjU","NjY","Njc","Njg","Njk","Nw","NzA","NzE","NzI","NzM","NzQ","NzU","NzY","Nzc","Nzg","Nzk","OA","ODA","ODE","ODI","ODM","ODQ","ODU","ODY","ODc","ODg","ODk","OQ","OTA","OTE","OTI","OTM","OTQ","OTU","OTY","OTc","OTg","OTk"]},"3":{"lst":["i32",257,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32,33,34,35,36,37,38,39,40,41,42,43,44,45,46,47,48,49,50,51,52,53,54,55,56,57,58,59,60,61,62,63,64,65,66,67,68,69,70,71,72,73,74,75,76,77,78,79,80,81,82,83,84,85,86,87,88,89,90,91,92,93,94,95,96,97,98,99,100,101,102,103,104,105,106,107,108,109,110,111,112,113,114,115,116,117,118,119,120,121,122,123,124,125,126,127,128,129,130,131,132,133,134,135,136,137,138,139,140,141,142,143,144,145,146,147,148,149,150,151,152,153,154,155,156,157,158,159,160,161,162,163,164,165,166,167,168,169,170,171,172,173,174,175,176,177,178,179,180,181,182,183,184,185,186,187,188,189,190,191,192,193,194,195,196,197,198,199,200,201,202,203,204,205,206,207,208,209,210,211,212,213,214,215,216,217,218,219,220,221,222,223,224,225,226,227,228,229,230,231,232,233,234,235,236,237,238,239,240,241,242,243,244,245,246,247,248,249,250,251,252,253,254,255,256,257]}}
+-- !result
