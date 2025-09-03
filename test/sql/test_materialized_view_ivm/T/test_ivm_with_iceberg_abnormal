@@ -1,0 +1,65 @@
+-- name: test_ivm_with_iceberg_abnormal
+create external catalog mv_iceberg_${uuid0}
+properties
+(
+    "type" = "iceberg",
+    "iceberg.catalog.type" = "hive",
+    "hive.metastore.uris" = "${iceberg_catalog_hive_metastore_uris}"
+);
+set catalog mv_iceberg_${uuid0};
+create database mv_ice_db_${uuid0};
+use mv_ice_db_${uuid0};
+create table t1 (
+  col_str string,
+  col_int int,
+  dt date
+) partition by(dt);
+
+insert into t1 values 
+  ('a', 1, '2023-12-01'),
+  ('a', 2, '2023-12-01'),
+  ('b', 3, '2023-12-02'),
+  ('', 4, '2023-12-02'),
+  (NULL, 5, '2023-12-03'),
+  (NULL, 6, '2023-12-03'),
+  (NULL, NULL, '2023-12-04'),
+  (NULL, NULL, NULL);
+set catalog default_catalog;
+create database db_${uuid0};
+use db_${uuid0};
+
+CREATE MATERIALIZED VIEW test_mv1 PARTITION BY dt 
+REFRESH DEFERRED MANUAL 
+properties
+(
+    "refresh_mode" = "incremental"
+)
+AS SELECT * FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1;
+
+REFRESH MATERIALIZED VIEW test_mv1 WITH SYNC MODE;
+
+function: print_hit_materialized_view("SELECT * FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1;", "test_mv1")
+SELECT * FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 ORDER BY col_str, col_int, dt limit 3;
+SELECT col_str, col_int, dt FROM test_mv1 ORDER BY col_str, col_int, dt limit 3;
+
+-- only overwrite 2023-12-01 partition, and the other partitions are not changed
+insert overwrite mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 select 'new_a', 3, '2023-12-01';
+-- only overwrite 2023-12-02 partition, and the other partitions are not changed
+insert overwrite mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 select 'new_b', 3, '2023-12-02';
+
+[UC]REFRESH MATERIALIZED VIEW test_mv1 WITH SYNC MODE;
+
+function: print_hit_materialized_view("SELECT * FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1;", "test_mv1")
+SELECT * FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 WHERE dt <= '2023-12-02' ORDER BY col_str, col_int, dt limit 3;
+SELECT col_str, col_int, dt FROM test_mv1 WHERE dt <= '2023-12-02' ORDER BY col_str, col_int, dt limit 3;
+
+ALTER MATERIALIZED VIEW test_mv1 SET("refresh_mode" = "auto");
+REFRESH MATERIALIZED VIEW test_mv1 WITH SYNC MODE;
+function: print_hit_materialized_view("SELECT * FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1;", "test_mv1")
+SELECT * FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 WHERE dt <= '2023-12-02' ORDER BY col_str, col_int, dt limit 3;
+SELECT col_str, col_int, dt FROM test_mv1 WHERE dt <= '2023-12-02' ORDER BY col_str, col_int, dt limit 3;
+
+drop materialized view test_mv1;
+drop table mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 force;
+drop database mv_iceberg_${uuid0}.mv_ice_db_${uuid0} force;
+drop database db_${uuid0} force;

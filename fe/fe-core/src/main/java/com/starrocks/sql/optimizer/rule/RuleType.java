@@ -221,6 +221,14 @@ public enum RuleType {
 
     TF_INNER_TO_SEMI,
 
+    // TVR transform rules
+    TF_TVR_TABLE_SCAN,
+    TF_TVR_AGGREGATE,
+    TF_TVR_PROJECT,
+    TF_TVR_FILTER,
+    TF_TVR_JOIN,
+    TF_TVR_UNION_ALL,
+
     // The following are implementation rules:
     IMPLEMENTATION_RULES,
     IMP_OLAP_LSCAN_TO_PSCAN,
@@ -294,6 +302,7 @@ public enum RuleType {
     GP_FINE_GRAINED_RANGE_PREDICATE,
     GP_ELIMINATE_OP_WITH_CONSTANT,
     GP_VECTOR_REWRITE,
+    GP_TVR_REWRITE,
 
 
     NUM_RULES;

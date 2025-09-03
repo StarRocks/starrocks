@@ -356,8 +356,8 @@ public abstract class BaseMVRefreshProcessor {
      * @param mvTargetPartitionNames: the partitions to be refreshed
      */
     protected InsertStmt generateInsertAst(ConnectContext ctx,
-                                           Set<String> mvTargetPartitionNames) {
-        final String definition = mvContext.getDefinition();
+                                           Set<String> mvTargetPartitionNames,
+                                           String definition) throws AnalysisException {
         final InsertStmt insertStmt =
                 (InsertStmt) SqlParser.parse(definition, ctx.getSessionVariable()).get(0);
         // set target partitions

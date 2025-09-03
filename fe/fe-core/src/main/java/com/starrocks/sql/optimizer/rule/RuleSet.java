@@ -170,6 +170,12 @@ import com.starrocks.sql.optimizer.rule.transformation.materialization.rule.Aggr
 import com.starrocks.sql.optimizer.rule.transformation.materialization.rule.OnlyJoinRule;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.rule.OnlyScanRule;
 import com.starrocks.sql.optimizer.rule.transformation.pruner.CboTablePruneRule;
+import com.starrocks.sql.optimizer.rule.tvr.TvrAggregateRule;
+import com.starrocks.sql.optimizer.rule.tvr.TvrFilterRule;
+import com.starrocks.sql.optimizer.rule.tvr.TvrJoinRule;
+import com.starrocks.sql.optimizer.rule.tvr.TvrProjectRule;
+import com.starrocks.sql.optimizer.rule.tvr.TvrTableScanRule;
+import com.starrocks.sql.optimizer.rule.tvr.TvrUnionAllRule;
 
 import java.util.List;
 
@@ -419,6 +425,16 @@ public class RuleSet {
                     new RewriteSimpleAggToMetaScanRule(),
                     RewriteSimpleAggToHDFSScanRule.SCAN_AND_PROJECT,
                     new MinMaxOptOnScanRule()
+            ));
+
+    public static final Rule TVR_REWRITE_RULES =
+            new CombinationRule(RuleType.GP_TVR_REWRITE, ImmutableList.of(
+                    new TvrTableScanRule(),
+                    new TvrProjectRule(),
+                    new TvrFilterRule(),
+                    new TvrJoinRule(),
+                    new TvrAggregateRule(),
+                    new TvrUnionAllRule()
             ));
 
     public RuleSet() {

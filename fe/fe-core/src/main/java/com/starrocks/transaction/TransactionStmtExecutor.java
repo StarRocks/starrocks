@@ -33,6 +33,8 @@ import com.starrocks.common.util.concurrent.lock.LockTimeoutException;
 import com.starrocks.lake.LakeTableHelper;
 import com.starrocks.load.EtlJobType;
 import com.starrocks.load.loadv2.InsertLoadJob;
+import com.starrocks.load.loadv2.InsertLoadTxnCallback;
+import com.starrocks.load.loadv2.InsertLoadTxnCallbackFactory;
 import com.starrocks.load.loadv2.LoadJob;
 import com.starrocks.load.loadv2.LoadMgr;
 import com.starrocks.metric.MetricRepo;
@@ -423,6 +425,8 @@ public class TransactionStmtExecutor {
                 coord.setLoadJobType(TLoadJobType.INSERT_VALUES);
             }
 
+            InsertLoadTxnCallback insertLoadTxnCallback =
+                    InsertLoadTxnCallbackFactory.of(context, database.getId(), targetTable);
             InsertLoadJob loadJob = context.getGlobalStateMgr().getLoadMgr().registerInsertLoadJob(
                     label,
                     database.getFullName(),
@@ -435,7 +439,8 @@ public class TransactionStmtExecutor {
                     estimate(execPlan),
                     context.getSessionVariable().getQueryTimeoutS(),
                     context.getCurrentWarehouseId(),
-                    coord);
+                    coord,
+                    insertLoadTxnCallback);
             loadJob.setJobProperties(dmlStmt.getProperties());
             jobId = loadJob.getId();
             coord.setLoadJobId(jobId);

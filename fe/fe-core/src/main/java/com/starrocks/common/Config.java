@@ -3386,6 +3386,9 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true)
     public static String default_mv_partition_refresh_strategy = "strict";
 
+    @ConfField(mutable = true)
+    public static String default_mv_refresh_mode = "pct";
+
     @ConfField(mutable = true, comment = "Check the schema of materialized view's base table strictly or not")
     public static boolean enable_active_materialized_view_schema_strict_check = true;
 
