@@ -12,6 +12,7 @@ displayed_sidebar: docs
 
 ```Haskell
 NULL_OR_EMPTY(str)
+BOOLEAN NULL_OR_EMPTY (any_array)
 ```
 
 ## 参数说明
@@ -40,6 +41,20 @@ MySQL > select null_or_empty("");
 +-------------------+
 
 MySQL > select null_or_empty("a");
++--------------------+
+| null_or_empty('a') |
++--------------------+
+|                  0 |
++--------------------+
+
+MySQL > select null_or_empty([]);
++-------------------+
+| null_or_empty('') |
++-------------------+
+|                 1 |
++-------------------+
+
+MySQL > select null_or_empty([1]);
 +--------------------+
 | null_or_empty('a') |
 +--------------------+

@@ -16,7 +16,6 @@ package com.starrocks.load.streamload;
 
 import com.google.common.collect.Lists;
 import com.google.re2j.Pattern;
-import com.starrocks.analysis.Expr;
 import com.starrocks.catalog.Database;
 import com.starrocks.common.Config;
 import com.starrocks.common.StarRocksException;
@@ -33,6 +32,7 @@ import com.starrocks.sql.ast.ImportColumnsStmt;
 import com.starrocks.sql.ast.ImportWhereStmt;
 import com.starrocks.sql.ast.PartitionNames;
 import com.starrocks.sql.ast.RowDelimiter;
+import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.parser.ParsingException;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.TCompressionType;

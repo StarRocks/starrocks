@@ -35,10 +35,9 @@
 package com.starrocks.qe;
 
 import com.google.common.base.Strings;
-import com.starrocks.analysis.Expr;
-import com.starrocks.analysis.LiteralExpr;
-import com.starrocks.analysis.NullLiteral;
-import com.starrocks.authentication.OAuth2Context;
+import com.starrocks.authentication.AuthenticationException;
+import com.starrocks.authentication.AuthenticationProvider;
+import com.starrocks.authentication.UserIdentityUtils;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Table;
@@ -74,6 +73,7 @@ import com.starrocks.server.WarehouseManager;
 import com.starrocks.service.FrontendOptions;
 import com.starrocks.sql.analyzer.AstToSQLBuilder;
 import com.starrocks.sql.ast.AstTraverser;
+import com.starrocks.sql.ast.DeleteStmt;
 import com.starrocks.sql.ast.DmlStmt;
 import com.starrocks.sql.ast.ExecuteStmt;
 import com.starrocks.sql.ast.InsertStmt;
@@ -83,6 +83,10 @@ import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.Relation;
 import com.starrocks.sql.ast.SetStmt;
 import com.starrocks.sql.ast.StatementBase;
+import com.starrocks.sql.ast.UpdateStmt;
+import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.LiteralExpr;
+import com.starrocks.sql.ast.expression.NullLiteral;
 import com.starrocks.sql.ast.txn.BeginStmt;
 import com.starrocks.sql.ast.txn.CommitStmt;
 import com.starrocks.sql.ast.txn.RollbackStmt;
@@ -101,7 +105,6 @@ import org.apache.logging.log4j.Logger;
 import java.io.IOException;
 import java.lang.management.ManagementFactory;
 import java.lang.management.ThreadMXBean;
-import java.net.URLEncoder;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.nio.channels.AsynchronousCloseException;
@@ -347,6 +350,7 @@ public class ConnectProcessor {
         boolean onlySetStmt = true;
         try {
             ctx.setQueryId(UUIDUtil.genUUID());
+            ctx.setExecutionId(UUIDUtil.toTUniqueId(ctx.getQueryId()));
             if (Config.enable_print_sql) {
                 LOG.info("Begin to execute sql, type: query, query id:{}, sql:{}", ctx.getQueryId(), originStmt);
             }
@@ -385,22 +389,25 @@ public class ConnectProcessor {
                         !((parsedStmt instanceof InsertStmt && !((InsertStmt) parsedStmt).isOverwrite()) ||
                                 parsedStmt instanceof BeginStmt ||
                                 parsedStmt instanceof CommitStmt ||
+                                parsedStmt instanceof UpdateStmt ||
+                                parsedStmt instanceof DeleteStmt ||
                                 parsedStmt instanceof RollbackStmt)) {
                     ErrorReport.report(ErrorCode.ERR_EXPLICIT_TXN_NOT_SUPPORT_STMT);
                     ctx.getState().setErrType(QueryState.ErrType.ANALYSIS_ERR);
                     return;
                 }
 
-                if (ctx.getOAuth2Context() != null && ctx.getAuthToken() == null) {
-                    OAuth2Context oAuth2Context = ctx.getOAuth2Context();
-                    String authUrl = oAuth2Context.authServerUrl() +
-                            "?response_type=code" +
-                            "&client_id=" + URLEncoder.encode(oAuth2Context.clientId(), StandardCharsets.UTF_8) +
-                            "&redirect_uri=" + URLEncoder.encode(oAuth2Context.redirectUrl(), StandardCharsets.UTF_8) +
-                            "&state=" + ctx.getConnectionId() +
-                            "&scope=openid";
+                try {
+                    AuthenticationProvider authenticationProvider = ctx.getAuthenticationProvider();
+                    if (authenticationProvider == null) {
+                        ErrorReport.report("Unknown authentication method");
+                        ctx.getState().setErrType(QueryState.ErrType.ANALYSIS_ERR);
+                        return;
+                    }
 
-                    ErrorReport.report(ErrorCode.ERR_OAUTH2_NOT_AUTHENTICATED, authUrl);
+                    authenticationProvider.checkLoginSuccess(ctx.getConnectionId(), ctx.getAuthenticationContext());
+                } catch (AuthenticationException authenticationException) {
+                    ErrorReport.report(authenticationException.getMessage());
                     ctx.getState().setErrType(QueryState.ErrType.ANALYSIS_ERR);
                     return;
                 }
@@ -704,7 +711,8 @@ public class ConnectProcessor {
                 }
             } else {
                 ShowResultSet resultSet = executor.getShowResultSet();
-                // for lower version fe, all forwarded command is OK or EOF State, so we prefer to use remote packet for compatible
+                // for lower version fe, all forwarded command is OK or EOF State, so we prefer to use remote packet for
+                // compatible
                 // ShowResultSet is null means this is not ShowStmt, use remote packet(executor.getOutputPacket())
                 // or use local packet (getResultPacket())
                 if (resultSet == null) {
@@ -776,7 +784,7 @@ public class ConnectProcessor {
             ctx.getSessionVariable().setEnableInsertStrict(request.enableStrictMode);
         }
         if (request.isSetCurrent_user_ident()) {
-            UserIdentity currentUserIdentity = UserIdentity.fromThrift(request.getCurrent_user_ident());
+            UserIdentity currentUserIdentity = UserIdentityUtils.fromThrift(request.getCurrent_user_ident());
             ctx.setCurrentUserIdentity(currentUserIdentity);
         }
 

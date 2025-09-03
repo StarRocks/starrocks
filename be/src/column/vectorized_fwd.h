@@ -27,6 +27,7 @@ class HyperLogLog;
 class BitmapValue;
 class PercentileValue;
 class JsonValue;
+class VariantValue;
 
 class DateValue;
 class TimestampValue;
@@ -103,6 +104,9 @@ using BitmapColumn = ObjectColumn<BitmapValue>;
 using PercentileColumn = ObjectColumn<PercentileValue>;
 using JsonColumnBase = ObjectColumn<JsonValue>;
 class JsonColumn;
+
+using VariantColumnBase = ObjectColumn<VariantValue>;
+class VariantColumn;
 
 class MapColumn;
 class StructColumn;

@@ -600,4 +600,109 @@ TEST_F(MetaFileTest, test_error_state) {
     EXPECT_TRUE(StarRocksMetrics::instance()->primary_key_table_error_state_total.value() > 0);
 }
 
+TEST_F(MetaFileTest, test_batch_apply_opwrite_set_final_rowset_basic) {
+    const int64_t tablet_id = 30001;
+    auto tablet = std::make_shared<Tablet>(_tablet_manager.get(), tablet_id);
+    auto metadata = std::make_shared<TabletMetadata>();
+    metadata->set_id(tablet_id);
+    metadata->set_version(10);
+    metadata->set_next_rowset_id(110);
+
+    MetaFileBuilder builder(*tablet, metadata);
+
+    // Batch 1: add two segments a.dat / b.dat
+    TxnLogPB_OpWrite op_write1;
+    RowsetMetadataPB rowset_meta1;
+    rowset_meta1.add_segments("a.dat");
+    rowset_meta1.add_segments("b.dat");
+    op_write1.mutable_rowset()->CopyFrom(rowset_meta1);
+    builder.batch_apply_opwrite(op_write1, /*replace_segments*/ {}, /*orphan_files*/ {});
+
+    // Batch 2: append one segment c.dat (no cross-batch replacement to avoid OOB)
+    TxnLogPB_OpWrite op_write2;
+    RowsetMetadataPB rowset_meta2;
+    rowset_meta2.add_segments("c.dat");
+    op_write2.mutable_rowset()->CopyFrom(rowset_meta2);
+    builder.batch_apply_opwrite(op_write2, /*replace_segments*/ {}, /*orphan_files*/ {});
+
+    // Update delete stats before finalizing; predicted segment ids start from next_rowset_id
+    std::map<uint32_t, size_t> segid_to_add_dels;
+    segid_to_add_dels[110] = 5; // a.dat
+    segid_to_add_dels[111] = 3; // b.dat
+    segid_to_add_dels[112] = 2; // c.dat
+    ASSERT_TRUE(builder.update_num_del_stat(segid_to_add_dels).ok());
+
+    // Seal pending rowset
+    builder.set_final_rowset();
+    ASSERT_EQ(1, metadata->rowsets_size());
+    const auto& final_rowset = metadata->rowsets(0);
+    EXPECT_EQ(110, final_rowset.id());
+    ASSERT_EQ(3, final_rowset.segments_size());
+    EXPECT_EQ("a.dat", final_rowset.segments(0));
+    EXPECT_EQ("b.dat", final_rowset.segments(1));
+    EXPECT_EQ("c.dat", final_rowset.segments(2));
+    EXPECT_EQ(10, final_rowset.num_dels()); // 5 + 3 + 2
+    EXPECT_EQ(113, metadata->next_rowset_id());
+
+    // Persist metadata
+    metadata->set_version(11);
+    ASSERT_TRUE(builder.finalize(next_id()).ok());
+    ASSIGN_OR_ABORT(auto persisted, _tablet_manager->get_tablet_metadata(tablet_id, 11));
+    ASSERT_EQ(1, persisted->rowsets_size());
+    EXPECT_EQ(10, persisted->rowsets(0).num_dels());
+    EXPECT_EQ("b.dat", persisted->rowsets(0).segments(1));
+}
+
+TEST_F(MetaFileTest, test_batch_apply_opwrite_merge_dels) {
+    const int64_t tablet_id = 30002;
+    auto tablet = std::make_shared<Tablet>(_tablet_manager.get(), tablet_id);
+    auto metadata = std::make_shared<TabletMetadata>();
+    metadata->set_id(tablet_id);
+    metadata->set_version(20);
+    metadata->set_next_rowset_id(500);
+
+    MetaFileBuilder builder(*tablet, metadata);
+
+    // batch 1: two segments + two del files
+    TxnLogPB_OpWrite op_write1;
+    RowsetMetadataPB rowset_meta1;
+    rowset_meta1.add_segments("s1.dat");
+    rowset_meta1.add_segments("s2.dat");
+    op_write1.mutable_rowset()->CopyFrom(rowset_meta1);
+    op_write1.add_dels("d1.del");
+    op_write1.add_dels("d2.del");
+    builder.batch_apply_opwrite(op_write1, {}, {});
+
+    // batch 2: one segment + one del file
+    TxnLogPB_OpWrite op_write2;
+    RowsetMetadataPB rowset_meta2;
+    rowset_meta2.add_segments("s3.dat");
+    op_write2.mutable_rowset()->CopyFrom(rowset_meta2);
+    op_write2.add_dels("d3.del");
+    builder.batch_apply_opwrite(op_write2, {}, {});
+
+    builder.set_final_rowset();
+    ASSERT_EQ(1, metadata->rowsets_size());
+    const auto& final_rowset = metadata->rowsets(0);
+    EXPECT_EQ(500, final_rowset.id());
+    ASSERT_EQ(3, final_rowset.segments_size());
+    EXPECT_EQ("s1.dat", final_rowset.segments(0));
+    EXPECT_EQ("s2.dat", final_rowset.segments(1));
+    EXPECT_EQ("s3.dat", final_rowset.segments(2));
+    ASSERT_EQ(3, final_rowset.del_files_size());
+    std::set<std::string> del_names;
+    for (int i = 0; i < final_rowset.del_files_size(); ++i) {
+        del_names.insert(final_rowset.del_files(i).name());
+        EXPECT_EQ(final_rowset.id(), final_rowset.del_files(i).origin_rowset_id());
+    }
+    EXPECT_TRUE(del_names.count("d1.del") > 0);
+    EXPECT_TRUE(del_names.count("d2.del") > 0);
+    EXPECT_TRUE(del_names.count("d3.del") > 0);
+
+    metadata->set_version(21);
+    ASSERT_TRUE(builder.finalize(next_id()).ok());
+    ASSIGN_OR_ABORT(auto persisted, _tablet_manager->get_tablet_metadata(tablet_id, 21));
+    ASSERT_EQ(1, persisted->rowsets_size());
+    ASSERT_EQ(3, persisted->rowsets(0).del_files_size());
+}
 } // namespace starrocks::lake

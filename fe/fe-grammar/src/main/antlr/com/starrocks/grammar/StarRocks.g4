@@ -1163,7 +1163,7 @@ tableOperationClause
     ;
 
 tableOperationArg
-    : functionCall (WHERE expression)?
+    : identifier '(' (argumentList)? ')' (WHERE expression)?
     ;
 
 tagOptions
@@ -2750,7 +2750,7 @@ whenClause
     ;
 
 filter
-    : FILTER '(' WHERE booleanExpression ')'
+    : FILTER '(' WHERE expression ')'
     ;
 
 over

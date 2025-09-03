@@ -14,10 +14,10 @@
 
 package com.starrocks.lake.snapshot;
 
-import com.starrocks.analysis.BrokerDesc;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.fs.HdfsUtil;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.BrokerDesc;
 import com.starrocks.storagevolume.StorageVolume;
 
 public class ClusterSnapshotUtils {

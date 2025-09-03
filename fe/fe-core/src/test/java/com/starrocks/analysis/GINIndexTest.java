@@ -25,8 +25,12 @@ import com.starrocks.common.InvertedIndexParams.IndexParamsKey;
 import com.starrocks.common.InvertedIndexParams.InvertedIndexImpType;
 import com.starrocks.common.InvertedIndexParams.SearchParamsKey;
 import com.starrocks.server.RunMode;
+import com.starrocks.sql.analyzer.IndexAnalyzer;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.IndexDef.IndexType;
+import com.starrocks.sql.ast.expression.MatchExpr;
+import com.starrocks.sql.ast.expression.SlotRef;
+import com.starrocks.sql.ast.expression.StringLiteral;
 import com.starrocks.sql.plan.PlanTestBase;
 import com.starrocks.thrift.TIndexType;
 import com.starrocks.thrift.TOlapTableIndex;
@@ -67,48 +71,48 @@ public class GINIndexTest extends PlanTestBase {
 
         Assertions.assertThrows(
                 SemanticException.class,
-                () -> InvertedIndexUtil.checkInvertedIndexValid(c1, null, KeysType.UNIQUE_KEYS),
+                () -> IndexAnalyzer.checkInvertedIndexValid(c1, null, KeysType.UNIQUE_KEYS),
                 "The inverted index can only be build on DUPLICATE/PRIMARY_KEYS table.");
 
         Assertions.assertThrows(
                 SemanticException.class,
-                () -> InvertedIndexUtil.checkInvertedIndexValid(c1, null, KeysType.DUP_KEYS),
+                () -> IndexAnalyzer.checkInvertedIndexValid(c1, null, KeysType.DUP_KEYS),
                 "The inverted index can only be build on column with type of CHAR/STRING/VARCHAR type.");
 
         Column c2 = new Column("f2", Type.STRING, true);
         Assertions.assertThrows(
                 SemanticException.class,
-                () -> InvertedIndexUtil.checkInvertedIndexValid(c2, new HashMap<String, String>() {{
+                () -> IndexAnalyzer.checkInvertedIndexValid(c2, new HashMap<String, String>() {{
                     put(IMP_LIB.name().toLowerCase(Locale.ROOT), "???");
                 }}, KeysType.DUP_KEYS),
                 "Only support clucene implement for now");
 
         Assertions.assertThrows(
                 SemanticException.class,
-                () -> InvertedIndexUtil.checkInvertedIndexValid(c2, new HashMap<String, String>() {{
+                () -> IndexAnalyzer.checkInvertedIndexValid(c2, new HashMap<String, String>() {{
                     put(IMP_LIB.name().toLowerCase(Locale.ROOT), InvertedIndexImpType.CLUCENE.name());
-                    put(InvertedIndexUtil.INVERTED_INDEX_PARSER_KEY, "french");
+                    put(IndexAnalyzer.INVERTED_INDEX_PARSER_KEY, "french");
                 }}, KeysType.DUP_KEYS));
 
         Column c3 = new Column("f3", Type.FLOAT, true);
         Assertions.assertThrows(
                 SemanticException.class,
-                () -> InvertedIndexUtil.checkInvertedIndexValid(c3, new HashMap<String, String>() {{
+                () -> IndexAnalyzer.checkInvertedIndexValid(c3, new HashMap<String, String>() {{
                     put(IMP_LIB.name().toLowerCase(Locale.ROOT), InvertedIndexImpType.CLUCENE.name());
-                    put(InvertedIndexUtil.INVERTED_INDEX_PARSER_KEY, InvertedIndexUtil.INVERTED_INDEX_PARSER_CHINESE);
+                    put(IndexAnalyzer.INVERTED_INDEX_PARSER_KEY, IndexAnalyzer.INVERTED_INDEX_PARSER_CHINESE);
                 }}, KeysType.DUP_KEYS));
 
         Assertions.assertThrows(
                 SemanticException.class,
-                () -> InvertedIndexUtil.checkInvertedIndexValid(c2, new HashMap<String, String>() {{
+                () -> IndexAnalyzer.checkInvertedIndexValid(c2, new HashMap<String, String>() {{
                     put(IMP_LIB.name().toLowerCase(Locale.ROOT), InvertedIndexImpType.CLUCENE.name());
                     put("xxx", "yyy");
                 }}, KeysType.DUP_KEYS));
 
         Assertions.assertDoesNotThrow(
-                () -> InvertedIndexUtil.checkInvertedIndexValid(c2, new HashMap<String, String>() {{
+                () -> IndexAnalyzer.checkInvertedIndexValid(c2, new HashMap<String, String>() {{
                     put(IMP_LIB.name().toLowerCase(Locale.ROOT), InvertedIndexImpType.CLUCENE.name());
-                    put(InvertedIndexUtil.INVERTED_INDEX_PARSER_KEY, InvertedIndexUtil.INVERTED_INDEX_PARSER_CHINESE);
+                    put(IndexAnalyzer.INVERTED_INDEX_PARSER_KEY, IndexAnalyzer.INVERTED_INDEX_PARSER_CHINESE);
                     put(IndexParamsKey.OMIT_TERM_FREQ_AND_POSITION.name().toLowerCase(Locale.ROOT), "true");
                     put(SearchParamsKey.IS_SEARCH_ANALYZED.name().toLowerCase(Locale.ROOT), "false");
                     put(SearchParamsKey.DEFAULT_SEARCH_ANALYZER.name().toLowerCase(Locale.ROOT), "english");
@@ -123,7 +127,7 @@ public class GINIndexTest extends PlanTestBase {
         };
         Assertions.assertThrows(
                 SemanticException.class,
-                () -> InvertedIndexUtil.checkInvertedIndexValid(c2, null, KeysType.DUP_KEYS),
+                () -> IndexAnalyzer.checkInvertedIndexValid(c2, null, KeysType.DUP_KEYS),
                 "The inverted index does not support shared data mode");
     }
 
@@ -135,7 +139,7 @@ public class GINIndexTest extends PlanTestBase {
 
         Index index = new Index(indexId, indexName, columns, IndexType.GIN, "", new HashMap<>() {{
             put(IMP_LIB.name().toLowerCase(Locale.ROOT), InvertedIndexImpType.CLUCENE.name());
-            put(InvertedIndexUtil.INVERTED_INDEX_PARSER_KEY, InvertedIndexUtil.INVERTED_INDEX_PARSER_CHINESE);
+            put(IndexAnalyzer.INVERTED_INDEX_PARSER_KEY, IndexAnalyzer.INVERTED_INDEX_PARSER_CHINESE);
             put(IndexParamsKey.OMIT_TERM_FREQ_AND_POSITION.name().toLowerCase(Locale.ROOT), "true");
             put(SearchParamsKey.IS_SEARCH_ANALYZED.name().toLowerCase(Locale.ROOT), "false");
             put(SearchParamsKey.DEFAULT_SEARCH_ANALYZER.name().toLowerCase(Locale.ROOT), "english");
@@ -154,12 +158,12 @@ public class GINIndexTest extends PlanTestBase {
                 olapIndex.getCommon_properties());
 
         Assertions.assertEquals(new HashMap<String, String>(){{
-            put(InvertedIndexUtil.INVERTED_INDEX_PARSER_KEY, InvertedIndexUtil.INVERTED_INDEX_PARSER_CHINESE);
+            put(IndexAnalyzer.INVERTED_INDEX_PARSER_KEY, IndexAnalyzer.INVERTED_INDEX_PARSER_CHINESE);
             put(IndexParamsKey.OMIT_TERM_FREQ_AND_POSITION.name().toLowerCase(Locale.ROOT), "true");
         }}, olapIndex.getIndex_properties());
 
         Assertions.assertEquals(new HashMap<String, String>(){{
-            put(InvertedIndexUtil.INVERTED_INDEX_PARSER_KEY, InvertedIndexUtil.INVERTED_INDEX_PARSER_CHINESE);
+            put(IndexAnalyzer.INVERTED_INDEX_PARSER_KEY, IndexAnalyzer.INVERTED_INDEX_PARSER_CHINESE);
             put(IndexParamsKey.OMIT_TERM_FREQ_AND_POSITION.name().toLowerCase(Locale.ROOT), "true");
         }}, olapIndex.getIndex_properties());
 

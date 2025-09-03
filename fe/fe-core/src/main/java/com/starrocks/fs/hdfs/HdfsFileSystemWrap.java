@@ -14,10 +14,10 @@
 
 package com.starrocks.fs.hdfs;
 
-import com.starrocks.analysis.BrokerDesc;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.fs.FileSystem;
 import com.starrocks.fs.HdfsUtil;
+import com.starrocks.sql.ast.BrokerDesc;
 import com.starrocks.thrift.THdfsProperties;
 import org.apache.hadoop.fs.FileStatus;
 

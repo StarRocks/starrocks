@@ -14,14 +14,15 @@
 
 package com.starrocks.sql.analyzer;
 
-import com.starrocks.analysis.Expr;
-import com.starrocks.analysis.ProcedureArgument;
 import com.starrocks.connector.Procedure;
+import com.starrocks.connector.iceberg.procedure.NamedArgument;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.AstVisitorExtendInterface;
 import com.starrocks.sql.ast.CallProcedureStatement;
+import com.starrocks.sql.ast.ProcedureArgument;
 import com.starrocks.sql.ast.QualifiedName;
+import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
@@ -63,7 +64,7 @@ public class CallProcedureAnalyzer {
 
         private void checkArguments(CallProcedureStatement stmt, Procedure procedure, ConnectContext context) {
             List<ProcedureArgument> callArgs = stmt.getArguments();
-            List<Procedure.Argument> procedureArgs = procedure.getArguments();
+            List<NamedArgument> procedureArgs = procedure.getArguments();
 
             // check named and unnamed arguments are mixing used.
             boolean anyNamedArgs = callArgs.stream().anyMatch(arg -> arg.getName().isPresent());
@@ -73,7 +74,7 @@ public class CallProcedureAnalyzer {
             }
 
             // record procedure argument names and their positions
-            Map<String, Procedure.Argument> procedureArgNameToArgument = new HashMap<>();
+            Map<String, NamedArgument> procedureArgNameToArgument = new HashMap<>();
             for (int index = 0; index < procedureArgs.size(); ++index) {
                 procedureArgNameToArgument.put(procedureArgs.get(index).getName(), procedure.getArguments().get(index));
             }
@@ -84,7 +85,7 @@ public class CallProcedureAnalyzer {
                 ProcedureArgument procedureArgument = callArgs.get(index);
                 if (procedureArgument.getName().isPresent()) {
                     String name = procedureArgument.getName().get();
-                    Procedure.Argument argument = procedureArgNameToArgument.get(name);
+                    NamedArgument argument = procedureArgNameToArgument.get(name);
                     if (argument == null) {
                         throw new SemanticException("Unknown argument name: " + name);
                     }
@@ -110,7 +111,7 @@ public class CallProcedureAnalyzer {
             Map<String, ConstantOperator> constantArgs = new HashMap<>();
             for (Map.Entry<String, ProcedureArgument> entry : callNamedArgs.entrySet()) {
                 Expr callArgumentValue = entry.getValue().getValue();
-                Procedure.Argument procedureArgument = procedureArgNameToArgument.get(entry.getKey());
+                NamedArgument procedureArgument = procedureArgNameToArgument.get(entry.getKey());
                 // check call argument is constant
                 ScalarOperator result;
                 try {

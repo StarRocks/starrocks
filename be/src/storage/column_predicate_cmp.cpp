@@ -182,6 +182,7 @@ static ColumnPredicate* new_column_predicate(const TypeInfoPtr& type_info, Colum
     case TYPE_OBJECT:
     case TYPE_PERCENTILE:
     case TYPE_JSON:
+    case TYPE_VARIANT:
     case TYPE_NULL:
     case TYPE_FUNCTION:
     case TYPE_TIME:

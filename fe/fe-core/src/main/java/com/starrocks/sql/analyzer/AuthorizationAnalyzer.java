@@ -16,8 +16,6 @@ package com.starrocks.sql.analyzer;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
-import com.starrocks.analysis.FunctionName;
-import com.starrocks.analysis.TableName;
 import com.starrocks.authorization.AuthorizationMgr;
 import com.starrocks.authorization.ObjectType;
 import com.starrocks.authorization.PEntryObject;
@@ -43,6 +41,8 @@ import com.starrocks.sql.ast.SetRoleStmt;
 import com.starrocks.sql.ast.ShowGrantsStmt;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.UserRef;
+import com.starrocks.sql.ast.expression.FunctionName;
+import com.starrocks.sql.ast.expression.TableName;
 import com.starrocks.sql.ast.pipe.PipeName;
 
 import java.util.ArrayList;

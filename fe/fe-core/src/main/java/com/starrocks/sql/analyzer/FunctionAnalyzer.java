@@ -18,17 +18,6 @@ import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
 import com.google.re2j.Pattern;
-import com.starrocks.analysis.Expr;
-import com.starrocks.analysis.FunctionCallExpr;
-import com.starrocks.analysis.FunctionName;
-import com.starrocks.analysis.FunctionParams;
-import com.starrocks.analysis.IntLiteral;
-import com.starrocks.analysis.LargeIntLiteral;
-import com.starrocks.analysis.LiteralExpr;
-import com.starrocks.analysis.NullLiteral;
-import com.starrocks.analysis.OrderByElement;
-import com.starrocks.analysis.StringLiteral;
-import com.starrocks.analysis.UserVariableExpr;
 import com.starrocks.catalog.AggregateFunction;
 import com.starrocks.catalog.ArrayType;
 import com.starrocks.catalog.Function;
@@ -50,7 +39,18 @@ import com.starrocks.common.FeConstants;
 import com.starrocks.common.Pair;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariableConstants;
-import com.starrocks.sql.ast.ArrayExpr;
+import com.starrocks.sql.ast.OrderByElement;
+import com.starrocks.sql.ast.expression.ArrayExpr;
+import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.FunctionCallExpr;
+import com.starrocks.sql.ast.expression.FunctionName;
+import com.starrocks.sql.ast.expression.FunctionParams;
+import com.starrocks.sql.ast.expression.IntLiteral;
+import com.starrocks.sql.ast.expression.LargeIntLiteral;
+import com.starrocks.sql.ast.expression.LiteralExpr;
+import com.starrocks.sql.ast.expression.NullLiteral;
+import com.starrocks.sql.ast.expression.StringLiteral;
+import com.starrocks.sql.ast.expression.UserVariableExpr;
 import com.starrocks.sql.common.TypeManager;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
@@ -214,6 +214,17 @@ public class FunctionAnalyzer {
             FunctionName argFuncNameWithoutIf =
                     new FunctionName(AggStateUtils.getAggFuncNameOfCombinator(fnName.getFunction()));
             FunctionParams params = functionCallExpr.getParams();
+            
+            // Validate that the condition parameter (last parameter) is boolean type or can be cast to boolean
+            if (!params.exprs().isEmpty()) {
+                Expr conditionExpr = params.exprs().get(params.exprs().size() - 1);
+                if (!Type.canCastTo(conditionExpr.getType(), Type.BOOLEAN)) {
+                    throw new SemanticException(String.format(
+                        "The condition expression in %s function must be boolean type or castable to boolean, but got %s",
+                        fnName.getFunction(), conditionExpr.getType().toSql()), functionCallExpr.getPos());
+                }
+            }
+            
             FunctionParams functionParamsWithOutIf =
                     new FunctionParams(params.isStar(), params.exprs().subList(0, params.exprs().size() - 1),
                             params.getExprsNames() == null ? null :

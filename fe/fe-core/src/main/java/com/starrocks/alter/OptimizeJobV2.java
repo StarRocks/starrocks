@@ -45,6 +45,7 @@ import com.starrocks.persist.ReplacePartitionOperationLog;
 import com.starrocks.persist.gson.GsonPostProcessable;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.scheduler.Constants;
+import com.starrocks.scheduler.SubmitResult;
 import com.starrocks.scheduler.TaskBuilder;
 import com.starrocks.scheduler.TaskManager;
 import com.starrocks.scheduler.TaskRun;
@@ -288,7 +289,12 @@ public class OptimizeJobV2 extends AlterJobV2 implements GsonPostProcessable {
         for (OptimizeTask rewriteTask : rewriteTasks) {
             try {
                 taskManager.createTask(rewriteTask, false);
-                taskManager.executeTask(rewriteTask.getName());
+                SubmitResult r = taskManager.executeTask(rewriteTask.getName());
+                if (r.getStatus() == SubmitResult.SubmitStatus.SUBMITTED) {
+                    rewriteTask.setOptimizeTaskState(Constants.TaskRunState.RUNNING);
+                } else if (r.getStatus() == SubmitResult.SubmitStatus.FAILED) {
+                    rewriteTask.setOptimizeTaskState(Constants.TaskRunState.FAILED);
+                }
                 LOG.debug("create rewrite task {}", rewriteTask.toString());
             } catch (DdlException e) {
                 rewriteTask.setOptimizeTaskState(Constants.TaskRunState.FAILED);
@@ -331,6 +337,7 @@ public class OptimizeJobV2 extends AlterJobV2 implements GsonPostProcessable {
         int progress = 0;
         TaskRunManager taskRunManager = GlobalStateMgr.getCurrentState().getTaskManager().getTaskRunManager();
         TaskRunScheduler taskRunScheduler = taskRunManager.getTaskRunScheduler();
+        TaskManager taskManager = GlobalStateMgr.getCurrentState().getTaskManager(); // add: define taskManager
 
         // prepare for the history task info
         Set<String> taskNames = Sets.newHashSet();
@@ -341,6 +348,14 @@ public class OptimizeJobV2 extends AlterJobV2 implements GsonPostProcessable {
                 .getTaskRunManager().getTaskRunHistory().lookupHistoryByTaskNames(dbName, taskNames);
 
         for (OptimizeTask rewriteTask : rewriteTasks) {
+            if (rewriteTask.getOptimizeTaskState() == Constants.TaskRunState.PENDING) {
+                SubmitResult r = taskManager.executeTask(rewriteTask.getName());
+                if (r.getStatus() == SubmitResult.SubmitStatus.SUBMITTED) {
+                    rewriteTask.setOptimizeTaskState(Constants.TaskRunState.RUNNING);
+                } else if (r.getStatus() == SubmitResult.SubmitStatus.FAILED) {
+                    rewriteTask.setOptimizeTaskState(Constants.TaskRunState.FAILED);
+                }
+            }
             if (rewriteTask.getOptimizeTaskState() == Constants.TaskRunState.FAILED
                     || rewriteTask.getOptimizeTaskState() == Constants.TaskRunState.SUCCESS) {
                 progress += 100 / rewriteTasks.size();

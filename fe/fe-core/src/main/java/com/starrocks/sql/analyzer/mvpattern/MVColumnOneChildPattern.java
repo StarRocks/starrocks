@@ -34,8 +34,8 @@
 
 package com.starrocks.sql.analyzer.mvpattern;
 
-import com.starrocks.analysis.Expr;
-import com.starrocks.analysis.FunctionCallExpr;
+import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.FunctionCallExpr;
 
 public class MVColumnOneChildPattern implements MVColumnPattern {
 

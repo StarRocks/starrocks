@@ -24,6 +24,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
+import org.wildfly.common.Assert;
 
 import java.util.Arrays;
 import java.util.List;
@@ -32,7 +33,6 @@ import java.util.stream.Stream;
 
 class SelectStmtWithCaseWhenTest {
     private static StarRocksAssert starRocksAssert;
-
 
     @BeforeAll
     public static void setUp()
@@ -43,7 +43,7 @@ class SelectStmtWithCaseWhenTest {
                 "  `order_date` date NOT NULL COMMENT \"\",\n" +
                 "  `income` decimal(7, 0) NOT NULL COMMENT \"\",\n" +
                 "  `ship_mode` int NOT NULL COMMENT \"\",\n" +
-                "  `ship_code` int" +
+                "  `ship_code` int\n" +
                 ") ENGINE=OLAP \n" +
                 "DUPLICATE KEY(`region`, `order_date`)\n" +
                 "COMMENT \"OLAP\"\n" +
@@ -59,10 +59,18 @@ class SelectStmtWithCaseWhenTest {
                 "\"replicated_storage\" = \"false\",\n" +
                 "\"compression\" = \"LZ4\"\n" +
                 ");";
+        String createTbl2StmtStr = " CREATE TABLE `t1` (\n" +
+                "  `id` varchar(128) NOT NULL COMMENT \"\",\n" +
+                "  `col_arr` array<varchar(100)> " +
+                ") ENGINE=OLAP \n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\"\n" +
+                ");";
 
         starRocksAssert = new StarRocksAssert();
         starRocksAssert.withDatabase("test").useDatabase("test");
         starRocksAssert.withTable(createTblStmtStr);
+        starRocksAssert.withTable(createTbl2StmtStr);
         FeConstants.enablePruneEmptyOutputScan = false;
         FeConstants.setLengthForVarchar = false;
     }
@@ -527,7 +535,8 @@ class SelectStmtWithCaseWhenTest {
                 {"<> 'A'", "[4: ship_mode, INT, false] < 90"},
                 {"<> 'B'", "(4: ship_mode < 80) OR (4: ship_mode >= 90)"},
                 {"<> 'C'", "(4: ship_mode < 70) OR ((4: ship_mode >= 90) OR (4: ship_mode >= 80))"},
-                {"<> 'D'", "(4: ship_mode < 60) OR (((4: ship_mode >= 90) OR (4: ship_mode >= 80)) OR (4: ship_mode >= 70))"},
+                {"<> 'D'",
+                        "(4: ship_mode < 60) OR (((4: ship_mode >= 90) OR (4: ship_mode >= 80)) OR (4: ship_mode >= 70))"},
                 {"<> 'E'", "[4: ship_mode, INT, false] >= 60"},
 
                 {"in ('A','B')",
@@ -580,10 +589,8 @@ class SelectStmtWithCaseWhenTest {
             argumentsList.add(Arguments.of(sql, Arrays.asList(tc).subList(1, tc.length)));
         }
 
-
         return argumentsList.stream();
     }
-
 
     private static Stream<Arguments> caseWhenWithNullableCol() {
         String sqlTemp = "select * from test.t0 where (case \n" +
@@ -648,7 +655,6 @@ class SelectStmtWithCaseWhenTest {
             argumentsList.add(Arguments.of(sql, Arrays.asList(tc).subList(1, tc.length)));
         }
 
-
         return argumentsList.stream();
     }
 
@@ -680,7 +686,8 @@ class SelectStmtWithCaseWhenTest {
                         "if(1: region = 'USA', 1, 0) IN (2, 3, NULL)"},
                 {"select * from test.t0 where (if(region='USA', 1, 0) in (2,3, null)) is null",
                         "if(1: region = 'USA', 1, 0) IN (2, 3, NULL) IS NULL"},
-                {"select * from test.t0 where if(region='USA', 1, 0) not in (0)", "[1: region, VARCHAR, false] = 'USA'"},
+                {"select * from test.t0 where if(region='USA', 1, 0) not in (0)",
+                        "[1: region, VARCHAR, false] = 'USA'"},
 
                 {"select * from test.t0 where if(region='USA', 1, 0) not in (0,1)", "0:EMPTYSET"},
                 {"select * from test.t0 where if(region='USA', 1, 0) not in (2,3)", "  0:OlapScanNode\n" +
@@ -704,13 +711,14 @@ class SelectStmtWithCaseWhenTest {
 
                 {"select * from test.t0 where if(ship_code is null or ship_code > 2, 2, 1) != 2",
                         "if[((5: ship_code IS NULL) OR (5: ship_code > 2), 2, 1)"},
-                {"select * from test.t0 where if(ship_code is null or ship_code > 2, 1, 0) is NOT NULL", "  0:OlapScanNode\n" +
-                        "     table: t0, rollup: t0\n" +
-                        "     preAggregation: on\n" +
-                        "     partitionsRatio=0/3, tabletsRatio=0/0\n" +
-                        "     tabletList=\n" +
-                        "     actualRows=0, avgRowSize=5.0\n" +
-                        "     cardinality: 1\n"},
+                {"select * from test.t0 where if(ship_code is null or ship_code > 2, 1, 0) is NOT NULL",
+                        "  0:OlapScanNode\n" +
+                                "     table: t0, rollup: t0\n" +
+                                "     preAggregation: on\n" +
+                                "     partitionsRatio=0/3, tabletsRatio=0/0\n" +
+                                "     tabletList=\n" +
+                                "     actualRows=0, avgRowSize=5.0\n" +
+                                "     cardinality: 1\n"},
                 {"with tmp as (select ship_mode, if(ship_code > 4, 1, 0) as layer0, " +
                         "if (ship_code >= 1 and ship_code <= 4, 1, 0) as layer1," +
                         "if(ship_code is null or ship_code < 1, 1, 0) as layer2 from t0) " +
@@ -719,39 +727,46 @@ class SelectStmtWithCaseWhenTest {
                         "if[((5: ship_code >= 1) AND (5: ship_code <= 4), 1, 0)"
                 },
 
-                {"select * from test.t0 where nullif('China', region) = 'China'", "[1: region, VARCHAR, false] != 'China'"},
+                {"select * from test.t0 where nullif('China', region) = 'China'",
+                        "[1: region, VARCHAR, false] != 'China'"},
                 {"select * from test.t0 where nullif('China', region) <> 'China'", "0:EMPTYSET"},
-                {"select * from test.t0 where nullif('China', region) is NULL", "[1: region, VARCHAR, false] = 'China'"},
+                {"select * from test.t0 where nullif('China', region) is NULL",
+                        "[1: region, VARCHAR, false] = 'China'"},
                 {"select * from test.t0 where (nullif('China', region) is NULL) is NULL",
                         "0:EMPTYSET"},
                 {"select * from test.t0 where (nullif('China', region) is NULL) is NOT NULL",
                         "0:OlapScanNode\n" +
                                 "     table: t0, rollup: t0\n" +
                                 "     preAggregation: on"},
-                {"select * from test.t0 where nullif('China', region) is NOT NULL", "[1: region, VARCHAR, false] != 'China'"},
+                {"select * from test.t0 where nullif('China', region) is NOT NULL",
+                        "[1: region, VARCHAR, false] != 'China'"},
                 {"select * from test.t0 where (nullif('China', region) is NOT NULL) is NULL",
                         "1: region != 'China' IS NULL"},
                 {"select * from test.t0 where (nullif('China', region) is NOT NULL) is NOT NULL",
                         "1: region != 'China' IS NOT NULL"},
 
                 {"select * from test.t0 where nullif('China', region) = 'USA'", "0:EMPTYSET"},
-                {"select * from test.t0 where nullif('China', region) <>  'USA'", "[1: region, VARCHAR, false] != 'China'"},
+                {"select * from test.t0 where nullif('China', region) <>  'USA'",
+                        "[1: region, VARCHAR, false] != 'China'"},
 
-                {"select * from test.t0 where nullif(1, ship_code) = 1", "(5: ship_code != 1) OR (5: ship_code IS NULL)"},
+                {"select * from test.t0 where nullif(1, ship_code) = 1",
+                        "(5: ship_code != 1) OR (5: ship_code IS NULL)"},
                 {"select * from test.t0 where nullif(1, ship_code) <> 1", "0:EMPTYSET"},
                 {"select * from test.t0 where nullif(1, ship_code) is NULL", "[5: ship_code, INT, true] = 1"},
                 {"select * from test.t0 where (nullif(1, ship_code) is NULL) is NULL", "0:EMPTYSET"},
                 {"select * from test.t0 where (nullif(1, ship_code) is NULL) is NOT NULL",
                         "0:OlapScanNode\n" +
-                        "     table: t0, rollup: t0\n" +
-                        "     preAggregation: on"},
-                {"select * from test.t0 where nullif(1, ship_code) is NOT NULL", "(5: ship_code != 1) OR (5: ship_code IS NULL)"},
+                                "     table: t0, rollup: t0\n" +
+                                "     preAggregation: on"},
+                {"select * from test.t0 where nullif(1, ship_code) is NOT NULL",
+                        "(5: ship_code != 1) OR (5: ship_code IS NULL)"},
                 {"select * from test.t0 where (nullif(1, ship_code) is NOT NULL) is NULL",
                         "(5: ship_code != 1) OR (5: ship_code IS NULL)"},
                 {"select * from test.t0 where (nullif(1, ship_code) is NOT NULL) is NOT NULL",
                         "(5: ship_code != 1) OR (5: ship_code IS NULL)"},
                 {"select * from test.t0 where nullif(1, ship_code) = 2", "0:EMPTYSET"},
-                {"select * from test.t0 where nullif(1, ship_code) <>  2", "(5: ship_code != 1) OR (5: ship_code IS NULL)"},
+                {"select * from test.t0 where nullif(1, ship_code) <>  2",
+                        "(5: ship_code != 1) OR (5: ship_code IS NULL)"},
         };
 
         List<Arguments> argumentsList = Lists.newArrayList();
@@ -824,7 +839,6 @@ class SelectStmtWithCaseWhenTest {
                         "0:EMPTYSET"
                 }
 
-
         };
         List<Arguments> argumentsList = Lists.newArrayList();
         for (String[] tc : testCases) {
@@ -842,5 +856,27 @@ class SelectStmtWithCaseWhenTest {
         joiner.add(patterns.toString());
         joiner.add(plan);
         Assertions.assertTrue(patterns.stream().anyMatch(plan::contains), joiner.toString());
+    }
+
+    @Test
+    public void testNotSimplifyCaseWhenSkipComplexFunctions() throws Exception {
+        String sql = "WITH cte01 AS (\n" +
+                "  SELECT\n" +
+                "    id,\n" +
+                "    (\n" +
+                "      CASE\n" +
+                "        WHEN (ARRAY_LENGTH(col_arr) < 2) THEN \"bucket1\"\n" +
+                "        WHEN ((ARRAY_LENGTH(col_arr) >= 2) AND (ARRAY_LENGTH(col_arr) < 4)) THEN \"bucket2\"\n" +
+                "        ELSE NULL\n" +
+                "        END\n" +
+                "      ) AS len_bucket\n" +
+                "  FROM\n" +
+                "    t1\n" +
+                ")\n" +
+                "SELECT id, len_bucket\n" +
+                "FROM cte01\n" +
+                "WHERE len_bucket IS NOT NULL;";
+        String plan = UtFrameUtils.getVerboseFragmentPlan(starRocksAssert.getCtx(), sql);
+        Assert.assertTrue(plan.contains("Predicates: CASE WHEN array_length"));
     }
 }

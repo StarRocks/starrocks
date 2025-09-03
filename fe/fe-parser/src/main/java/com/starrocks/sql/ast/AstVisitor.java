@@ -246,6 +246,10 @@ public interface AstVisitor<R, C> {
         return visitNode(clause, context);
     }
 
+    default R visitCreateIndexClause(CreateIndexClause clause, C context) {
+        return visitNode(clause, context);
+    }
+
     default R visitDropRollupClause(DropRollupClause clause, C context) {
         return visitNode(clause, context);
     }

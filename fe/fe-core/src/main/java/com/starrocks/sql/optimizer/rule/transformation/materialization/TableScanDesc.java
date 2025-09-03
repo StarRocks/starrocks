@@ -15,8 +15,8 @@
 
 package com.starrocks.sql.optimizer.rule.transformation.materialization;
 
-import com.starrocks.analysis.JoinOperator;
 import com.starrocks.catalog.Table;
+import com.starrocks.sql.ast.expression.JoinOperator;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.operator.logical.LogicalJoinOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalScanOperator;

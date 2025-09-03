@@ -17,7 +17,7 @@
 
 package com.starrocks.sql.analyzer.mvpattern;
 
-import com.starrocks.analysis.Expr;
+import com.starrocks.sql.ast.expression.Expr;
 
 public interface MVColumnPattern {
 
