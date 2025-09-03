@@ -17,7 +17,6 @@
 
 package com.starrocks.sql.ast.expression;
 
-import com.starrocks.catalog.Type;
 import com.starrocks.planner.TupleDescriptor;
 
 import java.util.List;
