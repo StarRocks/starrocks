@@ -2982,8 +2982,8 @@ public class Config extends ConfigBase {
     public static int lake_publish_delete_txnlog_max_threads = 16;
 
     @ConfField(mutable = true, comment =
-            "Consider balancing between workers during tablet migration in shared data mode. Default: false")
-    public static boolean lake_enable_balance_tablets_between_workers = false;
+            "Consider balancing between workers during tablet migration in shared data mode. Default: true")
+    public static boolean lake_enable_balance_tablets_between_workers = true;
 
     @ConfField(mutable = true, comment =
             "Threshold of considering the balancing between workers in shared-data mode, The imbalance factor is " +
