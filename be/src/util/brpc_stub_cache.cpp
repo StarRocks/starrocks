@@ -25,7 +25,6 @@ namespace starrocks {
 
 BrpcStubCache::BrpcStubCache(ExecEnv* exec_env) : _pipeline_timer(exec_env->pipeline_timer()) {
     _stub_map.init(239);
-    _pipeline_timer = exec_env->pipeline_timer();
     REGISTER_GAUGE_STARROCKS_METRIC(brpc_endpoint_stub_count, [this]() {
         std::lock_guard<SpinLock> l(_lock);
         return _stub_map.size();
