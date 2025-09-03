@@ -16,13 +16,11 @@ package com.starrocks.sql.analyzer;
 
 import com.google.common.base.Strings;
 import com.starrocks.authentication.AuthenticationMgr;
-import com.starrocks.authentication.UserAuthenticationInfo;
 import com.starrocks.authorization.AuthorizationMgr;
 import com.starrocks.catalog.UserIdentity;
 import com.starrocks.common.CaseSensibility;
 import com.starrocks.common.Config;
 import com.starrocks.common.PatternMatcher;
-import com.starrocks.epack.sql.ast.UserPasswordOption;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.AlterUserStmt;
@@ -32,7 +30,6 @@ import com.starrocks.sql.ast.DropUserStmt;
 import com.starrocks.sql.ast.ExecuteAsStmt;
 import com.starrocks.sql.ast.ShowAuthenticationStmt;
 import com.starrocks.sql.ast.StatementBase;
-import com.starrocks.sql.ast.UserLockOption;
 import com.starrocks.sql.ast.UserRef;
 
 public class AuthenticationAnalyzer {
@@ -104,21 +101,7 @@ public class AuthenticationAnalyzer {
                 stmt.getDefaultRoles().forEach(r -> validRoleName(r, "Valid role name fail", true));
             }
 
-            UserAuthenticationInfo userAuthenticationInfo =
-                    UserAuthOptionAnalyzer.analyzeAuthOption(stmt.getUser(), stmt.getAuthOption());
-
-            UserPasswordOption userPasswordOption = stmt.getPasswordOption();
-            if (userPasswordOption != null) {
-                userAuthenticationInfo.setPasswordExpired(userPasswordOption.isExpirePassword());
-            }
-            userAuthenticationInfo.setPasswordLastModifiedTimestamp(System.currentTimeMillis());
-
-            UserLockOption lockOption = stmt.getLockOption();
-            if (lockOption != null) {
-                userAuthenticationInfo.setLock(lockOption.isLock());
-            }
-
-            stmt.setAuthenticationInfo(userAuthenticationInfo);
+            UserAuthOptionAnalyzer.analyzeAuthOption(stmt.getUser(), stmt.getAuthOption(), stmt.getPasswordOption());
             return null;
         }
 
@@ -127,16 +110,7 @@ public class AuthenticationAnalyzer {
             analyzeUser(stmt.getUser());
             checkUserExist(stmt.getUser(), !stmt.isIfExists());
 
-            if (stmt.getAuthOption() != null) {
-                UserAuthenticationInfo userAuthenticationInfo =
-                        UserAuthOptionAnalyzer.analyzeAuthOption(stmt.getUser(), stmt.getAuthOption());
-                stmt.setAuthenticationInfo(userAuthenticationInfo);
-            }
-
-            if (stmt.getPasswordOption() != null && stmt.getUser().equals(UserRef.ROOT)) {
-                throw new SemanticException("Cannot expire root's password");
-            }
-
+            UserAuthOptionAnalyzer.analyzeAuthOption(stmt.getUser(), stmt.getAuthOption(), stmt.getPasswordOption());
             return null;
         }
 

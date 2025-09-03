@@ -24,8 +24,6 @@ import com.starrocks.common.DdlException;
 import com.starrocks.common.Pair;
 import com.starrocks.epack.authorization.PasswordPolicy;
 import com.starrocks.epack.sql.ast.UserPasswordOption;
-import com.starrocks.mysql.MysqlPassword;
-import com.starrocks.mysql.privilege.AuthPlugin;
 import com.starrocks.persist.EditLog;
 import com.starrocks.persist.GroupProviderLog;
 import com.starrocks.persist.ImageWriter;
@@ -91,14 +89,7 @@ public class AuthenticationMgr {
     public AuthenticationMgr() {
         // default user
         userToAuthenticationInfo = new UserAuthInfoTreeMap();
-        UserAuthenticationInfo info = new UserAuthenticationInfo();
-        try {
-            info.setOrigUserHost(ROOT_USER, UserAuthenticationInfo.ANY_HOST);
-        } catch (AuthenticationException e) {
-            throw new RuntimeException("should not happened!", e);
-        }
-        info.setAuthPlugin(AuthPlugin.Server.MYSQL_NATIVE_PASSWORD.toString());
-        info.setPassword(MysqlPassword.EMPTY_PASSWORD);
+        UserAuthenticationInfo info = new UserAuthenticationInfo(UserRef.ROOT, null, null, null);
         userToAuthenticationInfo.put(UserIdentity.ROOT, info);
         userNameToProperty.put(UserIdentity.ROOT.getUser(), new UserProperty());
     }
@@ -219,8 +210,10 @@ public class AuthenticationMgr {
     public void createUser(CreateUserStmt stmt) throws DdlException {
         UserRef user = stmt.getUser();
         UserIdentity userIdentity = new UserIdentity(user.getUser(), user.getHost(), user.isDomain());
-
-        UserAuthenticationInfo info = stmt.getAuthenticationInfo();
+        UserAuthenticationInfo info = new UserAuthenticationInfo(user,
+                stmt.getAuthOption(),
+                stmt.getPasswordOption(),
+                stmt.getLockOption());
         writeLock();
         try {
             if (userToAuthenticationInfo.containsKey(userIdentity)) {
@@ -423,7 +416,6 @@ public class AuthenticationMgr {
             throws AuthenticationException, PrivilegeException {
         writeLock();
         try {
-            info.analyze();
             updateUserNoLock(userIdentity, info, false);
             if (userProperty != null) {
                 userNameToProperty.put(userIdentity.getUser(), userProperty);
@@ -534,12 +526,6 @@ public class AuthenticationMgr {
         LOG.info("loading users");
         reader.readMap(UserIdentity.class, UserAuthenticationInfo.class,
                 (MapEntryConsumer<UserIdentity, UserAuthenticationInfo>) (userIdentity, userAuthenticationInfo) -> {
-                    try {
-                        userAuthenticationInfo.analyze();
-                    } catch (AuthenticationException e) {
-                        throw new IOException(e);
-                    }
-
                     ret.userToAuthenticationInfo.put(userIdentity, userAuthenticationInfo);
                 });
 

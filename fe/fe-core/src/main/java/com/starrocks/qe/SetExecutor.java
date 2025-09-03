@@ -34,6 +34,7 @@
 
 package com.starrocks.qe;
 
+import com.starrocks.authentication.UserAuthenticationInfo;
 import com.starrocks.catalog.UserIdentity;
 import com.starrocks.common.DdlException;
 import com.starrocks.server.GlobalStateMgr;
@@ -74,8 +75,8 @@ public class SetExecutor {
             // Set password
             UserRef user = setPassVar.getUser();
             UserIdentity userIdentity = new UserIdentity(user.getUser(), user.getHost(), user.isDomain());
-            GlobalStateMgr.getCurrentState().getAuthenticationMgr()
-                    .alterUser(userIdentity, setPassVar.getUserAuthenticationInfo(), null, null, null);
+            GlobalStateMgr.getCurrentState().getAuthenticationMgr().alterUser(userIdentity,
+                    new UserAuthenticationInfo(user, setPassVar.getAuthOption(), null, null), null, null, null);
 
             ctx.setPasswordExpired(false);
         }

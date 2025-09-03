@@ -39,7 +39,7 @@ public class OpenIdConnectAuthenticationTest {
         JWTAuthenticationProvider provider =
                 new JWTAuthenticationProvider("jwks.json", "preferred_username", emptyIssuer, emptyAudience);
         UserAuthOptionAnalyzer.analyzeAuthOption(new UserRef("harbor", "%"),
-                new UserAuthOption(null, "", true, NodePosition.ZERO));
+                new UserAuthOption(null, "", true, NodePosition.ZERO), null);
         String openIdConnectJson = mockTokenUtils.generateTestOIDCToken(3600 * 1000);
 
         MysqlSerializer serializer = MysqlSerializer.newInstance();

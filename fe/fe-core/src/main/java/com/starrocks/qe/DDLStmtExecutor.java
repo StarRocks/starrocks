@@ -21,6 +21,7 @@ import com.starrocks.analysis.FunctionName;
 import com.starrocks.analysis.ParseNode;
 import com.starrocks.authentication.AuthenticationMgr;
 import com.starrocks.authentication.SecurityIntegration;
+import com.starrocks.authentication.UserAuthenticationInfo;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.UserIdentity;
 import com.starrocks.common.AlreadyExistsException;
@@ -552,14 +553,21 @@ public class DDLStmtExecutor {
             ErrorReport.wrapWithRuntimeException(() -> {
                 UserRef user = stmt.getUser();
                 UserIdentity userIdentity = new UserIdentity(user.getUser(), user.getHost(), user.isDomain());
-                context.getGlobalStateMgr().getAuthenticationMgr().alterUser(
-                        userIdentity,
-                        stmt.getAuthenticationInfo(),
+
+                UserAuthenticationInfo userAuthenticationInfo = null;
+                if (stmt.getAuthOption() != null) {
+                    userAuthenticationInfo = new UserAuthenticationInfo(user,
+                            stmt.getAuthOption(),
+                            stmt.getPasswordOption(),
+                            stmt.getLockOption());
+                }
+
+                GlobalStateMgr.getCurrentState().getAuthenticationMgr().alterUser(userIdentity, userAuthenticationInfo,
                         stmt.getPasswordOption(),
                         stmt.getLockOption(),
                         stmt.getProperties());
 
-                if (stmt.getAuthenticationInfo() != null) {
+                if (stmt.getAuthOption() != null) {
                     context.setPasswordExpired(false);
                 }
             });

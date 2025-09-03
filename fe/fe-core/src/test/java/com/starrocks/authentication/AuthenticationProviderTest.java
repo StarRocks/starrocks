@@ -70,7 +70,8 @@ public class AuthenticationProviderTest {
 
         for (String password : passwords) {
             UserAuthOption userAuthOption = new UserAuthOption(null, password, true, NodePosition.ZERO);
-            UserAuthenticationInfo info = UserAuthOptionAnalyzer.analyzeAuthOption(testUser, userAuthOption);
+            UserAuthOptionAnalyzer.analyzeAuthOption(testUser, userAuthOption, null);
+            UserAuthenticationInfo info = new UserAuthenticationInfo(testUser, userAuthOption);
             PlainPasswordAuthenticationProvider provider = (PlainPasswordAuthenticationProvider) AuthenticationProviderFactory
                     .create(info.getAuthPlugin(), new String(info.getPassword()));
 
@@ -80,7 +81,8 @@ public class AuthenticationProviderTest {
 
         // no password
         PlainPasswordAuthenticationProvider provider = new PlainPasswordAuthenticationProvider(MysqlPassword.EMPTY_PASSWORD);
-        UserAuthenticationInfo info = UserAuthOptionAnalyzer.analyzeAuthOption(testUser, null);
+        UserAuthOptionAnalyzer.analyzeAuthOption(testUser, null, null);
+        UserAuthenticationInfo info = new UserAuthenticationInfo(testUser, null);
         ctx.setAuthDataSalt(new byte[0]);
         provider.authenticate(ctx, testUserIdentity, new byte[0]);
         try {
@@ -97,7 +99,8 @@ public class AuthenticationProviderTest {
         byte[] p = MysqlPassword.makeScrambledPassword("bb");
 
         UserAuthOption userAuthOption = new UserAuthOption(null, new String(p, StandardCharsets.UTF_8), false, NodePosition.ZERO);
-        info = UserAuthOptionAnalyzer.analyzeAuthOption(testUser, userAuthOption);
+        UserAuthOptionAnalyzer.analyzeAuthOption(testUser, userAuthOption, null);
+        info = new UserAuthenticationInfo(testUser, userAuthOption);
 
         provider = new PlainPasswordAuthenticationProvider(info.getPassword());
         try {
