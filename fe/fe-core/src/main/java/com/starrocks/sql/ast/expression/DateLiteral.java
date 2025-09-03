@@ -248,11 +248,6 @@ public class DateLiteral extends LiteralExpr {
     }
 
     @Override
-    public String toSqlImpl() {
-        return "'" + getStringValue() + "'";
-    }
-
-    @Override
     public Object getRealObjectValue() {
         if (type.isDate()) {
             return LocalDateTime.of((int) getYear(), (int) getMonth(), (int) getDay(), 0, 0);

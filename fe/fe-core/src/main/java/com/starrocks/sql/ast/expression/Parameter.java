@@ -81,11 +81,6 @@ public class Parameter extends Expr {
     }
 
     @Override
-    protected String toSqlImpl() {
-        return "?";
-    }
-
-    @Override
     public int hashCode() {
         return slotId;
     }

@@ -33,17 +33,7 @@ public class LargeStringLiteral extends StringLiteral {
     }
 
     public String toFullSqlImpl() {
-        return super.toSqlImpl();
-    }
-
-    @Override
-    public String toSqlImpl() {
-        if (shortSqlStr == null) {
-            String fullSql = toFullSqlImpl();
-            fullSql = fullSql.substring(0, LEN_LIMIT);
-            shortSqlStr = fullSql + "...'";
-        }
-        return shortSqlStr;
+        return toSql();
     }
 
     @Override

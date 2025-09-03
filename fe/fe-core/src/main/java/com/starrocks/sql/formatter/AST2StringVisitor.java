@@ -818,7 +818,7 @@ public class AST2StringVisitor implements AstVisitorExtendInterface<String, Void
                 sb.append(", ");
             }
             first = false;
-            sb.append(aggregation.getFunctionCallExpr().toSqlImpl());
+            sb.append(aggregation.getFunctionCallExpr().toSql());
             if (aggregation.getAlias() != null) {
                 sb.append(" AS ").append(aggregation.getAlias());
             }

@@ -127,15 +127,6 @@ public class CastExpr extends Expr {
     }
 
     @Override
-    public String toSqlImpl() {
-        if (targetTypeDef == null) {
-            return "CAST(" + getChild(0).toSql() + " AS " + type.toString() + ")";
-        } else {
-            return "CAST(" + getChild(0).toSql() + " AS " + targetTypeDef + ")";
-        }
-    }
-
-    @Override
     protected void toThrift(TExprNode msg) {
         msg.node_type = TExprNodeType.CAST_EXPR;
         msg.setOpcode(opcode);

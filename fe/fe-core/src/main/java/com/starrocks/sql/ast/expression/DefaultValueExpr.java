@@ -27,11 +27,6 @@ public class DefaultValueExpr extends Expr {
     }
 
     @Override
-    protected String toSqlImpl() {
-        return null;
-    }
-
-    @Override
     protected void toThrift(TExprNode msg) {
 
     }

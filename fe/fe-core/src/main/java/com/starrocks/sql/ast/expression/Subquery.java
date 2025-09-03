@@ -35,7 +35,6 @@
 package com.starrocks.sql.ast.expression;
 
 import com.google.common.base.Objects;
-import com.starrocks.sql.analyzer.AstToStringBuilder;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.AstVisitorExtendInterface;
@@ -109,12 +108,6 @@ public class Subquery extends Expr {
                 System.identityHashCode(this),
                 System.identityHashCode(ret));
         return ret;
-    }
-
-
-    @Override
-    public String toSqlImpl() {
-        return "(" + AstToStringBuilder.toString(queryStatement) + ")";
     }
 
     @Override

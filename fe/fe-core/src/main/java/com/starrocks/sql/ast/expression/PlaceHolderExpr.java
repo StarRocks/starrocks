@@ -43,11 +43,6 @@ public class PlaceHolderExpr extends Expr {
     }
 
     @Override
-    protected String toSqlImpl() {
-        return "<place-holder>";
-    }
-
-    @Override
     protected void toThrift(TExprNode msg) {
         msg.setNode_type(TExprNodeType.PLACEHOLDER_EXPR);
         msg.setVslot_ref(new TPlaceHolder());

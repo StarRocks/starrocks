@@ -574,7 +574,6 @@ public abstract class Expr extends TreeNode<Expr> implements ParseNode, Cloneabl
         Preconditions.checkState(!printSqlInParens);
         ExprExplainVisitor explain = new ExprExplainVisitor();
         return explain.visit(this);
-        //        return toSqlImpl();
     }
 
     /**
@@ -590,14 +589,6 @@ public abstract class Expr extends TreeNode<Expr> implements ParseNode, Cloneabl
         Preconditions.checkState(!printSqlInParens);
         ExprVerboseVisitor explain = new ExprVerboseVisitor();
         return explain.visit(this);
-    }
-
-    /**
-     * Returns a SQL string representing this expr. Subclasses should override this method
-     * instead of toSql() to ensure that parenthesis are properly added around the toSql().
-     */
-    protected String toSqlImpl() {
-        throw new StarRocksPlannerException("Not implement toSqlImpl function", ErrorType.INTERNAL_ERROR);
     }
 
     public String toMySql() {

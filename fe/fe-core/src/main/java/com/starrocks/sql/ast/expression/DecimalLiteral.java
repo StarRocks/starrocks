@@ -374,11 +374,6 @@ public class DecimalLiteral extends LiteralExpr {
     }
 
     @Override
-    public String toSqlImpl() {
-        return getStringValue();
-    }
-
-    @Override
     public String getStringValue() {
         // use BigDecimal.toPlainString() instead of BigDecimal.toString()
         // to avoid outputting scientific representation which cannot be

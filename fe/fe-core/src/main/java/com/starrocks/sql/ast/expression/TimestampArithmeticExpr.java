@@ -139,44 +139,6 @@ public class TimestampArithmeticExpr extends Expr {
         return intervalFirst;
     }
 
-    @Override
-    public String toSqlImpl() {
-        StringBuilder strBuilder = new StringBuilder();
-        if (funcName != null) {
-            if (funcName.equalsIgnoreCase("TIMESTAMPDIFF") || funcName.equalsIgnoreCase("TIMESTAMPADD")) {
-                strBuilder.append(funcName).append("(");
-                strBuilder.append(timeUnitIdent).append(", ");
-                strBuilder.append(getChild(1).toSql()).append(", ");
-                strBuilder.append(getChild(0).toSql()).append(")");
-                return strBuilder.toString();
-            }
-            // Function-call like version.
-            strBuilder.append(funcName).append("(");
-            strBuilder.append(getChild(0).toSql()).append(", ");
-            strBuilder.append("INTERVAL ");
-            strBuilder.append(getChild(1).toSql());
-            strBuilder.append(" ").append(timeUnitIdent);
-            strBuilder.append(")");
-            return strBuilder.toString();
-        }
-        if (intervalFirst) {
-            // Non-function-call like version with interval as first operand.
-            strBuilder.append("INTERVAL ");
-            strBuilder.append(getChild(1).toSql()).append(" ");
-            strBuilder.append(timeUnitIdent);
-            strBuilder.append(" ").append(op.toString()).append(" ");
-            strBuilder.append(getChild(0).toSql());
-        } else {
-            // Non-function-call like version with interval as second operand.
-            strBuilder.append(getChild(0).toSql());
-            strBuilder.append(" ").append(op.toString()).append(" ");
-            strBuilder.append("INTERVAL ");
-            strBuilder.append(getChild(1).toSql()).append(" ");
-            strBuilder.append(timeUnitIdent);
-        }
-        return strBuilder.toString();
-    }
-
     // Time units supported in timestamp arithmetic.
     public enum TimeUnit {
         YEAR("YEAR"),                               // YEARS

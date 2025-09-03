@@ -450,7 +450,7 @@ public class CreateMaterializedViewStmt extends DdlStmt {
                 // current version not support count(distinct) function in creating materialized view
                 if (!isReplay && functionCallExpr.isDistinct()) {
                     throw new UnsupportedMVException(
-                            "Materialized view does not support distinct function " + functionCallExpr.toSqlImpl());
+                            "Materialized view does not support distinct function " + functionCallExpr.toSql());
                 }
                 if (!FN_NAME_TO_PATTERN.containsKey(functionName)) {
                     // eg: avg_union(avg_state(xxx))
@@ -460,7 +460,7 @@ public class CreateMaterializedViewStmt extends DdlStmt {
 
                         throw new UnsupportedMVException(
                                 "Materialized view does not support function:%s, supported functions are: %s",
-                                functionCallExpr.toSqlImpl(), FN_NAME_TO_PATTERN.keySet());
+                                functionCallExpr.toSql(), FN_NAME_TO_PATTERN.keySet());
                     }
                     if (!mvColumnPattern.match(functionCallExpr)) {
                         throw new UnsupportedMVException(

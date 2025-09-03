@@ -55,11 +55,6 @@ public class NamedArgument extends Expr {
     }
 
     @Override
-    protected String toSqlImpl() {
-        return name + "=>" + expr.toSql();
-    }
-
-    @Override
     public String toString() {
         return name + "=>" + expr.toString();
     }

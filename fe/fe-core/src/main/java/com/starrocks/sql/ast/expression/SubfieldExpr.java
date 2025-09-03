@@ -86,11 +86,6 @@ public class SubfieldExpr extends Expr {
     }
 
     @Override
-    protected String toSqlImpl() {
-        return getChild(0).toSqlImpl() + "." + Joiner.on('.').join(fieldNames) + '[' + copyFlag + ']';
-    }
-
-    @Override
     protected void toThrift(TExprNode msg) {
         msg.setNode_type(TExprNodeType.SUBFIELD_EXPR);
         msg.setUsed_subfield_names(fieldNames);
@@ -130,6 +125,6 @@ public class SubfieldExpr extends Expr {
         if (children.get(0) instanceof SlotRef) {
             return ((SlotRef) children.get(0)).getColumnName();
         }
-        return children.get(0).toSqlImpl();
+        return children.get(0).toSql();
     }
 }

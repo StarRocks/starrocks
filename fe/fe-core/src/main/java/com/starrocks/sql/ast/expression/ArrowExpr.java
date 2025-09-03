@@ -54,11 +54,6 @@ public class ArrowExpr extends Expr {
     }
 
     @Override
-    protected String toSqlImpl() {
-        return String.format("%s->%s", getItem().toSqlImpl(), getKey().toSqlImpl());
-    }
-
-    @Override
     protected void toThrift(TExprNode msg) {
         throw new StarRocksPlannerException("not support", ErrorType.INTERNAL_ERROR);
     }

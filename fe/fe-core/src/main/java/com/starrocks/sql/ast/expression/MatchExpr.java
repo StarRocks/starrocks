@@ -95,11 +95,6 @@ public class MatchExpr extends Expr {
     }
 
     @Override
-    public String toSqlImpl() {
-        return getChild(0).toSql() + " " + matchOperator.getName() + " " + getChild(1).toSql();
-    }
-
-    @Override
     protected void toThrift(TExprNode msg) {
         msg.node_type = TExprNodeType.MATCH_EXPR;
         msg.setOpcode(matchOperator.getOpcode());

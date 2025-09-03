@@ -73,11 +73,6 @@ public class FieldReference extends Expr {
     }
 
     @Override
-    protected String toSqlImpl() {
-        return "FieldReference(" + fieldIndex + ")";
-    }
-
-    @Override
     protected void toThrift(TExprNode msg) {
         throw new StarRocksPlannerException("FieldReference not implement toThrift", ErrorType.INTERNAL_ERROR);
     }

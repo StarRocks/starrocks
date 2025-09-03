@@ -58,31 +58,6 @@ public class LambdaFunctionExpr extends Expr {
         return commonSubOperatorNum;
     }
 
-    @Override
-    protected String toSqlImpl() {
-        String names = getChild(1).toSql();
-        int realChildrenNum = getChildren().size() - 2 * commonSubOperatorNum;
-        if (realChildrenNum > 2) {
-            names = "(" + getChild(1).toSql();
-            for (int i = 2; i < realChildrenNum; ++i) {
-                names = names + ", " + getChild(i).toSql();
-            }
-            names = names + ")";
-        }
-        StringBuilder commonSubOp = new StringBuilder();
-        if (commonSubOperatorNum > 0) {
-            commonSubOp.append("\n        lambda common expressions:");
-        }
-        for (int i = realChildrenNum; i < realChildrenNum + commonSubOperatorNum; ++i) {
-            commonSubOp.append("{").append(getChild(i).toSql()).append(" <-> ")
-                    .append(getChild(i + commonSubOperatorNum).toSql()).append("}");
-        }
-        if (commonSubOperatorNum > 0) {
-            commonSubOp.append("\n        ");
-        }
-        return String.format("%s -> %s%s", names, getChild(0).toSql(), commonSubOp);
-    }
-
     public void checkValidAfterToExpr() { // before to operator, its type is LambdaArgument, after to SlotRef
         // 1 lambda expr, at least 1 lambda argument and common sub op's slotref + expr
         Preconditions.checkState(children.size() >= 2 + 2 * commonSubOperatorNum,

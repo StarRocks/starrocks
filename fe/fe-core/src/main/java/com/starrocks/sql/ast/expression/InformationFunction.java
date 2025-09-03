@@ -106,11 +106,6 @@ public class InformationFunction extends Expr {
         msg.info_func = new TInfoFunc(intValue, strValue);
     }
 
-    @Override
-    public String toSqlImpl() {
-        return funcType + "()";
-    }
-
     /**
      * Below function is added by new analyzer
      */

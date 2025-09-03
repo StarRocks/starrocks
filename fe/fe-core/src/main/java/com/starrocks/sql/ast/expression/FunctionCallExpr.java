@@ -34,11 +34,9 @@
 
 package com.starrocks.sql.ast.expression;
 
-import com.google.common.base.Joiner;
 import com.google.common.base.MoreObjects;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableSet;
-import com.google.common.collect.Lists;
 import com.starrocks.catalog.AggregateFunction;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
@@ -216,36 +214,6 @@ public class FunctionCallExpr extends Expr {
 
     public FunctionParams getFnParams() {
         return fnParams;
-    }
-
-    // TODO: process order by
-    @Override
-    public String toSqlImpl() {
-        StringBuilder sb = new StringBuilder();
-        sb.append(fnName);
-
-        sb.append("(");
-        if (fnParams.isStar()) {
-            sb.append("*");
-        }
-        if (fnParams.isDistinct()) {
-            sb.append("DISTINCT ");
-        }
-        sb.append(Joiner.on(", ").join(firstNChildrenToSql(children.size() - fnParams.getOrderByElemNum())));
-        if (fnParams.getOrderByElements() != null) {
-            sb.append(fnParams.getOrderByStringToSql());
-        }
-        sb.append(')');
-        return sb.toString();
-    }
-
-    public List<String> firstNChildrenToSql(int n) {
-        Preconditions.checkState(n <= children.size());
-        List<String> result = Lists.newArrayList();
-        for (int i = 0; i < n; i++) {
-            result.add(children.get(i).toSql());
-        }
-        return result;
     }
 
     @Override
