@@ -30,7 +30,7 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-public class HttpServerHandlerTest extends HttpServerTestUtils{
+public class HttpServerHandlerTest extends HttpServerTestUtils {
 
     @Test
     public void testSyncHandle() throws Exception {
