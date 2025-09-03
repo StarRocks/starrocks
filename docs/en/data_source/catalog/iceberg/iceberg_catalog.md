@@ -1549,7 +1549,7 @@ In this case, you need to perform manual compaction on the table or partitions t
 ```SQL
 ALTER TABLE [catalog.][database.]table_name 
 EXECUTE rewrite_data_files
-("key"="value"[,"key"="value", ...]) 
+("key"=value [,"key"=value, ...]) 
 [WHERE <predicate>]
 ```
 

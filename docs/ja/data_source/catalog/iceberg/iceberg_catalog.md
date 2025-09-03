@@ -1549,7 +1549,7 @@ Iceberg テーブルにデータがロードされるたびに、新しいデー
 ```SQL
 ALTER TABLE [catalog.][database.]table_name 
 EXECUTE rewrite_data_files
-("key"="value"[,"key"="value", ...]) 
+("key"=value [,"key"=value, ...]) 
 [WHERE <predicate>]
 ```
 

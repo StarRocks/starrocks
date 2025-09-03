@@ -1584,7 +1584,7 @@ ALTER VIEW iceberg.iceberg_db.iceberg_view2 MODIFY DIALECT SELECT k1, k2, k3 FRO
 ```SQL
 ALTER TABLE [catalog.][database.]table_name 
 EXECUTE rewrite_data_files
-("key"="value"[,"key"="value", ...]) 
+("key"=value [,"key"=value, ...]) 
 [WHERE <predicate>]
 ```
 
