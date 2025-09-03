@@ -421,6 +421,7 @@ public class DefaultWorkerProvider implements WorkerProvider {
         return ImmutableMap.copyOf(
                 workers.entrySet().stream()
                         .filter(entry -> isWorkerAvailable(entry.getValue()))
+                        .sorted(Map.Entry.comparingByKey())  // Sort by node ID to ensure deterministic order
                         .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue))
         );
     }
