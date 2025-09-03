@@ -16,11 +16,6 @@ package com.starrocks.sql.analyzer.mv;
 
 import com.google.api.client.util.Lists;
 import com.google.common.collect.Maps;
-import com.starrocks.analysis.Expr;
-import com.starrocks.analysis.ExprSubstitutionMap;
-import com.starrocks.analysis.FunctionCallExpr;
-import com.starrocks.analysis.JoinOperator;
-import com.starrocks.analysis.SlotRef;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.combinator.AggStateUtils;
 import com.starrocks.common.util.PropertyAnalyzer;
@@ -38,6 +33,11 @@ import com.starrocks.sql.ast.SetOperationRelation;
 import com.starrocks.sql.ast.SubqueryRelation;
 import com.starrocks.sql.ast.TableRelation;
 import com.starrocks.sql.ast.UnionRelation;
+import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.ExprSubstitutionMap;
+import com.starrocks.sql.ast.expression.FunctionCallExpr;
+import com.starrocks.sql.ast.expression.JoinOperator;
+import com.starrocks.sql.ast.expression.SlotRef;
 import com.starrocks.sql.optimizer.rule.tvr.common.TvrOpUtils;
 import org.apache.commons.collections4.CollectionUtils;
 
@@ -76,10 +76,7 @@ public class IVMAnalyzer {
 
     public static final Set<JoinOperator> IVM_SUPPORTED_JOIN_OPS = Set.of(
             JoinOperator.INNER_JOIN,
-            JoinOperator.CROSS_JOIN,
-            JoinOperator.LEFT_SEMI_JOIN,
-            JoinOperator.LEFT_OUTER_JOIN,
-            JoinOperator.FULL_OUTER_JOIN
+            JoinOperator.CROSS_JOIN
     );
 
     /**
@@ -125,7 +122,7 @@ public class IVMAnalyzer {
             throw new SemanticException("IVMAnalyzer does not support subquery relation, " +
                     "but got: %s", subqueryRelation.getClass().getSimpleName());
         }
-        return isChildRetractable;
+        return false;
     }
 
     private boolean checkSetRelation(SetOperationRelation setOperationRelation) {
