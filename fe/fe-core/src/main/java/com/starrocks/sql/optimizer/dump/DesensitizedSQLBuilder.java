@@ -95,8 +95,6 @@ public class DesensitizedSQLBuilder {
 
     private static final String TABLE_ALIAS = "table alias";
 
-
-
     public static String desensitizeSQL(StatementBase statement, Map<String, String> desensitizedDict) {
         Map<TableName, Table> tables = AnalyzerUtils.collectAllTableAndViewWithAlias(statement);
         boolean sameCatalogDb = tables.keySet().stream().map(TableName::getCatalogAndDb).distinct().count() == 1;
