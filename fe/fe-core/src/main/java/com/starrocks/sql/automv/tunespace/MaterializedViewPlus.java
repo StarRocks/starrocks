@@ -27,6 +27,7 @@ import com.starrocks.catalog.DistributionInfo;
 import com.starrocks.catalog.HashDistributionInfo;
 import com.starrocks.catalog.Index;
 import com.starrocks.catalog.MaterializedView;
+import com.starrocks.catalog.MaterializedViewRefreshType;
 import com.starrocks.catalog.RandomDistributionInfo;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.constraint.ForeignKeyConstraint;
@@ -227,7 +228,7 @@ public class MaterializedViewPlus {
             }
         }
 
-        if (refreshScheme != null && refreshScheme.getType() == MaterializedView.RefreshType.ASYNC) {
+        if (refreshScheme != null && refreshScheme.getType().equals(MaterializedViewRefreshType.ASYNC)) {
             MaterializedView.AsyncRefreshContext asyncRefreshContext = refreshScheme.getAsyncRefreshContext();
             if (asyncRefreshContext.isDefineStartTime()) {
                 printer.add(" START(")

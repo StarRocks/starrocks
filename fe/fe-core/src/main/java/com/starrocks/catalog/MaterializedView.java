@@ -126,18 +126,11 @@ import static com.starrocks.backup.mv.MVRestoreUpdater.restoreBaseTableInfoIfRes
  * - A Materialized View can have multi base-tables which are tables that are referenced in the view definition.
  * - A Materialized View can have multi ref-base-tables which are tables that are referenced by mv's partition expression.
  * - A Materialized View's partition expressions can be range partitioned or list partitioned:
- *      - If mv is range partitioned, it must only have one partition column.
- *      - If mv is list partitioned, it can have multi partition columns.
+ * - If mv is range partitioned, it must only have one partition column.
+ * - If mv is list partitioned, it can have multi partition columns.
  */
 public class MaterializedView extends OlapTable implements GsonPreProcessable, GsonPostProcessable {
     private static final Logger LOG = LogManager.getLogger(MaterializedView.class);
-
-    public enum RefreshType {
-        SYNC,
-        ASYNC,
-        MANUAL,
-        INCREMENTAL
-    }
 
     public enum RefreshMoment {
         IMMEDIATE,
@@ -382,7 +375,7 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
         @SerializedName(value = "moment")
         private RefreshMoment moment;
         @SerializedName(value = "type")
-        private RefreshType type;
+        private MaterializedViewRefreshType type;
         // when type is ASYNC
         // asyncRefreshContext is used to store refresh context
         @SerializedName(value = "asyncRefreshContext")
@@ -392,12 +385,12 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
 
         public MvRefreshScheme() {
             this.moment = RefreshMoment.IMMEDIATE;
-            this.type = RefreshType.ASYNC;
+            this.type = MaterializedViewRefreshType.ASYNC;
             this.asyncRefreshContext = new AsyncRefreshContext();
             this.lastRefreshTime = 0;
         }
 
-        public MvRefreshScheme(RefreshType type) {
+        public MvRefreshScheme(MaterializedViewRefreshType type) {
             this.type = type;
             this.moment = RefreshMoment.IMMEDIATE;
             this.asyncRefreshContext = new AsyncRefreshContext();
@@ -405,15 +398,15 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
         }
 
         public boolean isIncremental() {
-            return this.type.equals(RefreshType.INCREMENTAL);
+            return this.type.equals(MaterializedViewRefreshType.INCREMENTAL);
         }
 
         public boolean isSync() {
-            return this.type.equals(RefreshType.SYNC);
+            return this.type.equals(MaterializedViewRefreshType.SYNC);
         }
 
         public boolean isAsync() {
-            return type.equals(RefreshType.ASYNC);
+            return type.equals(MaterializedViewRefreshType.ASYNC);
         }
 
         public RefreshMoment getMoment() {
@@ -424,11 +417,11 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
             this.moment = moment;
         }
 
-        public RefreshType getType() {
+        public MaterializedViewRefreshType getType() {
             return type;
         }
 
-        public void setType(RefreshType type) {
+        public void setType(MaterializedViewRefreshType type) {
             this.type = type;
         }
 
@@ -837,7 +830,8 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
 
     /**
      * Return the updated partition names of the base table of the materialized view.
-     * @param baseTable: The base table of the materialized view to check the updated partition names
+     *
+     * @param baseTable:      The base table of the materialized view to check the updated partition names
      * @param isQueryRewrite: Whether it's for query rewrite or not
      * @return: Return the updated partition names of the base table
      */
@@ -947,7 +941,8 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
 
     /**
      * Get the updated partition names of the external base table of the materialized view.
-     * @param baseTable: the external base table of the materialized view to check the updated partition names
+     *
+     * @param baseTable:      the external base table of the materialized view to check the updated partition names
      * @param isQueryRewrite: whether it's for query rewrite or not
      * @return: the updated partition names of the external base table
      */
@@ -1023,7 +1018,6 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
             return slotRefs.get(0);
         }
     }
-
 
 
     @Override
@@ -1107,6 +1101,7 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
     /**
      * Reload the materialized view with original active state.
      * NOTE: This method will not try to activate the materialized view.
+     *
      * @param postLoadImage: whether this reload is called after FE's image loading process.
      */
     public void onReload(boolean postLoadImage) {
@@ -1116,7 +1111,7 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
     /**
      * `postLoadImage` is used to distinct wether it's called after FE's image loading process,
      * such as FE startup or checkpointing.
-     *
+     * <p>
      * Note!! The `onReload` method is called in some other scenarios such as - schema change of a materialize view.
      * The reloaded flag was introduced only to increase the speed of FE startup and checkpointing.
      * It shouldn't affect the behavior of other operations which might indeed need to do a reload process.
@@ -1309,11 +1304,11 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
      * @return
      */
     public boolean isLoadTriggeredRefresh() {
-        if (this.refreshScheme.getType() == MaterializedView.RefreshType.INCREMENTAL) {
+        if (this.refreshScheme.getType() == MaterializedViewRefreshType.INCREMENTAL) {
             return true;
         }
         AsyncRefreshContext asyncRefreshContext = this.refreshScheme.asyncRefreshContext;
-        return this.refreshScheme.getType() == MaterializedView.RefreshType.ASYNC &&
+        return this.refreshScheme.getType() == MaterializedViewRefreshType.ASYNC &&
                 asyncRefreshContext.step == 0 && null == asyncRefreshContext.timeUnit;
     }
 
@@ -1335,6 +1330,7 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
 
     /**
      * Whether this mv can be used for mv rewrite configured by {@code enable_query_rewrite} table property.
+     *
      * @return: true if it is configured to enable mv rewrite, otherwise false.
      */
     public boolean isEnableRewrite() {
@@ -1350,6 +1346,7 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
 
     /**
      * Whether this mv can be used for transparent rewrite configured by.
+     *
      * @return: true if it is configured to enable transparent rewrite, otherwise false.
      */
     public boolean isEnableTransparentRewrite() {
@@ -1496,7 +1493,7 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
                 sb.append("\nREFRESH ").append(refreshScheme.getType());
             }
         }
-        if (refreshScheme != null && refreshScheme.getType() == RefreshType.ASYNC) {
+        if (refreshScheme != null && refreshScheme.getType() == MaterializedViewRefreshType.ASYNC) {
             AsyncRefreshContext asyncRefreshContext = refreshScheme.getAsyncRefreshContext();
             if (asyncRefreshContext.isDefineStartTime()) {
                 sb.append(" START(\"").append(Utils.getDatetimeFromLong(asyncRefreshContext.getStartTime())
@@ -1670,6 +1667,7 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
 
     /**
      * NOTE: The ref-base-table partition expressions' order is guaranteed as the order of mv's defined partition columns' order.
+     *
      * @return table to the partition expr map, multi values if mv contains multi ref base tables, empty if it's un-partitioned
      */
     public Map<Table, List<Expr>> getRefBaseTablePartitionExprs() {
@@ -1689,6 +1687,7 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
      * </p>
      * NOTE: The ref-base-table slot refs' order is guaranteed as the order of mv's defined partition columns' order.
      * </p>
+     *
      * @return table to the partition slot ref map, multi values if mv contains multi ref base tables, empty if it's
      * un-partitioned
      */
@@ -1711,41 +1710,42 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
             return refreshBaseTable(refBaseTablePartitionColumnsOpt.orElse(Maps.newHashMap()));
         }
     }
+
     /**
      * According base table and materialized view's partition range, we can define those mappings from base to mv:
      * <p>
      * One-to-One
-     *  src:     |----|    |----|
-     *  dst:     |----|    |----|
+     * src:     |----|    |----|
+     * dst:     |----|    |----|
      * eg: base table is partitioned by one day, and mv is partition by one day
      * </p>
      * <p>
      * Many-to-One
-     *  src:     |----|    |----|     |----|    |----|
-     *  dst:     |--------------|     |--------------|
+     * src:     |----|    |----|     |----|    |----|
+     * dst:     |--------------|     |--------------|
      * eg: base table is partitioned by one day, and mv is partition by date_trunc('month', dt)
      * <p>
      * One/Many-to-Many
-     *  src:     |----| |----| |----| |----| |----| |----|
-     *  dst:     |--------------| |--------------| |--------------|
+     * src:     |----| |----| |----| |----| |----| |----|
+     * dst:     |--------------| |--------------| |--------------|
      * eg: base table is partitioned by three days, and mv is partition by date_trunc('month', dt)
-     *  </p>
-     *
-     *  For one-to-one or many-to-one we can trigger to refresh by materialized view's partition, but for many-to-many
-     *  we need also consider affected materialized view partitions also.
-     *
-     *  eg:
-     *  ref table's partitions:
-     *   p0:   [2023-07-27, 2023-07-30)
-     *   p1:   [2023-07-30, 2023-08-02)
-     *   p2:   [2023-08-02, 2023-08-05)
-     *  materialized view's partition:
-     *   p0:   [2023-07-01, 2023-08-01)
-     *   p1:   [2023-08-01, 2023-09-01)
-     *   p2:   [2023-09-01, 2023-10-01)
-     *
-     *  So ref table's p1 has been changed, materialized view to refresh partition: p0, p1. And when we refresh p0,p1
-     *  we also need to consider other ref table partitions(p0); otherwise, the mv's final result will lose data.
+     * </p>
+     * <p>
+     * For one-to-one or many-to-one we can trigger to refresh by materialized view's partition, but for many-to-many
+     * we need also consider affected materialized view partitions also.
+     * <p>
+     * eg:
+     * ref table's partitions:
+     * p0:   [2023-07-27, 2023-07-30)
+     * p1:   [2023-07-30, 2023-08-02)
+     * p2:   [2023-08-02, 2023-08-05)
+     * materialized view's partition:
+     * p0:   [2023-07-01, 2023-08-01)
+     * p1:   [2023-08-01, 2023-09-01)
+     * p2:   [2023-09-01, 2023-10-01)
+     * <p>
+     * So ref table's p1 has been changed, materialized view to refresh partition: p0, p1. And when we refresh p0,p1
+     * we also need to consider other ref table partitions(p0); otherwise, the mv's final result will lose data.
      */
     public boolean isCalcPotentialRefreshPartition(List<TableWithPartitions> baseChangedPartitionNames,
                                                    Map<Table, Map<String, PCell>> refBaseTablePartitionToCells,
@@ -1906,6 +1906,7 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
 
     /**
      * Get session properties from materialized view's table property.
+     *
      * @return session properties that are ensured to be not null
      */
     public Map<String, String> getSessionProperties() {
@@ -2173,6 +2174,7 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
 
     /**
      * Parse partition expr from sql
+     *
      * @param sql serialized partition expr sql
      * @return parsed and unanalyzed partition expr
      */
@@ -2402,6 +2404,7 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
 
     /**
      * Get mv's ordered columns if the mv has defined its output columns order.
+     *
      * @return: mv's defined output columns in the defined order
      */
     public List<Column> getOrderedOutputColumns() {
