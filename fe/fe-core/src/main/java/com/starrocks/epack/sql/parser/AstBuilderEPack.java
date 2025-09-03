@@ -4,8 +4,6 @@ package com.starrocks.epack.sql.parser;
 
 import com.google.common.base.Joiner;
 import com.starrocks.analysis.Expr;
-import com.starrocks.analysis.HintNode;
-import com.starrocks.analysis.ParseNode;
 import com.starrocks.analysis.StringLiteral;
 import com.starrocks.analysis.TableName;
 import com.starrocks.analysis.TypeDef;
@@ -57,7 +55,9 @@ import com.starrocks.sql.ast.CreateMaterializedViewStatement;
 import com.starrocks.sql.ast.CreateMaterializedViewStmt;
 import com.starrocks.sql.ast.CreateTableStmt;
 import com.starrocks.sql.ast.CreateViewStmt;
+import com.starrocks.sql.ast.HintNode;
 import com.starrocks.sql.ast.Identifier;
+import com.starrocks.sql.ast.ParseNode;
 import com.starrocks.sql.ast.Property;
 import com.starrocks.sql.ast.QualifiedName;
 import com.starrocks.sql.ast.StatementBase;

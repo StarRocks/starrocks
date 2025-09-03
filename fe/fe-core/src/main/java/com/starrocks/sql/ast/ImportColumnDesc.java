@@ -16,7 +16,6 @@
 package com.starrocks.sql.ast;
 
 import com.starrocks.analysis.Expr;
-import com.starrocks.analysis.ParseNode;
 import com.starrocks.sql.parser.NodePosition;
 
 public class ImportColumnDesc implements ParseNode {

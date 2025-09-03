@@ -24,9 +24,9 @@ import com.starrocks.analysis.FunctionCallExpr;
 import com.starrocks.analysis.InPredicate;
 import com.starrocks.analysis.IntLiteral;
 import com.starrocks.analysis.LiteralExpr;
-import com.starrocks.analysis.ParseNode;
 import com.starrocks.analysis.Subquery;
 import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.sql.ast.ParseNode;
 import com.starrocks.sql.ast.QueryRelation;
 import org.apache.commons.collections4.CollectionUtils;
 

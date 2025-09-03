@@ -16,7 +16,6 @@ package com.starrocks.sql.ast;
 
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.OrderByElement;
-import com.starrocks.analysis.ParseNode;
 import com.starrocks.analysis.Subquery;
 
 public class AstRewriter<C> implements AstVisitor<ParseNode, C> {

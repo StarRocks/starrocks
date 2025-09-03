@@ -38,6 +38,7 @@ import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.common.io.Writable;
+import com.starrocks.sql.ast.ParseNode;
 import com.starrocks.sql.ast.PartitionNames;
 import com.starrocks.sql.parser.NodePosition;
 

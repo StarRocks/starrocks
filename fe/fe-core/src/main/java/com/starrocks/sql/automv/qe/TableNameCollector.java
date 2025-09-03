@@ -17,8 +17,8 @@ package com.starrocks.sql.automv.qe;
 import com.google.api.client.util.Lists;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableList;
-import com.starrocks.analysis.ParseNode;
 import com.starrocks.analysis.TableName;
+import com.starrocks.sql.ast.ParseNode;
 import com.starrocks.sql.ast.TableRelation;
 
 import java.util.List;

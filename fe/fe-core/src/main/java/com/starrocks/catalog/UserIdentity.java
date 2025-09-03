@@ -36,7 +36,6 @@ package com.starrocks.catalog;
 
 import com.google.common.base.Strings;
 import com.google.gson.annotations.SerializedName;
-import com.starrocks.analysis.ParseNode;
 import com.starrocks.authentication.AuthenticationMgr;
 import com.starrocks.cluster.ClusterNamespace;
 import com.starrocks.common.CaseSensibility;
@@ -46,6 +45,7 @@ import com.starrocks.persist.gson.GsonPostProcessable;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.analyzer.FeNameFormat;
 import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.sql.ast.ParseNode;
 import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.thrift.TUserIdentity;
 import com.starrocks.thrift.TUserRoles;

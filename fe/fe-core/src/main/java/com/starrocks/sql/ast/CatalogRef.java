@@ -16,7 +16,6 @@
 package com.starrocks.sql.ast;
 
 import com.google.common.base.Preconditions;
-import com.starrocks.analysis.ParseNode;
 import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.common.ErrorCode;

@@ -3,13 +3,13 @@
 package com.starrocks.epack.sql.ast;
 
 import com.google.common.collect.Lists;
-import com.starrocks.analysis.ParseNode;
 import com.starrocks.epack.authorization.Policy;
 import com.starrocks.epack.authorization.SecurityPolicyMgr;
 import com.starrocks.epack.sql.analyzer.AnalyzerUtilsEPack;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.sql.ast.ParseNode;
 import com.starrocks.sql.parser.NodePosition;
 
 import java.util.List;

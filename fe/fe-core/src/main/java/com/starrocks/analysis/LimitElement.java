@@ -36,6 +36,7 @@ package com.starrocks.analysis;
 
 import com.google.common.base.Preconditions;
 import com.starrocks.sql.ast.AstVisitor;
+import com.starrocks.sql.ast.ParseNode;
 import com.starrocks.sql.parser.NodePosition;
 
 /**

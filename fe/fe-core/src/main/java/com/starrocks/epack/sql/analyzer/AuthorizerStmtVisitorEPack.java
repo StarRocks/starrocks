@@ -2,7 +2,6 @@
 
 package com.starrocks.epack.sql.analyzer;
 
-import com.starrocks.analysis.HintNode;
 import com.starrocks.analysis.SetVarHint;
 import com.starrocks.authorization.AccessDeniedException;
 import com.starrocks.authorization.ObjectType;
@@ -59,6 +58,7 @@ import com.starrocks.sql.ast.CreateMaterializedViewStatement;
 import com.starrocks.sql.ast.CreateRoutineLoadStmt;
 import com.starrocks.sql.ast.CreateTableStmt;
 import com.starrocks.sql.ast.CreateViewStmt;
+import com.starrocks.sql.ast.HintNode;
 import com.starrocks.sql.ast.LoadStmt;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.SelectRelation;

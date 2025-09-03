@@ -15,8 +15,8 @@
 package com.starrocks.sql.parser;
 
 import com.google.common.collect.Lists;
-import com.starrocks.analysis.HintNode;
 import com.starrocks.qe.SessionVariable;
+import com.starrocks.sql.ast.HintNode;
 import org.antlr.v4.runtime.CharStreams;
 import org.antlr.v4.runtime.CommonTokenStream;
 import org.junit.jupiter.api.Assertions;

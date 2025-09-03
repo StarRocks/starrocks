@@ -4,7 +4,6 @@ package com.starrocks.epack.authorization;
 
 import com.google.common.collect.Lists;
 import com.starrocks.analysis.Expr;
-import com.starrocks.analysis.ParseNode;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.TableName;
 import com.starrocks.authorization.AccessDeniedException;
@@ -19,6 +18,7 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AstRewriter;
+import com.starrocks.sql.ast.ParseNode;
 import com.starrocks.sql.common.MetaUtils;
 import com.starrocks.sql.parser.SqlParser;
 

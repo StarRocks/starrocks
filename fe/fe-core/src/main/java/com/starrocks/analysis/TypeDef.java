@@ -42,6 +42,7 @@ import com.starrocks.catalog.StructField;
 import com.starrocks.catalog.StructType;
 import com.starrocks.catalog.Type;
 import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.sql.ast.ParseNode;
 import com.starrocks.sql.parser.NodePosition;
 
 import java.util.List;

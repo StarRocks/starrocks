@@ -17,9 +17,9 @@ package com.starrocks.sql.optimizer;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
-import com.starrocks.analysis.HintNode;
 import com.starrocks.common.Pair;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.sql.ast.HintNode;
 import com.starrocks.sql.optimizer.base.DistributionCol;
 import com.starrocks.sql.optimizer.base.DistributionProperty;
 import com.starrocks.sql.optimizer.base.DistributionSpec;

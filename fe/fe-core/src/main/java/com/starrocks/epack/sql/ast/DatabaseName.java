@@ -2,7 +2,7 @@
 
 package com.starrocks.epack.sql.ast;
 
-import com.starrocks.analysis.ParseNode;
+import com.starrocks.sql.ast.ParseNode;
 import com.starrocks.sql.parser.NodePosition;
 
 import java.util.Objects;
