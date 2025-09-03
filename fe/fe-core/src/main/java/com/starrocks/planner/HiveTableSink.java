@@ -15,7 +15,6 @@
 package com.starrocks.planner;
 
 import com.google.common.base.Preconditions;
-import com.starrocks.analysis.TupleDescriptor;
 import com.starrocks.catalog.HiveTable;
 import com.starrocks.common.util.CompressionUtils;
 import com.starrocks.connector.Connector;

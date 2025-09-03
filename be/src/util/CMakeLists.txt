@@ -116,6 +116,7 @@ set(UTIL_FILES
   byte_buffer.cpp
   llm_cache.cpp
   llm_query_service.cpp
+  variant_util.cpp
 )
 
 add_library(Util STATIC

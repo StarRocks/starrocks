@@ -16,15 +16,6 @@
 package com.starrocks.sql.analyzer;
 
 import com.google.common.base.Strings;
-import com.starrocks.analysis.BinaryPredicate;
-import com.starrocks.analysis.BinaryType;
-import com.starrocks.analysis.BoolLiteral;
-import com.starrocks.analysis.CompoundPredicate;
-import com.starrocks.analysis.Expr;
-import com.starrocks.analysis.IntLiteral;
-import com.starrocks.analysis.OrderByElement;
-import com.starrocks.analysis.SlotRef;
-import com.starrocks.analysis.StringLiteral;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Replica;
 import com.starrocks.catalog.Table;
@@ -37,8 +28,17 @@ import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.AstVisitorExtendInterface;
+import com.starrocks.sql.ast.OrderByElement;
 import com.starrocks.sql.ast.PartitionNames;
 import com.starrocks.sql.ast.ShowTabletStmt;
+import com.starrocks.sql.ast.expression.BinaryPredicate;
+import com.starrocks.sql.ast.expression.BinaryType;
+import com.starrocks.sql.ast.expression.BoolLiteral;
+import com.starrocks.sql.ast.expression.CompoundPredicate;
+import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.IntLiteral;
+import com.starrocks.sql.ast.expression.SlotRef;
+import com.starrocks.sql.ast.expression.StringLiteral;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -84,7 +84,7 @@ public class ShowTabletStmtAnalyzer {
             if (whereClause != null) {
                 if (whereClause instanceof CompoundPredicate) {
                     CompoundPredicate cp = (CompoundPredicate) whereClause;
-                    if (cp.getOp() != com.starrocks.analysis.CompoundPredicate.Operator.AND) {
+                    if (cp.getOp() != CompoundPredicate.Operator.AND) {
                         throw new SemanticException("Only allow compound predicate with operator AND");
                     }
                     analyzeSubPredicate(cp.getChild(0));
@@ -150,7 +150,7 @@ public class ShowTabletStmtAnalyzer {
             }
             if (subExpr instanceof CompoundPredicate) {
                 CompoundPredicate cp = (CompoundPredicate) subExpr;
-                if (cp.getOp() != com.starrocks.analysis.CompoundPredicate.Operator.AND) {
+                if (cp.getOp() != CompoundPredicate.Operator.AND) {
                     throw new SemanticException("Only allow compound predicate with operator AND");
                 }
 

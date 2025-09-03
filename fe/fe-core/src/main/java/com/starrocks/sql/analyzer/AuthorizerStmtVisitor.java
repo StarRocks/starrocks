@@ -15,10 +15,6 @@
 package com.starrocks.sql.analyzer;
 
 import com.google.common.collect.Lists;
-import com.starrocks.analysis.FunctionName;
-import com.starrocks.analysis.SetVarHint;
-import com.starrocks.analysis.TableName;
-import com.starrocks.analysis.TableRef;
 import com.starrocks.authorization.AccessDeniedException;
 import com.starrocks.authorization.AuthorizationMgr;
 import com.starrocks.authorization.ColumnPrivilege;
@@ -213,6 +209,10 @@ import com.starrocks.sql.ast.UpdateStmt;
 import com.starrocks.sql.ast.UseCatalogStmt;
 import com.starrocks.sql.ast.UseDbStmt;
 import com.starrocks.sql.ast.UserRef;
+import com.starrocks.sql.ast.expression.FunctionName;
+import com.starrocks.sql.ast.expression.SetVarHint;
+import com.starrocks.sql.ast.expression.TableName;
+import com.starrocks.sql.ast.expression.TableRef;
 import com.starrocks.sql.ast.group.CreateGroupProviderStmt;
 import com.starrocks.sql.ast.group.DropGroupProviderStmt;
 import com.starrocks.sql.ast.group.ShowCreateGroupProviderStmt;
@@ -1792,12 +1792,18 @@ public class AuthorizerStmtVisitor implements AstVisitorExtendInterface<Void, Co
     public Void visitRefreshTableStatement(RefreshTableStmt statement, ConnectContext context) {
         try {
             Authorizer.checkTableAction(context,
-                    statement.getTableName(), PrivilegeType.ALTER);
+                    statement.getTableName(), PrivilegeType.REFRESH);
         } catch (AccessDeniedException e) {
-            AccessDeniedException.reportAccessDenied(
-                    statement.getTableName().getCatalog(),
-                    context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
-                    PrivilegeType.ALTER.name(), ObjectType.TABLE.name(), statement.getTableName().getTbl());
+            // If user has no REFRESH privilege, check if he has ALTER privilege, for compatibility
+            try {
+                Authorizer.checkTableAction(context,
+                        statement.getTableName(), PrivilegeType.ALTER);
+            } catch (AccessDeniedException e2) {
+                AccessDeniedException.reportAccessDenied(
+                        statement.getTableName().getCatalog(),
+                        context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+                        PrivilegeType.REFRESH.name(), ObjectType.TABLE.name(), statement.getTableName().getTbl());
+            }
         }
         return null;
     }

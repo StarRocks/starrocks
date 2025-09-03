@@ -16,12 +16,15 @@ package com.starrocks.connector.metadata;
 
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
+import com.starrocks.common.tvr.TvrTableDeltaTrait;
 import com.starrocks.common.tvr.TvrTableSnapshot;
 import com.starrocks.common.tvr.TvrVersionRange;
 import com.starrocks.connector.ConnectorMetadata;
 import com.starrocks.connector.ConnectorTableVersion;
 import com.starrocks.qe.ConnectContext;
+import org.apache.hadoop.util.Lists;
 
+import java.util.List;
 import java.util.Optional;
 
 // TODO(stephen): what's the pretty class name?
@@ -47,6 +50,18 @@ public class TableMetaMetadata implements ConnectorMetadata {
         String tableName = metadataTableName.getTableName();
         AbstractMetadataTableFactory tableFactory = MetadataTableFactoryProvider.getFactory(catalogType);
         return tableFactory.createTable(context, catalogName, dbName, tableName, tableType);
+    }
+
+    @Override
+    public TvrTableSnapshot getCurrentTvrSnapshot(String dbName, Table table) {
+        return TvrTableSnapshot.empty();
+    }
+
+    @Override
+    public List<TvrTableDeltaTrait> listTableDeltaTraits(String dbName, Table table,
+                                                         TvrTableSnapshot fromSnapshotExclusive,
+                                                         TvrTableSnapshot toSnapshotInclusive) {
+        return Lists.newArrayList();
     }
 
     @Override

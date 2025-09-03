@@ -23,7 +23,6 @@
 #include "column/column_visitor_adapter.h"
 #include "column/nullable_column.h"
 #include "column/vectorized_fwd.h"
-#include "common/object_pool.h"
 #include "exprs/agg/aggregate_state_allocator.h"
 #include "exprs/expr_context.h"
 #include "glog/logging.h"
@@ -91,6 +90,8 @@ public:
         return Status::NotSupported("Unsupported large binary column in column wise comparator");
     }
 
+    // For types with expensive comparison operations, always check the previous comparison result
+    // in _cmp_vector before performing the current comparison.
     Status do_visit(const BinaryColumn& column) {
         size_t num_rows = column.size();
         if (!_first_column->empty()) {
@@ -101,15 +102,17 @@ public:
         if (!_null_masks.empty()) {
             DCHECK_EQ(_null_masks.size(), num_rows);
             for (size_t i = 1; i < num_rows; ++i) {
+                if (_cmp_vector[i]) continue;
                 if (_null_masks[i - 1] == 0 && _null_masks[i] == 0) {
-                    _cmp_vector[i] |= column.get_slice(i - 1).compare(column.get_slice(i)) != 0;
+                    _cmp_vector[i] |= column.get_slice(i - 1) != (column.get_slice(i));
                 } else {
                     _cmp_vector[i] |= _null_masks[i - 1] != _null_masks[i];
                 }
             }
         } else {
             for (size_t i = 1; i < num_rows; ++i) {
-                _cmp_vector[i] |= column.get_slice(i - 1).compare(column.get_slice(i)) != 0;
+                if (_cmp_vector[i]) continue;
+                _cmp_vector[i] |= column.get_slice(i - 1) != (column.get_slice(i));
             }
         }
         return Status::OK();

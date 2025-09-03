@@ -17,7 +17,6 @@ package com.starrocks.sql.optimizer;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
-import com.starrocks.analysis.JoinOperator;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.common.Config;
 import com.starrocks.common.profile.Timer;
@@ -27,6 +26,7 @@ import com.starrocks.qe.SessionVariable;
 import com.starrocks.qe.feedback.OperatorTuningGuides;
 import com.starrocks.qe.feedback.PlanTuningAdvisor;
 import com.starrocks.sql.Explain;
+import com.starrocks.sql.ast.expression.JoinOperator;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.base.PhysicalPropertySet;
@@ -497,6 +497,17 @@ public class QueryOptimizer extends Optimizer {
         deriveLogicalProperty(tree);
     }
 
+
+    private OptExpression logicalTvrRuleRewrite(OptExpression tree,
+                                                TaskContext rootTaskContext,
+                                                ColumnRefSet requiredColumns) {
+        new SeparateProjectRule().rewrite(tree, rootTaskContext);
+        scheduler.rewriteIterative(tree, rootTaskContext, RuleSet.TVR_REWRITE_RULES);
+        new SeparateProjectRule().rewrite(tree, rootTaskContext);
+        deriveLogicalProperty(tree);
+        return tree;
+    }
+
     private OptExpression logicalRuleRewrite(
             OptExpression tree,
             TaskContext rootTaskContext) {
@@ -535,6 +546,11 @@ public class QueryOptimizer extends Optimizer {
         scheduler.rewriteIterative(tree, rootTaskContext, RuleSet.SUBQUERY_REWRITE_TO_JOIN_RULES);
         scheduler.rewriteOnce(tree, rootTaskContext, new ApplyExceptionRule());
         CTEUtils.collectCteOperators(tree, context);
+
+        // tvr rule rewrite
+        if (context.getSessionVariable().isEnableIVMRefresh()) {
+            tree = logicalTvrRuleRewrite(tree, rootTaskContext, requiredColumns);
+        }
 
         if (sessionVariable.isEnableFineGrainedRangePredicate()) {
             scheduler.rewriteAtMostOnce(tree, rootTaskContext, RuleSet.FINE_GRAINED_RANGE_PREDICATE_RULES);

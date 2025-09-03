@@ -14,7 +14,6 @@
 
 package com.starrocks.qe;
 
-import com.starrocks.analysis.BrokerDesc;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.LoadException;
@@ -25,6 +24,7 @@ import com.starrocks.load.ExportJob;
 import com.starrocks.load.ExportMgr;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.AuthorizerStmtVisitor;
+import com.starrocks.sql.ast.BrokerDesc;
 import com.starrocks.sql.ast.ExportStmt;
 import com.starrocks.thrift.THdfsProperties;
 import com.starrocks.utframe.StarRocksAssert;

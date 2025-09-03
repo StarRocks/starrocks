@@ -15,7 +15,6 @@
 package com.starrocks.planner;
 
 import com.google.common.annotations.VisibleForTesting;
-import com.starrocks.analysis.TupleDescriptor;
 import com.starrocks.catalog.TableFunction;
 import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.thrift.TExpr;

@@ -46,7 +46,6 @@ import com.google.common.collect.Range;
 import com.google.common.collect.Sets;
 import com.google.common.collect.Table.Cell;
 import com.google.gson.annotations.SerializedName;
-import com.starrocks.analysis.BrokerDesc;
 import com.starrocks.backup.BackupJobInfo.BackupIndexInfo;
 import com.starrocks.backup.BackupJobInfo.BackupPartitionInfo;
 import com.starrocks.backup.BackupJobInfo.BackupPhysicalPartitionInfo;
@@ -96,6 +95,7 @@ import com.starrocks.persist.ColocatePersistInfo;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.sql.ast.BrokerDesc;
 import com.starrocks.task.AgentBatchTask;
 import com.starrocks.task.AgentTask;
 import com.starrocks.task.AgentTaskExecutor;
@@ -1682,6 +1682,8 @@ public class RestoreJob extends AbstractJob {
                                     MaterializedView mv = (MaterializedView) olapTable;
                                     mv.setInactiveAndReason(MaterializedViewExceptions
                                                     .inactiveReasonForMetadataTableRestoreCorrupted(mv.getName()));
+                                    // clear version map so can be refreshed later
+                                    mv.getRefreshScheme().getAsyncRefreshContext().clearVisibleVersionMap();
                                     // drop all partitions
                                     Set<String> partitionNames = mv.getPartitionNames();
                                     for (String partitionName : partitionNames) {

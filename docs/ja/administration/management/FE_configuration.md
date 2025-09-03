@@ -2604,7 +2604,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 
 ##### lake_enable_balance_tablets_between_workers
 
-- デフォルト: false
+- デフォルト: true
 - タイプ: Boolean
 - 単位: -
 - 変更可能: はい

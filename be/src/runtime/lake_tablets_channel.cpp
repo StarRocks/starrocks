@@ -452,8 +452,8 @@ void LakeTabletsChannel::add_chunk(Chunk* chunk, const PTabletWriterAddChunkRequ
         }
         total_row_num += size;
         int64_t tablet_id = tablet_ids[row_indexes[from]];
-        auto& dw = _delta_writers[tablet_id];
-        if (dw == nullptr) {
+        auto delta_writer_iter = _delta_writers.find(tablet_id);
+        if (delta_writer_iter == _delta_writers.end()) {
             LOG(WARNING) << "LakeTabletsChannel txn_id: " << _txn_id << " load_id: " << print_id(request.id())
                          << " not found tablet_id: " << tablet_id;
             response->mutable_status()->set_status_code(TStatusCode::INTERNAL_ERROR);
@@ -464,6 +464,7 @@ void LakeTabletsChannel::add_chunk(Chunk* chunk, const PTabletWriterAddChunkRequ
         }
 
         // back pressure OlapTableSink since there are too many memtables need to flush
+        auto& dw = delta_writer_iter->second;
         while (dw->queueing_memtable_num() >= config::max_queueing_memtable_per_tablet) {
             if (watch.elapsed_time() / 1000000 > request.timeout_ms()) {
                 LOG(INFO) << "LakeTabletsChannel txn_id: " << _txn_id << " load_id: " << print_id(request.id())
@@ -549,7 +550,18 @@ void LakeTabletsChannel::add_chunk(Chunk* chunk, const PTabletWriterAddChunkRequ
 
     std::set<long> immutable_tablet_ids;
     for (auto tablet_id : request.tablet_ids()) {
-        auto& writer = _delta_writers[tablet_id];
+        auto writer_iter = _delta_writers.find(tablet_id);
+        if (writer_iter == _delta_writers.end()) {
+            LOG(WARNING) << "LakeTabletsChannel txn_id: " << _txn_id << " load_id: " << print_id(request.id())
+                         << " not found tablet_id: " << tablet_id;
+            response->mutable_status()->set_status_code(TStatusCode::INTERNAL_ERROR);
+            response->mutable_status()->add_error_msgs(
+                    fmt::format("Failed to add_chunk since tablet_id {} not exists, txn_id: {}, load_id: {}", tablet_id,
+                                _txn_id, print_id(request.id())));
+            return;
+        }
+
+        auto& writer = writer_iter->second;
         if (writer->is_immutable() && immutable_tablet_ids.count(tablet_id) == 0) {
             response->add_immutable_tablet_ids(tablet_id);
             response->add_immutable_partition_ids(writer->partition_id());

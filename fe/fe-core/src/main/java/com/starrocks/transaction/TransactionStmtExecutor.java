@@ -17,7 +17,6 @@ package com.starrocks.transaction;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.primitives.Ints;
-import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
@@ -33,6 +32,8 @@ import com.starrocks.common.util.concurrent.lock.LockTimeoutException;
 import com.starrocks.lake.LakeTableHelper;
 import com.starrocks.load.EtlJobType;
 import com.starrocks.load.loadv2.InsertLoadJob;
+import com.starrocks.load.loadv2.InsertLoadTxnCallback;
+import com.starrocks.load.loadv2.InsertLoadTxnCallbackFactory;
 import com.starrocks.load.loadv2.LoadJob;
 import com.starrocks.load.loadv2.LoadMgr;
 import com.starrocks.metric.MetricRepo;
@@ -59,6 +60,7 @@ import com.starrocks.sql.ast.LoadStmt;
 import com.starrocks.sql.ast.OriginStatement;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.UpdateStmt;
+import com.starrocks.sql.ast.expression.TableName;
 import com.starrocks.sql.ast.txn.BeginStmt;
 import com.starrocks.sql.ast.txn.CommitStmt;
 import com.starrocks.sql.ast.txn.RollbackStmt;
@@ -423,6 +425,8 @@ public class TransactionStmtExecutor {
                 coord.setLoadJobType(TLoadJobType.INSERT_VALUES);
             }
 
+            InsertLoadTxnCallback insertLoadTxnCallback =
+                    InsertLoadTxnCallbackFactory.of(context, database.getId(), targetTable);
             InsertLoadJob loadJob = context.getGlobalStateMgr().getLoadMgr().registerInsertLoadJob(
                     label,
                     database.getFullName(),
@@ -435,7 +439,8 @@ public class TransactionStmtExecutor {
                     estimate(execPlan),
                     context.getSessionVariable().getQueryTimeoutS(),
                     context.getCurrentWarehouseId(),
-                    coord);
+                    coord,
+                    insertLoadTxnCallback);
             loadJob.setJobProperties(dmlStmt.getProperties());
             jobId = loadJob.getId();
             coord.setLoadJobId(jobId);

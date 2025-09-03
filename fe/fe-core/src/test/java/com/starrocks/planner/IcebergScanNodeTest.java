@@ -1,8 +1,5 @@
 package com.starrocks.planner;
 
-import com.starrocks.analysis.DescriptorTable;
-import com.starrocks.analysis.TupleDescriptor;
-import com.starrocks.analysis.TupleId;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.ScalarType;
@@ -90,7 +87,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
-
 import java.util.stream.Stream;
 
 public class IcebergScanNodeTest {

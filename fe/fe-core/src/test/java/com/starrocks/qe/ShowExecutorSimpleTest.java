@@ -38,10 +38,6 @@ import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
 import com.starrocks.analysis.AccessTestUtil;
-import com.starrocks.analysis.LimitElement;
-import com.starrocks.analysis.SlotRef;
-import com.starrocks.analysis.StringLiteral;
-import com.starrocks.analysis.TableName;
 import com.starrocks.authorization.PrivilegeBuiltinConstants;
 import com.starrocks.catalog.BaseTableInfo;
 import com.starrocks.catalog.Catalog;
@@ -107,6 +103,10 @@ import com.starrocks.sql.ast.ShowRoutineLoadStmt;
 import com.starrocks.sql.ast.ShowTableStmt;
 import com.starrocks.sql.ast.ShowUserStmt;
 import com.starrocks.sql.ast.ShowVariablesStmt;
+import com.starrocks.sql.ast.expression.LimitElement;
+import com.starrocks.sql.ast.expression.SlotRef;
+import com.starrocks.sql.ast.expression.StringLiteral;
+import com.starrocks.sql.ast.expression.TableName;
 import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.statistic.AnalyzeMgr;
@@ -980,7 +980,7 @@ public class ShowExecutorSimpleTest {
                 "CREATE MATERIALIZED VIEW, CREATE PIPE ON ALL DATABASES TO ROLE 'root'";
         Assertions.assertTrue(resultSet.getResultRows().stream().anyMatch(l -> l.toString().contains(expectString1)));
         String expectString2 = "root, null, GRANT DELETE, DROP, INSERT, SELECT, ALTER, EXPORT, " +
-                "UPDATE ON ALL TABLES IN ALL DATABASES TO ROLE 'root'";
+                "UPDATE, REFRESH ON ALL TABLES IN ALL DATABASES TO ROLE 'root'";
         Assertions.assertTrue(resultSet.getResultRows().stream().anyMatch(l -> l.toString().contains(expectString2)));
     }
 

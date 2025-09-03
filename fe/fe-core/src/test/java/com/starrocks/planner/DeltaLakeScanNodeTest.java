@@ -14,8 +14,6 @@
 
 package com.starrocks.planner;
 
-import com.starrocks.analysis.TupleDescriptor;
-import com.starrocks.analysis.TupleId;
 import com.starrocks.catalog.DeltaLakeTable;
 import com.starrocks.connector.CatalogConnector;
 import com.starrocks.credential.CloudConfiguration;

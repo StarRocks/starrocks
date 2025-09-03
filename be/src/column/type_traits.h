@@ -22,10 +22,12 @@
 #include "column/nullable_column.h"
 #include "column/object_column.h"
 #include "column/struct_column.h"
+#include "column/variant_column.h"
 #include "column/vectorized_fwd.h"
 #include "types/constexpr.h"
 #include "types/int256.h"
 #include "types/logical_type.h"
+#include "types/variant_value.h"
 #include "util/json.h"
 
 namespace starrocks {
@@ -84,6 +86,8 @@ template <>
 inline constexpr bool isArithmeticLT<TYPE_JSON> = false;
 template <>
 inline constexpr bool isArithmeticLT<TYPE_VARBINARY> = false;
+template <>
+inline constexpr bool isArithmeticLT<TYPE_VARIANT> = false;
 
 template <LogicalType logical_type>
 constexpr bool isSliceLT = false;
@@ -293,6 +297,13 @@ template <>
 struct RunTimeTypeTraits<TYPE_JSON> {
     using CppType = JsonValue*;
     using ColumnType = JsonColumn;
+    using ProxyContainerType = ColumnType::Container;
+};
+
+template <>
+struct RunTimeTypeTraits<TYPE_VARIANT> {
+    using CppType = VariantValue*;
+    using ColumnType = VariantColumn;
     using ProxyContainerType = ColumnType::Container;
 };
 
@@ -508,6 +519,14 @@ struct RunTimeTypeLimits<TYPE_JSON> {
 
     static value_type min_value() { return JsonValue{vpack::Slice::minKeySlice()}; }
     static value_type max_value() { return JsonValue{vpack::Slice::maxKeySlice()}; }
+};
+
+template <>
+struct RunTimeTypeLimits<TYPE_VARIANT> {
+    using value_type = VariantValue;
+
+    static value_type min_value() { return VariantValue::of_null(); }
+    static value_type max_value() { return VariantValue::create(Slice::max_value()).value(); }
 };
 
 } // namespace starrocks

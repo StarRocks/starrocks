@@ -17,7 +17,6 @@ package com.starrocks.authentication;
 import com.google.common.base.Strings;
 import com.starrocks.catalog.UserIdentity;
 import com.starrocks.common.util.NetUtils;
-import com.starrocks.qe.ConnectContext;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -71,7 +70,7 @@ public class LDAPAuthProvider implements AuthenticationProvider {
     }
 
     @Override
-    public void authenticate(ConnectContext context, UserIdentity userIdentity, byte[] authResponse)
+    public void authenticate(AuthenticationContext authContext, UserIdentity userIdentity, byte[] authResponse)
             throws AuthenticationException {
         //clear password terminate string
         byte[] clearPassword = authResponse;

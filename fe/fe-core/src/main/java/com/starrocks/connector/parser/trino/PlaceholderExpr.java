@@ -14,9 +14,9 @@
 
 package com.starrocks.connector.parser.trino;
 
-import com.starrocks.analysis.Expr;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.AstVisitorExtendInterface;
+import com.starrocks.sql.ast.expression.Expr;
 
 public class PlaceholderExpr extends Expr {
     private final int index;

@@ -38,11 +38,11 @@ import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.gson.annotations.SerializedName;
-import com.starrocks.analysis.Expr;
 import com.starrocks.common.io.Writable;
 import com.starrocks.persist.OriginStatementInfo;
 import com.starrocks.persist.gson.GsonPostProcessable;
 import com.starrocks.sql.ast.CreateMaterializedViewStmt;
+import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.common.MetaUtils;
 import com.starrocks.thrift.TStorageType;
 

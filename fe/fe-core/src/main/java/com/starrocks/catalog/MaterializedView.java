@@ -23,12 +23,6 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.google.gson.annotations.SerializedName;
-import com.starrocks.analysis.DescriptorTable.ReferencedPartitionInfo;
-import com.starrocks.analysis.Expr;
-import com.starrocks.analysis.SlotDescriptor;
-import com.starrocks.analysis.SlotId;
-import com.starrocks.analysis.SlotRef;
-import com.starrocks.analysis.TableName;
 import com.starrocks.authentication.AuthenticationMgr;
 import com.starrocks.authorization.PrivilegeBuiltinConstants;
 import com.starrocks.backup.Status;
@@ -44,6 +38,7 @@ import com.starrocks.common.FeConstants;
 import com.starrocks.common.MaterializedViewExceptions;
 import com.starrocks.common.Pair;
 import com.starrocks.common.io.DeepCopy;
+import com.starrocks.common.tvr.TvrVersionRange;
 import com.starrocks.common.util.DateUtils;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.common.util.TimeUtils;
@@ -57,6 +52,9 @@ import com.starrocks.persist.ExpressionSerializedObject;
 import com.starrocks.persist.gson.GsonPostProcessable;
 import com.starrocks.persist.gson.GsonPreProcessable;
 import com.starrocks.persist.gson.GsonUtils;
+import com.starrocks.planner.DescriptorTable.ReferencedPartitionInfo;
+import com.starrocks.planner.SlotDescriptor;
+import com.starrocks.planner.SlotId;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SqlModeHelper;
 import com.starrocks.scheduler.Task;
@@ -75,6 +73,9 @@ import com.starrocks.sql.analyzer.RelationId;
 import com.starrocks.sql.analyzer.Scope;
 import com.starrocks.sql.analyzer.SelectAnalyzer;
 import com.starrocks.sql.ast.ParseNode;
+import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.SlotRef;
+import com.starrocks.sql.ast.expression.TableName;
 import com.starrocks.sql.optimizer.CachingMvPlanContextBuilder;
 import com.starrocks.sql.optimizer.MvRewritePreprocessor;
 import com.starrocks.sql.optimizer.Utils;
@@ -159,6 +160,45 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
 
         public static PartitionRefreshStrategy defaultValue() {
             return STRICT;
+        }
+    }
+
+    /**
+     * Refresh mode for materialized view.
+     */
+    public enum RefreshMode {
+        /**
+         * AUTO: Automatically determine the refresh mode based on the materialized view's properties.
+         */
+        AUTO,
+        /**
+         * PCT: Partition-based refresh mode(partition-change-tracking), only refresh the partitions that have changed since
+         * the last refresh.
+         */
+        PCT,
+        /**
+         * FULL: Full refresh mode, refresh all partitions of the materialized view.
+         */
+        FULL,
+        /**
+         * INCREMENTAL: Incremental refresh mode, only refresh the incremental changed rows since the last refresh.
+         */
+        INCREMENTAL;
+
+        public static RefreshMode defaultValue() {
+            return PCT;
+        }
+
+        public boolean isAuto() {
+            return this == AUTO;
+        }
+
+        public boolean isIncremental() {
+            return this == INCREMENTAL;
+        }
+
+        public boolean isFull() {
+            return this == FULL;
         }
     }
 
@@ -265,6 +305,12 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
         @SerializedName("mvPartitionNameRefBaseTablePartitionMap")
         private final Map<String, Set<String>> mvPartitionNameRefBaseTablePartitionMap;
 
+        @SerializedName("baseTableInfoTvrVersionRangeMap")
+        private final Map<BaseTableInfo, TvrVersionRange> baseTableInfoTvrDeltaMap = Maps.newConcurrentMap();
+
+        @SerializedName("tempBaseTableInfoTvrVersionRangeMap")
+        private final Map<BaseTableInfo, TvrVersionRange> tempBaseTableInfoTvrDeltaMap = Maps.newConcurrentMap();
+
         @SerializedName(value = "defineStartTime")
         private boolean defineStartTime;
 
@@ -302,6 +348,18 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
 
         public Map<String, Set<String>> getMvPartitionNameRefBaseTablePartitionMap() {
             return mvPartitionNameRefBaseTablePartitionMap;
+        }
+
+        public Map<BaseTableInfo, TvrVersionRange> getBaseTableInfoTvrVersionRangeMap() {
+            return baseTableInfoTvrDeltaMap;
+        }
+
+        public Map<BaseTableInfo, TvrVersionRange> getTempBaseTableInfoTvrDeltaMap() {
+            return tempBaseTableInfoTvrDeltaMap;
+        }
+
+        public void clearTempBaseTableInfoTvrDeltaMap() {
+            this.tempBaseTableInfoTvrDeltaMap.clear();
         }
 
         public void clearVisibleVersionMap() {
@@ -359,6 +417,8 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
             AsyncRefreshContext arc = new AsyncRefreshContext();
             arc.baseTableVisibleVersionMap.putAll(this.baseTableVisibleVersionMap);
             arc.baseTableInfoVisibleVersionMap.putAll(this.baseTableInfoVisibleVersionMap);
+            arc.baseTableInfoTvrDeltaMap.putAll(this.baseTableInfoTvrDeltaMap);
+            arc.tempBaseTableInfoTvrDeltaMap.putAll(this.tempBaseTableInfoTvrDeltaMap);
             arc.mvPartitionNameRefBaseTablePartitionMap.putAll(this.mvPartitionNameRefBaseTablePartitionMap);
             arc.defineStartTime = this.defineStartTime;
             arc.startTime = this.startTime;
@@ -689,6 +749,10 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
         return String.format("insert overwrite `%s` %s", getName(), getViewDefineSql());
     }
 
+    public String getIVMTaskDefinition() {
+        return String.format("INSERT INTO `%s` %s", getName(), getViewDefineSql());
+    }
+
     /**
      * Get the base table ids of the materialized view which can contain views of the defined query.
      */
@@ -786,6 +850,10 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
 
     public void setReloaded(boolean reloaded) {
         this.reloaded = reloaded;
+    }
+
+    public RefreshMode getRefreshMode() {
+        return RefreshMode.valueOf(tableProperty.getMvRefreshMode().toUpperCase());
     }
 
     /**
@@ -2317,13 +2385,13 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
      * @return: mv's defined output columns in the defined order
      */
     public List<Column> getOrderedOutputColumns() {
+        final List<Column> baseSchema = getBaseSchemaWithoutGeneratedColumn();
         if (CollectionUtils.isEmpty(this.queryOutputIndices)) {
-            return this.getBaseSchemaWithoutGeneratedColumn();
+            return baseSchema;
         } else {
-            List<Column> schema = this.getBaseSchemaWithoutGeneratedColumn();
             List<Column> outputColumns = Lists.newArrayList();
             for (Integer index : this.queryOutputIndices) {
-                outputColumns.add(schema.get(index));
+                outputColumns.add(baseSchema.get(index));
             }
             return outputColumns;
         }

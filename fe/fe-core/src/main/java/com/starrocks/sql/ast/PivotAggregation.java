@@ -14,7 +14,7 @@
 
 package com.starrocks.sql.ast;
 
-import com.starrocks.analysis.FunctionCallExpr;
+import com.starrocks.sql.ast.expression.FunctionCallExpr;
 import com.starrocks.sql.parser.NodePosition;
 
 public class PivotAggregation implements ParseNode {
