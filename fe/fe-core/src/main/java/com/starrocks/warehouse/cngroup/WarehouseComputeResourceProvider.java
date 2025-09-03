@@ -28,6 +28,7 @@ import org.apache.logging.log4j.Logger;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.stream.Collectors;
 
@@ -96,6 +97,7 @@ public final class WarehouseComputeResourceProvider implements ComputeResourcePr
         SystemInfoService systemInfoService = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
         List<ComputeNode> nodes = computeNodeIds.stream()
                 .map(id -> systemInfoService.getBackendOrComputeNode(id))
+                .filter(Objects::nonNull)
                 .filter(ComputeNode::isAlive).collect(Collectors.toList());
         return nodes;
     }
