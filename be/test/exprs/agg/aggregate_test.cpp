@@ -1420,9 +1420,9 @@ ColumnPtr gen_histogram_column() {
 }
 
 TEST_F(AggregateTest, test_histogram_none) {
-    std::vector<TypeDescriptor> arg_types = {
-            TypeDescriptor::from_logical_type(TYPE_BIGINT), TypeDescriptor::from_logical_type(TYPE_INT),
-            TypeDescriptor::from_logical_type(TYPE_DOUBLE)};
+    std::vector<TypeDescriptor> arg_types = {TypeDescriptor::from_logical_type(TYPE_BIGINT),
+                                             TypeDescriptor::from_logical_type(TYPE_INT),
+                                             TypeDescriptor::from_logical_type(TYPE_DOUBLE)};
     auto return_type = TypeDescriptor::from_logical_type(TYPE_VARCHAR);
     std::unique_ptr<FunctionContext> local_ctx(FunctionContext::create_test_context(std::move(arg_types), return_type));
 
@@ -1464,11 +1464,11 @@ TEST_F(AggregateTest, test_histogram_sample) {
                 TypeDescriptor::from_logical_type(TYPE_BIGINT), TypeDescriptor::from_logical_type(TYPE_INT),
                 TypeDescriptor::from_logical_type(TYPE_DOUBLE), TypeDescriptor::from_logical_type(TYPE_VARCHAR)};
         auto return_type = TypeDescriptor::from_logical_type(TYPE_VARCHAR);
-        std::unique_ptr<FunctionContext> local_ctx(FunctionContext::create_test_context(std::move(arg_types),
-                return_type));
+        std::unique_ptr<FunctionContext> local_ctx(
+                FunctionContext::create_test_context(std::move(arg_types), return_type));
 
-        const AggregateFunction* histogram_function = get_aggregate_function("histogram", TYPE_BIGINT, TYPE_VARCHAR,
-                true);
+        const AggregateFunction* histogram_function =
+                get_aggregate_function("histogram", TYPE_BIGINT, TYPE_VARCHAR, true);
         auto state = ManagedAggrState::create(ctx, histogram_function);
 
         auto data_column = gen_histogram_column<int64_t>();

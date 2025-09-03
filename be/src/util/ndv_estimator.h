@@ -41,7 +41,7 @@ namespace starrocks {
 
 class NDVEstimator {
 public:
-    virtual ~NDVEstimator() {};
+    virtual ~NDVEstimator(){};
 
     virtual int64_t estimate(int64_t sample_row, int64_t sample_distinct, int64_t count_once, double sample_ratio) = 0;
 };
@@ -51,7 +51,7 @@ using NDVEstimatorPtr = std::unique_ptr<NDVEstimator>;
 class DUJ1Estimator final : public NDVEstimator {
 public:
     DUJ1Estimator() = default;
-    ~DUJ1Estimator() override  = default;
+    ~DUJ1Estimator() override = default;
 
     int64_t estimate(int64_t sample_row, int64_t sample_distinct, int64_t count_once, double sample_ratio) override;
 };
@@ -61,7 +61,8 @@ public:
     LinearEstimator() = default;
     ~LinearEstimator() override = default;
 
-    int64_t estimate(int64_t /*sample_row*/, int64_t sample_distinct, int64_t /*count_once*/, double sample_ratio) override;
+    int64_t estimate(int64_t /*sample_row*/, int64_t sample_distinct, int64_t /*count_once*/,
+                     double sample_ratio) override;
 };
 
 class PolynomialEstimator final : public NDVEstimator {
@@ -69,7 +70,8 @@ public:
     PolynomialEstimator() = default;
     ~PolynomialEstimator() override = default;
 
-    int64_t estimate(int64_t /*sample_row*/, int64_t sample_distinct, int64_t /*count_once*/, double sample_ratio) override;
+    int64_t estimate(int64_t /*sample_row*/, int64_t sample_distinct, int64_t /*count_once*/,
+                     double sample_ratio) override;
 };
 
 class GEEEstimator final : public NDVEstimator {
@@ -88,4 +90,4 @@ public:
     static NDVEstimatorPtr build(const std::string& name);
 };
 
-}
+} // namespace starrocks
