@@ -92,6 +92,7 @@ import com.starrocks.sql.ast.txn.CommitStmt;
 import com.starrocks.sql.ast.txn.RollbackStmt;
 import com.starrocks.sql.common.AuditEncryptionChecker;
 import com.starrocks.sql.common.ErrorType;
+import com.starrocks.sql.formatter.FormatOptions;
 import com.starrocks.sql.parser.ParsingException;
 import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.thrift.TMasterOpRequest;
@@ -284,18 +285,33 @@ public class ConnectProcessor {
 
         ctx.getAuditEventBuilder().setFeIp(FrontendOptions.getLocalHostAddress());
 
-        if (parsedStmt != null && AuditEncryptionChecker.needEncrypt(parsedStmt)) {
-            // Some information like username, password in the stmt should not be printed.
-            ctx.getAuditEventBuilder().setStmt(AstToSQLBuilder.toSQLOrDefault(parsedStmt, origStmt));
-        } else if (parsedStmt == null) {
-            // invalid sql, record the original statement to avoid audit log can't replay
-            // but redact sensitive credentials first
-            ctx.getAuditEventBuilder().setStmt(SqlCredentialRedactor.redact(origStmt));
-        } else {
-            ctx.getAuditEventBuilder().setStmt(LogUtil.removeLineSeparator(origStmt));
-        }
+        ctx.getAuditEventBuilder().setStmt(formatStmt(origStmt, parsedStmt));
 
         GlobalStateMgr.getCurrentState().getAuditEventProcessor().handleAuditEvent(ctx.getAuditEventBuilder().build());
+    }
+
+    private String formatStmt(String origStmt, StatementBase parsedStmt) {
+        if (!Config.enable_audit_sql) {
+            return "?";
+        }
+        boolean needEncrypt = AuditEncryptionChecker.needEncrypt(parsedStmt);
+        if (parsedStmt == null) {
+            // invalid sql, record the original statement to avoid audit log can't replay
+            // but redact sensitive credentials first
+            if (Config.enable_sql_desensitize_in_log) {
+                return "this is a desensitized invalid sql";
+            }
+            return SqlCredentialRedactor.redact(origStmt);
+        } else if (AuditEncryptionChecker.needEncrypt(parsedStmt) || Config.enable_sql_desensitize_in_log) {
+            // Some information like username, password in the stmt should not be printed.
+            return AstToSQLBuilder.toSQL(parsedStmt, FormatOptions.allEnable()
+                            .setColumnSimplifyTableName(false)
+                            .setHideCredential(needEncrypt)
+                            .setEnableDigest(Config.enable_sql_desensitize_in_log))
+                    .orElse("this is a desensitized sql");
+        } else {
+            return LogUtil.removeLineSeparator(origStmt);
+        }
     }
 
     public static String computeStatementDigest(StatementBase queryStmt) {
