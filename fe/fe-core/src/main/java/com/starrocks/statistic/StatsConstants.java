@@ -96,7 +96,7 @@ public class StatsConstants {
     public static final String HISTOGRAM_BUCKET_NUM = "histogram_bucket_num";
     public static final String HISTOGRAM_MCV_SIZE = "histogram_mcv_size";
     public static final String HISTOGRAM_SAMPLE_RATIO = "histogram_sample_ratio";
-    public static final String HISTOGRAM_COLLECT_NDV = "histogram_collect_ndv";
+    public static final String HISTOGRAM_COLLECT_BUCKET_NDV_MODE = "histogram_collect_bucket_ndv_mode";
 
     // SQL plan manager table
     public static final String SPM_BASELINE_TABLE_NAME = "spm_baselines";
@@ -151,6 +151,12 @@ public class StatsConstants {
         // only use for ScheduleType.ONCE
         FINISH,
         FAILED
+    }
+
+    public enum HistogramCollectBucketNdvMode {
+        NONE,
+        SAMPLE,
+        HLL
     }
 
     public static Map<String, String> buildInitStatsProp() {

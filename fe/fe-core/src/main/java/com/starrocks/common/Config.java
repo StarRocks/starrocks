@@ -2315,7 +2315,7 @@ public class Config extends ConfigBase {
      * collect distinct count in histogram buckets
      */
     @ConfField(mutable = true)
-    public static boolean histogram_collect_ndv = false;
+    public static String histogram_collect_bucket_ndv_mode = "none";
 
     @ConfField(mutable = true, comment = "Use table sample instead of row-level bernoulli sample to collect statistics")
     public static boolean enable_use_table_sample_collect_statistics = true;
