@@ -1045,11 +1045,8 @@ public class SharedDataStorageVolumeMgrTest {
         Assertions.assertEquals(true, svm.exists(svName));
         Assertions.assertEquals(svName, svm.getStorageVolumeName(svKey));
         // remove
-        try {
-            svm.removeStorageVolume(svName);
-            Assertions.fail();
-        } catch (DdlException e) {
-            Assertions.assertTrue(e.getMessage().contains("Snapshot enabled on storage volume"));
-        }
+        DdlException ex = Assertions.assertThrows(DdlException.class, () -> svm.removeStorageVolume(svName));
+        Assertions.assertEquals("Snapshot enabled on storage volume 'test_snap', drop volume failed.", ex.getMessage());
+
     }
 }
