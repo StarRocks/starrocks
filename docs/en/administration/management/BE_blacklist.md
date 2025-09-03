@@ -5,7 +5,7 @@ displayed_sidebar: docs
 # Manage BE and CN Blacklist
 
 
-From v3.3.0 onwards, StarRocks supports the BE Blacklist feature, which allows you to forbid the usage of certain BE nodes in query execution, thereby avoiding frequent query failures or other unexpected behaviors caused by the failed connections to the BE nodes.
+From v3.3.0 onwards, StarRocks supports the BE Blacklist feature, which allows you to forbid the usage of certain BE nodes in query execution, thereby avoiding frequent query failures or other unexpected behaviors caused by the failed connections to the BE nodes. A network issue preventing connections to one or more BEs would be an example of when to use the blacklist.
 
 From v4.0 onwards, StarRocks supports adding Compute Nodes (CNs) to the Blacklist.
 
