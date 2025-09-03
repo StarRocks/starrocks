@@ -175,6 +175,39 @@ TEST_F(AiFunctionsTest, MissingRequiredFieldsConfig) {
     ASSERT_FALSE(config_result.ok());
 }
 
+TEST_F(AiFunctionsTest, EnvironmentVariableApiKey) {
+    // Set up test environment variable
+    const char* env_var = "TEST_AI_KEY";
+    setenv(env_var, "env-test-key", 1);
+
+    std::string json_str = R"({
+        "model": "gpt-3.5-turbo",
+        "api_key": "env.TEST_AI_KEY"
+    })";
+    JsonValue json;
+    ASSERT_TRUE(JsonValue::parse(json_str, &json).ok());
+
+    auto config_result = AiFunctions::parse_model_config(json);
+    ASSERT_TRUE(config_result.ok());
+    ASSERT_EQ("env-test-key", config_result->api_key);
+
+    // Clean up
+    unsetenv(env_var);
+}
+
+TEST_F(AiFunctionsTest, EnvironmentVariableNotFound) {
+    std::string json_str = R"({
+        "model": "gpt-3.5-turbo",
+        "api_key": "env.NON_EXISTENT_VAR"
+    })";
+    JsonValue json;
+    ASSERT_TRUE(JsonValue::parse(json_str, &json).ok());
+
+    auto config_result = AiFunctions::parse_model_config(json);
+    ASSERT_FALSE(config_result.ok());
+    ASSERT_TRUE(config_result.status().message().find("Environment variable not found") != std::string::npos);
+}
+
 TEST_F(AiFunctionsTest, AiQueryWrongArgumentCount) {
     std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
     Columns columns;
