@@ -10,6 +10,8 @@ import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.CancelExportStmt;
 import com.starrocks.sql.ast.ExportStmt;
 import com.starrocks.sql.ast.ShowExportStmt;
+import com.starrocks.sql.ast.expression.TableName;
+import com.starrocks.sql.ast.expression.TableRef;
 import com.starrocks.sql.common.AuditEncryptionChecker;
 import com.starrocks.system.BrokerHbResponse;
 import org.junit.jupiter.api.Assertions;

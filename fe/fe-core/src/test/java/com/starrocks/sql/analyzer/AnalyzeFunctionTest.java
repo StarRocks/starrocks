@@ -14,8 +14,8 @@
 
 package com.starrocks.sql.analyzer;
 
-import com.starrocks.analysis.StringLiteral;
 import com.starrocks.sql.ast.QueryStatement;
+import com.starrocks.sql.ast.expression.StringLiteral;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.jupiter.api.Assertions;

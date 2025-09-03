@@ -16,9 +16,9 @@
 package com.starrocks.planner;
 
 import com.google.common.collect.Lists;
-import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.Type;
+import com.starrocks.sql.ast.expression.LiteralExpr;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 

@@ -14,8 +14,6 @@
 
 package com.starrocks.planner;
 
-import com.starrocks.analysis.DescriptorTable;
-
 public class RuntimeFilterPushDownContext {
     private final RuntimeFilterDescription description;
     private final DescriptorTable descTbl;

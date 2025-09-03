@@ -14,8 +14,6 @@
 
 package com.starrocks.connector.iceberg.procedure;
 
-import com.starrocks.analysis.Expr;
-import com.starrocks.analysis.SlotRef;
 import com.starrocks.connector.HdfsEnvironment;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.iceberg.IcebergRewriteDataJob;
@@ -23,6 +21,8 @@ import com.starrocks.connector.iceberg.hive.IcebergHiveCatalog;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.AlterTableOperationClause;
 import com.starrocks.sql.ast.AlterTableStmt;
+import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.SlotRef;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import mockit.Mock;
 import mockit.MockUp;

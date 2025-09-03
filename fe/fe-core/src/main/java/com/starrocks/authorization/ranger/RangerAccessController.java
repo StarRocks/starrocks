@@ -13,13 +13,13 @@
 // limitations under the License.
 package com.starrocks.authorization.ranger;
 
-import com.starrocks.analysis.Expr;
 import com.starrocks.authorization.AccessDeniedException;
 import com.starrocks.authorization.ExternalAccessController;
 import com.starrocks.authorization.PrivilegeType;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.UserIdentity;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.parser.SqlParser;
 import org.apache.commons.lang.StringUtils;
 import org.apache.ranger.authorization.hadoop.config.RangerPluginConfig;

@@ -36,7 +36,6 @@ package com.starrocks.http.rest;
 
 import com.google.common.base.Strings;
 import com.google.common.collect.Maps;
-import com.starrocks.analysis.TableName;
 import com.starrocks.authorization.AccessDeniedException;
 import com.starrocks.authorization.PrivilegeType;
 import com.starrocks.catalog.Database;
@@ -66,6 +65,7 @@ import com.starrocks.sql.ast.SelectRelation;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.SubqueryRelation;
 import com.starrocks.sql.ast.TableRelation;
+import com.starrocks.sql.ast.expression.TableName;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.thrift.TDataSink;
 import com.starrocks.thrift.TDataSinkType;

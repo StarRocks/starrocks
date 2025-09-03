@@ -13,13 +13,13 @@
 // limitations under the License.
 package com.starrocks.connector.hudi;
 
-import com.starrocks.analysis.DescriptorTable;
 import com.starrocks.catalog.HudiTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.connector.RemoteFileDesc;
 import com.starrocks.connector.RemoteFileInfo;
 import com.starrocks.connector.hive.HiveConnectorScanRangeSource;
 import com.starrocks.connector.hive.RemoteFileInputFormat;
+import com.starrocks.planner.DescriptorTable;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.StarRocksPlannerException;

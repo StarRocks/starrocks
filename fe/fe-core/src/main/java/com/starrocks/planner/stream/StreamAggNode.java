@@ -15,12 +15,12 @@
 
 package com.starrocks.planner.stream;
 
-import com.starrocks.analysis.AggregateInfo;
-import com.starrocks.analysis.Expr;
 import com.starrocks.common.FeConstants;
+import com.starrocks.planner.AggregateInfo;
 import com.starrocks.planner.FragmentNormalizer;
 import com.starrocks.planner.PlanNode;
 import com.starrocks.planner.PlanNodeId;
+import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.optimizer.operator.stream.IMTInfo;
 import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.thrift.TExpr;

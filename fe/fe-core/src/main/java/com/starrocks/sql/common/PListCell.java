@@ -20,7 +20,6 @@ import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableSortedSet;
 import com.google.gson.annotations.SerializedName;
-import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.PrimitiveType;
@@ -30,6 +29,7 @@ import com.starrocks.connector.PartitionUtil;
 import com.starrocks.connector.hive.HiveMetaClient;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.sql.ast.PartitionValue;
+import com.starrocks.sql.ast.expression.LiteralExpr;
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.lang3.StringUtils;
 

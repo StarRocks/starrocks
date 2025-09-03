@@ -14,9 +14,9 @@
 
 package com.starrocks.datacache;
 
-import com.starrocks.analysis.Expr;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.QualifiedName;
+import com.starrocks.sql.ast.expression.Expr;
 
 import java.util.ArrayList;
 import java.util.Comparator;

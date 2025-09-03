@@ -17,8 +17,8 @@ package com.starrocks.sql;
 
 import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
-import com.starrocks.analysis.AnalyticWindow;
 import com.starrocks.catalog.OlapTable;
+import com.starrocks.sql.ast.expression.AnalyticWindow;
 import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.optimizer.ExpressionContext;

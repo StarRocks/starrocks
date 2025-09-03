@@ -14,8 +14,8 @@
 
 package com.starrocks.qe.feedback.skeleton;
 
-import com.starrocks.analysis.JoinOperator;
 import com.starrocks.qe.feedback.NodeExecStats;
+import com.starrocks.sql.ast.expression.JoinOperator;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalJoinOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;

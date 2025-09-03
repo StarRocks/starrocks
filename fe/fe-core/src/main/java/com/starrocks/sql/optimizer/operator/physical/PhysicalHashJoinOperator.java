@@ -14,7 +14,7 @@
 
 package com.starrocks.sql.optimizer.operator.physical;
 
-import com.starrocks.analysis.JoinOperator;
+import com.starrocks.sql.ast.expression.JoinOperator;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptExpressionVisitor;
 import com.starrocks.sql.optimizer.operator.OperatorType;

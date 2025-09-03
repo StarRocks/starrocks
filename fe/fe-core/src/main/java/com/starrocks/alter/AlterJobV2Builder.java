@@ -15,7 +15,6 @@
 
 package com.starrocks.alter;
 
-import com.starrocks.analysis.Expr;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ColumnId;
 import com.starrocks.catalog.Index;
@@ -23,6 +22,7 @@ import com.starrocks.catalog.KeysType;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.ast.OriginStatement;
+import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.warehouse.cngroup.ComputeResource;
 
 import java.util.HashMap;

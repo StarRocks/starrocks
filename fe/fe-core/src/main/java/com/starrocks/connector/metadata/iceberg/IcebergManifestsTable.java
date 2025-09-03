@@ -15,7 +15,6 @@
 package com.starrocks.connector.metadata.iceberg;
 
 import com.google.common.collect.Lists;
-import com.starrocks.analysis.DescriptorTable;
 import com.starrocks.catalog.ArrayType;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.PrimitiveType;
@@ -26,6 +25,7 @@ import com.starrocks.catalog.Table;
 import com.starrocks.connector.ConnectorTableId;
 import com.starrocks.connector.metadata.MetadataTable;
 import com.starrocks.connector.metadata.MetadataTableType;
+import com.starrocks.planner.DescriptorTable;
 import com.starrocks.thrift.THdfsTable;
 import com.starrocks.thrift.TTableDescriptor;
 import com.starrocks.thrift.TTableType;

@@ -14,9 +14,9 @@
 
 package com.starrocks.sql.analyzer;
 
-import com.starrocks.analysis.TableName;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.RecoverPartitionStmt;
+import com.starrocks.sql.ast.expression.TableName;
 
 public class RecoverPartitionAnalyzer {
     public static void analyze(RecoverPartitionStmt statement, ConnectContext context) {

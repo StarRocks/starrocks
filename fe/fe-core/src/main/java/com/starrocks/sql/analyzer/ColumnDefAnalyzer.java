@@ -16,17 +16,6 @@ package com.starrocks.sql.analyzer;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Sets;
-import com.starrocks.analysis.BoolLiteral;
-import com.starrocks.analysis.DateLiteral;
-import com.starrocks.analysis.DecimalLiteral;
-import com.starrocks.analysis.Expr;
-import com.starrocks.analysis.FloatLiteral;
-import com.starrocks.analysis.FunctionCallExpr;
-import com.starrocks.analysis.IntLiteral;
-import com.starrocks.analysis.LargeIntLiteral;
-import com.starrocks.analysis.NullLiteral;
-import com.starrocks.analysis.StringLiteral;
-import com.starrocks.analysis.TypeDef;
 import com.starrocks.catalog.AggregateFunction;
 import com.starrocks.catalog.AggregateType;
 import com.starrocks.catalog.FunctionSet;
@@ -37,6 +26,17 @@ import com.starrocks.catalog.combinator.AggStateDesc;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.sql.ast.ColumnDef;
+import com.starrocks.sql.ast.expression.BoolLiteral;
+import com.starrocks.sql.ast.expression.DateLiteral;
+import com.starrocks.sql.ast.expression.DecimalLiteral;
+import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.FloatLiteral;
+import com.starrocks.sql.ast.expression.FunctionCallExpr;
+import com.starrocks.sql.ast.expression.IntLiteral;
+import com.starrocks.sql.ast.expression.LargeIntLiteral;
+import com.starrocks.sql.ast.expression.NullLiteral;
+import com.starrocks.sql.ast.expression.StringLiteral;
+import com.starrocks.sql.ast.expression.TypeDef;
 
 import java.util.Set;
 

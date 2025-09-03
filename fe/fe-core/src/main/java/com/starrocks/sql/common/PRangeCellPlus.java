@@ -15,8 +15,8 @@
 package com.starrocks.sql.common;
 
 import com.google.common.collect.Range;
-import com.starrocks.analysis.Expr;
 import com.starrocks.catalog.PartitionKey;
+import com.starrocks.sql.ast.expression.Expr;
 
 import java.util.LinkedList;
 import java.util.List;

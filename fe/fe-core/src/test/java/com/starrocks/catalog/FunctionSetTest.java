@@ -15,8 +15,8 @@
 package com.starrocks.catalog;
 
 import com.google.common.collect.Lists;
-import com.starrocks.analysis.FunctionName;
 import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.sql.ast.expression.FunctionName;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;

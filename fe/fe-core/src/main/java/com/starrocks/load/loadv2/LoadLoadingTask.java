@@ -34,7 +34,6 @@
 
 package com.starrocks.load.loadv2;
 
-import com.starrocks.analysis.BrokerDesc;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.common.Config;
@@ -59,6 +58,7 @@ import com.starrocks.qe.scheduler.Coordinator;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.LoadPlanner;
 import com.starrocks.sql.analyzer.AstToSQLBuilder;
+import com.starrocks.sql.ast.BrokerDesc;
 import com.starrocks.sql.ast.LoadStmt;
 import com.starrocks.sql.common.AuditEncryptionChecker;
 import com.starrocks.thrift.TBrokerFileStatus;

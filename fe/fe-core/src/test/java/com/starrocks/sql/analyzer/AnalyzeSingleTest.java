@@ -14,7 +14,6 @@
 
 package com.starrocks.sql.analyzer;
 
-import com.starrocks.analysis.CompoundPredicate;
 import com.starrocks.common.Config;
 import com.starrocks.common.util.LogUtil;
 import com.starrocks.qe.ConnectContext;
@@ -26,6 +25,7 @@ import com.starrocks.sql.ast.SelectRelation;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.SubmitTaskStmt;
 import com.starrocks.sql.ast.TableRelation;
+import com.starrocks.sql.ast.expression.CompoundPredicate;
 import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.jupiter.api.Assertions;

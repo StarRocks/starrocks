@@ -15,8 +15,8 @@
 
 package com.starrocks.sql.analyzer;
 
-import com.starrocks.analysis.SlotRef;
 import com.starrocks.sql.ast.ShowAlterStmt;
+import com.starrocks.sql.ast.expression.SlotRef;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.jupiter.api.Assertions;
