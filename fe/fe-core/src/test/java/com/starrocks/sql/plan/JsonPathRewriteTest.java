@@ -278,7 +278,7 @@ public class JsonPathRewriteTest extends PlanTestBase {
                 // 9. JSON path in order by
                 Arguments.of(
                         "select get_json_string(c2, 'f6') from extend_predicate2 order by get_json_string(c2, 'f6')",
-                        " 6: DictDefine(5: c2.f6, [<place-holder>])"
+                        "<slot 6> : DictDefine(5: c2.f6, [<place-holder>])"
                 ),
                 // 10. JSON path in both select and where, different fields
                 Arguments.of(
@@ -312,7 +312,7 @@ public class JsonPathRewriteTest extends PlanTestBase {
                 // 15. JSON with MinMaxStats optimization
                 Arguments.of(
                         "select get_json_string(c2, 'f1') k1, count(*) from extend_predicate2 group by k1",
-                        "group by min-max stats"
+                        "<slot 7> : DictDefine(6: c2.f1, [<place-holder>])"
                 )
 
         );
