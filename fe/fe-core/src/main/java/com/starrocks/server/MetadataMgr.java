@@ -14,6 +14,7 @@
 
 package com.starrocks.server;
 
+import com.google.api.client.util.Lists;
 import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
 import com.google.common.cache.CacheBuilder;
@@ -44,6 +45,7 @@ import com.starrocks.common.MaterializedViewExceptions;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.profile.Tracers;
+import com.starrocks.common.tvr.TvrTableDeltaTrait;
 import com.starrocks.common.tvr.TvrTableSnapshot;
 import com.starrocks.common.tvr.TvrVersionRange;
 import com.starrocks.connector.CatalogConnector;
@@ -521,6 +523,21 @@ public class MetadataMgr {
             }
         }
         return connectorTable;
+    }
+
+    public TvrTableSnapshot getCurrentTvrSnapshot(String dbName, Table table) {
+        Optional<ConnectorMetadata> connectorMetadata = getOptionalMetadata(table.getCatalogName());
+        return connectorMetadata.map(metadata -> metadata.getCurrentTvrSnapshot(dbName, table))
+                .orElse(TvrTableSnapshot.empty());
+    }
+
+    public List<TvrTableDeltaTrait> listTableDeltaTraits(String dbName, Table table,
+                                                         TvrTableSnapshot fromSnapshotExclusive,
+                                                         TvrTableSnapshot toSnapshotInclusive) {
+        Optional<ConnectorMetadata> connectorMetadata = getOptionalMetadata(table.getCatalogName());
+        return connectorMetadata.map(metadata -> metadata.listTableDeltaTraits(
+                        dbName, table, fromSnapshotExclusive, toSnapshotInclusive))
+                .orElse(Lists.newArrayList());
     }
 
     public TvrVersionRange getTableVersionRange(String dbName, Table table,
