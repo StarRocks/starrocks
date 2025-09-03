@@ -281,6 +281,7 @@ public class ResourceGroupAnalyzer {
                     resourceGroup.setPartitionNum(partitionNum);
                     continue;
                 }
+
             } catch (NumberFormatException exception) {
                 throw new SemanticException(String.format("The value type of the property `%s` must be a valid numeric type, " +
                         "but it is set to `%s`", e.getKey(), e.getValue()));
