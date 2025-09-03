@@ -93,6 +93,7 @@ public:
     virtual bool is_object() const { return false; }
 
     virtual bool is_json() const { return false; }
+    virtual bool is_variant() const { return false; }
 
     virtual bool is_array() const { return false; }
 
@@ -100,6 +101,7 @@ public:
     virtual bool is_nullable_view() const { return false; }
     virtual bool is_array_view() const { return false; }
     virtual bool is_json_view() const { return false; }
+    virtual bool is_variant_view() const { return false; }
     virtual bool is_binary_view() const { return false; }
     virtual bool is_struct_view() const { return false; }
     virtual bool is_map_view() const { return false; }
