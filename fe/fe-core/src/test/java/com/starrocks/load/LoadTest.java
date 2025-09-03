@@ -365,22 +365,35 @@ public class LoadTest {
 
         int t0SlotId = slotDescByName.get("t0").getId().asInt();
         int eSlotId = slotDescByName.get("e").getId().asInt();
-        String c2ExprExplain = String.format(
-                "get_json_string[(array_filter(CAST(parse_json(<slot %d>) AS ARRAY<JSON>), " +
-                "array_map(<slot %d> -> get_json_string(<slot %d>, '$.name') = 'Tom', " +
-                "CAST(parse_json(<slot %d>) AS ARRAY<JSON>)))[1], '$.id'); args: JSON,VARCHAR; " +
-                "result: VARCHAR; args nullable: true; result nullable: true]",
+        String c2ExprExplain = String.format("get_json_string[(array_filter[(cast(parse_json[([%d, VARCHAR, true]); "
+                        + "args: VARCHAR; result: JSON; "
+                        + "args nullable: true; result nullable: true] as ARRAY<JSON>), "
+                        + "array_map[([%d, JSON, true] -> get_json_string[([%d, JSON, true], '$.name'); "
+                        + "args: JSON,VARCHAR; result: VARCHAR; args nullable: true; result nullable: true] = 'Tom', "
+                        + "cast(parse_json[([%d, VARCHAR, true]); args: VARCHAR; result: JSON; "
+                        + "args nullable: true; result nullable: true] as ARRAY<JSON>)); "
+                        + "args: FUNCTION,INVALID_TYPE; result: ARRAY<BOOLEAN>; "
+                        + "args nullable: true; result nullable: true]); args: INVALID_TYPE,INVALID_TYPE; "
+                        + "result: ARRAY<JSON>; args nullable: true; result nullable: true][1], '$.id'); "
+                        + "args: JSON,VARCHAR; result: VARCHAR; args nullable: true; result nullable: true]",
                     t0SlotId, eSlotId, eSlotId, t0SlotId);
         Assertions.assertEquals(c2ExprExplain, exprsByName.get("c2").explain());
 
         int t1SlotId = slotDescByName.get("t1").getId().asInt();
         int kSlotId = slotDescByName.get("k").getId().asInt();
         int vSlotId = slotDescByName.get("v").getId().asInt();
-        String c3ExprExplain = String.format(
-                "get_json_string[(map_values(map_filter(CAST(parse_json(<slot %d>) AS MAP<VARCHAR(65533),JSON>), " +
-                "map_values(map_apply((<slot %d>, <slot %d>) -> map{<slot %d>:get_json_string(<slot %d>, '$.name') = 'Jerry'}, " +
-                "CAST(parse_json(<slot %d>) AS MAP<VARCHAR(65533),JSON>)))))[1], '$.id'); args: JSON,VARCHAR; " +
-                "result: VARCHAR; args nullable: true; result nullable: true]",
+        String c3ExprExplain = String.format("get_json_string[(map_values[(map_filter[(cast(parse_json[([%d, VARCHAR, true]); "
+                        + "args: VARCHAR; result: JSON; args nullable: true; result nullable: true] as MAP<VARCHAR(65533),"
+                        + "JSON>), map_values[(map_apply[(([%d, VARCHAR(65533), true], [%d, JSON, true]) -> map{[%d, VARCHAR"
+                        + "(65533), true]:get_json_string[([%d, JSON, true], '$.name'); args: JSON,VARCHAR; result: VARCHAR; "
+                        + "args nullable: true; result nullable: true] = 'Jerry'}, cast(parse_json[([%d, VARCHAR, true]); args: "
+                        + "VARCHAR; result: JSON; args nullable: true; result nullable: true] as MAP<VARCHAR(65533),JSON>)); "
+                        + "args: FUNCTION,INVALID_TYPE; result: MAP<VARCHAR(65533),BOOLEAN>; args nullable: true; result "
+                        + "nullable: true]); args: INVALID_TYPE; result: ARRAY<BOOLEAN>; args nullable: true; result nullable: "
+                        + "true]); args: INVALID_TYPE,INVALID_TYPE; result: MAP<VARCHAR(65533),JSON>; args nullable: true; "
+                        + "result nullable: true]); args: INVALID_TYPE; result: ARRAY<JSON>; args nullable: true; result "
+                        + "nullable: true][1], '$.id'); args: JSON,VARCHAR; result: VARCHAR; args nullable: true; result "
+                        + "nullable: true]",
                 t1SlotId, kSlotId, vSlotId, kSlotId, vSlotId, t1SlotId);
         Assertions.assertEquals(c3ExprExplain, exprsByName.get("c3").explain());
     }

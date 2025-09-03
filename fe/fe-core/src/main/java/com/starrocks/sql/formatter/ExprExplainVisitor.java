@@ -398,7 +398,7 @@ public class ExprExplainVisitor implements AstVisitorExtendInterface<String, Voi
         }
 
         FunctionCallExpr fnCall = node.getFnCall();
-        return fnCall.accept(this, context) + " OVER (" + sb.substring(1) + ")";
+        return fnCall.accept(this, context) + " OVER (" + sb.toString().trim() + ")";
     }
 
     @Override

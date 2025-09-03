@@ -1651,30 +1651,30 @@ public class ExpressionTest extends PlanTestBase {
     @Test
     public void testStructRow() throws Exception {
         String sql = "select row('a', 1, 'a', 2).col1";
-        String plan = getVerboseExplain(sql);
+        String plan = getFragmentPlan(sql);
         assertCContains(plan, "row('a', 1, 'a', 2).col1");
     }
 
     @Test
     public void testStructCollection() throws Exception {
         String sql = "select row('a', 1, 'a', 2)[1]";
-        String plan = getVerboseExplain(sql);
+        String plan = getFragmentPlan(sql);
         assertCContains(plan, "row('a', 1, 'a', 2).col1");
 
         sql = "select row('a', 1, 'a', 2)[4]";
-        plan = getVerboseExplain(sql);
+        plan = getFragmentPlan(sql);
         assertCContains(plan, "row('a', 1, 'a', 2).col4");
 
         sql = "select row('a', 1, 'a', 2)[4]";
-        plan = getVerboseExplain(sql);
+        plan = getFragmentPlan(sql);
         assertCContains(plan, "row('a', 1, 'a', 2).col4");
 
         sql = "select row('a', 1, 'a', 2)[-1]";
-        plan = getVerboseExplain(sql);
+        plan = getFragmentPlan(sql);
         assertCContains(plan, "row('a', 1, 'a', 2).col4");
 
         sql = "select row('a', 1, 'a', 2)[-4]";
-        plan = getVerboseExplain(sql);
+        plan = getFragmentPlan(sql);
         assertCContains(plan, "row('a', 1, 'a', 2).col1");
     }
 
@@ -1682,7 +1682,9 @@ public class ExpressionTest extends PlanTestBase {
     public void testJsonArray() throws Exception {
         String sql = "select array_distinct([PARSE_JSON('{1: 2}')])";
         String plan = getVerboseExplain(sql);
-        assertCContains(plan, "array_distinct[([parse_json('{1: 2}')]); args: INVALID_TYPE; result: ARRAY<JSON>;");
+        assertCContains(plan, "array_distinct[([parse_json[('{1: 2}'); "
+                + "args: VARCHAR; result: JSON; args nullable: false; result nullable: true]]); "
+                + "args: INVALID_TYPE; result: ARRAY<JSON>;");
 
         sql = "select array_distinct([NULL])";
         plan = getVerboseExplain(sql);
