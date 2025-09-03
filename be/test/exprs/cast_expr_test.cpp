@@ -1564,6 +1564,32 @@ TEST_F(VectorizedCastExprTest, stringCastToTime) {
     }
 }
 
+TEST_F(VectorizedCastExprTest, stringCastToTime1) {
+    expr_node.child_type = TPrimitiveType::VARCHAR;
+    expr_node.type = gen_type_desc(TPrimitiveType::TIME);
+
+    std::unique_ptr<Expr> expr(VectorizedCastExprFactory::from_thrift(expr_node));
+
+    std::string p("15:15");
+
+    expr_node.type = gen_type_desc(expr_node.child_type);
+    MockVectorizedExpr<TYPE_VARCHAR> col1(expr_node, 10, Slice(p));
+
+    expr->_children.push_back(&col1);
+
+    {
+        ColumnPtr ptr = expr->evaluate(nullptr, nullptr);
+
+        // right cast
+        auto v = DoubleColumn::static_pointer_cast(ptr);
+        ASSERT_EQ(10, v->size());
+
+        for (int j = 0; j < v->size(); ++j) {
+            ASSERT_EQ(54900, v->get_data()[j]);
+        }
+    }
+}
+
 TEST_F(VectorizedCastExprTest, stringCastToTimeNull1) {
     expr_node.child_type = TPrimitiveType::VARCHAR;
     expr_node.type = gen_type_desc(TPrimitiveType::TIME);
@@ -1582,7 +1608,6 @@ TEST_F(VectorizedCastExprTest, stringCastToTimeNull1) {
 
         // right cast
         auto v = ColumnHelper::as_column<NullableColumn>(ptr);
-
         ASSERT_EQ(10, v->size());
 
         for (int j = 0; j < v->size(); ++j) {
@@ -1609,6 +1634,7 @@ TEST_F(VectorizedCastExprTest, stringCastToTimeNull2) {
 
         // right cast
         auto v = ColumnHelper::as_column<NullableColumn>(ptr);
+
         ASSERT_EQ(10, v->size());
 
         for (int j = 0; j < v->size(); ++j) {
@@ -1618,32 +1644,6 @@ TEST_F(VectorizedCastExprTest, stringCastToTimeNull2) {
 }
 
 TEST_F(VectorizedCastExprTest, stringCastToTimeNull3) {
-    expr_node.child_type = TPrimitiveType::VARCHAR;
-    expr_node.type = gen_type_desc(TPrimitiveType::TIME);
-
-    std::unique_ptr<Expr> expr(VectorizedCastExprFactory::from_thrift(expr_node));
-
-    std::string p("15:15");
-
-    expr_node.type = gen_type_desc(expr_node.child_type);
-    MockVectorizedExpr<TYPE_VARCHAR> col1(expr_node, 10, Slice(p));
-
-    expr->_children.push_back(&col1);
-
-    {
-        ColumnPtr ptr = expr->evaluate(nullptr, nullptr);
-
-        // right cast
-        auto v = ColumnHelper::as_column<NullableColumn>(ptr);
-        ASSERT_EQ(10, v->size());
-
-        for (int j = 0; j < v->size(); ++j) {
-            ASSERT_TRUE(v->is_null(j));
-        }
-    }
-}
-
-TEST_F(VectorizedCastExprTest, stringCastToTimeNull4) {
     expr_node.child_type = TPrimitiveType::VARCHAR;
     expr_node.type = gen_type_desc(TPrimitiveType::TIME);
 
@@ -1669,7 +1669,7 @@ TEST_F(VectorizedCastExprTest, stringCastToTimeNull4) {
     }
 }
 
-TEST_F(VectorizedCastExprTest, stringCastToTimeNull5) {
+TEST_F(VectorizedCastExprTest, stringCastToTimeNull4) {
     expr_node.child_type = TPrimitiveType::VARCHAR;
     expr_node.type = gen_type_desc(TPrimitiveType::TIME);
 
