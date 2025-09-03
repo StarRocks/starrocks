@@ -13,9 +13,8 @@
 // limitations under the License.
 package com.starrocks.sql.ast;
 
-import com.starrocks.analysis.OrderByElement;
-import com.starrocks.analysis.SlotRef;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.sql.ast.expression.SlotRef;
 import mockit.Mocked;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;

@@ -14,9 +14,6 @@
 
 package com.starrocks.connector.iceberg;
 
-import com.starrocks.analysis.IntLiteral;
-import com.starrocks.analysis.ProcedureArgument;
-import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Database;
 import com.starrocks.common.DdlException;
 import com.starrocks.connector.HdfsEnvironment;
@@ -27,6 +24,9 @@ import com.starrocks.connector.iceberg.procedure.RollbackToSnapshotProcedure;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.AlterTableOperationClause;
 import com.starrocks.sql.ast.AlterTableStmt;
+import com.starrocks.sql.ast.ProcedureArgument;
+import com.starrocks.sql.ast.expression.IntLiteral;
+import com.starrocks.sql.ast.expression.TableName;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.utframe.UtFrameUtils;

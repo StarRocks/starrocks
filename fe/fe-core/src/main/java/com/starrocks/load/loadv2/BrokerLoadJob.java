@@ -36,7 +36,6 @@ package com.starrocks.load.loadv2;
 
 import com.google.common.base.Joiner;
 import com.google.common.collect.Lists;
-import com.starrocks.analysis.BrokerDesc;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
@@ -72,6 +71,7 @@ import com.starrocks.qe.scheduler.Coordinator;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.service.FrontendOptions;
 import com.starrocks.sql.ast.AlterLoadStmt;
+import com.starrocks.sql.ast.BrokerDesc;
 import com.starrocks.sql.ast.LoadStmt;
 import com.starrocks.task.PriorityLeaderTask;
 import com.starrocks.thrift.TLoadJobType;

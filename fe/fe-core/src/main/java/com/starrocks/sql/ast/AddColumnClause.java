@@ -15,7 +15,6 @@
 
 package com.starrocks.sql.ast;
 
-import com.starrocks.analysis.ColumnPosition;
 import com.starrocks.sql.parser.NodePosition;
 
 import java.util.Map;

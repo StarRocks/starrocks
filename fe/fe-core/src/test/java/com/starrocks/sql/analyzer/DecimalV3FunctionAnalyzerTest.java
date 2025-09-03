@@ -16,14 +16,6 @@
 package com.starrocks.sql.analyzer;
 
 import com.google.common.collect.Lists;
-import com.starrocks.analysis.ArithmeticExpr;
-import com.starrocks.analysis.DecimalLiteral;
-import com.starrocks.analysis.Expr;
-import com.starrocks.analysis.FloatLiteral;
-import com.starrocks.analysis.FunctionCallExpr;
-import com.starrocks.analysis.IntLiteral;
-import com.starrocks.analysis.SlotRef;
-import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.AggregateFunction;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
@@ -31,6 +23,14 @@ import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
+import com.starrocks.sql.ast.expression.ArithmeticExpr;
+import com.starrocks.sql.ast.expression.DecimalLiteral;
+import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.FloatLiteral;
+import com.starrocks.sql.ast.expression.FunctionCallExpr;
+import com.starrocks.sql.ast.expression.IntLiteral;
+import com.starrocks.sql.ast.expression.SlotRef;
+import com.starrocks.sql.ast.expression.TableName;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 

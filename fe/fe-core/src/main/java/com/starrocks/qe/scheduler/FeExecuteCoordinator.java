@@ -15,7 +15,6 @@
 package com.starrocks.qe.scheduler;
 
 import com.google.common.collect.Lists;
-import com.starrocks.analysis.SlotRef;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.Status;
@@ -30,6 +29,7 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.QueryStatisticsItem;
 import com.starrocks.qe.RowBatch;
 import com.starrocks.qe.scheduler.slot.LogicalSlot;
+import com.starrocks.sql.ast.expression.SlotRef;
 import com.starrocks.sql.common.RyuDouble;
 import com.starrocks.sql.common.RyuFloat;
 import com.starrocks.sql.optimizer.operator.Projection;

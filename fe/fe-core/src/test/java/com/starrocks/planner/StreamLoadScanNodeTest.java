@@ -35,11 +35,6 @@
 package com.starrocks.planner;
 
 import com.google.common.collect.Lists;
-import com.starrocks.analysis.DescriptorTable;
-import com.starrocks.analysis.FunctionCallExpr;
-import com.starrocks.analysis.FunctionName;
-import com.starrocks.analysis.SlotDescriptor;
-import com.starrocks.analysis.TupleDescriptor;
 import com.starrocks.catalog.AggregateType;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Function;
@@ -58,6 +53,8 @@ import com.starrocks.load.streamload.StreamLoadInfo;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.ImportColumnDesc;
+import com.starrocks.sql.ast.expression.FunctionCallExpr;
+import com.starrocks.sql.ast.expression.FunctionName;
 import com.starrocks.sql.parser.AstBuilder;
 import com.starrocks.sql.parser.ParsingException;
 import com.starrocks.sql.parser.SqlParser;

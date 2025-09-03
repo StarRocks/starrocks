@@ -15,7 +15,6 @@
 package com.starrocks.sql.parser;
 
 import com.google.common.collect.Lists;
-import com.starrocks.analysis.Expr;
 import com.starrocks.common.Config;
 import com.starrocks.common.Pair;
 import com.starrocks.connector.parser.trino.TrinoParserUtils;
@@ -27,6 +26,7 @@ import com.starrocks.sql.ast.ImportColumnsStmt;
 import com.starrocks.sql.ast.OriginStatement;
 import com.starrocks.sql.ast.PrepareStmt;
 import com.starrocks.sql.ast.StatementBase;
+import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.common.UnsupportedException;

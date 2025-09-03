@@ -38,6 +38,7 @@ import com.starrocks.sql.ast.DropPartitionClause;
 import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.RefreshMaterializedViewStatement;
 import com.starrocks.sql.ast.TruncateTableStmt;
+import com.starrocks.sql.ast.expression.TableName;
 import com.starrocks.sql.common.PListCell;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MVTestBase;
 import com.starrocks.sql.plan.ExecPlan;
