@@ -18,6 +18,7 @@ import com.starrocks.authorization.AccessControlProvider;
 import com.starrocks.authorization.AccessDeniedException;
 import com.starrocks.authorization.NativeAccessController;
 import com.starrocks.authorization.PrivilegeType;
+import com.starrocks.authorization.ranger.hive.RangerHiveAccessController;
 import com.starrocks.authorization.ranger.starrocks.RangerStarRocksAccessController;
 import com.starrocks.authorization.ranger.starrocks.RangerStarRocksResource;
 import com.starrocks.catalog.Column;
@@ -257,5 +258,17 @@ public class RangerInterfaceTest {
             QueryStatement queryStatement = (QueryStatement) stmt;
             Assertions.assertTrue(((SelectRelation) queryStatement.getQueryRelation()).getRelation() instanceof SubqueryRelation);
         }
+    }
+
+    @Test
+    public void testHiveConvertToAccessTypeCreate() {
+        RangerHiveAccessController controller = new RangerHiveAccessController("hive-service");
+        Assertions.assertEquals("select", controller.convertToAccessType(PrivilegeType.SELECT));
+        Assertions.assertEquals("update", controller.convertToAccessType(PrivilegeType.INSERT));
+        Assertions.assertEquals("create", controller.convertToAccessType(PrivilegeType.CREATE_TABLE));
+        Assertions.assertEquals("create", controller.convertToAccessType(PrivilegeType.CREATE_VIEW));
+        Assertions.assertEquals("create", controller.convertToAccessType(PrivilegeType.CREATE_DATABASE));
+        Assertions.assertEquals("refresh", controller.convertToAccessType(PrivilegeType.REFRESH));
+        Assertions.assertEquals("drop", controller.convertToAccessType(PrivilegeType.DROP));
     }
 }

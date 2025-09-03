@@ -697,7 +697,7 @@ public class PrivilegeStmtAnalyzerV2Test {
 
         sql = "grant ALL PRIVILEGES on table test.t0 to user test_user";
         grantPrivilegeStmt = (GrantPrivilegeStmt) analyzeSuccess(sql);
-        Assertions.assertEquals("GRANT DELETE, DROP, INSERT, SELECT, ALTER, EXPORT, UPDATE " +
+        Assertions.assertEquals("GRANT DELETE, DROP, INSERT, SELECT, ALTER, EXPORT, UPDATE, REFRESH " +
                 "ON TABLE test.t0 TO USER 'test_user'@'%'", AstToSQLBuilder.toSQL(grantPrivilegeStmt));
 
         sql = "grant SELECT on all tables in all databases to user test_user";
