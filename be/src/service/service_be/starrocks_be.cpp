@@ -103,16 +103,9 @@ void start_be(const std::vector<StorePath>& paths, bool as_cn) {
     CHECK(global_vars->is_init()) << "global variables not initialized";
     LOG(INFO) << process_name << " start step " << start_step++ << ": global variables init successfully";
 
-<<<<<<< HEAD
-    auto* storage_engine = init_storage_engine(global_env, paths, as_cn);
-    LOG(INFO) << process_name << " start step " << start_step++ << ": storage engine init successfully";
-
-    auto* cache_env = CacheEnv::GetInstance();
-=======
     // cache env should be initialized before init_storage_engine,
     // because apply task is triggered in init_storage_engine and needs cache env.
-    auto* cache_env = DataCache::GetInstance();
->>>>>>> 1b62cf522b ([BugFix] Fix cache env init order (#62700))
+    auto* cache_env = CacheEnv::GetInstance();
     EXIT_IF_ERROR(cache_env->init(paths));
     LOG(INFO) << process_name << " start step " << start_step++ << ": cache env init successfully";
 
