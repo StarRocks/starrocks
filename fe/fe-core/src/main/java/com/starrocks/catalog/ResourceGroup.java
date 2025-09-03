@@ -52,6 +52,7 @@ public class ResourceGroup {
     public static final String DISABLE_RESOURCE_GROUP_NAME = "disable_resource_group";
     public static final String DEFAULT_MV_RESOURCE_GROUP_NAME = "default_mv_wg";
     public static final String SPILL_MEM_LIMIT_THRESHOLD = "spill_mem_limit_threshold";
+    public static final String PARTITION_NUM = "partition_num";
 
     /**
      * In the old version, DEFAULT_WG and DEFAULT_MV_WG are not saved and persisted in the FE, but are only created in each
@@ -102,6 +103,9 @@ public class ResourceGroup {
             new ColumnMeta(
                     new Column(MAX_CPU_CORES, ScalarType.createVarchar(200)),
                     (rg, classifier) -> "" + rg.getMaxCpuCores(), false),
+            new ColumnMeta(
+                    new Column(PARTITION_NUM, ScalarType.createVarchar(200)),
+                    (rg, classifier) -> "" + rg.getPartitionNum()),
             new ColumnMeta(
                     new Column(BIG_QUERY_CPU_SECOND_LIMIT, ScalarType.createVarchar(200)),
                     (rg, classifier) -> "" + Objects.requireNonNullElse(rg.getBigQueryCpuSecondLimit(), 0)),
@@ -172,6 +176,8 @@ public class ResourceGroup {
     private TWorkGroupType resourceGroupType;
     @SerializedName(value = "version")
     private long version;
+    @SerializedName(value = "partitionNum")
+    private Integer partitionNum;
 
     public ResourceGroup() {
     }
@@ -390,6 +396,14 @@ public class ResourceGroup {
 
     public void setClassifiers(List<ResourceGroupClassifier> classifiers) {
         this.classifiers = classifiers;
+    }
+
+    public Integer getPartitionNum() {
+        return partitionNum;
+    }
+
+    public void setPartitionNum(Integer partitionNum) {
+        this.partitionNum = partitionNum;
     }
 
     @Override

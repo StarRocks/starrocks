@@ -407,6 +407,11 @@ public class ResourceGroupMgr implements Writable {
                     wg.setSpillMemLimitThreshold(spillMemLimitThreshold);
                 }
 
+                Integer partitionNum = changedProperties.getPartitionNum();
+                if (partitionNum != null) {
+                    wg.setPartitionNum(partitionNum);
+                }
+
                 // Type is guaranteed to be immutable during the analyzer phase.
                 TWorkGroupType workGroupType = changedProperties.getResourceGroupType();
                 Preconditions.checkState(workGroupType == null);
@@ -584,6 +589,15 @@ public class ResourceGroupMgr implements Writable {
     }
 
     public TWorkGroup chooseResourceGroup(ConnectContext ctx, ResourceGroupClassifier.QueryType queryType, Set<Long> databases) {
+        ResourceGroup resourceGroup = chooseResourceGroupObject(ctx, queryType, databases);
+        if (resourceGroup == null) {
+            return null;
+        }
+        return resourceGroup.toThrift();
+    }
+
+    public ResourceGroup chooseResourceGroupObject(ConnectContext ctx, ResourceGroupClassifier.QueryType queryType,
+                                                   Set<Long> databases) {
         List<String> activeRoles = getUnqualifiedRole(ctx);
 
         readLock();
@@ -602,7 +616,7 @@ public class ResourceGroupMgr implements Writable {
                         .sorted(Comparator.comparingDouble(ResourceGroupClassifier::weight))
                         .collect(Collectors.toList());
                 if (!shortQueryClassifierList.isEmpty()) {
-                    return shortQueryResourceGroup.toThrift();
+                    return shortQueryResourceGroup;
                 }
             }
 
@@ -617,14 +631,19 @@ public class ResourceGroupMgr implements Writable {
             } else {
                 ResourceGroup rg =
                         id2ResourceGroupMap.get(classifierList.get(classifierList.size() - 1).getResourceGroupId());
-                if (rg == null) {
-                    return null;
-                }
-                return rg.toThrift();
+                return rg;
             }
         } finally {
             readUnlock();
         }
+    }
+
+    public ResourceGroup chooseResourceGroup(ConnectContext ctx, Set<Long> databases) {
+        ResourceGroup resourceGroup = chooseResourceGroupObject(ctx, ResourceGroupClassifier.QueryType.SELECT, databases);
+        if (resourceGroup == null) {
+            resourceGroup = resourceGroupMap.get(ResourceGroup.DEFAULT_RESOURCE_GROUP_NAME);
+        }
+        return resourceGroup;
     }
 
     public void createBuiltinResourceGroupsIfNotExist() {

@@ -62,6 +62,7 @@ import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
+import com.starrocks.common.ErrorReportException;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.NoAliveBackendException;
@@ -1406,6 +1407,9 @@ public class StmtExecutor {
             return;
         }
 
+        // Validate partition limits
+        validatePartitionLimits(context, execPlan.getScanNodes());
+
         List<PlanFragment> fragments = execPlan.getFragments();
         List<ScanNode> scanNodes = execPlan.getScanNodes();
         TDescriptorTable descTable = execPlan.getDescTbl().toThrift();
@@ -1499,6 +1503,45 @@ public class StmtExecutor {
 
         processQueryStatisticsFromResult(batch, execPlan, isOutfileQuery);
         GlobalStateMgr.getCurrentState().getQueryHistoryMgr().addQueryHistory(context, execPlan);
+    }
+
+
+    /**
+     * Validates the partition limits for the given execution plan based on the assigned resource group.
+     * This method checks if the number of partitions being accessed by OlapScanNode exceeds the limit
+     * defined in the resource group. If the limit is exceeded, an exception will be thrown.
+     *
+     * @param context The connection context which contains session information
+     * @param scanNodes The list of scan nodes in the execution plan
+     */
+    public void validatePartitionLimits(ConnectContext context, List<ScanNode> scanNodes) {
+        if (scanNodes.isEmpty()) {
+            return;
+        }
+
+        ResourceGroup resourceGroup = GlobalStateMgr.getCurrentState()
+                .getResourceGroupMgr()
+                .chooseResourceGroup(context, context.getCurrentSqlDbIds());
+        Integer partitionLimit = resourceGroup.getPartitionNum();
+        if (partitionLimit == null || partitionLimit <= 0) {
+            return;
+        }
+
+        scanNodes.stream()
+                .filter(OlapScanNode.class::isInstance)
+                .map(OlapScanNode.class::cast)
+                .forEach(node -> validateNodePartitionCount(node, partitionLimit));
+    }
+
+    private void validateNodePartitionCount(OlapScanNode node, int partitionLimit) {
+        int actualPartitionCount = node.getSelectedPartitionIds().size();
+        if (actualPartitionCount > partitionLimit) {
+            throw ErrorReportException.report(
+                    ErrorCode.ERR_TOO_MANY_PARTITIONS_IN_QUERY,
+                    actualPartitionCount,
+                    partitionLimit
+            );
+        }
     }
 
     /**
