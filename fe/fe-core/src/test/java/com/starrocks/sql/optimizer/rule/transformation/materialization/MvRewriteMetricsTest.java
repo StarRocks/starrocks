@@ -143,7 +143,7 @@ public class MvRewriteMetricsTest extends MVTestBase {
 
             connectContext.getSessionVariable().setTraceLogMode("command");
             Tracers.register(connectContext);
-            Tracers.init(connectContext, Tracers.Mode.LOGS, "MV");
+            Tracers.init(connectContext, "LOGS", "MV");
             // matched
             {
                 String query = "select * from depts where deptno > 10";

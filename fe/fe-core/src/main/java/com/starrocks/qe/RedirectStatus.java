@@ -17,7 +17,6 @@
 
 package com.starrocks.qe;
 
-import com.starrocks.sql.ShowTemporaryTableStmt;
 import com.starrocks.sql.ast.AddBackendBlackListStmt;
 import com.starrocks.sql.ast.AddComputeNodeBlackListStmt;
 import com.starrocks.sql.ast.AddSqlBlackListStmt;
@@ -48,7 +47,7 @@ import com.starrocks.sql.ast.AlterUserStmt;
 import com.starrocks.sql.ast.AlterViewStmt;
 import com.starrocks.sql.ast.AnalyzeProfileStmt;
 import com.starrocks.sql.ast.AnalyzeStmt;
-import com.starrocks.sql.ast.AstVisitor;
+import com.starrocks.sql.ast.AstVisitorExtendInterface;
 import com.starrocks.sql.ast.BackupStmt;
 import com.starrocks.sql.ast.BaseCreateAlterUserStmt;
 import com.starrocks.sql.ast.BaseGrantRevokePrivilegeStmt;
@@ -214,6 +213,7 @@ import com.starrocks.sql.ast.ShowStreamLoadStmt;
 import com.starrocks.sql.ast.ShowTableStatusStmt;
 import com.starrocks.sql.ast.ShowTableStmt;
 import com.starrocks.sql.ast.ShowTabletStmt;
+import com.starrocks.sql.ast.ShowTemporaryTableStmt;
 import com.starrocks.sql.ast.ShowTransactionStmt;
 import com.starrocks.sql.ast.ShowTriggersStmt;
 import com.starrocks.sql.ast.ShowUserPropertyStmt;
@@ -312,7 +312,7 @@ public class RedirectStatus {
         return new RedirectStatusVisitor().getRedirectStatus(stmt);
     }
 
-    public static class RedirectStatusVisitor implements AstVisitor<RedirectStatus, Void> {
+    public static class RedirectStatusVisitor implements AstVisitorExtendInterface<RedirectStatus, Void> {
         public RedirectStatus getRedirectStatus(StatementBase stmt) {
             return stmt.accept(this, null);
         }

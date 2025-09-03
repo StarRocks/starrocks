@@ -139,6 +139,16 @@ PARALLEL_TEST(ColumnViewTest, test_create_json_column_view) {
         DCHECK(json_column_view->is_json_view());
     }
 }
+PARALLEL_TEST(ColumnViewTest, test_create_variant_column_view) {
+    TypeDescriptor type_desc = TypeDescriptor(LogicalType::TYPE_VARIANT);
+    for (auto nullable : {true, false}) {
+        auto opt_variant_column_view = ColumnViewHelper::create_column_view(type_desc, nullable, 0, 0);
+        DCHECK(opt_variant_column_view.has_value());
+        auto variant_column_view = std::move(opt_variant_column_view.value());
+        DCHECK(variant_column_view->is_variant_view());
+        EXPECT_TRUE(variant_column_view->is_variant_view());
+    }
+}
 PARALLEL_TEST(ColumnViewTest, test_create_binary_column_view) {
     for (auto ltype : {LogicalType::TYPE_VARBINARY, LogicalType::TYPE_VARCHAR, LogicalType::TYPE_CHAR}) {
         for (auto nullable : {true, false}) {

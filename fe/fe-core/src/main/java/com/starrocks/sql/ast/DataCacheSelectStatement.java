@@ -16,7 +16,6 @@ package com.starrocks.sql.ast;
 
 import com.google.common.base.Preconditions;
 import com.starrocks.catalog.InternalCatalog;
-import com.starrocks.qe.OriginStatement;
 import com.starrocks.sql.analyzer.AstToSQLBuilder;
 import com.starrocks.sql.parser.NodePosition;
 
@@ -87,6 +86,6 @@ public class DataCacheSelectStatement extends DdlStmt {
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitDataCacheSelectStatement(this, context);
+        return ((AstVisitorExtendInterface<R, C>) visitor).visitDataCacheSelectStatement(this, context);
     }
 }

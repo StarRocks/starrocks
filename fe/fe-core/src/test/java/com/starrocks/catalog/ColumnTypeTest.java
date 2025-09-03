@@ -34,10 +34,10 @@
 
 package com.starrocks.catalog;
 
-import com.starrocks.analysis.TypeDef;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.FeConstants;
 import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.sql.ast.expression.TypeDef;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;

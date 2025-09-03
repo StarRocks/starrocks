@@ -28,6 +28,7 @@ import com.starrocks.sql.optimizer.dump.DumpInfo;
 import com.starrocks.sql.optimizer.operator.scalar.IsNullPredicateOperator;
 import com.starrocks.sql.optimizer.rule.RuleSet;
 import com.starrocks.sql.optimizer.rule.RuleType;
+import com.starrocks.sql.optimizer.rule.tvr.common.TvrOptContext;
 import com.starrocks.sql.optimizer.task.TaskContext;
 import com.starrocks.sql.optimizer.task.TaskScheduler;
 import com.starrocks.sql.optimizer.transformer.MVTransformerContext;
@@ -80,6 +81,9 @@ public class OptimizerContext {
     // which should be kept to be used to convert outer join into inner join.
     private final List<IsNullPredicateOperator> pushdownNotNullPredicates = Lists.newArrayList();
 
+    // TvrOptContext is used to store the context for TVR optimization.
+    private final TvrOptContext tvrOptContext;
+
     OptimizerContext(ConnectContext context) {
         this.connectContext = context;
         this.ruleSet = new RuleSet();
@@ -91,6 +95,7 @@ public class OptimizerContext {
 
         this.optimizerOptions = OptimizerOptions.defaultOpt();
         this.enableJoinIsNullPredicateDerive = getSessionVariable().isCboDeriveJoinIsNullPredicate();
+        this.tvrOptContext = new TvrOptContext(getSessionVariable());
     }
 
     // ============================ Query ============================
@@ -238,6 +243,10 @@ public class OptimizerContext {
 
     public boolean isInMemoPhase() {
         return this.inMemoPhase;
+    }
+
+    public TvrOptContext getTvrOptContext() {
+        return tvrOptContext;
     }
 
     /**

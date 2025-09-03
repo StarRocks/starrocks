@@ -16,9 +16,9 @@ package com.starrocks.connector.parser.trino;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
-import com.starrocks.analysis.Expr;
-import com.starrocks.analysis.FunctionCallExpr;
-import com.starrocks.sql.ast.AstVisitor;
+import com.starrocks.sql.ast.AstVisitorExtendInterface;
+import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.FunctionCallExpr;
 
 import java.util.Arrays;
 import java.util.List;
@@ -61,7 +61,7 @@ public class FunctionCallTransformer {
         new PlaceholderCollector(placeholderExprs, variableArgument).visit(targetCall);
     }
 
-    private static class PlaceholderCollector implements AstVisitor<Void, Void> {
+    private static class PlaceholderCollector implements AstVisitorExtendInterface<Void, Void> {
         private final List<PlaceholderExpr> placeholderExprs;
         private final boolean variableArgument;
         public PlaceholderCollector(List<PlaceholderExpr> placeholderExprs, boolean vararg) {
@@ -113,7 +113,7 @@ public class FunctionCallTransformer {
         return new FunctionCallRewriter(placeholderExprs, variableArgument, sourceArguments).visit(targetCall.clone());
     }
 
-    private static class FunctionCallRewriter implements AstVisitor<Expr, Void> {
+    private static class FunctionCallRewriter implements AstVisitorExtendInterface<Expr, Void> {
         private final List<Expr> sourceArguments;
         private boolean variableArgument;
 

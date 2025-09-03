@@ -16,7 +16,6 @@ package com.starrocks.sql.analyzer;
 
 import com.google.common.base.Strings;
 import com.starrocks.authentication.AuthenticationMgr;
-import com.starrocks.authentication.UserAuthenticationInfo;
 import com.starrocks.authorization.AuthorizationMgr;
 import com.starrocks.catalog.UserIdentity;
 import com.starrocks.common.CaseSensibility;
@@ -25,7 +24,7 @@ import com.starrocks.common.PatternMatcher;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.AlterUserStmt;
-import com.starrocks.sql.ast.AstVisitor;
+import com.starrocks.sql.ast.AstVisitorExtendInterface;
 import com.starrocks.sql.ast.CreateUserStmt;
 import com.starrocks.sql.ast.DropUserStmt;
 import com.starrocks.sql.ast.ExecuteAsStmt;
@@ -74,7 +73,7 @@ public class AuthenticationAnalyzer {
                 !context.getCurrentUserIdentity().equals(UserIdentity.ROOT);
     }
 
-    public static class AuthenticationAnalyzerVisitor implements AstVisitor<Void, ConnectContext> {
+    public static class AuthenticationAnalyzerVisitor implements AstVisitorExtendInterface<Void, ConnectContext> {
         private AuthorizationMgr authorizationManager = null;
 
         public void analyze(StatementBase statement, ConnectContext session) {
@@ -102,9 +101,7 @@ public class AuthenticationAnalyzer {
                 stmt.getDefaultRoles().forEach(r -> validRoleName(r, "Valid role name fail", true));
             }
 
-            UserAuthenticationInfo userAuthenticationInfo =
-                    UserAuthOptionAnalyzer.analyzeAuthOption(stmt.getUser(), stmt.getAuthOption());
-            stmt.setAuthenticationInfo(userAuthenticationInfo);
+            UserAuthOptionAnalyzer.analyzeAuthOption(stmt.getUser(), stmt.getAuthOption());
             return null;
         }
 
@@ -113,9 +110,7 @@ public class AuthenticationAnalyzer {
             analyzeUser(stmt.getUser());
             checkUserExist(stmt.getUser(), !stmt.isIfExists());
 
-            UserAuthenticationInfo userAuthenticationInfo =
-                    UserAuthOptionAnalyzer.analyzeAuthOption(stmt.getUser(), stmt.getAuthOption());
-            stmt.setAuthenticationInfo(userAuthenticationInfo);
+            UserAuthOptionAnalyzer.analyzeAuthOption(stmt.getUser(), stmt.getAuthOption());
             return null;
         }
 

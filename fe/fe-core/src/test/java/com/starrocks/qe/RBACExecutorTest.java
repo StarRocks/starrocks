@@ -13,13 +13,10 @@
 // limitations under the License.
 package com.starrocks.qe;
 
-import com.starrocks.analysis.FunctionName;
-import com.starrocks.analysis.InformationFunction;
 import com.starrocks.authentication.AuthenticationMgr;
 import com.starrocks.authorization.AccessDeniedException;
 import com.starrocks.authorization.AuthorizationMgr;
 import com.starrocks.authorization.DefaultAuthorizationProvider;
-import com.starrocks.authorization.GrantType;
 import com.starrocks.authorization.PrivilegeType;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.ScalarFunction;
@@ -34,6 +31,7 @@ import com.starrocks.sql.ast.CreateFunctionStmt;
 import com.starrocks.sql.ast.CreateUserStmt;
 import com.starrocks.sql.ast.GrantPrivilegeStmt;
 import com.starrocks.sql.ast.GrantRoleStmt;
+import com.starrocks.sql.ast.GrantType;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.SetDefaultRoleStmt;
 import com.starrocks.sql.ast.SetRoleStmt;
@@ -43,6 +41,8 @@ import com.starrocks.sql.ast.ShowRolesStmt;
 import com.starrocks.sql.ast.ShowUserStmt;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.UserRef;
+import com.starrocks.sql.ast.expression.FunctionName;
+import com.starrocks.sql.ast.expression.InformationFunction;
 import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.thrift.TFunctionBinaryType;
 import com.starrocks.utframe.StarRocksAssert;

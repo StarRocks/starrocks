@@ -16,11 +16,11 @@
 package com.starrocks.catalog;
 
 import com.google.common.collect.Lists;
-import com.starrocks.analysis.TypeDef;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
 import com.starrocks.sql.ast.ColumnDef;
 import com.starrocks.sql.ast.PartitionDesc;
+import com.starrocks.sql.ast.expression.TypeDef;
 import org.apache.commons.lang.NotImplementedException;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -51,11 +51,6 @@ public class PartitionDescTest {
         this.otherProperties = otherProperties;
 
         this.partitionDesc = new PartitionDescChild();
-    }
-
-    @Test
-    public void testAnalyzeByColumnDefs() {
-        assertThrows(NotImplementedException.class, () -> this.partitionDesc.analyze(columnDefs, otherProperties));
     }
 
     @Test

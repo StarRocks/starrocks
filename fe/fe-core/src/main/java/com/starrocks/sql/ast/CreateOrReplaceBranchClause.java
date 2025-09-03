@@ -14,7 +14,6 @@
 
 package com.starrocks.sql.ast;
 
-import com.starrocks.connector.BranchOptions;
 import com.starrocks.sql.parser.NodePosition;
 
 public class CreateOrReplaceBranchClause extends AlterTableClause {
@@ -56,6 +55,6 @@ public class CreateOrReplaceBranchClause extends AlterTableClause {
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitCreateOrReplaceBranchClause(this, context);
+        return ((AstVisitorExtendInterface<R, C>) visitor).visitCreateOrReplaceBranchClause(this, context);
     }
 }

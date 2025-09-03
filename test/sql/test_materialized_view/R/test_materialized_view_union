@@ -123,7 +123,6 @@ select k1, v1, v2 from t2;
 refresh materialized view test_union_mv2_${uuid0} with sync mode;
 select * from test_union_mv2_${uuid0} order by k1, v1;
 -- result:
-202301	1	1
 202305	1	2
 -- !result
 drop table t1;
@@ -207,11 +206,7 @@ UNION ALL
 SELECT * FROM t2;
 -- result:
 -- !result
-	
 REFRESH MATERIALIZED VIEW v1 WITH SYNC MODE;
--- result:
-031065ac-2d7e-11ef-b31f-e67f2420b196
--- !result
 select count(*) from v1;
 -- result:
 8

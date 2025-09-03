@@ -13,12 +13,12 @@
 // limitations under the License.
 package com.starrocks.sql.ast;
 
-import com.starrocks.analysis.FunctionName;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.Config;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.analyzer.CreateFunctionAnalyzer;
+import com.starrocks.sql.ast.expression.FunctionName;
 import mockit.Expectations;
 import mockit.Mocked;
 import org.junit.jupiter.api.Assertions;

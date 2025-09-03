@@ -15,7 +15,7 @@
 package com.starrocks.sql.optimizer.operator.scalar;
 
 import com.google.common.base.Preconditions;
-import com.starrocks.analysis.BinaryType;
+import com.starrocks.sql.ast.expression.BinaryType;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 
 import java.util.List;
@@ -55,7 +55,7 @@ public class BinaryPredicateOperator extends PredicateOperator {
 
     @Override
     public <R, C> R accept(ScalarOperatorVisitor<R, C> visitor, C context) {
-        return visitor.visitBinaryPredicate(this, context);
+        return  visitor.visitBinaryPredicate(this, context);
     }
 
     public BinaryPredicateOperator commutative() {

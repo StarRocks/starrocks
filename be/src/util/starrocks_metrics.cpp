@@ -113,6 +113,16 @@ StarRocksMetrics::StarRocksMetrics() : _metrics(_s_registry_name) {
     REGISTER_STARROCKS_METRIC(primary_key_wait_apply_done_duration_ms);
     REGISTER_STARROCKS_METRIC(primary_key_wait_apply_done_total);
 
+    // clone
+    _metrics.register_metric("clone_task_copy_bytes", MetricLabels().add("type", "INTER_NODE"),
+                             &clone_task_inter_node_copy_bytes);
+    _metrics.register_metric("clone_task_copy_bytes", MetricLabels().add("type", "INTRA_NODE"),
+                             &clone_task_intra_node_copy_bytes);
+    _metrics.register_metric("clone_task_copy_duration_ms", MetricLabels().add("type", "INTER_NODE"),
+                             &clone_task_inter_node_copy_duration_ms);
+    _metrics.register_metric("clone_task_copy_duration_ms", MetricLabels().add("type", "INTRA_NODE"),
+                             &clone_task_intra_node_copy_duration_ms);
+
     // push request
     _metrics.register_metric("push_requests_total", MetricLabels().add("status", "SUCCESS"),
                              &push_requests_success_total);

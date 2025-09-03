@@ -19,11 +19,11 @@ package com.starrocks.fs;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
-import com.starrocks.analysis.BrokerDesc;
 import com.starrocks.catalog.TableFunctionTable;
 import com.starrocks.common.Config;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.fs.hdfs.HdfsService;
+import com.starrocks.sql.ast.BrokerDesc;
 import com.starrocks.thrift.TBrokerCheckPathExistRequest;
 import com.starrocks.thrift.TBrokerCloseReaderRequest;
 import com.starrocks.thrift.TBrokerCloseWriterRequest;

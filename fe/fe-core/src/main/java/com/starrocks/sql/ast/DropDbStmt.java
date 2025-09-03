@@ -69,7 +69,7 @@ public class DropDbStmt extends DdlStmt {
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitDropDbStatement(this, context);
+        return ((AstVisitorExtendInterface<R, C>) visitor).visitDropDbStatement(this, context);
     }
 
 }

@@ -33,7 +33,7 @@ public class DefaultSlotSelectionStrategyTest {
     public void testReleaseSlot() throws InterruptedException {
         DefaultSlotSelectionStrategy strategy =
                 new DefaultSlotSelectionStrategy(() -> false, (groupId) -> false);
-        SlotTracker slotTracker = new SlotTracker(ImmutableList.of(strategy));
+        SlotTracker slotTracker = new SlotTracker(null, ImmutableList.of(strategy));
 
         LogicalSlot slot1 = generateSlot(1, 0);
         LogicalSlot slot2 = generateSlot(1, 0);

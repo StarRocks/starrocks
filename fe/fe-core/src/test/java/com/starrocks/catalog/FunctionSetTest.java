@@ -15,8 +15,8 @@
 package com.starrocks.catalog;
 
 import com.google.common.collect.Lists;
-import com.starrocks.analysis.FunctionName;
 import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.sql.ast.expression.FunctionName;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -293,6 +293,30 @@ public class FunctionSetTest {
         Assertions.assertNotNull(fn);
         Assertions.assertEquals(VARCHAR_ARRAY, fn.getReturnType());
         Assertions.assertEquals(VARCHAR_ARRAY_ARRAY, fn.getArgs()[0]);
+
+        // null_or_empty(null)
+        argTypes = new Type[] {Type.NULL};
+        desc = new Function(new FunctionName("null_or_empty"), argTypes, Type.INVALID, false);
+        fn = functionSet.getFunction(desc, Function.CompareMode.IS_SUPERTYPE_OF);
+        Assertions.assertNotNull(fn);
+        Assertions.assertEquals(Type.BOOLEAN, fn.getReturnType());
+        Assertions.assertEquals(Type.VARCHAR, fn.getArgs()[0]);
+
+        // null_or_empty(ARRAY<INT>)
+        argTypes = new Type[] {INT_ARRAY};
+        desc = new Function(new FunctionName("null_or_empty"), argTypes, Type.INVALID, false);
+        fn = functionSet.getFunction(desc, Function.CompareMode.IS_SUPERTYPE_OF);
+        Assertions.assertNotNull(fn);
+        Assertions.assertEquals(Type.BOOLEAN, fn.getReturnType());
+        Assertions.assertEquals(INT_ARRAY, fn.getArgs()[0]);
+
+        // null_or_empty(ARRAY<ARRAY<INT>>)
+        argTypes = new Type[] {INT_ARRAY_ARRAY};
+        desc = new Function(new FunctionName("null_or_empty"), argTypes, Type.INVALID, false);
+        fn = functionSet.getFunction(desc, Function.CompareMode.IS_SUPERTYPE_OF);
+        Assertions.assertNotNull(fn);
+        Assertions.assertEquals(Type.BOOLEAN, fn.getReturnType());
+        Assertions.assertEquals(INT_ARRAY_ARRAY, fn.getArgs()[0]);
 
         // coalesce
         argTypes = new Type[] {INT_ARRAY_ARRAY, DOUBLE_ARRAY};

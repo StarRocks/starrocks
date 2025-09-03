@@ -20,11 +20,6 @@ import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import com.google.gson.annotations.SerializedName;
-import com.starrocks.analysis.CastExpr;
-import com.starrocks.analysis.Expr;
-import com.starrocks.analysis.FunctionCallExpr;
-import com.starrocks.analysis.SlotRef;
-import com.starrocks.analysis.TableName;
 import com.starrocks.persist.ColumnIdExpr;
 import com.starrocks.persist.ExpressionSerializedObject;
 import com.starrocks.persist.gson.GsonPostProcessable;
@@ -32,7 +27,12 @@ import com.starrocks.persist.gson.GsonPreProcessable;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.analyzer.PartitionExprAnalyzer;
 import com.starrocks.sql.analyzer.SemanticException;
-import com.starrocks.sql.ast.AstVisitor;
+import com.starrocks.sql.ast.AstVisitorExtendInterface;
+import com.starrocks.sql.ast.expression.CastExpr;
+import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.FunctionCallExpr;
+import com.starrocks.sql.ast.expression.SlotRef;
+import com.starrocks.sql.ast.expression.TableName;
 import com.starrocks.sql.common.MetaUtils;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;
 import org.apache.logging.log4j.LogManager;
@@ -262,7 +262,7 @@ public class ExpressionRangePartitionInfo extends RangePartitionInfo implements 
      */
     public void renameTableName(String dbName, String newTableName) {
         Preconditions.checkArgument(!Strings.isNullOrEmpty(newTableName));
-        AstVisitor<Void, Void> renameVisitor = new AstVisitor<Void, Void>() {
+        AstVisitorExtendInterface<Void, Void> renameVisitor = new AstVisitorExtendInterface<Void, Void>() {
             @Override
             public Void visitExpression(Expr expr, Void context) {
                 for (Expr child : expr.getChildren()) {

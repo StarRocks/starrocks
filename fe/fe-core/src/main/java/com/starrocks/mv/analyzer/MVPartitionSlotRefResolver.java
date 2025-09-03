@@ -13,19 +13,14 @@
 // limitations under the License.
 package com.starrocks.mv.analyzer;
 
-import com.starrocks.analysis.AnalyticExpr;
-import com.starrocks.analysis.Expr;
-import com.starrocks.analysis.ParseNode;
-import com.starrocks.analysis.SlotRef;
-import com.starrocks.analysis.TableName;
 import com.starrocks.sql.analyzer.Field;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AstTraverser;
-import com.starrocks.sql.ast.AstVisitor;
+import com.starrocks.sql.ast.AstVisitorExtendInterface;
 import com.starrocks.sql.ast.CTERelation;
 import com.starrocks.sql.ast.CreateMaterializedViewStatement;
-import com.starrocks.sql.ast.FieldReference;
 import com.starrocks.sql.ast.JoinRelation;
+import com.starrocks.sql.ast.ParseNode;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.Relation;
 import com.starrocks.sql.ast.SelectListItem;
@@ -35,6 +30,11 @@ import com.starrocks.sql.ast.SubqueryRelation;
 import com.starrocks.sql.ast.TableRelation;
 import com.starrocks.sql.ast.ValuesRelation;
 import com.starrocks.sql.ast.ViewRelation;
+import com.starrocks.sql.ast.expression.AnalyticExpr;
+import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.FieldReference;
+import com.starrocks.sql.ast.expression.SlotRef;
+import com.starrocks.sql.ast.expression.TableName;
 
 import java.util.List;
 
@@ -44,12 +44,12 @@ import java.util.List;
  */
 public class MVPartitionSlotRefResolver {
 
-    static class ExprShuttle implements AstVisitor<Expr, Relation> {
+    static class ExprShuttle implements AstVisitorExtendInterface<Expr, Relation> {
 
-        private final AstVisitor<Expr, SlotRef> slotRefResolver;
+        private final AstVisitorExtendInterface<Expr, SlotRef> slotRefResolver;
 
         // Use customized SlotRefResolver
-        public ExprShuttle(AstVisitor<Expr, SlotRef> slotRefResolver) {
+        public ExprShuttle(AstVisitorExtendInterface<Expr, SlotRef> slotRefResolver) {
             this.slotRefResolver = slotRefResolver;
         }
 
@@ -94,7 +94,7 @@ public class MVPartitionSlotRefResolver {
         }
     }
 
-    private static final AstVisitor<Expr, SlotRef> SLOT_REF_RESOLVER = new AstVisitor<Expr, SlotRef>() {
+    private static final AstVisitorExtendInterface<Expr, SlotRef> SLOT_REF_RESOLVER = new AstVisitorExtendInterface<>() {
 
         @Override
         public Expr visit(ParseNode node) {
@@ -213,7 +213,7 @@ public class MVPartitionSlotRefResolver {
         }
     };
 
-    private static final AstVisitor<Expr, Relation> EXPR_SHUTTLE = new ExprShuttle(SLOT_REF_RESOLVER);
+    private static final AstVisitorExtendInterface<Expr, Relation> EXPR_SHUTTLE = new ExprShuttle(SLOT_REF_RESOLVER);
 
     /**
      * Recursive check if the query contains an unsupported window function

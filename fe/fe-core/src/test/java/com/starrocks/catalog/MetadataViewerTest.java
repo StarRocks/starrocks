@@ -35,14 +35,20 @@
 package com.starrocks.catalog;
 
 import com.google.common.collect.Lists;
-import com.starrocks.analysis.BinaryType;
 import com.starrocks.backup.CatalogMocker;
 import com.starrocks.catalog.Replica.ReplicaStatus;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
+import com.starrocks.sql.ast.AdminShowReplicaStatusStmt;
 import com.starrocks.sql.ast.PartitionNames;
+import com.starrocks.sql.ast.expression.BinaryPredicate;
+import com.starrocks.sql.ast.expression.BinaryType;
+import com.starrocks.sql.ast.expression.SlotRef;
+import com.starrocks.sql.ast.expression.StringLiteral;
+import com.starrocks.sql.ast.expression.TableName;
+import com.starrocks.sql.ast.expression.TableRef;
 import com.starrocks.system.SystemInfoService;
 import mockit.Expectations;
 import mockit.Mock;
@@ -183,4 +189,102 @@ public class MetadataViewerTest {
         Assertions.assertEquals(3, result.size());
     }
 
+    @Test
+    public void testGetTabletStatusWithStatement() throws Exception {
+        // Test with null where clause
+        TableName tableName = new TableName(CatalogMocker.TEST_DB_NAME, CatalogMocker.TEST_TBL_NAME);
+        TableRef tableRef = new TableRef(tableName, null);
+        AdminShowReplicaStatusStmt stmt = new AdminShowReplicaStatusStmt(tableRef, null);
+
+        List<List<String>> result = MetadataViewer.getTabletStatus(stmt);
+        Assertions.assertEquals(3, result.size());
+    }
+
+    @Test
+    public void testGetTabletStatusWithWhereClause() throws Exception {
+        // Test with where clause: status = 'DEAD'
+        TableName tableName = new TableName(CatalogMocker.TEST_DB_NAME, CatalogMocker.TEST_TBL_NAME);
+        TableRef tableRef = new TableRef(tableName, null);
+
+        // Create where clause: status = 'DEAD'
+        SlotRef leftChild = new SlotRef(tableName, "status");
+        StringLiteral rightChild = new StringLiteral("DEAD");
+        BinaryPredicate where = new BinaryPredicate(BinaryType.EQ, leftChild, rightChild);
+
+        AdminShowReplicaStatusStmt stmt = new AdminShowReplicaStatusStmt(tableRef, where);
+
+        List<List<String>> result = MetadataViewer.getTabletStatus(stmt);
+        Assertions.assertEquals(3, result.size());
+    }
+
+    @Test
+    public void testGetTabletStatusWithNotEqualWhereClause() throws Exception {
+        // Test with where clause: status != 'DEAD'
+        TableName tableName = new TableName(CatalogMocker.TEST_DB_NAME, CatalogMocker.TEST_TBL_NAME);
+        TableRef tableRef = new TableRef(tableName, null);
+
+        // Create where clause: status != 'DEAD'
+        SlotRef leftChild = new SlotRef(tableName, "status");
+        StringLiteral rightChild = new StringLiteral("DEAD");
+        BinaryPredicate where = new BinaryPredicate(BinaryType.NE, leftChild, rightChild);
+
+        AdminShowReplicaStatusStmt stmt = new AdminShowReplicaStatusStmt(tableRef, where);
+
+        List<List<String>> result = MetadataViewer.getTabletStatus(stmt);
+        Assertions.assertEquals(0, result.size());
+    }
+
+    @Test
+    public void testGetTabletStatusWithInvalidStatusFilter() throws Exception {
+        // Test with where clause: status = 'INVALID_STATUS'
+        TableName tableName = new TableName(CatalogMocker.TEST_DB_NAME, CatalogMocker.TEST_TBL_NAME);
+        TableRef tableRef = new TableRef(tableName, null);
+
+        // Create where clause: status = 'INVALID_STATUS'
+        SlotRef leftChild = new SlotRef(tableName, "status");
+        StringLiteral rightChild = new StringLiteral("INVALID_STATUS");
+        BinaryPredicate where = new BinaryPredicate(BinaryType.EQ, leftChild, rightChild);
+
+        AdminShowReplicaStatusStmt stmt = new AdminShowReplicaStatusStmt(tableRef, where);
+
+        List<List<String>> result = MetadataViewer.getTabletStatus(stmt);
+        // Should return all results since invalid status filter is treated as null
+        Assertions.assertEquals(3, result.size());
+    }
+
+    @Test
+    public void testGetTabletStatusWithNonStatusColumn() throws Exception {
+        // Test with where clause on non-status column: name = 'test'
+        TableName tableName = new TableName(CatalogMocker.TEST_DB_NAME, CatalogMocker.TEST_TBL_NAME);
+        TableRef tableRef = new TableRef(tableName, null);
+
+        // Create where clause: name = 'test' (not status column)
+        SlotRef leftChild = new SlotRef(tableName, "name");
+        StringLiteral rightChild = new StringLiteral("test");
+        BinaryPredicate where = new BinaryPredicate(BinaryType.EQ, leftChild, rightChild);
+
+        AdminShowReplicaStatusStmt stmt = new AdminShowReplicaStatusStmt(tableRef, where);
+
+        List<List<String>> result = MetadataViewer.getTabletStatus(stmt);
+        // Should return all results since non-status column filter is ignored
+        Assertions.assertEquals(3, result.size());
+    }
+
+    @Test
+    public void testGetTabletStatusWithOKStatus() throws Exception {
+        // Test with where clause: status = 'OK'
+        TableName tableName = new TableName(CatalogMocker.TEST_DB_NAME, CatalogMocker.TEST_TBL_NAME);
+        TableRef tableRef = new TableRef(tableName, null);
+
+        // Create where clause: status = 'OK'
+        SlotRef leftChild = new SlotRef(tableName, "status");
+        StringLiteral rightChild = new StringLiteral("OK");
+        BinaryPredicate where = new BinaryPredicate(BinaryType.EQ, leftChild, rightChild);
+
+        AdminShowReplicaStatusStmt stmt = new AdminShowReplicaStatusStmt(tableRef, where);
+
+        List<List<String>> result = MetadataViewer.getTabletStatus(stmt);
+        // Should return 0 results since no replicas have OK status in the mock
+        Assertions.assertEquals(0, result.size());
+    }
 }

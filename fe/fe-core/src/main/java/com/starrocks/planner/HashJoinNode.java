@@ -34,16 +34,15 @@
 
 package com.starrocks.planner;
 
-import com.starrocks.analysis.BinaryPredicate;
-import com.starrocks.analysis.BinaryType;
-import com.starrocks.analysis.Expr;
-import com.starrocks.analysis.JoinOperator;
-import com.starrocks.analysis.SlotId;
-import com.starrocks.analysis.SlotRef;
-import com.starrocks.analysis.TableRef;
 import com.starrocks.common.Config;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
+import com.starrocks.sql.ast.expression.BinaryPredicate;
+import com.starrocks.sql.ast.expression.BinaryType;
+import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.JoinOperator;
+import com.starrocks.sql.ast.expression.SlotRef;
+import com.starrocks.sql.ast.expression.TableRef;
 import com.starrocks.thrift.TEqJoinCondition;
 import com.starrocks.thrift.THashJoinNode;
 import com.starrocks.thrift.TNormalHashJoinNode;
@@ -191,6 +190,9 @@ public class HashJoinNode extends JoinNode {
         }
         if (isSkewJoin) {
             msg.hash_join_node.setIs_skew_join(isSkewJoin);
+        }
+        if (commonSlotMap != null) {
+            commonSlotMap.forEach((key, value) -> msg.hash_join_node.putToCommon_slot_map(key.asInt(), value.treeToThrift()));
         }
     }
 

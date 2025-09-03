@@ -15,11 +15,11 @@
 package com.starrocks.sql.optimizer.operator.scalar;
 
 import com.google.common.collect.Lists;
-import com.starrocks.analysis.FunctionCallExpr;
 import com.starrocks.catalog.AggregateFunction;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.Type;
+import com.starrocks.sql.ast.expression.FunctionCallExpr;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 
@@ -148,7 +148,7 @@ public class CallOperator extends ArgsScalarOperator {
             return false;
         }
         // check children nullable
-        if (FunctionCallExpr.nullableSameWithChildrenFunctions.contains(fnName)) {
+        if (FunctionCallExpr.NULLABLE_SAME_WITH_CHILDREN_FUNCTIONS.contains(fnName)) {
             // decimal operation may overflow
             return arguments.stream()
                     .anyMatch(argument -> argument.isNullable() || argument.getType().isDecimalOfAnyVersion());
@@ -243,6 +243,6 @@ public class CallOperator extends ArgsScalarOperator {
 
     @Override
     public <R, C> R accept(ScalarOperatorVisitor<R, C> visitor, C context) {
-        return visitor.visitCall(this, context);
+        return  visitor.visitCall(this, context);
     }
 }

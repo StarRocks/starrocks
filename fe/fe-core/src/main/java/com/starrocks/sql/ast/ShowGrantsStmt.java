@@ -14,7 +14,6 @@
 
 package com.starrocks.sql.ast;
 
-import com.starrocks.authorization.GrantType;
 import com.starrocks.sql.parser.NodePosition;
 
 public class ShowGrantsStmt extends ShowStmt {
@@ -54,6 +53,6 @@ public class ShowGrantsStmt extends ShowStmt {
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitShowGrantsStatement(this, context);
+        return ((AstVisitorExtendInterface<R, C>) visitor).visitShowGrantsStatement(this, context);
     }
 }

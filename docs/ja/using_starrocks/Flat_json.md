@@ -203,6 +203,18 @@ StarRocks 共有なしクラスタは v3.3.0 から Flat JSON をサポートし
 
 2. FE プルーニング機能を有効化します：`SET GLOBAL cbo_prune_json_subfield = true;`
 
+## 関連するセッション変数
+
+- `cbo_json_v2_rewrite`（デフォルト: true）: JSON v2 のパス書き換えを有効化し、`get_json_*` などの関数を Flat JSON のサブカラムへの直接アクセスに書き換えて、述語プッシュダウンやカラムプルーニングを有効にします。
+- `cbo_json_v2_dict_opt`（デフォルト: true）: パス書き換えで生成された Flat JSON の文字列サブカラムに対して、低カーディナリティ辞書最適化を有効にし、文字列式、GROUP BY、JOIN の高速化に寄与します。
+
+例：
+
+```SQL
+SET cbo_json_v2_rewrite = true;
+SET cbo_json_v2_dict_opt = true;
+```
+
 ## Flat JSON 機能の有効化（バージョン 3.4 以前）
 
 1. BE 設定を変更します：`enable_json_flat` はバージョン 3.4 以前はデフォルトで `false` です。変更方法については、[Configure BE parameters](../administration/management/BE_configuration.md#configure-be-parameters) を参照してください。

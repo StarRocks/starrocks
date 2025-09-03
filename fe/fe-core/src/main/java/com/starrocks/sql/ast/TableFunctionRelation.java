@@ -14,12 +14,12 @@
 
 package com.starrocks.sql.ast;
 
-import com.starrocks.analysis.Expr;
-import com.starrocks.analysis.FunctionCallExpr;
-import com.starrocks.analysis.FunctionName;
-import com.starrocks.analysis.FunctionParams;
-import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.TableFunction;
+import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.FunctionCallExpr;
+import com.starrocks.sql.ast.expression.FunctionName;
+import com.starrocks.sql.ast.expression.FunctionParams;
+import com.starrocks.sql.ast.expression.TableName;
 import com.starrocks.sql.parser.NodePosition;
 
 import java.util.List;
@@ -92,6 +92,6 @@ public class TableFunctionRelation extends Relation {
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitTableFunction(this, context);
+        return ((AstVisitorExtendInterface<R, C>) visitor).visitTableFunction(this, context);
     }
 }

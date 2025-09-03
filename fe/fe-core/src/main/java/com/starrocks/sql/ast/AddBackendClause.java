@@ -44,6 +44,6 @@ public class AddBackendClause extends BackendClause {
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitAddBackendClause(this, context);
+        return ((AstVisitorExtendInterface<R, C>) visitor).visitAddBackendClause(this, context);
     }
 }

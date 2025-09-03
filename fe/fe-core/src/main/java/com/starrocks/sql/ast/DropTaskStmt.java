@@ -14,7 +14,6 @@
 
 package com.starrocks.sql.ast;
 
-import com.starrocks.analysis.TaskName;
 import com.starrocks.sql.parser.NodePosition;
 
 public class DropTaskStmt extends DdlStmt {
@@ -44,7 +43,7 @@ public class DropTaskStmt extends DdlStmt {
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitDropTaskStmt(this, context);
+        return ((AstVisitorExtendInterface<R, C>) visitor).visitDropTaskStmt(this, context);
     }
 
 }

@@ -43,6 +43,6 @@ public class ShowDynamicPartitionStmt extends ShowStmt {
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitShowDynamicPartitionStatement(this, context);
+        return ((AstVisitorExtendInterface<R, C>) visitor).visitShowDynamicPartitionStatement(this, context);
     }
 }

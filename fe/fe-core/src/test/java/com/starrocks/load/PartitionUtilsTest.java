@@ -15,15 +15,15 @@
 package com.starrocks.load;
 
 import com.google.common.collect.Lists;
-import com.starrocks.analysis.DateLiteral;
-import com.starrocks.analysis.LiteralExpr;
-import com.starrocks.analysis.StringLiteral;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.HashDistributionInfo;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Type;
+import com.starrocks.sql.ast.expression.DateLiteral;
+import com.starrocks.sql.ast.expression.LiteralExpr;
+import com.starrocks.sql.ast.expression.StringLiteral;
 import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;

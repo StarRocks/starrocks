@@ -16,8 +16,8 @@ package com.starrocks.sql.ast;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableList;
-import com.starrocks.analysis.Expr;
-import com.starrocks.analysis.Parameter;
+import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.Parameter;
 import com.starrocks.sql.parser.NodePosition;
 
 import java.util.ArrayList;
@@ -89,6 +89,6 @@ public class PrepareStmt extends StatementBase {
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitPrepareStatement(this, context);
+        return ((AstVisitorExtendInterface<R, C>) visitor).visitPrepareStatement(this, context);
     }
 }

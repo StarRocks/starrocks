@@ -14,19 +14,11 @@
 
 package com.starrocks.sql.ast;
 
-import com.starrocks.analysis.Predicate;
-import com.starrocks.catalog.ResourceGroup;
-import com.starrocks.catalog.ResourceGroupClassifier;
-import com.starrocks.sql.analyzer.ResourceGroupAnalyzer;
-import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.sql.ast.expression.Predicate;
 import com.starrocks.sql.parser.NodePosition;
-import com.starrocks.thrift.TWorkGroupType;
 
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
-
-import static com.starrocks.catalog.ResourceGroupMgr.SHORT_QUERY_SET_EXCLUSIVE_CPU_CORES_ERR_MSG;
 
 // ReesourceGroup create statement format
 // create resource group [if not exists] [or replace] <name>
@@ -37,11 +29,10 @@ import static com.starrocks.catalog.ResourceGroupMgr.SHORT_QUERY_SET_EXCLUSIVE_C
 //
 public class CreateResourceGroupStmt extends DdlStmt {
     private final String name;
-    private boolean ifNotExists;
-    private boolean replaceIfExists;
+    private final boolean ifNotExists;
+    private final boolean replaceIfExists;
     private final List<List<Predicate>> classifiers;
     private final Map<String, String> properties;
-    private ResourceGroup resourceGroup;
 
     public CreateResourceGroupStmt(String name, boolean ifNotExists, boolean replaceIfExists,
                                    List<List<Predicate>> classifiers, Map<String, String> properties) {
@@ -63,51 +54,24 @@ public class CreateResourceGroupStmt extends DdlStmt {
         return ifNotExists;
     }
 
-    public void setIfNotExists(boolean ifNotExists) {
-        this.ifNotExists = ifNotExists;
-    }
-
     public boolean isReplaceIfExists() {
         return replaceIfExists;
     }
 
-    public void setReplaceIfExists(boolean replaceIfExists) {
-        this.replaceIfExists = replaceIfExists;
+    public String getName() {
+        return name;
     }
 
-    public void analyze() throws SemanticException {
-        resourceGroup = new ResourceGroup();
-        resourceGroup.setName(name);
-        List<ResourceGroupClassifier> classifierList = new ArrayList<>();
-        for (List<Predicate> predicates : classifiers) {
-            ResourceGroupClassifier classifier = ResourceGroupAnalyzer.convertPredicateToClassifier(predicates);
-            classifierList.add(classifier);
-        }
-        resourceGroup.setClassifiers(classifierList);
-        ResourceGroupAnalyzer.analyzeProperties(resourceGroup, properties);
-
-        if (resourceGroup.getResourceGroupType() == null) {
-            resourceGroup.setResourceGroupType(TWorkGroupType.WG_NORMAL);
-        }
-
-        if (resourceGroup.getResourceGroupType() == TWorkGroupType.WG_SHORT_QUERY &&
-                (resourceGroup.getExclusiveCpuCores() != null && resourceGroup.getExclusiveCpuCores() > 0)) {
-            throw new SemanticException(SHORT_QUERY_SET_EXCLUSIVE_CPU_CORES_ERR_MSG);
-        }
-
-        ResourceGroup.validateCpuParameters(resourceGroup.getRawCpuWeight(), resourceGroup.getExclusiveCpuCores());
-
-        if (resourceGroup.getMemLimit() == null) {
-            throw new SemanticException("property 'mem_limit' is absent");
-        }
+    public List<List<Predicate>> getClassifiers() {
+        return classifiers;
     }
 
-    public ResourceGroup getResourceGroup() {
-        return resourceGroup;
+    public Map<String, String> getProperties() {
+        return properties;
     }
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitCreateResourceGroupStatement(this, context);
+        return ((AstVisitorExtendInterface<R, C>) visitor).visitCreateResourceGroupStatement(this, context);
     }
 }

@@ -36,14 +36,13 @@ package com.starrocks.planner;
 
 import com.google.common.base.Joiner;
 import com.google.common.base.MoreObjects;
-import com.starrocks.analysis.Expr;
-import com.starrocks.analysis.SlotDescriptor;
-import com.starrocks.analysis.TupleDescriptor;
 import com.starrocks.catalog.ColumnAccessPath;
 import com.starrocks.common.StarRocksException;
+import com.starrocks.connector.BucketProperty;
 import com.starrocks.connector.RemoteFilesSampleStrategy;
 import com.starrocks.datacache.DataCacheOptions;
 import com.starrocks.server.WarehouseManager;
+import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.optimizer.ScanOptimizeOption;
 import com.starrocks.thrift.TColumnAccessPath;
 import com.starrocks.thrift.TScanRangeLocations;
@@ -55,6 +54,7 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -130,12 +130,19 @@ public abstract class ScanNode extends PlanNode {
         throw new StarRocksException("Error when using bucket-aware execution");
     }
 
+    public Optional<List<BucketProperty>> getBucketProperties() throws StarRocksException {
+        throw new StarRocksException("Error when using bucket-aware execution");
+    }
+
     public boolean isLocalNativeTable() {
         return false;
     }
 
     public boolean hasMoreScanRanges() {
         return false;
+    }
+
+    public void setReachLimit() {
     }
 
     /**

@@ -17,7 +17,6 @@ package com.starrocks.authorization;
 
 import com.google.common.collect.Lists;
 import com.google.gson.stream.JsonReader;
-import com.starrocks.analysis.TableName;
 import com.starrocks.authentication.AuthenticationMgr;
 import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.catalog.Table;
@@ -26,6 +25,7 @@ import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorReportException;
 import com.starrocks.common.StarRocksException;
+import com.starrocks.connector.iceberg.hive.IcebergHiveCatalog;
 import com.starrocks.persist.ImageWriter;
 import com.starrocks.persist.OperationType;
 import com.starrocks.persist.RolePrivilegeCollectionInfo;
@@ -50,6 +50,7 @@ import com.starrocks.sql.ast.CreateUserStmt;
 import com.starrocks.sql.ast.DataDescription;
 import com.starrocks.sql.ast.GrantPrivilegeStmt;
 import com.starrocks.sql.ast.GrantRoleStmt;
+import com.starrocks.sql.ast.GrantType;
 import com.starrocks.sql.ast.RevokePrivilegeStmt;
 import com.starrocks.sql.ast.RevokeRoleStmt;
 import com.starrocks.sql.ast.SetRoleStmt;
@@ -58,10 +59,12 @@ import com.starrocks.sql.ast.ShowGrantsStmt;
 import com.starrocks.sql.ast.ShowTableStmt;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.UserRef;
+import com.starrocks.sql.ast.expression.TableName;
 import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Mock;
 import mockit.MockUp;
+import mockit.Mocked;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
@@ -1563,7 +1566,7 @@ public class AuthorizationMgrTest {
     }
 
     @Test
-    public void testGrantOnCatalog() throws Exception {
+    public void testGrantOnCatalog(@Mocked IcebergHiveCatalog hiveCatalog) throws Exception {
         DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
                 "create external catalog test_catalog properties (" +
                         "\"type\"=\"iceberg\", \"iceberg.catalog.type\"=\"hive\")", ctx), ctx);

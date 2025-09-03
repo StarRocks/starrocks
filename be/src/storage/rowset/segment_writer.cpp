@@ -169,6 +169,10 @@ Status SegmentWriter::init(const std::vector<uint32_t>& column_indexes, bool has
         const bool enable_dup_zone_map =
                 _tablet_schema->keys_type() == KeysType::DUP_KEYS && is_zone_map_key_type(column.type());
         opts.need_zone_map = column.is_key() || enable_pk_zone_map || enable_dup_zone_map || column.is_sort_key();
+        // Create prefix zonemap for string type, but only truncate it for non-key columns
+        opts.need_zone_map |= config::enable_string_prefix_zonemap && is_string_type(column.type());
+        opts.zone_map_truncate_string =
+                config::enable_string_prefix_zonemap && is_string_type(column.type()) && !column.is_key();
         if (column.type() == LogicalType::TYPE_ARRAY) {
             opts.need_zone_map = false;
         }

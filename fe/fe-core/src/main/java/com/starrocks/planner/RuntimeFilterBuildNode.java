@@ -14,7 +14,6 @@
 
 package com.starrocks.planner;
 
-import com.starrocks.analysis.DescriptorTable;
 import com.starrocks.common.IdGenerator;
 
 import java.util.List;

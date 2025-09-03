@@ -76,6 +76,6 @@ public class ModifyBackendClause extends BackendClause {
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitModifyBackendClause(this, context);
+        return ((AstVisitorExtendInterface<R, C>) visitor).visitModifyBackendClause(this, context);
     }
 }

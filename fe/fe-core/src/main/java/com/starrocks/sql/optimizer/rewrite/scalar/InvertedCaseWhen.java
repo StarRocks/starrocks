@@ -18,11 +18,11 @@ import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
-import com.starrocks.analysis.BinaryType;
-import com.starrocks.analysis.Expr;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.Type;
+import com.starrocks.sql.ast.expression.BinaryType;
+import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CaseWhenOperator;
@@ -31,6 +31,7 @@ import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.InPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.IsNullPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
+import com.starrocks.sql.optimizer.operator.scalar.ScalarOperatorUtil;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperatorVisitor;
 
 import java.util.Collection;
@@ -39,6 +40,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.function.Predicate;
 import java.util.stream.Collectors;
 
 import static com.starrocks.sql.optimizer.operator.scalar.CompoundPredicateOperator.CompoundType;
@@ -81,7 +83,6 @@ public class InvertedCaseWhen {
         return elseBranch;
     }
 
-
     public static ScalarOperator in(boolean isNotIn, ScalarOperator lhs, List<ScalarOperator> values) {
         Preconditions.checkArgument(!values.isEmpty());
         List<ScalarOperator> args = Lists.newArrayList(lhs);
@@ -116,9 +117,21 @@ public class InvertedCaseWhen {
         }
     }
 
-    private static class InvertCaseWhenVisitor extends ScalarOperatorVisitor<Optional<InvertedCaseWhen>, Void> {
+    private static class Context {
+        private final boolean skipComplexFunctions;
+
+        public Context(boolean skipComplexFunctions) {
+            this.skipComplexFunctions = skipComplexFunctions;
+        }
+
+        public boolean isSkipComplexFunctions() {
+            return skipComplexFunctions;
+        }
+    }
+
+    private static class InvertCaseWhenVisitor extends ScalarOperatorVisitor<Optional<InvertedCaseWhen>, Context> {
         @Override
-        public Optional<InvertedCaseWhen> visit(ScalarOperator scalarOperator, Void context) {
+        public Optional<InvertedCaseWhen> visit(ScalarOperator scalarOperator, Context context) {
             return Optional.empty();
         }
 
@@ -211,7 +224,22 @@ public class InvertedCaseWhen {
         }
 
         @Override
-        public Optional<InvertedCaseWhen> visitCaseWhenOperator(CaseWhenOperator operator, Void context) {
+        public Optional<InvertedCaseWhen> visitCaseWhenOperator(CaseWhenOperator operator, Context context) {
+            if (context.isSkipComplexFunctions()) {
+                Predicate<ScalarOperator> isComplexFunction = op -> (op instanceof CallOperator)
+                        && op.getChildren().stream()
+                        .map(ScalarOperator::getType)
+                        .anyMatch(t -> t.isComplexType() || t.isJsonType());
+
+                boolean existsComplexFunctions = operator.getAllConditionClause()
+                        .stream()
+                        .anyMatch(when -> ScalarOperatorUtil.getStream(when).anyMatch(isComplexFunction));
+
+                if (existsComplexFunctions) {
+                    return Optional.empty();
+                }
+            }
+
             if (!operator.getAllValuesClause().stream().allMatch(ScalarOperator::isConstantRef)) {
                 return visit(operator, context);
             }
@@ -224,7 +252,7 @@ public class InvertedCaseWhen {
         }
 
         @Override
-        public Optional<InvertedCaseWhen> visitCall(CallOperator call, Void context) {
+        public Optional<InvertedCaseWhen> visitCall(CallOperator call, Context context) {
             String fnName = call.getFnName();
             if (fnName.equals(FunctionSet.IF)) {
                 ScalarOperator cond = call.getChild(0);
@@ -252,12 +280,10 @@ public class InvertedCaseWhen {
         }
     }
 
-
-
     private static final InvertCaseWhenVisitor INVERT_CASE_WHEN_VISITOR = new InvertCaseWhenVisitor();
 
-    public static Optional<InvertedCaseWhen> from(ScalarOperator op) {
-        return op.accept(INVERT_CASE_WHEN_VISITOR, null);
+    public static Optional<InvertedCaseWhen> from(ScalarOperator op, Context context) {
+        return op.accept(INVERT_CASE_WHEN_VISITOR, context);
     }
 
     private static ScalarOperator buildIfThen(ScalarOperator p, ConstantOperator first, ConstantOperator second) {
@@ -267,15 +293,15 @@ public class InvertedCaseWhen {
                 Lists.newArrayList(p, first, second), ifFunc);
     }
 
-    private static class SimplifyVisitor extends ScalarOperatorVisitor<Optional<ScalarOperator>, Void> {
+    private static class SimplifyVisitor extends ScalarOperatorVisitor<Optional<ScalarOperator>, Context> {
 
         @Override
-        public Optional<ScalarOperator> visit(ScalarOperator scalarOperator, Void context) {
+        public Optional<ScalarOperator> visit(ScalarOperator scalarOperator, Context context) {
             return Optional.empty();
         }
 
         @Override
-        public Optional<ScalarOperator> visitInPredicate(InPredicateOperator predicate, Void context) {
+        public Optional<ScalarOperator> visitInPredicate(InPredicateOperator predicate, Context context) {
             Set<ScalarOperator> inSet = predicate.getChildren().stream().skip(1).collect(Collectors.toSet());
             // col in (1, 2, 3) is not equal with col in (1, 2, 3, null). For col = 4, the first return false
             // while the second return null.
@@ -283,7 +309,7 @@ public class InvertedCaseWhen {
             if (!inSet.stream().allMatch(e -> e.isConstantRef() && !e.isNullable())) {
                 return Optional.empty();
             }
-            Optional<InvertedCaseWhen> maybeInvertedCaseWhen = from(predicate.getChild(0));
+            Optional<InvertedCaseWhen> maybeInvertedCaseWhen = from(predicate.getChild(0), context);
             if (!maybeInvertedCaseWhen.isPresent()) {
                 return Optional.empty();
             }
@@ -363,8 +389,6 @@ public class InvertedCaseWhen {
                 return result;
             }
 
-
-
             // for case when q1 then c1 when q2 then c2 ... else pn end, when it converted into InvertedCaseWhen
             //  thenToWhen records (c1->p1, c2->p2, ..., pn)(lisp style), pi satisfies:
             //  1. p1 = q1;
@@ -412,7 +436,7 @@ public class InvertedCaseWhen {
         }
 
         @Override
-        public Optional<ScalarOperator> visitBinaryPredicate(BinaryPredicateOperator predicate, Void context) {
+        public Optional<ScalarOperator> visitBinaryPredicate(BinaryPredicateOperator predicate, Context context) {
             BinaryType binaryType = predicate.getBinaryType();
             if (!binaryType.isEqual() && !binaryType.isNotEqual()) {
                 return Optional.empty();
@@ -423,8 +447,8 @@ public class InvertedCaseWhen {
         }
 
         @Override
-        public Optional<ScalarOperator> visitIsNullPredicate(IsNullPredicateOperator predicate, Void context) {
-            Optional<InvertedCaseWhen> maybeInvertedCaseWhen = from(predicate.getChild(0));
+        public Optional<ScalarOperator> visitIsNullPredicate(IsNullPredicateOperator predicate, Context context) {
+            Optional<InvertedCaseWhen> maybeInvertedCaseWhen = from(predicate.getChild(0), context);
             if (!maybeInvertedCaseWhen.isPresent()) {
                 return Optional.empty();
             }
@@ -460,7 +484,7 @@ public class InvertedCaseWhen {
 
     private static final SimplifyVisitor SIMPLIFY_VISITOR = new SimplifyVisitor();
 
-    public static ScalarOperator simplify(ScalarOperator op) {
-        return op.accept(SIMPLIFY_VISITOR, null).orElse(op);
+    public static ScalarOperator simplify(ScalarOperator op, boolean skipComplexFunctions) {
+        return op.accept(SIMPLIFY_VISITOR, new Context(skipComplexFunctions)).orElse(op);
     }
 }

@@ -35,10 +35,10 @@
 package com.starrocks.sql.ast;
 
 import com.google.common.collect.Lists;
-import com.starrocks.analysis.Expr;
-import com.starrocks.analysis.Predicate;
-import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Table;
+import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.Predicate;
+import com.starrocks.sql.ast.expression.TableName;
 import com.starrocks.sql.parser.NodePosition;
 
 import java.util.List;
@@ -143,6 +143,6 @@ public class DeleteStmt extends DmlStmt {
     }
 
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitDeleteStatement(this, context);
+        return ((AstVisitorExtendInterface<R, C>) visitor).visitDeleteStatement(this, context);
     }
 }

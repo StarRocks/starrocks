@@ -15,7 +15,6 @@
 package com.starrocks.statistic.columns;
 
 import com.google.common.base.Splitter;
-import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
@@ -26,6 +25,7 @@ import com.starrocks.scheduler.history.TableKeeper;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.AnalyzeTestUtil;
 import com.starrocks.sql.ast.AnalyzeStmt;
+import com.starrocks.sql.ast.expression.TableName;
 import com.starrocks.sql.plan.PlanTestBase;
 import com.starrocks.statistic.AnalyzeJob;
 import com.starrocks.statistic.AnalyzeMgr;

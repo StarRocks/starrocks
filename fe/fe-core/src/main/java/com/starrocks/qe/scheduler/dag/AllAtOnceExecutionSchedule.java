@@ -15,13 +15,14 @@
 package com.starrocks.qe.scheduler.dag;
 
 import com.starrocks.common.StarRocksException;
+import com.starrocks.common.profile.Timer;
+import com.starrocks.common.profile.Tracers;
 import com.starrocks.proto.PPlanFragmentCancelReason;
 import com.starrocks.qe.scheduler.Coordinator;
 import com.starrocks.qe.scheduler.Deployer;
 import com.starrocks.qe.scheduler.slot.DeployState;
 import com.starrocks.rpc.RpcException;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.thrift.TUniqueId;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -36,40 +37,73 @@ public class AllAtOnceExecutionSchedule implements ExecutionSchedule {
     private Deployer deployer;
     private ExecutionDAG dag;
     private volatile boolean cancelled = false;
+    private DeployScanRangesTask deployScanRangesTask = null;
 
-    class DeployMoreScanRangesTask implements Runnable {
+    class TracerContext implements AutoCloseable {
+        Tracers savedTracers;
+
+        TracerContext(Tracers currentTracers) {
+            if (currentTracers != null) {
+                savedTracers = Tracers.get();
+                Tracers.set(currentTracers);
+            }
+        }
+
+        @Override
+        public void close() {
+            if (savedTracers != null) {
+                Tracers.set(savedTracers);
+            }
+        }
+    }
+
+    class DeployScanRangesTask implements Runnable {
         List<DeployState> states;
-        private ExecutorService executorService;
+        ExecutorService executorService;
+        Tracers currentTracers;
 
-        DeployMoreScanRangesTask(List<DeployState> states, ExecutorService executorService) {
+        DeployScanRangesTask(List<DeployState> states) {
             this.states = states;
-            this.executorService = executorService;
         }
 
         @Override
         public void run() {
-            while (!cancelled && !states.isEmpty()) {
-                try {
-                    states = coordinator.assignIncrementalScanRangesToDeployStates(deployer, states);
-                    if (states.isEmpty()) {
-                        return;
-                    }
-                    for (DeployState state : states) {
-                        deployer.deployFragments(state);
-                    }
-                } catch (StarRocksException | RpcException e) {
-                    LOG.warn("Failed to assign incremental scan ranges to deploy states", e);
-                    coordinator.cancel(PPlanFragmentCancelReason.INTERNAL_ERROR, e.getMessage());
-                    throw new RuntimeException(e);
+            if (cancelled || states.isEmpty()) {
+                return;
+            }
+            try (TracerContext tracerContext = new TracerContext(currentTracers)) {
+                runOnce();
+            }
+            // If run in the executor service, we need to start the next turn.
+            // To submit this task again so all queries could get the same opportunity to run by queueing up
+            start();
+        }
+
+        public void runOnce() {
+            try (Timer timer = Tracers.watchScope(Tracers.Module.SCHEDULER, "DeployScanRanges")) {
+                states = coordinator.assignIncrementalScanRangesToDeployStates(deployer, states);
+                if (states.isEmpty()) {
+                    return;
                 }
+                for (DeployState state : states) {
+                    deployer.deployFragments(state);
+                }
+            } catch (StarRocksException | RpcException e) {
+                LOG.warn("Failed to assign incremental scan ranges to deploy states", e);
+                coordinator.cancel(PPlanFragmentCancelReason.INTERNAL_ERROR, e.getMessage());
+                throw new RuntimeException(e);
             }
         }
 
         public void start() {
             if (executorService != null) {
+                // Run in the executor service.
                 executorService.submit(this);
             } else {
-                this.run();
+                // Run in the main thread.
+                while (!cancelled && !states.isEmpty()) {
+                    this.runOnce();
+                }
             }
         }
     }
@@ -90,16 +124,16 @@ public class AllAtOnceExecutionSchedule implements ExecutionSchedule {
             states.add(deployState);
         }
 
-        ExecutorService executorService = null;
+        deployScanRangesTask = new DeployScanRangesTask(states);
         if (option.useQueryDeployExecutor) {
-            executorService = GlobalStateMgr.getCurrentState().getQueryDeployExecutor();
+            deployScanRangesTask.executorService = GlobalStateMgr.getCurrentState().getQueryDeployExecutor();
+            deployScanRangesTask.currentTracers = Tracers.get();
         }
-
-        DeployMoreScanRangesTask task = new DeployMoreScanRangesTask(states, executorService);
-        task.start();
     }
 
-    public void tryScheduleNextTurn(TUniqueId fragmentInstanceId) {
+    @Override
+    public void continueSchedule(Coordinator.ScheduleOption option) throws RpcException, StarRocksException {
+        deployScanRangesTask.start();
     }
 
     @Override

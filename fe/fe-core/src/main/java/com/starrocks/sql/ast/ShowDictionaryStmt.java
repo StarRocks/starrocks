@@ -36,6 +36,6 @@ public class ShowDictionaryStmt extends ShowStmt {
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitShowDictionaryStatement(this, context);
+        return ((AstVisitorExtendInterface<R, C>) visitor).visitShowDictionaryStatement(this, context);
     }
 }

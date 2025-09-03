@@ -19,43 +19,6 @@ import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Lists;
-import com.starrocks.analysis.AnalyticExpr;
-import com.starrocks.analysis.AnalyticWindow;
-import com.starrocks.analysis.ArithmeticExpr;
-import com.starrocks.analysis.BinaryPredicate;
-import com.starrocks.analysis.BinaryType;
-import com.starrocks.analysis.BoolLiteral;
-import com.starrocks.analysis.CaseExpr;
-import com.starrocks.analysis.CaseWhenClause;
-import com.starrocks.analysis.CastExpr;
-import com.starrocks.analysis.CollectionElementExpr;
-import com.starrocks.analysis.CompoundPredicate;
-import com.starrocks.analysis.DateLiteral;
-import com.starrocks.analysis.DecimalLiteral;
-import com.starrocks.analysis.Expr;
-import com.starrocks.analysis.FloatLiteral;
-import com.starrocks.analysis.FunctionCallExpr;
-import com.starrocks.analysis.FunctionName;
-import com.starrocks.analysis.FunctionParams;
-import com.starrocks.analysis.GroupByClause;
-import com.starrocks.analysis.GroupingFunctionCallExpr;
-import com.starrocks.analysis.InformationFunction;
-import com.starrocks.analysis.IntLiteral;
-import com.starrocks.analysis.JoinOperator;
-import com.starrocks.analysis.LargeIntLiteral;
-import com.starrocks.analysis.LimitElement;
-import com.starrocks.analysis.LiteralExpr;
-import com.starrocks.analysis.NullLiteral;
-import com.starrocks.analysis.OrderByElement;
-import com.starrocks.analysis.ParseNode;
-import com.starrocks.analysis.SlotRef;
-import com.starrocks.analysis.SubfieldExpr;
-import com.starrocks.analysis.Subquery;
-import com.starrocks.analysis.TableName;
-import com.starrocks.analysis.TimestampArithmeticExpr;
-import com.starrocks.analysis.TypeDef;
-import com.starrocks.analysis.VarBinaryLiteral;
-import com.starrocks.analysis.VariableExpr;
 import com.starrocks.catalog.ArrayType;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.PrimitiveType;
@@ -66,17 +29,17 @@ import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.qe.SqlModeHelper;
 import com.starrocks.sql.analyzer.RelationId;
-import com.starrocks.sql.ast.ArrayExpr;
 import com.starrocks.sql.ast.CTERelation;
 import com.starrocks.sql.ast.CreateTableAsSelectStmt;
 import com.starrocks.sql.ast.CreateTableStmt;
 import com.starrocks.sql.ast.DropTableStmt;
 import com.starrocks.sql.ast.ExceptRelation;
+import com.starrocks.sql.ast.GroupByClause;
 import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.IntersectRelation;
 import com.starrocks.sql.ast.JoinRelation;
-import com.starrocks.sql.ast.LambdaArgument;
-import com.starrocks.sql.ast.LambdaFunctionExpr;
+import com.starrocks.sql.ast.OrderByElement;
+import com.starrocks.sql.ast.ParseNode;
 import com.starrocks.sql.ast.Property;
 import com.starrocks.sql.ast.QualifiedName;
 import com.starrocks.sql.ast.QueryRelation;
@@ -94,6 +57,43 @@ import com.starrocks.sql.ast.UnionRelation;
 import com.starrocks.sql.ast.UnitIdentifier;
 import com.starrocks.sql.ast.ValueList;
 import com.starrocks.sql.ast.ValuesRelation;
+import com.starrocks.sql.ast.expression.AnalyticExpr;
+import com.starrocks.sql.ast.expression.AnalyticWindow;
+import com.starrocks.sql.ast.expression.ArithmeticExpr;
+import com.starrocks.sql.ast.expression.ArrayExpr;
+import com.starrocks.sql.ast.expression.BinaryPredicate;
+import com.starrocks.sql.ast.expression.BinaryType;
+import com.starrocks.sql.ast.expression.BoolLiteral;
+import com.starrocks.sql.ast.expression.CaseExpr;
+import com.starrocks.sql.ast.expression.CaseWhenClause;
+import com.starrocks.sql.ast.expression.CastExpr;
+import com.starrocks.sql.ast.expression.CollectionElementExpr;
+import com.starrocks.sql.ast.expression.CompoundPredicate;
+import com.starrocks.sql.ast.expression.DateLiteral;
+import com.starrocks.sql.ast.expression.DecimalLiteral;
+import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.FloatLiteral;
+import com.starrocks.sql.ast.expression.FunctionCallExpr;
+import com.starrocks.sql.ast.expression.FunctionName;
+import com.starrocks.sql.ast.expression.FunctionParams;
+import com.starrocks.sql.ast.expression.GroupingFunctionCallExpr;
+import com.starrocks.sql.ast.expression.InformationFunction;
+import com.starrocks.sql.ast.expression.IntLiteral;
+import com.starrocks.sql.ast.expression.JoinOperator;
+import com.starrocks.sql.ast.expression.LambdaArgument;
+import com.starrocks.sql.ast.expression.LambdaFunctionExpr;
+import com.starrocks.sql.ast.expression.LargeIntLiteral;
+import com.starrocks.sql.ast.expression.LimitElement;
+import com.starrocks.sql.ast.expression.LiteralExpr;
+import com.starrocks.sql.ast.expression.NullLiteral;
+import com.starrocks.sql.ast.expression.SlotRef;
+import com.starrocks.sql.ast.expression.SubfieldExpr;
+import com.starrocks.sql.ast.expression.Subquery;
+import com.starrocks.sql.ast.expression.TableName;
+import com.starrocks.sql.ast.expression.TimestampArithmeticExpr;
+import com.starrocks.sql.ast.expression.TypeDef;
+import com.starrocks.sql.ast.expression.VarBinaryLiteral;
+import com.starrocks.sql.ast.expression.VariableExpr;
 import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.sql.parser.ParsingException;
 import io.trino.sql.tree.AliasedRelation;
@@ -205,16 +205,16 @@ import java.util.Optional;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
-import static com.starrocks.analysis.AnalyticWindow.BoundaryType.CURRENT_ROW;
-import static com.starrocks.analysis.AnalyticWindow.BoundaryType.FOLLOWING;
-import static com.starrocks.analysis.AnalyticWindow.BoundaryType.PRECEDING;
-import static com.starrocks.analysis.AnalyticWindow.BoundaryType.UNBOUNDED_FOLLOWING;
-import static com.starrocks.analysis.AnalyticWindow.BoundaryType.UNBOUNDED_PRECEDING;
 import static com.starrocks.catalog.FunctionSet.ARRAY_AGG_DISTINCT;
 import static com.starrocks.common.util.TimeUtils.parseDateTimeFromString;
 import static com.starrocks.common.util.TimeUtils.parseTimeZoneFromString;
 import static com.starrocks.connector.parser.trino.TrinoParserUtils.alignWithInputDatetimeType;
 import static com.starrocks.connector.trino.TrinoParserUnsupportedException.trinoParserUnsupportedException;
+import static com.starrocks.sql.ast.expression.AnalyticWindow.BoundaryType.CURRENT_ROW;
+import static com.starrocks.sql.ast.expression.AnalyticWindow.BoundaryType.FOLLOWING;
+import static com.starrocks.sql.ast.expression.AnalyticWindow.BoundaryType.PRECEDING;
+import static com.starrocks.sql.ast.expression.AnalyticWindow.BoundaryType.UNBOUNDED_FOLLOWING;
+import static com.starrocks.sql.ast.expression.AnalyticWindow.BoundaryType.UNBOUNDED_PRECEDING;
 import static com.starrocks.sql.common.ErrorMsgProxy.PARSER_ERROR_MSG;
 import static com.starrocks.sql.common.UnsupportedException.unsupportedException;
 import static java.util.stream.Collectors.toList;
@@ -908,8 +908,8 @@ public class AstBuilder extends AstVisitor<ParseNode, ParseTreeContext> {
     protected ParseNode visitJsonQuery(JsonQuery jsonQuery, ParseTreeContext context) {
         Expr inputExpr = (Expr) visit(jsonQuery.getJsonPathInvocation().getInputExpression(), context);
         String jsonPath = jsonQuery.getJsonPathInvocation().getJsonPath().getValue();
-        com.starrocks.analysis.StringLiteral jsonPathLiteral =
-                new com.starrocks.analysis.StringLiteral(jsonPath.substring(jsonPath.indexOf('$')));
+        com.starrocks.sql.ast.expression.StringLiteral jsonPathLiteral =
+                new com.starrocks.sql.ast.expression.StringLiteral(jsonPath.substring(jsonPath.indexOf('$')));
         return new FunctionCallExpr("json_query", ImmutableList.of(inputExpr, jsonPathLiteral));
     }
 
@@ -987,7 +987,7 @@ public class AstBuilder extends AstVisitor<ParseNode, ParseTreeContext> {
                 throw new ParsingException(e.getMessage());
             }
         } else if (node.getType().equalsIgnoreCase("json")) {
-            return new com.starrocks.analysis.StringLiteral(node.getValue());
+            return new com.starrocks.sql.ast.expression.StringLiteral(node.getValue());
         } else if (node.getType().equalsIgnoreCase("real")) {
             try {
                 return new FloatLiteral(node.getValue());
@@ -1005,7 +1005,7 @@ public class AstBuilder extends AstVisitor<ParseNode, ParseTreeContext> {
 
     @Override
     protected ParseNode visitStringLiteral(StringLiteral node, ParseTreeContext context) {
-        return new com.starrocks.analysis.StringLiteral(node.getValue());
+        return new com.starrocks.sql.ast.expression.StringLiteral(node.getValue());
     }
 
     @Override
@@ -1020,7 +1020,8 @@ public class AstBuilder extends AstVisitor<ParseNode, ParseTreeContext> {
 
     @Override
     protected ParseNode visitIntervalLiteral(IntervalLiteral node, ParseTreeContext context) {
-        return new com.starrocks.sql.ast.IntervalLiteral(new com.starrocks.analysis.StringLiteral(node.getValue()),
+        return new com.starrocks.sql.ast.expression.IntervalLiteral(
+                new com.starrocks.sql.ast.expression.StringLiteral(node.getValue()),
                 new UnitIdentifier(node.getStartField().toString()));
     }
 
@@ -1036,7 +1037,7 @@ public class AstBuilder extends AstVisitor<ParseNode, ParseTreeContext> {
                 return new FunctionCallExpr("convert_tz", List.of(
                         new DateLiteral(parseDateTimeFromString(formattedValue), Type.DATETIME),
                         new VariableExpr("time_zone"),
-                        new com.starrocks.analysis.StringLiteral(zoneId.toString())
+                        new com.starrocks.sql.ast.expression.StringLiteral(zoneId.toString())
                 ));
             }
         } catch (AnalysisException e) {
@@ -1083,17 +1084,17 @@ public class AstBuilder extends AstVisitor<ParseNode, ParseTreeContext> {
         Expr left = (Expr) visit(node.getLeft(), context);
         Expr right = (Expr) visit(node.getRight(), context);
 
-        if (left instanceof com.starrocks.sql.ast.IntervalLiteral) {
+        if (left instanceof com.starrocks.sql.ast.expression.IntervalLiteral) {
             return alignWithInputDatetimeType(new TimestampArithmeticExpr(BINARY_OPERATOR_MAP.get(node.getOperator()), right,
-                    ((com.starrocks.sql.ast.IntervalLiteral) left).getValue(),
-                    ((com.starrocks.sql.ast.IntervalLiteral) left).getUnitIdentifier().getDescription(),
+                    ((com.starrocks.sql.ast.expression.IntervalLiteral) left).getValue(),
+                    ((com.starrocks.sql.ast.expression.IntervalLiteral) left).getUnitIdentifier().getDescription(),
                     true));
         }
 
-        if (right instanceof com.starrocks.sql.ast.IntervalLiteral) {
+        if (right instanceof com.starrocks.sql.ast.expression.IntervalLiteral) {
             return alignWithInputDatetimeType(new TimestampArithmeticExpr(BINARY_OPERATOR_MAP.get(node.getOperator()), left,
-                    ((com.starrocks.sql.ast.IntervalLiteral) right).getValue(),
-                    ((com.starrocks.sql.ast.IntervalLiteral) right).getUnitIdentifier().getDescription(),
+                    ((com.starrocks.sql.ast.expression.IntervalLiteral) right).getValue(),
+                    ((com.starrocks.sql.ast.expression.IntervalLiteral) right).getUnitIdentifier().getDescription(),
                     false));
         }
 
@@ -1124,7 +1125,7 @@ public class AstBuilder extends AstVisitor<ParseNode, ParseTreeContext> {
 
     @Override
     protected ParseNode visitBetweenPredicate(BetweenPredicate node, ParseTreeContext context) {
-        return new com.starrocks.analysis.BetweenPredicate(
+        return new com.starrocks.sql.ast.expression.BetweenPredicate(
                 (Expr) visit(node.getValue(), context),
                 (Expr) visit(node.getMin(), context),
                 (Expr) visit(node.getMax(), context),
@@ -1133,8 +1134,8 @@ public class AstBuilder extends AstVisitor<ParseNode, ParseTreeContext> {
 
     @Override
     protected ParseNode visitLikePredicate(LikePredicate node, ParseTreeContext context) {
-        return new com.starrocks.analysis.LikePredicate(
-                com.starrocks.analysis.LikePredicate.Operator.LIKE,
+        return new com.starrocks.sql.ast.expression.LikePredicate(
+                com.starrocks.sql.ast.expression.LikePredicate.Operator.LIKE,
                 (Expr) visit(node.getValue(), context),
                 (Expr) visit(node.getPattern(), context));
     }
@@ -1142,12 +1143,12 @@ public class AstBuilder extends AstVisitor<ParseNode, ParseTreeContext> {
     @Override
     protected ParseNode visitInPredicate(InPredicate node, ParseTreeContext context) {
         if (node.getValueList() instanceof InListExpression) {
-            return new com.starrocks.analysis.InPredicate(
+            return new com.starrocks.sql.ast.expression.InPredicate(
                     (Expr) visit(node.getValue(), context),
                     visit(node.getValueList(), context, Expr.class), false);
         } else {
             // SubqueryExpression
-            return new com.starrocks.analysis.InPredicate(
+            return new com.starrocks.sql.ast.expression.InPredicate(
                     (Expr) visit(node.getValue(), context),
                     (Expr) visit(node.getValueList(), context), false);
         }
@@ -1156,18 +1157,18 @@ public class AstBuilder extends AstVisitor<ParseNode, ParseTreeContext> {
     @Override
     protected ParseNode visitIsNullPredicate(IsNullPredicate node, ParseTreeContext context) {
         Expr value = (Expr) visit(node.getValue(), context);
-        return new com.starrocks.analysis.IsNullPredicate(value, false);
+        return new com.starrocks.sql.ast.expression.IsNullPredicate(value, false);
     }
 
     @Override
     protected ParseNode visitIsNotNullPredicate(IsNotNullPredicate node, ParseTreeContext context) {
         Expr value = (Expr) visit(node.getValue(), context);
-        return new com.starrocks.analysis.IsNullPredicate(value, true);
+        return new com.starrocks.sql.ast.expression.IsNullPredicate(value, true);
     }
 
     @Override
     protected ParseNode visitExists(ExistsPredicate node, ParseTreeContext context) {
-        return new com.starrocks.analysis.ExistsPredicate((Subquery) visit(node.getSubquery(), context), false);
+        return new com.starrocks.sql.ast.expression.ExistsPredicate((Subquery) visit(node.getSubquery(), context), false);
     }
 
     @Override

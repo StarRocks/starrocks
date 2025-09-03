@@ -239,6 +239,13 @@ TEST_F(StarRocksMetricsTest, Normal) {
         ASSERT_TRUE(metric != nullptr);
         ASSERT_STREQ("22", metric->to_string().c_str());
     }
+    {
+        instance->clone_requests_total.increment(23);
+        auto metric = metrics->get_metric("engine_requests_total",
+                                          MetricLabels().add("type", "clone").add("status", "total"));
+        ASSERT_TRUE(metric != nullptr);
+        ASSERT_STREQ("23", metric->to_string().c_str());
+    }
     //  comapction
     {
         instance->base_compaction_deltas_total.increment(30);
@@ -374,6 +381,10 @@ TEST_F(StarRocksMetricsTest, test_metrics_register) {
     ASSERT_NE(nullptr, instance->get_metric("delta_writer_wait_replica_duration_us"));
     ASSERT_NE(nullptr, instance->get_metric("delta_writer_txn_commit_duration_us"));
     ASSERT_NE(nullptr, instance->get_metric("memtable_finalize_duration_us"));
+    ASSERT_NE(nullptr, instance->get_metric("clone_task_copy_bytes", MetricLabels().add("type", "INTER_NODE")));
+    ASSERT_NE(nullptr, instance->get_metric("clone_task_copy_bytes", MetricLabels().add("type", "INTRA_NODE")));
+    ASSERT_NE(nullptr, instance->get_metric("clone_task_copy_duration_ms", MetricLabels().add("type", "INTER_NODE")));
+    ASSERT_NE(nullptr, instance->get_metric("clone_task_copy_duration_ms", MetricLabels().add("type", "INTRA_NODE")));
 }
 
 } // namespace starrocks

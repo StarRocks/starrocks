@@ -31,6 +31,7 @@ import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.lake.LakeTablet;
 import com.starrocks.proto.PublishLogVersionBatchRequest;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.replication.ReplicationTxnCommitAttachment;
 import com.starrocks.rpc.BrpcProxy;
 import com.starrocks.rpc.LakeService;
 import com.starrocks.server.GlobalStateMgr;
@@ -555,6 +556,72 @@ public class LakePublishBatchTest {
 
             PublishVersionDaemon publishVersionDaemon = new PublishVersionDaemon();
             publishVersionDaemon.runAfterCatalogReady();
+        }
+    }
+
+    @ParameterizedTest
+    @ValueSource(booleans = {false, true})
+    public void testBatchPublishReplicationTransaction(boolean enableAggregation) throws Exception {
+        String tableName = enableAggregation ? TABLE_AGG_ON : TABLE_AGG_OFF;
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(DB);
+        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), tableName);
+        List<TabletCommitInfo> transTablets = Lists.newArrayList();
+
+        for (Partition partition : table.getPartitions()) {
+            MaterializedIndex baseIndex = partition.getDefaultPhysicalPartition().getBaseIndex();
+            for (Long tabletId : baseIndex.getTabletIds()) {
+                for (Long backendId : GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackendIds()) {
+                    TabletCommitInfo tabletCommitInfo = new TabletCommitInfo(tabletId, backendId);
+                    transTablets.add(tabletCommitInfo);
+                }
+            }
+        }
+
+        GlobalTransactionMgr globalTransactionMgr = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr();
+        long transactionId1 = globalTransactionMgr.
+                beginTransaction(db.getId(), Lists.newArrayList(table.getId()),
+                        "label_replication_1" + "_" + UUIDUtil.genUUID().toString(),
+                        transactionSource,
+                        TransactionState.LoadJobSourceType.REPLICATION, Config.stream_load_default_timeout_second);
+
+        Map<Long, Long> partitionVersions = new HashMap<>();
+        for (Partition partition : table.getPartitions()) {
+            partitionVersions.put(partition.getDefaultPhysicalPartition().getId(),
+                    partition.getDefaultPhysicalPartition().getVisibleVersion() + 2);
+        }
+
+        // commit a transaction
+        VisibleStateWaiter waiter1 = globalTransactionMgr.commitTransaction(db.getId(), transactionId1, transTablets,
+                Lists.newArrayList(), new ReplicationTxnCommitAttachment(partitionVersions, null));
+
+        long transactionId2 = globalTransactionMgr.
+                beginTransaction(db.getId(), Lists.newArrayList(table.getId()),
+                        "label_replication_2" + "_" + UUIDUtil.genUUID().toString(),
+                        transactionSource,
+                        TransactionState.LoadJobSourceType.BACKEND_STREAMING, Config.stream_load_default_timeout_second);
+
+        // commit a transaction
+        VisibleStateWaiter waiter2 = globalTransactionMgr.commitTransaction(db.getId(), transactionId2, transTablets,
+                Lists.newArrayList(), null);
+
+        {
+            TransactionStateBatch readyStateBatch = globalTransactionMgr.getReadyPublishTransactionsBatch().get(0);
+            Assertions.assertEquals(2, readyStateBatch.size());
+
+            PublishVersionDaemon publishVersionDaemon = new PublishVersionDaemon();
+            publishVersionDaemon.runAfterCatalogReady();
+
+            Assertions.assertTrue(waiter1.await(10, TimeUnit.SECONDS));
+            Assertions.assertTrue(waiter2.await(10, TimeUnit.SECONDS));
+
+            // Verify that the transactions have been published
+            TransactionState transactionState1 = globalTransactionMgr.getDatabaseTransactionMgr(db.getId()).
+                    getTransactionState(transactionId1);
+            TransactionState transactionState2 = globalTransactionMgr.getDatabaseTransactionMgr(db.getId()).
+                    getTransactionState(transactionId2);
+
+            assertEquals(TransactionStatus.VISIBLE, transactionState1.getTransactionStatus());
+            assertEquals(TransactionStatus.VISIBLE, transactionState2.getTransactionStatus());
         }
     }
 

@@ -189,6 +189,11 @@ public:
     /// @return Negated value using two's complement
     constexpr int256_t operator-() const {
         if (low == 0) {
+            // Handle INT256_MIN special case to avoid undefined behavior
+            if (high == static_cast<int128_t>(static_cast<uint128_t>(1) << 127)) {
+                // For INT256_MIN, return itself since -INT256_MIN cannot be represented
+                return *this;
+            }
             return int256_t(-high, 0);
         } else {
             uint128_t new_low = ~low + 1;

@@ -15,8 +15,8 @@
 package com.starrocks.sql.plan;
 
 import com.google.common.collect.Sets;
-import com.starrocks.analysis.AnalyticExpr;
 import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.sql.ast.expression.AnalyticExpr;
 import com.starrocks.utframe.StarRocksAssert;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;

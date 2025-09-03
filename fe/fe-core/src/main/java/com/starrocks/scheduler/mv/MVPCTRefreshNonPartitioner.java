@@ -15,28 +15,31 @@
 
 package com.starrocks.scheduler.mv;
 
-import com.google.common.collect.Sets;
-import com.starrocks.analysis.Expr;
-import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedView;
-import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.scheduler.MvTaskRunContext;
 import com.starrocks.scheduler.TaskRunContext;
+import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.TableName;
+import com.starrocks.sql.common.PCellNone;
+import com.starrocks.sql.common.PCellSortedSet;
+import com.starrocks.sql.common.PCellWithName;
 
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 public final class MVPCTRefreshNonPartitioner extends MVPCTRefreshPartitioner {
     public MVPCTRefreshNonPartitioner(MvTaskRunContext mvContext,
                                       TaskRunContext context,
                                       Database db,
-                                      MaterializedView mv) {
-        super(mvContext, context, db, mv);
+                                      MaterializedView mv,
+                                      MVRefreshParams mvRefreshParams) {
+        super(mvContext, context, db, mv, mvRefreshParams);
     }
 
     @Override
@@ -60,42 +63,50 @@ public final class MVPCTRefreshNonPartitioner extends MVPCTRefreshPartitioner {
     }
 
     @Override
-    public Set<String> getMVPartitionsToRefreshWithForce() {
-        return mv.getVisiblePartitionNames();
+    public PCellSortedSet getMVPartitionsToRefreshWithForce() {
+        return getNonPartitionedMVPartitionsToRefresh();
+    }
+
+    private PCellSortedSet getNonPartitionedMVPartitionsToRefresh() {
+        List<PCellWithName> pCellWithNames = mv.getVisiblePartitionNames()
+                .stream()
+                .map(partitionName -> PCellWithName.of(partitionName, new PCellNone()))
+                .collect(Collectors.toList());
+        return PCellSortedSet.of(pCellWithNames);
     }
 
     @Override
-    public Set<String> getMVPartitionsToRefresh(PartitionInfo mvPartitionInfo,
-                                                Map<Long, BaseTableSnapshotInfo> snapshotBaseTables,
-                                                MVRefreshParams mvRefreshParams,
-                                                Set<String> mvPotentialPartitionNames) {
+    public PCellSortedSet getMVPartitionsToRefresh(Map<Long, BaseTableSnapshotInfo> snapshotBaseTables) {
         // non-partitioned materialized view
         if (mvRefreshParams.isForce() || isNonPartitionedMVNeedToRefresh(snapshotBaseTables, mv)) {
-            return mv.getVisiblePartitionNames();
+            return getNonPartitionedMVPartitionsToRefresh();
         }
-        return Sets.newHashSet();
+        return PCellSortedSet.of();
     }
 
     @Override
-    public Set<String> getMVPartitionNamesWithTTL(MaterializedView materializedView,
-                                                  MVRefreshParams mvRefreshParams,
-                                                  boolean isAutoRefresh) {
-        return Sets.newHashSet();
+    public PCellSortedSet getMVPartitionNamesWithTTL(boolean isAutoRefresh) {
+        return PCellSortedSet.of();
     }
 
-    public void filterPartitionByRefreshNumber(Set<String> mvPartitionsToRefresh,
-                                               Set<String> mvPotentialPartitionNames, boolean tentative) {
+    @Override
+    public void filterPartitionByRefreshNumber(PCellSortedSet mvPartitionsToRefresh) {
         // do nothing
     }
 
     @Override
-    public void filterPartitionByAdaptiveRefreshNumber(Set<String> mvPartitionsToRefresh,
-                                                       Set<String> mvPotentialPartitionNames, boolean tentative) {
+    public void filterPartitionByAdaptiveRefreshNumber(PCellSortedSet mvPartitionsToRefresh) {
         // do nothing
     }
 
     @Override
-    protected int getAdaptivePartitionRefreshNumber(Iterator<String> partitionNameIter) throws MVAdaptiveRefreshException {
+    protected int getAdaptivePartitionRefreshNumber(Iterator<PCellWithName> partitionNameIter) throws MVAdaptiveRefreshException {
         return 0;
+    }
+
+    @Override
+    public boolean isCalcPotentialRefreshPartition(Map<Table, PCellSortedSet> baseChangedPartitionNames,
+                                                   PCellSortedSet mvPartitions) {
+        return false;
     }
 }

@@ -33,6 +33,7 @@ import com.starrocks.catalog.HashDistributionInfo;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.MaterializedIndexMeta;
 import com.starrocks.catalog.MaterializedView;
+import com.starrocks.catalog.MaterializedViewRefreshType;
 import com.starrocks.catalog.MvPlanContext;
 import com.starrocks.catalog.MvUpdateInfo;
 import com.starrocks.catalog.OlapTable;
@@ -657,7 +658,7 @@ public class MvRewritePreprocessor {
                 }
                 // refresh schema
                 MaterializedView.MvRefreshScheme mvRefreshScheme =
-                        new MaterializedView.MvRefreshScheme(MaterializedView.RefreshType.SYNC);
+                        new MaterializedView.MvRefreshScheme(MaterializedViewRefreshType.SYNC);
                 MaterializedView mv;
                 if (olapTable.isCloudNativeTable()) {
                     mv = new LakeMaterializedView(db, mvName, indexMeta, olapTable,

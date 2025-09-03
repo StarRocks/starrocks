@@ -17,7 +17,6 @@ import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Range;
-import com.starrocks.analysis.Expr;
 import com.starrocks.catalog.BaseTableInfo;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.HiveTable;
@@ -33,6 +32,7 @@ import com.starrocks.connector.HivePartitionDataInfo;
 import com.starrocks.connector.PartitionUtil;
 import com.starrocks.connector.TableUpdateArbitrator;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.common.ListPartitionDiffer;
 import com.starrocks.sql.common.PListCell;
 import com.starrocks.sql.common.SyncPartitionUtils;
@@ -203,7 +203,7 @@ public class PCTTableSnapshotInfo extends BaseTableSnapshotInfo {
         for (int index = 0; index < refreshedPartitionNames.size(); ++index) {
             long modifiedTime = partitions.get(index).getModifiedTime();
             String partitionName = refreshedPartitionNames.get(index);
-            Preconditions.checkArgument(partitionName != null, "partitionName should not be null");
+            Preconditions.checkArgument(partitionName != null, "name should not be null");
 
             MaterializedView.BasePartitionInfo basePartitionInfo = new MaterializedView.BasePartitionInfo(
                     -1, modifiedTime, modifiedTime);

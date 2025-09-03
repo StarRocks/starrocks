@@ -19,7 +19,7 @@ import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.connector.ConnectorType;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.AlterCatalogStmt;
-import com.starrocks.sql.ast.AstVisitor;
+import com.starrocks.sql.ast.AstVisitorExtendInterface;
 import com.starrocks.sql.ast.CreateCatalogStmt;
 import com.starrocks.sql.ast.DropCatalogStmt;
 import com.starrocks.sql.ast.ModifyTablePropertiesClause;
@@ -48,7 +48,7 @@ public class CatalogAnalyzer {
         new CatalogAnalyzerVisitor().visit(stmt, session);
     }
 
-    static class CatalogAnalyzerVisitor implements AstVisitor<Void, ConnectContext> {
+    static class CatalogAnalyzerVisitor implements AstVisitorExtendInterface<Void, ConnectContext> {
         public void analyze(ShowStmt statement, ConnectContext session) {
             visit(statement, session);
         }

@@ -83,34 +83,68 @@ void BinaryColumnBase<T>::append(const Column& src, size_t offset, size_t count)
 }
 
 template <typename T>
-void BinaryColumnBase<T>::append_selective(const Column& src, const uint32_t* indexes, uint32_t from, uint32_t size) {
+void BinaryColumnBase<T>::append_selective(const Column& src, const uint32_t* indexes, uint32_t from,
+                                           const uint32_t size) {
     if (src.is_binary_view()) {
         down_cast<const ColumnView*>(&src)->append_to(*this, indexes, from, size);
         return;
     }
+
+    indexes += from;
+
     const auto& src_column = down_cast<const BinaryColumnBase<T>&>(src);
-    const auto& src_offsets = src_column.get_offset();
-    const auto& src_bytes = src_column.get_bytes();
 
-    size_t cur_row_count = _offsets.size() - 1;
-    size_t cur_byte_size = _bytes.size();
+    const size_t prev_num_offsets = _offsets.size();
+    const size_t prev_num_rows = prev_num_offsets - 1;
 
-    _offsets.resize(cur_row_count + size + 1);
+    _offsets.resize(prev_num_offsets + size * 2);
+    auto* __restrict new_offsets = _offsets.data() + prev_num_offsets;
+    const auto* __restrict src_offsets = src_column.get_offset().data();
+
+    // Buffer i-th start offset and end offset in new_offsets[i * 2] and new_offsets[i * 2 + 1].
     for (size_t i = 0; i < size; i++) {
-        uint32_t row_idx = indexes[from + i];
-        T str_size = src_offsets[row_idx + 1] - src_offsets[row_idx];
-        _offsets[cur_row_count + i + 1] = _offsets[cur_row_count + i] + str_size;
-        cur_byte_size += str_size;
+        const uint32_t src_idx = indexes[i];
+        new_offsets[i * 2] = src_offsets[src_idx];
+        new_offsets[i * 2 + 1] = src_offsets[src_idx + 1];
     }
-    _bytes.resize(cur_byte_size);
 
-    auto* dest_bytes = _bytes.data();
-    for (size_t i = 0; i < size; i++) {
-        uint32_t row_idx = indexes[from + i];
-        T str_size = src_offsets[row_idx + 1] - src_offsets[row_idx];
-        strings::memcpy_inlined(dest_bytes + _offsets[cur_row_count + i], src_bytes.data() + src_offsets[row_idx],
-                                str_size);
+    // Write bytes
+    {
+        size_t num_bytes = _bytes.size();
+        for (size_t i = 0; i < size; i++) {
+            num_bytes += new_offsets[i * 2 + 1] - new_offsets[i * 2];
+        }
+        _bytes.resize(num_bytes);
+        const auto* __restrict src_bytes = src_column.get_bytes().data();
+        auto* __restrict dest_bytes = _bytes.data();
+        size_t cur_offset = _offsets[prev_num_rows];
+
+        if (src_column.get_bytes().size() > 32 * 1024 * 1024ull) {
+            for (size_t i = 0; i < size; i++) {
+                if (i + 16 < size) {
+                    // If the source column is large enough, use prefetch to speed up copying.
+                    __builtin_prefetch(src_bytes + new_offsets[i * 2 + 32]);
+                }
+                const T str_size = new_offsets[i * 2 + 1] - new_offsets[i * 2];
+                strings::memcpy_inlined(dest_bytes + cur_offset, src_bytes + new_offsets[i * 2], str_size);
+                cur_offset += str_size;
+            }
+        } else {
+            for (size_t i = 0; i < size; i++) {
+                const T str_size = new_offsets[i * 2 + 1] - new_offsets[i * 2];
+                // Only copy 16 bytes extra when src_column is small enough, because the overhead of copying 16 bytes
+                // will be large when src_column is large enough.
+                strings::memcpy_inlined_overflow16(dest_bytes + cur_offset, src_bytes + new_offsets[i * 2], str_size);
+                cur_offset += str_size;
+            }
+        }
     }
+
+    // Write offsets.
+    for (int64_t i = 0; i < size; i++) {
+        new_offsets[i] = new_offsets[i - 1] + (new_offsets[i * 2 + 1] - new_offsets[i * 2]);
+    }
+    _offsets.resize(prev_num_offsets + size);
 
     _slices_cache = false;
 }

@@ -15,7 +15,7 @@
 
 package com.starrocks.sql.optimizer.rule.implementation;
 
-import com.starrocks.analysis.JoinOperator;
+import com.starrocks.sql.ast.expression.JoinOperator;
 import com.starrocks.sql.optimizer.JoinHelper;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;

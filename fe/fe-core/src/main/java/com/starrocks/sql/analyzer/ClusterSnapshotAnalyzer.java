@@ -21,7 +21,7 @@ import com.starrocks.server.RunMode;
 import com.starrocks.server.StorageVolumeMgr;
 import com.starrocks.sql.ast.AdminSetAutomatedSnapshotOffStmt;
 import com.starrocks.sql.ast.AdminSetAutomatedSnapshotOnStmt;
-import com.starrocks.sql.ast.AstVisitor;
+import com.starrocks.sql.ast.AstVisitorExtendInterface;
 import com.starrocks.sql.ast.StatementBase;
 
 public class ClusterSnapshotAnalyzer {
@@ -29,7 +29,7 @@ public class ClusterSnapshotAnalyzer {
         new ClusterSnapshotAnalyzer.ClusterSnapshotAnalyzerVisitor().visit(stmt, session);
     }
 
-    static class ClusterSnapshotAnalyzerVisitor implements AstVisitor<Void, ConnectContext> {
+    static class ClusterSnapshotAnalyzerVisitor implements AstVisitorExtendInterface<Void, ConnectContext> {
         @Override
         public Void visitAdminSetAutomatedSnapshotOnStatement(AdminSetAutomatedSnapshotOnStmt statement, ConnectContext context) {
             if (!RunMode.isSharedDataMode()) {

@@ -15,7 +15,6 @@
 package com.starrocks.sql.analyzer;
 
 import com.starrocks.qe.ConnectContext;
-import com.starrocks.qe.OriginStatement;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.AddSqlBlackListStmt;
 import com.starrocks.sql.ast.AdminCancelRepairTableStmt;
@@ -42,7 +41,7 @@ import com.starrocks.sql.ast.AlterSystemStmt;
 import com.starrocks.sql.ast.AlterTableStmt;
 import com.starrocks.sql.ast.AlterViewStmt;
 import com.starrocks.sql.ast.AnalyzeStmt;
-import com.starrocks.sql.ast.AstVisitor;
+import com.starrocks.sql.ast.AstVisitorExtendInterface;
 import com.starrocks.sql.ast.BackupStmt;
 import com.starrocks.sql.ast.BaseCreateAlterUserStmt;
 import com.starrocks.sql.ast.BaseGrantRevokePrivilegeStmt;
@@ -103,6 +102,7 @@ import com.starrocks.sql.ast.ExportStmt;
 import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.InstallPluginStmt;
 import com.starrocks.sql.ast.LoadStmt;
+import com.starrocks.sql.ast.OriginStatement;
 import com.starrocks.sql.ast.PauseRoutineLoadStmt;
 import com.starrocks.sql.ast.PrepareStmt;
 import com.starrocks.sql.ast.QueryStatement;
@@ -192,7 +192,7 @@ public class Analyzer {
         GlobalStateMgr.getCurrentState().getAnalyzer().analyzerVisitor.visit(statement, context);
     }
 
-    public static class AnalyzerVisitor implements AstVisitor<Void, ConnectContext> {
+    public static class AnalyzerVisitor implements AstVisitorExtendInterface<Void, ConnectContext> {
         private static final Analyzer.AnalyzerVisitor INSTANCE = new Analyzer.AnalyzerVisitor();
 
         public static Analyzer.AnalyzerVisitor getInstance() {
@@ -260,13 +260,13 @@ public class Analyzer {
 
         @Override
         public Void visitAlterResourceGroupStatement(AlterResourceGroupStmt statement, ConnectContext session) {
-            statement.analyze();
+            ResourceGroupAnalyzer.analyzeAlterResourceGroupStmt(statement);
             return null;
         }
 
         @Override
         public Void visitDropResourceGroupStatement(DropResourceGroupStmt statement, ConnectContext session) {
-            statement.analyze();
+            ResourceGroupAnalyzer.analyzeDropResourceGroupStmt(statement);
             return null;
         }
 
@@ -398,7 +398,7 @@ public class Analyzer {
 
         @Override
         public Void visitCreateResourceGroupStatement(CreateResourceGroupStmt statement, ConnectContext session) {
-            statement.analyze();
+            ResourceGroupAnalyzer.analyzeCreateResourceGroupStmt(statement);
             return null;
         }
 
@@ -966,7 +966,6 @@ public class Analyzer {
 
         @Override
         public Void visitAddSqlBlackListStatement(AddSqlBlackListStmt statement, ConnectContext session) {
-            statement.analyze();
             return null;
         }
 

@@ -836,8 +836,8 @@ ColumnAccessPath* SegmentIterator::_lookup_access_path(ColumnId cid, const Table
     ColumnAccessPath* access_path = nullptr;
     if (col.is_extended()) {
         auto extended_info = col.extended_info();
-        if (extended_info != nullptr && extended_info->source_column_index >= 0) {
-            ColumnId source_id = _opts.tablet_schema->column(extended_info->source_column_index).unique_id();
+        if (extended_info != nullptr && extended_info->source_column_uid >= 0) {
+            ColumnId source_id = extended_info->source_column_uid;
             auto it = _column_access_paths.find(source_id);
             if (it != _column_access_paths.end() && it->second->is_extended()) {
                 access_path = it->second;

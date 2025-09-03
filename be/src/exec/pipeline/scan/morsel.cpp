@@ -90,6 +90,10 @@ void SharedMorselQueueFactory::set_has_more(bool v) {
     _queue->set_has_more(v);
 }
 
+bool SharedMorselQueueFactory::reach_limit() const {
+    return _queue->reach_limit();
+}
+
 size_t IndividualMorselQueueFactory::num_original_morsels() const {
     size_t total = 0;
     for (const auto& queue : _queue_per_driver_seq) {
@@ -144,6 +148,15 @@ void IndividualMorselQueueFactory::set_has_more(bool v) {
     for (auto& q : _queue_per_driver_seq) {
         q->set_has_more(v);
     }
+}
+
+bool IndividualMorselQueueFactory::reach_limit() const {
+    for (const auto& p : _queue_per_driver_seq) {
+        if (p->reach_limit()) {
+            return true;
+        }
+    }
+    return false;
 }
 
 BucketSequenceMorselQueueFactory::BucketSequenceMorselQueueFactory(std::map<int, MorselQueuePtr>&& queue_per_driver_seq,

@@ -15,7 +15,7 @@
 
 package com.starrocks.sql.ast;
 
-import com.starrocks.analysis.Expr;
+import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.parser.NodePosition;
 
 import static com.starrocks.sql.ast.SetType.SESSION;
@@ -55,6 +55,6 @@ public class ShowStatusStmt extends ShowStmt {
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitShowStatusStatement(this, context);
+        return ((AstVisitorExtendInterface<R, C>) visitor).visitShowStatusStatement(this, context);
     }
 }

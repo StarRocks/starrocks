@@ -45,8 +45,6 @@ import com.starrocks.alter.MaterializedViewHandler;
 import com.starrocks.alter.SchemaChangeHandler;
 import com.starrocks.alter.SystemHandler;
 import com.starrocks.alter.dynamictablet.DynamicTabletJobMgr;
-import com.starrocks.analysis.LiteralExpr;
-import com.starrocks.analysis.TableName;
 import com.starrocks.authentication.AuthenticationMgr;
 import com.starrocks.authentication.JwkMgr;
 import com.starrocks.authorization.AccessControlProvider;
@@ -136,7 +134,6 @@ import com.starrocks.journal.JournalInconsistentException;
 import com.starrocks.journal.JournalTask;
 import com.starrocks.journal.JournalWriter;
 import com.starrocks.journal.bdbje.Timestamp;
-import com.starrocks.lake.ShardManager;
 import com.starrocks.lake.StarMgrMetaSyncer;
 import com.starrocks.lake.StarOSAgent;
 import com.starrocks.lake.compaction.CompactionControlScheduler;
@@ -217,6 +214,8 @@ import com.starrocks.sql.analyzer.AuthorizerStmtVisitor;
 import com.starrocks.sql.ast.RefreshTableStmt;
 import com.starrocks.sql.ast.SetType;
 import com.starrocks.sql.ast.SystemVariable;
+import com.starrocks.sql.ast.expression.LiteralExpr;
+import com.starrocks.sql.ast.expression.TableName;
 import com.starrocks.sql.optimizer.statistics.CachedStatisticStorage;
 import com.starrocks.sql.optimizer.statistics.StatisticStorage;
 import com.starrocks.sql.parser.AstBuilder;
@@ -457,9 +456,6 @@ public class GlobalStateMgr {
 
     private LocalMetastore localMetastore;
     private final GlobalFunctionMgr globalFunctionMgr;
-
-    @Deprecated
-    private final ShardManager shardManager;
 
     private final StateChangeExecution execution;
 
@@ -766,7 +762,6 @@ public class GlobalStateMgr {
 
         this.taskManager = new TaskManager();
         this.insertOverwriteJobMgr = new InsertOverwriteJobMgr();
-        this.shardManager = new ShardManager();
         this.compactionMgr = new CompactionMgr();
         this.compactionControlScheduler = new CompactionControlScheduler();
         this.configRefreshDaemon = new ConfigRefreshDaemon();
@@ -2233,6 +2228,10 @@ public class GlobalStateMgr {
 
     public BackupHandler getBackupHandler() {
         return this.backupHandler;
+    }
+
+    public PublishVersionDaemon getPublishVersionDaemon() {
+        return this.publishVersionDaemon;
     }
 
     public DeleteMgr getDeleteMgr() {

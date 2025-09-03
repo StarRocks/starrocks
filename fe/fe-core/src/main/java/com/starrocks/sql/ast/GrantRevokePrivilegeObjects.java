@@ -15,9 +15,8 @@
 
 package com.starrocks.sql.ast;
 
-import com.starrocks.analysis.FunctionName;
-import com.starrocks.analysis.ParseNode;
 import com.starrocks.common.Pair;
+import com.starrocks.sql.ast.expression.FunctionName;
 import com.starrocks.sql.parser.NodePosition;
 
 import java.util.List;

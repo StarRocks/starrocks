@@ -62,23 +62,25 @@ public class AuthenticationProviderTest {
 
         for (String password : passwords) {
             UserAuthOption userAuthOption = new UserAuthOption(null, password, true, NodePosition.ZERO);
-            UserAuthenticationInfo info = UserAuthOptionAnalyzer.analyzeAuthOption(testUser, userAuthOption);
+            UserAuthOptionAnalyzer.analyzeAuthOption(testUser, userAuthOption);
+            UserAuthenticationInfo info = new UserAuthenticationInfo(testUser, userAuthOption);
             PlainPasswordAuthenticationProvider provider = (PlainPasswordAuthenticationProvider) AuthenticationProviderFactory
                     .create(info.getAuthPlugin(), new String(info.getPassword()));
 
             byte[] scramble = MysqlPassword.scramble(seed, password);
-            provider.authenticate(ctx, testUserIdentity, scramble);
+            provider.authenticate(ctx.getAuthenticationContext(), testUserIdentity, scramble);
         }
 
         // no password
         PlainPasswordAuthenticationProvider provider = new PlainPasswordAuthenticationProvider(MysqlPassword.EMPTY_PASSWORD);
-        UserAuthenticationInfo info = UserAuthOptionAnalyzer.analyzeAuthOption(testUser, null);
+        UserAuthOptionAnalyzer.analyzeAuthOption(testUser, null);
+        UserAuthenticationInfo info = new UserAuthenticationInfo(testUser, null);
         ctx.setAuthDataSalt(new byte[0]);
-        provider.authenticate(ctx, testUserIdentity, new byte[0]);
+        provider.authenticate(ctx.getAuthenticationContext(), testUserIdentity, new byte[0]);
         try {
             ctx.setAuthDataSalt("x".getBytes(StandardCharsets.UTF_8));
             provider.authenticate(
-                    ctx,
+                    ctx.getAuthenticationContext(),
                     testUserIdentity,
                     "xx".getBytes(StandardCharsets.UTF_8));
             Assertions.fail();
@@ -89,13 +91,14 @@ public class AuthenticationProviderTest {
         byte[] p = MysqlPassword.makeScrambledPassword("bb");
 
         UserAuthOption userAuthOption = new UserAuthOption(null, new String(p, StandardCharsets.UTF_8), false, NodePosition.ZERO);
-        info = UserAuthOptionAnalyzer.analyzeAuthOption(testUser, userAuthOption);
+        UserAuthOptionAnalyzer.analyzeAuthOption(testUser, userAuthOption);
+        info = new UserAuthenticationInfo(testUser, userAuthOption);
 
         provider = new PlainPasswordAuthenticationProvider(info.getPassword());
         try {
             ctx.setAuthDataSalt(seed);
             provider.authenticate(
-                    ctx,
+                    ctx.getAuthenticationContext(),
                     testUserIdentity,
                     MysqlPassword.scramble(seed, "xx"));
             Assertions.fail();
@@ -106,7 +109,7 @@ public class AuthenticationProviderTest {
         try {
             ctx.setAuthDataSalt(seed);
             provider.authenticate(
-                    ctx,
+                    ctx.getAuthenticationContext(),
                     testUserIdentity,
                     MysqlPassword.scramble(seed, "bb"));
 
@@ -118,7 +121,7 @@ public class AuthenticationProviderTest {
             byte[] remotePassword = "bb".getBytes(StandardCharsets.UTF_8);
             ctx.setAuthDataSalt(null);
             provider.authenticate(
-                    ctx,
+                    ctx.getAuthenticationContext(),
                     testUserIdentity,
                     remotePassword);
 

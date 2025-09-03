@@ -215,7 +215,7 @@ public class PublishVersionDaemon extends FrontendDaemon {
      *
      * @return the thread pool executor
      */
-    private @NotNull ThreadPoolExecutor getLakeTaskExecutor() {
+    public @NotNull ThreadPoolExecutor getLakeTaskExecutor() {
         if (lakeTaskExecutor == null) {
             int numThreads = getOrFixLakeTaskExecutorThreadPoolMaxSizeConfig();
             lakeTaskExecutor =
@@ -528,8 +528,11 @@ public class PublishVersionDaemon extends FrontendDaemon {
                 LOG.info("partition is null in publish partition batch");
                 return true;
             }
-            if (partition.getVisibleVersion() + 1 != versions.get(0)) {
-                LOG.error("publish partition batch partition.getVisibleVersion() + 1 != version.get(0)" + " "
+
+            // this can happen when the table is doing schema change
+            if (partition.getVisibleVersion() + 1 != versions.get(0) && publishVersionData.getTransactionStates().get(0).
+                    getSourceType() != TransactionState.LoadJobSourceType.REPLICATION) {
+                LOG.debug("publish partition batch partition.getVisibleVersion() + 1 != version.get(0)" + " "
                         + partition.getId() + " " + partition.getVisibleVersion() + " " + versions.get(0));
                 return false;
             }

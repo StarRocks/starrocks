@@ -417,6 +417,7 @@ mysql> SHOW PROC '/cluster_balance';
 +-------------------+--------+
 | Item              | Number |
 +-------------------+--------+
+| balance_stat      | 1      |
 | cluster_load_stat | 1      |
 | working_slots     | 3      |
 | sched_stat        | 1      |
@@ -429,8 +430,30 @@ mysql> SHOW PROC '/cluster_balance';
 
 | **返回** | **说明**                                     |
 | -------- | -------------------------------------------- |
-| Item     | cluster_balance 中的子命令。<ul><li>cluster_load_stat: 集群当前的负载状态。</li><li>working_slots: 当前可用的工作插槽数。</li><li>sched_stat: 调度系统的当前状态。</li><li>priority_repair: 当前需要优先处理的 Tablet 修复任务数。</li><li>pending_tablets: 当前等待处理的 Tablet 数量。</li><li>running_tablets: 当前正在修复的 Tablet 数量。</li><li>history_tablets: 历史上修复过的 Tablet 数量。</li></ul>                 |
+| Item     | cluster_balance 中的子命令。<ul><li>balance_stat: 集群当前的均衡状态。</li><li>cluster_load_stat: 集群当前的负载状态。</li><li>working_slots: 当前可用的工作插槽数。</li><li>sched_stat: 调度系统的当前状态。</li><li>priority_repair: 当前需要优先处理的 Tablet 修复任务数。</li><li>pending_tablets: 当前等待处理的 Tablet 数量。</li><li>running_tablets: 当前正在修复的 Tablet 数量。</li><li>history_tablets: 历史上修复过的 Tablet 数量。</li></ul>                 |
 | Number   | cluster_balance 中每个子命令正在执行的个数。 |
+
+```Plain
+mysql> SHOW PROC '/cluster_balance/balance_stat';
++---------------+--------------------------------+----------+----------------+----------------+
+| StorageMedium | BalanceType                    | Balanced | PendingTablets | RunningTablets |
++---------------+--------------------------------+----------+----------------+----------------+
+| HDD           | inter-node disk usage          | true     | 0              | 0              |
+| HDD           | inter-node tablet distribution | true     | 0              | 0              |
+| HDD           | intra-node disk usage          | true     | 0              | 0              |
+| HDD           | intra-node tablet distribution | true     | 0              | 0              |
+| HDD           | colocation group               | true     | 0              | 0              |
+| HDD           | label-aware location           | true     | 0              | 0              |
++---------------+--------------------------------+----------+----------------+----------------+
+```
+
+| **返回**       | **说明**                        |
+| -------------- | ------------------------------- |
+| StorageMedium  | 存储介质。                      |
+| BalanceType    | 均衡类型。                      |
+| Balanced       | 是否均衡。                      |
+| PendingTablets | 任务状态为 Pending 的 Tablet 数。 |
+| RunningTablets | 任务状态为 Running 的 Tablet 数。 |
 
 示例十二：查看当前集群的 Colocate Join Group 信息。
 

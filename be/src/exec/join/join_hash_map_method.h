@@ -56,15 +56,100 @@ public:
     using CppType = typename RunTimeTypeTraits<LT>::CppType;
     using ColumnType = typename RunTimeTypeTraits<LT>::ColumnType;
 
+    static constexpr bool AreKeysInChainIdentical = false;
+
     static void build_prepare(RuntimeState* state, JoinHashTableItems* table_items);
     static void construct_hash_table(JoinHashTableItems* table_items, const Buffer<CppType>& keys,
                                      const Buffer<uint8_t>* is_nulls);
 
     static void lookup_init(const JoinHashTableItems& table_items, HashTableProbeState* probe_state,
-                            const Buffer<CppType>& keys, const Buffer<uint8_t>* is_nulls);
+                            const Buffer<CppType>& build_keys, const Buffer<CppType>& probe_keys,
+                            const Buffer<uint8_t>* is_nulls);
 
     static bool equal(const CppType& x, const CppType& y) { return x == y; }
 };
+
+// The `LinearChainedJoinHashMap` uses linear probing to store distinct keys and chained to storage for linked lists of
+// identical keys.
+// - `first` stores the build index of the header for the linked list for each distinct key.
+// - `next` maintains the linked list structure for each distinct key.
+//
+// Fingerprint
+// - Each `first` entry uses the highest 1 byte to store the fingerprint and the lower 3 bytes for the build index,
+//   thus supporting up to 0xFFFFFF buckets.
+// - The fingerprint is generated via hashing.
+//   During hashing, `bucket_num_with_fp = hash % (bucket_size * 8)` is computed instead of `hash % bucket_size`.
+//   - The lower 8 bits of `bucket_num_with_fp` represent the fingerprint (`fp`),
+//   - while `bucket_num_with_fp >> 8` yields the bucket number.
+//
+// Insert and probe
+// - During insertion, linear probing is used in `first` to locate either the first empty bucket or an existing matching key.
+//   The new build index is then inserted into the corresponding linked list in `next`.
+// - During probing, linear probing is used in `first` to locate either an empty bucket or the bucket_num for a matching key.
+//   - If an empty bucket is found, it indicates no matching key exists.
+//   - If a matching key exists, the entire linked list (with `first[bucket_num]` as its header) in `next` stores build
+//     indexes for all the same keys.
+//
+// The following diagram illustrates the structure of `LinearChainedJoinHashMap`:
+//
+// build keys                  first              next
+//                             ┌──────────────┐   ┌───┐
+//                             │FP|build_index│   │   │◄───┐
+//                             │1B     3B     │   │   │◄┐  │
+//                             ├──────────────┤   ├───┤ │  │
+//                    ┌───────►│              │   │   │ │  │
+//           ┌────┐   │     ┌──┤              │   │   │ │  │
+// ┌──────┐  │    │   │     │  ├──────────────┤   ├───┤ │  │
+// │ key  ├─►│hash├───┘     └─►│              │   │   ├─┘  │
+// └──────┘  │    │         ┌──┤              │   │   │◄─┐ │
+//           └────┘         │  ├──────────────┤   ├───┤  │ │
+//                          │  │              │   │   │  │ │
+//                          │  │              │   │   │  │ │
+//                          │  ├──────────────┤   ├───┤  │ │
+//                          └─►│              ├──►│   │  │ │
+//                             │              │   │   ├──┘ │
+//                             ├──────────────┤   ├───┤    │
+//                             │              │   │   │    │
+//                             │              │   │   │    │
+//                             ├──────────────┤   ├───┤    │
+//                             │              │   │   │    │
+//                             │              ├──►│   ├────┘
+//                             └──────────────┘   └───┘
+template <LogicalType LT, bool NeedBuildChained = true>
+class LinearChainedJoinHashMap {
+public:
+    using CppType = typename RunTimeTypeTraits<LT>::CppType;
+    using ColumnType = typename RunTimeTypeTraits<LT>::ColumnType;
+
+    static constexpr bool AreKeysInChainIdentical = true;
+
+    static void build_prepare(RuntimeState* state, JoinHashTableItems* table_items);
+    static void construct_hash_table(JoinHashTableItems* table_items, const Buffer<CppType>& keys,
+                                     const Buffer<uint8_t>* is_nulls);
+
+    static void lookup_init(const JoinHashTableItems& table_items, HashTableProbeState* probe_state,
+                            const Buffer<CppType>& build_keys, const Buffer<CppType>& probe_keys,
+                            const Buffer<uint8_t>* is_nulls);
+
+    static bool equal(const CppType& x, const CppType& y) { return true; }
+
+    static uint32_t max_supported_bucket_size() { return DATA_MASK; }
+
+private:
+    static constexpr uint32_t FP_BITS = 8;
+    static constexpr uint32_t FP_MASK = 0xFF00'0000ul;
+    static constexpr uint32_t DATA_MASK = 0x00FF'FFFFul;
+
+    static uint32_t _combine_data_fp(const uint32_t data, const uint32_t fp) { return fp | data; }
+    static uint32_t _extract_data(const uint32_t v) { return v & DATA_MASK; }
+    static uint32_t _extract_fp(const uint32_t v) { return v & FP_MASK; }
+
+    static uint32_t _get_bucket_num_from_hash(const uint32_t hash) { return hash >> FP_BITS; }
+    static uint32_t _get_fp_from_hash(const uint32_t hash) { return hash << (32 - FP_BITS); }
+};
+
+template <LogicalType LT>
+using LinearChainedJoinHashSet = LinearChainedJoinHashMap<LT, false>;
 
 // The bucket-chained linked list formed by first` and `next` is the same as that of `BucketChainedJoinHashMap`.
 //
@@ -101,12 +186,15 @@ public:
     using CppType = typename RunTimeTypeTraits<LT>::CppType;
     using ColumnType = typename RunTimeTypeTraits<LT>::ColumnType;
 
+    static constexpr bool AreKeysInChainIdentical = true;
+
     static void build_prepare(RuntimeState* state, JoinHashTableItems* table_items);
     static void construct_hash_table(JoinHashTableItems* table_items, const Buffer<CppType>& keys,
                                      const Buffer<uint8_t>* is_nulls);
 
     static void lookup_init(const JoinHashTableItems& table_items, HashTableProbeState* probe_state,
-                            const Buffer<CppType>& keys, const Buffer<uint8_t>* is_nulls);
+                            const Buffer<CppType>& build_keys, const Buffer<CppType>& probe_keys,
+                            const Buffer<uint8_t>* is_nulls);
 
     static bool equal(const CppType& x, const CppType& y) { return true; }
 };
@@ -149,12 +237,15 @@ public:
     using CppType = typename RunTimeTypeTraits<LT>::CppType;
     using ColumnType = typename RunTimeTypeTraits<LT>::ColumnType;
 
+    static constexpr bool AreKeysInChainIdentical = true;
+
     static void build_prepare(RuntimeState* state, JoinHashTableItems* table_items);
     static void construct_hash_table(JoinHashTableItems* table_items, const Buffer<CppType>& keys,
                                      const Buffer<uint8_t>* is_nulls);
 
     static void lookup_init(const JoinHashTableItems& table_items, HashTableProbeState* probe_state,
-                            const Buffer<CppType>& keys, const Buffer<uint8_t>* is_nulls);
+                            const Buffer<CppType>& build_keys, const Buffer<CppType>& probe_keys,
+                            const Buffer<uint8_t>* is_nulls);
 
     static bool equal(const CppType& x, const CppType& y) { return true; }
 };
@@ -168,12 +259,15 @@ public:
     using CppType = typename RunTimeTypeTraits<LT>::CppType;
     using ColumnType = typename RunTimeTypeTraits<LT>::ColumnType;
 
+    static constexpr bool AreKeysInChainIdentical = true;
+
     static void build_prepare(RuntimeState* state, JoinHashTableItems* table_items);
     static void construct_hash_table(JoinHashTableItems* table_items, const Buffer<CppType>& keys,
                                      const Buffer<uint8_t>* is_nulls);
 
     static void lookup_init(const JoinHashTableItems& table_items, HashTableProbeState* probe_state,
-                            const Buffer<CppType>& keys, const Buffer<uint8_t>* is_nulls);
+                            const Buffer<CppType>& build_keys, const Buffer<CppType>& probe_keys,
+                            const Buffer<uint8_t>* is_nulls);
 
     static bool equal(const CppType& x, const CppType& y) { return true; }
 };
@@ -221,12 +315,15 @@ public:
     using CppType = typename RunTimeTypeTraits<LT>::CppType;
     using ColumnType = typename RunTimeTypeTraits<LT>::ColumnType;
 
+    static constexpr bool AreKeysInChainIdentical = true;
+
     static void build_prepare(RuntimeState* state, JoinHashTableItems* table_items);
     static void construct_hash_table(JoinHashTableItems* table_items, const Buffer<CppType>& keys,
                                      const Buffer<uint8_t>* is_nulls);
 
     static void lookup_init(const JoinHashTableItems& table_items, HashTableProbeState* probe_state,
-                            const Buffer<CppType>& keys, const Buffer<uint8_t>* is_nulls);
+                            const Buffer<CppType>& build_keys, const Buffer<CppType>& probe_keys,
+                            const Buffer<uint8_t>* is_nulls);
 
     static bool equal(const CppType& x, const CppType& y) { return true; }
 };

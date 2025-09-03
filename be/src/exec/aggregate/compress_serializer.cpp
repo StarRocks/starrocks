@@ -170,6 +170,7 @@ private:
 
 template <class T>
 T mask(T bits) {
+    if (bits == sizeof(T) * 8) return ~T(0);
     return (T(1) << bits) - 1;
 }
 

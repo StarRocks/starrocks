@@ -15,10 +15,6 @@
 package com.starrocks.sql;
 
 import com.google.common.collect.Lists;
-import com.starrocks.analysis.DescriptorTable;
-import com.starrocks.analysis.SlotDescriptor;
-import com.starrocks.analysis.TableName;
-import com.starrocks.analysis.TupleDescriptor;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
@@ -28,13 +24,17 @@ import com.starrocks.common.FeConstants;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.load.Load;
 import com.starrocks.planner.DataSink;
+import com.starrocks.planner.DescriptorTable;
 import com.starrocks.planner.OlapTableSink;
 import com.starrocks.planner.PlanFragment;
+import com.starrocks.planner.SlotDescriptor;
+import com.starrocks.planner.TupleDescriptor;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.DeleteStmt;
 import com.starrocks.sql.ast.QueryRelation;
+import com.starrocks.sql.ast.expression.TableName;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.Optimizer;
 import com.starrocks.sql.optimizer.OptimizerFactory;
@@ -111,6 +111,9 @@ public class DeletePlanner {
                     table.enableReplicatedStorage(), false, false,
                     session.getCurrentComputeResource());
             execPlan.getFragments().get(0).setSink(dataSink);
+            if (session.getTxnId() != 0) {
+                ((OlapTableSink) dataSink).setIsMultiStatementsTxn(true);
+            }
 
             // if sink is OlapTableSink Assigned to Be execute this sql [cn execute OlapTableSink will crash]
             session.getSessionVariable().setPreferComputeNode(false);

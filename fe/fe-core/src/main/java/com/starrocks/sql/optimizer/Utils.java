@@ -18,7 +18,6 @@ import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
-import com.starrocks.analysis.JoinOperator;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
@@ -31,6 +30,7 @@ import com.starrocks.common.Pair;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.expression.JoinOperator;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.base.LogicalProperty;
 import com.starrocks.sql.optimizer.operator.Operator;
@@ -197,11 +197,13 @@ public class Utils {
         return list;
     }
 
+    /**
+     * Extract all operators satisfied the predicate
+     */
     public static <E extends Operator> void extractOperator(OptExpression root, List<E> list,
                                                             Predicate<Operator> lambda) {
         if (lambda.test(root.getOp())) {
             list.add((E) root.getOp());
-            return;
         }
 
         List<OptExpression> inputs = root.getInputs();
@@ -210,11 +212,13 @@ public class Utils {
         }
     }
 
+    /**
+     * Extract all operators satisfied the predicate
+     */
     private static <E extends Operator> void extractOperator(GroupExpression root, List<E> list,
                                                              Predicate<Operator> lambda) {
         if (lambda.test(root.getOp())) {
             list.add((E) root.getOp());
-            return;
         }
 
         List<Group> groups = root.getInputs();

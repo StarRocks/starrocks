@@ -17,9 +17,8 @@ package com.starrocks.qe;
 import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import com.starrocks.alter.SystemHandler;
-import com.starrocks.analysis.FunctionName;
-import com.starrocks.analysis.ParseNode;
 import com.starrocks.authentication.AuthenticationMgr;
+import com.starrocks.authentication.UserAuthenticationInfo;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.UserIdentity;
 import com.starrocks.common.AlreadyExistsException;
@@ -63,7 +62,7 @@ import com.starrocks.sql.ast.AlterSystemStmt;
 import com.starrocks.sql.ast.AlterTableStmt;
 import com.starrocks.sql.ast.AlterUserStmt;
 import com.starrocks.sql.ast.AlterViewStmt;
-import com.starrocks.sql.ast.AstVisitor;
+import com.starrocks.sql.ast.AstVisitorExtendInterface;
 import com.starrocks.sql.ast.BackupStmt;
 import com.starrocks.sql.ast.BaseGrantRevokePrivilegeStmt;
 import com.starrocks.sql.ast.BaseGrantRevokeRoleStmt;
@@ -121,6 +120,7 @@ import com.starrocks.sql.ast.GrantPrivilegeStmt;
 import com.starrocks.sql.ast.GrantRoleStmt;
 import com.starrocks.sql.ast.InstallPluginStmt;
 import com.starrocks.sql.ast.LoadStmt;
+import com.starrocks.sql.ast.ParseNode;
 import com.starrocks.sql.ast.PauseRoutineLoadStmt;
 import com.starrocks.sql.ast.RecoverDbStmt;
 import com.starrocks.sql.ast.RecoverPartitionStmt;
@@ -141,6 +141,7 @@ import com.starrocks.sql.ast.SyncStmt;
 import com.starrocks.sql.ast.TruncateTableStmt;
 import com.starrocks.sql.ast.UninstallPluginStmt;
 import com.starrocks.sql.ast.UserRef;
+import com.starrocks.sql.ast.expression.FunctionName;
 import com.starrocks.sql.ast.group.CreateGroupProviderStmt;
 import com.starrocks.sql.ast.group.DropGroupProviderStmt;
 import com.starrocks.sql.ast.integration.AlterSecurityIntegrationStatement;
@@ -206,7 +207,7 @@ public class DDLStmtExecutor {
         }
     }
 
-    public static class StmtExecutorVisitor implements AstVisitor<ShowResultSet, ConnectContext> {
+    public static class StmtExecutorVisitor implements AstVisitorExtendInterface<ShowResultSet, ConnectContext> {
         private static final Logger LOG = LogManager.getLogger(StmtExecutorVisitor.class);
         private static final StmtExecutorVisitor INSTANCE = new StmtExecutorVisitor();
 
@@ -547,8 +548,9 @@ public class DDLStmtExecutor {
             ErrorReport.wrapWithRuntimeException(() -> {
                 UserRef user = stmt.getUser();
                 UserIdentity userIdentity = new UserIdentity(user.getUser(), user.getHost(), user.isDomain());
-                context.getGlobalStateMgr().getAuthenticationMgr()
-                        .alterUser(userIdentity, stmt.getAuthenticationInfo(), stmt.getProperties());
+                UserAuthenticationInfo userAuthenticationInfo = new UserAuthenticationInfo(user, stmt.getAuthOption());
+                GlobalStateMgr.getCurrentState().getAuthenticationMgr()
+                        .alterUser(userIdentity, userAuthenticationInfo, stmt.getProperties());
             });
             return null;
         }
@@ -1324,7 +1326,7 @@ public class DDLStmtExecutor {
 
         @Override
         public ShowResultSet visitAdminSetAutomatedSnapshotOnStatement(AdminSetAutomatedSnapshotOnStmt stmt,
-                                                                     ConnectContext context) {
+                                                                       ConnectContext context) {
             ErrorReport.wrapWithRuntimeException(() -> {
                 context.getGlobalStateMgr().getClusterSnapshotMgr().setAutomatedSnapshotOn(stmt);
             });

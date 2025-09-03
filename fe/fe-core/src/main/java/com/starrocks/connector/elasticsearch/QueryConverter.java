@@ -15,31 +15,31 @@
 
 package com.starrocks.connector.elasticsearch;
 
-import com.starrocks.analysis.BinaryPredicate;
-import com.starrocks.analysis.BoolLiteral;
-import com.starrocks.analysis.CastExpr;
-import com.starrocks.analysis.CompoundPredicate;
-import com.starrocks.analysis.DecimalLiteral;
-import com.starrocks.analysis.Expr;
-import com.starrocks.analysis.FloatLiteral;
-import com.starrocks.analysis.FunctionCallExpr;
-import com.starrocks.analysis.InPredicate;
-import com.starrocks.analysis.IntLiteral;
-import com.starrocks.analysis.IsNullPredicate;
-import com.starrocks.analysis.LargeIntLiteral;
-import com.starrocks.analysis.LikePredicate;
-import com.starrocks.analysis.LiteralExpr;
-import com.starrocks.analysis.SlotRef;
-import com.starrocks.analysis.StringLiteral;
 import com.starrocks.connector.exception.StarRocksConnectorException;
-import com.starrocks.sql.ast.AstVisitor;
+import com.starrocks.sql.ast.AstVisitorExtendInterface;
+import com.starrocks.sql.ast.expression.BinaryPredicate;
+import com.starrocks.sql.ast.expression.BoolLiteral;
+import com.starrocks.sql.ast.expression.CastExpr;
+import com.starrocks.sql.ast.expression.CompoundPredicate;
+import com.starrocks.sql.ast.expression.DecimalLiteral;
+import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.FloatLiteral;
+import com.starrocks.sql.ast.expression.FunctionCallExpr;
+import com.starrocks.sql.ast.expression.InPredicate;
+import com.starrocks.sql.ast.expression.IntLiteral;
+import com.starrocks.sql.ast.expression.IsNullPredicate;
+import com.starrocks.sql.ast.expression.LargeIntLiteral;
+import com.starrocks.sql.ast.expression.LikePredicate;
+import com.starrocks.sql.ast.expression.LiteralExpr;
+import com.starrocks.sql.ast.expression.SlotRef;
+import com.starrocks.sql.ast.expression.StringLiteral;
 import com.starrocks.thrift.TExprOpcode;
 
 import java.util.ArrayList;
 import java.util.List;
 import java.util.stream.Collectors;
 
-public class QueryConverter implements AstVisitor<QueryBuilders.QueryBuilder, Void> {
+public class QueryConverter implements AstVisitorExtendInterface<QueryBuilders.QueryBuilder, Void> {
 
     // expr sets which can not be pushed down to Elasticsearch, SR BE should process
     List<Expr> localConjuncts = new ArrayList<>();
@@ -209,7 +209,7 @@ public class QueryConverter implements AstVisitor<QueryBuilders.QueryBuilder, Vo
         return columnName;
     }
 
-    private static class ExtractColumnName implements AstVisitor<String, Void> {
+    private static class ExtractColumnName implements AstVisitorExtendInterface<String, Void> {
         @Override
         public String visitCastExpr(CastExpr node, Void context) {
             return node.getChild(0).accept(this, null);

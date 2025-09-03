@@ -5068,7 +5068,8 @@ Status PersistentIndex::TEST_major_compaction(PersistentIndexMetaPB& index_meta)
 // 1. load current l2 vec
 // 2. merge l2 files to new l2 file
 // 3. modify PersistentIndexMetaPB and make this step atomic.
-Status PersistentIndex::major_compaction(DataDir* data_dir, int64_t tablet_id, std::shared_timed_mutex* mutex) {
+Status PersistentIndex::major_compaction(DataDir* data_dir, int64_t tablet_id, std::shared_timed_mutex* mutex,
+                                         IOStat* stat) {
     if (_cancel_major_compaction) {
         return Status::InternalError("cancel major compaction");
     }
@@ -5127,6 +5128,9 @@ Status PersistentIndex::major_compaction(DataDir* data_dir, int64_t tablet_id, s
                 l0_version, _l1_version,
                 _l2_versions.size() > 0 ? _l2_versions[0] : EditVersionWithMerge(INT64_MAX, INT64_MAX, true)));
         _calc_memory_usage();
+        if (stat != nullptr) {
+            stat->total_file_size = (_l0 ? _l0->file_size() : 0) + _l1_l2_file_size();
+        }
     }
     (void)_delete_major_compaction_tmp_index_file();
     return Status::OK();

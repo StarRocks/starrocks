@@ -8,6 +8,8 @@ import AdminSetFrontendNote from '../../_assets/commonMarkdown/FE_config_note.md
 
 import StaticFEConfigNote from '../../_assets/commonMarkdown/StaticFE_config_note.md'
 
+import EditionSpecificFEItem from '../../_assets/commonMarkdown/Edition_Specific_FE_Item.md'
+
 # FE Configuration
 
 <FEConfigMethod />
@@ -3491,7 +3493,7 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 
 ##### lake_enable_balance_tablets_between_workers
 
-- Default: false
+- Default: true
 - Type: Boolean
 - Unit: -
 - Is mutable: Yes
@@ -3873,15 +3875,6 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 - Unit: -
 - Is mutable: No
 - Description: The root directory of small files.
-- Introduced in: -
-
-##### enable_auth_check
-
-- Default: true
-- Type: Boolean
-- Unit: -
-- Is mutable: No
-- Description: Specifies whether to enable the authentication check feature. Valid values: `TRUE` and `FALSE`. `TRUE` specifies to enable this feature, and `FALSE` specifies to disable this feature.
 - Introduced in: -
 
 <!--
@@ -5554,7 +5547,6 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 - Description: Whether to enable prefixes with materialized view names in logs for better debug.
 - Introduced in: v3.4.0
 
-
 ##### enable_mv_post_image_reload_cache
 
 - Default: true
@@ -5572,3 +5564,14 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 - Is mutable: Yes
 - Description: Whether to allow the system to trace the historical nodes. By setting this item to `true`, you can enable the Cache Sharing feature and allow the system to choose the right cache nodes during elastic scaling.
 - Introduced in: v3.5.1
+
+##### transform_type_prefer_string_for_varchar
+
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Whether to prefer string type for fixed length varchar columns in materialized view creation and CTAS operations.
+- Introduced in: v4.0.0
+
+<EditionSpecificFEItem />
