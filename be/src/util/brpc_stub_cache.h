@@ -34,13 +34,12 @@
 
 #pragma once
 
-#include <exec/pipeline/schedule/pipeline_timer.h>
-
 #include <memory>
 #include <mutex>
 #include <vector>
 
 #include "common/statusor.h"
+#include "exec/pipeline/schedule/pipeline_timer.h"
 #include "gen_cpp/Types_types.h" // TNetworkAddress
 #include "service/brpc.h"
 #include "util/internal_service_recoverable_stub.h"
@@ -94,8 +93,9 @@ private:
     ~HttpBrpcStubCache();
 
     SpinLock _lock;
-    butil::FlatMap<butil::EndPoint, std::shared_ptr<PInternalService_RecoverableStub>> _stub_map;
-    butil::FlatMap<butil::EndPoint, std::shared_ptr<HttpEndpointCleanupTask>> _task_map;
+    butil::FlatMap<butil::EndPoint, std::pair<std::shared_ptr<PInternalService_RecoverableStub>,
+                                              std::shared_ptr<HttpEndpointCleanupTask>>>
+            _stub_map;
     pipeline::PipelineTimer* _pipeline_timer;
 };
 
@@ -112,8 +112,9 @@ private:
     ~LakeServiceBrpcStubCache();
 
     SpinLock _lock;
-    butil::FlatMap<butil::EndPoint, std::shared_ptr<LakeService_RecoverableStub>> _stub_map;
-    butil::FlatMap<butil::EndPoint, std::shared_ptr<LakeEndpointCleanupTask>> _task_map;
+    butil::FlatMap<butil::EndPoint,
+                   std::pair<std::shared_ptr<LakeService_RecoverableStub>, std::shared_ptr<LakeEndpointCleanupTask>>>
+            _stub_map;
     pipeline::PipelineTimer* _pipeline_timer;
 };
 
