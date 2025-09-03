@@ -1604,6 +1604,47 @@ public class AuthorizationMgrTest {
     }
 
     @Test
+    public void testRefreshTablePrivilege(@Mocked IcebergHiveCatalog hiveCatalog) throws Exception {
+        DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
+                "create external catalog test_catalog properties (" +
+                        "\"type\"=\"iceberg\", \"iceberg.catalog.type\"=\"hive\")", ctx), ctx);
+        ctx.setCurrentCatalog("test_catalog");
+        // set up user
+        setCurrentUserAndRoles(ctx, testUser);
+        ctx.setQualifiedUser(testUser.getUser());
+        AuthorizationMgr manager = ctx.getGlobalStateMgr().getAuthorizationMgr();
+
+        // throw AccessDeniedException if user has no REFRESH privilege
+        Assertions.assertThrows(AccessDeniedException.class, () ->
+                Authorizer.checkTableAction(ctx, "test_catalog", DB_NAME, TABLE_NAME_1, PrivilegeType.REFRESH)
+        );
+
+        // grant REFRESH privilege
+        setCurrentUserAndRoles(ctx, UserIdentity.ROOT);
+        String grantSql = "grant REFRESH on table " + DB_NAME + "." + TABLE_NAME_1 + " to test_user";
+        GrantPrivilegeStmt grantStmt = (GrantPrivilegeStmt) UtFrameUtils.parseStmtWithNewParser(grantSql, ctx);
+        manager.grant(grantStmt);
+
+        // verify REFRESH privilege
+        setCurrentUserAndRoles(ctx, testUser);
+        Authorizer.checkTableAction(ctx, "test_catalog", DB_NAME, TABLE_NAME_1, PrivilegeType.REFRESH);
+
+        // revoke REFRESH privilege
+        setCurrentUserAndRoles(ctx, UserIdentity.ROOT);
+        String revokeSql = "revoke REFRESH on table " + DB_NAME + "." + TABLE_NAME_1 + " from test_user";
+        RevokePrivilegeStmt revokeStmt = (RevokePrivilegeStmt) UtFrameUtils.parseStmtWithNewParser(revokeSql, ctx);
+        manager.revoke(revokeStmt);
+
+        // verify no REFRESH privilege
+        setCurrentUserAndRoles(ctx, testUser);
+        Assertions.assertThrows(AccessDeniedException.class, () ->
+                Authorizer.checkTableAction(ctx, "test_catalog", DB_NAME, TABLE_NAME_1, PrivilegeType.REFRESH)
+        );
+
+        DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser("drop catalog test_catalog", ctx), ctx);
+    }
+
+    @Test
     public void testGrantView() throws Exception {
         DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
                 "create user view_user", ctx), ctx);

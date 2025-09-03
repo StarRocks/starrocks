@@ -129,6 +129,8 @@ public class RangerHiveAccessController extends RangerAccessController {
             hiveAccessType = HiveAccessType.CREATE;
         } else if (privilegeType == PrivilegeType.DROP) {
             hiveAccessType = HiveAccessType.DROP;
+        } else if (privilegeType == PrivilegeType.REFRESH) {
+            hiveAccessType = HiveAccessType.REFRESH;
         } else {
             hiveAccessType = HiveAccessType.NONE;
         }

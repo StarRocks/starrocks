@@ -387,7 +387,7 @@ public class InfoSchemaDbTest {
         item2.setObject_database("db");
         item2.setObject_name("tbl");
         item2.setObject_type("TABLE");
-        item2.setPrivilege_type("DELETE, DROP, INSERT, SELECT, ALTER, EXPORT, UPDATE");
+        item2.setPrivilege_type("DELETE, DROP, INSERT, SELECT, ALTER, EXPORT, UPDATE, REFRESH");
         item2.setIs_grantable(false);
         Assertions.assertTrue(GrantsTo.getGrantsTo(request).grants_to.contains(item2));
 
