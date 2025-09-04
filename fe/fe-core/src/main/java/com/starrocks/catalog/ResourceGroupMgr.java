@@ -412,6 +412,11 @@ public class ResourceGroupMgr implements Writable {
                     wg.setPartitionNum(partitionNum);
                 }
 
+                Integer totalPartitionNum = changedProperties.getTotalPartitionNum();
+                if (totalPartitionNum != null) {
+                    wg.setTotalPartitionNum(totalPartitionNum);
+                }
+
                 // Type is guaranteed to be immutable during the analyzer phase.
                 TWorkGroupType workGroupType = changedProperties.getResourceGroupType();
                 Preconditions.checkState(workGroupType == null);

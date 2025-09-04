@@ -282,6 +282,15 @@ public class ResourceGroupAnalyzer {
                     continue;
                 }
 
+
+                if (key.equalsIgnoreCase(ResourceGroup.TOTAL_PARTITION_NUM)) {
+                    int totalPartitionNum = Integer.parseInt(value);
+                    if (totalPartitionNum <= 0) {
+                        throw new SemanticException("total_partition_num should be greater than 0");
+                    }
+                    resourceGroup.setTotalPartitionNum(totalPartitionNum);
+                    continue;
+                }
             } catch (NumberFormatException exception) {
                 throw new SemanticException(String.format("The value type of the property `%s` must be a valid numeric type, " +
                         "but it is set to `%s`", e.getKey(), e.getValue()));
@@ -342,12 +351,12 @@ public class ResourceGroupAnalyzer {
             // Create a temporary ResourceGroup to validate properties
             ResourceGroup tempResourceGroup = new ResourceGroup();
             analyzeProperties(tempResourceGroup, alterProperties.getProperties());
-            
+
             // Validate that type cannot be changed
             if (tempResourceGroup.getResourceGroupType() != null) {
                 throw new SemanticException("type of ResourceGroup is immutable");
             }
-            
+
             // Validate that at least one property is specified
             if (tempResourceGroup.getRawCpuWeight() == null &&
                     tempResourceGroup.getExclusiveCpuCores() == null &&

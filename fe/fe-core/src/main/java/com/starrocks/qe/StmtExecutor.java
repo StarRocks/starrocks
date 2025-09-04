@@ -1526,14 +1526,26 @@ public class StmtExecutor {
             return;
         }
         Integer partitionLimit = resourceGroup.getPartitionNum();
-        if (partitionLimit == null || partitionLimit <= 0) {
-            return;
+        if (partitionLimit != null && partitionLimit > 0) {
+            scanNodes.stream()
+                    .filter(OlapScanNode.class::isInstance)
+                    .map(OlapScanNode.class::cast)
+                    .forEach(node -> validateNodePartitionCount(node, partitionLimit));
         }
 
-        scanNodes.stream()
-                .filter(OlapScanNode.class::isInstance)
-                .map(OlapScanNode.class::cast)
-                .forEach(node -> validateNodePartitionCount(node, partitionLimit));
+        Integer totalPartitionNum = resourceGroup.getTotalPartitionNum();
+        if (totalPartitionNum != null && totalPartitionNum > 0) {
+            int totalPartitionCount = scanNodes.stream()
+                    .filter(OlapScanNode.class::isInstance)
+                    .map(OlapScanNode.class::cast)
+                    .mapToInt(node -> node.getSelectedPartitionNames().size())
+                    .sum();
+            if (totalPartitionCount > totalPartitionNum) {
+                throw ErrorReportException.report(ErrorCode.ERR_TOO_MANY_TOTAL_PARTITIONS_IN_QUERY,
+                        totalPartitionCount, totalPartitionNum);
+            }
+        }
+
     }
 
     private void validateNodePartitionCount(OlapScanNode node, int partitionLimit) {
@@ -1541,6 +1553,7 @@ public class StmtExecutor {
         if (actualPartitionCount > partitionLimit) {
             throw ErrorReportException.report(
                     ErrorCode.ERR_TOO_MANY_PARTITIONS_IN_QUERY,
+                    node.getTableName(),
                     actualPartitionCount,
                     partitionLimit
             );

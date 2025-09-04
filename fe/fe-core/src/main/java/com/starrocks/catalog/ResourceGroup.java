@@ -53,6 +53,7 @@ public class ResourceGroup {
     public static final String DEFAULT_MV_RESOURCE_GROUP_NAME = "default_mv_wg";
     public static final String SPILL_MEM_LIMIT_THRESHOLD = "spill_mem_limit_threshold";
     public static final String PARTITION_NUM = "partition_num";
+    public static final String TOTAL_PARTITION_NUM = "total_partition_num";
 
     /**
      * In the old version, DEFAULT_WG and DEFAULT_MV_WG are not saved and persisted in the FE, but are only created in each
@@ -106,6 +107,9 @@ public class ResourceGroup {
             new ColumnMeta(
                     new Column(PARTITION_NUM, ScalarType.createVarchar(200)),
                     (rg, classifier) -> "" + rg.getPartitionNum()),
+            new ColumnMeta(
+                    new Column(TOTAL_PARTITION_NUM, ScalarType.createVarchar(200)),
+                    (rg, classifier) -> "" + rg.getTotalPartitionNum()),
             new ColumnMeta(
                     new Column(BIG_QUERY_CPU_SECOND_LIMIT, ScalarType.createVarchar(200)),
                     (rg, classifier) -> "" + Objects.requireNonNullElse(rg.getBigQueryCpuSecondLimit(), 0)),
@@ -178,6 +182,8 @@ public class ResourceGroup {
     private long version;
     @SerializedName(value = "partitionNum")
     private Integer partitionNum;
+    @SerializedName(value = "totalPartitionNum")
+    private Integer totalPartitionNum;
 
     public ResourceGroup() {
     }
@@ -404,6 +410,14 @@ public class ResourceGroup {
 
     public void setPartitionNum(Integer partitionNum) {
         this.partitionNum = partitionNum;
+    }
+
+    public Integer getTotalPartitionNum() {
+        return totalPartitionNum;
+    }
+
+    public void setTotalPartitionNum(Integer totalPartitionNum) {
+        this.totalPartitionNum = totalPartitionNum;
     }
 
     @Override
