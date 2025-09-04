@@ -95,15 +95,14 @@ using SliceAggTwoLevelHashMap =
         phmap::parallel_flat_hash_map<Slice, AggDataPtr, SliceHashWithSeed<seed>, SliceEqual,
                                       phmap::priv::Allocator<phmap::priv::Pair<const Slice, AggDataPtr>>, PHMAPN>;
 
-template <typename T, typename = void>
-struct has_get_data : std::false_type {};
-
 template <typename T>
-struct has_get_data<T, std::void_t<decltype(std::declval<T>().immutable_data())>> : std::true_type {};
+concept HasImmutableData = requires(T t) {
+    {t.immutable_data()};
+};
 
 template <typename T>
 auto get_immutable_data(T* obj) {
-    if constexpr (has_get_data<T>::value) {
+    if constexpr (HasImmutableData<T>) {
         return obj->immutable_data();
     } else {
         return obj->get_proxy_data();
