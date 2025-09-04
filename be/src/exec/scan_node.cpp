@@ -96,15 +96,17 @@ Status ScanNode::prepare(RuntimeState* state) {
 // Distribute morsels from a single queue to multiple queues
 static std::map<int, pipeline::MorselQueuePtr> uniform_distribute_morsels(pipeline::MorselQueuePtr morsel_queue,
                                                                           int dop) {
+    std::map<int, pipeline::MorselQueuePtr> queue_per_driver;
     std::map<int, pipeline::Morsels> morsels_per_driver;
     int driver_seq = 0;
     while (!morsel_queue->empty()) {
-        auto maybe_morsel = morsel_queue->try_get();
-        DCHECK(maybe_morsel.ok());
-        morsels_per_driver[driver_seq].push_back(std::move(maybe_morsel.value()));
+        auto maybe_morsel_status_or = morsel_queue->try_get();
+        if (UNLIKELY(!maybe_morsel_status_or.ok())) {
+            return queue_per_driver;
+        }
+        morsels_per_driver[driver_seq].push_back(std::move(maybe_morsel_status_or.value()));
         driver_seq = (driver_seq + 1) % dop;
     }
-    std::map<int, pipeline::MorselQueuePtr> queue_per_driver;
 
     auto morsel_queue_type = morsel_queue->type();
     DCHECK(morsel_queue_type == pipeline::MorselQueue::Type::FIXED ||
