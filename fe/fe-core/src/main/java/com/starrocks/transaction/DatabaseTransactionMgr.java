@@ -185,7 +185,7 @@ public class DatabaseTransactionMgr {
 
         long tid = globalStateMgr.getGlobalTransactionMgr().getTransactionIDGenerator().getNextTransactionId();
         boolean combinedTxnLog = LakeTableHelper.supportCombinedTxnLog(sourceType);
-        boolean fileBundling = LakeTableHelper.fileBundling(dbId, tableIdList);
+        boolean fileBundling = LakeTableHelper.fileBundling(dbId, tableIdList) && LakeTableHelper.isTransactionSupportCombinedTxnLog(sourceType);
         LOG.info("begin transaction: txn_id: {} with label {} from coordinator {}, listner id: {}",
                 tid, label, coordinator, callbackId);
         TransactionState transactionState = new TransactionState(dbId, tableIdList, tid, label, requestId, sourceType,
