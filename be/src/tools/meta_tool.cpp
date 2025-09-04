@@ -117,6 +117,8 @@ DEFINE_string(audit_file, "", "audit file path");
 DEFINE_bool(do_delete, false, "do delete files");
 
 // flag defined in gflags library
+DECLARE_bool(help);
+DECLARE_bool(helpfull);
 DECLARE_bool(helpshort);
 
 std::string get_usage(const std::string& progname) {
@@ -1096,7 +1098,18 @@ int meta_tool_main(int argc, char** argv) {
     bool empty_args = (argc <= 1);
     std::string usage = get_usage(argv[0]);
     gflags::SetUsageMessage(usage);
-    google::ParseCommandLineFlags(&argc, &argv, true);
+    google::ParseCommandLineNonHelpFlags(&argc, &argv, true);
+    if (FLAGS_help || FLAGS_helpfull) {
+        // process `--help`, `--helpfull` as if it were `--helpshort`,
+        // avoid printing out all available gflags from all modules
+        FLAGS_help = false;
+        FLAGS_helpfull = false;
+        show_usage();
+        return 0;
+    } else {
+        // process other help flags as usual, may exit.
+        google::HandleCommandLineHelpFlags();
+    }
     starrocks::date::init_date_cache();
     starrocks::config::disable_storage_page_cache = true;
     starrocks::MemChunkAllocator::init_metrics();
