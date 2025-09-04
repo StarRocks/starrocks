@@ -36,11 +36,10 @@ package com.starrocks.load.loadv2;
 
 import com.google.common.base.Joiner;
 import com.google.common.collect.Lists;
-import com.starrocks.analysis.BrokerDesc;
+import com.starrocks.authentication.UserIdentityUtils;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
-import com.starrocks.catalog.UserIdentity;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.DataQualityException;
@@ -72,6 +71,7 @@ import com.starrocks.qe.scheduler.Coordinator;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.service.FrontendOptions;
 import com.starrocks.sql.ast.AlterLoadStmt;
+import com.starrocks.sql.ast.BrokerDesc;
 import com.starrocks.sql.ast.LoadStmt;
 import com.starrocks.task.PriorityLeaderTask;
 import com.starrocks.thrift.TLoadJobType;
@@ -268,8 +268,9 @@ public class BrokerLoadJob extends BulkLoadJob {
                     context.setDatabase(db.getFullName());
                     if (sessionVariables.get(CURRENT_QUALIFIED_USER_KEY) != null) {
                         context.setQualifiedUser(sessionVariables.get(CURRENT_QUALIFIED_USER_KEY));
-                        context.setCurrentUserIdentity(UserIdentity.fromString(sessionVariables.get(CURRENT_USER_IDENT_KEY)));
-                        context.setCurrentRoleIds(UserIdentity.fromString(sessionVariables.get(CURRENT_USER_IDENT_KEY)));
+                        context.setCurrentUserIdentity(
+                                UserIdentityUtils.fromString(sessionVariables.get(CURRENT_USER_IDENT_KEY)));
+                        context.setCurrentRoleIds(UserIdentityUtils.fromString(sessionVariables.get(CURRENT_USER_IDENT_KEY)));
                     } else {
                         throw new DdlException("Failed to divide job into loading task when user is null");
                     }

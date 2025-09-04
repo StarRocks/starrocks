@@ -188,8 +188,9 @@ Status TabletManager::create_tablet(const TCreateTabletReq& request, std::vector
 
     int64_t tablet_id = request.tablet_id;
     int32_t schema_hash = request.tablet_schema.schema_hash;
-    LOG(INFO) << "Creating tablet " << tablet_id;
+    VLOG(3) << "Creating tablet " << tablet_id;
 
+    int64_t start_ms = MonotonicMillis();
     std::unique_lock wlock(_get_tablets_shard_lock(tablet_id), std::defer_lock);
     std::shared_lock<std::shared_mutex> base_rlock;
 
@@ -257,7 +258,7 @@ Status TabletManager::create_tablet(const TCreateTabletReq& request, std::vector
         return Status::InternalError("fail to create tablet");
     }
 
-    LOG(INFO) << "Created tablet " << tablet_id;
+    LOG(INFO) << "Created tablet " << tablet_id << ", cost " << (MonotonicMillis() - start_ms) << "ms.";
     return Status::OK();
 }
 
@@ -414,7 +415,7 @@ Status TabletManager::drop_tablet(TTabletId tablet_id, TabletDropFlag flag) {
             return Status::NotFound(strings::Substitute("tablet $0 not fount", tablet_id));
         }
 
-        LOG(INFO) << "Start to drop tablet " << tablet_id;
+        VLOG(3) << "Start to drop tablet " << tablet_id;
         dropped_tablet = it->second;
         dropped_tablet->set_is_dropping(true);
         // we can not erase tablet from tablet map here.
@@ -422,6 +423,7 @@ Status TabletManager::drop_tablet(TTabletId tablet_id, TabletDropFlag flag) {
         // to complete, which can take a while. If a clone occurs in the meantime, a new tablet will be created, and
         // the new tablet and the old tablet may apply at the same time, modifying the primary key index at the same time.
     }
+    int64_t start_ms = MonotonicMillis();
     if (config::enable_event_based_compaction_framework) {
         dropped_tablet->stop_compaction();
         StorageEngine::instance()->compaction_manager()->remove_candidate(dropped_tablet->tablet_id());
@@ -489,7 +491,7 @@ Status TabletManager::drop_tablet(TTabletId tablet_id, TabletDropFlag flag) {
         _remove_tablet_from_partition(*dropped_tablet);
     }
     dropped_tablet->deregister_tablet_from_dir();
-    LOG(INFO) << "Succeed to drop tablet " << tablet_id;
+    LOG(INFO) << "Succeed to drop tablet " << tablet_id << ", cost " << (MonotonicMillis() - start_ms) << "ms.";
     return Status::OK();
 }
 
@@ -867,9 +869,9 @@ TabletSharedPtr TabletManager::find_best_tablet_to_do_update_compaction(DataDir*
     }
 
     if (best_tablet != nullptr) {
-        LOG(INFO) << "Found the best tablet to compact. "
-                  << "compaction_type=update"
-                  << " tablet_id=" << best_tablet->tablet_id() << " highest_score=" << highest_score;
+        VLOG(2) << "Found the best tablet to compact. "
+                << "compaction_type=update"
+                << " tablet_id=" << best_tablet->tablet_id() << " highest_score=" << highest_score;
         StarRocksMetrics::instance()->tablet_update_max_compaction_score.set_value(highest_score);
     }
     return best_tablet;
@@ -1106,7 +1108,7 @@ void TabletManager::sweep_shutdown_tablet(const DroppedTabletInfo& info,
     }
 
     if (st.ok() || st.is_not_found()) {
-        LOG(INFO) << ((info.flag == kMoveFilesToTrash) ? "Moved " : " Removed ") << tablet->tablet_id_path();
+        VLOG(3) << ((info.flag == kMoveFilesToTrash) ? "Moved " : "Removed ") << tablet->tablet_id_path();
     } else {
         LOG(WARNING) << "Fail to remove or move " << tablet->tablet_id_path() << " :" << st;
         return;
@@ -1215,15 +1217,14 @@ Status TabletManager::delete_shutdown_tablet(int64_t tablet_id) {
         return Status::NotFound(fmt::format("invalid flag: {}", to_delete.flag));
     }
 
-    if (st.ok() || st.is_not_found()) {
-        LOG(INFO) << ((to_delete.flag == kMoveFilesToTrash) ? "Moved " : " Removed ") << tablet->tablet_id_path();
-    } else {
+    if (!st.ok() && !st.is_not_found()) {
         LOG(WARNING) << "Fail to remove or move " << tablet->tablet_id_path() << " :" << st;
         return st;
     }
     st = _remove_tablet_meta(tablet);
     if (st.ok() || st.is_not_found()) {
-        LOG(INFO) << "Removed tablet meta of tablet " << tablet->tablet_id();
+        VLOG(3) << "Removed tablet meta of tablet " << tablet->tablet_id() << ", "
+                << ((to_delete.flag == kMoveFilesToTrash) ? "Moved " : "Removed ") << tablet->tablet_id_path();
     } else {
         LOG(ERROR) << "Fail to remove tablet meta of tablet " << tablet->tablet_id() << ", status:" << st;
         return st;
@@ -1484,7 +1485,7 @@ Status TabletManager::_create_tablet_meta_unlocked(const TCreateTabletReq& reque
         for (uint32_t col_idx = 0; col_idx < next_unique_id; ++col_idx) {
             col_idx_to_unique_id[col_idx] = col_idx;
         }
-        LOG(INFO) << "creating tablet meta. next_unique_id:" << next_unique_id;
+        VLOG(3) << "creating tablet meta. next_unique_id:" << next_unique_id;
     } else {
         auto base_tablet_schema = base_tablet->tablet_schema();
         next_unique_id = base_tablet_schema->next_column_unique_id();
@@ -1559,6 +1560,7 @@ Status TabletManager::_drop_tablet_unlocked(TTabletId tablet_id, TabletDropFlag 
         return Status::InvalidArgument(fmt::format("invalid TabletDropFlag {}", (int)flag));
     }
 
+    int64_t start_ms = MonotonicMillis();
     TabletMap& tablet_map = _get_tablet_map(tablet_id);
     auto it = tablet_map.find(tablet_id);
     if (it == tablet_map.end()) {
@@ -1566,7 +1568,7 @@ Status TabletManager::_drop_tablet_unlocked(TTabletId tablet_id, TabletDropFlag 
         return Status::NotFound(strings::Substitute("tablet $0 not fount", tablet_id));
     }
 
-    LOG(INFO) << "Start to drop tablet " << tablet_id;
+    VLOG(3) << "Start to drop tablet " << tablet_id;
     TabletSharedPtr dropped_tablet = it->second;
     tablet_map.erase(it);
     _remove_tablet_from_partition(*dropped_tablet);
@@ -1598,7 +1600,7 @@ Status TabletManager::_drop_tablet_unlocked(TTabletId tablet_id, TabletDropFlag 
         DCHECK_EQ(kKeepMetaAndFiles, flag);
     }
     dropped_tablet->deregister_tablet_from_dir();
-    LOG(INFO) << "Succeed to drop tablet " << tablet_id;
+    LOG(INFO) << "Succeed to drop tablet " << tablet_id << ", cost " << (MonotonicMillis() - start_ms) << "ms.";
     return Status::OK();
 }
 

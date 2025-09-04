@@ -35,10 +35,9 @@
 package com.starrocks.qe;
 
 import com.google.common.base.Strings;
-import com.starrocks.analysis.Expr;
-import com.starrocks.analysis.LiteralExpr;
-import com.starrocks.analysis.NullLiteral;
-import com.starrocks.authentication.OAuth2Context;
+import com.starrocks.authentication.AuthenticationException;
+import com.starrocks.authentication.AuthenticationProvider;
+import com.starrocks.authentication.UserIdentityUtils;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Table;
@@ -74,20 +73,26 @@ import com.starrocks.server.WarehouseManager;
 import com.starrocks.service.FrontendOptions;
 import com.starrocks.sql.analyzer.AstToSQLBuilder;
 import com.starrocks.sql.ast.AstTraverser;
+import com.starrocks.sql.ast.DeleteStmt;
 import com.starrocks.sql.ast.DmlStmt;
 import com.starrocks.sql.ast.ExecuteStmt;
 import com.starrocks.sql.ast.InsertStmt;
+import com.starrocks.sql.ast.OriginStatement;
 import com.starrocks.sql.ast.PrepareStmt;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.Relation;
 import com.starrocks.sql.ast.SetStmt;
 import com.starrocks.sql.ast.StatementBase;
+import com.starrocks.sql.ast.UpdateStmt;
+import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.LiteralExpr;
+import com.starrocks.sql.ast.expression.NullLiteral;
 import com.starrocks.sql.ast.txn.BeginStmt;
 import com.starrocks.sql.ast.txn.CommitStmt;
 import com.starrocks.sql.ast.txn.RollbackStmt;
 import com.starrocks.sql.common.AuditEncryptionChecker;
 import com.starrocks.sql.common.ErrorType;
-import com.starrocks.sql.common.SqlDigestBuilder;
+import com.starrocks.sql.formatter.FormatOptions;
 import com.starrocks.sql.parser.ParsingException;
 import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.thrift.TMasterOpRequest;
@@ -101,7 +106,6 @@ import org.apache.logging.log4j.Logger;
 import java.io.IOException;
 import java.lang.management.ManagementFactory;
 import java.lang.management.ThreadMXBean;
-import java.net.URLEncoder;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.nio.channels.AsynchronousCloseException;
@@ -281,18 +285,33 @@ public class ConnectProcessor {
 
         ctx.getAuditEventBuilder().setFeIp(FrontendOptions.getLocalHostAddress());
 
-        if (parsedStmt != null && AuditEncryptionChecker.needEncrypt(parsedStmt)) {
-            // Some information like username, password in the stmt should not be printed.
-            ctx.getAuditEventBuilder().setStmt(AstToSQLBuilder.toSQLOrDefault(parsedStmt, origStmt));
-        } else if (parsedStmt == null) {
-            // invalid sql, record the original statement to avoid audit log can't replay
-            // but redact sensitive credentials first
-            ctx.getAuditEventBuilder().setStmt(SqlCredentialRedactor.redact(origStmt));
-        } else {
-            ctx.getAuditEventBuilder().setStmt(LogUtil.removeLineSeparator(origStmt));
-        }
+        ctx.getAuditEventBuilder().setStmt(formatStmt(origStmt, parsedStmt));
 
         GlobalStateMgr.getCurrentState().getAuditEventProcessor().handleAuditEvent(ctx.getAuditEventBuilder().build());
+    }
+
+    private String formatStmt(String origStmt, StatementBase parsedStmt) {
+        if (!Config.enable_audit_sql) {
+            return "?";
+        }
+        boolean needEncrypt = AuditEncryptionChecker.needEncrypt(parsedStmt);
+        if (parsedStmt == null) {
+            // invalid sql, record the original statement to avoid audit log can't replay
+            // but redact sensitive credentials first
+            if (Config.enable_sql_desensitize_in_log) {
+                return "this is a desensitized invalid sql";
+            }
+            return SqlCredentialRedactor.redact(origStmt);
+        } else if (AuditEncryptionChecker.needEncrypt(parsedStmt) || Config.enable_sql_desensitize_in_log) {
+            // Some information like username, password in the stmt should not be printed.
+            return AstToSQLBuilder.toSQL(parsedStmt, FormatOptions.allEnable()
+                            .setColumnSimplifyTableName(false)
+                            .setHideCredential(needEncrypt)
+                            .setEnableDigest(Config.enable_sql_desensitize_in_log))
+                    .orElse("this is a desensitized sql");
+        } else {
+            return LogUtil.removeLineSeparator(origStmt);
+        }
     }
 
     public static String computeStatementDigest(StatementBase queryStmt) {
@@ -301,7 +320,7 @@ public class ConnectProcessor {
         }
 
         try {
-            String digest = SqlDigestBuilder.build(queryStmt);
+            String digest = AstToSQLBuilder.toDigest(queryStmt);
             MessageDigest md = MessageDigest.getInstance("MD5");
             md.reset();
             md.update(digest.getBytes());
@@ -347,6 +366,7 @@ public class ConnectProcessor {
         boolean onlySetStmt = true;
         try {
             ctx.setQueryId(UUIDUtil.genUUID());
+            ctx.setExecutionId(UUIDUtil.toTUniqueId(ctx.getQueryId()));
             if (Config.enable_print_sql) {
                 LOG.info("Begin to execute sql, type: query, query id:{}, sql:{}", ctx.getQueryId(), originStmt);
             }
@@ -385,22 +405,25 @@ public class ConnectProcessor {
                         !((parsedStmt instanceof InsertStmt && !((InsertStmt) parsedStmt).isOverwrite()) ||
                                 parsedStmt instanceof BeginStmt ||
                                 parsedStmt instanceof CommitStmt ||
+                                parsedStmt instanceof UpdateStmt ||
+                                parsedStmt instanceof DeleteStmt ||
                                 parsedStmt instanceof RollbackStmt)) {
                     ErrorReport.report(ErrorCode.ERR_EXPLICIT_TXN_NOT_SUPPORT_STMT);
                     ctx.getState().setErrType(QueryState.ErrType.ANALYSIS_ERR);
                     return;
                 }
 
-                if (ctx.getOAuth2Context() != null && ctx.getAuthToken() == null) {
-                    OAuth2Context oAuth2Context = ctx.getOAuth2Context();
-                    String authUrl = oAuth2Context.authServerUrl() +
-                            "?response_type=code" +
-                            "&client_id=" + URLEncoder.encode(oAuth2Context.clientId(), StandardCharsets.UTF_8) +
-                            "&redirect_uri=" + URLEncoder.encode(oAuth2Context.redirectUrl(), StandardCharsets.UTF_8) +
-                            "&state=" + ctx.getConnectionId() +
-                            "&scope=openid";
+                try {
+                    AuthenticationProvider authenticationProvider = ctx.getAuthenticationProvider();
+                    if (authenticationProvider == null) {
+                        ErrorReport.report("Unknown authentication method");
+                        ctx.getState().setErrType(QueryState.ErrType.ANALYSIS_ERR);
+                        return;
+                    }
 
-                    ErrorReport.report(ErrorCode.ERR_OAUTH2_NOT_AUTHENTICATED, authUrl);
+                    authenticationProvider.checkLoginSuccess(ctx.getConnectionId(), ctx.getAuthenticationContext());
+                } catch (AuthenticationException authenticationException) {
+                    ErrorReport.report(authenticationException.getMessage());
                     ctx.getState().setErrType(QueryState.ErrType.ANALYSIS_ERR);
                     return;
                 }
@@ -441,13 +464,14 @@ public class ConnectProcessor {
                 }
             }
         } catch (AnalysisException e) {
-            LOG.warn("Failed to parse SQL: " + originStmt + ", because.", e);
+            LOG.warn("Failed to parse SQL: " + SqlCredentialRedactor.redact(originStmt) + ", because.", e);
             ctx.getState().setError(e.getMessage());
             ctx.getState().setErrType(QueryState.ErrType.ANALYSIS_ERR);
         } catch (Throwable e) {
             // Catch all throwable.
             // If reach here, maybe StarRocks bug.
-            LOG.warn("Process one query failed. SQL: " + originStmt + ", because unknown reason: ", e);
+            LOG.warn("Process one query failed. SQL: " + SqlCredentialRedactor.redact(originStmt) +
+                    ", because unknown reason: ", e);
             ctx.getState().setError(e.getMessage());
             ctx.getState().setErrType(QueryState.ErrType.INTERNAL_ERR);
         } finally {
@@ -703,7 +727,8 @@ public class ConnectProcessor {
                 }
             } else {
                 ShowResultSet resultSet = executor.getShowResultSet();
-                // for lower version fe, all forwarded command is OK or EOF State, so we prefer to use remote packet for compatible
+                // for lower version fe, all forwarded command is OK or EOF State, so we prefer to use remote packet for
+                // compatible
                 // ShowResultSet is null means this is not ShowStmt, use remote packet(executor.getOutputPacket())
                 // or use local packet (getResultPacket())
                 if (resultSet == null) {
@@ -775,7 +800,7 @@ public class ConnectProcessor {
             ctx.getSessionVariable().setEnableInsertStrict(request.enableStrictMode);
         }
         if (request.isSetCurrent_user_ident()) {
-            UserIdentity currentUserIdentity = UserIdentity.fromThrift(request.getCurrent_user_ident());
+            UserIdentity currentUserIdentity = UserIdentityUtils.fromThrift(request.getCurrent_user_ident());
             ctx.setCurrentUserIdentity(currentUserIdentity);
         }
 

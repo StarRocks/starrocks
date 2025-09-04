@@ -16,8 +16,6 @@ package com.starrocks.planner;
 
 import com.google.common.base.MoreObjects;
 import com.google.common.base.Preconditions;
-import com.starrocks.analysis.SlotDescriptor;
-import com.starrocks.analysis.TupleDescriptor;
 import com.starrocks.catalog.DeltaLakeTable;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.StarRocksException;
@@ -53,6 +51,7 @@ public class DeltaLakeScanNode extends ScanNode {
     private final HDFSScanNodePredicates scanNodePredicates = new HDFSScanNodePredicates();
     private CloudConfiguration cloudConfiguration = null;
     private DeltaConnectorScanRangeSource scanRangeSource = null;
+    private volatile boolean reachLimit = false;
     private int selectedPartitionCount = -1;
 
     public DeltaLakeScanNode(PlanNodeId id, TupleDescriptor desc, String planNodeName) {
@@ -100,7 +99,12 @@ public class DeltaLakeScanNode extends ScanNode {
 
     @Override
     public boolean hasMoreScanRanges() {
-        return scanRangeSource.hasMoreOutput();
+        return !reachLimit && scanRangeSource.hasMoreOutput();
+    }
+
+    @Override
+    public void setReachLimit() {
+        reachLimit = true;
     }
 
     public void setupScanRangeSource(ScalarOperator predicate, List<String> fieldNames, boolean enableIncrementalScanRanges)

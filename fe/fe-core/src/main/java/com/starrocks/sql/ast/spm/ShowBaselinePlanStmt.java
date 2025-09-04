@@ -15,11 +15,12 @@
 package com.starrocks.sql.ast.spm;
 
 import com.google.common.collect.ImmutableMap;
-import com.starrocks.analysis.Expr;
 import com.starrocks.catalog.Type;
 import com.starrocks.sql.ast.AstVisitor;
+import com.starrocks.sql.ast.AstVisitorExtendInterface;
 import com.starrocks.sql.ast.QueryRelation;
 import com.starrocks.sql.ast.ShowStmt;
+import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.parser.NodePosition;
 
 import java.util.Map;
@@ -67,6 +68,6 @@ public class ShowBaselinePlanStmt extends ShowStmt {
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitShowBaselinePlanStatement(this, context);
+        return ((AstVisitorExtendInterface<R, C>) visitor).visitShowBaselinePlanStatement(this, context);
     }
 }

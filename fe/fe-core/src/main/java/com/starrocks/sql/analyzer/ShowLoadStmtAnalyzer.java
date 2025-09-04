@@ -15,14 +15,6 @@
 package com.starrocks.sql.analyzer;
 
 import com.google.common.base.Strings;
-import com.starrocks.analysis.BinaryPredicate;
-import com.starrocks.analysis.BinaryType;
-import com.starrocks.analysis.CompoundPredicate;
-import com.starrocks.analysis.Expr;
-import com.starrocks.analysis.LikePredicate;
-import com.starrocks.analysis.OrderByElement;
-import com.starrocks.analysis.SlotRef;
-import com.starrocks.analysis.StringLiteral;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
@@ -30,8 +22,16 @@ import com.starrocks.common.proc.LoadProcDir;
 import com.starrocks.common.util.OrderByPair;
 import com.starrocks.load.loadv2.JobState;
 import com.starrocks.qe.ConnectContext;
-import com.starrocks.sql.ast.AstVisitor;
+import com.starrocks.sql.ast.AstVisitorExtendInterface;
+import com.starrocks.sql.ast.OrderByElement;
 import com.starrocks.sql.ast.ShowLoadStmt;
+import com.starrocks.sql.ast.expression.BinaryPredicate;
+import com.starrocks.sql.ast.expression.BinaryType;
+import com.starrocks.sql.ast.expression.CompoundPredicate;
+import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.LikePredicate;
+import com.starrocks.sql.ast.expression.SlotRef;
+import com.starrocks.sql.ast.expression.StringLiteral;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -42,7 +42,7 @@ public class ShowLoadStmtAnalyzer {
         new ShowLoadStmtAnalyzerVisitor().visit(statement, context);
     }
 
-    static class ShowLoadStmtAnalyzerVisitor implements AstVisitor<Void, ConnectContext> {
+    static class ShowLoadStmtAnalyzerVisitor implements AstVisitorExtendInterface<Void, ConnectContext> {
 
         private boolean isAccurateMatch;
         private String labelValue;
@@ -116,7 +116,7 @@ public class ShowLoadStmtAnalyzer {
 
             if (expr instanceof CompoundPredicate) {
                 CompoundPredicate cp = (CompoundPredicate) expr;
-                if (cp.getOp() != com.starrocks.analysis.CompoundPredicate.Operator.AND) {
+                if (cp.getOp() != CompoundPredicate.Operator.AND) {
                     ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR,
                             "Only allow compound predicate with operator AND");
                 }

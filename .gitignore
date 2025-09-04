@@ -21,7 +21,7 @@ thirdparty/installed
 core.*
 extension/spark-doris-connector/.classpath
 extension/spark-doris-connector/target
-contrib/trino-connector/target/
+contrib/*/target/
 fe/log
 **/ut_ports
 venv/
@@ -33,7 +33,9 @@ fe_plugins/output
 fe/mocked
 fe/ut_ports
 fe/*/target
+fe/plugin/*/target/
 fe/fe-core/gen
+fe/fe-grammar/gen
 fe/fe-common/.classpath
 fe/fe-core/src/main/java/com/starrocks/sql/parser/gen
 fe/fe-core/src/main/java/com/starrocks/builtins

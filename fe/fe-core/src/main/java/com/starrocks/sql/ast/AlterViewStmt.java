@@ -15,7 +15,7 @@
 package com.starrocks.sql.ast;
 
 import com.google.common.collect.Maps;
-import com.starrocks.analysis.TableName;
+import com.starrocks.sql.ast.expression.TableName;
 import com.starrocks.sql.parser.NodePosition;
 
 import java.util.Map;
@@ -92,6 +92,6 @@ public class AlterViewStmt extends DdlStmt {
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitAlterViewStatement(this, context);
+        return ((AstVisitorExtendInterface<R, C>) visitor).visitAlterViewStatement(this, context);
     }
 }

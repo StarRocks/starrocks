@@ -29,7 +29,7 @@ public class ShowFrontendsStmt extends ShowStmt {
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitShowFrontendsStatement(this, context);
+        return ((AstVisitorExtendInterface<R, C>) visitor).visitShowFrontendsStatement(this, context);
     }
 }
 

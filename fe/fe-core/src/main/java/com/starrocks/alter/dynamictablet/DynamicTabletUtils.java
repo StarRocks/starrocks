@@ -14,6 +14,8 @@
 
 package com.starrocks.alter.dynamictablet;
 
+import com.starrocks.common.Config;
+
 public class DynamicTabletUtils {
 
     public static boolean isPowerOfTwo(long n) {
@@ -22,9 +24,12 @@ public class DynamicTabletUtils {
 
     public static int calcSplitCount(long dataSize, long splitSize) {
         int splitCount = 1;
-        while (dataSize > splitCount) {
-            splitCount *= 2;
-            dataSize /= splitCount;
+        for (long size = dataSize; size >= splitSize; size /= 2) {
+            int newSplitCount = splitCount * 2;
+            if (newSplitCount > Config.dynamic_tablet_max_split_count) {
+                break;
+            }
+            splitCount = newSplitCount;
         }
         return splitCount;
     }

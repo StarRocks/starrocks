@@ -17,11 +17,6 @@ package com.starrocks.sql.analyzer;
 import com.google.common.base.Enums;
 import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
-import com.starrocks.analysis.BinaryPredicate;
-import com.starrocks.analysis.BinaryType;
-import com.starrocks.analysis.Expr;
-import com.starrocks.analysis.SlotRef;
-import com.starrocks.analysis.StringLiteral;
 import com.starrocks.catalog.CatalogUtils;
 import com.starrocks.catalog.Replica;
 import com.starrocks.common.util.PropertyAnalyzer;
@@ -34,10 +29,15 @@ import com.starrocks.sql.ast.AdminSetPartitionVersionStmt;
 import com.starrocks.sql.ast.AdminSetReplicaStatusStmt;
 import com.starrocks.sql.ast.AdminShowReplicaDistributionStmt;
 import com.starrocks.sql.ast.AdminShowReplicaStatusStmt;
-import com.starrocks.sql.ast.AstVisitor;
+import com.starrocks.sql.ast.AstVisitorExtendInterface;
 import com.starrocks.sql.ast.PartitionNames;
 import com.starrocks.sql.ast.Property;
 import com.starrocks.sql.ast.StatementBase;
+import com.starrocks.sql.ast.expression.BinaryPredicate;
+import com.starrocks.sql.ast.expression.BinaryType;
+import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.SlotRef;
+import com.starrocks.sql.ast.expression.StringLiteral;
 import com.starrocks.sql.parser.NodePosition;
 
 import java.util.List;
@@ -51,7 +51,7 @@ public class AdminStmtAnalyzer {
         new AdminStmtAnalyzerVisitor().analyze(statementBase, session);
     }
 
-    static class AdminStmtAnalyzerVisitor implements AstVisitor<Void, ConnectContext> {
+    static class AdminStmtAnalyzerVisitor implements AstVisitorExtendInterface<Void, ConnectContext> {
         public void analyze(StatementBase statementBase, ConnectContext session) {
             visit(statementBase, session);
         }

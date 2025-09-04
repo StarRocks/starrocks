@@ -39,7 +39,8 @@ public class DefaultAuthorizationProvider implements AuthorizationProvider {
                 PrivilegeType.SELECT,
                 PrivilegeType.ALTER,
                 PrivilegeType.EXPORT,
-                PrivilegeType.UPDATE));
+                PrivilegeType.UPDATE,
+                PrivilegeType.REFRESH));
 
         typeToActionList.put(ObjectType.DATABASE, Lists.newArrayList(
                 PrivilegeType.CREATE_TABLE,

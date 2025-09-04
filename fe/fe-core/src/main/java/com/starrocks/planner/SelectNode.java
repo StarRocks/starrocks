@@ -34,9 +34,8 @@
 
 package com.starrocks.planner;
 
-import com.starrocks.analysis.Expr;
-import com.starrocks.analysis.SlotId;
 import com.starrocks.common.Pair;
+import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.thrift.TNormalPlanNode;
 import com.starrocks.thrift.TNormalSelectNode;

@@ -15,15 +15,6 @@
 package com.starrocks.sql.analyzer;
 
 import com.google.common.base.Strings;
-import com.starrocks.analysis.BinaryPredicate;
-import com.starrocks.analysis.BinaryType;
-import com.starrocks.analysis.BrokerDesc;
-import com.starrocks.analysis.Expr;
-import com.starrocks.analysis.IntLiteral;
-import com.starrocks.analysis.OrderByElement;
-import com.starrocks.analysis.SlotRef;
-import com.starrocks.analysis.StringLiteral;
-import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.FsBroker;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
@@ -35,12 +26,21 @@ import com.starrocks.common.util.OrderByPair;
 import com.starrocks.load.ExportJob;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.sql.ast.AstVisitor;
+import com.starrocks.sql.ast.AstVisitorExtendInterface;
+import com.starrocks.sql.ast.BrokerDesc;
 import com.starrocks.sql.ast.CancelExportStmt;
 import com.starrocks.sql.ast.ExportStmt;
+import com.starrocks.sql.ast.OrderByElement;
 import com.starrocks.sql.ast.PartitionNames;
 import com.starrocks.sql.ast.ShowExportStmt;
 import com.starrocks.sql.ast.StatementBase;
+import com.starrocks.sql.ast.expression.BinaryPredicate;
+import com.starrocks.sql.ast.expression.BinaryType;
+import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.IntLiteral;
+import com.starrocks.sql.ast.expression.SlotRef;
+import com.starrocks.sql.ast.expression.StringLiteral;
+import com.starrocks.sql.ast.expression.TableName;
 import com.starrocks.sql.common.MetaUtils;
 
 import java.util.ArrayList;
@@ -57,7 +57,7 @@ public class ExportStmtAnalyzer {
     }
 
 
-    static class ExportAnalyzerVisitor implements AstVisitor<Void, ConnectContext> {
+    static class ExportAnalyzerVisitor implements AstVisitorExtendInterface<Void, ConnectContext> {
 
         public void analyze(StatementBase statement, ConnectContext session) {
             visit(statement, session);

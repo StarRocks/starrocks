@@ -36,7 +36,7 @@ package com.starrocks.common;
 
 import com.google.common.base.Predicate;
 import com.google.common.collect.Lists;
-import com.starrocks.analysis.NullLiteral;
+import com.starrocks.sql.ast.expression.NullLiteral;
 
 import java.util.ArrayList;
 import java.util.Collection;

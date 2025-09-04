@@ -923,7 +923,10 @@ public class LowCardinalityTest2 extends PlanTestBase {
         // support(support(unsupport(Column), unsupport(Column)))
         sql = "select REVERSE(SUBSTR(LEFT(REVERSE(S_ADDRESS),INSTR(REVERSE(S_ADDRESS),'/')-1),5)) FROM supplier";
         plan = getFragmentPlan(sql);
-        assertContains(plan, "<slot 9> : reverse(substr(left(DictDecode(10: S_ADDRESS, [reverse(<place-holder>)])");
+        assertContains(plan, "  |  <slot 9> : reverse(substr(left(11: expr, " +
+                "CAST(CAST(instr(11: expr, '/') AS BIGINT) - 1 AS INT)), 5))\n" +
+                "  |  common expressions:\n" +
+                "  |  <slot 11> : DictDecode(10: S_ADDRESS, [reverse(<place-holder>)])");
     }
 
     @Test
@@ -1242,7 +1245,9 @@ public class LowCardinalityTest2 extends PlanTestBase {
                     "  |  aggregate: approx_count_distinct[([11: S_ADDRESS, INT, false]); args: INT; " +
                     "result: VARBINARY; args nullable: false; result nullable: false]\n" +
                     "  |  group by: [12: upper, INT, true]\n" +
-                    "  |  cardinality: 1");
+                    "  |  group by min-max stats:\n" +
+                    "  |  - 0:1\n" +
+                    "  |  cardinality: 1\n");
             assertContains(plan, "Global Dict Exprs:\n" +
                     "    12: DictDefine(11: S_ADDRESS, [upper(<place-holder>)])");
             // TODO add a case: Decode node before Sort Node

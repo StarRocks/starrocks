@@ -41,14 +41,9 @@ import com.google.common.collect.Maps;
 import com.google.common.collect.Multimap;
 import com.google.common.collect.Range;
 import com.google.common.collect.Sets;
-import com.starrocks.analysis.LiteralExpr;
-import com.starrocks.analysis.SlotDescriptor;
-import com.starrocks.analysis.SlotId;
-import com.starrocks.analysis.TableName;
-import com.starrocks.analysis.TupleDescriptor;
-import com.starrocks.analysis.TupleId;
 import com.starrocks.authentication.AuthenticationException;
 import com.starrocks.authentication.AuthenticationHandler;
+import com.starrocks.authentication.UserIdentityUtils;
 import com.starrocks.authorization.AccessDeniedException;
 import com.starrocks.authorization.PrivilegeType;
 import com.starrocks.catalog.CatalogUtils;
@@ -140,7 +135,11 @@ import com.starrocks.load.streamload.StreamLoadTask;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.persist.AutoIncrementInfo;
 import com.starrocks.planner.OlapTableSink;
+import com.starrocks.planner.SlotDescriptor;
+import com.starrocks.planner.SlotId;
 import com.starrocks.planner.StreamLoadPlanner;
+import com.starrocks.planner.TupleDescriptor;
+import com.starrocks.planner.TupleId;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ConnectProcessor;
 import com.starrocks.qe.DefaultCoordinator;
@@ -167,6 +166,8 @@ import com.starrocks.sql.ast.PartitionDesc;
 import com.starrocks.sql.ast.RangePartitionDesc;
 import com.starrocks.sql.ast.SetType;
 import com.starrocks.sql.ast.ShowAlterStmt;
+import com.starrocks.sql.ast.expression.LiteralExpr;
+import com.starrocks.sql.ast.expression.TableName;
 import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.staros.StarMgrServer;
 import com.starrocks.statistic.StatsConstants;
@@ -436,7 +437,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
 
         UserIdentity currentUser;
         if (params.isSetCurrent_user_ident()) {
-            currentUser = UserIdentity.fromThrift(params.current_user_ident);
+            currentUser = UserIdentityUtils.fromThrift(params.current_user_ident);
         } else {
             currentUser = UserIdentity.createAnalyzedUserIdentWithIp(params.user, params.user_ip);
         }
@@ -492,7 +493,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
 
         UserIdentity currentUser = null;
         if (params.isSetCurrent_user_ident()) {
-            currentUser = UserIdentity.fromThrift(params.current_user_ident);
+            currentUser = UserIdentityUtils.fromThrift(params.current_user_ident);
         } else {
             currentUser = UserIdentity.createAnalyzedUserIdentWithIp(params.user, params.user_ip);
         }
@@ -508,6 +509,10 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             for (String tableName : metadataMgr.listTableNames(context, catalogName, params.db)) {
                 LOG.debug("get table: {}, wait to check", tableName);
                 Table tbl = null;
+                if (!PatternMatcher.matchPattern(params.getPattern(), tableName, matcher, caseSensitive)) {
+                    continue;
+                }
+                
                 try {
                     tbl = metadataMgr.getTable(context, catalogName, params.db, tableName);
                 } catch (Exception e) {
@@ -521,10 +526,6 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                 try {
                     Authorizer.checkAnyActionOnTableLikeObject(context, params.db, tbl);
                 } catch (AccessDeniedException e) {
-                    continue;
-                }
-
-                if (!PatternMatcher.matchPattern(params.getPattern(), tableName, matcher, caseSensitive)) {
                     continue;
                 }
 
@@ -553,7 +554,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             throw new TException("missed user_identity");
         }
         // TODO: check privilege
-        UserIdentity userIdentity = UserIdentity.fromThrift(params.getUser_ident());
+        UserIdentity userIdentity = UserIdentityUtils.fromThrift(params.getUser_ident());
 
         PipeManager pm = GlobalStateMgr.getCurrentState().getPipeManager();
         Map<PipeId, Pipe> pipes = pm.getPipesUnlock();
@@ -591,7 +592,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         }
         LOG.info("listPipeFiles params={}", params);
         // TODO: check privilege
-        UserIdentity userIdentity = UserIdentity.fromThrift(params.getUser_ident());
+        UserIdentity userIdentity = UserIdentityUtils.fromThrift(params.getUser_ident());
         TListPipeFilesResult result = new TListPipeFilesResult();
         PipeManager pm = GlobalStateMgr.getCurrentState().getPipeManager();
         Map<PipeId, Pipe> pipes = pm.getPipesUnlock();
@@ -650,7 +651,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
 
     @Override
     public TColumnStatsUsageRes getColumnStatsUsage(TColumnStatsUsageReq request) throws TException {
-        UserIdentity currentUser = UserIdentity.fromThrift(request.getAuth_info().getCurrent_user_ident());
+        UserIdentity currentUser = UserIdentityUtils.fromThrift(request.getAuth_info().getCurrent_user_ident());
 
         TColumnStatsUsageRes result = ColumnStatsUsageSystemTable.query(request);
         result.getItems().removeIf(item -> {
@@ -675,7 +676,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
     @Override
     public TAnalyzeStatusRes getAnalyzeStatus(TAnalyzeStatusReq request) throws TException {
         TAnalyzeStatusRes res = AnalyzeStatusSystemTable.query(request);
-        UserIdentity currentUser = UserIdentity.fromThrift(request.getAuth_info().getCurrent_user_ident());
+        UserIdentity currentUser = UserIdentityUtils.fromThrift(request.getAuth_info().getCurrent_user_ident());
         res.getItems().removeIf(item -> {
             try {
                 ConnectContext context = new ConnectContext();
@@ -785,7 +786,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         // database privs should be checked in analysis phrase
         UserIdentity currentUser = null;
         if (params.isSetCurrent_user_ident()) {
-            currentUser = UserIdentity.fromThrift(params.current_user_ident);
+            currentUser = UserIdentityUtils.fromThrift(params.current_user_ident);
         } else {
             currentUser = UserIdentity.createAnalyzedUserIdentWithIp(params.user, params.user_ip);
         }

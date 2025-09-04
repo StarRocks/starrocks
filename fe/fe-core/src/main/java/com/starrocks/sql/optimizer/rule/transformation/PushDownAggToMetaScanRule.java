@@ -18,11 +18,11 @@ package com.starrocks.sql.optimizer.rule.transformation;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
-import com.starrocks.analysis.Expr;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.Type;
+import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
@@ -78,7 +78,9 @@ public class PushDownAggToMetaScanRule extends TransformationRule {
             if (!aggFuncName.equalsIgnoreCase(FunctionSet.DICT_MERGE)
                     && !aggFuncName.equalsIgnoreCase(FunctionSet.MAX)
                     && !aggFuncName.equalsIgnoreCase(FunctionSet.MIN)
-                    && !aggFuncName.equalsIgnoreCase(FunctionSet.COUNT)) {
+                    && !aggFuncName.equalsIgnoreCase(FunctionSet.COUNT)
+                    && !aggFuncName.equalsIgnoreCase(FunctionSet.COLUMN_SIZE)
+                    && !aggFuncName.equalsIgnoreCase(FunctionSet.COLUMN_COMPRESSED_SIZE)) {
                 return false;
             }
         }
@@ -135,7 +137,9 @@ public class PushDownAggToMetaScanRule extends TransformationRule {
 
             Column c = metaScan.getColRefToColumnMetaMap().get(usedColumn);
             Column copiedColumn = c.deepCopy();
-            if (aggCall.getFnName().equals(FunctionSet.COUNT)) {
+            if (aggCall.getFnName().equals(FunctionSet.COUNT)
+                    || aggCall.getFnName().equals(FunctionSet.COLUMN_SIZE)
+                    || aggCall.getFnName().equals(FunctionSet.COLUMN_COMPRESSED_SIZE)) {
                 // this variable is introduced to solve compatibility issues,
                 // see more details in the description of https://github.com/StarRocks/starrocks/pull/17619
                 copiedColumn.setType(Type.BIGINT);
@@ -152,7 +156,9 @@ public class PushDownAggToMetaScanRule extends TransformationRule {
                 newAggCalls.put(kv.getKey(),
                         new CallOperator(aggCall.getFnName(), aggCall.getType(),
                                 List.of(metaColumn, aggCall.getChild(1)), aggFunction));
-            } else if (aggCall.getFnName().equals(FunctionSet.COUNT)) {
+            } else if (aggCall.getFnName().equals(FunctionSet.COUNT)
+                    || aggCall.getFnName().equals(FunctionSet.COLUMN_SIZE)
+                    || aggCall.getFnName().equals(FunctionSet.COLUMN_COMPRESSED_SIZE)) {
                 // rewrite count to sum
                 Function aggFunction = Expr.getBuiltinFunction(FunctionSet.SUM, new Type[] {Type.BIGINT},
                         Function.CompareMode.IS_IDENTICAL);

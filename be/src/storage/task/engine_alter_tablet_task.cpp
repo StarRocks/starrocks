@@ -80,7 +80,7 @@ Status EngineAlterTabletTask::execute() {
         return res;
     }
 
-    LOG(INFO) << alter_msg_header << "success to do alter task. base_tablet_id=" << _alter_tablet_req.base_tablet_id;
+    VLOG(2) << alter_msg_header << "success to do alter task. base_tablet_id=" << _alter_tablet_req.base_tablet_id;
     return Status::OK();
 } // execute
 

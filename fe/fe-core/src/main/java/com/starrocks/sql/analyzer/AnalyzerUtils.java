@@ -27,23 +27,6 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Multimap;
 import com.google.common.collect.Sets;
-import com.starrocks.analysis.AnalyticExpr;
-import com.starrocks.analysis.CastExpr;
-import com.starrocks.analysis.CompoundPredicate;
-import com.starrocks.analysis.DateLiteral;
-import com.starrocks.analysis.Expr;
-import com.starrocks.analysis.FunctionCallExpr;
-import com.starrocks.analysis.FunctionName;
-import com.starrocks.analysis.GroupingFunctionCallExpr;
-import com.starrocks.analysis.IntLiteral;
-import com.starrocks.analysis.LiteralExpr;
-import com.starrocks.analysis.MaxLiteral;
-import com.starrocks.analysis.OrderByElement;
-import com.starrocks.analysis.ParseNode;
-import com.starrocks.analysis.SlotRef;
-import com.starrocks.analysis.StringLiteral;
-import com.starrocks.analysis.Subquery;
-import com.starrocks.analysis.TableName;
 import com.starrocks.authorization.AccessDeniedException;
 import com.starrocks.authorization.ObjectType;
 import com.starrocks.authorization.PrivilegeType;
@@ -84,19 +67,20 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.service.PartitionMeasure;
 import com.starrocks.sql.ast.AddPartitionClause;
 import com.starrocks.sql.ast.AstTraverser;
-import com.starrocks.sql.ast.AstVisitor;
+import com.starrocks.sql.ast.AstVisitorExtendInterface;
 import com.starrocks.sql.ast.CTERelation;
 import com.starrocks.sql.ast.ColumnDef;
 import com.starrocks.sql.ast.DeleteStmt;
 import com.starrocks.sql.ast.DistributionDesc;
 import com.starrocks.sql.ast.ExpressionPartitionDesc;
-import com.starrocks.sql.ast.FieldReference;
 import com.starrocks.sql.ast.FileTableFunctionRelation;
 import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.JoinRelation;
 import com.starrocks.sql.ast.ListPartitionDesc;
 import com.starrocks.sql.ast.MultiItemListPartitionDesc;
 import com.starrocks.sql.ast.NormalizedTableFunctionRelation;
+import com.starrocks.sql.ast.OrderByElement;
+import com.starrocks.sql.ast.ParseNode;
 import com.starrocks.sql.ast.PartitionDesc;
 import com.starrocks.sql.ast.PartitionKeyDesc;
 import com.starrocks.sql.ast.PartitionValue;
@@ -114,7 +98,24 @@ import com.starrocks.sql.ast.TableRelation;
 import com.starrocks.sql.ast.UpdateStmt;
 import com.starrocks.sql.ast.ValuesRelation;
 import com.starrocks.sql.ast.ViewRelation;
+import com.starrocks.sql.ast.expression.AnalyticExpr;
+import com.starrocks.sql.ast.expression.CastExpr;
+import com.starrocks.sql.ast.expression.CompoundPredicate;
+import com.starrocks.sql.ast.expression.DateLiteral;
+import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.FieldReference;
+import com.starrocks.sql.ast.expression.FunctionCallExpr;
+import com.starrocks.sql.ast.expression.FunctionName;
+import com.starrocks.sql.ast.expression.GroupingFunctionCallExpr;
+import com.starrocks.sql.ast.expression.IntLiteral;
+import com.starrocks.sql.ast.expression.LiteralExpr;
+import com.starrocks.sql.ast.expression.MaxLiteral;
+import com.starrocks.sql.ast.expression.SlotRef;
+import com.starrocks.sql.ast.expression.StringLiteral;
+import com.starrocks.sql.ast.expression.Subquery;
+import com.starrocks.sql.ast.expression.TableName;
 import com.starrocks.sql.common.ErrorType;
+import com.starrocks.sql.common.PCell;
 import com.starrocks.sql.common.PListCell;
 import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
@@ -374,7 +375,7 @@ public class AnalyzerUtils {
         return copiedTable;
     }
 
-    private static class DBCollector implements AstVisitor<Void, Void> {
+    private static class DBCollector implements AstVisitorExtendInterface<Void, Void> {
         private final Map<String, Database> dbs;
         private final ConnectContext session;
 
@@ -1427,7 +1428,7 @@ public class AnalyzerUtils {
                     ImmutableMap.of("replication_num", String.valueOf(replicationNum));
 
             // table partitions for check
-            TreeMap<String, PListCell> tablePartitions = Maps.newTreeMap(String.CASE_INSENSITIVE_ORDER);
+            TreeMap<String, PCell> tablePartitions = Maps.newTreeMap(String.CASE_INSENSITIVE_ORDER);
             tablePartitions.putAll(olapTable.getListPartitionItems());
             List<String> partitionColNames = Lists.newArrayList();
             List<PartitionDesc> partitionDescs = Lists.newArrayList();
@@ -1475,8 +1476,8 @@ public class AnalyzerUtils {
     /**
      * Calculate the unique partition name for list partition.
      */
-    private static String calculateUniquePartitionName(String partitionName, PListCell cell,
-                                                       Map<String, PListCell> tablePartitions) throws AnalysisException {
+    public static String calculateUniquePartitionName(String partitionName, PCell cell,
+                                                      Map<String, PCell> tablePartitions) throws AnalysisException {
         String orignialPartitionName = partitionName;
         int i = 0;
         // If the partition name already exists and their partition values are different, change the partition name.

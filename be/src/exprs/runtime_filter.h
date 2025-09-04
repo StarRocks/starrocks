@@ -676,7 +676,7 @@ public:
             return _min = TimestampValue::MIN_TIMESTAMP_VALUE && _max == TimestampValue::MAX_TIMESTAMP_VALUE;
         } else if constexpr (IsDecimal<CppType>) {
             return _min == DecimalV2Value::get_min_decimal() && _max == DecimalV2Value::get_max_decimal();
-        } else if constexpr (Type != TYPE_JSON) {
+        } else if constexpr (Type != TYPE_JSON && Type != TYPE_VARIANT) {
             return _min == RunTimeTypeLimits<Type>::min_value() && _max == RunTimeTypeLimits<Type>::max_value();
         } else {
             return false;
@@ -1078,7 +1078,7 @@ private:
         } else if constexpr (IsDecimal<CppType>) {
             _min = DecimalV2Value::get_max_decimal();
             _max = DecimalV2Value::get_min_decimal();
-        } else if constexpr (Type != TYPE_JSON) {
+        } else if constexpr (Type != TYPE_JSON && Type != TYPE_VARIANT) {
             // for json vaue, cpp type is JsonValue*
             // but min/max value type is JsonValue
             // and JsonValue needs special serialization handling.
@@ -1105,7 +1105,7 @@ private:
         } else if constexpr (IsDecimal<CppType>) {
             _max = DecimalV2Value::get_max_decimal();
             _min = DecimalV2Value::get_min_decimal();
-        } else if constexpr (Type != TYPE_JSON) {
+        } else if constexpr (Type != TYPE_JSON && Type != TYPE_VARIANT) {
             // for json vaue, cpp type is JsonValue*
             // but min/max value type is JsonValue
             // and JsonValue needs special serialization handling.

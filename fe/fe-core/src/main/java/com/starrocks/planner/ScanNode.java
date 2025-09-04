@@ -36,15 +36,13 @@ package com.starrocks.planner;
 
 import com.google.common.base.Joiner;
 import com.google.common.base.MoreObjects;
-import com.starrocks.analysis.Expr;
-import com.starrocks.analysis.SlotDescriptor;
-import com.starrocks.analysis.TupleDescriptor;
 import com.starrocks.catalog.ColumnAccessPath;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.connector.BucketProperty;
 import com.starrocks.connector.RemoteFilesSampleStrategy;
 import com.starrocks.datacache.DataCacheOptions;
 import com.starrocks.server.WarehouseManager;
+import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.optimizer.ScanOptimizeOption;
 import com.starrocks.thrift.TColumnAccessPath;
 import com.starrocks.thrift.TScanRangeLocations;
@@ -142,6 +140,9 @@ public abstract class ScanNode extends PlanNode {
 
     public boolean hasMoreScanRanges() {
         return false;
+    }
+
+    public void setReachLimit() {
     }
 
     /**

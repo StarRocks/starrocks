@@ -919,7 +919,7 @@ class StarrocksSQLApiLib(object):
 
         record_container.append(RESULT_FLAG)
         # return code
-        record_container.append("%s" % shell_res[0])
+        record_container.append(str(shell_res[0]))
 
         if shell_cmd.endswith("_stream_load"):
             self_print(shell_res[1])
@@ -948,7 +948,7 @@ class StarrocksSQLApiLib(object):
             return
 
         result_container.append(RESULT_FLAG)
-        result_container.append("%s" % func_res)
+        result_container.append(str(func_res))
         result_container.append(RESULT_END_FLAT)
 
     @staticmethod
@@ -1914,6 +1914,29 @@ class StarrocksSQLApiLib(object):
             count += 1
         tools.assert_equal("FINISHED", status, "wait alter table finish error")
 
+    """
+        Return True or error message if refresh mv failed
+        The difference between this function with regular REFRESH command is, the result of regular REFRESH
+        would be ignored, but this result of this function can be asserted
+    """
+    def refresh_mv_manual(self, db_name, mv_name):
+        """
+        Refresh a materialized view manually.
+        Returns True if refresh is successful, otherwise returns the error message.
+        """
+        sql = f"REFRESH MATERIALIZED VIEW {db_name}.{mv_name} WITH SYNC MODE"
+        try:
+            res = self.execute_sql(sql, True)
+            if res["status"]:
+                return "True"
+            else:
+                # Try to extract error message from result or use a default message
+                error_msg = res.get("msg") or res.get("error") or str(res)
+                return error_msg
+        except Exception as e:
+            # Catch any exception raised by execute_sql and return its string representation
+            return str(e)
+            
     def wait_materialized_view_cancel(self, check_count=60):
         """
         wait materialized view job cancel and return status

@@ -16,9 +16,9 @@ package com.starrocks.sql.optimizer;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
-import com.starrocks.analysis.HintNode;
-import com.starrocks.analysis.JoinOperator;
 import com.starrocks.common.Pair;
+import com.starrocks.sql.ast.HintNode;
+import com.starrocks.sql.ast.expression.JoinOperator;
 import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
@@ -33,7 +33,7 @@ import com.starrocks.sql.optimizer.operator.stream.PhysicalStreamJoinOperator;
 import java.util.List;
 import java.util.stream.Collectors;
 
-import static com.starrocks.analysis.BinaryType.EQ_FOR_NULL;
+import static com.starrocks.sql.ast.expression.BinaryType.EQ_FOR_NULL;
 
 public class JoinHelper {
     private final JoinOperator type;

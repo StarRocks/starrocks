@@ -22,17 +22,18 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
-import com.starrocks.analysis.OrderByElement;
-import com.starrocks.analysis.ParseNode;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.MvPlanContext;
 import com.starrocks.common.Config;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.scheduler.mv.MVTimelinessMgr;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.sql.analyzer.AstToSQLBuilder;
+import com.starrocks.sql.ast.OrderByElement;
+import com.starrocks.sql.ast.ParseNode;
 import com.starrocks.sql.ast.QueryRelation;
 import com.starrocks.sql.ast.QueryStatement;
+import com.starrocks.sql.formatter.AST2SQLVisitor;
+import com.starrocks.sql.formatter.FormatOptions;
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -96,7 +97,7 @@ public class CachingMvPlanContextBuilder {
          * Create a AstKey with parseNode(sub parse node)
          */
         public AstKey(ParseNode parseNode) {
-            this.sql = new AstToSQLBuilder.AST2SQLBuilderVisitor(true, false, true).visit(parseNode);
+            this.sql = AST2SQLVisitor.withOptions(FormatOptions.allEnable().setEnableDigest(false)).visit(parseNode);
         }
 
         @Override

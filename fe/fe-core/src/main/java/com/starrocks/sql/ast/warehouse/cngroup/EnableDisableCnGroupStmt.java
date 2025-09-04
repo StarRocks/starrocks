@@ -15,6 +15,7 @@
 package com.starrocks.sql.ast.warehouse.cngroup;
 
 import com.starrocks.sql.ast.AstVisitor;
+import com.starrocks.sql.ast.AstVisitorExtendInterface;
 import com.starrocks.sql.parser.NodePosition;
 
 public class EnableDisableCnGroupStmt extends CnGroupStmtBase {
@@ -35,6 +36,6 @@ public class EnableDisableCnGroupStmt extends CnGroupStmtBase {
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitEnableDisableCNGroupStatement(this, context);
+        return ((AstVisitorExtendInterface<R, C>) visitor).visitEnableDisableCNGroupStatement(this, context);
     }
 }

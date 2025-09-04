@@ -203,6 +203,18 @@ StarRocks存算一体集群从v3.3.0开始支持Flat JSON，存算分离集群�
 
 2. 启用FE分区裁剪功能：`SET GLOBAL cbo_prune_json_subfield = true;`
 
+## 相关会话变量
+
+- `cbo_json_v2_rewrite`（默认：true）：启用 JSON v2 路径改写，将 `get_json_*` 等函数改写为直接访问 Flat JSON 子列，从而启用谓词下推和列裁剪。
+- `cbo_json_v2_dict_opt`（默认：true）：为路径改写生成的 Flat JSON 字符串子列启用低基数字典优化，可加速字符串表达式、GROUP BY 和 JOIN。
+
+示例：
+
+```SQL
+SET cbo_json_v2_rewrite = true;
+SET cbo_json_v2_dict_opt = true;
+```
+
 ## 启用Flat JSON功能（3.4版本之前）
 
 1. 修改BE配置：`enable_json_flat`，在3.4版本之前默认为`false`。修改方法参考

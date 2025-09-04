@@ -403,6 +403,10 @@ public class TabletSchedCtx implements Comparable<TabletSchedCtx> {
         this.errMsg = errMsg;
     }
 
+    public String getErrMsg() {
+        return errMsg;
+    }
+
     public long getCopySize() {
         return copySize;
     }
@@ -535,6 +539,11 @@ public class TabletSchedCtx implements Comparable<TabletSchedCtx> {
         this.balanceType = balanceType;
     }
 
+    public boolean isIntraNodeBalance() {
+        return balanceType != null &&
+                (balanceType == BalanceType.INTRA_NODE_DISK_USAGE || balanceType == BalanceType.INTRA_NODE_TABLET_DISTRIBUTION);
+    }
+
     public void setSrcPathResourceHold() {
         this.srcPathResourceHold = true;
     }
@@ -602,7 +611,8 @@ public class TabletSchedCtx implements Comparable<TabletSchedCtx> {
          */
         List<Replica> candidates = getHealthyReplicas();
         if (candidates.isEmpty()) {
-            throw new SchedException(Status.UNRECOVERABLE, "unable to find source replica");
+            throw new SchedException(Status.UNRECOVERABLE,
+                    "unable to find source replica. replicas: " + tablet.getReplicaInfos());
         }
 
         // Shuffle the candidate list first so that we won't always choose the same replica with
@@ -702,7 +712,8 @@ public class TabletSchedCtx implements Comparable<TabletSchedCtx> {
         }
 
         if (chosenReplica == null) {
-            throw new SchedException(Status.UNRECOVERABLE, "unable to choose dest replica(maybe no incomplete replica");
+            throw new SchedException(Status.UNRECOVERABLE,
+                    "unable to choose dest replica(maybe no incomplete replica). replicas: " + tablet.getReplicaInfos());
         }
 
         // check if the dest replica has available slot
@@ -1005,7 +1016,7 @@ public class TabletSchedCtx implements Comparable<TabletSchedCtx> {
      * 1. SCHEDULE_FAILED: will keep the tablet RUNNING.
      * 2. UNRECOVERABLE: will remove the tablet from runningTablets.
      */
-    public void finishCloneTask(CloneTask cloneTask, TFinishTaskRequest request)
+    public void finishCloneTask(CloneTask cloneTask, TFinishTaskRequest request, TabletSchedulerStat stat)
             throws SchedException {
         Preconditions.checkState(state == State.RUNNING, state);
         Preconditions.checkArgument(cloneTask.getTaskVersion() == CloneTask.VERSION_2);
@@ -1099,10 +1110,20 @@ public class TabletSchedCtx implements Comparable<TabletSchedCtx> {
 
         if (request.isSetCopy_size()) {
             this.copySize = request.getCopy_size();
+            if (isIntraNodeBalance()) {
+                stat.counterCloneTaskIntraNodeCopyBytes.addAndGet(copySize);
+            } else {
+                stat.counterCloneTaskInterNodeCopyBytes.addAndGet(copySize);
+            }
         }
 
         if (request.isSetCopy_time_ms()) {
             this.copyTimeMs = request.getCopy_time_ms();
+            if (isIntraNodeBalance()) {
+                stat.counterCloneTaskIntraNodeCopyDurationMs.addAndGet(copyTimeMs);
+            } else {
+                stat.counterCloneTaskInterNodeCopyDurationMs.addAndGet(copyTimeMs);
+            }
         }
     }
 

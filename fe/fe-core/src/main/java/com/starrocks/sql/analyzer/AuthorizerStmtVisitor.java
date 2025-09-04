@@ -15,11 +15,6 @@
 package com.starrocks.sql.analyzer;
 
 import com.google.common.collect.Lists;
-import com.starrocks.analysis.FunctionName;
-import com.starrocks.analysis.HintNode;
-import com.starrocks.analysis.SetVarHint;
-import com.starrocks.analysis.TableName;
-import com.starrocks.analysis.TableRef;
 import com.starrocks.authorization.AccessDeniedException;
 import com.starrocks.authorization.AuthorizationMgr;
 import com.starrocks.authorization.ColumnPrivilege;
@@ -80,7 +75,7 @@ import com.starrocks.sql.ast.AlterTableStmt;
 import com.starrocks.sql.ast.AlterViewClause;
 import com.starrocks.sql.ast.AlterViewStmt;
 import com.starrocks.sql.ast.AnalyzeStmt;
-import com.starrocks.sql.ast.AstVisitor;
+import com.starrocks.sql.ast.AstVisitorExtendInterface;
 import com.starrocks.sql.ast.BackupStmt;
 import com.starrocks.sql.ast.BaseCreateAlterUserStmt;
 import com.starrocks.sql.ast.BaseGrantRevokePrivilegeStmt;
@@ -135,6 +130,7 @@ import com.starrocks.sql.ast.ExecuteScriptStmt;
 import com.starrocks.sql.ast.ExportStmt;
 import com.starrocks.sql.ast.FunctionRef;
 import com.starrocks.sql.ast.GrantRoleStmt;
+import com.starrocks.sql.ast.HintNode;
 import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.InstallPluginStmt;
 import com.starrocks.sql.ast.KillAnalyzeStmt;
@@ -213,6 +209,10 @@ import com.starrocks.sql.ast.UpdateStmt;
 import com.starrocks.sql.ast.UseCatalogStmt;
 import com.starrocks.sql.ast.UseDbStmt;
 import com.starrocks.sql.ast.UserRef;
+import com.starrocks.sql.ast.expression.FunctionName;
+import com.starrocks.sql.ast.expression.SetVarHint;
+import com.starrocks.sql.ast.expression.TableName;
+import com.starrocks.sql.ast.expression.TableRef;
 import com.starrocks.sql.ast.group.CreateGroupProviderStmt;
 import com.starrocks.sql.ast.group.DropGroupProviderStmt;
 import com.starrocks.sql.ast.group.ShowCreateGroupProviderStmt;
@@ -250,7 +250,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.regex.Pattern;
 
-public class AuthorizerStmtVisitor implements AstVisitor<Void, ConnectContext> {
+public class AuthorizerStmtVisitor implements AstVisitorExtendInterface<Void, ConnectContext> {
     // For show tablet detail command, if user has any privilege on the corresponding table, user can run it
     // TODO(yiming): match "/dbs", not only show tablet detail cmd, need to change privilege check for other proc node
     private static final Pattern SHOW_TABLET_DETAIL_CMD_PATTERN =
@@ -1792,12 +1792,18 @@ public class AuthorizerStmtVisitor implements AstVisitor<Void, ConnectContext> {
     public Void visitRefreshTableStatement(RefreshTableStmt statement, ConnectContext context) {
         try {
             Authorizer.checkTableAction(context,
-                    statement.getTableName(), PrivilegeType.ALTER);
+                    statement.getTableName(), PrivilegeType.REFRESH);
         } catch (AccessDeniedException e) {
-            AccessDeniedException.reportAccessDenied(
-                    statement.getTableName().getCatalog(),
-                    context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
-                    PrivilegeType.ALTER.name(), ObjectType.TABLE.name(), statement.getTableName().getTbl());
+            // If user has no REFRESH privilege, check if he has ALTER privilege, for compatibility
+            try {
+                Authorizer.checkTableAction(context,
+                        statement.getTableName(), PrivilegeType.ALTER);
+            } catch (AccessDeniedException e2) {
+                AccessDeniedException.reportAccessDenied(
+                        statement.getTableName().getCatalog(),
+                        context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+                        PrivilegeType.REFRESH.name(), ObjectType.TABLE.name(), statement.getTableName().getTbl());
+            }
         }
         return null;
     }

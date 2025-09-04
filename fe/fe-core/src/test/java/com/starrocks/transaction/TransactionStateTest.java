@@ -30,6 +30,7 @@ import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.proto.TxnFinishStatePB;
+import com.starrocks.thrift.TUniqueId;
 import com.starrocks.transaction.TransactionState.LoadJobSourceType;
 import com.starrocks.transaction.TransactionState.TxnCoordinator;
 import com.starrocks.transaction.TransactionState.TxnSourceType;
@@ -238,5 +239,25 @@ public class TransactionStateTest {
             txn.setTransactionStatus(TransactionStatus.COMMITTED);
             assertFalse(txn.isTimeout(4000));
         }
+    }
+
+    @Test
+    public void testAddLoadId() {
+        TransactionState txn = new TransactionState(1000L, Lists.newArrayList(20000L, 20001L),
+                3000, "label_addLoadId", UUIDUtil.genTUniqueId(),
+                LoadJobSourceType.BACKEND_STREAMING, new TxnCoordinator(TxnSourceType.BE, "127.0.0.1"), 50000L,
+                60 * 1000L);
+
+        TUniqueId id1 = UUIDUtil.genTUniqueId();
+        TUniqueId id2 = UUIDUtil.genTUniqueId();
+
+        txn.addLoadId(id1);
+        txn.addLoadId(id2);
+
+        List<TUniqueId> ids = txn.getLoadIds();
+        Assertions.assertNotNull(ids);
+        assertEquals(2, ids.size());
+        assertEquals(id1, ids.get(0));
+        assertEquals(id2, ids.get(1));
     }
 }

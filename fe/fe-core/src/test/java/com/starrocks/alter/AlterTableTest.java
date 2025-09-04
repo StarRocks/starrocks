@@ -473,4 +473,46 @@ public class AlterTableTest {
             Assertions.assertTrue(e.getMessage().contains("table has location property and cannot be colocated"));
         }
     }
+
+    @Test
+    public void testAlterTableEnableDynamicTablet() throws Exception {
+        starRocksAssert.useDatabase("test").withTable("CREATE TABLE test_enable_dynamic_tablet (\n" +
+                    "event_day DATE,\n" +
+                    "site_id INT DEFAULT '10',\n" +
+                    "city_code VARCHAR(100),\n" +
+                    "user_name VARCHAR(32) DEFAULT '',\n" +
+                    "pv BIGINT DEFAULT '0'\n" +
+                    ")\n" +
+                    "DUPLICATE KEY(event_day, site_id, city_code, user_name)\n" +
+                    "PARTITION BY RANGE(event_day)(\n" +
+                    "PARTITION p20200321 VALUES LESS THAN (\"2020-03-22\"),\n" +
+                    "PARTITION p20200322 VALUES LESS THAN (\"2020-03-23\"),\n" +
+                    "PARTITION p20200323 VALUES LESS THAN (\"2020-03-24\"),\n" +
+                    "PARTITION p20200324 VALUES LESS THAN MAXVALUE\n" +
+                    ")\n" +
+                    "DISTRIBUTED BY HASH(event_day, site_id)\n" +
+                    "PROPERTIES(\n" +
+                    "\t\"replication_num\" = \"1\",\n" +
+                    "    \"storage_medium\" = \"SSD\",\n" +
+                    "    \"enable_dynamic_tablet\" = \"true\"\n" +
+                    ");");
+
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+        OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(),
+                "test_enable_dynamic_tablet");
+        Assertions.assertTrue(table.getEnableDynamicTablet());
+
+        ConnectContext ctx = starRocksAssert.getCtx();
+        String sql = "ALTER TABLE test_enable_dynamic_tablet SET(\"enable_dynamic_tablet\" = \"false\");";
+        AlterTableStmt alterTableStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+        GlobalStateMgr.getCurrentState().getLocalMetastore().alterTable(ctx, alterTableStmt);
+
+        Assertions.assertFalse(table.getEnableDynamicTablet());
+
+        sql = "ALTER TABLE test_enable_dynamic_tablet SET(\"enable_dynamic_tablet\" = \"true\");";
+        alterTableStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+        GlobalStateMgr.getCurrentState().getLocalMetastore().alterTable(ctx, alterTableStmt);
+
+        Assertions.assertTrue(table.getEnableDynamicTablet());
+    }
 }

@@ -188,6 +188,7 @@ private:
     bool _is_lake_table = false;
     bool _write_txn_log = false;
     bool _enable_data_file_bundling = false;
+    bool _is_multi_statements_txn = false;
 
     TKeysType::type _keys_type;
 

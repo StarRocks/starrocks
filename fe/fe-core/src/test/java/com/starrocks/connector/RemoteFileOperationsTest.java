@@ -64,7 +64,7 @@ public class RemoteFileOperationsTest {
         ExecutorService executorToRefresh = Executors.newFixedThreadPool(5);
         ExecutorService executorToLoad = Executors.newFixedThreadPool(5);
 
-        CachingRemoteFileIO cachingFileIO = new CachingRemoteFileIO(hiveRemoteFileIO, executorToRefresh, 10, 10, 10);
+        CachingRemoteFileIO cachingFileIO = new CachingRemoteFileIO(hiveRemoteFileIO, executorToRefresh, 10, 10, 0.1);
         RemoteFileOperations ops = new RemoteFileOperations(cachingFileIO, executorToLoad, executorToLoad,
                 false, true, new Configuration());
 
@@ -104,7 +104,7 @@ public class RemoteFileOperationsTest {
         Assertions.assertEquals(20, blockDesc.getLength());
         Assertions.assertEquals(2, blockDesc.getReplicaHostIds().length);
 
-        CachingRemoteFileIO queryLevelCache = CachingRemoteFileIO.createQueryLevelInstance(cachingFileIO, 5);
+        CachingRemoteFileIO queryLevelCache = CachingRemoteFileIO.createQueryLevelInstance(cachingFileIO, 0.1);
         Assertions.assertEquals(1, queryLevelCache.getRemoteFiles(pathKey).size());
 
         Map<RemotePathKey, List<RemoteFileDesc>> presentRemoteFileInfos =
@@ -125,7 +125,7 @@ public class RemoteFileOperationsTest {
         ExecutorService executorToRefresh = Executors.newFixedThreadPool(5);
         ExecutorService executorToLoad = Executors.newFixedThreadPool(5);
 
-        CachingRemoteFileIO cachingFileIO = new CachingRemoteFileIO(hiveRemoteFileIO, executorToRefresh, 10, 10, 10);
+        CachingRemoteFileIO cachingFileIO = new CachingRemoteFileIO(hiveRemoteFileIO, executorToRefresh, 10, 10, 0.1);
         RemoteFileOperations ops = new RemoteFileOperations(cachingFileIO, executorToLoad, executorToLoad,
                 false, true, new Configuration());
 
@@ -193,7 +193,7 @@ public class RemoteFileOperationsTest {
         FeConstants.runningUnitTest = true;
         ExecutorService executorToRefresh = Executors.newSingleThreadExecutor();
         ExecutorService executorToLoad = Executors.newSingleThreadExecutor();
-        CachingRemoteFileIO cachingFileIO = new CachingRemoteFileIO(hiveRemoteFileIO, executorToRefresh, 10, 10, 10);
+        CachingRemoteFileIO cachingFileIO = new CachingRemoteFileIO(hiveRemoteFileIO, executorToRefresh, 10, 10, 0.1);
         RemoteFileOperations ops = new RemoteFileOperations(cachingFileIO, executorToLoad, executorToLoad,
                 false, true, new Configuration());
         new MockUp<HiveWriteUtils>() {
@@ -222,7 +222,7 @@ public class RemoteFileOperationsTest {
         FeConstants.runningUnitTest = true;
         ExecutorService executorToRefresh = Executors.newSingleThreadExecutor();
         ExecutorService executorToLoad = Executors.newSingleThreadExecutor();
-        CachingRemoteFileIO cachingFileIO = new CachingRemoteFileIO(hiveRemoteFileIO, executorToRefresh, 10, 10, 10);
+        CachingRemoteFileIO cachingFileIO = new CachingRemoteFileIO(hiveRemoteFileIO, executorToRefresh, 10, 10, 0.1);
         RemoteFileOperations ops = new RemoteFileOperations(cachingFileIO, executorToLoad, executorToLoad,
                 false, true, new Configuration());
 
@@ -261,7 +261,7 @@ public class RemoteFileOperationsTest {
         FeConstants.runningUnitTest = true;
         ExecutorService executorToRefresh = Executors.newSingleThreadExecutor();
         ExecutorService executorToLoad = Executors.newSingleThreadExecutor();
-        CachingRemoteFileIO cachingFileIO = new CachingRemoteFileIO(hiveRemoteFileIO, executorToRefresh, 10, 10, 10);
+        CachingRemoteFileIO cachingFileIO = new CachingRemoteFileIO(hiveRemoteFileIO, executorToRefresh, 10, 10, 0.1);
         RemoteFileOperations ops = new RemoteFileOperations(cachingFileIO, executorToLoad, executorToLoad,
                 false, true, new Configuration());
         Path targetPath = new Path("hdfs://hadoop01:9000/user/hive/warehouse/test.db/t1");
@@ -359,7 +359,7 @@ public class RemoteFileOperationsTest {
         ExecutorService executorToRefresh = Executors.newFixedThreadPool(5);
         ExecutorService executorToLoad = Executors.newFixedThreadPool(5);
 
-        CachingRemoteFileIO cachingFileIO = new CachingRemoteFileIO(hiveRemoteFileIO, executorToRefresh, 10, 10, 10);
+        CachingRemoteFileIO cachingFileIO = new CachingRemoteFileIO(hiveRemoteFileIO, executorToRefresh, 10, 10, 0.1);
         RemoteFileOperations ops = new RemoteFileOperations(cachingFileIO, executorToLoad, executorToLoad,
                 false, true, new Configuration());
 

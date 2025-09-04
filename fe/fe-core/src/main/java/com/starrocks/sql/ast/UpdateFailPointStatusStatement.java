@@ -128,7 +128,7 @@ public class UpdateFailPointStatusStatement extends StatementBase {
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitUpdateFailPointStatusStatement(this, context);
+        return ((AstVisitorExtendInterface<R, C>) visitor).visitUpdateFailPointStatusStatement(this, context);
     }
 
     @Override

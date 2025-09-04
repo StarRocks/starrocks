@@ -14,18 +14,13 @@
 
 package com.starrocks.connector.iceberg;
 
-import com.google.common.annotations.VisibleForTesting;
-import com.starrocks.analysis.ColumnPosition;
-import com.starrocks.analysis.Expr;
-import com.starrocks.analysis.SlotRef;
-import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Column;
-import com.starrocks.catalog.Type;
 import com.starrocks.common.DdlException;
-import com.starrocks.common.util.TimeUtils;
 import com.starrocks.connector.ConnectorAlterTableExecutor;
 import com.starrocks.connector.HdfsEnvironment;
 import com.starrocks.connector.exception.StarRocksConnectorException;
+import com.starrocks.connector.iceberg.procedure.IcebergTableProcedure;
+import com.starrocks.connector.iceberg.procedure.IcebergTableProcedureContext;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.AddColumnClause;
 import com.starrocks.sql.ast.AddColumnsClause;
@@ -34,6 +29,7 @@ import com.starrocks.sql.ast.AlterTableCommentClause;
 import com.starrocks.sql.ast.AlterTableOperationClause;
 import com.starrocks.sql.ast.AlterTableStmt;
 import com.starrocks.sql.ast.BranchOptions;
+import com.starrocks.sql.ast.ColumnPosition;
 import com.starrocks.sql.ast.ColumnRenameClause;
 import com.starrocks.sql.ast.CreateOrReplaceBranchClause;
 import com.starrocks.sql.ast.CreateOrReplaceTagClause;
@@ -46,18 +42,8 @@ import com.starrocks.sql.ast.ModifyTablePropertiesClause;
 import com.starrocks.sql.ast.TableRenameClause;
 import com.starrocks.sql.ast.TagOptions;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
-import org.apache.hadoop.fs.FileStatus;
-import org.apache.hadoop.fs.FileSystem;
-import org.apache.hadoop.fs.LocatedFileStatus;
-import org.apache.hadoop.fs.Path;
-import org.apache.hadoop.fs.RemoteIterator;
-import org.apache.iceberg.ContentFile;
-import org.apache.iceberg.ExpireSnapshots;
 import org.apache.iceberg.FileFormat;
 import org.apache.iceberg.ManageSnapshots;
-import org.apache.iceberg.ManifestFile;
-import org.apache.iceberg.ManifestFiles;
-import org.apache.iceberg.ManifestReader;
 import org.apache.iceberg.Snapshot;
 import org.apache.iceberg.SnapshotRef;
 import org.apache.iceberg.Table;
@@ -66,36 +52,22 @@ import org.apache.iceberg.Transaction;
 import org.apache.iceberg.UpdateProperties;
 import org.apache.iceberg.UpdateSchema;
 import org.apache.iceberg.relocated.com.google.common.base.Preconditions;
-import org.apache.velocity.VelocityContext;
-import org.apache.velocity.app.VelocityEngine;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.io.IOException;
-import java.io.StringWriter;
-import java.net.URI;
-import java.time.Duration;
-import java.time.LocalDateTime;
-import java.time.ZoneOffset;
-import java.util.ArrayList;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
-import java.util.Set;
 import java.util.stream.Collectors;
 
-import static com.starrocks.analysis.OutFileClause.PARQUET_COMPRESSION_TYPE_MAP;
 import static com.starrocks.connector.iceberg.IcebergApiConverter.toIcebergColumnType;
 import static com.starrocks.connector.iceberg.IcebergMetadata.COMMENT;
 import static com.starrocks.connector.iceberg.IcebergMetadata.COMPRESSION_CODEC;
 import static com.starrocks.connector.iceberg.IcebergMetadata.FILE_FORMAT;
 import static com.starrocks.connector.iceberg.IcebergMetadata.LOCATION_PROPERTY;
-import static com.starrocks.connector.iceberg.IcebergUtil.fileName;
+import static com.starrocks.sql.ast.OutFileClause.PARQUET_COMPRESSION_TYPE_MAP;
 import static com.starrocks.sql.common.UnsupportedException.unsupportedException;
-import static org.apache.iceberg.ReachableFileUtil.metadataFileLocations;
-import static org.apache.iceberg.ReachableFileUtil.statisticsFilesLocations;
 
 public class IcebergAlterTableExecutor extends ConnectorAlterTableExecutor {
     private static final Logger LOGGER = LoggerFactory.getLogger(IcebergAlterTableExecutor.class);
@@ -104,21 +76,6 @@ public class IcebergAlterTableExecutor extends ConnectorAlterTableExecutor {
     private Transaction transaction;
     private HdfsEnvironment hdfsEnvironment;
     private ConnectContext context;
-
-    private static final int DELETE_BATCH_SIZE = 1000;
-
-    // TODO:Support using session to set default retention_threshold.
-    private static final Duration DEFAULT_RETENTION_THRESHOLD = Duration.ofDays(7);
-
-    public IcebergAlterTableExecutor(AlterTableStmt stmt,
-            Table table,
-            IcebergCatalog icebergCatalog,
-            HdfsEnvironment hdfsEnvironment) {
-        super(stmt);
-        this.table = table;
-        this.icebergCatalog = icebergCatalog;
-        this.hdfsEnvironment = hdfsEnvironment;
-    }
 
     public IcebergAlterTableExecutor(AlterTableStmt stmt,
             Table table,
@@ -467,263 +424,17 @@ public class IcebergAlterTableExecutor extends ConnectorAlterTableExecutor {
 
     @Override
     public Void visitAlterTableOperationClause(AlterTableOperationClause clause, ConnectContext context) {
-        IcebergTableOperation op = IcebergTableOperation.fromString(clause.getTableOperationName());
-        if (op == IcebergTableOperation.UNKNOWN) {
-            throw new StarRocksConnectorException("Unknown iceberg table operation : %s", clause.getTableOperationName());
+        IcebergTableProcedure tableProcedure = clause.getTableProcedure();
+        if (tableProcedure == null) {
+            throw new StarRocksConnectorException("Table operation clause must have a table procedure");
         }
-        List<ConstantOperator> args = clause.getArgs();
-
-        switch (op) {
-            case FAST_FORWARD:
-                fastForward(args);
-                break;
-            case CHERRYPICK_SNAPSHOT:
-                cherryPickSnapshot(args);
-                break;
-            case EXPIRE_SNAPSHOTS:
-                expireSnapshots(args);
-                break;
-            case REMOVE_ORPHAN_FILES:
-                removeOrphanFiles(args);
-                break;
-            case ROLLBACK_TO_SNAPSHOT:
-                rollbackToSnapshot(args);
-                break;
-            case REWRITE_DATA_FILES:
-                rewriteDataFiles(clause, this.context);
-                break;
-            default:
-                throw new StarRocksConnectorException("Unsupported table operation %s", op);
-        }
+        Map<String, ConstantOperator> args = clause.getAnalyzedArgs();
+        IcebergTableProcedureContext tableProcedureContext =
+                new IcebergTableProcedureContext(icebergCatalog, table, context != null ? context : ConnectContext.get(),
+                        transaction, hdfsEnvironment, stmt, clause);
+        actions.add(() -> tableProcedure.execute(tableProcedureContext, args));
 
         return null;
     }
 
-    private void fastForward(List<ConstantOperator> args) {
-        if (args.size() != 2) {
-            throw new StarRocksConnectorException("invalid args. fast forward must contain `from branch` and `to branch`");
-        }
-
-        String from = args.get(0)
-                .castTo(Type.VARCHAR)
-                .map(ConstantOperator::getChar)
-                .orElseThrow(() -> new StarRocksConnectorException("invalid arg %s", args.get(0)));
-
-        String to = args.get(1)
-                .castTo(Type.VARCHAR)
-                .map(ConstantOperator::getChar)
-                .orElseThrow(() -> new StarRocksConnectorException("invalid arg %s", args.get(1)));
-
-        actions.add(() -> {
-            transaction.manageSnapshots().fastForwardBranch(from, to).commit();
-        });
-    }
-
-    private void cherryPickSnapshot(List<ConstantOperator> args) {
-        if (args.size() != 1) {
-            throw new StarRocksConnectorException("invalid args. cherrypick snapshot must contain `snapshot id`");
-        }
-
-        long snapshotId = args.get(0)
-                .castTo(Type.BIGINT)
-                .map(ConstantOperator::getBigint)
-                .orElseThrow(() -> new StarRocksConnectorException("invalid arg %s", args.get(0)));
-
-        actions.add(() -> {
-            transaction.manageSnapshots().cherrypick(snapshotId).commit();
-        });
-    }
-
-    private void rollbackToSnapshot(List<ConstantOperator> args) {
-        if (args.size() != 1) {
-            throw new StarRocksConnectorException("invalid args. rollback snapshot must contain `snapshot id`");
-        }
-        
-        long snapshotId = args.get(0)
-                .castTo(Type.BIGINT)
-                .map(ConstantOperator::getBigint)
-                .orElseThrow(() -> new StarRocksConnectorException("invalid arg %s", args.get(0)));
-
-        actions.add(() -> {
-            transaction.manageSnapshots().rollbackTo(snapshotId).commit();
-        });
-    }
-
-    public void rewriteDataFiles(AlterTableOperationClause clause, ConnectContext context) {
-        boolean rewriteAll = clause.isRewriteAll();
-        long minFileSizeBytes = clause.getMinFileSizeBytes();
-        long batchSize = clause.getBatchSize();
-        Expr partitionFilter = clause.getWhere();
-        String catalogName = stmt.getCatalogName();
-        String dbName = stmt.getDbName();
-        String tableName = stmt.getTableName();
-
-        VelocityContext velCtx = new VelocityContext();
-        velCtx.put("catalogName", catalogName);
-        velCtx.put("dbName", dbName);
-        velCtx.put("tableName", tableName);
-
-        String partitionFilterSql = null;
-        if (partitionFilter != null) {
-            List<SlotRef> slots = new ArrayList<>();
-            partitionFilter.collect(SlotRef.class, slots);
-            for (SlotRef slot : slots) {
-                slot.setTblName(new TableName(dbName, tableName));
-            }
-            partitionFilterSql = partitionFilter.toSql();
-        }
-        velCtx.put("partitionFilterSql", partitionFilterSql);
-        VelocityEngine defaultVelocityEngine = new VelocityEngine();
-        defaultVelocityEngine.setProperty(VelocityEngine.RUNTIME_LOG_REFERENCE_LOG_INVALID, false);
-        StringWriter writer = new StringWriter();
-        defaultVelocityEngine.evaluate(velCtx, writer, "InsertSelectTemplate", 
-                "INSERT INTO $catalogName.$dbName.$tableName" +
-                " SELECT * FROM $catalogName.$dbName.$tableName" +
-                " #if ($partitionFilterSql)" +
-                " WHERE $partitionFilterSql" +
-                " #end"
-        );
-        String executeStmt = writer.toString();
-        IcebergRewriteDataJob job = new IcebergRewriteDataJob(executeStmt, rewriteAll, 
-                minFileSizeBytes, batchSize, context, stmt);
-        try {
-            job.prepare();
-            job.execute();
-        } catch (Exception e) {
-            LOGGER.error("failed to rewrite data files for iceberg table {}.{}",
-                    stmt.getDbName(), stmt.getTableName(), e);
-            throw new StarRocksConnectorException("execute rewrite data files for iceberg table %s.%s failed: %s",
-                    stmt.getDbName(), stmt.getTableName(), e.getMessage(), e);
-        }
-    }
-
-    private void expireSnapshots(List<ConstantOperator> args) {
-        if (args.size() > 1) {
-            throw new StarRocksConnectorException("invalid args. only support `older_than` in the expire snapshot operation");
-        }
-
-        long olderThanMillis;
-        if (args.isEmpty()) {
-            olderThanMillis = -1L;
-        } else {
-            LocalDateTime time = Optional.ofNullable(args.get(0))
-                    .flatMap(arg -> arg.castTo(Type.DATETIME).map(ConstantOperator::getDatetime))
-                    .orElseThrow(() -> new StarRocksConnectorException("invalid arg %s", args.get(0)));
-            olderThanMillis = Duration.ofSeconds(time.atZone(TimeUtils.getTimeZone().toZoneId()).toEpochSecond()).toMillis();
-        }
-
-        actions.add(() -> {
-            ExpireSnapshots expireSnapshots = transaction.expireSnapshots();
-            if (olderThanMillis != -1) {
-                expireSnapshots = expireSnapshots.expireOlderThan(olderThanMillis);
-            }
-            expireSnapshots.commit();
-        });
-    }
-
-    private void removeOrphanFiles(List<ConstantOperator> args) {
-        if (args.size() > 1) {
-            throw new StarRocksConnectorException("invalid args. only support " +
-                    "`older_than` in the remove orphan files operation");
-        }
-
-        long olderThanMillis;
-        if (args.isEmpty()) {
-            LocalDateTime time = LocalDateTime.now(TimeUtils.getTimeZone().toZoneId());
-            olderThanMillis = time.minus(DEFAULT_RETENTION_THRESHOLD).toInstant(ZoneOffset.UTC).toEpochMilli();
-        } else {
-            LocalDateTime time = Optional.ofNullable(args.get(0))
-                    .flatMap(arg -> arg.castTo(Type.DATETIME)
-                    .map(ConstantOperator::getDatetime))
-                    .orElseThrow(() -> new StarRocksConnectorException("invalid arg %s", args.get(0)));
-            olderThanMillis = Duration.ofSeconds(time.atZone(TimeUtils.getTimeZone().toZoneId()).toEpochSecond()).toMillis();
-        }
-
-        if (table.currentSnapshot() == null) {
-            return;
-        }
-
-        Set<String> processedManifestFilePaths = new HashSet<>();
-        Set<String> validFileNames = new HashSet<>();
-
-        for (Snapshot snapshot : table.snapshots()) {
-            if (snapshot.manifestListLocation() != null) {
-                validFileNames.add(fileName(snapshot.manifestListLocation()));
-            }
-
-            for (ManifestFile manifest : snapshot.allManifests(table.io())) {
-                if (!processedManifestFilePaths.add(manifest.path())) {
-                    continue;
-                }
-
-                validFileNames.add(fileName(manifest.path()));
-                try (ManifestReader<? extends ContentFile<?>> manifestReader = readerForManifest(table, manifest)) {
-                    for (ContentFile<?> contentFile : manifestReader) {
-                        validFileNames.add(fileName(contentFile.location()));
-                    }
-                } catch (IOException e) {
-                    throw new StarRocksConnectorException("Unable to list manifest file content from " + manifest.path(), e);
-                }
-            }
-        }
-
-        metadataFileLocations(table, false).stream()
-                .map(IcebergUtil::fileName)
-                .forEach(validFileNames::add);
-
-        statisticsFilesLocations(table).stream()
-                .map(IcebergUtil::fileName)
-                .forEach(validFileNames::add);
-
-        validFileNames.add("version-hint.text");
-
-        actions.add(() -> scanAndDeleteInvalidFiles(table.location(), olderThanMillis, validFileNames));
-    }
-
-    private static ManifestReader<? extends ContentFile<?>> readerForManifest(Table table, ManifestFile manifest) {
-        return switch (manifest.content()) {
-            case DATA -> ManifestFiles.read(manifest, table.io());
-            case DELETES -> ManifestFiles.readDeleteManifest(manifest, table.io(), table.specs());
-        };
-    }
-
-    private void scanAndDeleteInvalidFiles(String tableLocation, long expiration, Set<String> validFiles) {
-        try {
-            URI uri = new Path(tableLocation).toUri();
-            FileSystem fileSystem = FileSystem.get(uri, hdfsEnvironment.getConfiguration());
-            RemoteIterator<LocatedFileStatus> allFiles = fileSystem.listFiles(new Path(tableLocation), true);
-            List<Path> filesToDelete = new ArrayList<>();
-            while (allFiles.hasNext()) {
-                LocatedFileStatus entry = allFiles.next();
-                FileStatus status = fileSystem.getFileStatus(entry.getPath());
-                if (status.getModificationTime() < expiration && !validFiles.contains(entry.getPath().getName())) {
-                    filesToDelete.add(entry.getPath());
-                    if (filesToDelete.size() >= DELETE_BATCH_SIZE) {
-                        deleteFiles(fileSystem, filesToDelete);
-                        filesToDelete.clear();
-                    }
-                }
-            }
-            if (!filesToDelete.isEmpty()) {
-                deleteFiles(fileSystem, filesToDelete);
-                filesToDelete.clear();
-            }
-        } catch (IOException e) {
-            throw new StarRocksConnectorException("Failed accessing data: ", e);
-        }
-    }
-
-    // TODO:implement deleteFiles in FsUtils
-    @VisibleForTesting
-    public static void deleteFiles(FileSystem fs, List<Path> files) {
-        files.forEach(file -> {
-            try {
-                fs.delete(file, false);
-                LOGGER.debug("Deleted file {}", file);
-            } catch (IOException e) {
-                LOGGER.error("Failed to delete file {}", file, e);
-                throw new StarRocksConnectorException("Failed to delete file " + file, e);
-            }
-        });
-    }
 }

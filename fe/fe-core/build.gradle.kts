@@ -18,7 +18,6 @@ import org.gradle.api.tasks.testing.logging.TestLogEvent
 
 plugins {
     java
-    antlr
     id("com.baidu.jprotobuf") version "1.2.1"
 }
 
@@ -29,7 +28,6 @@ java {
         main {
             java {
                 srcDir("src/main/java")
-                srcDir("build/generated-sources/antlr4")
                 srcDir("build/generated-sources/proto")
                 srcDir("build/generated-sources/thrift")
                 srcDir("build/generated-sources/genscript")
@@ -46,19 +44,15 @@ java {
     }
 }
 
-
-configurations.configureEach {
-    resolutionStrategy.force("org.antlr:antlr4-runtime:${project.ext["antlr.version"]}")
-}
-
 dependencies {
-    antlr("org.antlr:antlr4:${project.ext["antlr.version"]}")
-
     // Internal project dependencies
-    implementation(project(":fe-common"))
-    implementation(project(":plugin-common"))
-    implementation(project(":hive-udf"))
-    implementation(project(":spark-dpp"))
+    implementation(project(":fe-grammar"))
+    implementation(project(":fe-parser"))
+    implementation(project(":fe-spi"))
+    implementation(project(":fe-testing"))
+    implementation(project(":fe-utils"))
+    implementation(project(":plugin:hive-udf"))
+    implementation(project(":plugin:spark-dpp"))
 
     // dependency sync start
     implementation("com.aliyun.datalake:metastore-client-hive3") {
@@ -154,7 +148,6 @@ dependencies {
     implementation("javax.annotation:javax.annotation-api")
     implementation("javax.validation:validation-api")
     implementation("net.openhft:zero-allocation-hashing:0.16")
-    implementation("org.antlr:antlr4-runtime")
     implementation("org.apache.arrow:arrow-jdbc")
     implementation("org.apache.arrow:arrow-memory-netty")
     implementation("org.apache.arrow:arrow-vector")
@@ -290,17 +283,6 @@ dependencies {
     implementation("net.openhft:zero-allocation-hashing:0.16")
 }
 
-// Configure ANTLR plugin
-tasks.generateGrammarSource {
-    maxHeapSize = "512m"
-    // Add the -lib argument to tell ANTLR where to find imported grammars
-    arguments = arguments + listOf(
-        "-visitor",
-        "-package", "com.starrocks.sql.parser",
-    )
-    outputDirectory = layout.buildDirectory.get().dir("generated-sources/antlr4/com/starrocks/sql/parser").asFile
-}
-
 // Custom task for Protocol Buffer generation
 tasks.register<Task>("generateProtoSources") {
     description = "Generates Java source files from Protocol Buffer definitions"
@@ -426,7 +408,7 @@ tasks.register<Task>("generateByScripts") {
 
 // Add source generation tasks to the build process
 tasks.compileJava {
-    dependsOn("generateGrammarSource", "generateThriftSources", "generateProtoSources", "generateByScripts")
+    dependsOn("generateThriftSources", "generateProtoSources", "generateByScripts")
 }
 
 tasks.named<PrecompileTask>("jprotobuf_precompile") {

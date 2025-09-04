@@ -15,6 +15,7 @@
 package com.starrocks.sql.ast.pipe;
 
 import com.starrocks.sql.ast.AstVisitor;
+import com.starrocks.sql.ast.AstVisitorExtendInterface;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.parser.NodePosition;
 
@@ -64,7 +65,7 @@ public class PipeName extends StatementBase {
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitPipeName(this, context);
+        return ((AstVisitorExtendInterface<R, C>) visitor).visitPipeName(this, context);
     }
 
     @Override

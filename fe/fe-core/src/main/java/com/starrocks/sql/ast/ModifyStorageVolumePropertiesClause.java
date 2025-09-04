@@ -39,6 +39,6 @@ public class ModifyStorageVolumePropertiesClause extends AlterStorageVolumeClaus
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitModifyStorageVolumePropertiesClause(this, context);
+        return ((AstVisitorExtendInterface<R, C>) visitor).visitModifyStorageVolumePropertiesClause(this, context);
     }
 }

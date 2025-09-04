@@ -14,6 +14,7 @@
 
 package com.starrocks.catalog.system.sys;
 
+import com.starrocks.authentication.UserIdentityUtils;
 import com.starrocks.authorization.AccessDeniedException;
 import com.starrocks.catalog.BaseTableInfo;
 import com.starrocks.catalog.Database;
@@ -71,7 +72,7 @@ public class SysObjectDependencies {
 
         UserIdentity currentUser;
         if (auth.isSetCurrent_user_ident()) {
-            currentUser = UserIdentity.fromThrift(auth.getCurrent_user_ident());
+            currentUser = UserIdentityUtils.fromThrift(auth.getCurrent_user_ident());
         } else {
             currentUser = UserIdentity.createAnalyzedUserIdentWithIp(auth.getUser(), auth.getUser_ip());
         }

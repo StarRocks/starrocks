@@ -363,22 +363,51 @@ public class TaskManager implements MemoryTrackable {
         if (statement == null || !statement.isExplain()) {
             return null;
         }
-        ExecPlan execPlan = getMVRefreshExecPlan(task, option, statement);
-        return StmtExecutor.buildExplainString(execPlan, statement,
+        TaskRun taskRun = buildTaskRun(task, option);
+        ExecPlan execPlan = getMVRefreshExecPlan(taskRun, task, option, statement);
+        String explainString = StmtExecutor.buildExplainString(execPlan, statement,
                 ConnectContext.get(), ResourceGroupClassifier.QueryType.MV, statement.getExplainLevel());
+        // add extra info
+        String extraInfo = getExtraExplainInfo(taskRun, statement);
+        if (!Strings.isNullOrEmpty(extraInfo)) {
+            explainString += "\n" + extraInfo;
+        }
+        return explainString;
+    }
+
+    public TaskRun buildTaskRun(Task task, ExecuteOption option) {
+        return TaskRunBuilder.newBuilder(task)
+                .properties(option.getTaskRunProperties())
+                .setExecuteOption(option)
+                .setConnectContext(ConnectContext.get()).build();
+    }
+
+    private String getExtraExplainInfo(TaskRun taskRun,
+                                       StatementBase statement) {
+        TaskRunProcessor taskRunProcessor = taskRun.getProcessor();
+        if (taskRunProcessor == null) {
+            return "";
+        }
+        try {
+            if (taskRunProcessor instanceof MVTaskRunProcessor) {
+                MVTaskRunProcessor mvRefreshProcessor = (MVTaskRunProcessor) taskRun.getProcessor();
+                return mvRefreshProcessor.getExtraExplainInfo(statement);
+            } else {
+                return "";
+            }
+        } catch (Exception e) {
+            LOG.error("Failed to get getExtraExplainInfo:", e);
+            return "";
+        }
     }
 
     /**
      * Get the MV refresh execution plan for the given task.
      */
-    public ExecPlan getMVRefreshExecPlan(Task task, ExecuteOption option, StatementBase statement) {
+    public ExecPlan getMVRefreshExecPlan(TaskRun taskRun, Task task, ExecuteOption option, StatementBase statement) {
         if (statement == null || !statement.isExplain()) {
             return null;
         }
-        TaskRun taskRun = TaskRunBuilder.newBuilder(task)
-                .properties(option.getTaskRunProperties())
-                .setExecuteOption(option)
-                .setConnectContext(ConnectContext.get()).build();
         // init task run
         String queryId = UUIDUtil.genUUID().toString();
         TaskRunStatus status = taskRun.initStatus(queryId, System.currentTimeMillis());

@@ -128,7 +128,7 @@ public final class ColumnRefOperator extends ScalarOperator {
 
     @Override
     public <R, C> R accept(ScalarOperatorVisitor<R, C> visitor, C context) {
-        return visitor.visitVariableReference(this, context);
+        return  visitor.visitVariableReference(this, context);
     }
 
     public static boolean equals(List<ColumnRefOperator> lhs, List<ColumnRefOperator> rhs) {
@@ -177,9 +177,16 @@ public final class ColumnRefOperator extends ScalarOperator {
         }
 
         ColumnRefOperator rightColumn = (ColumnRefOperator) obj;
-        return SRStringUtils.areColumnNamesEqual(this.getName(), rightColumn.getName())
-                && this.getType().equals(rightColumn.getType())
-                && this.isNullable() == rightColumn.isNullable();
+        if (!SRStringUtils.areColumnNamesEqual(this.getName(), rightColumn.getName())
+                || this.isNullable() != rightColumn.isNullable()) {
+            return false;
+        }
+        if (type.isStringType()) {
+            // for string type, we only care about the type is string or not, since the length can be not strictly equal
+            return rightColumn.getType().isStringType();
+        } else {
+            return this.type.equals(rightColumn.type);
+        }
     }
 
     /**

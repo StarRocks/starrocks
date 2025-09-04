@@ -58,6 +58,7 @@ import com.starrocks.sql.analyzer.MaterializedViewAnalyzer;
 import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.PartitionNames;
 import com.starrocks.sql.common.DmlException;
+import com.starrocks.sql.common.PCellSortedSet;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;
 import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.sql.plan.ExecPlan;
@@ -95,6 +96,7 @@ public abstract class BaseMVRefreshProcessor {
     // Collect all bases tables of the mv to be updated meta after mv refresh success.
     // format :     table id -> <base table info, snapshot table>
     protected final MVPCTRefreshPartitioner mvRefreshPartitioner;
+    protected final MVRefreshParams mvRefreshParams;
 
     // Collect all base table snapshot infos for the mv which the snapshot infos are kept
     // and used in the final update meta.
@@ -127,8 +129,9 @@ public abstract class BaseMVRefreshProcessor {
         this.mvContext = mvContext;
         this.mvEntity = mvEntity;
         this.logger = MVTraceUtils.getLogger(mv, clazz);
+        this.mvRefreshParams = new MVRefreshParams(mv, mvContext.getProperties());
         // prepare mv refresh partitioner
-        this.mvRefreshPartitioner = buildMvRefreshPartitioner(mv, mvContext);
+        this.mvRefreshPartitioner = buildMvRefreshPartitioner(mv, mvContext, mvRefreshParams);
     }
 
     /**
@@ -176,14 +179,15 @@ public abstract class BaseMVRefreshProcessor {
      * Create a mv refresh partitioner by the mv's partition info.
      */
     private MVPCTRefreshPartitioner buildMvRefreshPartitioner(MaterializedView mv,
-                                                              TaskRunContext context) {
+                                                              TaskRunContext context,
+                                                              MVRefreshParams mvRefreshParams) {
         PartitionInfo partitionInfo = mv.getPartitionInfo();
         if (partitionInfo.isUnPartitioned()) {
-            return new MVPCTRefreshNonPartitioner(mvContext, context, db, mv);
+            return new MVPCTRefreshNonPartitioner(mvContext, context, db, mv, mvRefreshParams);
         } else if (partitionInfo.isRangePartition()) {
-            return new MVPCTRefreshRangePartitioner(mvContext, context, db, mv);
+            return new MVPCTRefreshRangePartitioner(mvContext, context, db, mv, mvRefreshParams);
         } else if (partitionInfo.isListPartition()) {
-            return new MVPCTRefreshListPartitioner(mvContext, context, db, mv);
+            return new MVPCTRefreshListPartitioner(mvContext, context, db, mv, mvRefreshParams);
         } else {
             throw new DmlException(String.format("materialized view:%s in database:%s refresh failed: partition info %s not " +
                     "supported", mv.getName(), db.getFullName(), partitionInfo));
@@ -296,7 +300,7 @@ public abstract class BaseMVRefreshProcessor {
                     throw new DmlException(String.format("materialized view %s refresh task failed: sync partition failed",
                             mv.getName()));
                 }
-                Set<String> mvCandidatePartition = getPCTMVToRefreshedPartitions(taskRunContext, true);
+                Set<String> mvCandidatePartition = getPCTMVToRefreshedPartitions(true);
                 baseTableCandidatePartitions = getPCTRefTableRefreshPartitions(mvCandidatePartition);
             } catch (Exception e) {
                 logger.warn("failed to compute candidate partitions in sync partitions",
@@ -332,7 +336,7 @@ public abstract class BaseMVRefreshProcessor {
     }
 
     protected void updatePCTToRefreshMetas(TaskRunContext taskRunContext) throws Exception {
-        this.pctMVToRefreshedPartitions = getPCTMVToRefreshedPartitions(taskRunContext, false);
+        this.pctMVToRefreshedPartitions = getPCTMVToRefreshedPartitions(false);
         // ref table of mv : refreshed partition names
         this.pctRefTableRefreshPartitions = getPCTRefTableRefreshPartitions(pctMVToRefreshedPartitions);
         // ref table of mv : refreshed partition names
@@ -352,8 +356,8 @@ public abstract class BaseMVRefreshProcessor {
      * @param mvTargetPartitionNames: the partitions to be refreshed
      */
     protected InsertStmt generateInsertAst(ConnectContext ctx,
-                                           Set<String> mvTargetPartitionNames) {
-        final String definition = mvContext.getDefinition();
+                                           Set<String> mvTargetPartitionNames,
+                                           String definition) throws AnalysisException {
         final InsertStmt insertStmt =
                 (InsertStmt) SqlParser.parse(definition, ctx.getSessionVariable()).get(0);
         // set target partitions
@@ -561,18 +565,18 @@ public abstract class BaseMVRefreshProcessor {
         return tables;
     }
 
+    /**
+     * @param tentative: if true, it means this is called in the first phase to compute candidate partitions and not the
+     *                 standard phase to get final partitions to refresh.
+     */
     @VisibleForTesting
-    public Set<String> getPCTMVToRefreshedPartitions(TaskRunContext context,
-                                                     boolean tentative) throws AnalysisException, LockTimeoutException {
-        final MaterializedView.PartitionRefreshStrategy partitionRefreshStrategy = mv.getPartitionRefreshStrategy();
-        boolean isForce = partitionRefreshStrategy == MaterializedView.PartitionRefreshStrategy.FORCE || tentative;
-        final MVRefreshParams mvRefreshParams = new MVRefreshParams(mv.getPartitionInfo(), context.getProperties(), isForce);
+    public Set<String> getPCTMVToRefreshedPartitions(boolean tentative) throws AnalysisException, LockTimeoutException {
+        // change mv refresh params if needed
+        mvRefreshParams.setIsTentative(tentative);
 
-        final Set<String> mvPotentialPartitionNames = Sets.newHashSet();
-        Set<String> mvToRefreshedPartitions = mvRefreshPartitioner.getMVToRefreshedPartitions(
-                snapshotBaseTables, mvRefreshParams, partitionRefreshStrategy, mvPotentialPartitionNames, tentative);
+        final PCellSortedSet mvToRefreshedPartitions = mvRefreshPartitioner.getMVToRefreshedPartitions(snapshotBaseTables);
         // update mv extra message
-        if (!tentative) {
+        if (!mvRefreshParams.isTentative()) {
             updateTaskRunStatus(status -> {
                 MVTaskRunExtraMessage extraMessage = status.getMvTaskRunExtraMessage();
                 extraMessage.setForceRefresh(mvRefreshParams.isForce());
@@ -580,7 +584,7 @@ public abstract class BaseMVRefreshProcessor {
                 extraMessage.setPartitionEnd(mvRefreshParams.getRangeEnd());
             });
         }
-        return mvToRefreshedPartitions;
+        return mvToRefreshedPartitions.getPartitionNames();
     }
 
     /**

@@ -22,7 +22,7 @@
 
 #include "column/chunk.h"
 #include "common/status.h"
-#include "exec/file_scanner.h"
+#include "exec/file_scanner/file_scanner.h"
 #include "exec/scan_node.h"
 #include "gen_cpp/InternalService_types.h"
 

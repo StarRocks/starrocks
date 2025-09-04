@@ -38,7 +38,6 @@ import com.google.common.base.Joiner;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
-import com.starrocks.analysis.ParseNode;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.common.LoadException;
@@ -49,13 +48,14 @@ import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.common.util.KafkaUtil;
 import com.starrocks.load.RoutineLoadDesc;
 import com.starrocks.metric.RoutineLoadLagTimeMetricMgr;
+import com.starrocks.persist.OriginStatementInfo;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.qe.ConnectContext;
-import com.starrocks.qe.OriginStatement;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.ColumnSeparator;
 import com.starrocks.sql.ast.CreateRoutineLoadStmt;
 import com.starrocks.sql.ast.LabelName;
+import com.starrocks.sql.ast.ParseNode;
 import com.starrocks.sql.ast.PartitionNames;
 import com.starrocks.sql.parser.AstBuilder;
 import com.starrocks.sql.parser.SqlParser;
@@ -429,7 +429,7 @@ public class KafkaRoutineLoadJobTest {
                 "PROPERTIES('format' = 'csv', 'trim_space' = 'true', 'max_filter_ratio' = '0', 'max_error_number' = '10') " +
                 "FROM KAFKA('kafka_broker_list' = 'http://127.0.0.1:8080','kafka_topic' = 'topic1');";
         KafkaRoutineLoadJob job = KafkaRoutineLoadJob.fromCreateStmt(createRoutineLoadStmt);
-        job.setOrigStmt(new OriginStatement(createSQL, 0));
+        job.setOrigStmt(new OriginStatementInfo(createSQL, 0));
         Assertions.assertEquals("csv", job.getFormat());
         Assertions.assertTrue(job.isTrimspace());
         Assertions.assertEquals((byte) "'".charAt(0), job.getEnclose());
@@ -503,7 +503,7 @@ public class KafkaRoutineLoadJobTest {
                 "PROPERTIES('format' = 'json', 'strip_outer_array' = 'true') " +
                 "FROM KAFKA('kafka_broker_list' = 'http://127.0.0.1:8080','kafka_topic' = 'topic1');";
         KafkaRoutineLoadJob job = KafkaRoutineLoadJob.fromCreateStmt(createRoutineLoadStmt);
-        job.setOrigStmt(new OriginStatement(createSQL, 0));
+        job.setOrigStmt(new OriginStatementInfo(createSQL, 0));
         Assertions.assertEquals("json", job.getFormat());
         Assertions.assertTrue(job.isStripOuterArray());
         Assertions.assertEquals("['$.category','$.price','$.author']", job.getJsonPaths());

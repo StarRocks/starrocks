@@ -39,7 +39,6 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.google.gson.annotations.SerializedName;
-import com.starrocks.analysis.BrokerDesc;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.DdlException;
@@ -53,14 +52,16 @@ import com.starrocks.load.BrokerFileGroup;
 import com.starrocks.load.BrokerFileGroupAggInfo;
 import com.starrocks.load.FailMsg;
 import com.starrocks.load.routineload.TxnStatusChangeReason;
+import com.starrocks.persist.OriginStatementInfo;
 import com.starrocks.qe.ConnectContext;
-import com.starrocks.qe.OriginStatement;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.qe.SqlModeHelper;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.WarehouseManager;
+import com.starrocks.sql.ast.BrokerDesc;
 import com.starrocks.sql.ast.DataDescription;
 import com.starrocks.sql.ast.LoadStmt;
+import com.starrocks.sql.ast.OriginStatement;
 import com.starrocks.transaction.TabletCommitInfo;
 import com.starrocks.transaction.TabletFailInfo;
 import com.starrocks.transaction.TransactionState;
@@ -85,7 +86,7 @@ public abstract class BulkLoadJob extends LoadJob {
     // the origin stmt is persisted instead of columns expr
     // the expr of columns will be reanalyze when the log is replayed
     @SerializedName("ost")
-    protected OriginStatement originStmt;
+    protected OriginStatementInfo originStmt;
 
     // include broker desc and data desc
     protected BrokerFileGroupAggInfo fileGroupAggInfo = new BrokerFileGroupAggInfo();
@@ -110,7 +111,9 @@ public abstract class BulkLoadJob extends LoadJob {
 
     public BulkLoadJob(long dbId, String label, OriginStatement originStmt) {
         super(dbId, label);
-        this.originStmt = originStmt;
+        if (originStmt != null) {
+            this.originStmt = new OriginStatementInfo(originStmt.getOrigStmt(), originStmt.getIdx());
+        }
 
         if (ConnectContext.get() != null) {
             SessionVariable var = ConnectContext.get().getSessionVariable();

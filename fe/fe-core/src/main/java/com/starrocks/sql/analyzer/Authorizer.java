@@ -16,8 +16,6 @@ package com.starrocks.sql.analyzer;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableList;
-import com.starrocks.analysis.Expr;
-import com.starrocks.analysis.TableName;
 import com.starrocks.authorization.AccessControlProvider;
 import com.starrocks.authorization.AccessController;
 import com.starrocks.authorization.AccessDeniedException;
@@ -37,6 +35,8 @@ import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.ast.StatementBase;
+import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.TableName;
 import com.starrocks.sql.ast.pipe.PipeName;
 import com.starrocks.warehouse.Warehouse;
 import org.apache.commons.collections4.ListUtils;

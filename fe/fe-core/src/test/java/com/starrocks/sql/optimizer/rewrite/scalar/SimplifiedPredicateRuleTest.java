@@ -16,9 +16,9 @@
 package com.starrocks.sql.optimizer.rewrite.scalar;
 
 import com.google.common.collect.Lists;
-import com.starrocks.analysis.BinaryType;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.Type;
+import com.starrocks.sql.ast.expression.BinaryType;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
@@ -139,5 +139,79 @@ public class SimplifiedPredicateRuleTest {
                 Lists.newArrayList(fromUnixTimeCall2), null);
         ScalarOperator result2 = rule.apply(hourCall2, null);
         assertEquals(hourCall2, result2);
+    }
+
+    @Test
+    public void applyHourToDatetimeRewrite() {
+        // hour(to_datetime(ts)) -> hour_from_unixtime(ts)
+        ColumnRefOperator tsColumn = new ColumnRefOperator(2, Type.BIGINT, "ts2", true);
+
+        CallOperator toDatetimeCall = new CallOperator(FunctionSet.TO_DATETIME, Type.DATETIME,
+                Lists.newArrayList(tsColumn), null);
+        CallOperator hourCall = new CallOperator(FunctionSet.HOUR, Type.TINYINT,
+                Lists.newArrayList(toDatetimeCall), null);
+
+        ScalarOperator result = rule.apply(hourCall, null);
+        assertEquals(OperatorType.CALL, result.getOpType());
+        CallOperator resultCall = (CallOperator) result;
+        assertEquals(FunctionSet.HOUR_FROM_UNIXTIME, resultCall.getFnName());
+        assertEquals(1, resultCall.getChildren().size());
+        assertEquals(tsColumn, resultCall.getChild(0));
+
+        // hour(to_datetime(ts, 0)) -> hour_from_unixtime(ts)
+        CallOperator toDatetimeCallScale0 = new CallOperator(FunctionSet.TO_DATETIME, Type.DATETIME,
+                Lists.newArrayList(tsColumn, ConstantOperator.createInt(0)), null);
+        CallOperator hourCall2 = new CallOperator(FunctionSet.HOUR, Type.TINYINT,
+                Lists.newArrayList(toDatetimeCallScale0), null);
+
+        ScalarOperator result2 = rule.apply(hourCall2, null);
+        assertEquals(OperatorType.CALL, result2.getOpType());
+        CallOperator resultCall2 = (CallOperator) result2;
+        assertEquals(FunctionSet.HOUR_FROM_UNIXTIME, resultCall2.getFnName());
+        assertEquals(1, resultCall2.getChildren().size());
+        assertEquals(tsColumn, resultCall2.getChild(0));
+
+        // hour(to_datetime(ts, 3)) -> hour_from_unixtime(ts/1000)
+        CallOperator toDatetimeCallScale3 = new CallOperator(FunctionSet.TO_DATETIME, Type.DATETIME,
+                Lists.newArrayList(tsColumn, ConstantOperator.createInt(3)), null);
+        CallOperator hourCall3 = new CallOperator(FunctionSet.HOUR, Type.TINYINT,
+                Lists.newArrayList(toDatetimeCallScale3), null);
+        ScalarOperator result3 = rule.apply(hourCall3, null);
+        assertEquals(OperatorType.CALL, result3.getOpType());
+        CallOperator resultCall3 = (CallOperator) result3;
+        assertEquals(FunctionSet.HOUR_FROM_UNIXTIME, resultCall3.getFnName());
+        assertEquals(1, resultCall3.getChildren().size());
+        // Expect a divide(ts, 1000) as the argument
+        ScalarOperator arg3 = resultCall3.getChild(0);
+        assertEquals(OperatorType.CALL, arg3.getOpType());
+        CallOperator div3 = (CallOperator) arg3;
+        assertEquals(FunctionSet.DIVIDE, div3.getFnName());
+        assertEquals(tsColumn, div3.getChild(0));
+        assertEquals(ConstantOperator.createInt(1000), div3.getChild(1));
+
+        // hour(to_datetime(ts, 6)) -> hour_from_unixtime(ts/1000000)
+        CallOperator toDatetimeCallScale6 = new CallOperator(FunctionSet.TO_DATETIME, Type.DATETIME,
+                Lists.newArrayList(tsColumn, ConstantOperator.createInt(6)), null);
+        CallOperator hourCall6 = new CallOperator(FunctionSet.HOUR, Type.TINYINT,
+                Lists.newArrayList(toDatetimeCallScale6), null);
+        ScalarOperator result6 = rule.apply(hourCall6, null);
+        assertEquals(OperatorType.CALL, result6.getOpType());
+        CallOperator resultCall6 = (CallOperator) result6;
+        assertEquals(FunctionSet.HOUR_FROM_UNIXTIME, resultCall6.getFnName());
+        assertEquals(1, resultCall6.getChildren().size());
+        ScalarOperator arg6 = resultCall6.getChild(0);
+        assertEquals(OperatorType.CALL, arg6.getOpType());
+        CallOperator div6 = (CallOperator) arg6;
+        assertEquals(FunctionSet.DIVIDE, div6.getFnName());
+        assertEquals(tsColumn, div6.getChild(0));
+        assertEquals(ConstantOperator.createInt(1_000_000), div6.getChild(1));
+
+        // Unsupported scale like 4 should not be rewritten
+        CallOperator toDatetimeCallScale4 = new CallOperator(FunctionSet.TO_DATETIME, Type.DATETIME,
+                Lists.newArrayList(tsColumn, ConstantOperator.createInt(4)), null);
+        CallOperator hourCall4 = new CallOperator(FunctionSet.HOUR, Type.TINYINT,
+                Lists.newArrayList(toDatetimeCallScale4), null);
+        ScalarOperator result4 = rule.apply(hourCall4, null);
+        assertEquals(hourCall4, result4);
     }
 }

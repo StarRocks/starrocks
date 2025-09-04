@@ -15,9 +15,9 @@
 package com.starrocks.catalog;
 
 import com.google.gson.annotations.SerializedName;
-import com.starrocks.analysis.DescriptorTable;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.connector.odps.EntityConvertUtils;
+import com.starrocks.planner.DescriptorTable;
 import com.starrocks.thrift.THdfsTable;
 import com.starrocks.thrift.TTableDescriptor;
 import com.starrocks.thrift.TTableType;

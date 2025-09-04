@@ -14,7 +14,7 @@
 
 package com.starrocks.sql.ast;
 
-import com.starrocks.analysis.Predicate;
+import com.starrocks.sql.ast.expression.Predicate;
 import com.starrocks.sql.parser.NodePosition;
 
 import java.util.List;
@@ -72,6 +72,6 @@ public class CreateResourceGroupStmt extends DdlStmt {
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitCreateResourceGroupStatement(this, context);
+        return ((AstVisitorExtendInterface<R, C>) visitor).visitCreateResourceGroupStatement(this, context);
     }
 }

@@ -19,6 +19,8 @@ package com.starrocks.analysis;
 
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
+import com.starrocks.sql.ast.expression.DateLiteral;
+import com.starrocks.sql.ast.expression.Expr;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
@@ -63,7 +65,7 @@ public class DateLiteralTest {
             DateLiteral literal = new DateLiteral("1997-10-07", Type.DATE);
             Expr castToExpr = literal.uncheckedCastTo(Type.DATETIME);
             Assertions.assertTrue(castToExpr instanceof DateLiteral);
-            Assertions.assertEquals(castToExpr.type, Type.DATETIME);
+            Assertions.assertEquals(castToExpr.getType(), Type.DATETIME);
 
             DateLiteral literal2 = new DateLiteral("1997-10-07 12:23:23", Type.DATETIME);
             Expr castToExpr2 = literal2.uncheckedCastTo(Type.DATETIME);

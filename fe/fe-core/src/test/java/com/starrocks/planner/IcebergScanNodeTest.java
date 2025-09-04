@@ -1,16 +1,5 @@
 package com.starrocks.planner;
 
-import com.starrocks.analysis.BinaryPredicate;
-import com.starrocks.analysis.BinaryType;
-import com.starrocks.analysis.BoolLiteral;
-import com.starrocks.analysis.DescriptorTable;
-import com.starrocks.analysis.Expr;
-import com.starrocks.analysis.IntLiteral;
-import com.starrocks.analysis.SlotRef;
-import com.starrocks.analysis.StringLiteral;
-import com.starrocks.analysis.TableName;
-import com.starrocks.analysis.TupleDescriptor;
-import com.starrocks.analysis.TupleId;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.ScalarType;
@@ -21,11 +10,10 @@ import com.starrocks.connector.CatalogConnector;
 import com.starrocks.connector.ConnectorMetadata;
 import com.starrocks.connector.ConnectorMgr;
 import com.starrocks.connector.ConnectorTblMetaInfoMgr;
-import com.starrocks.connector.HdfsEnvironment;
 import com.starrocks.connector.RemoteFileInfo;
 import com.starrocks.connector.RemoteFileInfoSource;
 import com.starrocks.connector.exception.StarRocksConnectorException;
-import com.starrocks.connector.iceberg.IcebergAlterTableExecutor;
+import com.starrocks.connector.iceberg.IcebergApiConverter;
 import com.starrocks.connector.iceberg.IcebergConnectorScanRangeSource;
 import com.starrocks.connector.iceberg.IcebergMORParams;
 import com.starrocks.connector.iceberg.IcebergMetadata;
@@ -39,7 +27,6 @@ import com.starrocks.connector.iceberg.IcebergRewriteData;
 import com.starrocks.connector.iceberg.IcebergRewriteDataJob;
 import com.starrocks.connector.iceberg.IcebergTableMORParams;
 import com.starrocks.connector.iceberg.IcebergTableOperation;
-import com.starrocks.connector.iceberg.hive.IcebergHiveCatalog;
 import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.credential.CloudConfigurationFactory;
 import com.starrocks.qe.ConnectContext;
@@ -50,20 +37,11 @@ import com.starrocks.server.LocalMetastore;
 import com.starrocks.server.MetadataMgr;
 import com.starrocks.server.TemporaryTableMgr;
 import com.starrocks.sql.StatementPlanner;
-import com.starrocks.sql.analyzer.AlterTableClauseAnalyzer;
-import com.starrocks.sql.analyzer.SemanticException;
-import com.starrocks.sql.ast.AlterTableOperationClause;
 import com.starrocks.sql.ast.AlterTableStmt;
 import com.starrocks.sql.ast.DmlStmt;
 import com.starrocks.sql.ast.IcebergRewriteStmt;
 import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.StatementBase;
-import com.starrocks.sql.optimizer.base.ColumnRefFactory;
-import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
-import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
-import com.starrocks.sql.optimizer.transformer.ExpressionMapping;
-import com.starrocks.sql.optimizer.transformer.SqlToScalarOperatorTranslator;
-import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.thrift.TBucketFunction;
 import com.starrocks.thrift.TIcebergTable;
@@ -83,10 +61,12 @@ import org.apache.iceberg.FileContent;
 import org.apache.iceberg.FileFormat;
 import org.apache.iceberg.FileMetadata;
 import org.apache.iceberg.FileScanTask;
+import org.apache.iceberg.NullOrder;
 import org.apache.iceberg.PartitionSpec;
 import org.apache.iceberg.ReplacePartitions;
 import org.apache.iceberg.RewriteFiles;
 import org.apache.iceberg.Schema;
+import org.apache.iceberg.SortOrder;
 import org.apache.iceberg.TableMetadata;
 import org.apache.iceberg.TableOperations;
 import org.apache.iceberg.Transaction;
@@ -107,12 +87,9 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
-import javax.swing.text.html.Option;
-import static com.starrocks.common.util.Util.executeCommand;
 import java.util.stream.Stream;
 
 public class IcebergScanNodeTest {
-    public static final HdfsEnvironment HDFS_ENVIRONMENT = new HdfsEnvironment();
     class TestableIcebergConnectorScanRangeSource extends IcebergConnectorScanRangeSource {
         public TestableIcebergConnectorScanRangeSource(IcebergConnectorScanRangeSource original) {
             super(
@@ -340,251 +317,7 @@ public class IcebergScanNodeTest {
     }
 
     @Test
-    public void testVisitAlterTableOperationClause_rewriteDataFiles2(@Mocked IcebergTable table) {
-        AlterTableClauseAnalyzer analyzer = new AlterTableClauseAnalyzer(table);
-
-        Expr rewriteAll = new BinaryPredicate(BinaryType.EQ,
-                new StringLiteral("REWRITE_ALL"), new BoolLiteral(true));
-        Expr minFileSize = new BinaryPredicate(BinaryType.EQ,
-                new StringLiteral("MIN_FILE_SIZE_BYTES"), new IntLiteral(100));
-        Expr batchSize = new BinaryPredicate(BinaryType.EQ,
-                new StringLiteral("BATCH_SIZE"), new IntLiteral(200));
-
-        AlterTableOperationClause clause = new AlterTableOperationClause(new NodePosition(1, 1), "REWRITE_DATA_FILES",
-                Arrays.asList(rewriteAll, minFileSize, batchSize), null);
-
-        analyzer.visitAlterTableOperationClause(clause, new ConnectContext());
-
-        Assertions.assertTrue(clause.isRewriteAll());
-        Assertions.assertEquals(100, clause.getMinFileSizeBytes());
-        Assertions.assertEquals(200, clause.getBatchSize());
-    }
-
-    @Test
-    public void testVisitAlterTableOperationClause_invalidExpr(@Mocked IcebergTable table) {
-        AlterTableClauseAnalyzer analyzer = new AlterTableClauseAnalyzer(table);
-        Expr wrongExpr = new StringLiteral("wrong");
-        AlterTableOperationClause clause = new AlterTableOperationClause(new NodePosition(1, 1), "REWRITE_DATA_FILES",
-                Collections.singletonList(wrongExpr), null);
-
-        Assertions.assertThrows(SemanticException.class,
-                () -> analyzer.visitAlterTableOperationClause(clause, new ConnectContext()));
-    }
-
-    @Test
-    public void testVisitAlterTableOperationClause_otherOp_addsArgs(@Mocked IcebergTable table) {
-        AlterTableClauseAnalyzer analyzer = new AlterTableClauseAnalyzer(table);
-        Expr expr = new StringLiteral("dummy");
-    
-        AlterTableOperationClause clause = new AlterTableOperationClause(
-                new NodePosition(1, 1),
-                "OTHER_OP",
-                Collections.singletonList(expr),
-                null
-        );
-    
-        final ConstantOperator constOp = ConstantOperator.createInt(123);
-    
-        new MockUp<SqlToScalarOperatorTranslator>() {
-            @Mock
-            public ScalarOperator translate(Expr e, ExpressionMapping m, ColumnRefFactory f) {
-                return constOp;
-            }
-        };
-    
-        analyzer.visitAlterTableOperationClause(clause, new ConnectContext());
-    
-        Assertions.assertFalse(clause.getArgs().isEmpty());
-        Assertions.assertEquals(constOp, clause.getArgs().get(0));
-    }
-
-    @Test
-    public void testVisitAlterTableOperationClause_otherOp_addsArgs2(@Mocked IcebergTable table) {
-        AlterTableClauseAnalyzer analyzer = new AlterTableClauseAnalyzer(table);
-        Expr expr = new StringLiteral("dummy");
-    
-        AlterTableOperationClause clause = new AlterTableOperationClause(
-                new NodePosition(1, 1),
-                "OTHER_OP",
-                Collections.singletonList(expr),
-                null
-        );
-    
-        final ConstantOperator constOp = ConstantOperator.createInt(123);
-    
-        new MockUp<SqlToScalarOperatorTranslator>() {
-            @Mock
-            public ScalarOperator translate(Expr e, ExpressionMapping m, ColumnRefFactory f) {
-                return constOp;
-            }
-        };
-    
-        analyzer.visitAlterTableOperationClause(clause, new ConnectContext());
-    
-        Assertions.assertFalse(clause.getArgs().isEmpty());
-        Assertions.assertEquals(constOp, clause.getArgs().get(0));
-    }
-
-    @Test
-    public void testVisitAlterTableOperationClause_rewriteDataFiles(@Mocked IcebergTable table) {
-        AlterTableClauseAnalyzer analyzer = new AlterTableClauseAnalyzer(table);
-
-        Expr rewriteAll = new BinaryPredicate(BinaryType.EQ,
-                new StringLiteral("REWRITE_ALL"), new BoolLiteral(true));
-        Expr minFileSize = new BinaryPredicate(BinaryType.EQ,
-                new StringLiteral("MIN_FILE_SIZE_BYTES"), new IntLiteral(100));
-        Expr batchSize = new BinaryPredicate(BinaryType.EQ,
-                new StringLiteral("BATCH_SIZE"), new IntLiteral(200));
-
-        AlterTableOperationClause clause = new AlterTableOperationClause(
-                new NodePosition(1, 1), "REWRITE_DATA_FILES",
-                Arrays.asList(rewriteAll, minFileSize, batchSize), null);
-
-        analyzer.visitAlterTableOperationClause(clause, new ConnectContext());
-
-        Assertions.assertTrue(clause.isRewriteAll());
-        Assertions.assertEquals(100, clause.getMinFileSizeBytes());
-        Assertions.assertEquals(200, clause.getBatchSize());
-    }
-
-    @Test
-    public void testVisitAlterTableOperationClause_nullTableOperationName_shouldThrow() {
-        AlterTableClauseAnalyzer analyzer = new AlterTableClauseAnalyzer(null);
-        AlterTableOperationClause clause = new AlterTableOperationClause(
-                new NodePosition(1, 1), null, Collections.emptyList(), null);
-
-        SemanticException ex = Assertions.assertThrows(SemanticException.class, () ->
-                analyzer.visitAlterTableOperationClause(clause, new ConnectContext()));
-        Assertions.assertTrue(ex.getMessage().contains("Table operation name should be null"));
-    }
-
-    @Test
-    public void testVisitAlterTableOperationClause_invalidExprType_shouldThrow() {
-        AlterTableClauseAnalyzer analyzer = new AlterTableClauseAnalyzer(null);
-        Expr expr = new BoolLiteral(true); // not a BinaryPredicate
-        AlterTableOperationClause clause = new AlterTableOperationClause(
-                new NodePosition(1, 1), "REWRITE_DATA_FILES",
-                Collections.singletonList(expr), null);
-
-        SemanticException ex = Assertions.assertThrows(SemanticException.class, () ->
-                analyzer.visitAlterTableOperationClause(clause, new ConnectContext()));
-        Assertions.assertTrue(ex.getMessage().contains("Invalid"));
-    }
-
-    @Test
-    public void testVisitAlterTableOperationClause_nonEqPredicate_shouldThrow() {
-        AlterTableClauseAnalyzer analyzer = new AlterTableClauseAnalyzer(null);
-        Expr expr = new BinaryPredicate(BinaryType.NE,
-                new StringLiteral("REWRITE_ALL"), new BoolLiteral(true)); // Not EQ
-        AlterTableOperationClause clause = new AlterTableOperationClause(
-                new NodePosition(1, 1), "REWRITE_DATA_FILES",
-                Collections.singletonList(expr), null);
-
-        SemanticException ex = Assertions.assertThrows(SemanticException.class, () ->
-                analyzer.visitAlterTableOperationClause(clause, new ConnectContext()));
-        Assertions.assertTrue(ex.getMessage().contains("Invalid"));
-    }
-
-    @Test
-    public void testVisitAlterTableOperationClause_nonLiteralArgs_shouldThrow() {
-        AlterTableClauseAnalyzer analyzer = new AlterTableClauseAnalyzer(null);
-        Expr expr = new BinaryPredicate(BinaryType.EQ,
-                new BinaryPredicate(BinaryType.EQ, new StringLiteral("x"), new StringLiteral("y")),
-                new BoolLiteral(true)); // left child not a LiteralExpr
-        AlterTableOperationClause clause = new AlterTableOperationClause(
-                new NodePosition(1, 1), "REWRITE_DATA_FILES",
-                Collections.singletonList(expr), null);
-
-        SemanticException ex = Assertions.assertThrows(SemanticException.class, () ->
-                analyzer.visitAlterTableOperationClause(clause, new ConnectContext()));
-        Assertions.assertTrue(ex.getMessage().contains("Invalid"));
-    }
-
-    @Test
-    public void testVisitAlterTableOperationClause_nonStringKey_shouldThrow() {
-        AlterTableClauseAnalyzer analyzer = new AlterTableClauseAnalyzer(null);
-        Expr expr = new BinaryPredicate(BinaryType.EQ,
-                new IntLiteral(1), new BoolLiteral(true)); // key is not StringLiteral
-        AlterTableOperationClause clause = new AlterTableOperationClause(
-                new NodePosition(1, 1), "REWRITE_DATA_FILES",
-                Collections.singletonList(expr), null);
-
-        SemanticException ex = Assertions.assertThrows(SemanticException.class, () ->
-                analyzer.visitAlterTableOperationClause(clause, new ConnectContext()));
-        Assertions.assertTrue(ex.getMessage().contains("Invalid"));
-    }
-
-    @Test
-    public void testVisitAlterTableOperationClause_rewriteAllInvalidType_shouldThrow() {
-        AlterTableClauseAnalyzer analyzer = new AlterTableClauseAnalyzer(null);
-        Expr expr = new BinaryPredicate(BinaryType.EQ,
-                new StringLiteral("REWRITE_ALL"), new IntLiteral(1)); // value not BoolLiteral
-        AlterTableOperationClause clause = new AlterTableOperationClause(
-                new NodePosition(1, 1), "REWRITE_DATA_FILES",
-                Collections.singletonList(expr), null);
-
-        SemanticException ex = Assertions.assertThrows(SemanticException.class, () ->
-                analyzer.visitAlterTableOperationClause(clause, new ConnectContext()));
-        Assertions.assertTrue(ex.getMessage().contains("boolean value"));
-    }
-
-    @Test
-    public void testVisitAlterTableOperationClause_minFileSizeNegative_shouldThrow() {
-        AlterTableClauseAnalyzer analyzer = new AlterTableClauseAnalyzer(null);
-        Expr expr = new BinaryPredicate(BinaryType.EQ,
-                new StringLiteral("MIN_FILE_SIZE_BYTES"), new IntLiteral(-1));
-        AlterTableOperationClause clause = new AlterTableOperationClause(
-                new NodePosition(1, 1), "REWRITE_DATA_FILES",
-                Collections.singletonList(expr), null);
-
-        SemanticException ex = Assertions.assertThrows(SemanticException.class, () ->
-                analyzer.visitAlterTableOperationClause(clause, new ConnectContext()));
-        Assertions.assertTrue(ex.getMessage().contains("non-negative integer"));
-    }
-
-    @Test
-    public void testVisitAlterTableOperationClause_batchSizeInvalidType_shouldThrow() {
-        AlterTableClauseAnalyzer analyzer = new AlterTableClauseAnalyzer(null);
-        Expr expr = new BinaryPredicate(BinaryType.EQ,
-                new StringLiteral("BATCH_SIZE"), new BoolLiteral(false)); // invalid type
-        AlterTableOperationClause clause = new AlterTableOperationClause(
-                new NodePosition(1, 1), "REWRITE_DATA_FILES",
-                Collections.singletonList(expr), null);
-
-        SemanticException ex = Assertions.assertThrows(SemanticException.class, () ->
-                analyzer.visitAlterTableOperationClause(clause, new ConnectContext()));
-        Assertions.assertTrue(ex.getMessage().contains("integer value"));
-    }
-
-    @Test
-    public void testVisitAlterTableOperationClause_unknownKey_shouldThrow() {
-        AlterTableClauseAnalyzer analyzer = new AlterTableClauseAnalyzer(null);
-        Expr expr = new BinaryPredicate(BinaryType.EQ,
-                new StringLiteral("UNKNOWN_KEY"), new IntLiteral(1));
-        AlterTableOperationClause clause = new AlterTableOperationClause(
-                new NodePosition(1, 1), "REWRITE_DATA_FILES",
-                Collections.singletonList(expr), null);
-
-        SemanticException ex = Assertions.assertThrows(SemanticException.class, () ->
-                analyzer.visitAlterTableOperationClause(clause, new ConnectContext()));
-        Assertions.assertTrue(ex.getMessage().contains("Unknown key"));
-    }
-
-    @Test
-    public void testVisitAlterTableOperationClause_whereClauseButNotIceberg_shouldThrow(@Mocked com.starrocks.catalog.Table table) {
-        AlterTableClauseAnalyzer analyzer = new AlterTableClauseAnalyzer(table);
-        Expr where = new BoolLiteral(true);
-        AlterTableOperationClause clause = new AlterTableOperationClause(
-                new NodePosition(1, 1), "REWRITE_DATA_FILES",
-                Collections.emptyList(), where);
-
-        SemanticException ex = Assertions.assertThrows(SemanticException.class, () ->
-                analyzer.visitAlterTableOperationClause(clause, new ConnectContext()));
-        Assertions.assertTrue(ex.getMessage().contains("not an iceberg table"));
-    }
-
-    @Test
-    public void testToThrift_withPartitionExprs() throws Exception {
+    public void testToThriftWithPartitionExprs() throws Exception {
 
         Schema schema = new Schema(
                 Types.NestedField.required(1, "col1", Types.StringType.get())
@@ -619,10 +352,16 @@ public class IcebergScanNodeTest {
                 .setFullSchema(schemaColumns)
                 .setNativeTable(mockNativeTable)
                 .setIcebergProperties(Collections.singletonMap("iceberg.catalog.type", "hive"))
+
                 .build();
 
         icebergTable.setComment("some normal comment");
 
+        Schema icebergApiSchema = IcebergApiConverter.toIcebergApiSchema(schemaColumns);
+        SortOrder.Builder builder = SortOrder.builderFor(icebergApiSchema);
+        builder.asc("col1", NullOrder.NULLS_FIRST);
+        SortOrder sortOrder = builder.build();
+        Mockito.when(mockNativeTable.sortOrder()).thenReturn(sortOrder);
 
         List<DescriptorTable.ReferencedPartitionInfo> partitions = new ArrayList<>();
         TTableDescriptor tdesc = icebergTable.toThrift(partitions);
@@ -632,6 +371,7 @@ public class IcebergScanNodeTest {
         Assertions.assertEquals("file:///tmp/test", tIcebergTable.getLocation());
         Assertions.assertFalse(tIcebergTable.getPartition_info().isEmpty());
         Assertions.assertEquals("col1_trunc", tIcebergTable.getPartition_info().get(0).getPartition_column_name());
+        Assertions.assertFalse(tIcebergTable.getSort_order().getSort_key_idxes().isEmpty());
     }
 
     private Schema _schema() {
@@ -766,7 +506,7 @@ public class IcebergScanNodeTest {
     }
 
     @Test
-    public void testFillRewriteFiles_shouldFillExtraCorrectly() throws Exception {
+    public void testFillRewriteFilesShouldFillExtraCorrectly() throws Exception {
         // 1. Mock InsertStmt
         IcebergRewriteStmt rewriteStmt = Mockito.mock(IcebergRewriteStmt.class);
         Mockito.when(rewriteStmt.rewriteAll()).thenReturn(true);
@@ -816,7 +556,7 @@ public class IcebergScanNodeTest {
     }
 
     @Test
-    public void testGetSourceFileScanOutputs_mixedScenarios() {
+    public void testGetSourceFileScanOutputsMixedScenarios() {
         // --- Mock DeleteFile ---
         DeleteFile posDeleteFile = Mockito.mock(DeleteFile.class);
         Mockito.when(posDeleteFile.content()).thenReturn(FileContent.POSITION_DELETES);
@@ -885,7 +625,7 @@ public class IcebergScanNodeTest {
     }
 
     @Test
-    public void testFinishSink_success(
+    public void testFinishSinkSuccess(
             @Mocked LocalMetastore localMetastore,
             @Mocked TemporaryTableMgr temporaryTableMgr,
             @Mocked ConnectorMgr connectorMgr,
@@ -909,7 +649,7 @@ public class IcebergScanNodeTest {
     }
 
     @Test
-    public void testFinishSink_metadataThrows(
+    public void testFinishSinkMetadataThrows(
             @Mocked LocalMetastore localMetastore,
             @Mocked TemporaryTableMgr temporaryTableMgr,
             @Mocked ConnectorMgr connectorMgr,
@@ -936,7 +676,7 @@ public class IcebergScanNodeTest {
     }
 
     @Test
-    public void testFinishSink_noMetadata(
+    public void testFinishSinkNoMetadata(
             @Mocked LocalMetastore localMetastore,
             @Mocked TemporaryTableMgr temporaryTableMgr,
             @Mocked ConnectorMgr connectorMgr,
@@ -954,7 +694,7 @@ public class IcebergScanNodeTest {
     }
 
     @Test
-    void execute_shouldRunNormally_whenPreparedStateAndTasksExist() throws Exception {
+    void executeShouldRunNormallyWhenPreparedStateAndTasksExist() throws Exception {
         ConnectContext context = Mockito.mock(ConnectContext.class, Mockito.RETURNS_DEEP_STUBS);
         AlterTableStmt alter = Mockito.mock(AlterTableStmt.class);
         IcebergRewriteStmt rewriteStmt = Mockito.mock(IcebergRewriteStmt.class);
@@ -1081,7 +821,7 @@ public class IcebergScanNodeTest {
     }
 
     @Test
-    void execute_shouldSetErrorAndReturn_whenExecutorThrows() throws Exception {
+    void executeShouldSetErrorAndReturnWhenExecutorThrows() throws Exception {
         ConnectContext context = Mockito.mock(ConnectContext.class, Mockito.RETURNS_DEEP_STUBS);
         AlterTableStmt alter = Mockito.mock(AlterTableStmt.class);
         IcebergRewriteStmt rewriteStmt = Mockito.mock(IcebergRewriteStmt.class);
@@ -1123,103 +863,6 @@ public class IcebergScanNodeTest {
 
         Mockito.verify(context.getState(), Mockito.times(1)).setError("boom");
         Mockito.verify(scanNode, Mockito.times(1)).rebuildScanRange(Mockito.anyList());
-    }
-
-    @Test
-    void rewriteDataFiles_shouldBuildSQL_andRunJob(@Mocked org.apache.iceberg.Table table,
-            @Mocked IcebergHiveCatalog icebergHiveCatalog) throws Exception {
-        // --- arrange
-        String catalog = "c1";
-        String db = "db";
-        String tbl = "table";
-
-        AlterTableStmt stmt = Mockito.mock(AlterTableStmt.class);
-        Mockito.when(stmt.getCatalogName()).thenReturn(catalog);
-        Mockito.when(stmt.getDbName()).thenReturn(db);
-        Mockito.when(stmt.getTableName()).thenReturn(tbl);
-
-        AlterTableOperationClause clause = Mockito.mock(AlterTableOperationClause.class);
-        Mockito.when(clause.isRewriteAll()).thenReturn(true);
-        Mockito.when(clause.getMinFileSizeBytes()).thenReturn(128L);
-        Mockito.when(clause.getBatchSize()).thenReturn(10L);
-
-        Expr where = Mockito.mock(Expr.class);
-        SlotRef slot = Mockito.mock(SlotRef.class);
-        Mockito.doAnswer(inv -> {
-            @SuppressWarnings("unchecked")
-            List<SlotRef> list = (List<SlotRef>) inv.getArgument(1);
-            list.add(slot);
-            return null;
-        }).when(where).collect(Mockito.eq(SlotRef.class), Mockito.anyList());
-        Mockito.when(where.toSql()).thenReturn("k1 = 1");
-        Mockito.when(clause.getWhere()).thenReturn(where);
-
-        ConnectContext ctx = Mockito.mock(ConnectContext.class);
-        new MockUp<IcebergRewriteDataJob>() {
-            @Mock public void prepare() {}
-            @Mock public void execute() {}
-        };
-
-
-        IcebergAlterTableExecutor target = new IcebergAlterTableExecutor(new AlterTableStmt(
-                new TableName("db", "table"),
-                List.of(clause)),
-                table, icebergHiveCatalog,
-                ctx,
-                HDFS_ENVIRONMENT);
-
-        // --- act
-        target.rewriteDataFiles(clause, ctx);
-    }
-
-    @Test
-    void rewriteDataFiles_shouldWrapAndThrow_whenJobExecuteFails(@Mocked org.apache.iceberg.Table table,
-            @Mocked IcebergHiveCatalog icebergHiveCatalog) throws Exception {
-        // --- arrange
-        String catalog = "c1";
-        String db = "db";
-        String tbl = "table";
-
-        AlterTableStmt stmt = Mockito.mock(AlterTableStmt.class);
-        Mockito.when(stmt.getCatalogName()).thenReturn(catalog);
-        Mockito.when(stmt.getDbName()).thenReturn(db);
-        Mockito.when(stmt.getTableName()).thenReturn(tbl);
-
-        AlterTableOperationClause clause = Mockito.mock(AlterTableOperationClause.class);
-        Mockito.when(clause.isRewriteAll()).thenReturn(true);
-        Mockito.when(clause.getMinFileSizeBytes()).thenReturn(128L);
-        Mockito.when(clause.getBatchSize()).thenReturn(10L);
-
-        Expr where = Mockito.mock(Expr.class);
-        SlotRef slot = Mockito.mock(SlotRef.class);
-        Mockito.doAnswer(inv -> {
-            @SuppressWarnings("unchecked")
-            List<SlotRef> list = (List<SlotRef>) inv.getArgument(1);
-            list.add(slot);
-            return null;
-        }).when(where).collect(Mockito.eq(SlotRef.class), Mockito.anyList());
-        Mockito.when(where.toSql()).thenReturn("k1 = 1");
-        Mockito.when(clause.getWhere()).thenReturn(where);
-
-        ConnectContext ctx = Mockito.mock(ConnectContext.class);
-        new MockUp<IcebergRewriteDataJob>() {
-            @Mock public void prepare() {}
-            @Mock public void execute() { throw new RuntimeException("boom"); }
-        };
-
-
-        IcebergAlterTableExecutor target = new IcebergAlterTableExecutor(new AlterTableStmt(
-                new TableName("db", "table"),
-                List.of(clause)),
-                table, icebergHiveCatalog,
-                ctx,
-                HDFS_ENVIRONMENT);
-
-        // --- act + assert
-        StarRocksConnectorException ex =
-                Assertions.assertThrows(StarRocksConnectorException.class, () -> target.rewriteDataFiles(clause, ctx));
-        Assertions.assertTrue(ex.getMessage().contains("db.table"));
-        Assertions.assertTrue(ex.getMessage().contains("boom"));
     }
 
     @Test

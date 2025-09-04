@@ -17,13 +17,13 @@ package com.starrocks.sql.optimizer.rule.tree.lowcardinality;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
-import com.starrocks.analysis.Expr;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.TableFunction;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.Pair;
+import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptExpressionVisitor;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
@@ -334,8 +334,11 @@ public class DecodeRewriter extends OptExpressionVisitor<OptExpression, ColumnRe
                 }
 
                 inputStringRefs.union(fnOutputs.get(i));
-                fnInputs.set(i, context.stringRefToDictRefMap.getOrDefault(fnInputs.get(i), fnInputs.get(i)));
-                fnOutputs.set(i, context.stringRefToDictRefMap.getOrDefault(fnOutputs.get(i), fnOutputs.get(i)));
+                ColumnRefOperator input = context.stringRefToDictRefMap.getOrDefault(fnInputs.get(i), fnInputs.get(i));
+                ColumnRefOperator output = context.stringRefToDictRefMap.getOrDefault(fnOutputs.get(i), fnOutputs.get(i));
+                fnInputs.set(i, input);
+                fnOutputs.set(i, output);
+                fragmentUseDictExprs.union(input);
             }
             function = (TableFunction) Expr.getBuiltinFunction(FunctionSet.UNNEST,
                     fnInputs.stream().map(ScalarOperator::getType).toArray(Type[]::new), function.getArgNames(),

@@ -24,6 +24,7 @@ import com.google.gson.JsonSerializer;
 import com.starrocks.catalog.Resource;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.View;
+import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.Pair;
 import com.starrocks.common.Version;
@@ -87,7 +88,7 @@ public class QueryDumpSerializer implements JsonSerializer<QueryDumpInfo> {
 
     private JsonObject serializeSensitiveContent(QueryDumpInfo dumpInfo) {
         JsonObject dumpJson = new JsonObject();
-        if (dumpInfo.isDesensitizedInfo()) {
+        if (Config.enable_desensitize_query_dump || dumpInfo.isDesensitizedInfo()) {
             try {
                 desensitizeContent(dumpInfo, dumpJson);
                 return dumpJson;

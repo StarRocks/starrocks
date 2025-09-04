@@ -15,7 +15,6 @@
 package com.starrocks.sql.analyzer;
 
 import com.google.common.base.Strings;
-import com.starrocks.analysis.BrokerDesc;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.PartitionType;
@@ -30,7 +29,8 @@ import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.load.EtlJobType;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.sql.ast.AstVisitor;
+import com.starrocks.sql.ast.AstVisitorExtendInterface;
+import com.starrocks.sql.ast.BrokerDesc;
 import com.starrocks.sql.ast.DataDescription;
 import com.starrocks.sql.ast.LabelName;
 import com.starrocks.sql.ast.LoadStmt;
@@ -49,7 +49,7 @@ public class LoadStmtAnalyzer {
         new LoadStmtAnalyzerVisitor().analyze(statement, context);
     }
 
-    static class LoadStmtAnalyzerVisitor implements AstVisitor<Void, ConnectContext> {
+    static class LoadStmtAnalyzerVisitor implements AstVisitorExtendInterface<Void, ConnectContext> {
 
         private static final String VERSION = "version";
 

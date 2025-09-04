@@ -14,11 +14,11 @@
 
 package com.starrocks.qe.scheduler;
 
-import com.starrocks.analysis.DescriptorTable;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.Status;
 import com.starrocks.common.util.RuntimeProfile;
 import com.starrocks.datacache.DataCacheSelectMetrics;
+import com.starrocks.planner.DescriptorTable;
 import com.starrocks.planner.PlanFragment;
 import com.starrocks.planner.ScanNode;
 import com.starrocks.planner.StreamLoadPlanner;
@@ -107,9 +107,9 @@ public abstract class Coordinator {
         startScheduling(option);
     }
 
-    public void execWithQueryDeployExecutor() throws Exception {
+    public void execWithQueryDeployExecutor(ConnectContext context) throws Exception {
         ScheduleOption option = new ScheduleOption();
-        option.useQueryDeployExecutor = true;
+        option.useQueryDeployExecutor = context.getSessionVariable().isEnableConnectorDeployScanRangesBackground();
         startScheduling(option);
     }
 

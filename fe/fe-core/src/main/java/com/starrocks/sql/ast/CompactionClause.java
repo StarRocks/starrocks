@@ -48,6 +48,6 @@ public class CompactionClause extends AlterTableClause {
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitCompactionClause(this, context);
+        return ((AstVisitorExtendInterface<R, C>) visitor).visitCompactionClause(this, context);
     }
 }

@@ -16,7 +16,7 @@
 package com.starrocks.sql.ast;
 
 import com.google.common.base.Strings;
-import com.starrocks.analysis.TableName;
+import com.starrocks.sql.ast.expression.TableName;
 import com.starrocks.sql.parser.NodePosition;
 
 import static com.starrocks.common.util.Util.normalizeName;
@@ -51,6 +51,6 @@ public class ShowIndexStmt extends ShowStmt {
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitShowIndexStatement(this, context);
+        return ((AstVisitorExtendInterface<R, C>) visitor).visitShowIndexStatement(this, context);
     }
 }

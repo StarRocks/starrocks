@@ -40,16 +40,18 @@ import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.ImmutableSortedSet;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
-import com.starrocks.analysis.ArithmeticExpr;
-import com.starrocks.analysis.FunctionName;
 import com.starrocks.builtins.VectorizedBuiltinFunctions;
-import com.starrocks.catalog.combinator.StateFunctionCombinator;
-import com.starrocks.catalog.combinator.AggStateDesc;
+import com.starrocks.catalog.combinator.AggStateCombineCombinator;
 import com.starrocks.catalog.combinator.AggStateIf;
 import com.starrocks.catalog.combinator.AggStateMergeCombinator;
 import com.starrocks.catalog.combinator.AggStateUnionCombinator;
 import com.starrocks.catalog.combinator.AggStateUtils;
+import com.starrocks.catalog.combinator.StateFunctionCombinator;
+import com.starrocks.catalog.combinator.StateMergeCombinator;
+import com.starrocks.catalog.combinator.StateUnionCombinator;
 import com.starrocks.sql.analyzer.PolymorphicFunctionAnalyzer;
+import com.starrocks.sql.ast.expression.ArithmeticExpr;
+import com.starrocks.sql.ast.expression.FunctionName;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -101,6 +103,7 @@ public class FunctionSet {
     public static final String TIMESTAMPADD = "timestampadd";
     public static final String TIMESTAMPDIFF = "timestampdiff";
     public static final String TO_DATE = "to_date";
+    public static final String TO_DATETIME = "to_datetime";
     public static final String DATE = "date";
     public static final String LAST_DAY = "last_day";
     public static final String MAKEDATE = "makedate";
@@ -157,6 +160,7 @@ public class FunctionSet {
     public static final String MD5_SUM_NUMERIC = "md5sum_numeric";
     public static final String SHA2 = "sha2";
     public static final String SM3 = "sm3";
+    public static final String ROW_FINGERPRINT= "row_fingerprint";
 
     // Vector Index functions:
     public static final String APPROX_COSINE_SIMILARITY = "approx_cosine_similarity";
@@ -308,6 +312,8 @@ public class FunctionSet {
     public static final String DISTINCT_PCSA = "distinct_pcsa";
     public static final String HISTOGRAM = "histogram";
     public static final String FLAT_JSON_META = "flat_json_meta";
+    public static final String COLUMN_SIZE = "column_size";
+    public static final String COLUMN_COMPRESSED_SIZE = "column_compressed_size";
     public static final String MANN_WHITNEY_U_TEST = "mann_whitney_u_test";
 
     // Bitmap functions:
@@ -555,7 +561,11 @@ public class FunctionSet {
 
     // scalar function
     public static final String STATE_SUFFIX = "_state";
+    public static final String STATE_UNION_SUFFIX = "_state_union";
+    public static final String STATE_MERGE_SUFFIX = "_state_merge";
+
     // agg function
+    public static final String AGG_STATE_COMBINE_SUFFIX = "_combine";
     public static final String AGG_STATE_UNION_SUFFIX = "_union";
     public static final String AGG_STATE_MERGE_SUFFIX = "_merge";
     public static final String AGG_STATE_IF_SUFFIX = "_if";
@@ -1054,9 +1064,12 @@ public class FunctionSet {
         if (AggStateUtils.isSupportedAggStateFunction(aggFunc, false)) {
             // register `_state` combinator
             StateFunctionCombinator.of(aggFunc).ifPresent(this::addBuiltInFunction);
+            StateMergeCombinator.of(aggFunc).ifPresent(this::addBuiltInFunction);
+            StateUnionCombinator.of(aggFunc).ifPresent(this::addBuiltInFunction);
             // register `_merge`/`_union` combinator for aggregate functions
             AggStateUnionCombinator.of(aggFunc).ifPresent(this::addBuiltInFunction);
             AggStateMergeCombinator.of(aggFunc).ifPresent(this::addBuiltInFunction);
+            AggStateCombineCombinator.of(aggFunc).ifPresent(this::addBuiltInFunction);
         }
 
         if (AggStateUtils.isSupportedAggStateFunction(aggFunc, true)) {
@@ -1075,6 +1088,18 @@ public class FunctionSet {
 
     public static String getAggStateMergeName(String name) {
         return String.format("%s%s", name, AGG_STATE_MERGE_SUFFIX);
+    }
+
+    public static String getAggStateCombineName(String name) {
+        return String.format("%s%s", name, AGG_STATE_COMBINE_SUFFIX);
+    }
+
+    public static String getStateMergeName(String name) {
+        return String.format("%s%s", name, STATE_MERGE_SUFFIX);
+    }
+
+    public static String getStateUnionName(String name) {
+        return String.format("%s%s", name, STATE_UNION_SUFFIX);
     }
 
     public static String getAggStateIfName(String name) {
@@ -1351,6 +1376,12 @@ public class FunctionSet {
                 Type.ARRAY_VARCHAR, Type.ARRAY_VARCHAR, false, false, false));
         addBuiltin(AggregateFunction.createBuiltin(FLAT_JSON_META, Lists.newArrayList(Type.ANY_ARRAY),
                 Type.ARRAY_VARCHAR, Type.ARRAY_VARCHAR, false, false, false));
+
+        // column meta size inspectors (used only in META_SCAN)
+        addBuiltin(AggregateFunction.createBuiltin(COLUMN_SIZE, Lists.newArrayList(Type.ANY_ELEMENT),
+                Type.BIGINT, Type.BIGINT, false, false, false));
+        addBuiltin(AggregateFunction.createBuiltin(COLUMN_COMPRESSED_SIZE, Lists.newArrayList(Type.ANY_ELEMENT),
+                Type.BIGINT, Type.BIGINT, false, false, false));
 
         for (Type t : Type.getSupportedTypes()) {
             // null/char/time is handled through type promotion

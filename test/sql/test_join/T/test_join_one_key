@@ -1,4 +1,4 @@
--- name: test_join_one_key
+-- name: test_join_one_key @sequential
 CREATE TABLE __row_util_base (
   k1 bigint NULL
 ) ENGINE=OLAP

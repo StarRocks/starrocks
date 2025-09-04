@@ -42,6 +42,6 @@ public class ComputeNodeClause extends AlterClause {
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitComputeNodeClause(this, context);
+        return ((AstVisitorExtendInterface<R, C>) visitor).visitComputeNodeClause(this, context);
     }
 }

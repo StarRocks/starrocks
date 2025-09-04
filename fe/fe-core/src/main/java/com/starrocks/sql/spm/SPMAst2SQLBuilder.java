@@ -14,23 +14,22 @@
 
 package com.starrocks.sql.spm;
 
-import com.google.common.base.Joiner;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Sets;
-import com.starrocks.analysis.Expr;
-import com.starrocks.analysis.FunctionCallExpr;
-import com.starrocks.analysis.InPredicate;
-import com.starrocks.analysis.LiteralExpr;
-import com.starrocks.analysis.ParseNode;
-import com.starrocks.analysis.SlotRef;
-import com.starrocks.sql.analyzer.AstToSQLBuilder;
 import com.starrocks.sql.ast.JoinRelation;
+import com.starrocks.sql.ast.ParseNode;
 import com.starrocks.sql.ast.QueryRelation;
 import com.starrocks.sql.ast.QueryStatement;
-import com.starrocks.sql.ast.SelectList;
 import com.starrocks.sql.ast.SelectListItem;
 import com.starrocks.sql.ast.SelectRelation;
 import com.starrocks.sql.ast.TableRelation;
+import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.FunctionCallExpr;
+import com.starrocks.sql.ast.expression.InPredicate;
+import com.starrocks.sql.ast.expression.LiteralExpr;
+import com.starrocks.sql.ast.expression.SlotRef;
+import com.starrocks.sql.formatter.AST2SQLVisitor;
+import com.starrocks.sql.formatter.FormatOptions;
 import org.apache.commons.collections4.CollectionUtils;
 
 import java.util.List;
@@ -41,9 +40,7 @@ import java.util.Set;
  * SPM need special spm function to serialize/deserialize digest
  */
 public class SPMAst2SQLBuilder {
-    private final boolean enableHints;
-
-    private final boolean enableDigest;
+    private final boolean enableSPMDigest;
 
     private final Builder builder = new Builder();
 
@@ -54,9 +51,9 @@ public class SPMAst2SQLBuilder {
 
     private int joinCount = 0;
 
-    public SPMAst2SQLBuilder(boolean enableHints, boolean enableDigest) {
-        this.enableHints = enableHints;
-        this.enableDigest = enableDigest;
+    public SPMAst2SQLBuilder(boolean enableHints, boolean enableSPMDigest) {
+        this.builder.getOptions().setEnableHints(enableHints);
+        this.enableSPMDigest = enableSPMDigest;
     }
 
     public String build(QueryRelation statement) {
@@ -84,9 +81,17 @@ public class SPMAst2SQLBuilder {
     }
 
     // need deserialize to SQL, so extends from AstToSQLBuilder, not AstToStringBuilder/SqlDigestBuilder
-    private class Builder extends AstToSQLBuilder.AST2SQLBuilderVisitor {
+    private class Builder extends AST2SQLVisitor {
         protected Builder() {
-            super(false, false, true);
+            options.setColumnSimplifyTableName(false);
+            options.setColumnWithTableName(true);
+            options.setHideCredential(true);
+            options.setEnableDigest(false);
+            options.setEnableNewLine(false);
+        }
+
+        public FormatOptions getOptions() {
+            return options;
         }
 
         @Override
@@ -115,49 +120,15 @@ public class SPMAst2SQLBuilder {
         @Override
         public String visitJoin(JoinRelation relation, Void context) {
             joinCount++;
-            String join;
-            if (enableHints) {
-                join = super.visitJoin(relation, context);
-            } else {
-                String hints = relation.getJoinHint();
-                relation.setJoinHint(null);
-                join = super.visitJoin(relation, context);
-                relation.setJoinHint(hints);
-            }
-            return join;
+            return super.visitJoin(relation, context);
         }
 
         @Override
         public String visitSelect(SelectRelation stmt, Void context) {
-            StringBuilder sqlBuilder = new StringBuilder();
-            SelectList selectList = stmt.getSelectList();
-            sqlBuilder.append("SELECT ");
-
-            // add hint
-            if (enableHints && selectList.getHintNodes() != null) {
-                sqlBuilder.append(extractHintStr(selectList.getHintNodes()));
-            }
-            if (selectList.isDistinct()) {
-                sqlBuilder.append("DISTINCT ");
-            }
-
-            sqlBuilder.append(Joiner.on(", ").join(visitSelectItemList(stmt)));
-            String fromClause = visit(stmt.getRelation());
-            if (fromClause != null) {
-                sqlBuilder.append(" FROM ").append(fromClause);
-            }
-            if (stmt.hasWhereClause()) {
-                sqlBuilder.append(" WHERE ").append(visit(stmt.getWhereClause()));
-            }
             if (stmt.hasGroupByClause()) {
                 aggCount++;
-                sqlBuilder.append(" GROUP BY ").append(visit(stmt.getGroupByClause()));
             }
-            if (stmt.hasHavingClause()) {
-                sqlBuilder.append(" HAVING ").append(visit(stmt.getHavingClause()));
-            }
-
-            return sqlBuilder.toString();
+            return super.visitSelect(stmt, context);
         }
 
         protected List<String> visitSelectItemList(SelectRelation stmt) {
@@ -172,7 +143,7 @@ public class SPMAst2SQLBuilder {
 
         @Override
         public String visitInPredicate(InPredicate node, Void context) {
-            if ((SPMFunctions.isSPMFunctions(node) || node.isConstantValues()) && enableDigest) {
+            if ((SPMFunctions.isSPMFunctions(node) || node.isConstantValues()) && enableSPMDigest) {
                 StringBuilder strBuilder = new StringBuilder();
                 String notStr = (node.isNotIn()) ? "NOT " : "";
                 strBuilder.append(printWithParentheses(node.getChild(0))).append(" ").append(notStr).append("IN ");
@@ -185,7 +156,7 @@ public class SPMAst2SQLBuilder {
         @Override
         public String visitFunctionCall(FunctionCallExpr node, Void context) {
             if (SPMFunctions.isSPMFunctions(node)) {
-                if (enableDigest) {
+                if (enableSPMDigest) {
                     return "?";
                 }
                 List<String> children = node.getChildren().stream().map(this::visit).toList();
@@ -196,7 +167,7 @@ public class SPMAst2SQLBuilder {
 
         @Override
         public String visitLiteral(LiteralExpr expr, Void context) {
-            if (enableDigest) {
+            if (enableSPMDigest) {
                 return "?";
             }
             return super.visitLiteral(expr, context);

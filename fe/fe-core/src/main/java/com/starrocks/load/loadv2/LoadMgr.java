@@ -253,7 +253,8 @@ public class LoadMgr implements MemoryTrackable {
                                                EstimateStats estimateStats,
                                                long timeout,
                                                long warehouseId,
-                                               Coordinator coordinator) throws StarRocksException {
+                                               Coordinator coordinator,
+                                               InsertLoadTxnCallback insertLoadTxnCallback) throws StarRocksException {
         // get db id
         Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbName);
         if (db == null) {
@@ -263,7 +264,7 @@ public class LoadMgr implements MemoryTrackable {
         InsertLoadJob loadJob;
         if (Objects.requireNonNull(jobType) == EtlJobType.INSERT) {
             loadJob = new InsertLoadJob(label, db.getId(), tableId, txnId, loadId, user,
-                    createTimestamp, timeout, warehouseId, coordinator);
+                    createTimestamp, timeout, warehouseId, coordinator, insertLoadTxnCallback);
             loadJob.setLoadFileInfo(estimateStats.estimateFileNum, estimateStats.estimateFileSize);
             loadJob.setEstimateScanRow(estimateStats.estimateScanRows);
             loadJob.setTransactionId(txnId);
@@ -473,11 +474,11 @@ public class LoadMgr implements MemoryTrackable {
             // remove the ones that finished earlier
             int numJobsToRemove = idToLoadJob.size() - Config.label_keep_max_num;
             if (numJobsToRemove > 0) {
-                LOG.info("remove {} jobs from {}", numJobsToRemove, jobs.size());
+                LOG.debug("remove {} jobs from {}", numJobsToRemove, jobs.size());
                 Iterator<LoadJob> iterator = jobs.iterator();
                 for (int i = 0; i != numJobsToRemove && iterator.hasNext(); ++i) {
                     LoadJob job = iterator.next();
-                    LOG.info("remove redundant job: {}", job.getLabel());
+                    LOG.debug("remove redundant job: {}", job.getLabel());
                     unprotectedRemoveJobReleatedMeta(job);
                 }
             }

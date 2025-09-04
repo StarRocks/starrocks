@@ -43,7 +43,6 @@ import com.google.common.collect.Maps;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import com.google.gson.annotations.SerializedName;
-import com.starrocks.analysis.RoutineLoadDataSourceProperties;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
@@ -69,11 +68,12 @@ import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.load.Load;
 import com.starrocks.load.RoutineLoadDesc;
 import com.starrocks.metric.RoutineLoadLagTimeMetricMgr;
-import com.starrocks.qe.OriginStatement;
+import com.starrocks.qe.OriginStatementInfo;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.ast.CreateRoutineLoadStmt;
+import com.starrocks.sql.ast.expression.RoutineLoadDataSourceProperties;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.transaction.TransactionState;
@@ -779,7 +779,7 @@ public class KafkaRoutineLoadJob extends RoutineLoadJob {
      */
     @Override
     public void modifyJob(RoutineLoadDesc routineLoadDesc, Map<String, String> jobProperties,
-                          RoutineLoadDataSourceProperties dataSourceProperties, OriginStatement originStatement,
+                          RoutineLoadDataSourceProperties dataSourceProperties, OriginStatementInfo originStatement,
                           boolean isReplay) throws DdlException {
         if (!isReplay && dataSourceProperties != null && dataSourceProperties.hasAnalyzedProperties()) {
             List<Pair<Integer, Long>> kafkaPartitionOffsets = dataSourceProperties.getKafkaPartitionOffsets();

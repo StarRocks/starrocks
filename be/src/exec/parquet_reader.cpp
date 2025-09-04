@@ -23,7 +23,7 @@
 
 #include "common/config.h"
 #include "common/logging.h"
-#include "exec/file_scanner.h"
+#include "exec/file_scanner/file_scanner.h"
 #include "fmt/format.h"
 #include "parquet/schema.h"
 #include "parquet_schema_builder.h"

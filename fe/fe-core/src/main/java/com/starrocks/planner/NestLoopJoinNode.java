@@ -15,15 +15,14 @@
 package com.starrocks.planner;
 
 import com.google.common.base.Preconditions;
-import com.starrocks.analysis.BinaryPredicate;
-import com.starrocks.analysis.DescriptorTable;
-import com.starrocks.analysis.Expr;
-import com.starrocks.analysis.JoinOperator;
-import com.starrocks.analysis.SlotRef;
-import com.starrocks.analysis.TableRef;
 import com.starrocks.common.IdGenerator;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
+import com.starrocks.sql.ast.expression.BinaryPredicate;
+import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.JoinOperator;
+import com.starrocks.sql.ast.expression.SlotRef;
+import com.starrocks.sql.ast.expression.TableRef;
 import com.starrocks.thrift.TNestLoopJoinNode;
 import com.starrocks.thrift.TNormalNestLoopJoinNode;
 import com.starrocks.thrift.TNormalPlanNode;
@@ -135,6 +134,10 @@ public class NestLoopJoinNode extends JoinNode implements RuntimeFilterBuildNode
         if (!buildRuntimeFilters.isEmpty()) {
             msg.nestloop_join_node.setBuild_runtime_filters(
                     RuntimeFilterDescription.toThriftRuntimeFilterDescriptions(buildRuntimeFilters));
+        }
+        if (commonSlotMap != null) {
+            commonSlotMap.forEach((key, value) ->
+                    msg.nestloop_join_node.putToCommon_slot_map(key.asInt(), value.treeToThrift()));
         }
     }
 

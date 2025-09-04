@@ -15,11 +15,13 @@
 package com.starrocks.common.profile;
 
 import com.google.common.base.Stopwatch;
+import com.google.common.collect.HashBasedTable;
+import com.google.common.collect.Lists;
+import com.google.common.collect.Table;
 import com.starrocks.common.util.DebugUtil;
 import org.apache.commons.lang3.StringUtils;
 
 import java.util.Comparator;
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -27,44 +29,56 @@ import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
 public class TimeWatcher {
-    private int levels = 0;
-
-    private final Map<String, ScopedTimer> timers = new LinkedHashMap<>();
+    private final List<String> levels = Lists.newArrayList();
+    private final Table<String, String, ScopedTimer> scopedTimers = HashBasedTable.create();
 
     public Timer scope(long time, String name) {
         ScopedTimer t;
-        if (timers.containsKey(name)) {
-            t = timers.get(name);
+        String prefix = String.join("/", levels);
+        if (scopedTimers.row(name).containsKey(prefix)) {
+            t = scopedTimers.row(name).get(prefix);
         } else {
             t = new ScopedTimer(time, name);
-            timers.put(name, t);
+            scopedTimers.put(name, prefix, t);
         }
         t.start();
         return t;
     }
 
     public Optional<Timer> getTimer(String name) {
-        return Optional.ofNullable(timers.get(name));
+        if (!scopedTimers.containsRow(name)) {
+            return Optional.empty();
+        }
+        Map<String, ScopedTimer> timers = scopedTimers.row(name);
+        if (timers.isEmpty()) {
+            return Optional.empty();
+        }
+        return Optional.ofNullable(timers.entrySet().stream()
+                .min(Comparator.comparingInt(e -> e.getKey().length()))
+                .map(Map.Entry::getValue)
+                .orElse(null));
     }
 
     public List<Timer> getAllTimerWithOrder() {
-        return timers.values().stream().sorted(Comparator.comparingLong(o -> o.firstTimePoints))
+        return scopedTimers.values().stream().sorted(Comparator.comparingLong(o -> o.firstTimePointNanoSecond))
                 .collect(Collectors.toList());
     }
 
     private class ScopedTimer extends Timer {
         private final String name;
         private final int scopeLevel;
-        private final long firstTimePoints;
+        private final long firstTimePointNanoSecond;
         private final Stopwatch stopWatch = Stopwatch.createUnstarted();
 
         private int count = 0;
         private int reentrantCount = 0;
 
         public ScopedTimer(long time, String name) {
-            this.firstTimePoints = time;
+            // The reason why here we want nanosecond is to make sure
+            // `getAllTimerWithOrder` can sort times in correct order.
+            this.firstTimePointNanoSecond = time;
             this.name = name;
-            this.scopeLevel = levels;
+            this.scopeLevel = levels.size();
         }
 
         @Override
@@ -77,13 +91,13 @@ public class TimeWatcher {
                 stopWatch.start();
             }
             reentrantCount++;
-            levels++;
             count++;
+            levels.add(name);
         }
 
         public void close() {
             reentrantCount--;
-            levels--;
+            levels.remove(levels.size() - 1);
             if (reentrantCount == 0) {
                 stopWatch.stop();
             }
@@ -91,7 +105,7 @@ public class TimeWatcher {
 
         @Override
         public long getFirstTimePoint() {
-            return firstTimePoints;
+            return firstTimePointNanoSecond / 1000000;
         }
 
         @Override

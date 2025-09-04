@@ -15,7 +15,6 @@
 package com.starrocks.sql.ast;
 
 import com.google.common.collect.Maps;
-import com.starrocks.analysis.ParseNode;
 import com.starrocks.common.util.PrintableMap;
 import com.starrocks.sql.parser.NodePosition;
 

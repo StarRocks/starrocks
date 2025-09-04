@@ -24,7 +24,7 @@
 #include "common/compiler_util.h"
 #include "common/config.h"
 #include "common/status.h"
-#include "exec/hdfs_scanner.h"
+#include "exec/hdfs_scanner/hdfs_scanner.h"
 #include "formats/parquet/column_reader.h"
 #include "formats/parquet/utils.h"
 #include "gutil/strings/substitute.h"

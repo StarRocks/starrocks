@@ -49,15 +49,6 @@ import com.staros.proto.FilePathInfo;
 import com.starrocks.alter.AlterJobExecutor;
 import com.starrocks.alter.AlterMVJobExecutor;
 import com.starrocks.alter.MaterializedViewHandler;
-import com.starrocks.analysis.Expr;
-import com.starrocks.analysis.HintNode;
-import com.starrocks.analysis.IntLiteral;
-import com.starrocks.analysis.SetVarHint;
-import com.starrocks.analysis.SlotRef;
-import com.starrocks.analysis.StringLiteral;
-import com.starrocks.analysis.TableName;
-import com.starrocks.analysis.TableRef;
-import com.starrocks.analysis.UserVariableHint;
 import com.starrocks.authorization.AccessDeniedException;
 import com.starrocks.authorization.ObjectType;
 import com.starrocks.authorization.PrivilegeType;
@@ -213,8 +204,8 @@ import com.starrocks.sql.ast.DropMaterializedViewStmt;
 import com.starrocks.sql.ast.DropPartitionClause;
 import com.starrocks.sql.ast.DropTableStmt;
 import com.starrocks.sql.ast.ExpressionPartitionDesc;
+import com.starrocks.sql.ast.HintNode;
 import com.starrocks.sql.ast.IncrementalRefreshSchemeDesc;
-import com.starrocks.sql.ast.IntervalLiteral;
 import com.starrocks.sql.ast.ManualRefreshSchemeDesc;
 import com.starrocks.sql.ast.PartitionDesc;
 import com.starrocks.sql.ast.PartitionRangeDesc;
@@ -233,6 +224,15 @@ import com.starrocks.sql.ast.SyncRefreshSchemeDesc;
 import com.starrocks.sql.ast.SystemVariable;
 import com.starrocks.sql.ast.TableRenameClause;
 import com.starrocks.sql.ast.TruncateTableStmt;
+import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.IntLiteral;
+import com.starrocks.sql.ast.expression.IntervalLiteral;
+import com.starrocks.sql.ast.expression.SetVarHint;
+import com.starrocks.sql.ast.expression.SlotRef;
+import com.starrocks.sql.ast.expression.StringLiteral;
+import com.starrocks.sql.ast.expression.TableName;
+import com.starrocks.sql.ast.expression.TableRef;
+import com.starrocks.sql.ast.expression.UserVariableHint;
 import com.starrocks.sql.common.MetaUtils;
 import com.starrocks.sql.common.PListCell;
 import com.starrocks.sql.common.SyncPartitionUtils;
@@ -348,30 +348,48 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
                 }
 
                 OlapTable olapTable = (OlapTable) table;
-                long tableId = olapTable.getId();
-                for (PhysicalPartition partition : olapTable.getAllPhysicalPartitions()) {
-                    long physicalPartitionId = partition.getId();
-                    TStorageMedium medium = olapTable.getPartitionInfo().getDataProperty(
-                            partition.getParentId()).getStorageMedium();
-                    for (MaterializedIndex index : partition
-                            .getMaterializedIndices(MaterializedIndex.IndexExtState.ALL)) {
-                        long indexId = index.getId();
-                        int schemaHash = olapTable.getSchemaHashByIndexId(indexId);
-                        TabletMeta tabletMeta = new TabletMeta(dbId, tableId, physicalPartitionId,
-                                indexId, medium, table.isCloudNativeTableOrMaterializedView());
-                        for (Tablet tablet : index.getTablets()) {
-                            long tabletId = tablet.getId();
-                            invertedIndex.addTablet(tabletId, tabletMeta);
-                            if (table.isOlapTableOrMaterializedView()) {
-                                for (Replica replica : ((LocalTablet) tablet).getImmutableReplicas()) {
-                                    invertedIndex.addReplica(tabletId, replica);
-                                }
-                            }
-                        }
-                    } // end for indices
-                } // end for partitions
+                if (olapTable.isMaterializedView()) {
+                    // For mv, this may throw exception in mv backup/restore case, we should catch it and set mv to inactive
+                    MaterializedView mv = (MaterializedView) olapTable;
+                    try {
+                        recreateOlapTableTabletInvertIndex(dbId, mv, invertedIndex);
+                    } catch (Exception e) {
+                        LOG.error("recreate inverted index for metadata table {} failed", mv.getName(), e);
+                        mv.setInactiveAndReason(MaterializedViewExceptions.inactiveReasonForMetadataTableRestoreCorrupted(
+                                mv.getName()));
+                    }
+                } else {
+                    recreateOlapTableTabletInvertIndex(dbId, olapTable, invertedIndex);
+                }
             } // end for tables
         } // end for dbs
+    }
+
+    private void recreateOlapTableTabletInvertIndex(long dbId,
+                                                    OlapTable olapTable,
+                                                    TabletInvertedIndex invertedIndex) {
+        long tableId = olapTable.getId();
+        for (PhysicalPartition partition : olapTable.getAllPhysicalPartitions()) {
+            long partitionId = partition.getParentId();
+            TStorageMedium medium = olapTable.getPartitionInfo().getDataProperty(
+                    partitionId).getStorageMedium();
+            long physicalPartitionId = partition.getId();
+            for (MaterializedIndex index : partition
+                    .getMaterializedIndices(MaterializedIndex.IndexExtState.ALL)) {
+                long indexId = index.getId();
+                TabletMeta tabletMeta = new TabletMeta(dbId, tableId, physicalPartitionId,
+                        indexId, medium, olapTable.isCloudNativeTableOrMaterializedView());
+                for (Tablet tablet : index.getTablets()) {
+                    long tabletId = tablet.getId();
+                    invertedIndex.addTablet(tabletId, tabletMeta);
+                    if (olapTable.isOlapTableOrMaterializedView()) {
+                        for (Replica replica : ((LocalTablet) tablet).getImmutableReplicas()) {
+                            invertedIndex.addReplica(tabletId, replica);
+                        }
+                    }
+                }
+            } // end for indices
+        }
     }
 
     public void createDb(String dbName) throws DdlException, AlreadyExistsException {
@@ -3751,6 +3769,14 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
                         ImmutableMap.of(key, propertiesToPersist.get(key)));
                 GlobalStateMgr.getCurrentState().getEditLog().logAlterTableProperties(info);
             }
+            if (propertiesToPersist.containsKey(PropertyAnalyzer.PROPERTIES_ENABLE_DYNAMIC_TABLET)) {
+                String enableDynamicTablet = propertiesToPersist.get(PropertyAnalyzer.PROPERTIES_ENABLE_DYNAMIC_TABLET);
+                tableProperty.getProperties().put(PropertyAnalyzer.PROPERTIES_ENABLE_DYNAMIC_TABLET, enableDynamicTablet);
+                tableProperty.buildEnableDynamicTablet();
+                ModifyTablePropertyOperationLog info = new ModifyTablePropertyOperationLog(db.getId(), table.getId(),
+                        ImmutableMap.of(key, propertiesToPersist.get(key)));
+                GlobalStateMgr.getCurrentState().getEditLog().logAlterTableProperties(info);
+            }
         }
     }
 
@@ -3830,6 +3856,14 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
             }
             String locations = PropertyAnalyzer.analyzeLocation(properties, true);
             results.put(PropertyAnalyzer.PROPERTIES_LABELS_LOCATION, locations);
+        }
+        if (properties.containsKey(PropertyAnalyzer.PROPERTIES_ENABLE_DYNAMIC_TABLET)) {
+            try {
+                Boolean enableDynamicTablet = PropertyAnalyzer.analyzeEnableDynamicTablet(properties, true);
+                results.put(PropertyAnalyzer.PROPERTIES_ENABLE_DYNAMIC_TABLET, enableDynamicTablet);
+            } catch (AnalysisException e) {
+                throw new RuntimeException(e.getMessage());
+            }
         }
         if (!properties.isEmpty()) {
             throw new DdlException("Modify failed because unknown properties: " + properties);

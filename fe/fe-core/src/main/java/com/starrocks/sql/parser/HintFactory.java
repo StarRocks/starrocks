@@ -17,23 +17,23 @@ package com.starrocks.sql.parser;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
-import com.starrocks.analysis.BinaryPredicate;
-import com.starrocks.analysis.BinaryType;
-import com.starrocks.analysis.Expr;
-import com.starrocks.analysis.HintNode;
-import com.starrocks.analysis.SetVarHint;
-import com.starrocks.analysis.UserVariableExpr;
-import com.starrocks.analysis.UserVariableHint;
 import com.starrocks.qe.SessionVariable;
+import com.starrocks.sql.ast.HintNode;
 import com.starrocks.sql.ast.UserVariable;
+import com.starrocks.sql.ast.expression.BinaryPredicate;
+import com.starrocks.sql.ast.expression.BinaryType;
+import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.SetVarHint;
+import com.starrocks.sql.ast.expression.UserVariableExpr;
+import com.starrocks.sql.ast.expression.UserVariableHint;
 import org.antlr.v4.runtime.Token;
 
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 
-import static com.starrocks.analysis.SetVarHint.SET_VAR;
-import static com.starrocks.analysis.UserVariableHint.SET_USER_VARIABLE;
+import static com.starrocks.sql.ast.expression.SetVarHint.SET_VAR;
+import static com.starrocks.sql.ast.expression.UserVariableHint.SET_USER_VARIABLE;
 import static com.starrocks.sql.common.ErrorMsgProxy.PARSER_ERROR_MSG;
 
 public class HintFactory {

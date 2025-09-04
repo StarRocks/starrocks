@@ -99,6 +99,24 @@ under the License.
     <dependencies>
         <dependency>
             <groupId>com.starrocks</groupId>
+            <artifactId>fe-grammar</artifactId>
+            <version>1.0.0</version>
+        </dependency>
+
+        <dependency>
+            <groupId>com.starrocks</groupId>
+            <artifactId>fe-parser</artifactId>
+            <version>1.0.0</version>
+        </dependency>
+
+        <dependency>
+            <groupId>com.starrocks</groupId>
+            <artifactId>fe-spi</artifactId>
+            <version>1.0.0</version>
+        </dependency>
+
+        <dependency>
+            <groupId>com.starrocks</groupId>
             <artifactId>spark-dpp</artifactId>
         </dependency>
 
@@ -563,12 +581,6 @@ under the License.
             <classifier>shaded</classifier>
         </dependency>
 
-        <!-- https://mvnrepository.com/artifact/org.antlr/antlr4-runtime -->
-        <dependency>
-            <groupId>org.antlr</groupId>
-            <artifactId>antlr4-runtime</artifactId>
-        </dependency>
-
         <dependency>
             <groupId>org.openjdk.jmh</groupId>
             <artifactId>jmh-core</artifactId>
@@ -969,32 +981,6 @@ under the License.
                         <goals>
                             <goal>compile</goal>
                         </goals>
-                    </execution>
-                </executions>
-            </plugin>
-
-            <!--antlr-->
-            <plugin>
-                <groupId>org.antlr</groupId>
-                <artifactId>antlr4-maven-plugin</artifactId>
-                <version>${antlr.version}</version>
-                <executions>
-                    <execution>
-                        <id>antlr</id>
-                        <phase>generate-sources</phase>
-                        <goals>
-                            <goal>antlr4</goal>
-                        </goals>
-                        <configuration>
-                            <sourceDirectory>src/main/java/com/starrocks/sql/parser</sourceDirectory>
-                            <visitor>true</visitor>
-                            <arguments>
-                                <argument>-package</argument>
-                                <argument>com.starrocks.sql.parser</argument>
-                                <argument>-o</argument>
-                                <argument>${project.build.directory}/generated-sources/antlr4/com/starrocks/sql/parser</argument>
-                            </arguments>
-                        </configuration>
                     </execution>
                 </executions>
             </plugin>

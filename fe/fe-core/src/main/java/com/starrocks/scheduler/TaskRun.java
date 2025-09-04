@@ -19,8 +19,11 @@ import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
 import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Maps;
+import com.google.common.collect.Sets;
 import com.google.gson.annotations.SerializedName;
-import com.starrocks.analysis.StringLiteral;
+import com.starrocks.authentication.AuthenticationMgr;
+import com.starrocks.authorization.PrivilegeBuiltinConstants;
+import com.starrocks.authorization.PrivilegeException;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.Table;
@@ -40,6 +43,7 @@ import com.starrocks.qe.StmtExecutor;
 import com.starrocks.scheduler.persist.TaskRunStatus;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.SystemVariable;
+import com.starrocks.sql.ast.expression.StringLiteral;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;
 import com.starrocks.warehouse.Warehouse;
 import org.apache.logging.log4j.LogManager;
@@ -243,22 +247,47 @@ public class TaskRun implements Comparable<TaskRun> {
         context.setGlobalStateMgr(GlobalStateMgr.getCurrentState());
         context.setCurrentCatalog(task.getCatalogName());
         context.setDatabase(task.getDbName());
-        context.setQualifiedUser(status.getUser());
-        if (status.getUserIdentity() != null) {
-            context.setCurrentUserIdentity(status.getUserIdentity());
-        } else {
-            context.setCurrentUserIdentity(UserIdentity.createAnalyzedUserIdentWithIp(status.getUser(), "%"));
-        }
-        context.setCurrentRoleIds(context.getCurrentUserIdentity());
         context.getState().reset();
         context.setQueryId(UUID.fromString(status.getQueryId()));
         context.setIsLastStmt(true);
         context.resetSessionVariable();
+        switchUser(context);
 
         // NOTE: Ensure the thread local connect context is always the same with the newest ConnectContext.
         // NOTE: Ensure this thread local is removed after this method to avoid memory leak in JVM.
         context.setThreadLocalInfo();
         return context;
+    }
+
+    /**
+     * Creator-based: record the creator(user) of MV, refresh the MV with same user
+     * - It's suitable for most scenarios, especially for the sql needs proper user
+     * Root-based: always use the ROOT to refresh the MV
+     * - It's suitable for LDAP-based authorization system, which lacks a proper user for authorization
+     */
+    private void switchUser(ConnectContext context) {
+        if (!Config.mv_use_creator_based_authorization) {
+            context.setQualifiedUser(AuthenticationMgr.ROOT_USER);
+            context.setCurrentUserIdentity(UserIdentity.ROOT);
+            context.setCurrentRoleIds(Sets.newHashSet(PrivilegeBuiltinConstants.ROOT_ROLE_ID));
+        } else {
+            context.setQualifiedUser(status.getUser());
+            if (status.getUserIdentity() != null) {
+                context.setCurrentUserIdentity(status.getUserIdentity());
+            } else {
+                context.setCurrentUserIdentity(UserIdentity.createAnalyzedUserIdentWithIp(status.getUser(), "%"));
+            }
+            // For internal task runs (e.g., MV refresh), always activate all roles of the task user
+            // to avoid relying on session default roles which may be empty (causing privilege errors).
+            try {
+                context.setCurrentRoleIds(GlobalStateMgr.getCurrentState().getAuthorizationMgr()
+                        .getRoleIdsByUser(context.getCurrentUserIdentity()));
+            } catch (PrivilegeException e) {
+                LOG.warn("TaskRun {} set role failed", taskRunId, e);
+                // Fallback to previous behavior if fetching roles fails
+                context.setCurrentRoleIds(context.getCurrentUserIdentity());
+            }
+        }
     }
 
     public TaskRunContext buildTaskRunContext() {
@@ -343,6 +372,12 @@ public class TaskRun implements Comparable<TaskRun> {
 
         // post process task run
         try (Timer ignored = Tracers.watchScope("TaskRunPostProcess")) {
+            // record the final status of task run
+            if (taskRunContext != null && taskRunContext.getStatus() != null) {
+                Tracers.record("TaskRunStatus", taskRunContext.getStatus().toJSON());
+            }
+
+            // post process the task run
             processor.postTaskRun(taskRunContext);
         } catch (Exception e) {
             LOG.warn("Failed to post task run, task_id: {}, task_run_id: {}, error: {}",

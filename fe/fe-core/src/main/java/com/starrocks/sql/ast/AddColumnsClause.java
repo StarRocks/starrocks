@@ -15,7 +15,6 @@
 
 package com.starrocks.sql.ast;
 
-import com.starrocks.analysis.ColumnPosition;
 import com.starrocks.sql.parser.NodePosition;
 
 import java.util.List;
@@ -51,6 +50,6 @@ public class AddColumnsClause extends AlterTableColumnClause {
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitAddColumnsClause(this, context);
+        return ((AstVisitorExtendInterface<R, C>) visitor).visitAddColumnsClause(this, context);
     }
 }

@@ -14,7 +14,7 @@
 
 package com.starrocks.sql.ast;
 
-import com.starrocks.analysis.LimitElement;
+import com.starrocks.sql.ast.expression.LimitElement;
 import com.starrocks.sql.parser.NodePosition;
 
 // Show Warning stmt
@@ -36,6 +36,6 @@ public class ShowWarningStmt extends ShowStmt {
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitShowWarningStatement(this, context);
+        return ((AstVisitorExtendInterface<R, C>) visitor).visitShowWarningStatement(this, context);
     }
 }

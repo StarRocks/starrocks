@@ -14,8 +14,8 @@
 
 package com.starrocks.sql.ast.warehouse;
 
-import com.starrocks.common.util.PrintableMap;
 import com.starrocks.sql.ast.AstVisitor;
+import com.starrocks.sql.ast.AstVisitorExtendInterface;
 import com.starrocks.sql.ast.DdlStmt;
 import com.starrocks.sql.parser.NodePosition;
 
@@ -67,21 +67,6 @@ public class CreateWarehouseStmt extends DdlStmt {
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitCreateWarehouseStatement(this, context);
-    }
-
-    @Override
-    public String toSql() {
-        StringBuilder sb = new StringBuilder();
-        sb.append("CREATE WAREHOUSE ");
-        if (ifNotExists) {
-            sb.append("IF NOT EXISTS ");
-        }
-        sb.append("'").append(warehouseName).append("' ");
-        if (comment != null) {
-            sb.append("COMMENT \"").append(comment).append("\" ");
-        }
-        sb.append("WITH PROPERTIES(").append(new PrintableMap<>(properties, " = ", true, false)).append(")");
-        return sb.toString();
+        return ((AstVisitorExtendInterface<R, C>) visitor).visitCreateWarehouseStatement(this, context);
     }
 }

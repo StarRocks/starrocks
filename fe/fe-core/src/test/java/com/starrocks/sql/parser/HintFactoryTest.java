@@ -16,8 +16,8 @@ package com.starrocks.sql.parser;
 
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
-import com.starrocks.analysis.HintNode;
 import com.starrocks.qe.SessionVariable;
+import com.starrocks.sql.ast.HintNode;
 import org.antlr.v4.runtime.CommonToken;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.params.ParameterizedTest;

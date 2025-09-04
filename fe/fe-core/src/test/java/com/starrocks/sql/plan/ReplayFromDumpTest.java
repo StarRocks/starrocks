@@ -909,7 +909,7 @@ public class ReplayFromDumpTest extends ReplayFromDumpTestBase {
     @Test
     public void testTimeoutDeepJoinCostPrune() throws Exception {
         Tracers.register(connectContext);
-        Tracers.init(connectContext, Tracers.Mode.TIMER, "optimizer");
+        Tracers.init(connectContext, "TIMER", "optimizer");
         connectContext.getSessionVariable().setOptimizerExecuteTimeout(-1);
 
         Pair<QueryDumpInfo, String> replayPair =
@@ -1159,6 +1159,28 @@ public class ReplayFromDumpTest extends ReplayFromDumpTestBase {
             Assertions.assertTrue(replayPair.second.contains("1:EMPTYSET"), replayPair.second);
         } finally {
             FeConstants.enablePruneEmptyOutputScan = false;
+        }
+    }
+
+    @Test
+    public void testUnnestLowCardinalityOptimization() throws Exception {
+        try {
+            FeConstants.USE_MOCK_DICT_MANAGER = true;
+            String dumpString = getDumpInfoFromFile("query_dump/unnest_low_cardinality_optimization");
+            QueryDumpInfo queryDumpInfo = getDumpInfoFromJson(dumpString);
+            Pair<QueryDumpInfo, String> replayPair = getPlanFragment(dumpString, queryDumpInfo.getSessionVariable(),
+                    TExplainLevel.NORMAL);
+            String plan = replayPair.second;
+            Assertions.assertTrue(plan.contains("  30:Project\n" +
+                    "  |  <slot 113> : 113: mock_field_111\n" +
+                    "  |  <slot 278> : lower(142: jl_str)\n" +
+                    "  |  \n" +
+                    "  29:TableValueFunction\n" +
+                    "  |  tableFunctionName: unnest\n" +
+                    "  |  columns: [unnest]\n" +
+                    "  |  returnTypes: [VARCHAR(65533)]"), plan);
+        } finally {
+            FeConstants.USE_MOCK_DICT_MANAGER = false;
         }
     }
 }

@@ -16,8 +16,6 @@ package com.starrocks.planner;
 
 import com.google.common.base.MoreObjects;
 import com.google.common.base.Preconditions;
-import com.starrocks.analysis.SlotDescriptor;
-import com.starrocks.analysis.TupleDescriptor;
 import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.StarRocksException;
@@ -72,6 +70,7 @@ public class IcebergScanNode extends ScanNode {
     private IcebergConnectorScanRangeSource scanRangeSource = null;
     private final IcebergTableMORParams tableFullMORParams;
     private final IcebergMORParams morParams;
+    private volatile boolean reachLimit = false;
     private int selectedPartitionCount = -1;
     private Optional<List<BucketProperty>> bucketProperties = Optional.empty();
 
@@ -90,7 +89,12 @@ public class IcebergScanNode extends ScanNode {
             return false;
         }
 
-        return scanRangeSource.hasMoreOutput();
+        return !reachLimit && scanRangeSource.hasMoreOutput();
+    }
+
+    @Override
+    public void setReachLimit() {
+        reachLimit = true;
     }
 
     @Override
@@ -116,7 +120,7 @@ public class IcebergScanNode extends ScanNode {
             LOG.warn(String.format("Table %s has no snapshot!", icebergTable.getCatalogTableName()));
             return;
         }
-        
+
         if (splits.isEmpty()) {
             LOG.warn("There is no scan tasks after splits",
                     icebergTable.getCatalogDBName(), icebergTable.getCatalogTableName(), icebergJobPlanningPredicate);
@@ -135,7 +139,7 @@ public class IcebergScanNode extends ScanNode {
             remoteFileInfoSource = new QueueIcebergRemoteFileInfoSource(trigger, remoteFileInfoDeque);
         }
 
-        scanRangeSource = new IcebergConnectorScanRangeSource(icebergTable, 
+        scanRangeSource = new IcebergConnectorScanRangeSource(icebergTable,
                 remoteFileInfoSource, morParams, desc, bucketProperties, true);
     }
 
@@ -175,7 +179,7 @@ public class IcebergScanNode extends ScanNode {
             }
         }
 
-        scanRangeSource = new IcebergConnectorScanRangeSource(icebergTable, 
+        scanRangeSource = new IcebergConnectorScanRangeSource(icebergTable,
                 remoteFileInfoSource, morParams, desc, bucketProperties);
     }
 

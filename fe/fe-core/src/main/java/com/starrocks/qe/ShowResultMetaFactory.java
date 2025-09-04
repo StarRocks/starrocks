@@ -34,11 +34,10 @@ import com.starrocks.common.proc.ProcResult;
 import com.starrocks.common.proc.RollupProcDir;
 import com.starrocks.common.proc.SchemaChangeProcDir;
 import com.starrocks.common.proc.TransProcDir;
-import com.starrocks.sql.ShowTemporaryTableStmt;
 import com.starrocks.sql.ast.AdminShowConfigStmt;
 import com.starrocks.sql.ast.AdminShowReplicaDistributionStmt;
 import com.starrocks.sql.ast.AdminShowReplicaStatusStmt;
-import com.starrocks.sql.ast.AstVisitor;
+import com.starrocks.sql.ast.AstVisitorExtendInterface;
 import com.starrocks.sql.ast.DescStorageVolumeStmt;
 import com.starrocks.sql.ast.DescribeStmt;
 import com.starrocks.sql.ast.HelpStmt;
@@ -111,6 +110,7 @@ import com.starrocks.sql.ast.ShowStreamLoadStmt;
 import com.starrocks.sql.ast.ShowTableStatusStmt;
 import com.starrocks.sql.ast.ShowTableStmt;
 import com.starrocks.sql.ast.ShowTabletStmt;
+import com.starrocks.sql.ast.ShowTemporaryTableStmt;
 import com.starrocks.sql.ast.ShowTransactionStmt;
 import com.starrocks.sql.ast.ShowTriggersStmt;
 import com.starrocks.sql.ast.ShowUserPropertyStmt;
@@ -131,7 +131,7 @@ import com.starrocks.sql.ast.warehouse.ShowWarehousesStmt;
 
 import java.util.List;
 
-public class ShowResultMetaFactory implements AstVisitor<ShowResultSetMetaData, Void> {
+public class ShowResultMetaFactory implements AstVisitorExtendInterface<ShowResultSetMetaData, Void> {
     public ShowResultSetMetaData getMetadata(StatementBase stmt) {
         return stmt.accept(this, null);
     }

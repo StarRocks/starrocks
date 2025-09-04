@@ -15,11 +15,10 @@
 
 package com.starrocks.sql.ast;
 
-import com.starrocks.analysis.LimitElement;
-import com.starrocks.analysis.OrderByElement;
-import com.starrocks.analysis.Predicate;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.util.OrderByPair;
+import com.starrocks.sql.ast.expression.LimitElement;
+import com.starrocks.sql.ast.expression.Predicate;
 import com.starrocks.sql.parser.NodePosition;
 
 import java.util.List;
@@ -64,6 +63,6 @@ public abstract class ShowStmt extends StatementBase {
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitShowStatement(this, context);
+        return ((AstVisitorExtendInterface<R, C>) visitor).visitShowStatement(this, context);
     }
 }
