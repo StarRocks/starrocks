@@ -1938,7 +1938,10 @@ public class DatabaseTransactionMgr {
             LOG.debug("replay a transaction state batch{}", transactionStateBatch);
             transactionStateBatch.replaySetTransactionStatus();
             Database db = globalStateMgr.getLocalMetastore().getDb(transactionStateBatch.getDbId());
-            updateCatalogAfterVisibleBatch(transactionStateBatch, db);
+            // db may be dropped when doing finishTransactionBatch
+            if (db != null) {
+                updateCatalogAfterVisibleBatch(transactionStateBatch, db);
+            }
 
             unprotectSetTransactionStateBatch(transactionStateBatch);
         } finally {
