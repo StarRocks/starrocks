@@ -245,15 +245,17 @@ public class HdfsUtil {
     /**
      * Delete path with broker
      *
-     * @param path
-     * @param brokerDesc
+     * @param path remote path to delete
+     * @param properties broker/hdfs properties
      * @throws StarRocksException if broker op failed
      */
-    public static void deletePath(String path, BrokerDesc brokerDesc) throws StarRocksException {
+    public static void deletePath(String path, Map<String, String> properties) throws StarRocksException {
         TBrokerDeletePathRequest tDeletePathRequest = new TBrokerDeletePathRequest(
-                    TBrokerVersion.VERSION_ONE, path, brokerDesc.getProperties());
-        hdfsService.deletePath(tDeletePathRequest);    
+                    TBrokerVersion.VERSION_ONE, path, properties);
+        hdfsService.deletePath(tDeletePathRequest);
     }
+
+    // removed BrokerDesc overload; use deletePath(String, Map<String,String>) instead
 
     public static boolean checkPathExist(String remotePath, BrokerDesc brokerDesc) throws StarRocksException {
         TBrokerCheckPathExistRequest tCheckPathExistRequest = new TBrokerCheckPathExistRequest(
