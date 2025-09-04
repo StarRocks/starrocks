@@ -36,7 +36,14 @@ package com.starrocks.transaction;
 
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
-import com.starrocks.catalog.*;
+import com.starrocks.catalog.Database;
+import com.starrocks.catalog.FakeEditLog;
+import com.starrocks.catalog.FakeGlobalStateMgr;
+import com.starrocks.catalog.GlobalStateMgrTestUtil;
+import com.starrocks.catalog.OlapTable;
+import com.starrocks.catalog.Partition;
+import com.starrocks.catalog.PhysicalPartition;
+import com.starrocks.catalog.Table;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.ExceptionChecker;
