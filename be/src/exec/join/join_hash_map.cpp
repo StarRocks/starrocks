@@ -241,7 +241,7 @@ std::pair<bool, JoinHashMapMethodUnaryType> JoinHashMapSelector::_try_use_linear
 
     if ((table_items->join_type == TJoinOp::ASOF_INNER_JOIN ||
          table_items->join_type == TJoinOp::ASOF_LEFT_OUTER_JOIN) &&
-        bucket_size > LinearChainedJoinHashMap<LT>::max_supported_bucket_size()) {
+        bucket_size > 1) {
         return {true, JoinHashMapMethodTypeTraits<JoinHashMapMethodType::LINEAR_CHAINED2, LT>::unary_type};
     }
 

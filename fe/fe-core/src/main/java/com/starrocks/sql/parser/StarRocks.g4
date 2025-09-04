@@ -2427,12 +2427,12 @@ namedArgument
     ;
 
 joinRelation
-    : crossOrInnerJoinType bracketHint?
+    : asofJoinType bracketHint?
+            rightRelation=relationPrimary joinCriteria
+    | crossOrInnerJoinType bracketHint?
             LATERAL? rightRelation=relationPrimary joinCriteria?
     | outerAndSemiJoinType bracketHint?
             LATERAL? rightRelation=relationPrimary joinCriteria
-    | asofJoinType bracketHint?
-            rightRelation=relationPrimary joinCriteria
     ;
 
 crossOrInnerJoinType
@@ -3129,7 +3129,7 @@ number
     ;
 
 nonReserved
-    : ACCESS | ACTIVE | ADVISOR | AFTER | AGGREGATE | APPLY | ASYNC | AUTHORS | AVG | ADMIN | ANTI | ASOF | AUTHENTICATION | AUTO_INCREMENT | AUTOMATED
+    : ACCESS | ACTIVE | ADVISOR | AFTER | AGGREGATE | APPLY | ASYNC | AUTHORS | AVG | ADMIN | ANTI | AUTHENTICATION | AUTO_INCREMENT | AUTOMATED
     | ARRAY_AGG | ARRAY_AGG_DISTINCT | ASSERT_ROWS | AWARE
     | BACKEND | BACKENDS | BACKUP | BEGIN | BITMAP_UNION | BLACKLIST | BLACKHOLE | BINARY | BODY | BOOLEAN | BRANCH | BROKER | BUCKETS
     | BUILTIN | BASE | BEFORE | BASELINE
