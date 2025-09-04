@@ -57,6 +57,7 @@ import com.starrocks.load.RoutineLoadDesc;
 import com.starrocks.memory.MemoryTrackable;
 import com.starrocks.persist.AlterRoutineLoadJobOperationLog;
 import com.starrocks.persist.ImageWriter;
+import com.starrocks.persist.OriginStatementInfo;
 import com.starrocks.persist.RoutineLoadOperation;
 import com.starrocks.persist.metablock.SRMetaBlockEOFException;
 import com.starrocks.persist.metablock.SRMetaBlockException;
@@ -69,6 +70,7 @@ import com.starrocks.server.RunMode;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.ast.AlterRoutineLoadStmt;
 import com.starrocks.sql.ast.CreateRoutineLoadStmt;
+import com.starrocks.sql.ast.OriginStatement;
 import com.starrocks.sql.ast.PauseRoutineLoadStmt;
 import com.starrocks.sql.ast.ResumeRoutineLoadStmt;
 import com.starrocks.sql.ast.StopRoutineLoadStmt;
@@ -303,7 +305,8 @@ public class RoutineLoadMgr implements Writable, MemoryTrackable {
                 throw new StarRocksException("Unknown data source type: " + type);
         }
 
-        routineLoadJob.setOrigStmt(createRoutineLoadStmt.getOrigStmt());
+        OriginStatement originStatement = createRoutineLoadStmt.getOrigStmt();
+        routineLoadJob.setOrigStmt(new OriginStatementInfo(originStatement.getOrigStmt(), originStatement.getIdx()));
         addRoutineLoadJob(routineLoadJob, createRoutineLoadStmt.getDBName());
     }
 
@@ -746,8 +749,12 @@ public class RoutineLoadMgr implements Writable, MemoryTrackable {
                 && !stmt.getDataSourceProperties().getType().equalsIgnoreCase(job.dataSourceType.name())) {
             throw new DdlException("The specified job type is not: " + stmt.getDataSourceProperties().getType());
         }
+        OriginStatement originStatement = stmt.getOrigStmt();
+        OriginStatementInfo originStatementInfo =
+                new OriginStatementInfo(originStatement.getOrigStmt(), originStatement.getIdx());
+
         job.modifyJob(stmt.getRoutineLoadDesc(), stmt.getAnalyzedJobProperties(),
-                stmt.getDataSourceProperties(), stmt.getOrigStmt(), false);
+                stmt.getDataSourceProperties(), originStatementInfo, false);
     }
 
     public void replayAlterRoutineLoadJob(AlterRoutineLoadJobOperationLog log) throws StarRocksException, IOException {
@@ -763,11 +770,6 @@ public class RoutineLoadMgr implements Writable, MemoryTrackable {
         job.modifyJob(routineLoadDesc, log.getJobProperties(),
                 log.getDataSourceProperties(), log.getOriginStatement(), true);
     }
-
-
-
-
-
 
     private void putJob(RoutineLoadJob routineLoadJob) {
         idToRoutineLoadJob.put(routineLoadJob.getId(), routineLoadJob);

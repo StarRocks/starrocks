@@ -92,8 +92,8 @@ import com.starrocks.lake.DataCacheInfo;
 import com.starrocks.lake.StarOSAgent;
 import com.starrocks.lake.StorageInfo;
 import com.starrocks.persist.ColocatePersistInfo;
+import com.starrocks.persist.OriginStatementInfo;
 import com.starrocks.qe.ConnectContext;
-import com.starrocks.qe.OriginStatement;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
 import com.starrocks.server.TemporaryTableMgr;
@@ -683,21 +683,21 @@ public class OlapTable extends Table {
 
     public void setIndexMeta(long indexId, String indexName, List<Column> schema, int schemaVersion,
                              int schemaHash, short shortKeyColumnCount, TStorageType storageType, KeysType keysType,
-                             OriginStatement origStmt) {
+                             OriginStatementInfo origStmt) {
         setIndexMeta(indexId, indexName, schema, schemaVersion, schemaHash, shortKeyColumnCount, storageType, keysType,
                 origStmt, null);
     }
 
     public void setIndexMeta(long indexId, String indexName, List<Column> schema, int schemaVersion,
                              int schemaHash, short shortKeyColumnCount, TStorageType storageType, KeysType keysType,
-                             OriginStatement origStmt, List<Integer> sortColumns) {
+                             OriginStatementInfo origStmt, List<Integer> sortColumns) {
         setIndexMeta(indexId, indexName, schema, schemaVersion, schemaHash, shortKeyColumnCount, storageType, keysType,
                 origStmt, sortColumns, null);
     }
 
     public void setIndexMeta(long indexId, String indexName, List<Column> schema, int schemaVersion,
                              int schemaHash, short shortKeyColumnCount, TStorageType storageType, KeysType keysType,
-                             OriginStatement origStmt, List<Integer> sortColumns, List<Integer> sortColumnUniqueIds) {
+                             OriginStatementInfo origStmt, List<Integer> sortColumns, List<Integer> sortColumnUniqueIds) {
         // Nullable when meta comes from schema change log replay.
         // The replay log only save the index id, so we need to get name by id.
         if (indexName == null) {
