@@ -304,7 +304,7 @@ template <>
 struct RunTimeTypeTraits<TYPE_VARIANT> {
     using CppType = VariantValue*;
     using ColumnType = VariantColumn;
-    using ProxyContainerType = ColumnType::Container;
+    using ProxyContainerType = ColumnType::ImmContainer;
 };
 
 template <>
