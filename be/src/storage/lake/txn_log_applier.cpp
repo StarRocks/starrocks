@@ -786,10 +786,10 @@ private:
                              << ", base version: " << txn_meta.visible_version() << ", new version: " << _new_version;
                 return Status::Corruption("mismatched snapshot version and new version");
             }
-        } else if (txn_meta.snapshot_version() - txn_meta.data_version() +  _metadata->version() != _new_version) {
+        } else if (txn_meta.snapshot_version() - txn_meta.data_version() + _metadata->version() != _new_version) {
             LOG(WARNING) << "Fail to apply replication log, mismatched version, snapshot version: "
                          << txn_meta.snapshot_version() << ", data version: " << txn_meta.data_version()
-                         << ", base version: " <<  _metadata->version() << ", new version: " << _new_version;
+                         << ", base version: " << _metadata->version() << ", new version: " << _new_version;
             return Status::Corruption("mismatched version");
         }
 
