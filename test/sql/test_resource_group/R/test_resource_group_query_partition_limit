@@ -19,6 +19,23 @@ INSERT INTO t_partition_limit (datekey, item_id, v1) VALUES ('2025-01-02 00:00:0
 INSERT INTO t_partition_limit (datekey, item_id, v1) VALUES ('2025-01-01 00:00:00', '1', 2);
 -- result:
 -- !result
+CREATE TABLE `t_partition_limit2` (
+  `datekey` datetime NOT NULL COMMENT "",
+  `item_id` varchar(65533) NOT NULL COMMENT "",
+  `v1` int(11) NULL COMMENT ""
+) ENGINE=OLAP
+PRIMARY KEY(`datekey`, `item_id`)
+COMMENT "OLAP"
+PARTITION BY date_trunc('day', `datekey`)
+DISTRIBUTED BY HASH(`datekey`, `item_id`);
+-- result:
+-- !result
+INSERT INTO t_partition_limit2 (datekey, item_id, v1) VALUES ('2025-01-05 00:00:00', '1', 2);
+-- result:
+-- !result
+INSERT INTO t_partition_limit2 (datekey, item_id, v1) VALUES ('2025-01-06 00:00:00', '1', 2);
+-- result:
+-- !result
 create resource group rg_${uuid0}
     to ( user='root' )
     with ('cpu_core_limit' = '1', 'mem_limit' = '0.99');
@@ -40,7 +57,22 @@ alter resource group rg_${uuid0} with ('cpu_core_limit'='1', 'mem_limit' = '1', 
 -- !result
 select count(1) from t_partition_limit;
 -- result:
-E: (5704, "Query partitions exceed limit: current partitions queried: '3', maximum allowed partitions: '2'")
+E: (5704, "Query partitions exceed limit: table: 't_partition_limit' current partitions queried: '3', maximum allowed partitions: '2'")
+-- !result
+alter resource group rg_${uuid0} with ('cpu_core_limit'='1', 'mem_limit' = '1', 'partition_num'='3', 'total_partition_num'='4');
+-- result:
+-- !result
+select count(1) from t_partition_limit UNION all select count(1) from t_partition_limit2;
+-- result:
+E: (5705, "The total number of partitions in the query '5' exceeds the limit '4' set by the resource group")
+-- !result
+alter resource group rg_${uuid0} with ('cpu_core_limit'='1', 'mem_limit' = '1', 'partition_num'='3', 'total_partition_num'='5');
+-- result:
+-- !result
+select count(1) from t_partition_limit UNION all select count(1) from t_partition_limit2;
+-- result:
+2
+3
 -- !result
 drop resource group rg_${uuid0};
 -- result:

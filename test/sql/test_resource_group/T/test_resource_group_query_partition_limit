@@ -13,6 +13,19 @@ INSERT INTO t_partition_limit (datekey, item_id, v1) VALUES ('2025-01-03 00:00:0
 INSERT INTO t_partition_limit (datekey, item_id, v1) VALUES ('2025-01-02 00:00:00', '1', 2);
 INSERT INTO t_partition_limit (datekey, item_id, v1) VALUES ('2025-01-01 00:00:00', '1', 2);
 
+
+CREATE TABLE `t_partition_limit2` (
+  `datekey` datetime NOT NULL COMMENT "",
+  `item_id` varchar(65533) NOT NULL COMMENT "",
+  `v1` int(11) NULL COMMENT ""
+) ENGINE=OLAP
+PRIMARY KEY(`datekey`, `item_id`)
+COMMENT "OLAP"
+PARTITION BY date_trunc('day', `datekey`)
+DISTRIBUTED BY HASH(`datekey`, `item_id`);
+INSERT INTO t_partition_limit2 (datekey, item_id, v1) VALUES ('2025-01-05 00:00:00', '1', 2);
+INSERT INTO t_partition_limit2 (datekey, item_id, v1) VALUES ('2025-01-06 00:00:00', '1', 2);
+
 create resource group rg_${uuid0}
     to ( user='root' )
     with ('cpu_core_limit' = '1', 'mem_limit' = '0.99');
@@ -26,5 +39,11 @@ select count(1) from t_partition_limit;
 
 alter resource group rg_${uuid0} with ('cpu_core_limit'='1', 'mem_limit' = '1', 'partition_num'='2');
 select count(1) from t_partition_limit;
+
+alter resource group rg_${uuid0} with ('cpu_core_limit'='1', 'mem_limit' = '1', 'partition_num'='3', 'total_partition_num'='4');
+select count(1) from t_partition_limit UNION all select count(1) from t_partition_limit2;
+
+alter resource group rg_${uuid0} with ('cpu_core_limit'='1', 'mem_limit' = '1', 'partition_num'='3', 'total_partition_num'='5');
+select count(1) from t_partition_limit UNION all select count(1) from t_partition_limit2;
 
 drop resource group rg_${uuid0};
