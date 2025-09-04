@@ -138,133 +138,118 @@ void LinearChainedJoinHashMap<LT, NeedBuildChained>::construct_hash_table(JoinHa
                                                                           const Buffer<CppType>& keys,
                                                                           const Buffer<uint8_t>* is_nulls) {
     const auto num_rows = 1 + table_items->row_count;
+    const uint32_t bucket_size_mask = table_items->bucket_size - 1;
+    auto* __restrict next = table_items->next.data();
+    auto* __restrict first = table_items->first.data();
 
-    if (table_items->join_type == TJoinOp::ASOF_INNER_JOIN || table_items->join_type == TJoinOp::ASOF_LEFT_OUTER_JOIN) {
-        LogicalType asof_join_build_type = table_items->asof_join_condition_desc.build_logical_type;
-        auto process_build_rows = [&]<LogicalType ASOF_LT>() {
-            using CppType = RunTimeCppType<ASOF_LT>;
-
-            auto& asof_buffer = ASOF_BUFFER(table_items);
-
-            const ColumnPtr& asof_temporal_column = table_items->build_chunk->get_column_by_slot_id(
-                    table_items->asof_join_condition_desc.build_slot_id);
-            const auto* typed_column = ColumnHelper::get_data_column_by_type<ASOF_LT>(asof_temporal_column.get());
-            const NullColumn* nullable_asof_column = ColumnHelper::get_null_column(asof_temporal_column);
-            const CppType* probe_temporal_values = typed_column->get_data().data();
-
-            const uint32_t bucket_size_mask = table_items->bucket_size - 1;
-            auto* __restrict next = table_items->next.data();
-            auto* __restrict first = table_items->first.data();
-            const uint8_t* __restrict is_nulls_data = is_nulls ? is_nulls->data() : nullptr;
-
-            auto need_calc_bucket_num = [&](const uint32_t index) {
-                // Only check `is_nulls_data[i]` for the nullable slice type. The hash calculation overhead for
-                // fixed-size types is small, and thus we do not check it to allow vectorization of the hash calculation.
-                if constexpr (!std::is_same_v<CppType, Slice>) {
-                    return true;
-                } else {
-                    return is_nulls_data != nullptr && is_nulls_data[index] == 0;
-                }
-            };
-            auto is_null = [&](const uint32_t index) { return is_nulls_data != nullptr && is_nulls_data[index] != 0; };
-
-            // Phase 1: Calculate hash values and store temporarily in next array
-            for (uint32_t i = 1; i < num_rows; i++) {
-                if (is_nulls_data != nullptr && is_nulls_data[i] != 0) {
-                    continue;
-                }
-
-                if (nullable_asof_column && nullable_asof_column->get_data()[i] != 0) {
-                    continue;
-                }
-
-                // Use `next` stores `bucket_num` temporarily.
-                if (need_calc_bucket_num(i)) {
-                    next[i] = JoinHashMapHelper::calc_bucket_num<
-                            typename LinearChainedJoinHashMap<LT, NeedBuildChained>::CppType>(
-                            keys[i], table_items->bucket_size << FP_BITS, table_items->log_bucket_size + FP_BITS);
-                }
-            }
-
-            // Phase 2: Process ASOF entries using linear probing
-            for (uint32_t i = 1; i < num_rows; i++) {
-                if (is_nulls_data != nullptr && is_nulls_data[i] != 0) {
-                    continue;
-                }
-
-                if (nullable_asof_column && nullable_asof_column->get_data()[i] != 0) {
-                    continue;
-                }
-
-                if (i + 16 < num_rows && !is_null(i + 16)) {
-                    __builtin_prefetch(first + _get_bucket_num_from_hash(next[i + 16]));
-                }
-
-                const uint32_t hash = next[i];
-                const uint32_t fp = _get_fp_from_hash(hash);
-                uint32_t bucket_num = _get_bucket_num_from_hash(hash);
-
-                uint32_t probe_times = 1;
-                while (true) {
-                    if (first[bucket_num] == 0) {
-                        first[bucket_num] = _combine_data_fp(i, fp);
-                        break;
-                    }
-
-                    if (fp == _extract_fp(first[bucket_num]) && keys[i] == keys[_extract_data(first[bucket_num])]) {
-                        break;
-                    }
-
-                    bucket_num = (bucket_num + probe_times) & bucket_size_mask;
-                    probe_times++;
-                }
-
-                uint32_t asof_lookup_index = _extract_data(first[bucket_num]);
-
-                if (!asof_buffer[asof_lookup_index]) {
-                    CREATE_ASOF_VECTOR_BY_INDEX(asof_buffer, table_items->asof_variant_index, asof_lookup_index);
-                }
-
-                asof_buffer[asof_lookup_index]->add_row(probe_temporal_values[i], i);
-            }
-        };
-
-        switch (asof_join_build_type) {
-        case TYPE_BIGINT:
-            process_build_rows.template operator()<TYPE_BIGINT>();
-            break;
-        case TYPE_DATE:
-            process_build_rows.template operator()<TYPE_DATE>();
-            break;
-        case TYPE_DATETIME:
-            process_build_rows.template operator()<TYPE_DATETIME>();
-            break;
-        default:
-            CHECK(false) << "ASOF JOIN: Unsupported build_type: " << asof_join_build_type
-                         << ". Only TYPE_BIGINT, TYPE_DATE, TYPE_DATETIME are supported.";
-            __builtin_unreachable();
+    // Shared linear-probing routine; is_null_pred should return true if row i is null (to skip prefetch)
+    // ReturnAnchor controls whether to compute and return the anchor index (only needed for ASOF)
+    auto linear_probe = [&]<bool BuildChained, bool ReturnAnchor>(const Buffer<CppType>& keys_ref, uint32_t i,
+                                                                 auto&& is_null_pred) -> uint32_t {
+        if (i + 16 < num_rows && !is_null_pred(i + 16)) {
+            __builtin_prefetch(first + _get_bucket_num_from_hash(next[i + 16]));
         }
 
+        const uint32_t hash = next[i];
+        const uint32_t fp = _get_fp_from_hash(hash);
+        uint32_t bucket_num = _get_bucket_num_from_hash(hash);
+
+        uint32_t probe_times = 1;
+        while (true) {
+            if (first[bucket_num] == 0) {
+                if constexpr (BuildChained) {
+                    next[i] = 0;
+                }
+                first[bucket_num] = _combine_data_fp(i, fp);
+                break;
+            }
+
+            if (fp == _extract_fp(first[bucket_num]) && keys_ref[i] == keys_ref[_extract_data(first[bucket_num])]) {
+                if constexpr (BuildChained) {
+                    next[i] = _extract_data(first[bucket_num]);
+                    first[bucket_num] = _combine_data_fp(i, fp);
+                }
+                break;
+            }
+
+            bucket_num = (bucket_num + probe_times) & bucket_size_mask;
+            probe_times++;
+        }
+
+        if constexpr (ReturnAnchor) {
+            return _extract_data(first[bucket_num]);
+        } else {
+            return 0u;
+        }
+    };
+
+
+    auto precompute_hashes_generic = [&]<bool HasKeyNulls, bool HasAsofNulls>(const uint8_t* key_nulls,
+                                                                              const uint8_t* asof_nulls) {
+        for (uint32_t i = 1; i < num_rows; i++) {
+            if constexpr (HasAsofNulls) {
+                if (asof_nulls[i] != 0) continue;
+            }
+            if constexpr (std::is_same_v<CppType, Slice> && HasKeyNulls) {
+                if (key_nulls[i] != 0) continue;
+            }
+            next[i] = JoinHashMapHelper::calc_bucket_num<CppType>(
+                    keys[i], table_items->bucket_size << FP_BITS, table_items->log_bucket_size + FP_BITS);
+        }
+    };
+
+    if (table_items->join_type == TJoinOp::ASOF_INNER_JOIN || table_items->join_type == TJoinOp::ASOF_LEFT_OUTER_JOIN) {
+        const uint8_t* __restrict is_nulls_data = is_nulls ? is_nulls->data() : nullptr;
+        const ColumnPtr& asof_temporal_column =
+                table_items->build_chunk->get_column_by_slot_id(table_items->asof_join_condition_desc.build_slot_id);
+        const NullColumn* nullable_asof_column = ColumnHelper::get_null_column(asof_temporal_column);
+        const uint8_t* __restrict asof_nulls_data =
+                nullable_asof_column ? nullable_asof_column->get_data().data() : nullptr;
+
+        auto is_null = [&](const uint32_t index) { return is_nulls_data != nullptr && is_nulls_data[index] != 0; };
+
+        if (is_nulls_data == nullptr) {
+            if (asof_nulls_data == nullptr) {
+                precompute_hashes_generic.template operator()<false, false>(nullptr, nullptr);
+            } else {
+                precompute_hashes_generic.template operator()<false, true>(nullptr, asof_nulls_data);
+            }
+        } else {
+            if (asof_nulls_data == nullptr) {
+                precompute_hashes_generic.template operator()<true, false>(is_nulls_data, nullptr);
+            } else {
+                precompute_hashes_generic.template operator()<true, true>(is_nulls_data, asof_nulls_data);
+            }
+        }
+
+        if (is_nulls_data == nullptr) {
+            auto asof_anchor_index_no_null = [&, num_rows](JoinHashTableItems*, const Buffer<CppType>& keys_ref,
+                                                          uint32_t i) -> uint32_t {
+                if (i + 16 < num_rows) {
+                    __builtin_prefetch(first + _get_bucket_num_from_hash(next[i + 16]));
+                }
+                return linear_probe.template operator()<false, true>(keys_ref, i, [](uint32_t) { return false; });
+            };
+            AsofJoinDispatcher::dispatch_and_process(table_items, keys, is_nulls, asof_anchor_index_no_null);
+        } else {
+            auto is_null_pred = [&](const uint32_t index) { return is_nulls_data[index] != 0; };
+            auto asof_anchor_index_nullable = [&, num_rows, is_null_pred](JoinHashTableItems*,
+                                                                         const Buffer<CppType>& keys_ref,
+                                                                         uint32_t i) -> uint32_t {
+                if (i + 16 < num_rows && !is_null_pred(i + 16)) {
+                    __builtin_prefetch(first + _get_bucket_num_from_hash(next[i + 16]));
+                }
+                return linear_probe.template operator()<false, true>(keys_ref, i, is_null_pred);
+            };
+            AsofJoinDispatcher::dispatch_and_process(table_items, keys, is_nulls, asof_anchor_index_nullable);
+        }
         table_items->finalize_asof_lookup_vectors();
         return;
     }
 
     auto process = [&]<bool IsNullable>() {
-        const uint32_t bucket_size_mask = table_items->bucket_size - 1;
-
-        auto* __restrict next = table_items->next.data();
-        auto* __restrict first = table_items->first.data();
         const uint8_t* __restrict is_nulls_data = IsNullable ? is_nulls->data() : nullptr;
 
-        auto need_calc_bucket_num = [&](const uint32_t index) {
-            // Only check `is_nulls_data[i]` for the nullable slice type. The hash calculation overhead for
-            // fixed-size types is small, and thus we do not check it to allow vectorization of the hash calculation.
-            if constexpr (!IsNullable || !std::is_same_v<CppType, Slice>) {
-                return true;
-            } else {
-                return is_nulls_data[index] == 0;
-            }
-        };
         auto is_null = [&](const uint32_t index) {
             if constexpr (!IsNullable) {
                 return false;
@@ -273,49 +258,27 @@ void LinearChainedJoinHashMap<LT, NeedBuildChained>::construct_hash_table(JoinHa
             }
         };
 
-        for (uint32_t i = 1; i < num_rows; i++) {
-            // Use `next` stores `bucket_num` temporarily.
-            if (need_calc_bucket_num(i)) {
-                next[i] = JoinHashMapHelper::calc_bucket_num<CppType>(keys[i], table_items->bucket_size << FP_BITS,
-                                                                      table_items->log_bucket_size + FP_BITS);
-            }
+        // Shared precompute for non-ASOF via generic helper
+        if constexpr (IsNullable) {
+            precompute_hashes_generic.template operator()<true, false>(is_nulls_data, nullptr);
+        } else {
+            precompute_hashes_generic.template operator()<false, false>(nullptr, nullptr);
         }
 
-        for (uint32_t i = 1; i < num_rows; i++) {
-            if (i + 16 < num_rows && !is_null(i + 16)) {
-                __builtin_prefetch(first + _get_bucket_num_from_hash(next[i + 16]));
+        auto is_null_pred = [&](const uint32_t index) {
+            if constexpr (!IsNullable) {
+                return false;
+            } else {
+                return is_nulls_data[index] != 0;
             }
+        };
 
+        for (uint32_t i = 1; i < num_rows; i++) {
             if (is_null(i)) {
                 next[i] = 0;
                 continue;
             }
-
-            const uint32_t hash = next[i];
-            const uint32_t fp = _get_fp_from_hash(hash);
-            uint32_t bucket_num = _get_bucket_num_from_hash(hash);
-
-            uint32_t probe_times = 1;
-            while (true) {
-                if (first[bucket_num] == 0) {
-                    if constexpr (NeedBuildChained) {
-                        next[i] = 0;
-                    }
-                    first[bucket_num] = _combine_data_fp(i, fp);
-                    break;
-                }
-
-                if (fp == _extract_fp(first[bucket_num]) && keys[i] == keys[_extract_data(first[bucket_num])]) {
-                    if constexpr (NeedBuildChained) {
-                        next[i] = _extract_data(first[bucket_num]);
-                        first[bucket_num] = _combine_data_fp(i, fp);
-                    }
-                    break;
-                }
-
-                bucket_num = (bucket_num + probe_times) & bucket_size_mask;
-                probe_times++;
-            }
+            (void)linear_probe.template operator()<NeedBuildChained, false>(keys, i, is_null_pred);
         }
 
         if constexpr (!NeedBuildChained) {
@@ -893,15 +856,13 @@ void DenseRangeDirectMappingJoinHashMap<LT>::construct_hash_table(JoinHashTableI
         return ti->dense_groups[dense_group_index].start_index + offset_in_group;
     };
 
-    auto run_dense_group_bitset = [&]<bool HasNullableKey, bool IsAsof, bool HasAsofNulls>() {
+    auto run_dense_group_bitset = [&]<bool HasNullableKey, bool HasAsofNulls>() {
         for (uint32_t row = 1; row < num_rows; ++row) {
             if constexpr (HasNullableKey) {
                 if (build_key_nulls_data[row] != 0) continue;
             }
-            if constexpr (IsAsof) {
-                if constexpr (HasAsofNulls) {
-                    if (asof_null_data[row] != 0) continue;
-                }
+            if constexpr (HasAsofNulls) {
+                if (asof_null_data[row] != 0) continue;
             }
             const uint32_t range_offset = static_cast<uint32_t>(build_keys[row] - key_min_value);
             const uint32_t dense_group_index = range_offset / 32;
@@ -921,26 +882,18 @@ void DenseRangeDirectMappingJoinHashMap<LT>::construct_hash_table(JoinHashTableI
         }
     };
 
-    if (!is_asof_join) {
-        if (!has_key_nulls) {
-            run_dense_group_bitset.template operator()<false, false, false>();
+    auto run_bitset_dispatch = [&]<bool HasNullableKey>() {
+        if (has_asof_nulls) {
+            run_dense_group_bitset.template operator()<HasNullableKey, true>();
         } else {
-            run_dense_group_bitset.template operator()<true, false, false>();
+            run_dense_group_bitset.template operator()<HasNullableKey, false>();
         }
+    };
+
+    if (has_key_nulls) {
+        run_bitset_dispatch.template operator()<true>();
     } else {
-        if (!has_key_nulls) {
-            if (!has_asof_nulls) {
-                run_dense_group_bitset.template operator()<false, true, false>();
-            } else {
-                run_dense_group_bitset.template operator()<false, true, true>();
-            }
-        } else {
-            if (!has_asof_nulls) {
-                run_dense_group_bitset.template operator()<true, true, false>();
-            } else {
-                run_dense_group_bitset.template operator()<true, true, true>();
-            }
-        }
+        run_bitset_dispatch.template operator()<false>();
     }
 
     {
@@ -951,20 +904,15 @@ void DenseRangeDirectMappingJoinHashMap<LT>::construct_hash_table(JoinHashTableI
     }
 
     if (is_asof_join) {
-        auto asof_anchor_index_strategy =
-            [compute_dense_slot](JoinHashTableItems* ti,
-                                 const Buffer<CppType>& k,
-                                 uint32_t row) -> uint32_t {
-                const uint32_t dense_slot = compute_dense_slot(ti, k, row);
-                if (ti->first[dense_slot] == 0) {
-                    ti->first[dense_slot] = row;
-                }
-                return ti->first[dense_slot];
+        auto asof_anchor_index_strategy = [compute_dense_slot](JoinHashTableItems* ti, const Buffer<CppType>& k,
+                                                               uint32_t row) -> uint32_t {
+            const uint32_t dense_slot = compute_dense_slot(ti, k, row);
+            if (ti->first[dense_slot] == 0) {
+                ti->first[dense_slot] = row;
+            }
+            return ti->first[dense_slot];
         };
-        AsofJoinDispatcher::dispatch_and_process(table_items,
-                                                 build_keys,
-                                                 build_key_nulls,
-                                                 asof_anchor_index_strategy);
+        AsofJoinDispatcher::dispatch_and_process(table_items, build_keys, build_key_nulls, asof_anchor_index_strategy);
         table_items->finalize_asof_lookup_vectors();
         return;
     }
