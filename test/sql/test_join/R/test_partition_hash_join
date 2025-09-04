@@ -1,4 +1,4 @@
--- name: test_partition_hash_join
+-- name: test_partition_hash_join @sequential
 CREATE TABLE __row_util_base (
   k1 bigint NULL
 ) ENGINE=OLAP
