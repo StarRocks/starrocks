@@ -525,7 +525,7 @@ public class ExprExplainVisitor implements AstVisitorExtendInterface<String, Voi
         message += node.getChildren().stream().limit(size)
                 .map(this::visit)
                 .collect(Collectors.joining(", "));
-        message += (node.getNullIfNotExist() ? "true" : "false");
+        message += ", " + (node.getNullIfNotExist() ? "true" : "false");
         message += ")";
         return message;
     }
