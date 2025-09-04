@@ -237,7 +237,7 @@ public class Backend extends ComputeNode {
         return exceedLimit;
     }
 
-    public void updateDisks(Map<String, TDisk> backendDisks) {
+    public void updateDisks(Map<String, TDisk> backendDisks, SystemInfoService systemInfoService) {
         // The very first time to init the path info
         if (!initPathInfo) {
             boolean allPathHashUpdated = true;
@@ -249,8 +249,7 @@ public class Backend extends ComputeNode {
             }
             if (allPathHashUpdated) {
                 initPathInfo = true;
-                GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo()
-                        .updatePathInfo(new ArrayList<>(disksRef.values()), Lists.newArrayList());
+                systemInfoService.updatePathInfo(new ArrayList<>(disksRef.values()), Lists.newArrayList());
             }
         }
 
@@ -259,15 +258,12 @@ public class Backend extends ComputeNode {
         List<DiskInfo> addedDisks = Lists.newArrayList();
         List<DiskInfo> removedDisks = Lists.newArrayList();
         /*
-         * set isChanged to true only if new disk is added or old disk is dropped or disk state is changed.
-         * we ignore the change of capacity, because capacity info is only used in master FE.
+         * set isChanged to true only if a new disk is added or old disk is dropped or disk state is changed.
+         * we ignore the change of capacity because capacity info is only used in master FE.
          */
         boolean isChanged = false;
         for (TDisk tDisk : backendDisks.values()) {
             String rootPath = tDisk.getRoot_path();
-            long totalCapacityB = tDisk.getDisk_total_capacity();
-            long dataUsedCapacityB = tDisk.getData_used_capacity();
-            long diskAvailableCapacityB = tDisk.getDisk_available_capacity();
             boolean isUsed = tDisk.isUsed();
 
             DiskInfo diskInfo = disksRef.get(rootPath);
@@ -279,17 +275,6 @@ public class Backend extends ComputeNode {
             }
             UpdateDiskInfo updateDiskInfo = new UpdateDiskInfo(rootPath, diskInfo.getState());
             updateDiskInfoMap.put(rootPath, updateDiskInfo);
-
-            diskInfo.setTotalCapacityB(totalCapacityB);
-            diskInfo.setDataUsedCapacityB(dataUsedCapacityB);
-            diskInfo.setAvailableCapacityB(diskAvailableCapacityB);
-            if (tDisk.isSetPath_hash()) {
-                diskInfo.setPathHash(tDisk.getPath_hash());
-            }
-
-            if (tDisk.isSetStorage_medium()) {
-                diskInfo.setStorageMedium(tDisk.getStorage_medium());
-            }
 
             // if the disk state is decommissioned/disable, ignore the report state from BE,
             // because these states is set by user.
@@ -320,13 +305,28 @@ public class Backend extends ComputeNode {
         }
 
         if (isChanged) {
-            SystemInfoService systemInfoService = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
             // log disk changing
             UpdateBackendInfo updateBackendInfo = new UpdateBackendInfo(getId());
             updateBackendInfo.setDiskInfoMap(updateDiskInfoMap);
-            GlobalStateMgr.getCurrentState().getEditLog().logBackendStateChange(updateBackendInfo,
-                    wal -> systemInfoService.replayBackendStateChange((UpdateBackendInfo) wal));
+            GlobalStateMgr.getCurrentState().getEditLog().logBackendStateChange(
+                    updateBackendInfo, wal -> systemInfoService.replayBackendStateChange((UpdateBackendInfo) wal));
             systemInfoService.updatePathInfo(addedDisks, removedDisks);
+        }
+
+        // update leader side disk info
+        for (TDisk tDisk : backendDisks.values()) {
+            String rootPath = tDisk.getRoot_path();
+            DiskInfo diskInfo = disksRef.get(rootPath);
+            diskInfo.setTotalCapacityB(tDisk.getDisk_total_capacity());
+            diskInfo.setDataUsedCapacityB(tDisk.getData_used_capacity());
+            diskInfo.setAvailableCapacityB(tDisk.getDisk_available_capacity());
+            if (tDisk.isSetPath_hash()) {
+                diskInfo.setPathHash(tDisk.getPath_hash());
+            }
+
+            if (tDisk.isSetStorage_medium()) {
+                diskInfo.setStorageMedium(tDisk.getStorage_medium());
+            }
         }
     }
 

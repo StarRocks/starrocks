@@ -761,7 +761,7 @@ public class NodeMgr {
             if (GlobalStateMgr.getCurrentState().getHaProtocol() instanceof BDBHA) {
                 BDBHA bdbha = (BDBHA) GlobalStateMgr.getCurrentState().getHaProtocol();
                 if (role == FrontendNodeType.FOLLOWER) {
-                    bdbha.addUnstableNode(host, getFollowerCnt());
+                    bdbha.addUnstableNode(nodeName, getFollowerCnt() + 1);
                 }
 
                 // In some cases, for example, fe starts with the outdated meta, the node name that has been dropped
@@ -881,7 +881,7 @@ public class NodeMgr {
 
             if (fe.getRole() == FrontendNodeType.FOLLOWER) {
                 GlobalStateMgr.getCurrentState().getHaProtocol().removeElectableNode(fe.getNodeName());
-                GlobalStateMgr.getCurrentState().getHaProtocol().removeUnstableNode(fe.getNodeName(), getFollowerCnt());
+                GlobalStateMgr.getCurrentState().getHaProtocol().removeUnstableNode(fe.getNodeName(), getFollowerCnt() - 1);
             }
             Frontend finalFE = fe;
             GlobalStateMgr.getCurrentState().getEditLog().logRemoveFrontend(

@@ -62,11 +62,10 @@ public class DiskInfo implements Writable {
     @SerializedName(value = "s")
     private DiskState state;
 
+    // The following properties are reported from Backend and only used in leader node, so no need to persist
     private long totalCapacityB;
     private long dataUsedCapacityB;
     private long diskAvailableCapacityB;
-
-    // path hash and storage medium are reported from Backend and no need to persist
     private long pathHash = 0;
     private TStorageMedium storageMedium;
 

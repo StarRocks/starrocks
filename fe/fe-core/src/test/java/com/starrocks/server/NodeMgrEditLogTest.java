@@ -332,7 +332,7 @@ public class NodeMgrEditLogTest {
     public void testDropFrontendEditLogException() throws Exception {
         // 1. Prepare test data and add frontend first
         FrontendNodeType role = FrontendNodeType.OBSERVER;
-        String host = "192.168.1.300";
+        String host = "192.168.1.3";
         int editLogPort = 9010;
 
         // Create a separate NodeMgr for exception testing
@@ -392,7 +392,7 @@ public class NodeMgrEditLogTest {
     public void testDropFrontendWrongRole() throws Exception {
         // 1. Add a FOLLOWER frontend
         FrontendNodeType followerRole = FrontendNodeType.FOLLOWER;
-        String host = "192.168.1.500";
+        String host = "192.168.1.5";
         int editLogPort = 9010;
         
         masterNodeMgr.addFrontend(followerRole, host, editLogPort);
@@ -499,8 +499,8 @@ public class NodeMgrEditLogTest {
     public void testModifyFrontendHostEditLogException() throws Exception {
         // 1. Prepare test data and add frontend first
         FrontendNodeType role = FrontendNodeType.OBSERVER;
-        String originalHost = "192.168.1.300";
-        String newHost = "192.168.1.400";
+        String originalHost = "192.168.1.3";
+        String newHost = "192.168.1.4";
         int editLogPort = 9010;
 
         // Create a separate NodeMgr for exception testing

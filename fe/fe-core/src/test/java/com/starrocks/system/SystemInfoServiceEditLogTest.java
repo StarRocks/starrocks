@@ -39,6 +39,7 @@ import com.starrocks.sql.ast.DropBackendClause;
 import com.starrocks.sql.ast.DropComputeNodeClause;
 import com.starrocks.sql.ast.ModifyBackendClause;
 import com.starrocks.thrift.TDisk;
+import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.utframe.MockJournal;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.jupiter.api.AfterEach;
@@ -1615,7 +1616,9 @@ public class SystemInfoServiceEditLogTest {
 
         // 4. Test follower replay functionality
         // First add the same backend to follower
-        followerSystemInfoService.replayAddBackend(originalBackend);
+        Backend replayBackendInfo = (Backend) UtFrameUtils
+                .PseudoJournalReplayer.replayNextJournal(OperationType.OP_ADD_BACKEND_V2);
+        followerSystemInfoService.replayAddBackend(replayBackendInfo);
         Assertions.assertEquals(1, followerSystemInfoService.getBackends().size());
 
         DecommissionDiskInfo replayInfo = (DecommissionDiskInfo) UtFrameUtils
@@ -1702,7 +1705,9 @@ public class SystemInfoServiceEditLogTest {
 
         // 4. Test follower replay functionality
         // First add the same backend to follower
-        followerSystemInfoService.replayAddBackend(originalBackend);
+        Backend replayBackendInfo = (Backend) UtFrameUtils
+                .PseudoJournalReplayer.replayNextJournal(OperationType.OP_ADD_BACKEND_V2);
+        followerSystemInfoService.replayAddBackend(replayBackendInfo);
         Assertions.assertEquals(1, followerSystemInfoService.getBackends().size());
 
         CancelDecommissionDiskInfo replayInfo = (CancelDecommissionDiskInfo) UtFrameUtils
@@ -1789,7 +1794,9 @@ public class SystemInfoServiceEditLogTest {
 
         // 4. Test follower replay functionality
         // First add the same backend to follower
-        followerSystemInfoService.replayAddBackend(originalBackend);
+        Backend replayBackendInfo = (Backend) UtFrameUtils
+                .PseudoJournalReplayer.replayNextJournal(OperationType.OP_ADD_BACKEND_V2);
+        followerSystemInfoService.replayAddBackend(replayBackendInfo);
         Assertions.assertEquals(1, followerSystemInfoService.getBackends().size());
 
         DisableDiskInfo replayInfo = (DisableDiskInfo) UtFrameUtils
@@ -1872,19 +1879,55 @@ public class SystemInfoServiceEditLogTest {
         // 3. Create TDisk objects for update
         Map<String, TDisk> backendDisks = new HashMap<>();
         TDisk disk1 = new TDisk("/data1/", 1000, 800, true);
+        disk1.setDisk_available_capacity(200);
+        disk1.setPath_hash(1111);
+        disk1.setStorage_medium(TStorageMedium.HDD);
         TDisk disk2 = new TDisk("/data2/", 2000, 700, true);
+        disk2.setDisk_available_capacity(1300);
+        disk2.setPath_hash(2222);
+        disk2.setStorage_medium(TStorageMedium.HDD);
         TDisk disk3 = new TDisk("/data3/", 3000, 600, false);
+        disk3.setDisk_available_capacity(2400);
+        disk3.setPath_hash(3333);
+        disk3.setStorage_medium(TStorageMedium.SSD);
 
         backendDisks.put(disk1.getRoot_path(), disk1);
         backendDisks.put(disk2.getRoot_path(), disk2);
         backendDisks.put(disk3.getRoot_path(), disk3);
 
         // 4. Execute updateDisks operation (master side)
-        originalBackend.updateDisks(backendDisks);
+        originalBackend.updateDisks(backendDisks, masterSystemInfoService);
+        Assertions.assertEquals(3, originalBackend.getDisks().size());
+        DiskInfo masterDisk1 = originalBackend.getDisks().get("/data1/");
+        DiskInfo masterDisk2 = originalBackend.getDisks().get("/data2/");
+        DiskInfo masterDisk3 = originalBackend.getDisks().get("/data3/");
+        Assertions.assertNotNull(masterDisk1);
+        Assertions.assertNotNull(masterDisk2);
+        Assertions.assertNotNull(masterDisk3);
+        Assertions.assertEquals(1000L, masterDisk1.getTotalCapacityB());
+        Assertions.assertEquals(2000L, masterDisk2.getTotalCapacityB());
+        Assertions.assertEquals(3000L, masterDisk3.getTotalCapacityB());
+        Assertions.assertEquals(800L, masterDisk1.getDataUsedCapacityB());
+        Assertions.assertEquals(700L, masterDisk2.getDataUsedCapacityB());
+        Assertions.assertEquals(600L, masterDisk3.getDataUsedCapacityB());
+        Assertions.assertEquals(200, masterDisk1.getAvailableCapacityB());
+        Assertions.assertEquals(1300, masterDisk2.getAvailableCapacityB());
+        Assertions.assertEquals(2400, masterDisk3.getAvailableCapacityB());
+        Assertions.assertEquals(DiskInfo.DiskState.ONLINE, masterDisk1.getState());
+        Assertions.assertEquals(DiskInfo.DiskState.ONLINE, masterDisk2.getState());
+        Assertions.assertEquals(DiskInfo.DiskState.OFFLINE, masterDisk3.getState());
+        Assertions.assertEquals(1111, masterDisk1.getPathHash());
+        Assertions.assertEquals(2222, masterDisk2.getPathHash());
+        Assertions.assertEquals(3333, masterDisk3.getPathHash());
+        Assertions.assertEquals(TStorageMedium.HDD, masterDisk1.getStorageMedium());
+        Assertions.assertEquals(TStorageMedium.HDD, masterDisk2.getStorageMedium());
+        Assertions.assertEquals(TStorageMedium.SSD, masterDisk3.getStorageMedium());
 
         // 5. Test follower replay functionality
         // First add the same backend to follower
-        followerSystemInfoService.replayAddBackend(originalBackend);
+        Backend replayBackendInfo = (Backend) UtFrameUtils
+                .PseudoJournalReplayer.replayNextJournal(OperationType.OP_ADD_BACKEND_V2);
+        followerSystemInfoService.replayAddBackend(replayBackendInfo);
         Assertions.assertEquals(1, followerSystemInfoService.getBackends().size());
 
         UpdateBackendInfo info = (UpdateBackendInfo) UtFrameUtils
@@ -1945,7 +1988,7 @@ public class SystemInfoServiceEditLogTest {
 
         // 4. Execute updateDisks operation and expect exception
         RuntimeException exception = Assertions.assertThrows(RuntimeException.class, () -> {
-            originalBackend.updateDisks(backendDisks);
+            originalBackend.updateDisks(backendDisks, exceptionSystemInfoService);
         });
         Assertions.assertEquals("EditLog write failed", exception.getMessage());
 
@@ -1958,5 +2001,256 @@ public class SystemInfoServiceEditLogTest {
         // Verify no disks were added due to exception
         Map<String, DiskInfo> disks = backend.getDisks();
         Assertions.assertTrue(disks == null || disks.isEmpty());
+    }
+
+    // ==================== Backend Disk State Update Tests ====================
+
+    @Test
+    public void testBackendUpdateDiskStateAndVerifyFollower() throws Exception {
+        // 1. Prepare test data and add backend first
+        String host = "192.168.1.100";
+        int heartbeatPort = 9060;
+        String beHostPort = host + ":" + heartbeatPort;
+
+        List<String> hostPorts = Arrays.asList(beHostPort);
+        AddBackendClause addBackendClause = new AddBackendClause(hostPorts, warehouse, cnGroupName, null);
+        addBackendClause.getHostPortPairs().add(Pair.create(host, heartbeatPort));
+        masterSystemInfoService.addBackends(addBackendClause);
+        Assertions.assertEquals(1, masterSystemInfoService.getBackends().size());
+
+        // 2. Verify initial state
+        List<Backend> backends = masterSystemInfoService.getBackends();
+        Backend originalBackend = backends.get(0);
+        Assertions.assertEquals(host, originalBackend.getHost());
+        Assertions.assertEquals(heartbeatPort, originalBackend.getHeartbeatPort());
+
+        // 3. Create initial TDisk objects
+        Map<String, TDisk> initialDisks = new HashMap<>();
+        TDisk disk1 = new TDisk("/data1/", 1000, 800, true);
+        TDisk disk2 = new TDisk("/data2/", 2000, 700, true);
+        initialDisks.put(disk1.getRoot_path(), disk1);
+        initialDisks.put(disk2.getRoot_path(), disk2);
+
+        // 4. First update with initial disks
+        originalBackend.updateDisks(initialDisks, masterSystemInfoService);
+        Assertions.assertEquals(2, originalBackend.getDisks().size());
+
+        // 5. Update disk state (change disk2 to offline)
+        Map<String, TDisk> updatedDisks = new HashMap<>();
+        TDisk updatedDisk1 = new TDisk("/data1/", 1000, 800, true);
+        TDisk updatedDisk2 = new TDisk("/data2/", 2000, 700, false); // Changed to offline
+        updatedDisks.put(updatedDisk1.getRoot_path(), updatedDisk1);
+        updatedDisks.put(updatedDisk2.getRoot_path(), updatedDisk2);
+
+        // 6. Execute disk state update (master side)
+        originalBackend.updateDisks(updatedDisks, masterSystemInfoService);
+
+        // 7. Test follower replay functionality
+        // First add the same backend to follower
+        Backend replayBackendInfo = (Backend) UtFrameUtils
+                .PseudoJournalReplayer.replayNextJournal(OperationType.OP_ADD_BACKEND_V2);
+        followerSystemInfoService.replayAddBackend(originalBackend);
+        Assertions.assertEquals(1, followerSystemInfoService.getBackends().size());
+
+        // Replay first disk update (initial disks)
+        UpdateBackendInfo info1 = (UpdateBackendInfo) UtFrameUtils
+                .PseudoJournalReplayer.replayNextJournal(OperationType.OP_BACKEND_STATE_CHANGE_V2);
+        followerSystemInfoService.replayBackendStateChange(info1);
+
+        // Replay second disk update (state change)
+        UpdateBackendInfo info2 = (UpdateBackendInfo) UtFrameUtils
+                .PseudoJournalReplayer.replayNextJournal(OperationType.OP_BACKEND_STATE_CHANGE_V2);
+        followerSystemInfoService.replayBackendStateChange(info2);
+
+        // 8. Verify follower state is consistent with master
+        Backend followerBackend = followerSystemInfoService.getBackend(originalBackend.getId());
+        Assertions.assertNotNull(followerBackend);
+        Assertions.assertEquals(originalBackend.getId(), followerBackend.getId());
+        Assertions.assertEquals(host, followerBackend.getHost());
+        Assertions.assertEquals(heartbeatPort, followerBackend.getHeartbeatPort());
+
+        // Verify disk information and state
+        Map<String, DiskInfo> followerDisks = followerBackend.getDisks();
+        Assertions.assertNotNull(followerDisks);
+        Assertions.assertEquals(2, followerDisks.size());
+        
+        DiskInfo followerDisk1 = followerDisks.get("/data1/");
+        DiskInfo followerDisk2 = followerDisks.get("/data2/");
+        Assertions.assertNotNull(followerDisk1);
+        Assertions.assertNotNull(followerDisk2);
+        
+        // Verify disk1 is still online
+        Assertions.assertEquals(DiskInfo.DiskState.ONLINE, followerDisk1.getState());
+        // Verify disk2 is now offline
+        Assertions.assertEquals(DiskInfo.DiskState.OFFLINE, followerDisk2.getState());
+    }
+
+    @Test
+    public void testBackendAddDiskAndVerifyFollower() throws Exception {
+        // 1. Prepare test data and add backend first
+        String host = "192.168.1.100";
+        int heartbeatPort = 9060;
+        String beHostPort = host + ":" + heartbeatPort;
+
+        List<String> hostPorts = Arrays.asList(beHostPort);
+        AddBackendClause addBackendClause = new AddBackendClause(hostPorts, warehouse, cnGroupName, null);
+        addBackendClause.getHostPortPairs().add(Pair.create(host, heartbeatPort));
+        masterSystemInfoService.addBackends(addBackendClause);
+        Assertions.assertEquals(1, masterSystemInfoService.getBackends().size());
+
+        // 2. Verify initial state
+        List<Backend> backends = masterSystemInfoService.getBackends();
+        Backend originalBackend = backends.get(0);
+        Assertions.assertEquals(host, originalBackend.getHost());
+        Assertions.assertEquals(heartbeatPort, originalBackend.getHeartbeatPort());
+
+        // 3. Create initial TDisk objects with one disk
+        Map<String, TDisk> initialDisks = new HashMap<>();
+        TDisk disk1 = new TDisk("/data1/", 1000, 800, true);
+        initialDisks.put(disk1.getRoot_path(), disk1);
+
+        // 4. First update with initial disk
+        originalBackend.updateDisks(initialDisks, masterSystemInfoService);
+        Assertions.assertEquals(1, originalBackend.getDisks().size());
+
+        // 5. Add new disk
+        Map<String, TDisk> updatedDisks = new HashMap<>();
+        TDisk disk2 = new TDisk("/data2/", 2000, 700, true);
+        updatedDisks.put(disk1.getRoot_path(), disk1);
+        updatedDisks.put(disk2.getRoot_path(), disk2);
+
+        // 6. Execute add disk operation (master side)
+        originalBackend.updateDisks(updatedDisks, masterSystemInfoService);
+        Assertions.assertEquals(2, originalBackend.getDisks().size());
+
+        // 7. Test follower replay functionality
+        // First add the same backend to follower
+        Backend replayBackendInfo = (Backend) UtFrameUtils
+                .PseudoJournalReplayer.replayNextJournal(OperationType.OP_ADD_BACKEND_V2);
+        followerSystemInfoService.replayAddBackend(replayBackendInfo);
+        Assertions.assertEquals(1, followerSystemInfoService.getBackends().size());
+
+        // Replay first disk update (initial disk)
+        UpdateBackendInfo info1 = (UpdateBackendInfo) UtFrameUtils
+                .PseudoJournalReplayer.replayNextJournal(OperationType.OP_BACKEND_STATE_CHANGE_V2);
+        followerSystemInfoService.replayBackendStateChange(info1);
+
+        // Replay second disk update (add new disk)
+        UpdateBackendInfo info2 = (UpdateBackendInfo) UtFrameUtils
+                .PseudoJournalReplayer.replayNextJournal(OperationType.OP_BACKEND_STATE_CHANGE_V2);
+        followerSystemInfoService.replayBackendStateChange(info2);
+
+        // 8. Verify follower state is consistent with master
+        Backend followerBackend = followerSystemInfoService.getBackend(originalBackend.getId());
+        Assertions.assertNotNull(followerBackend);
+        Assertions.assertEquals(originalBackend.getId(), followerBackend.getId());
+        Assertions.assertEquals(host, followerBackend.getHost());
+        Assertions.assertEquals(heartbeatPort, followerBackend.getHeartbeatPort());
+
+        // Verify disk information
+        Map<String, DiskInfo> followerDisks = followerBackend.getDisks();
+        Assertions.assertNotNull(followerDisks);
+        Assertions.assertEquals(2, followerDisks.size());
+        
+        // Verify both disks exist
+        Assertions.assertTrue(followerDisks.containsKey("/data1/"));
+        Assertions.assertTrue(followerDisks.containsKey("/data2/"));
+        
+        DiskInfo followerDisk1 = followerDisks.get("/data1/");
+        DiskInfo followerDisk2 = followerDisks.get("/data2/");
+        Assertions.assertNotNull(followerDisk1);
+        Assertions.assertNotNull(followerDisk2);
+        
+        // Verify disk properties
+        Assertions.assertEquals(DiskInfo.DiskState.ONLINE, followerDisk1.getState());
+        Assertions.assertEquals(DiskInfo.DiskState.ONLINE, followerDisk2.getState());
+    }
+
+    @Test
+    public void testBackendRemoveDiskAndVerifyFollower() throws Exception {
+        // 1. Prepare test data and add backend first
+        String host = "192.168.1.100";
+        int heartbeatPort = 9060;
+        String beHostPort = host + ":" + heartbeatPort;
+
+        List<String> hostPorts = Arrays.asList(beHostPort);
+        AddBackendClause addBackendClause = new AddBackendClause(hostPorts, warehouse, cnGroupName, null);
+        addBackendClause.getHostPortPairs().add(Pair.create(host, heartbeatPort));
+        masterSystemInfoService.addBackends(addBackendClause);
+        Assertions.assertEquals(1, masterSystemInfoService.getBackends().size());
+
+        // 2. Verify initial state
+        List<Backend> backends = masterSystemInfoService.getBackends();
+        Backend originalBackend = backends.get(0);
+        Assertions.assertEquals(host, originalBackend.getHost());
+        Assertions.assertEquals(heartbeatPort, originalBackend.getHeartbeatPort());
+
+        // 3. Create initial TDisk objects with multiple disks
+        Map<String, TDisk> initialDisks = new HashMap<>();
+        TDisk disk1 = new TDisk("/data1/", 1000, 800, true);
+        TDisk disk2 = new TDisk("/data2/", 2000, 700, true);
+        TDisk disk3 = new TDisk("/data3/", 3000, 600, true);
+        initialDisks.put(disk1.getRoot_path(), disk1);
+        initialDisks.put(disk2.getRoot_path(), disk2);
+        initialDisks.put(disk3.getRoot_path(), disk3);
+
+        // 4. First update with initial disks
+        originalBackend.updateDisks(initialDisks, masterSystemInfoService);
+        Assertions.assertEquals(3, originalBackend.getDisks().size());
+
+        // 5. Remove one disk (disk2)
+        Map<String, TDisk> updatedDisks = new HashMap<>();
+        updatedDisks.put(disk1.getRoot_path(), disk1);
+        updatedDisks.put(disk3.getRoot_path(), disk3);
+        // Note: disk2 is not included, so it will be removed
+
+        // 6. Execute remove disk operation (master side)
+        originalBackend.updateDisks(updatedDisks, masterSystemInfoService);
+        Assertions.assertEquals(2, originalBackend.getDisks().size());
+
+        // 7. Test follower replay functionality
+        // First add the same backend to follower
+        Backend replayBackendInfo = (Backend) UtFrameUtils
+                .PseudoJournalReplayer.replayNextJournal(OperationType.OP_ADD_BACKEND_V2);
+        followerSystemInfoService.replayAddBackend(replayBackendInfo);
+        Assertions.assertEquals(1, followerSystemInfoService.getBackends().size());
+
+        // Replay first disk update (initial disks)
+        UpdateBackendInfo info1 = (UpdateBackendInfo) UtFrameUtils
+                .PseudoJournalReplayer.replayNextJournal(OperationType.OP_BACKEND_STATE_CHANGE_V2);
+        followerSystemInfoService.replayBackendStateChange(info1);
+
+        // Replay second disk update (remove disk)
+        UpdateBackendInfo info2 = (UpdateBackendInfo) UtFrameUtils
+                .PseudoJournalReplayer.replayNextJournal(OperationType.OP_BACKEND_STATE_CHANGE_V2);
+        followerSystemInfoService.replayBackendStateChange(info2);
+
+        // 8. Verify follower state is consistent with master
+        Backend followerBackend = followerSystemInfoService.getBackend(originalBackend.getId());
+        Assertions.assertNotNull(followerBackend);
+        Assertions.assertEquals(originalBackend.getId(), followerBackend.getId());
+        Assertions.assertEquals(host, followerBackend.getHost());
+        Assertions.assertEquals(heartbeatPort, followerBackend.getHeartbeatPort());
+
+        // Verify disk information
+        Map<String, DiskInfo> followerDisks = followerBackend.getDisks();
+        Assertions.assertNotNull(followerDisks);
+        Assertions.assertEquals(2, followerDisks.size());
+        
+        // Verify disk1 and disk3 still exist
+        Assertions.assertTrue(followerDisks.containsKey("/data1/"));
+        Assertions.assertTrue(followerDisks.containsKey("/data3/"));
+        
+        // Verify disk2 was removed
+        Assertions.assertFalse(followerDisks.containsKey("/data2/"));
+        
+        DiskInfo followerDisk1 = followerDisks.get("/data1/");
+        DiskInfo followerDisk3 = followerDisks.get("/data3/");
+        Assertions.assertNotNull(followerDisk1);
+        Assertions.assertNotNull(followerDisk3);
+        
+        // Verify remaining disk properties
+        Assertions.assertEquals(DiskInfo.DiskState.ONLINE, followerDisk1.getState());
+        Assertions.assertEquals(DiskInfo.DiskState.ONLINE, followerDisk3.getState());
     }
 }

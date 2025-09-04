@@ -240,7 +240,7 @@ public class Frontend extends JsonWriter {
     private void changeToAlive(boolean isReplay) {
         if (!isReplay && GlobalStateMgr.getCurrentState().getHaProtocol() instanceof BDBHA) {
             BDBHA ha = (BDBHA) GlobalStateMgr.getCurrentState().getHaProtocol();
-            ha.removeUnstableNode(host, GlobalStateMgr.getCurrentState().getNodeMgr().getFollowerCnt());
+            ha.removeUnstableNode(nodeName, GlobalStateMgr.getCurrentState().getNodeMgr().getFollowerCnt());
         }
     }
 
