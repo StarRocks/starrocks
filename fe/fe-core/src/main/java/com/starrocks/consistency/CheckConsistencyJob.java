@@ -375,7 +375,7 @@ public class CheckConsistencyJob {
             ConsistencyCheckInfo info = new ConsistencyCheckInfo(db.getId(), table.getId(), physicalPartition.getId(),
                         index.getId(), tabletId, lastCheckTime,
                         checkedVersion, isConsistent);
-            journalTask = GlobalStateMgr.getCurrentState().getEditLog().logFinishConsistencyCheckNoWait(info);
+            journalTask = GlobalStateMgr.getCurrentState().getEditLog().logFinishConsistencyCheck(info);
         }
 
         // Wait for edit log write finish out of db lock.

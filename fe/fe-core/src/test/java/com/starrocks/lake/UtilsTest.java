@@ -14,11 +14,8 @@
 
 package com.starrocks.lake;
 
-import com.staros.client.StarClientException;
-import com.staros.proto.StatusCode;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.epack.lake.StarOSAgentEpack;
-import com.starrocks.persist.ShardInfo;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.NodeMgr;
 import com.starrocks.server.WarehouseManager;
@@ -62,11 +59,6 @@ public class UtilsTest {
             @Mock
             public long getPrimaryComputeNodeId(long clusterId) throws StarRocksException {
                 throw new StarRocksException("Failed to get primary backend");
-            }
-
-            @Mock
-            public ShardInfo getShardInfo(long shardId, long workerGroupId) throws StarClientException {
-                throw new StarClientException(StatusCode.GRPC, "Failed to get shard info");
             }
         };
     }
