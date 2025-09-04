@@ -20,8 +20,11 @@ import com.starrocks.common.DdlException;
 import com.starrocks.common.Pair;
 import com.starrocks.lake.StarOSAgent;
 import com.starrocks.persist.DropBackendInfo;
+import com.starrocks.persist.DropComputeNodeLog;
 import com.starrocks.persist.EditLog;
+import com.starrocks.persist.UpdateBackendInfo;
 import com.starrocks.persist.UpdateHistoricalNodeLog;
+import com.starrocks.persist.WALApplier;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.LocalMetastore;
 import com.starrocks.server.RunMode;
@@ -88,7 +91,13 @@ public class SystemInfoServiceTest {
         };
         new MockUp<EditLog>() {
             @Mock
-            public void logBackendStateChange(Backend be) {
+            public void logBackendStateChange(UpdateBackendInfo info, WALApplier walApplier) {
+                walApplier.apply(info);
+            }
+
+            @Mock
+            public void logDropBackend(DropBackendInfo info, WALApplier applier) {
+                applier.apply(info);
             }
         };
     }
@@ -139,6 +148,12 @@ public class SystemInfoServiceTest {
         String location = "rack:rack1";
         properties.put(AlterSystemStmtAnalyzer.PROP_KEY_LOCATION, location);
         ModifyBackendClause clause = new ModifyBackendClause("originalHost:1000", properties);
+        new MockUp<EditLog>() {
+            @Mock
+            public void logBackendStateChange(UpdateBackendInfo info, WALApplier walApplier) {
+                walApplier.apply(info);
+            }
+        };
         service.modifyBackendProperty(clause);
         Backend backend = service.getBackendWithHeartbeatPort("originalHost", 1000);
         Assertions.assertNotNull(backend);
@@ -191,10 +206,6 @@ public class SystemInfoServiceTest {
 
         new Expectations() {
             {
-                service.getBackendWithHeartbeatPort("newHost", 1000);
-                minTimes = 0;
-                result = be;
-
                 globalStateMgr.getLocalMetastore();
                 minTimes = 0;
                 result = localMetastore;
@@ -211,11 +222,17 @@ public class SystemInfoServiceTest {
                 return WarehouseManager.DEFAULT_RESOURCE;
             }
         };
+        new MockUp<EditLog>() {
+            @Mock
+            public void logDropBackend(DropBackendInfo info, WALApplier applier) {
+                applier.apply(info);
+            }
+        };
         service.addBackend(be);
         be.setStarletPort(1001);
         service.dropBackend("newHost", 1000, WarehouseManager.DEFAULT_WAREHOUSE_NAME, "", false);
         Backend beIP = service.getBackendWithHeartbeatPort("newHost", 1000);
-        Assertions.assertTrue(beIP == null);
+        Assertions.assertNull(beIP);
 
         Config.enable_trace_historical_node = savedConfig;
     }
@@ -242,10 +259,6 @@ public class SystemInfoServiceTest {
 
         new Expectations() {
             {
-                service.getComputeNodeWithHeartbeatPort("newHost", 1000);
-                minTimes = 0;
-                result = cn;
-
                 globalStateMgr.getLocalMetastore();
                 minTimes = 0;
                 result = localMetastore;
@@ -260,6 +273,13 @@ public class SystemInfoServiceTest {
             @Mock
             public ComputeResource acquireComputeResource(CRAcquireContext acquireContext) {
                 return WarehouseManager.DEFAULT_RESOURCE;
+            }
+        };
+
+        new MockUp<EditLog>() {
+            @Mock
+            public void logDropComputeNode(DropComputeNodeLog log, WALApplier applier) {
+                applier.apply(log);
             }
         };
         service.addComputeNode(cn);
@@ -534,5 +554,4 @@ public class SystemInfoServiceTest {
             service.modifyBackendHost(clause);
         });
     }
-
 }
