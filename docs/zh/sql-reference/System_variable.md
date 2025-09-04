@@ -463,6 +463,12 @@ ALTER USER 'jack' SET PROPERTIES ('session.query_timeout' = '600');
 * 默认值：false，表示不开启。
 * 引入版本：v2.5
 
+### enable_group_by_compressed_key
+
+* 描述：是否利用准确的统计信息来压缩 GROUP BY Key 列。有效值：`true` 和 `false`。
+* 默认值：true
+* 引入版本：v4.0
+
 ### enable_gin_filter
 
 * 描述：查询时是否使用[全文倒排索引](../table_design/indexes/inverted_index.md)。
