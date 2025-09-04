@@ -68,7 +68,7 @@ import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.load.Load;
 import com.starrocks.load.RoutineLoadDesc;
 import com.starrocks.metric.RoutineLoadLagTimeMetricMgr;
-import com.starrocks.qe.OriginStatementInfo;
+import com.starrocks.persist.OriginStatementInfo;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
 import com.starrocks.server.WarehouseManager;
