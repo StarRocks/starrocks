@@ -191,7 +191,7 @@ public class SparkRepository {
                 if (brokerDesc.hasBroker()) {
                     BrokerUtil.deletePath(remoteArchivePath, brokerDesc);
                 } else {
-                    HdfsUtil.deletePath(remoteArchivePath, brokerDesc);
+                    HdfsUtil.deletePath(remoteArchivePath, brokerDesc.getProperties());
                 }
                 currentArchive.libraries.clear();
             }
