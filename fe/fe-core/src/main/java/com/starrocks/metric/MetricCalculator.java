@@ -183,9 +183,7 @@ public class MetricCalculator extends TimerTask {
         }
 
         // Clean up stale routine load lag time metrics
-        if (Config.enable_routine_load_lag_time_metrics) {
-            RoutineLoadLagTimeMetricMgr.getInstance().cleanupStaleMetrics();
-        }
+        RoutineLoadLagTimeMetricMgr.getInstance().cleanupStaleMetrics();
 
         MetricRepo.GAUGE_SAFE_MODE.setValue(GlobalStateMgr.getCurrentState().isSafeMode() ? 1 : 0);
     }

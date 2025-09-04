@@ -19,6 +19,7 @@ package com.starrocks.metric;
 
 import com.google.common.collect.Maps;
 import com.starrocks.common.Config;
+import com.starrocks.common.jmockit.Deencapsulation;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
@@ -30,6 +31,7 @@ import java.util.Map;
 
 import static org.mockito.Mockito.any;
 import static org.mockito.Mockito.atLeast;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.verify;
 
 public class RoutineLoadLagTimeMetricMgrTest {
@@ -168,5 +170,125 @@ public class RoutineLoadLagTimeMetricMgrTest {
         // Verify max value is among the retrieved values
         Long maxValue = retrieved.values().stream().max(Long::compareTo).orElse(0L);
         Assertions.assertEquals(Long.valueOf(75L), maxValue, "Max lag time should be 75");
+    }
+
+    @Test
+    public void testIsStaleMethodWhenStale() {
+        // Setup: Add a job with lag time metrics
+        Map<Integer, Long> partitionLagTimes = Maps.newHashMap();
+        partitionLagTimes.put(0, 30L);
+        metricMgr.updateRoutineLoadLagTimeMetric(1L, "test_stale_job", partitionLagTimes);
+
+        // Get the internal RoutineLoadLagTimeMetric object
+        Map<String, Object> jobLagTimeMap = Deencapsulation.getField(metricMgr, "jobLagTimeMap");
+        Object lagTimeMetric = jobLagTimeMap.get("1.test_stale_job");
+        Assertions.assertNotNull(lagTimeMetric, "Lag time metric should exist");
+
+        // Test: Check if metric is stale (6 minutes ago)
+        long currentTime = System.currentTimeMillis();
+        long staleThresholdMs = 5L * 60 * 1000; // 5 minutes
+        long staleUpdateTime = currentTime - (6L * 60 * 1000); // 6 minutes ago
+
+        // Set the update timestamp to 6 minutes ago
+        Deencapsulation.setField(lagTimeMetric, "updateTimestamp", staleUpdateTime);
+
+        // Verify: Metric should be stale
+        boolean isStale = Deencapsulation.invoke(lagTimeMetric, "isStale", currentTime, staleThresholdMs);
+        Assertions.assertTrue(isStale, "Metric should be stale after 6 minutes");
+    }
+
+    @Test
+    public void testIsStaleMethodWhenFresh() {
+        // Setup: Add a job with lag time metrics
+        Map<Integer, Long> partitionLagTimes = Maps.newHashMap();
+        partitionLagTimes.put(0, 30L);
+        metricMgr.updateRoutineLoadLagTimeMetric(1L, "test_fresh_job", partitionLagTimes);
+
+        // Get the internal RoutineLoadLagTimeMetric object
+        Map<String, Object> jobLagTimeMap = Deencapsulation.getField(metricMgr, "jobLagTimeMap");
+        Object lagTimeMetric = jobLagTimeMap.get("1.test_fresh_job");
+        Assertions.assertNotNull(lagTimeMetric, "Lag time metric should exist");
+
+        // Test: Check if metric is fresh (2 minutes ago)
+        long currentTime = System.currentTimeMillis();
+        long staleThresholdMs = 5L * 60 * 1000; // 5 minutes
+        long freshUpdateTime = currentTime - (2L * 60 * 1000); // 2 minutes ago
+
+        // Set the update timestamp to 2 minutes ago
+        Deencapsulation.setField(lagTimeMetric, "updateTimestamp", freshUpdateTime);
+
+        // Verify: Metric should not be stale
+        boolean isStale = Deencapsulation.invoke(lagTimeMetric, "isStale", currentTime, staleThresholdMs);
+        Assertions.assertFalse(isStale, "Metric should not be stale after 2 minutes");
+    }
+
+    @Test
+    public void testCollectRoutineLoadLagTimeMetricsExceptionHandling() {
+        // Setup: Add a job with metrics
+        Map<Integer, Long> partitionLagTimes = Maps.newHashMap();
+        partitionLagTimes.put(0, 30L);
+        metricMgr.updateRoutineLoadLagTimeMetric(1L, "test_collect_exception_job", partitionLagTimes);
+
+        // Mock visitor to throw exception
+        doThrow(new RuntimeException("Simulated visitor exception")).when(mockVisitor).visit(any());
+
+        // Execute: This should handle the exception gracefully
+        Assertions.assertDoesNotThrow(() -> {
+            metricMgr.collectRoutineLoadLagTimeMetrics(mockVisitor);
+        }, "collectRoutineLoadLagTimeMetrics should handle exceptions gracefully");
+    }
+
+    @Test
+    public void testGetPartitionLagTimesExceptionHandling() {
+        // Setup: First add a job to have some data
+        Map<Integer, Long> partitionLagTimes = Maps.newHashMap();
+        partitionLagTimes.put(0, 30L);
+        metricMgr.updateRoutineLoadLagTimeMetric(1L, "test_get_exception_job", partitionLagTimes);
+
+        // Get the internal jobLagTimeMap and replace it with a map that throws exception
+        Map<String, Object> originalJobLagTimeMap = Deencapsulation.getField(metricMgr, "jobLagTimeMap");
+        
+        // Create a custom map that throws exception when get() is called
+        Map<String, Object> faultyMap = new java.util.HashMap<String, Object>() {
+            @Override
+            public Object get(Object key) {
+                throw new RuntimeException("Simulated map access exception");
+            }
+        };
+        
+        // Replace the internal map with our faulty map
+        Deencapsulation.setField(metricMgr, "jobLagTimeMap", faultyMap);
+
+        // Execute: This should handle the exception gracefully
+        Map<Integer, Long> result = Assertions.assertDoesNotThrow(() -> {
+            return metricMgr.getPartitionLagTimes(1L, "test_get_exception_job");
+        }, "getPartitionLagTimes should handle exceptions gracefully");
+
+        // Verify: Should return empty map on exception
+        Assertions.assertTrue(result.isEmpty(), "Should return empty map when exception occurs");
+        
+        // Restore the original map for other tests
+        Deencapsulation.setField(metricMgr, "jobLagTimeMap", originalJobLagTimeMap);
+    }
+
+    @Test
+    public void testEmitJobMetricsExceptionHandling() {
+        // Setup: Add a job with metrics
+        Map<Integer, Long> partitionLagTimes = Maps.newHashMap();
+        partitionLagTimes.put(0, 30L);
+        metricMgr.updateRoutineLoadLagTimeMetric(1L, "test_emit_exception_job", partitionLagTimes);
+
+        // Get the internal objects
+        Map<String, Object> jobLagTimeMap = Deencapsulation.getField(metricMgr, "jobLagTimeMap");
+        Object lagTimeMetric = jobLagTimeMap.get("1.test_emit_exception_job");
+        Assertions.assertNotNull(lagTimeMetric, "Lag time metric should exist");
+
+        // Mock visitor to throw exception
+        doThrow(new RuntimeException("Simulated emit exception")).when(mockVisitor).visit(any());
+
+        // Execute: This should handle the exception gracefully
+        Assertions.assertDoesNotThrow(() -> {
+            Deencapsulation.invoke(metricMgr, "emitJobMetrics", "1.test_emit_exception_job", lagTimeMetric, mockVisitor);
+        }, "emitJobMetrics should handle exceptions gracefully");
     }
 }

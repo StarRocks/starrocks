@@ -102,10 +102,6 @@ public class RoutineLoadLagTimeMetricMgr {
                      jobName, newMaxLagTime, newPartitionLagTimes.size());
         }
 
-        public Map<Integer, GaugeMetricImpl<Long>> getPartitionMetrics() { 
-            return Collections.unmodifiableMap(partitionMetrics);
-        }
-
         public Map<Integer, Long> getPartitionLagTimes() {
             Map<Integer, Long> lagTimes = Maps.newHashMap();
             partitionMetrics.forEach((partition, metric) -> 

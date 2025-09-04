@@ -905,8 +905,6 @@ public class KafkaRoutineLoadJob extends RoutineLoadJob {
             RoutineLoadLagTimeMetricMgr metricMgr = RoutineLoadLagTimeMetricMgr.getInstance();
             Map<Integer, Long> lagTimes = metricMgr.getPartitionLagTimes(this.getDbId(), this.getName());
             if (lagTimes != null && !lagTimes.isEmpty()) {
-                LOG.info("Retrieved lag times from metrics manager for job {} ({}): {} partitions", 
-                            id, name, lagTimes.size());
                 return lagTimes;
             }
             return Maps.newHashMap();
