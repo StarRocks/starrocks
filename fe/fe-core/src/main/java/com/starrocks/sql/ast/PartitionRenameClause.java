@@ -42,6 +42,6 @@ public class PartitionRenameClause extends AlterTableClause {
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitPartitionRenameClause(this, context);
+        return ((AstVisitorExtendInterface<R, C>) visitor).visitPartitionRenameClause(this, context);
     }
 }

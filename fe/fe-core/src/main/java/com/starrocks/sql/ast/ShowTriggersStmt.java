@@ -28,6 +28,6 @@ public class ShowTriggersStmt extends ShowStmt {
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitShowTriggersStatement(this, context);
+        return ((AstVisitorExtendInterface<R, C>) visitor).visitShowTriggersStatement(this, context);
     }
 }

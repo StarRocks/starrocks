@@ -67,7 +67,7 @@ public class CallProcedureStatement extends DdlStmt {
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitCallProcedureStatement(this, context);
+        return ((AstVisitorExtendInterface<R, C>) visitor).visitCallProcedureStatement(this, context);
     }
 
 }

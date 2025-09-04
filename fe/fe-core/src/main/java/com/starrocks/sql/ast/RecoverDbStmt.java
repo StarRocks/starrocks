@@ -50,6 +50,6 @@ public class RecoverDbStmt extends DdlStmt {
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitRecoverDbStatement(this, context);
+        return ((AstVisitorExtendInterface<R, C>) visitor).visitRecoverDbStatement(this, context);
     }
 }

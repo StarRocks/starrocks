@@ -36,9 +36,7 @@ package com.starrocks.sql.ast;
 
 import com.google.common.base.Preconditions;
 import com.starrocks.sql.parser.NodePosition;
-import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.lang3.EnumUtils;
-import org.apache.commons.lang3.StringUtils;
 
 import java.util.List;
 
@@ -68,7 +66,7 @@ public abstract class StatementBase implements ParseNode {
         }
 
         public static ExplainLevel parse(String value) {
-            if (StringUtils.isEmpty(value)) {
+            if (value == null || value.isEmpty()) {
                 return defaultValue();
             }
             ExplainLevel result = EnumUtils.getEnumIgnoreCase(ExplainLevel.class, value);
@@ -167,6 +165,6 @@ public abstract class StatementBase implements ParseNode {
     }
 
     public boolean isExistQueryScopeHint() {
-        return CollectionUtils.isNotEmpty(allQueryScopeHints);
+        return allQueryScopeHints != null && !allQueryScopeHints.isEmpty();
     }
 }

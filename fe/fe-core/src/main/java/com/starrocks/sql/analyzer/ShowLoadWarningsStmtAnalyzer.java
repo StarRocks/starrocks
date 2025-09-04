@@ -25,7 +25,7 @@ import com.starrocks.analysis.StringLiteral;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.qe.ConnectContext;
-import com.starrocks.sql.ast.AstVisitor;
+import com.starrocks.sql.ast.AstVisitorExtendInterface;
 import com.starrocks.sql.ast.ShowLoadWarningsStmt;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -39,7 +39,7 @@ public class ShowLoadWarningsStmtAnalyzer {
         new ShowLoadWarningsStmtAnalyzerVisitor().visit(statement, context);
     }
 
-    static class ShowLoadWarningsStmtAnalyzerVisitor implements AstVisitor<Void, ConnectContext> {
+    static class ShowLoadWarningsStmtAnalyzerVisitor implements AstVisitorExtendInterface<Void, ConnectContext> {
 
         private String label;
         private long jobId;

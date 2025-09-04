@@ -87,6 +87,6 @@ public class CreateFileStmt extends DdlStmt {
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitCreateFileStatement(this, context);
+        return ((AstVisitorExtendInterface<R, C>) visitor).visitCreateFileStatement(this, context);
     }
 }

@@ -71,6 +71,6 @@ public class AdminSetReplicaStatusStmt extends DdlStmt {
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitAdminSetReplicaStatusStatement(this, context);
+        return ((AstVisitorExtendInterface<R, C>) visitor).visitAdminSetReplicaStatusStatement(this, context);
     }
 }

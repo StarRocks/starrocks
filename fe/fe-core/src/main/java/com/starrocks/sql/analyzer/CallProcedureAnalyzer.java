@@ -19,7 +19,7 @@ import com.starrocks.analysis.ProcedureArgument;
 import com.starrocks.connector.Procedure;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.sql.ast.AstVisitor;
+import com.starrocks.sql.ast.AstVisitorExtendInterface;
 import com.starrocks.sql.ast.CallProcedureStatement;
 import com.starrocks.sql.ast.QualifiedName;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
@@ -41,7 +41,7 @@ public class CallProcedureAnalyzer {
         new CallProcedureAnalyzer.CallProcedureStmtAnalyzerVisitor().visit(stmt, session);
     }
 
-    public static class CallProcedureStmtAnalyzerVisitor implements AstVisitor<Void, ConnectContext> {
+    public static class CallProcedureStmtAnalyzerVisitor implements AstVisitorExtendInterface<Void, ConnectContext> {
         @Override
         public Void visitCallProcedureStatement(CallProcedureStatement stmt, ConnectContext context) {
             QualifiedName qualifiedName = stmt.getQualifiedName();

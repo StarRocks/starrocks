@@ -43,6 +43,6 @@ public class DropResourceGroupStmt extends DdlStmt {
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitDropResourceGroupStatement(this, context);
+        return ((AstVisitorExtendInterface<R, C>) visitor).visitDropResourceGroupStatement(this, context);
     }
 }

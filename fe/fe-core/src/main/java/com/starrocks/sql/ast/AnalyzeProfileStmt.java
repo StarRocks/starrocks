@@ -30,7 +30,7 @@ public class AnalyzeProfileStmt extends StatementBase {
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitAnalyzeProfileStatement(this, context);
+        return ((AstVisitorExtendInterface<R, C>) visitor).visitAnalyzeProfileStatement(this, context);
     }
 
     public String getQueryId() {

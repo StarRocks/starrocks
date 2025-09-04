@@ -96,6 +96,9 @@ public class InsertStmt extends DmlStmt {
 
     private boolean isVersionOverwrite = false;
 
+    // hint in each part of ast. used to ast to sql
+    protected List<HintNode> hintNodes;
+
     // column match by position or name
     public enum ColumnMatchPolicy {
         POSITION,
@@ -179,7 +182,7 @@ public class InsertStmt extends DmlStmt {
     public void setOverwrite(boolean overwrite) {
         isOverwrite = overwrite;
     }
-    
+
     public void setOverwriteJobId(long overwriteJobId) {
         this.overwriteJobId = overwriteJobId;
     }
@@ -325,7 +328,7 @@ public class InsertStmt extends DmlStmt {
     }
 
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitInsertStatement(this, context);
+        return ((AstVisitorExtendInterface<R, C>) visitor).visitInsertStatement(this, context);
     }
 
     public boolean useTableFunctionAsTargetTable() {
@@ -369,5 +372,13 @@ public class InsertStmt extends DmlStmt {
 
     public void setColumnMatchPolicy(ColumnMatchPolicy columnMatchPolicy) {
         this.columnMatchPolicy = columnMatchPolicy;
+    }
+
+    public List<HintNode> getHintNodes() {
+        return hintNodes;
+    }
+
+    public void setHintNodes(List<HintNode> hintNodes) {
+        this.hintNodes = hintNodes;
     }
 }

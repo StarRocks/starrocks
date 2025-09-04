@@ -35,53 +35,53 @@ public class EditLogEPack extends EditLog {
 
     public void logCreateRoleMapping(String name, Map<String, String> propertyMap) {
         RoleMappingPersistInfo info = new RoleMappingPersistInfo(name, propertyMap);
-        logEdit(OperationTypeEPack.OP_CREATE_ROLE_MAPPING, info);
+        logJsonObject(OperationTypeEPack.OP_CREATE_ROLE_MAPPING, info);
     }
 
     public void logAlterRoleMapping(String name, Map<String, String> alterProps) {
         RoleMappingPersistInfo info = new RoleMappingPersistInfo(name, alterProps);
-        logEdit(OperationTypeEPack.OP_ALTER_ROLE_MAPPING, info);
+        logJsonObject(OperationTypeEPack.OP_ALTER_ROLE_MAPPING, info);
     }
 
     public void logDropRoleMapping(String name) {
         RoleMappingPersistInfo info = new RoleMappingPersistInfo(name, null);
-        logEdit(OperationTypeEPack.OP_DROP_ROLE_MAPPING, info);
+        logJsonObject(OperationTypeEPack.OP_DROP_ROLE_MAPPING, info);
     }
 
     public void logMVChangeLog(MVChangeLog mvChangeLog) {
-        logEdit(OperationTypeEPack.OP_MV_CHANGE, mvChangeLog);
+        logJsonObject(OperationTypeEPack.OP_MV_CHANGE, mvChangeLog);
     }
 
     public void logRecommendationsTaskStatusChange(RecommendationsTaskStatus taskStatus) {
-        logEdit(OperationTypeEPack.OP_RECOMMENDATIONS_TASK_STATUS_CHANGE, taskStatus);
+        logJsonObject(OperationTypeEPack.OP_RECOMMENDATIONS_TASK_STATUS_CHANGE, taskStatus);
     }
 
     public void logCreatePasswordPolicy(CreatePasswordPolicyLog createPasswordPolicyLog) {
-        logEdit(OperationTypeEPack.OP_CREATE_PASSWORD_POLICY, createPasswordPolicyLog);
+        logJsonObject(OperationTypeEPack.OP_CREATE_PASSWORD_POLICY, createPasswordPolicyLog);
     }
 
     public void logDropPasswordPolicy(DropPasswordPolicyLog dropPasswordPolicyLog) {
-        logEdit(OperationTypeEPack.OP_DROP_PASSWORD_POLICY, dropPasswordPolicyLog);
+        logJsonObject(OperationTypeEPack.OP_DROP_PASSWORD_POLICY, dropPasswordPolicyLog);
     }
 
     public void logSetGlobalPasswordPolicy(SetPasswordPolicyLog setPasswordPolicyLog) {
-        logEdit(OperationTypeEPack.OP_SET_PASSWORD_POLICY, setPasswordPolicyLog);
+        logJsonObject(OperationTypeEPack.OP_SET_PASSWORD_POLICY, setPasswordPolicyLog);
     }
 
     public void logUnsetGlobalPasswordPolicy(UnsetPasswordPolicyLog unsetPasswordPolicyLog) {
-        logEdit(OperationTypeEPack.OP_UNSET_PASSWORD_POLICY, unsetPasswordPolicyLog);
+        logJsonObject(OperationTypeEPack.OP_UNSET_PASSWORD_POLICY, unsetPasswordPolicyLog);
     }
 
     public void logManualClusterSnapshotLog(ManualClusterSnapshotLog info) {
-        logEdit(OperationTypeEPack.OP_MANUAL_CLUSTER_SNAPSHOT_LOG, info);
+        logJsonObject(OperationTypeEPack.OP_MANUAL_CLUSTER_SNAPSHOT_LOG, info);
     }
 
     public void logInitSystemInfo(SystemInfo info, WALApplier applier) {
-        logEdit(OperationTypeEPack.OP_INIT_SYSTEM_INFO, info, applier);
+        logJsonObject(OperationTypeEPack.OP_INIT_SYSTEM_INFO, info, applier);
     }
 
     public void logRegisterLicense(RegisterLicenseLog log, WALApplier applier) {
-        logEdit(OperationTypeEPack.OP_REGISTER_LICENSE, log, applier);
+        logJsonObject(OperationTypeEPack.OP_REGISTER_LICENSE, log, applier);
     }
 
     @Override

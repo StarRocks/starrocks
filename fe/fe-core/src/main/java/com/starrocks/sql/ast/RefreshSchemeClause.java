@@ -42,6 +42,6 @@ public class RefreshSchemeClause extends AlterTableClause {
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitRefreshSchemeClause(this, context);
+        return ((AstVisitorExtendInterface<R, C>) visitor).visitRefreshSchemeClause(this, context);
     }
 }

@@ -64,7 +64,7 @@ public class CreateResourceStmt extends DdlStmt {
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitCreateResourceStatement(this, context);
+        return ((AstVisitorExtendInterface<R, C>) visitor).visitCreateResourceStatement(this, context);
     }
 }
 

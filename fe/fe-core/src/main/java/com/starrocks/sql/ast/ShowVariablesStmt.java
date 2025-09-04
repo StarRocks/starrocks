@@ -105,6 +105,6 @@ public class ShowVariablesStmt extends ShowStmt {
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitShowVariablesStatement(this, context);
+        return ((AstVisitorExtendInterface<R, C>) visitor).visitShowVariablesStatement(this, context);
     }
 }

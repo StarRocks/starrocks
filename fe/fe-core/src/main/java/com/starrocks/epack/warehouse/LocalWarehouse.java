@@ -463,7 +463,7 @@ public class LocalWarehouse extends Warehouse implements GsonPostProcessable {
             LocalWarehouseOpLog opLog = LocalWarehouseOpLog.createCNGroupOpLog(newCluster);
             WarehouseInternalOpLog log = new WarehouseInternalOpLog(getName(), opLog.toJson());
             EditLog editLog = GlobalStateMgr.getCurrentState().getEditLog();
-            editLog.logEdit(OperationType.OP_WAREHOUSE_INTERNAL_OP, log);
+            editLog.logJsonObject(OperationType.OP_WAREHOUSE_INTERNAL_OP, log);
         }
     }
 
@@ -496,7 +496,7 @@ public class LocalWarehouse extends Warehouse implements GsonPostProcessable {
             LocalWarehouseOpLog opLog = LocalWarehouseOpLog.dropCNGroupOpLog(clusterToDel.getName());
             WarehouseInternalOpLog log = new WarehouseInternalOpLog(getName(), opLog.toJson());
             EditLog editLog = GlobalStateMgr.getCurrentState().getEditLog();
-            editLog.logEdit(OperationType.OP_WAREHOUSE_INTERNAL_OP, log);
+            editLog.logJsonObject(OperationType.OP_WAREHOUSE_INTERNAL_OP, log);
         }
     }
 
@@ -510,7 +510,7 @@ public class LocalWarehouse extends Warehouse implements GsonPostProcessable {
             LocalWarehouseOpLog opLog = LocalWarehouseOpLog.enableCNGroupOpLog(c.getName());
             WarehouseInternalOpLog log = new WarehouseInternalOpLog(getName(), opLog.toJson());
             EditLog editLog = GlobalStateMgr.getCurrentState().getEditLog();
-            editLog.logEdit(OperationType.OP_WAREHOUSE_INTERNAL_OP, log);
+            editLog.logJsonObject(OperationType.OP_WAREHOUSE_INTERNAL_OP, log);
         }
     }
 
@@ -524,7 +524,7 @@ public class LocalWarehouse extends Warehouse implements GsonPostProcessable {
             LocalWarehouseOpLog opLog = LocalWarehouseOpLog.disableCNGroupOpLog(c.getName());
             WarehouseInternalOpLog log = new WarehouseInternalOpLog(getName(), opLog.toJson());
             EditLog editLog = GlobalStateMgr.getCurrentState().getEditLog();
-            editLog.logEdit(OperationType.OP_WAREHOUSE_INTERNAL_OP, log);
+            editLog.logJsonObject(OperationType.OP_WAREHOUSE_INTERNAL_OP, log);
         }
     }
 

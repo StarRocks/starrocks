@@ -48,7 +48,7 @@ public class AlterStorageVolumeStmt extends DdlStmt {
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitAlterStorageVolumeStatement(this, context);
+        return ((AstVisitorExtendInterface<R, C>) visitor).visitAlterStorageVolumeStatement(this, context);
     }
 
     @Override

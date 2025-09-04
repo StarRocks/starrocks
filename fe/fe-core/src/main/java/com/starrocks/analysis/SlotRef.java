@@ -47,6 +47,7 @@ import com.starrocks.catalog.Type;
 import com.starrocks.planner.FragmentNormalizer;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AstVisitor;
+import com.starrocks.sql.ast.AstVisitorExtendInterface;
 import com.starrocks.sql.ast.QualifiedName;
 import com.starrocks.thrift.TExprNode;
 import com.starrocks.thrift.TExprNodeType;
@@ -497,7 +498,7 @@ public class SlotRef extends Expr {
      */
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) throws SemanticException {
-        return visitor.visitSlot(this, context);
+        return ((AstVisitorExtendInterface<R, C>) visitor).visitSlot(this, context);
     }
 
     public TableName getTblNameWithoutAnalyzed() {

@@ -15,6 +15,7 @@
 package com.starrocks.sql.ast.integration;
 
 import com.starrocks.sql.ast.AstVisitor;
+import com.starrocks.sql.ast.AstVisitorExtendInterface;
 import com.starrocks.sql.ast.ShowStmt;
 import com.starrocks.sql.parser.NodePosition;
 
@@ -25,6 +26,6 @@ public class ShowSecurityIntegrationStatement extends ShowStmt {
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitShowSecurityIntegrationStatement(this, context);
+        return ((AstVisitorExtendInterface<R, C>) visitor).visitShowSecurityIntegrationStatement(this, context);
     }
 }

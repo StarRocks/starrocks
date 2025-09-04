@@ -19,6 +19,7 @@ import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AstVisitor;
+import com.starrocks.sql.ast.AstVisitorExtendInterface;
 import com.starrocks.thrift.TDictQueryExpr;
 import com.starrocks.thrift.TExprNode;
 import com.starrocks.thrift.TExprNodeType;
@@ -55,7 +56,7 @@ public class DictQueryExpr extends FunctionCallExpr {
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitDictQueryExpr(this, context);
+        return ((AstVisitorExtendInterface<R, C>) visitor).visitDictQueryExpr(this, context);
     }
 
     @Override

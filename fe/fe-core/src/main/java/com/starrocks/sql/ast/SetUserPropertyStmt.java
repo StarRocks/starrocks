@@ -58,7 +58,7 @@ public class SetUserPropertyStmt extends DdlStmt {
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitSetUserPropertyStatement(this, context);
+        return ((AstVisitorExtendInterface<R, C>) visitor).visitSetUserPropertyStatement(this, context);
     }
 }
 

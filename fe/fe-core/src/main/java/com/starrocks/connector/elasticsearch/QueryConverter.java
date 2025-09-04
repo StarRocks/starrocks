@@ -32,14 +32,14 @@ import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.StringLiteral;
 import com.starrocks.connector.exception.StarRocksConnectorException;
-import com.starrocks.sql.ast.AstVisitor;
+import com.starrocks.sql.ast.AstVisitorExtendInterface;
 import com.starrocks.thrift.TExprOpcode;
 
 import java.util.ArrayList;
 import java.util.List;
 import java.util.stream.Collectors;
 
-public class QueryConverter implements AstVisitor<QueryBuilders.QueryBuilder, Void> {
+public class QueryConverter implements AstVisitorExtendInterface<QueryBuilders.QueryBuilder, Void> {
 
     // expr sets which can not be pushed down to Elasticsearch, SR BE should process
     List<Expr> localConjuncts = new ArrayList<>();
@@ -209,7 +209,7 @@ public class QueryConverter implements AstVisitor<QueryBuilders.QueryBuilder, Vo
         return columnName;
     }
 
-    private static class ExtractColumnName implements AstVisitor<String, Void> {
+    private static class ExtractColumnName implements AstVisitorExtendInterface<String, Void> {
         @Override
         public String visitCastExpr(CastExpr node, Void context) {
             return node.getChild(0).accept(this, null);

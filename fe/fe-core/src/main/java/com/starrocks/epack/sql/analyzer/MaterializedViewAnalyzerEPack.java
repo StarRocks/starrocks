@@ -12,7 +12,7 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.MaterializedViewAnalyzer;
 import com.starrocks.sql.analyzer.SemanticException;
-import com.starrocks.sql.ast.AstVisitor;
+import com.starrocks.sql.ast.AstVisitorExtendInterface;
 import com.starrocks.sql.ast.CreateMaterializedViewStatement;
 
 import java.util.List;
@@ -24,7 +24,7 @@ public class MaterializedViewAnalyzerEPack {
         new MaterializedViewAnalyzerVisitor().visit(statement, context);
     }
 
-    static class MaterializedViewAnalyzerVisitor implements AstVisitor<Void, ConnectContext> {
+    static class MaterializedViewAnalyzerVisitor implements AstVisitorExtendInterface<Void, ConnectContext> {
         @Override
         public Void visitCreateMaterializedViewStatement(CreateMaterializedViewStatement statement,
                                                          ConnectContext context) {

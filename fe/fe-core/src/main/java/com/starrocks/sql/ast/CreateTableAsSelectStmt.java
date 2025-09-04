@@ -70,6 +70,6 @@ public class CreateTableAsSelectStmt extends StatementBase {
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitCreateTableAsSelectStatement(this, context);
+        return ((AstVisitorExtendInterface<R, C>) visitor).visitCreateTableAsSelectStatement(this, context);
     }
 }

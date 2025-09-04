@@ -1412,6 +1412,21 @@ public class EditLog {
         });
     }
 
+    public void logJsonObject(short op, Object obj, WALApplier applier) {
+        logEdit(op, new Writable() {
+            @Override
+            public void write(DataOutput out) throws IOException {
+                Text.writeString(out, GsonUtils.GSON.toJson(obj));
+            }
+        });
+        applier.apply(new Writable() {
+            @Override
+            public void write(DataOutput out) throws IOException {
+                Text.writeString(out, GsonUtils.GSON.toJson(obj));
+            }
+        });
+    }
+
     /**
      * submit log in queue and return immediately
      */
@@ -2181,52 +2196,52 @@ public class EditLog {
 
     public void logCreateMaskingPolicy(Policy policy) {
         CreatePolicyLog createPolicyInfo = new CreatePolicyLog(policy);
-        logEdit(OperationTypeEPack.OP_CREATE_MASKING_POLICY, createPolicyInfo);
+        logJsonObject(OperationTypeEPack.OP_CREATE_MASKING_POLICY, createPolicyInfo);
     }
 
     public void logCreateRowAccessPolicy(Policy policy) {
         CreatePolicyLog createPolicyInfo = new CreatePolicyLog(policy);
-        logEdit(OperationTypeEPack.OP_CREATE_ROW_ACCESS_POLICY, createPolicyInfo);
+        logJsonObject(OperationTypeEPack.OP_CREATE_ROW_ACCESS_POLICY, createPolicyInfo);
     }
 
     public void logDropPolicy(PolicyName policyName, DbUID db, Policy policy) {
         DropPolicyLog dropPolicyLog =
                 new DropPolicyLog(policy.getPolicyType(), policy.getPolicyId(), db, policyName.getName());
-        logEdit(OperationTypeEPack.OP_DROP_POLICY, dropPolicyLog);
+        logJsonObject(OperationTypeEPack.OP_DROP_POLICY, dropPolicyLog);
     }
 
     public void logAlterPolicySetBody(PolicyName policyName, PolicyType policyType, String policyBody) {
         AlterPolicyLog alterPolicyInfo = new AlterPolicyLog(policyName, policyType,
                 new AlterPolicyLog.PolicySetBodyInfo(policyBody));
-        logEdit(OperationTypeEPack.OP_ALTER_POLICY_SET_BODY, alterPolicyInfo);
+        logJsonObject(OperationTypeEPack.OP_ALTER_POLICY_SET_BODY, alterPolicyInfo);
     }
 
     public void logAlterPolicySetComment(PolicyName policyName, PolicyType policyType, String comment) {
         AlterPolicyLog alterPolicyInfo = new AlterPolicyLog(policyName, policyType,
                 new AlterPolicyLog.PolicySetCommentInfo(comment));
-        logEdit(OperationTypeEPack.OP_ALTER_POLICY_SET_COMMENT, alterPolicyInfo);
+        logJsonObject(OperationTypeEPack.OP_ALTER_POLICY_SET_COMMENT, alterPolicyInfo);
     }
 
     public void logAlterPolicyRename(PolicyName policyName, PolicyType policyType, String newPolicyName) {
         AlterPolicyLog alterPolicyInfo = new AlterPolicyLog(policyName, policyType,
                 new AlterPolicyLog.PolicyRenameInfo(newPolicyName));
-        logEdit(OperationTypeEPack.OP_ALTER_POLICY_RENAME, alterPolicyInfo);
+        logJsonObject(OperationTypeEPack.OP_ALTER_POLICY_RENAME, alterPolicyInfo);
     }
 
     public void logApplyMaskingPolicy(ApplyOrRevokeMaskingPolicyLog applyMaskingPolicyInfo) {
-        logEdit(OperationTypeEPack.OP_APPLY_MASKING_POLICY, applyMaskingPolicyInfo);
+        logJsonObject(OperationTypeEPack.OP_APPLY_MASKING_POLICY, applyMaskingPolicyInfo);
     }
 
     public void logApplyRowAccessPolicy(ApplyOrRevokeRowAccessPolicyLog applyMaskingPolicyInfo) {
-        logEdit(OperationTypeEPack.OP_APPLY_ROW_ACCESS_POLICY, applyMaskingPolicyInfo);
+        logJsonObject(OperationTypeEPack.OP_APPLY_ROW_ACCESS_POLICY, applyMaskingPolicyInfo);
     }
 
     public void logRevokeMaskingPolicy(ApplyOrRevokeMaskingPolicyLog applyMaskingPolicyInfo) {
-        logEdit(OperationTypeEPack.OP_REVOKE_MASKING_POLICY, applyMaskingPolicyInfo);
+        logJsonObject(OperationTypeEPack.OP_REVOKE_MASKING_POLICY, applyMaskingPolicyInfo);
     }
 
     public void logRevokeRowAccessPolicy(ApplyOrRevokeRowAccessPolicyLog applyMaskingPolicyInfo) {
-        logEdit(OperationTypeEPack.OP_REVOKE_ROW_ACCESS_POLICY, applyMaskingPolicyInfo);
+        logJsonObject(OperationTypeEPack.OP_REVOKE_ROW_ACCESS_POLICY, applyMaskingPolicyInfo);
     }
 
     public void logCreateSecurityIntegration(String name, Map<String, String> propertyMap) {
@@ -2263,7 +2278,6 @@ public class EditLog {
     public void logMVEpochChange(MVEpoch epoch) {
         logJsonObject(OperationType.OP_MV_EPOCH_UPDATE, epoch);
     }
-
 
     public void logAlterTableProperties(ModifyTablePropertyOperationLog info) {
         logJsonObject(OperationType.OP_ALTER_TABLE_PROPERTIES, info);
@@ -2314,17 +2328,17 @@ public class EditLog {
     // failover group
     public void logCreateFailoverGroup(FailoverGroup failoverGroup) {
         CreateFailoverGroupLog createFailoverGroupLog = new CreateFailoverGroupLog(failoverGroup);
-        logEdit(OperationTypeEPack.OP_CREATE_FAILOVER_GROUP, createFailoverGroupLog);
+        logJsonObject(OperationTypeEPack.OP_CREATE_FAILOVER_GROUP, createFailoverGroupLog);
     }
 
     public void logDropFailoverGroup(long failoverGroupId) {
         DropFailoverGroupLog dropFailoverGroupLog = new DropFailoverGroupLog(failoverGroupId);
-        logEdit(OperationTypeEPack.OP_DROP_FAILOVER_GROUP, dropFailoverGroupLog);
+        logJsonObject(OperationTypeEPack.OP_DROP_FAILOVER_GROUP, dropFailoverGroupLog);
     }
 
     public void logUpdateFailoverGroup(FailoverGroup failoverGroup) {
         UpdateFailoverGroupLog updateFailoverGroupLog = new UpdateFailoverGroupLog(failoverGroup);
-        logEdit(OperationTypeEPack.OP_UPDATE_FAILOVER_GROUP, updateFailoverGroupLog);
+        logJsonObject(OperationTypeEPack.OP_UPDATE_FAILOVER_GROUP, updateFailoverGroupLog);
     }
 
     public void logColumnRename(ColumnRenameInfo columnRenameInfo) {

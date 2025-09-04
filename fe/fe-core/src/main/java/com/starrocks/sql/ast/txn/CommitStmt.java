@@ -15,6 +15,7 @@
 package com.starrocks.sql.ast.txn;
 
 import com.starrocks.sql.ast.AstVisitor;
+import com.starrocks.sql.ast.AstVisitorExtendInterface;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.parser.NodePosition;
 
@@ -25,6 +26,6 @@ public class CommitStmt extends StatementBase {
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitCommitStatement(this, context);
+        return ((AstVisitorExtendInterface<R, C>) visitor).visitCommitStatement(this, context);
     }
 }

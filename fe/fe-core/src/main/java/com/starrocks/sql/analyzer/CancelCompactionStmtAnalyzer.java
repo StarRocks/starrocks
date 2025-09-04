@@ -22,7 +22,7 @@ import com.starrocks.analysis.SlotRef;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.qe.ConnectContext;
-import com.starrocks.sql.ast.AstVisitor;
+import com.starrocks.sql.ast.AstVisitorExtendInterface;
 import com.starrocks.sql.ast.CancelCompactionStmt;
 
 public class CancelCompactionStmtAnalyzer {
@@ -31,7 +31,7 @@ public class CancelCompactionStmtAnalyzer {
         new CancelCompactionStmtAnalyzerVisitor().analyze(statement, context);
     }
 
-    static class CancelCompactionStmtAnalyzerVisitor implements AstVisitor<Void, ConnectContext> {
+    static class CancelCompactionStmtAnalyzerVisitor implements AstVisitorExtendInterface<Void, ConnectContext> {
 
         public void analyze(CancelCompactionStmt statement, ConnectContext context) {
             visit(statement, context);

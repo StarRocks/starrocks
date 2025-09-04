@@ -32,6 +32,6 @@ public class AddComputeNodeBlackListStmt extends StatementBase {
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitAddComputeNodeBlackListStatement(this, context);
+        return ((AstVisitorExtendInterface<R, C>) visitor).visitAddComputeNodeBlackListStatement(this, context);
     }
 }

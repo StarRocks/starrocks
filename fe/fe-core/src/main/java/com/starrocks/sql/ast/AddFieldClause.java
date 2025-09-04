@@ -58,6 +58,6 @@ public class AddFieldClause extends AlterTableColumnClause {
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitAddFieldClause(this, context);
+        return ((AstVisitorExtendInterface<R, C>) visitor).visitAddFieldClause(this, context);
     }
 }

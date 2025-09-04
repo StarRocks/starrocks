@@ -73,6 +73,6 @@ public class CreateRepositoryStmt extends DdlStmt {
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitCreateRepositoryStatement(this, context);
+        return ((AstVisitorExtendInterface<R, C>) visitor).visitCreateRepositoryStatement(this, context);
     }
 }

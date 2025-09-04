@@ -73,7 +73,7 @@ public class CancelAlterTableStmt extends CancelStmt {
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitCancelAlterTableStatement(this, context);
+        return ((AstVisitorExtendInterface<R, C>) visitor).visitCancelAlterTableStatement(this, context);
     }
 
     @Override

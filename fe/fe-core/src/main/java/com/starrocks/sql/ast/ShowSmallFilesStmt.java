@@ -40,6 +40,6 @@ public class ShowSmallFilesStmt extends ShowStmt {
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitShowSmallFilesStatement(this, context);
+        return ((AstVisitorExtendInterface<R, C>) visitor).visitShowSmallFilesStatement(this, context);
     }
 }

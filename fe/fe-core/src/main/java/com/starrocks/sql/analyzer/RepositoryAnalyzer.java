@@ -21,7 +21,7 @@ import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.sql.ast.AstVisitor;
+import com.starrocks.sql.ast.AstVisitorExtendInterface;
 import com.starrocks.sql.ast.CreateRepositoryStmt;
 import com.starrocks.sql.ast.DdlStmt;
 import com.starrocks.sql.ast.DropRepositoryStmt;
@@ -36,7 +36,7 @@ public class RepositoryAnalyzer {
         new RepositoryAnalyzerVisitor().analyze(dropRepositoryStmt, session);
     }
 
-    public static class RepositoryAnalyzerVisitor implements AstVisitor<Void, ConnectContext> {
+    public static class RepositoryAnalyzerVisitor implements AstVisitorExtendInterface<Void, ConnectContext> {
         public void analyze(DdlStmt statement, ConnectContext session) {
             visit(statement, session);
         }

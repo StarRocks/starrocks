@@ -59,6 +59,6 @@ public class CancelLoadStmt extends DdlStmt {
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitCancelLoadStatement(this, context);
+        return ((AstVisitorExtendInterface<R, C>) visitor).visitCancelLoadStatement(this, context);
     }
 }

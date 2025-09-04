@@ -125,7 +125,7 @@ public class SubfieldOperator extends ArgsScalarOperator {
 
     @Override
     public <R, C> R accept(ScalarOperatorVisitor<R, C> visitor, C context) {
-        return visitor.visitSubfield(this, context);
+        return  visitor.visitSubfield(this, context);
     }
 
     @Override

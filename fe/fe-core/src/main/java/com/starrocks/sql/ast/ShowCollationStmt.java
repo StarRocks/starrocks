@@ -48,6 +48,6 @@ public class ShowCollationStmt extends ShowStmt {
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitShowCollationStatement(this, context);
+        return ((AstVisitorExtendInterface<R, C>) visitor).visitShowCollationStatement(this, context);
     }
 }

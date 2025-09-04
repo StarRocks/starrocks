@@ -36,7 +36,7 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.TemporaryTableMgr;
-import com.starrocks.sql.ast.AstVisitor;
+import com.starrocks.sql.ast.AstVisitorExtendInterface;
 import com.starrocks.sql.ast.DdlStmt;
 import com.starrocks.sql.ast.DropDbStmt;
 import com.starrocks.sql.ast.DropFunctionStmt;
@@ -59,7 +59,7 @@ public class DropStmtAnalyzer {
         new DropStmtAnalyzerVisitor().analyze(ddlStmt, session);
     }
 
-    static class DropStmtAnalyzerVisitor implements AstVisitor<Void, ConnectContext> {
+    static class DropStmtAnalyzerVisitor implements AstVisitorExtendInterface<Void, ConnectContext> {
         public void analyze(DdlStmt statement, ConnectContext session) {
             visit(statement, session);
         }

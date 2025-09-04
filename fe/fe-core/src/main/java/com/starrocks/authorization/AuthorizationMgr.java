@@ -659,7 +659,7 @@ public class AuthorizationMgr {
         }
 
         UpdateGroupToRoleLog log = new UpdateGroupToRoleLog(groupName, roleIdList);
-        GlobalStateMgr.getCurrentState().getEditLog().logEdit(OperationType.OP_GRANT_ROLE_TO_GROUP, log);
+        GlobalStateMgr.getCurrentState().getEditLog().logJsonObject(OperationType.OP_GRANT_ROLE_TO_GROUP, log);
     }
 
     public void replayGrantRoleToGroup(List<Long> roleIdList, String groupName) {
@@ -812,7 +812,7 @@ public class AuthorizationMgr {
         }
 
         UpdateGroupToRoleLog log = new UpdateGroupToRoleLog(groupName, roleIdList);
-        GlobalStateMgr.getCurrentState().getEditLog().logEdit(OperationType.OP_REVOKE_ROLE_FROM_GROUP, log);
+        GlobalStateMgr.getCurrentState().getEditLog().logJsonObject(OperationType.OP_REVOKE_ROLE_FROM_GROUP, log);
     }
 
     public void replayRevokeRoleFromGroup(List<Long> roleIdList, String groupName) {

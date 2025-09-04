@@ -66,6 +66,6 @@ public class AlterViewClause extends AlterClause {
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitAlterViewClause(this, context);
+        return ((AstVisitorExtendInterface<R, C>) visitor).visitAlterViewClause(this, context);
     }
 }

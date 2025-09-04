@@ -35,6 +35,7 @@
 package com.starrocks.analysis;
 
 import com.starrocks.sql.ast.AstVisitor;
+import com.starrocks.sql.ast.AstVisitorExtendInterface;
 import com.starrocks.sql.parser.NodePosition;
 
 import java.util.ArrayList;
@@ -109,6 +110,6 @@ public class GroupingFunctionCallExpr extends FunctionCallExpr {
      */
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitGroupingFunctionCall(this, context);
+        return ((AstVisitorExtendInterface<R, C>) visitor).visitGroupingFunctionCall(this, context);
     }
 }

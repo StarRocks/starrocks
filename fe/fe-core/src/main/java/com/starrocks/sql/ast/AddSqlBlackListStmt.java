@@ -35,7 +35,7 @@ public class AddSqlBlackListStmt extends StatementBase {
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitAddSqlBlackListStatement(this, context);
+        return ((AstVisitorExtendInterface<R, C>) visitor).visitAddSqlBlackListStatement(this, context);
     }
 }
 

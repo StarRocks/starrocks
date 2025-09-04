@@ -15,6 +15,7 @@
 package com.starrocks.sql.ast.spm;
 
 import com.starrocks.sql.ast.AstVisitor;
+import com.starrocks.sql.ast.AstVisitorExtendInterface;
 import com.starrocks.sql.ast.DdlStmt;
 import com.starrocks.sql.parser.NodePosition;
 
@@ -34,6 +35,6 @@ public class DropBaselinePlanStmt extends DdlStmt {
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitDropBaselinePlanStatement(this, context);
+        return ((AstVisitorExtendInterface<R, C>) visitor).visitDropBaselinePlanStatement(this, context);
     }
 }

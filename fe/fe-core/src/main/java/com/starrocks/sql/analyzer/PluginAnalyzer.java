@@ -18,7 +18,7 @@ import com.starrocks.common.Config;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.qe.ConnectContext;
-import com.starrocks.sql.ast.AstVisitor;
+import com.starrocks.sql.ast.AstVisitorExtendInterface;
 import com.starrocks.sql.ast.InstallPluginStmt;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.UninstallPluginStmt;
@@ -28,7 +28,7 @@ public class PluginAnalyzer {
         new PluginAnalyzerVisitor().visit(statement, context);
     }
 
-    static class PluginAnalyzerVisitor implements AstVisitor<Void, ConnectContext> {
+    static class PluginAnalyzerVisitor implements AstVisitorExtendInterface<Void, ConnectContext> {
 
         @Override
         public Void visitInstallPluginStatement(InstallPluginStmt statement, ConnectContext context) {

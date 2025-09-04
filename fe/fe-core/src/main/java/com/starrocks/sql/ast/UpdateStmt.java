@@ -116,6 +116,6 @@ public class UpdateStmt extends DmlStmt {
     }
 
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitUpdateStatement(this, context);
+        return ((AstVisitorExtendInterface<R, C>) visitor).visitUpdateStatement(this, context);
     }
 }

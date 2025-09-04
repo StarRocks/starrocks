@@ -13,7 +13,7 @@
 // limitations under the License.
 package com.starrocks.epack.sql.ast;
 
-import com.starrocks.sql.ast.AstVisitor;
+import com.starrocks.sql.ast.AstVisitorExtendInterface;
 import com.starrocks.sql.ast.warehouse.CreateWarehouseStmt;
 import com.starrocks.sql.ast.warehouse.DropWarehouseStmt;
 import com.starrocks.sql.ast.warehouse.ResumeWarehouseStmt;
@@ -26,7 +26,7 @@ import com.starrocks.sql.automv.ast.CreateTunespaceStmt;
 import com.starrocks.sql.automv.ast.ShowRecommendationsStmt;
 import com.starrocks.sql.automv.ast.SubmitRecommendationsTaskStmt;
 
-public interface AstVisitorEPack<R, C> extends AstVisitor<R, C> {
+public interface AstVisitorEPack<R, C> extends AstVisitorExtendInterface<R, C> {
 
     // ---------------------------------------- Warehouse Statement ----------------------------------------------------
 

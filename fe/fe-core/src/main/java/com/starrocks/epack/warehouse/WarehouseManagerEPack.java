@@ -301,7 +301,7 @@ public class WarehouseManagerEPack extends WarehouseManager {
             idToWh.put(wh.getId(), wh);
 
             EditLog editLog = GlobalStateMgr.getCurrentState().getEditLog();
-            editLog.logEdit(OperationType.OP_CREATE_WAREHOUSE, wh);
+            editLog.logJsonObject(OperationType.OP_CREATE_WAREHOUSE, wh);
             LOG.info("createWarehouse whName = {}, id = {}, comment = {}", warehouseName, warehouseId, comment);
             warehouseEventListeners.stream()
                     .forEach(listener -> listener.onCreateWarehouse(wh));
@@ -363,7 +363,7 @@ public class WarehouseManagerEPack extends WarehouseManager {
 
             warehouse.delete();
             EditLog editLog = GlobalStateMgr.getCurrentState().getEditLog();
-            editLog.logEdit(OperationType.OP_DROP_WAREHOUSE, new DropWarehouseLog(warehouseName));
+            editLog.logJsonObject(OperationType.OP_DROP_WAREHOUSE, new DropWarehouseLog(warehouseName));
         }
     }
 
@@ -400,7 +400,7 @@ public class WarehouseManagerEPack extends WarehouseManager {
 
             warehouse.suspendSelf();
             EditLog editLog = GlobalStateMgr.getCurrentState().getEditLog();
-            editLog.logEdit(OperationType.OP_ALTER_WAREHOUSE, warehouse);
+            editLog.logJsonObject(OperationType.OP_ALTER_WAREHOUSE, warehouse);
         }
     }
 
@@ -429,7 +429,7 @@ public class WarehouseManagerEPack extends WarehouseManager {
             }
             warehouse.resumeSelf();
             EditLog editLog = GlobalStateMgr.getCurrentState().getEditLog();
-            editLog.logEdit(OperationType.OP_ALTER_WAREHOUSE, warehouse);
+            editLog.logJsonObject(OperationType.OP_ALTER_WAREHOUSE, warehouse);
         }
     }
 
@@ -547,7 +547,7 @@ public class WarehouseManagerEPack extends WarehouseManager {
                 }
                 warehouse.setProperty(warehouseProperty);
                 EditLog editLog = GlobalStateMgr.getCurrentState().getEditLog();
-                editLog.logEdit(OperationType.OP_ALTER_WAREHOUSE, warehouse);
+                editLog.logJsonObject(OperationType.OP_ALTER_WAREHOUSE, warehouse);
             }
         }
     }

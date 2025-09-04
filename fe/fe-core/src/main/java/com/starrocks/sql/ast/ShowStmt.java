@@ -64,6 +64,6 @@ public abstract class ShowStmt extends StatementBase {
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitShowStatement(this, context);
+        return ((AstVisitorExtendInterface<R, C>) visitor).visitShowStatement(this, context);
     }
 }

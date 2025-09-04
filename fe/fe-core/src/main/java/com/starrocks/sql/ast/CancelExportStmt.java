@@ -64,7 +64,7 @@ public class CancelExportStmt extends DdlStmt {
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitCancelExportStatement(this, context);
+        return ((AstVisitorExtendInterface<R, C>) visitor).visitCancelExportStatement(this, context);
     }
 }
 

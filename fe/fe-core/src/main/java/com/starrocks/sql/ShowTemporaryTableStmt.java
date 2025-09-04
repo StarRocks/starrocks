@@ -16,6 +16,7 @@ package com.starrocks.sql;
 
 import com.starrocks.analysis.Expr;
 import com.starrocks.sql.ast.AstVisitor;
+import com.starrocks.sql.ast.AstVisitorExtendInterface;
 import com.starrocks.sql.ast.ShowTableStmt;
 import com.starrocks.sql.parser.NodePosition;
 
@@ -37,6 +38,6 @@ public class ShowTemporaryTableStmt extends ShowTableStmt {
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitShowTemporaryTablesStatement(this, context);
+        return ((AstVisitorExtendInterface<R, C>) visitor).visitShowTemporaryTablesStatement(this, context);
     }
 }

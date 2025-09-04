@@ -117,6 +117,6 @@ public class MapExpr extends Expr {
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitMapExpr(this, context);
+        return ((AstVisitorExtendInterface<R, C>) visitor).visitMapExpr(this, context);
     }
 }

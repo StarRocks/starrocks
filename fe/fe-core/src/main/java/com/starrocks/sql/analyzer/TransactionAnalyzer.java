@@ -15,7 +15,7 @@
 package com.starrocks.sql.analyzer;
 
 import com.starrocks.qe.ConnectContext;
-import com.starrocks.sql.ast.AstVisitor;
+import com.starrocks.sql.ast.AstVisitorExtendInterface;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.txn.BeginStmt;
 import com.starrocks.sql.ast.txn.CommitStmt;
@@ -26,7 +26,7 @@ public class TransactionAnalyzer {
         new TransactionAnalyzerVisitor().analyze(statement, context);
     }
 
-    static class TransactionAnalyzerVisitor implements AstVisitor<Void, ConnectContext> {
+    static class TransactionAnalyzerVisitor implements AstVisitorExtendInterface<Void, ConnectContext> {
 
         public void analyze(StatementBase statement, ConnectContext session) {
             visit(statement, session);

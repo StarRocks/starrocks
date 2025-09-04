@@ -18,6 +18,7 @@ import com.google.common.base.Preconditions;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.sql.ast.AstVisitor;
+import com.starrocks.sql.ast.AstVisitorExtendInterface;
 import com.starrocks.sql.parser.NodePosition;
 
 import java.util.Objects;
@@ -55,7 +56,7 @@ public class UserVariableExpr extends Expr {
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitUserVariableExpr(this, context);
+        return ((AstVisitorExtendInterface<R, C>) visitor).visitUserVariableExpr(this, context);
     }
 
     @Override

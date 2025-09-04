@@ -50,6 +50,6 @@ public class RecoverPartitionStmt extends DdlStmt {
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitRecoverPartitionStatement(this, context);
+        return ((AstVisitorExtendInterface<R, C>) visitor).visitRecoverPartitionStatement(this, context);
     }
 }

@@ -46,6 +46,6 @@ public class CancelAlterSystemStmt extends CancelStmt {
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitCancelAlterSystemStatement(this, context);
+        return ((AstVisitorExtendInterface<R, C>) visitor).visitCancelAlterSystemStatement(this, context);
     }
 }

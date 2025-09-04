@@ -49,7 +49,7 @@ public class InstallPluginStmt extends DdlStmt {
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitInstallPluginStatement(this, context);
+        return ((AstVisitorExtendInterface<R, C>) visitor).visitInstallPluginStatement(this, context);
     }
 }
 

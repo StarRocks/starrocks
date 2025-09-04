@@ -21,7 +21,7 @@ import com.starrocks.analysis.OrderByElement;
 import com.starrocks.analysis.Subquery;
 import com.starrocks.analysis.TableName;
 import com.starrocks.qe.ConnectContext;
-import com.starrocks.sql.ast.AstVisitor;
+import com.starrocks.sql.ast.AstVisitorExtendInterface;
 import com.starrocks.sql.ast.CTERelation;
 import com.starrocks.sql.ast.ExceptRelation;
 import com.starrocks.sql.ast.IntersectRelation;
@@ -42,7 +42,7 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.stream.Collectors;
 
-public class CollectAstVisitor implements AstVisitor<Void, Void> {
+public class CollectAstVisitor implements AstVisitorExtendInterface<Void, Void> {
     private final AopAstHandler handler;
 
     private CollectAstVisitor(AopAstHandler handler) {

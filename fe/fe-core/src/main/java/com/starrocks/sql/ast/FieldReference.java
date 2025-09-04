@@ -39,7 +39,7 @@ public class FieldReference extends Expr {
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitFieldReference(this, context);
+        return ((AstVisitorExtendInterface<R, C>) visitor).visitFieldReference(this, context);
     }
 
     public int getFieldIndex() {

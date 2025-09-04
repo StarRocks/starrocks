@@ -6,7 +6,7 @@ import com.starrocks.epack.sql.ast.WithColumnMaskingPolicy;
 import com.starrocks.epack.sql.ast.WithRowAccessPolicy;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.analyzer.ViewAnalyzer;
-import com.starrocks.sql.ast.AstVisitor;
+import com.starrocks.sql.ast.AstVisitorExtendInterface;
 import com.starrocks.sql.ast.CreateViewStmt;
 import com.starrocks.sql.ast.StatementBase;
 
@@ -17,7 +17,7 @@ public class ViewAnalyzerEPack {
         new ViewAnalyzerVisitor().visit(statement, context);
     }
 
-    static class ViewAnalyzerVisitor implements AstVisitor<Void, ConnectContext> {
+    static class ViewAnalyzerVisitor implements AstVisitorExtendInterface<Void, ConnectContext> {
         @Override
         public Void visitCreateViewStatement(CreateViewStmt statement, ConnectContext context) {
             ViewAnalyzer.analyze(statement, context);

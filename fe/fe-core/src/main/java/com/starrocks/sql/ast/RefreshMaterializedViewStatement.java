@@ -46,7 +46,7 @@ public class RefreshMaterializedViewStatement extends DdlStmt {
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitRefreshMaterializedViewStatement(this, context);
+        return ((AstVisitorExtendInterface<R, C>) visitor).visitRefreshMaterializedViewStatement(this, context);
     }
 
     public EitherOr<PartitionRangeDesc, Set<PListCell>> getPartitionDesc() {

@@ -49,7 +49,7 @@ public class ShowRestoreStmt extends ShowStmt {
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitShowRestoreStatement(this, context);
+        return ((AstVisitorExtendInterface<R, C>) visitor).visitShowRestoreStatement(this, context);
     }
 }
 
