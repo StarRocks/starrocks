@@ -33,6 +33,6 @@ public class AlterUserStmt extends BaseCreateAlterUserStmt {
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return ((AstVisitorExtendInterface<R, C>) visitor).visitAlterUserStatement(this, context);
+        return visitor.visitAlterUserStatement(this, context);
     }
 }

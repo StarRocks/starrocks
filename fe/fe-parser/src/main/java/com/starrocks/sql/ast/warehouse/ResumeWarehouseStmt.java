@@ -15,18 +15,17 @@
 package com.starrocks.sql.ast.warehouse;
 
 import com.starrocks.sql.ast.AstVisitor;
-import com.starrocks.sql.ast.AstVisitorExtendInterface;
-import com.starrocks.sql.ast.StatementBase;
+import com.starrocks.sql.ast.DdlStmt;
 import com.starrocks.sql.parser.NodePosition;
 
-public class SetWarehouseStmt extends StatementBase {
-    private final String warehouseName;
+public class ResumeWarehouseStmt extends DdlStmt {
+    private String warehouseName;
 
-    public SetWarehouseStmt(String warehouseName) {
+    public ResumeWarehouseStmt(String warehouseName) {
         this(warehouseName, NodePosition.ZERO);
     }
 
-    public SetWarehouseStmt(String warehouseName, NodePosition pos) {
+    public ResumeWarehouseStmt(String warehouseName, NodePosition pos) {
         super(pos);
         this.warehouseName = warehouseName;
     }
@@ -37,6 +36,6 @@ public class SetWarehouseStmt extends StatementBase {
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return ((AstVisitorExtendInterface<R, C>) visitor).visitSetWarehouseStatement(this, context);
+        return visitor.visitResumeWarehouseStatement(this, context);
     }
 }
