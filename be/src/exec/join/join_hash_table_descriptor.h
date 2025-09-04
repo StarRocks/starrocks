@@ -22,6 +22,7 @@
 #include <cstdint>
 #include <optional>
 #include <set>
+#include <variant>
 
 #include "column/chunk.h"
 #include "column/column_hash.h"
@@ -36,7 +37,6 @@
 #include "util/orlp/pdqsort.h"
 #include "util/phmap/phmap.h"
 #include "util/runtime_profile.h"
-#include <variant>
 
 namespace starrocks {
 
@@ -78,9 +78,7 @@ private:
     Entries _entries;
 
 public:
-    void add_row(CppType asof_value, uint32_t row_index) {
-        _entries.emplace_back(asof_value, row_index);
-    }
+    void add_row(CppType asof_value, uint32_t row_index) { _entries.emplace_back(asof_value, row_index); }
 
     void sort() {
         auto comparator = [](const Entry& lhs, const Entry& rhs) {
@@ -98,7 +96,6 @@ public:
         if (_entries.empty()) {
             return 0;
         }
-
 
         size_t size = _entries.size();
         size_t low = 0;
@@ -153,76 +150,110 @@ private:
     }
 };
 
-#define ASOF_BUFFER_TYPES(T) \
-    Buffer<std::unique_ptr<AsofLookupVector<T, TExprOpcode::LT>>>, \
-    Buffer<std::unique_ptr<AsofLookupVector<T, TExprOpcode::LE>>>, \
-    Buffer<std::unique_ptr<AsofLookupVector<T, TExprOpcode::GT>>>, \
-    Buffer<std::unique_ptr<AsofLookupVector<T, TExprOpcode::GE>>>
+#define ASOF_BUFFER_TYPES(T)                                               \
+    Buffer<std::unique_ptr<AsofLookupVector<T, TExprOpcode::LT>>>,         \
+            Buffer<std::unique_ptr<AsofLookupVector<T, TExprOpcode::LE>>>, \
+            Buffer<std::unique_ptr<AsofLookupVector<T, TExprOpcode::GT>>>, \
+            Buffer<std::unique_ptr<AsofLookupVector<T, TExprOpcode::GE>>>
 
-using AsofBufferVariant = std::variant<
-    ASOF_BUFFER_TYPES(int64_t),        // 0-3: Buffer<AsofLookupVector<int64_t, OP>*>
-    ASOF_BUFFER_TYPES(DateValue),      // 4-7: Buffer<AsofLookupVector<DateValue, OP>*>
-    ASOF_BUFFER_TYPES(TimestampValue)  // 8-11: Buffer<AsofLookupVector<TimestampValue, OP>*>
->;
+using AsofBufferVariant =
+        std::variant<ASOF_BUFFER_TYPES(int64_t),       // 0-3: Buffer<AsofLookupVector<int64_t, OP>*>
+                     ASOF_BUFFER_TYPES(DateValue),     // 4-7: Buffer<AsofLookupVector<DateValue, OP>*>
+                     ASOF_BUFFER_TYPES(TimestampValue) // 8-11: Buffer<AsofLookupVector<TimestampValue, OP>*>
+                     >;
 
 // 🚀 前向声明，用于模板函数
 struct JoinHashTableItems;
 
 constexpr size_t get_asof_variant_index(LogicalType logical_type, TExprOpcode::type opcode) {
-    size_t base = (logical_type == TYPE_BIGINT) ? 0 : (logical_type == TYPE_DATE) ? 4 : 8; // TYPE_DATETIME -> TimestampValue (index 8-11)
-    size_t offset = (opcode == TExprOpcode::LT) ? 0 : (opcode == TExprOpcode::LE) ? 1 : (opcode == TExprOpcode::GT) ? 2 : 3;
+    size_t base = (logical_type == TYPE_BIGINT) ? 0
+                  : (logical_type == TYPE_DATE) ? 4
+                                                : 8; // TYPE_DATETIME -> TimestampValue (index 8-11)
+    size_t offset = (opcode == TExprOpcode::LT)   ? 0
+                    : (opcode == TExprOpcode::LE) ? 1
+                    : (opcode == TExprOpcode::GT) ? 2
+                                                  : 3;
     return base + offset;
 }
 
 // 🚀 根据 variant_index 创建对应类型的 Buffer
 inline AsofBufferVariant create_asof_buffer_by_index(size_t variant_index) {
     switch (variant_index) {
-        case 0:  return Buffer<std::unique_ptr<AsofLookupVector<int64_t, TExprOpcode::LT>>>{};
-        case 1:  return Buffer<std::unique_ptr<AsofLookupVector<int64_t, TExprOpcode::LE>>>{};
-        case 2:  return Buffer<std::unique_ptr<AsofLookupVector<int64_t, TExprOpcode::GT>>>{};
-        case 3:  return Buffer<std::unique_ptr<AsofLookupVector<int64_t, TExprOpcode::GE>>>{};
-        case 4:  return Buffer<std::unique_ptr<AsofLookupVector<DateValue, TExprOpcode::LT>>>{};
-        case 5:  return Buffer<std::unique_ptr<AsofLookupVector<DateValue, TExprOpcode::LE>>>{};
-        case 6:  return Buffer<std::unique_ptr<AsofLookupVector<DateValue, TExprOpcode::GT>>>{};
-        case 7:  return Buffer<std::unique_ptr<AsofLookupVector<DateValue, TExprOpcode::GE>>>{};
-        case 8:  return Buffer<std::unique_ptr<AsofLookupVector<TimestampValue, TExprOpcode::LT>>>{};
-        case 9:  return Buffer<std::unique_ptr<AsofLookupVector<TimestampValue, TExprOpcode::LE>>>{};
-        case 10: return Buffer<std::unique_ptr<AsofLookupVector<TimestampValue, TExprOpcode::GT>>>{};
-        case 11: return Buffer<std::unique_ptr<AsofLookupVector<TimestampValue, TExprOpcode::GE>>>{};
-        default: __builtin_unreachable();
+    case 0:
+        return Buffer<std::unique_ptr<AsofLookupVector<int64_t, TExprOpcode::LT>>>{};
+    case 1:
+        return Buffer<std::unique_ptr<AsofLookupVector<int64_t, TExprOpcode::LE>>>{};
+    case 2:
+        return Buffer<std::unique_ptr<AsofLookupVector<int64_t, TExprOpcode::GT>>>{};
+    case 3:
+        return Buffer<std::unique_ptr<AsofLookupVector<int64_t, TExprOpcode::GE>>>{};
+    case 4:
+        return Buffer<std::unique_ptr<AsofLookupVector<DateValue, TExprOpcode::LT>>>{};
+    case 5:
+        return Buffer<std::unique_ptr<AsofLookupVector<DateValue, TExprOpcode::LE>>>{};
+    case 6:
+        return Buffer<std::unique_ptr<AsofLookupVector<DateValue, TExprOpcode::GT>>>{};
+    case 7:
+        return Buffer<std::unique_ptr<AsofLookupVector<DateValue, TExprOpcode::GE>>>{};
+    case 8:
+        return Buffer<std::unique_ptr<AsofLookupVector<TimestampValue, TExprOpcode::LT>>>{};
+    case 9:
+        return Buffer<std::unique_ptr<AsofLookupVector<TimestampValue, TExprOpcode::LE>>>{};
+    case 10:
+        return Buffer<std::unique_ptr<AsofLookupVector<TimestampValue, TExprOpcode::GT>>>{};
+    case 11:
+        return Buffer<std::unique_ptr<AsofLookupVector<TimestampValue, TExprOpcode::GE>>>{};
+    default:
+        __builtin_unreachable();
     }
 }
 
-
-
-
-
-
-
-
 // 🚀 运行时分发版本（保留用于动态情况）
-#define CREATE_ASOF_VECTOR_BY_INDEX(buffer, variant_index, asof_lookup_index) \
-    do { \
-        switch (variant_index) { \
-            case 0:  buffer[asof_lookup_index] = std::make_unique<AsofLookupVector<int64_t, TExprOpcode::LT>>(); break; \
-            case 1:  buffer[asof_lookup_index] = std::make_unique<AsofLookupVector<int64_t, TExprOpcode::LE>>(); break; \
-            case 2:  buffer[asof_lookup_index] = std::make_unique<AsofLookupVector<int64_t, TExprOpcode::GT>>(); break; \
-            case 3:  buffer[asof_lookup_index] = std::make_unique<AsofLookupVector<int64_t, TExprOpcode::GE>>(); break; \
-            case 4:  buffer[asof_lookup_index] = std::make_unique<AsofLookupVector<DateValue, TExprOpcode::LT>>(); break; \
-            case 5:  buffer[asof_lookup_index] = std::make_unique<AsofLookupVector<DateValue, TExprOpcode::LE>>(); break; \
-            case 6:  buffer[asof_lookup_index] = std::make_unique<AsofLookupVector<DateValue, TExprOpcode::GT>>(); break; \
-            case 7:  buffer[asof_lookup_index] = std::make_unique<AsofLookupVector<DateValue, TExprOpcode::GE>>(); break; \
-            case 8:  buffer[asof_lookup_index] = std::make_unique<AsofLookupVector<TimestampValue, TExprOpcode::LT>>(); break; \
-            case 9:  buffer[asof_lookup_index] = std::make_unique<AsofLookupVector<TimestampValue, TExprOpcode::LE>>(); break; \
-            case 10: buffer[asof_lookup_index] = std::make_unique<AsofLookupVector<TimestampValue, TExprOpcode::GT>>(); break; \
-            case 11: buffer[asof_lookup_index] = std::make_unique<AsofLookupVector<TimestampValue, TExprOpcode::GE>>(); break; \
-            default: __builtin_unreachable(); \
-        } \
+#define CREATE_ASOF_VECTOR_BY_INDEX(buffer, variant_index, asof_lookup_index)                                  \
+    do {                                                                                                       \
+        switch (variant_index) {                                                                               \
+        case 0:                                                                                                \
+            buffer[asof_lookup_index] = std::make_unique<AsofLookupVector<int64_t, TExprOpcode::LT>>();        \
+            break;                                                                                             \
+        case 1:                                                                                                \
+            buffer[asof_lookup_index] = std::make_unique<AsofLookupVector<int64_t, TExprOpcode::LE>>();        \
+            break;                                                                                             \
+        case 2:                                                                                                \
+            buffer[asof_lookup_index] = std::make_unique<AsofLookupVector<int64_t, TExprOpcode::GT>>();        \
+            break;                                                                                             \
+        case 3:                                                                                                \
+            buffer[asof_lookup_index] = std::make_unique<AsofLookupVector<int64_t, TExprOpcode::GE>>();        \
+            break;                                                                                             \
+        case 4:                                                                                                \
+            buffer[asof_lookup_index] = std::make_unique<AsofLookupVector<DateValue, TExprOpcode::LT>>();      \
+            break;                                                                                             \
+        case 5:                                                                                                \
+            buffer[asof_lookup_index] = std::make_unique<AsofLookupVector<DateValue, TExprOpcode::LE>>();      \
+            break;                                                                                             \
+        case 6:                                                                                                \
+            buffer[asof_lookup_index] = std::make_unique<AsofLookupVector<DateValue, TExprOpcode::GT>>();      \
+            break;                                                                                             \
+        case 7:                                                                                                \
+            buffer[asof_lookup_index] = std::make_unique<AsofLookupVector<DateValue, TExprOpcode::GE>>();      \
+            break;                                                                                             \
+        case 8:                                                                                                \
+            buffer[asof_lookup_index] = std::make_unique<AsofLookupVector<TimestampValue, TExprOpcode::LT>>(); \
+            break;                                                                                             \
+        case 9:                                                                                                \
+            buffer[asof_lookup_index] = std::make_unique<AsofLookupVector<TimestampValue, TExprOpcode::LE>>(); \
+            break;                                                                                             \
+        case 10:                                                                                               \
+            buffer[asof_lookup_index] = std::make_unique<AsofLookupVector<TimestampValue, TExprOpcode::GT>>(); \
+            break;                                                                                             \
+        case 11:                                                                                               \
+            buffer[asof_lookup_index] = std::make_unique<AsofLookupVector<TimestampValue, TExprOpcode::GE>>(); \
+            break;                                                                                             \
+        default:                                                                                               \
+            __builtin_unreachable();                                                                           \
+        }                                                                                                      \
     } while (0)
 
 #undef ASOF_BUFFER_TYPES
-
-
 
 struct HashTableSlotDescriptor {
     SlotDescriptor* slot;
@@ -282,17 +313,17 @@ struct JoinHashTableItems {
     size_t asof_variant_index = 0;
 
     void resize_asof_lookup_vectors(size_t size) {
-        std::visit([size](auto& buffer) {
-            buffer.resize(size);
-        }, asof_lookup_vectors);
+        std::visit([size](auto& buffer) { buffer.resize(size); }, asof_lookup_vectors);
     }
 
     void finalize_asof_lookup_vectors() {
-        std::visit([](auto& buffer) {
-            for (auto& ptr : buffer) {
-                if (ptr) ptr->sort();
-            }
-        }, asof_lookup_vectors);
+        std::visit(
+                [](auto& buffer) {
+                    for (auto& ptr : buffer) {
+                        if (ptr) ptr->sort();
+                    }
+                },
+                asof_lookup_vectors);
     }
 
 public:
@@ -459,8 +490,6 @@ struct HashTableProbeState {
     }
 };
 
-
-
 struct HashTableParam {
     bool with_other_conjunct = false;
     bool enable_late_materialization = false;
@@ -491,14 +520,14 @@ struct HashTableParam {
 };
 
 // 🚀 静态类型版本的 ASOF Buffer 获取函数（需要完整的 JoinHashTableItems 定义）
-template<size_t VariantIndex>
+template <size_t VariantIndex>
 constexpr auto& get_asof_buffer_static(JoinHashTableItems* table_items) {
     static_assert(VariantIndex < 12, "Invalid variant index");
     return std::get<VariantIndex>(table_items->asof_lookup_vectors);
 }
 
 // 🚀 静态版本的 ASOF Vector 创建函数
-template<size_t VariantIndex>
+template <size_t VariantIndex>
 void create_asof_vector_static(JoinHashTableItems* table_items, uint32_t asof_lookup_index) {
     auto& buffer = get_asof_buffer_static<VariantIndex>(table_items);
 
@@ -531,6 +560,142 @@ void create_asof_vector_static(JoinHashTableItems* table_items, uint32_t asof_lo
     }
 }
 
+template <LogicalType ASOF_LT, TExprOpcode::type OpCode>
+class AsofRowProcessor {
+public:
+    using AsofCppType = RunTimeCppType<ASOF_LT>;
+    static constexpr size_t variant_index = get_asof_variant_index(ASOF_LT, OpCode);
+
+    template <typename IndexStrategy>
+    static void process_rows(JoinHashTableItems* table_items, const auto& keys, const Buffer<uint8_t>* is_nulls,
+                             IndexStrategy&& get_asof_index) {
+        const ColumnPtr& asof_col =
+                table_items->build_chunk->get_column_by_slot_id(table_items->asof_join_condition_desc.build_slot_id);
+        const auto* data_col = ColumnHelper::get_data_column_by_type<ASOF_LT>(asof_col.get());
+        const NullColumn* nullable_asof = ColumnHelper::get_null_column(asof_col);
+        const AsofCppType* __restrict asof_data = data_col->get_data().data();
+
+        const bool has_key_nulls = (is_nulls != nullptr);
+        const bool has_asof_nulls = (nullable_asof != nullptr);
+
+        if (!has_key_nulls && !has_asof_nulls) {
+            process_rows_impl<false, false>(table_items, keys, is_nulls, nullable_asof, asof_data,
+                                            std::forward<IndexStrategy>(get_asof_index));
+        } else if (has_key_nulls && !has_asof_nulls) {
+            process_rows_impl<true, false>(table_items, keys, is_nulls, nullable_asof, asof_data,
+                                           std::forward<IndexStrategy>(get_asof_index));
+        } else if (!has_key_nulls && has_asof_nulls) {
+            process_rows_impl<false, true>(table_items, keys, is_nulls, nullable_asof, asof_data,
+                                           std::forward<IndexStrategy>(get_asof_index));
+        } else {
+            process_rows_impl<true, true>(table_items, keys, is_nulls, nullable_asof, asof_data,
+                                          std::forward<IndexStrategy>(get_asof_index));
+        }
+    }
+
+    template <bool HasKeyNulls, bool HasAsofNulls, typename IndexStrategy>
+    static void process_rows_impl(JoinHashTableItems* table_items, const auto& keys, const Buffer<uint8_t>* is_nulls,
+                                  const NullColumn* nullable_asof, const AsofCppType* __restrict asof_data,
+                                  IndexStrategy&& get_asof_index) {
+        auto& asof_buffer = get_asof_buffer_static<variant_index>(table_items);
+        const uint32_t num_rows = table_items->row_count + 1;
+
+        const uint8_t* __restrict asof_null_data = HasAsofNulls ? nullable_asof->get_data().data() : nullptr;
+        const uint8_t* __restrict null_data = HasKeyNulls ? is_nulls->data() : nullptr;
+        for (uint32_t i = 1; i < num_rows; ++i) {
+            if (should_skip_row<HasKeyNulls, HasAsofNulls>(i, null_data, asof_null_data)) continue;
+
+            uint32_t asof_lookup_index = get_asof_index(table_items, keys, i);
+
+            if (!asof_buffer[asof_lookup_index]) {
+                create_asof_vector_static<variant_index>(table_items, asof_lookup_index);
+            }
+            asof_buffer[asof_lookup_index]->add_row(asof_data[i], i);
+        }
+    }
+
+private:
+    static auto get_asof_column_data(JoinHashTableItems* table_items) {
+        const ColumnPtr& asof_temporal_column =
+                table_items->build_chunk->get_column_by_slot_id(table_items->asof_join_condition_desc.build_slot_id);
+        const auto* typed_column = ColumnHelper::get_data_column_by_type<ASOF_LT>(asof_temporal_column.get());
+        const NullColumn* nullable_asof_column = ColumnHelper::get_null_column(asof_temporal_column);
+
+        return std::make_pair(typed_column->get_data().data(), nullable_asof_column);
+    }
+
+    template <bool HasKeyNulls, bool HasAsofNulls>
+    ALWAYS_INLINE static bool should_skip_row(uint32_t i, const uint8_t* key_nulls, const uint8_t* asof_nulls) {
+        if constexpr (HasKeyNulls) {
+            if (key_nulls[i] != 0) return true;
+        }
+        if constexpr (HasAsofNulls) {
+            if (asof_nulls[i] != 0) return true;
+        }
+        return false;
+    }
+
+    // 确保 ASOF vector 存在
+    static void ensure_asof_vector(auto& asof_buffer, JoinHashTableItems* table_items, uint32_t index) {
+        if (!asof_buffer[index]) {
+            create_asof_vector_static<variant_index>(table_items, index);
+        }
+    }
+};
+
+class AsofJoinDispatcher {
+public:
+    template <typename IndexStrategy>
+    static void dispatch_and_process(JoinHashTableItems* table_items, const auto& keys, const Buffer<uint8_t>* is_nulls,
+                                     IndexStrategy&& index_strategy) {
+        LogicalType asof_type = table_items->asof_join_condition_desc.build_logical_type;
+        TExprOpcode::type opcode = table_items->asof_join_condition_desc.condition_op;
+
+        switch (asof_type) {
+        case TYPE_BIGINT:
+            dispatch_opcode<TYPE_BIGINT>(table_items, opcode, keys, is_nulls,
+                                         std::forward<IndexStrategy>(index_strategy));
+            break;
+        case TYPE_DATE:
+            dispatch_opcode<TYPE_DATE>(table_items, opcode, keys, is_nulls,
+                                       std::forward<IndexStrategy>(index_strategy));
+            break;
+        case TYPE_DATETIME:
+            dispatch_opcode<TYPE_DATETIME>(table_items, opcode, keys, is_nulls,
+                                           std::forward<IndexStrategy>(index_strategy));
+            break;
+        default:
+            CHECK(false) << "ASOF JOIN: Unsupported build_type: " << asof_type
+                         << ". Only TYPE_BIGINT, TYPE_DATE, TYPE_DATETIME are supported.";
+            __builtin_unreachable();
+        }
+    }
+
+private:
+    template <LogicalType ASOF_LT, typename IndexStrategy>
+    static void dispatch_opcode(JoinHashTableItems* table_items, TExprOpcode::type opcode, const auto& keys,
+                                const Buffer<uint8_t>* is_nulls, IndexStrategy&& index_strategy) {
+        switch (opcode) {
+        case TExprOpcode::LT:
+            AsofRowProcessor<ASOF_LT, TExprOpcode::LT>::process_rows(table_items, keys, is_nulls,
+                                                                     std::forward<IndexStrategy>(index_strategy));
+            break;
+        case TExprOpcode::LE:
+            AsofRowProcessor<ASOF_LT, TExprOpcode::LE>::process_rows(table_items, keys, is_nulls,
+                                                                     std::forward<IndexStrategy>(index_strategy));
+            break;
+        case TExprOpcode::GT:
+            AsofRowProcessor<ASOF_LT, TExprOpcode::GT>::process_rows(table_items, keys, is_nulls,
+                                                                     std::forward<IndexStrategy>(index_strategy));
+            break;
+        case TExprOpcode::GE:
+            AsofRowProcessor<ASOF_LT, TExprOpcode::GE>::process_rows(table_items, keys, is_nulls,
+                                                                     std::forward<IndexStrategy>(index_strategy));
+            break;
+        default:
+            __builtin_unreachable();
+        }
+    }
+};
 
 } // namespace starrocks
-
