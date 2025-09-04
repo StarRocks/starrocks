@@ -29,6 +29,7 @@ import com.starrocks.sql.ast.AlterUserStmt;
 import com.starrocks.sql.ast.AstVisitorExtendInterface;
 import com.starrocks.sql.ast.BaseGrantRevokePrivilegeStmt;
 import com.starrocks.sql.ast.BaseGrantRevokeRoleStmt;
+import com.starrocks.sql.ast.BrokerDesc;
 import com.starrocks.sql.ast.CTERelation;
 import com.starrocks.sql.ast.CleanTemporaryTableStmt;
 import com.starrocks.sql.ast.CreateCatalogStmt;
@@ -426,7 +427,14 @@ public class AST2StringVisitor implements AstVisitorExtendInterface<String, Void
         sb.append(")");
 
         if (stmt.getBrokerDesc() != null) {
-            sb.append(stmt.getBrokerDesc());
+            BrokerDesc brokerDesc = stmt.getBrokerDesc();
+            sb.append(" WITH BROKER ").append(brokerDesc.getName());
+            Map<String, String> properties = brokerDesc.getProperties();
+
+            if (properties != null && !properties.isEmpty()) {
+                PrintableMap<String, String> printableMap = new PrintableMap<>(properties, " = ", true, false, true);
+                sb.append(" (").append(printableMap.toString()).append(")");
+            }
         }
 
         if (stmt.getCluster() != null) {

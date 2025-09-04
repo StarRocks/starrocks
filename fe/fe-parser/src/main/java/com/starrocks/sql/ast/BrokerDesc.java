@@ -19,32 +19,15 @@ package com.starrocks.sql.ast;
 
 import com.google.common.base.Strings;
 import com.google.common.collect.Maps;
-import com.google.gson.annotations.SerializedName;
-import com.starrocks.common.util.PrintableMap;
 import com.starrocks.sql.parser.NodePosition;
 
 import java.util.Map;
 
-// Broker descriptor
-//
-// Broker example:
-// WITH BROKER "broker0"
-// (
-//   "username" = "user0",
-//   "password" = "password0"
-// )
 public class BrokerDesc implements ParseNode {
-    @SerializedName("n")
-    private String name;
-    @SerializedName("p")
+    private final String name;
     private Map<String, String> properties;
 
     private final NodePosition pos;
-
-    // Only used for recovery
-    private BrokerDesc() {
-        pos = NodePosition.ZERO;
-    }
 
     public BrokerDesc(Map<String, String> properties) {
         this(properties, NodePosition.ZERO);
@@ -81,26 +64,6 @@ public class BrokerDesc implements ParseNode {
 
     public Map<String, String> getProperties() {
         return properties;
-    }
-
-    public String getMergeConditionStr() {
-        if (properties.containsKey(LoadStmt.MERGE_CONDITION)) {
-            return properties.get(LoadStmt.MERGE_CONDITION);
-        }
-        return "";
-    }
-
-
-
-
-    public String toString() {
-        StringBuilder sb = new StringBuilder();
-        sb.append(" WITH BROKER ").append(name);
-        if (properties != null && !properties.isEmpty()) {
-            PrintableMap<String, String> printableMap = new PrintableMap<>(properties, " = ", true, false, true);
-            sb.append(" (").append(printableMap.toString()).append(")");
-        }
-        return sb.toString();
     }
 
     @Override

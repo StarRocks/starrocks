@@ -390,7 +390,7 @@ public class SparkEtlJobHandler {
             if (brokerDesc.hasBroker()) {
                 BrokerUtil.deletePath(outputPath, brokerDesc);
             } else {
-                HdfsUtil.deletePath(outputPath, brokerDesc);
+                HdfsUtil.deletePath(outputPath, brokerDesc.getProperties());
             }
             LOG.info("delete path success. path: {}", outputPath);
         } catch (StarRocksException e) {

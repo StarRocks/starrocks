@@ -77,6 +77,7 @@ import com.starrocks.load.loadv2.dpp.DppResult;
 import com.starrocks.load.loadv2.etl.EtlJobConfig;
 import com.starrocks.metric.TableMetricsEntity;
 import com.starrocks.metric.TableMetricsRegistry;
+import com.starrocks.persist.BrokerPropertiesPersistInfo;
 import com.starrocks.planner.DescriptorTable;
 import com.starrocks.planner.SlotDescriptor;
 import com.starrocks.planner.TupleDescriptor;
@@ -228,13 +229,10 @@ public class SparkLoadJob extends BulkLoadJob {
         sparkResource = ((SparkResource) oriResource).getCopiedResource();
         sparkResource.update(resourceDesc);
 
-        // broker desc
+        // broker desc -> persist properties
         Map<String, String> brokerProperties = sparkResource.getBrokerPropertiesWithoutPrefix();
-        if (sparkResource.hasBroker()) {
-            brokerDesc = new BrokerDesc(sparkResource.getBroker(), brokerProperties);
-        } else {
-            brokerDesc = new BrokerDesc(brokerProperties);
-        }
+        String name = sparkResource.hasBroker() ? sparkResource.getBroker() : "";
+        this.brokerPersistInfo = new BrokerPropertiesPersistInfo(name, brokerProperties);
     }
 
     @Override
@@ -249,6 +247,10 @@ public class SparkLoadJob extends BulkLoadJob {
     @Override
     protected void unprotectedExecuteJob() throws LoadException {
         // create pending task
+        BrokerDesc brokerDesc = null;
+        if (brokerPersistInfo != null) {
+            brokerDesc = new BrokerDesc(brokerPersistInfo.getName(), brokerPersistInfo.getProperties());
+        }
         LoadTask task = new SparkLoadPendingTask(this, fileGroupAggInfo.getAggKeyToFileGroups(),
                 sparkResource, brokerDesc);
         task.init();
@@ -332,8 +334,9 @@ public class SparkLoadJob extends BulkLoadJob {
 
         // get etl status
         SparkEtlJobHandler handler = new SparkEtlJobHandler();
+        BrokerDesc runtimeBrokerDescForStatus = new BrokerDesc(brokerPersistInfo.getName(), brokerPersistInfo.getProperties());
         EtlStatus status =
-                handler.getEtlJobStatus(sparkLoadAppHandle, appId, id, etlOutputPath, sparkResource, brokerDesc);
+                handler.getEtlJobStatus(sparkLoadAppHandle, appId, id, etlOutputPath, sparkResource, runtimeBrokerDescForStatus);
         writeLock();
         try {
             switch (status.getState()) {
@@ -407,7 +410,8 @@ public class SparkLoadJob extends BulkLoadJob {
         }
 
         // get etl output files and update loading state
-        unprotectedUpdateToLoadingState(etlStatus, handler.getEtlFilePaths(etlOutputPath, brokerDesc));
+        BrokerDesc runtimeBrokerDescForPaths = new BrokerDesc(brokerPersistInfo.getName(), brokerPersistInfo.getProperties());
+        unprotectedUpdateToLoadingState(etlStatus, handler.getEtlFilePaths(etlOutputPath, runtimeBrokerDescForPaths));
         // log loading statedppResult
         unprotectedLogUpdateStateInfo();
         // prepare loading infos
@@ -460,7 +464,8 @@ public class SparkLoadJob extends BulkLoadJob {
     private PushBrokerReaderParams getPushBrokerReaderParams(OlapTable table, long indexId) throws StarRocksException {
         if (!indexToPushBrokerReaderParams.containsKey(indexId)) {
             PushBrokerReaderParams pushBrokerReaderParams = new PushBrokerReaderParams();
-            pushBrokerReaderParams.init(table.getSchemaByIndexId(indexId), brokerDesc);
+            pushBrokerReaderParams.init(table.getSchemaByIndexId(indexId),
+                    new BrokerDesc(brokerPersistInfo.getName(), brokerPersistInfo.getProperties()));
             indexToPushBrokerReaderParams.put(indexId, pushBrokerReaderParams);
         }
         return indexToPushBrokerReaderParams.get(indexId);
@@ -644,9 +649,10 @@ public class SparkLoadJob extends BulkLoadJob {
             }
 
             // update broker address
-            if (brokerDesc.hasBroker()) {
+            BrokerDesc runtimeBrokerDescForPush = new BrokerDesc(brokerPersistInfo.getName(), brokerPersistInfo.getProperties());
+            if (runtimeBrokerDescForPush.hasBroker()) {
                 FsBroker fsBroker = GlobalStateMgr.getCurrentState().getBrokerMgr().getBroker(
-                        brokerDesc.getName(), backend.getHost());
+                        runtimeBrokerDescForPush.getName(), backend.getHost());
                 tBrokerScanRange.getBroker_addresses().add(
                         new TNetworkAddress(fsBroker.ip, fsBroker.port));
                 LOG.debug("push task for replica {}, broker {}:{}, backendId {}," +
@@ -793,7 +799,8 @@ public class SparkLoadJob extends BulkLoadJob {
             try {
                 // delete label dir, remove the last taskId dir
                 String outputPath = etlOutputPath.substring(0, etlOutputPath.lastIndexOf("/"));
-                handler.deleteEtlOutputPath(outputPath, brokerDesc);
+                handler.deleteEtlOutputPath(outputPath,
+                        new BrokerDesc(brokerPersistInfo.getName(), brokerPersistInfo.getProperties()));
             } catch (Exception e) {
                 LOG.warn("delete etl files failed. id: {}, state: {}", id, state, e);
             }

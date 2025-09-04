@@ -66,7 +66,7 @@ public class HdfsUtilTest {
         };
 
         Assertions.assertThrows(StarRocksException.class, () ->
-                HdfsUtil.deletePath("hdfs://abc/dbf", new BrokerDesc(new HashMap<>())));
+                HdfsUtil.deletePath("hdfs://abc/dbf", new HashMap<>()));
 
         Assertions.assertThrows(StarRocksException.class, () ->
                 HdfsUtil.rename("hdfs://abc/dbf", "hdfs://abc/dba", new BrokerDesc(new HashMap<>()), 1000));
