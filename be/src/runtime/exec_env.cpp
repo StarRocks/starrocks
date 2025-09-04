@@ -483,6 +483,7 @@ Status ExecEnv::init(const std::vector<StorePath>& store_paths, bool as_cn) {
                     .set_idle_timeout(MonoDelta::FromMilliseconds(config::streaming_load_thread_pool_idle_time_ms))
                     .build(&load_segment_pool));
     _load_segment_thread_pool = load_segment_pool.release();
+    REGISTER_THREAD_POOL_METRICS(load_segment, _load_segment_thread_pool);
 
     _broker_mgr = new BrokerMgr(this);
 
