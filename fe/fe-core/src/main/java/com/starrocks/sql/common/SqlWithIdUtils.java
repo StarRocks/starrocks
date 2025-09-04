@@ -25,7 +25,6 @@ import com.starrocks.catalog.Table;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
-import com.starrocks.sql.analyzer.AstToStringBuilder;
 import com.starrocks.sql.analyzer.Field;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.CTERelation;
@@ -36,6 +35,7 @@ import com.starrocks.sql.ast.SelectRelation;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.TableRelation;
 import com.starrocks.sql.ast.ViewRelation;
+import com.starrocks.sql.formatter.AST2StringVisitor;
 import com.starrocks.sql.parser.SqlParser;
 
 import java.util.ArrayList;
@@ -109,13 +109,12 @@ public class SqlWithIdUtils {
         return SqlParser.parse(sql, context.getSessionVariable()).get(0);
     }
 
-    private static class SqlEncoderVisitor extends AstToStringBuilder.AST2StringBuilderVisitor {
+    private static class SqlEncoderVisitor extends AST2StringVisitor {
 
         private final Map<TableName, Table> tableMap;
         Map<String, Database> databaseMap;
 
         public SqlEncoderVisitor(Map<String, Database> databaseMap, Map<TableName, Table> tableMap) {
-            super();
             this.databaseMap = databaseMap;
             this.tableMap = tableMap;
         }
