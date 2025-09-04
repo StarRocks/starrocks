@@ -121,6 +121,18 @@ Status IcebergTableSink::decompose_to_pipeline(pipeline::OpFactories prev_operat
     } else {
         auto source_column_index = iceberg_table_desc->partition_source_index_in_schema();
         partition_expr = iceberg_table_desc->get_partition_exprs();
+
+        //for 3.5 fe -> 4.0 be compact, try to set this.
+        if (partition_expr.empty()) {
+            auto output_expr = this->get_output_expr();
+            for (const auto& index : source_column_index) {
+                if (index < 0 || index >= this->get_output_expr().size()) {
+                    return Status::InternalError(fmt::format("Invalid partition index: {}", index));
+                }
+                partition_expr.push_back(output_expr[index]);
+            }
+        }
+
         int idx = 0;
         for (auto& part_expr : partition_expr) {
             int index = source_column_index[idx];
