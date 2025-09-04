@@ -24,12 +24,7 @@
 #include "exec/hash_join_node.h"
 #include "serde/column_array_serde.h"
 #include "simd/simd.h"
-<<<<<<< HEAD:be/src/exec/join_hash_map.cpp
-=======
-#include "types/logical_type_infra.h"
-#include "util/runtime_profile.h"
 #include "util/stack_util.h"
->>>>>>> 6b0fd1ee94 ([BugFix] Fix NPE for JoinHashTable::mem_usage (#61872)):be/src/exec/join/join_hash_map.cpp
 
 namespace starrocks {
 
