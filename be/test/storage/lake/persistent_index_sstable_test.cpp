@@ -473,16 +473,16 @@ TEST_F(PersistentIndexSstableTest, test_persistent_index_sstable_stream_builder)
     const int N = 1000;
     const std::string filename = "test_stream_builder.sst";
     const std::string encryption_meta = "";
-    
+
     // 1. Create stream builder and add keys
     ASSIGN_OR_ABORT(auto file, fs::new_writable_file(lake::join_path(kTestDir, filename)));
     auto builder = std::make_unique<PersistentIndexSstableStreamBuilder>(std::move(file), encryption_meta);
-    
+
     // Test initial state
     ASSERT_EQ(0, builder->num_entries());
     ASSERT_OK(builder->status());
     ASSERT_FALSE(builder->file_path().empty());
-    
+
     // Add keys in order
     std::vector<std::string> keys;
     for (int i = 0; i < N; i++) {
@@ -490,27 +490,27 @@ TEST_F(PersistentIndexSstableTest, test_persistent_index_sstable_stream_builder)
         keys.push_back(key);
         ASSERT_OK(builder->add(Slice(key)));
     }
-    
+
     // Check state after adding keys
     ASSERT_EQ(N, builder->num_entries());
     ASSERT_OK(builder->status());
-    
+
     // 2. Finish building
     uint64_t file_size = 0;
     ASSERT_OK(builder->finish(&file_size));
     ASSERT_GT(file_size, 0);
     ASSERT_EQ(N, builder->num_entries());
-    
+
     // Test file_info
     FileInfo info = builder->file_info();
     ASSERT_EQ(filename, info.path);
     ASSERT_EQ(file_size, info.size);
     ASSERT_EQ(encryption_meta, info.encryption_meta);
-    
+
     // Test that adding after finish fails
     ASSERT_ERROR(builder->add(Slice("should_fail")));
     ASSERT_ERROR(builder->finish());
-    
+
     // 3. Read back and verify the sstable
     std::unique_ptr<PersistentIndexSstable> sst = std::make_unique<PersistentIndexSstable>();
     ASSIGN_OR_ABORT(auto read_file, fs::new_random_access_file(lake::join_path(kTestDir, filename)));
@@ -520,18 +520,18 @@ TEST_F(PersistentIndexSstableTest, test_persistent_index_sstable_stream_builder)
     sstable_pb.set_filename(filename);
     sstable_pb.set_filesize(file_size);
     ASSERT_OK(sst->init(std::move(read_file), sstable_pb, cache_ptr.get()));
-    
+
     // 4. Iterate and verify all keys
     sstable::ReadIOStat stat;
     sstable::ReadOptions options;
     options.stat = &stat;
     sstable::Iterator* iter = sst->new_iterator(options);
-    
+
     iter->SeekToFirst();
     int count = 0;
     for (; iter->Valid() && iter->status().ok(); iter->Next()) {
         ASSERT_EQ(iter->key().to_string(), keys[count]);
-        
+
         // Parse and verify the value
         IndexValuesWithVerPB index_value_with_ver_pb;
         ASSERT_TRUE(index_value_with_ver_pb.ParseFromArray(iter->value().data, iter->value().size));
@@ -542,7 +542,7 @@ TEST_F(PersistentIndexSstableTest, test_persistent_index_sstable_stream_builder)
     ASSERT_OK(iter->status());
     ASSERT_EQ(N, count);
     delete iter;
-    
+
     // 5. Test seeking to specific keys
     iter = sst->new_iterator(options);
     for (int i = 0; i < 10; i++) {
@@ -550,7 +550,7 @@ TEST_F(PersistentIndexSstableTest, test_persistent_index_sstable_stream_builder)
         iter->Seek(keys[r]);
         ASSERT_TRUE(iter->Valid());
         ASSERT_EQ(iter->key().to_string(), keys[r]);
-        
+
         IndexValuesWithVerPB index_value_with_ver_pb;
         ASSERT_TRUE(index_value_with_ver_pb.ParseFromArray(iter->value().data, iter->value().size));
         ASSERT_EQ(r, index_value_with_ver_pb.values(0).rowid());
@@ -561,23 +561,23 @@ TEST_F(PersistentIndexSstableTest, test_persistent_index_sstable_stream_builder)
 TEST_F(PersistentIndexSstableTest, test_stream_builder_error_handling) {
     const std::string filename = "test_stream_builder_error.sst";
     const std::string encryption_meta = "";
-    
+
     // Test with invalid file (simulate error)
     ASSIGN_OR_ABORT(auto file, fs::new_writable_file(lake::join_path(kTestDir, filename)));
     auto builder = std::make_unique<PersistentIndexSstableStreamBuilder>(std::move(file), encryption_meta);
-    
+
     // Add some keys
     ASSERT_OK(builder->add(Slice("key1")));
     ASSERT_OK(builder->add(Slice("key2")));
-    
+
     // Test double finish
     uint64_t file_size = 0;
     ASSERT_OK(builder->finish(&file_size));
     ASSERT_GT(file_size, 0);
-    
+
     // Second finish should fail
     ASSERT_ERROR(builder->finish(&file_size));
-    
+
     // Adding after finish should fail
     ASSERT_ERROR(builder->add(Slice("key3")));
 }
