@@ -119,6 +119,7 @@ public class DataDescription implements ParseNode {
     // save column mapping in SET(xxx = xxx) clause
     private final List<Expr> columnMappingList;
     private final Expr whereExpr;
+    private final Expr precedingFilterExpr;
 
     private final String srcTableName;
 
@@ -166,7 +167,7 @@ public class DataDescription implements ParseNode {
                            Expr whereExpr,
                            CsvFormat csvFormat) {
         this(tableName, partitionNames, filePaths, columns, columnSeparator, rowDelimiter, fileFormat, columnsFromPath,
-                isNegative, columnMappingList, whereExpr, csvFormat, NodePosition.ZERO);
+                isNegative, columnMappingList, whereExpr, null, csvFormat, NodePosition.ZERO);
     }
 
     public DataDescription(String tableName,
@@ -179,7 +180,7 @@ public class DataDescription implements ParseNode {
                            List<String> columnsFromPath,
                            boolean isNegative,
                            List<Expr> columnMappingList,
-                           Expr whereExpr,
+                           Expr whereExpr, Expr precedingFilterExpr,
                            CsvFormat csvFormat, NodePosition pos) {
         this.pos = pos;
         this.tableName = normalizeName(tableName);
@@ -193,6 +194,7 @@ public class DataDescription implements ParseNode {
         this.isNegative = isNegative;
         this.columnMappingList = columnMappingList;
         this.whereExpr = whereExpr;
+        this.precedingFilterExpr = precedingFilterExpr;
         this.srcTableName = null;
         this.csvFormat = csvFormat;
     }
@@ -225,6 +227,7 @@ public class DataDescription implements ParseNode {
         this.isNegative = isNegative;
         this.columnMappingList = columnMappingList;
         this.whereExpr = whereExpr;
+        this.precedingFilterExpr = null;
         this.srcTableName = normalizeName(srcTableName);
     }
 
@@ -238,6 +241,10 @@ public class DataDescription implements ParseNode {
 
     public Expr getWhereExpr() {
         return whereExpr;
+    }
+
+    public Expr getPrecedingFilterExpr() {
+        return precedingFilterExpr;
     }
 
     public List<String> getFilePaths() {

@@ -98,6 +98,7 @@ public class BrokerFileGroup implements Writable {
     private Map<String, Pair<String, List<String>>> columnToHadoopFunction;
     // filter the data which has been conformed
     private Expr whereExpr;
+    private Expr precedingFilterExpr;
 
     // load from table
     private long srcTableId = -1;
@@ -151,6 +152,7 @@ public class BrokerFileGroup implements Writable {
         this.columnExprList = dataDescription.getParsedColumnExprList();
         this.columnToHadoopFunction = dataDescription.getColumnToHadoopFunction();
         this.whereExpr = dataDescription.getWhereExpr();
+        this.precedingFilterExpr = dataDescription.getPrecedingFilterExpr();
         this.csvFormat = new CsvFormat((byte) 0, (byte) 0, 0, false);
     }
 
@@ -316,6 +318,10 @@ public class BrokerFileGroup implements Writable {
 
     public Expr getWhereExpr() {
         return whereExpr;
+    }
+
+    public Expr getPrecedingFilterExpr() {
+        return precedingFilterExpr;
     }
 
     public List<String> getFilePaths() {
