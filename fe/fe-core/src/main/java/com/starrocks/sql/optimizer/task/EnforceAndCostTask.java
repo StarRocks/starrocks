@@ -250,8 +250,8 @@ public class EnforceAndCostTask extends OptimizerTask implements Cloneable {
                             .map(prop -> prop.getCteProperty().getCteIds())
                             .flatMap(Set::stream)
                             .collect(Collectors.toSet());
-                    for (Integer CteId : requiredCTE) {
-                        if (groupUseCTE.contains(CteId) && !childrenUseCteIds.contains(CteId)) {
+                    for (Integer cteId : requiredCTE) {
+                        if (groupUseCTE.contains(cteId) && !childrenUseCteIds.contains(cteId)) {
                             return false;
                         }
                     }
