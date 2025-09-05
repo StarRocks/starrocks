@@ -58,10 +58,14 @@ import com.starrocks.common.Pair;
 import com.starrocks.common.util.ParseUtil;
 import com.starrocks.common.util.PrintableMap;
 import com.starrocks.common.util.SqlCredentialRedactor;
+import com.starrocks.epack.authorization.ObjectTypeEPack;
+import com.starrocks.epack.sql.ast.AstVisitorEPack;
+import com.starrocks.epack.sql.ast.CreatePasswordPolicyStmt;
+import com.starrocks.epack.sql.ast.CreatePolicyStmt;
+import com.starrocks.epack.sql.ast.PolicyType;
 import com.starrocks.sql.ast.AlterStorageVolumeStmt;
 import com.starrocks.sql.ast.AlterUserStmt;
 import com.starrocks.sql.ast.ArrayExpr;
-import com.starrocks.sql.ast.AstVisitorExtendInterface;
 import com.starrocks.sql.ast.BaseGrantRevokePrivilegeStmt;
 import com.starrocks.sql.ast.BaseGrantRevokeRoleStmt;
 import com.starrocks.sql.ast.CTERelation;
@@ -138,7 +142,7 @@ import java.util.stream.Collectors;
 import static com.starrocks.catalog.FunctionSet.IGNORE_NULL_WINDOW_FUNCTION;
 import static java.util.stream.Collectors.toList;
 
-public class AST2StringVisitor implements AstVisitorExtendInterface<String, Void> {
+public class AST2StringVisitor implements AstVisitorEPack<String, Void> {
     // use options:
     //   addFunctionDbName;
     //   withBackquote;
@@ -227,7 +231,17 @@ public class AST2StringVisitor implements AstVisitorExtendInterface<String, Void
             if (stmt.getObjectList().stream().anyMatch(PEntryObject::isFuzzyMatching)) {
                 sb.append(stmt.getObjectList().get(0).toString());
             } else {
-                sb.append(stmt.getObjectType().name()).append(" ");
+                if (stmt.getObjectType().getId() > 20000) {
+                    if (stmt.getObjectType().equals(ObjectTypeEPack.MASKING_POLICY)) {
+                        sb.append(ObjectTypeEPack.MASKING_POLICY.name()).append(" ");
+                    } else if (stmt.getObjectType().equals(ObjectTypeEPack.ROW_ACCESS_POLICY)) {
+                        sb.append(ObjectTypeEPack.ROW_ACCESS_POLICY.name()).append(" ");
+                    } else if (stmt.getObjectType().equals(ObjectTypeEPack.WAREHOUSE)) {
+                        sb.append(ObjectTypeEPack.WAREHOUSE.name()).append(" ");
+                    }
+                } else {
+                    sb.append(stmt.getObjectType().name()).append(" ");
+                }
 
                 List<String> objectString = new ArrayList<>();
                 for (PEntryObject pEntryObject : stmt.getObjectList()) {
@@ -273,11 +287,59 @@ public class AST2StringVisitor implements AstVisitorExtendInterface<String, Void
 
         if (statement.getGrantType().equals(GrantType.ROLE)) {
             sqlBuilder.append("ROLE ").append(statement.getRoleOrGroup());
+        } else if (statement.getGrantType().equals(GrantType.GROUP)) {
+            sqlBuilder.append("EXTERNAL GROUP ").append(statement.getRoleOrGroup());
         } else {
             sqlBuilder.append(statement.getUser());
         }
 
         return sqlBuilder.toString();
+    }
+
+    @Override
+    public String visitCreatePolicyStatement(CreatePolicyStmt stmt, Void context) {
+        StringBuilder sb = new StringBuilder();
+        sb.append("CREATE");
+        if (stmt.getPolicyType().equals(PolicyType.MASKING)) {
+            sb.append(" MASKING POLICY ");
+        } else {
+            sb.append(" ROW ACCESS POLICY ");
+        }
+
+        sb.append(stmt.getPolicyName());
+        sb.append(" AS ");
+
+        sb.append("(");
+        List<String> arg = new ArrayList<>();
+        for (int i = 0; i < stmt.getArgNames().size(); ++i) {
+            arg.add(stmt.getArgNames().get(i) + " " + stmt.getArgTypeDefs().get(i).toSql());
+        }
+        sb.append(Joiner.on(",").join(arg));
+        sb.append(")");
+        sb.append(" RETURNS ").append(stmt.getReturnType().toSql());
+        sb.append(" -> ");
+        sb.append(visit(stmt.getExpression()));
+
+        if (stmt.getComment() != null && !stmt.getComment().equals("")) {
+            sb.append(" COMMENT \"").append(stmt.getComment()).append("\"");
+        }
+
+        return sb.toString();
+    }
+
+    @Override
+    public String visitCreatePasswordPolicyStatement(CreatePasswordPolicyStmt stmt, Void context) {
+        StringBuilder sb = new StringBuilder();
+        sb.append("CREATE PASSWORD POLICY ");
+        sb.append(stmt.getPolicyName());
+        sb.append(" COMMENT \"").append(stmt.getComment()).append("\"");
+        Map<String, String> properties = new HashMap<>(stmt.getProperties());
+        if (!stmt.getProperties().isEmpty()) {
+            sb.append(" PROPERTIES (")
+                    .append(new PrintableMap<>(properties, "=", true, false)).append(")");
+        }
+
+        return sb.toString();
     }
 
     // --------------------------------------------Set Statement -------------------------------------------------------
