@@ -20,6 +20,7 @@ import com.staros.proto.WarmupLevel;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ExceptionChecker;
+import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.epack.lake.StarOSAgentEpack;
@@ -27,6 +28,7 @@ import com.starrocks.epack.warehouse.cngroup.CNGroupResource;
 import com.starrocks.persist.EditLog;
 import com.starrocks.persist.EditLogDeserializer;
 import com.starrocks.persist.OperationType;
+import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
 import com.starrocks.server.WarehouseManager;
@@ -106,7 +108,7 @@ public class WarehouseManagerEPackTest {
         ByteArrayOutputStream byteOut = new ByteArrayOutputStream();
         DataOutputStream stream = new DataOutputStream(byteOut);
         stream.writeShort(op);
-        w.write(stream);
+        Text.writeString(stream, GsonUtils.GSON.toJson(w, w.getClass()));
         return byteOut.toByteArray();
     }
 
@@ -282,7 +284,7 @@ public class WarehouseManagerEPackTest {
             {
                 short op;
                 Writable w;
-                editLog.logEdit(op = withCapture(), w = withCapture());
+                editLog.logJsonObject(op = withCapture(), w = withCapture());
                 Assert.assertNotNull(w);
                 bytes.set(writeEditLog(op, w));
             }

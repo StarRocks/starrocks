@@ -1412,19 +1412,15 @@ public class EditLog {
         });
     }
 
-    public void logJsonObject(short op, Object obj, WALApplier applier) {
-        logEdit(op, new Writable() {
+    public void logJsonObject(short op, Writable writable, WALApplier applier) {
+        JournalTask task = submitLog(op, new Writable() {
             @Override
             public void write(DataOutput out) throws IOException {
-                Text.writeString(out, GsonUtils.GSON.toJson(obj));
+                Text.writeString(out, GsonUtils.GSON.toJson(writable));
             }
-        });
-        applier.apply(new Writable() {
-            @Override
-            public void write(DataOutput out) throws IOException {
-                Text.writeString(out, GsonUtils.GSON.toJson(obj));
-            }
-        });
+        }, -1);
+        waitInfinity(task);
+        applier.apply(writable);
     }
 
     /**

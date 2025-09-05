@@ -342,10 +342,10 @@ public class GrantRoleToGroupTest {
         GlobalStateMgr.getCurrentState().setEditLog(editLog);
         ConnectContext ctx = new ConnectContext();
 
-        String createUserSql = "create user u1";
+        String createUserSql = "create user u_grant";
         CreateUserStmt stmt = (CreateUserStmt) UtFrameUtils.parseStmtWithNewParser(createUserSql, ctx);
         DDLStmtExecutor.execute(stmt, ctx);
-        ctx.setCurrentUserIdentity(new UserIdentity("u1", "%"));
+        ctx.setCurrentUserIdentity(new UserIdentity("u_grant", "%"));
 
         ctx.setGroups(Set.of("g1"));
         ShowGrantsStmt stmt2 = new ShowGrantsStmt("g1", GrantType.GROUP, NodePosition.ZERO);

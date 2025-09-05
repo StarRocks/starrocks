@@ -39,10 +39,14 @@ public class WarehouseStmtTest {
         String sql1 = "CREATE WAREHOUSE warehouse_1";
         StatementBase stmt = AnalyzeTestUtil.analyzeSuccess(sql1);
         Assert.assertTrue(stmt instanceof CreateWarehouseStmt);
+
         String sql2 = "CREATE WAREHOUSE warehouse_2 properties(\"min_cluster\"=\"3\")";
         StatementBase stmt2 = AnalyzeTestUtil.analyzeSuccess(sql2);
-        Assert.assertEquals("CREATE WAREHOUSE 'warehouse_2' WITH PROPERTIES(\"min_cluster\"  =  \"3\")",
-                stmt2.toSql());
+        Assert.assertTrue(stmt2 instanceof CreateWarehouseStmt);
+        CreateWarehouseStmt createStmt = (CreateWarehouseStmt) stmt2;
+        Assert.assertEquals("warehouse_2", createStmt.getWarehouseName());
+        Assert.assertNotNull(createStmt.getProperties());
+        Assert.assertEquals("3", createStmt.getProperties().get("min_cluster"));
     }
 
     @Test
@@ -51,7 +55,10 @@ public class WarehouseStmtTest {
         String sql1 = "DROP WAREHOUSE warehouse_1";
         StatementBase stmt = AnalyzeTestUtil.analyzeSuccess(sql1);
         Assert.assertTrue(stmt instanceof DropWarehouseStmt);
-        Assert.assertEquals("DROP WAREHOUSE 'warehouse_1'", stmt.toSql());
+        DropWarehouseStmt dropStmt = (DropWarehouseStmt) stmt;
+        Assert.assertEquals("warehouse_1", dropStmt.getWarehouseName());
+        Assert.assertFalse(dropStmt.isSetIfExists());
+
         String sql2 = "DROP WAREHOUSE";
         AnalyzeTestUtil.analyzeFail(sql2);
 
@@ -59,6 +66,9 @@ public class WarehouseStmtTest {
         String sql3 = "DROP WAREHOUSE 'warehouse_1'";
         StatementBase stmt2 = AnalyzeTestUtil.analyzeSuccess(sql3);
         Assert.assertTrue(stmt2 instanceof DropWarehouseStmt);
+        DropWarehouseStmt dropStmt2 = (DropWarehouseStmt) stmt2;
+        Assert.assertEquals("warehouse_1", dropStmt2.getWarehouseName());
+        Assert.assertFalse(dropStmt2.isSetIfExists());
     }
 
     @Test

@@ -16,6 +16,7 @@ package com.starrocks.epack.warehouse;
 
 import com.starrocks.common.ExceptionChecker;
 import com.starrocks.common.io.Text;
+import com.starrocks.persist.gson.GsonUtils;
 import org.junit.Assert;
 import org.junit.Test;
 
@@ -30,7 +31,7 @@ public class LocalWarehouseOpLogTest {
         ExceptionChecker.expectThrowsNoException(() -> {
             ByteArrayOutputStream out = new ByteArrayOutputStream();
             DataOutputStream dataOut = new DataOutputStream(out);
-            opLog.write(dataOut);
+            Text.writeString(dataOut, GsonUtils.GSON.toJson(opLog, LocalWarehouseOpLog.class));
 
             byte[] bytes = out.toByteArray();
             DataInputStream dataIn = new DataInputStream(new ByteArrayInputStream(bytes));
