@@ -2,13 +2,11 @@
 displayed_sidebar: docs
 ---
 
-# ADD BACKEND BLACKLIST
+# ADD BACKEND/COMPUTE NOTE BLACKLIST
 
-## 説明
+BE または CN ノードを BE および CN ブラックリストに追加します。クエリ実行時にノードの使用を禁止するために、手動で BE/CN ノードをブラックリストに追加することができます。これにより、ノードへの接続が失敗したことによる頻繁なクエリの失敗やその他の予期しない動作を回避できます。
 
-BE ノードを BE ブラックリストに追加します。クエリ実行時にノードの使用を禁止するために、手動で BE ノードをブラックリストに追加することができます。これにより、BE ノードへの接続失敗による頻繁なクエリ失敗やその他の予期しない動作を回避できます。
-
-この機能は v3.3.0 以降でサポートされています。詳細については、[Manage BE Blacklist](../../../../administration/management/BE_blacklist.md) を参照してください。
+BE ブラックリストは v3.3.0 以降でサポートされ、CN ブラックリストは v4.0 以降でサポートされています。詳細については、[Manage BE and CN Blacklist](../../../../administration/management/BE_blacklist.md) を参照してください。
 
 :::note
 
@@ -16,19 +14,19 @@ BE ノードを BE ブラックリストに追加します。クエリ実行時�
 
 :::
 
-デフォルトでは、StarRocks は BE ブラックリストを自動的に管理し、接続が失われた BE ノードをブラックリストに追加し、接続が再確立されたときにブラックリストから削除します。ただし、手動でブラックリストに追加された BE ノードは、StarRocks によってブラックリストから削除されません。
+デフォルトでは、StarRocks は BE および CN ブラックリストを自動的に管理し、接続が失われた BE/CN ノードをブラックリストに追加し、接続が再確立されたときにブラックリストから削除します。ただし、手動でブラックリストに追加されたノードは、StarRocks によってブラックリストから削除されません。
 
-## 構文
+## Syntax
 
 ```SQL
-ADD BACKEND BLACKLIST <be_id>[, ...]
+ADD { BACKEND | COMPUTE NODE } BLACKLIST { <be_id>[, ...] | <cn_id>[, ...] }
 ```
 
-## パラメータ
+## Parameters
 
-`be_id`: ブラックリストに追加する BE ノードの ID。BE ID は [SHOW BACKENDS](SHOW_BACKENDS.md) を実行して取得できます。
+`be_id` または `cn_id`: ブラックリストに追加する BE または CN ノードの ID。BE ID は [SHOW BACKENDS](./SHOW_BACKENDS.md) を実行して取得し、CN ID は [SHOW COMPUTE NODES](./SHOW_COMPUTE_NODES.md) を実行して取得できます。
 
-## 例
+## Examples
 
 ```SQL
 -- BE ID を取得します。
@@ -39,10 +37,20 @@ SHOW BACKENDS\G
                    ...
 -- BE をブラックリストに追加します。
 ADD BACKEND BLACKLIST 10001;
+
+-- CN ID を取得します。
+SHOW COMPUTE NODES\G
+*************************** 1. row ***************************
+        ComputeNodeId: 10005
+                   IP: xxx.xx.xx.xxx
+                   ...
+-- CN をブラックリストに追加します。
+ADD COMPUTE NODE BLACKLIST 10005;
 ```
 
-## 関連する SQL
+## Relevant SQLs
 
-- [DELETE BACKEND BLACKLIST](./DELETE_BACKEND_BLACKLIST.md)
-- [SHOW BACKEND BLACKLIST](./SHOW_BACKEND_BLACKLIST.md)
-- [SHOW BACKENDS](SHOW_BACKENDS.md)
+- [DELETE BACKEND/COMPUTE NODE BLACKLIST](./DELETE_BACKEND_BLACKLIST.md)
+- [SHOW BACKEND/COMPUTE NODE BLACKLIST](./SHOW_BACKEND_BLACKLIST.md)
+- [SHOW BACKENDS](./SHOW_BACKENDS.md)
+- [SHOW COMPUTE NODES](./SHOW_COMPUTE_NODES.md)
