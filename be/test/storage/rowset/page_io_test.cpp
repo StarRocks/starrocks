@@ -50,7 +50,7 @@ protected:
 
 void PageIOTest::SetUp() {
     _prev_page_cache = DataCache::GetInstance()->page_cache_ptr();
-    CacheOptions options{.mem_space_size = _cache_size};
+    MemCacheOptions options{.mem_space_size = _cache_size};
     _lru_cache = std::make_shared<LRUCacheEngine>();
     ASSERT_OK(_lru_cache->init(options));
     _page_cache = std::make_shared<StoragePageCache>(_lru_cache.get());

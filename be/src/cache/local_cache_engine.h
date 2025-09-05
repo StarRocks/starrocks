@@ -27,7 +27,6 @@ class LocalCacheEngine {
 public:
     virtual ~LocalCacheEngine() = default;
 
-    virtual Status init(const CacheOptions& options) = 0;
     virtual bool is_initialized() const = 0;
 
     // Write data to cache

@@ -76,7 +76,7 @@ TEST_F(BlockCacheTest, hybrid_cache) {
     ASSERT_TRUE(fs::create_directories(cache_dir).ok());
 
     const size_t block_size = 256 * 1024;
-    CacheOptions options = TestCacheUtils::create_simple_options(block_size, 2 * MB);
+    DiskCacheOptions options = TestCacheUtils::create_simple_options(block_size, 2 * MB);
     options.dir_spaces.push_back({.path = cache_dir, .size = 50 * MB});
     auto cache = TestCacheUtils::create_cache(options);
 
@@ -120,7 +120,7 @@ TEST_F(BlockCacheTest, hybrid_cache) {
 TEST_F(BlockCacheTest, write_with_overwrite_option) {
     const size_t block_size = 1024 * 1024;
 
-    CacheOptions options = TestCacheUtils::create_simple_options(block_size, 20 * MB);
+    DiskCacheOptions options = TestCacheUtils::create_simple_options(block_size, 20 * MB);
     options.inline_item_count_limit = 1000;
     auto cache = TestCacheUtils::create_cache(options);
 
@@ -157,7 +157,7 @@ TEST_F(BlockCacheTest, read_cache_with_adaptor) {
     ASSERT_TRUE(fs::create_directories(cache_dir).ok());
 
     const size_t block_size = 1024 * 1024;
-    CacheOptions options = TestCacheUtils::create_simple_options(block_size, 0);
+    DiskCacheOptions options = TestCacheUtils::create_simple_options(block_size, 0);
     options.dir_spaces.push_back({.path = cache_dir, .size = 500 * MB});
     options.skip_read_factor = 1;
     auto cache = TestCacheUtils::create_cache(options);
@@ -221,7 +221,7 @@ TEST_F(BlockCacheTest, update_cache_quota) {
     std::unique_ptr<BlockCache> block_cache(new BlockCache);
     const size_t block_size = 256 * 1024;
     size_t quota = 50 * MB;
-    CacheOptions options = TestCacheUtils::create_simple_options(block_size, 1 * MB);
+    DiskCacheOptions options = TestCacheUtils::create_simple_options(block_size, 1 * MB);
     options.dir_spaces.push_back({.path = cache_dir, .size = quota});
     auto cache = TestCacheUtils::create_cache(options);
     auto local_cache = cache->local_cache();
@@ -257,7 +257,7 @@ TEST_F(BlockCacheTest, clear_residual_blockfiles) {
     ASSERT_TRUE(fs::create_directories(cache_dir).ok());
 
     const size_t block_size = 256 * 1024;
-    CacheOptions options = TestCacheUtils::create_simple_options(block_size, 0);
+    DiskCacheOptions options = TestCacheUtils::create_simple_options(block_size, 0);
     options.dir_spaces.push_back({.path = cache_dir, .size = 50 * MB});
     auto cache = TestCacheUtils::create_cache(options);
 
@@ -294,7 +294,7 @@ TEST_F(BlockCacheTest, clear_residual_blockfiles) {
 }
 
 TEST_F(BlockCacheTest, read_peer_cache) {
-    CacheOptions options = TestCacheUtils::create_simple_options(256 * KB, 1 * MB);
+    DiskCacheOptions options = TestCacheUtils::create_simple_options(256 * KB, 1 * MB);
     auto cache = TestCacheUtils::create_cache(options);
 
     IOBuffer iobuf;

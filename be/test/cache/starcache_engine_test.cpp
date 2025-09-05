@@ -86,7 +86,7 @@ void StarCacheEngineTest::_check_found(int value) {
 }
 
 void StarCacheEngineTest::_init_local_cache() {
-    CacheOptions options = TestCacheUtils::create_simple_options(256 * KB, _mem_quota);
+    DiskCacheOptions options = TestCacheUtils::create_simple_options(256 * KB, _mem_quota);
     options.dir_spaces.push_back({.path = _cache_dir, .size = 50 * MB});
 
     _cache = std::make_shared<StarCacheEngine>();

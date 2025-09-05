@@ -848,7 +848,8 @@ void* ReportDataCacheMetricsTaskWorkerPool::_worker_thread_callback(void* arg_th
         request.__set_report_version(g_report_version.load(std::memory_order_relaxed));
 
         TDataCacheMetrics t_metrics{};
-        const LocalCacheEngine* cache = DataCache::GetInstance()->local_cache();
+        // TODO: mem_metrics + disk_metrics
+        const LocalCacheEngine* cache = DataCache::GetInstance()->local_disk_cache();
         if (cache != nullptr && cache->is_initialized()) {
             const auto metrics = cache->cache_metrics();
             DataCacheUtils::set_metrics_from_thrift(t_metrics, metrics);

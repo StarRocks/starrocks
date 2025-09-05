@@ -27,7 +27,7 @@
 
 namespace starrocks {
 
-Status StarCacheEngine::init(const CacheOptions& options) {
+Status StarCacheEngine::init(const DiskCacheOptions& options) {
     starcache::CacheOptions opt;
     opt.mem_quota_bytes = options.mem_space_size;
     for (auto& dir : options.dir_spaces) {

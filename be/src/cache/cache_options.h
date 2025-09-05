@@ -42,7 +42,15 @@ struct DirSpace {
     size_t size;
 };
 
-struct CacheOptions {
+struct RemoteCacheOptions {
+    double skip_read_factor = 0;
+};
+
+struct MemCacheOptions {
+    size_t mem_space_size = 0;
+};
+
+struct DiskCacheOptions {
     // basic
     size_t mem_space_size = 0;
     std::vector<DirSpace> dir_spaces;
@@ -54,13 +62,16 @@ struct CacheOptions {
     bool enable_direct_io = false;
     bool enable_tiered_cache = true;
     bool enable_datacache_persistence = false;
-    std::string engine;
     size_t max_concurrent_inserts = 0;
     size_t max_flying_memory_mb = 0;
     double scheduler_threads_per_cpu = 0;
     double skip_read_factor = 0;
     uint32_t inline_item_count_limit = 0;
     std::string eviction_policy;
+};
+
+struct BlockCacheOptions {
+    size_t block_size = 0;
 };
 
 struct WriteCacheOptions {

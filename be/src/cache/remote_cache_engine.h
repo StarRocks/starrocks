@@ -25,7 +25,7 @@ public:
     virtual ~RemoteCacheEngine() = default;
 
     // Init remote cache
-    virtual Status init(const CacheOptions& options) = 0;
+    virtual Status init(const RemoteCacheOptions& options) = 0;
 
     // Write data to remote cache
     virtual Status write(const std::string& key, const IOBuffer& buffer, WriteCacheOptions* options) = 0;

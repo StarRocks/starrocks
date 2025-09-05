@@ -3347,7 +3347,7 @@ TEST_F(FileReaderTest, TestStructSubfieldNoDecodeNotOutput) {
 }
 
 TEST_F(FileReaderTest, TestReadFooterCache) {
-    CacheOptions options = TestCacheUtils::create_simple_options(256 * KB, 100 * MB);
+    DiskCacheOptions options = TestCacheUtils::create_simple_options(256 * KB, 100 * MB);
     auto local_cache = std::make_shared<StarCacheEngine>();
     ASSERT_OK(local_cache->init(options));
     auto cache = std::make_shared<StoragePageCache>(local_cache.get());
