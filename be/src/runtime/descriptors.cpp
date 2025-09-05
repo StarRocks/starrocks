@@ -239,6 +239,9 @@ IcebergTableDescriptor::IcebergTableDescriptor(const TTableDescriptor& tdesc, Ob
     } else {
         _source_column_names = tdesc.icebergTable.partition_column_names; //to compat with lower fe, set this also
         _partition_column_names = tdesc.icebergTable.partition_column_names;
+        for ([[maybe_unused]] const auto& _ : tdesc.icebergTable.partition_column_names) {
+            _transform_exprs.emplace_back("identity"); //to compat with lower fe, set this also
+        }
     }
 }
 
