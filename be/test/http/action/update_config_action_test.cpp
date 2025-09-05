@@ -45,7 +45,7 @@ TEST_F(UpdateConfigActionTest, update_datacache_config) {
     ASSERT_TRUE(fs::create_directories(cache_dir).ok());
 
     auto cache = std::make_shared<StarCacheEngine>();
-    DiskCacheOptions options = TestCacheUtils::create_simple_options(256 * KB);
+    DiskCacheOptions options = TestCacheUtils::create_simple_options(256 * KB, 0);
     options.dir_spaces.push_back({.path = cache_dir, .size = 50 * MB});
     ASSERT_OK(cache->init(options));
     DataCache::GetInstance()->set_local_disk_cache(cache);

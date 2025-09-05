@@ -31,11 +31,12 @@ constexpr size_t GB = MB * 1024;
 
 class TestCacheUtils {
 public:
-    static DiskCacheOptions create_simple_options(size_t block_size, ssize_t disk_quota = -1) {
+    static DiskCacheOptions create_simple_options(size_t block_size, size_t mem_quota, ssize_t disk_quota = -1) {
         DiskCacheOptions options;
         if (disk_quota > 0) {
             options.dir_spaces.push_back({.path = "./block_disk_cache", .size = (size_t)disk_quota});
         }
+        options.mem_space_size = mem_quota;
         options.enable_checksum = false;
         options.max_concurrent_inserts = 1500000;
         options.max_flying_memory_mb = 100;

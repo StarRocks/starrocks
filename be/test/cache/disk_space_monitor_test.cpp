@@ -179,7 +179,7 @@ TEST_F(DiskSpaceMonitorTest, auto_increase_cache_quota) {
     SCOPED_UPDATE(int64_t, config::datacache_disk_adjust_interval_seconds, 1);
     SCOPED_UPDATE(int64_t, config::datacache_disk_idle_seconds_for_expansion, 300);
 
-    auto options = TestCacheUtils::create_simple_options(kBlockSize, 20 * MB);
+    auto options = TestCacheUtils::create_simple_options(kBlockSize, 0, 20 * MB);
     auto block_cache = TestCacheUtils::create_cache(options);
     auto local_cache = block_cache->local_cache();
 
@@ -229,7 +229,7 @@ TEST_F(DiskSpaceMonitorTest, auto_increase_cache_quota_with_limit) {
     config::datacache_disk_size = "25%";
     DeferOp defer([]() { config::datacache_disk_size = "100%"; });
 
-    auto options = TestCacheUtils::create_simple_options(kBlockSize, 20 * MB);
+    auto options = TestCacheUtils::create_simple_options(kBlockSize, 0, 20 * MB);
     auto block_cache = TestCacheUtils::create_cache(options);
     auto local_cache = block_cache->local_cache();
 
@@ -279,7 +279,7 @@ TEST_F(DiskSpaceMonitorTest, auto_decrease_cache_quota) {
     SCOPED_UPDATE(int64_t, config::datacache_disk_adjust_interval_seconds, 3);
     SCOPED_UPDATE(int64_t, config::datacache_disk_idle_seconds_for_expansion, 300);
 
-    auto options = TestCacheUtils::create_simple_options(kBlockSize, 50 * MB);
+    auto options = TestCacheUtils::create_simple_options(kBlockSize, 0, 50 * MB);
     auto block_cache = TestCacheUtils::create_cache(options);
     auto local_cache = block_cache->local_cache();
 
@@ -328,7 +328,7 @@ TEST_F(DiskSpaceMonitorTest, auto_decrease_cache_quota_to_zero) {
     SCOPED_UPDATE(int64_t, config::datacache_disk_adjust_interval_seconds, 2);
     SCOPED_UPDATE(int64_t, config::datacache_disk_idle_seconds_for_expansion, 300);
 
-    auto options = TestCacheUtils::create_simple_options(kBlockSize, 50 * MB);
+    auto options = TestCacheUtils::create_simple_options(kBlockSize, 0, 50 * MB);
     auto block_cache = TestCacheUtils::create_cache(options);
     auto local_cache = block_cache->local_cache();
 
@@ -377,7 +377,7 @@ TEST_F(DiskSpaceMonitorTest, get_directory_capacity) {
     SCOPED_UPDATE(bool, config::datacache_enable, true);
     SCOPED_UPDATE(bool, config::enable_datacache_disk_auto_adjust, false);
 
-    auto options = TestCacheUtils::create_simple_options(kBlockSize, 20 * MB);
+    auto options = TestCacheUtils::create_simple_options(kBlockSize, 0, 20 * MB);
     auto block_cache = TestCacheUtils::create_cache(options);
     auto local_cache = block_cache->local_cache();
 
