@@ -151,7 +151,11 @@ public:
             return false;
         }
         // For primary key table with single key column and the type is not VARCHAR/CHAR,
-        // we can't enable pk parrallel execution.
+        // we can't enable pk parrallel execution. The reason is that, in the current implementation,
+        // when encoding a single-key column of a non-binary type, big-endian encoding is not used,
+        // which may result in incorrect ordering between sst and segment files.
+        // This is a legacy bug, but for compatibility reasons, it will not be supported in the first phase.
+        // Will fix it later.
         if (tablet_schema()->num_key_columns() > 1 || tablet_schema()->column(0).type() == LogicalType::TYPE_VARCHAR ||
             tablet_schema()->column(0).type() == LogicalType::TYPE_CHAR) {
             return true;
