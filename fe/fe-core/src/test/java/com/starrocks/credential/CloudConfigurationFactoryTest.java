@@ -83,7 +83,7 @@ public class CloudConfigurationFactoryTest {
                 "AzureCloudConfiguration{resources='', jars='', hdpuser='', " +
                         "cred=AzureADLS2CloudCredential{oauth2ManagedIdentity=false, oauth2TenantId='', oauth2ClientId='', " +
                         "endpoint='account.dfs.core.windows.net', storageAccount='', sharedKey='', " +
-                        "sasToken='sas_token', oauth2ClientSecret='', oauth2ClientEndpoint=''}}",
+                        "sasToken='sas_token', oauth2ClientSecret='', oauth2ClientEndpoint='', oauth2TokenFile=''}}",
                 cloudConfiguration.toConfString());
 
         map = new HashMap<>();
@@ -281,6 +281,7 @@ public class CloudConfigurationFactoryTest {
                 put(CloudConfigurationConstants.AZURE_ADLS2_OAUTH2_CLIENT_ENDPOINT, "XX");
                 put(CloudConfigurationConstants.AZURE_ADLS2_OAUTH2_CLIENT_SECRET, "XX");
                 put(CloudConfigurationConstants.AZURE_ADLS2_OAUTH2_USE_MANAGED_IDENTITY, "XX");
+                put(CloudConfigurationConstants.AZURE_ADLS2_OAUTH2_TOKEN_FILE, "XX");
             }
         };
         CloudConfiguration cc = CloudConfigurationFactory.buildCloudConfigurationForStorage(map);
@@ -294,7 +295,7 @@ public class CloudConfigurationFactoryTest {
                 "AzureCloudConfiguration{resources='', jars='', hdpuser='', " +
                         "cred=AzureADLS2CloudCredential{oauth2ManagedIdentity=false, oauth2TenantId='XX', " +
                         "oauth2ClientId='XX', endpoint='', storageAccount='XX', sharedKey='XX', sasToken='', " +
-                        "oauth2ClientSecret='XX', oauth2ClientEndpoint='XX'}}");
+                        "oauth2ClientSecret='XX', oauth2ClientEndpoint='XX', oauth2TokenFile='XX'}}");
     }
 
     @Test
@@ -338,6 +339,27 @@ public class CloudConfigurationFactoryTest {
                 conf.get("fs.azure.account.oauth.provider.type"));
         Assertions.assertEquals("tenant-id", conf.get("fs.azure.account.oauth2.msi.tenant"));
         Assertions.assertEquals("client-id", conf.get("fs.azure.account.oauth2.client.id"));
+    }
+
+    @Test
+    public void testAzureADLS2WorkloadIdentity() {
+        Map<String, String> map = new HashMap<>() {
+            {                
+                put(CloudConfigurationConstants.AZURE_ADLS2_OAUTH2_CLIENT_ID, "client-id");
+                put(CloudConfigurationConstants.AZURE_ADLS2_OAUTH2_TENANT_ID, "tenant-id");
+                put(CloudConfigurationConstants.AZURE_ADLS2_OAUTH2_TOKEN_FILE, "/path/to/token");
+            }
+        };
+
+        CloudConfiguration cc = CloudConfigurationFactory.buildCloudConfigurationForStorage(map);
+        Assertions.assertEquals(cc.getCloudType(), CloudType.AZURE);
+        Configuration conf = new Configuration();
+        cc.applyToConfiguration(conf);
+        Assertions.assertEquals("OAuth", conf.get("fs.azure.account.auth.type"));
+        Assertions.assertEquals("org.apache.hadoop.fs.azurebfs.oauth2.WorkloadIdentityTokenProvider",
+                conf.get("fs.azure.account.oauth.provider.type"));
+        Assertions.assertEquals("tenant-id", conf.get("fs.azure.account.oauth2.msi.tenant"));
+        Assertions.assertEquals("/path/to/token", conf.get("fs.azure.account.oauth2.token.file"));
     }
 
     @Test
