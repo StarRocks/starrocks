@@ -34,7 +34,7 @@ A partitioned materialized view can be created only on a partitioned base table 
 Currently, StarRocks supports building partitioned materialized views on tables from the following data sources:
 
 - **StarRocks OLAP tables in the default catalog**
-  - Supported partitioning strategy: Range partitioning
+  - Supported partitioning strategy: Range partitioning, List Partitioning, and Expression Partitioning
   - Supported data types for Partitioning Key: INT, DATE, DATETIME, and STRING
   - Supported table types: Primary Key, Duplicate Key, Aggregate Key, and Unique Key
   - Supported both in shared-nothing cluster and shared-data cluster
@@ -45,11 +45,9 @@ Currently, StarRocks supports building partitioned materialized views on tables 
 :::note
 
 - You cannot create a partitioned materialized view based on a non-partitioned base (fact) table.
-- For StarRocks OLAP tables:
-  - Currently, list partitioning and expression partitioning are not supported.
-  - The two adjacent partitions of the base table must have consecutive ranges.
+- For StarRocks OLAP tables, the two adjacent partitions of the base table must have consecutive ranges.
 - For multi-level partitioned base tables in external catalogs, only the primary level partitioning path can be used to create a partitioned materialized view. For example,  for a table partitioned in the `yyyyMMdd/hour` format, you can only build the materialized view partitioned by `yyyyMMdd`.
-- From v3.2.3, StarRocks supports creating partitioned materialized views upon Iceberg tables with [Partition Transforms](https://iceberg.apache.org/spec/#partition-transforms), and the materialized views are partitioned by the column after the transformation. For more information, see [Data lake query acceleration with materialized views - Choose a suitabledata_lake_query_acceleration_with_materialized_views.mdterialized_views.md#choose-a-suitable-refresh-strategy).
+- From v3.2.3, StarRocks supports creating partitioned materialized views upon Iceberg tables with [Partition Transforms](https://iceberg.apache.org/spec/#partition-transforms), and the materialized views are partitioned by the column after the transformation. For more information, see [Data lake query acceleration with materialized views - Choose a suitable refresh strategy](./data_lake_query_acceleration_with_materialized_views.md#choose-a-suitable-refresh-strategy).
 
 :::
 
