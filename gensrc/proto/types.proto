@@ -233,7 +233,7 @@ message PersistentIndexSstablePB {
     optional uint32 shared_rssid = 8;
     optional int64 shared_version = 9;
     // For sstable generated during compaction process.
-    optional bool need_delvec = 10;
+    optional bool has_delvec = 10;
 }
 
 message PersistentIndexSstableMetaPB {
