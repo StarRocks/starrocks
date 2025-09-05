@@ -68,6 +68,7 @@ public class StreamLoadInfo {
     // optional
     private List<ImportColumnDesc> columnExprDescs = Lists.newArrayList();
     private Expr whereExpr;
+    private Expr precedingFilterExpr;
     private String mergeConditionStr;
     private ColumnSeparator columnSeparator;
     private RowDelimiter rowDelimiter;
@@ -149,6 +150,10 @@ public class StreamLoadInfo {
 
     public Expr getWhereExpr() {
         return whereExpr;
+    }
+
+    public Expr getPrecedingFilterExpr() {
+        return precedingFilterExpr;
     }
 
     public String getMergeConditionStr() {
@@ -419,6 +424,7 @@ public class StreamLoadInfo {
             columnExprDescs = Lists.newArrayList(routineLoadJob.getColumnDescs());
         }
         whereExpr = routineLoadJob.getWhereExpr();
+        precedingFilterExpr = routineLoadJob.getPrecedingFilterExpr();
         setMergeConditionExpr(routineLoadJob.getMergeCondition());
         columnSeparator = routineLoadJob.getColumnSeparator();
         rowDelimiter = routineLoadJob.getRowDelimiter();
@@ -474,7 +480,7 @@ public class StreamLoadInfo {
         ImportWhereStmt whereStmt;
         try {
             whereStmt = new ImportWhereStmt(com.starrocks.sql.parser.SqlParser.parseSqlToExpr(whereString,
-                    SqlModeHelper.MODE_DEFAULT));
+                    SqlModeHelper.MODE_DEFAULT), false);
         } catch (ParsingException e) {
             LOG.warn("analyze where statement failed, sql={}, error={}", whereString, e.getMessage(), e);
             throw e;
