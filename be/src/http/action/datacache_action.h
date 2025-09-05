@@ -29,6 +29,7 @@
 namespace starrocks {
 
 class LocalCacheEngine;
+// TODO: support mem metrics
 class DataCacheAction : public HttpHandler {
 public:
     explicit DataCacheAction(LocalCacheEngine* local_cache) : _local_cache(local_cache) {}

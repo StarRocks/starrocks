@@ -31,14 +31,12 @@ constexpr size_t GB = MB * 1024;
 
 class TestCacheUtils {
 public:
-    static CacheOptions create_simple_options(size_t block_size, size_t mem_quota, ssize_t disk_quota = -1,
-                                              const std::string& engine = "starcache") {
-        CacheOptions options;
-        options.mem_space_size = mem_quota;
+    static DiskCacheOptions create_simple_options(size_t block_size, size_t mem_quota, ssize_t disk_quota = -1) {
+        DiskCacheOptions options;
         if (disk_quota > 0) {
             options.dir_spaces.push_back({.path = "./block_disk_cache", .size = (size_t)disk_quota});
         }
-        options.engine = engine;
+        options.mem_space_size = mem_quota;
         options.enable_checksum = false;
         options.max_concurrent_inserts = 1500000;
         options.max_flying_memory_mb = 100;
@@ -49,13 +47,17 @@ public:
         return options;
     }
 
-    static std::shared_ptr<BlockCache> create_cache(const CacheOptions& options) {
+    static std::shared_ptr<BlockCache> create_cache(const DiskCacheOptions& options) {
+        BlockCacheOptions block_cache_options;
+        block_cache_options.block_size = options.block_size;
+        RemoteCacheOptions remote_cache_options;
+        remote_cache_options.skip_read_factor = options.skip_read_factor;
         auto local_cache = std::make_shared<StarCacheEngine>();
         auto remote_cache = std::make_shared<PeerCacheEngine>();
         auto block_cache = std::make_shared<BlockCache>();
         EXPECT_OK(local_cache->init(options));
-        EXPECT_OK(remote_cache->init(options));
-        EXPECT_OK(block_cache->init(options, local_cache, remote_cache));
+        EXPECT_OK(remote_cache->init(remote_cache_options));
+        EXPECT_OK(block_cache->init(block_cache_options, local_cache, remote_cache));
         return block_cache;
     }
 };

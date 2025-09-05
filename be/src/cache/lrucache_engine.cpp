@@ -17,7 +17,7 @@
 #include <butil/fast_rand.h>
 
 namespace starrocks {
-Status LRUCacheEngine::init(const CacheOptions& options) {
+Status LRUCacheEngine::init(const MemCacheOptions& options) {
     _cache = std::make_unique<ShardedLRUCache>(options.mem_space_size);
     _initialized.store(true, std::memory_order_relaxed);
     return Status::OK();

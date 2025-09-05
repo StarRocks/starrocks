@@ -32,7 +32,7 @@ protected:
 };
 
 void PageHandleTest::SetUp() {
-    CacheOptions options{.mem_space_size = 10 * 1024 * 1024};
+    MemCacheOptions options{.mem_space_size = 10 * 1024 * 1024};
     _cache_engine = std::make_shared<LRUCacheEngine>();
     ASSERT_OK(_cache_engine->init(options));
     _page_cache = std::make_shared<StoragePageCache>(_cache_engine.get());

@@ -33,7 +33,7 @@ public:
     ~BlockCache();
 
     // Init the block cache instance
-    Status init(const CacheOptions& options, std::shared_ptr<LocalCacheEngine> local_cache,
+    Status init(const BlockCacheOptions& options, std::shared_ptr<LocalCacheEngine> local_cache,
                 std::shared_ptr<RemoteCacheEngine> remote_cache);
 
     // Write data buffer to cache, the `offset` must be aligned by block size

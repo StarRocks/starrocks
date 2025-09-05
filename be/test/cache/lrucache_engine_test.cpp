@@ -74,7 +74,7 @@ void LRUCacheEngineTest::_check_found(int value) {
 
 void LRUCacheEngineTest::SetUp() {
     _cache = std::make_shared<LRUCacheEngine>();
-    CacheOptions opts{.mem_space_size = _capacity};
+    MemCacheOptions opts{.mem_space_size = _capacity};
     ASSERT_OK(_cache->init(opts));
 }
 
