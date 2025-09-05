@@ -90,7 +90,8 @@
         "insert",
         "alter",
         "export",
-        "update"
+        "update",
+        "refresh"
       ]
     },
     {
