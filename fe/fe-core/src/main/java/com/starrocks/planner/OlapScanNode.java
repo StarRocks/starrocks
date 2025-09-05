@@ -845,7 +845,7 @@ public class OlapScanNode extends ScanNode {
             }
             if (!conjuncts.isEmpty()) {
                 output.append(prefix).append("PREDICATES: ").append(
-                        getExplainString(conjuncts)).append("\n");
+                        explainExpr(conjuncts)).append("\n");
             }
         } else {
             if (isPreAggregation) {
@@ -855,7 +855,7 @@ public class OlapScanNode extends ScanNode {
                         .append("\n");
             }
             if (!conjuncts.isEmpty()) {
-                output.append(prefix).append("Predicates: ").append(getVerboseExplain(conjuncts)).append("\n");
+                output.append(prefix).append("Predicates: ").append(explainExpr(TExplainLevel.VERBOSE, conjuncts)).append("\n");
             }
             if (!dictStringIdToIntIds.isEmpty()) {
                 List<String> flatDictList = dictStringIdToIntIds.entrySet().stream().limit(5)
