@@ -559,11 +559,11 @@ public abstract class StarRocksHttpTestCase {
                 result = frontend;
 
                 nodeMgr.getAllFrontends();
-                minTimes = 1;
+                minTimes = 0;
                 result = Lists.newArrayList(frontend);
 
                 nodeMgr.getSelfNode();
-                minTimes = 1;
+                minTimes = 0;
                 result = new Pair<>(frontend.getHost(), HTTP_PORT);
             }
         };

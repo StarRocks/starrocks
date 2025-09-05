@@ -39,18 +39,18 @@ public class HttpUtilsTest extends StarRocksHttpTestCase {
         Map<String, String> header = Map.of(HttpHeaders.AUTHORIZATION, rootAuth);
         String url = "http://localhost:" + HTTP_PORT + QUERY_PLAN_URI + "?path=/backends";
         String result = HttpUtils.get(url, header);
-        Assertions.assertTrue(true);
         Assertions.assertNotNull(result);
     }
 
     @Test
-    public void testHttpPost() throws Exception {
+    public void testHttpPost()  {
         Map<String, String> header = Map.of(HttpHeaders.AUTHORIZATION, rootAuth);
         String url = URI + "/_query_plan";
         StringEntity entity = new StringEntity(
                 "{ \"sql\" :  \" select k1 as alias_1,k2 from " + DB_NAME + "." + TABLE_NAME + " \" }",
                 StandardCharsets.UTF_8);
-        String result = HttpUtils.post(url, entity, header);
-        Assertions.assertNull(result);
+        Assertions.assertThrows(RuntimeException.class, () -> {
+            HttpUtils.post(url, entity, header);
+        });
     }
 }
