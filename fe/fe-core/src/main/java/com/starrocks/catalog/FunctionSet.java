@@ -130,6 +130,7 @@ public class FunctionSet {
     public static final String QUARTER = "quarter";
     public static final String TIMESTAMP = "timestamp";
     public static final String TIME_TO_SEC = "time_to_sec";
+    public static final String SEC_TO_TIME = "sec_to_time";
     public static final String STR2DATE = "str2date";
     public static final String MICROSECONDS_ADD = "microseconds_add";
     public static final String MICROSECONDS_SUB = "microseconds_sub";

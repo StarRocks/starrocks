@@ -3897,6 +3897,43 @@ StatusOr<ColumnPtr> TimeFunctions::time_format(FunctionContext* context, const s
     return builder.build(ColumnHelper::is_all_const(columns));
 }
 
+constexpr static const int64_t MAX_TIME = 3023999L;
+
+static int64_t from_seconds_with_limit(int64_t time) {
+    if (time > MAX_TIME) {
+        return MAX_TIME;
+    }
+    if (time < -MAX_TIME) {
+        return -MAX_TIME;
+    }
+    return time;
+}
+
+StatusOr<ColumnPtr> TimeFunctions::sec_to_time(FunctionContext* context, const starrocks::Columns& columns) {
+    if (columns.size() > 1) {
+        return Status::InvalidArgument("FORMAT_TIME requires exactly 1 arguments");
+    }
+
+    const auto &bigint_column = columns[0];
+
+    RETURN_IF_COLUMNS_ONLY_NULL(columns);
+
+    auto bigint_viewer = ColumnViewer<TYPE_BIGINT>(bigint_column);
+    const size_t size = bigint_column->size();
+    auto builder = ColumnBuilder<TYPE_TIME>(size);
+
+    for (size_t i = 0; i < size; ++i) {
+        if (bigint_viewer.is_null(i)) {
+            builder.append_null();
+            continue;
+        }
+        auto time = static_cast<double>(from_seconds_with_limit(bigint_viewer.value(i)));
+        builder.append(time);
+    }
+
+    return builder.build(ColumnHelper::is_all_const(columns));
+}
+
 } // namespace starrocks
 
 #include "gen_cpp/opcode/TimeFunctions.inc"
