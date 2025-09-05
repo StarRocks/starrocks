@@ -1777,12 +1777,18 @@ public class AuthorizerStmtVisitor implements AstVisitor<Void, ConnectContext> {
     public Void visitRefreshTableStatement(RefreshTableStmt statement, ConnectContext context) {
         try {
             Authorizer.checkTableAction(context,
-                    statement.getTableName(), PrivilegeType.ALTER);
+                    statement.getTableName(), PrivilegeType.REFRESH);
         } catch (AccessDeniedException e) {
-            AccessDeniedException.reportAccessDenied(
-                    statement.getTableName().getCatalog(),
-                    context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
-                    PrivilegeType.ALTER.name(), ObjectType.TABLE.name(), statement.getTableName().getTbl());
+            // If user has no REFRESH privilege, check if he has ALTER privilege, for compatibility
+            try {
+                Authorizer.checkTableAction(context,
+                        statement.getTableName(), PrivilegeType.ALTER);
+            } catch (AccessDeniedException e2) {
+                AccessDeniedException.reportAccessDenied(
+                        statement.getTableName().getCatalog(),
+                        context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+                        PrivilegeType.REFRESH.name(), ObjectType.TABLE.name(), statement.getTableName().getTbl());
+            }
         }
         return null;
     }

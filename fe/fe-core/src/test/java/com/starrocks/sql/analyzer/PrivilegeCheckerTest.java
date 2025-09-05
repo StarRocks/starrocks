@@ -1157,12 +1157,19 @@ public class PrivilegeCheckerTest {
                 "Access denied; you need (at least one of) the CREATE TABLE privilege(s) on DATABASE db1 for " +
                         "this operation");
 
+        // check refresh external table: REFRESH
+        verifyGrantRevoke(
+                "refresh external table db1.tbl1",
+                "grant REFRESH on db1.tbl1 to test",
+                "revoke REFRESH on db1.tbl1 from test",
+                "Access denied; you need (at least one of) the REFRESH privilege(s) on TABLE tbl1 for this operation");
+
         // check refresh external table: ALTER
         verifyGrantRevoke(
                 "refresh external table db1.tbl1",
                 "grant ALTER on db1.tbl1 to test",
                 "revoke ALTER on db1.tbl1 from test",
-                "Access denied; you need (at least one of) the ALTER privilege(s) on TABLE tbl1 for this operation");
+                "Access denied; you need (at least one of) the REFRESH privilege(s) on TABLE tbl1 for this operation");
 
         // check alter table: ALTER
         verifyGrantRevoke(
