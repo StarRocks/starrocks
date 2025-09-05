@@ -414,6 +414,8 @@ CONF_Bool(enable_event_based_compaction_framework, "true");
 
 CONF_Bool(enable_size_tiered_compaction_strategy, "true");
 CONF_mBool(enable_pk_size_tiered_compaction_strategy, "true");
+// Enable parallel execution within tablet for primary key tables.
+CONF_mBool(enable_pk_parallel_execution, "false");
 // We support real-time compaction strategy for primary key tables in shared-data mode.
 // This real-time compaction strategy enables compacting rowsets across multiple levels simultaneously.
 // The parameter `size_tiered_max_compaction_level` defines the maximum compaction level allowed in a single compaction task.

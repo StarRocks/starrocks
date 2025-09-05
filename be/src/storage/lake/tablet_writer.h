@@ -65,6 +65,8 @@ public:
     // PREREQUISITES: the writer has successfully `finish()`ed but not yet `close()`ed.
     std::vector<FileInfo> files() const { return _files; }
 
+    std::vector<FileInfo> ssts() const { return _ssts; }
+
     // The sum of all segment file sizes, in bytes.
     int64_t data_size() const { return _data_size; }
 
@@ -143,6 +145,20 @@ public:
 
     const DictColumnsValidMap& global_dict_columns_valid_info() const { return _global_dict_columns_valid_info; }
 
+    bool enable_pk_parallel_execution() {
+        if (!config::enable_pk_parallel_execution || _schema->keys_type() != KeysType::PRIMARY_KEYS ||
+            _schema->has_separate_sort_key()) {
+            return false;
+        }
+        // For primary key table with single key column and the type is not VARCHAR/CHAR,
+        // we can't enable pk parrallel execution.
+        if (tablet_schema()->num_key_columns() > 1 || tablet_schema()->column(0).type() == LogicalType::TYPE_VARCHAR ||
+            tablet_schema()->column(0).type() == LogicalType::TYPE_CHAR) {
+            return true;
+        }
+        return false;
+    }
+
 protected:
     TabletManager* _tablet_mgr;
     int64_t _tablet_id;
@@ -150,6 +166,7 @@ protected:
     int64_t _txn_id;
     ThreadPool* _flush_pool;
     std::vector<FileInfo> _files;
+    std::vector<FileInfo> _ssts;
     int64_t _num_rows = 0;
     int64_t _data_size = 0;
     uint32_t _seg_id = 0;

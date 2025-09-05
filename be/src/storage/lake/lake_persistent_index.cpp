@@ -156,7 +156,7 @@ LakePersistentIndex::LakePersistentIndex(TabletManager* tablet_mgr, int64_t tabl
         : PersistentIndex(""), _tablet_mgr(tablet_mgr), _tablet_id(tablet_id) {}
 
 LakePersistentIndex::~LakePersistentIndex() {
-    if (_memtable) {
+    if (_memtable != nullptr) {
         _memtable->clear();
     }
     _sstables.clear();
