@@ -34,9 +34,15 @@ StarRocks の非同期マテリアライズドビューは、さまざまなパ�
 現在、StarRocks は次のデータソースからのテーブルに対してパーティション化されたマテリアライズドビューの構築をサポートしています。
 
 - **デフォルトカタログ内の StarRocks OLAP テーブル**
+<<<<<<< HEAD
   - サポートされているパーティション戦略: レンジパーティション化
   - パーティションキーにサポートされているデータ型: INT、DATE、DATETIME、STRING
   - サポートされているテーブルタイプ: Primary Key、Duplicate Key、Aggregate Key、Unique Key
+=======
+  - サポートされているパーティション戦略: レンジパーティション化、リストパーティション化、および式パーティション化
+  - パーティションキーにサポートされているデータ型: INT, DATE, DATETIME, STRING
+  - サポートされているテーブルタイプ: Primary Key, Duplicate Key, Aggregate Key, Unique Key
+>>>>>>> 49dfd25776 ([Doc] Update Partitioned Materialized View (#62759))
   - 共有なしクラスタと共有データクラスタの両方でサポート
 - **Hive Catalog、Hudi Catalog、Iceberg Catalog、Paimon Catalog のテーブル**
   - サポートされているパーティションレベル: プライマリレベル
@@ -45,11 +51,17 @@ StarRocks の非同期マテリアライズドビューは、さまざまなパ�
 :::note
 
 - 非パーティション化されたベース（ファクト）テーブルに基づいてパーティション化されたマテリアライズドビューを作成することはできません。
+<<<<<<< HEAD
 - StarRocks OLAP テーブルの場合:
   - 現在、リストパーティション化と式に基づくパーティション化はサポートされていません。
   - ベーステーブルの隣接する2つのパーティションは連続した範囲でなければなりません。
 - 外部カタログの多層パーティション化されたベーステーブルの場合、プライマリレベルのパーティションパスのみを使用してパーティション化されたマテリアライズドビューを作成できます。たとえば、`yyyyMMdd/hour` 形式でパーティション化されたテーブルの場合、`yyyyMMdd` でパーティション化されたマテリアライズドビューを構築することしかできません。
 - v3.2.3 以降、StarRocks は Iceberg テーブルに対して [Partition Transforms](https://iceberg.apache.org/spec/#partition-transforms) を使用してパーティション化されたマテリアライズドビューの作成をサポートしており、マテリアライズドビューは変換後の列でパーティション化されます。詳細については、[Data lake query acceleration with materialized views - Choose a suitabledata_lake_query_acceleration_with_materialized_views.mdterialized_views.md#choose-a-suitable-refresh-strategy](https://iceberg.apache.org/spec/#partition-transforms) を参照してください。
+=======
+- StarRocks OLAP テーブルの場合、ベーステーブルの隣接する2つのパーティションは連続した範囲を持つ必要があります。
+- 外部カタログの多層パーティション化されたベーステーブルの場合、プライマリレベルのパーティションパスのみを使用してパーティション化されたマテリアライズドビューを作成できます。たとえば、`yyyyMMdd/hour` 形式でパーティション化されたテーブルの場合、`yyyyMMdd` でパーティション化されたマテリアライズドビューのみを構築できます。
+- v3.2.3 以降、StarRocks は Iceberg テーブルに対するパーティション化されたマテリアライズドビューの作成をサポートしており、マテリアライズドビューは変換後の列でパーティション化されます。詳細は [適切なリフレッシュ戦略を選択する](./data_lake_query_acceleration_with_materialized_views.md#適切なリフレッシュ戦略を選択する). を参照してください。
+>>>>>>> 49dfd25776 ([Doc] Update Partitioned Materialized View (#62759))
 
 :::
 
