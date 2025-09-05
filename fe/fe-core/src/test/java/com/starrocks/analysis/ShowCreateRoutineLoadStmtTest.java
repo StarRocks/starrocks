@@ -57,4 +57,14 @@ public class ShowCreateRoutineLoadStmtTest {
         Assert.assertEquals("testDb", stmt.getDbFullName());
         Assert.assertEquals("rl_test", stmt.getName());
     }
+
+    @Test
+    public void testNoDb() {
+        ctx = UtFrameUtils.createDefaultCtx();
+        ctx.setDatabase("testDb2");
+        ShowCreateRoutineLoadStmt stmt = new ShowCreateRoutineLoadStmt(new LabelName(null, "testJob2"));
+        com.starrocks.sql.analyzer.Analyzer.analyze(stmt, ctx);
+        Assert.assertEquals("testJob2", stmt.getName());
+        Assert.assertEquals("testDb2", stmt.getDbFullName());
+    }
 }
