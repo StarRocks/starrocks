@@ -38,8 +38,8 @@ public class ShowCreateRoutineLoadStmt extends ShowStmt {
         return labelName.getDbName();
     }
 
-    public void setLabelName(LabelName labelName) {
-        this.labelName = labelName;
+    public void setDb(String db) {
+        labelName.setDbName(db);
     }
 
     @Override
