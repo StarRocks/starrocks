@@ -772,12 +772,12 @@ public class JoinTest extends PlanTestBase {
 
         sql = "select (v2+v6 = 1 or v2+v6 = 5) from t0, t1 where v2 = v5 ";
         plan = getVerboseExplain(sql);
-        assertContains(plan, "  4:Project\n" +
-                "  |  output columns:\n" +
-                "  |  7 <-> (8: add = 1) OR (8: add = 5)\n" +
-                "  |  common expressions:\n" +
-                "  |  8 <-> [2: v2, BIGINT, true] + [6: v6, BIGINT, true]\n" +
-                "  |  cardinality: 1");
+        assertContains(plan, "  4:Project\n"
+                + "  |  output columns:\n"
+                + "  |  7 <-> ([8: add, BIGINT, true] = 1) OR ([8: add, BIGINT, true] = 5)\n"
+                + "  |  common expressions:\n"
+                + "  |  8 <-> [2: v2, BIGINT, true] + [6: v6, BIGINT, true]\n"
+                + "  |  cardinality: 1");
         assertContains(plan, "output columns: 2, 6");
 
         sql = "select * from t0,t1 where v1 = v4";

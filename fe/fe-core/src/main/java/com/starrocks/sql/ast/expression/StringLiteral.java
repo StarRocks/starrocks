@@ -139,21 +139,6 @@ public class StringLiteral extends LiteralExpr {
     }
 
     @Override
-    public String toSqlImpl() {
-        if (sqlStr == null) {
-            String sql = value;
-            if (value != null) {
-                if (value.contains("\\")) {
-                    sql = value.replace("\\", "\\\\");
-                }
-                sql = sql.replace("'", "\\'");
-            }
-            sqlStr =  "'" + sql + "'";
-        }
-        return sqlStr;
-    }
-
-    @Override
     protected void toThrift(TExprNode msg) {
         msg.node_type = TExprNodeType.STRING_LITERAL;
         msg.string_literal = new TStringLiteral(getUnescapedValue());

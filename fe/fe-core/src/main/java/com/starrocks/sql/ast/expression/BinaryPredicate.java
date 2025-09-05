@@ -141,16 +141,6 @@ public class BinaryPredicate extends Predicate implements Writable {
     }
 
     @Override
-    public String toSqlImpl() {
-        return getChild(0).toSql() + " " + op.toString() + " " + getChild(1).toSql();
-    }
-
-    @Override
-    public String explainImpl() {
-        return getChild(0).explain() + " " + op.toString() + " " + getChild(1).explain();
-    }
-
-    @Override
     protected void toThrift(TExprNode msg) {
         msg.node_type = TExprNodeType.BINARY_PRED;
         msg.setOpcode(opcode);

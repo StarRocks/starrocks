@@ -25,7 +25,6 @@ import com.starrocks.thrift.TExprNodeType;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.stream.Collectors;
 
 public class ArrayExpr extends Expr {
 
@@ -41,13 +40,6 @@ public class ArrayExpr extends Expr {
 
     public ArrayExpr(ArrayExpr other) {
         super(other);
-    }
-
-    @Override
-    protected String toSqlImpl() {
-        return '[' +
-                children.stream().map(Expr::toSql).collect(Collectors.joining(",")) +
-                ']';
     }
 
     @Override

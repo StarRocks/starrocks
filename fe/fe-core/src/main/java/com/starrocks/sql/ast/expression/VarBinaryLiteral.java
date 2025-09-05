@@ -131,11 +131,6 @@ public class VarBinaryLiteral extends LiteralExpr {
     }
 
     @Override
-    public String toSqlImpl() {
-        return "'" + getStringValue() + "'";
-    }
-
-    @Override
     protected void toThrift(TExprNode msg) {
         msg.node_type = TExprNodeType.BINARY_LITERAL;
         msg.binary_literal = new TBinaryLiteral(ByteBuffer.wrap(value));

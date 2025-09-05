@@ -461,7 +461,7 @@ public class AST2SQLVisitor extends AST2StringVisitor {
             List<SlotRef> exprs = node.collectAllSlotRefs(true);
             String sortedSlots = exprs.stream()
                     .filter(SlotRef::isColumnRef)
-                    .map(SlotRef::toSqlImpl)
+                    .map(SlotRef::toSql)
                     .sorted()
                     .collect(Collectors.joining(","));
             return "$massive_compounds[" + sortedSlots + "]$";

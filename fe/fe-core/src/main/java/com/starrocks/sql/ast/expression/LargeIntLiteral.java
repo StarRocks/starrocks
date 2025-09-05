@@ -203,11 +203,6 @@ public class LargeIntLiteral extends LiteralExpr {
     }
 
     @Override
-    public String toSqlImpl() {
-        return getStringValue();
-    }
-
-    @Override
     protected void toThrift(TExprNode msg) {
         msg.node_type = TExprNodeType.LARGE_INT_LITERAL;
         msg.large_int_literal = new TLargeIntLiteral(value.toString());

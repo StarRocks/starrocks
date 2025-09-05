@@ -46,11 +46,6 @@ public class IntervalLiteral extends LiteralExpr {
     }
 
     @Override
-    protected String toSqlImpl() {
-        return "interval " + value.toSql() + " " + unitIdentifier.toSql();
-    }
-
-    @Override
     protected void toThrift(TExprNode msg) {
         throw new StarRocksPlannerException("IntervalLiteral not implement toThrift", ErrorType.INTERNAL_ERROR);
     }

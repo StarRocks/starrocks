@@ -186,9 +186,9 @@ public class SelectStmtWithDecimalTypesNewPlannerTest {
     public void testDecimalInPredicates() throws Exception {
         String sql = "select * from db1.decimal_table where col_decimal64p13s0 in (0, 1, 9999, -9.223372E+18)";
         String plan = UtFrameUtils.getVerboseFragmentPlan(ctx, sql);
-        String snippet = "CAST(3: col_decimal64p13s0 AS DECIMAL128(19,0))" +
-                " IN (0, 1, 9999, -9223372000000000000)";
-        Assertions.assertTrue(plan.contains(snippet));
+        String snippet = "cast([3: col_decimal64p13s0, DECIMAL64(13,0), false] as DECIMAL128(19,0))"
+                + " IN (0, 1, 9999, -9223372000000000000)";
+        Assertions.assertTrue(plan.contains(snippet), plan);
     }
 
     @Test

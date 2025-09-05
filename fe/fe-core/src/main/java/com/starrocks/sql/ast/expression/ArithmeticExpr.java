@@ -427,24 +427,6 @@ public class ArithmeticExpr extends Expr {
     }
 
     @Override
-    public String toSqlImpl() {
-        if (children.size() == 1) {
-            return op.toString() + " " + getChild(0).toSql();
-        } else {
-            return getChild(0).toSql() + " " + op.toString() + " " + getChild(1).toSql();
-        }
-    }
-
-    @Override
-    protected String explainImpl() {
-        if (children.size() == 1) {
-            return op.toString() + " " + getChild(0).explain();
-        } else {
-            return getChild(0).explain() + " " + op.toString() + " " + getChild(1).explain();
-        }
-    }
-
-    @Override
     protected void toThrift(TExprNode msg) {
         msg.node_type = TExprNodeType.ARITHMETIC_EXPR;
         msg.setOpcode(op.getOpcode());

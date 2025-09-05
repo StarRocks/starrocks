@@ -84,17 +84,6 @@ public class CompoundPredicate extends Predicate {
     }
 
     @Override
-    public String toSqlImpl() {
-        if (children.size() == 1) {
-            Preconditions.checkState(op == Operator.NOT);
-            return "NOT (" + getChild(0).toSql() + ")";
-        } else {
-            return "(" + getChild(0).toSql() + ")" + " " + op.toString() + " " + "(" + getChild(
-                    1).toSql() + ")";
-        }
-    }
-
-    @Override
     protected void toThrift(TExprNode msg) {
         msg.node_type = TExprNodeType.COMPOUND_PRED;
         msg.setOpcode(op.toThrift());
@@ -152,6 +141,6 @@ public class CompoundPredicate extends Predicate {
 
     @Override
     public String toString() {
-        return toSqlImpl();
+        return toSql();
     }
 }

@@ -150,4 +150,3 @@ column statistics:
 * P_BRAND-->[-Infinity, Infinity, 0.0, 10.0, 25.0] MCV: [[Brand#35:823300][Brand#12:816700][Brand#52:815800][Brand#33:814100][Brand#53:808800]] ESTIMATE
 * P_CONTAINER-->[-Infinity, Infinity, 0.0, 10.0, 40.0] MCV: [[SM DRUM:515300][JUMBO JAR:511500][LG JAR:510300][LG BOX:509600][MED CAN:509100]] ESTIMATE
 [end]
-

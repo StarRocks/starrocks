@@ -97,4 +97,3 @@ tabletRatio=10/10
 cardinality=112500000
 avgRowSize=95.0
 [end]
-

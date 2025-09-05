@@ -818,7 +818,7 @@ public class AST2StringVisitor implements AstVisitorExtendInterface<String, Void
                 sb.append(", ");
             }
             first = false;
-            sb.append(aggregation.getFunctionCallExpr().toSqlImpl());
+            sb.append(aggregation.getFunctionCallExpr().toSql());
             if (aggregation.getAlias() != null) {
                 sb.append(" AS ").append(aggregation.getAlias());
             }
@@ -1279,7 +1279,14 @@ public class AST2StringVisitor implements AstVisitorExtendInterface<String, Void
                 return visitExpression(node, context);
             }
         } else if (node instanceof LargeStringLiteral) {
-            return ((LargeStringLiteral) node).toFullSqlImpl();
+            String sql = node.getStringValue();
+            if (sql != null) {
+                if (sql.contains("\\")) {
+                    sql = sql.replace("\\", "\\\\");
+                }
+                sql = sql.replace("'", "\\'");
+            }
+            return "'" + sql + "'";
         } else {
             return visitExpression(node, context);
         }
