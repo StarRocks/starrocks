@@ -1217,6 +1217,10 @@ splitTabletClause
       properties?
     ;
 
+alterTableAutoIncrementClause
+    : AUTO_INCREMENT '=' INTEGER_VALUE
+    ;
+
 // ---------Alter partition clause---------
 
 addPartitionClause
@@ -3182,8 +3186,4 @@ nonReserved
     | ARRAY_ELEMENT
     | PERSISTENT
     | EXCLUDE | EXCEPT
-    ;
-
-alterTableAutoIncrementClause
-    : AUTO_INCREMENT '=' INTEGER_VALUE
     ;
