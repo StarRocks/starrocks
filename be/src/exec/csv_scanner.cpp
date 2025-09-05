@@ -239,14 +239,13 @@ Status CSVScanner::_init_reader() {
 
         _curr_reader = std::make_unique<ScannerCSVReader>(file, _state, _parse_options);
         _curr_reader->set_counter(_counter);
-        if (_scan_range.ranges[_curr_file_index].size > 0 &&
-            _scan_range.ranges[_curr_file_index].format_type == TFileFormatType::FORMAT_CSV_PLAIN) {
+        if (range_desc.size > 0 && range_desc.format_type == TFileFormatType::FORMAT_CSV_PLAIN) {
             // Does not set limit for compressed file.
-            _curr_reader->set_limit(_scan_range.ranges[_curr_file_index].size);
+            _curr_reader->set_limit(range_desc.size);
         }
-        if (_scan_range.ranges[_curr_file_index].start_offset > 0) {
+        if (range_desc.start_offset > 0) {
             // Skip the first record started from |start_offset|.
-            auto status = file->skip(_scan_range.ranges[_curr_file_index].start_offset);
+            auto status = file->skip(range_desc.start_offset);
             if (status.is_time_out()) {
                 // open this file next time
                 --_curr_file_index;
@@ -257,7 +256,8 @@ Status CSVScanner::_init_reader() {
             RETURN_IF_ERROR(_curr_reader->next_record(&dummy));
         }
 
-        if (_parse_options.skip_header) {
+        // only the first range needs to skip header
+        if (_parse_options.skip_header && range_desc.start_offset == 0) {
             for (int64_t i = 0; i < _parse_options.skip_header; i++) {
                 CSVReader::Record dummy;
                 auto st = _curr_reader->next_record(&dummy);
