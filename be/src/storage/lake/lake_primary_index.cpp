@@ -282,7 +282,7 @@ Status LakePrimaryIndex::erase(const TabletMetadataPtr& metadata, const Column& 
         if (lake_persistent_index != nullptr) {
             std::vector<Slice> keys;
             std::vector<uint64_t> old_values(pks.size(), NullIndexValue);
-            const Slice* vkeys = _build_persistent_keys(pks, 0, pks.size(), &keys);
+            const Slice* vkeys = build_persistent_keys(pks, _key_size, 0, pks.size(), &keys);
             // Cloud native index need to setup rowset id as rebuild point when erase.
             RETURN_IF_ERROR(lake_persistent_index->erase(pks.size(), vkeys,
                                                          reinterpret_cast<IndexValue*>(old_values.data()), rowset_id));

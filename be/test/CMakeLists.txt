@@ -314,6 +314,7 @@ set(EXEC_FILES
         ./storage/lake/lake_primary_key_consistency_test.cpp
         ./storage/lake/spill_mem_table_sink_test.cpp
         ./storage/lake/transactions_test.cpp
+        ./storage/lake/pk_tablet_sst_writer_test.cpp
         ./storage/load_spill_block_manager_test.cpp
         ./storage/rowset_update_state_test.cpp
         ./storage/rowset_column_update_state_test.cpp
