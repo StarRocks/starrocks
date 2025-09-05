@@ -10,6 +10,32 @@ After upgrading StarRocks to v3.5, DO NOT downgrade it directly to v3.4.0 ～ v3
 
 :::
 
+## 3.5.5
+
+Release date: September 5, 2025
+
+### Improvements
+
+- Added a new system variable `enable_drop_table_check_mv_dependency` (default: `false`). When set to `true`, if the object to be dropped is referenced by a downstream materialized view, the system prevents the execution of `DROP TABLE` / `DROP VIEW` / `DROP MATERIALIZED VIEW`. The error message lists the dependent materialized views and suggests checking the `sys.object_dependencies` view for details. [#61584](https://github.com/StarRocks/starrocks/pull/61584)
+- Logs now include the Linux distribution and CPU architecture of the build, to facilitate issue reproduction and troubleshooting. Log format: `... build <hash> distro <id> arch <arch>`. [#62017](https://github.com/StarRocks/starrocks/pull/62017)
+- Persisted per-Tablet index and incremental column group file sizes are now cached, replacing on-demand directory scans. This accelerates Tablet status reporting in BE and reduces latency under high I/O scenarios. [#61901](https://github.com/StarRocks/starrocks/pull/61901)
+- Downgraded several high-frequency INFO logs in FE and BE to VLOG, and aggregated task submission logs, significantly reducing redundant storage-related logs and log volume under heavy load. [#62121](https://github.com/StarRocks/starrocks/pull/62121)
+- Improved query performance for External Catalog metadata through `information_schema` by pushing table filters before calling `getTable`, avoiding per-table RPCs. [#62404](https://github.com/StarRocks/starrocks/pull/62404)
+
+### Bug Fixes
+
+The following issues have been fixed:
+
+- NullPointerException when fetching partition-level column statistics during the Plan stage due to missing data. [#61935](https://github.com/StarRocks/starrocks/pull/61935)
+- Fixed Parquet write issues with non-empty NULL arrays, and corrected `SPLIT(NULL, …)` behavior to consistently return NULL, preventing data corruption and runtime errors. [#61999](https://github.com/StarRocks/starrocks/pull/61999)
+- Failure when creating materialized views using `CASE WHEN` expressions due to incompatible VARCHAR type returns (fixed by ensuring consistency before and after refresh, and introducing a new FE configuration `transform_type_prefer_string_for_varchar` to prefer STRING and avoid length mismatch). [#61996](https://github.com/StarRocks/starrocks/pull/61996)
+- Statistics for nested CTEs could not be computed outside of memo when `enable_rbo_table_prune` was `false`. [#62070](https://github.com/StarRocks/starrocks/pull/62070)
+- In Audit Logs, inaccurate Scan Rows results for INSERT INTO SELECT statements. [#61381](https://github.com/StarRocks/starrocks/pull/61381)
+- ExceptionInInitializerError/NullPointerException during initialization caused FE startup failure when Query Queue v2 was enabled. [#62161](https://github.com/StarRocks/starrocks/pull/62161)
+- BE crash when `LakePersistentIndex` initialization failed and `_memtable` cleanup was triggered. [#62279](https://github.com/StarRocks/starrocks/pull/62279)
+- Permission issues during materialized view refresh due to creator roles not being activated (fixed by adding FE configuration `mv_use_creator_based_authorization`. When set to `false`, materialized views are refreshed as root, for compatibility with LDAP-authenticated clusters). [#62396](https://github.com/StarRocks/starrocks/pull/62396)
+- Materialized view refresh failures caused by case-sensitive List partition table names (fixed by enforcing case-insensitive uniqueness checks on partition names, aligning with OLAP table semantics). [#62389](https://github.com/StarRocks/starrocks/pull/62389)
+
 ## 3.5.4
 
 Release Date: August 22, 2025
