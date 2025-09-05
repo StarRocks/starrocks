@@ -36,12 +36,10 @@
 
 #include <gtest/gtest.h>
 
-#include "cache/datacache.h"
 #include "cache/lrucache_engine.h"
 #include "cache/object_cache/page_cache.h"
 #include "common/config.h"
 #include "testutil/assert.h"
-#include "util/logging.h"
 
 namespace starrocks {
 
@@ -52,7 +50,7 @@ public:
 
 protected:
     void SetUp() override {
-        CacheOptions opts{.mem_space_size = 10 * 1024 * 1024};
+        MemCacheOptions opts{.mem_space_size = 10 * 1024 * 1024};
         _lru_cache = std::make_shared<LRUCacheEngine>();
         ASSERT_OK(_lru_cache->init(opts));
 
