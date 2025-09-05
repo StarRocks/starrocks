@@ -89,6 +89,7 @@ import org.apache.logging.log4j.Logger;
 
 import java.lang.management.ManagementFactory;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -981,8 +982,13 @@ public final class MetricRepo {
         visitor.visitJvm(jvmStats);
 
         // starrocks metrics
-        for (Metric metric : STARROCKS_METRIC_REGISTER.getMetrics()) {
-            visitor.visit(metric);
+        List<Metric> metrics = STARROCKS_METRIC_REGISTER.getMetrics();
+        // group metrics by name so that the same metric name will be visited together
+        Map<String, List<Metric>> groupedMetrics = metrics.stream().collect(Collectors.groupingBy(Metric::getName));
+        for (Map.Entry<String, List<Metric>> entry : groupedMetrics.entrySet()) {
+            for (Metric metric : entry.getValue()) {
+                visitor.visit(metric);
+            }
         }
 
         // database metrics
