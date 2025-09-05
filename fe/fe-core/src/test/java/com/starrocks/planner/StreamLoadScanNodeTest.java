@@ -46,11 +46,17 @@ import com.starrocks.catalog.Table.TableType;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.StarRocksException;
+import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.load.Load;
+import com.starrocks.load.routineload.KafkaRoutineLoadJob;
 import com.starrocks.load.streamload.StreamLoadInfo;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.SessionVariable;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.analyzer.CreateRoutineLoadAnalyzer;
+import com.starrocks.sql.ast.CreateRoutineLoadStmt;
 import com.starrocks.sql.ast.ImportColumnDesc;
+import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.expression.FunctionCallExpr;
 import com.starrocks.sql.ast.expression.FunctionName;
 import com.starrocks.sql.parser.AstBuilder;
@@ -181,6 +187,31 @@ public class StreamLoadScanNodeTest {
         StreamLoadScanNode scanNode =
                 new StreamLoadScanNode(streamLoadInfo.getId(), new PlanNodeId(1), dstDesc, dstTable, streamLoadInfo);
         return scanNode;
+    }
+
+    private StreamLoadScanNode getStreamLoadScanNode(TupleDescriptor dstDesc) throws StarRocksException {
+        SessionVariable sessionVariable = new SessionVariable();
+        ConnectContext ctx = new ConnectContext();
+        ctx.setSessionVariable(sessionVariable);
+        ConnectContext.set(ctx);
+        String sql = "CREATE ROUTINE LOAD db.job ON tbl " +
+                "COLUMNS TERMINATED BY ';', " +
+                "ROWS TERMINATED BY '\n', " +
+                "COLUMNS(`k1`, `k2`, `v1`, `v2`=1), " +
+                "PRECEDING FILTER k1 = 1 " +
+                "PROPERTIES (\"desired_concurrent_number\"=\"3\") " +
+                "FROM KAFKA\n"
+                + "(\n"
+                + "\"kafka_broker_list\" = \"kafkahost1:9092,kafkahost2:9092\",\n"
+                + "\"kafka_topic\" = \"topictest\"\n"
+                + ");";
+        List<StatementBase> stmts = SqlParser.parse(sql, 32);
+        CreateRoutineLoadStmt createRoutineLoadStmt = (CreateRoutineLoadStmt)stmts.get(0);
+        CreateRoutineLoadAnalyzer.analyze(createRoutineLoadStmt, ctx);
+        KafkaRoutineLoadJob routineLoadJob = new KafkaRoutineLoadJob();
+        Deencapsulation.invoke(routineLoadJob, "setOptional", createRoutineLoadStmt);
+        StreamLoadInfo streamLoadInfo = StreamLoadInfo.fromRoutineLoadJob(routineLoadJob);
+        return new StreamLoadScanNode(streamLoadInfo.getId(), new PlanNodeId(1), dstDesc, dstTable, streamLoadInfo);
     }
 
     @Test
@@ -580,6 +611,49 @@ public class StreamLoadScanNodeTest {
             TPlanNode planNode = new TPlanNode();
             scanNode.toThrift(planNode);
         });
+    }
+
+    @Test
+    public void testPrecedingFilter() throws StarRocksException {
+        DescriptorTable descTbl = new DescriptorTable();
+        TupleDescriptor dstDesc = descTbl.createTupleDescriptor("DstTableDesc");
+
+        List<Column> columns = getBaseSchema();
+        for (Column column : columns) {
+            SlotDescriptor slot = descTbl.addSlotDescriptor(dstDesc);
+            slot.setColumn(column);
+            slot.setIsMaterialized(true);
+            if (column.isAllowNull()) {
+                slot.setIsNullable(true);
+            } else {
+                slot.setIsNullable(false);
+            }
+        }
+
+        new Expectations() {
+            {
+                dstTable.getColumn("k1");
+                result = columns.stream().filter(c -> c.getName().equals("k1")).findFirst().get();
+                minTimes = 0;
+
+                dstTable.getColumn("k2");
+                result = columns.stream().filter(c -> c.getName().equals("k2")).findFirst().get();
+                minTimes = 0;
+
+                dstTable.getColumn("v1");
+                result = columns.stream().filter(c -> c.getName().equals("v1")).findFirst().get();
+                minTimes = 0;
+
+                dstTable.getColumn("v2");
+                result = columns.stream().filter(c -> c.getName().equals("v2")).findFirst().get();
+                minTimes = 0;
+            }
+        };
+
+        StreamLoadScanNode scanNode = getStreamLoadScanNode(dstDesc);
+        scanNode.init(descTbl);
+
+        Assertions.assertEquals(1, scanNode.precedingFilterConjuncts.size());
     }
 
     @Test

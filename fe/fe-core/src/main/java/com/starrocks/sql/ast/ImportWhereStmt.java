@@ -23,18 +23,24 @@ import java.util.ArrayList;
 
 public class ImportWhereStmt extends StatementBase {
     private final Expr expr;
+    private final boolean isPrecedingFilter;
 
-    public ImportWhereStmt(Expr expr) {
-        this(expr, NodePosition.ZERO);
+    public ImportWhereStmt(Expr expr, boolean isPrecedingFilter) {
+        this(expr, NodePosition.ZERO, isPrecedingFilter);
     }
 
-    public ImportWhereStmt(Expr expr, NodePosition pos) {
+    public ImportWhereStmt(Expr expr, NodePosition pos, boolean isPrecedingFilter) {
         super(pos);
         this.expr = expr;
+        this.isPrecedingFilter = isPrecedingFilter;
     }
 
     public Expr getExpr() {
         return expr;
+    }
+
+    public boolean isPrecedingFilter() {
+        return isPrecedingFilter;
     }
 
     public boolean isContainSubquery() {

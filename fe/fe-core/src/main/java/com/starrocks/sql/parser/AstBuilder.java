@@ -3406,7 +3406,7 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
             csvFormat = new CsvFormat((byte) 0, (byte) 0, 0, false);
         }
         return new DataDescription(dstTableName, partitionNames, files, colList, colSep, rowDelimiter,
-                format, colFromPath, context.NEGATIVE() != null, colMappingList, whereExpr,
+                format, colFromPath, context.NEGATIVE() != null, colMappingList, whereExpr, null,
                 csvFormat, createPos(context));
     }
 
@@ -9550,9 +9550,14 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
                 loadPropertyList.add(importColumnsStmt);
             }
 
-            if (loadPropertiesContext.expression() != null) {
+            if (loadPropertiesContext.PRECEDING_FILTER() != null && loadPropertiesContext.expression() != null) {
+                Expr precedingFilter = (Expr) visit(loadPropertiesContext.expression());
+                loadPropertyList.add(new ImportWhereStmt(precedingFilter, precedingFilter.getPos(), true));
+            }
+
+            if (loadPropertiesContext.WHERE() != null && loadPropertiesContext.expression() != null) {
                 Expr where = (Expr) visit(loadPropertiesContext.expression());
-                loadPropertyList.add(new ImportWhereStmt(where, where.getPos()));
+                loadPropertyList.add(new ImportWhereStmt(where, where.getPos(), false));
             }
 
             if (loadPropertiesContext.partitionNames() != null) {

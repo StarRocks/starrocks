@@ -277,7 +277,7 @@ public class KafkaRoutineLoadJobTest {
     public void testFromCreateStmtWithErrorTable(@Mocked GlobalStateMgr globalStateMgr,
                                                  @Injectable Database database) throws LoadException {
         CreateRoutineLoadStmt createRoutineLoadStmt = initCreateRoutineLoadStmt();
-        RoutineLoadDesc routineLoadDesc = new RoutineLoadDesc(columnSeparator, null, null, null, partitionNames);
+        RoutineLoadDesc routineLoadDesc = new RoutineLoadDesc(columnSeparator, null, null, null, null, partitionNames);
         Deencapsulation.setField(createRoutineLoadStmt, "routineLoadDesc", routineLoadDesc);
 
         new Expectations() {
@@ -301,7 +301,7 @@ public class KafkaRoutineLoadJobTest {
                                    @Injectable Database database,
                                    @Injectable OlapTable table) throws StarRocksException {
         CreateRoutineLoadStmt createRoutineLoadStmt = initCreateRoutineLoadStmt();
-        RoutineLoadDesc routineLoadDesc = new RoutineLoadDesc(columnSeparator, null, null, null, partitionNames);
+        RoutineLoadDesc routineLoadDesc = new RoutineLoadDesc(columnSeparator, null, null, null, null, partitionNames);
         Deencapsulation.setField(createRoutineLoadStmt, "routineLoadDesc", routineLoadDesc);
         List<Pair<Integer, Long>> partitionIdToOffset = Lists.newArrayList();
         for (String s : kafkaPartitionString.split(",")) {
@@ -384,7 +384,7 @@ public class KafkaRoutineLoadJobTest {
         jobProperties.put("max_error_number", "10");
         createRoutineLoadStmt.checkJobProperties();
 
-        RoutineLoadDesc routineLoadDesc = new RoutineLoadDesc(columnSeparator, null, null, null, partitionNames);
+        RoutineLoadDesc routineLoadDesc = new RoutineLoadDesc(columnSeparator, null, null, null, null, partitionNames);
         Deencapsulation.setField(createRoutineLoadStmt, "routineLoadDesc", routineLoadDesc);
         List<Pair<Integer, Long>> partitionIdToOffset = Lists.newArrayList();
         for (String s : kafkaPartitionString.split(",")) {
@@ -458,7 +458,7 @@ public class KafkaRoutineLoadJobTest {
         jobProperties.put("timezone", "Asia/Shanghai");
         createRoutineLoadStmt.checkJobProperties();
 
-        RoutineLoadDesc routineLoadDesc = new RoutineLoadDesc(columnSeparator, null, null, null, partitionNames);
+        RoutineLoadDesc routineLoadDesc = new RoutineLoadDesc(columnSeparator, null, null, null, null, partitionNames);
         Deencapsulation.setField(createRoutineLoadStmt, "routineLoadDesc", routineLoadDesc);
         List<Pair<Integer, Long>> partitionIdToOffset = Lists.newArrayList();
         for (String s : kafkaPartitionString.split(",")) {
@@ -536,7 +536,7 @@ public class KafkaRoutineLoadJobTest {
                                                             @Injectable OlapTable table) throws StarRocksException {
         CreateRoutineLoadStmt createRoutineLoadStmt = initCreateRoutineLoadStmt();
         RoutineLoadDesc routineLoadDesc =
-                new RoutineLoadDesc(columnSeparator, null, null, null, partitionNames);
+                new RoutineLoadDesc(columnSeparator, null, null, null, null, partitionNames);
         Deencapsulation.setField(createRoutineLoadStmt, "routineLoadDesc", routineLoadDesc);
         List<Pair<Integer, Long>> partitionIdToOffset = Lists.newArrayList();
         for (String s : kafkaPartitionString.split(",")) {

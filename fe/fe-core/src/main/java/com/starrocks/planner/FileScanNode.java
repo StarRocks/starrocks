@@ -339,7 +339,8 @@ public class FileScanNode extends LoadScanNode {
         params.setFlexible_column_mapping(flexibleColumnMapping);
         params.setFile_scan_type(fileScanType);
         initColumns(context);
-        initWhereExpr(fileGroup.getWhereExpr());
+        initAndSetPrecedingFilter(fileGroup.getPrecedingFilterExpr(), context.tupleDescriptor);
+        initAndSetWhereExpr(fileGroup.getWhereExpr(), this.desc);
     }
 
     /**

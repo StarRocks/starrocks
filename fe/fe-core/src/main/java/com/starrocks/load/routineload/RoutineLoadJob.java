@@ -198,6 +198,7 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
     protected PartitionNames partitions; // optional
     protected List<ImportColumnDesc> columnDescs; // optional
     protected Expr whereExpr; // optional
+    protected Expr precedingFilterExpr; // optional
     protected ColumnSeparator columnSeparator; // optional
     protected RowDelimiter rowDelimiter; // optional
     @SerializedName("de")
@@ -461,6 +462,9 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
         if (routineLoadDesc.getWherePredicate() != null) {
             whereExpr = routineLoadDesc.getWherePredicate().getExpr();
         }
+        if (routineLoadDesc.getPrecedingFilter() != null) {
+            precedingFilterExpr = routineLoadDesc.getPrecedingFilter().getExpr();
+        }
         if (routineLoadDesc.getColumnSeparator() != null) {
             columnSeparator = routineLoadDesc.getColumnSeparator();
         }
@@ -608,6 +612,10 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
 
     public Expr getWhereExpr() {
         return whereExpr;
+    }
+
+    public Expr getPrecedingFilterExpr() {
+        return precedingFilterExpr;
     }
 
     public ColumnSeparator getColumnSeparator() {
@@ -1688,6 +1696,7 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
                 partitions == null ? STAR_STRING : Joiner.on(",").join(partitions.getPartitionNames()));
         jobProperties.put("columnToColumnExpr", columnDescs == null ? STAR_STRING : Joiner.on(",").join(columnDescs));
         jobProperties.put("whereExpr", whereExpr == null ? STAR_STRING : ExprToSql.toSql(whereExpr));
+        jobProperties.put("precedingFilterExpr", precedingFilterExpr == null ? STAR_STRING : ExprToSql.toSql(precedingFilterExpr));
         if (getFormat().equalsIgnoreCase("json")) {
             jobProperties.put("dataFormat", "json");
         } else {
@@ -1860,6 +1869,9 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
         }
         if (routineLoadDesc.getWherePredicate() != null) {
             originLoadDesc.setWherePredicate(routineLoadDesc.getWherePredicate());
+        }
+        if (routineLoadDesc.getPrecedingFilter() != null) {
+            originLoadDesc.setPrecedingFilter(routineLoadDesc.getPrecedingFilter());
         }
         if (routineLoadDesc.getPartitionNames() != null) {
             originLoadDesc.setPartitionNames(routineLoadDesc.getPartitionNames());

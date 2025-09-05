@@ -111,6 +111,8 @@ abstract public class PlanNode extends TreeNode<PlanNode> {
 
     protected List<Expr> conjuncts = Lists.newArrayList();
 
+    protected List<Expr> precedingFilterConjuncts = Lists.newArrayList();
+
     // Fragment that this PlanNode is executed in. Valid only after this PlanNode has been
     // assigned to a fragment. Set and maintained by enclosing PlanFragment.
     protected PlanFragment fragment_;
@@ -173,6 +175,7 @@ abstract public class PlanNode extends TreeNode<PlanNode> {
         this.tupleIds = Lists.newArrayList(node.tupleIds);
         this.nullableTupleIds = Sets.newHashSet(node.nullableTupleIds);
         this.conjuncts = ExprUtils.cloneList(node.conjuncts, null);
+        this.precedingFilterConjuncts = ExprUtils.cloneList(node.precedingFilterConjuncts, null);
         this.cardinality = -1;
         this.planNodeName = planNodeName;
     }
@@ -296,6 +299,13 @@ abstract public class PlanNode extends TreeNode<PlanNode> {
             return;
         }
         this.conjuncts.addAll(conjuncts);
+    }
+
+    public void addPreFilterConjuncts(List<Expr> conjuncts) {
+        if (conjuncts == null) {
+            return;
+        }
+        this.precedingFilterConjuncts.addAll(conjuncts);
     }
 
     public boolean isReplicated() {

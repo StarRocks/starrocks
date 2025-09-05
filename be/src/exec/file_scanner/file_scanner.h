@@ -109,6 +109,7 @@ protected:
 
     // sources
     std::vector<SlotDescriptor*> _src_slot_descriptors;
+    std::vector<ExprContext*> _preceding_filter_ctxs;
 
     // destination
     const TupleDescriptor* _dest_tuple_desc;

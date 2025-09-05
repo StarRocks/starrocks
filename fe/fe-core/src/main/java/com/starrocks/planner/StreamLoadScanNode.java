@@ -249,7 +249,8 @@ public class StreamLoadScanNode extends LoadScanNode {
             params.setConfluent_schema_registry_url(streamLoadInfo.getConfluentSchemaRegistryUrl());
         }
         initColumns();
-        initWhereExpr(streamLoadInfo.getWhereExpr());
+        initAndSetPrecedingFilter(streamLoadInfo.getPrecedingFilterExpr(), paramCreateContext.tupleDescriptor);
+        initAndSetWhereExpr(streamLoadInfo.getWhereExpr(), this.desc);
     }
 
     private void initColumns() throws StarRocksException {
@@ -362,6 +363,11 @@ public class StreamLoadScanNode extends LoadScanNode {
 
             paramCreateContext.params.putToExpr_of_dest_slot(dstSlotDesc.getId().asInt(), ExprToThriftVisitor.treeToThrift(expr));
         }
+
+        for (Expr conjunct : precedingFilterConjuncts) {
+            paramCreateContext.params.addToPreceding_filter_exprs(ExprToThriftVisitor.treeToThrift(conjunct));
+        }
+
         paramCreateContext.params.setDest_sid_to_src_sid_without_trans(destSidToSrcSidWithoutTrans);
         paramCreateContext.params.setSrc_tuple_id(paramCreateContext.tupleDescriptor.getId().asInt());
         paramCreateContext.params.setDest_tuple_id(desc.getId().asInt());

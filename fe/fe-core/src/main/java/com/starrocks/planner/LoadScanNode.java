@@ -60,13 +60,27 @@ public abstract class LoadScanNode extends ScanNode {
         super(id, desc, planNodeName);
     }
 
-    protected void initWhereExpr(Expr whereExpr) throws StarRocksException {
+    protected void initAndSetWhereExpr(Expr whereExpr, TupleDescriptor tupleDesc) throws StarRocksException {
+        Expr newWhereExr = initWhereExpr(whereExpr, tupleDesc);
+        if (newWhereExr != null) {
+            addConjuncts(AnalyzerUtils.extractConjuncts(newWhereExr));
+        }
+    }
+
+    protected void initAndSetPrecedingFilter(Expr whereExpr, TupleDescriptor tupleDesc) throws StarRocksException {
+        Expr newWhereExr = initWhereExpr(whereExpr, tupleDesc);
+        if (newWhereExr != null) {
+            addPreFilterConjuncts(AnalyzerUtils.extractConjuncts(newWhereExr));
+        }
+    }
+
+    protected Expr initWhereExpr(Expr whereExpr, TupleDescriptor tupleDesc) throws StarRocksException {
         if (whereExpr == null) {
-            return;
+            return null;
         }
 
         Map<String, SlotDescriptor> dstDescMap = Maps.newTreeMap(String.CASE_INSENSITIVE_ORDER);
-        for (SlotDescriptor slotDescriptor : desc.getSlots()) {
+        for (SlotDescriptor slotDescriptor : tupleDesc.getSlots()) {
             dstDescMap.put(slotDescriptor.getColumn().getName(), slotDescriptor);
         }
 
@@ -77,21 +91,25 @@ public abstract class LoadScanNode extends ScanNode {
         for (SlotRef slot : slots) {
             SlotDescriptor slotDesc = dstDescMap.get(slot.getColumnName());
             if (slotDesc == null) {
-                throw new StarRocksException("unknown column in where statement. "
-                        + "the column '" + slot.getColumnName() + "' in where clause must be in the target table.");
+                throw new StarRocksException("unknown column reference in where statement, reference="
+                        + slot.getColumnName());
             }
+
+            // should ensure all filter column can be found in BE/CN.
+            slotDesc.setIsMaterialized(true);
+
             smap.getLhs().add(slot);
             SlotRef slotRef = new SlotRef(slotDesc);
             slotRef.setColumnName(slot.getColumnName());
             smap.getRhs().add(slotRef);
         }
-        whereExpr = whereExpr.clone(smap);
-        whereExpr = ExprUtils.analyzeAndCastFold(whereExpr);
+        Expr newWhereExpr = whereExpr.clone(smap);
+        newWhereExpr = ExprUtils.analyzeAndCastFold(newWhereExpr);
 
-        if (!whereExpr.getType().isBoolean()) {
+        if (!newWhereExpr.getType().isBoolean()) {
             throw new StarRocksException("where statement is not a valid statement return bool");
         }
-        addConjuncts(AnalyzerUtils.extractConjuncts(whereExpr));
+        return newWhereExpr;
     }
 
     protected void checkBitmapCompatibility(SlotDescriptor slotDesc, Expr expr)
