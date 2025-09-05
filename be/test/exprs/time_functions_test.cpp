@@ -4729,7 +4729,6 @@ TEST_F(TimeFunctionsTest, hourFromUnixTime) {
 
 // Tests for sec_to_time function
 TEST_F(TimeFunctionsTest, secToTimeTest) {
-
     {
         auto int_value = ColumnHelper::create_column(TypeDescriptor(TYPE_BIGINT), false);
 
@@ -4789,7 +4788,7 @@ TEST_F(TimeFunctionsTest, secToTimeTest) {
     }
 
     {
-        // Create int column
+        // Create null column
         auto null_value = ColumnHelper::create_column(TypeDescriptor(TYPE_BIGINT), true);
 
         (void)null_value->append_nulls(1);
@@ -4805,4 +4804,3 @@ TEST_F(TimeFunctionsTest, secToTimeTest) {
 }
 
 } // namespace starrocks
-
