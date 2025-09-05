@@ -33,6 +33,7 @@
       "d_year":"[-Infinity, Infinity, 0.0, 1.0, 1.0]"
     }
   },
+  "histogram_statistics": {},
   "be_number":3,
   "exception":[
 

@@ -172,6 +172,18 @@ public class QueryDumpSerializer implements JsonSerializer<QueryDumpInfo> {
             tableColumnStatistics.add(entry.getKey(), columnStatistics);
         }
         dumpJson.add("column_statistics", tableColumnStatistics);
+
+        // histogram statistics
+        JsonObject tableColumnHistogramStatistics = new JsonObject();
+        for (Map.Entry<String, Map<String, ColumnStatistic>> entry : dumpInfo.getTableHistogramStatisticsMap().entrySet()) {
+            JsonObject columnHistogramStatistics = new JsonObject();
+            for (Map.Entry<String, ColumnStatistic> columnEntry : entry.getValue().entrySet()) {
+                columnHistogramStatistics.addProperty(columnEntry.getKey(), columnEntry.getValue().toString());
+            }
+            tableColumnHistogramStatistics.add(entry.getKey(), columnHistogramStatistics);
+        }
+        dumpJson.add("histogram_statistics", tableColumnHistogramStatistics);
+
         if (StringUtils.isNotEmpty(dumpInfo.getExplainInfo())) {
             dumpJson.addProperty("explain_info", dumpInfo.getExplainInfo());
         }
@@ -278,6 +290,24 @@ public class QueryDumpSerializer implements JsonSerializer<QueryDumpInfo> {
             tableColumnStatistics.add(tableName, columnStatistics);
         }
         dumpJson.add("column_statistics", tableColumnStatistics);
+
+        // histogram statistics
+        JsonObject tableColumnHistogramStatistics = new JsonObject();
+        for (Map.Entry<String, Map<String, ColumnStatistic>> entry : dumpInfo.getTableHistogramStatisticsMap().entrySet()) {
+            JsonObject columnHistogramStatistics = new JsonObject();
+            for (Map.Entry<String, ColumnStatistic> columnEntry : entry.getValue().entrySet()) {
+                columnHistogramStatistics.addProperty(
+                        DesensitizedSQLBuilder.desensitizeColName(columnEntry.getKey(), dict),
+                        columnEntry.getValue().toString()
+                );
+            }
+            String[] splits = entry.getKey().split("\\.");
+            String tableName = DesensitizedSQLBuilder.desensitizeDbName(splits[0], dict) + "."
+                    + DesensitizedSQLBuilder.desensitizeTblName(splits[1], dict);
+            tableColumnHistogramStatistics.add(tableName, columnHistogramStatistics);
+        }
+        dumpJson.add("histogram_statistics", tableColumnHistogramStatistics);
+
         String explainInfo = desensitizeExplainInfo(dumpInfo.getExplainInfo(), dict);
         if (StringUtils.isNotEmpty(explainInfo)) {
             dumpJson.addProperty("explain_info", desensitizeExplainInfo(dumpInfo.getExplainInfo(), dict));

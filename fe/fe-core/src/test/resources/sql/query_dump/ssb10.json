@@ -42,6 +42,7 @@
       "c_city":"[-Infinity, Infinity, 0.0, 10.0, 250.0]"
     }
   },
+  "histogram_statistics": {},
   "be_number":3,
   "exception":[
 

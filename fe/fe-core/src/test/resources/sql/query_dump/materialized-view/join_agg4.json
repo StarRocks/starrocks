@@ -103,6 +103,7 @@
       "d_year":"[-Infinity, Infinity, 0.0, 1.0, 1.0] UNKNOWN"
     }
   },
+  "histogram_statistics": {},
   "be_number":1,
   "be_core_stat":{
     "numOfHardwareCoresPerBe":"{\"11001\":104}",

@@ -43,6 +43,9 @@ public interface DumpInfo {
     default void addTableStatistics(Table table, String column, ColumnStatistic columnStatistic) {
     }
 
+    default void addTableHistogramStatistics(Table table, String column, ColumnStatistic columnStatistic) {
+    }
+
     default void addPartitionRowCount(Table table, String partition, long rowCount) {
     }
 

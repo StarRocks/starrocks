@@ -40,6 +40,7 @@
       "subs_billing_cycle": "[-Infinity, Infinity, 0.0, 1.0, 1.0] UNKNOWN"
     }
   },
+  "histogram_statistics": {},
   "be_number": 3,
   "be_core_stat": {
     "numOfHardwareCoresPerBe": "{\"10004\":32,\"10058\":32,\"10059\":32}",

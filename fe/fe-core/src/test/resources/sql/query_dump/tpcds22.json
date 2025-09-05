@@ -35,6 +35,7 @@
       "d_date_sk":"[2415022.0, 2488070.0, 0.0, 4.0, 72542.0]"
     }
   },
+  "histogram_statistics": {},
   "be_number":5,
   "exception":[
 

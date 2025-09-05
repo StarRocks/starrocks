@@ -44,6 +44,7 @@
       "ps_supplycost":"[-Infinity, Infinity, 0.0, 1.0, 1.0] UNKNOWN"
     }
   },
+  "histogram_statistics": {},
   "be_number":0,
   "be_core_stat":{
     "numOfHardwareCoresPerBe":"{\"10004\":104}",

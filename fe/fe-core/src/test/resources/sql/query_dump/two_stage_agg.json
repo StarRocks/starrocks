@@ -15,6 +15,7 @@
       "lo_shipmode":"[-Infinity, Infinity, 0.0, 4.786802333333333, 7.0] ESTIMATE"
     }
   },
+  "histogram_statistics": {},
   "be_number":3,
   "exception":[
 
