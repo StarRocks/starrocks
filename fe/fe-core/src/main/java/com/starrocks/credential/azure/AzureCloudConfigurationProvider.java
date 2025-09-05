@@ -30,6 +30,7 @@ import static com.starrocks.connector.share.credential.CloudConfigurationConstan
 import static com.starrocks.connector.share.credential.CloudConfigurationConstants.AZURE_ADLS2_OAUTH2_CLIENT_ID;
 import static com.starrocks.connector.share.credential.CloudConfigurationConstants.AZURE_ADLS2_OAUTH2_CLIENT_SECRET;
 import static com.starrocks.connector.share.credential.CloudConfigurationConstants.AZURE_ADLS2_OAUTH2_TENANT_ID;
+import static com.starrocks.connector.share.credential.CloudConfigurationConstants.AZURE_ADLS2_OAUTH2_TOKEN_FILE;
 import static com.starrocks.connector.share.credential.CloudConfigurationConstants.AZURE_ADLS2_OAUTH2_USE_MANAGED_IDENTITY;
 import static com.starrocks.connector.share.credential.CloudConfigurationConstants.AZURE_ADLS2_SAS_TOKEN;
 import static com.starrocks.connector.share.credential.CloudConfigurationConstants.AZURE_ADLS2_SHARED_KEY;
@@ -99,7 +100,8 @@ public class AzureCloudConfigurationProvider implements CloudConfigurationProvid
                 properties.getOrDefault(AZURE_ADLS2_SHARED_KEY, ""),
                 properties.getOrDefault(AZURE_ADLS2_SAS_TOKEN, ""),
                 properties.getOrDefault(AZURE_ADLS2_OAUTH2_CLIENT_SECRET, ""),
-                properties.getOrDefault(AZURE_ADLS2_OAUTH2_CLIENT_ENDPOINT, "")
+                properties.getOrDefault(AZURE_ADLS2_OAUTH2_CLIENT_ENDPOINT, ""),
+                properties.getOrDefault(AZURE_ADLS2_OAUTH2_TOKEN_FILE, "")
         );
         if (adls2.validate()) {
             return new AzureCloudConfiguration(adls2);
