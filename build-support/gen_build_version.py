@@ -86,11 +86,19 @@ def get_build_arch():
 
 def get_java_version():
     java_home = os.getenv("JAVA_HOME")
-    java_res = subprocess.Popen([java_home + "/bin/java", "-fullversion"], stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
-    out, err = java_res.communicate()
-
-    if java_res.returncode == 0:
-        return out.decode('utf-8').replace("\"", "\\\"").strip()
+    java_cmd = None
+    if java_home:
+        java_cmd = java_home + "/bin/java"
+    else:
+        # Fallback to system java on PATH
+        java_cmd = "java"
+    try:
+        java_res = subprocess.Popen([java_cmd, "-fullversion"], stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+        out, _ = java_res.communicate()
+        if java_res.returncode == 0:
+            return out.decode('utf-8').replace("\"", "\\\"").strip()
+    except Exception:
+        pass
     return "unknown jdk"
 
 def get_fingerprint(items):
