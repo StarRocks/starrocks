@@ -102,7 +102,7 @@ Status KafkaDataConsumer::init(StreamLoadContext* ctx) {
     // we will direct return instead of wait consume until timeout.
     // Another advantage of doing this is that for topics with little data,
     // there is no need to wait until the timeout and occupy a lot of consumer threads.
-    RETURN_IF_ERROR(set_conf("enable.partition.eof", "true"));
+    RETURN_IF_ERROR(set_conf("enable.partition.eof", config::routine_load_enable_partition_eof));
     RETURN_IF_ERROR(set_conf("enable.auto.offset.store", "false"));
     // TODO: set it larger than 0 after we set rd_kafka_conf_set_stats_cb()
     RETURN_IF_ERROR(set_conf("statistics.interval.ms", "0"));

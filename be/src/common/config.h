@@ -687,6 +687,9 @@ CONF_mInt32(txn_commit_rpc_timeout_ms, "60000");
 // If set to true, metric calculator will run
 CONF_Bool(enable_metric_calculator, "true");
 
+// Only true or false.
+CONF_mString(routine_load_enable_partition_eof, "true");
+
 // Max consumer num in one data consumer group, for routine load.
 CONF_mInt32(max_consumer_num_per_group, "3");
 
