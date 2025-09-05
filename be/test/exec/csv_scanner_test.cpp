@@ -792,6 +792,7 @@ TEST_P(CSVScannerTest, test_skip_header) {
 
     std::vector<TBrokerRangeDesc> ranges;
     TBrokerRangeDesc range;
+    range.__set_start_offset(0);
     range.__set_num_of_columns_from_file(2);
     range.__set_path("./be/test/exec/test_data/csv_scanner/csv_file15");
     ranges.push_back(range);
@@ -816,6 +817,45 @@ TEST_P(CSVScannerTest, test_skip_header) {
     EXPECT_EQ(6, chunk->get(2)[1].get_int32());
     EXPECT_EQ(8, chunk->get(3)[1].get_int32());
     EXPECT_EQ(0, chunk->get(4)[1].get_int32());
+}
+
+TEST_P(CSVScannerTest, test_skip_header_start_offset_not_0) {
+    std::vector<TypeDescriptor> types{TypeDescriptor(TYPE_INT), TypeDescriptor(TYPE_INT)};
+
+    std::vector<TBrokerRangeDesc> ranges;
+    TBrokerRangeDesc range;
+    // the first line is not included
+    range.__set_start_offset(1);
+    range.__set_num_of_columns_from_file(2);
+    range.__set_path("./be/test/exec/test_data/csv_scanner/csv_file15");
+    ranges.push_back(range);
+
+    auto scanner = create_csv_scanner(types, ranges, "\n", "|", 4);
+    Status st = scanner->open();
+    ASSERT_TRUE(st.ok()) << st.to_string();
+
+    scanner->use_v2(_use_v2);
+
+    ChunkPtr chunk = scanner->get_next().value();
+    EXPECT_EQ(8, chunk->num_rows());
+
+    EXPECT_EQ(33, chunk->get(0)[0].get_int32());
+    EXPECT_EQ(55, chunk->get(1)[0].get_int32());
+    EXPECT_EQ(77, chunk->get(2)[0].get_int32());
+    EXPECT_EQ(1, chunk->get(3)[0].get_int32());
+    EXPECT_EQ(3, chunk->get(4)[0].get_int32());
+    EXPECT_EQ(5, chunk->get(5)[0].get_int32());
+    EXPECT_EQ(7, chunk->get(6)[0].get_int32());
+    EXPECT_EQ(9, chunk->get(7)[0].get_int32());
+
+    EXPECT_EQ(44, chunk->get(0)[1].get_int32());
+    EXPECT_EQ(66, chunk->get(1)[1].get_int32());
+    EXPECT_EQ(88, chunk->get(2)[1].get_int32());
+    EXPECT_EQ(2, chunk->get(3)[1].get_int32());
+    EXPECT_EQ(4, chunk->get(4)[1].get_int32());
+    EXPECT_EQ(6, chunk->get(5)[1].get_int32());
+    EXPECT_EQ(8, chunk->get(6)[1].get_int32());
+    EXPECT_EQ(0, chunk->get(7)[1].get_int32());
 }
 
 TEST_P(CSVScannerTrimSpaceTest, test_trim_space) {
