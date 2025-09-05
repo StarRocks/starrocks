@@ -26,6 +26,7 @@ import io.netty.handler.codec.http.HttpRequest;
 import io.netty.handler.codec.http.HttpVersion;
 import mockit.Mock;
 import mockit.MockUp;
+import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -110,8 +111,7 @@ public class RestBaseActionTest {
 
         List<Pair<String, Integer>> fronts = restBaseAction.getOtherAliveFe();
 
-        assert fronts.size() == 1;
-
+        Assertions.assertEquals(fronts.size(), 1);
     }
 
 }

@@ -126,6 +126,6 @@ public class QueryDetailV2Test extends StarRocksHttpTestCase {
         String respStr = Objects.requireNonNull(response.body()).string();
         Gson gson = new Gson();
         QueryDetail[] details = gson.fromJson(respStr, QueryDetail[].class);
-        Assertions.assertTrue(details.length == 3);
+        Assertions.assertEquals(3, details.length);
     }
 }

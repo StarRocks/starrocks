@@ -350,10 +350,13 @@ public class RestBaseAction extends BaseAction {
     }
 
     public static Pair<String, Integer> getCurrentFe() {
-
-        return GlobalStateMgr.getCurrentState()
-                .getNodeMgr()
-                .getSelfNode();
+        if (GlobalStateMgr.getCurrentState() == null) {
+            return null;
+        } else {
+            return GlobalStateMgr.getCurrentState()
+                    .getNodeMgr()
+                    .getSelfNode();
+        }
     }
 
     public static List<Pair<String, Integer>> getOtherAliveFe() {

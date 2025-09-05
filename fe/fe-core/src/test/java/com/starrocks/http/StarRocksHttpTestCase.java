@@ -559,17 +559,14 @@ public abstract class StarRocksHttpTestCase {
                 result = frontend;
 
                 nodeMgr.getAllFrontends();
-                minTimes = 0;
+                minTimes = 1;
                 result = Lists.newArrayList(frontend);
 
                 nodeMgr.getSelfNode();
-                minTimes = 0;
+                minTimes = 1;
                 result = new Pair<>(frontend.getHost(), HTTP_PORT);
             }
         };
-
-
-
 
         // init default warehouse
         globalStateMgr.getWarehouseMgr().initDefaultWarehouse();

@@ -55,14 +55,17 @@ public class HttpUtils {
 
     public static final Logger LOG = LoggerFactory.getLogger(HttpUtils.class);
 
-    private static CloseableHttpClient httpClient;
+    private static volatile CloseableHttpClient httpClient;
 
     private static PoolingHttpClientConnectionManager clientConnectionManager;
 
-
     public static CloseableHttpClient getInstance() {
         if (httpClient == null) {
-            httpClient = getHttpClient();
+            synchronized (HttpUtils.class) {
+                if (httpClient == null) {
+                    httpClient = getHttpClient();
+                }
+            }
         }
         return httpClient;
     }
@@ -115,13 +118,13 @@ public class HttpUtils {
 
     }
 
-    public static String get(String uri, Map<String, String> header) {
+    public static String get(String uri, Map<String, String> header) throws Exception {
         HttpGet httpGet = new HttpGet(uri);
         addHeaders(httpGet, header);
         return executeRequest(uri, httpGet, null);
     }
 
-    public static String post(String uri, AbstractHttpEntity entity, Map<String, String> header) {
+    public static String post(String uri, AbstractHttpEntity entity, Map<String, String> header) throws Exception {
         HttpPost httpPost = new HttpPost(uri);
         httpPost.setEntity(entity);
         addHeaders(httpPost, header);
@@ -134,11 +137,11 @@ public class HttpUtils {
         }
     }
 
-    private static String executeRequest(String uri, HttpUriRequest request, AbstractHttpEntity entity) {
+    private static String executeRequest(String uri, HttpUriRequest request, AbstractHttpEntity entity) throws Exception {
         CloseableHttpClient httpClient = getInstance();
         if (Objects.isNull(httpClient)) {
             LOG.error("HttpClient is null for uri: {}", uri);
-            return null;
+            throw new RuntimeException("HttpClient is null");
         }
         try (CloseableHttpResponse response = httpClient.execute(request)) {
             int code = response.getStatusLine().getStatusCode();
@@ -148,14 +151,15 @@ public class HttpUtils {
             } else {
                 if (entity != null) {
                     LOG.error("request url:{}, error code:{}, body:{}, result:{}", uri, code, entity, result);
+                    throw new RuntimeException("Http request failed, url: " + uri + ", code: " + code + ", body: " + entity + ", response: " + result);
                 } else {
                     LOG.error("request url:{}, error code:{}, result:{}", uri, code, result);
+                    throw new RuntimeException("Http request failed, url: " + uri + ", code: " + code + ", response: " + result);
                 }
-                return null;
             }
         } catch (IOException e) {
             LOG.error("http request exception, uri: {}", uri, e);
-            return null;
+            throw new RuntimeException("Http request exception, uri: " + uri, e);
         }
     }
 
