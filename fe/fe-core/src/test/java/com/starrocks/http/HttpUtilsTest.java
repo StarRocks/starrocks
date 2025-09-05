@@ -49,7 +49,7 @@ public class HttpUtilsTest extends StarRocksHttpTestCase {
         StringEntity entity = new StringEntity(
                 "{ \"sql\" :  \" select k1 as alias_1,k2 from " + DB_NAME + "." + TABLE_NAME + " \" }",
                 StandardCharsets.UTF_8);
-        Assertions.assertThrows(RuntimeException.class, () -> {
+        Assertions.assertThrows(HttpRequestException.class, () -> {
             HttpUtils.post(url, entity, header);
         });
     }

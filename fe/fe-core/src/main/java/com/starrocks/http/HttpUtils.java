@@ -137,11 +137,11 @@ public class HttpUtils {
         }
     }
 
-    private static String executeRequest(String uri, HttpUriRequest request, AbstractHttpEntity entity) throws Exception {
+    private static String executeRequest(String uri, HttpUriRequest request, AbstractHttpEntity entity) throws HttpRequestException {
         CloseableHttpClient httpClient = getInstance();
         if (Objects.isNull(httpClient)) {
             LOG.error("HttpClient is null for uri: {}", uri);
-            throw new RuntimeException("HttpClient is null");
+            throw new HttpRequestException("HttpClient is null for uri: " + uri);
         }
         try (CloseableHttpResponse response = httpClient.execute(request)) {
             int code = response.getStatusLine().getStatusCode();
@@ -150,16 +150,21 @@ public class HttpUtils {
                 return result;
             } else {
                 if (entity != null) {
-                    LOG.error("request url:{}, error code:{}, body:{}, result:{}", uri, code, entity, result);
-                    throw new RuntimeException("Http request failed, url: " + uri + ", code: " + code + ", body: " + entity + ", response: " + result);
+                    String msg = String.format("Http request failed, url=%s, code=%d, body=%s, response=%s",
+                            uri, code, entity, result);
+                    LOG.error(msg);
+                    throw new HttpRequestException(msg);
                 } else {
-                    LOG.error("request url:{}, error code:{}, result:{}", uri, code, result);
-                    throw new RuntimeException("Http request failed, url: " + uri + ", code: " + code + ", response: " + result);
+                    String msg = String.format("Http request failed, url=%s, code=%d, response=%s",
+                            uri, code, result);
+                    LOG.error(msg);
+                    throw new HttpRequestException(msg);
                 }
             }
         } catch (IOException e) {
-            LOG.error("http request exception, uri: {}", uri, e);
-            throw new RuntimeException("Http request exception, uri: " + uri, e);
+            String msg = "Http request exception, uri=" + uri;
+            LOG.error(msg, e);
+            throw new HttpRequestException(msg, e);
         }
     }
 
