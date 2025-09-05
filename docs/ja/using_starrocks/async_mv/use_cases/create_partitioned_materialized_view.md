@@ -34,7 +34,7 @@ StarRocks の非同期マテリアライズドビューは、さまざまなパ�
 現在、StarRocks は次のデータソースからのテーブルに対してパーティション化されたマテリアライズドビューの構築をサポートしています。
 
 - **デフォルトカタログ内の StarRocks OLAP テーブル**
-  - サポートされているパーティション戦略: レンジパーティション化
+  - サポートされているパーティション戦略: レンジパーティション化、リストパーティション化、および式パーティション化
   - パーティションキーにサポートされているデータ型: INT, DATE, DATETIME, STRING
   - サポートされているテーブルタイプ: Primary Key, Duplicate Key, Aggregate Key, Unique Key
   - 共有なしクラスタと共有データクラスタの両方でサポート
@@ -45,11 +45,9 @@ StarRocks の非同期マテリアライズドビューは、さまざまなパ�
 :::note
 
 - 非パーティション化されたベース（ファクト）テーブルに基づいてパーティション化されたマテリアライズドビューを作成することはできません。
-- StarRocks OLAP テーブルの場合:
-  - 現在、リストパーティション化と式に基づくパーティション化はサポートされていません。
-  - ベーステーブルの隣接する2つのパーティションは連続した範囲を持つ必要があります。
+- StarRocks OLAP テーブルの場合、ベーステーブルの隣接する2つのパーティションは連続した範囲を持つ必要があります。
 - 外部カタログの多層パーティション化されたベーステーブルの場合、プライマリレベルのパーティションパスのみを使用してパーティション化されたマテリアライズドビューを作成できます。たとえば、`yyyyMMdd/hour` 形式でパーティション化されたテーブルの場合、`yyyyMMdd` でパーティション化されたマテリアライズドビューのみを構築できます。
-- v3.2.3 以降、StarRocks は Iceberg テーブルに対するパーティション化されたマテリアライズドビューの作成をサポートしており、マテリアライズドビューは変換後の列でパーティション化されます。詳細は [Data lake query acceleration with materialized views - Choose a suitabledata_lake_query_acceleration_with_materialized_views.mdterialized_views.md#choose-a-suitable-refresh-strategy](https://iceberg.apache.org/spec/#partition-transforms) を参照してください。
+- v3.2.3 以降、StarRocks は Iceberg テーブルに対するパーティション化されたマテリアライズドビューの作成をサポートしており、マテリアライズドビューは変換後の列でパーティション化されます。詳細は [適切なリフレッシュ戦略を選択する](./data_lake_query_acceleration_with_materialized_views.md#適切なリフレッシュ戦略を選択する). を参照してください。
 
 :::
 
