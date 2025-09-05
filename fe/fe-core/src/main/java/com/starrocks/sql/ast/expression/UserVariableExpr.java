@@ -85,11 +85,6 @@ public class UserVariableExpr extends Expr {
     }
 
     @Override
-    public String toSqlImpl() {
-        return "@" + name;
-    }
-
-    @Override
     public Expr uncheckedCastTo(Type targetType) throws AnalysisException {
         Preconditions.checkState(value != null, "should analyze UserVariableExpr first then cast its value");
         UserVariableExpr userVariableExpr = new UserVariableExpr(this);

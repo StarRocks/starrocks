@@ -69,24 +69,6 @@ public class MapExpr extends Expr {
         return TypeManager.getCommonSuperType(valueExprsType);
     }
 
-    public boolean isExplicitType() {
-        return explicitType;
-    }
-
-    @Override
-    protected String toSqlImpl() {
-        StringBuilder sb = new StringBuilder();
-        sb.append("map{");
-        for (int i = 0; i < children.size(); i += 2) {
-            if (i > 0) {
-                sb.append(",");
-            }
-            sb.append(children.get(i).toSql() + ":" + children.get(i + 1).toSql());
-        }
-        sb.append("}");
-        return sb.toString();
-    }
-
     @Override
     public Expr uncheckedCastTo(Type targetType) throws AnalysisException {
         ArrayList<Expr> newItems = new ArrayList<>();
