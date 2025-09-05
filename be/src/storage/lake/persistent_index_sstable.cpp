@@ -114,8 +114,8 @@ size_t PersistentIndexSstable::memory_usage() const {
 }
 
 PersistentIndexSstableStreamBuilder::PersistentIndexSstableStreamBuilder(std::unique_ptr<WritableFile> wf,
-                                                                         const std::string& encryption_meta)
-        : _wf(std::move(wf)), _finished(false), _encryption_meta(encryption_meta) {
+                                                                         std::string encryption_meta)
+        : _wf(std::move(wf)), _finished(false), _encryption_meta(std::move(encryption_meta)) {
     _filter_policy.reset(const_cast<sstable::FilterPolicy*>(sstable::NewBloomFilterPolicy(10)));
     sstable::Options options;
     options.filter_policy = _filter_policy.get();
