@@ -4733,14 +4733,14 @@ TEST_F(TimeFunctionsTest, secToTimeTest) {
     {
         auto int_value = ColumnHelper::create_column(TypeDescriptor(TYPE_BIGINT), false);
 
-        int_value->append_datum((RunTimeTypeTraits<TYPE_BIGINT>::CppType)0);
-        int_value->append_datum((RunTimeTypeTraits<TYPE_BIGINT>::CppType)1);
-        int_value->append_datum((RunTimeTypeTraits<TYPE_BIGINT>::CppType)60);
-        int_value->append_datum((RunTimeTypeTraits<TYPE_BIGINT>::CppType)3600);
-        int_value->append_datum((RunTimeTypeTraits<TYPE_BIGINT>::CppType)36000);
-        int_value->append_datum((RunTimeTypeTraits<TYPE_BIGINT>::CppType)86399);
-        int_value->append_datum((RunTimeTypeTraits<TYPE_BIGINT>::CppType)3024000);
-        int_value->append_datum((RunTimeTypeTraits<TYPE_BIGINT>::CppType)4000000);
+        int_value->append_datum(0L);
+        int_value->append_datum(1L);
+        int_value->append_datum(60L);
+        int_value->append_datum(3600L);
+        int_value->append_datum(36000L);
+        int_value->append_datum(86399L);
+        int_value->append_datum(3024000L);
+        int_value->append_datum(4000000L);
 
         Columns columns;
         columns.emplace_back(int_value);
@@ -4762,14 +4762,14 @@ TEST_F(TimeFunctionsTest, secToTimeTest) {
     {
         auto int_value = ColumnHelper::create_column(TypeDescriptor(TYPE_BIGINT), false);
 
-        int_value->append_datum((RunTimeTypeTraits<TYPE_BIGINT>::CppType)-0);
-        int_value->append_datum((RunTimeTypeTraits<TYPE_BIGINT>::CppType)-1);
-        int_value->append_datum((RunTimeTypeTraits<TYPE_BIGINT>::CppType)-60);
-        int_value->append_datum((RunTimeTypeTraits<TYPE_BIGINT>::CppType)-3600);
-        int_value->append_datum((RunTimeTypeTraits<TYPE_BIGINT>::CppType)-36000);
-        int_value->append_datum((RunTimeTypeTraits<TYPE_BIGINT>::CppType)-86399);
-        int_value->append_datum((RunTimeTypeTraits<TYPE_BIGINT>::CppType)-3024000);
-        int_value->append_datum((RunTimeTypeTraits<TYPE_BIGINT>::CppType)-4000000);
+        int_value->append_datum(-0L);
+        int_value->append_datum(-1L);
+        int_value->append_datum(-60L);
+        int_value->append_datum(-3600L);
+        int_value->append_datum(-36000L);
+        int_value->append_datum(-86399L);
+        int_value->append_datum(-3024000L);
+        int_value->append_datum(-4000000L);
 
         Columns columns;
         columns.emplace_back(int_value);
