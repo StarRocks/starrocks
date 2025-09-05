@@ -5339,6 +5339,10 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
             throw new DdlException("New auto_increment value must be greater than current value: " + currentValue);
         }
 
+        if (!((OlapTable) table).sendDropAutoIncrementMapTask()) {
+            throw new DdlException("Failed to drop auto increment cache in CN/BE");
+        }
+
         addOrReplaceAutoIncrementIdByTableId(tableId, newAutoIncrementValue);
 
         ConcurrentHashMap<Long, Long> idMap = new ConcurrentHashMap<>();
