@@ -22,8 +22,7 @@ TIME sec_to_time(BIGINT sec)
 ## Return value
 
 Returns a TIME value in the format HH:MM:SS, representing the time calculated from the start of a day (00:00:00).
-
-If <seconds> is NULL, the function returns NULL.
+If sec is NULL, the function returns NULL.
 
 ## Examples
 

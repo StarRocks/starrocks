@@ -21,8 +21,7 @@ TIME sec_to_time(BIGINT sec)
 ## 返回值说明
 
 必填，输入的秒数，表示从一天起点时间（00:00:00）开始计算的秒数，支持正整数或负整数类型。
-
-如果输入的 <seconds> 为 NULL，函数返回 NULL。
+如果输入的 sec 为 NULL，函数返回 NULL。
 
 ## 示例
 

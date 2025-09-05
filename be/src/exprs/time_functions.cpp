@@ -3914,7 +3914,7 @@ StatusOr<ColumnPtr> TimeFunctions::sec_to_time(FunctionContext* context, const s
         return Status::InvalidArgument("FORMAT_TIME requires exactly 1 arguments");
     }
 
-    const auto &bigint_column = columns[0];
+    const auto& bigint_column = columns[0];
 
     RETURN_IF_COLUMNS_ONLY_NULL(columns);
 
