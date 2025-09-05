@@ -76,7 +76,7 @@ private:
 
 class PersistentIndexSstableStreamBuilder {
 public:
-    explicit PersistentIndexSstableStreamBuilder(std::unique_ptr<WritableFile> wf, const std::string& encryption_meta);
+    explicit PersistentIndexSstableStreamBuilder(std::unique_ptr<WritableFile> wf, std::string encryption_meta);
 
     Status add(const Slice& key);
     Status finish(uint64_t* file_size = nullptr);
