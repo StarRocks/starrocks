@@ -70,6 +70,14 @@ public:
     void set_data(const void* data) { _data = data; }
     void set_length(size_t length) { _length = length; }
 
+    template <class T>
+    bool is_aligned() const {
+        if ((uintptr_t)_data % alignof(T) == 0) {
+            return true;
+        }
+        return false;
+    }
+
 private:
     std::shared_ptr<PageHandle> _handle;
 
