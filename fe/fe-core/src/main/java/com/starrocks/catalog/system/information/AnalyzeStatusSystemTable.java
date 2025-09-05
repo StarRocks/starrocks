@@ -118,6 +118,7 @@ public class AnalyzeStatusSystemTable extends SystemTable {
                     continue;
                 }
             } catch (MetaNotFoundException ignored) {
+                continue;
             }
 
             String columnStr = "ALL";
