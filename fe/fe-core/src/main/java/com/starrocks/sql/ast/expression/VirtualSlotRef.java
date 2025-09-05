@@ -17,7 +17,6 @@
 
 package com.starrocks.sql.ast.expression;
 
-import com.starrocks.catalog.Type;
 import com.starrocks.planner.TupleDescriptor;
 
 import java.util.List;
@@ -31,30 +30,12 @@ public class VirtualSlotRef extends SlotRef {
     private TupleDescriptor tupleDescriptor;
     private List<Expr> realSlots;
 
-    public VirtualSlotRef(String col, Type type, TupleDescriptor tupleDescriptor, List<Expr> realSlots) {
-        super(null, col);
-        super.type = type;
-        this.tupleDescriptor = tupleDescriptor;
-        this.realSlots = realSlots;
-    }
-
     protected VirtualSlotRef(VirtualSlotRef other) {
         super(other);
         if (other.realSlots != null) {
             realSlots = Expr.cloneList(other.realSlots);
         }
         tupleDescriptor = other.tupleDescriptor;
-    }
-
-
-
-
-    public List<Expr> getRealSlots() {
-        return realSlots;
-    }
-
-    public void setRealSlots(List<Expr> realSlots) {
-        this.realSlots = realSlots;
     }
 
     @Override

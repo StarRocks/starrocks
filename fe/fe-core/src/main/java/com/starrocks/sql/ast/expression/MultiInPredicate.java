@@ -70,22 +70,6 @@ public class MultiInPredicate extends Predicate {
         return numberOfColumns;
     }
 
-    @Override
-    public String toSqlImpl() {
-        StringBuilder strBuilder = new StringBuilder();
-        String notStr = (isNotIn) ? "NOT " : "";
-        strBuilder.append("(");
-        for (int i = 0; i < numberOfColumns; ++i) {
-            strBuilder.append(getChild(i).toSql());
-            if (i < numberOfColumns - 1) {
-                strBuilder.append(", ");
-            }
-        }
-        strBuilder.append(") ").append(notStr).append("IN (").append(getChild(numberOfColumns).toSql());
-        strBuilder.append(")");
-        return strBuilder.toString();
-    }
-
     public boolean equalsWithoutChild(Object obj) {
         if (super.equalsWithoutChild(obj)) {
             MultiInPredicate expr = (MultiInPredicate) obj;

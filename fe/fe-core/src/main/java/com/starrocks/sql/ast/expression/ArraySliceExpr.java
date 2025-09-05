@@ -51,12 +51,6 @@ public class ArraySliceExpr extends Expr {
     }
 
     @Override
-    protected String toSqlImpl() {
-        return this.children.get(0).toSqlImpl() + "[" + this.children.get(1).toSqlImpl()
-                + ":" + this.children.get(2).toSqlImpl() + "]";
-    }
-
-    @Override
     protected void toThrift(TExprNode msg) {
         msg.setNode_type(TExprNodeType.ARRAY_SLICE_EXPR);
     }

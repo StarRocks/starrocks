@@ -193,7 +193,7 @@ public class ReplayWithMVFromDumpTest extends ReplayFromDumpTestBase {
             Pair<QueryDumpInfo, String> replayPair =
                     getCostPlanFragment(getDumpInfoFromFile("query_dump/tpch_query11_mv_rewrite"));
             assertContains(replayPair.second,
-                    "DictDecode(78: n_name, [<place-holder> = 'GERMANY'])");
+                    "DictDecode([79: n_name, INT, false], [<place-holder> = 'GERMANY'])");
         } finally {
             FeConstants.USE_MOCK_DICT_MANAGER = false;
         }

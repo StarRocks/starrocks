@@ -271,6 +271,14 @@ public class SlotRef extends Expr {
         return desc;
     }
 
+    public TableName getTblName() {
+        return tblName;
+    }
+
+    public String getColName() {
+        return colName;
+    }
+
     @Override
     public String debugString() {
         MoreObjects.ToStringHelper helper = MoreObjects.toStringHelper(this);
@@ -281,45 +289,8 @@ public class SlotRef extends Expr {
         return helper.toString();
     }
 
-    @Override
-    public String toSqlImpl() {
-        StringBuilder sb = new StringBuilder();
-        if (tblName != null && !isFromLambda()) {
-            return tblName.toSql() + "." + "`" + colName + "`";
-        } else if (label != null) {
-            if (isBackQuoted && !(label.startsWith("`") && label.endsWith("`"))) {
-                sb.append("`").append(label).append("`");
-                return sb.toString();
-            } else {
-                return label;
-            }
-        } else if (desc.getSourceExprs() != null) {
-            sb.append("<slot ").append(desc.getId().asInt()).append(">");
-            for (Expr expr : desc.getSourceExprs()) {
-                sb.append(" ");
-                sb.append(expr.toSql());
-            }
-            return sb.toString();
-        } else {
-            return "<slot " + desc.getId().asInt() + ">";
-        }
-    }
-
     public boolean isColumnRef() {
         return tblName != null && !isFromLambda();
-    }
-
-    @Override
-    public String explainImpl() {
-        if (label != null) {
-            return "[" + label + "," +
-                    " " + desc.getType() + "," +
-                    " " + desc.getIsNullable() + "]";
-        } else {
-            return "[" + desc.getId().asInt() + "," +
-                    " " + desc.getType() + "," +
-                    " " + desc.getIsNullable() + "]";
-        }
     }
 
     @Override
