@@ -14,7 +14,6 @@
 
 package com.starrocks.sql.ast;
 
-import com.starrocks.alter.AlterOpType;
 import com.starrocks.sql.parser.NodePosition;
 
 /**
@@ -28,7 +27,7 @@ public class AlterTableAutoIncrementClause extends AlterTableClause {
     }
 
     public AlterTableAutoIncrementClause(long autoIncrementValue, NodePosition pos) {
-        super(AlterOpType.ALTER_AUTO_INCREMENT, pos);
+        super(pos);
         this.autoIncrementValue = autoIncrementValue;
     }
 
@@ -38,6 +37,6 @@ public class AlterTableAutoIncrementClause extends AlterTableClause {
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitAlterTableAutoIncrementClause(this, context);
+        return ((AstVisitorExtendInterface<R, C>) visitor).visitAlterTableAutoIncrementClause(this, context);
     }
 }
