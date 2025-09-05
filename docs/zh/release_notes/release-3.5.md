@@ -10,6 +10,32 @@ displayed_sidebar: docs
 
 :::
 
+## 3.5.5
+
+发布日期: 2025 年 9 月 5 日
+
+### 功能增强
+
+- 新增系统变量 `enable_drop_table_check_mv_dependency`（默认值：`false`）。设置为 `true` 后，若被删除的对象被下游物化视图所依赖，系统将阻止执行该 `DROP TABLE` / `DROP VIEW` / `DROP MATERIALIZED VIEW` 操作。错误信息会列出依赖的物化视图，并提示查看 `sys.object_dependencies` 视图获取详细信息。[#61584](https://github.com/StarRocks/starrocks/pull/61584)
+- 日志新增构建的 Linux 发行版与 CPU 架构信息，便于问题复现与排障。相关日志格式为 `... build <hash> distro <id> arch <arch>`。[#62017](https://github.com/StarRocks/starrocks/pull/62017)
+- 通过在每个 Tablet 缓存持久化索引与增量列组文件大小，替代按需目录扫描，加速 BE 的 Tablet 状态上报并降低高 I/O 场景延迟。 [#61901](https://github.com/StarRocks/starrocks/pull/61901)
+- 将 FE 与 BE 日志中多处高频 INFO 日志降级为 VLOG，并对任务提交日志做聚合，显著减少存储相关冗余日志与高负载下的日志量。[#62121](https://github.com/StarRocks/starrocks/pull/62121)
+- 通过 `information_schema` 数据库查询 External Catalog 元数据时，通过将表过滤下推到调用 `getTable` 之前，加速此类查询，避免逐表 RPC，并提升性能。[#62404](https://github.com/StarRocks/starrocks/pull/62404)
+
+### 问题修复
+
+修复了以下问题：
+
+- 在 Plan 阶段获取分区级列统计信息时，因缺失而产生 NullPointerException 的问题。[#61935](https://github.com/StarRocks/starrocks/pull/61935)
+- Parquet 写出在 NULL 数组非零大小场景下的问题，并纠正 `SPLIT(NULL, …)` 行为保持输出为 NULL，避免数据损坏与运行时错误。[#61999](https://github.com/StarRocks/starrocks/pull/61999)
+- 创建使用 `CASE WHEN` 表达式的物化视图时，因 VARCHAR 类型返回不兼容导致的失败（修复后，系统确保刷新前后一致性，新增 FE 配置 `transform_type_prefer_string_for_varchar` 以优先用 STRING，避免长度不匹配）。[#61996](https://github.com/StarRocks/starrocks/pull/61996)
+- 当 `enable_rbo_table_prune` 为 `false` 时，在表裁剪时系统无法在 memo 之外计算嵌套 CTE 统计信息的问题。[#62070](https://github.com/StarRocks/starrocks/pull/62070)
+- Audit Log 中，INSERT INTO SELECT 语句的 Scan Rows 结果不准确。[#61381](https://github.com/StarRocks/starrocks/pull/61381)
+- 初始化阶段出现 ExceptionInInitializerError/NullPointerException 问题，导致启用 Query Queue v2 时 FE 重启失败。 [#62161](https://github.com/StarRocks/starrocks/pull/62161)
+- BE 在 `LakePersistentIndex` 初始化失败时因清理 `_memtable` 而崩溃。[#62279](https://github.com/StarRocks/starrocks/pull/62279)
+- 物化视图刷新时创建者的所有角色未被激活导致的权限问题（修复后，新增 FE 配置 `mv_use_creator_based_authorization`，设置为 `false` 时系统以 root 身份刷新物化视图，用于适配 LDAP 验证方式的集群）。[#62396](https://github.com/StarRocks/starrocks/pull/62396)
+- 因 List 分区表名仅大小写不同而导致的物化视图刷新失败（修复后，对分区名实施大小写不敏感的唯一性校验，与 OLAP 表语义一致）。[#62389](https://github.com/StarRocks/starrocks/pull/62389)
+
 ## 3.5.4
 
 发布日期: 2025年8月22日
