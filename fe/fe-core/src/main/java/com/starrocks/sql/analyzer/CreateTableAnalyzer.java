@@ -381,7 +381,7 @@ public class CreateTableAnalyzer {
             if (keysType == KeysType.PRIMARY_KEYS) {
                 ColumnDef cd = columnDefs.get(i);
                 cd.setPrimaryKeyNonNullable();
-                if (cd.isAllowNull()) {
+                if (!Config.enable_null_primary_key && cd.isAllowNull()) {
                     throw new SemanticException("primary key column[" + colName + "] cannot be nullable");
                 }
                 Type t = cd.getType();
