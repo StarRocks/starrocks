@@ -270,6 +270,7 @@ TEST_F(LocalTabletsChannelTest, diagnose_stack_trace) {
     add_chunk_request.set_sender_id(0);
     add_chunk_request.set_eos(true);
     add_chunk_request.set_packet_seq(0);
+    add_chunk_request.set_timeout_ms(100);
 
     auto old_threshold = config::load_diagnose_rpc_timeout_stack_trace_threshold_ms;
     DeferOp defer([&]() {
@@ -314,6 +315,7 @@ TEST_F(LocalTabletsChannelTest, test_primary_replica_profile) {
     add_chunk_request.set_sender_id(0);
     add_chunk_request.set_eos(true);
     add_chunk_request.set_packet_seq(0);
+    add_chunk_request.set_timeout_ms(60000);
 
     int chunk_size = 16;
     auto chunk = _generate_data(chunk_size, tablet->tablet_schema());
@@ -382,6 +384,7 @@ void LocalTabletsChannelTest::test_cancel_secondary_replica_base(bool is_empty_t
     add_chunk_request.set_eos(true);
     add_chunk_request.set_packet_seq(0);
     add_chunk_request.set_wait_all_sender_close(true);
+    add_chunk_request.set_timeout_ms(60000);
 
     auto chunk = _generate_data(1, tablet->tablet_schema());
     ASSIGN_OR_ABORT(auto chunk_pb, serde::ProtobufChunkSerde::serialize(chunk));
@@ -447,6 +450,7 @@ TEST_F(LocalTabletsChannelTest, test_cancel_secondary_replica_rpc_fail) {
     add_chunk_request.set_eos(true);
     add_chunk_request.set_packet_seq(0);
     add_chunk_request.set_wait_all_sender_close(true);
+    add_chunk_request.set_timeout_ms(60000);
 
     DeferOp defer([&]() {
         SyncPoint::GetInstance()->ClearCallBack("LocalTabletsChannel::rpc::tablet_writer_cancel");
@@ -744,6 +748,7 @@ TEST_F(LocalTabletsChannelTest, test_get_replica_status) {
     add_chunk_request.set_eos(true);
     add_chunk_request.set_packet_seq(0);
     add_chunk_request.set_wait_all_sender_close(true);
+    add_chunk_request.set_timeout_ms(60000);
     auto chunk = _generate_data(2, _tablets[0]->tablet_schema());
     ASSIGN_OR_ABORT(auto chunk_pb, serde::ProtobufChunkSerde::serialize(chunk));
     add_chunk_request.mutable_chunk()->Swap(&chunk_pb);
