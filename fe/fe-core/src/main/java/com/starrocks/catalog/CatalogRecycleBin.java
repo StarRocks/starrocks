@@ -242,7 +242,7 @@ public class CatalogRecycleBin extends FrontendDaemon implements Writable {
         return null;
     }
 
-    public PhysicalPartition getPhysicalPartition(long physicalPartitionId) {
+    public synchronized PhysicalPartition getPhysicalPartition(long physicalPartitionId) {
         for (Partition partition : idToPartition.values().stream()
                 .map(RecyclePartitionInfo::getPartition)
                 .collect(Collectors.toList())) {
@@ -1119,6 +1119,12 @@ public class CatalogRecycleBin extends FrontendDaemon implements Writable {
         });
 
         return Stream.of(dbInfos, tableInfos, partitionInfos).flatMap(Collection::stream).collect(Collectors.toList());
+    }
+
+    public synchronized boolean isTabletInRecycleBin(TabletMeta tabletMeta) {
+        return idToDatabase.containsKey(tabletMeta.getDbId()) ||
+                idToTableInfo.containsColumn(tabletMeta.getTableId()) ||
+                getPhysicalPartition(tabletMeta.getPhysicalPartitionId()) != null;
     }
 
     @VisibleForTesting
