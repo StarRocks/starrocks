@@ -53,6 +53,7 @@ import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.ast.CreateMaterializedViewStatement;
 import com.starrocks.sql.ast.QueryRelation;
 import com.starrocks.sql.ast.QueryStatement;
+import com.starrocks.sql.ast.RefreshMaterializedViewStatement;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.SystemVariable;
 import com.starrocks.sql.ast.expression.StringLiteral;
@@ -435,12 +436,20 @@ public abstract class MVTestBase extends StarRocksTestBase {
     }
 
     protected static ExecPlan getMVRefreshExecPlan(TaskRun taskRun) throws Exception {
+        return getMVRefreshExecPlan(taskRun, false);
+    }
+
+    protected static ExecPlan getMVRefreshExecPlan(TaskRun taskRun, boolean isForce) throws Exception {
+        if (isForce) {
+            taskRun.getProperties().put(TaskRun.FORCE, "true");
+        }
         initAndExecuteTaskRun(taskRun);
         TaskRunProcessor processor = taskRun.getProcessor();
         Assertions.assertTrue(processor instanceof MVTaskRunProcessor);
         MVTaskRunProcessor mvTaskRunProcessor = (MVTaskRunProcessor) processor;
         MvTaskRunContext mvTaskRunContext = mvTaskRunProcessor.getMvTaskRunContext();
-        return mvTaskRunContext.getExecPlan();
+        ExecPlan result = mvTaskRunContext.getExecPlan();
+        return result;
     }
 
     protected static void initAndExecuteTaskRun(TaskRun taskRun) throws Exception {
@@ -587,8 +596,6 @@ public abstract class MVTestBase extends StarRocksTestBase {
         }
     }
 
-
-
     protected void doTest(List<TestListener> listeners, ExceptionRunnable testCase) {
         for (TestListener listener : listeners) {
             listener.onBeforeCase(connectContext);
@@ -666,8 +673,32 @@ public abstract class MVTestBase extends StarRocksTestBase {
         Assertions.assertTrue(task != null, "Task for MV " + mv.getName() + " not found:" + explainQuery);
         StatementBase stmt = getAnalyzedPlan(explainQuery, connectContext);
         Assertions.assertTrue(stmt != null, "Expected a valid StatementBase but got null:" + explainQuery);
-        ExecuteOption executeOption = new ExecuteOption(70, false, new HashMap<>());
+        ExecuteOption executeOption = buildExecuteOption(stmt);
         return taskManager.getMVRefreshExplain(task, executeOption, stmt);
+    }
+
+    protected String explainMVRefreshExecPlan(MaterializedView mv, ExecuteOption executeOption, String explainQuery) {
+        TaskManager taskManager = GlobalStateMgr.getCurrentState().getTaskManager();
+        Task task = taskManager.getTask(TaskBuilder.getMvTaskName(mv.getId()));
+        Assertions.assertTrue(task != null, "Task for MV " + mv.getName() + " not found:" + explainQuery);
+        StatementBase stmt = getAnalyzedPlan(explainQuery, connectContext);
+        Assertions.assertTrue(stmt != null, "Expected a valid StatementBase but got null:" + explainQuery);
+        return taskManager.getMVRefreshExplain(task, executeOption, stmt);
+    }
+
+    protected ExecuteOption buildExecuteOption(StatementBase stmt) {
+        Map<String, String> props = new HashMap<>();
+        boolean force = false;
+        if (stmt instanceof RefreshMaterializedViewStatement) {
+            RefreshMaterializedViewStatement refreshMaterializedViewStatement = (RefreshMaterializedViewStatement) stmt;
+            if (refreshMaterializedViewStatement.isForceRefresh()) {
+                force = true;
+            }
+        }
+        if (force) {
+            props.put(TaskRun.FORCE, "true");
+        }
+        return new ExecuteOption(70, false, props);
     }
 
     /**
@@ -679,7 +710,7 @@ public abstract class MVTestBase extends StarRocksTestBase {
         Assertions.assertTrue(task != null, "Task for MV " + mv.getName() + " not found:" + explainQuery);
         StatementBase stmt = getAnalyzedPlan(explainQuery, connectContext);
         Assertions.assertTrue(stmt != null, "Expected a valid StatementBase but got null:" + explainQuery);
-        ExecuteOption executeOption = new ExecuteOption(70, false, new HashMap<>());
+        ExecuteOption executeOption = buildExecuteOption(stmt);
         TaskRun taskRun = taskManager.buildTaskRun(task, executeOption);
         return taskManager.getMVRefreshExecPlan(taskRun, task, executeOption, stmt);
     }

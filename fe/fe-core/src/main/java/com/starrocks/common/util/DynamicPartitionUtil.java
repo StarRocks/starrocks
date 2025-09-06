@@ -433,7 +433,7 @@ public class DynamicPartitionUtil {
         PartitionInfo partitionInfo = olapTable.getPartitionInfo();
         PartitionType partitionType = partitionInfo.getType();
         if (!isDynamicPartitionTable(olapTable, partitionInfo, tableProperty)) {
-            LOG.info("unable to schedule olap table {}-{} because dynamic partition is not enabled, " +
+            LOG.debug("unable to schedule olap table {}-{} because dynamic partition is not enabled, " +
                             "partition type: {}, partition column size: {}",
                     table.getName(), table.getId(), partitionType, partitionInfo.getPartitionColumnsSize());
             return false;
@@ -479,7 +479,7 @@ public class DynamicPartitionUtil {
         PartitionInfo partitionInfo = olapTable.getPartitionInfo();
         PartitionType partitionType = partitionInfo.getType();
         if (!isTTLPartitionTable(olapTable, partitionInfo, tableProperty)) {
-            LOG.info("unable to schedule olap table {}-{} because partition ttl is not enabled, " +
+            LOG.debug("unable to schedule olap table {}-{} because partition ttl is not enabled, " +
                             "partition type: {}, partition column size: {}",
                     table.getName(), table.getId(), partitionType, partitionInfo.getPartitionColumnsSize());
             return false;

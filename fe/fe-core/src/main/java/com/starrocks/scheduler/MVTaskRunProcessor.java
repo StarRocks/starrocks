@@ -87,7 +87,7 @@ public class MVTaskRunProcessor extends BaseTaskRunProcessor implements MVRefres
 
     @VisibleForTesting
     @Override
-    public void prepare(TaskRunContext context) throws Exception {
+    public TaskRunContext prepare(TaskRunContext context) throws Exception {
         // NOTE: mvId is set in Task's properties when creating
         final Map<String, String> properties = context.getProperties();
         final long mvId = Long.parseLong(properties.get(MV_ID));
@@ -142,6 +142,7 @@ public class MVTaskRunProcessor extends BaseTaskRunProcessor implements MVRefres
 
         this.mvRefreshProcessor = MVRefreshProcessorFactory.INSTANCE.newProcessor(db, mv, mvTaskRunContext, mvMetricsEntity);
         logger.info("finish prepare refresh mv:{}, jobId: {}", mvId, jobId);
+        return mvTaskRunContext;
     }
 
     /**
@@ -154,6 +155,7 @@ public class MVTaskRunProcessor extends BaseTaskRunProcessor implements MVRefres
         Preconditions.checkNotNull(mvRefreshProcessor);
 
         // get exec plan
+        mvTaskRunContext.setIsExplain(true);
         BaseMVRefreshProcessor.ProcessExecPlan processExecPlan =
                 mvRefreshProcessor.getProcessExecPlan(mvTaskRunContext);
         if (processExecPlan == null || processExecPlan.state() != Constants.TaskRunState.SUCCESS) {
