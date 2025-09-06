@@ -15,44 +15,27 @@
 package com.starrocks.sql.ast.warehouse;
 
 import com.starrocks.sql.ast.AstVisitor;
-import com.starrocks.sql.ast.AstVisitorExtendInterface;
-import com.starrocks.sql.ast.DdlStmt;
+import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.parser.NodePosition;
 
-import java.util.Map;
-
-public class AlterWarehouseStmt extends DdlStmt {
+public class SetWarehouseStmt extends StatementBase {
     private final String warehouseName;
-    private Map<String, String> properties;
 
-    public AlterWarehouseStmt(String warehouseName,
-                              Map<String, String> properties) {
-        this(warehouseName, properties, NodePosition.ZERO);
+    public SetWarehouseStmt(String warehouseName) {
+        this(warehouseName, NodePosition.ZERO);
     }
 
-    public AlterWarehouseStmt(String warehouseName,
-                              Map<String, String> properties,
-                              NodePosition pos) {
+    public SetWarehouseStmt(String warehouseName, NodePosition pos) {
         super(pos);
         this.warehouseName = warehouseName;
-        this.properties = properties;
     }
 
     public String getWarehouseName() {
         return warehouseName;
     }
 
-    public Map<String, String> getProperties() {
-        return this.properties;
-    }
-
-    public void setProperties(Map<String, String> properties) {
-        this.properties = properties;
-    }
-
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return ((AstVisitorExtendInterface<R, C>) visitor).visitAlterWarehouseStatement(this, context);
+        return visitor.visitSetWarehouseStatement(this, context);
     }
 }
-

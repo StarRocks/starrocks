@@ -15,19 +15,20 @@
 package com.starrocks.sql.ast.warehouse;
 
 import com.starrocks.sql.ast.AstVisitor;
-import com.starrocks.sql.ast.AstVisitorExtendInterface;
 import com.starrocks.sql.ast.DdlStmt;
 import com.starrocks.sql.parser.NodePosition;
 
-public class ResumeWarehouseStmt extends DdlStmt {
-    private String warehouseName;
+public class DropWarehouseStmt extends DdlStmt {
+    private final boolean ifExists;
+    private final String warehouseName;
 
-    public ResumeWarehouseStmt(String warehouseName) {
-        this(warehouseName, NodePosition.ZERO);
+    public DropWarehouseStmt(boolean ifExists, String warehouseName) {
+        this(ifExists, warehouseName, NodePosition.ZERO);
     }
 
-    public ResumeWarehouseStmt(String warehouseName, NodePosition pos) {
+    public DropWarehouseStmt(boolean ifExists, String warehouseName, NodePosition pos) {
         super(pos);
+        this.ifExists = ifExists;
         this.warehouseName = warehouseName;
     }
 
@@ -35,8 +36,26 @@ public class ResumeWarehouseStmt extends DdlStmt {
         return warehouseName;
     }
 
+    public boolean isSetIfExists() {
+        return ifExists;
+    }
+
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return ((AstVisitorExtendInterface<R, C>) visitor).visitResumeWarehouseStatement(this, context);
+        return visitor.visitDropWarehouseStatement(this, context);
+    }
+
+    @Override
+    public String toSql() {
+        StringBuilder sb = new StringBuilder();
+        sb.append("DROP WAREHOUSE ");
+        if (ifExists) {
+            sb.append("IF EXISTS ");
+        }
+        sb.append("\'" + warehouseName + "\'");
+        return sb.toString();
     }
 }
+
+
+
