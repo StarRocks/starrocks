@@ -16,7 +16,6 @@
 
 #include "storage/lake/pk_tablet_writer.h"
 #include "storage/lake/rowset.h"
-#include "storage/lake/tablet_metadata.h"
 #include "storage/lake/tablet_reader.h"
 #include "storage/lake/tablet_writer.h"
 #include "storage/tablet_schema_map.h"
@@ -82,6 +81,26 @@ StatusOr<std::unique_ptr<TabletReader>> VersionedTablet::new_reader(
     }
     return std::make_unique<TabletReader>(_tablet_mgr, _metadata, std::move(schema), could_split,
                                           could_split_physically);
+}
+
+StatusOr<std::unique_ptr<TabletReader>> VersionedTablet::new_reader(
+        Schema schema, bool could_split, bool could_split_physically,
+        const std::vector<BaseRowsetSharedPtr>& base_rowsets, std::shared_ptr<const TabletSchema> tablet_schema) {
+    if (!base_rowsets.empty()) {
+        std::vector<std::shared_ptr<Rowset>> rowsets;
+        for (auto& rowset : base_rowsets) {
+            rowsets.emplace_back(std::dynamic_pointer_cast<Rowset>(rowset));
+        }
+        auto reader = std::make_unique<TabletReader>(_tablet_mgr, _metadata, std::move(schema), could_split,
+                                                     could_split_physically, std::move(rowsets));
+        reader->set_tablet_schema(std::move(tablet_schema));
+        return reader;
+    }
+    // Fallback: construct a reader without rowsets and set the schema explicitly
+    auto reader = std::make_unique<TabletReader>(_tablet_mgr, _metadata, std::move(schema), could_split,
+                                                 could_split_physically);
+    reader->set_tablet_schema(std::move(tablet_schema));
+    return reader;
 }
 
 bool VersionedTablet::has_delete_predicates() const {
