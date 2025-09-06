@@ -1174,6 +1174,9 @@ public class StreamLoadTask extends AbstractStreamLoadTask {
         // sync stream load collect profile, here we collect profile only when be has reported
         if (isSyncStreamLoad() && coord != null && coord.isProfileAlreadyReported()) {
             collectProfile(false);
+        } else {
+            LOG.debug("stream load does not collect profile, txn_id: {}, label: {}, load id: {}",
+                    txnId, label, DebugUtil.printId(loadId));
         }
 
         writeLock();

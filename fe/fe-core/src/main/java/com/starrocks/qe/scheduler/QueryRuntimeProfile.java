@@ -96,7 +96,7 @@ public class QueryRuntimeProfile {
      * if the time costs of stream load is less than {@link Config#stream_load_profile_collect_threshold_second},
      * the profile will not be reported to FE to reduce the overhead of profile under high-frequency import
      */
-    private boolean profileAlreadyReported = false;
+    private volatile boolean profileAlreadyReported = false;
 
     private RuntimeProfile queryProfile;
     private List<RuntimeProfile> fragmentProfiles;

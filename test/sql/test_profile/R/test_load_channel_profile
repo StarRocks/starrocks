@@ -59,6 +59,14 @@ shell: env mysql_cmd="${mysql_cmd} -D${db[0]}" label="label_${uuid0}" bash ${roo
 Analyze profile succeeded
 Analyze profile succeeded
 -- !result
+function: enable_fe_verbose_log(["com.starrocks.qe.QeProcessorImpl", "com.starrocks.qe.scheduler.QueryRuntimeProfile", "com.starrocks.load.streamload.StreamLoadTask", "com.starrocks.common.util.ProfileManager"])
+-- result:
+None
+-- !result
+function: set_vlog_level_for_all_be(["fragment_mgr*", "plan_fragment_executor*"], 1)
+-- result:
+None
+-- !result
 alter table t0 set('enable_load_profile'='true');
 -- result:
 -- !result
@@ -75,4 +83,12 @@ shell: env mysql_cmd="${mysql_cmd} -D${db[0]}" label="label_${uuid1}" bash ${roo
 0
 Analyze profile succeeded
 Analyze profile succeeded
+-- !result
+function: disable_fe_verbose_log(["com.starrocks.qe.QeProcessorImpl", "com.starrocks.qe.scheduler.QueryRuntimeProfile", "com.starrocks.load.streamload.StreamLoadTask", "com.starrocks.common.util.ProfileManager"])
+-- result:
+None
+-- !result
+function: set_vlog_level_for_all_be(["fragment_mgr*", "plan_fragment_executor*"], 0)
+-- result:
+None
 -- !result
