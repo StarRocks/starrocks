@@ -1550,7 +1550,7 @@ TEST_F(TimeFunctionsTest, str_to_date_of_dateformat) {
         str_col->append_datum(Slice("2020-06-25"));
         str_col->append_datum(Slice("     2020-03-12"));
         str_col->append_datum(Slice("   2020-03-12    11:35:23  "));
-        str_col->append_datum(Slice("   2020-0  "));
+        str_col->append_datum(Slice("   2020-00-02  "));
 
         Columns columns;
         columns.emplace_back(str_col);
@@ -1605,6 +1605,78 @@ TEST_F(TimeFunctionsTest, str_to_date_of_datetimeformat) {
         ASSERT_EQ(TimestampValue::create(2020, 3, 12, 8, 19, 39), nullable_col->get(3).get_timestamp());
         ASSERT_EQ(TimestampValue::create(2020, 3, 12, 11, 35, 23), nullable_col->get(4).get_timestamp());
         ASSERT_EQ(TimestampValue::create(2020, 3, 12, 11, 0, 0), nullable_col->get(5).get_timestamp());
+    }
+}
+
+TEST_F(TimeFunctionsTest, str_to_date_of_monthformat) {
+    FunctionContext* ctx = FunctionContext::create_test_context();
+    auto ptr = std::unique_ptr<FunctionContext>(ctx);
+
+    const char* str1 = "2013-05";
+    const char* fmt1 = "%Y-%m";
+    TimestampValue ts1 = TimestampValue::create(2013, 5, 1, 0, 0, 0);
+    const auto& varchar_type_desc = TypeDescriptor::create_varchar_type(TypeDescriptor::MAX_VARCHAR_LENGTH);
+    // const <=> non-const
+    {
+        auto str_col = ColumnHelper::create_column(varchar_type_desc, true);
+        auto fmt_col = ColumnHelper::create_const_column<TYPE_VARCHAR>(fmt1, 1);
+        str_col->append_datum(Slice(str1));
+        (void)str_col->append_nulls(1);
+        str_col->append_datum(Slice("2020-06"));
+        str_col->append_datum(Slice("     2020-03-12"));
+        str_col->append_datum(Slice("   2020-03-12    11:35:23  "));
+        str_col->append_datum(Slice("   202a-0  "));
+
+        Columns columns;
+        columns.emplace_back(str_col);
+        columns.emplace_back(fmt_col);
+
+        ColumnPtr result = TimeFunctions::str_to_date(ctx, columns).value();
+        ASSERT_TRUE(result->is_nullable());
+
+        NullableColumn::Ptr nullable_col = ColumnHelper::as_column<NullableColumn>(result);
+
+        ASSERT_EQ(ts1, nullable_col->get(0).get_timestamp());
+        ASSERT_TRUE(nullable_col->is_null(1));
+        ASSERT_EQ(TimestampValue::create(2020, 6, 1, 0, 0, 0), nullable_col->get(2).get_timestamp());
+        ASSERT_EQ(TimestampValue::create(2020, 3, 1, 0, 0, 0), nullable_col->get(3).get_timestamp());
+        ASSERT_EQ(TimestampValue::create(2020, 3, 1, 0, 0, 0), nullable_col->get(4).get_timestamp());
+        ASSERT_TRUE(nullable_col->is_null(5));
+    }
+}
+
+TEST_F(TimeFunctionsTest, str_to_date_of_yearformat) {
+    FunctionContext* ctx = FunctionContext::create_test_context();
+    auto ptr = std::unique_ptr<FunctionContext>(ctx);
+
+    const char* str1 = "2013";
+    const char* fmt1 = "%Y";
+    TimestampValue ts1 = TimestampValue::create(2013, 1, 1, 0, 0, 0);
+    const auto& varchar_type_desc = TypeDescriptor::create_varchar_type(TypeDescriptor::MAX_VARCHAR_LENGTH);
+    // const <=> non-const
+    {
+        auto str_col = ColumnHelper::create_column(varchar_type_desc, true);
+        auto fmt_col = ColumnHelper::create_const_column<TYPE_VARCHAR>(fmt1, 1);
+        str_col->append_datum(Slice(str1));
+        (void)str_col->append_nulls(1);
+        str_col->append_datum(Slice("2020-06-25"));
+        str_col->append_datum(Slice("     2020-03-12"));
+        str_col->append_datum(Slice("   2020-03-12    11:35:23  "));
+
+        Columns columns;
+        columns.emplace_back(str_col);
+        columns.emplace_back(fmt_col);
+
+        ColumnPtr result = TimeFunctions::str_to_date(ctx, columns).value();
+        ASSERT_TRUE(result->is_nullable());
+
+        NullableColumn::Ptr nullable_col = ColumnHelper::as_column<NullableColumn>(result);
+
+        ASSERT_EQ(ts1, nullable_col->get(0).get_timestamp());
+        ASSERT_TRUE(nullable_col->is_null(1));
+        ASSERT_EQ(TimestampValue::create(2020, 1, 1, 0, 0, 0), nullable_col->get(2).get_timestamp());
+        ASSERT_EQ(TimestampValue::create(2020, 1, 1, 0, 0, 0), nullable_col->get(3).get_timestamp());
+        ASSERT_EQ(TimestampValue::create(2020, 1, 1, 0, 0, 0), nullable_col->get(4).get_timestamp());
     }
 }
 
@@ -3077,7 +3149,7 @@ TEST_F(TimeFunctionsTest, str2date_of_dateformat) {
         str_col->append_datum(Slice("2020-06-25"));
         str_col->append_datum(Slice("     2020-03-12"));
         str_col->append_datum(Slice("   2020-03-12    11:35:23  "));
-        str_col->append_datum(Slice("   2020-0  "));
+        str_col->append_datum(Slice("   2020-00-02  "));
 
         Columns columns;
         columns.emplace_back(str_col);
