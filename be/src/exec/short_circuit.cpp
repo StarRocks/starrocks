@@ -36,9 +36,10 @@
 namespace starrocks {
 class MysqlResultMemorySink : public DataSink {
 public:
-    MysqlResultMemorySink(const vector<TExpr>& t_exprs, bool is_binary_format,
+    MysqlResultMemorySink(const vector<TExpr>& t_exprs, bool is_binary_format, bool is_inf_nan_convert_to_null,
                           vector<std::unique_ptr<TFetchDataResult>>& results)
-            : _t_exprs(t_exprs), _is_binary_format(is_binary_format), _results(results) {}
+            : _t_exprs(t_exprs), _is_binary_format(is_binary_format),
+            _is_inf_nan_convert_to_null(is_inf_nan_convert_to_null), _results(results) {}
 
     ~MysqlResultMemorySink() override { delete _row_buffer; };
 
@@ -103,6 +104,7 @@ public:
 private:
     const std::vector<TExpr>& _t_exprs;
     const bool _is_binary_format;
+    const bool _is_inf_nan_convert_to_null;
     MysqlRowBuffer* _row_buffer;
     std::vector<std::unique_ptr<TFetchDataResult>>& _results;
     std::vector<ExprContext*> _output_expr_ctxs;
@@ -169,7 +171,9 @@ Status ShortCircuitExecutor::prepare(TExecShortCircuitParams& common_request) {
                                                    0, _source->row_desc(), &_sink));
     } else {
         bool is_binary_format = _common_request->is_binary_row;
-        _sink = std::make_unique<MysqlResultMemorySink>(output_exprs, is_binary_format, _results);
+        bool is_inf_nan_convert_to_null = _common_request->is_inf_nan_convert_to_null;
+        _sink = std::make_unique<MysqlResultMemorySink>(output_exprs, is_binary_format,
+                                                        is_inf_nan_convert_to_null, _results);
     }
 
     // prepare

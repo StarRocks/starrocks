@@ -391,14 +391,15 @@ int64_t StructColumn::xor_checksum(uint32_t from, uint32_t to) const {
     return xor_checksum;
 }
 
-void StructColumn::put_mysql_row_buffer(MysqlRowBuffer* buf, size_t idx, bool is_binary_protocol) const {
+void StructColumn::put_mysql_row_buffer(MysqlRowBuffer* buf, size_t idx, bool is_binary_protocol,
+                                        bool is_inf_nan_convert_to_null) const {
     DCHECK_LT(idx, size());
     buf->begin_push_bracket();
     for (size_t i = 0; i < _fields.size(); ++i) {
         const auto& field = _fields[i];
         buf->push_string(_field_names[i]);
         buf->separator(':');
-        field->put_mysql_row_buffer(buf, idx);
+        field->put_mysql_row_buffer(buf, idx, false, is_inf_nan_convert_to_null);
         if (i < _fields.size() - 1) {
             // Add struct field separator, last field don't need ','.
             buf->separator(',');

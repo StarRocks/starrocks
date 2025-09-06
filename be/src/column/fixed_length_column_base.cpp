@@ -13,6 +13,7 @@
 // limitations under the License.
 
 #include <gutil/strings/fastmem.h>
+#include <type_traits>
 
 #include "column/column_helper.h"
 #include "column/fixed_length_column.h"
@@ -369,7 +370,8 @@ int64_t FixedLengthColumnBase<T>::xor_checksum(uint32_t from, uint32_t to) const
 }
 
 template <typename T>
-void FixedLengthColumnBase<T>::put_mysql_row_buffer(MysqlRowBuffer* buf, size_t idx, bool is_binary_protocol) const {
+void FixedLengthColumnBase<T>::put_mysql_row_buffer(MysqlRowBuffer* buf, size_t idx, bool is_binary_protocol, 
+                                                    bool is_inf_nan_convert_to_null) const {
     if constexpr (IsDecimal<T>) {
         buf->push_decimal(_data[idx].to_string());
     } else if constexpr (IsDate<T>) {
@@ -377,6 +379,12 @@ void FixedLengthColumnBase<T>::put_mysql_row_buffer(MysqlRowBuffer* buf, size_t 
     } else if constexpr (IsTimestamp<T>) {
         buf->push_timestamp(_data[idx], is_binary_protocol);
     } else if constexpr (std::is_arithmetic_v<T>) {
+        if constexpr (std::is_same_v<T, float> || std::is_same_v<T, double>) {
+            if (is_inf_nan_convert_to_null && (std::isnan(_data[idx]) || std::isinf(_data[idx]))) {
+                buf->push_null(is_binary_protocol);
+                return;
+            }
+        }
         buf->push_number(_data[idx], is_binary_protocol);
     } else {
         std::string s = _data[idx].to_string();

@@ -287,7 +287,8 @@ public class PlanFragmentBuilder {
         // Finalize fragments
         for (PlanFragment fragment : execPlan.getFragments()) {
             // TODO(murphy) check it
-            fragment.createDataSink(TResultSinkType.MYSQL_PROTOCAL);
+            fragment.createDataSink(TResultSinkType.MYSQL_PROTOCAL,
+                    connectContext.getSessionVariable().isEnableInfNanConvertToNull());
         }
         Collections.reverse(execPlan.getFragments());
 
@@ -391,6 +392,8 @@ public class PlanFragmentBuilder {
         for (PlanFragment fragment : fragments) {
             fragment.createDataSink(resultSinkType);
             fragment.setCollectExecStatsIds(execPlan.getCollectExecStatsIds());
+            fragment.createDataSink(resultSinkType,
+                    ConnectContext.get().getSessionVariable().isEnableInfNanConvertToNull());
         }
         Collections.reverse(fragments);
         // assign colocate groups to plan fragment

@@ -426,6 +426,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public static final String CHOOSE_EXECUTE_INSTANCES_MODE = "choose_execute_instances_mode";
 
+    // If enabled, inf and nan values of double and float will be converted to null.
+    public static final String ENABLE_INF_NAN_CONVERT_TO_NULL = "enable_inf_nan_convert_to_null";
+
     // --------  New planner session variables end --------
 
     // Type of compression of transmitted data
@@ -2685,6 +2688,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VarAttr(name = INSERT_LOCAL_SHUFFLE_FOR_WINDOW_PRE_AGG)
     private boolean insertLocalShuffleForWindowPreAgg = true;
 
+    @VarAttr(name = ENABLE_INF_NAN_CONVERT_TO_NULL)
+    private boolean enableInfNanConvertToNull = false;
+
     public SessionVariableConstants.ChooseInstancesMode getChooseExecuteInstancesMode() {
         return Enums.getIfPresent(SessionVariableConstants.ChooseInstancesMode.class,
                         StringUtils.upperCase(chooseExecuteInstancesMode))
@@ -2700,6 +2706,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
             throw new IllegalArgumentException("Legal values of choose_execute_instances_mode are " + legalValues);
         }
         this.chooseExecuteInstancesMode = StringUtils.upperCase(mode);
+    }
+
+    public boolean isEnableInfNanConvertToNull() {
+        return enableInfNanConvertToNull;
+    }
+
+    public void setEnableInfNanConvertToNull(boolean enableInfNanConvertToNull) {
+        this.enableInfNanConvertToNull = enableInfNanConvertToNull;
     }
 
     public boolean isCboDecimalCastStringStrict() {
