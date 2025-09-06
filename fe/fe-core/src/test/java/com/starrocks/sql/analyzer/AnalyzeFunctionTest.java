@@ -323,4 +323,14 @@ public class AnalyzeFunctionTest {
         analyzeFail("select array_generate(1, 5, 'a')");
         analyzeFail("select array_generate(1, 2, 3, 4)");
     }
+
+    @Test
+    public void testSecToTime() throws Exception {
+        analyzeFail("select sec_to_time(0)");
+        analyzeFail("select sec_to_time(1)");
+        analyzeFail("select sec_to_time(-1)");
+        analyzeFail("select sec_to_time(3024000)");
+        analyzeFail("select sec_to_time(-3024000)");
+    }
+
 }
