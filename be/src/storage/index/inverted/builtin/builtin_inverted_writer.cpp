@@ -149,6 +149,7 @@ void BuiltinInvertedWriterImpl<field_type>::add_values(const void* values, size_
         context.writer->reset_rowid(_rid);
 
         _do_add_values(values, count, &context);
+        _rid += count;
         return;
     }
 
