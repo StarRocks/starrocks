@@ -539,6 +539,9 @@ public class OperationType {
     public static final short OP_CREATE_STREAM_LOAD_TASK_V2 = 13070;
 
     @IgnorableOnReplayFailed
+    public static final short OP_CREATE_MULTI_STMT_STREAM_LOAD_TASK = 13071;
+
+    @IgnorableOnReplayFailed
     public static final short OP_MODIFY_COLUMN_COMMENT = 13080;
 
     // storage volume

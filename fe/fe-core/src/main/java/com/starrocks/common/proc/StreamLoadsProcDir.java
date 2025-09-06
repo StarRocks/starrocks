@@ -19,8 +19,8 @@ import com.google.common.base.Strings;
 import com.google.common.collect.ImmutableList;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.MetaNotFoundException;
+import com.starrocks.load.streamload.AbstractStreamLoadTask;
 import com.starrocks.load.streamload.StreamLoadMgr;
-import com.starrocks.load.streamload.StreamLoadTask;
 import com.starrocks.server.GlobalStateMgr;
 
 import java.util.List;
@@ -62,9 +62,11 @@ public class StreamLoadsProcDir implements ProcDirInterface {
         baseProcResult.setNames(TITLE_NAMES);
         StreamLoadMgr streamLoadManager = GlobalStateMgr.getCurrentState().getStreamLoadMgr();
         try {
-            List<StreamLoadTask> streamLoadTaskList = streamLoadManager.getTask(null, null, true);
-            for (StreamLoadTask streamLoadTask : streamLoadTaskList) {
-                baseProcResult.addRow(streamLoadTask.getShowBriefInfo());
+            List<AbstractStreamLoadTask> streamLoadTaskList = streamLoadManager.getTask(null, null, true);
+            for (AbstractStreamLoadTask streamLoadTask : streamLoadTaskList) {
+                for (List<String> row : streamLoadTask.getShowBriefInfo()) {
+                    baseProcResult.addRow(row);
+                }
             }
         } catch (MetaNotFoundException e) {
             throw new AnalysisException("failed to get all of stream load task");

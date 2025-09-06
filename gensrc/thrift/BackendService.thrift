@@ -115,6 +115,7 @@ struct TProxyResult {
 struct TStreamLoadChannel {
     1: optional string label
     2: optional i32 channel_id
+    3: optional string table_name
 }
 
 struct TGetTabletsInfoRequest {

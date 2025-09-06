@@ -26,16 +26,16 @@ import org.apache.logging.log4j.Logger;
 
 /**
  * Provide the predicate chain and comparator chain
- * which would be used in `List<StreamLoadTask>.stream().filter(predicateChain).sorted(comparatorChain).skip().limit()`
+ * which would be used in `List<AbstractStreamLoadTask>.stream().filter(predicateChain).sorted(comparatorChain).skip().limit()`
  * with a group of pre-defined ColumnValueSuppliers.
  */
-public class StreamLoadFunctionalExprProvider extends FunctionalExprProvider<StreamLoadTask> {
+public class StreamLoadFunctionalExprProvider extends FunctionalExprProvider<AbstractStreamLoadTask> {
 
     private static final Logger LOG = LogManager.getLogger(StreamLoadFunctionalExprProvider.class);
 
 
-    private static final ColumnValueSupplier<StreamLoadTask> TASK_NAME_SUPPLIER =
-            new ColumnValueSupplier<StreamLoadTask>() {
+    private static final ColumnValueSupplier<AbstractStreamLoadTask> TASK_NAME_SUPPLIER =
+            new ColumnValueSupplier<AbstractStreamLoadTask>() {
                 @Override
                 public String getColumnName() {
                     return "Label";
@@ -48,12 +48,12 @@ public class StreamLoadFunctionalExprProvider extends FunctionalExprProvider<Str
 
                 @Override
                 @SuppressWarnings("unchecked")
-                public String getColumnValue(StreamLoadTask task) {
+                public String getColumnValue(AbstractStreamLoadTask task) {
                     return task.getLabel();
                 }
             };
-    private static final ColumnValueSupplier<StreamLoadTask> TASK_ID_SUPPLIER =
-            new ColumnValueSupplier<StreamLoadTask>() {
+    private static final ColumnValueSupplier<AbstractStreamLoadTask> TASK_ID_SUPPLIER =
+            new ColumnValueSupplier<AbstractStreamLoadTask>() {
                 @Override
                 public String getColumnName() {
                     return "Id";
@@ -66,12 +66,12 @@ public class StreamLoadFunctionalExprProvider extends FunctionalExprProvider<Str
 
                 @Override
                 @SuppressWarnings("unchecked")
-                public Long getColumnValue(StreamLoadTask task) {
+                public Long getColumnValue(AbstractStreamLoadTask task) {
                     return task.getId();
                 }
             };
-    private static final ColumnValueSupplier<StreamLoadTask> TASK_CREATE_TIME_SUPPLIER =
-            new ColumnValueSupplier<StreamLoadTask>() {
+    private static final ColumnValueSupplier<AbstractStreamLoadTask> TASK_CREATE_TIME_SUPPLIER =
+            new ColumnValueSupplier<AbstractStreamLoadTask>() {
                 @Override
                 public String getColumnName() {
                     return "CreateTimeMs";
@@ -84,12 +84,12 @@ public class StreamLoadFunctionalExprProvider extends FunctionalExprProvider<Str
 
                 @Override
                 @SuppressWarnings("unchecked")
-                public Long getColumnValue(StreamLoadTask task) {
+                public Long getColumnValue(AbstractStreamLoadTask task) {
                     return task.createTimeMs() / 1000 * 1000;
                 }
             };
-    private static final ColumnValueSupplier<StreamLoadTask> TASK_DB_NAME_SUPPLIER =
-            new ColumnValueSupplier<StreamLoadTask>() {
+    private static final ColumnValueSupplier<AbstractStreamLoadTask> TASK_DB_NAME_SUPPLIER =
+            new ColumnValueSupplier<AbstractStreamLoadTask>() {
                 @Override
                 public String getColumnName() {
                     return "DbName";
@@ -102,12 +102,12 @@ public class StreamLoadFunctionalExprProvider extends FunctionalExprProvider<Str
 
                 @Override
                 @SuppressWarnings("unchecked")
-                public String getColumnValue(StreamLoadTask task) {
+                public String getColumnValue(AbstractStreamLoadTask task) {
                     return task.getDBName();
                 }
             };
-    private static final ColumnValueSupplier<StreamLoadTask> TASK_TABLE_NAME_SUPPLIER =
-            new ColumnValueSupplier<StreamLoadTask>() {
+    private static final ColumnValueSupplier<AbstractStreamLoadTask> TASK_TABLE_NAME_SUPPLIER =
+            new ColumnValueSupplier<AbstractStreamLoadTask>() {
                 @Override
                 public String getColumnName() {
                     return "TableName";
@@ -120,12 +120,12 @@ public class StreamLoadFunctionalExprProvider extends FunctionalExprProvider<Str
 
                 @Override
                 @SuppressWarnings("unchecked")
-                public String getColumnValue(StreamLoadTask task) {
+                public String getColumnValue(AbstractStreamLoadTask task) {
                     return task.getTableName();
                 }
             };
-    private static final ColumnValueSupplier<StreamLoadTask> TASK_STATE_SUPPLIER =
-            new ColumnValueSupplier<StreamLoadTask>() {
+    private static final ColumnValueSupplier<AbstractStreamLoadTask> TASK_STATE_SUPPLIER =
+            new ColumnValueSupplier<AbstractStreamLoadTask>() {
                 @Override
                 public String getColumnName() {
                     return "State";
@@ -138,13 +138,13 @@ public class StreamLoadFunctionalExprProvider extends FunctionalExprProvider<Str
 
                 @Override
                 @SuppressWarnings("unchecked")
-                public String getColumnValue(StreamLoadTask task) {
+                public String getColumnValue(AbstractStreamLoadTask task) {
                     return task.getStateName();
                 }
             };
 
-    private static final ColumnValueSupplier<StreamLoadTask> TASK_TYPE_SUPPLIER =
-            new ColumnValueSupplier<StreamLoadTask>() {
+    private static final ColumnValueSupplier<AbstractStreamLoadTask> TASK_TYPE_SUPPLIER =
+            new ColumnValueSupplier<AbstractStreamLoadTask>() {
                 @Override
                 public String getColumnName() {
                     return "Type";
@@ -157,15 +157,15 @@ public class StreamLoadFunctionalExprProvider extends FunctionalExprProvider<Str
 
                 @Override
                 @SuppressWarnings("unchecked")
-                public String getColumnValue(StreamLoadTask task) {
+                public String getColumnValue(AbstractStreamLoadTask task) {
                     return task.getStringByType();
                 }
             };
 
     @Override
-    protected ImmutableList<ColumnValueSupplier<StreamLoadTask>> delegateWhereSuppliers() {
+    protected ImmutableList<ColumnValueSupplier<AbstractStreamLoadTask>> delegateWhereSuppliers() {
         // return a group of ColumnValueSuppliers which are abled to be filtered and ordered.
-        return new ImmutableList.Builder<ColumnValueSupplier<StreamLoadTask>>()
+        return new ImmutableList.Builder<ColumnValueSupplier<AbstractStreamLoadTask>>()
                 .add(TASK_NAME_SUPPLIER)
                 .add(TASK_ID_SUPPLIER)
                 .add(TASK_CREATE_TIME_SUPPLIER)
@@ -177,7 +177,7 @@ public class StreamLoadFunctionalExprProvider extends FunctionalExprProvider<Str
     }
 
     @Override
-    protected boolean delegatePostRowFilter(ConnectContext cxt, StreamLoadTask task) {
+    protected boolean delegatePostRowFilter(ConnectContext cxt, AbstractStreamLoadTask task) {
         // validate table privilege at the end of a predicateChain in the `stream().filter()`
         try {
             Authorizer.checkTableAction(
