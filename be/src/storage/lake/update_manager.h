@@ -17,6 +17,7 @@
 #include <string>
 #include <unordered_map>
 
+#include "runtime/exec_env.h"
 #include "storage/del_vector.h"
 #include "storage/lake/lake_primary_index.h"
 #include "storage/lake/rowset_update_state.h"

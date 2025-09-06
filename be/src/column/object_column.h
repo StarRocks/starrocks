@@ -37,6 +37,18 @@ public:
     using ValueType = T;
     using Container = Buffer<ValueType*>;
 
+    struct ObjectDataProxyContainer {
+        ObjectDataProxyContainer(const ObjectColumn& column) : _column(column) {}
+
+        T* operator[](size_t index) const { return _column.get_object(index); }
+
+        size_t size() const { return _column.size(); }
+
+    private:
+        const ObjectColumn& _column;
+    };
+    using ImmContainer = ObjectDataProxyContainer;
+
     ObjectColumn() = default;
 
     explicit ObjectColumn(size_t size) : _pool(size) {}
@@ -161,6 +173,8 @@ public:
         _build_cache();
         return _cache;
     }
+
+    const ObjectDataProxyContainer immutable_data() const { return ObjectDataProxyContainer(*this); }
 
     Datum get(size_t n) const override { return Datum(get_object(n)); }
 

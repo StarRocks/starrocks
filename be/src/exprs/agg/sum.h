@@ -59,7 +59,7 @@ public:
                 size_t row_num) const override {
         DCHECK(columns[0]->is_numeric() || columns[0]->is_decimal());
         const auto& column = down_cast<const InputColumnType&>(*columns[0]);
-        this->data(state).sum += column.get_data()[row_num];
+        this->data(state).sum += column.immutable_data()[row_num];
     }
 
     AggStateTableKind agg_state_table_kind(bool is_append_only) const override { return AggStateTableKind::RESULT; }
@@ -68,13 +68,13 @@ public:
                  size_t row_num) const override {
         DCHECK(columns[0]->is_numeric() || columns[0]->is_decimal());
         const auto& column = down_cast<const InputColumnType&>(*columns[0]);
-        this->data(state).sum -= column.get_data()[row_num];
+        this->data(state).sum -= column.immutable_data()[row_num];
     }
 
     void update_batch_single_state(FunctionContext* ctx, size_t chunk_size, const Column** columns,
                                    AggDataPtr __restrict state) const override {
         const auto* column = down_cast<const InputColumnType*>(columns[0]);
-        const auto* data = column->get_data().data();
+        const auto* data = column->immutable_data().data();
         for (size_t i = 0; i < chunk_size; ++i) {
             this->data(state).sum += data[i];
         }
@@ -84,7 +84,7 @@ public:
                                               int64_t peer_group_start, int64_t peer_group_end, int64_t frame_start,
                                               int64_t frame_end) const override {
         const auto* column = down_cast<const InputColumnType*>(columns[0]);
-        const auto* data = column->get_data().data();
+        const auto* data = column->immutable_data().data();
         for (size_t i = frame_start; i < frame_end; ++i) {
             this->data(state).sum += data[i];
         }
@@ -96,7 +96,7 @@ public:
                                              bool ignore_subtraction, bool ignore_addition,
                                              [[maybe_unused]] bool has_null) const override {
         const auto* column = down_cast<const InputColumnType*>(columns[0]);
-        const auto* data = column->get_data().data();
+        const auto* data = column->immutable_data().data();
 
         const int64_t previous_frame_first_position = current_row_position - 1 + rows_start_offset;
         const int64_t current_frame_last_position = current_row_position + rows_end_offset;
@@ -113,7 +113,7 @@ public:
     void merge(FunctionContext* ctx, const Column* column, AggDataPtr __restrict state, size_t row_num) const override {
         DCHECK(column->is_numeric() || column->is_decimal());
         const auto* input_column = down_cast<const ResultColumnType*>(column);
-        this->data(state).sum += input_column->get_data()[row_num];
+        this->data(state).sum += input_column->immutable_data()[row_num];
     }
 
     void get_values(FunctionContext* ctx, ConstAggDataPtr __restrict state, Column* dst, size_t start,
@@ -135,7 +135,7 @@ public:
     void batch_serialize(FunctionContext* ctx, size_t chunk_size, const Buffer<AggDataPtr>& agg_states,
                          size_t state_offset, Column* to) const override {
         auto* column = down_cast<ResultColumnType*>(to);
-        Buffer<ResultType>& result_data = column->get_data();
+        auto& result_data = column->get_data();
         for (size_t i = 0; i < chunk_size; i++) {
             result_data.emplace_back(this->data(agg_states[i] + state_offset).sum);
         }
@@ -149,8 +149,8 @@ public:
 
     void convert_to_serialize_format([[maybe_unused]] FunctionContext* ctx, const Columns& src, size_t chunk_size,
                                      ColumnPtr* dst) const override {
-        Buffer<ResultType>& dst_data = down_cast<ResultColumnType*>((*dst).get())->get_data();
-        const auto* src_data = down_cast<const InputColumnType*>(src[0].get())->get_data().data();
+        auto& dst_data = down_cast<ResultColumnType*>((*dst).get())->get_data();
+        const auto* src_data = down_cast<const InputColumnType*>(src[0].get())->immutable_data().data();
 
         dst_data.resize(chunk_size);
         for (size_t i = 0; i < chunk_size; ++i) {

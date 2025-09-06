@@ -30,7 +30,7 @@
 
 namespace starrocks {
 
-using NullMasks = NullColumn::Container;
+using NullMasks = NullColumn::ImmContainer;
 
 // compare the value by column
 //
@@ -126,7 +126,7 @@ public:
         } else {
             _cmp_vector[0] |= 1;
         }
-        const auto& data_container = column.get_data();
+        const auto data_container = column.immutable_data();
         if (!_null_masks.empty()) {
             DCHECK_EQ(_null_masks.size(), num_rows);
             for (size_t i = 1; i < num_rows; ++i) {
@@ -160,7 +160,7 @@ public:
 private:
     const ColumnPtr& _first_column;
     std::vector<uint8_t>& _cmp_vector;
-    const NullColumn::Container& _null_masks;
+    const NullMasks _null_masks;
 };
 
 // append the result by selector
@@ -413,7 +413,7 @@ Status SortedStreamingAggregator::_compute_group_by(size_t chunk_size) {
     // _cmp_vector[i] = group[i - 1].equals(group[i])
     // _cmp_vector[i] == 0 means group[i - 1].equals(group[i])
     _cmp_vector.assign(chunk_size, 0);
-    const Buffer<uint8_t> dummy;
+    const NullMasks dummy;
     SCOPED_TIMER(_agg_stat->agg_compute_timer);
     for (size_t i = 0; i < _group_by_columns.size(); ++i) {
         ColumnSelfComparator cmp(_last_columns[i], _cmp_vector, dummy);

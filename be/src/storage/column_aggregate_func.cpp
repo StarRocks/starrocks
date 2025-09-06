@@ -53,7 +53,7 @@ template <typename ColumnType, typename StateType>
 class ReplaceAggregator final : public ValueColumnAggregator<ColumnType, StateType> {
 public:
     void aggregate_impl(int row, const ColumnPtr& src) override {
-        const auto* data = down_cast<const ColumnType*>(src.get())->get_data().data();
+        const auto* data = down_cast<const ColumnType*>(src.get())->immutable_data().data();
         this->data() = data[row];
     }
 

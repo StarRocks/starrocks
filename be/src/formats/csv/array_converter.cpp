@@ -21,12 +21,13 @@ namespace starrocks::csv {
 
 Status ArrayConverter::write_string(OutputStream* os, const Column& column, size_t row_num,
                                     const Options& options) const {
-    auto* array = down_cast<const ArrayColumn*>(&column);
-    auto& offsets = array->offsets();
-    auto& elements = array->elements();
+    const auto* array = down_cast<const ArrayColumn*>(&column);
+    const auto& offsets = array->offsets();
+    const auto& elements = array->elements();
+    const auto offset_datas = offsets.immutable_data();
 
-    auto begin = offsets.get_data()[row_num];
-    auto end = offsets.get_data()[row_num + 1];
+    auto begin = offset_datas[row_num];
+    auto end = offset_datas[row_num + 1];
 
     RETURN_IF_ERROR(os->write('['));
     for (auto i = begin; i < end; i++) {

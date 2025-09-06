@@ -717,7 +717,7 @@ Status ScalarColumnWriter::append_array_offsets(const Column& column) {
     // In memory, it will be transformed by actual offset(0, 3, 6)
     // In disk, offset is stored as length array(3, 3)
     auto& offsets = down_cast<const UInt32Column&>(column);
-    auto& data = offsets.get_data();
+    auto& data = offsets.immutable_data();
 
     std::vector<uint32_t> array_size;
     raw::make_room(&array_size, offsets.size() - 1);
@@ -1053,7 +1053,7 @@ inline EncodingTypePB DictColumnWriter::speculate_encoding(const Column& column)
         using CppType = typename RunTimeTypeTraits<Type>::CppType;
         phmap::flat_hash_set<CppType> hash_set;
         for (size_t i = 0; i < row_count; i++) {
-            CppType value = numerical_col->get_data()[i];
+            CppType value = numerical_col->immutable_data()[i];
             hash_set.insert(value);
             if (hash_set.size() > max_card) {
                 return BIT_SHUFFLE;

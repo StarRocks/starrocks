@@ -108,7 +108,7 @@ StatusOr<ColumnPtr> UtilityFunctions::uuid(FunctionContext* ctx, const Columns& 
     int32_t num_rows = ColumnHelper::get_const_value<TYPE_INT>(columns.back());
 
     ASSIGN_OR_RETURN(auto col, UtilityFunctions::uuid_numeric(ctx, columns));
-    auto& uuid_data = down_cast<Int128Column*>(col.get())->get_data();
+    const auto uuid_data = down_cast<const Int128Column*>(col.get())->immutable_data();
 
     auto res = BinaryColumn::create();
     auto& bytes = res->get_bytes();
@@ -254,7 +254,7 @@ StatusOr<ColumnPtr> UtilityFunctions::assert_true(FunctionContext* context, cons
             column = FunctionHelper::get_data_column_of_nullable(column);
         }
         auto bool_column = ColumnHelper::cast_to<TYPE_BOOLEAN>(column);
-        const auto& data = bool_column->get_data();
+        const auto data = bool_column->immutable_data();
         for (size_t i = 0; i < size; ++i) {
             if (!data[i]) {
                 throw std::runtime_error(msg);
@@ -396,13 +396,13 @@ inline void encode_float64(double v, std::string* dest) {
 struct EncoderVisitor : public ColumnVisitorAdapter<EncoderVisitor> {
     bool is_last_field = false;
     std::vector<std::string>* buffs;
-    const Buffer<uint8_t>* null_mask = nullptr; // Track null rows to skip processing
+    const ImmBuffer<uint8_t>* null_mask = nullptr; // Track null rows to skip processing
 
     explicit EncoderVisitor() : ColumnVisitorAdapter(this) {}
 
     // Nullable wrapper: handle null values and data together
     Status do_visit(const NullableColumn& column) {
-        auto& nulls = column.immutable_null_column_data();
+        const auto nulls = column.immutable_null_column_data();
 
         for (size_t i = 0; i < column.size(); i++) {
             if (nulls[i]) {
@@ -413,7 +413,7 @@ struct EncoderVisitor : public ColumnVisitorAdapter<EncoderVisitor> {
         }
 
         // Set the null mask so that subsequent visitor methods can skip null rows
-        const Buffer<uint8_t>* original_null_mask = null_mask;
+        const ImmBuffer<uint8_t>* original_null_mask = null_mask;
         null_mask = &nulls;
 
         // Process the underlying data column
@@ -450,7 +450,7 @@ struct EncoderVisitor : public ColumnVisitorAdapter<EncoderVisitor> {
     // Fixed-length numerics
     template <typename T>
     Status do_visit(const FixedLengthColumn<T>& column) {
-        const auto& data = column.get_data();
+        const auto data = column.immutable_data();
         for (size_t i = 0; i < column.size(); i++) {
             // Skip processing for null rows
             if (null_mask && (*null_mask)[i]) {

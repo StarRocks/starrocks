@@ -791,7 +791,8 @@ Status OlapTableSink::_fill_auto_increment_id_internal(Chunk* chunk, SlotDescrip
     }
 
     ColumnPtr& data_col = NullableColumn::dynamic_pointer_cast(col)->data_column();
-    Filter filter(NullableColumn::dynamic_pointer_cast(col)->immutable_null_column_data());
+    const auto null_datas = NullableColumn::dynamic_pointer_cast(col)->immutable_null_column_data();
+    Filter filter(null_datas.begin(), null_datas.end());
 
     Filter init_filter(chunk->num_rows(), 0);
 

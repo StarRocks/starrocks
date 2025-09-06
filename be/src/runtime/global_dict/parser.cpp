@@ -19,6 +19,7 @@
 #include "column/column_builder.h"
 #include "column/column_helper.h"
 #include "column/column_viewer.h"
+#include "column/vectorized_fwd.h"
 #include "common/global_types.h"
 #include "common/statusor.h"
 #include "exprs/dictmapping_expr.h"
@@ -123,7 +124,7 @@ private:
                 }
                 const auto* data_column =
                         down_cast<const LowCardDictColumn*>(ColumnHelper::get_data_column(input.get()));
-                const auto& dicts_data = data_column->get_data();
+                const auto dicts_data = data_column->immutable_data();
                 for (size_t i = 0; i < num_rows; ++i) {
                     RETURN_IF_ERROR((*_dict_opt_ctx->err_status)[_dict_opt_ctx->code_convert_map[dicts_data[i]]]);
                 }
@@ -158,7 +159,7 @@ private:
             const auto* data_column = down_cast<LowCardDictColumn*>(null_column->data_column().get());
             // we could use data_column to avoid check null
             // because 0 in LowCardDictColumn means null
-            const auto& container = data_column->get_data();
+            const auto container = data_column->immutable_data();
             auto res = _dict_opt_ctx->convert_column->clone_empty();
 
             if (!input->has_null() && _is_strict) {
@@ -172,7 +173,7 @@ private:
         } else {
             // is not nullable
             const auto* data_column = down_cast<const LowCardDictColumn*>(input.get());
-            const auto& container = data_column->get_data();
+            const auto container = data_column->immutable_data();
             if (_is_strict) {
                 auto res = _data_column_ptr->clone_empty();
                 res->append_selective(*_data_column_ptr, _code_convert(container, _dict_opt_ctx->code_convert_map));
@@ -227,7 +228,7 @@ private:
     }
 
     // res[i] = mapping[index[i]]
-    std::vector<uint32_t> _code_convert(const Buffer<int32_t>& index, const std::vector<int16_t>& mapping) {
+    std::vector<uint32_t> _code_convert(const ImmBuffer<int32_t>& index, const std::vector<int16_t>& mapping) {
         std::vector<uint32_t> res(index.size());
         SIMDGather::gather(res.data(), mapping.data(), index.data(), mapping.size(), index.size());
         return res;
