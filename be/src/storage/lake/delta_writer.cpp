@@ -628,6 +628,12 @@ StatusOr<TxnLogPtr> DeltaWriterImpl::finish_with_txnlog(DeltaWriterFinishMode mo
             return Status::InternalError(fmt::format("unknown file {}", f.path));
         }
     }
+    for (auto& sst : _tablet_writer->ssts()) {
+        auto* file_meta = op_write->add_ssts();
+        file_meta->set_name(sst.path);
+        file_meta->set_size(sst.size.value());
+        file_meta->set_encryption_meta(sst.encryption_meta);
+    }
     op_write->mutable_rowset()->set_num_rows(_tablet_writer->num_rows());
     op_write->mutable_rowset()->set_data_size(_tablet_writer->data_size());
     op_write->mutable_rowset()->set_overlapped(op_write->rowset().segments_size() > 1);
