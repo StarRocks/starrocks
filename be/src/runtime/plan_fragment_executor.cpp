@@ -315,7 +315,8 @@ void PlanFragmentExecutor::send_report(bool done) {
     auto elapsed_second = (MonotonicMillis() - _start_time_ms) / 1000;
     if (load_profile_collect_second != -1 && elapsed_second < load_profile_collect_second) {
         VLOG(1) << "skip send_report, fragment_instance_id=" << print_id(_runtime_state->fragment_instance_id())
-                << ", load_profile_collect_second=" << load_profile_collect_second << ", elapsed_second=" << elapsed_second; 
+                << ", load_profile_collect_second=" << load_profile_collect_second
+                << ", elapsed_second=" << elapsed_second;
         return;
     }
 
