@@ -101,7 +101,6 @@ public class AnalyzeStatusSystemTable extends SystemTable {
                 }
             }
             TAnalyzeStatusItem item = new TAnalyzeStatusItem();
-            itemList.add(item);
             item.setCatalog_name("");
             item.setDatabase_name("");
             item.setTable_name("");
@@ -136,6 +135,7 @@ public class AnalyzeStatusSystemTable extends SystemTable {
             item.setEnd_time(DateUtils.formatDateTimeUnix(analyze.getEndTime()));
             item.setProperties(analyze.getProperties() == null ? "{}" : analyze.getProperties().toString());
             item.setReason(analyze.getReason());
+            itemList.add(item);
         }
 
         return res;
