@@ -90,7 +90,7 @@ public class DecodeNode extends PlanNode {
                 output.append("<function id ").
                         append(kv.getKey()).
                         append("> : ").
-                        append(kv.getValue().toSql()).
+                        append(explainExpr(kv.getValue())).
                         append("\n");
             }
         }

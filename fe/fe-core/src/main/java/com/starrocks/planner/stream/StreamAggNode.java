@@ -58,23 +58,23 @@ public class StreamAggNode extends PlanNode {
         if (CollectionUtils.isNotEmpty(aggInfo.getMaterializedAggregateExprs())) {
             output.append(detailPrefix)
                     .append("output: ")
-                    .append(getExplainString(aggInfo.getAggregateExprs()))
+                    .append(explainExpr(aggInfo.getAggregateExprs()))
                     .append("\n");
         }
         output.append(detailPrefix)
                 .append("group_by: ")
-                .append(getExplainString(aggInfo.getGroupingExprs()))
+                .append(explainExpr(aggInfo.getGroupingExprs()))
                 .append("\n");
         if (!conjuncts.isEmpty()) {
-            output.append(detailPrefix).append("having: ").append(getExplainString(conjuncts)).append("\n");
+            output.append(detailPrefix).append("having: ").append(explainExpr(conjuncts)).append("\n");
         }
 
         if (detailLevel == TExplainLevel.VERBOSE) {
             if (detailImt != null) {
-                output.append(detailPrefix).append("detail_imt: ").append(detailImt.toString()).append("\n");
+                output.append(detailPrefix).append("detail_imt: ").append(detailImt).append("\n");
             }
             if (aggImt != null) {
-                output.append(detailPrefix).append("agg_imt: ").append(aggImt.toString()).append("\n");
+                output.append(detailPrefix).append("agg_imt: ").append(aggImt).append("\n");
             }
         }
         return output.toString();

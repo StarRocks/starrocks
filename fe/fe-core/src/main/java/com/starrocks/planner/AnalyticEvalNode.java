@@ -222,9 +222,9 @@ public class AnalyticEvalNode extends PlanNode {
         for (Expr fnCall : analyticFnCalls) {
             strings.add("[");
             if (detailLevel.equals(TExplainLevel.NORMAL)) {
-                strings.add(fnCall.toSql());
+                strings.add(explainExpr(fnCall));
             } else {
-                strings.add(fnCall.explain());
+                strings.add(explainExpr(TExplainLevel.VERBOSE, List.of(fnCall)));
             }
             strings.add("]");
         }
@@ -238,9 +238,9 @@ public class AnalyticEvalNode extends PlanNode {
 
             for (Expr partitionExpr : partitionExprs) {
                 if (detailLevel.equals(TExplainLevel.NORMAL)) {
-                    strings.add(partitionExpr.toSql());
+                    strings.add(explainExpr(partitionExpr));
                 } else {
-                    strings.add(partitionExpr.explain());
+                    strings.add(explainExpr(TExplainLevel.VERBOSE, List.of(partitionExpr)));
                 }
             }
 

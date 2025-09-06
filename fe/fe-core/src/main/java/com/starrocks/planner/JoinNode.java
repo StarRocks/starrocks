@@ -55,7 +55,6 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -515,27 +514,27 @@ public abstract class JoinNode extends PlanNode implements RuntimeFilterBuildNod
         for (BinaryPredicate eqJoinPredicate : eqJoinConjuncts) {
             output.append(detailPrefix).append("equal join conjunct: ");
             if (detailLevel.equals(TExplainLevel.VERBOSE)) {
-                output.append(eqJoinPredicate.explain());
+                output.append(explainExpr(detailLevel, List.of(eqJoinPredicate)));
             } else {
-                output.append(eqJoinPredicate.toSql());
+                output.append(explainExpr(eqJoinPredicate));
             }
             output.append("\n");
         }
         if (!otherJoinConjuncts.isEmpty()) {
-            output.append(detailPrefix + "other join predicates: ").append(
-                    getVerboseExplain(otherJoinConjuncts, detailLevel) + "\n");
+            output.append(detailPrefix).append("other join predicates: ")
+                    .append(explainExpr(detailLevel, otherJoinConjuncts)).append("\n");
         }
         if (!conjuncts.isEmpty()) {
             output.append(detailPrefix).append("other predicates: ")
-                    .append(getVerboseExplain(conjuncts, detailLevel))
+                    .append(explainExpr(detailLevel, conjuncts))
                     .append("\n");
         }
 
         if (commonSlotMap != null && !commonSlotMap.isEmpty()) {
-            output.append(detailPrefix + "  common sub expr:" + "\n");
+            output.append(detailPrefix).append("  common sub expr:").append("\n");
             for (Map.Entry<SlotId, Expr> entry : commonSlotMap.entrySet()) {
-                output.append(detailPrefix + "  <slot " + entry.getKey().toString() + "> : "
-                        + getExplainString(Arrays.asList(entry.getValue())) + "\n");
+                output.append(detailPrefix).append("  <slot ").append(entry.getKey().toString()).append("> : ")
+                        .append(explainExpr(entry.getValue())).append("\n");
             }
         }
 
