@@ -93,6 +93,11 @@ public class FunctionSet {
     public static final String FROM_UNIXTIME_MS = "from_unixtime_ms";
     public static final String HOUR = "hour";
     public static final String HOUR_FROM_UNIXTIME = "hour_from_unixtime";
+    public static final String YEAR_FROM_UNIXTIME = "year_from_unixtime";
+    public static final String MONTH_FROM_UNIXTIME = "month_from_unixtime";
+    public static final String DAY_FROM_UNIXTIME = "day_from_unixtime";
+    public static final String MINUTE_FROM_UNIXTIME = "minute_from_unixtime";
+    public static final String SECOND_FROM_UNIXTIME = "second_from_unixtime";
     public static final String MINUTE = "minute";
     public static final String MONTH = "month";
     public static final String MONTHNAME = "monthname";

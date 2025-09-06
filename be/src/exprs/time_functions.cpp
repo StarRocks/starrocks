@@ -1595,6 +1595,48 @@ static inline int64_t impl_hour_from_unixtime(int64_t unixtime) {
     return hour;
 }
 
+static inline int64_t impl_minute_from_unixtime(int64_t unixtime) {
+    static const libdivide::divider<int64_t> fast_div_60(60);
+    static const libdivide::divider<int64_t> fast_div_3600(3600);
+    static const libdivide::divider<int64_t> fast_div_86400(86400);
+
+    int64_t remainder;
+    if (LIKELY(unixtime >= 0)) {
+        remainder = unixtime - unixtime / fast_div_86400 * 86400;
+    } else {
+        remainder = unixtime % 86400;
+        if (remainder < 0) {
+            remainder += 86400;
+        }
+    }
+    int64_t hour_sec = (remainder / fast_div_3600) * 3600;
+    int64_t minute = (remainder - hour_sec) / fast_div_60;
+    return minute;
+}
+
+static inline int64_t impl_second_from_unixtime(int64_t unixtime) {
+    static const libdivide::divider<int64_t> fast_div_60(60);
+    static const libdivide::divider<int64_t> fast_div_86400(86400);
+
+    int64_t remainder;
+    if (LIKELY(unixtime >= 0)) {
+        remainder = unixtime - unixtime / fast_div_86400 * 86400;
+    } else {
+        remainder = unixtime % 86400;
+        if (remainder < 0) {
+            remainder += 86400;
+        }
+    }
+    int64_t second = remainder - (remainder / fast_div_60) * 60;
+    return second;
+}
+
+static inline int64_t floor_div_86400(int64_t seconds) {
+    // floor division for negative values
+    if (LIKELY(seconds >= 0)) return seconds / 86400;
+    return -(((-seconds) + 86400 - 1) / 86400);
+}
+
 StatusOr<ColumnPtr> TimeFunctions::hour_from_unixtime(FunctionContext* context, const Columns& columns) {
     DCHECK_EQ(columns.size(), 1);
     RETURN_IF_COLUMNS_ONLY_NULL(columns);
@@ -1622,6 +1664,173 @@ StatusOr<ColumnPtr> TimeFunctions::hour_from_unixtime(FunctionContext* context, 
         int offset = ctz.lookup_offset(t).offset;
         int hour = impl_hour_from_unixtime(date + offset);
         result.append(hour);
+    }
+    return result.build(ColumnHelper::is_all_const(columns));
+}
+
+StatusOr<ColumnPtr> TimeFunctions::minute_from_unixtime(FunctionContext* context, const Columns& columns) {
+    DCHECK_EQ(columns.size(), 1);
+    RETURN_IF_COLUMNS_ONLY_NULL(columns);
+
+    static const auto epoch =
+            std::chrono::time_point_cast<cctz::sys_seconds>(std::chrono::system_clock::from_time_t(0));
+
+    auto ctz = context->state()->timezone_obj();
+    auto size = columns[0]->size();
+    ColumnViewer<TYPE_BIGINT> data_column(columns[0]);
+    ColumnBuilder<TYPE_INT> result(size);
+    for (int row = 0; row < size; ++row) {
+        if (data_column.is_null(row)) {
+            result.append_null();
+            continue;
+        }
+
+        auto date = data_column.value(row);
+        if (date < 0 || date > MAX_UNIX_TIMESTAMP) {
+            result.append_null();
+            continue;
+        }
+
+        cctz::time_point<cctz::sys_seconds> t = epoch + cctz::seconds(date);
+        int offset = ctz.lookup_offset(t).offset;
+        int minute = impl_minute_from_unixtime(date + offset);
+        result.append(minute);
+    }
+    return result.build(ColumnHelper::is_all_const(columns));
+}
+
+StatusOr<ColumnPtr> TimeFunctions::second_from_unixtime(FunctionContext* context, const Columns& columns) {
+    DCHECK_EQ(columns.size(), 1);
+    RETURN_IF_COLUMNS_ONLY_NULL(columns);
+
+    static const auto epoch =
+            std::chrono::time_point_cast<cctz::sys_seconds>(std::chrono::system_clock::from_time_t(0));
+
+    auto ctz = context->state()->timezone_obj();
+    auto size = columns[0]->size();
+    ColumnViewer<TYPE_BIGINT> data_column(columns[0]);
+    ColumnBuilder<TYPE_INT> result(size);
+    for (int row = 0; row < size; ++row) {
+        if (data_column.is_null(row)) {
+            result.append_null();
+            continue;
+        }
+
+        auto date = data_column.value(row);
+        if (date < 0 || date > MAX_UNIX_TIMESTAMP) {
+            result.append_null();
+            continue;
+        }
+
+        cctz::time_point<cctz::sys_seconds> t = epoch + cctz::seconds(date);
+        int offset = ctz.lookup_offset(t).offset;
+        int second = impl_second_from_unixtime(date + offset);
+        result.append(second);
+    }
+    return result.build(ColumnHelper::is_all_const(columns));
+}
+
+StatusOr<ColumnPtr> TimeFunctions::year_from_unixtime(FunctionContext* context, const Columns& columns) {
+    DCHECK_EQ(columns.size(), 1);
+    RETURN_IF_COLUMNS_ONLY_NULL(columns);
+
+    static const auto epoch =
+            std::chrono::time_point_cast<cctz::sys_seconds>(std::chrono::system_clock::from_time_t(0));
+
+    auto ctz = context->state()->timezone_obj();
+    auto size = columns[0]->size();
+    ColumnViewer<TYPE_BIGINT> data_column(columns[0]);
+    ColumnBuilder<TYPE_INT> result(size);
+    for (int row = 0; row < size; ++row) {
+        if (data_column.is_null(row)) {
+            result.append_null();
+            continue;
+        }
+
+        auto date = data_column.value(row);
+        if (date < 0 || date > MAX_UNIX_TIMESTAMP) {
+            result.append_null();
+            continue;
+        }
+
+        cctz::time_point<cctz::sys_seconds> t = epoch + cctz::seconds(date);
+        int offset = ctz.lookup_offset(t).offset;
+        int64_t adjusted = date + offset;
+        int64_t days = floor_div_86400(adjusted);
+        DateValue dv = DateValue::from_days_since_unix_epoch((int)days);
+        int y, m, d;
+        dv.to_date(&y, &m, &d);
+        result.append(y);
+    }
+    return result.build(ColumnHelper::is_all_const(columns));
+}
+
+StatusOr<ColumnPtr> TimeFunctions::month_from_unixtime(FunctionContext* context, const Columns& columns) {
+    DCHECK_EQ(columns.size(), 1);
+    RETURN_IF_COLUMNS_ONLY_NULL(columns);
+
+    static const auto epoch =
+            std::chrono::time_point_cast<cctz::sys_seconds>(std::chrono::system_clock::from_time_t(0));
+
+    auto ctz = context->state()->timezone_obj();
+    auto size = columns[0]->size();
+    ColumnViewer<TYPE_BIGINT> data_column(columns[0]);
+    ColumnBuilder<TYPE_INT> result(size);
+    for (int row = 0; row < size; ++row) {
+        if (data_column.is_null(row)) {
+            result.append_null();
+            continue;
+        }
+
+        auto date = data_column.value(row);
+        if (date < 0 || date > MAX_UNIX_TIMESTAMP) {
+            result.append_null();
+            continue;
+        }
+
+        cctz::time_point<cctz::sys_seconds> t = epoch + cctz::seconds(date);
+        int offset = ctz.lookup_offset(t).offset;
+        int64_t adjusted = date + offset;
+        int64_t days = floor_div_86400(adjusted);
+        DateValue dv = DateValue::from_days_since_unix_epoch((int)days);
+        int y, m, d;
+        dv.to_date(&y, &m, &d);
+        result.append(m);
+    }
+    return result.build(ColumnHelper::is_all_const(columns));
+}
+
+StatusOr<ColumnPtr> TimeFunctions::day_from_unixtime(FunctionContext* context, const Columns& columns) {
+    DCHECK_EQ(columns.size(), 1);
+    RETURN_IF_COLUMNS_ONLY_NULL(columns);
+
+    static const auto epoch =
+            std::chrono::time_point_cast<cctz::sys_seconds>(std::chrono::system_clock::from_time_t(0));
+
+    auto ctz = context->state()->timezone_obj();
+    auto size = columns[0]->size();
+    ColumnViewer<TYPE_BIGINT> data_column(columns[0]);
+    ColumnBuilder<TYPE_INT> result(size);
+    for (int row = 0; row < size; ++row) {
+        if (data_column.is_null(row)) {
+            result.append_null();
+            continue;
+        }
+
+        auto date = data_column.value(row);
+        if (date < 0 || date > MAX_UNIX_TIMESTAMP) {
+            result.append_null();
+            continue;
+        }
+
+        cctz::time_point<cctz::sys_seconds> t = epoch + cctz::seconds(date);
+        int offset = ctz.lookup_offset(t).offset;
+        int64_t adjusted = date + offset;
+        int64_t days = floor_div_86400(adjusted);
+        DateValue dv = DateValue::from_days_since_unix_epoch((int)days);
+        int y, m, d;
+        dv.to_date(&y, &m, &d);
+        result.append(d);
     }
     return result.build(ColumnHelper::is_all_const(columns));
 }
