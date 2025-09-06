@@ -29,7 +29,7 @@ public class UnixGroupProvider extends GroupProvider {
     }
 
     @Override
-    public Set<String> getGroup(UserIdentity userIdentity) {
+    public Set<String> getGroup(UserIdentity userIdentity, String distinguishedName) {
         Set<String> userGroups = Set.of();
 
         UserGroupInformation ugi = UserGroupInformation.createRemoteUser(userIdentity.getUser());

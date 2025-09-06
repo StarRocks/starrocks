@@ -551,6 +551,7 @@ public class AuthenticationMgr {
 
     public void alterSecurityIntegration(String name, Map<String, String> alterProps,
                                          boolean isReplay) throws DdlException {
+        //FIXME: add group provider need create object
         SecurityIntegration securityIntegration = nameToSecurityIntegrationMap.get(name);
         if (securityIntegration == null) {
             throw new DdlException("security integration '" + name + "' not found");
