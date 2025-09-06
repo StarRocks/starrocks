@@ -37,6 +37,9 @@ package com.starrocks.sql.optimizer.rewrite;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableSet;
+import com.google.re2j.Matcher;
+import com.google.re2j.Pattern;
+import com.google.re2j.PatternSyntaxException;
 import com.starrocks.authorization.AuthorizationMgr;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Type;
@@ -1499,6 +1502,35 @@ public class ScalarOperatorFunctions {
                                            ConstantOperator replacement) {
         return ConstantOperator.createVarchar(
                 StringUtils.replace(value.getVarchar(), target.getVarchar(), replacement.getVarchar()));
+    }
+
+    @ConstantFunction(name = "regexp_replace", argTypes = {VARCHAR, VARCHAR, VARCHAR}, returnType = VARCHAR)
+    public static ConstantOperator regexpReplace(ConstantOperator str, ConstantOperator pattern,
+                                                 ConstantOperator replacement) {
+        if (str.isNull() || pattern.isNull() || replacement.isNull()) {
+            return ConstantOperator.createNull(Type.VARCHAR);
+        }
+        if (str.getVarchar().isEmpty()) {
+            return ConstantOperator.createVarchar(str.getVarchar());
+        }
+
+        Pattern p;
+        try {
+            p = Pattern.compile(pattern.getVarchar());
+        } catch (PatternSyntaxException e) {
+            return ConstantOperator.createNull(Type.VARCHAR);
+        }
+        Matcher m = p.matcher(str.getVarchar());
+        String resultString = str.getVarchar();
+        if (m.find() && m.end() >= str.getVarchar().length()) {
+            // Pattern '.*' matches empty strings, it leads to wrong result,
+            // so we only replace first matched string if it matches the end of the string
+            resultString = m.replaceFirst(replacement.getVarchar());
+        } else {
+            // Replace all matched strings.
+            resultString = m.replaceAll(replacement.getVarchar());
+        }
+        return ConstantOperator.createVarchar(resultString);
     }
 
     private static ConstantOperator createDecimalConstant(BigDecimal result) {
