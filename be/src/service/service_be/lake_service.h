@@ -59,6 +59,10 @@ public:
     void drop_table(::google::protobuf::RpcController* controller, const ::starrocks::DropTableRequest* request,
                     ::starrocks::DropTableResponse* response, ::google::protobuf::Closure* done) override;
 
+    void remove_table_path(::google::protobuf::RpcController* controller,
+                           const ::starrocks::RemoveTablePathRequest* request,
+                           ::starrocks::RemoveTablePathResponse* response, ::google::protobuf::Closure* done) override;
+
     void delete_data(::google::protobuf::RpcController* controller, const ::starrocks::DeleteDataRequest* request,
                      ::starrocks::DeleteDataResponse* response, ::google::protobuf::Closure* done) override;
 
