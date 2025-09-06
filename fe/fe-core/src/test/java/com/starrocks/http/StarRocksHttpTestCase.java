@@ -59,6 +59,7 @@ import com.starrocks.catalog.TabletMeta;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ExceptionChecker.ThrowingRunnable;
+import com.starrocks.common.Pair;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.ha.FrontendNodeType;
@@ -545,7 +546,8 @@ public abstract class StarRocksHttpTestCase {
             }
         };
 
-        Frontend frontend = new Frontend(0, FrontendNodeType.LEADER, "", "", 0);
+        Frontend frontend = new Frontend(0, FrontendNodeType.LEADER, "", "localhost", 0);
+        frontend.setAlive(true);
         new Expectations(nodeMgr) {
             {
                 nodeMgr.getClusterInfo();
@@ -555,6 +557,14 @@ public abstract class StarRocksHttpTestCase {
                 nodeMgr.getMySelf();
                 minTimes = 0;
                 result = frontend;
+
+                nodeMgr.getAllFrontends();
+                minTimes = 0;
+                result = Lists.newArrayList(frontend);
+
+                nodeMgr.getSelfNode();
+                minTimes = 0;
+                result = new Pair<>(frontend.getHost(), HTTP_PORT);
             }
         };
 
