@@ -281,6 +281,7 @@ TEST_F(LakeTabletsChannelTest, test_simple_write) {
     add_chunk_request.set_sender_id(0);
     add_chunk_request.set_eos(false);
     add_chunk_request.set_packet_seq(0);
+    add_chunk_request.set_timeout_ms(60000);
 
     for (int i = 0; i < kChunkSize; i++) {
         int64_t tablet_id = 10086 + (i / kChunkSizePerTablet);
@@ -345,6 +346,7 @@ TEST_F(LakeTabletsChannelTest, test_simple_write) {
     finish_request.set_sender_id(0);
     finish_request.set_eos(true);
     finish_request.set_packet_seq(1);
+    finish_request.set_timeout_ms(60000);
     finish_request.add_partition_ids(10);
     finish_request.add_partition_ids(11);
 
@@ -395,6 +397,7 @@ TEST_F(LakeTabletsChannelTest, test_write_partial_partition) {
     add_chunk_request.set_sender_id(0);
     add_chunk_request.set_eos(false);
     add_chunk_request.set_packet_seq(0);
+    add_chunk_request.set_timeout_ms(60000);
 
     for (int i = 0; i < kChunkSize; i++) {
         int64_t tablet_id = 10086 + (i / kChunkSizePerTablet);
@@ -416,6 +419,7 @@ TEST_F(LakeTabletsChannelTest, test_write_partial_partition) {
     finish_request.set_sender_id(0);
     finish_request.set_eos(true);
     finish_request.set_packet_seq(1);
+    finish_request.set_timeout_ms(60000);
     // Does not contain partition 11
     finish_request.add_partition_ids(10);
 
@@ -459,6 +463,7 @@ TEST_F(LakeTabletsChannelTest, test_write_bundling_file) {
     add_chunk_request.set_sender_id(0);
     add_chunk_request.set_eos(false);
     add_chunk_request.set_packet_seq(0);
+    add_chunk_request.set_timeout_ms(60000);
 
     for (int i = 0; i < kChunkSize; i++) {
         int64_t tablet_id = 10086 + (i / kChunkSizePerTablet);
@@ -480,6 +485,7 @@ TEST_F(LakeTabletsChannelTest, test_write_bundling_file) {
     finish_request.set_sender_id(0);
     finish_request.set_eos(true);
     finish_request.set_packet_seq(1);
+    finish_request.set_timeout_ms(60000);
     finish_request.add_partition_ids(10);
     finish_request.add_partition_ids(11);
 
@@ -530,6 +536,7 @@ TEST_F(LakeTabletsChannelTest, test_write_concurrently) {
             add_chunk_request.set_sender_id(sender_id);
             add_chunk_request.set_eos(false);
             add_chunk_request.set_packet_seq(i);
+            add_chunk_request.set_timeout_ms(60000);
 
             for (int j = 0; j < kChunkSize; j++) {
                 int64_t tablet_id = 10086 + (j / kChunkSizePerTablet);
@@ -551,6 +558,7 @@ TEST_F(LakeTabletsChannelTest, test_write_concurrently) {
         finish_request.set_sender_id(sender_id);
         finish_request.set_eos(true);
         finish_request.set_packet_seq(kLookCount);
+        finish_request.set_timeout_ms(60000);
         finish_request.add_partition_ids(10);
         finish_request.add_partition_ids(11);
 
@@ -598,6 +606,7 @@ TEST_F(LakeTabletsChannelTest, DISABLED_test_abort) {
             add_chunk_request.set_sender_id(0);
             add_chunk_request.set_eos(false);
             add_chunk_request.set_packet_seq(packet_seq++);
+            add_chunk_request.set_timeout_ms(60000);
 
             for (int i = 0; i < kChunkSize; i++) {
                 int64_t tablet_id = 10086 + (i / kChunkSizePerTablet);
@@ -623,6 +632,7 @@ TEST_F(LakeTabletsChannelTest, DISABLED_test_abort) {
         finish_request.set_packet_seq(packet_seq++);
         finish_request.add_partition_ids(10);
         finish_request.add_partition_ids(11);
+        finish_request.set_timeout_ms(60000);
         _tablets_channel->add_chunk(nullptr, finish_request, &finish_response, &close_channel);
         ASSERT_NE(TStatusCode::OK, finish_response.status().status_code());
         ASSERT_TRUE(close_channel);
@@ -659,7 +669,7 @@ TEST_F(LakeTabletsChannelTest, test_write_failed) {
     add_chunk_request.set_sender_id(0);
     add_chunk_request.set_eos(false);
     add_chunk_request.set_packet_seq(0);
-
+    add_chunk_request.set_timeout_ms(60000);
     for (int i = 0; i < kChunkSize; i++) {
         int64_t tablet_id = 10086 + (i / kChunkSizePerTablet);
         add_chunk_request.add_tablet_ids(tablet_id);
@@ -705,6 +715,7 @@ TEST_F(LakeTabletsChannelTest, test_tablet_not_existed) {
     add_chunk_request.set_sender_id(0);
     add_chunk_request.set_eos(false);
     add_chunk_request.set_packet_seq(0);
+    add_chunk_request.set_timeout_ms(60000);
 
     for (int i = 0; i < kChunkSize; i++) {
         int64_t tablet_id = 10086 + (i / kChunkSizePerTablet);
@@ -744,6 +755,7 @@ TEST_F(LakeTabletsChannelTest, test_empty_tablet) {
     add_chunk_request.set_sender_id(0);
     add_chunk_request.set_eos(false);
     add_chunk_request.set_packet_seq(0);
+    add_chunk_request.set_timeout_ms(60000);
 
     // Only tablet 10086 has data
     for (int i = 0; i < kChunkSize; i++) {
@@ -767,6 +779,7 @@ TEST_F(LakeTabletsChannelTest, test_empty_tablet) {
     finish_request.set_packet_seq(1);
     finish_request.add_partition_ids(10);
     finish_request.add_partition_ids(11);
+    finish_request.set_timeout_ms(60000);
 
     _tablets_channel->add_chunk(nullptr, finish_request, &finish_response, &close_channel);
     ASSERT_TRUE(finish_response.status().status_code() == TStatusCode::OK);
@@ -812,6 +825,7 @@ TEST_F(LakeTabletsChannelTest, test_finish_failed) {
     add_chunk_request.set_sender_id(0);
     add_chunk_request.set_eos(false);
     add_chunk_request.set_packet_seq(0);
+    add_chunk_request.set_timeout_ms(60000);
 
     // Only tablet 10086 has data
     for (int i = 0; i < kChunkSize; i++) {
@@ -838,6 +852,7 @@ TEST_F(LakeTabletsChannelTest, test_finish_failed) {
     finish_request.set_packet_seq(1);
     finish_request.add_partition_ids(10);
     finish_request.add_partition_ids(11);
+    finish_request.set_timeout_ms(60000);
 
     _tablets_channel->add_chunk(nullptr, finish_request, &finish_response, &close_channel);
     ASSERT_NE(TStatusCode::OK, finish_response.status().status_code());
@@ -861,6 +876,7 @@ TEST_F(LakeTabletsChannelTest, test_finish_after_abort) {
         add_chunk_request.set_sender_id(0);
         add_chunk_request.set_eos(true);
         add_chunk_request.set_packet_seq(0);
+        add_chunk_request.set_timeout_ms(60000);
 
         for (int i = 0; i < kChunkSize; i++) {
             int64_t tablet_id = 10086 + (i / kChunkSizePerTablet);
@@ -889,6 +905,7 @@ TEST_F(LakeTabletsChannelTest, test_finish_after_abort) {
         finish_request.set_sender_id(1);
         finish_request.set_eos(true);
         finish_request.set_packet_seq(0);
+        finish_request.set_timeout_ms(60000);
 
         bool close_channel;
         _tablets_channel->add_chunk(nullptr, finish_request, &finish_response, &close_channel);
@@ -921,6 +938,7 @@ TEST_F(LakeTabletsChannelTest, test_profile) {
     add_chunk_request.set_sender_id(0);
     add_chunk_request.set_eos(true);
     add_chunk_request.set_packet_seq(0);
+    add_chunk_request.set_timeout_ms(60000);
 
     for (int i = 0; i < kChunkSize; i++) {
         int64_t tablet_id = 10086 + (i / kChunkSizePerTablet);
