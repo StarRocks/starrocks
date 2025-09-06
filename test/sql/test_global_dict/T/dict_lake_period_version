@@ -1,8 +1,12 @@
 -- name: test_dict_lake_period_version
 
-create external catalog hive_sql_test_${uuid0} PROPERTIES ("type"="hive", "hive.metastore.uris"="${hive_metastore_uris}");
+set low_cardinality_optimize_on_lake = true;
+set always_collect_low_card_dict_on_lake = true;
 
-use hive_sql_test_${uuid0}.hive_oss_db;
+create external catalog hive_sql_test_${uuid0} PROPERTIES ("type"="hive", "hive.metastore.uris"="${hive_metastore_uris}");
+create database if not exists hive_sql_test_${uuid0}.hive_test_db_${uuid0};
+use hive_sql_test_${uuid0}.hive_test_db_${uuid0};
+
 drop table if exists dict_version_test_${uuid0} force;
 create table dict_version_test_${uuid0} (
 c1 int,
@@ -38,7 +42,7 @@ function: try_collect_dict_N_times('c2', 'dict_version_test_${uuid0}', 5)
 function: assert_no_global_dict('c2', 'dict_version_test_${uuid0}')
 
 drop table dict_version_test_${uuid0} force;
-
+drop database if exists hive_sql_test_${uuid0}.hive_test_db_${uuid0} force;
 drop catalog hive_sql_test_${uuid0};
 
 set catalog default_catalog;
