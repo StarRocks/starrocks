@@ -592,13 +592,6 @@ public class TaskManager implements MemoryTrackable {
 
         writer.writeInt(runStatusList.size());
         for (TaskRunStatus status : runStatusList) {
-            // TODO: This is to be compatible with the old version of TaskRunStatus when degraded from a higher version
-            // because SKIPPED state is not defined in the lower version.
-            // NOTE: This can be removed in the next 3.4 version release.
-            if (status.getState() != null && status.getState().equals(Constants.TaskRunState.SKIPPED)) {
-                status.setState(Constants.TaskRunState.SUCCESS);
-                LOG.warn("TaskRunStatus state is SKIPPED, change to SUCCESS, status: {}", status);
-            }
             writer.writeJson(status);
         }
 
