@@ -16,7 +16,6 @@ package com.starrocks.connector.odps;
 
 import com.aliyun.odps.Odps;
 import com.aliyun.odps.OdpsException;
-import com.aliyun.odps.Partition;
 import com.aliyun.odps.PartitionSpec;
 import com.aliyun.odps.Project;
 import com.aliyun.odps.security.SecurityManager;
@@ -24,6 +23,7 @@ import com.aliyun.odps.table.TableIdentifier;
 import com.aliyun.odps.table.configuration.SplitOptions;
 import com.aliyun.odps.table.enviroment.Credentials;
 import com.aliyun.odps.table.enviroment.EnvironmentSettings;
+import com.aliyun.odps.table.optimizer.predicate.Predicate;
 import com.aliyun.odps.table.read.TableBatchReadSession;
 import com.aliyun.odps.table.read.TableReadSessionBuilder;
 import com.aliyun.odps.table.read.split.InputSplit;
@@ -75,6 +75,7 @@ import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.ExecutionException;
@@ -97,7 +98,7 @@ public class OdpsMetadata implements ConnectorMetadata {
     private String catalogOwner;
     private LoadingCache<String, Set<String>> tableNameCache;
     private LoadingCache<OdpsTableName, OdpsTable> tableCache;
-    private LoadingCache<OdpsTableName, List<Partition>> partitionCache;
+    private LoadingCache<OdpsTableName, List<PartitionSpec>> partitionCache;
 
     public OdpsMetadata(Odps odps, String catalogName, AliyunCloudCredential aliyunCloudCredential,
                         OdpsProperties properties) {
@@ -226,25 +227,22 @@ public class OdpsMetadata implements ConnectorMetadata {
     public List<String> listPartitionNames(String databaseName, String tableName, ConnectorMetadatRequestContext requestContext) {
         OdpsTableName odpsTableName = OdpsTableName.of(databaseName, tableName);
         // TODO: perhaps not good to support users to fetch whole tables?
-        List<Partition> partitions = get(partitionCache, odpsTableName);
+        List<PartitionSpec> partitions = get(partitionCache, odpsTableName);
         if (partitions == null || partitions.isEmpty()) {
             return Collections.emptyList();
         }
-        return partitions.stream().map(Partition::getPartitionSpec)
-                .map(p -> p.toString(false, true)).collect(
-                        Collectors.toList());
+        return partitions.stream().map(p -> p.toString(false, true)).collect(
+                Collectors.toList());
     }
 
     @Override
     public List<String> listPartitionNamesByValue(String databaseName, String tableName,
                                                   List<Optional<String>> partitionValues) {
-        List<Partition> partitions = get(partitionCache, OdpsTableName.of(databaseName, tableName));
+        List<PartitionSpec> partitionSpecs = get(partitionCache, OdpsTableName.of(databaseName, tableName));
         ImmutableList.Builder<String> builder = ImmutableList.builder();
-        if (partitions == null || partitions.isEmpty()) {
+        if (partitionSpecs == null || partitionSpecs.isEmpty()) {
             return builder.build();
         }
-        List<PartitionSpec> partitionSpecs =
-                partitions.stream().map(Partition::getPartitionSpec).collect(Collectors.toList());
         List<String> keys = new ArrayList<>(partitionSpecs.get(0).keys());
         for (PartitionSpec partitionSpec : partitionSpecs) {
             boolean present = true;
@@ -281,10 +279,18 @@ public class OdpsMetadata implements ConnectorMetadata {
         return builder.build();
     }
 
-    private List<Partition> loadPartitions(OdpsTableName odpsTableName) {
+    private List<PartitionSpec> loadPartitions(OdpsTableName odpsTableName) {
         com.aliyun.odps.Table odpsTable =
                 odps.tables().get(odpsTableName.getDatabaseName(), odpsTableName.getTableName());
-        return odpsTable.getPartitions();
+        try {
+            return odpsTable.getPartitionSpecs();
+        } catch (OdpsException e) {
+            String errorMsg =
+                    "Encounter error when loading partitions of" + odpsTableName + ", error: " + e.getMessage() +
+                            ", MaxCompute requestId " + e.getRequestId();
+            LOG.error(errorMsg, e);
+            throw new StarRocksConnectorException(errorMsg, e);
+        }
     }
 
     @Override
@@ -293,15 +299,16 @@ public class OdpsMetadata implements ConnectorMetadata {
             return Collections.emptyList();
         }
         OdpsTable odpsTable = (OdpsTable) table;
-        List<Partition> partitions = get(partitionCache,
+        List<PartitionSpec> partitions = get(partitionCache,
                 OdpsTableName.of(odpsTable.getCatalogDBName(), odpsTable.getCatalogTableName()));
         if (partitions == null || partitions.isEmpty()) {
             return Collections.emptyList();
         }
         Set<String> filter = new HashSet<>(partitionNames);
         return partitions.stream()
-                .filter(partition -> filter.contains(partition.getPartitionSpec().toString(false, true)))
-                .map(OdpsPartition::new).collect(Collectors.toList());
+                .filter(partition -> filter.contains(partition.toString(false, true)))
+                .map(p -> new OdpsPartition(odps.tables().get(odpsTable.getCatalogDBName(), odpsTable.getCatalogTableName()), p))
+                .collect(Collectors.toList());
     }
 
     @Override
@@ -344,18 +351,38 @@ public class OdpsMetadata implements ConnectorMetadata {
         try {
             LOG.info("get remote file infos, project:{}, table:{}, columns:{}", odpsTable.getCatalogDBName(),
                     odpsTable.getCatalogTableName(), params.getFieldNames());
-            TableReadSessionBuilder tableReadSessionBuilder =
-                    scanBuilder.identifier(TableIdentifier.of(odpsTable.getCatalogDBName(), odpsTable.getCatalogTableName()))
-                            .withSettings(settings)
-                            .requiredDataColumns(orderedColumnNames)
-                            .requiredPartitions(partitionSpecs);
+            TableReadSessionBuilder tableReadSessionBuilder = scanBuilder.identifier(
+                            TableIdentifier.of(odpsTable.getCatalogDBName(), odpsTable.getCatalogTableName()))
+                    .withSettings(settings).requiredDataColumns(orderedColumnNames).requiredPartitions(partitionSpecs)
+                    .withSplitOptions(
+                            Objects.equals(properties.get(OdpsProperties.SPLIT_POLICY), OdpsProperties.ROW_OFFSET) ?
+                                    SplitOptions.newBuilder().SplitByRowOffset().build() : SplitOptions.newBuilder()
+                                    .SplitByByteSize(Long.parseLong(properties.get(OdpsProperties.SPLIT_SIZE_LIMIT)))
+                                    .build());
+            TableBatchReadSession odpsTableScanSession;
+            if (Boolean.parseBoolean(properties.get(OdpsProperties.ENABLE_PREDICATE_PUSHDOWN))) {
+                Predicate odpsPredicate = EntityConvertUtils.convertPredicate(params.getPredicate(),
+                        ImmutableSet.copyOf(odpsTable.getPartitionColumnNames()));
+                LOG.info("try to push down predicate {}", odpsPredicate);
+                tableReadSessionBuilder.withFilterPredicate(odpsPredicate);
+                try {
+                    odpsTableScanSession = tableReadSessionBuilder.buildBatchReadSession();
+                } catch (IOException e) {
+                    LOG.warn("push down predicate failed {}", odpsPredicate);
+                    // fallback: clear predicate and retry
+                    odpsTableScanSession =
+                            tableReadSessionBuilder.withFilterPredicate(Predicate.NO_PREDICATE).buildBatchReadSession();
+                }
+            } else {
+                odpsTableScanSession = tableReadSessionBuilder.buildBatchReadSession();
+            }
             OdpsSplitsInfo odpsSplitsInfo;
             switch (properties.get(OdpsProperties.SPLIT_POLICY)) {
                 case OdpsProperties.ROW_OFFSET:
-                    odpsSplitsInfo = callRowOffsetSplitsInfo(tableReadSessionBuilder, params.getLimit());
+                    odpsSplitsInfo = callRowOffsetSplitsInfo(odpsTableScanSession, params.getLimit());
                     break;
                 case OdpsProperties.SIZE:
-                    odpsSplitsInfo = callSizeSplitsInfo(tableReadSessionBuilder);
+                    odpsSplitsInfo = callSizeSplitsInfo(odpsTableScanSession);
                     break;
                 default:
                     throw new StarRocksConnectorException(
@@ -367,37 +394,27 @@ public class OdpsMetadata implements ConnectorMetadata {
             return Lists.newArrayList(remoteFileInfo);
         } catch (Exception e) {
             LOG.error("getRemoteFileInfos error", e);
-            throw new StarRocksConnectorException("Encounter error when try to split the maxcompute table: " + e.getMessage(), e);
+            throw new StarRocksConnectorException(
+                    "Encounter error when try to split the maxcompute table: " + e.getMessage(), e);
         }
     }
 
-    private OdpsSplitsInfo callSizeSplitsInfo(TableReadSessionBuilder tableReadSessionBuilder)
-            throws IOException {
-        Map<String, String> splitProperties = new HashMap<>();
-        splitProperties.put("tunnel_endpoint", properties.get(OdpsProperties.TUNNEL_ENDPOINT));
-        splitProperties.put("quota_name", properties.get(OdpsProperties.TUNNEL_QUOTA));
+    private OdpsSplitsInfo callSizeSplitsInfo(TableBatchReadSession odpsTableScanSession) throws IOException {
+        Map<String, String> splitProperties = getCommonSplitProperties();
         OdpsSplitsInfo odpsSplitsInfo;
-        TableBatchReadSession sizeScan = tableReadSessionBuilder
-                .withSplitOptions(SplitOptions.createDefault())
-                .buildBatchReadSession();
-        InputSplitAssigner assigner = sizeScan.getInputSplitAssigner();
-        odpsSplitsInfo = new OdpsSplitsInfo(Arrays.asList(assigner.getAllSplits()), sizeScan,
+        InputSplitAssigner assigner = odpsTableScanSession.getInputSplitAssigner();
+        odpsSplitsInfo = new OdpsSplitsInfo(Arrays.asList(assigner.getAllSplits()), odpsTableScanSession,
                 OdpsSplitsInfo.SplitPolicy.SIZE, splitProperties);
         return odpsSplitsInfo;
     }
 
-    private OdpsSplitsInfo callRowOffsetSplitsInfo(TableReadSessionBuilder tableReadSessionBuilder, long limit)
+    private OdpsSplitsInfo callRowOffsetSplitsInfo(TableBatchReadSession odpsTableScanSession, long limit)
             throws IOException {
-        Map<String, String> splitProperties = new HashMap<>();
-        splitProperties.put("tunnel_endpoint", properties.get(OdpsProperties.TUNNEL_ENDPOINT));
-        splitProperties.put("quota_name", properties.get(OdpsProperties.TUNNEL_QUOTA));
+        Map<String, String> splitProperties = getCommonSplitProperties();
         OdpsSplitsInfo odpsSplitsInfo;
         List<InputSplit> splits = new ArrayList<>();
-        TableBatchReadSession rowScan = tableReadSessionBuilder
-                .withSplitOptions(SplitOptions.newBuilder().SplitByRowOffset().build())
-                .buildBatchReadSession();
         RowRangeInputSplitAssigner inputSplitAssigner =
-                (RowRangeInputSplitAssigner) rowScan.getInputSplitAssigner();
+                (RowRangeInputSplitAssigner) odpsTableScanSession.getInputSplitAssigner();
         long rowsPerSplit = Long.parseLong(properties.get(OdpsProperties.SPLIT_ROW_COUNT));
         long totalRowCount = inputSplitAssigner.getTotalRowCount();
         if (limit != -1) {
@@ -413,9 +430,16 @@ public class OdpsMetadata implements ConnectorMetadata {
         InputSplitWithRowRange splitByRowOffset =
                 (InputSplitWithRowRange) inputSplitAssigner.getSplitByRowOffset(numRecord, totalRowCount - numRecord);
         splits.add(splitByRowOffset);
-        odpsSplitsInfo = new OdpsSplitsInfo(splits, rowScan,
+        odpsSplitsInfo = new OdpsSplitsInfo(splits, odpsTableScanSession,
                 OdpsSplitsInfo.SplitPolicy.ROW_OFFSET, splitProperties);
         return odpsSplitsInfo;
+    }
+
+    private Map<String, String> getCommonSplitProperties() {
+        Map<String, String> splitProperties = new HashMap<>();
+        splitProperties.put("tunnel_endpoint", properties.get(OdpsProperties.TUNNEL_ENDPOINT));
+        splitProperties.put("quota_name", properties.get(OdpsProperties.TUNNEL_QUOTA));
+        return splitProperties;
     }
 
     @Override
