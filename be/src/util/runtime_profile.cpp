@@ -35,6 +35,7 @@
 #include "util/runtime_profile.h"
 
 #include <boost/thread/thread_time.hpp>
+#include "util/metric_categorizer.h"
 #include <iomanip>
 #include <iostream>
 #include <memory>
@@ -1149,5 +1150,117 @@ std::string RuntimeProfile::get_children_name_string() {
 
     return ss.str();
 }
+
+void RuntimeProfile::pretty_print_enhanced(std::ostream* s, const std::string& level, 
+                                           const std::string& prefix) const {
+    // For now, use existing pretty_print but with enhanced counter display
+    std::ostream& stream = *s;
+    
+    // create copy of _counter_map and _child_counter_map so we don't need to hold lock
+    CounterMap counter_map;
+    ChildCounterMap child_counter_map;
+    {
+        std::lock_guard<std::mutex> l(_counter_lock);
+        counter_map = _counter_map;
+        child_counter_map = _child_counter_map;
+    }
+
+    CounterMap::const_iterator total_time = counter_map.find("TotalTime");
+    DCHECK(total_time != counter_map.end());
+
+    stream.flags(std::ios::fixed);
+    stream << prefix << _name << ":";
+
+    if (total_time->second.first->value() != 0) {
+        stream << "(Active: "
+               << PrettyPrinter::print(total_time->second.first->value(), total_time->second.first->type())
+               << ", non-child: " << std::setprecision(2) << _local_time_percent << "%)";
+    }
+
+    stream << std::endl;
+
+    // Print info strings
+    {
+        std::lock_guard<std::mutex> l(_info_strings_lock);
+        for (const std::string& key : _info_strings_display_order) {
+            stream << prefix << "   - " << key << ": " << _info_strings.find(key)->second << std::endl;
+        }
+    }
+
+    // Print event sequences
+    {
+        std::lock_guard<std::mutex> l(_event_sequences_lock);
+        for (const EventSequenceMap::value_type& event_sequence : _event_sequence_map) {
+            stream << prefix << "  " << event_sequence.first << ": "
+                   << PrettyPrinter::print(event_sequence.second->elapsed_time(), TUnit::TIME_NS) << std::endl;
+
+            int64_t last = 0L;
+            for (const EventSequence::Event& event : event_sequence.second->events()) {
+                stream << prefix << "     - " << event.first << ": "
+                       << PrettyPrinter::print(event.second, TUnit::TIME_NS) << " ("
+                       << PrettyPrinter::print(event.second - last, TUnit::TIME_NS) << ")" << std::endl;
+                last = event.second;
+            }
+        }
+    }
+
+    // Use enhanced counter printing
+    RuntimeProfile::print_child_counters_enhanced(prefix, ROOT_COUNTER, counter_map, child_counter_map, level, s);
+
+    // Recursively print children with same level
+    ChildVector children;
+    {
+        std::lock_guard<std::mutex> l(_children_lock);
+        children = _children;
+    }
+    for (auto& i : children) {
+        RuntimeProfile* profile = i.first;
+        bool indent = i.second;
+        profile->pretty_print_enhanced(s, level, prefix + (indent ? "  " : ""));
+    }
+}
+
+void RuntimeProfile::print_child_counters_enhanced(const std::string& prefix, const std::string& counter_name,
+                                                   const CounterMap& counter_map, const ChildCounterMap& child_counter_map,
+                                                   const std::string& level, std::ostream* s) {
+    std::ostream& stream = *s;
+    auto itr = child_counter_map.find(counter_name);
+    if (itr != child_counter_map.end()) {
+        const std::set<std::string>& child_counters = itr->second;
+        
+        for (const std::string& child_counter : child_counters) {
+            auto iter = counter_map.find(child_counter);
+            DCHECK(iter != counter_map.end());
+            
+            // Skip based on level filtering
+            if (level == "basic" && !RuntimeProfileMetricHelper::is_basic_metric(child_counter)) {
+                continue;
+            }
+            if (level == "advanced" && RuntimeProfileMetricHelper::is_trace_metric(child_counter)) {
+                continue; 
+            }
+            // trace level shows all metrics
+            
+            // Skip zero values for non-critical metrics
+            if (iter->second.first->value() == 0 && level != "trace" && 
+                !RuntimeProfileMetricHelper::always_display_when_zero(child_counter)) {
+                continue;
+            }
+            
+            if (iter->second.first->should_display()) {
+                // Use friendly name if available
+                std::string display_name = RuntimeProfileMetricHelper::get_friendly_name(child_counter);
+                
+                stream << prefix << "   - " << display_name << ": "
+                       << PrettyPrinter::print(iter->second.first->value(), iter->second.first->type()) << std::endl;
+                
+                // Recursively print child counters
+                RuntimeProfile::print_child_counters_enhanced(prefix + "  ", child_counter, counter_map, 
+                                                             child_counter_map, level, s);
+            }
+        }
+    }
+}
+
 
 } // namespace starrocks
