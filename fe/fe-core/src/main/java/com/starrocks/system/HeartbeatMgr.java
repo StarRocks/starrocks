@@ -367,8 +367,10 @@ public class HeartbeatMgr extends FrontendDaemon {
                 }
             }
 
-            String accessibleHostPort = NetUtils.getHostPortInAccessibleFormat(fe.getHost(), Config.http_port);
-            String url = "http://" + accessibleHostPort
+            int port = Config.enable_https ? Config.https_port : Config.http_port;
+            String accessibleHostPort = NetUtils.getHostPortInAccessibleFormat(fe.getHost(), port);
+            String scheme = Config.enable_https ? "https://" : "http://";
+            String url = scheme + accessibleHostPort
                     + "/api/bootstrap?cluster_id=" + clusterId + "&token=" + token;
             try {
                 String resultStr = Util.getResultForUrl(url, null,
