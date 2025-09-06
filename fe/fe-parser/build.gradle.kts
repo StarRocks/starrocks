@@ -14,6 +14,7 @@
 
 plugins {
     java
+    checkstyle
 }
 
 java {
@@ -38,7 +39,7 @@ tasks.withType<Test> {
     // Configure JMockit agent for tests
     jvmArgs("-javaagent:${repositories.mavenLocal().url.path}/com/github/hazendaz/jmockit/jmockit/1.49.4/jmockit-1.49.4.jar")
 
-    // Set for parallel test execution as in the Maven config
+    // Set for parallel test execution similar to Maven config
     maxParallelForks = providers.gradleProperty("fe_ut_parallel").map { it.toInt() }.getOrElse(1)
 
     // Equivalent to reuseForks=false in Maven
@@ -47,4 +48,27 @@ tasks.withType<Test> {
 
 tasks.withType<JavaCompile> {
     options.encoding = "UTF-8"
+}
+
+// Checkstyle configuration to match Maven behavior
+checkstyle {
+    toolVersion = "10.21.1"  // puppycrawl.version from parent pom
+    configFile = rootProject.file("checkstyle.xml")
+}
+
+// Configure Checkstyle tasks to match Maven behavior
+tasks.withType<Checkstyle>().configureEach {
+    exclude("**/sql/parser/gen/**")
+    ignoreFailures = false  // Match Maven behavior: failsOnError=true
+    // Avoid circular dependency: Checkstyle should not depend on compiled classes
+    classpath = files()
+}
+
+// Bind checkstyle to run before compilation
+tasks.compileJava {
+    dependsOn(tasks.checkstyleMain)
+}
+
+tasks.compileTestJava {
+    dependsOn(tasks.checkstyleTest)
 }
