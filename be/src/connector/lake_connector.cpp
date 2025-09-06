@@ -874,7 +874,9 @@ void LakeDataSource::update_counter() {
 // ================================
 
 LakeDataSourceProvider::LakeDataSourceProvider(ConnectorScanNode* scan_node, const TPlanNode& plan_node)
-        : _scan_node(scan_node), _t_lake_scan_node(plan_node.lake_scan_node) {}
+        : _scan_node(scan_node),
+          _t_lake_scan_node(plan_node.lake_scan_node),
+          _tablet_manager(ExecEnv::GetInstance()->lake_tablet_manager()) {}
 
 DataSourcePtr LakeDataSourceProvider::create_data_source(const TScanRange& scan_range) {
     return std::make_unique<LakeDataSource>(this, scan_range);
@@ -906,6 +908,21 @@ StatusOr<pipeline::MorselQueuePtr> LakeDataSourceProvider::convert_scan_range_to
         const std::vector<TScanRangeParams>& scan_ranges, int node_id, int32_t pipeline_dop,
         bool enable_tablet_internal_parallel, TTabletInternalParallelMode::type tablet_internal_parallel_mode,
         size_t num_total_scan_ranges, size_t scan_parallelism) {
+    // submit async tasks to warmup tablet meta.
+    if (config::enable_preload_lake_tablet_metadata) {
+        for (const auto& tablet_scan_range : scan_ranges) {
+            int64_t version = std::stoll(tablet_scan_range.scan_range.internal_scan_range.version);
+            int64_t tablet_id = tablet_scan_range.scan_range.internal_scan_range.tablet_id;
+            auto packaged_func = [this, tablet_id, version]() {
+                [[maybe_unused]] auto tablet = _tablet_manager->get_tablet_metadata(tablet_id, version);
+            };
+            if (auto st = ExecEnv::GetInstance()->load_segment_thread_pool()->submit_func(std::move(packaged_func));
+                !st.ok()) {
+                LOG(WARNING) << "submit_func failed: " << st.code_as_string() << ", tablet_id: " << tablet_id
+                             << ", version: " << version;
+            }
+        }
+    }
     int64_t lake_scan_parallelism = 0;
     if (!scan_ranges.empty() && enable_tablet_internal_parallel) {
         ASSIGN_OR_RETURN(_could_split, _could_tablet_internal_parallel(scan_ranges, pipeline_dop, num_total_scan_ranges,
@@ -938,17 +955,10 @@ StatusOr<bool> LakeDataSourceProvider::_could_tablet_internal_parallel(
     int64_t num_table_rows = 0;
     for (const auto& tablet_scan_range : scan_ranges) {
         int64_t version = std::stoll(tablet_scan_range.scan_range.internal_scan_range.version);
-#ifdef BE_TEST
         ASSIGN_OR_RETURN(auto tablet_num_rows,
                          _tablet_manager->get_tablet_num_rows(
                                  tablet_scan_range.scan_range.internal_scan_range.tablet_id, version));
         num_table_rows += static_cast<int64_t>(tablet_num_rows);
-#else
-        ASSIGN_OR_RETURN(auto tablet_num_rows,
-                         ExecEnv::GetInstance()->lake_tablet_manager()->get_tablet_num_rows(
-                                 tablet_scan_range.scan_range.internal_scan_range.tablet_id, version));
-        num_table_rows += static_cast<int64_t>(tablet_num_rows);
-#endif
     }
 
     // splitted_scan_rows is restricted in the range [min_splitted_scan_rows, max_splitted_scan_rows].
@@ -973,17 +983,10 @@ StatusOr<bool> LakeDataSourceProvider::_could_split_tablet_physically(
     // Keys type needn't merge or aggregate.
     int64_t version = std::stoll(scan_ranges[0].scan_range.internal_scan_range.version);
     KeysType keys_type;
-#ifdef BE_TEST
     ASSIGN_OR_RETURN(
             auto first_tablet_schema,
             _tablet_manager->get_tablet_schema(scan_ranges[0].scan_range.internal_scan_range.tablet_id, &version));
     keys_type = first_tablet_schema->keys_type();
-#else
-    ASSIGN_OR_RETURN(auto first_tablet_schema,
-                     ExecEnv::GetInstance()->lake_tablet_manager()->get_tablet_schema(
-                             scan_ranges[0].scan_range.internal_scan_range.tablet_id, &version));
-    keys_type = first_tablet_schema->keys_type();
-#endif
 
     const auto skip_aggr = _t_lake_scan_node.is_preaggregation;
     bool is_keys_type_matched = keys_type == PRIMARY_KEYS || keys_type == DUP_KEYS ||

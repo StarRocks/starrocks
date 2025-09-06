@@ -208,7 +208,7 @@ public:
             bool enable_tablet_internal_parallel, TTabletInternalParallelMode::type tablet_internal_parallel_mode,
             size_t num_total_scan_ranges, size_t scan_parallelism = 0) override;
 
-    // for ut
+    // FOR TEST ONLY
     void set_lake_tablet_manager(lake::TabletManager* tablet_manager) { _tablet_manager = tablet_manager; }
 
     // possiable physical distribution optimize of data source
@@ -241,7 +241,7 @@ protected:
     ConnectorScanNode* _scan_node;
     const TLakeScanNode _t_lake_scan_node;
 
-    // for ut
+    // Allow injecting a different TabletManager in unit test
     lake::TabletManager* _tablet_manager;
 
     bool _could_split = false;

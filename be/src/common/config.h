@@ -547,6 +547,7 @@ CONF_mInt32(load_fp_tablets_channel_add_chunk_block_ms, "-1");
 CONF_mInt64(diagnose_stack_trace_interval_ms, "1800000");
 
 CONF_Bool(enable_load_segment_parallel, "false");
+CONF_mBool(enable_preload_lake_tablet_metadata, "true");
 CONF_Int32(load_segment_thread_pool_num_max, "128");
 CONF_Int32(load_segment_thread_pool_queue_size, "10240");
 
