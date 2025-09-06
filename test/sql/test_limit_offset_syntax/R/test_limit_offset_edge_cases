@@ -1,0 +1,67 @@
+-- name: test_limit_offset_edge_cases
+CREATE DATABASE db_${uuid0};
+-- result:
+-- !result
+USE db_${uuid0};
+-- result:
+-- !result
+CREATE TABLE test_table (
+    id INT,
+    value VARCHAR(50)
+) DUPLICATE KEY(id)
+DISTRIBUTED BY HASH(id) BUCKETS 1;
+-- result:
+-- !result
+INSERT INTO test_table VALUES 
+(1, 'a'), (2, 'b'), (3, 'c'), (4, 'd'), (5, 'e');
+-- result:
+-- !result
+SET @my_limit = 2;
+-- result:
+-- !result
+SET @my_offset = 1;
+-- result:
+-- !result
+SELECT id, value FROM test_table ORDER BY id LIMIT @my_limit OFFSET @my_offset;
+-- result:
+2	b
+3	c
+-- !result
+SELECT id, value FROM test_table ORDER BY id LIMIT @my_offset, @my_limit;
+-- result:
+2	b
+3	c
+-- !result
+SELECT id, value FROM test_table ORDER BY id LIMIT 3 OFFSET @my_offset;
+-- result:
+2	b
+3	c
+4	d
+-- !result
+SELECT id, value FROM test_table ORDER BY id LIMIT @my_limit OFFSET 3;
+-- result:
+4	d
+5	e
+-- !result
+SELECT id, value FROM test_table ORDER BY id LIMIT 2 OFFSET 0;
+-- result:
+1	a
+2	b
+-- !result
+SELECT id, value FROM test_table ORDER BY id LIMIT 0, 2;
+-- result:
+1	a
+2	b
+-- !result
+SELECT id, value FROM test_table ORDER BY id LIMIT 2 OFFSET 10;
+-- result:
+-- !result
+SELECT id, value FROM test_table ORDER BY id LIMIT 10, 2;
+-- result:
+-- !result
+DROP TABLE test_table;
+-- result:
+-- !result
+DROP DATABASE db_${uuid0};
+-- result:
+-- !result
