@@ -67,6 +67,11 @@ public:
     virtual uint64_t size() const = 0;
 
     virtual void incre_rowid() = 0;
+
+    virtual void reset_rowid(size_t rid) = 0;
+
+    virtual void merge_index_from(std::vector<std::unique_ptr<BitmapIndexWriter>> others) = 0;
+
 private:
 
     BitmapIndexWriter(const BitmapIndexWriter&) = delete;

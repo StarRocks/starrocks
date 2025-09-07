@@ -153,6 +153,35 @@ public:
             _value = reinterpret_cast<uint64_t>(context); // NOLINT
         }
     }
+    void union_with(const BitmapUpdateContextRefOrSingleValue& other) {
+        if (!is_context() && !other.is_context()) {
+            if (value() != other.value()) {
+                auto* new_context = new BitmapUpdateContext(value(), other.value());
+                _value = reinterpret_cast<uint64_t>(new_context);
+            }
+            return;
+        }
+
+        BitmapUpdateContext* target_context = is_context() ? context() : nullptr;
+        BitmapUpdateContext* other_context = other.is_context() ? other.context() : nullptr;
+
+        if (!target_context) {
+            target_context = new BitmapUpdateContext(value());
+            _value = reinterpret_cast<uint64_t>(target_context);
+        }
+
+        if (other_context) {
+            *target_context->roaring() |= *other_context->roaring();
+        } else {
+            target_context->roaring()->add(other.value());
+        }
+    }
+
+    BitmapUpdateContextRefOrSingleValue& operator|=(const BitmapUpdateContextRefOrSingleValue& other) {
+        union_with(other);
+        return *this;
+    }
+
     Roaring* roaring() { return context()->roaring(); }
 
     static uint64_t estimate_size(int element_count) { return BitmapUpdateContext::estimate_size(element_count); }
@@ -353,6 +382,34 @@ public:
     }
 
     inline void incre_rowid() override { _rid++; }
+
+    inline void reset_rowid(size_t rid) override { _rid = rid; }
+
+    void merge_index_from(std::vector<std::unique_ptr<BitmapIndexWriter>> others) override {
+        size_t merge_index_size = _mem_index.size();
+        for (auto& other : others) {
+            auto* other_impl = dynamic_cast<BitmapIndexWriterImpl<field_type>*>(other.get());
+            if (other_impl == nullptr) {
+                continue;
+            }
+            merge_index_size += other_impl->_mem_index.size();
+        }
+        _mem_index.reserve(merge_index_size);
+        
+        for (auto& other : others) {
+            auto* other_impl = dynamic_cast<BitmapIndexWriterImpl<field_type>*>(other.get());
+            if (other_impl == nullptr) {
+                continue;
+            }
+            _null_bitmap |= other_impl->_null_bitmap;
+            for (auto& p : other_impl->_mem_index) {
+                auto [itr, inserted] = _mem_index.try_emplace(p.first, std::move(p.second));
+                if (!inserted) {
+                    itr->second |= p.second;
+                }
+            }
+        }
+    }
 
 private:
     TypeInfoPtr _typeinfo;
