@@ -50,7 +50,7 @@ under the License.
         <jackson.version>2.15.2</jackson.version>
         <avro.version>1.11.4</avro.version>
         <jetty.version>9.4.57.v20241219</jetty.version>
-        <io.netty.version>4.1.124.Final</io.netty.version>
+        <io.netty.version>4.1.125.Final</io.netty.version>
     </properties>
 
     <profiles>
