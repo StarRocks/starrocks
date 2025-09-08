@@ -253,7 +253,7 @@ public class DatabricksUnityMetastoreTest {
         Assert.assertEquals("AzureCloudConfiguration{resources='', jars='', hdpuser='', " +
                 "cred=AzureADLS2CloudCredential{oauth2ManagedIdentity=false, oauth2TenantId='', oauth2ClientId='', " +
                 "endpoint='storage_account.dfs.core.windows.net', storageAccount='', sharedKey='', sasToken='sas_token', " +
-                "oauth2ClientSecret='', oauth2ClientEndpoint=''}}", conf.toConfString());
+                "oauth2ClientSecret='', oauth2ClientEndpoint='', oauth2TokenFile=''}}", conf.toConfString());
 
     }
 }
