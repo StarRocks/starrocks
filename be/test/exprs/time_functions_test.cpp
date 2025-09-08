@@ -4730,6 +4730,15 @@ TEST_F(TimeFunctionsTest, hourFromUnixTime) {
 // Tests for sec_to_time function
 TEST_F(TimeFunctionsTest, secToTimeTest) {
     {
+        auto int_value = ColumnHelper::create_column(TypeDescriptor(TYPE_BIGINT,TYPE_BIGINT), false);
+        int_value->append_datum(0L,1L);
+        Columns columns;
+        columns.emplace_back(int_value);
+        ColumnPtr result = TimeFunctions::sec_to_time(_utils->get_fn_ctx(), columns).value();
+        auto v = ColumnHelper::cast_to<TYPE_TIME>(result);
+        EXPECT_EQ(1, result->size());
+    }
+    {
         auto int_value = ColumnHelper::create_column(TypeDescriptor(TYPE_BIGINT), false);
 
         int_value->append_datum(0L);
@@ -4757,7 +4766,6 @@ TEST_F(TimeFunctionsTest, secToTimeTest) {
         EXPECT_EQ(3023999, v->get_data()[6]);
         EXPECT_EQ(3023999, v->get_data()[7]);
     }
-
     {
         auto int_value = ColumnHelper::create_column(TypeDescriptor(TYPE_BIGINT), false);
 
