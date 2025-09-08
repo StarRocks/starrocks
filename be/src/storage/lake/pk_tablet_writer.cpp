@@ -176,7 +176,7 @@ Status VerticalPkTabletWriter::write_columns(const Chunk& data, const std::vecto
         RETURN_IF_ERROR(sst_writer->reset_sst_writer(_location_provider, _fs));
         _pk_sst_writers.emplace_back(std::move(sst_writer));
     }
-    if (!_pk_sst_writers.empty()) {
+    if (_pk_sst_writers.size() > _current_writer_index) {
         RETURN_IF_ERROR(_pk_sst_writers[_current_writer_index]->append_sst_record(data));
     }
     if (_rows_mapper_builder != nullptr) {

@@ -49,7 +49,9 @@ public:
               _schema(std::move(schema)),
               _txn_id(txn_id),
               _flush_pool(flush_pool),
-              _is_compaction(is_compaction) {}
+              _is_compaction(is_compaction) {
+        decide_pk_parallel_execution();
+    }
 
     virtual ~TabletWriter() = default;
 
@@ -145,10 +147,10 @@ public:
 
     const DictColumnsValidMap& global_dict_columns_valid_info() const { return _global_dict_columns_valid_info; }
 
-    bool enable_pk_parallel_execution() {
+    void decide_pk_parallel_execution() {
         if (!config::enable_pk_parallel_execution || _schema->keys_type() != KeysType::PRIMARY_KEYS ||
             _schema->has_separate_sort_key()) {
-            return false;
+            return;
         }
         // For primary key table with single key column and the type is not VARCHAR/CHAR,
         // we can't enable pk parrallel execution. The reason is that, in the current implementation,
@@ -156,12 +158,14 @@ public:
         // which may result in incorrect ordering between sst and segment files.
         // This is a legacy bug, but for compatibility reasons, it will not be supported in the first phase.
         // Will fix it later.
-        if (tablet_schema()->num_key_columns() > 1 || tablet_schema()->column(0).type() == LogicalType::TYPE_VARCHAR ||
-            tablet_schema()->column(0).type() == LogicalType::TYPE_CHAR) {
-            return true;
+        if (_schema->num_key_columns() > 1 || _schema->column(0).type() == LogicalType::TYPE_VARCHAR ||
+            _schema->column(0).type() == LogicalType::TYPE_CHAR) {
+            _enable_pk_parallel_execution = true;
         }
-        return false;
+        return;
     }
+
+    bool enable_pk_parallel_execution() const { return _enable_pk_parallel_execution; }
 
 protected:
     TabletManager* _tablet_mgr;
@@ -182,6 +186,7 @@ protected:
 
     bool _is_compaction = false;
     DictColumnsValidMap _global_dict_columns_valid_info;
+    bool _enable_pk_parallel_execution = false;
 };
 
 } // namespace lake
