@@ -80,6 +80,7 @@ import com.starrocks.planner.ScanNode;
 import com.starrocks.planner.SlotDescriptor;
 import com.starrocks.planner.TupleDescriptor;
 import com.starrocks.proto.UnlockTabletMetadataRequest;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.DefaultCoordinator;
 import com.starrocks.qe.scheduler.Coordinator;
 import com.starrocks.rpc.BrpcProxy;
@@ -460,7 +461,8 @@ public class ExportJob implements Writable, GsonPostProcessable {
         fragment.setSink(new ExportSink(exportTempPath, fileNamePrefix + taskIdx + "_", columnSeparator,
                     rowDelimiter, brokerDesc, hdfsProperties));
         try {
-            fragment.createDataSink(TResultSinkType.MYSQL_PROTOCAL);
+            fragment.createDataSink(TResultSinkType.MYSQL_PROTOCAL,
+                    ConnectContext.get().getSessionVariable().isEnableInfNanConvertToNull());
         } catch (Exception e) {
             LOG.info("Fragment finalize failed. e=", e);
             throw new StarRocksException("Fragment finalize failed");

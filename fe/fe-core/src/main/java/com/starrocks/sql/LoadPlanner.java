@@ -382,7 +382,8 @@ public class LoadPlanner {
 
         // 5. finalize
         for (PlanFragment fragment : fragments) {
-            fragment.createDataSink(TResultSinkType.MYSQL_PROTOCAL);
+            fragment.createDataSink(TResultSinkType.MYSQL_PROTOCAL,
+                    getContext().getSessionVariable().isEnableInfNanConvertToNull());
         }
         Collections.reverse(fragments);
     }

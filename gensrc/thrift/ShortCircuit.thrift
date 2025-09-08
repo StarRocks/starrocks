@@ -43,4 +43,5 @@ struct TExecShortCircuitParams {
     8: optional list<TKeyLiteralExpr> key_literal_exprs;
     9: optional list<i64> tablet_ids;
     10: optional list<string> versions;
+    11: optional bool is_inf_nan_convert_to_null;
 }

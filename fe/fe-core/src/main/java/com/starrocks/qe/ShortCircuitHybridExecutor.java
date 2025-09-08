@@ -76,9 +76,9 @@ public class ShortCircuitHybridExecutor extends ShortCircuitExecutor {
     public ShortCircuitHybridExecutor(ConnectContext context, PlanFragment planFragment,
                                       List<TScanRangeLocations> scanRangeLocations, TDescriptorTable tDescriptorTable,
                                       boolean isBinaryRow, boolean enableProfile, String protocol,
-                                      WorkerProvider workerProvider) {
+                                      WorkerProvider workerProvider, boolean isInfNanConvertToNull) {
         super(context, planFragment, scanRangeLocations, tDescriptorTable, isBinaryRow, enableProfile,
-                protocol, workerProvider);
+                protocol, workerProvider, isInfNanConvertToNull);
     }
 
     @Override

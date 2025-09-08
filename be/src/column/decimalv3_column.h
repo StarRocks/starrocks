@@ -48,7 +48,8 @@ public:
 
     MutableColumnPtr clone_empty() const override { return this->create(_precision, _scale); }
 
-    void put_mysql_row_buffer(MysqlRowBuffer* buf, size_t idx, bool is_binary_protocol = false) const override;
+    void put_mysql_row_buffer(MysqlRowBuffer* buf, size_t idx, bool is_binary_protocol = false,
+                              bool is_inf_nan_convert_to_null = false) const override;
     std::string debug_item(size_t idx) const override;
     void crc32_hash(uint32_t* hash, uint32_t from, uint32_t to) const override;
     int64_t xor_checksum(uint32_t from, uint32_t to) const override;
