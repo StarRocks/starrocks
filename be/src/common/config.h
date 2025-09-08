@@ -1356,6 +1356,10 @@ CONF_Alias(datacache_checksum_enable, block_cache_checksum_enable);
 CONF_Alias(datacache_direct_io_enable, block_cache_direct_io_enable);
 CONF_Alias(datacache_engine, block_cache_engine);
 
+// Segment cache population after write completion
+CONF_mBool(enable_segment_cache_populate_on_write, "false");
+CONF_mInt32(segment_cache_populate_thread_num, "4");
+
 CONF_mInt64(l0_l1_merge_ratio, "10");
 // max wal file size in l0
 CONF_mInt64(l0_max_file_size, "209715200"); // 200MB

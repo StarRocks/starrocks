@@ -37,6 +37,7 @@
 #include <memory>
 #include <utility>
 
+#include "cache/segment_cache_populator.h"
 #include "column/binary_column.h"
 #include "column/chunk.h"
 #include "column/datum_tuple.h"
@@ -359,7 +360,11 @@ Status SegmentWriter::finalize_footer(uint64_t* segment_file_size, uint64_t* foo
     }
     RETURN_IF_ERROR(_write_footer());
     *segment_file_size = _wfile->size();
-    return _wfile->close();
+    RETURN_IF_ERROR(_wfile->close());
+
+    // Signal segment write completion for async cache population
+    _signal_segment_write_complete();
+    return Status::OK();
 }
 
 Status SegmentWriter::_write_short_key_index() {
@@ -483,6 +488,14 @@ void SegmentWriter::_check_column_global_dict_valid(ColumnWriter* column_writer,
                 _global_dict_columns_valid_info[kv.first] = kv.second;
             }
         }
+    }
+}
+
+void SegmentWriter::_signal_segment_write_complete() {
+
+    Status st = SegmentCachePopulator::instance()->populate_segment_to_cache_async(segment_path());
+    if (!st.ok()) {
+        LOG(WARNING) << "Failed to signal segment cache population for " << segment_path() << ": " << st;
     }
 }
 

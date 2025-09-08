@@ -166,6 +166,9 @@ private:
     // Check global dictionary validity for a single column writer
     void _check_column_global_dict_valid(ColumnWriter* column_writer, uint32_t column_index);
 
+    // Signal segment write completion for cache population
+    void _signal_segment_write_complete();
+
     uint32_t _segment_id;
     TabletSchemaCSPtr _tablet_schema;
     SegmentWriterOptions _opts;

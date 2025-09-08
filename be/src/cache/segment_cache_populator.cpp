@@ -15,11 +15,10 @@
 #include "cache/segment_cache_populator.h"
 
 #include "cache/datacache.h"
+#include "common/config.h"
 #include "fs/fs.h"
 #include "io/cache_input_stream.h"
 #include "gutil/strings/substitute.h"
-
-DEFINE_int32(segment_cache_populate_thread_num, 2, "Number of threads for async segment cache population");
 
 namespace starrocks {
 
@@ -29,7 +28,7 @@ SegmentCachePopulator* SegmentCachePopulator::instance() {
 }
 
 SegmentCachePopulator::SegmentCachePopulator() {
-    _cache_populate_pool = std::make_unique<ThreadPool>(FLAGS_segment_cache_populate_thread_num);
+    _cache_populate_pool = std::make_unique<ThreadPool>(config::segment_cache_populate_thread_num);
     Status st = _cache_populate_pool->initialize("segment_cache_populate");
     if (!st.ok()) {
         LOG(WARNING) << "Failed to initialize segment cache populate thread pool: " << st;
@@ -60,6 +59,25 @@ Status SegmentCachePopulator::populate_segment_to_cache(const std::string& segme
     }
 
     return Status::OK();
+}
+
+Status SegmentCachePopulator::populate_segment_to_cache_async(const std::string& segment_path) {
+    if (!config::enable_segment_cache_populate_on_write) {
+        return Status::OK(); // Feature disabled
+    }
+
+    if (!_cache_populate_pool) {
+        return Status::InternalError("Cache populate thread pool not initialized");
+    }
+
+    auto task = [segment_path]() {
+        Status st = populate_segment_to_cache(segment_path);
+        if (!st.ok()) {
+            LOG(WARNING) << "Failed to populate segment cache for " << segment_path << ": " << st;
+        }
+    };
+
+    return _cache_populate_pool->submit_func(std::move(task));
 }
 
 }

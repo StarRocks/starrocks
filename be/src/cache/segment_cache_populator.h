@@ -22,17 +22,17 @@ namespace starrocks {
 class SegmentCachePopulator {
 public:
     static SegmentCachePopulator* instance();
-    
+
     // Sync version - does the actual work
     static Status populate_segment_to_cache(const std::string& segment_path);
-    
+
     // Async version - submits to thread pool
     Status populate_segment_to_cache_async(const std::string& segment_path);
 
 private:
     SegmentCachePopulator();
     ~SegmentCachePopulator();
-    
+
     std::unique_ptr<ThreadPool> _cache_populate_pool;
 };
 
