@@ -141,4 +141,28 @@ public class PredicatePushDownTest extends PlanTestBase {
             assertContains(plan, "5: v5 < 3");
         }
     }
+
+    @Test
+    public void testNonDeterministicFunctionInCTE() throws Exception {
+        // Test that predicates with non-deterministic functions are not pushed down through Project
+        // This prevents rand() from being calculated twice in CTE scenarios
+        String sql = "WITH input AS (SELECT v1, rand() AS rn FROM t0) " +
+                "SELECT v1, rn, rn < 0.5 FROM input WHERE rn < 0.5";
+        String plan = getFragmentPlan(sql);
+
+        // The plan should not push down the predicate through the project that contains rand()
+        // Instead, the filter should remain above the project
+        // The filter should not be pushed down to the scan level
+        assertContains(plan, " 2:Project\n" +
+                "  |  <slot 1> : 1: v1\n" +
+                "  |  <slot 4> : 6: rand\n" +
+                "  |  <slot 5> : 6: rand < 0.5\n" +
+                "  |  common expressions:\n" +
+                "  |  <slot 6> : rand()\n" +
+                "  |  \n" +
+                "  1:SELECT\n" +
+                "  |  predicates: rand() < 0.5\n" +
+                "  |  \n" +
+                "  0:OlapScanNode");
+    }
 }

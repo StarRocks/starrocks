@@ -18,6 +18,7 @@ import com.google.common.collect.Lists;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
+import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.logical.LogicalFilterOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalProjectOperator;
@@ -99,6 +100,12 @@ public class PushDownPredicateProjectRule extends TransformationRule {
                     return Lists.newArrayList();
                 }
             }
+        }
+
+        // Check if the filter's predicate contains non-deterministic functions
+        // If it does, don't push down the predicate to avoid incorrect results
+        if (Utils.hasNonDeterministicFunc(filter.getPredicate())) {
+            return Lists.newArrayList();
         }
 
         ReplaceColumnRefRewriter rewriter = new ReplaceColumnRefRewriter(project.getColumnRefMap());
