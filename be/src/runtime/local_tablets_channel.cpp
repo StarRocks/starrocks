@@ -31,6 +31,7 @@
 #include "gutil/ref_counted.h"
 #include "gutil/strings/join.h"
 #include "runtime/descriptors.h"
+#include "runtime/exec_env.h"
 #include "runtime/global_dict/types.h"
 #include "runtime/global_dict/types_fwd_decl.h"
 #include "runtime/load_channel.h"

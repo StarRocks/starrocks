@@ -38,12 +38,13 @@ namespace starrocks {
 struct RetentionState {
     static void udpate(uint64_t* value_ptr, const ArrayColumn* column, size_t row_num) {
         const auto& ele_col = column->elements();
-        const auto& offsets = column->offsets().get_data();
+        const auto offsets = column->offsets().immutable_data();
 
         size_t array_size = 0;
         if (ele_col.is_nullable()) {
             const auto& null_column = down_cast<const NullableColumn&>(ele_col);
             auto data_column = down_cast<const BooleanColumn*>(null_column.data_column().get());
+            const auto imm_data = data_column->immutable_data();
             size_t offset = offsets[row_num];
             array_size = offsets[row_num + 1] - offset;
 
@@ -54,13 +55,15 @@ struct RetentionState {
 
             for (size_t i = 0; i < array_size; ++i) {
                 auto ele_offset = offset + i;
-                if (!null_column.is_null(ele_offset) && data_column->get_data()[ele_offset]) {
+                if (!null_column.is_null(ele_offset) && imm_data[ele_offset]) {
                     // Set right bit for condition.
                     (*value_ptr) |= RetentionState::bool_values[i];
                 }
             }
         } else {
             const auto& data_column = down_cast<const BooleanColumn&>(ele_col);
+            const auto imm_data = data_column.immutable_data();
+
             size_t offset = offsets[row_num];
             array_size = offsets[row_num + 1] - offset;
 
@@ -69,7 +72,7 @@ struct RetentionState {
             }
 
             for (size_t i = 0; i < array_size; ++i) {
-                if (data_column.get_data()[offset + i]) {
+                if (imm_data[offset + i]) {
                     (*value_ptr) |= RetentionState::bool_values[i];
                 }
             }
@@ -145,7 +148,7 @@ public:
 
     void merge(FunctionContext* ctx, const Column* column, AggDataPtr __restrict state, size_t row_num) const override {
         const auto* input_column = down_cast<const Int64Column*>(column);
-        this->data(state).boolean_value |= input_column->get_data()[row_num];
+        this->data(state).boolean_value |= input_column->immutable_data()[row_num];
     }
 
     void serialize_to_column(FunctionContext* ctx, ConstAggDataPtr __restrict state, Column* to) const override {

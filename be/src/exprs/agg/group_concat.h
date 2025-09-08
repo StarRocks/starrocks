@@ -460,7 +460,7 @@ public:
         }
         for (auto i = 0; i < input_columns.size(); ++i) {
             auto array_column = down_cast<const ArrayColumn*>(ColumnHelper::get_data_column(input_columns[i].get()));
-            auto& offsets = array_column->offsets().get_data();
+            auto offsets = array_column->offsets().immutable_data();
             state_impl.update(ctx, array_column->elements(), i, offsets[row_num],
                               offsets[row_num + 1] - offsets[row_num]);
         }

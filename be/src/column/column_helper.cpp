@@ -58,7 +58,8 @@ void ColumnHelper::merge_two_filters(const ColumnPtr& column, Filter* __restrict
 
         // NOTE(zc): Must use uint8_t* to enable auto-vectorized.
         const auto nulls = nullable_column->null_column_data().data();
-        const auto datas = (down_cast<const UInt8Column*>(nullable_column->data_column().get()))->get_data().data();
+        const auto datas =
+                (down_cast<const UInt8Column*>(nullable_column->data_column().get()))->immutable_data().data();
         auto num_rows = nullable_column->size();
         // we treat null(1) as false(0)
         for (size_t j = 0; j < num_rows; ++j) {
@@ -66,7 +67,7 @@ void ColumnHelper::merge_two_filters(const ColumnPtr& column, Filter* __restrict
         }
     } else {
         size_t num_rows = column->size();
-        const auto datas = as_raw_const_column<UInt8Column>(column)->get_data().data();
+        const auto datas = as_raw_const_column<UInt8Column>(column)->immutable_data().data();
         for (size_t j = 0; j < num_rows; ++j) {
             (*filter)[j] &= datas[j];
         }
@@ -499,7 +500,7 @@ ColumnPtr ColumnHelper::convert_time_column_from_double_to_str(const ColumnPtr& 
         new_data_column->reserve(size);
 
         for (int row = 0; row < size; ++row) {
-            auto time = data_column->get_data()[row];
+            auto time = data_column->immutable_data()[row];
             std::string time_str = time_str_from_double(time);
             new_data_column->append(time_str);
         }
