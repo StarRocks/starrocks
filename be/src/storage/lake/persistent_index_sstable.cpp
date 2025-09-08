@@ -166,7 +166,7 @@ uint64_t PersistentIndexSstableStreamBuilder::num_entries() const {
 FileInfo PersistentIndexSstableStreamBuilder::file_info() const {
     FileInfo file_info;
     file_info.path = file_name(_wf->filename());
-    file_info.size = _table_builder ? _wf->size() : 0;
+    file_info.size = _table_builder ? _table_builder->FileSize() : 0;
     file_info.encryption_meta = _encryption_meta;
     return file_info;
 }
