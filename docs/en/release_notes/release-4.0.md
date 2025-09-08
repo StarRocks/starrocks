@@ -16,6 +16,7 @@ Release date: September 9, 2025
 - Supports compaction for Iceberg tables via procedure `rewrite_data_files`. 
 - Supports Iceberg tables with hidden partitions, including creating, writing, and reading the tables. [#58914](https://github.com/StarRocks/starrocks/issues/58914)
 - Supports the TIME data type in the Paimon catalog. [#58292](https://github.com/StarRocks/starrocks/pull/58292)
+
 <!--
 - Optimized sorting on Iceberg tables.
 -->
@@ -24,6 +25,7 @@ Release date: September 9, 2025
 
 - In scenarios where JWT authentication and the Iceberg REST Catalog are used, StarRocks supports the passthrough of user login information to Iceberg via the REST Session Catalog for subsequent data access authentication. [#59611](https://github.com/StarRocks/starrocks/pull/59611) [#58850](https://github.com/StarRocks/starrocks/pull/58850)
 - Supports vended credentials for the Iceberg catalog.
+
 <!--
 - Supports HTTPS via configuring certificates on the StarRocks FE side, enhancing system access security to meet encrypted transmission requirements on the cloud or intranet. [#56394](https://github.com/StarRocks/starrocks/pull/56394)
 - Supports HTTPS communication between BE nodes to ensure the encryption and integrity of data transmission, preventing internal data leakage and Man-in-the-Middle attacks.[#53695](https://github.com/StarRocks/starrocks/pull/53695)
@@ -37,6 +39,7 @@ Release date: September 9, 2025
 - Supports enabling case-insensitive processing on names of catalogs, databases, tables, views, and materialized views. [#61136](https://github.com/StarRocks/starrocks/pull/61136)
 - Supports blacklisting Compute Nodes in shared-data clusters. [#60830](https://github.com/StarRocks/starrocks/pull/60830)
 - Supports global connection ID. [#57256](https://github.com/StarRocks/starrocks/pull/57276)
+
 <!--
 - Supports Multi-Table Write-Write Transaction to allow users to control the atomic submission of INSERT, UPDATE, and DELETE operations. The transaction supports Stream Load and INSERT INTO interfaces, effectively guaranteeing cross-table consistency in ETL and real-time write scenarios.
 - Supports modifying aggregate keys of Aggregate tables.
