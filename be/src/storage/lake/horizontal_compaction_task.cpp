@@ -14,6 +14,7 @@
 
 #include "storage/lake/horizontal_compaction_task.h"
 
+#include "runtime/current_thread.h"
 #include "runtime/runtime_state.h"
 #include "storage/chunk_helper.h"
 #include "storage/compaction_utils.h"

@@ -28,6 +28,7 @@
 #include "storage/row_store_encoder_factory.h"
 #include "storage/rowset/rowset_writer.h"
 #include "util/blocking_queue.hpp"
+#include "util/time.h"
 
 namespace starrocks {
 

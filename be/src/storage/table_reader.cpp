@@ -18,9 +18,12 @@
 #include <queue>
 
 #include "exec/tablet_info.h"
+#include "runtime/current_thread.h"
+#include "runtime/exec_env.h"
 #include "serde/protobuf_serde.h"
 #include "storage/local_tablet_reader.h"
 #include "storage/storage_engine.h"
+#include "storage/tablet.h"
 #include "storage/tablet_manager.h"
 #include "storage/tablet_reader.h"
 #include "util/brpc_stub_cache.h"

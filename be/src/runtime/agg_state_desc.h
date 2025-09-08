@@ -42,12 +42,7 @@ public:
               _func_version(func_version) {}
 
     // copy assignment operator
-    AggStateDesc(const AggStateDesc& other)
-            : _func_name(other._func_name),
-              _return_type(other._return_type),
-              _arg_types(other._arg_types),
-              _is_result_nullable(other._is_result_nullable),
-              _func_version(other._func_version) {}
+    AggStateDesc(const AggStateDesc& other) = default;
     AggStateDesc& operator=(const AggStateDesc& other) {
         if (this != &other) {
             this->_func_name = other._func_name;

@@ -44,12 +44,16 @@
 
 namespace starrocks {
 
+std::atomic<size_t> StoragePageCacheMetrics::returned_page_handle_count{};
+std::atomic<size_t> StoragePageCacheMetrics::released_page_handle_count{};
+
 METRIC_DEFINE_UINT_GAUGE(page_cache_lookup_count, MetricUnit::OPERATIONS);
 METRIC_DEFINE_UINT_GAUGE(page_cache_hit_count, MetricUnit::OPERATIONS);
 METRIC_DEFINE_UINT_GAUGE(page_cache_insert_count, MetricUnit::OPERATIONS);
 METRIC_DEFINE_UINT_GAUGE(page_cache_insert_evict_count, MetricUnit::OPERATIONS);
 METRIC_DEFINE_UINT_GAUGE(page_cache_release_evict_count, MetricUnit::OPERATIONS);
 METRIC_DEFINE_UINT_GAUGE(page_cache_capacity, MetricUnit::BYTES);
+METRIC_DEFINE_UINT_GAUGE(page_cache_pinned_count, MetricUnit::BYTES);
 
 void StoragePageCache::init_metrics() {
     StarRocksMetrics::instance()->metrics()->register_metric("page_cache_lookup_count", &page_cache_lookup_count);
@@ -79,6 +83,10 @@ void StoragePageCache::init_metrics() {
     StarRocksMetrics::instance()->metrics()->register_metric("page_cache_capacity", &page_cache_capacity);
     StarRocksMetrics::instance()->metrics()->register_hook("page_cache_capacity",
                                                            [this]() { page_cache_capacity.set_value(get_capacity()); });
+
+    StarRocksMetrics::instance()->metrics()->register_metric("page_cache_pinned_count", &page_cache_pinned_count);
+    StarRocksMetrics::instance()->metrics()->register_hook(
+            "page_cache_pinned_count", [this]() { page_cache_pinned_count.set_value(get_pinned_count()); });
 }
 
 void StoragePageCache::prune() {
@@ -123,12 +131,17 @@ bool StoragePageCache::adjust_capacity(int64_t delta, size_t min_capacity) {
     return true;
 }
 
+size_t StoragePageCache::get_pinned_count() const {
+    return StoragePageCacheMetrics::returned_page_handle_count - StoragePageCacheMetrics::released_page_handle_count;
+}
+
 bool StoragePageCache::lookup(const std::string& key, PageCacheHandle* handle) {
     MemCacheHandle* obj_handle = nullptr;
     Status st = _cache->lookup(key, &obj_handle);
     if (!st.ok()) {
         return false;
     }
+    StoragePageCacheMetrics::returned_page_handle_count++;
     *handle = PageCacheHandle(_cache, obj_handle);
     return true;
 }
@@ -155,6 +168,7 @@ Status StoragePageCache::insert(const std::string& key, std::vector<uint8_t>* da
     Status st = _cache->insert(key, (void*)data, mem_size, deleter, &obj_handle, opts);
     if (st.ok()) {
         *handle = PageCacheHandle(_cache, obj_handle);
+        StoragePageCacheMetrics::returned_page_handle_count++;
     }
     return st;
 }
@@ -165,6 +179,7 @@ Status StoragePageCache::insert(const std::string& key, void* data, int64_t size
     Status st = _cache->insert(key, data, size, deleter, &obj_handle, opts);
     if (st.ok()) {
         *handle = PageCacheHandle(_cache, obj_handle);
+        StoragePageCacheMetrics::returned_page_handle_count++;
     }
     return st;
 }

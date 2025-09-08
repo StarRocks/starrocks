@@ -46,6 +46,7 @@
 #pragma once
 
 #include <cstdint>
+#include <memory>
 
 #include "common/logging.h"
 #include "runtime/mem_pool.h"
@@ -200,6 +201,7 @@ public:
         _offsets_pos =
                 static_cast<uint32_t>(_data.get_size()) - (_num_elems + 1) * static_cast<uint32_t>(sizeof(uint32_t));
         _offsets_ptr = reinterpret_cast<uint32_t*>(_data.data + _offsets_pos);
+        // TODO: align offset
 
         if (_data.size < config::small_dictionary_page_size) {
             _parsed_datas = std::vector<Slice>();

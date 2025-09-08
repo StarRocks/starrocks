@@ -20,6 +20,7 @@
 #include "common/tracer.h"
 #include "gutil/strings/substitute.h"
 #include "io/io_profiler.h"
+#include "runtime/current_thread.h"
 #include "storage/chunk_helper.h"
 #include "storage/primary_key_dump.h"
 #include "storage/primary_key_encoder.h"

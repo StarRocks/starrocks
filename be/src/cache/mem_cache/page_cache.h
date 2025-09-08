@@ -34,24 +34,28 @@
 
 #pragma once
 
-#include <memory>
 #include <string>
 #include <utility>
 
 #include "cache/datacache.h"
-#include "gutil/macros.h" // for DISALLOW_COPY
-#include "runtime/current_thread.h"
-#include "runtime/exec_env.h"
-#include "util/defer_op.h"
 
 namespace starrocks {
 
 class PageCacheHandle;
 class MemTracker;
+<<<<<<< HEAD:be/src/cache/mem_cache/page_cache.h
 struct MemCacheWriteOptions;
+=======
+struct ObjectCacheWriteOptions;
+>>>>>>> 6c0693fbf6 ([Enhancement] support column zero copy read from page cache (#62331)):be/src/cache/object_cache/page_cache.h
 
 // Page cache min size is 256MB
 static constexpr int64_t kcacheMinSize = 268435456;
+
+struct StoragePageCacheMetrics {
+    static std::atomic<size_t> returned_page_handle_count;
+    static std::atomic<size_t> released_page_handle_count;
+};
 
 // Wrapper around Cache, and used for cache page of column datas in Segment.
 // TODO(zc): We should add some metric to see cache hit/miss rate.
@@ -116,6 +120,10 @@ public:
     bool is_initialized() const { return _initialized.load(std::memory_order_relaxed); }
     bool available() const { return is_initialized() && _cache->mem_cache_available(); }
 
+    // get the number of pinned pages in the page cache
+    // used for metrics
+    size_t get_pinned_count() const;
+
 private:
     LocalMemCacheEngine* _cache = nullptr;
     std::atomic<bool> _initialized = false;
@@ -135,6 +143,7 @@ public:
 
     ~PageCacheHandle() {
         if (_handle != nullptr) {
+            StoragePageCacheMetrics::released_page_handle_count++;
             _cache->release(_handle);
         }
     }

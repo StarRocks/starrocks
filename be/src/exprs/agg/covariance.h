@@ -73,10 +73,10 @@ public:
         this->data(state).count += 1;
 
         double oldMeanX = this->data(state).meanX;
-        InputCppType rowX = column0->get_data()[row_num];
+        InputCppType rowX = column0->immutable_data()[row_num];
 
         double oldMeanY = this->data(state).meanY;
-        InputCppType rowY = column1->get_data()[row_num];
+        InputCppType rowY = column1->immutable_data()[row_num];
 
         double newMeanX = (oldMeanX + (rowX - oldMeanX) / this->data(state).count);
         double newMeanY = (oldMeanY + (rowY - oldMeanY) / this->data(state).count);
@@ -178,9 +178,11 @@ public:
         double c2 = 0;
 
         int64_t count = 1;
+        const auto src0_data = src_column0->immutable_data();
+        const auto src1_data = src_column1->immutable_data();
         for (size_t i = 0; i < chunk_size; ++i) {
-            meanX = static_cast<double>(src_column0->get_data()[i]);
-            meanY = static_cast<double>(src_column1->get_data()[i]);
+            meanX = static_cast<double>(src0_data[i]);
+            meanY = static_cast<double>(src1_data[i]);
             memcpy(bytes.data() + old_size, &meanX, sizeof(double));
             memcpy(bytes.data() + old_size + sizeof(double), &meanY, sizeof(double));
             memcpy(bytes.data() + old_size + sizeof(double) * 2, &c2, sizeof(double));

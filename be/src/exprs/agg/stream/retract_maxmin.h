@@ -195,11 +195,11 @@ public:
     T get_row_value(const Column* column, size_t row_num) const {
         if constexpr (lt_is_string<LT>) {
             DCHECK(column->is_binary());
-            return column->get(row_num).get_slice();
+            return down_cast<const InputColumnType&>(*column).get_slice(row_num);
         } else {
             DCHECK(!column->is_nullable() && !column->is_binary());
             const auto& col = down_cast<const InputColumnType&>(*column);
-            return col.get_data()[row_num];
+            return col.immutable_data()[row_num];
         }
     }
 

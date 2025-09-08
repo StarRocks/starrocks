@@ -38,6 +38,7 @@
 #include "runtime/types.h"
 #include "types/logical_type.h"
 #include "util/pred_guard.h"
+#include "util/value_generator.h"
 
 namespace starrocks {
 

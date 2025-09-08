@@ -52,8 +52,9 @@ struct ArrayAggAggregateState {
                     });
                 }
             } else {
+                const auto datas = column.immutable_data();
                 for (int i = 0; i < count; i++) {
-                    set.emplace(column.get_data()[offset + i]);
+                    set.emplace(datas[offset + i]);
                 }
             }
         } else {
@@ -275,7 +276,7 @@ public:
         auto& input_columns = down_cast<const StructColumn*>(ColumnHelper::get_data_column(column))->fields();
         for (auto i = 0; i < input_columns.size(); ++i) {
             auto array_column = down_cast<const ArrayColumn*>(ColumnHelper::get_data_column(input_columns[i].get()));
-            auto& offsets = array_column->offsets().get_data();
+            const auto offsets = array_column->offsets().immutable_data();
             this->data(state).update(array_column->elements(), i, offsets[row_num],
                                      offsets[row_num + 1] - offsets[row_num]);
         }

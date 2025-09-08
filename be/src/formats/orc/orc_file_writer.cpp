@@ -253,14 +253,14 @@ inline const uint8_t* get_raw_null_column(const ColumnPtr& col) {
         return nullptr;
     }
     auto& null_column = down_cast<const NullableColumn*>(col.get())->null_column();
-    auto* raw_column = null_column->get_data().data();
+    auto* raw_column = null_column->immutable_data().data();
     return raw_column;
 }
 
 template <LogicalType lt>
 inline const RunTimeCppType<lt>* get_raw_data_column(const ColumnPtr& col) {
     auto* data_column = ColumnHelper::get_data_column(col.get());
-    auto* raw_column = down_cast<const RunTimeColumnType<lt>*>(data_column)->get_data().data();
+    auto* raw_column = down_cast<const RunTimeColumnType<lt>*>(data_column)->immutable_data().data();
     return raw_column;
 }
 

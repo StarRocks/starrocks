@@ -34,10 +34,13 @@
 
 #pragma once
 
+<<<<<<< HEAD
 #include "cache/mem_cache/page_cache.h"
 #include "gutil/macros.h" // for DISALLOW_COPY
+=======
+#include "cache/object_cache/page_cache.h"
+>>>>>>> 6c0693fbf6 ([Enhancement] support column zero copy read from page cache (#62331))
 #include "storage/rowset/page_handle_fwd.h"
-#include "util/slice.h"
 
 namespace starrocks {
 
@@ -104,16 +107,16 @@ public:
         }
     }
 
+    // Don't allow copy and assign
+    PageHandleTmpl(const PageHandleTmpl&) = delete;
+    const PageHandleTmpl& operator=(const PageHandleTmpl&) = delete;
+
 private:
     // when this is true, it means this struct own data and _data is valid.
     // otherwise _cache_data is valid, and data is belonged to cache.
     bool _is_data_owner = false;
     PageType* _data = nullptr;
     PageCacheHandle _cache_data;
-
-    // Don't allow copy and assign
-    PageHandleTmpl(const PageHandleTmpl&) = delete;
-    const PageHandleTmpl& operator=(const PageHandleTmpl&) = delete;
 };
 
 } // namespace starrocks

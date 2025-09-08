@@ -48,7 +48,9 @@
 #include "storage/rowset/encoding_info.h"
 #include "storage/rowset/options.h"
 #include "storage/rowset/page_handle.h"
+#include "storage/rowset/page_handle_fwd.h"
 #include "util/compression/block_compression.h"
+#include "util/faststring.h"
 #include "util/rle_encoding.h"
 
 namespace starrocks {
@@ -341,7 +343,7 @@ private:
                                 const PagePointer& page_pointer, uint32_t page_index);
 
     faststring _null_flags;
-    PageHandle _page_handle;
+    std::shared_ptr<PageHandle> _page_handle;
 };
 
 Status parse_page_v1(std::unique_ptr<ParsedPage>* result, PageHandle handle, const Slice& body,
@@ -377,8 +379,9 @@ Status parse_page_v2(std::unique_ptr<ParsedPage>* result, PageHandle handle, con
                      const DataPageFooterPB& footer, const EncodingInfo* encoding, const PagePointer& page_pointer,
                      uint32_t page_index) {
     auto page = std::make_unique<ParsedPageV2>();
-    page->_page_handle = std::move(handle);
+    page->_page_handle = std::make_shared<PageHandle>(std::move(handle));
 
+    // TODO: port the nulls decode to null pages
     auto null_size = footer.nullmap_size();
     if (null_size > 0) {
         Slice null_flags(body.data + body.size - null_size, null_size);
@@ -416,6 +419,7 @@ Status parse_page_v2(std::unique_ptr<ParsedPage>* result, PageHandle handle, con
     PageDecoder* decoder = nullptr;
     RETURN_IF_ERROR(encoding->create_page_decoder(data_slice, &decoder));
     page->_data_decoder.reset(decoder);
+    page->_data_decoder->set_page_handle(page->_page_handle);
     RETURN_IF_ERROR(page->_data_decoder->init());
 
     page->_first_ordinal = footer.first_ordinal();

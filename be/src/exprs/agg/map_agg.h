@@ -16,7 +16,6 @@
 
 #include <fmt/format.h>
 
-#include "column/binary_column.h"
 #include "column/column.h"
 #include "column/column_helper.h"
 #include "column/fixed_length_column.h"
@@ -26,8 +25,8 @@
 #include "exprs/agg/aggregate.h"
 #include "exprs/function_context.h"
 #include "gutil/casts.h"
+#include "runtime/mem_pool.h"
 #include "util/phmap/phmap.h"
-#include "util/time.h"
 
 namespace starrocks {
 
@@ -43,8 +42,9 @@ struct MapAggAggregateFunctionState : public AggregateFunctionEmptyState {
     void update(MemPool* mem_pool, const KeyColumnType& arg_key_column, const Column& arg_value_column, size_t offset,
                 size_t count) {
         if constexpr (!lt_is_string<KT>) {
+            auto key_datas = arg_key_column.immutable_data();
             for (int i = offset; i < offset + count; i++) {
-                auto key = arg_key_column.get_data()[i];
+                auto key = key_datas[i];
                 if (!hash_map.contains(key)) {
                     auto value = arg_value_column.get(i);
                     value_column->append_datum(value);
@@ -90,7 +90,7 @@ public:
 
     void merge(FunctionContext* ctx, const Column* column, AggDataPtr __restrict state, size_t row_num) const override {
         auto map_column = down_cast<const MapColumn*>(ColumnHelper::get_data_column(column));
-        auto& offsets = map_column->offsets().get_data();
+        auto& offsets = map_column->offsets().immutable_data();
         if (offsets[row_num + 1] > offsets[row_num]) {
             this->data(state).update(
                     ctx->mem_pool(),

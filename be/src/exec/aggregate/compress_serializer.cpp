@@ -132,7 +132,7 @@ public:
     void bit_compress(const Column& column) {
         if constexpr (sizeof(T) == 1 || sizeof(T) == 2 || sizeof(T) == 4 || sizeof(T) == 8 || sizeof(T) == 16) {
             using SrcType = typename int_type<sizeof(T)>::type;
-            const auto& container = column.get_data();
+            const auto container = column.immutable_data();
             const auto& raw_data = container.data();
             size_t n = container.size();
             auto base = std::any_cast<T>(_base);

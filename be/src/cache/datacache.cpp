@@ -22,6 +22,7 @@
 #include "common/status.h"
 #include "gutil/strings/split.h"
 #include "gutil/strings/strip.h"
+#include "runtime/exec_env.h"
 #include "storage/options.h"
 #include "util/parse_util.h"
 

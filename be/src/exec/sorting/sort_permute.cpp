@@ -99,7 +99,7 @@ public:
 
     template <typename T>
     Status do_visit(DecimalV3Column<T>* dst) {
-        using Container = typename DecimalV3Column<T>::Container;
+        using Container = typename DecimalV3Column<T>::ImmContainer;
         using ColumnType = DecimalV3Column<T>;
 
         auto& data = dst->get_data();
@@ -111,7 +111,12 @@ public:
         }
 
         for (auto& p : _perm) {
+<<<<<<< HEAD
             data[output++] = (*srcs[p.chunk_index])[p.index_in_chunk];
+=======
+            const Container& container = down_cast<const ColumnType*>(_columns[p.chunk_index])->immutable_data();
+            data[output++] = container[p.index_in_chunk];
+>>>>>>> 6c0693fbf6 ([Enhancement] support column zero copy read from page cache (#62331))
         }
 
         return Status::OK();
@@ -119,7 +124,7 @@ public:
 
     template <typename T>
     Status do_visit(FixedLengthColumnBase<T>* dst) {
-        using Container = typename FixedLengthColumnBase<T>::Container;
+        using Container = typename FixedLengthColumnBase<T>::ImmContainer;
         using ColumnType = FixedLengthColumnBase<T>;
 
         auto& data = dst->get_data();
@@ -131,7 +136,12 @@ public:
         }
 
         for (auto& p : _perm) {
+<<<<<<< HEAD
             data[output++] = (*srcs[p.chunk_index])[p.index_in_chunk];
+=======
+            const Container& container = down_cast<const ColumnType*>(_columns[p.chunk_index])->immutable_data();
+            data[output++] = container[p.index_in_chunk];
+>>>>>>> 6c0693fbf6 ([Enhancement] support column zero copy read from page cache (#62331))
         }
 
         return Status::OK();

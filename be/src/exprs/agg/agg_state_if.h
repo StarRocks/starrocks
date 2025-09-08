@@ -13,6 +13,9 @@
 // limitations under the License.
 
 #pragma once
+
+#include <utility>
+
 #include "column/column_helper.h"
 #include "exprs/agg/aggregate.h"
 #ifdef __x86_64__
@@ -29,7 +32,11 @@ struct AggStateIfState {};
 class AggStateIf final : public AggregateFunctionBatchHelper<AggStateIfState, AggStateIf> {
 public:
     AggStateIf(AggStateDesc agg_state_desc, const AggregateFunction* function)
+<<<<<<< HEAD:be/src/exprs/agg/agg_state_if.h
             : _agg_state_desc(std::move(agg_state_desc)), _function(function) {
+=======
+            : AggStateCombinator(std::move(agg_state_desc), function) {
+>>>>>>> 6c0693fbf6 ([Enhancement] support column zero copy read from page cache (#62331)):be/src/exprs/agg/combinator/agg_state_if.h
         DCHECK(_function != nullptr);
     }
     const AggStateDesc* get_agg_state_desc() const { return &_agg_state_desc; }
@@ -132,9 +139,10 @@ public:
             } else if (nullCount == predicate_column->size()) {
                 fake_null_column = NullColumn::create(columns[0]->size(), 1);
             } else {
-                const auto& nullable_predicate_null_col_data = nullable_predicate_column->immutable_null_column_data();
-                const auto& nullable_predicate_data_col_data =
-                        down_cast<const UInt8Column*>(nullable_predicate_column->immutable_data_column())->get_data();
+                const auto nullable_predicate_null_col_data = nullable_predicate_column->immutable_null_column_data();
+                const auto nullable_predicate_data_col_data =
+                        down_cast<const UInt8Column*>(nullable_predicate_column->immutable_data_column())
+                                ->immutable_data();
                 // we treat false(0) as null(which is 1)
                 for (size_t i = 0; i < chunk_size; ++i) {
                     fake_null_column_raw_data[i] = static_cast<uint8_t>((!nullable_predicate_data_col_data[i]) ||

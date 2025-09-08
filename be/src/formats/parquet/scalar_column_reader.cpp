@@ -646,7 +646,7 @@ Status LowCardColumnReader::fill_dst_column(ColumnPtr& dst, ColumnPtr& src) {
     const ColumnPtr& dict_codes = src;
     auto* codes_nullable_column = ColumnHelper::as_raw_column<NullableColumn>(dict_codes);
     auto* codes_column = ColumnHelper::as_raw_column<FixedLengthColumn<int32_t>>(codes_nullable_column->data_column());
-    const NullData& null_data_ptr = codes_nullable_column->immutable_null_column_data();
+    const auto* null_data_ptr = codes_nullable_column->immutable_null_column_data().data();
 
     auto& codes = codes_column->get_data();
     if (codes_nullable_column->has_null()) {
