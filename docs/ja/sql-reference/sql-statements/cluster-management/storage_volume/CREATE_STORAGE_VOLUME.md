@@ -50,7 +50,6 @@ PROPERTIES
 | aws.s3.secret_key                   | S3 バケットにアクセスするために使用されるシークレットアクセスキー。         |
 | aws.s3.iam_role_arn                 | データファイルが保存されている S3 バケットに対する権限を持つ IAM ロールの ARN。 |
 | aws.s3.external_id                  | S3 バケットへのクロスアカウントアクセスに使用される AWS アカウントの外部 ID。 |
-| aws.s3.enable_ssl                  | SSL 接続を有効にするかどうかを指定します。<br />有効な値：`true` および `false`。デフォルト値：`true`。 |
 | azure.blob.endpoint                 | Azure Blob Storage アカウントのエンドポイント。例: `https://test.blob.core.windows.net`。 |
 | azure.blob.shared_key               | Azure Blob Storage へのリクエストを認証するために使用される共有キー。 |
 | azure.blob.sas_token                | Azure Blob Storage へのリクエストを認証するために使用される共有アクセス署名 (SAS)。 |
