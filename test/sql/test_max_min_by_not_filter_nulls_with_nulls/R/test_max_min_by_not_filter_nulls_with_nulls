@@ -391,3 +391,11 @@ select max_by(row(tag,tag), tag) from (select 1 tag, subject_id from exam) t;
 -- result:
 {"col1":1,"col2":1}
 -- !result
+select max_by([tag], tag) from (select 1 tag, subject_id from exam) t;
+-- result:
+[1]
+-- !result
+select max_by(map(tag,tag), tag) from (select 1 tag, subject_id from exam) t;
+-- result:
+{1:1}
+-- !result

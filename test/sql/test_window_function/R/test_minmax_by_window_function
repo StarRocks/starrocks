@@ -85,3 +85,15 @@ select count(mb) from (select min_by(named_struct("k",v1,"v",v1), v1) over (part
 -- result:
 40960
 -- !result
+select count(mb) from (select min_by(["k",v1,"v",v1], v1) over (partition by v1) mb from t1_not_nulls) t;
+-- result:
+40960
+-- !result
+select count(mb) from (select min_by(map("k",v1), v1) over (partition by v1) mb from t1_not_nulls) t;
+-- result:
+40960
+-- !result
+select count(mb) from (select min_by(map("k",[v1]), v1) over (partition by v1) mb from t1_not_nulls) t;
+-- result:
+40960
+-- !result
