@@ -23,6 +23,8 @@
 #include "exprs/agg/aggregate.h"
 #include "exprs/function_context.h"
 #include "runtime/mem_pool.h"
+#include "runtime/memory/column_allocator.h"
+#include "runtime/memory/counting_allocator.h"
 #include "runtime/runtime_state.h"
 #include "types/logical_type.h"
 #include "util/defer_op.h"
@@ -184,10 +186,14 @@ public:
 // input columns result in intermediate result: struct{array[col0], array[col1], array[col2]... array[coln]}
 // return ordered array[col0']
 struct ArrayAggAggregateStateV2 {
-    void update(const Column& column, size_t index, size_t offset, size_t count) {
+    void update(FunctionContext* ctx, const Column& column, size_t index, size_t offset, size_t count) {
+        SCOPED_THREAD_LOCAL_COLUMN_ALLOCATOR_SETTER(ctx->agg_state_column_allocator());
         data_columns[index]->append(column, offset, count);
     }
-    void update_nulls(size_t index, size_t count) { data_columns[index]->append_nulls(count); }
+    void update_nulls(FunctionContext* ctx, size_t index, size_t count) {
+        SCOPED_THREAD_LOCAL_COLUMN_ALLOCATOR_SETTER(ctx->agg_state_column_allocator());
+        data_columns[index]->append_nulls(count);
+    }
 
     bool check_overflow(FunctionContext* ctx) const {
         std::string err_msg;
@@ -211,14 +217,34 @@ struct ArrayAggAggregateStateV2 {
     }
 
     // release the trailing N-1 order-by columns
-    void release_order_by_columns() {
+    void release_order_by_columns(FunctionContext* ctx) {
         if (data_columns.empty()) {
             return;
         }
+        SCOPED_THREAD_LOCAL_COLUMN_ALLOCATOR_SETTER(ctx->agg_state_column_allocator());
         for (auto i = 1; i < data_columns.size(); ++i) {
             data_columns[i].reset();
         }
         data_columns.resize(1);
+    }
+
+    void reset(FunctionContext* ctx) {
+        if (data_columns.empty()) {
+            return;
+        }
+
+        SCOPED_THREAD_LOCAL_COLUMN_ALLOCATOR_SETTER(ctx->agg_state_column_allocator());
+        for (auto& col : data_columns) {
+            col->resize(0);
+        }
+    }
+
+    void release(FunctionContext* ctx) {
+        SCOPED_THREAD_LOCAL_COLUMN_ALLOCATOR_SETTER(ctx->agg_state_column_allocator());
+        for (auto& col : data_columns) {
+            col.reset();
+        }
+        data_columns.clear();
     }
 
     // using pointer rather than vector to avoid variadic size
@@ -240,11 +266,7 @@ public:
 
     void reset(FunctionContext* ctx, const Columns& args, AggDataPtr __restrict state) const override {
         auto& state_impl = this->data(state);
-        if (!state_impl.data_columns.empty()) {
-            for (auto& col : state_impl.data_columns) {
-                col->resize(0);
-            }
-        }
+        state_impl.reset(ctx);
     }
 
     void update(FunctionContext* ctx, const Column** columns, AggDataPtr __restrict state,
@@ -256,7 +278,7 @@ public:
             }
             // TODO: update is random access, so we could not pre-reserve memory for State, which is the bottleneck
             if ((columns[i]->is_nullable() && columns[i]->is_null(row_num)) || columns[i]->only_null()) {
-                this->data(state).update_nulls(i, 1);
+                this->data(state).update_nulls(ctx, i, 1);
                 continue;
             }
             auto* data_col = columns[i];
@@ -266,7 +288,7 @@ public:
                 data_col = down_cast<const ConstColumn*>(columns[i])->data_column().get();
                 tmp_row_num = 0;
             }
-            this->data(state).update(*data_col, i, tmp_row_num, 1);
+            this->data(state).update(ctx, *data_col, i, tmp_row_num, 1);
         }
     }
 
@@ -276,7 +298,7 @@ public:
         for (auto i = 0; i < input_columns.size(); ++i) {
             auto array_column = down_cast<const ArrayColumn*>(ColumnHelper::get_data_column(input_columns[i].get()));
             auto& offsets = array_column->offsets().get_data();
-            this->data(state).update(array_column->elements(), i, offsets[row_num],
+            this->data(state).update(ctx, array_column->elements(), i, offsets[row_num],
                                      offsets[row_num + 1] - offsets[row_num]);
         }
     }
@@ -308,9 +330,8 @@ public:
             }
             auto& offsets = array_col->offsets_column()->get_data();
             offsets.push_back(offsets.back() + elem_size);
-            state_impl.data_columns[i].reset();
         }
-        state_impl.data_columns.clear();
+        state_impl.release(ctx);
 
         // should check overflow after append, otherwise the result column with multi row will be overflow.
         if (UNLIKELY(state_impl.check_overflow(*to, ctx))) {
@@ -352,7 +373,7 @@ public:
             Status st = sort_and_tie_columns(ctx->state()->cancelled_ref(), order_by_columns, sort_desc, &perm);
             // release order-by columns early
             order_by_columns.clear();
-            state_impl.release_order_by_columns();
+            state_impl.release_order_by_columns(ctx);
             if (UNLIKELY(ctx->state()->cancelled_ref())) {
                 ctx->set_error("array_agg detects cancelled.", false);
                 return;
@@ -413,7 +434,7 @@ public:
         } else {
             array_col->elements_column()->append_selective(*res, index);
         }
-        state_impl.data_columns.clear(); // early release memory
+        state_impl.release(ctx);
         auto& offsets = array_col->offsets_column()->get_data();
         offsets.push_back(offsets.back() + elem_size);
         // should check overflow after append, otherwise the result column with multi row will be overflow.
