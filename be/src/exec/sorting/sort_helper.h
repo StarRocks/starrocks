@@ -98,9 +98,8 @@ struct SorterComparator<T> {
 template <class NullPred>
 static inline Status sort_and_tie_helper_nullable_vertical(const std::atomic<bool>& cancel, const Columns& data_columns,
                                                            NullPred null_pred, const SortDesc& sort_desc,
-                                                           Permutation& permutation, Tie& tie,
-                                                           std::pair<int, int> range, bool build_tie, size_t limit,
-                                                           size_t* limited) {
+                                                           Permutation& permutation, Tie& tie, SortRange range,
+                                                           bool build_tie, size_t limit, size_t* limited) {
     TieIterator iterator(tie, range.first, range.second);
     while (iterator.next()) {
         if (UNLIKELY(cancel.load(std::memory_order_acquire))) {
@@ -116,9 +115,9 @@ static inline Status sort_and_tie_helper_nullable_vertical(const std::atomic<boo
         if (LIKELY(range_last - range_first > 1)) {
             auto pivot_iter =
                     std::partition(permutation.begin() + range_first, permutation.begin() + range_last, null_pred);
-            int pivot_start = pivot_iter - permutation.begin();
-            std::pair<size_t, size_t> null_range = {range_first, pivot_start};
-            std::pair<size_t, size_t> notnull_range = {pivot_start, range_last};
+            const size_t pivot_start = pivot_iter - permutation.begin();
+            SortRange null_range = {range_first, pivot_start};
+            SortRange notnull_range = {pivot_start, range_last};
             if (!sort_desc.is_null_first()) {
                 std::swap(null_range, notnull_range);
             }
@@ -160,24 +159,24 @@ static inline Status sort_and_tie_helper_nullable_vertical(const std::atomic<boo
 /// For example, given two columns `(null(3), null(2), null(1)), (1, 2, 3)`, if the datum values of null elements are
 /// not set to the same, the sorting result is `(null(1), null(2), null(3)), (3, 2, 1)`, but the expected result
 /// should be (null(3), null(2), null(1)), (1, 2, 3).
-template <class NullPred>
+template <class NullPred, SingleChunkPermutation Perm>
 static inline Status partition_null_and_nonnull_helper(const std::atomic<bool>& cancel, NullPred null_pred,
-                                                       const SortDesc& sort_desc, SmallPermutation& permutation,
-                                                       Tie& tie, std::pair<int, int> range) {
+                                                       const SortDesc& sort_desc, Perm& permutation,
+                                                       Tie& tie, SortRange range) {
     TieIterator iterator(tie, range.first, range.second);
     while (iterator.next()) {
         if (UNLIKELY(cancel.load(std::memory_order_acquire))) {
             return Status::Cancelled("Sort cancelled");
         }
-        int range_first = iterator.range_first;
-        int range_last = iterator.range_last;
+        const size_t range_first = iterator.range_first;
+        const size_t range_last = iterator.range_last;
 
         if (LIKELY(range_last - range_first > 1)) {
             auto pivot_iter =
                     std::partition(permutation.begin() + range_first, permutation.begin() + range_last, null_pred);
-            int pivot_start = pivot_iter - permutation.begin();
-            std::pair<int, int> null_range = {range_first, pivot_start};
-            std::pair<int, int> notnull_range = {pivot_start, range_last};
+            const size_t pivot_start = pivot_iter - permutation.begin();
+            SortRange null_range = {range_first, pivot_start};
+            SortRange notnull_range = {pivot_start, range_last};
             if (!sort_desc.is_null_first()) {
                 std::swap(null_range, notnull_range);
             }
@@ -200,11 +199,11 @@ static inline Status partition_null_and_nonnull_helper(const std::atomic<bool>& 
 
 // 1. Partition null and notnull values
 // 2. Sort by not-null values
-template <class NullPred>
+template <class NullPred, SingleChunkPermutation Perm>
 static inline Status sort_and_tie_helper_nullable(const std::atomic<bool>& cancel, const NullableColumn* column,
                                                   const ColumnPtr& data_column, NullPred null_pred,
-                                                  const SortDesc& sort_desc, SmallPermutation& permutation, Tie& tie,
-                                                  std::pair<int, int> range, bool build_tie) {
+                                                  const SortDesc& sort_desc, Perm& permutation, Tie& tie,
+                                                  SortRange range, bool build_tie) {
     RETURN_IF_ERROR(partition_null_and_nonnull_helper(cancel, null_pred, sort_desc, permutation, tie, range));
 
     // TODO(Murphy): avoid sort the null datums in the column, eliminate the extra overhead
@@ -227,9 +226,8 @@ static inline Status sort_and_tie_helper_nullable(const std::atomic<bool>& cance
 
 template <class DataComparator, class PermutationType>
 static inline Status sort_and_tie_helper(const std::atomic<bool>& cancel, const Column* column, bool is_asc_order,
-                                         PermutationType& permutation, Tie& tie, DataComparator cmp,
-                                         std::pair<int, int> range, bool build_tie, size_t limit = 0,
-                                         size_t* limited = nullptr) {
+                                         PermutationType& permutation, Tie& tie, DataComparator cmp, SortRange range,
+                                         bool build_tie, size_t limit = 0, size_t* limited = nullptr) {
     auto lesser = [&](auto lhs, auto rhs) { return cmp(lhs, rhs) < 0; };
     auto greater = [&](auto lhs, auto rhs) { return cmp(lhs, rhs) > 0; };
     auto do_sort = [&](size_t first_iter, size_t last_iter) {
@@ -238,7 +236,7 @@ static inline Status sort_and_tie_helper(const std::atomic<bool>& cancel, const 
 
         // If this range could be used to prune the limit, use partial sort and calculate the end of limit
         if (UNLIKELY(limit > 0 && first_iter < limit && limit <= last_iter)) {
-            int n = limit - first_iter;
+            const size_t n = limit - first_iter;
             if (is_asc_order) {
                 std::partial_sort(begin, begin + n, end, lesser);
             } else {
@@ -269,8 +267,8 @@ static inline Status sort_and_tie_helper(const std::atomic<bool>& cancel, const 
         if (UNLIKELY(cancel.load(std::memory_order_acquire))) {
             return Status::Cancelled("Sort cancelled");
         }
-        int range_first = iterator.range_first;
-        int range_last = iterator.range_last;
+        const size_t range_first = iterator.range_first;
+        const size_t range_last = iterator.range_last;
 
         if (UNLIKELY(limit > 0 && range_first > limit)) {
             break;
@@ -280,7 +278,7 @@ static inline Status sort_and_tie_helper(const std::atomic<bool>& cancel, const 
             do_sort(range_first, range_last);
             if (build_tie) {
                 tie[range_first] = 0;
-                for (int i = range_first + 1; i < range_last; i++) {
+                for (size_t i = range_first + 1; i < range_last; i++) {
                     tie[i] &= cmp(permutation[i - 1], permutation[i]) == 0;
                 }
             }

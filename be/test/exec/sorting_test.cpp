@@ -305,7 +305,7 @@ TEST(SortingTest, materialize_by_permutation_array) {
 
     ColumnPtr materialized = array_data_col->clone_empty();
     SmallPermutation perm{{0}, {2}, {4}, {1}, {3}, {5}};
-    materialize_column_by_permutation_single(materialized.get(), array_data_col, perm);
+    materialize_column_by_permutation_single(materialized.get(), array_data_col, array_view<SmallPermuteItem>{perm});
 
     auto array_cmp = [](const std::vector<std::optional<int32_t>>& cmp_vec, const DatumArray& arr) {
         ASSERT_EQ(cmp_vec.size(), arr.size());
@@ -346,7 +346,7 @@ TEST(SortingTest, materialize_by_permutation_struct) {
 
     ColumnPtr materialized = column->clone_empty();
     SmallPermutation perm{{2}, {0}, {1}};
-    materialize_column_by_permutation_single(materialized.get(), column, perm);
+    materialize_column_by_permutation_single(materialized.get(), column, array_view<SmallPermuteItem>{perm});
     ASSERT_EQ(3, materialized->size());
     ASSERT_EQ("{id:3,name:'hello'}", materialized->debug_item(0));
     ASSERT_EQ("{id:1,name:'smith'}", materialized->debug_item(1));
@@ -368,7 +368,7 @@ TEST(SortingTest, materialize_by_permutation_json) {
     }
     ColumnPtr materialized = json_column->clone_empty();
     SmallPermutation perm{{1}, {2}, {0}};
-    materialize_column_by_permutation_single(materialized.get(), json_column, perm);
+    materialize_column_by_permutation_single(materialized.get(), json_column, array_view<SmallPermuteItem>{perm});
     ASSERT_EQ(3, materialized->size());
     ASSERT_EQ(jsons.at(1), *materialized->get(0).get_json());
     ASSERT_EQ(jsons.at(2), *materialized->get(1).get_json());

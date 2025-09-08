@@ -13,6 +13,7 @@
 // limitations under the License.
 
 #include <algorithm>
+#include <optional>
 #include <utility>
 
 #include "column/array_column.h"
@@ -55,7 +56,7 @@ public:
         return false;
     }
 
-    std::pair<int, int> get() const { return {_source_offsets[_next_index - 1], _source_offsets[_next_index]}; }
+    SortRange get() const { return {_source_offsets[_next_index - 1], _source_offsets[_next_index]}; }
 
     void reset() { _next_index = 0; }
 
@@ -66,7 +67,7 @@ private:
 };
 
 template <typename T>
-concept RangeOrRanges = std::is_same_v<T, std::pair<int, int>> || std::is_same_v<T, Ranges>;
+concept RangeOrRanges = std::is_same_v<T, SortRange> || std::is_same_v<T, Ranges>;
 
 template <class DataComparator, class PermutationType>
 static Status sort_and_tie_helper(const std::atomic<bool>& cancel, const Column* column, bool is_asc_order,
@@ -97,14 +98,14 @@ static Status sort_and_tie_helper_nullable(const std::atomic<bool>& cancel, cons
 }
 
 // Sort a column by permtuation
-template <RangeOrRanges R>
-class ColumnSorter final : public ColumnVisitorAdapter<ColumnSorter<R>> {
+template <SingleChunkPermutation PERM, RangeOrRanges R>
+class ColumnSorter final : public ColumnVisitorAdapter<ColumnSorter<PERM, R>> {
     static constexpr bool IS_RANGES = std::is_same_v<R, Ranges>;
 
 public:
-    explicit ColumnSorter(const std::atomic<bool>& cancel, const SortDesc& sort_desc, SmallPermutation& permutation,
-                          Tie& tie, R range_or_ranges, bool build_tie)
-            : ColumnVisitorAdapter<ColumnSorter<R>>(this),
+    explicit ColumnSorter(const std::atomic<bool>& cancel, const SortDesc& sort_desc, PERM& permutation, Tie& tie,
+                          R range_or_ranges, bool build_tie)
+            : ColumnVisitorAdapter<ColumnSorter<PERM, R>>(this),
               _cancel(cancel),
               _sort_desc(sort_desc),
               _permutation(permutation),
@@ -120,7 +121,7 @@ public:
 
         const auto null_data = column.immutable_null_column_data();
 
-        auto null_pred = [&](const SmallPermuteItem& item) -> bool {
+        auto null_pred = [&](const PermItem& item) -> bool {
             if (_sort_desc.is_null_first()) {
                 return null_data[item.index_in_chunk] == 1;
             } else {
@@ -138,7 +139,7 @@ public:
     }
 
     Status do_visit(const ArrayColumn& column) {
-        auto cmp = [&](const SmallPermuteItem& lhs, const SmallPermuteItem& rhs) {
+        auto cmp = [&](const PermItem& lhs, const PermItem& rhs) {
             return column.compare_at(lhs.index_in_chunk, rhs.index_in_chunk, column, _sort_desc.nan_direction());
         };
 
@@ -147,7 +148,7 @@ public:
     }
 
     Status do_visit(const MapColumn& column) {
-        auto cmp = [&](const SmallPermuteItem& lhs, const SmallPermuteItem& rhs) {
+        auto cmp = [&](const PermItem& lhs, const PermItem& rhs) {
             return column.compare_at(lhs.index_in_chunk, rhs.index_in_chunk, column, _sort_desc.nan_direction());
         };
 
@@ -156,7 +157,7 @@ public:
     }
 
     Status do_visit(const StructColumn& column) {
-        auto cmp = [&](const SmallPermuteItem& lhs, const SmallPermuteItem& rhs) {
+        auto cmp = [&](const PermItem& lhs, const PermItem& rhs) {
             return column.compare_at(lhs.index_in_chunk, rhs.index_in_chunk, column, _sort_desc.nan_direction());
         };
 
@@ -170,12 +171,12 @@ public:
             DCHECK_GE(column.size(), _permutation.size());
         }
 
-        using ItemType = InlinePermuteItem<Slice>;
+        using ItemType = InlinePermuteItem<Slice, PermItem>;
         auto cmp = [&](const ItemType& lhs, const ItemType& rhs) -> int {
             return lhs.inline_value.compare(rhs.inline_value);
         };
 
-        auto inlined = create_inline_permutation<Slice, IS_RANGES>(_permutation, column.get_proxy_data());
+        auto inlined = create_inline_permutation<Slice, PERM, IS_RANGES>(_permutation, column.get_proxy_data());
         RETURN_IF_ERROR(sort_and_tie_helper(_cancel, &column, _sort_desc.asc_order(), inlined, _tie, cmp,
                                             _range_or_ranges, _build_tie));
         restore_inline_permutation(inlined, _permutation);
@@ -189,12 +190,12 @@ public:
             DCHECK_GE(column.size(), _permutation.size());
         }
 
-        using ItemType = InlinePermuteItem<T>;
-        auto cmp = [&](const ItemType& lhs, const ItemType& rhs) {
+        using ItemType = InlinePermuteItem<T, PermItem>;
+        auto cmp = [](const ItemType lhs, const ItemType rhs) {
             return SorterComparator<T>::compare(lhs.inline_value, rhs.inline_value);
         };
 
-        auto inlined = create_inline_permutation<T, IS_RANGES>(_permutation, column.immutable_data());
+        auto inlined = create_inline_permutation<T, PERM, IS_RANGES>(_permutation, column.immutable_data());
         RETURN_IF_ERROR(sort_and_tie_helper(_cancel, &column, _sort_desc.asc_order(), inlined, _tie, cmp,
                                             _range_or_ranges, _build_tie));
         restore_inline_permutation(inlined, _permutation);
@@ -210,7 +211,7 @@ public:
     }
 
     Status do_visit(const JsonColumn& column) {
-        auto cmp = [&](const SmallPermuteItem& lhs, const SmallPermuteItem& rhs) {
+        auto cmp = [&](const PermItem& lhs, const PermItem& rhs) {
             return column.get_object(lhs.index_in_chunk)->compare(*column.get_object(rhs.index_in_chunk));
         };
 
@@ -219,9 +220,11 @@ public:
     }
 
 private:
+    using PermItem = typename PERM::value_type;
+
     const std::atomic<bool>& _cancel;
     const SortDesc& _sort_desc;
-    SmallPermutation& _permutation;
+    PERM& _permutation;
     Tie& _tie;
     R _range_or_ranges;
     bool _build_tie;
@@ -231,8 +234,7 @@ private:
 class VerticalColumnSorter final : public ColumnVisitorAdapter<VerticalColumnSorter> {
 public:
     explicit VerticalColumnSorter(const std::atomic<bool>& cancel, Columns columns, const SortDesc& sort_desc,
-                                  Permutation& permutation, Tie& tie, std::pair<int, int> range, bool build_tie,
-                                  size_t limit)
+                                  Permutation& permutation, Tie& tie, SortRange range, bool build_tie, size_t limit)
             : ColumnVisitorAdapter(this),
               _cancel(cancel),
               _sort_desc(sort_desc),
@@ -246,7 +248,7 @@ public:
 
     size_t get_limited() const { return _pruned_limit; }
 
-    Status do_visit(const NullableColumn& column) {
+    Status do_visit(const NullableColumn& colum) {
         std::vector<ImmutableNullData> null_datas;
         Columns data_columns;
         for (auto& col : _vertical_columns) {
@@ -462,20 +464,22 @@ private:
     Columns _vertical_columns;
     Permutation& _permutation;
     Tie& _tie;
-    std::pair<int, int> _range;
+    SortRange _range;
     bool _build_tie;
     size_t _limit;        // The requested limit
     size_t _pruned_limit; // The pruned limit during partial sorting
 };
 
+template <SingleChunkPermutation Perm>
 Status sort_and_tie_column(const std::atomic<bool>& cancel, const ColumnPtr& column, const SortDesc& sort_desc,
-                           SmallPermutation& permutation, Tie& tie, std::pair<int, int> range, bool build_tie) {
+                           Perm& permutation, Tie& tie, SortRange range, bool build_tie) {
     ColumnSorter column_sorter(cancel, sort_desc, permutation, tie, range, build_tie);
     return column->accept(&column_sorter);
 }
 
+template <SingleChunkPermutation Perm>
 Status sort_and_tie_column(const std::atomic<bool>& cancel, ColumnPtr& column, const SortDesc& sort_desc,
-                           SmallPermutation& permutation, Tie& tie, std::pair<int, int> range, bool build_tie) {
+                           Perm& permutation, Tie& tie, SortRange range, bool build_tie) {
     // Nullable column need set all the null rows to default values,
     // see the comment of the declaration of `partition_null_and_nonnull_helper` for details.
     if (column->is_nullable() && !column->is_constant()) {
@@ -510,8 +514,9 @@ Status sort_and_tie_columns(const std::atomic<bool>& cancel, const Columns& colu
     return Status::OK();
 }
 
+template <SingleChunkPermutation Perm>
 Status sort_and_tie_columns(const std::atomic<bool>& cancel, const Columns& columns, const SortDescs& sort_desc,
-                            SmallPermutation& permutation) {
+                            Perm& permutation) {
     if (columns.size() < 1) {
         return Status::OK();
     }
@@ -530,6 +535,15 @@ Status sort_and_tie_columns(const std::atomic<bool>& cancel, const Columns& colu
 
     return Status::OK();
 }
+
+template Status sort_and_tie_columns<SmallPermutation>(const std::atomic<bool>& cancel, const Columns& columns,
+                                                       const SortDescs& sort_desc, SmallPermutation& permutation);
+template Status sort_and_tie_columns<LargePermutation>(const std::atomic<bool>& cancel, const Columns& columns,
+                                                       const SortDescs& sort_desc, LargePermutation& permutation);
+template Status sort_and_tie_column(const std::atomic<bool>& cancel, const ColumnPtr& column, const SortDesc& sort_desc,
+                                    SmallPermutation& permutation, Tie& tie, SortRange range, bool build_tie);
+template Status sort_and_tie_column(const std::atomic<bool>& cancel, const ColumnPtr& column, const SortDesc& sort_desc,
+                                    LargePermutation& permutation, Tie& tie, SortRange range, bool build_tie);
 
 Status sort_and_tie_columns(const std::atomic<bool>& cancel, const std::vector<const Column*>& columns,
                             const SortDescs& sort_desc, SmallPermutation& perm,
@@ -599,7 +613,7 @@ Status stable_sort_and_tie_columns(const std::atomic<bool>& cancel, const Column
     size_t num_rows = columns[0]->size();
     DCHECK_EQ(num_rows, small_perm->size());
     Tie tie(num_rows, 1);
-    std::pair<int, int> range{0, num_rows};
+    SortRange range{0, num_rows};
 
     for (int col_index = 0; col_index < columns.size(); col_index++) {
         ColumnPtr column = columns[col_index];
@@ -622,7 +636,7 @@ Status stable_sort_and_tie_columns(const std::atomic<bool>& cancel, const Column
 }
 
 Status sort_vertical_columns(const std::atomic<bool>& cancel, const Columns& columns, const SortDesc& sort_desc,
-                             Permutation& permutation, Tie& tie, std::pair<int, int> range, const bool build_tie,
+                             Permutation& permutation, Tie& tie, SortRange range, const bool build_tie,
                              const size_t limit, size_t* limited) {
     DCHECK_GT(columns.size(), 0);
     DCHECK_GT(permutation.size(), 0);
@@ -657,7 +671,7 @@ Status sort_vertical_chunks(const std::atomic<bool>& cancel, const std::vector<C
     for (int col = 0; col < num_columns; col++) {
         // TODO: use the flag directly
         bool build_tie = col != num_columns - 1;
-        std::pair<int, int> range(0, perm.size());
+        SortRange range(0, perm.size());
         DCHECK_GT(perm.size(), 0);
 
         Columns vertical_columns;

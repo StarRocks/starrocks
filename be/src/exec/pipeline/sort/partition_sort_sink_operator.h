@@ -101,8 +101,7 @@ public:
             std::string sort_keys, int64_t offset, int64_t limit, const TTopNType::type topn_type,
             const std::vector<OrderByType>& order_by_types, TupleDescriptor* materialized_tuple_desc,
             const RowDescriptor& parent_node_row_desc, const RowDescriptor& parent_node_child_row_desc,
-            std::vector<ExprContext*> analytic_partition_exprs, int64_t max_buffered_rows, int64_t max_buffered_bytes,
-            std::vector<SlotId> early_materialized_slots, SpillProcessChannelFactoryPtr spill_channel_factory,
+            std::vector<ExprContext*> analytic_partition_exprs, SpillProcessChannelFactoryPtr spill_channel_factory,
             const char* name = "local_sort_sink")
             : OperatorFactory(id, name, plan_node_id),
               _sort_context_factory(std::move(std::move(sort_context_factory))),
@@ -118,9 +117,6 @@ public:
               _parent_node_row_desc(parent_node_row_desc),
               _parent_node_child_row_desc(parent_node_child_row_desc),
               _analytic_partition_exprs(std::move(analytic_partition_exprs)),
-              _max_buffered_rows(max_buffered_rows),
-              _max_buffered_bytes(max_buffered_bytes),
-              _early_materialized_slots(std::move(early_materialized_slots)),
               _spill_channel_factory(std::move(spill_channel_factory)) {}
 
     ~PartitionSortSinkOperatorFactory() override = default;
@@ -151,9 +147,6 @@ protected:
     const RowDescriptor& _parent_node_row_desc;
     const RowDescriptor& _parent_node_child_row_desc;
     std::vector<ExprContext*> _analytic_partition_exprs;
-    int64_t _max_buffered_rows;
-    int64_t _max_buffered_bytes;
-    std::vector<SlotId> _early_materialized_slots;
     SpillProcessChannelFactoryPtr _spill_channel_factory;
 };
 

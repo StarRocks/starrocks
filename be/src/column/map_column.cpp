@@ -261,7 +261,7 @@ uint32_t MapColumn::serialize(size_t idx, uint8_t* pos) const {
             perm[i].index_in_chunk = offset + i;
         }
         Tie tie(map_size, 1);
-        std::pair<int, int> range{0, map_size};
+        SortRange range{0, map_size};
         auto st = sort_and_tie_column(false, _keys, SortDesc(true, true), perm, tie, range, false);
         DCHECK(st.ok());
     }

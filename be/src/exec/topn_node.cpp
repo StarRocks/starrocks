@@ -237,8 +237,7 @@ Status TopNNode::_consume_chunks(RuntimeState* state, ExecNode* child) {
 
     } else {
         _chunks_sorter = std::make_unique<ChunksSorterFullSort>(state, &(_sort_exec_exprs.lhs_ordering_expr_ctxs()),
-                                                                &_is_asc_order, &_is_null_first, _sort_keys, 1024000,
-                                                                16 * 1024 * 1024, _early_materialized_slots);
+                                                                &_is_asc_order, &_is_null_first, _sort_keys);
     }
 
     bool eos = false;
@@ -323,20 +322,10 @@ std::vector<std::shared_ptr<pipeline::OperatorFactory>> TopNNode::_decompose_to_
 
     OperatorFactoryPtr sink_operator;
 
-    int64_t max_buffered_rows = ChunksSorterFullSort::kDefaultMaxBufferRows;
-    int64_t max_buffered_bytes = ChunksSorterFullSort::kDefaultMaxBufferBytes;
-    if (_tnode.sort_node.__isset.max_buffered_bytes) {
-        max_buffered_bytes = _tnode.sort_node.max_buffered_bytes;
-    }
-    if (_tnode.sort_node.__isset.max_buffered_rows) {
-        max_buffered_rows = _tnode.sort_node.max_buffered_rows;
-    }
-
     sink_operator = std::make_shared<SinkFactory>(
             context->next_operator_id(), id(), context_factory, _sort_exec_exprs, _is_asc_order, _is_null_first,
             _sort_keys, _offset, _limit, _tnode.sort_node.topn_type, _order_by_types, _materialized_tuple_desc,
-            child(0)->row_desc(), _row_descriptor, _analytic_partition_exprs, max_buffered_rows, max_buffered_bytes,
-            _early_materialized_slots, spill_channel_factory);
+            child(0)->row_desc(), _row_descriptor, _analytic_partition_exprs, spill_channel_factory);
 
     // Initialize OperatorFactory's fields involving runtime filters.
     this->init_runtime_filter_for_operator(sink_operator.get(), context, rc_rf_probe_collector);

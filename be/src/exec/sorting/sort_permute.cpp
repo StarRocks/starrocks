@@ -82,6 +82,12 @@ struct PermutationTraits<SmallPermuteItem> {
     static inline uint32_t index(const SmallPermuteItem& p) { return p.index_in_chunk; }
 };
 
+template <>
+struct PermutationTraits<LargePermuteItem> {
+    static inline uint32_t chunk(const LargePermuteItem& /*p*/) { return uint32_t{0}; }
+    static inline size_t index(const LargePermuteItem& p) { return p.index_in_chunk; }
+};
+
 // Append permutation to column, implements `materialize_by_permutation` function
 template <typename PermRange>
 class ColumnAppendPermutation final : public ColumnVisitorMutableAdapter<ColumnAppendPermutation<PermRange>> {
@@ -115,7 +121,6 @@ public:
             dst->null_column()->resize(orig_size + _perm.size());
             materialize_column_by_permutation_impl(dst->data_column().get(), data_columns, _perm);
         }
-        DCHECK_EQ(dst->null_column()->size(), dst->data_column()->size());
 
         return Status::OK();
     }
@@ -238,10 +243,11 @@ void materialize_column_by_permutation(Column* dst, const std::vector<const Colu
     materialize_column_by_permutation_impl<PermutationView>(dst, std::span<const Column* const>{columns}, perm);
 }
 
-void materialize_column_by_permutation_single(Column* dst, const Column* column, SmallPermutationView perm) {
+template <SingleChunkPermutationView PermView>
+void materialize_column_by_permutation_single(Column* dst, const Column* column, PermView perm) {
     // A pointer is a span with one element
     std::span<const Column* const> col_span{&column, 1};
-    materialize_column_by_permutation_impl<SmallPermutationView>(dst, col_span, perm);
+    materialize_column_by_permutation_impl<PermView>(dst, col_span, perm);
 }
 
 void materialize_by_permutation(Chunk* dst, const std::vector<ChunkPtr>& chunks, const PermutationView perm) {
@@ -265,7 +271,8 @@ void materialize_by_permutation(Chunk* dst, const std::vector<ChunkPtr>& chunks,
     }
 }
 
-void materialize_by_permutation_single(Chunk* dst, const ChunkPtr& chunk, SmallPermutationView perm) {
+template <SingleChunkPermutationView PermView>
+void materialize_by_permutation_single(Chunk* dst, const ChunkPtr& chunk, PermView perm) {
     if (perm.empty()) {
         return;
     }
@@ -277,4 +284,8 @@ void materialize_by_permutation_single(Chunk* dst, const ChunkPtr& chunk, SmallP
                                                  chunk->get_column_by_index(col_index).get(), perm);
     }
 }
+
+template void materialize_by_permutation_single(Chunk* dst, const ChunkPtr& chunk, SmallPermutationView perm);
+template void materialize_by_permutation_single(Chunk* dst, const ChunkPtr& chunk, LargePermutationView perm);
+
 } // namespace starrocks

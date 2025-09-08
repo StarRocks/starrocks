@@ -34,18 +34,21 @@ struct SortDescs;
 // @param permutation input and output permutation
 // @param tie input and output tie
 // @param range sort range, {0, 0} means not build tie but sort data
+template <SingleChunkPermutation Perm>
 Status sort_and_tie_column(const std::atomic<bool>& cancel, ColumnPtr& column, const SortDesc& sort_desc,
-                           SmallPermutation& permutation, Tie& tie, std::pair<int, int> range, const bool build_tie);
+                           Perm& permutation, Tie& tie, SortRange range, const bool build_tie);
+template <SingleChunkPermutation Perm>
 Status sort_and_tie_column(const std::atomic<bool>& cancel, const ColumnPtr& column, const SortDesc& sort_desc,
-                           SmallPermutation& permutation, Tie& tie, std::pair<int, int> range, const bool build_tie);
+                           Perm& permutation, Tie& tie, SortRange range, const bool build_tie);
 
 // Sort multiple columns using column-wise algorithm, the final order is stored in the Permutation argument
 Status sort_and_tie_columns(const std::atomic<bool>& cancel, const Columns& columns, const SortDescs& sort_desc,
                             Permutation* permutation);
 
 // Sort multiple columns using column-wise algorithm, the order changes are reflected in the given SmallPermutation
+template <SingleChunkPermutation Perm>
 Status sort_and_tie_columns(const std::atomic<bool>& cancel, const Columns& columns, const SortDescs& sort_desc,
-                            SmallPermutation& permutation);
+                            Perm& permutation);
 
 /// Usually used to sort array columns.
 ///
@@ -68,7 +71,7 @@ Status stable_sort_and_tie_columns(const std::atomic<bool>& cancel, const Column
 
 // Sort multiple columns in vertical
 Status sort_vertical_columns(const std::atomic<bool>& cancel, const Columns& columns, const SortDesc& sort_desc,
-                             Permutation& permutation, Tie& tie, std::pair<int, int> range, const bool build_tie,
+                             Permutation& permutation, Tie& tie, SortRange range, const bool build_tie,
                              const size_t limit = 0, size_t* limited = nullptr);
 
 // Sort multiple chunks in column-wise style
