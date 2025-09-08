@@ -4730,8 +4730,8 @@ TEST_F(TimeFunctionsTest, hourFromUnixTime) {
 // Tests for sec_to_time function
 TEST_F(TimeFunctionsTest, secToTimeTest) {
     {
-        auto int_value = ColumnHelper::create_column(TypeDescriptor(TYPE_BIGINT,TYPE_BIGINT), false);
-        int_value->append_datum(0L,1L);
+        auto int_value = ColumnHelper::create_column(TypeDescriptor(TYPE_BIGINT, TYPE_BIGINT), false);
+        int_value->append_datum(0L, 1L);
         Columns columns;
         columns.emplace_back(int_value);
         ColumnPtr result = TimeFunctions::sec_to_time(_utils->get_fn_ctx(), columns).value();
