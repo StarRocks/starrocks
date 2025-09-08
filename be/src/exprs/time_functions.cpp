@@ -3910,10 +3910,6 @@ static int64_t from_seconds_with_limit(int64_t time) {
 }
 
 StatusOr<ColumnPtr> TimeFunctions::sec_to_time(FunctionContext* context, const starrocks::Columns& columns) {
-    if (columns.size() > 1) {
-        return Status::InvalidArgument("FORMAT_TIME requires exactly 1 arguments");
-    }
-
     const auto& bigint_column = columns[0];
 
     RETURN_IF_COLUMNS_ONLY_NULL(columns);
