@@ -135,7 +135,7 @@ StatusOr<ColumnPtr> MapFunctions::map_size(FunctionContext* context, const Colum
     raw::make_room(&col_result->get_data(), num_rows);
     DCHECK_EQ(num_rows, col_result->size());
 
-    const uint32_t* offsets = col_map->offsets().get_data().data();
+    const uint32_t* offsets = col_map->offsets().immutable_data().data();
 
     int32_t* p = col_result->get_data().data();
     for (size_t i = 0; i < num_rows; i++) {
@@ -203,9 +203,8 @@ StatusOr<ColumnPtr> MapFunctions::map_filter(FunctionContext* context, const Col
             // set null from src
             auto* dest_nullable_column = down_cast<NullableColumn*>(dest_column.get());
             const auto* src_nullable_column = down_cast<const NullableColumn*>(src_column.get());
-            dest_nullable_column->mutable_null_column()->get_data().assign(
-                    src_nullable_column->null_column()->get_data().begin(),
-                    src_nullable_column->null_column()->get_data().end());
+            const auto src_nulldata = src_nullable_column->immutable_null_column_data();
+            dest_nullable_column->mutable_null_column()->get_data().assign(src_nulldata.begin(), src_nulldata.end());
             dest_nullable_column->set_has_null(src_nullable_column->has_null());
 
             data_column = dest_nullable_column->data_column();
@@ -226,7 +225,8 @@ StatusOr<ColumnPtr> MapFunctions::map_filter(FunctionContext* context, const Col
         auto* dest_data_column = dest_nullable_column->mutable_data_column();
 
         if (src_column->has_null()) {
-            dest_null_column->get_data().assign(src_null_column->get_data().begin(), src_null_column->get_data().end());
+            const auto src_null_data = src_null_column->immutable_data();
+            dest_null_column->get_data().assign(src_null_data.begin(), src_null_data.end());
         } else {
             dest_null_column->get_data().resize(chunk_size, 0);
         }
@@ -257,13 +257,13 @@ void MapFunctions::_filter_map_items(const MapColumn* src_column, const ColumnPt
     Buffer<uint32_t> indexes;
     // only keep the elements whose filter is not null and not 0.
     for (size_t i = 0; i < src_column->size(); ++i) {
-        if (dest_null_map == nullptr || !dest_null_map->get_data()[i]) {         // dest_null_map[i] is not null
-            if (filter_null_map == nullptr || !filter_null_map->get_data()[i]) { // filter_null_map[i] is not null
+        if (dest_null_map == nullptr || !dest_null_map->get_data()[i]) {               // dest_null_map[i] is not null
+            if (filter_null_map == nullptr || !filter_null_map->immutable_data()[i]) { // filter_null_map[i] is not null
                 size_t elem_size = 0;
-                size_t filter_elem_id = filter->offsets().get_data()[i];
-                size_t filter_elem_limit = filter->offsets().get_data()[i + 1];
-                for (size_t src_elem_id = src_column->offsets().get_data()[i];
-                     src_elem_id < src_column->offsets().get_data()[i + 1]; ++filter_elem_id, ++src_elem_id) {
+                size_t filter_elem_id = filter->offsets().immutable_data()[i];
+                size_t filter_elem_limit = filter->offsets().immutable_data()[i + 1];
+                for (size_t src_elem_id = src_column->offsets().immutable_data()[i];
+                     src_elem_id < src_column->offsets().immutable_data()[i + 1]; ++filter_elem_id, ++src_elem_id) {
                     // only keep the valid elements
                     if (filter_elem_id < filter_elem_limit && !filter->elements().is_null(filter_elem_id) &&
                         filter->elements().get(filter_elem_id).get_int8() != 0) {
@@ -313,10 +313,12 @@ StatusOr<ColumnPtr> MapFunctions::distinct_map_keys(FunctionContext* context, co
     auto& offsets_vec = new_offsets->get_data();
     offsets_vec.push_back(0);
 
+    const auto offsets_data = offsets->immutable_data();
+
     uint32_t new_offset = 0;
     for (auto i = 0; i < size; ++i) {
-        for (auto j = offsets->get_data()[i]; j < offsets->get_data()[i + 1]; ++j) {
-            for (auto k = j + 1; k < offsets->get_data()[i + 1]; ++k) {
+        for (auto j = offsets_data[i]; j < offsets_data[i + 1]; ++j) {
+            for (auto k = j + 1; k < offsets_data[i + 1]; ++k) {
                 if (hash[j] == hash[k] && keys->equals(j, *keys, k)) {
                     filter[j] = 0;
                     has_duplicated_keys = true;
@@ -439,11 +441,11 @@ StatusOr<ColumnPtr> MapFunctions::map_concat(FunctionContext* context, const Col
                 continue;
             }
             tmp_all_null = false;
-            size_t unique_start = all_offsets[col_idx]->get_data()[row_idx];
+            size_t unique_start = all_offsets[col_idx]->immutable_data()[row_idx];
             size_t off_idx = unique_start;
             // suppose the keys in each map are unique.
             auto eq_end = dest_keys->size();
-            for (; off_idx < all_offsets[col_idx]->get_data()[row_idx + 1]; ++off_idx) {
+            for (; off_idx < all_offsets[col_idx]->immutable_data()[row_idx + 1]; ++off_idx) {
                 if (sets.contains(hash_values[col_idx].get()[off_idx])) {
                     auto eq_idx = eq_start;
                     for (; eq_idx < eq_end; ++eq_idx) { // check identical keys at the current row

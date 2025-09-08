@@ -15,6 +15,7 @@
 #include "storage/local_tablet_reader.h"
 
 #include "gen_cpp/internal_service.pb.h"
+#include "runtime/current_thread.h"
 #include "serde/protobuf_serde.h"
 #include "storage/chunk_helper.h"
 #include "storage/primary_index.h"

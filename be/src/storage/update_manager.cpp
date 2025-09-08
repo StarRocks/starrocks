@@ -19,6 +19,7 @@
 #include <numeric>
 
 #include "gutil/endian.h"
+#include "runtime/current_thread.h"
 #include "storage/chunk_helper.h"
 #include "storage/del_vector.h"
 #include "storage/kv_store.h"

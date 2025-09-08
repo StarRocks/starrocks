@@ -14,6 +14,7 @@
 
 #include "exprs/string_functions.h"
 
+#include "column/bytes.h"
 #include "util/defer_op.h"
 
 #ifdef __x86_64__
@@ -485,7 +486,7 @@ ColumnPtr right_const_not_null(const Columns& columns, const BinaryColumn* src, 
         return result;
     }
 
-    auto& src_bytes = src->get_bytes();
+    const auto& src_bytes = src->get_bytes();
     const size_t src_bytes_size = src_bytes.size();
     auto reserved = src_bytes_size;
     if (INT_MAX / size > len) {
@@ -685,7 +686,7 @@ static inline ColumnPtr substr_not_const(FunctionContext* context, const starroc
     NullableBinaryColumnBuilder result;
     result.resize(rows_num, src->byte_size());
 
-    const Bytes& src_bytes = src->get_bytes();
+    const auto& src_bytes = src->get_bytes();
     auto is_ascii = validate_ascii_fast((const char*)src_bytes.data(), src_bytes.size());
     if (is_ascii) {
         ascii_substr_not_const(rows_num, &str_viewer, &off_viewer, &len_viewer, &result);
@@ -705,7 +706,7 @@ static inline ColumnPtr right_not_const(FunctionContext* context, const starrock
 
     NullableBinaryColumnBuilder result;
 
-    const Bytes& src_bytes = src->get_bytes();
+    const auto& src_bytes = src->get_bytes();
     auto is_ascii = validate_ascii_fast((const char*)src_bytes.data(), src_bytes.size());
     result.resize(rows_num, src->byte_size());
 
@@ -785,7 +786,7 @@ public:
     template <LogicalType Type, LogicalType ResultType>
     static ColumnPtr evaluate(const ColumnPtr& v1) {
         const auto* len_column = down_cast<const Int32Column*>(v1.get());
-        auto& len_array = len_column->get_data();
+        const auto len_array = len_column->immutable_data();
         const auto num_rows = len_column->size();
         NullableBinaryColumnBuilder builder;
         auto& dst_bytes = builder.data_column()->get_bytes();
@@ -876,7 +877,7 @@ void fast_repeat(uint8_t* dst, const uint8_t* src, size_t src_size, int32_t repe
 static inline ColumnPtr repeat_const_not_null(const Columns& columns, const BinaryColumn* src) {
     auto times = ColumnHelper::get_const_value<TYPE_INT>(columns[1]);
 
-    auto& src_offsets = src->get_offset();
+    const auto& src_offsets = src->get_offset();
     const auto num_rows = src->size();
 
     NullableBinaryColumnBuilder builder;
@@ -1600,7 +1601,7 @@ static inline ColumnPtr pad_const_not_null(const Columns& columns, const BinaryC
         SubstrState state = {.is_const = true, .pos = 1, .len = len};
         return substr_const_not_null(columns, src, &state);
     }
-    auto& src_bytes = src->get_bytes();
+    const auto& src_bytes = src->get_bytes();
     auto src_is_utf8 = !validate_ascii_fast((const char*)src_bytes.data(), src_bytes.size());
     if (src_is_utf8 && pad_state->fill_is_utf8) {
         return pad_utf8_const<true, true, pad_type>(columns, src, (uint8_t*)fill.data, fill.size, len,
@@ -1758,7 +1759,7 @@ ColumnPtr pad_not_const(const Columns& columns, [[maybe_unused]] const PadState*
 template <bool pad_is_const, PadType pad_type>
 ColumnPtr pad_not_const_check_ascii(const Columns& columns, [[maybe_unused]] const PadState* state) {
     auto src = ColumnHelper::get_binary_column(columns[0].get());
-    auto& bytes = src->get_bytes();
+    const auto& bytes = src->get_bytes();
     auto is_ascii = validate_ascii_fast((const char*)bytes.data(), bytes.size());
     if (is_ascii) {
         return pad_not_const<true, pad_is_const, pad_type>(columns, state);
@@ -1927,8 +1928,8 @@ StatusOr<ColumnPtr> StringFunctions::utf8_length(FunctionContext* context, const
 }
 
 template <char CA, char CZ>
-static inline void vectorized_toggle_case(const Bytes* src, Bytes* dst) {
-    const size_t size = src->size();
+static inline void vectorized_toggle_case(const ImmBytes src, Bytes* dst) {
+    const size_t size = src.size();
     // resize of raw::RawVectorPad16 is faster than std::vector because of
     // no initialization
     static_assert(sizeof(Bytes::value_type) == 1, "Underlying element type must be 8-bit width");
@@ -1937,7 +1938,7 @@ static inline void vectorized_toggle_case(const Bytes* src, Bytes* dst) {
     Bytes buffer;
     buffer.resize(size);
     uint8_t* dst_ptr = buffer.data();
-    char* begin = (char*)(src->data());
+    char* begin = (char*)(src.data());
     char* end = (char*)(begin + size);
     char* src_ptr = begin;
 #if defined(__SSE2__)
@@ -1964,7 +1965,7 @@ static inline void vectorized_toggle_case(const Bytes* src, Bytes* dst) {
         *dst_ptr = *src_ptr ^ (((CA <= *src_ptr) & (*src_ptr <= CZ)) << 5);
     }
     // move semantics
-    dst->swap(reinterpret_cast<Bytes&>(buffer));
+    *dst = std::move(buffer);
 }
 
 template <bool to_upper>
@@ -2024,16 +2025,16 @@ template <bool to_upper>
 template <LogicalType Type, LogicalType ResultType>
 ColumnPtr StringCaseToggleFunction<to_upper>::evaluate(const ColumnPtr& v1) {
     const auto* src = down_cast<const BinaryColumn*>(v1.get());
-    const Bytes& src_bytes = src->get_bytes();
-    const Offsets& src_offsets = src->get_offset();
+    const auto& src_bytes = src->get_bytes();
+    const auto& src_offsets = src->get_offset();
     auto dst = RunTimeColumnType<TYPE_VARCHAR>::create();
     auto& dst_offsets = dst->get_offset();
     auto& dst_bytes = dst->get_bytes();
     dst_offsets.assign(src_offsets.begin(), src_offsets.end());
     if constexpr (to_upper) {
-        vectorized_toggle_case<'a', 'z'>(&src_bytes, &dst_bytes);
+        vectorized_toggle_case<'a', 'z'>(src_bytes, &dst_bytes);
     } else {
-        vectorized_toggle_case<'A', 'Z'>(&src_bytes, &dst_bytes);
+        vectorized_toggle_case<'A', 'Z'>(src_bytes, &dst_bytes);
     }
     return dst;
 }
@@ -2050,8 +2051,8 @@ public:
     template <LogicalType Type, LogicalType ResultType>
     static ColumnPtr evaluate(const ColumnPtr& v1) {
         const auto* src = down_cast<const BinaryColumn*>(v1.get());
-        const Bytes& src_bytes = src->get_bytes();
-        const Offsets& src_offsets = src->get_offset();
+        const auto& src_bytes = src->get_bytes();
+        const auto& src_offsets = src->get_offset();
         auto dst = RunTimeColumnType<TYPE_VARCHAR>::create();
         auto& dst_offsets = dst->get_offset();
         auto& dst_bytes = dst->get_bytes();
@@ -2059,9 +2060,9 @@ public:
             dst_offsets.assign(src_offsets.begin(), src_offsets.end());
             // if all characters are ascii, we process them with the fast path
             if constexpr (to_upper) {
-                vectorized_toggle_case<'a', 'z'>(&src_bytes, &dst_bytes);
+                vectorized_toggle_case<'a', 'z'>(src_bytes, &dst_bytes);
             } else {
-                vectorized_toggle_case<'A', 'Z'>(&src_bytes, &dst_bytes);
+                vectorized_toggle_case<'A', 'Z'>(src_bytes, &dst_bytes);
             }
         } else {
             dst_bytes.resize(src_offsets.back());
@@ -3749,8 +3750,9 @@ static StatusOr<ColumnPtr> hyperscan_vec_evaluate(const BinaryColumn* src, Strin
     MatchInfoChain match_info_chain;
     match_info_chain.info_chain.reserve(src->size());
 
-    auto src_value_size = src->get_bytes().size();
-    const char* data = (src_value_size) ? reinterpret_cast<const char*>(src->get_bytes().data())
+    const auto& src_bytes = src->get_bytes();
+    auto src_value_size = src_bytes.size();
+    const char* data = (src_value_size) ? reinterpret_cast<const char*>(src_bytes.data())
                                         : &StringFunctions::_DUMMY_STRING_FOR_EMPTY_PATTERN;
 
     auto st = hs_scan(

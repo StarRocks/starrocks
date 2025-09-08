@@ -46,6 +46,7 @@
 #include "storage/rowset/page_handle.h"
 #include "storage/rowset/page_pointer.h"
 #include "storage/rowset/parsed_page.h"
+#include "storage/types.h"
 #include "util/compression/block_compression.h"
 #include "util/slice.h"
 

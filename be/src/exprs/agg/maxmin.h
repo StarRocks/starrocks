@@ -175,7 +175,7 @@ public:
                 size_t row_num) const override {
         DCHECK(!columns[0]->is_nullable() && !columns[0]->is_binary());
         const auto& column = down_cast<const InputColumnType&>(*columns[0]);
-        T value = column.get_data()[row_num];
+        T value = column.immutable_data()[row_num];
         OP()(this->data(state), value);
     }
 
@@ -198,7 +198,7 @@ public:
         int64_t current_frame_last_position = current_row_position + rows_end_offset;
         if (!ignore_subtraction && previous_frame_first_position >= partition_start &&
             previous_frame_first_position < partition_end) {
-            if (OP::equals(this->data(state), column.get_data()[previous_frame_first_position])) {
+            if (OP::equals(this->data(state), column.immutable_data()[previous_frame_first_position])) {
                 current_frame_last_position = std::min(current_frame_last_position, partition_end - 1);
                 this->data(state).reset();
                 int64_t frame_start = previous_frame_first_position + 1;
@@ -228,7 +228,7 @@ public:
     void merge(FunctionContext* ctx, const Column* column, AggDataPtr __restrict state, size_t row_num) const override {
         DCHECK(!column->is_nullable() && !column->is_binary());
         const auto* input_column = down_cast<const InputColumnType*>(column);
-        T value = input_column->get_data()[row_num];
+        T value = input_column->immutable_data()[row_num];
         OP()(this->data(state), value);
     }
 
@@ -294,7 +294,7 @@ public:
         int64_t current_frame_last_position = current_row_position + rows_end_offset;
         if (!ignore_subtraction && previous_frame_first_position >= partition_start &&
             previous_frame_first_position < partition_end) {
-            if (OP::equals(this->data(state), column.get_data()[previous_frame_first_position])) {
+            if (OP::equals(this->data(state), column.get_slice(previous_frame_first_position))) {
                 current_frame_last_position = std::min(current_frame_last_position, partition_end - 1);
                 this->data(state).reset();
                 int64_t frame_start = previous_frame_first_position + 1;

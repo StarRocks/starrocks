@@ -75,8 +75,9 @@ public:
         // but they can not be compiled into SIMD instructions.
 
         // Use lambdas to make the compiler to better analyze code within smaller scopes, thereby ensuring vectorization.
-        auto check_range = [](uint8_t* __restrict__ local_res, const CppType* __restrict__ local_values,
-                              const size_t local_size, const CppType min_value, const CppType max_value) {
+        using ImmutableContainer = typename RunTimeColumnType<Type>::ImmContainer;
+        auto check_range = [](uint8_t* __restrict__ local_res, ImmutableContainer local_values, const size_t local_size,
+                              const CppType min_value, const CppType max_value) {
             for (int i = 0; i < local_size; i++) {
                 local_res[i] = (local_values[i] >= min_value) & (local_values[i] <= max_value);
             }
@@ -97,13 +98,13 @@ public:
         if (col->is_nullable() && col->has_null()) {
             const auto* tmp = ColumnHelper::as_raw_column<NullableColumn>(col);
 
-            const CppType* data = ColumnHelper::cast_to_raw<Type>(tmp->data_column())->get_data().data();
+            const auto data = GetContainer<Type>::get_data(tmp->data_column());
             check_range(res, data, size, _min_value, _max_value);
 
             const uint8_t* null_data = tmp->null_column_data().data();
             merge_null(res, null_data, size, _has_null);
         } else {
-            const CppType* data = ColumnHelper::get_data_column_by_type<Type>(col.get())->get_data().data();
+            const auto data = GetContainer<Type>::get_data(ColumnHelper::get_data_column(col));
             check_range(res, data, size, _min_value, _max_value);
         }
 

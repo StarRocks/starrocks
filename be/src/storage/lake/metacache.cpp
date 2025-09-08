@@ -17,9 +17,11 @@
 #include <bvar/bvar.h>
 
 #include "gen_cpp/lake_types.pb.h"
+#include "runtime/exec_env.h"
 #include "storage/del_vector.h"
 #include "storage/lake/tablet_manager.h"
 #include "storage/rowset/segment.h"
+#include "util/defer_op.h"
 #include "util/lru_cache.h"
 
 namespace starrocks::lake {

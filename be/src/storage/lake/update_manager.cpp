@@ -16,6 +16,7 @@
 
 #include "fs/fs_util.h"
 #include "fs/key_cache.h"
+#include "runtime/current_thread.h"
 #include "storage/chunk_helper.h"
 #include "storage/del_vector.h"
 #include "storage/lake/column_mode_partial_update_handler.h"

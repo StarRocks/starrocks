@@ -345,7 +345,8 @@ public:
 
         if (src[0]->is_nullable()) {
             auto* src_nullable_column = down_cast<const NullableColumn*>(src[0].get());
-            auto* src_column = down_cast<const InputColumnType*>(src_nullable_column->data_column().get());
+            const auto* src_column = down_cast<const InputColumnType*>(src_nullable_column->data_column().get());
+            const auto src_data = GetContainer<LT>::get_data(src_column);
 
             ApproxTopKState<LT> state;
             for (size_t i = 0; i < src_nullable_column->size(); ++i) {
@@ -353,7 +354,7 @@ public:
                 if (src_nullable_column->is_null(i)) {
                     state.process_null(1);
                 } else {
-                    state.template process<false>(ctx->mem_pool(), src_column->get_data()[i], 1, false);
+                    state.template process<false>(ctx->mem_pool(), src_data[i], 1, false);
                 }
                 serialize_state(state, dst_column);
             }
@@ -361,9 +362,11 @@ public:
             auto* src_column = down_cast<const InputColumnType*>(src[0].get());
 
             ApproxTopKState<LT> state;
-            for (auto& value : src_column->get_data()) {
+            const auto imm_data = GetContainer<LT>::get_data(src_column);
+            size_t size = imm_data.size();
+            for (size_t i = 0; i < size; ++i) {
                 state.reset(kv.first, kv.second);
-                state.template process<false>(ctx->mem_pool(), value, 1, false);
+                state.template process<false>(ctx->mem_pool(), imm_data[i], 1, false);
                 serialize_state(state, dst_column);
             }
         }

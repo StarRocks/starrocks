@@ -25,9 +25,10 @@ Status MapConverter::write_string(OutputStream* os, const Column& column, size_t
     auto& offsets = map->offsets();
     auto& keys = map->keys();
     auto& values = map->values();
+    const auto offsets_data = offsets.immutable_data();
 
-    auto begin = offsets.get_data()[row_num];
-    auto end = offsets.get_data()[row_num + 1];
+    auto begin = offsets_data[row_num];
+    auto end = offsets_data[row_num + 1];
 
     RETURN_IF_ERROR(os->write('{'));
     for (auto i = begin; i < end; i++) {

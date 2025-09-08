@@ -148,7 +148,7 @@ struct AggHashSetOfOneNumberKey : public AggHashSet<HashSet, AggHashSetOfOneNumb
     ALWAYS_NOINLINE void build_set_noprefetch(size_t chunk_size, const Columns& key_columns, MemPool* pool,
                                               Filter* not_founds) {
         const auto* column = down_cast<const ColumnType*>(key_columns[0].get());
-        const auto& keys = column->get_data();
+        const auto keys = column->immutable_data();
 
         for (size_t i = 0; i < chunk_size; ++i) {
             if constexpr (compute_and_allocate) {
@@ -163,7 +163,7 @@ struct AggHashSetOfOneNumberKey : public AggHashSet<HashSet, AggHashSetOfOneNumb
     ALWAYS_NOINLINE void build_set_prefetch(size_t chunk_size, const Columns& key_columns, MemPool* pool,
                                             Filter* not_founds) {
         const auto* column = down_cast<const ColumnType*>(key_columns[0].get());
-        const auto& keys = column->get_data();
+        const auto keys = column->immutable_data();
 
         AGG_HASH_SET_PRECOMPUTE_HASH_VALS();
         for (size_t i = 0; i < chunk_size; ++i) {
@@ -236,7 +236,7 @@ struct AggHashSetOfOneNullableNumberKey
         const auto* nullable_column = down_cast<const NullableColumn*>(key_columns[0].get());
         const auto* data_column = down_cast<const ColumnType*>(nullable_column->data_column().get());
         const auto& null_data = nullable_column->null_column_data();
-        const auto& keys = data_column->get_data();
+        const auto keys = data_column->immutable_data();
 
         if (nullable_column->has_null()) {
             for (size_t i = 0; i < chunk_size; ++i) {
@@ -266,7 +266,7 @@ struct AggHashSetOfOneNullableNumberKey
                                             Filter* not_founds) {
         const auto* nullable_column = down_cast<const NullableColumn*>(key_columns[0].get());
         const auto* data_column = down_cast<const ColumnType*>(nullable_column->data_column().get());
-        const auto& keys = data_column->get_data();
+        const auto keys = data_column->immutable_data();
 
         AGG_HASH_SET_PRECOMPUTE_HASH_VALS();
         for (size_t i = 0; i < chunk_size; ++i) {

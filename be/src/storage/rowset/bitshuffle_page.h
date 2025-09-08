@@ -404,7 +404,8 @@ inline Status BitShufflePageDecoder<Type>::next_batch(const SparseRange<>& range
     while (to_read > 0) {
         _cur_index = iter.begin();
         Range<> r = iter.next(to_read);
-        int n = dst->append_numbers(get_data(_cur_index * SIZE_OF_TYPE), r.span_size() * SIZE_OF_TYPE);
+        ContainerResource container(_page_handle, get_data(_cur_index * SIZE_OF_TYPE), r.span_size() * SIZE_OF_TYPE);
+        int n = dst->append_numbers(container);
         DCHECK_EQ(r.span_size(), n);
         _cur_index += r.span_size();
         to_read -= r.span_size();

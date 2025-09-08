@@ -18,6 +18,7 @@
 #include "fs/fs_util.h"
 #include "gen_cpp/TFileBrokerService.h"
 #include "gen_cpp/lake_service.pb.h"
+#include "runtime/exec_env.h"
 #include "runtime/snapshot_loader.h"
 #include "storage/lake/filenames.h"
 #include "storage/lake/tablet.h"

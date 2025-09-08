@@ -90,7 +90,7 @@ public:
         const auto* key_column = down_cast<const InputColumnType*>(columns[1]);
 
         auto bimtap_value = bitmap_column->get_pool()[row_num];
-        auto key_value = key_column->get_data()[row_num];
+        auto key_value = GetContainer<LT>::get_data(key_column)[row_num];
 
         if constexpr (LT != TYPE_VARCHAR && LT != TYPE_CHAR) {
             intersect.update(key_value, bimtap_value);
@@ -149,7 +149,7 @@ public:
             BitmapIntersect<BitmapRuntimeCppType<LT>> intersect_per_row(intersect);
 
             auto bimtap_value = bitmap_column->get_pool()[i];
-            auto key_value = key_column->get_data()[i];
+            auto key_value = GetContainer<LT>::get_data(key_column)[i];
 
             if constexpr (LT != TYPE_VARCHAR && LT != TYPE_CHAR) {
                 intersect_per_row.update(key_value, bimtap_value);

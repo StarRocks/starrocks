@@ -28,6 +28,7 @@
 #include "common/process_exit.h"
 #include "common/status.h"
 #include "fs/s3/poco_common.h"
+#include "runtime/current_thread.h"
 #include "runtime/exec_env.h"
 #include "runtime/fragment_mgr.h"
 #include "runtime/global_variables.h"

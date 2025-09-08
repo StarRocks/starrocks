@@ -38,6 +38,7 @@
 
 #include "common/logging.h"
 #include "fs/fs.h"
+#include "runtime/exec_env.h"
 #include "storage/key_coder.h"
 #include "storage/rowset/page_handle.h"
 #include "storage/rowset/page_io.h"

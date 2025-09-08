@@ -16,6 +16,7 @@
 
 #include <future>
 
+#include "runtime/current_thread.h"
 #include "storage/chunk_helper.h"
 #include "storage/delete_predicates.h"
 #include "storage/lake/column_mode_partial_update_handler.h"

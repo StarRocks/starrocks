@@ -17,6 +17,7 @@
 #include <fmt/format.h>
 
 #include "gutil/strings/join.h"
+#include "runtime/current_thread.h"
 #include "storage/lake/lake_primary_index.h"
 #include "storage/lake/lake_primary_key_recover.h"
 #include "storage/lake/meta_file.h"

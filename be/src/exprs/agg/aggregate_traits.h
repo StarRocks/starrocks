@@ -37,7 +37,7 @@ struct AggDataTypeTraits<lt, FixedLengthLTGuard<lt>> {
 
     static void append_value(ColumnType* column, const ValueType& value) { column->append(value); }
 
-    static RefType get_row_ref(const ColumnType& column, size_t row) { return column.get_data()[row]; }
+    static RefType get_row_ref(const ColumnType& column, size_t row) { return column.immutable_data()[row]; }
     static RefType get_ref(const ValueType& value) { return value; }
 
     static void update_max(ValueType& current, const RefType& input) { current = std::max<ValueType>(current, input); }
