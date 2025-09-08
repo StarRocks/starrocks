@@ -12,31 +12,29 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package com.starrocks.sql.ast.warehouse;
+package com.starrocks.sql.ast.warehouse.cngroup;
 
 import com.starrocks.sql.ast.AstVisitor;
-import com.starrocks.sql.ast.AstVisitorExtendInterface;
-import com.starrocks.sql.ast.DdlStmt;
 import com.starrocks.sql.parser.NodePosition;
 
-public class SuspendWarehouseStmt extends DdlStmt {
-    private String warehouseName;
+public class EnableDisableCnGroupStmt extends CnGroupStmtBase {
+    private final boolean isEnable;
 
-    public SuspendWarehouseStmt(String warehouseName) {
-        this(warehouseName, NodePosition.ZERO);
+    public EnableDisableCnGroupStmt(String warehouseName, String cnGroupName, boolean isEnable) {
+        this(warehouseName, cnGroupName, isEnable, NodePosition.ZERO);
     }
 
-    public SuspendWarehouseStmt(String warehouseName, NodePosition pos) {
-        super(pos);
-        this.warehouseName = warehouseName;
+    public EnableDisableCnGroupStmt(String warehouseName, String cnGroupName, boolean isEnable, NodePosition pos) {
+        super(warehouseName, cnGroupName, pos);
+        this.isEnable = isEnable;
     }
 
-    public String getWarehouseName() {
-        return warehouseName;
+    public boolean isSetEnable() {
+        return isEnable;
     }
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return ((AstVisitorExtendInterface<R, C>) visitor).visitSuspendWarehouseStatement(this, context);
+        return visitor.visitEnableDisableCNGroupStatement(this, context);
     }
 }
