@@ -416,6 +416,7 @@ set(EXEC_FILES
         ./udf/java/java_data_converter_test.cpp
         ./udf/java/java_udf_test.cpp
         ./util/table_metrics_mgr_test.cpp
+        ./util/jvm_metrics_test.cpp
 )
 
 if (${USE_AVX512})
@@ -629,4 +630,3 @@ ADD_BE_TEST(fuzzy/builtin_functions_fuzzy_test)
 
 add_dependencies(starrocks_dw_test engine_storage_migration_task_test compaction_task_test builtin_functions_fuzzy_test)
 add_dependencies(starrocks_dw_test engine_storage_migration_task_test compaction_task_test builtin_functions_fuzzy_test)
-
