@@ -41,6 +41,7 @@ PROPERTIES
 
 | **プロパティ**                        | **説明**                                              |
 | ----------------------------------- | ------------------------------------------------------------ |
+<<<<<<< HEAD
 | enabled                             | このストレージボリュームを有効にするかどうか。デフォルト: `false`。無効なストレージボリュームは参照できません。 |
 | aws.s3.region                       | S3 バケットが存在するリージョン。例: `us-west-2`。 |
 | aws.s3.endpoint                     | S3 バケットにアクセスするためのエンドポイント URL。例: `https://s3.us-west-2.amazonaws.com`。[プレビュー] v3.3.0 以降、Amazon S3 Express One Zone ストレージクラスがサポートされています。例: `https://s3express.us-west-2.amazonaws.com`。   |
@@ -64,6 +65,41 @@ PROPERTIES
 | fs.viewfs.mounttable.`<ViewFS_cluster>`.link./`<viewfs_path>` | マウントされる ViewFS クラスターへのパス。複数のパスはカンマ (,) で区切る必要があります。`<ViewFS_cluster>` は `LOCATIONS` で指定された ViewFS クラスター名です。 |
 | aws.s3.enable_partitioned_prefix    | ストレージボリュームに対して Partitioned Prefix 機能を有効にするかどうか。デフォルト: `false`。この機能の詳細については、[Partitioned Prefix](#partitioned-prefix) を参照してください。 |
 | aws.s3.num_partitioned_prefix       | ストレージボリュームに作成されるプレフィックスの数。デフォルト: `256`。有効範囲: [4, 1024]。|
+=======
+| enabled                             | このストレージボリュームを有効にするかどうか。デフォルトは `false` です。無効なストレージボリュームは参照できません。 |
+| aws.s3.region                       | S3 バケットが存在するリージョンです。例：`us-west-2`。 |
+| aws.s3.endpoint                     | S3 バケットにアクセスするためのエンドポイント URL です。例：`https://s3.us-west-2.amazonaws.com`。[プレビュー] v3.3.0 以降、Amazon S3 Express One Zone ストレージクラスがサポートされています。例：`https://s3express.us-west-2.amazonaws.com`。 <Beta />  |
+| aws.s3.use_aws_sdk_default_behavior | AWS SDK のデフォルト認証情報を使用するかどうか。有効な値は `true` と `false`（デフォルト）です。 |
+| aws.s3.use_instance_profile         | S3 にアクセスするための認証方法としてインスタンスプロファイルとアサインドロールを使用するかどうか。有効な値は `true` と `false`（デフォルト）です。<ul><li>IAM ユーザー認証（アクセスキーとシークレットキー）を使用して S3 にアクセスする場合、この項目を `false` に設定し、`aws.s3.access_key` と `aws.s3.secret_key` を指定する必要があります。</li><li>インスタンスプロファイルを使用して S3 にアクセスする場合、この項目を `true` に設定する必要があります。</li><li>アサインドロールを使用して S3 にアクセスする場合、この項目を `true` に設定し、`aws.s3.iam_role_arn` を指定する必要があります。</li><li>外部 AWS アカウントを使用する場合、この項目を `true` に設定し、`aws.s3.iam_role_arn` と `aws.s3.external_id` を指定する必要があります。</li></ul> |
+| aws.s3.access_key                   | S3 バケットにアクセスするためのアクセスキー ID です。             |
+| aws.s3.secret_key                   | S3 バケットにアクセスするためのシークレットアクセスキーです。         |
+| aws.s3.iam_role_arn                 | データファイルが保存されている S3 バケットに対して権限を持つ IAM ロールの ARN です。 |
+| aws.s3.external_id                  | S3 バケットへのクロスアカウントアクセスに使用される AWS アカウントの外部 ID です。 |
+| azure.blob.endpoint                 | Azure Blob Storage アカウントのエンドポイントです。例：`https://test.blob.core.windows.net`。 |
+| azure.blob.shared_key               | Azure Blob Storage へのリクエストを承認するために使用される共有キーです。 |
+| azure.blob.sas_token                | Azure Blob Storage へのリクエストを承認するために使用される共有アクセス署名 (SAS) です。 |
+| azure.adls2.endpoint                 | Azure Data Lake Storage Gen2 アカウントのエンドポイントです。例：`https://test.dfs.core.windows.net`。 |
+| azure.adls2.shared_key               | Azure Data Lake Storage Gen2 へのリクエストを承認するために使用される共有キーです。 |
+| azure.adls2.sas_token                | Azure Data Lake Storage Gen2 へのリクエストを承認するために使用される共有アクセス署名 (SAS) です。 |
+| azure.adls2.oauth2_use_managed_identity | Azure Data Lake Storage Gen2 へのリクエストを認証するために Managed Identity を使用するかどうか。デフォルト: `false`。|
+| azure.adls2.oauth2_tenant_id        | Azure Data Lake Storage Gen2 へのリクエストを認証するために使用される Managed Identity の Tenant ID。 |
+| azure.adls2.oauth2_client_id        | Azure Data Lake Storage Gen2 へのリクエストを認証するために使用される Managed Identity の Client ID。 |
+| gcp.gcs.service_account_email	      | Service Account 作成時に生成された JSON ファイル内のメールアドレスです。例：`user@hello.iam.gserviceaccount.com`。 |
+| gcp.gcs.service_account_private_key_id | Service Account 作成時に生成された JSON ファイル内の秘密鍵 ID です。 |
+| gcp.gcs.service_account_private_key | Service Account 作成時に生成された JSON ファイル内の秘密鍵です。例：`-----BEGIN PRIVATE KEY----xxxx-----END PRIVATE KEY-----\n`。 |
+| gcp.gcs.impersonation_service_account | なりすましベースの認証を使用する場合、なりすます Service Account です。          |
+| gcp.gcs.use_compute_engine_service_account | Compute Engine にバインドされている Service Account を使用するかどうか。 |
+| hadoop.security.authentication      | 認証方法です。有効な値は `simple`（デフォルト）と `kerberos` です。`simple` はシンプル認証、つまりユーザー名を示します。`kerberos` は Kerberos 認証を示します。 |
+| username                            | HDFS クラスターの NameNode にアクセスするためのユーザー名です。                      |
+| hadoop.security.kerberos.ticket.cache.path | kinit で生成されたチケットキャッシュを保存するパスです。                   |
+| dfs.nameservices                    | HDFS クラスターの名前です。                                        |
+| dfs.ha.namenodes.`<ha_cluster_name>`                   | NameNode の名前です。複数の名前はカンマ (,) で区切る必要があります。ダブルクォート内にスペースは許可されません。`<ha_cluster_name>` は `dfs.nameservices` で指定された HDFS サービスの名前です。 |
+| dfs.namenode.rpc-address.`<ha_cluster_name>`.`<NameNode>` | NameNode の RPC アドレス情報です。`<NameNode>` は `dfs.ha.namenodes.<ha_cluster_name>` で指定された NameNode の名前です。 |
+| dfs.client.failover.proxy.provider                    | クライアント接続のための NameNode のプロバイダーです。デフォルト値は `org.apache.hadoop.hdfs.server.namenode.ha.ConfiguredFailoverProxyProvider` です。 |
+| fs.viewfs.mounttable.`<ViewFS_cluster>`.link./`<viewfs_path>` | マウントする ViewFS クラスターへのパスです。複数のパスはカンマ (,) で区切る必要があります。`<ViewFS_cluster>` は `LOCATIONS` で指定された ViewFS クラスター名です。 |
+| aws.s3.enable_partitioned_prefix    | ストレージボリュームに対して Partitioned Prefix 機能を有効にするかどうか。デフォルトは `false` です。この機能の詳細については、[Partitioned Prefix](#partitioned-prefix) を参照してください。 |
+| aws.s3.num_partitioned_prefix       | ストレージボリュームに対して作成されるプレフィックスの数です。デフォルトは `256` です。有効範囲は [4, 1024] です。|
+>>>>>>> 668fb46cad ([Doc] Revert enable_ssl property in Storage Volume (#62811))
 
 #### 認証情報
 
