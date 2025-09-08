@@ -298,7 +298,7 @@ StatusOr<ColumnPtr> TimeFunctions::utc_time(FunctionContext* context, const Colu
 }
 
 StatusOr<ColumnPtr> TimeFunctions::timestamp(FunctionContext* context, const Columns& columns) {
-    return columns[0];
+    return std::move(*columns[0]).mutate();
 }
 
 static const std::vector<int> NOW_PRECISION_FACTORS = {1000000, 100000, 10000, 1000, 100, 10, 1};
