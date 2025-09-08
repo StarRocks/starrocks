@@ -7,7 +7,7 @@ sidebar_position: 30
 
 Range partitioning is suitable for storing simple contiguous data, such as time series data, or continuous numerical data.
 
-Based on range partition, you can create [dynamic partitions](#dynamic-partitioning), which allows you to manage the time to life (TTL) of partitions.
+Based on range partitioning, you can create partitions using the [dynamic partitioning strategy](#dynamic-partitioning), which allows you to manage the Time-to-live (TTL) of partitions.
 
 :::note
 
