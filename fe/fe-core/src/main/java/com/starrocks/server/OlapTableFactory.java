@@ -486,7 +486,7 @@ public class OlapTableFactory implements AbstractTableFactory {
             } catch (Exception e) {
                 throw new DdlException(e.getMessage());
             }
-            
+
             try {
                 boolean fileBundling = PropertyAnalyzer.analyzeFileBundling(properties);
                 table.setFileBundling(fileBundling);
@@ -745,6 +745,14 @@ public class OlapTableFactory implements AbstractTableFactory {
                 table.getTableProperty().getProperties()
                         .put(PropertyAnalyzer.PROPERTIES_TIME_DRIFT_CONSTRAINT, timeDriftConstraintSpec);
                 table.getTableProperty().setTimeDriftConstraintSpec(timeDriftConstraintSpec);
+            }
+
+            // analyze enable_async_cache_on_write_populate
+            if (properties != null && properties.containsKey(PropertyAnalyzer.PROPERTIES_ENABLE_ASYNC_CACHE_ON_WRITE_POPULATE)) {
+                boolean enableAsyncCache = PropertyAnalyzer.analyzeBooleanProp(properties,
+                        PropertyAnalyzer.PROPERTIES_ENABLE_ASYNC_CACHE_ON_WRITE_POPULATE, false);
+                table.getTableProperty().setEnableAsyncCacheOnWritePopulate(enableAsyncCache);
+                properties.remove(PropertyAnalyzer.PROPERTIES_ENABLE_ASYNC_CACHE_ON_WRITE_POPULATE);
             }
 
             try {

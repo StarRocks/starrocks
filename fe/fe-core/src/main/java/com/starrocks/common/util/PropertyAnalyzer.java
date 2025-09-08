@@ -203,6 +203,7 @@ public class PropertyAnalyzer {
     public static final String DISABLE_LOW_CARD_DICT = "0";
 
     public static final String PROPERTIES_ENABLE_ASYNC_WRITE_BACK = "enable_async_write_back";
+    public static final String PROPERTIES_ENABLE_ASYNC_CACHE_ON_WRITE_POPULATE = "enable_async_cache_on_write_populate";
     public static final String PROPERTIES_PARTITION_TTL_NUMBER = "partition_ttl_number";
     public static final String PROPERTIES_PARTITION_TTL = "partition_ttl";
     public static final String PROPERTIES_PARTITION_LIVE_NUMBER = "partition_live_number";

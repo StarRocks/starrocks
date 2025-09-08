@@ -329,6 +329,8 @@ public class TableProperty implements Writable, GsonPostProcessable {
 
     private Boolean enableDynamicTablet = null;
 
+    private boolean enableAsyncCacheOnWritePopulate = false;
+
     public TableProperty() {
         this(Maps.newLinkedHashMap());
     }
@@ -462,14 +464,14 @@ public class TableProperty implements Writable, GsonPostProcessable {
                 properties.containsKey(PropertyAnalyzer.PROPERTIES_FLAT_JSON_SPARSITY_FACTOR) ||
                 properties.containsKey(PropertyAnalyzer.PROPERTIES_FLAT_JSON_COLUMN_MAX)) {
             boolean enableFlatJson = PropertyAnalyzer.analyzeFlatJsonEnabled(properties);
-            
+
             // If flat_json.enable is false, only allow setting the enable property
             if (!enableFlatJson && (properties.containsKey(PropertyAnalyzer.PROPERTIES_FLAT_JSON_NULL_FACTOR) ||
                     properties.containsKey(PropertyAnalyzer.PROPERTIES_FLAT_JSON_SPARSITY_FACTOR) ||
                     properties.containsKey(PropertyAnalyzer.PROPERTIES_FLAT_JSON_COLUMN_MAX))) {
                 throw new RuntimeException("flat JSON configuration must be set after enabling flat JSON.");
             }
-            
+
             try {
                 double flatJsonNullFactor = PropertyAnalyzer.analyzerDoubleProp(properties,
                         PropertyAnalyzer.PROPERTIES_FLAT_JSON_NULL_FACTOR, Config.flat_json_null_factor);
@@ -1217,6 +1219,14 @@ public class TableProperty implements Writable, GsonPostProcessable {
 
     public Boolean getEnableDynamicTablet() {
         return enableDynamicTablet;
+    }
+
+    public boolean isEnableAsyncCacheOnWritePopulate() {
+        return enableAsyncCacheOnWritePopulate;
+    }
+
+    public void setEnableAsyncCacheOnWritePopulate(boolean enableAsyncCacheOnWritePopulate) {
+        this.enableAsyncCacheOnWritePopulate = enableAsyncCacheOnWritePopulate;
     }
 
     @Override
