@@ -83,6 +83,7 @@ struct SegmentWriterOptions {
     std::string encryption_meta;
     bool is_compaction = false;
     std::shared_ptr<FlatJsonConfig> flat_json_config = nullptr;
+    bool enable_async_cache_on_write_populate = false;
 };
 
 // SegmentWriter is responsible for writing data into single segment by all or partital columns.
@@ -168,6 +169,9 @@ private:
 
     // Signal segment write completion for cache population
     void _signal_segment_write_complete();
+
+    // Check if cache population should be enabled based on config and table property
+    bool _should_populate_cache() const;
 
     uint32_t _segment_id;
     TabletSchemaCSPtr _tablet_schema;

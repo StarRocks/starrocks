@@ -62,9 +62,6 @@ Status SegmentCachePopulator::populate_segment_to_cache(const std::string& segme
 }
 
 Status SegmentCachePopulator::populate_segment_to_cache_async(const std::string& segment_path) {
-    if (!config::enable_segment_cache_populate_on_write) {
-        return Status::OK(); // Feature disabled
-    }
 
     if (!_cache_populate_pool) {
         return Status::InternalError("Cache populate thread pool not initialized");

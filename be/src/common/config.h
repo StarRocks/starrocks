@@ -1357,7 +1357,8 @@ CONF_Alias(datacache_direct_io_enable, block_cache_direct_io_enable);
 CONF_Alias(datacache_engine, block_cache_engine);
 
 // Segment cache population after write completion
-CONF_mBool(enable_segment_cache_populate_on_write, "false");
+// Options: "false" (disabled), "true" (all tables), "selective" (per-table property)
+CONF_String_enum(enable_segment_cache_populate_on_write, "false", "false,true,selective");
 CONF_mInt32(segment_cache_populate_thread_num, "4");
 
 CONF_mInt64(l0_l1_merge_ratio, "10");

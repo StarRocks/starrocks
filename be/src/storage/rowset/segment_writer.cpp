@@ -493,10 +493,21 @@ void SegmentWriter::_check_column_global_dict_valid(ColumnWriter* column_writer,
 
 void SegmentWriter::_signal_segment_write_complete() {
 
+    if (!_should_populate_cache()) {
+        return;
+    }
+
     Status st = SegmentCachePopulator::instance()->populate_segment_to_cache_async(segment_path());
     if (!st.ok()) {
         LOG(WARNING) << "Failed to signal segment cache population for " << segment_path() << ": " << st;
     }
+}
+
+bool SegmentWriter::_should_populate_cache() const {
+    const std::string& config_value = config::enable_segment_cache_populate_on_write;
+    if (config_value == "true") return true;
+    if (config_value == "selective") return _opts.enable_async_cache_on_write_populate;
+    return false;
 }
 
 } // namespace starrocks
