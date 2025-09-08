@@ -1,6 +1,10 @@
 {
   "version.label": {
+<<<<<<< HEAD
     "message": "Latest-3.4",
+=======
+    "message": "Latest-3.5",
+>>>>>>> b725113b68 ([Doc] JA version Tag for 3.5 and 3.4 (#62815))
     "description": "The label for version current"
   },
   "sidebar.docs.category.Introduction to StarRocks": {
