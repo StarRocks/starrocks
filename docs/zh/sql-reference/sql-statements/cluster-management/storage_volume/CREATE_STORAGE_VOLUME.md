@@ -53,7 +53,6 @@ import Beta from '../../../../_assets/commonMarkdown/_beta.mdx'
 | aws.s3.secret_key                   | 访问 S3 存储空间的 Secret Key。                              |
 | aws.s3.iam_role_arn                 | 有访问 S3 存储空间权限 IAM Role 的 ARN。                     |
 | aws.s3.external_id                  | 用于跨 AWS 账户访问 S3 存储空间的外部 ID。                   |
-| aws.s3.enable_ssl                   | 指定是否启用 SSL 连接。<br />有效值：`true` 和 `false`。默认值：`true`。                   |
 | azure.blob.endpoint   | Azure Blob Storage 的链接地址，如 `https://test.blob.core.windows.net`。 |
 | azure.blob.shared_key | 访问 Azure Blob Storage 的共享密钥（Shared Key）。           |
 | azure.blob.sas_token  | 访问 Azure Blob Storage 的共享访问签名（SAS）。              |
