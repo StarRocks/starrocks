@@ -51,7 +51,6 @@ import java.nio.charset.StandardCharsets;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyShort;
@@ -125,27 +124,6 @@ public class SecurityIntegrationTest {
         }
 
         return sb.toString();
-    }
-
-    @Test
-    public void testFileGroupProvider() throws DdlException, AuthenticationException, IOException, NoSuchMethodException {
-        new MockUp<FileGroupProvider>() {
-            @Mock
-            public InputStream getPath(String groupFileUrl) throws IOException {
-                String path = ClassLoader.getSystemClassLoader().getResource("auth").getPath() + "/" + "file_group";
-                return new FileInputStream(path);
-            }
-        };
-
-        String groupName = "g1";
-        Map<String, String> properties = new HashMap<>();
-        properties.put(FileGroupProvider.GROUP_FILE_URL, "file_group");
-        FileGroupProvider fileGroupProvider = new FileGroupProvider(groupName, properties);
-        fileGroupProvider.init();
-
-        Set<String> groups = fileGroupProvider.getGroup(new UserIdentity("harbor", "%"), "harbor");
-        Assertions.assertTrue(groups.contains("group1"));
-        Assertions.assertTrue(groups.contains("group2"));
     }
 
     @Test

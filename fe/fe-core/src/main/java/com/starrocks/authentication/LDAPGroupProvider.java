@@ -14,6 +14,7 @@
 
 package com.starrocks.authentication;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Strings;
 import com.starrocks.catalog.UserIdentity;
 import com.starrocks.common.Config;
@@ -402,5 +403,10 @@ public class LDAPGroupProvider extends GroupProvider {
                         key + "' property value: " + val + ", error: " + e.getMessage(), e);
             }
         }
+    }
+
+    @VisibleForTesting
+    public void setUserToGroupCache(Map<String, Set<String>> userToGroupCache) {
+        this.userToGroupCache = userToGroupCache;
     }
 }
