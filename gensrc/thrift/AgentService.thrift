@@ -136,6 +136,7 @@ struct TCreateTabletReq {
     24: optional i64 gtid = 0;
     25: optional TFlatJsonConfig flat_json_config;
     26: optional TCompactionStrategy compaction_strategy;
+    27: optional bool enable_async_cache_on_write_populate;
 }
 
 struct TDropTabletReq {
@@ -189,7 +190,7 @@ struct TAlterTabletReqV2 {
     15: optional TAlterJobType alter_job_type = TAlterJobType.SCHEMA_CHANGE
     16: optional Descriptors.TDescriptorTable desc_tbl
     17: optional Exprs.TExpr where_expr
-    18: optional list<string> base_table_column_names 
+    18: optional list<string> base_table_column_names
 }
 
 struct TClusterInfo {
@@ -293,7 +294,7 @@ struct TUploadReq {
     // hdfs_write_buffer_size_kb for writing through lib hdfs directly
     6: optional i32 hdfs_write_buffer_size_kb = 0
     // properties from hdfs-site.xml, core-site.xml and load_properties
-    7: optional PlanNodes.THdfsProperties hdfs_properties 
+    7: optional PlanNodes.THdfsProperties hdfs_properties
 }
 
 struct TDownloadReq {
@@ -307,7 +308,7 @@ struct TDownloadReq {
     // hdfs_read_buffer_size_kb for writing through lib hdfs directly
     6: optional i32 hdfs_read_buffer_size_kb = 0
     // properties from hdfs-site.xml, core-site.xml and load_properties
-    7: optional PlanNodes.THdfsProperties hdfs_properties 
+    7: optional PlanNodes.THdfsProperties hdfs_properties
 }
 
 struct TSnapshotRequest {
@@ -520,7 +521,7 @@ struct TAgentResult {
     1: required Status.TStatus status
     2: optional string snapshot_path
     3: optional bool allow_incremental_clone
-    // the snapshot that be has done according 
+    // the snapshot that be has done according
     // to the preferred snapshot version that client requests
     4: optional i32 snapshot_format = 1
 }

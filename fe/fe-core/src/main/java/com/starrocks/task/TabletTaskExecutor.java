@@ -277,6 +277,7 @@ public class TabletTaskExecutor {
                         .setEnablePersistentIndex(table.enablePersistentIndex())
                         .setPersistentIndexType(table.getPersistentIndexType())
                         .setPrimaryIndexCacheExpireSec(table.primaryIndexCacheExpireSec())
+                        .setEnableAsyncCacheOnWritePopulate(table.isEnableAsyncCacheOnWritePopulate())
                         .setBinlogConfig(table.getCurBinlogConfig())
                         .setFlatJsonConfig(table.getFlatJsonConfig())
                         .setTabletType(tabletType)

@@ -67,6 +67,7 @@ public class CreateReplicaTask extends AgentTask {
     private final TStorageMedium storageMedium;
     private final boolean enablePersistentIndex;
     private TPersistentIndexType persistentIndexType;
+    private final boolean enableAsyncCacheOnWritePopulate;
 
     private BinlogConfig binlogConfig;
     private FlatJsonConfig flatJsonConfig;
@@ -101,6 +102,7 @@ public class CreateReplicaTask extends AgentTask {
         this.enablePersistentIndex = builder.isEnablePersistentIndex();
         this.primaryIndexCacheExpireSec = builder.getPrimaryIndexCacheExpireSec();
         this.persistentIndexType = builder.getPersistentIndexType();
+        this.enableAsyncCacheOnWritePopulate = builder.isEnableAsyncCacheOnWritePopulate();
         this.tabletType = builder.getTabletType();
         this.compressionType = builder.getCompressionType();
         this.compressionLevel = builder.getCompressionLevel();
@@ -201,6 +203,7 @@ public class CreateReplicaTask extends AgentTask {
         if (compactionStrategy != null) {
             createTabletReq.setCompaction_strategy(compactionStrategy);
         }
+        createTabletReq.setEnable_async_cache_on_write_populate(enableAsyncCacheOnWritePopulate);
         return createTabletReq;
     }
 
@@ -219,6 +222,7 @@ public class CreateReplicaTask extends AgentTask {
         private TStorageMedium storageMedium;
         private boolean enablePersistentIndex;
         private TPersistentIndexType persistentIndexType;
+        private boolean enableAsyncCacheOnWritePopulate;
         private BinlogConfig binlogConfig;
         private FlatJsonConfig flatJsonConfig;
         private TTabletType tabletType = TTabletType.TABLET_TYPE_DISK;
@@ -316,7 +320,7 @@ public class CreateReplicaTask extends AgentTask {
         public Builder setCompressionLevel(int compressionLevel) {
             this.compressionLevel = compressionLevel;
             return this;
-        }        
+        }
 
         public TStorageMedium getStorageMedium() {
             return storageMedium;
@@ -333,6 +337,15 @@ public class CreateReplicaTask extends AgentTask {
 
         public Builder setEnablePersistentIndex(boolean enablePersistentIndex) {
             this.enablePersistentIndex = enablePersistentIndex;
+            return this;
+        }
+
+        public boolean isEnableAsyncCacheOnWritePopulate() {
+            return enableAsyncCacheOnWritePopulate;
+        }
+
+        public Builder setEnableAsyncCacheOnWritePopulate(boolean enableAsyncCacheOnWritePopulate) {
+            this.enableAsyncCacheOnWritePopulate = enableAsyncCacheOnWritePopulate;
             return this;
         }
 

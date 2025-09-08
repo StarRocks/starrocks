@@ -2420,6 +2420,13 @@ public class OlapTable extends Table {
         return false;
     }
 
+    public boolean isEnableAsyncCacheOnWritePopulate() {
+        if (tableProperty != null) {
+            return tableProperty.isEnableAsyncCacheOnWritePopulate();
+        }
+        return false;
+    }
+
     public Boolean enablePersistentIndex() {
         if (tableProperty != null) {
             return tableProperty.enablePersistentIndex();
@@ -3511,7 +3518,7 @@ public class OlapTable extends Table {
         }
 
         if (getCompactionStrategy() != TCompactionStrategy.DEFAULT) {
-            properties.put(PropertyAnalyzer.PROPERTIES_COMPACTION_STRATEGY, 
+            properties.put(PropertyAnalyzer.PROPERTIES_COMPACTION_STRATEGY,
                                 TableProperty.compactionStrategyToString(getCompactionStrategy()));
         }
 

@@ -223,6 +223,10 @@ Status TabletManager::create_tablet(const TCreateTabletReq& req) {
         tablet_metadata_pb->set_compaction_strategy(CompactionStrategyPB::DEFAULT);
     }
 
+    if (req.__isset.enable_async_cache_on_write_populate) {
+        tablet_metadata_pb->set_enable_async_cache_on_write_populate(req.enable_async_cache_on_write_populate);
+    }
+
     auto compress_type = req.__isset.compression_type ? req.compression_type : TCompressionType::LZ4_FRAME;
     RETURN_IF_ERROR(
             convert_t_schema_to_pb_schema(req.tablet_schema, compress_type, tablet_metadata_pb->mutable_schema()));

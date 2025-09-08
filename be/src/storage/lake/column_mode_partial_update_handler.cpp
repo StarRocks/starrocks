@@ -235,10 +235,14 @@ StatusOr<std::unique_ptr<SegmentWriter>> ColumnModePartialUpdateHandler::_prepar
     WritableFileOptions opts{.sync_on_close = true, .mode = FileSystem::CREATE_OR_OPEN_WITH_TRUNCATE};
     SegmentWriterOptions writer_options;
 
-    if (auto metadata = params.tablet->tablet_mgr()->get_latest_cached_tablet_metadata(params.tablet->id());
-        metadata && metadata->has_flat_json_config()) {
-        writer_options.flat_json_config = std::make_shared<FlatJsonConfig>();
-        writer_options.flat_json_config->update(metadata->flat_json_config());
+    if (auto metadata = params.tablet->tablet_mgr()->get_latest_cached_tablet_metadata(params.tablet->id())) {
+        if (metadata->has_flat_json_config()) {
+            writer_options.flat_json_config = std::make_shared<FlatJsonConfig>();
+            writer_options.flat_json_config->update(metadata->flat_json_config());
+        }
+        if (metadata->has_enable_async_cache_on_write_populate()) {
+            writer_options.enable_async_cache_on_write_populate = metadata->enable_async_cache_on_write_populate();
+        }
     }
 
     if (config::enable_transparent_data_encryption) {

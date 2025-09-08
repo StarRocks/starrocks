@@ -116,10 +116,14 @@ Status HorizontalGeneralTabletWriter::reset_segment_writer(bool eos) {
     SegmentWriterOptions opts;
     opts.is_compaction = _is_compaction;
 
-    if (auto metadata = _tablet_mgr->get_latest_cached_tablet_metadata(_tablet_id);
-        metadata && metadata->has_flat_json_config()) {
-        opts.flat_json_config = std::make_shared<FlatJsonConfig>();
-        opts.flat_json_config->update(metadata->flat_json_config());
+    if (auto metadata = _tablet_mgr->get_latest_cached_tablet_metadata(_tablet_id)) {
+        if (metadata->has_flat_json_config()) {
+            opts.flat_json_config = std::make_shared<FlatJsonConfig>();
+            opts.flat_json_config->update(metadata->flat_json_config());
+        }
+        if (metadata->has_enable_async_cache_on_write_populate()) {
+            opts.enable_async_cache_on_write_populate = metadata->enable_async_cache_on_write_populate();
+        }
     }
 
     opts.global_dicts = _global_dicts;
@@ -351,10 +355,14 @@ StatusOr<std::shared_ptr<SegmentWriter>> VerticalGeneralTabletWriter::create_seg
     SegmentWriterOptions opts;
     opts.is_compaction = _is_compaction;
 
-    if (auto metadata = _tablet_mgr->get_latest_cached_tablet_metadata(_tablet_id);
-        metadata && metadata->has_flat_json_config()) {
-        opts.flat_json_config = std::make_shared<FlatJsonConfig>();
-        opts.flat_json_config->update(metadata->flat_json_config());
+    if (auto metadata = _tablet_mgr->get_latest_cached_tablet_metadata(_tablet_id)) {
+        if (metadata->has_flat_json_config()) {
+            opts.flat_json_config = std::make_shared<FlatJsonConfig>();
+            opts.flat_json_config->update(metadata->flat_json_config());
+        }
+        if (metadata->has_enable_async_cache_on_write_populate()) {
+            opts.enable_async_cache_on_write_populate = metadata->enable_async_cache_on_write_populate();
+        }
     }
 
     WritableFileOptions wopts;

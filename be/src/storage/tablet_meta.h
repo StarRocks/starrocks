@@ -110,7 +110,8 @@ public:
                const TTabletSchema& tablet_schema, uint32_t next_unique_id, bool enable_persistent_index,
                const std::unordered_map<uint32_t, uint32_t>& col_ordinal_to_unique_id, const TabletUid& tablet_uid,
                TTabletType::type tabletType, TCompressionType::type compression_type,
-               int32_t primary_index_cache_expire_sec, TStorageType::type storage_type, int compression_level);
+               int32_t primary_index_cache_expire_sec, TStorageType::type storage_type, int compression_level,
+               bool enable_async_cache_on_write_populate = false);
 
     virtual ~TabletMeta();
 

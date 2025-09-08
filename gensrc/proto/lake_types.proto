@@ -175,6 +175,8 @@ message TabletMetadataPB {
     optional CompactionStrategyPB compaction_strategy = 20;
     // flat json
     optional FlatJsonConfigPB flat_json_config = 21;
+    // enable async cache population on write
+    optional bool enable_async_cache_on_write_populate = 22;
 }
 
 message MetadataUpdateInfoPB {
@@ -259,7 +261,7 @@ message TxnLogPB {
 }
 
 message CombinedTxnLogPB {
-    repeated TxnLogPB txn_logs = 1;    
+    repeated TxnLogPB txn_logs = 1;
 }
 
 message TabletMetadataLockPB {}
