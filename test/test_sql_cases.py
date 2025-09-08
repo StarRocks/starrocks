@@ -112,6 +112,16 @@ class TestSQLCases(sr_sql_lib.StarrocksSQLApiLib):
         super().tearDown()
 
         log.info("[TearDown begin]: %s" % self.case_info.name)
+        # run custom cleanup (always)
+        try:
+            if hasattr(self.case_info, "cleanup"):
+                for stmt in self.case_info.cleanup:
+                    try:
+                        self.execute_single_statement(stmt, -1, False)
+                    except Exception as e:
+                        log.warning(f"cleanup stmt error: {e}")
+        except Exception as e:
+            log.warning(f"cleanup error: {e}")
 
         for each_db in self.db:
             self.drop_database(each_db)
@@ -428,6 +438,18 @@ Start to run: %s
                 self_print(f"[LOOP] Finish!\n", color=ColorEnum.BLUE, logout=True, bold=True)
                 tools.ok_(loop_check_res, f"Loop checker fail: {''.join(sql['ori'])}!")
 
+            elif isinstance(sql, dict) and sql.get("type", "") == CLEANUP_FLAG:
+                # record mode: write cleanup block in-place to res_log to keep position
+                if record_mode:
+                    if isinstance(sql.get("ori"), list):
+                        self.res_log.append("".join(sql["ori"]))
+                    else:
+                        self.res_log.append("CLEANUP {")
+                        for stmt in sql.get("cmd", []):
+                            self.res_log.append(stmt)
+                        self.res_log.append("} END CLEANUP")
+                # do nothing during execution here; cleanup executes in tearDown
+                continue
             elif isinstance(sql, dict) and sql["type"] == sr_sql_lib.CONCURRENCY_FLAG:
                 # concurrency statement
                 self_print(f"[CONCURRENCY] Start...", color=ColorEnum.CYAN, logout=True)
