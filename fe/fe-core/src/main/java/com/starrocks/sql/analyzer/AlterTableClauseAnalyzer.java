@@ -451,7 +451,8 @@ public class AlterTableClauseAnalyzer implements AstVisitorExtendInterface<Void,
                                 " must be bool type(false/true)");
             }
         } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_ENABLE_ASYNC_CACHE_ON_WRITE_POPULATE)) {
-            PropertyAnalyzer.analyzeBooleanProp(properties, PropertyAnalyzer.PROPERTIES_ENABLE_ASYNC_CACHE_ON_WRITE_POPULATE, false);
+            PropertyAnalyzer.analyzeBooleanProp(properties,
+                    PropertyAnalyzer.PROPERTIES_ENABLE_ASYNC_CACHE_ON_WRITE_POPULATE, false);
         } else {
             ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR, "Unknown properties: " + properties);
         }
