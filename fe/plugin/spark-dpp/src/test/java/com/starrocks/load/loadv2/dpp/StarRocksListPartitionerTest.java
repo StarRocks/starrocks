@@ -1,4 +1,19 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// Licensed to the Apache Software Foundation (ASF) under one
+// or more contributor license agreements.  See the NOTICE file
+// distributed with this work for additional information
+// regarding copyright ownership.  The ASF licenses this file
+// to you under the Apache License, Version 2.0 (the
+// "License"); you may not use this file except in compliance
+// with the License.  You may obtain a copy of the License at
+//
+//   http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing,
+// software distributed under the License is distributed on an
+// "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+// KIND, either express or implied.  See the License for the
+// specific language governing permissions and limitations
+// under the License.
 
 package com.starrocks.load.loadv2.dpp;
 
@@ -26,10 +41,10 @@ public class StarRocksListPartitionerTest {
                 10001, inKeys2, 3);
 
         List<List<Object>> inKeys3 = new ArrayList<>();
-        String[] arr3_1 = {"2022-02-01", "cn"};
-        inKeys3.add(Arrays.asList((Object[]) arr3_1));
-        String[] arr3_2 = {"2022-02-01", "us"};
-        inKeys3.add(Arrays.asList((Object[]) arr3_2));
+        String[] arr31 = {"2022-02-01", "cn"};
+        inKeys3.add(Arrays.asList((Object[]) arr31));
+        String[] arr32 = {"2022-02-01", "us"};
+        inKeys3.add(Arrays.asList((Object[]) arr32));
         EtlJobConfig.EtlPartition partition3 = new EtlJobConfig.EtlPartition(
                 10002, inKeys3, 3);
 
