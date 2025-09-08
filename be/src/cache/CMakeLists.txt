@@ -24,6 +24,7 @@ set(CACHE_FILES
   datacache.cpp
   datacache_utils.cpp
   lrucache_engine.cpp
+  segment_cache_populator.cpp
   block_cache/block_cache.cpp
   block_cache/io_buffer.cpp
   block_cache/block_cache_hit_rate_counter.hpp
