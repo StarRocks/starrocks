@@ -20,11 +20,7 @@ import com.google.common.collect.Maps;
 import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Table;
-<<<<<<< HEAD
-=======
 import com.starrocks.catalog.system.information.AnalyzeStatusSystemTable;
-import com.starrocks.common.util.UUIDUtil;
->>>>>>> 6a908b4036 ([BugFix] fix NPE of information_schema.analyze_status when db is dropped (#62796))
 import com.starrocks.journal.JournalEntity;
 import com.starrocks.persist.OperationType;
 import com.starrocks.qe.ConnectContext;
