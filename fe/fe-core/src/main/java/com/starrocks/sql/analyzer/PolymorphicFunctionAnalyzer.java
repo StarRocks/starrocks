@@ -216,6 +216,8 @@ public class PolymorphicFunctionAnalyzer {
             .put(FunctionSet.COALESCE, new CommonDeduce())
             // it's mock, need handle it in expressionAnalyzer
             .put(FunctionSet.NAMED_STRUCT, new RowDeduce())
+            .put(FunctionSet.MAX_BY, types -> types[0])
+            .put(FunctionSet.MIN_BY, types -> types[0])
             .put(FunctionSet.ANY_VALUE, types -> types[0])
             // any_value functions
             .put(FunctionSet.getAggStateName(FunctionSet.ANY_VALUE), types -> types[0])

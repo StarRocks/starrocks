@@ -77,3 +77,11 @@ select count(mb), max(get_json_int(mb, "$")) from (select min_by(v5, v1) over (p
 -- result:
 40960	40960
 -- !result
+select count(mb) from (select min_by(named_struct("k",v1,"v",v1), v1) over (partition by v1) mb from t1_not_nulls) t;
+-- result:
+40960
+-- !result
+select count(mb) from (select min_by(named_struct("k",v1,"v",v1), v1) over (partition by v1) mb from t1_not_nulls) t;
+-- result:
+40960
+-- !result

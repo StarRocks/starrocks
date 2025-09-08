@@ -43,3 +43,7 @@ select count(mb), sum(mb) from (select min_by(v2, v2) over (partition by v1) mb 
 select count(mb), sum(mb) from (select min_by(v3, v3) over (partition by v1) mb from t1_not_nulls) t;
 select count(mb), max(mb) from (select min_by(v4, v4) over (partition by v1) mb from t1_not_nulls) t;
 select count(mb), max(get_json_int(mb, "$")) from (select min_by(v5, v1) over (partition by v1) mb from t1_not_nulls) t;
+
+select count(mb) from (select min_by(named_struct("k",v1,"v",v1), v1) over (partition by v1) mb from t1_not_nulls) t;
+select count(mb) from (select min_by(named_struct("k",v1,"v",v1), v1) over (partition by v1) mb from t1_not_nulls) t;
+

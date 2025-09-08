@@ -134,3 +134,4 @@ SELECT max_by(subject, exam_result) over(partition by subject_id) FROM exam orde
 
 select max_by(tag, tag) from (select 'literal' tag, subject_id from exam) t;
 select max_by(tag, tag) from (select 1 tag, subject_id from exam) t;
+select max_by(row(tag,tag), tag) from (select 1 tag, subject_id from exam) t;
