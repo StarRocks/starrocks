@@ -30,7 +30,8 @@ _JNI_IMPORT_OR_EXPORT_ jint JNICALL JNI_CreateJavaVM(JavaVM** pvm, void** penv, 
 
 _JNI_IMPORT_OR_EXPORT_ jint JNICALL JNI_GetCreatedJavaVMs(JavaVM** vm, jsize sz, jsize* output) {
     fprintf(stderr, "unsupported call jni function, JAVA_HOME is required\n ");
-    return JNI_ERR;
+    exit(1);
+    return 1;
 }
 
 /* Defined by native libraries. */
