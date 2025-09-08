@@ -125,11 +125,6 @@ public class BoolLiteral extends LiteralExpr {
     }
 
     @Override
-    public String toSqlImpl() {
-        return value ? "TRUE" : "FALSE";
-    }
-
-    @Override
     public Object getRealObjectValue() {
         return value;
     }

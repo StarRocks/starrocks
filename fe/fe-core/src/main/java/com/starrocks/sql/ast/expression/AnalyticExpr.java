@@ -34,7 +34,6 @@
 
 package com.starrocks.sql.ast.expression;
 
-import com.google.common.base.Joiner;
 import com.google.common.base.MoreObjects;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
@@ -202,6 +201,10 @@ public class AnalyticExpr extends Expr {
 
     public boolean isSkewed() {
         return isSkewed;
+    }
+
+    public String getSqlString() {
+        return sqlString;
     }
 
     @Override
@@ -402,50 +405,6 @@ public class AnalyticExpr extends Expr {
         resetWindow = false;
         // sync with children, now that they've been reset
         syncWithChildren();
-    }
-
-    @Override
-    public String toSqlImpl() {
-        if (sqlString != null) {
-            return sqlString;
-        }
-        StringBuilder sb = new StringBuilder();
-        sb.append(fnCall.toSql()).append(" OVER (");
-        boolean needsSpace = false;
-        if (!partitionExprs.isEmpty()) {
-            sb.append("PARTITION BY ").append(exprListToSql(partitionExprs));
-            needsSpace = true;
-        }
-        if (!orderByElements.isEmpty()) {
-            List<String> orderByStrings = Lists.newArrayList();
-            for (OrderByElement e : orderByElements) {
-                orderByStrings.add(e.toSql());
-            }
-            if (needsSpace) {
-                sb.append(" ");
-            }
-            sb.append("ORDER BY ").append(Joiner.on(", ").join(orderByStrings));
-            needsSpace = true;
-        }
-        if (window != null) {
-            if (needsSpace) {
-                sb.append(" ");
-            }
-            sb.append(window.toSql());
-        }
-        sb.append(")");
-        return sb.toString();
-    }
-
-    private String exprListToSql(List<? extends Expr> exprs) {
-        if (exprs == null || exprs.isEmpty()) {
-            return "";
-        }
-        List<String> strings = Lists.newArrayList();
-        for (Expr expr : exprs) {
-            strings.add(expr.toSql());
-        }
-        return Joiner.on(", ").join(strings);
     }
 
     /**

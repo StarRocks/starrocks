@@ -674,16 +674,16 @@ public class AggregateTest extends PlanTestBase {
         FeConstants.runningUnitTest = true;
         String sql = "select count(distinct t1a,t1b), avg(t1c) from test_all_type";
         String plan = getVerboseExplain(sql);
-        assertContains(plan, " 2:AGGREGATE (update serialize)\n" +
-                "  |  aggregate: count[(if[(1: t1a IS NULL, NULL, [2: t1b, SMALLINT, true]); " +
-                "args: BOOLEAN,SMALLINT,SMALLINT; result: SMALLINT; args nullable: true; result nullable: true]); " +
-                "args: SMALLINT; result: BIGINT; args nullable: true; result nullable: false], " +
-                "avg[([12: avg, VARBINARY, true]); args: INT; result: VARBINARY; args nullable: true; " +
-                "result nullable: true]");
-        assertContains(plan, " 1:AGGREGATE (update serialize)\n" +
-                "  |  aggregate: avg[([3: t1c, INT, true]); args: INT; result: VARBINARY; " +
-                "args nullable: true; result nullable: true]\n" +
-                "  |  group by: [1: t1a, VARCHAR, true], [2: t1b, SMALLINT, true]");
+        assertContains(plan, "2:AGGREGATE (update serialize)\n"
+                + "  |  aggregate: count[(if[([1: t1a, VARCHAR, true] IS NULL, NULL, [2: t1b, SMALLINT, true]); "
+                + "args: BOOLEAN,SMALLINT,SMALLINT; result: SMALLINT; args nullable: true; result nullable: true]); "
+                + "args: SMALLINT; result: BIGINT; args nullable: true; result nullable: false], "
+                + "avg[([12: avg, VARBINARY, true]); args: INT; result: VARBINARY; args nullable: true; "
+                + "result nullable: true]\n");
+        assertContains(plan, "1:AGGREGATE (update serialize)\n"
+                + "  |  aggregate: avg[([3: t1c, INT, true]); args: INT; result: VARBINARY; "
+                + "args nullable: true; result nullable: true]\n"
+                + "  |  group by: [1: t1a, VARCHAR, true], [2: t1b, SMALLINT, true]");
         FeConstants.runningUnitTest = false;
     }
 
@@ -692,13 +692,13 @@ public class AggregateTest extends PlanTestBase {
         FeConstants.runningUnitTest = true;
         String sql = "select count(distinct t1a,t1b) from test_all_type";
         String plan = getVerboseExplain(sql);
-        assertContains(plan, "2:AGGREGATE (update serialize)\n" +
-                "  |  aggregate: count[(if[(1: t1a IS NULL, NULL, [2: t1b, SMALLINT, true]); " +
-                "args: BOOLEAN,SMALLINT,SMALLINT; result: SMALLINT; args nullable: true; " +
-                "result nullable: true]); args: SMALLINT; result: BIGINT; args nullable: true; result nullable: false]");
-        assertContains(plan, "4:AGGREGATE (merge finalize)\n" +
-                "  |  aggregate: count[([11: count, BIGINT, false]); args: SMALLINT; " +
-                "result: BIGINT; args nullable: true; result nullable: false]");
+        assertContains(plan, "2:AGGREGATE (update serialize)\n"
+                + "  |  aggregate: count[(if[([1: t1a, VARCHAR, true] IS NULL, NULL, [2: t1b, SMALLINT, true]); "
+                + "args: BOOLEAN,SMALLINT,SMALLINT; result: SMALLINT; args nullable: true; "
+                + "result nullable: true]); args: SMALLINT; result: BIGINT; args nullable: true; result nullable: false]");
+        assertContains(plan, "4:AGGREGATE (merge finalize)\n"
+                + "  |  aggregate: count[([11: count, BIGINT, false]); args: SMALLINT; "
+                + "result: BIGINT; args nullable: true; result nullable: false]");
         FeConstants.runningUnitTest = false;
     }
 
