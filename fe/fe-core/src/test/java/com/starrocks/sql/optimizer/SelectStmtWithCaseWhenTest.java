@@ -613,11 +613,8 @@ class SelectStmtWithCaseWhenTest {
         } else {
             Assertions.assertTrue(patterns.stream().anyMatch(plan::contains), joiner.toString());
         }
+        starRocksAssert.getCtx().getSessionVariable().setEnablePredicateExprReuse(true);
 
-        //        String code = "{\n\"" + sql.replace("\n", " ") + "\",\n" + Arrays.stream(plan.split("\n"))
-        //                .filter(c -> c.contains("PREDICATES:")).map(c -> c.replace("PREDICATES:", "").trim())
-        //                .collect(Collectors.joining(", ", "\"", "\"")) + "},";
-        //        System.out.println(code);
     }
 
     @Test
@@ -639,6 +636,18 @@ class SelectStmtWithCaseWhenTest {
                 "FROM cte01\n" +
                 "WHERE len_bucket IS NOT NULL;";
         String plan = UtFrameUtils.getVerboseFragmentPlan(starRocksAssert.getCtx(), sql);
-        Assert.assertTrue(plan.contains("CASE WHEN array_length"));
+        Assert.assertTrue(plan.contains("  2:SELECT\n" +
+                "  |  predicates: 3: case IS NOT NULL\n" +
+                "  |  cardinality: 1\n" +
+                "  |  \n" +
+                "  1:Project\n" +
+                "  |  output columns:\n" +
+                "  |  1 <-> [1: id, VARCHAR, false]\n" +
+                "  |  3 <-> CASE WHEN [5: array_length, INT, true] < 2 THEN 'bucket1' " +
+                "WHEN ([5: array_length, INT, true] >= 2) AND ([5: array_length, INT, true] < 4) THEN 'bucket2' ELSE NULL END\n" +
+                "  |  4 <-> [5: array_length, INT, true]\n" +
+                "  |  common expressions:\n" +
+                "  |  5 <-> array_length[([2: col_arr, ARRAY<VARCHAR(100)>, true]); " +
+                "args: INVALID_TYPE; result: INT; args nullable: true; result nullable: true]"));
     }
 }
