@@ -216,8 +216,23 @@ public class PolymorphicFunctionAnalyzer {
             .put(FunctionSet.COALESCE, new CommonDeduce())
             // it's mock, need handle it in expressionAnalyzer
             .put(FunctionSet.NAMED_STRUCT, new RowDeduce())
+            // min/max by functions
             .put(FunctionSet.MAX_BY, types -> types[0])
             .put(FunctionSet.MIN_BY, types -> types[0])
+            .put(FunctionSet.getAggStateName(FunctionSet.MAX_BY), types -> types[0])
+            .put(FunctionSet.getAggStateUnionName(FunctionSet.MAX_BY), types -> types[0])
+            .put(FunctionSet.getAggStateMergeName(FunctionSet.MAX_BY), types -> types[0])
+            .put(FunctionSet.getAggStateIfName(FunctionSet.MAX_BY), types -> types[0])
+            .put(FunctionSet.getStateUnionName(FunctionSet.MAX_BY), types -> types[0])
+            .put(FunctionSet.getStateMergeName(FunctionSet.MAX_BY), types -> types[0])
+            .put(FunctionSet.getAggStateCombineName(FunctionSet.MAX_BY), types -> types[0])
+            .put(FunctionSet.getAggStateName(FunctionSet.MIN_BY), types -> types[0])
+            .put(FunctionSet.getAggStateUnionName(FunctionSet.MIN_BY), types -> types[0])
+            .put(FunctionSet.getAggStateMergeName(FunctionSet.MIN_BY), types -> types[0])
+            .put(FunctionSet.getAggStateIfName(FunctionSet.MIN_BY), types -> types[0])
+            .put(FunctionSet.getStateUnionName(FunctionSet.MIN_BY), types -> types[0])
+            .put(FunctionSet.getStateMergeName(FunctionSet.MIN_BY), types -> types[0])
+            .put(FunctionSet.getAggStateCombineName(FunctionSet.MIN_BY), types -> types[0])
             .put(FunctionSet.ANY_VALUE, types -> types[0])
             // any_value functions
             .put(FunctionSet.getAggStateName(FunctionSet.ANY_VALUE), types -> types[0])
