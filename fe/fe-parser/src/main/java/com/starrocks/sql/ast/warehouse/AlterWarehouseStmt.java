@@ -15,46 +15,45 @@
 package com.starrocks.sql.ast.warehouse;
 
 import com.starrocks.sql.ast.AstVisitor;
-import com.starrocks.sql.ast.AstVisitorExtendInterface;
 import com.starrocks.sql.ast.DdlStmt;
 import com.starrocks.sql.parser.NodePosition;
 
-public class DropWarehouseStmt extends DdlStmt {
-    private final boolean ifExists;
-    private final String warehouseName;
+import java.util.Map;
 
-    public DropWarehouseStmt(boolean ifExists, String warehouseName) {
-        this(ifExists, warehouseName, NodePosition.ZERO);
+public class AlterWarehouseStmt extends DdlStmt {
+    private final String warehouseName;
+    private Map<String, String> properties;
+
+    public AlterWarehouseStmt(String warehouseName,
+                              Map<String, String> properties) {
+        this(warehouseName, properties, NodePosition.ZERO);
     }
 
-    public DropWarehouseStmt(boolean ifExists, String warehouseName, NodePosition pos) {
+    public AlterWarehouseStmt(String warehouseName,
+                              Map<String, String> properties,
+                              NodePosition pos) {
         super(pos);
-        this.ifExists = ifExists;
         this.warehouseName = warehouseName;
+        this.properties = properties;
     }
 
     public String getWarehouseName() {
         return warehouseName;
     }
 
-    public boolean isSetIfExists() {
-        return ifExists;
+    public Map<String, String> getProperties() {
+        return this.properties;
+    }
+
+    public void setProperties(Map<String, String> properties) {
+        this.properties = properties;
     }
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return ((AstVisitorExtendInterface<R, C>) visitor).visitDropWarehouseStatement(this, context);
+        return visitor.visitAlterWarehouseStatement(this, context);
     }
-
-    @Override
-    public String toSql() {
-        StringBuilder sb = new StringBuilder();
-        sb.append("DROP WAREHOUSE ");
-        if (ifExists) {
-            sb.append("IF EXISTS ");
-        }
-        sb.append("\'" + warehouseName + "\'");
-        return sb.toString();
-    }
-
 }
+
+
+

@@ -12,25 +12,34 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package com.starrocks.sql.ast.warehouse.cngroup;
+package com.starrocks.sql.ast;
 
-import com.starrocks.sql.ast.AstVisitor;
-import com.starrocks.sql.ast.AstVisitorExtendInterface;
 import com.starrocks.sql.parser.NodePosition;
 
 import java.util.Map;
 
-public class AlterCnGroupStmt extends CnGroupStmtBase {
+// CreateUserStmt and AlterUserStmt share the same parameter and check logic
+public abstract class BaseCreateAlterUserStmt extends DdlStmt {
+    protected UserRef user;
+    protected UserAuthOption authOption;
 
     private final Map<String, String> properties;
 
-    public AlterCnGroupStmt(String warehouseName, String cnGroupName, Map<String, String> properties) {
-        this(warehouseName, cnGroupName, properties, NodePosition.ZERO);
+    public BaseCreateAlterUserStmt(UserRef user, UserAuthOption authOption,
+                                   Map<String, String> properties, NodePosition pos) {
+        super(pos);
+
+        this.user = user;
+        this.authOption = authOption;
+        this.properties = properties;
     }
 
-    public AlterCnGroupStmt(String warehouseName, String cnGroupName, Map<String, String> properties, NodePosition pos) {
-        super(warehouseName, cnGroupName, pos);
-        this.properties = properties;
+    public UserRef getUser() {
+        return user;
+    }
+
+    public UserAuthOption getAuthOption() {
+        return authOption;
     }
 
     public Map<String, String> getProperties() {
@@ -39,6 +48,6 @@ public class AlterCnGroupStmt extends CnGroupStmtBase {
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return ((AstVisitorExtendInterface<R, C>) visitor).visitAlterCNGroupStatement(this, context);
+        return visitor.visitBaseCreateAlterUserStmt(this, context);
     }
 }
