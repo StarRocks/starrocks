@@ -18,6 +18,8 @@
 #include "common/config.h"
 #include "fs/fs.h"
 #include "io/cache_input_stream.h"
+#include "io/shared_buffered_input_stream.h"
+#include "util/threadpool.h"
 #include "gutil/strings/substitute.h"
 
 namespace starrocks {
@@ -28,10 +30,14 @@ SegmentCachePopulator* SegmentCachePopulator::instance() {
 }
 
 SegmentCachePopulator::SegmentCachePopulator() {
-    _cache_populate_pool = std::make_unique<ThreadPool>(config::segment_cache_populate_thread_num);
-    Status st = _cache_populate_pool->initialize("segment_cache_populate");
+    Status st = ThreadPoolBuilder("segment_cache_populate")
+                    .set_min_threads(1)
+                    .set_max_threads(config::segment_cache_populate_thread_num)
+                    .set_max_queue_size(1000)
+                    .set_idle_timeout(MonoDelta::FromMilliseconds(10000))
+                    .build(&_cache_populate_pool);
     if (!st.ok()) {
-        LOG(WARNING) << "Failed to initialize segment cache populate thread pool: " << st;
+        LOG(WARNING) << "Failed to create segment cache populate thread pool: " << st;
     }
 }
 
@@ -47,8 +53,11 @@ Status SegmentCachePopulator::populate_segment_to_cache(const std::string& segme
     ASSIGN_OR_RETURN(auto file, fs->new_random_access_file(segment_path));
     ASSIGN_OR_RETURN(auto file_size, file->get_size());
 
-    auto cache_input_stream = std::make_unique<io::CacheInputStream>(
-        std::move(file), segment_path, file_size, io::CacheOptions{});
+    auto shared_buffered_input_stream = std::make_shared<io::SharedBufferedInputStream>(
+        std::move(file), segment_path, file_size);
+
+    auto cache_input_stream = std::make_shared<io::CacheInputStream>(
+        shared_buffered_input_stream, segment_path, file_size, 0 /* modification_time */);
 
     constexpr size_t kChunkSize = 1024 * 1024;
     std::vector<uint8_t> buffer(kChunkSize);
