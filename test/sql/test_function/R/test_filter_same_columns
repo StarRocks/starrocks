@@ -1,0 +1,41 @@
+-- name: test_filter_same_columns
+WITH input AS (SELECT if(id%2=0, id, null) AS col FROM TABLE(generate_series(1, 10)) AS tmp(id) limit 10) SELECT col FROM input WHERE least(col) IS NOT NULL AND least(col) < 20;
+-- result:
+2
+4
+6
+8
+10
+-- !result
+WITH input AS (SELECT if(id%2=0, id, null) AS col FROM TABLE(generate_series(1, 10)) AS tmp(id) limit 10) SELECT col FROM input WHERE greatest(col) IS NOT NULL AND greatest(col) < 20;
+-- result:
+2
+4
+6
+8
+10
+-- !result
+WITH input AS (SELECT if(id%2=0, id, null) AS col FROM TABLE(generate_series(1, 10)) AS tmp(id) limit 10) SELECT col FROM input WHERE positive(col) IS NOT NULL AND positive(col) < 20;
+-- result:
+2
+4
+6
+8
+10
+-- !result
+WITH input AS (SELECT if(id%2=0, id, null) AS col FROM TABLE(generate_series(1, 10)) AS tmp(id) limit 10) SELECT col FROM input WHERE coalesce(col) IS NOT NULL AND coalesce(col) < 20;
+-- result:
+2
+4
+6
+8
+10
+-- !result
+with input as (select date'2020-01-01' as dt, if(id%2, add_months(dt, 1), null) as col from table(generate_series(1, 10)) as tmp(id)) select col from input where timestamp(col) is not null and timestamp(col) > '2020-01-01';
+-- result:
+20200201000000
+20200201000000
+20200201000000
+20200201000000
+20200201000000
+-- !result
