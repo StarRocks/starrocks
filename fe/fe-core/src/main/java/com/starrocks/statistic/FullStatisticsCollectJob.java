@@ -143,6 +143,9 @@ public class FullStatisticsCollectJob extends StatisticsCollectJob {
             } catch (Exception e) {
                 failedNum++;
                 LOG.warn("collect statistics task failed in job: {}, {}", this, sql, e);
+                if (e.getMessage().contains("USER_CANCEL")) {
+                    throw e;
+                }
 
                 double failureRatio = 1.0 * failedNum / collectSQLList.size();
                 if (collectSQLList.size() < 100) {
