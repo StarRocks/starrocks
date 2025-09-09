@@ -486,6 +486,7 @@ jobs:
     env:
       commit_id: ${{ inputs.COMMIT_ID }}
       base_commit_id: ${{ inputs.COV_BASE_COMMIT }}
+      branch: ${{ needs.info.outputs.BRANCH }}
     outputs:
       DIFF_FILE: ${{ steps.diff.outputs.DIFF_FILE }}
     needs:
@@ -506,6 +507,10 @@ jobs:
       - name: diff
         id: diff
         run: |
+          git config --global user.name "wanpengfei-git"
+          git config --global user.email "wanpengfei91@163.com"
+          git checkout ${branch}
+          git reset ${commit_id} --hard
           diff_file=${SHARE_PATH}/${base_commit_id}_${commit_id}.diff
           git diff ${base_commit_id} ${commit_id} > ${diff_file}
           echo "DIFF_FILE=${diff_file}" >> $GITHUB_OUTPUT
