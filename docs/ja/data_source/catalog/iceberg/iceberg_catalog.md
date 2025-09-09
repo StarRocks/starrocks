@@ -465,32 +465,38 @@ Iceberg クラスターのストレージとして AWS S3 を選択した場合�
   "aws.s3.region" = "<aws_s3_region>"
   ```
 
+- REST カタログで Vended Credential（v4.0以降でサポート）を選択するには、`StorageCredentialParams` を次のように構成します。
+
+  ```SQL
+  "aws.s3.region" = "<aws_s3_region>"
+  ```
+
 AWS S3 用の `StorageCredentialParams`:
 
 ###### aws.s3.use_instance_profile
 
-必須: はい
-説明: インスタンスプロファイルベースの認証方法と想定ロールベースの認証方法を有効にするかどうかを指定します。 有効な値: `true` および `false`。 デフォルト値: `false`。
+- 必須: はい
+- 説明: インスタンスプロファイルベースの認証方法と想定ロールベースの認証方法を有効にするかどうかを指定します。 有効な値: `true` および `false`。 デフォルト値: `false`。
 
 ###### aws.s3.iam_role_arn
 
-必須: いいえ
-説明: AWS S3 バケットに対する権限を持つ IAM ロールの ARN です。想定ロールベースの認証方法を使用して AWS S3 にアクセスする場合、このパラメーターを指定する必要があります。
+- 必須: いいえ
+- 説明: AWS S3 バケットに対する権限を持つ IAM ロールの ARN です。想定ロールベースの認証方法を使用して AWS S3 にアクセスする場合、このパラメーターを指定する必要があります。
 
 ###### aws.s3.region
 
-必須: はい
-説明: AWS S3 バケットが存在するリージョンです。例: `us-west-1`。
+- 必須: はい
+- 説明: AWS S3 バケットが存在するリージョンです。例: `us-west-1`。
 
 ###### aws.s3.access_key
 
-必須: いいえ
-説明: IAM ユーザーのアクセスキーです。IAM ユーザーベースの認証方法を使用して AWS S3 にアクセスする場合、このパラメーターを指定する必要があります。
+- 必須: いいえ
+- 説明: IAM ユーザーのアクセスキーです。IAM ユーザーベースの認証方法を使用して AWS S3 にアクセスする場合、このパラメーターを指定する必要があります。
 
 ###### aws.s3.secret_key
 
-必須: いいえ
-説明: IAM ユーザーのシークレットキーです。IAM ユーザーベースの認証方法を使用して AWS S3 にアクセスする場合、このパラメーターを指定する必要があります。
+- 必須: いいえ
+- 説明: IAM ユーザーのシークレットキーです。IAM ユーザーベースの認証方法を使用して AWS S3 にアクセスする場合、このパラメーターを指定する必要があります。
 
 AWS S3 へのアクセス認証方法の選択方法および AWS IAM コンソールでのアクセス制御ポリシーの構成方法については、 [AWS S3 へのアクセス認証パラメーター](../../../integrations/authenticate_to_aws_resources.md#authentication-parameters-for-accessing-aws-s3) を参照してください。
 
@@ -522,28 +528,28 @@ MinIO およびその他の S3 互換システム用の `StorageCredentialParams
 
 ###### aws.s3.enable_ssl
 
-必須: はい
-説明: SSL 接続を有効にするかどうかを指定します。<br />有効な値: `true` および `false`。 デフォルト値: `true`。
+- 必須: はい
+- 説明: SSL 接続を有効にするかどうかを指定します。<br />有効な値: `true` および `false`。 デフォルト値: `true`。
 
 ###### aws.s3.enable_path_style_access
 
-必須: はい
-説明: パススタイルアクセスを有効にするかどうかを指定します。<br />有効な値: `true` および `false`。 デフォルト値: `false`。 MinIO の場合、値を `true` に設定する必要があります。<br />パススタイル URL は次の形式を使用します: `https://s3.<region_code>.amazonaws.com/<bucket_name>/<key_name>`。 例: US West (Oregon) リージョンに `DOC-EXAMPLE-BUCKET1` というバケットを作成し、そのバケット内の `alice.jpg` オブジェクトにアクセスしたい場合、次のパススタイル URL を使用できます: `https://s3.us-west-2.amazonaws.com/DOC-EXAMPLE-BUCKET1/alice.jpg`。
+- 必須: はい
+- 説明: パススタイルアクセスを有効にするかどうかを指定します。<br />有効な値: `true` および `false`。 デフォルト値: `false`。 MinIO の場合、値を `true` に設定する必要があります。<br />パススタイル URL は次の形式を使用します: `https://s3.<region_code>.amazonaws.com/<bucket_name>/<key_name>`。 例: US West (Oregon) リージョンに `DOC-EXAMPLE-BUCKET1` というバケットを作成し、そのバケット内の `alice.jpg` オブジェクトにアクセスしたい場合、次のパススタイル URL を使用できます: `https://s3.us-west-2.amazonaws.com/DOC-EXAMPLE-BUCKET1/alice.jpg`。
 
 ###### aws.s3.endpoint
 
-必須: はい
-説明: AWS S3 の代わりに S3 互換ストレージシステムに接続するために使用されるエンドポイント。
+- 必須: はい
+- 説明: AWS S3 の代わりに S3 互換ストレージシステムに接続するために使用されるエンドポイント。
 
 ###### aws.s3.access_key
 
-必須: はい
-説明: IAM ユーザーのアクセスキー。
+- 必須: はい
+- 説明: IAM ユーザーのアクセスキー。
 
 ###### aws.s3.secret_key
 
-必須: はい
-説明: IAM ユーザーのシークレットキー。
+- 必須: はい
+- 説明: IAM ユーザーのシークレットキー。
 
 </TabItem>
 
@@ -571,35 +577,36 @@ Iceberg クラスターのストレージとして Blob Storage を選択した�
   "azure.blob.container" = "<container_name>",
   "azure.blob.sas_token" = "<storage_account_SAS_token>"
   ```
+- REST カタログで Vended Credential（v4.0以降でサポート）を選択する場合、`StorageCredentialParams` を設定する必要はありません。
 
 Microsoft Azure 用の `StorageCredentialParams`:
 
 ###### azure.blob.storage_account
 
-必須: はい
-説明: Blob Storage アカウントのユーザー名。
+- 必須: はい
+- 説明: Blob Storage アカウントのユーザー名。
 
 ###### azure.blob.shared_key
 
-必須: はい
-説明: Blob Storage アカウントの共有キー。
+- 必須: はい
+- 説明: Blob Storage アカウントの共有キー。
 
 ###### azure.blob.account_name
 
-必須: はい
-説明: Blob Storage アカウントのユーザー名。
+- 必須: はい
+- 説明: Blob Storage アカウントのユーザー名。
 
 ###### azure.blob.container
 
-必須: はい
-説明: データを保存する blob コンテナの名前。
+- 必須: はい
+- 説明: データを保存する blob コンテナの名前。
 
 ###### azure.blob.sas_token
 
-必須: はい
-説明: Blob Storage アカウントにアクセスするために使用される SAS トークン。
+- 必須: はい
+- 説明: Blob Storage アカウントにアクセスするために使用される SAS トークン。
 
-###### Azure Data Lake Storage Gen1
+##### Azure Data Lake Storage Gen1
 
 Iceberg クラスターのストレージとして Data Lake Storage Gen1 を選択した場合、次のいずれかの操作を行います。
 
@@ -619,7 +626,7 @@ Iceberg クラスターのストレージとして Data Lake Storage Gen1 を選
   "azure.adls1.oauth2_endpoint" = "<OAuth_2.0_authorization_endpoint_v2>"
   ```
 
-###### Azure Data Lake Storage Gen2
+##### Azure Data Lake Storage Gen2
 
 Iceberg クラスターのストレージとして Data Lake Storage Gen2 を選択した場合、次のいずれかの操作を行います。
 
@@ -649,6 +656,8 @@ Iceberg クラスターのストレージとして Data Lake Storage Gen2 を選
   "azure.adls2.oauth2_client_secret" = "<service_principal_client_secret>",
   "azure.adls2.oauth2_client_endpoint" = "<service_principal_client_endpoint>"
   ```
+
+- REST カタログで Vended Credential（v4.0以降でサポート）を選択する場合、`StorageCredentialParams` を設定する必要はありません。
 
 </TabItem>
 
@@ -692,31 +701,33 @@ Iceberg クラスターのストレージとして Google GCS を選択した場
     "gcp.gcs.impersonation_service_account" = "<data_google_service_account_email>"
     ```
 
+- REST カタログで Vended Credential（v4.0以降でサポート）を選択する場合、`StorageCredentialParams` を設定する必要はありません。
+
 Google GCS 用の `StorageCredentialParams`:
 
 ###### gcp.gcs.service_account_email
 
-デフォルト値: ""
-例: "[user@hello.iam.gserviceaccount.com](mailto:user@hello.iam.gserviceaccount.com)"
-説明: サービスアカウントの作成時に生成された JSON ファイル内のメールアドレス。
+- デフォルト値: ""
+- 例: "[user@hello.iam.gserviceaccount.com](mailto:user@hello.iam.gserviceaccount.com)"
+- 説明: サービスアカウントの作成時に生成された JSON ファイル内のメールアドレス。
 
 ###### gcp.gcs.service_account_private_key_id
 
-デフォルト値: ""
-例: "61d257bd8479547cb3e04f0b9b6b9ca07af3b7ea"
-説明: サービスアカウントの作成時に生成された JSON ファイル内のプライベートキー ID。
+- デフォルト値: ""
+- 例: "61d257bd8479547cb3e04f0b9b6b9ca07af3b7ea"
+- 説明: サービスアカウントの作成時に生成された JSON ファイル内のプライベートキー ID。
 
 ###### gcp.gcs.service_account_private_key
 
-デフォルト値: ""
-例: "-----BEGIN PRIVATE KEY----xxxx-----END PRIVATE KEY-----\n"  
-説明: サービスアカウントの作成時に生成された JSON ファイル内のプライベートキー。
+- デフォルト値: ""
+- 例: "-----BEGIN PRIVATE KEY----xxxx-----END PRIVATE KEY-----\n"  
+- 説明: サービスアカウントの作成時に生成された JSON ファイル内のプライベートキー。
 
 ###### gcp.gcs.impersonation_service_account
 
-デフォルト値: ""  
-例: "hello"  
-説明: インパーソネートしたいサービスアカウント。
+- デフォルト値: ""  
+- 例: "hello"  
+- 説明: インパーソネートしたいサービスアカウント。
 
 </TabItem>
 
@@ -853,6 +864,27 @@ v3.4 以降、StarRocks は、以下のパラメーターを設定すること�
       "aws.s3.region" = "us-west-2"
   );
   ```
+
+##### Vended Credential を選択した場合
+
+REST カタログで Vended Credential を選択する場合、次のようなコマンドを実行します。
+
+```SQL
+CREATE EXTERNAL CATALOG polaris_s3
+PROPERTIES
+(
+    "type" = "iceberg",
+    "iceberg.catalog.uri" = "http://xxx:xxx/api/catalog",
+    "iceberg.catalog.type" = "rest",
+    "iceberg.catalog.rest.nested-namespace-enabled"="true",
+    "iceberg.catalog.security" = "oauth2",
+    "iceberg.catalog.oauth2.credential" = "xxxxx:xxxx",
+    "iceberg.catalog.oauth2.scope"='PRINCIPAL_ROLE:ALL',
+    "iceberg.catalog.warehouse" = "iceberg_catalog",
+    "aws.s3.region" = "us-west-2"
+);
+```
+
 </TabItem>
 
 <TabItem value="HDFS" label="HDFS" >
@@ -927,6 +959,22 @@ PROPERTIES
       "azure.blob.storage_account" = "<blob_storage_account_name>",
       "azure.blob.container" = "<blob_container_name>",
       "azure.blob.sas_token" = "<blob_storage_account_SAS_token>"
+  );
+  ```
+
+- REST カタログで Vended Credential を選択する場合、次のようなコマンドを実行します。
+
+  ```SQL
+  CREATE EXTERNAL CATALOG polaris_azure
+  PROPERTIES (   
+      "type"  =  "iceberg",   
+      "iceberg.catalog.uri"  = "http://xxx:xxx/api/catalog",
+      "iceberg.catalog.type"  =  "rest",
+      "iceberg.catalog.rest.nested-namespace-enabled"="true", 
+      "iceberg.catalog.security" = "oauth2",
+      "iceberg.catalog.oauth2.credential" = "xxxxx:xxxx",
+      "iceberg.catalog.oauth2.scope"='PRINCIPAL_ROLE:ALL',
+      "iceberg.catalog.warehouse" = "iceberg_catalog"
   );
   ```
 
@@ -1006,6 +1054,22 @@ PROPERTIES
   );
   ```
 
+- REST カタログで Vended Credential を選択する場合、次のようなコマンドを実行します。
+
+  ```SQL
+  CREATE EXTERNAL CATALOG polaris_azure
+  PROPERTIES (   
+      "type"  =  "iceberg",   
+      "iceberg.catalog.uri"  = "http://xxx:xxx/api/catalog",
+      "iceberg.catalog.type"  =  "rest",
+      "iceberg.catalog.rest.nested-namespace-enabled"="true", 
+      "iceberg.catalog.security" = "oauth2",
+      "iceberg.catalog.oauth2.credential" = "xxxxx:xxxx",
+      "iceberg.catalog.oauth2.scope"='PRINCIPAL_ROLE:ALL',
+      "iceberg.catalog.warehouse" = "iceberg_catalog"
+  );
+  ```
+
 </TabItem>
 
 <TabItem value="GCS" label="Google GCS" >
@@ -1071,6 +1135,23 @@ PROPERTIES
         "gcp.gcs.impersonation_service_account" = "<data_google_service_account_email>"
     );
     ```
+  
+  - REST カタログで Vended Credential を選択する場合、次のようなコマンドを実行します。
+
+  ```SQL
+  CREATE EXTERNAL CATALOG polaris_gcp
+  PROPERTIES (   
+      "type"  =  "iceberg",   
+      "iceberg.catalog.uri"  = "http://xxx:xxx/api/catalog",
+      "iceberg.catalog.type"  =  "rest",
+      "iceberg.catalog.rest.nested-namespace-enabled"="true", 
+      "iceberg.catalog.security" = "oauth2",
+      "iceberg.catalog.oauth2.credential" = "xxxxx:xxxx",
+      "iceberg.catalog.oauth2.scope"='PRINCIPAL_ROLE:ALL',
+      "iceberg.catalog.warehouse" = "iceberg_catalog"
+  );
+  ```
+
 </TabItem>
 
 </Tabs>
