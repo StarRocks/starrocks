@@ -39,7 +39,7 @@ public abstract class GroupProvider {
 
     }
 
-    public void destory() {
+    public void destroy() {
 
     }
 
@@ -59,7 +59,7 @@ public abstract class GroupProvider {
         return "";
     }
 
-    public abstract Set<String> getGroup(UserIdentity userIdentity);
+    public abstract Set<String> getGroup(UserIdentity userIdentity, String distinguishedName);
 
     public abstract void checkProperty() throws SemanticException;
 }

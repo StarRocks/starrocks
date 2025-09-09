@@ -32,10 +32,19 @@ public class AuthenticationContext {
     // but currentUserIdentity may be modified by execute as statement.
     private UserIdentity currentUserIdentity;
 
+    // Distinguished name (DN) used for LDAP authentication and group resolution
+    // In LDAP context, this represents the unique identifier of a user in the directory
+    // For non-LDAP authentication, this typically defaults to the username
+    // Used by group providers to resolve user group memberships
+    protected String distinguishedName = "";
+
     // The Token in the OpenIDConnect authentication method is obtained
     // from the authentication logic and stored in the AuthenticationContext.
     // If the downstream system needs it, it needs to be obtained from the AuthenticationContext.
     private volatile String authToken = null;
+
+    // The security integration method used for authentication.
+    protected String securityIntegration = "native";
 
     // The authentication provider used for this authentication.
     private AuthenticationProvider authenticationProvider = null;
@@ -65,6 +74,14 @@ public class AuthenticationContext {
 
     public void setCurrentUserIdentity(UserIdentity currentUserIdentity) {
         this.currentUserIdentity = currentUserIdentity;
+    }
+
+    public void setDistinguishedName(String distinguishedName) {
+        this.distinguishedName = distinguishedName;
+    }
+
+    public String getDistinguishedName() {
+        return distinguishedName;
     }
 
     public String getAuthToken() {
@@ -97,5 +114,13 @@ public class AuthenticationContext {
 
     public void setAuthDataSalt(byte[] authDataSalt) {
         this.authDataSalt = authDataSalt;
+    }
+
+    public String getSecurityIntegration() {
+        return securityIntegration;
+    }
+
+    public void setSecurityIntegration(String securityIntegration) {
+        this.securityIntegration = securityIntegration;
     }
 }

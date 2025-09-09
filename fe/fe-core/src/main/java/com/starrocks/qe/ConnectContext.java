@@ -473,26 +473,42 @@ public class ConnectContext {
         authenticationContext.setCurrentUserIdentity(currentUserIdentity);
     }
 
+    public void setDistinguishedName(String distinguishedName) {
+        authenticationContext.setDistinguishedName(distinguishedName);
+    }
+
+    public String getDistinguishedName() {
+        return authenticationContext.getDistinguishedName();
+    }
+
     public Set<Long> getCurrentRoleIds() {
         return currentRoleIds;
     }
 
     public void setCurrentRoleIds(UserIdentity user) {
-        try {
-            Set<Long> defaultRoleIds;
-            if (GlobalVariable.isActivateAllRolesOnLogin()) {
-                defaultRoleIds = globalStateMgr.getAuthorizationMgr().getRoleIdsByUser(user);
-            } else {
-                defaultRoleIds = globalStateMgr.getAuthorizationMgr().getDefaultRoleIdsByUser(user);
+        if (user.isEphemeral()) {
+            this.currentRoleIds = new HashSet<>();
+        } else {
+            try {
+                Set<Long> defaultRoleIds;
+                if (GlobalVariable.isActivateAllRolesOnLogin()) {
+                    defaultRoleIds = globalStateMgr.getAuthorizationMgr().getRoleIdsByUser(user);
+                } else {
+                    defaultRoleIds = globalStateMgr.getAuthorizationMgr().getDefaultRoleIdsByUser(user);
+                }
+                this.currentRoleIds = defaultRoleIds;
+            } catch (PrivilegeException e) {
+                LOG.warn("Set current role fail : {}", e.getMessage());
             }
-            this.currentRoleIds = defaultRoleIds;
-        } catch (PrivilegeException e) {
-            LOG.warn("Set current role fail : {}", e.getMessage());
         }
     }
 
     public void setCurrentRoleIds(Set<Long> roleIds) {
         this.currentRoleIds = roleIds;
+    }
+
+    public void setCurrentRoleIds(UserIdentity userIdentity, Set<String> groups) {
+        setCurrentRoleIds(userIdentity);
     }
 
     public void setAuthInfoFromThrift(TAuthInfo authInfo) {
@@ -543,6 +559,14 @@ public class ConnectContext {
 
     public void setAuthDataSalt(byte[] authDataSalt) {
         authenticationContext.setAuthDataSalt(authDataSalt);
+    }
+
+    public String getSecurityIntegration() {
+        return authenticationContext.getSecurityIntegration();
+    }
+
+    public void setSecurityIntegration(String securityIntegration) {
+        authenticationContext.setSecurityIntegration(securityIntegration);
     }
 
     /**
@@ -991,6 +1015,7 @@ public class ConnectContext {
     /**
      * Get the current compute resource, acquire it if not set.
      * NOTE: This method will acquire compute resource if it is not set.
+     *
      * @return: the current compute resource, or the default resource if not in shared data mode.
      */
     public ComputeResource getCurrentComputeResource() {
@@ -1006,6 +1031,7 @@ public class ConnectContext {
     /**
      * Get the name of the current compute resource.
      * NOTE: this method will not acquire compute resource if it is not set.
+     *
      * @return: the name of the current compute resource, or empty string if not set.
      */
     public String getCurrentComputeResourceName() {
@@ -1018,6 +1044,7 @@ public class ConnectContext {
 
     /**
      * Get the current compute resource without acquiring it.
+     *
      * @return: the current compute resource(null if not set), or the default resource if not in shared data mode.
      */
     public ComputeResource getCurrentComputeResourceNoAcquire() {
@@ -1162,7 +1189,8 @@ public class ConnectContext {
     /**
      * NOTE: The ExecTimeout should not contain the pending time which may be caused by QueryQueue's scheduler.
      * </p>
-     * @return  Get the timeout for this session, unit: second
+     *
+     * @return Get the timeout for this session, unit: second
      */
     public int getExecTimeout() {
         return pendingTimeSecond + getExecTimeoutWithoutPendingTime();
@@ -1174,6 +1202,7 @@ public class ConnectContext {
 
     /**
      * update the pending time for this session, unit: second
+     *
      * @param pendingTimeSecond: the pending time for this session
      */
     public void setPendingTimeSecond(int pendingTimeSecond) {
@@ -1194,6 +1223,7 @@ public class ConnectContext {
 
     /**
      * Check the connect context is timeout or not. If true, kill the connection, otherwise, return false.
+     *
      * @param now : current time in milliseconds
      * @return true if timeout, false otherwise
      */
