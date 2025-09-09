@@ -884,8 +884,8 @@ class SelectStmtWithCaseWhenTest {
                 "  1:Project\n" +
                 "  |  output columns:\n" +
                 "  |  1 <-> [1: id, VARCHAR, false]\n" +
-                "  |  3 <-> CASE WHEN [5: array_length, INT, true] < 2 THEN 'bucket1' " +
-                "WHEN ([5: array_length, INT, true] >= 2) AND ([5: array_length, INT, true] < 4) THEN 'bucket2' ELSE NULL END\n" +
+                "  |  3 <-> CASE WHEN 5: array_length < 2 THEN 'bucket1' " +
+                "WHEN (5: array_length >= 2) AND (5: array_length < 4) THEN 'bucket2' ELSE NULL END\n" +
                 "  |  4 <-> [5: array_length, INT, true]\n" +
                 "  |  common expressions:\n" +
                 "  |  5 <-> array_length[([2: col_arr, ARRAY<VARCHAR(100)>, true]); " +
