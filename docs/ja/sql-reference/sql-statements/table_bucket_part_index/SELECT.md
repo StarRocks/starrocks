@@ -1117,9 +1117,9 @@ GROUP BY c0;
 
 ### EXCLUDE
 
-この機能はバージョン4.0からサポートされています。
+この機能は v4.0 からサポートされています。
 
-この機能は、クエリ結果から指定した列を除外し、特定の列を無視する必要がある場合のクエリ文を簡略化します。多数の列を含むテーブルを扱う際に特に便利で、明示的に保持する列名を全て列挙する手間を省けます。
+EXCLUDE キーワードは、クエリ結果から指定した列を除外するために使用され、特定の列を無視できる場合に SQL ステートメントを簡素化します。特に、多くの列を含むテーブルを扱う際に便利で、保持するすべての列を明示的に列挙する必要がなくなります。
 
 #### 構文
 
@@ -1144,7 +1144,7 @@ FROM ...
 ##### 基本使用法
 
 ```sql
--- テストテーブルの作成
+-- test_table の作成。
 CREATE TABLE test_table (
   id INT,
   name VARCHAR(50),
@@ -1152,17 +1152,17 @@ CREATE TABLE test_table (
   email VARCHAR(100)
 ) DUPLICATE KEY(id);
 
--- 単一列を除外 (age)
+-- 単一列を除外 (age)。
 SELECT * EXCLUDE (age) FROM test_table;
 -- 以下のクエリと同等：
 SELECT id, name, email FROM test_table;
 
--- 複数列を除外 (name, email)
+-- 複数列を除外 (name, email)。
 SELECT * EXCLUDE (name, email) FROM test_table;
 -- 以下のクエリと同等：
 SELECT id, age FROM test_table;
 
--- テーブルエイリアスを使用して列を除外
+-- テーブルエイリアスを使用して列を除外。
 SELECT test_table.* EXCLUDE (email) FROM test_table;
 -- 以下のクエリと同等：
 SELECT id, name, age FROM test_table;

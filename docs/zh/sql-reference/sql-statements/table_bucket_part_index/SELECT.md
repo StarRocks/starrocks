@@ -1115,9 +1115,9 @@ GROUP BY c0;
 
 ### EXCLUDE
 
-该函数从 4.0 版本开始支持。
+该功能从 4.0 版本开始支持。
 
-该功能用于在查询结果中排除指定的列，简化需忽略部分列时的查询语句。这在处理包含大量列的表时尤为便捷，避免显式列出所有需要保留的列名。
+EXCLUDE 关键词用于在查询结果中排除指定的列，简化需忽略部分列的查询语句。这在处理包含大量列的表时尤为便捷，避免显式列出所有需要保留的列名。
 
 #### 语法
 
@@ -1142,7 +1142,7 @@ FROM ...
 ##### 基础用法
 
 ```sql
--- 创建测试表
+-- 创建 test_table。
 CREATE TABLE test_table (
   id INT,
   name VARCHAR(50),
@@ -1152,16 +1152,16 @@ CREATE TABLE test_table (
 
 -- 排除单列 (age)
 SELECT * EXCLUDE (age) FROM test_table;
--- 结果等同于以下查询：
+-- 以上查询等同于以下查询：
 SELECT id, name, email FROM test_table;
 
 -- 排除多列 (name, email)
 SELECT * EXCLUDE (name, email) FROM test_table;
--- 结果等同于以下查询：
+-- 以上查询等同于以下查询：
 SELECT id, age FROM test_table;
 
 -- 使用表别名排除列
 SELECT test_table.* EXCLUDE (email) FROM test_table;
--- 结果等同于以下查询：
+-- 以上查询等同于以下查询：
 SELECT id, name, age FROM test_table;
 ```
