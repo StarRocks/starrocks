@@ -27,6 +27,6 @@ public interface ParseNode {
     NodePosition getPos();
 
     default <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        throw new RuntimeException(this.toSql() + " Not implement accept function");
+        throw new RuntimeException(this.getClass().getName() + " Not implement accept function");
     }
 }

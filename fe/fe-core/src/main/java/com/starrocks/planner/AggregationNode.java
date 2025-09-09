@@ -330,27 +330,27 @@ public class AggregationNode extends PlanNode implements RuntimeFilterBuildNode 
         if (nameDetail != null) {
             output.append(detailPrefix).append(nameDetail).append("\n");
         }
-        if (aggInfo.getAggregateExprs() != null && aggInfo.getMaterializedAggregateExprs().size() > 0) {
+        if (aggInfo.getAggregateExprs() != null && !aggInfo.getMaterializedAggregateExprs().isEmpty()) {
             if (detailLevel == TExplainLevel.VERBOSE) {
                 output.append(detailPrefix).append("aggregate: ");
             } else {
                 output.append(detailPrefix).append("output: ");
             }
-            output.append(getVerboseExplain(aggInfo.getAggregateExprs(), detailLevel)).append("\n");
+            output.append(explainExpr(detailLevel, aggInfo.getAggregateExprs())).append("\n");
         }
         // TODO: unify them
         if (detailLevel == TExplainLevel.VERBOSE) {
             if (CollectionUtils.isNotEmpty(aggInfo.getGroupingExprs())) {
                 output.append(detailPrefix).append("group by: ").append(
-                        getVerboseExplain(aggInfo.getGroupingExprs(), detailLevel)).append("\n");
+                        explainExpr(detailLevel, aggInfo.getGroupingExprs())).append("\n");
             }
         } else {
             output.append(detailPrefix).append("group by: ").append(
-                    getVerboseExplain(aggInfo.getGroupingExprs(), detailLevel)).append("\n");
+                    explainExpr(detailLevel, aggInfo.getGroupingExprs())).append("\n");
         }
 
         if (!conjuncts.isEmpty()) {
-            output.append(detailPrefix).append("having: ").append(getVerboseExplain(conjuncts, detailLevel))
+            output.append(detailPrefix).append("having: ").append(explainExpr(detailLevel, conjuncts))
                     .append("\n");
         }
         if (useSortAgg) {

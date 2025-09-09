@@ -97,15 +97,15 @@ public class HudiScanNode extends ScanNode {
         }
         if (!scanNodePredicates.getPartitionConjuncts().isEmpty()) {
             output.append(prefix).append("PARTITION PREDICATES: ").append(
-                    getExplainString(scanNodePredicates.getPartitionConjuncts())).append("\n");
+                    explainExpr(scanNodePredicates.getPartitionConjuncts())).append("\n");
         }
         if (!scanNodePredicates.getNonPartitionConjuncts().isEmpty()) {
             output.append(prefix).append("NON-PARTITION PREDICATES: ").append(
-                    getExplainString(scanNodePredicates.getNonPartitionConjuncts())).append("\n");
+                    explainExpr(scanNodePredicates.getNonPartitionConjuncts())).append("\n");
         }
         if (!scanNodePredicates.getMinMaxConjuncts().isEmpty()) {
             output.append(prefix).append("MIN/MAX PREDICATES: ").append(
-                    getExplainString(scanNodePredicates.getMinMaxConjuncts())).append("\n");
+                    explainExpr(scanNodePredicates.getMinMaxConjuncts())).append("\n");
         }
 
         output.append(prefix).append(
