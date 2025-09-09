@@ -108,7 +108,12 @@ ALTER TABLE [<db_name>.]<tbl_name> COMMENT = "<new table comment>";
 
 #### パーティションの追加
 
-レンジパーティションまたはリストパーティションを追加できます。式パーティションの追加はサポートされていません。
+レンジパーティションまたはリストパーティションを追加する際は、必ずそれぞれの構文を厳格に遵守する必要があります。
+
+:::note
+- 式パーティションの追加はサポートされていません。
+- 注意：`PARTITION BY date_trunc(column)` および `PARTITION BY time_slice(column)` は、表現形式が式パーティションであるにもかかわらず、レンジパーティションとして扱われます。したがって、このようなパーティション方法を使用するテーブルに新しいパーティションを追加する際は、以下のレンジパーティションの構文を使用できます。
+:::
 
 構文：
 
@@ -243,8 +248,19 @@ multi_range_partitions ::=
 ```sql
 ALTER TABLE [<db_name>.]<tbl_name> 
 ADD TEMPORARY PARTITION [IF NOT EXISTS] <partition_name>
-partition_desc ["key"="value"]
+{ single_range_partition | multi_range_partitions | list_partitions }
 [DISTRIBUTED BY HASH (k1[,k2 ...]) [BUCKETS num]]
+
+-- single_range_partition および multi_range_partitions の詳細については、このページ内の「パーティションの追加」セクションを参照してください。
+
+list_partitions::= 
+    PARTITION <partition_name> VALUES IN (value_list)
+
+value_list ::=
+    value_item [, ...]
+
+value_item ::=
+    { <value> | ( <value> [, ...] ) }
 ```
 
 #### 一時パーティションを使用して現在のパーティションを置き換える
