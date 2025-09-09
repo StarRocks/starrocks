@@ -965,6 +965,7 @@ alterClause
     | tableOperationClause
     | dropPersistentIndexClause
     | splitTabletClause
+    | alterTableAutoIncrementClause
 
     //Alter partition clause
     | addPartitionClause
@@ -1214,6 +1215,10 @@ splitTabletClause
     : SPLIT
       (((TABLET | TABLETS) partitionNames?) | tabletList)
       properties?
+    ;
+
+alterTableAutoIncrementClause
+    : AUTO_INCREMENT '=' INTEGER_VALUE
     ;
 
 // ---------Alter partition clause---------
