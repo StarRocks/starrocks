@@ -54,18 +54,26 @@ public class RoutineLoadLagTimeMetricMgr {
         private long updateTimestamp;
         private final String jobName;
         
-        private final Map<Integer, GaugeMetricImpl<Long>> partitionMetrics;
-        private final GaugeMetricImpl<Long> maxLagTimeMetric;
+        private final Map<Integer, Long> partitionLagTimes;
+        private final LeaderAwareGaugeMetricLong maxLagTimeMetric;
         
         public RoutineLoadLagTimeMetric(String jobName) {
             this.updateTimestamp = -1;
             this.jobName = jobName;
-            this.partitionMetrics = Maps.newHashMap();
-            this.maxLagTimeMetric = new GaugeMetricImpl<>(
+            this.partitionLagTimes = Maps.newHashMap();
+            this.maxLagTimeMetric = new LeaderAwareGaugeMetricLong(
                     "routine_load_lag_time_seconds_max",
                     MetricUnit.SECONDS,
                     "Maximum lag time across all partitions for routine load job"
-            );
+            ) {
+                @Override
+                public Long getValueLeader() {
+                    return partitionLagTimes.values().stream()
+                            .mapToLong(Long::longValue)
+                            .max()
+                            .orElse(0L);
+                }
+            };
             this.maxLagTimeMetric.addLabel(new MetricLabel("job_name", jobName));
             
             LOG.debug("Initialized empty lag time metric structure for job {}", jobName);
@@ -73,45 +81,18 @@ public class RoutineLoadLagTimeMetricMgr {
         
         public void updateMetrics(Map<Integer, Long> newPartitionLagTimes, long newUpdateTimestamp) {
             this.updateTimestamp = newUpdateTimestamp;
-            this.partitionMetrics.clear();
-
-            // Calculate max lag time from partition lag times
-            long newMaxLagTime = newPartitionLagTimes.values().stream()
-                    .mapToLong(Long::longValue)
-                    .max()
-                    .orElse(0L);
-
-            for (Map.Entry<Integer, Long> entry : newPartitionLagTimes.entrySet()) {
-                int partition = entry.getKey();
-                long lagTime = entry.getValue();
-                
-                GaugeMetricImpl<Long> partitionMetric = new GaugeMetricImpl<>(
-                        "routine_load_lag_time_seconds_partition",
-                        MetricUnit.SECONDS,
-                        "Kafka partition lag time in seconds"
-                );
-                partitionMetric.addLabel(new MetricLabel("job_name", jobName));
-                partitionMetric.addLabel(new MetricLabel("partition", String.valueOf(partition)));
-                partitionMetric.setValue(lagTime);
-                
-                this.partitionMetrics.put(partition, partitionMetric);
-            }
-
-            this.maxLagTimeMetric.setValue(newMaxLagTime);
+            this.partitionLagTimes.clear();
+            this.partitionLagTimes.putAll(newPartitionLagTimes);
             
-            LOG.debug("Updated metrics for job {}: max_lag_time={}s, partitions={}", 
-                     jobName, newMaxLagTime, newPartitionLagTimes.size());
+            LOG.debug("Updated metrics for job {}: partitions={}", 
+                     jobName, newPartitionLagTimes.size());
         }
 
         public Map<Integer, Long> getPartitionLagTimes() {
-            Map<Integer, Long> lagTimes = Maps.newHashMap();
-            partitionMetrics.forEach((partition, metric) -> 
-                    lagTimes.put(partition, metric.getValue())
-            );
-            return lagTimes;
+            return Maps.newHashMap(partitionLagTimes);
         }
 
-        public GaugeMetricImpl<Long> getMaxLagTimeMetric() {
+        public LeaderAwareGaugeMetricLong getMaxLagTimeMetric() {
             return maxLagTimeMetric;
         }
         
@@ -120,7 +101,7 @@ public class RoutineLoadLagTimeMetricMgr {
         }
         
         public boolean hasData() {
-            return !partitionMetrics.isEmpty() && updateTimestamp > 0;
+            return !partitionLagTimes.isEmpty() && updateTimestamp > 0;
         }
     }
 
