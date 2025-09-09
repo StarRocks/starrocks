@@ -68,6 +68,7 @@ import java.util.stream.Collectors;
 
 public class AnalyzeMgr implements Writable {
     private static final Logger LOG = LogManager.getLogger(AnalyzeMgr.class);
+    public static final String USER_CANCEL_MESSAGE = "kill analyze";
     private static final Pair<Long, Long> CHECK_ALL_TABLES =
             new Pair<>(StatsConstants.DEFAULT_ALL_ID, StatsConstants.DEFAULT_ALL_ID);
     public static final String IS_MULTI_COLUMN_STATS = "is_multi_column_stats";
@@ -820,7 +821,7 @@ public class AnalyzeMgr implements Writable {
     public void killConnection(long analyzeID) {
         ConnectContext context = connectionMap.get(analyzeID);
         if (context != null) {
-            context.kill(false, "kill analyze");
+            context.kill(false, USER_CANCEL_MESSAGE);
         } else {
             throw new SemanticException("There is no running task with analyzeId " + analyzeID);
         }
