@@ -151,6 +151,10 @@ public class AlterMVJobExecutor extends AlterJobExecutorEPack {
         if (properties.containsKey(PropertyAnalyzer.PROPERTIES_PARTITION_REFRESH_STRATEGY)) {
             partitionRefreshStrategy = PropertyAnalyzer.analyzePartitionRefreshStrategy(properties);
         }
+        String mvRefreshMode = null;
+        if (properties.containsKey(PropertyAnalyzer.PROPERTIES_MV_REFRESH_MODE)) {
+            mvRefreshMode = PropertyAnalyzer.analyzeRefreshMode(properties);
+        }
         String resourceGroup = null;
         if (properties.containsKey(PropertyAnalyzer.PROPERTIES_RESOURCE_GROUP)) {
             resourceGroup = PropertyAnalyzer.analyzeResourceGroup(properties);
@@ -342,6 +346,11 @@ public class AlterMVJobExecutor extends AlterJobExecutorEPack {
                 !materializedView.getTableProperty().getPartitionRefreshStrategy().equals(partitionRefreshStrategy)) {
             curProp.put(PropertyAnalyzer.PROPERTIES_PARTITION_REFRESH_STRATEGY, String.valueOf(partitionRefreshStrategy));
             materializedView.getTableProperty().setPartitionRefreshStrategy(partitionRefreshStrategy);
+            isChanged = true;
+        } else if (propClone.containsKey(PropertyAnalyzer.PROPERTIES_MV_REFRESH_MODE) &&
+                !materializedView.getTableProperty().getMvRefreshMode().equals(mvRefreshMode)) {
+            curProp.put(PropertyAnalyzer.PROPERTIES_MV_REFRESH_MODE, String.valueOf(mvRefreshMode));
+            materializedView.getTableProperty().setMvRefreshMode(mvRefreshMode);
             isChanged = true;
         } else if (propClone.containsKey(PropertyAnalyzer.PROPERTIES_AUTO_REFRESH_PARTITIONS_LIMIT) &&
                 materializedView.getTableProperty().getAutoRefreshPartitionsLimit() != autoRefreshPartitionsLimit) {

@@ -547,6 +547,7 @@ public class WarehouseActionTest extends StarRocksHttpTestCase {
                     0,
                     0L,
                     isStatisticsJob,
+                    null,
                     null);
             if (isFinished) {
                 job.updateState(JobState.FINISHED);

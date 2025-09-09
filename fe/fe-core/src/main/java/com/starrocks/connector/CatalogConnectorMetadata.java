@@ -26,6 +26,8 @@ import com.starrocks.common.DdlException;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.profile.Tracers;
+import com.starrocks.common.tvr.TvrTableDeltaTrait;
+import com.starrocks.common.tvr.TvrTableSnapshot;
 import com.starrocks.common.tvr.TvrVersionRange;
 import com.starrocks.connector.informationschema.InformationSchemaMetadata;
 import com.starrocks.connector.metadata.MetadataTable;
@@ -147,6 +149,28 @@ public class CatalogConnectorMetadata implements ConnectorMetadata {
         }
 
         return metadata.getTable(context, dbName, tblName);
+    }
+
+    @Override
+    public TvrTableSnapshot getCurrentTvrSnapshot(String dbName, Table table) {
+        ConnectorMetadata metadata = metadataOfTable(table);
+        if (metadata == null) {
+            metadata = metadataOfDb(dbName);
+        }
+
+        return metadata.getCurrentTvrSnapshot(dbName, table);
+    }
+
+    @Override
+    public List<TvrTableDeltaTrait> listTableDeltaTraits(String dbName, Table table,
+                                                         TvrTableSnapshot fromSnapshotExclusive,
+                                                         TvrTableSnapshot toSnapshotInclusive) {
+        ConnectorMetadata metadata = metadataOfTable(table);
+        if (metadata == null) {
+            metadata = metadataOfDb(dbName);
+        }
+
+        return metadata.listTableDeltaTraits(dbName, table, fromSnapshotExclusive, toSnapshotInclusive);
     }
 
     @Override

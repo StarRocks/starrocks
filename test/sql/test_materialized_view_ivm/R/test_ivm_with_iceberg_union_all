@@ -1,0 +1,189 @@
+-- name: test_ivm_with_iceberg_union_all
+create external catalog mv_iceberg_${uuid0}
+properties
+(
+    "type" = "iceberg",
+    "iceberg.catalog.type" = "hive",
+    "hive.metastore.uris" = "${iceberg_catalog_hive_metastore_uris}"
+);
+-- result:
+-- !result
+set catalog mv_iceberg_${uuid0};
+-- result:
+-- !result
+create database mv_ice_db_${uuid0};
+-- result:
+-- !result
+use mv_ice_db_${uuid0};
+-- result:
+-- !result
+create table t1 (
+  col1 string,
+  col2 int,
+  dt date
+) partition by(dt);
+-- result:
+-- !result
+create table t2 (
+  col1 string,
+  col2 int,
+  dt date
+) partition by(dt);
+-- result:
+-- !result
+create table t3 (
+  col1 string,
+  col2 int,
+  dt date
+) partition by(dt);
+-- result:
+-- !result
+insert into t1 values 
+  ('a', 1, '2023-12-01'),
+  ('a', 2, '2023-12-01'),
+  ('b', 3, '2023-12-02'),
+  ('', 4, '2023-12-02'),
+  (NULL, 5, '2023-12-03'),
+  (NULL, 6, '2023-12-03'),
+  (NULL, NULL, '2023-12-04'),
+  (NULL, NULL, NULL);
+-- result:
+-- !result
+insert into t2 values 
+  ('a', 1, '2023-12-01'),
+  ('b', 3, '2023-12-02'),
+  ('', 4, '2023-12-02'),
+  (NULL, 5, '2023-12-03'),
+  (NULL, NULL, NULL);
+-- result:
+-- !result
+insert into t3 values 
+  ('a', 1, '2023-12-01'),
+  ('b', 3, '2023-12-02'),
+  ('', 4, '2023-12-02'),
+  (NULL, 5, '2023-12-03');
+-- result:
+-- !result
+set catalog default_catalog;
+-- result:
+-- !result
+create database db_${uuid0};
+-- result:
+-- !result
+use db_${uuid0};
+-- result:
+-- !result
+CREATE MATERIALIZED VIEW test_mv1 PARTITION BY dt 
+REFRESH DEFERRED MANUAL 
+properties
+(
+    "refresh_mode" = "incremental"
+)
+AS 
+SELECT * FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 WHERE col2 > 1 
+UNION ALL 
+SELECT * FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t2
+UNION ALL
+SELECT * FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t3 WHERE dt >= '2023-12-02';
+-- result:
+-- !result
+REFRESH MATERIALIZED VIEW test_mv1 WITH SYNC MODE;
+SELECT COUNT(*) FROM test_mv1;
+-- result:
+13
+-- !result
+insert into mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 values 
+  ('1d8cf2a2c0e14fa89d8117792be6eb6f', 2000, '2023-12-01');
+-- result:
+-- !result
+REFRESH MATERIALIZED VIEW test_mv1 WITH SYNC MODE;
+SELECT COUNT(*) FROM test_mv1;
+-- result:
+14
+-- !result
+SELECT * FROM test_mv1 ORDER BY col1, col2, dt limit 5;
+-- result:
+None	None	None
+None	5	2023-12-03
+None	5	2023-12-03
+None	5	2023-12-03
+None	6	2023-12-03
+-- !result
+insert into mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t2 values 
+  ('1d8cf2a2c0e14fa89d8117792be6eb6f', 2000, '2023-12-01');
+-- result:
+-- !result
+REFRESH MATERIALIZED VIEW test_mv1 WITH SYNC MODE;
+SELECT COUNT(*) FROM test_mv1;
+-- result:
+15
+-- !result
+SELECT * FROM test_mv1 ORDER BY col1, col2, dt limit 5;
+-- result:
+None	None	None
+None	5	2023-12-03
+None	5	2023-12-03
+None	5	2023-12-03
+None	6	2023-12-03
+-- !result
+insert into mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 values 
+  ('1d8cf2a2c0e14fa89d8117792be6eb6f', 2000, '2023-12-01');
+-- result:
+-- !result
+insert into mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t2 values 
+  ('1d8cf2a2c0e14fa89d8117792be6eb6f', 2000, '2023-12-01');
+-- result:
+-- !result
+REFRESH MATERIALIZED VIEW test_mv1 WITH SYNC MODE;
+SELECT COUNT(*) FROM test_mv1;
+-- result:
+17
+-- !result
+SELECT * FROM test_mv1 ORDER BY col1, col2, dt limit 5;
+-- result:
+None	None	None
+None	5	2023-12-03
+None	5	2023-12-03
+None	5	2023-12-03
+None	6	2023-12-03
+-- !result
+insert into mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 values 
+  ('1d8cf2a2c0e14fa89d8117792be6eb6f', 2000, '2023-12-01');
+-- result:
+-- !result
+insert into mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t2 values 
+  ('1d8cf2a2c0e14fa89d8117792be6eb6f', 2000, '2023-12-01');
+-- result:
+-- !result
+insert into mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t3 values 
+  ('1d8cf2a2c0e14fa89d8117792be6eb6f', 2000, '2023-12-01');
+-- result:
+-- !result
+REFRESH MATERIALIZED VIEW test_mv1 WITH SYNC MODE;
+SELECT COUNT(*) FROM test_mv1;
+-- result:
+19
+-- !result
+SELECT * FROM test_mv1 ORDER BY col1, col2, dt limit 5;
+-- result:
+None	None	None
+None	5	2023-12-03
+None	5	2023-12-03
+None	5	2023-12-03
+None	6	2023-12-03
+-- !result
+drop materialized view default_catalog.db_${uuid0}.test_mv1;
+-- result:
+-- !result
+drop table mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 force;
+-- result:
+-- !result
+drop table mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t2 force;
+-- result:
+-- !result
+drop table mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t3 force;
+-- result:
+-- !result
+drop database mv_iceberg_${uuid0}.mv_ice_db_${uuid0} force;
+-- result:
+-- !result
