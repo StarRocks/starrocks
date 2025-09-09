@@ -1276,6 +1276,10 @@ public interface AstVisitor<R, C> {
         return visitNode(clause, context);
     }
 
+    default R visitAlterTableAutoIncrementClause(AlterTableAutoIncrementClause clause, C context) {
+        return visitNode(clause, context);
+    }
+
     default R visitAddRollupClause(AddRollupClause clause, C context) {
         return visitNode(clause, context);
     }
