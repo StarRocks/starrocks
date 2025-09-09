@@ -3101,6 +3101,7 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
         }
 
         boolean isNonPartitioned = partitionInfo.isUnPartitioned();
+        DataProperty dataProperty = PropertyAnalyzer.analyzeMVDataProperty(materializedView, properties);
         PropertyAnalyzer.analyzeMVProperties(db, materializedView, properties, isNonPartitioned,
                 stmt.getPartitionByExprToAdjustExprMap());
         final long warehouseId = materializedView.getWarehouseId();
@@ -3113,7 +3114,6 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
                 if (!warehouseManager.isResourceAvailable(computeResource)) {
                     throw new DdlException("No available resource for warehouse " + warehouseId);
                 }
-                DataProperty dataProperty = PropertyAnalyzer.analyzeMVDataProperty(materializedView, properties);
                 buildNonPartitionOlapTable(db, materializedView, partitionInfo, dataProperty, computeResource);
             } else {
                 List<Expr> mvPartitionExprs = stmt.getPartitionByExprs();
