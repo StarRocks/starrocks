@@ -1536,6 +1536,62 @@ ALTER VIEW iceberg.iceberg_db.iceberg_view2 ADD DIALECT SELECT k1, k2 FROM icebe
 ALTER VIEW iceberg.iceberg_db.iceberg_view2 MODIFY DIALECT SELECT k1, k2, k3 FROM iceberg.iceberg_db.iceberg_table;
 ```
 
+### Manual compaction
+
+From v4.0 onwards, StarRocks supports manual compaction on Iceberg tables.
+
+Each time data is loaded into an Iceberg table, new data and metadata files are generated. As time elapses, excessive data files can significantly slow down the query plan generation and cause an impact on the performance.
+
+In this case, you need to perform manual compaction on the table or partitions to merge the small data files, and thereby improve the performance.
+
+#### Syntax
+
+```SQL
+ALTER TABLE [catalog.][database.]table_name 
+EXECUTE rewrite_data_files
+("key"=value [,"key"=value, ...]) 
+[WHERE <predicate>]
+```
+
+#### Parameters
+
+##### `rewrite_data_files` properties
+
+`"key"=value` pairs that declare the manual compaction behaviors. Note that you need to wrap the key in double quotes.
+
+###### `min_file_size_bytes`
+
+- Description: The upper limit of a small data file. Data files whose size is less this value will be merged during the compaction.
+- Unit: Byte
+- Type: Int
+- Default: 268,435,456 (256 MB)
+
+###### `batch_size`
+
+- Description: The maximum size of data that can be processed in each batch.
+- Unit: Byte
+- Type: Int
+- Default: 10,737,418,240 (10 GB)
+
+###### `rewrite_all`
+
+- Description: Whether to rewrite all data files during the compaction, ignoring the parameters that filter data files with specific requirements.
+- Unit: -
+- Type: Boolean
+- Default: false
+
+##### `WHERE` clause
+
+- Description: The filter predicate used to specify the partition(s) to be involved in the compaction.
+
+#### Example
+
+The following example performs manual compaction on specific partitions in the Iceberg table `t1`. The partitions are represented by the clause `WHERE part_col = 'p1'`. In these partitions, data files that are smaller than 134,217,728 bytes (128 MB) will be merged during the compaction.
+
+```SQL
+ALTER TABLE t1 EXECUTE rewrite_data_files("min_file_size_bytes"= 134217728) WHERE part_col = 'p1';
+```
+
 ---
 
 ### Configure metadata caching
