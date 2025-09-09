@@ -1,6 +1,6 @@
 {
   "version.label": {
-    "message": "Latest-3.5",
+    "message": "Candidate-4.0",
     "description": "The label for version current"
   },
   "sidebar.docs.category.Introduction to StarRocks": {
