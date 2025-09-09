@@ -19,11 +19,11 @@ import com.starrocks.common.CaseSensibility;
 import com.starrocks.common.PatternMatcher;
 import com.starrocks.epack.authorization.PasswordPolicy;
 import com.starrocks.epack.authorization.SecurityPolicyMgr;
-import com.starrocks.epack.sql.ast.UserPasswordOption;
 import com.starrocks.mysql.MysqlPassword;
 import com.starrocks.mysql.privilege.AuthPlugin;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.UserAuthOption;
+import com.starrocks.sql.ast.UserPasswordOption;
 import com.starrocks.sql.ast.UserRef;
 
 import java.util.Arrays;

@@ -19,9 +19,9 @@ import com.starrocks.common.DdlException;
 import com.starrocks.common.util.FrontendDaemon;
 import com.starrocks.epack.authorization.PasswordPolicy;
 import com.starrocks.epack.authorization.SecurityPolicyMgr;
-import com.starrocks.epack.sql.ast.UserPasswordOption;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.UserLockOption;
+import com.starrocks.sql.ast.UserPasswordOption;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 

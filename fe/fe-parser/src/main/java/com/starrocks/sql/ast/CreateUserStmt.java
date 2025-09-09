@@ -14,7 +14,6 @@
 
 package com.starrocks.sql.ast;
 
-import com.starrocks.epack.sql.ast.UserPasswordOption;
 import com.starrocks.sql.parser.NodePosition;
 
 import java.util.List;
@@ -62,6 +61,6 @@ public class CreateUserStmt extends BaseCreateAlterUserStmt {
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return ((AstVisitorExtendInterface<R, C>) visitor).visitCreateUserStatement(this, context);
+        return visitor.visitCreateUserStatement(this, context);
     }
 }

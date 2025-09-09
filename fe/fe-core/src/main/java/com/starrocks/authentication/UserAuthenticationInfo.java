@@ -19,12 +19,12 @@ import com.google.gson.annotations.SerializedName;
 import com.starrocks.common.CaseSensibility;
 import com.starrocks.common.PatternMatcher;
 import com.starrocks.common.io.Writable;
-import com.starrocks.epack.sql.ast.UserPasswordOption;
 import com.starrocks.mysql.MysqlPassword;
 import com.starrocks.mysql.privilege.AuthPlugin;
 import com.starrocks.persist.gson.GsonPostProcessable;
 import com.starrocks.sql.ast.UserAuthOption;
 import com.starrocks.sql.ast.UserLockOption;
+import com.starrocks.sql.ast.UserPasswordOption;
 import com.starrocks.sql.ast.UserRef;
 
 import java.io.IOException;
