@@ -37,7 +37,6 @@
 #include <cstdint>
 #include <memory>
 #include <string>
-#include <vector>
 
 #include "common/statusor.h"
 #include "fs/fs.h"
@@ -46,11 +45,11 @@
 #include "gutil/macros.h"
 #include "storage/delta_column_group.h"
 #include "storage/index/inverted/inverted_index_iterator.h"
+#include "storage/options.h"
 #include "storage/rowset/page_handle.h"
 #include "storage/rowset/page_pointer.h"
 #include "storage/short_key_index.h"
 #include "storage/tablet_schema.h"
-#include "util/faststring.h"
 #include "util/once.h"
 
 namespace starrocks {
@@ -71,6 +70,9 @@ class ColumnIterator;
 class Segment;
 using SegmentSharedPtr = std::shared_ptr<Segment>;
 using ChunkIteratorPtr = std::shared_ptr<ChunkIterator>;
+namespace lake {
+class TabletManager;
+}
 
 // A Segment is used to represent a segment in memory format. When segment is
 // generated, it won't be modified, so this struct aimed to help read operation.

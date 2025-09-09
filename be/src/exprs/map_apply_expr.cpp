@@ -74,7 +74,7 @@ StatusOr<ColumnPtr> MapApplyExpr::evaluate_checked(ExprContext* context, Chunk* 
             data_column = nullable->data_column();
             // empty null map with non-empty elements
             data_column->empty_null_in_complex_column(
-                    nullable->null_column()->get_data(),
+                    nullable->null_column()->immutable_data(),
                     down_cast<MapColumn*>(data_column.get())->offsets_column()->get_data());
             if (input_null_map) {
                 input_null_map = FunctionHelper::union_null_column(nullable->null_column(),

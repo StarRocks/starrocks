@@ -36,6 +36,7 @@
 
 #include "io/io_profiler.h"
 #include "runtime/current_thread.h"
+#include "runtime/exec_env.h"
 #include "storage/lake/schema_change.h"
 #include "storage/schema_change.h"
 #include "util/defer_op.h"

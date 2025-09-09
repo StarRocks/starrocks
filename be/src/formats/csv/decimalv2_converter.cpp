@@ -24,7 +24,7 @@ namespace starrocks::csv {
 Status DecimalV2Converter::write_string(OutputStream* os, const Column& column, size_t row_num,
                                         const Options& options) const {
     auto decimal_column = down_cast<const FixedLengthColumn<DecimalV2Value>*>(&column);
-    return os->write(decimal_column->get_data()[row_num]);
+    return os->write(decimal_column->immutable_data()[row_num]);
 }
 
 Status DecimalV2Converter::write_quoted_string(OutputStream* os, const Column& column, size_t row_num,

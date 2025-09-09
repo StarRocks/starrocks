@@ -229,7 +229,6 @@ Status ScalarColumnIterator::next_batch(size_t* n, Column* dst) {
                 break;
             }
         }
-
         contain_deleted_row = contain_deleted_row || _contains_deleted_row(_page->page_index());
         // number of rows to be read from this page
         size_t nread = remaining;

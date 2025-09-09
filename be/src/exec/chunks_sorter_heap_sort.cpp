@@ -224,7 +224,7 @@ void ChunksSorterHeapSort::_do_filter_data_for_type(detail::ChunkHolder* chunk_h
         const auto& order_by_null_column = down_cast<const NullableColumn*>(input_column.get())->null_column();
         const auto& order_by_data_column = down_cast<const NullableColumn*>(input_column.get())->data_column();
 
-        const auto* null_data = order_by_null_column->get_data().data();
+        const auto* null_data = order_by_null_column->immutable_data().data();
         const auto* order_by_data = ColumnHelper::cast_to_raw<TYPE>(order_by_data_column)->get_data().data();
         auto* __restrict__ filter_data = filter->data();
 

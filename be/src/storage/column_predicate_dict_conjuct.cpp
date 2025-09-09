@@ -39,7 +39,7 @@ public:
     DictConjuctPredicateOperator(std::vector<uint8_t> code_mapping) : _code_mapping(std::move(code_mapping)) {}
 
     uint8_t eval_at(const LowCardDictColumn* lowcard_column, int idx) const {
-        return _code_mapping[lowcard_column->get_data()[idx]];
+        return _code_mapping[lowcard_column->immutable_data()[idx]];
     }
 
     bool zone_map_filter(const ZoneMapDetail& detail) const { return true; }

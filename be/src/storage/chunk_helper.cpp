@@ -305,6 +305,7 @@ Chunk* ChunkHelper::new_chunk_pooled(const Schema& schema, size_t chunk_size) {
     for (size_t i = 0; i < schema.num_fields(); i++) {
         const FieldPtr& f = schema.field(i);
         auto column = column_from_pool(*f);
+        // TODO: call reserve in SegmentIterator::read
         column->reserve(chunk_size);
         columns.emplace_back(std::move(column));
     }

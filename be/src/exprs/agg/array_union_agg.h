@@ -53,7 +53,7 @@ struct ArrayUnionAggAggregateState {
                 }
             } else {
                 for (int i = 0; i < count; i++) {
-                    set.emplace(column.get_data()[offset + i]);
+                    set.emplace(column.immutable_data()[offset + i]);
                 }
             }
         } else {

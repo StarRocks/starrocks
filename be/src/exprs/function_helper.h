@@ -17,6 +17,7 @@
 #include "column/column_helper.h"
 #include "column/const_column.h"
 #include "column/type_traits.h"
+#include "column/vectorized_fwd.h"
 #include "gutil/casts.h"
 
 namespace starrocks {
@@ -43,15 +44,7 @@ public:
      * @param col, row_num, data 
      */
     template <typename ToColumnType, typename CppType>
-    static void get_data_of_column(const Column* col, size_t row_num, CppType& data) {
-        if (col->is_constant()) {
-            auto const_col = down_cast<const ConstColumn*>(col);
-            col = const_col->data_column().get();
-            row_num = 0;
-        }
-        const auto* column = down_cast<const ToColumnType*>(col);
-        data = column->get_data()[row_num];
-    }
+    static inline void get_data_of_column(const Column* col, size_t row_num, CppType& data);
 
     /**
      * if ptr is ConstColumn, return data column
@@ -86,6 +79,28 @@ public:
     // merge a column and null_column and generate a column with null values.
     static ColumnPtr merge_column_and_null_column(ColumnPtr&& column, NullColumnPtr&& null_column);
 };
+
+template <typename ToColumnType, typename CppType>
+inline void FunctionHelper::get_data_of_column(const Column* col, size_t row_num, CppType& data) {
+    if (col->is_constant()) {
+        auto const_col = down_cast<const ConstColumn*>(col);
+        col = const_col->data_column().get();
+        row_num = 0;
+    }
+    const auto* column = down_cast<const ToColumnType*>(col);
+    data = column->immutable_data()[row_num];
+}
+
+template <>
+inline void FunctionHelper::get_data_of_column<BinaryColumn, Slice>(const Column* col, size_t row_num, Slice& data) {
+    if (col->is_constant()) {
+        auto const_col = down_cast<const ConstColumn*>(col);
+        col = const_col->data_column().get();
+        row_num = 0;
+    }
+    const auto* column = down_cast<const BinaryColumn*>(col);
+    data = column->get_slice(row_num);
+}
 
 #define DEFINE_VECTORIZED_FN(NAME) static StatusOr<ColumnPtr> NAME(FunctionContext* context, const Columns& columns)
 

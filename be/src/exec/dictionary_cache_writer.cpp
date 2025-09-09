@@ -15,6 +15,7 @@
 #include "exec/dictionary_cache_writer.h"
 
 #include "exec/tablet_info.h"
+#include "runtime/current_thread.h"
 #include "serde/protobuf_serde.h"
 #include "util/brpc_stub_cache.h"
 #include "util/compression/block_compression.h"

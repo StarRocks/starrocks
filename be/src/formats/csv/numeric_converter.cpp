@@ -23,10 +23,11 @@ template <typename T>
 Status NumericConverter<T>::write_string(OutputStream* os, const Column& column, size_t row_num,
                                          const Options& options) const {
     auto numeric_column = down_cast<const FixedLengthColumn<DataType>*>(&column);
+    const auto idata = numeric_column->immutable_data();
     if constexpr (std::is_same_v<int8_t, DataType>) {
-        return os->write<int16_t>(numeric_column->get_data()[row_num]);
+        return os->write<int16_t>(idata[row_num]);
     } else {
-        return os->write(numeric_column->get_data()[row_num]);
+        return os->write(idata[row_num]);
     }
 }
 

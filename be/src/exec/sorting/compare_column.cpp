@@ -90,7 +90,7 @@ public:
         // Two step compare:
         // 1. Compare null values, store at temporary result
         // 2. Mask notnull values, and compare not-null values
-        const NullData& null_data = column.immutable_null_column_data();
+        const auto null_data = column.immutable_null_column_data();
 
         int nan_direction = _sort_order * _null_first;
 
@@ -201,7 +201,7 @@ public:
     template <typename T>
     Status do_visit(const FixedLengthColumnBase<T>& column) {
         T rhs_data = _rhs_value.get<T>();
-        auto& lhs_data = column.get_data();
+        const auto lhs_data = column.immutable_data();
 
         if (_sort_order == 1) {
             auto cmp = [&](int lhs_row) { return SorterComparator<T>::compare(lhs_data[lhs_row], rhs_data); };
@@ -222,7 +222,7 @@ public:
     }
 
     Status do_visit(const JsonColumn& column) {
-        auto& lhs_data = column.get_data();
+        const auto lhs_data = column.immutable_data();
         const JsonValue& rhs_json = *_rhs_value.get_json();
 
         if (_sort_order == 1) {
@@ -263,7 +263,7 @@ public:
         // 1. Compare the null flag
         // 2. Compare the value if both are not null. Since value for null is just default value,
         //    which are equal, so just compare the value directly
-        const NullData& null_data = column.immutable_null_column_data();
+        const auto null_data = column.immutable_null_column_data();
         for (size_t i = 1; i < column.size(); i++) {
             (*_tie)[i] &= (null_data[i - 1] == null_data[i]);
         }
@@ -275,12 +275,12 @@ public:
     template <typename T>
     Status do_visit(const BinaryColumnBase<T>& column) {
         auto& data = column.get_proxy_data();
-        const NullData* null_data = nullptr;
+        ImmutableNullData null_data;
         if (_nullable_column != nullptr) {
-            null_data = &_nullable_column->get_data();
+            null_data = _nullable_column->immutable_data();
         }
         for (size_t i = 1; i < column.size(); i++) {
-            if ((null_data == nullptr) || ((*null_data)[i - 1] != 1 && (*null_data)[i] != 1)) {
+            if ((null_data.empty()) || (null_data[i - 1] != 1 && null_data[i] != 1)) {
                 (*_tie)[i] &= SorterComparator<Slice>::compare(data[i - 1], data[i]) == 0;
             }
         }
@@ -289,13 +289,13 @@ public:
 
     template <typename T>
     Status do_visit(const FixedLengthColumnBase<T>& column) {
-        auto& data = column.get_data();
-        const NullData* null_data = nullptr;
+        const auto data = column.immutable_data();
+        ImmutableNullData null_data;
         if (_nullable_column != nullptr) {
-            null_data = &_nullable_column->get_data();
+            null_data = _nullable_column->immutable_data();
         }
         for (size_t i = 1; i < column.size(); i++) {
-            if ((null_data == nullptr) || ((*null_data)[i - 1] != 1 && (*null_data)[i] != 1)) {
+            if ((null_data.empty()) || (null_data[i - 1] != 1 && null_data[i] != 1)) {
                 (*_tie)[i] &= SorterComparator<T>::compare(data[i - 1], data[i]) == 0;
             }
         }

@@ -17,6 +17,7 @@
 #include "column/column_helper.h"
 #include "column/column_viewer.h"
 #include "column/datum_convert.h"
+#include "runtime/exec_env.h"
 #include "runtime/mem_pool.h"
 #include "runtime/runtime_state.h"
 #include "simd/simd.h"
