@@ -215,12 +215,12 @@ public abstract class SetOperationNode extends PlanNode {
         // A SetOperationNode may have predicates if a union is set operation inside an inline view,
         // and the enclosing select stmt has predicates referring to the inline view.
         if (CollectionUtils.isNotEmpty(conjuncts)) {
-            output.append(prefix).append("predicates: ").append(getExplainString(conjuncts)).append("\n");
+            output.append(prefix).append("predicates: ").append(explainExpr(conjuncts)).append("\n");
         }
         if (CollectionUtils.isNotEmpty(constExprLists_)) {
             output.append(prefix).append("constant exprs: ").append("\n");
             for (List<Expr> exprs : constExprLists_) {
-                output.append(prefix).append("    ").append(exprs.stream().map(Expr::toSql)
+                output.append(prefix).append("    ").append(exprs.stream().map(this::explainExpr)
                         .collect(Collectors.joining(" | "))).append("\n");
             }
         }
@@ -228,15 +228,20 @@ public abstract class SetOperationNode extends PlanNode {
             if (CollectionUtils.isNotEmpty(setOperationOutputList)) {
                 output.append(prefix).append("output exprs:").append("\n");
                 output.append(prefix).append("    ")
-                        .append(setOperationOutputList.stream().map(Expr::explain).collect(
-                                Collectors.joining(" | "))).append("\n");
+                        .append(setOperationOutputList.stream()
+                                .map(c -> explainExpr(detailLevel, List.of(c)))
+                                .collect(Collectors.joining(" | ")))
+                        .append("\n");
             }
 
             if (CollectionUtils.isNotEmpty(materializedResultExprLists_)) {
                 output.append(prefix).append("child exprs:").append("\n");
                 for (List<Expr> exprs : materializedResultExprLists_) {
-                    output.append(prefix).append("    ").append(exprs.stream().map(Expr::explain)
-                            .collect(Collectors.joining(" | "))).append("\n");
+                    output.append(prefix).append("    ")
+                            .append(exprs.stream()
+                                    .map(c -> explainExpr(detailLevel, List.of(c)))
+                                    .collect(Collectors.joining(" | ")))
+                            .append("\n");
                 }
             }
             List<String> passThroughNodeIds = Lists.newArrayList();

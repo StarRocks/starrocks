@@ -76,10 +76,14 @@ import java.util.stream.Collectors;
  * @Todo: merge with AST2StringVisitor
  */
 public class ExprExplainVisitor implements AstVisitorExtendInterface<String, Void> {
-    private final FormatOptions options = FormatOptions.allEnable();
+    private FormatOptions options = FormatOptions.allEnable();
 
     public ExprExplainVisitor() {
         options.setEnableDigest(false);
+    }
+
+    public ExprExplainVisitor(FormatOptions options) {
+        this.options = options;
     }
 
     // ========================================= Helper Methods =========================================

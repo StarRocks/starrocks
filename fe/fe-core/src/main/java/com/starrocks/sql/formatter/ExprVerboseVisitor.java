@@ -22,6 +22,14 @@ import java.util.stream.Collectors;
 
 public class ExprVerboseVisitor extends ExprExplainVisitor {
 
+    public ExprVerboseVisitor() {
+        super();
+    }
+
+    public ExprVerboseVisitor(FormatOptions options) {
+        super(options);
+    }
+
     @Override
     public String visitFunctionCall(FunctionCallExpr node, Void context) {
         StringBuilder sb = new StringBuilder();

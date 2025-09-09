@@ -266,19 +266,19 @@ public class EsScanNode extends ScanNode {
 
         if (conjuncts.isEmpty()) {
             output.append(prefix).append("PREDICATES: ").append(
-                    getExplainString(conjuncts)).append("\n");
+                    explainExpr(conjuncts)).append("\n");
             output.append(prefix).append("ES_QUERY_DSL: ").append("{\"match_all\": {}}").append("\n");
         } else {
             QueryConverter queryConverter = new QueryConverter();
             QueryBuilders.QueryBuilder queryBuilder = queryConverter.convert(getConjuncts());
             output.append(prefix).append("PREDICATES: ").append(
-                    getExplainString(conjuncts)).append("\n");
+                    explainExpr(conjuncts)).append("\n");
             // reserved for later using: LOCAL_PREDICATES is processed by StarRocks EsScanNode
             output.append(prefix).append("LOCAL_PREDICATES: ")
-                    .append(getExplainString(queryConverter.localConjuncts()))
+                    .append(explainExpr(queryConverter.localConjuncts()))
                     .append("\n");
             output.append(prefix).append("REMOTE_PREDICATES: ")
-                    .append(getExplainString(queryConverter.remoteConjuncts()))
+                    .append(explainExpr(queryConverter.remoteConjuncts()))
                     .append("\n");
             output.append(prefix)
                     .append("ES_QUERY_DSL: ")
