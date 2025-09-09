@@ -247,6 +247,26 @@ TEST_F(LocalTabletsChannelTest, test_profile) {
     ASSERT_EQ(chunk.num_rows(), profile->get_counter("AddRowNum")->value());
 }
 
+TEST_F(LocalTabletsChannelTest, test_add_chunk_not_exist_tablet) {
+    auto open_request = _open_single_replica_request;
+    ASSERT_OK(_tablets_channel->open(open_request, &_open_response, _schema_param, false));
+
+    PTabletWriterAddChunkRequest add_chunk_request;
+    add_chunk_request.mutable_id()->CopyFrom(_load_id);
+    add_chunk_request.set_index_id(_index_id);
+    add_chunk_request.set_sender_id(0);
+    add_chunk_request.set_eos(true);
+    add_chunk_request.set_packet_seq(0);
+
+    auto non_exist_tablet_id = _tablet->tablet_id() + 1;
+    add_chunk_request.add_tablet_ids(non_exist_tablet_id);
+
+    PTabletWriterAddBatchResult add_chunk_response;
+    _tablets_channel->add_chunk(nullptr, add_chunk_request, &add_chunk_response);
+    ASSERT_EQ(TStatusCode::INTERNAL_ERROR, add_chunk_response.status().status_code()) << add_chunk_response.status();
+    _tablets_channel->abort();
+}
+
 using RpcTabletWriterCancelTuple =
         std::tuple<PTabletWriterCancelRequest*, google::protobuf::Closure*, brpc::Controller*>;
 
