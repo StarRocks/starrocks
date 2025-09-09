@@ -14,9 +14,9 @@
 
 package com.starrocks.sql.formatter;
 
-import com.starrocks.analysis.CastExpr;
-import com.starrocks.analysis.FunctionCallExpr;
-import com.starrocks.analysis.SlotRef;
+import com.starrocks.sql.ast.expression.CastExpr;
+import com.starrocks.sql.ast.expression.FunctionCallExpr;
+import com.starrocks.sql.ast.expression.SlotRef;
 
 import java.util.stream.Collectors;
 

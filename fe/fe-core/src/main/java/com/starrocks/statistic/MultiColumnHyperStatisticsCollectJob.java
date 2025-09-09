@@ -14,7 +14,6 @@
 
 package com.starrocks.statistic;
 
-import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
@@ -24,6 +23,7 @@ import com.starrocks.sql.ast.OriginStatement;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.ValuesRelation;
+import com.starrocks.sql.ast.expression.TableName;
 
 import java.util.List;
 import java.util.Map;

@@ -17,10 +17,10 @@
 
 package com.starrocks.fs;
 
-import com.starrocks.analysis.BrokerDesc;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.fs.hdfs.HdfsFs;
 import com.starrocks.fs.hdfs.HdfsFsManager;
+import com.starrocks.sql.ast.BrokerDesc;
 import com.starrocks.thrift.THdfsProperties;
 import mockit.Mock;
 import mockit.MockUp;

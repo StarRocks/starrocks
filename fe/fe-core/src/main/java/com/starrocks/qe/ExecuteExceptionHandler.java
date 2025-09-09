@@ -15,7 +15,6 @@
 package com.starrocks.qe;
 
 import com.google.common.collect.ImmutableSet;
-import com.starrocks.analysis.SlotId;
 import com.starrocks.catalog.HiveTable;
 import com.starrocks.common.Config;
 import com.starrocks.common.InternalErrorCode;
@@ -29,6 +28,7 @@ import com.starrocks.connector.exception.RemoteFileNotFoundException;
 import com.starrocks.connector.statistics.ConnectorTableColumnKey;
 import com.starrocks.planner.HdfsScanNode;
 import com.starrocks.planner.ScanNode;
+import com.starrocks.planner.SlotId;
 import com.starrocks.rpc.RpcException;
 import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.GlobalStateMgr;

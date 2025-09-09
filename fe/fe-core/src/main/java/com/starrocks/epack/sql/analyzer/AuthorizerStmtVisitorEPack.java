@@ -2,7 +2,6 @@
 
 package com.starrocks.epack.sql.analyzer;
 
-import com.starrocks.analysis.SetVarHint;
 import com.starrocks.authorization.AccessDeniedException;
 import com.starrocks.authorization.ObjectType;
 import com.starrocks.authorization.PrivilegeType;
@@ -62,6 +61,7 @@ import com.starrocks.sql.ast.HintNode;
 import com.starrocks.sql.ast.LoadStmt;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.SelectRelation;
+import com.starrocks.sql.ast.expression.SetVarHint;
 import org.apache.commons.collections4.CollectionUtils;
 
 import java.util.ArrayList;

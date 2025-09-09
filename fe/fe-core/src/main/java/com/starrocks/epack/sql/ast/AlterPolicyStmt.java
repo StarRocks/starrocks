@@ -2,9 +2,9 @@
 
 package com.starrocks.epack.sql.ast;
 
-import com.starrocks.analysis.Expr;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.DdlStmt;
+import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.parser.NodePosition;
 
 public class AlterPolicyStmt extends DdlStmt {

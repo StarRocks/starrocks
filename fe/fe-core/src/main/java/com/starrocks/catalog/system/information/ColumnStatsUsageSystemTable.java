@@ -15,7 +15,6 @@
 package com.starrocks.catalog.system.information;
 
 import com.google.api.client.util.Lists;
-import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.ColumnId;
 import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.catalog.Type;
@@ -24,6 +23,7 @@ import com.starrocks.catalog.system.SystemTable;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.Pair;
 import com.starrocks.common.util.TimeUtils;
+import com.starrocks.sql.ast.expression.TableName;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;

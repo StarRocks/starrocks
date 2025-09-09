@@ -15,13 +15,13 @@
 package com.starrocks.load.routineload;
 
 import com.google.common.collect.ImmutableList;
-import com.starrocks.analysis.FunctionalExprProvider;
 import com.starrocks.authorization.AccessDeniedException;
 import com.starrocks.authorization.PrivilegeType;
 import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.util.LogBuilder;
 import com.starrocks.common.util.LogKey;
+import com.starrocks.load.FunctionalExprProvider;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.analyzer.Authorizer;
 import org.apache.logging.log4j.LogManager;

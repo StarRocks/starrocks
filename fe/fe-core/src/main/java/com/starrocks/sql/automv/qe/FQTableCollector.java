@@ -17,7 +17,6 @@ package com.starrocks.sql.automv.qe;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Maps;
-import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Table;
@@ -28,6 +27,7 @@ import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.ParseNode;
 import com.starrocks.sql.ast.TableRelation;
 import com.starrocks.sql.ast.ViewRelation;
+import com.starrocks.sql.ast.expression.TableName;
 import com.starrocks.sql.automv.pieces.FQTable;
 
 import java.util.Map;

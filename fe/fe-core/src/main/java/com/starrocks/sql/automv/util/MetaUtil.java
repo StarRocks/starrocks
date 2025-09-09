@@ -14,7 +14,6 @@
 package com.starrocks.sql.automv.util;
 
 import com.google.common.collect.Sets;
-import com.starrocks.analysis.TableName;
 import com.starrocks.authentication.AuthenticationMgr;
 import com.starrocks.authorization.PrivilegeBuiltinConstants;
 import com.starrocks.catalog.Catalog;
@@ -32,6 +31,7 @@ import com.starrocks.qe.SessionVariable;
 import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.MetadataMgr;
+import com.starrocks.sql.ast.expression.TableName;
 import com.starrocks.sql.automv.qe.CustomizedQueryExecutor;
 import com.starrocks.sql.automv.tunespace.MaterializedViewPlus;
 import org.apache.logging.log4j.LogManager;

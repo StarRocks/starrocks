@@ -15,9 +15,9 @@
 package com.starrocks.sql.automv.pn;
 
 import com.google.common.base.Preconditions;
-import com.starrocks.analysis.ArithmeticExpr;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.Type;
+import com.starrocks.sql.ast.expression.ArithmeticExpr;
 import com.starrocks.sql.automv.boolalgebra.Modifier;
 import com.starrocks.sql.automv.boolalgebra.PowerBool;
 import com.starrocks.sql.automv.boolalgebra.TriBool;

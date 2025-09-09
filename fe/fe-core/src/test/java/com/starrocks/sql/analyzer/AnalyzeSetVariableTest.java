@@ -14,8 +14,6 @@
 
 package com.starrocks.sql.analyzer;
 
-import com.starrocks.analysis.LiteralExpr;
-import com.starrocks.analysis.Subquery;
 import com.starrocks.catalog.ResourceGroupMgr;
 import com.starrocks.catalog.UserIdentity;
 import com.starrocks.qe.ConnectContext;
@@ -24,6 +22,8 @@ import com.starrocks.qe.SetExecutor;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.SetStmt;
 import com.starrocks.sql.ast.UserVariable;
+import com.starrocks.sql.ast.expression.LiteralExpr;
+import com.starrocks.sql.ast.expression.Subquery;
 import com.starrocks.thrift.TWorkGroup;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;

@@ -14,8 +14,8 @@
 
 package com.starrocks.sql.automv.tunespace;
 
-import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.InternalCatalog;
+import com.starrocks.sql.ast.expression.TableName;
 import com.starrocks.sql.automv.qe.TablePlus;
 
 import java.util.Objects;

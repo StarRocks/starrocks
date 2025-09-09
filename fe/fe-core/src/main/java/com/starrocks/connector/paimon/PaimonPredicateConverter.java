@@ -15,9 +15,9 @@
 
 package com.starrocks.connector.paimon;
 
-import com.starrocks.analysis.BoolLiteral;
 import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.connector.exception.StarRocksConnectorException;
+import com.starrocks.sql.ast.expression.BoolLiteral;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CastOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;

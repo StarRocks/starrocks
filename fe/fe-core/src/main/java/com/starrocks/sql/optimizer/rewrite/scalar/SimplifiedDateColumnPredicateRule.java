@@ -15,12 +15,12 @@
 package com.starrocks.sql.optimizer.rewrite.scalar;
 
 import com.google.common.collect.ImmutableList;
-import com.starrocks.analysis.BinaryType;
-import com.starrocks.analysis.Expr;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.Type;
+import com.starrocks.sql.ast.expression.BinaryType;
+import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CastOperator;
@@ -32,10 +32,10 @@ import com.starrocks.sql.optimizer.rewrite.ScalarOperatorRewriteContext;
 import java.time.DateTimeException;
 import java.util.regex.Pattern;
 
-import static com.starrocks.analysis.BinaryType.GE;
-import static com.starrocks.analysis.BinaryType.GT;
-import static com.starrocks.analysis.BinaryType.LE;
-import static com.starrocks.analysis.BinaryType.LT;
+import static com.starrocks.sql.ast.expression.BinaryType.GE;
+import static com.starrocks.sql.ast.expression.BinaryType.GT;
+import static com.starrocks.sql.ast.expression.BinaryType.LE;
+import static com.starrocks.sql.ast.expression.BinaryType.LT;
 
 /**
  * if t is date

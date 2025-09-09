@@ -14,9 +14,9 @@
 
 package com.starrocks.sql.automv.column;
 
-import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Type;
+import com.starrocks.sql.ast.expression.TableName;
 import com.starrocks.sql.automv.util.PrettyPrinter;
 
 import java.util.Objects;

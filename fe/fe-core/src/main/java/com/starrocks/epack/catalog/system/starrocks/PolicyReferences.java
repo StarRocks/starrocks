@@ -14,7 +14,6 @@
 
 package com.starrocks.epack.catalog.system.starrocks;
 
-import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.ColumnId;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Table;
@@ -29,6 +28,7 @@ import com.starrocks.epack.catalog.system.SystemIdEPack;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.sql.ast.expression.TableName;
 import com.starrocks.thrift.TGetPolicyReferenceItem;
 import com.starrocks.thrift.TGetPolicyReferenceResponse;
 import com.starrocks.thrift.TGetPolicyReferencesRequest;
