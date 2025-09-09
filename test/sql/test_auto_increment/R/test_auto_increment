@@ -800,3 +800,37 @@ DROP TABLE t_auto_increment_partial_update_column_upsert;
 DROP DATABASE test_auto_increment_partial_update_column_upsert;
 -- result:
 -- !result
+-- name: test_alter_auto_increment_counter @sequential
+CREATE TABLE `t_alter_auto_increment_counter` (
+  `k`  BIGINT NOT NULL COMMENT "",
+  `v1` BIGINT AUTO_INCREMENT
+) ENGINE=OLAP 
+PRIMARY KEY(`k`)
+DISTRIBUTED BY HASH(`k`) BUCKETS 1
+PROPERTIES (
+"replicated_storage" = "true",
+"replication_num" = "1"
+);
+-- result:
+-- !result
+INSERT INTO t_alter_auto_increment_counter VALUES (1, 1);
+-- result:
+-- !result
+INSERT INTO t_alter_auto_increment_counter VALUES (2, 2);
+-- result:
+-- !result
+ALTER TABLE t_alter_auto_increment_counter AUTO_INCREMENT = 300;
+-- result:
+-- !result
+INSERT INTO t_alter_auto_increment_counter VALUES (3, DEFAULT);
+-- result:
+-- !result
+SELECT * FROM t_alter_auto_increment_counter ORDER BY k;
+-- result:
+1	1
+2	2
+3	300
+-- !result
+DROP TABLE t_alter_auto_increment_counter;
+-- result:
+-- !result
