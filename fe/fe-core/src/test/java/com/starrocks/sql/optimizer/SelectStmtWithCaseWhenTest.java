@@ -855,18 +855,7 @@ class SelectStmtWithCaseWhenTest {
         joiner.add(sql);
         joiner.add(patterns.toString());
         joiner.add(plan);
-<<<<<<< HEAD
         Assertions.assertTrue(patterns.stream().anyMatch(plan::contains), joiner.toString());
-=======
-
-        if (patterns.stream().anyMatch(String::isBlank)) {
-            Assertions.assertFalse(plan.contains("PREDICATES:"), joiner.toString());
-        } else {
-            Assertions.assertTrue(patterns.stream().anyMatch(plan::contains), joiner.toString());
-        }
-        starRocksAssert.getCtx().getSessionVariable().setEnablePredicateExprReuse(true);
-
->>>>>>> 726fa67c3f ([Enhancement] support common expr reuse in complex case-when expr in scan predicates (#62779))
     }
 
     @Test
@@ -888,9 +877,6 @@ class SelectStmtWithCaseWhenTest {
                 "FROM cte01\n" +
                 "WHERE len_bucket IS NOT NULL;";
         String plan = UtFrameUtils.getVerboseFragmentPlan(starRocksAssert.getCtx(), sql);
-<<<<<<< HEAD
-        Assert.assertTrue(plan.contains("Predicates: CASE WHEN array_length"));
-=======
         Assert.assertTrue(plan.contains("  2:SELECT\n" +
                 "  |  predicates: 3: case IS NOT NULL\n" +
                 "  |  cardinality: 1\n" +
@@ -904,6 +890,5 @@ class SelectStmtWithCaseWhenTest {
                 "  |  common expressions:\n" +
                 "  |  5 <-> array_length[([2: col_arr, ARRAY<VARCHAR(100)>, true]); " +
                 "args: INVALID_TYPE; result: INT; args nullable: true; result nullable: true]"));
->>>>>>> 726fa67c3f ([Enhancement] support common expr reuse in complex case-when expr in scan predicates (#62779))
     }
 }
