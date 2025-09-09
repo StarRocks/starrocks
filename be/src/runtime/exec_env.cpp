@@ -498,7 +498,7 @@ Status ExecEnv::init(const std::vector<StorePath>& store_paths, bool as_cn) {
 #endif
     _load_channel_mgr = new LoadChannelMgr();
     _load_stream_mgr = new LoadStreamMgr();
-    _brpc_stub_cache = new BrpcStubCache();
+    _brpc_stub_cache = new BrpcStubCache(this);
     _stream_load_executor = new StreamLoadExecutor(this);
     _stream_context_mgr = new StreamContextMgr();
     _transaction_mgr = new TransactionMgr(this);
