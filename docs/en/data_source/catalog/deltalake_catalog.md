@@ -4,7 +4,8 @@ toc_max_heading_level: 5
 description: "Query data directly from Delta Lake"
 ---
 import Intro from '../../_assets/catalog/_deltalake_intro.mdx'
-import DatabricksParams from '../../_assets/catalog/_databricks_params.mdx'
+import DatabricksMetaParams from '../../_assets/catalog/_databricks_meta_params.mdx'
+import DatabricksDataParams from '../../_assets/catalog/_databricks_data_params.mdx'
 
 # Delta Lake catalog
 
@@ -155,7 +156,7 @@ The following table describes the parameters you need to configure in `Metastore
 
 For information about how to choose an authentication method for accessing AWS Glue and how to configure an access control policy in the AWS IAM Console, see [Authentication parameters for accessing AWS Glue](../../integrations/authenticate_to_aws_resources.md#authentication-parameters-for-accessing-aws-glue).
 
-<DatabricksParams />
+<DatabricksMetaParams />
 
 #### StorageCredentialParams
 
@@ -164,6 +165,8 @@ A set of parameters about how StarRocks integrates with your storage system. Thi
 If you use HDFS as storage, you do not need to configure `StorageCredentialParams`.
 
 If you use AWS S3, other S3-compatible storage system, Microsoft Azure Storage, or Google GCS as storage, you must configure `StorageCredentialParams`.
+
+<DatabricksDataParams />
 
 ##### AWS S3
 
@@ -363,7 +366,7 @@ If you choose Google GCS as storage for your Delta Lake cluster, take one of the
 
   The following table describes the parameters you need to configure in `StorageCredentialParams`.
 
-  | **Parameter**                              | **Default value** | **Value** **example** | **Description**                                              |
+  | **Parameter**                              | **Default value** | **Value example** | **Description**                                              |
   | ------------------------------------------ | ----------------- | --------------------- | ------------------------------------------------------------ |
   | gcp.gcs.use_compute_engine_service_account | false             | true                  | Specifies whether to directly use the service account that is bound to your Compute Engine. |
 
@@ -377,9 +380,9 @@ If you choose Google GCS as storage for your Delta Lake cluster, take one of the
 
   The following table describes the parameters you need to configure in `StorageCredentialParams`.
 
-  | **Parameter**                          | **Default value** | **Value** **example**                                        | **Description**                                              |
+  | **Parameter**                          | **Default value** | **Value example**                                        | **Description**                                              |
   | -------------------------------------- | ----------------- | ------------------------------------------------------------ | ------------------------------------------------------------ |
-  | gcp.gcs.service_account_email          | ""                | "[user@hello.iam.gserviceaccount.com](mailto:user@hello.iam.gserviceaccount.com)" | The email address in the JSON file generated at the creation of the service account. |
+  | gcp.gcs.service_account_email          | ""                | `"user@hello.iam.gserviceaccount.com"` | The email address in the JSON file generated at the creation of the service account. |
   | gcp.gcs.service_account_private_key_id | ""                | "61d257bd8479547cb3e04f0b9b6b9ca07af3b7ea"                   | The private key ID in the JSON file generated at the creation of the service account. |
   | gcp.gcs.service_account_private_key    | ""                | "-----BEGIN PRIVATE KEY----xxxx-----END PRIVATE KEY-----\n"  | The private key in the JSON file generated at the creation of the service account. |
 
@@ -394,7 +397,7 @@ If you choose Google GCS as storage for your Delta Lake cluster, take one of the
 
     The following table describes the parameters you need to configure in `StorageCredentialParams`.
 
-    | **Parameter**                              | **Default value** | **Value** **example** | **Description**                                              |
+    | **Parameter**                              | **Default value** | **Value example** | **Description**                                              |
     | ------------------------------------------ | ----------------- | --------------------- | ------------------------------------------------------------ |
     | gcp.gcs.use_compute_engine_service_account | false             | true                  | Specifies whether to directly use the service account that is bound to your Compute Engine. |
     | gcp.gcs.impersonation_service_account      | ""                | "hello"               | The service account that you want to impersonate.            |
@@ -410,9 +413,9 @@ If you choose Google GCS as storage for your Delta Lake cluster, take one of the
 
     The following table describes the parameters you need to configure in `StorageCredentialParams`.
 
-    | **Parameter**                          | **Default value** | **Value** **example**                                        | **Description**                                              |
+    | **Parameter**                          | **Default value** | **Value example**                                        | **Description**                                              |
     | -------------------------------------- | ----------------- | ------------------------------------------------------------ | ------------------------------------------------------------ |
-    | gcp.gcs.service_account_email          | ""                | "[user@hello.iam.gserviceaccount.com](mailto:user@hello.iam.gserviceaccount.com)" | The email address in the JSON file generated at the creation of the meta service account. |
+    | gcp.gcs.service_account_email          | ""                | `"user@hello.iam.gserviceaccount.com"` | The email address in the JSON file generated at the creation of the meta service account. |
     | gcp.gcs.service_account_private_key_id | ""                | "61d257bd8479547cb3e04f0b9b6b9ca07af3b7ea"                   | The private key ID in the JSON file generated at the creation of the meta service account. |
     | gcp.gcs.service_account_private_key    | ""                | "-----BEGIN PRIVATE KEY----xxxx-----END PRIVATE KEY-----\n"  | The private key in the JSON file generated at the creation of the meta service account. |
     | gcp.gcs.impersonation_service_account  | ""                | "hello"                                                      | The data service account that you want to impersonate.       |
