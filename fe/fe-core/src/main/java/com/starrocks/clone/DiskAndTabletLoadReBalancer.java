@@ -654,10 +654,22 @@ public class DiskAndTabletLoadReBalancer extends Rebalancer {
             }
             // neither the number of tablets select in high load BE nor low load BE exceeds limit,
             // change group index in succession.
-            if ((h + l) % 2 == 0) {
+            // If either highGroup or lowGroup has only one backend, we always move the other index.
+            // This prevents getting stuck in an infinite loop due to modulo operation with size 1.
+            // Otherwise, we alternate h and l based on (h + l) % 2 to iterate through both groups.
+            if (highGroup.size() == 1) {
+                // Only one backend in highGroup, so increment lowGroup index
+                l++;
+            } else if (lowGroup.size() == 1) {
+                // Only one backend in lowGroup, so increment highGroup index
                 h++;
             } else {
-                l++;
+                // Both groups have multiple backends, alternate selection to balance iteration
+                if ((h + l) % 2 == 0) {
+                    h++;
+                } else {
+                    l++;
+                }
             }
         }
 
