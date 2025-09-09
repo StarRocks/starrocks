@@ -1571,6 +1571,62 @@ ALTER VIEW iceberg.iceberg_db.iceberg_view2 ADD DIALECT SELECT k1, k2 FROM icebe
 ALTER VIEW iceberg.iceberg_db.iceberg_view2 MODIFY DIALECT SELECT k1, k2, k3 FROM iceberg.iceberg_db.iceberg_table;
 ```
 
+### 手动 Compaction
+
+从 v4.0 开始，StarRocks 支持对 Iceberg 表执行手动 Compaction。
+
+每次将数据导入到 Iceberg 表时，都会生成新的数据文件和元数据文件。随着时间推移，大量的数据文件会显著降低查询计划生成速度，并影响系统性能。
+
+此时需要对表或分区执行手动 Compaction，将小型数据文件合并，从而提升系统性能。
+
+#### 语法
+
+```SQL
+ALTER TABLE [catalog.][database.]table_name 
+EXECUTE rewrite_data_files
+("key"=value [,"key"=value, ...]) 
+[WHERE <predicate>]
+```
+
+#### 参数
+
+##### `rewrite_data_files` 属性
+
+声明手动 Compaction 行为的 `"key"=value` 键值对。请注意，需要用双引号包裹其中的键。
+
+###### `min_file_size_bytes`
+
+- 描述：小型数据文件的上限值。小于该值的数据文件将在 Compaction 过程中被合并。
+- 单位：Byte
+- 类型：Int
+- 默认值：268,435,456（256 MB）
+
+###### `batch_size`
+
+- 描述：每次批处理中可处理的最大数据量。
+- 单位：Byte
+- 类型：Int
+- 默认值：10,737,418,240 (10 GB)
+
+###### `rewrite_all`
+
+- 描述：在 Compaction 过程中，是否忽略用于筛选具有特定条件的数据文件的参数，重写所有数据文件。
+- 单位：-
+- 类型：Boolean
+- 默认值：false
+
+##### `WHERE` 子句
+
+- 描述：用于指定参与 Compaction 操作的分区的过滤谓词。
+
+#### 示例
+
+以下示例对 Iceberg 表 `t1` 中的特定分区执行手动 Compaction。分区由子句 `WHERE part_col = 'p1'` 表示。在这些分区中，小于 134,217,728 字节（128 MB）的数据文件将在 Compaction 过程中被合并。
+
+```SQL
+ALTER TABLE t1 EXECUTE rewrite_data_files("min_file_size_bytes"= 134217728) WHERE part_col = 'p1';
+```
+
 ---
 
 ### 配置元数据缓存

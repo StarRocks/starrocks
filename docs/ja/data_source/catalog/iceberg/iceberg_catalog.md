@@ -1536,6 +1536,62 @@ ALTER VIEW iceberg.iceberg_db.iceberg_view2 ADD DIALECT SELECT k1, k2 FROM icebe
 ALTER VIEW iceberg.iceberg_db.iceberg_view2 MODIFY DIALECT SELECT k1, k2, k3 FROM iceberg.iceberg_db.iceberg_table;
 ```
 
+### 手動コンパクション
+
+v4.0 以降、StarRocks は Iceberg テーブルに対する手動コンパクションをサポートしています。
+
+Iceberg テーブルにデータがロードされるたびに、新しいデータファイルとメタデータファイルが生成されます。時間の経過とともに過剰なデータファイルが蓄積されると、クエリプランの生成が大幅に遅延し、パフォーマンスに影響を及ぼす可能性があります。
+
+この場合、テーブルまたはパーティションに対して手動コンパクションを実行し、小さなデータファイルをマージすることでパフォーマンスを改善する必要があります。
+
+#### 構文
+
+```SQL
+ALTER TABLE [catalog.][database.]table_name 
+EXECUTE rewrite_data_files
+("key"=value [,"key"=value, ...]) 
+[WHERE <predicate>]
+```
+
+#### パラメータ
+
+##### `rewrite_data_files` プロパティ
+
+手動コンパクションの動作を指定する `"key"=value` ペア。キーは二重引用符で囲む必要があることに注意してください。
+
+###### `min_file_size_bytes`
+
+- 説明: 小規模データファイルの上限値。この値より小さいサイズのデータファイルは、コンパクション時にマージされます。
+- 単位: Byte
+- タイプ: Int
+- デフォルト: 268,435,456 (256 MB)
+
+###### `batch_size`
+
+- 説明: 各バッチで処理可能なデータの最大サイズ。
+- 単位: Byte
+- タイプ: Int
+- デフォルト: 10,737,418,240 (10 GB)
+
+###### `rewrite_all`
+
+- 説明: 特定の要件を持つデータファイルをフィルタリングするパラメータを無視し、コンパクション中にすべてのデータファイルを書き換えるかどうか。
+- 単位: -
+- タイプ: Boolean
+- デフォルト: false
+
+##### `WHERE` 句
+
+- 説明: コンパクションに含めるパーティションを指定するために使用されるフィルタ述語。
+
+#### 例
+
+以下の例は、Iceberg テーブル `t1` 内の特定のパーティションに対して手動コンパクションを実行します。パーティションは `part_col = 'p1'` 句で指定されます。これらのパーティションでは、134,217,728 Byte（128 MB）未満のデータファイルがコンパクション中にマージされます。
+
+```SQL
+ALTER TABLE t1 EXECUTE rewrite_data_files("min_file_size_bytes"= 134217728) WHERE part_col = 'p1';
+```
+
 ---
 
 ### メタデータキャッシュの構成
