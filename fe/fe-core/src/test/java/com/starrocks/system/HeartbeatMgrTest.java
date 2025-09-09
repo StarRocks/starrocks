@@ -38,6 +38,7 @@ import com.starrocks.catalog.FsBroker;
 import com.starrocks.common.Pair;
 import com.starrocks.common.util.Util;
 import com.starrocks.ha.FrontendNodeType;
+import com.starrocks.lake.StarOSAgent;
 import com.starrocks.rpc.ThriftConnectionPool;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.NodeMgr;
@@ -244,6 +245,177 @@ public class HeartbeatMgrTest {
                 // verify the runMode is set in the masterInfo request
                 Assertions.assertNotNull(masterInfo);
                 Assertions.assertEquals(TRunMode.SHARED_DATA, masterInfo.getRun_mode());
+            }
+        };
+    }
+
+    @Test
+    public void testObserverFeCallsAddWorkerDuringJournalReplay(@Mocked StarOSAgent starOSAgent, 
+                                                               @Mocked SystemInfoService systemInfoService) {
+        // Test that observer FEs call addWorker() during journal replay to maintain worker cache
+        new MockUp<RunMode>() {
+            @Mock
+            public boolean isSharedDataMode() {
+                return true;
+            }
+        };
+
+        ComputeNode computeNode = new ComputeNode(1001L, "10.1.1.100", 9050);
+        computeNode.setStarletPort(9070);
+        computeNode.setWorkerGroupId(2L);
+
+        new Expectations() {
+            {
+                globalStateMgr.getStarOSAgent();
+                minTimes = 0;
+                result = starOSAgent;
+
+                globalStateMgr.isLeader();
+                minTimes = 0;
+                result = false; // Observer FE (not leader)
+                
+                // Mock the system info lookup
+                nodeMgr.getClusterInfo();
+                minTimes = 0;
+                result = systemInfoService;
+                
+                // First tries Backend, then ComputeNode
+                systemInfoService.getBackend(1001L);
+                minTimes = 0;
+                result = null; // No backend found
+                
+                systemInfoService.getComputeNode(1001L);
+                minTimes = 0;
+                result = computeNode;
+            }
+        };
+
+        HeartbeatMgr heartbeatMgr = new HeartbeatMgr(false);
+
+        // Create successful heartbeat response
+        BackendHbResponse response = new BackendHbResponse(1001L, 9060, 8030, 8060, 9070, 1000L, "test-version", 16, 8000000000L);
+
+        // Test observer FE during journal replay - should call addWorker()
+        boolean isChanged = heartbeatMgr.handleHbResponse(response, true /* isReplay */);
+
+        new Verifications() {
+            {
+                starOSAgent.addWorker(1001L, "10.1.1.100:9070", 2L);
+                times = 1; // Should be called for observer FE during replay
+            }
+        };
+    }
+
+    @Test  
+    public void testLeaderFeSkipsAddWorkerDuringJournalReplay(@Mocked StarOSAgent starOSAgent,
+                                                             @Mocked SystemInfoService systemInfoService) {
+        // Test that leader FE does NOT call addWorker() during journal replay
+        new MockUp<RunMode>() {
+            @Mock
+            public boolean isSharedDataMode() {
+                return true;
+            }
+        };
+
+        ComputeNode computeNode = new ComputeNode(1002L, "10.1.1.101", 9050);
+        computeNode.setStarletPort(9070);
+        computeNode.setWorkerGroupId(2L);
+
+        new Expectations() {
+            {
+                globalStateMgr.getStarOSAgent();
+                minTimes = 0;
+                result = starOSAgent;
+
+                globalStateMgr.isLeader();
+                minTimes = 0;
+                result = true; // Leader FE
+                
+                // Mock the system info lookup
+                nodeMgr.getClusterInfo();
+                minTimes = 0;
+                result = systemInfoService;
+                
+                // First tries Backend, then ComputeNode
+                systemInfoService.getBackend(1002L);
+                minTimes = 0;
+                result = null; // No backend found
+                
+                systemInfoService.getComputeNode(1002L);
+                minTimes = 0;
+                result = computeNode;
+            }
+        };
+
+        HeartbeatMgr heartbeatMgr = new HeartbeatMgr(false);
+
+        // Create successful heartbeat response
+        BackendHbResponse response = new BackendHbResponse(1002L, 9060, 8030, 8060, 9070, 1000L, "test-version", 16, 8000000000L);
+
+        // Test leader FE during journal replay - should NOT call addWorker()
+        boolean isChanged = heartbeatMgr.handleHbResponse(response, true /* isReplay */);
+
+        new Verifications() {
+            {
+                starOSAgent.addWorker(anyLong, anyString, anyLong);
+                times = 0; // Should NOT be called for leader FE during replay
+            }
+        };
+    }
+
+    @Test
+    public void testLiveHeartbeatAlwaysCallsAddWorker(@Mocked StarOSAgent starOSAgent,
+                                                     @Mocked SystemInfoService systemInfoService) {
+        // Test that both leader and observer FE call addWorker() during live heartbeat processing
+        new MockUp<RunMode>() {
+            @Mock
+            public boolean isSharedDataMode() {
+                return true;
+            }
+        };
+
+        ComputeNode computeNode = new ComputeNode(1003L, "10.1.1.102", 9050);
+        computeNode.setStarletPort(9070);
+        computeNode.setWorkerGroupId(2L);
+
+        new Expectations() {
+            {
+                globalStateMgr.getStarOSAgent();
+                minTimes = 0;
+                result = starOSAgent;
+
+                globalStateMgr.isLeader();
+                minTimes = 0;
+                result = true; // Could be either leader or observer - doesn't matter for live heartbeat
+                
+                // Mock the system info lookup
+                nodeMgr.getClusterInfo();
+                minTimes = 0;
+                result = systemInfoService;
+                
+                // First tries Backend, then ComputeNode
+                systemInfoService.getBackend(1003L);
+                minTimes = 0;
+                result = null; // No backend found
+                
+                systemInfoService.getComputeNode(1003L);
+                minTimes = 0;
+                result = computeNode;
+            }
+        };
+
+        HeartbeatMgr heartbeatMgr = new HeartbeatMgr(false);
+
+        // Create successful heartbeat response
+        BackendHbResponse response = new BackendHbResponse(1003L, 9060, 8030, 8060, 9070, 1000L, "test-version", 16, 8000000000L);
+
+        // Test live heartbeat processing (not replay) - should call addWorker()
+        boolean isChanged = heartbeatMgr.handleHbResponse(response, false /* isReplay */);
+
+        new Verifications() {
+            {
+                starOSAgent.addWorker(1003L, "10.1.1.102:9070", 2L);
+                times = 1; // Should be called for live heartbeat processing
             }
         };
     }

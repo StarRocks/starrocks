@@ -188,7 +188,8 @@ public class HeartbeatMgr extends FrontendDaemon {
         setInterval(Math.max(1L, Config.heartbeat_timeout_second * 1000L - (System.currentTimeMillis() - startTime)));
     }
 
-    private boolean handleHbResponse(HeartbeatResponse response, boolean isReplay) {
+    // package-private for testing
+    boolean handleHbResponse(HeartbeatResponse response, boolean isReplay) {
         switch (response.getType()) {
             case FRONTEND: {
                 FrontendHbResponse hbResponse = (FrontendHbResponse) response;
@@ -217,8 +218,12 @@ public class HeartbeatMgr extends FrontendDaemon {
                                     .abortTxnWhenCoordinateBeDown(computeNode.getHost(), 100);
                         }
                     } else {
-                        if (RunMode.isSharedDataMode() && !isReplay) {
-                            // addWorker
+                        if (RunMode.isSharedDataMode() && 
+                                (!isReplay || !GlobalStateMgr.getCurrentState().isLeader())) {
+                            // Observer FEs maintain StarOSAgent worker map fields via journal replay.
+                            // When CNs restart, they get new WorkerIds. Observer FEs (which can never
+                            // become leaders) must refresh their cached workers during replay to avoid incorrectly
+                            // identifying primary CNs as unavailable and triggering backup CN selection.
                             int starletPort = computeNode.getStarletPort();
                             if (starletPort != 0) {
                                 String workerAddr = NetUtils.getHostPortInAccessibleFormat(computeNode.getHost(),
