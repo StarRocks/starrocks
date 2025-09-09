@@ -24,7 +24,7 @@ CREATE TABLE telemetry (
 )
 ENGINE=OLAP
 PRIMARY KEY(device_id, ts)
-PARTITION BY RANGE (date_trunc('day', ts))
+PARTITION BY date_trunc('day', ts)
 DISTRIBUTED BY HASH(device_id) BUCKETS 16
 ORDER BY (device_id, ts);
 ```
