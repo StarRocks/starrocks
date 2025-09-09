@@ -54,3 +54,7 @@ N-Gram bloom filter 索引是一种特殊的 Bloom filter 索引，通常用于�
 ### [全文倒排索引](./inverted_index.md)
 
 全文倒排索引可以快速定位到与关键词匹配的数据行，能够加速全文检索。
+
+### [向量索引](./vector_index.md)
+
+向量索引使您能够使用 StarRocks 进行近似最近邻搜索（ANNS）。

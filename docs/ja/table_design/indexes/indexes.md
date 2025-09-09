@@ -38,18 +38,22 @@ ZoneMap index は、各データチャンクの統計情報を格納し、Min（
 
 クエリ条件の列がプレフィックスフィールドでない場合、データとクエリの特性に基づいてこの列にインデックスを手動で作成し、クエリ効率を向上させることができます。
 
-### [Bitmap indexes](./Bitmap_index.md)
+### [ビットマップインデックス](./Bitmap_index.md)
 
 ビットマップインデックスは、高基数列または複数の低基数列の組み合わせに対するクエリに適しています。ビットマップインデックスは、これらのクエリに対して理想的なフィルタリングパフォーマンスを示し、1000 行中少なくとも 999 行をフィルタリングします。
 
-### [Bloom filter indexes](./Bloomfilter_index.md)
+### [ブルームフィルターインデックス](./Bloomfilter_index.md)
 
 ブルームフィルターインデックスは、ID 列などの比較的高基数の列に適していますが、ある程度の誤判率が発生する可能性があります。
 
-### [N-Gram bloom filter indexes](./Ngram_Bloom_Filter_Index.md)
+### [N-gram ブルームフィルターインデックス](./Ngram_Bloom_Filter_Index.md)
 
 n-gram ブルームフィルターインデックスは、ブルームフィルターインデックスの特別なタイプであり、通常、`LIKE` クエリや `ngram_search` および `ngram_search_case_insensitive` 関数の操作を高速化するために使用されます。
 
-### [Full-Text inverted indexes](./inverted_index.md)
+### [全文インバーテッドインデックス](./inverted_index.md)
 
 全文逆インデックスは、キーワードに一致するデータ行を迅速に見つけることができ、全文検索を高速化します。
+
+### [ベクターインデックス](./vector_index.md)
+
+ベクトルインデックスを使用すると、StarRocksで近似最近傍検索（ANNS）を実行できます。

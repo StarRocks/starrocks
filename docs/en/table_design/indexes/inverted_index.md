@@ -12,7 +12,9 @@ import Beta from '../../_assets/commonMarkdown/_beta.mdx'
 
 Since version 3.3.0, StarRocks supports full-text inverted indexes, which can break the text into smaller words, and create an index entry for each word that can show the mapping relationship between the word and its corresponding row number in the data file. For full-text searches, StarRocks queries the inverted index based on the search keywords, quickly locating the data rows that match the keywords.
 
-The full-text inverted index is not yet supported in Primary Key tables and shared-data clusters.
+Primary Key tables support full-text inverted indexes from v4.0 onwards.
+
+The full-text inverted index is not yet supported in shared-data clusters.
 
 ## Overview
 
@@ -26,13 +28,17 @@ During full-text searches, StarRocks can locate index entries containing the sea
 
 ### Create full-text inverted index
 
-Before creating a fulltext inverted index, you need to enable FE configuration item `enable_experimental_gin`.
+Before creating a full-text inverted index, you need to enable FE configuration item `enable_experimental_gin`.
 
 ```sql
 ADMIN SET FRONTEND CONFIG ("enable_experimental_gin" = "true");
 ```
 
-Also, a fulltext inverted index can only be created in the Duplicate Key table and the table property `replicated_storage` needs to be `false`.
+:::note
+When creating a full-text inverted index for a table, you must disable the `replicated_storage` feature for the table.
+- For v4.0 and later, this feature is automatically disabled when you create the index.
+- for versions earlier than v4.0, you must manually set the table property `replicated_storage` to `false`.
+:::
 
 #### Create full-text Inverted Index at table creation
 
@@ -243,6 +249,6 @@ If the full-text inverted index does not tokenize the indexed column, that is, `
   :::
 - Regular predicates: `==`, `!=`, `<=`, `>=`, `NOT IN`, `IN`, `IS NOT NULL`, `NOT NULL`
 
-## How to verify whether the full-text inverted index  accelerates queries
+## Verify whether a query is accelerated by the full-text inverted index
 
 After executing the query, you can view the detailed metrics `GinFilterRows` and `GinFilter` in the scan node of the Query Profile to see the number of rows filtered and the filtering time using the full-text inverted index.
