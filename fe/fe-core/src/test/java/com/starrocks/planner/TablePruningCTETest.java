@@ -162,13 +162,13 @@ public class TablePruningCTETest extends TablePruningTestBase {
         String q = getSqlList("sql/tpch_pk_tables/", "q5").get(0);
         String plan = checkHashJoinCountWithOnlyRBO(q, 3);
         plan = plan.replaceAll("\\d+:\\s*", "");
-        Assertions.assertTrue(plan.contains("Predicates: " +
-                "l_suppkey IN (1, 2, 100), " +
-                "l_partkey IN (200, 1000), " +
-                "l_partkey IN (200, 1000), " +
-                "l_suppkey IN (1, 2, 100), " +
-                "[l_orderkey, BIGINT, false] >= 1, " +
-                "[l_orderkey, BIGINT, false] <= 1000"));
+        Assertions.assertTrue(plan.contains("Predicates: "
+                + "[l_suppkey, BIGINT, false] IN (1, 2, 100), "
+                + "[l_partkey, BIGINT, false] IN (200, 1000), "
+                + "[l_partkey, BIGINT, false] IN (200, 1000), "
+                + "[l_suppkey, BIGINT, false] IN (1, 2, 100), "
+                + "[l_orderkey, BIGINT, false] >= 1, "
+                + "[l_orderkey, BIGINT, false] <= 1000"), plan);
     }
 
     @Test

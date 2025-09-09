@@ -154,11 +154,6 @@ public class FloatLiteral extends LiteralExpr {
     }
 
     @Override
-    public String toSqlImpl() {
-        return getStringValue();
-    }
-
-    @Override
     public String getStringValue() {
         return Double.toString(value);
     }

@@ -133,6 +133,11 @@ bool BinaryPlainPageDecoder<Type>::append_range(uint32_t idx, uint32_t end, Colu
 
         size_t append_bytes_length = offsets.back() - begin_offset;
         size_t old_bytes_size = bytes.size();
+        size_t reserve_length = 65535 * 2 / (end - idx) * 4096;
+        if (bytes.capacity() == 0) {
+            bytes.reserve(reserve_length);
+        }
+
         bytes.resize(old_bytes_size + append_bytes_length);
         // TODO: need did some optimize for large memory copy
         memcpy(bytes.data() + old_bytes_size, _data.get_data() + offset(idx), append_bytes_length);

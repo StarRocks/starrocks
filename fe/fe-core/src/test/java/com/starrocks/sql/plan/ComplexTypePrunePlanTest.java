@@ -234,8 +234,8 @@ public class ComplexTypePrunePlanTest extends PlanTestBase {
         String sql = "select c1.b[cast('  111   ' as bigint)] from test";
         String plan = getVerboseExplain(sql);
         assertCContains(plan, "1:Project\n" +
-                "  |  output columns:\n" +
-                "  |  5 <-> 2: c1.b[true][111]",
+                        "  |  output columns:\n" +
+                        "  |  5 <-> [2: c1, struct<a int(11), b array<struct<a int(11), b int(11)>>>, true].b[true][111]",
                 "Pruned type: 2 <-> [struct<a int(11), b array<struct<a int(11), b int(11)>>>]");
     }
 
@@ -316,23 +316,23 @@ public class ComplexTypePrunePlanTest extends PlanTestBase {
     @Test
     public void testSubfieldNoCopy() throws Exception {
         String sql = "select c3.c.a, c3.c.b, c3.a, c3.b, c3.d, c2.a, c1.a, c1.b[1].a from test";
-        assertVerbosePlanContains(sql, "c3.c.a[false]", "c3.c.b[false]", "c3.a[false]", "c3.b[false]",
+        assertPlanContains(sql, "c3.c.a[false]", "c3.c.b[false]", "c3.a[false]", "c3.b[false]",
                 "c3.d[false]", "c2.a[false]", "c1.a[false]");
         // we don't support non-copy for this expr now
-        assertVerbosePlanContains(sql, "c1.b[true][1].a[true]");
+        assertPlanContains(sql, "c1.b[true][1].a[true]");
         // test common project expr
         sql = "select c1.a, c1.a + 1 as c1a, c1.a + 2 as c2a from test";
-        assertVerbosePlanContains(sql, "c1.a[true]", "cast(2: c1.a[true] as BIGINT)");
+        assertPlanContains(sql, "c1.a[true]", "cast(2: c1.a[true] as BIGINT)");
     }
 
     @Test
     public void testSubfieldNeedCopyForOverlap() throws Exception {
         String sql = "select c3.c.a, c3.c from test";
-        assertVerbosePlanContains(sql, "c3.c.a[true]", "c3.c[true]");
+        assertPlanContains(sql, "c3.c.a[true]", "c3.c[true]");
         sql = "select c1.b, c1.b[1] from test";
-        assertVerbosePlanContains(sql, "c1.b[true]", "c1.b[true][1]");
+        assertPlanContains(sql, "c1.b[true]", "c1.b[true][1]");
         sql = "select c1.b[1].a, c1.b from test";
-        assertVerbosePlanContains(sql, "c1.b[true][1].a[true]", "c1.b[true]");
+        assertPlanContains(sql, "c1.b[true][1].a[true]", "c1.b[true]");
     }
 
     @Test

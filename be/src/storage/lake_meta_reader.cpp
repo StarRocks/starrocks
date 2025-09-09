@@ -19,6 +19,8 @@
 #include "column/chunk.h"
 #include "column/column_helper.h"
 #include "common/status.h"
+#include "runtime/exec_env.h"
+#include "runtime/global_dict/config.h"
 #include "storage/lake/rowset.h"
 #include "storage/rowset/column_iterator.h"
 #include "storage/rowset/rowset.h"

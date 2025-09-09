@@ -29,6 +29,7 @@ public class LoadConstants {
     public static final String RUNTIME_DETAILS_PLAN_TIME_MS = "plan_time_ms";
     public static final String RUNTIME_DETAILS_RECEIVE_DATA_TIME_MS = "receive_data_time_ms";
     public static final String RUNTIME_DETAILS_BEGIN_TXN_TIME_MS = "begin_txn_time_ms";
+    public static final String RUNTIME_DETAILS_TXN_ERROR_MSG = "txn_error_msg";
 
     public static final String PROPERTIES_TIMEOUT = "timeout";
     public static final String PROPERTIES_MAX_FILTER_RATIO = "max_filter_ratio";

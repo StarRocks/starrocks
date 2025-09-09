@@ -67,7 +67,7 @@ public:
         int64_t temp = 1 + this->data(state).count;
 
         TResult delta;
-        delta = column->get_data()[row_num] - this->data(state).mean;
+        delta = column->immutable_data()[row_num] - this->data(state).mean;
 
         TResult r;
         if constexpr (lt_is_decimalv2<LT>) {
@@ -177,7 +177,7 @@ public:
 
         int64_t count = 1;
         for (size_t i = 0; i < chunk_size; ++i) {
-            mean = src_column->get_data()[i];
+            mean = src_column->immutable_data()[i];
             memcpy(bytes.data() + old_size, &mean, sizeof(TResult));
             memcpy(bytes.data() + old_size + sizeof(TResult), &m2, sizeof(TResult));
             memcpy(bytes.data() + old_size + sizeof(TResult) * 2, &count, sizeof(int64_t));

@@ -14,7 +14,6 @@
 
 #pragma once
 
-#include "join_hash_map_helper.h"
 #include "join_hash_table_descriptor.h"
 
 namespace starrocks {
@@ -59,12 +58,12 @@ public:
     static constexpr bool AreKeysInChainIdentical = false;
 
     static void build_prepare(RuntimeState* state, JoinHashTableItems* table_items);
-    static void construct_hash_table(JoinHashTableItems* table_items, const Buffer<CppType>& keys,
-                                     const Buffer<uint8_t>* is_nulls);
+    static void construct_hash_table(JoinHashTableItems* table_items, const ImmBuffer<CppType>& keys,
+                                     const std::optional<ImmBuffer<uint8_t>> is_nulls);
 
     static void lookup_init(const JoinHashTableItems& table_items, HashTableProbeState* probe_state,
-                            const Buffer<CppType>& build_keys, const Buffer<CppType>& probe_keys,
-                            const Buffer<uint8_t>* is_nulls);
+                            const ImmBuffer<CppType>& build_keys, const ImmBuffer<CppType>& probe_keys,
+                            std::optional<ImmBuffer<uint8_t>> is_nulls);
 
     static bool equal(const CppType& x, const CppType& y) { return x == y; }
 };
@@ -124,12 +123,12 @@ public:
     static constexpr bool AreKeysInChainIdentical = true;
 
     static void build_prepare(RuntimeState* state, JoinHashTableItems* table_items);
-    static void construct_hash_table(JoinHashTableItems* table_items, const Buffer<CppType>& keys,
-                                     const Buffer<uint8_t>* is_nulls);
+    static void construct_hash_table(JoinHashTableItems* table_items, const ImmBuffer<CppType>& keys,
+                                     const std::optional<ImmBuffer<uint8_t>> is_nulls);
 
     static void lookup_init(const JoinHashTableItems& table_items, HashTableProbeState* probe_state,
-                            const Buffer<CppType>& build_keys, const Buffer<CppType>& probe_keys,
-                            const Buffer<uint8_t>* is_nulls);
+                            const ImmBuffer<CppType>& build_keys, const ImmBuffer<CppType>& probe_keys,
+                            const std::optional<ImmBuffer<uint8_t>> is_nulls);
 
     static bool equal(const CppType& x, const CppType& y) { return true; }
 
@@ -189,12 +188,12 @@ public:
     static constexpr bool AreKeysInChainIdentical = true;
 
     static void build_prepare(RuntimeState* state, JoinHashTableItems* table_items);
-    static void construct_hash_table(JoinHashTableItems* table_items, const Buffer<CppType>& keys,
-                                     const Buffer<uint8_t>* is_nulls);
+    static void construct_hash_table(JoinHashTableItems* table_items, const ImmBuffer<CppType>& keys,
+                                     const std::optional<ImmBuffer<uint8_t>> is_nulls);
 
     static void lookup_init(const JoinHashTableItems& table_items, HashTableProbeState* probe_state,
-                            const Buffer<CppType>& build_keys, const Buffer<CppType>& probe_keys,
-                            const Buffer<uint8_t>* is_nulls);
+                            const ImmBuffer<CppType>& build_keys, const ImmBuffer<CppType>& probe_keys,
+                            const std::optional<ImmBuffer<uint8_t>> is_nulls);
 
     static bool equal(const CppType& x, const CppType& y) { return true; }
 };
@@ -240,12 +239,12 @@ public:
     static constexpr bool AreKeysInChainIdentical = true;
 
     static void build_prepare(RuntimeState* state, JoinHashTableItems* table_items);
-    static void construct_hash_table(JoinHashTableItems* table_items, const Buffer<CppType>& keys,
-                                     const Buffer<uint8_t>* is_nulls);
+    static void construct_hash_table(JoinHashTableItems* table_items, const ImmBuffer<CppType>& keys,
+                                     const std::optional<ImmBuffer<uint8_t>> is_nulls);
 
     static void lookup_init(const JoinHashTableItems& table_items, HashTableProbeState* probe_state,
-                            const Buffer<CppType>& build_keys, const Buffer<CppType>& probe_keys,
-                            const Buffer<uint8_t>* is_nulls);
+                            const ImmBuffer<CppType>& build_keys, const ImmBuffer<CppType>& probe_keys,
+                            const std::optional<ImmBuffer<uint8_t>> is_nulls);
 
     static bool equal(const CppType& x, const CppType& y) { return true; }
 };
@@ -262,12 +261,12 @@ public:
     static constexpr bool AreKeysInChainIdentical = true;
 
     static void build_prepare(RuntimeState* state, JoinHashTableItems* table_items);
-    static void construct_hash_table(JoinHashTableItems* table_items, const Buffer<CppType>& keys,
-                                     const Buffer<uint8_t>* is_nulls);
+    static void construct_hash_table(JoinHashTableItems* table_items, const ImmBuffer<CppType>& keys,
+                                     const std::optional<ImmBuffer<uint8_t>> is_nulls);
 
     static void lookup_init(const JoinHashTableItems& table_items, HashTableProbeState* probe_state,
-                            const Buffer<CppType>& build_keys, const Buffer<CppType>& probe_keys,
-                            const Buffer<uint8_t>* is_nulls);
+                            const ImmBuffer<CppType>& build_keys, const ImmBuffer<CppType>& probe_keys,
+                            const std::optional<ImmBuffer<uint8_t>> is_nulls);
 
     static bool equal(const CppType& x, const CppType& y) { return true; }
 };
@@ -318,12 +317,12 @@ public:
     static constexpr bool AreKeysInChainIdentical = true;
 
     static void build_prepare(RuntimeState* state, JoinHashTableItems* table_items);
-    static void construct_hash_table(JoinHashTableItems* table_items, const Buffer<CppType>& keys,
-                                     const Buffer<uint8_t>* is_nulls);
+    static void construct_hash_table(JoinHashTableItems* table_items, const ImmBuffer<CppType>& keys,
+                                     const std::optional<ImmBuffer<uint8_t>> is_nulls);
 
     static void lookup_init(const JoinHashTableItems& table_items, HashTableProbeState* probe_state,
-                            const Buffer<CppType>& build_keys, const Buffer<CppType>& probe_keys,
-                            const Buffer<uint8_t>* is_nulls);
+                            const ImmBuffer<CppType>& build_keys, const ImmBuffer<CppType>& probe_keys,
+                            const std::optional<ImmBuffer<uint8_t>> is_nulls);
 
     static bool equal(const CppType& x, const CppType& y) { return true; }
 };
