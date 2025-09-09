@@ -904,10 +904,7 @@ public class KafkaRoutineLoadJob extends RoutineLoadJob {
         try {
             RoutineLoadLagTimeMetricMgr metricMgr = RoutineLoadLagTimeMetricMgr.getInstance();
             Map<Integer, Long> lagTimes = metricMgr.getPartitionLagTimes(this.getDbId(), this.getName());
-            if (lagTimes != null && !lagTimes.isEmpty()) {
-                return lagTimes;
-            }
-            return Maps.newHashMap();
+            return lagTimes != null ? lagTimes : Maps.newHashMap();
         } catch (Exception e) {
             LOG.warn("Failed to get routine load lag time for job {} ({}): {}", id, name, e.getMessage(), e);
             // Return empty map as fallback
