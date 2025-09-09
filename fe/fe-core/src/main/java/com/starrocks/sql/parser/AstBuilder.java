@@ -7370,6 +7370,22 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
 
         FunctionName fnName = FunctionName.createFnName(fullFunctionName);
         String functionName = fnName.getFunction();
+        if (fullFunctionName.equals(FunctionSet.CSV_FORMAT)) {
+            if (context.ASTERISK_SYMBOL() == null) {
+                int num = context.expression().size();
+                if (num < 3) {
+                    throw new ParsingException(PARSER_ERROR_MSG.wrongNumOfArgs(functionName), pos);
+                }
+                List<Expr> params = visit(context.expression(), Expr.class);
+                return new FunctionCallExpr(functionName, params, pos);
+            } else {
+                FunctionParams functionParams = FunctionParams.createStarParam();
+                FunctionCallExpr functionCallExpr = new FunctionCallExpr(
+                        functionName, functionParams, pos);
+                return functionCallExpr;
+            }
+        }
+
         if (functionName.equals(FunctionSet.TIME_SLICE) || functionName.equals(FunctionSet.DATE_SLICE)) {
             if (context.expression().size() == 2) {
                 Expr e1 = (Expr) visit(context.expression(0));

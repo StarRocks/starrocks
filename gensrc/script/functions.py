@@ -449,6 +449,9 @@ vectorized_functions = [
      'BinaryFunctions::from_binary_prepare', 'BinaryFunctions::from_binary_close'],
     [30603, 'from_binary', True, True, 'VARCHAR', ['VARBINARY'], 'BinaryFunctions::from_binary',
      'BinaryFunctions::from_binary_prepare', 'BinaryFunctions::from_binary_close'],
+    # csv_format(separator, quote, col1, ....)
+    [30604, 'csv_format', True, True, 'VARCHAR', ['VARCHAR', 'VARCHAR', 'VARCHAR', '...'], 'StringFunctions::csv_format'],
+
 
     # 50xxx: timestamp functions
     [50008, 'year', True, False, 'SMALLINT', ['DATE'], 'TimeFunctions::yearV3'],

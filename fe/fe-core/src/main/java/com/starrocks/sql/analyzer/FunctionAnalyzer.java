@@ -246,7 +246,10 @@ public class FunctionAnalyzer {
     private static void analyzeBuiltinAggFunction(FunctionName fnName,
                                                   FunctionParams fnParams,
                                                   FunctionCallExpr functionCallExpr) {
-        if (fnParams.isStar() && !fnName.getFunction().equals(FunctionSet.COUNT)) {
+        if (fnParams.isStar()
+                && !fnName.getFunction().equals(FunctionSet.COUNT)
+                && !fnName.getFunction().equals(FunctionSet.CSV_FORMAT)
+        ) {
             throw new SemanticException("'*' can only be used in conjunction with COUNT: " + functionCallExpr.toSql(),
                     functionCallExpr.getPos());
         }

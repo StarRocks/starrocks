@@ -2662,7 +2662,7 @@ functionCall
     | aggregationFunction filter? over?                                                   #aggregationFunctionCall
     | windowFunction over                                                                 #windowFunctionCall
     | TRANSLATE '(' (expression (',' expression)*)? ')'                                   #translateFunctionCall
-    | qualifiedName '(' (expression (',' expression)*)? ')'  over?                        #simpleFunctionCall
+    | qualifiedName '(' (expression (',' expression)* | ASTERISK_SYMBOL)? ')' over?       #simpleFunctionCall
     ;
 
 aggregationFunction

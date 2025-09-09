@@ -40,6 +40,7 @@ import com.starrocks.sql.ast.expression.GroupingFunctionCallExpr;
 import com.starrocks.sql.ast.expression.IntLiteral;
 import com.starrocks.sql.ast.expression.LimitElement;
 import com.starrocks.sql.ast.expression.SlotRef;
+import com.starrocks.sql.ast.expression.StringLiteral;
 import com.starrocks.sql.ast.expression.UserVariableExpr;
 import com.starrocks.sql.common.StarRocksPlannerException;
 import org.apache.commons.collections4.CollectionUtils;
@@ -283,6 +284,7 @@ public class SelectAnalyzer {
                             AstToStringBuilder.getAliasName(item.getExpr(), false, false) : item.getAlias();
                 }
 
+                analyzeCsvFormat(item, analyzeState, scope);
                 analyzeExpression(item.getExpr(), analyzeState, scope);
                 outputExpressionBuilder.add(item.getExpr());
 
@@ -341,6 +343,65 @@ public class SelectAnalyzer {
         analyzeState.setOutputScope(new Scope(RelationId.anonymous(), new RelationFields(outputFields.build())));
         return outputExpressions;
     }
+
+
+    public void analyzeCsvFormat(SelectListItem item, AnalyzeState analyzeState, Scope scope) {
+        if (!(item.getExpr() instanceof FunctionCallExpr)) {
+            return;
+        }
+        FunctionCallExpr functionCallExpr = (FunctionCallExpr) item.getExpr();
+        if (!functionCallExpr.getFnName().getFunction().equalsIgnoreCase(FunctionSet.CSV_FORMAT)) {
+            return;
+        }
+        boolean useBackendOperator = session.getSessionVariable().isEnableCsvFormatBackendOperator();
+        String separator = session.getSessionVariable().getCsvFormatSeparator();
+        String enclose = session.getSessionVariable().getCsvFormatEnclose();
+        boolean isStar = functionCallExpr.getParams().isStar();
+        // If * is passed in
+        if (isStar) {
+            // Create a new list of fields, including the default delimiter and quotation marks
+            List<Expr> columnExprList = new ArrayList<>();
+
+            // Parameter 1: Delimiter (default comma)
+            StringLiteral separatorLiteral = new StringLiteral(separator);
+            columnExprList.add(separatorLiteral);
+
+            // Parameter 2: Quotation mark characters (default double quotation marks)
+            StringLiteral quoteLiteral = new StringLiteral(enclose);
+            columnExprList.add(quoteLiteral);
+
+            // Parameter 3...n: Add all fields in the original fieldList
+            List<Field> fieldList = (item.getTblName() == null ? scope.getRelationFields().getAllFields()
+                    : scope.getRelationFields().resolveFieldsWithPrefix(item.getTblName()))
+                    .stream().filter(Field::isVisible).collect(Collectors.toList());
+            /*
+             * Generate a special "SlotRef" as FieldReference,
+             * which represents a reference to the expression in the source scope.
+             * Because the real expression cannot be obtained in star
+             * eg: "select csv_format(*) from (select count(*) from table) t"
+             */
+            for (Field field : fieldList) {
+                int fieldIndex = scope.getRelationFields().indexOf(field);
+                FieldReference fieldReference = new FieldReference(fieldIndex, item.getTblName());
+                analyzeExpression(fieldReference, analyzeState, scope);
+                columnExprList.add(fieldReference);
+            }
+            FunctionCallExpr node = CsvCastUtil.buildCsvFormatExpressionFromExprs(columnExprList, useBackendOperator);
+            item.setExpr(node);
+            return;
+        }
+        // If * is not passed in, replace the fieldList with the parameters contained in the item
+        List<Expr> columnExprList = functionCallExpr.getChildren();
+        // Insufficient parameters. Keep as is
+        if (columnExprList.size() < 3) {
+            throw new SemanticException(
+                    "csv_format requires at least three parameters");
+        }
+        // No table means this is a constant query
+        FunctionCallExpr node = CsvCastUtil.buildCsvFormatExpressionFromExprs(columnExprList, useBackendOperator);
+        item.setExpr(node);
+    }
+
 
     private List<OrderByElement> analyzeOrderBy(List<OrderByElement> orderByElements, AnalyzeState analyzeState,
                                                 Scope orderByScope,

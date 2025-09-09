@@ -978,6 +978,12 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     // query timeout cannot greater than one month
     public static final int MAX_QUERY_TIMEOUT = 259200;
 
+
+    public static final String ENABLE_CSV_FORMAT_BACKEND_OPERATOR = "enable_csv_format_backend_operator";
+    public static final String CSV_FORMAT_SEPARATOR = "csv_format_separator";
+    public static final String CSV_FORMAT_ENCLOSE = "csv_format_enclose";
+
+
     @VariableMgr.VarAttr(name = ENABLE_PIPELINE, alias = ENABLE_PIPELINE_ENGINE, show = ENABLE_PIPELINE_ENGINE)
     private boolean enablePipelineEngine = true;
 
@@ -1946,6 +1952,27 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VarAttr(name = ENABLE_DROP_TABLE_CHECK_MV_DEPENDENCY)
     public boolean enableDropTableCheckMvDependency = false;
+
+    @VariableMgr.VarAttr(name = ENABLE_CSV_FORMAT_BACKEND_OPERATOR)
+    private boolean enableCsvFormatBackendOperator = false;
+
+    @VariableMgr.VarAttr(name = CSV_FORMAT_SEPARATOR)
+    private String csvFormatSeparator = ",";
+
+    @VariableMgr.VarAttr(name = CSV_FORMAT_ENCLOSE)
+    private String csvFormatEnclose = "\"";
+
+    public boolean isEnableCsvFormatBackendOperator() {
+        return enableCsvFormatBackendOperator;
+    }
+
+    public String getCsvFormatSeparator() {
+        return csvFormatSeparator;
+    }
+
+    public String getCsvFormatEnclose() {
+        return csvFormatEnclose;
+    }
 
     public int getCboPruneJsonSubfieldDepth() {
         return cboPruneJsonSubfieldDepth;

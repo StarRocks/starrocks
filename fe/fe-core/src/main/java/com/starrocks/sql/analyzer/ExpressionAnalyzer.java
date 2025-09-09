@@ -1309,6 +1309,13 @@ public class ExpressionAnalyzer {
                     }
                     break;
                 }
+                case FunctionSet.CSV_FORMAT: {
+                    // csv_format(separator, quote, col1, ....)
+                    if (node.getChildren().size() < 3) {
+                        throw new SemanticException(fnName + " should have at least 3 input.", node.getPos());
+                    }
+                }
+
             }
         }
 

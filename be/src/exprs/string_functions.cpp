@@ -4916,6 +4916,172 @@ StatusOr<ColumnPtr> StringFunctions::format_bytes(FunctionContext* context, cons
 
     return result.build(ColumnHelper::is_all_const(columns));
 }
+
+
+
+// CSV format conversion function, which converts multi-column data into CSV format strings
+// csv_format(separator, quote, col1, ....)
+// columns[0]: Delimiter (VARCHAR)
+// columns[1]: Quotation mark characters (VARCHAR)
+// columns[2..N]: Data columns (various types, possibly containing NULL)
+StatusOr<ColumnPtr> StringFunctions::csv_format(FunctionContext* context, const Columns& columns) {
+    // Check the number of parameters. At least three parameters are required:
+    // delimiters, quotation marks, and at least one data column
+    const auto num_columns = columns.size();
+    if (num_columns < 3) {
+        return Status::InvalidArgument("csv_format requires at least 3 arguments");
+    }
+
+    // Create the view vector of the data column. Starting from the third parameter (index 2), all are data columns
+    std::vector<ColumnViewer<TYPE_VARCHAR>> data_views;
+    for (int i = 2; i < columns.size(); ++i) {
+        // Add each data column to the view list
+        data_views.emplace_back(columns[i]);
+    }
+
+    // Obtain the total number of rows (based on the size of the first column)
+    const size_t num_rows = columns[0]->size();
+    // Obtain the number of data columns
+    const size_t num_data_columns = data_views.size();
+
+    // Create a view of the delimiter column (the first parameter)
+    ColumnViewer<TYPE_VARCHAR> sep_viewer(columns[0]);
+    // Create a view of the quoted character column (the second parameter)
+    ColumnViewer<TYPE_VARCHAR> quote_viewer(columns[1]);
+
+    // Check whether the delimiter and quotation marks are empty strings (not allowed to be empty)
+    for (int row = 0; row < num_rows; ++row) {
+        // Check the situation where the delimiter is not NULL and is an empty string
+        if (!sep_viewer.is_null(row) && sep_viewer.value(row).empty()) {
+            return Status::InvalidArgument("csv_format separator cannot be empty");
+        }
+        // Check the case where the quotation mark character is not NULL and is an empty string
+        if (!quote_viewer.is_null(row) && quote_viewer.value(row).empty()) {
+            return Status::InvalidArgument("csv_format quote cannot be empty");
+        }
+    }
+
+    // Create a result column builder and pre-allocate space for num_rows rows
+    ColumnBuilder<TYPE_VARCHAR> builder(num_rows);
+    // Create a NULL tag array and initialize it to all zeros (indicating that none of them are NULL)
+    std::vector<uint8_t> null_data(num_rows, 0);
+    // Mark whether the entire result column contains NULL values
+    bool has_null = false;
+
+    // Process the data row by row
+    for (int row = 0; row < num_rows; ++row) {
+        // Check whether the delimiter or quotation marks of the current line are NULL
+        if (sep_viewer.is_null(row) || quote_viewer.is_null(row)) {
+            // If it is NULL, the result will also be NULL
+            builder.append_null();
+            // Mark this line as NULL
+            null_data[row] = 1;
+            // Mark that the entire result contains NULL values
+            has_null = true;
+            // Skip the processing of the current line
+            continue;
+        }
+
+        // Get the delimiter value of the current row
+        const auto sep = sep_viewer.value(row);
+        // Get the quoted character value of the current line
+        const auto quote = quote_viewer.value(row);
+        // Extract the first character of the delimiter
+        // (VARCHAR may contain multiple characters, but usually only one is used)
+        const char separator = sep.data[0];
+        // Extract the first character of the quotation mark character
+        const char quote_char = quote.data[0];
+        // Create quotation strings (for wrapping each field)
+        const std::string quote_str(1, quote_char);
+        // Create a double-quoted string (for the quotes in escaped fields)
+        const std::string double_quote_str(2, quote_char);
+
+        // Build the CSV string of the current row using the string stream
+        std::stringstream ss;
+        // Mark whether there is valid data in the current row (at least one non-null column)
+        bool row_has_data = false;
+
+        // Traverse all data columns and construct CSV rows
+        for (int col = 0; col < num_data_columns; ++col) {
+            // Get a view of the current data column
+            const auto& viewer = data_views[col];
+
+            // If it is not the first column, add a delimiter before the field
+            if (col > 0) {
+                // Add delimiters between columns
+                ss << separator;
+            }
+
+            // Handle the value of the current cell - all columns are enclosed in quotation marks
+            if (viewer.is_null(row)) {
+                // NULL value handling: Use two quotation marks to represent null values ""
+                ss << quote_str << quote_str;
+                // Mark the line with data (even if it is NULL)
+                row_has_data = true;
+            } else {
+                // Non-NULL value handling: Obtain field values and convert them to strings
+                const auto& value = viewer.value(row);
+                // Convert to a string
+                std::string cell_value = value.to_string();
+
+                // Escape handling: Replace single quotes in the field content with double quotes
+                size_t pos = 0;
+                // Find all quotation mark characters in the field and escape them
+                while ((pos = cell_value.find(quote_char, pos)) != std::string::npos) {
+                    // " Replace with ""
+                    cell_value.replace(pos, 1, double_quote_str);
+                    // Skip two characters (because the length increases after replacement)
+                    pos += 2;
+                }
+
+                // Enclose the escaped field values in quotation marks
+                ss << quote_str << cell_value << quote_str;
+                // Mark that there is data in this row
+                row_has_data = true;
+            }
+        }
+
+        // Handle situations where there is no valid data for the entire row
+        if (!row_has_data) {
+            // Return an empty string
+            builder.append("");
+        } else {
+            // Obtain the constructed CSV string
+            std::string result = ss.str();
+            // Check whether the length of the result exceeds the OLAP limit
+            if (result.size() > get_olap_string_max_length()) {
+                // If it is too long, return NULL
+                builder.append_null();
+                // Mark this line as NULL
+                null_data[row] = 1;
+                // Mark that the entire result contains NULL values
+                has_null = true;
+            } else {
+                // Add the result normally
+                builder.append(result);
+            }
+        }
+    }
+
+    // If the result column contains NULL values, a NullableColumn needs to be constructed
+    if (has_null) {
+        // Build the base result column
+        auto result = builder.build(ColumnHelper::is_all_const(columns));
+        // Convert to NullableColumn to handle NULL values
+        auto nullable_col = ColumnHelper::as_column<NullableColumn>(result);
+        // Set the NULL tag data we maintain to the result column
+        nullable_col->null_column()->get_data().swap(null_data);
+        return result;
+    }
+
+    // If there is no NULL value, directly return the constructed result column
+    return builder.build(ColumnHelper::is_all_const(columns));
+}
+
+
+
+
+
 } // namespace starrocks
 
 #include "gen_cpp/opcode/StringFunctions.inc"

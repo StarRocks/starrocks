@@ -359,6 +359,17 @@ public:
      */
     DEFINE_VECTORIZED_FN(concat_ws);
 
+
+    /**
+     * Return the csv lines separated by commas
+     *
+     * @param: [separator_string_value, quota_string_value, ......]
+     * @paramType: [BinaryColumn, ......]
+     * @return: BinaryColumn
+     */
+    DEFINE_VECTORIZED_FN(csv_format);
+
+
     /**
      * Index (position) of first argument within second argument which is a comma-separated string
      *

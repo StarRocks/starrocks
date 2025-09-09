@@ -79,6 +79,7 @@ import java.time.temporal.ChronoUnit;
 import java.time.temporal.IsoFields;
 import java.time.temporal.TemporalAdjusters;
 import java.time.temporal.TemporalUnit;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashSet;
 import java.util.List;
@@ -1594,6 +1595,34 @@ public class ScalarOperatorFunctions {
     public static ConstantOperator typeofInternal(ConstantOperator value) {
         return ConstantOperator.createVarchar(value.getVarchar());
     }
+
+    @ConstantFunction(name = "csv_format", argTypes = {VARCHAR, VARCHAR, VARCHAR}, returnType = VARCHAR)
+    public static ConstantOperator csv_format(ConstantOperator split, ConstantOperator enclose, ConstantOperator... values) {
+        Preconditions.checkArgument(values.length > 0);
+        if (split.isNull()) {
+            return ConstantOperator.createNull(Type.VARCHAR);
+        }
+        if (enclose.isNull()) {
+            return ConstantOperator.createNull(Type.VARCHAR);
+        }
+        final StringBuilder resultBuilder = new StringBuilder();
+        List<String> list = new ArrayList<>();
+        for (int i = 0; i < values.length; i++) {
+            String item = values[i].getVarchar();
+            if (values[i].isNull()) {
+                item = "";
+            }
+            if (item.contains(enclose.getVarchar())) {
+                item = item.replace(enclose.getVarchar(), enclose.getVarchar() + enclose.getVarchar());
+            }
+            String realItem = String.format("%s%s%s", enclose, item, enclose);
+            list.add(realItem);
+        }
+        String result = String.join(split.getVarchar(), list);
+        resultBuilder.append(result);
+        return ConstantOperator.createVarchar(resultBuilder.toString());
+    }
+
 
 }
 
