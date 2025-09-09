@@ -3885,4 +3885,19 @@ public class OlapTable extends Table {
         }
         return true;
     }
+
+    // only used for LakeTable and LakeMaterializedView
+    public List<Long> getShardGroupIds() {
+        if (RunMode.isSharedNothingMode()) {
+            return Lists.newArrayList();
+        }
+        List<Long> shardGroupIds = new ArrayList<>();
+        for (Partition p : getAllPartitions()) {
+            for (MaterializedIndex index : p.getDefaultPhysicalPartition()
+                    .getMaterializedIndices(MaterializedIndex.IndexExtState.ALL)) {
+                shardGroupIds.add(index.getShardGroupId());
+            }
+        }
+        return shardGroupIds;
+    }
 }

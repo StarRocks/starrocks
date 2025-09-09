@@ -3102,6 +3102,7 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
 
         boolean isNonPartitioned = partitionInfo.isUnPartitioned();
         DataProperty dataProperty = PropertyAnalyzer.analyzeMVDataProperty(materializedView, properties);
+        String colocateGroup = properties.get(PropertyAnalyzer.PROPERTIES_COLOCATE_WITH);
         PropertyAnalyzer.analyzeMVProperties(db, materializedView, properties, isNonPartitioned,
                 stmt.getPartitionByExprToAdjustExprMap());
         final long warehouseId = materializedView.getWarehouseId();
@@ -3136,6 +3137,11 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
                         mvPartitionExprs, stmt.getQueryStatement(), stmt.getBaseTableInfos());
                 LOG.info("Generate mv {} partition exprs: {}", mvName, partitionExprMaps);
                 materializedView.setPartitionExprMaps(partitionExprMaps);
+            }
+
+            // shared-data mv's colocation info must be updated after tablet creation
+            if (StringUtils.isNotEmpty(colocateGroup)) {
+                colocateTableIndex.addTableToGroup(db, materializedView, colocateGroup, true /* expectLakeTable */);
             }
 
             GlobalStateMgr.getCurrentState().getMaterializedViewMgr().prepareMaintenanceWork(stmt, materializedView);
