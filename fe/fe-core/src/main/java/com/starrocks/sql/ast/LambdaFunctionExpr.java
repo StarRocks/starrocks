@@ -54,54 +54,8 @@ public class LambdaFunctionExpr extends Expr {
         this.commonSubOperatorNum = rhs.commonSubOperatorNum;
     }
 
-    @Override
-    protected String toSqlImpl() {
-        String names = getChild(1).toSql();
-        int realChildrenNum = getChildren().size() - 2 * commonSubOperatorNum;
-        if (realChildrenNum > 2) {
-            names = "(" + getChild(1).toSql();
-            for (int i = 2; i < realChildrenNum; ++i) {
-                names = names + ", " + getChild(i).toSql();
-            }
-            names = names + ")";
-        }
-        StringBuilder commonSubOp = new StringBuilder();
-        if (commonSubOperatorNum > 0) {
-            commonSubOp.append("\n        lambda common expressions:");
-        }
-        for (int i = realChildrenNum; i < realChildrenNum + commonSubOperatorNum; ++i) {
-            commonSubOp.append("{").append(getChild(i).toSql()).append(" <-> ")
-                    .append(getChild(i + commonSubOperatorNum).toSql()).append("}");
-        }
-        if (commonSubOperatorNum > 0) {
-            commonSubOp.append("\n        ");
-        }
-        return String.format("%s -> %s%s", names, getChild(0).toSql(), commonSubOp);
-    }
-
-    @Override
-    public String explainImpl() {
-        String names = getChild(1).explain();
-        int realChildrenNum = getChildren().size() - 2 * commonSubOperatorNum;
-        if (realChildrenNum > 2) {
-            names = "(" + getChild(1).explain();
-            for (int i = 2; i < realChildrenNum; ++i) {
-                names = names + ", " + getChild(i).explain();
-            }
-            names = names + ")";
-        }
-        StringBuilder commonSubOp = new StringBuilder();
-        if (commonSubOperatorNum > 0) {
-            commonSubOp.append("\n        lambda common expressions:");
-        }
-        for (int i = realChildrenNum; i < realChildrenNum + commonSubOperatorNum; ++i) {
-            commonSubOp.append("{").append(getChild(i).explain()).append(" <-> ")
-                    .append(getChild(i + commonSubOperatorNum).explain()).append("}");
-        }
-        if (commonSubOperatorNum > 0) {
-            commonSubOp.append("\n        ");
-        }
-        return String.format("%s -> %s%s", names, getChild(0).explain(), commonSubOp);
+    public int getCommonSubOperatorNum() {
+        return commonSubOperatorNum;
     }
 
     public void checkValidAfterToExpr() { // before to operator, its type is LambdaArgument, after to SlotRef

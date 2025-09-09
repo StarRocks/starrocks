@@ -117,27 +117,13 @@ public class CastExpr extends Expr {
         return "castTo" + targetType.getPrimitiveType().toString();
     }
 
+    public boolean isNoOp() {
+        return noOp;
+    }
+
     @Override
     public Expr clone() {
         return new CastExpr(this);
-    }
-
-    @Override
-    public String toSqlImpl() {
-        if (targetTypeDef == null) {
-            return "CAST(" + getChild(0).toSql() + " AS " + type.toString() + ")";
-        } else {
-            return "CAST(" + getChild(0).toSql() + " AS " + targetTypeDef + ")";
-        }
-    }
-
-    @Override
-    protected String explainImpl() {
-        if (noOp) {
-            return getChild(0).explain();
-        } else {
-            return "cast(" + getChild(0).explain() + " as " + type.toString() + ")";
-        }
     }
 
     @Override

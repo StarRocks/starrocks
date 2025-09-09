@@ -285,7 +285,7 @@ OutPut Exchange Id: 07
 
 6:NESTLOOP JOIN
 |  join op: INNER JOIN
-|  other join predicates: ((46: N_NAME = 'CANADA') AND (51: N_NAME = 'IRAN')) OR ((46: N_NAME = 'IRAN') AND (51: N_NAME = 'CANADA'))
+|  other join predicates: (([46: N_NAME, CHAR, false] = 'CANADA') AND ([51: N_NAME, CHAR, false] = 'IRAN')) OR (([46: N_NAME, CHAR, false] = 'IRAN') AND ([51: N_NAME, CHAR, false] = 'CANADA'))
 |  cardinality: 1
 |  column statistics:
 |  * N_NATIONKEY-->[0.0, 24.0, 0.0, 4.0, 1.0] MCV: [[22:1][23:1][24:1][10:1][11:1]] ESTIMATE
@@ -300,7 +300,7 @@ OutPut Exchange Id: 07
 3:OlapScanNode
 table: nation, rollup: nation
 preAggregation: on
-Predicates: 46: N_NAME IN ('CANADA', 'IRAN')
+Predicates: [46: N_NAME, CHAR, false] IN ('CANADA', 'IRAN')
 partitionsRatio=1/1, tabletsRatio=1/1
 actualRows=0, avgRowSize=29.0
 cardinality: 25
@@ -317,7 +317,7 @@ OutPut Exchange Id: 05
 4:OlapScanNode
 table: nation, rollup: nation
 preAggregation: on
-Predicates: 51: N_NAME IN ('IRAN', 'CANADA')
+Predicates: [51: N_NAME, CHAR, false] IN ('IRAN', 'CANADA')
 partitionsRatio=1/1, tabletsRatio=1/1
 actualRows=0, avgRowSize=29.0
 cardinality: 25

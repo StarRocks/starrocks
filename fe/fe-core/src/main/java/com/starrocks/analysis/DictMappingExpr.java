@@ -48,17 +48,6 @@ public class DictMappingExpr extends Expr {
     }
 
     @Override
-    protected String toSqlImpl() {
-        String fnName = this.type.matchesType(this.getChild(1).getType()) ? "DictDecode" : "DictDefine";
-
-        if (children.size() == 2) {
-            return fnName + "(" + this.getChild(0).toSqlImpl() + ", [" + this.getChild(1).toSqlImpl() + "])";
-        }
-        return fnName + "(" + this.getChild(0).toSqlImpl() + ", [" + this.getChild(1).toSqlImpl() + "], " +
-                getChild(2).toSqlImpl() + ")";
-    }
-
-    @Override
     protected void toThrift(TExprNode msg) {
         msg.setNode_type(TExprNodeType.DICT_EXPR);
     }

@@ -83,18 +83,6 @@ public class ExistsPredicate extends Predicate {
     }
 
     @Override
-    public String toSqlImpl() {
-        StringBuilder strBuilder = new StringBuilder();
-        if (notExists) {
-            strBuilder.append("NOT ");
-
-        }
-        strBuilder.append("EXISTS ");
-        strBuilder.append(getChild(0).toSql());
-        return strBuilder.toString();
-    }
-
-    @Override
     public int hashCode() {
         return Objects.hash(super.hashCode(), notExists);
     }

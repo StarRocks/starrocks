@@ -516,15 +516,11 @@ public class LowCardinalityTest2 extends PlanTestBase {
         connectContext.getSessionVariable().setNewPlanerAggStage(0);
 
         sql = "select count(distinct S_ADDRESS, S_COMMENT) from supplier";
-        plan = getVerboseExplain(sql);
-        assertContains(plan,
-                "aggregate: count[(if[(3: S_ADDRESS IS NULL, NULL, [7: S_COMMENT, VARCHAR(101), false]); " +
-                        "args: BOOLEAN,VARCHAR,VARCHAR; result: VARCHAR; args nullable: true; result nullable: true]); " +
-                        "args: VARCHAR; result: BIGINT; args nullable: true; result nullable: false]\n");
-        Assertions.assertTrue(plan.contains("  4:Decode\n" +
-                "  |  <dict id 10> : <string id 3>\n" +
-                "  |  <dict id 11> : <string id 7>\n" +
-                "  |  cardinality: 1"));
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "count(if(3: S_ADDRESS IS NULL, NULL, 7: S_COMMENT))");
+        Assertions.assertTrue(plan.contains("  4:Decode\n"
+                + "  |  <dict id 10> : <string id 3>\n"
+                + "  |  <dict id 11> : <string id 7>"));
     }
 
     @Test
@@ -766,7 +762,10 @@ public class LowCardinalityTest2 extends PlanTestBase {
         // test if with only one dictionary column
         sql = "select case when S_ADDRESS = 'key' then 1 else 0 end from supplier";
         plan = getVerboseExplain(sql);
-        Assertions.assertTrue(plan.contains("9 <-> DictDecode(10: S_ADDRESS, [if(<place-holder> = 'key', 1, 0)]"), plan);
+        Assertions.assertTrue(plan.contains(
+                        "9 <-> DictDecode([10: S_ADDRESS, INT, false], [if[(<place-holder> = 'key', 1, 0); args: BOOLEAN,"
+                                + "TINYINT,TINYINT; result: TINYINT; args nullable: false; result nullable: true]])"),
+                plan);
         Assertions.assertTrue(plan.contains("dict_col=S_ADDRESS"), plan);
         // test case when result no-string
         sql = "select case when S_ADDRESS = 'key' then 1 when S_ADDRESS = '2' then 2 else 0 end from supplier";
@@ -778,40 +777,40 @@ public class LowCardinalityTest2 extends PlanTestBase {
         plan = getVerboseExplain(sql);
         Assertions.assertTrue(plan.contains("     dict_col=S_ADDRESS"), plan);
         Assertions.assertTrue(plan.contains(
-                "  |  9 <-> CASE WHEN DictDecode(10: S_ADDRESS, [<place-holder> = 'key']) " +
-                        "THEN 1 WHEN DictDecode(10: S_ADDRESS, [<place-holder> = '2']) THEN 2 ELSE 4: S_NATIONKEY END"), plan);
+                "  |  9 <-> CASE WHEN DictDecode([10: S_ADDRESS, INT, false], [<place-holder> = 'key']) "
+                        + "THEN 1 WHEN DictDecode([10: S_ADDRESS, INT, false], [<place-holder> = '2']) "
+                        + "THEN 2 ELSE [4: S_NATIONKEY, INT, false] END"), plan);
         // test case when with common expression 1
         sql = "select S_ADDRESS = 'key' , " +
                 "case when S_ADDRESS = 'key' then 1 when S_ADDRESS = '2' then 2 else 3 end from supplier";
         plan = getVerboseExplain(sql);
-        Assertions.assertTrue(plan.contains("  1:Project\n" +
-                "  |  output columns:\n" +
-                "  |  9 <-> DictDecode(11: S_ADDRESS, [<place-holder> = 'key'])\n" +
-                "  |  10 <-> DictDecode(11: S_ADDRESS, [CASE WHEN <place-holder> = 'key' THEN 1 " +
-                "WHEN <place-holder> = '2' THEN 2 ELSE 3 END])\n" +
-                "  |  cardinality: 1"), plan);
+        Assertions.assertTrue(plan.contains("1:Project\n"
+                + "  |  output columns:\n"
+                + "  |  9 <-> DictDecode([11: S_ADDRESS, INT, false], [<place-holder> = 'key'])\n"
+                + "  |  10 <-> DictDecode([11: S_ADDRESS, INT, false], [CASE WHEN <place-holder> = 'key' THEN 1 "
+                + "WHEN <place-holder> = '2' THEN 2 ELSE 3 END])"), plan);
         Assertions.assertTrue(plan.contains("     dict_col=S_ADDRESS"), plan);
         // test case when result string
         sql = "select case when S_ADDRESS = 'key' then 'key1' when S_ADDRESS = '2' " +
                 "then 'key2' else 'key3' end from supplier";
         plan = getVerboseExplain(sql);
-        Assertions.assertTrue(plan.contains("DictDecode(10: S_ADDRESS, [CASE WHEN <place-holder> = 'key' THEN 'key1'" +
-                " WHEN <place-holder> = '2' THEN 'key2' ELSE 'key3' END])"), plan);
+        Assertions.assertTrue(plan.contains("DictDecode([10: S_ADDRESS, INT, false], [CASE WHEN <place-holder> = 'key' "
+                + "THEN 'key1' WHEN <place-holder> = '2' THEN 'key2' ELSE 'key3' END])"), plan);
         // test case when with unsupported function call
         sql = "select case when S_ADDRESS = 'key' then rand() when S_ADDRESS = '2' " +
                 "then 'key2' else 'key3' end from supplier";
         plan = getVerboseExplain(sql);
-        Assertions.assertTrue(plan.contains(" |  9 <-> CASE WHEN DictDecode(10: S_ADDRESS, [<place-holder> = 'key']) " +
-                "THEN CAST(rand() AS VARCHAR) " +
-                "WHEN DictDecode(10: S_ADDRESS, [<place-holder> = '2']) " +
-                "THEN 'key2' ELSE 'key3' END"), plan);
+        Assertions.assertTrue(plan.contains(" |  9 <-> CASE WHEN "
+                + "DictDecode([10: S_ADDRESS, INT, false], [<place-holder> = 'key']) "
+                + "THEN cast(rand[(); args: ; result: DOUBLE; args nullable: false; result nullable: true] as VARCHAR) "
+                + "WHEN DictDecode([10: S_ADDRESS, INT, false], [<place-holder> = '2']) THEN 'key2' ELSE 'key3' END"), plan);
         assertNotContains(plan, "DecodeNode");
         // test multi low cardinality column input
         sql = "select if(S_ADDRESS = 'key', S_COMMENT, 'y') from supplier";
         plan = getVerboseExplain(sql);
-        Assertions.assertTrue(plan.contains("  |  9 <-> if[(DictDecode(10: S_ADDRESS, [<place-holder> = 'key']), " +
-                "[7: S_COMMENT, VARCHAR, false], 'y'); args: BOOLEAN,VARCHAR,VARCHAR; " +
-                "result: VARCHAR; args nullable: true; result nullable: true]"), plan);
+        Assertions.assertTrue(plan.contains("  |  9 <-> if[(DictDecode([10: S_ADDRESS, INT, false], "
+                + "[<place-holder> = 'key']), [7: S_COMMENT, VARCHAR, false], 'y'); args: BOOLEAN,VARCHAR,VARCHAR; "
+                + "result: VARCHAR; args nullable: true; result nullable: true]"), plan);
     }
 
     @Test
@@ -857,8 +856,8 @@ public class LowCardinalityTest2 extends PlanTestBase {
 
         // test simple string function
         sql = "select substring(S_ADDRESS,1,2)  from supplier";
-        plan = getVerboseExplain(sql);
-        Assertions.assertTrue(plan.contains("9 <-> DictDecode(10: S_ADDRESS, [substring(<place-holder>, 1, 2)])"), plan);
+        plan = getFragmentPlan(sql);
+        Assertions.assertTrue(plan.contains("<slot 9> : DictDecode(10: S_ADDRESS, [substring(<place-holder>, 1, 2)])"), plan);
 
         // test simple string function with two column
         // test worth for rewrite
@@ -872,16 +871,18 @@ public class LowCardinalityTest2 extends PlanTestBase {
         // test string function with one column
         sql = "select substring(S_ADDRESS, S_ADDRESS, 1) from supplier";
         plan = getVerboseExplain(sql);
-        Assertions.assertTrue(plan.contains(
-                "9 <-> DictDecode(10: S_ADDRESS, [substring(<place-holder>, CAST(<place-holder> AS INT), 1)])"), plan);
+        Assertions.assertTrue(plan.contains("9 <-> DictDecode([10: S_ADDRESS, INT, false], "
+                + "[substring[(<place-holder>, cast(<place-holder> as INT), 1); "
+                + "args: VARCHAR,INT,INT; result: VARCHAR; args nullable: true; result nullable: true]])"), plan);
 
         // test simple string function with two column
         // test worth for rewrite
         sql = "select substring(upper(S_ADDRESS), S_SUPPKEY, 2) from supplier";
         plan = getVerboseExplain(sql);
-        Assertions.assertTrue(plan.contains(
-                "9 <-> substring[(DictDecode(10: S_ADDRESS, [upper(<place-holder>)]), [1: S_SUPPKEY, INT, false], 2); " +
-                        "args: VARCHAR,INT,INT; result: VARCHAR; args nullable: true; result nullable: true]"), plan);
+        Assertions.assertTrue(plan.contains("9 <-> substring[(DictDecode([10: S_ADDRESS, INT, false], [upper[(<place-holder>); "
+                + "args: VARCHAR; result: VARCHAR; args nullable: false; result nullable: true]]), "
+                + "[1: S_SUPPKEY, INT, false], 2); args: VARCHAR,INT,INT; result: VARCHAR; "
+                + "args nullable: true; result nullable: true]"), plan);
 
         // test two dictionary column
         // test worth for rewrite
@@ -895,12 +896,13 @@ public class LowCardinalityTest2 extends PlanTestBase {
         // DictExpr return varchar and int
         sql = "select if(S_SUPPKEY='kks', upper(S_ADDRESS), S_COMMENT), upper(S_ADDRESS) from supplier";
         plan = getVerboseExplain(sql);
-        Assertions.assertTrue(plan.contains("9 <-> if[(cast([1: S_SUPPKEY, INT, false] as VARCHAR(1048576)) = 'kks', " +
-                "[12: expr, VARCHAR, true], [7: S_COMMENT, VARCHAR, false]); args: BOOLEAN,VARCHAR,VARCHAR; " +
-                "result: VARCHAR; args nullable: true; result nullable: true]\n" +
-                "  |  10 <-> [12: expr, VARCHAR, true]\n" +
-                "  |  common expressions:\n" +
-                "  |  12 <-> DictDecode(11: S_ADDRESS, [upper(<place-holder>)])"), plan);
+        Assertions.assertTrue(plan.contains("9 <-> if[(cast([1: S_SUPPKEY, INT, false] as VARCHAR(1048576)) = 'kks', "
+                + "[12: expr, VARCHAR, true], [7: S_COMMENT, VARCHAR, false]); args: BOOLEAN,VARCHAR,VARCHAR; result: "
+                + "VARCHAR; args nullable: true; result nullable: true]\n"
+                + "  |  10 <-> [12: expr, VARCHAR, true]\n"
+                + "  |  common expressions:\n"
+                + "  |  12 <-> DictDecode([11: S_ADDRESS, INT, false], [upper[(<place-holder>); args: VARCHAR; result: "
+                + "VARCHAR; args nullable: false; result nullable: true]])"), plan);
 
         // TODO: return dict column for this case
         // common expression reuse 2
@@ -908,17 +910,18 @@ public class LowCardinalityTest2 extends PlanTestBase {
         sql = "select if(S_ADDRESS='kks', S_COMMENT, S_COMMENT) from supplier";
         plan = getVerboseExplain(sql);
         Assertions.assertTrue(plan.contains(
-                "9 <-> if[(DictDecode(10: S_ADDRESS, [<place-holder> = 'kks']), " +
-                        "[7: S_COMMENT, VARCHAR, false], [7: S_COMMENT, VARCHAR, false]); " +
-                        "args: BOOLEAN,VARCHAR,VARCHAR; result: VARCHAR; args nullable: true; " +
-                        "result nullable: true]"), plan);
+                "9 <-> if[(DictDecode([10: S_ADDRESS, INT, false], [<place-holder> = 'kks']), [7: S_COMMENT, VARCHAR, "
+                        + "false], [7: S_COMMENT, VARCHAR, false]); args: BOOLEAN,VARCHAR,VARCHAR; result: VARCHAR; args "
+                        + "nullable: true; result nullable: true]"), plan);
         assertNotContains(plan, "DecodeNode");
 
         // common expression reuse 3
         sql =
                 "select if(S_ADDRESS='kks', upper(S_COMMENT), S_COMMENT), concat(upper(S_COMMENT), S_ADDRESS) from supplier";
         plan = getVerboseExplain(sql);
-        Assertions.assertTrue(plan.contains("9 <-> if[(DictDecode(11: S_ADDRESS, [<place-holder> = 'kks'])"), plan);
+        Assertions.assertTrue(plan.contains("9 <-> if[(DictDecode([11: S_ADDRESS, INT, false], [<place-holder> = 'kks']), "
+                + "[13: expr, VARCHAR, true], DictDecode([12: S_COMMENT, INT, false], [<place-holder>])); args: "
+                + "BOOLEAN,VARCHAR,VARCHAR; result: VARCHAR; args nullable: true; result nullable: true]"), plan);
 
         // support(support(unsupport(Column), unsupport(Column)))
         sql = "select REVERSE(SUBSTR(LEFT(REVERSE(S_ADDRESS),INSTR(REVERSE(S_ADDRESS),'/')-1),5)) FROM supplier";
@@ -943,12 +946,13 @@ public class LowCardinalityTest2 extends PlanTestBase {
         sql = "select * from supplier l join supplier r on " +
                 "l.S_NAME = r.S_NAME where upper(l.S_ADDRESS) like '%A%' and upper(l.S_ADDRESS) not like '%B%'";
         plan = getCostExplain(sql);
-        assertContains(plan, "0:OlapScanNode\n" +
-                "     table: supplier, rollup: supplier\n" +
-                "     preAggregation: on\n" +
-                "     Predicates: DictDecode(17: S_ADDRESS, [(upper(<place-holder>) LIKE '%A%')" +
-                " AND (NOT (upper(<place-holder>) LIKE '%B%'))])\n" +
-                "     dict_col=S_ADDRESS,S_COMMENT");
+        assertContains(plan, "0:OlapScanNode\n"
+                + "     table: supplier, rollup: supplier\n"
+                + "     preAggregation: on\n"
+                + "     Predicates: DictDecode([17: S_ADDRESS, INT, false], [(upper[(<place-holder>); args: VARCHAR; result: "
+                + "VARCHAR; args nullable: false; result nullable: true] LIKE '%A%') AND (NOT (upper[(<place-holder>); args: "
+                + "VARCHAR; result: VARCHAR; args nullable: false; result nullable: true] LIKE '%B%'))])\n"
+                + "     dict_col=S_ADDRESS,S_COMMENT\n");
 
         // Test Simple Filter
         sql = "select count(*) from supplier where S_ADDRESS = 'kks' group by S_ADDRESS ";
@@ -1401,22 +1405,23 @@ public class LowCardinalityTest2 extends PlanTestBase {
         String sql = "select count(t.a) from(select S_ADDRESS in ('kks', 'kks2') as a from supplier) as t";
         String plan = getVerboseExplain(sql);
         Assertions.assertTrue(plan.contains(" dict_col=S_ADDRESS"), plan);
-        Assertions.assertTrue(plan.contains("9 <-> DictDecode(11: S_ADDRESS, [<place-holder> IN ('kks', 'kks2')])"), plan);
+        Assertions.assertTrue(plan.contains("9 <-> DictDecode([11: S_ADDRESS, INT, false], [<place-holder> IN ('kks', 'kks2')])"),
+                plan);
 
         sql = "select count(t.a) from(select S_ADDRESS = 'kks' as a from supplier) as t";
         plan = getVerboseExplain(sql);
         Assertions.assertTrue(plan.contains(" dict_col=S_ADDRESS"), plan);
-        Assertions.assertTrue(plan.contains("9 <-> DictDecode(11: S_ADDRESS, [<place-holder> = 'kks'])"), plan);
+        Assertions.assertTrue(plan.contains("9 <-> DictDecode([11: S_ADDRESS, INT, false], [<place-holder> = 'kks'])"), plan);
 
         sql = "select count(t.a) from(select S_ADDRESS is null as a from supplier) as t";
         plan = getVerboseExplain(sql);
         Assertions.assertTrue(plan.contains(" dict_col=S_ADDRESS"), plan);
-        Assertions.assertTrue(plan.contains("9 <-> DictDecode(11: S_ADDRESS, [<place-holder> IS NULL])"), plan);
+        Assertions.assertTrue(plan.contains("9 <-> DictDecode([11: S_ADDRESS, INT, false], [<place-holder> IS NULL])"), plan);
 
         sql = "select count(t.a) from(select S_ADDRESS is not null as a from supplier) as t";
         plan = getVerboseExplain(sql);
         Assertions.assertTrue(plan.contains(" dict_col=S_ADDRESS"), plan);
-        Assertions.assertTrue(plan.contains("9 <-> DictDecode(11: S_ADDRESS, [<place-holder> IS NOT NULL])"), plan);
+        Assertions.assertTrue(plan.contains("9 <-> DictDecode([11: S_ADDRESS, INT, false], [<place-holder> IS NOT NULL])"), plan);
 
         sql = "select count(t.a) from(select S_ADDRESS <=> 'kks' as a from supplier) as t";
         plan = getVerboseExplain(sql);
@@ -1442,10 +1447,11 @@ public class LowCardinalityTest2 extends PlanTestBase {
             connectContext.getSessionVariable().setNewPlanerAggStage(2);
             sql = "select upper(lower(S_ADDRESS)) from supplier group by lower(S_ADDRESS);";
             plan = getVerboseExplain(sql);
-            assertContains(plan, "  5:Project\n" +
-                    "  |  output columns:\n" +
-                    "  |  10 <-> DictDecode(12: lower, [upper(<place-holder>)])\n" +
-                    "  |  cardinality: 1");
+            assertContains(plan, "  5:Project\n"
+                    + "  |  output columns:\n"
+                    + "  |  10 <-> DictDecode([12: lower, INT, true], [upper[(<place-holder>); args: VARCHAR; result: VARCHAR; "
+                    + "args nullable: true; result nullable: true]])\n"
+                    + "  |  cardinality: 1");
             Assertions.assertTrue(plan.contains("  4:AGGREGATE (merge finalize)\n" +
                     "  |  group by: [12: lower, INT, true]"), plan);
         } finally {
@@ -1816,13 +1822,13 @@ public class LowCardinalityTest2 extends PlanTestBase {
                 "if(S_ADDRESS > 'a' and S_ADDRESS < 'b', true, false)";
         String plan = getVerboseExplain(sql);
         assertContains(plan,
-                "Predicates: DictDecode(10: S_ADDRESS, [(<place-holder> > 'a') AND (<place-holder> < 'b')])");
+                "Predicates: DictDecode([10: S_ADDRESS, INT, false], [(<place-holder> > 'a') AND (<place-holder> < 'b')])");
 
         sql = "select count(*) from supplier group by S_ADDRESS having " +
                 "if(not S_ADDRESS like '%a%' and S_ADDRESS < 'b', true, false)";
         plan = getVerboseExplain(sql);
-        assertContains(plan, "DictDecode(10: S_ADDRESS, [(NOT (<place-holder> LIKE '%a%')" +
-                ") AND (<place-holder> < 'b')])");
+        assertContains(plan,
+                "DictDecode([10: S_ADDRESS, INT, false], [(NOT (<place-holder> LIKE '%a%')) AND (<place-holder> < 'b')])");
     }
 
     @Test
@@ -1890,14 +1896,15 @@ public class LowCardinalityTest2 extends PlanTestBase {
         String sql = "select s_address, cast(t1.s_address as date), cast(t1.s_phone as date), upper(t1.s_address)," +
                 " cast(t2.a as date), 123 from supplier t1 join (select max(s_address) a from supplier) t2 ";
         String plan = getVerboseExplain(sql);
-        assertContains(plan, "5:Project\n" +
-                "  |  output columns:\n" +
-                "  |  18 <-> DictDecode(23: S_ADDRESS, [CAST(<place-holder> AS DATE)])\n" +
-                "  |  19 <-> cast([5: S_PHONE, CHAR, false] as DATE)\n" +
-                "  |  20 <-> DictDecode(23: S_ADDRESS, [upper(<place-holder>)])\n" +
-                "  |  21 <-> DictDecode(25: max, [CAST(<place-holder> AS DATE)])\n" +
-                "  |  22 <-> 123\n" +
-                "  |  23 <-> [23: S_ADDRESS, INT, false]");
+        assertContains(plan, "  5:Project\n"
+                + "  |  output columns:\n"
+                + "  |  18 <-> DictDecode([23: S_ADDRESS, INT, false], [cast(<place-holder> as DATE)])\n"
+                + "  |  19 <-> cast([5: S_PHONE, CHAR, false] as DATE)\n"
+                + "  |  20 <-> DictDecode([23: S_ADDRESS, INT, false], [upper[(<place-holder>); args: VARCHAR; result: VARCHAR;"
+                + " args nullable: false; result nullable: true]])\n"
+                + "  |  21 <-> DictDecode([25: max, INT, true], [cast(<place-holder> as DATE)])\n"
+                + "  |  22 <-> 123\n"
+                + "  |  23 <-> [23: S_ADDRESS, INT, false]");
         assertContains(plan, "Global Dict Exprs:\n" +
                 "    25: DictDefine(24: S_ADDRESS, [<place-holder>])");
     }

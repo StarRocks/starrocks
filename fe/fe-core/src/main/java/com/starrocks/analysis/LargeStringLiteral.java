@@ -26,24 +26,8 @@ public class LargeStringLiteral extends StringLiteral {
 
     public static final int LEN_LIMIT = 50;
 
-    private String shortSqlStr;
-
     public LargeStringLiteral(String value, NodePosition pos) {
         super(value, pos);
-    }
-
-    public String toFullSqlImpl() {
-        return super.toSqlImpl();
-    }
-
-    @Override
-    public String toSqlImpl() {
-        if (shortSqlStr == null) {
-            String fullSql = toFullSqlImpl();
-            fullSql = fullSql.substring(0, LEN_LIMIT);
-            shortSqlStr = fullSql + "...'";
-        }
-        return shortSqlStr;
     }
 
     @Override

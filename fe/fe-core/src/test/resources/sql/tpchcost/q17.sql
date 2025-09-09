@@ -30,67 +30,67 @@ UNPARTITIONED
 |  <slot 6> : 6: L_EXTENDEDPRICE
 |
 9:SELECT
-      |  predicates: 5: L_QUANTITY < 0.2 * 50: avg
-      |
-      8:ANALYTIC
-      |  functions: [, avg(5: L_QUANTITY), ]
-      |  partition by: 18: P_PARTKEY
-      |
-      7:SORT
-      |  order by: <slot 18> 18: P_PARTKEY ASC
-      |  analytic partition by: 18: P_PARTKEY
-      |  offset: 0
-      |
-      6:EXCHANGE
+|  predicates: 5: L_QUANTITY < 0.2 * 50: avg
+|
+8:ANALYTIC
+|  functions: [, avg(5: L_QUANTITY), ]
+|  partition by: 18: P_PARTKEY
+|
+7:SORT
+|  order by: <slot 18> 18: P_PARTKEY ASC
+|  analytic partition by: 18: P_PARTKEY
+|  offset: 0
+|
+6:EXCHANGE
 
-      PLAN FRAGMENT 2
-      OUTPUT EXPRS:
-      PARTITION: RANDOM
+PLAN FRAGMENT 2
+OUTPUT EXPRS:
+PARTITION: RANDOM
 
-      STREAM DATA SINK
-      EXCHANGE ID: 06
-      HASH_PARTITIONED: 18: P_PARTKEY
+STREAM DATA SINK
+EXCHANGE ID: 06
+HASH_PARTITIONED: 18: P_PARTKEY
 
-      5:Project
-      |  <slot 5> : 5: L_QUANTITY
-      |  <slot 6> : 6: L_EXTENDEDPRICE
-      |  <slot 18> : 18: P_PARTKEY
-      |
-      4:HASH JOIN
-      |  join op: INNER JOIN (BROADCAST)
-      |  colocate: false, reason:
-      |  equal join conjunct: 2: L_PARTKEY = 18: P_PARTKEY
-      |
-      |----3:EXCHANGE
-      |
-      0:OlapScanNode
-      TABLE: lineitem
-      PREAGGREGATION: ON
-      partitions=1/1
-      rollup: lineitem
-      tabletRatio=20/20
-      cardinality=600000000
-      avgRowSize=24.0
+5:Project
+|  <slot 5> : 5: L_QUANTITY
+|  <slot 6> : 6: L_EXTENDEDPRICE
+|  <slot 18> : 18: P_PARTKEY
+|
+4:HASH JOIN
+|  join op: INNER JOIN (BROADCAST)
+|  colocate: false, reason:
+|  equal join conjunct: 2: L_PARTKEY = 18: P_PARTKEY
+|
+|----3:EXCHANGE
+|
+0:OlapScanNode
+TABLE: lineitem
+PREAGGREGATION: ON
+partitions=1/1
+rollup: lineitem
+tabletRatio=20/20
+cardinality=600000000
+avgRowSize=24.0
 
-      PLAN FRAGMENT 3
-      OUTPUT EXPRS:
-      PARTITION: RANDOM
+PLAN FRAGMENT 3
+OUTPUT EXPRS:
+PARTITION: RANDOM
 
-      STREAM DATA SINK
-      EXCHANGE ID: 03
-      UNPARTITIONED
+STREAM DATA SINK
+EXCHANGE ID: 03
+UNPARTITIONED
 
-      2:Project
-      |  <slot 18> : 18: P_PARTKEY
-      |
-      1:OlapScanNode
-      TABLE: part
-      PREAGGREGATION: ON
-      PREDICATES: 21: P_BRAND = 'Brand#35', 24: P_CONTAINER = 'JUMBO CASE'
-      partitions=1/1
-      rollup: part
-      tabletRatio=10/10
-      cardinality=20000
-      avgRowSize=28.0
+2:Project
+|  <slot 18> : 18: P_PARTKEY
+|
+1:OlapScanNode
+TABLE: part
+PREAGGREGATION: ON
+PREDICATES: 21: P_BRAND = 'Brand#35', 24: P_CONTAINER = 'JUMBO CASE'
+partitions=1/1
+rollup: part
+tabletRatio=10/10
+cardinality=20000
+avgRowSize=28.0
 [end]
 

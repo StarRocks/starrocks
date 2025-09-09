@@ -58,11 +58,6 @@ public class LambdaArgument extends Expr {
     }
 
     @Override
-    protected String toSqlImpl() {
-        return name;
-    }
-
-    @Override
     protected void toThrift(TExprNode msg) {
         throw new StarRocksPlannerException("not support", ErrorType.INTERNAL_ERROR);
     }

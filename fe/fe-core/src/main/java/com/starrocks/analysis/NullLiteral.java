@@ -108,11 +108,6 @@ public class NullLiteral extends LiteralExpr {
     }
 
     @Override
-    public String toSqlImpl() {
-        return getStringValue();
-    }
-
-    @Override
     public String getStringValue() {
         return "NULL";
     }

@@ -334,11 +334,6 @@ public class IntLiteral extends LiteralExpr {
     }
 
     @Override
-    public String toSqlImpl() {
-        return getStringValue();
-    }
-
-    @Override
     protected void toThrift(TExprNode msg) {
         msg.node_type = TExprNodeType.INT_LITERAL;
         msg.int_literal = new TIntLiteral(value);
