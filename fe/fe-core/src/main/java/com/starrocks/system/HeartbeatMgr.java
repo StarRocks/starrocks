@@ -220,10 +220,10 @@ public class HeartbeatMgr extends FrontendDaemon {
                     } else {
                         if (RunMode.isSharedDataMode() && 
                                 (!isReplay || !GlobalStateMgr.getCurrentState().isLeader())) {
-                            // Observer FEs maintain StarOSAgent worker map fields via journal replay.
-                            // When CNs restart, they get new WorkerIds. Observer FEs (which can never
-                            // become leaders) must refresh their cached workers during replay to avoid incorrectly
-                            // identifying primary CNs as unavailable and triggering backup CN selection.
+                            // Non-leader FEs maintain StarOSAgent worker map fields via journal replay.
+                            // When CNs restart, they get new WorkerIds. Non-leader FEs must refresh
+                            // their cached workers during replay to avoid incorrectly identifying primary
+                            // CNs as unavailable and triggering backup CN selection.
                             int starletPort = computeNode.getStarletPort();
                             if (starletPort != 0) {
                                 String workerAddr = NetUtils.getHostPortInAccessibleFormat(computeNode.getHost(),
