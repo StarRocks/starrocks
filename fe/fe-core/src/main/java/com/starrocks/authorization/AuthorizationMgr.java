@@ -51,6 +51,7 @@ import com.starrocks.sql.ast.RevokePrivilegeStmt;
 import com.starrocks.sql.ast.RevokeRoleStmt;
 import com.starrocks.sql.ast.UserRef;
 import com.starrocks.sql.parser.NodePosition;
+import org.apache.commons.collections4.CollectionUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.jetbrains.annotations.NotNull;
@@ -64,6 +65,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
@@ -992,14 +994,19 @@ public class AuthorizationMgr {
         }
     }
 
-    public UserPrivilegeCollectionV2 getUserPrivilegeCollectionUnlocked(UserIdentity userIdentity)
+    public UserPrivilegeCollectionV2 getUserPrivilegeCollectionUnlocked(UserIdentity userIdentity, boolean exceptionIfNotExists)
             throws PrivilegeException {
         UserPrivilegeCollectionV2 userCollection = userToPrivilegeCollection.get(userIdentity);
-        if (userCollection == null) {
+        if (userCollection == null && exceptionIfNotExists) {
             throw new PrivilegeException("cannot find user " + (userIdentity == null ? "null" :
-                    userIdentity.toString()));
+                userIdentity.toString()));
         }
         return userCollection;
+    }
+
+    public UserPrivilegeCollectionV2 getUserPrivilegeCollectionUnlocked(UserIdentity userIdentity)
+            throws PrivilegeException {
+        return getUserPrivilegeCollectionUnlocked(userIdentity, true);
     }
 
     public List<String> getAllUsers() {
@@ -1131,7 +1138,7 @@ public class AuthorizationMgr {
     public List<String> getGranteeRoleDetailsForUser(UserIdentity userIdentity) {
         userReadLock();
         try {
-            Set<Long> allRoles = getRoleIdsByUserUnlocked(userIdentity);
+            Set<Long> allRoles = getRoleIdsByUserUnlocked(userIdentity, Set.of());
 
             roleReadLock();
             try {
@@ -1391,7 +1398,7 @@ public class AuthorizationMgr {
         }
     }
 
-    protected Set<Long> getRoleIdsByUserUnlocked(UserIdentity user) throws PrivilegeException {
+    protected Set<Long> getRoleIdsByUserUnlocked(UserIdentity user, Set<String> userGroups) throws PrivilegeException {
         Set<Long> ret = new HashSet<>();
 
         for (long roleId : getUserPrivilegeCollectionUnlocked(user).getAllRoles()) {
@@ -1400,16 +1407,27 @@ public class AuthorizationMgr {
                 ret.add(roleId);
             }
         }
+
+        if (CollectionUtils.isNotEmpty(userGroups)) {
+            for (String roleName : userGroups) {
+                Optional.ofNullable(getRoleIdByNameNoLock(roleName)).ifPresent(ret::add);
+            }
+        }
+
         return ret;
     }
 
     // used in executing `set role` statement
     public Set<Long> getRoleIdsByUser(UserIdentity user) throws PrivilegeException {
+        return getRoleIdsByUser(user, Set.of());
+    }
+
+    public Set<Long> getRoleIdsByUser(UserIdentity user, Set<String> userGroups) throws PrivilegeException {
         userReadLock();
         try {
             roleReadLock();
             try {
-                return getRoleIdsByUserUnlocked(user);
+                return getRoleIdsByUserUnlocked(user, userGroups);
             } finally {
                 roleReadUnlock();
             }
@@ -1419,15 +1437,29 @@ public class AuthorizationMgr {
     }
 
     public Set<Long> getDefaultRoleIdsByUser(UserIdentity user) throws PrivilegeException {
+        return getDefaultRoleIdsByUser(user, Set.of());
+    }
+
+    public Set<Long> getDefaultRoleIdsByUser(UserIdentity user, Set<String> userGroups) throws PrivilegeException {
         userReadLock();
         try {
             Set<Long> ret = new HashSet<>();
             roleReadLock();
             try {
-                for (long roleId : getUserPrivilegeCollectionUnlocked(user).getDefaultRoleIds()) {
-                    // role may be removed
-                    if (getRolePrivilegeCollectionUnlocked(roleId, false) != null) {
-                        ret.add(roleId);
+                UserPrivilegeCollectionV2 privileges = getUserPrivilegeCollectionUnlocked(user, false);
+
+                if (privileges != null) {
+                    for (long roleId : privileges.getDefaultRoleIds()) {
+                        // role may be removed
+                        if (getRolePrivilegeCollectionUnlocked(roleId, false) != null) {
+                            ret.add(roleId);
+                        }
+                    }
+                }
+
+                if (CollectionUtils.isNotEmpty(userGroups)) {
+                    for (String roleName : userGroups) {
+                        Optional.ofNullable(getRoleIdByNameNoLock(roleName)).ifPresent(ret::add);
                     }
                 }
                 return ret;
