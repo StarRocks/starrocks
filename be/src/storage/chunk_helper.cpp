@@ -305,6 +305,7 @@ Chunk* ChunkHelper::new_chunk_pooled(const Schema& schema, size_t chunk_size) {
     for (size_t i = 0; i < schema.num_fields(); i++) {
         const FieldPtr& f = schema.field(i);
         auto column = column_from_pool(*f);
+        // TODO: call reserve in SegmentIterator::read
         column->reserve(chunk_size);
         columns.emplace_back(std::move(column));
     }
@@ -625,9 +626,10 @@ bool ChunkPipelineAccumulator::is_finished() const {
 }
 
 template <class ColumnT>
-inline constexpr bool is_object = std::is_same_v<ColumnT, ArrayColumn> || std::is_same_v<ColumnT, StructColumn> ||
-                                  std::is_same_v<ColumnT, MapColumn> || std::is_same_v<ColumnT, JsonColumn> ||
-                                  std::is_same_v<ObjectColumn<typename ColumnT::ValueType>, ColumnT>;
+inline constexpr bool is_object =
+        std::is_same_v<ColumnT, ArrayColumn> || std::is_same_v<ColumnT, StructColumn> ||
+        std::is_same_v<ColumnT, MapColumn> || std::is_same_v<ColumnT, JsonColumn> ||
+        std::is_same_v<ColumnT, VariantColumn> || std::is_same_v<ObjectColumn<typename ColumnT::ValueType>, ColumnT>;
 
 // Selective-copy data from SegmentedColumn according to provided index
 class SegmentedColumnSelectiveCopy final : public ColumnVisitorAdapter<SegmentedColumnSelectiveCopy> {
@@ -737,7 +739,7 @@ public:
         return {};
     }
 
-    // Inefficient fallback implementation, it's usually used for Array/Struct/Map/Json
+    // Inefficient fallback implementation, it's usually used for Array/Struct/Map/Json/Variant
     template <class ColumnT>
     typename std::enable_if_t<is_object<ColumnT>, Status> do_visit(const ColumnT& column) {
         _result = column.clone_empty();

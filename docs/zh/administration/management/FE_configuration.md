@@ -3493,7 +3493,7 @@ Compaction Score 代表了一个表分区是否值得进行 Compaction 的评分
 
 ##### lake_enable_balance_tablets_between_workers
 
-- 默认值：false
+- 默认值：true
 - 类型：Boolean
 - 单位：-
 - 是否动态：是
@@ -5529,5 +5529,14 @@ Compaction Score 代表了一个表分区是否值得进行 Compaction 的评分
 - 是否动态：是
 - 描述：是否允许系统跟踪历史节点。将此项设置为 `true`，就可以启用 Cache Sharing 功能，并允许系统在弹性扩展过程中选择正确的缓存节点。
 - 引入版本：v3.5.1
+
+
+##### transform_type_prefer_string_for_varchar
+- 默认值：true
+- 类型：布尔值
+- 单位：-
+- 是否动态：是
+- 描述：在物化视图创建和 CTAS 操作中，是否优先对固定长度的 VARCHAR 列使用 STRING 类型。
+- 引入版本：v4.0.0
 
 <EditionSpecificFEItem />

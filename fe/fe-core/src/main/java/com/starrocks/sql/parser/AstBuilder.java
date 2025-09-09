@@ -21,65 +21,6 @@ import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
-import com.starrocks.analysis.AnalyticExpr;
-import com.starrocks.analysis.AnalyticWindow;
-import com.starrocks.analysis.ArithmeticExpr;
-import com.starrocks.analysis.ArrowExpr;
-import com.starrocks.analysis.BetweenPredicate;
-import com.starrocks.analysis.BinaryPredicate;
-import com.starrocks.analysis.BinaryType;
-import com.starrocks.analysis.BoolLiteral;
-import com.starrocks.analysis.BrokerDesc;
-import com.starrocks.analysis.CaseExpr;
-import com.starrocks.analysis.CaseWhenClause;
-import com.starrocks.analysis.CastExpr;
-import com.starrocks.analysis.CollectionElementExpr;
-import com.starrocks.analysis.ColumnPosition;
-import com.starrocks.analysis.CompoundPredicate;
-import com.starrocks.analysis.DateLiteral;
-import com.starrocks.analysis.DecimalLiteral;
-import com.starrocks.analysis.DictQueryExpr;
-import com.starrocks.analysis.ExistsPredicate;
-import com.starrocks.analysis.Expr;
-import com.starrocks.analysis.FloatLiteral;
-import com.starrocks.analysis.FunctionCallExpr;
-import com.starrocks.analysis.FunctionName;
-import com.starrocks.analysis.FunctionParams;
-import com.starrocks.analysis.GroupByClause;
-import com.starrocks.analysis.GroupingFunctionCallExpr;
-import com.starrocks.analysis.InPredicate;
-import com.starrocks.analysis.InformationFunction;
-import com.starrocks.analysis.IntLiteral;
-import com.starrocks.analysis.IsNullPredicate;
-import com.starrocks.analysis.JoinOperator;
-import com.starrocks.analysis.LargeIntLiteral;
-import com.starrocks.analysis.LikePredicate;
-import com.starrocks.analysis.LimitElement;
-import com.starrocks.analysis.LiteralExpr;
-import com.starrocks.analysis.MatchExpr;
-import com.starrocks.analysis.MultiInPredicate;
-import com.starrocks.analysis.NamedArgument;
-import com.starrocks.analysis.NullLiteral;
-import com.starrocks.analysis.OdbcScalarFunctionCall;
-import com.starrocks.analysis.OrderByElement;
-import com.starrocks.analysis.OutFileClause;
-import com.starrocks.analysis.Parameter;
-import com.starrocks.analysis.Predicate;
-import com.starrocks.analysis.ProcedureArgument;
-import com.starrocks.analysis.RoutineLoadDataSourceProperties;
-import com.starrocks.analysis.SetVarHint;
-import com.starrocks.analysis.SlotRef;
-import com.starrocks.analysis.StringLiteral;
-import com.starrocks.analysis.SubfieldExpr;
-import com.starrocks.analysis.Subquery;
-import com.starrocks.analysis.TableName;
-import com.starrocks.analysis.TableRef;
-import com.starrocks.analysis.TaskName;
-import com.starrocks.analysis.TimestampArithmeticExpr;
-import com.starrocks.analysis.TypeDef;
-import com.starrocks.analysis.UserVariableExpr;
-import com.starrocks.analysis.VarBinaryLiteral;
-import com.starrocks.analysis.VariableExpr;
 import com.starrocks.authentication.UserProperty;
 import com.starrocks.catalog.AggregateFunction;
 import com.starrocks.catalog.AggregateType;
@@ -110,7 +51,6 @@ import com.starrocks.qe.SqlModeHelper;
 import com.starrocks.scheduler.persist.TaskSchedule;
 import com.starrocks.server.StorageVolumeMgr;
 import com.starrocks.server.WarehouseManager;
-import com.starrocks.sql.ShowTemporaryTableStmt;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.analyzer.FunctionAnalyzer;
 import com.starrocks.sql.analyzer.RelationId;
@@ -156,6 +96,7 @@ import com.starrocks.sql.ast.AlterStorageVolumeClause;
 import com.starrocks.sql.ast.AlterStorageVolumeCommentClause;
 import com.starrocks.sql.ast.AlterStorageVolumeStmt;
 import com.starrocks.sql.ast.AlterSystemStmt;
+import com.starrocks.sql.ast.AlterTableAutoIncrementClause;
 import com.starrocks.sql.ast.AlterTableClause;
 import com.starrocks.sql.ast.AlterTableCommentClause;
 import com.starrocks.sql.ast.AlterTableOperationClause;
@@ -169,10 +110,10 @@ import com.starrocks.sql.ast.AnalyzeMultiColumnDesc;
 import com.starrocks.sql.ast.AnalyzeProfileStmt;
 import com.starrocks.sql.ast.AnalyzeStmt;
 import com.starrocks.sql.ast.AnalyzeTypeDesc;
-import com.starrocks.sql.ast.ArrayExpr;
 import com.starrocks.sql.ast.AsyncRefreshSchemeDesc;
 import com.starrocks.sql.ast.BackupStmt;
 import com.starrocks.sql.ast.BranchOptions;
+import com.starrocks.sql.ast.BrokerDesc;
 import com.starrocks.sql.ast.CTERelation;
 import com.starrocks.sql.ast.CallProcedureStatement;
 import com.starrocks.sql.ast.CancelAlterSystemStmt;
@@ -190,6 +131,7 @@ import com.starrocks.sql.ast.ClearDataCacheRulesStmt;
 import com.starrocks.sql.ast.ColWithComment;
 import com.starrocks.sql.ast.ColumnAssignment;
 import com.starrocks.sql.ast.ColumnDef;
+import com.starrocks.sql.ast.ColumnPosition;
 import com.starrocks.sql.ast.ColumnRenameClause;
 import com.starrocks.sql.ast.ColumnSeparator;
 import com.starrocks.sql.ast.CompactionClause;
@@ -224,14 +166,12 @@ import com.starrocks.sql.ast.DataCacheSelectStatement;
 import com.starrocks.sql.ast.DataDescription;
 import com.starrocks.sql.ast.DeallocateStmt;
 import com.starrocks.sql.ast.DecommissionBackendClause;
-import com.starrocks.sql.ast.DefaultValueExpr;
 import com.starrocks.sql.ast.DelBackendBlackListStmt;
 import com.starrocks.sql.ast.DelComputeNodeBlackListStmt;
 import com.starrocks.sql.ast.DelSqlBlackListStmt;
 import com.starrocks.sql.ast.DeleteStmt;
 import com.starrocks.sql.ast.DescStorageVolumeStmt;
 import com.starrocks.sql.ast.DescribeStmt;
-import com.starrocks.sql.ast.DictionaryGetExpr;
 import com.starrocks.sql.ast.DistributionDesc;
 import com.starrocks.sql.ast.DropAnalyzeJobStmt;
 import com.starrocks.sql.ast.DropBackendClause;
@@ -279,6 +219,7 @@ import com.starrocks.sql.ast.GrantRevokeClause;
 import com.starrocks.sql.ast.GrantRevokePrivilegeObjects;
 import com.starrocks.sql.ast.GrantRoleStmt;
 import com.starrocks.sql.ast.GrantType;
+import com.starrocks.sql.ast.GroupByClause;
 import com.starrocks.sql.ast.HashDistributionDesc;
 import com.starrocks.sql.ast.HelpStmt;
 import com.starrocks.sql.ast.HintNode;
@@ -291,18 +232,14 @@ import com.starrocks.sql.ast.IndexDef;
 import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.InstallPluginStmt;
 import com.starrocks.sql.ast.IntersectRelation;
-import com.starrocks.sql.ast.IntervalLiteral;
 import com.starrocks.sql.ast.JoinRelation;
 import com.starrocks.sql.ast.KeysDesc;
 import com.starrocks.sql.ast.KillAnalyzeStmt;
 import com.starrocks.sql.ast.KillStmt;
 import com.starrocks.sql.ast.LabelName;
-import com.starrocks.sql.ast.LambdaArgument;
-import com.starrocks.sql.ast.LambdaFunctionExpr;
 import com.starrocks.sql.ast.ListPartitionDesc;
 import com.starrocks.sql.ast.LoadStmt;
 import com.starrocks.sql.ast.ManualRefreshSchemeDesc;
-import com.starrocks.sql.ast.MapExpr;
 import com.starrocks.sql.ast.ModifyBackendClause;
 import com.starrocks.sql.ast.ModifyBrokerClause;
 import com.starrocks.sql.ast.ModifyColumnClause;
@@ -316,7 +253,9 @@ import com.starrocks.sql.ast.MultiRangePartitionDesc;
 import com.starrocks.sql.ast.NormalizedTableFunctionRelation;
 import com.starrocks.sql.ast.OptimizeClause;
 import com.starrocks.sql.ast.OptimizeRange;
+import com.starrocks.sql.ast.OrderByElement;
 import com.starrocks.sql.ast.OriginStatement;
+import com.starrocks.sql.ast.OutFileClause;
 import com.starrocks.sql.ast.ParseNode;
 import com.starrocks.sql.ast.PartitionDesc;
 import com.starrocks.sql.ast.PartitionKeyDesc;
@@ -329,6 +268,7 @@ import com.starrocks.sql.ast.PivotAggregation;
 import com.starrocks.sql.ast.PivotRelation;
 import com.starrocks.sql.ast.PivotValue;
 import com.starrocks.sql.ast.PrepareStmt;
+import com.starrocks.sql.ast.ProcedureArgument;
 import com.starrocks.sql.ast.Property;
 import com.starrocks.sql.ast.PropertySet;
 import com.starrocks.sql.ast.QualifiedName;
@@ -437,6 +377,7 @@ import com.starrocks.sql.ast.ShowStreamLoadStmt;
 import com.starrocks.sql.ast.ShowTableStatusStmt;
 import com.starrocks.sql.ast.ShowTableStmt;
 import com.starrocks.sql.ast.ShowTabletStmt;
+import com.starrocks.sql.ast.ShowTemporaryTableStmt;
 import com.starrocks.sql.ast.ShowTransactionStmt;
 import com.starrocks.sql.ast.ShowTriggersStmt;
 import com.starrocks.sql.ast.ShowUserPropertyStmt;
@@ -462,6 +403,7 @@ import com.starrocks.sql.ast.TableRenameClause;
 import com.starrocks.sql.ast.TableSampleClause;
 import com.starrocks.sql.ast.TabletList;
 import com.starrocks.sql.ast.TagOptions;
+import com.starrocks.sql.ast.TaskName;
 import com.starrocks.sql.ast.TruncatePartitionClause;
 import com.starrocks.sql.ast.TruncateTableStmt;
 import com.starrocks.sql.ast.UninstallPluginStmt;
@@ -478,6 +420,65 @@ import com.starrocks.sql.ast.UserRef;
 import com.starrocks.sql.ast.UserVariable;
 import com.starrocks.sql.ast.ValueList;
 import com.starrocks.sql.ast.ValuesRelation;
+import com.starrocks.sql.ast.expression.AnalyticExpr;
+import com.starrocks.sql.ast.expression.AnalyticWindow;
+import com.starrocks.sql.ast.expression.ArithmeticExpr;
+import com.starrocks.sql.ast.expression.ArrayExpr;
+import com.starrocks.sql.ast.expression.ArrowExpr;
+import com.starrocks.sql.ast.expression.BetweenPredicate;
+import com.starrocks.sql.ast.expression.BinaryPredicate;
+import com.starrocks.sql.ast.expression.BinaryType;
+import com.starrocks.sql.ast.expression.BoolLiteral;
+import com.starrocks.sql.ast.expression.CaseExpr;
+import com.starrocks.sql.ast.expression.CaseWhenClause;
+import com.starrocks.sql.ast.expression.CastExpr;
+import com.starrocks.sql.ast.expression.CollectionElementExpr;
+import com.starrocks.sql.ast.expression.CompoundPredicate;
+import com.starrocks.sql.ast.expression.DateLiteral;
+import com.starrocks.sql.ast.expression.DecimalLiteral;
+import com.starrocks.sql.ast.expression.DefaultValueExpr;
+import com.starrocks.sql.ast.expression.DictQueryExpr;
+import com.starrocks.sql.ast.expression.DictionaryGetExpr;
+import com.starrocks.sql.ast.expression.ExistsPredicate;
+import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.FloatLiteral;
+import com.starrocks.sql.ast.expression.FunctionCallExpr;
+import com.starrocks.sql.ast.expression.FunctionName;
+import com.starrocks.sql.ast.expression.FunctionParams;
+import com.starrocks.sql.ast.expression.GroupingFunctionCallExpr;
+import com.starrocks.sql.ast.expression.InPredicate;
+import com.starrocks.sql.ast.expression.InformationFunction;
+import com.starrocks.sql.ast.expression.IntLiteral;
+import com.starrocks.sql.ast.expression.IntervalLiteral;
+import com.starrocks.sql.ast.expression.IsNullPredicate;
+import com.starrocks.sql.ast.expression.JoinOperator;
+import com.starrocks.sql.ast.expression.LambdaArgument;
+import com.starrocks.sql.ast.expression.LambdaFunctionExpr;
+import com.starrocks.sql.ast.expression.LargeIntLiteral;
+import com.starrocks.sql.ast.expression.LikePredicate;
+import com.starrocks.sql.ast.expression.LimitElement;
+import com.starrocks.sql.ast.expression.LiteralExpr;
+import com.starrocks.sql.ast.expression.MapExpr;
+import com.starrocks.sql.ast.expression.MatchExpr;
+import com.starrocks.sql.ast.expression.MultiInPredicate;
+import com.starrocks.sql.ast.expression.NamedArgument;
+import com.starrocks.sql.ast.expression.NullLiteral;
+import com.starrocks.sql.ast.expression.OdbcScalarFunctionCall;
+import com.starrocks.sql.ast.expression.Parameter;
+import com.starrocks.sql.ast.expression.Predicate;
+import com.starrocks.sql.ast.expression.RoutineLoadDataSourceProperties;
+import com.starrocks.sql.ast.expression.SetVarHint;
+import com.starrocks.sql.ast.expression.SlotRef;
+import com.starrocks.sql.ast.expression.StringLiteral;
+import com.starrocks.sql.ast.expression.SubfieldExpr;
+import com.starrocks.sql.ast.expression.Subquery;
+import com.starrocks.sql.ast.expression.TableName;
+import com.starrocks.sql.ast.expression.TableRef;
+import com.starrocks.sql.ast.expression.TimestampArithmeticExpr;
+import com.starrocks.sql.ast.expression.TypeDef;
+import com.starrocks.sql.ast.expression.UserVariableExpr;
+import com.starrocks.sql.ast.expression.VarBinaryLiteral;
+import com.starrocks.sql.ast.expression.VariableExpr;
 import com.starrocks.sql.ast.feedback.AddPlanAdvisorStmt;
 import com.starrocks.sql.ast.feedback.ClearPlanAdvisorStmt;
 import com.starrocks.sql.ast.feedback.DelPlanAdvisorStmt;
@@ -562,7 +563,6 @@ import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
 import static com.starrocks.catalog.FunctionSet.ARRAY_AGG_DISTINCT;
-import static com.starrocks.sql.ast.IndexDef.IndexType.getIndexType;
 import static com.starrocks.sql.common.ErrorMsgProxy.PARSER_ERROR_MSG;
 import static java.lang.String.format;
 import static java.util.stream.Collectors.toList;
@@ -4844,6 +4844,12 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     }
 
     @Override
+    public ParseNode visitAlterTableAutoIncrementClause(StarRocksParser.AlterTableAutoIncrementClauseContext context) {
+        long autoIncrementValue = Long.parseLong(context.INTEGER_VALUE().getText());
+        return new AlterTableAutoIncrementClause(autoIncrementValue, createPos(context));
+    }
+
+    @Override
     public ParseNode visitModifyPropertiesClause(StarRocksParser.ModifyPropertiesClauseContext context) {
         Map<String, String> properties = new HashMap<>();
         List<Property> propertyList = visit(context.propertyList().property(), Property.class);
@@ -4869,17 +4875,17 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     public ParseNode visitOptimizeRange(StarRocksParser.OptimizeRangeContext context) {
         StringLiteral start = null;
         StringLiteral end = null;
-        
+
         // Extract start value if present
         if (context.start != null) {
             start = (StringLiteral) visit(context.start);
         }
-        
+
         // Extract end value if present
         if (context.end != null) {
             end = (StringLiteral) visit(context.end);
         }
-        
+
         // Create and return OptimizeRange object with position information
         return new OptimizeRange(start, end, createPos(context));
     }
@@ -7673,7 +7679,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             if (isCountFunc && isDistinct) {
                 throw new ParsingException("Aggregation filter does not support COUNT DISTINCT");
             }
-            Expr booleanExpr = (Expr) visit(context.filter().booleanExpression());
+            Expr booleanExpr = (Expr) visit(context.filter().expression());
             functionName = functionName + FunctionSet.AGG_STATE_IF_SUFFIX;
             exprs.add(booleanExpr);
 
@@ -9307,5 +9313,21 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         }
         Collections.sort(res);
         return res;
+    }
+
+    public static IndexDef.IndexType getIndexType(StarRocksParser.IndexTypeContext indexTypeContext) {
+        IndexDef.IndexType index;
+        if (indexTypeContext == null || indexTypeContext.BITMAP() != null) {
+            index = IndexDef.IndexType.BITMAP;
+        } else if (indexTypeContext.GIN() != null) {
+            index = IndexDef.IndexType.GIN;
+        } else if (indexTypeContext.NGRAMBF() != null) {
+            index = IndexDef.IndexType.NGRAMBF;
+        } else if (indexTypeContext.VECTOR() != null) {
+            index = IndexDef.IndexType.VECTOR;
+        } else {
+            throw new ParsingException("Not specify index type");
+        }
+        return index;
     }
 }

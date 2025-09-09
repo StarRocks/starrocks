@@ -35,15 +35,15 @@
 package com.starrocks.task;
 
 import com.google.common.base.Preconditions;
-import com.starrocks.analysis.BinaryPredicate;
-import com.starrocks.analysis.BinaryType;
-import com.starrocks.analysis.InPredicate;
-import com.starrocks.analysis.IsNullPredicate;
-import com.starrocks.analysis.LiteralExpr;
-import com.starrocks.analysis.Predicate;
-import com.starrocks.analysis.SlotRef;
 import com.starrocks.common.Status;
 import com.starrocks.common.util.concurrent.MarkedCountDownLatch;
+import com.starrocks.sql.ast.expression.BinaryPredicate;
+import com.starrocks.sql.ast.expression.BinaryType;
+import com.starrocks.sql.ast.expression.InPredicate;
+import com.starrocks.sql.ast.expression.IsNullPredicate;
+import com.starrocks.sql.ast.expression.LiteralExpr;
+import com.starrocks.sql.ast.expression.Predicate;
+import com.starrocks.sql.ast.expression.SlotRef;
 import com.starrocks.sql.common.MetaUtils;
 import com.starrocks.thrift.TBrokerScanRange;
 import com.starrocks.thrift.TColumn;

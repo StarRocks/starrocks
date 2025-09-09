@@ -35,6 +35,7 @@
 package com.starrocks.qe;
 
 import com.google.common.base.Preconditions;
+import com.starrocks.authentication.UserIdentityUtils;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
@@ -256,7 +257,7 @@ public class LeaderOpExecutor {
         params.setTime_zone(ctx.getSessionVariable().getTimeZone());
         params.setStmt_id(ctx.getStmtId());
         params.setEnableStrictMode(ctx.getSessionVariable().getEnableInsertStrict());
-        params.setCurrent_user_ident(ctx.getCurrentUserIdentity().toThrift());
+        params.setCurrent_user_ident(UserIdentityUtils.toThrift(ctx.getCurrentUserIdentity()));
         params.setForward_times(forwardTimes);
         params.setSession_id(ctx.getSessionId().toString());
         params.setConnectionId(ctx.getConnectionId());

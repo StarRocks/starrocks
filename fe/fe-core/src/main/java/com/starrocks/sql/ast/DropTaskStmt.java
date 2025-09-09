@@ -14,7 +14,6 @@
 
 package com.starrocks.sql.ast;
 
-import com.starrocks.analysis.TaskName;
 import com.starrocks.sql.parser.NodePosition;
 
 public class DropTaskStmt extends DdlStmt {

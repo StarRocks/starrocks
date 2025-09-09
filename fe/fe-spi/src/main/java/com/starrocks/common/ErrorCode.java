@@ -275,6 +275,8 @@ public enum ErrorCode {
             "Cannot execute cross-database transactions. All DML target tables must belong to the same db"),
     ERR_EXPLICIT_TXN_NOT_SUPPORT_STMT(5305, new byte[] {'2', '5', 'P', '0', '1'},
             "Explicit transaction only support insert statement"),
+    ERR_EXPLICIT_TXN_NOT_SUPPORT_STMT_ORDER(5306, new byte[] {'2', '5', 'P', '0', '1'},
+            "Explicit transaction only support single update/delete before insert statement"),
 
     /**
      * 5400 - 5499: Internal error

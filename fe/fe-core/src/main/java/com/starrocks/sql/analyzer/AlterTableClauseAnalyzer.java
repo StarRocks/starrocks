@@ -19,15 +19,6 @@ import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
-import com.starrocks.analysis.ColumnPosition;
-import com.starrocks.analysis.Expr;
-import com.starrocks.analysis.FunctionCallExpr;
-import com.starrocks.analysis.IntLiteral;
-import com.starrocks.analysis.OrderByElement;
-import com.starrocks.analysis.ProcedureArgument;
-import com.starrocks.analysis.SlotRef;
-import com.starrocks.analysis.TableName;
-import com.starrocks.analysis.TypeDef;
 import com.starrocks.catalog.AggregateType;
 import com.starrocks.catalog.CatalogUtils;
 import com.starrocks.catalog.Column;
@@ -70,10 +61,12 @@ import com.starrocks.sql.ast.AddPartitionClause;
 import com.starrocks.sql.ast.AddRollupClause;
 import com.starrocks.sql.ast.AlterClause;
 import com.starrocks.sql.ast.AlterMaterializedViewStatusClause;
+import com.starrocks.sql.ast.AlterTableAutoIncrementClause;
 import com.starrocks.sql.ast.AlterTableOperationClause;
 import com.starrocks.sql.ast.AstVisitorExtendInterface;
 import com.starrocks.sql.ast.AsyncRefreshSchemeDesc;
 import com.starrocks.sql.ast.ColumnDef;
+import com.starrocks.sql.ast.ColumnPosition;
 import com.starrocks.sql.ast.ColumnRenameClause;
 import com.starrocks.sql.ast.CompactionClause;
 import com.starrocks.sql.ast.CreateIndexClause;
@@ -84,9 +77,7 @@ import com.starrocks.sql.ast.DropPartitionClause;
 import com.starrocks.sql.ast.DropRollupClause;
 import com.starrocks.sql.ast.ExpressionPartitionDesc;
 import com.starrocks.sql.ast.HashDistributionDesc;
-import com.starrocks.sql.ast.IndexDef;
 import com.starrocks.sql.ast.IndexDef.IndexType;
-import com.starrocks.sql.ast.IntervalLiteral;
 import com.starrocks.sql.ast.KeysDesc;
 import com.starrocks.sql.ast.ListPartitionDesc;
 import com.starrocks.sql.ast.ModifyColumnClause;
@@ -96,10 +87,12 @@ import com.starrocks.sql.ast.ModifyTablePropertiesClause;
 import com.starrocks.sql.ast.MultiItemListPartitionDesc;
 import com.starrocks.sql.ast.MultiRangePartitionDesc;
 import com.starrocks.sql.ast.OptimizeClause;
+import com.starrocks.sql.ast.OrderByElement;
 import com.starrocks.sql.ast.PartitionConvertContext;
 import com.starrocks.sql.ast.PartitionDesc;
 import com.starrocks.sql.ast.PartitionNames;
 import com.starrocks.sql.ast.PartitionRenameClause;
+import com.starrocks.sql.ast.ProcedureArgument;
 import com.starrocks.sql.ast.RandomDistributionDesc;
 import com.starrocks.sql.ast.RangePartitionDesc;
 import com.starrocks.sql.ast.RefreshSchemeClause;
@@ -113,6 +106,13 @@ import com.starrocks.sql.ast.SplitTabletClause;
 import com.starrocks.sql.ast.StructFieldDesc;
 import com.starrocks.sql.ast.SyncRefreshSchemeDesc;
 import com.starrocks.sql.ast.TableRenameClause;
+import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.FunctionCallExpr;
+import com.starrocks.sql.ast.expression.IntLiteral;
+import com.starrocks.sql.ast.expression.IntervalLiteral;
+import com.starrocks.sql.ast.expression.SlotRef;
+import com.starrocks.sql.ast.expression.TableName;
+import com.starrocks.sql.ast.expression.TypeDef;
 import com.starrocks.sql.common.MetaUtils;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
@@ -148,21 +148,7 @@ public class AlterTableClauseAnalyzer implements AstVisitorExtendInterface<Void,
 
     @Override
     public Void visitCreateIndexClause(CreateIndexClause clause, ConnectContext context) {
-        IndexDef indexDef = clause.getIndexDef();
-        indexDef.analyze();
-        Index index;
-        // Only assign meaningful indexId for OlapTable
-        if (table.isOlapTableOrMaterializedView()) {
-            long indexId = IndexType.isCompatibleIndex(indexDef.getIndexType()) ? ((OlapTable) table).incAndGetMaxIndexId() : -1;
-            index = new Index(indexId, indexDef.getIndexName(),
-                    MetaUtils.getColumnIdsByColumnNames(table, indexDef.getColumns()),
-                    indexDef.getIndexType(), indexDef.getComment(), indexDef.getProperties());
-        } else {
-            index = new Index(indexDef.getIndexName(),
-                    MetaUtils.getColumnIdsByColumnNames(table, indexDef.getColumns()),
-                    indexDef.getIndexType(), indexDef.getComment(), indexDef.getProperties());
-        }
-        clause.setIndex(index);
+        IndexAnalyzer.analyze(clause.getIndexDef());
         return null;
     }
 
@@ -1660,6 +1646,20 @@ public class AlterTableClauseAnalyzer implements AstVisitorExtendInterface<Void,
                 throw new SemanticException("Partition filter contains columns that are not partition columns");
             }
         }
+        return null;
+    }
+
+    @Override
+    public Void visitAlterTableAutoIncrementClause(AlterTableAutoIncrementClause clause, ConnectContext context) {
+        if (!table.isNativeTable()) {
+            throw new SemanticException("Only native table supports AUTO_INCREMENT clause");
+        }
+
+        long newValue = clause.getAutoIncrementValue();
+        if (newValue <= 0) {
+            throw new SemanticException("AUTO_INCREMENT value must be positive");
+        }
+
         return null;
     }
 }

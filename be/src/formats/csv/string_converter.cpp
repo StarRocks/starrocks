@@ -17,7 +17,6 @@
 #include "column/binary_column.h"
 #include "common/config.h"
 #include "gutil/strings/substitute.h"
-#include "runtime/descriptors.h"
 #include "runtime/types.h"
 #include "util/utf8.h"
 
@@ -26,8 +25,8 @@ namespace starrocks::csv {
 Status StringConverter::write_string(OutputStream* os, const Column& column, size_t row_num,
                                      const Options& options) const {
     auto* binary = down_cast<const BinaryColumn*>(&column);
-    auto& bytes = binary->get_bytes();
-    auto& offsets = binary->get_offset();
+    const auto& bytes = binary->get_bytes();
+    const auto& offsets = binary->get_offset();
 
     Slice s(&bytes[offsets[row_num]], offsets[row_num + 1] - offsets[row_num]);
     // TODO(zhuming): escape delimiter characters.
@@ -37,8 +36,8 @@ Status StringConverter::write_string(OutputStream* os, const Column& column, siz
 Status StringConverter::write_quoted_string(OutputStream* os, const Column& column, size_t row_num,
                                             const Options& options) const {
     auto* binary = down_cast<const BinaryColumn*>(&column);
-    auto& bytes = binary->get_bytes();
-    auto& offsets = binary->get_offset();
+    const auto& bytes = binary->get_bytes();
+    const auto& offsets = binary->get_offset();
 
     Slice s(&bytes[offsets[row_num]], offsets[row_num + 1] - offsets[row_num]);
     // TODO(zhuming): escape delimiter characters.

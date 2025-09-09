@@ -15,7 +15,7 @@
 
 package com.starrocks.catalog;
 
-import com.starrocks.analysis.TableName;
+import com.starrocks.sql.ast.expression.TableName;
 
 import java.util.Map;
 

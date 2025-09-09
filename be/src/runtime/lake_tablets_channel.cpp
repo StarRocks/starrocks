@@ -220,6 +220,8 @@ private:
 
     bool _is_data_file_bundle_enabled(const PTabletWriterOpenRequest& params);
 
+    bool _is_multi_statements_txn(const PTabletWriterOpenRequest& params);
+
     LoadChannel* _load_channel;
     lake::TabletManager* _tablet_manager;
 
@@ -450,8 +452,8 @@ void LakeTabletsChannel::add_chunk(Chunk* chunk, const PTabletWriterAddChunkRequ
         }
         total_row_num += size;
         int64_t tablet_id = tablet_ids[row_indexes[from]];
-        auto& dw = _delta_writers[tablet_id];
-        if (dw == nullptr) {
+        auto delta_writer_iter = _delta_writers.find(tablet_id);
+        if (delta_writer_iter == _delta_writers.end()) {
             LOG(WARNING) << "LakeTabletsChannel txn_id: " << _txn_id << " load_id: " << print_id(request.id())
                          << " not found tablet_id: " << tablet_id;
             response->mutable_status()->set_status_code(TStatusCode::INTERNAL_ERROR);
@@ -462,6 +464,7 @@ void LakeTabletsChannel::add_chunk(Chunk* chunk, const PTabletWriterAddChunkRequ
         }
 
         // back pressure OlapTableSink since there are too many memtables need to flush
+        auto& dw = delta_writer_iter->second;
         while (dw->queueing_memtable_num() >= config::max_queueing_memtable_per_tablet) {
             if (watch.elapsed_time() / 1000000 > request.timeout_ms()) {
                 LOG(INFO) << "LakeTabletsChannel txn_id: " << _txn_id << " load_id: " << print_id(request.id())
@@ -547,7 +550,18 @@ void LakeTabletsChannel::add_chunk(Chunk* chunk, const PTabletWriterAddChunkRequ
 
     std::set<long> immutable_tablet_ids;
     for (auto tablet_id : request.tablet_ids()) {
-        auto& writer = _delta_writers[tablet_id];
+        auto writer_iter = _delta_writers.find(tablet_id);
+        if (writer_iter == _delta_writers.end()) {
+            LOG(WARNING) << "LakeTabletsChannel txn_id: " << _txn_id << " load_id: " << print_id(request.id())
+                         << " not found tablet_id: " << tablet_id;
+            response->mutable_status()->set_status_code(TStatusCode::INTERNAL_ERROR);
+            response->mutable_status()->add_error_msgs(
+                    fmt::format("Failed to add_chunk since tablet_id {} not exists, txn_id: {}, load_id: {}", tablet_id,
+                                _txn_id, print_id(request.id())));
+            return;
+        }
+
+        auto& writer = writer_iter->second;
         if (writer->is_immutable() && immutable_tablet_ids.count(tablet_id) == 0) {
             response->add_immutable_tablet_ids(tablet_id);
             response->add_immutable_partition_ids(writer->partition_id());
@@ -682,6 +696,11 @@ bool LakeTabletsChannel::_is_data_file_bundle_enabled(const PTabletWriterOpenReq
            params.lake_tablet_params().enable_data_file_bundling();
 }
 
+bool LakeTabletsChannel::_is_multi_statements_txn(const PTabletWriterOpenRequest& params) {
+    return params.has_lake_tablet_params() && params.lake_tablet_params().has_is_multi_statements_txn() &&
+           params.lake_tablet_params().is_multi_statements_txn();
+}
+
 Status LakeTabletsChannel::_create_delta_writers(const PTabletWriterOpenRequest& params, bool is_incremental) {
     int64_t schema_id = 0;
     std::vector<SlotDescriptor*>* slots = nullptr;
@@ -748,6 +767,7 @@ Status LakeTabletsChannel::_create_delta_writers(const PTabletWriterOpenRequest&
                                               .set_profile(_profile)
                                               .set_bundle_writable_file_context(bundle_writable_file_context)
                                               .set_global_dicts(&_global_dicts)
+                                              .set_is_multi_statements_txn(_is_multi_statements_txn(params))
                                               .build());
         _delta_writers.emplace(tablet.tablet_id(), std::move(writer));
         tablet_ids.emplace_back(tablet.tablet_id());

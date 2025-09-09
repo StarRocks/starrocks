@@ -129,8 +129,6 @@ void ObjectCacheBench::init_cache(CacheType cache_type) {
         _page_cache = std::make_shared<StoragePageCache>();
         _page_cache->init(_lru_cache.get());
     } else {
-        opt.engine = "starcache";
-
         _star_cache = std::make_shared<StarCacheEngine>();
         Status st = _star_cache->init(opt);
         if (!st.ok()) {

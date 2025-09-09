@@ -14,11 +14,11 @@
 package com.starrocks.sql.common;
 
 import com.google.common.base.Strings;
-import com.starrocks.analysis.BrokerDesc;
 import com.starrocks.connector.share.credential.CloudConfigurationConstants;
 import com.starrocks.sql.ast.AlterStorageVolumeStmt;
 import com.starrocks.sql.ast.AstVisitorExtendInterface;
 import com.starrocks.sql.ast.BaseCreateAlterUserStmt;
+import com.starrocks.sql.ast.BrokerDesc;
 import com.starrocks.sql.ast.CreateCatalogStmt;
 import com.starrocks.sql.ast.CreateResourceStmt;
 import com.starrocks.sql.ast.CreateRoutineLoadStmt;

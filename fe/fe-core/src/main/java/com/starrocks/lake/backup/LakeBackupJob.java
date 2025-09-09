@@ -15,7 +15,6 @@
 package com.starrocks.lake.backup;
 
 import com.google.common.collect.Maps;
-import com.starrocks.analysis.TableRef;
 import com.starrocks.backup.BackupJob;
 import com.starrocks.backup.SnapshotInfo;
 import com.starrocks.backup.Status;
@@ -38,6 +37,7 @@ import com.starrocks.rpc.LakeService;
 import com.starrocks.rpc.RpcException;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.WarehouseManager;
+import com.starrocks.sql.ast.expression.TableRef;
 import com.starrocks.system.Backend;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.thrift.THdfsProperties;

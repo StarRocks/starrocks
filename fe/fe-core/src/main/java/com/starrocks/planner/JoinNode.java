@@ -38,19 +38,16 @@ import com.google.common.base.MoreObjects;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
-import com.starrocks.analysis.BinaryPredicate;
-import com.starrocks.analysis.BinaryType;
-import com.starrocks.analysis.DescriptorTable;
-import com.starrocks.analysis.Expr;
-import com.starrocks.analysis.JoinOperator;
-import com.starrocks.analysis.SlotId;
-import com.starrocks.analysis.SlotRef;
-import com.starrocks.analysis.TableRef;
-import com.starrocks.analysis.TupleId;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.IdGenerator;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
+import com.starrocks.sql.ast.expression.BinaryPredicate;
+import com.starrocks.sql.ast.expression.BinaryType;
+import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.JoinOperator;
+import com.starrocks.sql.ast.expression.SlotRef;
+import com.starrocks.sql.ast.expression.TableRef;
 import com.starrocks.sql.optimizer.operator.UKFKConstraints;
 import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.thrift.TJoinDistributionMode;
@@ -58,7 +55,6 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -518,27 +514,27 @@ public abstract class JoinNode extends PlanNode implements RuntimeFilterBuildNod
         for (BinaryPredicate eqJoinPredicate : eqJoinConjuncts) {
             output.append(detailPrefix).append("equal join conjunct: ");
             if (detailLevel.equals(TExplainLevel.VERBOSE)) {
-                output.append(eqJoinPredicate.explain());
+                output.append(explainExpr(detailLevel, List.of(eqJoinPredicate)));
             } else {
-                output.append(eqJoinPredicate.toSql());
+                output.append(explainExpr(eqJoinPredicate));
             }
             output.append("\n");
         }
         if (!otherJoinConjuncts.isEmpty()) {
-            output.append(detailPrefix + "other join predicates: ").append(
-                    getVerboseExplain(otherJoinConjuncts, detailLevel) + "\n");
+            output.append(detailPrefix).append("other join predicates: ")
+                    .append(explainExpr(detailLevel, otherJoinConjuncts)).append("\n");
         }
         if (!conjuncts.isEmpty()) {
             output.append(detailPrefix).append("other predicates: ")
-                    .append(getVerboseExplain(conjuncts, detailLevel))
+                    .append(explainExpr(detailLevel, conjuncts))
                     .append("\n");
         }
 
         if (commonSlotMap != null && !commonSlotMap.isEmpty()) {
-            output.append(detailPrefix + "  common sub expr:" + "\n");
+            output.append(detailPrefix).append("  common sub expr:").append("\n");
             for (Map.Entry<SlotId, Expr> entry : commonSlotMap.entrySet()) {
-                output.append(detailPrefix + "  <slot " + entry.getKey().toString() + "> : "
-                        + getExplainString(Arrays.asList(entry.getValue())) + "\n");
+                output.append(detailPrefix).append("  <slot ").append(entry.getKey().toString()).append("> : ")
+                        .append(explainExpr(entry.getValue())).append("\n");
             }
         }
 

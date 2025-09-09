@@ -43,12 +43,6 @@ import com.google.common.collect.Sets;
 import com.google.common.primitives.Ints;
 import com.google.gson.Gson;
 import com.starrocks.alter.AlterJobException;
-import com.starrocks.analysis.Expr;
-import com.starrocks.analysis.Parameter;
-import com.starrocks.analysis.SetVarHint;
-import com.starrocks.analysis.StringLiteral;
-import com.starrocks.analysis.TableName;
-import com.starrocks.analysis.UserVariableHint;
 import com.starrocks.authorization.AccessDeniedException;
 import com.starrocks.authorization.ObjectType;
 import com.starrocks.authorization.PrivilegeException;
@@ -100,6 +94,8 @@ import com.starrocks.load.ExportJob;
 import com.starrocks.load.InsertOverwriteJob;
 import com.starrocks.load.InsertOverwriteJobMgr;
 import com.starrocks.load.loadv2.InsertLoadJob;
+import com.starrocks.load.loadv2.InsertLoadTxnCallback;
+import com.starrocks.load.loadv2.InsertLoadTxnCallbackFactory;
 import com.starrocks.load.loadv2.LoadErrorUtils;
 import com.starrocks.load.loadv2.LoadJob;
 import com.starrocks.load.loadv2.LoadMgr;
@@ -199,6 +195,12 @@ import com.starrocks.sql.ast.UpdateStmt;
 import com.starrocks.sql.ast.UseCatalogStmt;
 import com.starrocks.sql.ast.UseDbStmt;
 import com.starrocks.sql.ast.UserVariable;
+import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.Parameter;
+import com.starrocks.sql.ast.expression.SetVarHint;
+import com.starrocks.sql.ast.expression.StringLiteral;
+import com.starrocks.sql.ast.expression.TableName;
+import com.starrocks.sql.ast.expression.UserVariableHint;
 import com.starrocks.sql.ast.feedback.PlanAdvisorStmt;
 import com.starrocks.sql.ast.translate.TranslateStmt;
 import com.starrocks.sql.ast.txn.BeginStmt;
@@ -210,6 +212,7 @@ import com.starrocks.sql.common.DmlException;
 import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.MetaUtils;
 import com.starrocks.sql.common.StarRocksPlannerException;
+import com.starrocks.sql.formatter.FormatOptions;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.cost.feature.CostPredictor;
 import com.starrocks.sql.optimizer.dump.QueryDumpInfo;
@@ -2640,6 +2643,8 @@ public class StmtExecutor {
             InsertLoadJob loadJob = null;
             if (!(targetTable.isIcebergTable() || targetTable.isHiveTable() || targetTable.isTableFunctionTable() ||
                     targetTable.isBlackHoleTable())) {
+                InsertLoadTxnCallback insertLoadTxnCallback =
+                        InsertLoadTxnCallbackFactory.of(context, database.getId(), targetTable);
                 // insert, update and delete job
                 loadJob = context.getGlobalStateMgr().getLoadMgr().registerInsertLoadJob(
                         label,
@@ -2653,7 +2658,8 @@ public class StmtExecutor {
                         new LoadMgr.EstimateStats(estimateScanRows, estimateFileNum, estimateScanFileSize),
                         getExecTimeout(),
                         context.getCurrentWarehouseId(),
-                        coord);
+                        coord,
+                        insertLoadTxnCallback);
                 loadJob.setJobProperties(stmt.getProperties());
                 jobId = loadJob.getId();
                 if (txnState != null) {
@@ -3139,15 +3145,19 @@ public class StmtExecutor {
         if (!Config.enable_collect_query_detail_info) {
             return;
         }
-        String sql;
-        if (AuditEncryptionChecker.needEncrypt(parsedStmt)) {
-            sql = AstToSQLBuilder.toSQLOrDefault(parsedStmt, parsedStmt.getOrigStmt().originStmt);
-        } else {
-            sql = parsedStmt.getOrigStmt().originStmt;
+        String sql = parsedStmt.getOrigStmt().originStmt;
+        boolean needEncrypt = AuditEncryptionChecker.needEncrypt(parsedStmt);
+        if (needEncrypt || Config.enable_sql_desensitize_in_log) {
+            sql = AstToSQLBuilder.toSQL(parsedStmt, FormatOptions.allEnable()
+                            .setColumnSimplifyTableName(false)
+                            .setHideCredential(needEncrypt)
+                            .setEnableDigest(Config.enable_sql_desensitize_in_log))
+                    .orElse("this is a desensitized sql");
         }
 
         boolean isQuery = context.isQueryStmt(parsedStmt);
         QueryDetail queryDetail = new QueryDetail(
+
                 DebugUtil.printId(context.getQueryId()),
                 isQuery,
                 context.connectionId,

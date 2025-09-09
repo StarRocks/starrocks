@@ -13,7 +13,7 @@
 // limitations under the License.
 package com.starrocks.sql.spm;
 
-import com.starrocks.analysis.Expr;
+import com.starrocks.sql.ast.expression.Expr;
 
 import java.util.Collections;
 import java.util.List;

@@ -16,6 +16,15 @@ package com.starrocks.sql.ast;
 
 import com.starrocks.sql.ast.group.CreateGroupProviderStmt;
 import com.starrocks.sql.ast.group.DropGroupProviderStmt;
+import com.starrocks.sql.ast.warehouse.AlterWarehouseStmt;
+import com.starrocks.sql.ast.warehouse.CreateWarehouseStmt;
+import com.starrocks.sql.ast.warehouse.DropWarehouseStmt;
+import com.starrocks.sql.ast.warehouse.ResumeWarehouseStmt;
+import com.starrocks.sql.ast.warehouse.SetWarehouseStmt;
+import com.starrocks.sql.ast.warehouse.SuspendWarehouseStmt;
+import com.starrocks.sql.ast.warehouse.cngroup.AlterCnGroupStmt;
+import com.starrocks.sql.ast.warehouse.cngroup.CreateCnGroupStmt;
+import com.starrocks.sql.ast.warehouse.cngroup.EnableDisableCnGroupStmt;
 
 public interface AstVisitor<R, C> {
     default R visit(ParseNode node) {
@@ -202,6 +211,21 @@ public interface AstVisitor<R, C> {
         return visitDDLStatement(statement, context);
     }
 
+    // ------------------------------------------- Warehouse Statement ----------------------------------------------------
+
+    default R visitCreateWarehouseStatement(CreateWarehouseStmt statement, C context) {
+        return visitDDLStatement(statement, context);
+    }
+
+    default R visitAlterWarehouseStatement(AlterWarehouseStmt statement, C context) {
+        return visitDDLStatement(statement, context);
+    }
+
+    default R visitDropWarehouseStatement(DropWarehouseStmt statement, C context) {
+        return visitDDLStatement(statement, context);
+    }
+
+
     // ------------------------------------------- Drop Statement ----------------------------------------------------
 
     default R visitDropAnalyzeStatement(DropAnalyzeJobStmt statement, C context) {
@@ -246,6 +270,10 @@ public interface AstVisitor<R, C> {
         return visitNode(clause, context);
     }
 
+    default R visitCreateIndexClause(CreateIndexClause clause, C context) {
+        return visitNode(clause, context);
+    }
+
     default R visitDropRollupClause(DropRollupClause clause, C context) {
         return visitNode(clause, context);
     }
@@ -256,5 +284,47 @@ public interface AstVisitor<R, C> {
 
     default R visitAlterStorageVolumeCommentClause(AlterStorageVolumeCommentClause clause, C context) {
         return visitNode(clause, context);
+    }
+
+    // ------------------------------------------- Additional Warehouse Statement ----------------------------------------------------
+
+    default R visitSuspendWarehouseStatement(SuspendWarehouseStmt statement, C context) {
+        return visitDDLStatement(statement, context);
+    }
+
+    default R visitResumeWarehouseStatement(ResumeWarehouseStmt statement, C context) {
+        return visitDDLStatement(statement, context);
+    }
+
+    default R visitSetWarehouseStatement(SetWarehouseStmt statement, C context) {
+        return visitStatement(statement, context);
+    }
+
+    // ------------------------------------------- CN Group Statement ----------------------------------------------------
+
+    default R visitCreateCNGroupStatement(CreateCnGroupStmt statement, C context) {
+        return visitDDLStatement(statement, context);
+    }
+
+    default R visitAlterCNGroupStatement(AlterCnGroupStmt statement, C context) {
+        return visitDDLStatement(statement, context);
+    }
+
+    default R visitEnableDisableCNGroupStatement(EnableDisableCnGroupStmt statement, C context) {
+        return visitDDLStatement(statement, context);
+    }
+
+    // ------------------------------------------- User Statement ----------------------------------------------------
+
+    default R visitBaseCreateAlterUserStmt(BaseCreateAlterUserStmt statement, C context) {
+        return visitDDLStatement(statement, context);
+    }
+
+    default R visitCreateUserStatement(CreateUserStmt statement, C context) {
+        return visitBaseCreateAlterUserStmt(statement, context);
+    }
+
+    default R visitAlterUserStatement(AlterUserStmt statement, C context) {
+        return visitBaseCreateAlterUserStmt(statement, context);
     }
 }

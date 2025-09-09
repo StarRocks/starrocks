@@ -14,17 +14,18 @@
 
 package com.starrocks.sql.analyzer;
 
-import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.util.SqlCredentialRedactor;
 import com.starrocks.sql.ast.ParseNode;
 import com.starrocks.sql.ast.StatementBase;
+import com.starrocks.sql.ast.expression.TableName;
 import com.starrocks.sql.formatter.AST2SQLVisitor;
 import com.starrocks.sql.formatter.FormatOptions;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.util.Map;
+import java.util.Optional;
 
 /**
  * AstToSQLBuilder inherits AstToStringBuilder and rewrites some special AST logic to
@@ -66,6 +67,15 @@ public class AstToSQLBuilder {
         } catch (Exception e) {
             LOG.info("Ast to sql failed.", e);
             return SqlCredentialRedactor.redact(defaultSql);
+        }
+    }
+
+    public static Optional<String> toSQL(StatementBase statement, FormatOptions options) {
+        try {
+            return Optional.of(AST2SQLVisitor.withOptions(options).visit(statement));
+        } catch (Exception e) {
+            LOG.info("Ast to sql failed.", e);
+            return Optional.empty();
         }
     }
 

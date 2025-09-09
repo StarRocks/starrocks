@@ -17,9 +17,6 @@ package com.starrocks.alter;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Range;
-import com.starrocks.analysis.DateLiteral;
-import com.starrocks.analysis.TableName;
-import com.starrocks.analysis.TableRef;
 import com.starrocks.catalog.ColocateTableIndex;
 import com.starrocks.catalog.DataProperty;
 import com.starrocks.catalog.Database;
@@ -65,6 +62,7 @@ import com.starrocks.sql.ast.AddPartitionClause;
 import com.starrocks.sql.ast.AddRollupClause;
 import com.starrocks.sql.ast.AlterClause;
 import com.starrocks.sql.ast.AlterMaterializedViewStmt;
+import com.starrocks.sql.ast.AlterTableAutoIncrementClause;
 import com.starrocks.sql.ast.AlterTableCommentClause;
 import com.starrocks.sql.ast.AlterTableStmt;
 import com.starrocks.sql.ast.AlterViewClause;
@@ -94,6 +92,9 @@ import com.starrocks.sql.ast.SwapTableClause;
 import com.starrocks.sql.ast.TableRenameClause;
 import com.starrocks.sql.ast.TruncatePartitionClause;
 import com.starrocks.sql.ast.TruncateTableStmt;
+import com.starrocks.sql.ast.expression.DateLiteral;
+import com.starrocks.sql.ast.expression.TableName;
+import com.starrocks.sql.ast.expression.TableRef;
 import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.thrift.TTabletMetaType;
 import com.starrocks.thrift.TTabletType;
@@ -915,6 +916,23 @@ public class AlterJobExecutor implements AstVisitorExtendInterface<Void, Connect
 
         GlobalStateMgr.getCurrentState().getAlterJobMgr().alterView(alterViewInfo, false);
         GlobalStateMgr.getCurrentState().getEditLog().logModifyViewDef(alterViewInfo);
+        return null;
+    }
+
+    @Override
+    public Void visitAlterTableAutoIncrementClause(AlterTableAutoIncrementClause clause, ConnectContext context) {
+        Locker locker = new Locker();
+        locker.lockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(table.getId()), LockType.WRITE);
+        try {
+            try {
+                GlobalStateMgr.getCurrentState().getLocalMetastore()
+                    .alterTableAutoIncrement(db.getFullName(), table.getName(), clause.getAutoIncrementValue());
+            } catch (DdlException e) {
+                throw new AlterJobException(e.getMessage());
+            }
+        } finally {
+            locker.unLockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(table.getId()), LockType.WRITE);
+        }
         return null;
     }
 }

@@ -40,9 +40,9 @@ import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
-import com.starrocks.analysis.StringLiteral;
-import com.starrocks.analysis.VariableExpr;
-import com.starrocks.authentication.OAuth2Context;
+import com.starrocks.authentication.AuthenticationContext;
+import com.starrocks.authentication.AuthenticationProvider;
+import com.starrocks.authentication.UserIdentityUtils;
 import com.starrocks.authentication.UserProperty;
 import com.starrocks.authorization.AccessDeniedException;
 import com.starrocks.authorization.ObjectType;
@@ -82,6 +82,8 @@ import com.starrocks.sql.ast.SetType;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.SystemVariable;
 import com.starrocks.sql.ast.UserVariable;
+import com.starrocks.sql.ast.expression.StringLiteral;
+import com.starrocks.sql.ast.expression.VariableExpr;
 import com.starrocks.sql.optimizer.QueryMaterializationContext;
 import com.starrocks.sql.optimizer.dump.DumpInfo;
 import com.starrocks.sql.optimizer.dump.QueryDumpInfo;
@@ -166,39 +168,18 @@ public class ConnectContext {
     protected volatile boolean isKilled;
     // Db
     protected String currentDb = "";
-    // `qualifiedUser` is the user used when the user establishes connection and authentication.
-    // It is the real user used for this connection.
-    // Different from the `currentUserIdentity` authentication user of execute as,
-    // `qualifiedUser` should not be changed during the entire session.
-    protected String qualifiedUser;
-    // `currentUserIdentity` is the user used for authorization. Under normal circumstances,
-    // `currentUserIdentity` and `qualifiedUser` are the same user,
-    // but currentUserIdentity may be modified by execute as statement.
-    protected UserIdentity currentUserIdentity;
+
+    // Authentication context that encapsulates authentication and authorization information
+    protected AuthenticationContext authenticationContext = new AuthenticationContext();
+
     // currentRoleIds is the role that has taken effect in the current session.
     // Note that this set is not all roles belonging to the current user.
     // `execute as` will modify currentRoleIds and assign the active role of the impersonate user to currentRoleIds.
     // For specific logic, please refer to setCurrentRoleIds.
-    protected Set<Long> currentRoleIds = new HashSet<>();
+    private Set<Long> currentRoleIds = new HashSet<>();
+
     // groups of current user
-    protected Set<String> groups = new HashSet<>();
-
-    // The Token in the OpenIDConnect authentication method is obtained
-    // from the authentication logic and stored in the ConnectContext.
-    // If the downstream system needs it, it needs to be obtained from the ConnectContext.
-    protected volatile String authToken = null;
-
-    // Only used in OAuth2 authentication mode to store
-    // relevant information of OAuth2 authentication.
-    // Ensure that necessary information can be obtained during OAuth2 http callback process.
-    private volatile OAuth2Context oAuth2Context = null;
-
-    // After negotiate and switching with the client,
-    // the auth plugin type used for this authentication is finally determined.
-    private String authPlugin = null;
-
-    //Auth Data salt generated at mysql negotiate used for password salting
-    private byte[] authDataSalt = null;
+    private Set<String> groups = new HashSet<>();
 
     // Serializer used to pack MySQL packet.
     protected MysqlSerializer serializer;
@@ -477,19 +458,19 @@ public class ConnectContext {
     }
 
     public String getQualifiedUser() {
-        return qualifiedUser;
+        return authenticationContext.getQualifiedUser();
     }
 
     public void setQualifiedUser(String qualifiedUser) {
-        this.qualifiedUser = qualifiedUser;
+        authenticationContext.setQualifiedUser(qualifiedUser);
     }
 
     public UserIdentity getCurrentUserIdentity() {
-        return currentUserIdentity;
+        return authenticationContext.getCurrentUserIdentity();
     }
 
     public void setCurrentUserIdentity(UserIdentity currentUserIdentity) {
-        this.currentUserIdentity = currentUserIdentity;
+        authenticationContext.setCurrentUserIdentity(currentUserIdentity);
     }
 
     public Set<Long> getCurrentRoleIds() {
@@ -518,17 +499,17 @@ public class ConnectContext {
         if (authInfo.isSetCurrent_user_ident()) {
             setAuthInfoFromThrift(authInfo.getCurrent_user_ident());
         } else {
-            currentUserIdentity = UserIdentity.createAnalyzedUserIdentWithIp(authInfo.user, authInfo.user_ip);
-            setCurrentRoleIds(currentUserIdentity);
+            setCurrentUserIdentity(UserIdentity.createAnalyzedUserIdentWithIp(authInfo.user, authInfo.user_ip));
+            setCurrentRoleIds(getCurrentUserIdentity());
         }
     }
 
     public void setAuthInfoFromThrift(TUserIdentity tUserIdent) {
-        currentUserIdentity = UserIdentity.fromThrift(tUserIdent);
+        setCurrentUserIdentity(UserIdentityUtils.fromThrift(tUserIdent));
         if (tUserIdent.isSetCurrent_role_ids()) {
-            currentRoleIds = new HashSet<>(tUserIdent.current_role_ids.getRole_id_list());
+            setCurrentRoleIds(new HashSet<>(tUserIdent.current_role_ids.getRole_id_list()));
         } else {
-            setCurrentRoleIds(currentUserIdentity);
+            setCurrentRoleIds(getCurrentUserIdentity());
         }
     }
 
@@ -541,35 +522,34 @@ public class ConnectContext {
     }
 
     public String getAuthToken() {
-        return authToken;
+        return authenticationContext.getAuthToken();
     }
 
     public void setAuthToken(String authToken) {
-        this.authToken = authToken;
+        authenticationContext.setAuthToken(authToken);
     }
 
-    public void setOAuth2Context(OAuth2Context oAuth2Context) {
-        this.oAuth2Context = oAuth2Context;
-    }
-
-    public OAuth2Context getOAuth2Context() {
-        return oAuth2Context;
+    public AuthenticationProvider getAuthenticationProvider() {
+        return authenticationContext.getAuthenticationProvider();
     }
 
     public void setAuthPlugin(String authPlugin) {
-        this.authPlugin = authPlugin;
+        authenticationContext.setAuthPlugin(authPlugin);
     }
 
     public String getAuthPlugin() {
-        return authPlugin;
+        return authenticationContext.getAuthPlugin();
     }
 
     public void setAuthDataSalt(byte[] authDataSalt) {
-        this.authDataSalt = authDataSalt;
+        authenticationContext.setAuthDataSalt(authDataSalt);
     }
 
-    public byte[] getAuthDataSalt() {
-        return authDataSalt;
+    /**
+     * Get the authentication context for this connection
+     */
+    public AuthenticationContext getAuthenticationContext() {
+        return authenticationContext;
     }
 
     public void modifySystemVariable(SystemVariable setVar, boolean onlySetSessionVar) throws DdlException {
@@ -1538,7 +1518,7 @@ public class ConnectContext {
         public List<String> toRow(long nowMs, boolean full) {
             List<String> row = Lists.newArrayList();
             row.add("" + connectionId);
-            row.add(ClusterNamespace.getNameFromFullName(qualifiedUser));
+            row.add(ClusterNamespace.getNameFromFullName(getQualifiedUser()));
             // Ip + port
             if (ConnectContext.this instanceof HttpConnectContext) {
                 String remoteAddress = ((HttpConnectContext) (ConnectContext.this)).getRemoteAddress();

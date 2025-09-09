@@ -13,7 +13,6 @@
 // limitations under the License.
 package com.starrocks.connector.delta;
 
-import com.starrocks.analysis.DescriptorTable;
 import com.starrocks.catalog.DeltaLakeTable;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.common.AnalysisException;
@@ -24,6 +23,7 @@ import com.starrocks.connector.PartitionUtil;
 import com.starrocks.connector.RemoteFileInfoSource;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.hive.RemoteFileInputFormat;
+import com.starrocks.planner.DescriptorTable;
 import com.starrocks.thrift.TDeletionVectorDescriptor;
 import com.starrocks.thrift.THdfsScanRange;
 import com.starrocks.thrift.TNetworkAddress;

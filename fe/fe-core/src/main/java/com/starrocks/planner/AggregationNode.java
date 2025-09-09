@@ -38,16 +38,6 @@ import com.google.common.base.MoreObjects;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
-import com.starrocks.analysis.AggregateInfo;
-import com.starrocks.analysis.DecimalLiteral;
-import com.starrocks.analysis.DescriptorTable;
-import com.starrocks.analysis.Expr;
-import com.starrocks.analysis.FunctionCallExpr;
-import com.starrocks.analysis.LiteralExpr;
-import com.starrocks.analysis.SlotDescriptor;
-import com.starrocks.analysis.SlotId;
-import com.starrocks.analysis.SlotRef;
-import com.starrocks.analysis.TupleId;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
@@ -56,6 +46,11 @@ import com.starrocks.common.IdGenerator;
 import com.starrocks.common.Pair;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
+import com.starrocks.sql.ast.expression.DecimalLiteral;
+import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.FunctionCallExpr;
+import com.starrocks.sql.ast.expression.LiteralExpr;
+import com.starrocks.sql.ast.expression.SlotRef;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
@@ -335,27 +330,27 @@ public class AggregationNode extends PlanNode implements RuntimeFilterBuildNode 
         if (nameDetail != null) {
             output.append(detailPrefix).append(nameDetail).append("\n");
         }
-        if (aggInfo.getAggregateExprs() != null && aggInfo.getMaterializedAggregateExprs().size() > 0) {
+        if (aggInfo.getAggregateExprs() != null && !aggInfo.getMaterializedAggregateExprs().isEmpty()) {
             if (detailLevel == TExplainLevel.VERBOSE) {
                 output.append(detailPrefix).append("aggregate: ");
             } else {
                 output.append(detailPrefix).append("output: ");
             }
-            output.append(getVerboseExplain(aggInfo.getAggregateExprs(), detailLevel)).append("\n");
+            output.append(explainExpr(detailLevel, aggInfo.getAggregateExprs())).append("\n");
         }
         // TODO: unify them
         if (detailLevel == TExplainLevel.VERBOSE) {
             if (CollectionUtils.isNotEmpty(aggInfo.getGroupingExprs())) {
                 output.append(detailPrefix).append("group by: ").append(
-                        getVerboseExplain(aggInfo.getGroupingExprs(), detailLevel)).append("\n");
+                        explainExpr(detailLevel, aggInfo.getGroupingExprs())).append("\n");
             }
         } else {
             output.append(detailPrefix).append("group by: ").append(
-                    getVerboseExplain(aggInfo.getGroupingExprs(), detailLevel)).append("\n");
+                    explainExpr(detailLevel, aggInfo.getGroupingExprs())).append("\n");
         }
 
         if (!conjuncts.isEmpty()) {
-            output.append(detailPrefix).append("having: ").append(getVerboseExplain(conjuncts, detailLevel))
+            output.append(detailPrefix).append("having: ").append(explainExpr(detailLevel, conjuncts))
                     .append("\n");
         }
         if (useSortAgg) {

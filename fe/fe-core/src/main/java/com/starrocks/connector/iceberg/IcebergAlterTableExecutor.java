@@ -14,7 +14,6 @@
 
 package com.starrocks.connector.iceberg;
 
-import com.starrocks.analysis.ColumnPosition;
 import com.starrocks.catalog.Column;
 import com.starrocks.common.DdlException;
 import com.starrocks.connector.ConnectorAlterTableExecutor;
@@ -30,6 +29,7 @@ import com.starrocks.sql.ast.AlterTableCommentClause;
 import com.starrocks.sql.ast.AlterTableOperationClause;
 import com.starrocks.sql.ast.AlterTableStmt;
 import com.starrocks.sql.ast.BranchOptions;
+import com.starrocks.sql.ast.ColumnPosition;
 import com.starrocks.sql.ast.ColumnRenameClause;
 import com.starrocks.sql.ast.CreateOrReplaceBranchClause;
 import com.starrocks.sql.ast.CreateOrReplaceTagClause;
@@ -61,12 +61,12 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.stream.Collectors;
 
-import static com.starrocks.analysis.OutFileClause.PARQUET_COMPRESSION_TYPE_MAP;
 import static com.starrocks.connector.iceberg.IcebergApiConverter.toIcebergColumnType;
 import static com.starrocks.connector.iceberg.IcebergMetadata.COMMENT;
 import static com.starrocks.connector.iceberg.IcebergMetadata.COMPRESSION_CODEC;
 import static com.starrocks.connector.iceberg.IcebergMetadata.FILE_FORMAT;
 import static com.starrocks.connector.iceberg.IcebergMetadata.LOCATION_PROPERTY;
+import static com.starrocks.sql.ast.OutFileClause.PARQUET_COMPRESSION_TYPE_MAP;
 import static com.starrocks.sql.common.UnsupportedException.unsupportedException;
 
 public class IcebergAlterTableExecutor extends ConnectorAlterTableExecutor {

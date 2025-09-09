@@ -708,6 +708,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String ENABLE_CBO_VIEW_BASED_MV_REWRITE = "enable_cbo_view_based_mv_rewrite";
     public static final String ENABLE_CBO_BASED_MV_REWRITE = "enable_cbo_based_mv_rewrite";
 
+    public static final String ENABLE_IVM_REFRESH = "enable_ivm_refresh";
+    public static final String TVR_TARGET_MVID = "tvr_target_mvid";
+
     public static final String ENABLE_SPM_REWRITE = "enable_spm_rewrite";
     public static final String SPM_REWRITE_TIMEOUT_MS = "spm_rewrite_timeout_ms";
 
@@ -951,6 +954,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String ENABLE_MULTI_CAST_LIMIT_PUSH_DOWN = "enable_multi_cast_limit_push_down";
 
     public static final String ENABLE_DROP_TABLE_CHECK_MV_DEPENDENCY = "enable_drop_table_check_mv_dependency";
+
+    public static final String ENABLE_DESENSITIZE_EXPLAIN = "enable_desensitize_explain";
 
     public static final List<String> DEPRECATED_VARIABLES = ImmutableList.<String>builder()
             .add(CODEGEN_LEVEL)
@@ -1535,7 +1540,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     private boolean alwaysCollectDict = false;
 
     @VariableMgr.VarAttr(name = ALWAYS_COLLECT_LOW_CARD_DICT_ON_LAKE, flag = VariableMgr.INVISIBLE)
-    private boolean alwaysCollectDictOnLake = true;
+    private boolean alwaysCollectDictOnLake = false;
 
     @VariableMgr.VarAttr(name = CBO_ENABLE_LOW_CARDINALITY_OPTIMIZE)
     private boolean enableLowCardinalityOptimize = true;
@@ -1544,7 +1549,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     private boolean useLowCardinalityOptimizeV2 = true;
 
     @VariableMgr.VarAttr(name = LOW_CARDINALITY_OPTIMIZE_ON_LAKE)
-    private boolean useLowCardinalityOptimizeOnLake = true;
+    private boolean useLowCardinalityOptimizeOnLake = false;
 
     @VarAttr(name = ARRAY_LOW_CARDINALITY_OPTIMIZE)
     private boolean enableArrayLowCardinalityOptimize = true;
@@ -1927,6 +1932,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VarAttr(name = ENABLE_DEFER_PROJECT_AFTER_TOPN)
     private boolean enableDeferProjectAfterTopN = true;
 
+    @VarAttr(name = ENABLE_DESENSITIZE_EXPLAIN)
+    private boolean enableDesensitizeExplain = false;
+
     // When this variable is enabled, the limits of consumers a CTE are pushed down to the producer of the CTE.
     // The limits can then be applied before the exchange.
     // For example:
@@ -1943,6 +1951,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VarAttr(name = ENABLE_DROP_TABLE_CHECK_MV_DEPENDENCY)
     public boolean enableDropTableCheckMvDependency = false;
+
+    public boolean isEnableDesensitizeExplain() {
+        return enableDesensitizeExplain;
+    }
+
+    public void setEnableDesensitizeExplain(boolean enableDesensitizeExplain) {
+        this.enableDesensitizeExplain = enableDesensitizeExplain;
+    }
 
     public int getCboPruneJsonSubfieldDepth() {
         return cboPruneJsonSubfieldDepth;
@@ -2324,6 +2340,12 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     // to rewrite in RBO and CBO phase.
     @VarAttr(name = ENABLE_CBO_BASED_MV_REWRITE)
     private boolean enableCBOBasedMVRewrite = true;
+
+    @VarAttr(name = TVR_TARGET_MVID, flag = VariableMgr.INVISIBLE)
+    private String tvrTargetMvId = "";
+
+    @VarAttr(name = ENABLE_IVM_REFRESH, flag = VariableMgr.INVISIBLE)
+    private boolean enableIVMRefresh = false;
 
     @VarAttr(name = ENABLE_SPM_REWRITE)
     private boolean enableSPMRewrite = false;
@@ -4482,6 +4504,22 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public void setEnableCboBasedMvRewrite(boolean enableCBOBasedMVRewrite) {
         this.enableCBOBasedMVRewrite = enableCBOBasedMVRewrite;
+    }
+
+    public void setEnableIVMRefresh(boolean enableIvmRefresh) {
+        this.enableIVMRefresh = enableIvmRefresh;
+    }
+
+    public boolean isEnableIVMRefresh() {
+        return enableIVMRefresh;
+    }
+
+    public void setTvrTargetMvid(String tvrTargetMvid) {
+        this.tvrTargetMvId = tvrTargetMvid;
+    }
+
+    public String getTvrTargetMvId() {
+        return this.tvrTargetMvId;
     }
 
     public int getCboMaterializedViewRewriteRuleOutputLimit() {

@@ -43,9 +43,6 @@ import com.google.common.collect.Iterables;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
-import com.starrocks.analysis.BloomFilterIndexUtil;
-import com.starrocks.analysis.ColumnPosition;
-import com.starrocks.analysis.SlotRef;
 import com.starrocks.binlog.BinlogConfig;
 import com.starrocks.catalog.AggregateType;
 import com.starrocks.catalog.ArrayType;
@@ -101,6 +98,7 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.analyzer.FeNameFormat;
+import com.starrocks.sql.analyzer.IndexAnalyzer;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AddColumnClause;
 import com.starrocks.sql.ast.AddColumnsClause;
@@ -109,6 +107,7 @@ import com.starrocks.sql.ast.AlterClause;
 import com.starrocks.sql.ast.AlterTableColumnClause;
 import com.starrocks.sql.ast.CancelAlterTableStmt;
 import com.starrocks.sql.ast.CancelStmt;
+import com.starrocks.sql.ast.ColumnPosition;
 import com.starrocks.sql.ast.CreateIndexClause;
 import com.starrocks.sql.ast.DropColumnClause;
 import com.starrocks.sql.ast.DropFieldClause;
@@ -121,6 +120,7 @@ import com.starrocks.sql.ast.ModifyColumnCommentClause;
 import com.starrocks.sql.ast.ModifyTablePropertiesClause;
 import com.starrocks.sql.ast.OptimizeClause;
 import com.starrocks.sql.ast.ReorderColumnsClause;
+import com.starrocks.sql.ast.expression.SlotRef;
 import com.starrocks.sql.common.MetaUtils;
 import com.starrocks.task.AgentBatchTask;
 import com.starrocks.task.AgentTaskExecutor;
@@ -1486,7 +1486,7 @@ public class SchemaChangeHandler extends AlterHandler {
             }
         }
 
-        BloomFilterIndexUtil.analyseBfWithNgramBf(olapTable, newSet, bfColumnIds);
+        IndexAnalyzer.analyseBfWithNgramBf(olapTable, newSet, bfColumnIds);
 
         // property 3: timeout
         long timeoutSecond = PropertyAnalyzer.analyzeTimeout(propertyMap, Config.alter_table_timeout_second);
@@ -2850,9 +2850,20 @@ public class SchemaChangeHandler extends AlterHandler {
 
     private void processAddIndex(CreateIndexClause alterClause, OlapTable olapTable, List<Index> newIndexes)
             throws StarRocksException {
-        Index newIndex = alterClause.getIndex();
-        if (newIndex == null) {
-            return;
+        // Create Index object directly from IndexDef
+        IndexDef indexDef = alterClause.getIndexDef();
+        Index newIndex;
+        // Only assign meaningful indexId for OlapTable
+        if (olapTable.isOlapTableOrMaterializedView()) {
+            long indexId = IndexDef.IndexType.isCompatibleIndex(indexDef.getIndexType()) ? 
+                    olapTable.incAndGetMaxIndexId() : -1;
+            newIndex = new Index(indexId, indexDef.getIndexName(),
+                    MetaUtils.getColumnIdsByColumnNames(olapTable, indexDef.getColumns()),
+                    indexDef.getIndexType(), indexDef.getComment(), indexDef.getProperties());
+        } else {
+            newIndex = new Index(indexDef.getIndexName(),
+                    MetaUtils.getColumnIdsByColumnNames(olapTable, indexDef.getColumns()),
+                    indexDef.getIndexType(), indexDef.getComment(), indexDef.getProperties());
         }
 
         if (newIndex.getIndexType() == IndexType.GIN) {
@@ -2874,7 +2885,6 @@ public class SchemaChangeHandler extends AlterHandler {
         }
 
         List<Index> existedIndexes = olapTable.getIndexes();
-        IndexDef indexDef = alterClause.getIndexDef();
         Set<String> newColset = Sets.newTreeSet(String.CASE_INSENSITIVE_ORDER);
         newColset.addAll(indexDef.getColumns());
         for (Index existedIdx : existedIndexes) {
@@ -2903,7 +2913,7 @@ public class SchemaChangeHandler extends AlterHandler {
             if (column != null) {
                 // only throw DdlException
                 try {
-                    indexDef.checkColumn(column, olapTable.getKeysType());
+                    IndexAnalyzer.checkColumn(column, indexDef.getIndexType(), indexDef.getProperties(), olapTable.getKeysType());
                 } catch (Exception e) {
                     throw new DdlException(e.getMessage());
                 }

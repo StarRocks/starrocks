@@ -40,8 +40,6 @@ import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.ImmutableSortedSet;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
-import com.starrocks.analysis.ArithmeticExpr;
-import com.starrocks.analysis.FunctionName;
 import com.starrocks.builtins.VectorizedBuiltinFunctions;
 import com.starrocks.catalog.combinator.AggStateCombineCombinator;
 import com.starrocks.catalog.combinator.AggStateIf;
@@ -52,6 +50,8 @@ import com.starrocks.catalog.combinator.StateFunctionCombinator;
 import com.starrocks.catalog.combinator.StateMergeCombinator;
 import com.starrocks.catalog.combinator.StateUnionCombinator;
 import com.starrocks.sql.analyzer.PolymorphicFunctionAnalyzer;
+import com.starrocks.sql.ast.expression.ArithmeticExpr;
+import com.starrocks.sql.ast.expression.FunctionName;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -312,6 +312,8 @@ public class FunctionSet {
     public static final String DISTINCT_PCSA = "distinct_pcsa";
     public static final String HISTOGRAM = "histogram";
     public static final String FLAT_JSON_META = "flat_json_meta";
+    public static final String COLUMN_SIZE = "column_size";
+    public static final String COLUMN_COMPRESSED_SIZE = "column_compressed_size";
     public static final String MANN_WHITNEY_U_TEST = "mann_whitney_u_test";
 
     // Bitmap functions:
@@ -1161,7 +1163,7 @@ public class FunctionSet {
 
             // MAX_BY
             for (Type t1 : Type.getSupportedTypes()) {
-                if (t1.isFunctionType() || t1.isNull() || t1.isChar() || t1.isPseudoType()) {
+                if (t1.isFunctionType() || t1.isNull() || t1.isChar()) {
                     continue;
                 }
                 addBuiltin(AggregateFunction.createBuiltin(
@@ -1170,7 +1172,7 @@ public class FunctionSet {
 
             // MIN_BY
             for (Type t1 : Type.getSupportedTypes()) {
-                if (t1.isFunctionType() || t1.isNull() || t1.isChar() || t1.isPseudoType()) {
+                if (t1.isFunctionType() || t1.isNull() || t1.isChar()) {
                     continue;
                 }
                 addBuiltin(AggregateFunction.createBuiltin(
@@ -1374,6 +1376,12 @@ public class FunctionSet {
                 Type.ARRAY_VARCHAR, Type.ARRAY_VARCHAR, false, false, false));
         addBuiltin(AggregateFunction.createBuiltin(FLAT_JSON_META, Lists.newArrayList(Type.ANY_ARRAY),
                 Type.ARRAY_VARCHAR, Type.ARRAY_VARCHAR, false, false, false));
+
+        // column meta size inspectors (used only in META_SCAN)
+        addBuiltin(AggregateFunction.createBuiltin(COLUMN_SIZE, Lists.newArrayList(Type.ANY_ELEMENT),
+                Type.BIGINT, Type.BIGINT, false, false, false));
+        addBuiltin(AggregateFunction.createBuiltin(COLUMN_COMPRESSED_SIZE, Lists.newArrayList(Type.ANY_ELEMENT),
+                Type.BIGINT, Type.BIGINT, false, false, false));
 
         for (Type t : Type.getSupportedTypes()) {
             // null/char/time is handled through type promotion

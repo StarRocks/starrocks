@@ -87,7 +87,7 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
 
-import static com.starrocks.analysis.BinaryType.EQ_FOR_NULL;
+import static com.starrocks.sql.ast.expression.BinaryType.EQ_FOR_NULL;
 import static org.apache.iceberg.TableProperties.DEFAULT_FILE_FORMAT;
 import static org.apache.iceberg.TableProperties.DEFAULT_FILE_FORMAT_DEFAULT;
 

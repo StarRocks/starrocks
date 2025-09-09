@@ -43,11 +43,6 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Multimap;
 import com.google.common.collect.Sets;
 import com.google.common.collect.Streams;
-import com.starrocks.analysis.BloomFilterIndexUtil;
-import com.starrocks.analysis.DateLiteral;
-import com.starrocks.analysis.Expr;
-import com.starrocks.analysis.StringLiteral;
-import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.AggregateType;
 import com.starrocks.catalog.BaseTableInfo;
 import com.starrocks.catalog.Column;
@@ -80,12 +75,17 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
 import com.starrocks.server.StorageVolumeMgr;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
+import com.starrocks.sql.analyzer.IndexAnalyzer;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.analyzer.SetStmtAnalyzer;
 import com.starrocks.sql.ast.Property;
 import com.starrocks.sql.ast.SetListItem;
 import com.starrocks.sql.ast.SetStmt;
 import com.starrocks.sql.ast.SystemVariable;
+import com.starrocks.sql.ast.expression.DateLiteral;
+import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.StringLiteral;
+import com.starrocks.sql.ast.expression.TableName;
 import com.starrocks.sql.common.MetaUtils;
 import com.starrocks.sql.optimizer.rewrite.TimeDriftConstraint;
 import com.starrocks.sql.optimizer.rule.transformation.partition.PartitionSelector;
@@ -101,6 +101,7 @@ import com.starrocks.thrift.TTabletType;
 import com.starrocks.warehouse.Warehouse;
 import org.apache.commons.collections.CollectionUtils;
 import org.apache.commons.collections.MapUtils;
+import org.apache.commons.lang3.EnumUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.jetbrains.annotations.NotNull;
@@ -214,6 +215,7 @@ public class PropertyAnalyzer {
     public static final String PROPERTIES_PARTITION_REFRESH_NUMBER = "partition_refresh_number";
     public static final String PROPERTIES_EXCLUDED_TRIGGER_TABLES = "excluded_trigger_tables";
     public static final String PROPERTIES_EXCLUDED_REFRESH_TABLES = "excluded_refresh_tables";
+    public static final String PROPERTIES_MV_REFRESH_MODE = "refresh_mode";
 
     // 1. `force_external_table_query_rewrite` is used to control whether external table can be rewritten or not
     // 2. external table can be rewritten by default if not specific.
@@ -676,6 +678,24 @@ public class PropertyAnalyzer {
         return partitionRefreshStrategy;
     }
 
+    public static String analyzeRefreshMode(Map<String, String> properties) {
+        String refreshMode = null;
+        if (properties != null && properties.containsKey(PROPERTIES_MV_REFRESH_MODE)) {
+            refreshMode = properties.get(PROPERTIES_MV_REFRESH_MODE);
+            try {
+                MaterializedView.RefreshMode.valueOf(refreshMode.toUpperCase());
+            } catch (IllegalArgumentException e) {
+                throw new IllegalArgumentException("Invalid refresh_mode: " + refreshMode + ". Only " +
+                        EnumUtils.getEnumList(MaterializedView.RefreshMode.class).stream()
+                                .map(MaterializedView.RefreshMode::name)
+                                .collect(Collectors.joining(", ")) +
+                        " are supported.");
+            }
+            properties.remove(PROPERTIES_MV_REFRESH_MODE);
+        }
+        return refreshMode;
+    }
+
     public static List<TableName> analyzeExcludedTables(Map<String, String> properties,
                                                         String propertiesKey,
                                                         MaterializedView mv) {
@@ -960,7 +980,7 @@ public class PropertyAnalyzer {
     public static double analyzeBloomFilterFpp(Map<String, String> properties) throws AnalysisException {
         double bfFpp = 0;
         if (properties != null && properties.containsKey(PROPERTIES_BF_FPP)) {
-            bfFpp = BloomFilterIndexUtil.analyzeBloomFilterFpp(properties);
+            bfFpp = IndexAnalyzer.analyzeBloomFilterFpp(properties);
             // have to remove this from properties, which means it's valid and checked already
             properties.remove(PROPERTIES_BF_FPP);
         }
@@ -1740,6 +1760,13 @@ public class PropertyAnalyzer {
                 materializedView.getTableProperty().getProperties()
                         .put(PropertyAnalyzer.PROPERTIES_PARTITION_REFRESH_STRATEGY, strategy);
                 materializedView.getTableProperty().setPartitionRefreshStrategy(strategy);
+            }
+            // refresh mode
+            if (properties.containsKey(PropertyAnalyzer.PROPERTIES_MV_REFRESH_MODE)) {
+                String mvRefreshMode = PropertyAnalyzer.analyzeRefreshMode(properties);
+                materializedView.getTableProperty().getProperties()
+                        .put(PropertyAnalyzer.PROPERTIES_MV_REFRESH_MODE, mvRefreshMode);
+                materializedView.getTableProperty().setMvRefreshMode(mvRefreshMode);
             }
             // exclude trigger tables
             if (properties.containsKey(PropertyAnalyzer.PROPERTIES_EXCLUDED_TRIGGER_TABLES)) {

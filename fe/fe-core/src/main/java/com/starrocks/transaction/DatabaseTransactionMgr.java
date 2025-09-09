@@ -185,7 +185,8 @@ public class DatabaseTransactionMgr {
 
         long tid = globalStateMgr.getGlobalTransactionMgr().getTransactionIDGenerator().getNextTransactionId();
         boolean combinedTxnLog = LakeTableHelper.supportCombinedTxnLog(sourceType);
-        boolean fileBundling = LakeTableHelper.fileBundling(dbId, tableIdList);
+        boolean fileBundling = LakeTableHelper.fileBundling(dbId, tableIdList)
+                && LakeTableHelper.isTransactionSupportCombinedTxnLog(sourceType);
         LOG.info("begin transaction: txn_id: {} with label {} from coordinator {}, listner id: {}",
                 tid, label, coordinator, callbackId);
         TransactionState transactionState = new TransactionState(dbId, tableIdList, tid, label, requestId, sourceType,
@@ -1938,7 +1939,10 @@ public class DatabaseTransactionMgr {
             LOG.debug("replay a transaction state batch{}", transactionStateBatch);
             transactionStateBatch.replaySetTransactionStatus();
             Database db = globalStateMgr.getLocalMetastore().getDb(transactionStateBatch.getDbId());
-            updateCatalogAfterVisibleBatch(transactionStateBatch, db);
+            // db may be dropped when doing finishTransactionBatch
+            if (db != null) {
+                updateCatalogAfterVisibleBatch(transactionStateBatch, db);
+            }
 
             unprotectSetTransactionStateBatch(transactionStateBatch);
         } finally {

@@ -14,11 +14,11 @@
 
 package com.starrocks.sql.ast.pipe;
 
-import com.starrocks.analysis.TableName;
 import com.starrocks.load.pipe.Pipe;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.AstVisitorExtendInterface;
 import com.starrocks.sql.ast.ShowStmt;
+import com.starrocks.sql.ast.expression.TableName;
 import com.starrocks.sql.parser.NodePosition;
 
 import java.util.List;

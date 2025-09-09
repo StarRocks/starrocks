@@ -15,12 +15,12 @@
 
 package com.starrocks.planner.stream;
 
-import com.starrocks.analysis.AggregateInfo;
-import com.starrocks.analysis.Expr;
 import com.starrocks.common.FeConstants;
+import com.starrocks.planner.AggregateInfo;
 import com.starrocks.planner.FragmentNormalizer;
 import com.starrocks.planner.PlanNode;
 import com.starrocks.planner.PlanNodeId;
+import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.optimizer.operator.stream.IMTInfo;
 import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.thrift.TExpr;
@@ -58,23 +58,23 @@ public class StreamAggNode extends PlanNode {
         if (CollectionUtils.isNotEmpty(aggInfo.getMaterializedAggregateExprs())) {
             output.append(detailPrefix)
                     .append("output: ")
-                    .append(getExplainString(aggInfo.getAggregateExprs()))
+                    .append(explainExpr(aggInfo.getAggregateExprs()))
                     .append("\n");
         }
         output.append(detailPrefix)
                 .append("group_by: ")
-                .append(getExplainString(aggInfo.getGroupingExprs()))
+                .append(explainExpr(aggInfo.getGroupingExprs()))
                 .append("\n");
         if (!conjuncts.isEmpty()) {
-            output.append(detailPrefix).append("having: ").append(getExplainString(conjuncts)).append("\n");
+            output.append(detailPrefix).append("having: ").append(explainExpr(conjuncts)).append("\n");
         }
 
         if (detailLevel == TExplainLevel.VERBOSE) {
             if (detailImt != null) {
-                output.append(detailPrefix).append("detail_imt: ").append(detailImt.toString()).append("\n");
+                output.append(detailPrefix).append("detail_imt: ").append(detailImt).append("\n");
             }
             if (aggImt != null) {
-                output.append(detailPrefix).append("agg_imt: ").append(aggImt.toString()).append("\n");
+                output.append(detailPrefix).append("agg_imt: ").append(aggImt).append("\n");
             }
         }
         return output.toString();
