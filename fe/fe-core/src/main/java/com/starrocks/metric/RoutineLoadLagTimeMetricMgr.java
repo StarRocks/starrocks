@@ -33,6 +33,7 @@ import java.util.Map;
  */
 public class RoutineLoadLagTimeMetricMgr {
     private static final Logger LOG = LogManager.getLogger(RoutineLoadLagTimeMetricMgr.class);
+    private static final long STALE_THRESHOLD_MS = 5L * 60 * 1000; // 5 minutes; to prevent memory leaks
     
     private static final RoutineLoadLagTimeMetricMgr INSTANCE = new RoutineLoadLagTimeMetricMgr();
     
@@ -157,7 +158,7 @@ public class RoutineLoadLagTimeMetricMgr {
         
         try {
             long now = System.currentTimeMillis();
-            long staleThresholdMs = 5L * 60 * 1000; // 5 minutes; to prevent memory leaks
+            long staleThresholdMs = STALE_THRESHOLD_MS;
             
             // Clean up stale data
             Iterator<Map.Entry<String, RoutineLoadLagTimeMetric>> jobLagTimeIterator = jobLagTimeMap.entrySet().iterator();
@@ -224,12 +225,12 @@ public class RoutineLoadLagTimeMetricMgr {
             RoutineLoadLagTimeMetric lagTimeMetric = jobLagTimeMap.get(jobKey);
             
             if (lagTimeMetric == null || !lagTimeMetric.hasData()) {
-                LOG.info("No lag time metric found for job {} ({})", jobKey, jobName);
+                LOG.debug("No lag time metric found for job {} ({})", jobKey, jobName);
                 return Collections.emptyMap();
             }
             
             Map<Integer, Long> lagTimes = lagTimeMetric.getPartitionLagTimes();
-            LOG.info("Retrieved {} partition lag times for job {} ({})", 
+            LOG.debug("Retrieved {} partition lag times for job {} ({})", 
                      lagTimes.size(), jobKey, jobName);
             return lagTimes;
             
