@@ -106,7 +106,12 @@ Currently, column comments cannot be modified.
 
 #### ADD PARTITION(S)
 
-You can choose to add range partitions or list partitions.
+You must strictly follow the respective syntax to add range partitions or list partitions.
+
+:::note
+- Adding expression partitions is not supported.
+- Please note that `PARTITION BY date_trunc(column)` and `PARTITION BY time_slice(column)` are considered range partitioning, despite their format of expression partitioning. Therefore, you can use the following syntax for range partitions to add new partitions to tables use such partitioning strategies.
+:::
 
 Syntax：
 
@@ -241,8 +246,19 @@ Syntax:
 ```sql
 ALTER TABLE [<db_name>.]<tbl_name> 
 ADD TEMPORARY PARTITION [IF NOT EXISTS] <partition_name>
-partition_desc ["key"="value"]
+{ single_range_partition | multi_range_partitions | list_partitions }
 [DISTRIBUTED BY HASH (k1[,k2 ...]) [BUCKETS num]]
+
+-- For details of single_range_partition and multi_range_partitions, see ADD PARTITION(S) section in this page.
+
+list_partitions::= 
+    PARTITION <partition_name> VALUES IN (value_list)
+
+value_list ::=
+    value_item [, ...]
+
+value_item ::=
+    { <value> | ( <value> [, ...] ) }
 ```
 
 #### Use a temporary partition to replace the current partition
