@@ -169,11 +169,7 @@ public final class QeProcessorImpl implements QeProcessor, MemoryTrackable {
                 continue;
             }
             final String queryIdStr = DebugUtil.printId(info.getConnectContext().getExecutionId());
-            String execState = (
-                    info.getConnectContext().isPending() ?
-                            LogicalSlot.State.REQUIRING :
-                            LogicalSlot.State.ALLOCATED).toQueryStateString();
-            final QueryStatisticsItem item = new QueryStatisticsItem.Builder()
+            QueryStatisticsItem.Builder itemBuilder = new QueryStatisticsItem.Builder()
                     .customQueryId(context.getCustomQueryId())
                     .queryId(queryIdStr)
                     .executionId(info.getConnectContext().getExecutionId())
@@ -181,13 +177,29 @@ public final class QeProcessorImpl implements QeProcessor, MemoryTrackable {
                     .sql(info.getSql())
                     .user(context.getQualifiedUser())
                     .connId(String.valueOf(context.getConnectionId()))
-                    .db(context.getDatabase())
-                    .fragmentInstanceInfos(info.getCoord().getFragmentInstanceInfos())
-                    .profile(info.getCoord().getQueryProfile())
-                    .warehouseName(info.coord.getWarehouseName())
-                    .resourceGroupName(info.coord.getResourceGroupName())
-                    .execState(execState)
-                    .build();
+                    .db(context.getDatabase());
+
+            if (!info.connectContext.isPlanning()) {
+                String execState = (
+                        info.getConnectContext().isPending() ?
+                                LogicalSlot.State.REQUIRING :
+                                LogicalSlot.State.ALLOCATED).toQueryStateString();
+                itemBuilder
+                        .fragmentInstanceInfos(info.getCoord().getFragmentInstanceInfos())
+                        .profile(info.getCoord().getQueryProfile())
+                        .warehouseName(info.coord.getWarehouseName())
+                        .resourceGroupName(info.coord.getResourceGroupName())
+                        .execState(execState)
+                        .build();
+            } else {
+                List<QueryStatisticsItem.FragmentInstanceInfo> emptyFragmentInstanceInfos = Lists.newArrayList();
+                emptyFragmentInstanceInfos.add(new QueryStatisticsItem.FragmentInstanceInfo.Builder().build());
+                itemBuilder
+                        .fragmentInstanceInfos(emptyFragmentInstanceInfos)
+                        .execState(LogicalSlot.State.CREATED.toQueryStateString());
+            }
+
+            final QueryStatisticsItem item = itemBuilder.build();
 
             querySet.put(queryIdStr, item);
         }
@@ -365,6 +377,11 @@ public final class QeProcessorImpl implements QeProcessor, MemoryTrackable {
             QueryInfo res = new QueryInfo(connectContext, null, null);
             res.isMVJob = true;
             return res;
+        }
+
+        public static QueryInfo fromPlanningQuery(ConnectContext connectContext, String sql) {
+            connectContext.setPlanning(true);
+            return new QueryInfo(connectContext, sql, null);
         }
 
         public ConnectContext getConnectContext() {
