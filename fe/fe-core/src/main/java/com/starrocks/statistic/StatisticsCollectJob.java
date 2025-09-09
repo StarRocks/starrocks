@@ -180,6 +180,10 @@ public abstract class StatisticsCollectJob {
             if (context.getState().getStateType() == QueryState.MysqlStateType.ERR) {
                 LOG.warn("Statistics collect fail | Error Message [{}] | {} | SQL [{}]",
                         context.getState().getErrorMessage(), DebugUtil.printId(context.getQueryId()), sql);
+                if (StringUtils.contains(context.getState().getErrorMessage(), "kill analyze")) {
+                    throw new DdlException(context.getState().getErrorMessage());
+                }
+
                 if (StringUtils.contains(context.getState().getErrorMessage(), "Too many versions")) {
                     Thread.sleep(Config.statistic_collect_too_many_version_sleep);
                     count++;
