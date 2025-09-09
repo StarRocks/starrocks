@@ -66,6 +66,7 @@ import com.starrocks.sql.ast.AddPartitionClause;
 import com.starrocks.sql.ast.AddRollupClause;
 import com.starrocks.sql.ast.AlterClause;
 import com.starrocks.sql.ast.AlterMaterializedViewStmt;
+import com.starrocks.sql.ast.AlterTableAutoIncrementClause;
 import com.starrocks.sql.ast.AlterTableCommentClause;
 import com.starrocks.sql.ast.AlterTableStmt;
 import com.starrocks.sql.ast.AlterViewClause;
@@ -915,6 +916,23 @@ public class AlterJobExecutor implements AstVisitor<Void, ConnectContext> {
 
         GlobalStateMgr.getCurrentState().getAlterJobMgr().alterView(alterViewInfo, false);
         GlobalStateMgr.getCurrentState().getEditLog().logModifyViewDef(alterViewInfo);
+        return null;
+    }
+
+    @Override
+    public Void visitAlterTableAutoIncrementClause(AlterTableAutoIncrementClause clause, ConnectContext context) {
+        Locker locker = new Locker();
+        locker.lockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(table.getId()), LockType.WRITE);
+        try {
+            try {
+                GlobalStateMgr.getCurrentState().getLocalMetastore()
+                    .alterTableAutoIncrement(db.getFullName(), table.getName(), clause.getAutoIncrementValue());
+            } catch (DdlException e) {
+                throw new AlterJobException(e.getMessage());
+            }
+        } finally {
+            locker.unLockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(table.getId()), LockType.WRITE);
+        }
         return null;
     }
 }

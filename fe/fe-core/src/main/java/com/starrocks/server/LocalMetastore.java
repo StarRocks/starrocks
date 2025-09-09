@@ -5307,4 +5307,27 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
                 }).sum();
         return ImmutableMap.of("Partition", totalCount);
     }
+
+    public void alterTableAutoIncrement(String dbName, String tableName, long newAutoIncrementValue) throws DdlException {
+        Table table = getTable(dbName, tableName);
+        Long tableId = table.getId();
+        Long currentValue = getCurrentAutoIncrementIdByTableId(tableId);
+
+        if (currentValue != null && newAutoIncrementValue <= currentValue) {
+            throw new DdlException("New auto_increment value must be greater than current value: " + currentValue);
+        }
+
+        if (!((OlapTable) table).sendDropAutoIncrementMapTask()) {
+            throw new DdlException("Failed to drop auto increment cache in CN/BE");
+        }
+
+        addOrReplaceAutoIncrementIdByTableId(tableId, newAutoIncrementValue);
+
+        ConcurrentHashMap<Long, Long> idMap = new ConcurrentHashMap<>();
+        idMap.put(tableId, newAutoIncrementValue);
+        AutoIncrementInfo info = new AutoIncrementInfo(idMap);
+        stateMgr.getEditLog().logSaveAutoIncrementId(info);
+
+        LOG.info("Set auto_increment value for table {}.{} to {}", dbName, tableName, newAutoIncrementValue);
+    }
 }
