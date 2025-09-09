@@ -45,4 +45,21 @@ public class ExplainTest extends PlanTestBase {
                 + "    - SCAN [t0] => [1:v1] {rows: 1}\n"
                 + "      |partitionRatio: 0/1, tabletRatio: 0/0");
     }
+
+    @Test
+    public void testDesensitizeExplain() throws Exception {
+        connectContext.getSessionVariable().setEnableDesensitizeExplain(true);
+        String sql = "SELECT DISTINCT t0.v1 FROM t0 LEFT JOIN t1 ON t0.v1 = t1.v4 WHERE t0.v1 > 1000";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "PREDICATES: 1: v1 > ?\n");
+
+        sql = "SELECT DISTINCT t0.v1 FROM t0 LEFT JOIN t1 ON t0.v1 = t1.v4 and t0.v2 + t1.v5 > 1000";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "other join predicates: 2: v2 + 5: v5 > ?");
+
+        sql = "SELECT MIN(pow(t0.v1, 2)) FROM t0";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "min(pow(CAST(1: v1 AS DOUBLE), ?))");
+
+    }
 }

@@ -233,7 +233,7 @@ Status StreamAggregator::_output_result_changes_with_retract(size_t chunk_size, 
     // compute agg count to decide whehter to generate retract info.
     auto agg_count_column = down_cast<const Int64Column*>(
             final_result_chunk->get_column_by_index(_group_by_columns.size() + _count_agg_idx).get());
-    const auto& agg_count_column_data = agg_count_column->get_data();
+    const auto agg_count_column_data = agg_count_column->immutable_data();
 
     // 2. seek previous results from result state table.
     StateTableResult prev_state_result;

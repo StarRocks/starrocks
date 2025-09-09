@@ -37,6 +37,7 @@
 #include <memory>
 #include <sstream>
 
+#include "runtime/exec_env.h"
 #include "runtime/mem_tracker.h"
 #include "storage/metadata_util.h"
 #include "storage/olap_common.h"

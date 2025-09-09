@@ -80,3 +80,6 @@ public class QualifiedName implements ParseNode {
         return parts.hashCode();
     }
 }
+
+
+

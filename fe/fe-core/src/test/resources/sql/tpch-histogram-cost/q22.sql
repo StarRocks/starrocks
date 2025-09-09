@@ -126,7 +126,7 @@ OutPut Exchange Id: 11
 2:OlapScanNode
 table: customer, rollup: customer
 preAggregation: on
-Predicates: substring(5: C_PHONE, 1, 2) IN ('21', '28', '24', '32', '35', '34', '37')
+Predicates: substring[([5: C_PHONE, CHAR, false], 1, 2); args: VARCHAR,INT,INT; result: VARCHAR; args nullable: false; result nullable: true] IN ('21', '28', '24', '32', '35', '34', '37')
 partitionsRatio=1/1, tabletsRatio=10/10
 actualRows=0, avgRowSize=31.0
 cardinality: 7500000
@@ -175,7 +175,7 @@ OutPut Exchange Id: 06
 3:OlapScanNode
 table: customer, rollup: customer
 preAggregation: on
-Predicates: [15: C_ACCTBAL, DOUBLE, false] > 0.0, substring(14: C_PHONE, 1, 2) IN ('21', '28', '24', '32', '35', '34', '37')
+Predicates: [15: C_ACCTBAL, DOUBLE, false] > 0.0, substring[([14: C_PHONE, CHAR, false], 1, 2); args: VARCHAR,INT,INT; result: VARCHAR; args nullable: false; result nullable: true] IN ('21', '28', '24', '32', '35', '34', '37')
 partitionsRatio=1/1, tabletsRatio=10/10
 actualRows=0, avgRowSize=23.0
 cardinality: 6815795
@@ -200,4 +200,3 @@ probe runtime filters:
 column statistics:
 * O_CUSTKEY-->[1.0, 1.49999E7, 0.0, 8.0, 9999600.0] ESTIMATE
 [end]
-

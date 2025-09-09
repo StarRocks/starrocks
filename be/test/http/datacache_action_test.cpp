@@ -52,7 +52,7 @@ public:
 
         auto options = TestCacheUtils::create_simple_options(256 * KB, 20 * MB);
         _cache = std::make_shared<StarCacheEngine>();
-        ASSERT_OK(_cache->init(options));
+        ASSERT_OK(reinterpret_cast<StarCacheEngine*>(_cache.get())->init(options));
     }
     void TearDown() override {
         if (_evhttp_req != nullptr) {

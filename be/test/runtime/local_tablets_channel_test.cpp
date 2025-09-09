@@ -232,6 +232,31 @@ protected:
 
 using RpcLoadDisagnosePair = std::pair<PLoadDiagnoseRequest*, ReusableClosure<PLoadDiagnoseResult>*>;
 
+TEST_F(LocalTabletsChannelTest, test_add_chunk_not_exist_tablet) {
+    _create_tablets(1);
+    // open as a secondary replica of 3 replicas
+    ReplicaInfo replica_info{_tablets[0]->tablet_id(), _nodes};
+    _open_channel(_nodes[1].node_id(), {replica_info});
+
+    PTabletWriterAddChunkRequest add_chunk_request;
+    add_chunk_request.mutable_id()->CopyFrom(_load_id);
+    add_chunk_request.set_index_id(_index_id);
+    add_chunk_request.set_sink_id(_sink_id);
+    add_chunk_request.set_sender_id(0);
+    add_chunk_request.set_eos(true);
+    add_chunk_request.set_packet_seq(0);
+
+    auto non_exist_tablet_id = _tablets[0]->tablet_id() + 1;
+    add_chunk_request.add_tablet_ids(non_exist_tablet_id);
+
+    bool close_channel = false;
+    PTabletWriterAddBatchResult add_chunk_response;
+    _tablets_channel->add_chunk(nullptr, add_chunk_request, &add_chunk_response, &close_channel);
+    ASSERT_EQ(TStatusCode::INTERNAL_ERROR, add_chunk_response.status().status_code()) << add_chunk_response.status();
+    ASSERT_TRUE(close_channel); // set_eos(true)
+    _tablets_channel->abort();
+}
+
 TEST_F(LocalTabletsChannelTest, diagnose_stack_trace) {
     _create_tablets(1);
     // open as a secondary replica of 3 replicas

@@ -108,133 +108,133 @@ template <>
 struct RunTimeTypeTraits<TYPE_BOOLEAN> {
     using CppType = uint8_t;
     using ColumnType = BooleanColumn;
-    using ProxyContainerType = ColumnType::Container;
+    using ProxyContainerType = ColumnType::ImmContainer;
 };
 
 template <>
 struct RunTimeTypeTraits<TYPE_TINYINT> {
     using CppType = int8_t;
     using ColumnType = Int8Column;
-    using ProxyContainerType = ColumnType::Container;
+    using ProxyContainerType = ColumnType::ImmContainer;
 };
 
 template <>
 struct RunTimeTypeTraits<TYPE_UNSIGNED_TINYINT> {
     using CppType = uint8_t;
     using ColumnType = UInt8Column;
-    using ProxyContainerType = ColumnType::Container;
+    using ProxyContainerType = ColumnType::ImmContainer;
 };
 
 template <>
 struct RunTimeTypeTraits<TYPE_SMALLINT> {
     using CppType = int16_t;
     using ColumnType = Int16Column;
-    using ProxyContainerType = ColumnType::Container;
+    using ProxyContainerType = ColumnType::ImmContainer;
 };
 
 template <>
 struct RunTimeTypeTraits<TYPE_UNSIGNED_SMALLINT> {
     using CppType = uint16_t;
     using ColumnType = UInt16Column;
-    using ProxyContainerType = ColumnType::Container;
+    using ProxyContainerType = ColumnType::ImmContainer;
 };
 
 template <>
 struct RunTimeTypeTraits<TYPE_INT> {
     using CppType = int32_t;
     using ColumnType = Int32Column;
-    using ProxyContainerType = ColumnType::Container;
+    using ProxyContainerType = ColumnType::ImmContainer;
 };
 
 template <>
 struct RunTimeTypeTraits<TYPE_UNSIGNED_INT> {
     using CppType = uint32_t;
     using ColumnType = UInt32Column;
-    using ProxyContainerType = ColumnType::Container;
+    using ProxyContainerType = ColumnType::ImmContainer;
 };
 
 template <>
 struct RunTimeTypeTraits<TYPE_BIGINT> {
     using CppType = int64_t;
     using ColumnType = Int64Column;
-    using ProxyContainerType = ColumnType::Container;
+    using ProxyContainerType = ColumnType::ImmContainer;
 };
 
 template <>
 struct RunTimeTypeTraits<TYPE_UNSIGNED_BIGINT> {
     using CppType = uint64_t;
     using ColumnType = UInt64Column;
-    using ProxyContainerType = ColumnType::Container;
+    using ProxyContainerType = ColumnType::ImmContainer;
 };
 
 template <>
 struct RunTimeTypeTraits<TYPE_LARGEINT> {
     using CppType = int128_t;
     using ColumnType = Int128Column;
-    using ProxyContainerType = ColumnType::Container;
+    using ProxyContainerType = ColumnType::ImmContainer;
 };
 
 template <>
 struct RunTimeTypeTraits<TYPE_FLOAT> {
     using CppType = float;
     using ColumnType = FloatColumn;
-    using ProxyContainerType = ColumnType::Container;
+    using ProxyContainerType = ColumnType::ImmContainer;
 };
 
 template <>
 struct RunTimeTypeTraits<TYPE_DOUBLE> {
     using CppType = double;
     using ColumnType = DoubleColumn;
-    using ProxyContainerType = ColumnType::Container;
+    using ProxyContainerType = ColumnType::ImmContainer;
 };
 
 template <>
 struct RunTimeTypeTraits<TYPE_DECIMALV2> {
     using CppType = DecimalV2Value;
     using ColumnType = DecimalColumn;
-    using ProxyContainerType = ColumnType::Container;
+    using ProxyContainerType = ColumnType::ImmContainer;
 };
 
 template <>
 struct RunTimeTypeTraits<TYPE_DECIMAL32> {
     using CppType = int32_t;
     using ColumnType = Decimal32Column;
-    using ProxyContainerType = ColumnType::Container;
+    using ProxyContainerType = ColumnType::ImmContainer;
 };
 
 template <>
 struct RunTimeTypeTraits<TYPE_DECIMAL64> {
     using CppType = int64_t;
     using ColumnType = Decimal64Column;
-    using ProxyContainerType = ColumnType::Container;
+    using ProxyContainerType = ColumnType::ImmContainer;
 };
 
 template <>
 struct RunTimeTypeTraits<TYPE_DECIMAL128> {
     using CppType = int128_t;
     using ColumnType = Decimal128Column;
-    using ProxyContainerType = ColumnType::Container;
+    using ProxyContainerType = ColumnType::ImmContainer;
 };
 
 template <>
 struct RunTimeTypeTraits<TYPE_DECIMAL256> {
     using CppType = int256_t;
     using ColumnType = Decimal256Column;
-    using ProxyContainerType = ColumnType::Container;
+    using ProxyContainerType = ColumnType::ImmContainer;
 };
 
 template <>
 struct RunTimeTypeTraits<TYPE_INT256> {
     using CppType = int256_t;
     using ColumnType = Int256Column;
-    using ProxyContainerType = ColumnType::Container;
+    using ProxyContainerType = ColumnType::ImmContainer;
 };
 
 template <>
 struct RunTimeTypeTraits<TYPE_NULL> {
     using CppType = uint8_t;
     using ColumnType = NullColumn;
-    using ProxyContainerType = ColumnType::Container;
+    using ProxyContainerType = ColumnType::ImmContainer;
 };
 
 template <>
@@ -255,21 +255,21 @@ template <>
 struct RunTimeTypeTraits<TYPE_DATE> {
     using CppType = DateValue;
     using ColumnType = DateColumn;
-    using ProxyContainerType = ColumnType::Container;
+    using ProxyContainerType = ColumnType::ImmContainer;
 };
 
 template <>
 struct RunTimeTypeTraits<TYPE_DATETIME> {
     using CppType = TimestampValue;
     using ColumnType = TimestampColumn;
-    using ProxyContainerType = ColumnType::Container;
+    using ProxyContainerType = ColumnType::ImmContainer;
 };
 
 template <>
 struct RunTimeTypeTraits<TYPE_TIME> {
     using CppType = double;
     using ColumnType = DoubleColumn;
-    using ProxyContainerType = ColumnType::Container;
+    using ProxyContainerType = ColumnType::ImmContainer;
 };
 
 template <>
@@ -297,14 +297,14 @@ template <>
 struct RunTimeTypeTraits<TYPE_JSON> {
     using CppType = JsonValue*;
     using ColumnType = JsonColumn;
-    using ProxyContainerType = ColumnType::Container;
+    using ProxyContainerType = ColumnType::ImmContainer;
 };
 
 template <>
 struct RunTimeTypeTraits<TYPE_VARIANT> {
     using CppType = VariantValue*;
     using ColumnType = VariantColumn;
-    using ProxyContainerType = ColumnType::Container;
+    using ProxyContainerType = ColumnType::ImmContainer;
 };
 
 template <>
