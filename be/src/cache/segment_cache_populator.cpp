@@ -48,6 +48,9 @@ SegmentCachePopulator::~SegmentCachePopulator() {
 }
 
 Status SegmentCachePopulator::populate_segment_to_cache(const std::string& segment_path) {
+    if (!config::datacache_enable) {
+        return Status::OK();
+    }
 
     ASSIGN_OR_RETURN(auto fs, FileSystem::CreateUniqueFromString(segment_path));
     ASSIGN_OR_RETURN(auto file, fs->new_random_access_file(segment_path));
@@ -57,7 +60,12 @@ Status SegmentCachePopulator::populate_segment_to_cache(const std::string& segme
         std::move(file), segment_path, file_size);
 
     auto cache_input_stream = std::make_shared<io::CacheInputStream>(
-        shared_buffered_input_stream, segment_path, file_size, 0 /* modification_time */);
+        shared_buffered_input_stream, segment_path, file_size, 0);
+
+    // Use minimal configuration - only enable population since that's our purpose
+    cache_input_stream->set_enable_populate_cache(true);
+    cache_input_stream->set_enable_async_populate_mode(true);
+    cache_input_stream->set_enable_block_buffer(config::datacache_block_buffer_enable);
 
     constexpr size_t kChunkSize = 1024 * 1024;
     std::vector<uint8_t> buffer(kChunkSize);
