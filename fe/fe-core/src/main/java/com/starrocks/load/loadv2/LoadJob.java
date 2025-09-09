@@ -928,6 +928,16 @@ public abstract class LoadJob extends AbstractTxnStateChangeCallback implements 
         }
         runtimeDetails.put(LoadConstants.RUNTIME_DETAILS_LOAD_ID, Joiner.on(", ").join(loadIds));
         runtimeDetails.put(LoadConstants.RUNTIME_DETAILS_TXN_ID, transactionId);
+        TransactionState txnState = GlobalStateMgr.getCurrentState()
+                .getGlobalTransactionMgr().getTransactionState(dbId, transactionId);
+        if (txnState != null) {
+            txnState.writeLock();
+            try {
+                runtimeDetails.put(LoadConstants.RUNTIME_DETAILS_TXN_ERROR_MSG, txnState.getErrMsg());
+            } finally {
+                txnState.writeUnlock();
+            }
+        }
         runtimeDetails.putAll(loadingStatus.getLoadStatistic().toRuntimeDetails());
         Gson gson = new Gson();
         return gson.toJson(runtimeDetails);
