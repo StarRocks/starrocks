@@ -41,7 +41,7 @@ public class RuntimeFilterPushDownContext {
         return description;
     }
 
-    public ExecGroup getExecGroup(int planNodeId) {
-        return this.execGroups.getExecGroup(planNodeId);
+    public ExecGroupId getExecGroupId(int planNodeId) {
+        return this.execGroups.getExecGroupId(planNodeId);
     }
 }
