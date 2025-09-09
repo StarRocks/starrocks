@@ -58,6 +58,9 @@ CONF_String(ssl_private_key_path, "");
 // The max number of single connections maintained by the brpc client and each server.
 // These connections are created during the first few access and will be used thereafter
 CONF_Int32(brpc_max_connections_per_server, "1");
+// BRPC stub cache expire configurations
+// The expire time of BRPC stub cache, default 60 minutes.
+CONF_mInt32(brpc_stub_expire_s, "3600"); // 60 minutes
 
 // Declare a selection strategy for those servers have many ips.
 // Note that there should at most one ip match this list.
