@@ -76,8 +76,8 @@ template <LogicalType ret_type, bool is_max_by>
 struct MaxMinByDispatcherInner {
     template <LogicalType arg_type>
     void operator()(AggregateFuncResolver* resolver) {
-        if constexpr ((lt_is_aggregate<arg_type> || lt_is_json<arg_type>)&&(lt_is_aggregate<ret_type> ||
-                                                                            lt_is_json<ret_type>)) {
+        if constexpr ((lt_is_aggregate<arg_type> || lt_is_json<arg_type>)&&(
+                              lt_is_aggregate<ret_type> || lt_is_json<ret_type> || lt_is_collection<ret_type>)) {
             if constexpr (is_max_by) {
                 resolver->add_aggregate_mapping_notnull<arg_type, ret_type>(
                         "max_by", true, AggregateFactory::MakeMaxByAggregateFunction<arg_type, false>());
@@ -104,6 +104,9 @@ struct MaxMinByDispatcher {
 void AggregateFuncResolver::register_minmaxany() {
     auto minmax_types = aggregate_types();
     minmax_types.push_back(TYPE_JSON);
+    minmax_types.push_back(TYPE_ARRAY);
+    minmax_types.push_back(TYPE_STRUCT);
+    minmax_types.push_back(TYPE_MAP);
     for (auto ret_type : minmax_types) {
         for (auto arg_type : minmax_types) {
             type_dispatch_all(arg_type, MaxMinByDispatcher<true>(), this, ret_type);
