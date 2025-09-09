@@ -135,6 +135,10 @@ public abstract class HyperQueryJob {
             setDefaultSessionVariable(context);
             return executor.executeStatisticDQL(context, sql);
         } catch (Exception e) {
+            if (e.getMessage().contains("USER_CANCEL")) {
+                lastFailure = e;
+                throw e;
+            }
             failures++;
             String message = "execute statistics query failed, sql: " + sql +  ", error: " + e.getMessage();
             LOG.error(message, e);
