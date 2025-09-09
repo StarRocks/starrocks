@@ -28,6 +28,7 @@
 #include "fs/fs_util.h"
 #include "runtime/mem_tracker.h"
 #include "storage/chunk_helper.h"
+#include "storage/lake/compaction_task.h"
 #include "storage/lake/delta_writer.h"
 #include "storage/lake/fixed_location_provider.h"
 #include "storage/lake/join_path.h"
@@ -68,6 +69,7 @@ inline std::shared_ptr<TabletMetadataPB> generate_tablet_metadata(KeysType keys_
         c0->set_type("VARCHAR");
         c0->set_is_key(true);
         c0->set_is_nullable(false);
+        c0->set_length(20);
     }
     auto c1 = schema->add_column();
     {
@@ -250,6 +252,66 @@ TEST_F(PkTabletSSTWriterTest, test_pk_tablet_sst_writer_reuse) {
 
     // The two files should be different
     ASSERT_NE(file_info1.path, file_info2.path);
+}
+
+TEST_F(PkTabletSSTWriterTest, test_publish_multi_segments_with_sst) {
+    auto chunk0 = generate_data(12);
+    auto chunk1 = generate_data(12, 12);
+    auto chunk2 = generate_data(12, 24);
+    auto indexes = std::vector<uint32_t>(chunk0.num_rows());
+    for (uint32_t i = 0, n = chunk0.num_rows(); i < n; i++) {
+        indexes[i] = i;
+    }
+    auto version = 1;
+    auto tablet_id = _tablet_metadata->id();
+    const int64_t old_size = config::write_buffer_size;
+    config::write_buffer_size = 1;
+    const bool old_enable_pk_parallel_execution = config::enable_pk_parallel_execution;
+    config::enable_pk_parallel_execution = true;
+    for (int i = 0; i < 5; i++) {
+        int64_t txn_id = next_id();
+        ASSIGN_OR_ABORT(auto delta_writer, DeltaWriterBuilder()
+                                                   .set_tablet_manager(_tablet_mgr.get())
+                                                   .set_tablet_id(tablet_id)
+                                                   .set_txn_id(txn_id)
+                                                   .set_partition_id(_partition_id)
+                                                   .set_mem_tracker(_mem_tracker.get())
+                                                   .set_schema_id(_tablet_schema->id())
+                                                   .set_profile(&_dummy_runtime_profile)
+                                                   .build());
+        ASSERT_OK(delta_writer->open());
+        ASSERT_OK(delta_writer->write(chunk0, indexes.data(), indexes.size()));
+        ASSERT_OK(delta_writer->write(chunk1, indexes.data(), indexes.size()));
+        ASSERT_OK(delta_writer->write(chunk2, indexes.data(), indexes.size()));
+        ASSERT_OK(delta_writer->finish_with_txnlog());
+        delta_writer->close();
+        // read txnlog
+        ASSIGN_OR_ABORT(auto txn_log, _tablet_mgr->get_txn_log(tablet_id, txn_id));
+        EXPECT_EQ(txn_log->op_write().ssts_size(), 1);
+        // Publish version
+        ASSERT_OK(publish_single_version(tablet_id, version + 1, txn_id).status());
+        EXPECT_TRUE(_update_mgr->TEST_check_update_state_cache_absent(tablet_id, txn_id));
+        version++;
+    }
+    // Compaction
+    {
+        auto old_val = config::lake_pk_compaction_min_input_segments;
+        config::lake_pk_compaction_min_input_segments = 1;
+        int64_t txn_id = next_id();
+        auto task_context = std::make_unique<CompactionTaskContext>(txn_id, tablet_id, version, false, false, nullptr);
+        ASSIGN_OR_ABORT(auto task, _tablet_mgr->compact(task_context.get()));
+        ASSERT_OK(task->execute(CompactionTask::kNoCancelFn));
+        EXPECT_EQ(100, task_context->progress.value());
+        ASSIGN_OR_ABORT(auto txn_log, _tablet_mgr->get_txn_log(tablet_id, txn_id));
+        EXPECT_EQ(txn_log->op_compaction().input_rowsets_size(), 5);
+        EXPECT_EQ(txn_log->op_compaction().ssts_size(), 1);
+        ASSERT_OK(publish_single_version(tablet_id, version + 1, txn_id).status());
+        version++;
+        config::lake_pk_compaction_min_input_segments = old_val;
+    }
+    // update memory usage, should large than zero
+    config::write_buffer_size = old_size;
+    config::enable_pk_parallel_execution = old_enable_pk_parallel_execution;
 }
 
 } // namespace starrocks::lake
