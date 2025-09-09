@@ -6,12 +6,12 @@ displayed_sidebar: docs
 
 
 
-Calculates a 64-bit hash value for any type of input and return the bitmap containing the hash value. It is mainly used for the stream load task to import non integer fields into the bitmap field of the StarRocks table. For example:
+Calculates a 64-bit hash value for any type of input and returns a bitmap containing the hash value. It is mainly used to load non-integer data into the BITMAP field of the StarRocks table via Stream Load. For example:
 
 ```bash
 cat data | curl --location-trusted -u user:passwd -T - \
     -H "columns: dt,page,device_id, device_id=bitmap_hash64(device_id)" \
-    http://host:8410/api/test/testDb/_stream_load
+    http://<fe_host>:8030/api/test_db/tbl1/_stream_load
 ```
 
 ## Syntax
@@ -19,6 +19,14 @@ cat data | curl --location-trusted -u user:passwd -T - \
 ```Haskell
 BITMAP BITMAP_HASH64(expr)
 ```
+
+## Parameters
+
+`expr`: The input can be of any data type.
+
+## Return value
+
+Returns a value of the BITMAP data type.
 
 ## Examples
 

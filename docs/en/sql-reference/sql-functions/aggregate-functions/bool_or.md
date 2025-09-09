@@ -14,16 +14,15 @@ bool_or(expr)
 
 ## Parameters
 
-`expr`: The expression must evaluate to a boolean value, true or false.
+`expr`: The expression must evaluate to a boolean value, that is, true or false.
 
 ## Return value
 
-Returns a boolean value.
+Returns a boolean value. An error is returned if `expr` does not exist.
 
 ## Usage notes
 
-- This function ignores nulls.
-- An error is returned if `expr` does not exist.
+This function ignores NULL values.
 
 ## Examples
 
