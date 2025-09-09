@@ -1534,6 +1534,15 @@ public class StreamLoadTask extends AbstractTxnStateChangeCallback
         runtimeDetails.put(LoadConstants.RUNTIME_DETAILS_BEGIN_TXN_TIME_MS, beginTxnTimeMs);
         runtimeDetails.put(LoadConstants.RUNTIME_DETAILS_RECEIVE_DATA_TIME_MS, receiveDataTimeMs);
         runtimeDetails.put(LoadConstants.RUNTIME_DETAILS_PLAN_TIME_MS, planTimeMs);
+        TransactionState txnState = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().getTransactionState(dbId, txnId);
+        if (txnState != null) {
+            txnState.writeLock();
+            try {
+                runtimeDetails.put(LoadConstants.RUNTIME_DETAILS_TXN_ERROR_MSG, txnState.getErrMsg());
+            } finally {
+                txnState.writeUnlock();
+            }
+        }
         Gson gson = new Gson();
         return gson.toJson(runtimeDetails);
     }
