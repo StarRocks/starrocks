@@ -1153,6 +1153,7 @@ alterClause
     | tableOperationClause
     | dropPersistentIndexClause
     | splitTabletClause
+    | alterTableAutoIncrementClause
 
     //Apply Policy clause
     | applyMaskingPolicyClause
@@ -1413,6 +1414,10 @@ splitTabletClause
     : SPLIT
       (((TABLET | TABLETS) partitionNames?) | tabletList)
       properties?
+    ;
+
+alterTableAutoIncrementClause
+    : AUTO_INCREMENT '=' INTEGER_VALUE
     ;
 
 // ---------Alter partition clause---------

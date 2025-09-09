@@ -96,6 +96,7 @@ import com.starrocks.sql.ast.AlterStorageVolumeClause;
 import com.starrocks.sql.ast.AlterStorageVolumeCommentClause;
 import com.starrocks.sql.ast.AlterStorageVolumeStmt;
 import com.starrocks.sql.ast.AlterSystemStmt;
+import com.starrocks.sql.ast.AlterTableAutoIncrementClause;
 import com.starrocks.sql.ast.AlterTableClause;
 import com.starrocks.sql.ast.AlterTableCommentClause;
 import com.starrocks.sql.ast.AlterTableOperationClause;
@@ -4901,6 +4902,12 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     public ParseNode visitSwapTableClause(StarRocksParser.SwapTableClauseContext context) {
         Identifier identifier = (Identifier) visit(context.identifier());
         return new SwapTableClause(identifier.getValue(), createPos(context));
+    }
+
+    @Override
+    public ParseNode visitAlterTableAutoIncrementClause(StarRocksParser.AlterTableAutoIncrementClauseContext context) {
+        long autoIncrementValue = Long.parseLong(context.INTEGER_VALUE().getText());
+        return new AlterTableAutoIncrementClause(autoIncrementValue, createPos(context));
     }
 
     @Override
