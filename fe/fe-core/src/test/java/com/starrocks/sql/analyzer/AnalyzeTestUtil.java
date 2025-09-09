@@ -340,6 +340,14 @@ public class AnalyzeTestUtil {
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\"\n" +
                 ");");
+
+        starRocksAssert.withTable("CREATE TABLE test_auto_increment (" +
+                "id BIGINT NOT NULL AUTO_INCREMENT," +
+                "name VARCHAR(100)" +
+                ") " +
+                "PRIMARY KEY (`id`) " +
+                "DISTRIBUTED BY HASH(`id`) BUCKETS 1 " +
+                "PROPERTIES(\"replication_num\" = \"1\");");
     }
 
     public static String getDbName() {

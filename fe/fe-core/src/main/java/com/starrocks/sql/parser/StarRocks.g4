@@ -947,6 +947,7 @@ alterClause
     | dropTagClause
     | tableOperationClause
     | dropPersistentIndexClause
+    | alterTableAutoIncrementClause
 
     //Alter partition clause
     | addPartitionClause
@@ -1186,6 +1187,10 @@ integer_list
 
 dropPersistentIndexClause
     : DROP PERSISTENT INDEX ON TABLETS integer_list
+    ;
+
+alterTableAutoIncrementClause
+    : AUTO_INCREMENT '=' INTEGER_VALUE
     ;
 
 // ---------Alter partition clause---------
