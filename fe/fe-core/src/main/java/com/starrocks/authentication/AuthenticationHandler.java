@@ -98,7 +98,7 @@ public class AuthenticationHandler {
                 provider.authenticate(context, matchedUserIdentity.getKey(), authResponse);
             }
 
-            return new AuthenticationResult(matchedUserIdentity.getKey(), List.of(Config.group_provider), null);
+            return new AuthenticationResult(matchedUserIdentity.getKey(), List.of(Config.group_provider), null, "native");
         }
     }
 
@@ -138,7 +138,8 @@ public class AuthenticationHandler {
                     UserIdentity.createEphemeralUserIdent(user, remoteHost),
                     securityIntegration.getGroupProviderName() == null ?
                             List.of(Config.group_provider) : securityIntegration.getGroupProviderName(),
-                    securityIntegration.getGroupAllowedLoginList());
+                    securityIntegration.getGroupAllowedLoginList(),
+                    authMechanism);
         }
 
         if (authenticationResult == null && !exceptions.isEmpty()) {
@@ -154,19 +155,38 @@ public class AuthenticationHandler {
             throws AuthenticationException {
         String user = authenticationResult.authenticatedUser.getUser();
 
+        // Step 1: Set user identity to context
+        // Set the authenticated user identity as the current user for authorization purposes
         context.setCurrentUserIdentity(authenticationResult.authenticatedUser);
-        if (!authenticationResult.authenticatedUser.isEphemeral()) {
-            context.setCurrentRoleIds(authenticationResult.authenticatedUser);
-
-            UserProperty userProperty = GlobalStateMgr.getCurrentState().getAuthenticationMgr()
-                    .getUserProperty(authenticationResult.authenticatedUser.getUser());
-            context.updateByUserProperty(userProperty);
-        }
+        // Set the qualified username for this connection session
         context.setQualifiedUser(user);
 
-        Set<String> groups = getGroups(authenticationResult.authenticatedUser, authenticationResult.groupProviderName);
-        context.setGroups(groups);
+        // Step 2: Set distinguished name to context if it is empty
+        // Distinguished name is used for LDAP authentication and group resolution
+        // If not already set, use the username as the distinguished name
+        if (context.getDistinguishedName().isEmpty()) {
+            context.setDistinguishedName(user);
+        }
 
+        // Step 3: Set security integration to context
+        // Record which security integration method was used for authentication
+        // This helps track authentication method (native, LDAP, OAuth2, etc.)
+        if (authenticationResult.securityIntegration != null) {
+            context.setSecurityIntegration(authenticationResult.securityIntegration);
+        }
+
+        // Step 4: Resolve and set user groups
+        // Get user groups from configured group providers (e.g., LDAP groups)
+        // Groups are used for role-based access control and permission management
+        Set<String> groups = getGroups(context.getCurrentUserIdentity(), context.getDistinguishedName(),
+                authenticationResult.groupProviderName);
+        context.setGroups(groups);
+        // Set current role IDs based on the authenticated user and groups
+        context.setCurrentRoleIds(authenticationResult.authenticatedUser, groups);
+
+        // Step 5: Validate group access permissions
+        // If authentication result specifies allowed groups, verify user belongs to at least one
+        // This ensures users can only access groups they are authorized for
         if (authenticationResult.authenticatedGroupList != null && !authenticationResult.authenticatedGroupList.isEmpty()) {
             Set<String> intersection = new HashSet<>(groups);
             intersection.retainAll(authenticationResult.authenticatedGroupList);
@@ -174,23 +194,35 @@ public class AuthenticationHandler {
                 throw new AuthenticationException(ErrorCode.ERR_GROUP_ACCESS_DENY, user, Joiner.on(",").join(groups));
             }
         }
-    }
 
-    private static class AuthenticationResult {
-        private UserIdentity authenticatedUser = null;
-        private List<String> groupProviderName = null;
-        private List<String> authenticatedGroupList = null;
-
-        public AuthenticationResult(UserIdentity authenticatedUser,
-                                    List<String> groupProviderName,
-                                    List<String> authenticatedGroupList) {
-            this.authenticatedUser = authenticatedUser;
-            this.groupProviderName = groupProviderName;
-            this.authenticatedGroupList = authenticatedGroupList;
+        // Step 6: Apply user properties for non-ephemeral users
+        // Load and apply user-specific properties (session variables, resource limits, etc.)
+        // Ephemeral users (from external auth) don't have stored properties
+        if (!authenticationResult.authenticatedUser.isEphemeral()) {
+            UserProperty userProperty = GlobalStateMgr.getCurrentState().getAuthenticationMgr()
+                    .getUserProperty(authenticationResult.authenticatedUser.getUser());
+            context.updateByUserProperty(userProperty);
         }
     }
 
-    public static Set<String> getGroups(UserIdentity userIdentity, List<String> groupProviderList) {
+    private static class AuthenticationResult {
+        private final UserIdentity authenticatedUser;
+        private final List<String> groupProviderName;
+        private final List<String> authenticatedGroupList;
+        private final String securityIntegration;
+
+        public AuthenticationResult(UserIdentity authenticatedUser,
+                                    List<String> groupProviderName,
+                                    List<String> authenticatedGroupList,
+                                    String securityIntegration) {
+            this.authenticatedUser = authenticatedUser;
+            this.groupProviderName = groupProviderName;
+            this.authenticatedGroupList = authenticatedGroupList;
+            this.securityIntegration = securityIntegration;
+        }
+    }
+
+    public static Set<String> getGroups(UserIdentity userIdentity, String distinguishedName, List<String> groupProviderList) {
         AuthenticationMgr authenticationMgr = GlobalStateMgr.getCurrentState().getAuthenticationMgr();
 
         HashSet<String> groups = new HashSet<>();
@@ -199,7 +231,7 @@ public class AuthenticationHandler {
             if (groupProvider == null) {
                 continue;
             }
-            groups.addAll(groupProvider.getGroup(userIdentity));
+            groups.addAll(groupProvider.getGroup(userIdentity, distinguishedName));
         }
 
         return groups;
