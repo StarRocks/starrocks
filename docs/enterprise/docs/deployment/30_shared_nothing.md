@@ -55,3 +55,4 @@ Token for Emergency Mode is: 123456-2468-5123-9f45-05cac6394318
 
 When the deployment completes you will be presented with licensing information. Copy the license request string and the number of required CPUs and contact CelerData support.
 
+For instructions on licensing clusters using RESTful API, see [License Your CelerData Cluster using RESTful API](./40_license_cluster.md).
