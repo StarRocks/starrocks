@@ -955,6 +955,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public static final String ENABLE_DROP_TABLE_CHECK_MV_DEPENDENCY = "enable_drop_table_check_mv_dependency";
 
+    public static final String ENABLE_DESENSITIZE_EXPLAIN = "enable_desensitize_explain";
+
     public static final List<String> DEPRECATED_VARIABLES = ImmutableList.<String>builder()
             .add(CODEGEN_LEVEL)
             .add(MAX_EXECUTION_TIME)
@@ -1930,6 +1932,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VarAttr(name = ENABLE_DEFER_PROJECT_AFTER_TOPN)
     private boolean enableDeferProjectAfterTopN = true;
 
+    @VarAttr(name = ENABLE_DESENSITIZE_EXPLAIN)
+    private boolean enableDesensitizeExplain = false;
+
     // When this variable is enabled, the limits of consumers a CTE are pushed down to the producer of the CTE.
     // The limits can then be applied before the exchange.
     // For example:
@@ -1946,6 +1951,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VarAttr(name = ENABLE_DROP_TABLE_CHECK_MV_DEPENDENCY)
     public boolean enableDropTableCheckMvDependency = false;
+
+    public boolean isEnableDesensitizeExplain() {
+        return enableDesensitizeExplain;
+    }
+
+    public void setEnableDesensitizeExplain(boolean enableDesensitizeExplain) {
+        this.enableDesensitizeExplain = enableDesensitizeExplain;
+    }
 
     public int getCboPruneJsonSubfieldDepth() {
         return cboPruneJsonSubfieldDepth;
