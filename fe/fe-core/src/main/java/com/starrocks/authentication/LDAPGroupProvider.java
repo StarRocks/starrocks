@@ -16,6 +16,7 @@ package com.starrocks.authentication;
 
 import com.google.common.base.Strings;
 import com.starrocks.catalog.UserIdentity;
+import com.starrocks.catalog.UserIdentityWithDnName;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.sql.analyzer.SemanticException;
@@ -31,6 +32,7 @@ import java.util.HashSet;
 import java.util.Hashtable;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
@@ -134,7 +136,15 @@ public class LDAPGroupProvider extends GroupProvider {
 
     @Override
     public Set<String> getGroup(UserIdentity userIdentity) {
-        return userToGroupCache.getOrDefault(userIdentity.getUser(), Set.of());
+        Set<String> userGroups = userToGroupCache.get(userIdentity.getUser());
+
+        if (userGroups == null && userIdentity instanceof UserIdentityWithDnName identityWithDnName) {
+            if (identityWithDnName.getDnName() != null) {
+                userGroups = userToGroupCache.get(identityWithDnName.getDnName());
+            }
+        }
+
+        return Objects.requireNonNullElse(userGroups, Set.of());
     }
 
     public void refreshGroups() {
