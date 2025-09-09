@@ -139,7 +139,9 @@ public class HistogramStatisticsCollectJob extends StatisticsCollectJob {
         if (mostCommonValues.isEmpty()) {
             context.put("mcv", "NULL");
         } else {
-            context.put("mcv", "'[" + Joiner.on(",").join(mcvList) + "]'");
+            String mcvJson = "[" + Joiner.on(",").join(mcvList) + "]";
+            String escapedMcvJson = mcvJson.replace("'", "''");
+            context.put("mcv", "'" + escapedMcvJson + "'");
         }
 
         if (!mostCommonValues.isEmpty()) {
