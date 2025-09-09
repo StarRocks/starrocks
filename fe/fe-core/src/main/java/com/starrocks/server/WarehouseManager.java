@@ -149,21 +149,13 @@ public class WarehouseManager implements Writable {
 
     public Warehouse getWarehouseAllowNull(String warehouseName) {
         try (LockCloseable ignored = new LockCloseable(rwLock.readLock())) {
-            Warehouse warehouse = nameToWh.get(warehouseName);
-            if (warehouse == null && Config.enable_rollback_default_warehouse) {
-                return getWarehouse(DEFAULT_WAREHOUSE_ID);
-            }
-            return warehouse;
+            return nameToWh.get(warehouseName);
         }
     }
 
     public Warehouse getWarehouseAllowNull(long warehouseId) {
         try (LockCloseable ignored = new LockCloseable(rwLock.readLock())) {
-            Warehouse warehouse = idToWh.get(warehouseId);
-            if (warehouse == null && Config.enable_rollback_default_warehouse) {
-                return getWarehouse(DEFAULT_WAREHOUSE_ID);
-            }
-            return warehouse;
+            return idToWh.get(warehouseId);
         }
     }
 

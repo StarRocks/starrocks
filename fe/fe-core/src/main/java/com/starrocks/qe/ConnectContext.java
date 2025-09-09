@@ -50,6 +50,7 @@ import com.starrocks.authorization.PrivilegeException;
 import com.starrocks.authorization.PrivilegeType;
 import com.starrocks.catalog.UserIdentity;
 import com.starrocks.cluster.ClusterNamespace;
+import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
@@ -953,7 +954,11 @@ public class ConnectContext {
 
         Warehouse warehouse = globalStateMgr.getWarehouseMgr().getWarehouseAllowNull(warehouseName);
         if (warehouse == null) {
-            throw new SemanticException("Warehouse " + warehouseName + " not exist");
+            if (Config.enable_rollback_default_warehouse) {
+                warehouse = globalStateMgr.getWarehouseMgr().getWarehouse(WarehouseManager.DEFAULT_WAREHOUSE_ID);
+            } else {
+                throw new SemanticException("Warehouse " + warehouseName + " not exist");
+            }
         }
         return warehouse.getId();
     }

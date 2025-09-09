@@ -2967,7 +2967,13 @@ public class Config extends ConfigBase {
      * whether to rollback default warehouse when warehouse is not exists
      */
     @ConfField(mutable = true)
-    public static boolean enable_rollback_default_warehouse = true;
+    public static boolean enable_rollback_default_warehouse = false;
+
+    /**
+     * whether to rollback default compute node when compute node is not exists
+     */
+    @ConfField(mutable = true)
+    public static boolean enable_rollback_default_cn_node = false;
 
     @ConfField(mutable = true)
     public static int lake_warehouse_max_compute_replica = 3;
