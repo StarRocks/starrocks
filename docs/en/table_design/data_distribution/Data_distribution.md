@@ -50,9 +50,9 @@ Also, StarRocks distributes data by implementing the two-level partitioning + bu
 | ------------------------- | ------------------------------------------------------------ | ------------------------------------------------------------ |
 | Random distribution       | Random bucketing                                             | The entire table is considered a partition. The data in the table is randomly distributed into different buckets. This is the default data distribution method. |
 | Hash distribution         | Hash bucketing                                               | The entire table is considered a partition. The data in the table is distributed to the corresponding buckets, which is based on the hash values of the data's bucketing key by using a hash function. |
-| Range+Random distribution | <ol><li>Expression partitioning or range partitioning </li><li>Random bucketing </li></ol> | <ol><li>The data in the table is distributed to the corresponding partitions, which is based on the ranges where partitioning column values fall in. </li><li>The data in the partition is randomly distributed across different buckets. </li></ol> |
-| Range+Hash distribution   | <ol><li>Expression partitioning or range partitioning</li><li>Hash bucketing </li></ol> | <ol><li>The data in the table is distributed to the corresponding partitions, which is based on the ranges where partitioning column values fall in.</li><li>The data in the partition is distributed to the corresponding buckets, which is based on the hash values of the data's bucketing key by using a hash function. </li></ol> |
-| List+Random distribution  | <ol><li>Expression partitioning or list partitioning</li><li>Random bucketing </li></ol> | <ol><li>The data in the table is distributed to the corresponding partitions, which is based on the ranges where partitioning column values fall in.</li><li>The data in the partition is randomly distributed across different buckets.</li></ol> |
+| Range+Random distribution | <ol><li>Range partitioning </li><li>Random bucketing </li></ol> | <ol><li>The data in the table is distributed to the corresponding partitions, which is based on the ranges where partitioning column values fall in. </li><li>The data in the partition is randomly distributed across different buckets. </li></ol> |
+| Range+Hash distribution   | <ol><li>Range partitioning</li><li>Hash bucketing </li></ol> | <ol><li>The data in the table is distributed to the corresponding partitions, which is based on the ranges where partitioning column values fall in.</li><li>The data in the partition is distributed to the corresponding buckets, which is based on the hash values of the data's bucketing key by using a hash function. </li></ol> |
+| List+Random distribution  | <ol><li>Expression partitioning or list partitioning</li><li>Random bucketing </li></ol> | <ol><li>The data in the table is partitioned based on the value lists that the partitioning columns values belongs to.</li><li>The data in the partition is randomly distributed across different buckets.</li></ol> |
 | List+Hash distribution    | <ol><li>Expression partitioning or List partitioning</li><li>Hash bucketing </li></ol> | <ol><li>The data in the table is partitioned based on the value lists that the partitioning columns values belongs to.</li><li>The data in the partition is distributed to the corresponding buckets, which is based on the hash values of the data's bucketing key by using a hash function.</li></ol> |
 
 - **Random distribution**
@@ -150,7 +150,7 @@ Also, StarRocks distributes data by implementing the two-level partitioning + bu
   )
   DUPLICATE KEY(id)
   -- Use expression partitioning as the partitioning method and specify the partitioning column.
-  -- You can also use list partitionifng.
+  -- You can also use list partitioning.
   PARTITION BY (city)
   -- Use hash bucketing as the bucketing method and must specify the bucketing key.
   DISTRIBUTED BY HASH(city,id); 
@@ -256,18 +256,7 @@ PARTITION BY from_unixtime(ts,'%Y%m%d'), city;
 
 #### Range partitioning
 
-Range partitioning is suitable for storing simple contiguous data, such as time series data, or continuous numerical data. Range partitioning is appropriate for frequently queried data based on continuous date/numerical ranges. Additionally, it can be applied in some special cases where historical data needs to be partitioned by month, and recent data needs to be partitioned by day.
-
-You need to explicitly define the data partitioning columns and establish the mapping relationship between partitions and ranges of partitioning column values. During data loading, StarRocks assigns the data to the corresponding partitions based on the ranges to which the data partitioning column values belong.
-
-As for the data type of the partitioning columns, before v3.3.0, range partitioning only supports partitioning columns of date and integer types. Since v3.3.0, three specific time functions can be used as partition columns. When explicitly defining the mapping relationship between partitions and ranges of partitioning column values, you need to first use a specific time function to convert partitioning column values of timestamps or strings into date values, and then divide the partitions based on the converted date values.
-
-:::info
-
-- If the partitioning column value is a timestamp, you need to use the from_unixtime or from_unixtime_ms function to convert a timestamp to a date value when dividing the partitions. When the from_unixtime function is used, the partitioning column only supports INT and BIGINT types. When the from_unixtime_ms function is used, the partitioning column only supports BIGINT type.
-- If the partitioning column value is a string (STRING, VARCHAR, or CHAR type), you need to use the str2date function to convert the string to a date value when dividing the partitions.
-
-:::
+[Range partitioning](./dynamic_partitioning.md) is suitable for storing simple contiguous data, such as time series data, or continuous numerical data.
 
 ##### Manually create partitions
 
@@ -378,7 +367,7 @@ Define the mapping relationship between each partition and the range of partitio
 
 ##### Dynamic partitioning
 
-[Dynamic partitioning](dynamic_partitioning.md) related properties are configured at table creation. StarRocks automatically creates new partitions in advance and removes expired partitions to ensure data freshness, which implements time-to-live (TTL) management for partitions.
+[Dynamic partitioning](./dynamic_partitioning.md#dynamic-partitioning) related properties are configured at table creation. StarRocks automatically creates new partitions in advance and removes expired partitions to ensure data freshness, which implements time-to-live (TTL) management for partitions.
 
 Different from the automatic partition creation ability provided by the expression partitioning, dynamic partitioning can only periodically create new partitions based on the properties. If the new data does not belong to these partitions, an error is returned for the load job. However, the automatic partition creation ability provided by the expression partitioning can always create corresponding new partitions based on the loaded data.
 
