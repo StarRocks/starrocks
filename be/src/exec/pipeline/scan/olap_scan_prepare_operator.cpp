@@ -42,7 +42,7 @@ Status OlapScanPrepareOperator::prepare(RuntimeState* state) {
 
     RETURN_IF_ERROR(_ctx->prepare(state));
 
-    auto* capture_tablet_rowsets_timer = ADD_TIMER(_unique_metrics, "CaptureTabletRowsetsTime");
+    RuntimeProfile::Counter* capture_tablet_rowsets_timer = ADD_TIMER(_unique_metrics, "CaptureTabletRowsetsTime");
     {
         SCOPED_TIMER(capture_tablet_rowsets_timer);
         RETURN_IF_ERROR(_ctx->capture_tablet_rowsets(_morsel_queue->prepare_olap_scan_ranges()));
@@ -83,9 +83,7 @@ StatusOr<ChunkPtr> OlapScanPrepareOperator::pull_chunk(RuntimeState* state) {
     }
     _morsel_queue->set_tablet_rowsets(std::move(tablet_rowsets));
 
-    if ((_morsel_queue->type() == MorselQueue::Type::LOGICAL_SPLIT ||
-         _morsel_queue->type() == MorselQueue::Type::PHYSICAL_SPLIT) &&
-        !tablets.empty()) {
+    if (!tablets.empty()) {
         _morsel_queue->set_tablet_schema(tablets[0]->tablet_schema());
     }
 

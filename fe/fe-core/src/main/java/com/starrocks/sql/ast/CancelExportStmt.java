@@ -15,7 +15,7 @@
 
 package com.starrocks.sql.ast;
 
-import com.starrocks.analysis.Expr;
+import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.parser.NodePosition;
 
 import java.util.UUID;
@@ -64,7 +64,7 @@ public class CancelExportStmt extends DdlStmt {
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitCancelExportStatement(this, context);
+        return ((AstVisitorExtendInterface<R, C>) visitor).visitCancelExportStatement(this, context);
     }
 }
 

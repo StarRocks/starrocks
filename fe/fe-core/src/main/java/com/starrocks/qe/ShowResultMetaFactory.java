@@ -34,11 +34,10 @@ import com.starrocks.common.proc.ProcResult;
 import com.starrocks.common.proc.RollupProcDir;
 import com.starrocks.common.proc.SchemaChangeProcDir;
 import com.starrocks.common.proc.TransProcDir;
-import com.starrocks.sql.ShowTemporaryTableStmt;
 import com.starrocks.sql.ast.AdminShowConfigStmt;
 import com.starrocks.sql.ast.AdminShowReplicaDistributionStmt;
 import com.starrocks.sql.ast.AdminShowReplicaStatusStmt;
-import com.starrocks.sql.ast.AstVisitor;
+import com.starrocks.sql.ast.AstVisitorExtendInterface;
 import com.starrocks.sql.ast.DescStorageVolumeStmt;
 import com.starrocks.sql.ast.DescribeStmt;
 import com.starrocks.sql.ast.HelpStmt;
@@ -111,6 +110,7 @@ import com.starrocks.sql.ast.ShowStreamLoadStmt;
 import com.starrocks.sql.ast.ShowTableStatusStmt;
 import com.starrocks.sql.ast.ShowTableStmt;
 import com.starrocks.sql.ast.ShowTabletStmt;
+import com.starrocks.sql.ast.ShowTemporaryTableStmt;
 import com.starrocks.sql.ast.ShowTransactionStmt;
 import com.starrocks.sql.ast.ShowTriggersStmt;
 import com.starrocks.sql.ast.ShowUserPropertyStmt;
@@ -131,7 +131,7 @@ import com.starrocks.sql.ast.warehouse.ShowWarehousesStmt;
 
 import java.util.List;
 
-public class ShowResultMetaFactory implements AstVisitor<ShowResultSetMetaData, Void> {
+public class ShowResultMetaFactory implements AstVisitorExtendInterface<ShowResultSetMetaData, Void> {
     public ShowResultSetMetaData getMetadata(StatementBase stmt) {
         return stmt.accept(this, null);
     }
@@ -357,11 +357,21 @@ public class ShowResultMetaFactory implements AstVisitor<ShowResultSetMetaData, 
 
     @Override
     public ShowResultSetMetaData visitAdminShowReplicaStatusStatement(AdminShowReplicaStatusStmt statement, Void context) {
-        ShowResultSetMetaData.Builder builder = ShowResultSetMetaData.builder();
-        for (String title : AdminShowReplicaStatusStmt.TITLE_NAMES) {
-            builder.addColumn(new Column(title, ScalarType.createVarchar(30)));
-        }
-        return builder.build();
+        return ShowResultSetMetaData.builder()
+                .addColumn(new Column("TabletId", ScalarType.createVarchar(30)))
+                .addColumn(new Column("ReplicaId", ScalarType.createVarchar(30)))
+                .addColumn(new Column("BackendId", ScalarType.createVarchar(30)))
+                .addColumn(new Column("Version", ScalarType.createVarchar(30)))
+                .addColumn(new Column("LastFailedVersion", ScalarType.createVarchar(30)))
+                .addColumn(new Column("LastSuccessVersion", ScalarType.createVarchar(30)))
+                .addColumn(new Column("CommittedVersion", ScalarType.createVarchar(30)))
+                .addColumn(new Column("SchemaHash", ScalarType.createVarchar(30)))
+                .addColumn(new Column("VersionNum", ScalarType.createVarchar(30)))
+                .addColumn(new Column("IsBad", ScalarType.createVarchar(30)))
+                .addColumn(new Column("IsSetBadForce", ScalarType.createVarchar(30)))
+                .addColumn(new Column("State", ScalarType.createVarchar(30)))
+                .addColumn(new Column("Status", ScalarType.createVarchar(30)))
+                .build();
     }
 
     @Override
@@ -726,11 +736,14 @@ public class ShowResultMetaFactory implements AstVisitor<ShowResultSetMetaData, 
 
     @Override
     public ShowResultSetMetaData visitAdminShowConfigStatement(AdminShowConfigStmt statement, Void context) {
-        ShowResultSetMetaData.Builder builder = ShowResultSetMetaData.builder();
-        for (String title : AdminShowConfigStmt.TITLE_NAMES) {
-            builder.addColumn(new Column(title, ScalarType.createVarchar(30)));
-        }
-        return builder.build();
+        return ShowResultSetMetaData.builder()
+                .addColumn(new Column("Key", ScalarType.createVarchar(30)))
+                .addColumn(new Column("AliasNames", ScalarType.createVarchar(30)))
+                .addColumn(new Column("Value", ScalarType.createVarchar(30)))
+                .addColumn(new Column("Type", ScalarType.createVarchar(30)))
+                .addColumn(new Column("IsMutable", ScalarType.createVarchar(30)))
+                .addColumn(new Column("Comment", ScalarType.createVarchar(30)))
+                .build();
     }
 
     @Override
@@ -1252,6 +1265,7 @@ public class ShowResultMetaFactory implements AstVisitor<ShowResultSetMetaData, 
                 .addColumn(new Column("CpuCores", ScalarType.createVarchar(20)))
                 .addColumn(new Column("MemUsedPct", ScalarType.createVarchar(20)))
                 .addColumn(new Column("CpuUsedPct", ScalarType.createVarchar(20)))
+                .addColumn(new Column("CNGroupName", ScalarType.createVarchar(256)))
                 .build();
     }
 

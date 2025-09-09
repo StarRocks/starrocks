@@ -15,7 +15,6 @@
 package com.starrocks.sql.plan;
 
 import com.google.common.collect.Lists;
-import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.IcebergTable;
@@ -32,6 +31,7 @@ import com.starrocks.sql.analyzer.AstToSQLBuilder;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.StatementBase;
+import com.starrocks.sql.ast.expression.TableName;
 import com.starrocks.sql.common.MetaUtils;
 import com.starrocks.sql.optimizer.dump.QueryDumpInfo;
 import com.starrocks.sql.parser.SqlParser;
@@ -49,6 +49,7 @@ import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -900,6 +901,136 @@ public class InsertPlanTest extends PlanTestBase {
                 "  0:UNION\n" +
                 "     constant exprs: \n" +
                 "         NULL\n";
+        Assertions.assertEquals(expected, actualRes);
+    }
+
+    @Test
+    public void testInsertIcebergWithGlobalShuffle() throws Exception {
+        String createIcebergCatalogStmt = "create external catalog iceberg_catalog_shuffle properties (\"type\"=\"iceberg\", " +
+                "\"hive.metastore.uris\"=\"thrift://hms:9083\", \"iceberg.catalog.type\"=\"hive\")";
+        starRocksAssert.withCatalog(createIcebergCatalogStmt);
+        MetadataMgr metadata = starRocksAssert.getCtx().getGlobalStateMgr().getMetadataMgr();
+
+        Table nativeTable = new BaseTable(null, null);
+
+        Column k1 = new Column("k1", Type.INT);
+        Column k2 = new Column("k2", Type.INT);
+        IcebergTable.Builder builder = IcebergTable.builder();
+        builder.setCatalogName("iceberg_catalog_shuffle");
+        builder.setCatalogDBName("iceberg_db");
+        builder.setCatalogTableName("iceberg_table");
+        builder.setSrTableName("iceberg_table");
+        builder.setFullSchema(Lists.newArrayList(k1, k2));
+        builder.setNativeTable(nativeTable);
+        IcebergTable icebergTable = builder.build();
+
+        new Expectations(icebergTable) {
+            {
+                icebergTable.getUUID();
+                result = 12345566;
+                minTimes = 0;
+
+                icebergTable.isUnPartitioned();
+                result = false;
+                minTimes = 0;
+
+                icebergTable.getPartitionColumns();
+                result = Arrays.asList(k1);
+
+                icebergTable.partitionColumnIndexes();
+                result = Arrays.asList(0);
+            }
+        };
+
+        new Expectations(nativeTable) {
+            {
+                nativeTable.sortOrder();
+                result = SortOrder.unsorted();
+                minTimes = 0;
+
+                nativeTable.location();
+                result = "hdfs://fake_location";
+                minTimes = 0;
+
+                nativeTable.properties();
+                result = new HashMap<String, String>();
+                minTimes = 0;
+
+                nativeTable.io();
+                result = new HadoopFileIO();
+                minTimes = 0;
+
+                nativeTable.spec();
+                result = PartitionSpec.unpartitioned();
+            }
+        };
+
+        new Expectations(metadata) {
+            {
+                metadata.getDb((ConnectContext) any, "iceberg_catalog_shuffle", "iceberg_db");
+                result = new Database(12345566, "iceberg_db");
+                minTimes = 0;
+
+                metadata.getTable((ConnectContext) any, "iceberg_catalog_shuffle", "iceberg_db", "iceberg_table");
+                result = icebergTable;
+                minTimes = 0;
+            }
+        };
+
+        new MockUp<SessionVariable>() {
+            @Mock
+            public boolean isEnableIcebergSinkGlobalShuffle() {
+                return true;
+            }
+        };
+
+        new MockUp<MetaUtils>() {
+            @Mock
+            public Database getDatabase(String catalogName, String tableName) {
+                return new Database(12345566, "iceberg_db");
+            }
+
+            @Mock
+            public com.starrocks.catalog.Table getSessionAwareTable(
+                    ConnectContext context, Database database, TableName tableName) {
+                return icebergTable;
+            }
+        };
+
+        String actualRes = getInsertExecPlan(
+                "explain insert into iceberg_catalog_shuffle.iceberg_db.iceberg_table select 1, 2 from t0");
+        String expected = "PLAN FRAGMENT 0\n" +
+                " OUTPUT EXPRS:6: k1 | 7: k2\n" +
+                "  PARTITION: HASH_PARTITIONED: 6: k1\n" +
+                "\n" +
+                "  Iceberg TABLE SINK\n" +
+                "    TABLE: 12345566\n" +
+                "    TUPLE ID: 2\n" +
+                "    RANDOM\n" +
+                "\n" +
+                "  2:EXCHANGE\n" +
+                "\n" +
+                "PLAN FRAGMENT 1\n" +
+                " OUTPUT EXPRS:\n" +
+                "  PARTITION: RANDOM\n" +
+                "\n" +
+                "  STREAM DATA SINK\n" +
+                "    EXCHANGE ID: 02\n" +
+                "    HASH_PARTITIONED: 6: k1\n" +
+                "\n" +
+                "  1:Project\n" +
+                "  |  <slot 6> : 1\n" +
+                "  |  <slot 7> : 2\n" +
+                "  |  \n" +
+                "  0:OlapScanNode\n" +
+                "     TABLE: t0\n" +
+                "     PREAGGREGATION: ON\n" +
+                "     partitions=0/1\n" +
+                "     rollup: t0\n" +
+                "     tabletRatio=0/0\n" +
+                "     tabletList=\n" +
+                "     cardinality=1\n" +
+                "     avgRowSize=9.0\n";
         Assertions.assertEquals(expected, actualRes);
     }
 

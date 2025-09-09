@@ -15,6 +15,7 @@ package com.starrocks.catalog.system.information;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
+import com.starrocks.authentication.UserIdentityUtils;
 import com.starrocks.authorization.AccessDeniedException;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.InternalCatalog;
@@ -22,17 +23,18 @@ import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
+import com.starrocks.catalog.UserIdentity;
 import com.starrocks.catalog.system.SystemId;
 import com.starrocks.catalog.system.SystemTable;
 import com.starrocks.cluster.ClusterNamespace;
 import com.starrocks.common.Config;
+import com.starrocks.common.util.SqlCredentialRedactor;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.scheduler.Task;
 import com.starrocks.scheduler.TaskManager;
 import com.starrocks.scheduler.persist.TaskRunStatus;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.Authorizer;
-import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
@@ -137,7 +139,7 @@ public class TaskRunsSystemTable extends SystemTable {
         }
 
         ConnectContext context = Preconditions.checkNotNull(ConnectContext.get(), "not a valid connection");
-        TUserIdentity userIdentity = context.getCurrentUserIdentity().toThrift();
+        TUserIdentity userIdentity = UserIdentityUtils.toThrift(context.getCurrentUserIdentity());
         params.setCurrent_user_ident(userIdentity);
         // Evaluate result
         TGetTaskRunInfoResult info = query(params);
@@ -166,7 +168,7 @@ public class TaskRunsSystemTable extends SystemTable {
 
         UserIdentity currentUser = null;
         if (params.isSetCurrent_user_ident()) {
-            currentUser = UserIdentity.fromThrift(params.current_user_ident);
+            currentUser = UserIdentityUtils.fromThrift(params.current_user_ident);
         }
         GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
         TaskManager taskManager = globalStateMgr.getTaskManager();
@@ -198,13 +200,21 @@ public class TaskRunsSystemTable extends SystemTable {
             info.setCatalog(status.getCatalogName());
             info.setDatabase(ClusterNamespace.getNameFromFullName(status.getDbName()));
             if (!Strings.isEmpty(status.getDefinition())) {
-                info.setDefinition(status.getDefinition());
+                if (Config.enable_task_info_mask_credential) {
+                    info.setDefinition(SqlCredentialRedactor.redact(status.getDefinition()));
+                } else {
+                    info.setDefinition(status.getDefinition());
+                }
             } else {
                 try {
                     // NOTE: use task's definition to display task-run's definition here
                     Task task = taskManager.getTaskWithoutLock(taskName);
                     if (task != null) {
-                        info.setDefinition(task.getDefinition());
+                        if (Config.enable_task_info_mask_credential) {
+                            info.setDefinition(SqlCredentialRedactor.redact(task.getDefinition()));
+                        } else {
+                            info.setDefinition(task.getDefinition());
+                        }
                     }
                 } catch (Exception e) {
                     LOG.warn("Get taskName {} definition failed: {}", taskName, e);

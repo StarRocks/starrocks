@@ -16,16 +16,17 @@
 package com.starrocks.catalog;
 
 import com.google.common.collect.Lists;
-import com.starrocks.analysis.TypeDef;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ExceptionChecker;
+import com.starrocks.sql.analyzer.PartitionDescAnalyzer;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.ColumnDef;
 import com.starrocks.sql.ast.ListPartitionDesc;
 import com.starrocks.sql.ast.MultiItemListPartitionDesc;
 import com.starrocks.sql.ast.PartitionDesc;
 import com.starrocks.sql.ast.SingleItemListPartitionDesc;
+import com.starrocks.sql.ast.expression.TypeDef;
 import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.thrift.TTabletType;
 import com.starrocks.utframe.UtFrameUtils;
@@ -122,23 +123,25 @@ public class ListPartitionDescTest {
     public ListPartitionInfo findSingleListPartitionInfo() throws AnalysisException, DdlException {
         ListPartitionDesc listPartitionDesc = this.findListSinglePartitionDesc("province",
                 "p1", "p2", this.findSupportedProperties(null));
-        listPartitionDesc.analyze(this.findColumnDefList(), null);
+        PartitionDescAnalyzer.analyze(listPartitionDesc, this.findColumnDefList(), null);
 
         Map<String, Long> partitionNameToId = new HashMap<>();
         partitionNameToId.put("p1", 10001L);
         partitionNameToId.put("p2", 10002L);
-        return (ListPartitionInfo) listPartitionDesc.toPartitionInfo(this.findColumnList(), partitionNameToId, false);
+        return (ListPartitionInfo) PartitionInfoBuilder.build(listPartitionDesc, this.findColumnList(),
+                partitionNameToId, false);
     }
 
     public ListPartitionInfo findMultiListPartitionInfo() throws AnalysisException, DdlException {
         ListPartitionDesc listPartitionDesc = this.findListMultiPartitionDesc("dt,province",
                 "p1", "p2", this.findSupportedProperties(null));
-        listPartitionDesc.analyze(this.findColumnDefList(), null);
+        PartitionDescAnalyzer.analyze(listPartitionDesc, this.findColumnDefList(), null);
 
         Map<String, Long> partitionNameToId = new HashMap<>();
         partitionNameToId.put("p1", 10001L);
         partitionNameToId.put("p2", 10002L);
-        return (ListPartitionInfo) listPartitionDesc.toPartitionInfo(this.findColumnList(), partitionNameToId, false);
+        return (ListPartitionInfo) PartitionInfoBuilder.build(listPartitionDesc, this.findColumnList(),
+                partitionNameToId, false);
     }
 
     @Test
@@ -152,7 +155,7 @@ public class ListPartitionDescTest {
 
             List<PartitionDesc> partitionDescs = Lists.newArrayList(p1);
             ListPartitionDesc listPartitionDesc = new ListPartitionDesc(partitionColNames, partitionDescs);
-            listPartitionDesc.analyze(this.findColumnDefList(), null);
+            PartitionDescAnalyzer.analyze(listPartitionDesc, this.findColumnDefList(), null);
         });
     }
 
@@ -166,7 +169,7 @@ public class ListPartitionDescTest {
 
             List<PartitionDesc> partitionDescs = Lists.newArrayList(p1);
             ListPartitionDesc listPartitionDesc = new ListPartitionDesc(partitionColNames, partitionDescs);
-            listPartitionDesc.analyze(this.findColumnDefList(), null);
+            PartitionDescAnalyzer.analyze(listPartitionDesc, this.findColumnDefList(), null);
         });
     }
 
@@ -174,7 +177,7 @@ public class ListPartitionDescTest {
     public void testSingleListPartitionDesc() throws AnalysisException {
         ListPartitionDesc listPartitionDesc = this.findListSinglePartitionDesc("province",
                 "p1", "p2", null);
-        listPartitionDesc.analyze(this.findColumnDefList(), null);
+        PartitionDescAnalyzer.analyze(listPartitionDesc, this.findColumnDefList(), null);
         String sql = listPartitionDesc.toString();
         String target = "PARTITION BY LIST(`province`)(\n" +
                 "  PARTITION p1 VALUES IN (\'guangdong\',\'tianjin\'),\n" +
@@ -187,7 +190,7 @@ public class ListPartitionDescTest {
     public void testMultiListPartitionDesc() throws AnalysisException {
         ListPartitionDesc listPartitionDesc = this.findListMultiPartitionDesc("dt,province",
                 "p1", "p2", null);
-        listPartitionDesc.analyze(this.findColumnDefList(), null);
+        PartitionDescAnalyzer.analyze(listPartitionDesc, this.findColumnDefList(), null);
         String sql = listPartitionDesc.toString();
         String target = "PARTITION BY LIST(`dt`,`province`)(\n" +
                 "  PARTITION p1 VALUES IN ((\'2022-04-15\',\'guangdong\'),(\'2022-04-15\',\'tianjin\')),\n" +
@@ -200,7 +203,7 @@ public class ListPartitionDescTest {
     public void testDuplicatePartitionColumn() {
         assertThrows(AnalysisException.class, () -> {
             ListPartitionDesc listPartitionDesc = this.findListSinglePartitionDesc("dt,dt", "p1", "p1", null);
-            listPartitionDesc.analyze(this.findColumnDefList(), null);
+            PartitionDescAnalyzer.analyze(listPartitionDesc, this.findColumnDefList(), null);
         });
     }
 
@@ -213,7 +216,7 @@ public class ListPartitionDescTest {
             dt.setAggregateType(AggregateType.NONE);
             List<ColumnDef> columnDefList = Lists.newArrayList(province, dt);
             ListPartitionDesc listSinglePartitionDesc = this.findListSinglePartitionDesc("province", "p1", "p2", null);
-            listSinglePartitionDesc.analyze(columnDefList, null);
+            PartitionDescAnalyzer.analyzeListPartitionDesc(listSinglePartitionDesc, columnDefList, null);
         });
     }
 
@@ -221,7 +224,7 @@ public class ListPartitionDescTest {
     public void testColumnNoExist() {
         assertThrows(AnalysisException.class, () -> {
             ListPartitionDesc listPartitionDesc = this.findListSinglePartitionDesc("name", "p1", "p1", null);
-            listPartitionDesc.analyze(this.findColumnDefList(), null);
+            PartitionDescAnalyzer.analyze(listPartitionDesc, this.findColumnDefList(), null);
         });
     }
 
@@ -229,7 +232,7 @@ public class ListPartitionDescTest {
     public void testDuplicateSingleListPartitionNames() {
         assertThrows(AnalysisException.class, () -> {
             ListPartitionDesc listSinglePartitionDesc = this.findListSinglePartitionDesc("province", "p1", "p1", null);
-            listSinglePartitionDesc.analyze(this.findColumnDefList(), null);
+            PartitionDescAnalyzer.analyze(listSinglePartitionDesc, this.findColumnDefList(), null);
         });
     }
 
@@ -237,7 +240,7 @@ public class ListPartitionDescTest {
     public void testDuplicateMultiListPartitionNames() {
         assertThrows(AnalysisException.class, () -> {
             ListPartitionDesc listMultiPartitionDesc = this.findListMultiPartitionDesc("dt,province", "p1", "p1", null);
-            listMultiPartitionDesc.analyze(this.findColumnDefList(), null);
+            PartitionDescAnalyzer.analyze(listMultiPartitionDesc, this.findColumnDefList(), null);
         });
     }
 
@@ -248,7 +251,7 @@ public class ListPartitionDescTest {
             supportedProperties.put("storage_medium", "xxx");
             ListPartitionDesc listMultiPartitionDesc = this.findListMultiPartitionDesc(
                     "dt,province", "p1", "p1", this.findSupportedProperties(supportedProperties));
-            listMultiPartitionDesc.analyze(this.findColumnDefList(), this.findSupportedProperties(null));
+            PartitionDescAnalyzer.analyze(listMultiPartitionDesc, this.findColumnDefList(), this.findSupportedProperties(null));
         });
     }
 
@@ -259,7 +262,7 @@ public class ListPartitionDescTest {
             supportedProperties.put("storage_cooldown_time", "2021-04-01 12:12:12");
             ListPartitionDesc listMultiPartitionDesc = this.findListMultiPartitionDesc(
                     "dt,province", "p1", "p1", this.findSupportedProperties(supportedProperties));
-            listMultiPartitionDesc.analyze(this.findColumnDefList(), this.findSupportedProperties(null));
+            PartitionDescAnalyzer.analyze(listMultiPartitionDesc, this.findColumnDefList(), this.findSupportedProperties(null));
         });
     }
 
@@ -270,7 +273,7 @@ public class ListPartitionDescTest {
             supportedProperties.put("replication_num", "0");
             ListPartitionDesc listMultiPartitionDesc = this.findListMultiPartitionDesc(
                     "dt,province", "p1", "p1", this.findSupportedProperties(supportedProperties));
-            listMultiPartitionDesc.analyze(this.findColumnDefList(), this.findSupportedProperties(null));
+            PartitionDescAnalyzer.analyze(listMultiPartitionDesc, this.findColumnDefList(), this.findSupportedProperties(null));
         });
     }
 
@@ -281,7 +284,7 @@ public class ListPartitionDescTest {
             supportedProperties.put("in_memory", "xxx");
             ListPartitionDesc listMultiPartitionDesc = this.findListMultiPartitionDesc(
                     "dt,province", "p1", "p1", this.findSupportedProperties(supportedProperties));
-            listMultiPartitionDesc.analyze(this.findColumnDefList(), this.findSupportedProperties(null));
+            PartitionDescAnalyzer.analyze(listMultiPartitionDesc, this.findColumnDefList(), this.findSupportedProperties(null));
         });
     }
 
@@ -292,7 +295,7 @@ public class ListPartitionDescTest {
             supportedProperties.put("no_support", "xxx");
             ListPartitionDesc listMultiPartitionDesc = this.findListMultiPartitionDesc(
                     "dt,province", "p1", "p1", this.findSupportedProperties(supportedProperties));
-            listMultiPartitionDesc.analyze(this.findColumnDefList(), null);
+            PartitionDescAnalyzer.analyze(listMultiPartitionDesc, this.findColumnDefList(), null);
         });
     }
 
@@ -347,7 +350,7 @@ public class ListPartitionDescTest {
                             Lists.newArrayList("2022-04-15", "beijing")), null);
             List<PartitionDesc> partitionDescs = Lists.newArrayList(p1, p2);
             ListPartitionDesc listPartitionDesc = new ListPartitionDesc(partitionColNames, partitionDescs);
-            listPartitionDesc.analyze(this.findColumnDefList(), null);
+            PartitionDescAnalyzer.analyze(listPartitionDesc, this.findColumnDefList(), null);
         });
     }
 
@@ -368,7 +371,7 @@ public class ListPartitionDescTest {
                             Lists.newArrayList("2022-04-15", "guangdong")), null);
             List<PartitionDesc> partitionDescs = Lists.newArrayList(p1, p2);
             ListPartitionDesc listPartitionDesc = new ListPartitionDesc(partitionColNames, partitionDescs);
-            listPartitionDesc.analyze(this.findColumnDefList(), null);
+            PartitionDescAnalyzer.analyze(listPartitionDesc, this.findColumnDefList(), null);
         });
     }
 
@@ -387,7 +390,7 @@ public class ListPartitionDescTest {
                     Lists.newArrayList("shanghai", "beijing"), null);
             List<PartitionDesc> partitionDescs = Lists.newArrayList(p1, p2);
             ListPartitionDesc listPartitionDesc = new ListPartitionDesc(partitionColNames, partitionDescs);
-            listPartitionDesc.analyze(this.findColumnDefList(), null);
+            PartitionDescAnalyzer.analyze(listPartitionDesc, this.findColumnDefList(), null);
         });
     }
 
@@ -406,7 +409,7 @@ public class ListPartitionDescTest {
                     Lists.newArrayList("shanghai", "beijing"), null);
             List<PartitionDesc> partitionDescs = Lists.newArrayList(p1, p2);
             ListPartitionDesc listPartitionDesc = new ListPartitionDesc(partitionColNames, partitionDescs);
-            listPartitionDesc.analyze(this.findColumnDefList(), null);
+            PartitionDescAnalyzer.analyze(listPartitionDesc, this.findColumnDefList(), null);
         });
     }
 

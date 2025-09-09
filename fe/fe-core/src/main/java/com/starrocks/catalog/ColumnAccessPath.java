@@ -16,7 +16,7 @@ package com.starrocks.catalog;
 
 import com.google.api.client.util.Lists;
 import com.google.common.base.Preconditions;
-import com.starrocks.analysis.StringLiteral;
+import com.starrocks.sql.ast.expression.StringLiteral;
 import com.starrocks.sql.optimizer.rule.tree.prunesubfield.SubfieldAccessPathNormalizer;
 import com.starrocks.thrift.TAccessPathType;
 import com.starrocks.thrift.TColumnAccessPath;
@@ -92,9 +92,8 @@ public class ColumnAccessPath {
     }
 
     public static ColumnAccessPath createFromLinearPath(String linearPath, Type valueType) {
-        final int jsonFlattenDepth = 20;
-        List<String> pieces = Lists.newArrayList();
-        if (SubfieldAccessPathNormalizer.parseSimpleJsonPath(jsonFlattenDepth, linearPath, pieces)) {
+        List<String> pieces = SubfieldAccessPathNormalizer.parseSimpleJsonPath(linearPath);
+        if (pieces.isEmpty()) {
             throw new IllegalArgumentException("illegal json path: " + linearPath);
         }
         return createLinearPath(pieces, valueType);

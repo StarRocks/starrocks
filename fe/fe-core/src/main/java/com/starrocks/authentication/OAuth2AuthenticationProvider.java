@@ -14,12 +14,13 @@
 
 package com.starrocks.authentication;
 
+import com.starrocks.catalog.UserIdentity;
+import com.starrocks.common.ErrorCode;
 import com.starrocks.mysql.MysqlCodec;
 import com.starrocks.mysql.privilege.AuthPlugin;
-import com.starrocks.qe.ConnectContext;
-import com.starrocks.sql.ast.UserIdentity;
 
 import java.io.ByteArrayOutputStream;
+import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 
 public class OAuth2AuthenticationProvider implements AuthenticationProvider {
@@ -41,7 +42,7 @@ public class OAuth2AuthenticationProvider implements AuthenticationProvider {
     }
 
     @Override
-    public void authenticate(ConnectContext context, UserIdentity userIdentity, byte[] authResponse)
+    public void authenticate(AuthenticationContext authContext, UserIdentity userIdentity, byte[] authResponse)
             throws AuthenticationException {
         /*
           If the auth plugin used by the client for this authentication is not AUTHENTICATION_OAUTH2_CLIENT,
@@ -50,14 +51,14 @@ public class OAuth2AuthenticationProvider implements AuthenticationProvider {
           Any operation will return an auth url to guide the user to perform oauth2 authentication.
           This is because in many scenarios, the client cannot directly launch a web browser.
          */
-        if (!AuthPlugin.Client.AUTHENTICATION_OAUTH2_CLIENT.toString().equals(context.getAuthPlugin())) {
+        if (!AuthPlugin.Client.AUTHENTICATION_OAUTH2_CLIENT.toString().equals(authContext.getAuthPlugin())) {
             return;
         }
 
         long startTime = System.currentTimeMillis();
         String token;
         while (true) {
-            token = context.getAuthToken();
+            token = authContext.getAuthToken();
             if (token != null) {
                 break;
             }
@@ -79,7 +80,7 @@ public class OAuth2AuthenticationProvider implements AuthenticationProvider {
     }
 
     @Override
-    public byte[] authMoreDataPacket(ConnectContext context, String user, String host) {
+    public byte[] authMoreDataPacket(AuthenticationContext authContext, String user, String host) {
         ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
         byte[] bytes = oAuth2Context.authServerUrl().getBytes(StandardCharsets.UTF_8);
         MysqlCodec.writeInt2(outputStream, bytes.length);
@@ -93,13 +94,29 @@ public class OAuth2AuthenticationProvider implements AuthenticationProvider {
         MysqlCodec.writeInt2(outputStream, bytes.length);
         MysqlCodec.writeBytes(outputStream, bytes);
 
-        context.setOAuth2Context(oAuth2Context);
-
         return outputStream.toByteArray();
     }
 
     @Override
-    public byte[] authSwitchRequestPacket(ConnectContext context, String user, String host) {
-        return authMoreDataPacket(context, user, host);
+    public byte[] authSwitchRequestPacket(AuthenticationContext authContext, String user, String host) {
+        return authMoreDataPacket(authContext, user, host);
+    }
+
+    @Override
+    public void checkLoginSuccess(int connectionId, AuthenticationContext context) throws AuthenticationException {
+        if (context.getAuthToken() == null) {
+            String authUrl = oAuth2Context.authServerUrl() +
+                    "?response_type=code" +
+                    "&client_id=" + URLEncoder.encode(oAuth2Context.clientId(), StandardCharsets.UTF_8) +
+                    "&redirect_uri=" + URLEncoder.encode(oAuth2Context.redirectUrl(), StandardCharsets.UTF_8) +
+                    "&state=" + connectionId +
+                    "&scope=openid";
+
+            throw new AuthenticationException(ErrorCode.ERR_OAUTH2_NOT_AUTHENTICATED, authUrl);
+        }
+    }
+
+    public OAuth2Context getoAuth2Context() {
+        return oAuth2Context;
     }
 }

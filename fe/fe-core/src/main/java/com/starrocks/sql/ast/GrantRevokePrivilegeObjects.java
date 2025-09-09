@@ -15,9 +15,8 @@
 
 package com.starrocks.sql.ast;
 
-import com.starrocks.analysis.FunctionName;
-import com.starrocks.analysis.ParseNode;
 import com.starrocks.common.Pair;
+import com.starrocks.sql.ast.expression.FunctionName;
 import com.starrocks.sql.parser.NodePosition;
 
 import java.util.List;
@@ -27,7 +26,7 @@ public class GrantRevokePrivilegeObjects implements ParseNode {
     private List<List<String>> privilegeObjectNameTokensList;
 
     //UnResolved AST used in syntax grantImpersonate
-    private List<UserIdentity> userPrivilegeObjectList;
+    private List<UserRef> userPrivilegeObjectList;
 
     //UnResolved AST used in syntax grantPrivWithFunc
     private List<Pair<FunctionName, FunctionArgsDef>> functions;
@@ -51,11 +50,11 @@ public class GrantRevokePrivilegeObjects implements ParseNode {
         this.privilegeObjectNameTokensList = privilegeObjectNameTokensList;
     }
 
-    public List<UserIdentity> getUserPrivilegeObjectList() {
+    public List<UserRef> getUserPrivilegeObjectList() {
         return userPrivilegeObjectList;
     }
 
-    public void setUserPrivilegeObjectList(List<UserIdentity> userPrivilegeObjectList) {
+    public void setUserPrivilegeObjectList(List<UserRef> userPrivilegeObjectList) {
         this.userPrivilegeObjectList = userPrivilegeObjectList;
     }
 

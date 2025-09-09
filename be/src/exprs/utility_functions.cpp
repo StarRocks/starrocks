@@ -14,6 +14,7 @@
 
 #include "exprs/utility_functions.h"
 
+#include "column/column_visitor_adapter.h"
 #include "gen_cpp/FrontendService_types.h"
 #include "runtime/client_cache.h"
 
@@ -29,7 +30,9 @@
 #include <limits>
 #include <random>
 
+#include "column/binary_column.h"
 #include "column/column_builder.h"
+#include "column/column_helper.h"
 #include "column/column_viewer.h"
 #include "column/vectorized_fwd.h"
 #include "common/config.h"
@@ -39,6 +42,8 @@
 #include "gutil/casts.h"
 #include "runtime/runtime_state.h"
 #include "service/backend_options.h"
+#include "storage/key_coder.h"
+#include "storage/primary_key_encoder.h"
 #include "types/logical_type.h"
 #include "util/cidr.h"
 #include "util/monotime.h"
@@ -103,7 +108,7 @@ StatusOr<ColumnPtr> UtilityFunctions::uuid(FunctionContext* ctx, const Columns& 
     int32_t num_rows = ColumnHelper::get_const_value<TYPE_INT>(columns.back());
 
     ASSIGN_OR_RETURN(auto col, UtilityFunctions::uuid_numeric(ctx, columns));
-    auto& uuid_data = down_cast<Int128Column*>(col.get())->get_data();
+    const auto uuid_data = down_cast<const Int128Column*>(col.get())->immutable_data();
 
     auto res = BinaryColumn::create();
     auto& bytes = res->get_bytes();
@@ -249,7 +254,7 @@ StatusOr<ColumnPtr> UtilityFunctions::assert_true(FunctionContext* context, cons
             column = FunctionHelper::get_data_column_of_nullable(column);
         }
         auto bool_column = ColumnHelper::cast_to<TYPE_BOOLEAN>(column);
-        const auto& data = bool_column->get_data();
+        const auto data = bool_column->immutable_data();
         for (size_t i = 0; i < size; ++i) {
             if (!data[i]) {
                 throw std::runtime_error(msg);
@@ -364,6 +369,188 @@ StatusOr<ColumnPtr> UtilityFunctions::equiwidth_bucket(FunctionContext* context,
         builder.append(bucket);
     }
     return builder.build(false);
+}
+
+// Helpers copied and adapted from storage/primary_key_encoder.cpp for order-preserving encoding
+namespace detail {
+
+inline void encode_float32(float v, std::string* dest) {
+    uint32_t u;
+    static_assert(sizeof(u) == sizeof(v), "size mismatch");
+    memcpy(&u, &v, sizeof(u));
+    // If negative, flip all bits; else flip sign bit only.
+    u ^= (u & 0x80000000u) ? 0xFFFFFFFFu : 0x80000000u;
+    u = starrocks::encoding_utils::to_bigendian(u);
+    dest->append(reinterpret_cast<const char*>(&u), sizeof(u));
+}
+
+inline void encode_float64(double v, std::string* dest) {
+    uint64_t u;
+    static_assert(sizeof(u) == sizeof(v), "size mismatch");
+    memcpy(&u, &v, sizeof(u));
+    u ^= (u & 0x8000000000000000ull) ? 0xFFFFFFFFFFFFFFFFull : 0x8000000000000000ull;
+    u = starrocks::encoding_utils::to_bigendian(u);
+    dest->append(reinterpret_cast<char*>(&u), sizeof(u));
+}
+
+struct EncoderVisitor : public ColumnVisitorAdapter<EncoderVisitor> {
+    bool is_last_field = false;
+    std::vector<std::string>* buffs;
+    const ImmBuffer<uint8_t>* null_mask = nullptr; // Track null rows to skip processing
+
+    explicit EncoderVisitor() : ColumnVisitorAdapter(this) {}
+
+    // Nullable wrapper: handle null values and data together
+    Status do_visit(const NullableColumn& column) {
+        const auto nulls = column.immutable_null_column_data();
+
+        for (size_t i = 0; i < column.size(); i++) {
+            if (nulls[i]) {
+                (*buffs)[i].append("\0", 1);
+            } else {
+                (*buffs)[i].append("\1", 1);
+            }
+        }
+
+        // Set the null mask so that subsequent visitor methods can skip null rows
+        const ImmBuffer<uint8_t>* original_null_mask = null_mask;
+        null_mask = &nulls;
+
+        // Process the underlying data column
+        Status status = column.data_column()->accept(this);
+
+        // Restore the original null mask
+        null_mask = original_null_mask;
+
+        return status;
+    }
+
+    // Const: forward to data
+    Status do_visit(const ConstColumn& column) {
+        for (size_t i = 0; i < column.size(); i++) {
+            RETURN_IF_ERROR(column.data_column()->accept(this));
+        }
+        return Status::OK();
+    }
+
+    // Strings/binary
+    template <typename T>
+    Status do_visit(const BinaryColumnBase<T>& column) {
+        for (size_t i = 0; i < column.size(); i++) {
+            // Skip processing for null rows
+            if (null_mask && (*null_mask)[i]) {
+                continue;
+            }
+            Slice s = column.get_slice(i);
+            encoding_utils::encode_slice(s, &(*buffs)[i], is_last_field);
+        }
+        return Status::OK();
+    }
+
+    // Fixed-length numerics
+    template <typename T>
+    Status do_visit(const FixedLengthColumn<T>& column) {
+        const auto data = column.immutable_data();
+        for (size_t i = 0; i < column.size(); i++) {
+            // Skip processing for null rows
+            if (null_mask && (*null_mask)[i]) {
+                continue;
+            }
+            if constexpr (std::is_same_v<T, float>) {
+                encode_float32(data[i], &(*buffs)[i]);
+            } else if constexpr (std::is_same_v<T, double>) {
+                encode_float64(data[i], &(*buffs)[i]);
+            } else if constexpr (std::is_integral_v<T> && sizeof(T) <= 8) {
+                encoding_utils::encode_integral<T>(data[i], &(*buffs)[i]);
+            } else if constexpr (std::is_same_v<T, DateValue>) {
+                encoding_utils::encode_integral<int32_t>(data[i].julian(), &(*buffs)[i]);
+            } else if constexpr (std::is_same_v<T, DateTimeValue>) {
+                encoding_utils::encode_integral<int64_t>(data[i].to_int64(), &(*buffs)[i]);
+            } else if constexpr (std::is_same_v<T, TimestampValue>) {
+                encoding_utils::encode_integral<int64_t>(data[i].timestamp(), &(*buffs)[i]);
+            } else {
+                return Status::NotSupported(
+                        fmt::format("encode_sort_key: unsupported argument type: {}", typeid(T).name()));
+            }
+        }
+        return Status::OK();
+    }
+
+    // Unsupported complex types map/array/struct/json/hll/bitmap/percentile
+    template <typename T>
+    Status do_visit(const T& column) {
+        // Even for unsupported types, we should check null mask to be consistent
+        // but since we're returning an error anyway, we can skip the null check
+        return Status::NotSupported("encode_sort_key: unsupported argument type");
+    }
+};
+} // namespace detail
+
+// The encoding strategy of encode_sort_key is as follows:
+//
+// - For each input column, each row's value is encoded into a binary buffer
+//   using an order-preserving encoding. The encoding method depends on the
+//   column's type:
+//     * For integral types, values are converted to big-endian and, for signed
+//       types, the sign bit is flipped to preserve order.
+//     * For floating-point types, a custom encoding is used to ensure correct
+//       sort order.
+//     * For string types (Slice), a special encoding is used for non-last fields
+//       to escape 0x00 bytes and append a 0x00 0x00 terminator, while the last
+//       field is appended directly.
+//     * For date/time types, the internal integer representation is encoded as
+//       an integral value.
+//     * Unsupported types return an error.
+//
+// - For each column, a NULL marker (byte value 0x00 or 0x01) is appended for every
+//   row, regardless of the column's nullability, to ensure consistent encoding
+//   even if the column's nullability metadata is lost during processing.
+//
+// - After encoding each column, a separator byte (0x00) is appended between
+//   columns (except after the last column) to delimit fields in the composite
+//   key.
+//
+// - The result is a composite binary key for each row, which preserves the
+//   original sort order of the input columns when compared lexicographically.
+StatusOr<ColumnPtr> UtilityFunctions::encode_sort_key(FunctionContext* context, const Columns& columns) {
+    const char* NOT_NULL_MARKER = "\1";
+    const char* COLUMN_SEPARATOR = "\0";
+    int num_args = columns.size();
+    RETURN_IF(num_args < 1, Status::InvalidArgument("encode_sort_key requires at least 1 argument"));
+
+    size_t num_rows = columns[0]->size();
+    auto result = ColumnBuilder<TYPE_VARBINARY>(num_rows);
+
+    std::vector<std::string> buffs(num_rows);
+    detail::EncoderVisitor visitor;
+    visitor.buffs = &buffs;
+    for (int j = 0; j < num_args; ++j) {
+        // Insert NOT_NULL markers for all rows.
+        // This is necessary because the function may receive columns whose nullability
+        // does not accurately reflect the original data source.
+        // For example, a nullable column that contains no null values may be converted
+        // to a non-nullable column during processing. To ensure consistency in the sort key
+        // encoding, we explicitly add NOT_NULL markers for every row.
+        if (!columns[j]->is_nullable()) {
+            for (auto& buff : buffs) {
+                buff.append(NOT_NULL_MARKER, 1);
+            }
+        }
+        visitor.is_last_field = (j + 1 == num_args);
+        RETURN_IF_ERROR(columns[j]->accept(&visitor));
+
+        // Add a separator between each column
+        if (j < num_args - 1) {
+            for (auto& buff : buffs) {
+                buff.append(COLUMN_SEPARATOR, 1);
+            }
+        }
+    }
+
+    for (size_t i = 0; i < num_rows; i++) {
+        result.append(std::move(buffs[i]));
+    }
+    return result.build(ColumnHelper::is_all_const(columns));
 }
 
 } // namespace starrocks

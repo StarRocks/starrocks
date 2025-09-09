@@ -154,13 +154,13 @@ bool SinkBuffer::is_finished() const {
 }
 
 void SinkBuffer::update_profile(RuntimeProfile* profile) {
-    auto* rpc_count = ADD_COUNTER(profile, "RpcCount", TUnit::UNIT);
-    auto* rpc_avg_timer = ADD_TIMER(profile, "RpcAvgTime");
-    auto* network_timer = ADD_TIMER(profile, "NetworkTime");
-    auto* wait_timer = ADD_TIMER(profile, "WaitTime");
-    auto* overall_timer = ADD_TIMER(profile, "OverallTime");
+    RuntimeProfile::Counter* rpc_count = ADD_COUNTER(profile, "RpcCount", TUnit::UNIT);
+    RuntimeProfile::Counter* rpc_avg_timer = ADD_TIMER(profile, "RpcAvgTime");
+    RuntimeProfile::Counter* network_timer = ADD_TIMER(profile, "NetworkTime");
+    RuntimeProfile::Counter* wait_timer = ADD_TIMER(profile, "WaitTime");
+    RuntimeProfile::Counter* overall_timer = ADD_TIMER(profile, "OverallTime");
 
-    COUNTER_SET(rpc_count, _rpc_count);
+    COUNTER_SET(rpc_count, _rpc_count.load());
     COUNTER_SET(rpc_avg_timer, _rpc_cumulative_time / std::max(_rpc_count.load(), static_cast<int64_t>(1)));
 
     COUNTER_SET(network_timer, _network_time());
@@ -169,16 +169,16 @@ void SinkBuffer::update_profile(RuntimeProfile* profile) {
     // WaitTime consists two parts
     // 1. buffer full time
     // 2. pending finish time
-    COUNTER_SET(wait_timer, _full_time);
+    COUNTER_SET(wait_timer, _full_time.load());
     COUNTER_UPDATE(wait_timer, MonotonicNanos() - _pending_timestamp);
 
-    auto* bytes_sent_counter = ADD_COUNTER(profile, "BytesSent", TUnit::BYTES);
-    auto* request_sent_counter = ADD_COUNTER(profile, "RequestSent", TUnit::UNIT);
-    COUNTER_SET(bytes_sent_counter, _bytes_sent);
-    COUNTER_SET(request_sent_counter, _request_sent);
+    RuntimeProfile::Counter* bytes_sent_counter = ADD_COUNTER(profile, "BytesSent", TUnit::BYTES);
+    RuntimeProfile::Counter* request_sent_counter = ADD_COUNTER(profile, "RequestSent", TUnit::UNIT);
+    COUNTER_SET(bytes_sent_counter, _bytes_sent.load());
+    COUNTER_SET(request_sent_counter, _request_sent.load());
 
-    auto* bytes_unsent_counter = ADD_COUNTER(profile, "BytesUnsent", TUnit::BYTES);
-    auto* request_unsent_counter = ADD_COUNTER(profile, "RequestUnsent", TUnit::UNIT);
+    RuntimeProfile::Counter* bytes_unsent_counter = ADD_COUNTER(profile, "BytesUnsent", TUnit::BYTES);
+    RuntimeProfile::Counter* request_unsent_counter = ADD_COUNTER(profile, "RequestUnsent", TUnit::UNIT);
     COUNTER_SET(bytes_unsent_counter, _bytes_enqueued - _bytes_sent);
     COUNTER_SET(request_unsent_counter, _request_enqueued - _request_sent);
 

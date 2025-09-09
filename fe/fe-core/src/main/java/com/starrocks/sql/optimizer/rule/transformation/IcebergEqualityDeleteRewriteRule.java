@@ -15,9 +15,6 @@
 package com.starrocks.sql.optimizer.rule.transformation;
 
 import com.google.common.collect.ImmutableMap;
-import com.starrocks.analysis.BinaryType;
-import com.starrocks.analysis.HintNode;
-import com.starrocks.analysis.JoinOperator;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.Type;
@@ -28,6 +25,9 @@ import com.starrocks.connector.iceberg.IcebergDeleteSchema;
 import com.starrocks.connector.iceberg.IcebergMORParams;
 import com.starrocks.connector.iceberg.IcebergTableMORParams;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.HintNode;
+import com.starrocks.sql.ast.expression.BinaryType;
+import com.starrocks.sql.ast.expression.JoinOperator;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.Utils;
@@ -83,7 +83,7 @@ public class IcebergEqualityDeleteRewriteRule extends TransformationRule {
             return false;
         }
 
-        Optional<Long> snapshotId = scanOperator.getTableVersionRange().end();
+        Optional<Long> snapshotId = scanOperator.getTvrVersionRange().end();
         if (snapshotId.isEmpty()) {
             return false;
         }
@@ -181,7 +181,7 @@ public class IcebergEqualityDeleteRewriteRule extends TransformationRule {
             fillExtendedColumns(columnRefFactory, colRefToColumn, columnToColRef, hasPartitionEvolution, icebergTable);
             LogicalIcebergEqualityDeleteScanOperator eqScanOp = new LogicalIcebergEqualityDeleteScanOperator(
                     equalityDeleteTable, colRefToColumn.build(), columnToColRef.build(), -1, null,
-                    scanOperator.getTableVersionRange());
+                    scanOperator.getTvrVersionRange());
             eqScanOp.setOriginPredicate(scanOperator.getPredicate());
             eqScanOp.setTableFullMORParams(icebergTableFullMorParams);
             eqScanOp.setMORParams(IcebergMORParams.of(IcebergMORParams.ScanTaskType.EQ_DELETE, equalityIds));
@@ -282,7 +282,7 @@ public class IcebergEqualityDeleteRewriteRule extends TransformationRule {
         ScalarOperator newPredicate = rewriter.rewrite(scanOperator.getPredicate());
 
         LogicalIcebergScanOperator newOp =  new LogicalIcebergScanOperator(table, newColRefToColBuilder.build(),
-                newColToColRefBuilder.build(), scanOperator.getLimit(), newPredicate, scanOperator.getTableVersionRange());
+                newColToColRefBuilder.build(), scanOperator.getLimit(), newPredicate, scanOperator.getTvrVersionRange());
 
         newOp.setMORParam(scanOperator.getMORParam());
         newOp.setTableFullMORParams(scanOperator.getTableFullMORParams());
@@ -357,7 +357,7 @@ public class IcebergEqualityDeleteRewriteRule extends TransformationRule {
 
         // we shouldn't push down limit to scan node in this pattern.
         LogicalIcebergScanOperator newOp =  new LogicalIcebergScanOperator(withDeleteIcebergTable, newColRefToColBuilder.build(),
-                newColToColRefBuilder.build(), -1, newPredicate, scanOperator.getTableVersionRange());
+                newColToColRefBuilder.build(), -1, newPredicate, scanOperator.getTvrVersionRange());
         newOp.setFromEqDeleteRewriteRule(true);
         return newOp;
     }

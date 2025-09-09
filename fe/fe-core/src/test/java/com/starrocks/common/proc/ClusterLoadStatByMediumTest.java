@@ -92,8 +92,8 @@ public class ClusterLoadStatByMediumTest {
             String balanceStat = row.get(1);
             if (medium.equals("HDD")) {
                 Assertions.assertEquals(
-                        "{\"maxUsedPercent\":0.9,\"minUsedPercent\":0.1,\"maxBeId\":1,\"minBeId\":2,\"type\":\"CLUSTER_DISK\"," +
-                                "\"balanced\":false}",
+                        "{\"maxUsedPercent\":0.9,\"minUsedPercent\":0.1,\"maxBeId\":1,\"minBeId\":2," +
+                                "\"type\":\"INTER_NODE_DISK_USAGE\",\"balanced\":false}",
                         balanceStat);
             } else if (medium.equals("SSD")) {
                 Assertions.assertEquals("{\"balanced\":true}", balanceStat);

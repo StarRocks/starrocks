@@ -41,6 +41,7 @@ import com.starrocks.authentication.AuthenticationProvider;
 import com.starrocks.authentication.AuthenticationProviderFactory;
 import com.starrocks.authentication.SecurityIntegration;
 import com.starrocks.authentication.UserAuthenticationInfo;
+import com.starrocks.catalog.UserIdentity;
 import com.starrocks.common.Config;
 import com.starrocks.common.ConfigBase;
 import com.starrocks.common.DdlException;
@@ -50,7 +51,6 @@ import com.starrocks.mysql.privilege.AuthPlugin;
 import com.starrocks.mysql.ssl.SSLContextLoader;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.sql.ast.UserIdentity;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -325,14 +325,16 @@ public class MysqlProto {
             MysqlCodec.writeNulTerminateString(outputStream, switchAuthPlugin);
 
             byte[] authSwitchRequestPacket =
-                    provider.authSwitchRequestPacket(context, user, context.getMysqlChannel().getRemoteIp());
+                    provider.authSwitchRequestPacket(context.getAuthenticationContext(), user,
+                            context.getMysqlChannel().getRemoteIp());
             if (authSwitchRequestPacket != null) {
                 MysqlCodec.writeBytes(outputStream, authSwitchRequestPacket);
             }
             MysqlCodec.writeInt1(outputStream, 0);
         } else {
             // AuthMoreData Packet
-            byte[] authMoreDataPacket = provider.authMoreDataPacket(context, user, context.getMysqlChannel().getRemoteIp());
+            byte[] authMoreDataPacket = provider.authMoreDataPacket(context.getAuthenticationContext(), user,
+                    context.getMysqlChannel().getRemoteIp());
             if (authMoreDataPacket != null) {
                 MysqlCodec.writeInt1(outputStream, (byte) 0x01);
                 MysqlCodec.writeBytes(outputStream, authMoreDataPacket);

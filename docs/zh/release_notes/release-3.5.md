@@ -10,6 +10,78 @@ displayed_sidebar: docs
 
 :::
 
+## 3.5.5
+
+发布日期: 2025 年 9 月 5 日
+
+### 功能增强
+
+- 新增系统变量 `enable_drop_table_check_mv_dependency`（默认值：`false`）。设置为 `true` 后，若被删除的对象被下游物化视图所依赖，系统将阻止执行该 `DROP TABLE` / `DROP VIEW` / `DROP MATERIALIZED VIEW` 操作。错误信息会列出依赖的物化视图，并提示查看 `sys.object_dependencies` 视图获取详细信息。[#61584](https://github.com/StarRocks/starrocks/pull/61584)
+- 日志新增构建的 Linux 发行版与 CPU 架构信息，便于问题复现与排障。相关日志格式为 `... build <hash> distro <id> arch <arch>`。[#62017](https://github.com/StarRocks/starrocks/pull/62017)
+- 通过在每个 Tablet 缓存持久化索引与增量列组文件大小，替代按需目录扫描，加速 BE 的 Tablet 状态上报并降低高 I/O 场景延迟。 [#61901](https://github.com/StarRocks/starrocks/pull/61901)
+- 将 FE 与 BE 日志中多处高频 INFO 日志降级为 VLOG，并对任务提交日志做聚合，显著减少存储相关冗余日志与高负载下的日志量。[#62121](https://github.com/StarRocks/starrocks/pull/62121)
+- 通过 `information_schema` 数据库查询 External Catalog 元数据时，通过将表过滤下推到调用 `getTable` 之前，加速此类查询，避免逐表 RPC，并提升性能。[#62404](https://github.com/StarRocks/starrocks/pull/62404)
+
+### 问题修复
+
+修复了以下问题：
+
+- 在 Plan 阶段获取分区级列统计信息时，因缺失而产生 NullPointerException 的问题。[#61935](https://github.com/StarRocks/starrocks/pull/61935)
+- Parquet 写出在 NULL 数组非零大小场景下的问题，并纠正 `SPLIT(NULL, …)` 行为保持输出为 NULL，避免数据损坏与运行时错误。[#61999](https://github.com/StarRocks/starrocks/pull/61999)
+- 创建使用 `CASE WHEN` 表达式的物化视图时，因 VARCHAR 类型返回不兼容导致的失败（修复后，系统确保刷新前后一致性，新增 FE 配置 `transform_type_prefer_string_for_varchar` 以优先用 STRING，避免长度不匹配）。[#61996](https://github.com/StarRocks/starrocks/pull/61996)
+- 当 `enable_rbo_table_prune` 为 `false` 时，在表裁剪时系统无法在 memo 之外计算嵌套 CTE 统计信息的问题。[#62070](https://github.com/StarRocks/starrocks/pull/62070)
+- Audit Log 中，INSERT INTO SELECT 语句的 Scan Rows 结果不准确。[#61381](https://github.com/StarRocks/starrocks/pull/61381)
+- 初始化阶段出现 ExceptionInInitializerError/NullPointerException 问题，导致启用 Query Queue v2 时 FE 重启失败。 [#62161](https://github.com/StarRocks/starrocks/pull/62161)
+- BE 在 `LakePersistentIndex` 初始化失败时因清理 `_memtable` 而崩溃。[#62279](https://github.com/StarRocks/starrocks/pull/62279)
+- 物化视图刷新时创建者的所有角色未被激活导致的权限问题（修复后，新增 FE 配置 `mv_use_creator_based_authorization`，设置为 `false` 时系统以 root 身份刷新物化视图，用于适配 LDAP 验证方式的集群）。[#62396](https://github.com/StarRocks/starrocks/pull/62396)
+- 因 List 分区表名仅大小写不同而导致的物化视图刷新失败（修复后，对分区名实施大小写不敏感的唯一性校验，与 OLAP 表语义一致）。[#62389](https://github.com/StarRocks/starrocks/pull/62389)
+
+## 3.5.4
+
+发布日期: 2025年8月22日
+
+### 功能增强
+
+- 增加日志以明确 Tablet 无法修复的原因。 [#61959](https://github.com/StarRocks/starrocks/pull/61959)
+- 优化日志中的 DROP PARTITION 信息。 [#61787](https://github.com/StarRocks/starrocks/pull/61787)
+- 为统计信息未知的表分配一个较大但可配置的行数，用于统计估算。 [#61332](https://github.com/StarRocks/starrocks/pull/61332)
+- 增加基于标签位置的均衡统计。 [#61905](https://github.com/StarRocks/starrocks/pull/61905)
+- 增加 Colocate Group 均衡统计以提升集群监控能力。 [#61736](https://github.com/StarRocks/starrocks/pull/61736)
+- 当健康副本数超过默认副本数时，跳过 Publish 等待阶段。 [#61820](https://github.com/StarRocks/starrocks/pull/61820)
+- 在 Tablet 报告中加入 Tablet 信息的收集时间。 [#61643](https://github.com/StarRocks/starrocks/pull/61643)
+- 支持写入带标签的 Starlet 文件。 [#61605](https://github.com/StarRocks/starrocks/pull/61605)
+- 支持通过 SHOW PROC 查看集群均衡统计。 [#61578](https://github.com/StarRocks/starrocks/pull/61578)
+- 升级 librdkafka 至 2.11.0 以支持 Kafka 4.0，并移除废弃配置。 [#61698](https://github.com/StarRocks/starrocks/pull/61698)
+- 在 Stream Load 事务接口中新增 `prepared_timeout` 配置。 [#61539](https://github.com/StarRocks/starrocks/pull/61539)
+- 升级 StarOS 至 v3.5-rc3。 [#61685](https://github.com/StarRocks/starrocks/pull/61685)
+
+### 问题修复
+
+修复了以下问题：
+
+- 随机分布表的 Dict 版本错误。 [#61933](https://github.com/StarRocks/starrocks/pull/61933)
+- 在 Context Condition 中的 Query Context 错误。 [#61929](https://github.com/StarRocks/starrocks/pull/61929)
+- ALTER 操作中因 Shadow Tablet 的同步 Publish 导致 Publish 失败。 [#61887](https://github.com/StarRocks/starrocks/pull/61887)
+- 修复 CVE-2025-55163 漏洞。 [#62041](https://github.com/StarRocks/starrocks/pull/62041)
+- 从 Apache Kafka 实时导入数据时发生内存泄漏。 [#61698](https://github.com/StarRocks/starrocks/pull/61698)
+- Lake Persistent Index 中 Rebuild 文件数量统计错误。 [#61859](https://github.com/StarRocks/starrocks/pull/61859)
+- 在生成表达式列上收集统计信息导致跨库查询失败。 [#61829](https://github.com/StarRocks/starrocks/pull/61829)
+- Query Cache 在存算一体集群中不一致，导致结果不一致。 [#61783](https://github.com/StarRocks/starrocks/pull/61783)
+- CatalogRecycleBin 保留已删除分区信息导致内存占用过高。 [#61582](https://github.com/StarRocks/starrocks/pull/61582)
+- SQL Server JDBC 连接在超时超过 65,535 毫秒时失败。 [#61719](https://github.com/StarRocks/starrocks/pull/61719)
+- 安全集成未能加密密码，导致敏感信息泄露。 [#60666](https://github.com/StarRocks/starrocks/pull/60666)
+- Iceberg 分区列上的 `MIN()` 和 `MAX()` 异常返回 NULL。 [#61858](https://github.com/StarRocks/starrocks/pull/61858)
+- 含不可下推子字段的 Join 谓词被错误改写。 [#61868](https://github.com/StarRocks/starrocks/pull/61868)
+- 取消 QueryContext 可能导致 use-after-free。 [#61897](https://github.com/StarRocks/starrocks/pull/61897)
+- CBO 表裁剪逻辑错误忽略其他谓词。 [#61881](https://github.com/StarRocks/starrocks/pull/61881)
+- `COLUMN_UPSERT_MODE` 部分更新将自增列覆盖为 0。 [#61341](https://github.com/StarRocks/starrocks/pull/61341)
+- JDBC TIME 类型转换使用错误的时区偏移，导致时间值错误。 [#61783](https://github.com/StarRocks/starrocks/pull/61783)
+- Routine Load 作业未序列化 `max_filter_ratio`。 [#61755](https://github.com/StarRocks/starrocks/pull/61755)
+- Stream Load 的 `now(precision)` 函数存在精度参数丢失。 [#61721](https://github.com/StarRocks/starrocks/pull/61721)
+- 取消查询可能导致“query id not found”错误。 [#61667](https://github.com/StarRocks/starrocks/pull/61667)
+- LDAP 认证在查询过程中可能漏报 PartialResultException 导致查询结果不完整。 [#60667](https://github.com/StarRocks/starrocks/pull/60667)
+- 查询条件包含 DATETIME 时，Paimon Timestamp 的时区转换错误。 [#60473](https://github.com/StarRocks/starrocks/pull/60473)
+
 ## 3.5.3
 
 发布日期： 2025 年 8 月 11 日

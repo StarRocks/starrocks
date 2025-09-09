@@ -14,8 +14,6 @@
 
 package com.starrocks.sql.ast;
 
-import com.starrocks.alter.AlterOpType;
-import com.starrocks.analysis.ColumnPosition;
 import com.starrocks.catalog.Type;
 import com.starrocks.sql.parser.NodePosition;
 
@@ -52,13 +50,13 @@ public class AddFieldClause extends AlterTableColumnClause {
     }
 
     public AddFieldClause(String colName, StructFieldDesc fieldDesc, Map<String, String> properties) {
-        super(AlterOpType.SCHEMA_CHANGE, null, properties, NodePosition.ZERO);
+        super(null, properties, NodePosition.ZERO);
         this.colName = colName;
         this.fieldDesc = fieldDesc;
     }
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitAddFieldClause(this, context);
+        return ((AstVisitorExtendInterface<R, C>) visitor).visitAddFieldClause(this, context);
     }
 }

@@ -17,6 +17,7 @@
 #include "common/tracer.h"
 #include "fs/fs_util.h"
 #include "gutil/strings/substitute.h"
+#include "runtime/current_thread.h"
 #include "serde/column_array_serde.h"
 #include "storage/chunk_helper.h"
 #include "storage/delta_column_group.h"
@@ -761,6 +762,7 @@ Status RowsetColumnUpdateState::finalize(Tablet* tablet, Rowset* rowset, uint32_
     // It means column_1 and column_2 are stored in aaa.cols, and column_3 and column_4 are stored in bbb.cols
     std::map<uint32_t, std::vector<std::vector<ColumnUID>>> dcg_column_ids;
     std::map<uint32_t, std::vector<std::string>> dcg_column_files;
+    std::map<uint32_t, int64_t> rssid_to_segment_file_size;
     // 3. read from raw segment file and update file, and generate `.col` files one by one
     int idx = 0; // It is used for generate different .cols filename
     for (uint32_t col_index = 0; col_index < update_column_ids.size(); col_index += BATCH_HANDLE_COLUMN_CNT) {
@@ -814,6 +816,7 @@ Status RowsetColumnUpdateState::finalize(Tablet* tablet, Rowset* rowset, uint32_
             dcg_column_ids[each.first].push_back(selective_unique_update_column_ids);
             dcg_column_files[each.first].push_back(file_name(delta_column_group_writer->segment_path()));
             handle_cnt++;
+            rssid_to_segment_file_size[each.first] += segment_file_size;
         }
         idx++;
     }
@@ -821,7 +824,8 @@ Status RowsetColumnUpdateState::finalize(Tablet* tablet, Rowset* rowset, uint32_
     for (const auto& each : rss_upt_id_to_rowid_pairs) {
         _rssid_to_delta_column_group[each.first] = std::make_shared<DeltaColumnGroup>();
         _rssid_to_delta_column_group[each.first]->init(latest_applied_version.major_number() + 1,
-                                                       dcg_column_ids[each.first], dcg_column_files[each.first]);
+                                                       dcg_column_ids[each.first], dcg_column_files[each.first], {},
+                                                       rssid_to_segment_file_size[each.first]);
     }
     cost_str << " [generate delta column group] " << watch.elapsed_time();
     watch.reset();

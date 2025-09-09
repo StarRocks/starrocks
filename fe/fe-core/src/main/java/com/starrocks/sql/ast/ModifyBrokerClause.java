@@ -16,7 +16,6 @@
 package com.starrocks.sql.ast;
 
 import com.google.common.base.Strings;
-import com.starrocks.alter.AlterOpType;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Pair;
 import com.starrocks.sql.parser.NodePosition;
@@ -39,7 +38,7 @@ public class ModifyBrokerClause extends AlterClause {
     protected Set<Pair<String, Integer>> hostPortPairs;
 
     public ModifyBrokerClause(ModifyOp op, String brokerName, List<String> hostPorts, NodePosition pos) {
-        super(AlterOpType.ALTER_OTHER, pos);
+        super(pos);
         this.op = op;
         this.brokerName = brokerName;
         this.hostPorts = hostPorts;
@@ -83,6 +82,6 @@ public class ModifyBrokerClause extends AlterClause {
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitModifyBrokerClause(this, context);
+        return ((AstVisitorExtendInterface<R, C>) visitor).visitModifyBrokerClause(this, context);
     }
 }

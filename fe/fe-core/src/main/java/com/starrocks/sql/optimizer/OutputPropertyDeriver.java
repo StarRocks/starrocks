@@ -18,10 +18,14 @@ import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
-import com.starrocks.analysis.JoinOperator;
 import com.starrocks.catalog.ColocateTableIndex;
+import com.starrocks.catalog.Column;
+import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.system.SystemTable;
+import com.starrocks.connector.BucketProperty;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.expression.JoinOperator;
 import com.starrocks.sql.optimizer.base.CTEProperty;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.base.DistributionCol;
@@ -31,6 +35,7 @@ import com.starrocks.sql.optimizer.base.EmptyDistributionProperty;
 import com.starrocks.sql.optimizer.base.EmptySortProperty;
 import com.starrocks.sql.optimizer.base.EquivalentDescriptor;
 import com.starrocks.sql.optimizer.base.HashDistributionDesc;
+import com.starrocks.sql.optimizer.base.HashDistributionDescBP;
 import com.starrocks.sql.optimizer.base.HashDistributionSpec;
 import com.starrocks.sql.optimizer.base.PhysicalPropertySet;
 import com.starrocks.sql.optimizer.base.SortProperty;
@@ -44,6 +49,7 @@ import com.starrocks.sql.optimizer.operator.physical.PhysicalExceptOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalFilterOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalHashAggregateOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalHashJoinOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalIcebergScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalIntersectOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalJDBCScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalJoinOperator;
@@ -70,6 +76,7 @@ import org.jetbrains.annotations.NotNull;
 
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -141,7 +148,6 @@ public class OutputPropertyDeriver extends PropertyDeriverBase<PhysicalPropertyS
 
         EquivalentDescriptor leftDesc = leftScanDistributionSpec.getEquivDesc();
         EquivalentDescriptor rightDesc = rightScanDistributionSpec.getEquivDesc();
-
 
         ColocateTableIndex colocateIndex = GlobalStateMgr.getCurrentState().getColocateTableIndex();
         long leftTableId = leftDesc.getTableId();
@@ -488,6 +494,60 @@ public class OutputPropertyDeriver extends PropertyDeriverBase<PhysicalPropertyS
         }
     }
 
+    private Optional<HashDistributionDesc> computeLakeHashDistributionDesc(HashDistributionDesc require,
+                                                                           List<BucketProperty> bucketProperties,
+                                                                           Map<ColumnRefOperator, Column> map) {
+        ColumnRefSet requireColumnRefSet = ColumnRefSet.createByIds(
+                require.getDistributionCols().stream().map(DistributionCol::getColId).toList());
+
+        List<Integer> bucketColumnIds = new ArrayList<>();
+        Map<Integer, Integer> id2Index = new HashMap<>();
+        for (int i = 0; i < bucketProperties.size(); i++) {
+            Column column = bucketProperties.get(i).getColumn();
+            for (Map.Entry<ColumnRefOperator, Column> entry : map.entrySet()) {
+                if (entry.getKey().getName().equals(column.getName())) {
+                    bucketColumnIds.add(entry.getKey().getId());
+                    id2Index.put(entry.getKey().getId(), i);
+                    break;
+                }
+            }
+        }
+        ColumnRefSet bucketColumnRefSet = ColumnRefSet.createByIds(bucketColumnIds);
+        requireColumnRefSet.intersect(bucketColumnRefSet);
+        if (requireColumnRefSet.isEmpty()) {
+            return Optional.empty();
+        } else {
+            // respect the order of column shuffle
+            List<BucketProperty> usedBP = require.getDistributionCols().stream()
+                    .map(DistributionCol::getColId).filter(requireColumnRefSet::contains)
+                    .map(id2Index::get).map(bucketProperties::get).toList();
+            return Optional.of(new HashDistributionDescBP(
+                    requireColumnRefSet.getStream().toList(), LOCAL, usedBP));
+        }
+    }
+
+    @Override
+    public PhysicalPropertySet visitPhysicalIcebergScan(PhysicalIcebergScanOperator node, ExpressionContext context) {
+        // according bucket properties to compute distribution that meet requirement
+        DistributionSpec distributionSpec = requirements.getDistributionProperty().getSpec();
+        if (ConnectContext.get().getSessionVariable().isEnableBucketAwareExecutionOnLake() &&
+                distributionSpec instanceof HashDistributionSpec hashDistribution) {
+            IcebergTable table = (IcebergTable) node.getTable();
+            if (table.hasBucketProperties()) {
+                List<BucketProperty> properties = table.getBucketProperties();
+                Optional<HashDistributionDesc> hashDistributionDesc = computeLakeHashDistributionDesc(
+                        hashDistribution.getHashDistributionDesc(), properties, node.getColRefToColumnMetaMap());
+                if (hashDistributionDesc.isPresent()) {
+                    HashDistributionDesc nullStrictDesc = hashDistributionDesc.get().getNullStrictDesc();
+                    return createPropertySetByDistribution(new HashDistributionSpec(nullStrictDesc));
+                }
+            }
+            LOG.debug("table name: " + node.getTable().getName() + ", requirement distribution type: " +
+                    distributionSpec.toString());
+        }
+        return mergeCTEProperty(PhysicalPropertySet.EMPTY);
+    }
+
     @Override
     public PhysicalPropertySet visitPhysicalTopN(PhysicalTopNOperator topN, ExpressionContext context) {
         PhysicalPropertySet outputProperty;
@@ -614,7 +674,6 @@ public class OutputPropertyDeriver extends PropertyDeriverBase<PhysicalPropertyS
     public PhysicalPropertySet visitPhysicalValues(PhysicalValuesOperator node, ExpressionContext context) {
         return createGatherPropertySet();
     }
-
 
     private void updatePropertyWithProjection(Projection projection, PhysicalPropertySet oldProperty) {
         if (projection == null) {

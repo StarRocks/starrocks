@@ -21,6 +21,7 @@
 #include <thread>
 
 #include "column/vectorized_fwd.h"
+#include "runtime/memory/column_allocator.h"
 #include "types/bitmap_value_detail.h"
 #include "util/coding.h"
 

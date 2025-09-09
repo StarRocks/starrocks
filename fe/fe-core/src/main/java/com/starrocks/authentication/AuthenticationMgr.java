@@ -19,10 +19,9 @@ import com.google.gson.annotations.SerializedName;
 import com.starrocks.authorization.AuthorizationMgr;
 import com.starrocks.authorization.PrivilegeException;
 import com.starrocks.authorization.UserPrivilegeCollectionV2;
+import com.starrocks.catalog.UserIdentity;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.Pair;
-import com.starrocks.mysql.MysqlPassword;
-import com.starrocks.mysql.privilege.AuthPlugin;
 import com.starrocks.persist.EditLog;
 import com.starrocks.persist.GroupProviderLog;
 import com.starrocks.persist.ImageWriter;
@@ -38,7 +37,7 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.CreateUserStmt;
 import com.starrocks.sql.ast.DropUserStmt;
-import com.starrocks.sql.ast.UserIdentity;
+import com.starrocks.sql.ast.UserRef;
 import com.starrocks.sql.ast.group.CreateGroupProviderStmt;
 import com.starrocks.sql.ast.group.DropGroupProviderStmt;
 import org.apache.logging.log4j.LogManager;
@@ -58,7 +57,7 @@ import java.util.concurrent.locks.ReentrantReadWriteLock;
 public class AuthenticationMgr {
     private static final Logger LOG = LogManager.getLogger(AuthenticationMgr.class);
     public static final String ROOT_USER = "root";
-    public static final long DEFAULT_MAX_CONNECTION_FOR_EXTERNAL_USER = 100;
+    public static final long DEFAULT_MAX_CONNECTION_FOR_EXTERNAL_USER = 1000;
 
     // core data structure
     // user identity -> all the authentication information
@@ -87,14 +86,7 @@ public class AuthenticationMgr {
     public AuthenticationMgr() {
         // default user
         userToAuthenticationInfo = new UserAuthInfoTreeMap();
-        UserAuthenticationInfo info = new UserAuthenticationInfo();
-        try {
-            info.setOrigUserHost(ROOT_USER, UserAuthenticationInfo.ANY_HOST);
-        } catch (AuthenticationException e) {
-            throw new RuntimeException("should not happened!", e);
-        }
-        info.setAuthPlugin(AuthPlugin.Server.MYSQL_NATIVE_PASSWORD.toString());
-        info.setPassword(MysqlPassword.EMPTY_PASSWORD);
+        UserAuthenticationInfo info = new UserAuthenticationInfo(UserRef.ROOT, null);
         userToAuthenticationInfo.put(UserIdentity.ROOT, info);
         userNameToProperty.put(UserIdentity.ROOT.getUser(), new UserProperty());
     }
@@ -165,6 +157,7 @@ public class AuthenticationMgr {
     /**
      * Get max connection number based on plain username, the user should be an internal user,
      * if the user doesn't exist in SR, it will throw an exception.
+     *
      * @param userName plain username saved in SR
      * @return max connection number of the user
      */
@@ -212,15 +205,16 @@ public class AuthenticationMgr {
     }
 
     public void createUser(CreateUserStmt stmt) throws DdlException {
-        UserIdentity userIdentity = stmt.getUserIdentity();
-        UserAuthenticationInfo info = stmt.getAuthenticationInfo();
+        UserRef user = stmt.getUser();
+        UserIdentity userIdentity = new UserIdentity(user.getUser(), user.getHost(), user.isDomain());
+        UserAuthenticationInfo info = new UserAuthenticationInfo(user, stmt.getAuthOption());
         writeLock();
         try {
             if (userToAuthenticationInfo.containsKey(userIdentity)) {
                 // Existence verification has been performed in the Analyzer stage. If it exists here,
                 // it may be that other threads have performed the same operation, and return directly here
-                LOG.info("Operation CREATE USER failed for " + stmt.getUserIdentity()
-                        + " : user " + stmt.getUserIdentity() + " already exists");
+                LOG.info("Operation CREATE USER failed for " + stmt.getUser()
+                        + " : user " + stmt.getUser() + " already exists");
                 return;
             }
 
@@ -334,9 +328,10 @@ public class AuthenticationMgr {
     }
 
     public void dropUser(DropUserStmt stmt) throws DdlException {
-        UserIdentity userIdentity = stmt.getUserIdentity();
+        UserRef user = stmt.getUser();
         writeLock();
         try {
+            UserIdentity userIdentity = new UserIdentity(user.getUser(), user.getHost(), user.isDomain());
             dropUserNoLock(userIdentity);
             // drop user privilege as well
             GlobalStateMgr.getCurrentState().getAuthorizationMgr().onDropUser(userIdentity);
@@ -383,7 +378,6 @@ public class AuthenticationMgr {
             throws AuthenticationException, PrivilegeException {
         writeLock();
         try {
-            info.analyze();
             updateUserNoLock(userIdentity, info, false);
             if (userProperty != null) {
                 userNameToProperty.put(userIdentity.getUser(), userProperty);
@@ -494,12 +488,6 @@ public class AuthenticationMgr {
         LOG.info("loading users");
         reader.readMap(UserIdentity.class, UserAuthenticationInfo.class,
                 (MapEntryConsumer<UserIdentity, UserAuthenticationInfo>) (userIdentity, userAuthenticationInfo) -> {
-                    try {
-                        userAuthenticationInfo.analyze();
-                    } catch (AuthenticationException e) {
-                        throw new IOException(e);
-                    }
-
                     ret.userToAuthenticationInfo.put(userIdentity, userAuthenticationInfo);
                 });
 
@@ -627,7 +615,7 @@ public class AuthenticationMgr {
         groupProvider.init();
         this.nameToGroupProviderMap.put(stmt.getName(), groupProvider);
 
-        GlobalStateMgr.getCurrentState().getEditLog().logEdit(OperationType.OP_CREATE_GROUP_PROVIDER,
+        GlobalStateMgr.getCurrentState().getEditLog().logJsonObject(OperationType.OP_CREATE_GROUP_PROVIDER,
                 new GroupProviderLog(stmt.getName(), stmt.getPropertyMap()));
     }
 
@@ -645,7 +633,7 @@ public class AuthenticationMgr {
         GroupProvider groupProvider = this.nameToGroupProviderMap.remove(stmt.getName());
         groupProvider.destory();
 
-        GlobalStateMgr.getCurrentState().getEditLog().logEdit(OperationType.OP_DROP_GROUP_PROVIDER,
+        GlobalStateMgr.getCurrentState().getEditLog().logJsonObject(OperationType.OP_DROP_GROUP_PROVIDER,
                 new GroupProviderLog(stmt.getName(), null));
     }
 

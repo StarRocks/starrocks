@@ -15,7 +15,7 @@
 package com.starrocks.authentication;
 
 import com.google.common.base.Joiner;
-import com.starrocks.analysis.InformationFunction;
+import com.starrocks.catalog.UserIdentity;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.mysql.MysqlCodec;
@@ -29,7 +29,7 @@ import com.starrocks.sql.analyzer.Analyzer;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.StatementBase;
-import com.starrocks.sql.ast.UserIdentity;
+import com.starrocks.sql.ast.expression.InformationFunction;
 import com.starrocks.sql.ast.group.ShowCreateGroupProviderStmt;
 import com.starrocks.sql.ast.integration.ShowCreateSecurityIntegrationStatement;
 import com.starrocks.sql.parser.NodePosition;
@@ -233,7 +233,7 @@ public class SecurityIntegrationTest {
 
         Assertions.assertThrows(AuthenticationException.class, () ->
                 ldapAuthProviderForNative.authenticate(
-                        context,
+                        context.getAuthenticationContext(),
                         new UserIdentity("admin", "%"),
                         "x".getBytes(StandardCharsets.UTF_8)));
     }

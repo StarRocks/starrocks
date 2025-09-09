@@ -14,7 +14,7 @@
 
 package com.starrocks.connector.iceberg;
 
-import com.google.common.cache.Cache;
+import com.github.benmanes.caffeine.cache.Cache;
 import com.starrocks.connector.PlanMode;
 import com.starrocks.qe.ConnectContext;
 import org.apache.iceberg.DataFile;

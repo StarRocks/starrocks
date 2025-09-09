@@ -25,18 +25,6 @@ import com.google.common.collect.Multimap;
 import com.google.common.collect.Sets;
 import com.google.common.collect.Streams;
 import com.starrocks.alter.AlterJobMgr;
-import com.starrocks.analysis.Expr;
-import com.starrocks.analysis.ExprSubstitutionMap;
-import com.starrocks.analysis.FunctionCallExpr;
-import com.starrocks.analysis.IntLiteral;
-import com.starrocks.analysis.OrderByElement;
-import com.starrocks.analysis.SlotDescriptor;
-import com.starrocks.analysis.SlotId;
-import com.starrocks.analysis.SlotRef;
-import com.starrocks.analysis.StringLiteral;
-import com.starrocks.analysis.TableName;
-import com.starrocks.analysis.TimestampArithmeticExpr;
-import com.starrocks.analysis.TypeDef;
 import com.starrocks.catalog.AggregateType;
 import com.starrocks.catalog.BaseTableInfo;
 import com.starrocks.catalog.Column;
@@ -74,12 +62,14 @@ import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.connector.iceberg.IcebergPartitionTransform;
 import com.starrocks.mv.analyzer.MVPartitionSlotRefResolver;
+import com.starrocks.planner.SlotDescriptor;
+import com.starrocks.planner.SlotId;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SqlModeHelper;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
 import com.starrocks.sql.ast.AlterMaterializedViewStmt;
-import com.starrocks.sql.ast.AstVisitor;
+import com.starrocks.sql.ast.AstVisitorExtendInterface;
 import com.starrocks.sql.ast.CancelRefreshMaterializedViewStmt;
 import com.starrocks.sql.ast.ColWithComment;
 import com.starrocks.sql.ast.ColumnDef;
@@ -87,7 +77,9 @@ import com.starrocks.sql.ast.CreateMaterializedViewStatement;
 import com.starrocks.sql.ast.DistributionDesc;
 import com.starrocks.sql.ast.DropMaterializedViewStmt;
 import com.starrocks.sql.ast.HashDistributionDesc;
+import com.starrocks.sql.ast.IncrementalRefreshSchemeDesc;
 import com.starrocks.sql.ast.IndexDef;
+import com.starrocks.sql.ast.OrderByElement;
 import com.starrocks.sql.ast.PartitionRangeDesc;
 import com.starrocks.sql.ast.QueryRelation;
 import com.starrocks.sql.ast.QueryStatement;
@@ -97,6 +89,15 @@ import com.starrocks.sql.ast.SelectRelation;
 import com.starrocks.sql.ast.SetOperationRelation;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.ViewRelation;
+import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.ExprSubstitutionMap;
+import com.starrocks.sql.ast.expression.FunctionCallExpr;
+import com.starrocks.sql.ast.expression.IntLiteral;
+import com.starrocks.sql.ast.expression.SlotRef;
+import com.starrocks.sql.ast.expression.StringLiteral;
+import com.starrocks.sql.ast.expression.TableName;
+import com.starrocks.sql.ast.expression.TimestampArithmeticExpr;
+import com.starrocks.sql.ast.expression.TypeDef;
 import com.starrocks.sql.common.PListCell;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.Optimizer;
@@ -234,6 +235,7 @@ public class MaterializedViewAnalyzer {
     /**
      * We can support some external tables for creating materialized view.
      * For more details see: https://github.com/StarRocks/starrocks/issues/19581
+     *
      * @param table : table to check
      * @return true if the external table is supported for materialized view
      */
@@ -283,7 +285,7 @@ public class MaterializedViewAnalyzer {
                 .collect(Collectors.toList());
     }
 
-    static class MaterializedViewAnalyzerVisitor implements AstVisitor<Void, ConnectContext> {
+    static class MaterializedViewAnalyzerVisitor implements AstVisitorExtendInterface<Void, ConnectContext> {
 
         public enum RefreshTimeUnit {
             DAY,
@@ -473,7 +475,8 @@ public class MaterializedViewAnalyzer {
             if (!ctx.getSessionVariable().isEnableIncrementalRefreshMV()) {
                 return;
             }
-            if (!createStmt.getRefreshSchemeDesc().getType().equals(MaterializedView.RefreshType.INCREMENTAL)) {
+
+            if (!(createStmt.getRefreshSchemeDesc() instanceof IncrementalRefreshSchemeDesc)) {
                 return;
             }
 
@@ -666,13 +669,14 @@ public class MaterializedViewAnalyzer {
                 Multimap<String, Integer> colMultiMap = ArrayListMultimap.create();
 
                 for (IndexDef indexDef : indexDefs) {
-                    indexDef.analyze();
+                    IndexAnalyzer.analyze(indexDef);
                     List<ColumnId> columnIds = new ArrayList<>(indexDef.getColumns().size());
                     for (String indexColName : indexDef.getColumns()) {
                         boolean found = false;
                         for (Column column : columns) {
                             if (column.getName().equalsIgnoreCase(indexColName)) {
-                                indexDef.checkColumn(column, statement.getKeysType());
+                                IndexAnalyzer.checkColumn(column, indexDef.getIndexType(), indexDef.getProperties(),
+                                        statement.getKeysType());
                                 found = true;
                                 columnIds.add(column.getColumnId());
                                 break;
@@ -1077,7 +1081,7 @@ public class MaterializedViewAnalyzer {
             } else {
                 List<Column> refPartitionCols = refBaseTable.getPartitionColumns();
                 Optional<Column> refPartitionColOpt = refPartitionCols.stream()
-                        .filter(col -> col.getName().equals(slotRef.getColumnName()))
+                        .filter(col -> col.getName().equalsIgnoreCase(slotRef.getColumnName()))
                         .findFirst();
                 if (refPartitionColOpt.isEmpty()) {
                     throw new SemanticException("Materialized view partition column in partition exp " +
@@ -1105,6 +1109,7 @@ public class MaterializedViewAnalyzer {
                 }
             }
         }
+
         private boolean shouldMVPartitionByListType(CreateMaterializedViewStatement statement,
                                                     List<Expr> mvPartitionByExprs,
                                                     Expr partitionRefTableExpr,
@@ -1213,7 +1218,7 @@ public class MaterializedViewAnalyzer {
             }
         }
 
-        private  void checkRangePartitionColumnLimit(List<Expr> partitionByExprs) {
+        private void checkRangePartitionColumnLimit(List<Expr> partitionByExprs) {
             if (partitionByExprs.size() > 1) {
                 throw new SemanticException("Materialized view with range partition type " +
                         "only supports single column");
@@ -1266,8 +1271,9 @@ public class MaterializedViewAnalyzer {
 
         /**
          * Check if the partition function of base table is supported.
+         *
          * @param partitionByExpr : base table's partition function
-         * @param table : base table
+         * @param table           : base table
          */
         private void checkBaseTableSupportedPartitionFunc(Expr partitionByExpr,
                                                           OlapTable table) {
@@ -1521,7 +1527,7 @@ public class MaterializedViewAnalyzer {
                     ErrorReport.reportSemanticException(ErrorCode.ERR_DUP_FIELDNAME, columnDef.getName());
                 }
             }
-            distributionDesc.analyze(columnSet);
+            DistributionDescAnalyzer.analyze(distributionDesc, columnSet);
         }
 
         private Short autoInferReplicationNum(Map<TableName, Table> tableNameTableMap) {
@@ -1759,7 +1765,7 @@ public class MaterializedViewAnalyzer {
         ColumnDef generatedPartitionColumn = new ColumnDef(
                 columnName, typeDef, null, false, null, null, true,
                 ColumnDef.DefaultValueDef.NOT_SET, null, adjustedPartitionByExpr, "");
-        return generatedPartitionColumn.toColumn(null);
+        return Column.fromColumnDef(null, generatedPartitionColumn);
     }
 
     /**

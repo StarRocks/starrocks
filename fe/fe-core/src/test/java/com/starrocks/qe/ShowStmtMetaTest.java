@@ -14,17 +14,13 @@
 
 package com.starrocks.qe;
 
-import com.starrocks.analysis.Expr;
-import com.starrocks.analysis.LabelName;
-import com.starrocks.analysis.TableName;
-import com.starrocks.analysis.TableRef;
 import com.starrocks.common.proc.BaseProcResult;
 import com.starrocks.common.proc.ProcNodeInterface;
 import com.starrocks.common.proc.ProcResult;
-import com.starrocks.sql.ShowTemporaryTableStmt;
 import com.starrocks.sql.ast.AdminShowConfigStmt;
 import com.starrocks.sql.ast.AdminShowReplicaDistributionStmt;
 import com.starrocks.sql.ast.AdminShowReplicaStatusStmt;
+import com.starrocks.sql.ast.LabelName;
 import com.starrocks.sql.ast.SetType;
 import com.starrocks.sql.ast.ShowAlterStmt;
 import com.starrocks.sql.ast.ShowAnalyzeJobStmt;
@@ -92,6 +88,7 @@ import com.starrocks.sql.ast.ShowStreamLoadStmt;
 import com.starrocks.sql.ast.ShowTableStatusStmt;
 import com.starrocks.sql.ast.ShowTableStmt;
 import com.starrocks.sql.ast.ShowTabletStmt;
+import com.starrocks.sql.ast.ShowTemporaryTableStmt;
 import com.starrocks.sql.ast.ShowTransactionStmt;
 import com.starrocks.sql.ast.ShowTriggersStmt;
 import com.starrocks.sql.ast.ShowUserPropertyStmt;
@@ -99,6 +96,9 @@ import com.starrocks.sql.ast.ShowUserStmt;
 import com.starrocks.sql.ast.ShowVariablesStmt;
 import com.starrocks.sql.ast.ShowWarningStmt;
 import com.starrocks.sql.ast.ShowWhiteListStmt;
+import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.TableName;
+import com.starrocks.sql.ast.expression.TableRef;
 import com.starrocks.sql.ast.group.ShowCreateGroupProviderStmt;
 import com.starrocks.sql.ast.group.ShowGroupProvidersStmt;
 import com.starrocks.sql.ast.integration.ShowCreateSecurityIntegrationStatement;
@@ -1409,7 +1409,7 @@ public class ShowStmtMetaTest {
     public void testShowNodesStmt() {
         ShowNodesStmt stmt = new ShowNodesStmt("test_cluster", "test_warehouse", "test_node", NodePosition.ZERO);
         ShowResultSetMetaData metaData = new ShowResultMetaFactory().getMetadata(stmt);
-        Assertions.assertEquals(20, metaData.getColumnCount());
+        Assertions.assertEquals(21, metaData.getColumnCount());
         Assertions.assertEquals("WarehouseName", metaData.getColumn(0).getName());
         Assertions.assertEquals("CNGroupId", metaData.getColumn(1).getName());
         Assertions.assertEquals("WorkerGroupId", metaData.getColumn(2).getName());
@@ -1430,6 +1430,7 @@ public class ShowStmtMetaTest {
         Assertions.assertEquals("CpuCores", metaData.getColumn(17).getName());
         Assertions.assertEquals("MemUsedPct", metaData.getColumn(18).getName());
         Assertions.assertEquals("CpuUsedPct", metaData.getColumn(19).getName());
+        Assertions.assertEquals("CNGroupName", metaData.getColumn(20).getName());
     }
 
     @Test

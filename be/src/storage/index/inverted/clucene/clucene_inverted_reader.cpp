@@ -74,13 +74,15 @@ Status FullTextCLuceneInvertedReader::query(OlapReaderStatistics* stats, const s
     lucene::search::IndexSearcher index_searcher(directory);
 
     switch (query_type) {
-    case InvertedIndexQueryType::MATCH_ALL_QUERY:
     case InvertedIndexQueryType::EQUAL_QUERY:
         match_operator =
                 std::make_unique<MatchTermOperator>(&index_searcher, nullptr, column_name_ws.c_str(), search_wstr);
         break;
     case InvertedIndexQueryType::MATCH_ANY_QUERY:
         match_operator = std::make_unique<MatchAnyOperator>(&index_searcher, nullptr, column_name_ws, tokens);
+        break;
+    case InvertedIndexQueryType::MATCH_ALL_QUERY:
+        match_operator = std::make_unique<MatchAllOperator>(&index_searcher, nullptr, column_name_ws, tokens);
         break;
     case InvertedIndexQueryType::MATCH_PHRASE_QUERY:
         // in phrase query

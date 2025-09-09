@@ -15,7 +15,6 @@
 
 package com.starrocks.sql.ast;
 
-import com.starrocks.alter.AlterOpType;
 import com.starrocks.sql.parser.NodePosition;
 
 // rename column
@@ -28,7 +27,7 @@ public class ColumnRenameClause extends AlterTableClause {
     }
 
     public ColumnRenameClause(String colName, String newColName, NodePosition pos) {
-        super(AlterOpType.RENAME, pos);
+        super(pos);
         this.colName = colName;
         this.newColName = newColName;
     }
@@ -43,6 +42,6 @@ public class ColumnRenameClause extends AlterTableClause {
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitColumnRenameClause(this, context);
+        return ((AstVisitorExtendInterface<R, C>) visitor).visitColumnRenameClause(this, context);
     }
 }

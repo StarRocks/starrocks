@@ -1522,6 +1522,7 @@ struct TPartitionMetaInfo {
     29: optional i64 storage_size
     30: optional bool tablet_balanced
     31: optional i64 metadata_switch_version
+    32: optional i64 path_id
 }
 
 struct TGetPartitionsMetaResponse {
@@ -1582,15 +1583,26 @@ struct TTabletSchedule {
     4: optional string type
     5: optional string priority
     6: optional string state
-    7: optional string tablet_status
+    7: optional string schedule_reason
     8: optional double create_time
     9: optional double schedule_time
     10: optional double finish_time
-    11: optional i64 clone_src
-    12: optional i64 clone_dest
+    11: optional i64 src_be_id
+    12: optional i64 dest_be_id
     13: optional i64 clone_bytes
     14: optional double clone_duration
     15: optional string error_msg
+    16: optional double clone_rate
+    17: optional i64 timeout
+    18: optional string medium
+    19: optional string src_path
+    20: optional string dest_path
+    21: optional string orig_priority
+    22: optional i64 last_priority_adjust_time
+    23: optional i64 visible_version
+    24: optional i64 committed_version
+    25: optional i32 failed_schedule_count
+    26: optional i32 failed_running_count
 }
 
 struct TGetTabletScheduleRequest {
@@ -1636,6 +1648,7 @@ struct TQueryStatisticsInfo {
     14: optional string customQueryId
     15: optional string resourceGroupName
     16: optional string execProgress
+    17: optional string execState
 }
 
 struct TGetQueryStatisticsResponse {
@@ -2054,6 +2067,23 @@ struct TFinishCheckpointResponse {
     1: optional Status.TStatus status;
 }
 
+struct TListRecycleBinCatalogsParams {
+    1: optional Types.TUserIdentity user_ident
+}
+
+struct TListRecycleBinCatalogsInfo {
+    1: optional string type
+    2: optional string name
+    3: optional i64 dbid
+    4: optional i64 tableid
+    5: optional i64 partitionid
+    6: optional i64 droptime
+}
+
+struct TListRecycleBinCatalogsResult {
+    1: optional list<TListRecycleBinCatalogsInfo> recyclebin_catalogs
+}
+
 // Batch fetching partition meta info by a list of tablet ids
 // FIXME: add auth info to the request, so the API will be secured
 struct TPartitionMetaRequest {
@@ -2287,6 +2317,7 @@ service FrontendService {
     TStartCheckpointResponse startCheckpoint(1: TStartCheckpointRequest request)
 
     TFinishCheckpointResponse finishCheckpoint(1: TFinishCheckpointRequest request)
+    TListRecycleBinCatalogsResult listRecycleBinCatalogs(1: TListRecycleBinCatalogsParams params)
 
     TPartitionMetaResponse getPartitionMeta(TPartitionMetaRequest request)
 

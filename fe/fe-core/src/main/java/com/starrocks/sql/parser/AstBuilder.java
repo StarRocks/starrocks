@@ -21,70 +21,7 @@ import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
-import com.starrocks.analysis.AnalyticExpr;
-import com.starrocks.analysis.AnalyticWindow;
-import com.starrocks.analysis.ArithmeticExpr;
-import com.starrocks.analysis.ArrowExpr;
-import com.starrocks.analysis.BetweenPredicate;
-import com.starrocks.analysis.BinaryPredicate;
-import com.starrocks.analysis.BinaryType;
-import com.starrocks.analysis.BoolLiteral;
-import com.starrocks.analysis.BrokerDesc;
-import com.starrocks.analysis.CaseExpr;
-import com.starrocks.analysis.CaseWhenClause;
-import com.starrocks.analysis.CastExpr;
-import com.starrocks.analysis.CollectionElementExpr;
-import com.starrocks.analysis.ColumnPosition;
-import com.starrocks.analysis.CompoundPredicate;
-import com.starrocks.analysis.DateLiteral;
-import com.starrocks.analysis.DecimalLiteral;
-import com.starrocks.analysis.DictQueryExpr;
-import com.starrocks.analysis.ExistsPredicate;
-import com.starrocks.analysis.Expr;
-import com.starrocks.analysis.FloatLiteral;
-import com.starrocks.analysis.FunctionCallExpr;
-import com.starrocks.analysis.FunctionName;
-import com.starrocks.analysis.FunctionParams;
-import com.starrocks.analysis.GroupByClause;
-import com.starrocks.analysis.GroupingFunctionCallExpr;
-import com.starrocks.analysis.HintNode;
-import com.starrocks.analysis.InPredicate;
-import com.starrocks.analysis.InformationFunction;
-import com.starrocks.analysis.IntLiteral;
-import com.starrocks.analysis.IsNullPredicate;
-import com.starrocks.analysis.JoinOperator;
-import com.starrocks.analysis.LabelName;
-import com.starrocks.analysis.LargeIntLiteral;
-import com.starrocks.analysis.LikePredicate;
-import com.starrocks.analysis.LimitElement;
-import com.starrocks.analysis.LiteralExpr;
-import com.starrocks.analysis.MatchExpr;
-import com.starrocks.analysis.MultiInPredicate;
-import com.starrocks.analysis.NamedArgument;
-import com.starrocks.analysis.NullLiteral;
-import com.starrocks.analysis.OdbcScalarFunctionCall;
-import com.starrocks.analysis.OrderByElement;
-import com.starrocks.analysis.OutFileClause;
-import com.starrocks.analysis.Parameter;
-import com.starrocks.analysis.ParseNode;
-import com.starrocks.analysis.Predicate;
-import com.starrocks.analysis.ProcedureArgument;
-import com.starrocks.analysis.RoutineLoadDataSourceProperties;
-import com.starrocks.analysis.SetVarHint;
-import com.starrocks.analysis.SlotRef;
-import com.starrocks.analysis.StringLiteral;
-import com.starrocks.analysis.SubfieldExpr;
-import com.starrocks.analysis.Subquery;
-import com.starrocks.analysis.TableName;
-import com.starrocks.analysis.TableRef;
-import com.starrocks.analysis.TaskName;
-import com.starrocks.analysis.TimestampArithmeticExpr;
-import com.starrocks.analysis.TypeDef;
-import com.starrocks.analysis.UserVariableExpr;
-import com.starrocks.analysis.VarBinaryLiteral;
-import com.starrocks.analysis.VariableExpr;
 import com.starrocks.authentication.UserProperty;
-import com.starrocks.authorization.GrantType;
 import com.starrocks.catalog.AggregateFunction;
 import com.starrocks.catalog.AggregateType;
 import com.starrocks.catalog.ArrayType;
@@ -92,7 +29,6 @@ import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.MapType;
-import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.StructField;
@@ -106,20 +42,15 @@ import com.starrocks.common.CsvFormat;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.NotImplementedException;
 import com.starrocks.common.Pair;
-import com.starrocks.common.profile.Tracers;
 import com.starrocks.common.util.DateUtils;
 import com.starrocks.common.util.TimeUtils;
-import com.starrocks.connector.BranchOptions;
-import com.starrocks.connector.TagOptions;
 import com.starrocks.mysql.MysqlPassword;
 import com.starrocks.mysql.privilege.AuthPlugin;
 import com.starrocks.qe.ConnectContext;
-import com.starrocks.qe.OriginStatement;
 import com.starrocks.qe.SqlModeHelper;
 import com.starrocks.scheduler.persist.TaskSchedule;
 import com.starrocks.server.StorageVolumeMgr;
 import com.starrocks.server.WarehouseManager;
-import com.starrocks.sql.ShowTemporaryTableStmt;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.analyzer.FunctionAnalyzer;
 import com.starrocks.sql.analyzer.RelationId;
@@ -178,9 +109,10 @@ import com.starrocks.sql.ast.AnalyzeMultiColumnDesc;
 import com.starrocks.sql.ast.AnalyzeProfileStmt;
 import com.starrocks.sql.ast.AnalyzeStmt;
 import com.starrocks.sql.ast.AnalyzeTypeDesc;
-import com.starrocks.sql.ast.ArrayExpr;
 import com.starrocks.sql.ast.AsyncRefreshSchemeDesc;
 import com.starrocks.sql.ast.BackupStmt;
+import com.starrocks.sql.ast.BranchOptions;
+import com.starrocks.sql.ast.BrokerDesc;
 import com.starrocks.sql.ast.CTERelation;
 import com.starrocks.sql.ast.CallProcedureStatement;
 import com.starrocks.sql.ast.CancelAlterSystemStmt;
@@ -198,6 +130,7 @@ import com.starrocks.sql.ast.ClearDataCacheRulesStmt;
 import com.starrocks.sql.ast.ColWithComment;
 import com.starrocks.sql.ast.ColumnAssignment;
 import com.starrocks.sql.ast.ColumnDef;
+import com.starrocks.sql.ast.ColumnPosition;
 import com.starrocks.sql.ast.ColumnRenameClause;
 import com.starrocks.sql.ast.ColumnSeparator;
 import com.starrocks.sql.ast.CompactionClause;
@@ -232,14 +165,12 @@ import com.starrocks.sql.ast.DataCacheSelectStatement;
 import com.starrocks.sql.ast.DataDescription;
 import com.starrocks.sql.ast.DeallocateStmt;
 import com.starrocks.sql.ast.DecommissionBackendClause;
-import com.starrocks.sql.ast.DefaultValueExpr;
 import com.starrocks.sql.ast.DelBackendBlackListStmt;
 import com.starrocks.sql.ast.DelComputeNodeBlackListStmt;
 import com.starrocks.sql.ast.DelSqlBlackListStmt;
 import com.starrocks.sql.ast.DeleteStmt;
 import com.starrocks.sql.ast.DescStorageVolumeStmt;
 import com.starrocks.sql.ast.DescribeStmt;
-import com.starrocks.sql.ast.DictionaryGetExpr;
 import com.starrocks.sql.ast.DistributionDesc;
 import com.starrocks.sql.ast.DropAnalyzeJobStmt;
 import com.starrocks.sql.ast.DropBackendClause;
@@ -286,8 +217,11 @@ import com.starrocks.sql.ast.GrantPrivilegeStmt;
 import com.starrocks.sql.ast.GrantRevokeClause;
 import com.starrocks.sql.ast.GrantRevokePrivilegeObjects;
 import com.starrocks.sql.ast.GrantRoleStmt;
+import com.starrocks.sql.ast.GrantType;
+import com.starrocks.sql.ast.GroupByClause;
 import com.starrocks.sql.ast.HashDistributionDesc;
 import com.starrocks.sql.ast.HelpStmt;
+import com.starrocks.sql.ast.HintNode;
 import com.starrocks.sql.ast.Identifier;
 import com.starrocks.sql.ast.ImportColumnDesc;
 import com.starrocks.sql.ast.ImportColumnsStmt;
@@ -297,17 +231,14 @@ import com.starrocks.sql.ast.IndexDef;
 import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.InstallPluginStmt;
 import com.starrocks.sql.ast.IntersectRelation;
-import com.starrocks.sql.ast.IntervalLiteral;
 import com.starrocks.sql.ast.JoinRelation;
 import com.starrocks.sql.ast.KeysDesc;
 import com.starrocks.sql.ast.KillAnalyzeStmt;
 import com.starrocks.sql.ast.KillStmt;
-import com.starrocks.sql.ast.LambdaArgument;
-import com.starrocks.sql.ast.LambdaFunctionExpr;
+import com.starrocks.sql.ast.LabelName;
 import com.starrocks.sql.ast.ListPartitionDesc;
 import com.starrocks.sql.ast.LoadStmt;
 import com.starrocks.sql.ast.ManualRefreshSchemeDesc;
-import com.starrocks.sql.ast.MapExpr;
 import com.starrocks.sql.ast.ModifyBackendClause;
 import com.starrocks.sql.ast.ModifyBrokerClause;
 import com.starrocks.sql.ast.ModifyColumnClause;
@@ -321,6 +252,10 @@ import com.starrocks.sql.ast.MultiRangePartitionDesc;
 import com.starrocks.sql.ast.NormalizedTableFunctionRelation;
 import com.starrocks.sql.ast.OptimizeClause;
 import com.starrocks.sql.ast.OptimizeRange;
+import com.starrocks.sql.ast.OrderByElement;
+import com.starrocks.sql.ast.OriginStatement;
+import com.starrocks.sql.ast.OutFileClause;
+import com.starrocks.sql.ast.ParseNode;
 import com.starrocks.sql.ast.PartitionDesc;
 import com.starrocks.sql.ast.PartitionKeyDesc;
 import com.starrocks.sql.ast.PartitionNames;
@@ -332,6 +267,7 @@ import com.starrocks.sql.ast.PivotAggregation;
 import com.starrocks.sql.ast.PivotRelation;
 import com.starrocks.sql.ast.PivotValue;
 import com.starrocks.sql.ast.PrepareStmt;
+import com.starrocks.sql.ast.ProcedureArgument;
 import com.starrocks.sql.ast.Property;
 import com.starrocks.sql.ast.PropertySet;
 import com.starrocks.sql.ast.QualifiedName;
@@ -440,6 +376,7 @@ import com.starrocks.sql.ast.ShowStreamLoadStmt;
 import com.starrocks.sql.ast.ShowTableStatusStmt;
 import com.starrocks.sql.ast.ShowTableStmt;
 import com.starrocks.sql.ast.ShowTabletStmt;
+import com.starrocks.sql.ast.ShowTemporaryTableStmt;
 import com.starrocks.sql.ast.ShowTransactionStmt;
 import com.starrocks.sql.ast.ShowTriggersStmt;
 import com.starrocks.sql.ast.ShowUserPropertyStmt;
@@ -464,6 +401,8 @@ import com.starrocks.sql.ast.TableRelation;
 import com.starrocks.sql.ast.TableRenameClause;
 import com.starrocks.sql.ast.TableSampleClause;
 import com.starrocks.sql.ast.TabletList;
+import com.starrocks.sql.ast.TagOptions;
+import com.starrocks.sql.ast.TaskName;
 import com.starrocks.sql.ast.TruncatePartitionClause;
 import com.starrocks.sql.ast.TruncateTableStmt;
 import com.starrocks.sql.ast.UninstallPluginStmt;
@@ -476,10 +415,69 @@ import com.starrocks.sql.ast.UpdateStmt;
 import com.starrocks.sql.ast.UseCatalogStmt;
 import com.starrocks.sql.ast.UseDbStmt;
 import com.starrocks.sql.ast.UserAuthOption;
-import com.starrocks.sql.ast.UserIdentity;
+import com.starrocks.sql.ast.UserRef;
 import com.starrocks.sql.ast.UserVariable;
 import com.starrocks.sql.ast.ValueList;
 import com.starrocks.sql.ast.ValuesRelation;
+import com.starrocks.sql.ast.expression.AnalyticExpr;
+import com.starrocks.sql.ast.expression.AnalyticWindow;
+import com.starrocks.sql.ast.expression.ArithmeticExpr;
+import com.starrocks.sql.ast.expression.ArrayExpr;
+import com.starrocks.sql.ast.expression.ArrowExpr;
+import com.starrocks.sql.ast.expression.BetweenPredicate;
+import com.starrocks.sql.ast.expression.BinaryPredicate;
+import com.starrocks.sql.ast.expression.BinaryType;
+import com.starrocks.sql.ast.expression.BoolLiteral;
+import com.starrocks.sql.ast.expression.CaseExpr;
+import com.starrocks.sql.ast.expression.CaseWhenClause;
+import com.starrocks.sql.ast.expression.CastExpr;
+import com.starrocks.sql.ast.expression.CollectionElementExpr;
+import com.starrocks.sql.ast.expression.CompoundPredicate;
+import com.starrocks.sql.ast.expression.DateLiteral;
+import com.starrocks.sql.ast.expression.DecimalLiteral;
+import com.starrocks.sql.ast.expression.DefaultValueExpr;
+import com.starrocks.sql.ast.expression.DictQueryExpr;
+import com.starrocks.sql.ast.expression.DictionaryGetExpr;
+import com.starrocks.sql.ast.expression.ExistsPredicate;
+import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.FloatLiteral;
+import com.starrocks.sql.ast.expression.FunctionCallExpr;
+import com.starrocks.sql.ast.expression.FunctionName;
+import com.starrocks.sql.ast.expression.FunctionParams;
+import com.starrocks.sql.ast.expression.GroupingFunctionCallExpr;
+import com.starrocks.sql.ast.expression.InPredicate;
+import com.starrocks.sql.ast.expression.InformationFunction;
+import com.starrocks.sql.ast.expression.IntLiteral;
+import com.starrocks.sql.ast.expression.IntervalLiteral;
+import com.starrocks.sql.ast.expression.IsNullPredicate;
+import com.starrocks.sql.ast.expression.JoinOperator;
+import com.starrocks.sql.ast.expression.LambdaArgument;
+import com.starrocks.sql.ast.expression.LambdaFunctionExpr;
+import com.starrocks.sql.ast.expression.LargeIntLiteral;
+import com.starrocks.sql.ast.expression.LikePredicate;
+import com.starrocks.sql.ast.expression.LimitElement;
+import com.starrocks.sql.ast.expression.LiteralExpr;
+import com.starrocks.sql.ast.expression.MapExpr;
+import com.starrocks.sql.ast.expression.MatchExpr;
+import com.starrocks.sql.ast.expression.MultiInPredicate;
+import com.starrocks.sql.ast.expression.NamedArgument;
+import com.starrocks.sql.ast.expression.NullLiteral;
+import com.starrocks.sql.ast.expression.OdbcScalarFunctionCall;
+import com.starrocks.sql.ast.expression.Parameter;
+import com.starrocks.sql.ast.expression.Predicate;
+import com.starrocks.sql.ast.expression.RoutineLoadDataSourceProperties;
+import com.starrocks.sql.ast.expression.SetVarHint;
+import com.starrocks.sql.ast.expression.SlotRef;
+import com.starrocks.sql.ast.expression.StringLiteral;
+import com.starrocks.sql.ast.expression.SubfieldExpr;
+import com.starrocks.sql.ast.expression.Subquery;
+import com.starrocks.sql.ast.expression.TableName;
+import com.starrocks.sql.ast.expression.TableRef;
+import com.starrocks.sql.ast.expression.TimestampArithmeticExpr;
+import com.starrocks.sql.ast.expression.TypeDef;
+import com.starrocks.sql.ast.expression.UserVariableExpr;
+import com.starrocks.sql.ast.expression.VarBinaryLiteral;
+import com.starrocks.sql.ast.expression.VariableExpr;
 import com.starrocks.sql.ast.feedback.AddPlanAdvisorStmt;
 import com.starrocks.sql.ast.feedback.ClearPlanAdvisorStmt;
 import com.starrocks.sql.ast.feedback.DelPlanAdvisorStmt;
@@ -564,7 +562,6 @@ import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
 import static com.starrocks.catalog.FunctionSet.ARRAY_AGG_DISTINCT;
-import static com.starrocks.sql.ast.IndexDef.IndexType.getIndexType;
 import static com.starrocks.sql.common.ErrorMsgProxy.PARSER_ERROR_MSG;
 import static java.lang.String.format;
 import static java.util.stream.Collectors.toList;
@@ -1601,13 +1598,43 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
 
     @Override
     public ParseNode visitTableOperationClause(StarRocksParser.TableOperationClauseContext context) {
-        StarRocksParser.TableOperationArgContext arg = context.tableOperationArg();
-        FunctionCallExpr fun = (FunctionCallExpr) visit(arg.functionCall());
+        StarRocksParser.TableOperationArgContext tableOperation = context.tableOperationArg();
+        String operationName = getIdentifierName(tableOperation.identifier());
+
         Expr where = null;
-        if (arg.WHERE() != null) {
-            where = (Expr) visit(arg.expression());
+        if (tableOperation.WHERE() != null) {
+            where = (Expr) visit(tableOperation.expression());
         }
-        return new AlterTableOperationClause(createPos(context), fun.getFnName().getFunction(), fun.getParams().exprs(), where);
+
+        List<Expr> parameters;
+        List<ProcedureArgument> procedureArguments = new ArrayList<>();
+        boolean useNamedArgs = false;
+
+        if (tableOperation.argumentList() == null) {
+            return new AlterTableOperationClause(createPos(context), operationName, Collections.emptyList(), where);
+        }
+
+        if (tableOperation.argumentList().expressionList() != null) {
+            parameters = visit(tableOperation.argumentList().expressionList().expression(), Expr.class);
+        } else {
+            parameters = visit(tableOperation.argumentList().namedArgumentList().namedArgument(), Expr.class);
+            useNamedArgs = true;
+        }
+        int namedArgNum = parameters.stream().filter(f -> f instanceof NamedArgument).toList().size();
+        if (namedArgNum > 0 && namedArgNum < parameters.size()) {
+            throw new SemanticException("All arguments must be passed by name or all must be passed positionally");
+        }
+
+        if (useNamedArgs) {
+            parameters.forEach(v -> {
+                NamedArgument namedArgument = (NamedArgument) v;
+                procedureArguments.add(new ProcedureArgument(namedArgument.getName(), namedArgument.getExpr()));
+            });
+        } else {
+            parameters.forEach(v -> procedureArguments.add(new ProcedureArgument(null, v)));
+        }
+
+        return new AlterTableOperationClause(createPos(context), operationName, procedureArguments, where);
     }
 
     @Override
@@ -2131,8 +2158,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                 refreshSchemeDesc = new SyncRefreshSchemeDesc();
             } else {
                 // use new manual refresh
-                refreshSchemeDesc =
-                        new ManualRefreshSchemeDesc(MaterializedView.RefreshMoment.IMMEDIATE, NodePosition.ZERO);
+                refreshSchemeDesc = new ManualRefreshSchemeDesc(RefreshSchemeClause.RefreshMoment.IMMEDIATE, NodePosition.ZERO);
             }
         }
         if (refreshSchemeDesc instanceof SyncRefreshSchemeDesc) {
@@ -2240,6 +2266,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         TableName mvName = qualifiedNameToTableName(mvQualifiedName);
         PartitionRangeDesc rangePartitionDesc = null;
         Set<PListCell> cells = null;
+
         if (context.partitionRangeDesc() != null) {
             rangePartitionDesc =
                     (PartitionRangeDesc) visit(context.partitionRangeDesc());
@@ -2260,10 +2287,25 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                         .collect(Collectors.toSet());
             }
         }
-        return new RefreshMaterializedViewStatement(mvName, new EitherOr(rangePartitionDesc, cells),
-                context.FORCE() != null, context.SYNC() != null,
+        RefreshMaterializedViewStatement statement =
+                new RefreshMaterializedViewStatement(mvName, new EitherOr(rangePartitionDesc, cells),
+                        context.FORCE() != null, context.SYNC() != null,
                 context.priority != null ? Integer.parseInt(context.priority.getText()) : null,
                 createPos(context));
+
+        if (context.explainDesc() != null) {
+            StatementBase.ExplainLevel explainLevel = getExplainType(context.explainDesc());
+            statement.setIsExplain(true, explainLevel);
+        }
+
+        if (context.optimizerTrace() != null) {
+            String module = "base";
+            if (context.optimizerTrace().identifier() != null) {
+                module = ((Identifier) visit(context.optimizerTrace().identifier())).getValue();
+            }
+            statement.setIsTrace(getTraceMode(context.optimizerTrace()), module);
+        }
+        return statement;
     }
 
     @Override
@@ -4275,7 +4317,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                 stringLiteral.getStringValue(), isPlainPassword, pos);
 
         if (context.user() != null) {
-            return new SetPassVar((UserIdentity) visit(context.user()), authOption, pos);
+            return new SetPassVar((UserRef) visit(context.user()), authOption, pos);
         } else {
             return new SetPassVar(null, authOption, pos);
         }
@@ -5563,19 +5605,19 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         return queryStatement;
     }
 
-    private Tracers.Mode getTraceMode(StarRocksParser.OptimizerTraceContext context) {
+    private String getTraceMode(StarRocksParser.OptimizerTraceContext context) {
         if (context.LOGS() != null) {
-            return Tracers.Mode.LOGS;
+            return "LOGS";
         } else if (context.VALUES() != null) {
-            return Tracers.Mode.VARS;
+            return "VARS";
         } else if (context.TIMES() != null) {
-            return Tracers.Mode.TIMER;
+            return "TIMER";
         } else if (context.ALL() != null) {
-            return Tracers.Mode.TIMING;
+            return "TIMING";
         } else if (context.REASON() != null) {
-            return Tracers.Mode.REASON;
+            return "REASON";
         } else {
-            return Tracers.Mode.NONE;
+            return "NONE";
         }
     }
 
@@ -6452,7 +6494,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
 
     @Override
     public ParseNode visitCreateUserStatement(StarRocksParser.CreateUserStatementContext context) {
-        UserIdentity user = (UserIdentity) visit(context.user());
+        UserRef user = (UserRef) visit(context.user());
         UserAuthOption authOption = (UserAuthOption) visitIfPresent(context.authOption());
         boolean ifNotExists = context.IF() != null;
 
@@ -6474,13 +6516,13 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
 
     @Override
     public ParseNode visitDropUserStatement(StarRocksParser.DropUserStatementContext context) {
-        UserIdentity user = (UserIdentity) visit(context.user());
+        UserRef user = (UserRef) visit(context.user());
         return new DropUserStmt(user, context.EXISTS() != null, createPos(context));
     }
 
     @Override
     public ParseNode visitAlterUserStatement(StarRocksParser.AlterUserStatementContext context) {
-        UserIdentity user = (UserIdentity) visit(context.user());
+        UserRef user = (UserRef) visit(context.user());
 
         if (context.ROLE() != null) {
             List<String> roles = new ArrayList<>();
@@ -6541,7 +6583,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     public ParseNode visitShowAuthenticationForUser(StarRocksParser.ShowAuthenticationForUserContext context) {
         NodePosition pos = createPos(context);
         if (context.user() != null) {
-            return new ShowAuthenticationStmt((UserIdentity) visit(context.user()), false, pos);
+            return new ShowAuthenticationStmt((UserRef) visit(context.user()), false, pos);
         } else {
             return new ShowAuthenticationStmt(null, false, pos);
         }
@@ -6551,7 +6593,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     public ParseNode visitExecuteAsStatement(StarRocksParser.ExecuteAsStatementContext context) {
         boolean allowRevert = context.WITH() == null;
         // we only support WITH NO REVERT for now
-        return new ExecuteAsStmt((UserIdentity) visit(context.user()), allowRevert, createPos(context));
+        return new ExecuteAsStmt((UserRef) visit(context.user()), allowRevert, createPos(context));
     }
 
     @Override
@@ -6593,7 +6635,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             roleNameList.add(((Identifier) visit(oneContext)).getValue());
         }
 
-        return new GrantRoleStmt(roleNameList, (UserIdentity) visit(context.user()), createPos(context));
+        return new GrantRoleStmt(roleNameList, (UserRef) visit(context.user()), createPos(context));
     }
 
     @Override
@@ -6616,7 +6658,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             roleNameList.add(((Identifier) visit(oneContext)).getValue());
         }
 
-        return new RevokeRoleStmt(roleNameList, (UserIdentity) visit(context.user()), createPos(context));
+        return new RevokeRoleStmt(roleNameList, (UserRef) visit(context.user()), createPos(context));
     }
 
     @Override
@@ -6672,7 +6714,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             setRoleType = SetRoleType.ROLE;
         }
 
-        return new SetDefaultRoleStmt((UserIdentity) visit(context.user()), setRoleType, roles, createPos(context));
+        return new SetDefaultRoleStmt((UserRef) visit(context.user()), setRoleType, roles, createPos(context));
     }
 
     @Override
@@ -6682,7 +6724,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             Identifier role = (Identifier) visit(context.identifierOrString());
             return new ShowGrantsStmt(role.getValue(), GrantType.ROLE, pos);
         } else {
-            UserIdentity userId = context.user() == null ? null : (UserIdentity) visit(context.user());
+            UserRef userId = context.user() == null ? null : (UserRef) visit(context.user());
             return new ShowGrantsStmt(userId, pos);
         }
     }
@@ -6708,7 +6750,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     public ParseNode visitGrantRevokeClause(StarRocksParser.GrantRevokeClauseContext context) {
         NodePosition pos = createPos(context);
         if (context.user() != null) {
-            UserIdentity user = (UserIdentity) visit(context.user());
+            UserRef user = (UserRef) visit(context.user());
             return new GrantRevokeClause(user, null, pos);
         } else {
             String roleName = ((Identifier) visit(context.identifierOrString())).getValue();
@@ -6720,8 +6762,8 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     public ParseNode visitGrantOnUser(StarRocksParser.GrantOnUserContext context) {
         List<String> privList = Collections.singletonList("IMPERSONATE");
         GrantRevokeClause clause = (GrantRevokeClause) visit(context.grantRevokeClause());
-        List<UserIdentity> users = context.user().stream()
-                .map(user -> (UserIdentity) visit(user)).collect(toList());
+        List<UserRef> users = context.user().stream()
+                .map(user -> (UserRef) visit(user)).collect(toList());
         GrantRevokePrivilegeObjects objects = new GrantRevokePrivilegeObjects();
         objects.setUserPrivilegeObjectList(users);
         return new GrantPrivilegeStmt(privList, "USER", clause, objects,
@@ -6732,8 +6774,8 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     public ParseNode visitRevokeOnUser(StarRocksParser.RevokeOnUserContext context) {
         List<String> privList = Collections.singletonList("IMPERSONATE");
         GrantRevokeClause clause = (GrantRevokeClause) visit(context.grantRevokeClause());
-        List<UserIdentity> users = context.user().stream()
-                .map(user -> (UserIdentity) visit(user)).collect(toList());
+        List<UserRef> users = context.user().stream()
+                .map(user -> (UserRef) visit(user)).collect(toList());
         GrantRevokePrivilegeObjects objects = new GrantRevokePrivilegeObjects();
         objects.setUserPrivilegeObjectList(users);
         return new RevokePrivilegeStmt(privList, "USER", clause, objects, createPos(context));
@@ -7630,7 +7672,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             if (isCountFunc && isDistinct) {
                 throw new ParsingException("Aggregation filter does not support COUNT DISTINCT");
             }
-            Expr booleanExpr = (Expr) visit(context.filter().booleanExpression());
+            Expr booleanExpr = (Expr) visit(context.filter().expression());
             functionName = functionName + FunctionSet.AGG_STATE_IF_SUFFIX;
             exprs.add(booleanExpr);
 
@@ -8145,6 +8187,9 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             case "MATCH_ANY":
                 operator = MatchExpr.MatchOperator.MATCH_ANY;
                 break;
+            case "MATCH_ALL":
+                operator = MatchExpr.MatchOperator.MATCH_ALL;
+                break;
             default:
                 throw new SemanticException("Unknown match operator: " + matchOp);
         }
@@ -8507,13 +8552,13 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         LocalDateTime startTime = LocalDateTime.now();
         IntervalLiteral intervalLiteral = null;
         NodePosition pos = createPos(context);
-        MaterializedView.RefreshMoment refreshMoment =
+        RefreshSchemeClause.RefreshMoment refreshMoment =
                 Config.default_mv_refresh_immediate ?
-                        MaterializedView.RefreshMoment.IMMEDIATE : MaterializedView.RefreshMoment.DEFERRED;
+                        RefreshSchemeClause.RefreshMoment.IMMEDIATE : RefreshSchemeClause.RefreshMoment.DEFERRED;
         if (context.DEFERRED() != null) {
-            refreshMoment = MaterializedView.RefreshMoment.DEFERRED;
+            refreshMoment = RefreshSchemeClause.RefreshMoment.DEFERRED;
         } else if (context.IMMEDIATE() != null) {
-            refreshMoment = MaterializedView.RefreshMoment.IMMEDIATE;
+            refreshMoment = RefreshSchemeClause.RefreshMoment.IMMEDIATE;
         }
         if (context.ASYNC() != null) {
             boolean defineStartTime = false;
@@ -8631,20 +8676,20 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     public ParseNode visitUserWithHostAndBlanket(StarRocksParser.UserWithHostAndBlanketContext context) {
         Identifier user = (Identifier) visit(context.identifierOrString(0));
         Identifier host = (Identifier) visit(context.identifierOrString(1));
-        return new UserIdentity(user.getValue(), host.getValue(), true, false, createPos(context));
+        return new UserRef(user.getValue(), host.getValue(), true, createPos(context));
     }
 
     @Override
     public ParseNode visitUserWithHost(StarRocksParser.UserWithHostContext context) {
         Identifier user = (Identifier) visit(context.identifierOrString(0));
         Identifier host = (Identifier) visit(context.identifierOrString(1));
-        return new UserIdentity(user.getValue(), host.getValue(), false, false, createPos(context));
+        return new UserRef(user.getValue(), host.getValue(), false, createPos(context));
     }
 
     @Override
     public ParseNode visitUserWithoutHost(StarRocksParser.UserWithoutHostContext context) {
         Identifier user = (Identifier) visit(context.identifierOrString());
-        return new UserIdentity(user.getValue(), "%", false, false, createPos(context));
+        return new UserRef(user.getValue(), "%", false, createPos(context));
     }
 
     @Override
@@ -9261,5 +9306,21 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         }
         Collections.sort(res);
         return res;
+    }
+
+    public static IndexDef.IndexType getIndexType(StarRocksParser.IndexTypeContext indexTypeContext) {
+        IndexDef.IndexType index;
+        if (indexTypeContext == null || indexTypeContext.BITMAP() != null) {
+            index = IndexDef.IndexType.BITMAP;
+        } else if (indexTypeContext.GIN() != null) {
+            index = IndexDef.IndexType.GIN;
+        } else if (indexTypeContext.NGRAMBF() != null) {
+            index = IndexDef.IndexType.NGRAMBF;
+        } else if (indexTypeContext.VECTOR() != null) {
+            index = IndexDef.IndexType.VECTOR;
+        } else {
+            throw new ParsingException("Not specify index type");
+        }
+        return index;
     }
 }

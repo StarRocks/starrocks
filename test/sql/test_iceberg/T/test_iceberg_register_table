@@ -1,0 +1,59 @@
+-- name: test_iceberg_register_table
+create external catalog iceberg_sql_test_${uuid0} PROPERTIES ("type"="iceberg", "iceberg.catalog.type"="hive", "iceberg.catalog.hive.metastore.uris"="${iceberg_catalog_hive_metastore_uris}","aws.s3.access_key" = "${oss_ak}","aws.s3.secret_key" = "${oss_sk}","aws.s3.endpoint" = "${oss_endpoint}");
+create database iceberg_sql_test_${uuid0}.iceberg_db_${uuid0};
+
+-- Register Iceberg table with metadata file
+call iceberg_sql_test_${uuid0}.system.register_table("iceberg_db_${uuid0}", "iceberg_register_table", "oss://${oss_bucket}/iceberg_ci_db/iceberg_register_table/metadata/00002-c1b32f52-4f2b-42cc-b251-1b2909a52ea6.metadata.json");
+select * from iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.iceberg_register_table order by k1;
+drop table iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.iceberg_register_table;
+
+call iceberg_sql_test_${uuid0}.system.register_table(database_name="iceberg_db_${uuid0}",table_name="iceberg_register_table", metadata_file="oss://${oss_bucket}/iceberg_ci_db/iceberg_register_table/metadata/00002-c1b32f52-4f2b-42cc-b251-1b2909a52ea6.metadata.json");
+select * from iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.iceberg_register_table order by k1;
+drop table iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.iceberg_register_table;
+
+call iceberg_sql_test_${uuid0}.system.register_table(database_name=>"iceberg_db_${uuid0}",table_name=>"iceberg_register_table", metadata_file=>"oss://${oss_bucket}/iceberg_ci_db/iceberg_register_table/metadata/00002-c1b32f52-4f2b-42cc-b251-1b2909a52ea6.metadata.json");
+select * from iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.iceberg_register_table order by k1;
+drop table iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.iceberg_register_table;
+
+call iceberg_sql_test_${uuid0}.system.register_table(table_name=>"iceberg_register_table", database_name=>"iceberg_db_${uuid0}", metadata_file=>"oss://${oss_bucket}/iceberg_ci_db/iceberg_register_table/metadata/00002-c1b32f52-4f2b-42cc-b251-1b2909a52ea6.metadata.json");
+select * from iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.iceberg_register_table order by k1;
+drop table iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.iceberg_register_table;
+
+call iceberg_sql_test_${uuid0}.system.register_table(metadata_file="oss://${oss_bucket}/iceberg_ci_db/iceberg_register_table/metadata/00002-c1b32f52-4f2b-42cc-b251-1b2909a52ea6.metadata.json", table_name="iceberg_register_table", database_name="iceberg_db_${uuid0}");
+select * from iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.iceberg_register_table order by k1;
+drop table iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.iceberg_register_table;
+
+-- Register Iceberg table with old snapshot metadata file
+call iceberg_sql_test_${uuid0}.system.register_table("iceberg_db_${uuid0}", "iceberg_register_table", "oss://${oss_bucket}/iceberg_ci_db/iceberg_register_table/metadata/00001-ce5998c2-b755-478f-94d1-bcd6c57bfbe0.metadata.json");
+select * from iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.iceberg_register_table order by k1;
+drop table iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.iceberg_register_table;
+
+-- Register Iceberg table without catalog name
+set catalog iceberg_sql_test_${uuid0};
+call system.register_table("iceberg_db_${uuid0}", "iceberg_register_table", "oss://${oss_bucket}/iceberg_ci_db/iceberg_register_table/metadata/00002-c1b32f52-4f2b-42cc-b251-1b2909a52ea6.metadata.json");
+select * from iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.iceberg_register_table order by k1;
+drop table iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.iceberg_register_table;
+
+-- Register Iceberg table without database name
+set catalog iceberg_sql_test_${uuid0};
+call register_table("iceberg_db_${uuid0}", "iceberg_register_table", "oss://${oss_bucket}/iceberg_ci_db/iceberg_register_table/metadata/00002-c1b32f52-4f2b-42cc-b251-1b2909a52ea6.metadata.json");
+select * from iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.iceberg_register_table order by k1;
+drop table iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.iceberg_register_table;
+
+use iceberg_sql_test_${uuid0}.iceberg_db_${uuid0};
+call register_table(table_name="iceberg_register_table", metadata_file="oss://${oss_bucket}/iceberg_ci_db/iceberg_register_table/metadata/00002-c1b32f52-4f2b-42cc-b251-1b2909a52ea6.metadata.json");
+select * from iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.iceberg_register_table order by k1;
+drop table iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.iceberg_register_table;
+
+-- error cases
+use iceberg_sql_test_${uuid0}.iceberg_db_${uuid0};
+-- missing metadata_file
+call register_table("iceberg_db_${uuid0}", "iceberg_register_table");
+-- invalid metadata_file
+call register_table("iceberg_db_${uuid0}", "iceberg_register_table", "oss://${oss_bucket}/iceberg_ci_db/iceberg_register_table/metadata/00003-xxxxxx.metadata.json");
+-- missing table_name
+call register_table(database_name="iceberg_db_${uuid0}", metadata_file="oss://${oss_bucket}/iceberg_ci_db/iceberg_register_table/metadata/00002-c1b32f52-4f2b-42cc-b251-1b2909a52ea6.metadata.json");
+
+set catalog default_catalog;
+drop database iceberg_sql_test_${uuid0}.iceberg_db_${uuid0};
+drop catalog iceberg_sql_test_${uuid0};

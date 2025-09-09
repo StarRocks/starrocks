@@ -12,7 +12,6 @@ import org.junit.jupiter.api.Test;
 
 import static com.starrocks.sql.analyzer.AnalyzeTestUtil.analyzeFail;
 import static com.starrocks.sql.analyzer.AnalyzeTestUtil.analyzeSuccess;
-import static org.junit.jupiter.api.Assertions.assertEquals;
 
 public class ShowTransactionStmtTest {
     
@@ -68,11 +67,5 @@ public class ShowTransactionStmtTest {
         analyzeFail("SHOW TRANSACTION WHERE STATE != 'LOADING'", failMessage);
         analyzeFail("SHOW TRANSACTION WHERE ID = ''", failMessage);
         analyzeFail("SHOW TRANSACTION WHERE ID = '123'", failMessage);
-    }
-
-    @Test
-    public void checkShowTransactionStmtRedirectStatus() {
-        ShowTransactionStmt stmt = new ShowTransactionStmt("", null);
-        assertEquals(stmt.getRedirectStatus(), RedirectStatus.FORWARD_NO_SYNC);
     }
 }

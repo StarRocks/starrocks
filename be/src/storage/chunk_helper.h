@@ -221,4 +221,29 @@ private:
     const size_t _segment_size;
 };
 
+class ExprContext;
+/**
+ * RAII guard for evaluating common expressions on a chunk.
+ * 
+ * This class provides automatic scope management for evaluating common expressions
+ * that are temporarily used during expression computation. Common expressions are
+ * computed once and reused across multiple expressions to avoid redundant computation,
+ * but they are only needed during the computation phase and should be cleaned up
+ * from the chunk after computation completes.
+ * 
+ * The destructor automatically removes the common expressions from the chunk
+ * to prevent memory leaks and ensure proper cleanup.
+ */
+class CommonExprEvalScopeGuard {
+public:
+    CommonExprEvalScopeGuard(const ChunkPtr& chunk, const std::map<SlotId, ExprContext*>& common_expr_ctxs);
+    ~CommonExprEvalScopeGuard();
+
+    Status evaluate();
+
+private:
+    const ChunkPtr& _chunk;
+    const std::map<SlotId, ExprContext*>& _common_expr_ctxs;
+};
+
 } // namespace starrocks

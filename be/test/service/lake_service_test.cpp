@@ -1970,7 +1970,7 @@ TEST_F(LakeServiceTest, test_vacuum_full_null_thread_pool) {
     brpc::Controller cntl;
     VacuumFullRequest request;
     VacuumFullResponse response;
-    request.add_tablet_ids(_tablet_id);
+    request.set_tablet_id(_tablet_id);
     _lake_service.vacuum_full(&cntl, &request, &response, nullptr);
     ASSERT_EQ("full vacuum thread pool is null", cntl.ErrorText());
 }
@@ -1986,7 +1986,7 @@ TEST_F(LakeServiceTest, test_vacuum_full_thread_pool_full) {
     brpc::Controller cntl;
     VacuumFullRequest request;
     VacuumFullResponse response;
-    request.add_tablet_ids(_tablet_id);
+    request.set_tablet_id(_tablet_id);
     _lake_service.vacuum_full(&cntl, &request, &response, nullptr);
     EXPECT_FALSE(cntl.Failed()) << cntl.ErrorText();
     EXPECT_EQ(TStatusCode::SERVICE_UNAVAILABLE, response.status().status_code()) << response.status().status_code();

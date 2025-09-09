@@ -296,6 +296,7 @@ vectorized_functions = [
     [30050, 'starts_with', True, False, 'BOOLEAN', ['VARCHAR', 'VARCHAR'], 'StringFunctions::starts_with'],
 
     [30060, 'null_or_empty', True, False, 'BOOLEAN', ['VARCHAR'], 'StringFunctions::null_or_empty'],
+    [30061, 'null_or_empty', True, False, 'BOOLEAN', ['ANY_ARRAY'], 'ArrayFunctions::null_or_empty'],
 
     [30070, 'space', True, True, 'VARCHAR', ['INT'], 'StringFunctions::space'],
     [30080, 'repeat', True, True, 'VARCHAR', ['VARCHAR', 'INT'], 'StringFunctions::repeat'],
@@ -485,6 +486,8 @@ vectorized_functions = [
     [50080, 'minute', True, False, 'INT', ['DATETIME'], 'TimeFunctions::minute'],
     [50089, 'second', True, False, 'TINYINT', ['DATETIME'], 'TimeFunctions::secondV2'],
     [50090, 'second', True, False, 'INT', ['DATETIME'], 'TimeFunctions::second'],
+
+    [50100, 'weekday', True, False, 'INT', ['DATETIME'], 'TimeFunctions::week_day'],
 
     [50110, 'years_add', True, False, 'DATETIME', ['DATETIME', 'INT'], 'TimeFunctions::years_add'],
     [50111, 'years_sub', True, False, 'DATETIME', ['DATETIME', 'INT'], 'TimeFunctions::years_sub'],
@@ -825,6 +828,7 @@ vectorized_functions = [
     [100019, 'assert_true', True, False, 'BOOLEAN', ['BOOLEAN', "VARCHAR"], 'UtilityFunctions::assert_true'],
     [100018, 'host_name', True, False, 'VARCHAR', [], "UtilityFunctions::host_name"],
     [100020, 'get_query_profile', True, False, 'VARCHAR', ['VARCHAR'], "UtilityFunctions::get_query_profile"],
+    [100024, 'encode_sort_key', True, False, 'VARBINARY', ['ANY_ELEMENT', '...'], 'UtilityFunctions::encode_sort_key'],
 
     # json string function
     [110022, "get_json_int", False, False, "BIGINT", ["VARCHAR", "VARCHAR"], "JsonFunctions::get_json_bigint",

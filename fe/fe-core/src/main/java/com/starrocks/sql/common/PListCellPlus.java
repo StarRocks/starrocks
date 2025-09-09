@@ -22,7 +22,7 @@ import java.util.Objects;
 /**
  * {@link PListCell} means a list partition with multiple values.
  * eg: partition p1 values in ((1, 'a'), (2, 'b')) is a partition items which contains multi values with multi partition columns
- *  partitionName: p1
+ *  name: p1
  *  partitionItems: ((1, 'a'), (2, 'b'))
  */
 public final class PListCellPlus {
@@ -92,7 +92,7 @@ public final class PListCellPlus {
     public String toString() {
         return "PListCell{" +
                 "cell=" + cell +
-                ", partitionName='" + partitionName + '\'' +
+                ", name='" + partitionName + '\'' +
                 '}';
     }
 }

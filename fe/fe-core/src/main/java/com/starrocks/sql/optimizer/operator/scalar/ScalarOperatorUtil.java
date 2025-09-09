@@ -16,15 +16,17 @@ package com.starrocks.sql.optimizer.operator.scalar;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
-import com.starrocks.analysis.Expr;
-import com.starrocks.analysis.FunctionName;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Type;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.FunctionName;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.rewrite.ScalarOperatorRewriter;
+
+import java.util.stream.Stream;
 
 import static com.starrocks.catalog.Function.CompareMode.IS_IDENTICAL;
 import static com.starrocks.catalog.Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF;
@@ -89,5 +91,10 @@ public class ScalarOperatorUtil {
         return Utils.downcast(op, CompoundPredicateOperator.class)
                 .map(compOp -> compOp.isNot() && isSimpleLike(compOp.getChild(0)))
                 .orElse(false);
+    }
+
+    public static Stream<ScalarOperator> getStream(ScalarOperator operator) {
+        return Stream.concat(Stream.of(operator),
+                operator.getChildren().stream().flatMap(ScalarOperatorUtil::getStream));
     }
 }

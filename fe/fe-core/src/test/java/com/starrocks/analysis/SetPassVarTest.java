@@ -38,6 +38,7 @@ import com.google.common.collect.Lists;
 import com.starrocks.authentication.AuthenticationMgr;
 import com.starrocks.authentication.UserAuthenticationInfo;
 import com.starrocks.authorization.AuthorizationMgr;
+import com.starrocks.catalog.UserIdentity;
 import com.starrocks.common.ErrorReportException;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.qe.ConnectContext;
@@ -52,8 +53,8 @@ import com.starrocks.sql.ast.SetPassVar;
 import com.starrocks.sql.ast.SetStmt;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.SystemVariable;
+import com.starrocks.sql.ast.UserRef;
 import com.starrocks.sql.ast.UserAuthOption;
-import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.utframe.StarRocksAssert;
@@ -99,17 +100,17 @@ public class SetPassVarTest {
         //  mode: SET PASSWORD FOR 'testUser' = 'testPass';
         UserAuthOption userAuthOption =
                 new UserAuthOption(null, "*88EEBA7D913688E7278E2AD071FDB5E76D76D34B", false, NodePosition.ZERO);
-        stmt = new SetPassVar(new UserIdentity("test", "%"), userAuthOption, NodePosition.ZERO);
+        stmt = new SetPassVar(new UserRef("test", "%"), userAuthOption, NodePosition.ZERO);
         SetStmtAnalyzer.analyze(new SetStmt(Lists.newArrayList(stmt)), null);
-        Assertions.assertEquals("test", stmt.getUserIdent().getUser());
+        Assertions.assertEquals("test", stmt.getUser().getUser());
         Assertions.assertEquals("*88EEBA7D913688E7278E2AD071FDB5E76D76D34B", stmt.getAuthOption().getAuthString());
-        Assertions.assertEquals("'test'@'%'", stmt.getUserIdent().toString());
+        Assertions.assertEquals("'test'@'%'", stmt.getUser().toString());
 
         // empty user
         ctxToRoot();
         stmt = new SetPassVar(null, userAuthOption, NodePosition.ZERO);
         SetStmtAnalyzer.analyze(new SetStmt(Lists.newArrayList(stmt)), ctx);
-        Assertions.assertEquals("'root'@'%'", stmt.getUserIdent().toString());
+        Assertions.assertEquals("'root'@'%'", stmt.getUser().toString());
     }
 
     @Test
@@ -118,7 +119,7 @@ public class SetPassVarTest {
         SetStmt setStmt = (SetStmt) SqlParser.parse(sql, ctx.getSessionVariable()).get(0);
         Analyzer.analyze(setStmt, ctx);
         SetPassVar setPassVar = (SetPassVar) setStmt.getSetListItems().get(0);
-        Assertions.assertEquals("test", setPassVar.getUserIdent().getUser());
+        Assertions.assertEquals("test", setPassVar.getUser().getUser());
 
         sql = "SET PASSWORD = PASSWORD('testPass')";
         setStmt = (SetStmt) SqlParser.parse(sql, ctx.getSessionVariable()).get(0);
@@ -191,7 +192,7 @@ public class SetPassVarTest {
             //  mode: SET PASSWORD FOR 'testUser' = 'testPass';
             UserAuthOption userAuthOption =
                     new UserAuthOption(null, "*88EEBAHD913688E7278E2AD071FDB5E76D76D34B", false, NodePosition.ZERO);
-            stmt = new SetPassVar(new UserIdentity("test", "%"), userAuthOption, NodePosition.ZERO);
+            stmt = new SetPassVar(new UserRef("test", "%"), userAuthOption, NodePosition.ZERO);
             SetStmtAnalyzer.analyze(new SetStmt(Lists.newArrayList(stmt)), null);
             Assertions.fail("No exception throws.");
         });
@@ -215,7 +216,8 @@ public class SetPassVarTest {
         AuthenticationMgr authenticationManager =
                 starRocksAssert.getCtx().getGlobalStateMgr().getAuthenticationMgr();
         authenticationManager.createUser(createUserStmt);
-        return createUserStmt.getUserIdentity();
+        UserRef user = createUserStmt.getUser();
+        return new UserIdentity(user.getUser(), user.getHost());
     }
 
     @Test

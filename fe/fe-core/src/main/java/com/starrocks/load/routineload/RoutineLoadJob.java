@@ -43,8 +43,6 @@ import com.google.common.collect.Maps;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import com.google.gson.annotations.SerializedName;
-import com.starrocks.analysis.Expr;
-import com.starrocks.analysis.RoutineLoadDataSourceProperties;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.OlapTable;
@@ -71,12 +69,12 @@ import com.starrocks.metric.MetricRepo;
 import com.starrocks.metric.TableMetricsEntity;
 import com.starrocks.metric.TableMetricsRegistry;
 import com.starrocks.persist.AlterRoutineLoadJobOperationLog;
+import com.starrocks.persist.OriginStatementInfo;
 import com.starrocks.persist.RoutineLoadOperation;
 import com.starrocks.persist.gson.GsonPostProcessable;
 import com.starrocks.planner.StreamLoadPlanner;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.DefaultCoordinator;
-import com.starrocks.qe.OriginStatement;
 import com.starrocks.qe.QeProcessorImpl;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.qe.SqlModeHelper;
@@ -91,6 +89,8 @@ import com.starrocks.sql.ast.ImportColumnsStmt;
 import com.starrocks.sql.ast.LoadStmt;
 import com.starrocks.sql.ast.PartitionNames;
 import com.starrocks.sql.ast.RowDelimiter;
+import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.RoutineLoadDataSourceProperties;
 import com.starrocks.thrift.TExecPlanFragmentParams;
 import com.starrocks.thrift.TLoadJobType;
 import com.starrocks.thrift.TRoutineLoadJobInfo;
@@ -301,7 +301,7 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
     // this is the origin stmt of CreateRoutineLoadStmt, we use it to persist the RoutineLoadJob,
     // because we can not serialize the Expressions contained in job.
     @SerializedName("os")
-    protected OriginStatement origStmt;
+    protected OriginStatementInfo origStmt;
 
     @SerializedName("warehouseId")
     protected long warehouseId = WarehouseManager.DEFAULT_WAREHOUSE_ID;
@@ -1545,11 +1545,11 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
         return false;
     }
 
-    public void setOrigStmt(OriginStatement origStmt) {
+    public void setOrigStmt(OriginStatementInfo origStmt) {
         this.origStmt = origStmt;
     }
 
-    public OriginStatement getOrigStmt() {
+    public OriginStatementInfo getOrigStmt() {
         return origStmt;
     }
 
@@ -1815,7 +1815,7 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
     public void modifyJob(RoutineLoadDesc routineLoadDesc,
                           Map<String, String> jobProperties,
                           RoutineLoadDataSourceProperties dataSourceProperties,
-                          OriginStatement originStatement,
+                          OriginStatementInfo originStatement,
                           boolean isReplay) throws DdlException {
         writeLock();
         try {
@@ -1878,7 +1878,7 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
                         " FROM KAFKA (\"kafka_topic\" = \"my_topic\")",
                 name, tableName, originLoadDesc.toSql());
         LOG.debug("merge result: {}", sql);
-        origStmt = new OriginStatement(sql, 0);
+        origStmt = new OriginStatementInfo(sql, 0);
     }
 
     protected abstract void modifyDataSourceProperties(RoutineLoadDataSourceProperties dataSourceProperties)

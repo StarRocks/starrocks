@@ -215,6 +215,11 @@ public class TabletTaskExecutor {
                                                                    CreateTabletOption option)
             throws DdlException {
         ArrayList<CreateReplicaTask> tasks = new ArrayList<>((int) physicalPartition.storageReplicaCount());
+        // TabletCreationOptimization must ensure that the schemas of all tablets under a partition are consistent. 
+        // If multiple indexes exist in the partition, disable TabletCreationOptimization.
+        if (physicalPartition.getMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE).size() > 1) {
+            option.setEnableTabletCreationOptimization(false);
+        }
         for (MaterializedIndex index : physicalPartition.getMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE)) {
             tasks.addAll(buildCreateReplicaTasks(dbId, table, physicalPartition, index, computeResource, option));
         }
@@ -462,7 +467,7 @@ public class TabletTaskExecutor {
                                 batchTaskMap.put(backendId, batchTask);
                             }
                             batchTask.addTask(dropTask);
-                            LOG.info("delete tablet[{}] from backend[{}] because table {}-{} is dropped",
+                            LOG.debug("delete tablet[{}] from backend[{}] because table {}-{} is dropped",
                                     tabletId, backendId, olapTable.getId(), olapTable.getName());
                         } // end for replicas
                     } // end for tablets

@@ -67,7 +67,7 @@ bool TieIterator::next() {
 // Append permutation to column, implements `materialize_by_permutation` function
 class ColumnAppendPermutation final : public ColumnVisitorMutableAdapter<ColumnAppendPermutation> {
 public:
-    explicit ColumnAppendPermutation(const Columns& columns, const PermutationView& perm)
+    explicit ColumnAppendPermutation(const std::vector<const Column*>& columns, const PermutationView& perm)
             : ColumnVisitorMutableAdapter(this), _columns(columns), _perm(perm) {}
 
     Status do_visit(NullableColumn* dst) {
@@ -76,9 +76,11 @@ public:
         }
 
         uint32_t orig_size = dst->size();
-        Columns null_columns, data_columns;
+        std::vector<const Column*> null_columns, data_columns;
+        null_columns.reserve(_columns.size());
+        data_columns.reserve(_columns.size());
         for (auto& col : _columns) {
-            const auto* src_column = down_cast<const NullableColumn*>(col.get());
+            const auto* src_column = down_cast<const NullableColumn*>(col);
             null_columns.push_back(src_column->null_column());
             data_columns.push_back(src_column->data_column());
         }
@@ -99,19 +101,16 @@ public:
 
     template <typename T>
     Status do_visit(DecimalV3Column<T>* dst) {
-        using Container = typename DecimalV3Column<T>::Container;
+        using Container = typename DecimalV3Column<T>::ImmContainer;
         using ColumnType = DecimalV3Column<T>;
 
         auto& data = dst->get_data();
         size_t output = data.size();
         data.resize(output + _perm.size());
-        std::vector<const Container*> srcs;
-        for (auto& column : _columns) {
-            srcs.push_back(&(down_cast<const ColumnType*>(column.get())->get_data()));
-        }
 
         for (auto& p : _perm) {
-            data[output++] = (*srcs[p.chunk_index])[p.index_in_chunk];
+            const Container& container = down_cast<const ColumnType*>(_columns[p.chunk_index])->immutable_data();
+            data[output++] = container[p.index_in_chunk];
         }
 
         return Status::OK();
@@ -119,19 +118,16 @@ public:
 
     template <typename T>
     Status do_visit(FixedLengthColumnBase<T>* dst) {
-        using Container = typename FixedLengthColumnBase<T>::Container;
+        using Container = typename FixedLengthColumnBase<T>::ImmContainer;
         using ColumnType = FixedLengthColumnBase<T>;
 
         auto& data = dst->get_data();
         size_t output = data.size();
         data.resize(output + _perm.size());
-        std::vector<const Container*> srcs;
-        for (auto& column : _columns) {
-            srcs.push_back(&(down_cast<const ColumnType*>(column.get())->get_data()));
-        }
 
         for (auto& p : _perm) {
-            data[output++] = (*srcs[p.chunk_index])[p.index_in_chunk];
+            const Container& container = down_cast<const ColumnType*>(_columns[p.chunk_index])->immutable_data();
+            data[output++] = container[p.index_in_chunk];
         }
 
         return Status::OK();
@@ -187,29 +183,32 @@ public:
 
     template <typename T>
     Status do_visit(BinaryColumnBase<T>* dst) {
-        using Container = typename BinaryColumnBase<T>::BinaryDataProxyContainer;
-        std::vector<const Container*> srcs;
-        for (auto& column : _columns) {
-            srcs.push_back(&(down_cast<const BinaryColumnBase<T>*>(column.get())->get_proxy_data()));
-        }
+        using ColumnType = BinaryColumnBase<T>;
 
         auto& offsets = dst->get_offset();
         auto& bytes = dst->get_bytes();
-        size_t old_rows = dst->size();
-        size_t num_offsets = offsets.size();
-        size_t num_bytes = bytes.size();
-        offsets.resize(num_offsets + _perm.size());
+
+        std::vector<Slice> slices{};
+        slices.reserve(_perm.size());
+        size_t added_bytes = 0;
+
         for (auto& p : _perm) {
-            Slice slice = (*srcs[p.chunk_index])[p.index_in_chunk];
-            offsets[num_offsets] = offsets[num_offsets - 1] + slice.get_size();
-            ++num_offsets;
-            num_bytes += slice.get_size();
+            Slice slice = down_cast<const BinaryColumnBase<T>*>(_columns[p.chunk_index])->get_slice(p.index_in_chunk);
+            added_bytes += slice.get_size();
+            slices.push_back(slice);
         }
 
-        bytes.resize(num_bytes);
-        for (size_t i = 0; i < _perm.size(); i++) {
-            Slice slice = (*srcs[_perm[i].chunk_index])[_perm[i].index_in_chunk];
-            strings::memcpy_inlined(bytes.data() + offsets[old_rows + i], slice.get_data(), slice.get_size());
+        bytes.resize(bytes.size() + added_bytes);
+        offsets.reserve(offsets.size() + _perm.size());
+
+        DCHECK(!offsets.empty());
+        auto curr_offset = offsets.back();
+        auto* const byte_ptr = bytes.data();
+
+        for (Slice slice : slices) {
+            strings::memcpy_inlined(byte_ptr + curr_offset, slice.get_data(), slice.get_size());
+            curr_offset += slice.get_size();
+            offsets.push_back(curr_offset);
         }
 
         dst->invalidate_slice_cache();
@@ -235,11 +234,12 @@ public:
     }
 
 private:
-    const Columns& _columns;
+    const std::vector<const Column*>& _columns;
     const PermutationView& _perm;
 };
 
-void materialize_column_by_permutation(Column* dst, const Columns& columns, const PermutationView& perm) {
+void materialize_column_by_permutation(Column* dst, const std::vector<const Column*>& columns,
+                                       const PermutationView& perm) {
     ColumnAppendPermutation visitor(columns, perm);
     Status st = dst->accept_mutable(&visitor);
     CHECK(st.ok());
@@ -257,7 +257,7 @@ void materialize_by_permutation(Chunk* dst, const std::vector<ChunkPtr>& chunks,
     DCHECK_EQ(dst->num_columns(), chunks[0]->columns().size());
 
     for (size_t col_index = 0; col_index < dst->num_columns(); col_index++) {
-        Columns tmp_columns;
+        std::vector<const Column*> tmp_columns;
         tmp_columns.reserve(chunks.size());
         for (const auto& chunk : chunks) {
             tmp_columns.push_back(chunk->get_column_by_index(col_index));

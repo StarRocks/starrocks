@@ -2491,7 +2491,7 @@ TEST_F(FlatJsonColumnRWTest, testSegmentWriterIteratorWithMixedDataTypes) {
             ASSIGN_OR_ABORT(auto column_iter, segment->new_column_iterator_or_default(col, path.get()));
             ASSERT_OK(column_iter->init(column_opts));
             ASSERT_OK(column_iter->seek_to_first());
-            size_t count = 4096;
+            size_t count = 3;
             auto column = ColumnHelper::create_column(TypeDescriptor(field_type), true);
             ASSERT_OK(column_iter->next_batch(&count, column.get()));
             ASSERT_EQ(column->size(), json_strings.size());

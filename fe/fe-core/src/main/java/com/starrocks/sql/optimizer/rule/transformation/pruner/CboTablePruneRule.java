@@ -20,10 +20,10 @@ import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
-import com.starrocks.analysis.JoinOperator;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.Pair;
+import com.starrocks.sql.ast.expression.JoinOperator;
 import com.starrocks.sql.optimizer.JoinHelper;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
@@ -98,6 +98,12 @@ public class CboTablePruneRule extends TransformationRule {
                 JoinHelper.separateEqualPredicatesFromOthers(input);
         List<BinaryPredicateOperator> eqOnPredicates = onPredicates.first;
         List<ScalarOperator> otherOnPredicates = onPredicates.second;
+
+        // Sometimes, a JoinOperator may have other predicates on both Operator.predicate and
+        // LogicalJoinOperator.onPredicate, so we must tackle all of them as other predicates together.
+        if (joinOp.getPredicate() != null) {
+            otherOnPredicates.add(joinOp.getPredicate());
+        }
 
         if (eqOnPredicates.isEmpty()) {
             return Collections.emptyList();

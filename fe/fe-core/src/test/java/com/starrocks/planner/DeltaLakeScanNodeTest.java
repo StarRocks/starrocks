@@ -14,8 +14,6 @@
 
 package com.starrocks.planner;
 
-import com.starrocks.analysis.TupleDescriptor;
-import com.starrocks.analysis.TupleId;
 import com.starrocks.catalog.DeltaLakeTable;
 import com.starrocks.connector.CatalogConnector;
 import com.starrocks.credential.CloudConfiguration;
@@ -49,6 +47,7 @@ public class DeltaLakeScanNodeTest {
         TupleDescriptor desc = new TupleDescriptor(new TupleId(0));
         desc.setTable(table);
         DeltaLakeScanNode scanNode = new DeltaLakeScanNode(new PlanNodeId(0), desc, "XXX");
+        scanNode.setReachLimit();
     }
 
     @Test

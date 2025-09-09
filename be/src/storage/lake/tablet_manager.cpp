@@ -107,6 +107,10 @@ std::string TabletManager::txn_log_location(int64_t tablet_id, int64_t txn_id) c
     return _location_provider->txn_log_location(tablet_id, txn_id);
 }
 
+std::string TabletManager::txn_log_location(int64_t tablet_id, int64_t txn_id, const PUniqueId& load_id) const {
+    return _location_provider->txn_log_location(tablet_id, txn_id, load_id);
+}
+
 std::string TabletManager::combined_txn_log_location(int64_t tablet_id, int64_t txn_id) const {
     return _location_provider->combined_txn_log_location(tablet_id, txn_id);
 }
@@ -502,6 +506,45 @@ StatusOr<BundleTabletMetadataPtr> TabletManager::parse_bundle_tablet_metadata(co
     return bundle_metadata;
 }
 
+StatusOr<TabletMetadataPtrs> TabletManager::get_metas_from_bundle_tablet_metadata(const std::string& location,
+                                                                                  FileSystem* input_fs) {
+    std::unique_ptr<RandomAccessFile> input_file;
+    RandomAccessFileOptions opts{.skip_fill_local_cache = true};
+    if (input_fs == nullptr) {
+        ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(location));
+        ASSIGN_OR_RETURN(input_file, fs->new_random_access_file(opts, location));
+    } else {
+        ASSIGN_OR_RETURN(input_file, input_fs->new_random_access_file(opts, location));
+    }
+    ASSIGN_OR_RETURN(auto serialized_string, input_file->read_all());
+
+    auto file_size = serialized_string.size();
+    ASSIGN_OR_RETURN(auto bundle_metadata, TabletManager::parse_bundle_tablet_metadata(location, serialized_string));
+    TabletMetadataPtrs metadatas;
+    metadatas.reserve(bundle_metadata->tablet_meta_pages().size());
+    for (const auto& tablet_page : bundle_metadata->tablet_meta_pages()) {
+        const PagePointerPB& page_pointer = tablet_page.second;
+        auto offset = page_pointer.offset();
+        auto size = page_pointer.size();
+        RETURN_IF(offset + size > file_size,
+                  Status::InternalError(
+                          fmt::format("Invalid page pointer for tablet {}, offset: {}, size: {}, file size: {}",
+                                      tablet_page.first, offset, size, file_size)));
+
+        auto metadata = std::make_shared<starrocks::TabletMetadataPB>();
+        std::string_view metadata_str = std::string_view(serialized_string.data() + offset);
+        RETURN_IF(
+                !metadata->ParseFromArray(metadata_str.data(), size),
+                Status::InternalError(fmt::format("Failed to parse tablet metadata for tablet {}, offset: {}, size: {}",
+                                                  tablet_page.first, offset, size)));
+        RETURN_IF(metadata->id() != tablet_page.first,
+                  Status::InternalError(fmt::format("Tablet ID mismatch in bundle metadata, expected: {}, found: {}",
+                                                    tablet_page.first, metadata->id())));
+        metadatas.push_back(std::move(metadata));
+    }
+    return metadatas;
+}
+
 DEFINE_FAIL_POINT(tablet_schema_not_found_in_bundle_metadata);
 StatusOr<TabletMetadataPtr> TabletManager::get_single_tablet_metadata(int64_t tablet_id, int64_t version,
                                                                       bool fill_cache, int64_t expected_gtid,
@@ -699,6 +742,10 @@ StatusOr<TxnLogPtr> TabletManager::get_txn_log(int64_t tablet_id, int64_t txn_id
     return get_txn_log(txn_log_location(tablet_id, txn_id));
 }
 
+StatusOr<TxnLogPtr> TabletManager::get_txn_log(int64_t tablet_id, int64_t txn_id, const PUniqueId& load_id) {
+    return get_txn_log(txn_log_location(tablet_id, txn_id, load_id));
+}
+
 StatusOr<TxnLogPtr> TabletManager::get_txn_slog(int64_t tablet_id, int64_t txn_id) {
     return get_txn_log(txn_slog_location(tablet_id, txn_id));
 }
@@ -721,13 +768,19 @@ Status TabletManager::put_txn_log(const TxnLogPtr& log, const std::string& path)
 
     _metacache->cache_txn_log(path, log);
 
+    VLOG(2) << "put log path " << path << " log " << log->DebugString();
+
     auto t1 = butil::gettimeofday_us();
     g_put_txn_log_latency << (t1 - t0);
     return Status::OK();
 }
 
 Status TabletManager::put_txn_log(const TxnLogPtr& log) {
-    return put_txn_log(log, txn_log_location(log->tablet_id(), log->txn_id()));
+    if (log->has_load_id()) {
+        return put_txn_log(log, txn_log_location(log->tablet_id(), log->txn_id(), log->load_id()));
+    } else {
+        return put_txn_log(log, txn_log_location(log->tablet_id(), log->txn_id()));
+    }
 }
 
 Status TabletManager::put_txn_log(const TxnLog& log) {

@@ -168,6 +168,11 @@ public class LakeTable extends OlapTable {
             properties.put(PropertyAnalyzer.PROPERTIES_PERSISTENT_INDEX_TYPE, getPersistentIndexTypeString());
         }
 
+        Boolean enableDynamicTablet = getEnableDynamicTablet();
+        if (enableDynamicTablet != null && enableDynamicTablet) {
+            properties.put(PropertyAnalyzer.PROPERTIES_ENABLE_DYNAMIC_TABLET, enableDynamicTablet.toString());
+        }
+
         return properties;
     }
 
@@ -175,6 +180,7 @@ public class LakeTable extends OlapTable {
     public Status createTabletsForRestore(int tabletNum, MaterializedIndex index, GlobalStateMgr globalStateMgr,
                                           int replicationNum, long version, int schemaHash,
                                           long physicalPartitionId, Database db) {
+        // Use physical partition id as path id when creating a new physical partition
         FilePathInfo fsInfo = getPartitionFilePathInfo(physicalPartitionId);
         FileCacheInfo cacheInfo = getPartitionFileCacheInfo(physicalPartitionId);
         Map<String, String> properties = new HashMap<>();

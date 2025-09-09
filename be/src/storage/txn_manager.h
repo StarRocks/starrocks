@@ -65,6 +65,7 @@
 #include "storage/tablet.h"
 #include "util/countdown_latch.h"
 #include "util/lru_cache.h"
+#include "util/threadpool.h"
 #include "util/time.h"
 
 namespace starrocks {
@@ -76,9 +77,13 @@ struct TabletTxnInfo {
     RowsetSharedPtr rowset;
     int64_t creation_time{0};
     int64_t commit_time{0};
+    bool is_shadow{false};
 
-    TabletTxnInfo(PUniqueId load_id, RowsetSharedPtr rowset)
-            : load_id(std::move(load_id)), rowset(std::move(rowset)), creation_time(UnixSeconds()) {}
+    TabletTxnInfo(PUniqueId load_id, RowsetSharedPtr rowset, bool is_shadow)
+            : load_id(std::move(load_id)),
+              rowset(std::move(rowset)),
+              creation_time(UnixSeconds()),
+              is_shadow(is_shadow) {}
 
     TabletTxnInfo() = default;
 };
@@ -94,7 +99,7 @@ public:
                        const PUniqueId& load_id);
 
     Status commit_txn(TPartitionId partition_id, const TabletSharedPtr& tablet, TTransactionId transaction_id,
-                      const PUniqueId& load_id, const RowsetSharedPtr& rowset_ptr, bool is_recovery);
+                      const PUniqueId& load_id, const RowsetSharedPtr& rowset_ptr, bool is_recovery, bool is_shadow);
 
     Status publish_txn(TPartitionId partition_id, const TabletSharedPtr& tablet, TTransactionId transaction_id,
                        int64_t version, const RowsetSharedPtr& rowset, uint32_t wait_time = 0,
@@ -123,7 +128,7 @@ public:
 
     Status commit_txn(KVStore* meta, TPartitionId partition_id, TTransactionId transaction_id, TTabletId tablet_id,
                       SchemaHash schema_hash, const TabletUid& tablet_uid, const PUniqueId& load_id,
-                      const RowsetSharedPtr& rowset_ptr, bool is_recovery);
+                      const RowsetSharedPtr& rowset_ptr, bool is_recovery, bool is_shadow);
 
     // delete the txn from manager if it is not committed(not have a valid rowset)
     Status rollback_txn(TPartitionId partition_id, TTransactionId transaction_id, TTabletId tablet_id,
@@ -139,7 +144,7 @@ public:
                                  int64_t* partition_id, std::set<int64_t>* transaction_ids);
 
     void get_txn_related_tablets(const TTransactionId transaction_id, TPartitionId partition_ids,
-                                 std::map<TabletInfo, RowsetSharedPtr>* tablet_infos);
+                                 std::map<TabletInfo, std::pair<RowsetSharedPtr, bool>>* tablet_infos);
 
     void get_all_related_tablets(std::set<TabletInfo>* tablet_infos);
 

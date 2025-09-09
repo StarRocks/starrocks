@@ -13,7 +13,6 @@
 // limitations under the License.
 package com.starrocks.sql.ast;
 
-import com.starrocks.analysis.RedirectStatus;
 import com.starrocks.sql.parser.NodePosition;
 
 public class DeallocateStmt extends StatementBase {
@@ -34,13 +33,8 @@ public class DeallocateStmt extends StatementBase {
     }
 
     @Override
-    public RedirectStatus getRedirectStatus() {
-        return null;
-    }
-
-    @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitDeallocatePrepareStatement(this, context);
+        return ((AstVisitorExtendInterface<R, C>) visitor).visitDeallocatePrepareStatement(this, context);
     }
 
 }

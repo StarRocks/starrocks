@@ -2,7 +2,7 @@
 #include <cstddef>
 #include <cstdint>
 
-#include "util/hash_util.hpp"
+#include "util/hash_fwd.h"
 #include "util/slice.h"
 #include "util/unaligned_access.h"
 #if defined(__aarch64__)
@@ -44,8 +44,6 @@ public:
         return static_cast<size_t>(h + l);
     }
 };
-
-enum PhmapSeed { PhmapSeed1, PhmapSeed2 };
 
 template <int n, PhmapSeed seed>
 class phmap_mix_with_seed {
@@ -173,12 +171,6 @@ inline uint64_t crc_hash_64(const void* data, int32_t length, uint64_t hash) {
     // Apply a mixing function to the hash value to improve its distribution for SwissTable, which relies on the lowest 7 bits as a fingerprint
     return phmap_mix<8>()(crc_hash_64_unmixed(data, length, hash));
 }
-
-struct CRC_HASH_SEEDS {
-    // TODO: 0x811C9DC5 is not prime number
-    static const uint32_t CRC_HASH_SEED1 = 0x811C9DC5;
-    static const uint32_t CRC_HASH_SEED2 = 0x811C9DD7;
-};
 
 class SliceHash {
 public:

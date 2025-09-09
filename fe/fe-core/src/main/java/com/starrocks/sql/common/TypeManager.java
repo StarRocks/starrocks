@@ -16,7 +16,6 @@ package com.starrocks.sql.common;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
-import com.starrocks.analysis.Expr;
 import com.starrocks.catalog.ArrayType;
 import com.starrocks.catalog.MapType;
 import com.starrocks.catalog.PrimitiveType;
@@ -28,6 +27,7 @@ import com.starrocks.common.AnalysisException;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariableConstants;
 import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.sql.ast.expression.Expr;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -302,14 +302,32 @@ public class TypeManager {
 
     public static Type getCompatibleTypeForCaseWhen(List<Type> types) {
         Type compatibleType = types.get(0);
+        boolean isContainVarcharWithoutLength = false;
         for (int i = 1; i < types.size(); i++) {
             compatibleType = getCommonSuperType(compatibleType, types.get(i));
             if (!compatibleType.isValid()) {
                 throw new SemanticException("Failed to get compatible type for CaseWhen with %s and %s",
                         types.get(i), types.get(i - 1));
             }
+            if (types.get(i) instanceof ScalarType) {
+                ScalarType scalarType = (ScalarType) types.get(i);
+                // If the varchar type is without length, we should use default string type
+                // to avoid the varchar type without length is not compatible with other types.
+                if (scalarType.isVarchar() && scalarType.getLength() <= 0) {
+                    isContainVarcharWithoutLength = true;
+                }
+            }
         }
-
-        return compatibleType;
+        if (compatibleType.isStringType()) {
+            ScalarType resultType = (ScalarType) compatibleType;
+            // If result type is varchar with length, it may cause the case when result type is not compatible.
+            if (isContainVarcharWithoutLength && resultType.getLength() > 0) {
+                return ScalarType.createVarcharType(ScalarType.getOlapMaxVarcharLength());
+            } else {
+                return compatibleType;
+            }
+        } else {
+            return compatibleType;
+        }
     }
 }

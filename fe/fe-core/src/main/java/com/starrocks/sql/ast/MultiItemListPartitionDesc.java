@@ -14,12 +14,10 @@
 
 package com.starrocks.sql.ast;
 
-import com.starrocks.analysis.LiteralExpr;
-import com.starrocks.catalog.PartitionType;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.util.PrintableMap;
-import com.starrocks.sql.analyzer.FeNameFormat;
+import com.starrocks.sql.ast.expression.LiteralExpr;
 import com.starrocks.sql.parser.NodePosition;
 
 import java.util.ArrayList;
@@ -46,7 +44,6 @@ public class MultiItemListPartitionDesc extends SinglePartitionDesc {
     public MultiItemListPartitionDesc(boolean ifNotExists, String partitionName, List<List<String>> multiValues,
                                       Map<String, String> properties, NodePosition pos) {
         super(ifNotExists, partitionName, properties, pos);
-        this.type = PartitionType.LIST;
         this.multiValues = multiValues;
     }
 
@@ -69,20 +66,8 @@ public class MultiItemListPartitionDesc extends SinglePartitionDesc {
         return multiPartitionValues;
     }
 
-    public void analyze(List<ColumnDef> columnDefList, Map<String, String> tableProperties) throws AnalysisException {
-        FeNameFormat.checkPartitionName(getPartitionName());
-        analyzeValues(columnDefList.size());
-        analyzeProperties(tableProperties, null);
+    public void setColumnDefList(List<ColumnDef> columnDefList) {
         this.columnDefList = columnDefList;
-    }
-
-    private void analyzeValues(int partitionColSize) throws AnalysisException {
-        for (List<String> values : this.multiValues) {
-            if (values.size() != partitionColSize) {
-                throw new AnalysisException(
-                        "(" + String.join(",", values) + ") size should be equal to partition column size ");
-            }
-        }
     }
 
     @Override

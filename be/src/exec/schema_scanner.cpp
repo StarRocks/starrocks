@@ -47,6 +47,7 @@
 #include "exec/schema_scanner/schema_partitions_meta_scanner.h"
 #include "exec/schema_scanner/schema_pipe_files.h"
 #include "exec/schema_scanner/schema_pipes.h"
+#include "exec/schema_scanner/schema_recyclebin_catalogs.h"
 #include "exec/schema_scanner/schema_routine_load_jobs_scanner.h"
 #include "exec/schema_scanner/schema_schema_privileges_scanner.h"
 #include "exec/schema_scanner/schema_schemata_scanner.h"
@@ -221,6 +222,8 @@ std::unique_ptr<SchemaScanner> SchemaScanner::create(TSchemaTableType::type type
         return std::make_unique<SysFeMemoryUsage>();
     case TSchemaTableType::SCH_TEMP_TABLES:
         return std::make_unique<SchemaTempTablesScanner>();
+    case TSchemaTableType::SCH_RECYCLEBIN_CATALOGS:
+        return std::make_unique<SchemaRecycleBinCatalogs>();
     case TSchemaTableType::SCH_COLUMN_STATS_USAGE:
         return std::make_unique<SchemaColumnStatsUsageScanner>();
     case TSchemaTableType::SCH_ANALYZE_STATUS:

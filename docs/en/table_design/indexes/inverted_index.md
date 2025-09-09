@@ -98,8 +98,12 @@ After creating a full-text inverted index, you need to ensure that the system va
 
 #### Supported queries when indexed column is tokenized
 
-If the full-text inverted index tokenizes indexed columns, that is, `'parser' = 'standard|english|chinese'`, only the `MATCH` or `MATCH_ANY` predicate is supported for data filtering using full-text inverted indexes, and the format needs to be `<col_name> (NOT) MATCH '%keyword%'` or `<col_name> (NOT) MATCH_ANY 'keyword1, keyword2'. The `keyword` must be a string literal, and does not support expressions .
+When a full-text inverted index column is enabled with tokenization (`parser` = `standard` | `english` | `chinese`), only the `MATCH`, `MATCH_ANY`, or `MATCH_ALL` predicates are supported for filtering. The supported formats are:
+- `<col_name> (NOT) MATCH '%keyword%'`
+- `<col_name> (NOT) MATCH_ANY 'keyword1, keyword2'`
+- `<col_name> (NOT) MATCH_ALL 'keyword1, keyword2'`
 
+Here, keyword must be a string literal; expressions are not supported.
 1. Create a table and insert a few rows of test data.
 
       ```SQL
@@ -143,7 +147,13 @@ If the full-text inverted index tokenizes indexed columns, that is, `'parser' = 
     ```SQL
     MySQL [example_db]> SELECT * FROM t WHERE t.value MATCH_ANY "database data";
     ```
+4. Use the `MATCH_ALL` predicate for querying.
 
+- Query data rows whose `value` column contains both the keyword `database` and `data`.
+
+    ```SQL
+    MySQL [example_db]> SELECT * FROM t WHERE t.value MATCH_ALL "database data";
+    ```
 **Notes:**
 
 - During queries, keywords can be matched fuzzily using `%`, in the format of `%keyword%`. However, the keyword must contain a part of a word. For example, if the keyword is <code>starrocks&nbsp;</code>, it cannot match the word `starrocks` because it contains spaces.
@@ -189,7 +199,7 @@ If the full-text inverted index tokenizes indexed columns, that is, `'parser' = 
     1 row in set (0.01 sec)
     ```
 
-- The `MATCH` or `MATCH_ANY` predicate in the query conditions must be used as a pushdown predicate, so it must be in the WHERE clause and be performed against the indexed column.
+- The `MATCH`, `MATCH_ANY`, or `MATCH_ALL` predicate in the query conditions must be used as a pushdown predicate, so it must be in the WHERE clause and be performed against the indexed column.
 
     Take the following table and test data as an example:
 
@@ -212,14 +222,14 @@ If the full-text inverted index tokenizes indexed columns, that is, `'parser' = 
 
     The following query statements do not meet the requirement:
 
-    - Because the `MATCH` predicate in the query statement is not in the WHERE clause, it can not be pushed down, resulting in a query error.
+    - Because the `MATCH`, `MATCH_ANY`, or `MATCH_ALL` predicate in the query statement is not in the WHERE clause, it can not be pushed down, resulting in a query error.
 
         ```SQL
         MySQL [test]> SELECT value MATCH "test" FROM t_match;
         ERROR 1064 (HY000): Match can only be used as a pushdown predicate on a column with GIN in a single query.
         ```
 
-    - Because the column `value_test` against which the `MATCH` predicate in the query statement is performed is not an indexed column, the query fails.
+    - Because the column `value_test` against which the `MATCH`, `MATCH_ANY`, or `MATCH_ALL` predicate in the query statement is performed is not an indexed column, the query fails.
 
         ```SQL
         MySQL [test]> SELECT * FROM t_match WHERE value_test match "test";
@@ -230,7 +240,7 @@ If the full-text inverted index tokenizes indexed columns, that is, `'parser' = 
 
 If the full-text inverted index does not tokenize the indexed column, that is, `'parser' = 'none'`, all pushdown predicates in the query conditions listed below can be used for data filtering using the full-text inverted index:
 
-- Expression predicates: (NOT) LIKE, (NOT) MATCH, (NOT) MATCH_ANY
+- Expression predicates: (NOT) LIKE, (NOT) MATCH, (NOT) MATCH_ANY, (NOT) MATCH_ALL
   
   :::note
 

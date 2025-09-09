@@ -14,7 +14,9 @@
 
 package com.starrocks.sql.analyzer;
 
+import com.starrocks.authentication.UserAuthenticationInfo;
 import com.starrocks.authorization.AuthorizationMgr;
+import com.starrocks.catalog.UserIdentity;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.ErrorReportException;
 import com.starrocks.qe.ConnectContext;
@@ -32,7 +34,7 @@ import com.starrocks.sql.ast.SetDefaultRoleStmt;
 import com.starrocks.sql.ast.SetRoleStmt;
 import com.starrocks.sql.ast.SetRoleType;
 import com.starrocks.sql.ast.StatementBase;
-import com.starrocks.sql.ast.UserIdentity;
+import com.starrocks.sql.ast.UserRef;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.jupiter.api.AfterAll;
@@ -83,20 +85,20 @@ public class PrivilegeStmtAnalyzerV2Test {
     public void testCreateUser() throws Exception {
         String sql = "create user test";
         CreateUserStmt stmt = (CreateUserStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
-        Assertions.assertEquals("test", stmt.getUserIdentity().getUser());
-        Assertions.assertEquals("%", stmt.getUserIdentity().getHost());
+        Assertions.assertEquals("test", stmt.getUser().getUser());
+        Assertions.assertEquals("%", stmt.getUser().getHost());
         Assertions.assertNull(stmt.getAuthOption());
 
         sql = "create user 'test'@'10.1.1.1'";
         stmt = (CreateUserStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
-        Assertions.assertEquals("test", stmt.getUserIdentity().getUser());
-        Assertions.assertEquals("10.1.1.1", stmt.getUserIdentity().getHost());
+        Assertions.assertEquals("test", stmt.getUser().getUser());
+        Assertions.assertEquals("10.1.1.1", stmt.getUser().getHost());
         Assertions.assertNull(stmt.getAuthOption());
 
         sql = "create user 'test'@'%' identified by 'abc'";
         stmt = (CreateUserStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
-        Assertions.assertEquals("test", stmt.getUserIdentity().getUser());
-        Assertions.assertEquals("%", stmt.getUserIdentity().getHost());
+        Assertions.assertEquals("test", stmt.getUser().getUser());
+        Assertions.assertEquals("%", stmt.getUser().getHost());
         Assertions.assertEquals("abc", stmt.getAuthOption().getAuthString());
 
         sql = "create user 'aaa~bbb'";
@@ -110,7 +112,8 @@ public class PrivilegeStmtAnalyzerV2Test {
         sql = "create user u1 identified with mysql_native_password by '123456'";
         CreateUserStmt createUserStmt = (CreateUserStmt) analyzeSuccess(sql);
         Assertions.assertEquals("*6BB4837EB74329105EE4568DDA7DC67ED2CA2AD9",
-                new String(createUserStmt.getAuthenticationInfo().getPassword(), StandardCharsets.UTF_8));
+                new String(new UserAuthenticationInfo(createUserStmt.getUser(), createUserStmt.getAuthOption()).getPassword(),
+                        StandardCharsets.UTF_8));
 
         sql = "create user u2 identified with mysql_native_password as '123456'";
         try {
@@ -128,12 +131,14 @@ public class PrivilegeStmtAnalyzerV2Test {
         sql = "create user u2 identified with mysql_native_password as '*6BB4837EB74329105EE4568DDA7DC67ED2CA2AD9'";
         createUserStmt = (CreateUserStmt) analyzeSuccess(sql);
         Assertions.assertEquals("*6BB4837EB74329105EE4568DDA7DC67ED2CA2AD9",
-                new String(createUserStmt.getAuthenticationInfo().getPassword(), StandardCharsets.UTF_8));
+                new String(new UserAuthenticationInfo(createUserStmt.getUser(), createUserStmt.getAuthOption()).getPassword(),
+                        StandardCharsets.UTF_8));
 
         sql = "create user u3 identified by '123456'";
         createUserStmt = (CreateUserStmt) analyzeSuccess(sql);
         Assertions.assertEquals("*6BB4837EB74329105EE4568DDA7DC67ED2CA2AD9",
-                new String(createUserStmt.getAuthenticationInfo().getPassword(), StandardCharsets.UTF_8));
+                new String(new UserAuthenticationInfo(createUserStmt.getUser(), createUserStmt.getAuthOption()).getPassword(),
+                        StandardCharsets.UTF_8));
 
         sql = "create user u4 identified by password '123456'";
         try {
@@ -151,7 +156,8 @@ public class PrivilegeStmtAnalyzerV2Test {
         sql = "create user u4 identified by password '*6BB4837EB74329105EE4568DDA7DC67ED2CA2AD9'";
         createUserStmt = (CreateUserStmt) analyzeSuccess(sql);
         Assertions.assertEquals("*6BB4837EB74329105EE4568DDA7DC67ED2CA2AD9",
-                new String(createUserStmt.getAuthenticationInfo().getPassword(), StandardCharsets.UTF_8));
+                new String(new UserAuthenticationInfo(createUserStmt.getUser(), createUserStmt.getAuthOption()).getPassword(),
+                        StandardCharsets.UTF_8));
     }
 
     @Test
@@ -251,8 +257,8 @@ public class PrivilegeStmtAnalyzerV2Test {
     public void testAlterDropUser() throws Exception {
         String sql = "alter user test_user identified by 'abc'";
         AlterUserStmt alterUserStmt = (AlterUserStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
-        Assertions.assertEquals("test_user", alterUserStmt.getUserIdentity().getUser());
-        Assertions.assertEquals("%", alterUserStmt.getUserIdentity().getHost());
+        Assertions.assertEquals("test_user", alterUserStmt.getUser().getUser());
+        Assertions.assertEquals("%", alterUserStmt.getUser().getHost());
         Assertions.assertEquals("abc", alterUserStmt.getAuthOption().getAuthString());
 
         sql = "alter user 'test'@'10.1.1.1' identified by 'abc'";
@@ -260,7 +266,7 @@ public class PrivilegeStmtAnalyzerV2Test {
             UtFrameUtils.parseStmtWithNewParser(sql, ctx);
             Assertions.fail();
         } catch (AnalysisException e) {
-            Assertions.assertTrue(e.getMessage().contains("Operation ALTER USER failed for 'test'@'10.1.1.1' : user not exists"));
+            Assertions.assertTrue(e.getMessage().contains("cannot find user 'test'@'10.1.1.1'!"));
         }
 
 
@@ -269,12 +275,12 @@ public class PrivilegeStmtAnalyzerV2Test {
             DropUserStmt dropUserStmt = (DropUserStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
             Assertions.fail();
         } catch (AnalysisException e) {
-            Assertions.assertTrue(e.getMessage().contains("Operation DROP USER failed for 'test'@'%' : user not exists"));
+            Assertions.assertTrue(e.getMessage().contains("cannot find user 'test'@'%'"));
         }
 
         sql = "drop user test_user";
         DropUserStmt dropUserStmt = (DropUserStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
-        Assertions.assertEquals("test_user", dropUserStmt.getUserIdentity().getUser());
+        Assertions.assertEquals("test_user", dropUserStmt.getUser().getUser());
 
         sql = "drop user root";
         try {
@@ -329,12 +335,12 @@ public class PrivilegeStmtAnalyzerV2Test {
         sql = "grant test_role to test_user";
         GrantRoleStmt grantRoleStmt = (GrantRoleStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
         Assertions.assertEquals("[test_role]", grantRoleStmt.getGranteeRole().toString());
-        Assertions.assertEquals("'test_user'@'%'", grantRoleStmt.getUserIdentity().toString());
+        Assertions.assertEquals("'test_user'@'%'", grantRoleStmt.getUser().toString());
 
         sql = "grant test_role, test_role2 to test_user";
         grantRoleStmt = (GrantRoleStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
         Assertions.assertEquals("[test_role, test_role2]", grantRoleStmt.getGranteeRole().toString());
-        Assertions.assertEquals("'test_user'@'%'", grantRoleStmt.getUserIdentity().toString());
+        Assertions.assertEquals("'test_user'@'%'", grantRoleStmt.getUser().toString());
 
         sql = "grant ___ to test_user";
         try {
@@ -657,7 +663,7 @@ public class PrivilegeStmtAnalyzerV2Test {
     public void testExecuteAs() throws Exception {
         ExecuteAsStmt stmt = (ExecuteAsStmt) UtFrameUtils.parseStmtWithNewParser(
                 "execute as root with no revert", ctx);
-        Assertions.assertEquals(UserIdentity.ROOT, stmt.getToUser());
+        Assertions.assertEquals(UserRef.ROOT, stmt.getToUser());
         Assertions.assertFalse(stmt.isAllowRevert());
 
         try {
@@ -691,7 +697,7 @@ public class PrivilegeStmtAnalyzerV2Test {
 
         sql = "grant ALL PRIVILEGES on table test.t0 to user test_user";
         grantPrivilegeStmt = (GrantPrivilegeStmt) analyzeSuccess(sql);
-        Assertions.assertEquals("GRANT DELETE, DROP, INSERT, SELECT, ALTER, EXPORT, UPDATE " +
+        Assertions.assertEquals("GRANT DELETE, DROP, INSERT, SELECT, ALTER, EXPORT, UPDATE, REFRESH " +
                 "ON TABLE test.t0 TO USER 'test_user'@'%'", AstToSQLBuilder.toSQL(grantPrivilegeStmt));
 
         sql = "grant SELECT on all tables in all databases to user test_user";
@@ -754,18 +760,18 @@ public class PrivilegeStmtAnalyzerV2Test {
 
         analyzeSuccess("create user user_not_exists");
         analyzeSuccess("create user if not exists user_not_exists");
-        analyzeFail("create user user_exists", "Operation CREATE USER failed for 'user_exists'@'%' : user already exists");
+        analyzeFail("create user user_exists", "user 'user_exists'@'%' already exists");
         analyzeSuccess("create user if not exists user_exists");
 
         analyzeSuccess("drop user user_exists");
         analyzeSuccess("drop user if exists user_exists");
-        analyzeFail("drop user user_not_exists", "Operation DROP USER failed for 'user_not_exists'@'%' : user not exists");
+        analyzeFail("drop user user_not_exists", "cannot find user 'user_not_exists'@'%'!");
         analyzeSuccess("drop user if exists user_not_exists");
 
         analyzeSuccess("alter user user_exists identified by 'xxx'");
         analyzeSuccess("alter user if exists user_exists identified by 'xxx'");
         analyzeFail("alter user user_not_exists identified by 'xxx'",
-                "Operation ALTER USER failed for 'user_not_exists'@'%' : user not exists");
+                "cannot find user 'user_not_exists'@'%'!");
         analyzeSuccess("alter user if exists user_not_exists identified by 'xxx'");
 
         context = AnalyzeTestUtil.getConnectContext();

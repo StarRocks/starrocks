@@ -15,7 +15,6 @@
 
 package com.starrocks.sql.ast;
 
-import com.starrocks.ha.FrontendNodeType;
 import com.starrocks.sql.parser.NodePosition;
 
 public class ModifyFrontendAddressClause extends FrontendClause {
@@ -23,16 +22,12 @@ public class ModifyFrontendAddressClause extends FrontendClause {
     protected String srcHost;
     protected String destHost;
 
-    public ModifyFrontendAddressClause(String hostPort, FrontendNodeType role) {
-        super(hostPort, role, NodePosition.ZERO);
-    }
-
     public ModifyFrontendAddressClause(String srcHost, String destHost) {
         this(srcHost, destHost, NodePosition.ZERO);
     }
 
     public ModifyFrontendAddressClause(String srcHost, String destHost, NodePosition pos) {
-        super("", FrontendNodeType.UNKNOWN, pos);
+        super("", pos);
         this.srcHost = srcHost;
         this.destHost = destHost;
     }
@@ -47,6 +42,6 @@ public class ModifyFrontendAddressClause extends FrontendClause {
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitModifyFrontendHostClause(this, context);
+        return ((AstVisitorExtendInterface<R, C>) visitor).visitModifyFrontendHostClause(this, context);
     }
 }

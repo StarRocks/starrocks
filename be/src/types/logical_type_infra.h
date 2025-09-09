@@ -55,6 +55,7 @@ namespace starrocks {
     M(TYPE_TIME)                     \
     M(TYPE_JSON)                     \
     M(TYPE_VARBINARY)                \
+    M(TYPE_VARIANT)                  \
     M(TYPE_BOOLEAN)
 
 #define APPLY_FOR_COMPLEX_TYPE(M) \
@@ -104,7 +105,16 @@ namespace starrocks {
     M(FUNCTION)                         \
     M(BINARY)                           \
     M(VARBINARY)                        \
-    M(JSON)
+    M(JSON)                             \
+    M(VARIANT)
+
+#define APPLY_FOR_MIN_MAX_COMPRESSABLE_TYPE(M) \
+    APPLY_FOR_ALL_INT_TYPE(M)                  \
+    M(TYPE_DECIMAL32)                          \
+    M(TYPE_DECIMAL64)                          \
+    M(TYPE_DECIMAL128)                         \
+    M(TYPE_DATE)                               \
+    M(TYPE_DATETIME)
 
 #define APPLY_FOR_BITSET_FILTER_SUPPORTED_TYPE(M) \
     M(TYPE_BOOLEAN)                               \

@@ -15,6 +15,7 @@
 
 package com.starrocks.sql.analyzer;
 
+import com.starrocks.catalog.UserIdentity;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.CreateUserStmt;
@@ -27,7 +28,6 @@ import com.starrocks.sql.ast.ShowStmt;
 import com.starrocks.sql.ast.ShowTableStatusStmt;
 import com.starrocks.sql.ast.ShowTableStmt;
 import com.starrocks.sql.ast.ShowVariablesStmt;
-import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
@@ -131,12 +131,12 @@ public class AnalyzeShowTest {
         String sql = "SHOW AUTHENTICATION;";
         ShowAuthenticationStmt stmt = (ShowAuthenticationStmt) analyzeSuccess(sql);
         Assertions.assertFalse(stmt.isAll());
-        Assertions.assertEquals("root", stmt.getUserIdent().getUser());
+        Assertions.assertEquals("root", stmt.getUser().getUser());
 
         sql = "SHOW ALL AUTHENTICATION;";
         stmt = (ShowAuthenticationStmt) analyzeSuccess(sql);
         Assertions.assertTrue(stmt.isAll());
-        Assertions.assertNull(stmt.getUserIdent());
+        Assertions.assertNull(stmt.getUser());
 
         sql = "SHOW AUTHENTICATION FOR xx";
         analyzeFail(sql, "cannot find user 'xx'@'%'!");
@@ -149,7 +149,7 @@ public class AnalyzeShowTest {
         sql = "SHOW AUTHENTICATION FOR u1";
         stmt = (ShowAuthenticationStmt) analyzeSuccess(sql);
         Assertions.assertFalse(stmt.isAll());
-        Assertions.assertEquals("u1", stmt.getUserIdent().getUser());
+        Assertions.assertEquals("u1", stmt.getUser().getUser());
 
         DropUserStmt dropUserStmt = (DropUserStmt) UtFrameUtils.parseStmtWithNewParser(
                 "drop user u1", context);

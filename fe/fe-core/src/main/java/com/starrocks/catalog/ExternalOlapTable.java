@@ -459,7 +459,7 @@ public class ExternalOlapTable extends OlapTable {
             THashDistributionInfo hashDist = meta.getDistribution_desc().getHash_distribution();
             DistributionDesc distributionDesc = new HashDistributionDesc(hashDist.getBucket_num(),
                     hashDist.getDistribution_columns());
-            defaultDistributionInfo = distributionDesc.toDistributionInfo(getBaseSchema());
+            defaultDistributionInfo = DistributionInfoBuilder.build(distributionDesc, getBaseSchema());
         }
 
         for (TPartitionMeta partitionMeta : meta.getPartitions()) {

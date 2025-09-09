@@ -17,6 +17,7 @@ package com.starrocks.sql.optimizer.statistics;
 import com.github.benmanes.caffeine.cache.AsyncCacheLoader;
 import com.github.benmanes.caffeine.cache.AsyncLoadingCache;
 import com.github.benmanes.caffeine.cache.Caffeine;
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableMap;
 import com.google.gson.JsonArray;
@@ -26,8 +27,11 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.catalog.OlapTable;
+import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.Table;
+import com.starrocks.catalog.Type;
 import com.starrocks.common.Config;
+import com.starrocks.common.FeConstants;
 import com.starrocks.common.Pair;
 import com.starrocks.common.ThreadPoolManager;
 import com.starrocks.memory.MemoryTrackable;
@@ -36,6 +40,7 @@ import com.starrocks.qe.SimpleExecutor;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.optimizer.base.ColumnIdentifier;
+import com.starrocks.sql.optimizer.rule.tree.prunesubfield.SubfieldAccessPathNormalizer;
 import com.starrocks.statistic.StatisticUtils;
 import com.starrocks.thrift.TResultBatch;
 import com.starrocks.thrift.TResultSinkType;
@@ -52,6 +57,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Executor;
+import java.util.stream.Collectors;
 
 public class ColumnMinMaxMgr implements IMinMaxStatsMgr, MemoryTrackable {
     private record CacheValue(ColumnMinMax minMax, StatsVersion version) {}
@@ -75,7 +81,7 @@ public class ColumnMinMaxMgr implements IMinMaxStatsMgr, MemoryTrackable {
     @Override
     public Optional<ColumnMinMax> getStats(ColumnIdentifier identifier, StatsVersion version) {
         CompletableFuture<Optional<CacheValue>> future = cache.get(identifier);
-        if (future.isDone()) {
+        if (future.isDone() || FeConstants.runningUnitTest) {
             try {
                 Optional<CacheValue> cacheValue = future.get();
                 if (cacheValue.isPresent()) {
@@ -118,7 +124,36 @@ public class ColumnMinMaxMgr implements IMinMaxStatsMgr, MemoryTrackable {
         return List.of(Pair.create(List.of(new ColumnMinMax("1", "10000")), (long) cache.asMap().size()));
     }
 
-    private static final class CacheLoader implements AsyncCacheLoader<ColumnIdentifier, Optional<CacheValue>> {
+    @VisibleForTesting
+    public static String genMinMaxSql(String catalogName, Database db, OlapTable olapTable, Column column) {
+        List<String> pieces = SubfieldAccessPathNormalizer.parseSimpleJsonPath(column.getColumnId().getId());
+        String columnName;
+        if (pieces.size() == 1) {
+            columnName = column.getName();
+        } else {
+            String path = pieces.stream().skip(1).collect(Collectors.joining("."));
+            String jsonFunc;
+            Type type = column.getType();
+            if (type.equals(Type.BIGINT)) {
+                jsonFunc = "get_json_int";
+            } else if (type.isStringType()) {
+                jsonFunc = "get_json_string";
+            } else if (type.equals(Type.DOUBLE)) {
+                jsonFunc = "get_json_double";
+            } else {
+                throw new IllegalStateException("unsupported json field type: " + column.getType());
+            }
+            columnName = String.format("%s(%s, '%s')", jsonFunc, StatisticUtils.quoting(column.getName()), path);
+        }
+        String sql = "select min(" + columnName + ") as min, max(" + columnName + ") as max"
+                + " from " +
+                StatisticUtils.quoting(catalogName, db.getOriginName(), olapTable.getName())
+                + "[_META_];";
+        return sql;
+    }
+
+    protected static final class CacheLoader implements AsyncCacheLoader<ColumnIdentifier, Optional<CacheValue>> {
+
         @Override
         public @NonNull CompletableFuture<Optional<CacheValue>> asyncLoad(@NonNull ColumnIdentifier key,
                                                                           @NonNull Executor executor) {
@@ -131,15 +166,15 @@ public class ColumnMinMaxMgr implements IMinMaxStatsMgr, MemoryTrackable {
                     if (column == null || (!column.getType().isNumericType() && !column.getType().isDate())) {
                         return Optional.empty();
                     }
+                    // We need the aggregated result, so this constraint is not satisfied.
+                    if (column.isAggregated()) {
+                        return Optional.empty();
+                    }
 
-                    long version = olapTable.getPartitions().stream()
-                            .map(p -> p.getDefaultPhysicalPartition().getVisibleVersionTime())
-                            .max(Long::compareTo).orElse(0L);
-
+                    long version = olapTable.getPartitions().stream().flatMap(p -> p.getSubPartitions().stream()).map(
+                            PhysicalPartition::getVisibleVersionTime).max(Long::compareTo).orElse(0L);
                     String catalogName = InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME;
-                    String sql = "select min(" + column.getName() + ") as min, max(" + column.getName() + ") as max"
-                            + " from " + StatisticUtils.quoting(catalogName, db.getOriginName(), olapTable.getName())
-                            + "[_META_];";
+                    String sql = genMinMaxSql(catalogName, db, olapTable, column);
 
                     ConnectContext context = STMT_EXECUTOR.createConnectContext();
                     context.getSessionVariable().setPipelineDop(1);
@@ -148,7 +183,11 @@ public class ColumnMinMaxMgr implements IMinMaxStatsMgr, MemoryTrackable {
                         return Optional.empty();
                     }
                     Preconditions.checkState(result.size() == 1);
-                    return Optional.of(new CacheValue(toMinMax(result.get(0)), new StatsVersion(version, version)));
+                    ColumnMinMax minMax = toMinMax(result.get(0));
+                    if (minMax.minValue() == null || minMax.maxValue() == null) {
+                        return Optional.empty();
+                    }
+                    return Optional.of(new CacheValue(minMax, new StatsVersion(version, version)));
                 } catch (Exception e) {
                     LOG.warn("get MinMax for column: {}, error: {}", key, e.getMessage(), e);
                 }
@@ -161,8 +200,19 @@ public class ColumnMinMaxMgr implements IMinMaxStatsMgr, MemoryTrackable {
             ByteBuf copied = Unpooled.copiedBuffer(buffer);
             String jsonString = copied.toString(Charset.defaultCharset());
             JsonElement obj = JsonParser.parseString(jsonString);
-            JsonArray data = obj.getAsJsonObject().get("data").getAsJsonArray();
-            return new ColumnMinMax(data.get(0).getAsString(), data.get(1).getAsString());
+            JsonElement dataElement = obj.getAsJsonObject().get("data");
+            if (dataElement == null || dataElement.isJsonNull() || !dataElement.isJsonArray()) {
+                throw new IllegalStateException("Invalid 'data' field");
+            }
+            JsonArray data = dataElement.getAsJsonArray();
+
+            JsonElement minElement = data.get(0);
+            JsonElement maxElement = data.get(1);
+
+            String min = minElement.isJsonNull() ? null : minElement.getAsString();
+            String max = maxElement.isJsonNull() ? null : maxElement.getAsString();
+
+            return new ColumnMinMax(min, max);
         }
     }
 

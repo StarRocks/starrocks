@@ -23,6 +23,7 @@ import com.google.gson.annotations.SerializedName;
 import com.starrocks.authorization.PrivilegeBuiltinConstants;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.DistributionInfo;
+import com.starrocks.catalog.DistributionInfoBuilder;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.OlapTable.OlapTableState;
@@ -32,6 +33,7 @@ import com.starrocks.catalog.PartitionType;
 import com.starrocks.catalog.SinglePartitionInfo;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Tablet;
+import com.starrocks.catalog.UserIdentity;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.util.DebugUtil;
@@ -54,7 +56,6 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.OptimizeClause;
 import com.starrocks.sql.ast.StatementBase;
-import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.sql.parser.SqlParser;
 import io.opentelemetry.api.trace.StatusCode;
 import org.apache.logging.log4j.LogManager;
@@ -434,7 +435,8 @@ public class OnlineOptimizeJobV2 extends AlterJobV2 implements GsonPostProcessab
         try {
             targetTable.setState(OlapTableState.UPDATING_META);
             if (allPartitionOptimized && optimizeClause.getDistributionDesc() != null) {
-                this.distributionInfo = optimizeClause.getDistributionDesc().toDistributionInfo(targetTable.getColumns());
+                this.distributionInfo =
+                        DistributionInfoBuilder.build(optimizeClause.getDistributionDesc(), targetTable.getColumns());
                 targetTable.setDefaultDistributionInfo(distributionInfo);
             }
             targetTable.setState(OlapTableState.NORMAL);

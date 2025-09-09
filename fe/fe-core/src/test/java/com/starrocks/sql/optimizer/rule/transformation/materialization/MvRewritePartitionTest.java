@@ -130,7 +130,7 @@ public class MvRewritePartitionTest extends MVTestBase {
     @Test
     public void testPartitionPrune1() throws Exception {
         Tracers.register(connectContext);
-        Tracers.init(connectContext, Tracers.Mode.LOGS, "MV");
+        Tracers.init(connectContext, "LOGS", "MV");
         createAndRefreshMv("CREATE MATERIALIZED VIEW test_partition_tbl_mv1\n" +
                         " PARTITION BY k1\n" +
                         " DISTRIBUTED BY HASH(k1) BUCKETS 10\n" +

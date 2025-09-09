@@ -42,6 +42,7 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Multimap;
 import com.google.common.collect.Sets;
+import com.starrocks.authentication.UserIdentityUtils;
 import com.starrocks.catalog.CatalogRecycleBin;
 import com.starrocks.catalog.ColocateTableIndex.GroupId;
 import com.starrocks.catalog.DataProperty;
@@ -60,6 +61,7 @@ import com.starrocks.catalog.Replica.ReplicaState;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.catalog.TabletMeta;
+import com.starrocks.catalog.UserIdentity;
 import com.starrocks.clone.BalanceStat.BalanceType;
 import com.starrocks.clone.SchedException.Status;
 import com.starrocks.clone.TabletSchedCtx.Priority;
@@ -75,7 +77,6 @@ import com.starrocks.leader.ReportHandler;
 import com.starrocks.persist.ReplicaPersistInfo;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.LocalMetastore;
-import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.system.Backend;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.system.NodeSelector;
@@ -548,7 +549,7 @@ public class TabletScheduler extends FrontendDaemon {
         LOG.debug("pending tablets current count: {}\n{}", pendingTablets.size(), sb);
     }
 
-    private boolean checkIfTabletExpired(TabletSchedCtx ctx) {
+    protected boolean checkIfTabletExpired(TabletSchedCtx ctx) {
         return checkIfTabletExpired(ctx, GlobalStateMgr.getCurrentState().getRecycleBin(), System.currentTimeMillis());
     }
 
@@ -647,7 +648,9 @@ public class TabletScheduler extends FrontendDaemon {
                 LOG.warn("got unexpected exception, discard this schedule. tablet: {}",
                         tabletCtx.getTabletId(), e);
                 stat.counterTabletScheduledFailed.incrementAndGet();
-                finalizeTabletCtx(tabletCtx, TabletSchedCtx.State.UNEXPECTED, e.getMessage());
+                String errMsg = e.getMessage();
+                tabletCtx.setErrMsg(errMsg);
+                finalizeTabletCtx(tabletCtx, TabletSchedCtx.State.UNEXPECTED, errMsg);
                 continue;
             }
 
@@ -1109,7 +1112,8 @@ public class TabletScheduler extends FrontendDaemon {
         } finally {
             locker.unLockDatabase(db.getId(), LockType.WRITE);
         }
-        throw new SchedException(Status.UNRECOVERABLE, "unable to delete any redundant replicas");
+        throw new SchedException(Status.UNRECOVERABLE, "unable to delete any redundant replicas. replicas: " +
+                tabletCtx.getTablet().getReplicaInfos());
     }
 
     private boolean deleteBackendDropped(TabletSchedCtx tabletCtx, boolean force) throws SchedException {
@@ -1343,7 +1347,8 @@ public class TabletScheduler extends FrontendDaemon {
                 deleteReplicaInternal(tabletCtx, replica, "colocate redundant", forceDropBad);
                 throw new SchedException(Status.FINISHED, "colocate redundant replica is deleted");
             }
-            throw new SchedException(Status.UNRECOVERABLE, "unable to delete any colocate redundant replicas");
+            throw new SchedException(Status.UNRECOVERABLE, "unable to delete any colocate redundant replicas. replicas: " +
+                    tabletCtx.getTablet().getReplicaInfos() + ", backend set: " + backendSet);
         } finally {
             locker.unLockDatabase(db.getId(), LockType.WRITE);
         }
@@ -1835,7 +1840,7 @@ public class TabletScheduler extends FrontendDaemon {
 
         Preconditions.checkState(tabletCtx.getState() == TabletSchedCtx.State.RUNNING, tabletCtx.getState());
         try {
-            tabletCtx.finishCloneTask(cloneTask, request);
+            tabletCtx.finishCloneTask(cloneTask, request, stat);
         } catch (SchedException e) {
             tabletCtx.increaseFailedRunningCounter();
             tabletCtx.setErrMsg(e.getMessage());
@@ -1853,7 +1858,9 @@ public class TabletScheduler extends FrontendDaemon {
             LOG.warn("got unexpected exception when finish clone task. tablet: {}",
                     tabletCtx.getTabletId(), e);
             stat.counterTabletScheduledDiscard.incrementAndGet();
-            finalizeTabletCtx(tabletCtx, TabletSchedCtx.State.UNEXPECTED, e.getMessage());
+            String errMsg = e.getMessage();
+            tabletCtx.setErrMsg(errMsg);
+            finalizeTabletCtx(tabletCtx, TabletSchedCtx.State.UNEXPECTED, errMsg);
             return;
         }
 
@@ -2154,8 +2161,16 @@ public class TabletScheduler extends FrontendDaemon {
         return pendingTablets.size();
     }
 
+    public synchronized long getPendingNum(Type type) {
+        return pendingTablets.stream().filter(t -> t.getType() == type).count();
+    }
+
     public synchronized int getRunningNum() {
         return runningTablets.size();
+    }
+
+    public synchronized long getRunningNum(Type type) {
+        return runningTablets.values().stream().filter(t -> t.getType() == type).count();
     }
 
     public synchronized int getHistoryNum() {
@@ -2180,6 +2195,8 @@ public class TabletScheduler extends FrontendDaemon {
     private synchronized long getPendingBalanceTabletNum(TStorageMedium medium, BalanceType balanceType) {
         if (balanceType == BalanceType.COLOCATION_GROUP) {
             return getPendingRepairTabletNum(medium, TabletHealthStatus.COLOCATE_MISMATCH);
+        } else if (balanceType == BalanceType.LABEL_AWARE_LOCATION) {
+            return getPendingRepairTabletNum(medium, TabletHealthStatus.LOCATION_MISMATCH);
         }
 
         return pendingTablets.stream()
@@ -2196,6 +2213,8 @@ public class TabletScheduler extends FrontendDaemon {
     private synchronized long getRunningBalanceTabletNum(TStorageMedium medium, BalanceType balanceType) {
         if (balanceType == BalanceType.COLOCATION_GROUP) {
             return getRunningRepairTabletNum(medium, TabletHealthStatus.COLOCATE_MISMATCH);
+        } else if (balanceType == BalanceType.LABEL_AWARE_LOCATION) {
+            return getRunningRepairTabletNum(medium, TabletHealthStatus.LOCATION_MISMATCH);
         }
 
         return runningTablets.values().stream()
@@ -2213,7 +2232,7 @@ public class TabletScheduler extends FrontendDaemon {
         List<TabletSchedCtx> tabletCtxs;
         UserIdentity currentUser = null;
         if (request.isSetCurrent_user_ident()) {
-            currentUser = UserIdentity.fromThrift(request.current_user_ident);
+            currentUser = UserIdentityUtils.fromThrift(request.current_user_ident);
         }
         synchronized (this) {
             Stream<TabletSchedCtx> all;

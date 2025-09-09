@@ -14,8 +14,7 @@
 
 package com.starrocks.sql.ast;
 
-import com.starrocks.analysis.RedirectStatus;
-import com.starrocks.analysis.TableName;
+import com.starrocks.sql.ast.expression.TableName;
 import com.starrocks.sql.parser.NodePosition;
 
 public class AdminSetPartitionVersionStmt extends DdlStmt {
@@ -55,12 +54,7 @@ public class AdminSetPartitionVersionStmt extends DdlStmt {
     }
 
     @Override
-    public RedirectStatus getRedirectStatus() {
-        return RedirectStatus.FORWARD_NO_SYNC;
-    }
-
-    @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitAdminSetPartitionVersionStmt(this, context);
+        return ((AstVisitorExtendInterface<R, C>) visitor).visitAdminSetPartitionVersionStmt(this, context);
     }
 }

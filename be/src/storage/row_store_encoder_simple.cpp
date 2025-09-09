@@ -30,6 +30,9 @@
 
 namespace starrocks {
 
+// Import encoding utilities from primary_key_encoder.h
+using encoding_utils::encode_integral;
+
 Status RowStoreEncoderSimple::encode_columns_to_full_row_column(const Schema& schema, const Columns& columns,
                                                                 BinaryColumn& dest) {
     RETURN_IF_ERROR(is_supported(schema));

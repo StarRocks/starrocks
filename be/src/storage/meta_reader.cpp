@@ -35,7 +35,8 @@
 namespace starrocks {
 
 std::vector<std::string> SegmentMetaCollecter::support_collect_fields = {
-        META_FLAT_JSON_META, META_DICT_MERGE, META_MAX, META_MIN, META_COUNT_ROWS, META_COUNT_COL};
+        META_FLAT_JSON_META, META_DICT_MERGE, META_MAX,         META_MIN,
+        META_COUNT_ROWS,     META_COUNT_COL,  META_COLUMN_SIZE, META_COLUMN_COMPRESSED_SIZE};
 
 Status SegmentMetaCollecter::parse_field_and_colname(const std::string& item, std::string* field,
                                                      std::string* col_name) {
@@ -140,6 +141,11 @@ Status MetaReader::_fill_result_chunk(Chunk* chunk) {
             desc.children.emplace_back(item_desc);
             MutableColumnPtr column = ColumnHelper::create_column(desc, false);
             chunk->append_column(std::move(column), slot->id());
+        } else if (field == META_COLUMN_SIZE || field == META_COLUMN_COMPRESSED_SIZE) {
+            TypeDescriptor desc;
+            desc.type = TYPE_BIGINT;
+            MutableColumnPtr column = ColumnHelper::create_column(desc, true);
+            chunk->append_column(std::move(column), slot->id());
         } else {
             MutableColumnPtr column = ColumnHelper::create_column(slot->type(), true);
             chunk->append_column(std::move(column), slot->id());
@@ -236,6 +242,10 @@ Status SegmentMetaCollecter::_collect(const std::string& name, ColumnId cid, Col
         return _collect_flat_json(cid, column);
     } else if (name == META_COUNT_COL) {
         return _collect_count(cid, column, type);
+    } else if (name == META_COLUMN_SIZE) {
+        return _collect_column_size(cid, column, type);
+    } else if (name == META_COLUMN_COMPRESSED_SIZE) {
+        return _collect_column_compressed_size(cid, column, type);
     }
     return Status::NotSupported("Not Support Collect Meta: " + name);
 }
@@ -318,7 +328,14 @@ Status SegmentMetaCollecter::_collect_dict(ColumnId cid, Column* column, Logical
 Status SegmentMetaCollecter::_collect_dict_for_column(ColumnIterator* column_iter, ColumnId cid, Column* column) {
     std::vector<Slice> words;
     if (!column_iter->all_page_dict_encoded()) {
-        return Status::GlobalDictError("no global dict");
+        auto& tablet_column = _params->tablet_schema->column(cid);
+        // For JSON data, the schema may be heterogeneous, meaning that some segments might not contain the dictionary column,
+        // but a global dictionary could still be present and usable.
+        if (!tablet_column.is_extended()) {
+            return Status::GlobalDictError("no global dict");
+        } else {
+            return Status::OK();
+        }
     } else {
         RETURN_IF_ERROR(column_iter->fetch_all_dict_words(&words));
     }
@@ -404,7 +421,7 @@ Status SegmentMetaCollecter::__collect_max_or_min(ColumnId cid, Column* column, 
     if (cid >= _segment->num_columns()) {
         return Status::NotFound("");
     }
-    const ColumnReader* col_reader = _segment->column(cid);
+    ColumnReader* col_reader = const_cast<ColumnReader*>(_segment->column(cid));
     if (col_reader == nullptr || col_reader->segment_zone_map() == nullptr) {
         return Status::NotFound("");
     }
@@ -415,7 +432,7 @@ Status SegmentMetaCollecter::__collect_max_or_min(ColumnId cid, Column* column, 
     TypeInfoPtr type_info = get_type_info(delegate_type(type));
     if constexpr (!is_max) { // min
         Datum min;
-        if (!segment_zone_map_pb->has_null()) {
+        if (segment_zone_map_pb->has_not_null()) {
             RETURN_IF_ERROR(datum_from_string(type_info.get(), &min, segment_zone_map_pb->min(), nullptr));
             column->append_datum(min);
         } else {
@@ -451,6 +468,60 @@ Status SegmentMetaCollecter::_collect_count(ColumnId cid, Column* column, Logica
     column->append_datum(int64_t(num_rows - nulls));
 
     return Status::OK();
+}
+
+Status SegmentMetaCollecter::_collect_column_size(ColumnId cid, Column* column, LogicalType type) {
+    ColumnReader* col_reader = const_cast<ColumnReader*>(_segment->column(cid));
+    RETURN_IF(col_reader == nullptr, Status::NotFound("column not found: " + std::to_string(cid)));
+
+    size_t total_mem_footprint = _collect_column_size_recursive(col_reader);
+    column->append_datum(int64_t(total_mem_footprint));
+    return Status::OK();
+}
+
+Status SegmentMetaCollecter::_collect_column_compressed_size(ColumnId cid, Column* column, LogicalType type) {
+    // Compressed size estimation: sum of data page sizes via ordinal index ranges
+    ColumnReader* col_reader = const_cast<ColumnReader*>(_segment->column(cid));
+    RETURN_IF(col_reader == nullptr, Status::NotFound("column not found: " + std::to_string(cid)));
+
+    int64_t total = _collect_column_compressed_size_recursive(col_reader);
+    column->append_datum(total);
+    return Status::OK();
+}
+
+size_t SegmentMetaCollecter::_collect_column_size_recursive(ColumnReader* col_reader) {
+    size_t total_mem_footprint = col_reader->total_mem_footprint();
+
+    if (col_reader->sub_readers() != nullptr) {
+        for (const auto& sub_reader : *col_reader->sub_readers()) {
+            total_mem_footprint += _collect_column_size_recursive(sub_reader.get());
+        }
+    }
+
+    return total_mem_footprint;
+}
+
+int64_t SegmentMetaCollecter::_collect_column_compressed_size_recursive(ColumnReader* col_reader) {
+    OlapReaderStatistics stats;
+    IndexReadOptions opts;
+    opts.use_page_cache = false;
+    opts.read_file = _read_file.get();
+    opts.stats = &stats;
+
+    Status status = col_reader->load_ordinal_index(opts);
+    if (!status.ok()) {
+        return 0; // Return 0 on error, caller should handle the error
+    }
+
+    int64_t total = col_reader->data_page_footprint();
+
+    if (col_reader->sub_readers() != nullptr) {
+        for (const auto& sub_reader : *col_reader->sub_readers()) {
+            total += _collect_column_compressed_size_recursive(sub_reader.get());
+        }
+    }
+
+    return total;
 }
 
 } // namespace starrocks

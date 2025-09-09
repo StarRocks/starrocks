@@ -128,12 +128,6 @@ public class ShowLoadStmtTest {
     }
 
     @Test
-    public void testGetRedirectStatus() {
-        ShowLoadStmt stmt = new ShowLoadStmt(null, null, null, null);
-        Assertions.assertEquals(stmt.getRedirectStatus(), RedirectStatus.FORWARD_WITH_SYNC);
-    }
-
-    @Test
     public void testShowLoadAll() {
         analyzeSuccess("show load all");
         analyzeSuccess("show load all where label = 'hehe'");

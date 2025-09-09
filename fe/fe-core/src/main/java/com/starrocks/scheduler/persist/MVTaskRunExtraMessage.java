@@ -24,6 +24,7 @@ import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.scheduler.Constants;
 import com.starrocks.scheduler.ExecuteOption;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;
+import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.lang3.StringUtils;
 
 import java.util.Map;
@@ -41,9 +42,11 @@ public class MVTaskRunExtraMessage implements Writable {
     // refreshed partitions of materialized view in this task run
     @SerializedName("mvPartitionsToRefresh")
     private Set<String> mvPartitionsToRefresh = Sets.newHashSet();
+    // NOTE: This is set in mv's plan schdduler stage and are partitions which should be refreshed.
     // refreshed partitions of the ref base table in this task run which should only have one table for now.
     @SerializedName("refBasePartitionsToRefreshMap")
     private Map<String, Set<String>> refBasePartitionsToRefreshMap = Maps.newHashMap();
+    // NOTE: This is only set after mv's version map has been committed and it's from final task run exec plan.
     // refreshed partitions of all the base tables which are optimized by optimizer and the real partitions in executing.
     @SerializedName("basePartitionsToRefreshMap")
     private Map<String, Set<String>> basePartitionsToRefreshMap = Maps.newHashMap();
@@ -99,7 +102,7 @@ public class MVTaskRunExtraMessage implements Writable {
     }
 
     public void setMvPartitionsToRefresh(Set<String> mvPartitionsToRefresh) {
-        if (mvPartitionsToRefresh == null) {
+        if (CollectionUtils.isEmpty(mvPartitionsToRefresh)) {
             return;
         }
         this.mvPartitionsToRefresh = Sets.newHashSet(MvUtils.shrinkToSize(mvPartitionsToRefresh,
@@ -123,15 +126,6 @@ public class MVTaskRunExtraMessage implements Writable {
         if (mvPartitionsToRefresh != null)  {
             String mvPartitionToRefresh = Joiner.on(",").join(mvPartitionsToRefresh);
             return StringUtils.substring(mvPartitionToRefresh, 0, 1024);
-        } else {
-            return "";
-        }
-    }
-
-    public String getBasePartitionsToRefreshMapString() {
-        if (basePartitionsToRefreshMap != null) {
-            String basePartitionToRefresh = basePartitionsToRefreshMap.toString();
-            return StringUtils.substring(basePartitionToRefresh, 0, 1024);
         } else {
             return "";
         }
@@ -185,6 +179,10 @@ public class MVTaskRunExtraMessage implements Writable {
     public void setPlanBuilderMessage(Map<String, String> planBuilderMessage) {
         this.planBuilderMessage = MvUtils.shrinkToSize(planBuilderMessage,
                 Config.max_mv_task_run_meta_message_values_length);
+    }
+
+    public Map<String, String> getPlanBuilderMessage() {
+        return planBuilderMessage;
     }
 
     @Override

@@ -20,11 +20,6 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
 import com.google.common.hash.HashFunction;
 import com.google.common.hash.Hashing;
-import com.starrocks.analysis.Expr;
-import com.starrocks.analysis.SlotRef;
-import com.starrocks.analysis.StringLiteral;
-import com.starrocks.analysis.SubfieldExpr;
-import com.starrocks.analysis.TypeDef;
 import com.starrocks.authorization.PrivilegeBuiltinConstants;
 import com.starrocks.catalog.AggregateType;
 import com.starrocks.catalog.Column;
@@ -34,12 +29,14 @@ import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.LocalTablet;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
+import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.StructField;
 import com.starrocks.catalog.StructType;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
+import com.starrocks.catalog.UserIdentity;
 import com.starrocks.common.Config;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
@@ -53,7 +50,11 @@ import com.starrocks.qe.SimpleExecutor;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.ast.ColumnDef;
-import com.starrocks.sql.ast.UserIdentity;
+import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.SlotRef;
+import com.starrocks.sql.ast.expression.StringLiteral;
+import com.starrocks.sql.ast.expression.SubfieldExpr;
+import com.starrocks.sql.ast.expression.TypeDef;
 import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.optimizer.statistics.StatisticsEstimateCoefficient;
@@ -222,8 +223,8 @@ public class StatisticUtils {
 
     public static LocalDateTime getTableLastUpdateTime(Table table) {
         if (table.isNativeTableOrMaterializedView()) {
-            long maxTime = table.getPartitions().stream().map(p -> p.getDefaultPhysicalPartition().getVisibleVersionTime())
-                    .max(Long::compareTo).orElse(0L);
+            long maxTime = table.getPartitions().stream().flatMap(p -> p.getSubPartitions().stream()).map(
+                        PhysicalPartition::getVisibleVersionTime).max(Long::compareTo).orElse(0L);
             return LocalDateTime.ofInstant(Instant.ofEpochMilli(maxTime), Clock.systemDefaultZone().getZone());
         } else {
             try {
@@ -233,6 +234,21 @@ public class StatisticUtils {
                 return null;
             }
         }
+    }
+
+    /**
+     * Retrieves the last update timestamp of the specified table in milliseconds.
+     *
+     * @param table The table object for which the last update time is to be retrieved.
+     * @return The timestamp in milliseconds since the Unix epoch, or null if the update time is not available.
+     */
+    public static Long getTableLastUpdateTimestamp(Table table) {
+        LocalDateTime updateTime = getTableLastUpdateTime(table);
+        if (updateTime == null) {
+            return null;
+        }
+        Instant instant = updateTime.atZone(Clock.systemDefaultZone().getZone()).toInstant();
+        return instant.toEpochMilli();
     }
 
     public static Set<String> getUpdatedPartitionNames(Table table, LocalDateTime checkTime) {

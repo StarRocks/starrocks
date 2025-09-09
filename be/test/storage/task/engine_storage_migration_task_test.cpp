@@ -347,10 +347,14 @@ public:
         }
         EngineStorageMigrationTask migration_task(tablet_id, schema_hash, dest_path, false);
         ASSERT_OK(migration_task.execute());
+        ASSERT_GT(migration_task.get_copy_size(), 0);
+        ASSERT_GE(migration_task.get_copy_time_ms(), 0);
         // sleep 2 second for add latency for load
         sleep(2);
         EngineStorageMigrationTask migration_task_2(tablet_id, schema_hash, source_path, false);
         ASSERT_OK(migration_task_2.execute());
+        ASSERT_GT(migration_task_2.get_copy_size(), 0);
+        ASSERT_GE(migration_task_2.get_copy_time_ms(), 0);
     }
 
     void do_chain_path_migration(int64_t tablet_id, int32_t schema_hash) {
@@ -489,14 +493,14 @@ TEST_F(EngineStorageMigrationTaskTest, test_concurrent_ingestion_and_migration) 
     tablet_manager->start_trash_sweep();
     starrocks::StorageEngine::instance()->_clean_unused_txns();
 
-    std::map<TabletInfo, RowsetSharedPtr> tablet_related_rs;
+    std::map<TabletInfo, std::pair<RowsetSharedPtr, bool>> tablet_related_rs;
     StorageEngine::instance()->txn_manager()->get_txn_related_tablets(2222, 10, &tablet_related_rs);
     ASSERT_EQ(1, tablet_related_rs.size());
     TVersion version = 3;
     // publish version for txn
     auto tablet = tablet_manager->get_tablet(12345);
     for (auto& tablet_rs : tablet_related_rs) {
-        const RowsetSharedPtr& rowset = tablet_rs.second;
+        const RowsetSharedPtr& rowset = tablet_rs.second.first;
         auto st = StorageEngine::instance()->txn_manager()->publish_txn(10, tablet, 2222, version, rowset);
         // success because the related transaction is GCed
         ASSERT_TRUE(st.ok());
@@ -566,14 +570,14 @@ TEST_F(EngineStorageMigrationTaskTest, test_concurrent_ingestion_and_migration_p
     tablet_manager->start_trash_sweep();
     starrocks::StorageEngine::instance()->_clean_unused_txns();
 
-    std::map<TabletInfo, RowsetSharedPtr> tablet_related_rs;
+    std::map<TabletInfo, std::pair<RowsetSharedPtr, bool>> tablet_related_rs;
     StorageEngine::instance()->txn_manager()->get_txn_related_tablets(4444, 90, &tablet_related_rs);
     ASSERT_EQ(1, tablet_related_rs.size());
     TVersion version = 5;
     // publish version for txn
     auto tablet = tablet_manager->get_tablet(99999);
     for (auto& tablet_rs : tablet_related_rs) {
-        const RowsetSharedPtr& rowset = tablet_rs.second;
+        const RowsetSharedPtr& rowset = tablet_rs.second.first;
         auto st = StorageEngine::instance()->txn_manager()->publish_txn(90, tablet, 4444, version, rowset);
         // success because the related transaction is GCed
         ASSERT_TRUE(st.ok());

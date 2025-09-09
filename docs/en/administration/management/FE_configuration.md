@@ -8,6 +8,8 @@ import AdminSetFrontendNote from '../../_assets/commonMarkdown/FE_config_note.md
 
 import StaticFEConfigNote from '../../_assets/commonMarkdown/StaticFE_config_note.md'
 
+import EditionSpecificFEItem from '../../_assets/commonMarkdown/Edition_Specific_FE_Item.md'
+
 # FE Configuration
 
 <FEConfigMethod />
@@ -1169,6 +1171,18 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Description: The interval at which the Automated Cluster Snapshot tasks are triggered.
 - Introduced in: v3.4.2
 
+##### enable_table_name_case_insensitive
+
+- Default: false
+- Type: Boolean
+- Unit: -
+- Is mutable: No
+- Description: Whether to enable case-insensitive processing on catalog names, database names, table names, view names, and materialized view names. Currently, table names are case-sensitive by default.
+  - After enabling this feature, all related names will be stored in lowercase, and all SQL commands containing these names will automatically convert them to lowercase.
+  - You can enable this feature only when creating a cluster. **After the cluster is started, the value of this configuration cannot be modified by any means**. Any attempt to modify it will result in an error. FE will fail to start when it detects that the value of this configuration item is inconsistent with that when the cluster was first started.
+  - Currently, this feature does not support JDBC catalog and table names. Do not enable this feature if you want to perform case-insensitive processing on JDBC or ODBC data sources.
+- Introduced in: v4.0
+
 ### User, role, and privilege
 
 ##### privilege_max_total_roles_per_user
@@ -1944,6 +1958,24 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 - Is mutable: No
 - Description: Threshold of low cardinality dictionary.
 - Introduced in: v3.5.0
+
+##### enable_manual_collect_array_ndv
+
+- Default: false
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Whether to enable manual collection for the NDV information of the ARRAY type.
+- Introduced in: v4.0
+
+##### enable_auto_collect_array_ndv
+
+- Default: false
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Whether to enable automatic collection for the NDV information of the ARRAY type.
+- Introduced in: v4.0
 
 ### Loading and unloading
 
@@ -3461,7 +3493,7 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 
 ##### lake_enable_balance_tablets_between_workers
 
-- Default: false
+- Default: true
 - Type: Boolean
 - Unit: -
 - Is mutable: Yes
@@ -3843,15 +3875,6 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 - Unit: -
 - Is mutable: No
 - Description: The root directory of small files.
-- Introduced in: -
-
-##### enable_auth_check
-
-- Default: true
-- Type: Boolean
-- Unit: -
-- Is mutable: No
-- Description: Specifies whether to enable the authentication check feature. Valid values: `TRUE` and `FALSE`. `TRUE` specifies to enable this feature, and `FALSE` specifies to disable this feature.
 - Introduced in: -
 
 <!--
@@ -5524,7 +5547,6 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 - Description: Whether to enable prefixes with materialized view names in logs for better debug.
 - Introduced in: v3.4.0
 
-
 ##### enable_mv_post_image_reload_cache
 
 - Default: true
@@ -5542,3 +5564,14 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 - Is mutable: Yes
 - Description: Whether to allow the system to trace the historical nodes. By setting this item to `true`, you can enable the Cache Sharing feature and allow the system to choose the right cache nodes during elastic scaling.
 - Introduced in: v3.5.1
+
+##### transform_type_prefer_string_for_varchar
+
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Whether to prefer string type for fixed length varchar columns in materialized view creation and CTAS operations.
+- Introduced in: v4.0.0
+
+<EditionSpecificFEItem />

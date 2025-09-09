@@ -37,14 +37,14 @@ public class TxnStateCallbackFactory {
             return false;
         }
         callbacks.put(callback.getId(), callback);
-        LOG.info("add callback of txn state : {}. current callback size: {}",
+        LOG.debug("add callback of txn state : {}. current callback size: {}",
                 callback.getId(), callbacks.size());
         return true;
     }
 
     public synchronized void removeCallback(long id) {
         if (callbacks.remove(id) != null) {
-            LOG.info("remove callback of txn state : {}. current callback size: {}",
+            LOG.debug("remove callback of txn state : {}. current callback size: {}",
                     id, callbacks.size());
         }
     }

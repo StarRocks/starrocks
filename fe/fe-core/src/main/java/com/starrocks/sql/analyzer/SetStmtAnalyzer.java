@@ -18,17 +18,12 @@ import com.google.common.base.Enums;
 import com.google.common.base.Joiner;
 import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
-import com.starrocks.analysis.Expr;
-import com.starrocks.analysis.LiteralExpr;
-import com.starrocks.analysis.NullLiteral;
-import com.starrocks.analysis.SlotRef;
-import com.starrocks.analysis.StringLiteral;
-import com.starrocks.analysis.Subquery;
 import com.starrocks.authentication.UserAuthenticationInfo;
 import com.starrocks.catalog.ArrayType;
 import com.starrocks.catalog.IndexParams;
 import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.Type;
+import com.starrocks.catalog.UserIdentity;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.StarRocksException;
@@ -55,9 +50,15 @@ import com.starrocks.sql.ast.SetPassVar;
 import com.starrocks.sql.ast.SetStmt;
 import com.starrocks.sql.ast.SetUserPropertyVar;
 import com.starrocks.sql.ast.SystemVariable;
-import com.starrocks.sql.ast.UserIdentity;
+import com.starrocks.sql.ast.UserRef;
 import com.starrocks.sql.ast.UserVariable;
 import com.starrocks.sql.ast.ValuesRelation;
+import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.LiteralExpr;
+import com.starrocks.sql.ast.expression.NullLiteral;
+import com.starrocks.sql.ast.expression.SlotRef;
+import com.starrocks.sql.ast.expression.StringLiteral;
+import com.starrocks.sql.ast.expression.Subquery;
 import com.starrocks.sql.common.QueryDebugOptions;
 import com.starrocks.system.HeartbeatFlags;
 import com.starrocks.thrift.TCompressionType;
@@ -442,12 +443,15 @@ public class SetStmtAnalyzer {
     }
 
     private static void analyzeSetPassVar(SetPassVar var, ConnectContext session) {
-        UserIdentity userIdentity = var.getUserIdent();
-        if (userIdentity == null) {
+        UserRef user = var.getUser();
+        UserIdentity userIdentity;
+        if (user == null) {
             userIdentity = session.getCurrentUserIdentity();
+            var.setUser(new UserRef(userIdentity.getUser(), userIdentity.getHost(), userIdentity.isDomain()));
+        } else {
+            userIdentity = new UserIdentity(user.getUser(), user.getHost(), user.isDomain());
+            AuthenticationAnalyzer.analyzeUser(user);
         }
-        userIdentity.analyze();
-        var.setUserIdent(userIdentity);
 
         UserAuthenticationInfo userAuthenticationInfo =
                 GlobalStateMgr.getCurrentState().getAuthenticationMgr().getUserAuthenticationInfoByUserIdentity(userIdentity);
@@ -461,7 +465,7 @@ public class SetStmtAnalyzer {
                     userIdentity + ", AuthPlugin: " + userAuthenticationInfo.getAuthPlugin());
         }
 
-        var.setUserAuthenticationInfo(UserAuthOptionAnalyzer.analyzeAuthOption(userIdentity, var.getAuthOption()));
+        UserAuthOptionAnalyzer.analyzeAuthOption(var.getUser(), var.getAuthOption());
     }
 
     private static boolean checkUserVariableType(Type type) {

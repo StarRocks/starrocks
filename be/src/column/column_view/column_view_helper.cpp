@@ -26,6 +26,7 @@ static bool should_use_view(LogicalType ltype) {
     case TYPE_STRUCT:
     case TYPE_MAP:
     case TYPE_JSON:
+    case TYPE_VARIANT:
     case TYPE_VARCHAR:
     case TYPE_CHAR:
     case TYPE_BINARY:

@@ -31,9 +31,17 @@ public class TabletSchedulerStatTest {
         // update
         stat.counterCloneTask.incrementAndGet();
         stat.counterCloneTaskSucceeded.incrementAndGet();
+        stat.counterCloneTaskInterNodeCopyBytes.addAndGet(100L);
+        stat.counterCloneTaskIntraNodeCopyBytes.addAndGet(101L);
+        stat.counterCloneTaskInterNodeCopyDurationMs.addAndGet(10L);
+        stat.counterCloneTaskIntraNodeCopyDurationMs.addAndGet(11L);
         Assertions.assertEquals(1L, stat.counterCloneTask.get());
         Assertions.assertEquals(1L, stat.counterCloneTaskSucceeded.get());
         Assertions.assertEquals(0L, stat.counterCloneTaskFailed.get());
+        Assertions.assertEquals(100L, stat.counterCloneTaskInterNodeCopyBytes.get());
+        Assertions.assertEquals(101L, stat.counterCloneTaskIntraNodeCopyBytes.get());
+        Assertions.assertEquals(10L, stat.counterCloneTaskInterNodeCopyDurationMs.get());
+        Assertions.assertEquals(11L, stat.counterCloneTaskIntraNodeCopyDurationMs.get());
         Assertions.assertNull(stat.getLastSnapshot());
         long lastSnapShotTime = ((AtomicLong) Deencapsulation.getField(stat, "lastSnapshotTime")).get();
         Assertions.assertEquals(-1L, lastSnapShotTime);
@@ -53,7 +61,7 @@ public class TabletSchedulerStatTest {
 
         // test getBrief
         List<List<String>> infos = stat.getBrief();
-        Assertions.assertEquals(27, infos.size());
+        Assertions.assertEquals(30, infos.size());
         for (List<String> info : infos) {
             if (info.get(0).equals("num of clone task")) {
                 Assertions.assertEquals("1", info.get(1));

@@ -41,7 +41,7 @@
         <jni-connector.version>1.0.0</jni-connector.version>
         <hadoop-ext.version>1.0.0</hadoop-ext.version>
         <java-utils.version>1.0.0</java-utils.version>
-        <io.netty.version>4.1.118.Final</io.netty.version>
+        <io.netty.version>4.1.125.Final</io.netty.version>
         <protobuf-java.version>3.25.5</protobuf-java.version>
         <nimbusds.version>9.37.2</nimbusds.version>
         <commons-io.version>2.14.0</commons-io.version>
@@ -535,10 +535,6 @@
                                 <fileSet>
                                     <sourceFile>../fe/checkstyle.xml</sourceFile>
                                     <destinationFile>./checkstyle.xml</destinationFile>
-                                </fileSet>
-                                <fileSet>
-                                    <sourceFile>../fe/checkstyle-header.txt</sourceFile>
-                                    <destinationFile>./checkstyle-header.txt</destinationFile>
                                 </fileSet>
                             </fileSets>
                         </configuration>

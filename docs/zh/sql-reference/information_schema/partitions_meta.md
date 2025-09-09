@@ -40,3 +40,4 @@ displayed_sidebar: docs
 | STORAGE_PATH                  | 分区的存储路径。                                 |
 | STORAGE_SIZE                  | 分区的存储大小。                                 |
 | METADATA_SWITCH_VERSION       | 分区的元数据切换版本。                           |
+| TABLET_BALANCED               | 分区的 Tablet 分布是否均衡。                     |

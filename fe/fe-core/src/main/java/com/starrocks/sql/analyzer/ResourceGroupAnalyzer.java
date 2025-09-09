@@ -15,17 +15,20 @@
 package com.starrocks.sql.analyzer;
 
 import com.google.common.base.Splitter;
-import com.starrocks.analysis.BinaryPredicate;
-import com.starrocks.analysis.BinaryType;
-import com.starrocks.analysis.Expr;
-import com.starrocks.analysis.InPredicate;
-import com.starrocks.analysis.Predicate;
-import com.starrocks.analysis.SlotRef;
-import com.starrocks.analysis.StringLiteral;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.ResourceGroup;
 import com.starrocks.catalog.ResourceGroupClassifier;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.AlterResourceGroupStmt;
+import com.starrocks.sql.ast.CreateResourceGroupStmt;
+import com.starrocks.sql.ast.DropResourceGroupStmt;
+import com.starrocks.sql.ast.expression.BinaryPredicate;
+import com.starrocks.sql.ast.expression.BinaryType;
+import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.InPredicate;
+import com.starrocks.sql.ast.expression.Predicate;
+import com.starrocks.sql.ast.expression.SlotRef;
+import com.starrocks.sql.ast.expression.StringLiteral;
 import com.starrocks.system.BackendResourceStat;
 import com.starrocks.thrift.TWorkGroupType;
 import org.apache.commons.collections.CollectionUtils;
@@ -275,6 +278,93 @@ public class ResourceGroupAnalyzer {
             }
 
             throw new SemanticException("Unknown property: " + key);
+        }
+    }
+
+    /**
+     * Analyze CreateResourceGroupStmt for validation only
+     * The actual ResourceGroup construction is now handled by ResourceGroupBuilder
+     */
+    public static void analyzeCreateResourceGroupStmt(CreateResourceGroupStmt stmt) throws SemanticException {
+        // Validate classifiers by converting them (this validates the syntax and format)
+        for (List<Predicate> predicates : stmt.getClassifiers()) {
+            convertPredicateToClassifier(predicates);
+        }
+
+        // Create a temporary ResourceGroup to validate properties
+        ResourceGroup tempResourceGroup = new ResourceGroup();
+        analyzeProperties(tempResourceGroup, stmt.getProperties());
+
+        // Validate required properties exist
+        if (tempResourceGroup.getMemLimit() == null) {
+            throw new SemanticException("property 'mem_limit' is absent");
+        }
+
+        // Set default type if not specified for validation
+        if (tempResourceGroup.getResourceGroupType() == null) {
+            tempResourceGroup.setResourceGroupType(TWorkGroupType.WG_NORMAL);
+        }
+
+        // Validate short query resource group constraints
+        if (tempResourceGroup.getResourceGroupType() == TWorkGroupType.WG_SHORT_QUERY &&
+                (tempResourceGroup.getExclusiveCpuCores() != null && tempResourceGroup.getExclusiveCpuCores() > 0)) {
+            throw new SemanticException("short query resource group should not set exclusive_cpu_cores");
+        }
+
+        // Validate CPU parameters
+        ResourceGroup.validateCpuParameters(tempResourceGroup.getRawCpuWeight(), tempResourceGroup.getExclusiveCpuCores());
+    }
+
+    /**
+     * Analyze AlterResourceGroupStmt for validation only
+     * The actual ResourceGroup modification is now handled by ResourceGroupBuilder
+     */
+    public static void analyzeAlterResourceGroupStmt(AlterResourceGroupStmt stmt) throws SemanticException {
+        String name = stmt.getName();
+        AlterResourceGroupStmt.SubCommand cmd = stmt.getCmd();
+
+        // Validate classifiers by converting them (this validates the syntax and format)
+        if (cmd instanceof AlterResourceGroupStmt.AddClassifiers addClassifiers) {
+            for (List<Predicate> predicates : addClassifiers.getClassifiers()) {
+                convertPredicateToClassifier(predicates);
+            }
+        } else if (cmd instanceof AlterResourceGroupStmt.AlterProperties alterProperties) {
+            // Create a temporary ResourceGroup to validate properties
+            ResourceGroup tempResourceGroup = new ResourceGroup();
+            analyzeProperties(tempResourceGroup, alterProperties.getProperties());
+            
+            // Validate that type cannot be changed
+            if (tempResourceGroup.getResourceGroupType() != null) {
+                throw new SemanticException("type of ResourceGroup is immutable");
+            }
+            
+            // Validate that at least one property is specified
+            if (tempResourceGroup.getRawCpuWeight() == null &&
+                    tempResourceGroup.getExclusiveCpuCores() == null &&
+                    tempResourceGroup.getMemLimit() == null &&
+                    tempResourceGroup.getConcurrencyLimit() == null &&
+                    tempResourceGroup.getMaxCpuCores() == null &&
+                    tempResourceGroup.getBigQueryCpuSecondLimit() == null &&
+                    tempResourceGroup.getBigQueryMemLimit() == null &&
+                    tempResourceGroup.getBigQueryScanRowsLimit() == null &&
+                    tempResourceGroup.getSpillMemLimitThreshold() == null) {
+                throw new SemanticException("At least one of ('cpu_weight','exclusive_cpu_cores','mem_limit'," +
+                        "'max_cpu_cores','concurrency_limit','big_query_mem_limit', 'big_query_scan_rows_limit'," +
+                        "'big_query_cpu_second_limit','spill_mem_limit_threshold') " +
+                        "should be specified");
+            }
+        }
+
+        // Validate builtin resource group constraints
+        if (ResourceGroup.BUILTIN_WG_NAMES.contains(name) && !(cmd instanceof AlterResourceGroupStmt.AlterProperties)) {
+            throw new SemanticException(String.format("cannot alter classifiers of builtin resource group [%s]", name));
+        }
+    }
+
+    public static void analyzeDropResourceGroupStmt(DropResourceGroupStmt stmt) throws SemanticException {
+        String name = stmt.getName();
+        if (ResourceGroup.BUILTIN_WG_NAMES.contains(name)) {
+            throw new SemanticException(String.format("cannot drop builtin resource group [%s]", name));
         }
     }
 }

@@ -50,6 +50,7 @@ under the License.
         <jackson.version>2.18.3</jackson.version>
         <avro.version>1.11.4</avro.version>
         <jetty.version>9.4.57.v20241219</jetty.version>
+        <io.netty.version>4.1.125.Final</io.netty.version>
     </properties>
 
     <profiles>
@@ -205,8 +206,8 @@ under the License.
 
             <dependency>
                 <groupId>io.netty</groupId>
-                <artifactId>netty-handler</artifactId>
-                <version>4.1.118.Final</version>
+                <artifactId>netty-all</artifactId>
+                <version>${io.netty.version}</version>
             </dependency>
 
             <!-- https://mvnrepository.com/artifact/org.apache.hadoop/hadoop-auth -->
@@ -229,8 +230,8 @@ under the License.
                 <version>${zookeeper.version}</version>
                 <exclusions>
                     <exclusion>
-                        <artifactId>io.netty</artifactId>
-                        <groupId>netty-handler</groupId>
+                        <groupId>io.netty</groupId>
+                        <artifactId>*</artifactId>
                     </exclusion>
                 </exclusions>
             </dependency>
@@ -256,6 +257,10 @@ under the License.
                         <groupId>org.eclipse.jetty</groupId>
                         <artifactId>jetty-server</artifactId>
                     </exclusion>
+                    <exclusion>
+                        <groupId>io.netty</groupId>
+                        <artifactId>*</artifactId>
+                    </exclusion>
                 </exclusions>
             </dependency>
 
@@ -274,6 +279,10 @@ under the License.
                     <exclusion>
                         <artifactId>com.fasterxml.jackson.core</artifactId>
                         <groupId>jackson-databind</groupId>
+                    </exclusion>
+                    <exclusion>
+                        <groupId>io.netty</groupId>
+                        <artifactId>*</artifactId>
                     </exclusion>
                 </exclusions>
             </dependency>

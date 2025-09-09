@@ -117,11 +117,12 @@ Status GlobalDictDecoderBase<Dict>::decode_string(const Column* in, Column* out)
     if (!in->is_nullable()) {
         auto* res_column = down_cast<StringColumnType*>(out);
         const auto* column = down_cast<const DictColumnType*>(in);
+        const auto dict_data = column->immutable_data();
 
         const size_t num_rows = in->size();
         std::vector<StringCppType> res_slices(num_rows);
         for (size_t i = 0; i < num_rows; i++) {
-            DictCppType key = column->get_data()[i];
+            DictCppType key = dict_data[i];
             auto iter = _dict.find(key);
             if (iter == _dict.end()) {
                 return Status::InternalError(fmt::format("Dict Decode failed, Dict can't take cover all key :{}", key));
@@ -139,12 +140,13 @@ Status GlobalDictDecoderBase<Dict>::decode_string(const Column* in, Column* out)
 
     auto* res_data_column = down_cast<StringColumnType*>(res_column->data_column().get());
     const auto* data_column = down_cast<const DictColumnType*>(column->data_column().get());
+    const auto dict_data = data_column->immutable_data();
 
     const size_t num_rows = in->size();
     std::vector<StringCppType> res_slices(num_rows);
     for (size_t i = 0; i < num_rows; i++) {
         if (column->null_column_data()[i] == 0) {
-            DictCppType key = data_column->get_data()[i];
+            DictCppType key = dict_data[i];
             auto iter = _dict.find(key);
             if (iter == _dict.end()) {
                 return Status::InternalError(fmt::format("Dict Decode failed, Dict can't take cover all key :{}", key));

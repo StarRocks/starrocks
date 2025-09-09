@@ -15,11 +15,11 @@
 package com.starrocks.qe.scheduler.dag;
 
 import com.google.common.base.Preconditions;
-import com.starrocks.analysis.DescriptorTable;
 import com.starrocks.catalog.ResourceGroupClassifier;
 import com.starrocks.common.util.CompressionUtils;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.load.loadv2.BulkLoadJob;
+import com.starrocks.planner.DescriptorTable;
 import com.starrocks.planner.PlanFragment;
 import com.starrocks.planner.ScanNode;
 import com.starrocks.planner.SchemaScanNode;

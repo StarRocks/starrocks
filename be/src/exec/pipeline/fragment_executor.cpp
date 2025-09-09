@@ -676,7 +676,8 @@ Status FragmentExecutor::_prepare_stream_load_pipe(ExecEnv* exec_env, const Unif
                             delete ctx;
                         }
                     });
-                    RETURN_IF_ERROR(exec_env->stream_context_mgr()->put_channel_context(label, channel_id, ctx));
+                    RETURN_IF_ERROR(
+                            exec_env->stream_context_mgr()->put_channel_context(label, table_name, channel_id, ctx));
                 }
                 stream_load_contexts.push_back(ctx);
             }
@@ -854,7 +855,7 @@ Status FragmentExecutor::prepare(ExecEnv* exec_env, const TExecPlanFragmentParam
             auto fragment_ctx = _query_ctx->fragment_mgr()->get(request.fragment_instance_id());
             auto* profile = fragment_ctx->runtime_state()->runtime_profile();
 
-            auto* prepare_timer = ADD_TIMER_WITH_THRESHOLD(profile, "FragmentInstancePrepareTime", 10_ms);
+            auto* prepare_timer = ADD_TIMER_WITH_THRESHOLD(profile, "FragmentInstancePrepareTime", 1_ms);
             COUNTER_SET(prepare_timer, profiler.prepare_time);
 
             auto* prepare_query_ctx_timer =
@@ -975,7 +976,8 @@ void FragmentExecutor::_fail_cleanup(bool fragment_has_registed) {
     }
 }
 
-Status FragmentExecutor::append_incremental_scan_ranges(ExecEnv* exec_env, const TExecPlanFragmentParams& request) {
+Status FragmentExecutor::append_incremental_scan_ranges(ExecEnv* exec_env, const TExecPlanFragmentParams& request,
+                                                        TExecPlanFragmentResult* response) {
     DCHECK(!request.__isset.fragment);
     DCHECK(request.__isset.params);
     const TPlanFragmentExecParams& params = request.params;
@@ -996,6 +998,7 @@ Status FragmentExecutor::append_incremental_scan_ranges(ExecEnv* exec_env, const
     RuntimeState* runtime_state = fragment_ctx->runtime_state();
 
     std::unordered_set<int> notify_ids;
+    std::vector<int32_t> closed_scan_nodes;
 
     for (const auto& [node_id, scan_ranges] : params.per_node_scan_ranges) {
         if (scan_ranges.size() == 0) continue;
@@ -1019,6 +1022,10 @@ Status FragmentExecutor::append_incremental_scan_ranges(ExecEnv* exec_env, const
         RETURN_IF_ERROR(morsel_queue_factory->append_morsels(0, std::move(morsels)));
         morsel_queue_factory->set_has_more(has_more_morsel);
         notify_ids.insert(node_id);
+
+        if (morsel_queue_factory->reach_limit()) {
+            closed_scan_nodes.push_back(node_id);
+        }
     }
 
     if (params.__isset.node_to_per_driver_seq_scan_ranges) {
@@ -1047,6 +1054,14 @@ Status FragmentExecutor::append_incremental_scan_ranges(ExecEnv* exec_env, const
             }
             morsel_queue_factory->set_has_more(has_more_morsel);
             notify_ids.insert(node_id);
+
+            if (morsel_queue_factory->reach_limit()) {
+                closed_scan_nodes.push_back(node_id);
+            }
+        }
+
+        if (closed_scan_nodes.size() > 0) {
+            response->__set_closed_scan_nodes(closed_scan_nodes);
         }
     }
 

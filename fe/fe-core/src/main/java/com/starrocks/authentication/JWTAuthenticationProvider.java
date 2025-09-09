@@ -15,10 +15,9 @@
 package com.starrocks.authentication;
 
 import com.nimbusds.jose.jwk.JWKSet;
+import com.starrocks.catalog.UserIdentity;
 import com.starrocks.mysql.MysqlCodec;
-import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.sql.ast.UserIdentity;
 
 import java.nio.ByteBuffer;
 
@@ -42,7 +41,7 @@ public class JWTAuthenticationProvider implements AuthenticationProvider {
     }
 
     @Override
-    public void authenticate(ConnectContext context, UserIdentity userIdentity, byte[] authResponse)
+    public void authenticate(AuthenticationContext authContext, UserIdentity userIdentity, byte[] authResponse)
             throws AuthenticationException {
         try {
             ByteBuffer authBuffer = ByteBuffer.wrap(authResponse);
@@ -52,7 +51,7 @@ public class JWTAuthenticationProvider implements AuthenticationProvider {
             JWKSet jwkSet = GlobalStateMgr.getCurrentState().getJwkMgr().getJwkSet(jwksUrl);
             OpenIdConnectVerifier.verify(new String(idToken), userIdentity.getUser(), jwkSet, principalFiled, requiredIssuer,
                     requiredAudience);
-            context.setAuthToken(new String(idToken));
+            authContext.setAuthToken(new String(idToken));
         } catch (Exception e) {
             throw new AuthenticationException(e.getMessage());
         }

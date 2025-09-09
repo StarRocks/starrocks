@@ -17,14 +17,15 @@ package com.starrocks.authorization;
 
 import com.google.common.collect.Lists;
 import com.google.gson.stream.JsonReader;
-import com.starrocks.analysis.TableName;
 import com.starrocks.authentication.AuthenticationMgr;
 import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.catalog.Table;
+import com.starrocks.catalog.UserIdentity;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorReportException;
 import com.starrocks.common.StarRocksException;
+import com.starrocks.connector.iceberg.hive.IcebergHiveCatalog;
 import com.starrocks.persist.ImageWriter;
 import com.starrocks.persist.OperationType;
 import com.starrocks.persist.RolePrivilegeCollectionInfo;
@@ -49,6 +50,7 @@ import com.starrocks.sql.ast.CreateUserStmt;
 import com.starrocks.sql.ast.DataDescription;
 import com.starrocks.sql.ast.GrantPrivilegeStmt;
 import com.starrocks.sql.ast.GrantRoleStmt;
+import com.starrocks.sql.ast.GrantType;
 import com.starrocks.sql.ast.RevokePrivilegeStmt;
 import com.starrocks.sql.ast.RevokeRoleStmt;
 import com.starrocks.sql.ast.SetRoleStmt;
@@ -56,11 +58,13 @@ import com.starrocks.sql.ast.ShowDbStmt;
 import com.starrocks.sql.ast.ShowGrantsStmt;
 import com.starrocks.sql.ast.ShowTableStmt;
 import com.starrocks.sql.ast.StatementBase;
-import com.starrocks.sql.ast.UserIdentity;
+import com.starrocks.sql.ast.UserRef;
+import com.starrocks.sql.ast.expression.TableName;
 import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Mock;
 import mockit.MockUp;
+import mockit.Mocked;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
@@ -902,7 +906,10 @@ public class AuthorizationMgrTest {
         CreateUserStmt createUserStmt = (CreateUserStmt) UtFrameUtils.parseStmtWithNewParser(
                 "create user test_role_user", ctx);
         ctx.getGlobalStateMgr().getAuthenticationMgr().createUser(createUserStmt);
-        UserIdentity testUser = createUserStmt.getUserIdentity();
+
+        UserRef user = createUserStmt.getUser();
+        UserIdentity testUser = new UserIdentity(user.getUser(), user.getHost(), user.isDomain());
+
         AuthorizationMgr manager = ctx.getGlobalStateMgr().getAuthorizationMgr();
         setCurrentUserAndRoles(ctx, UserIdentity.ROOT);
 
@@ -1559,7 +1566,7 @@ public class AuthorizationMgrTest {
     }
 
     @Test
-    public void testGrantOnCatalog() throws Exception {
+    public void testGrantOnCatalog(@Mocked IcebergHiveCatalog hiveCatalog) throws Exception {
         DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
                 "create external catalog test_catalog properties (" +
                         "\"type\"=\"iceberg\", \"iceberg.catalog.type\"=\"hive\")", ctx), ctx);
@@ -1594,6 +1601,47 @@ public class AuthorizationMgrTest {
         new NativeAccessController().checkCatalogAction(ctx,
                 InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
                 PrivilegeType.CREATE_DATABASE);
+    }
+
+    @Test
+    public void testRefreshTablePrivilege(@Mocked IcebergHiveCatalog hiveCatalog) throws Exception {
+        DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
+                "create external catalog test_catalog properties (" +
+                        "\"type\"=\"iceberg\", \"iceberg.catalog.type\"=\"hive\")", ctx), ctx);
+        ctx.setCurrentCatalog("test_catalog");
+        // set up user
+        setCurrentUserAndRoles(ctx, testUser);
+        ctx.setQualifiedUser(testUser.getUser());
+        AuthorizationMgr manager = ctx.getGlobalStateMgr().getAuthorizationMgr();
+
+        // throw AccessDeniedException if user has no REFRESH privilege
+        Assertions.assertThrows(AccessDeniedException.class, () ->
+                Authorizer.checkTableAction(ctx, "test_catalog", DB_NAME, TABLE_NAME_1, PrivilegeType.REFRESH)
+        );
+
+        // grant REFRESH privilege
+        setCurrentUserAndRoles(ctx, UserIdentity.ROOT);
+        String grantSql = "grant REFRESH on table " + DB_NAME + "." + TABLE_NAME_1 + " to test_user";
+        GrantPrivilegeStmt grantStmt = (GrantPrivilegeStmt) UtFrameUtils.parseStmtWithNewParser(grantSql, ctx);
+        manager.grant(grantStmt);
+
+        // verify REFRESH privilege
+        setCurrentUserAndRoles(ctx, testUser);
+        Authorizer.checkTableAction(ctx, "test_catalog", DB_NAME, TABLE_NAME_1, PrivilegeType.REFRESH);
+
+        // revoke REFRESH privilege
+        setCurrentUserAndRoles(ctx, UserIdentity.ROOT);
+        String revokeSql = "revoke REFRESH on table " + DB_NAME + "." + TABLE_NAME_1 + " from test_user";
+        RevokePrivilegeStmt revokeStmt = (RevokePrivilegeStmt) UtFrameUtils.parseStmtWithNewParser(revokeSql, ctx);
+        manager.revoke(revokeStmt);
+
+        // verify no REFRESH privilege
+        setCurrentUserAndRoles(ctx, testUser);
+        Assertions.assertThrows(AccessDeniedException.class, () ->
+                Authorizer.checkTableAction(ctx, "test_catalog", DB_NAME, TABLE_NAME_1, PrivilegeType.REFRESH)
+        );
+
+        DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser("drop catalog test_catalog", ctx), ctx);
     }
 
     @Test

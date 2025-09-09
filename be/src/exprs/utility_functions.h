@@ -67,6 +67,9 @@ public:
 
     // Build a equi-width histogram
     DEFINE_VECTORIZED_FN(equiwidth_bucket);
+
+    // Build an order-preserving composite binary key from heterogeneous arguments
+    DEFINE_VECTORIZED_FN(encode_sort_key);
 };
 
 } // namespace starrocks

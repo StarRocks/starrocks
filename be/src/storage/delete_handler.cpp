@@ -90,12 +90,12 @@ Status DeleteConditionHandler::generate_delete_predicate(const TabletSchema& sch
                 in_pred->add_values(condition_value);
             }
 
-            LOG(INFO) << "store one sub-delete condition. condition name=" << in_pred->column_name()
-                      << ",condition size=" << in_pred->values().size();
+            VLOG(3) << "store one sub-delete condition. condition name=" << in_pred->column_name()
+                    << ",condition size=" << in_pred->values().size();
         } else {
             string condition_str = construct_sub_predicates(condition);
             del_pred->add_sub_predicates(condition_str);
-            LOG(INFO) << "store one sub-delete condition. condition=" << condition_str;
+            VLOG(3) << "store one sub-delete condition. condition=" << condition_str;
         }
     }
     del_pred->set_version(-1);

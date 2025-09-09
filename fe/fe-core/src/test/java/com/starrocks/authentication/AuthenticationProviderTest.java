@@ -14,6 +14,7 @@
 
 package com.starrocks.authentication;
 
+import com.starrocks.catalog.UserIdentity;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.mysql.MysqlAuthPacket;
@@ -30,7 +31,7 @@ import com.starrocks.sql.analyzer.Analyzer;
 import com.starrocks.sql.analyzer.UserAuthOptionAnalyzer;
 import com.starrocks.sql.ast.CreateUserStmt;
 import com.starrocks.sql.ast.UserAuthOption;
-import com.starrocks.sql.ast.UserIdentity;
+import com.starrocks.sql.ast.UserRef;
 import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.sql.parser.SqlParser;
 import mockit.Mock;
@@ -52,31 +53,35 @@ public class AuthenticationProviderTest {
 
     @Test
     public void testAuthentication() throws Exception {
-        UserIdentity testUser = UserIdentity.createAnalyzedUserIdentWithIp("test", "%");
+        UserRef testUser = new UserRef("test", "%");
+        UserIdentity testUserIdentity = UserIdentity.createAnalyzedUserIdentWithIp("test", "%");
+
         String[] passwords = {"asdf123", "starrocks", "testtest"};
         byte[] seed = "petals on a wet black bough".getBytes(StandardCharsets.UTF_8);
         ctx.setAuthDataSalt(seed);
 
         for (String password : passwords) {
             UserAuthOption userAuthOption = new UserAuthOption(null, password, true, NodePosition.ZERO);
-            UserAuthenticationInfo info = UserAuthOptionAnalyzer.analyzeAuthOption(testUser, userAuthOption);
+            UserAuthOptionAnalyzer.analyzeAuthOption(testUser, userAuthOption);
+            UserAuthenticationInfo info = new UserAuthenticationInfo(testUser, userAuthOption);
             PlainPasswordAuthenticationProvider provider = (PlainPasswordAuthenticationProvider) AuthenticationProviderFactory
                     .create(info.getAuthPlugin(), new String(info.getPassword()));
 
             byte[] scramble = MysqlPassword.scramble(seed, password);
-            provider.authenticate(ctx, testUser, scramble);
+            provider.authenticate(ctx.getAuthenticationContext(), testUserIdentity, scramble);
         }
 
         // no password
         PlainPasswordAuthenticationProvider provider = new PlainPasswordAuthenticationProvider(MysqlPassword.EMPTY_PASSWORD);
-        UserAuthenticationInfo info = UserAuthOptionAnalyzer.analyzeAuthOption(testUser, null);
+        UserAuthOptionAnalyzer.analyzeAuthOption(testUser, null);
+        UserAuthenticationInfo info = new UserAuthenticationInfo(testUser, null);
         ctx.setAuthDataSalt(new byte[0]);
-        provider.authenticate(ctx, testUser, new byte[0]);
+        provider.authenticate(ctx.getAuthenticationContext(), testUserIdentity, new byte[0]);
         try {
             ctx.setAuthDataSalt("x".getBytes(StandardCharsets.UTF_8));
             provider.authenticate(
-                    ctx,
-                    testUser,
+                    ctx.getAuthenticationContext(),
+                    testUserIdentity,
                     "xx".getBytes(StandardCharsets.UTF_8));
             Assertions.fail();
         } catch (AuthenticationException e) {
@@ -86,14 +91,15 @@ public class AuthenticationProviderTest {
         byte[] p = MysqlPassword.makeScrambledPassword("bb");
 
         UserAuthOption userAuthOption = new UserAuthOption(null, new String(p, StandardCharsets.UTF_8), false, NodePosition.ZERO);
-        info = UserAuthOptionAnalyzer.analyzeAuthOption(testUser, userAuthOption);
+        UserAuthOptionAnalyzer.analyzeAuthOption(testUser, userAuthOption);
+        info = new UserAuthenticationInfo(testUser, userAuthOption);
 
         provider = new PlainPasswordAuthenticationProvider(info.getPassword());
         try {
             ctx.setAuthDataSalt(seed);
             provider.authenticate(
-                    ctx,
-                    testUser,
+                    ctx.getAuthenticationContext(),
+                    testUserIdentity,
                     MysqlPassword.scramble(seed, "xx"));
             Assertions.fail();
         } catch (AuthenticationException e) {
@@ -103,8 +109,8 @@ public class AuthenticationProviderTest {
         try {
             ctx.setAuthDataSalt(seed);
             provider.authenticate(
-                    ctx,
-                    testUser,
+                    ctx.getAuthenticationContext(),
+                    testUserIdentity,
                     MysqlPassword.scramble(seed, "bb"));
 
         } catch (AuthenticationException e) {
@@ -115,8 +121,8 @@ public class AuthenticationProviderTest {
             byte[] remotePassword = "bb".getBytes(StandardCharsets.UTF_8);
             ctx.setAuthDataSalt(null);
             provider.authenticate(
-                    ctx,
-                    testUser,
+                    ctx.getAuthenticationContext(),
+                    testUserIdentity,
                     remotePassword);
 
         } catch (AuthenticationException e) {

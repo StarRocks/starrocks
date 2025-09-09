@@ -14,8 +14,8 @@
 
 package com.starrocks.qe.feedback.guide;
 
-import com.starrocks.analysis.JoinOperator;
 import com.starrocks.qe.feedback.skeleton.JoinNode;
+import com.starrocks.sql.ast.expression.JoinOperator;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.base.DistributionProperty;
 import com.starrocks.sql.optimizer.base.DistributionSpec;

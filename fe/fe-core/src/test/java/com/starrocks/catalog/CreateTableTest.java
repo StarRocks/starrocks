@@ -38,7 +38,6 @@ import com.google.api.client.util.Lists;
 import com.google.common.collect.HashMultimap;
 import com.google.common.collect.ImmutableMap;
 import com.starrocks.alter.AlterJobException;
-import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.catalog.constraint.UniqueConstraint;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
@@ -63,6 +62,7 @@ import com.starrocks.sql.ast.AlterTableStmt;
 import com.starrocks.sql.ast.CreateDbStmt;
 import com.starrocks.sql.ast.CreateTableStmt;
 import com.starrocks.sql.ast.ShowCreateTableStmt;
+import com.starrocks.sql.ast.expression.LiteralExpr;
 import com.starrocks.system.Backend;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.utframe.StarRocksAssert;
@@ -1131,7 +1131,7 @@ public class CreateTableTest {
     }
 
     @Test
-    public void testCreateVarBinaryTable() {
+    public void testCreateVarBinaryTable() throws Exception {
         // duplicate table
         ExceptionChecker.expectThrowsNoException(() -> createTable(
                 "create table test.varbinary_tbl\n" +
@@ -1174,20 +1174,16 @@ public class CreateTableTest {
                 "distributed by hash(k1) buckets 1\n" + "properties('replication_num' = '1');"));
 
         // failed
-        ExceptionChecker.expectThrowsWithMsg(AnalysisException.class,
-                "Invalid data type of key column 'k2': 'VARBINARY'",
-                () -> createTable("create table test.varbinary_tbl0\n"
+        createTable("create table test.varbinary_tbl00\n"
                         + "(k1 int, k2 varbinary)\n"
                         + "duplicate key(k1, k2)\n"
                         + "distributed by hash(k1) buckets 1\n"
-                        + "properties('replication_num' = '1');"));
-        ExceptionChecker.expectThrowsWithMsg(DdlException.class,
-                "VARBINARY(10) column can not be distribution column",
-                () -> createTable("create table test.varbinary_tbl0 \n"
+                + "properties('replication_num' = '1');");
+        createTable("create table test.varbinary_tbl01 \n"
                         + "(k1 int, k2 varbinary(10) )\n"
                         + "duplicate key(k1)\n"
                         + "distributed by hash(k2) buckets 1\n"
-                        + "properties('replication_num' = '1');"));
+                + "properties('replication_num' = '1');");
         ExceptionChecker.expectThrowsWithMsg(DdlException.class,
                 "Column[j] type[VARBINARY] cannot be a range partition key",
                 () -> createTable("create table test.varbinary_tbl0 \n" +
@@ -1199,7 +1195,7 @@ public class CreateTableTest {
     }
 
     @Test
-    public void testCreateBinaryTable() {
+    public void testCreateBinaryTable() throws Exception {
         // duplicate table
         ExceptionChecker.expectThrowsNoException(() -> createTable(
                 "create table test.binary_tbl\n" +
@@ -1242,20 +1238,16 @@ public class CreateTableTest {
                 "distributed by hash(k1) buckets 1\n" + "properties('replication_num' = '1');"));
 
         // failed
-        ExceptionChecker.expectThrowsWithMsg(AnalysisException.class,
-                "Invalid data type of key column 'k2': 'VARBINARY'",
-                () -> createTable("create table test.binary_tbl0\n"
+        createTable("create table test.binary_tbl01\n"
                         + "(k1 int, k2 binary)\n"
                         + "duplicate key(k1, k2)\n"
                         + "distributed by hash(k1) buckets 1\n"
-                        + "properties('replication_num' = '1');"));
-        ExceptionChecker.expectThrowsWithMsg(DdlException.class,
-                "VARBINARY(10) column can not be distribution column",
-                () -> createTable("create table test.binary_tbl0 \n"
+                + "properties('replication_num' = '1');");
+        createTable("create table test.binary_tbl11 \n"
                         + "(k1 int, k2 binary(10) )\n"
                         + "duplicate key(k1)\n"
                         + "distributed by hash(k2) buckets 1\n"
-                        + "properties('replication_num' = '1');"));
+                + "properties('replication_num' = '1');");
         ExceptionChecker.expectThrowsWithMsg(DdlException.class,
                 "Column[j] type[VARBINARY] cannot be a range partition key",
                 () -> createTable("create table test.binary_tbl0 \n" +

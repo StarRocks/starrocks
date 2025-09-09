@@ -19,7 +19,6 @@ import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Streams;
-import com.starrocks.analysis.FunctionParams;
 import com.starrocks.catalog.AggregateFunction;
 import com.starrocks.catalog.AnyArrayType;
 import com.starrocks.catalog.AnyElementType;
@@ -40,6 +39,7 @@ import com.starrocks.common.FeConstants;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.FunctionAnalyzer;
+import com.starrocks.sql.ast.expression.FunctionParams;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MVTestBase;
 import com.starrocks.sql.optimizer.statistics.EmptyStatisticStorage;
 import com.starrocks.sql.parser.NodePosition;
@@ -104,8 +104,7 @@ public class AggStateCombinatorTest extends MVTestBase {
             if (!(func instanceof AggregateFunction)) {
                 continue;
             }
-            if ((func instanceof AggStateMergeCombinator) || (func instanceof AggStateUnionCombinator) ||
-                    (func instanceof AggStateIf)) {
+            if (AggStateUtils.isAggStateCombinator(func)) {
                 continue;
             }
             builtInAggregateFunctions.add((AggregateFunction) func);
@@ -128,7 +127,7 @@ public class AggStateCombinatorTest extends MVTestBase {
         } else if (type instanceof AnyMapType) {
             return new MapType(Type.STRING, Type.STRING);
         } else if (type instanceof AnyStructType) {
-            Type[] argsTypes = {Type.STRING};
+            Type[] argsTypes = { Type.STRING };
             ArrayList<Type> structTypes = new ArrayList<>();
             for (Type t : argsTypes) {
                 structTypes.add(new ArrayType(t));
@@ -345,12 +344,24 @@ public class AggStateCombinatorTest extends MVTestBase {
             if (FunctionSet.UNSUPPORTED_AGG_STATE_FUNCTIONS.contains(aggFunc.functionName())) {
                 continue;
             }
+            // merge combinator
             var mergeCombinator = AggStateMergeCombinator.of(aggFunc);
             Assertions.assertTrue(mergeCombinator.isPresent());
+            // union combinator
             var unionCombinator = AggStateUnionCombinator.of(aggFunc);
             Assertions.assertTrue(unionCombinator.isPresent());
+            // if combinator
             var ifCombinator = AggStateIf.of(aggFunc);
             Assertions.assertTrue(ifCombinator.isPresent());
+            // combine combinator
+            var combineCombinator = AggStateCombineCombinator.of(aggFunc);
+            Assertions.assertTrue(combineCombinator.isPresent());
+            // agg union state combinator
+            var stateUnionCombinator = StateUnionCombinator.of(aggFunc);
+            Assertions.assertTrue(stateUnionCombinator.isPresent());
+            // agg merge state combinator
+            var stateMergeCombinator = StateMergeCombinator.of(aggFunc);
+            Assertions.assertTrue(stateMergeCombinator.isPresent());
         }
     }
 
@@ -367,7 +378,7 @@ public class AggStateCombinatorTest extends MVTestBase {
             supportedAggFunctions.add(aggFunc.functionName());
             Function result = getAggStateFunc(aggFunc);
             Assertions.assertNotNull(result);
-            Assertions.assertTrue(result instanceof AggStateCombinator);
+            Assertions.assertTrue(result instanceof StateFunctionCombinator);
             Assertions.assertFalse(result.getReturnType().isWildcardDecimal());
             Assertions.assertFalse(result.getReturnType().isPseudoType());
         }
@@ -393,8 +404,8 @@ public class AggStateCombinatorTest extends MVTestBase {
             List<Type> argTypes = Stream.of(aggFunc.getArgs()).map(this::mockType).collect(Collectors.toList());
             intermediateType.setAggStateDesc(new AggStateDesc(aggFunc.functionName(),
                     aggFunc.getReturnType(), argTypes));
-            Type[] argumentTypes = {intermediateType};
-            Boolean[] argArgumentConstants = {false};
+            Type[] argumentTypes = { intermediateType };
+            Boolean[] argArgumentConstants = { false };
 
             Function result = FunctionAnalyzer.getAnalyzedAggregateFunction(ConnectContext.get(),
                     aggStateFuncName, params, argumentTypes, argArgumentConstants, NodePosition.ZERO);
@@ -424,8 +435,8 @@ public class AggStateCombinatorTest extends MVTestBase {
             List<Type> argTypes = Stream.of(aggFunc.getArgs()).map(this::mockType).collect(Collectors.toList());
             intermediateType.setAggStateDesc(new AggStateDesc(aggFunc.functionName(),
                     aggFunc.getReturnType(), argTypes));
-            Type[] argumentTypes = {intermediateType};
-            Boolean[] argArgumentConstants = {false};
+            Type[] argumentTypes = { intermediateType };
+            Boolean[] argArgumentConstants = { false };
 
             String aggStateFuncName = FunctionSet.getAggStateMergeName(aggFunc.functionName());
             FunctionParams params = new FunctionParams(false, Lists.newArrayList());
@@ -915,8 +926,8 @@ public class AggStateCombinatorTest extends MVTestBase {
                     + " from test_agg_state_table group by k1;";
             String plan = UtFrameUtils.getVerboseFragmentPlan(starRocksAssert.getCtx(), sql1);
             PlanTestBase.assertContains(plan, "|  aggregate: array_agg_union[([2: v0, " +
-                    "struct<col1 array<varchar(100)>>, true]); args: INVALID_TYPE; result: " +
-                    "struct<col1 array<varchar(100)>>; args nullable: true; result nullable: true]");
+                    "struct<col1 array<varchar(1048576)>>, true]); args: INVALID_TYPE; " +
+                    "result: struct<col1 array<varchar(100)>>; args nullable: true; result nullable: true]");
             PlanTestBase.assertContains(plan, " 0:OlapScanNode\n" +
                     "     table: test_agg_state_table, rollup: test_agg_state_table");
         }
@@ -926,8 +937,8 @@ public class AggStateCombinatorTest extends MVTestBase {
             String sql1 = "select k1, " + Joiner.on(", ").join(mergeColumns)
                     + " from test_agg_state_table group by k1;";
             String plan = UtFrameUtils.getVerboseFragmentPlan(starRocksAssert.getCtx(), sql1);
-            PlanTestBase.assertContains(plan, "|  aggregate: " +
-                    "array_agg_merge[([2: v0, struct<col1 array<varchar(100)>>, true]); args: INVALID_TYPE; " +
+            PlanTestBase.assertContains(plan, "|  aggregate: array_agg_merge[([2: v0, " +
+                    "struct<col1 array<varchar(1048576)>>, true]); args: INVALID_TYPE; " +
                     "result: ARRAY<VARCHAR(100)>; args nullable: true; result nullable: true]");
             PlanTestBase.assertContains(plan, " 0:OlapScanNode\n" +
                     "     table: test_agg_state_table, rollup: test_agg_state_table");
@@ -1230,5 +1241,102 @@ public class AggStateCombinatorTest extends MVTestBase {
         starRocksAssert.dropTable("t1");
         starRocksAssert.dropMaterializedView("test_mv1");
     }
-}
 
+    private Function getAggStateCombineFunc(AggregateFunction aggFunc) {
+        List<Type> argTypes = Stream.of(aggFunc.getArgs()).map(this::mockType).collect(Collectors.toList());
+        String aggStateFuncName = AggStateUtils.aggStateCombineFunctionName(aggFunc.functionName());
+        Type[] argumentTypes = argTypes.toArray(Type[]::new);
+        FunctionParams params = new FunctionParams(false, Lists.newArrayList());
+        Boolean[] argArgumentConstants = IntStream.range(0, aggFunc.getNumArgs()).mapToObj(x -> Boolean.FALSE)
+                .toArray(Boolean[]::new);
+        Function result = FunctionAnalyzer.getAnalyzedAggregateFunction(ConnectContext.get(),
+                aggStateFuncName, params, argumentTypes, argArgumentConstants, NodePosition.ZERO);
+        return result;
+    }
+
+    @Test
+    public void testFunctionAnalyzeCombineCombinator() {
+        var builtInAggregateFunctions = getBuiltInAggFunctions();
+        Set<String> supportedAggFunctions = Sets.newHashSet();
+        Set<String> unSupportedAggFunctions = Sets.newHashSet();
+        for (AggregateFunction aggFunc : builtInAggregateFunctions) {
+            if (!AggStateUtils.isSupportedAggStateFunction(aggFunc, false)) {
+                unSupportedAggFunctions.add(aggFunc.functionName());
+                continue;
+            }
+            supportedAggFunctions.add(aggFunc.functionName());
+            Function result = getAggStateCombineFunc(aggFunc);
+            Assertions.assertNotNull(result);
+            Assertions.assertTrue(result instanceof AggStateCombineCombinator);
+            Assertions.assertFalse(result.getReturnType().isWildcardDecimal(),
+                    "Wildcard decimal is not supported for agg state combine function: " + result.getFunctionName());
+            Assertions.assertFalse(result.getReturnType().isPseudoType());
+        }
+        Assertions.assertTrue(supportedAggFunctions.size() >= SUPPORTED_AGG_STATE_FUNCTIONS.size());
+    }
+
+    @Test
+    public void testFunctionAnalyzeStateUnionCombinator() {
+        var builtInAggregateFunctions = getBuiltInAggFunctions();
+        Set<String> supportedAggFunctions = Sets.newHashSet();
+        for (AggregateFunction aggFunc : builtInAggregateFunctions) {
+            if (!AggStateUtils.isSupportedAggStateFunction(aggFunc, false)) {
+                continue;
+            }
+            supportedAggFunctions.add(aggFunc.functionName());
+            Function aggStateFunc = getAggStateFunc(aggFunc);
+            Assertions.assertNotNull(aggStateFunc);
+            String aggStateFuncName = FunctionSet.getStateUnionName(aggFunc.functionName());
+            FunctionParams params = new FunctionParams(false, Lists.newArrayList());
+
+            Type intermediateType = aggStateFunc.getReturnType();
+            // set agg_state_desc
+            List<Type> argTypes = Stream.of(aggFunc.getArgs()).map(this::mockType).collect(Collectors.toList());
+            intermediateType.setAggStateDesc(new AggStateDesc(aggFunc.functionName(),
+                    aggFunc.getReturnType(), argTypes));
+            Type[] argumentTypes = { intermediateType, intermediateType };
+            Boolean[] argArgumentConstants = { false, false };
+
+            Function result = FunctionAnalyzer.getAnalyzedAggregateFunction(ConnectContext.get(),
+                    aggStateFuncName, params, argumentTypes, argArgumentConstants, NodePosition.ZERO);
+            Assertions.assertNotNull(result);
+            Assertions.assertTrue(result instanceof StateUnionCombinator);
+            Assertions.assertFalse(result.getReturnType().isWildcardDecimal());
+            Assertions.assertFalse(result.getReturnType().isPseudoType());
+        }
+        Assertions.assertTrue(supportedAggFunctions.size() >= SUPPORTED_AGG_STATE_FUNCTIONS.size());
+    }
+
+
+    @Test
+    public void testFunctionAnalyzeStateMergeCombinator() {
+        var builtInAggregateFunctions = getBuiltInAggFunctions();
+        Set<String> supportedAggFunctions = Sets.newHashSet();
+        for (AggregateFunction aggFunc : builtInAggregateFunctions) {
+            if (!AggStateUtils.isSupportedAggStateFunction(aggFunc, false)) {
+                continue;
+            }
+            supportedAggFunctions.add(aggFunc.functionName());
+            Function aggStateFunc = getAggStateFunc(aggFunc);
+            Assertions.assertNotNull(aggStateFunc);
+            String aggStateFuncName = FunctionSet.getStateMergeName(aggFunc.functionName());
+            FunctionParams params = new FunctionParams(false, Lists.newArrayList());
+
+            Type intermediateType = aggStateFunc.getReturnType();
+            // set agg_state_desc
+            List<Type> argTypes = Stream.of(aggFunc.getArgs()).map(this::mockType).collect(Collectors.toList());
+            intermediateType.setAggStateDesc(new AggStateDesc(aggFunc.functionName(),
+                    aggFunc.getReturnType(), argTypes));
+            Type[] argumentTypes = { intermediateType };
+            Boolean[] argArgumentConstants = { false };
+
+            Function result = FunctionAnalyzer.getAnalyzedAggregateFunction(ConnectContext.get(),
+                    aggStateFuncName, params, argumentTypes, argArgumentConstants, NodePosition.ZERO);
+            Assertions.assertNotNull(result);
+            Assertions.assertTrue(result instanceof StateMergeCombinator);
+            Assertions.assertFalse(result.getReturnType().isWildcardDecimal());
+            Assertions.assertFalse(result.getReturnType().isPseudoType());
+        }
+        Assertions.assertTrue(supportedAggFunctions.size() >= SUPPORTED_AGG_STATE_FUNCTIONS.size());
+    }
+}

@@ -15,11 +15,11 @@
 
 package com.starrocks.sql.ast;
 
-import com.starrocks.analysis.FunctionName;
 import com.starrocks.authorization.ObjectType;
 import com.starrocks.authorization.PEntryObject;
 import com.starrocks.authorization.PrivilegeType;
 import com.starrocks.common.Pair;
+import com.starrocks.sql.ast.expression.FunctionName;
 import com.starrocks.sql.parser.NodePosition;
 
 import java.util.List;
@@ -64,7 +64,7 @@ public class BaseGrantRevokePrivilegeStmt extends DdlStmt {
     /**
      * old privilege framework only support grant/revoke on one single object
      */
-    public UserIdentity getUserPrivilegeObject() {
+    public UserRef getUserPrivilegeObject() {
         return objectsUnResolved.getUserPrivilegeObjectList().get(0);
     }
 
@@ -72,7 +72,7 @@ public class BaseGrantRevokePrivilegeStmt extends DdlStmt {
         return objectsUnResolved.getPrivilegeObjectNameTokensList();
     }
 
-    public List<UserIdentity> getUserPrivilegeObjectList() {
+    public List<UserRef> getUserPrivilegeObjectList() {
         return objectsUnResolved.getUserPrivilegeObjectList();
     }
 
@@ -96,8 +96,8 @@ public class BaseGrantRevokePrivilegeStmt extends DdlStmt {
         return role;
     }
 
-    public UserIdentity getUserIdentity() {
-        return clause.getUserIdentity();
+    public UserRef getUser() {
+        return clause.getUser();
     }
 
     public String getObjectTypeUnResolved() {
@@ -134,6 +134,6 @@ public class BaseGrantRevokePrivilegeStmt extends DdlStmt {
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitGrantRevokePrivilegeStatement(this, context);
+        return ((AstVisitorExtendInterface<R, C>) visitor).visitGrantRevokePrivilegeStatement(this, context);
     }
 }

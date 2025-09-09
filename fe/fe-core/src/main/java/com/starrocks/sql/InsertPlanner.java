@@ -19,15 +19,6 @@ import com.google.common.base.Stopwatch;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
 import com.starrocks.alter.SchemaChangeHandler;
-import com.starrocks.analysis.DescriptorTable;
-import com.starrocks.analysis.Expr;
-import com.starrocks.analysis.LiteralExpr;
-import com.starrocks.analysis.NullLiteral;
-import com.starrocks.analysis.SlotDescriptor;
-import com.starrocks.analysis.SlotRef;
-import com.starrocks.analysis.StringLiteral;
-import com.starrocks.analysis.TableName;
-import com.starrocks.analysis.TupleDescriptor;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ColumnId;
 import com.starrocks.catalog.Database;
@@ -50,12 +41,15 @@ import com.starrocks.common.profile.Timer;
 import com.starrocks.common.profile.Tracers;
 import com.starrocks.planner.BlackHoleTableSink;
 import com.starrocks.planner.DataSink;
+import com.starrocks.planner.DescriptorTable;
 import com.starrocks.planner.HiveTableSink;
 import com.starrocks.planner.IcebergTableSink;
 import com.starrocks.planner.MysqlTableSink;
 import com.starrocks.planner.OlapTableSink;
 import com.starrocks.planner.PlanFragment;
+import com.starrocks.planner.SlotDescriptor;
 import com.starrocks.planner.TableFunctionTableSink;
+import com.starrocks.planner.TupleDescriptor;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.server.GlobalStateMgr;
@@ -67,12 +61,18 @@ import com.starrocks.sql.analyzer.RelationFields;
 import com.starrocks.sql.analyzer.RelationId;
 import com.starrocks.sql.analyzer.Scope;
 import com.starrocks.sql.analyzer.SemanticException;
-import com.starrocks.sql.ast.DefaultValueExpr;
 import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.QueryRelation;
 import com.starrocks.sql.ast.SelectListItem;
 import com.starrocks.sql.ast.SelectRelation;
 import com.starrocks.sql.ast.ValuesRelation;
+import com.starrocks.sql.ast.expression.DefaultValueExpr;
+import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.LiteralExpr;
+import com.starrocks.sql.ast.expression.NullLiteral;
+import com.starrocks.sql.ast.expression.SlotRef;
+import com.starrocks.sql.ast.expression.StringLiteral;
+import com.starrocks.sql.ast.expression.TableName;
 import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.common.TypeManager;
@@ -85,10 +85,8 @@ import com.starrocks.sql.optimizer.base.DistributionProperty;
 import com.starrocks.sql.optimizer.base.DistributionSpec;
 import com.starrocks.sql.optimizer.base.GatherDistributionSpec;
 import com.starrocks.sql.optimizer.base.HashDistributionDesc;
-import com.starrocks.sql.optimizer.base.Ordering;
 import com.starrocks.sql.optimizer.base.PhysicalPropertySet;
 import com.starrocks.sql.optimizer.base.RoundRobinDistributionSpec;
-import com.starrocks.sql.optimizer.base.SortProperty;
 import com.starrocks.sql.optimizer.operator.logical.LogicalProjectOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CastOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
@@ -109,11 +107,7 @@ import com.starrocks.sql.plan.PlanFragmentBuilder;
 import com.starrocks.thrift.TPartialUpdateMode;
 import com.starrocks.thrift.TResultSinkType;
 import org.apache.commons.collections4.CollectionUtils;
-import org.apache.iceberg.NullOrder;
 import org.apache.iceberg.PartitionSpec;
-import org.apache.iceberg.SortDirection;
-import org.apache.iceberg.SortField;
-import org.apache.iceberg.SortOrder;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -335,6 +329,7 @@ public class InsertPlanner {
                     dict.ifPresent(
                             columnDict -> globalDicts.add(new Pair<>(slotDescriptor.getId().asInt(), columnDict)));
                 }
+                // TODO: attach the dict for JSON
             }
             tupleDesc.computeMemLayout();
 
@@ -397,6 +392,9 @@ public class InsertPlanner {
                 }
                 if (insertStmt.isFromOverwrite()) {
                     ((OlapTableSink) dataSink).setIsFromOverwrite(true);
+                }
+                if (session.getTxnId() != 0) {
+                    ((OlapTableSink) dataSink).setIsMultiStatementsTxn(true);
                 }
 
                 // if sink is OlapTableSink Assigned to Be execute this sql [cn execute OlapTableSink will crash]
@@ -851,24 +849,13 @@ public class InsertPlanner {
         Table targetTable = insertStmt.getTargetTable();
         if (targetTable instanceof IcebergTable) {
             IcebergTable icebergTable = (IcebergTable) targetTable;
-            SortOrder sortOrder = icebergTable.getNativeTable().sortOrder();
-
-            if (sortOrder.isUnsorted()) {
-                return new PhysicalPropertySet();
-            } else {
-                List<SortField> sortFields = sortOrder.fields();
-                List<Ordering> orderings = new ArrayList<>();
-                List<Integer> sortKeyIndexes = icebergTable.getSortKeyIndexes();
-                for (int index : sortKeyIndexes) {
-                    ColumnRefOperator columnRef = outputColumns.get(index);
-                    SortField sortField = sortFields.get(sortKeyIndexes.indexOf(index));
-                    boolean isAsc = sortField.direction() == SortDirection.ASC;
-                    boolean isNullFirst = sortField.nullOrder() == NullOrder.NULLS_FIRST;
-                    Ordering ordering = new Ordering(columnRef, isAsc, isNullFirst);
-                    orderings.add(ordering);
-                }
-                SortProperty sortProperty = SortProperty.createProperty(orderings);
-                return new PhysicalPropertySet(sortProperty);
+            if (session.isEnableIcebergSinkGlobalShuffle() && (!icebergTable.getPartitionColumns().isEmpty())) {
+                List<Integer> partitionColumnIDs = icebergTable.partitionColumnIndexes().stream()
+                        .map(x -> outputColumns.get(x).getId()).collect(Collectors.toList());
+                HashDistributionDesc desc = new HashDistributionDesc(partitionColumnIDs,
+                        HashDistributionDesc.SourceType.SHUFFLE_AGG);
+                return new PhysicalPropertySet(DistributionProperty
+                        .createProperty(DistributionSpec.createHashDistributionSpec(desc)));
             }
         }
 

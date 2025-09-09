@@ -8,6 +8,8 @@ import AdminSetFrontendNote from '../../_assets/commonMarkdown/FE_config_note.md
 
 import StaticFEConfigNote from '../../_assets/commonMarkdown/StaticFE_config_note.md'
 
+import EditionSpecificFEItem from '../../_assets/commonMarkdown/Edition_Specific_FE_Item.md'
+
 # FE 設定
 
 <FEConfigMethod />
@@ -800,6 +802,18 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 説明: 自動クラスタスナップショットのタスクがトリガされる間隔。
 - 導入バージョン: v3.4.2
 
+##### enable_table_name_case_insensitive
+
+- デフォルト: false
+- タイプ: Boolean
+- 単位: -
+- 変更可能: いいえ
+- 説明: カタログ名、データベース名、テーブル名、ビュー名、および非同期マテリアライズドビュー名に対して、大文字小文字を区別しない処理を有効にするかどうか。現在、テーブル名はデフォルトで大文字小文字を区別します。
+  - この機能を有効にすると、関連するすべての名前が小文字で保存され、これらの名前を含むすべての SQL コマンドは自動的に小文字に変換されます。  
+  - この機能はクラスターを作成する際にのみ有効にできます。**クラスターが起動された後、この設定項目の値はどのような手段でも変更できません**。この設定を変更しようとするとエラーが発生します。FE は、この設定項目の値がクラスターが最初に起動された際の値と一致しない場合、起動に失敗します。  
+  - 現在は、この機能は JDBC カタログ名とテーブル名をサポートしていません。JDBC または ODBC データソースで大文字小文字を区別しない処理を実行したい場合は、この機能を有効にしないでください。
+- 導入バージョン: v4.0
+
 ### ユーザー、ロール、および権限
 
 ##### privilege_max_total_roles_per_user
@@ -1343,6 +1357,24 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 変更可能: いいえ
 - 説明: 低基数辞書のしきい値。
 - 導入バージョン: v3.5.0
+
+##### enable_manual_collect_array_ndv
+
+- デフォルト: false
+- タイプ: Boolean
+- 単位: -
+- 変更可能: はい
+- 説明: ARRAY タイプの NDV 情報の手動収集を有効にするかどうか。
+- 導入バージョン: v4.0
+
+##### enable_auto_collect_array_ndv
+
+- デフォルト: false
+- タイプ: Boolean
+- 単位: -
+- 変更可能: はい
+- 説明: ARRAY タイプの NDV 情報の自動収集を有効にするかどうか。
+- 導入バージョン: v4.0
 
 ### ロードとアンロード
 
@@ -2572,7 +2604,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 
 ##### lake_enable_balance_tablets_between_workers
 
-- デフォルト: false
+- デフォルト: true
 - タイプ: Boolean
 - 単位: -
 - 変更可能: はい
@@ -2723,15 +2755,6 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 単位: -
 - 変更可能: いいえ
 - 説明: 小さなファイルのルートディレクトリ。
-- 導入バージョン: -
-
-##### enable_auth_check
-
-- デフォルト: true
-- タイプ: Boolean
-- 単位: -
-- 変更可能: いいえ
-- 説明: 認証チェック機能を有効にするかどうかを指定します。有効な値: `TRUE` および `FALSE`。`TRUE` はこの機能を有効にすることを指定し、`FALSE` はこの機能を無効にすることを指定します。
 - 導入バージョン: -
 
 ##### authentication_ldap_simple_server_host
@@ -3265,3 +3288,13 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 変更可能: はい
 - 説明: システムがヒストリカルノードをトレースすることを許可するかどうか。この項目を `true` に設定することで、キャッシュ共有機能を有効にし、エラスティックなスケーリング時にシステムが適切なキャッシュノードを選択できるようにすることができる。
 - 導入バージョン: v3.5.1
+
+##### transform_type_prefer_string_for_varchar
+- デフォルト: true
+- タイプ: Boolean
+- 単位: -
+- 変更可能: はい
+- 説明: マテリアライズドビューの作成とCTAS操作において、固定長のVARCHAR列に対してSTRING型を優先するかどうか。
+- 導入バージョン: v4.0.0
+
+<EditionSpecificFEItem />

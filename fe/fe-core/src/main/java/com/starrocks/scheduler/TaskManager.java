@@ -23,12 +23,14 @@ import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.catalog.Column;
+import com.starrocks.catalog.ResourceGroupClassifier;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.Pair;
 import com.starrocks.common.util.LogUtil;
 import com.starrocks.common.util.TimeUtils;
+import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.common.util.concurrent.QueryableReentrantLock;
 import com.starrocks.memory.MemoryTrackable;
 import com.starrocks.persist.ImageWriter;
@@ -40,15 +42,18 @@ import com.starrocks.persist.metablock.SRMetaBlockWriter;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ShowResultSet;
 import com.starrocks.qe.ShowResultSetMetaData;
+import com.starrocks.qe.StmtExecutor;
 import com.starrocks.scheduler.history.TaskRunHistory;
 import com.starrocks.scheduler.persist.ArchiveTaskRunsLog;
 import com.starrocks.scheduler.persist.TaskRunStatus;
 import com.starrocks.scheduler.persist.TaskRunStatusChange;
 import com.starrocks.scheduler.persist.TaskSchedule;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.SubmitTaskStmt;
 import com.starrocks.sql.common.DmlException;
 import com.starrocks.sql.optimizer.Utils;
+import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.thrift.TGetTasksParams;
 import org.apache.commons.collections.CollectionUtils;
 import org.apache.commons.collections4.ListUtils;
@@ -348,6 +353,83 @@ public class TaskManager implements MemoryTrackable {
             throw new DmlException("execute task %s failed: %s", e, task.getName(), e.getMessage());
         } finally {
             taskRunScheduler.removeSyncRunningTaskRun(taskRun);
+        }
+    }
+
+    /**
+     * Get the MV refresh plan explain result for the given task.
+     */
+    public String getMVRefreshExplain(Task task, ExecuteOption option, StatementBase statement) {
+        if (statement == null || !statement.isExplain()) {
+            return null;
+        }
+        TaskRun taskRun = buildTaskRun(task, option);
+        ExecPlan execPlan = getMVRefreshExecPlan(taskRun, task, option, statement);
+        String explainString = StmtExecutor.buildExplainString(execPlan, statement,
+                ConnectContext.get(), ResourceGroupClassifier.QueryType.MV, statement.getExplainLevel());
+        // add extra info
+        String extraInfo = getExtraExplainInfo(taskRun, statement);
+        if (!Strings.isNullOrEmpty(extraInfo)) {
+            explainString += "\n" + extraInfo;
+        }
+        return explainString;
+    }
+
+    public TaskRun buildTaskRun(Task task, ExecuteOption option) {
+        return TaskRunBuilder.newBuilder(task)
+                .properties(option.getTaskRunProperties())
+                .setExecuteOption(option)
+                .setConnectContext(ConnectContext.get()).build();
+    }
+
+    private String getExtraExplainInfo(TaskRun taskRun,
+                                       StatementBase statement) {
+        TaskRunProcessor taskRunProcessor = taskRun.getProcessor();
+        if (taskRunProcessor == null) {
+            return "";
+        }
+        try {
+            if (taskRunProcessor instanceof MVTaskRunProcessor) {
+                MVTaskRunProcessor mvRefreshProcessor = (MVTaskRunProcessor) taskRun.getProcessor();
+                return mvRefreshProcessor.getExtraExplainInfo(statement);
+            } else {
+                return "";
+            }
+        } catch (Exception e) {
+            LOG.error("Failed to get getExtraExplainInfo:", e);
+            return "";
+        }
+    }
+
+    /**
+     * Get the MV refresh execution plan for the given task.
+     */
+    public ExecPlan getMVRefreshExecPlan(TaskRun taskRun, Task task, ExecuteOption option, StatementBase statement) {
+        if (statement == null || !statement.isExplain()) {
+            return null;
+        }
+        // init task run
+        String queryId = UUIDUtil.genUUID().toString();
+        TaskRunStatus status = taskRun.initStatus(queryId, System.currentTimeMillis());
+        status.setPriority(option.getPriority());
+        status.setMergeRedundant(option.isMergeRedundant());
+        status.setProperties(option.getTaskRunProperties());
+
+        TaskRunProcessor processor = taskRun.getProcessor();
+        if (processor == null || !(processor instanceof MVTaskRunProcessor)) {
+            throw new DmlException("Explain can only support MVTaskRunProcessor: " + task.getName());
+        }
+        MVTaskRunProcessor mvRefreshProcessor = (MVTaskRunProcessor) processor;
+        TaskRunContext taskRunContext = taskRun.buildTaskRunContext();
+        try {
+            // prepare the task run context
+            mvRefreshProcessor.prepare(taskRunContext);
+            // execute the task run
+            return mvRefreshProcessor.getMVRefreshExecPlan();
+        } catch (Exception e) {
+            LOG.warn("Failed to get MV refresh explain for task: {}", task.getName(), e);
+            throw new DmlException("Failed to get MV refresh explain for task: %s, error: %s", e,
+                    task.getName(), e.getMessage());
         }
     }
 

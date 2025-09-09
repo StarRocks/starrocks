@@ -15,7 +15,7 @@
 
 package com.starrocks.sql.ast;
 
-import com.starrocks.analysis.TableRef;
+import com.starrocks.sql.ast.expression.TableRef;
 import com.starrocks.sql.parser.NodePosition;
 
 public class ShowDataDistributionStmt extends ShowStmt {
@@ -48,7 +48,7 @@ public class ShowDataDistributionStmt extends ShowStmt {
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitShowDataDistributionStatement(this, context);
+        return ((AstVisitorExtendInterface<R, C>) visitor).visitShowDataDistributionStatement(this, context);
     }
 }
 

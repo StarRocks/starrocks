@@ -224,6 +224,18 @@ select count(*) from t_test_gin_index_query where query_english match_any "hello
 -- result:
 5
 -- !result
+select count(*) from t_test_gin_index_query where query_chinese match_any "中文 视图 分析";
+-- result:
+3
+-- !result
+select count(*) from t_test_gin_index_query where query_english match_all "hello world";
+-- result:
+1
+-- !result
+select count(*) from t_test_gin_index_query where query_chinese match_all "物化 视图";
+-- result:
+1
+-- !result
 drop table t_test_gin_index_query;
 -- result:
 -- !result
@@ -549,6 +561,10 @@ SELECT * FROM t_gin_index_multiple_predicate_none WHERE text_column match_any "A
 -- result:
 2	abc
 -- !result
+SELECT * FROM t_gin_index_multiple_predicate_none WHERE text_column match_all "ABC";
+-- result:
+2	abc
+-- !result
 SELECT * FROM t_gin_index_multiple_predicate_none WHERE text_column NOT match_any "ABC";
 -- result:
 1	ABC
@@ -563,6 +579,21 @@ SELECT * FROM t_gin_index_multiple_predicate_none WHERE text_column match_any "a
 SELECT * FROM t_gin_index_multiple_predicate_none WHERE text_column NOT match_any "abc ABC";
 -- result:
 1	ABC
+3	ABD
+4	This is Gin Index
+5	None
+-- !result
+SELECT * FROM t_gin_index_multiple_predicate_none WHERE text_column NOT match_all "abc ABC";
+-- result:
+1	ABC
+3	ABD
+4	This is Gin Index
+5	None
+-- !result
+SELECT * FROM t_gin_index_multiple_predicate_none WHERE text_column NOT match_any "This Index";
+-- result:
+1	ABC
+2	abc
 3	ABD
 4	This is Gin Index
 5	None
@@ -628,6 +659,13 @@ SELECT * FROM t_gin_index_multiple_predicate_english WHERE text_column LIKE "thi
 2	abc
 -- !result
 SELECT * FROM t_gin_index_multiple_predicate_english WHERE text_column LIKE "%this%" AND text_column LIKE "%is%";
+-- result:
+-- !result
+SELECT * FROM t_gin_index_multiple_predicate_english WHERE text_column match_all "this Gin";
+-- result:
+4	This is Gin Index
+-- !result
+SELECT * FROM t_gin_index_multiple_predicate_english WHERE text_column match_all "abc Gin";
 -- result:
 -- !result
 DROP TABLE t_gin_index_multiple_predicate_english;
@@ -1101,6 +1139,37 @@ SELECT * FROM t_complex_predicate_for_gin_none WHERE text_column match_any NULL;
 -- result:
 E: (1064, 'Getting analyzing error. Detail message: right operand of MATCH must be of type StringLiteral with NOT NULL.')
 -- !result
+SELECT * FROM t_complex_predicate_for_gin_none WHERE upper(text_column) match_all "%CBD%";
+-- result:
+E: (1064, 'Getting analyzing error. Detail message: left operand of MATCH must be column ref.')
+-- !result
+SELECT * FROM t_complex_predicate_for_gin_none WHERE lower(text_column) match_all "%cbd%";
+-- result:
+E: (1064, 'Getting analyzing error. Detail message: left operand of MATCH must be column ref.')
+-- !result
+SELECT * FROM t_complex_predicate_for_gin_none WHERE CAST(id1 as STRING) match_all "abc";
+-- result:
+E: (1064, 'Getting analyzing error. Detail message: left operand of MATCH must be column ref.')
+-- !result
+SELECT * FROM t_complex_predicate_for_gin_none WHERE CAST(id1 as STRING) match_all "%abc%";
+-- result:
+E: (1064, 'Getting analyzing error. Detail message: left operand of MATCH must be column ref.')
+-- !result
+SELECT * FROM t_complex_predicate_for_gin_none WHERE text_column match_all CONCAT("ab", "c");
+-- result:
+E: (1064, 'Getting analyzing error. Detail message: right operand of MATCH must be of type StringLiteral with NOT NULL.')
+-- !result
+SELECT * FROM t_complex_predicate_for_gin_none WHERE text_column match_all CONCAT("ab", "%");
+-- result:
+E: (1064, 'Getting analyzing error. Detail message: right operand of MATCH must be of type StringLiteral with NOT NULL.')
+-- !result
+SELECT * FROM t_complex_predicate_for_gin_none WHERE text_column match_all "";
+-- result:
+-- !result
+SELECT * FROM t_complex_predicate_for_gin_none WHERE text_column match_all NULL;
+-- result:
+E: (1064, 'Getting analyzing error. Detail message: right operand of MATCH must be of type StringLiteral with NOT NULL.')
+-- !result
 INSERT INTO t_complex_predicate_for_gin_english VALUES (1, "abc cbd");
 -- result:
 -- !result
@@ -1189,6 +1258,37 @@ SELECT * FROM t_complex_predicate_for_gin_english WHERE text_column match_any ""
 -- result:
 -- !result
 SELECT * FROM t_complex_predicate_for_gin_english WHERE text_column match_any NULL;
+-- result:
+E: (1064, 'Getting analyzing error. Detail message: right operand of MATCH must be of type StringLiteral with NOT NULL.')
+-- !result
+SELECT * FROM t_complex_predicate_for_gin_english WHERE upper(text_column) match_all "%CBD%";
+-- result:
+E: (1064, 'Getting analyzing error. Detail message: left operand of MATCH must be column ref.')
+-- !result
+SELECT * FROM t_complex_predicate_for_gin_english WHERE lower(text_column) match_all "%cbd%";
+-- result:
+E: (1064, 'Getting analyzing error. Detail message: left operand of MATCH must be column ref.')
+-- !result
+SELECT * FROM t_complex_predicate_for_gin_english WHERE CAST(id1 as STRING) match_all "abc";
+-- result:
+E: (1064, 'Getting analyzing error. Detail message: left operand of MATCH must be column ref.')
+-- !result
+SELECT * FROM t_complex_predicate_for_gin_english WHERE CAST(id1 as STRING) match_all "%abc%";
+-- result:
+E: (1064, 'Getting analyzing error. Detail message: left operand of MATCH must be column ref.')
+-- !result
+SELECT * FROM t_complex_predicate_for_gin_english WHERE text_column match_all CONCAT("ab", "c");
+-- result:
+E: (1064, 'Getting analyzing error. Detail message: right operand of MATCH must be of type StringLiteral with NOT NULL.')
+-- !result
+SELECT * FROM t_complex_predicate_for_gin_english WHERE text_column match_all CONCAT("ab", "%");
+-- result:
+E: (1064, 'Getting analyzing error. Detail message: right operand of MATCH must be of type StringLiteral with NOT NULL.')
+-- !result
+SELECT * FROM t_complex_predicate_for_gin_english WHERE text_column match_all "";
+-- result:
+-- !result
+SELECT * FROM t_complex_predicate_for_gin_english WHERE text_column match_all NULL;
 -- result:
 E: (1064, 'Getting analyzing error. Detail message: right operand of MATCH must be of type StringLiteral with NOT NULL.')
 -- !result
@@ -1288,6 +1388,18 @@ SELECT id1 FROM t_upper_case_column_name WHERE `TEXT` MATCH_ANY "b";
 -- result:
 -- !result
 SELECT id1 FROM t_upper_case_column_name WHERE `text` MATCH_ANY "b";
+-- result:
+-- !result
+SELECT id1 FROM t_upper_case_column_name WHERE `TeXt` MATCH_ALL "b";
+-- result:
+-- !result
+SELECT id1 FROM t_upper_case_column_name WHERE `Text` MATCH_ALL "b";
+-- result:
+-- !result
+SELECT id1 FROM t_upper_case_column_name WHERE `TEXT` MATCH_ALL "b";
+-- result:
+-- !result
+SELECT id1 FROM t_upper_case_column_name WHERE `text` MATCH_ALL "b";
 -- result:
 -- !result
 DROP TABLE t_upper_case_column_name;
@@ -1447,6 +1559,14 @@ SELECT id FROM t_disable_global_dict_rewrite WHERE v2 MATCH_ANY "abc" ORDER BY v
 -- result:
 [REGEX].*Match can only used as a pushdown predicate on column with GIN in a single query.*
 -- !result
+SELECT id FROM t_disable_global_dict_rewrite WHERE v1 MATCH_ALL "abc" ORDER BY v1;
+-- result:
+1
+-- !result
+SELECT id FROM t_disable_global_dict_rewrite WHERE v2 MATCH_ALL "abc" ORDER BY v2;
+-- result:
+[REGEX].*Match can only used as a pushdown predicate on column with GIN in a single query.*
+-- !result
 DROP TABLE t_disable_global_dict_rewrite;
 -- result:
 -- !result
@@ -1591,6 +1711,18 @@ SELECT count(*) FROM t_gin_match_empty WHERE v2 MATCH_ANY "";
 0
 -- !result
 SELECT count(*) FROM t_gin_match_empty WHERE v3 MATCH_ANY "";
+-- result:
+0
+-- !result
+SELECT count(*) FROM t_gin_match_empty WHERE v1 MATCH_ALL "";
+-- result:
+0
+-- !result
+SELECT count(*) FROM t_gin_match_empty WHERE v2 MATCH_ALL "";
+-- result:
+0
+-- !result
+SELECT count(*) FROM t_gin_match_empty WHERE v3 MATCH_ALL "";
 -- result:
 0
 -- !result

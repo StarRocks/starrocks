@@ -15,12 +15,13 @@
 package com.starrocks.sql.ast;
 
 import com.google.common.collect.Lists;
-import com.starrocks.analysis.Expr;
-import com.starrocks.analysis.SlotRef;
-import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Table;
+import com.starrocks.common.tvr.TvrVersionRange;
 import com.starrocks.sql.analyzer.Field;
+import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.SlotRef;
+import com.starrocks.sql.ast.expression.TableName;
 import com.starrocks.sql.parser.NodePosition;
 
 import java.util.Collections;
@@ -52,6 +53,8 @@ public class TableRelation extends Relation {
 
     // used for time travel
     private QueryPeriod queryPeriod;
+    // used for tvr incremental read
+    private TvrVersionRange tvrVersionRange;
 
     // TABLE SAMPLE
     private TableSampleClause sampleClause;
@@ -198,7 +201,7 @@ public class TableRelation extends Relation {
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitTable(this, context);
+        return ((AstVisitorExtendInterface<R, C>) visitor).visitTable(this, context);
     }
 
     @Override
@@ -220,6 +223,14 @@ public class TableRelation extends Relation {
 
     public void setQueryPeriod(QueryPeriod queryPeriod) {
         this.queryPeriod = queryPeriod;
+    }
+
+    public void setTvrVersionRange(TvrVersionRange tvrVersionRange) {
+        this.tvrVersionRange = tvrVersionRange;
+    }
+
+    public TvrVersionRange getTvrVersionRange() {
+        return tvrVersionRange;
     }
 
     public TableSampleClause getSampleClause() {

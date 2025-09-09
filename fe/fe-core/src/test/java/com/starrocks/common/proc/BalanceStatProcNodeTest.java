@@ -55,8 +55,11 @@ import mockit.Mocked;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
+import java.util.Arrays;
+import java.util.Collection;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 public class BalanceStatProcNodeTest {
 
@@ -134,14 +137,14 @@ public class BalanceStatProcNodeTest {
             TabletSchedCtx ctx1 =
                     new TabletSchedCtx(TabletSchedCtx.Type.BALANCE, 1L, 2L, 3L, 4L, 1001L, System.currentTimeMillis());
             ctx1.setOrigPriority(TabletSchedCtx.Priority.NORMAL);
-            ctx1.setBalanceType(BalanceType.BACKEND_DISK);
+            ctx1.setBalanceType(BalanceType.INTRA_NODE_DISK_USAGE);
             ctx1.setStorageMedium(TStorageMedium.HDD);
             Deencapsulation.invoke(tabletScheduler, "addToPendingTablets", ctx1);
 
             TabletSchedCtx ctx2 =
                     new TabletSchedCtx(TabletSchedCtx.Type.BALANCE, 1L, 2L, 3L, 4L, 1002L, System.currentTimeMillis());
             ctx2.setOrigPriority(TabletSchedCtx.Priority.NORMAL);
-            ctx2.setBalanceType(BalanceType.BACKEND_DISK);
+            ctx2.setBalanceType(BalanceType.INTRA_NODE_DISK_USAGE);
             ctx2.setStorageMedium(TStorageMedium.HDD);
             Deencapsulation.invoke(tabletScheduler, "addToPendingTablets", ctx2);
         }
@@ -177,7 +180,7 @@ public class BalanceStatProcNodeTest {
             TabletSchedCtx ctx = new TabletSchedCtx(TabletSchedCtx.Type.BALANCE, db.getId(), olapTable.getId(), partitionId,
                     index.getId(), tablet1Id, System.currentTimeMillis());
             ctx.setOrigPriority(TabletSchedCtx.Priority.NORMAL);
-            ctx.setBalanceType(BalanceType.CLUSTER_TABLET);
+            ctx.setBalanceType(BalanceType.INTER_NODE_TABLET_DISTRIBUTION);
             ctx.setStorageMedium(TStorageMedium.HDD);
             Deencapsulation.invoke(tabletScheduler, "addToRunningTablets", ctx);
         }
@@ -226,6 +229,45 @@ public class BalanceStatProcNodeTest {
             Deencapsulation.invoke(tabletScheduler, "addToRunningTablets", ctx2);
         }
 
+        // 3. label location mismatch balance
+        {
+            List<Column> cols = Lists.newArrayList(new Column("province", Type.VARCHAR));
+            PartitionInfo listPartition = new ListPartitionInfo(PartitionType.LIST, cols);
+            long partitionId = 1225L;
+            listPartition.setDataProperty(partitionId, DataProperty.DEFAULT_DATA_PROPERTY);
+            listPartition.setIsInMemory(partitionId, false);
+            listPartition.setReplicationNum(partitionId, (short) 1);
+            OlapTable olapTable = new OlapTable(1224L, "location_table", cols, null, listPartition, null);
+
+            MaterializedIndex index = new MaterializedIndex(1200L, MaterializedIndex.IndexState.NORMAL);
+            TabletMeta tabletMeta = new TabletMeta(db.getId(), olapTable.getId(), partitionId, index.getId(), TStorageMedium.HDD);
+            long tablet1Id = 1210L;
+            index.addTablet(new LocalTablet(tablet1Id), tabletMeta);
+            long tablet2Id = 1211L;
+            index.addTablet(new LocalTablet(tablet2Id), tabletMeta);
+            Map<String, Long> indexNameToId = olapTable.getIndexNameToId();
+            indexNameToId.put("index1", index.getId());
+
+            // balance stat
+            Set<Long> currentBes = Sets.newHashSet(be1.getId(), be2.getId());
+            Map<String, Collection<String>> expectedLocations = Maps.newHashMap();
+            expectedLocations.put("rack", Arrays.asList("rack1", "rack2"));
+            index.setBalanceStat(BalanceStat.createLabelLocationBalanceStat(tablet1Id, currentBes, expectedLocations));
+
+            Partition partition = new Partition(partitionId, partitionId, "p1", index, new HashDistributionInfo(2, cols));
+            olapTable.addPartition(partition);
+
+            db.registerTableUnlocked(olapTable);
+
+            // 1 running tablet
+            TabletSchedCtx ctx = new TabletSchedCtx(TabletSchedCtx.Type.REPAIR, db.getId(), olapTable.getId(), partitionId,
+                    index.getId(), tablet1Id, System.currentTimeMillis());
+            ctx.setOrigPriority(TabletSchedCtx.Priority.NORMAL);
+            ctx.setTabletStatus(LocalTablet.TabletHealthStatus.LOCATION_MISMATCH);
+            ctx.setStorageMedium(TStorageMedium.HDD);
+            Deencapsulation.invoke(tabletScheduler, "addToRunningTablets", ctx);
+        }
+
         new Expectations() {
             {
                 GlobalStateMgr.getCurrentState().getLocalMetastore();
@@ -237,7 +279,7 @@ public class BalanceStatProcNodeTest {
         BalanceStatProcNode proc = new BalanceStatProcNode(tabletScheduler);
         BaseProcResult result = (BaseProcResult) proc.fetchResult();
         List<List<String>> rows = result.getRows();
-        Assertions.assertEquals(5, rows.size());
+        Assertions.assertEquals(6, rows.size());
 
         // cluster disk balanced
         Assertions.assertEquals("[HDD, inter-node disk usage, true, 0, 0]", rows.get(0).toString());
@@ -249,5 +291,7 @@ public class BalanceStatProcNodeTest {
         Assertions.assertEquals("[HDD, intra-node tablet distribution, true, 0, 0]", rows.get(3).toString());
         // colocation group not balanced
         Assertions.assertEquals("[HDD, colocation group, false, 1, 1]", rows.get(4).toString());
+        // label-aware location table not balanced
+        Assertions.assertEquals("[HDD, label-aware location, false, 0, 1]", rows.get(5).toString());
     }
 }

@@ -15,16 +15,17 @@
 #pragma once
 
 #include <cstdint>
-#include <memory>
 #include <string>
 #include <type_traits>
 
 #include "column/column_visitor.h"
 #include "column/column_visitor_mutable.h"
+#include "column/container_resource.h"
 #include "column/vectorized_fwd.h"
 #include "common/cow.h"
 #include "common/statusor.h"
 #include "gutil/casts.h"
+#include "runtime/memory/column_allocator.h"
 #include "storage/delete_condition.h" // for DelCondSatisfied
 #include "util/slice.h"
 
@@ -93,6 +94,7 @@ public:
     virtual bool is_object() const { return false; }
 
     virtual bool is_json() const { return false; }
+    virtual bool is_variant() const { return false; }
 
     virtual bool is_array() const { return false; }
 
@@ -100,6 +102,7 @@ public:
     virtual bool is_nullable_view() const { return false; }
     virtual bool is_array_view() const { return false; }
     virtual bool is_json_view() const { return false; }
+    virtual bool is_variant_view() const { return false; }
     virtual bool is_binary_view() const { return false; }
     virtual bool is_struct_view() const { return false; }
     virtual bool is_map_view() const { return false; }
@@ -273,6 +276,7 @@ public:
     //  - the count of copied integers on success.
     //  - -1 if this is not a numeric column.
     [[nodiscard]] virtual size_t append_numbers(const void* buff, size_t length) = 0;
+    virtual size_t append_numbers(const ContainerResource& res) { return append_numbers(res.data(), res.length()); }
 
     // Append |*value| |count| times, this is only used when load default value.
     virtual void append_value_multiple_times(const void* value, size_t count) = 0;
@@ -346,7 +350,7 @@ public:
     inline size_t filter(const Filter& filter, size_t count) { return filter_range(filter, 0, count); }
 
     // get rid of the case where the map/array is null but the map/array'elements are not empty.
-    bool empty_null_in_complex_column(const Filter& null_data, const Buffer<uint32_t>& offsets);
+    bool empty_null_in_complex_column(const ImmBuffer<uint8_t>& null_data, const ImmBuffer<uint32_t>& offsets);
 
     // FIXME: Many derived implementation assume |to| equals to size().
     virtual size_t filter_range(const Filter& filter, size_t from, size_t to) = 0;

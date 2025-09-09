@@ -18,10 +18,8 @@ import com.google.common.base.Joiner;
 import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import com.google.gson.annotations.SerializedName;
-import com.starrocks.analysis.Expr;
-import com.starrocks.analysis.ParseNode;
 import com.starrocks.common.AnalysisException;
-import com.starrocks.common.io.Writable;
+import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.parser.NodePosition;
 
 import java.util.ArrayList;
@@ -36,7 +34,7 @@ import java.util.List;
  *      PARTITIONS (p1, p2)
  *      TEMPORARY PARTITIONS (p1, p2)
  */
-public class PartitionNames implements ParseNode, Writable {
+public class PartitionNames implements ParseNode {
 
     @SerializedName(value = "partitionNames")
     private final List<String> partitionNames;

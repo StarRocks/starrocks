@@ -15,6 +15,8 @@
 package com.starrocks.analysis;
 
 import com.google.common.collect.ImmutableList;
+import com.starrocks.authentication.UserIdentityUtils;
+import com.starrocks.catalog.UserIdentity;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.scheduler.Constants;
@@ -25,7 +27,6 @@ import com.starrocks.scheduler.persist.TaskSchedule;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.service.FrontendServiceImpl;
 import com.starrocks.sql.ast.SubmitTaskStmt;
-import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.thrift.TGetTaskInfoResult;
 import com.starrocks.thrift.TGetTasksParams;
@@ -98,7 +99,7 @@ public class ShowTaskTest {
 
         UserIdentity currentUserIdentity = connectContext.getCurrentUserIdentity();
         TGetTasksParams tGetTasksParams = new TGetTasksParams();
-        tGetTasksParams.setCurrent_user_ident(new TUserIdentity(currentUserIdentity.toThrift()));
+        tGetTasksParams.setCurrent_user_ident(new TUserIdentity(UserIdentityUtils.toThrift(currentUserIdentity)));
         TGetTaskInfoResult taskResult = frontendService.getTasks(tGetTasksParams);
         List<TTaskInfo> tasks = taskResult.getTasks();
         Assertions.assertEquals(2, tasks.size());
@@ -138,7 +139,7 @@ public class ShowTaskTest {
 
         UserIdentity currentUserIdentity = connectContext.getCurrentUserIdentity();
         TGetTasksParams tGetTasksParams = new TGetTasksParams();
-        tGetTasksParams.setCurrent_user_ident(new TUserIdentity(currentUserIdentity.toThrift()));
+        tGetTasksParams.setCurrent_user_ident(new TUserIdentity(UserIdentityUtils.toThrift(currentUserIdentity)));
         TGetTaskInfoResult taskResult = frontendService.getTasks(tGetTasksParams);
         List<TTaskInfo> tasks = taskResult.getTasks();
         Assertions.assertEquals(2, tasks.size());

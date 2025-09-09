@@ -39,25 +39,16 @@ import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
-import com.starrocks.analysis.BinaryPredicate;
-import com.starrocks.analysis.Expr;
-import com.starrocks.analysis.LikePredicate;
-import com.starrocks.analysis.LimitElement;
-import com.starrocks.analysis.Predicate;
-import com.starrocks.analysis.SlotRef;
-import com.starrocks.analysis.StringLiteral;
-import com.starrocks.analysis.TableName;
-import com.starrocks.analysis.TableRef;
 import com.starrocks.authentication.AuthenticationMgr;
 import com.starrocks.authentication.GroupProvider;
 import com.starrocks.authentication.SecurityIntegration;
 import com.starrocks.authentication.UserAuthenticationInfo;
+import com.starrocks.authentication.UserIdentityUtils;
 import com.starrocks.authorization.AccessDeniedException;
 import com.starrocks.authorization.ActionSet;
 import com.starrocks.authorization.AuthorizationMgr;
 import com.starrocks.authorization.CatalogPEntryObject;
 import com.starrocks.authorization.DbPEntryObject;
-import com.starrocks.authorization.GrantType;
 import com.starrocks.authorization.ObjectType;
 import com.starrocks.authorization.PrivilegeBuiltinConstants;
 import com.starrocks.authorization.PrivilegeEntry;
@@ -91,6 +82,7 @@ import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TabletInvertedIndex;
 import com.starrocks.catalog.TabletMeta;
+import com.starrocks.catalog.UserIdentity;
 import com.starrocks.catalog.View;
 import com.starrocks.clone.DynamicPartitionScheduler;
 import com.starrocks.common.AnalysisException;
@@ -133,8 +125,8 @@ import com.starrocks.load.pipe.Pipe;
 import com.starrocks.load.pipe.PipeManager;
 import com.starrocks.load.routineload.RoutineLoadFunctionalExprProvider;
 import com.starrocks.load.routineload.RoutineLoadJob;
+import com.starrocks.load.streamload.AbstractStreamLoadTask;
 import com.starrocks.load.streamload.StreamLoadFunctionalExprProvider;
-import com.starrocks.load.streamload.StreamLoadTask;
 import com.starrocks.meta.BlackListSql;
 import com.starrocks.proto.FailPointTriggerModeType;
 import com.starrocks.proto.PFailPointInfo;
@@ -156,7 +148,6 @@ import com.starrocks.server.TemporaryTableMgr;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.service.ExecuteEnv;
 import com.starrocks.service.InformationSchemaDataSource;
-import com.starrocks.sql.ShowTemporaryTableStmt;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.analyzer.AstToSQLBuilder;
 import com.starrocks.sql.analyzer.AstToStringBuilder;
@@ -165,11 +156,12 @@ import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AdminShowConfigStmt;
 import com.starrocks.sql.ast.AdminShowReplicaDistributionStmt;
 import com.starrocks.sql.ast.AdminShowReplicaStatusStmt;
-import com.starrocks.sql.ast.AstVisitor;
+import com.starrocks.sql.ast.AstVisitorExtendInterface;
 import com.starrocks.sql.ast.DescStorageVolumeStmt;
 import com.starrocks.sql.ast.DescribeStmt;
 import com.starrocks.sql.ast.GrantPrivilegeStmt;
 import com.starrocks.sql.ast.GrantRevokeClause;
+import com.starrocks.sql.ast.GrantType;
 import com.starrocks.sql.ast.HelpStmt;
 import com.starrocks.sql.ast.ImportColumnDesc;
 import com.starrocks.sql.ast.PartitionNames;
@@ -234,11 +226,21 @@ import com.starrocks.sql.ast.ShowStreamLoadStmt;
 import com.starrocks.sql.ast.ShowTableStatusStmt;
 import com.starrocks.sql.ast.ShowTableStmt;
 import com.starrocks.sql.ast.ShowTabletStmt;
+import com.starrocks.sql.ast.ShowTemporaryTableStmt;
 import com.starrocks.sql.ast.ShowTransactionStmt;
 import com.starrocks.sql.ast.ShowUserPropertyStmt;
 import com.starrocks.sql.ast.ShowUserStmt;
 import com.starrocks.sql.ast.ShowVariablesStmt;
-import com.starrocks.sql.ast.UserIdentity;
+import com.starrocks.sql.ast.UserRef;
+import com.starrocks.sql.ast.expression.BinaryPredicate;
+import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.LikePredicate;
+import com.starrocks.sql.ast.expression.LimitElement;
+import com.starrocks.sql.ast.expression.Predicate;
+import com.starrocks.sql.ast.expression.SlotRef;
+import com.starrocks.sql.ast.expression.StringLiteral;
+import com.starrocks.sql.ast.expression.TableName;
+import com.starrocks.sql.ast.expression.TableRef;
 import com.starrocks.sql.ast.group.ShowCreateGroupProviderStmt;
 import com.starrocks.sql.ast.group.ShowGroupProvidersStmt;
 import com.starrocks.sql.ast.integration.ShowCreateSecurityIntegrationStatement;
@@ -314,7 +316,7 @@ public class ShowExecutor {
         return GlobalStateMgr.getCurrentState().getShowExecutor().showExecutorVisitor.visit(statement, context);
     }
 
-    public static class ShowExecutorVisitor implements AstVisitor<ShowResultSet, ConnectContext> {
+    public static class ShowExecutorVisitor implements AstVisitorExtendInterface<ShowResultSet, ConnectContext> {
         private static final Logger LOG = LogManager.getLogger(ShowExecutor.ShowExecutorVisitor.class);
         private static final ShowExecutor.ShowExecutorVisitor INSTANCE = new ShowExecutor.ShowExecutorVisitor();
 
@@ -757,7 +759,7 @@ public class ShowExecutor {
                                             String mvName = olapTable.getIndexNameById(mvMeta.getIndexId());
                                             rows.add(Lists.newArrayList(showStmt.getTable(),
                                                     ShowMaterializedViewStatus.buildCreateMVSql(olapTable,
-                                                    mvName, mvMeta), "utf8", "utf8_general_ci"));
+                                                            mvName, mvMeta), "utf8", "utf8_general_ci"));
                                         } else {
                                             rows.add(Lists.newArrayList(showStmt.getTable(), mvMeta.getOriginStmt(),
                                                     "utf8", "utf8_general_ci"));
@@ -885,7 +887,7 @@ public class ShowExecutor {
                     try {
                         TListConnectionRequest request = new TListConnectionRequest();
                         TAuthInfo tAuthInfo = new TAuthInfo();
-                        tAuthInfo.setCurrent_user_ident(context.getCurrentUserIdentity().toThrift());
+                        tAuthInfo.setCurrent_user_ident(UserIdentityUtils.toThrift(context.getCurrentUserIdentity()));
                         request.setAuth_info(tAuthInfo);
                         request.setFor_user(statement.getForUser());
                         request.setShow_full(statement.showFull());
@@ -1374,7 +1376,7 @@ public class ShowExecutor {
         public ShowResultSet visitShowStreamLoadStatement(ShowStreamLoadStmt statement, ConnectContext context) {
             List<List<String>> rows = Lists.newArrayList();
             // if task exists
-            List<StreamLoadTask> streamLoadTaskList;
+            List<AbstractStreamLoadTask> streamLoadTaskList;
             try {
                 streamLoadTaskList = GlobalStateMgr.getCurrentState().getStreamLoadMgr()
                         .getTask(statement.getDbFullName(),
@@ -1388,13 +1390,15 @@ public class ShowExecutor {
             if (streamLoadTaskList != null) {
                 StreamLoadFunctionalExprProvider fProvider =
                         statement.getFunctionalExprProvider(context);
-                rows = streamLoadTaskList.parallelStream()
+                List<AbstractStreamLoadTask> tasks = streamLoadTaskList.parallelStream()
                         .filter(fProvider.getPredicateChain())
                         .sorted(fProvider.getOrderComparator())
                         .skip(fProvider.getSkipCount())
                         .limit(fProvider.getLimitCount())
-                        .map(StreamLoadTask::getShowInfo)
                         .collect(Collectors.toList());
+                for (AbstractStreamLoadTask task : tasks) {
+                    rows.addAll(task.getShowInfo());
+                }
             }
 
             if (!Strings.isNullOrEmpty(statement.getName()) && rows.isEmpty()) {
@@ -2068,7 +2072,8 @@ public class ShowExecutor {
                     infos.addAll(privilegeToRowString(authorizationManager,
                             new GrantRevokeClause(null, statement.getGroupOrRole()), typeToPrivilegeEntryList));
                 } else {
-                    UserIdentity userIdentity = statement.getUserIdent();
+                    UserRef user = statement.getUser();
+                    UserIdentity userIdentity = new UserIdentity(user.getUser(), user.getHost(), user.isDomain());
                     List<String> granteeRole = authorizationManager.getGranteeRoleDetailsForUser(userIdentity);
                     if (granteeRole != null) {
                         infos.add(granteeRole);
@@ -2076,9 +2081,9 @@ public class ShowExecutor {
 
                     if (!userIdentity.isEphemeral()) {
                         Map<ObjectType, List<PrivilegeEntry>> typeToPrivilegeEntryList =
-                                authorizationManager.getTypeToPrivilegeEntryListByUser(statement.getUserIdent());
+                                authorizationManager.getTypeToPrivilegeEntryListByUser(userIdentity);
                         infos.addAll(privilegeToRowString(authorizationManager,
-                                new GrantRevokeClause(statement.getUserIdent(), null), typeToPrivilegeEntryList));
+                                new GrantRevokeClause(statement.getUser(), null), typeToPrivilegeEntryList));
                     }
                 }
                 return new ShowResultSet(showResultMetaFactory.getMetadata(statement), infos);
@@ -2104,7 +2109,7 @@ public class ShowExecutor {
                     }
                     List<String> info = new ArrayList<>();
                     info.add(userOrRoleName.getRoleName() != null ?
-                            userOrRoleName.getRoleName() : userOrRoleName.getUserIdentity().toString());
+                            userOrRoleName.getRoleName() : userOrRoleName.getUser().toString());
                     info.add(catalogName);
 
                     GrantPrivilegeStmt grantPrivilegeStmt = new GrantPrivilegeStmt(new ArrayList<>(), objectType.name(),
@@ -2678,16 +2683,16 @@ public class ShowExecutor {
             if (statement.isAll()) {
                 authenticationInfoMap.putAll(authenticationManager.getUserToAuthenticationInfo());
             } else {
+                UserRef user = statement.getUser();
+                UserIdentity userIdentity = new UserIdentity(user.getUser(), user.getHost(), user.isDomain());
                 UserAuthenticationInfo userAuthenticationInfo;
-                if (statement.getUserIdent() == null) {
+                if (statement.getUser() == null) {
                     userAuthenticationInfo = authenticationManager
                             .getUserAuthenticationInfoByUserIdentity(context.getCurrentUserIdentity());
                 } else {
-                    userAuthenticationInfo =
-                            authenticationManager.getUserAuthenticationInfoByUserIdentity(
-                                    statement.getUserIdent());
+                    userAuthenticationInfo = authenticationManager.getUserAuthenticationInfoByUserIdentity(userIdentity);
                 }
-                authenticationInfoMap.put(statement.getUserIdent(), userAuthenticationInfo);
+                authenticationInfoMap.put(userIdentity, userAuthenticationInfo);
             }
             for (Map.Entry<UserIdentity, UserAuthenticationInfo> entry : authenticationInfoMap.entrySet()) {
                 UserAuthenticationInfo userAuthenticationInfo = entry.getValue();

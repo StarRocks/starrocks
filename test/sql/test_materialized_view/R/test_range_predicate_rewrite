@@ -83,9 +83,14 @@ INSERT INTO `t1` VALUES
 (20, 'varchar_value_20', 'varchar_value_40', 1050, 0);
 -- result:
 -- !result
+set new_planner_optimize_timeout=10000;
+-- result:
+-- !result
+set materialized_view_rewrite_mode="force";
+-- result:
+-- !result
 create MATERIALIZED VIEW flat_mv
-DISTRIBUTED BY RANDOM
-REFRESH MANUAL
+REFRESH DEFERRED MANUAL
 PROPERTIES (
 "replication_num" = "1"
 ) as select t0.id, t0.date_col, t0.float_col_1, t0.float_col_2, t0.varchar_col, t0.tinyint_col, t1.varchar_col_1, t1.varchar_col_2, t1.int_col_1, t1.tinyint_col_1 from t0 join t1 on t0.tinyint_col = t1.tinyint_col_1;
@@ -93,8 +98,7 @@ PROPERTIES (
 -- !result
 refresh materialized view flat_mv with sync mode;
 create MATERIALIZED VIEW join_filter_mv
-DISTRIBUTED BY RANDOM
-REFRESH MANUAL
+REFRESH DEFERRED MANUAL
 PROPERTIES (
 "replication_num" = "1"
 ) as select id, date_col, float_col_1, int_col_1, tinyint_col, tinyint_col_1 from flat_mv where id in (1, 2, 3, 4, 5, 6, 6, 7, 9, 10);
@@ -102,8 +106,7 @@ PROPERTIES (
 -- !result
 refresh materialized view join_filter_mv with sync mode;
 create MATERIALIZED VIEW date_mv
-DISTRIBUTED BY RANDOM
-REFRESH MANUAL
+REFRESH DEFERRED MANUAL
 PROPERTIES (
 "replication_num" = "1"
 )   as select tinyint_col, date_col , sum(float_col_1 * int_col_1) as sum_value from join_filter_mv group by tinyint_col, date_col;
@@ -111,8 +114,7 @@ PROPERTIES (
 -- !result
 refresh materialized view date_mv with sync mode;
 create MATERIALIZED VIEW month_mv
-DISTRIBUTED BY RANDOM
-REFRESH MANUAL
+REFRESH DEFERRED MANUAL
 PROPERTIES (
 "replication_num" = "1"
 )  as select tinyint_col, date_trunc('month', date_col) as date_col, sum(sum_value) as sum_value from date_mv group by tinyint_col, date_trunc('month', date_col);
@@ -120,28 +122,28 @@ PROPERTIES (
 -- !result
 refresh materialized view month_mv with sync mode;
 create MATERIALIZED VIEW year_mv
-DISTRIBUTED BY RANDOM
-REFRESH MANUAL
+REFRESH DEFERRED MANUAL
 PROPERTIES (
 "replication_num" = "1"
 )   as select  tinyint_col, date_trunc('year', date_col) as date_col, sum(sum_value) as sum_value from date_mv group by tinyint_col, date_trunc('year', date_col);
 -- result:
 -- !result
 refresh materialized view year_mv with sync mode;
-set materialized_view_rewrite_mode="force";
+[UC]analyze table join_filter_mv with sync mode;
 -- result:
+db_89866d8037f446228d95db141eeec734.join_filter_mv	analyze	status	OK
 -- !result
 [UC]analyze table date_mv with sync mode;
 -- result:
-db_bb80de4492ca4b8b93c59fcc3ba63184.date_mv	analyze	status	OK
+db_89866d8037f446228d95db141eeec734.date_mv	analyze	status	OK
 -- !result
 [UC]analyze table month_mv with sync mode;
 -- result:
-db_bb80de4492ca4b8b93c59fcc3ba63184.month_mv	analyze	status	OK
+db_89866d8037f446228d95db141eeec734.month_mv	analyze	status	OK
 -- !result
 [UC]analyze table year_mv with sync mode;
 -- result:
-db_bb80de4492ca4b8b93c59fcc3ba63184.year_mv	analyze	status	OK
+db_89866d8037f446228d95db141eeec734.year_mv	analyze	status	OK
 -- !result
 select /*+ set_Var(enable_fine_grained_range_predicate = true, enable_force_rule_based_mv_rewrite = true, nested_mv_rewrite_max_level = 10) */
 sum(t0.float_col_1 * t1.int_col_1), t0.tinyint_col from  t0 join t1 on t0.tinyint_col = t1.tinyint_col_1 where t0.id in (1, 2, 3, 4, 5, 6, 6, 7, 9, 10)

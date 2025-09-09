@@ -14,8 +14,6 @@
 
 package com.starrocks.sql.ast;
 
-import com.starrocks.analysis.ProcedureArgument;
-import com.starrocks.analysis.RedirectStatus;
 import com.starrocks.connector.Procedure;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.parser.NodePosition;
@@ -23,7 +21,7 @@ import com.starrocks.sql.parser.NodePosition;
 import java.util.List;
 import java.util.Map;
 
-public class CallProcedureStatement extends StatementBase {
+public class CallProcedureStatement extends DdlStmt {
     private QualifiedName qualifiedName;
     private final List<ProcedureArgument> arguments;
     private Procedure procedure;
@@ -67,13 +65,8 @@ public class CallProcedureStatement extends StatementBase {
     }
 
     @Override
-    public RedirectStatus getRedirectStatus() {
-        return RedirectStatus.NO_FORWARD;
-    }
-
-    @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitCallProcedureStatement(this, context);
+        return ((AstVisitorExtendInterface<R, C>) visitor).visitCallProcedureStatement(this, context);
     }
 
 }

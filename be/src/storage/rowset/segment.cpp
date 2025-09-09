@@ -44,11 +44,13 @@
 #include "column/schema.h"
 #include "common/logging.h"
 #include "fs/key_cache.h"
+#include "gutil/strings/split.h"
 #include "gutil/strings/substitute.h"
+#include "runtime/current_thread.h"
+#include "runtime/exec_env.h"
 #include "segment_iterator.h"
 #include "segment_options.h"
 #include "storage/lake/tablet_manager.h"
-#include "storage/predicate_tree/predicate_tree.hpp"
 #include "storage/rowset/cast_column_iterator.h"
 #include "storage/rowset/column_reader.h"
 #include "storage/rowset/default_value_column_iterator.h"
@@ -57,7 +59,6 @@
 #include "storage/rowset/scalar_column_iterator.h"
 #include "storage/rowset/segment_writer.h" // k_segment_magic_length
 #include "storage/tablet_schema.h"
-#include "storage/type_utils.h"
 #include "storage/utils.h"
 #include "util/crc32c.h"
 #include "util/failpoint/fail_point.h"
@@ -484,15 +485,30 @@ StatusOr<ColumnIteratorUPtr> Segment::_new_extended_column_iterator(const Tablet
                                                                     ColumnAccessPath* path) {
     auto extended_info = column.extended_info();
     RETURN_IF(extended_info == nullptr, Status::InvalidArgument("extended info is null"));
-    auto source_index = extended_info->source_column_index;
-    RETURN_IF(source_index < 0 || static_cast<size_t>(source_index) >= _tablet_schema->num_columns(),
-              Status::InvalidArgument(fmt::format("invalid source column index: {}", source_index)));
     auto access_path = extended_info->access_path;
     RETURN_IF(access_path == nullptr, Status::InvalidArgument("access path is null for extended column"));
 
-    auto source_id = _tablet_schema->column(source_index).unique_id();
-    std::string full_path = access_path->linear_path();
+    // Resolve the root column by unique id to be robust across schema changes
+    auto full_path = access_path->linear_path();
     auto [col_name, field_name] = JsonFlatPath::split_path(full_path);
+
+    int32_t source_uid = extended_info->source_column_uid;
+    int32_t source_index = _tablet_schema->field_index(source_uid);
+    if (source_index < 0 || static_cast<size_t>(source_index) >= _tablet_schema->num_columns()) {
+        // The root column does not exist in this segment (e.g., added by schema change later).
+        // Fall back to column default/nullability.
+        const TypeInfoPtr& type_info = get_type_info(column);
+        auto default_iter = std::make_unique<DefaultValueColumnIterator>(column.has_default_value(),
+                                                                         column.default_value(), column.is_nullable(),
+                                                                         type_info, column.length(), num_rows());
+        ColumnIteratorOptions iter_opts;
+        RETURN_IF_ERROR(default_iter->init(iter_opts));
+        VLOG(2) << "root column '" << col_name << "' not found in segment, return default for path: " << full_path;
+        return default_iter;
+    }
+    RETURN_IF(access_path == nullptr, Status::InvalidArgument("access path is null for extended column"));
+
+    auto source_id = _tablet_schema->column(static_cast<size_t>(source_index)).unique_id();
     auto& leaf_type = access_path->leaf_value_type();
     RETURN_IF(!_column_readers.contains(source_id),
               Status::RuntimeError(fmt::format("unknown root column: {}", source_id)));
@@ -524,7 +540,25 @@ StatusOr<ColumnIteratorUPtr> Segment::_new_extended_column_iterator(const Tablet
         }
     }
 
-    // Build a regular ColumnIterator to read it
+    // case 3: check if this segment contains the specific field
+    auto& column_reader = _column_readers[source_id];
+    bool may_contains = column_reader->has_remain_json();
+    if (may_contains && column_reader->get_remain_filter() != nullptr) {
+        std::vector<std::string> paths = strings::Split(full_path, ".");
+        std::string_view leaf = paths.back();
+        may_contains = column_reader->get_remain_filter()->test_bytes(leaf.data(), leaf.size());
+    }
+    if (column_reader->is_flat_json() && !may_contains) {
+        // create an iterator always return NULL for fields that don't exist in this segment
+        auto default_null_iter = std::make_unique<DefaultValueColumnIterator>(false, "", true, get_type_info(column),
+                                                                              column.length(), num_rows());
+        ColumnIteratorOptions iter_opts;
+        RETURN_IF_ERROR(default_null_iter->init(iter_opts));
+        VLOG(2) << "json field " << full_path << " not found in segment, return NULL directly";
+        return default_null_iter;
+    }
+
+    // Build a regular JsonExtractIterator to read it
     auto& source_reader = _column_readers[source_id];
     ASSIGN_OR_RETURN(auto source_iter, source_reader->new_iterator(path, &column));
     return create_json_extract_iterator(std::move(source_iter), source_reader->is_nullable(), std::string(field_name),

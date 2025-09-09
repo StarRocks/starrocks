@@ -14,13 +14,6 @@
 
 package com.starrocks.sql.ast.pipe;
 
-import com.starrocks.analysis.Expr;
-import com.starrocks.analysis.LikePredicate;
-import com.starrocks.analysis.LimitElement;
-import com.starrocks.analysis.OrderByElement;
-import com.starrocks.analysis.RedirectStatus;
-import com.starrocks.analysis.StringLiteral;
-import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Database;
 import com.starrocks.common.PatternMatcher;
 import com.starrocks.common.util.DateUtils;
@@ -28,7 +21,14 @@ import com.starrocks.common.util.OrderByPair;
 import com.starrocks.load.pipe.Pipe;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.AstVisitor;
+import com.starrocks.sql.ast.AstVisitorExtendInterface;
+import com.starrocks.sql.ast.OrderByElement;
 import com.starrocks.sql.ast.ShowStmt;
+import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.LikePredicate;
+import com.starrocks.sql.ast.expression.LimitElement;
+import com.starrocks.sql.ast.expression.StringLiteral;
+import com.starrocks.sql.ast.expression.TableName;
 import com.starrocks.sql.parser.NodePosition;
 
 import java.util.List;
@@ -135,12 +135,7 @@ public class ShowPipeStmt extends ShowStmt {
     }
 
     @Override
-    public RedirectStatus getRedirectStatus() {
-        return RedirectStatus.FORWARD_NO_SYNC;
-    }
-
-    @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitShowPipeStatement(this, context);
+        return ((AstVisitorExtendInterface<R, C>) visitor).visitShowPipeStatement(this, context);
     }
 }

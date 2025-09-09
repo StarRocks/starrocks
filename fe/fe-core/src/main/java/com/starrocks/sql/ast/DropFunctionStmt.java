@@ -15,9 +15,8 @@
 
 package com.starrocks.sql.ast;
 
-import com.starrocks.analysis.FunctionName;
-import com.starrocks.analysis.RedirectStatus;
 import com.starrocks.catalog.FunctionSearchDesc;
+import com.starrocks.sql.ast.expression.FunctionName;
 import com.starrocks.sql.parser.NodePosition;
 
 public class DropFunctionStmt extends DdlStmt {
@@ -62,12 +61,7 @@ public class DropFunctionStmt extends DdlStmt {
     }
 
     @Override
-    public RedirectStatus getRedirectStatus() {
-        return RedirectStatus.FORWARD_WITH_SYNC;
-    }
-
-    @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitDropFunctionStatement(this, context);
+        return ((AstVisitorExtendInterface<R, C>) visitor).visitDropFunctionStatement(this, context);
     }
 }

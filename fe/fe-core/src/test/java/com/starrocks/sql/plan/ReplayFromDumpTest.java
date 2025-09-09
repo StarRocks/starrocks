@@ -91,15 +91,15 @@ public class ReplayFromDumpTest extends ReplayFromDumpTestBase {
                 getCostPlanFragment(getDumpInfoFromFile("query_dump/join_eliminate_nulls"), sessionVariable);
         Assertions.assertTrue(replayPair.second.contains("11:NESTLOOP JOIN\n" +
                 "  |  join op: INNER JOIN\n" +
-                "  |  other join predicates: CASE 174: type WHEN '1' THEN concat('ocms_', 90: name) = " +
-                "'ocms_fengyang56' " +
-                "WHEN '0' THEN TRUE ELSE FALSE END\n" +
-                "  |  limit: 10"), replayPair.second);
-        Assertions.assertTrue(replayPair.second.contains("  4:HASH JOIN\n" +
-                "  |  join op: RIGHT OUTER JOIN (PARTITIONED)\n" +
-                "  |  equal join conjunct: [tid, BIGINT, true] = [5: customer_id, BIGINT, true]\n" +
-                "  |  build runtime filters:\n" +
-                "  |  - filter_id = 0, build_expr = (5: customer_id), remote = true"), replayPair.second);
+                "  |  other join predicates: CASE [174: type, VARCHAR, true] WHEN '1' THEN concat[('ocms_', [90: name, VARCHAR,"
+                + " true]); args: VARCHAR; result: VARCHAR; args nullable: true; result nullable: true] = 'ocms_fengyang56' "
+                + "WHEN '0' THEN TRUE ELSE FALSE END\n"
+                + "  |  limit: 10"), replayPair.second);
+        Assertions.assertTrue(replayPair.second.contains("  4:HASH JOIN\n"
+                + "  |  join op: RIGHT OUTER JOIN (PARTITIONED)\n"
+                + "  |  equal join conjunct: [tid, BIGINT, true] = [5: customer_id, BIGINT, true]\n"
+                + "  |  build runtime filters:\n"
+                + "  |  - filter_id = 0, build_expr = (5: customer_id), remote = true"), replayPair.second);
         sessionVariable.setNewPlanerAggStage(0);
     }
 
@@ -200,20 +200,20 @@ public class ReplayFromDumpTest extends ReplayFromDumpTestBase {
         // check outer join with isNull predicate on inner table
         // The estimate cardinality of join should not be 0.
         Pair<QueryDumpInfo, String> replayPair = getCostPlanFragment(getDumpInfoFromFile("query_dump/tpcds78"));
-        Assertions.assertTrue(replayPair.second.contains("3:HASH JOIN\n" +
-                "  |  join op: LEFT OUTER JOIN (BUCKET_SHUFFLE)\n" +
-                "  |  equal join conjunct: [2: ss_ticket_number, INT, false] = [25: sr_ticket_number, INT, true]\n" +
-                "  |  equal join conjunct: [1: ss_item_sk, INT, false] = [24: sr_item_sk, INT, true]\n" +
-                "  |  other predicates: 25: sr_ticket_number IS NULL\n" +
-                "  |  output columns: 1, 3, 5, 11, 12, 14\n" +
-                "  |  cardinality: 37372757"), replayPair.second);
-        Assertions.assertTrue(replayPair.second.contains("15:HASH JOIN\n" +
-                "  |  join op: LEFT OUTER JOIN (BUCKET_SHUFFLE)\n" +
-                "  |  equal join conjunct: [76: ws_order_number, INT, false] = [110: wr_order_number, INT, true]\n" +
-                "  |  equal join conjunct: [75: ws_item_sk, INT, false] = [109: wr_item_sk, INT, true]\n" +
-                "  |  other predicates: 110: wr_order_number IS NULL\n" +
-                "  |  output columns: 75, 77, 80, 93, 94, 96\n" +
-                "  |  cardinality: 7914602"), replayPair.second);
+        Assertions.assertTrue(replayPair.second.contains("3:HASH JOIN\n"
+                + "  |  join op: LEFT OUTER JOIN (BUCKET_SHUFFLE)\n"
+                + "  |  equal join conjunct: [2: ss_ticket_number, INT, false] = [25: sr_ticket_number, INT, true]\n"
+                + "  |  equal join conjunct: [1: ss_item_sk, INT, false] = [24: sr_item_sk, INT, true]\n"
+                + "  |  other predicates: [25: sr_ticket_number, INT, true] IS NULL\n"
+                + "  |  output columns: 1, 3, 5, 11, 12, 14\n"
+                + "  |  cardinality: 37372757"), replayPair.second);
+        Assertions.assertTrue(replayPair.second.contains("15:HASH JOIN\n"
+                + "  |  join op: LEFT OUTER JOIN (BUCKET_SHUFFLE)\n"
+                + "  |  equal join conjunct: [76: ws_order_number, INT, false] = [110: wr_order_number, INT, true]\n"
+                + "  |  equal join conjunct: [75: ws_item_sk, INT, false] = [109: wr_item_sk, INT, true]\n"
+                + "  |  other predicates: [110: wr_order_number, INT, true] IS NULL\n"
+                + "  |  output columns: 75, 77, 80, 93, 94, 96\n"
+                + "  |  cardinality: 7914602"), replayPair.second);
     }
 
     @Test
@@ -765,17 +765,16 @@ public class ReplayFromDumpTest extends ReplayFromDumpTestBase {
 
     @Test
     public void testNestedViewWithCTE() throws Exception {
-
         Pair<QueryDumpInfo, String> replayPair =
                 getPlanFragment(getDumpInfoFromFile("query_dump/nested_view_with_cte"),
                         null, TExplainLevel.NORMAL);
-        Assertions.assertTrue(replayPair.second.contains("Project\n" +
-                "  |  <slot 7363> : 7363: count\n" +
-                "  |  limit: 100\n"), replayPair.second);
-        Assertions.assertTrue(replayPair.second.contains("AGGREGATE (merge finalize)\n" +
-                "  |  output: count(7363: count)\n" +
-                "  |  group by: 24: mock_038, 15: mock_003, 108: mock_109, 4: mock_005, 2: mock_110, 2133: case\n" +
-                "  |  limit: 100"), replayPair.second);
+        PlanTestBase.assertContains(replayPair.second, "Project\n" +
+                "  |  <slot 7368> : 7368: count\n" +
+                "  |  limit: 100");
+        PlanTestBase.assertContains(replayPair.second, "AGGREGATE (merge finalize)\n" +
+                "  |  output: count(7368: count)\n" +
+                "  |  group by: 24: mock_038, 15: mock_003, 108: mock_109, 4: mock_005, 2: mock_110, 2134: case\n" +
+                "  |  limit: 100");
     }
 
     @Test
@@ -910,7 +909,7 @@ public class ReplayFromDumpTest extends ReplayFromDumpTestBase {
     @Test
     public void testTimeoutDeepJoinCostPrune() throws Exception {
         Tracers.register(connectContext);
-        Tracers.init(connectContext, Tracers.Mode.TIMER, "optimizer");
+        Tracers.init(connectContext, "TIMER", "optimizer");
         connectContext.getSessionVariable().setOptimizerExecuteTimeout(-1);
 
         Pair<QueryDumpInfo, String> replayPair =
@@ -1160,6 +1159,28 @@ public class ReplayFromDumpTest extends ReplayFromDumpTestBase {
             Assertions.assertTrue(replayPair.second.contains("1:EMPTYSET"), replayPair.second);
         } finally {
             FeConstants.enablePruneEmptyOutputScan = false;
+        }
+    }
+
+    @Test
+    public void testUnnestLowCardinalityOptimization() throws Exception {
+        try {
+            FeConstants.USE_MOCK_DICT_MANAGER = true;
+            String dumpString = getDumpInfoFromFile("query_dump/unnest_low_cardinality_optimization");
+            QueryDumpInfo queryDumpInfo = getDumpInfoFromJson(dumpString);
+            Pair<QueryDumpInfo, String> replayPair = getPlanFragment(dumpString, queryDumpInfo.getSessionVariable(),
+                    TExplainLevel.NORMAL);
+            String plan = replayPair.second;
+            Assertions.assertTrue(plan.contains("  30:Project\n" +
+                    "  |  <slot 113> : 113: mock_field_111\n" +
+                    "  |  <slot 278> : lower(142: jl_str)\n" +
+                    "  |  \n" +
+                    "  29:TableValueFunction\n" +
+                    "  |  tableFunctionName: unnest\n" +
+                    "  |  columns: [unnest]\n" +
+                    "  |  returnTypes: [VARCHAR(65533)]"), plan);
+        } finally {
+            FeConstants.USE_MOCK_DICT_MANAGER = false;
         }
     }
 }

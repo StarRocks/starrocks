@@ -19,7 +19,6 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Range;
 import com.google.common.collect.Sets;
-import com.starrocks.analysis.Expr;
 import com.starrocks.catalog.BaseTableInfo;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.MaterializedView;
@@ -29,6 +28,7 @@ import com.starrocks.common.AnalysisException;
 import com.starrocks.common.ThrowingSupplier;
 import com.starrocks.connector.ConnectorPartitionTraits;
 import com.starrocks.connector.PartitionInfo;
+import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.common.PCell;
 import com.starrocks.sql.optimizer.QueryMaterializationContext;
 
