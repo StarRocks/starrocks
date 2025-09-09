@@ -154,3 +154,10 @@ function: assert_explain_costs_contains('SELECT COUNT(*) FROM t1 JOIN t2 USING (
 
 function: assert_explain_costs_contains('SELECT COUNT(*) FROM (t1 n1 JOIN t2 n2 ON n1.k1 = n2.k1) JOIN t3 n3 ON n1.k1 = n3.k1', 'cardinality: 45150', 'cardinality: 45150', 'cardinality: 90000', 'cardinality: 4562636', 'cardinality: 1173989056')
 function: assert_explain_costs_contains('SELECT COUNT(*) FROM (t1 n1 JOIN t2 n2 ON n1.k1 = n2.k1) JOIN t3 n3 ON n1.k3 = n3.k3', 'cardinality: 45150', 'cardinality: 45150', 'cardinality: 90000', 'cardinality: 4562636', 'cardinality: 1446330752')
+
+
+create table test_escaped_string (k1 string) properties("replication_num"="1");
+insert into test_escaped_string select "aaaaa's";
+insert into test_escaped_string select "bbbbbbb";
+[UC] analyze table test_escaped_string update histogram on k1;
+function: assert_explain_costs_contains('select k1 from test_escaped_string', 'MCV')
