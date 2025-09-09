@@ -541,6 +541,24 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Description: The port on which the HTTPS server in the FE node listens.
 - Introduced in: v4.0
 
+##### ssl_cipher_whitelist
+
+- Default: Empty string
+- Type: String
+- Unit: -
+- Is mutable: No
+- Description: Comma separated list, with regex support to whitelist ssl cipher suites by IANA names. If both whitelist and blacklist are set, blacklist takes precedence.
+- Introduced in: v4.0
+
+##### ssl_cipher_blacklist
+
+- Default: Empty string
+- Type: String
+- Unit: -
+- Is mutable: No
+- Description: Comma separated list, with regex support to blacklist ssl cipher suites by IANA names. If both whitelist and blacklist are set, blacklist takes precedence.
+- Introduced in: v4.0
+
 ##### http_async_threads_num
 
 - Default: 4096

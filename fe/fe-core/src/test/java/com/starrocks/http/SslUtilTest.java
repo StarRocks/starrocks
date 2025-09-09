@@ -37,13 +37,13 @@ class SslUtilTest {
 
     @AfterEach
     void resetConfig() {
-        Config.sslCipherWhitelist = "";
-        Config.sslCipherBlacklist = "";
+        Config.ssl_cipher_whitelist = "";
+        Config.ssl_cipher_blacklist = "";
     }
 
     @Test
     void whitelistRegexOnlyGcmEcdheRsa() {
-        Config.sslCipherWhitelist = "^ECDHE-RSA-.*-GCM-.*$";
+        Config.ssl_cipher_whitelist = "^ECDHE-RSA-.*-GCM-.*$";
         String[] out = SslUtil.filterCipherSuites(DEFAULTS);
         assertArrayEquals(
                 new String[] {"ECDHE-RSA-AES128-GCM-SHA256", "ECDHE-RSA-AES256-GCM-SHA384"},
@@ -53,7 +53,7 @@ class SslUtilTest {
 
     @Test
     void blacklistShaCbc() {
-        Config.sslCipherBlacklist = ".*-SHA$";
+        Config.ssl_cipher_blacklist = ".*-SHA$";
         String[] out = SslUtil.filterCipherSuites(DEFAULTS);
         assertFalse(Arrays.asList(out).contains("AES128-SHA"));
         assertFalse(Arrays.asList(out).contains("AES256-SHA"));
@@ -64,7 +64,7 @@ class SslUtilTest {
 
     @Test
     void excludeAllTls13() {
-        Config.sslCipherBlacklist = "TLS_AES_128_GCM_SHA256,TLS_AES_256_GCM_SHA384,TLS_CHACHA20_POLY1305_SHA256";
+        Config.ssl_cipher_blacklist = "TLS_AES_128_GCM_SHA256,TLS_AES_256_GCM_SHA384,TLS_CHACHA20_POLY1305_SHA256";
         String[] out = SslUtil.filterCipherSuites(DEFAULTS);
         for (String s : out) {
             assertFalse(s.startsWith("TLS_"));
@@ -73,7 +73,7 @@ class SslUtilTest {
 
     @Test
     void whitelistSingleTls13() {
-        Config.sslCipherWhitelist = "TLS_AES_128_GCM_SHA256";
+        Config.ssl_cipher_whitelist = "TLS_AES_128_GCM_SHA256";
         String[] out = SslUtil.filterCipherSuites(DEFAULTS);
         assertArrayEquals(new String[] {"TLS_AES_128_GCM_SHA256"}, out);
     }

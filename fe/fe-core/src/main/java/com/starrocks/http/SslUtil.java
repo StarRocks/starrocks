@@ -50,8 +50,8 @@ public class SslUtil {
     }
 
     public static String[] filterCipherSuites(String[] defaults) {
-        List<Pattern> whitelist = parsePatterns(Config.sslCipherWhitelist);
-        List<Pattern> blacklist = parsePatterns(Config.sslCipherBlacklist);
+        List<Pattern> whitelist = parsePatterns(Config.ssl_cipher_whitelist);
+        List<Pattern> blacklist = parsePatterns(Config.ssl_cipher_blacklist);
 
         if (whitelist.isEmpty() && blacklist.isEmpty()) {
             return defaults;

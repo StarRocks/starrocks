@@ -733,14 +733,14 @@ public class Config extends ConfigBase {
      *  If both whitelist and blacklist are set, blacklist takes precedence.
      */
     @ConfField
-    public static String sslCipherWhitelist = "";
+    public static String ssl_cipher_whitelist = "";
 
     /**
      *  Property to blacklist ssl cipher suites, comma separated list, with regex support.
      *  If both whitelist and blacklist are set, blacklist takes precedence.
      */
     @ConfField
-    public static String sslCipherBlacklist = "";
+    public static String ssl_cipher_blacklist = "";
 
     /**
      * Configs for query queue v2.
