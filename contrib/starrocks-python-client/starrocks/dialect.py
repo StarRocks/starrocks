@@ -233,7 +233,7 @@ class StarRocksDDLCompiler(MySQLDDLCompiler):
             table_opts.append(f'PRIMARY KEY({opts["PRIMARY_KEY"]})')
 
         if "PARTITION_BY" in opts:
-            table_opts.append(f"PARTITION BY ({opts['PARTITION_BY']})")
+            table_opts.append(f"PARTITION BY {opts['PARTITION_BY']}")
 
         if 'DISTRIBUTED_BY' in opts:
             table_opts.append(f'DISTRIBUTED BY HASH({opts["DISTRIBUTED_BY"]})')

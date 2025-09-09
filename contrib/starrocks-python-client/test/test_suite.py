@@ -19,7 +19,7 @@ from textwrap import dedent
 from sqlalchemy.testing.suite import *
 
 from sqlalchemy.testing.assertions import AssertsCompiledSQL
-from sqlalchemy import VARCHAR, Table, Column, Integer, MetaData
+from sqlalchemy import VARCHAR, Table, Column, Integer, MetaData, DateTime
 from sqlalchemy import schema
 
 from sqlalchemy.testing import fixtures
@@ -75,7 +75,20 @@ class CompileTest(fixtures.TestBase, AssertsCompiledSQL):
             starrocks_partition_by="id")
         self.assert_compile(
             schema.CreateTable(tbl),
-            "CREATE TABLE btable (id BIGINT NOT NULL AUTO_INCREMENT)PRIMARY KEY(id) PARTITION BY (id)")
+            "CREATE TABLE btable (id BIGINT NOT NULL AUTO_INCREMENT)PRIMARY KEY(id) PARTITION BY id")
+
+    def test_create_partition_by_column_and_funcall(self):
+        m = MetaData()
+        tbl = Table(
+            'btable', m, 
+            Column("id", Integer, primary_key=True),
+            Column("dt", DateTime, primary_key=True),
+            starrocks_primary_key="id, dt",
+            starrocks_partition_by="id, date_trunc('month', dt)")
+        self.assert_compile(
+            schema.CreateTable(tbl),
+        "CREATE TABLE btable (id INTEGER NOT NULL, dt DATETIME NOT NULL)PRIMARY KEY(id, dt) PARTITION BY id, date_trunc('month', dt)"
+)
 
     def test_create_order_by(self):
         m = MetaData()
@@ -102,7 +115,7 @@ class CompileTest(fixtures.TestBase, AssertsCompiledSQL):
             starrocks_partition_by="id")
         self.assert_compile(
             schema.CreateTable(tbl),
-            "CREATE TABLE btable (id BIGINT NOT NULL AUTO_INCREMENT, data VARCHAR(10))PRIMARY KEY(id) PARTITION BY (id) DISTRIBUTED BY HASH(id) BUCKETS 10 ORDER BY (id, data)")
+            "CREATE TABLE btable (id BIGINT NOT NULL AUTO_INCREMENT, data VARCHAR(10))PRIMARY KEY(id) PARTITION BY id DISTRIBUTED BY HASH(id) BUCKETS 10 ORDER BY (id, data)")
 
 
 # Float test fixes below for "Data type of first column cannot be FLOAT" error given by starrocks
