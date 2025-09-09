@@ -340,6 +340,25 @@ public class AnalyzeTestUtil {
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\"\n" +
                 ");");
+<<<<<<< HEAD
+=======
+        starRocksAssert.withTable("CREATE TABLE test.test_exclude ( \n" + 
+                " id INT, \n" +
+                " name VARCHAR(50), \n" +
+                " age INT, \n" +
+                " email VARCHAR(100)) \n" +
+                " DUPLICATE KEY(id) PROPERTIES ( \n" +
+                "\"replication_num\" = \"1\"\n" +
+                ");");
+
+        starRocksAssert.withTable("CREATE TABLE test_auto_increment (" +
+                "id BIGINT NOT NULL AUTO_INCREMENT," +
+                "name VARCHAR(100)" +
+                ") " +
+                "PRIMARY KEY (`id`) " +
+                "DISTRIBUTED BY HASH(`id`) BUCKETS 1 " +
+                "PROPERTIES(\"replication_num\" = \"1\");");
+>>>>>>> 7cbfdee587 ([Enhancement] provide alter table xxx set auto_increment (#62767))
     }
 
     public static String getDbName() {

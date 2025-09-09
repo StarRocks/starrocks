@@ -947,6 +947,11 @@ alterClause
     | dropTagClause
     | tableOperationClause
     | dropPersistentIndexClause
+<<<<<<< HEAD:fe/fe-core/src/main/java/com/starrocks/sql/parser/StarRocks.g4
+=======
+    | splitTabletClause
+    | alterTableAutoIncrementClause
+>>>>>>> 7cbfdee587 ([Enhancement] provide alter table xxx set auto_increment (#62767)):fe/fe-grammar/src/main/antlr/com/starrocks/grammar/StarRocks.g4
 
     //Alter partition clause
     | addPartitionClause
@@ -1188,6 +1193,19 @@ dropPersistentIndexClause
     : DROP PERSISTENT INDEX ON TABLETS integer_list
     ;
 
+<<<<<<< HEAD:fe/fe-core/src/main/java/com/starrocks/sql/parser/StarRocks.g4
+=======
+splitTabletClause
+    : SPLIT
+      (((TABLET | TABLETS) partitionNames?) | tabletList)
+      properties?
+    ;
+
+alterTableAutoIncrementClause
+    : AUTO_INCREMENT '=' INTEGER_VALUE
+    ;
+
+>>>>>>> 7cbfdee587 ([Enhancement] provide alter table xxx set auto_increment (#62767)):fe/fe-grammar/src/main/antlr/com/starrocks/grammar/StarRocks.g4
 // ---------Alter partition clause---------
 
 addPartitionClause

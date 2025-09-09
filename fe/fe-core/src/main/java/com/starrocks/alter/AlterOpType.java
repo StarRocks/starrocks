@@ -34,6 +34,26 @@
 
 package com.starrocks.alter;
 
+<<<<<<< HEAD
+=======
+import com.starrocks.sql.ast.AddColumnClause;
+import com.starrocks.sql.ast.AddColumnsClause;
+import com.starrocks.sql.ast.AddFieldClause;
+import com.starrocks.sql.ast.AddPartitionClause;
+import com.starrocks.sql.ast.AddRollupClause;
+import com.starrocks.sql.ast.AlterClause;
+import com.starrocks.sql.ast.AlterTableAutoIncrementClause;
+import com.starrocks.sql.ast.CreateIndexClause;
+import com.starrocks.sql.ast.DropColumnClause;
+import com.starrocks.sql.ast.DropFieldClause;
+import com.starrocks.sql.ast.DropIndexClause;
+import com.starrocks.sql.ast.DropRollupClause;
+import com.starrocks.sql.ast.ModifyColumnClause;
+import com.starrocks.sql.ast.ModifyColumnCommentClause;
+import com.starrocks.sql.ast.OptimizeClause;
+import com.starrocks.sql.ast.ReorderColumnsClause;
+
+>>>>>>> 7cbfdee587 ([Enhancement] provide alter table xxx set auto_increment (#62767))
 public enum AlterOpType {
     // rollup
     ADD_ROLLUP,
@@ -66,10 +86,19 @@ public enum AlterOpType {
 
     // Optimize table
     OPTIMIZE,
+<<<<<<< HEAD
     ALTER_BRANCH,
     ALTER_TAG,
     ALTER_TABLE_OPERATION,
     INVALID_OP; // INVALID_OP must be the last one
+=======
+    // ALTER AUTO_INCREMENT counter
+    ALTER_AUTO_INCREMENT,
+    // ALTER_OTHER must be the last one
+    ALTER_OTHER,
+    // INVALID_OP must be the last one
+    INVALID_OP;
+>>>>>>> 7cbfdee587 ([Enhancement] provide alter table xxx set auto_increment (#62767))
 
     // true means 2 operations have no conflict.
     public static Boolean[][] COMPATIBITLITY_MATRIX;
@@ -93,4 +122,33 @@ public enum AlterOpType {
         return this == ADD_ROLLUP || this == SCHEMA_CHANGE || this == ADD_PARTITION || this == OPTIMIZE;
     }
 
+<<<<<<< HEAD
+=======
+    public static AlterOpType getOpType(AlterClause alterClause) {
+        if (alterClause instanceof AddColumnClause ||
+                alterClause instanceof AddColumnsClause ||
+                alterClause instanceof AddFieldClause ||
+                alterClause instanceof CreateIndexClause ||
+                alterClause instanceof DropColumnClause ||
+                alterClause instanceof DropFieldClause ||
+                alterClause instanceof DropIndexClause ||
+                alterClause instanceof ModifyColumnClause ||
+                alterClause instanceof ModifyColumnCommentClause ||
+                alterClause instanceof ReorderColumnsClause) {
+            return SCHEMA_CHANGE;
+        } else if (alterClause instanceof AddPartitionClause) {
+            return ADD_PARTITION;
+        } else if (alterClause instanceof AddRollupClause) {
+            return ADD_ROLLUP;
+        } else if (alterClause instanceof DropRollupClause) {
+            return DROP_ROLLUP;
+        } else if (alterClause instanceof OptimizeClause) {
+            return OPTIMIZE;
+        } else if (alterClause instanceof AlterTableAutoIncrementClause) {
+            return ALTER_AUTO_INCREMENT;
+        }
+
+        return ALTER_OTHER;
+    }
+>>>>>>> 7cbfdee587 ([Enhancement] provide alter table xxx set auto_increment (#62767))
 }
