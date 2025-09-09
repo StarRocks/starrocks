@@ -27,7 +27,6 @@ import com.starrocks.common.Config;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.common.util.ThreadUtil;
 import com.starrocks.scheduler.Constants;
-import com.starrocks.scheduler.TaskBuilder;
 import com.starrocks.scheduler.persist.TaskRunStatus;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.DDLTestBase;
