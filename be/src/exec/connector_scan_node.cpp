@@ -698,6 +698,8 @@ StatusOr<pipeline::MorselQueuePtr> ConnectorScanNode::convert_scan_range_to_mors
         const std::vector<TScanRangeParams>& scan_ranges, int node_id, int32_t pipeline_dop,
         bool enable_tablet_internal_parallel, TTabletInternalParallelMode::type tablet_internal_parallel_mode,
         size_t num_total_scan_ranges) {
+    auto timer = ADD_TIMER(_runtime_profile, "ScannerConvertMorselQueueTime");
+    SCOPED_TIMER(timer);
     return _data_source_provider->convert_scan_range_to_morsel_queue(
             scan_ranges, node_id, pipeline_dop, enable_tablet_internal_parallel, tablet_internal_parallel_mode,
             num_total_scan_ranges);
