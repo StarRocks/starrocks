@@ -1159,8 +1159,14 @@ public class TabletScheduler extends FrontendDaemon {
 
         Set<Pair<String, String>> matchedLocations = new HashSet<>();
         Replica dupReplica = null;
-        //1. delete the unmatched replica
-        for (Replica replica : tabletCtx.getReplicas()) {
+        // 1. delete the unmatched replica
+        // To ensure the correctness of the cleanup process after a rebalance, we iterate the replicas in reverse order.
+        // After cloning a replica from the source BE to a newly added destination BE, the replica on the new BE will
+        // always be at the end of the list. By traversing the list in reverse, we process newer replicas first
+        // and preserve the newly added replica, preventing it from being mistakenly deleted.
+        List<Replica> replicas = tabletCtx.getReplicas();
+        for (int i = replicas.size() - 1; i >= 0; i--) {
+            Replica replica = replicas.get(i);
             if (!TabletChecker.isLocationMatch(replica.getBackendId(), tabletCtx.getRequiredLocation())) {
                 deleteReplicaInternal(tabletCtx, replica, "location mismatch", force);
                 return true;
