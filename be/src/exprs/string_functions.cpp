@@ -3132,7 +3132,7 @@ StatusOr<ColumnPtr> StringFunctions::concat_ws(FunctionContext* context, const C
     }
 
     if (columns.size() == 2) {
-        return columns[1];
+        return std::move(*columns[1]).mutate();
     }
 
     const auto sep_size = ColumnHelper::compute_bytes_size(columns.begin(), columns.begin() + 1);

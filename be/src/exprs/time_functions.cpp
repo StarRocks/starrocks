@@ -3186,7 +3186,7 @@ Status TimeFunctions::date_trunc_prepare(FunctionContext* context, FunctionConte
 }
 
 StatusOr<ColumnPtr> TimeFunctions::date_trunc_day(FunctionContext* context, const starrocks::Columns& columns) {
-    return columns[1];
+    return std::move(*columns[1]).mutate();
 }
 
 DEFINE_UNARY_FN_WITH_IMPL(date_trunc_monthImpl, v) {
