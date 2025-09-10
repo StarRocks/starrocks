@@ -35,8 +35,6 @@
 package com.starrocks.cluster;
 
 import com.google.common.base.Strings;
-import com.starrocks.authentication.AuthenticationMgr;
-import com.starrocks.system.SystemInfoService;
 
 /**
  * used to isolate the use for the database name and user name in the globalStateMgr,
@@ -50,7 +48,7 @@ public class ClusterNamespace {
     public static final String CLUSTER_DELIMITER = ":";
 
     public static String getFullName(String name) {
-        return linkString(SystemInfoService.DEFAULT_CLUSTER, name);
+        return linkString("default_cluster", name);
     }
 
     public static String getNameFromFullName(String fullName) {
@@ -72,7 +70,7 @@ public class ClusterNamespace {
         if (Strings.isNullOrEmpty(cluster) || Strings.isNullOrEmpty(name)) {
             return null;
         }
-        if (name.contains(CLUSTER_DELIMITER) || name.equalsIgnoreCase(AuthenticationMgr.ROOT_USER)) {
+        if (name.contains(CLUSTER_DELIMITER) || name.equalsIgnoreCase("root")) {
             return name;
         }
         return cluster + CLUSTER_DELIMITER + name;

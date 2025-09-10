@@ -17,7 +17,6 @@ package com.starrocks.authentication;
 import com.starrocks.catalog.UserIdentity;
 import com.starrocks.common.Config;
 import com.starrocks.mysql.MysqlCodec;
-import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import org.ietf.jgss.GSSContext;
 import org.ietf.jgss.GSSCredential;
@@ -49,7 +48,7 @@ public class KerberosAuthenticationProvider implements AuthenticationProvider {
     }
 
     @Override
-    public void authenticate(ConnectContext context, UserIdentity userIdentity, byte[] authResponse)
+    public void authenticate(AuthenticationContext context, UserIdentity userIdentity, byte[] authResponse)
             throws AuthenticationException {
         try {
             String spn = Config.authentication_kerberos_service_principal;
@@ -126,7 +125,7 @@ public class KerberosAuthenticationProvider implements AuthenticationProvider {
     }
 
     @Override
-    public byte[] authMoreDataPacket(ConnectContext context, String user, String host) throws AuthenticationException {
+    public byte[] authMoreDataPacket(AuthenticationContext context, String user, String host) throws AuthenticationException {
         try {
             Map.Entry<UserIdentity, UserAuthenticationInfo> authenticationInfo =
                     GlobalStateMgr.getCurrentState().getAuthenticationMgr().getBestMatchedUserIdentity(user, host);
@@ -152,7 +151,8 @@ public class KerberosAuthenticationProvider implements AuthenticationProvider {
     }
 
     @Override
-    public byte[] authSwitchRequestPacket(ConnectContext context, String user, String host) throws AuthenticationException {
+    public byte[] authSwitchRequestPacket(AuthenticationContext context, String user, String host)
+            throws AuthenticationException {
         return authMoreDataPacket(context, user, host);
     }
 }

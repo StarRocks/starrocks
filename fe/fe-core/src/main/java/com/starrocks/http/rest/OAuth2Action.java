@@ -16,6 +16,8 @@ package com.starrocks.http.rest;
 
 import com.nimbusds.jose.jwk.JWKSet;
 import com.starrocks.authentication.AuthenticationException;
+import com.starrocks.authentication.AuthenticationProvider;
+import com.starrocks.authentication.OAuth2AuthenticationProvider;
 import com.starrocks.authentication.OAuth2Context;
 import com.starrocks.authentication.OAuth2ResultMessage;
 import com.starrocks.authentication.OpenIdConnectVerifier;
@@ -79,8 +81,18 @@ public class OAuth2Action extends RestBaseAction {
             return;
         }
 
+        AuthenticationProvider authenticationProvider = context.getAuthenticationProvider();
+        if (!(authenticationProvider instanceof OAuth2AuthenticationProvider)) {
+            response.appendContent(OAuth2ResultMessage.generateLoginSuccessPage(
+                    "Failed", "The authentication type is not OAuth2",
+                    context.getQualifiedUser(), String.valueOf(connectionId)));
+            sendResult(request, response);
+            return;
+        }
+
         try {
-            OAuth2Context oAuth2Context = context.getOAuth2Context();
+            OAuth2Context oAuth2Context = ((OAuth2AuthenticationProvider) authenticationProvider).getoAuth2Context();
+
             String oidcToken = getToken(authorizationCode, oAuth2Context, connectionId);
             JWKSet jwkSet = GlobalStateMgr.getCurrentState().getJwkMgr().getJwkSet(oAuth2Context.jwksUrl());
 

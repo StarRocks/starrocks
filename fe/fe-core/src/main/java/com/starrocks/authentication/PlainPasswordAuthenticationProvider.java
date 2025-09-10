@@ -19,7 +19,6 @@ import com.starrocks.common.ErrorCode;
 import com.starrocks.common.Pair;
 import com.starrocks.epack.authentication.AuthenticationMgrEPack;
 import com.starrocks.mysql.MysqlPassword;
-import com.starrocks.qe.ConnectContext;
 import com.starrocks.rpc.ThriftConnectionPool;
 import com.starrocks.rpc.ThriftRPCRequestExecutor;
 import com.starrocks.server.GlobalStateMgr;
@@ -39,14 +38,13 @@ public class PlainPasswordAuthenticationProvider implements AuthenticationProvid
     }
 
     public void authenticate(
-            ConnectContext context,
+            AuthenticationContext authContext,
             UserIdentity userIdentity,
             byte[] authResponse) throws AuthenticationException {
         AuthenticationMgrEPack authenticationMgr =
                 (AuthenticationMgrEPack) GlobalStateMgr.getCurrentState().getAuthenticationMgr();
         String usePassword = authResponse.length == 0 ? "NO" : "YES";
-
-        byte[] randomString = context.getAuthDataSalt();
+        byte[] randomString = authContext.getAuthDataSalt();
         // The password sent by mysql client has already been scrambled(encrypted) using random string,
         // so we don't need to scramble it again.
         if (randomString != null) {
@@ -61,7 +59,7 @@ public class PlainPasswordAuthenticationProvider implements AuthenticationProvid
                         authenticationMgr.increasePasswordErrorTimes(userIdentity);
                     } else {
                         TAuthInfo tAuthInfo = new TAuthInfo();
-                        tAuthInfo.current_user_ident = userIdentity.toThrift();
+                        tAuthInfo.current_user_ident = UserIdentityUtils.toThrift(userIdentity);
 
                         TUserSecurityPolicyRequest tUserSecurityPolicyRequest = new TUserSecurityPolicyRequest();
                         tUserSecurityPolicyRequest.setAuthInfo(tAuthInfo);
@@ -90,7 +88,7 @@ public class PlainPasswordAuthenticationProvider implements AuthenticationProvid
         }
 
         if (authenticationMgr.checkUserPasswordExpired(userIdentity)) {
-            context.setPasswordExpired(true);
+            authContext.setPasswordExpired(true);
         }
 
         if (authenticationMgr.checkUserLocked(userIdentity)) {
@@ -99,7 +97,8 @@ public class PlainPasswordAuthenticationProvider implements AuthenticationProvid
     }
 
     @Override
-    public byte[] authSwitchRequestPacket(ConnectContext context, String user, String host) throws AuthenticationException {
-        return context.getAuthDataSalt();
+    public byte[] authSwitchRequestPacket(AuthenticationContext authContext, String user, String host)
+            throws AuthenticationException {
+        return authContext.getAuthDataSalt();
     }
 }
