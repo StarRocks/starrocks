@@ -180,8 +180,10 @@ public class ProfileManager implements MemoryTrackable {
                     + "may be forget to insert 'QUERY_ID' column into infoStrings");
         }
 
+        String removedQueryId = null;
         writeLock.lock();
         try {
+<<<<<<< HEAD
             if (queryType != null && queryType.equals("Load")) {
                 loadProfileMap.put(queryId, element);
                 if (loadProfileMap.size() > Config.load_profile_info_reserved_num) {
@@ -192,10 +194,18 @@ public class ProfileManager implements MemoryTrackable {
                 if (profileMap.size() > Config.profile_info_reserved_num) {
                     profileMap.remove(profileMap.keySet().iterator().next());
                 }
+=======
+            profileMap.put(queryId, element);
+            if (profileMap.size() > Config.profile_info_reserved_num) {
+                removedQueryId = profileMap.keySet().iterator().next();
+                profileMap.remove(removedQueryId);
+>>>>>>> 678cb8fff4 ([BugFix] Fix collecting stream load profile failed (#62802))
             }
         } finally {
             writeLock.unlock();
         }
+
+        LOG.debug("push profile for query: {}, remove profile for query: {}", queryId, removedQueryId);
 
         return profileString;
     }
