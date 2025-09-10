@@ -71,7 +71,7 @@ Before proceeding, make sure the following requirements are met:
 
    :::
 
-3. Download the [StarRocks Tableau JDBC Connector file](https://releases.starrocks.io/resources/starrocks_jdbc-v1.2.0_signed.taco).
+3. Download the [StarRocks Tableau JDBC Connector file](https://exchange.tableau.com/products/1079).
 4. Store the connector file in the following directory of each node:
 
    - Linux: `/opt/tableau/connectors`

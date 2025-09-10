@@ -71,7 +71,7 @@ StarRocks Tableau JDBC Connector は、Tableau Desktop および Tableau Server 
 
    :::
 
-3. [StarRocks Tableau JDBC Connector file](https://releases.starrocks.io/resources/starrocks_jdbc-v1.2.0_signed.taco) をダウンロードします。
+3. [StarRocks Tableau JDBC Connector file](https://exchange.tableau.com/products/1079) をダウンロードします。
 4. 各ノードの以下のディレクトリにコネクタファイルを保存します：
 
    - Linux: `/opt/tableau/connectors`
