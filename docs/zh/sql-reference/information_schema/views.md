@@ -17,6 +17,6 @@ displayed_sidebar: docs
 | CHECK_OPTION         | CHECK_OPTION 属性的值。该值是 NONE、CASCADE 或 LOCAL 中的一个。 |
 | IS_UPDATABLE         | 视图是否可更新。如果对视图的 UPDATE 和 DELETE（以及类似的操作）是合法的，则设置标志为 YES（true）。否则，标志设置为 NO（false）。如果视图不可更新，诸如 UPDATE、DELETE 和 INSERT 等语句是非法的，会被拒绝。 |
 | DEFINER              | 创建视图的用户。                                             |
-| SECURITY_TYPE        | 视图的 SQL SECURITY 特性。该值是 DEFINER 或 INVOKER 中的一个。 |
+| SECURITY_TYPE        |                                                              |
 | CHARACTER_SET_CLIENT |                                                              |
 | COLLATION_CONNECTION |                                                              |
