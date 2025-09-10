@@ -453,27 +453,32 @@ public class SystemInfoService implements GsonPostProcessable {
     }
 
     public void dropComputeNodes(DropComputeNodeClause dropComputeNodeClause) throws DdlException {
-        String warehouse = dropComputeNodeClause.getWarehouse();
-        // check if the warehouse exist
-        if (GlobalStateMgr.getCurrentState().getWarehouseMgr().getWarehouseAllowNull(warehouse) == null) {
-            ErrorReport.reportDdlException(ErrorCode.ERR_UNKNOWN_WAREHOUSE, String.format("name: %s", warehouse));
-        }
-
         for (Pair<String, Integer> pair : dropComputeNodeClause.getHostPortPairs()) {
-            dropComputeNode(pair.first, pair.second, warehouse, dropComputeNodeClause.getCNGroupName());
+            dropComputeNode(pair.first, pair.second, dropComputeNodeClause.getWarehouse(), dropComputeNodeClause.getCNGroupName());
         }
     }
 
     public void dropComputeNode(String host, int heartbeatPort, String warehouse, String cnGroupName)
             throws DdlException {
+        if (!Strings.isNullOrEmpty(warehouse)) {
+            // check if the warehouse exist
+            if (GlobalStateMgr.getCurrentState().getWarehouseMgr().getWarehouseAllowNull(warehouse) == null) {
+                ErrorReport.reportDdlException(ErrorCode.ERR_UNKNOWN_WAREHOUSE, String.format("name: %s", warehouse));
+            }
+        }
+
         ComputeNode dropComputeNode = getComputeNodeWithHeartbeatPort(host, heartbeatPort);
         if (dropComputeNode == null) {
             throw new DdlException("compute node does not exists[" +
                     NetUtils.getHostPortInAccessibleFormat(host, heartbeatPort) + "]");
         }
 
-        // check if warehouseName is right
         Warehouse wh = GlobalStateMgr.getCurrentState().getWarehouseMgr().getWarehouseAllowNull(dropComputeNode.getWarehouseId());
+        // If warehouse is null, use the warehouse of the compute node
+        if (Strings.isNullOrEmpty(warehouse)) {
+            warehouse = wh.getName();
+        }
+        // check if warehouseName is right
         if (wh != null) {
             if (!warehouse.equalsIgnoreCase(wh.getName())) {
                 throw new DdlException("compute node [" + host + ":" + heartbeatPort +
