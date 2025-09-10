@@ -137,7 +137,9 @@ public class HttpUtils {
         }
     }
 
-    private static String executeRequest(String uri, HttpUriRequest request, AbstractHttpEntity entity) throws HttpRequestException {
+    private static String executeRequest(String uri,
+                                         HttpUriRequest request,
+                                         AbstractHttpEntity entity) throws HttpRequestException {
         CloseableHttpClient httpClient = getInstance();
         if (Objects.isNull(httpClient)) {
             LOG.error("HttpClient is null for uri: {}", uri);
