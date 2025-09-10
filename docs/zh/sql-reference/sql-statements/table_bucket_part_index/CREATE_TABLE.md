@@ -263,15 +263,159 @@ key_type(k1[,k2 ...])
 
 ## 分区
 
-可以通过以下方式管理分区：
+您可以通过以下分区策略创建表：
 
-### 动态创建分区
+- [表达式分区](../../../table_design/data_distribution/expression_partitioning.md)
+- [List 分区](../../../table_design/data_distribution/list_partitioning.md)
+- [Range 分区](../../../table_design/data_distribution/dynamic_partitioning.md)
+
+详细操作说明请参见对应的主题。
+
+### 创建表达式分区
+
+#### 简单时间函数表达式分区
+
+如果您经常按照连续日期范围来查询和管理数据，则只需要在时间函数分区表达式中，指定一个日期类型（DATE 或者 DATETIME ）的分区列，以及指定分区粒度（年、月、日或小时）。StarRocks 会根据导入的数据和分区表达式，自动创建分区并且设置分区的起止时间。
+
+不过在一些特殊场景下，比如历史数据按月划分分区、最近数据按天划分分区，则需要采用 [Range 分区](../../../table_design/data_distribution/Data_distribution.md#range-分区)创建分区。
+
+语法：
+
+```sql
+PARTITION BY expression
+...
+[ PROPERTIES( { 'partition_live_number' = 'xxx' | 'partition_retention_condition' = 'expr' } ) ]
+
+expression ::=
+    { date_trunc ( <time_unit> , <partition_column> ) |
+      time_slice ( <partition_column> , INTERVAL <N> <time_unit> [ , boundary ] ) }
+```
+
+- `expression`
+  - 必填：是
+  - 说明：使用 [date_trunc](../../sql-functions/date-time-functions/date_trunc.md) 或 [time_slice](../../sql-functions/date-time-functions/time_slice.md) 的简单时间函数表达式。并且如果您使用 `time_slice` 函数，则可以不传入参数 `boundary`，因为在该场景中该参数默认且仅支持为 `floor`，不支持为 `ceil`。
+
+- `time_unit`
+  - 必填：是
+  - 说明：分区粒度，目前仅支持为 `hour`、`day`、`month` 或 `year`，暂时不支持为 `week`。如果分区粒度为 `hour`，则仅支持分区列为 DATETIME 类型，不支持为 DATE 类型。
+
+- `partition_column`
+  - 必填：是
+  - 说明：分区列。仅支持为日期类型（DATE 或 DATETIME），不支持为其它类型。
+    - 如果使用 `date_trunc` 函数，则分区列支持为 DATE 或 DATETIME 类型。
+    - 如果使用 `time_slice` 函数，则分区列仅支持为 DATETIME 类型。分区列的值支持为 `NULL`。
+    - 如果分区列是 DATE 类型，则范围支持为 [0000-01-01 ~ 9999-12-31]。
+    - 如果分区列是 DATETIME 类型，则范围支持为 [0000-01-01 01:01:01 ~ 9999-12-31 23:59:59]。
+    - 目前仅支持指定一个分区列，不支持指定多个分区列。
+
+- `partition_live_number`
+  - 必填：否
+  - 说明：保留最近多少数量的分区。最近是指分区按时间的先后顺序进行排序，以**当前时间**为基准，然后从后往前数指定个数的分区进行保留，其余（更早的）分区会被删除。后台会定时调度任务来管理分区数量，调度间隔可以通过 FE 动态参数 `dynamic_partition_check_interval_seconds` 配置，默认为 600 秒，即 10 分钟。假设当前为 2023 年 4 月 4 日，`partition_live_number` 设置为 `2`，分区包含 `p20230401`、`p20230402`、`p20230403`、`p20230404`，则分区 `p20230403`、`p20230404` 会保留，其他分区会删除。如果导入了脏数据，比如未来时间 4 月 5 日和 6 日的数据，导致分区包含 `p20230401`、`p20230402`、`p20230403`、`p20230404`、`p20230405`、`p20230406`，则分区 `p20230403`、`p20230404`、`p20230405`、`p20230406` 会保留，其他分区会删除。
+
+- `partition_retention_condition`
+  - 必填：否
+  - 说明：用于声明动态保留分区的表达式。不符合表达式中条件的分区将被定期删除。示例：`"partition_retention_condition" = "dt >= CURRENT_DATE() - INTERVAL 3 MONTH"`。从 v3.5.0 开始，StarRocks 内表支持通用分区表达式（Common Partition Expression）TTL。
+    - 表达式只能包含分区列和常量。不支持非分区列。
+    - 通用分区表达式处理 List 分区和 Range 分区的方式不同：
+      - 对于 List 分区表，StarRocks 支持通过通用分区表达式过滤删除分区。
+      - 对于 Range 分区表，StarRocks 只能基于 FE 的分区裁剪功能过滤删除分区。对于分区裁剪不支持的谓词，StarRocks 无法过滤删除对应的分区。
+
+:::note
+- 在导入的过程中 StarRocks 根据导入数据已经自动创建了一些分区，但是由于某些原因导入作业最终失败，则在当前版本中，已经自动创建的分区并不会由于导入失败而自动删除。
+- StarRocks 单次导入自动创建分区数量上限默认为 4096，由 FE 配置参数 `auto_partition_max_creation_number_per_load` 决定。该参数可以防止您由于误操作而创建大量分区。
+- 分区命名规则与动态分区的命名规则一致。
+:::
+
+#### 列表达式分区
+
+如果您经常按照枚举值来查询和管理数据，则您只需要指定表示类型的列为分区列，StarRocks 会根据导入的数据的分区列值，来自动划分并创建分区。
+
+不过在一些特殊场景下，比如表中包含表示城市的列，您经常按照国家和城市来查询和管理数据，希望将同属于一个国家的多个城市的数据存储在一个分区中，则需要使用 [List 分区](../../../table_design/data_distribution/list_partitioning.md)。
+
+语法：
+
+```SQL
+PARTITION BY expression
+...
+
+expression ::=
+    <partition_columns>
+    
+partition_columns ::=
+    <column>, [ <column> [,...] ]
+```
+
+- `partition_columns`
+  - 必填：是
+  - 说明：分区列。
+    - 支持为字符串（不支持 BINARY）、日期、整数和布尔值。不支持分区列的值为 `NULL`。
+    - 导入后自动创建的一个分区中只能包含各分区列的一个值，如果需要包含各分区列的多值，请使用 [List 分区](../../../table_design/data_distribution/list_partitioning.md)。
+
+:::note
+
+- 从 v3.4 版开始，您可以省略用于包裹分区列的括号。例如，您可以将 `PARTITION BY (dt,city)` 替换为 `PARTITION BY dt,city`。
+- 在导入的过程中 StarRocks 根据导入数据已经自动创建了一些分区，但是由于某些原因导入作业最终失败，则在当前版本中，已经自动创建的分区并不会由于导入失败而自动删除。
+- StarRocks 单次导入自动创建分区数量上限默认为 4096，由 FE 配置参数 `auto_partition_max_creation_number_per_load` 决定。该参数可以防止您由于误操作而创建大量分区。
+- 分区命名规则：如果存在多个分区列，则不同分区列的值以下划线（_）连接。例如：存在有两个分区列 `dt` 和 `city`，均为字符串类型，导入一条数据 `2022-04-01`, `beijing`，则自动创建的分区名称为 `p20220401_beijing`。
+:::
+
+#### 基于复杂时间函数表达式的分区（自 v3.4 起）
+
+详情及示例请参见 [表达式分区 - 基于复杂时间函数表达式的分区](../../../table_design/data_distribution/expression_partitioning.md#复杂时间函数表达式分区-自-v34)。
+
+#### 基于混合表达式的分区（自 v3.4 起）
+
+详情及示例请参见 [表达式分区 - 基于混合表达式的分区](../../../table_design/data_distribution/expression_partitioning.md#混合表达式分区-自-v34)。
+
+### 创建 List 分区
+
+语法：
+
+```SQL
+PARTITION BY LIST (partition_columns) (
+    PARTITION <partition_name> VALUES IN (value_list)
+    [, ...]
+)
+
+partition_columns::= 
+    <column> [,<column> [, ...] ]
+
+value_list ::=
+    value_item [, value_item [, ...] ]
+
+value_item ::=
+    { <value> | ( <value> [, <value>, [, ...] ] ) }    
+```
+
+- `partition_columns`
+  - 必填：是
+  - 说明：分区列。分区列的值支持为字符串（除 BINARY）、日期（DATE 和 DATETIME）、整数和布尔值。自 v3.3.3 起，分区列的值支持为 `NULL`。
+
+- `partition_name`
+  - 必填：是
+  - 说明：分区名称。建议您按照业务场景设置合理的分区名称，便于区别不同分区包含的数据分类。
+
+- `value_list`
+  - 必填：是
+  - 说明：分区中分区列的枚举值列表。
+
+:::note
+- 不支持动态 List 分区。
+- StarRocks 存算分离模式 从 3.1.1 版本开始支持该功能。
+- 使用 `ALTER TABLE <table_name> DROP PARTITION <partition_name>;` 分区直接被删除并且不能被恢复。
+- 自 v3.4.0、v3.3.8、v3.2.13 以及 v3.1.16 起，StarRocks 支持[备份与恢复](../../../administration/management/Backup_and_restore.md) List 分区表。
+- 从 3.3.5 版本开始，[异步物化视图](../../../using_starrocks/async_mv/Materialized_view.md)支持基于使用 List 分区的基表创建。
+:::
+
+### 创建 Range 分区
+
+#### 动态创建分区
 
 [动态分区](../../../table_design/data_distribution/dynamic_partitioning.md) 提供了分区的生存时间 (TTL) 管理。StarRocks 自动提前创建新分区并删除过期分区，以确保数据的新鲜度。要启用此功能，您可以在创建表时配置动态分区相关属性。
 
-### 逐个创建分区
+#### 逐个创建分区
 
-#### 仅为分区指定上限
+##### 仅为分区指定上限
 
 语法：
 
@@ -308,7 +452,7 @@ PARTITION BY RANGE ( <partitioning_column1> [, <partitioning_column2>, ... ] )
 - 当需要数据回溯时，您可能需要考虑清空第一个分区，以便在必要时添加分区。
 :::
 
-#### 为分区指定上下限
+##### 为分区指定上下限
 
 语法：
 
@@ -336,7 +480,7 @@ PARTITION BY RANGE ( <partitioning_column1> [, <partitioning_column2>, ... ] )
   )
   ```
 
-### 批量创建多个分区
+#### 批量创建多个分区
 
 语法
 
