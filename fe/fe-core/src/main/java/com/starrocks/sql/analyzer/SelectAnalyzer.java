@@ -60,10 +60,6 @@ import java.util.stream.Stream;
 import static com.starrocks.sql.ast.expression.Expr.pushNegationToOperands;
 import static com.starrocks.sql.common.ErrorType.INTERNAL_ERROR;
 
-/**
- * Old Deduped size: 1000, time: 501 ms
- * New Deduped size: 1000, time: 18 ms
- */
 public class SelectAnalyzer {
     private final ConnectContext session;
 

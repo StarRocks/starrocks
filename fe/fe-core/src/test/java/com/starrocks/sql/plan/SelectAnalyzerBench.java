@@ -23,6 +23,10 @@ import com.starrocks.sql.ast.expression.Expr;
 import java.util.ArrayList;
 import java.util.List;
 
+/**
+ * Old Deduped size: 1000, time: 501 ms
+ * New Deduped size: 1000, time: 18 ms
+ */
 public class SelectAnalyzerBench {
     // Benchmark test for removeDuplicateField optimization
     // This is a simple micro-benchmark for development/verification purposes.
