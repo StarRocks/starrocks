@@ -51,6 +51,7 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
@@ -825,13 +826,13 @@ public class SelectAnalyzer {
             if (this == o) return true;
             if (o == null || getClass() != o.getClass()) return false;
             NameExprKey that = (NameExprKey) o;
-            return java.util.Objects.equals(name, that.name) &&
-                    java.util.Objects.equals(originExpr, that.originExpr);
+            return Objects.equals(name, that.name) &&
+                    Objects.equals(originExpr, that.originExpr);
         }
 
         @Override
         public int hashCode() {
-            return java.util.Objects.hash(name, originExpr);
+            return Objects.hash(name, originExpr);
         }
     }
 
