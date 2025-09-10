@@ -501,6 +501,7 @@ SET(DW_TEST_FILES
     ./storage/lake/tablet_warmup_manager_test.cpp
     ./storage/lake/tablet_writer_test.cpp
     ./storage/lake/transactions_test.cpp
+    ./storage/lake/pk_tablet_sst_writer_test.cpp
     ./storage/lake/txn_log_applier_test.cpp
     ./storage/lake/vacuum_test.cpp
     ./storage/lake/write_combined_txn_log_test.cpp
