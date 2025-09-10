@@ -235,6 +235,11 @@ StarRocks 从 v3.3.2 版本开始支持查询 Iceberg 视图。目前仅支持�
 - StarRocks 支持查询 Delta Lake 中 Parquet 格式的数据，Parquet 文件支持 SNAPPY、LZ4、ZSTD、GZIP 和 NO_COMPRESSION 压缩格式。
 - StarRocks 不支持查询 Delta Lake 中的 MAP 类型和 STRUCT 类型的数据。
 - 从 v3.0.0 开始，StarRocks 支持使用 SHOW CREATE TABLE 查看 Delta Lake 表结构。
+- 目前，Delta Lake Catalog 支持以下表功能：
+  - V2 Checkpoint（从 v3.3.0 开始）
+  - 无时区的时间戳（从 v3.3.1 开始）
+  - 列映射（从 v3.3.6 开始）
+  - Deletion Vector（从 v3.4.1 开始）
 
 ## JDBC Catalog
 
