@@ -1,0 +1,178 @@
+-- name: test_mv_force_refresh
+create database db_${uuid0};
+-- result:
+-- !result
+use db_${uuid0};
+-- result:
+-- !result
+CREATE TABLE `t1` (
+    `k1` date,
+    `k2` int,
+    `k3` int
+)
+DUPLICATE KEY(`k1`)
+PARTITION BY RANGE (k1) (
+START ("2020-10-01") END ("2022-03-04") EVERY (INTERVAL 15 day)
+)
+DISTRIBUTED BY HASH(`k1`) BUCKETS 3;
+-- result:
+-- !result
+INSERT INTO t1 VALUES ("2020-11-10",1,1),("2020-11-11",2,2),("2020-11-12",3,3);
+-- result:
+-- !result
+CREATE MATERIALIZED VIEW test_mv1
+PARTITION BY k1
+DISTRIBUTED BY HASH(k1) BUCKETS 10
+REFRESH DEFERRED MANUAL
+PROPERTIES ("partition_refresh_number"="-1")
+AS SELECT * FROM t1;
+-- result:
+-- !result
+REFRESH MATERIALIZED VIEW test_mv1 WITH SYNC MODE;
+select * from test_mv1 order by k1, k2;
+-- result:
+2020-11-10	1	1
+2020-11-11	2	2
+2020-11-12	3	3
+-- !result
+REFRESH MATERIALIZED VIEW test_mv1 FORCE WITH SYNC MODE;
+select * from test_mv1 order by k1, k2;
+-- result:
+2020-11-10	1	1
+2020-11-11	2	2
+2020-11-12	3	3
+-- !result
+REFRESH MATERIALIZED VIEW test_mv1 PARTITION START("2020-11-10") END("2020-11-11") FORCE WITH SYNC MODE;
+select * from test_mv1 order by k1, k2;
+-- result:
+2020-11-10	1	1
+2020-11-11	2	2
+2020-11-12	3	3
+-- !result
+INSERT INTO t1 VALUES ("2020-11-10",4,4);
+-- result:
+-- !result
+REFRESH MATERIALIZED VIEW test_mv1 FORCE WITH SYNC MODE;
+select * from test_mv1 order by k1, k2;
+-- result:
+2020-11-10	1	1
+2020-11-10	4	4
+2020-11-11	2	2
+2020-11-12	3	3
+-- !result
+DROP MATERIALIZED VIEW test_mv1;
+-- result:
+-- !result
+CREATE TABLE `t2` (
+    `k1` date,
+    `k2` int,
+    `k3` int
+)
+DUPLICATE KEY(`k1`)
+DISTRIBUTED BY HASH(`k1`) BUCKETS 3;
+-- result:
+-- !result
+INSERT INTO t2 VALUES ("2020-11-10",1,1),("2020-11-11",2,2),("2020-11-12",3,3);
+-- result:
+-- !result
+CREATE MATERIALIZED VIEW test_mv1
+DISTRIBUTED BY HASH(k1) BUCKETS 10
+REFRESH DEFERRED MANUAL
+AS SELECT * FROM t2;
+-- result:
+-- !result
+REFRESH MATERIALIZED VIEW test_mv1 WITH SYNC MODE;
+select * from test_mv1 order by k1, k2;
+-- result:
+2020-11-10	1	1
+2020-11-11	2	2
+2020-11-12	3	3
+-- !result
+REFRESH MATERIALIZED VIEW test_mv1 FORCE WITH SYNC MODE;
+select * from test_mv1 order by k1, k2;
+-- result:
+2020-11-10	1	1
+2020-11-11	2	2
+2020-11-12	3	3
+-- !result
+INSERT INTO t2 VALUES ("2020-11-10",4,4);
+-- result:
+-- !result
+REFRESH MATERIALIZED VIEW test_mv1 FORCE WITH SYNC MODE;
+select * from test_mv1 order by k1, k2;
+-- result:
+2020-11-10	1	1
+2020-11-10	4	4
+2020-11-11	2	2
+2020-11-12	3	3
+-- !result
+DROP MATERIALIZED VIEW test_mv1;
+-- result:
+-- !result
+CREATE TABLE t3 (
+    k1 date,
+    k2 int,
+    k3 int 
+)
+DUPLICATE KEY(k1)
+PARTITION BY date_trunc("day", k1), k2;
+-- result:
+-- !result
+INSERT INTO t3 VALUES ("2020-11-10",1,1),("2020-11-11",2,2),("2020-11-12",3,3);
+-- result:
+-- !result
+CREATE MATERIALIZED VIEW test_mv1
+partition by (date_trunc("day", k1), k2)
+REFRESH DEFERRED MANUAL
+PROPERTIES ("partition_refresh_number"="-1")
+AS select k1, k2, sum(k3) from t3 group by k1, k2;
+-- result:
+-- !result
+REFRESH MATERIALIZED VIEW test_mv1 WITH SYNC MODE;
+select * from test_mv1 order by k1, k2;
+-- result:
+2020-11-10	1	1
+2020-11-11	2	2
+2020-11-12	3	3
+-- !result
+REFRESH MATERIALIZED VIEW test_mv1 FORCE WITH SYNC MODE;
+select * from test_mv1 order by k1, k2;
+-- result:
+2020-11-10	1	1
+2020-11-11	2	2
+2020-11-12	3	3
+-- !result
+INSERT INTO t3 VALUES ("2020-11-10",4,4);
+-- result:
+-- !result
+REFRESH MATERIALIZED VIEW test_mv1 PARTITION (("2020-11-10", "4")) FORCE WITH SYNC MODE;
+select * from test_mv1 order by k1, k2;
+-- result:
+2020-11-10	1	1
+2020-11-10	4	4
+2020-11-11	2	2
+2020-11-12	3	3
+-- !result
+REFRESH MATERIALIZED VIEW test_mv1 FORCE WITH SYNC MODE;
+select * from test_mv1 order by k1, k2;
+-- result:
+2020-11-10	1	1
+2020-11-10	4	4
+2020-11-11	2	2
+2020-11-12	3	3
+-- !result
+DROP MATERIALIZED VIEW test_mv1;
+-- result:
+-- !result
+drop table t1;
+-- result:
+-- !result
+drop table t2;
+-- result:
+-- !result
+drop table t3;
+-- result:
+-- !result
+drop database db_${uuid0} force;
+-- result:
+-- !result
