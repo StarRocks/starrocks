@@ -21,6 +21,7 @@ public enum IcebergTableOperation {
     REMOVE_ORPHAN_FILES,
     ROLLBACK_TO_SNAPSHOT,
     REWRITE_DATA_FILES,
+    ADD_FILES,
     UNKNOWN;
 
     
