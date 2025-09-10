@@ -4,6 +4,7 @@ displayed_sidebar: docs
 
 # ALTER TABLE
 
+<<<<<<< HEAD
 ## 説明
 
 既存のテーブルを変更します。以下を含みます：
@@ -16,6 +17,22 @@ displayed_sidebar: docs
 - [ロールアップインデックスの作成/削除](#modify-rollup-index)
 - [ビットマップインデックスの変更](#modify-bitmap-indexes)
 - [テーブルプロパティの変更](#modify-table-properties)
+=======
+import Beta from '../../../_assets/commonMarkdown/_beta.mdx'
+
+## 説明
+
+ALTER TABLE は既存のテーブルを修正します。以下を含みます:
+
+- [テーブル、パーティション、ロールアップ、または列の名前変更](#rename)
+- [テーブルコメントの修正](#alter-table-comment-from-v31)
+- [パーティションの修正（パーティションの追加/削除とパーティション属性の修正）](#modify-partition)
+- [バケッティング方法とバケット数の修正](#modify-the-bucketing-method-and-number-of-buckets-from-v32)
+- [列の変更（列の追加/削除、列順の変更、列コメントの変更）](#modify-columns-adddelete-columns-change-the-order-of-columns)
+- [ロールアップの作成/削除](#modify-rollup)
+- [インデックスの作成/削除](#modify-indexes)
+- [テーブルプロパティの修正](#modify-table-properties)
+>>>>>>> 524edf4607 ([Doc] Doc for Modifying Column Comment (#62951))
 - [アトミックスワップ](#swap)
 - [手動データバージョンコンパクション](#manual-compaction-from-31)
 - [主キー永続インデックスの削除](#主キー永続インデックスの削除-339-より)
@@ -33,6 +50,7 @@ alter_clause1[, alter_clause2, ...]
 
 `alter_clause` には次の操作を含めることができます：名前変更、コメント、パーティション、バケット、列、ロールアップインデックス、ビットマップインデックス、テーブルプロパティ、スワップ、コンパクション。
 
+<<<<<<< HEAD
 - 名前変更: テーブル、ロールアップインデックス、パーティション、または列の名前を変更します（**v3.3.2以降**でサポート）。
 - コメント: テーブルコメントを変更します（**v3.1以降**でサポート）。
 - パーティション: パーティションプロパティを変更し、パーティションを削除または追加します。
@@ -40,17 +58,33 @@ alter_clause1[, alter_clause2, ...]
 - 列: 列を追加、削除、または並べ替え、または列タイプを変更します。
 - ロールアップインデックス: ロールアップインデックスを作成または削除します。
 - ビットマップインデックス: インデックスを変更します（ビットマップインデックスのみ変更可能）。
+=======
+- 名前変更: テーブル、ロールアップ、パーティション、または列の名前を変更します（**v3.3.2 以降でサポート**）。
+- コメント: テーブルコメントを修正します（**v3.1 以降でサポート**）。
+- パーティション: パーティションプロパティを修正、パーティションを削除、またはパーティションを追加します。
+- バケット: バケッティング方法とバケット数を修正します。
+- 列: 列の追加、削除、並び替え、列のタイプの変更、コメントの変更
+- ロールアップ: ロールアップを作成または削除します。
+- インデックス: インデックスを修正します。
+>>>>>>> 524edf4607 ([Doc] Doc for Modifying Column Comment (#62951))
 - スワップ: 2つのテーブルをアトミックに交換します。
 - コンパクション: ロードされたデータのバージョンをマージするために手動でコンパクションを実行します（**v3.1以降**でサポート）。
 - 永続インデックスの削除: 共有データクラスタの主キーテーブルの永続インデックスを削除します (**v3.3.9以降でサポートされています**)。
 
 ## 制限と使用上の注意
 
+<<<<<<< HEAD
 - パーティション、列、ロールアップインデックスに対する操作は、1つのALTER TABLE文で実行できません。
 - 列コメントは変更できません。
 - 1つのテーブルには、同時に1つのスキーマ変更操作しか行えません。同時に2つのスキーマ変更コマンドを実行することはできません。
 - バケット、列、ロールアップインデックスに対する操作は非同期操作です。タスクが送信されるとすぐに成功メッセージが返されます。進行状況を確認するには [SHOW ALTER TABLE](SHOW_ALTER.md) コマンドを実行し、操作をキャンセルするには [CANCEL ALTER TABLE](CANCEL_ALTER_TABLE.md) コマンドを実行できます。
 - 名前変更、コメント、パーティション、ビットマップインデックス、スワップに対する操作は同期操作であり、コマンドの返り値は実行が完了したことを示します。
+=======
+- パーティション、列、ロールアップに対する操作は、1つの ALTER TABLE ステートメントで実行できません。
+- 1つのテーブルには、同時に1つのスキーマ変更操作しか実行できません。1つのテーブルに対して同時に2つのスキーマ変更コマンドを実行することはできません。
+- バケット、列、ロールアップに対する操作は非同期操作です。タスクが送信された後、成功メッセージが即座に返されます。進捗を確認するには [SHOW ALTER TABLE](SHOW_ALTER.md) コマンドを実行し、操作をキャンセルするには [CANCEL ALTER TABLE](CANCEL_ALTER_TABLE.md) コマンドを実行できます。
+- 名前変更、コメント、パーティション、インデックス、スワップに対する操作は同期操作であり、コマンドの返り値は実行が完了したことを示します。
+>>>>>>> 524edf4607 ([Doc] Doc for Modifying Column Comment (#62951))
 
 ### 名前変更
 
@@ -100,10 +134,13 @@ RENAME COLUMN <old_col_name> [ TO ] <new_col_name>
 ALTER TABLE [<db_name>.]<tbl_name> COMMENT = "<new table comment>";
 ```
 
+<<<<<<< HEAD
 :::tip
 現在、列コメントは変更できません。
 :::
 
+=======
+>>>>>>> 524edf4607 ([Doc] Doc for Modifying Column Comment (#62951))
 ### パーティションの変更
 
 #### パーティションの追加
@@ -415,7 +452,11 @@ INSERT INTO details (event_time, event_type, user_id, device_code, channel) VALU
   ALTER TABLE details DISTRIBUTED BY HASH(user_id, event_time) BUCKETS 10;
   ```
 
+<<<<<<< HEAD
 ### 列の変更（列の追加/削除、列の順序変更）
+=======
+### 列の変更（列の追加/削除、列順の変更、列コメントの変更）
+>>>>>>> 524edf4607 ([Doc] Doc for Modifying Column Comment (#62951))
 
 #### 指定されたインデックスの指定された位置に列を追加する
 
@@ -493,16 +534,22 @@ DROP COLUMN column_name
 1. パーティション列を削除することはできません。
 2. 列が基本インデックスから削除された場合、ロールアップインデックスに含まれている場合も削除されます。
 
+<<<<<<< HEAD
 #### 指定されたインデックスの列タイプと列位置を変更する
+=======
+#### 列の型、位置、コメント、その他のプロパティを変更する
+>>>>>>> 524edf4607 ([Doc] Doc for Modifying Column Comment (#62951))
 
 構文：
 
 ```sql
 ALTER TABLE [<db_name>.]<tbl_name>
-MODIFY COLUMN column_name column_type [KEY | agg_type] [NULL | NOT NULL] [DEFAULT "default_value"]
-[AFTER column_name|FIRST]
-[FROM rollup_index_name]
-[PROPERTIES ("key"="value", ...)]
+MODIFY COLUMN <column_name> 
+[ column_type [ KEY | agg_type ] ] [ NULL | NOT NULL ] 
+[ DEFAULT "<default_value>"] [ COMMENT "<new_column_comment>" ]
+[ AFTER <column_name> | FIRST ]
+[ FROM rollup_index_name ]
+[ PROPERTIES ("key"="value", ...) ]
 ```
 
 注意：
@@ -523,6 +570,7 @@ MODIFY COLUMN column_name column_type [KEY | agg_type] [NULL | NOT NULL] [DEFAUL
    - INT を DATE に変換します（INT データの変換に失敗した場合、元のデータはそのまま残ります）。
 
 6. NULL から NOT NULL への変換はサポートされていません。
+7. 単一のMODIFY COLUMN句で複数のプロパティを変更できます。ただし、一部のプロパティの組み合わせはサポートされていません。
 
 #### 指定されたインデックスの列を並べ替える
 
@@ -583,9 +631,13 @@ DISTRIBUTED BY HASH(order_id);
 ALTER TABLE orders ORDER BY (dt, revenue, state);
 ```
 
+<<<<<<< HEAD
 import Beta from '../../../_assets/commonMarkdown/_beta.mdx'
 
 #### STRUCT列を変更してフィールドを追加または削除する
+=======
+#### STRUCT 列を修正してフィールドを追加または削除する
+>>>>>>> 524edf4607 ([Doc] Doc for Modifying Column Comment (#62951))
 
 <Beta />
 
