@@ -80,6 +80,12 @@ Status CompactionTask::fill_compaction_segment_info(TxnLogPB_OpCompaction* op_co
         op_compaction->mutable_output_rowset()->set_data_size(writer->data_size());
         op_compaction->mutable_output_rowset()->set_overlapped(false);
         op_compaction->mutable_output_rowset()->set_next_compaction_offset(0);
+        for (auto& sst : writer->ssts()) {
+            auto* file_meta = op_compaction->add_ssts();
+            file_meta->set_name(sst.path);
+            file_meta->set_size(sst.size.value());
+            file_meta->set_encryption_meta(sst.encryption_meta);
+        }
     }
     return Status::OK();
 }

@@ -14,7 +14,9 @@
 
 #pragma once
 
+#include <memory>
 #include <string>
+#include <vector>
 
 #include "gen_cpp/lake_types.pb.h"
 #include "storage/persistent_index.h"
@@ -27,6 +29,11 @@ namespace starrocks {
 
 class WritableFile;
 class PersistentIndexSstablePB;
+
+namespace sstable {
+class TableBuilder;
+class FilterPolicy;
+} // namespace sstable
 
 namespace lake {
 using KeyIndex = size_t;
@@ -65,6 +72,28 @@ private:
     std::unique_ptr<sstable::FilterPolicy> _filter_policy{nullptr};
     std::unique_ptr<RandomAccessFile> _rf{nullptr};
     PersistentIndexSstablePB _sstable_pb;
+};
+
+class PersistentIndexSstableStreamBuilder {
+public:
+    explicit PersistentIndexSstableStreamBuilder(std::unique_ptr<WritableFile> wf, std::string encryption_meta);
+
+    Status add(const Slice& key);
+    Status finish(uint64_t* file_size = nullptr);
+
+    uint64_t num_entries() const;
+    FileInfo file_info() const;
+    Status status() const;
+    std::string file_path() const { return _wf->filename(); }
+
+private:
+    std::unique_ptr<sstable::TableBuilder> _table_builder;
+    std::unique_ptr<sstable::FilterPolicy> _filter_policy;
+    std::unique_ptr<WritableFile> _wf;
+    Status _status;
+    bool _finished;
+    std::string _encryption_meta;
+    uint32_t _sst_rowid = 0;
 };
 
 } // namespace lake
