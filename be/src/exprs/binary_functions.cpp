@@ -35,7 +35,7 @@ StatusOr<ColumnPtr> BinaryFunctions::to_binary(FunctionContext* context, const C
     auto to_binary_type = state->to_binary_type;
     switch (to_binary_type) {
     case BinaryFormatType::UTF8:
-        return src_column;
+        return std::move(*src_column).mutate();
     case BinaryFormatType::ENCODE64:
         return EncryptionFunctions::from_base64(context, columns);
     default:
@@ -81,7 +81,7 @@ StatusOr<ColumnPtr> BinaryFunctions::from_binary(FunctionContext* context, const
     auto to_binary_type = state->to_binary_type;
     switch (to_binary_type) {
     case BinaryFormatType::UTF8:
-        return src_column;
+        return std::move(*src_column).mutate();
     case BinaryFormatType::ENCODE64:
         return EncryptionFunctions::to_base64(context, columns);
     default:
