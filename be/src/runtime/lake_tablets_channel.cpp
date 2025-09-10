@@ -403,8 +403,8 @@ void LakeTabletsChannel::add_chunk(Chunk* chunk, const PTabletWriterAddChunkRequ
     }
     if (UNLIKELY(request.timeout_ms() < 0)) {
         response->mutable_status()->set_status_code(TStatusCode::INVALID_ARGUMENT);
-        response->mutable_status()->add_error_msgs(fmt::format(
-                "negtive timeout_ms {} in PTabletWriterAddChunkRequest", request.timeout_ms()));
+        response->mutable_status()->add_error_msgs(
+                fmt::format("negtive timeout_ms {} in PTabletWriterAddChunkRequest", request.timeout_ms()));
         return;
     }
 
