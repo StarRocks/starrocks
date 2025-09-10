@@ -318,6 +318,12 @@ void FragmentExecState::coordinator_callback(const Status& status, RuntimeProfil
             [&res, &params](FrontendServiceConnection& client) { client->reportExecStatus(res, params); },
             config::thrift_rpc_timeout_ms);
 
+    VLOG(1) << "report exec status, fragment_instance_id: " << print_id(_runtime_state->fragment_instance_id())
+            << ", has_profile: " << params.__isset.profile
+            << ", has_load_channel_profile: " << params.__isset.load_channel_profile
+            << ", rpc_status: " << rpc_status.to_string()
+            << ", result: " << apache::thrift::ThriftDebugString(res).c_str();
+
     if (rpc_status.ok()) {
         rpc_status = Status(res.status);
     }

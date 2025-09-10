@@ -1174,6 +1174,9 @@ public class StreamLoadTask extends AbstractStreamLoadTask {
         // sync stream load collect profile, here we collect profile only when be has reported
         if (isSyncStreamLoad() && coord != null && coord.isProfileAlreadyReported()) {
             collectProfile(false);
+        } else {
+            LOG.debug("stream load does not collect profile, txn_id: {}, label: {}, load id: {}",
+                    txnId, label, DebugUtil.printId(loadId));
         }
 
         writeLock();
@@ -1628,15 +1631,6 @@ public class StreamLoadTask extends AbstractStreamLoadTask {
         runtimeDetails.put(LoadConstants.RUNTIME_DETAILS_BEGIN_TXN_TIME_MS, beginTxnTimeMs);
         runtimeDetails.put(LoadConstants.RUNTIME_DETAILS_RECEIVE_DATA_TIME_MS, receiveDataTimeMs);
         runtimeDetails.put(LoadConstants.RUNTIME_DETAILS_PLAN_TIME_MS, planTimeMs);
-        TransactionState txnState = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().getTransactionState(dbId, txnId);
-        if (txnState != null) {
-            txnState.writeLock();
-            try {
-                runtimeDetails.put(LoadConstants.RUNTIME_DETAILS_TXN_ERROR_MSG, txnState.getErrMsg());
-            } finally {
-                txnState.writeUnlock();
-            }
-        }
         Gson gson = new Gson();
         return gson.toJson(runtimeDetails);
     }
