@@ -46,12 +46,25 @@ public class MVRefreshParams {
         this.mvPartitionInfo = partitionInfo;
     }
 
+<<<<<<< HEAD
     public boolean isForceCompleteRefresh() {
         return isForce && isCompleteRefresh();
     }
 
     public boolean isForce() {
         return isForce;
+=======
+    public boolean isNonTentativeForce() {
+        return isForce() && !isTentative;
+    }
+
+    public void setIsTentative(boolean tentative) {
+        this.isTentative = tentative;
+    }
+
+    public boolean isTentative() {
+        return isTentative;
+>>>>>>> cccd31c903 ([Enhancement] Ensure mv force refresh will refresh target partitions (#62627))
     }
 
     public boolean isCompleteRefresh() {

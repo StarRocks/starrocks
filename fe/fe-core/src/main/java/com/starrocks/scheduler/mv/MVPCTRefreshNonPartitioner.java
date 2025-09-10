@@ -40,6 +40,10 @@ public final class MVPCTRefreshNonPartitioner extends MVPCTRefreshPartitioner {
         super(mvContext, context, db, mv);
     }
 
+    public PCellSortedSet getMVPartitionsToRefreshByParams() {
+        return getNonPartitionedMVPartitionsToRefresh();
+    }
+
     @Override
     public boolean syncAddOrDropPartitions() {
         // do nothing
@@ -66,10 +70,14 @@ public final class MVPCTRefreshNonPartitioner extends MVPCTRefreshPartitioner {
     }
 
     @Override
+<<<<<<< HEAD
     public Set<String> getMVPartitionsToRefresh(PartitionInfo mvPartitionInfo,
                                                 Map<Long, TableSnapshotInfo> snapshotBaseTables,
                                                 MVRefreshParams mvRefreshParams,
                                                 Set<String> mvPotentialPartitionNames) {
+=======
+    public PCellSortedSet getMVPartitionsToRefreshWithCheck(Map<Long, BaseTableSnapshotInfo> snapshotBaseTables) {
+>>>>>>> cccd31c903 ([Enhancement] Ensure mv force refresh will refresh target partitions (#62627))
         // non-partitioned materialized view
         if (mvRefreshParams.isForce() || isNonPartitionedMVNeedToRefresh(snapshotBaseTables, mv)) {
             return mv.getVisiblePartitionNames();

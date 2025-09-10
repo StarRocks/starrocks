@@ -351,6 +351,86 @@ public class TaskManager implements MemoryTrackable {
         }
     }
 
+<<<<<<< HEAD
+=======
+    /**
+     * Get the MV refresh plan explain result for the given task.
+     */
+    public String getMVRefreshExplain(Task task, ExecuteOption option, StatementBase statement) {
+        if (statement == null || !statement.isExplain()) {
+            return null;
+        }
+        TaskRun taskRun = buildTaskRun(task, option);
+        ExecPlan execPlan = getMVRefreshExecPlan(taskRun, task, option, statement);
+        String explainString = StmtExecutor.buildExplainString(execPlan, statement,
+                ConnectContext.get(), ResourceGroupClassifier.QueryType.MV, statement.getExplainLevel());
+        // add extra info
+        String extraInfo = getExtraExplainInfo(taskRun, statement);
+        if (!Strings.isNullOrEmpty(extraInfo)) {
+            explainString += "\n" + extraInfo;
+        }
+        return explainString;
+    }
+
+    public TaskRun buildTaskRun(Task task, ExecuteOption option) {
+        return TaskRunBuilder.newBuilder(task)
+                .properties(option.getTaskRunProperties())
+                .setExecuteOption(option)
+                .setConnectContext(ConnectContext.get()).build();
+    }
+
+    private String getExtraExplainInfo(TaskRun taskRun,
+                                       StatementBase statement) {
+        TaskRunProcessor taskRunProcessor = taskRun.getProcessor();
+        if (taskRunProcessor == null) {
+            return "";
+        }
+        try {
+            if (taskRunProcessor instanceof MVTaskRunProcessor) {
+                MVTaskRunProcessor mvRefreshProcessor = (MVTaskRunProcessor) taskRun.getProcessor();
+                return mvRefreshProcessor.getExtraExplainInfo(statement);
+            } else {
+                return "";
+            }
+        } catch (Exception e) {
+            LOG.error("Failed to get getExtraExplainInfo:", e);
+            return "";
+        }
+    }
+
+    /**
+     * Get the MV refresh execution plan for the given task.
+     */
+    public ExecPlan getMVRefreshExecPlan(TaskRun taskRun, Task task, ExecuteOption option, StatementBase statement) {
+        if (statement == null || !statement.isExplain()) {
+            return null;
+        }
+        // init task run
+        String queryId = UUIDUtil.genUUID().toString();
+        TaskRunStatus status = taskRun.initStatus(queryId, System.currentTimeMillis());
+        status.setPriority(option.getPriority());
+        status.setMergeRedundant(option.isMergeRedundant());
+        status.setProperties(option.getTaskRunProperties());
+
+        TaskRunProcessor processor = taskRun.getProcessor();
+        if (processor == null || !(processor instanceof MVTaskRunProcessor)) {
+            throw new DmlException("Explain can only support MVTaskRunProcessor: " + task.getName());
+        }
+        MVTaskRunProcessor mvRefreshProcessor = (MVTaskRunProcessor) processor;
+        TaskRunContext taskRunContext = taskRun.buildTaskRunContext();
+        try {
+            // prepare the task run context
+            taskRunContext = mvRefreshProcessor.prepare(taskRunContext);
+            // execute the task run
+            return mvRefreshProcessor.getMVRefreshExecPlan();
+        } catch (Exception e) {
+            LOG.warn("Failed to get MV refresh explain for task: {}", task.getName(), e);
+            throw new DmlException("Failed to get MV refresh explain for task: %s, error: %s", e,
+                    task.getName(), e.getMessage());
+        }
+    }
+
+>>>>>>> cccd31c903 ([Enhancement] Ensure mv force refresh will refresh target partitions (#62627))
     public SubmitResult executeTaskAsync(Task task, ExecuteOption option) {
         TaskRun taskRun = TaskRunBuilder
                 .newBuilder(task)
