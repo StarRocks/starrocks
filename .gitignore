@@ -92,3 +92,6 @@ be/tags
 build/
 cmake-build-debug/
 CMakeLists.txt
+
+.claude
+CLAUDE.md
