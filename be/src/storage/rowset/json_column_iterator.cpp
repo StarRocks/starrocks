@@ -210,11 +210,15 @@ Status JsonFlatColumnIterator::next_batch(size_t* n, Column* dst) {
     if (_null_iter != nullptr) {
         RETURN_IF_ERROR(_null_iter->next_batch(n, null_column));
         down_cast<NullableColumn*>(dst)->update_has_null();
+    } else if (dst->is_nullable()) {
+        null_column->append_value_multiple_times(&DATUM_NOT_NULL, *n);
     }
 
     // 2. Read flat column
     auto read = [&](ColumnIterator* iter, Column* column) { return iter->next_batch(n, column); };
-    return _read(json_column, read);
+    auto ret = _read(json_column, read);
+    dst->check_or_die();
+    return ret;
 }
 
 Status JsonFlatColumnIterator::next_batch(const SparseRange<>& range, Column* dst) {
@@ -234,11 +238,15 @@ Status JsonFlatColumnIterator::next_batch(const SparseRange<>& range, Column* ds
     if (_null_iter != nullptr) {
         RETURN_IF_ERROR(_null_iter->next_batch(range, null_column));
         down_cast<NullableColumn*>(dst)->update_has_null();
+    } else if (dst->is_nullable()) {
+        null_column->append_value_multiple_times(&DATUM_NOT_NULL, range.span_size());
     }
 
     // 2. Read flat column
     auto read = [&](ColumnIterator* iter, Column* column) { return iter->next_batch(range, column); };
-    return _read(json_column, read);
+    auto ret = _read(json_column, read);
+    dst->check_or_die();
+    return ret;
 }
 
 Status JsonFlatColumnIterator::fetch_values_by_rowid(const rowid_t* rowids, size_t size, Column* values) {
@@ -258,7 +266,9 @@ Status JsonFlatColumnIterator::fetch_values_by_rowid(const rowid_t* rowids, size
     // 2. Read flat column
     auto read = [&](ColumnIterator* iter, Column* column) { return iter->fetch_values_by_rowid(rowids, size, column); };
 
-    return _read(json_column, read);
+    auto ret = _read(json_column, read);
+    values->check_or_die();
+    return ret;
 }
 
 Status JsonFlatColumnIterator::seek_to_first() {
@@ -388,6 +398,7 @@ Status JsonDynamicFlatIterator::_dynamic_flat(Column* output, FUNC read_fn) {
     _flattener->flatten(proxy.get());
     auto result = _flattener->mutable_result();
     json_data->set_flat_columns(_target_paths, _target_types, result);
+    output->check_or_die();
     return Status::OK();
 }
 
@@ -540,7 +551,9 @@ Status JsonMergeIterator::next_batch(size_t* n, Column* dst) {
     }
 
     auto func = [&](ColumnIterator* iter, Column* column) { return iter->next_batch(n, column); };
-    return _merge(json_column, func);
+    auto ret = _merge(json_column, func);
+    dst->check_or_die();
+    return ret;
 }
 
 Status JsonMergeIterator::next_batch(const SparseRange<>& range, Column* dst) {
@@ -563,7 +576,9 @@ Status JsonMergeIterator::next_batch(const SparseRange<>& range, Column* dst) {
     }
 
     auto func = [&](ColumnIterator* iter, Column* column) { return iter->next_batch(range, column); };
-    return _merge(json_column, func);
+    auto ret = _merge(json_column, func);
+    dst->check_or_die();
+    return ret;
 }
 
 Status JsonMergeIterator::fetch_values_by_rowid(const rowid_t* rowids, size_t size, Column* dst) {
@@ -586,7 +601,9 @@ Status JsonMergeIterator::fetch_values_by_rowid(const rowid_t* rowids, size_t si
     }
 
     auto func = [&](ColumnIterator* iter, Column* column) { return iter->fetch_values_by_rowid(rowids, size, column); };
-    return _merge(json_column, func);
+    auto ret = _merge(json_column, func);
+    dst->check_or_die();
+    return ret;
 }
 
 Status JsonMergeIterator::seek_to_first() {
