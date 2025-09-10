@@ -245,6 +245,7 @@ TEST_F(LocalTabletsChannelTest, test_add_chunk_not_exist_tablet) {
     add_chunk_request.set_sender_id(0);
     add_chunk_request.set_eos(true);
     add_chunk_request.set_packet_seq(0);
+    add_chunk_request.set_timeout_ms(60000);
 
     auto non_exist_tablet_id = _tablets[0]->tablet_id() + 1;
     add_chunk_request.add_tablet_ids(non_exist_tablet_id);
