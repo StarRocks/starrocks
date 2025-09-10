@@ -3047,7 +3047,7 @@ static inline ColumnPtr concat_not_const(Columns const& columns) {
  */
 StatusOr<ColumnPtr> StringFunctions::concat(FunctionContext* context, const Columns& columns) {
     if (columns.size() == 1) {
-        return columns[0]->clone();
+        return std::move(*columns[0]).mutate();
     }
 
     RETURN_IF_COLUMNS_ONLY_NULL(columns);
@@ -3133,7 +3133,7 @@ StatusOr<ColumnPtr> StringFunctions::concat_ws(FunctionContext* context, const C
     }
 
     if (columns.size() == 2) {
-        return columns[1];
+        return std::move(*columns[1]).mutate();
     }
 
     const auto sep_size = ColumnHelper::compute_bytes_size(columns.begin(), columns.begin() + 1);
