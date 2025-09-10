@@ -174,6 +174,8 @@ private:
     // then profile will not be reported to FE even though enable_profile=true
     int32_t load_profile_collect_second = -1;
 
+    int64_t _start_time_ms;
+
     // If this is set to false, and 'enable_profile' is false as well,
     // This executor will not report status to FE on being cancelled.
     bool _is_report_on_cancel;
