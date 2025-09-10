@@ -967,6 +967,81 @@ TEST_F(LakeTabletsChannelTest, test_profile) {
     ASSERT_EQ(4, replicas_profile->get_counter("TabletsNum")->value());
 }
 
+TEST_F(LakeTabletsChannelTest, test_missing_timeout_ms) {
+    auto open_request = _open_request;
+    open_request.set_num_senders(1);
+
+    ASSERT_OK(_tablets_channel->open(open_request, &_open_response, _schema_param, false));
+
+    constexpr int kChunkSize = 32;
+    constexpr int kChunkSizePerTablet = kChunkSize / 4;
+    auto chunk = generate_data(kChunkSize);
+
+    PTabletWriterAddChunkRequest add_chunk_request;
+    add_chunk_request.set_index_id(kIndexId);
+    add_chunk_request.set_sender_id(0);
+    add_chunk_request.set_eos(false);
+    add_chunk_request.set_packet_seq(0);
+
+    for (int i = 0; i < kChunkSize; i++) {
+        int64_t tablet_id = 10086 + (i / kChunkSizePerTablet);
+        add_chunk_request.add_tablet_ids(tablet_id);
+        add_chunk_request.add_partition_ids(tablet_id < 10088 ? 10 : 11);
+    }
+
+    ASSIGN_OR_ABORT(auto chunk_pb, serde::ProtobufChunkSerde::serialize(chunk));
+    add_chunk_request.mutable_chunk()->Swap(&chunk_pb);
+
+    bool close_channel;
+    PTabletWriterAddBatchResult resp;
+    _tablets_channel->add_chunk(&chunk, add_chunk_request, &resp, &close_channel);
+    ASSERT_EQ(TStatusCode::INVALID_ARGUMENT, resp.status().status_code());
+    ASSERT_GE(resp.status().error_msgs_size(), 1);
+    {
+        const auto& msg = resp.status().error_msgs(0);
+        ASSERT_TRUE(msg.find("missing timeout_ms") != std::string::npos) << msg;
+    }
+    ASSERT_FALSE(close_channel);
+}
+
+TEST_F(LakeTabletsChannelTest, test_negative_timeout_ms) {
+    auto open_request = _open_request;
+    open_request.set_num_senders(1);
+
+    ASSERT_OK(_tablets_channel->open(open_request, &_open_response, _schema_param, false));
+
+    constexpr int kChunkSize = 32;
+    constexpr int kChunkSizePerTablet = kChunkSize / 4;
+    auto chunk = generate_data(kChunkSize);
+
+    PTabletWriterAddChunkRequest add_chunk_request;
+    add_chunk_request.set_index_id(kIndexId);
+    add_chunk_request.set_sender_id(0);
+    add_chunk_request.set_eos(false);
+    add_chunk_request.set_packet_seq(0);
+    add_chunk_request.set_timeout_ms(-1);
+
+    for (int i = 0; i < kChunkSize; i++) {
+        int64_t tablet_id = 10086 + (i / kChunkSizePerTablet);
+        add_chunk_request.add_tablet_ids(tablet_id);
+        add_chunk_request.add_partition_ids(tablet_id < 10088 ? 10 : 11);
+    }
+
+    ASSIGN_OR_ABORT(auto chunk_pb, serde::ProtobufChunkSerde::serialize(chunk));
+    add_chunk_request.mutable_chunk()->Swap(&chunk_pb);
+
+    bool close_channel;
+    PTabletWriterAddBatchResult resp;
+    _tablets_channel->add_chunk(&chunk, add_chunk_request, &resp, &close_channel);
+    ASSERT_EQ(TStatusCode::INVALID_ARGUMENT, resp.status().status_code());
+    ASSERT_GE(resp.status().error_msgs_size(), 1);
+    {
+        const auto& msg = resp.status().error_msgs(0);
+        ASSERT_TRUE(msg.find("negtive timeout_ms") != std::string::npos) << msg;
+    }
+    ASSERT_FALSE(close_channel);
+}
+
 struct Param {
     int num_sender;
     int fail_tablet;

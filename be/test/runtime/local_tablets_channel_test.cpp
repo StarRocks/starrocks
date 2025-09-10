@@ -303,6 +303,56 @@ TEST_F(LocalTabletsChannelTest, diagnose_stack_trace) {
     ASSERT_EQ(1, num_diagnose);
 }
 
+TEST_F(LocalTabletsChannelTest, test_add_chunk_missing_timeout_ms) {
+    _create_tablets(1);
+    // open as a secondary replica of 3 replicas
+    ReplicaInfo replica_info{_tablets[0]->tablet_id(), _nodes};
+    _open_channel(_nodes[1].node_id(), {replica_info});
+
+    PTabletWriterAddChunkRequest add_chunk_request;
+    add_chunk_request.mutable_id()->CopyFrom(_load_id);
+    add_chunk_request.set_index_id(_index_id);
+    add_chunk_request.set_sink_id(_sink_id);
+    add_chunk_request.set_sender_id(0);
+    add_chunk_request.set_eos(true);
+    add_chunk_request.set_packet_seq(0);
+    // intentionally do NOT set timeout_ms to trigger validation error
+
+    bool close_channel = true; // will be reset to false inside add_chunk
+    PTabletWriterAddBatchResult add_chunk_response;
+    _tablets_channel->add_chunk(nullptr, add_chunk_request, &add_chunk_response, &close_channel);
+    ASSERT_EQ(TStatusCode::INVALID_ARGUMENT, add_chunk_response.status().status_code()) << add_chunk_response.status();
+    ASSERT_TRUE(add_chunk_response.status().error_msgs_size() > 0);
+    ASSERT_TRUE(add_chunk_response.status().error_msgs(0).find("missing timeout_ms") != std::string::npos)
+            << add_chunk_response.status().error_msgs(0);
+    ASSERT_FALSE(close_channel);
+}
+
+TEST_F(LocalTabletsChannelTest, test_add_chunk_negative_timeout_ms) {
+    _create_tablets(1);
+    // open as a secondary replica of 3 replicas
+    ReplicaInfo replica_info{_tablets[0]->tablet_id(), _nodes};
+    _open_channel(_nodes[1].node_id(), {replica_info});
+
+    PTabletWriterAddChunkRequest add_chunk_request;
+    add_chunk_request.mutable_id()->CopyFrom(_load_id);
+    add_chunk_request.set_index_id(_index_id);
+    add_chunk_request.set_sink_id(_sink_id);
+    add_chunk_request.set_sender_id(0);
+    add_chunk_request.set_eos(true);
+    add_chunk_request.set_packet_seq(0);
+    add_chunk_request.set_timeout_ms(-1); // negative to trigger validation error
+
+    bool close_channel = true; // will be reset to false inside add_chunk
+    PTabletWriterAddBatchResult add_chunk_response;
+    _tablets_channel->add_chunk(nullptr, add_chunk_request, &add_chunk_response, &close_channel);
+    ASSERT_EQ(TStatusCode::INVALID_ARGUMENT, add_chunk_response.status().status_code()) << add_chunk_response.status();
+    ASSERT_TRUE(add_chunk_response.status().error_msgs_size() > 0);
+    ASSERT_TRUE(add_chunk_response.status().error_msgs(0).find("negtive timeout_ms") != std::string::npos)
+            << add_chunk_response.status().error_msgs(0);
+    ASSERT_FALSE(close_channel);
+}
+
 TEST_F(LocalTabletsChannelTest, test_primary_replica_profile) {
     _create_tablets(1);
     auto& tablet = _tablets[0];
