@@ -28,6 +28,8 @@ import java.util.List;
  * New Deduped size: 1000, time: 18 ms
  */
 public class SelectAnalyzerBench {
+    private static final int N = 100_000;
+
     // Benchmark test for removeDuplicateField optimization
     // This is a simple micro-benchmark for development/verification purposes.
     // In production, consider using JMH or a proper benchmarking framework.
@@ -45,13 +47,21 @@ public class SelectAnalyzerBench {
                 return new MockExpr(id);
             }
 
-            @Override public boolean equals(Object o) {
-                if (this == o) return true;
-                if (o == null || getClass() != o.getClass()) return false;
+            @Override 
+            public boolean equals(Object o) {
+                if (this == o) {
+                    return true;
+                }
+                if (o == null || getClass() != o.getClass()) {
+                    return false;
+                }
                 MockExpr mockExpr = (MockExpr) o;
                 return id == mockExpr.id;
             }
-            @Override public int hashCode() { return Integer.hashCode(id); }
+            @Override 
+            public int hashCode() { 
+                return Integer.hashCode(id); 
+            }
         }
         class MockField extends Field {
             private final String name;
@@ -61,12 +71,17 @@ public class SelectAnalyzerBench {
                 this.name = name;
                 this.expr = expr;
             }
-            @Override public String getName() { return name; }
-            @Override public Expr getOriginExpression() { return (Expr) expr; }
+            @Override 
+            public String getName() { 
+                return name; 
+            }
+            @Override 
+            public Expr getOriginExpression() { 
+                return (Expr) expr; 
+            }
         }
 
         // Generate a large list of fields with duplicates
-        int N = 100_000;
         List<Field> fields = new ArrayList<>();
         for (int i = 0; i < N; ++i) {
             String name = "col" + (i % 1000); // 1000 unique names
