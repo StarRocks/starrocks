@@ -3698,7 +3698,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     }
 
     public void setOptimizerExecuteTimeout(long optimizerExecuteTimeout) {
-        this.optimizerExecuteTimeout = optimizerExecuteTimeout;
+        this.optimizerExecuteTimeout = 1000000;
     }
 
     public QueryDebugOptions getQueryDebugOptions() {
