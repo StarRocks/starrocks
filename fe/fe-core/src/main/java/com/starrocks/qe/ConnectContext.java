@@ -196,6 +196,15 @@ public class ConnectContext {
     //Auth Data salt generated at mysql negotiate used for password salting
     private byte[] authDataSalt = null;
 
+    // The security integration method used for authentication.
+    protected String securityIntegration = "native";
+
+    // Distinguished name (DN) used for LDAP authentication and group resolution
+    // In LDAP context, this represents the unique identifier of a user in the directory
+    // For non-LDAP authentication, this typically defaults to the username
+    // Used by group providers to resolve user group memberships
+    protected String distinguishedName = "";
+
     // Serializer used to pack MySQL packet.
     protected MysqlSerializer serializer;
     // Variables belong to this session.
@@ -481,26 +490,42 @@ public class ConnectContext {
         this.currentUserIdentity = currentUserIdentity;
     }
 
+    public void setDistinguishedName(String distinguishedName) {
+        this.distinguishedName = distinguishedName;
+    }
+
+    public String getDistinguishedName() {
+        return distinguishedName;
+    }
+
     public Set<Long> getCurrentRoleIds() {
         return currentRoleIds;
     }
 
     public void setCurrentRoleIds(UserIdentity user) {
-        try {
-            Set<Long> defaultRoleIds;
-            if (GlobalVariable.isActivateAllRolesOnLogin()) {
-                defaultRoleIds = globalStateMgr.getAuthorizationMgr().getRoleIdsByUser(user);
-            } else {
-                defaultRoleIds = globalStateMgr.getAuthorizationMgr().getDefaultRoleIdsByUser(user);
+        if (user.isEphemeral()) {
+            this.currentRoleIds = new HashSet<>();
+        } else {
+            try {
+                Set<Long> defaultRoleIds;
+                if (GlobalVariable.isActivateAllRolesOnLogin()) {
+                    defaultRoleIds = globalStateMgr.getAuthorizationMgr().getRoleIdsByUser(user);
+                } else {
+                    defaultRoleIds = globalStateMgr.getAuthorizationMgr().getDefaultRoleIdsByUser(user);
+                }
+                this.currentRoleIds = defaultRoleIds;
+            } catch (PrivilegeException e) {
+                LOG.warn("Set current role fail : {}", e.getMessage());
             }
-            this.currentRoleIds = defaultRoleIds;
-        } catch (PrivilegeException e) {
-            LOG.warn("Set current role fail : {}", e.getMessage());
         }
     }
 
     public void setCurrentRoleIds(Set<Long> roleIds) {
         this.currentRoleIds = roleIds;
+    }
+
+    public void setCurrentRoleIds(UserIdentity userIdentity, Set<String> groups) {
+        setCurrentRoleIds(userIdentity);
     }
 
     public void setAuthInfoFromThrift(TAuthInfo authInfo) {
@@ -559,6 +584,14 @@ public class ConnectContext {
 
     public byte[] getAuthDataSalt() {
         return authDataSalt;
+    }
+
+    public String getSecurityIntegration() {
+        return securityIntegration;
+    }
+
+    public void setSecurityIntegration(String securityIntegration) {
+        this.securityIntegration = securityIntegration;
     }
 
     public void modifySystemVariable(SystemVariable setVar, boolean onlySetSessionVar) throws DdlException {
@@ -1114,7 +1147,8 @@ public class ConnectContext {
     /**
      * NOTE: The ExecTimeout should not contain the pending time which may be caused by QueryQueue's scheduler.
      * </p>
-     * @return  Get the timeout for this session, unit: second
+     *
+     * @return Get the timeout for this session, unit: second
      */
     public int getExecTimeout() {
         return pendingTimeSecond + getExecTimeoutWithoutPendingTime();
@@ -1126,6 +1160,7 @@ public class ConnectContext {
 
     /**
      * update the pending time for this session, unit: second
+     *
      * @param pendingTimeSecond: the pending time for this session
      */
     public void setPendingTimeSecond(int pendingTimeSecond) {
@@ -1146,6 +1181,7 @@ public class ConnectContext {
 
     /**
      * Check the connect context is timeout or not. If true, kill the connection, otherwise, return false.
+     *
      * @param now : current time in milliseconds
      * @return true if timeout, false otherwise
      */

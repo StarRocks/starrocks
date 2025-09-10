@@ -12,15 +12,19 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.qe;
 
 import com.google.common.base.Preconditions;
+import com.starrocks.authentication.AuthenticationHandler;
 import com.starrocks.authentication.UserProperty;
+import com.starrocks.common.Config;
 import com.starrocks.sql.ast.ExecuteAsStmt;
 import com.starrocks.sql.ast.UserIdentity;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+
+import java.util.List;
+import java.util.Set;
 
 public class ExecuteAsExecutor {
     private static final Logger LOG = LogManager.getLogger(ExecuteAsStmt.class);
@@ -29,7 +33,7 @@ public class ExecuteAsExecutor {
      * Only set current user, won't reset any other context, for example, current database.
      * Because mysql client still think that this session is using old databases and will show such hint,
      * which will only confuse the user
-     *
+     * <p>
      * MySQL [test_priv]> execute as test1 with no revert;
      * Query OK, 0 rows affected (0.00 sec)
      * MySQL [test_priv]> select * from test_table2;
@@ -40,14 +44,69 @@ public class ExecuteAsExecutor {
         Preconditions.checkArgument(!stmt.isAllowRevert());
         LOG.info("{} EXEC AS {} from now on", ctx.getCurrentUserIdentity(), stmt.getToUser());
 
-        UserIdentity user = stmt.getToUser();
-        ctx.setCurrentUserIdentity(user);
-        ctx.setCurrentRoleIds(user);
+        UserIdentity userIdentity = stmt.getToUser();
+        ctx.setCurrentUserIdentity(userIdentity);
 
-        if (!user.isEphemeral()) {
+        // Refresh groups and roles for all users based on security integration
+        refreshGroupsAndRoles(ctx, userIdentity);
+
+        if (!userIdentity.isEphemeral()) {
             UserProperty userProperty = ctx.getGlobalStateMgr().getAuthenticationMgr()
-                    .getUserProperty(user.getUser());
+                    .getUserProperty(userIdentity.getUser());
             ctx.updateByUserProperty(userProperty);
         }
+    }
+
+    /**
+     * Refresh groups and roles for user based on security integration
+     * This applies to all users (both external and native) to ensure proper permission refresh
+     */
+    private static void refreshGroupsAndRoles(ConnectContext ctx, UserIdentity userIdentity) {
+        try {
+            // Get group provider list based on security integration
+            List<String> groupProviderList = getGroupProviderList(ctx);
+
+            // Query groups for the user
+            Set<String> groups = AuthenticationHandler.getGroups(userIdentity, userIdentity.getUser(), groupProviderList);
+
+            // Set groups to context
+            ctx.setGroups(groups);
+
+            // Refresh current role IDs based on user + groups
+            ctx.setCurrentRoleIds(userIdentity);
+
+            LOG.info("Refreshed groups {} and roles for user {}", groups, userIdentity);
+        } catch (Exception e) {
+            LOG.warn("Failed to refresh groups and roles for user {}: {}", userIdentity, e.getMessage());
+            // Continue execution even if group refresh fails
+        }
+    }
+
+    /**
+     * Get group provider list based on security integration
+     */
+    private static List<String> getGroupProviderList(ConnectContext ctx) {
+        String securityIntegration = ctx.getSecurityIntegration();
+
+        // If no security integration is set, use default group provider
+        if (securityIntegration == null || securityIntegration.isEmpty() ||
+                securityIntegration.equals("native")) {
+            return List.of(Config.group_provider);
+        }
+
+        // Try to get group provider from security integration
+        try {
+            var authMgr = ctx.getGlobalStateMgr().getAuthenticationMgr();
+            var si = authMgr.getSecurityIntegration(securityIntegration);
+            if (si != null && si.getGroupProviderName() != null && !si.getGroupProviderName().isEmpty()) {
+                return si.getGroupProviderName();
+            }
+        } catch (Exception e) {
+            LOG.warn("Failed to get group provider from security integration {}: {}",
+                    securityIntegration, e.getMessage());
+        }
+
+        // Fallback to default group provider
+        return List.of(Config.group_provider);
     }
 }
