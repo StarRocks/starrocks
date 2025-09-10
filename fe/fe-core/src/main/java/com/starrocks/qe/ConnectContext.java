@@ -199,6 +199,15 @@ public class ConnectContext {
     //Auth Data salt generated at mysql negotiate used for password salting
     private byte[] authDataSalt = null;
 
+    // The security integration method used for authentication.
+    protected String securityIntegration = "native";
+
+    // Distinguished name (DN) used for LDAP authentication and group resolution
+    // In LDAP context, this represents the unique identifier of a user in the directory
+    // For non-LDAP authentication, this typically defaults to the username
+    // Used by group providers to resolve user group memberships
+    protected String distinguishedName = "";
+
     // Serializer used to pack MySQL packet.
     protected MysqlSerializer serializer;
     // Variables belong to this session.
@@ -492,11 +501,11 @@ public class ConnectContext {
     }
 
     public void setDistinguishedName(String distinguishedName) {
-        authenticationContext.setDistinguishedName(distinguishedName);
+        this.distinguishedName = distinguishedName;
     }
 
     public String getDistinguishedName() {
-        return authenticationContext.getDistinguishedName();
+        return distinguishedName;
     }
 
     public Set<Long> getCurrentRoleIds() {
@@ -583,24 +592,16 @@ public class ConnectContext {
         this.authDataSalt = authDataSalt;
     }
 
-<<<<<<< HEAD
     public byte[] getAuthDataSalt() {
         return authDataSalt;
-=======
+    }
+
     public String getSecurityIntegration() {
-        return authenticationContext.getSecurityIntegration();
+        return securityIntegration;
     }
 
     public void setSecurityIntegration(String securityIntegration) {
-        authenticationContext.setSecurityIntegration(securityIntegration);
-    }
-
-    /**
-     * Get the authentication context for this connection
-     */
-    public AuthenticationContext getAuthenticationContext() {
-        return authenticationContext;
->>>>>>> c4cb935968 ([Enhancement] Support use DN to match group in group provider (#62711))
+        this.securityIntegration = securityIntegration;
     }
 
     public void modifySystemVariable(SystemVariable setVar, boolean onlySetSessionVar) throws DdlException {

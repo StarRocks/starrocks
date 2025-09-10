@@ -14,13 +14,13 @@
 
 package com.starrocks.authentication;
 
-import com.starrocks.catalog.UserIdentity;
 import com.starrocks.common.Config;
 import com.starrocks.persist.EditLog;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.CreateUserStmt;
 import com.starrocks.sql.ast.UserAuthOption;
-import com.starrocks.sql.ast.UserRef;
+import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.sql.parser.NodePosition;
 import mockit.Mock;
 import mockit.MockUp;
@@ -64,7 +64,7 @@ class LDAPAuthProviderTest {
         GlobalStateMgr.getCurrentState().setAuthenticationMgr(authenticationMgr);
 
         authenticationMgr.createUser(new CreateUserStmt(
-                new UserRef("ldap_user", "%", false, NodePosition.ZERO),
+                new UserIdentity("ldap_user", "%"),
                 true,
                 new UserAuthOption("AUTHENTICATION_LDAP_SIMPLE",
                         "uid=ldap_user,ou=company,dc=example,dc=com",
@@ -95,12 +95,12 @@ class LDAPAuthProviderTest {
                 "ou=People,dc=starrocks,dc=com", "uid",
                 providedDN);
 
-        AuthenticationContext authCtx = new AuthenticationContext();
+        ConnectContext context = new ConnectContext();
         UserIdentity user = UserIdentity.createEphemeralUserIdent("ldap_user", "%");
         byte[] authResponse = "password\0".getBytes(StandardCharsets.UTF_8);
 
-        provider.authenticate(authCtx, user, authResponse);
-        Assertions.assertEquals(providedDN, authCtx.getDistinguishedName());
+        provider.authenticate(context, user, authResponse);
+        Assertions.assertEquals(providedDN, context.getDistinguishedName());
     }
 
     @Test
@@ -114,11 +114,11 @@ class LDAPAuthProviderTest {
                 /* ldapUserDN */ null
         );
 
-        AuthenticationContext authCtx = new AuthenticationContext();
+        ConnectContext context = new ConnectContext();
         UserIdentity user = UserIdentity.createEphemeralUserIdent("ldap_user", "%");
         byte[] authResponse = "password\0".getBytes(StandardCharsets.UTF_8);
 
-        provider.authenticate(authCtx, user, authResponse);
-        Assertions.assertEquals(discoveredDN, authCtx.getDistinguishedName());
+        provider.authenticate(context, user, authResponse);
+        Assertions.assertEquals(discoveredDN, context.getDistinguishedName());
     }
 }

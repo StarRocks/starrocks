@@ -17,11 +17,7 @@ package com.starrocks.qe;
 import com.google.common.base.Preconditions;
 import com.starrocks.authentication.AuthenticationHandler;
 import com.starrocks.authentication.UserProperty;
-<<<<<<< HEAD
-=======
-import com.starrocks.catalog.UserIdentity;
 import com.starrocks.common.Config;
->>>>>>> c4cb935968 ([Enhancement] Support use DN to match group in group provider (#62711))
 import com.starrocks.sql.ast.ExecuteAsStmt;
 import com.starrocks.sql.ast.UserIdentity;
 import org.apache.logging.log4j.LogManager;
@@ -48,23 +44,15 @@ public class ExecuteAsExecutor {
         Preconditions.checkArgument(!stmt.isAllowRevert());
         LOG.info("{} EXEC AS {} from now on", ctx.getCurrentUserIdentity(), stmt.getToUser());
 
-<<<<<<< HEAD
-        UserIdentity user = stmt.getToUser();
-        ctx.setCurrentUserIdentity(user);
-        ctx.setCurrentRoleIds(user);
-=======
-        UserRef user = stmt.getToUser();
-        // Create UserIdentity with ephemeral flag for external users
-        UserIdentity userIdentity = new UserIdentity(user.getUser(), user.getHost(), user.isDomain());
+        UserIdentity userIdentity = stmt.getToUser();
         ctx.setCurrentUserIdentity(userIdentity);
 
         // Refresh groups and roles for all users based on security integration
         refreshGroupsAndRoles(ctx, userIdentity);
->>>>>>> c4cb935968 ([Enhancement] Support use DN to match group in group provider (#62711))
 
-        if (!user.isEphemeral()) {
+        if (!userIdentity.isEphemeral()) {
             UserProperty userProperty = ctx.getGlobalStateMgr().getAuthenticationMgr()
-                    .getUserProperty(user.getUser());
+                    .getUserProperty(userIdentity.getUser());
             ctx.updateByUserProperty(userProperty);
         }
     }

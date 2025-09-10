@@ -15,18 +15,9 @@
 package com.starrocks.authentication;
 
 import com.google.common.annotations.VisibleForTesting;
-<<<<<<< HEAD
-import com.starrocks.StarRocksFE;
 import com.starrocks.common.DdlException;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.UserIdentity;
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
-=======
-import com.starrocks.catalog.UserIdentity;
-import com.starrocks.common.DdlException;
-import com.starrocks.sql.analyzer.SemanticException;
->>>>>>> c4cb935968 ([Enhancement] Support use DN to match group in group provider (#62711))
 
 import java.io.FileInputStream;
 import java.io.IOException;
