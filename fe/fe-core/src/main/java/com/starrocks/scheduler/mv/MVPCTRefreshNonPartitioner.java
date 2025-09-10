@@ -42,6 +42,10 @@ public final class MVPCTRefreshNonPartitioner extends MVPCTRefreshPartitioner {
         super(mvContext, context, db, mv, mvRefreshParams);
     }
 
+    public PCellSortedSet getMVPartitionsToRefreshByParams() {
+        return getNonPartitionedMVPartitionsToRefresh();
+    }
+
     @Override
     public boolean syncAddOrDropPartitions() {
         // do nothing
@@ -76,7 +80,7 @@ public final class MVPCTRefreshNonPartitioner extends MVPCTRefreshPartitioner {
     }
 
     @Override
-    public PCellSortedSet getMVPartitionsToRefresh(Map<Long, BaseTableSnapshotInfo> snapshotBaseTables) {
+    public PCellSortedSet getMVPartitionsToRefreshWithCheck(Map<Long, BaseTableSnapshotInfo> snapshotBaseTables) {
         // non-partitioned materialized view
         if (mvRefreshParams.isForce() || isNonPartitionedMVNeedToRefresh(snapshotBaseTables, mv)) {
             return getNonPartitionedMVPartitionsToRefresh();

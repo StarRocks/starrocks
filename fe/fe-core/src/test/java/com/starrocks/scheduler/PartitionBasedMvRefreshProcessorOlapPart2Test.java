@@ -834,12 +834,20 @@ public class PartitionBasedMvRefreshProcessorOlapPart2Test extends MVTestBase {
         for (String query : explainQueries) {
             // skip run
             ExecPlan execPlan = getMVRefreshExecPlan(mv, query);
-            Assertions.assertTrue(execPlan == null);
+            if (query.contains("force")) {
+                Assertions.assertNotNull(execPlan, execPlan.getExplainString(StatementBase.ExplainLevel.NORMAL));
+            } else {
+                Assertions.assertNull(execPlan);
+            }
         }
         for (String query : traceQueries) {
             // skip run
             ExecPlan execPlan = getMVRefreshExecPlan(mv, query);
-            Assertions.assertTrue(execPlan == null);
+            if (query.contains("force")) {
+                Assertions.assertNotNull(execPlan, execPlan.getExplainString(StatementBase.ExplainLevel.NORMAL));
+            } else {
+                Assertions.assertNull(execPlan);
+            }
         }
 
         executeInsertSql("INSERT INTO t1 VALUES (\"2020-06-23\",1);\n");

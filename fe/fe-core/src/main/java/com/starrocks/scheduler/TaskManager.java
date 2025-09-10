@@ -423,7 +423,7 @@ public class TaskManager implements MemoryTrackable {
         TaskRunContext taskRunContext = taskRun.buildTaskRunContext();
         try {
             // prepare the task run context
-            mvRefreshProcessor.prepare(taskRunContext);
+            taskRunContext = mvRefreshProcessor.prepare(taskRunContext);
             // execute the task run
             return mvRefreshProcessor.getMVRefreshExecPlan();
         } catch (Exception e) {

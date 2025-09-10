@@ -69,6 +69,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.TimeUnit;
+import java.util.stream.Collectors;
 
 import static com.starrocks.connector.iceberg.IcebergPartitionUtils.getIcebergTablePartitionPredicateExpr;
 
@@ -84,6 +85,29 @@ public final class MVPCTRefreshListPartitioner extends MVPCTRefreshPartitioner {
         super(mvContext, context, db, mv, mvRefreshParams);
         this.differ = new ListPartitionDiffer(mv, false);
         this.logger = MVTraceUtils.getLogger(mv, MVPCTRefreshListPartitioner.class);
+    }
+
+    public PCellSortedSet getMVPartitionsToRefreshByParams() {
+        if (mvRefreshParams.isCompleteRefresh()) {
+            return PCellSortedSet.of(mv.getListPartitionItems());
+        } else {
+            Set<PListCell> pListCells = mvRefreshParams.getListValues();
+            Map<String, PListCell> mvPartitions = mv.getListPartitionItems();
+            Map<String, PListCell> mvFilteredPartitions = mvPartitions.entrySet().stream()
+                    .filter(e -> {
+                        PListCell mvListCell = e.getValue();
+                        if (mvListCell.getItemSize() == 1) {
+                            // if list value is a single value, check it directly
+                            return pListCells.contains(e.getValue());
+                        } else {
+                            // if list values is multi values, split it into single values and check it then.
+                            return mvListCell.toSingleValueCells().stream().anyMatch(i -> pListCells.contains(i));
+                        }
+                    })
+                    .map(Map.Entry::getKey)
+                    .collect(Collectors.toMap(k -> k, mvPartitions::get));
+            return PCellSortedSet.of(mvFilteredPartitions);
+        }
     }
 
     @Override
@@ -336,14 +360,7 @@ public final class MVPCTRefreshListPartitioner extends MVPCTRefreshPartitioner {
     }
 
     @Override
-    public PCellSortedSet getMVPartitionsToRefreshWithForce() {
-        Map<String, PCell> mvValidListPartitionMapMap = mv.getPartitionCells(Optional.empty());
-        filterPartitionsByTTL(mvValidListPartitionMapMap, false);
-        return PCellSortedSet.of(mvValidListPartitionMapMap);
-    }
-
-    @Override
-    public PCellSortedSet getMVPartitionsToRefresh(Map<Long, BaseTableSnapshotInfo> snapshotBaseTables) {
+    public PCellSortedSet getMVPartitionsToRefreshWithCheck(Map<Long, BaseTableSnapshotInfo> snapshotBaseTables) {
         // list partitioned materialized view
         boolean isAutoRefresh = mvContext.getTaskType().isAutoRefresh();
         PCellSortedSet mvListPartitionNames = getMVPartitionNamesWithTTL(isAutoRefresh);

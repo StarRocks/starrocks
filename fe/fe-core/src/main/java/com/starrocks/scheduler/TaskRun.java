@@ -349,7 +349,7 @@ public class TaskRun implements Comparable<TaskRun> {
         TaskRunContext taskRunContext = buildTaskRunContext();
 
         // prepare to execute task run, move it here so that we can catch the exception and set the status
-        processor.prepare(taskRunContext);
+        taskRunContext = processor.prepare(taskRunContext);
 
         // process task run
         Constants.TaskRunState taskRunState;

@@ -33,8 +33,8 @@ public class MockTaskRunProcessor implements TaskRunProcessor {
     }
 
     @Override
-    public void prepare(TaskRunContext context) throws Exception {
-        // do nothing
+    public TaskRunContext prepare(TaskRunContext context) throws Exception {
+        return context;
     }
 
     @Override

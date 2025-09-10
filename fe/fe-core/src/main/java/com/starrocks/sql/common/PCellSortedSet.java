@@ -24,6 +24,7 @@ import java.util.Set;
 import java.util.SortedSet;
 import java.util.TreeSet;
 import java.util.function.Consumer;
+import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 /**
@@ -39,7 +40,7 @@ public record PCellSortedSet(SortedSet<PCellWithName> partitions) {
         return new PCellSortedSet(partitions);
     }
 
-    public static PCellSortedSet of(Map<String, PCell> input) {
+    public static PCellSortedSet of(Map<String, ? extends PCell> input) {
         SortedSet<PCellWithName> partitions = input.entrySet()
                 .stream()
                 .map(entry -> PCellWithName.of(entry.getKey(), entry.getValue()))
@@ -153,6 +154,10 @@ public record PCellSortedSet(SortedSet<PCellWithName> partitions) {
             return;
         }
         partitions.addAll(other.partitions);
+    }
+
+    public Map<String, PCell> toCellMap() {
+        return partitions.stream().collect(Collectors.toMap(PCellWithName::name, PCellWithName::cell));
     }
 
     @Override
