@@ -177,15 +177,19 @@ public class ProfileManager implements MemoryTrackable {
                     + "may be forget to insert 'QUERY_ID' column into infoStrings");
         }
 
+        String removedQueryId = null;
         writeLock.lock();
         try {
             profileMap.put(queryId, element);
             if (profileMap.size() > Config.profile_info_reserved_num) {
-                profileMap.remove(profileMap.keySet().iterator().next());
+                removedQueryId = profileMap.keySet().iterator().next();
+                profileMap.remove(removedQueryId);
             }
         } finally {
             writeLock.unlock();
         }
+
+        LOG.debug("push profile for query: {}, remove profile for query: {}", queryId, removedQueryId);
 
         return profileString;
     }
