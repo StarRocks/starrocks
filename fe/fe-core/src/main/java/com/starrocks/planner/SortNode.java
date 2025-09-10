@@ -292,9 +292,9 @@ public class SortNode extends PlanNode implements RuntimeFilterBuildNode {
                 output.append(", ");
             }
             if (detailLevel.equals(TExplainLevel.NORMAL)) {
-                output.append(partitionExpr.next().toSql()).append(" ");
+                output.append(explainExpr(partitionExpr.next())).append(" ");
             } else {
-                output.append(partitionExpr.next().explain()).append(" ");
+                output.append(explainExpr(TExplainLevel.VERBOSE, List.of(partitionExpr.next()))).append(" ");
             }
         }
         if (!start) {
@@ -312,9 +312,9 @@ public class SortNode extends PlanNode implements RuntimeFilterBuildNode {
                 output.append(", ");
             }
             if (detailLevel.equals(TExplainLevel.NORMAL)) {
-                output.append(orderExpr.next().toSql()).append(" ");
+                output.append(explainExpr(orderExpr.next())).append(" ");
             } else {
-                output.append(orderExpr.next().explain()).append(" ");
+                output.append(explainExpr(TExplainLevel.VERBOSE, List.of(orderExpr.next()))).append(" ");
             }
             output.append(isAsc.next() ? "ASC" : "DESC");
         }

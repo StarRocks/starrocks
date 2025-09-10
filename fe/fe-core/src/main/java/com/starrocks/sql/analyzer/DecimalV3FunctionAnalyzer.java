@@ -463,19 +463,7 @@ public class DecimalV3FunctionAnalyzer {
             newFn = DecimalV3FunctionAnalyzer
                     .rectifyAggregationFunction((AggregateFunction) fn, argType, commonType);
         } else if (FunctionSet.MAX_BY.equals(fnName) || FunctionSet.MIN_BY.equals(fnName)) {
-            Type returnType = fn.getReturnType();
-            // Decimal v3 function return type maybe need change
-            ScalarType firstType = (ScalarType) argumentTypes[0];
-            Type commonType = firstType;
-            if (firstType.isDecimalV3()) {
-                commonType = ScalarType.createDecimalV3Type(firstType.getPrimitiveType(),
-                        firstType.getPrecision(), firstType.getScalarScale());
-            }
-            if (returnType.isDecimalV3() && commonType.isValid()) {
-                returnType = commonType;
-            }
-            Preconditions.checkState(fn instanceof AggregateFunction);
-
+            Type returnType = argumentTypes[0];
             Type[] argTypes = replaceArgDecimalType(fn.getArgs(), argumentTypes);
             newFn = fn.copy();
             newFn.setArgsType(argTypes);

@@ -103,7 +103,7 @@ public class RewriteTreeTask extends OptimizerTask {
             }
             Preconditions.checkState(result.size() <= 1, "Rewrite rule should provide at most 1 expression");
 
-            OptimizerTraceUtil.logApplyRuleAfter(result);
+            OptimizerTraceUtil.logApplyRuleAfter(rule, result);
 
             if (result.isEmpty()) {
                 continue;

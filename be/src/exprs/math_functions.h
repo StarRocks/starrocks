@@ -421,7 +421,7 @@ public:
      */
     template <LogicalType Type>
     DEFINE_VECTORIZED_FN(positive) {
-        return VECTORIZED_FN_ARGS(0);
+        return std::move(*columns[0]).mutate();
     }
 
     /**
@@ -450,7 +450,7 @@ public:
     template <LogicalType Type>
     static StatusOr<ColumnPtr> least(FunctionContext* context, const Columns& columns) {
         if (columns.size() == 1) {
-            return columns[0];
+            return std::move(*columns[0]).mutate();
         }
 
         RETURN_IF_COLUMNS_ONLY_NULL(columns);
@@ -491,7 +491,7 @@ public:
     template <LogicalType Type>
     static StatusOr<ColumnPtr> greatest(FunctionContext* context, const Columns& columns) {
         if (columns.size() == 1) {
-            return columns[0];
+            return std::move(*columns[0]).mutate();
         }
 
         RETURN_IF_COLUMNS_ONLY_NULL(columns);
