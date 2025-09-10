@@ -218,7 +218,8 @@ public class ShowCreateTableStmtTest {
         String sql = "show create table primary_table";
         ShowCreateTableStmt showCreateTableStmt = (ShowCreateTableStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
         ShowResultSet resultSet = ShowExecutor.execute(showCreateTableStmt, ctx);
-        Assertions.assertEquals("AS dict_mapping('test.dict', k1, k2, k3, k4, k5, TRUE) COMMENT",
+        Assertions.assertTrue(resultSet.getResultRows().get(0).get(1)
+                        .contains("AS dict_mapping('test.dict', k1, k2, k3, k4, k5, TRUE) COMMENT"),
                 resultSet.getResultRows().get(0).get(1));
     }
 }
