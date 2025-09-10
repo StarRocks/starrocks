@@ -295,7 +295,7 @@ StatusOr<ColumnPtr> TimeFunctions::utc_time(FunctionContext* context, const Colu
 }
 
 StatusOr<ColumnPtr> TimeFunctions::timestamp(FunctionContext* context, const Columns& columns) {
-    return columns[0];
+    return std::move(*columns[0]).mutate();
 }
 
 static const std::vector<int> NOW_PRECISION_FACTORS = {1000000, 100000, 10000, 1000, 100, 10, 1};
@@ -2704,7 +2704,7 @@ Status TimeFunctions::date_trunc_prepare(FunctionContext* context, FunctionConte
 }
 
 StatusOr<ColumnPtr> TimeFunctions::date_trunc_day(FunctionContext* context, const starrocks::Columns& columns) {
-    return columns[1];
+    return std::move(*columns[1]).mutate();
 }
 
 DEFINE_UNARY_FN_WITH_IMPL(date_trunc_monthImpl, v) {
