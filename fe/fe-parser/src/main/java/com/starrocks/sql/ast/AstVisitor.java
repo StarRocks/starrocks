@@ -1,4 +1,4 @@
-package com.starrocks.sql.ast;// Copyright 2021-present StarRocks, Inc. All rights reserved.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -11,6 +11,8 @@ package com.starrocks.sql.ast;// Copyright 2021-present StarRocks, Inc. All righ
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
+
+package com.starrocks.sql.ast;
 
 import com.starrocks.sql.ast.group.CreateGroupProviderStmt;
 import com.starrocks.sql.ast.group.DropGroupProviderStmt;
