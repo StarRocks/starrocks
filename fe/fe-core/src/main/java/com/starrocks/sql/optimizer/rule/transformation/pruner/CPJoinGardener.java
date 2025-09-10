@@ -32,6 +32,7 @@ import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.OperatorBuilderFactory;
+import com.starrocks.sql.optimizer.operator.logical.LogicalCTEConsumeOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalJoinOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalProjectOperator;
@@ -51,6 +52,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
+import java.util.function.Function;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
@@ -1066,7 +1068,18 @@ public class CPJoinGardener extends OptExpressionVisitor<Boolean, Void> {
         frontier = grafter.graft(frontier).orElse(frontier);
 
         // step4: (Top-down) remove the unused ColumnRefOperators.
-        colRefMap.replaceAll((k, v) -> pruner.columnRefRewriter.rewrite(v));
+        // if Frontier is LogicalCTEConsumerOperator, getRowOutputInfo().getColumnRefMap() returns
+        // LogicalCTEConsumerOperator.cteOutputColumnRefMap, the input ColumnRefOperators in this map
+        // are output ColumnRefOperators of LogicalCTEProducerOperator, thus these ColumnRefOperators
+        // are dangling, so when we create a LogicalProjectOperator above LogicalCTEConsumerOperator,we
+        // just need map output ColumnRefOperators to themselves.
+        //LogicalCTEConsumeOperator cteConsumeOperator = frontier.getOp().cast();
+        if (frontier.getOp() instanceof LogicalCTEConsumeOperator) {
+            colRefMap = colRefMap.keySet().stream()
+                    .collect(Collectors.toMap(Function.identity(), Function.identity()));
+        } else {
+            colRefMap.replaceAll((k, v) -> pruner.columnRefRewriter.rewrite(v));
+        }
         LogicalProjectOperator projectOperator = new LogicalProjectOperator(colRefMap);
         frontier = OptExpression.create(projectOperator, frontier);
         Cleaner cleaner = new Cleaner(columnRefFactory);
