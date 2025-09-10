@@ -16,9 +16,12 @@ package com.starrocks.http.rest.v2;
 
 import com.starrocks.common.Pair;
 import com.starrocks.common.util.ProfileManager;
+import com.starrocks.ha.FrontendNodeType;
 import com.starrocks.http.StarRocksHttpTestCase;
 import com.starrocks.http.rest.RestBaseAction;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.system.Frontend;
+import mockit.Expectations;
 import mockit.Mock;
 import mockit.MockUp;
 import okhttp3.Request;
@@ -47,7 +50,8 @@ public class ProfileActionV2Test extends StarRocksHttpTestCase {
     }
 
     @Test
-    public void testQueryProfileFromLeaderFront() throws IOException {
+    public void testQueryProfileFromLeaderFront() throws Exception {
+
         new MockUp<ProfileManager>() {
             @Mock
             public String getProfile(String queryId) {
@@ -90,7 +94,19 @@ public class ProfileActionV2Test extends StarRocksHttpTestCase {
     }
 
     @Test
-    public void testQueryProfileFromFronts() throws IOException {
+    public void testQueryProfileFromFronts() throws Exception {
+
+        Frontend frontend = new Frontend(0, FrontendNodeType.LEADER, "", "localhost", 0);
+
+        new Expectations(GlobalStateMgr.getCurrentState().getNodeMgr()) {
+            {
+
+                GlobalStateMgr.getCurrentState().getNodeMgr().getSelfNode();
+                minTimes = 1;
+                result = new Pair<>(frontend.getHost(), HTTP_PORT);
+            }
+        };
+
         new MockUp<RestBaseAction>() {
             @Mock
             public static List<Pair<String, Integer>> getOtherAliveFe() {

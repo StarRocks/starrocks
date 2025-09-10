@@ -16,11 +16,14 @@ package com.starrocks.http.rest.v2;
 
 import com.google.gson.Gson;
 import com.starrocks.common.Pair;
+import com.starrocks.ha.FrontendNodeType;
 import com.starrocks.http.StarRocksHttpTestCase;
 import com.starrocks.http.rest.RestBaseAction;
 import com.starrocks.qe.QueryDetail;
 import com.starrocks.qe.QueryDetailQueue;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.system.Frontend;
+import mockit.Expectations;
 import mockit.Mock;
 import mockit.MockUp;
 import okhttp3.Request;
@@ -76,6 +79,17 @@ public class QueryDetailV2Test extends StarRocksHttpTestCase {
 
     @Test
     public void testQueryDetailFromFronts() throws IOException {
+
+        Frontend frontend = new Frontend(0, FrontendNodeType.LEADER, "", "localhost", 0);
+
+        new Expectations(GlobalStateMgr.getCurrentState().getNodeMgr()) {
+            {
+
+                GlobalStateMgr.getCurrentState().getNodeMgr().getSelfNode();
+                minTimes = 1;
+                result = new Pair<>(frontend.getHost(), HTTP_PORT);
+            }
+        };
 
         QueryDetail startQueryDetail = new QueryDetail("219a2d5443c542d4-8fc938db37c892e3", false, 1, "127.0.0.1",
                 System.currentTimeMillis(), -1, -1, QueryDetail.QueryMemState.RUNNING,
