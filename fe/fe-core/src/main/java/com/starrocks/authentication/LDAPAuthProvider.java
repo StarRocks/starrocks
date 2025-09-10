@@ -14,6 +14,7 @@
 
 package com.starrocks.authentication;
 
+import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
 import com.starrocks.common.util.NetUtils;
 import com.starrocks.qe.ConnectContext;
@@ -80,11 +81,17 @@ public class LDAPAuthProvider implements AuthenticationProvider {
         }
 
         try {
+            String distinguishedName;
             if (!Strings.isNullOrEmpty(ldapUserDN)) {
-                checkPassword(ldapUserDN, new String(clearPassword, StandardCharsets.UTF_8));
+                distinguishedName = ldapUserDN;
             } else {
-                checkPasswordByRoot(userIdentity.getUser(), new String(clearPassword, StandardCharsets.UTF_8));
+                distinguishedName = findUserDNByRoot(userIdentity.getUser());
             }
+            Preconditions.checkNotNull(distinguishedName);
+            checkPassword(distinguishedName, new String(clearPassword, StandardCharsets.UTF_8));
+
+            // set distinguished name to auth context
+            context.setDistinguishedName(distinguishedName);
         } catch (Exception e) {
             LOG.warn("check password failed for user: {}", userIdentity.getUser(), e);
             throw new AuthenticationException(e.getMessage());
@@ -111,7 +118,7 @@ public class LDAPAuthProvider implements AuthenticationProvider {
     }
 
     //bind to ldap server to check password
-    public void checkPassword(String dn, String password) throws Exception {
+    protected void checkPassword(String dn, String password) throws Exception {
         if (Strings.isNullOrEmpty(password)) {
             throw new AuthenticationException("empty password is not allowed for simple authentication");
         }
@@ -143,8 +150,8 @@ public class LDAPAuthProvider implements AuthenticationProvider {
 
     //1. bind ldap server by root dn
     //2. search user
-    //3. if match exactly one, check password
-    public void checkPasswordByRoot(String user, String password) throws Exception {
+    //3. if match exactly one, return the user's actual DN
+    protected String findUserDNByRoot(String user) throws Exception {
         if (Strings.isNullOrEmpty(ldapBindRootPwd)) {
             throw new AuthenticationException("empty password is not allowed for simple authentication");
         }
@@ -198,7 +205,7 @@ public class LDAPAuthProvider implements AuthenticationProvider {
                 throw new AuthenticationException("ldap search matched user count " + matched);
             }
 
-            checkPassword(userDN, password);
+            return userDN;
         } finally {
             if (ctx != null) {
                 try {
