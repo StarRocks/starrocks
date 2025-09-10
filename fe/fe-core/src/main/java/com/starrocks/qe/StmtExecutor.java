@@ -2147,6 +2147,10 @@ public class StmtExecutor {
                         .build();
         sendMetaData(metaData);
 
+        if (explainString == null) {
+            explainString = "Profile analysis failed or not available";
+        }
+
         if (isProxy) {
             proxyResultSet = new ShowResultSet(metaData,
                     Arrays.stream(explainString.split("\n")).map(Collections::singletonList).collect(
