@@ -10,7 +10,7 @@ displayed_sidebar: docs
 
 | **字段**                  | **描述**                               |
 | ------------------------- | ---------------------------------------|
-| TYPE                      | 被删除的元数据类型，如 Database、Table、Partition  |
+| TYPE                      | 被删除的元数据类型，包括 Database、Table 和 Partition。 |
 | NAME                      | 被删除对象的名字。                     |
 | DB_ID                     | 被删除对象的 DB ID。                   |
 | TABLE_ID                  | 被删除对象的 Table ID。                |
