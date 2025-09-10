@@ -454,7 +454,8 @@ public class SystemInfoService implements GsonPostProcessable {
 
     public void dropComputeNodes(DropComputeNodeClause dropComputeNodeClause) throws DdlException {
         for (Pair<String, Integer> pair : dropComputeNodeClause.getHostPortPairs()) {
-            dropComputeNode(pair.first, pair.second, dropComputeNodeClause.getWarehouse(), dropComputeNodeClause.getCNGroupName());
+            dropComputeNode(pair.first, pair.second, dropComputeNodeClause.getWarehouse(),
+                    dropComputeNodeClause.getCNGroupName());
         }
     }
 
