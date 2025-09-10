@@ -4,15 +4,23 @@ displayed_sidebar: docs
 
 # ALTER TABLE
 
+import Beta from '../../../_assets/commonMarkdown/_beta.mdx'
+
 ALTER TABLE Modifies an existing table, including:
 
 - [Rename table, partition, index, or column](#rename)
 - [Modify table comment](#alter-table-comment-from-v31)
 - [Modify partitions (add/delete partitions and modify partition attributes)](#modify-partition)
 - [Modify the bucketing method and number of buckets](#modify-the-bucketing-method-and-number-of-buckets-from-v32)
+<<<<<<< HEAD
 - [Modify columns (add/delete columns and change the order of columns)](#modify-columns-adddelete-columns-change-the-order-of-columns)
 - [Create/delete rollup index](#modify-rollup-index)
 - [Modify bitmap index](#modify-bitmap-indexes)
+=======
+- [Modify columns (add/delete columns, change column order, and modify column comment)](#modify-columns-adddelete-columns-change-column-order-modify-column-comment)
+- [Create/delete rollup](#modify-rollup)
+- [Create/delete index](#modify-indexes)
+>>>>>>> 524edf4607 ([Doc] Doc for Modifying Column Comment (#62951))
 - [Modify table properties](#modify-table-properties)
 - [Atomic swap](#swap)
 - [Manual data version compaction](#manual-compaction-from-31)
@@ -35,9 +43,15 @@ alter_clause1[, alter_clause2, ...]
 - comment: modifies the table comment (supported from **v3.1 onwards**).
 - partition: modifies partition properties, drops a partition, or adds a partition.
 - bucket: modifies the bucketing method and number of buckets.
+<<<<<<< HEAD
 - column: adds, drops, or reorders columns, or modifies column type.
 - rollup index: creates or drops a rollup index.
 - bitmap index: modifies index (only Bitmap index can be modified).
+=======
+- column: adds, drops, or reorders columns, modifies column type or comment
+- rollup: creates or drops a rollup.
+- index: modifies indexes.
+>>>>>>> 524edf4607 ([Doc] Doc for Modifying Column Comment (#62951))
 - swap: atomic exchange of two tables.
 - compaction: performs manual compaction to merge versions of loaded data (supported from **v3.1 onwards**).
 - drop persistent index: Drop persistent index for Primary Key table in shared-data cluster. **Supported from v3.3.9 onwards**.
@@ -45,7 +59,10 @@ alter_clause1[, alter_clause2, ...]
 ## Limits and usage notes
 
 - Operations on partition, column, and rollup index cannot be performed in one ALTER TABLE statement.
+<<<<<<< HEAD
 - Column comments cannot be modified.
+=======
+>>>>>>> 524edf4607 ([Doc] Doc for Modifying Column Comment (#62951))
 - One table can have only one ongoing schema change operation at a time. You cannot run two schema change commands on a table at the same time.
 - Operations on bucket, column and rollup index are asynchronous operations. A success message is return immediately after the task is submitted. You can run the [SHOW ALTER TABLE](SHOW_ALTER.md) command to check the progress, and run the [CANCEL ALTER TABLE](CANCEL_ALTER_TABLE.md) command to cancel the operation.
 - Operations on rename, comment, partition, bitmap index and swap are synchronous operations, and a command return indicates that the execution is finished.
@@ -97,10 +114,6 @@ Syntax:
 ```sql
 ALTER TABLE [<db_name>.]<tbl_name> COMMENT = "<new table comment>";
 ```
-
-:::tip
-Currently, column comments cannot be modified.
-:::
 
 ### Modify partition
 
@@ -382,7 +395,7 @@ INSERT INTO details (event_time, event_type, user_id, device_code, channel) VALU
   ALTER TABLE details DISTRIBUTED BY HASH(user_id, event_time) BUCKETS 10;
   ``
 
-### Modify columns (add/delete columns, change the order of columns)
+### Modify columns (add/delete columns, change column order, modify column comment)
 
 #### Add a column to the specified location of the specified index
 
@@ -460,16 +473,18 @@ Note:
 1. You cannot drop partition column.
 2. If the column is dropped from the base index, it will also be dropped if it is included in the rollup index.
 
-#### Modify the column type and column position of specified index
+#### Modify the column type, position, comment, and other properties
 
 Syntax:
 
 ```sql
 ALTER TABLE [<db_name>.]<tbl_name>
-MODIFY COLUMN column_name column_type [KEY | agg_type] [NULL | NOT NULL] [DEFAULT "default_value"]
-[AFTER column_name|FIRST]
-[FROM rollup_index_name]
-[PROPERTIES ("key"="value", ...)]
+MODIFY COLUMN <column_name> 
+[ column_type [ KEY | agg_type ] ] [ NULL | NOT NULL ] 
+[ DEFAULT "<default_value>"] [ COMMENT "<new_column_comment>" ]
+[ AFTER <column_name> | FIRST ]
+[ FROM rollup_index_name ]
+[ PROPERTIES ("key"="value", ...) ]
 ```
 
 Note:
@@ -490,6 +505,7 @@ Note:
    - Convert INT to DATE (If the INT data fails to convert, the original data remains the same)
 
 6. Conversion from NULL to NOT NULL is not supported.
+7. You can modify several properties in a single MODIFY COLUMN clause. However, some combination of properties are not supported.
 
 #### Reorder the columns of specified index
 
