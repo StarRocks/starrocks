@@ -588,8 +588,6 @@ DISTRIBUTED BY HASH(order_id);
 ALTER TABLE orders ORDER BY (dt, revenue, state);
 ```
 
-import Beta from '../../../_assets/commonMarkdown/_beta.mdx'
-
 #### 修改STRUCT列以添加或删除字段
 
 <Beta />
