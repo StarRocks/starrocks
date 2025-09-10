@@ -397,17 +397,7 @@ public class ConnectProcessor {
                             "&state=" + ctx.getConnectionId() +
                             "&scope=openid";
 
-<<<<<<< HEAD
                     ErrorReport.report(ErrorCode.ERR_OAUTH2_NOT_AUTHENTICATED, authUrl);
-=======
-                    authenticationProvider.checkLoginSuccess(ctx.getConnectionId(), ctx.getAuthenticationContext());
-                } catch (AuthenticationException authenticationException) {
-                    if (authenticationException.getErrorCode() != null) {
-                        ErrorReport.report(authenticationException.getErrorCode(), authenticationException.getMessage());
-                    } else {
-                        ErrorReport.report(ErrorCode.ERR_ACCESS_DENIED, authenticationException.getMessage());
-                    }
->>>>>>> c4cb935968 ([Enhancement] Support use DN to match group in group provider (#62711))
                     ctx.getState().setErrType(QueryState.ErrType.ANALYSIS_ERR);
                     return;
                 }

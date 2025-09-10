@@ -19,9 +19,10 @@ import com.starrocks.common.DdlException;
 import com.starrocks.persist.EditLog;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.analyzer.Analyzer;
 import com.starrocks.sql.ast.CreateUserStmt;
 import com.starrocks.sql.ast.UserAuthOption;
-import com.starrocks.sql.ast.UserRef;
+import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.sql.parser.NodePosition;
 import mockit.Mock;
 import mockit.MockUp;
@@ -60,14 +61,16 @@ public class AuthenticationHandlerTest {
     public void testLdapDNMappingGroup() throws Exception {
         AuthenticationMgr authenticationMgr = new AuthenticationMgr();
         GlobalStateMgr.getCurrentState().setAuthenticationMgr(authenticationMgr);
-
-        authenticationMgr.createUser(new CreateUserStmt(
-                new UserRef("ldap_user", "%", false, NodePosition.ZERO),
+        CreateUserStmt stmt = new CreateUserStmt(
+                new UserIdentity("ldap_user", "%"),
                 true,
                 new UserAuthOption("AUTHENTICATION_LDAP_SIMPLE",
                         "uid=ldap_user,ou=company,dc=example,dc=com",
                         false, NodePosition.ZERO),
-                List.of(), Map.of(), NodePosition.ZERO));
+                List.of(), Map.of(), NodePosition.ZERO);
+        Analyzer.analyze(stmt, new ConnectContext());
+
+        authenticationMgr.createUser(stmt);
 
         new MockUp<LDAPAuthProvider>() {
             @Mock
@@ -98,14 +101,13 @@ public class AuthenticationHandlerTest {
         ldapGroupProvider.setUserToGroupCache(groups);
 
         ConnectContext context = new ConnectContext();
-        AuthenticationContext authCtx = context.getAuthenticationContext();
         AuthenticationHandler.authenticate(context, "ldap_user", "%", "\0".getBytes(StandardCharsets.UTF_8));
 
-        Assertions.assertEquals("ldap_user", authCtx.getQualifiedUser());
-        Assertions.assertEquals("uid=ldap_user,ou=company,dc=example,dc=com", authCtx.getDistinguishedName());
+        Assertions.assertEquals("ldap_user", context.getQualifiedUser());
+        Assertions.assertEquals("uid=ldap_user,ou=company,dc=example,dc=com", context.getDistinguishedName());
 
         Assertions.assertEquals(Set.of("group1", "group2"),
-                ldapGroupProvider.getGroup(authCtx.getCurrentUserIdentity(), authCtx.getDistinguishedName()));
+                ldapGroupProvider.getGroup(context.getCurrentUserIdentity(), context.getDistinguishedName()));
 
         properties = new HashMap<>();
         properties.put(GroupProvider.GROUP_PROVIDER_PROPERTY_TYPE_KEY, "ldap");
@@ -122,6 +124,6 @@ public class AuthenticationHandlerTest {
         groups2.put("u2", Set.of("group6"));
         ldapGroupProvider2.setUserToGroupCache(groups2);
         Assertions.assertEquals(Set.of("group3", "group4"),
-                ldapGroupProvider2.getGroup(authCtx.getCurrentUserIdentity(), authCtx.getDistinguishedName()));
+                ldapGroupProvider2.getGroup(context.getCurrentUserIdentity(), context.getDistinguishedName()));
     }
 }

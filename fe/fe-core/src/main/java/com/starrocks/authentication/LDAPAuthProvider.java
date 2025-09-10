@@ -91,7 +91,7 @@ public class LDAPAuthProvider implements AuthenticationProvider {
             checkPassword(distinguishedName, new String(clearPassword, StandardCharsets.UTF_8));
 
             // set distinguished name to auth context
-            authContext.setDistinguishedName(distinguishedName);
+            context.setDistinguishedName(distinguishedName);
         } catch (Exception e) {
             LOG.warn("check password failed for user: {}", userIdentity.getUser(), e);
             throw new AuthenticationException(e.getMessage());

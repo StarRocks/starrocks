@@ -196,6 +196,15 @@ public class ConnectContext {
     //Auth Data salt generated at mysql negotiate used for password salting
     private byte[] authDataSalt = null;
 
+    // The security integration method used for authentication.
+    protected String securityIntegration = "native";
+
+    // Distinguished name (DN) used for LDAP authentication and group resolution
+    // In LDAP context, this represents the unique identifier of a user in the directory
+    // For non-LDAP authentication, this typically defaults to the username
+    // Used by group providers to resolve user group memberships
+    protected String distinguishedName = "";
+
     // Serializer used to pack MySQL packet.
     protected MysqlSerializer serializer;
     // Variables belong to this session.
@@ -482,11 +491,11 @@ public class ConnectContext {
     }
 
     public void setDistinguishedName(String distinguishedName) {
-        authenticationContext.setDistinguishedName(distinguishedName);
+        this.distinguishedName = distinguishedName;
     }
 
     public String getDistinguishedName() {
-        return authenticationContext.getDistinguishedName();
+        return distinguishedName;
     }
 
     public Set<Long> getCurrentRoleIds() {
@@ -573,24 +582,16 @@ public class ConnectContext {
         this.authDataSalt = authDataSalt;
     }
 
-<<<<<<< HEAD
     public byte[] getAuthDataSalt() {
         return authDataSalt;
-=======
+    }
+
     public String getSecurityIntegration() {
-        return authenticationContext.getSecurityIntegration();
+        return securityIntegration;
     }
 
     public void setSecurityIntegration(String securityIntegration) {
-        authenticationContext.setSecurityIntegration(securityIntegration);
-    }
-
-    /**
-     * Get the authentication context for this connection
-     */
-    public AuthenticationContext getAuthenticationContext() {
-        return authenticationContext;
->>>>>>> c4cb935968 ([Enhancement] Support use DN to match group in group provider (#62711))
+        this.securityIntegration = securityIntegration;
     }
 
     public void modifySystemVariable(SystemVariable setVar, boolean onlySetSessionVar) throws DdlException {
@@ -1009,67 +1010,6 @@ public class ConnectContext {
     public void setCurrentWarehouseId(long warehouseId) {
         Warehouse warehouse = globalStateMgr.getWarehouseMgr().getWarehouse(warehouseId);
         this.sessionVariable.setWarehouseName(warehouse.getName());
-<<<<<<< HEAD
-=======
-        this.computeResource = null;
-    }
-
-    public void setCurrentComputeResource(ComputeResource computeResource) {
-        this.computeResource = computeResource;
-    }
-
-    public synchronized void tryAcquireResource(boolean force) {
-        if (!force && this.computeResource != null) {
-            return;
-        }
-        // once warehouse is set, needs to choose the available cngroup
-        // try to acquire cn group id once the warehouse is set
-        final long warehouseId = this.getCurrentWarehouseId();
-        final WarehouseManager warehouseManager = globalStateMgr.getWarehouseMgr();
-        this.computeResource = warehouseManager.acquireComputeResource(warehouseId, this.computeResource);
-    }
-
-    /**
-     * Get the current compute resource, acquire it if not set.
-     * NOTE: This method will acquire compute resource if it is not set.
-     *
-     * @return: the current compute resource, or the default resource if not in shared data mode.
-     */
-    public ComputeResource getCurrentComputeResource() {
-        if (!RunMode.isSharedDataMode()) {
-            return WarehouseManager.DEFAULT_RESOURCE;
-        }
-        if (this.computeResource == null) {
-            tryAcquireResource(false);
-        }
-        return this.computeResource;
-    }
-
-    /**
-     * Get the name of the current compute resource.
-     * NOTE: this method will not acquire compute resource if it is not set.
-     *
-     * @return: the name of the current compute resource, or empty string if not set.
-     */
-    public String getCurrentComputeResourceName() {
-        if (!RunMode.isSharedDataMode() || this.computeResource == null) {
-            return "";
-        }
-        final WarehouseManager warehouseManager = globalStateMgr.getWarehouseMgr();
-        return warehouseManager.getComputeResourceName(this.computeResource);
-    }
-
-    /**
-     * Get the current compute resource without acquiring it.
-     *
-     * @return: the current compute resource(null if not set), or the default resource if not in shared data mode.
-     */
-    public ComputeResource getCurrentComputeResourceNoAcquire() {
-        if (!RunMode.isSharedDataMode()) {
-            return WarehouseManager.DEFAULT_RESOURCE;
-        }
-        return this.computeResource;
->>>>>>> c4cb935968 ([Enhancement] Support use DN to match group in group provider (#62711))
     }
 
     public void setParentConnectContext(ConnectContext parent) {
