@@ -39,7 +39,6 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.util.List;
-import java.util.Locale;
 
 import static com.starrocks.catalog.Column.COLUMN_UNIQUE_ID_INIT_VALUE;
 import static com.starrocks.connector.ConnectorTableId.CONNECTOR_ID_GENERATOR;
@@ -97,7 +96,7 @@ public class DeltaUtils {
             String partitionColName = partitionColNameVector.getString(i);
             Preconditions.checkArgument(partitionColName != null && !partitionColName.isEmpty(),
                     "Expected non-null and non-empty partition column name");
-            partitionColumnNames.add(partitionColName.toLowerCase(Locale.ROOT));
+            partitionColumnNames.add(partitionColName);
         }
         return partitionColumnNames;
     }
