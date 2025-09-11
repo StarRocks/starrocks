@@ -18,15 +18,12 @@ import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.optimizer.validate.ValidateException;
-<<<<<<< HEAD
 import io.delta.kernel.Operation;
 import io.delta.kernel.Snapshot;
 import io.delta.kernel.Table;
 import io.delta.kernel.TransactionBuilder;
-=======
 import io.delta.kernel.data.ArrayValue;
 import io.delta.kernel.data.ColumnVector;
->>>>>>> 52a53cf9cc ([BugFix] Fix delta lake table can not find partition column (#62953))
 import io.delta.kernel.engine.Engine;
 import io.delta.kernel.exceptions.CheckpointAlreadyExistsException;
 import io.delta.kernel.exceptions.TableNotFoundException;
@@ -41,12 +38,17 @@ import mockit.Mocked;
 import org.apache.hadoop.conf.Configuration;
 import org.junit.Rule;
 import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
 import org.junit.rules.ExpectedException;
 
 import java.io.IOException;
+import java.util.List;
 
 import static io.delta.kernel.internal.util.ColumnMapping.COLUMN_MAPPING_MODE_KEY;
 import static io.delta.kernel.internal.util.ColumnMapping.COLUMN_MAPPING_MODE_NAME;
+import static org.hamcrest.MatcherAssert.assertThat;
+import static org.hamcrest.Matchers.containsString;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 public class DeltaUtilsTest {
     @Rule
