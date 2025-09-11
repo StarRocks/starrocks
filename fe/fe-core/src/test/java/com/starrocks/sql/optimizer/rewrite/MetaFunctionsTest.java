@@ -368,4 +368,28 @@ public class MetaFunctionsTest extends MVTestBase {
         Assertions.assertNotNull(result);
         Assertions.assertTrue(result.isNull());
     }
+
+    @Test
+    public void testInspectGlobalDict() throws Exception {
+        // Test with non-existent table
+        assertThrows(SemanticException.class, () -> {
+            MetaFunctions.inspectGlobalDict(
+                    ConstantOperator.createVarchar("test.non_existent_table"),
+                    ConstantOperator.createVarchar("k1"));
+        });
+
+        // Test with non-OLAP table
+        assertThrows(SemanticException.class, () -> {
+            MetaFunctions.inspectGlobalDict(
+                    ConstantOperator.createVarchar("test.mysql_external_table"),
+                    ConstantOperator.createVarchar("k1"));
+        });
+
+        // Test with valid table and column (should return null since no global dict exists)
+        ConstantOperator result = MetaFunctions.inspectGlobalDict(
+                ConstantOperator.createVarchar("test.tbl1"),
+                ConstantOperator.createVarchar("k1"));
+        Assertions.assertNotNull(result);
+        Assertions.assertTrue(result.isNull());
+    }
 }
