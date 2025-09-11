@@ -49,7 +49,7 @@ public class SystemHandlerCanForceDropTest {
     public void testCanForceDropEmptyTablets() {
         // Test case: empty tablet list should return true
         List<Long> emptyTabletIds = new ArrayList<>();
-        boolean result = systemHandler.canForceDrop(emptyTabletIds);
+        boolean result = systemHandler.canDropBackend(emptyTabletIds);
         Assertions.assertTrue(result, "Empty tablet list should return true");
     }
 
@@ -66,7 +66,7 @@ public class SystemHandlerCanForceDropTest {
             }
         };
         
-        boolean result = systemHandler.canForceDrop(tabletIds);
+        boolean result = systemHandler.canDropBackend(tabletIds);
         Assertions.assertFalse(result, "Shared data mode should return false");
     }
 
@@ -84,10 +84,10 @@ public class SystemHandlerCanForceDropTest {
         };
         
         // First call to set lastRecycleBinCheckTime
-        systemHandler.canForceDrop(tabletIds);
+        systemHandler.canDropBackend(tabletIds);
         
         // Second call within interval should return false
-        boolean result = systemHandler.canForceDrop(tabletIds);
+        boolean result = systemHandler.canDropBackend(tabletIds);
         Assertions.assertFalse(result, "Within recycle bin check interval should return false");
     }
 
@@ -112,7 +112,7 @@ public class SystemHandlerCanForceDropTest {
             }
         };
         
-        boolean result = systemHandler.canForceDrop(tabletIds);
+        boolean result = systemHandler.canDropBackend(tabletIds);
         Assertions.assertFalse(result, "No available backends should return false");
     }
 
@@ -157,7 +157,7 @@ public class SystemHandlerCanForceDropTest {
         // Mock TabletInvertedIndex
         mockTabletInvertedIndex();
         
-        boolean result = systemHandler.canForceDrop(tabletIds);
+        boolean result = systemHandler.canDropBackend(tabletIds);
         Assertions.assertFalse(result, "Tablet not in recycle bin should return false");
     }
 
@@ -202,7 +202,7 @@ public class SystemHandlerCanForceDropTest {
         // Mock TabletInvertedIndex with insufficient replicas
         mockTabletInvertedIndexWithInsufficientReplicas();
         
-        boolean result = systemHandler.canForceDrop(tabletIds);
+        boolean result = systemHandler.canDropBackend(tabletIds);
         Assertions.assertFalse(result, "Insufficient replicas should return false");
     }
 
@@ -247,7 +247,7 @@ public class SystemHandlerCanForceDropTest {
         // Mock TabletInvertedIndex with no normal replica on retained backends
         mockTabletInvertedIndexWithNoNormalReplica();
         
-        boolean result = systemHandler.canForceDrop(tabletIds);
+        boolean result = systemHandler.canDropBackend(tabletIds);
         Assertions.assertFalse(result, "No normal replica on retained backends should return false");
     }
 
@@ -292,7 +292,7 @@ public class SystemHandlerCanForceDropTest {
         // Mock TabletInvertedIndex with sufficient replicas and normal replica on retained backends
         mockTabletInvertedIndexWithSuccess();
         
-        boolean result = systemHandler.canForceDrop(tabletIds);
+        boolean result = systemHandler.canDropBackend(tabletIds);
         Assertions.assertTrue(result, "All conditions met should return true");
     }
 

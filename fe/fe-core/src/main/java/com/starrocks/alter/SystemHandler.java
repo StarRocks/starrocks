@@ -362,7 +362,7 @@ public class SystemHandler extends AlterHandler {
             }
 
             List<Long> backendTabletIds = invertedIndex.getTabletIdsByBackendId(beId);
-            if (canForceDrop(backendTabletIds)) {
+            if (canDropBackend(backendTabletIds)) {
                 if (Config.drop_backend_after_decommission) {
                     try {
                         systemInfoService.dropBackend(beId);
@@ -392,7 +392,7 @@ public class SystemHandler extends AlterHandler {
      *    and at least one healthy replica on retained backend.
      * 3. There are at least 1 available backend.
      */
-    protected boolean canForceDrop(List<Long> backendTabletIds) {
+    protected boolean canDropBackend(List<Long> backendTabletIds) {
         if (backendTabletIds.isEmpty()) {
             return true;
         }
