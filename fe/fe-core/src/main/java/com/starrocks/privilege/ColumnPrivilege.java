@@ -23,7 +23,12 @@ import com.starrocks.catalog.View;
 import com.starrocks.catalog.system.SystemTable;
 import com.starrocks.connector.metadata.MetadataTable;
 import com.starrocks.qe.ConnectContext;
+<<<<<<< HEAD:fe/fe-core/src/main/java/com/starrocks/privilege/ColumnPrivilege.java
 import com.starrocks.sql.StatementPlanner;
+=======
+import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.analyzer.Analyzer;
+>>>>>>> 32810c222f ([BugFix] Fix view based rewrite bugs (#62918)):fe/fe-core/src/main/java/com/starrocks/authorization/ColumnPrivilege.java
 import com.starrocks.sql.analyzer.Authorizer;
 import com.starrocks.sql.ast.AstTraverser;
 import com.starrocks.sql.ast.DeleteStmt;
@@ -104,7 +109,7 @@ public class ColumnPrivilege {
              */
             ColumnRefFactory columnRefFactory = new ColumnRefFactory();
             LogicalPlan logicalPlan;
-            MVTransformerContext mvTransformerContext = StatementPlanner.makeMVTransformerContext(context.getSessionVariable());
+            MVTransformerContext mvTransformerContext = MVTransformerContext.of(context, true);
             TransformerContext transformerContext = new TransformerContext(columnRefFactory, context, mvTransformerContext);
             logicalPlan = new RelationTransformer(transformerContext).transformWithSelectLimit(stmt.getQueryRelation());
 

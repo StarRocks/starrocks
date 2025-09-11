@@ -26,6 +26,7 @@ import com.starrocks.sql.optimizer.rule.RuleSetType;
 import com.starrocks.sql.optimizer.rule.RuleType;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;
 import com.starrocks.sql.optimizer.transformer.LogicalPlan;
+import com.starrocks.sql.optimizer.transformer.MVTransformerContext;
 
 public class MaterializedViewOptimizer {
     public MvPlanContext optimize(MaterializedView mv,
@@ -76,12 +77,56 @@ public class MaterializedViewOptimizer {
         if (plans == null) {
             return new MvPlanContext(false, "No query plan for it");
         }
+<<<<<<< HEAD
         OptExpression mvPlan = plans.first;
         boolean isValidPlan = MvUtils.isValidMVPlan(mvPlan);
         // not set it invalid plan if text match rewrite is on because text match rewrite can support all query pattern.
         String invalidPlanReason = "";
         if (!isValidPlan) {
             invalidPlanReason = MvUtils.getInvalidReason(mvPlan, inlineView);
+=======
+        // disable function fold constants
+        final boolean originDisableFunctionFoldConstants = connectContext.getSessionVariable().isDisableFunctionFoldConstants();
+        if (!isCheckNonDeterministicFunction) {
+            // In some cases(eg, transparent mv), we can generate a plan for mv even
+            // if it contains non-deterministic functions, but we need to disable function fold constants because
+            // non-deterministic functions can be evaluated for each query.
+            connectContext.getSessionVariable().setDisableFunctionFoldConstants(true);
+        }
+
+        final boolean originalEnableInnerToSemi = connectContext.getSessionVariable().isEnableInnerJoinToSemi();
+        if (originalEnableInnerToSemi) {
+            connectContext.getSessionVariable().setEnableInnerJoinToSemi(false);
+        }
+
+        final int originalSemiJoinDeduplicateMode = connectContext.getSessionVariable().getSemiJoinDeduplicateMode();
+        if (originalSemiJoinDeduplicateMode != -1) {
+            connectContext.getSessionVariable().setSemiJoinDeduplicateMode(-1);
+        }
+
+        MVTransformerContext mvTransformerContext = new MVTransformerContext(connectContext, inlineView);
+        try {
+            // get optimized plan of mv's defined query
+            Pair<OptExpression, LogicalPlan> plans = MvUtils.getRuleOptimizedLogicalPlan(stmt, columnRefFactory,
+                            connectContext, optimizerOptions, mvTransformerContext);
+            if (plans == null) {
+                return new MvPlanContext(false, "No query plan for it");
+            }
+            OptExpression mvPlan = plans.first;
+            boolean isValidPlan = MvUtils.isValidMVPlan(mvPlan);
+            // not set it invalid plan if text match rewrite is on because text match rewrite can support all query pattern.
+            String invalidPlanReason = "";
+            if (!isValidPlan) {
+                invalidPlanReason = MvUtils.getInvalidReason(mvPlan, inlineView);
+            }
+            return new MvPlanContext(mvPlan, plans.second.getOutputColumn(), columnRefFactory, isValidPlan,
+                    containsNDFunctions, invalidPlanReason);
+        } finally {
+            connectContext.getSessionVariable().setCboPushDownAggregateMode(originAggPushDownMode);
+            connectContext.getSessionVariable().setDisableFunctionFoldConstants(originDisableFunctionFoldConstants);
+            connectContext.getSessionVariable().setEnableInnerJoinToSemi(originalEnableInnerToSemi);
+            connectContext.getSessionVariable().setSemiJoinDeduplicateMode(originalSemiJoinDeduplicateMode);
+>>>>>>> 32810c222f ([BugFix] Fix view based rewrite bugs (#62918))
         }
         return new MvPlanContext(mvPlan, plans.second.getOutputColumn(), columnRefFactory, isValidPlan, invalidPlanReason);
     }

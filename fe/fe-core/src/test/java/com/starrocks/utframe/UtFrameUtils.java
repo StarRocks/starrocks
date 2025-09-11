@@ -956,6 +956,8 @@ public class UtFrameUtils {
         String replaySql = initMockEnv(connectContext, replayDumpInfo);
         replaySql = LogUtil.removeLineSeparator(replaySql);
         Map<String, Database> dbs = null;
+
+        StarRocksTestBase.registerTrace(connectContext);
         try {
             StatementBase statementBase;
             try (Timer st = Tracers.watchScope("Parse")) {
@@ -984,6 +986,7 @@ public class UtFrameUtils {
         } finally {
             unLock(dbs);
             tearMockEnv();
+            StarRocksTestBase.unRegisterTrace(connectContext);
         }
     }
 

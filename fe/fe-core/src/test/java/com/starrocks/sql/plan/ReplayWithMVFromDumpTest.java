@@ -217,13 +217,21 @@ public class ReplayWithMVFromDumpTest extends ReplayFromDumpTestBase {
 
     @Test
     public void testViewDeltaRewriter() throws Exception {
+        String fileContent = getDumpInfoFromFile("query_dump/view_delta");
+        QueryDumpInfo queryDumpInfo = getDumpInfoFromJson(fileContent);
+        SessionVariable sessionVariable = queryDumpInfo.getSessionVariable();
         QueryDebugOptions debugOptions = new QueryDebugOptions();
         debugOptions.setEnableQueryTraceLog(true);
-        connectContext.getSessionVariable().setQueryDebugOptions(debugOptions.toString());
+        sessionVariable.setQueryDebugOptions(debugOptions.toString());
         Pair<QueryDumpInfo, String> replayPair =
+<<<<<<< HEAD
                 getPlanFragment(getDumpInfoFromFile("query_dump/view_delta"),
                         connectContext.getSessionVariable(), TExplainLevel.NORMAL);
         Assert.assertTrue(replayPair.second, replayPair.second.contains("mv_yyf_trade_water3"));
+=======
+                getPlanFragment(fileContent, sessionVariable, TExplainLevel.NORMAL);
+        Assertions.assertTrue(replayPair.second.contains("mv_yyf_trade_water3"), replayPair.second);
+>>>>>>> 32810c222f ([BugFix] Fix view based rewrite bugs (#62918))
     }
 
     @Test
@@ -294,5 +302,18 @@ public class ReplayWithMVFromDumpTest extends ReplayFromDumpTestBase {
                             connectContext.getSessionVariable(), TExplainLevel.NORMAL);
             PlanTestBase.assertContains(replayPair.second, "tbl_mock_239", "MaterializedView: true");
         }
+    }
+
+    @Test
+    public void testViewBasedRewrite3() throws Exception {
+        String fileContent = getDumpInfoFromFile("query_dump/view_based_rewrite1");
+        QueryDumpInfo queryDumpInfo = getDumpInfoFromJson(fileContent);
+        SessionVariable sessionVariable = queryDumpInfo.getSessionVariable();
+        QueryDebugOptions debugOptions = new QueryDebugOptions();
+        debugOptions.setEnableQueryTraceLog(true);
+        sessionVariable.setQueryDebugOptions(debugOptions.toString());
+        Pair<QueryDumpInfo, String> replayPair = getPlanFragment(fileContent, sessionVariable, TExplainLevel.NORMAL);
+        String plan = replayPair.second;
+        PlanTestBase.assertContains(plan, "single_mv_ads_biz_customer_combine_td_for_task_2y");
     }
 }
