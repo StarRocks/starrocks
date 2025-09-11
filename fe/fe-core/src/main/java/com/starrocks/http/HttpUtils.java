@@ -53,24 +53,21 @@ import javax.net.ssl.SSLContext;
 
 public class HttpUtils {
 
-    public static final Logger LOG = LoggerFactory.getLogger(HttpUtils.class);
+    private static final Logger LOG = LoggerFactory.getLogger(HttpUtils.class);
 
-    private static volatile CloseableHttpClient httpClient;
+
+    private static class SingletonHolder {
+        private static final CloseableHttpClient INSTANCE = getHttpClient();
+    }
+
+    public static CloseableHttpClient getInstance() {
+        return SingletonHolder.INSTANCE;
+    }
 
     private static PoolingHttpClientConnectionManager clientConnectionManager;
 
-    public static CloseableHttpClient getInstance() {
-        if (httpClient == null) {
-            synchronized (HttpUtils.class) {
-                if (httpClient == null) {
-                    httpClient = getHttpClient();
-                }
-            }
-        }
-        return httpClient;
-    }
 
-    public static CloseableHttpClient getHttpClient() {
+    private static CloseableHttpClient getHttpClient() {
 
         RequestConfig  requestConfig = RequestConfig.custom().setCookieSpec(CookieSpecs.IGNORE_COOKIES)
                 .setExpectContinueEnabled(Boolean.TRUE)
@@ -111,9 +108,6 @@ public class HttpUtils {
         } catch (KeyStoreException e) {
             LOG.error("Got KeyStoreException when SSLContext init", e);
         }
-
-        httpClient = getHttpClient();
-
         LOG.info(" initial http client successfully");
 
     }
