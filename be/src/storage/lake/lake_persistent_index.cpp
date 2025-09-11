@@ -260,8 +260,8 @@ Status LakePersistentIndex::minor_compact() {
     return Status::OK();
 }
 
-Status LakePersistentIndex::ingest_sst(const FileMetaPB& sst_meta, uint32_t rssid, int64_t version,
-                                       bool is_compaction) {
+Status LakePersistentIndex::ingest_sst(const FileMetaPB& sst_meta, uint32_t rssid, int64_t version, bool is_compaction,
+                                       DelVectorPtr delvec) {
     if (!_memtable->empty()) {
         RETURN_IF_ERROR(flush_memtable());
     }
@@ -289,7 +289,8 @@ Status LakePersistentIndex::ingest_sst(const FileMetaPB& sst_meta, uint32_t rssi
     if (block_cache == nullptr) {
         return Status::InternalError("Block cache is null.");
     }
-    RETURN_IF_ERROR(sstable->init(std::move(rf), sstable_pb, block_cache->cache(), _tablet_mgr, _tablet_id));
+    RETURN_IF_ERROR(sstable->init(std::move(rf), sstable_pb, block_cache->cache(), _tablet_mgr, _tablet_id,
+                                  true /* need filter */, delvec));
     _sstables.emplace_back(std::move(sstable));
     TRACE_COUNTER_INCREMENT("ingest_sst_times", 1);
     return Status::OK();

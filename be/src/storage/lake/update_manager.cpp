@@ -289,7 +289,7 @@ Status UpdateManager::publish_primary_key_tablet(const TxnLogPB_OpWrite& op_writ
             // TODO support condition column with sst ingestion.
             // rowset_id + segment_id is the rssid of this segment
             RETURN_IF_ERROR(index.ingest_sst(op_write.ssts(segment_id), rowset_id + segment_id, metadata->version(),
-                                             false /* no compaction */));
+                                             false /* no compaction */, nullptr));
         }
     }
 
@@ -819,10 +819,11 @@ Status UpdateManager::light_publish_primary_compaction(const TxnLogPB_OpCompacti
             &delvecs, op_compaction.ssts_size() > 0 /* NOT update pk index */);
     RETURN_IF_ERROR(resolver->execute());
     // 3. ingest ssts to index
+    DCHECK(delvecs.size() == op_compaction.ssts_size());
     for (int i = 0; i < op_compaction.ssts_size(); i++) {
         // metadata.next_rowset_id() + i is the rssid of output rowset's i-th segment
         RETURN_IF_ERROR(index.ingest_sst(op_compaction.ssts(i), metadata.next_rowset_id() + i, metadata.version(),
-                                         true /* is compaction */));
+                                         true /* is compaction */, delvecs[i].second));
     }
     _index_cache.update_object_size(index_entry, index.memory_usage());
     // 4. update TabletMeta and write to meta file
