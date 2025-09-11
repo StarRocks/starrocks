@@ -64,10 +64,10 @@ public class HttpUtils {
         return SingletonHolder.INSTANCE;
     }
 
-    private static PoolingHttpClientConnectionManager clientConnectionManager;
-
+    private static final PoolingHttpClientConnectionManager clientConnectionManager;
 
     private static CloseableHttpClient getHttpClient() {
+        Objects.requireNonNull(clientConnectionManager, "clientConnectionManager is not initialized");
 
         RequestConfig  requestConfig = RequestConfig.custom().setCookieSpec(CookieSpecs.IGNORE_COOKIES)
                 .setExpectContinueEnabled(Boolean.TRUE)
@@ -87,6 +87,7 @@ public class HttpUtils {
     }
 
     static {
+        PoolingHttpClientConnectionManager poolingHttpClientConnectionManager = null;
         try {
             SSLContextBuilder builder = new SSLContextBuilder();
             builder.loadTrustMaterial(null, new TrustSelfSignedStrategy());
@@ -97,9 +98,9 @@ public class HttpUtils {
                             .register("http", PlainConnectionSocketFactory.getSocketFactory())
                             .register("https", socketFactory)
                             .build();
-            clientConnectionManager = new PoolingHttpClientConnectionManager(socketFactoryRegistry);
-            clientConnectionManager.setDefaultMaxPerRoute(50);
-            clientConnectionManager.setMaxTotal(100);
+            poolingHttpClientConnectionManager = new PoolingHttpClientConnectionManager(socketFactoryRegistry);
+            poolingHttpClientConnectionManager.setDefaultMaxPerRoute(50);
+            poolingHttpClientConnectionManager.setMaxTotal(100);
 
         } catch (NoSuchAlgorithmException e) {
             LOG.error("Got NoSuchAlgorithmException when SSLContext init", e);
@@ -108,8 +109,8 @@ public class HttpUtils {
         } catch (KeyStoreException e) {
             LOG.error("Got KeyStoreException when SSLContext init", e);
         }
+        clientConnectionManager = poolingHttpClientConnectionManager;
         LOG.info(" initial http client successfully");
-
     }
 
     public static String get(String uri, Map<String, String> header) throws Exception {
