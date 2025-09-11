@@ -4,8 +4,6 @@ displayed_sidebar: docs
 
 # ALTER TABLE
 
-import Beta from '../../../_assets/commonMarkdown/_beta.mdx'
-
 ## 説明
 
 ALTER TABLE は既存のテーブルを修正します。以下を含みます:
@@ -555,8 +553,6 @@ ALTER TABLE orders ORDER BY (dt, revenue, state);
 #### STRUCT列を修正してフィールドを追加または削除
 
 v3.2.10およびv3.3.2以降、StarRocksはSTRUCT列を修正してフィールドを追加または削除することをサポートしています。これはネストされたフィールドやARRAYタイプ内のフィールドにも適用されます。
-
-<Beta />
 
 構文:
 
