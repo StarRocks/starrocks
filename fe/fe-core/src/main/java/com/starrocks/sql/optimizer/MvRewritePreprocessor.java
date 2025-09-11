@@ -175,6 +175,8 @@ public class MvRewritePreprocessor {
                     // it's safe used in the optimize context here since the query mv context is not shared across the
                     // connect-context.
                     connectContext.setQueryMVContext(queryMaterializationContext);
+                    // register queryOptExpression
+                    queryMaterializationContext.registerQueryOptExpression(queryOptExpression);
                 }
 
                 // 5. process relate mvs with views

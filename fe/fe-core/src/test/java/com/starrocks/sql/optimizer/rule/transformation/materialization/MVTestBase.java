@@ -30,6 +30,11 @@ import com.starrocks.catalog.MvPlanContext;
 import com.starrocks.catalog.MvRefreshArbiter;
 import com.starrocks.catalog.MvUpdateInfo;
 import com.starrocks.catalog.Table;
+<<<<<<< HEAD
+=======
+import com.starrocks.catalog.View;
+import com.starrocks.common.Config;
+>>>>>>> 46739ddb91 ([Enhancement] Choose best candidate mv with considering input query data layout (#62830))
 import com.starrocks.common.DdlException;
 import com.starrocks.common.Pair;
 import com.starrocks.common.util.RuntimeProfile;
@@ -677,4 +682,21 @@ public class MVTestBase extends StarRocksTestBase {
             addListPartition(tbl, pName, val);
         }
     }
+<<<<<<< HEAD
+=======
+
+    public View getView(String viewName) {
+        Table table = getTable(DB_NAME, viewName);
+        Assertions.assertTrue(table instanceof View);
+        return (View) table;
+    }
+
+    public static void disableMVRewriteConsiderDataLayout() {
+        Config.mv_rewrite_consider_data_layout_mode = "disable";
+    }
+
+    public static void enableMVRewriteConsiderDataLayout() {
+        Config.mv_rewrite_consider_data_layout_mode = "enable";
+    }
+>>>>>>> 46739ddb91 ([Enhancement] Choose best candidate mv with considering input query data layout (#62830))
 }
