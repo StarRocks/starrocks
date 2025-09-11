@@ -33,12 +33,41 @@ public class QueryDebugOptions {
     @SerializedName(value = "enableQueryTraceLog")
     private boolean enableQueryTraceLog = false;
 
+    @Deprecated
     @SerializedName(value = "mvRefreshTraceMode")
     private String mvRefreshTraceMode;
 
+    @Deprecated
     @SerializedName(value = "mvRefreshTraceModule")
     private String mvRefreshTraceModule;
 
+<<<<<<< HEAD
+=======
+    @SerializedName(value = "traceMode")
+    private String traceMode;
+
+    @SerializedName(value = "traceModule")
+    private String traceModule;
+
+    public static class ExecDebugOption {
+        @SerializedName(value = "plan_node_id")
+        private int planNodeId;
+        @SerializedName(value = "debug_action")
+        private String debugAction;
+        @SerializedName(value = "value")
+        private int value = 0;
+        public TExecDebugOption toThirft() {
+            final TExecDebugOption option = new TExecDebugOption();
+            option.setDebug_node_id(planNodeId);
+            option.setDebug_action(TDebugAction.valueOf(debugAction));
+            option.setValue(value);
+            return option;
+        }
+    }
+    @SerializedName(value = "execDebugOptions")
+    private List<ExecDebugOption> execDebugOptions = Lists.newArrayList();
+
+>>>>>>> 32810c222f ([BugFix] Fix view based rewrite bugs (#62918))
     public QueryDebugOptions() {
         // To make unit test more stable, add retry times for refreshing materialized views.
         if (FeConstants.runningUnitTest) {
@@ -70,12 +99,20 @@ public class QueryDebugOptions {
         this.enableQueryTraceLog = enableQueryTraceLog;
     }
 
-    public Tracers.Mode getMvRefreshTraceMode() {
-        return Strings.isEmpty(mvRefreshTraceMode) ? Tracers.Mode.TIMER : Tracers.Mode.valueOf(mvRefreshTraceMode);
+    public Tracers.Mode getTraceMode() {
+        return Strings.isEmpty(traceMode) ? Tracers.Mode.TIMER : Tracers.Mode.valueOf(traceMode.toUpperCase());
     }
 
-    public Tracers.Module getMvRefreshTraceModule() {
-        return Strings.isEmpty(mvRefreshTraceModule) ? Tracers.Module.BASE : Tracers.Module.valueOf(mvRefreshTraceModule);
+    public Tracers.Module getTraceModule() {
+        return Strings.isEmpty(traceModule) ? Tracers.Module.BASE : Tracers.Module.valueOf(traceModule.toUpperCase());
+    }
+
+    public void setTraceMode(String traceMode) {
+        this.traceMode = traceMode;
+    }
+
+    public void setTraceModule(String traceModule) {
+        this.traceModule = traceModule;
     }
 
     public static QueryDebugOptions getInstance() {

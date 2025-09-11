@@ -26,6 +26,7 @@ import com.starrocks.sql.optimizer.rule.RuleSetType;
 import com.starrocks.sql.optimizer.rule.RuleType;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;
 import com.starrocks.sql.optimizer.transformer.LogicalPlan;
+import com.starrocks.sql.optimizer.transformer.MVTransformerContext;
 
 public class MaterializedViewOptimizer {
     public MvPlanContext optimize(MaterializedView mv,
@@ -96,10 +97,28 @@ public class MaterializedViewOptimizer {
             connectContext.getSessionVariable().setDisableFunctionFoldConstants(true);
         }
 
+<<<<<<< HEAD
         try {
             // get optimized plan of mv's defined query
             Pair<OptExpression, LogicalPlan> plans =
                     MvUtils.getRuleOptimizedLogicalPlan(stmt, columnRefFactory, connectContext, optimizerConfig, inlineView);
+=======
+        final boolean originalEnableInnerToSemi = connectContext.getSessionVariable().isEnableInnerJoinToSemi();
+        if (originalEnableInnerToSemi) {
+            connectContext.getSessionVariable().setEnableInnerJoinToSemi(false);
+        }
+
+        final int originalSemiJoinDeduplicateMode = connectContext.getSessionVariable().getSemiJoinDeduplicateMode();
+        if (originalSemiJoinDeduplicateMode != -1) {
+            connectContext.getSessionVariable().setSemiJoinDeduplicateMode(-1);
+        }
+
+        MVTransformerContext mvTransformerContext = new MVTransformerContext(connectContext, inlineView);
+        try {
+            // get optimized plan of mv's defined query
+            Pair<OptExpression, LogicalPlan> plans = MvUtils.getRuleOptimizedLogicalPlan(stmt, columnRefFactory,
+                            connectContext, optimizerOptions, mvTransformerContext);
+>>>>>>> 32810c222f ([BugFix] Fix view based rewrite bugs (#62918))
             if (plans == null) {
                 return new MvPlanContext(false, "No query plan for it");
             }

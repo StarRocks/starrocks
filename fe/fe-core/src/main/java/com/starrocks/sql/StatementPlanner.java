@@ -39,7 +39,6 @@ import com.starrocks.http.HttpConnectContext;
 import com.starrocks.planner.PlanFragment;
 import com.starrocks.planner.ResultSink;
 import com.starrocks.qe.ConnectContext;
-import com.starrocks.qe.SessionVariable;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.service.FrontendOptions;
 import com.starrocks.service.arrow.flight.sql.ArrowFlightSqlConnectContext;
@@ -264,16 +263,6 @@ public class StatementPlanner {
         return areTablesCopySafe && !session.getSessionVariable().isCboUseDBLock();
     }
 
-    /**
-     * Create a map from opt expression to parse node for the optimizer to use which only used in text match rewrite for mv.
-     */
-    public static MVTransformerContext makeMVTransformerContext(SessionVariable sessionVariable) {
-        if (sessionVariable.isEnableMaterializedViewTextMatchRewrite()) {
-            return new MVTransformerContext();
-        }
-        return null;
-    }
-
     private static ExecPlan createQueryPlan(StatementBase stmt,
                                             ConnectContext session,
                                             TResultSinkType resultSinkType) {
@@ -283,7 +272,7 @@ public class StatementPlanner {
         // 1. Build Logical plan
         ColumnRefFactory columnRefFactory = new ColumnRefFactory();
         LogicalPlan logicalPlan;
-        MVTransformerContext mvTransformerContext = makeMVTransformerContext(session.getSessionVariable());
+        MVTransformerContext mvTransformerContext = MVTransformerContext.of(session, true);
 
         try (Timer ignored = Tracers.watchScope("Transformer")) {
             // get a logicalPlan without inlining views
@@ -349,7 +338,7 @@ public class StatementPlanner {
             }
 
             LogicalPlan logicalPlan;
-            MVTransformerContext mvTransformerContext = makeMVTransformerContext(session.getSessionVariable());
+            MVTransformerContext mvTransformerContext = MVTransformerContext.of(session, true);
             try (Timer ignored = Tracers.watchScope("Transformer")) {
                 // get a logicalPlan without inlining views
                 TransformerContext transformerContext = new TransformerContext(columnRefFactory, session, mvTransformerContext);
