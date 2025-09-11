@@ -13,7 +13,7 @@ displayed_sidebar: docs
 - [修改表注释](#修改表的注释31-版本起)
 - [修改分区（增删分区和修改分区属性）](#操作-partition-相关语法)
 - [修改分桶方式和分桶数量](#修改分桶方式和分桶数量自-32-版本起)
-- [修改列（增删列和修改列顺序）](#修改列增删列和修改列顺序)
+- [修改列（增删列和修改列顺序和注释）](#修改列添加删除列改变列的顺序或注释)
 - [创建或删除 rollup index](#操作-rollup-index-语法)
 - [修改 bitmap index](#bitmap-index-修改)
 - [修改表的属性](#修改表的属性)
@@ -40,7 +40,7 @@ alter_clause1[, alter_clause2, ...]
 - comment: 修改表的注释。**从 3.1 版本开始支持。**
 - partition: 修改分区属性，删除分区，增加分区。
 - bucket：修改分桶方式和分桶数量。
-- column: 增加列，删除列，调整列顺序，修改列类型。*
+- column: 增加列，删除列，调整列顺序，修改列类型以及注释。
 - rollup index: 创建或删除 rollup index。
 - bitmap index: 修改 bitmap index。
 - swap: 原子替换两张表。
@@ -50,7 +50,6 @@ alter_clause1[, alter_clause2, ...]
 ## 使用限制和注意事项
 
 - partition、column 和 rollup index <!--是否包含compaction，bucket和column/rollupindex可以在一起吗-->这些操作不能同时出现在一条 `ALTER TABLE` 语句中。
-- 当前还不支持修改列注释。
 - 每张表仅支持一个进行中的 Schema Change 操作。不能对同一张表同时执行两条 Schema Change 命令。
 - bucket、column、rollup index <!--是否包含compaction和fast schema evolution-->是异步操作，命令提交成功后会立即返回一个成功消息，您可以使用 [SHOW ALTER TABLE](SHOW_ALTER.md) 语句查看操作的进度。如果需要取消正在进行的操作，则您可以使用 [CANCEL ALTER TABLE](SHOW_ALTER.md)。
 - rename、comment、partition、bitmap index 和 swap 是同步操作，命令返回表示执行完毕。
@@ -107,11 +106,7 @@ RENAME COLUMN <old_col_name> [ TO ] <new_col_name>
 ALTER TABLE [<db_name>.]<tbl_name> COMMENT = "<new table comment>";
 ```
 
-:::tip
-当前还不支持修改列注释。
-:::
-
-### 操作 partition 相关语法
+### 修改分区
 
 #### 增加分区 (ADD PARTITION(S))
 
@@ -391,7 +386,7 @@ INSERT INTO details (event_time, event_type, user_id, device_code, channel) VALU
   ALTER TABLE details DISTRIBUTED BY HASH(user_id, event_time) BUCKETS 10;
   ```
 
-### 修改列（增删列和修改列顺序）
+### 修改列（添加/删除列，改变列的顺序或注释）
 
 下文中的 index 为物化索引。建表成功后表为 base 表 (base index)，基于 base 表可 [创建 rollup index](#创建-rollup-index-add-rollup)。
 
@@ -471,16 +466,18 @@ DROP COLUMN column_name
 1. 不能删除分区列。
 2. 如果是从 base index 中删除列，则如果 rollup index 中包含该列，也会被删除。
 
-#### 修改指定 index 的列类型以及列位置 (MODIFY COLUMN)
+#### 修改列类型、位置、注释和其他属性
 
 语法：
 
 ```sql
 ALTER TABLE [<db_name>.]<tbl_name>
-MODIFY COLUMN column_name column_type [KEY | agg_type] [NULL | NOT NULL] [DEFAULT "default_value"]
-[AFTER column_name|FIRST]
-[FROM rollup_index_name]
-[PROPERTIES ("key"="value", ...)]
+MODIFY COLUMN <column_name> 
+[ column_type [ KEY | agg_type ] ] [ NULL | NOT NULL ] 
+[ DEFAULT "<default_value>"] [ COMMENT "<new_column_comment>" ]
+[ AFTER <column_name> | FIRST ]
+[ FROM rollup_index_name ]
+[ PROPERTIES ("key"="value", ...) ]
 ```
 
 注意：
@@ -500,6 +497,25 @@ MODIFY COLUMN column_name column_type [KEY | agg_type] [NULL | NOT NULL] [DEFAUL
     DATE 转换成 DATETIME(时分秒自动补零，例如: `2019-12-09` &lt;--&gt; `2019-12-09 00:00:00`)
     - FLOAT 转换成 DOUBLE。
     - INT 转换成 DATE (如果 INT 类型数据不合法则转换失败，原始数据不变。)
+
+6. 不支持从NULL转换为NOT NULL。
+7. 您可以在单个 MODIFY COLUMN 子句中修改多个属性。但某些属性的组合不支持。
+
+#### 重新排序指定索引的列
+
+语法：
+
+```sql
+ALTER TABLE [<db_name>.]<tbl_name>
+ORDER BY (column_name1, column_name2, ...)
+[FROM rollup_index_name]
+[PROPERTIES ("key"="value", ...)]
+```
+
+注意：
+
+- 索引中的所有列必须写出。
+- 值列列在键列之后。
 
 #### 修改排序键
 

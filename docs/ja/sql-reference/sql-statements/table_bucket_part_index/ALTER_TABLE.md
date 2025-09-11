@@ -6,13 +6,13 @@ displayed_sidebar: docs
 
 ## 説明
 
-既存のテーブルを修正します。以下を含みます：
+ALTER TABLE は既存のテーブルを修正します。以下を含みます:
 
 - [テーブル、パーティション、インデックス、または列の名前変更](#rename)
 - [テーブルコメントの修正](#alter-table-comment-from-v31)
 - [パーティションの修正（パーティションの追加/削除とパーティション属性の修正）](#modify-partition)
 - [バケット法とバケット数の修正](#modify-the-bucketing-method-and-number-of-buckets-from-v32)
-- [列の修正（列の追加/削除と列の順序変更）](#modify-columns-adddelete-columns-change-the-order-of-columns)
+- [列の変更（列の追加/削除、列順の変更、列コメントの変更）](#modify-columns-adddelete-columns-change-the-order-of-columns)
 - [ロールアップインデックスの作成/削除](#modify-rollup-index)
 - [ビットマップインデックスの修正](#modify-bitmap-indexes)
 - [テーブルプロパティの修正](#modify-table-properties)
@@ -37,7 +37,7 @@ alter_clause1[, alter_clause2, ...]
 - コメント: テーブルコメントを修正します（**v3.1以降**でサポート）。
 - パーティション: パーティションプロパティを修正、パーティションを削除、またはパーティションを追加します。
 - バケット: バケット法とバケット数を修正します。
-- 列: 列を追加、削除、または再配置、または列タイプを修正します。
+- 列: 列の追加、削除、並び替え、列のタイプの変更、コメントの変更
 - ロールアップインデックス: ロールアップインデックスを作成または削除します。
 - ビットマップインデックス: インデックスを修正します（ビットマップインデックスのみ修正可能）。
 - スワップ: 2つのテーブルをアトミックに交換します。
@@ -47,7 +47,6 @@ alter_clause1[, alter_clause2, ...]
 ## 制限と使用上の注意
 
 - パーティション、列、およびロールアップインデックスに対する操作は、1つの ALTER TABLE ステートメントで実行できません。
-- 列コメントは修正できません。
 - 1つのテーブルには、同時に1つのスキーマ変更操作しか実行できません。同時に2つのスキーマ変更コマンドを実行することはできません。
 - バケット、列、およびロールアップインデックスに対する操作は非同期操作です。タスクが送信された後、成功メッセージが即座に返されます。[SHOW ALTER TABLE](SHOW_ALTER.md) コマンドを実行して進行状況を確認し、[CANCEL ALTER TABLE](CANCEL_ALTER_TABLE.md) コマンドを実行して操作をキャンセルできます。
 - 名前変更、コメント、パーティション、ビットマップインデックス、およびスワップに対する操作は同期操作であり、コマンドの返り値は実行が完了したことを示します。
@@ -100,11 +99,7 @@ RENAME COLUMN <old_col_name> [ TO ] <new_col_name>
 ALTER TABLE [<db_name>.]<tbl_name> COMMENT = "<new table comment>";
 ```
 
-:::tip
-現在、列コメントは修正できません。
-:::
-
-### パーティションの修正
+### パーティションの変更
 
 #### パーティションの追加
 
@@ -384,7 +379,7 @@ INSERT INTO details (event_time, event_type, user_id, device_code, channel) VALU
   ALTER TABLE details DISTRIBUTED BY HASH(user_id, event_time) BUCKETS 10;
   ```
 
-### 列の修正（列の追加/削除、列の順序変更）
+### 列の変更（列の追加/削除、列順の変更、列コメントの変更）
 
 #### 指定したインデックスの指定した位置に列を追加
 
@@ -462,16 +457,18 @@ DROP COLUMN column_name
 1. パーティション列を削除することはできません。
 2. 基本インデックスから列を削除すると、ロールアップインデックスに含まれている場合も削除されます。
 
-#### 指定したインデックスの列タイプと列位置の修正
+#### 列の型、位置、コメント、その他のプロパティを変更する
 
 構文:
 
 ```sql
 ALTER TABLE [<db_name>.]<tbl_name>
-MODIFY COLUMN column_name column_type [KEY | agg_type] [NULL | NOT NULL] [DEFAULT "default_value"]
-[AFTER column_name|FIRST]
-[FROM rollup_index_name]
-[PROPERTIES ("key"="value", ...)]
+MODIFY COLUMN <column_name> 
+[ column_type [ KEY | agg_type ] ] [ NULL | NOT NULL ] 
+[ DEFAULT "<default_value>"] [ COMMENT "<new_column_comment>" ]
+[ AFTER <column_name> | FIRST ]
+[ FROM rollup_index_name ]
+[ PROPERTIES ("key"="value", ...) ]
 ```
 
 注意:
@@ -492,6 +489,7 @@ MODIFY COLUMN column_name column_type [KEY | agg_type] [NULL | NOT NULL] [DEFAUL
    - INT を DATE に変換（INT データの変換に失敗した場合、元のデータはそのままです）
 
 6. NULL から NOT NULL への変換はサポートされていません。
+7. 単一のMODIFY COLUMN句で複数のプロパティを変更できます。ただし、一部のプロパティの組み合わせはサポートされていません。
 
 #### 指定したインデックスの列を再配置
 
