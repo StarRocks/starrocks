@@ -3882,4 +3882,7 @@ public class Config extends ConfigBase {
 
     @ConfField(mutable = true, comment = "Enable desensitize sql in query dump")
     public static boolean enable_desensitize_query_dump = false;
+
+    @ConfField(mutable = true, comment = "default presto catalog when sql_dialect=presto")
+    public static String default_presto_catalog = "unified_catalog_hms";
 }
