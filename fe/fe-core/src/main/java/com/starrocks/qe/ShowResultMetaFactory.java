@@ -922,6 +922,8 @@ public class ShowResultMetaFactory implements AstVisitor<ShowResultSetMetaData, 
                 .addColumn(new Column("IsPending", ScalarType.createVarchar(16)))
                 .addColumn(new Column("Warehouse", ScalarType.createVarchar(20)))
                 .addColumn(new Column("CNGroup", ScalarType.createVarchar(64)))
+                .addColumn(new Column("Catalog", ScalarType.createVarchar(64)))
+                .addColumn(new Column("QueryId", ScalarType.createVarchar(64)))
                 .build();
     }
 
