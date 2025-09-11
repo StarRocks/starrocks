@@ -16,6 +16,7 @@ package com.starrocks.server;
 
 import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
+import com.google.gson.annotations.SerializedName;
 import com.staros.proto.FileCacheInfo;
 import com.staros.proto.FilePathInfo;
 import com.staros.proto.FileStoreInfo;
@@ -38,11 +39,15 @@ import com.starrocks.lake.StarOSAgent;
 import com.starrocks.lake.StorageInfo;
 import com.starrocks.persist.TableStorageInfo;
 import com.starrocks.persist.TableStorageInfos;
+import com.starrocks.persist.metablock.SRMetaBlockEOFException;
+import com.starrocks.persist.metablock.SRMetaBlockException;
+import com.starrocks.persist.metablock.SRMetaBlockReader;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.storagevolume.StorageVolume;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.io.IOException;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.util.ArrayList;
@@ -61,7 +66,9 @@ import static com.starrocks.server.GlobalStateMgr.NEXT_ID_INIT_VALUE;
 public class SharedDataStorageVolumeMgr extends StorageVolumeMgr {
     private static final Logger LOG = LogManager.getLogger(SharedDataStorageVolumeMgr.class);
 
-    private final Map<String, Long> storageVolumeIdToVTabletGroupId = new ConcurrentHashMap<>();
+    // volume id to virtual tablet group, used for shared data
+    @SerializedName("svToVTabletGroup")
+    protected Map<String, Long> storageVolumeIdToVTabletGroupId = new ConcurrentHashMap<>();
 
     @Override
     public StorageVolume getStorageVolumeByName(String svName) {
@@ -652,7 +659,10 @@ public class SharedDataStorageVolumeMgr extends StorageVolumeMgr {
 
     @Override
     public boolean hasStorageVolumeBindAsVirtualGroup(long shardGroupId) {
-        return storageVolumeIdToVTabletGroupId.values().stream().anyMatch(vTabletGroupId -> shardGroupId == vTabletGroupId);
+        try (LockCloseable lock = new LockCloseable(rwLock.readLock())) {
+            return storageVolumeIdToVTabletGroupId.values().stream()
+                    .anyMatch(vTabletGroupId -> shardGroupId == vTabletGroupId);
+        }
     }
 
     public long getOrCreateVirtualTabletId(String storageVolumeName, String srcServiceId) throws MetaNotFoundException {
@@ -689,5 +699,17 @@ public class SharedDataStorageVolumeMgr extends StorageVolumeMgr {
             LOG.error("Failed to create shard for storage volume {} ", storageVolumeName, e);
             throw new RuntimeException("Failed to create shard for storage volume: " + storageVolumeName, e);
         }
+    }
+
+    @Override
+    public void load(SRMetaBlockReader reader)
+            throws SRMetaBlockEOFException, IOException, SRMetaBlockException {
+        SharedDataStorageVolumeMgr data = (SharedDataStorageVolumeMgr) reader.readJson(StorageVolumeMgr.class);
+        this.storageVolumeToDbs = data.storageVolumeToDbs;
+        this.storageVolumeToTables = data.storageVolumeToTables;
+        this.defaultStorageVolumeId = data.defaultStorageVolumeId;
+        this.dbToStorageVolume = data.dbToStorageVolume;
+        this.tableToStorageVolume = data.tableToStorageVolume;
+        this.storageVolumeIdToVTabletGroupId = data.storageVolumeIdToVTabletGroupId;
     }
 }
