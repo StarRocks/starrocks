@@ -5,13 +5,9 @@ displayed_sidebar: docs
 
 # ALTER TABLE
 
-<<<<<<< HEAD
-## 功能
-=======
 import Beta from '../../../_assets/commonMarkdown/_beta.mdx'
 
-## 描述
->>>>>>> 524edf4607 ([Doc] Doc for Modifying Column Comment (#62951))
+## 功能
 
 该语句用于修改已有表，包括：
 
@@ -46,33 +42,19 @@ alter_clause1[, alter_clause2, ...]
 - comment: 修改表的注释。**从 3.1 版本开始支持。**
 - partition: 修改分区属性，删除分区，增加分区。
 - bucket：修改分桶方式和分桶数量。
-<<<<<<< HEAD
-- column: 增加列，删除列，调整列顺序，修改列类型。*
+- column: 增加列，删除列，调整列顺序，修改列类型以及注释。
 - rollup index: 创建或删除 rollup index。
 - bitmap index: 修改 bitmap index。
-=======
-- column: 增加列，删除列，调整列顺序，修改列类型以及注释
-- rollup: 创建或删除 Rollup。
-- index: 修改索引。
->>>>>>> 524edf4607 ([Doc] Doc for Modifying Column Comment (#62951))
 - swap: 原子替换两张表。
 - compaction: 对指定表或分区手动执行 Compaction（数据版本合并）。**从 3.1 版本开始支持。**
 - drop persistent index: 存算分离下删除主键索引。**从 3.3.9 版本开始支持。**
 
 ## 使用限制和注意事项
 
-<<<<<<< HEAD
 - partition、column 和 rollup index <!--是否包含compaction，bucket和column/rollupindex可以在一起吗-->这些操作不能同时出现在一条 `ALTER TABLE` 语句中。
-- 当前还不支持修改列注释。
 - 每张表仅支持一个进行中的 Schema Change 操作。不能对同一张表同时执行两条 Schema Change 命令。
 - bucket、column、rollup index <!--是否包含compaction和fast schema evolution-->是异步操作，命令提交成功后会立即返回一个成功消息，您可以使用 [SHOW ALTER TABLE](SHOW_ALTER.md) 语句查看操作的进度。如果需要取消正在进行的操作，则您可以使用 [CANCEL ALTER TABLE](SHOW_ALTER.md)。
 - rename、comment、partition、bitmap index 和 swap 是同步操作，命令返回表示执行完毕。
-=======
-- 在一个ALTER TABLE语句中不能同时对分区、列和 Rollup 进行操作。
-- 一个表一次只能有一个正在进行的schema change操作。不能同时在一个表上运行两个schema change命令。
-- 对分桶、列和 Rollup 的操作是异步操作。任务提交后会立即返回成功消息。可以运行[SHOW ALTER TABLE](SHOW_ALTER.md)命令检查进度，并运行[CANCEL ALTER TABLE](CANCEL_ALTER_TABLE.md)命令取消操作。
-- 对重命名、注释、分区、索引和原子替换的操作是同步操作，命令返回表示执行已完成。
->>>>>>> 524edf4607 ([Doc] Doc for Modifying Column Comment (#62951))
 
 ### Rename 对名称进行修改
 
@@ -126,15 +108,7 @@ RENAME COLUMN <old_col_name> [ TO ] <new_col_name>
 ALTER TABLE [<db_name>.]<tbl_name> COMMENT = "<new table comment>";
 ```
 
-<<<<<<< HEAD
-:::tip
-当前还不支持修改列注释。
-:::
-
-### 操作 partition 相关语法
-=======
 ### 修改分区
->>>>>>> 524edf4607 ([Doc] Doc for Modifying Column Comment (#62951))
 
 #### 增加分区 (ADD PARTITION(S))
 
@@ -414,11 +388,7 @@ INSERT INTO details (event_time, event_type, user_id, device_code, channel) VALU
   ALTER TABLE details DISTRIBUTED BY HASH(user_id, event_time) BUCKETS 10;
   ```
 
-<<<<<<< HEAD
-### 修改列（增删列和修改列顺序）
-=======
 ### 修改列（添加/删除列，改变列的顺序或注释）
->>>>>>> 524edf4607 ([Doc] Doc for Modifying Column Comment (#62951))
 
 下文中的 index 为物化索引。建表成功后表为 base 表 (base index)，基于 base 表可 [创建 rollup index](#创建-rollup-index-add-rollup)。
 
@@ -498,11 +468,7 @@ DROP COLUMN column_name
 1. 不能删除分区列。
 2. 如果是从 base index 中删除列，则如果 rollup index 中包含该列，也会被删除。
 
-<<<<<<< HEAD
-#### 修改指定 index 的列类型以及列位置 (MODIFY COLUMN)
-=======
 #### 修改列类型、位置、注释和其他属性
->>>>>>> 524edf4607 ([Doc] Doc for Modifying Column Comment (#62951))
 
 语法：
 
@@ -524,7 +490,6 @@ MODIFY COLUMN <column_name>
 4. 分区列不能做任何修改。
 5. 目前支持以下类型的转换（精度损失由用户保证）：
 
-<<<<<<< HEAD
     - TINYINT/SMALLINT/INT/BIGINT 转换成 TINYINT/SMALLINT/INT/BIGINT/DOUBLE。
     - TINYINT/SMALLINT/INT/BIGINT/LARGEINT/FLOAT/DOUBLE/DECIMAL 转换成 VARCHAR。
     - VARCHAR 支持修改最大长度。
@@ -534,15 +499,6 @@ MODIFY COLUMN <column_name>
     DATE 转换成 DATETIME(时分秒自动补零，例如: `2019-12-09` &lt;--&gt; `2019-12-09 00:00:00`)
     - FLOAT 转换成 DOUBLE。
     - INT 转换成 DATE (如果 INT 类型数据不合法则转换失败，原始数据不变。)
-=======
-   - 将TINYINT/SMALLINT/INT/BIGINT转换为TINYINT/SMALLINT/INT/BIGINT/DOUBLE。
-   - 将TINYINT/SMALLINT/INT/BIGINT/LARGEINT/FLOAT/DOUBLE/DECIMAL转换为VARCHAR。VARCHAR支持修改最大长度。
-   - 将VARCHAR转换为TINYINT/SMALLINT/INT/BIGINT/LARGEINT/FLOAT/DOUBLE。
-   - 将VARCHAR转换为DATE（目前支持六种格式："%Y-%m-%d", "%y-%m-%d", "%Y%m%d", "%y%m%d", "%Y/%m/%d, "%y/%m/%d"）
-   - 将DATETIME转换为DATE（仅保留年月日信息，即`2019-12-09 21:47:05` `<-->` `2019-12-09`）
-   - 将DATE转换为DATETIME（将小时、分钟、秒设置为零，例如：`2019-12-09` `<-->` `2019-12-09 00:00:00`）
-   - 将FLOAT转换为DOUBLE
-   - 将INT转换为DATE（如果INT数据转换失败，原始数据保持不变）
 
 6. 不支持从NULL转换为NOT NULL。
 7. 您可以在单个 MODIFY COLUMN 子句中修改多个属性。但某些属性的组合不支持。
@@ -562,7 +518,6 @@ ORDER BY (column_name1, column_name2, ...)
 
 - 索引中的所有列必须写出。
 - 值列列在键列之后。
->>>>>>> 524edf4607 ([Doc] Doc for Modifying Column Comment (#62951))
 
 #### 修改排序键
 
@@ -607,17 +562,11 @@ DISTRIBUTED BY HASH(order_id);
 ALTER TABLE orders ORDER BY (dt,revenue,state);
 ```
 
-<<<<<<< HEAD
 #### STRUCT 类型列增删字段（MODIFY COLUMN ADD/DROP FIELD）
 
 自 v3.2.10 及 v3.3.2 起，StarRocks 支持向 STRUCT 类型列增删字段。该字段可以为嵌套 STRUCT 类型或存在于 ARRAY 类型中。
-=======
-#### 修改STRUCT列以添加或删除字段
 
 <Beta />
-
-从v3.2.10和v3.3.2起，StarRocks支持修改STRUCT列以添加或删除字段，该字段可以是嵌套的或在ARRAY类型中。
->>>>>>> 524edf4607 ([Doc] Doc for Modifying Column Comment (#62951))
 
 语法：
 
