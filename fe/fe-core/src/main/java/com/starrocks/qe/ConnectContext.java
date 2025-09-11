@@ -1588,6 +1588,10 @@ public class ConnectContext {
             row.add(sessionVariable.getWarehouseName());
             // cngroup
             row.add(getCurrentComputeResourceName());
+            // catalog
+            row.add(sessionVariable.getCatalog());
+            // query id
+            row.add(queryId == null ? null : queryId.toString());
             return row;
         }
     }
