@@ -178,6 +178,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String QUERY_CACHE_TYPE = "query_cache_type";
     public static final String INTERACTIVE_TIMEOUT = "interactive_timeout";
     public static final String WAIT_TIMEOUT = "wait_timeout";
+    public static final String ENABLE_COMPARE_FOR_NULL = "enable_compare_for_null";
 
     public static final String CATALOG = "catalog";
     public static final String NET_WRITE_TIMEOUT = "net_write_timeout";
@@ -1180,6 +1181,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     // The number of seconds the server waits for activity on a noninteractive connection before closing it.
     @VariableMgr.VarAttr(name = WAIT_TIMEOUT)
     private int waitTimeout = 28800;
+
+    @VariableMgr.VarAttr(name = ENABLE_COMPARE_FOR_NULL)
+    private boolean enableCompareForNull = false;
 
     // The number of seconds to wait for a block to be written to a connection before aborting the write
     @VariableMgr.VarAttr(name = NET_WRITE_TIMEOUT)
@@ -3202,6 +3206,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public int getWaitTimeoutS() {
         return waitTimeout;
+    }
+
+    public boolean isEnableCompareForNull() {
+        return enableCompareForNull;
     }
 
     public long getSqlMode() {
