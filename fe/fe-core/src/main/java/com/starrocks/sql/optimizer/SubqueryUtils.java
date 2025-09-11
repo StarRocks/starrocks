@@ -44,6 +44,7 @@ import com.starrocks.sql.optimizer.rewrite.scalar.ScalarOperatorRewriteRule;
 import com.starrocks.sql.optimizer.transformer.CTETransformerContext;
 import com.starrocks.sql.optimizer.transformer.ExpressionMapping;
 import com.starrocks.sql.optimizer.transformer.LogicalPlan;
+import com.starrocks.sql.optimizer.transformer.MVTransformerContext;
 import com.starrocks.sql.optimizer.transformer.OptExprBuilder;
 import com.starrocks.sql.optimizer.transformer.RelationTransformer;
 
@@ -103,7 +104,8 @@ public class SubqueryUtils {
             relation.getOrderBy().clear();
         }
 
-        return new RelationTransformer(columnRefFactory, session, outer, cteContext).transform(relation);
+        return new RelationTransformer(columnRefFactory, session, outer, cteContext,
+                new MVTransformerContext(session, true)).transform(relation);
     }
 
     private static Function getAggregateFunction(String functionName, Type[] argTypes) {
