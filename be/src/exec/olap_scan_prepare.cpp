@@ -369,9 +369,10 @@ Status ChunkPredicateBuilder<E, Type>::_build_bitset_in_predicates(PredicateComp
         if (slot_desc == nullptr) {
             continue;
         }
-        if (desc->is_stream_build_filter()) {
-            continue;
-        }
+        // Enable TopN/Aggregate filters for storage-level optimization
+        // if (desc->is_stream_build_filter()) {
+        //     continue;
+        // }
 
         // The un-arrived runtime filter will not be added to the predicate tree,
         // but will be added to `RuntimeFilterPredicates` by `get_runtime_filter_predicates`.
@@ -1163,9 +1164,10 @@ Status ChunkPredicateBuilder<E, Type>::_get_column_predicates(PredicateParser* p
             if (slot_desc == nullptr) {
                 continue;
             }
-            if (desc->is_stream_build_filter()) {
-                continue;
-            }
+            // Enable TopN/Aggregate filters for storage-level optimization
+            // if (desc->is_stream_build_filter()) {
+            //     continue;
+            // }
 
             auto column_id = parser->column_id(*slot_desc);
             // Connector scan only use parsed predicate_tree to filter with statistics but not with data rows,
@@ -1369,9 +1371,10 @@ StatusOr<RuntimeFilterPredicates> ScanConjunctsManager::get_runtime_filter_predi
         if (slot_desc == nullptr) {
             continue;
         }
-        if (desc->is_stream_build_filter()) {
-            continue;
-        }
+        // Enable TopN/Aggregate filters for storage-level optimization
+        // if (desc->is_stream_build_filter()) {
+        //     continue;
+        // }
         // If the runtime filter's partition-by-exprs's size is greater than 1, skip to push it down to storage engine.
         if (desc->num_partition_by_exprs() > 1) {
             continue;
