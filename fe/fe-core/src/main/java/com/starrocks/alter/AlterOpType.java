@@ -69,6 +69,10 @@ public enum AlterOpType {
     ALTER_BRANCH,
     ALTER_TAG,
     ALTER_TABLE_OPERATION,
+
+    // ALTER AUTO_INCREMENT counter
+    ALTER_AUTO_INCREMENT,
+
     INVALID_OP; // INVALID_OP must be the last one
 
     // true means 2 operations have no conflict.
@@ -92,5 +96,4 @@ public enum AlterOpType {
     public boolean needCheckCapacity() {
         return this == ADD_ROLLUP || this == SCHEMA_CHANGE || this == ADD_PARTITION || this == OPTIMIZE;
     }
-
 }
