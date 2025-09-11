@@ -17,7 +17,6 @@ plugins {
     id("com.github.johnrengelman.shadow") version "8.1.1"
 }
 
-version = "1.0.0"
 
 java {
     sourceCompatibility = JavaVersion.VERSION_1_8

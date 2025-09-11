@@ -178,28 +178,41 @@ under the License.
     <dependencyManagement>
         <dependencies>
 
+            <!-- internal modules unified -->
+            <dependency>
+                <groupId>com.starrocks</groupId>
+                <artifactId>fe-grammar</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.starrocks</groupId>
+                <artifactId>fe-parser</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.starrocks</groupId>
+                <artifactId>fe-spi</artifactId>
+                <version>${project.version}</version>
+            </dependency>
             <dependency>
                 <groupId>com.starrocks</groupId>
                 <artifactId>fe-utils</artifactId>
-                <version>1.0.0</version>
+                <version>${project.version}</version>
             </dependency>
-
-            <dependency>
-                <groupId>com.starrocks</groupId>
-                <artifactId>hive-udf</artifactId>
-                <version>1.0.0</version>
-            </dependency>
-
             <dependency>
                 <groupId>com.starrocks</groupId>
                 <artifactId>fe-testing</artifactId>
-                <version>1.0.0</version>
+                <version>${project.version}</version>
             </dependency>
-
             <dependency>
                 <groupId>com.starrocks</groupId>
                 <artifactId>spark-dpp</artifactId>
-                <version>1.0.0</version>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.starrocks</groupId>
+                <artifactId>hive-udf</artifactId>
+                <version>${project.version}</version>
             </dependency>
 
             <!-- https://mvnrepository.com/artifact/commons-cli/commons-cli -->
