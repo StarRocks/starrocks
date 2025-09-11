@@ -97,14 +97,6 @@ public class IsNullPredicate extends Predicate {
     }
 
     @Override
-    public String toSqlImpl() {
-        return getChild(0).toSql() + (isNotNull ? " IS NOT NULL" : " IS NULL");
-    }
-
-    public boolean isSlotRefChildren() {
-        return (children.get(0) instanceof SlotRef);
-    }
-    @Override
     protected void toThrift(TExprNode msg) {
         msg.node_type = TExprNodeType.FUNCTION_CALL;
     }

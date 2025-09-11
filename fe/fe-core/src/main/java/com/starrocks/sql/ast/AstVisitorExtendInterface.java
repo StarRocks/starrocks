@@ -1292,6 +1292,10 @@ public interface AstVisitorExtendInterface<R, C> extends AstVisitor<R, C> {
         return visitNode(clause, context);
     }
 
+    default R visitAlterTableAutoIncrementClause(AlterTableAutoIncrementClause clause, C context) {
+        return visitNode(clause, context);
+    }
+
     default R visitAddRollupClause(AddRollupClause clause, C context) {
         return visitNode(clause, context);
     }
@@ -1488,7 +1492,7 @@ public interface AstVisitorExtendInterface<R, C> extends AstVisitor<R, C> {
     }
 
     default R visitGroupingFunctionCall(GroupingFunctionCallExpr node, C context) {
-        return visitExpression(node, context);
+        return visitFunctionCall(node, context);
     }
 
     default R visitInformationFunction(InformationFunction node, C context) {
@@ -1603,7 +1607,7 @@ public interface AstVisitorExtendInterface<R, C> extends AstVisitor<R, C> {
     }
 
     default R visitLargeStringLiteral(LargeStringLiteral node, C context) {
-        return visitLiteral(node, context);
+        return visitStringLiteral(node, context);
     }
 
     default R visitMaxLiteral(MaxLiteral node, C context) {

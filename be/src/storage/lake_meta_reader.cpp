@@ -21,6 +21,7 @@
 #include "column/column_helper.h"
 #include "column/datum_convert.h"
 #include "common/status.h"
+#include "runtime/exec_env.h"
 #include "runtime/global_dict/config.h"
 #include "storage/lake/rowset.h"
 #include "storage/rowset/column_iterator.h"

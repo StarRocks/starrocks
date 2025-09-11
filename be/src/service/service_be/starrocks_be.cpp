@@ -28,6 +28,7 @@
 #include "common/process_exit.h"
 #include "common/status.h"
 #include "fs/s3/poco_common.h"
+#include "runtime/current_thread.h"
 #include "runtime/exec_env.h"
 #include "runtime/fragment_mgr.h"
 #include "runtime/global_variables.h"
@@ -107,16 +108,18 @@ void start_be(const std::vector<StorePath>& paths, bool as_cn) {
     CHECK(global_vars->is_init()) << "global variables not initialized";
     LOG(INFO) << process_name << " start step " << start_step++ << ": global variables init successfully";
 
-    auto* storage_engine = init_storage_engine(global_env, paths, as_cn);
-    LOG(INFO) << process_name << " start step " << start_step++ << ": storage engine init successfully";
-
+    // cache env should be initialized before init_storage_engine,
+    // because apply task is triggered in init_storage_engine and needs cache env.
     auto* cache_env = DataCache::GetInstance();
     EXIT_IF_ERROR(cache_env->init(paths));
     LOG(INFO) << process_name << " start step " << start_step++ << ": cache env init successfully";
 
+    auto* storage_engine = init_storage_engine(global_env, paths, as_cn);
+    LOG(INFO) << process_name << " start step " << start_step++ << ": storage engine init successfully";
+
     auto* exec_env = ExecEnv::GetInstance();
     EXIT_IF_ERROR(exec_env->init(paths, as_cn));
-    LOG(INFO) << process_name << " start step " << start_step++ << ": exec engine init successfully";
+    LOG(INFO) << process_name << " start step " << start_step++ << ": exec env init successfully";
 
     // Start all background threads of storage engine.
     // SHOULD be called after exec env is initialized.
@@ -124,7 +127,7 @@ void start_be(const std::vector<StorePath>& paths, bool as_cn) {
     LOG(INFO) << process_name << " start step " << start_step++ << ": storage engine start bg threads successfully";
 
 #ifdef USE_STAROS
-    auto* local_cache = cache_env->local_cache();
+    auto* local_cache = cache_env->local_disk_cache();
     if (config::datacache_unified_instance_enable && local_cache && local_cache->is_initialized()) {
         auto* starcache = reinterpret_cast<StarCacheEngine*>(local_cache);
         init_staros_worker(starcache->starcache_instance());

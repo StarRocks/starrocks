@@ -423,7 +423,11 @@ public class ConnectProcessor {
 
                     authenticationProvider.checkLoginSuccess(ctx.getConnectionId(), ctx.getAuthenticationContext());
                 } catch (AuthenticationException authenticationException) {
-                    ErrorReport.report(authenticationException.getMessage());
+                    if (authenticationException.getErrorCode() != null) {
+                        ErrorReport.report(authenticationException.getErrorCode(), authenticationException.getMessage());
+                    } else {
+                        ErrorReport.report(ErrorCode.ERR_ACCESS_DENIED, authenticationException.getMessage());
+                    }
                     ctx.getState().setErrType(QueryState.ErrType.ANALYSIS_ERR);
                     return;
                 }

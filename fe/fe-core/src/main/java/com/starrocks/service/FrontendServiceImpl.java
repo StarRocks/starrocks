@@ -285,6 +285,9 @@ import com.starrocks.thrift.TListPipeFilesResult;
 import com.starrocks.thrift.TListPipesInfo;
 import com.starrocks.thrift.TListPipesParams;
 import com.starrocks.thrift.TListPipesResult;
+import com.starrocks.thrift.TListRecycleBinCatalogsInfo;
+import com.starrocks.thrift.TListRecycleBinCatalogsParams;
+import com.starrocks.thrift.TListRecycleBinCatalogsResult;
 import com.starrocks.thrift.TListSessionsOptions;
 import com.starrocks.thrift.TListSessionsRequest;
 import com.starrocks.thrift.TListSessionsResponse;
@@ -2958,6 +2961,39 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             response.setStatus(status);
             return response;
         }
+    }
+
+    public TListRecycleBinCatalogsResult listRecycleBinCatalogs(TListRecycleBinCatalogsParams params) throws TException {
+        if (!params.isSetUser_ident()) {
+            throw new TException("missed user_identity");
+        }
+        LOG.info("listRecycleBinCatalogs params={}", params);
+        UserIdentity userIdentity = UserIdentityUtils.fromThrift(params.getUser_ident());
+        if (!userIdentity.equals(UserIdentity.ROOT)) {
+            throw new TException("operation can be executed only by root user");
+        }
+        TListRecycleBinCatalogsResult result = new TListRecycleBinCatalogsResult();
+        List<List<String>> rowSet = GlobalStateMgr.getCurrentState().getRecycleBin().getCatalogRecycleBinInfo();
+
+        for (List<String> record : rowSet) {
+            TListRecycleBinCatalogsInfo info = new TListRecycleBinCatalogsInfo();
+            info.setType(record.get(0));
+            info.setName(record.get(1));
+            if (!record.get(2).isEmpty()) {
+                info.setDbid(Long.parseLong(record.get(2)));
+            }
+            if (!record.get(3).isEmpty()) {
+                info.setTableid(Long.parseLong(record.get(3)));
+            }
+            if (!record.get(4).isEmpty()) {
+                info.setPartitionid(Long.parseLong(record.get(4)));
+            }
+            info.setDroptime(Long.parseLong(record.get(5)));
+
+            result.addToRecyclebin_catalogs(info);
+        }
+
+        return result;
     }
 
     @Override

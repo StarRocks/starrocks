@@ -91,15 +91,15 @@ public class ReplayFromDumpTest extends ReplayFromDumpTestBase {
                 getCostPlanFragment(getDumpInfoFromFile("query_dump/join_eliminate_nulls"), sessionVariable);
         Assertions.assertTrue(replayPair.second.contains("11:NESTLOOP JOIN\n" +
                 "  |  join op: INNER JOIN\n" +
-                "  |  other join predicates: CASE 174: type WHEN '1' THEN concat('ocms_', 90: name) = " +
-                "'ocms_fengyang56' " +
-                "WHEN '0' THEN TRUE ELSE FALSE END\n" +
-                "  |  limit: 10"), replayPair.second);
-        Assertions.assertTrue(replayPair.second.contains("  4:HASH JOIN\n" +
-                "  |  join op: RIGHT OUTER JOIN (PARTITIONED)\n" +
-                "  |  equal join conjunct: [tid, BIGINT, true] = [5: customer_id, BIGINT, true]\n" +
-                "  |  build runtime filters:\n" +
-                "  |  - filter_id = 0, build_expr = (5: customer_id), remote = true"), replayPair.second);
+                "  |  other join predicates: CASE [174: type, VARCHAR, true] WHEN '1' THEN concat[('ocms_', [90: name, VARCHAR,"
+                + " true]); args: VARCHAR; result: VARCHAR; args nullable: true; result nullable: true] = 'ocms_fengyang56' "
+                + "WHEN '0' THEN TRUE ELSE FALSE END\n"
+                + "  |  limit: 10"), replayPair.second);
+        Assertions.assertTrue(replayPair.second.contains("  4:HASH JOIN\n"
+                + "  |  join op: RIGHT OUTER JOIN (PARTITIONED)\n"
+                + "  |  equal join conjunct: [tid, BIGINT, true] = [5: customer_id, BIGINT, true]\n"
+                + "  |  build runtime filters:\n"
+                + "  |  - filter_id = 0, build_expr = (5: customer_id), remote = true"), replayPair.second);
         sessionVariable.setNewPlanerAggStage(0);
     }
 
@@ -200,20 +200,20 @@ public class ReplayFromDumpTest extends ReplayFromDumpTestBase {
         // check outer join with isNull predicate on inner table
         // The estimate cardinality of join should not be 0.
         Pair<QueryDumpInfo, String> replayPair = getCostPlanFragment(getDumpInfoFromFile("query_dump/tpcds78"));
-        Assertions.assertTrue(replayPair.second.contains("3:HASH JOIN\n" +
-                "  |  join op: LEFT OUTER JOIN (BUCKET_SHUFFLE)\n" +
-                "  |  equal join conjunct: [2: ss_ticket_number, INT, false] = [25: sr_ticket_number, INT, true]\n" +
-                "  |  equal join conjunct: [1: ss_item_sk, INT, false] = [24: sr_item_sk, INT, true]\n" +
-                "  |  other predicates: 25: sr_ticket_number IS NULL\n" +
-                "  |  output columns: 1, 3, 5, 11, 12, 14\n" +
-                "  |  cardinality: 37372757"), replayPair.second);
-        Assertions.assertTrue(replayPair.second.contains("15:HASH JOIN\n" +
-                "  |  join op: LEFT OUTER JOIN (BUCKET_SHUFFLE)\n" +
-                "  |  equal join conjunct: [76: ws_order_number, INT, false] = [110: wr_order_number, INT, true]\n" +
-                "  |  equal join conjunct: [75: ws_item_sk, INT, false] = [109: wr_item_sk, INT, true]\n" +
-                "  |  other predicates: 110: wr_order_number IS NULL\n" +
-                "  |  output columns: 75, 77, 80, 93, 94, 96\n" +
-                "  |  cardinality: 7914602"), replayPair.second);
+        Assertions.assertTrue(replayPair.second.contains("3:HASH JOIN\n"
+                + "  |  join op: LEFT OUTER JOIN (BUCKET_SHUFFLE)\n"
+                + "  |  equal join conjunct: [2: ss_ticket_number, INT, false] = [25: sr_ticket_number, INT, true]\n"
+                + "  |  equal join conjunct: [1: ss_item_sk, INT, false] = [24: sr_item_sk, INT, true]\n"
+                + "  |  other predicates: [25: sr_ticket_number, INT, true] IS NULL\n"
+                + "  |  output columns: 1, 3, 5, 11, 12, 14\n"
+                + "  |  cardinality: 37372757"), replayPair.second);
+        Assertions.assertTrue(replayPair.second.contains("15:HASH JOIN\n"
+                + "  |  join op: LEFT OUTER JOIN (BUCKET_SHUFFLE)\n"
+                + "  |  equal join conjunct: [76: ws_order_number, INT, false] = [110: wr_order_number, INT, true]\n"
+                + "  |  equal join conjunct: [75: ws_item_sk, INT, false] = [109: wr_item_sk, INT, true]\n"
+                + "  |  other predicates: [110: wr_order_number, INT, true] IS NULL\n"
+                + "  |  output columns: 75, 77, 80, 93, 94, 96\n"
+                + "  |  cardinality: 7914602"), replayPair.second);
     }
 
     @Test

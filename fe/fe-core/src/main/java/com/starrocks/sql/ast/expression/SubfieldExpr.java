@@ -77,13 +77,12 @@ public class SubfieldExpr extends Expr {
         return fieldNames;
     }
 
-    public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return ((AstVisitorExtendInterface<R, C>) visitor).visitSubfieldExpr(this, context);
+    public boolean isCopyFlag() {
+        return copyFlag;
     }
 
-    @Override
-    protected String toSqlImpl() {
-        return getChild(0).toSqlImpl() + "." + Joiner.on('.').join(fieldNames) + '[' + copyFlag + ']';
+    public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
+        return ((AstVisitorExtendInterface<R, C>) visitor).visitSubfieldExpr(this, context);
     }
 
     @Override
@@ -126,6 +125,6 @@ public class SubfieldExpr extends Expr {
         if (children.get(0) instanceof SlotRef) {
             return ((SlotRef) children.get(0)).getColumnName();
         }
-        return children.get(0).toSqlImpl();
+        return children.get(0).toSql();
     }
 }

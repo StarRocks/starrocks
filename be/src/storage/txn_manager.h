@@ -65,6 +65,7 @@
 #include "storage/tablet.h"
 #include "util/countdown_latch.h"
 #include "util/lru_cache.h"
+#include "util/threadpool.h"
 #include "util/time.h"
 
 namespace starrocks {

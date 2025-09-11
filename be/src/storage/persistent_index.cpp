@@ -22,6 +22,7 @@
 #include "gutil/strings/escaping.h"
 #include "gutil/strings/substitute.h"
 #include "io/io_profiler.h"
+#include "runtime/current_thread.h"
 #include "storage/chunk_helper.h"
 #include "storage/chunk_iterator.h"
 #include "storage/persistent_index_tablet_loader.h"

@@ -58,6 +58,9 @@ CONF_String(ssl_private_key_path, "");
 // The max number of single connections maintained by the brpc client and each server.
 // These connections are created during the first few access and will be used thereafter
 CONF_Int32(brpc_max_connections_per_server, "1");
+// BRPC stub cache expire configurations
+// The expire time of BRPC stub cache, default 60 minutes.
+CONF_mInt32(brpc_stub_expire_s, "3600"); // 60 minutes
 
 // Declare a selection strategy for those servers have many ips.
 // Note that there should at most one ip match this list.
@@ -309,6 +312,8 @@ CONF_Int32(min_file_descriptor_number, "60000");
 // data and index page size, default is 64k
 CONF_Int32(data_page_size, "65536");
 
+CONF_mBool(enable_zero_copy_from_page_cache, "true");
+
 // Page cache is the cache for the decompressed or decoded page of data file.
 // Currently, BE does not support configure the upper limit of the page cache.
 // The memory limit of page cache are uniformly restricted by datacache_mem_size.
@@ -412,6 +417,8 @@ CONF_Bool(enable_event_based_compaction_framework, "true");
 
 CONF_Bool(enable_size_tiered_compaction_strategy, "true");
 CONF_mBool(enable_pk_size_tiered_compaction_strategy, "true");
+// Enable parallel execution within tablet for primary key tables.
+CONF_mBool(enable_pk_parallel_execution, "false");
 // We support real-time compaction strategy for primary key tables in shared-data mode.
 // This real-time compaction strategy enables compacting rowsets across multiple levels simultaneously.
 // The parameter `size_tiered_max_compaction_level` defines the maximum compaction level allowed in a single compaction task.

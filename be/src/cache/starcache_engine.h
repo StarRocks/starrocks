@@ -26,7 +26,7 @@ public:
     StarCacheEngine() = default;
     virtual ~StarCacheEngine() override = default;
 
-    Status init(const CacheOptions& options) override;
+    Status init(const DiskCacheOptions& options);
     bool is_initialized() const override { return _initialized.load(std::memory_order_relaxed); }
 
     Status write(const std::string& key, const IOBuffer& buffer, WriteCacheOptions* options) override;

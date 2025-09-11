@@ -88,7 +88,7 @@ public class ProjectNode extends PlanNode {
                 output.append("<slot ").
                         append(kv.first).
                         append("> : ").
-                        append(kv.second.toSql()).
+                        append(explainExpr(kv.second)).
                         append("\n");
             }
         }
@@ -103,7 +103,7 @@ public class ProjectNode extends PlanNode {
                     output.append("<slot ").
                             append(kv.getKey()).
                             append("> : ").
-                            append(kv.getValue().toSql()).
+                            append(explainExpr(kv.getValue())).
                             append("\n");
                 }
             }

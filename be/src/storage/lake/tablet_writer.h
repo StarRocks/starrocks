@@ -49,7 +49,9 @@ public:
               _schema(std::move(schema)),
               _txn_id(txn_id),
               _flush_pool(flush_pool),
-              _is_compaction(is_compaction) {}
+              _is_compaction(is_compaction) {
+        decide_pk_parallel_execution();
+    }
 
     virtual ~TabletWriter() = default;
 
@@ -64,6 +66,8 @@ public:
     //
     // PREREQUISITES: the writer has successfully `finish()`ed but not yet `close()`ed.
     std::vector<FileInfo> files() const { return _files; }
+
+    std::vector<FileInfo> ssts() const { return _ssts; }
 
     // The sum of all segment file sizes, in bytes.
     int64_t data_size() const { return _data_size; }
@@ -143,6 +147,26 @@ public:
 
     const DictColumnsValidMap& global_dict_columns_valid_info() const { return _global_dict_columns_valid_info; }
 
+    void decide_pk_parallel_execution() {
+        if (!config::enable_pk_parallel_execution || _schema->keys_type() != KeysType::PRIMARY_KEYS ||
+            _schema->has_separate_sort_key()) {
+            return;
+        }
+        // For primary key table with single key column and the type is not VARCHAR/CHAR,
+        // we can't enable pk parrallel execution. The reason is that, in the current implementation,
+        // when encoding a single-key column of a non-binary type, big-endian encoding is not used,
+        // which may result in incorrect ordering between sst and segment files.
+        // This is a legacy bug, but for compatibility reasons, it will not be supported in the first phase.
+        // Will fix it later.
+        if (_schema->num_key_columns() > 1 || _schema->column(0).type() == LogicalType::TYPE_VARCHAR ||
+            _schema->column(0).type() == LogicalType::TYPE_CHAR) {
+            _enable_pk_parallel_execution = true;
+        }
+        return;
+    }
+
+    bool enable_pk_parallel_execution() const { return _enable_pk_parallel_execution; }
+
 protected:
     TabletManager* _tablet_mgr;
     int64_t _tablet_id;
@@ -150,6 +174,7 @@ protected:
     int64_t _txn_id;
     ThreadPool* _flush_pool;
     std::vector<FileInfo> _files;
+    std::vector<FileInfo> _ssts;
     int64_t _num_rows = 0;
     int64_t _data_size = 0;
     uint32_t _seg_id = 0;
@@ -161,6 +186,7 @@ protected:
 
     bool _is_compaction = false;
     DictColumnsValidMap _global_dict_columns_valid_info;
+    bool _enable_pk_parallel_execution = false;
 };
 
 } // namespace lake

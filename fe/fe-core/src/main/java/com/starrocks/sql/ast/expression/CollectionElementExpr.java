@@ -71,13 +71,6 @@ public class CollectionElementExpr extends Expr {
     }
 
     @Override
-    protected String toSqlImpl() {
-        Expr expr = this.children.get(0);
-        Expr subscript = this.children.get(1);
-        return expr.toSqlImpl() + "[" + subscript.toSqlImpl() + "]";
-    }
-
-    @Override
     protected void toThrift(TExprNode msg) {
         if (getChild(0).getType().isArrayType()) {
             msg.setNode_type(TExprNodeType.ARRAY_ELEMENT_EXPR);
