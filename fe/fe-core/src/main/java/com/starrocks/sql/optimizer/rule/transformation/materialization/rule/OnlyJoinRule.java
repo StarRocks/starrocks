@@ -28,10 +28,8 @@ import com.starrocks.sql.optimizer.operator.logical.LogicalScanOperator;
 import com.starrocks.sql.optimizer.operator.pattern.Pattern;
 import com.starrocks.sql.optimizer.rule.RuleType;
 
-import java.util.concurrent.atomic.AtomicBoolean;
-
 /**
- *  OnlyJoinRule is used to match the only-join query pattern and rewrite it by mv.
+ *  OnlyJoinRule is used to match SPJ query pattern and rewrite it by mv.
  */
 public class OnlyJoinRule extends BaseMaterializedViewRewriteRule {
     private static final OnlyJoinRule INSTANCE = new OnlyJoinRule();
@@ -44,8 +42,7 @@ public class OnlyJoinRule extends BaseMaterializedViewRewriteRule {
         return INSTANCE;
     }
 
-    public static boolean isLogicalSPJ(OptExpression root,
-                                       AtomicBoolean hasJoin) {
+    public static boolean isLogicalSPJ(OptExpression root) {
         if (root == null) {
             return false;
         }
@@ -59,9 +56,6 @@ public class OnlyJoinRule extends BaseMaterializedViewRewriteRule {
                 && !(operator instanceof LogicalJoinOperator)) {
             return false;
         }
-        if (operator instanceof LogicalJoinOperator) {
-            hasJoin.set(true);
-        }
         if (operator instanceof LogicalOlapScanOperator) {
             LogicalOlapScanOperator olapScanOperator = (LogicalOlapScanOperator) operator;
             if (olapScanOperator.isSample()) {
@@ -69,7 +63,7 @@ public class OnlyJoinRule extends BaseMaterializedViewRewriteRule {
             }
         }
         for (OptExpression child : root.getInputs()) {
-            if (!isLogicalSPJ(child, hasJoin)) {
+            if (!isLogicalSPJ(child)) {
                 return false;
             }
         }
@@ -78,9 +72,12 @@ public class OnlyJoinRule extends BaseMaterializedViewRewriteRule {
 
     @Override
     public boolean check(OptExpression input, OptimizerContext context) {
-        // for only-join rule, only SPJ is supported
-        AtomicBoolean hasJoin = new AtomicBoolean(false);
-        if (!isLogicalSPJ(input, hasJoin) || !hasJoin.get()) {
+        // NOTE:
+        // 1. For only-join rule, only SPJ is supported
+        // 2. Don't limit the input must contain a join because it may be a single table query but we still can rewrite it
+        //    in this rule, because of a multi table plan after some rules(eg: FineGrainedRangePredicateRule) may
+        //    become a single table plan.
+        if (!isLogicalSPJ(input)) {
             return false;
         }
         return super.check(input, context);
