@@ -32,9 +32,9 @@ public class AwsCloudConfiguration extends CloudConfiguration {
 
     private final AwsCloudCredential awsCloudCredential;
 
-    // shared-data cluster uses 3 methods to determine whether enable path style access,
-    // if is null, BE/CN will auto-determine whether use path style access, otherwise it will
-    // be determined by corresponding value
+    // shared-data cluster uses 2 methods to determine whether to enable path style access:
+    // if it is null, BE/CN will auto-determine whether to use path style access; otherwise, it will
+    // be determined by the corresponding value.
     private Boolean enablePathStyleAccess = null;
 
     private boolean enableSSL = true;
