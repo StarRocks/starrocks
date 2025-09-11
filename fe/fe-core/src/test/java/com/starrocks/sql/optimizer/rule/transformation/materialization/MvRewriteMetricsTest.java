@@ -186,6 +186,7 @@ public class MvRewriteMetricsTest extends MVTestBase {
 
     @Test
     public void testMvMetricsWithValidMvId() {
+        disableMVRewriteConsiderDataLayout();
         String mvName = "mv0";
         String sql = String.format("CREATE MATERIALIZED VIEW %s" +
                 " REFRESH DEFERRED MANUAL " +
@@ -270,6 +271,7 @@ public class MvRewriteMetricsTest extends MVTestBase {
                 Assertions.assertTrue(json.contains("mv_query_total_matched_count"));
             }
         });
+        enableMVRewriteConsiderDataLayout();
     }
 
     @Test

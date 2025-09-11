@@ -380,6 +380,36 @@ public class MvUtils {
         }
     }
 
+    /**
+     * Whether `root` and its children are all Select/Project/Scan ops.
+     */
+    public static boolean isLogicalSP(OptExpression root) {
+        if (root == null) {
+            return false;
+        }
+        Operator operator = root.getOp();
+        if (!(operator instanceof LogicalOperator)) {
+            return false;
+        }
+        if (!(operator instanceof LogicalScanOperator)
+                && !(operator instanceof LogicalProjectOperator)
+                && !(operator instanceof LogicalFilterOperator)) {
+            return false;
+        }
+        if (operator instanceof LogicalOlapScanOperator) {
+            LogicalOlapScanOperator olapScanOperator = (LogicalOlapScanOperator) operator;
+            if (olapScanOperator.isSample()) {
+                return false;
+            }
+        }
+        for (OptExpression child : root.getInputs()) {
+            if (!isLogicalSP(child)) {
+                return false;
+            }
+        }
+        return true;
+    }
+
     public static boolean isLogicalSPJG(OptExpression root) {
         return isLogicalSPJG(root, 0);
     }

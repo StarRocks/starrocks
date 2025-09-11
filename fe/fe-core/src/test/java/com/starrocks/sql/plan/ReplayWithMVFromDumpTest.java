@@ -233,7 +233,7 @@ public class ReplayWithMVFromDumpTest extends ReplayFromDumpTestBase {
         Pair<QueryDumpInfo, String> replayPair =
                 getPlanFragment(getDumpInfoFromFile("query_dump/materialized-view/count_star_rewrite"),
                         connectContext.getSessionVariable(), TExplainLevel.NORMAL);
-        assertContains(replayPair.second, "tbl_mock_067");
+        assertContains(replayPair.second, "tbl_mock_065");
         // NOTE: OUTPUT EXPRS must refer to coalesce column ref
         assertContains(replayPair.second, " OUTPUT EXPRS:59: count\n" +
                 "  PARTITION: RANDOM\n" +
@@ -306,5 +306,14 @@ public class ReplayWithMVFromDumpTest extends ReplayFromDumpTestBase {
         Pair<QueryDumpInfo, String> replayPair = getPlanFragment(fileContent, sessionVariable, TExplainLevel.NORMAL);
         String plan = replayPair.second;
         PlanTestBase.assertContains(plan, "single_mv_ads_biz_customer_combine_td_for_task_2y");
+    }
+
+    @Test
+    public void testChooseBest() throws Exception {
+        Pair<QueryDumpInfo, String> replayPair =
+                getPlanFragment(getDumpInfoFromFile("query_dump/materialized-view/choose_best_mv1"),
+                        connectContext.getSessionVariable(), TExplainLevel.NORMAL);
+        String plan = replayPair.second;
+        PlanTestBase.assertContains(plan, "rocketview_v4", "rocketview_v4_mv2");
     }
 }
