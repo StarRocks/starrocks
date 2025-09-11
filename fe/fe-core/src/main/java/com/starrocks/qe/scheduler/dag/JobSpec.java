@@ -292,6 +292,11 @@ public class JobSpec {
             TExecPlanFragmentParams params = planner.getExecPlanFragmentParams();
             TUniqueId queryId = params.getParams().getFragment_instance_id();
 
+            // Build minimal query options for sync stream load to avoid null dereference
+            TQueryOptions queryOptions = new TQueryOptions();
+            queryOptions.setQuery_type(TQueryType.LOAD);
+            queryOptions.setLoad_job_type(TLoadJobType.STREAM_LOAD);
+
             return new Builder()
                     .queryId(queryId)
                     .fragments(Collections.emptyList())
@@ -301,7 +306,7 @@ public class JobSpec {
                     .isBlockQuery(true)
                     .needReport(true)
                     .queryGlobals(null)
-                    .queryOptions(null)
+                    .queryOptions(queryOptions)
                     .enablePipeline(false)
                     .resourceGroup(null)
                     .warehouseId(planner.getWarehouseId())
