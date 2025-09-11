@@ -38,6 +38,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Random;
 
+import static com.starrocks.sql.optimizer.rule.transformation.materialization.MVTestBase.disableMVRewriteConsiderDataLayout;
+
 public class MaterializedViewTest extends MaterializedViewTestBase {
     private static final List<String> outerJoinTypes = ImmutableList.of("left", "right");
 
@@ -45,6 +47,7 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
     public static void beforeClass() throws Exception {
         MaterializedViewTestBase.beforeClass();
 
+        disableMVRewriteConsiderDataLayout();
         starRocksAssert.useDatabase(MATERIALIZED_DB_NAME);
 
         starRocksAssert.useTable("depts");

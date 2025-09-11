@@ -1494,6 +1494,11 @@ public class Config extends ConfigBase {
             "in materialized view creation/ctas")
     public static boolean transform_type_prefer_string_for_varchar = true;
 
+    @ConfField(mutable = true, comment = "Whether materialized view rewrite should consider underlying table data layout " +
+            "(e.g., colocation property, table sort keys) when deciding rewrite applicability: enable/disable/force"
+    )
+    public static String mv_rewrite_consider_data_layout_mode = "enable";
+
     /**
      * The number of query retries.
      * A query may retry if we encounter RPC exception and no result has been sent to user.
