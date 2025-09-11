@@ -12,15 +12,9 @@ ALTER TABLE Modifies an existing table, including:
 - [Modify table comment](#alter-table-comment-from-v31)
 - [Modify partitions (add/delete partitions and modify partition attributes)](#modify-partition)
 - [Modify the bucketing method and number of buckets](#modify-the-bucketing-method-and-number-of-buckets-from-v32)
-<<<<<<< HEAD
-- [Modify columns (add/delete columns and change the order of columns)](#modify-columns-adddelete-columns-change-the-order-of-columns)
+- [Modify columns (add/delete columns, change column order, and modify column comment)](#modify-columns-adddelete-columns-change-column-order-modify-column-comment)
 - [Create/delete rollup index](#modify-rollup-index)
 - [Modify bitmap index](#modify-bitmap-indexes)
-=======
-- [Modify columns (add/delete columns, change column order, and modify column comment)](#modify-columns-adddelete-columns-change-column-order-modify-column-comment)
-- [Create/delete rollup](#modify-rollup)
-- [Create/delete index](#modify-indexes)
->>>>>>> 524edf4607 ([Doc] Doc for Modifying Column Comment (#62951))
 - [Modify table properties](#modify-table-properties)
 - [Atomic swap](#swap)
 - [Manual data version compaction](#manual-compaction-from-31)
@@ -43,15 +37,9 @@ alter_clause1[, alter_clause2, ...]
 - comment: modifies the table comment (supported from **v3.1 onwards**).
 - partition: modifies partition properties, drops a partition, or adds a partition.
 - bucket: modifies the bucketing method and number of buckets.
-<<<<<<< HEAD
-- column: adds, drops, or reorders columns, or modifies column type.
+- column: adds, drops, or reorders columns, modifies column type or comment
 - rollup index: creates or drops a rollup index.
 - bitmap index: modifies index (only Bitmap index can be modified).
-=======
-- column: adds, drops, or reorders columns, modifies column type or comment
-- rollup: creates or drops a rollup.
-- index: modifies indexes.
->>>>>>> 524edf4607 ([Doc] Doc for Modifying Column Comment (#62951))
 - swap: atomic exchange of two tables.
 - compaction: performs manual compaction to merge versions of loaded data (supported from **v3.1 onwards**).
 - drop persistent index: Drop persistent index for Primary Key table in shared-data cluster. **Supported from v3.3.9 onwards**.
@@ -59,10 +47,6 @@ alter_clause1[, alter_clause2, ...]
 ## Limits and usage notes
 
 - Operations on partition, column, and rollup index cannot be performed in one ALTER TABLE statement.
-<<<<<<< HEAD
-- Column comments cannot be modified.
-=======
->>>>>>> 524edf4607 ([Doc] Doc for Modifying Column Comment (#62951))
 - One table can have only one ongoing schema change operation at a time. You cannot run two schema change commands on a table at the same time.
 - Operations on bucket, column and rollup index are asynchronous operations. A success message is return immediately after the task is submitted. You can run the [SHOW ALTER TABLE](SHOW_ALTER.md) command to check the progress, and run the [CANCEL ALTER TABLE](CANCEL_ALTER_TABLE.md) command to cancel the operation.
 - Operations on rename, comment, partition, bitmap index and swap are synchronous operations, and a command return indicates that the execution is finished.
