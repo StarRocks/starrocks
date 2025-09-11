@@ -59,7 +59,7 @@ public class RoutineLoadLagTimeMetricMgr {
             this.jobName = jobName;
             this.partitionLagTimes = Maps.newHashMap();
             this.maxLagTimeMetric = new LeaderAwareGaugeMetricLong(
-                    "routine_load_lag_time_seconds_max",
+                    "routine_load_max_lag_time_of_partition",
                     MetricUnit.SECONDS,
                     "Maximum lag time across all partitions for routine load job"
             ) {
