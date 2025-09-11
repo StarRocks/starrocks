@@ -174,18 +174,11 @@ public class HDFSBackendSelector implements BackendSelector {
             return null;
         }
 
-<<<<<<< HEAD
         boolean forceReBalance = ConnectContext.get() != null ? ConnectContext.get().getSessionVariable().
                 getHdfsBackendSelectorForceRebalance() : false;
         boolean enableDataCache = ConnectContext.get() != null ? ConnectContext.get().getSessionVariable().
                 isEnableScanDataCache() : false;
         // If force-rebalancing is not specified and cache is used, skip the rebalancing directly.
-=======
-        SessionVariable sessionVariable = connectContext.getSessionVariable();
-        boolean forceReBalance = sessionVariable.getHdfsBackendSelectorForceRebalance();
-        boolean enableDataCache = sessionVariable.isEnableScanDataCache();
-        // If force re-balancing is not specified and cache is used, skip the rebalancing directly.
->>>>>>> 79ee456b9e ([BugFix] fix iceberg table scan exception during scan range deploy (#62994))
         if (!forceReBalance && enableDataCache) {
             return backends.get(0);
         }
@@ -315,19 +308,7 @@ public class HDFSBackendSelector implements BackendSelector {
         }
 
         // use consistent hashing to schedule remote scan ranges
-<<<<<<< HEAD
         HashRing hashRing = makeHashRing();
-=======
-        HashRing hashRing = makeHashRing(assignedBytesPerComputeNode.keySet());
-        HashRing candidateHashRing = null;
-        if (candidateWorkerProvider != null) {
-            Collection<ComputeNode> candidateWorkers = candidateWorkerProvider.getAllWorkers();
-            if (!candidateWorkers.isEmpty()) {
-                candidateHashRing = makeHashRing(candidateWorkers);
-            }
-        }
-
->>>>>>> 79ee456b9e ([BugFix] fix iceberg table scan exception during scan range deploy (#62994))
         if (shuffleScanRange) {
             Collections.shuffle(remoteScanRangeLocations);
         }
@@ -339,18 +320,7 @@ public class HDFSBackendSelector implements BackendSelector {
             if (node == null) {
                 throw new UserException("Failed to find backend to execute");
             }
-<<<<<<< HEAD
             recordScanRangeAssignment(node, backends, scanRangeLocations);
-=======
-
-            ComputeNode candidateNode = null;
-            if (candidateHashRing != null) {
-                List<ComputeNode> candidateBackends = candidateHashRing.get(scanRangeLocations, kCandidateNumber);
-                // if data cache is enabled, skip re-balancing because it makes the cache position undefined.
-                candidateNode = candidateBackends.get(0);
-            }
-            recordScanRangeAssignment(node, candidateNode, backends, scanRangeLocations);
->>>>>>> 79ee456b9e ([BugFix] fix iceberg table scan exception during scan range deploy (#62994))
         }
 
         recordScanRangeStatistic();
