@@ -72,10 +72,13 @@ import java.util.Set;
 
 public class HDFSBackendSelector implements BackendSelector {
     public static final Logger LOG = LogManager.getLogger(HDFSBackendSelector.class);
-    // be -> assigned scans
-    Map<ComputeNode, Long> assignedScansPerComputeNode = Maps.newHashMap();
-    // be -> re-balance bytes
-    Map<ComputeNode, Long> reBalanceBytesPerComputeNode = Maps.newHashMap();
+    // be -> assigned bytes
+    Map<ComputeNode, Long> assignedBytesPerComputeNode = Maps.newHashMap();
+    // be -> re-balanced bytes
+    Map<ComputeNode, Long> reBalancedBytesPerComputeNode = Maps.newHashMap();
+    // be -> assigned scan ranges
+    Map<ComputeNode, Long> assignedScanRangesPerComputeNode = Maps.newHashMap();
+
     private final ScanNode scanNode;
     private final List<TScanRangeLocations> locations;
     private final FragmentScanRangeAssignment assignment;
@@ -183,7 +186,7 @@ public class HDFSBackendSelector implements BackendSelector {
         ComputeNode node = null;
         long addedScans = scanRangeLocations.scan_range.hdfs_scan_range.length;
         for (ComputeNode backend : backends) {
-            long assignedScanRanges = assignedScansPerComputeNode.get(backend);
+            long assignedScanRanges = assignedBytesPerComputeNode.get(backend);
             if (assignedScanRanges + addedScans < avgNodeScanRangeBytes * kMaxImbalanceRatio) {
                 node = backend;
                 break;
@@ -212,7 +215,7 @@ public class HDFSBackendSelector implements BackendSelector {
 
     @VisibleForTesting
     public HashRing makeHashRing() {
-        Set<ComputeNode> nodes = assignedScansPerComputeNode.keySet();
+        Set<ComputeNode> nodes = assignedBytesPerComputeNode.keySet();
         HashRing hashRing = null;
         String hashAlgorithm = ConnectContext.get() != null ? ConnectContext.get().getSessionVariable().
                 getHdfsBackendSelectorHashAlgorithm() : "consistent";
@@ -289,8 +292,9 @@ public class HDFSBackendSelector implements BackendSelector {
         long totalSize = computeTotalSize();
         long avgNodeScanRangeBytes = totalSize / Math.max(workerProvider.getAllWorkers().size(), 1) + 1;
         for (ComputeNode computeNode : workerProvider.getAllWorkers()) {
-            assignedScansPerComputeNode.put(computeNode, 0L);
-            reBalanceBytesPerComputeNode.put(computeNode, 0L);
+            assignedBytesPerComputeNode.put(computeNode, 0L);
+            assignedScanRangesPerComputeNode.put(computeNode, 0L);
+            reBalancedBytesPerComputeNode.put(computeNode, 0L);
         }
 
         // schedule scan ranges to co-located backends.
@@ -329,32 +333,41 @@ public class HDFSBackendSelector implements BackendSelector {
 
         // update statistic
         long addedScans = scanRangeLocations.scan_range.hdfs_scan_range.length;
-        assignedScansPerComputeNode.put(worker, assignedScansPerComputeNode.get(worker) + addedScans);
+        assignedBytesPerComputeNode.put(worker, assignedBytesPerComputeNode.get(worker) + addedScans);
         // the fist item in backends will be assigned if there is no re-balance, we compute re-balance bytes
         // if the worker is not the first item in backends.
         if (worker != backends.get(0)) {
-            reBalanceBytesPerComputeNode.put(worker, reBalanceBytesPerComputeNode.get(worker) + addedScans);
+            reBalancedBytesPerComputeNode.put(worker, reBalancedBytesPerComputeNode.get(worker) + addedScans);
         }
 
         // add scan range params
         TScanRangeParams scanRangeParams = new TScanRangeParams();
         scanRangeParams.scan_range = scanRangeLocations.scan_range;
         assignment.put(worker.getId(), scanNode.getId().asInt(), scanRangeParams);
+        assignedScanRangesPerComputeNode.put(worker,
+                assignedScanRangesPerComputeNode.get(worker) + 1);
     }
 
     private void recordScanRangeStatistic() {
         // record scan range size for each backend
-        for (Map.Entry<ComputeNode, Long> entry : assignedScansPerComputeNode.entrySet()) {
+        for (Map.Entry<ComputeNode, Long> entry : assignedBytesPerComputeNode.entrySet()) {
             String host = entry.getKey().getAddress().hostname.replace('.', '_');
             long value = entry.getValue();
             String key = String.format("Placement.%s.assign.%s", scanNode.getTableName(), host);
             Tracers.count(Tracers.Module.EXTERNAL, key, value);
         }
         // record re-balance bytes for each backend
-        for (Map.Entry<ComputeNode, Long> entry : reBalanceBytesPerComputeNode.entrySet()) {
+        for (Map.Entry<ComputeNode, Long> entry : reBalancedBytesPerComputeNode.entrySet()) {
             String host = entry.getKey().getAddress().hostname.replace('.', '_');
             long value = entry.getValue();
             String key = String.format("Placement.%s.balance.%s", scanNode.getTableName(), host);
+            Tracers.count(Tracers.Module.EXTERNAL, key, value);
+        }
+        // record split number for each backend
+        for (Map.Entry<ComputeNode, Long> entry : assignedScanRangesPerComputeNode.entrySet()) {
+            String host = entry.getKey().getAddress().hostname.replace('.', '_');
+            long value = entry.getValue();
+            String key = String.format("Placement.%s.split.%s", scanNode.getTableName(), host);
             Tracers.count(Tracers.Module.EXTERNAL, key, value);
         }
     }
