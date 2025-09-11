@@ -26,11 +26,6 @@ public class TransformerContext {
 
     private final ExpressionMapping outer;
     private final CTETransformerContext cteContext;
-    // whether to expand view in logical plan
-    // the origin strategy is true, means will inline view by default.
-    private final boolean inlineView;
-    private final boolean enableViewBasedMvRewrite;
-
     private final MVTransformerContext mvTransformerContext;
 
     public TransformerContext(
@@ -39,17 +34,7 @@ public class TransformerContext {
             MVTransformerContext mvTransformerContext) {
         this(columnRefFactory, session,
                 new ExpressionMapping(new Scope(RelationId.anonymous(), new RelationFields())),
-                new CTETransformerContext(session.getSessionVariable().getCboCTEMaxLimit()), true, mvTransformerContext);
-    }
-
-    public TransformerContext(
-            ColumnRefFactory columnRefFactory,
-            ConnectContext session,
-            boolean inlineView,
-            MVTransformerContext mvTransformerContext) {
-        this(columnRefFactory, session,
-                new ExpressionMapping(new Scope(RelationId.anonymous(), new RelationFields())),
-                new CTETransformerContext(session.getSessionVariable().getCboCTEMaxLimit()), inlineView, mvTransformerContext);
+                new CTETransformerContext(session.getSessionVariable().getCboCTEMaxLimit()), mvTransformerContext);
     }
 
     public TransformerContext(
@@ -57,23 +42,11 @@ public class TransformerContext {
             ConnectContext session,
             ExpressionMapping outer,
             CTETransformerContext cteContext,
-            MVTransformerContext mvTransformerContext) {
-        this(columnRefFactory, session, outer, cteContext, true, mvTransformerContext);
-    }
-
-    public TransformerContext(
-            ColumnRefFactory columnRefFactory,
-            ConnectContext session,
-            ExpressionMapping outer,
-            CTETransformerContext cteContext,
-            boolean inlineView,
             MVTransformerContext mvTransformerContext) {
         this.columnRefFactory = columnRefFactory;
         this.session = session;
         this.outer = outer;
         this.cteContext = cteContext;
-        this.inlineView = inlineView;
-        this.enableViewBasedMvRewrite = session.getSessionVariable().isEnableViewBasedMvRewrite();
         this.mvTransformerContext = mvTransformerContext;
     }
 
@@ -91,14 +64,6 @@ public class TransformerContext {
 
     public CTETransformerContext getCteContext() {
         return cteContext;
-    }
-
-    public boolean isInlineView() {
-        return inlineView;
-    }
-
-    public boolean isEnableViewBasedMvRewrite() {
-        return enableViewBasedMvRewrite;
     }
 
     public MVTransformerContext getMVTransformerContext() {

@@ -275,6 +275,10 @@ public class MvRewritePreprocessor {
             // means there is no plan with view
             return;
         }
+        Set<String> viewNames = logicalViewScanOperators.stream()
+                .map(op -> op.getTable().getName()).collect(Collectors.toSet());
+        logMVPrepare(connectContext, "[ViewBasedRewrite] There are {} view scan operators in the query plan",
+                viewNames);
         // optimize logical plan with view
         OptExpression optViewScanExpressions = MvUtils.optimizeViewPlan(
                 logicalPlanWithViewInline, connectContext, requiredColumns, columnRefFactory);
@@ -307,9 +311,13 @@ public class MvRewritePreprocessor {
 
             // add a projection to make predicate push-down rules work.
             Projection projection = viewScanOperator.getProjection();
-            LogicalProjectOperator projectOperator = new LogicalProjectOperator(projection.getColumnRefMap());
-            OptExpression projectionExpr = OptExpression.create(projectOperator, viewScanExpr);
-            return projectionExpr;
+            if (projection != null) {
+                LogicalProjectOperator projectOperator = new LogicalProjectOperator(projection.getColumnRefMap());
+                OptExpression projectionExpr = OptExpression.create(projectOperator, viewScanExpr);
+                return projectionExpr;
+            } else {
+                return viewScanExpr;
+            }
         } else {
             for (OptExpression input : logicalTree.getInputs()) {
                 OptExpression newInput = extractLogicalPlanWithView(input, viewScans);
