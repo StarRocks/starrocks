@@ -263,5 +263,10 @@ INSERT INTO t (event_time)
 SELECT DATE_ADD(NOW(), INTERVAL d hour)
 FROM table(generate_series(0, 8)) AS g(d);
 
+<<<<<<< HEAD
 SHOW PARTITION FROM t;
 ```
+=======
+SHOW PARTITIONS FROM t;
+```
+>>>>>>> 2f1531970a ([Doc]Fixed syntax error of pre-create partition example (#62726))
