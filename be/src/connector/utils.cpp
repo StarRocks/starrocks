@@ -40,8 +40,6 @@ StatusOr<std::string> HiveUtils::make_partition_name(
     return ss.str();
 }
 
-<<<<<<< HEAD
-=======
 template <typename T>
 StatusOr<std::string> HiveUtils::format_decimal_value(T value, int scale) {
     if (scale < 0) {
@@ -163,7 +161,6 @@ StatusOr<std::string> HiveUtils::iceberg_column_value(const TypeDescriptor& type
     return value;
 }
 
->>>>>>> 771e8fd8d7 ([BugFix] fix thread unsafe gmtime to gmtime_r (#60483))
 std::vector<formats::FileColumnId> IcebergUtils::generate_parquet_field_ids(
         const std::vector<TIcebergSchemaField>& fields) {
     std::vector<formats::FileColumnId> file_column_ids(fields.size());
