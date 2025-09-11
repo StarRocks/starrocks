@@ -17,16 +17,10 @@ package com.starrocks.sql.optimizer.rule.transformation.materialization.rule;
 
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
-import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.OperatorType;
-import com.starrocks.sql.optimizer.operator.logical.LogicalFilterOperator;
-import com.starrocks.sql.optimizer.operator.logical.LogicalJoinOperator;
-import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
-import com.starrocks.sql.optimizer.operator.logical.LogicalOperator;
-import com.starrocks.sql.optimizer.operator.logical.LogicalProjectOperator;
-import com.starrocks.sql.optimizer.operator.logical.LogicalScanOperator;
 import com.starrocks.sql.optimizer.operator.pattern.Pattern;
 import com.starrocks.sql.optimizer.rule.RuleType;
+import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;
 
 /**
  *  OnlyJoinRule is used to match SPJ query pattern and rewrite it by mv.
@@ -42,34 +36,6 @@ public class OnlyJoinRule extends BaseMaterializedViewRewriteRule {
         return INSTANCE;
     }
 
-    public static boolean isLogicalSPJ(OptExpression root) {
-        if (root == null) {
-            return false;
-        }
-        Operator operator = root.getOp();
-        if (!(operator instanceof LogicalOperator)) {
-            return false;
-        }
-        if (!(operator instanceof LogicalScanOperator)
-                && !(operator instanceof LogicalProjectOperator)
-                && !(operator instanceof LogicalFilterOperator)
-                && !(operator instanceof LogicalJoinOperator)) {
-            return false;
-        }
-        if (operator instanceof LogicalOlapScanOperator) {
-            LogicalOlapScanOperator olapScanOperator = (LogicalOlapScanOperator) operator;
-            if (olapScanOperator.isSample()) {
-                return false;
-            }
-        }
-        for (OptExpression child : root.getInputs()) {
-            if (!isLogicalSPJ(child)) {
-                return false;
-            }
-        }
-        return true;
-    }
-
     @Override
     public boolean check(OptExpression input, OptimizerContext context) {
         // NOTE:
@@ -77,7 +43,7 @@ public class OnlyJoinRule extends BaseMaterializedViewRewriteRule {
         // 2. Don't limit the input must contain a join because it may be a single table query but we still can rewrite it
         //    in this rule, because of a multi table plan after some rules(eg: FineGrainedRangePredicateRule) may
         //    become a single table plan.
-        if (!isLogicalSPJ(input)) {
+        if (!MvUtils.isLogicalSPJ(input)) {
             return false;
         }
         return super.check(input, context);
