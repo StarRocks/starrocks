@@ -39,27 +39,16 @@ alter_clause1[, alter_clause2, ...]
 - comment: 修改表的注释。**从 3.1 版本开始支持。**
 - partition: 修改分区属性，删除分区，增加分区。
 - bucket：修改分桶方式和分桶数量。
-<<<<<<< HEAD
-- column: 增加列，删除列，调整列顺序，修改列类型。*
+- column: 增加列，删除列，调整列顺序，修改列类型以及注释
 - rollup index: 创建或删除 rollup index。
 - bitmap index: 修改 bitmap index。
-=======
-- column: 增加列，删除列，调整列顺序，修改列类型以及注释
-- rollup: 创建或删除 Rollup。
-- index: 修改索引。
->>>>>>> 524edf4607 ([Doc] Doc for Modifying Column Comment (#62951))
 - swap: 原子替换两张表。
 - compaction: 对指定表或分区手动执行 Compaction（数据版本合并）。**从 3.1 版本开始支持。**
 - drop persistent index: 存算分离下删除主键索引。**从 3.3.9 版本开始支持。**
 
 ## 限制和使用注意事项
 
-<<<<<<< HEAD
-- 在一个ALTER TABLE语句中不能同时对分区、列和汇总索引进行操作。
-- 列注释不能被修改。
-=======
 - 在一个ALTER TABLE语句中不能同时对分区、列和 Rollup 进行操作。
->>>>>>> 524edf4607 ([Doc] Doc for Modifying Column Comment (#62951))
 - 一个表一次只能有一个正在进行的schema change操作。不能同时在一个表上运行两个schema change命令。
 - 对分桶、列和汇总索引的操作是异步操作。任务提交后会立即返回成功消息。可以运行[SHOW ALTER TABLE](SHOW_ALTER.md)命令检查进度，并运行[CANCEL ALTER TABLE](CANCEL_ALTER_TABLE.md)命令取消操作。
 - 对重命名、注释、分区、Bitmap索引和交换的操作是同步操作，命令返回表示执行已完成。
