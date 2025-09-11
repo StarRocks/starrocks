@@ -2337,7 +2337,9 @@ public class AuthorizerStmtVisitor implements AstVisitorExtendInterface<Void, Co
             });
 
             functionRefs.forEach(functionRef -> {
-                List<Function> fns = functionRef.getFunctions();
+                String functionName = functionRef.getFunctionName();
+                List<Function> fns = db.getFunctionsByName(functionName);
+
                 for (Function fn : fns) {
                     try {
                         Authorizer.checkFunctionAction(context,
