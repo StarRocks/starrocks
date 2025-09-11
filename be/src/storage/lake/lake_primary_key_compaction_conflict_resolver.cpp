@@ -60,6 +60,7 @@ Status LakePrimaryKeyCompactionConflictResolver::segment_iterator(
     params.new_version = _metadata->version();
     params.delvec_loader = delvec_loader.get();
     params.index = _index;
+    params.skip_pk_index_update = _skip_pk_index_update;
     return handler(params, segment_iters, [&](uint32_t rssid, const DelVectorPtr& dv, uint32_t num_dels) {
         (*_segment_id_to_add_dels)[rssid] += num_dels;
         _delvecs->emplace_back(rssid, dv);

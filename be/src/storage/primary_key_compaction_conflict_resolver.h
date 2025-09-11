@@ -33,6 +33,7 @@ struct CompactConflictResolveParams {
     int64_t new_version = 0;
     DelvecLoader* delvec_loader = 0;
     PrimaryIndex* index = 0;
+    bool skip_pk_index_update = false;
 };
 
 class PrimaryKeyCompactionConflictResolver {

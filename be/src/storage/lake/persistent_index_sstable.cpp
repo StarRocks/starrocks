@@ -27,7 +27,7 @@
 namespace starrocks::lake {
 
 Status PersistentIndexSstable::init(std::unique_ptr<RandomAccessFile> rf, const PersistentIndexSstablePB& sstable_pb,
-                                    Cache* cache, bool need_filter) {
+                                    Cache* cache, TabletManager* tablet_mgr, int64_t tablet_id, bool need_filter) {
     sstable::Options options;
     if (need_filter) {
         _filter_policy.reset(const_cast<sstable::FilterPolicy*>(sstable::NewBloomFilterPolicy(10)));
@@ -39,6 +39,15 @@ Status PersistentIndexSstable::init(std::unique_ptr<RandomAccessFile> rf, const 
     _sst.reset(table);
     _rf = std::move(rf);
     _sstable_pb.CopyFrom(sstable_pb);
+    // load delvec
+    if (_sstable_pb.has_delvec()) {
+        // load delvec
+        SegmentReadOptions seg_options;
+        auto delvec_loader = std::make_unique<LakeDelvecLoader>(tablet_mgr, nullptr, true /* fill cache */,
+                                                                seg_options.lake_io_opts);
+        RETURN_IF_ERROR(delvec_loader->load(TabletSegmentId(tablet_id, _sstable_pb.shared_rssid()),
+                                            _sstable_pb.shared_version(), &_delvec));
+    }
     return Status::OK();
 }
 
@@ -90,6 +99,22 @@ Status PersistentIndexSstable::multi_get(const Slice* keys, const KeyIndexSet& k
         if (!index_value_with_ver_pb.ParseFromString(index_value_with_vers[i])) {
             return Status::InternalError("parse index value info failed");
         }
+        // Check if this rowid is already filtered by delvec
+        if (_delvec) {
+            if (_delvec->roaring()->contains(index_value_with_ver_pb.values(0).rowid())) {
+                ++i;
+                continue;
+            }
+        }
+        // fill shared rssid & version if have
+        if (_sstable_pb.has_shared_version() && _sstable_pb.shared_version() > 0) {
+            DCHECK(_sstable_pb.has_shared_rssid());
+            for (size_t j = 0; j < index_value_with_ver_pb.values_size(); ++j) {
+                index_value_with_ver_pb.mutable_values(j)->set_rssid(_sstable_pb.shared_rssid());
+                index_value_with_ver_pb.mutable_values(j)->set_version(_sstable_pb.shared_version());
+            }
+        }
+
         if (index_value_with_ver_pb.values_size() > 0) {
             if (version < 0) {
                 values[key_index] = build_index_value(index_value_with_ver_pb.values(0));
