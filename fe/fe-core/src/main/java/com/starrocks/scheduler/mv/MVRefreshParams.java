@@ -66,10 +66,6 @@ public class MVRefreshParams {
         return partitionRefreshStrategy == MaterializedView.PartitionRefreshStrategy.FORCE;
     }
 
-    public boolean isForceCompleteRefresh() {
-        return isForce() && isCompleteRefresh();
-    }
-
     public boolean isNonTentativeForce() {
         return isForce() && !isTentative;
     }

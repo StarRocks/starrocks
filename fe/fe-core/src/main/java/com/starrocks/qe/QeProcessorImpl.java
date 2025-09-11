@@ -200,7 +200,7 @@ public final class QeProcessorImpl implements QeProcessor, MemoryTrackable {
             LOG.debug("ReportExecStatus(): fragment_instance_id={}, query_id={}, backend num: {}, ip: {}",
                     DebugUtil.printId(params.fragment_instance_id), DebugUtil.printId(params.query_id),
                     params.backend_num, beAddr);
-            LOG.debug("params: {}", params);
+            LOG.trace("params: {}", params);
         }
         final TReportExecStatusResult result = new TReportExecStatusResult();
         final QueryInfo info = coordinatorMap.get(params.query_id);
