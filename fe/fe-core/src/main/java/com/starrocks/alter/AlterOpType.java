@@ -70,6 +70,9 @@ public enum AlterOpType {
     ALTER_TAG,
     ALTER_TABLE_OPERATION,
 
+    // ALTER AUTO_INCREMENT counter
+    ALTER_AUTO_INCREMENT,
+
     // dynamic tablet split
     SPLIT_TABLET,
 
@@ -96,5 +99,4 @@ public enum AlterOpType {
     public boolean needCheckCapacity() {
         return this == ADD_ROLLUP || this == SCHEMA_CHANGE || this == ADD_PARTITION || this == OPTIMIZE;
     }
-
 }
