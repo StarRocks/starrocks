@@ -96,8 +96,8 @@ revoke apply on masking policy mp from u1;
 -- !result
 show grants for u1;
 -- result:
-'u1'@'%'	default_catalog	GRANT DELETE, DROP, INSERT, SELECT, ALTER, EXPORT, UPDATE ON ALL TABLES IN DATABASE sys TO USER 'u1'@'%'
-'u1'@'%'	default_catalog	GRANT DELETE, DROP, INSERT, SELECT, ALTER, EXPORT, UPDATE ON TABLE test_masking_policy_grant.t0 TO USER 'u1'@'%'
+'u1'@'%'	default_catalog	GRANT DELETE, DROP, INSERT, SELECT, ALTER, EXPORT, UPDATE, REFRESH ON ALL TABLES IN DATABASE sys TO USER 'u1'@'%'
+'u1'@'%'	default_catalog	GRANT DELETE, DROP, INSERT, SELECT, ALTER, EXPORT, UPDATE, REFRESH ON TABLE test_masking_policy_grant.t0 TO USER 'u1'@'%'
 'u1'@'%'	default_catalog	GRANT IMPERSONATE ON USER 'root'@'%' TO USER 'u1'@'%'
 -- !result
 execute as u1 with no revert;
@@ -227,8 +227,8 @@ revoke apply on row access policy rp from u2;
 -- !result
 show grants for u2;
 -- result:
-'u2'@'%'	default_catalog	GRANT DELETE, DROP, INSERT, SELECT, ALTER, EXPORT, UPDATE ON ALL TABLES IN DATABASE sys TO USER 'u2'@'%'
-'u2'@'%'	default_catalog	GRANT DELETE, DROP, INSERT, SELECT, ALTER, EXPORT, UPDATE ON TABLE test_row_access_policy_grant.t0 TO USER 'u2'@'%'
+'u2'@'%'	default_catalog	GRANT DELETE, DROP, INSERT, SELECT, ALTER, EXPORT, UPDATE, REFRESH ON ALL TABLES IN DATABASE sys TO USER 'u2'@'%'
+'u2'@'%'	default_catalog	GRANT DELETE, DROP, INSERT, SELECT, ALTER, EXPORT, UPDATE, REFRESH ON TABLE test_row_access_policy_grant.t0 TO USER 'u2'@'%'
 'u2'@'%'	default_catalog	GRANT IMPERSONATE ON USER 'root'@'%' TO USER 'u2'@'%'
 -- !result
 execute as u2 with no revert;
