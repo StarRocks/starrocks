@@ -14,7 +14,7 @@
 
 package com.starrocks.http;
 
-import autovalue.shaded.com.google.common.common.collect.Lists;
+import com.google.common.collect.Lists;
 import com.starrocks.common.Config;
 import com.starrocks.common.Pair;
 import com.starrocks.ha.FrontendNodeType;

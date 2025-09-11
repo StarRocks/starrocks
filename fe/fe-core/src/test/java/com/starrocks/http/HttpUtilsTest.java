@@ -14,9 +14,6 @@
 
 package com.starrocks.http;
 
-import com.starrocks.common.Pair;
-import com.starrocks.server.GlobalStateMgr;
-import mockit.Expectations;
 import mockit.Mock;
 import mockit.MockUp;
 import org.apache.http.HttpHeaders;
@@ -25,7 +22,6 @@ import org.apache.http.client.methods.CloseableHttpResponse;
 import org.apache.http.client.methods.HttpUriRequest;
 import org.apache.http.entity.StringEntity;
 import org.apache.http.impl.client.CloseableHttpClient;
-import org.apache.http.protocol.HttpContext;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
