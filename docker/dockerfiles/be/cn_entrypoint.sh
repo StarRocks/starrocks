@@ -175,7 +175,7 @@ fi
 update_conf_from_configmap
 collect_env_info
 add_self $svc_name || exit $?
-trap exit_clean SIGTERM
+trap exit_clean SIGTERM EXIT
 
 log_stderr "run start_cn.sh"
 
