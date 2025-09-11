@@ -42,9 +42,9 @@ BrpcStubCache::~BrpcStubCache() {
     }
 
     for (auto& pool : pools_to_cleanup) {
-        pool->_cleanup_task->unschedule(_pipeline_timer);
+        (void)_pipeline_timer->unschedule(pool->_cleanup_task.get());
     }
-
+    std::lock_guard<SpinLock> l(_lock);
     _stub_map.clear();
 }
 
@@ -54,14 +54,14 @@ std::shared_ptr<PInternalService_RecoverableStub> BrpcStubCache::get_stub(const 
     auto stub_pool = _stub_map.seek(endpoint);
     if (stub_pool == nullptr) {
         auto new_pool = std::make_shared<StubPool>();
-        new_pool->_cleanup_task = new EndpointCleanupTask<BrpcStubCache>(this, endpoint);
+        new_pool->_cleanup_task = std::make_shared<EndpointCleanupTask<BrpcStubCache>>(this, endpoint);
         _stub_map.insert(endpoint, new_pool);
         stub_pool = _stub_map.seek(endpoint);
     }
 
-    if (_pipeline_timer->unschedule((*stub_pool)->_cleanup_task) != TIMER_TASK_RUNNING) {
+    if (_pipeline_timer->unschedule((*stub_pool)->_cleanup_task.get()) != TIMER_TASK_RUNNING) {
         timespec tm = butil::seconds_from_now(config::brpc_stub_expire_s);
-        auto status = _pipeline_timer->schedule((*stub_pool)->_cleanup_task, tm);
+        auto status = _pipeline_timer->schedule((*stub_pool)->_cleanup_task.get(), tm);
         if (!status.ok()) {
             LOG(WARNING) << "Failed to schedule brpc cleanup task: " << endpoint;
         }
@@ -107,7 +107,7 @@ BrpcStubCache::StubPool::StubPool() : _idx(-1) {
 
 BrpcStubCache::StubPool::~StubPool() {
     _stubs.clear();
-    SAFE_DELETE(_cleanup_task);
+    _cleanup_task.reset();
 }
 
 std::shared_ptr<PInternalService_RecoverableStub> BrpcStubCache::StubPool::get_or_create(
@@ -147,9 +147,10 @@ HttpBrpcStubCache::~HttpBrpcStubCache() {
     }
 
     for (auto& task : task_to_cleanup) {
-        task->unschedule(_pipeline_timer);
+        _pipeline_timer->unschedule(task.get());
     }
 
+    std::lock_guard<SpinLock> l(_lock);
     _stub_map.clear();
 }
 
@@ -226,9 +227,10 @@ LakeServiceBrpcStubCache::~LakeServiceBrpcStubCache() {
     }
 
     for (auto& task : task_to_cleanup) {
-        task->unschedule(_pipeline_timer);
+        _pipeline_timer->unschedule(task.get());
     }
 
+    std::lock_guard<SpinLock> l(_lock);
     _stub_map.clear();
 }
 

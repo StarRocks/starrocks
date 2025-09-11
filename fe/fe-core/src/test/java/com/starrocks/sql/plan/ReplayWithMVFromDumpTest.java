@@ -221,12 +221,14 @@ public class ReplayWithMVFromDumpTest extends ReplayFromDumpTestBase {
 
     @Test
     public void testViewDeltaRewriter() throws Exception {
+        String fileContent = getDumpInfoFromFile("query_dump/view_delta");
+        QueryDumpInfo queryDumpInfo = getDumpInfoFromJson(fileContent);
+        SessionVariable sessionVariable = queryDumpInfo.getSessionVariable();
         QueryDebugOptions debugOptions = new QueryDebugOptions();
         debugOptions.setEnableQueryTraceLog(true);
-        connectContext.getSessionVariable().setQueryDebugOptions(debugOptions.toString());
+        sessionVariable.setQueryDebugOptions(debugOptions.toString());
         Pair<QueryDumpInfo, String> replayPair =
-                getPlanFragment(getDumpInfoFromFile("query_dump/view_delta"),
-                        connectContext.getSessionVariable(), TExplainLevel.NORMAL);
+                getPlanFragment(fileContent, sessionVariable, TExplainLevel.NORMAL);
         Assertions.assertTrue(replayPair.second.contains("mv_yyf_trade_water3"), replayPair.second);
     }
 
@@ -238,7 +240,7 @@ public class ReplayWithMVFromDumpTest extends ReplayFromDumpTestBase {
         Pair<QueryDumpInfo, String> replayPair =
                 getPlanFragment(getDumpInfoFromFile("query_dump/materialized-view/count_star_rewrite"),
                         connectContext.getSessionVariable(), TExplainLevel.NORMAL);
-        assertContains(replayPair.second, "tbl_mock_067");
+        assertContains(replayPair.second, "tbl_mock_065");
         // NOTE: OUTPUT EXPRS must refer to coalesce column ref
         assertContains(replayPair.second, " OUTPUT EXPRS:59: count\n" +
                 "  PARTITION: RANDOM\n" +
@@ -298,5 +300,27 @@ public class ReplayWithMVFromDumpTest extends ReplayFromDumpTestBase {
                             connectContext.getSessionVariable(), TExplainLevel.NORMAL);
             PlanTestBase.assertContains(replayPair.second, "tbl_mock_239", "MaterializedView: true");
         }
+    }
+
+    @Test
+    public void testViewBasedRewrite3() throws Exception {
+        String fileContent = getDumpInfoFromFile("query_dump/view_based_rewrite1");
+        QueryDumpInfo queryDumpInfo = getDumpInfoFromJson(fileContent);
+        SessionVariable sessionVariable = queryDumpInfo.getSessionVariable();
+        QueryDebugOptions debugOptions = new QueryDebugOptions();
+        debugOptions.setEnableQueryTraceLog(true);
+        sessionVariable.setQueryDebugOptions(debugOptions.toString());
+        Pair<QueryDumpInfo, String> replayPair = getPlanFragment(fileContent, sessionVariable, TExplainLevel.NORMAL);
+        String plan = replayPair.second;
+        PlanTestBase.assertContains(plan, "single_mv_ads_biz_customer_combine_td_for_task_2y");
+    }
+
+    @Test
+    public void testChooseBest() throws Exception {
+        Pair<QueryDumpInfo, String> replayPair =
+                getPlanFragment(getDumpInfoFromFile("query_dump/materialized-view/choose_best_mv1"),
+                        connectContext.getSessionVariable(), TExplainLevel.NORMAL);
+        String plan = replayPair.second;
+        PlanTestBase.assertContains(plan, "rocketview_v4", "rocketview_v4_mv2");
     }
 }
