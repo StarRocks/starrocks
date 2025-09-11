@@ -14,8 +14,13 @@
 
 package com.starrocks.http;
 
+import autovalue.shaded.com.google.common.common.collect.Lists;
+import com.starrocks.common.Config;
 import com.starrocks.common.Pair;
+import com.starrocks.ha.FrontendNodeType;
 import com.starrocks.http.rest.RestBaseAction;
+import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.system.Frontend;
 import com.starrocks.thrift.TNetworkAddress;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.handler.codec.http.HttpHeaderNames;
@@ -24,6 +29,7 @@ import io.netty.handler.codec.http.HttpHeaders;
 import io.netty.handler.codec.http.HttpMethod;
 import io.netty.handler.codec.http.HttpRequest;
 import io.netty.handler.codec.http.HttpVersion;
+import mockit.Expectations;
 import mockit.Mock;
 import mockit.MockUp;
 import org.junit.jupiter.api.Assertions;
@@ -112,6 +118,59 @@ public class RestBaseActionTest {
         List<Pair<String, Integer>> fronts = restBaseAction.getOtherAliveFe();
 
         Assertions.assertEquals(fronts.size(), 1);
+    }
+
+    @Test
+    public void verifyGetEmptyOtherAliveFronts() {
+
+        new Expectations(GlobalStateMgr.getCurrentState().getNodeMgr()) {
+            {
+
+                GlobalStateMgr.getCurrentState();
+                minTimes = 1;
+                result = null;
+            }
+        };
+
+        List<Pair<String, Integer>> fronts = restBaseAction.getOtherAliveFe();
+
+        Assertions.assertEquals(fronts.size(), 0);
+    }
+
+    @Test
+    public void verifyGetNullCurrentFe() {
+
+        new Expectations(GlobalStateMgr.getCurrentState()) {
+            {
+
+                GlobalStateMgr.getCurrentState();
+                minTimes = 1;
+                result = null;
+            }
+        };
+
+        Pair<String, Integer> currentFe = restBaseAction.getCurrentFe();
+
+        Assertions.assertNull(currentFe);
+    }
+
+    @Test
+    public void testGetAllAliveFe() {
+        Frontend frontend = new Frontend(0, FrontendNodeType.LEADER, "", "localhost", 0);
+        frontend.setAlive(true);
+        new Expectations(GlobalStateMgr.getCurrentState().getNodeMgr()) {
+            {
+                GlobalStateMgr.getCurrentState().getNodeMgr().getAllFrontends();
+                minTimes = 1;
+                result = Lists.newArrayList(frontend);
+            }
+        };
+
+        List<Pair<String, Integer>> result = restBaseAction.getAllAliveFe();
+
+        Assertions.assertEquals(1, result.size());
+        Assertions.assertEquals(frontend.getHost(), result.get(0).first);
+        Assertions.assertEquals(Config.http_port, result.get(0).second);
     }
 
 }
