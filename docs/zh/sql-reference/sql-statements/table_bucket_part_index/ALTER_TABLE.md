@@ -5,8 +5,6 @@ displayed_sidebar: docs
 
 # ALTER TABLE
 
-import Beta from '../../../_assets/commonMarkdown/_beta.mdx'
-
 ## 功能
 
 该语句用于修改已有表，包括：
@@ -565,8 +563,6 @@ ALTER TABLE orders ORDER BY (dt,revenue,state);
 #### STRUCT 类型列增删字段（MODIFY COLUMN ADD/DROP FIELD）
 
 自 v3.2.10 及 v3.3.2 起，StarRocks 支持向 STRUCT 类型列增删字段。该字段可以为嵌套 STRUCT 类型或存在于 ARRAY 类型中。
-
-<Beta />
 
 语法：
 
