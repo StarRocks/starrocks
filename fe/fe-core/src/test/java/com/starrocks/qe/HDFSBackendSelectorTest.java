@@ -224,7 +224,7 @@ public class HDFSBackendSelectorTest {
 
         variance = 0.4 / 100 * scanRangeNumber * scanRangeSize;
         double actual = 0;
-        for (Map.Entry<ComputeNode, Long> entry : selector.reBalanceBytesPerComputeNode.entrySet()) {
+        for (Map.Entry<ComputeNode, Long> entry : selector.reBalancedBytesPerComputeNode.entrySet()) {
             System.out.printf("%s -> %d bytes re-balance\n", entry.getKey(), entry.getValue());
             actual = actual + entry.getValue();
         }
