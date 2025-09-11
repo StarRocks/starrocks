@@ -215,7 +215,7 @@ public class HDFSBackendSelector implements BackendSelector {
 
     @VisibleForTesting
     public HashRing makeHashRing() {
-        Set<ComputeNode> nodes = assignedScansPerComputeNode.keySet();
+        Set<ComputeNode> nodes = assignedBytesPerComputeNode.keySet();
         HashRing hashRing = null;
         String hashAlgorithm = ConnectContext.get() != null ? ConnectContext.get().getSessionVariable().
                 getHdfsBackendSelectorHashAlgorithm() : "consistent";
