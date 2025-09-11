@@ -30,7 +30,7 @@ StarRocks Tableau JDBC Connector 是一个用于 Tableau Desktop 和 Tableau Ser
    - macOS：`~/Library/Tableau/Drivers`
    - Windows：`C:\Program Files\Tableau\Drivers`
 
-3. 下载 [StarRocks JDBC Connector](https://releases.starrocks.io/resources/starrocks_jdbc-v1.2.0_signed.taco) 文件。
+3. 下载 [StarRocks JDBC Connector](https://exchange.tableau.com/products/1079) 文件。
 4. 将 Connector 文件存放在以下目录：
 
    - macOS：`~/Documents/My Tableau Repository/Connectors`
