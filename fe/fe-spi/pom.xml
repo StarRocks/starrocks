@@ -12,7 +12,6 @@
     </parent>
 
     <artifactId>fe-spi</artifactId>
-    <version>1.0.0</version>
     <packaging>jar</packaging>
 
     <properties>
