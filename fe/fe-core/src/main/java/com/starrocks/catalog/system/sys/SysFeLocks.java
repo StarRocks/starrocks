@@ -25,7 +25,6 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Table;
-import com.starrocks.catalog.UserIdentity;
 import com.starrocks.catalog.system.SystemId;
 import com.starrocks.catalog.system.SystemTable;
 import com.starrocks.common.Config;
@@ -74,19 +73,12 @@ public class SysFeLocks {
     @VisibleForTesting
     public static TFeLocksRes listLocks(TFeLocksReq request, boolean authenticate) throws TException {
         TAuthInfo auth = request.getAuth_info();
-        UserIdentity currentUser;
-        if (auth.isSetCurrent_user_ident()) {
-            currentUser = UserIdentityUtils.fromThrift(auth.getCurrent_user_ident());
-        } else {
-            currentUser = UserIdentity.createAnalyzedUserIdentWithIp(auth.getUser(), auth.getUser_ip());
-        }
+        ConnectContext context = new ConnectContext();
+        UserIdentityUtils.setAuthInfoFromThrift(context, auth);
 
         // authorize
         try {
             if (authenticate) {
-                ConnectContext context = new ConnectContext();
-                context.setCurrentUserIdentity(currentUser);
-                context.setCurrentRoleIds(currentUser);
                 Authorizer.checkSystemAction(context, PrivilegeType.OPERATE);
             }
         } catch (AccessDeniedException e) {
