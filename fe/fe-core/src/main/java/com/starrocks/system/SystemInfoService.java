@@ -472,19 +472,22 @@ public class SystemInfoService implements GsonPostProcessable {
                     NetUtils.getHostPortInAccessibleFormat(host, heartbeatPort) + "]");
         }
 
-        // check if warehouseName is right
-        Warehouse wh = GlobalStateMgr.getCurrentState().getWarehouseMgr().getWarehouseAllowNull(dropComputeNode.getWarehouseId());
-        if (wh != null) {
-            if (!warehouse.equalsIgnoreCase(wh.getName())) {
-                throw new DdlException("compute node [" + host + ":" + heartbeatPort +
-                        "] does not exist in warehouse " + warehouse);
+        if (!Strings.isNullOrEmpty(warehouse)) {
+            // check if warehouseName is right
+            Warehouse wh = GlobalStateMgr.getCurrentState().getWarehouseMgr()
+                    .getWarehouseAllowNull(dropComputeNode.getWarehouseId());
+            if (wh != null) {
+                if (!warehouse.equalsIgnoreCase(wh.getName())) {
+                    throw new DdlException("compute node [" + host + ":" + heartbeatPort +
+                            "] does not exist in warehouse " + warehouse);
+                }
+                if (!Strings.isNullOrEmpty(cnGroupName)) {
+                    // validate cnGroupName if provided
+                    wh.validateRemoveNodeFromCNGroup(dropComputeNode, cnGroupName);
+                }
             }
-            if (!Strings.isNullOrEmpty(cnGroupName)) {
-                // validate cnGroupName if provided
-                wh.validateRemoveNodeFromCNGroup(dropComputeNode, cnGroupName);
-            }
+            // Allow drop compute node if `wh` is null for whatever reason
         }
-        // Allow drop compute node if `wh` is null for whatever reason
 
         // try to record the historical backend nodes
         tryUpdateHistoricalComputeNodes(dropComputeNode.getWarehouseId(), dropComputeNode.getWorkerGroupId());
@@ -585,22 +588,25 @@ public class SystemInfoService implements GsonPostProcessable {
                     NetUtils.getHostPortInAccessibleFormat(host, heartbeatPort) + "]");
         }
 
-        // check if warehouseName is right
-        Warehouse wh = GlobalStateMgr.getCurrentState().getWarehouseMgr().getWarehouseAllowNull(droppedBackend.getWarehouseId());
-        if (wh != null) {
-            if (!warehouse.equalsIgnoreCase(wh.getName())) {
-                LOG.warn("warehouseName in dropBackends is not equal, " +
-                                "warehouseName from dropBackendClause is {}, while actual one is {}",
-                        warehouse, wh.getName());
-                throw new DdlException("backend [" + host + ":" + heartbeatPort +
-                        "] does not exist in warehouse " + warehouse);
+        if (!Strings.isNullOrEmpty(warehouse)) {
+            // check if warehouseName is right
+            Warehouse wh = GlobalStateMgr.getCurrentState().getWarehouseMgr()
+                    .getWarehouseAllowNull(droppedBackend.getWarehouseId());
+            if (wh != null) {
+                if (!warehouse.equalsIgnoreCase(wh.getName())) {
+                    LOG.warn("warehouseName in dropBackends is not equal, " +
+                                    "warehouseName from dropBackendClause is {}, while actual one is {}",
+                            warehouse, wh.getName());
+                    throw new DdlException("backend [" + host + ":" + heartbeatPort +
+                            "] does not exist in warehouse " + warehouse);
+                }
+                if (!Strings.isNullOrEmpty(cnGroupName)) {
+                    // validate cnGroupName if provided
+                    wh.validateRemoveNodeFromCNGroup(droppedBackend, cnGroupName);
+                }
             }
-            if (!Strings.isNullOrEmpty(cnGroupName)) {
-                // validate cnGroupName if provided
-                wh.validateRemoveNodeFromCNGroup(droppedBackend, cnGroupName);
-            }
+            // allow dropping the node if `wh` is null for whatever reason
         }
-        // allow dropping the node if `wh` is null for whatever reason
 
         if (needCheckWithoutForce) {
             try {
