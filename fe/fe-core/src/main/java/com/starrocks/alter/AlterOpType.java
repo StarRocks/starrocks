@@ -70,11 +70,11 @@ public enum AlterOpType {
     ALTER_TAG,
     ALTER_TABLE_OPERATION,
 
-    // dynamic tablet split
-    SPLIT_TABLET,
-
     // ALTER AUTO_INCREMENT counter
     ALTER_AUTO_INCREMENT,
+
+    // dynamic tablet split
+    SPLIT_TABLET,
 
     INVALID_OP; // INVALID_OP must be the last one
 
