@@ -18,6 +18,8 @@ import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.DeltaLakeTable;
 import com.starrocks.sql.optimizer.validate.ValidateException;
+import io.delta.kernel.data.ArrayValue;
+import io.delta.kernel.data.ColumnVector;
 import io.delta.kernel.engine.Engine;
 import io.delta.kernel.internal.SnapshotImpl;
 import io.delta.kernel.internal.actions.Metadata;
@@ -35,6 +37,7 @@ import org.apache.hadoop.conf.Configuration;
 import org.junit.Assert;
 import org.junit.Rule;
 import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
 import org.junit.rules.ExpectedException;
 
 import java.util.List;
@@ -42,6 +45,9 @@ import java.util.List;
 import static io.delta.kernel.internal.util.ColumnMapping.COLUMN_MAPPING_MODE_KEY;
 import static io.delta.kernel.internal.util.ColumnMapping.COLUMN_MAPPING_MODE_NAME;
 import static io.delta.kernel.internal.util.ColumnMapping.COLUMN_MAPPING_MODE_NONE;
+import static org.hamcrest.MatcherAssert.assertThat;
+import static org.hamcrest.Matchers.containsString;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 public class DeltaUtilsTest {
     @Rule
@@ -99,5 +105,139 @@ public class DeltaUtilsTest {
         Assert.assertEquals("catalog0", deltaLakeTable.getCatalogName());
         Assert.assertEquals("db0", deltaLakeTable.getCatalogDBName());
         Assert.assertEquals("table0", deltaLakeTable.getCatalogTableName());
+    }
+
+    @Test
+    public void testLoadPartitionColumnNamesEmptyPartitions(@Mocked SnapshotImpl snapshot,
+                                                            @Mocked Metadata metadata,
+                                                            @Mocked ArrayValue partitionColumns,
+                                                            @Mocked ColumnVector columnVector) {
+        new Expectations() {
+            {
+                snapshot.getMetadata();
+                result = metadata;
+
+                metadata.getPartitionColumns();
+                result = partitionColumns;
+
+                partitionColumns.getSize();
+                result = 0;
+
+                partitionColumns.getElements();
+                result = columnVector;
+            }
+        };
+
+        List<String> result = DeltaUtils.loadPartitionColumnNames(snapshot);
+        Assertions.assertTrue(result.isEmpty());
+    }
+
+    @Test
+    public void testLoadPartitionColumnNamesMultiplePartitions(@Mocked SnapshotImpl snapshot,
+                                                               @Mocked Metadata metadata,
+                                                               @Mocked ArrayValue partitionColumns,
+                                                               @Mocked ColumnVector columnVector) {
+        new Expectations() {
+            {
+                snapshot.getMetadata();
+                result = metadata;
+
+                metadata.getPartitionColumns();
+                result = partitionColumns;
+
+                partitionColumns.getSize();
+                result = 3;
+
+                partitionColumns.getElements();
+                result = columnVector;
+
+                columnVector.isNullAt(0);
+                result = false;
+                columnVector.getString(0);
+                result = "year";
+
+                columnVector.isNullAt(1);
+                result = false;
+                columnVector.getString(1);
+                result = "month";
+
+                columnVector.isNullAt(2);
+                result = false;
+                columnVector.getString(2);
+                result = "day";
+            }
+        };
+
+        List<String> result = DeltaUtils.loadPartitionColumnNames(snapshot);
+        Assertions.assertEquals(3, result.size());
+        Assertions.assertEquals("year", result.get(0));
+        Assertions.assertEquals("month", result.get(1));
+        Assertions.assertEquals("day", result.get(2));
+    }
+
+    @Test
+    public void testLoadPartitionColumnNames_NullPartitionColumn(@Mocked SnapshotImpl snapshot,
+                                                                 @Mocked Metadata metadata,
+                                                                 @Mocked ArrayValue partitionColumns,
+                                                                 @Mocked ColumnVector columnVector) {
+        new Expectations() {
+            {
+                snapshot.getMetadata();
+                result = metadata;
+
+                metadata.getPartitionColumns();
+                result = partitionColumns;
+
+                partitionColumns.getSize();
+                result = 1;
+
+                partitionColumns.getElements();
+                result = columnVector;
+
+                columnVector.isNullAt(0);
+                result = true;
+            }
+        };
+
+        Throwable exception = assertThrows(IllegalArgumentException.class, () ->
+                DeltaUtils.loadPartitionColumnNames(snapshot));
+        assertThat(exception.getMessage(), containsString("Expected a non-null partition column name"));
+    }
+
+    @Test
+    public void testLoadPartitionColumnNamesUpperCasePartitionColumn(@Mocked SnapshotImpl snapshot,
+                                                                     @Mocked Metadata metadata,
+                                                                     @Mocked ArrayValue partitionColumns,
+                                                                     @Mocked ColumnVector columnVector) {
+        new Expectations() {
+            {
+                snapshot.getMetadata();
+                result = metadata;
+
+                metadata.getPartitionColumns();
+                result = partitionColumns;
+
+                partitionColumns.getSize();
+                result = 2;
+
+                partitionColumns.getElements();
+                result = columnVector;
+
+                columnVector.isNullAt(0);
+                result = false;
+                columnVector.getString(0);
+                result = "YEAR";
+
+                columnVector.isNullAt(1);
+                result = false;
+                columnVector.getString(1);
+                result = "MONTH";
+            }
+        };
+
+        List<String> result = DeltaUtils.loadPartitionColumnNames(snapshot);
+        Assertions.assertEquals(2, result.size());
+        Assertions.assertEquals("YEAR", result.get(0));
+        Assertions.assertEquals("MONTH", result.get(1));
     }
 }
