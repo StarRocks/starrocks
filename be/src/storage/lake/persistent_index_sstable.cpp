@@ -44,7 +44,7 @@ Status PersistentIndexSstable::init(std::unique_ptr<RandomAccessFile> rf, const 
     if (_sstable_pb.has_delvec()) {
         if (delvec) {
             // If delvec is already provided, use it directly.
-            _delvec = delvec;
+            _delvec = std::move(delvec);
         } else {
             // otherwise, load delvec from file
             SegmentReadOptions seg_options;

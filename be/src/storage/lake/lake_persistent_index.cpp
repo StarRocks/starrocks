@@ -290,7 +290,7 @@ Status LakePersistentIndex::ingest_sst(const FileMetaPB& sst_meta, uint32_t rssi
         return Status::InternalError("Block cache is null.");
     }
     RETURN_IF_ERROR(sstable->init(std::move(rf), sstable_pb, block_cache->cache(), _tablet_mgr, _tablet_id,
-                                  true /* need filter */, delvec));
+                                  true /* need filter */, std::move(delvec)));
     _sstables.emplace_back(std::move(sstable));
     TRACE_COUNTER_INCREMENT("ingest_sst_times", 1);
     return Status::OK();

@@ -209,7 +209,7 @@ Status LakePrimaryIndex::ingest_sst(const FileMetaPB& sst_meta, uint32_t rssid, 
 
     auto* lake_persistent_index = dynamic_cast<LakePersistentIndex*>(_persistent_index.get());
     if (lake_persistent_index != nullptr) {
-        return lake_persistent_index->ingest_sst(sst_meta, rssid, version, is_compaction, delvec);
+        return lake_persistent_index->ingest_sst(sst_meta, rssid, version, is_compaction, std::move(delvec));
     } else {
         return Status::InternalError("Persistent index is not a LakePersistentIndex.");
     }
