@@ -64,10 +64,10 @@ public class HttpUtils {
         return SingletonHolder.INSTANCE;
     }
 
-    private static final PoolingHttpClientConnectionManager clientConnectionManager;
+    private static final PoolingHttpClientConnectionManager CLIENT_CONNECTION_MANAGER;
 
     private static CloseableHttpClient getHttpClient() {
-        Objects.requireNonNull(clientConnectionManager, "clientConnectionManager is not initialized");
+        Objects.requireNonNull(CLIENT_CONNECTION_MANAGER, "clientConnectionManager is not initialized");
 
         RequestConfig  requestConfig = RequestConfig.custom().setCookieSpec(CookieSpecs.IGNORE_COOKIES)
                 .setExpectContinueEnabled(Boolean.TRUE)
@@ -80,7 +80,7 @@ public class HttpUtils {
                 .build();
 
         return HttpClients.custom()
-                .setConnectionManager(clientConnectionManager)
+                .setConnectionManager(CLIENT_CONNECTION_MANAGER)
                 .setDefaultRequestConfig(requestConfig)
                 .setRetryHandler(new DefaultHttpRequestRetryHandler(5, false))
                 .build();
@@ -109,7 +109,7 @@ public class HttpUtils {
         } catch (KeyStoreException e) {
             LOG.error("Got KeyStoreException when SSLContext init", e);
         }
-        clientConnectionManager = poolingHttpClientConnectionManager;
+        CLIENT_CONNECTION_MANAGER = poolingHttpClientConnectionManager;
         LOG.info(" initial http client successfully");
     }
 
