@@ -201,14 +201,14 @@ Status LakePrimaryIndex::apply_opcompaction(const TabletMetadata& metadata,
     return Status::OK();
 }
 
-Status LakePrimaryIndex::ingest_sst(const FileMetaPB& sst_meta, uint32_t rssid, int64_t version) {
+Status LakePrimaryIndex::ingest_sst(const FileMetaPB& sst_meta, uint32_t rssid, int64_t version, bool is_compaction) {
     if (!_enable_persistent_index) {
         return Status::OK();
     }
 
     auto* lake_persistent_index = dynamic_cast<LakePersistentIndex*>(_persistent_index.get());
     if (lake_persistent_index != nullptr) {
-        return lake_persistent_index->ingest_sst(sst_meta, rssid, version);
+        return lake_persistent_index->ingest_sst(sst_meta, rssid, version, is_compaction);
     } else {
         return Status::InternalError("Persistent index is not a LakePersistentIndex.");
     }
