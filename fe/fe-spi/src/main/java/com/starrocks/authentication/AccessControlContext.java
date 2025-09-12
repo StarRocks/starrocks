@@ -16,11 +16,17 @@ package com.starrocks.authentication;
 
 import com.starrocks.catalog.UserIdentity;
 
+import java.util.HashSet;
+import java.util.Set;
+
 /**
- * AuthenticationContext encapsulates authentication and authorization information for a connection session.
+ * AccessControlContext encapsulates authentication and authorization information for a connection session.
  * This includes user identity, roles, groups, and authentication-related metadata.
+ * <p>
+ * AccessControlContext unifies both the previous AuthenticationContext and AuthorizationContext
+ * so that identity, auth metadata, role/group memberships, and access-control flags live together.
  */
-public class AuthenticationContext {
+public class AccessControlContext {
     // `qualifiedUser` is the user used when the user establishes connection and authentication.
     // It is the real user used for this connection.
     // Different from the `currentUserIdentity` authentication user of execute as,
@@ -56,7 +62,16 @@ public class AuthenticationContext {
     // Auth Data salt generated at mysql negotiate used for password salting
     private byte[] authDataSalt = null;
 
-    public AuthenticationContext() {
+    // groups of current user
+    private Set<String> groups = new HashSet<>();
+
+    // currentRoleIds is the role that has taken effect in the current session.
+    private Set<Long> currentRoleIds = new HashSet<>();
+
+    // Bypass the authorizer check for certain cases
+    private boolean bypassAuthorizerCheck = false;
+
+    public AccessControlContext() {
         // Default constructor
     }
 
@@ -123,4 +138,30 @@ public class AuthenticationContext {
     public void setSecurityIntegration(String securityIntegration) {
         this.securityIntegration = securityIntegration;
     }
+
+    public Set<Long> getCurrentRoleIds() {
+        return currentRoleIds;
+    }
+
+    public void setCurrentRoleIds(Set<Long> currentRoleIds) {
+        this.currentRoleIds = currentRoleIds;
+    }
+
+    public Set<String> getGroups() {
+        return groups;
+    }
+
+    public void setGroups(Set<String> groups) {
+        this.groups = groups;
+    }
+
+    public boolean isBypassAuthorizerCheck() {
+        return bypassAuthorizerCheck;
+    }
+
+    public void setBypassAuthorizerCheck(boolean bypassAuthorizerCheck) {
+        this.bypassAuthorizerCheck = bypassAuthorizerCheck;
+    }
 }
+
+

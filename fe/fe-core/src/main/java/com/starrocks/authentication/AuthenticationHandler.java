@@ -60,12 +60,12 @@ public class AuthenticationHandler {
          * For example, a meaningless authentication of OAuth2 may cause a long wait.
          */
         AuthenticationResult authenticationResult;
-        authenticationResult = authenticateWithNative(context.getAuthenticationContext(), user, remoteHost, authResponse);
+        authenticationResult = authenticateWithNative(context.getAccessControlContext(), user, remoteHost, authResponse);
 
         // If the user does not exist in the native authentication method, authentication is performed in Security Integration
         if (authenticationResult == null) {
             authenticationResult =
-                    authenticateWithSecurityIntegration(context.getAuthenticationContext(), user, remoteHost, authResponse);
+                    authenticateWithSecurityIntegration(context.getAccessControlContext(), user, remoteHost, authResponse);
         }
 
         if (authenticationResult == null) {
@@ -76,7 +76,7 @@ public class AuthenticationHandler {
         return authenticationResult.authenticatedUser;
     }
 
-    private static AuthenticationResult authenticateWithNative(AuthenticationContext authContext, String user, String remoteHost,
+    private static AuthenticationResult authenticateWithNative(AccessControlContext authContext, String user, String remoteHost,
                                                                byte[] authResponse)
             throws AuthenticationException {
         AuthenticationMgr authenticationMgr = GlobalStateMgr.getCurrentState().getAuthenticationMgr();
@@ -119,7 +119,7 @@ public class AuthenticationHandler {
         }
     }
 
-    private static AuthenticationResult authenticateWithSecurityIntegration(AuthenticationContext authContext,
+    private static AuthenticationResult authenticateWithSecurityIntegration(AccessControlContext authContext,
                                                                             String user,
                                                                             String remoteHost,
                                                                             byte[] authResponse) throws AuthenticationException {

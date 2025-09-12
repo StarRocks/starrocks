@@ -98,7 +98,7 @@ public class AuthenticationHandlerTest {
         ldapGroupProvider.setUserToGroupCache(groups);
 
         ConnectContext context = new ConnectContext();
-        AuthenticationContext authCtx = context.getAuthenticationContext();
+        AccessControlContext authCtx = context.getAccessControlContext();
         AuthenticationHandler.authenticate(context, "ldap_user", "%", "\0".getBytes(StandardCharsets.UTF_8));
 
         Assertions.assertEquals("ldap_user", authCtx.getQualifiedUser());

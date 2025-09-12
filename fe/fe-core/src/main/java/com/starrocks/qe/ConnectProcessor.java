@@ -421,7 +421,7 @@ public class ConnectProcessor {
                         return;
                     }
 
-                    authenticationProvider.checkLoginSuccess(ctx.getConnectionId(), ctx.getAuthenticationContext());
+                    authenticationProvider.checkLoginSuccess(ctx.getConnectionId(), ctx.getAccessControlContext());
                 } catch (AuthenticationException authenticationException) {
                     if (authenticationException.getErrorCode() != null) {
                         ErrorReport.report(authenticationException.getErrorCode(), authenticationException.getMessage());
