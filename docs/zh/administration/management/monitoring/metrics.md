@@ -1634,6 +1634,46 @@ displayed_sidebar: docs
 - 单位：个
 - 描述：Pipeline Prepare 线程池中排队的任务数量（瞬时值）。
 
+### starrocks_be_exec_state_report_active_threads
+
+- 单位：个
+- 描述：汇报 Fragment 实例执行状态的线程池中正在执行的任务数（瞬时值）。
+
+### starrocks_be_exec_state_report_running_threads
+
+- 单位：个
+- 描述：汇报 Fragment 实例执行状态的线程池的线程数（瞬时值），最小为 1，最大为 2。
+
+### starrocks_be_exec_state_report_threadpool_size
+
+- 单位：个
+- 描述：汇报 Fragment 实例执行状态的线程池的最大线程数（瞬时值），默认为 2。
+
+### starrocks_be_exec_state_report_queue_count
+
+- 单位：个
+- 描述：汇报 Fragment 实例执行状态的线程池中排队的任务数（瞬时值），最大为 1000。
+
+### starrocks_be_priority_exec_state_report_active_threads
+
+- 单位：个
+- 描述：汇报 Fragment 实例最终执行状态的线程池中正在执行的任务数（瞬时值）。
+
+### starrocks_be_priority_exec_state_report_running_threads
+
+- 单位：个
+- 描述：汇报 Fragment 实例最终执行状态的线程池的线程数（瞬时值），最小为 1，最大为 2。
+
+### starrocks_be_priority_exec_state_report_threadpool_size
+
+- 单位：个
+- 描述：汇报 Fragment 实例最终执行状态的线程池的最大线程数（瞬时值），默认为 2。
+
+### starrocks_be_priority_exec_state_report_queue_count
+
+- 单位：个
+- 描述：汇报 Fragment 实例最终执行状态的线程池中排队的任务数（瞬时值），最大为 2147483647。
+
 ### starrocks_fe_routine_load_jobs
 
 - 单位：个
