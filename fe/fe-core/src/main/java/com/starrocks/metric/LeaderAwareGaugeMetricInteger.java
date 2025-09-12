@@ -14,10 +14,13 @@
 
 package com.starrocks.metric;
 
-public abstract class LeaderAwareGaugeMetric<T> extends LeaderAwareMetric<T> {
+public abstract class LeaderAwareGaugeMetricInteger extends LeaderAwareGaugeMetric<Integer> {
+    public LeaderAwareGaugeMetricInteger(String name, MetricUnit unit, String description) {
+        super(name, unit, description);
+    }
 
-    public LeaderAwareGaugeMetric(String name, MetricUnit unit, String description) {
-        super(name, MetricType.GAUGE, unit, description);
+    @Override
+    public Integer getValueNonLeader() {
+        return 0;
     }
 }
-
