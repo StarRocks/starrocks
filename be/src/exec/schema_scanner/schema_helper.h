@@ -116,6 +116,9 @@ public:
     static Status get_users(const SchemaScannerState& state, const TGetUsersRequest& request,
                             TGetUsersResponse* response);
 
+    static Status listRecycleBinCatalogs(const SchemaScannerState& state, const TListRecycleBinCatalogsParams& req,
+                                         TListRecycleBinCatalogsResult* res);
+
     static Status get_column_stats_usage(const SchemaScannerState& state, const TColumnStatsUsageReq& var_params,
                                          TColumnStatsUsageRes* var_result);
 

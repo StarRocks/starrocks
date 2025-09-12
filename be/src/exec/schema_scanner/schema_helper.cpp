@@ -226,6 +226,12 @@ Status SchemaHelper::get_users(const SchemaScannerState& state, const TGetUsersR
             state, [&request, &response](FrontendServiceConnection& client) { client->getUsers(*response, request); });
 }
 
+Status SchemaHelper::listRecycleBinCatalogs(const SchemaScannerState& state, const TListRecycleBinCatalogsParams& req,
+                                            TListRecycleBinCatalogsResult* res) {
+    return _call_rpc(state,
+                     [&req, &res](FrontendServiceConnection& client) { client->listRecycleBinCatalogs(*res, req); });
+}
+
 Status SchemaHelper::get_column_stats_usage(const SchemaScannerState& state, const TColumnStatsUsageReq& var_params,
                                             TColumnStatsUsageRes* var_result) {
     return _call_rpc(state, [&var_params, &var_result](FrontendServiceConnection& client) {

@@ -1,0 +1,31 @@
+-- name: test_recyclebin_catalogs
+CREATE DATABASE db_${uuid0};
+-- result:
+-- !result
+USE db_${uuid0};
+-- result:
+-- !result
+CREATE TABLE IF NOT EXISTS db_${uuid0} (k1 int(11) NULL, k2 datetime NULL) ENGINE=OLAP UNIQUE KEY(`k1`) PARTITION BY RANGE(`k1`) (PARTITION p111 VALUES [('-1000'), ('111')),PARTITION p222 VALUES [('111'), ('222')),PARTITION p333 VALUES [('222'), ('333')),PARTITION p1000 VALUES [('333'), ('1000'))) DISTRIBUTED BY HASH(`k1`) BUCKETS 3 PROPERTIES ("replication_num" = "1");
+-- result:
+-- !result
+ALTER TABLE db_${uuid0} DROP PARTITION p1000;
+-- result:
+-- !result
+select count(*) from information_schema.recyclebin_catalogs where type='Partition' and db_id='(select db_id from information_schema.recyclebin_catalogs where type = 'Database' and name = 'db_${uuid0}')';
+-- result:
+1
+-- !result
+DROP TABLE db_${uuid0};
+-- result:
+-- !result
+select count(*) from information_schema.recyclebin_catalogs where type='Table' and db_id='(select db_id from information_schema.recyclebin_catalogs where type = 'Database' and name = 'db_${uuid0}')';
+-- result:
+1
+-- !result
+DROP DATABASE db_${uuid0};
+-- result:
+-- !result
+select count(*) from information_schema.recyclebin_catalogs where type='Database' and name='db_${uuid0}';
+-- result:
+1
+-- !result
