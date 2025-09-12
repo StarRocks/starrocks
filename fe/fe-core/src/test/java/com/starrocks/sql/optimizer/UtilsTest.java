@@ -31,6 +31,7 @@ import com.starrocks.common.FeConstants;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.CreateDbStmt;
+import com.starrocks.sql.optimizer.operator.Projection;
 import com.starrocks.sql.optimizer.operator.logical.LogicalJoinOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalPaimonScanOperator;
@@ -384,6 +385,67 @@ public class UtilsTest {
             // The number i belongs to the range (out/2, out].
             Assertions.assertTrue(out >= i);
             Assertions.assertTrue(out / 2 < i);
+        }
+    }
+
+    @Test
+    public void testMergeWithProject1() {
+        Map<ColumnRefOperator, ScalarOperator> columnRefMap1 = new HashMap<>();
+        Map<ColumnRefOperator, ScalarOperator> columnRefMap2 = new HashMap<>();
+        for (int i = 0; i < 10; i++) {
+            ColumnRefOperator midColRef;
+            {
+                String colName = "v" + (i + 1);
+                ColumnRefOperator colRef = new ColumnRefOperator(i, Type.BIGINT, colName, true);
+                midColRef = new ColumnRefOperator(i + 50, Type.BIGINT, colName, true);
+                columnRefMap1.put(colRef, midColRef);
+            }
+            {
+                String colName = "v" + (i + 100);
+                ColumnRefOperator colRef = new ColumnRefOperator(i, Type.BIGINT, colName, true);
+                columnRefMap2.put(midColRef, colRef);
+            }
+        }
+        Projection projection1 = new Projection(columnRefMap1);
+        Projection projection2 = new Projection(columnRefMap2);
+        Projection mergedProjection = Utils.mergeWithProject(projection1, projection2);
+        Assertions.assertEquals(10, mergedProjection.getColumnRefMap().size());
+        for (int i = 0; i < 10; i++) {
+            ColumnRefOperator colRef = new ColumnRefOperator(i, Type.BIGINT, "v" + (i + 1), true);
+            Assertions.assertTrue(mergedProjection.getColumnRefMap().containsKey(colRef));
+            ScalarOperator scalarOperator = mergedProjection.getColumnRefMap().get(colRef);
+            Assertions.assertTrue(scalarOperator instanceof ColumnRefOperator);
+            Assertions.assertEquals("v" + (i + 100), ((ColumnRefOperator) scalarOperator).getName());
+        }
+    }
+
+    @Test 
+    public void testMergeWithProject2() {
+        Map<ColumnRefOperator, ScalarOperator> columnRefMap1 = new HashMap<>();
+        Map<ColumnRefOperator, ScalarOperator> columnRefMap2 = new HashMap<>();
+        for (int i = 0; i < 10; i++) {
+            ColumnRefOperator midColRef;
+            {
+                String colName = "v" + (i + 1);
+                ColumnRefOperator colRef = new ColumnRefOperator(i, Type.BIGINT, colName, true);
+                midColRef = new ColumnRefOperator(i + 50, Type.BIGINT, colName, true);
+                columnRefMap1.put(colRef, midColRef);
+            }
+            {
+                String colName = "v" + (i + 100);
+                ColumnRefOperator colRef = new ColumnRefOperator(i, Type.BIGINT, colName, true);
+                columnRefMap2.put(midColRef, colRef);
+            }
+        }
+        Projection projection2 = new Projection(columnRefMap2);
+        Map<ColumnRefOperator, ScalarOperator> mergedColRefMap = Utils.mergeWithProject(columnRefMap1, projection2);
+        Assertions.assertEquals(10, mergedColRefMap.size());
+        for (int i = 0; i < 10; i++) {
+            ColumnRefOperator colRef = new ColumnRefOperator(i, Type.BIGINT, "v" + (i + 1), true);
+            Assertions.assertTrue(mergedColRefMap.containsKey(colRef));
+            ScalarOperator scalarOperator = mergedColRefMap.get(colRef);
+            Assertions.assertTrue(scalarOperator instanceof ColumnRefOperator);
+            Assertions.assertEquals("v" + (i + 100), ((ColumnRefOperator) scalarOperator).getName());
         }
     }
 }
