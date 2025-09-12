@@ -15,7 +15,6 @@
 package com.starrocks.sql.common;
 
 import com.google.gson.annotations.SerializedName;
-import com.starrocks.common.FeConstants;
 import com.starrocks.common.profile.Tracers;
 import com.starrocks.persist.gson.GsonUtils;
 import org.apache.logging.log4j.util.Strings;
@@ -33,18 +32,19 @@ public class QueryDebugOptions {
     @SerializedName(value = "enableQueryTraceLog")
     private boolean enableQueryTraceLog = false;
 
+    @Deprecated
     @SerializedName(value = "mvRefreshTraceMode")
     private String mvRefreshTraceMode;
 
+    @Deprecated
     @SerializedName(value = "mvRefreshTraceModule")
     private String mvRefreshTraceModule;
 
-    public QueryDebugOptions() {
-        // To make unit test more stable, add retry times for refreshing materialized views.
-        if (FeConstants.runningUnitTest) {
-            this.maxRefreshMaterializedViewRetryNum = 3;
-        }
-    }
+    @SerializedName(value = "traceMode")
+    private String traceMode;
+
+    @SerializedName(value = "traceModule")
+    private String traceModule;
 
     public boolean isEnableNormalizePredicateAfterMVRewrite() {
         return enableNormalizePredicateAfterMVRewrite;
@@ -70,12 +70,20 @@ public class QueryDebugOptions {
         this.enableQueryTraceLog = enableQueryTraceLog;
     }
 
-    public Tracers.Mode getMvRefreshTraceMode() {
-        return Strings.isEmpty(mvRefreshTraceMode) ? Tracers.Mode.TIMER : Tracers.Mode.valueOf(mvRefreshTraceMode);
+    public Tracers.Mode getTraceMode() {
+        return Strings.isEmpty(traceMode) ? Tracers.Mode.TIMER : Tracers.Mode.valueOf(traceMode.toUpperCase());
     }
 
-    public Tracers.Module getMvRefreshTraceModule() {
-        return Strings.isEmpty(mvRefreshTraceModule) ? Tracers.Module.BASE : Tracers.Module.valueOf(mvRefreshTraceModule);
+    public Tracers.Module getTraceModule() {
+        return Strings.isEmpty(traceModule) ? Tracers.Module.BASE : Tracers.Module.valueOf(traceModule.toUpperCase());
+    }
+
+    public void setTraceMode(String traceMode) {
+        this.traceMode = traceMode;
+    }
+
+    public void setTraceModule(String traceModule) {
+        this.traceModule = traceModule;
     }
 
     public static QueryDebugOptions getInstance() {

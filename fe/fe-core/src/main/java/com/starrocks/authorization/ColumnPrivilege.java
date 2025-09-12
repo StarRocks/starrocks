@@ -25,7 +25,6 @@ import com.starrocks.catalog.system.SystemTable;
 import com.starrocks.connector.metadata.MetadataTable;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.sql.StatementPlanner;
 import com.starrocks.sql.analyzer.Analyzer;
 import com.starrocks.sql.analyzer.Authorizer;
 import com.starrocks.sql.ast.AstTraverser;
@@ -107,7 +106,7 @@ public class ColumnPrivilege {
              */
             ColumnRefFactory columnRefFactory = new ColumnRefFactory();
             LogicalPlan logicalPlan;
-            MVTransformerContext mvTransformerContext = StatementPlanner.makeMVTransformerContext(context.getSessionVariable());
+            MVTransformerContext mvTransformerContext = MVTransformerContext.of(context, true);
             TransformerContext transformerContext = new TransformerContext(columnRefFactory, context, mvTransformerContext);
             logicalPlan = new RelationTransformer(transformerContext).transformWithSelectLimit(stmt.getQueryRelation());
 
