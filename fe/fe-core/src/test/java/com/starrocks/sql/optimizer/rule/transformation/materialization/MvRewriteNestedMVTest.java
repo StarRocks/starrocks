@@ -71,6 +71,7 @@ public class MvRewriteNestedMVTest extends MvRewriteTestBase {
         dropMv("test", "nested_mv_1");
         dropMv("test", "nested_mv_2");
         dropMv("test", "nested_mv_3");
+        starRocksAssert.dropTable("t1");
         starRocksAssert.dropTable("nest_base_table_1");
     }
 
@@ -184,5 +185,12 @@ public class MvRewriteNestedMVTest extends MvRewriteTestBase {
         connectContext.getSessionVariable().setEnableFineGrainedRangePredicate(true);
         String plan = getFragmentPlan(sql);
         PlanTestBase.assertContains(plan, "date_mv", "month_mv", "year_mv");
+        starRocksAssert.dropTable("t0");
+        starRocksAssert.dropTable("t1");
+        starRocksAssert.dropMaterializedView("flat_mv");
+        starRocksAssert.dropMaterializedView("join_filter_mv");
+        starRocksAssert.dropMaterializedView("date_mv");
+        starRocksAssert.dropMaterializedView("month_mv");
+        starRocksAssert.dropMaterializedView("year_mv");
     }
 }
