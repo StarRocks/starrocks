@@ -37,12 +37,12 @@ void BinaryColumnBase<T>::check_or_die() const {
     CHECK_EQ(_bytes.size(), _offsets.back());
     size_t size = this->size();
     for (size_t i = 0; i < size; i++) {
-        CHECK_GE(_offsets[i + 1], _offsets[i]);
+        DCHECK_GE(_offsets[i + 1], _offsets[i]);
     }
     if (_slices_cache) {
         for (size_t i = 0; i < size; i++) {
-            CHECK_EQ(_slices[i].data, get_slice(i).data);
-            CHECK_EQ(_slices[i].size, get_slice(i).size);
+            DCHECK_EQ(_slices[i].data, get_slice(i).data);
+            DCHECK_EQ(_slices[i].size, get_slice(i).size);
         }
     }
 }
