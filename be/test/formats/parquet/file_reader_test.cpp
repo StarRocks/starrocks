@@ -22,6 +22,7 @@
 
 #include "cache/block_cache/block_cache.h"
 #include "cache/block_cache/test_cache_utils.h"
+#include "cache/lrucache_engine.h"
 #include "cache/starcache_engine.h"
 #include "column/column_helper.h"
 #include "column/fixed_length_column.h"
@@ -3347,8 +3348,8 @@ TEST_F(FileReaderTest, TestStructSubfieldNoDecodeNotOutput) {
 }
 
 TEST_F(FileReaderTest, TestReadFooterCache) {
-    DiskCacheOptions options = TestCacheUtils::create_simple_options(256 * KB, 100 * MB);
-    auto local_cache = std::make_shared<StarCacheEngine>();
+    MemCacheOptions options{.mem_space_size = 100 * MB};
+    auto local_cache = std::make_shared<LRUCacheEngine>();
     ASSERT_OK(local_cache->init(options));
     auto cache = std::make_shared<StoragePageCache>(local_cache.get());
 

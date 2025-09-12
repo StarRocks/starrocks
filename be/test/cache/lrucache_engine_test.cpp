@@ -191,9 +191,4 @@ TEST_F(LRUCacheEngineTest, test_metrics) {
     ASSERT_EQ(metrics.capacity, _capacity);
     ASSERT_EQ(metrics.object_item_count, 0);
 }
-
-TEST_F(LRUCacheEngineTest, adjust_inline_cache_count_limit) {
-    ASSERT_TRUE(_cache->update_inline_cache_count_limit(0).is_not_supported());
-}
-
 } // namespace starrocks

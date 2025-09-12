@@ -233,13 +233,6 @@ TEST_F(BlockCacheTest, update_cache_quota) {
     }
 
     {
-        size_t new_mem_quota = 2 * 1024 * 1024;
-        ASSERT_TRUE(local_cache->update_mem_quota(new_mem_quota, false).ok());
-        auto metrics = local_cache->cache_metrics();
-        ASSERT_EQ(metrics.mem_quota_bytes, new_mem_quota);
-    }
-
-    {
         size_t new_disk_quota = 100 * 1024 * 1024;
         std::vector<DirSpace> dir_spaces;
         dir_spaces.push_back({.path = cache_dir, .size = new_disk_quota});
