@@ -182,8 +182,6 @@ public class MvRewriteNestedMVTest extends MvRewriteTestBase {
         connectContext.getSessionVariable().setNestedMvRewriteMaxLevel(10);
         connectContext.getSessionVariable().setMaterializedViewRewriteMode("force");
         connectContext.getSessionVariable().setEnableFineGrainedRangePredicate(true);
-        connectContext.getSessionVariable().setEnableMaterializedViewTimeSeriesPushDownRewrite(false);
-        connectContext.getSessionVariable().setEnableMaterializedViewPushDownRewrite(false);
         String plan = getFragmentPlan(sql);
         PlanTestBase.assertContains(plan, "date_mv", "month_mv", "year_mv");
     }
