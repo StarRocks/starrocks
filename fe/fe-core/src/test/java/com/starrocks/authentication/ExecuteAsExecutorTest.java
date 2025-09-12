@@ -104,7 +104,7 @@ public class ExecuteAsExecutorTest {
         ConnectContext context = new ConnectContext();
         AuthenticationHandler.authenticate(context, "impersonate_user", "%", MysqlPassword.EMPTY_PASSWORD);
 
-        Assertions.assertEquals("impersonate_user", context.getAuthenticationContext().getQualifiedUser());
+        Assertions.assertEquals("impersonate_user", context.getAccessControlContext().getQualifiedUser());
         Assertions.assertEquals(Set.of("group1", "group2"), context.getGroups());
 
         ExecuteAsStmt executeAsStmt = new ExecuteAsStmt(new UserRef("u1", "%"), false);
