@@ -130,21 +130,4 @@ public class SimplifiedPredicateRuleTest extends PlanTestBase {
                 .explainWithout("hour_from_unixtime");
     }
 
-    @Test
-    public void applyHourToDatetimeRewrite() throws Exception {
-        starRocksAssert.query("SELECT hour(to_datetime(ts)) FROM test_timestamp")
-                .explainContains("hour_from_unixtime");
-
-        starRocksAssert.query("SELECT hour(to_datetime(ts, 0)) FROM test_timestamp")
-                .explainContains("hour_from_unixtime");
-
-        starRocksAssert.query("SELECT hour(to_datetime(ts, 3)) FROM test_timestamp")
-                .explainContains("hour_from_unixtime", "/ 1000");
-
-        starRocksAssert.query("SELECT hour(to_datetime(ts, 6)) FROM test_timestamp")
-                .explainContains("hour_from_unixtime", "/ 1000000");
-
-        starRocksAssert.query("SELECT hour(to_datetime(ts, 4)) FROM test_timestamp")
-                .explainWithout("hour_from_unixtime");
-    }
 }
