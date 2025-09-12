@@ -139,30 +139,8 @@ drop_my_self()
 
 exit_clean()
 {
-    log_stderr "Receives signal to exit ..."
-    pidfile=$STARROCKS_HOME/bin/cn.pid
-    if ! test -f $pidfile ; then
-        log_stderr "Can't find $pidfile!"
-    else
-        pid=`cat $pidfile`
-        if [[ "x$pid" == "x" ]] ; then
-            log_stderr "Empty pid file!"
-        else
-            log_stderr "detect cn pid $pid exists ..."
-            while true
-            do
-                if ps -p $pid &>/dev/null ; then
-                    log_stderr "cn process $pid is still alive ..."
-                    sleep $PROBE_INTERVAL
-                else
-                    log_stderr "cn process $pid dead."
-                    break;
-                fi
-            done
-        fi
-    fi
-    # remove myself from FE
-    drop_my_self $svc_name
+    log_stderr "Got SIGTERM, exit ..."
+    exit 143
 }
 
 svc_name=$1
@@ -185,12 +163,8 @@ if [[ "x$LOG_CONSOLE" == "x1" ]] ; then
     addition_args="--logconsole"
 fi
 $STARROCKS_HOME/bin/start_cn.sh $addition_args
-ret=$?
-if [[ $ret -ne 0 && "x$LOG_CONSOLE" != "x1" ]] ; then
-    nol=50
-    log_stderr "Last $nol lines of cn.INFO ..."
-    tail -n $nol $STARROCKS_HOME/log/cn.INFO
-    log_stderr "Last $nol lines of cn.out ..."
-    tail -n $nol $STARROCKS_HOME/log/cn.out
-fi
-exit $ret
+
+# the reason why we need to sleep here is to avoid the pod being killed by k8s
+# before the preStop hook is exited.
+# 120 is the default value of terminationGracePeriodSeconds
+sleep 120
