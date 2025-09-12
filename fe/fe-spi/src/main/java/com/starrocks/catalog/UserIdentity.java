@@ -57,8 +57,8 @@ public class UserIdentity implements Writable, GsonPostProcessable {
      * destroyed after disconnected, currently it's used by ldap security integration where we use external ldap server
      * to authenticate and the metadata of a user is not stored on StarRocks.
      */
+    @SerializedName("ephemeral")
     private boolean ephemeral = false;
-    Set<Long> mappedRoleIds;
 
     public static final UserIdentity ROOT;
 

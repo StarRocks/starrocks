@@ -136,7 +136,8 @@ public class AuthorizationAnalyzer {
                     for (UserRef user : users) {
                         UserIdentity userIdentity = null;
                         if (user != null) {
-                            userIdentity = new UserIdentity(user.getUser(), user.getHost(), user.isDomain());
+                            // Consider external user flag when creating UserIdentity
+                            userIdentity = new UserIdentity(user.getUser(), user.getHost(), user.isDomain(), user.isExternal());
                         }
                         objectList.add(authorizationManager.generateUserObject(ObjectType.USER, userIdentity));
                     }
@@ -194,7 +195,10 @@ public class AuthorizationAnalyzer {
             } else {
                 for (UserRef userRef : stmt.getUserPrivilegeObjectList()) {
                     AuthenticationAnalyzer.analyzeUser(userRef);
-                    AuthenticationAnalyzer.checkUserExist(userRef, true);
+                    // If userRef is external, skip existence check since external users don't exist in local storage
+                    if (!userRef.isExternal()) {
+                        AuthenticationAnalyzer.checkUserExist(userRef, true);
+                    }
                     userIdentities.add(userRef);
                 }
             }

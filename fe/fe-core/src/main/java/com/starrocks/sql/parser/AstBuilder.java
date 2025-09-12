@@ -6784,8 +6784,14 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
     @Override
     public ParseNode visitExecuteAsStatement(com.starrocks.sql.parser.StarRocksParser.ExecuteAsStatementContext context) {
         boolean allowRevert = context.WITH() == null;
+        boolean isExternal = context.EXTERNAL() != null;
         // we only support WITH NO REVERT for now
-        return new ExecuteAsStmt((UserRef) visit(context.user()), allowRevert, createPos(context));
+        UserRef userRef = (UserRef) visit(context.user());
+        // Create UserRef with external flag if EXTERNAL keyword is present
+        if (isExternal) {
+            userRef = new UserRef(userRef.getUser(), userRef.getHost(), userRef.isDomain(), true, userRef.getPos());
+        }
+        return new ExecuteAsStmt(userRef, allowRevert, createPos(context));
     }
 
     @Override
@@ -6982,8 +6988,15 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
     public ParseNode visitGrantOnUser(com.starrocks.sql.parser.StarRocksParser.GrantOnUserContext context) {
         List<String> privList = Collections.singletonList("IMPERSONATE");
         GrantRevokeClause clause = (GrantRevokeClause) visit(context.grantRevokeClause());
+        // Check if EXTERNAL keyword is present
+        boolean isExternal = context.EXTERNAL() != null;
         List<UserRef> users = context.user().stream()
-                .map(user -> (UserRef) visit(user)).collect(toList());
+                .map(user -> {
+                    UserRef userRef = (UserRef) visit(user);
+                    // Create a new UserRef with isExternal based on the EXTERNAL keyword
+                    return new UserRef(userRef.getUser(), userRef.getHost(), 
+                                     userRef.isDomain(), isExternal, userRef.getPos());
+                }).collect(toList());
         GrantRevokePrivilegeObjects objects = new GrantRevokePrivilegeObjects();
         objects.setUserPrivilegeObjectList(users);
         return new GrantPrivilegeStmt(privList, "USER", clause, objects,
@@ -6994,8 +7007,15 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
     public ParseNode visitRevokeOnUser(com.starrocks.sql.parser.StarRocksParser.RevokeOnUserContext context) {
         List<String> privList = Collections.singletonList("IMPERSONATE");
         GrantRevokeClause clause = (GrantRevokeClause) visit(context.grantRevokeClause());
+        // Check if EXTERNAL keyword is present
+        boolean isExternal = context.EXTERNAL() != null;
         List<UserRef> users = context.user().stream()
-                .map(user -> (UserRef) visit(user)).collect(toList());
+                .map(user -> {
+                    UserRef userRef = (UserRef) visit(user);
+                    // Create a new UserRef with isExternal based on the EXTERNAL keyword
+                    return new UserRef(userRef.getUser(), userRef.getHost(), 
+                                     userRef.isDomain(), isExternal, userRef.getPos());
+                }).collect(toList());
         GrantRevokePrivilegeObjects objects = new GrantRevokePrivilegeObjects();
         objects.setUserPrivilegeObjectList(users);
         return new RevokePrivilegeStmt(privList, "USER", clause, objects, createPos(context));

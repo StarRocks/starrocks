@@ -152,7 +152,10 @@ public class AuthenticationAnalyzer {
                 throw new SemanticException("`EXECUTE AS` must use with `WITH NO REVERT` for now!");
             }
             analyzeUser(stmt.getToUser());
-            checkUserExist(stmt.getToUser(), true);
+            // Skip existence check for external users since they don't exist in local storage
+            if (!stmt.getToUser().isExternal()) {
+                checkUserExist(stmt.getToUser(), true);
+            }
             return null;
         }
     }

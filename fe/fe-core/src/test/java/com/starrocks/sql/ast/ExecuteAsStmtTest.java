@@ -26,6 +26,7 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.Analyzer;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.parser.AstBuilder;
+import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.sql.parser.SqlParser;
 import mockit.Expectations;
 import mockit.Mocked;
@@ -34,6 +35,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import java.util.HashSet;
+import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
@@ -57,7 +59,11 @@ public class ExecuteAsStmtTest {
                 minTimes = 0;
                 result = auth;
 
-                GlobalStateMgr.getCurrentState().getAuthorizationMgr().getDefaultRoleIdsByUser((UserIdentity) any);
+                GlobalStateMgr.getCurrentState().getAuthorizationMgr();
+                minTimes = 0;
+                result = authorizationMgr;
+
+                authorizationMgr.getDefaultRoleIdsByUser((UserIdentity) any);
                 minTimes = 0;
                 result = new HashSet<>();
             }
@@ -142,5 +148,97 @@ public class ExecuteAsStmtTest {
             com.starrocks.sql.analyzer.Analyzer.analyze(stmt, ctx);
             Assertions.fail("No exception throws.");
         });
+    }
+
+    @Test
+    public void testExternalUserImpersonate() throws Exception {
+        ConnectContext ctx = new ConnectContext();
+        // Test EXECUTE AS with external user - simplified test without parsing
+        new Expectations(ctx) {
+            {
+                ctx.getSecurityIntegration();
+                minTimes = 0;
+                result = "ldap";
+
+                ctx.getGlobalStateMgr();
+                minTimes = 0;
+                result = globalStateMgr;
+
+                ctx.setGroups((Set<String>) any);
+                minTimes = 1;
+
+                ctx.setCurrentRoleIds((UserIdentity) any, (Set<String>) any);
+                minTimes = 1;
+            }
+        };
+        ctx.setGlobalStateMgr(globalStateMgr);
+
+        // Create external user directly for testing
+        UserRef externalUserRef = new UserRef("alice", "%", false, true, NodePosition.ZERO);
+        ExecuteAsStmt stmt = new ExecuteAsStmt(externalUserRef, false);
+
+        Assertions.assertEquals("alice", stmt.getToUser().getUser());
+        Assertions.assertTrue(stmt.getToUser().isExternal());
+        Assertions.assertEquals("EXECUTE AS 'alice'@'%' WITH NO REVERT", stmt.toString());
+
+        // Execute the statement
+        ExecuteAsExecutor.execute(stmt, ctx);
+
+        // Verify that the user identity is set as ephemeral (external)
+        UserIdentity currentUser = ctx.getCurrentUserIdentity();
+        Assertions.assertEquals("alice", currentUser.getUser());
+        Assertions.assertTrue(currentUser.isEphemeral());
+    }
+
+    @Test
+    public void testNativeUserImpersonate() throws Exception {
+        ConnectContext ctx = new ConnectContext();
+        // Test EXECUTE AS with native user (non-external) - simplified test without parsing
+        new Expectations(ctx) {
+            {
+                ctx.getSecurityIntegration();
+                minTimes = 0;
+                result = "native";
+
+                ctx.getGlobalStateMgr();
+                minTimes = 0;
+                result = globalStateMgr;
+
+                ctx.setGroups((Set<String>) any);
+                minTimes = 0; // Should not be called for native users
+
+                ctx.setCurrentRoleIds((UserIdentity) any, (Set<String>) any);
+                minTimes = 0; // Should not be called for native users
+
+                ctx.updateByUserProperty((UserProperty) any);
+                minTimes = 1;
+            }
+        };
+        
+        new Expectations(auth) {
+            {
+                auth.getUserProperty(anyString);
+                minTimes = 0;
+                result = new UserProperty();
+            }
+        };
+        
+        ctx.setGlobalStateMgr(globalStateMgr);
+
+        // Create native user directly for testing
+        UserRef nativeUserRef = new UserRef("user1", "%", false, false, NodePosition.ZERO);
+        ExecuteAsStmt stmt = new ExecuteAsStmt(nativeUserRef, false);
+        
+        Assertions.assertEquals("user1", stmt.getToUser().getUser());
+        Assertions.assertFalse(stmt.getToUser().isExternal());
+        Assertions.assertEquals("EXECUTE AS 'user1'@'%' WITH NO REVERT", stmt.toString());
+
+        // Execute the statement
+        ExecuteAsExecutor.execute(stmt, ctx);
+
+        // Verify that the user identity is set as non-ephemeral (native)
+        UserIdentity currentUser = ctx.getCurrentUserIdentity();
+        Assertions.assertEquals("user1", currentUser.getUser());
+        Assertions.assertFalse(currentUser.isEphemeral());
     }
 }

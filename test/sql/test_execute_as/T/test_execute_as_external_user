@@ -1,0 +1,55 @@
+-- name: test_execute_as_external_user
+CREATE GROUP PROVIDER `test_execute_as_file_group_provider` PROPERTIES ("group_file_url" = "group_mapping", "type" = "file");
+admin set frontend config ("group_provider"="test_execute_as_file_group_provider");
+
+drop user if exists test_impersonate;
+create user test_impersonate;
+grant impersonate on user root to test_impersonate;
+
+create database if not exists test_execute_as_d1;
+create database if not exists test_execute_as_d2;
+
+drop role if exists r1;
+create role r1;
+grant all on database test_execute_as_d1 to role r1;
+grant impersonate on user test_impersonate to role r1;
+grant r1 to external group r1_group;
+
+drop role if exists r2;
+create role r2;
+grant all on database test_execute_as_d2 to role r2;
+grant impersonate on user test_impersonate to role r2;
+grant r2 to external group r2_group;
+
+grant impersonate on external user u1 to test_impersonate;
+grant impersonate on external user u2 to test_impersonate;
+
+execute as test_impersonate with no revert;
+select current_group();
+select current_role();
+
+execute as external user u1 with no revert;
+show databases;
+select current_group();
+select current_role();
+
+execute as test_impersonate with no revert;
+select current_group();
+select current_role();
+
+execute as external user u2 with no revert;
+show databases;
+select current_group();
+select current_role();
+
+execute as test_impersonate with no revert;
+select current_group();
+select current_role();
+
+execute as root with no revert;
+drop user if exists test_impersonate;
+drop role if exists r1;
+drop role if exists r2;
+drop database if exists test_execute_as_d1;
+drop database if exists test_execute_as_d2;
+drop group provider test_execute_as_file_group_provider;

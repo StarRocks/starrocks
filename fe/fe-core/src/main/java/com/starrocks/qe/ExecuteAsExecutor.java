@@ -47,7 +47,12 @@ public class ExecuteAsExecutor {
 
         UserRef user = stmt.getToUser();
         // Create UserIdentity with ephemeral flag for external users
-        UserIdentity userIdentity = new UserIdentity(user.getUser(), user.getHost(), user.isDomain());
+        UserIdentity userIdentity;
+        if (user.isExternal()) {
+            userIdentity = UserIdentity.createEphemeralUserIdent(user.getUser(), user.getHost());
+        } else {
+            userIdentity = new UserIdentity(user.getUser(), user.getHost(), user.isDomain());
+        }
         ctx.setCurrentUserIdentity(userIdentity);
 
         // Refresh groups and roles for all users based on security integration

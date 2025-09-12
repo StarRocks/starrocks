@@ -1958,7 +1958,7 @@ showAuthenticationStatement
     ;
 
 executeAsStatement
-    : EXECUTE AS user (WITH NO REVERT)?
+    : EXECUTE AS EXTERNAL? USER? user (WITH NO REVERT)?
     ;
 
 createRoleStatement
@@ -2004,10 +2004,9 @@ grantRevokeClause
     ;
 
 grantPrivilegeStatement
-    : GRANT IMPERSONATE ON USER user (',' user)* TO grantRevokeClause (WITH GRANT OPTION)?              #grantOnUser
+    : GRANT IMPERSONATE ON EXTERNAL? USER user (',' user)* TO grantRevokeClause (WITH GRANT OPTION)?    #grantOnUser
     | GRANT privilegeTypeList ON SYSTEM TO grantRevokeClause (WITH GRANT OPTION)?                       #grantOnSystem
     | GRANT privilegeTypeList ON privObjectNameList TO grantRevokeClause (WITH GRANT OPTION)?           #grantOnTableBrief
-
     | GRANT privilegeTypeList ON GLOBAL? FUNCTION privFunctionObjectNameList
         TO grantRevokeClause (WITH GRANT OPTION)?                                                       #grantOnFunc
     | GRANT privilegeTypeList ON privObjectType privObjectNameList
@@ -2018,7 +2017,7 @@ grantPrivilegeStatement
     ;
 
 revokePrivilegeStatement
-    : REVOKE IMPERSONATE ON USER user (',' user)* FROM grantRevokeClause                                #revokeOnUser
+    : REVOKE IMPERSONATE ON EXTERNAL? USER user (',' user)* FROM grantRevokeClause                      #revokeOnUser
     | REVOKE privilegeTypeList ON SYSTEM FROM grantRevokeClause                                         #revokeOnSystem
     | REVOKE privilegeTypeList ON privObjectNameList FROM grantRevokeClause                             #revokeOnTableBrief
     | REVOKE privilegeTypeList ON GLOBAL? FUNCTION privFunctionObjectNameList

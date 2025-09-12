@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.authorization;
 
 import com.google.gson.annotations.SerializedName;
@@ -37,8 +36,8 @@ public class UserPEntryObject implements PEntryObject {
         if (user == null) {
             return new UserPEntryObject(null);
         }
-
-        if (!GlobalStateMgr.getCurrentState().getAuthenticationMgr().doesUserExist(user)) {
+        // For external users (ephemeral users), skip the existence check
+        if (!user.isEphemeral() && !GlobalStateMgr.getCurrentState().getAuthenticationMgr().doesUserExist(user)) {
             throw new PrivObjNotFoundException("cannot find user " + user);
         }
         return new UserPEntryObject(user);
@@ -77,6 +76,10 @@ public class UserPEntryObject implements PEntryObject {
      */
     @Override
     public boolean validate() {
+        // For external users (ephemeral users), skip the validation check
+        if (userIdentity != null && userIdentity.isEphemeral()) {
+            return true;
+        }
         return GlobalStateMgr.getCurrentState().getAuthorizationMgr()
                 .getUserPrivilegeCollectionUnlockedAllowNull(userIdentity) != null;
     }
@@ -134,6 +137,9 @@ public class UserPEntryObject implements PEntryObject {
         if (userIdentity == null) {
             return "ALL USERS";
         } else {
+            if (userIdentity.isEphemeral()) {
+                return "EXTERNAL USER " + userIdentity.toString();
+            }
             return userIdentity.toString();
         }
     }
