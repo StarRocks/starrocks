@@ -162,6 +162,9 @@ public class InputDependenciesChecker implements PlanValidator.Checker {
                 }
                 if (joinOperator.getPredicate() != null) {
                     usedCols.union(joinOperator.getPredicate().getUsedColumns());
+                    if (joinOperator.getPredicateCommonOperators() != null) {
+                        inputCols.union(joinOperator.getPredicateCommonOperators().keySet());
+                    }
                 }
             }
             checkInputCols(inputCols, usedCols, optExpression);
