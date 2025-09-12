@@ -22,7 +22,6 @@ import com.starrocks.sql.optimizer.dump.QueryDumpInfo;
 import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.After;
-import org.junit.Assert;
 import org.junit.Before;
 import org.junit.BeforeClass;
 import org.junit.Test;
@@ -225,7 +224,7 @@ public class ReplayWithMVFromDumpTest extends ReplayFromDumpTestBase {
         sessionVariable.setQueryDebugOptions(debugOptions.toString());
         Pair<QueryDumpInfo, String> replayPair =
                 getPlanFragment(fileContent, sessionVariable, TExplainLevel.NORMAL);
-        Assert.assertTrue(replayPair.second.contains("mv_yyf_trade_water3"), replayPair.second);
+        assertContains(replayPair.second, "mv_yyf_trade_water3");
     }
 
     @Test

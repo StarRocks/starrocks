@@ -101,7 +101,7 @@ public class MaterializedViewOptimizer {
         try {
             // get optimized plan of mv's defined query
             Pair<OptExpression, LogicalPlan> plans = MvUtils.getRuleOptimizedLogicalPlan(stmt, columnRefFactory,
-                            connectContext, optimizerOptions, mvTransformerContext);
+                            connectContext, optimizerConfig, mvTransformerContext);
             if (plans == null) {
                 return new MvPlanContext(false, "No query plan for it");
             }

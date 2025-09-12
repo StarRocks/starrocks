@@ -15,7 +15,6 @@
 package com.starrocks.sql.common;
 
 import com.google.gson.annotations.SerializedName;
-import com.starrocks.common.FeConstants;
 import com.starrocks.common.profile.Tracers;
 import com.starrocks.persist.gson.GsonUtils;
 import org.apache.logging.log4j.util.Strings;
@@ -46,31 +45,6 @@ public class QueryDebugOptions {
 
     @SerializedName(value = "traceModule")
     private String traceModule;
-
-    public static class ExecDebugOption {
-        @SerializedName(value = "plan_node_id")
-        private int planNodeId;
-        @SerializedName(value = "debug_action")
-        private String debugAction;
-        @SerializedName(value = "value")
-        private int value = 0;
-        public TExecDebugOption toThirft() {
-            final TExecDebugOption option = new TExecDebugOption();
-            option.setDebug_node_id(planNodeId);
-            option.setDebug_action(TDebugAction.valueOf(debugAction));
-            option.setValue(value);
-            return option;
-        }
-    }
-    @SerializedName(value = "execDebugOptions")
-    private List<ExecDebugOption> execDebugOptions = Lists.newArrayList();
-
-    public QueryDebugOptions() {
-        // To make unit test more stable, add retry times for refreshing materialized views.
-        if (FeConstants.runningUnitTest) {
-            this.maxRefreshMaterializedViewRetryNum = 3;
-        }
-    }
 
     public boolean isEnableNormalizePredicateAfterMVRewrite() {
         return enableNormalizePredicateAfterMVRewrite;

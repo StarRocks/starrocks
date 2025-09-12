@@ -93,35 +93,4 @@ public abstract class StarRocksTestBase {
             }
         }
     }
-
-    public static void registerTrace(ConnectContext connectContext) {
-        if (connectContext == null) {
-            return;
-        }
-        QueryDebugOptions debugOptions = connectContext.getSessionVariable().getQueryDebugOptions();
-        boolean isPrintTrace = debugOptions.isEnableQueryTraceLog();
-        if (!isPrintTrace) {
-            return;
-        }
-        Tracers.register(connectContext);
-        Tracers.Mode traceMode = debugOptions.getTraceMode();
-        Tracers.Module traceModule = debugOptions.getTraceModule();
-        Tracers.init(connectContext, traceMode.name(), traceModule.name());
-    }
-
-    public static void unRegisterTrace(ConnectContext connectContext) {
-        if (connectContext == null) {
-            return;
-        }
-        QueryDebugOptions debugOptions = connectContext.getSessionVariable().getQueryDebugOptions();
-        boolean isPrintTrace = debugOptions.isEnableQueryTraceLog();
-        if (!isPrintTrace) {
-            return;
-        }
-        String pr = Tracers.printLogs();
-        if (!Strings.isNullOrEmpty(pr)) {
-            System.out.println(pr);
-        }
-        Tracers.close();
-    }
 }

@@ -469,7 +469,7 @@ public class MvUtils {
     public static Pair<OptExpression, LogicalPlan> getRuleOptimizedLogicalPlan(StatementBase mvStmt,
                                                                                ColumnRefFactory columnRefFactory,
                                                                                ConnectContext connectContext,
-                                                                               OptimizerOptions optimizerOptions,
+                                                                               OptimizerConfig optimizerConfig,
                                                                                MVTransformerContext mvTransformerContext) {
         Preconditions.checkState(mvStmt instanceof QueryStatement);
         Analyzer.analyze(mvStmt, connectContext);
