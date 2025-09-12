@@ -279,42 +279,7 @@ jobs:
       REPO: ${{ github.repository }}
     steps:
       - name: clean
-        run: |
-          rm -rf ${{ github.workspace }}
-          mkdir -p ${{ github.workspace }}
-
-      - name: Download BE Path Filter Artifact
-        uses: dawidd6/action-download-artifact@v6
-        with:
-          name: be-path-filter
-          path: be-path-filter
-          run_id: ${{ github.run_id }}
-
-      - name: Parsing path-filter file
-        id: parsing-path-filter
-        run: |
-          cd be-path-filter/; ls;
-          echo "src_filter=`cat src_filter.txt`" >> $GITHUB_OUTPUT
-          echo "test_filter.txt=`cat test_filter.txt`" >> $GITHUB_OUTPUT
-          echo "thirdparty_filter=`cat thirdparty_filter.txt`" >> $GITHUB_OUTPUT
-
-      - name: Update Image (${{ matrix.linux }})
-        id: update-image
-        if: steps.parsing-path-filter.outputs.thirdparty_filter == 'true'
-        env:
-          linux_distro: ${{ matrix.linux }}
-        run: |
-          cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull && git checkout test_arm && source lib/init.sh
-          ./bin/run-pr-update-image.sh
-
-      - name: Upload Thirdparty Result
-        uses: actions/upload-artifact@v4
-        with:
-          name: THIRDPARTY-RESULT-${{ matrix.linux }}
-          path: image_cache.info
-          retention-days: 1
-          overwrite: true
-          if-no-files-found: ignore
+        run: echo 1
 
       - name: Clean ENV
         if: always() && steps.parsing-path-filter.outputs.thirdparty_filter == 'true'
@@ -897,7 +862,7 @@ jobs:
 
           echo "##### Package: ${tar_path}" >> $GITHUB_STEP_SUMMARY
           echo "cluster_name=${CLUSTER_NAME}" >> $GITHUB_OUTPUT
-          ./bin/deploy-cluster.sh -c ${CLUSTER_NAME} --output ${tar_path} --with-coverage
+          ./bin/deploy-cluster.sh -c ${CLUSTER_NAME} --output ${tar_path} --with-coverage --arm
 
       - name: Clean ENV
         if: always()
