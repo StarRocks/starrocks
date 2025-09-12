@@ -1598,7 +1598,7 @@ StatusOr<ColumnPtr> TimeFunctions::hour_from_unixtime(FunctionContext* context, 
     auto ctz = context->state()->timezone_obj();
     auto size = columns[0]->size();
     ColumnViewer<TYPE_BIGINT> data_column(columns[0]);
-    ColumnBuilder<TYPE_INT> result(size);
+    ColumnBuilder<TYPE_TINYINT> result(size);
     for (int row = 0; row < size; ++row) {
         if (data_column.is_null(row)) {
             result.append_null();

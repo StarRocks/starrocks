@@ -565,7 +565,7 @@ vectorized_functions = [
     # TODO: 50380 year_from_unixtime
     # TODO: 50381 month_from_unixtime
     # TODO: 50382 day_from_unixtime
-    [50383, 'hour_from_unixtime', True, False, 'INT', ['BIGINT'], 'TimeFunctions::hour_from_unixtime'],
+    [50383, 'hour_from_unixtime', True, False, 'TINYINT', ['BIGINT'], 'TimeFunctions::hour_from_unixtime'],
     # TODO: 50384 minute_from_unixtime
     # TODO: 50385 second_from_unixtime
 
