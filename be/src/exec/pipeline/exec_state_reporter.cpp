@@ -24,11 +24,7 @@
 #include "runtime/exec_env.h"
 #include "service/backend_options.h"
 #include "util/network_util.h"
-<<<<<<< HEAD
-=======
 #include "util/starrocks_metrics.h"
-#include "util/thrift_rpc_helper.h"
->>>>>>> d37927c522 ([Enhancement] Add fragment instance exec state report thread pool metrics (#63067))
 
 namespace starrocks::pipeline {
 std::string to_load_error_http_path(const std::string& file_name) {

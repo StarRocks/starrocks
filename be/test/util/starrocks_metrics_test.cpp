@@ -347,13 +347,8 @@ TEST_F(StarRocksMetricsTest, test_metrics_register) {
     assert_threadpool_metrics_register("clone", instance);
     assert_threadpool_metrics_register("remote_snapshot", instance);
     assert_threadpool_metrics_register("replicate_snapshot", instance);
-<<<<<<< HEAD
-=======
-    assert_threadpool_metrics_register("load_channel", instance);
-    assert_threadpool_metrics_register("merge_commit", instance);
     assert_threadpool_metrics_register("exec_state_report", instance);
     assert_threadpool_metrics_register("priority_exec_state_report", instance);
->>>>>>> d37927c522 ([Enhancement] Add fragment instance exec state report thread pool metrics (#63067))
     ASSERT_NE(nullptr, instance->get_metric("load_channel_add_chunks_total"));
     ASSERT_NE(nullptr, instance->get_metric("load_channel_add_chunks_duration_us"));
     ASSERT_NE(nullptr, instance->get_metric("load_channel_add_chunks_wait_memtable_duration_us"));
