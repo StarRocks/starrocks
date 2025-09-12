@@ -61,8 +61,8 @@ class BitmapUpdateContext {
     static const size_t estimate_size_threshold = 1024;
 
 public:
-    explicit BitmapUpdateContext(rowid_t rid) : _roaring(Roaring::bitmapOf(1, rid)){};
-    explicit BitmapUpdateContext(rowid_t rid0, rowid_t rid1) : _roaring(Roaring::bitmapOfList({rid0, rid1})){};
+    explicit BitmapUpdateContext(rowid_t rid) : _roaring(Roaring::bitmapOf(1, rid)){ _pending_adds.reserve(_ADD_BATCH_SIZE); };
+    explicit BitmapUpdateContext(rowid_t rid0, rowid_t rid1) : _roaring(Roaring::bitmapOfList({rid0, rid1})){ _pending_adds.reserve(_ADD_BATCH_SIZE); };
 
     Roaring* roaring() { return &_roaring; }
 
@@ -76,6 +76,20 @@ public:
 
     static void init_estimate_size(uint64_t* reverted_index_size) {
         *reverted_index_size += BitmapUpdateContext::estimate_size(1);
+    }
+
+    void add_and_flush_if_needed(rowid_t rid) {
+        _pending_adds.push_back(rid);
+        if (_pending_adds.size() >= _ADD_BATCH_SIZE) {
+            flush_pending_adds();
+        }
+    }
+
+    void flush_pending_adds() {
+        if (!_pending_adds.empty()) {
+            _roaring.addMany(_pending_adds.size(), _pending_adds.data());
+            _pending_adds.clear();
+        }
     }
 
     // When _element_count is less than estimate_size_threshold, update the estimate size
@@ -117,6 +131,8 @@ private:
     uint64_t _previous_size{0};
     uint32_t _element_count{1};
     bool _size_changed{false};
+    std::vector<uint32_t> _pending_adds;
+    static const size_t _ADD_BATCH_SIZE = 64;
 };
 
 // if last bit is 0 it is std::unique_ptr<BitmapUpdateContext>
@@ -147,7 +163,7 @@ public:
     }
     void add(rowid_t rid) {
         if (is_context()) {
-            context()->roaring()->add(rid);
+            context()->add_and_flush_if_needed(rid);
         } else {
             auto* context = new BitmapUpdateContext(value(), rid);
             _value = reinterpret_cast<uint64_t>(context); // NOLINT
@@ -201,6 +217,12 @@ public:
     void late_update_size(uint64_t* reverted_index_size) {
         if (is_context()) {
             context()->late_update_size(reverted_index_size);
+        }
+    }
+
+    void flush_pending_adds() {
+        if (is_context()) {
+            context()->flush_pending_adds();
         }
     }
 
@@ -289,6 +311,7 @@ public:
         uint64_t size = 0;
         size += _null_bitmap.getSizeInBytes(false);
         for (BitmapUpdateContextRefOrSingleValue* update_context : _late_update_context_vector) {
+            update_context->flush_pending_adds();
             update_context->late_update_size(&_reverted_index_size);
         }
         _late_update_context_vector.clear();
@@ -304,6 +327,7 @@ public:
 
         OrderedMemoryIndexType ordered_mem_index;
         for (auto& p : _mem_index) {
+            p.second.flush_pending_adds();
             ordered_mem_index.insert(std::move(p));
         }
 
