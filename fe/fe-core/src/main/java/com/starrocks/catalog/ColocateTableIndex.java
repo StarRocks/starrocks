@@ -51,7 +51,6 @@ import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.common.util.concurrent.lock.AutoCloseableLock;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
-import com.starrocks.lake.LakeTable;
 import com.starrocks.persist.ColocatePersistInfo;
 import com.starrocks.persist.ImageWriter;
 import com.starrocks.persist.TablePropertyInfo;
@@ -259,10 +258,9 @@ public class ColocateTableIndex implements Writable {
                 group2Schema.put(groupId, groupSchema);
             }
 
-            if (tbl.isCloudNativeTable()) {
+            if (tbl.isCloudNativeTableOrMaterializedView()) {
                 if (!isReplay) { // leader create or update meta group
-                    LakeTable ltbl = (LakeTable) tbl;
-                    List<Long> shardGroupIds = ltbl.getShardGroupIds();
+                    List<Long> shardGroupIds = tbl.getShardGroupIds();
                     if (!groupAlreadyExist) {
                         GlobalStateMgr.getCurrentState().getStarOSAgent().createMetaGroup(groupId.grpId, shardGroupIds);
                     } else {
@@ -339,9 +337,8 @@ public class ColocateTableIndex implements Writable {
 
             GroupId groupId = table2Group.remove(tableId);
 
-            if (tbl != null && tbl.isCloudNativeTable() && !isReplay) {
-                LakeTable ltbl = (LakeTable) tbl;
-                List<Long> shardGroupIds = ltbl.getShardGroupIds();
+            if (tbl != null && tbl.isCloudNativeTableOrMaterializedView() && !isReplay) {
+                List<Long> shardGroupIds = tbl.getShardGroupIds();
                 try {
                     GlobalStateMgr.getCurrentState().getStarOSAgent().updateMetaGroup(groupId.grpId, shardGroupIds,
                             false /* isJoin */);
@@ -1031,7 +1028,7 @@ public class ColocateTableIndex implements Writable {
 
     public void updateLakeTableColocationInfo(OlapTable olapTable, boolean isJoin,
                                               GroupId expectGroupId) throws DdlException {
-        if (olapTable == null || !olapTable.isCloudNativeTable()) { // skip non-lake table
+        if (olapTable == null || !olapTable.isCloudNativeTableOrMaterializedView()) { // skip non-lake table
             return;
         }
 
@@ -1045,8 +1042,7 @@ public class ColocateTableIndex implements Writable {
                 groupId = table2Group.get(olapTable.getId());
             }
 
-            LakeTable ltbl = (LakeTable) olapTable;
-            List<Long> shardGroupIds = ltbl.getShardGroupIds();
+            List<Long> shardGroupIds = olapTable.getShardGroupIds();
             LOG.info("update meta group id {}, table {}, shard groups: {}, join: {}",
                     groupId.grpId, olapTable.getId(), shardGroupIds, isJoin);
             GlobalStateMgr.getCurrentState().getStarOSAgent().updateMetaGroup(groupId.grpId, shardGroupIds, isJoin);
@@ -1066,7 +1062,7 @@ public class ColocateTableIndex implements Writable {
             // database and table should be valid if reach here
             Database database = globalStateMgr.getLocalMetastore().getDbIncludeRecycleBin(dbId);
             Table table = globalStateMgr.getLocalMetastore().getTableIncludeRecycleBin(database, tableId);
-            if (table.isCloudNativeTable()) {
+            if (table.isCloudNativeTableOrMaterializedView()) {
                 lakeGroups.add(entry.getValue());
             }
         }
