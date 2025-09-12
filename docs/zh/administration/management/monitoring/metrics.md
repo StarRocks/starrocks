@@ -1677,3 +1677,43 @@ displayed_sidebar: docs
 
 - 单位：个
 - 描述: 黑名单 SQL 被拦截的次数。
+
+### starrocks_fe_scheduled_pending_tablet_num
+
+- 单位：个
+- 描述：FE 调度的 pending 状态的 clone 任务数（瞬时值），包括 BALANCE 和 REPAIR 两种类型。
+
+### starrocks_fe_scheduled_running_tablet_num
+
+- 单位：个
+- 描述：FE 调度的 running 状态的 clone 任务数（瞬时值），包括 BALANCE 和 REPAIR 两种类型。
+
+### starrocks_fe_clone_task_total
+
+- 单位：个
+- 描述：集群中 clone 任务总数（累积值）。
+
+### starrocks_fe_clone_task_success
+
+- 单位：个
+- 描述：集群中执行成功的 clone 任务总数（累积值）。
+
+### starrocks_fe_clone_task_copy_bytes
+
+- 单位：字节
+- 描述：集群中 clone 任务拷贝的总文件大小（累积值），包括 INTER_NODE 和 INTRA_NODE 两种类型。
+
+### starrocks_fe_clone_task_copy_duration_ms
+
+- 单位：毫秒
+- 描述：集群中 clone 任务拷贝的总耗时（累积值），包括 INTER_NODE 和 INTRA_NODE 两种类型。
+
+### starrocks_be_clone_task_copy_bytes
+
+- 单位：字节
+- 描述：BE 中 clone 任务拷贝的总文件大小（累积值），包括 INTER_NODE 和 INTRA_NODE 两种类型。
+
+### starrocks_be_clone_task_copy_duration_ms
+
+- 单位：毫秒
+- 描述：BE 中 clone 任务拷贝的总耗时（累积值），包括 INTER_NODE 和 INTRA_NODE 两种类型。
