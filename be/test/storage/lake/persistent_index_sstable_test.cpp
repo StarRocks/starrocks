@@ -226,7 +226,7 @@ TEST_F(PersistentIndexSstableTest, test_persistent_index_sstable) {
     PersistentIndexSstablePB sstable_pb;
     sstable_pb.set_filename(filename);
     sstable_pb.set_filesize(filesize);
-    ASSERT_OK(sst->init(std::move(read_file), sstable_pb, cache_ptr.get()));
+    ASSERT_OK(sst->init(std::move(read_file), sstable_pb, cache_ptr.get(), nullptr, 0));
     // check memory usage
     ASSERT_TRUE(sst->memory_usage() > 0);
 
@@ -519,7 +519,7 @@ TEST_F(PersistentIndexSstableTest, test_persistent_index_sstable_stream_builder)
     PersistentIndexSstablePB sstable_pb;
     sstable_pb.set_filename(filename);
     sstable_pb.set_filesize(file_size);
-    ASSERT_OK(sst->init(std::move(read_file), sstable_pb, cache_ptr.get()));
+    ASSERT_OK(sst->init(std::move(read_file), sstable_pb, cache_ptr.get(), nullptr, 0));
 
     // 4. Iterate and verify all keys
     sstable::ReadIOStat stat;
