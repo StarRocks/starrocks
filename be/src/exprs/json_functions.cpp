@@ -572,6 +572,7 @@ static StatusOr<ColumnPtr> _extract_with_hyper(NativeJsonState* state, const std
     RETURN_IF_ERROR(transform.trans(json_column->get_flat_fields()));
     auto res = transform.mutable_result();
     DCHECK_EQ(1, res.size());
+    res[0]->check_or_die();
     return res[0];
 }
 
@@ -655,13 +656,25 @@ StatusOr<ColumnPtr> JsonFunctions::_flat_json_query_impl(FunctionContext* contex
 
     } else {
         // full match
+        StatusOr<ColumnPtr> ret;
         if (ResultType != state->flat_column_type) {
             DCHECK(state->cast_expr != nullptr);
             Chunk chunk;
             chunk.append_column(flat_column, 0);
-            return state->cast_expr->evaluate_checked(nullptr, &chunk);
+            ret = state->cast_expr->evaluate_checked(nullptr, &chunk);
+        } else {
+            ret = std::move(flat_column->clone());
         }
+        if (ret.ok()) {
+            ret.value()->check_or_die();
+            return Column::mutate(std::move(ret.value()));
+        } else {
+            return ret;
+        }
+<<<<<<< HEAD
         return std::move(flat_column->clone());
+=======
+>>>>>>> 180b81f3ff ([BugFix] Fix JSON extraction null column consistency and add validation checks (#63054))
     }
 }
 
