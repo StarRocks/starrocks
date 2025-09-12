@@ -1,4 +1,4 @@
--- name: test_query_detail_api
+-- name: test_query_detail_api @sequential
 use ${db[0]};
 -- result:
 -- !result
@@ -27,7 +27,7 @@ select sum(id) from query_detail_test_table;
 -- result:
 15
 -- !result
-shell: current_time=$(date +%s); curl -X GET '${url}/api/query_detail?event_time='$((current_time - 10)) -u 'root:' | jq '.[-1] | {scanRows, scanBytes, returnRows, state}'
+shell: current_time=$(date +%s); curl -X GET '${url}/api/query_detail?event_time='$((current_time - 1)) -u 'root:' | jq '.[-1] | {scanRows, scanBytes, returnRows, state}'
 -- result:
 0
 {
@@ -37,16 +37,16 @@ shell: current_time=$(date +%s); curl -X GET '${url}/api/query_detail?event_time
   "state": "FINISHED"
 }
 -- !result
-shell: current_time=$(date +%s); curl -X GET '${url}/api/query_detail?event_time='$((current_time - 10)) -u 'root:' | jq '.[-1] | (.cpuCostNs > 0 and .memCostBytes > 0)'
+shell: current_time=$(date +%s); curl -X GET '${url}/api/query_detail?event_time='$((current_time - 1)) -u 'root:' | jq '.[-1] | (.cpuCostNs > 0 and .memCostBytes > 0)'
 -- result:
 0
 false
 -- !result
 SELECT * FROM non_existent_table;
 -- result:
-E: (5502, "Getting analyzing error. Detail message: Unknown table 'test_db_d00fce41aefa4707a504bd68aa6502d2.non_existent_table'.")
+E: (5502, "Getting analyzing error. Detail message: Unknown table 'test_db_f09fcf89708147159395cb0276ecbc4e.non_existent_table'.")
 -- !result
-shell: current_time=$(date +%s); curl -X GET '${url}/api/query_detail?event_time='$((current_time - 10)) -u 'root:' | jq '.[-1] | {scanRows, scanBytes, returnRows, state}'
+shell: current_time=$(date +%s); curl -X GET '${url}/api/query_detail?event_time='$((current_time - 1)) -u 'root:' | jq '.[-1] | {scanRows, scanBytes, returnRows, state}'
 -- result:
 0
 {
@@ -56,7 +56,7 @@ shell: current_time=$(date +%s); curl -X GET '${url}/api/query_detail?event_time
   "state": "FAILED"
 }
 -- !result
-shell: current_time=$(date +%s); curl -X GET '${url}/api/query_detail?event_time='$((current_time - 10)) -u 'root:' | jq '.[-1] | (.cpuCostNs == 0 and .memCostBytes == 0)'
+shell: current_time=$(date +%s); curl -X GET '${url}/api/query_detail?event_time='$((current_time - 1)) -u 'root:' | jq '.[-1] | (.cpuCostNs == 0 and .memCostBytes == 0)'
 -- result:
 0
 true
@@ -65,7 +65,7 @@ select /*+set_var(query_timeout=1)*/ sum(id), sleep(5) from query_detail_test_ta
 -- result:
 E: (5024, "Query reached its timeout of 1 seconds, please increase the 'query_timeout' session variable and retry")
 -- !result
-shell: current_time=$(date +%s); curl -X GET '${url}/api/query_detail?event_time='$((current_time - 10)) -u 'root:' | jq '.[-1] | {scanRows, scanBytes, returnRows, state}'
+shell: current_time=$(date +%s); curl -X GET '${url}/api/query_detail?event_time='$((current_time - 1)) -u 'root:' | jq '.[-1] | {scanRows, scanBytes, returnRows, state}'
 -- result:
 0
 {
@@ -75,7 +75,7 @@ shell: current_time=$(date +%s); curl -X GET '${url}/api/query_detail?event_time
   "state": "FAILED"
 }
 -- !result
-shell: current_time=$(date +%s); curl -X GET '${url}/api/query_detail?event_time='$((current_time - 10)) -u 'root:' | jq '.[-1] | (.cpuCostNs == 0 and .memCostBytes == 0)'
+shell: current_time=$(date +%s); curl -X GET '${url}/api/query_detail?event_time='$((current_time - 1)) -u 'root:' | jq '.[-1] | (.cpuCostNs == 0 and .memCostBytes == 0)'
 -- result:
 0
 true
