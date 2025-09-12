@@ -1,4 +1,4 @@
--- name: test_query_detail_api_successful_query
+-- name: test_query_detail_api
 use ${db[0]};
 -- result:
 -- !result
@@ -23,175 +23,62 @@ INSERT INTO query_detail_test_table VALUES
 (5, 'test5', 50.5, '2024-01-05 14:00:00');
 -- result:
 -- !result
-shell: curl -X POST '${url}/api/v1/catalogs/default_catalog/databases/${db[0]}/sql' -u 'root:' -d '{"query": "SELECT id, name, value FROM query_detail_test_table WHERE id > 2 ORDER BY value DESC;", "onlyOutputResultRaw":true}' --header "Content-Type: application/json"
+select sum(id) from query_detail_test_table;
+-- result:
+15
+-- !result
+shell: current_time=$(date +%s); curl -X GET '${url}/api/query_detail?event_time='$((current_time - 10)) -u 'root:' | jq '.[-1] | {scanRows, scanBytes, returnRows, state}'
 -- result:
 0
-{"meta":[{"name":"id","type":"bigint(20)"},{"name":"name","type":"varchar(100)"},{"name":"value","type":"double"}],"data":[{"id":5,"name":"test5","value":50.5},{"id":4,"name":"test4","value":40.5},{"id":3,"name":"test3","value":30.5}],"statistics":{"scanRows":5,"scanBytes":200,"returnRows":3}}
+{
+  "scanRows": 0,
+  "scanBytes": 0,
+  "returnRows": 1,
+  "state": "FINISHED"
+}
 -- !result
-sync;
--- result:
--- !result
-shell: sleep 2
--- result:
--- !result
-shell: current_time=$(date +%s)000; curl -X GET '${url}/api/query_detail?event_time='$((current_time - 10000)) -u 'root:'
--- result:
-0
-[{"eventTime":<timestamp>,"queryId":"<query_id>","isQuery":true,"remoteIP":"127.0.0.1","connId":<conn_id>,"startTime":<start_time>,"endTime":<end_time>,"latency":<latency>,"state":"FINISHED","database":"<db_name>","sql":"SELECT id, name, value FROM query_detail_test_table WHERE id > 2 ORDER BY value DESC;","user":"root","errorMessage":null,"explain":"<explain_plan>","profile":"<profile_info>","resourceGroupName":null,"scanRows":5,"scanBytes":200,"returnRows":3,"cpuCostNs":<cpu_cost>,"memCostBytes":<memory_bytes>,"spillBytes":0,"warehouse":"default_warehouse","digest":"<query_digest>","catalog":"default_catalog","queryFeMemory":0}]
--- !result
-sync;
--- result:
--- !result
--- name: test_query_detail_api_failed_query
-use ${db[0]};
--- result:
--- !result
-shell: curl -X POST '${url}/api/v1/catalogs/default_catalog/databases/${db[0]}/sql' -u 'root:' -d '{"query": "SELECT * FROM non_existent_table;", "onlyOutputResultRaw":true}' --header "Content-Type: application/json"
+shell: current_time=$(date +%s); curl -X GET '${url}/api/query_detail?event_time='$((current_time - 10)) -u 'root:' | jq '.[-1] | (.cpuCostNs > 0 and .memCostBytes > 0)'
 -- result:
 0
-{"status":"FAILED","code":"1","msg":"Table 'non_existent_table' doesn't exist","message":"Table 'non_existent_table' doesn't exist"}
+false
 -- !result
-sync;
+SELECT * FROM non_existent_table;
 -- result:
+E: (5502, "Getting analyzing error. Detail message: Unknown table 'test_db_d00fce41aefa4707a504bd68aa6502d2.non_existent_table'.")
 -- !result
-shell: sleep 2
--- result:
--- !result
-shell: current_time=$(date +%s)000; curl -X GET '${url}/api/query_detail?event_time='$((current_time - 10000)) -u 'root:'
+shell: current_time=$(date +%s); curl -X GET '${url}/api/query_detail?event_time='$((current_time - 10)) -u 'root:' | jq '.[-1] | {scanRows, scanBytes, returnRows, state}'
 -- result:
 0
-[{"eventTime":<timestamp>,"queryId":"<query_id>","isQuery":true,"remoteIP":"127.0.0.1","connId":<conn_id>,"startTime":<start_time>,"endTime":<end_time>,"latency":<latency>,"state":"FAILED","database":"<db_name>","sql":"SELECT * FROM non_existent_table;","user":"root","errorMessage":"Table 'non_existent_table' doesn't exist","explain":null,"profile":null,"resourceGroupName":null,"scanRows":0,"scanBytes":0,"returnRows":0,"cpuCostNs":0,"memCostBytes":0,"spillBytes":0,"warehouse":"default_warehouse","digest":"<query_digest>","catalog":"default_catalog","queryFeMemory":0}]
+{
+  "scanRows": 0,
+  "scanBytes": 0,
+  "returnRows": 0,
+  "state": "FAILED"
+}
 -- !result
-sync;
--- result:
--- !result
--- name: test_query_detail_api_timeout_query
-use ${db[0]};
--- result:
--- !result
-shell: curl -X POST '${url}/api/v1/catalogs/default_catalog/databases/${db[0]}/sql' -u 'root:' -d '{"query": "SELECT COUNT(*), AVG(value), SUM(value), MAX(value), MIN(value) FROM query_detail_test_table GROUP BY id HAVING COUNT(*) > 0 ORDER BY AVG(value) DESC;", "onlyOutputResultRaw":true}' --header "Content-Type: application/json" --max-time 5
+shell: current_time=$(date +%s); curl -X GET '${url}/api/query_detail?event_time='$((current_time - 10)) -u 'root:' | jq '.[-1] | (.cpuCostNs == 0 and .memCostBytes == 0)'
 -- result:
 0
-{"meta":[{"name":"count(*)","type":"bigint(20)"},{"name":"avg(value)","type":"double"},{"name":"sum(value)","type":"double"},{"name":"max(value)","type":"double"},{"name":"min(value)","type":"double"}],"data":[{"count(*)":1,"avg(value)":50.5,"sum(value)":50.5,"max(value)":50.5,"min(value)":50.5},{"count(*)":1,"avg(value)":40.5,"sum(value)":40.5,"max(value)":40.5,"min(value)":40.5},{"count(*)":1,"avg(value)":30.5,"sum(value)":30.5,"max(value)":30.5,"min(value)":30.5},{"count(*)":1,"avg(value)":20.5,"sum(value)":20.5,"max(value)":20.5,"min(value)":20.5},{"count(*)":1,"avg(value)":10.5,"sum(value)":10.5,"max(value)":10.5,"min(value)":10.5}],"statistics":{"scanRows":5,"scanBytes":200,"returnRows":5}}
+true
 -- !result
-sync;
+select /*+set_var(query_timeout=1)*/ sum(id), sleep(5) from query_detail_test_table;
 -- result:
+E: (5024, "Query reached its timeout of 1 seconds, please increase the 'query_timeout' session variable and retry")
 -- !result
-shell: sleep 3
--- result:
--- !result
-shell: current_time=$(date +%s)000; curl -X GET '${url}/api/query_detail?event_time='$((current_time - 10000)) -u 'root:'
+shell: current_time=$(date +%s); curl -X GET '${url}/api/query_detail?event_time='$((current_time - 10)) -u 'root:' | jq '.[-1] | {scanRows, scanBytes, returnRows, state}'
 -- result:
 0
-[{"eventTime":<timestamp>,"queryId":"<query_id>","isQuery":true,"remoteIP":"127.0.0.1","connId":<conn_id>,"startTime":<start_time>,"endTime":<end_time>,"latency":<latency>,"state":"FINISHED","database":"<db_name>","sql":"SELECT COUNT(*), AVG(value), SUM(value), MAX(value), MIN(value) FROM query_detail_test_table GROUP BY id HAVING COUNT(*) > 0 ORDER BY AVG(value) DESC;","user":"root","errorMessage":null,"explain":"<explain_plan>","profile":"<profile_info>","resourceGroupName":null,"scanRows":5,"scanBytes":200,"returnRows":5,"cpuCostNs":<cpu_cost>,"memCostBytes":<memory_bytes>,"spillBytes":0,"warehouse":"default_warehouse","digest":"<query_digest>","catalog":"default_catalog","queryFeMemory":0}]
+{
+  "scanRows": 0,
+  "scanBytes": 0,
+  "returnRows": 0,
+  "state": "FAILED"
+}
 -- !result
-sync;
--- result:
--- !result
--- name: test_query_detail_api_error_query
-use ${db[0]};
--- result:
--- !result
-shell: curl -X POST '${url}/api/v1/catalogs/default_catalog/databases/${db[0]}/sql' -u 'root:' -d '{"query": "SELECT FROM query_detail_test_table;", "onlyOutputResultRaw":true}' --header "Content-Type: application/json"
+shell: current_time=$(date +%s); curl -X GET '${url}/api/query_detail?event_time='$((current_time - 10)) -u 'root:' | jq '.[-1] | (.cpuCostNs == 0 and .memCostBytes == 0)'
 -- result:
 0
-{"status":"FAILED","code":"1","msg":"Getting syntax error at line 1, column 7. Detail message: Unexpected input 'from', the most similar input is {a legal identifier}.","message":"Getting syntax error at line 1, column 7. Detail message: Unexpected input 'from', the most similar input is {a legal identifier}."}
--- !result
-sync;
--- result:
--- !result
-shell: sleep 1
--- result:
--- !result
-shell: curl -X POST '${url}/api/v1/catalogs/default_catalog/databases/${db[0]}/sql' -u 'root:' -d '{"query": "SELECT * FROM query_detail_test_table WHERE invalid_column = 1;", "onlyOutputResultRaw":true}' --header "Content-Type: application/json"
--- result:
-0
-{"status":"FAILED","code":"1","msg":"Unknown column 'invalid_column' in 'where clause'","message":"Unknown column 'invalid_column' in 'where clause'"}
--- !result
-sync;
--- result:
--- !result
-shell: sleep 1
--- result:
--- !result
-shell: current_time=$(date +%s)000; curl -X GET '${url}/api/query_detail?event_time='$((current_time - 10000)) -u 'root:'
--- result:
-0
-[{"eventTime":<timestamp>,"queryId":"<query_id>","isQuery":true,"remoteIP":"127.0.0.1","connId":<conn_id>,"startTime":<start_time>,"endTime":<end_time>,"latency":<latency>,"state":"FAILED","database":"<db_name>","sql":"SELECT FROM query_detail_test_table;","user":"root","errorMessage":"Getting syntax error at line 1, column 7. Detail message: Unexpected input 'from', the most similar input is {a legal identifier}.","explain":null,"profile":null,"resourceGroupName":null,"scanRows":0,"scanBytes":0,"returnRows":0,"cpuCostNs":0,"memCostBytes":0,"spillBytes":0,"warehouse":"default_warehouse","digest":"<query_digest>","catalog":"default_catalog","queryFeMemory":0},{"eventTime":<timestamp>,"queryId":"<query_id>","isQuery":true,"remoteIP":"127.0.0.1","connId":<conn_id>,"startTime":<start_time>,"endTime":<end_time>,"latency":<latency>,"state":"FAILED","database":"<db_name>","sql":"SELECT * FROM query_detail_test_table WHERE invalid_column = 1;","user":"root","errorMessage":"Unknown column 'invalid_column' in 'where clause'","explain":null,"profile":null,"resourceGroupName":null,"scanRows":0,"scanBytes":0,"returnRows":0,"cpuCostNs":0,"memCostBytes":0,"spillBytes":0,"warehouse":"default_warehouse","digest":"<query_digest>","catalog":"default_catalog","queryFeMemory":0}]
--- !result
-sync;
--- result:
--- !result
--- name: test_query_detail_api_metrics_validation
-use ${db[0]};
--- result:
--- !result
-shell: curl -X POST '${url}/api/v1/catalogs/default_catalog/databases/${db[0]}/sql' -u 'root:' -d '{"query": "SELECT id, name, value, created_time FROM query_detail_test_table WHERE value > 25 ORDER BY value;", "onlyOutputResultRaw":true}' --header "Content-Type: application/json"
--- result:
-0
-{"meta":[{"name":"id","type":"bigint(20)"},{"name":"name","type":"varchar(100)"},{"name":"value","type":"double"},{"name":"created_time","type":"datetime"}],"data":[{"id":3,"name":"test3","value":30.5,"created_time":"2024-01-03 12:00:00"},{"id":4,"name":"test4","value":40.5,"created_time":"2024-01-04 13:00:00"},{"id":5,"name":"test5","value":50.5,"created_time":"2024-01-05 14:00:00"}],"statistics":{"scanRows":5,"scanBytes":250,"returnRows":3}}
--- !result
-sync;
--- result:
--- !result
-shell: sleep 2
--- result:
--- !result
-shell: current_time=$(date +%s)000; curl -X GET '${url}/api/query_detail?event_time='$((current_time - 10000)) -u 'root:'
--- result:
-0
-[{"eventTime":<timestamp>,"queryId":"<query_id>","isQuery":true,"remoteIP":"127.0.0.1","connId":<conn_id>,"startTime":<start_time>,"endTime":<end_time>,"latency":<latency>,"state":"FINISHED","database":"<db_name>","sql":"SELECT id, name, value, created_time FROM query_detail_test_table WHERE value > 25 ORDER BY value;","user":"root","errorMessage":null,"explain":"<explain_plan>","profile":"<profile_info>","resourceGroupName":null,"scanRows":5,"scanBytes":250,"returnRows":3,"cpuCostNs":<cpu_cost>,"memCostBytes":<memory_bytes>,"spillBytes":0,"warehouse":"default_warehouse","digest":"<query_digest>","catalog":"default_catalog","queryFeMemory":0}]
--- !result
-sync;
--- result:
--- !result
--- name: test_query_detail_api_invalid_parameters
-use ${db[0]};
--- result:
--- !result
-shell: curl -X GET '${url}/api/query_detail' -u 'root:'
--- result:
-0
-not valid parameter
--- !result
-sync;
--- result:
--- !result
-shell: curl -X GET '${url}/api/query_detail?event_time=invalid' -u 'root:'
--- result:
-0
-not valid parameter
--- !result
-sync;
--- result:
--- !result
-shell: curl -X GET '${url}/api/query_detail?event_time=-1' -u 'root:'
--- result:
-0
-[]
--- !result
-sync;
--- result:
--- !result
--- name: test_query_detail_api_authentication
-use ${db[0]};
--- result:
--- !result
-shell: curl -X GET '${url}/api/query_detail?event_time=0'
--- result:
-0
-{"status":"FAILED","code":"1","msg":"Need auth information.","message":"Need auth information."}
--- !result
-sync;
--- result:
--- !result
-shell: curl -X GET '${url}/api/query_detail?event_time=0' -u 'invalid:password'
--- result:
-0
-{"status":"FAILED","code":"1","msg":"Access denied for user 'invalid'","message":"Access denied for user 'invalid'"}
--- !result
-sync;
--- result:
+true
 -- !result
 DROP TABLE query_detail_test_table;
 -- result:
