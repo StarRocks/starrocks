@@ -60,8 +60,33 @@ Status LakePrimaryKeyCompactionConflictResolver::segment_iterator(
     params.new_version = _metadata->version();
     params.delvec_loader = delvec_loader.get();
     params.index = _index;
-    params.skip_pk_index_update = _skip_pk_index_update;
     return handler(params, segment_iters, [&](uint32_t rssid, const DelVectorPtr& dv, uint32_t num_dels) {
+        (*_segment_id_to_add_dels)[rssid] += num_dels;
+        _delvecs->emplace_back(rssid, dv);
+    });
+}
+
+Status LakePrimaryKeyCompactionConflictResolver::segment_iterator(
+        const std::function<Status(const CompactConflictResolveParams&, const std::vector<SegmentPtr>&,
+                                   const std::function<void(uint32_t, const DelVectorPtr&, uint32_t)>&)>& handler) {
+    // load all segments
+    std::vector<SegmentPtr> segments;
+    RETURN_IF_ERROR(_rowset->load_segments(&segments, true /* file cache*/));
+    RETURN_ERROR_IF_FALSE(segments.size() == _rowset->num_segments());
+    // init delvec loader
+    SegmentReadOptions seg_options;
+
+    auto delvec_loader =
+            std::make_unique<LakeDelvecLoader>(_tablet_mgr, _builder, false /* fill cache */, seg_options.lake_io_opts);
+    // init params
+    CompactConflictResolveParams params;
+    params.tablet_id = _rowset->tablet_id();
+    params.rowset_id = _metadata->next_rowset_id();
+    params.base_version = _base_version;
+    params.new_version = _metadata->version();
+    params.delvec_loader = delvec_loader.get();
+    params.index = _index;
+    return handler(params, segments, [&](uint32_t rssid, const DelVectorPtr& dv, uint32_t num_dels) {
         (*_segment_id_to_add_dels)[rssid] += num_dels;
         _delvecs->emplace_back(rssid, dv);
     });

@@ -15,6 +15,7 @@
 #pragma once
 
 #include "storage/lake/tablet_metadata.h"
+#include "storage/lake/types_fwd.h"
 #include "storage/primary_key_compaction_conflict_resolver.h"
 #include "storage/tablet_manager.h"
 
@@ -31,8 +32,7 @@ public:
                                                       TabletManager* tablet_mgr, MetaFileBuilder* builder,
                                                       LakePrimaryIndex* index, int64_t txn_id, int64_t base_version,
                                                       std::map<uint32_t, size_t>* segment_id_to_add_dels,
-                                                      std::vector<std::pair<uint32_t, DelVectorPtr>>* delvecs,
-                                                      bool skip_pk_index_update)
+                                                      std::vector<std::pair<uint32_t, DelVectorPtr>>* delvecs)
             : _metadata(metadata),
               _rowset(rowset),
               _tablet_mgr(tablet_mgr),
@@ -41,14 +41,18 @@ public:
               _txn_id(txn_id),
               _base_version(base_version),
               _segment_id_to_add_dels(segment_id_to_add_dels),
-              _delvecs(delvecs),
-              _skip_pk_index_update(skip_pk_index_update) {}
+              _delvecs(delvecs) {}
     ~LakePrimaryKeyCompactionConflictResolver() {}
 
     StatusOr<std::string> filename() const override;
     Schema generate_pkey_schema() override;
     Status segment_iterator(
             const std::function<Status(const CompactConflictResolveParams&, const std::vector<ChunkIteratorPtr>&,
+                                       const std::function<void(uint32_t, const DelVectorPtr&, uint32_t)>&)>& handler)
+            override;
+
+    Status segment_iterator(
+            const std::function<Status(const CompactConflictResolveParams&, const std::vector<SegmentPtr>&,
                                        const std::function<void(uint32_t, const DelVectorPtr&, uint32_t)>&)>& handler)
             override;
 
@@ -66,8 +70,6 @@ private:
     std::map<uint32_t, size_t>* _segment_id_to_add_dels = nullptr;
     // <rssid -> Delvec>
     std::vector<std::pair<uint32_t, starrocks::DelVectorPtr>>* _delvecs = nullptr;
-    // do not update pk index
-    bool _skip_pk_index_update = false;
 };
 
 } // namespace starrocks::lake

@@ -814,10 +814,14 @@ Status UpdateManager::light_publish_primary_compaction(const TxnLogPB_OpCompacti
             *std::max_element(op_compaction.input_rowsets().begin(), op_compaction.input_rowsets().end());
 
     // 2. update primary index, and generate delete info.
-    auto resolver = std::make_unique<LakePrimaryKeyCompactionConflictResolver>(
-            &metadata, &output_rowset, _tablet_mgr, builder, &index, txn_id, base_version, &segment_id_to_add_dels,
-            &delvecs, op_compaction.ssts_size() > 0 /* NOT update pk index */);
-    RETURN_IF_ERROR(resolver->execute());
+    auto resolver = std::make_unique<LakePrimaryKeyCompactionConflictResolver>(&metadata, &output_rowset, _tablet_mgr,
+                                                                               builder, &index, txn_id, base_version,
+                                                                               &segment_id_to_add_dels, &delvecs);
+    if (op_compaction.ssts_size() > 0) {
+        RETURN_IF_ERROR(resolver->execute_without_update_index());
+    } else {
+        RETURN_IF_ERROR(resolver->execute());
+    }
     // 3. ingest ssts to index
     DCHECK(delvecs.size() == op_compaction.ssts_size());
     for (int i = 0; i < op_compaction.ssts_size(); i++) {
