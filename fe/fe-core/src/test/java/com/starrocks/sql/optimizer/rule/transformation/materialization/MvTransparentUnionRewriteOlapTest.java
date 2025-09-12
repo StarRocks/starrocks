@@ -198,7 +198,7 @@ public class MvTransparentUnionRewriteOlapTest extends MVTestBase {
                                 "     tabletRatio=3/3",
                 };
                 for (int i = 0; i < sqls.length; i++) {
-                    System.out.println("start to test " + i);
+                    logSysInfo("start to test " + i);
                     String query = sqls[i];
                     String plan = getFragmentPlan(query);
                     PlanTestBase.assertNotContains(plan, "mv0");
@@ -245,7 +245,7 @@ public class MvTransparentUnionRewriteOlapTest extends MVTestBase {
                                 "     tabletRatio=3/3", // case 3
                 };
                 for (int i = 0; i < sqls.length; i++) {
-                    System.out.println("start to test " + i);
+                    logSysInfo("start to test " + i);
                     String query = sqls[i];
                     String plan = getFragmentPlan(query);
                     PlanTestBase.assertContains(plan, ":UNION", ": mv0", ": m1");
@@ -547,7 +547,7 @@ public class MvTransparentUnionRewriteOlapTest extends MVTestBase {
                 };
                 for (int i = 0; i < sqls.length; i++) {
                     String query = sqls[i];
-                    System.out.println("start to check:" + query);
+                    logSysInfo("start to check:" + query);
                     String plan = getFragmentPlan(query);
                     PlanTestBase.assertContains(plan, "mv2");
                 }
@@ -669,7 +669,7 @@ public class MvTransparentUnionRewriteOlapTest extends MVTestBase {
 
                         String query = "SELECT k1, k2, sum(v1), count(v2) from m1 group by k1, k2 order by k1, k2";
                         String plan = getFragmentPlan(query, "MV");
-                        System.out.println(plan);
+                        logSysInfo(plan);
                     });
         });
         connectContext.getSessionVariable().setEnableMaterializedViewTextMatchRewrite(false);
@@ -694,7 +694,7 @@ public class MvTransparentUnionRewriteOlapTest extends MVTestBase {
 
                         String query = "select * from m1;";
                         String plan = getFragmentPlan(query, "MV");
-                        System.out.println(plan);
+                        logSysInfo(plan);
                     });
         });
         connectContext.getSessionVariable().setEnableMaterializedViewTextMatchRewrite(false);

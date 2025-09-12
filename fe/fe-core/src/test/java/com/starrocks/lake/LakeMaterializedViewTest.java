@@ -64,6 +64,7 @@ import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.thrift.TStorageType;
 import com.starrocks.utframe.StarRocksAssert;
+import com.starrocks.utframe.StarRocksTestBase;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Mock;
 import mockit.MockUp;
@@ -80,7 +81,7 @@ import java.util.Map;
 
 import static com.starrocks.sql.optimizer.MVTestUtils.waitForSchemaChangeAlterJobFinish;
 
-public class LakeMaterializedViewTest {
+public class LakeMaterializedViewTest extends StarRocksTestBase {
     private static final String DB = "db_for_lake_mv";
 
     private static ConnectContext connectContext;
@@ -237,7 +238,7 @@ public class LakeMaterializedViewTest {
 
         // show create materialized view
         String ddlStmt = lakeMv.getMaterializedViewDdlStmt(true);
-        System.out.println(ddlStmt);
+        logSysInfo(ddlStmt);
         Assertions.assertTrue(ddlStmt.contains("\"replication_num\" = \"1\""));
         Assertions.assertTrue(ddlStmt.contains("\"datacache.enable\" = \"true\""));
         Assertions.assertTrue(ddlStmt.contains("\"enable_async_write_back\" = \"false\""));
@@ -346,7 +347,7 @@ public class LakeMaterializedViewTest {
             starRocksAssert.dropTable("base_table4");
             Assertions.assertNull(GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "base_table4"));
         } catch (Exception e) {
-            System.out.println(e);
+            logSysInfo(e);
             Assertions.fail();
         }
     }
@@ -378,7 +379,7 @@ public class LakeMaterializedViewTest {
             starRocksAssert.dropTable("base_table5");
             Assertions.assertNull(GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "base_table5"));
         } catch (Exception e) {
-            System.out.println(e);
+            logSysInfo(e);
             Assertions.fail();
         }
     }
