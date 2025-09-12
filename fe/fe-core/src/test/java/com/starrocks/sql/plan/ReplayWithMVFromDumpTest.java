@@ -224,14 +224,8 @@ public class ReplayWithMVFromDumpTest extends ReplayFromDumpTestBase {
         debugOptions.setEnableQueryTraceLog(true);
         sessionVariable.setQueryDebugOptions(debugOptions.toString());
         Pair<QueryDumpInfo, String> replayPair =
-<<<<<<< HEAD
-                getPlanFragment(getDumpInfoFromFile("query_dump/view_delta"),
-                        connectContext.getSessionVariable(), TExplainLevel.NORMAL);
-        Assert.assertTrue(replayPair.second, replayPair.second.contains("mv_yyf_trade_water3"));
-=======
                 getPlanFragment(fileContent, sessionVariable, TExplainLevel.NORMAL);
-        Assertions.assertTrue(replayPair.second.contains("mv_yyf_trade_water3"), replayPair.second);
->>>>>>> 32810c222f ([BugFix] Fix view based rewrite bugs (#62918))
+        Assert.assertTrue(replayPair.second.contains("mv_yyf_trade_water3"), replayPair.second);
     }
 
     @Test

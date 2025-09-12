@@ -879,7 +879,6 @@ public class Utils {
     }
 
     /**
-<<<<<<< HEAD
      * Check if the operator has applied the rule
      * @param op input operator to be checked
      * @param ruleMask specific rule mask
@@ -916,7 +915,9 @@ public class Utils {
             return;
         }
         op.resetOpRuleMask(ruleMask);
-=======
+    }
+
+    /**
      * Merge projection1 -> projection2, use projection1's output as the final output.
      */
     public static Projection mergeWithProject(Projection projection1,
@@ -946,7 +947,6 @@ public class Utils {
             resultMap.put(entry.getKey(), result);
         }
         return resultMap;
->>>>>>> 32810c222f ([BugFix] Fix view based rewrite bugs (#62918))
     }
 
     /**

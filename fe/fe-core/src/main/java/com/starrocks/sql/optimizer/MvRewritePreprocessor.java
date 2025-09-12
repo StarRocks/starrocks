@@ -263,7 +263,7 @@ public class MvRewritePreprocessor {
             // means there is no plan with view
             return;
         }
-        Set<String> viewNames = logicalViewScanOperators.stream()
+        Set<String> viewNames = viewScans.stream()
                 .map(op -> op.getTable().getName()).collect(Collectors.toSet());
         logMVPrepare(connectContext, "[ViewBasedRewrite] There are {} view scan operators in the query plan",
                 viewNames);

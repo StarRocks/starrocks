@@ -41,33 +41,12 @@ public class QueryDebugOptions {
     @SerializedName(value = "mvRefreshTraceModule")
     private String mvRefreshTraceModule;
 
-<<<<<<< HEAD
-=======
     @SerializedName(value = "traceMode")
     private String traceMode;
 
     @SerializedName(value = "traceModule")
     private String traceModule;
 
-    public static class ExecDebugOption {
-        @SerializedName(value = "plan_node_id")
-        private int planNodeId;
-        @SerializedName(value = "debug_action")
-        private String debugAction;
-        @SerializedName(value = "value")
-        private int value = 0;
-        public TExecDebugOption toThirft() {
-            final TExecDebugOption option = new TExecDebugOption();
-            option.setDebug_node_id(planNodeId);
-            option.setDebug_action(TDebugAction.valueOf(debugAction));
-            option.setValue(value);
-            return option;
-        }
-    }
-    @SerializedName(value = "execDebugOptions")
-    private List<ExecDebugOption> execDebugOptions = Lists.newArrayList();
-
->>>>>>> 32810c222f ([BugFix] Fix view based rewrite bugs (#62918))
     public QueryDebugOptions() {
         // To make unit test more stable, add retry times for refreshing materialized views.
         if (FeConstants.runningUnitTest) {

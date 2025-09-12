@@ -267,11 +267,7 @@ public class StatementPlanner {
         // 1. Build Logical plan
         ColumnRefFactory columnRefFactory = new ColumnRefFactory();
         LogicalPlan logicalPlan;
-<<<<<<< HEAD
-        MVTransformerContext mvTransformerContext  = makeMVTransformerContext(session.getSessionVariable());
-=======
         MVTransformerContext mvTransformerContext = MVTransformerContext.of(session, true);
->>>>>>> 32810c222f ([BugFix] Fix view based rewrite bugs (#62918))
 
         try (Timer ignored = Tracers.watchScope("Transformer")) {
             // get a logicalPlan without inlining views

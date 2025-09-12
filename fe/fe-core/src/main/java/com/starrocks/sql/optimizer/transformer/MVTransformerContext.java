@@ -14,14 +14,10 @@
 package com.starrocks.sql.optimizer.transformer;
 
 import com.google.common.collect.Maps;
-<<<<<<< HEAD
 import com.starrocks.analysis.ParseNode;
-=======
 import com.starrocks.catalog.View;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
-import com.starrocks.sql.ast.ParseNode;
->>>>>>> 32810c222f ([BugFix] Fix view based rewrite bugs (#62918))
 import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.util.Box;
 
