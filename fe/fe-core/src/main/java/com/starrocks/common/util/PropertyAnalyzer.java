@@ -1824,7 +1824,7 @@ public class PropertyAnalyzer {
                     throw new AnalysisException(": random distribution does not support 'colocate_with'");
                 }
                 GlobalStateMgr.getCurrentState().getColocateTableIndex().addTableToGroup(
-                        db, materializedView, colocateGroup, materializedView.isCloudNativeMaterializedView());
+                        db, materializedView, colocateGroup, false /* expectLakeTable */);
             }
 
             // enable_query_rewrite
