@@ -202,6 +202,7 @@ public class LakeTable extends OlapTable {
         return Lists.newArrayList();
     }
 
+<<<<<<< HEAD
     public List<Long> getShardGroupIds() {
         List<Long> shardGroupIds = new ArrayList<>();
         for (Partition p : getAllPartitions()) {
@@ -210,6 +211,8 @@ public class LakeTable extends OlapTable {
         return shardGroupIds;
     }
 
+=======
+>>>>>>> f5e9bf81cd ([BugFix] fix shared-data cluster MV does not support colocation (#62941))
     @Override
     public String getComment() {
         if (!Strings.isNullOrEmpty(comment)) {

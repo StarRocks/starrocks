@@ -3317,7 +3317,14 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
 
         boolean isNonPartitioned = partitionInfo.isUnPartitioned();
         DataProperty dataProperty = PropertyAnalyzer.analyzeMVDataProperty(materializedView, properties);
+<<<<<<< HEAD
         PropertyAnalyzer.analyzeMVProperties(db, materializedView, properties, isNonPartitioned);
+=======
+        String colocateGroup = properties.get(PropertyAnalyzer.PROPERTIES_COLOCATE_WITH);
+        PropertyAnalyzer.analyzeMVProperties(db, materializedView, properties, isNonPartitioned,
+                stmt.getPartitionByExprToAdjustExprMap());
+        final long warehouseId = materializedView.getWarehouseId();
+>>>>>>> f5e9bf81cd ([BugFix] fix shared-data cluster MV does not support colocation (#62941))
         try {
             Set<Long> tabletIdSet = new HashSet<>();
             // process single partition info
@@ -3343,6 +3350,11 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
                         stmt.getQueryStatement(), stmt.getBaseTableInfos());
                 LOG.info("Generate mv {} partition exprs: {}", mvName, partitionExprMaps);
                 materializedView.setPartitionExprMaps(partitionExprMaps);
+            }
+
+            // shared-data mv's colocation info must be updated after tablet creation
+            if (StringUtils.isNotEmpty(colocateGroup)) {
+                colocateTableIndex.addTableToGroup(db, materializedView, colocateGroup, true /* expectLakeTable */);
             }
 
             GlobalStateMgr.getCurrentState().getMaterializedViewMgr().prepareMaintenanceWork(stmt, materializedView);

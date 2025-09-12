@@ -3706,4 +3706,59 @@ public class OlapTable extends Table {
     public void updateLastCollectProfileTime() {
         this.lastCollectProfileTime = System.currentTimeMillis();
     }
+<<<<<<< HEAD
+=======
+
+    /**
+     * Return partition name and associate partition cell with specific partition columns.
+     * If partitionColumnsOpt is empty, return partition cell with all partition columns.
+     */
+    public Map<String, PCell> getPartitionCells(Optional<List<Column>> partitionColumnsOpt) {
+        PartitionInfo partitionInfo = this.getPartitionInfo();
+        if (partitionInfo.isUnPartitioned()) {
+            return null;
+        }
+        if (partitionInfo.isRangePartition()) {
+            Preconditions.checkArgument(partitionColumnsOpt.isEmpty() || partitionColumnsOpt.get().size() == 1);
+            Map<String, Range<PartitionKey>> rangeMap = getRangePartitionMap();
+            if (rangeMap == null) {
+                return null;
+            }
+            return rangeMap.entrySet().stream().collect(Collectors.toMap(x -> x.getKey(), x -> new PRangeCell(x.getValue())));
+        } else if (partitionInfo.isListPartition()) {
+            Map<String, PListCell> listMap = getListPartitionItems(partitionColumnsOpt);
+            if (listMap == null) {
+                return null;
+            }
+            return listMap.entrySet().stream().collect(Collectors.toMap(x -> x.getKey(), x -> x.getValue()));
+        }
+        return null;
+    }
+
+    public boolean allowUpdateFileBundling() {
+        for (Partition partition : getPartitions()) {
+            for (PhysicalPartition physicalPartition : partition.getSubPartitions()) {
+                if (physicalPartition.getMetadataSwitchVersion() != 0) {
+                    return false;
+                }
+            }
+        }
+        return true;
+    }
+
+    // only used for LakeTable and LakeMaterializedView
+    public List<Long> getShardGroupIds() {
+        if (RunMode.isSharedNothingMode()) {
+            return Lists.newArrayList();
+        }
+        List<Long> shardGroupIds = new ArrayList<>();
+        for (Partition p : getAllPartitions()) {
+            for (MaterializedIndex index : p.getDefaultPhysicalPartition()
+                    .getMaterializedIndices(MaterializedIndex.IndexExtState.ALL)) {
+                shardGroupIds.add(index.getShardGroupId());
+            }
+        }
+        return shardGroupIds;
+    }
+>>>>>>> f5e9bf81cd ([BugFix] fix shared-data cluster MV does not support colocation (#62941))
 }

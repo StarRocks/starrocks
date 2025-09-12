@@ -53,6 +53,11 @@ import com.starrocks.scheduler.Task;
 import com.starrocks.scheduler.TaskBuilder;
 import com.starrocks.scheduler.TaskManager;
 import com.starrocks.server.GlobalStateMgr;
+<<<<<<< HEAD
+=======
+import com.starrocks.server.RunMode;
+import com.starrocks.sql.analyzer.MaterializedViewAnalyzer;
+>>>>>>> f5e9bf81cd ([BugFix] fix shared-data cluster MV does not support colocation (#62941))
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.analyzer.SetStmtAnalyzer;
 import com.starrocks.sql.ast.AlterMaterializedViewStatusClause;
@@ -201,11 +206,75 @@ public class AlterMVJobExecutor extends AlterJobExecutor {
             }
         }
 
+<<<<<<< HEAD
         if (!properties.isEmpty()) {
             if (propClone.containsKey(PropertyAnalyzer.PROPERTIES_COLOCATE_WITH)) {
-                throw new SemanticException("Modify failed because unsupported properties: " +
-                        "colocate group is not supported for materialized view");
+=======
+        boolean isChanged = false;
+        // bloom_filter_columns
+        if (propClone.containsKey(PropertyAnalyzer.PROPERTIES_BF_COLUMNS)) {
+            List<Column> baseSchema = materializedView.getColumns();
+
+            // analyze bloom filter columns
+            Set<String> bfColumns = null;
+            try {
+                bfColumns = PropertyAnalyzer.analyzeBloomFilterColumns(properties, baseSchema,
+                        materializedView.getKeysType() == KeysType.PRIMARY_KEYS);
+            } catch (AnalysisException e) {
+                throw new SemanticException("Failed to analyze bloom filter columns: " + e.getMessage());
             }
+            if (bfColumns != null && bfColumns.isEmpty()) {
+                bfColumns = null;
+            }
+
+            // analyze bloom filter fpp
+            double bfFpp = 0;
+            try {
+                bfFpp = PropertyAnalyzer.analyzeBloomFilterFpp(properties);
+            } catch (AnalysisException e) {
+                throw new SemanticException("Failed to analyze bloom filter fpp: " + e.getMessage());
+            }
+            if (bfColumns != null && bfFpp == 0) {
+                bfFpp = FeConstants.DEFAULT_BLOOM_FILTER_FPP;
+            } else if (bfColumns == null) {
+                bfFpp = 0;
+            }
+
+            Set<ColumnId> bfColumnIds = null;
+            if (bfColumns != null && !bfColumns.isEmpty()) {
+                bfColumnIds = Sets.newTreeSet(ColumnId.CASE_INSENSITIVE_ORDER);
+                for (String colName : bfColumns) {
+                    bfColumnIds.add(materializedView.getColumn(colName).getColumnId());
+                }
+            }
+            Set<ColumnId> oldBfColumnIds = materializedView.getBfColumnIds();
+            if (bfColumnIds != null && oldBfColumnIds != null &&
+                    bfColumnIds.equals(oldBfColumnIds) && materializedView.getBfFpp() == bfFpp) {
+                // do nothing
+            } else {
+                isChanged = true;
+                materializedView.setBloomFilterInfo(bfColumnIds, bfFpp);
+            }
+            properties.remove(PropertyAnalyzer.PROPERTIES_BF_COLUMNS);
+        }
+
+        if (properties.containsKey(PropertyAnalyzer.PROPERTIES_COLOCATE_WITH)) {
+            // TODO: when support shared-nothing mode, must check PROPERTIES_LABELS_LOCATION
+            if (RunMode.isSharedNothingMode()) {
+>>>>>>> f5e9bf81cd ([BugFix] fix shared-data cluster MV does not support colocation (#62941))
+                throw new SemanticException("Modify failed because unsupported properties: " +
+                        "colocate_with is not supported for materialized view in shared-nothing cluster.");
+            }
+            try {
+                String colocateGroup = PropertyAnalyzer.analyzeColocate(properties);
+                GlobalStateMgr.getCurrentState().getColocateTableIndex()
+                        .modifyTableColocate(db, materializedView, colocateGroup, false, null);
+            } catch (DdlException e) {
+                throw new AlterJobException(e.getMessage(), e);
+            }
+        }
+
+        if (!properties.isEmpty()) {
             // analyze properties
             List<SetListItem> setListItems = Lists.newArrayList();
             for (Map.Entry<String, String> entry : properties.entrySet()) {
