@@ -65,6 +65,7 @@ public class MvTransparentUnionRewriteOlapTest extends MvRewriteTestBase {
                 )
         );
         connectContext.getSessionVariable().setEnableMaterializedViewTransparentUnionRewrite(true);
+        connectContext.getSessionVariable().setMaterializedViewRewriteMode("force");
     }
 
     @Before
