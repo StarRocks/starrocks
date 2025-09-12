@@ -118,7 +118,7 @@ public class MvTransparentRewriteWithHiveTableTest extends MVTestBase {
                                 "l_suppkey + 2 >1000;",
                 };
                 for (String query : sqls) {
-                    System.out.println(query);
+                    logSysInfo(query);
                     String plan = getFragmentPlan(query);
                     PlanTestBase.assertContains(plan, ":UNION", ": mv0", ": lineitem_par");
                 }
@@ -208,7 +208,7 @@ public class MvTransparentRewriteWithHiveTableTest extends MVTestBase {
                         "SELECT * FROM mv0 WHERE l_shipdate <= '1998-01-05' and l_suppkey > 100;",
                 };
                 for (String query : sqls) {
-                    System.out.println(query);
+                    logSysInfo(query);
                     String plan = getFragmentPlan(query);
                     // transparent plan will contain union, but it can be pruned
                     PlanTestBase.assertNotContains(plan, "UNION");

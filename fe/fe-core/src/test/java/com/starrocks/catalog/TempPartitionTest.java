@@ -51,6 +51,7 @@ import com.starrocks.sql.ast.ShowPartitionsStmt;
 import com.starrocks.sql.ast.ShowTabletStmt;
 import com.starrocks.sql.ast.TruncateTableStmt;
 import com.starrocks.utframe.StarRocksAssert;
+import com.starrocks.utframe.StarRocksTestBase;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.Assertions;
@@ -63,7 +64,7 @@ import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 
-public class TempPartitionTest {
+public class TempPartitionTest extends StarRocksTestBase {
 
     private static String tempPartitionFile = "./TempPartitionTest";
     private static String tblFile = "./tblFile";
@@ -120,7 +121,7 @@ public class TempPartitionTest {
             }
         } catch (Exception e) {
             if (expectedException) {
-                System.out.println("got exception: " + e.getMessage());
+                logSysInfo("got exception: " + e.getMessage());
             } else {
                 throw e;
             }
@@ -419,8 +420,8 @@ public class TempPartitionTest {
         getPartitionNameToTabletIdMap("db2.tbl2", true, tempPartitionTabletIds);
         Assertions.assertEquals(3, tempPartitionTabletIds.keySet().size());
 
-        System.out.println("partition tablets: " + originPartitionTabletIds);
-        System.out.println("temp partition tablets: " + tempPartitionTabletIds);
+        logSysInfo("partition tablets: " + originPartitionTabletIds);
+        logSysInfo("temp partition tablets: " + tempPartitionTabletIds);
 
         // drop non exist temp partition
         stmtStr = "alter table db2.tbl2 drop temporary partition tp4;";
@@ -473,8 +474,8 @@ public class TempPartitionTest {
         Assertions.assertEquals(3, tempPartitionTabletIds2.keySet().size());
 
         // Here, we should have 3 partitions p1,p2,p3, and 3 temp partitions tp1,tp2,tp3
-        System.out.println("we have partition tablets: " + originPartitionTabletIds2);
-        System.out.println("we have temp partition tablets: " + tempPartitionTabletIds2);
+        logSysInfo("we have partition tablets: " + originPartitionTabletIds2);
+        logSysInfo("we have temp partition tablets: " + tempPartitionTabletIds2);
 
         stmtStr = "alter table db2.tbl2 replace partition(p1, p2) with temporary partition(tp2, tp3);";
         alterTableWithNewAnalyzer(stmtStr, true);
@@ -580,8 +581,8 @@ public class TempPartitionTest {
         Assertions.assertEquals(1, tempPartitionTabletIds2.keySet().size());
 
         // for now , we have 3 partitions: tp1, tp2, tp3, 1 temp partition: p1
-        System.out.println("we have partition tablets: " + originPartitionTabletIds2);
-        System.out.println("we have temp partition tablets: " + tempPartitionTabletIds2);
+        logSysInfo("we have partition tablets: " + originPartitionTabletIds2);
+        logSysInfo("we have temp partition tablets: " + tempPartitionTabletIds2);
 
         stmtStr = "alter table db2.tbl2 add rollup r1(k1);";
         alterTableWithNewAnalyzer(stmtStr, true);
@@ -602,11 +603,11 @@ public class TempPartitionTest {
         Map<Long, AlterJobV2> alterJobs = GlobalStateMgr.getCurrentState().getRollupHandler().getAlterJobsV2();
         for (AlterJobV2 alterJobV2 : alterJobs.values()) {
             while (!alterJobV2.getJobState().isFinalState()) {
-                System.out.println(
+                logSysInfo(
                         "alter job " + alterJobV2.getDbId() + " is running. state: " + alterJobV2.getJobState());
                 Thread.sleep(5000);
             }
-            System.out.println("alter job " + alterJobV2.getDbId() + " is done. state: " + alterJobV2.getJobState());
+            logSysInfo("alter job " + alterJobV2.getDbId() + " is done. state: " + alterJobV2.getJobState());
             Assertions.assertEquals(AlterJobV2.JobState.FINISHED, alterJobV2.getJobState());
         }
 

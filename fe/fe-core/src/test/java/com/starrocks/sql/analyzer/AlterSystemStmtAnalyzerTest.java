@@ -31,6 +31,7 @@ import com.starrocks.sql.ast.ShowBackendsStmt;
 import com.starrocks.system.Backend;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.utframe.StarRocksAssert;
+import com.starrocks.utframe.StarRocksTestBase;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Mock;
 import mockit.MockUp;
@@ -45,7 +46,7 @@ import java.util.List;
 import static com.starrocks.sql.analyzer.AnalyzeTestUtil.analyzeSuccess;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
-public class AlterSystemStmtAnalyzerTest {
+public class AlterSystemStmtAnalyzerTest extends StarRocksTestBase {
     private static StarRocksAssert starRocksAssert;
     private static ConnectContext connectContext;
 
@@ -123,11 +124,11 @@ public class AlterSystemStmtAnalyzerTest {
         for (String loc : testLocs) {
             String stmtStr = "alter system modify backend '127.0.0.1:9091' set ('" +
                     AlterSystemStmtAnalyzer.PROP_KEY_LOCATION + "' = '" + loc + "')";
-            System.out.println(stmtStr);
+            logSysInfo(stmtStr);
             try {
                 UtFrameUtils.parseStmtWithNewParser(stmtStr, connectContext);
             } catch (Exception e) {
-                System.out.println(e.getMessage());
+                logSysInfo(e.getMessage());
                 Assertions.assertFalse(analyzeSuccess[i++]);
                 continue;
             }
@@ -137,18 +138,18 @@ public class AlterSystemStmtAnalyzerTest {
 
         String stmtStr = "alter system modify backend '127.0.0.1:9091'" +
                 " set ('invalid_prop_key' = 'val', '" + PropertyAnalyzer.PROPERTIES_LABELS_LOCATION +  "' = 'a:b')";
-        System.out.println(stmtStr);
+        logSysInfo(stmtStr);
         try {
             UtFrameUtils.parseStmtWithNewParser(stmtStr, connectContext);
         } catch (Exception e) {
-            System.out.println(e.getMessage());
+            logSysInfo(e.getMessage());
             Assertions.assertTrue(e.getMessage().contains("unsupported property: invalid_prop_key"));
         }
     }
 
     private void modifyBackendLocation(String location) throws Exception {
         SystemInfoService systemInfoService = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
-        System.out.println(systemInfoService.getBackends());
+        logSysInfo(systemInfoService.getBackends());
         List<Long> backendIds = systemInfoService.getBackendIds();
         Backend backend = systemInfoService.getBackend(backendIds.get(0));
         String modifyBackendPropSqlStr = "alter system modify backend '" + backend.getHost() +
@@ -165,7 +166,7 @@ public class AlterSystemStmtAnalyzerTest {
         ShowBackendsStmt showBackendsStmt = (ShowBackendsStmt) UtFrameUtils.parseStmtWithNewParser(showBackendLocationSqlStr,
                 connectContext);
         ShowResultSet showResultSet = ShowExecutor.execute(showBackendsStmt, connectContext);
-        System.out.println(showResultSet.getResultRows());
+        logSysInfo(showResultSet.getResultRows());
         Assertions.assertTrue(showResultSet.getResultRows().get(0).toString().contains("a:b"));
     }
 

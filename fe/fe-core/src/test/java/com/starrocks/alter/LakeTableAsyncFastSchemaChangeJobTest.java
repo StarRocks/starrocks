@@ -34,6 +34,7 @@ import com.starrocks.server.RunMode;
 import com.starrocks.sql.ast.AlterTableStmt;
 import com.starrocks.sql.ast.CreateDbStmt;
 import com.starrocks.sql.ast.CreateTableStmt;
+import com.starrocks.utframe.StarRocksTestBase;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
@@ -43,7 +44,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 
-public class LakeTableAsyncFastSchemaChangeJobTest {
+public class LakeTableAsyncFastSchemaChangeJobTest extends StarRocksTestBase {
     private static ConnectContext connectContext;
     private static final String DB_NAME = "test_lake_fast_schema_evolution";
 

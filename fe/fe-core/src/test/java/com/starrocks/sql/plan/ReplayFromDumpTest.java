@@ -751,7 +751,6 @@ public class ReplayFromDumpTest extends ReplayFromDumpTestBase {
         Pair<QueryDumpInfo, String> replayPair =
                 getPlanFragment(getDumpInfoFromFile("query_dump/pushdown_distinct_agg_below_window2"),
                         null, TExplainLevel.NORMAL);
-        System.out.println(replayPair.second);
         Assertions.assertTrue(replayPair.second.contains("  3:ANALYTIC\n" +
                 "  |  functions: [, sum(5: sum), ]\n" +
                 "  |  partition by: 1: TIME\n" +
@@ -1107,7 +1106,6 @@ public class ReplayFromDumpTest extends ReplayFromDumpTestBase {
         QueryDumpInfo queryDumpInfo = getDumpInfoFromJson(dumpString);
         Pair<QueryDumpInfo, String> replayPair = getPlanFragment(dumpString, queryDumpInfo.getSessionVariable(),
                 TExplainLevel.NORMAL);
-        System.out.println(Tracers.printScopeTimer());
         String ss = Tracers.printScopeTimer();
         int start = ss.indexOf("PhysicalRewrite[") + "PhysicalRewrite[".length();
         int end = ss.indexOf("]", start);

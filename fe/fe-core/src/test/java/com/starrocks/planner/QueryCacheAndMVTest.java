@@ -200,7 +200,6 @@ public class QueryCacheAndMVTest extends MVTestBase {
         Assertions.assertTrue(optFragment.isPresent());
         PlanFragment fragment = optFragment.get();
         String expectRange = "[]";
-        System.out.println(fragment.getCacheParam().getRegion_map().values());
         boolean exists = fragment.getCacheParam().getRegion_map()
                 .values().stream().anyMatch(value -> value.equals(expectRange));
         Assertions.assertTrue(exists);

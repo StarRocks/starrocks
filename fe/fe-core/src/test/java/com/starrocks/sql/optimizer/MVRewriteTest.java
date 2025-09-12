@@ -43,6 +43,7 @@ import com.starrocks.sql.ast.CreateMaterializedViewStmt;
 import com.starrocks.sql.optimizer.statistics.EmptyStatisticStorage;
 import com.starrocks.sql.plan.PlanTestBase;
 import com.starrocks.utframe.StarRocksAssert;
+import com.starrocks.utframe.StarRocksTestBase;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.AfterEach;
@@ -51,7 +52,7 @@ import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
-public class MVRewriteTest {
+public class MVRewriteTest extends StarRocksTestBase {
     private static final String EMPS_TABLE_NAME = "emps";
     private static final String EMPS_MV_NAME = "emps_mv";
     private static final String HR_DB_NAME = "db1";
@@ -835,7 +836,7 @@ public class MVRewriteTest {
             starRocksAssert.withMaterializedView(createMVSQL);
             Assertions.fail();
         } catch (Exception e) {
-            System.out.println(e.getMessage());
+            logSysInfo(e.getMessage());
         }
     }
 
@@ -1777,7 +1778,6 @@ public class MVRewriteTest {
 
         String query = "select k1, sum(k3) from t1 where k1 = '2024-06-12' group by k1";
         String plan = UtFrameUtils.getFragmentPlan(connectContext, query);
-        System.out.println(plan);
         PlanTestBase.assertContains(plan, "     TABLE: t1\n" +
                 "     PREAGGREGATION: ON\n" +
                 "     PREDICATES: 1: k1 = '2024-06-12'\n" +
