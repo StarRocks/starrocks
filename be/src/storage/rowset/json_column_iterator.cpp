@@ -393,12 +393,8 @@ Status JsonDynamicFlatIterator::_dynamic_flat(Column* output, FUNC read_fn) {
     // 2. flat
     _flattener->flatten(proxy.get());
     auto result = _flattener->mutable_result();
-<<<<<<< HEAD
-    json_data->set_flat_columns(_target_paths, _target_types, result);
-=======
     json_data->set_flat_columns(_target_paths, _target_types, std::move(result));
     output->check_or_die();
->>>>>>> 180b81f3ff ([BugFix] Fix JSON extraction null column consistency and add validation checks (#63054))
     return Status::OK();
 }
 
