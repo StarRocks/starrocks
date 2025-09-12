@@ -241,7 +241,7 @@ public class ConnectionTest {
         TAuthInfo tAuthInfo = new TAuthInfo();
         tAuthInfo.setUser("user");
         tAuthInfo.setUser_ip("%");
-        context.setAuthInfoFromThrift(tAuthInfo);
+        UserIdentityUtils.setAuthInfoFromThrift(context, tAuthInfo);
         Assertions.assertEquals("user", context.getCurrentUserIdentity().getUser());
     }
 

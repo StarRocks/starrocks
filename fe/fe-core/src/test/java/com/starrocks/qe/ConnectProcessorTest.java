@@ -37,7 +37,7 @@ package com.starrocks.qe;
 import com.google.common.base.Strings;
 import com.google.common.collect.Sets;
 import com.starrocks.analysis.AccessTestUtil;
-import com.starrocks.authentication.AuthenticationContext;
+import com.starrocks.authentication.AccessControlContext;
 import com.starrocks.authentication.AuthenticationMgr;
 import com.starrocks.authentication.PlainPasswordAuthenticationProvider;
 import com.starrocks.authorization.PrivilegeBuiltinConstants;
@@ -320,9 +320,9 @@ public class ConnectProcessorTest extends DDLTestBase {
                 minTimes = 0;
                 result = MysqlCapability.DEFAULT_CAPABILITY;
 
-                context.getAuthenticationContext();
+                context.getAccessControlContext();
                 minTimes = 0;
-                result = new AuthenticationContext();
+                result = new AccessControlContext();
 
                 context.getAuthenticationProvider();
                 minTimes = 0;

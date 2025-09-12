@@ -26,14 +26,14 @@ public interface AuthenticationProvider {
      * @param authResponse auth response received by mysql protocol
      * @throws AuthenticationException when authentication fail
      */
-    void authenticate(AuthenticationContext authContext, UserIdentity userIdentity, byte[] authResponse)
+    void authenticate(AccessControlContext authContext, UserIdentity userIdentity, byte[] authResponse)
             throws AuthenticationException;
 
     /**
      * Some special Authentication Methods need to pass more information, and authMoreDataPacket is a unified interface.
      * <a href="https://dev.mysql.com/doc/dev/mysql-server/latest/page_protocol_connection_phase_packets_protocol_auth_more_data.html">...</a>
      */
-    default byte[] authMoreDataPacket(AuthenticationContext authContext, String user, String host)
+    default byte[] authMoreDataPacket(AccessControlContext authContext, String user, String host)
             throws AuthenticationException {
         return null;
     }
@@ -44,12 +44,12 @@ public interface AuthenticationProvider {
      * server can send this packet tp ask client to use another authentication method.
      * <a href="https://dev.mysql.com/doc/dev/mysql-server/latest/page_protocol_connection_phase_packets_protocol_auth_switch_request.html">...</a>
      */
-    default byte[] authSwitchRequestPacket(AuthenticationContext authContext, String user, String host)
+    default byte[] authSwitchRequestPacket(AccessControlContext authContext, String user, String host)
             throws AuthenticationException {
         return null;
     }
 
-    default void checkLoginSuccess(int connectionId, AuthenticationContext authContext) throws AuthenticationException {
+    default void checkLoginSuccess(int connectionId, AccessControlContext authContext) throws AuthenticationException {
         // do nothing
     }
 }
