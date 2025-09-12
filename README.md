@@ -138,6 +138,7 @@ This project is used by the following companies. Learn more about their use case
 - [Fresha](https://medium.com/fresha-data-engineering/how-we-accidentally-became-one-of-uks-first-starrocks-production-pioneers-7db249f10010)
 - [Grab](https://engineering.grab.com/building-a-spark-observability)
 - [HerdWatch](https://medium.com/p/a7916a7e87bf)
+- [Intuit](https://www.youtube.com/watch?v=tUC3FS3ki10)
 - [iQiyi](https://medium.com/starrocks-engineering/real-time-analytics-at-scale-why-we-use-starrocks-0aa3c859cbeb)
 - [Naver](https://starrocks.medium.com/how-join-changed-how-we-approach-data-infra-at-naver-3a5bb1dac49f)
 - [Pinterest](https://medium.com/pinterest-engineering/delivering-faster-analytics-at-pinterest-a639cdfad374)
