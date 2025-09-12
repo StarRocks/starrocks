@@ -156,7 +156,8 @@ public class StreamLoadMultiStmtTask extends AbstractStreamLoadTask {
     }
 
     public void beginTxn(TransactionResult resp) {
-        TransactionStmtExecutor.beginStmt(context, new BeginStmt(NodePosition.ZERO));
+        TransactionStmtExecutor.beginStmt(context, new BeginStmt(NodePosition.ZERO),
+                TransactionState.LoadJobSourceType.MULTI_STATEMENT_STREAMING);
         this.txnId = context.getTxnId();
         LOG.info("start transaction id {}", txnId);
     }
