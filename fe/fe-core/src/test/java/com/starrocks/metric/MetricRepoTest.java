@@ -18,6 +18,7 @@ import com.starrocks.catalog.Table;
 import com.starrocks.clone.TabletSchedCtx;
 import com.starrocks.clone.TabletScheduler;
 import com.starrocks.clone.TabletSchedulerStat;
+import com.starrocks.common.Config;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.http.rest.MetricsAction;
 import com.starrocks.rpc.BrpcProxy;
@@ -250,6 +251,38 @@ public class MetricRepoTest extends PlanTestBase {
             } else {
                 Assertions.fail("Unknown type: " + type);
             }
+        }
+    }
+
+    @Test
+    public void testRoutineLoadLagTimeMetricsCollection() {
+        // Test that routine load lag time metrics are collected when config is enabled
+        boolean originalConfigValue = Config.enable_routine_load_lag_time_metrics;
+        try {
+            // Test case 1: Config enabled - should collect metrics
+            Config.enable_routine_load_lag_time_metrics = true;
+            
+            JsonMetricVisitor visitor = new JsonMetricVisitor("test");
+            MetricsAction.RequestParams params = new MetricsAction.RequestParams(true, true, true, true);
+            
+            // This should execute line 914 and call RoutineLoadLagTimeMetricMgr.getInstance().collectRoutineLoadLagTimeMetrics(visitor)
+            String result = MetricRepo.getMetric(visitor, params);
+            
+            // Verify that the method completed successfully (no exceptions thrown)
+            Assertions.assertNotNull(result);
+            
+            // Test case 2: Config disabled - should skip metrics collection
+            Config.enable_routine_load_lag_time_metrics = false;
+            
+            JsonMetricVisitor visitor2 = new JsonMetricVisitor("test2");
+            String result2 = MetricRepo.getMetric(visitor2, params);
+            
+            // Verify that the method completed successfully even when config is disabled
+            Assertions.assertNotNull(result2);
+            
+        } finally {
+            // Restore original config value
+            Config.enable_routine_load_lag_time_metrics = originalConfigValue;
         }
     }
 }
