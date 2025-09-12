@@ -1,7 +1,7 @@
 ---
 sidebar_position: 1
 sidebar_label: '概述'
-keywords: ['S3 API', 'reduce cost', 'efficiency', 'efficient', 'performance']
+keywords: ['nei cun', 'S3 API', 'reduce cost', 'efficiency', 'efficient', 'performance']
 ---
 
 # 最佳实践
