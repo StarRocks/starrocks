@@ -20,6 +20,7 @@
 #include <jemalloc/jemalloc.h>
 
 #include <cerrno>
+#include <cinttypes>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
@@ -91,6 +92,7 @@ static void dump_trace_info() {
         auto query_id = CurrentThread::current().query_id();
         auto fragment_instance_id = CurrentThread::current().fragment_instance_id();
         const std::string& custom_coredump_msg = CurrentThread::current().get_custom_coredump_msg();
+        auto txn_id = CurrentThread::current().txn_id();
         const uint32_t MAX_BUFFER_SIZE = 512;
         char buffer[MAX_BUFFER_SIZE] = {};
 
@@ -100,9 +102,9 @@ static void dump_trace_info() {
 
         res = sprintf(buffer, "query_id:");
         res = print_unique_id(buffer + res, query_id) + res;
-        res = sprintf(buffer + res, ", ") + res;
-        res = sprintf(buffer + res, "fragment_instance:") + res;
+        res = sprintf(buffer + res, ", fragment_instance:") + res;
         res = print_unique_id(buffer + res, fragment_instance_id) + res;
+        res = sprintf(buffer + res, ", txn_id: %" PRId64, txn_id) + res;
         res = sprintf(buffer + res, "\n") + res;
 
         // print for lake filename

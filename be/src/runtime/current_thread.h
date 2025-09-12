@@ -236,6 +236,10 @@ public:
     void set_pipeline_driver_id(int32_t driver_id) { _driver_id = driver_id; }
     int32_t get_driver_id() const { return _driver_id; }
 
+    void set_txn_id(int64_t txn_id) { _txn_id = txn_id; }
+
+    int64_t txn_id() const { return _txn_id; }
+
     void set_custom_coredump_msg(const std::string& custom_coredump_msg) { _custom_coredump_msg = custom_coredump_msg; }
 
     const std::string& get_custom_coredump_msg() const { return _custom_coredump_msg; }
@@ -349,6 +353,7 @@ private:
     int32_t _driver_id = 0;
     bool _check = true;
     bool _reserve_mod = false;
+    int64_t _txn_id = 0;
 };
 
 inline thread_local CurrentThread tls_thread_status;
