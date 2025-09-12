@@ -3706,4 +3706,13 @@ public class OlapTable extends Table {
     public void updateLastCollectProfileTime() {
         this.lastCollectProfileTime = System.currentTimeMillis();
     }
+
+    // only used for LakeTable and LakeMaterializedView
+    public List<Long> getShardGroupIds() {
+        List<Long> shardGroupIds = new ArrayList<>();
+        for (Partition p : getAllPartitions()) {
+            shardGroupIds.add(p.getShardGroupId());
+        }
+        return shardGroupIds;
+    }
 }
