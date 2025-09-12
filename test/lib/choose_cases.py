@@ -260,6 +260,9 @@ class ChooseCase(object):
                     tools.assert_in("thread", each_stat, "CONCURRENCY THREAD FORMAT ERROR!")
                     for each_thread in each_stat["thread"]:
                         _case_sqls.extend(each_thread["cmd"])
+                elif isinstance(each_stat, dict) and each_stat.get("type", "") == CLEANUP_FLAG:
+                    tools.assert_in("cmd", each_stat, "CLEANUP STATEMENT FORMAT ERROR!")
+                    _case_sqls.extend(each_stat["cmd"])
                 else:
                     tools.ok_(False, "Init data error!")
 

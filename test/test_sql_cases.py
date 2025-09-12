@@ -187,6 +187,15 @@ class TestSQLCases(sr_sql_lib.StarrocksSQLApiLib):
                         resource_name = self._get_resource_name(each_cmd)
                         if len(resource_name) > 0:
                             self.resource.append(resource_name)
+            elif isinstance(sql, dict) and sql.get("type", "") == CLEANUP_FLAG:
+                tools.assert_in("cmd", sql, "CLEANUP STATEMENT FORMAT ERROR!")
+                for each_cmd in sql["cmd"]:
+                    db_name = self._get_db_name(each_cmd)
+                    if len(db_name) > 0:
+                        self.db.append(db_name)
+                    resource_name = self._get_resource_name(each_cmd)
+                    if len(resource_name) > 0:
+                        self.resource.append(resource_name)
             else:
                 tools.ok_(False, "Init data error!")
 
@@ -239,6 +248,12 @@ class TestSQLCases(sr_sql_lib.StarrocksSQLApiLib):
                             db_name = self._get_db_name(each_cmd)
                             if len(db_name) > 0:
                                 all_db_dict.setdefault(db_name, set()).add(case.name)
+                elif isinstance(sql, dict) and sql.get("type", "") == CLEANUP_FLAG:
+                    tools.assert_in("cmd", sql, "CLEANUP STATEMENT FORMAT ERROR!")
+                    for each_cmd in sql["cmd"]:
+                        db_name = self._get_db_name(each_cmd)
+                        if len(db_name) > 0:
+                            all_db_dict.setdefault(db_name, set()).add(case.name)
                 else:
                     tools.ok_(False, "Check db uniqueness error!")
 
@@ -276,6 +291,13 @@ class TestSQLCases(sr_sql_lib.StarrocksSQLApiLib):
                         for each_uuid in uuid_vars:
                             if each_uuid not in variable_dict:
                                 variable_dict[each_uuid] = uuid.uuid4().hex
+            elif isinstance(sql, dict) and sql.get("type", "") == CLEANUP_FLAG:
+                tools.assert_in("cmd", sql, "CLEANUP STATEMENT FORMAT ERROR!")
+                for each_cmd in sql["cmd"]:
+                    uuid_vars = re.findall(r"\${(uuid[0-9]*)}", each_cmd)
+                    for each_uuid in uuid_vars:
+                        if each_uuid not in variable_dict:
+                            variable_dict[each_uuid] = uuid.uuid4().hex
 
             else:
                 tools.ok_(False, "Replace uuid error!")
@@ -306,6 +328,16 @@ class TestSQLCases(sr_sql_lib.StarrocksSQLApiLib):
                         tmp_cmd.append(each_cmd)
                     each_thread["cmd"] = tmp_cmd
 
+                ret.append(_sql)
+            elif isinstance(sql, dict) and sql.get("type", "") == CLEANUP_FLAG:
+                _sql = copy.deepcopy(sql)
+                tools.assert_in("cmd", _sql, "CLEANUP STATEMENT FORMAT ERROR!")
+                tmp_cmd = []
+                for each_cmd in _sql["cmd"]:
+                    for each_var in variable_dict:
+                        each_cmd = each_cmd.replace("${%s}" % each_var, variable_dict[each_var])
+                    tmp_cmd.append(each_cmd)
+                _sql["cmd"] = tmp_cmd
                 ret.append(_sql)
 
         return ret
