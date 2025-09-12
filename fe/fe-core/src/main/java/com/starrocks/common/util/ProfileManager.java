@@ -196,7 +196,6 @@ public class ProfileManager implements MemoryTrackable {
                     profileMap.remove(removedQueryId);
                 }
             }
-            }
         } finally {
             writeLock.unlock();
         }
