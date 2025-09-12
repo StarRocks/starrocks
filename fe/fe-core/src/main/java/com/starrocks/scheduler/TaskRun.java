@@ -346,6 +346,27 @@ public class TaskRun implements Comparable<TaskRun> {
     }
 
     public Constants.TaskRunState executeTaskRun() throws Exception {
+        try {
+            Constants.TaskRunState result = doExecuteTaskRun();
+            // clear the fail count
+            task.resetConsecutiveFailCount();
+            return result;
+        } catch (Exception e) {
+            task.incConsecutiveFailCount();
+            LOG.warn("Failed to execute task run, task_id: {}, task_run_id: {}, failCount:{}",
+                    taskId, taskRunId, task.getConsecutiveFailCount(), e);
+            if (Config.max_task_consecutive_fail_count > 0 &&
+                    task.getConsecutiveFailCount() >= Config.max_task_consecutive_fail_count) {
+                LOG.warn("Task {} has failed {} times continuously, so we disable it",
+                        task.getName(), task.getConsecutiveFailCount());
+                TaskManager taskManager = GlobalStateMgr.getCurrentState().getTaskManager();
+                taskManager.suspendTask(task);
+            }
+            throw e;
+        }
+    }
+
+    private Constants.TaskRunState doExecuteTaskRun() throws Exception {
         TaskRunContext taskRunContext = buildTaskRunContext();
 
         // prepare to execute task run, move it here so that we can catch the exception and set the status

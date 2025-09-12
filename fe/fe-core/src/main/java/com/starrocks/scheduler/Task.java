@@ -20,11 +20,14 @@ import com.starrocks.catalog.UserIdentity;
 import com.starrocks.cluster.ClusterNamespace;
 import com.starrocks.common.io.Writable;
 import com.starrocks.common.util.PropertyAnalyzer;
+import com.starrocks.persist.gson.GsonPostProcessable;
 import com.starrocks.scheduler.persist.TaskSchedule;
 
+import java.io.IOException;
 import java.util.Map;
+import java.util.concurrent.atomic.AtomicInteger;
 
-public class Task implements Writable {
+public class Task implements Writable, GsonPostProcessable {
 
     @SerializedName("id")
     private long id;
@@ -74,6 +77,9 @@ public class Task implements Writable {
 
     @SerializedName("createUserIdentity")
     private UserIdentity userIdentity;
+
+    // consecutive failure count, used to mark a task as PAUSE when it exceeds the threshold
+    private volatile AtomicInteger consecutiveFailCount = new AtomicInteger();
 
     public Task() {}
 
@@ -211,6 +217,18 @@ public class Task implements Writable {
         this.postRun = postRun;
     }
 
+    public int getConsecutiveFailCount() {
+        return consecutiveFailCount.get();
+    }
+
+    public int incConsecutiveFailCount() {
+        return consecutiveFailCount.incrementAndGet();
+    }
+
+    public void resetConsecutiveFailCount() {
+        this.consecutiveFailCount.set(0);
+    }
+
     @Override
     public String toString() {
         return "Task{" +
@@ -227,6 +245,14 @@ public class Task implements Writable {
                 ", expireTime=" + expireTime +
                 ", source=" + source +
                 ", createUser='" + createUser + '\'' +
+                ", consecutiveFailCount='" + consecutiveFailCount + '\'' +
                 '}';
+    }
+
+    @Override
+    public void gsonPostProcess() throws IOException {
+        if (consecutiveFailCount == null) {
+            this.consecutiveFailCount = new AtomicInteger();
+        }
     }
 }
