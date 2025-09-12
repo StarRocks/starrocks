@@ -1,0 +1,85 @@
+-- name: test_query_detail_api @sequential
+use ${db[0]};
+-- result:
+-- !result
+CREATE TABLE `query_detail_test_table` (
+    `id` bigint,
+    `name` varchar(100),
+    `value` double,
+    `created_time` datetime
+) 
+DUPLICATE KEY(`id`)
+COMMENT "Test table for query detail API"
+PROPERTIES (
+    "replication_num" = "1"
+);
+-- result:
+-- !result
+INSERT INTO query_detail_test_table VALUES 
+(1, 'test1', 10.5, '2024-01-01 10:00:00'),
+(2, 'test2', 20.5, '2024-01-02 11:00:00'),
+(3, 'test3', 30.5, '2024-01-03 12:00:00'),
+(4, 'test4', 40.5, '2024-01-04 13:00:00'),
+(5, 'test5', 50.5, '2024-01-05 14:00:00');
+-- result:
+-- !result
+select sum(id) from query_detail_test_table;
+-- result:
+15
+-- !result
+shell: current_time=$(date +%s); curl -X GET '${url}/api/query_detail?event_time='$((current_time - 1)) -u 'root:' | jq '.[-1] | {scanRows, scanBytes, returnRows, state}'
+-- result:
+0
+{
+  "scanRows": 0,
+  "scanBytes": 0,
+  "returnRows": 1,
+  "state": "FINISHED"
+}
+-- !result
+shell: current_time=$(date +%s); curl -X GET '${url}/api/query_detail?event_time='$((current_time - 1)) -u 'root:' | jq '.[-1] | (.cpuCostNs > 0 and .memCostBytes > 0)'
+-- result:
+0
+false
+-- !result
+SELECT * FROM non_existent_table;
+-- result:
+E: (5502, "Getting analyzing error. Detail message: Unknown table 'test_db_f09fcf89708147159395cb0276ecbc4e.non_existent_table'.")
+-- !result
+shell: current_time=$(date +%s); curl -X GET '${url}/api/query_detail?event_time='$((current_time - 1)) -u 'root:' | jq '.[-1] | {scanRows, scanBytes, returnRows, state}'
+-- result:
+0
+{
+  "scanRows": 0,
+  "scanBytes": 0,
+  "returnRows": 0,
+  "state": "FAILED"
+}
+-- !result
+shell: current_time=$(date +%s); curl -X GET '${url}/api/query_detail?event_time='$((current_time - 1)) -u 'root:' | jq '.[-1] | (.cpuCostNs == 0 and .memCostBytes == 0)'
+-- result:
+0
+true
+-- !result
+select /*+set_var(query_timeout=1)*/ sum(id), sleep(5) from query_detail_test_table;
+-- result:
+E: (5024, "Query reached its timeout of 1 seconds, please increase the 'query_timeout' session variable and retry")
+-- !result
+shell: current_time=$(date +%s); curl -X GET '${url}/api/query_detail?event_time='$((current_time - 1)) -u 'root:' | jq '.[-1] | {scanRows, scanBytes, returnRows, state}'
+-- result:
+0
+{
+  "scanRows": 0,
+  "scanBytes": 0,
+  "returnRows": 0,
+  "state": "FAILED"
+}
+-- !result
+shell: current_time=$(date +%s); curl -X GET '${url}/api/query_detail?event_time='$((current_time - 1)) -u 'root:' | jq '.[-1] | (.cpuCostNs == 0 and .memCostBytes == 0)'
+-- result:
+0
+true
+-- !result
+DROP TABLE query_detail_test_table;
+-- result:
+-- !result
