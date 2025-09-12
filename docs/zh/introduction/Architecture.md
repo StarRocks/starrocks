@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+keywords: ['cun chu']
 ---
 
 # 架构
