@@ -1828,7 +1828,7 @@ public class PartitionBasedMvRefreshProcessorOlapTest extends MVTestBase {
     public void testQueryDebugOptions() {
         SessionVariable sessionVariable = connectContext.getSessionVariable();
         QueryDebugOptions debugOptions = sessionVariable.getQueryDebugOptions();
-        Assert.assertEquals(debugOptions.getMaxRefreshMaterializedViewRetryNum(), 3);
+        Assert.assertEquals(debugOptions.getMaxRefreshMaterializedViewRetryNum(), 1);
         Assert.assertEquals(debugOptions.isEnableNormalizePredicateAfterMVRewrite(), false);
     }
     @Test

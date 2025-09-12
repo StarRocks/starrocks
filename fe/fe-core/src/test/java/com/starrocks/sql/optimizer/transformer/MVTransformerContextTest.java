@@ -50,6 +50,7 @@ public class MVTransformerContextTest extends MVTestBase  {
         Assertions.assertFalse(view1.getRelatedMaterializedViews().isEmpty());
         Assertions.assertTrue(mvTransformerContext.isEnableViewBasedMVRewrite(view1));
         starRocksAssert.dropView("view1");
+        starRocksAssert.dropMaterializedView("mv1");
     }
 
     @Test
@@ -71,5 +72,6 @@ public class MVTransformerContextTest extends MVTestBase  {
         Assertions.assertFalse(view1.getRelatedMaterializedViews().isEmpty());
         Assertions.assertFalse(mvTransformerContext.isEnableViewBasedMVRewrite(view1));
         starRocksAssert.dropView("view1");
+        starRocksAssert.dropMaterializedView("mv1");
     }
 }
