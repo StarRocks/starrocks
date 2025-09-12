@@ -22,6 +22,8 @@ public interface IMinMaxStatsMgr {
 
     Optional<ColumnMinMax> getStats(ColumnIdentifier identifier, StatsVersion version);
 
+    Optional<ColumnMinMax> getStatsSync(ColumnIdentifier identifier, StatsVersion version);
+
     void removeStats(ColumnIdentifier identifier, StatsVersion version);
 
     static IMinMaxStatsMgr internalInstance() {
