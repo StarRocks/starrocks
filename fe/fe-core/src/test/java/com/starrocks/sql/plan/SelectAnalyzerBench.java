@@ -15,10 +15,10 @@
 package com.starrocks.sql.plan;
 
 import com.google.common.collect.Lists;
+import com.starrocks.analysis.Expr;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.analyzer.Field;
 import com.starrocks.sql.analyzer.SelectAnalyzer;
-import com.starrocks.sql.ast.expression.Expr;
 
 import java.util.ArrayList;
 import java.util.List;
