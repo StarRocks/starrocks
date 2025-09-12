@@ -28,6 +28,7 @@ import com.starrocks.catalog.Type;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
+import com.starrocks.sql.optimizer.OptimizerTraceUtil;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.operator.AggType;
 import com.starrocks.sql.optimizer.operator.ColumnOutputInfo;
@@ -213,6 +214,7 @@ public class FineGrainedRangePredicateRule extends TransformationRule {
 
         LogicalAggregationOperator newAggOp = rewriteAggOperator(aggColInfoList, unionOutputCols);
 
+        OptimizerTraceUtil.logMVRewrite(context, this, "FineGrainedRangePredicateRule applied");
         return Lists.newArrayList(OptExpression.create(newAggOp, unionOpt));
     }
 
