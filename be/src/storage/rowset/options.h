@@ -34,10 +34,12 @@
 
 #pragma once
 
-#include <cstddef>
-
+#include "common/config.h"
 #include "io/seekable_input_stream.h"
+#include "storage/olap_common.h"
+#include "storage/options.h"
 #include "storage/rowset/page_handle.h"
+
 namespace starrocks {
 
 class FileSystem;

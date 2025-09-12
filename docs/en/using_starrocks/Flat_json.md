@@ -203,6 +203,18 @@ Setting Flat JSON-related properties on table level is supported from v4.0 onwar
 
 2. Enable FE pruning feature: `SET GLOBAL cbo_prune_json_subfield = true;`
 
+## Related session variables
+
+- `cbo_json_v2_rewrite` (default: true): Enables JSON v2 path rewrite so that expressions like `get_json_*` can be rewritten to direct access of Flat JSON subcolumns, unlocking predicate pushdown and column pruning.
+- `cbo_json_v2_dict_opt` (default: true): Enables low-cardinality dictionary optimization for Flat JSON extended string subcolumns produced by the rewrite, which can speed up string expressions, GROUP BY, and JOIN.
+
+Example:
+
+```SQL
+SET cbo_json_v2_rewrite = true;
+SET cbo_json_v2_dict_opt = true;
+```
+
 ## Enabling Flat JSON Feature (Before Version 3.4)
 
 1. Modify BE configuration: `enable_json_flat`, which defaults to `false` before version 3.4. For modification methods, refer to

@@ -81,6 +81,25 @@ Status IcebergTableSink::decompose_to_pipeline(pipeline::OpFactories prev_operat
     sink_ctx->transform_exprs = iceberg_table_desc->get_transform_exprs();
     sink_ctx->fragment_context = fragment_ctx;
     sink_ctx->tuple_desc_id = t_iceberg_sink.tuple_id;
+    auto& sort_order = iceberg_table_desc->sort_order();
+    if (!sort_order.sort_key_idxes.empty()) {
+        sink_ctx->sort_ordering = std::make_shared<connector::SortOrdering>();
+        sink_ctx->sort_ordering->sort_key_idxes.assign(sort_order.sort_key_idxes.begin(),
+                                                       sort_order.sort_key_idxes.end());
+        sink_ctx->sort_ordering->sort_descs.descs.reserve(sort_order.sort_key_idxes.size());
+        for (size_t idx = 0; idx < sort_order.sort_key_idxes.size(); ++idx) {
+            bool is_asc = idx < sort_order.is_ascs.size() ? sort_order.is_ascs[idx] : true;
+            bool is_null_first = false;
+            if (idx < sort_order.is_null_firsts.size()) {
+                is_null_first = sort_order.is_null_firsts[idx];
+            } else if (is_asc) {
+                // If ascending, nulls are first by default
+                // If descending, nulls are last by default
+                is_null_first = true;
+            }
+            sink_ctx->sort_ordering->sort_descs.descs.emplace_back(is_asc, is_null_first);
+        }
+    }
 
     auto connector = connector::ConnectorManager::default_instance()->get(connector::Connector::ICEBERG);
     auto sink_provider = connector->create_data_sink_provider();
@@ -102,6 +121,18 @@ Status IcebergTableSink::decompose_to_pipeline(pipeline::OpFactories prev_operat
     } else {
         auto source_column_index = iceberg_table_desc->partition_source_index_in_schema();
         partition_expr = iceberg_table_desc->get_partition_exprs();
+
+        //for 3.5 fe -> 4.0 be compact, try to set this.
+        if (partition_expr.empty()) {
+            auto output_expr = this->get_output_expr();
+            for (const auto& index : source_column_index) {
+                if (index < 0 || index >= this->get_output_expr().size()) {
+                    return Status::InternalError(fmt::format("Invalid partition index: {}", index));
+                }
+                partition_expr.push_back(output_expr[index]);
+            }
+        }
+
         int idx = 0;
         for (auto& part_expr : partition_expr) {
             int index = source_column_index[idx];

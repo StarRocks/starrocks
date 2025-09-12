@@ -15,7 +15,6 @@
 package com.starrocks.qe;
 
 import com.google.common.collect.Maps;
-import com.starrocks.analysis.TableName;
 import com.starrocks.authorization.IdGenerator;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.HiveTable;
@@ -27,6 +26,7 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.LocalMetastore;
 import com.starrocks.server.MetadataMgr;
 import com.starrocks.server.TemporaryTableMgr;
+import com.starrocks.sql.ast.expression.TableName;
 
 import java.util.ArrayList;
 import java.util.HashMap;

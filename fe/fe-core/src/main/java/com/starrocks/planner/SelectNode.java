@@ -34,9 +34,8 @@
 
 package com.starrocks.planner;
 
-import com.starrocks.analysis.Expr;
-import com.starrocks.analysis.SlotId;
 import com.starrocks.common.Pair;
+import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.thrift.TNormalPlanNode;
 import com.starrocks.thrift.TNormalSelectNode;
@@ -47,7 +46,6 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.nio.ByteBuffer;
-import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 
@@ -99,12 +97,12 @@ public class SelectNode extends PlanNode {
     protected String getNodeExplainString(String prefix, TExplainLevel detailLevel) {
         StringBuilder output = new StringBuilder();
         if (!conjuncts.isEmpty()) {
-            output.append(prefix + "predicates: " + getExplainString(conjuncts) + "\n");
+            output.append(prefix + "predicates: " + explainExpr(conjuncts) + "\n");
             if (commonSlotMap != null && !commonSlotMap.isEmpty()) {
                 output.append(prefix + "  common sub expr:" + "\n");
                 for (Map.Entry<SlotId, Expr> entry : commonSlotMap.entrySet()) {
                     output.append(prefix + "  <slot " + entry.getKey().toString() + "> : "
-                            + getExplainString(Arrays.asList(entry.getValue())) + "\n");
+                            + explainExpr(entry.getValue()) + "\n");
                 }
             }
         }

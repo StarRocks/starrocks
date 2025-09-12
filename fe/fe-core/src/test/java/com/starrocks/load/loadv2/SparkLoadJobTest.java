@@ -36,8 +36,6 @@ package com.starrocks.load.loadv2;
 
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
-import com.starrocks.analysis.BrokerDesc;
-import com.starrocks.analysis.LabelName;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.LocalTablet;
@@ -52,7 +50,6 @@ import com.starrocks.catalog.ResourceMgr;
 import com.starrocks.catalog.SparkResource;
 import com.starrocks.catalog.Type;
 import com.starrocks.catalog.UserIdentity;
-import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DataQualityException;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ExceptionChecker;
@@ -66,10 +63,12 @@ import com.starrocks.load.EtlJobType;
 import com.starrocks.load.EtlStatus;
 import com.starrocks.load.loadv2.etl.EtlJobConfig;
 import com.starrocks.qe.ConnectContext;
-import com.starrocks.qe.OriginStatement;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.BrokerDesc;
 import com.starrocks.sql.ast.DataDescription;
+import com.starrocks.sql.ast.LabelName;
 import com.starrocks.sql.ast.LoadStmt;
+import com.starrocks.sql.ast.OriginStatement;
 import com.starrocks.sql.ast.ResourceDesc;
 import com.starrocks.task.AgentBatchTask;
 import com.starrocks.task.AgentTaskExecutor;
@@ -204,7 +203,6 @@ public class SparkLoadJobTest {
 
         try {
             Assertions.assertTrue(resource.getSparkConfigs().isEmpty());
-            resourceDesc.analyze();
             BulkLoadJob bulkLoadJob = BulkLoadJob.fromLoadStmt(loadStmt, null);
             SparkLoadJob sparkLoadJob = (SparkLoadJob) bulkLoadJob;
             // check member
@@ -222,7 +220,7 @@ public class SparkLoadJobTest {
             SparkResource sparkResource = Deencapsulation.getField(sparkLoadJob, "sparkResource");
             Assertions.assertTrue(sparkResource.getSparkConfigs().containsKey("spark.executor.memory"));
             Assertions.assertEquals("1g", sparkResource.getSparkConfigs().get("spark.executor.memory"));
-        } catch (DdlException | AnalysisException e) {
+        } catch (DdlException e) {
             Assertions.fail(e.getMessage());
         }
     }

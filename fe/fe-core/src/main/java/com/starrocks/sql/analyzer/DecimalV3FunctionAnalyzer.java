@@ -17,12 +17,6 @@ package com.starrocks.sql.analyzer;
 import com.google.common.base.Joiner;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableSortedSet;
-import com.starrocks.analysis.ArithmeticExpr;
-import com.starrocks.analysis.Expr;
-import com.starrocks.analysis.FunctionCallExpr;
-import com.starrocks.analysis.FunctionName;
-import com.starrocks.analysis.FunctionParams;
-import com.starrocks.analysis.IntLiteral;
 import com.starrocks.catalog.AggregateFunction;
 import com.starrocks.catalog.ArrayType;
 import com.starrocks.catalog.Function;
@@ -32,6 +26,12 @@ import com.starrocks.catalog.ScalarFunction;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Type;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.sql.ast.expression.ArithmeticExpr;
+import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.FunctionCallExpr;
+import com.starrocks.sql.ast.expression.FunctionName;
+import com.starrocks.sql.ast.expression.FunctionParams;
+import com.starrocks.sql.ast.expression.IntLiteral;
 import com.starrocks.sql.parser.NodePosition;
 
 import java.util.Arrays;
@@ -463,19 +463,7 @@ public class DecimalV3FunctionAnalyzer {
             newFn = DecimalV3FunctionAnalyzer
                     .rectifyAggregationFunction((AggregateFunction) fn, argType, commonType);
         } else if (FunctionSet.MAX_BY.equals(fnName) || FunctionSet.MIN_BY.equals(fnName)) {
-            Type returnType = fn.getReturnType();
-            // Decimal v3 function return type maybe need change
-            ScalarType firstType = (ScalarType) argumentTypes[0];
-            Type commonType = firstType;
-            if (firstType.isDecimalV3()) {
-                commonType = ScalarType.createDecimalV3Type(firstType.getPrimitiveType(),
-                        firstType.getPrecision(), firstType.getScalarScale());
-            }
-            if (returnType.isDecimalV3() && commonType.isValid()) {
-                returnType = commonType;
-            }
-            Preconditions.checkState(fn instanceof AggregateFunction);
-
+            Type returnType = argumentTypes[0];
             Type[] argTypes = replaceArgDecimalType(fn.getArgs(), argumentTypes);
             newFn = fn.copy();
             newFn.setArgsType(argTypes);
@@ -541,6 +529,16 @@ public class DecimalV3FunctionAnalyzer {
     private static Function getArrayDecimalFunction(Function fn, Type[] argumentTypes) {
         Function newFn = fn.copy();
         Preconditions.checkState(argumentTypes.length > 0);
+
+        // Check if the first argument contains DECIMAL256 type and disable array functions for it
+        if (argumentTypes[0] instanceof ArrayType) {
+            Type itemType = ((ArrayType) argumentTypes[0]).getItemType();
+            if (itemType.isDecimal256()) {
+                throw new SemanticException(String.format(
+                        "Array function '%s' is not supported for DECIMAL256 type", fn.functionName()));
+            }
+        }
+
         switch (fn.functionName()) {
             case FunctionSet.ARRAY_DISTINCT:
             case FunctionSet.ARRAY_SORT:

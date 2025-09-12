@@ -140,6 +140,10 @@ public abstract class StorageVolumeMgr implements Writable, GsonPostProcessable 
             if (sv == null) {
                 throw new MetaNotFoundException(String.format("Storage volume '%s' does not exist", name));
             }
+            String svName = GlobalStateMgr.getCurrentState().getClusterSnapshotMgr().getAutomatedSnapshotSvName();
+            if (svName != null && svName.equals(name)) {
+                throw new DdlException(String.format("Snapshot enabled on storage volume '%s', drop volume failed.", name));
+            }
             Preconditions.checkState(!defaultStorageVolumeId.equals(sv.getId()),
                     "default storage volume can not be removed");
             Set<Long> dbs = storageVolumeToDbs.getOrDefault(sv.getId(), new HashSet<>());

@@ -34,7 +34,6 @@
 
 package com.starrocks.planner;
 
-import com.starrocks.analysis.TupleId;
 import com.starrocks.common.LocalExchangerType;
 import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.thrift.TPlanNode;

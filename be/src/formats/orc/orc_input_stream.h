@@ -16,7 +16,7 @@
 
 #include <orc/OrcFile.hh>
 
-#include "exec/hdfs_scanner.h"
+#include "exec/hdfs_scanner/hdfs_scanner.h"
 #include "io/shared_buffered_input_stream.h"
 namespace starrocks {
 

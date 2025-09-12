@@ -15,7 +15,6 @@
 package com.starrocks.authentication;
 
 import com.google.common.base.Joiner;
-import com.starrocks.analysis.InformationFunction;
 import com.starrocks.catalog.UserIdentity;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
@@ -30,6 +29,7 @@ import com.starrocks.sql.analyzer.Analyzer;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.StatementBase;
+import com.starrocks.sql.ast.expression.InformationFunction;
 import com.starrocks.sql.ast.group.ShowCreateGroupProviderStmt;
 import com.starrocks.sql.ast.integration.ShowCreateSecurityIntegrationStatement;
 import com.starrocks.sql.parser.NodePosition;
@@ -51,7 +51,6 @@ import java.nio.charset.StandardCharsets;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyShort;
@@ -125,27 +124,6 @@ public class SecurityIntegrationTest {
         }
 
         return sb.toString();
-    }
-
-    @Test
-    public void testFileGroupProvider() throws DdlException, AuthenticationException, IOException, NoSuchMethodException {
-        new MockUp<FileGroupProvider>() {
-            @Mock
-            public InputStream getPath(String groupFileUrl) throws IOException {
-                String path = ClassLoader.getSystemClassLoader().getResource("auth").getPath() + "/" + "file_group";
-                return new FileInputStream(path);
-            }
-        };
-
-        String groupName = "g1";
-        Map<String, String> properties = new HashMap<>();
-        properties.put(FileGroupProvider.GROUP_FILE_URL, "file_group");
-        FileGroupProvider fileGroupProvider = new FileGroupProvider(groupName, properties);
-        fileGroupProvider.init();
-
-        Set<String> groups = fileGroupProvider.getGroup(new UserIdentity("harbor", "127.0.0.1"));
-        Assertions.assertTrue(groups.contains("group1"));
-        Assertions.assertTrue(groups.contains("group2"));
     }
 
     @Test
@@ -233,7 +211,7 @@ public class SecurityIntegrationTest {
 
         Assertions.assertThrows(AuthenticationException.class, () ->
                 ldapAuthProviderForNative.authenticate(
-                        context,
+                        context.getAccessControlContext(),
                         new UserIdentity("admin", "%"),
                         "x".getBytes(StandardCharsets.UTF_8)));
     }
@@ -260,7 +238,6 @@ public class SecurityIntegrationTest {
                 ShowExecutor.execute(new ShowCreateSecurityIntegrationStatement("ldap", NodePosition.ZERO), null);
         Assert.assertTrue(
                 resultSet.getResultRows().get(0).get(1).contains("\"authentication_ldap_simple_bind_root_pwd\" = \"***\""));
-
 
         properties = new HashMap<>();
         properties.put(SecurityIntegration.SECURITY_INTEGRATION_PROPERTY_TYPE_KEY, "authentication_oauth2");

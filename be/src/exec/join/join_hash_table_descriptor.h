@@ -114,7 +114,8 @@ struct JoinHashTableItems {
         // 1) the ht's size is enough large, for example, larger than (1UL << 27) bytes.
         // 2) smaller ht but most buckets have more than one keys
         cache_miss_serious = row_count > (1UL << 18) &&
-                             ((probe_bytes > (1UL << 25) && keys_per_bucket > 2) ||
+                             ((probe_bytes > (1UL << 24) && keys_per_bucket >= 10) ||
+                              (probe_bytes > (1UL << 25) && keys_per_bucket > 2) ||
                               (probe_bytes > (1UL << 26) && keys_per_bucket > 1.5) || probe_bytes > (1UL << 27));
         VLOG_QUERY << "ht cache miss serious = " << cache_miss_serious << " row# = " << row_count
                    << " , bytes = " << probe_bytes << " , depth = " << keys_per_bucket;
@@ -134,7 +135,8 @@ struct HashTableProbeState {
     Buffer<uint32_t> buckets;
     Buffer<uint32_t> next;
     Buffer<Slice> probe_slice;
-    const Buffer<uint8_t>* null_array = nullptr;
+
+    std::optional<ImmBuffer<uint8_t>> null_array;
     ColumnPtr probe_key_column;
     const Columns* key_columns = nullptr;
     ColumnPtr build_index_column;

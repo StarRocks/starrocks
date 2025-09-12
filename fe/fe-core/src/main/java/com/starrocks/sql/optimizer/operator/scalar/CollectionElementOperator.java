@@ -73,7 +73,7 @@ public class CollectionElementOperator extends ArgsScalarOperator {
 
     @Override
     public <R, C> R accept(ScalarOperatorVisitor<R, C> visitor, C context) {
-        return visitor.visitCollectionElement(this, context);
+        return  visitor.visitCollectionElement(this, context);
     }
 
     @Override

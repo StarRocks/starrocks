@@ -14,6 +14,7 @@
 package com.starrocks.catalog.system.information;
 
 import com.google.common.collect.Lists;
+import com.starrocks.authentication.UserIdentityUtils;
 import com.starrocks.authorization.AccessDeniedException;
 import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.catalog.PrimitiveType;
@@ -23,6 +24,8 @@ import com.starrocks.catalog.UserIdentity;
 import com.starrocks.catalog.system.SystemId;
 import com.starrocks.catalog.system.SystemTable;
 import com.starrocks.cluster.ClusterNamespace;
+import com.starrocks.common.Config;
+import com.starrocks.common.util.SqlCredentialRedactor;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.scheduler.Constants;
 import com.starrocks.scheduler.Task;
@@ -69,7 +72,7 @@ public class TasksSystemTable {
         List<TTaskInfo> result = Lists.newArrayList();
         UserIdentity currentUser = null;
         if (params.isSetCurrent_user_ident()) {
-            currentUser = UserIdentity.fromThrift(params.current_user_ident);
+            currentUser = UserIdentityUtils.fromThrift(params.current_user_ident);
         }
 
         for (Task task : taskList) {
@@ -96,12 +99,16 @@ public class TasksSystemTable {
                 scheduleStr = task.getType().name();
             }
             if (task.getType() == Constants.TaskType.PERIODICAL) {
-                scheduleStr += task.getSchedule();
+                scheduleStr += " " + task.getSchedule();
             }
             info.setSchedule(scheduleStr);
             info.setCatalog(task.getCatalogName());
             info.setDatabase(ClusterNamespace.getNameFromFullName(task.getDbName()));
-            info.setDefinition(task.getDefinition());
+            if (Config.enable_task_info_mask_credential) {
+                info.setDefinition(SqlCredentialRedactor.redact(task.getDefinition()));
+            } else {
+                info.setDefinition(task.getDefinition());
+            }
             info.setExpire_time(task.getExpireTime() / 1000);
             info.setProperties(task.getPropertiesString());
             if (task.getUserIdentity() != null) {

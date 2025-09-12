@@ -15,13 +15,13 @@
 package com.starrocks.authorization.ranger.hive;
 
 import com.google.common.collect.Maps;
-import com.starrocks.analysis.Expr;
-import com.starrocks.analysis.TableName;
 import com.starrocks.authorization.AccessDeniedException;
 import com.starrocks.authorization.PrivilegeType;
 import com.starrocks.authorization.ranger.RangerAccessController;
 import com.starrocks.catalog.Column;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.TableName;
 
 import java.util.List;
 import java.util.Locale;
@@ -129,6 +129,8 @@ public class RangerHiveAccessController extends RangerAccessController {
             hiveAccessType = HiveAccessType.CREATE;
         } else if (privilegeType == PrivilegeType.DROP) {
             hiveAccessType = HiveAccessType.DROP;
+        } else if (privilegeType == PrivilegeType.REFRESH) {
+            hiveAccessType = HiveAccessType.REFRESH;
         } else {
             hiveAccessType = HiveAccessType.NONE;
         }

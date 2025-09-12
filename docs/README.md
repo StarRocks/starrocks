@@ -33,11 +33,11 @@ Before contributing, please read this article carefully to quickly understand th
    Long lists of settings like this do not index well in search, and the reader will not find the information even when they type in the exact name of a setting:
 
    ```markdown
-   - setting_name_foo
+   - `setting_name_foo`
 
      Details for foo
 
-   - setting_name_bar
+   - `setting_name_bar`
      Details for bar
    ...
    ```
@@ -45,11 +45,11 @@ Before contributing, please read this article carefully to quickly understand th
    Instead, use a section heading (e.g., `###`) for the setting name and remove the indent for the text:
 
    ```markdown
-   ### setting_name_foo
+   ### `setting_name_foo`
 
    Details for foo
 
-   ### setting_name_bar
+   ### `setting_name_bar`
    Details for bar
    ...
    ```

@@ -80,6 +80,6 @@ public class CastOperator extends CallOperator {
 
     @Override
     public <R, C> R accept(ScalarOperatorVisitor<R, C> visitor, C context) {
-        return visitor.visitCastOperator(this, context);
+        return  visitor.visitCastOperator(this, context);
     }
 }

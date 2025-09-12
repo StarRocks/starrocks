@@ -58,6 +58,9 @@ CONF_String(ssl_private_key_path, "");
 // The max number of single connections maintained by the brpc client and each server.
 // These connections are created during the first few access and will be used thereafter
 CONF_Int32(brpc_max_connections_per_server, "1");
+// BRPC stub cache expire configurations
+// The expire time of BRPC stub cache, default 60 minutes.
+CONF_mInt32(brpc_stub_expire_s, "3600"); // 60 minutes
 
 // Declare a selection strategy for those servers have many ips.
 // Note that there should at most one ip match this list.
@@ -309,6 +312,8 @@ CONF_Int32(min_file_descriptor_number, "60000");
 // data and index page size, default is 64k
 CONF_Int32(data_page_size, "65536");
 
+CONF_mBool(enable_zero_copy_from_page_cache, "true");
+
 // Page cache is the cache for the decompressed or decoded page of data file.
 // Currently, BE does not support configure the upper limit of the page cache.
 // The memory limit of page cache are uniformly restricted by datacache_mem_size.
@@ -322,6 +327,20 @@ CONF_mBool(enable_bitmap_index_memory_page_cache, "true");
 CONF_mBool(enable_zonemap_index_memory_page_cache, "true");
 // whether to enable the ordinal index memory cache
 CONF_mBool(enable_ordinal_index_memory_page_cache, "true");
+
+// ========================== ZONEMAP BEGIN ===================================
+// Enable ZoneMap for string (CHAR/VARCHAR) columns using prefix-based min/max
+CONF_mBool(enable_string_prefix_zonemap, "true");
+// Prefix length used for string ZoneMap min/max when enabled
+CONF_mInt32(string_prefix_zonemap_prefix_len, "16");
+// Adaptive creation of string zonemap index based on page overlap quality.
+// If the estimated overlap ratio across consecutive pages is greater than this threshold,
+// skip writing the page-level string zonemap index. Range: [0.0, 1.0].
+CONF_mDouble(string_zonemap_overlap_threshold, "0.8");
+// Minimum number of non-empty pages before applying the adaptive check.
+CONF_mInt32(string_zonemap_min_pages_for_adaptive_check, "16");
+
+// ========================== ZONEMAP END ===================================
 
 CONF_mInt32(base_compaction_check_interval_seconds, "60");
 CONF_mInt64(min_base_compaction_num_singleton_deltas, "5");
@@ -398,6 +417,8 @@ CONF_Bool(enable_event_based_compaction_framework, "true");
 
 CONF_Bool(enable_size_tiered_compaction_strategy, "true");
 CONF_mBool(enable_pk_size_tiered_compaction_strategy, "true");
+// Enable parallel execution within tablet for primary key tables.
+CONF_mBool(enable_pk_parallel_execution, "false");
 // We support real-time compaction strategy for primary key tables in shared-data mode.
 // This real-time compaction strategy enables compacting rowsets across multiple levels simultaneously.
 // The parameter `size_tiered_max_compaction_level` defines the maximum compaction level allowed in a single compaction task.
@@ -1511,8 +1532,10 @@ CONF_mBool(lake_enable_vertical_compaction_fill_data_cache, "true");
 
 CONF_mInt32(dictionary_cache_refresh_timeout_ms, "60000"); // 1 min
 CONF_mInt32(dictionary_cache_refresh_threadpool_size, "8");
+
+// ======================= FLAT JSON start ==============================================
 // json flat flag
-CONF_mBool(enable_json_flat, "false");
+CONF_mBool(enable_json_flat, "true");
 
 // enable compaction is base on flat json, not whole json
 CONF_mBool(enable_compaction_flat_json, "true");
@@ -1546,6 +1569,7 @@ CONF_mInt32(json_flat_column_max, "100");
 
 // for whitelist on flat json remain data, max set 1kb
 CONF_mInt32(json_flat_remain_filter_max_bytes, "1024");
+// ======================= FLAT JSON end ==============================================
 
 // Allowable intervals for continuous generation of pk dumps
 // Disable when pk_dump_interval_seconds <= 0
@@ -1731,4 +1755,5 @@ CONF_mInt64(split_exchanger_buffer_chunk_num, "1000");
 
 // when to split hashmap/hashset into two level hashmap/hashset, negative number means use default value
 CONF_mInt64(two_level_memory_threshold, "-1");
+
 } // namespace starrocks::config

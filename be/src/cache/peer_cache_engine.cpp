@@ -23,7 +23,7 @@
 
 namespace starrocks {
 
-Status PeerCacheEngine::init(const CacheOptions& options) {
+Status PeerCacheEngine::init(const RemoteCacheOptions& options) {
     _cache_adaptor.reset(starcache::create_default_adaptor(options.skip_read_factor));
     return Status::OK();
 }

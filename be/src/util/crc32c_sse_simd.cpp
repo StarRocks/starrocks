@@ -19,7 +19,9 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the Chromium source repository LICENSE file.
 
+#if defined(__SSE4_2__) && defined(__PCLMUL__)
 #include <x86intrin.h>
+#endif
 
 #include <cstdint>
 

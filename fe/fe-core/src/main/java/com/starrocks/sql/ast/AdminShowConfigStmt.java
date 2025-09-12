@@ -15,16 +15,11 @@
 
 package com.starrocks.sql.ast;
 
-import com.google.common.collect.ImmutableList;
 import com.starrocks.sql.ast.AdminSetConfigStmt.ConfigType;
 import com.starrocks.sql.parser.NodePosition;
 
 // admin show frontend config;
 public class AdminShowConfigStmt extends ShowStmt {
-    public static final ImmutableList<String> TITLE_NAMES =
-            new ImmutableList.Builder<String>().add("Key").add("AliasNames").add(
-                    "Value").add("Type").add("IsMutable").add("Comment").build();
-
     private final ConfigType type;
 
     private final String pattern;
@@ -49,6 +44,6 @@ public class AdminShowConfigStmt extends ShowStmt {
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitAdminShowConfigStatement(this, context);
+        return ((AstVisitorExtendInterface<R, C>) visitor).visitAdminShowConfigStatement(this, context);
     }
 }

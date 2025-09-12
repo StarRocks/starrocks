@@ -35,9 +35,8 @@
 package com.starrocks.persist;
 
 import com.google.gson.annotations.SerializedName;
-import com.starrocks.analysis.RoutineLoadDataSourceProperties;
 import com.starrocks.common.io.Writable;
-import com.starrocks.qe.OriginStatement;
+import com.starrocks.sql.ast.expression.RoutineLoadDataSourceProperties;
 
 import java.util.Map;
 
@@ -50,11 +49,11 @@ public class AlterRoutineLoadJobOperationLog implements Writable {
     @SerializedName(value = "dataSourceProperties")
     private RoutineLoadDataSourceProperties dataSourceProperties;
     @SerializedName(value = "originStatement")
-    private OriginStatement originStatement;
+    private OriginStatementInfo originStatement;
 
     public AlterRoutineLoadJobOperationLog(long jobId, Map<String, String> jobProperties,
                                            RoutineLoadDataSourceProperties dataSourceProperties,
-                                           OriginStatement originStatement) {
+                                           OriginStatementInfo originStatement) {
         this.jobId = jobId;
         this.jobProperties = jobProperties;
         this.dataSourceProperties = dataSourceProperties;
@@ -73,7 +72,7 @@ public class AlterRoutineLoadJobOperationLog implements Writable {
         return dataSourceProperties;
     }
 
-    public OriginStatement getOriginStatement() {
+    public OriginStatementInfo getOriginStatement() {
         return originStatement;
     }
 

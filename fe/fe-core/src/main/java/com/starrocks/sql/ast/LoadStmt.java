@@ -35,8 +35,6 @@
 package com.starrocks.sql.ast;
 
 import com.google.common.collect.ImmutableSet;
-import com.starrocks.analysis.BrokerDesc;
-import com.starrocks.analysis.LabelName;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.util.LoadPriority;
 import com.starrocks.common.util.PropertyAnalyzer;
@@ -344,6 +342,6 @@ public class LoadStmt extends DdlStmt {
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitLoadStatement(this, context);
+        return ((AstVisitorExtendInterface<R, C>) visitor).visitLoadStatement(this, context);
     }
 }

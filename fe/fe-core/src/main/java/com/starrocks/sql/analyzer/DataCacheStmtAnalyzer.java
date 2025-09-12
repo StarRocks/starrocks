@@ -15,9 +15,6 @@
 package com.starrocks.sql.analyzer;
 
 import com.google.common.collect.ImmutableList;
-import com.starrocks.analysis.Expr;
-import com.starrocks.analysis.SlotRef;
-import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Table;
@@ -27,7 +24,7 @@ import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.MetadataMgr;
 import com.starrocks.server.RunMode;
-import com.starrocks.sql.ast.AstVisitor;
+import com.starrocks.sql.ast.AstVisitorExtendInterface;
 import com.starrocks.sql.ast.ClearDataCacheRulesStmt;
 import com.starrocks.sql.ast.CreateDataCacheRuleStmt;
 import com.starrocks.sql.ast.DataCacheSelectStatement;
@@ -37,6 +34,9 @@ import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.SelectRelation;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.TableRelation;
+import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.SlotRef;
+import com.starrocks.sql.ast.expression.TableName;
 
 import java.time.Duration;
 import java.time.format.DateTimeParseException;
@@ -52,7 +52,7 @@ public class DataCacheStmtAnalyzer {
         new DataCacheStmtAnalyzerVisitor().analyze(stmt, session);
     }
 
-    static class DataCacheStmtAnalyzerVisitor implements AstVisitor<Void, ConnectContext> {
+    static class DataCacheStmtAnalyzerVisitor implements AstVisitorExtendInterface<Void, ConnectContext> {
         private final DataCacheMgr dataCacheMgr = DataCacheMgr.getInstance();
 
         public void analyze(StatementBase statement, ConnectContext session) {

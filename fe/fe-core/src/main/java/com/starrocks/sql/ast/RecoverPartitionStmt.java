@@ -15,7 +15,7 @@
 
 package com.starrocks.sql.ast;
 
-import com.starrocks.analysis.TableName;
+import com.starrocks.sql.ast.expression.TableName;
 import com.starrocks.sql.parser.NodePosition;
 
 public class RecoverPartitionStmt extends DdlStmt {
@@ -50,6 +50,6 @@ public class RecoverPartitionStmt extends DdlStmt {
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitRecoverPartitionStatement(this, context);
+        return ((AstVisitorExtendInterface<R, C>) visitor).visitRecoverPartitionStatement(this, context);
     }
 }

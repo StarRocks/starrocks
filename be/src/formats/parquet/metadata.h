@@ -17,7 +17,7 @@
 #include <string>
 
 #include "common/status.h"
-#include "exec/hdfs_scanner.h"
+#include "exec/hdfs_scanner/hdfs_scanner.h"
 #include "formats/parquet/schema.h"
 #include "fs/fs.h"
 #include "gen_cpp/parquet_types.h"

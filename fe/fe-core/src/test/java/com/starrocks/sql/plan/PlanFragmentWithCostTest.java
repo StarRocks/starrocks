@@ -888,7 +888,7 @@ public class PlanFragmentWithCostTest extends PlanWithCostTestBase {
             assertContains(unionPlan, "  4:OlapScanNode\n" +
                     "     table: t1, rollup: t1\n" +
                     "     preAggregation: on\n" +
-                    "     Predicates: 5: v4 + 2 IS NOT NULL\n" +
+                    "     Predicates: [5: v4, BIGINT, true] + 2 IS NOT NULL\n" +
                     "     partitionsRatio=1/1, tabletsRatio=3/3\n" +
                     "     tabletList=" + tabletIdsStrList.get(1) + "\n" +
                     "     actualRows=0, avgRowSize=4.0\n" +
@@ -898,7 +898,7 @@ public class PlanFragmentWithCostTest extends PlanWithCostTestBase {
             assertContains(unionPlan, "  1:OlapScanNode\n" +
                     "     table: t0, rollup: t0\n" +
                     "     preAggregation: on\n" +
-                    "     Predicates: 1: v1 + 1 IS NOT NULL\n" +
+                    "     Predicates: [1: v1, BIGINT, true] + 1 IS NOT NULL\n" +
                     "     partitionsRatio=1/1, tabletsRatio=3/3\n" +
                     "     tabletList=" + tabletIdsStrList.get(0) + "\n" +
                     "     actualRows=0, avgRowSize=4.0\n" +

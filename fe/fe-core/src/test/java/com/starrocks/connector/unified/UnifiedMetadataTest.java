@@ -16,7 +16,6 @@ package com.starrocks.connector.unified;
 
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
-import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.DeltaLakeTable;
 import com.starrocks.catalog.HiveTable;
 import com.starrocks.catalog.HudiTable;
@@ -43,6 +42,7 @@ import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.credential.CloudType;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.CreateTableStmt;
+import com.starrocks.sql.ast.expression.TableName;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Expectations;
 import mockit.Mocked;

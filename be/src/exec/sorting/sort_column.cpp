@@ -118,7 +118,7 @@ public:
             return column.data_column_ref().accept(this);
         }
 
-        const NullData& null_data = column.immutable_null_column_data();
+        const auto null_data = column.immutable_null_column_data();
 
         auto null_pred = [&](const SmallPermuteItem& item) -> bool {
             if (_sort_desc.is_null_first()) {
@@ -194,7 +194,7 @@ public:
             return SorterComparator<T>::compare(lhs.inline_value, rhs.inline_value);
         };
 
-        auto inlined = create_inline_permutation<T, IS_RANGES>(_permutation, column.get_data());
+        auto inlined = create_inline_permutation<T, IS_RANGES>(_permutation, column.immutable_data());
         RETURN_IF_ERROR(sort_and_tie_helper(_cancel, &column, _sort_desc.asc_order(), inlined, _tie, cmp,
                                             _range_or_ranges, _build_tie));
         restore_inline_permutation(inlined, _permutation);
@@ -247,17 +247,17 @@ public:
     size_t get_limited() const { return _pruned_limit; }
 
     Status do_visit(const NullableColumn& column) {
-        std::vector<const NullData*> null_datas;
+        std::vector<ImmutableNullData> null_datas;
         Columns data_columns;
         for (auto& col : _vertical_columns) {
             auto real = down_cast<const NullableColumn*>(col.get());
-            null_datas.push_back(&real->immutable_null_column_data());
+            null_datas.push_back(real->immutable_null_column_data());
             data_columns.push_back(real->data_column());
         }
 
         if (_sort_desc.is_null_first()) {
             auto null_pred = [&](const PermutationItem& item) -> bool {
-                return (*null_datas[item.chunk_index])[item.index_in_chunk] == 1;
+                return null_datas[item.chunk_index][item.index_in_chunk] == 1;
             };
 
             RETURN_IF_ERROR(sort_and_tie_helper_nullable_vertical(_cancel, data_columns, null_pred, _sort_desc,
@@ -265,7 +265,7 @@ public:
                                                                   &_pruned_limit));
         } else {
             auto null_pred = [&](const PermutationItem& item) -> bool {
-                return (*null_datas[item.chunk_index])[item.index_in_chunk] != 1;
+                return null_datas[item.chunk_index][item.index_in_chunk] != 1;
             };
 
             RETURN_IF_ERROR(sort_and_tie_helper_nullable_vertical(_cancel, data_columns, null_pred, _sort_desc,
@@ -290,10 +290,10 @@ public:
                 return lhs.inline_value.compare(rhs.inline_value);
             };
 
-            std::vector<const Container*> containers;
+            std::vector<Container> containers;
             for (const auto& col : _vertical_columns) {
                 const auto real = down_cast<const ColumnType*>(col.get());
-                containers.push_back(&real->get_proxy_data());
+                containers.push_back(real->get_proxy_data());
             }
 
             auto inlined = _create_inlined_permutation<Slice>(containers);
@@ -319,17 +319,17 @@ public:
     template <typename T>
     Status do_visit(const FixedLengthColumnBase<T>& column) {
         using ColumnType = FixedLengthColumnBase<T>;
-        using Container = typename FixedLengthColumnBase<T>::Container;
+        using Container = typename FixedLengthColumnBase<T>::ImmContainer;
 
         if (_need_inline_value()) {
             using ItemType = CompactChunkItem<T>;
             auto cmp = [&](const ItemType& lhs, const ItemType& rhs) {
                 return SorterComparator<T>::compare(lhs.inline_value, rhs.inline_value);
             };
-            std::vector<const Container*> containers;
+            std::vector<Container> containers;
             for (const auto& col : _vertical_columns) {
                 const auto real = down_cast<const ColumnType*>(col.get());
-                containers.emplace_back(&real->get_data());
+                containers.emplace_back(real->immutable_data());
             }
             auto inlined = _create_inlined_permutation<T>(containers);
             RETURN_IF_ERROR(sort_and_tie_helper(_cancel, &column, _sort_desc.asc_order(), inlined, _tie, cmp, _range,
@@ -340,8 +340,8 @@ public:
             auto cmp = [&](const ItemType& lhs, const ItemType& rhs) {
                 auto left_column = down_cast<const ColumnType*>(_vertical_columns[lhs.chunk_index].get());
                 auto right_column = down_cast<const ColumnType*>(_vertical_columns[rhs.chunk_index].get());
-                auto left_value = left_column->get_data()[lhs.index_in_chunk];
-                auto right_value = right_column->get_data()[rhs.index_in_chunk];
+                auto left_value = left_column->immutable_data()[lhs.index_in_chunk];
+                auto right_value = right_column->immutable_data()[rhs.index_in_chunk];
                 return SorterComparator<T>::compare(left_value, right_value);
             };
 
@@ -434,7 +434,7 @@ private:
             int index_in_chunk = _permutation[i].index_in_chunk;
             result[i].chunk_index = chunk_index;
             result[i].index_in_chunk = index_in_chunk;
-            result[i].inline_value = (*containers[chunk_index])[index_in_chunk];
+            result[i].inline_value = containers[chunk_index][index_in_chunk];
         }
         return result;
     }

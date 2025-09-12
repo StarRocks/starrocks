@@ -1648,6 +1648,7 @@ struct TQueryStatisticsInfo {
     14: optional string customQueryId
     15: optional string resourceGroupName
     16: optional string execProgress
+    17: optional string execState
 }
 
 struct TGetQueryStatisticsResponse {
@@ -1987,7 +1988,9 @@ struct TConnectionInfo {
     9: optional string info;
     10: optional string isPending;
     11: optional string warehouse;
-	12: optional string cngroup;
+    12: optional string cngroup;
+    13: optional string catalog;
+    14: optional string queryId;
 }
 
 struct TListConnectionResponse {
@@ -2064,6 +2067,23 @@ struct TFinishCheckpointRequest {
 
 struct TFinishCheckpointResponse {
     1: optional Status.TStatus status;
+}
+
+struct TListRecycleBinCatalogsParams {
+    1: optional Types.TUserIdentity user_ident
+}
+
+struct TListRecycleBinCatalogsInfo {
+    1: optional string type
+    2: optional string name
+    3: optional i64 dbid
+    4: optional i64 tableid
+    5: optional i64 partitionid
+    6: optional i64 droptime
+}
+
+struct TListRecycleBinCatalogsResult {
+    1: optional list<TListRecycleBinCatalogsInfo> recyclebin_catalogs
 }
 
 // Batch fetching partition meta info by a list of tablet ids
@@ -2299,6 +2319,7 @@ service FrontendService {
     TStartCheckpointResponse startCheckpoint(1: TStartCheckpointRequest request)
 
     TFinishCheckpointResponse finishCheckpoint(1: TFinishCheckpointRequest request)
+    TListRecycleBinCatalogsResult listRecycleBinCatalogs(1: TListRecycleBinCatalogsParams params)
 
     TPartitionMetaResponse getPartitionMeta(TPartitionMetaRequest request)
 

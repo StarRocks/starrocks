@@ -957,8 +957,8 @@ struct ColumnRangeBuilder {
     template <LogicalType ltype, typename E, CompoundNodeType Type>
     Status operator()(ChunkPredicateBuilder<E, Type>* parent, const SlotDescriptor* slot,
                       std::map<std::string, ColumnValueRangeType>* column_value_ranges) {
-        if constexpr (ltype == TYPE_TIME || ltype == TYPE_NULL || ltype == TYPE_JSON || lt_is_float<ltype> ||
-                      lt_is_binary<ltype>) {
+        if constexpr (ltype == TYPE_TIME || ltype == TYPE_NULL || ltype == TYPE_JSON || ltype == TYPE_VARIANT ||
+                      lt_is_float<ltype> || lt_is_binary<ltype>) {
             return Status::OK();
         } else {
             // Treat tinyint and boolean as int
@@ -1226,6 +1226,11 @@ Status ChunkPredicateBuilder<E, Type>::build_column_expr_predicates() {
         const SlotDescriptor* slot_desc = slots[index];
         LogicalType ltype = slot_desc->type().type;
         if (!support_column_expr_predicate(ltype)) {
+            continue;
+        }
+
+        // string column may use local dict optimiztion, throw exception will take unexcept result
+        if (is_string_type(ltype) && _opts.runtime_state->query_options().allow_throw_exception) {
             continue;
         }
 

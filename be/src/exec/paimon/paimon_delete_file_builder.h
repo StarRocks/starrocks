@@ -14,7 +14,7 @@
 
 #pragma once
 
-#include "exec/hdfs_scanner.h"
+#include "exec/hdfs_scanner/hdfs_scanner.h"
 #include "fs/fs.h"
 #include "gen_cpp/PlanNodes_types.h"
 

@@ -29,6 +29,8 @@ public class MaterializedViewExceptions {
 
     public static final String INACTIVE_REASON_FOR_BASE_TABLE_REORDER_COLUMNS = "base-table reordered columns:";
 
+    public static final String INACTIVE_REASON_FOR_METADATA_TABLE_RESTORE_CORRUPTED = "metadata backup/restore mv corrupted:";
+
     /**
      * Create the inactive reason when base table not exists
      */
@@ -61,6 +63,10 @@ public class MaterializedViewExceptions {
 
     public static String inactiveReasonForBaseTableReorderColumns(String tableName) {
         return INACTIVE_REASON_FOR_BASE_TABLE_REORDER_COLUMNS + tableName;
+    }
+
+    public static String inactiveReasonForMetadataTableRestoreCorrupted(String tableName) {
+        return INACTIVE_REASON_FOR_METADATA_TABLE_RESTORE_CORRUPTED + tableName;
     }
 
     public static String inactiveReasonForBaseTableActive(String tableName) {

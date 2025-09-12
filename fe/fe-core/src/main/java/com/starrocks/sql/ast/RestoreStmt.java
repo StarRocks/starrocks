@@ -15,9 +15,8 @@
 
 package com.starrocks.sql.ast;
 
-import com.starrocks.analysis.LabelName;
-import com.starrocks.analysis.TableRef;
 import com.starrocks.server.RunMode;
+import com.starrocks.sql.ast.expression.TableRef;
 import com.starrocks.sql.parser.NodePosition;
 
 import java.util.List;
@@ -68,7 +67,7 @@ public class RestoreStmt extends AbstractBackupStmt {
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitRestoreStatement(this, context);
+        return ((AstVisitorExtendInterface<R, C>) visitor).visitRestoreStatement(this, context);
     }
 
     public void setTimeoutMs(long timeoutMs) {

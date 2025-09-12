@@ -19,21 +19,12 @@ import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
-import com.starrocks.analysis.Expr;
-import com.starrocks.analysis.FunctionCallExpr;
-import com.starrocks.analysis.LiteralExpr;
-import com.starrocks.analysis.OrderByElement;
-import com.starrocks.analysis.ParseNode;
-import com.starrocks.analysis.SlotRef;
-import com.starrocks.analysis.TableName;
-import com.starrocks.analysis.TypeDef;
 import com.starrocks.catalog.AggregateType;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ColumnId;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Index;
 import com.starrocks.catalog.KeysType;
-import com.starrocks.catalog.PartitionType;
 import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Table;
@@ -53,7 +44,6 @@ import com.starrocks.server.TemporaryTableMgr;
 import com.starrocks.sql.ast.ColumnDef;
 import com.starrocks.sql.ast.CreateTableStmt;
 import com.starrocks.sql.ast.CreateTemporaryTableStmt;
-import com.starrocks.sql.ast.DictionaryGetExpr;
 import com.starrocks.sql.ast.DistributionDesc;
 import com.starrocks.sql.ast.ExpressionPartitionDesc;
 import com.starrocks.sql.ast.HashDistributionDesc;
@@ -61,8 +51,21 @@ import com.starrocks.sql.ast.Identifier;
 import com.starrocks.sql.ast.IndexDef;
 import com.starrocks.sql.ast.KeysDesc;
 import com.starrocks.sql.ast.ListPartitionDesc;
+import com.starrocks.sql.ast.MultiItemListPartitionDesc;
+import com.starrocks.sql.ast.OrderByElement;
+import com.starrocks.sql.ast.ParseNode;
 import com.starrocks.sql.ast.PartitionDesc;
 import com.starrocks.sql.ast.RandomDistributionDesc;
+import com.starrocks.sql.ast.RangePartitionDesc;
+import com.starrocks.sql.ast.SingleItemListPartitionDesc;
+import com.starrocks.sql.ast.SingleRangePartitionDesc;
+import com.starrocks.sql.ast.expression.DictionaryGetExpr;
+import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.FunctionCallExpr;
+import com.starrocks.sql.ast.expression.LiteralExpr;
+import com.starrocks.sql.ast.expression.SlotRef;
+import com.starrocks.sql.ast.expression.TableName;
+import com.starrocks.sql.ast.expression.TypeDef;
 import com.starrocks.sql.common.EngineType;
 import com.starrocks.sql.common.MetaUtils;
 import org.apache.commons.collections.CollectionUtils;
@@ -565,10 +568,13 @@ public class CreateTableAnalyzer {
         PartitionDesc partitionDesc = stmt.getPartitionDesc();
         if (stmt.isOlapEngine()) {
             if (partitionDesc != null) {
-                if (partitionDesc.getType() == PartitionType.RANGE || partitionDesc.getType() == PartitionType.LIST) {
+                if (partitionDesc instanceof ListPartitionDesc ||
+                        partitionDesc instanceof MultiItemListPartitionDesc ||
+                        partitionDesc instanceof RangePartitionDesc ||
+                        partitionDesc instanceof SingleItemListPartitionDesc ||
+                        partitionDesc instanceof SingleRangePartitionDesc) {
                     try {
-                        PartitionDescAnalyzer.analyze(partitionDesc);
-                        partitionDesc.analyze(stmt.getColumnDefs(), stmt.getProperties());
+                        PartitionDescAnalyzer.analyze(partitionDesc, stmt.getColumnDefs(), stmt.getProperties());
                     } catch (AnalysisException e) {
                         throw new SemanticException(e.getMessage());
                     }
@@ -584,8 +590,7 @@ public class CreateTableAnalyzer {
                 } else if (partitionDesc instanceof ExpressionPartitionDesc) {
                     ExpressionPartitionDesc expressionPartitionDesc = (ExpressionPartitionDesc) partitionDesc;
                     try {
-                        PartitionDescAnalyzer.analyze(partitionDesc);
-                        expressionPartitionDesc.analyze(stmt.getColumnDefs(), stmt.getProperties());
+                        PartitionDescAnalyzer.analyze(expressionPartitionDesc, stmt.getColumnDefs(), stmt.getProperties());
                     } catch (AnalysisException e) {
                         throw new SemanticException(e.getMessage());
                     }
@@ -597,7 +602,7 @@ public class CreateTableAnalyzer {
         } else {
             if (engineName.equalsIgnoreCase(Table.TableType.ELASTICSEARCH.name())) {
                 EsUtil.analyzePartitionDesc(partitionDesc);
-            } else if (engineName.equalsIgnoreCase(Table.TableType.ICEBERG.name()) 
+            } else if (engineName.equalsIgnoreCase(Table.TableType.ICEBERG.name())
                     || engineName.equalsIgnoreCase(Table.TableType.HIVE.name())) {
                 if (partitionDesc != null) {
                     ((ListPartitionDesc) partitionDesc).analyzeExternalPartitionColumns(stmt.getColumnDefs(), engineName);
@@ -646,12 +651,12 @@ public class CreateTableAnalyzer {
                         + " must use hash distribution", distributionDesc.getPos());
             }
             if (distributionDesc.getBuckets() > Config.max_bucket_number_per_partition && stmt.isOlapEngine()
-                    && stmt.getPartitionDesc() != null && stmt.getPartitionDesc().getType() != PartitionType.UNPARTITIONED) {
+                    && stmt.getPartitionDesc() != null) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_TOO_MANY_BUCKETS, Config.max_bucket_number_per_partition);
             }
             Set<String> columnSet = Sets.newTreeSet(String.CASE_INSENSITIVE_ORDER);
             columnSet.addAll(columnDefs.stream().map(ColumnDef::getName).collect(Collectors.toSet()));
-            distributionDesc.analyze(columnSet);
+            DistributionDescAnalyzer.analyze(distributionDesc, columnSet);
             stmt.setDistributionDesc(distributionDesc);
             stmt.setProperties(properties);
         } else {
@@ -672,7 +677,7 @@ public class CreateTableAnalyzer {
     private static void analyzeGeneratedColumnForIceberg(CreateTableStmt stmt, ConnectContext context) {
         List<Column> columns = stmt.getColumns();
         ListPartitionDesc desc = (ListPartitionDesc) stmt.getPartitionDesc();
-        
+
         for (Column column : columns) {
             if (column.isGeneratedColumn()) {
                 if (!column.getName().startsWith(FeConstants.GENERATED_PARTITION_COLUMN_PREFIX)) {
@@ -701,7 +706,7 @@ public class CreateTableAnalyzer {
                             throw new SemanticException("Iceberg transform expression's parameter should be a column reference");
                         }
                     } else if (fnName.equalsIgnoreCase("truncate") ||
-                                fnName.equalsIgnoreCase("bucket")) {
+                            fnName.equalsIgnoreCase("bucket")) {
                         if (expr.getChildren().size() != 2) {
                             throw new SemanticException("Iceberg transform expression parameter's count not valid");
                         } else if (!(expr.getChild(0) instanceof SlotRef)) {
@@ -710,7 +715,7 @@ public class CreateTableAnalyzer {
                             throw new SemanticException("Iceberg transform expression's second parameter is not valid");
                         }
                     } else {
-                        throw new SemanticException("Iceberg partition column does not support " + fnName + 
+                        throw new SemanticException("Iceberg partition column does not support " + fnName +
                                 " transform expression");
                     }
                 } else {
@@ -820,7 +825,7 @@ public class CreateTableAnalyzer {
             List<String> vectorIndexNames = indexDefs.stream()
                     .filter(indexDef -> indexDef.getIndexType() == IndexDef.IndexType.VECTOR)
                     .map(IndexDef::getIndexName)
-                    .toList();
+                    .collect(Collectors.toList());
             if (vectorIndexNames.size() > 1) {
                 throw new SemanticException(
                         String.format("At most one vector index is allowed for a table, but %d were found: %s",
@@ -831,7 +836,7 @@ public class CreateTableAnalyzer {
             Set<List<String>> distinctCol = new HashSet<>();
 
             for (IndexDef indexDef : indexDefs) {
-                indexDef.analyze();
+                IndexAnalyzer.analyze(indexDef);
                 if (!statement.isOlapEngine()) {
                     throw new SemanticException("index only support in olap engine at current version", indexDef.getPos());
                 }
@@ -840,7 +845,8 @@ public class CreateTableAnalyzer {
                     boolean found = false;
                     for (Column column : columns) {
                         if (column.getName().equalsIgnoreCase(indexColName)) {
-                            indexDef.checkColumn(column, keysDesc.getKeysType());
+                            IndexAnalyzer.checkColumn(column, indexDef.getIndexType(), indexDef.getProperties(),
+                                    keysDesc.getKeysType());
                             found = true;
                             columnIds.add(column.getColumnId());
                             break;

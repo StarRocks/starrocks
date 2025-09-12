@@ -192,7 +192,7 @@ public final class MVPCTBasedRefreshProcessor extends BaseMVRefreshProcessor {
         // Generate AST of insert statement
         InsertStmt insertStmt = null;
         try (Timer ignored = Tracers.watchScope("MVRefreshParser")) {
-            insertStmt = generateInsertAst(ctx, mvToRefreshedPartitions);
+            insertStmt = generateInsertAst(ctx, mvToRefreshedPartitions, mv.getTaskDefinition());
         }
 
         PlannerMetaLocker locker = new PlannerMetaLocker(ctx, insertStmt);

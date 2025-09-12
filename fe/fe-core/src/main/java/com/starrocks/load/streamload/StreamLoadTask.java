@@ -18,7 +18,6 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.gson.Gson;
 import com.google.gson.annotations.SerializedName;
-import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.common.Config;
@@ -57,6 +56,7 @@ import com.starrocks.server.WarehouseManager;
 import com.starrocks.service.FrontendOptions;
 import com.starrocks.sql.LoadPlanner;
 import com.starrocks.sql.ast.StreamLoadStmt;
+import com.starrocks.sql.ast.expression.TableName;
 import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.task.LoadEtlTask;
 import com.starrocks.thrift.TLoadInfo;
@@ -1174,6 +1174,9 @@ public class StreamLoadTask extends AbstractStreamLoadTask {
         // sync stream load collect profile, here we collect profile only when be has reported
         if (isSyncStreamLoad() && coord != null && coord.isProfileAlreadyReported()) {
             collectProfile(false);
+        } else {
+            LOG.debug("stream load does not collect profile, txn_id: {}, label: {}, load id: {}",
+                    txnId, label, DebugUtil.printId(loadId));
         }
 
         writeLock();

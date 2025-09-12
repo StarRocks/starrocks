@@ -14,3 +14,21 @@ insert into t1 select * from t0 order by c0;
 
 select count(*) from t1;
 select count(*) from t1 where c0 like 's_%';
+
+
+-- name: test_push_down_cast_expr
+CREATE TABLE `test003` (
+  `data_date` date NOT NULL COMMENT "",
+  `user_id` varchar(128) NULL COMMENT ""
+) ENGINE=OLAP 
+PRIMARY KEY(`data_date`)
+COMMENT "OLAP"
+DISTRIBUTED BY HASH(`data_date`)
+PROPERTIES (
+"replication_num" = "1"
+);
+insert into test003 values("2025-08-12", NULL);
+
+set sql_mode = 'ALLOW_THROW_EXCEPTION';
+select * from test003 where CAST(user_id AS INT) ;
+

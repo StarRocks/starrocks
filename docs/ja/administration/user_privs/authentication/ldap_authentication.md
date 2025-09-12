@@ -76,29 +76,28 @@ LDAP 認証では、クライアントがクリアテキストのパスワード
 mysql -utom -P8030 -h127.0.0.1 -p --default-auth mysql_clear_password --enable-cleartext-plugin
 ```
 
-### JDBC クライアントから LDAP で接続する
+### JDBC/ODBC クライアントから LDAP で接続する
 
 - **JDBC**
 
-JDBC のデフォルトの MysqlClearPasswordPlugin は SSL トランスポートを必要とするため、カスタムプラグインが必要です。
+JDBC 接続を使用する場合、サーバー側で SSL を有効にする必要があることに注意してください。詳細については、[SSL 認証](../ssl_authentication.md)を参照してください。
+
+JDBC 5:
 
 ```java
-public class MysqlClearPasswordPluginWithoutSSL extends MysqlClearPasswordPlugin {
-    @Override  
-    public boolean requiresConfidentiality() {
-        return false;
-    }
-}
+Properties properties = new Properties();
+properties.put("authenticationPlugins", "com.mysql.jdbc.authentication.MysqlClearPasswordPlugin");
+properties.put("defaultAuthenticationPlugin", "com.mysql.jdbc.authentication.MysqlClearPasswordPlugin");
+properties.put("disabledAuthenticationPlugins", "com.mysql.jdbc.authentication.MysqlNativePasswordPlugin");
 ```
 
-接続後、カスタムプラグインをプロパティに設定します。
+JDBC 8:
 
 ```java
-...
-Properties properties = new Properties();// パッケージ名を xxx.xxx.xxx に置き換えます
-properties.put("authenticationPlugins", "xxx.xxx.xxx.MysqlClearPasswordPluginWithoutSSL");
-properties.put("defaultAuthenticationPlugin", "xxx.xxx.xxx.MysqlClearPasswordPluginWithoutSSL");
-properties.put("disabledAuthenticationPlugins", "com.mysql.jdbc.authentication.MysqlNativePasswordPlugin");DriverManager.getConnection(url, properties);
+Properties properties = new Properties();
+properties.put("authenticationPlugins", "com.mysql.cj.protocol.a.authentication.MysqlClearPasswordPlugin");
+properties.put("defaultAuthenticationPlugin", "com.mysql.cj.protocol.a.authentication.MysqlClearPasswordPlugin");
+properties.put("disabledAuthenticationPlugins", "com.mysql.cj.protocol.a.authentication.MysqlNativePasswordPlugin");
 ```
 
 - **ODBC**

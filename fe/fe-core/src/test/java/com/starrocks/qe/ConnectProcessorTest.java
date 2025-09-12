@@ -37,7 +37,9 @@ package com.starrocks.qe;
 import com.google.common.base.Strings;
 import com.google.common.collect.Sets;
 import com.starrocks.analysis.AccessTestUtil;
+import com.starrocks.authentication.AccessControlContext;
 import com.starrocks.authentication.AuthenticationMgr;
+import com.starrocks.authentication.PlainPasswordAuthenticationProvider;
 import com.starrocks.authorization.PrivilegeBuiltinConstants;
 import com.starrocks.catalog.UserIdentity;
 import com.starrocks.common.jmockit.Deencapsulation;
@@ -48,6 +50,7 @@ import com.starrocks.mysql.MysqlCommand;
 import com.starrocks.mysql.MysqlEofPacket;
 import com.starrocks.mysql.MysqlErrPacket;
 import com.starrocks.mysql.MysqlOkPacket;
+import com.starrocks.mysql.MysqlPassword;
 import com.starrocks.mysql.MysqlSerializer;
 import com.starrocks.plugin.AuditEvent.AuditEventBuilder;
 import com.starrocks.proto.PQueryStatistics;
@@ -316,6 +319,14 @@ public class ConnectProcessorTest extends DDLTestBase {
                 context.getCapability();
                 minTimes = 0;
                 result = MysqlCapability.DEFAULT_CAPABILITY;
+
+                context.getAccessControlContext();
+                minTimes = 0;
+                result = new AccessControlContext();
+
+                context.getAuthenticationProvider();
+                minTimes = 0;
+                result = new PlainPasswordAuthenticationProvider(MysqlPassword.EMPTY_PASSWORD);
             }
         };
 

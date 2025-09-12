@@ -15,18 +15,18 @@ package com.starrocks.sql.optimizer.rule.transformation.materialization.equivale
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
-import com.starrocks.analysis.FunctionParams;
 import com.starrocks.catalog.AggregateFunction;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.Type;
-import com.starrocks.catalog.combinator.AggStateCombinator;
 import com.starrocks.catalog.combinator.AggStateMergeCombinator;
 import com.starrocks.catalog.combinator.AggStateUnionCombinator;
 import com.starrocks.catalog.combinator.AggStateUtils;
+import com.starrocks.catalog.combinator.StateFunctionCombinator;
 import com.starrocks.common.Pair;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.analyzer.FunctionAnalyzer;
+import com.starrocks.sql.ast.expression.FunctionParams;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
@@ -35,7 +35,7 @@ import com.starrocks.sql.parser.NodePosition;
 import java.util.Arrays;
 import java.util.List;
 
-import static com.starrocks.catalog.FunctionSet.AGG_STATE_SUFFIX;
+import static com.starrocks.catalog.FunctionSet.STATE_SUFFIX;
 
 public class AggStateRewriteEquivalent extends IAggregateRewriteEquivalent {
     public static IAggregateRewriteEquivalent INSTANCE = new AggStateRewriteEquivalent();
@@ -67,11 +67,11 @@ public class AggStateRewriteEquivalent extends IAggregateRewriteEquivalent {
         CallOperator argCall0 = (CallOperator) arg0;
         Function argFunc0 = argCall0.getFunction();
         // arg0 must agg_state function
-        if (argFunc0 == null || !(argFunc0 instanceof AggStateCombinator)) {
+        if (argFunc0 == null || !(argFunc0 instanceof StateFunctionCombinator)) {
             return null;
         }
         String argStateName = argCall0.getFnName();
-        if (argStateName == null || !argStateName.endsWith(AGG_STATE_SUFFIX)) {
+        if (argStateName == null || !argStateName.endsWith(STATE_SUFFIX)) {
             return null;
         }
         if (argCall0.getType().getAggStateDesc() == null) {
@@ -136,7 +136,7 @@ public class AggStateRewriteEquivalent extends IAggregateRewriteEquivalent {
                 return null;
             }
             CallOperator queryArg0Call = (CallOperator) queryArg0;
-            if (!(queryArg0Call.getFunction() instanceof AggStateCombinator)) {
+            if (!(queryArg0Call.getFunction() instanceof StateFunctionCombinator)) {
                 return null;
             }
             if (!realAggFuncName.equalsIgnoreCase(AggStateUtils.getAggFuncNameOfCombinator(queryArg0Call.getFnName()))) {

@@ -16,12 +16,12 @@ package com.starrocks.http;
 
 import com.google.gson.JsonObject;
 import com.google.gson.stream.JsonWriter;
-import com.starrocks.analysis.Expr;
 import com.starrocks.catalog.Column;
 import com.starrocks.proto.PQueryStatistics;
 import com.starrocks.proto.QueryStatisticsItemPB;
 import com.starrocks.qe.ShowResultSet;
 import com.starrocks.qe.ShowResultSetMetaData;
+import com.starrocks.sql.ast.expression.Expr;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
 import org.apache.logging.log4j.LogManager;

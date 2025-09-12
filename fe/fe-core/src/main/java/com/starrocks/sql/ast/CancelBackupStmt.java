@@ -59,6 +59,6 @@ public class CancelBackupStmt extends CancelStmt {
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitCancelBackupStatement(this, context);
+        return ((AstVisitorExtendInterface<R, C>) visitor).visitCancelBackupStatement(this, context);
     }
 }

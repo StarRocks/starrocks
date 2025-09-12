@@ -24,7 +24,7 @@
 #include "common/config.h"
 #include "common/status.h"
 #include "exec/exec_node.h"
-#include "exec/hdfs_scanner.h"
+#include "exec/hdfs_scanner/hdfs_scanner.h"
 #include "exprs/expr.h"
 #include "exprs/expr_context.h"
 #include "formats/parquet/column_reader_factory.h"

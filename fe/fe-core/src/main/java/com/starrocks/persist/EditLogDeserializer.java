@@ -264,6 +264,11 @@ public class EditLogDeserializer {
             .put(OperationType.OP_DROP_SPM_BASELINE_LOG, BaselinePlan.Info.class)
             .put(OperationType.OP_UPDATE_DYNAMIC_TABLET_JOB_LOG, DynamicTabletJob.class)
             .put(OperationType.OP_REMOVE_DYNAMIC_TABLET_JOB_LOG, RemoveDynamicTabletJobLog.class)
+            .put(OperationType.OP_SAVE_NEXTID_V2, NextIdLog.class)
+            .put(OperationType.OP_ERASE_DB_V2, EraseDbLog.class)
+            .put(OperationType.OP_ERASE_PARTITION_V2, ErasePartitionLog.class)
+            .put(OperationType.OP_DROP_ALL_BROKER_V2, DropBrokerLog.class)
+            .put(OperationType.OP_DROP_REPOSITORY_V2, DropRepositoryLog.class)
             .build();
 
     public static Writable deserialize(Short opCode, DataInput in) throws IOException {
@@ -271,6 +276,7 @@ public class EditLogDeserializer {
 
         Writable data = null;
         switch (opCode) {
+            // This is for compatibility reasons. Do not delete the read code. You can delete it in version 4.2.
             case OperationType.OP_SAVE_NEXTID:
             case OperationType.OP_ERASE_DB:
             case OperationType.OP_ERASE_PARTITION:
@@ -284,6 +290,7 @@ public class EditLogDeserializer {
                 data = ChangeMaterializedViewRefreshSchemeLog.read(in);
                 break;
             }
+            // This is for compatibility reasons. Do not delete the read code. You can delete it in version 4.2.
             case OperationType.OP_FINISH_CONSISTENCY_CHECK: {
                 data = new ConsistencyCheckInfo();
                 ((ConsistencyCheckInfo) data).readFields(in);

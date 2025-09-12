@@ -37,11 +37,7 @@
 #include <cstddef>
 #include <memory>
 
-#include "column/array_column.h"
-#include "column/column_helper.h"
-#include "column/hash_set.h"
 #include "column/nullable_column.h"
-#include "common/logging.h"
 #include "fs/fs.h"
 #include "gutil/strings/substitute.h"
 #include "simd/simd.h"
@@ -394,6 +390,14 @@ Status ScalarColumnWriter::init() {
     if (_opts.need_zone_map) {
         _has_index_builder = true;
         _zone_map_index_builder = ZoneMapIndexWriter::create(type_info());
+        if (_opts.zone_map_truncate_string) {
+            _zone_map_index_builder->enable_truncate_string();
+        }
+        if (is_string_type(_type_info->type())) {
+            _zone_map_index_quality_judger =
+                    ZoneMapIndexQualityJudger::create(_type_info.get(), config::string_zonemap_overlap_threshold,
+                                                      config::string_zonemap_min_pages_for_adaptive_check);
+        }
     }
     if (_opts.need_bitmap_index) {
         _has_index_builder = true;
@@ -591,6 +595,22 @@ Status ScalarColumnWriter::_write_data_page(Page* page) {
 Status ScalarColumnWriter::finish_current_page() {
     if (_zone_map_index_builder != nullptr) {
         RETURN_IF_ERROR(_zone_map_index_builder->flush());
+        if (_zone_map_index_quality_judger != nullptr) {
+            std::optional<ZoneMapPB> last_zonemap = _zone_map_index_builder->get_last_zonemap();
+            if (last_zonemap.has_value()) {
+                _zone_map_index_quality_judger->feed(last_zonemap.value());
+            }
+            CreateIndexDecision decision = _zone_map_index_quality_judger->make_decision();
+            if (decision == CreateIndexDecision::Bad) {
+                _zone_map_index_builder.reset();
+                _zone_map_index_quality_judger.reset();
+                VLOG(2) << "ZoneMapIndexQualityJudger decided to not create the index for this column";
+            } else if (decision == CreateIndexDecision::Good) {
+                // Stop judging
+                _zone_map_index_quality_judger.reset();
+                VLOG(2) << "ZoneMapIndexQualityJudger decided to create the index for this column";
+            }
+        }
     }
 
     if (_bloom_filter_index_builder != nullptr) {
@@ -697,7 +717,7 @@ Status ScalarColumnWriter::append_array_offsets(const Column& column) {
     // In memory, it will be transformed by actual offset(0, 3, 6)
     // In disk, offset is stored as length array(3, 3)
     auto& offsets = down_cast<const UInt32Column&>(column);
-    auto& data = offsets.get_data();
+    auto& data = offsets.immutable_data();
 
     std::vector<uint32_t> array_size;
     raw::make_room(&array_size, offsets.size() - 1);
@@ -1033,7 +1053,7 @@ inline EncodingTypePB DictColumnWriter::speculate_encoding(const Column& column)
         using CppType = typename RunTimeTypeTraits<Type>::CppType;
         phmap::flat_hash_set<CppType> hash_set;
         for (size_t i = 0; i < row_count; i++) {
-            CppType value = numerical_col->get_data()[i];
+            CppType value = numerical_col->immutable_data()[i];
             hash_set.insert(value);
             if (hash_set.size() > max_card) {
                 return BIT_SHUFFLE;

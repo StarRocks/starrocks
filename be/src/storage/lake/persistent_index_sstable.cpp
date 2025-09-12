@@ -17,6 +17,9 @@
 #include <butil/time.h> // NOLINT
 
 #include "fs/fs.h"
+#include "fs/key_cache.h"
+#include "gen_cpp/types.pb.h"
+#include "storage/lake/lake_delvec_loader.h"
 #include "storage/lake/utils.h"
 #include "storage/sstable/table_builder.h"
 #include "util/trace.h"
@@ -108,6 +111,68 @@ Status PersistentIndexSstable::multi_get(const Slice* keys, const KeyIndexSet& k
 
 size_t PersistentIndexSstable::memory_usage() const {
     return (_sst != nullptr) ? _sst->memory_usage() : 0;
+}
+
+PersistentIndexSstableStreamBuilder::PersistentIndexSstableStreamBuilder(std::unique_ptr<WritableFile> wf,
+                                                                         std::string encryption_meta)
+        : _wf(std::move(wf)), _finished(false), _encryption_meta(std::move(encryption_meta)) {
+    _filter_policy.reset(const_cast<sstable::FilterPolicy*>(sstable::NewBloomFilterPolicy(10)));
+    sstable::Options options;
+    options.filter_policy = _filter_policy.get();
+    _table_builder = std::make_unique<sstable::TableBuilder>(options, _wf.get());
+}
+
+Status PersistentIndexSstableStreamBuilder::add(const Slice& key) {
+    if (_finished) {
+        return Status::InvalidArgument("Builder already finished");
+    }
+
+    if (!_status.ok()) {
+        return _status;
+    }
+
+    IndexValuesWithVerPB index_value_pb;
+    auto* val = index_value_pb.add_values();
+    val->set_rowid(_sst_rowid++);
+
+    _table_builder->Add(key, Slice(index_value_pb.SerializeAsString()));
+    _status = _table_builder->status();
+    return _status;
+}
+
+Status PersistentIndexSstableStreamBuilder::finish(uint64_t* file_size) {
+    if (_finished) {
+        return Status::InvalidArgument("Builder already finished");
+    }
+
+    if (!_status.ok()) {
+        return _status;
+    }
+
+    _status = _table_builder->Finish();
+    if (_status.ok()) {
+        _finished = true;
+        if (file_size != nullptr) {
+            *file_size = _table_builder->FileSize();
+        }
+    }
+    return _status;
+}
+
+uint64_t PersistentIndexSstableStreamBuilder::num_entries() const {
+    return _table_builder ? _table_builder->NumEntries() : 0;
+}
+
+FileInfo PersistentIndexSstableStreamBuilder::file_info() const {
+    FileInfo file_info;
+    file_info.path = file_name(_wf->filename());
+    file_info.size = _table_builder ? _table_builder->FileSize() : 0;
+    file_info.encryption_meta = _encryption_meta;
+    return file_info;
+}
+
+Status PersistentIndexSstableStreamBuilder::status() const {
+    return _status;
 }
 
 } // namespace starrocks::lake

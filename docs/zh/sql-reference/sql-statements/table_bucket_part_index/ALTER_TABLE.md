@@ -4,6 +4,8 @@ displayed_sidebar: docs
 
 # ALTER TABLE
 
+import Beta from '../../../_assets/commonMarkdown/_beta.mdx'
+
 ## 描述
 
 修改现有表，包括：
@@ -12,13 +14,13 @@ displayed_sidebar: docs
 - [修改表注释](#修改表的注释31-版本起)
 - [修改分区（增删分区和修改分区属性）](#操作-partition-相关语法)
 - [修改分桶方式和分桶数量](#修改分桶方式和分桶数量自-32-版本起)
-- [修改列（增删列和修改列顺序）](#修改列增删列和修改列顺序)
+- [修改列（增删列和修改列顺序和注释）](#修改列添加删除列改变列的顺序或注释)
 - [创建或删除 rollup index](#操作-rollup-index-语法)
 - [修改 bitmap index](#bitmap-index-修改)
 - [修改表的属性](#修改表的属性)
 - [对表进行原子替换](#swap-将两个表原子替换)
 - [手动执行 Compaction 合并表数据](#手动-compaction31-版本起)
-- [删除主键索引](#删除主键索引-339-版本起))
+- [删除主键索引](#删除主键索引-339-版本起)
 
 :::tip
 此操作需要对目标表具有ALTER权限。
@@ -31,30 +33,29 @@ ALTER TABLE [<db_name>.]<tbl_name>
 alter_clause1[, alter_clause2, ...]
 ```
 
-`alter_clause`可以包含以下操作：重命名、注释、分区、分桶、列、汇总索引、Bitmap索引、表属性、交换和 Compaction。
+`alter_clause`可以包含以下操作：重命名、注释、分区、分桶、列、Rollup、索引、表属性、原子替换和 Compaction。
 
-- rename: 修改表名、rollup index 名、partition 名或列名（从 3.3.2 版本开始支持）。
+- rename: 修改表名、rollup 名、partition 名或列名（从 3.3.2 版本开始支持）。
 - comment: 修改表的注释。**从 3.1 版本开始支持。**
 - partition: 修改分区属性，删除分区，增加分区。
 - bucket：修改分桶方式和分桶数量。
-- column: 增加列，删除列，调整列顺序，修改列类型。*
-- rollup index: 创建或删除 rollup index。
-- bitmap index: 修改 bitmap index。
+- column: 增加列，删除列，调整列顺序，修改列类型以及注释
+- rollup: 创建或删除 Rollup。
+- index: 修改索引。
 - swap: 原子替换两张表。
 - compaction: 对指定表或分区手动执行 Compaction（数据版本合并）。**从 3.1 版本开始支持。**
 - drop persistent index: 存算分离下删除主键索引。**从 3.3.9 版本开始支持。**
 
 ## 限制和使用注意事项
 
-- 在一个ALTER TABLE语句中不能同时对分区、列和汇总索引进行操作。
-- 列注释不能被修改。
+- 在一个ALTER TABLE语句中不能同时对分区、列和 Rollup 进行操作。
 - 一个表一次只能有一个正在进行的schema change操作。不能同时在一个表上运行两个schema change命令。
-- 对分桶、列和汇总索引的操作是异步操作。任务提交后会立即返回成功消息。可以运行[SHOW ALTER TABLE](SHOW_ALTER.md)命令检查进度，并运行[CANCEL ALTER TABLE](CANCEL_ALTER_TABLE.md)命令取消操作。
-- 对重命名、注释、分区、Bitmap索引和交换的操作是同步操作，命令返回表示执行已完成。
+- 对分桶、列和 Rollup 的操作是异步操作。任务提交后会立即返回成功消息。可以运行[SHOW ALTER TABLE](SHOW_ALTER.md)命令检查进度，并运行[CANCEL ALTER TABLE](CANCEL_ALTER_TABLE.md)命令取消操作。
+- 对重命名、注释、分区、索引和原子替换的操作是同步操作，命令返回表示执行已完成。
 
 ### 重命名
 
-重命名支持修改表名、汇总索引和分区名。
+重命名支持修改表名、Rollup 名和分区名。
 
 #### 重命名表
 
@@ -62,7 +63,7 @@ alter_clause1[, alter_clause2, ...]
 ALTER TABLE <tbl_name> RENAME <new_tbl_name>
 ```
 
-#### 重命名汇总索引
+#### 重命名 Rollup
 
 ```sql
 ALTER TABLE [<db_name>.]<tbl_name>
@@ -100,15 +101,16 @@ RENAME COLUMN <old_col_name> [ TO ] <new_col_name>
 ALTER TABLE [<db_name>.]<tbl_name> COMMENT = "<new table comment>";
 ```
 
-:::tip
-目前，列注释不能被修改。
-:::
-
 ### 修改分区
 
 #### 添加分区
 
-可以选择添加Range分区或List分区。不支持添加表达式分区。
+您必须严格遵循相应的语法来添加 Range 分区或 List 分区。
+
+:::note
+- 不支持添加表达式分区。
+- 请注意，尽管 `PARTITION BY date_trunc(column)` 和 `PARTITION BY time_slice(column)` 的格式为表达式分区，两者都属于属于 Range 分区。因此，您可以使用以下 Range 分区的语法，为采用此类分区策略的表添加新分区。
+:::
 
 语法：
 
@@ -225,7 +227,7 @@ multi_range_partitions ::=
   `multi_range_partitions`的注意事项：
 
   - 仅适用于Range分区。
-  - 涉及的参数与[添加分区](#add-partitions)中的参数一致。
+  - 涉及的参数与[添加分区](#添加分区)中的参数一致。
   - 仅支持具有单个分区键的分区。
 
 - 使用通用分区表达式删除分区（从v3.5.0起支持）：
@@ -264,8 +266,19 @@ ALTER TABLE t1 DROP PARTITIONS WHERE dt < CURRENT_DATE() - INTERVAL 3 MONTH;
 ```sql
 ALTER TABLE [<db_name>.]<tbl_name> 
 ADD TEMPORARY PARTITION [IF NOT EXISTS] <partition_name>
-partition_desc ["key"="value"]
+{ single_range_partition | multi_range_partitions | list_partitions }
 [DISTRIBUTED BY HASH (k1[,k2 ...]) [BUCKETS num]]
+
+-- 有关 single_range_partition 和 multi_range_partitions 的详细信息，请参阅本页面中的“添加分区”部分。
+
+list_partitions::= 
+    PARTITION <partition_name> VALUES IN (value_list)
+
+value_list ::=
+    value_item [, ...]
+
+value_item ::=
+    { <value> | ( <value> [, ...] ) }
 ```
 
 #### 使用临时分区替换当前分区
@@ -420,7 +433,7 @@ INSERT INTO details (event_time, event_type, user_id, device_code, channel) VALU
   ALTER TABLE details DISTRIBUTED BY HASH(user_id, event_time) BUCKETS 10;
   ```
 
-### 修改列（添加/删除列，改变列的顺序）
+### 修改列（添加/删除列，改变列的顺序或注释）
 
 #### 在指定索引的指定位置添加列
 
@@ -438,7 +451,7 @@ ADD COLUMN column_name column_type [KEY | agg_type] [DEFAULT "default_value"]
 
 1. 如果向聚合表中添加值列，需要指定agg_type。
 2. 如果向非聚合表（如明细表）中添加键列，需要指定KEY关键字。
-3. 不能将已经存在于基础索引中的列添加到汇总索引中。（如有需要，可以重新创建汇总索引。）
+3. 不能将已经存在于基础索引中的列添加到 Rollup 中。（如有需要，可以重新创建 Rollup。）
 
 #### 向指定索引添加多个列
 
@@ -470,7 +483,7 @@ ADD COLUMN column_name column_type [KEY | agg_type] [DEFAULT "default_value"]
 
 2. 如果向非聚合表中添加键列，需要指定KEY关键字。
 
-3. 不能将已经存在于基础索引中的列添加到汇总索引中。（如有需要，可以创建另一个汇总索引。）
+3. 不能将已经存在于基础索引中的列添加到 Rollup 中。（如有需要，可以创建另一个 Rollup。）
 
 #### 添加生成列（从v3.1起）
 
@@ -496,18 +509,20 @@ DROP COLUMN column_name
 注意：
 
 1. 不能删除分区列。
-2. 如果从基础索引中删除列，并且该列包含在汇总索引中，也会被删除。
+2. 如果从基础索引中删除列，并且该列包含在 Rollup 中，也会被删除。
 
-#### 修改指定索引的列类型和列位置
+#### 修改列类型、位置、注释和其他属性
 
 语法：
 
 ```sql
 ALTER TABLE [<db_name>.]<tbl_name>
-MODIFY COLUMN column_name column_type [KEY | agg_type] [NULL | NOT NULL] [DEFAULT "default_value"]
-[AFTER column_name|FIRST]
-[FROM rollup_index_name]
-[PROPERTIES ("key"="value", ...)]
+MODIFY COLUMN <column_name> 
+[ column_type [ KEY | agg_type ] ] [ NULL | NOT NULL ] 
+[ DEFAULT "<default_value>"] [ COMMENT "<new_column_comment>" ]
+[ AFTER <column_name> | FIRST ]
+[ FROM rollup_index_name ]
+[ PROPERTIES ("key"="value", ...) ]
 ```
 
 注意：
@@ -528,6 +543,7 @@ MODIFY COLUMN column_name column_type [KEY | agg_type] [NULL | NOT NULL] [DEFAUL
    - 将INT转换为DATE（如果INT数据转换失败，原始数据保持不变）
 
 6. 不支持从NULL转换为NOT NULL。
+7. 您可以在单个 MODIFY COLUMN 子句中修改多个属性。但某些属性的组合不支持。
 
 #### 重新排序指定索引的列
 
@@ -587,8 +603,6 @@ DISTRIBUTED BY HASH(order_id);
 ```SQL
 ALTER TABLE orders ORDER BY (dt, revenue, state);
 ```
-
-import Beta from '../../../_assets/commonMarkdown/_beta.mdx'
 
 #### 修改STRUCT列以添加或删除字段
 
@@ -655,9 +669,9 @@ field_desc ::= <field_type> [ AFTER <prior_field_name> | FIRST ]
 
 :::
 
-### 修改汇总索引
+### 修改 Rollup
 
-#### 创建汇总索引
+#### 创建 Rollup
 
 语法：
 
@@ -677,7 +691,7 @@ ALTER TABLE [<db_name>.]<tbl_name>
 ADD ROLLUP r1(col1,col2) from r0;
 ```
 
-#### 批量创建汇总索引
+#### 批量创建 Rollup
 
 语法：
 
@@ -701,7 +715,7 @@ ADD ROLLUP r1(col1,col2) from r0, r2(col3,col4) from r0;
 2. 汇总表中的列必须是from_index中已存在的列。
 3. 在属性中，用户可以指定存储格式。详情请参见CREATE TABLE。
 
-#### 删除汇总索引
+#### 删除 Rollup
 
 语法：
 
@@ -716,7 +730,7 @@ DROP ROLLUP rollup_name [PROPERTIES ("key"="value", ...)];
 ALTER TABLE [<db_name>.]<tbl_name> DROP ROLLUP r1;
 ```
 
-#### 批量删除汇总索引
+#### 批量删除 Rollup
 
 语法：
 
@@ -733,31 +747,31 @@ ALTER TABLE [<db_name>.]<tbl_name> DROP ROLLUP r1, r2;
 
 注意：不能删除基础索引。
 
-### 修改Bitmap索引
+### 修改索引
 
-Bitmap索引支持以下修改：
+您可以创建或删除以下索引：
+- [Bitmap 索引](../../../table_design/indexes/Bitmap_index.md)
+- [N-Gram bloom filter 索引](../../../table_design/indexes/Ngram_Bloom_Filter_Index.md)
+- [全文倒排索引](../../../table_design/indexes/inverted_index.md)
+- [向量索引](../../../table_design/indexes/vector_index.md)
 
-#### 创建Bitmap索引
+#### 创建索引
 
 语法：
 
 ```sql
 ALTER TABLE [<db_name>.]<tbl_name>
-ADD INDEX index_name (column [, ...],) [USING BITMAP] [COMMENT 'balabala'];
+ADD INDEX index_name (column [, ...],) [USING { BITMAP | NGRAMBF | GIN | VECTOR } ] [COMMENT '<comment>']
 ```
 
-注意：
+有关创建这些索引的详细说明和示例，请参阅上述对应的教程。
 
-```plain text
-1. 当前版本仅支持Bitmap索引。
-2. BITMAP索引仅在单列中创建。
-```
-
-#### 删除Bitmap索引
+#### 删除索引
 
 语法：
 
 ```sql
+ALTER TABLE [<db_name>.]<tbl_name>
 DROP INDEX index_name;
 ```
 
@@ -789,9 +803,9 @@ SET ("key" = "value")
 
 :::
 
-### 交换
+### 原子替换
 
-交换支持两个表的原子交换。
+支持两个表的原子替换。
 
 语法：
 
@@ -801,8 +815,8 @@ SWAP WITH <tbl_name>;
 ```
 
 :::note
-- OLAP表之间的唯一键和外键约束将在交换期间进行验证，以确保交换的两个表的约束一致。如果检测到不一致，将返回错误。如果未检测到不一致，唯一键和外键约束将自动交换。
-- 依赖于交换表的物化视图将自动设置为非活动状态，其唯一键和外键约束将被移除且不再可用。
+- OLAP表之间的唯一键和外键约束将在原子替换期间进行验证，以确保替换的两个表的约束一致。如果检测到不一致，将返回错误。如果未检测到不一致，唯一键和外键约束将自动替换。
+- 依赖于被替换表的物化视图将自动设置为非活动状态，其唯一键和外键约束将被移除且不再可用。
 :::
 
 ### 手动 Compaction（从3.1起）
@@ -949,9 +963,9 @@ DROP PERSISTENT INDEX ON TABLETS(<tablet_id>[, <tablet_id>, ...]);
     ADD PARTITION p1 VALUES [("2014-01-01"), ("2014-02-01"));
     ```
 
-### 汇总索引
+### Rollup
 
-1. 基于基础索引（k1,k2,k3,v1,v2）创建汇总索引`example_rollup_index`。使用列存储。
+1. 基于基础索引（k1,k2,k3,v1,v2）创建 Rollup `example_rollup_index`。使用列存储。
 
     ```sql
     ALTER TABLE example_db.my_table
@@ -959,7 +973,7 @@ DROP PERSISTENT INDEX ON TABLETS(<tablet_id>[, <tablet_id>, ...]);
     PROPERTIES("storage_type"="column");
     ```
 
-2. 基于`example_rollup_index(k1,k3,v1,v2)`创建索引`example_rollup_index2`。
+2. 基于 `example_rollup_index(k1,k3,v1,v2)` 创建 Rollup `example_rollup_index2`。
 
     ```sql
     ALTER TABLE example_db.my_table
@@ -967,7 +981,7 @@ DROP PERSISTENT INDEX ON TABLETS(<tablet_id>[, <tablet_id>, ...]);
     FROM example_rollup_index;
     ```
 
-3. 基于基础索引（k1, k2, k3, v1）创建索引`example_rollup_index3`。汇总超时时间设置为一小时。
+3. 基于基础 Rollup（k1, k2, k3, v1）创建 Rollup `example_rollup_index3`。超时时间设置为一小时。
 
     ```sql
     ALTER TABLE example_db.my_table
@@ -975,7 +989,7 @@ DROP PERSISTENT INDEX ON TABLETS(<tablet_id>[, <tablet_id>, ...]);
     PROPERTIES("storage_type"="column", "timeout" = "3600");
     ```
 
-4. 删除索引`example_rollup_index2`。
+4. 删除 Rollup `example_rollup_index2`。
 
     ```sql
     ALTER TABLE example_db.my_table
@@ -1251,7 +1265,7 @@ DROP PERSISTENT INDEX ON TABLETS(<tablet_id>[, <tablet_id>, ...]);
     ALTER TABLE table1 RENAME table2;
     ```
 
-2. 将`example_table`的汇总索引`rollup1`重命名为`rollup2`。
+2. 将`example_table`的 Rollup `rollup1`重命名为`rollup2`。
 
     ```sql
     ALTER TABLE example_table RENAME ROLLUP rollup1 rollup2;
@@ -1263,25 +1277,25 @@ DROP PERSISTENT INDEX ON TABLETS(<tablet_id>[, <tablet_id>, ...]);
     ALTER TABLE example_table RENAME PARTITION p1 p2;
     ```
 
-### Bitmap索引
+### 索引
 
-1. 为`table1`中的列`siteid`创建Bitmap索引。
+1. 为 `table1` 中的列 `siteid` 创建 Bitmap 索引。
 
     ```sql
     ALTER TABLE table1
-    ADD INDEX index_1 (siteid) [USING BITMAP] COMMENT 'balabala';
+    ADD INDEX index_1 (siteid) USING BITMAP COMMENT 'site_id_bitmap';
     ```
 
-2. 删除`table1`中列`siteid`的Bitmap索引。
+2. 删除 `table1` 中列 `siteid` 的 Bitmap 索引。
 
     ```sql
     ALTER TABLE table1
     DROP INDEX index_1;
     ```
 
-### 交换
+### 原子替换
 
-在`table1`和`table2`之间进行原子交换。
+在`table1`和`table2`之间进行原子替换。
 
 ```sql
 ALTER TABLE table1 SWAP WITH table2

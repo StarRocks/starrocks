@@ -30,6 +30,7 @@
 #include "service/brpc.h"
 #include "storage/storage_engine.h"
 #include "storage/tablet_manager.h"
+#include "util/runtime_profile.h"
 #include "util/thrift_util.h"
 
 namespace starrocks {
@@ -140,8 +141,7 @@ ShortCircuitExecutor::ShortCircuitExecutor(ExecEnv* exec_env)
 
 Status ShortCircuitExecutor::prepare(TExecShortCircuitParams& common_request) {
     SCOPED_TIMER(_runtime_profile->total_time_counter());
-    auto* timer = ADD_TIMER(_runtime_profile, "PrepareTime");
-    SCOPED_TIMER(timer);
+    SCOPED_TIMER(ADD_TIMER(_runtime_profile, "PrepareTime"));
 
     _common_request = &common_request;
     const TDescriptorTable& t_desc_tbl = _common_request->desc_tbl;
@@ -181,8 +181,7 @@ Status ShortCircuitExecutor::prepare(TExecShortCircuitParams& common_request) {
 
 Status ShortCircuitExecutor::execute() {
     SCOPED_TIMER(_runtime_profile->total_time_counter());
-    auto* timer = ADD_TIMER(_runtime_profile, "ExecuteTime");
-    SCOPED_TIMER(timer);
+    SCOPED_TIMER(ADD_TIMER(_runtime_profile, "ExecuteTime"));
 
     RETURN_IF_ERROR(_source->open(runtime_state()));
     RETURN_IF_ERROR(_sink->open(runtime_state()));
@@ -259,8 +258,7 @@ RuntimeState* ShortCircuitExecutor::runtime_state() {
 Status ShortCircuitExecutor::fetch_data(brpc::Controller* cntl, PExecShortCircuitResult& response) {
     {
         SCOPED_TIMER(_runtime_profile->total_time_counter());
-        auto* timer = ADD_TIMER(_runtime_profile, "CloseTime");
-        SCOPED_TIMER(timer);
+        SCOPED_TIMER(ADD_TIMER(_runtime_profile, "CloseTime"));
 
         //TODO need row count
         // response.set_affected_rows(runtime_state()->num_rows_load_sink_success());

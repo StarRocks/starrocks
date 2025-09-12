@@ -135,6 +135,7 @@ This project is used by the following companies. Learn more about their use case
 - [Didi](https://www.starrocks.io/blog/reduced-80-cost-didis-journey-from-multiple-olap-engines-to-starrocks)
 - [Eightfold.ai](https://www.youtube.com/watch?v=qNk_-QTZk3E)
 - [Fanatics](https://www.youtube.com/watch?v=hbXovqR6tOc)
+- [Fresha](https://medium.com/fresha-data-engineering/how-we-accidentally-became-one-of-uks-first-starrocks-production-pioneers-7db249f10010)
 - [Grab](https://engineering.grab.com/building-a-spark-observability)
 - [HerdWatch](https://medium.com/p/a7916a7e87bf)
 - [iQiyi](https://medium.com/starrocks-engineering/real-time-analytics-at-scale-why-we-use-starrocks-0aa3c859cbeb)

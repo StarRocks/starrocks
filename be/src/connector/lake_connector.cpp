@@ -374,8 +374,9 @@ Status LakeDataSource::init_tablet_reader(RuntimeState* runtime_state) {
         _params.plan_node_id = _morsel->get_plan_node_id();
         _params.scan_range = _morsel->get_scan_range();
     }
-    ASSIGN_OR_RETURN(_reader, _tablet.new_reader(std::move(child_schema), need_split,
-                                                 _provider->could_split_physically(), _morsel->rowsets()));
+    ASSIGN_OR_RETURN(_reader,
+                     _tablet.new_reader(std::move(child_schema), need_split, _provider->could_split_physically(),
+                                        _morsel->rowsets(), _tablet_schema));
     if (reader_columns.size() == scanner_columns.size()) {
         _prj_iter = _reader;
     } else {
@@ -434,7 +435,15 @@ Status LakeDataSource::_extend_schema_by_access_paths() {
         column.set_type(value_type);
         column.set_length(path->value_type().len);
         column.set_is_nullable(true);
-        column.set_extended_info(std::make_unique<ExtendedColumnInfo>(path.get(), root_column_index));
+        int32_t root_uid = _tablet_schema->column(static_cast<size_t>(root_column_index)).unique_id();
+        column.set_extended_info(std::make_unique<ExtendedColumnInfo>(path.get(), root_uid));
+
+        // For UNIQUE/AGG tables, extended flat JSON subcolumns behave like value columns
+        // and must carry a valid aggregation for pre-aggregation. Use REPLACE.
+        auto keys_type = _tablet_schema->keys_type();
+        if (keys_type == KeysType::UNIQUE_KEYS || keys_type == KeysType::AGG_KEYS) {
+            column.set_aggregation(StorageAggregateType::STORAGE_AGGREGATE_REPLACE);
+        }
 
         tmp_schema->append_column(column);
         VLOG(2) << "extend the access path column: " << path->linear_path();
@@ -462,6 +471,28 @@ Status LakeDataSource::init_column_access_paths(Schema* schema) {
             }
         } else {
             LOG(WARNING) << "failed to find column in schema: " << root;
+        }
+    }
+    // Preserve access paths referenced by extended columns even if not selected by pushdown
+    {
+        std::unordered_set<const ColumnAccessPath*> kept;
+        kept.reserve(new_one.size());
+        for (const auto& p : new_one) kept.insert(p.get());
+
+        for (size_t i = 0; i < _tablet_schema->num_columns(); ++i) {
+            const auto& col = _tablet_schema->column(i);
+            if (!col.is_extended() || col.extended_info() == nullptr || col.extended_info()->access_path == nullptr) {
+                continue;
+            }
+            const ColumnAccessPath* needed = col.extended_info()->access_path;
+            if (kept.find(needed) != kept.end()) continue;
+            for (auto& owned : _column_access_paths) {
+                if (owned.get() == needed) {
+                    new_one.emplace_back(std::move(owned));
+                    kept.insert(needed);
+                    break;
+                }
+            }
         }
     }
     _column_access_paths = std::move(new_one);

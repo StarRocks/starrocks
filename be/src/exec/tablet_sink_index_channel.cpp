@@ -190,6 +190,7 @@ void NodeChannel::_open(int64_t index_id, RefCountClosure<PTabletWriterOpenResul
         // does not need to write the txn log again.
         request.mutable_lake_tablet_params()->set_write_txn_log(!_parent->_write_txn_log);
         request.mutable_lake_tablet_params()->set_enable_data_file_bundling(_parent->_enable_data_file_bundling);
+        request.mutable_lake_tablet_params()->set_is_multi_statements_txn(_parent->_is_multi_statements_txn);
     }
     request.set_is_replicated_storage(_parent->_enable_replicated_storage);
     request.set_node_id(_node_id);
@@ -798,7 +799,7 @@ Status NodeChannel::_wait_request(ReusableClosure<PTabletWriterAddBatchResult>* 
 #endif
     _mem_tracker->release(closure->request_size);
 
-    _ts_profile->client_rpc_timer->update(closure->latency());
+    COUNTER_UPDATE(_ts_profile->client_rpc_timer, closure->latency());
 
     if (closure->cntl.Failed()) {
         _cancelled = true;

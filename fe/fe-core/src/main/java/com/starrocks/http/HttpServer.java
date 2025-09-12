@@ -353,7 +353,7 @@ public class HttpServer {
 
         GaugeMetricImpl<Long> httpWorkersNum = new GaugeMetricImpl<>(
                 HTTP_WORKERS_NUM, Metric.MetricUnit.NOUNIT, "the number of http workers");
-        httpWorkersNum.setValue(0L);
+        httpWorkersNum.setValue((long) workerGroup.executorCount());
         httpMetricRegistry.registerGauge(httpWorkersNum);
 
         GaugeMetric<Long> pendingTasks = new GaugeMetric<>(HTTP_WORKER_PENDING_TASKS_NUM, Metric.MetricUnit.NOUNIT,

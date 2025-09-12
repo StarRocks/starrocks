@@ -212,3 +212,16 @@ with agged_table as ( select distinct c0, c1 from t0) select /*+SET_VAR(cbo_cte_
 -- result:
 81921	1677762560.0	1677762560.0
 -- !result
+set enable_profile=true;
+-- result:
+-- !result
+set enable_async_profile=true;
+-- result:
+-- !result
+set profile_timeout=300;
+-- result:
+-- !result
+select count(*) from small_table1 s1 join small_table2 s2 on s1.c0 = s2.c0 join small_table3 s3 on s1.c0 = s3.c0 where s3.c3 = 0;
+-- result:
+0
+-- !result

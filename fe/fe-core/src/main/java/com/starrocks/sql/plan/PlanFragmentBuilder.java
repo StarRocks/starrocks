@@ -18,22 +18,6 @@ import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
-import com.starrocks.analysis.AggregateInfo;
-import com.starrocks.analysis.BinaryType;
-import com.starrocks.analysis.BrokerDesc;
-import com.starrocks.analysis.DescriptorTable;
-import com.starrocks.analysis.Expr;
-import com.starrocks.analysis.FunctionCallExpr;
-import com.starrocks.analysis.IntLiteral;
-import com.starrocks.analysis.JoinOperator;
-import com.starrocks.analysis.LiteralExpr;
-import com.starrocks.analysis.OrderByElement;
-import com.starrocks.analysis.SlotDescriptor;
-import com.starrocks.analysis.SlotId;
-import com.starrocks.analysis.SlotRef;
-import com.starrocks.analysis.SortInfo;
-import com.starrocks.analysis.TupleDescriptor;
-import com.starrocks.analysis.TupleId;
 import com.starrocks.catalog.AggregateFunction;
 import com.starrocks.catalog.ColocateTableIndex;
 import com.starrocks.catalog.Column;
@@ -71,6 +55,7 @@ import com.starrocks.common.tvr.TvrVersionRange;
 import com.starrocks.connector.BucketProperty;
 import com.starrocks.connector.metadata.MetadataTable;
 import com.starrocks.load.BrokerFileGroup;
+import com.starrocks.planner.AggregateInfo;
 import com.starrocks.planner.AggregationNode;
 import com.starrocks.planner.AnalyticEvalNode;
 import com.starrocks.planner.AssertNumRowsNode;
@@ -79,6 +64,7 @@ import com.starrocks.planner.DataPartition;
 import com.starrocks.planner.DataSink;
 import com.starrocks.planner.DecodeNode;
 import com.starrocks.planner.DeltaLakeScanNode;
+import com.starrocks.planner.DescriptorTable;
 import com.starrocks.planner.EmptySetNode;
 import com.starrocks.planner.EsScanNode;
 import com.starrocks.planner.ExceptNode;
@@ -115,9 +101,14 @@ import com.starrocks.planner.ScanNode;
 import com.starrocks.planner.SchemaScanNode;
 import com.starrocks.planner.SelectNode;
 import com.starrocks.planner.SetOperationNode;
+import com.starrocks.planner.SlotDescriptor;
+import com.starrocks.planner.SlotId;
+import com.starrocks.planner.SortInfo;
 import com.starrocks.planner.SortNode;
 import com.starrocks.planner.SplitCastPlanFragment;
 import com.starrocks.planner.TableFunctionNode;
+import com.starrocks.planner.TupleDescriptor;
+import com.starrocks.planner.TupleId;
 import com.starrocks.planner.UnionNode;
 import com.starrocks.planner.stream.StreamAggNode;
 import com.starrocks.planner.stream.StreamJoinNode;
@@ -131,8 +122,17 @@ import com.starrocks.service.FrontendOptions;
 import com.starrocks.sql.analyzer.DecimalV3FunctionAnalyzer;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AssertNumRowsElement;
+import com.starrocks.sql.ast.BrokerDesc;
 import com.starrocks.sql.ast.CreateMaterializedViewStatement;
+import com.starrocks.sql.ast.OrderByElement;
 import com.starrocks.sql.ast.QueryRelation;
+import com.starrocks.sql.ast.expression.BinaryType;
+import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.FunctionCallExpr;
+import com.starrocks.sql.ast.expression.IntLiteral;
+import com.starrocks.sql.ast.expression.JoinOperator;
+import com.starrocks.sql.ast.expression.LiteralExpr;
+import com.starrocks.sql.ast.expression.SlotRef;
 import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.common.UnsupportedException;
 import com.starrocks.sql.optimizer.JoinHelper;
@@ -2734,6 +2734,7 @@ public class PlanFragmentBuilder {
             rightFragment.getPlanRoot().forceCollectExecStats();
             this.currentExecGroup = leftExecGroup;
 
+            Map<SlotId, Expr> commonSubExprMap = buildCommonSubExprMap(node.getPredicateCommonOperators(), context);
             List<Expr> conjuncts = extractConjuncts(node.getPredicate(), context);
             List<Expr> joinOnConjuncts = extractConjuncts(node.getOnPredicate(), context);
             List<Expr> probePartitionByExprs = Lists.newArrayList();
@@ -2751,6 +2752,7 @@ public class PlanFragmentBuilder {
             NestLoopJoinNode joinNode = new NestLoopJoinNode(context.getNextNodeId(),
                     leftFragment.getPlanRoot(), rightFragment.getPlanRoot(),
                     null, node.getJoinType(), Lists.newArrayList(), joinOnConjuncts);
+            joinNode.setCommonSlotMap(commonSubExprMap);
 
             joinNode.setLimit(node.getLimit());
             joinNode.computeStatistics(optExpr.getStatistics());
@@ -2865,6 +2867,7 @@ public class PlanFragmentBuilder {
             List<Expr> eqJoinConjuncts = joinExpr.eqJoinConjuncts;
             List<Expr> otherJoinConjuncts = joinExpr.otherJoin;
             List<Expr> conjuncts = joinExpr.conjuncts;
+            Map<SlotId, Expr> commonSlotMap = joinExpr.commonSubOperatorMap;
 
             setNullableForJoin(joinOperator, leftFragment, rightFragment, context);
 
@@ -2882,6 +2885,7 @@ public class PlanFragmentBuilder {
                         joinNode.setUkfkProperty(joinProperty);
                     }
                 }
+                joinNode.setCommonSlotMap(commonSlotMap);
                 // set skew join, this is used by runtime filter
                 PhysicalHashJoinOperator physicalHashJoinOperator = (PhysicalHashJoinOperator) node;
                 boolean isSkewJoin = physicalHashJoinOperator.getSkewColumn() != null;
@@ -3416,23 +3420,8 @@ public class PlanFragmentBuilder {
 
             TupleDescriptor tupleDescriptor = context.getDescTbl().createTupleDescriptor();
 
-            Map<SlotId, Expr> commonSubOperatorMap = Maps.newHashMap();
-            if (filter.getPredicateCommonOperators() != null) {
-                for (Map.Entry<ColumnRefOperator, ScalarOperator> entry : filter.getPredicateCommonOperators().entrySet()) {
-                    Expr expr = ScalarOperatorToExpr.buildExecExpression(entry.getValue(),
-                            new ScalarOperatorToExpr.FormatterContext(context.getColRefToExpr(),
-                                    filter.getPredicateCommonOperators()));
+            Map<SlotId, Expr> commonSubOperatorMap = buildCommonSubExprMap(filter.getPredicateCommonOperators(), context);
 
-                    commonSubOperatorMap.put(new SlotId(entry.getKey().getId()), expr);
-
-                    SlotDescriptor slotDescriptor =
-                            context.getDescTbl().addSlotDescriptor(tupleDescriptor, new SlotId(entry.getKey().getId()));
-                    slotDescriptor.setIsNullable(expr.isNullable());
-                    slotDescriptor.setIsMaterialized(false);
-                    slotDescriptor.setType(expr.getType());
-                    context.getColRefToExpr().put(entry.getKey(), new SlotRef(entry.getKey().toString(), slotDescriptor));
-                }
-            }
 
             List<Expr> predicates = Utils.extractConjuncts(filter.getPredicate()).stream()
                     .map(d -> ScalarOperatorToExpr.buildExecExpression(d,
@@ -3650,12 +3639,38 @@ public class PlanFragmentBuilder {
             public final List<Expr> eqJoinConjuncts;
             public final List<Expr> otherJoin;
             public final List<Expr> conjuncts;
+            public final Map<SlotId, Expr> commonSubOperatorMap;
 
-            public JoinExprInfo(List<Expr> eqJoinConjuncts, List<Expr> otherJoin, List<Expr> conjuncts) {
+            public JoinExprInfo(List<Expr> eqJoinConjuncts, List<Expr> otherJoin, List<Expr> conjuncts,
+                                Map<SlotId, Expr> commonSubOperatorMap) {
                 this.eqJoinConjuncts = eqJoinConjuncts;
                 this.otherJoin = otherJoin;
                 this.conjuncts = conjuncts;
+                this.commonSubOperatorMap = commonSubOperatorMap;
             }
+
+        }
+
+        private Map<SlotId, Expr> buildCommonSubExprMap(
+                Map<ColumnRefOperator, ScalarOperator> commonSubOperators, ExecPlan context) {
+            Map<SlotId, Expr> commonSubExprMap = Maps.newHashMap();
+            if (commonSubOperators != null && !commonSubOperators.isEmpty()) {
+                TupleDescriptor tupleDescriptor = context.getDescTbl().createTupleDescriptor();
+                for (Map.Entry<ColumnRefOperator, ScalarOperator> entry : commonSubOperators.entrySet()) {
+                    Expr expr = ScalarOperatorToExpr.buildExecExpression(entry.getValue(),
+                            new ScalarOperatorToExpr.FormatterContext(context.getColRefToExpr(), commonSubOperators));
+
+                    commonSubExprMap.put(new SlotId(entry.getKey().getId()), expr);
+
+                    SlotDescriptor slotDescriptor =
+                            context.getDescTbl().addSlotDescriptor(tupleDescriptor, new SlotId(entry.getKey().getId()));
+                    slotDescriptor.setIsNullable(expr.isNullable());
+                    slotDescriptor.setIsMaterialized(false);
+                    slotDescriptor.setType(expr.getType());
+                    context.getColRefToExpr().put(entry.getKey(), new SlotRef(entry.getKey().toString(), slotDescriptor));
+                }
+            }
+            return commonSubExprMap;
         }
 
         private JoinExprInfo buildJoinExpr(OptExpression optExpr, ExecPlan context) {
@@ -3701,13 +3716,18 @@ public class PlanFragmentBuilder {
             List<Expr> otherJoinConjuncts = otherJoin.stream().map(e -> ScalarOperatorToExpr.buildExecExpression(e,
                             new ScalarOperatorToExpr.FormatterContext(context.getColRefToExpr())))
                     .collect(Collectors.toList());
+            Map<SlotId, Expr> commonSubExprMap = Maps.newHashMap();
+            if (optExpr.getOp() instanceof PhysicalJoinOperator) {
+                PhysicalJoinOperator joinOperator = (PhysicalJoinOperator) optExpr.getOp();
+                commonSubExprMap = buildCommonSubExprMap(joinOperator.getPredicateCommonOperators(), context);
+            }
 
             List<ScalarOperator> predicates = Utils.extractConjuncts(predicate);
             List<Expr> conjuncts = predicates.stream().map(e -> ScalarOperatorToExpr.buildExecExpression(e,
                             new ScalarOperatorToExpr.FormatterContext(context.getColRefToExpr())))
                     .collect(Collectors.toList());
 
-            return new JoinExprInfo(eqJoinConjuncts, otherJoinConjuncts, conjuncts);
+            return new JoinExprInfo(eqJoinConjuncts, otherJoinConjuncts, conjuncts, commonSubExprMap);
         }
 
         // TODO(murphy) consider state distribution

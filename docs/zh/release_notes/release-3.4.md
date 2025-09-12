@@ -4,6 +4,20 @@ displayed_sidebar: docs
 
 # StarRocks version 3.4
 
+## 3.4.7
+
+发布日期：2025 年 9 月 1 日
+
+### 问题修复
+
+修复了如下问题：
+
+- Routine Load 作业未序列化 `max_filter_ratio`。 [#61755](https://github.com/StarRocks/starrocks/pull/61755)
+- Stream Load 的 `now(precision)` 函数存在精度参数丢失。 [#61721](https://github.com/StarRocks/starrocks/pull/61721)
+- Audit Log 中，INSERT INTO SELECT 语句的 Scan Rows 结果不准确。[#61381](https://github.com/StarRocks/starrocks/pull/61381)
+- 升级集群至 v3.4.5 后，`fslib read iops` 指标相较升级之前升高。[#61724](https://github.com/StarRocks/starrocks/pull/61724)
+- 使用 JDBC Catalog 查询 SQLServer，查询经常卡住。[#61719](https://github.com/StarRocks/starrocks/pull/61719)
+
 ## 3.4.6
 
 发布日期：2025 年 8 月 7 日

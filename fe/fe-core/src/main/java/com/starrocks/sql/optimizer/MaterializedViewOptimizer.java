@@ -25,6 +25,7 @@ import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.rule.RuleType;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;
 import com.starrocks.sql.optimizer.transformer.LogicalPlan;
+import com.starrocks.sql.optimizer.transformer.MVTransformerContext;
 
 public class MaterializedViewOptimizer {
     public MvPlanContext optimize(MaterializedView mv,
@@ -64,6 +65,7 @@ public class MaterializedViewOptimizer {
         optimizerOptions.disableRule(RuleType.TF_ELIMINATE_AGG);
         optimizerOptions.disableRule(RuleType.TF_ELIMINATE_AGG_FUNCTION);
         optimizerOptions.disableRule(RuleType.TF_PULL_UP_PREDICATE_SCAN);
+        optimizerOptions.disableRule(RuleType.TF_JSON_PATH_REWRITE);
         // For sync mv, no rewrite query by original sync mv rule to avoid useless rewrite.
         if (mv.getRefreshScheme().isSync()) {
             optimizerOptions.disableRule(RuleType.TF_MATERIALIZED_VIEW);
@@ -107,11 +109,11 @@ public class MaterializedViewOptimizer {
             connectContext.getSessionVariable().setSemiJoinDeduplicateMode(-1);
         }
 
+        MVTransformerContext mvTransformerContext = new MVTransformerContext(connectContext, inlineView);
         try {
             // get optimized plan of mv's defined query
-            Pair<OptExpression, LogicalPlan> plans =
-                    MvUtils.getRuleOptimizedLogicalPlan(stmt, columnRefFactory, connectContext, optimizerOptions,
-                            inlineView);
+            Pair<OptExpression, LogicalPlan> plans = MvUtils.getRuleOptimizedLogicalPlan(stmt, columnRefFactory,
+                            connectContext, optimizerOptions, mvTransformerContext);
             if (plans == null) {
                 return new MvPlanContext(false, "No query plan for it");
             }

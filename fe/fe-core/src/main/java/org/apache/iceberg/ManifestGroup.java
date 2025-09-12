@@ -18,9 +18,9 @@
  */
 package org.apache.iceberg;
 
+import com.github.benmanes.caffeine.cache.Cache;
 import com.github.benmanes.caffeine.cache.Caffeine;
 import com.github.benmanes.caffeine.cache.LoadingCache;
-import com.google.common.cache.Cache;
 import org.apache.iceberg.expressions.Evaluator;
 import org.apache.iceberg.expressions.Expression;
 import org.apache.iceberg.expressions.Expressions;
@@ -327,7 +327,6 @@ class ManifestGroup {
 
         matchingManifests =
                 CloseableIterable.count(scanMetrics.scannedDataManifests(), matchingManifests);
-
         return Iterables.transform(
                 matchingManifests,
                 manifest ->

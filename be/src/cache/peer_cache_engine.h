@@ -24,7 +24,7 @@ public:
     PeerCacheEngine() = default;
     ~PeerCacheEngine() override = default;
 
-    Status init(const CacheOptions& options) override;
+    Status init(const RemoteCacheOptions& options) override;
 
     Status read(const std::string& key, size_t off, size_t size, IOBuffer* buffer, ReadCacheOptions* options) override;
 

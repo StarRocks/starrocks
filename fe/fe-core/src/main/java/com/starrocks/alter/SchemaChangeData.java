@@ -42,6 +42,7 @@ class SchemaChangeData {
     private final double bloomFilterFpp;
     private final boolean hasIndexChanged;
     private final Map<Long, Short> newIndexShortKeyCount;
+    private final boolean shortKeyChanged;
     private final List<Integer> sortKeyIdxes;
     private final List<Integer> sortKeyUniqueIds;
     private final long warehouseId;
@@ -99,6 +100,10 @@ class SchemaChangeData {
         return Collections.unmodifiableMap(newIndexShortKeyCount);
     }
 
+    boolean isShortKeyChanged() {
+        return shortKeyChanged;
+    }
+
     @Nullable
     List<Integer> getSortKeyIdxes() {
         return sortKeyIdxes;
@@ -129,6 +134,7 @@ class SchemaChangeData {
         this.bloomFilterFpp = builder.bloomFilterFpp;
         this.hasIndexChanged = builder.hasIndexChanged;
         this.newIndexShortKeyCount = Objects.requireNonNull(builder.newIndexShortKeyCount, "newIndexShortKeyCount is null");
+        this.shortKeyChanged = builder.shortKeyChanged;
         this.sortKeyIdxes = builder.sortKeyIdxes;
         this.sortKeyUniqueIds = builder.sortKeyUniqueIds;
         this.warehouseId = builder.warehouseId;
@@ -147,6 +153,7 @@ class SchemaChangeData {
         private double bloomFilterFpp;
         private boolean hasIndexChanged = false;
         private Map<Long, Short> newIndexShortKeyCount = new HashMap<>();
+        private boolean shortKeyChanged = false;
         private List<Integer> sortKeyIdxes;
         private List<Integer> sortKeyUniqueIds;
         private long warehouseId;
@@ -188,8 +195,9 @@ class SchemaChangeData {
             return this;
         }
 
-        Builder withNewIndexShortKeyCount(long indexId, short shortKeyCount) {
+        Builder withNewIndexShortKeyCount(long indexId, short shortKeyCount, boolean shortKeyChanged) {
             this.newIndexShortKeyCount.put(indexId, shortKeyCount);
+            this.shortKeyChanged |= shortKeyChanged;
             return this;
         }
 

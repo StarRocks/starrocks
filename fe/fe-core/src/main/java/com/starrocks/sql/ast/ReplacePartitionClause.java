@@ -97,6 +97,6 @@ public class ReplacePartitionClause extends AlterTableClause {
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitReplacePartitionClause(this, context);
+        return ((AstVisitorExtendInterface<R, C>) visitor).visitReplacePartitionClause(this, context);
     }
 }

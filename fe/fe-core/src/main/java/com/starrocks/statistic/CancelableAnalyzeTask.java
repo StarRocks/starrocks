@@ -55,9 +55,6 @@ public class CancelableAnalyzeTask implements RunnableFuture<Void> {
 
         try {
             originalTask.run();
-            if (!cancelled) {
-                analyzeStatus.setStatus(StatsConstants.ScheduleStatus.FINISH);
-            }
         } catch (Throwable t) {
             exception = t;
             analyzeStatus.setStatus(StatsConstants.ScheduleStatus.FAILED);

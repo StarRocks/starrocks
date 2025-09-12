@@ -19,18 +19,6 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Range;
 import com.google.common.collect.Sets;
-import com.starrocks.analysis.BetweenPredicate;
-import com.starrocks.analysis.BinaryPredicate;
-import com.starrocks.analysis.BinaryType;
-import com.starrocks.analysis.CompoundPredicate;
-import com.starrocks.analysis.Expr;
-import com.starrocks.analysis.FunctionCallExpr;
-import com.starrocks.analysis.InPredicate;
-import com.starrocks.analysis.LiteralExpr;
-import com.starrocks.analysis.NullLiteral;
-import com.starrocks.analysis.SlotId;
-import com.starrocks.analysis.SlotRef;
-import com.starrocks.analysis.TupleId;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.KeysType;
@@ -41,7 +29,17 @@ import com.starrocks.common.Pair;
 import com.starrocks.common.util.UnionFind;
 import com.starrocks.rpc.ConfigurableSerDesFactory;
 import com.starrocks.server.RunMode;
-import com.starrocks.sql.ast.AstVisitor;
+import com.starrocks.sql.ast.AstVisitorExtendInterface;
+import com.starrocks.sql.ast.expression.BetweenPredicate;
+import com.starrocks.sql.ast.expression.BinaryPredicate;
+import com.starrocks.sql.ast.expression.BinaryType;
+import com.starrocks.sql.ast.expression.CompoundPredicate;
+import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.FunctionCallExpr;
+import com.starrocks.sql.ast.expression.InPredicate;
+import com.starrocks.sql.ast.expression.LiteralExpr;
+import com.starrocks.sql.ast.expression.NullLiteral;
+import com.starrocks.sql.ast.expression.SlotRef;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.thrift.TCacheParam;
 import com.starrocks.thrift.TExpr;
@@ -243,7 +241,7 @@ public class FragmentNormalizer {
         return null;
     }
 
-    public static class SimpleRangePredicateVisitor implements AstVisitor<String, Void> {
+    public static class SimpleRangePredicateVisitor implements AstVisitorExtendInterface<String, Void> {
         @Override
         public String visitBinaryPredicate(BinaryPredicate node, Void context) {
             String lhs = visit(node.getChild(0), context);

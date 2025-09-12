@@ -35,6 +35,6 @@ public class CleanTemporaryTableStmt extends DdlStmt {
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitCleanTemporaryTableStatement(this, context);
+        return ((AstVisitorExtendInterface<R, C>) visitor).visitCleanTemporaryTableStatement(this, context);
     }
 }

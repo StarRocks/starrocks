@@ -4,7 +4,7 @@ displayed_sidebar: docs
 
 # regexp_count
 
-对字符串 str 进行正则匹配，计算正则表达式 pattern 在目标字符串中出现的次数。
+对字符串进行正则匹配，计算正则表达式 Pattern 在目标字符串中出现的次数。
 
 ## 语法
 

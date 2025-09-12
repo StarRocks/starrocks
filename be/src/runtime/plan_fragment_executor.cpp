@@ -68,6 +68,7 @@ PlanFragmentExecutor::PlanFragmentExecutor(ExecEnv* exec_env, report_status_call
           _prepared(false),
           _closed(false),
           enable_profile(true),
+          _start_time_ms(MonotonicMillis()),
           _is_report_on_cancel(true),
           _collect_query_statistics_with_every_batch(false),
           _is_runtime_filter_merge_node(false) {}
@@ -311,9 +312,10 @@ void PlanFragmentExecutor::send_report(bool done) {
         return;
     }
 
-    auto start_timestamp = _runtime_state->timestamp_ms() / 1000;
-    auto now = std::time(nullptr);
-    if (load_profile_collect_second != -1 && now - start_timestamp < load_profile_collect_second) {
+    auto elapsed_second = (MonotonicMillis() - _start_time_ms) / 1000;
+    if (load_profile_collect_second != -1 && elapsed_second < load_profile_collect_second) {
+        VLOG(1) << "skip profile report, fragment_instance_id=" << print_id(_runtime_state->fragment_instance_id())
+                << ", threshold_second=" << load_profile_collect_second << ", elapsed_second=" << elapsed_second;
         return;
     }
 

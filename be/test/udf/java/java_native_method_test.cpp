@@ -1,3 +1,17 @@
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 #include "udf/java/java_native_method.h"
 
 #include <gtest/gtest.h>
@@ -70,7 +84,7 @@ TEST_F(JavaNativeMethodTest, get_addrs_int) {
         const Column* data_column = down_cast<const NullableColumn*>(column.get())->data_column().get();
         const auto* array_column = down_cast<const ArrayColumn*>(data_column);
         ASSERT_EQ(results[0], (jlong)nullable_column->null_column_data().data());
-        ASSERT_EQ(results[1], (jlong)array_column->offsets().get_data().data());
+        ASSERT_EQ(results[1], (jlong)array_column->offsets().immutable_data().data());
         ASSERT_EQ(results[2], (jlong)array_column->elements_column().get());
         env->DeleteLocalRef(arr);
     }
@@ -88,7 +102,7 @@ TEST_F(JavaNativeMethodTest, get_addrs_int) {
         const Column* data_column = nullable_column->data_column();
         auto* map_column = down_cast<const MapColumn*>(data_column);
         ASSERT_EQ(results[0], (jlong)nullable_column->null_column_data().data());
-        ASSERT_EQ(results[1], (jlong)map_column->offsets().get_data().data());
+        ASSERT_EQ(results[1], (jlong)map_column->offsets().immutable_data().data());
         ASSERT_EQ(results[2], (jlong)map_column->keys_column().get());
         ASSERT_EQ(results[3], (jlong)map_column->values_column().get());
         env->DeleteLocalRef(arr);

@@ -15,9 +15,10 @@
 package com.starrocks.sql.plan;
 
 import com.starrocks.sql.analyzer.Analyzer;
-import com.starrocks.sql.analyzer.AstToSQLBuilder;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.StatementBase;
+import com.starrocks.sql.formatter.AST2SQLVisitor;
+import com.starrocks.sql.formatter.FormatOptions;
 import com.starrocks.sql.parser.SqlParser;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
@@ -270,7 +271,9 @@ public class SelectUsingAliasTest extends PlanTestBase {
     private void testSqlRewrite(String sql, String expected, boolean withoutTbl) {
         StatementBase stmt = SqlParser.parse(sql, connectContext.getSessionVariable()).get(0);
         Analyzer.analyze(stmt, connectContext);
-        String afterSql = new AstToSQLBuilder.AST2SQLBuilderVisitor(false, withoutTbl, true).visit(stmt);
+        String afterSql = AST2SQLVisitor.withOptions(
+                FormatOptions.allEnable().setColumnSimplifyTableName(false).setColumnWithTableName(!withoutTbl)
+                        .setEnableDigest(false)).visit(stmt);
         Assertions.assertEquals(expected, afterSql.replaceAll("`", ""));
     }
 }

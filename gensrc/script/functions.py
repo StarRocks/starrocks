@@ -296,6 +296,7 @@ vectorized_functions = [
     [30050, 'starts_with', True, False, 'BOOLEAN', ['VARCHAR', 'VARCHAR'], 'StringFunctions::starts_with'],
 
     [30060, 'null_or_empty', True, False, 'BOOLEAN', ['VARCHAR'], 'StringFunctions::null_or_empty'],
+    [30061, 'null_or_empty', True, False, 'BOOLEAN', ['ANY_ARRAY'], 'ArrayFunctions::null_or_empty'],
 
     [30070, 'space', True, True, 'VARCHAR', ['INT'], 'StringFunctions::space'],
     [30080, 'repeat', True, True, 'VARCHAR', ['VARCHAR', 'INT'], 'StringFunctions::repeat'],
@@ -607,7 +608,7 @@ vectorized_functions = [
     # TODO: 50380 year_from_unixtime
     # TODO: 50381 month_from_unixtime
     # TODO: 50382 day_from_unixtime
-    [50383, 'hour_from_unixtime', True, False, 'INT', ['BIGINT'], 'TimeFunctions::hour_from_unixtime'],
+    [50383, 'hour_from_unixtime', True, False, 'TINYINT', ['BIGINT'], 'TimeFunctions::hour_from_unixtime'],
     # TODO: 50384 minute_from_unixtime
     # TODO: 50385 second_from_unixtime
 

@@ -26,7 +26,7 @@
 #include "column/column_helper.h"
 #include "column/fixed_length_column.h"
 #include "common/logging.h"
-#include "exec/hdfs_scanner.h"
+#include "exec/hdfs_scanner/hdfs_scanner.h"
 #include "exprs/binary_predicate.h"
 #include "exprs/expr_context.h"
 #include "exprs/in_const_predicate.hpp"
@@ -3347,7 +3347,7 @@ TEST_F(FileReaderTest, TestStructSubfieldNoDecodeNotOutput) {
 }
 
 TEST_F(FileReaderTest, TestReadFooterCache) {
-    CacheOptions options = TestCacheUtils::create_simple_options(256 * KB, 100 * MB);
+    DiskCacheOptions options = TestCacheUtils::create_simple_options(256 * KB, 100 * MB);
     auto local_cache = std::make_shared<StarCacheEngine>();
     ASSERT_OK(local_cache->init(options));
     auto cache = std::make_shared<StoragePageCache>(local_cache.get());

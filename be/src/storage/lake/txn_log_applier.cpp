@@ -17,6 +17,7 @@
 #include <fmt/format.h>
 
 #include "gutil/strings/join.h"
+#include "runtime/current_thread.h"
 #include "storage/lake/lake_primary_index.h"
 #include "storage/lake/lake_primary_key_recover.h"
 #include "storage/lake/meta_file.h"
@@ -182,6 +183,54 @@ public:
         if (log.has_op_replication()) {
             RETURN_IF_ERROR(apply_replication_log(log.op_replication(), log.txn_id()));
         }
+        return Status::OK();
+    }
+
+    Status apply(const TxnLogVector& txn_logs) override {
+        if (txn_logs.empty()) {
+            return Status::OK();
+        }
+
+        SCOPED_THREAD_LOCAL_CHECK_MEM_LIMIT_SETTER(true);
+        SCOPED_THREAD_LOCAL_SINGLETON_CHECK_MEM_TRACKER_SETTER(
+                config::enable_pk_strict_memcheck ? _tablet.update_mgr()->mem_tracker() : nullptr);
+
+        // Pre-check: only accept op_write operations
+        for (const auto& log : txn_logs) {
+            _max_txn_id = std::max(_max_txn_id, log->txn_id());
+
+            // Ensure this log has op_write
+            if (!log->has_op_write()) {
+                return Status::NotSupported(
+                        "Transaction log without op_write operation is not supported in batch apply");
+            }
+        }
+        RETURN_IF_ERROR(check_rebuild_index());
+
+        // At this point, all logs contain only op_write operations
+        _tablet.update_mgr()->lock_shard_pk_index_shard(_tablet.id());
+        DeferOp defer([&]() { _tablet.update_mgr()->unlock_shard_pk_index_shard(_tablet.id()); });
+
+        RETURN_IF_ERROR(prepare_primary_index());
+
+        // Collect all write operations data
+        for (const auto& log : txn_logs) {
+            if (log->has_op_write()) {
+                const auto& op_write = log->op_write();
+                if (is_column_mode_partial_update(op_write)) {
+                    RETURN_IF_ERROR(_tablet.update_mgr()->publish_column_mode_partial_update(
+                            op_write, log->txn_id(), _metadata, &_tablet, &_builder, _base_version));
+                } else {
+                    RETURN_IF_ERROR(_tablet.update_mgr()->publish_primary_key_tablet(op_write, log->txn_id(), _metadata,
+                                                                                     &_tablet, _index_entry, &_builder,
+                                                                                     _base_version, true));
+                }
+                _metadata->set_next_rowset_id(_metadata->next_rowset_id() +
+                                              std::max(1, op_write.rowset().segments_size()));
+            }
+        }
+        _builder.set_final_rowset();
+
         return Status::OK();
     }
 
@@ -433,6 +482,115 @@ public:
         if (log.has_op_alter_metadata()) {
             return apply_alter_meta_log(_metadata.get(), log.op_alter_metadata(), _tablet.tablet_mgr());
         }
+        return Status::OK();
+    }
+
+    Status apply(const TxnLogVector& txn_logs) override {
+        if (txn_logs.empty()) {
+            return Status::OK();
+        }
+
+        VLOG(2) << "Applying " << txn_logs.size() << " transaction logs in batch for tablet " << _tablet.id();
+
+        // Collect all rowset information to be merged
+        int64_t total_num_rows = 0;
+        int64_t total_data_size = 0;
+        std::vector<std::string> all_segments;
+        std::vector<int64_t> all_segment_sizes;
+        std::vector<std::string> all_segment_encryption_metas;
+
+        // Traverse all transaction logs and collect op_write information
+        VLOG(2) << "Collecting op_write information from transaction logs for tablet " << _tablet.id();
+        for (const auto& log : txn_logs) {
+            if (log->has_op_write()) {
+                const auto& op_write = log->op_write();
+                if (op_write.has_rowset() && op_write.rowset().num_rows() > 0) {
+                    const auto& rowset = op_write.rowset();
+
+                    // Check for delete predicate - not supported in batch mode
+                    if (rowset.has_delete_predicate()) {
+                        LOG(WARNING) << "Delete predicate is not supported in batch transaction log apply for tablet "
+                                     << _tablet.id();
+                        return Status::NotSupported("Delete predicate is not supported in batch transaction log apply");
+                    }
+
+                    // Accumulate row count and data size
+                    total_num_rows += rowset.num_rows();
+                    total_data_size += rowset.data_size();
+
+                    // Collect all segments
+                    all_segments.reserve(all_segments.size() + rowset.segments_size());
+                    for (int i = 0; i < rowset.segments_size(); i++) {
+                        all_segments.emplace_back(rowset.segments(i));
+                    }
+
+                    // Collect segment sizes
+                    all_segment_sizes.reserve(all_segment_sizes.size() + rowset.segment_size_size());
+                    for (int i = 0; i < rowset.segment_size_size(); i++) {
+                        all_segment_sizes.emplace_back(rowset.segment_size(i));
+                    }
+
+                    // Collect encryption metas directly as strings
+                    all_segment_encryption_metas.reserve(all_segment_encryption_metas.size() +
+                                                         rowset.segment_encryption_metas_size());
+                    for (int i = 0; i < rowset.segment_encryption_metas_size(); i++) {
+                        all_segment_encryption_metas.emplace_back(rowset.segment_encryption_metas(i));
+                    }
+                }
+            } else {
+                return Status::NotSupported(
+                        "Transaction log without op_write operation is not supported in batch apply");
+            }
+        }
+
+        // If no valid rowset data, return directly
+        if (total_num_rows == 0) {
+            VLOG(2) << "No valid rowset data to apply for tablet " << _tablet.id();
+            return Status::OK();
+        }
+
+        VLOG(2) << "Creating merged rowset with total_num_rows=" << total_num_rows
+                << ", total_data_size=" << total_data_size << " for tablet " << _tablet.id();
+        // Create merged rowset
+        auto merged_rowset = _metadata->add_rowsets();
+        merged_rowset->set_num_rows(total_num_rows);
+        merged_rowset->set_data_size(total_data_size);
+        merged_rowset->set_overlapped(all_segments.size() > 1);
+
+        // Set segments using move semantics
+        for (auto&& segment : std::move(all_segments)) {
+            merged_rowset->add_segments(std::move(segment));
+        }
+
+        // Set segment sizes
+        for (int64_t size : all_segment_sizes) {
+            merged_rowset->add_segment_size(size);
+        }
+
+        // Set segment encryption metas directly
+        for (const auto& meta : all_segment_encryption_metas) {
+            merged_rowset->add_segment_encryption_metas(meta);
+        }
+
+        // Set rowset ID and update next_rowset_id
+        merged_rowset->set_id(_metadata->next_rowset_id());
+        _metadata->set_next_rowset_id(_metadata->next_rowset_id() + std::max(1, merged_rowset->segments_size()));
+        VLOG(2) << "Set rowset id to " << merged_rowset->id() << " and updated next_rowset_id to "
+                << _metadata->next_rowset_id() << " for tablet " << _tablet.id();
+
+        // Update schema related information
+        if (!_metadata->rowset_to_schema().empty()) {
+            auto schema_id = _metadata->schema().id();
+            (*_metadata->mutable_rowset_to_schema())[merged_rowset->id()] = schema_id;
+
+            // Add to historical schema if it's the first rowset of latest schema
+            if (_metadata->historical_schemas().count(schema_id) <= 0) {
+                VLOG(2) << "Adding new schema " << schema_id << " to historical schemas for tablet " << _tablet.id();
+                auto& item = (*_metadata->mutable_historical_schemas())[schema_id];
+                item.CopyFrom(_metadata->schema());
+            }
+        }
+
         return Status::OK();
     }
 

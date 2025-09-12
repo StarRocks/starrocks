@@ -15,7 +15,6 @@
 package com.starrocks.catalog.system.information;
 
 import com.google.common.collect.Lists;
-import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.ScalarType;
@@ -27,6 +26,7 @@ import com.starrocks.common.util.DateUtils;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ShowResultSetMetaData;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.expression.TableName;
 import com.starrocks.statistic.AnalyzeStatus;
 import com.starrocks.statistic.NativeAnalyzeStatus;
 import com.starrocks.statistic.StatisticUtils;
@@ -101,7 +101,6 @@ public class AnalyzeStatusSystemTable extends SystemTable {
                 }
             }
             TAnalyzeStatusItem item = new TAnalyzeStatusItem();
-            itemList.add(item);
             item.setCatalog_name("");
             item.setDatabase_name("");
             item.setTable_name("");
@@ -118,6 +117,7 @@ public class AnalyzeStatusSystemTable extends SystemTable {
                     continue;
                 }
             } catch (MetaNotFoundException ignored) {
+                continue;
             }
 
             String columnStr = "ALL";
@@ -135,6 +135,7 @@ public class AnalyzeStatusSystemTable extends SystemTable {
             item.setEnd_time(DateUtils.formatDateTimeUnix(analyze.getEndTime()));
             item.setProperties(analyze.getProperties() == null ? "{}" : analyze.getProperties().toString());
             item.setReason(analyze.getReason());
+            itemList.add(item);
         }
 
         return res;

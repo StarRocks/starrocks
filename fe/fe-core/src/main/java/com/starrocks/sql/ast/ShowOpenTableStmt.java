@@ -29,6 +29,6 @@ public class ShowOpenTableStmt extends ShowStmt {
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitShowOpenTableStatement(this, context);
+        return ((AstVisitorExtendInterface<R, C>) visitor).visitShowOpenTableStatement(this, context);
     }
 }

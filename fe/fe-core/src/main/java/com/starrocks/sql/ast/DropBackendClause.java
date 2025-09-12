@@ -48,6 +48,6 @@ public class DropBackendClause extends BackendClause {
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitDropBackendClause(this, context);
+        return ((AstVisitorExtendInterface<R, C>) visitor).visitDropBackendClause(this, context);
     }
 }

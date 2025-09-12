@@ -15,13 +15,13 @@
 package com.starrocks.sql.plan;
 
 import com.google.common.collect.Maps;
-import com.starrocks.analysis.HintNode;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.DDLStmtExecutor;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.qe.ShowResultSet;
 import com.starrocks.qe.StmtExecutor;
 import com.starrocks.sql.ast.DmlStmt;
+import com.starrocks.sql.ast.HintNode;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.parser.SqlParser;
 import mockit.Mock;

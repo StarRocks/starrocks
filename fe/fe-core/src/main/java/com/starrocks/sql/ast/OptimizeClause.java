@@ -16,7 +16,6 @@ package com.starrocks.sql.ast;
 
 import com.google.common.collect.Lists;
 import com.google.gson.annotations.SerializedName;
-import com.starrocks.analysis.OrderByElement;
 import com.starrocks.sql.parser.NodePosition;
 
 import java.util.List;
@@ -151,6 +150,6 @@ public class OptimizeClause extends AlterTableClause {
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitOptimizeClause(this, context);
+        return ((AstVisitorExtendInterface<R, C>) visitor).visitOptimizeClause(this, context);
     }
 }

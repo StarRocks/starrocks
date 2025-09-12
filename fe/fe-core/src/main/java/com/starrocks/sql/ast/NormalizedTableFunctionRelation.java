@@ -14,7 +14,7 @@
 
 package com.starrocks.sql.ast;
 
-import com.starrocks.analysis.JoinOperator;
+import com.starrocks.sql.ast.expression.JoinOperator;
 
 /**
  * {@link NormalizedTableFunctionRelation} is a special {@link JoinRelation} converted from TABLE(table_function(...)).
@@ -37,6 +37,6 @@ public class NormalizedTableFunctionRelation extends JoinRelation {
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitNormalizedTableFunction(this, context);
+        return ((AstVisitorExtendInterface<R, C>) visitor).visitNormalizedTableFunction(this, context);
     }
 }

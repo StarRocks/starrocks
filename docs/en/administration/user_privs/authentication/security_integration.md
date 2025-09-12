@@ -126,13 +126,13 @@ PROPERTIES (
 ```SQL
 CREATE SECURITY INTEGRATION <security_integration_name> 
 PROPERTIES (
-    "type" = "jwt",
+    "type" = "authentication_jwt",
     "jwks_url" = "",
     "principal_field" = "",
     "required_issuer" = "",
     "required_audience" = ""
     "comment" = ""
-)
+);
 ```
 
 #### Parameters

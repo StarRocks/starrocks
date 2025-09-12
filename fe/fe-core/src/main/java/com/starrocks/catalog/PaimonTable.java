@@ -15,8 +15,8 @@
 package com.starrocks.catalog;
 
 import com.google.common.base.Joiner;
-import com.starrocks.analysis.DescriptorTable;
 import com.starrocks.common.util.TimeUtils;
+import com.starrocks.planner.DescriptorTable;
 import com.starrocks.planner.PaimonScanNode;
 import com.starrocks.thrift.TIcebergSchema;
 import com.starrocks.thrift.TIcebergSchemaField;

@@ -104,6 +104,7 @@ Status OlapTableSink::init(const TDataSink& t_sink, RuntimeState* state) {
     _is_lake_table = table_sink.is_lake_table;
     _write_txn_log = table_sink.write_txn_log;
     _enable_data_file_bundling = table_sink.enable_data_file_bundling;
+    _is_multi_statements_txn = table_sink.is_multi_statements_txn;
     _keys_type = table_sink.keys_type;
     if (table_sink.__isset.null_expr_in_auto_increment) {
         _null_expr_in_auto_increment = table_sink.null_expr_in_auto_increment;
@@ -790,7 +791,8 @@ Status OlapTableSink::_fill_auto_increment_id_internal(Chunk* chunk, SlotDescrip
     }
 
     ColumnPtr& data_col = NullableColumn::dynamic_pointer_cast(col)->data_column();
-    Filter filter(NullableColumn::dynamic_pointer_cast(col)->immutable_null_column_data());
+    const auto null_datas = NullableColumn::dynamic_pointer_cast(col)->immutable_null_column_data();
+    Filter filter(null_datas.begin(), null_datas.end());
 
     Filter init_filter(chunk->num_rows(), 0);
 

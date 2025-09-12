@@ -15,13 +15,13 @@
 
 package com.starrocks.planner.stream;
 
-import com.starrocks.analysis.BinaryPredicate;
-import com.starrocks.analysis.Expr;
-import com.starrocks.analysis.JoinOperator;
-import com.starrocks.analysis.TableRef;
 import com.starrocks.planner.JoinNode;
 import com.starrocks.planner.PlanNode;
 import com.starrocks.planner.PlanNodeId;
+import com.starrocks.sql.ast.expression.BinaryPredicate;
+import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.JoinOperator;
+import com.starrocks.sql.ast.expression.TableRef;
 import com.starrocks.sql.optimizer.operator.stream.IMTInfo;
 import com.starrocks.thrift.TEqJoinCondition;
 import com.starrocks.thrift.TExplainLevel;

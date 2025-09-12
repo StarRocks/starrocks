@@ -4,6 +4,20 @@ displayed_sidebar: docs
 
 # StarRocks version 3.4
 
+## 3.4.7
+
+Release Date: September 1, 2025
+
+### Bug Fixes
+
+The following issues have been fixed:
+
+- Routine Load jobs did not serialize `max_filter_ratio`. [#61755](https://github.com/StarRocks/starrocks/pull/61755)
+- In Stream Load, the `now(precision)` function lost the precision parameter. [#61721](https://github.com/StarRocks/starrocks/pull/61721)
+- In Audit Log, the Scan Rows result for `INSERT INTO SELECT` statements was inaccurate. [#61381](https://github.com/StarRocks/starrocks/pull/61381)
+- After upgrading the cluster to v3.4.5, the `fslib read iops` metric increased compared to before the upgrade. [#61724](https://github.com/StarRocks/starrocks/pull/61724)
+- Queries against SQLServer using JDBC Catalog often got stuck. [#61719](https://github.com/StarRocks/starrocks/pull/61719)
+
 ## 3.4.6
 
 Release Date: August 7, 2025

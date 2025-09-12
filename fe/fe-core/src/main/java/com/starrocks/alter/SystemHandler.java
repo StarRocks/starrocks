@@ -60,7 +60,7 @@ import com.starrocks.sql.ast.AddComputeNodeClause;
 import com.starrocks.sql.ast.AddFollowerClause;
 import com.starrocks.sql.ast.AddObserverClause;
 import com.starrocks.sql.ast.AlterClause;
-import com.starrocks.sql.ast.AstVisitor;
+import com.starrocks.sql.ast.AstVisitorExtendInterface;
 import com.starrocks.sql.ast.CancelAlterSystemStmt;
 import com.starrocks.sql.ast.CancelStmt;
 import com.starrocks.sql.ast.CleanTabletSchedQClause;
@@ -108,7 +108,7 @@ public class SystemHandler extends AlterHandler {
         return null;
     }
 
-    protected static class Visitor implements AstVisitor<Void, Void> {
+    protected static class Visitor implements AstVisitorExtendInterface<Void, Void> {
         private static final SystemHandler.Visitor INSTANCE = new SystemHandler.Visitor();
 
         public static SystemHandler.Visitor getInstance() {

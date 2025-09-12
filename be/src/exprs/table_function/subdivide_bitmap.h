@@ -45,7 +45,8 @@ public:
         return Status::OK();
     }
 
-    void process_row(const Buffer<BitmapValue*>& src_bitmap_col, SrcSizeCppType batch_size, size_t row,
+    template <class ImmObjectContainer>
+    void process_row(const ImmObjectContainer& src_bitmap_col, SrcSizeCppType batch_size, size_t row,
                      Column* dst_bitmap_col, UInt32Column* dst_offset_col, uint32_t* compact_offset) const {
         auto* bitmap = src_bitmap_col[row];
 
@@ -82,8 +83,8 @@ public:
 
         const auto* src_bitmap_col = ColumnHelper::cast_to_raw<TYPE_OBJECT>(ColumnHelper::get_data_column(c0.get()));
         const auto* src_size_col = ColumnHelper::cast_to_raw<Type>(ColumnHelper::get_data_column(c1.get()));
-        const auto& src_bitmap_data = src_bitmap_col->get_data();
-        const auto& src_size_data = src_size_col->get_data();
+        const auto src_bitmap_data = src_bitmap_col->immutable_data();
+        const auto src_size_data = src_size_col->immutable_data();
         bool has_null = c0->has_null() || c1->has_null();
 
         if (has_null) {

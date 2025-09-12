@@ -100,7 +100,7 @@ public class ApplyRuleTask extends OptimizerTask {
             }
 
             newExpressions.addAll(targetExpressions);
-            OptimizerTraceUtil.logApplyRuleAfter(targetExpressions);
+            OptimizerTraceUtil.logApplyRuleAfter(rule, targetExpressions);
 
             extractExpr = binder.next();
         }

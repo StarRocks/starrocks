@@ -41,6 +41,7 @@
 #include "storage/rowset/column_reader.h"
 #include "storage/rowset/dict_page.h"
 #include "storage/rowset/encoding_info.h"
+#include "storage/rowset/page_handle_fwd.h"
 #include "types/logical_type.h"
 #include "util/bitmap.h"
 
@@ -229,7 +230,6 @@ Status ScalarColumnIterator::next_batch(size_t* n, Column* dst) {
                 break;
             }
         }
-
         contain_deleted_row = contain_deleted_row || _contains_deleted_row(_page->page_index());
         // number of rows to be read from this page
         size_t nread = remaining;
@@ -356,8 +356,9 @@ Status ScalarColumnIterator::_load_dict_page() {
     // read dictionary page
     Slice dict_data;
     PageFooterPB dict_footer;
+    PageHandle dict_page_handle;
     RETURN_IF_ERROR(
-            _reader->read_page(_opts, _reader->get_dict_page_pointer(), &_dict_page_handle, &dict_data, &dict_footer));
+            _reader->read_page(_opts, _reader->get_dict_page_pointer(), &dict_page_handle, &dict_data, &dict_footer));
     // ignore dict_footer.dict_page_footer().encoding() due to only
     // PLAIN_ENCODING is supported for dict page right now
     if constexpr (Type == TYPE_CHAR || Type == TYPE_VARCHAR || Type == TYPE_JSON) {
@@ -365,6 +366,7 @@ Status ScalarColumnIterator::_load_dict_page() {
     } else {
         _dict_decoder = std::make_unique<BitShufflePageDecoder<Type>>(dict_data);
     }
+    _dict_decoder->set_page_handle(std::make_shared<PageHandle>(std::move(dict_page_handle)));
     return _dict_decoder->init();
 }
 

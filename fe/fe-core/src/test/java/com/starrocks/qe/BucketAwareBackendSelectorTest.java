@@ -15,13 +15,17 @@
 package com.starrocks.qe;
 
 import com.google.common.collect.ImmutableMap;
+import com.starrocks.catalog.Column;
+import com.starrocks.catalog.Type;
 import com.starrocks.common.StarRocksException;
+import com.starrocks.connector.BucketProperty;
 import com.starrocks.planner.PlanNodeId;
 import com.starrocks.planner.ScanNode;
 import com.starrocks.qe.scheduler.DefaultWorkerProvider;
 import com.starrocks.qe.scheduler.WorkerProvider;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.system.ComputeNode;
+import com.starrocks.thrift.TBucketFunction;
 import com.starrocks.thrift.THdfsScanRange;
 import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.thrift.TScanRange;
@@ -36,6 +40,7 @@ import org.junit.jupiter.api.Test;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.function.Function;
 import java.util.stream.Collectors;
@@ -79,8 +84,8 @@ public class BucketAwareBackendSelectorTest {
     }
 
     private ColocatedBackendSelector.Assignment genColocatedAssignment(int bucketNum, int numScanNodes) {
-        return new ColocatedBackendSelector.Assignment(bucketNum, numScanNodes,
-                ColocatedBackendSelector.Assignment.ScanRangeType.NONNATIVE);
+        BucketProperty bucketProperty = new BucketProperty(TBucketFunction.MURMUR3_X86_32, 10, new Column("c1", Type.INT));
+        return new ColocatedBackendSelector.Assignment(bucketNum, numScanNodes, Optional.of(List.of(bucketProperty)));
     }
 
     @Test
@@ -104,7 +109,7 @@ public class BucketAwareBackendSelectorTest {
 
         // Create and test BucketAwareBackendSelector
         BucketAwareBackendSelector selector = new BucketAwareBackendSelector(
-                scanNode, locations, colocatedAssignment, workerProvider, false, false);
+                scanNode, locations, colocatedAssignment, workerProvider, false, false, SessionVariableConstants.BALANCE);
 
         // Execute the method under test
         selector.computeScanRangeAssignment();
@@ -152,7 +157,7 @@ public class BucketAwareBackendSelectorTest {
 
         // Create and test BucketAwareBackendSelector with incremental scan ranges
         BucketAwareBackendSelector selector = new BucketAwareBackendSelector(
-                scanNode, locations, colocatedAssignment, workerProvider, false, true);
+                scanNode, locations, colocatedAssignment, workerProvider, false, true, SessionVariableConstants.BALANCE);
 
         // Execute the method under test
         selector.computeScanRangeAssignment();
@@ -202,7 +207,7 @@ public class BucketAwareBackendSelectorTest {
 
         // Create and test BucketAwareBackendSelector
         BucketAwareBackendSelector selector = new BucketAwareBackendSelector(
-                scanNode, locations, colocatedAssignment, workerProvider, true, false);
+                scanNode, locations, colocatedAssignment, workerProvider, true, false, SessionVariableConstants.ELASTIC);
 
         // Execute the method under test
         selector.computeScanRangeAssignment();
@@ -232,7 +237,7 @@ public class BucketAwareBackendSelectorTest {
 
         // Create BucketAwareBackendSelector
         BucketAwareBackendSelector selector = new BucketAwareBackendSelector(
-                scanNode, locations, colocatedAssignment, workerProvider, false, false);
+                scanNode, locations, colocatedAssignment, workerProvider, false, false, SessionVariableConstants.BALANCE);
 
         // Execute and expect exception
         Assertions.assertThrows(StarRocksException.class, selector::computeScanRangeAssignment);

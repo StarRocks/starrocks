@@ -19,7 +19,7 @@ import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.sql.ast.AstVisitor;
+import com.starrocks.sql.ast.AstVisitorExtendInterface;
 import com.starrocks.sql.ast.CancelRefreshDictionaryStmt;
 import com.starrocks.sql.ast.CreateDictionaryStmt;
 import com.starrocks.sql.ast.DropDictionaryStmt;
@@ -34,7 +34,7 @@ public class DictionaryAnalyzer {
         new DictionaryAnalyzer.DictionaryAnalyzerVisitor().visit(stmt, session);
     }
 
-    static class DictionaryAnalyzerVisitor implements AstVisitor<Void, ConnectContext> {
+    static class DictionaryAnalyzerVisitor implements AstVisitorExtendInterface<Void, ConnectContext> {
         @Override
         public Void visitCreateDictionaryStatement(CreateDictionaryStmt statement, ConnectContext context) {
             String dictionaryName = statement.getDictionaryName();

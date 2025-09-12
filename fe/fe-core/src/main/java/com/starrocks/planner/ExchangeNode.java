@@ -37,12 +37,10 @@ package com.starrocks.planner;
 import com.google.common.base.MoreObjects;
 import com.google.common.base.MoreObjects.ToStringHelper;
 import com.google.common.collect.Lists;
-import com.starrocks.analysis.Expr;
-import com.starrocks.analysis.SlotRef;
-import com.starrocks.analysis.SortInfo;
-import com.starrocks.analysis.TupleId;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
+import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.SlotRef;
 import com.starrocks.sql.optimizer.base.DistributionSpec;
 import com.starrocks.sql.optimizer.operator.TopNType;
 import com.starrocks.thrift.TExchangeNode;
@@ -232,7 +230,7 @@ public class ExchangeNode extends PlanNode {
             if (CollectionUtils.isNotEmpty(partitionExprs)) {
                 output.append(detailPrefix)
                         .append("partition exprs: ")
-                        .append(getVerboseExplain(partitionExprs, detailLevel))
+                        .append(explainExpr(detailLevel, partitionExprs))
                         .append('\n');
             }
         }

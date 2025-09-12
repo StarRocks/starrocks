@@ -18,12 +18,12 @@ package com.starrocks.rowstore;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Lists;
-import com.starrocks.analysis.BinaryPredicate;
-import com.starrocks.analysis.BoolLiteral;
-import com.starrocks.analysis.Expr;
-import com.starrocks.analysis.InPredicate;
-import com.starrocks.analysis.LiteralExpr;
-import com.starrocks.analysis.SlotRef;
+import com.starrocks.sql.ast.expression.BinaryPredicate;
+import com.starrocks.sql.ast.expression.BoolLiteral;
+import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.InPredicate;
+import com.starrocks.sql.ast.expression.LiteralExpr;
+import com.starrocks.sql.ast.expression.SlotRef;
 
 import java.util.ArrayList;
 import java.util.HashMap;

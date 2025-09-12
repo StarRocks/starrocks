@@ -18,7 +18,7 @@
 
 #include <iostream>
 
-#include "exec/hdfs_scanner.h"
+#include "exec/hdfs_scanner/hdfs_scanner.h"
 #include "formats/parquet/column_reader.h"
 #include "fs/fs_memory.h"
 #include "gen_cpp/parquet_types.h"

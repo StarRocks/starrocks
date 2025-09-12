@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+keywords: ['shu zu']
 ---
 
 # array_contains

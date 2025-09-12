@@ -18,10 +18,6 @@ import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
-import com.starrocks.analysis.ArithmeticExpr;
-import com.starrocks.analysis.Expr;
-import com.starrocks.analysis.FunctionName;
-import com.starrocks.analysis.TableName;
 import com.starrocks.authentication.AuthenticationMgr;
 import com.starrocks.authorization.AccessDeniedException;
 import com.starrocks.authorization.AuthorizationMgr;
@@ -55,6 +51,7 @@ import com.starrocks.common.FeConstants;
 import com.starrocks.common.proc.ReplicasProcNode;
 import com.starrocks.common.util.KafkaUtil;
 import com.starrocks.connector.exception.StarRocksConnectorException;
+import com.starrocks.connector.iceberg.hive.IcebergHiveCatalog;
 import com.starrocks.http.rest.RestBaseAction;
 import com.starrocks.load.pipe.PipeManagerTest;
 import com.starrocks.load.routineload.RoutineLoadMgr;
@@ -96,6 +93,10 @@ import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.SubqueryRelation;
 import com.starrocks.sql.ast.UserAuthOption;
 import com.starrocks.sql.ast.UserRef;
+import com.starrocks.sql.ast.expression.ArithmeticExpr;
+import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.FunctionName;
+import com.starrocks.sql.ast.expression.TableName;
 import com.starrocks.sql.ast.warehouse.cngroup.AlterCnGroupStmt;
 import com.starrocks.sql.ast.warehouse.cngroup.CreateCnGroupStmt;
 import com.starrocks.sql.ast.warehouse.cngroup.DropCnGroupStmt;
@@ -502,7 +503,7 @@ public class PrivilegeCheckerTest {
     }
 
     @Test
-    public void testCatalogStatement() throws Exception {
+    public void testCatalogStatement(@Mocked IcebergHiveCatalog hiveCatalog) throws Exception {
         starRocksAssert.withCatalog("create external catalog test_ex_catalog properties (" +
                 "\"type\"=\"iceberg\", \"iceberg.catalog.type\"=\"hive\")");
         ConnectContext ctx = starRocksAssert.getCtx();
@@ -556,7 +557,7 @@ public class PrivilegeCheckerTest {
     }
 
     @Test
-    public void testExternalDBAndTablePEntryObject() throws Exception {
+    public void testExternalDBAndTablePEntryObject(@Mocked IcebergHiveCatalog hiveCatalog) throws Exception {
         starRocksAssert.withCatalog("create external catalog test_iceberg properties (" +
                 "\"type\"=\"iceberg\", \"iceberg.catalog.type\"=\"hive\")");
         DbPEntryObject dbPEntryObject =
@@ -1160,12 +1161,19 @@ public class PrivilegeCheckerTest {
                 "Access denied; you need (at least one of) the CREATE TABLE privilege(s) on DATABASE db1 for " +
                         "this operation");
 
+        // check refresh external table: REFRESH
+        verifyGrantRevoke(
+                "refresh external table db1.tbl1",
+                "grant REFRESH on db1.tbl1 to test",
+                "revoke REFRESH on db1.tbl1 from test",
+                "Access denied; you need (at least one of) the REFRESH privilege(s) on TABLE tbl1 for this operation");
+
         // check refresh external table: ALTER
         verifyGrantRevoke(
                 "refresh external table db1.tbl1",
                 "grant ALTER on db1.tbl1 to test",
                 "revoke ALTER on db1.tbl1 from test",
-                "Access denied; you need (at least one of) the ALTER privilege(s) on TABLE tbl1 for this operation");
+                "Access denied; you need (at least one of) the REFRESH privilege(s) on TABLE tbl1 for this operation");
 
         // check alter table: ALTER
         verifyGrantRevoke(

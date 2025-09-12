@@ -16,10 +16,10 @@
 package com.starrocks.sql.ast;
 
 import com.google.common.collect.Lists;
-import com.starrocks.analysis.Expr;
-import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.catalog.Type;
+import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.TableName;
 import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.statistic.StatsConstants;
 
@@ -142,6 +142,6 @@ public class CreateAnalyzeJobStmt extends DdlStmt {
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitCreateAnalyzeJobStatement(this, context);
+        return ((AstVisitorExtendInterface<R, C>) visitor).visitCreateAnalyzeJobStatement(this, context);
     }
 }

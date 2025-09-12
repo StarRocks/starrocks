@@ -16,9 +16,8 @@
 package com.starrocks.sql.ast;
 
 import com.google.common.base.Preconditions;
-import com.starrocks.analysis.Expr;
-import com.starrocks.analysis.ParseNode;
-import com.starrocks.analysis.TableName;
+import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.TableName;
 import com.starrocks.sql.parser.NodePosition;
 
 import java.util.ArrayList;

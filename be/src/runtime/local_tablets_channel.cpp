@@ -31,6 +31,7 @@
 #include "gutil/ref_counted.h"
 #include "gutil/strings/join.h"
 #include "runtime/descriptors.h"
+#include "runtime/exec_env.h"
 #include "runtime/global_dict/types.h"
 #include "runtime/global_dict/types_fwd_decl.h"
 #include "runtime/load_channel.h"
@@ -390,7 +391,17 @@ void LocalTabletsChannel::add_chunk(Chunk* chunk, const PTabletWriterAddChunkReq
 
     std::set<long> immutable_tablet_ids;
     for (auto tablet_id : request.tablet_ids()) {
-        auto& writer = _delta_writers[tablet_id];
+        auto it = _delta_writers.find(tablet_id);
+        if (it == _delta_writers.end()) {
+            LOG(WARNING) << "LocalTabletsChannel txn_id: " << _txn_id << " load_id: " << print_id(request.id())
+                         << " not found tablet_id: " << tablet_id;
+            response->mutable_status()->set_status_code(TStatusCode::INTERNAL_ERROR);
+            response->mutable_status()->add_error_msgs(
+                    fmt::format("Failed to add_chunk since tablet_id {} does not exist, txn_id: {}, load_id: {}",
+                                tablet_id, _txn_id, print_id(request.id())));
+            return;
+        }
+        auto& writer = it->second;
         if (writer->is_immutable() && immutable_tablet_ids.count(tablet_id) == 0) {
             response->add_immutable_tablet_ids(tablet_id);
             response->add_immutable_partition_ids(writer->partition_id());
@@ -1083,8 +1094,8 @@ void LocalTabletsChannel::update_profile() {
     if (!peer_or_primary_replica_profiles.empty()) {
         auto* merged_profile = RuntimeProfile::merge_isomorphic_profiles(&obj_pool, peer_or_primary_replica_profiles);
         RuntimeProfile* final_profile = _profile->create_child(replicated_storage ? "PrimaryReplicas" : "PeerReplicas");
-        auto* tablets_counter = ADD_COUNTER(final_profile, "TabletsNum", TUnit::UNIT);
-        COUNTER_SET(tablets_counter, static_cast<int64_t>(peer_or_primary_replica_profiles.size()));
+        COUNTER_SET(ADD_COUNTER(final_profile, "TabletsNum", TUnit::UNIT),
+                    static_cast<int64_t>(peer_or_primary_replica_profiles.size()));
         final_profile->copy_all_info_strings_from(merged_profile);
         final_profile->copy_all_counters_from(merged_profile);
     }
@@ -1092,8 +1103,8 @@ void LocalTabletsChannel::update_profile() {
     if (!secondary_replica_profiles.empty()) {
         auto* merged_profile = RuntimeProfile::merge_isomorphic_profiles(&obj_pool, secondary_replica_profiles);
         RuntimeProfile* final_profile = _profile->create_child("SecondaryReplicas");
-        auto* tablets_counter = ADD_COUNTER(final_profile, "TabletsNum", TUnit::UNIT);
-        COUNTER_SET(tablets_counter, static_cast<int64_t>(secondary_replica_profiles.size()));
+        COUNTER_SET(ADD_COUNTER(final_profile, "TabletsNum", TUnit::UNIT),
+                    static_cast<int64_t>(secondary_replica_profiles.size()));
         final_profile->copy_all_info_strings_from(merged_profile);
         final_profile->copy_all_counters_from(merged_profile);
     }
@@ -1144,9 +1155,9 @@ void LocalTabletsChannel::get_load_replica_status(const std::string& remote_ip,
     }
 }
 
-#define ADD_AND_SET_COUNTER(profile, name, type, val) (ADD_COUNTER(profile, name, type))->set(val)
-#define ADD_AND_UPDATE_COUNTER(profile, name, type, val) (ADD_COUNTER(profile, name, type))->update(val)
-#define ADD_AND_UPDATE_TIMER(profile, name, val) (ADD_TIMER(profile, name))->update(val)
+#define ADD_AND_SET_COUNTER(profile, name, type, val) COUNTER_SET(ADD_COUNTER(profile, name, type), val)
+#define ADD_AND_UPDATE_COUNTER(profile, name, type, val) COUNTER_UPDATE(ADD_COUNTER(profile, name, type), val)
+#define ADD_AND_UPDATE_TIMER(profile, name, val) COUNTER_UPDATE(ADD_TIMER(profile, name), val)
 
 void LocalTabletsChannel::_update_peer_replica_profile(DeltaWriter* writer, RuntimeProfile* profile) {
     const DeltaWriterStat& writer_stat = writer->get_writer_stat();
@@ -1169,7 +1180,7 @@ void LocalTabletsChannel::_update_peer_replica_profile(DeltaWriter* writer, Runt
     const FlushStatistic& flush_stat = writer->get_flush_stats();
     ADD_AND_UPDATE_COUNTER(profile, "MemtableFlushedCount", TUnit::UNIT, flush_stat.flush_count);
     ADD_AND_SET_COUNTER(profile, "MemtableFlushingCount", TUnit::UNIT, flush_stat.cur_flush_count);
-    ADD_AND_SET_COUNTER(profile, "MemtableQueueCount", TUnit::UNIT, flush_stat.queueing_memtable_num);
+    ADD_AND_SET_COUNTER(profile, "MemtableQueueCount", TUnit::UNIT, flush_stat.queueing_memtable_num.load());
     ADD_AND_UPDATE_TIMER(profile, "FlushTaskPendingTime", flush_stat.pending_time_ns);
     auto& memtable_stat = flush_stat.memtable_stats;
     ADD_AND_UPDATE_COUNTER(profile, "MemtableInsertCount", TUnit::UNIT, memtable_stat.insert_count);

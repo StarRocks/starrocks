@@ -17,8 +17,8 @@ package com.starrocks.scheduler;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Maps;
 import com.starrocks.alter.OptimizeTask;
-import com.starrocks.analysis.IntLiteral;
 import com.starrocks.catalog.MaterializedView;
+import com.starrocks.catalog.MaterializedViewRefreshType;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.FeConstants;
@@ -32,9 +32,10 @@ import com.starrocks.scheduler.persist.TaskSchedule;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AsyncRefreshSchemeDesc;
-import com.starrocks.sql.ast.IntervalLiteral;
 import com.starrocks.sql.ast.RefreshSchemeClause;
 import com.starrocks.sql.ast.SubmitTaskStmt;
+import com.starrocks.sql.ast.expression.IntLiteral;
+import com.starrocks.sql.ast.expression.IntervalLiteral;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.warehouse.Warehouse;
 
@@ -203,10 +204,11 @@ public class TaskBuilder {
 
     public static void updateTaskInfo(Task task, RefreshSchemeClause refreshSchemeDesc, MaterializedView materializedView)
             throws DdlException {
-        MaterializedView.RefreshType refreshType = refreshSchemeDesc.getType();
-        if (refreshType == MaterializedView.RefreshType.MANUAL) {
+        MaterializedViewRefreshType refreshType = MaterializedViewRefreshType.getType(refreshSchemeDesc);
+
+        if (refreshType == MaterializedViewRefreshType.MANUAL) {
             task.setType(Constants.TaskType.MANUAL);
-        } else if (refreshType == MaterializedView.RefreshType.ASYNC) {
+        } else if (refreshType == MaterializedViewRefreshType.ASYNC) {
             if (refreshSchemeDesc instanceof AsyncRefreshSchemeDesc) {
                 AsyncRefreshSchemeDesc asyncRefreshSchemeDesc = (AsyncRefreshSchemeDesc) refreshSchemeDesc;
                 IntervalLiteral intervalLiteral = asyncRefreshSchemeDesc.getIntervalLiteral();
@@ -239,11 +241,11 @@ public class TaskBuilder {
 
         MaterializedView.AsyncRefreshContext asyncRefreshContext =
                 materializedView.getRefreshScheme().getAsyncRefreshContext();
-        MaterializedView.RefreshType refreshType = materializedView.getRefreshScheme().getType();
+        MaterializedViewRefreshType refreshType = materializedView.getRefreshScheme().getType();
         // mapping refresh type to task type
-        if (refreshType == MaterializedView.RefreshType.MANUAL) {
+        if (refreshType == MaterializedViewRefreshType.MANUAL) {
             task.setType(Constants.TaskType.MANUAL);
-        } else if (refreshType == MaterializedView.RefreshType.ASYNC) {
+        } else if (refreshType == MaterializedViewRefreshType.ASYNC) {
             if (asyncRefreshContext.getTimeUnit() == null) {
                 task.setType(Constants.TaskType.EVENT_TRIGGERED);
             } else {
@@ -268,7 +270,7 @@ public class TaskBuilder {
             taskManager.createTask(task, false);
         } else {
             Map<String, String> previousTaskProperties = currentTask.getProperties() == null ?
-                     Maps.newHashMap() : Maps.newHashMap(currentTask.getProperties());
+                    Maps.newHashMap() : Maps.newHashMap(currentTask.getProperties());
             Task changedTask = TaskBuilder.rebuildMvTask(materializedView, dbName, previousTaskProperties, currentTask);
             TaskBuilder.updateTaskInfo(changedTask, materializedView);
             taskManager.alterTask(currentTask, changedTask, false);

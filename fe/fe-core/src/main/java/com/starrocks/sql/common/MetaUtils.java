@@ -17,8 +17,6 @@ package com.starrocks.sql.common;
 import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
-import com.starrocks.analysis.Expr;
-import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ColumnId;
@@ -32,14 +30,16 @@ import com.starrocks.common.util.DebugUtil;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.external.starrocks.TableMetaSyncer;
+import com.starrocks.persist.OriginStatementInfo;
 import com.starrocks.qe.ConnectContext;
-import com.starrocks.qe.OriginStatement;
 import com.starrocks.qe.SqlModeHelper;
 import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.CreateMaterializedViewStmt;
 import com.starrocks.sql.ast.StatementBase;
+import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.TableName;
 import com.starrocks.sql.optimizer.base.ColumnIdentifier;
 import com.starrocks.sql.optimizer.rule.mv.MVUtils;
 import com.starrocks.sql.parser.SqlParser;
@@ -122,7 +122,7 @@ public class MetaUtils {
         return table;
     }
 
-    public static Map<String, Expr> parseColumnNameToDefineExpr(OriginStatement originStmt) {
+    public static Map<String, Expr> parseColumnNameToDefineExpr(OriginStatementInfo originStmt) {
         CreateMaterializedViewStmt stmt;
 
         try {

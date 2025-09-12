@@ -15,7 +15,7 @@
 
 package com.starrocks.sql.ast;
 
-import com.starrocks.analysis.TableName;
+import com.starrocks.sql.ast.expression.TableName;
 import com.starrocks.sql.parser.NodePosition;
 
 /**
@@ -43,6 +43,6 @@ public class AlterMaterializedViewStmt extends DdlStmt {
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitAlterMaterializedViewStatement(this, context);
+        return ((AstVisitorExtendInterface<R, C>) visitor).visitAlterMaterializedViewStatement(this, context);
     }
 }

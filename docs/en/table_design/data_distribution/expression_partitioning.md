@@ -20,6 +20,10 @@ If you frequently query and manage data based on continuous time ranges, you onl
 
 However, in some special scenarios, such as partitioning historical data into partitions by month and recent data into partitions by day, you must use [range partitioning](./Data_distribution.md#range-partitioning) to create partitions.
 
+:::note
+Please note that `PARTITION BY date_trunc(column)` and `PARTITION BY time_slice(column)` are considered range partitioning, despite their format of expression partitioning. Therefore, you can use the `ALTER TABLE ... ADD PARTITION` statement for range partitions to add new partitions to tables use such partitioning strategies.
+:::
+
 ### Syntax
 
 ```sql

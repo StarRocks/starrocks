@@ -25,6 +25,11 @@ public interface ExecutionSchedule {
 
     void schedule(Coordinator.ScheduleOption option) throws RpcException, StarRocksException;
 
-    void tryScheduleNextTurn(TUniqueId fragmentInstanceId) throws RpcException, StarRocksException;
+    default void continueSchedule(Coordinator.ScheduleOption option) throws RpcException, StarRocksException {
+    }
+
+    default void tryScheduleNextTurn(TUniqueId fragmentInstanceId) throws RpcException, StarRocksException {
+    }
+
     void cancel();
 }

@@ -40,14 +40,14 @@ inline const uint8_t* get_raw_null_column(const ColumnPtr& col) {
         return nullptr;
     }
     auto& null_column = down_cast<const NullableColumn*>(col.get())->null_column();
-    auto* raw_column = null_column->get_data().data();
+    auto* raw_column = null_column->immutable_data().data();
     return raw_column;
 }
 
 template <LogicalType lt>
 inline const RunTimeCppType<lt>* get_raw_data_column(const ColumnPtr& col) {
     auto* data_column = ColumnHelper::get_data_column(col.get());
-    auto* raw_column = down_cast<const RunTimeColumnType<lt>*>(data_column)->get_data().data();
+    auto* raw_column = down_cast<const RunTimeColumnType<lt>*>(data_column)->immutable_data().data();
     return raw_column;
 }
 
@@ -391,8 +391,8 @@ Status LevelBuilder::_write_byte_array_column_chunk(const LevelBuilderContext& c
                                                     const CallbackFunction& write_leaf_callback) {
     const auto* data_col = down_cast<const RunTimeColumnType<lt>*>(ColumnHelper::get_data_column(col.get()));
     const auto* null_col = get_raw_null_column(col);
-    auto& vo = data_col->get_offset();
-    auto& vb = data_col->get_bytes();
+    const auto& vo = data_col->get_offset();
+    const auto& vb = data_col->get_bytes();
 
     // Use the rep_levels in the context from caller since node is primitive.
     auto& rep_levels = ctx._rep_levels;
@@ -435,7 +435,7 @@ Status LevelBuilder::_write_array_column_chunk(const LevelBuilderContext& ctx, c
     auto* null_col = get_raw_null_column(col);
     auto* array_col = down_cast<const ArrayColumn*>(ColumnHelper::get_data_column(col.get()));
     const auto& elements = array_col->elements_column();
-    const auto& offsets = array_col->offsets_column()->get_data();
+    const auto offsets = array_col->offsets_column()->immutable_data();
 
     size_t num_levels_upper_bound = ctx._num_levels + elements->size();
     auto def_levels = std::make_shared<std::vector<int16_t>>(num_levels_upper_bound,
@@ -525,7 +525,7 @@ Status LevelBuilder::_write_map_column_chunk(const LevelBuilderContext& ctx, con
         return Status::NotSupported("Does not support to write map value of null key");
     }
     const auto& values = map_col->values_column();
-    const auto& offsets = map_col->offsets_column()->get_data();
+    const auto offsets = map_col->offsets_column()->immutable_data();
 
     size_t num_levels_upper_bound = ctx._num_levels + keys->size();
     auto def_levels = std::make_shared<std::vector<int16_t>>(num_levels_upper_bound,

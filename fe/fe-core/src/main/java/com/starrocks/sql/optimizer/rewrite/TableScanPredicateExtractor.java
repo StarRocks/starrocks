@@ -18,11 +18,14 @@ import com.starrocks.catalog.Column;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
+import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
+import com.starrocks.sql.optimizer.operator.scalar.CaseWhenOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CompoundPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.LambdaFunctionOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
+import com.starrocks.sql.optimizer.operator.scalar.ScalarOperatorUtil;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperatorVisitor;
 
 import java.util.LinkedList;
@@ -102,7 +105,7 @@ public class TableScanPredicateExtractor {
     }
 
     // CanFullyPushDownVisitor is used to check whether a predicate can be pushed down into ScanNode.
-    // currently, we only allow single-column predicates that not contain lambda expressions to be pushed down.
+    // currently, we only allow single-column predicates that not contain lambda expressions and complex case-when to be pushed down.
     private class CanFullyPushDownVisitor extends ScalarOperatorVisitor<Boolean, CanFullyPushDownVisitorContext> {
         private final Map<ColumnRefOperator, Column> columnRefOperatorColumnMap;
 
@@ -171,6 +174,18 @@ public class TableScanPredicateExtractor {
         @Override
         public Boolean visitLambdaFunctionOperator(LambdaFunctionOperator op, CanFullyPushDownVisitorContext context) {
             return false;
+        }
+
+        @Override
+        public Boolean visitCaseWhenOperator(CaseWhenOperator op, CanFullyPushDownVisitorContext context) {
+            if (!visit(op, context)) {
+                return false;
+            }
+            boolean containsCallOperator = op.getAllConditionClause().stream()
+                    .anyMatch(scalarOperator ->
+                            ScalarOperatorUtil.getStream(scalarOperator)
+                                    .anyMatch(operator -> operator instanceof CallOperator));
+            return !containsCallOperator;
         }
     }
 }

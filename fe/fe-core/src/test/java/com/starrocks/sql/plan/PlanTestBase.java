@@ -996,6 +996,7 @@ public class PlanTestBase extends PlanTestNoneDBBase {
         connectContext.getSessionVariable().setEnableShortCircuit(true);
         connectContext.getSessionVariable().setCboPushDownGroupingSet(false);
         connectContext.getSessionVariable().setCboEnableSingleNodePreferTwoStageAggregate(false);
+        connectContext.getSessionVariable().setCboRewriteMonotonicMinmax(false);
     }
 
     @AfterAll
