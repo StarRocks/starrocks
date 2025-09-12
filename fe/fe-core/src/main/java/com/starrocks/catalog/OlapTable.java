@@ -3743,4 +3743,33 @@ public class OlapTable extends Table {
         }
         return null;
     }
+<<<<<<< HEAD
+=======
+
+    public boolean allowUpdateFileBundling() {
+        for (Partition partition : getPartitions()) {
+            for (PhysicalPartition physicalPartition : partition.getSubPartitions()) {
+                if (physicalPartition.getMetadataSwitchVersion() != 0) {
+                    return false;
+                }
+            }
+        }
+        return true;
+    }
+
+    // only used for LakeTable and LakeMaterializedView
+    public List<Long> getShardGroupIds() {
+        if (RunMode.isSharedNothingMode()) {
+            return Lists.newArrayList();
+        }
+        List<Long> shardGroupIds = new ArrayList<>();
+        for (Partition p : getAllPartitions()) {
+            for (MaterializedIndex index : p.getDefaultPhysicalPartition()
+                    .getMaterializedIndices(MaterializedIndex.IndexExtState.ALL)) {
+                shardGroupIds.add(index.getShardGroupId());
+            }
+        }
+        return shardGroupIds;
+    }
+>>>>>>> f5e9bf81cd ([BugFix] fix shared-data cluster MV does not support colocation (#62941))
 }

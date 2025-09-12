@@ -209,17 +209,6 @@ public class LakeTable extends OlapTable {
         return Lists.newArrayList();
     }
 
-    public List<Long> getShardGroupIds() {
-        List<Long> shardGroupIds = new ArrayList<>();
-        for (Partition p : getAllPartitions()) {
-            for (MaterializedIndex index : p.getDefaultPhysicalPartition()
-                    .getMaterializedIndices(MaterializedIndex.IndexExtState.ALL)) {
-                shardGroupIds.add(index.getShardGroupId());
-            }
-        }
-        return shardGroupIds;
-    }
-
     @Override
     public String getComment() {
         if (!Strings.isNullOrEmpty(comment)) {
