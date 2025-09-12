@@ -14,10 +14,11 @@
 
 package com.starrocks.metric;
 
-public abstract class LeaderAwareGaugeMetric<T> extends LeaderAwareMetric<T> {
+public abstract class LeaderAwareCounterMetric<T> extends LeaderAwareMetric<T> {
 
-    public LeaderAwareGaugeMetric(String name, MetricUnit unit, String description) {
-        super(name, MetricType.GAUGE, unit, description);
+    public LeaderAwareCounterMetric(String name, MetricUnit unit, String description) {
+        super(name, MetricType.COUNTER, unit, description);
     }
-}
 
+    public abstract void increase(T delta);
+}

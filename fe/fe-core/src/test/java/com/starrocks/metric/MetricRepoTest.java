@@ -15,6 +15,10 @@
 package com.starrocks.metric;
 
 import com.starrocks.catalog.Table;
+import com.starrocks.clone.TabletSchedCtx;
+import com.starrocks.clone.TabletScheduler;
+import com.starrocks.clone.TabletSchedulerStat;
+import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.http.rest.MetricsAction;
 import com.starrocks.rpc.BrpcProxy;
 import com.starrocks.server.GlobalStateMgr;
@@ -27,6 +31,7 @@ import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
+import java.util.Set;
 
 public class MetricRepoTest extends PlanTestBase {
 
@@ -138,6 +143,113 @@ public class MetricRepoTest extends PlanTestBase {
             }
             Assertions.assertTrue(line.contains("is_leader=\"true\""), line);
         }
+    }
 
+    @Test
+    public void testCloneMetrics() {
+        GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
+        Assertions.assertTrue(globalStateMgr.isLeader());
+
+        TabletScheduler tabletScheduler = globalStateMgr.getTabletScheduler();
+        TabletSchedulerStat stat = tabletScheduler.getStat();
+        stat.counterCloneTask.incrementAndGet(); // 1
+        stat.counterCloneTaskSucceeded.incrementAndGet(); // 1
+        stat.counterCloneTaskInterNodeCopyBytes.addAndGet(100L);
+        stat.counterCloneTaskInterNodeCopyDurationMs.addAndGet(10L);
+        stat.counterCloneTaskIntraNodeCopyBytes.addAndGet(101L);
+        stat.counterCloneTaskIntraNodeCopyDurationMs.addAndGet(11L);
+
+        TabletSchedCtx ctx1 = new TabletSchedCtx(TabletSchedCtx.Type.BALANCE, 1L, 2L, 3L, 4L, 1001L, System.currentTimeMillis());
+        Deencapsulation.invoke(tabletScheduler, "addToPendingTablets", ctx1);
+        TabletSchedCtx ctx2 = new TabletSchedCtx(TabletSchedCtx.Type.REPAIR, 1L, 2L, 3L, 4L, 1002L, System.currentTimeMillis());
+        Deencapsulation.invoke(tabletScheduler, "addToRunningTablets", ctx2);
+        Set<Long> allTabletIds = Deencapsulation.getField(tabletScheduler, "allTabletIds");
+        allTabletIds.add(1001L);
+        allTabletIds.add(1002L);
+
+        // check
+        List<Metric> scheduledTabletNum = MetricRepo.getMetricsByName("scheduled_tablet_num");
+        Assertions.assertEquals(1, scheduledTabletNum.size());
+        Assertions.assertEquals(2L, (Long) scheduledTabletNum.get(0).getValue());
+
+        List<Metric> scheduledPendingTabletNums = MetricRepo.getMetricsByName("scheduled_pending_tablet_num");
+        Assertions.assertEquals(2, scheduledPendingTabletNums.size());
+        for (Metric metric : scheduledPendingTabletNums) {
+            // label 0 is is_leader
+            MetricLabel label0 = (MetricLabel) metric.getLabels().get(0);
+            Assertions.assertEquals("is_leader", label0.getKey());
+            Assertions.assertEquals("true", label0.getValue());
+
+            MetricLabel label1 = (MetricLabel) metric.getLabels().get(1);
+            String type = label1.getValue();
+            if (type.equals("REPAIR")) {
+                Assertions.assertEquals(0L, metric.getValue());
+            } else if (type.equals("BALANCE")) {
+                Assertions.assertEquals(1L, metric.getValue());
+            } else {
+                Assertions.fail("Unknown type: " + type);
+            }
+        }
+
+        List<Metric> scheduledRunningTabletNums = MetricRepo.getMetricsByName("scheduled_running_tablet_num");
+        Assertions.assertEquals(2, scheduledRunningTabletNums.size());
+        for (Metric metric : scheduledRunningTabletNums) {
+            // label 0 is is_leader
+            MetricLabel label = (MetricLabel) metric.getLabels().get(1);
+            String type = label.getValue();
+            if (type.equals("REPAIR")) {
+                Assertions.assertEquals(1L, metric.getValue());
+            } else if (type.equals("BALANCE")) {
+                Assertions.assertEquals(0L, metric.getValue());
+            } else {
+                Assertions.fail("Unknown type: " + type);
+            }
+        }
+
+        List<Metric> cloneTaskTotal = MetricRepo.getMetricsByName("clone_task_total");
+        Assertions.assertEquals(1, cloneTaskTotal.size());
+        Assertions.assertEquals(1L, (Long) cloneTaskTotal.get(0).getValue());
+
+        List<Metric> cloneTaskSuccess = MetricRepo.getMetricsByName("clone_task_success");
+        Assertions.assertEquals(1, cloneTaskSuccess.size());
+        Assertions.assertEquals(1L, (Long) cloneTaskSuccess.get(0).getValue());
+
+        List<Metric> cloneTaskCopyBytes = MetricRepo.getMetricsByName("clone_task_copy_bytes");
+        Assertions.assertEquals(2, cloneTaskCopyBytes.size());
+        for (Metric metric : cloneTaskCopyBytes) {
+            // label 0 is is_leader
+            MetricLabel label0 = (MetricLabel) metric.getLabels().get(0);
+            Assertions.assertEquals("is_leader", label0.getKey());
+            Assertions.assertEquals("true", label0.getValue());
+
+            MetricLabel label1 = (MetricLabel) metric.getLabels().get(1);
+            String type = label1.getValue();
+            if (type.equals("INTER_NODE")) {
+                Assertions.assertEquals(100L, metric.getValue());
+            } else if (type.equals("INTRA_NODE")) {
+                Assertions.assertEquals(101L, metric.getValue());
+            } else {
+                Assertions.fail("Unknown type: " + type);
+            }
+        }
+
+        List<Metric> cloneTaskCopyDurationMs = MetricRepo.getMetricsByName("clone_task_copy_duration_ms");
+        Assertions.assertEquals(2, cloneTaskCopyDurationMs.size());
+        for (Metric metric : cloneTaskCopyDurationMs) {
+            // label 0 is is_leader
+            MetricLabel label0 = (MetricLabel) metric.getLabels().get(0);
+            Assertions.assertEquals("is_leader", label0.getKey());
+            Assertions.assertEquals("true", label0.getValue());
+
+            MetricLabel label1 = (MetricLabel) metric.getLabels().get(1);
+            String type = label1.getValue();
+            if (type.equals("INTER_NODE")) {
+                Assertions.assertEquals(10L, metric.getValue());
+            } else if (type.equals("INTRA_NODE")) {
+                Assertions.assertEquals(11L, metric.getValue());
+            } else {
+                Assertions.fail("Unknown type: " + type);
+            }
+        }
     }
 }
