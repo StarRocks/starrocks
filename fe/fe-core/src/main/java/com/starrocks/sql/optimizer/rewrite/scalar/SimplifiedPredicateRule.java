@@ -395,6 +395,16 @@ public class SimplifiedPredicateRule extends BottomUpScalarOperatorRewriteRule {
             return simplifiedJsonQuery(call);
         } else if (FunctionSet.HOUR.equalsIgnoreCase(call.getFnName())) {
             return simplifiedHourFromUnixTime(call);
+        } else if (FunctionSet.YEAR.equalsIgnoreCase(call.getFnName())) {
+            return simplifiedExtractFromUnixTime(call, FunctionSet.YEAR_FROM_UNIXTIME);
+        } else if (FunctionSet.MONTH.equalsIgnoreCase(call.getFnName())) {
+            return simplifiedExtractFromUnixTime(call, FunctionSet.MONTH_FROM_UNIXTIME);
+        } else if (FunctionSet.DAY.equalsIgnoreCase(call.getFnName())) {
+            return simplifiedExtractFromUnixTime(call, FunctionSet.DAY_FROM_UNIXTIME);
+        } else if (FunctionSet.MINUTE.equalsIgnoreCase(call.getFnName())) {
+            return simplifiedExtractFromUnixTime(call, FunctionSet.MINUTE_FROM_UNIXTIME);
+        } else if (FunctionSet.SECOND.equalsIgnoreCase(call.getFnName())) {
+            return simplifiedExtractFromUnixTime(call, FunctionSet.SECOND_FROM_UNIXTIME);
         }
         return call;
     }
@@ -658,5 +668,29 @@ public class SimplifiedPredicateRule extends BottomUpScalarOperatorRewriteRule {
         }
 
         return call;
+    }
+
+    // Simplify extract(from_unixtime(ts)) to extract_from_unixtime(ts)
+    private static ScalarOperator simplifiedExtractFromUnixTime(CallOperator call, String targetFn) {
+        if (call.getChildren().size() != 1) {
+            return call;
+        }
+
+        ScalarOperator child = call.getChild(0);
+        if (!(child instanceof CallOperator)) {
+            return call;
+        }
+
+        CallOperator childCall = (CallOperator) child;
+        if (!FunctionSet.FROM_UNIXTIME.equalsIgnoreCase(childCall.getFnName())) {
+            return call;
+        }
+
+        Type[] argTypes = childCall.getChildren().stream().map(ScalarOperator::getType).toArray(Type[]::new);
+        Function fn = Expr.getBuiltinFunction(targetFn, argTypes, Function.CompareMode.IS_IDENTICAL);
+        if (fn == null) {
+            return call;
+        }
+        return new CallOperator(targetFn, call.getType(), childCall.getChildren(), fn);
     }
 }

@@ -605,12 +605,12 @@ vectorized_functions = [
      
 
     # specialized version of from_unixtime to reduce the cost of datetime conversion
-    # TODO: 50380 year_from_unixtime
-    # TODO: 50381 month_from_unixtime
-    # TODO: 50382 day_from_unixtime
+    [50380, 'year_from_unixtime', True, False, 'INT', ['BIGINT'], 'TimeFunctions::year_from_unixtime'],
+    [50381, 'month_from_unixtime', True, False, 'INT', ['BIGINT'], 'TimeFunctions::month_from_unixtime'],
+    [50382, 'day_from_unixtime', True, False, 'INT', ['BIGINT'], 'TimeFunctions::day_from_unixtime'],
     [50383, 'hour_from_unixtime', True, False, 'INT', ['BIGINT'], 'TimeFunctions::hour_from_unixtime'],
-    # TODO: 50384 minute_from_unixtime
-    # TODO: 50385 second_from_unixtime
+    [50384, 'minute_from_unixtime', True, False, 'INT', ['BIGINT'], 'TimeFunctions::minute_from_unixtime'],
+    [50385, 'second_from_unixtime', True, False, 'INT', ['BIGINT'], 'TimeFunctions::second_from_unixtime'],
 
     [50310, 'dayname', True, False, 'VARCHAR', ['DATETIME'], 'TimeFunctions::day_name'],
     [50311, 'monthname', True, False, 'VARCHAR', ['DATETIME'], 'TimeFunctions::month_name'],
