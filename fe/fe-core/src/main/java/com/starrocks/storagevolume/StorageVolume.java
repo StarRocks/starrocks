@@ -292,6 +292,13 @@ public class StorageVolume implements Writable, GsonPostProcessable {
                     params.put(CloudConfigurationConstants.AWS_S3_NUM_PARTITIONED_PREFIX,
                             Integer.toString(s3FileStoreInfo.getNumPartitionedPrefix()));
                 }
+                if (s3FileStoreInfo.getPathStyleAccess() == 1) {
+                    params.put(CloudConfigurationConstants.AWS_S3_ENABLE_PATH_STYLE_ACCESS,
+                            Boolean.toString(true));
+                } else if (s3FileStoreInfo.getPathStyleAccess() == 2) {
+                    params.put(CloudConfigurationConstants.AWS_S3_ENABLE_PATH_STYLE_ACCESS,
+                            Boolean.toString(false));
+                }
                 AwsCredentialInfo credentialInfo = s3FileStoreInfo.getCredential();
                 if (credentialInfo.hasSimpleCredential()) {
                     params.put(CloudConfigurationConstants.AWS_S3_USE_INSTANCE_PROFILE, "false");
