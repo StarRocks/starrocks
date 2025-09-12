@@ -57,6 +57,8 @@ import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ExceptionChecker;
+import com.starrocks.metric.LongCounterMetric;
+import com.starrocks.metric.Metric;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.persist.EditLog;
 import com.starrocks.persist.metablock.SRMetaBlockReader;
@@ -123,12 +125,19 @@ public class BackupHandlerTest {
 
     private TabletInvertedIndex invertedIndex = new TabletInvertedIndex();
 
-    public void setUpMocker(GlobalStateMgr globalStateMgr, BrokerMgr brokerMgr, EditLog editLog) {
+    private void initMetrics() {
+        MetricRepo.COUNTER_UNFINISHED_BACKUP_JOB = new LongCounterMetric("unfinished_backup_job", Metric.MetricUnit.REQUESTS,
+                "current unfinished backup job");
+        MetricRepo.COUNTER_UNFINISHED_RESTORE_JOB = new LongCounterMetric("unfinished_restore_job", Metric.MetricUnit.REQUESTS,
+                "current unfinished restore job");
+    }
+
+    private void setUpMocker(GlobalStateMgr globalStateMgr, BrokerMgr brokerMgr, EditLog editLog) {
         Config.tmp_dir = tmpPath;
         rootDir = new File(Config.tmp_dir);
         rootDir.mkdirs();
 
-        MetricRepo.init();
+        initMetrics();
 
         try {
             db = CatalogMocker.mockDb();
