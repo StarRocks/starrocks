@@ -17,6 +17,7 @@ import com.google.common.collect.Lists;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ColumnId;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
@@ -25,9 +26,12 @@ import com.starrocks.catalog.StructField;
 import com.starrocks.catalog.StructType;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
+import com.starrocks.catalog.system.information.InfoSchemaDb;
 import com.starrocks.common.Config;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.SessionVariable;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.expression.TableName;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.jupiter.api.Assertions;
@@ -146,5 +150,27 @@ public class MetaUtilTest {
                 MetaUtils.getColumnIdsByColumnNames(olapTable, Lists.newArrayList("b")).get(0));
         Assertions.assertEquals(ColumnId.create("c"),
                 MetaUtils.getColumnIdsByColumnNames(olapTable, Lists.newArrayList("c")).get(0));
+    }
+
+
+    public void testGetCatalogName() {
+        TableName informationTableName = new TableName(InfoSchemaDb.DATABASE_NAME, "task_runs");
+        informationTableName.normalizationOnlyQuery(connectContext);
+        Assertions.assertEquals(informationTableName.getCatalog(), InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME);
+
+        TableName starrocksTableName = new TableName("test", "t0");
+        starrocksTableName.normalizationOnlyQuery(connectContext);
+        Assertions.assertEquals(starrocksTableName.getCatalog(), InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME);
+
+        SessionVariable sessionVariable = connectContext.getSessionVariable();
+        sessionVariable.setSqlDialect("trino");
+        connectContext.setSessionVariable(sessionVariable);
+
+        starrocksTableName.normalizationOnlyQuery(connectContext);
+        Assertions.assertEquals(informationTableName.getCatalog(), InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME);
+
+        starrocksTableName.normalizationOnlyQuery(connectContext);
+        Assertions.assertEquals(starrocksTableName.getCatalog(), InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME));
+
     }
 }

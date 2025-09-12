@@ -1439,7 +1439,7 @@ public class QueryAnalyzer {
     public Table resolveTable(TableRelation tableRelation) {
         TableName tableName = tableRelation.getName();
         try {
-            tableName.normalization(session);
+            tableName.normalizationOnlyQuery(session);
             String catalogName = tableName.getCatalog();
             String dbName = tableName.getDb();
             String tbName = tableName.getTbl();
