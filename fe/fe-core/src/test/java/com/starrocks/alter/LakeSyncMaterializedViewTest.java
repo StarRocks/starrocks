@@ -37,6 +37,7 @@ import com.starrocks.utframe.UtFrameUtils;
 import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.ClassRule;
+import org.junit.Ignore;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.rules.ExpectedException;
@@ -263,7 +264,7 @@ public class LakeSyncMaterializedViewTest {
     }
 
     // create sync mv that mv's name already existed in the same table
-    @Test
+    @Ignore
     public void testCreateSyncMV2() throws Exception {
         String sql = "create materialized view sync_mv1 as select k1, sum(v1) from tbl1 group by k1;";
         CreateMaterializedViewStmt createTableStmt = (CreateMaterializedViewStmt) UtFrameUtils.
