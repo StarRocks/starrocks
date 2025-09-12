@@ -871,19 +871,10 @@ public class Utils {
         if (newProjectionMap == null || newProjectionMap.isEmpty()) {
             return input;
         }
-        Operator newOp = input.getOp();
-        if (newOp.getProjection() == null || newOp.getProjection().getColumnRefMap().isEmpty()) {
-            newOp.setProjection(new Projection(newProjectionMap));
-        } else {
-            // merge two projections
-            ReplaceColumnRefRewriter rewriter = new ReplaceColumnRefRewriter(newOp.getProjection().getColumnRefMap());
-            Map<ColumnRefOperator, ScalarOperator> resultMap = Maps.newHashMap();
-            for (Map.Entry<ColumnRefOperator, ScalarOperator> entry : newProjectionMap.entrySet()) {
-                ScalarOperator result = rewriter.rewrite(entry.getValue());
-                resultMap.put(entry.getKey(), result);
-            }
-            newOp.setProjection(new Projection(resultMap));
-        }
+        Operator inputOp = input.getOp();
+        // merge two projections
+        Projection newProjection = new Projection(mergeWithProject(newProjectionMap, inputOp.getProjection()));
+        inputOp.setProjection(newProjection);
         return input;
     }
 
@@ -924,6 +915,38 @@ public class Utils {
             return;
         }
         op.resetOpRuleMask(ruleMask);
+    }
+
+    /**
+     * Merge projection1 -> projection2, use projection1's output as the final output.
+     */
+    public static Projection mergeWithProject(Projection projection1,
+                                              Projection projection2) {
+
+        if (projection1 == null || projection1.getColumnRefMap() == null) {
+            return projection1;
+        }
+        return new Projection(mergeWithProject(projection1.getColumnRefMap(), projection2));
+    }
+
+    /**
+     * Merge input mapping with projection's mapping, return a new mapping based on the existed projection.
+     */
+    public static Map<ColumnRefOperator, ScalarOperator> mergeWithProject(Map<ColumnRefOperator, ScalarOperator> input,
+                                                                          Projection projection) {
+        if (input == null || input.isEmpty()) {
+            return input;
+        }
+        if (projection == null || projection.getColumnRefMap() == null) {
+            return input;
+        }
+        ReplaceColumnRefRewriter rewriter = new ReplaceColumnRefRewriter(projection.getColumnRefMap());
+        Map<ColumnRefOperator, ScalarOperator> resultMap = Maps.newHashMap();
+        for (Map.Entry<ColumnRefOperator, ScalarOperator> entry : input.entrySet()) {
+            ScalarOperator result = rewriter.rewrite(entry.getValue());
+            resultMap.put(entry.getKey(), result);
+        }
+        return resultMap;
     }
 
     /**

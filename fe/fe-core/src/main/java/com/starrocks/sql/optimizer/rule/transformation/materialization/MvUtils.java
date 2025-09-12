@@ -108,6 +108,7 @@ import com.starrocks.sql.optimizer.rule.RuleSetType;
 import com.starrocks.sql.optimizer.rule.mv.MVUtils;
 import com.starrocks.sql.optimizer.rule.mv.MaterializedViewWrapper;
 import com.starrocks.sql.optimizer.transformer.LogicalPlan;
+import com.starrocks.sql.optimizer.transformer.MVTransformerContext;
 import com.starrocks.sql.optimizer.transformer.RelationTransformer;
 import com.starrocks.sql.optimizer.transformer.SqlToScalarOperatorTranslator;
 import com.starrocks.sql.optimizer.transformer.TransformerContext;
@@ -467,12 +468,12 @@ public class MvUtils {
                                                                                ColumnRefFactory columnRefFactory,
                                                                                ConnectContext connectContext,
                                                                                OptimizerConfig optimizerConfig,
-                                                                               boolean inlineView) {
+                                                                               MVTransformerContext mvTransformerContext) {
         Preconditions.checkState(mvStmt instanceof QueryStatement);
         Analyzer.analyze(mvStmt, connectContext);
         QueryRelation query = ((QueryStatement) mvStmt).getQueryRelation();
         TransformerContext transformerContext =
-                new TransformerContext(columnRefFactory, connectContext, inlineView, null);
+                new TransformerContext(columnRefFactory, connectContext, mvTransformerContext);
         LogicalPlan logicalPlan = new RelationTransformer(transformerContext).transform(query);
         Optimizer optimizer = new Optimizer(optimizerConfig);
         OptExpression optimizedPlan = optimizer.optimize(
@@ -1172,40 +1173,40 @@ public class MvUtils {
             LogicalViewScanOperator viewScanOperator = op.cast();
             OptExpression inlineViewPlan = viewScanOperator.getOriginalPlanEvaluator();
             if (viewScanOperator.getPredicate() != null) {
+                Operator inlineViewOp = inlineViewPlan.getOp();
+
                 // original map records inlined view's column ref to non-inlined view's column ref mapping,
                 // now we need to rewrite non-inlined view's column ref to inlined view's column ref,
                 // so we need to reverse the mapping.
                 Map<ColumnRefOperator, ScalarOperator> originalColumnRefToInlinedColumnRefMap =
                         Maps.newHashMap(viewScanOperator.getOriginalColumnRefToInlinedColumnRefMap());
-                // add new added column ref mapping
-                if (viewScanOperator.getProjection() != null) {
-                    viewScanOperator.getProjection().getColumnRefMap()
-                            .entrySet()
-                            .stream()
-                            .forEach(e -> originalColumnRefToInlinedColumnRefMap.put(e.getKey(), e.getValue()));
-                }
                 Map<ColumnRefOperator, ScalarOperator> reverseColumnRefMap = originalColumnRefToInlinedColumnRefMap
                         .entrySet()
                         .stream()
                         .collect(Collectors.toMap(e -> (ColumnRefOperator) e.getValue(), e -> e.getKey()));
-
-                // If viewScanOperator contains predicate, we need to rewrite them, otherwise predicate will be lost.
+                if (inlineViewOp.getProjection() != null) {
+                    // if inline view's projection is not null, also need to rewrite inline view's projection
+                    reverseColumnRefMap = Utils.mergeWithProject(reverseColumnRefMap, inlineViewOp.getProjection());
+                }
                 ReplaceColumnRefRewriter rewriter = new ReplaceColumnRefRewriter(reverseColumnRefMap);
-                Operator.Builder builder = OperatorBuilderFactory.build(inlineViewPlan.getOp());
-                builder.withOperator(inlineViewPlan.getOp());
+
+                Operator.Builder builder = OperatorBuilderFactory.build(inlineViewOp);
+                builder.withOperator(inlineViewOp);
                 if (viewScanOperator.getPredicate() != null) {
-                    // rewrite predicate
+                    // If viewScanOperator contains predicate, we need to rewrite them, otherwise predicate will be lost.
                     ScalarOperator rewrittenPredicate = rewriter.rewrite(viewScanOperator.getPredicate());
                     builder.setPredicate(rewrittenPredicate);
                 }
                 // rewrite projection
-                if (viewScanOperator.getPredicate() != null) {
-                    Map<ColumnRefOperator, ScalarOperator> newColumnRefMap = viewScanOperator
+                if (viewScanOperator.getProjection() != null) {
+                    // merge inline view's projection with view scan's projection
+                    Map<ColumnRefOperator, ScalarOperator> newColumnRefMap = Maps.newHashMap();
+                    viewScanOperator
                             .getProjection().getColumnRefMap()
                             .entrySet()
                             .stream()
                             .map(e -> Maps.immutableEntry(e.getKey(), rewriter.rewrite(e.getValue())))
-                            .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
+                            .forEach(e -> newColumnRefMap.put(e.getKey(), e.getValue()));
                     builder.setProjection(new Projection(newColumnRefMap));
                 }
                 Operator newInlineViewPlanOp = builder.build();

@@ -26,6 +26,7 @@ import com.starrocks.sql.optimizer.rule.RuleSetType;
 import com.starrocks.sql.optimizer.rule.RuleType;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;
 import com.starrocks.sql.optimizer.transformer.LogicalPlan;
+import com.starrocks.sql.optimizer.transformer.MVTransformerContext;
 
 public class MaterializedViewOptimizer {
     public MvPlanContext optimize(MaterializedView mv,
@@ -71,11 +72,13 @@ public class MaterializedViewOptimizer {
             return new MvPlanContext(false, invalidPlanReason);
         }
         // get optimized plan of mv's defined query
+        MVTransformerContext mvTransformerContext = new MVTransformerContext(connectContext, inlineView);
         Pair<OptExpression, LogicalPlan> plans =
-                MvUtils.getRuleOptimizedLogicalPlan(stmt, columnRefFactory, connectContext, optimizerConfig, inlineView);
+                MvUtils.getRuleOptimizedLogicalPlan(stmt, columnRefFactory, 
+                    connectContext, optimizerConfig, mvTransformerContext);
         if (plans == null) {
             return new MvPlanContext(false, "No query plan for it");
-        }
+        } 
         OptExpression mvPlan = plans.first;
         boolean isValidPlan = MvUtils.isValidMVPlan(mvPlan);
         // not set it invalid plan if text match rewrite is on because text match rewrite can support all query pattern.
