@@ -143,8 +143,8 @@ public class MvRewriteNestedMVTest extends MvRewriteTestBase {
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\"\n" +
                 ");");
-        executeInsertSql("INSERT INTO `t0` VALUES ('2024-02-01', 1, 100, 10.5, 20.5, 'varchar_value_1', 1);");
-        executeInsertSql("INSERT INTO `t1` VALUES (1, 'varchar_value_1', 'varchar_value_21', 100, 1);");
+        executeInsertSql(connectContext, "INSERT INTO `t0` VALUES ('2024-02-01', 1, 100, 10.5, 20.5, 'varchar_value_1', 1);");
+        executeInsertSql(connectContext, "INSERT INTO `t1` VALUES (1, 'varchar_value_1', 'varchar_value_21', 100, 1);");
         starRocksAssert.withRefreshedMaterializedView("create MATERIALIZED VIEW flat_mv\n" +
                 "REFRESH DEFERRED MANUAL\n" +
                 "PROPERTIES (\n" +
