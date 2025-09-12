@@ -319,7 +319,7 @@ public class MetaFunctionsTest extends MVTestBase {
                 ConstantOperator.createVarchar("test.tbl1"),
                 ConstantOperator.createVarchar("k1"));
         Assertions.assertNotNull(result);
-        Assertions.assertTrue(result.getVarchar().contains("No global dictionary found for column: k1"));
+        Assertions.assertEquals("invalidated column dict", result.getVarchar());
     }
 
     @Test
