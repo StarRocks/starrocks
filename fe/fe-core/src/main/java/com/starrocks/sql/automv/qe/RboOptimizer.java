@@ -83,6 +83,7 @@ import com.starrocks.sql.optimizer.task.RewriteTreeTask;
 import com.starrocks.sql.optimizer.task.TaskContext;
 import com.starrocks.sql.optimizer.task.TaskScheduler;
 import com.starrocks.sql.optimizer.transformer.LogicalPlan;
+import com.starrocks.sql.optimizer.transformer.MVTransformerContext;
 import com.starrocks.sql.optimizer.transformer.RelationTransformer;
 import com.starrocks.sql.optimizer.transformer.TransformerContext;
 import com.starrocks.sql.parser.SqlParser;
@@ -158,8 +159,10 @@ public class RboOptimizer {
         ColumnRefFactory columnRefFactory = new ColumnRefFactory();
         QueryRelation query = stmt.getQueryRelation();
         boolean inlineView = connectContext.getSessionVariable().isAutoMVEnableViewInline();
+        MVTransformerContext mvTransformerContext =
+                new MVTransformerContext(connectContext, inlineView);
         TransformerContext transformerContext =
-                new TransformerContext(columnRefFactory, connectContext, inlineView, null);
+                new TransformerContext(columnRefFactory, connectContext, mvTransformerContext);
         RelationTransformer relationTransformer = new RelationTransformer(transformerContext);
         LogicalPlan logicalPlan = relationTransformer.transformWithSelectLimit(query);
         RboOptimizer optimizer =
