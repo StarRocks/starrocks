@@ -80,7 +80,8 @@ public:
     StatusOr<std::unique_ptr<TabletReader>> new_reader(Schema schema);
 
     StatusOr<std::unique_ptr<TabletReader>> new_reader(Schema schema, bool could_split, bool could_split_physically,
-                                                       const std::vector<BaseRowsetSharedPtr>& base_rowsets);
+                                                       const std::vector<BaseRowsetSharedPtr>& base_rowsets,
+                                                       std::shared_ptr<const TabletSchema> tablet_schema = nullptr);
 
     TabletManager* tablet_manager() const { return _tablet_mgr; }
 

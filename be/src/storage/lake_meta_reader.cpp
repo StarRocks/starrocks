@@ -16,16 +16,13 @@
 
 #include <vector>
 
-#include "column/array_column.h"
 #include "column/chunk.h"
 #include "column/column_helper.h"
-#include "column/datum_convert.h"
 #include "common/status.h"
 #include "runtime/exec_env.h"
 #include "runtime/global_dict/config.h"
 #include "storage/lake/rowset.h"
 #include "storage/rowset/column_iterator.h"
-#include "storage/rowset/column_reader.h"
 #include "storage/rowset/rowset.h"
 
 namespace starrocks {
@@ -40,6 +37,35 @@ Status LakeMetaReader::init(const LakeMetaReaderParams& read_params) {
     ASSIGN_OR_RETURN(auto tablet, ExecEnv::GetInstance()->lake_tablet_manager()->get_tablet(
                                           read_params.tablet_id, read_params.version.second));
 
+    // Build and possibly extend tablet schema using access paths
+    TabletSchemaCSPtr base_schema = tablet.get_schema();
+    TabletSchemaCSPtr tablet_schema = base_schema;
+    if (read_params.column_access_paths != nullptr && !read_params.column_access_paths->empty()) {
+        TabletSchemaSPtr tmp_schema = TabletSchema::copy(*base_schema);
+        int field_number = tmp_schema->num_columns();
+        for (auto& path : *read_params.column_access_paths) {
+            int root_column_index = tmp_schema->field_index(path->path());
+            RETURN_IF(root_column_index < 0, Status::RuntimeError("unknown access path: " + path->path()));
+
+            TabletColumn column;
+            column.set_name(path->linear_path());
+            column.set_unique_id(++field_number);
+            column.set_type(path->value_type().type);
+            column.set_length(path->value_type().len);
+            column.set_is_nullable(true);
+            int32_t root_uid = tmp_schema->column(static_cast<size_t>(root_column_index)).unique_id();
+            column.set_extended_info(std::make_unique<ExtendedColumnInfo>(path.get(), root_uid));
+
+            tmp_schema->append_column(column);
+            VLOG(2) << "extend the tablet-schema: " << column.debug_string();
+        }
+        tablet_schema = tmp_schema;
+    }
+
+    // Store the effective schema into params for downstream collectors
+    _params.desc_tbl = read_params.desc_tbl;
+    _collect_context.seg_collecter_params.tablet_schema = tablet_schema;
+
     RETURN_IF_ERROR(_build_collect_context(tablet, read_params));
     RETURN_IF_ERROR(_init_seg_meta_collecters(tablet, read_params));
 
@@ -52,6 +78,10 @@ Status LakeMetaReader::init(const LakeMetaReaderParams& read_params) {
 Status LakeMetaReader::_build_collect_context(const lake::VersionedTablet& tablet,
                                               const LakeMetaReaderParams& read_params) {
     auto tablet_schema = tablet.get_schema();
+    // If schema was extended in init(), prefer that one
+    if (_collect_context.seg_collecter_params.tablet_schema != nullptr) {
+        tablet_schema = _collect_context.seg_collecter_params.tablet_schema;
+    }
     for (const auto& it : *(read_params.id_to_names)) {
         std::string col_name = "";
         std::string collect_field = "";
