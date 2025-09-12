@@ -58,6 +58,29 @@ class LakeTableCleaner {
                 allRemoved = false;
             }
         }
+
+        if (allRemoved) {
+            removeTablePath();
+        }
+
         return allRemoved;
+    }
+
+    public boolean removeTablePath() {
+        try {
+            String tablePath = table.getDefaultFilePathInfo().getFullPath();
+            if (tablePath == null || tablePath.isEmpty()) {
+                LOG.warn("Fail to remove table path of table {}, full path is empty.", table.getName());
+                return false;
+            }
+
+            if (!tablePath.endsWith("/")) {
+                tablePath = tablePath + "/";
+            }
+            return LakeTableHelper.removeTablePath(tablePath);
+        } catch (Exception e) {
+            LOG.warn("Fail to remove table path of table {}: {}", table.getName(), e.getMessage());
+            return false;
+        }
     }
 }
