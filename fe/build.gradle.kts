@@ -19,7 +19,7 @@ plugins {
 
 allprojects {
     group = "com.starrocks"
-    version = "3.4.0"
+    version = "main"
 
     repositories {
         mavenCentral()

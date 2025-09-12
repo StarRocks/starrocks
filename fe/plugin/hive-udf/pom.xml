@@ -5,7 +5,7 @@
     <parent>
         <artifactId>starrocks-fe</artifactId>
         <groupId>com.starrocks</groupId>
-        <version>3.4.0</version>
+        <version>main</version>
         <relativePath>../../pom.xml</relativePath>
     </parent>
     <modelVersion>4.0.0</modelVersion>

@@ -54,7 +54,6 @@ import com.starrocks.journal.JournalWriter;
 import com.starrocks.journal.bdbje.BDBEnvironment;
 import com.starrocks.journal.bdbje.BDBJEJournal;
 import com.starrocks.journal.bdbje.BDBTool;
-import com.starrocks.journal.bdbje.BDBToolOptions;
 import com.starrocks.lake.snapshot.RestoreClusterSnapshotMgr;
 import com.starrocks.leader.MetaHelper;
 import com.starrocks.qe.ConnectScheduler;
@@ -71,11 +70,6 @@ import com.starrocks.service.GroovyUDSServer;
 import com.starrocks.service.arrow.flight.sql.ArrowFlightSqlService;
 import com.starrocks.staros.StarMgrServer;
 import com.starrocks.system.Frontend;
-import org.apache.commons.cli.BasicParser;
-import org.apache.commons.cli.CommandLine;
-import org.apache.commons.cli.CommandLineParser;
-import org.apache.commons.cli.Options;
-import org.apache.commons.cli.ParseException;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import sun.misc.Signal;
@@ -90,21 +84,16 @@ import java.util.List;
 import java.util.Optional;
 import java.util.concurrent.TimeUnit;
 
-public class StarRocksFE {
-    private static final Logger LOG = LogManager.getLogger(StarRocksFE.class);
-
-    public static final String STARROCKS_HOME_DIR = System.getenv("STARROCKS_HOME");
-    public static final String PID_DIR = System.getenv("PID_DIR");
+public class StarRocksFEServer {
+    private static final Logger LOG = LogManager.getLogger(StarRocksFEServer.class);
 
     public static volatile boolean stopped = false;
 
-    public static void main(String[] args) {
-        start(STARROCKS_HOME_DIR, PID_DIR, args);
-    }
-
-
     // entrance for starrocks frontend
-    public static void start(String starRocksDir, String pidDir, String[] args) {
+    public static void start(CommandLineOptions cmdLineOpts) {
+        String starRocksDir = Config.STARROCKS_HOME_DIR;
+        String pidDir = System.getenv("PID_DIR");
+
         if (Strings.isNullOrEmpty(starRocksDir)) {
             System.err.println("env STARROCKS_HOME is not set.");
             return;
@@ -114,8 +103,6 @@ public class StarRocksFE {
             System.err.println("env PID_DIR is not set.");
             return;
         }
-
-        CommandLineOptions cmdLineOpts = parseArgs(args);
 
         try {
             // pid file
@@ -317,7 +304,7 @@ public class StarRocksFE {
         String url = "http://" + accessibleHostPort
                 + "/api/bootstrap"
                 + "?cluster_id=" + GlobalStateMgr.getCurrentState().getNodeMgr().getClusterId()
-                + "&token=" +  GlobalStateMgr.getCurrentState().getNodeMgr().getToken();
+                + "&token=" + GlobalStateMgr.getCurrentState().getNodeMgr().getToken();
         try {
             String resultStr = Util.getResultForUrl(url, null,
                     Config.heartbeat_timeout_second * 1000,
@@ -355,160 +342,11 @@ public class StarRocksFE {
         return (aliveCnt - 1) >= (frontends.size()) / 2 + 1;
     }
 
-    /*
-     * -v --version
-     *      Print the version of StarRocks Frontend
-     * -h --helper
-     *      Specify the helper node when joining a bdb je replication group
-     * -b --bdb
-     *      Run bdbje debug tools
-     *
-     *      -l --listdb
-     *          List all database names in bdbje
-     *      -d --db
-     *          Specify a database in bdbje
-     *
-     *          -s --stat
-     *              Print statistic of a database, including count, first key, last key
-     *          -f --from
-     *              Specify the start scan key
-     *          -t --to
-     *              Specify the end scan key
-     *          -m --metaversion
-     *              Specify the meta version to decode log value, separated by ',', first
-     *              is community meta version, second is StarRocks meta version
-     * -rs --cluster_snapshot
-     *      Specify fe start to restore from a cluster snapshot
-     * -ht --host_type
-     *      Specify fe start use ip or fqdn
-     * -fp --failpoint
-     *      Enable fail point
-     */
-    protected static CommandLineOptions parseArgs(String[] args) {
-        CommandLineParser commandLineParser = new BasicParser();
-        Options options = new Options();
-        options.addOption("ht", "host_type", true, "Specify fe start use ip or fqdn");
-        options.addOption("rs", "cluster_snapshot", false, "Specify fe start to restore from a cluster snapshot");
-        options.addOption("v", "version", false, "Print the version of StarRocks Frontend");
-        options.addOption("h", "helper", true, "Specify the helper node when joining a bdb je replication group");
-        options.addOption("b", "bdb", false, "Run bdbje debug tools");
-        options.addOption("l", "listdb", false, "Print the list of databases in bdbje");
-        options.addOption("d", "db", true, "Specify a database in bdbje");
-        options.addOption("s", "stat", false, "Print statistic of a database, including count, first key, last key");
-        options.addOption("f", "from", true, "Specify the start scan key");
-        options.addOption("t", "to", true, "Specify the end scan key");
-        options.addOption("m", "metaversion", true,
-                "Specify the meta version to decode log value, separated by ',', first is community meta" +
-                        " version, second is StarRocks meta version");
-        options.addOption("fp", "failpoint", false, "enable fail point");
-
-        CommandLine cmd = null;
-        try {
-            cmd = commandLineParser.parse(options, args);
-        } catch (final ParseException e) {
-            LOG.error(e.getMessage(), e);
-            System.err.println("Failed to parse command line. exit now");
+    private static void runCommandLineOptions(CommandLineOptions cmdLineOpts) {
+        if (cmdLineOpts == null) {
+            System.err.println("invalid command line options");
             System.exit(-1);
         }
-
-        CommandLineOptions commandLineOptions = new CommandLineOptions();
-        // -v --version
-        if (cmd.hasOption('v') || cmd.hasOption("version")) {
-            commandLineOptions.setVersion(true);
-        }
-        // -b --bdb
-        if (cmd.hasOption('b') || cmd.hasOption("bdb")) {
-            if (cmd.hasOption('l') || cmd.hasOption("listdb")) {
-                // list bdb je databases
-                BDBToolOptions bdbOpts = new BDBToolOptions(true, "", false, "", "", 0, 0);
-                commandLineOptions.setBdbToolOpts(bdbOpts);
-            } else if (cmd.hasOption('d') || cmd.hasOption("db")) {
-                // specify a database
-                String dbName = cmd.getOptionValue("db");
-                if (Strings.isNullOrEmpty(dbName)) {
-                    System.err.println("BDBJE database name is missing");
-                    System.exit(-1);
-                }
-
-                if (cmd.hasOption('s') || cmd.hasOption("stat")) {
-                    BDBToolOptions bdbOpts = new BDBToolOptions(false, dbName, true, "", "", 0, 0);
-                    commandLineOptions.setBdbToolOpts(bdbOpts);
-                } else {
-                    String fromKey = "";
-                    String endKey = "";
-                    int metaVersion = 0;
-                    int starrocksMetaVersion = 0;
-                    if (cmd.hasOption('f') || cmd.hasOption("from")) {
-                        fromKey = cmd.getOptionValue("from");
-                        if (Strings.isNullOrEmpty(fromKey)) {
-                            System.err.println("from key is missing");
-                            System.exit(-1);
-                        }
-                    }
-                    if (cmd.hasOption('t') || cmd.hasOption("to")) {
-                        endKey = cmd.getOptionValue("to");
-                        if (Strings.isNullOrEmpty(endKey)) {
-                            System.err.println("end key is missing");
-                            System.exit(-1);
-                        }
-                    }
-                    if (cmd.hasOption('m') || cmd.hasOption("metaversion")) {
-                        try {
-                            String version = cmd.getOptionValue("metaversion");
-                            String[] vs = version.split(",");
-                            if (vs.length != 2) {
-                                System.err.println("invalid meta version format");
-                                System.exit(-1);
-                            }
-                            metaVersion = Integer.parseInt(vs[0]);
-                            starrocksMetaVersion = Integer.parseInt(vs[1]);
-                        } catch (NumberFormatException e) {
-                            System.err.println("Invalid meta version format");
-                            System.exit(-1);
-                        }
-                    }
-
-                    BDBToolOptions bdbOpts =
-                            new BDBToolOptions(false, dbName, false, fromKey, endKey, metaVersion,
-                                    starrocksMetaVersion);
-                    commandLineOptions.setBdbToolOpts(bdbOpts);
-                }
-            } else {
-                System.err.println("Invalid options when running bdb je tools");
-                System.exit(-1);
-            }
-        }
-        // -h --helper
-        if (cmd.hasOption('h') || cmd.hasOption("helper")) {
-            String helperNode = cmd.getOptionValue("helper");
-            if (Strings.isNullOrEmpty(helperNode)) {
-                System.err.println("Missing helper node value");
-                System.exit(-1);
-            }
-            commandLineOptions.setHelpers(helperNode);
-        }
-        // -ht --host_type
-        if (cmd.hasOption("ht") || cmd.hasOption("host_type")) {
-            String hostType = cmd.getOptionValue("host_type");
-            if (Strings.isNullOrEmpty(hostType)) {
-                System.err.println("Missing host type value");
-                System.exit(-1);
-            }
-            commandLineOptions.setHostType(hostType);
-        }
-        // -rs --cluster_snapshot
-        if (cmd.hasOption("rs") || cmd.hasOption("cluster_snapshot")) {
-            commandLineOptions.setStartFromSnapshot(true);
-        }
-        // -fp --failpoint
-        if (cmd.hasOption("fp") || cmd.hasOption("failpoint")) {
-            commandLineOptions.setEnableFailPoint(true);
-        }
-
-        return commandLineOptions;
-    }
-
-    private static void runCommandLineOptions(CommandLineOptions cmdLineOpts) {
         if (cmdLineOpts.isVersion()) {
             System.out.println("Build version: " + Version.STARROCKS_VERSION);
             System.out.println("Commit hash: " + Version.STARROCKS_COMMIT_HASH);
