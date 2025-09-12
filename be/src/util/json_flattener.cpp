@@ -85,9 +85,8 @@ void extract_bool(const vpack::Slice* json, NullableColumn* result) {
         if (json->isNone() || json->isNull()) {
             result->append_nulls(1);
         } else if (json->isBool()) {
-            result->null_column()->append(0);
             auto res = json->getBool();
-            down_cast<RunTimeColumnType<TYPE_BOOLEAN>*>(result->data_column().get())->append(res);
+            result->append_datum(res);
         } else if (json->isString()) {
             vpack::ValueLength len;
             const char* str = json->getStringUnchecked(len);
@@ -98,15 +97,14 @@ void extract_bool(const vpack::Slice* json, NullableColumn* result) {
                 if (parseResult != StringParser::PARSE_SUCCESS) {
                     result->append_nulls(1);
                 } else {
-                    down_cast<RunTimeColumnType<TYPE_BOOLEAN>*>(result->data_column().get())->append(b);
+                    result->append_datum(b);
                 }
             } else {
-                down_cast<RunTimeColumnType<TYPE_BOOLEAN>*>(result->data_column().get())->append(r != 0);
+                result->append_datum(r != 0);
             }
         } else if (json->isNumber()) {
-            result->null_column()->append(0);
             auto res = json->getNumber<double>();
-            down_cast<RunTimeColumnType<TYPE_BOOLEAN>*>(result->data_column().get())->append(res != 0);
+            result->append_datum(res != 0);
         } else {
             result->append_nulls(1);
         }
