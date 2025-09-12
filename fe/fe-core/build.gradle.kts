@@ -412,6 +412,8 @@ tasks.register<Task>("generateByScripts") {
 // Add source generation tasks to the build process
 tasks.compileJava {
     dependsOn("generateThriftSources", "generateProtoSources", "generateByScripts")
+    // Add explicit dependency on hive-udf shadowJar task
+    dependsOn(":plugin:hive-udf:shadowJar")
 }
 
 tasks.named<PrecompileTask>("jprotobuf_precompile") {
