@@ -15,15 +15,14 @@
 
 package com.starrocks.scheduler.mv;
 
-import com.starrocks.analysis.Expr;
-import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedView;
-import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.scheduler.MvTaskRunContext;
 import com.starrocks.scheduler.TaskRunContext;
+import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.TableName;
 import com.starrocks.sql.common.PCellNone;
 import com.starrocks.sql.common.PCellSortedSet;
 import com.starrocks.sql.common.PCellWithName;
@@ -38,8 +37,13 @@ public final class MVPCTRefreshNonPartitioner extends MVPCTRefreshPartitioner {
     public MVPCTRefreshNonPartitioner(MvTaskRunContext mvContext,
                                       TaskRunContext context,
                                       Database db,
-                                      MaterializedView mv) {
-        super(mvContext, context, db, mv);
+                                      MaterializedView mv,
+                                      MVRefreshParams mvRefreshParams) {
+        super(mvContext, context, db, mv, mvRefreshParams);
+    }
+
+    public PCellSortedSet getMVPartitionsToRefreshByParams() {
+        return getNonPartitionedMVPartitionsToRefresh();
     }
 
     @Override
@@ -76,10 +80,7 @@ public final class MVPCTRefreshNonPartitioner extends MVPCTRefreshPartitioner {
     }
 
     @Override
-    public PCellSortedSet getMVPartitionsToRefresh(PartitionInfo mvPartitionInfo,
-                                                   Map<Long, BaseTableSnapshotInfo> snapshotBaseTables,
-                                                   MVRefreshParams mvRefreshParams,
-                                                   Set<String> mvPotentialPartitionNames) {
+    public PCellSortedSet getMVPartitionsToRefreshWithCheck(Map<Long, BaseTableSnapshotInfo> snapshotBaseTables) {
         // non-partitioned materialized view
         if (mvRefreshParams.isForce() || isNonPartitionedMVNeedToRefresh(snapshotBaseTables, mv)) {
             return getNonPartitionedMVPartitionsToRefresh();
@@ -88,25 +89,28 @@ public final class MVPCTRefreshNonPartitioner extends MVPCTRefreshPartitioner {
     }
 
     @Override
-    public PCellSortedSet getMVPartitionNamesWithTTL(MaterializedView materializedView,
-                                                     MVRefreshParams mvRefreshParams,
-                                                     boolean isAutoRefresh) {
+    public PCellSortedSet getMVPartitionNamesWithTTL(boolean isAutoRefresh) {
         return PCellSortedSet.of();
     }
 
-    public void filterPartitionByRefreshNumber(PCellSortedSet mvPartitionsToRefresh,
-                                               Set<String> mvPotentialPartitionNames, boolean tentative) {
+    @Override
+    public void filterPartitionByRefreshNumber(PCellSortedSet mvPartitionsToRefresh) {
         // do nothing
     }
 
     @Override
-    public void filterPartitionByAdaptiveRefreshNumber(PCellSortedSet mvPartitionsToRefresh,
-                                                       Set<String> mvPotentialPartitionNames, boolean tentative) {
+    public void filterPartitionByAdaptiveRefreshNumber(PCellSortedSet mvPartitionsToRefresh) {
         // do nothing
     }
 
     @Override
     protected int getAdaptivePartitionRefreshNumber(Iterator<PCellWithName> partitionNameIter) throws MVAdaptiveRefreshException {
         return 0;
+    }
+
+    @Override
+    public boolean isCalcPotentialRefreshPartition(Map<Table, PCellSortedSet> baseChangedPartitionNames,
+                                                   PCellSortedSet mvPartitions) {
+        return false;
     }
 }

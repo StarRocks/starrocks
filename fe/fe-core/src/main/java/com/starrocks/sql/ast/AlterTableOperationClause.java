@@ -14,12 +14,14 @@
 
 package com.starrocks.sql.ast;
 
-import com.starrocks.analysis.Expr;
+import com.starrocks.connector.iceberg.procedure.IcebergTableProcedure;
+import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.parser.NodePosition;
 
 import java.util.List;
+import java.util.Map;
 
 public class AlterTableOperationClause extends AlterTableClause {
     public class RewriteDataOptions {
@@ -28,27 +30,29 @@ public class AlterTableOperationClause extends AlterTableClause {
         private long minFileSizeBytes;
         private long batchSize;
         private ScalarOperator partitionFilter;
-    
+
         public RewriteDataOptions(Expr where,
-                                boolean rewriteAll,
-                                long minFileSizeBytes,
-                                long batchSize) {
-            this.where           = where;
-            this.rewriteAll      = rewriteAll;
+                                  boolean rewriteAll,
+                                  long minFileSizeBytes,
+                                  long batchSize) {
+            this.where = where;
+            this.rewriteAll = rewriteAll;
             this.minFileSizeBytes = minFileSizeBytes;
-            this.batchSize       = batchSize;
-            this.partitionFilter   = null;
+            this.batchSize = batchSize;
+            this.partitionFilter = null;
         }
     }
-    private final String tableOperationName;
-    private final List<Expr> exprs;
-    private List<ConstantOperator> args;
-    private RewriteDataOptions rewriteDataOptions;
 
-    public AlterTableOperationClause(NodePosition pos, String tableOperationName, List<Expr> exprs, Expr where) {
+    private final String tableOperationName;
+    private final List<ProcedureArgument> arguments;
+    private Map<String, ConstantOperator> analyzedArgs;
+    private RewriteDataOptions rewriteDataOptions;
+    private IcebergTableProcedure tableProcedure;
+
+    public AlterTableOperationClause(NodePosition pos, String tableOperationName, List<ProcedureArgument> arguments, Expr where) {
         super(pos);
         this.tableOperationName = tableOperationName;
-        this.exprs = exprs;
+        this.arguments = arguments;
         rewriteDataOptions = new RewriteDataOptions(where, false, 256L * 1024 * 1024, 10L * 1024 * 1024 * 1024);
     }
 
@@ -57,16 +61,24 @@ public class AlterTableOperationClause extends AlterTableClause {
         return tableOperationName;
     }
 
-    public List<Expr> getExprs() {
-        return exprs;
+    public List<ProcedureArgument> getArguments() {
+        return arguments;
     }
 
-    public List<ConstantOperator> getArgs() {
-        return args;
+    public Map<String, ConstantOperator> getAnalyzedArgs() {
+        return analyzedArgs;
     }
 
-    public void setArgs(List<ConstantOperator> args) {
-        this.args = args;
+    public void setAnalyzedArgs(Map<String, ConstantOperator> analyzedArgs) {
+        this.analyzedArgs = analyzedArgs;
+    }
+
+    public IcebergTableProcedure getTableProcedure() {
+        return tableProcedure;
+    }
+
+    public void setTableProcedure(IcebergTableProcedure tableProcedure) {
+        this.tableProcedure = tableProcedure;
     }
 
     public void setWhere(Expr where) {
@@ -104,7 +116,7 @@ public class AlterTableOperationClause extends AlterTableClause {
     public void setPartitionFilter(ScalarOperator partitionFilter) {
         this.rewriteDataOptions.partitionFilter = partitionFilter;
     }
-    
+
     public ScalarOperator getPartitionFilter() {
         return this.rewriteDataOptions.partitionFilter;
     }

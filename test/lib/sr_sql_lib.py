@@ -919,7 +919,7 @@ class StarrocksSQLApiLib(object):
 
         record_container.append(RESULT_FLAG)
         # return code
-        record_container.append("%s" % shell_res[0])
+        record_container.append(str(shell_res[0]))
 
         if shell_cmd.endswith("_stream_load"):
             self_print(shell_res[1])
@@ -948,7 +948,7 @@ class StarrocksSQLApiLib(object):
             return
 
         result_container.append(RESULT_FLAG)
-        result_container.append("%s" % func_res)
+        result_container.append(str(func_res))
         result_container.append(RESULT_END_FLAT)
 
     @staticmethod
@@ -1914,6 +1914,29 @@ class StarrocksSQLApiLib(object):
             count += 1
         tools.assert_equal("FINISHED", status, "wait alter table finish error")
 
+    """
+        Return True or error message if refresh mv failed
+        The difference between this function with regular REFRESH command is, the result of regular REFRESH
+        would be ignored, but this result of this function can be asserted
+    """
+    def refresh_mv_manual(self, db_name, mv_name):
+        """
+        Refresh a materialized view manually.
+        Returns True if refresh is successful, otherwise returns the error message.
+        """
+        sql = f"REFRESH MATERIALIZED VIEW {db_name}.{mv_name} WITH SYNC MODE"
+        try:
+            res = self.execute_sql(sql, True)
+            if res["status"]:
+                return "True"
+            else:
+                # Try to extract error message from result or use a default message
+                error_msg = res.get("msg") or res.get("error") or str(res)
+                return error_msg
+        except Exception as e:
+            # Catch any exception raised by execute_sql and return its string representation
+            return str(e)
+            
     def wait_materialized_view_cancel(self, check_count=60):
         """
         wait materialized view job cancel and return status
@@ -2546,6 +2569,102 @@ out.append("${{dictMgr.NO_DICT_STRING_COLUMNS.contains(cid)}}")
         tools.assert_equal(200, res.status_code, f"failed to post http request [res={res}] [url={exec_url}]")
         return res.content.decode("utf-8")
 
+    def get_http_request(self, exec_url, params=None) -> str:
+        """Sends a GET request with optional query params and returns response text.
+
+        Args:
+            exec_url: Base URL such as http://fe_host:fe_port/log
+            params: Optional dict of query parameters
+        Returns:
+            Response body as string.
+        """
+        res = requests.get(exec_url, params=params, auth=HTTPBasicAuth(self.mysql_user, self.mysql_password))
+        tools.assert_equal(200, res.status_code, f"failed to get http request [res={res}] [url={exec_url}] [params={params}]")
+        return res.content.decode("utf-8")
+
+    def enable_fe_verbose_log(self, logger_names: List[str]):
+        """Enable FE DEBUG loggers across all alive FEs via /log?add_verbose=...
+
+        Args:
+            logger_names: List of fully-qualified Java logger names (package + class),
+                e.g. [
+                    "com.starrocks.qe.QeProcessorImpl",
+                    "com.starrocks.qe.scheduler.QueryRuntimeProfile",
+                ]
+                The value is passed directly to the FE /log endpoint as
+                add_verbose=<logger_name>.
+        """
+        if not logger_names:
+            return
+        endpoints = self._get_fe_http_endpoints()
+        for ep in endpoints:
+            base = f"http://{ep['host']}:{ep['port']}/log"
+            for logger_name in logger_names:
+                log.info(f"Enable FE DEBUG logger on {ep['host']}:{ep['port']}: {logger_name}")
+                self.get_http_request(base, params={"add_verbose": logger_name})
+
+    def disable_fe_verbose_log(self, logger_names: List[str]):
+        """Disable FE DEBUG loggers across all alive FEs via /log?del_verbose=...
+
+        Args:
+            logger_names: List of fully-qualified Java logger names (package + class),
+                e.g. [
+                    "com.starrocks.qe.QeProcessorImpl",
+                    "com.starrocks.qe.scheduler.QueryRuntimeProfile",
+                ]
+                The value is passed directly to the FE /log endpoint as
+                del_verbose=<logger_name>.
+        """
+        if not logger_names:
+            return
+        endpoints = self._get_fe_http_endpoints()
+        for ep in endpoints:
+            base = f"http://{ep['host']}:{ep['port']}/log"
+            for logger_name in logger_names:
+                log.info(f"Disable FE DEBUG logger on {ep['host']}:{ep['port']}: {logger_name}")
+                self.get_http_request(base, params={"del_verbose": logger_name})
+
+    def _get_fe_http_endpoints(self) -> List[Dict]:
+        """Get http host and port of all FEs (alive preferred).
+
+        Returns:
+            List of dicts with keys: host, port
+        """
+        res = self.execute_sql("show frontends;", ori=True)
+        tools.assert_true(res["status"], res["msg"])
+
+        host_idx = None
+        http_port_idx = None
+        alive_idx = None
+        for i, col_info in enumerate(res["desc"]):
+            if col_info[0] == "IP":
+                host_idx = i
+            if col_info[0] == "HttpPort":
+                http_port_idx = i
+            if col_info[0] == "Alive":
+                alive_idx = i
+
+        # Strictly require expected columns
+        tools.assert_true(host_idx is not None, "SHOW FRONTENDS missing IP column")
+        tools.assert_true(http_port_idx is not None, "SHOW FRONTENDS missing HttpPort column")
+        tools.assert_true(alive_idx is not None, "SHOW FRONTENDS missing Alive column")
+
+        endpoints: List[Dict] = []
+        for row in res["result"]:
+            try:
+                if alive_idx is not None and str(row[alive_idx]).lower() != "true":
+                    continue
+            except Exception:
+                pass
+
+            host = row[host_idx]
+            port = row[http_port_idx]
+            endpoints.append({"host": str(host), "port": str(port)})
+
+        tools.assert_true(len(endpoints) > 0, "No alive FE endpoints found from SHOW FRONTENDS")
+
+        return endpoints
+
     def manual_compact(self, database_name, table_name):
         sql = "show tablet from " + database_name + "." + table_name
         res = self.execute_sql(sql, True)
@@ -2698,6 +2817,56 @@ out.append("${{dictMgr.NO_DICT_STRING_COLUMNS.contains(cid)}}")
                 return res["result"][0][i]
 
         tools.assert_true(False, f"failed to get backend cpu cores [res={res}]")
+
+    def get_all_backend_ids(self) -> List[str]:
+        """Return ids of all alive backends (fallback to all rows if Alive not found)."""
+        res = self.execute_sql("show backends;", ori=True)
+        tools.assert_true(res["status"], res["msg"])
+
+        alive_idx = None
+        id_idx = None
+        for i, col_info in enumerate(res["desc"]):
+            if col_info[0] == "Alive":
+                alive_idx = i
+            if col_info[0] in ("BackendId", "BackendID", "BackendId "):
+                id_idx = i
+        if id_idx is None:
+            id_idx = 0
+
+        be_ids: List[str] = []
+        if alive_idx is not None:
+            for row in res["result"]:
+                try:
+                    if str(row[alive_idx]).lower() == "true":
+                        be_ids.append(str(row[id_idx]))
+                except Exception:
+                    continue
+        else:
+            for row in res["result"]:
+                be_ids.append(str(row[id_idx]))
+
+        return be_ids
+
+    def set_vlog_level_for_all_be(self, prefixes, level: int):
+        """Set VLOG level for one or more file-prefix patterns on all alive backends.
+
+        Args:
+            prefixes: str or List[str]. File base-name prefix with optional '*' wildcard,
+                e.g. "fragment_mgr*" or ["fragment_mgr*", "plan_fragment_executor*"]
+            level: int VLOG level to set (e.g. 0..10)
+        """
+        if isinstance(prefixes, str):
+            prefix_list = [prefixes]
+        else:
+            prefix_list = list(prefixes)
+        be_ids = self.get_all_backend_ids()
+        for be_id in be_ids:
+            for prefix in prefix_list:
+                sql = (
+                    f"admin execute on {be_id} 'VLogCntl.getInstance().setLogLevel(\"{prefix}\", {level}) ';"
+                )
+                res = self.execute_sql(sql, True)
+                tools.assert_true(res["status"], f"fail to set VLOG on BE {be_id}, res={res}")
 
     def assert_table_cardinality(self, sql, rows):
         """

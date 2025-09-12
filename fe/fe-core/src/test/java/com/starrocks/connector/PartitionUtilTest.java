@@ -18,9 +18,6 @@ import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Range;
-import com.starrocks.analysis.BoolLiteral;
-import com.starrocks.analysis.DateLiteral;
-import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.DeltaLakeTable;
 import com.starrocks.catalog.HiveTable;
@@ -36,8 +33,10 @@ import com.starrocks.common.StarRocksException;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.hive.HiveMetaClient;
 import com.starrocks.connector.hive.HivePartitionName;
-import com.starrocks.connector.iceberg.IcebergApiConverter;
 import com.starrocks.server.MetadataMgr;
+import com.starrocks.sql.ast.expression.BoolLiteral;
+import com.starrocks.sql.ast.expression.DateLiteral;
+import com.starrocks.sql.ast.expression.LiteralExpr;
 import mockit.Expectations;
 import mockit.Mock;
 import mockit.MockUp;
@@ -107,7 +106,7 @@ public class PartitionUtilTest {
     @Test
     public void testCreateIcebergPartitionKey() throws AnalysisException {
         PartitionKey partitionKey = createPartitionKey(
-                Lists.newArrayList("1", "a", "3.0", IcebergApiConverter.PARTITION_NULL_VALUE), partColumns,
+                Lists.newArrayList("1", "a", "3.0", null), partColumns,
                 Table.TableType.ICEBERG);
         Assertions.assertEquals("(\"1\", \"a\", \"3.0\", \"NULL\")", partitionKey.toSql());
     }

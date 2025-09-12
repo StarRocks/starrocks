@@ -18,10 +18,6 @@ import com.google.common.base.Joiner;
 import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
-import com.starrocks.analysis.Expr;
-import com.starrocks.analysis.SlotRef;
-import com.starrocks.analysis.SubfieldExpr;
-import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ColumnId;
 import com.starrocks.catalog.DistributionInfo;
@@ -55,7 +51,6 @@ import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.analyzer.Field;
 import com.starrocks.sql.analyzer.QueryAnalyzer;
 import com.starrocks.sql.ast.CTERelation;
-import com.starrocks.sql.ast.FieldReference;
 import com.starrocks.sql.ast.NormalizedTableFunctionRelation;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.SelectList;
@@ -67,6 +62,11 @@ import com.starrocks.sql.ast.TableFunctionRelation;
 import com.starrocks.sql.ast.TableRelation;
 import com.starrocks.sql.ast.ValuesRelation;
 import com.starrocks.sql.ast.ViewRelation;
+import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.FieldReference;
+import com.starrocks.sql.ast.expression.SlotRef;
+import com.starrocks.sql.ast.expression.SubfieldExpr;
+import com.starrocks.sql.ast.expression.TableName;
 import com.starrocks.sql.common.MetaUtils;
 import com.starrocks.sql.formatter.AST2SQLVisitor;
 import com.starrocks.sql.parser.SqlParser;
@@ -94,8 +94,6 @@ public class DesensitizedSQLBuilder {
     private static final String COLUMN_ALIAS = "column alias";
 
     private static final String TABLE_ALIAS = "table alias";
-
-
 
     public static String desensitizeSQL(StatementBase statement, Map<String, String> desensitizedDict) {
         Map<TableName, Table> tables = AnalyzerUtils.collectAllTableAndViewWithAlias(statement);

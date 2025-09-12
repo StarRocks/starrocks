@@ -87,9 +87,8 @@ void extract_bool(const vpack::Slice* json, NullableColumn* result) {
         if (json->isNone() || json->isNull()) {
             result->append_nulls(1);
         } else if (json->isBool()) {
-            result->null_column()->append(0);
             auto res = json->getBool();
-            down_cast<RunTimeColumnType<TYPE_BOOLEAN>*>(result->data_column().get())->append(res);
+            result->append_datum(res);
         } else if (json->isString()) {
             vpack::ValueLength len;
             const char* str = json->getStringUnchecked(len);
@@ -100,15 +99,14 @@ void extract_bool(const vpack::Slice* json, NullableColumn* result) {
                 if (parseResult != StringParser::PARSE_SUCCESS) {
                     result->append_nulls(1);
                 } else {
-                    down_cast<RunTimeColumnType<TYPE_BOOLEAN>*>(result->data_column().get())->append(b);
+                    result->append_datum(b);
                 }
             } else {
-                down_cast<RunTimeColumnType<TYPE_BOOLEAN>*>(result->data_column().get())->append(r != 0);
+                result->append_datum(r != 0);
             }
         } else if (json->isNumber()) {
-            result->null_column()->append(0);
             auto res = json->getNumber<double>();
-            down_cast<RunTimeColumnType<TYPE_BOOLEAN>*>(result->data_column().get())->append(res != 0);
+            result->append_datum(res != 0);
         } else {
             result->append_nulls(1);
         }
@@ -153,12 +151,13 @@ void merge_number(vpack::Builder* builder, const std::string_view& name, const C
     DCHECK(src->is_nullable());
     auto* nullable_column = down_cast<const NullableColumn*>(src);
     auto* col = down_cast<const RunTimeColumnType<TYPE>*>(nullable_column->data_column().get());
+    const auto data = col->immutable_data().data();
 
     if constexpr (TYPE == LogicalType::TYPE_LARGEINT) {
         // the value is from json, must be uint64_t
-        builder->addUnchecked(name.data(), name.size(), vpack::Value((uint64_t)col->get_data()[idx]));
+        builder->addUnchecked(name.data(), name.size(), vpack::Value((uint64_t)data[idx]));
     } else {
-        builder->addUnchecked(name.data(), name.size(), vpack::Value(col->get_data()[idx]));
+        builder->addUnchecked(name.data(), name.size(), vpack::Value(data[idx]));
     }
 }
 

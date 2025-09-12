@@ -325,14 +325,16 @@ public class MysqlProto {
             MysqlCodec.writeNulTerminateString(outputStream, switchAuthPlugin);
 
             byte[] authSwitchRequestPacket =
-                    provider.authSwitchRequestPacket(context, user, context.getMysqlChannel().getRemoteIp());
+                    provider.authSwitchRequestPacket(context.getAccessControlContext(), user,
+                            context.getMysqlChannel().getRemoteIp());
             if (authSwitchRequestPacket != null) {
                 MysqlCodec.writeBytes(outputStream, authSwitchRequestPacket);
             }
             MysqlCodec.writeInt1(outputStream, 0);
         } else {
             // AuthMoreData Packet
-            byte[] authMoreDataPacket = provider.authMoreDataPacket(context, user, context.getMysqlChannel().getRemoteIp());
+            byte[] authMoreDataPacket = provider.authMoreDataPacket(context.getAccessControlContext(), user,
+                    context.getMysqlChannel().getRemoteIp());
             if (authMoreDataPacket != null) {
                 MysqlCodec.writeInt1(outputStream, (byte) 0x01);
                 MysqlCodec.writeBytes(outputStream, authMoreDataPacket);

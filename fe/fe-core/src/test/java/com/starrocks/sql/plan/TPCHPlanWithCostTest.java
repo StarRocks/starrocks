@@ -49,7 +49,7 @@ public class TPCHPlanWithCostTest extends DistributedEnvPlanTestBase {
     @ParameterizedTest(name = "Tpch.{0}")
     @MethodSource("tpchSource")
     public void testTPCH(String name, String sql, String resultFile) {
-        runFileUnitTest(sql, resultFile);
+        runFileUnitTest(sql, resultFile, true);
     }
 
     private static Stream<Arguments> tpchSource() {

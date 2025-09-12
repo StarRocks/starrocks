@@ -34,7 +34,6 @@ import com.starrocks.common.proc.ProcResult;
 import com.starrocks.common.proc.RollupProcDir;
 import com.starrocks.common.proc.SchemaChangeProcDir;
 import com.starrocks.common.proc.TransProcDir;
-import com.starrocks.sql.ShowTemporaryTableStmt;
 import com.starrocks.sql.ast.AdminShowConfigStmt;
 import com.starrocks.sql.ast.AdminShowReplicaDistributionStmt;
 import com.starrocks.sql.ast.AdminShowReplicaStatusStmt;
@@ -111,6 +110,7 @@ import com.starrocks.sql.ast.ShowStreamLoadStmt;
 import com.starrocks.sql.ast.ShowTableStatusStmt;
 import com.starrocks.sql.ast.ShowTableStmt;
 import com.starrocks.sql.ast.ShowTabletStmt;
+import com.starrocks.sql.ast.ShowTemporaryTableStmt;
 import com.starrocks.sql.ast.ShowTransactionStmt;
 import com.starrocks.sql.ast.ShowTriggersStmt;
 import com.starrocks.sql.ast.ShowUserPropertyStmt;
@@ -935,6 +935,8 @@ public class ShowResultMetaFactory implements AstVisitorExtendInterface<ShowResu
                 .addColumn(new Column("IsPending", ScalarType.createVarchar(16)))
                 .addColumn(new Column("Warehouse", ScalarType.createVarchar(20)))
                 .addColumn(new Column("CNGroup", ScalarType.createVarchar(64)))
+                .addColumn(new Column("Catalog", ScalarType.createVarchar(64)))
+                .addColumn(new Column("QueryId", ScalarType.createVarchar(64)))
                 .build();
     }
 

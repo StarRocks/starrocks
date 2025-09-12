@@ -38,9 +38,9 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.gson.Gson;
 import com.google.gson.annotations.SerializedName;
-import com.starrocks.analysis.FunctionName;
 import com.starrocks.sql.ast.CreateFunctionStmt;
 import com.starrocks.sql.ast.HdfsURI;
+import com.starrocks.sql.ast.expression.FunctionName;
 import com.starrocks.thrift.TAggregateFunction;
 import com.starrocks.thrift.TFunction;
 import com.starrocks.thrift.TFunctionBinaryType;
@@ -221,6 +221,7 @@ public class AggregateFunction extends Function {
         newFn.setId(this.getId());
         newFn.setUserVisible(this.isUserVisible());
         newFn.setAggStateDesc(this.getAggStateDesc());
+        newFn.setisAnalyticFn(this.isAnalyticFn());
         return newFn;
     }
 

@@ -42,10 +42,6 @@ import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.google.gson.stream.JsonReader;
 import com.staros.starlet.StarletAgentFactory;
-import com.starrocks.analysis.SetVarHint;
-import com.starrocks.analysis.StringLiteral;
-import com.starrocks.analysis.TableName;
-import com.starrocks.analysis.UserVariableHint;
 import com.starrocks.authentication.AuthenticationMgr;
 import com.starrocks.authorization.PrivilegeBuiltinConstants;
 import com.starrocks.catalog.Database;
@@ -116,6 +112,10 @@ import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.SystemVariable;
 import com.starrocks.sql.ast.TableRelation;
 import com.starrocks.sql.ast.UserVariable;
+import com.starrocks.sql.ast.expression.SetVarHint;
+import com.starrocks.sql.ast.expression.StringLiteral;
+import com.starrocks.sql.ast.expression.TableName;
+import com.starrocks.sql.ast.expression.UserVariableHint;
 import com.starrocks.sql.optimizer.LogicalPlanPrinter;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.Optimizer;
@@ -588,7 +588,7 @@ public class UtFrameUtils {
             } finally {
                 String pr = Tracers.printLogs();
                 if (!Strings.isNullOrEmpty(pr)) {
-                    System.out.println(pr);
+                    StarRocksTestBase.logSysInfo(pr);
                 }
                 Tracers.close();
             }
@@ -967,6 +967,8 @@ public class UtFrameUtils {
         String replaySql = initMockEnv(connectContext, replayDumpInfo);
         replaySql = LogUtil.removeLineSeparator(replaySql);
         Map<String, Database> dbs = null;
+
+        StarRocksTestBase.registerTrace(connectContext);
         try {
             StatementBase statementBase;
             try (Timer st = Tracers.watchScope("Parse")) {
@@ -995,6 +997,7 @@ public class UtFrameUtils {
         } finally {
             unLock(dbs);
             tearMockEnv();
+            StarRocksTestBase.unRegisterTrace(connectContext);
         }
     }
 

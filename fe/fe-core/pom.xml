@@ -31,7 +31,6 @@ under the License.
     </parent>
 
     <artifactId>fe-core</artifactId>
-    <version>3.4.0</version>
     <packaging>jar</packaging>
 
     <properties>
@@ -100,13 +99,16 @@ under the License.
         <dependency>
             <groupId>com.starrocks</groupId>
             <artifactId>fe-grammar</artifactId>
-            <version>1.0.0</version>
         </dependency>
 
         <dependency>
             <groupId>com.starrocks</groupId>
             <artifactId>fe-parser</artifactId>
-            <version>1.0.0</version>
+        </dependency>
+
+        <dependency>
+            <groupId>com.starrocks</groupId>
+            <artifactId>fe-spi</artifactId>
         </dependency>
 
         <dependency>

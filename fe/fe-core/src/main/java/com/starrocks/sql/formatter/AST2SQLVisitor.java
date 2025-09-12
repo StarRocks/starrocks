@@ -15,22 +15,12 @@
 package com.starrocks.sql.formatter;
 
 import com.google.common.base.Joiner;
-import com.starrocks.analysis.CompoundPredicate;
-import com.starrocks.analysis.Expr;
-import com.starrocks.analysis.InPredicate;
-import com.starrocks.analysis.LimitElement;
-import com.starrocks.analysis.LiteralExpr;
-import com.starrocks.analysis.SlotRef;
-import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.util.ParseUtil;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.analyzer.Field;
-import com.starrocks.sql.ast.ArrayExpr;
 import com.starrocks.sql.ast.CTERelation;
-import com.starrocks.sql.ast.FieldReference;
 import com.starrocks.sql.ast.JoinRelation;
-import com.starrocks.sql.ast.MapExpr;
 import com.starrocks.sql.ast.NormalizedTableFunctionRelation;
 import com.starrocks.sql.ast.ParseNode;
 import com.starrocks.sql.ast.SelectList;
@@ -42,6 +32,16 @@ import com.starrocks.sql.ast.TableRelation;
 import com.starrocks.sql.ast.TableSampleClause;
 import com.starrocks.sql.ast.ValuesRelation;
 import com.starrocks.sql.ast.ViewRelation;
+import com.starrocks.sql.ast.expression.ArrayExpr;
+import com.starrocks.sql.ast.expression.CompoundPredicate;
+import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.FieldReference;
+import com.starrocks.sql.ast.expression.InPredicate;
+import com.starrocks.sql.ast.expression.LimitElement;
+import com.starrocks.sql.ast.expression.LiteralExpr;
+import com.starrocks.sql.ast.expression.MapExpr;
+import com.starrocks.sql.ast.expression.SlotRef;
+import com.starrocks.sql.ast.expression.TableName;
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.lang3.StringUtils;
 
@@ -461,7 +461,7 @@ public class AST2SQLVisitor extends AST2StringVisitor {
             List<SlotRef> exprs = node.collectAllSlotRefs(true);
             String sortedSlots = exprs.stream()
                     .filter(SlotRef::isColumnRef)
-                    .map(SlotRef::toSqlImpl)
+                    .map(SlotRef::toSql)
                     .sorted()
                     .collect(Collectors.joining(","));
             return "$massive_compounds[" + sortedSlots + "]$";

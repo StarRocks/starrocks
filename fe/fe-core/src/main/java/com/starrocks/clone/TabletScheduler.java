@@ -42,6 +42,7 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Multimap;
 import com.google.common.collect.Sets;
+import com.starrocks.authentication.UserIdentityUtils;
 import com.starrocks.catalog.CatalogRecycleBin;
 import com.starrocks.catalog.ColocateTableIndex.GroupId;
 import com.starrocks.catalog.DataProperty;
@@ -1175,8 +1176,14 @@ public class TabletScheduler extends FrontendDaemon {
 
         Set<Pair<String, String>> matchedLocations = new HashSet<>();
         Replica dupReplica = null;
-        //1. delete the unmatched replica
-        for (Replica replica : tabletCtx.getReplicas()) {
+        // 1. delete the unmatched replica
+        // To ensure the correctness of the cleanup process after a rebalance, we iterate the replicas in reverse order.
+        // After cloning a replica from the source BE to a newly added destination BE, the replica on the new BE will
+        // always be at the end of the list. By traversing the list in reverse, we process newer replicas first
+        // and preserve the newly added replica, preventing it from being mistakenly deleted.
+        List<Replica> replicas = tabletCtx.getReplicas();
+        for (int i = replicas.size() - 1; i >= 0; i--) {
+            Replica replica = replicas.get(i);
             if (!TabletChecker.isLocationMatch(replica.getBackendId(), tabletCtx.getRequiredLocation())) {
                 deleteReplicaInternal(tabletCtx, replica, "location mismatch", force);
                 return true;
@@ -1839,7 +1846,7 @@ public class TabletScheduler extends FrontendDaemon {
 
         Preconditions.checkState(tabletCtx.getState() == TabletSchedCtx.State.RUNNING, tabletCtx.getState());
         try {
-            tabletCtx.finishCloneTask(cloneTask, request);
+            tabletCtx.finishCloneTask(cloneTask, request, stat);
         } catch (SchedException e) {
             tabletCtx.increaseFailedRunningCounter();
             tabletCtx.setErrMsg(e.getMessage());
@@ -2160,8 +2167,16 @@ public class TabletScheduler extends FrontendDaemon {
         return pendingTablets.size();
     }
 
+    public synchronized long getPendingNum(Type type) {
+        return pendingTablets.stream().filter(t -> t.getType() == type).count();
+    }
+
     public synchronized int getRunningNum() {
         return runningTablets.size();
+    }
+
+    public synchronized long getRunningNum(Type type) {
+        return runningTablets.values().stream().filter(t -> t.getType() == type).count();
     }
 
     public synchronized int getHistoryNum() {
@@ -2223,7 +2238,7 @@ public class TabletScheduler extends FrontendDaemon {
         List<TabletSchedCtx> tabletCtxs;
         UserIdentity currentUser = null;
         if (request.isSetCurrent_user_ident()) {
-            currentUser = UserIdentity.fromThrift(request.current_user_ident);
+            currentUser = UserIdentityUtils.fromThrift(request.current_user_ident);
         }
         synchronized (this) {
             Stream<TabletSchedCtx> all;

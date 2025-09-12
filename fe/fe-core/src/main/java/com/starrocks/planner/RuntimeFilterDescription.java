@@ -16,11 +16,10 @@ package com.starrocks.planner;
 
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
-import com.starrocks.analysis.Expr;
-import com.starrocks.analysis.SortInfo;
 import com.starrocks.connector.BucketProperty;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
+import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.thrift.TBucketProperty;
 import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.thrift.TRuntimeFilterBuildJoinMode;
@@ -269,7 +268,7 @@ public class RuntimeFilterDescription {
         }
         // colocate runtime filter couldn't apply to other exec groups
         if (isBuildFromColocateGroup && joinMode.equals(COLOCATE)) {
-            int probeExecGroupId = rfPushCtx.getExecGroup(node.getId().asInt()).getGroupId().asInt();
+            int probeExecGroupId = rfPushCtx.getExecGroupId(node.getId().asInt()).asInt();
             if (execGroupId != probeExecGroupId) {
                 return false;
             }

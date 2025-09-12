@@ -14,11 +14,11 @@
 
 package com.starrocks.catalog;
 
-import com.starrocks.analysis.Predicate;
 import com.starrocks.sql.analyzer.ResourceGroupAnalyzer;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AlterResourceGroupStmt;
 import com.starrocks.sql.ast.CreateResourceGroupStmt;
+import com.starrocks.sql.ast.expression.Predicate;
 import com.starrocks.thrift.TWorkGroupType;
 
 import java.util.ArrayList;

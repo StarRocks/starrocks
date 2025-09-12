@@ -153,9 +153,6 @@ private:
     // keep dict page decoder
     std::unique_ptr<PageDecoder> _dict_decoder;
 
-    // keep dict page handle to avoid released
-    PageHandle _dict_page_handle;
-
     // page iterator used to get next page when current page is finished.
     // This value will be reset when a new seek is issued
     OrdinalPageIndexIterator _page_iter;

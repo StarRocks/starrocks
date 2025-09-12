@@ -19,12 +19,6 @@ import com.google.common.collect.BiMap;
 import com.google.common.collect.HashBiMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
-import com.starrocks.analysis.DescriptorTable;
-import com.starrocks.analysis.Expr;
-import com.starrocks.analysis.LiteralExpr;
-import com.starrocks.analysis.SlotDescriptor;
-import com.starrocks.analysis.SlotId;
-import com.starrocks.analysis.TupleDescriptor;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.PartitionKey;
@@ -41,7 +35,13 @@ import com.starrocks.connector.PartitionUtil;
 import com.starrocks.connector.RemoteFileInfo;
 import com.starrocks.connector.RemoteFileInfoSource;
 import com.starrocks.connector.exception.StarRocksConnectorException;
+import com.starrocks.planner.DescriptorTable;
+import com.starrocks.planner.SlotDescriptor;
+import com.starrocks.planner.SlotId;
+import com.starrocks.planner.TupleDescriptor;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.LiteralExpr;
 import com.starrocks.thrift.TExpr;
 import com.starrocks.thrift.TExprMinMaxValue;
 import com.starrocks.thrift.THdfsPartition;
@@ -471,7 +471,7 @@ public class IcebergConnectorScanRangeSource extends ConnectorScanRangeSource {
             Class<?> javaClass = type.typeId().javaClass();
 
             String partitionValue;
-
+            boolean partitionValueIsNull = (PartitionUtil.getPartitionValue(partition, index, javaClass) == null);
             // currently starrocks date literal only support local datetime
             if (type.equals(Types.TimestampType.withZone())) {
                 Long value = PartitionUtil.getPartitionValue(partition, index, javaClass);
@@ -485,9 +485,11 @@ public class IcebergConnectorScanRangeSource extends ConnectorScanRangeSource {
                 partitionValue = field.transform().toHumanString(type, PartitionUtil.getPartitionValue(
                         partition, index, javaClass));
             }
-
-            partitionValues.add(partitionValue);
-
+            if (!partitionValueIsNull) {
+                partitionValues.add(partitionValue);
+            } else {
+                partitionValues.add(null);
+            } 
             cols.add(table.getColumn(field.name()));
         });
 

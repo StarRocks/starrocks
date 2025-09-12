@@ -18,10 +18,6 @@ import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
-import com.starrocks.analysis.ArithmeticExpr;
-import com.starrocks.analysis.Expr;
-import com.starrocks.analysis.FunctionName;
-import com.starrocks.analysis.TableName;
 import com.starrocks.authentication.AuthenticationMgr;
 import com.starrocks.authorization.AccessDeniedException;
 import com.starrocks.authorization.AuthorizationMgr;
@@ -97,6 +93,10 @@ import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.SubqueryRelation;
 import com.starrocks.sql.ast.UserAuthOption;
 import com.starrocks.sql.ast.UserRef;
+import com.starrocks.sql.ast.expression.ArithmeticExpr;
+import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.FunctionName;
+import com.starrocks.sql.ast.expression.TableName;
 import com.starrocks.sql.ast.warehouse.cngroup.AlterCnGroupStmt;
 import com.starrocks.sql.ast.warehouse.cngroup.CreateCnGroupStmt;
 import com.starrocks.sql.ast.warehouse.cngroup.DropCnGroupStmt;
@@ -116,6 +116,7 @@ import com.starrocks.thrift.TGetGrantsToRolesOrUserRequest;
 import com.starrocks.thrift.TGetGrantsToRolesOrUserResponse;
 import com.starrocks.thrift.TGrantsToType;
 import com.starrocks.utframe.StarRocksAssert;
+import com.starrocks.utframe.StarRocksTestBase;
 import com.starrocks.utframe.UtFrameUtils;
 import com.starrocks.warehouse.cngroup.ComputeResource;
 import mockit.Expectations;
@@ -139,7 +140,7 @@ import java.util.Map;
 
 import static org.mockito.ArgumentMatchers.eq;
 
-public class PrivilegeCheckerTest {
+public class PrivilegeCheckerTest extends StarRocksTestBase {
     private static StarRocksAssert starRocksAssert;
     private static UserRef user;
     private static UserIdentity testUser;
@@ -338,7 +339,7 @@ public class PrivilegeCheckerTest {
             Authorizer.check(statement, ctx);
             Assertions.fail();
         } catch (Exception e) {
-            System.out.println(e.getMessage() + ", sql: " + sql);
+            logSysInfo(e.getMessage() + ", sql: " + sql);
             Assertions.assertTrue(e.getMessage().contains(expectError), e.getMessage());
         }
         return statement;
@@ -371,7 +372,7 @@ public class PrivilegeCheckerTest {
             Authorizer.check(statement, starRocksAssert.getCtx());
             Assertions.fail();
         } catch (Exception e) {
-            System.out.println(e.getMessage() + ", sql: " + sql);
+            logSysInfo(e.getMessage() + ", sql: " + sql);
             Assertions.assertTrue(e.getMessage().contains(expectError));
         }
     }
@@ -390,7 +391,7 @@ public class PrivilegeCheckerTest {
             Authorizer.check(statement, starRocksAssert.getCtx());
             Assertions.fail();
         } catch (Exception e) {
-            System.out.println(e.getMessage() + ", sql: " + sql);
+            logSysInfo(e.getMessage() + ", sql: " + sql);
             Assertions.assertTrue(e.getMessage().contains(expectError2nd));
         }
 
@@ -402,7 +403,7 @@ public class PrivilegeCheckerTest {
             Authorizer.check(statement, starRocksAssert.getCtx());
             Assertions.fail();
         } catch (Exception e) {
-            System.out.println(e.getMessage() + ", sql: " + sql);
+            logSysInfo(e.getMessage() + ", sql: " + sql);
             Assertions.assertTrue(e.getMessage().contains(expectError1st));
         }
     }
@@ -418,7 +419,7 @@ public class PrivilegeCheckerTest {
             Authorizer.check(statement, ctx);
             Assertions.fail();
         } catch (Exception e) {
-            System.out.println(e.getMessage() + ", sql: " + sql);
+            logSysInfo(e.getMessage() + ", sql: " + sql);
             Assertions.assertTrue(e.getMessage().contains(expectError));
         }
 
@@ -452,7 +453,7 @@ public class PrivilegeCheckerTest {
             Authorizer.check(statement, starRocksAssert.getCtx());
             Assertions.fail();
         } catch (Exception e) {
-            System.out.println(e.getMessage() + ", sql: " + sql);
+            logSysInfo(e.getMessage() + ", sql: " + sql);
             Assertions.assertTrue(e.getMessage().contains(expectError));
         }
     }
@@ -470,7 +471,7 @@ public class PrivilegeCheckerTest {
             Authorizer.check(statement, starRocksAssert.getCtx());
             Assertions.fail();
         } catch (Exception e) {
-            System.out.println(e.getMessage());
+            logSysInfo(e.getMessage());
             Assertions.assertTrue(e.getMessage().contains(expectError));
         }
     }
@@ -484,7 +485,7 @@ public class PrivilegeCheckerTest {
             Authorizer.check(statement, ctx);
             Assertions.fail();
         } catch (Exception e) {
-            System.out.println(e.getMessage() + ", sql: " + sql);
+            logSysInfo(e.getMessage() + ", sql: " + sql);
             Assertions.assertTrue(e.getMessage().contains(
                     "Access denied; you need (at least one of) the USAGE privilege(s) on RESOURCE my_spark for this operation"
             ));
@@ -551,7 +552,7 @@ public class PrivilegeCheckerTest {
         ctxToTestUser();
         ShowResultSet res = ShowExecutor.execute(
                 (ShowStmt) UtFrameUtils.parseStmtWithNewParser("SHOW catalogs", ctx), ctx);
-        System.out.println(res.getResultRows());
+        logSysInfo(res.getResultRows());
         Assertions.assertEquals(2, res.getResultRows().size());
         Assertions.assertEquals("test_ex_catalog3", res.getResultRows().get(1).get(0));
     }
@@ -593,7 +594,7 @@ public class PrivilegeCheckerTest {
         try {
             TablePEntryObject.generate(Arrays.asList("resource_mapping_inside_catalog_iceberg0", "db1", "tbl1"));
         } catch (PrivObjNotFoundException e) {
-            System.out.println(e.getMessage());
+            logSysInfo(e.getMessage());
             e.getMessage().contains("cannot find table tbl1 in db db1, msg: test");
         }
     }
@@ -772,7 +773,7 @@ public class PrivilegeCheckerTest {
                 StatsConstants.AnalyzeType.FULL, StatsConstants.ScheduleType.ONCE, Maps.newHashMap(),
                 StatsConstants.ScheduleStatus.FINISH, LocalDateTime.MIN);
         List<String> showResult = ShowAnalyzeJobStmt.showAnalyzeJobs(ctx, nativeAnalyzeJob);
-        System.out.println(showResult);
+        logSysInfo(showResult);
         // can show result for analyze job with all type
         Assertions.assertNotNull(showResult);
 
@@ -785,7 +786,7 @@ public class PrivilegeCheckerTest {
             new StmtExecutor(ctx, new KillAnalyzeStmt(0L)).checkPrivilegeForKillAnalyzeStmt(ctx,
                     nativeAnalyzeJob.getId());
         } catch (Exception e) {
-            System.out.println(e.getMessage());
+            logSysInfo(e.getMessage());
             Assertions.assertTrue(e.getMessage().contains("Access denied;"));
         }
         grantRevokeSqlAsRoot("grant SELECT,INSERT on db2.tbl1 to test");
@@ -801,7 +802,7 @@ public class PrivilegeCheckerTest {
                 StatsConstants.AnalyzeType.FULL, StatsConstants.ScheduleType.ONCE, Maps.newHashMap(),
                 StatsConstants.ScheduleStatus.FINISH, LocalDateTime.MIN);
         showResult = ShowAnalyzeJobStmt.showAnalyzeJobs(ctx, nativeAnalyzeJob);
-        System.out.println(showResult);
+        logSysInfo(showResult);
         // can show result for analyze job with db.*
         Assertions.assertNotNull(showResult);
 
@@ -824,7 +825,7 @@ public class PrivilegeCheckerTest {
                 StatsConstants.AnalyzeType.FULL, StatsConstants.ScheduleType.ONCE, Maps.newHashMap(),
                 StatsConstants.ScheduleStatus.FINISH, LocalDateTime.MIN);
         showResult = ShowAnalyzeJobStmt.showAnalyzeJobs(ctx, nativeAnalyzeJob);
-        System.out.println(showResult);
+        logSysInfo(showResult);
         // can show result for analyze job on table that user has any privilege on
         Assertions.assertNotNull(showResult);
         Assertions.assertEquals("tbl1", showResult.get(3));
@@ -847,7 +848,7 @@ public class PrivilegeCheckerTest {
                 StatsConstants.AnalyzeType.FULL, StatsConstants.ScheduleType.ONCE, Maps.newHashMap(),
                 StatsConstants.ScheduleStatus.FINISH, LocalDateTime.MIN);
         showResult = ShowAnalyzeJobStmt.showAnalyzeJobs(ctx, nativeAnalyzeJob);
-        System.out.println(showResult);
+        logSysInfo(showResult);
         // cannot show result for analyze job on table that user doesn't have any privileges on
         Assertions.assertNull(showResult);
         grantRevokeSqlAsRoot("revoke DROP on db1.tbl1 from test");
@@ -874,7 +875,7 @@ public class PrivilegeCheckerTest {
         analyzeStatus.setStatus(StatsConstants.ScheduleStatus.FINISH);
         analyzeStatus.setReason("Test Success");
         List<String> showResult = ShowAnalyzeStatusStmt.showAnalyzeStatus(ctx, analyzeStatus);
-        System.out.println(showResult);
+        logSysInfo(showResult);
         // can show result for analyze status on table that user has any privilege on
         Assertions.assertNotNull(showResult);
         Assertions.assertEquals("tbl1", showResult.get(2));
@@ -894,7 +895,7 @@ public class PrivilegeCheckerTest {
                 StatsConstants.AnalyzeType.FULL,
                 LocalDateTime.of(2020, 1, 1, 1, 1), Maps.newHashMap());
         showResult = ShowBasicStatsMetaStmt.showBasicStatsMeta(ctx, basicStatsMeta);
-        System.out.println(showResult);
+        logSysInfo(showResult);
         // can show result for stats on table that user has any privilege on
         Assertions.assertNotNull(showResult);
 
@@ -903,7 +904,7 @@ public class PrivilegeCheckerTest {
                 LocalDateTime.of(2020, 1, 1, 1, 1),
                 Maps.newHashMap());
         showResult = ShowHistogramStatsMetaStmt.showHistogramStatsMeta(ctx, histogramStatsMeta);
-        System.out.println(showResult);
+        logSysInfo(showResult);
         // can show result for stats on table that user has any privilege on
         Assertions.assertNotNull(showResult);
 
@@ -914,7 +915,7 @@ public class PrivilegeCheckerTest {
                 StatsConstants.ScheduleType.ONCE, Maps.newHashMap(),
                 LocalDateTime.of(2020, 1, 1, 1, 1));
         showResult = ShowAnalyzeStatusStmt.showAnalyzeStatus(ctx, analyzeStatus);
-        System.out.println(showResult);
+        logSysInfo(showResult);
         // cannot show result for analyze status on table that user doesn't have any privileges on
         Assertions.assertNull(showResult);
 
@@ -922,7 +923,7 @@ public class PrivilegeCheckerTest {
                 StatsConstants.AnalyzeType.FULL,
                 LocalDateTime.of(2020, 1, 1, 1, 1), Maps.newHashMap());
         showResult = ShowBasicStatsMetaStmt.showBasicStatsMeta(ctx, basicStatsMeta);
-        System.out.println(showResult);
+        logSysInfo(showResult);
         // cannot show result for stats on table that user doesn't have any privilege on
         Assertions.assertNull(showResult);
 
@@ -931,7 +932,7 @@ public class PrivilegeCheckerTest {
                 LocalDateTime.of(2020, 1, 1, 1, 1),
                 Maps.newHashMap());
         showResult = ShowHistogramStatsMetaStmt.showHistogramStatsMeta(ctx, histogramStatsMeta);
-        System.out.println(showResult);
+        logSysInfo(showResult);
         // cannot show result for stats on table that user doesn't have any privilege on
         Assertions.assertNull(showResult);
         grantRevokeSqlAsRoot("revoke DROP on db1.tbl1 from test");
@@ -1161,12 +1162,19 @@ public class PrivilegeCheckerTest {
                 "Access denied; you need (at least one of) the CREATE TABLE privilege(s) on DATABASE db1 for " +
                         "this operation");
 
+        // check refresh external table: REFRESH
+        verifyGrantRevoke(
+                "refresh external table db1.tbl1",
+                "grant REFRESH on db1.tbl1 to test",
+                "revoke REFRESH on db1.tbl1 from test",
+                "Access denied; you need (at least one of) the REFRESH privilege(s) on TABLE tbl1 for this operation");
+
         // check refresh external table: ALTER
         verifyGrantRevoke(
                 "refresh external table db1.tbl1",
                 "grant ALTER on db1.tbl1 to test",
                 "revoke ALTER on db1.tbl1 from test",
-                "Access denied; you need (at least one of) the ALTER privilege(s) on TABLE tbl1 for this operation");
+                "Access denied; you need (at least one of) the REFRESH privilege(s) on TABLE tbl1 for this operation");
 
         // check alter table: ALTER
         verifyGrantRevoke(
@@ -1209,7 +1217,7 @@ public class PrivilegeCheckerTest {
         ShowResultSet showResultSet = ShowExecutor.execute((ShowStmt) statement, ctx);
         grantRevokeSqlAsRoot("revoke SELECT on db1.tbl2 from test");
         List<List<String>> resultRows = showResultSet.getResultRows();
-        System.out.println(resultRows);
+        logSysInfo(resultRows);
         Assertions.assertEquals(1, resultRows.size());
         Assertions.assertEquals("tbl2", resultRows.get(0).get(0));
 
@@ -1263,7 +1271,7 @@ public class PrivilegeCheckerTest {
         ShowResultSet showResultSet = ShowExecutor.execute((ShowStmt) statement, ctx);
         grantRevokeSqlAsRoot("revoke SELECT on db1.tbl1 from test");
         List<List<String>> resultRows = showResultSet.getResultRows();
-        System.out.println(resultRows);
+        logSysInfo(resultRows);
         Assertions.assertEquals(1, resultRows.size());
         Assertions.assertEquals("tbl1", resultRows.get(0).get(0));
     }
@@ -1320,7 +1328,7 @@ public class PrivilegeCheckerTest {
         ctxToTestUser();
         List<List<String>> results = GlobalStateMgr.getCurrentState().getResourceMgr().getResourcesInfo();
         grantRevokeSqlAsRoot("revoke alter on resource 'hive1' from test");
-        System.out.println(results);
+        logSysInfo(results);
         Assertions.assertTrue(results.size() > 0);
         Assertions.assertTrue(results.stream().anyMatch(m -> m.contains("hive1")));
         Assertions.assertFalse(results.stream().anyMatch(m -> m.contains("hive0")));
@@ -1367,7 +1375,7 @@ public class PrivilegeCheckerTest {
         List<ConnectContext.ThreadInfo> results = connectScheduler.listConnection(connectContext, null);
         long nowMs = System.currentTimeMillis();
         for (ConnectContext.ThreadInfo threadInfo : results) {
-            System.out.println(threadInfo.toRow(nowMs, true));
+            logSysInfo(threadInfo.toRow(nowMs, true));
         }
         Assertions.assertEquals(1, results.size());
         Assertions.assertEquals("test", results.get(0).toRow(nowMs, true).get(1));
@@ -1376,7 +1384,7 @@ public class PrivilegeCheckerTest {
         grantRevokeSqlAsRoot("grant operate on system to test");
         results = connectScheduler.listConnection(connectContext, null);
         for (ConnectContext.ThreadInfo threadInfo : results) {
-            System.out.println(threadInfo.toRow(nowMs, true));
+            logSysInfo(threadInfo.toRow(nowMs, true));
         }
         Assertions.assertEquals(2, results.size());
         Assertions.assertEquals("test2", results.get(01).toRow(nowMs, true).get(1));
@@ -1838,7 +1846,7 @@ public class PrivilegeCheckerTest {
         // test OPERATE priv, can show tablet, ip:port is not hidden
         grantRevokeSqlAsRoot("grant OPERATE on SYSTEM to test");
         showResultSet = ShowExecutor.execute((ShowStmt) showTabletStmt, starRocksAssert.getCtx());
-        System.out.println(showResultSet.getResultRows().get(0));
+        logSysInfo(showResultSet.getResultRows().get(0));
         Assertions.assertTrue(showResultSet.getResultRows().get(0).toString().contains("127.0.0.1"));
 
         grantRevokeSqlAsRoot("revoke OPERATE on SYSTEM from test");
@@ -1848,18 +1856,18 @@ public class PrivilegeCheckerTest {
         showTabletSql = "show tablet " + tabletId;
         showTabletStmt = UtFrameUtils.parseStmtWithNewParser(showTabletSql, starRocksAssert.getCtx());
         showResultSet = ShowExecutor.execute((ShowStmt) showTabletStmt, starRocksAssert.getCtx());
-        System.out.println(showResultSet.getResultRows().get(0));
+        logSysInfo(showResultSet.getResultRows().get(0));
         String detailCmd = showResultSet.getResultRows().get(0).get(9);
-        System.out.println(detailCmd);
+        logSysInfo(detailCmd);
         showTabletStmt = UtFrameUtils.parseStmtWithNewParser(detailCmd, starRocksAssert.getCtx());
         showResultSet = ShowExecutor.execute((ShowStmt) showTabletStmt, starRocksAssert.getCtx());
-        System.out.println(showResultSet.getResultRows().get(0));
+        logSysInfo(showResultSet.getResultRows().get(0));
         Assertions.assertTrue(showResultSet.getResultRows().get(0).toString().contains("*:0"));
 
         // test OPERATE priv
         grantRevokeSqlAsRoot("grant OPERATE on SYSTEM to test");
         showResultSet = ShowExecutor.execute((ShowStmt) showTabletStmt, starRocksAssert.getCtx());
-        System.out.println(showResultSet.getResultRows().get(0));
+        logSysInfo(showResultSet.getResultRows().get(0));
         Assertions.assertTrue(showResultSet.getResultRows().get(0).toString().contains("127.0.0.1"));
 
         // clean
@@ -2064,7 +2072,7 @@ public class PrivilegeCheckerTest {
         stmtExecutor = new StmtExecutor(starRocksAssert.getCtx(), killStatement);
         stmtExecutor.execute();
         Assertions.assertTrue(ctx.getState().isError());
-        System.out.println(ctx.getState().getErrorMessage());
+        logSysInfo(ctx.getState().getErrorMessage());
         Assertions.assertTrue(ctx.getState().getErrorMessage().contains(
                 "Access denied;"));
 
@@ -2117,7 +2125,7 @@ public class PrivilegeCheckerTest {
             Authorizer.check(statement, ctx);
             Assertions.fail();
         } catch (SemanticException e) {
-            System.out.println(e.getMessage() + ", sql: " + alterSql);
+            logSysInfo(e.getMessage() + ", sql: " + alterSql);
             Assertions.assertTrue(
                     e.getMessage().contains("Routine load job [" + jobName + "] not found when checking privilege"));
         }
@@ -2260,7 +2268,7 @@ public class PrivilegeCheckerTest {
             Authorizer.check(statement, ctx);
             Assertions.fail();
         } catch (Exception e) {
-            System.out.println(e.getMessage() + ", sql: " + createSql);
+            logSysInfo(e.getMessage() + ", sql: " + createSql);
             Assertions.assertTrue(e.getMessage().contains(
                     "Access denied; you need (at least one of) the USAGE privilege(s) on RESOURCE my_spark for this operation"
             ));
@@ -2448,7 +2456,7 @@ public class PrivilegeCheckerTest {
             Authorizer.check(statement, starRocksAssert.getCtx());
             Assertions.fail();
         } catch (Exception e) {
-            System.out.println(e.getMessage() + ", sql: " + createBackupSql);
+            logSysInfo(e.getMessage() + ", sql: " + createBackupSql);
             Assertions.assertTrue(e.getMessage().contains(expectError));
         }
 
@@ -2462,7 +2470,7 @@ public class PrivilegeCheckerTest {
             Authorizer.check(statement, starRocksAssert.getCtx());
             Assertions.fail();
         } catch (Exception e) {
-            System.out.println(e.getMessage() + ", sql: " + createBackupSql);
+            logSysInfo(e.getMessage() + ", sql: " + createBackupSql);
             Assertions.assertTrue(e.getMessage().contains(expectError));
         }
 
@@ -2541,7 +2549,7 @@ public class PrivilegeCheckerTest {
             Authorizer.check(statement, starRocksAssert.getCtx());
             Assertions.fail();
         } catch (Exception e) {
-            System.out.println(e.getMessage() + ", sql: " + restoreSql);
+            logSysInfo(e.getMessage() + ", sql: " + restoreSql);
             Assertions.assertTrue(e.getMessage().contains(expectError));
         }
         ctxToRoot();
@@ -2553,7 +2561,7 @@ public class PrivilegeCheckerTest {
             Authorizer.check(statement, starRocksAssert.getCtx());
             Assertions.fail();
         } catch (Exception e) {
-            System.out.println(e.getMessage() + ", sql: " + restoreSql);
+            logSysInfo(e.getMessage() + ", sql: " + restoreSql);
             Assertions.assertTrue(e.getMessage().contains(expectError));
         }
         ctxToRoot();
@@ -2724,7 +2732,7 @@ public class PrivilegeCheckerTest {
         try {
             GlobalStateMgr.getCurrentState().getLocalMetastore().dropMaterializedView(statement);
         } catch (Exception e) {
-            System.out.println(e.getMessage());
+            logSysInfo(e.getMessage());
             Assertions.assertTrue(e.getMessage().contains(
                     "Access denied; you need (at least one of) the DROP privilege(s)"));
         }
@@ -2833,7 +2841,7 @@ public class PrivilegeCheckerTest {
             Authorizer.check(statement, starRocksAssert.getCtx());
             Assertions.fail();
         } catch (Exception e) {
-            System.out.println(e.getMessage());
+            logSysInfo(e.getMessage());
             Assertions.assertTrue(e.getMessage().contains(
                     "Access denied; you need (at least one of) the SELECT privilege(s) on TABLE tbl1 for this operation"));
         }
@@ -2883,7 +2891,7 @@ public class PrivilegeCheckerTest {
             UtFrameUtils.parseStmtWithNewParser("select my_udf_json_get('a', 'b')",
                     starRocksAssert.getCtx());
         } catch (Exception e) {
-            System.out.println(e.getMessage());
+            logSysInfo(e.getMessage());
             Assertions.assertTrue(e.getMessage().contains(
                     "Access denied; you need (at least one of) the USAGE privilege(s) on GLOBAL FUNCTION " +
                             "my_udf_json_get(VARCHAR,VARCHAR)"));
@@ -2957,7 +2965,7 @@ public class PrivilegeCheckerTest {
             Authorizer.check(statement, starRocksAssert.getCtx());
             Assertions.fail();
         } catch (ErrorReportException e) {
-            System.out.println(e.getMessage() + ", sql: " + selectSQL);
+            logSysInfo(e.getMessage() + ", sql: " + selectSQL);
             Assertions.assertTrue(
                     e.getMessage().contains("Access denied; you need (at least one of) the USAGE privilege(s) " +
                             "on GLOBAL FUNCTION my_udf_json_get(VARCHAR,VARCHAR) for this operation"));
@@ -3314,21 +3322,21 @@ public class PrivilegeCheckerTest {
         ctxToTestUser();
         ShowResultSet res =
                 ShowExecutor.execute((ShowStmt) UtFrameUtils.parseStmtWithNewParser("SHOW tables from db1", ctx), ctx);
-        System.out.println(res.getResultRows());
+        logSysInfo(res.getResultRows());
         Assertions.assertEquals(1, res.getResultRows().size());
         Assertions.assertEquals("tbl1", res.getResultRows().get(0).get(0));
 
         // can show mv if we have any privilege on it
         grantRevokeSqlAsRoot("grant alter on materialized view db1.mv5 to test");
         res = ShowExecutor.execute((ShowStmt) UtFrameUtils.parseStmtWithNewParser("SHOW tables from db1", ctx), ctx);
-        System.out.println(res.getResultRows());
+        logSysInfo(res.getResultRows());
         Assertions.assertEquals(2, res.getResultRows().size());
         Assertions.assertEquals("mv5", res.getResultRows().get(0).get(0));
 
         // can show view if we have any privilege on it
         grantRevokeSqlAsRoot("grant drop on view db1.view5 to test");
         res = ShowExecutor.execute((ShowStmt) UtFrameUtils.parseStmtWithNewParser("SHOW tables from db1", ctx), ctx);
-        System.out.println(res.getResultRows());
+        logSysInfo(res.getResultRows());
         Assertions.assertEquals(3, res.getResultRows().size());
         Assertions.assertEquals("view5", res.getResultRows().get(2).get(0));
         grantRevokeSqlAsRoot("revoke drop on view db1.view5 from test");
@@ -3870,7 +3878,7 @@ public class PrivilegeCheckerTest {
         context.setCurrentRoleIds(userIdentity);
         context.setThreadLocalInfo();
         String msg = restBaseAction.getErrorRespWhenUnauthorized(new AccessDeniedException());
-        System.out.println(msg);
+        logSysInfo(msg);
         Assertions.assertTrue(msg.contains("Current role(s): [role_x_11]. Inactivated role(s): [role_x_12]."));
         starRocksAssert.getCtx().setThreadLocalInfo();
 

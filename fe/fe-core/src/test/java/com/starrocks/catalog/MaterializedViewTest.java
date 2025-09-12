@@ -18,9 +18,6 @@ import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.alter.AlterJobV2;
-import com.starrocks.analysis.Expr;
-import com.starrocks.analysis.FunctionCallExpr;
-import com.starrocks.analysis.SlotRef;
 import com.starrocks.catalog.MaterializedIndex.IndexState;
 import com.starrocks.common.Config;
 import com.starrocks.common.Pair;
@@ -41,6 +38,9 @@ import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AlterTableStmt;
 import com.starrocks.sql.ast.ShowCreateTableStmt;
 import com.starrocks.sql.ast.StatementBase;
+import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.FunctionCallExpr;
+import com.starrocks.sql.ast.expression.SlotRef;
 import com.starrocks.sql.optimizer.MVTestUtils;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;
 import com.starrocks.sql.parser.SqlParser;
@@ -671,8 +671,8 @@ public class MaterializedViewTest extends StarRocksTestBase {
         ShowCreateTableStmt showCreateTableStmt =
                 (ShowCreateTableStmt) UtFrameUtils.parseStmtWithNewParser(showCreateSql, connectContext);
         ShowResultSet showResultSet = ShowExecutor.execute(showCreateTableStmt, connectContext);
-        System.out.println(showResultSet.getMetaData().toString());
-        System.out.println(showResultSet.getResultRows());
+        logSysInfo(showResultSet.getMetaData().toString());
+        logSysInfo(showResultSet.getResultRows());
     }
 
     @Test
@@ -720,7 +720,7 @@ public class MaterializedViewTest extends StarRocksTestBase {
         ShowCreateTableStmt showCreateTableStmt =
                 (ShowCreateTableStmt) UtFrameUtils.parseStmtWithNewParser(showCreateSql, connectContext);
         ShowResultSet showResultSet = ShowExecutor.execute(showCreateTableStmt, connectContext);
-        System.out.println(showResultSet.getResultRows());
+        logSysInfo(showResultSet.getResultRows());
     }
 
     private String getShowMVResult(String mvName) throws Exception {
@@ -728,11 +728,11 @@ public class MaterializedViewTest extends StarRocksTestBase {
         ShowCreateTableStmt showCreateTableStmt =
                 (ShowCreateTableStmt) UtFrameUtils.parseStmtWithNewParser(showCreateSql, connectContext);
         ShowResultSet showResultSet = ShowExecutor.execute(showCreateTableStmt, connectContext);
-        System.out.println(showResultSet.getResultRows());
+        logSysInfo(showResultSet.getResultRows());
         List<List<String>> result = showResultSet.getResultRows();
         Assertions.assertEquals(1, result.size());
         String actual = result.get(0).get(1);
-        System.out.println(actual);
+        logSysInfo(actual);
         return actual;
     }
 

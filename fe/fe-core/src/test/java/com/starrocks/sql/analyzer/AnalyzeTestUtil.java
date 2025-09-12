@@ -16,6 +16,7 @@ package com.starrocks.sql.analyzer;
 
 import com.starrocks.common.Config;
 import com.starrocks.common.ErrorReportException;
+import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.RunMode;
 import com.starrocks.sql.ast.QueryStatement;
@@ -348,6 +349,14 @@ public class AnalyzeTestUtil {
                 " DUPLICATE KEY(id) PROPERTIES ( \n" +
                 "\"replication_num\" = \"1\"\n" +
                 ");");
+
+        starRocksAssert.withTable("CREATE TABLE test_auto_increment (" +
+                "id BIGINT NOT NULL AUTO_INCREMENT," +
+                "name VARCHAR(100)" +
+                ") " +
+                "PRIMARY KEY (`id`) " +
+                "DISTRIBUTED BY HASH(`id`) BUCKETS 1 " +
+                "PROPERTIES(\"replication_num\" = \"1\");");
     }
 
     public static String getDbName() {
@@ -413,7 +422,8 @@ public class AnalyzeTestUtil {
                     connectContext.getSessionVariable().getSqlMode()).get(0);
             Analyzer.analyze(statementBase, connectContext);
             Assertions.fail("Miss semantic error exception");
-        } catch (ParsingException | SemanticException | UnsupportedException | ErrorReportException e) {
+        } catch (ParsingException | SemanticException | UnsupportedException | ErrorReportException
+                 | StarRocksConnectorException e) {
             if (!exceptMessage.equals("")) {
                 Assertions.assertTrue(e.getMessage().contains(exceptMessage), e.getMessage());
             }

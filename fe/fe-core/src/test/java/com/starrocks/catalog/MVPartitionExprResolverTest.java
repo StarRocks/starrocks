@@ -17,11 +17,6 @@ package com.starrocks.catalog;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
-import com.starrocks.analysis.Expr;
-import com.starrocks.analysis.FunctionCallExpr;
-import com.starrocks.analysis.SlotRef;
-import com.starrocks.analysis.StringLiteral;
-import com.starrocks.analysis.TableName;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.mv.analyzer.MVPartitionExpr;
 import com.starrocks.mv.analyzer.MVPartitionExprResolver;
@@ -32,6 +27,11 @@ import com.starrocks.scheduler.TaskRunBuilder;
 import com.starrocks.scheduler.mv.MVPCTBasedRefreshProcessor;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.QueryStatement;
+import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.FunctionCallExpr;
+import com.starrocks.sql.ast.expression.SlotRef;
+import com.starrocks.sql.ast.expression.StringLiteral;
+import com.starrocks.sql.ast.expression.TableName;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MVTestBase;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.utframe.UtFrameUtils;
@@ -203,7 +203,6 @@ public class MVPartitionExprResolverTest extends MVTestBase {
                         ") t group by k1",
         };
         for (String sql : sqls) {
-            System.out.println(sql);
             checkMVPartitionExprs(sql, slot, 2);
         }
     }
@@ -496,7 +495,6 @@ public class MVPartitionExprResolverTest extends MVTestBase {
 
                     MVPCTBasedRefreshProcessor processor = getPartitionBasedRefreshProcessor(taskRun);
                     Set<String> mvPartitionsToRefresh = processor.getMVTaskRunExtraMessage().getMvPartitionsToRefresh();
-                    System.out.println(mvPartitionsToRefresh);
                     Assertions.assertTrue(mvPartitionsToRefresh.contains("p20220101_20220102"));
                     Map<String, Set<String>> refBasePartitionsToRefreshMap =
                             processor.getMVTaskRunExtraMessage().getRefBasePartitionsToRefreshMap();

@@ -153,6 +153,12 @@ public class Config extends ConfigBase {
      *      default is false. if true, then compress fe.audit.log by gzip
      */
     @ConfField
+    public static boolean enable_audit_sql = true;
+    @ConfField
+    public static boolean enable_internal_sql = true;
+    @ConfField
+    public static boolean enable_sql_desensitize_in_log = false;
+    @ConfField
     public static String audit_log_dir = StarRocksFE.STARROCKS_HOME_DIR + "/log";
     @ConfField
     public static int audit_log_roll_num = 90;
@@ -417,6 +423,11 @@ public class Config extends ConfigBase {
 
     @ConfField(mutable = true)
     public static boolean enable_task_run_fe_evaluation = true;
+
+    // whether mask credential info in `information_schema.tasks` and `information_schema.task_runs`
+    // if task count is big, mask process can be time consuming
+    @ConfField(mutable = true)
+    public static boolean enable_task_info_mask_credential = true;
 
     /**
      * The max keep time of some kind of jobs.
@@ -1115,7 +1126,7 @@ public class Config extends ConfigBase {
      * Default spark dpp version
      */
     @ConfField
-    public static String spark_dpp_version = "1.0.0";
+    public static String spark_dpp_version = "3.4.0";
     /**
      * Default spark load timeout
      */
@@ -1481,7 +1492,12 @@ public class Config extends ConfigBase {
 
     @ConfField(mutable = true, comment = "Whether to prefer string type for fixed length varchar column " +
             "in materialized view creation/ctas")
-    public static boolean transform_type_prefer_string_for_varchar = false;
+    public static boolean transform_type_prefer_string_for_varchar = true;
+
+    @ConfField(mutable = true, comment = "Whether materialized view rewrite should consider underlying table data layout " +
+            "(e.g., colocation property, table sort keys) when deciding rewrite applicability: enable/disable/force"
+    )
+    public static String mv_rewrite_consider_data_layout_mode = "enable";
 
     /**
      * The number of query retries.
@@ -2122,7 +2138,7 @@ public class Config extends ConfigBase {
      * The size of the thread-pool which will be used to refresh statistic caches
      */
     @ConfField
-    public static int statistic_cache_thread_pool_size = 10;
+    public static int statistic_cache_thread_pool_size = 5;
 
     @ConfField
     public static int slot_manager_response_thread_pool_size = 16;
@@ -2144,6 +2160,9 @@ public class Config extends ConfigBase {
      */
     @ConfField(mutable = true)
     public static long statistic_update_interval_sec = 24L * 60L * 60L;
+
+    @ConfField(mutable = true)
+    public static boolean enable_statistic_cache_refresh_after_write = false;
 
     @ConfField(mutable = true)
     public static long statistic_collect_too_many_version_sleep = 600000; // 10min
@@ -2974,8 +2993,8 @@ public class Config extends ConfigBase {
     public static int lake_publish_delete_txnlog_max_threads = 16;
 
     @ConfField(mutable = true, comment =
-            "Consider balancing between workers during tablet migration in shared data mode. Default: false")
-    public static boolean lake_enable_balance_tablets_between_workers = false;
+            "Consider balancing between workers during tablet migration in shared data mode. Default: true")
+    public static boolean lake_enable_balance_tablets_between_workers = true;
 
     @ConfField(mutable = true, comment =
             "Threshold of considering the balancing between workers in shared-data mode, The imbalance factor is " +
@@ -3378,6 +3397,9 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true)
     public static String default_mv_partition_refresh_strategy = "strict";
 
+    @ConfField(mutable = true)
+    public static String default_mv_refresh_mode = "pct";
+
     @ConfField(mutable = true, comment = "Check the schema of materialized view's base table strictly or not")
     public static boolean enable_active_materialized_view_schema_strict_check = true;
 
@@ -3409,6 +3431,13 @@ public class Config extends ConfigBase {
      */
     @ConfField(mutable = true)
     public static boolean mv_auto_analyze_async = true;
+
+    /**
+     * Creator-based: record the creator(user) of MV, refresh the MV with same user
+     * Root-based: always use the ROOT to refresh the MV
+     */
+    @ConfField(mutable = true, comment = "Whether to use the creator-based authorization or root for MV refresh")
+    public static boolean mv_use_creator_based_authorization = true;
 
     /**
      * To prevent the external catalog from displaying too many entries in the grantsTo system table,
@@ -3797,6 +3826,12 @@ public class Config extends ConfigBase {
     public static long default_statistics_output_row_count = 1L * 1000 * 1000 * 1000;
 
     /**
+     * Whether enable dynamic tablet.
+     */
+    @ConfField(mutable = true, comment = "Whether enable dynamic tablet.")
+    public static boolean enable_dynamic_tablet = false;
+
+    /**
      * The default scheduler interval for dynamic tablet jobs.
      */
     @ConfField(mutable = false, comment = "The default scheduler interval for dynamic tablet jobs.")
@@ -3824,7 +3859,7 @@ public class Config extends ConfigBase {
      * The max number of new tablets that an old tablet can be split into.
      */
     @ConfField(mutable = true, comment = "The max number of new tablets that an old tablet can be split into.")
-    public static int dynamic_tablet_max_split_count = 1024;
+    public static int dynamic_tablet_max_split_count = 8;
 
     /**
      * Whether to enable tracing historical nodes when cluster scale
@@ -3849,4 +3884,7 @@ public class Config extends ConfigBase {
     @ConfField(comment = "Enable case-insensitive catalog/database/table names. " +
             "Only configurable during cluster initialization, immutable once set.")
     public static boolean enable_table_name_case_insensitive = false;
+
+    @ConfField(mutable = true, comment = "Enable desensitize sql in query dump")
+    public static boolean enable_desensitize_query_dump = false;
 }

@@ -66,7 +66,6 @@ import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
-import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Executors;
@@ -368,17 +367,13 @@ public class TaskManager implements MemoryTrackable {
         ExecPlan execPlan = getMVRefreshExecPlan(taskRun, task, option, statement);
         String explainString = StmtExecutor.buildExplainString(execPlan, statement,
                 ConnectContext.get(), ResourceGroupClassifier.QueryType.MV, statement.getExplainLevel());
-
-        // append pctmvToRefreshedPartitions
-        if (statement.getExplainLevel() == StatementBase.ExplainLevel.VERBOSE) {
-            Optional<Set<String>> pctmvToRefreshedPartitions = getPCTMVToRefreshedPartitions(taskRun);
-            if (pctmvToRefreshedPartitions.isPresent()) {
-                explainString += "\n" + "MVToRefreshedPartitions: " + pctmvToRefreshedPartitions.get();
-            }
+        // add extra info
+        String extraInfo = getExtraExplainInfo(taskRun, statement);
+        if (!Strings.isNullOrEmpty(extraInfo)) {
+            explainString += "\n" + extraInfo;
         }
         return explainString;
     }
-
 
     public TaskRun buildTaskRun(Task task, ExecuteOption option) {
         return TaskRunBuilder.newBuilder(task)
@@ -387,13 +382,22 @@ public class TaskManager implements MemoryTrackable {
                 .setConnectContext(ConnectContext.get()).build();
     }
 
-    private Optional<Set<String>> getPCTMVToRefreshedPartitions(TaskRun taskRun) {
-        MVTaskRunProcessor mvRefreshProcessor = (MVTaskRunProcessor) taskRun.getProcessor();
+    private String getExtraExplainInfo(TaskRun taskRun,
+                                       StatementBase statement) {
+        TaskRunProcessor taskRunProcessor = taskRun.getProcessor();
+        if (taskRunProcessor == null) {
+            return "";
+        }
         try {
-            return Optional.of(mvRefreshProcessor.getPCTMVToRefreshedPartitions(taskRun.buildTaskRunContext()));
+            if (taskRunProcessor instanceof MVTaskRunProcessor) {
+                MVTaskRunProcessor mvRefreshProcessor = (MVTaskRunProcessor) taskRun.getProcessor();
+                return mvRefreshProcessor.getExtraExplainInfo(statement);
+            } else {
+                return "";
+            }
         } catch (Exception e) {
-            LOG.error("Failed to get PCTMVToRefreshedPartitions", e);
-            return Optional.empty();
+            LOG.error("Failed to get getExtraExplainInfo:", e);
+            return "";
         }
     }
 
@@ -419,7 +423,7 @@ public class TaskManager implements MemoryTrackable {
         TaskRunContext taskRunContext = taskRun.buildTaskRunContext();
         try {
             // prepare the task run context
-            mvRefreshProcessor.prepare(taskRunContext);
+            taskRunContext = mvRefreshProcessor.prepare(taskRunContext);
             // execute the task run
             return mvRefreshProcessor.getMVRefreshExecPlan();
         } catch (Exception e) {

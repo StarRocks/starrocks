@@ -14,44 +14,62 @@
 
 package com.starrocks.sql.ast;
 
-import com.starrocks.analysis.AnalyticExpr;
-import com.starrocks.analysis.ArithmeticExpr;
-import com.starrocks.analysis.ArraySliceExpr;
-import com.starrocks.analysis.ArrowExpr;
-import com.starrocks.analysis.BetweenPredicate;
-import com.starrocks.analysis.BinaryPredicate;
-import com.starrocks.analysis.CaseExpr;
-import com.starrocks.analysis.CastExpr;
-import com.starrocks.analysis.CloneExpr;
-import com.starrocks.analysis.CollectionElementExpr;
-import com.starrocks.analysis.CompoundPredicate;
-import com.starrocks.analysis.DictQueryExpr;
-import com.starrocks.analysis.ExistsPredicate;
-import com.starrocks.analysis.Expr;
-import com.starrocks.analysis.FunctionCallExpr;
-import com.starrocks.analysis.GroupByClause;
-import com.starrocks.analysis.GroupingFunctionCallExpr;
-import com.starrocks.analysis.InPredicate;
-import com.starrocks.analysis.InformationFunction;
-import com.starrocks.analysis.IsNullPredicate;
-import com.starrocks.analysis.LikePredicate;
-import com.starrocks.analysis.LimitElement;
-import com.starrocks.analysis.LiteralExpr;
-import com.starrocks.analysis.MatchExpr;
-import com.starrocks.analysis.MultiInPredicate;
-import com.starrocks.analysis.NamedArgument;
-import com.starrocks.analysis.OrderByElement;
-import com.starrocks.analysis.Parameter;
-import com.starrocks.analysis.SetVarHint;
-import com.starrocks.analysis.SlotRef;
-import com.starrocks.analysis.SubfieldExpr;
-import com.starrocks.analysis.Subquery;
-import com.starrocks.analysis.TimestampArithmeticExpr;
-import com.starrocks.analysis.UserVariableExpr;
-import com.starrocks.analysis.UserVariableHint;
-import com.starrocks.analysis.VariableExpr;
 import com.starrocks.connector.parser.trino.PlaceholderExpr;
-import com.starrocks.sql.ShowTemporaryTableStmt;
+import com.starrocks.sql.ast.expression.AnalyticExpr;
+import com.starrocks.sql.ast.expression.ArithmeticExpr;
+import com.starrocks.sql.ast.expression.ArrayExpr;
+import com.starrocks.sql.ast.expression.ArraySliceExpr;
+import com.starrocks.sql.ast.expression.ArrowExpr;
+import com.starrocks.sql.ast.expression.BetweenPredicate;
+import com.starrocks.sql.ast.expression.BinaryPredicate;
+import com.starrocks.sql.ast.expression.BoolLiteral;
+import com.starrocks.sql.ast.expression.CaseExpr;
+import com.starrocks.sql.ast.expression.CastExpr;
+import com.starrocks.sql.ast.expression.CloneExpr;
+import com.starrocks.sql.ast.expression.CollectionElementExpr;
+import com.starrocks.sql.ast.expression.CompoundPredicate;
+import com.starrocks.sql.ast.expression.DateLiteral;
+import com.starrocks.sql.ast.expression.DecimalLiteral;
+import com.starrocks.sql.ast.expression.DefaultValueExpr;
+import com.starrocks.sql.ast.expression.DictMappingExpr;
+import com.starrocks.sql.ast.expression.DictQueryExpr;
+import com.starrocks.sql.ast.expression.DictionaryGetExpr;
+import com.starrocks.sql.ast.expression.ExistsPredicate;
+import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.FieldReference;
+import com.starrocks.sql.ast.expression.FloatLiteral;
+import com.starrocks.sql.ast.expression.FunctionCallExpr;
+import com.starrocks.sql.ast.expression.GroupingFunctionCallExpr;
+import com.starrocks.sql.ast.expression.InPredicate;
+import com.starrocks.sql.ast.expression.InformationFunction;
+import com.starrocks.sql.ast.expression.IntLiteral;
+import com.starrocks.sql.ast.expression.IntervalLiteral;
+import com.starrocks.sql.ast.expression.IsNullPredicate;
+import com.starrocks.sql.ast.expression.LambdaArgument;
+import com.starrocks.sql.ast.expression.LambdaFunctionExpr;
+import com.starrocks.sql.ast.expression.LargeIntLiteral;
+import com.starrocks.sql.ast.expression.LargeStringLiteral;
+import com.starrocks.sql.ast.expression.LikePredicate;
+import com.starrocks.sql.ast.expression.LimitElement;
+import com.starrocks.sql.ast.expression.LiteralExpr;
+import com.starrocks.sql.ast.expression.MapExpr;
+import com.starrocks.sql.ast.expression.MatchExpr;
+import com.starrocks.sql.ast.expression.MaxLiteral;
+import com.starrocks.sql.ast.expression.MultiInPredicate;
+import com.starrocks.sql.ast.expression.NamedArgument;
+import com.starrocks.sql.ast.expression.NullLiteral;
+import com.starrocks.sql.ast.expression.Parameter;
+import com.starrocks.sql.ast.expression.PlaceHolderExpr;
+import com.starrocks.sql.ast.expression.SetVarHint;
+import com.starrocks.sql.ast.expression.SlotRef;
+import com.starrocks.sql.ast.expression.StringLiteral;
+import com.starrocks.sql.ast.expression.SubfieldExpr;
+import com.starrocks.sql.ast.expression.Subquery;
+import com.starrocks.sql.ast.expression.TimestampArithmeticExpr;
+import com.starrocks.sql.ast.expression.UserVariableExpr;
+import com.starrocks.sql.ast.expression.UserVariableHint;
+import com.starrocks.sql.ast.expression.VarBinaryLiteral;
+import com.starrocks.sql.ast.expression.VariableExpr;
 import com.starrocks.sql.ast.feedback.AddPlanAdvisorStmt;
 import com.starrocks.sql.ast.feedback.ClearPlanAdvisorStmt;
 import com.starrocks.sql.ast.feedback.DelPlanAdvisorStmt;
@@ -1274,6 +1292,10 @@ public interface AstVisitorExtendInterface<R, C> extends AstVisitor<R, C> {
         return visitNode(clause, context);
     }
 
+    default R visitAlterTableAutoIncrementClause(AlterTableAutoIncrementClause clause, C context) {
+        return visitNode(clause, context);
+    }
+
     default R visitAddRollupClause(AddRollupClause clause, C context) {
         return visitNode(clause, context);
     }
@@ -1434,20 +1456,50 @@ public interface AstVisitorExtendInterface<R, C> extends AstVisitor<R, C> {
         return visitRelation(node, context);
     }
 
-    // ------------------------------------------- Expression --------------------------------==------------------------
-
+    // ------------------------------------------- Expression ----------------------------------------
     default R visitExpression(Expr node, C context) {
         return visitNode(node, context);
     }
 
-    default R visitArithmeticExpr(ArithmeticExpr node, C context) {
+    // ------------------------------------------- References ----------------------------------------
+    default R visitFieldReference(FieldReference node, C context) {
         return visitExpression(node, context);
     }
 
-    default R visitAnalyticExpr(AnalyticExpr node, C context) {
+    default R visitPlaceholderExpr(PlaceholderExpr node, C context) {
         return visitExpression(node, context);
     }
 
+    default R visitPlaceHolderExpr(PlaceHolderExpr node, C context) {
+        return visitExpression(node, context);
+    }
+
+    default R visitParameterExpr(Parameter node, C context) {
+        return visitExpression(node, context);
+    }
+
+    default R visitSlot(SlotRef node, C context) {
+        return visitExpression(node, context);
+    }
+
+    default R visitNamedArgument(NamedArgument node, C context) {
+        return visitExpression(node, context);
+    }
+
+    // ------------------------------------------- Functions ----------------------------------------
+    default R visitFunctionCall(FunctionCallExpr node, C context) {
+        return visitExpression(node, context);
+    }
+
+    default R visitGroupingFunctionCall(GroupingFunctionCallExpr node, C context) {
+        return visitFunctionCall(node, context);
+    }
+
+    default R visitInformationFunction(InformationFunction node, C context) {
+        return visitExpression(node, context);
+    }
+
+    // ------------------------------------------- Collections --------------------------------------
     default R visitArrayExpr(ArrayExpr node, C context) {
         return visitExpression(node, context);
     }
@@ -1468,11 +1520,132 @@ public interface AstVisitorExtendInterface<R, C> extends AstVisitor<R, C> {
         return visitExpression(node, context);
     }
 
-    default R visitBetweenPredicate(BetweenPredicate node, C context) {
+    default R visitSubfieldExpr(SubfieldExpr node, C context) {
         return visitExpression(node, context);
     }
 
+    // ------------------------------------------- Predicates ---------------------------------------
+    default R visitPredicate(Expr node, C context) {
+        return visitExpression(node, context);
+    }
+
+    default R visitBetweenPredicate(BetweenPredicate node, C context) {
+        return visitPredicate(node, context);
+    }
+
     default R visitBinaryPredicate(BinaryPredicate node, C context) {
+        return visitPredicate(node, context);
+    }
+
+    default R visitCompoundPredicate(CompoundPredicate node, C context) {
+        return visitPredicate(node, context);
+    }
+
+    default R visitExistsPredicate(ExistsPredicate node, C context) {
+        return visitPredicate(node, context);
+    }
+
+    default R visitInPredicate(InPredicate node, C context) {
+        return visitPredicate(node, context);
+    }
+
+    default R visitMultiInPredicate(MultiInPredicate node, C context) {
+        return visitPredicate(node, context);
+    }
+
+    default R visitIsNullPredicate(IsNullPredicate node, C context) {
+        return visitPredicate(node, context);
+    }
+
+    default R visitLikePredicate(LikePredicate node, C context) {
+        return visitPredicate(node, context);
+    }
+
+    // ------------------------------------------- Literal ------------------------------------------
+    default R visitLiteral(LiteralExpr node, C context) {
+        return visitExpression(node, context);
+    }
+
+    default R visitDefaultValueExpr(DefaultValueExpr node, C context) {
+        return visitExpression(node, context);
+    }
+
+    default R visitBoolLiteral(BoolLiteral node, C context) {
+        return visitLiteral(node, context);
+    }
+
+    default R visitDateLiteral(DateLiteral node, C context) {
+        return visitLiteral(node, context);
+    }
+
+    default R visitIntLiteral(IntLiteral node, C context) {
+        return visitLiteral(node, context);
+    }
+
+    default R visitDecimalLiteral(DecimalLiteral node, C context) {
+        return visitLiteral(node, context);
+    }
+
+    default R visitVarBinaryLiteral(VarBinaryLiteral node, C context) {
+        return visitLiteral(node, context);
+    }
+
+    default R visitLargeIntLiteral(LargeIntLiteral node, C context) {
+        return visitLiteral(node, context);
+    }
+
+    default R visitNullLiteral(NullLiteral node, C context) {
+        return visitLiteral(node, context);
+    }
+
+    default R visitFloatLiteral(FloatLiteral node, C context) {
+        return visitLiteral(node, context);
+    }
+
+    default R visitStringLiteral(StringLiteral node, C context) {
+        return visitLiteral(node, context);
+    }
+
+    default R visitLargeStringLiteral(LargeStringLiteral node, C context) {
+        return visitStringLiteral(node, context);
+    }
+
+    default R visitMaxLiteral(MaxLiteral node, C context) {
+        return visitLiteral(node, context);
+    }
+
+    default R visitIntervalLiteral(IntervalLiteral node, C context) {
+        return visitLiteral(node, context);
+    }
+
+    // ------------------------------------------- Lambda -----------------------------------------
+    default R visitLambdaArguments(LambdaArgument node, C context) {
+        return visitExpression(node, context);
+    }
+
+    default R visitLambdaFunctionExpr(LambdaFunctionExpr node, C context) {
+        return visitExpression(node, context);
+    }
+
+    // ------------------------------------------- Dict -------------------------------------------
+    default R visitDictionaryGetExpr(DictionaryGetExpr node, C context) {
+        return visitExpression(node, context);
+    }
+
+    default R visitDictQueryExpr(DictQueryExpr node, C context) {
+        return visitExpression(node, context);
+    }
+
+    default R visitDictMappingExpr(DictMappingExpr node, C context) {
+        return visitExpression(node, context);
+    }
+
+    // ------------------------------------------- Others -------------------------------------------
+    default R visitArithmeticExpr(ArithmeticExpr node, C context) {
+        return visitExpression(node, context);
+    }
+
+    default R visitAnalyticExpr(AnalyticExpr node, C context) {
         return visitExpression(node, context);
     }
 
@@ -1484,71 +1657,7 @@ public interface AstVisitorExtendInterface<R, C> extends AstVisitor<R, C> {
         return visitExpression(node, context);
     }
 
-    default R visitCompoundPredicate(CompoundPredicate node, C context) {
-        return visitExpression(node, context);
-    }
-
-    default R visitDefaultValueExpr(DefaultValueExpr node, C context) {
-        return visitExpression(node, context);
-    }
-
-    default R visitExistsPredicate(ExistsPredicate node, C context) {
-        return visitExpression(node, context);
-    }
-
-    default R visitFieldReference(FieldReference node, C context) {
-        return visitExpression(node, context);
-    }
-
-    default R visitFunctionCall(FunctionCallExpr node, C context) {
-        return visitExpression(node, context);
-    }
-
-    default R visitGroupingFunctionCall(GroupingFunctionCallExpr node, C context) {
-        return visitExpression(node, context);
-    }
-
-    default R visitInformationFunction(InformationFunction node, C context) {
-        return visitExpression(node, context);
-    }
-
-    default R visitInPredicate(InPredicate node, C context) {
-        return visitExpression(node, context);
-    }
-
-    default R visitMultiInPredicate(MultiInPredicate node, C context) {
-        return visitExpression(node, context);
-    }
-
-    default R visitIsNullPredicate(IsNullPredicate node, C context) {
-        return visitExpression(node, context);
-    }
-
-    default R visitLikePredicate(LikePredicate node, C context) {
-        return visitExpression(node, context);
-    }
-
     default R visitMatchExpr(MatchExpr node, C context) {
-        return visitExpression(node, context);
-    }
-
-    default R visitLambdaFunctionExpr(LambdaFunctionExpr node, C context) {
-        return visitExpression(node, context);
-    }
-
-    default R visitLambdaArguments(LambdaArgument node, C context) {
-        return visitExpression(node, context);
-    }
-
-    default R visitLiteral(LiteralExpr node, C context) {
-        return visitExpression(node, context);
-    }
-
-    default R visitSlot(SlotRef node, C context) {
-        return visitExpression(node, context);
-    }
-
-    default R visitSubfieldExpr(SubfieldExpr node, C context) {
         return visitExpression(node, context);
     }
 
@@ -1569,22 +1678,6 @@ public interface AstVisitorExtendInterface<R, C> extends AstVisitor<R, C> {
     }
 
     default R visitCloneExpr(CloneExpr node, C context) {
-        return visitExpression(node, context);
-    }
-
-    default R visitPlaceholderExpr(PlaceholderExpr node, C context) {
-        return visitExpression(node, context);
-    }
-
-    default R visitParameterExpr(Parameter node, C context) {
-        return visitExpression(node, context);
-    }
-
-    default R visitDictionaryGetExpr(DictionaryGetExpr node, C context) {
-        return visitExpression(node, context);
-    }
-
-    default R visitNamedArgument(NamedArgument node, C context) {
         return visitExpression(node, context);
     }
 
@@ -1625,7 +1718,6 @@ public interface AstVisitorExtendInterface<R, C> extends AstVisitor<R, C> {
     }
 
     // ------------------------------------------- AST -----------------------------------------------------------------
-
     default R visitLimitElement(LimitElement node, C context) {
         return null;
     }
@@ -1636,10 +1728,6 @@ public interface AstVisitorExtendInterface<R, C> extends AstVisitor<R, C> {
 
     default R visitGroupByClause(GroupByClause node, C context) {
         return null;
-    }
-
-    default R visitDictQueryExpr(DictQueryExpr node, C context) {
-        return visitExpression(node, context);
     }
 
     default R visitHintNode(HintNode node, C context) {

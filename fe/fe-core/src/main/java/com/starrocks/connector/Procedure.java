@@ -14,7 +14,7 @@
 
 package com.starrocks.connector;
 
-import com.starrocks.catalog.Type;
+import com.starrocks.connector.iceberg.procedure.NamedArgument;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 
@@ -24,9 +24,9 @@ import java.util.Map;
 public abstract class Procedure {
     private final String databaseName;
     private final String procedureName;
-    private final List<Argument> arguments;
+    private final List<NamedArgument> arguments;
 
-    public Procedure(String databaseName, String procedureName, List<Argument> arguments) {
+    public Procedure(String databaseName, String procedureName, List<NamedArgument> arguments) {
         this.databaseName = databaseName;
         this.procedureName = procedureName;
         this.arguments = arguments;
@@ -42,32 +42,8 @@ public abstract class Procedure {
 
     public abstract void execute(ConnectContext context, Map<String, ConstantOperator> args);
 
-    public List<Argument> getArguments() {
+    public List<NamedArgument> getArguments() {
         return this.arguments;
-    }
-
-    public static class Argument {
-        private final String name;
-        private final Type type;
-        private final boolean required;
-
-        public Argument(String name, Type type, boolean required) {
-            this.name = name;
-            this.type = type;
-            this.required = required;
-        }
-
-        public String getName() {
-            return this.name;
-        }
-
-        public Type getType() {
-            return this.type;
-        }
-
-        public boolean isRequired() {
-            return this.required;
-        }
     }
 }
 

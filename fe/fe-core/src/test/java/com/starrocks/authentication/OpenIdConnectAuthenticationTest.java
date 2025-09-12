@@ -46,7 +46,8 @@ public class OpenIdConnectAuthenticationTest {
         serializer.writeInt1(0);
         serializer.writeLenEncodedString(openIdConnectJson);
         try {
-            provider.authenticate(new ConnectContext(), new UserIdentity("harbor", "%"), serializer.toArray());
+            provider.authenticate(new ConnectContext().getAccessControlContext(), new UserIdentity("harbor", "%"),
+                    serializer.toArray());
         } catch (Exception e) {
             Assertions.fail(e.getMessage());
         }
@@ -87,9 +88,8 @@ public class OpenIdConnectAuthenticationTest {
         JWKSet jwkSet = mockJwkMgr.getJwkSet("jwks.json");
 
         try {
-            OpenIdConnectVerifier.verify(openIdConnectJson, "harbor",
-                    jwkSet, "preferred_username", new String[] {"http://localhost:38080/realms/master",
-                            "foo"}, new String[] {"12345", "56789"});
+            OpenIdConnectVerifier.verify(openIdConnectJson, "harbor", jwkSet, "preferred_username",
+                    new String[] {"http://localhost:38080/realms/master", "foo"}, new String[] {"12345", "56789"});
         } catch (Exception e) {
             Assertions.fail(e.getMessage());
         }

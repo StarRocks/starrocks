@@ -15,11 +15,11 @@
 
 package com.starrocks.sql.ast;
 
-import com.starrocks.analysis.Expr;
-import com.starrocks.analysis.ExprSubstitutionMap;
-import com.starrocks.analysis.SlotRef;
-import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.system.information.InfoSchemaDb;
+import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.ExprSubstitutionMap;
+import com.starrocks.sql.ast.expression.SlotRef;
+import com.starrocks.sql.ast.expression.TableName;
 import com.starrocks.sql.parser.NodePosition;
 
 import static com.starrocks.common.util.Util.normalizeName;

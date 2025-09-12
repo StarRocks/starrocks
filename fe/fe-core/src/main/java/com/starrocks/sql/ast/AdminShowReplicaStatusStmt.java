@@ -16,8 +16,8 @@
 package com.starrocks.sql.ast;
 
 import com.google.common.collect.Lists;
-import com.starrocks.analysis.Expr;
-import com.starrocks.analysis.TableRef;
+import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.TableRef;
 import com.starrocks.sql.parser.NodePosition;
 
 import java.util.List;

@@ -122,7 +122,7 @@ public:
 
     template <typename T>
     Status do_visit(DecimalV3Column<T>* dst) {
-        using Container = typename DecimalV3Column<T>::Container;
+        using Container = typename DecimalV3Column<T>::ImmContainer;
         using ColumnType = DecimalV3Column<T>;
 
         auto& data = dst->get_data();
@@ -130,7 +130,7 @@ public:
         data.resize(output + _perm.size());
 
         for (auto& p : _perm) {
-            const Container& container = down_cast<const ColumnType*>(_columns[PermTraits::chunk(p)])->get_data();
+            const Container& container = down_cast<const ColumnType*>(_columns[PermTraits::chunk(p)])->immutable_data();
             data[output++] = container[PermTraits::index(p)];
         }
 
@@ -139,7 +139,7 @@ public:
 
     template <typename T>
     Status do_visit(FixedLengthColumnBase<T>* dst) {
-        using Container = typename FixedLengthColumnBase<T>::Container;
+        using Container = typename FixedLengthColumnBase<T>::ImmContainer;
         using ColumnType = FixedLengthColumnBase<T>;
 
         auto& data = dst->get_data();
@@ -147,7 +147,7 @@ public:
         data.resize(output + _perm.size());
 
         for (auto& p : _perm) {
-            const Container& container = down_cast<const ColumnType*>(_columns[PermTraits::chunk(p)])->get_data();
+            const Container& container = down_cast<const ColumnType*>(_columns[PermTraits::chunk(p)])->immutable_data();
             data[output++] = container[PermTraits::index(p)];
         }
 

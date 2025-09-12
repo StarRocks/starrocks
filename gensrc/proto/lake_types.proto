@@ -45,6 +45,7 @@ message FileMetaPB {
     optional int64 size = 2;
     // Whether this file shared by multiple tablets
     optional bool shared = 3 [default=false];
+    optional bytes encryption_meta = 4;
 }
 
 message DelvecMetadataPB {
@@ -202,6 +203,7 @@ message TxnLogPB {
         // for partial update, record dest rewrite segment names to avoid gc
         repeated string rewrite_segments = 4;
         repeated bytes del_encryption_metas = 5;
+        repeated FileMetaPB ssts = 6;
     }
 
     message OpCompaction {
@@ -219,6 +221,7 @@ message TxnLogPB {
         // x and y might be new segments
         optional int32 new_segment_offset = 6;
         optional int32 new_segment_count = 7;
+        repeated FileMetaPB ssts = 8;
     }
 
     message OpSchemaChange {
@@ -256,6 +259,7 @@ message TxnLogPB {
     optional OpAlterMetadata op_alter_metadata = 6;
     optional OpReplication op_replication = 7;
     optional int64 partition_id = 8;
+    optional PUniqueId load_id = 9;
 }
 
 message CombinedTxnLogPB {
@@ -273,6 +277,7 @@ message TxnInfoPB {
     optional bool force_publish = 5; // only used for compaction
     optional bool rebuild_pindex = 6;
     optional int64 gtid = 7 [default=0];
+    repeated PUniqueId load_ids = 8;
 }
 
 message SplittingTabletInfoPB {

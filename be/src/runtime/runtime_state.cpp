@@ -70,6 +70,9 @@
 namespace starrocks {
 
 // for ut only
+RuntimeState::RuntimeState() : _obj_pool(new ObjectPool()) {}
+
+// for ut only
 RuntimeState::RuntimeState(const TUniqueId& fragment_instance_id, const TQueryOptions& query_options,
                            const TQueryGlobals& query_globals, ExecEnv* exec_env)
         : _unreported_error_idx(0),
@@ -523,7 +526,8 @@ void RuntimeState::update_load_datacache_metrics(TReportExecStatusParams* load_p
         }
 #endif // USE_STAROS
     } else {
-        const LocalCacheEngine* cache = DataCache::GetInstance()->local_cache();
+        // TODO: mem_metrics + disk_metrics
+        const LocalCacheEngine* cache = DataCache::GetInstance()->local_disk_cache();
         if (cache != nullptr && cache->is_initialized()) {
             TDataCacheMetrics t_metrics{};
             DataCacheUtils::set_metrics_from_thrift(t_metrics, cache->cache_metrics());

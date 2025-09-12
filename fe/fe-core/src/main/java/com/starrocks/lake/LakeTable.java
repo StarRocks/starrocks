@@ -168,6 +168,11 @@ public class LakeTable extends OlapTable {
             properties.put(PropertyAnalyzer.PROPERTIES_PERSISTENT_INDEX_TYPE, getPersistentIndexTypeString());
         }
 
+        Boolean enableDynamicTablet = getEnableDynamicTablet();
+        if (enableDynamicTablet != null && enableDynamicTablet) {
+            properties.put(PropertyAnalyzer.PROPERTIES_ENABLE_DYNAMIC_TABLET, enableDynamicTablet.toString());
+        }
+
         return properties;
     }
 
@@ -201,17 +206,6 @@ public class LakeTable extends OlapTable {
     @Override
     public List<List<Long>> getArbitraryTabletBucketsSeq() throws DdlException {
         return Lists.newArrayList();
-    }
-
-    public List<Long> getShardGroupIds() {
-        List<Long> shardGroupIds = new ArrayList<>();
-        for (Partition p : getAllPartitions()) {
-            for (MaterializedIndex index : p.getDefaultPhysicalPartition()
-                    .getMaterializedIndices(MaterializedIndex.IndexExtState.ALL)) {
-                shardGroupIds.add(index.getShardGroupId());
-            }
-        }
-        return shardGroupIds;
     }
 
     @Override

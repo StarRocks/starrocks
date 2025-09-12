@@ -544,6 +544,7 @@ public class TabletSchedulerTest {
 
         TabletScheduler tabletScheduler = new TabletScheduler(new TabletSchedulerStat());
         Deencapsulation.invoke(tabletScheduler, "addToPendingTablets", ctx);
+        Assertions.assertEquals(1L, tabletScheduler.getPendingNum(TabletSchedCtx.Type.REPAIR));
 
         Deencapsulation.invoke(tabletScheduler, "schedulePendingTablets");
         Assertions.assertEquals(TabletSchedCtx.State.UNEXPECTED, ctx.getState());
@@ -573,6 +574,7 @@ public class TabletSchedulerTest {
 
         TabletScheduler tabletScheduler = new TabletScheduler(new TabletSchedulerStat());
         Deencapsulation.invoke(tabletScheduler, "addToRunningTablets", ctx);
+        Assertions.assertEquals(1L, tabletScheduler.getRunningNum(TabletSchedCtx.Type.REPAIR));
 
         tabletScheduler.finishCloneTask(task, new TFinishTaskRequest());
         Assertions.assertEquals(TabletSchedCtx.State.UNEXPECTED, ctx.getState());

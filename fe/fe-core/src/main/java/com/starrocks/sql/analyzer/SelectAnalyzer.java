@@ -18,17 +18,6 @@ import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
 import com.google.common.collect.Streams;
-import com.starrocks.analysis.AnalyticExpr;
-import com.starrocks.analysis.CastExpr;
-import com.starrocks.analysis.Expr;
-import com.starrocks.analysis.FunctionCallExpr;
-import com.starrocks.analysis.GroupByClause;
-import com.starrocks.analysis.GroupingFunctionCallExpr;
-import com.starrocks.analysis.IntLiteral;
-import com.starrocks.analysis.LimitElement;
-import com.starrocks.analysis.OrderByElement;
-import com.starrocks.analysis.SlotRef;
-import com.starrocks.analysis.UserVariableExpr;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.Type;
@@ -36,11 +25,22 @@ import com.starrocks.common.FeConstants;
 import com.starrocks.common.TreeNode;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.AstVisitorExtendInterface;
-import com.starrocks.sql.ast.FieldReference;
+import com.starrocks.sql.ast.GroupByClause;
+import com.starrocks.sql.ast.OrderByElement;
 import com.starrocks.sql.ast.ParseNode;
 import com.starrocks.sql.ast.Relation;
 import com.starrocks.sql.ast.SelectList;
 import com.starrocks.sql.ast.SelectListItem;
+import com.starrocks.sql.ast.expression.AnalyticExpr;
+import com.starrocks.sql.ast.expression.CastExpr;
+import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.FieldReference;
+import com.starrocks.sql.ast.expression.FunctionCallExpr;
+import com.starrocks.sql.ast.expression.GroupingFunctionCallExpr;
+import com.starrocks.sql.ast.expression.IntLiteral;
+import com.starrocks.sql.ast.expression.LimitElement;
+import com.starrocks.sql.ast.expression.SlotRef;
+import com.starrocks.sql.ast.expression.UserVariableExpr;
 import com.starrocks.sql.common.StarRocksPlannerException;
 import org.apache.commons.collections4.CollectionUtils;
 
@@ -48,15 +48,17 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 import java.util.stream.Stream;
 
-import static com.starrocks.analysis.Expr.pushNegationToOperands;
+import static com.starrocks.sql.ast.expression.Expr.pushNegationToOperands;
 import static com.starrocks.sql.common.ErrorType.INTERNAL_ERROR;
 
 public class SelectAnalyzer {
@@ -808,27 +810,65 @@ public class SelectAnalyzer {
         ExpressionAnalyzer.analyzeExpression(expr, analyzeState, scope, session);
     }
 
+    // Use a HashSet to store unique pairs of (name, originExpression)
+    // Use a custom key class or a string representation for the pair
+    private static class NameExprKey {
+        private final String name;
+        private final Expr originExpr;
+
+        NameExprKey(String name, Expr originExpr) {
+            this.name = name;
+            this.originExpr = originExpr;
+        }
+
+        @Override
+        public boolean equals(Object o) {
+            if (this == o) {
+                return true;
+            }
+            if (o == null || getClass() != o.getClass()) {
+                return false;
+            }
+            NameExprKey that = (NameExprKey) o;
+            return Objects.equals(name, that.name) &&
+                    Objects.equals(originExpr, that.originExpr);
+        }
+
+        @Override
+        public int hashCode() {
+            return Objects.hash(name, originExpr);
+        }
+    }
 
     // The Scope used by order by allows parsing of the same column,
     // such as 'select v1 as v, v1 as v from t0 order by v'
     // but normal parsing does not allow it. So add a de-duplication operation here.
-    private List<Field> removeDuplicateField(List<Field> originalFields) {
+    public List<Field> removeDuplicateField(List<Field> originalFields) {
         List<Field> allFields = Lists.newArrayList();
-        for (Field field : originalFields) {
-            if (session.getSessionVariable().isEnableStrictOrderBy()) {
-                if (field.getName() != null && field.getOriginExpression() != null &&
-                        allFields.stream().anyMatch(f -> f.getOriginExpression() != null
-                                && f.getName() != null && field.getName().equals(f.getName())
-                                && field.getOriginExpression().equals(f.getOriginExpression()))) {
-                    continue;
+        if (session.getSessionVariable().isEnableStrictOrderBy()) {
+            Set<NameExprKey> visited = new HashSet<>();
+            for (Field field : originalFields) {
+                if (field.getName() != null && field.getOriginExpression() != null) {
+                    NameExprKey key = new NameExprKey(field.getName(), field.getOriginExpression());
+                    if (visited.contains(key)) {
+                        continue;
+                    }
+                    visited.add(key);
                 }
-            } else {
-                if (field.getName() != null &&
-                        allFields.stream().anyMatch(f -> f.getName() != null && field.getName().equals(f.getName()))) {
-                    continue;
-                }
+                allFields.add(field);
             }
-            allFields.add(field);
+        } else {
+            // Use a HashSet to store unique field names
+            Set<String> visited = new HashSet<>();
+            for (Field field : originalFields) {
+                if (field.getName() != null) {
+                    if (visited.contains(field.getName())) {
+                        continue;
+                    }
+                    visited.add(field.getName());
+                }
+                allFields.add(field);
+            }
         }
         return allFields;
     }

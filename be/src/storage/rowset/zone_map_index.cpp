@@ -39,6 +39,8 @@
 #include "column/column_helper.h"
 #include "column/column_viewer.h"
 #include "common/config.h"
+#include "runtime/current_thread.h"
+#include "runtime/exec_env.h"
 #include "storage/chunk_helper.h"
 #include "storage/decimal_type_info.h"
 #include "storage/olap_define.h"
@@ -493,10 +495,8 @@ struct ZoneMapWrapper {
         }
 
         // For non-null zones, check value range overlap
-        return (other.zone_map.min_value.value >= zone_map.min_value.value &&
-                other.zone_map.min_value.value <= zone_map.max_value.value) ||
-               (other.zone_map.max_value.value >= zone_map.min_value.value &&
-                other.zone_map.max_value.value <= zone_map.max_value.value);
+        return std::max(zone_map.min_value.value, other.zone_map.min_value.value) <=
+               std::min(zone_map.max_value.value, other.zone_map.max_value.value);
     }
 };
 

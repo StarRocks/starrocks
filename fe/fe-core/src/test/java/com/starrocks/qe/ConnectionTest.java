@@ -15,6 +15,7 @@
 package com.starrocks.qe;
 
 import com.starrocks.authentication.AuthenticationMgr;
+import com.starrocks.authentication.UserIdentityUtils;
 import com.starrocks.authorization.AccessDeniedException;
 import com.starrocks.authorization.NativeAccessController;
 import com.starrocks.authorization.PrivilegeType;
@@ -113,7 +114,6 @@ public class ConnectionTest {
         result = ExecuteEnv.getInstance().getScheduler()
                 .registerConnection(createConnectContextForUser("test"));
         Assertions.assertFalse(result.first);
-        System.out.println(result.second);
         Assertions.assertTrue(result.second.contains("Reach user-level"));
     }
 
@@ -162,7 +162,6 @@ public class ConnectionTest {
         com.starrocks.sql.analyzer.Analyzer.analyze(stmt, starRocksAssert.getCtx());
         starRocksAssert.getCtx().setCurrentUserIdentity(new UserIdentity("test", "%"));
         ShowResultSet resultSet = ShowExecutor.execute(stmt, starRocksAssert.getCtx());
-        System.out.println(resultSet.getResultRows());
         Assertions.assertEquals(1, resultSet.getResultRows().size());
         Assertions.assertTrue(resultSet.getResultRows().get(0).contains("test"));
 
@@ -183,7 +182,7 @@ public class ConnectionTest {
         TListConnectionRequest request = new TListConnectionRequest();
 
         TAuthInfo tAuthInfo = new TAuthInfo();
-        tAuthInfo.setCurrent_user_ident(UserIdentity.ROOT.toThrift());
+        tAuthInfo.setCurrent_user_ident(UserIdentityUtils.toThrift(UserIdentity.ROOT));
         request.setAuth_info(tAuthInfo);
         request.setFor_user(null);
         request.setShow_full(false);
@@ -192,7 +191,7 @@ public class ConnectionTest {
         Assertions.assertEquals(2, response.getConnections().size());
 
         tAuthInfo = new TAuthInfo();
-        tAuthInfo.setCurrent_user_ident(UserIdentity.ROOT.toThrift());
+        tAuthInfo.setCurrent_user_ident(UserIdentityUtils.toThrift(UserIdentity.ROOT));
         request.setAuth_info(tAuthInfo);
         request.setFor_user("u2");
         request.setShow_full(false);
@@ -200,7 +199,7 @@ public class ConnectionTest {
         Assertions.assertEquals(1, response.getConnections().size());
 
         tAuthInfo = new TAuthInfo();
-        tAuthInfo.setCurrent_user_ident(UserIdentity.ROOT.toThrift());
+        tAuthInfo.setCurrent_user_ident(UserIdentityUtils.toThrift(UserIdentity.ROOT));
         request.setAuth_info(tAuthInfo);
         request.setFor_user("u3");
         request.setShow_full(false);
@@ -209,7 +208,7 @@ public class ConnectionTest {
 
         UserIdentity userIdentity = UserIdentity.createAnalyzedUserIdentWithDomain("u2", "test");
         tAuthInfo = new TAuthInfo();
-        tAuthInfo.setCurrent_user_ident(userIdentity.toThrift());
+        tAuthInfo.setCurrent_user_ident(UserIdentityUtils.toThrift(userIdentity));
         request.setAuth_info(tAuthInfo);
         request.setFor_user("u2");
         request.setShow_full(false);
@@ -226,7 +225,7 @@ public class ConnectionTest {
 
         userIdentity = UserIdentity.createAnalyzedUserIdentWithDomain("u1", "test");
         tAuthInfo = new TAuthInfo();
-        tAuthInfo.setCurrent_user_ident(userIdentity.toThrift());
+        tAuthInfo.setCurrent_user_ident(UserIdentityUtils.toThrift(userIdentity));
         request.setAuth_info(tAuthInfo);
         request.setFor_user("u2");
         request.setShow_full(false);
@@ -240,7 +239,7 @@ public class ConnectionTest {
         TAuthInfo tAuthInfo = new TAuthInfo();
         tAuthInfo.setUser("user");
         tAuthInfo.setUser_ip("%");
-        context.setAuthInfoFromThrift(tAuthInfo);
+        UserIdentityUtils.setAuthInfoFromThrift(context, tAuthInfo);
         Assertions.assertEquals("user", context.getCurrentUserIdentity().getUser());
     }
 

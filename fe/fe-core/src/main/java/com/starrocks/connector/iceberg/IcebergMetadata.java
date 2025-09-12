@@ -14,11 +14,9 @@
 
 package com.starrocks.connector.iceberg;
 
-import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
-import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.IcebergTable;
@@ -35,7 +33,9 @@ import com.starrocks.common.Pair;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.profile.Timer;
 import com.starrocks.common.profile.Tracers;
+import com.starrocks.common.tvr.TvrDeltaStats;
 import com.starrocks.common.tvr.TvrTableDelta;
+import com.starrocks.common.tvr.TvrTableDeltaTrait;
 import com.starrocks.common.tvr.TvrTableSnapshot;
 import com.starrocks.common.tvr.TvrVersionRange;
 import com.starrocks.common.util.PropertyAnalyzer;
@@ -78,7 +78,7 @@ import com.starrocks.sql.ast.CreateViewStmt;
 import com.starrocks.sql.ast.DropTableStmt;
 import com.starrocks.sql.ast.ListPartitionDesc;
 import com.starrocks.sql.ast.PartitionDesc;
-import com.starrocks.sql.common.DmlException;
+import com.starrocks.sql.ast.expression.TableName;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
@@ -93,10 +93,12 @@ import org.apache.iceberg.BaseFileScanTask;
 import org.apache.iceberg.BaseTable;
 import org.apache.iceberg.DataFile;
 import org.apache.iceberg.DataFiles;
+import org.apache.iceberg.DataOperations;
 import org.apache.iceberg.DeleteFile;
 import org.apache.iceberg.FileContent;
 import org.apache.iceberg.FileScanTask;
 import org.apache.iceberg.HistoryEntry;
+import org.apache.iceberg.IncrementalAppendScan;
 import org.apache.iceberg.ManifestFile;
 import org.apache.iceberg.Metrics;
 import org.apache.iceberg.MetricsConfig;
@@ -106,13 +108,13 @@ import org.apache.iceberg.PartitionSpec;
 import org.apache.iceberg.PartitionSpecParser;
 import org.apache.iceberg.ReplacePartitions;
 import org.apache.iceberg.RewriteFiles;
+import org.apache.iceberg.Scan;
 import org.apache.iceberg.Schema;
 import org.apache.iceberg.SchemaParser;
 import org.apache.iceberg.Snapshot;
 import org.apache.iceberg.SnapshotRef;
 import org.apache.iceberg.SortOrder;
 import org.apache.iceberg.StarRocksIcebergTableScan;
-import org.apache.iceberg.StructLike;
 import org.apache.iceberg.TableScan;
 import org.apache.iceberg.Transaction;
 import org.apache.iceberg.catalog.TableIdentifier;
@@ -121,31 +123,24 @@ import org.apache.iceberg.exceptions.NoSuchNamespaceException;
 import org.apache.iceberg.exceptions.NoSuchTableException;
 import org.apache.iceberg.expressions.Expression;
 import org.apache.iceberg.expressions.Expressions;
-import org.apache.iceberg.expressions.Literal;
 import org.apache.iceberg.expressions.ResidualEvaluator;
 import org.apache.iceberg.io.CloseableIterable;
 import org.apache.iceberg.io.CloseableIterator;
 import org.apache.iceberg.io.FileIO;
 import org.apache.iceberg.metrics.ScanReport;
-import org.apache.iceberg.types.Conversions;
 import org.apache.iceberg.types.Type;
 import org.apache.iceberg.types.Types;
 import org.apache.iceberg.util.SerializationUtil;
+import org.apache.iceberg.util.SnapshotUtil;
 import org.apache.iceberg.util.TableScanUtil;
 import org.apache.iceberg.view.View;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import java.net.URLDecoder;
-import java.nio.ByteBuffer;
-import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDateTime;
-import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Base64;
 import java.util.Collections;
 import java.util.Deque;
 import java.util.HashMap;
@@ -512,6 +507,50 @@ public class IcebergMetadata implements ConnectorMetadata {
             LOG.error("Failed to get iceberg view {}.{}", dbName, viewName, e);
             return null;
         }
+    }
+
+    @Override
+    public TvrTableSnapshot getCurrentTvrSnapshot(String dbName, Table table) {
+        IcebergTable icebergTable = (IcebergTable) table;
+        Optional<Long> snapshotId = Optional.ofNullable(icebergTable.getNativeTable().currentSnapshot())
+                .map(Snapshot::snapshotId);
+        return TvrTableSnapshot.of(snapshotId);
+    }
+
+    @Override
+    public List<TvrTableDeltaTrait> listTableDeltaTraits(String dbName, Table table,
+                                                         TvrTableSnapshot fromSnapshotExclusive,
+                                                         TvrTableSnapshot toSnapshotInclusive) {
+        if (fromSnapshotExclusive.equals(toSnapshotInclusive)) {
+            return Collections.emptyList();
+        }
+        // fromSnapshotExclusive can be empty, but toSnapshotInclusive must have a valid snapshot ID
+        final long fromSnapshotIdExclusive = fromSnapshotExclusive.from.getVersion();
+        final long toSnapshotIdInclusive =
+                toSnapshotInclusive.end().orElseThrow(() -> new StarRocksConnectorException(
+                        "toSnapshotInclusive must have a valid snapshot ID"));
+        final IcebergTable icebergTable = (IcebergTable) table;
+        final org.apache.iceberg.Table nativeTable = icebergTable.getNativeTable();
+        long lastSnapshotId = toSnapshotIdInclusive;
+
+        final List<TvrTableDeltaTrait> tvrDeltaTraits = Lists.newArrayList();
+        // snapshot from the last to the first
+        final Iterable<Snapshot> snapshots = SnapshotUtil.ancestorsBetween(
+                toSnapshotIdInclusive, fromSnapshotIdExclusive, nativeTable::snapshot);
+        for (Snapshot snapshot : snapshots) {
+            long currentSnapshotId = snapshot.snapshotId();
+            TvrTableDelta delta = TvrTableDelta.of(currentSnapshotId, lastSnapshotId);
+            TvrDeltaStats stats = TvrDeltaStats.of(snapshot.addedRows());
+            if (snapshot.operation() != null && snapshot.operation().equals(DataOperations.APPEND)) {
+                tvrDeltaTraits.add(TvrTableDeltaTrait.ofMonotonic(delta, stats));
+            } else {
+                tvrDeltaTraits.add(TvrTableDeltaTrait.ofRetractable(delta, stats));
+            }
+            lastSnapshotId = currentSnapshotId;
+        }
+        // reserve to ensure the last snapshot is in the last of the collection.
+        Collections.reverse(tvrDeltaTraits);
+        return tvrDeltaTraits;
     }
 
     @Override
@@ -951,20 +990,32 @@ public class IcebergMetadata implements ConnectorMetadata {
 
         final long snapshotId = tvrVersionRange.end().orElseThrow(() -> new StarRocksConnectorException(
                 "Snapshot ID is not present in tvrVersionRange: " + tvrVersionRange));
-        TableScan scan = icebergCatalog.getTableScan(nativeTbl, scanContext)
-                .useSnapshot(snapshotId)
-                .metricsReporter(metricsReporter)
-                .planWith(jobPlanningExecutor);
+        Scan scan;
+        if (tvrVersionRange.start() != null && tvrVersionRange.start().isPresent()) {
+            IncrementalAppendScan incrementalAppendScan = nativeTbl.newIncrementalAppendScan();
+            incrementalAppendScan =
+                    incrementalAppendScan.fromSnapshotExclusive(tvrVersionRange.from.getVersion());
+            incrementalAppendScan =
+                    incrementalAppendScan.toSnapshot(snapshotId);
+            scan = incrementalAppendScan
+                    .metricsReporter(metricsReporter)
+                    .planWith(jobPlanningExecutor);
+        } else {
+            scan = icebergCatalog.getTableScan(nativeTbl, scanContext)
+                    .useSnapshot(snapshotId)
+                    .metricsReporter(metricsReporter)
+                    .planWith(jobPlanningExecutor);
+        }
 
         if (enableCollectColumnStats) {
-            scan = scan.includeColumnStats();
+            scan = (Scan) scan.includeColumnStats();
         }
 
         if (icebergPredicate.op() != Expression.Operation.TRUE) {
-            scan = scan.filter(icebergPredicate);
+            scan = (Scan) scan.filter(icebergPredicate);
         }
 
-        TableScan tableScan = scan;
+        Scan tableScan = scan;
         return new Iterator<>() {
             CloseableIterable<FileScanTask> fileScanTaskIterable;
             CloseableIterator<FileScanTask> fileScanTaskIterator;
@@ -1243,10 +1294,9 @@ public class IcebergMetadata implements ConnectorMetadata {
             if (partitionSpec.isPartitioned()) {
                 String relativePartitionLocation = getIcebergRelativePartitionPath(
                         nativeTbl.location(), dataFile.partition_path);
-                PartitionData partitionData = partitionDataFromPath(
-                        relativePartitionLocation, nullFingerprint, partitionSpec, nativeTbl);
+                IcebergPartitionData partitionData = IcebergPartitionData.partitionDataFromPath(
+                        relativePartitionLocation, nullFingerprint, partitionSpec);
                 builder.withPartition(partitionData);
-                // builder.withPartitionPath(relativePartitionLocation);
             }
             batchWrite.addFile(builder.build());
         }
@@ -1297,111 +1347,6 @@ public class IcebergMetadata implements ConnectorMetadata {
             return new DynamicOverwrite(transaction);
         }
         return new Append(transaction);
-    }
-
-    public PartitionData partitionDataFromPath(String relativePartitionPath,
-                                               String partitionNullFingerprint, PartitionSpec spec,
-                                               org.apache.iceberg.Table table) {
-        PartitionData data = new PartitionData(spec.fields().size());
-        String[] partitions = relativePartitionPath.split("/", -1);
-        List<PartitionField> partitionFields = spec.fields();
-        if (partitions.length != partitionNullFingerprint.length()) {
-            throw new InternalError("Invalid partition and fingerprint size, partition:" + relativePartitionPath +
-                    " partition size:" + String.valueOf(partitions.length) + " fingerprint:" + partitionNullFingerprint);
-        }
-        for (int i = 0; i < partitions.length; i++) {
-            PartitionField field = partitionFields.get(i);
-            String[] parts = partitions[i].split("=", 2);
-            Preconditions.checkArgument(parts.length == 2 && parts[0] != null &&
-                    field.name().equals(parts[0]), "Invalid partition: %s", partitions[i]);
-            org.apache.iceberg.types.Type resultType = spec.partitionType().fields().get(i).type();
-            // org.apache.iceberg.types.Type sourceType = table.schema().findType(field.sourceId());
-            // NOTICE:
-            // The behavior here should match the make_partition_path method in be, 
-            // and revert the String path value to the origin value and type of transform expr for the metastore.
-            // otherwise, if we use the api of iceberg to filter the scan files, the result may be incorrect!
-            if (partitionNullFingerprint.charAt(i) == '0') { //'0' means not null, '1' means null
-                // apply date decoding for date type
-                String transform = field.transform().toString();
-                if (transform.equals("year") || transform.equals("month")
-                        || transform.equals("day") || transform.equals("hour")) {
-                    Integer year = org.apache.iceberg.util.DateTimeUtil.EPOCH.getYear();
-                    Integer month = org.apache.iceberg.util.DateTimeUtil.EPOCH.getMonthValue();
-                    Integer day = org.apache.iceberg.util.DateTimeUtil.EPOCH.getDayOfMonth();
-                    Integer hour = org.apache.iceberg.util.DateTimeUtil.EPOCH.getHour();
-                    String[] dateParts = parts[1].split("-");
-                    if (dateParts.length > 0) {
-                        year = Integer.parseInt(dateParts[0]);
-                    }
-                    if (dateParts.length > 1) {
-                        month = Integer.parseInt(dateParts[1]);
-                    }
-                    if (dateParts.length > 2) {
-                        day = Integer.parseInt(dateParts[2]);
-                    }
-                    if (dateParts.length > 3) {
-                        hour = Integer.parseInt(dateParts[3]);
-                    }
-                    LocalDateTime target = LocalDateTime.of(year, month, day, hour, 0);
-                    if (transform.equals("year")) {
-                        //iceberg stores the result of transform as metadata.
-                        parts[1] = String.valueOf(
-                                ChronoUnit.YEARS.between(org.apache.iceberg.util.DateTimeUtil.EPOCH_DAY, target));
-                    } else if (transform.equals("month")) {
-                        parts[1] = String.valueOf(
-                                ChronoUnit.MONTHS.between(org.apache.iceberg.util.DateTimeUtil.EPOCH_DAY, target));
-                    } else if (transform.equals("day")) {
-                        //The reuslt of day transform is a date type.
-                        //It is diffrent from other date transform exprs, however other's result is a integer.
-                        //do nothing
-                    } else if (transform.equals("hour")) {
-                        parts[1] = String.valueOf(
-                                ChronoUnit.HOURS.between(org.apache.iceberg.util.DateTimeUtil.EPOCH_DAY.atTime(0, 0), target));
-                    }
-                } else if (transform.startsWith("truncate")) {
-                    //the result type of truncate is the same as the truncate column
-                    if (parts[1].length() == 0) {
-                        //do nothing
-                    } else if (resultType.typeId() == Type.TypeID.STRING || resultType.typeId() == Type.TypeID.FIXED) {
-                        parts[1] = URLDecoder.decode(parts[1], StandardCharsets.UTF_8);
-                    } else if (resultType.typeId() == Type.TypeID.BINARY) {
-                        parts[1] = URLDecoder.decode(parts[1], StandardCharsets.UTF_8);
-                        //Do not convert the byte array to utf-8, because some byte is not valid in utf-8.
-                        //like 0xE6 is not valid in utf8. If the convert failed, utf-8 will transfer the byte to 0xFFFD as default
-                        //we should just read and store the byte in latin, and thus not change the byte array value.
-                        parts[1] = new String(Base64.getDecoder().decode(parts[1]), StandardCharsets.ISO_8859_1);
-                    }
-                } else if (transform.startsWith("bucket")) {
-                    //the result type of bucket is integer.
-                    //do nothing
-                } else if (transform.equals("identity")) {
-                    if (parts[1].length() == 0) {
-                        //do nothing
-                    } else if (resultType.typeId() == Type.TypeID.STRING || resultType.typeId() == Type.TypeID.FIXED) {
-                        parts[1] = URLDecoder.decode(parts[1], StandardCharsets.UTF_8);
-                    } else if (resultType.typeId() == Type.TypeID.BINARY) {
-                        parts[1] = URLDecoder.decode(parts[1], StandardCharsets.UTF_8);
-                        parts[1] = new String(Base64.getDecoder().decode(parts[1]), StandardCharsets.ISO_8859_1);
-                    } else if (resultType.typeId() == Type.TypeID.TIMESTAMP) {
-                        parts[1] = URLDecoder.decode(parts[1], StandardCharsets.UTF_8);
-                        parts[1] = parts[1].replace(' ', 'T');
-                    }
-                } else {
-                    throw new DmlException("Unsupported partition transform: %s", transform);
-                }
-            }
-
-            if (partitionNullFingerprint.charAt(i) == '1') {
-                data.set(i, null);
-            } else if (resultType.typeId() == Type.TypeID.BINARY) {
-                data.set(i, parts[1].getBytes(StandardCharsets.ISO_8859_1));
-            } else if (resultType.typeId() == Type.TypeID.TIMESTAMP) {
-                data.set(i, Literal.of(parts[1]).to(Types.TimestampType.withoutZone()).value());
-            } else {
-                data.set(i, Conversions.fromPartitionString(resultType, parts[1]));
-            }
-        }
-        return data;
     }
 
     public static String getIcebergRelativePartitionPath(String tableLocation, String partitionLocation) {
@@ -1589,58 +1534,6 @@ public class IcebergMetadata implements ConnectorMetadata {
 
         public void setSnapshotId(long snapshotId) {
             rewriteFiles.validateFromSnapshot(snapshotId);
-        }
-    }
-
-    public static class PartitionData implements StructLike {
-        private final Object[] values;
-
-        private PartitionData(int size) {
-            this.values = new Object[size];
-        }
-
-        @Override
-        public int size() {
-            return values.length;
-        }
-
-        @Override
-        public <T> T get(int pos, Class<T> javaClass) {
-            Object value = values[pos];
-            if (javaClass == ByteBuffer.class && value instanceof byte[]) {
-                value = ByteBuffer.wrap((byte[]) value);
-            }
-            return javaClass.cast(value);
-        }
-
-        @Override
-        public <T> void set(int pos, T value) {
-            if (value instanceof ByteBuffer) {
-                ByteBuffer buffer = (ByteBuffer) value;
-                byte[] bytes = new byte[buffer.remaining()];
-                buffer.duplicate().get(bytes);
-                values[pos] = bytes;
-            } else {
-                values[pos] = value;
-            }
-        }
-
-        @Override
-        public boolean equals(Object other) {
-            if (this == other) {
-                return true;
-            }
-            if (other == null || getClass() != other.getClass()) {
-                return false;
-            }
-
-            PartitionData that = (PartitionData) other;
-            return Arrays.equals(values, that.values);
-        }
-
-        @Override
-        public int hashCode() {
-            return Arrays.hashCode(values);
         }
     }
 

@@ -16,7 +16,6 @@ package com.starrocks.sql.common;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
-import com.starrocks.analysis.Expr;
 import com.starrocks.catalog.ArrayType;
 import com.starrocks.catalog.MapType;
 import com.starrocks.catalog.PrimitiveType;
@@ -28,6 +27,7 @@ import com.starrocks.common.AnalysisException;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariableConstants;
 import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.sql.ast.expression.Expr;
 
 import java.util.ArrayList;
 import java.util.List;

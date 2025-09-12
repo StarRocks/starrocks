@@ -15,10 +15,10 @@
 package com.starrocks.catalog.combinator;
 
 import com.google.common.collect.ImmutableList;
-import com.starrocks.analysis.FunctionName;
 import com.starrocks.catalog.AggregateFunction;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.Type;
+import com.starrocks.sql.ast.expression.FunctionName;
 import com.starrocks.thrift.TFunctionBinaryType;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -29,8 +29,8 @@ import java.util.Optional;
 /**
  * Merge combinator for aggregate function to merge the agg state to return the final result of aggregate function.
  * DESC: return_type {agg_func}_merge(immediate_type)
- *  input type          : aggregate function's immediate_type
- *  intermediate type   : aggregate function's immediate_type
+ *  input type          : aggregate function's intermediate_type
+ *  intermediate type   : aggregate function's intermediate_type
  *  return type         : aggregate function's return type
  */
 public final class AggStateMergeCombinator extends AggregateFunction {

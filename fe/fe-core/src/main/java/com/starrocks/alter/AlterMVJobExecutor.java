@@ -17,11 +17,6 @@ package com.starrocks.alter;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
-import com.starrocks.analysis.Expr;
-import com.starrocks.analysis.IntLiteral;
-import com.starrocks.analysis.SlotRef;
-import com.starrocks.analysis.StringLiteral;
-import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ColumnId;
 import com.starrocks.catalog.Database;
@@ -58,18 +53,24 @@ import com.starrocks.scheduler.Task;
 import com.starrocks.scheduler.TaskBuilder;
 import com.starrocks.scheduler.TaskManager;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.RunMode;
 import com.starrocks.sql.analyzer.MaterializedViewAnalyzer;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.analyzer.SetStmtAnalyzer;
 import com.starrocks.sql.ast.AlterMaterializedViewStatusClause;
 import com.starrocks.sql.ast.AsyncRefreshSchemeDesc;
-import com.starrocks.sql.ast.IntervalLiteral;
 import com.starrocks.sql.ast.ModifyTablePropertiesClause;
 import com.starrocks.sql.ast.RefreshSchemeClause;
 import com.starrocks.sql.ast.SetListItem;
 import com.starrocks.sql.ast.SetStmt;
 import com.starrocks.sql.ast.SystemVariable;
 import com.starrocks.sql.ast.TableRenameClause;
+import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.IntLiteral;
+import com.starrocks.sql.ast.expression.IntervalLiteral;
+import com.starrocks.sql.ast.expression.SlotRef;
+import com.starrocks.sql.ast.expression.StringLiteral;
+import com.starrocks.sql.ast.expression.TableName;
 import com.starrocks.sql.common.DmlException;
 import com.starrocks.sql.optimizer.CachingMvPlanContextBuilder;
 import com.starrocks.sql.optimizer.MvPlanContextBuilder;
@@ -149,6 +150,10 @@ public class AlterMVJobExecutor extends AlterJobExecutor {
         String partitionRefreshStrategy = null;
         if (properties.containsKey(PropertyAnalyzer.PROPERTIES_PARTITION_REFRESH_STRATEGY)) {
             partitionRefreshStrategy = PropertyAnalyzer.analyzePartitionRefreshStrategy(properties);
+        }
+        String mvRefreshMode = null;
+        if (properties.containsKey(PropertyAnalyzer.PROPERTIES_MV_REFRESH_MODE)) {
+            mvRefreshMode = PropertyAnalyzer.analyzeRefreshMode(properties);
         }
         String resourceGroup = null;
         if (properties.containsKey(PropertyAnalyzer.PROPERTIES_RESOURCE_GROUP)) {
@@ -275,11 +280,22 @@ public class AlterMVJobExecutor extends AlterJobExecutor {
             properties.remove(PropertyAnalyzer.PROPERTIES_BF_COLUMNS);
         }
 
-        if (!properties.isEmpty()) {
-            if (propClone.containsKey(PropertyAnalyzer.PROPERTIES_COLOCATE_WITH)) {
+        if (properties.containsKey(PropertyAnalyzer.PROPERTIES_COLOCATE_WITH)) {
+            // TODO: when support shared-nothing mode, must check PROPERTIES_LABELS_LOCATION
+            if (RunMode.isSharedNothingMode()) {
                 throw new SemanticException("Modify failed because unsupported properties: " +
-                        "colocate group is not supported for materialized view");
+                        "colocate_with is not supported for materialized view in shared-nothing cluster.");
             }
+            try {
+                String colocateGroup = PropertyAnalyzer.analyzeColocate(properties);
+                GlobalStateMgr.getCurrentState().getColocateTableIndex()
+                        .modifyTableColocate(db, materializedView, colocateGroup, false, null);
+            } catch (DdlException e) {
+                throw new AlterJobException(e.getMessage(), e);
+            }
+        }
+
+        if (!properties.isEmpty()) {
             // analyze properties
             List<SetListItem> setListItems = Lists.newArrayList();
             for (Map.Entry<String, String> entry : properties.entrySet()) {
@@ -341,6 +357,11 @@ public class AlterMVJobExecutor extends AlterJobExecutor {
                 !materializedView.getTableProperty().getPartitionRefreshStrategy().equals(partitionRefreshStrategy)) {
             curProp.put(PropertyAnalyzer.PROPERTIES_PARTITION_REFRESH_STRATEGY, String.valueOf(partitionRefreshStrategy));
             materializedView.getTableProperty().setPartitionRefreshStrategy(partitionRefreshStrategy);
+            isChanged = true;
+        } else if (propClone.containsKey(PropertyAnalyzer.PROPERTIES_MV_REFRESH_MODE) &&
+                !materializedView.getTableProperty().getMvRefreshMode().equals(mvRefreshMode)) {
+            curProp.put(PropertyAnalyzer.PROPERTIES_MV_REFRESH_MODE, String.valueOf(mvRefreshMode));
+            materializedView.getTableProperty().setMvRefreshMode(mvRefreshMode);
             isChanged = true;
         } else if (propClone.containsKey(PropertyAnalyzer.PROPERTIES_AUTO_REFRESH_PARTITIONS_LIMIT) &&
                 materializedView.getTableProperty().getAutoRefreshPartitionsLimit() != autoRefreshPartitionsLimit) {

@@ -771,7 +771,7 @@ public class PlanFragmentWithCostTest extends PlanWithCostTestBase {
 
         String sql = "select * from t0 join[shuffle] t1 on t0.v2 = t1.v5 and t0.v3 = t1.v6";
         String plan = getVerboseExplain(sql);
-        System.out.println(plan);
+        logSysInfo(plan);
 
         assertContains(plan, "  |  build runtime filters:\n" +
                 "  |  - filter_id = 0, build_expr = (5: v5), remote = true\n" +
@@ -801,7 +801,7 @@ public class PlanFragmentWithCostTest extends PlanWithCostTestBase {
         String sql = "select * from (select t1.v5 as v5, t0.v3 as v3 from t0 join[shuffle] t1 on t0.v2 = " +
                 "t1.v5 and t0.v3 = t1.v6) tt join[shuffle] t2 on tt.v5 = t2.v8 and tt.v3 = t2.v7";
         String plan = getVerboseExplain(sql);
-        System.out.println(plan);
+        logSysInfo(plan);
 
         assertContains(plan, "  |  - filter_id = 0, build_expr = (5: v5), remote = true\n" +
                 "  |  - filter_id = 1, build_expr = (6: v6), remote = true");
@@ -888,7 +888,7 @@ public class PlanFragmentWithCostTest extends PlanWithCostTestBase {
             assertContains(unionPlan, "  4:OlapScanNode\n" +
                     "     table: t1, rollup: t1\n" +
                     "     preAggregation: on\n" +
-                    "     Predicates: 5: v4 + 2 IS NOT NULL\n" +
+                    "     Predicates: [5: v4, BIGINT, true] + 2 IS NOT NULL\n" +
                     "     partitionsRatio=1/1, tabletsRatio=3/3\n" +
                     "     tabletList=" + tabletIdsStrList.get(1) + "\n" +
                     "     actualRows=0, avgRowSize=4.0\n" +
@@ -898,7 +898,7 @@ public class PlanFragmentWithCostTest extends PlanWithCostTestBase {
             assertContains(unionPlan, "  1:OlapScanNode\n" +
                     "     table: t0, rollup: t0\n" +
                     "     preAggregation: on\n" +
-                    "     Predicates: 1: v1 + 1 IS NOT NULL\n" +
+                    "     Predicates: [1: v1, BIGINT, true] + 1 IS NOT NULL\n" +
                     "     partitionsRatio=1/1, tabletsRatio=3/3\n" +
                     "     tabletList=" + tabletIdsStrList.get(0) + "\n" +
                     "     actualRows=0, avgRowSize=4.0\n" +
@@ -1234,7 +1234,7 @@ public class PlanFragmentWithCostTest extends PlanWithCostTestBase {
 
         String sql = "select * from t0 join[shuffle] t1 on t0.v2 = t1.v5 and t0.v3 = t1.v6";
         String plan = getVerboseExplain(sql);
-        System.out.println(plan);
+        logSysInfo(plan);
 
         assertContains(plan, "  Input Partition: RANDOM\n" +
                 "  OutPut Partition: HASH_PARTITIONED: 2: v2\n" +
@@ -1801,7 +1801,7 @@ public class PlanFragmentWithCostTest extends PlanWithCostTestBase {
                 "    AND v1 = 99))\n" +
                 "   AND v1 = 100";
         String plan = getFragmentPlan(sql);
-        System.out.println(plan);
+        logSysInfo(plan);
     }
 
     @Test
@@ -2274,7 +2274,7 @@ public class PlanFragmentWithCostTest extends PlanWithCostTestBase {
                     "  |  1 <-> [1: v1, BIGINT, true]\n" +
                     "  |  4 <-> [4: t1a, VARCHAR, true]\n" +
                     "  |  cardinality: 10000");
-            System.out.println(plan);
+            logSysInfo(plan);
             assertContains(plan, "PLAN COST\n" +
                     "  CPU: 4.80001312001E11\n" +
                     "  Memory: 320201.0");

@@ -34,8 +34,9 @@ public class MVPCTRefreshNonPartitionerTest {
         TaskRunContext taskRunContext = Mockito.mock(TaskRunContext.class);
         Database database = Mockito.mock(Database.class);
         MaterializedView mv = Mockito.mock(MaterializedView.class);
+        MVRefreshParams mvRefreshParams = Mockito.mock(MVRefreshParams.class);
         MVPCTRefreshNonPartitioner job = new MVPCTRefreshNonPartitioner(mvTaskRunContext, taskRunContext,
-                database, mv);
+                database, mv, mvRefreshParams);
         Iterator<PCellWithName> dummyIter = Collections.emptyIterator();
         int result = job.getAdaptivePartitionRefreshNumber(dummyIter);
         Assertions.assertEquals(0, result);

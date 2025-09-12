@@ -40,12 +40,12 @@ import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.gson.annotations.SerializedName;
-import com.starrocks.analysis.Expr;
-import com.starrocks.analysis.FunctionName;
 import com.starrocks.catalog.combinator.AggStateDesc;
 import com.starrocks.common.Pair;
 import com.starrocks.common.io.Writable;
 import com.starrocks.sql.ast.HdfsURI;
+import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.FunctionName;
 import com.starrocks.thrift.TFunction;
 import com.starrocks.thrift.TFunctionBinaryType;
 import org.apache.commons.lang.ArrayUtils;
@@ -717,6 +717,12 @@ public class Function implements Writable {
                 optSuffix = Optional.of(FunctionSet.AGG_STATE_UNION_SUFFIX);
             } else if (s.endsWith(FunctionSet.AGG_STATE_IF_SUFFIX)) {
                 optSuffix = Optional.of(FunctionSet.AGG_STATE_IF_SUFFIX);
+            } else if (s.endsWith(FunctionSet.AGG_STATE_COMBINE_SUFFIX)) {
+                optSuffix = Optional.of(FunctionSet.AGG_STATE_COMBINE_SUFFIX);
+            } else if (s.endsWith(FunctionSet.STATE_UNION_SUFFIX)) {
+                optSuffix = Optional.of(FunctionSet.STATE_UNION_SUFFIX);
+            } else if (s.endsWith(FunctionSet.STATE_MERGE_SUFFIX)) {
+                optSuffix = Optional.of(FunctionSet.STATE_MERGE_SUFFIX);
             }
             if (optSuffix.isEmpty()) {
                 return s;

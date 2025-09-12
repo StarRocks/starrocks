@@ -19,15 +19,16 @@ import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
-import com.starrocks.analysis.BinaryType;
-import com.starrocks.analysis.Expr;
-import com.starrocks.analysis.FunctionName;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.Type;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.expression.BinaryType;
+import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.FunctionName;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
+import com.starrocks.sql.optimizer.OptimizerTraceUtil;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.operator.AggType;
 import com.starrocks.sql.optimizer.operator.ColumnOutputInfo;
@@ -213,6 +214,7 @@ public class FineGrainedRangePredicateRule extends TransformationRule {
 
         LogicalAggregationOperator newAggOp = rewriteAggOperator(aggColInfoList, unionOutputCols);
 
+        OptimizerTraceUtil.logMVRewrite(context, this, "FineGrainedRangePredicateRule applied");
         return Lists.newArrayList(OptExpression.create(newAggOp, unionOpt));
     }
 

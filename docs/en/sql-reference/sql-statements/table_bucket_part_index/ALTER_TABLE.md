@@ -4,15 +4,17 @@ displayed_sidebar: docs
 
 # ALTER TABLE
 
+import Beta from '../../../_assets/commonMarkdown/_beta.mdx'
+
 ALTER TABLE Modifies an existing table, including:
 
-- [Rename table, partition, index, or column](#rename)
+- [Rename table, partition, rollup, or column](#rename)
 - [Modify table comment](#alter-table-comment-from-v31)
 - [Modify partitions (add/delete partitions and modify partition attributes)](#modify-partition)
 - [Modify the bucketing method and number of buckets](#modify-the-bucketing-method-and-number-of-buckets-from-v32)
-- [Modify columns (add/delete columns and change the order of columns)](#modify-columns-adddelete-columns-change-the-order-of-columns)
-- [Create/delete rollup index](#modify-rollup-index)
-- [Modify bitmap index](#modify-bitmap-indexes)
+- [Modify columns (add/delete columns, change column order, and modify column comment)](#modify-columns-adddelete-columns-change-column-order-modify-column-comment)
+- [Create/delete rollup](#modify-rollup)
+- [Create/delete index](#modify-indexes)
 - [Modify table properties](#modify-table-properties)
 - [Atomic swap](#swap)
 - [Manual data version compaction](#manual-compaction-from-31)
@@ -29,30 +31,29 @@ ALTER TABLE [<db_name>.]<tbl_name>
 alter_clause1[, alter_clause2, ...]
 ```
 
-`alter_clause` can held the following operations: rename, comment, partition, bucket, column, rollup index, bitmap index, table property, swap, and compaction.
+`alter_clause` can held the following operations: rename, comment, partition, bucket, column, rollup, index, table property, swap, and compaction.
 
-- rename: renames a table, rollup index, partition, or column (supported from **v3.3.2 onwards**).
+- rename: renames a table, rollup, partition, or column (supported from **v3.3.2 onwards**).
 - comment: modifies the table comment (supported from **v3.1 onwards**).
 - partition: modifies partition properties, drops a partition, or adds a partition.
 - bucket: modifies the bucketing method and number of buckets.
-- column: adds, drops, or reorders columns, or modifies column type.
-- rollup index: creates or drops a rollup index.
-- bitmap index: modifies index (only Bitmap index can be modified).
+- column: adds, drops, or reorders columns, modifies column type or comment
+- rollup: creates or drops a rollup.
+- index: modifies indexes.
 - swap: atomic exchange of two tables.
 - compaction: performs manual compaction to merge versions of loaded data (supported from **v3.1 onwards**).
-- drop persistent index: Drop persistent index for Primary Key table in shared-data cluster. **Supported from v3.3.9 onwards**.
+- drop persistent index: Drop persistent index for Primary Key table in shared-data cluster (supported from **v3.3.9 onwards**).
 
 ## Limits and usage notes
 
 - Operations on partition, column, and rollup index cannot be performed in one ALTER TABLE statement.
-- Column comments cannot be modified.
 - One table can have only one ongoing schema change operation at a time. You cannot run two schema change commands on a table at the same time.
-- Operations on bucket, column and rollup index are asynchronous operations. A success message is return immediately after the task is submitted. You can run the [SHOW ALTER TABLE](SHOW_ALTER.md) command to check the progress, and run the [CANCEL ALTER TABLE](CANCEL_ALTER_TABLE.md) command to cancel the operation.
-- Operations on rename, comment, partition, bitmap index and swap are synchronous operations, and a command return indicates that the execution is finished.
+- Operations on bucket, column and rollup are asynchronous operations. A success message is return immediately after the task is submitted. You can run the [SHOW ALTER TABLE](SHOW_ALTER.md) command to check the progress, and run the [CANCEL ALTER TABLE](CANCEL_ALTER_TABLE.md) command to cancel the operation.
+- Operations on rename, comment, partition, index and swap are synchronous operations, and a command return indicates that the execution is finished.
 
 ### Rename
 
-Rename supports modification of table name, rollup index, and partition name.
+Rename supports modification of table name, rollup, and partition name.
 
 #### Rename a table
 
@@ -60,7 +61,7 @@ Rename supports modification of table name, rollup index, and partition name.
 ALTER TABLE <tbl_name> RENAME <new_tbl_name>
 ```
 
-#### Rename a rollup index
+#### Rename a rollup
 
 ```sql
 ALTER TABLE [<db_name>.]<tbl_name>
@@ -98,15 +99,16 @@ Syntax:
 ALTER TABLE [<db_name>.]<tbl_name> COMMENT = "<new table comment>";
 ```
 
-:::tip
-Currently, column comments cannot be modified.
-:::
-
 ### Modify partition
 
 #### ADD PARTITION(S)
 
-You can choose to add range partitions or list partitions. Adding expression partitions is not supported.
+You must strictly follow the respective syntax to add range partitions or list partitions.
+
+:::note
+- Adding expression partitions is not supported.
+- Please note that `PARTITION BY date_trunc(column)` and `PARTITION BY time_slice(column)` are considered range partitioning, despite their format of expression partitioning. Therefore, you can use the following syntax for range partitions to add new partitions to tables use such partitioning strategies.
+:::
 
 Syntax：
 
@@ -262,8 +264,19 @@ Syntax:
 ```sql
 ALTER TABLE [<db_name>.]<tbl_name> 
 ADD TEMPORARY PARTITION [IF NOT EXISTS] <partition_name>
-partition_desc ["key"="value"]
+{ single_range_partition | multi_range_partitions | list_partitions }
 [DISTRIBUTED BY HASH (k1[,k2 ...]) [BUCKETS num]]
+
+-- For details of single_range_partition and multi_range_partitions, see ADD PARTITION(S) section in this page.
+
+list_partitions::= 
+    PARTITION <partition_name> VALUES IN (value_list)
+
+value_list ::=
+    value_item [, ...]
+
+value_item ::=
+    { <value> | ( <value> [, ...] ) }
 ```
 
 #### Use a temporary partition to replace the current partition
@@ -418,7 +431,7 @@ INSERT INTO details (event_time, event_type, user_id, device_code, channel) VALU
   ALTER TABLE details DISTRIBUTED BY HASH(user_id, event_time) BUCKETS 10;
   ``
 
-### Modify columns (add/delete columns, change the order of columns)
+### Modify columns (add/delete columns, change column order, modify column comment)
 
 #### Add a column to the specified location of the specified index
 
@@ -436,7 +449,7 @@ Note:
 
 1. If you add a value column to an Aggregate table, you need to specify agg_type.
 2. If you add a key column to a non-Aggregate table (such as a Duplicate Key table), you need to specify the KEY keyword.
-3. You cannot add a column that already exists in the base index to the rollup index. (You can recreate a rollup index if needed.)
+3. You cannot add a column that already exists in the base index to the rollup. (You can recreate a rollup if needed.)
 
 #### Add multiple columns to specified index
 
@@ -468,7 +481,7 @@ Note:
 
 2. If you add a key column to a non-Aggregate table, you need to specify the KEY keyword.
 
-3. You cannot add a column that already exists in the base index to the rollup index. (You can create another rollup index if needed.)
+3. You cannot add a column that already exists in the base index to the rollup. (You can create another rollup if needed.)
 
 #### Add a generated column (from v3.1)
 
@@ -494,18 +507,20 @@ DROP COLUMN column_name
 Note:
 
 1. You cannot drop partition column.
-2. If the column is dropped from the base index, it will also be dropped if it is included in the rollup index.
+2. If the column is dropped from the base index, it will also be dropped if it is included in the rollup.
 
-#### Modify the column type and column position of specified index
+#### Modify the column type, position, comment, and other properties
 
 Syntax:
 
 ```sql
 ALTER TABLE [<db_name>.]<tbl_name>
-MODIFY COLUMN column_name column_type [KEY | agg_type] [NULL | NOT NULL] [DEFAULT "default_value"]
-[AFTER column_name|FIRST]
-[FROM rollup_index_name]
-[PROPERTIES ("key"="value", ...)]
+MODIFY COLUMN <column_name> 
+[ column_type [ KEY | agg_type ] ] [ NULL | NOT NULL ] 
+[ DEFAULT "<default_value>"] [ COMMENT "<new_column_comment>" ]
+[ AFTER <column_name> | FIRST ]
+[ FROM rollup_index_name ]
+[ PROPERTIES ("key"="value", ...) ]
 ```
 
 Note:
@@ -526,6 +541,7 @@ Note:
    - Convert INT to DATE (If the INT data fails to convert, the original data remains the same)
 
 6. Conversion from NULL to NOT NULL is not supported.
+7. You can modify several properties in a single MODIFY COLUMN clause. However, some combination of properties are not supported.
 
 #### Reorder the columns of specified index
 
@@ -585,8 +601,6 @@ Decouple the sort key from the primary key, and modify the sort key to `dt, reve
 ```SQL
 ALTER TABLE orders ORDER BY (dt, revenue, state);
 ```
-
-import Beta from '../../../_assets/commonMarkdown/_beta.mdx'
 
 #### Modify a STRUCT column to add or drop a field
 
@@ -654,10 +668,9 @@ For more usage instructions, see [Example - Column -14](#column).
 
 :::
 
+### Modify rollup
 
-### Modify rollup index
-
-#### Create a rollup index
+#### Create a rollup
 
 Syntax:
 
@@ -677,7 +690,7 @@ ALTER TABLE [<db_name>.]<tbl_name>
 ADD ROLLUP r1(col1,col2) from r0;
 ```
 
-#### Create rollup indexes in batches
+#### Create rollups in batches
 
 Syntax:
 
@@ -701,7 +714,7 @@ Note:
 2. The columns in the rollup table must be existing columns in from_index.
 3. In properties, user can specify the storage format. See CREATE TABLE for details.
 
-#### Drop a rollup index
+#### Drop a rollup
 
 Syntax:
 
@@ -716,7 +729,7 @@ Example:
 ALTER TABLE [<db_name>.]<tbl_name> DROP ROLLUP r1;
 ```
 
-#### Batch drop rollup indexes
+#### Batch drop rollups
 
 Syntax:
 
@@ -733,31 +746,31 @@ ALTER TABLE [<db_name>.]<tbl_name> DROP ROLLUP r1, r2;
 
 Note: You cannot drop the base index.
 
-### Modify bitmap indexes
+### Modify indexes
 
-Bitmap index supports the following modifications:
+You can create or drop the following indexes:
+- [Bitmap index](../../../table_design/indexes/Bitmap_index.md)
+- [N-Gram bloom filter index](../../../table_design/indexes/Ngram_Bloom_Filter_Index.md)
+- [Full-Text inverted index](../../../table_design/indexes/inverted_index.md)
+- [Vector index](../../../table_design/indexes/vector_index.md)
 
-#### Create a bitmap index
+#### Create an index
 
 Syntax:
 
 ```sql
 ALTER TABLE [<db_name>.]<tbl_name>
-ADD INDEX index_name (column [, ...],) [USING BITMAP] [COMMENT 'balabala'];
+ADD INDEX index_name (column) [USING { BITMAP | NGRAMBF | GIN | VECTOR } ] [COMMENT '<comment>']
 ```
 
-Note:
+For detailed instructions and examples on creating these indexes, see the corresponding tutorials listed above.
 
-```plain text
-1. Bitmap index is only supported for the current version.
-2. A BITMAP index is created only in a single column.
-```
-
-#### Drop an bitmap index
+#### Drop an index
 
 Syntax:
 
 ```sql
+ALTER TABLE [<db_name>.]<tbl_name>
 DROP INDEX index_name;
 ```
 
@@ -948,9 +961,9 @@ DROP PERSISTENT INDEX ON TABLETS(<tablet_id>[, <tablet_id>, ...]);
     ADD PARTITION p1 VALUES [("2014-01-01"), ("2014-02-01"));
     ```
 
-### Rollup index
+### Rollup
 
-1. Create an rollup index `example_rollup_index` based on the base index (k1,k2,k3,v1,v2). Column-based storage is used.
+1. Create a rollup `example_rollup_index` based on the base index (k1,k2,k3,v1,v2). Column-based storage is used.
 
     ```sql
     ALTER TABLE example_db.my_table
@@ -958,7 +971,7 @@ DROP PERSISTENT INDEX ON TABLETS(<tablet_id>[, <tablet_id>, ...]);
     PROPERTIES("storage_type"="column");
     ```
 
-2. Create an index `example_rollup_index2` based on `example_rollup_index(k1,k3,v1,v2)`.
+2. Create a rollup `example_rollup_index2` based on `example_rollup_index(k1,k3,v1,v2)`.
 
     ```sql
     ALTER TABLE example_db.my_table
@@ -966,7 +979,7 @@ DROP PERSISTENT INDEX ON TABLETS(<tablet_id>[, <tablet_id>, ...]);
     FROM example_rollup_index;
     ```
 
-3. Create an index `example_rollup_index3` based on the base index (k1, k2, k3, v1). The rollup timeout time is set to one hour.
+3. Create a rollup `example_rollup_index3` based on the base index (k1, k2, k3, v1). The rollup timeout time is set to one hour.
 
     ```sql
     ALTER TABLE example_db.my_table
@@ -974,7 +987,7 @@ DROP PERSISTENT INDEX ON TABLETS(<tablet_id>[, <tablet_id>, ...]);
     PROPERTIES("storage_type"="column", "timeout" = "3600");
     ```
 
-4. Drop an index `example_rollup_index2`.
+4. Drop the rollup `example_rollup_index2`.
 
     ```sql
     ALTER TABLE example_db.my_table
@@ -1250,7 +1263,7 @@ DROP PERSISTENT INDEX ON TABLETS(<tablet_id>[, <tablet_id>, ...]);
     ALTER TABLE table1 RENAME table2;
     ```
 
-2. Rename rollup index `rollup1` of `example_table` to `rollup2`.
+2. Rename rollup `rollup1` of `example_table` to `rollup2`.
 
     ```sql
     ALTER TABLE example_table RENAME ROLLUP rollup1 rollup2;
@@ -1262,13 +1275,13 @@ DROP PERSISTENT INDEX ON TABLETS(<tablet_id>[, <tablet_id>, ...]);
     ALTER TABLE example_table RENAME PARTITION p1 p2;
     ```
 
-### Bitmap index
+### Index
 
 1. Create a bitmap index for column `siteid` in `table1`.
 
     ```sql
     ALTER TABLE table1
-    ADD INDEX index_1 (siteid) [USING BITMAP] COMMENT 'balabala';
+    ADD INDEX index_1 (siteid) USING BITMAP COMMENT 'site_id_bitmap';
     ```
 
 2. Drop the bitmap index of column `siteid` in `table1`.

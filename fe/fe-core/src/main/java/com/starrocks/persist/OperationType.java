@@ -637,6 +637,21 @@ public class OperationType {
     @IgnorableOnReplayFailed
     public static final short OP_REMOVE_DYNAMIC_TABLET_JOB_LOG = 13551;
 
+    // New V2 operations for logEdit to logJsonObject migration
+    public static final short OP_SAVE_NEXTID_V2 = 13552;
+    
+    @IgnorableOnReplayFailed
+    public static final short OP_ERASE_DB_V2 = 13553;
+    
+    @IgnorableOnReplayFailed
+    public static final short OP_ERASE_PARTITION_V2 = 13554;
+    
+    @IgnorableOnReplayFailed
+    public static final short OP_DROP_ALL_BROKER_V2 = 13555;
+    
+    @IgnorableOnReplayFailed
+    public static final short OP_DROP_REPOSITORY_V2 = 13556;
+
     /**
      * NOTICE: OperationType cannot use a value exceeding 20000, please follow the above sequence number
      */

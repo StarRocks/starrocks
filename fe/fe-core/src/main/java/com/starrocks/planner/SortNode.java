@@ -38,14 +38,11 @@ import com.google.common.base.Joiner;
 import com.google.common.base.MoreObjects;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
-import com.starrocks.analysis.DescriptorTable;
-import com.starrocks.analysis.Expr;
-import com.starrocks.analysis.SlotId;
-import com.starrocks.analysis.SortInfo;
 import com.starrocks.common.IdGenerator;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.optimizer.operator.TopNType;
 import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.thrift.TLateMaterializeMode;
@@ -295,9 +292,9 @@ public class SortNode extends PlanNode implements RuntimeFilterBuildNode {
                 output.append(", ");
             }
             if (detailLevel.equals(TExplainLevel.NORMAL)) {
-                output.append(partitionExpr.next().toSql()).append(" ");
+                output.append(explainExpr(partitionExpr.next())).append(" ");
             } else {
-                output.append(partitionExpr.next().explain()).append(" ");
+                output.append(explainExpr(TExplainLevel.VERBOSE, List.of(partitionExpr.next()))).append(" ");
             }
         }
         if (!start) {
@@ -315,9 +312,9 @@ public class SortNode extends PlanNode implements RuntimeFilterBuildNode {
                 output.append(", ");
             }
             if (detailLevel.equals(TExplainLevel.NORMAL)) {
-                output.append(orderExpr.next().toSql()).append(" ");
+                output.append(explainExpr(orderExpr.next())).append(" ");
             } else {
-                output.append(orderExpr.next().explain()).append(" ");
+                output.append(explainExpr(TExplainLevel.VERBOSE, List.of(orderExpr.next()))).append(" ");
             }
             output.append(isAsc.next() ? "ASC" : "DESC");
         }

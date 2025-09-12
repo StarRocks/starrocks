@@ -16,9 +16,9 @@ package com.starrocks.connector.parser.trino;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
-import com.starrocks.analysis.Expr;
-import com.starrocks.analysis.FunctionCallExpr;
 import com.starrocks.sql.ast.AstVisitorExtendInterface;
+import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.FunctionCallExpr;
 
 import java.util.Arrays;
 import java.util.List;

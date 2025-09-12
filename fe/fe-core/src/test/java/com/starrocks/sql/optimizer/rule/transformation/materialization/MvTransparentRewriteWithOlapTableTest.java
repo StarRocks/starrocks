@@ -716,11 +716,11 @@ public class MvTransparentRewriteWithOlapTableTest extends MVTestBase {
                         String[] expects = {
                                 "  4:Project\n" +
                                         "  |  <slot 19> : 19: k1\n" +
-                                        "  |  <slot 20> : 20: k2\n" +
                                         "  |  <slot 21> : 21: v1\n" +
                                         "  |  <slot 22> : 22: v2\n" +
-                                        "  |  <slot 24> : 24: v4\n" +
-                                        "  |  <slot 25> : CAST(23: v3 AS CHAR(20))\n" +
+                                        "  |  <slot 25> : CAST(20: k2 AS VARCHAR(65533))\n" +
+                                        "  |  <slot 26> : CAST(23: v3 AS CHAR(20))\n" +
+                                        "  |  <slot 27> : CAST(24: v4 AS VARCHAR(20))\n" +
                                         "  |  \n" +
                                         "  3:OlapScanNode\n" +
                                         "     TABLE: m3\n" +
@@ -728,11 +728,11 @@ public class MvTransparentRewriteWithOlapTableTest extends MVTestBase {
                                         "     partitions=2/3",
                                 "  4:Project\n" +
                                         "  |  <slot 19> : 19: k1\n" +
-                                        "  |  <slot 20> : 20: k2\n" +
                                         "  |  <slot 21> : 21: v1\n" +
                                         "  |  <slot 22> : 22: v2\n" +
-                                        "  |  <slot 24> : 24: v4\n" +
-                                        "  |  <slot 25> : CAST(23: v3 AS CHAR(20))\n" +
+                                        "  |  <slot 25> : CAST(20: k2 AS VARCHAR(65533))\n" +
+                                        "  |  <slot 26> : CAST(23: v3 AS CHAR(20))\n" +
+                                        "  |  <slot 27> : CAST(24: v4 AS VARCHAR(20))\n" +
                                         "  |  \n" +
                                         "  3:OlapScanNode\n" +
                                         "     TABLE: m3\n" +
@@ -776,11 +776,11 @@ public class MvTransparentRewriteWithOlapTableTest extends MVTestBase {
                         String[] expects = {
                                 "  4:Project\n" +
                                         "  |  <slot 19> : 19: k1\n" +
-                                        "  |  <slot 20> : 20: k2\n" +
                                         "  |  <slot 21> : 21: v1\n" +
                                         "  |  <slot 22> : 22: v2\n" +
-                                        "  |  <slot 24> : 24: v4\n" +
-                                        "  |  <slot 25> : CAST(23: v3 AS CHAR(20))\n" +
+                                        "  |  <slot 25> : CAST(20: k2 AS VARCHAR(65533))\n" +
+                                        "  |  <slot 26> : CAST(23: v3 AS CHAR(20))\n" +
+                                        "  |  <slot 27> : CAST(24: v4 AS VARCHAR(20))\n" +
                                         "  |  \n" +
                                         "  3:OlapScanNode\n" +
                                         "     TABLE: m3\n" +
@@ -789,11 +789,11 @@ public class MvTransparentRewriteWithOlapTableTest extends MVTestBase {
                                         "     partitions=2/3",
                                 "  4:Project\n" +
                                         "  |  <slot 19> : 19: k1\n" +
-                                        "  |  <slot 20> : 20: k2\n" +
                                         "  |  <slot 21> : 21: v1\n" +
                                         "  |  <slot 22> : 22: v2\n" +
-                                        "  |  <slot 24> : 24: v4\n" +
-                                        "  |  <slot 25> : CAST(23: v3 AS CHAR(20))\n" +
+                                        "  |  <slot 25> : CAST(20: k2 AS VARCHAR(65533))\n" +
+                                        "  |  <slot 26> : CAST(23: v3 AS CHAR(20))\n" +
+                                        "  |  <slot 27> : CAST(24: v4 AS VARCHAR(20))\n" +
                                         "  |  \n" +
                                         "  3:OlapScanNode\n" +
                                         "     TABLE: m3\n" +
@@ -836,28 +836,28 @@ public class MvTransparentRewriteWithOlapTableTest extends MVTestBase {
                                 "SELECT * from m3 where v1 > 1",
                         };
                         String[] expects = {
-                                "  4:Project\n" +
+                                "  7:Project\n" +
                                         "  |  <slot 19> : 19: k1\n" +
-                                        "  |  <slot 20> : 20: k2\n" +
                                         "  |  <slot 21> : 21: v1\n" +
                                         "  |  <slot 22> : 22: v2\n" +
-                                        "  |  <slot 24> : 24: v4\n" +
-                                        "  |  <slot 25> : CAST(23: v3 AS CHAR(20))\n" +
+                                        "  |  <slot 25> : CAST(20: k2 AS VARCHAR(65533))\n" +
+                                        "  |  <slot 26> : CAST(23: v3 AS CHAR(20))\n" +
+                                        "  |  <slot 27> : CAST(24: v4 AS VARCHAR(20))\n" +
                                         "  |  \n" +
-                                        "  3:OlapScanNode\n" +
+                                        "  6:OlapScanNode\n" +
                                         "     TABLE: m3\n" +
                                         "     PREAGGREGATION: ON\n" +
                                         "     PREDICATES: 21: v1 > 2\n" +
                                         "     partitions=2/3",
-                                "  4:Project\n" +
+                                "  7:Project\n" +
                                         "  |  <slot 19> : 19: k1\n" +
-                                        "  |  <slot 20> : 20: k2\n" +
                                         "  |  <slot 21> : 21: v1\n" +
                                         "  |  <slot 22> : 22: v2\n" +
-                                        "  |  <slot 24> : 24: v4\n" +
-                                        "  |  <slot 25> : CAST(23: v3 AS CHAR(20))\n" +
+                                        "  |  <slot 25> : CAST(20: k2 AS VARCHAR(65533))\n" +
+                                        "  |  <slot 26> : CAST(23: v3 AS CHAR(20))\n" +
+                                        "  |  <slot 27> : CAST(24: v4 AS VARCHAR(20))\n" +
                                         "  |  \n" +
-                                        "  3:OlapScanNode\n" +
+                                        "  6:OlapScanNode\n" +
                                         "     TABLE: m3\n" +
                                         "     PREAGGREGATION: ON\n" +
                                         "     PREDICATES: 21: v1 > 2\n" +
@@ -899,18 +899,17 @@ public class MvTransparentRewriteWithOlapTableTest extends MVTestBase {
                         String[] expects = {
                                 "  4:Project\n" +
                                         "  |  <slot 19> : 19: k1\n" +
-                                        "  |  <slot 20> : 20: k2\n" +
                                         "  |  <slot 21> : 21: v1\n" +
                                         "  |  <slot 22> : 22: v2\n" +
-                                        "  |  <slot 24> : 24: v4\n" +
-                                        "  |  <slot 25> : CAST(23: v3 AS CHAR(20))\n" +
+                                        "  |  <slot 25> : CAST(20: k2 AS VARCHAR(65533))\n" +
+                                        "  |  <slot 26> : CAST(23: v3 AS CHAR(20))\n" +
+                                        "  |  <slot 27> : CAST(24: v4 AS VARCHAR(20))\n" +
                                         "  |  \n" +
                                         "  3:OlapScanNode\n" +
                                         "     TABLE: m3\n" +
                                         "     PREAGGREGATION: ON\n" +
                                         "     PREDICATES: 19: k1 = 1\n" +
-                                        "     partitions=0/3\n" + // pruned
-                                        "     rollup: m3"
+                                        "     partitions=0/3"
                         };
                         int len = sqls.length;
                         for (int i = 0; i < len; i++) {
@@ -1010,12 +1009,11 @@ public class MvTransparentRewriteWithOlapTableTest extends MVTestBase {
                         {
                             String plan = getFragmentPlan("select dt from t3", TExplainLevel.COSTS, "");
                             PlanTestBase.assertContains(plan, "UNION", "mv0", "t3");
-                            PlanTestBase.assertContains(plan, "  0:UNION\n" +
-                                    "  |  output exprs:\n" +
-                                    "  |      [7, VARCHAR(10), false]\n" +
+                            PlanTestBase.assertContains(plan, "|  output exprs:\n" +
+                                    "  |      [7, VARCHAR(1048576), false]\n" +
                                     "  |  child exprs:\n" +
                                     "  |      [11: dt, VARCHAR, false]\n" +
-                                    "  |      [15: dt, VARCHAR, false]");
+                                    "  |      [17: cast, VARCHAR(10), false]");
                         }
                     });
         });
@@ -1041,11 +1039,12 @@ public class MvTransparentRewriteWithOlapTableTest extends MVTestBase {
                         {
                             String plan = getFragmentPlan("select min(age) from t3 group by province;", TExplainLevel.COSTS, "");
                             PlanTestBase.assertContains(plan, "UNION", "mv0", "t3");
-                            PlanTestBase.assertContains(plan, "  |  output exprs:\n" +
-                                    "  |      [6, VARCHAR(64), false] | [8, SMALLINT, true]\n" +
+                            PlanTestBase.assertContains(plan, "  0:UNION\n" +
+                                    "  |  output exprs:\n" +
+                                    "  |      [6, VARCHAR(1048576), false] | [8, SMALLINT, true]\n" +
                                     "  |  child exprs:\n" +
                                     "  |      [9: province, VARCHAR, false] | [11: min(age), SMALLINT, true]\n" +
-                                    "  |      [14: province, VARCHAR, false] | [16: min, SMALLINT, true]");
+                                    "  |      [17: cast, VARCHAR(64), false] | [16: min, SMALLINT, true]");
                         }
                     });
         });
@@ -1302,7 +1301,6 @@ public class MvTransparentRewriteWithOlapTableTest extends MVTestBase {
                                     "from mock_tbl1\n" +
                                     "group by date_trunc('day', data_date)";
                             String plan = getFragmentPlan(query, TExplainLevel.VERBOSE);
-                            System.out.println(plan);
                             PlanTestBase.assertContains(plan, "test_mv1");
                             PlanTestBase.assertContains(plan, " 0:UNION\n" +
                                     "  |  output exprs:\n" +

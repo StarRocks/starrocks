@@ -15,10 +15,8 @@
 #pragma once
 
 #include <memory>
+#include <span>
 #include <vector>
-
-#include "runtime/memory/column_allocator.h"
-#include "types/int256.h"
 
 namespace starrocks {
 
@@ -27,9 +25,12 @@ class HyperLogLog;
 class BitmapValue;
 class PercentileValue;
 class JsonValue;
+class VariantValue;
 
 class DateValue;
 class TimestampValue;
+
+struct int256_t;
 
 typedef __int128 int128_t;
 
@@ -45,6 +46,9 @@ class ColumnAllocator;
 // We may change the Buffer implementation in the future.
 template <typename T>
 using Buffer = std::vector<T, ColumnAllocator<T>>;
+
+template <typename T>
+using ImmBuffer = std::span<const T>;
 
 class ArrayColumn;
 class ArrayViewColumn;
@@ -88,6 +92,9 @@ using Decimal256Column = DecimalV3Column<int256_t>;
 using BinaryColumn = BinaryColumnBase<uint32_t>;
 using LargeBinaryColumn = BinaryColumnBase<uint64_t>;
 
+class ColumnVisitor;
+class ColumnVisitorMutable;
+
 template <typename T>
 constexpr bool is_decimal_column = false;
 template <typename T>
@@ -103,6 +110,9 @@ using BitmapColumn = ObjectColumn<BitmapValue>;
 using PercentileColumn = ObjectColumn<PercentileValue>;
 using JsonColumnBase = ObjectColumn<JsonValue>;
 class JsonColumn;
+
+using VariantColumnBase = ObjectColumn<VariantValue>;
+class VariantColumn;
 
 class MapColumn;
 class StructColumn;

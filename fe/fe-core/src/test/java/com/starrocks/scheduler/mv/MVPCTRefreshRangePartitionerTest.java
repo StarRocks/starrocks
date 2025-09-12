@@ -68,7 +68,9 @@ public class MVPCTRefreshRangePartitionerTest {
         List<PCellWithName> partitions = Arrays.asList(PCellWithName.of("mv_p1", new PCellNone()),
                 PCellWithName.of("mv_p2", new PCellNone()));
         Iterator<PCellWithName> iter = partitions.iterator();
-        MVPCTRefreshRangePartitioner partitioner = new MVPCTRefreshRangePartitioner(mvContext, null, null, mv);
+        MVRefreshParams mvRefreshParams = new MVRefreshParams(mv, new HashMap<>());
+        MVPCTRefreshRangePartitioner partitioner = new MVPCTRefreshRangePartitioner(mvContext, null,
+                null, mv, mvRefreshParams);
         MVAdaptiveRefreshException exception = Assertions.assertThrows(MVAdaptiveRefreshException.class,
                 () -> partitioner.getAdaptivePartitionRefreshNumber(iter));
         Assertions.assertTrue(exception.getMessage().contains("Missing too many partition stats"));
@@ -84,7 +86,9 @@ public class MVPCTRefreshRangePartitionerTest {
         when(mv.getPartitionInfo()).thenReturn(mock(PartitionInfo.class));
         when(mv.getTableProperty().getPartitionTTLNumber()).thenReturn(2);
 
-        MVPCTRefreshRangePartitioner partitioner = new MVPCTRefreshRangePartitioner(mvContext, null, null, mv);
+        MVRefreshParams mvRefreshParams = new MVRefreshParams(mv, new HashMap<>());
+        MVPCTRefreshRangePartitioner partitioner = new MVPCTRefreshRangePartitioner(mvContext, null, null, mv,
+                mvRefreshParams);
 
         PCellSortedSet toRefreshPartitions = PCellSortedSet.of();
         toRefreshPartitions.add(PCellWithName.of("partition1", new PCellNone()));

@@ -44,6 +44,7 @@ import com.starrocks.credential.aws.AwsCloudConfiguration;
 import com.starrocks.lake.LakeTable;
 import com.starrocks.lake.LakeTablet;
 import com.starrocks.lake.StarOSAgent;
+import com.starrocks.lake.snapshot.ClusterSnapshotMgr;
 import com.starrocks.persist.EditLog;
 import com.starrocks.persist.ImageWriter;
 import com.starrocks.persist.SetDefaultStorageVolumeLog;
@@ -1009,5 +1010,43 @@ public class SharedDataStorageVolumeMgrTest {
         Assertions.assertTrue(svm1.tableToStorageVolume.isEmpty());
         Assertions.assertEquals(StorageVolumeMgr.BUILTIN_STORAGE_VOLUME, svm1.getStorageVolumeNameOfDb(1L));
         Assertions.assertEquals(StorageVolumeMgr.BUILTIN_STORAGE_VOLUME, svm1.getStorageVolumeNameOfTable(1L));
+    }
+
+    @Test
+    public void testDropSnapshotStorageVolume(@Mocked GlobalStateMgr globalStateMgr)
+            throws AlreadyExistsException, DdlException, MetaNotFoundException {
+        ClusterSnapshotMgr clusterSnapshotMgr = new ClusterSnapshotMgr();
+        new Expectations() {
+            {
+                GlobalStateMgr.getCurrentState();
+                result = globalStateMgr;
+
+                globalStateMgr.getCurrentState().getClusterSnapshotMgr();
+                result = clusterSnapshotMgr;
+
+                globalStateMgr.getCurrentState().getClusterSnapshotMgr().getAutomatedSnapshotSvName();
+                result = "test_snap";
+            }
+        };
+
+        String svName = "test_snap";
+        // create
+        StorageVolumeMgr svm = new SharedDataStorageVolumeMgr();
+        List<String> locations = Arrays.asList("s3://abc");
+        Map<String, String> storageParams = new HashMap<>();
+        storageParams.put("aaa", "bbb");
+        storageParams.put(AWS_S3_REGION, "region");
+        Assertions.assertThrows(DdlException.class,
+                () -> svm.createStorageVolume(svName, "S3", locations, storageParams, Optional.empty(), ""));
+        storageParams.remove("aaa");
+        storageParams.put(AWS_S3_ENDPOINT, "endpoint");
+        storageParams.put(AWS_S3_USE_AWS_SDK_DEFAULT_BEHAVIOR, "true");
+        String svKey = svm.createStorageVolume(svName, "S3", locations, storageParams, Optional.empty(), "");
+        Assertions.assertEquals(true, svm.exists(svName));
+        Assertions.assertEquals(svName, svm.getStorageVolumeName(svKey));
+        // remove
+        DdlException ex = Assertions.assertThrows(DdlException.class, () -> svm.removeStorageVolume(svName));
+        Assertions.assertEquals("Snapshot enabled on storage volume 'test_snap', drop volume failed.", ex.getMessage());
+
     }
 }

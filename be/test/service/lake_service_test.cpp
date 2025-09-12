@@ -1074,6 +1074,7 @@ TEST_F(LakeServiceTest, test_aggregate_compact) {
                 txnlog2.set_tablet_id(101);
                 txnlog2.set_txn_id(100);
                 resp->add_txn_logs()->CopyFrom(txnlog2);
+                resp->add_compact_stats();
                 resp->mutable_status()->set_status_code(0);
                 done->Run();
             }));

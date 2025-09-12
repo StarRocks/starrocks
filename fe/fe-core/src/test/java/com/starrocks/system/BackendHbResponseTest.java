@@ -15,6 +15,7 @@
 package com.starrocks.system;
 
 import com.starrocks.common.io.DataOutputBuffer;
+import com.starrocks.common.io.Text;
 import com.starrocks.journal.JournalEntity;
 import com.starrocks.persist.EditLogDeserializer;
 import com.starrocks.persist.HbPackage;
@@ -77,7 +78,7 @@ public class BackendHbResponseTest {
         DataOutputBuffer buffer = new DataOutputBuffer(1024);
         JournalEntity entity = new JournalEntity(OperationType.OP_HEARTBEAT_V2, hbPackage);
         buffer.writeShort(entity.opCode());
-        entity.data().write(buffer);
+        Text.writeString(buffer, GsonUtils.GSON.toJson(entity.data(), HbPackage.class));
 
         DataInputStream in = new DataInputStream(new ByteArrayInputStream(buffer.getData()));
         short opCode = in.readShort();

@@ -107,6 +107,10 @@ std::string TabletManager::txn_log_location(int64_t tablet_id, int64_t txn_id) c
     return _location_provider->txn_log_location(tablet_id, txn_id);
 }
 
+std::string TabletManager::txn_log_location(int64_t tablet_id, int64_t txn_id, const PUniqueId& load_id) const {
+    return _location_provider->txn_log_location(tablet_id, txn_id, load_id);
+}
+
 std::string TabletManager::combined_txn_log_location(int64_t tablet_id, int64_t txn_id) const {
     return _location_provider->combined_txn_log_location(tablet_id, txn_id);
 }
@@ -738,6 +742,10 @@ StatusOr<TxnLogPtr> TabletManager::get_txn_log(int64_t tablet_id, int64_t txn_id
     return get_txn_log(txn_log_location(tablet_id, txn_id));
 }
 
+StatusOr<TxnLogPtr> TabletManager::get_txn_log(int64_t tablet_id, int64_t txn_id, const PUniqueId& load_id) {
+    return get_txn_log(txn_log_location(tablet_id, txn_id, load_id));
+}
+
 StatusOr<TxnLogPtr> TabletManager::get_txn_slog(int64_t tablet_id, int64_t txn_id) {
     return get_txn_log(txn_slog_location(tablet_id, txn_id));
 }
@@ -760,13 +768,19 @@ Status TabletManager::put_txn_log(const TxnLogPtr& log, const std::string& path)
 
     _metacache->cache_txn_log(path, log);
 
+    VLOG(2) << "put log path " << path << " log " << log->DebugString();
+
     auto t1 = butil::gettimeofday_us();
     g_put_txn_log_latency << (t1 - t0);
     return Status::OK();
 }
 
 Status TabletManager::put_txn_log(const TxnLogPtr& log) {
-    return put_txn_log(log, txn_log_location(log->tablet_id(), log->txn_id()));
+    if (log->has_load_id()) {
+        return put_txn_log(log, txn_log_location(log->tablet_id(), log->txn_id(), log->load_id()));
+    } else {
+        return put_txn_log(log, txn_log_location(log->tablet_id(), log->txn_id()));
+    }
 }
 
 Status TabletManager::put_txn_log(const TxnLog& log) {

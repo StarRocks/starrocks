@@ -17,8 +17,6 @@ package com.starrocks.planner;
 import com.google.common.base.MoreObjects;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Maps;
-import com.starrocks.analysis.SlotDescriptor;
-import com.starrocks.analysis.TupleDescriptor;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.PaimonTable;
 import com.starrocks.catalog.Type;
@@ -351,19 +349,19 @@ public class PaimonScanNode extends ScanNode {
         }
         if (!scanNodePredicates.getPartitionConjuncts().isEmpty()) {
             output.append(prefix).append("PARTITION PREDICATES: ").append(
-                    getExplainString(scanNodePredicates.getPartitionConjuncts())).append("\n");
+                    explainExpr(scanNodePredicates.getPartitionConjuncts())).append("\n");
         }
         if (!scanNodePredicates.getNonPartitionConjuncts().isEmpty()) {
             output.append(prefix).append("NON-PARTITION PREDICATES: ").append(
-                    getExplainString(scanNodePredicates.getNonPartitionConjuncts())).append("\n");
+                    explainExpr(scanNodePredicates.getNonPartitionConjuncts())).append("\n");
         }
         if (!scanNodePredicates.getNoEvalPartitionConjuncts().isEmpty()) {
             output.append(prefix).append("NO EVAL-PARTITION PREDICATES: ").append(
-                    getExplainString(scanNodePredicates.getNoEvalPartitionConjuncts())).append("\n");
+                    explainExpr(scanNodePredicates.getNoEvalPartitionConjuncts())).append("\n");
         }
         if (!scanNodePredicates.getMinMaxConjuncts().isEmpty()) {
             output.append(prefix).append("MIN/MAX PREDICATES: ").append(
-                    getExplainString(scanNodePredicates.getMinMaxConjuncts())).append("\n");
+                    explainExpr(scanNodePredicates.getMinMaxConjuncts())).append("\n");
         }
 
         List<String> partitionNames = GlobalStateMgr.getCurrentState().getMetadataMgr().listPartitionNames(

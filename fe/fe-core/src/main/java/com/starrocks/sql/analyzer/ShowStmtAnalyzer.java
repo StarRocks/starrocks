@@ -16,16 +16,6 @@ package com.starrocks.sql.analyzer;
 
 import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
-import com.starrocks.analysis.BinaryPredicate;
-import com.starrocks.analysis.BinaryType;
-import com.starrocks.analysis.CompoundPredicate;
-import com.starrocks.analysis.Expr;
-import com.starrocks.analysis.LikePredicate;
-import com.starrocks.analysis.OrderByElement;
-import com.starrocks.analysis.Predicate;
-import com.starrocks.analysis.SlotRef;
-import com.starrocks.analysis.StringLiteral;
-import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.KeysType;
@@ -54,9 +44,9 @@ import com.starrocks.qe.ShowResultMetaFactory;
 import com.starrocks.qe.ShowResultSetMetaData;
 import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.sql.ShowTemporaryTableStmt;
 import com.starrocks.sql.ast.AstVisitorExtendInterface;
 import com.starrocks.sql.ast.DescribeStmt;
+import com.starrocks.sql.ast.OrderByElement;
 import com.starrocks.sql.ast.ShowAlterStmt;
 import com.starrocks.sql.ast.ShowAnalyzeJobStmt;
 import com.starrocks.sql.ast.ShowAnalyzeStatusStmt;
@@ -64,6 +54,7 @@ import com.starrocks.sql.ast.ShowBasicStatsMetaStmt;
 import com.starrocks.sql.ast.ShowColumnStmt;
 import com.starrocks.sql.ast.ShowCreateDbStmt;
 import com.starrocks.sql.ast.ShowCreateExternalCatalogStmt;
+import com.starrocks.sql.ast.ShowCreateRoutineLoadStmt;
 import com.starrocks.sql.ast.ShowCreateTableStmt;
 import com.starrocks.sql.ast.ShowDataDistributionStmt;
 import com.starrocks.sql.ast.ShowDataStmt;
@@ -86,7 +77,17 @@ import com.starrocks.sql.ast.ShowStreamLoadStmt;
 import com.starrocks.sql.ast.ShowTableStatusStmt;
 import com.starrocks.sql.ast.ShowTableStmt;
 import com.starrocks.sql.ast.ShowTabletStmt;
+import com.starrocks.sql.ast.ShowTemporaryTableStmt;
 import com.starrocks.sql.ast.ShowTransactionStmt;
+import com.starrocks.sql.ast.expression.BinaryPredicate;
+import com.starrocks.sql.ast.expression.BinaryType;
+import com.starrocks.sql.ast.expression.CompoundPredicate;
+import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.LikePredicate;
+import com.starrocks.sql.ast.expression.Predicate;
+import com.starrocks.sql.ast.expression.SlotRef;
+import com.starrocks.sql.ast.expression.StringLiteral;
+import com.starrocks.sql.ast.expression.TableName;
 import com.starrocks.sql.ast.spm.ShowBaselinePlanStmt;
 import com.starrocks.sql.common.MetaUtils;
 import org.apache.commons.lang.StringUtils;
@@ -232,6 +233,14 @@ public class ShowStmtAnalyzer {
 
         @Override
         public Void visitShowRoutineLoadStatement(ShowRoutineLoadStmt node, ConnectContext context) {
+            String dbName = node.getDbFullName();
+            dbName = getDatabaseName(dbName, context);
+            node.setDb(dbName);
+            return null;
+        }
+
+        @Override
+        public Void visitShowCreateRoutineLoadStatement(ShowCreateRoutineLoadStmt node, ConnectContext context) {
             String dbName = node.getDbFullName();
             dbName = getDatabaseName(dbName, context);
             node.setDb(dbName);

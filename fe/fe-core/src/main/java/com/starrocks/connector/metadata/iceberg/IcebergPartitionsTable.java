@@ -14,7 +14,6 @@
 
 package com.starrocks.connector.metadata.iceberg;
 
-import com.starrocks.analysis.DescriptorTable;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.PrimitiveType;
@@ -27,6 +26,7 @@ import com.starrocks.connector.iceberg.IcebergApiConverter;
 import com.starrocks.connector.metadata.MetadataTable;
 import com.starrocks.connector.metadata.MetadataTableType;
 import com.starrocks.connector.share.iceberg.IcebergPartitionUtils;
+import com.starrocks.planner.DescriptorTable;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.THdfsTable;

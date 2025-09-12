@@ -42,7 +42,6 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Multimap;
 import com.google.gson.annotations.SerializedName;
-import com.starrocks.analysis.TableName;
 import com.starrocks.binlog.BinlogConfig;
 import com.starrocks.catalog.constraint.ForeignKeyConstraint;
 import com.starrocks.catalog.constraint.UniqueConstraint;
@@ -59,6 +58,7 @@ import com.starrocks.persist.gson.GsonPostProcessable;
 import com.starrocks.server.RunMode;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.sql.ast.expression.TableName;
 import com.starrocks.thrift.TCompactionStrategy;
 import com.starrocks.thrift.TCompressionType;
 import com.starrocks.thrift.TPersistentIndexType;
@@ -215,6 +215,10 @@ public class TableProperty implements Writable, GsonPostProcessable {
     // It represents the mode selected to determine the number of partitions to refresh
     private String partitionRefreshStrategy = Config.default_mv_partition_refresh_strategy;
 
+    // This property only applies to materialized views/
+    // It represents the mode selected to determine how to refresh the materialized view
+    private String mvRefreshMode = Config.default_mv_refresh_mode;
+
     // This property only applies to materialized views
     // When using the system to automatically refresh, the maximum range of the most recent partitions will be refreshed.
     // By default, all partitions will be refreshed.
@@ -327,6 +331,8 @@ public class TableProperty implements Writable, GsonPostProcessable {
 
     private TCompactionStrategy compactionStrategy = TCompactionStrategy.DEFAULT;
 
+    private Boolean enableDynamicTablet = null;
+
     public TableProperty() {
         this(Maps.newLinkedHashMap());
     }
@@ -413,6 +419,7 @@ public class TableProperty implements Writable, GsonPostProcessable {
                 buildDataCachePartitionDuration();
                 buildLocation();
                 buildStorageCoolDownTTL();
+                buildEnableDynamicTablet();
                 break;
             case OperationType.OP_MODIFY_TABLE_CONSTRAINT_PROPERTY:
                 buildConstraint();
@@ -429,6 +436,7 @@ public class TableProperty implements Writable, GsonPostProcessable {
         buildPartitionRefreshNumber();
         buildMVPartitionRefreshStrategy();
         buildAutoRefreshPartitionsLimit();
+        buildMVRefreshMode();
         buildExcludedTriggerTables();
         buildResourceGroup();
         buildConstraint();
@@ -558,6 +566,12 @@ public class TableProperty implements Writable, GsonPostProcessable {
     public TableProperty buildMVPartitionRefreshStrategy() {
         partitionRefreshStrategy = properties.getOrDefault(PropertyAnalyzer.PROPERTIES_PARTITION_REFRESH_STRATEGY,
                 Config.default_mv_partition_refresh_strategy);
+        return this;
+    }
+
+    public TableProperty buildMVRefreshMode() {
+        mvRefreshMode = properties.getOrDefault(PropertyAnalyzer.PROPERTIES_MV_REFRESH_MODE,
+                Config.default_mv_refresh_mode);
         return this;
     }
 
@@ -903,6 +917,19 @@ public class TableProperty implements Writable, GsonPostProcessable {
         }
     }
 
+    public TableProperty buildEnableDynamicTablet() {
+        String value = properties.get(PropertyAnalyzer.PROPERTIES_ENABLE_DYNAMIC_TABLET);
+        if (value == null) {
+            enableDynamicTablet = null;
+        } else if (value.isEmpty()) {
+            enableDynamicTablet = null;
+            properties.remove(PropertyAnalyzer.PROPERTIES_ENABLE_DYNAMIC_TABLET);
+        } else {
+            enableDynamicTablet = Boolean.parseBoolean(value);
+        }
+        return this;
+    }
+
     public void modifyTableProperties(Map<String, String> modifyProperties) {
         properties.putAll(modifyProperties);
     }
@@ -981,6 +1008,14 @@ public class TableProperty implements Writable, GsonPostProcessable {
 
     public void setPartitionRefreshStrategy(String partitionRefreshStrategy) {
         this.partitionRefreshStrategy = partitionRefreshStrategy;
+    }
+
+    public void setMvRefreshMode(String mvRefreshMode) {
+        this.mvRefreshMode = mvRefreshMode;
+    }
+
+    public String getMvRefreshMode() {
+        return mvRefreshMode;
     }
 
     public void setResourceGroup(String resourceGroup) {
@@ -1199,6 +1234,10 @@ public class TableProperty implements Writable, GsonPostProcessable {
         return useFastSchemaEvolution;
     }
 
+    public Boolean getEnableDynamicTablet() {
+        return enableDynamicTablet;
+    }
+
     @Override
     public void gsonPostProcess() throws IOException {
         try {
@@ -1233,5 +1272,6 @@ public class TableProperty implements Writable, GsonPostProcessable {
         buildFileBundling();
         buildMutableBucketNum();
         buildCompactionStrategy();
+        buildEnableDynamicTablet();
     }
 }

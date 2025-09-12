@@ -21,12 +21,15 @@
 #include "fmt/format.h"
 #include "gen_cpp/AgentService_types.h"
 #include "gutil/strings/join.h"
+#include "runtime/exec_env.h"
 #include "storage/data_dir.h"
 #include "storage/replication_txn_manager.h"
 #include "storage/storage_engine.h"
 #include "storage/tablet.h"
 #include "storage/tablet_manager.h"
 #include "storage/txn_manager.h"
+#include "util/countdown_latch.h"
+#include "util/defer_op.h"
 #include "util/starrocks_metrics.h"
 #include "util/threadpool.h"
 #include "util/time.h"
@@ -124,87 +127,101 @@ void run_publish_version_task(ThreadPoolToken* token, const TPublishVersionReque
     span->SetAttribute("num_tablet", num_active_tablet);
 
     std::mutex affected_dirs_lock;
+    CountDownLatch latch(static_cast<int>(tablet_tasks.size()));
     for (auto& tablet_task : tablet_tasks) {
         uint32_t retry_time = 0;
         Status st;
         while (retry_time++ < PUBLISH_VERSION_SUBMIT_MAX_RETRY) {
-            st = token->submit_func([&]() {
-                auto& task = tablet_task;
-                auto tablet_span = Tracer::Instance().add_span("tablet_publish_txn", span);
-                auto scoped_tablet_span = trace::Scope(tablet_span);
-                tablet_span->SetAttribute("txn_id", transaction_id);
-                tablet_span->SetAttribute("tablet_id", task.tablet_id);
-                tablet_span->SetAttribute("version", task.version);
-                if (!is_replication_txn && !task.rowset) {
-                    task.st = Status::NotFound(
-                            fmt::format("rowset not found  of tablet: {}, txn_id: {}", task.tablet_id, task.txn_id));
-                    LOG(WARNING) << task.st;
-                    return;
-                }
-                TabletSharedPtr tablet = StorageEngine::instance()->tablet_manager()->get_tablet(task.tablet_id);
-                if (!tablet) {
-                    // tablet may get dropped, it's ok to ignore this situation
-                    LOG(WARNING) << fmt::format(
-                            "publish_version tablet not found tablet_id: {}, version: {} txn_id: {}", task.tablet_id,
-                            task.version, task.txn_id);
-                    return;
-                }
-                {
-                    std::lock_guard lg(affected_dirs_lock);
-                    affected_dirs.insert(tablet->data_dir());
-                }
-                if (is_replication_txn) {
-                    task.st = StorageEngine::instance()->replication_txn_manager()->publish_txn(
-                            task.txn_id, task.partition_id, tablet, task.version);
-                    if (!task.st.ok()) {
-                        LOG(WARNING) << "Publish txn failed tablet:" << tablet->tablet_id()
-                                     << " version:" << task.version << " partition:" << task.partition_id
-                                     << " txn_id: " << task.txn_id;
-                        std::string_view msg = task.st.message();
-                        tablet_span->SetStatus(trace::StatusCode::kError, {msg.data(), msg.size()});
-                    } else {
-                        VLOG(2) << "Publish txn success tablet:" << tablet->tablet_id() << " version:" << task.version
-                                << " tablet_max_version:" << tablet->max_continuous_version()
-                                << " partition:" << task.partition_id << " txn_id: " << task.txn_id;
-                    }
-                } else if (is_version_overwrite) {
-                    task.st = StorageEngine::instance()->txn_manager()->publish_overwrite_txn(
-                            task.partition_id, tablet, task.txn_id, task.version, task.rowset, wait_time);
-                    if (!task.st.ok()) {
-                        LOG(WARNING) << "Publish overwrite txn failed tablet:" << tablet->tablet_id()
-                                     << " version:" << task.version << " partition:" << task.partition_id
-                                     << " txn_id: " << task.txn_id << " rowset:" << task.rowset->rowset_id();
-                        std::string_view msg = task.st.message();
-                        tablet_span->SetStatus(trace::StatusCode::kError, {msg.data(), msg.size()});
-                    } else {
-                        LOG(INFO) << "Publish overwrite txn success tablet:" << tablet->tablet_id()
-                                  << " version:" << task.version
-                                  << " tablet_max_version:" << tablet->max_continuous_version()
-                                  << " partition:" << task.partition_id << " txn_id: " << task.txn_id
-                                  << " rowset:" << task.rowset->rowset_id();
-                    }
-                } else {
-                    task.st = StorageEngine::instance()->txn_manager()->publish_txn(
-                            task.partition_id, tablet, task.txn_id, task.version, task.rowset, wait_time,
-                            task.is_double_write);
-                    if (!task.st.ok()) {
-                        LOG(WARNING) << "Publish txn failed tablet:" << tablet->tablet_id()
-                                     << " version:" << task.version << " partition:" << task.partition_id
-                                     << " txn_id: " << task.txn_id << " rowset:" << task.rowset->rowset_id();
-                        std::string_view msg = task.st.message();
-                        tablet_span->SetStatus(trace::StatusCode::kError, {msg.data(), msg.size()});
-                    } else {
-                        if (task.is_double_write || VLOG_ROW_IS_ON) {
-                            LOG(INFO) << "Publish txn success tablet:" << tablet->tablet_id()
-                                      << " version:" << task.version
-                                      << " tablet_max_version:" << tablet->max_continuous_version()
-                                      << " is_double_write:" << task.is_double_write
-                                      << " partition:" << task.partition_id << " txn_id: " << task.txn_id
-                                      << " rowset:" << task.rowset->rowset_id();
+            auto task = std::make_shared<CancellableRunnable>(
+                    [&]() {
+                        DeferOp defer([&] { latch.count_down(); });
+                        auto& task = tablet_task;
+                        auto tablet_span = Tracer::Instance().add_span("tablet_publish_txn", span);
+                        auto scoped_tablet_span = trace::Scope(tablet_span);
+                        tablet_span->SetAttribute("txn_id", transaction_id);
+                        tablet_span->SetAttribute("tablet_id", task.tablet_id);
+                        tablet_span->SetAttribute("version", task.version);
+                        if (!is_replication_txn && !task.rowset) {
+                            task.st = Status::NotFound(fmt::format("rowset not found of tablet: {}, txn_id: {}",
+                                                                   task.tablet_id, task.txn_id));
+                            LOG(WARNING) << task.st;
+                            return;
                         }
-                    }
-                }
-            });
+                        TabletSharedPtr tablet =
+                                StorageEngine::instance()->tablet_manager()->get_tablet(task.tablet_id);
+                        if (!tablet) {
+                            // tablet may get dropped, it's ok to ignore this situation
+                            LOG(WARNING) << fmt::format(
+                                    "publish_version tablet not found tablet_id: {}, version: {} txn_id: {}",
+                                    task.tablet_id, task.version, task.txn_id);
+                            return;
+                        }
+                        {
+                            std::lock_guard lg(affected_dirs_lock);
+                            affected_dirs.insert(tablet->data_dir());
+                        }
+                        if (is_replication_txn) {
+                            task.st = StorageEngine::instance()->replication_txn_manager()->publish_txn(
+                                    task.txn_id, task.partition_id, tablet, task.version);
+                            if (!task.st.ok()) {
+                                LOG(WARNING) << "Publish txn failed tablet:" << tablet->tablet_id()
+                                             << " version:" << task.version << " partition:" << task.partition_id
+                                             << " txn_id: " << task.txn_id;
+                                std::string_view msg = task.st.message();
+                                tablet_span->SetStatus(trace::StatusCode::kError, {msg.data(), msg.size()});
+                            } else {
+                                VLOG(2) << "Publish txn success tablet:" << tablet->tablet_id()
+                                        << " version:" << task.version
+                                        << " tablet_max_version:" << tablet->max_continuous_version()
+                                        << " partition:" << task.partition_id << " txn_id: " << task.txn_id;
+                            }
+                        } else if (is_version_overwrite) {
+                            task.st = StorageEngine::instance()->txn_manager()->publish_overwrite_txn(
+                                    task.partition_id, tablet, task.txn_id, task.version, task.rowset, wait_time);
+                            if (!task.st.ok()) {
+                                LOG(WARNING) << "Publish overwrite txn failed tablet:" << tablet->tablet_id()
+                                             << " version:" << task.version << " partition:" << task.partition_id
+                                             << " txn_id: " << task.txn_id << " rowset:" << task.rowset->rowset_id();
+                                std::string_view msg = task.st.message();
+                                tablet_span->SetStatus(trace::StatusCode::kError, {msg.data(), msg.size()});
+                            } else {
+                                LOG(INFO) << "Publish overwrite txn success tablet:" << tablet->tablet_id()
+                                          << " version:" << task.version
+                                          << " tablet_max_version:" << tablet->max_continuous_version()
+                                          << " partition:" << task.partition_id << " txn_id: " << task.txn_id
+                                          << " rowset:" << task.rowset->rowset_id();
+                            }
+                        } else {
+                            task.st = StorageEngine::instance()->txn_manager()->publish_txn(
+                                    task.partition_id, tablet, task.txn_id, task.version, task.rowset, wait_time,
+                                    task.is_double_write);
+                            if (!task.st.ok()) {
+                                LOG(WARNING) << "Publish txn failed tablet:" << tablet->tablet_id()
+                                             << " version:" << task.version << " partition:" << task.partition_id
+                                             << " txn_id: " << task.txn_id << " rowset:" << task.rowset->rowset_id();
+                                std::string_view msg = task.st.message();
+                                tablet_span->SetStatus(trace::StatusCode::kError, {msg.data(), msg.size()});
+                            } else {
+                                if (task.is_double_write || VLOG_ROW_IS_ON) {
+                                    LOG(INFO) << "Publish txn success tablet:" << tablet->tablet_id()
+                                              << " version:" << task.version
+                                              << " tablet_max_version:" << tablet->max_continuous_version()
+                                              << " is_double_write:" << task.is_double_write
+                                              << " partition:" << task.partition_id << " txn_id: " << task.txn_id
+                                              << " rowset:" << task.rowset->rowset_id();
+                                }
+                            }
+                        }
+                    },
+                    [&]() {
+                        tablet_task.st = Status::Cancelled(
+                                fmt::format("publish version task has been cancelled, tablet_id={}, version={}",
+                                            tablet_task.tablet_id, tablet_task.version));
+                        VLOG(1) << tablet_task.st;
+                        latch.count_down();
+                    });
+
+            st = token->submit(std::move(task));
             if (st.is_service_unavailable()) {
                 int64_t retry_sleep_ms = 50 * retry_time;
                 LOG(WARNING) << "publish version threadpool is busy, retry in  " << retry_sleep_ms
@@ -219,10 +236,11 @@ void run_publish_version_task(ThreadPoolToken* token, const TPublishVersionReque
         }
         if (!st.ok()) {
             tablet_task.st = std::move(st);
+            latch.count_down();
         }
     }
     span->AddEvent("all_task_submitted");
-    token->wait();
+    latch.wait();
     span->AddEvent("all_task_finished");
 
     Status st;

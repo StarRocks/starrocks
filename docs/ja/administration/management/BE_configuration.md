@@ -1435,6 +1435,42 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 説明: ゾーンマップインデックスのメモリーキャッシュを有効にするかどうか。ゾーンマップインデックスを使用してスキャンを高速化したい場合は、メモリキャッシュを使用することを推奨します。
 - 導入バージョン: -
 
+##### enable_string_prefix_zonemap
+
+- デフォルト: true
+- タイプ: Boolean
+- 単位: -
+- 可変: はい
+- 説明: 文字列（CHAR/VARCHAR）列に対して、前置長に基づくゾーンマップを有効にするかどうか。非キー列では、最小値/最大値は `string_prefix_zonemap_prefix_len` で指定した長さに切り詰められます。
+- 導入バージョン: -
+
+##### string_prefix_zonemap_prefix_len
+
+- デフォルト: 16
+- タイプ: Int
+- 単位: -
+- 可変: はい
+- 説明: `enable_string_prefix_zonemap` が有効な場合に、文字列ゾーンマップの最小値/最大値に使用する前置長。
+- 導入バージョン: -
+
+##### string_zonemap_overlap_threshold
+
+- デフォルト: 0.8
+- タイプ: Double
+- 単位: -
+- 可変: はい
+- 説明: 文字列ページレベルのゾーンマップを自動作成するためのしきい値。連続するページ間の推定オーバーラップ率がこの値を超える場合、ページレベルのゾーンマップの書き込みをスキップします。範囲: [0.0, 1.0]。
+- 導入バージョン: -
+
+##### string_zonemap_min_pages_for_adaptive_check
+
+- デフォルト: 16
+- タイプ: Int
+- 単位: -
+- 可変: はい
+- 説明: 自適応チェックを適用する前に必要な非空ページの最小数。
+- 導入バージョン: -
+
 ##### enable_ordinal_index_memory_page_cache
 
 - デフォルト: true
@@ -1739,6 +1775,15 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 可変: はい
 - 説明: Flat JSON によって抽出できるサブフィールドの最大数。このパラメータは `enable_json_flat` が `true` に設定されている場合にのみ有効です。
 - 導入バージョン: v3.3.0
+
+##### json_flat_create_zonemap
+
+- デフォルト: true
+- タイプ: Boolean
+- 単位: 
+- 可変: はい
+- 説明: フラット化された JSON のサブカラムに対してゾーンマップを作成するかどうか。`enable_json_flat` が `true` の場合にのみ有効です。
+- 導入バージョン: -
 
 ##### enable_compaction_flat_json
 

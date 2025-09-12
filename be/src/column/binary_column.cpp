@@ -37,12 +37,12 @@ void BinaryColumnBase<T>::check_or_die() const {
     CHECK_EQ(_bytes.size(), _offsets.back());
     size_t size = this->size();
     for (size_t i = 0; i < size; i++) {
-        CHECK_GE(_offsets[i + 1], _offsets[i]);
+        DCHECK_GE(_offsets[i + 1], _offsets[i]);
     }
     if (_slices_cache) {
         for (size_t i = 0; i < size; i++) {
-            CHECK_EQ(_slices[i].data, get_slice(i).data);
-            CHECK_EQ(_slices[i].size, get_slice(i).size);
+            DCHECK_EQ(_slices[i].data, get_slice(i).data);
+            DCHECK_EQ(_slices[i].size, get_slice(i).size);
         }
     }
 }
@@ -93,14 +93,13 @@ void BinaryColumnBase<T>::append_selective(const Column& src, const uint32_t* in
     indexes += from;
 
     const auto& src_column = down_cast<const BinaryColumnBase<T>&>(src);
-    const auto* __restrict src_offsets = src_column.get_offset().data();
-    const auto* __restrict src_bytes = src_column.get_bytes().data();
 
     const size_t prev_num_offsets = _offsets.size();
     const size_t prev_num_rows = prev_num_offsets - 1;
 
     _offsets.resize(prev_num_offsets + size * 2);
     auto* __restrict new_offsets = _offsets.data() + prev_num_offsets;
+    const auto* __restrict src_offsets = src_column.get_offset().data();
 
     // Buffer i-th start offset and end offset in new_offsets[i * 2] and new_offsets[i * 2 + 1].
     for (size_t i = 0; i < size; i++) {
@@ -116,6 +115,7 @@ void BinaryColumnBase<T>::append_selective(const Column& src, const uint32_t* in
             num_bytes += new_offsets[i * 2 + 1] - new_offsets[i * 2];
         }
         _bytes.resize(num_bytes);
+        const auto* __restrict src_bytes = src_column.get_bytes().data();
         auto* __restrict dest_bytes = _bytes.data();
         size_t cur_offset = _offsets[prev_num_rows];
 

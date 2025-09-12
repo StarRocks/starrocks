@@ -16,7 +16,6 @@ package com.starrocks.sql.analyzer;
 
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
-import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.HiveTable;
@@ -30,6 +29,7 @@ import com.starrocks.qe.StmtExecutor;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.MetadataMgr;
 import com.starrocks.sql.ast.StatementBase;
+import com.starrocks.sql.ast.expression.TableName;
 import com.starrocks.sql.common.MetaUtils;
 import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.utframe.StarRocksAssert;

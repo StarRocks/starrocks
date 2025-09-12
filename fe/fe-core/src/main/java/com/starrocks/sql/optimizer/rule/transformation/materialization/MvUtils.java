@@ -21,17 +21,6 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Range;
 import com.google.common.collect.Sets;
-import com.starrocks.analysis.BinaryPredicate;
-import com.starrocks.analysis.BinaryType;
-import com.starrocks.analysis.BoolLiteral;
-import com.starrocks.analysis.CompoundPredicate;
-import com.starrocks.analysis.DateLiteral;
-import com.starrocks.analysis.Expr;
-import com.starrocks.analysis.FunctionCallExpr;
-import com.starrocks.analysis.InPredicate;
-import com.starrocks.analysis.JoinOperator;
-import com.starrocks.analysis.LiteralExpr;
-import com.starrocks.analysis.SlotRef;
 import com.starrocks.catalog.BaseTableInfo;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
@@ -60,6 +49,17 @@ import com.starrocks.sql.ast.QueryRelation;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.RandomDistributionDesc;
 import com.starrocks.sql.ast.StatementBase;
+import com.starrocks.sql.ast.expression.BinaryPredicate;
+import com.starrocks.sql.ast.expression.BinaryType;
+import com.starrocks.sql.ast.expression.BoolLiteral;
+import com.starrocks.sql.ast.expression.CompoundPredicate;
+import com.starrocks.sql.ast.expression.DateLiteral;
+import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.FunctionCallExpr;
+import com.starrocks.sql.ast.expression.InPredicate;
+import com.starrocks.sql.ast.expression.JoinOperator;
+import com.starrocks.sql.ast.expression.LiteralExpr;
+import com.starrocks.sql.ast.expression.SlotRef;
 import com.starrocks.sql.common.MetaUtils;
 import com.starrocks.sql.common.PRangeCell;
 import com.starrocks.sql.optimizer.CachingMvPlanContextBuilder;
@@ -109,6 +109,7 @@ import com.starrocks.sql.optimizer.rule.RuleType;
 import com.starrocks.sql.optimizer.rule.mv.MVUtils;
 import com.starrocks.sql.optimizer.rule.mv.MaterializedViewWrapper;
 import com.starrocks.sql.optimizer.transformer.LogicalPlan;
+import com.starrocks.sql.optimizer.transformer.MVTransformerContext;
 import com.starrocks.sql.optimizer.transformer.RelationTransformer;
 import com.starrocks.sql.optimizer.transformer.SqlToScalarOperatorTranslator;
 import com.starrocks.sql.optimizer.transformer.TransformerContext;
@@ -379,6 +380,36 @@ public class MvUtils {
         }
     }
 
+    /**
+     * Whether `root` and its children are all Select/Project/Scan ops.
+     */
+    public static boolean isLogicalSP(OptExpression root) {
+        if (root == null) {
+            return false;
+        }
+        Operator operator = root.getOp();
+        if (!(operator instanceof LogicalOperator)) {
+            return false;
+        }
+        if (!(operator instanceof LogicalScanOperator)
+                && !(operator instanceof LogicalProjectOperator)
+                && !(operator instanceof LogicalFilterOperator)) {
+            return false;
+        }
+        if (operator instanceof LogicalOlapScanOperator) {
+            LogicalOlapScanOperator olapScanOperator = (LogicalOlapScanOperator) operator;
+            if (olapScanOperator.isSample()) {
+                return false;
+            }
+        }
+        for (OptExpression child : root.getInputs()) {
+            if (!isLogicalSP(child)) {
+                return false;
+            }
+        }
+        return true;
+    }
+
     public static boolean isLogicalSPJG(OptExpression root) {
         return isLogicalSPJG(root, 0);
     }
@@ -482,12 +513,12 @@ public class MvUtils {
                                                                                ColumnRefFactory columnRefFactory,
                                                                                ConnectContext connectContext,
                                                                                OptimizerOptions optimizerOptions,
-                                                                               boolean inlineView) {
+                                                                               MVTransformerContext mvTransformerContext) {
         Preconditions.checkState(mvStmt instanceof QueryStatement);
         Analyzer.analyze(mvStmt, connectContext);
         QueryRelation query = ((QueryStatement) mvStmt).getQueryRelation();
         TransformerContext transformerContext =
-                new TransformerContext(columnRefFactory, connectContext, inlineView, null);
+                new TransformerContext(columnRefFactory, connectContext, mvTransformerContext);
         LogicalPlan logicalPlan = new RelationTransformer(transformerContext).transform(query);
         Optimizer optimizer =
                 OptimizerFactory.create(
@@ -1218,40 +1249,40 @@ public class MvUtils {
             LogicalViewScanOperator viewScanOperator = op.cast();
             OptExpression inlineViewPlan = viewScanOperator.getOriginalPlanEvaluator();
             if (viewScanOperator.getPredicate() != null) {
+                Operator inlineViewOp = inlineViewPlan.getOp();
+
                 // original map records inlined view's column ref to non-inlined view's column ref mapping,
                 // now we need to rewrite non-inlined view's column ref to inlined view's column ref,
                 // so we need to reverse the mapping.
                 Map<ColumnRefOperator, ScalarOperator> originalColumnRefToInlinedColumnRefMap =
                         Maps.newHashMap(viewScanOperator.getOriginalColumnRefToInlinedColumnRefMap());
-                // add new added column ref mapping
-                if (viewScanOperator.getProjection() != null) {
-                    viewScanOperator.getProjection().getColumnRefMap()
-                            .entrySet()
-                            .stream()
-                            .forEach(e -> originalColumnRefToInlinedColumnRefMap.put(e.getKey(), e.getValue()));
-                }
                 Map<ColumnRefOperator, ScalarOperator> reverseColumnRefMap = originalColumnRefToInlinedColumnRefMap
                         .entrySet()
                         .stream()
                         .collect(Collectors.toMap(e -> (ColumnRefOperator) e.getValue(), e -> e.getKey()));
-
-                // If viewScanOperator contains predicate, we need to rewrite them, otherwise predicate will be lost.
+                if (inlineViewOp.getProjection() != null) {
+                    // if inline view's projection is not null, also need to rewrite inline view's projection
+                    reverseColumnRefMap = Utils.mergeWithProject(reverseColumnRefMap, inlineViewOp.getProjection());
+                }
                 ReplaceColumnRefRewriter rewriter = new ReplaceColumnRefRewriter(reverseColumnRefMap);
-                Operator.Builder builder = OperatorBuilderFactory.build(inlineViewPlan.getOp());
-                builder.withOperator(inlineViewPlan.getOp());
+
+                Operator.Builder builder = OperatorBuilderFactory.build(inlineViewOp);
+                builder.withOperator(inlineViewOp);
                 if (viewScanOperator.getPredicate() != null) {
-                    // rewrite predicate
+                    // If viewScanOperator contains predicate, we need to rewrite them, otherwise predicate will be lost.
                     ScalarOperator rewrittenPredicate = rewriter.rewrite(viewScanOperator.getPredicate());
                     builder.setPredicate(rewrittenPredicate);
                 }
                 // rewrite projection
-                if (viewScanOperator.getPredicate() != null) {
-                    Map<ColumnRefOperator, ScalarOperator> newColumnRefMap = viewScanOperator
+                if (viewScanOperator.getProjection() != null) {
+                    // merge inline view's projection with view scan's projection
+                    Map<ColumnRefOperator, ScalarOperator> newColumnRefMap = Maps.newHashMap();
+                    viewScanOperator
                             .getProjection().getColumnRefMap()
                             .entrySet()
                             .stream()
                             .map(e -> Maps.immutableEntry(e.getKey(), rewriter.rewrite(e.getValue())))
-                            .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
+                            .forEach(e -> newColumnRefMap.put(e.getKey(), e.getValue()));
                     builder.setProjection(new Projection(newColumnRefMap));
                 }
                 Operator newInlineViewPlanOp = builder.build();

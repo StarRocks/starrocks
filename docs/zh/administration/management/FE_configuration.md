@@ -9,6 +9,8 @@ import AdminSetFrontendNote from '../../_assets/commonMarkdown/FE_config_note.md
 
 import StaticFEConfigNote from '../../_assets/commonMarkdown/StaticFE_config_note.md'
 
+import EditionSpecificFEItem from '../../_assets/commonMarkdown/Edition_Specific_FE_Item.md'
+
 # FE 配置项
 
 <FEConfigMethod />
@@ -3491,7 +3493,7 @@ Compaction Score 代表了一个表分区是否值得进行 Compaction 的评分
 
 ##### lake_enable_balance_tablets_between_workers
 
-- 默认值：false
+- 默认值：true
 - 类型：Boolean
 - 单位：-
 - 是否动态：是
@@ -3873,15 +3875,6 @@ Compaction Score 代表了一个表分区是否值得进行 Compaction 的评分
 - 单位：-
 - 是否动态：否
 - 描述：小文件的根目录。
-- 引入版本：-
-
-##### enable_auth_check
-
-- 默认值：true
-- 类型：Boolean
-- 单位：-
-- 是否动态：否
-- 描述：是否开启鉴权检查功能。取值范围：`TRUE` 和 `FALSE`。`TRUE` 表示开启该功能。`FALSE`表示关闭该功能。
 - 引入版本：-
 
 <!--
@@ -5536,3 +5529,14 @@ Compaction Score 代表了一个表分区是否值得进行 Compaction 的评分
 - 是否动态：是
 - 描述：是否允许系统跟踪历史节点。将此项设置为 `true`，就可以启用 Cache Sharing 功能，并允许系统在弹性扩展过程中选择正确的缓存节点。
 - 引入版本：v3.5.1
+
+
+##### transform_type_prefer_string_for_varchar
+- 默认值：true
+- 类型：布尔值
+- 单位：-
+- 是否动态：是
+- 描述：在物化视图创建和 CTAS 操作中，是否优先对固定长度的 VARCHAR 列使用 STRING 类型。
+- 引入版本：v4.0.0
+
+<EditionSpecificFEItem />

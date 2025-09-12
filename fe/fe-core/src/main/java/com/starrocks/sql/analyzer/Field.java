@@ -14,15 +14,15 @@
 
 package com.starrocks.sql.analyzer;
 
-import com.starrocks.analysis.Expr;
-import com.starrocks.analysis.SlotRef;
-import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.StructField;
 import com.starrocks.catalog.StructType;
 import com.starrocks.catalog.Type;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.GlobalVariable;
 import com.starrocks.sql.ast.QualifiedName;
+import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.SlotRef;
+import com.starrocks.sql.ast.expression.TableName;
 
 import java.util.LinkedList;
 import java.util.List;

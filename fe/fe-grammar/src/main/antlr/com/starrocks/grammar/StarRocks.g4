@@ -965,6 +965,7 @@ alterClause
     | tableOperationClause
     | dropPersistentIndexClause
     | splitTabletClause
+    | alterTableAutoIncrementClause
 
     //Alter partition clause
     | addPartitionClause
@@ -1163,7 +1164,7 @@ tableOperationClause
     ;
 
 tableOperationArg
-    : functionCall (WHERE expression)?
+    : identifier '(' (argumentList)? ')' (WHERE expression)?
     ;
 
 tagOptions
@@ -1214,6 +1215,10 @@ splitTabletClause
     : SPLIT
       (((TABLET | TABLETS) partitionNames?) | tabletList)
       properties?
+    ;
+
+alterTableAutoIncrementClause
+    : AUTO_INCREMENT '=' INTEGER_VALUE
     ;
 
 // ---------Alter partition clause---------
@@ -2750,7 +2755,7 @@ whenClause
     ;
 
 filter
-    : FILTER '(' WHERE booleanExpression ')'
+    : FILTER '(' WHERE expression ')'
     ;
 
 over

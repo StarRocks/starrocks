@@ -16,12 +16,11 @@
 package com.starrocks.sql.ast;
 
 import com.google.common.collect.ImmutableSet;
-import com.starrocks.analysis.Expr;
-import com.starrocks.analysis.LimitElement;
-import com.starrocks.analysis.OrderByElement;
-import com.starrocks.analysis.TableName;
 import com.starrocks.common.proc.ProcNodeInterface;
 import com.starrocks.common.util.OrderByPair;
+import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.LimitElement;
+import com.starrocks.sql.ast.expression.TableName;
 import com.starrocks.sql.parser.NodePosition;
 
 import java.util.HashMap;

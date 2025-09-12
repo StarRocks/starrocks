@@ -215,6 +215,18 @@ ALTER USER 'jack' SET PROPERTIES ('session.query_timeout' = '600');
 * 类型：String
 * 引入版本：v2.5.14
 
+### cbo_json_v2_dict_opt
+
+* 描述：是否为 JSON v2 路径改写生成的 Flat JSON 字符串子列启用低基数字典优化。开启后，优化器可以为这些子列构建并使用全局字典，从而加速字符串表达式、GROUP BY、JOIN 等操作。
+* 默认值：true
+* 类型：Boolean
+
+### cbo_json_v2_rewrite
+
+* 描述：是否在优化器中启用 JSON v2 路径改写。开启后，会将 JSON 函数（如 `get_json_*`）改写为直接访问 Flat JSON 子列，从而启用谓词下推、列裁剪以及字典优化。
+* 默认值：true
+* 类型：Boolean
+
 ### cbo_materialized_view_rewrite_related_mvs_limit
 
 * 描述：用于指定查询在 Plan 阶段最多拥有的候选物化视图个数。
@@ -450,6 +462,12 @@ ALTER USER 'jack' SET PROPERTIES ('session.query_timeout' = '600');
   您也可以通过添加 `skew` hint 来开启 count distinct 列的分桶优化，例如 `select a,count(distinct [skew] b) from t group by a;`。
 * 默认值：false，表示不开启。
 * 引入版本：v2.5
+
+### enable_group_by_compressed_key
+
+* 描述：是否利用准确的统计信息来压缩 GROUP BY Key 列。有效值：`true` 和 `false`。
+* 默认值：true
+* 引入版本：v4.0
 
 ### enable_gin_filter
 
@@ -972,7 +990,13 @@ ALTER USER 'jack' SET PROPERTIES ('session.query_timeout' = '600');
 
 ### pipeline_dop
 
-* 描述：一个 Pipeline 实例的并行数量。可通过设置实例的并行数量调整查询并发度。默认值为 0，即系统自适应调整每个 pipeline 的并行度。您也可以设置为大于 0 的数值，通常为 BE 节点 CPU 物理核数的一半。从 3.0 版本开始，支持根据查询并发度自适应调节 `pipeline_dop`。
+* 描述：一个 Pipeline 实例的并行数量。可通过设置实例的并行数量调整查询并发度。默认值为 0，即系统自适应调整每个 pipeline 的并行度。该变量还控制着 OLAP 表上导入作业的并行度。您也可以设置为大于 0 的数值，通常为 BE 节点 CPU 物理核数的一半。从 3.0 版本开始，支持根据查询并发度自适应调节 `pipeline_dop`。
+* 默认值：0
+* 类型：Int
+
+### pipeline_sink_dop
+
+* 描述：用于向 Iceberg 表、Hive 表导入数据以及通过 INSERT INTO FILES() 导出数据的 Sink 并行数量。该参数用于调整这些导入作业的并发性。默认值为 0，即系统自适应调整并行度。您也可以将此变量设置为大于 0 的值。
 * 默认值：0
 * 类型：Int
 

@@ -612,6 +612,8 @@ void AdaptivePartitionHashJoinBuilder::_adjust_partition_rows(size_t hash_table_
     _hash_table_bytes_per_row = hash_table_bytes_per_row;
     _hash_table_probing_bytes_per_row = hash_table_probing_bytes_per_row;
 
+    hash_table_bytes_per_row = std::max<size_t>(hash_table_bytes_per_row, 1);
+
     _fit_L2_cache_max_rows = _L2_cache_size / hash_table_bytes_per_row;
     _fit_L3_cache_max_rows = _L3_cache_size / hash_table_bytes_per_row;
 

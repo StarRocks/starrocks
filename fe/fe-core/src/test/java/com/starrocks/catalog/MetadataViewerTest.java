@@ -35,12 +35,6 @@
 package com.starrocks.catalog;
 
 import com.google.common.collect.Lists;
-import com.starrocks.analysis.BinaryPredicate;
-import com.starrocks.analysis.BinaryType;
-import com.starrocks.analysis.SlotRef;
-import com.starrocks.analysis.StringLiteral;
-import com.starrocks.analysis.TableName;
-import com.starrocks.analysis.TableRef;
 import com.starrocks.backup.CatalogMocker;
 import com.starrocks.catalog.Replica.ReplicaStatus;
 import com.starrocks.common.AnalysisException;
@@ -49,6 +43,12 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
 import com.starrocks.sql.ast.AdminShowReplicaStatusStmt;
 import com.starrocks.sql.ast.PartitionNames;
+import com.starrocks.sql.ast.expression.BinaryPredicate;
+import com.starrocks.sql.ast.expression.BinaryType;
+import com.starrocks.sql.ast.expression.SlotRef;
+import com.starrocks.sql.ast.expression.StringLiteral;
+import com.starrocks.sql.ast.expression.TableName;
+import com.starrocks.sql.ast.expression.TableRef;
 import com.starrocks.system.SystemInfoService;
 import mockit.Expectations;
 import mockit.Mock;
@@ -133,7 +133,6 @@ public class MetadataViewerTest {
                 null};
         List<List<String>> result = (List<List<String>>) getTabletStatusMethod.invoke(null, args);
         Assertions.assertEquals(3, result.size());
-        System.out.println(result);
 
         args = new Object[] {CatalogMocker.TEST_DB_NAME, CatalogMocker.TEST_TBL_NAME, partitions, ReplicaStatus.DEAD,
                 BinaryType.EQ};
@@ -152,7 +151,6 @@ public class MetadataViewerTest {
         Object[] args = new Object[] {CatalogMocker.TEST_DB_NAME, CatalogMocker.TEST_TBL_NAME, null};
         List<List<String>> result = (List<List<String>>) getTabletDistributionMethod.invoke(null, args);
         Assertions.assertEquals(3, result.size());
-        System.out.println(result);
     }
 
     @Test
