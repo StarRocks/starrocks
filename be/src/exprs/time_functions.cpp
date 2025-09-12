@@ -1598,7 +1598,7 @@ StatusOr<ColumnPtr> TimeFunctions::hour_from_unixtime(FunctionContext* context, 
     auto ctz = context->state()->timezone_obj();
     auto size = columns[0]->size();
     ColumnViewer<TYPE_BIGINT> data_column(columns[0]);
-    ColumnBuilder<TYPE_INT> result(size);
+    ColumnBuilder<TYPE_TINYINT> result(size);
     for (int row = 0; row < size; ++row) {
         if (data_column.is_null(row)) {
             result.append_null();
@@ -3513,3 +3513,8 @@ StatusOr<ColumnPtr> TimeFunctions::time_format(FunctionContext* context, const s
 }
 
 } // namespace starrocks
+<<<<<<< HEAD
+=======
+
+#include "gen_cpp/opcode/TimeFunctions.inc"
+>>>>>>> 3688bc4bd4 ([BugFix] fix hour_from_unixtime rule (#63006))

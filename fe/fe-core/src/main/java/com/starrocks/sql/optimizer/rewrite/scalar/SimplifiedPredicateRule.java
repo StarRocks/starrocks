@@ -44,6 +44,7 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.Objects;
 import java.util.Set;
+import java.util.function.Predicate;
 import java.util.stream.Collectors;
 
 public class SimplifiedPredicateRule extends BottomUpScalarOperatorRewriteRule {
@@ -576,12 +577,26 @@ public class SimplifiedPredicateRule extends BottomUpScalarOperatorRewriteRule {
                 ConstantOperator.createVarchar(mergePath)), child.getFunction());
     }
 
+    private static ScalarOperator lookupChild(ScalarOperator call, Predicate<ScalarOperator> predicate) {
+        if (predicate.test(call)) {
+            return call;
+        }
+        for (ScalarOperator child : call.getChildren()) {
+            ScalarOperator res = lookupChild(child, predicate);
+            if (res != null) {
+                return res;
+            }
+        }
+        return null;
+    }
+
     // Simplify hour(from_unixtime(ts)) to hour_from_unixtime(ts)
     private static ScalarOperator simplifiedHourFromUnixTime(CallOperator call) {
         if (call.getChildren().size() != 1) {
             return call;
         }
 
+<<<<<<< HEAD
         ScalarOperator child = call.getChild(0);
         if (!(child instanceof CallOperator)) {
             return call;
@@ -596,6 +611,32 @@ public class SimplifiedPredicateRule extends BottomUpScalarOperatorRewriteRule {
         Type[] argTypes = childCall.getChildren().stream().map(ScalarOperator::getType).toArray(Type[]::new);
         Function fn =
                 Expr.getBuiltinFunction(FunctionSet.HOUR_FROM_UNIXTIME, argTypes, Function.CompareMode.IS_IDENTICAL);
+=======
+        // Case 1: hour(from_unixtime(ts)) -> hour_from_unixtime(ts)
+        ScalarOperator fromUnixTime = lookupChild(call,
+                x -> x instanceof CallOperator &&
+                        ((CallOperator) x).getFnName().equalsIgnoreCase(FunctionSet.FROM_UNIXTIME));
+        if (fromUnixTime != null) {
+            // Keep original behavior: only succeeds when argument list matches hour_from_unixtime signature
+            Type[] argTypes = fromUnixTime.getChildren().stream().map(ScalarOperator::getType).toArray(Type[]::new);
+            Function fn =
+                    Expr.getBuiltinFunction(FunctionSet.HOUR_FROM_UNIXTIME, argTypes,
+                            Function.CompareMode.IS_IDENTICAL);
+            if (fn == null) {
+                return call;
+            }
+            return new CallOperator(FunctionSet.HOUR_FROM_UNIXTIME, call.getType(), fromUnixTime.getChildren(), fn);
+        }
+
+        // Case 2: hour(to_datetime(ts)) or hour(to_datetime(ts, 0)) -> hour_from_unixtime(ts)
+        ScalarOperator toDatetime = lookupChild(call,
+                x -> x instanceof CallOperator &&
+                        ((CallOperator) x).getFnName().equalsIgnoreCase(FunctionSet.TO_DATETIME));
+        if (toDatetime != null) {
+            List<ScalarOperator> args = toDatetime.getChildren();
+            ScalarOperator tsArg;
+            ScalarOperator unixtimeArgForHour;
+>>>>>>> 3688bc4bd4 ([BugFix] fix hour_from_unixtime rule (#63006))
 
         if (fn == null) {
             return call;
