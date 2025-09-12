@@ -1,0 +1,133 @@
+-- name: test_query_detail_api_successful_query
+use ${db[0]};
+
+-- Create test table for query detail testing
+CREATE TABLE `query_detail_test_table` (
+    `id` bigint,
+    `name` varchar(100),
+    `value` double,
+    `created_time` datetime
+) 
+DUPLICATE KEY(`id`)
+COMMENT "Test table for query detail API"
+PROPERTIES (
+    "replication_num" = "1"
+);
+
+-- Insert test data
+INSERT INTO query_detail_test_table VALUES 
+(1, 'test1', 10.5, '2024-01-01 10:00:00'),
+(2, 'test2', 20.5, '2024-01-02 11:00:00'),
+(3, 'test3', 30.5, '2024-01-03 12:00:00'),
+(4, 'test4', 40.5, '2024-01-04 13:00:00'),
+(5, 'test5', 50.5, '2024-01-05 14:00:00');
+
+-- Execute a successful query to generate query detail
+shell: curl -X POST '${url}/api/v1/catalogs/default_catalog/databases/${db[0]}/sql' -u 'root:' -d '{"query": "SELECT id, name, value FROM query_detail_test_table WHERE id > 2 ORDER BY value DESC;", "onlyOutputResultRaw":true}' --header "Content-Type: application/json"
+sync;
+
+-- Wait a moment for query to complete and be recorded
+shell: sleep 2
+
+-- Test successful query detail retrieval
+-- Get current timestamp to query recent query details
+shell: current_time=$(date +%s)000; curl -X GET '${url}/api/query_detail?event_time='$((current_time - 10000)) -u 'root:'
+sync;
+
+-- name: test_query_detail_api_failed_query
+use ${db[0]};
+
+-- Test failed query detail retrieval
+-- Execute a query that will fail (table doesn't exist)
+shell: curl -X POST '${url}/api/v1/catalogs/default_catalog/databases/${db[0]}/sql' -u 'root:' -d '{"query": "SELECT * FROM non_existent_table;", "onlyOutputResultRaw":true}' --header "Content-Type: application/json"
+sync;
+
+-- Wait for query to fail and be recorded
+shell: sleep 2
+
+-- Get query details for failed query
+shell: current_time=$(date +%s)000; curl -X GET '${url}/api/query_detail?event_time='$((current_time - 10000)) -u 'root:'
+sync;
+
+-- name: test_query_detail_api_timeout_query
+use ${db[0]};
+
+-- Test timeout query detail retrieval
+-- Execute a query that might timeout (complex aggregation with large dataset)
+shell: curl -X POST '${url}/api/v1/catalogs/default_catalog/databases/${db[0]}/sql' -u 'root:' -d '{"query": "SELECT COUNT(*), AVG(value), SUM(value), MAX(value), MIN(value) FROM query_detail_test_table GROUP BY id HAVING COUNT(*) > 0 ORDER BY AVG(value) DESC;", "onlyOutputResultRaw":true}' --header "Content-Type: application/json" --max-time 5
+sync;
+
+-- Wait for query to complete or timeout
+shell: sleep 3
+
+-- Get query details for timeout query
+shell: current_time=$(date +%s)000; curl -X GET '${url}/api/query_detail?event_time='$((current_time - 10000)) -u 'root:'
+sync;
+
+-- name: test_query_detail_api_error_query
+use ${db[0]};
+
+-- Test error query detail retrieval
+-- Execute queries with various syntax errors
+shell: curl -X POST '${url}/api/v1/catalogs/default_catalog/databases/${db[0]}/sql' -u 'root:' -d '{"query": "SELECT FROM query_detail_test_table;", "onlyOutputResultRaw":true}' --header "Content-Type: application/json"
+sync;
+
+-- Wait for error to be recorded
+shell: sleep 1
+
+-- Execute another error query
+shell: curl -X POST '${url}/api/v1/catalogs/default_catalog/databases/${db[0]}/sql' -u 'root:' -d '{"query": "SELECT * FROM query_detail_test_table WHERE invalid_column = 1;", "onlyOutputResultRaw":true}' --header "Content-Type: application/json"
+sync;
+
+-- Wait for error to be recorded
+shell: sleep 1
+
+-- Get query details for error queries
+shell: current_time=$(date +%s)000; curl -X GET '${url}/api/query_detail?event_time='$((current_time - 10000)) -u 'root:'
+sync;
+
+-- name: test_query_detail_api_metrics_validation
+use ${db[0]};
+
+-- Test query detail metrics validation
+-- Execute a query that should have positive metrics
+shell: curl -X POST '${url}/api/v1/catalogs/default_catalog/databases/${db[0]}/sql' -u 'root:' -d '{"query": "SELECT id, name, value, created_time FROM query_detail_test_table WHERE value > 25 ORDER BY value;", "onlyOutputResultRaw":true}' --header "Content-Type: application/json"
+sync;
+
+-- Wait for query to complete
+shell: sleep 2
+
+-- Get query details and validate metrics
+shell: current_time=$(date +%s)000; curl -X GET '${url}/api/query_detail?event_time='$((current_time - 10000)) -u 'root:'
+sync;
+
+-- name: test_query_detail_api_invalid_parameters
+use ${db[0]};
+
+-- Test query detail API with invalid parameters
+-- Missing event_time parameter
+shell: curl -X GET '${url}/api/query_detail' -u 'root:'
+sync;
+
+-- Invalid event_time parameter
+shell: curl -X GET '${url}/api/query_detail?event_time=invalid' -u 'root:'
+sync;
+
+-- Negative event_time parameter
+shell: curl -X GET '${url}/api/query_detail?event_time=-1' -u 'root:'
+sync;
+
+-- name: test_query_detail_api_authentication
+use ${db[0]};
+
+-- Test query detail API authentication
+-- Without authentication
+shell: curl -X GET '${url}/api/query_detail?event_time=0'
+sync;
+
+-- With invalid authentication
+shell: curl -X GET '${url}/api/query_detail?event_time=0' -u 'invalid:password'
+sync;
+
+-- Clean up test table
+DROP TABLE query_detail_test_table;
