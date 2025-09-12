@@ -963,6 +963,7 @@ public class UtFrameUtils {
         String replaySql = initMockEnv(connectContext, replayDumpInfo);
         replaySql = LogUtil.removeLineSeparator(replaySql);
         Map<String, Database> dbs = null;
+
         try {
             StatementBase statementBase;
             try (Timer st = Tracers.watchScope("Parse")) {

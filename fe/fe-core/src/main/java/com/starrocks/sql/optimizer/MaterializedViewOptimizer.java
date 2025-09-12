@@ -25,6 +25,7 @@ import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.rule.RuleType;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;
 import com.starrocks.sql.optimizer.transformer.LogicalPlan;
+import com.starrocks.sql.optimizer.transformer.MVTransformerContext;
 
 public class MaterializedViewOptimizer {
     public MvPlanContext optimize(MaterializedView mv,
@@ -96,11 +97,11 @@ public class MaterializedViewOptimizer {
             connectContext.getSessionVariable().setDisableFunctionFoldConstants(true);
         }
 
+        MVTransformerContext mvTransformerContext = new MVTransformerContext(connectContext, inlineView);
         try {
             // get optimized plan of mv's defined query
-            Pair<OptExpression, LogicalPlan> plans =
-                    MvUtils.getRuleOptimizedLogicalPlan(stmt, columnRefFactory, connectContext, optimizerOptions,
-                            inlineView);
+            Pair<OptExpression, LogicalPlan> plans = MvUtils.getRuleOptimizedLogicalPlan(stmt, columnRefFactory,
+                            connectContext, optimizerOptions, mvTransformerContext);
             if (plans == null) {
                 return new MvPlanContext(false, "No query plan for it");
             }
