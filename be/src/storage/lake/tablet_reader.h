@@ -83,7 +83,11 @@ public:
 
     size_t merged_rows() const override { return _collect_iter->merged_rows(); }
 
-    void set_tablet(std::shared_ptr<VersionedTablet> tablet) { _tablet = tablet; }
+    void set_tablet(std::shared_ptr<VersionedTablet> tablet) { _tablet = std::move(tablet); }
+
+    void set_tablet_schema(std::shared_ptr<const TabletSchema> tablet_schema) {
+        _tablet_schema = std::move(tablet_schema);
+    }
 
     void get_split_tasks(std::vector<pipeline::ScanSplitContextPtr>* split_tasks) { split_tasks->swap(_split_tasks); }
 

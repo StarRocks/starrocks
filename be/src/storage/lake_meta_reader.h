@@ -14,14 +14,13 @@
 
 #pragma once
 
-#include <string>
 #include <vector>
 
+#include "column/column_access_path.h"
 #include "column/vectorized_fwd.h"
-#include "runtime/descriptors.h"
 #include "storage/lake/versioned_tablet.h"
 #include "storage/meta_reader.h"
-#include "storage/olap_common.h"
+#include "storage/tablet_schema.h"
 
 #ifdef BE_TEST
 #define DECL_FINAL
@@ -36,6 +35,9 @@ class TabletSchema;
 
 struct LakeMetaReaderParams : MetaReaderParams {
     LakeMetaReaderParams() = default;
+    // Optional extended schema and access paths, mirroring OlapMetaReaderParams
+    TabletSchemaCSPtr tablet_schema;
+    std::vector<ColumnAccessPathPtr>* column_access_paths = nullptr;
 };
 
 namespace lake {
