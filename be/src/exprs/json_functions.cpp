@@ -667,14 +667,8 @@ StatusOr<ColumnPtr> JsonFunctions::_flat_json_query_impl(FunctionContext* contex
         }
         if (ret.ok()) {
             ret.value()->check_or_die();
-            return Column::mutate(std::move(ret.value()));
-        } else {
-            return ret;
         }
-<<<<<<< HEAD
-        return std::move(flat_column->clone());
-=======
->>>>>>> 180b81f3ff ([BugFix] Fix JSON extraction null column consistency and add validation checks (#63054))
+        return ret;
     }
 }
 
