@@ -351,10 +351,4 @@ private:
     int64_t _merge_ms = 0;
 };
 
-// Extract functions for different JSON types
-void extract_bool(const vpack::Slice* json, NullableColumn* result);
-void extract_number(const vpack::Slice* json, NullableColumn* result);
-void extract_string(const vpack::Slice* json, NullableColumn* result);
-void extract_json(const vpack::Slice* json, NullableColumn* result);
-
 } // namespace starrocks

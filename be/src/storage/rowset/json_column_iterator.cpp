@@ -218,8 +218,6 @@ Status JsonFlatColumnIterator::next_batch(size_t* n, Column* dst) {
     if (_null_iter != nullptr) {
         RETURN_IF_ERROR(_null_iter->next_batch(n, null_column));
         down_cast<NullableColumn*>(dst)->update_has_null();
-    } else if (dst->is_nullable()) {
-        null_column->append_value_multiple_times(&DATUM_NOT_NULL, *n);
     }
 
     // 2. Read flat column
@@ -246,8 +244,6 @@ Status JsonFlatColumnIterator::next_batch(const SparseRange<>& range, Column* ds
     if (_null_iter != nullptr) {
         RETURN_IF_ERROR(_null_iter->next_batch(range, null_column));
         down_cast<NullableColumn*>(dst)->update_has_null();
-    } else if (dst->is_nullable()) {
-        null_column->append_value_multiple_times(&DATUM_NOT_NULL, range.span_size());
     }
 
     // 2. Read flat column
