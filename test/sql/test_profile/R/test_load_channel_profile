@@ -59,6 +59,11 @@ shell: env mysql_cmd="${mysql_cmd} -D${db[0]}" label="label_${uuid0}" bash ${roo
 Analyze profile succeeded
 Analyze profile succeeded
 -- !result
+CLEANUP {
+  function: disable_fe_verbose_log(["com.starrocks.qe.QeProcessorImpl", "com.starrocks.qe.scheduler.QueryRuntimeProfile", "com.starrocks.load.streamload.StreamLoadTask", "com.starrocks.common.util.ProfileManager"])
+  function: set_vlog_level_for_all_be(["fragment_mgr*", "plan_fragment_executor*"], 0)
+} END CLEANUP
+
 function: enable_fe_verbose_log(["com.starrocks.qe.QeProcessorImpl", "com.starrocks.qe.scheduler.QueryRuntimeProfile", "com.starrocks.load.streamload.StreamLoadTask", "com.starrocks.common.util.ProfileManager"])
 -- result:
 None
@@ -84,7 +89,3 @@ shell: env mysql_cmd="${mysql_cmd} -D${db[0]}" label="label_${uuid1}" bash ${roo
 Analyze profile succeeded
 Analyze profile succeeded
 -- !result
-CLEANUP {
-function: disable_fe_verbose_log(["com.starrocks.qe.QeProcessorImpl", "com.starrocks.qe.scheduler.QueryRuntimeProfile", "com.starrocks.load.streamload.StreamLoadTask", "com.starrocks.common.util.ProfileManager"])
-function: set_vlog_level_for_all_be(["fragment_mgr*", "plan_fragment_executor*"], 0)
-} END CLEANUP
