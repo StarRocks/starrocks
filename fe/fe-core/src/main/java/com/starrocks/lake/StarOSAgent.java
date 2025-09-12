@@ -685,6 +685,10 @@ public class StarOSAgent {
     }
 
     public void updateMetaGroup(long metaGroupId, List<Long> shardGroupIds, boolean isJoin) throws DdlException {
+        if (shardGroupIds == null || shardGroupIds.isEmpty()) {
+            return;
+        }
+
         prepare();
 
         try {
