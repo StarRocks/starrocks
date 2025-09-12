@@ -92,6 +92,7 @@ public class GlobalStateMgrTestUtil {
     public static String testTxnLable10 = "testTxnLable10";
     public static String testTxnLableCompaction1 = "testTxnLableCompaction1";
     public static String testTxnLableCompaction2 = "testTxnLableCompaction2";
+    public static String testTxnLableReplication1 = "testTxnLableReplication1";
     public static String testEsTable1 = "partitionedEsTable1";
     public static long testEsTableId1 = 14;
 
