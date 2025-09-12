@@ -24,6 +24,11 @@
 #include "runtime/exec_env.h"
 #include "service/backend_options.h"
 #include "util/network_util.h"
+<<<<<<< HEAD
+=======
+#include "util/starrocks_metrics.h"
+#include "util/thrift_rpc_helper.h"
+>>>>>>> d37927c522 ([Enhancement] Add fragment instance exec state report thread pool metrics (#63067))
 
 namespace starrocks::pipeline {
 std::string to_load_error_http_path(const std::string& file_name) {
@@ -317,7 +322,7 @@ Status ExecStateReporter::report_epoch(const TMVMaintenanceTasks& params, ExecEn
 }
 
 ExecStateReporter::ExecStateReporter(const CpuUtil::CpuIds& cpuids) {
-    auto status = ThreadPoolBuilder("ex_state_report") // exec state reporter
+    auto status = ThreadPoolBuilder("exec_state_report") // exec state reporter
                           .set_min_threads(1)
                           .set_max_threads(2)
                           .set_max_queue_size(1000)
@@ -327,8 +332,9 @@ ExecStateReporter::ExecStateReporter(const CpuUtil::CpuIds& cpuids) {
     if (!status.ok()) {
         LOG(FATAL) << "Cannot create thread pool for ExecStateReport: error=" << status.to_string();
     }
+    REGISTER_THREAD_POOL_METRICS(exec_state_report, _thread_pool);
 
-    status = ThreadPoolBuilder("priority_ex_state_report") // priority exec state reporter with infinite queue
+    status = ThreadPoolBuilder("priority_exec_state_report") // priority exec state reporter with infinite queue
                      .set_min_threads(1)
                      .set_max_threads(2)
                      .set_idle_timeout(MonoDelta::FromMilliseconds(2000))
@@ -337,6 +343,7 @@ ExecStateReporter::ExecStateReporter(const CpuUtil::CpuIds& cpuids) {
     if (!status.ok()) {
         LOG(FATAL) << "Cannot create thread pool for priority ExecStateReport: error=" << status.to_string();
     }
+    REGISTER_THREAD_POOL_METRICS(priority_exec_state_report, _priority_thread_pool);
 }
 
 void ExecStateReporter::submit(std::function<void()>&& report_task, bool priority) {
