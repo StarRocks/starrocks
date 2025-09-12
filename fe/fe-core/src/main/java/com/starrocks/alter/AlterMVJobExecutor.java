@@ -53,6 +53,7 @@ import com.starrocks.scheduler.Task;
 import com.starrocks.scheduler.TaskBuilder;
 import com.starrocks.scheduler.TaskManager;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.RunMode;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.analyzer.SetStmtAnalyzer;
 import com.starrocks.sql.ast.AlterMaterializedViewStatusClause;
@@ -201,11 +202,22 @@ public class AlterMVJobExecutor extends AlterJobExecutor {
             }
         }
 
-        if (!properties.isEmpty()) {
-            if (propClone.containsKey(PropertyAnalyzer.PROPERTIES_COLOCATE_WITH)) {
+        if (properties.containsKey(PropertyAnalyzer.PROPERTIES_COLOCATE_WITH)) {
+            // TODO: when support shared-nothing mode, must check PROPERTIES_LABELS_LOCATION
+            if (RunMode.isSharedNothingMode()) {
                 throw new SemanticException("Modify failed because unsupported properties: " +
-                        "colocate group is not supported for materialized view");
+                        "colocate_with is not supported for materialized view in shared-nothing cluster.");
             }
+            try {
+                String colocateGroup = PropertyAnalyzer.analyzeColocate(properties);
+                GlobalStateMgr.getCurrentState().getColocateTableIndex()
+                        .modifyTableColocate(db, materializedView, colocateGroup, false, null);
+            } catch (DdlException e) {
+                throw new AlterJobException(e.getMessage(), e);
+            }
+        }
+
+        if (!properties.isEmpty()) {
             // analyze properties
             List<SetListItem> setListItems = Lists.newArrayList();
             for (Map.Entry<String, String> entry : properties.entrySet()) {
