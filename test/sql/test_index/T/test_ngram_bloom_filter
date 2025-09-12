@@ -106,8 +106,9 @@ function: wait_alter_table_finish()
 -- because tow rows all hit bloom filter if case insensitive, which is a bad case
 select * from ngram_index_case_in_sensitive order by ngram_search(Username,"aabaa",4) desc;
 
--- both are case insensitive, can't filter data 
+-- both are case insensitive
 select * from ngram_index_case_in_sensitive order by ngram_search_case_insensitive(Username,"aabaa",4) desc;
+select * from ngram_index_case_in_sensitive order by ngram_search_case_insensitive(Username,"ddddd",4) desc;
 
 -- name: test_ngram_bloom_filter_char
 create database ngram_bloom_filter_db_3;
