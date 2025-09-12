@@ -77,11 +77,7 @@ import com.starrocks.proto.PKafkaOffsetProxyResult;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.scheduler.slot.BaseSlotManager;
 import com.starrocks.server.GlobalStateMgr;
-<<<<<<< HEAD
-=======
 import com.starrocks.server.RunMode;
-import com.starrocks.server.WarehouseManager;
->>>>>>> 6f0379cce6 ([Enhancement] Make some fe metrics leader awareness (#63004))
 import com.starrocks.service.ExecuteEnv;
 import com.starrocks.staros.StarMgrServer;
 import com.starrocks.system.Backend;
