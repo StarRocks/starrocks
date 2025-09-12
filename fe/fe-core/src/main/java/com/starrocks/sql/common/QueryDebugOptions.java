@@ -41,8 +41,6 @@ public class QueryDebugOptions {
     @SerializedName(value = "mvRefreshTraceModule")
     private String mvRefreshTraceModule;
 
-<<<<<<< HEAD
-=======
     @SerializedName(value = "traceMode")
     private String traceMode;
 
@@ -67,7 +65,6 @@ public class QueryDebugOptions {
     @SerializedName(value = "execDebugOptions")
     private List<ExecDebugOption> execDebugOptions = Lists.newArrayList();
 
->>>>>>> 32810c222f ([BugFix] Fix view based rewrite bugs (#62918))
     public QueryDebugOptions() {
         // To make unit test more stable, add retry times for refreshing materialized views.
         if (FeConstants.runningUnitTest) {

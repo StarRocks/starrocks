@@ -31,12 +31,9 @@ import com.starrocks.common.FeConstants;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.CreateDbStmt;
-<<<<<<< HEAD
-=======
 import com.starrocks.sql.ast.expression.BinaryType;
 import com.starrocks.sql.ast.expression.JoinOperator;
 import com.starrocks.sql.optimizer.operator.Projection;
->>>>>>> 32810c222f ([BugFix] Fix view based rewrite bugs (#62918))
 import com.starrocks.sql.optimizer.operator.logical.LogicalJoinOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalPaimonScanOperator;

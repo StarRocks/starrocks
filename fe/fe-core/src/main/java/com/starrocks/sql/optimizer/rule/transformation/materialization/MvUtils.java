@@ -469,13 +469,8 @@ public class MvUtils {
     public static Pair<OptExpression, LogicalPlan> getRuleOptimizedLogicalPlan(StatementBase mvStmt,
                                                                                ColumnRefFactory columnRefFactory,
                                                                                ConnectContext connectContext,
-<<<<<<< HEAD
-                                                                               OptimizerConfig optimizerConfig,
-                                                                               boolean inlineView) {
-=======
                                                                                OptimizerOptions optimizerOptions,
                                                                                MVTransformerContext mvTransformerContext) {
->>>>>>> 32810c222f ([BugFix] Fix view based rewrite bugs (#62918))
         Preconditions.checkState(mvStmt instanceof QueryStatement);
         Analyzer.analyze(mvStmt, connectContext);
         QueryRelation query = ((QueryStatement) mvStmt).getQueryRelation();
