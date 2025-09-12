@@ -62,6 +62,7 @@ public class MvTransparentUnionRewriteOlapTest extends MVTestBase {
                 )
         );
         connectContext.getSessionVariable().setEnableMaterializedViewTransparentUnionRewrite(true);
+        connectContext.getSessionVariable().setMaterializedViewRewriteMode("force");
     }
 
     private void withPartialScanMv(StarRocksAssert.ExceptionRunnable runner) {
