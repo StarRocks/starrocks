@@ -51,6 +51,7 @@ import com.starrocks.common.Config;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.TraceManager;
 import com.starrocks.common.io.Writable;
+import com.starrocks.common.util.DebugUtil;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.persist.gson.GsonPreProcessable;
 import com.starrocks.server.GlobalStateMgr;
@@ -895,6 +896,8 @@ public class TransactionState implements Writable, GsonPreProcessable {
         sb.append(", label: ").append(label);
         sb.append(", db id: ").append(dbId);
         sb.append(", table id list: ").append(StringUtils.join(tableIdList, ","));
+        sb.append(", load id list: ").append(loadIds != null ?
+                loadIds.stream().map(DebugUtil::printId).collect(java.util.stream.Collectors.joining(",")) : "null");
         sb.append(", callback id: ").append(getCallbackId());
         sb.append(", coordinator: ").append(txnCoordinator.toString());
         sb.append(", transaction status: ").append(transactionStatus);
