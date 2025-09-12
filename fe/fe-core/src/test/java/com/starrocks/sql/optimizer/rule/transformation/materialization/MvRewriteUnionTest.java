@@ -416,7 +416,7 @@ public class MvRewriteUnionTest extends MVTestBase {
                         );
                         for (Pair<String, String> p : sqls) {
                             String query = p.first;
-                            System.out.println(query);
+                            logSysInfo(query);
                             String plan = getFragmentPlan(query);
                             PlanTestBase.assertContains(plan, ":UNION");
                             PlanTestBase.assertContainsIgnoreColRefs(plan, "union_mv0", p.second);
@@ -448,7 +448,7 @@ public class MvRewriteUnionTest extends MVTestBase {
                                 );
                         for (Pair<String, String> p : sqls) {
                             String query = p.first;
-                            System.out.println(query);
+                            logSysInfo(query);
                             String plan = getFragmentPlan(query);
                             PlanTestBase.assertContains(plan, ":UNION");
                             PlanTestBase.assertContainsIgnoreColRefs(plan, "union_mv0", p.second);

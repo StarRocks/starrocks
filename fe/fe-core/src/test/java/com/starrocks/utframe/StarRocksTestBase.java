@@ -36,13 +36,16 @@ import java.util.Set;
 public abstract class StarRocksTestBase {
     protected static final Logger LOG = LogManager.getLogger(StarRocksTestBase.class);
 
+    // Whether print log to system out
+    protected static boolean isOutputSystemOut = false;
+
     // StarRocksAssert is a class that provides methods to interact with StarRocks.
     protected static StarRocksAssert starRocksAssert;
     // existedTables is a set that contains all tables that have been created.
     protected static Set<Table> existedTables = Sets.newHashSet();
 
     @BeforeEach
-    public void before() {
+    public void before() throws Exception {
         if (starRocksAssert != null) {
             collectTables(starRocksAssert, existedTables);
         }
@@ -56,6 +59,54 @@ public abstract class StarRocksTestBase {
             } catch (Exception e) {
                 // ignore exception
             }
+        }
+    }
+
+    public static void logSysInfo(boolean info) {
+        if (isOutputSystemOut || LOG.isInfoEnabled()) {
+            System.out.println(info);
+        }
+    }
+
+    public static void logSysInfo(int info) {
+        if (isOutputSystemOut || LOG.isInfoEnabled()) {
+            System.out.println(info);
+        }
+    }
+
+    public static void logSysInfo(long info) {
+        if (isOutputSystemOut || LOG.isInfoEnabled()) {
+            System.out.println(info);
+        }
+    }
+
+    public static void logSysInfo(float info) {
+        if (isOutputSystemOut || LOG.isInfoEnabled()) {
+            System.out.println(info);
+        }
+    }
+
+    public static void logSysInfo(double info) {
+        if (isOutputSystemOut || LOG.isInfoEnabled()) {
+            System.out.println(info);
+        }
+    }
+
+    public static void logSysInfo(char[] info) {
+        if (isOutputSystemOut || LOG.isInfoEnabled()) {
+            System.out.println(info);
+        }
+    }
+
+    public static void logSysInfo(String info) {
+        if (isOutputSystemOut || LOG.isInfoEnabled()) {
+            System.out.println(info);
+        }
+    }
+
+    public static void logSysInfo(Object... info) {
+        if (isOutputSystemOut || LOG.isInfoEnabled()) {
+            System.out.println(info);
         }
     }
 

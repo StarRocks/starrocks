@@ -67,7 +67,7 @@ public class AlterMaterializedViewTest extends MVTestBase  {
     }
 
     @BeforeEach
-    public void before() {
+    public void before() throws Exception {
         super.before();
         connectContext.setThreadLocalInfo();
     }

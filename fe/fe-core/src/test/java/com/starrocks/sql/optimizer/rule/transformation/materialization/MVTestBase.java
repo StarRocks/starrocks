@@ -157,7 +157,7 @@ public class MVTestBase extends StarRocksTestBase {
         Pair<ExecPlan, String> execPlanWithQuery = result.second;
         String traceLog = execPlanWithQuery.second;
         if (!Strings.isNullOrEmpty(traceLog)) {
-            System.out.println(traceLog);
+            logSysInfo(traceLog);
         }
         return execPlanWithQuery.first.getExplainString(level);
     }
@@ -447,7 +447,7 @@ public class MVTestBase extends StarRocksTestBase {
         try {
             String addPartitionSql = String.format("ALTER TABLE %s ADD " +
                     "PARTITION %s VALUES [(%s),(%s))", tbl, pName, toPartitionVal(pVal1), toPartitionVal(pVal2));
-            System.out.println(addPartitionSql);
+            logSysInfo(addPartitionSql);
             starRocksAssert.alterTable(addPartitionSql);
 
             // insert values

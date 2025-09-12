@@ -275,7 +275,6 @@ public class SetExecutorTest {
         for (int i = 0; i < 1023; ++i) {
             ctx.getUserVariables().put(String.valueOf(i), new UserVariable(null, null, null));
         }
-        System.out.println(ctx.getUserVariables().keySet().size());
         try {
             sql = "set @aVar = 6, @bVar = @aVar + 1, @cVar = @bVar + 1";
             stmt = (SetStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
