@@ -735,6 +735,18 @@ public class Config extends ConfigBase {
     public static boolean enable_https = false;
 
     /**
+     * format of the keystore, JKS by default
+     */
+    @ConfField
+    public static String ssl_keystore_type = "JKS";
+
+    /**
+     * format of the truststore, JKS by default
+     */
+    @ConfField
+    public static String ssl_truststore_type = "JKS";
+
+    /**
      * Configs for query queue v2.
      * The configs {@code query_queue_v2_xxx} are effective only when {@code enable_query_queue_v2} is true.
      * @see com.starrocks.qe.scheduler.slot.QueryQueueOptions

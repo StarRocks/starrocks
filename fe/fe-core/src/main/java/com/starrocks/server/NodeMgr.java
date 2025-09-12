@@ -439,8 +439,10 @@ public class NodeMgr {
                     isVersionFileChanged = true;
                 }
                 try {
-                    URL idURL = new URL("http://" + NetUtils.getHostPortInAccessibleFormat(
-                            rightHelperNode.first, Config.http_port) + "/check");
+                    int port = Config.enable_https ? Config.https_port : Config.http_port;
+                    String scheme = Config.enable_https ? "https://" : "http://";
+                    URL idURL = new URL(scheme + NetUtils.getHostPortInAccessibleFormat(
+                            rightHelperNode.first, port) + "/check");
                     HttpURLConnection conn = null;
                     conn = (HttpURLConnection) idURL.openConnection();
                     conn.setConnectTimeout(2 * 1000);
@@ -519,12 +521,13 @@ public class NodeMgr {
         // we try to get info from helper nodes, once we get the right helper node,
         // other helper nodes will be ignored and removed.
         Pair<String, Integer> rightHelperNode = null;
+        int port = Config.enable_https ? Config.https_port : Config.http_port;
+        String scheme = Config.enable_https ? "https://" : "http://";
         for (Pair<String, Integer> helperNode : helperNodes) {
             try {
-                String accessibleHostPort = NetUtils.getHostPortInAccessibleFormat(helperNode.first, Config.http_port);
-                String encodedAddress = URLEncoder.encode(selfNode.first,
-                        StandardCharsets.UTF_8.toString());
-                URL url = new URL("http://" + accessibleHostPort + "/role?host=" + encodedAddress +
+                String accessibleHostPort = NetUtils.getHostPortInAccessibleFormat(helperNode.first, port);
+                String encodedAddress = URLEncoder.encode(selfNode.first, StandardCharsets.UTF_8.toString());
+                URL url = new URL(scheme + accessibleHostPort + "/role?host=" + encodedAddress +
                         "&port=" + selfNode.second);
                 HttpURLConnection conn = null;
                 conn = (HttpURLConnection) url.openConnection();
@@ -559,7 +562,7 @@ public class NodeMgr {
                 continue;
             }
 
-            LOG.info("get fe node type {}, name {} from {}:{}", role, nodeName, helperNode.first, Config.http_port);
+            LOG.info("get fe node type {}, name {} from {}:{}", role, nodeName, helperNode.first, port);
             rightHelperNode = helperNode;
             break;
         }
@@ -688,8 +691,9 @@ public class NodeMgr {
     }
 
     private boolean getVersionFileFromHelper(Pair<String, Integer> helperNode) throws IOException {
-        String url = "http://" + NetUtils.getHostPortInAccessibleFormat(
-                helperNode.first, Config.http_port) + "/version";
+        int port = Config.enable_https ? Config.https_port : Config.http_port;
+        String scheme = Config.enable_https ? "https://" : "http://";
+        String url = scheme + NetUtils.getHostPortInAccessibleFormat(helperNode.first, port) + "/version";
         LOG.info("Downloading version file from {}", url);
         try {
             File dir = new File(GlobalStateMgr.getImageDirPath());
@@ -713,12 +717,14 @@ public class NodeMgr {
         Storage storage = new Storage(imageFileDir);
         long localImageJournalId = storage.getImageJournalId();
 
-        String accessibleHostPort = NetUtils.getHostPortInAccessibleFormat(helperNode.first, Config.http_port);
-        URL infoUrl = new URL("http://" + accessibleHostPort + "/info?subdir=" + subDir);
+        int port = Config.enable_https ? Config.https_port : Config.http_port;
+        String accessibleHostPort = NetUtils.getHostPortInAccessibleFormat(helperNode.first, port);
+        String scheme = Config.enable_https ? "https://" : "http://";
+        URL infoUrl = new URL(scheme + accessibleHostPort + "/info?subdir=" + subDir);
         StorageInfo remoteStorageInfo = getStorageInfo(infoUrl);
         long remoteImageJournalId = remoteStorageInfo.getImageJournalId();
         if (remoteImageJournalId > localImageJournalId) {
-            String url = "http://" + accessibleHostPort + "/image?"
+            String url = scheme + accessibleHostPort + "/image?"
                     + "version=" + remoteImageJournalId
                     + "&subdir=" + subDir
                     + "&image_format_version=" + remoteStorageInfo.getImageFormatVersion();
@@ -1116,7 +1122,7 @@ public class NodeMgr {
         } else {
             String leaderNodeName = GlobalStateMgr.getServingState().getHaProtocol().getLeaderNodeName();
             Frontend frontend = frontends.get(leaderNodeName);
-            return new Pair<>(frontend.getHost(), Config.http_port);
+            return new Pair<>(frontend.getHost(), Config.enable_https ? Config.http_port : Config.http_port);
         }
     }
 
@@ -1252,7 +1258,7 @@ public class NodeMgr {
     public void setLeaderInfo() {
         this.leaderIp = FrontendOptions.getLocalHostAddress();
         this.leaderRpcPort = Config.rpc_port;
-        this.leaderHttpPort = Config.http_port;
+        this.leaderHttpPort = Config.enable_https ? Config.https_port : Config.http_port;
         LeaderInfo info = new LeaderInfo(this.leaderIp, this.leaderHttpPort, this.leaderRpcPort);
         GlobalStateMgr.getCurrentState().getEditLog().logLeaderInfo(info);
 
