@@ -374,9 +374,6 @@ public:
     METRICS_DEFINE_THREAD_POOL(pk_index_compaction);
     METRICS_DEFINE_THREAD_POOL(compact_pool);
     METRICS_DEFINE_THREAD_POOL(pindex_load);
-<<<<<<< HEAD
-=======
-    METRICS_DEFINE_THREAD_POOL(put_aggregate_metadata);
     METRICS_DEFINE_THREAD_POOL(exec_state_report);
     METRICS_DEFINE_THREAD_POOL(priority_exec_state_report);
 >>>>>>> d37927c522 ([Enhancement] Add fragment instance exec state report thread pool metrics (#63067))
