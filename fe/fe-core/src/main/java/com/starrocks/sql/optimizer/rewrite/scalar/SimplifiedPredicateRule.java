@@ -596,22 +596,6 @@ public class SimplifiedPredicateRule extends BottomUpScalarOperatorRewriteRule {
             return call;
         }
 
-<<<<<<< HEAD
-        ScalarOperator child = call.getChild(0);
-        if (!(child instanceof CallOperator)) {
-            return call;
-        }
-
-        CallOperator childCall = (CallOperator) child;
-        if (!FunctionSet.FROM_UNIXTIME.equalsIgnoreCase(childCall.getFnName())) {
-            return call;
-        }
-
-        // Create hour_from_unixtime function call
-        Type[] argTypes = childCall.getChildren().stream().map(ScalarOperator::getType).toArray(Type[]::new);
-        Function fn =
-                Expr.getBuiltinFunction(FunctionSet.HOUR_FROM_UNIXTIME, argTypes, Function.CompareMode.IS_IDENTICAL);
-=======
         // Case 1: hour(from_unixtime(ts)) -> hour_from_unixtime(ts)
         ScalarOperator fromUnixTime = lookupChild(call,
                 x -> x instanceof CallOperator &&
@@ -628,20 +612,6 @@ public class SimplifiedPredicateRule extends BottomUpScalarOperatorRewriteRule {
             return new CallOperator(FunctionSet.HOUR_FROM_UNIXTIME, call.getType(), fromUnixTime.getChildren(), fn);
         }
 
-        // Case 2: hour(to_datetime(ts)) or hour(to_datetime(ts, 0)) -> hour_from_unixtime(ts)
-        ScalarOperator toDatetime = lookupChild(call,
-                x -> x instanceof CallOperator &&
-                        ((CallOperator) x).getFnName().equalsIgnoreCase(FunctionSet.TO_DATETIME));
-        if (toDatetime != null) {
-            List<ScalarOperator> args = toDatetime.getChildren();
-            ScalarOperator tsArg;
-            ScalarOperator unixtimeArgForHour;
->>>>>>> 3688bc4bd4 ([BugFix] fix hour_from_unixtime rule (#63006))
-
-        if (fn == null) {
-            return call;
-        }
-
-        return new CallOperator(FunctionSet.HOUR_FROM_UNIXTIME, call.getType(), childCall.getChildren(), fn);
+        return call;
     }
 }

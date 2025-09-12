@@ -3513,8 +3513,3 @@ StatusOr<ColumnPtr> TimeFunctions::time_format(FunctionContext* context, const s
 }
 
 } // namespace starrocks
-<<<<<<< HEAD
-=======
-
-#include "gen_cpp/opcode/TimeFunctions.inc"
->>>>>>> 3688bc4bd4 ([BugFix] fix hour_from_unixtime rule (#63006))

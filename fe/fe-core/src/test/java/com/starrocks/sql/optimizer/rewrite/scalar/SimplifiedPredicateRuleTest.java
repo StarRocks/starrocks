@@ -16,11 +16,7 @@
 package com.starrocks.sql.optimizer.rewrite.scalar;
 
 import com.google.common.collect.Lists;
-<<<<<<< HEAD
 import com.starrocks.analysis.BinaryType;
-import com.starrocks.catalog.FunctionSet;
-=======
->>>>>>> 3688bc4bd4 ([BugFix] fix hour_from_unixtime rule (#63006))
 import com.starrocks.catalog.Type;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
@@ -133,8 +129,6 @@ public class SimplifiedPredicateRuleTest extends PlanTestBase {
         starRocksAssert.query("SELECT hour(from_unixtime(ts, '%Y-%m-%d %H:%i:%s')) FROM test_timestamp")
                 .explainWithout("hour_from_unixtime");
     }
-<<<<<<< HEAD
-=======
 
     @Test
     public void applyHourToDatetimeRewrite() throws Exception {
@@ -153,5 +147,4 @@ public class SimplifiedPredicateRuleTest extends PlanTestBase {
         starRocksAssert.query("SELECT hour(to_datetime(ts, 4)) FROM test_timestamp")
                 .explainWithout("hour_from_unixtime");
     }
->>>>>>> 3688bc4bd4 ([BugFix] fix hour_from_unixtime rule (#63006))
 }
