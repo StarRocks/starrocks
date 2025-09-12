@@ -419,7 +419,8 @@ public class UtilsTest {
         }
     }
 
-    @Test void testMergeWithProject2() {
+    @Test 
+    public void testMergeWithProject2() {
         Map<ColumnRefOperator, ScalarOperator> columnRefMap1 = new HashMap<>();
         Map<ColumnRefOperator, ScalarOperator> columnRefMap2 = new HashMap<>();
         for (int i = 0; i < 10; i++) {
