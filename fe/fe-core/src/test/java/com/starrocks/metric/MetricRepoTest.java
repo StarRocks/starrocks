@@ -15,10 +15,10 @@
 package com.starrocks.metric;
 
 import com.starrocks.catalog.Table;
-import com.starrocks.common.Config;
 import com.starrocks.clone.TabletSchedCtx;
 import com.starrocks.clone.TabletScheduler;
 import com.starrocks.clone.TabletSchedulerStat;
+import com.starrocks.common.Config;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.http.rest.MetricsAction;
 import com.starrocks.rpc.BrpcProxy;
