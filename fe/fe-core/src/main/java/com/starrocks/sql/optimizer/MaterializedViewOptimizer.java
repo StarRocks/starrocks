@@ -97,20 +97,7 @@ public class MaterializedViewOptimizer {
             connectContext.getSessionVariable().setDisableFunctionFoldConstants(true);
         }
 
-<<<<<<< HEAD
-=======
-        final boolean originalEnableInnerToSemi = connectContext.getSessionVariable().isEnableInnerJoinToSemi();
-        if (originalEnableInnerToSemi) {
-            connectContext.getSessionVariable().setEnableInnerJoinToSemi(false);
-        }
-
-        final int originalSemiJoinDeduplicateMode = connectContext.getSessionVariable().getSemiJoinDeduplicateMode();
-        if (originalSemiJoinDeduplicateMode != -1) {
-            connectContext.getSessionVariable().setSemiJoinDeduplicateMode(-1);
-        }
-
         MVTransformerContext mvTransformerContext = new MVTransformerContext(connectContext, inlineView);
->>>>>>> 32810c222f ([BugFix] Fix view based rewrite bugs (#62918))
         try {
             // get optimized plan of mv's defined query
             Pair<OptExpression, LogicalPlan> plans = MvUtils.getRuleOptimizedLogicalPlan(stmt, columnRefFactory,
