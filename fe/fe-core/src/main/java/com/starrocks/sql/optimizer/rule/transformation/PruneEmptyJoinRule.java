@@ -67,14 +67,14 @@ public class PruneEmptyJoinRule extends TransformationRule {
         JoinOperator type = join.getJoinType();
 
         int joinIndex; // 0 left, 1 right
-        if (type.isInnerJoin() || type.isCrossJoin() || type.isSemiJoin()) {
+        if (type.isAnyInnerJoin() || type.isCrossJoin() || type.isSemiJoin()) {
             /* inner join, cross join, semi join
              *      join
              *     /    \     ->  Empty
              *   Empty   B
              */
             return transToEmpty(input, context);
-        } else if (type.isRightOuterJoin() || type.isLeftOuterJoin()) {
+        } else if (type.isRightOuterJoin() || type.isAnyLeftOuterJoin()) {
             /* left outer join        Project (remain B columns(null))
              *     /     \        ->     |
              *    A      Empty           A

@@ -71,6 +71,20 @@ class PushDownPredicateJoinTypeTest extends PlanTestBase {
         assertContains(plan, "OUTER JOIN");
     }
 
+    @ParameterizedTest
+    @MethodSource("asofInnerJoinStream")
+    void testAsofInnerJoin(String sql) throws Exception {
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "ASOF INNER JOIN");
+    }
+
+    @ParameterizedTest
+    @MethodSource("asofLeftJoinStream")
+    void testAsofLeftJoin(String sql) throws Exception {
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "ASOF LEFT OUTER JOIN");
+    }
+
     private static Stream<Arguments> innerJoinStream() {
         List<String> sqls = Lists.newArrayList();
         sqls.add("select * from t0, t1 where v1 = v4 and v1 = 1 and v5 = 2");
@@ -80,6 +94,16 @@ class PushDownPredicateJoinTypeTest extends PlanTestBase {
         sqls.add("select * from t0, t1, t2 where v1 = v4 and v2 = v7");
         sqls.add("select * from t0 join t1 on v1 = 4 or v5 < 1");
         sqls.add("select * from t0 join t1 join t2 on v1 = v4 and v2 = v7");
+        return sqls.stream().map(e -> Arguments.of(e));
+    }
+
+    private static Stream<Arguments> asofInnerJoinStream() {
+        List<String> sqls = Lists.newArrayList();
+        sqls.add("select * from t0 asof join t1 on t0.v1 = t1.v4 and v1 = 1 and v5 = 2 and t0.v2 <= t1.v5");
+        sqls.add("select * from t0 asof inner join t1 on t0.v1 = t1.v4 and t0.v2 >= t1.v5 where v1 > 4 or v5 < 2");
+        sqls.add("select * from t0 asof join t1 on t0.v1 = t1.v4 and t0.v2 < t1.v5 where t0.v1 > 1");
+        sqls.add("select * from t0 asof join t1 on t0.v1 = t1.v4 and t0.v2 > t1.v5 and t1.v6 = 2");
+        sqls.add("select * from t0 asof join t1 on t0.v1 = t1.v4 and t0.v2 <= t1.v5 join t2 on t1.v4 = t2.v7");
         return sqls.stream().map(e -> Arguments.of(e));
     }
 
@@ -119,6 +143,16 @@ class PushDownPredicateJoinTypeTest extends PlanTestBase {
         sqls.add("select * from t0 full outer join t1 on v1 = 1 and v4 = 4");
         sqls.add("select * from t0 full outer join t1 on v1 < 1 and v4 > 4 and v2 > v5");
         sqls.add("select * from t0 left join t1 on t0.v1 = t1.v4 and t0.v1 > 1");
+        return sqls.stream().map(e -> Arguments.of(e));
+    }
+
+    private static Stream<Arguments> asofLeftJoinStream() {
+        List<String> sqls = Lists.newArrayList();
+        sqls.add("select * from t0 asof left join t1 on t0.v1 = t1.v4 and t0.v2 <= t1.v5");
+        sqls.add("select * from t0 asof left outer join t1 on t0.v1 = t1.v4 and t0.v2 >= t1.v5");
+        sqls.add("select * from t0 asof left join t1 on t0.v1 = t1.v4 and t0.v2 < t1.v5 where t0.v1 > 1");
+        sqls.add("select * from t0 asof left join t1 on t0.v1 = t1.v4 and t0.v2 > t1.v5 and t1.v6 = 2");
+        sqls.add("select * from t0 asof left join t1 on t0.v1 = t1.v4 and t0.v2 <= t1.v5 left join t2 on t1.v4 = t2.v7");
         return sqls.stream().map(e -> Arguments.of(e));
     }
 

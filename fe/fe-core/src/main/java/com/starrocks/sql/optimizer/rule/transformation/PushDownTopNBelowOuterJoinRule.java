@@ -55,7 +55,7 @@ public class PushDownTopNBelowOuterJoinRule extends TransformationRule {
         LogicalJoinOperator joinOperator = childExpr.getOp().cast();
         JoinOperator joinType = joinOperator.getJoinType();
 
-        if (!joinType.isLeftOuterJoin() && !joinType.isRightOuterJoin()) {
+        if (!joinType.isAnyLeftOuterJoin() && !joinType.isRightOuterJoin()) {
             return false;
         }
 
@@ -68,7 +68,7 @@ public class PushDownTopNBelowOuterJoinRule extends TransformationRule {
         }
 
         OptExpression joinChild = null;
-        if (joinType.isLeftOuterJoin()) {
+        if (joinType.isAnyLeftOuterJoin()) {
             joinChild = childExpr.inputAt(0);
         } else if (joinType.isRightJoin()) {
             joinChild = childExpr.inputAt(1);
@@ -94,7 +94,7 @@ public class PushDownTopNBelowOuterJoinRule extends TransformationRule {
         LogicalJoinOperator joinOperator = childExpr.getOp().cast();
 
         OptExpression joinChildWithSort;
-        if (joinOperator.getJoinType().isLeftOuterJoin()) {
+        if (joinOperator.getJoinType().isAnyLeftOuterJoin()) {
             joinChildWithSort = childExpr.inputAt(0);
         } else {
             joinChildWithSort = childExpr.inputAt(1);
@@ -109,7 +109,7 @@ public class PushDownTopNBelowOuterJoinRule extends TransformationRule {
                 .build(), joinChildWithSort);
 
         OptExpression newJoinOperator;
-        if (joinOperator.getJoinType().isLeftOuterJoin()) {
+        if (joinOperator.getJoinType().isAnyLeftOuterJoin()) {
             newJoinOperator = OptExpression.create(joinOperator,
                     Lists.newArrayList(newTopNOperator, childExpr.inputAt(1)));
         } else {
