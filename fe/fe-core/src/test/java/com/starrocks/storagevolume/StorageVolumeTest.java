@@ -58,6 +58,7 @@ import java.util.HashMap;
 import java.util.Map;
 
 import static com.starrocks.connector.share.credential.CloudConfigurationConstants.AWS_S3_ACCESS_KEY;
+import static com.starrocks.connector.share.credential.CloudConfigurationConstants.AWS_S3_ENABLE_PATH_STYLE_ACCESS;
 import static com.starrocks.connector.share.credential.CloudConfigurationConstants.AWS_S3_ENDPOINT;
 import static com.starrocks.connector.share.credential.CloudConfigurationConstants.AWS_S3_EXTERNAL_ID;
 import static com.starrocks.connector.share.credential.CloudConfigurationConstants.AWS_S3_IAM_ROLE_ARN;
@@ -123,6 +124,7 @@ public class StorageVolumeTest {
         storageParams.put(AWS_S3_ACCESS_KEY, "access_key");
         storageParams.put(AWS_S3_SECRET_KEY, "secret_key");
         storageParams.put(AWS_S3_USE_AWS_SDK_DEFAULT_BEHAVIOR, "false");
+        storageParams.put(AWS_S3_ENABLE_PATH_STYLE_ACCESS, "true");
 
         StorageVolume sv = new StorageVolume("1", "test", "s3", Arrays.asList("s3://abc"),
                 storageParams, true, "");
@@ -133,6 +135,7 @@ public class StorageVolumeTest {
         Assertions.assertTrue(fileStore.hasS3FsInfo());
         S3FileStoreInfo s3FileStoreInfo = fileStore.getS3FsInfo();
         Assertions.assertTrue(s3FileStoreInfo.getCredential().hasSimpleCredential());
+        Assertions.assertEquals(s3FileStoreInfo.getPathStyleAccess(), 1);
         AwsSimpleCredentialInfo simpleCredentialInfo = s3FileStoreInfo.getCredential().getSimpleCredential();
         Assertions.assertEquals("access_key", simpleCredentialInfo.getAccessKey());
         Assertions.assertEquals("secret_key", simpleCredentialInfo.getAccessKeySecret());
@@ -613,6 +616,24 @@ public class StorageVolumeTest {
             Assertions.assertTrue(params.containsKey(CloudConfigurationConstants.AWS_S3_ENABLE_PARTITIONED_PREFIX));
             Assertions.assertTrue(params.containsKey(CloudConfigurationConstants.AWS_S3_NUM_PARTITIONED_PREFIX));
             Assertions.assertEquals("32", params.get(CloudConfigurationConstants.AWS_S3_NUM_PARTITIONED_PREFIX));
+        }
+
+        fsInfoBuilder.getS3FsInfoBuilder()
+                .setPathStyleAccess(1);
+
+        {
+            FileStoreInfo fs = fsInfoBuilder.build();
+            Map<String, String> params = StorageVolume.getParamsFromFileStoreInfo(fs);
+            Assertions.assertEquals("true", params.get(CloudConfigurationConstants.AWS_S3_ENABLE_PATH_STYLE_ACCESS));
+        }
+
+        fsInfoBuilder.getS3FsInfoBuilder()
+                .setPathStyleAccess(2);
+
+        {
+            FileStoreInfo fs = fsInfoBuilder.build();
+            Map<String, String> params = StorageVolume.getParamsFromFileStoreInfo(fs);
+            Assertions.assertEquals("false", params.get(CloudConfigurationConstants.AWS_S3_ENABLE_PATH_STYLE_ACCESS));
         }
 
         // It's OK to have trailing '/' after bucket name
