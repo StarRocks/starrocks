@@ -597,6 +597,19 @@ foreach(lib IN ITEMS ${LLVM_LIBRARIES})
     set_target_properties(${lib} PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/llvm/lib/lib${lib}.a)
 endforeach()
 
+set (STARROCKS_LINKER "$ENV{STARROCKS_LINKER}")
+include(cmake_modules/FindGlibcVersion.cmake)
+
+if (GLIBC_VERSION VERSION_LESS "2.29" AND CMAKE_CXX_COMPILER_VERSION VERSION_GREATER 14.0.0)
+    if (NOT DEFINED ${STARROCKS_LINKER} OR ${STARROCKS_LINKER} STREQUAL "")
+        set(STARROCKS_LINKER "gold")
+    endif()
+endif()
+message("using linker: ${STARROCKS_LINKER}")
+
+if (NOT STARROCKS_LINKER STREQUAL "")
+    add_link_options("-fuse-ld=${STARROCKS_LINKER}")
+endif ()
 
 # Check Clang-Tidy
 include(cmake_modules/FindClangTidy.cmake)
@@ -811,6 +824,21 @@ SET(CMAKE_CXX_FLAGS "${CXX_COMMON_FLAGS} ${CMAKE_CXX_FLAGS}")
 if("${WITH_RELATIVE_SRC_PATH}" STREQUAL "ON")
     # apply -ffile-prefix-map option to .c source files as well
     SET(CMAKE_C_FLAGS "${FILE_PREFIX_MAP_FLAG} ${CMAKE_C_FLAGS}")
+endif()
+
+# Apply optimizations only with lld linker
+if(STARROCKS_LINKER STREQUAL "lld")
+    # ICF (Identical Code Folding) - only works with lld
+    add_link_options(-Wl,--icf=all -Wl,--gc-sections)
+    add_compile_options(-ffunction-sections -fdata-sections)
+    
+    # LTO (Link Time Optimization) - only works with lld
+    add_link_options(-flto=thin -Wl,--gc-sections -Wl,--thinlto-cache-dir=.thinlto-cache)
+    add_compile_options(-flto=thin -ffunction-sections -fdata-sections)
+
+    message(STATUS "Using LLD linker - enabling LTO and ICF optimizations")
+else()
+    message(STATUS "Not using LLD linker (${STARROCKS_LINKER}) - skipping LTO and ICF optimizations")
 endif()
 
 message(STATUS "Compiler Flags: ${CMAKE_CXX_FLAGS}")
@@ -1079,19 +1107,6 @@ set (TEST_LINK_LIBS ${STARROCKS_LINK_LIBS}
 # Only build static libs
 set(BUILD_SHARED_LIBS OFF)
 
-set (STARROCKS_LINKER "$ENV{STARROCKS_LINKER}")
-include(cmake_modules/FindGlibcVersion.cmake)
-
-if (GLIBC_VERSION VERSION_LESS "2.29" AND CMAKE_CXX_COMPILER_VERSION VERSION_GREATER 14.0.0)
-    if (NOT DEFINED ${STARROCKS_LINKER} OR ${STARROCKS_LINKER} STREQUAL "")
-        set(STARROCKS_LINKER "gold")
-    endif()
-endif()
-message("using linker: ${STARROCKS_LINKER}")
-
-if (NOT STARROCKS_LINKER STREQUAL "")
-    add_link_options("-fuse-ld=${STARROCKS_LINKER}")
-endif ()
 
 if (${MAKE_TEST} STREQUAL "ON")
     SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DGTEST_USE_OWN_TR1_TUPLE=0")
