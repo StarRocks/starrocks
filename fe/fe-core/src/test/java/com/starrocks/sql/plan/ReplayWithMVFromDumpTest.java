@@ -18,9 +18,8 @@ import com.starrocks.common.FeConstants;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MVTestBase;
 import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.utframe.UtFrameUtils;
-import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeAll;
-import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.MethodOrderer;
 import org.junit.jupiter.api.MethodOrderer.MethodName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestMethodOrder;
@@ -38,17 +37,9 @@ public class ReplayWithMVFromDumpTest extends ReplayFromDumpTestBase {
         // set default config for timeliness mvs
         UtFrameUtils.mockTimelinessForAsyncMVTest(connectContext);
         connectContext.getSessionVariable().setMaterializedViewRewriteMode("force");
+        connectContext.getSessionVariable().setEnableViewBasedMvRewrite(true);
         FeConstants.isReplayFromQueryDump = true;
         MVTestBase.disableMVRewriteConsiderDataLayout();
-    }
-
-    @BeforeEach
-    public void before() throws Exception {
-        super.before();
-    }
-
-    @AfterEach
-    public void after() {
     }
 
     @Test
@@ -195,15 +186,13 @@ public class ReplayWithMVFromDumpTest extends ReplayFromDumpTestBase {
 
     @Test
     public void testViewBasedRewrite1() throws Exception {
-        String plan =
-                getPlanFragment("query_dump/materialized-view/view_based_rewrite1", TExplainLevel.NORMAL);
+        String plan = getPlanFragment("query_dump/materialized-view/view_based_rewrite1", TExplainLevel.NORMAL);
         PlanTestBase.assertContains(plan, "tbl_mock_255", "MaterializedView: true");
     }
 
     @Test
     public void testViewBasedRewrite2() throws Exception {
-        String plan =
-                getPlanFragment("query_dump/materialized-view/view_based_rewrite2", TExplainLevel.NORMAL);
+        String plan = getPlanFragment("query_dump/materialized-view/view_based_rewrite2", TExplainLevel.NORMAL);
         PlanTestBase.assertContains(plan, "tbl_mock_239", "MaterializedView: true");
     }
 
@@ -220,14 +209,12 @@ public class ReplayWithMVFromDumpTest extends ReplayFromDumpTestBase {
     }
 
     @Test
-    public void testIssueRewriteBugs1() throws Exception {
-        connectContext.getSessionVariable().setMaterializedViewRewriteMode("default");
+    public void testZ_AggPushDownRewriteBugs1() throws Exception {
         String plan = getPlanFragment("query_dump/materialized-view/mv_rewrite_bugs1", TExplainLevel.COSTS);
         assertContains(plan, "mv_dim_table1_1");
         assertContains(plan, "mv_fact_table1");
         assertContains(plan, "14:Project\n" +
                 "  |  output columns:\n" +
                 "  |  179 <-> [209: sum, DOUBLE, true] / cast([210: sum, BIGINT, true] as DOUBLE)");
-        connectContext.getSessionVariable().setMaterializedViewRewriteMode("force");
     }
 }
