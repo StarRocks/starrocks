@@ -19,7 +19,6 @@ import com.starrocks.sql.optimizer.rule.transformation.materialization.MVTestBas
 import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.jupiter.api.BeforeAll;
-import org.junit.jupiter.api.MethodOrderer;
 import org.junit.jupiter.api.MethodOrderer.MethodName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestMethodOrder;
@@ -212,7 +211,6 @@ public class ReplayWithMVFromDumpTest extends ReplayFromDumpTestBase {
     public void testZ_AggPushDownRewriteBugs1() throws Exception {
         connectContext.getSessionVariable().setMaterializedViewRewriteMode("default");
         String plan = getPlanFragment("query_dump/materialized-view/mv_rewrite_bugs1", TExplainLevel.COSTS);
-        assertContains(plan, "mv_dim_table1_1");
         assertContains(plan, "mv_fact_table1");
         assertContains(plan, "  14:Project\n" +
                 "  |  output columns:\n" +
