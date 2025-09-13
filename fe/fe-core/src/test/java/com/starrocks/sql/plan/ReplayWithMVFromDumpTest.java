@@ -213,7 +213,7 @@ public class ReplayWithMVFromDumpTest extends ReplayFromDumpTestBase {
         String plan = getPlanFragment("query_dump/materialized-view/mv_rewrite_bugs1", TExplainLevel.COSTS);
         assertContains(plan, "mv_dim_table1_1");
         assertContains(plan, "mv_fact_table1");
-        assertContains(plan, "14:Project\n" +
+        assertContains(plan, "  14:Project\n" +
                 "  |  output columns:\n" +
                 "  |  179 <-> [209: sum, DOUBLE, true] / cast([210: sum, BIGINT, true] as DOUBLE)");
     }
