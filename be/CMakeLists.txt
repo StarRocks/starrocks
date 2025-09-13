@@ -826,8 +826,8 @@ if("${WITH_RELATIVE_SRC_PATH}" STREQUAL "ON")
     SET(CMAKE_C_FLAGS "${FILE_PREFIX_MAP_FLAG} ${CMAKE_C_FLAGS}")
 endif()
 
-# Apply optimizations only with lld linker
-if(STARROCKS_LINKER STREQUAL "lld")
+# Apply optimizations only with Clang compiler and lld linker
+if(CMAKE_CXX_COMPILER_ID STREQUAL "Clang" AND STARROCKS_LINKER STREQUAL "lld")
     # ICF (Identical Code Folding) - only works with lld
     add_link_options(-Wl,--icf=all -Wl,--gc-sections)
     add_compile_options(-ffunction-sections -fdata-sections)
@@ -836,9 +836,9 @@ if(STARROCKS_LINKER STREQUAL "lld")
     add_link_options(-flto=thin -Wl,--gc-sections -Wl,--thinlto-cache-dir=.thinlto-cache)
     add_compile_options(-flto=thin -ffunction-sections -fdata-sections)
 
-    message(STATUS "Using LLD linker - enabling LTO and ICF optimizations")
+    message(STATUS "Using Clang + LLD linker - enabling LTO and ICF optimizations")
 else()
-    message(STATUS "Not using LLD linker (${STARROCKS_LINKER}) - skipping LTO and ICF optimizations")
+    message(STATUS "Not using Clang + LLD (compiler: ${CMAKE_CXX_COMPILER_ID}, linker: ${STARROCKS_LINKER}) - skipping LTO and ICF optimizations")
 endif()
 
 message(STATUS "Compiler Flags: ${CMAKE_CXX_FLAGS}")
