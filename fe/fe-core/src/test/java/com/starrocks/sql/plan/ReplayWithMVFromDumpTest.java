@@ -15,10 +15,6 @@
 package com.starrocks.sql.plan;
 
 import com.starrocks.common.FeConstants;
-import com.starrocks.common.Pair;
-import com.starrocks.qe.SessionVariable;
-import com.starrocks.sql.common.QueryDebugOptions;
-import com.starrocks.sql.optimizer.dump.QueryDumpInfo;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MVTestBase;
 import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.utframe.UtFrameUtils;
