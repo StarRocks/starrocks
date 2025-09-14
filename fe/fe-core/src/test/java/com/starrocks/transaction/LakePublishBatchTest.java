@@ -605,13 +605,16 @@ public class LakePublishBatchTest {
                 Lists.newArrayList(), null);
 
         {
-            TransactionStateBatch readyStateBatch = globalTransactionMgr.getReadyPublishTransactionsBatch().get(0);
-            Assertions.assertEquals(2, readyStateBatch.size());
+            List<TransactionStateBatch> batches = globalTransactionMgr.getReadyPublishTransactionsBatch();
+            Assertions.assertEquals(1, batches.size());
+            Assertions.assertEquals(1, batches.get(0).size());
 
             PublishVersionDaemon publishVersionDaemon = new PublishVersionDaemon();
             publishVersionDaemon.runAfterCatalogReady();
 
             Assertions.assertTrue(waiter1.await(10, TimeUnit.SECONDS));
+
+            publishVersionDaemon.runAfterCatalogReady();
             Assertions.assertTrue(waiter2.await(10, TimeUnit.SECONDS));
 
             // Verify that the transactions have been published
