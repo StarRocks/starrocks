@@ -41,12 +41,14 @@ SET enable_async_profile=false;
 INSERT INTO test_load_channel_profile WITH LABEL label_${uuid0} SELECT * FROM test_load_channel_profile;
 shell: env mysql_cmd="${mysql_cmd} -D${db[0]}" label="label_${uuid0}" bash ${root_path}/sql/test_profile/T/test_load_profile_analysis.sh
 
+CLEANUP {
+  function: disable_fe_verbose_log(["com.starrocks.qe.QeProcessorImpl", "com.starrocks.qe.scheduler.QueryRuntimeProfile", "com.starrocks.load.streamload.StreamLoadTask", "com.starrocks.common.util.ProfileManager"])
+  function: set_vlog_level_for_all_be(["fragment_mgr*", "plan_fragment_executor*"], 0)
+} END CLEANUP
+
 function: enable_fe_verbose_log(["com.starrocks.qe.QeProcessorImpl", "com.starrocks.qe.scheduler.QueryRuntimeProfile", "com.starrocks.load.streamload.StreamLoadTask", "com.starrocks.common.util.ProfileManager"])
 function: set_vlog_level_for_all_be(["fragment_mgr*", "plan_fragment_executor*"], 1)
 
 alter table test_load_channel_profile set('enable_load_profile'='true');
 shell: curl --location-trusted -u root: -H "Expect:100-continue" -H "label: "label_${uuid1}"" -H "column_separator: ," -d '1,2,3' -X PUT ${url}/api/${db[0]}/test_load_channel_profile/_stream_load
 shell: env mysql_cmd="${mysql_cmd} -D${db[0]}" label="label_${uuid1}" bash ${root_path}/sql/test_profile/T/test_load_profile_analysis.sh
-
-function: disable_fe_verbose_log(["com.starrocks.qe.QeProcessorImpl", "com.starrocks.qe.scheduler.QueryRuntimeProfile", "com.starrocks.load.streamload.StreamLoadTask", "com.starrocks.common.util.ProfileManager"])
-function: set_vlog_level_for_all_be(["fragment_mgr*", "plan_fragment_executor*"], 0)
