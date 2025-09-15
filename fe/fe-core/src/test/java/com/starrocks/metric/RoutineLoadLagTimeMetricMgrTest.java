@@ -45,6 +45,10 @@ public class RoutineLoadLagTimeMetricMgrTest {
         metricMgr = RoutineLoadLagTimeMetricMgr.getInstance();
         // Enable routine load lag time metrics for testing
         Config.enable_routine_load_lag_time_metrics = true;
+        
+        // Clear any existing metrics from previous tests to ensure test isolation
+        Map<String, Object> jobLagTimeMap = Deencapsulation.getField(metricMgr, "jobLagTimeMap");
+        jobLagTimeMap.clear();
     }
 
     @AfterEach
@@ -287,5 +291,66 @@ public class RoutineLoadLagTimeMetricMgrTest {
         Assertions.assertDoesNotThrow(() -> {
             Deencapsulation.invoke(metricMgr, "emitJobMetrics", "1.test_emit_exception_job", lagTimeMetric, mockVisitor);
         }, "emitJobMetrics should handle exceptions gracefully");
+    }
+
+    @Test
+    public void testGetValueLeaderCalculatesMaxLagTimeCorrectly() {
+        // Setup: Partition lag times with different values
+        Map<Integer, Long> partitionLagTimes = Maps.newHashMap();
+        partitionLagTimes.put(0, 30L);  // min
+        partitionLagTimes.put(1, 75L);  // max
+        partitionLagTimes.put(2, 45L);  // middle
+        partitionLagTimes.put(3, 60L);  // another value
+
+        // Execute: Update metrics
+        metricMgr.updateRoutineLoadLagTimeMetric(1L, "test_getValueLeader_job", partitionLagTimes);
+
+        // Get the internal RoutineLoadLagTimeMetric object
+        Map<String, Object> jobLagTimeMap = Deencapsulation.getField(metricMgr, "jobLagTimeMap");
+        Object lagTimeMetric = jobLagTimeMap.get("1.test_getValueLeader_job");
+        Assertions.assertNotNull(lagTimeMetric, "Lag time metric should exist");
+
+        // Get the maxLagTimeMetric field
+        Object maxLagTimeMetric = Deencapsulation.getField(lagTimeMetric, "maxLagTimeMetric");
+        Assertions.assertNotNull(maxLagTimeMetric, "Max lag time metric should exist");
+
+        // Verify: Call getValueLeader() directly to test the max calculation logic
+        Long maxValue = Deencapsulation.invoke(maxLagTimeMetric, "getValueLeader");
+        Assertions.assertEquals(Long.valueOf(75L), maxValue, "getValueLeader should return the maximum lag time (75L)");
+    }
+
+    @Test
+    public void testCleanupStaleMetrics() {
+        // Setup: Add multiple jobs with different timestamps
+        Map<Integer, Long> partitionLagTimes = Maps.newHashMap();
+        partitionLagTimes.put(0, 30L);
+        partitionLagTimes.put(1, 45L);
+
+        // Add fresh job (should not be removed)
+        metricMgr.updateRoutineLoadLagTimeMetric(1L, "fresh_job", partitionLagTimes);
+        
+        // Add stale job (should be removed)
+        metricMgr.updateRoutineLoadLagTimeMetric(2L, "stale_job", partitionLagTimes);
+
+        // Get the internal jobLagTimeMap
+        Map<String, Object> jobLagTimeMap = Deencapsulation.getField(metricMgr, "jobLagTimeMap");
+        
+        // Verify both jobs exist initially
+        Assertions.assertEquals(2, jobLagTimeMap.size(), "Should have 2 jobs initially");
+        Assertions.assertTrue(jobLagTimeMap.containsKey("1.fresh_job"), "Fresh job should exist");
+        Assertions.assertTrue(jobLagTimeMap.containsKey("2.stale_job"), "Stale job should exist");
+
+        // Manually set the stale job's timestamp to be older than 5 minutes
+        Object staleJobMetric = jobLagTimeMap.get("2.stale_job");
+        long staleTimestamp = System.currentTimeMillis() - (6L * 60 * 1000); // 6 minutes ago
+        Deencapsulation.setField(staleJobMetric, "updateTimestamp", staleTimestamp);
+
+        // Execute: Clean up stale metrics
+        metricMgr.cleanupStaleMetrics();
+
+        // Verify: Only fresh job should remain
+        Assertions.assertEquals(1, jobLagTimeMap.size(), "Should have 1 job after cleanup");
+        Assertions.assertTrue(jobLagTimeMap.containsKey("1.fresh_job"), "Fresh job should still exist");
+        Assertions.assertFalse(jobLagTimeMap.containsKey("2.stale_job"), "Stale job should be removed");
     }
 }
