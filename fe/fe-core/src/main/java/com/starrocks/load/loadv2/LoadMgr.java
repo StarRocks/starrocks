@@ -330,7 +330,12 @@ public class LoadMgr implements MemoryTrackable {
                 .build());
         if (isJobExpired(job, System.currentTimeMillis())) {
             LOG.info("remove expired job: {}", job);
-            unprotectedRemoveJobReleatedMeta(job);
+            writeLock();
+            try {
+                unprotectedRemoveJobReleatedMeta(job);
+            } finally {
+                writeUnlock();
+            }
         }
     }
 
@@ -346,7 +351,12 @@ public class LoadMgr implements MemoryTrackable {
 
         if (isJobExpired(job, System.currentTimeMillis())) {
             LOG.info("remove expired job: {}", job);
-            unprotectedRemoveJobReleatedMeta(job);
+            writeLock();
+            try {
+                unprotectedRemoveJobReleatedMeta(job);
+            } finally {
+                writeUnlock();
+            }
         }
     }
 
