@@ -92,7 +92,7 @@ File stores the SQL statements and the execution results that need to be verifie
 Accordingly, there are two modes of operation.  
 - RECORD MODE`[-r|--record]`  
 Cases in the files of type T will be executed and the results will be saved to the corresponding R file in order to use them in VALIDATE MODE in the future.
-- VALIDATE MODE`[-v|--validate]  
+- VALIDATE MODE`[-v|--validate]`  
 Cases in the files of type R will be executed, the framework will compare the actual results with the expected results in the file. If they do not match, the case is fail.
 
 **`-p|--part` [Optional]**  
