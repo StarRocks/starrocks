@@ -17,21 +17,21 @@ package com.starrocks.sql.optimizer.rewrite.scalar;
 
 import com.google.common.collect.Lists;
 import com.starrocks.analysis.BinaryType;
-import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.Type;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
-import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CaseWhenOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.LikePredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
+import com.starrocks.sql.plan.PlanTestBase;
+import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
-public class SimplifiedPredicateRuleTest {
+public class SimplifiedPredicateRuleTest extends PlanTestBase {
     private static final ConstantOperator OI_NULL = ConstantOperator.createNull(Type.INT);
     private static final ConstantOperator OI_100 = ConstantOperator.createInt(100);
     private static final ConstantOperator OI_200 = ConstantOperator.createInt(200);
@@ -41,6 +41,20 @@ public class SimplifiedPredicateRuleTest {
     private static final ConstantOperator OB_TRUE = ConstantOperator.createBoolean(true);
 
     private SimplifiedPredicateRule rule = new SimplifiedPredicateRule();
+
+    @BeforeAll
+    public static void beforeAll() throws Exception {
+        starRocksAssert.withTable("CREATE TABLE IF NOT EXISTS `test_timestamp` (\n" +
+                "  `id` bigint NULL COMMENT \"\",\n" +
+                "  `ts` bigint NULL COMMENT \"unix timestamp\"\n" +
+                ") ENGINE=OLAP\n" +
+                "DUPLICATE KEY(`id`)\n" +
+                "DISTRIBUTED BY HASH(`id`) BUCKETS 3\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\",\n" +
+                "\"in_memory\" = \"false\"\n" +
+                ");");
+    }
 
     @Test
     public void applyCaseWhen() {
@@ -105,39 +119,15 @@ public class SimplifiedPredicateRuleTest {
     }
 
     @Test
-    public void applyHourFromUnixTime() {
-        // Test hour(from_unixtime(ts)) -> hour_from_unixtime(ts)
-        ColumnRefOperator tsColumn = new ColumnRefOperator(1, Type.BIGINT, "ts", true);
+    public void applyHourFromUnixTime() throws Exception {
+        starRocksAssert.query("SELECT hour(from_unixtime(ts)) FROM test_timestamp")
+                .explainContains("hour_from_unixtime");
 
-        // Create from_unixtime(ts) call
-        CallOperator fromUnixTimeCall = new CallOperator(FunctionSet.FROM_UNIXTIME, Type.VARCHAR,
-                Lists.newArrayList(tsColumn), null);
+        starRocksAssert.query("SELECT hour(ts) FROM test_timestamp")
+                .explainWithout("hour_from_unixtime");
 
-        // Create hour(from_unixtime(ts)) call
-        CallOperator hourCall = new CallOperator(FunctionSet.HOUR, Type.TINYINT,
-                Lists.newArrayList(fromUnixTimeCall), null);
-
-        ScalarOperator result = rule.apply(hourCall, null);
-
-        // Verify the result is hour_from_unixtime(ts)
-        assertEquals(OperatorType.CALL, result.getOpType());
-        CallOperator resultCall = (CallOperator) result;
-        assertEquals(FunctionSet.HOUR_FROM_UNIXTIME, resultCall.getFnName());
-        assertEquals(1, resultCall.getChildren().size());
-        assertEquals(tsColumn, resultCall.getChild(0));
-
-        // Test that hour(ts) is not optimized (not from_unixtime)
-        CallOperator simpleHourCall = new CallOperator(FunctionSet.HOUR, Type.TINYINT,
-                Lists.newArrayList(tsColumn), null);
-        ScalarOperator simpleResult = rule.apply(simpleHourCall, null);
-        assertEquals(simpleHourCall, simpleResult);
-
-        // Test that hour(from_unixtime(ts, format)) is not optimized (multiple arguments)
-        CallOperator fromUnixTimeCall2 = new CallOperator(FunctionSet.FROM_UNIXTIME, Type.VARCHAR,
-                Lists.newArrayList(tsColumn, ConstantOperator.createVarchar("format")), null);
-        CallOperator hourCall2 = new CallOperator(FunctionSet.HOUR, Type.TINYINT,
-                Lists.newArrayList(fromUnixTimeCall2), null);
-        ScalarOperator result2 = rule.apply(hourCall2, null);
-        assertEquals(hourCall2, result2);
+        starRocksAssert.query("SELECT hour(from_unixtime(ts, '%Y-%m-%d %H:%i:%s')) FROM test_timestamp")
+                .explainWithout("hour_from_unixtime");
     }
+
 }
