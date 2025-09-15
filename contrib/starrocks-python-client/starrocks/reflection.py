@@ -16,7 +16,7 @@
 import dataclasses
 import json
 import re
-from typing import Any
+from typing import Any, Union
 
 from sqlalchemy.dialects.mysql.types import DATETIME
 from sqlalchemy.dialects.mysql.types import TIME
@@ -32,7 +32,7 @@ from sqlalchemy import util
 class ReflectedState(object):
     """Stores informations about table or view."""
 
-    table_name: str | None = None
+    table_name: Union[str, None] = None
     columns: list[dict] = dataclasses.field(default_factory=list)
     table_options: dict[str, str] = dataclasses.field(default_factory=dict)
     keys: list[dict] = dataclasses.field(default_factory=list)
