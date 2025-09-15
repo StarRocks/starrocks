@@ -107,6 +107,8 @@ private:
 
 class BitmapIndexIterator {
 public:
+    using DictPredicate = std::function<StatusOr<ColumnPtr>(const Column&)>;
+
     BitmapIndexIterator(BitmapIndexReader* reader, std::unique_ptr<IndexedColumnIterator> dict_iter,
                         std::unique_ptr<IndexedColumnIterator> bitmap_iter, bool has_null, rowid_t num_bitmap)
             : _reader(reader),
@@ -126,6 +128,10 @@ public:
     // Returns NotFound when no such value exists (all values in dictionary < `value`).
     // Returns other error status otherwise.
     Status seek_dictionary(const void* value, bool* exact_match);
+
+    StatusOr<Buffer<rowid_t>> seek_dictionary_by_predicate(const DictPredicate& predicate, const Slice& from_value, size_t search_size);
+
+    Status next_batch_dictionary(size_t* n, Column* column);
 
     // Read bitmap at the given ordinal into `result`.
     Status read_bitmap(rowid_t ordinal, Roaring* result);
@@ -148,6 +154,8 @@ public:
     //     read_union_bitmap(range[i].begin(), range[i].end(), &result);
     // }
     Status read_union_bitmap(const SparseRange<>& range, Roaring* result);
+
+    Status read_union_bitmap(const Buffer<rowid_t>& rowids, Roaring* result);
 
     rowid_t bitmap_nums() const { return _num_bitmap; }
 

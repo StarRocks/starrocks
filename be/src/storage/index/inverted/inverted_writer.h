@@ -18,6 +18,8 @@
 #include "storage/collection.h"
 
 namespace starrocks {
+class WritableFile;
+class ColumnMetaPB;
 
 class InvertedWriter {
 public:
@@ -33,12 +35,8 @@ public:
 
     virtual void add_nulls(uint32_t count) = 0;
 
-    virtual Status finish() = 0;
+    virtual Status finish([[maybe_unused]] WritableFile* wfile, [[maybe_unused]] ColumnMetaPB* meta) = 0;
 
     virtual uint64_t size() const = 0;
-
-    virtual uint64_t estimate_buffer_size() const = 0;
-
-    virtual uint64_t total_mem_footprint() const = 0;
 };
 } // namespace starrocks
