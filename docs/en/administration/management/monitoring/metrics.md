@@ -1635,6 +1635,54 @@ For more information on how to build a monitoring service for your StarRocks clu
 - Unit: Count
 - Description: Queued task count in the pipeline PREPARE thread pool. This is an instantaneous value.
 
+### starrocks_be_exec_state_report_active_threads
+
+- Unit: Count
+- Type: Instantaneous
+- Description: The number of tasks being executed in the thread pool that reports the execution status of the Fragment instance.
+
+### starrocks_be_exec_state_report_running_threads
+
+- Unit: Count
+- Type: Instantaneous
+- Description: The number of threads in the thread pool that reports the execution status of the Fragment instance, with a minimum of 1 and a maximum of 2.
+
+### starrocks_be_exec_state_report_threadpool_size
+
+- Unit: Count
+- Type: Instantaneous
+- Description: The maximum number of threads in the thread pool that reports the execution status of the Fragment instance, defaults to 2.
+
+### starrocks_be_exec_state_report_queue_count
+
+- Unit: Count
+- Type: Instantaneous
+- Description: The number of tasks queued in the thread pool that reports the execution status of the Fragment instance, up to a maximum of 1000.
+
+### starrocks_be_priority_exec_state_report_active_threads
+
+- Unit: Count
+- Type: Instantaneous
+- Description: The number of tasks being executed in the thread pool that reports the final execution state of the Fragment instance.
+
+### starrocks_be_priority_exec_state_report_running_threads
+
+- Unit: Count
+- Type: Instantaneous
+- Description: The number of threads in the thread pool that reports the final execution status of the Fragment instance, with a minimum of 1 and a maximum of 2.
+
+### starrocks_be_priority_exec_state_report_threadpool_size
+
+- Unit: Count
+- Type: Instantaneous
+- Description: The maximum number of threads in the thread pool that reports the final execution status of the Fragment instance, defaults to 2.
+
+### starrocks_be_priority_exec_state_report_queue_count
+
+- Unit: Count
+- Type: Instantaneous
+- Description: The number of tasks queued in the thread pool that reports the final execution status of the Fragment instance, up to a maximum of 2147483647.
+
 ### starrocks_fe_routine_load_jobs
 
 - Unit: Count
