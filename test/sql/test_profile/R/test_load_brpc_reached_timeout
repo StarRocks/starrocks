@@ -122,9 +122,7 @@ shell: env mysql_cmd="${mysql_cmd} -Ddb_${uuid0}" label="label_${uuid2}" bash ${
 Analyze profile succeeded
 Analyze profile succeeded
 -- !result
-admin disable failpoint "node_channel_set_brpc_timeout";
--- result:
--- !result
-admin disable failpoint "tablets_channel_add_chunk_wait_write_block";
--- result:
--- !result
+CLEANUP {
+    admin disable failpoint "node_channel_set_brpc_timeout";
+    admin disable failpoint "tablets_channel_add_chunk_wait_write_block";
+} END CLEANUP
