@@ -44,4 +44,9 @@ add_library(Column STATIC
         stream_chunk.cpp
         column_view/column_view_base.cpp
         column_view/column_view_helper.cpp
+<<<<<<< HEAD
+=======
+        variant_column.cpp
+        german_string.cpp
+>>>>>>> b956f11544 ([Enhancement] Full sort use german string for comparison (#62929))
 )
