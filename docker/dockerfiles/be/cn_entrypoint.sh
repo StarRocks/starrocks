@@ -163,9 +163,13 @@ if [[ "x$LOG_CONSOLE" == "x1" ]] ; then
     addition_args="--logconsole"
 fi
 $STARROCKS_HOME/bin/start_cn.sh $addition_args
+ret=$?
 
 # The reason why we need to sleep here is to avoid the pod being killed by k8s
 # before the preStop hook is exited.
 # If the CN subprocess fails to start, we also want the entrypoint script to exit as soon as possible.
 # Taking all the above into consideration, we set it to five seconds.
 sleep 5
+
+# keep the same return code from start_cn.sh
+exit $ret
