@@ -20,8 +20,8 @@ import com.starrocks.connector.share.credential.CloudConfigurationConstants;
 import mockit.Expectations;
 import mockit.Mocked;
 import org.apache.hadoop.conf.Configuration;
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 import software.amazon.awssdk.services.glue.model.StorageDescriptor;
 
 import java.util.ArrayList;
@@ -34,12 +34,12 @@ public class MetastoreClientUtilsTest {
     @Test
     public void testGetGlueCatalogId() {
         Configuration conf = new Configuration();
-        Assert.assertNull(MetastoreClientUtils.getCatalogId(conf));
+        Assertions.assertNull(MetastoreClientUtils.getCatalogId(conf));
         conf.set(GlueMetastoreClientDelegate.CATALOG_ID_CONF, "123");
-        Assert.assertEquals("123", MetastoreClientUtils.getCatalogId(conf));
+        Assertions.assertEquals("123", MetastoreClientUtils.getCatalogId(conf));
         conf = new Configuration();
         conf.set(CloudConfigurationConstants.AWS_GLUE_CATALOG_ID, "1234");
-        Assert.assertEquals("1234", MetastoreClientUtils.getCatalogId(conf));
+        Assertions.assertEquals("1234", MetastoreClientUtils.getCatalogId(conf));
     }
 
     @Mocked
@@ -70,13 +70,13 @@ public class MetastoreClientUtilsTest {
                 }
             }
         };
-        IllegalArgumentException exception = Assert.assertThrows(
+        IllegalArgumentException exception = Assertions.assertThrows(
                 IllegalArgumentException.class,
                 () -> {
                 MetastoreClientUtils.validateGlueTable(tableBuilder.build(),  metastore);
             }
         );
-        Assert.assertEquals(
+        Assertions.assertEquals(
                 "Partition projection table may not readable",
                 exception.getMessage()); 
 
@@ -99,7 +99,7 @@ public class MetastoreClientUtilsTest {
         try {
             MetastoreClientUtils.validateGlueTable(tableBuilder.build(), metastore);
         } catch (Exception e) {
-            Assert.fail(e.getMessage());
+            Assertions.fail(e.getMessage());
         }
     }
 }
