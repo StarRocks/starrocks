@@ -30,7 +30,6 @@ import com.starrocks.sql.optimizer.dump.QueryDumpInfo;
 import com.starrocks.system.BackendResourceStat;
 import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.utframe.StarRocksAssert;
-import com.starrocks.utframe.StarRocksTestBase;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Mock;
 import mockit.MockUp;
@@ -48,7 +47,7 @@ import java.util.Objects;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
-public class ReplayFromDumpTestBase extends StarRocksTestBase {
+public class ReplayFromDumpTestBase {
     public static ConnectContext connectContext;
     public static StarRocksAssert starRocksAssert;
 
@@ -88,7 +87,6 @@ public class ReplayFromDumpTestBase extends StarRocksTestBase {
         connectContext.getSessionVariable().setCboPushDownAggregateMode(-1);
         connectContext.setQueryId(UUIDUtil.genUUID());
         connectContext.setExecutionId(UUIDUtil.toTUniqueId(connectContext.getQueryId()));
-        super.before();
     }
 
     @AfterAll

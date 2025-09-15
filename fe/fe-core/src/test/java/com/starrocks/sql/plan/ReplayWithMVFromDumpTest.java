@@ -15,7 +15,6 @@
 package com.starrocks.sql.plan;
 
 import com.starrocks.common.FeConstants;
-import com.starrocks.sql.optimizer.rule.transformation.materialization.MVTestBase;
 import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.jupiter.api.BeforeAll;
@@ -38,7 +37,6 @@ public class ReplayWithMVFromDumpTest extends ReplayFromDumpTestBase {
         connectContext.getSessionVariable().setMaterializedViewRewriteMode("force");
         connectContext.getSessionVariable().setEnableViewBasedMvRewrite(true);
         FeConstants.isReplayFromQueryDump = true;
-        MVTestBase.disableMVRewriteConsiderDataLayout();
     }
 
     @Test
@@ -136,15 +134,8 @@ public class ReplayWithMVFromDumpTest extends ReplayFromDumpTestBase {
     public void testMVWithDictRewrite() throws Exception {
         try {
             FeConstants.USE_MOCK_DICT_MANAGER = true;
-<<<<<<< HEAD
-            Pair<QueryDumpInfo, String> replayPair =
-                    getCostPlanFragment(getDumpInfoFromFile("query_dump/tpch_query11_mv_rewrite"));
-            assertContains(replayPair.second,
-                    "DictDecode(78: n_name, [<place-holder> = 'GERMANY'])");
-=======
-            String plan = getPlanFragment("query_dump/tpch_query11_mv_rewrite", TExplainLevel.COSTS);
-            assertContains(plan, "DictDecode([79: n_name, INT, false], [<place-holder> = 'GERMANY'])");
->>>>>>> ace10b8644 ([BugFix] Fix mv agg pushdown rewrite bugs (#63060))
+            String plan = getPlanFragment("query_dump/tpch_query11_mv_rewrite", TExplainLevel.NORMAL);
+            assertContains(plan, "DictDecode(78: n_name, [<place-holder> = 'GERMANY'])");
         } finally {
             FeConstants.USE_MOCK_DICT_MANAGER = false;
         }
@@ -177,19 +168,9 @@ public class ReplayWithMVFromDumpTest extends ReplayFromDumpTestBase {
 
     @Test
     public void testMV_CountStarRewrite() throws Exception {
-<<<<<<< HEAD
-        QueryDebugOptions debugOptions = new QueryDebugOptions();
-        debugOptions.setEnableQueryTraceLog(true);
-        connectContext.getSessionVariable().setQueryDebugOptions(debugOptions.toString());
-        Pair<QueryDumpInfo, String> replayPair =
-                getPlanFragment(getDumpInfoFromFile("query_dump/materialized-view/count_star_rewrite"),
-                        connectContext.getSessionVariable(), TExplainLevel.NORMAL);
-        assertContains(replayPair.second, "tbl_mock_067");
-=======
         String plan = getPlanFragment("query_dump/materialized-view/count_star_rewrite",
                 TExplainLevel.NORMAL);
         assertContains(plan, "tbl_mock_067");
->>>>>>> ace10b8644 ([BugFix] Fix mv agg pushdown rewrite bugs (#63060))
         // NOTE: OUTPUT EXPRS must refer to coalesce column ref
         assertContains(plan, " OUTPUT EXPRS:59: count\n" +
                 "  PARTITION: RANDOM\n" +
@@ -217,14 +198,6 @@ public class ReplayWithMVFromDumpTest extends ReplayFromDumpTestBase {
         String plan = getPlanFragment("query_dump/view_based_rewrite1", TExplainLevel.NORMAL);
         PlanTestBase.assertContains(plan, "single_mv_ads_biz_customer_combine_td_for_task_2y");
     }
-<<<<<<< HEAD
-=======
-
-    @Test
-    public void testChooseBest() throws Exception {
-        String plan = getPlanFragment("query_dump/materialized-view/choose_best_mv1", TExplainLevel.NORMAL);
-        PlanTestBase.assertContains(plan, "rocketview_v4", "rocketview_v4_mv2");
-    }
 
     @Test
     public void testZ_AggPushDownRewriteBugs1() throws Exception {
@@ -236,5 +209,4 @@ public class ReplayWithMVFromDumpTest extends ReplayFromDumpTestBase {
                 "  |  179 <-> [209: sum, DOUBLE, true] / cast([210: sum, BIGINT, true] as DOUBLE)");
         connectContext.getSessionVariable().setMaterializedViewRewriteMode("force");
     }
->>>>>>> ace10b8644 ([BugFix] Fix mv agg pushdown rewrite bugs (#63060))
 }
