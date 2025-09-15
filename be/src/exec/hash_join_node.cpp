@@ -99,6 +99,15 @@ Status HashJoinNode::init(const TPlanNode& tnode, RuntimeState* state) {
         }
     }
 
+    if (tnode.hash_join_node.__isset.asof_join_condition) {
+        auto asof_join_condition = tnode.hash_join_node.asof_join_condition;
+        RETURN_IF_ERROR(
+                Expr::create_expr_tree(_pool, asof_join_condition.left, &_asof_join_condition_probe_expr_ctx, state));
+        RETURN_IF_ERROR(
+                Expr::create_expr_tree(_pool, asof_join_condition.right, &_asof_join_condition_build_expr_ctx, state));
+        _asof_join_condition_op = tnode.hash_join_node.asof_join_condition.opcode;
+    }
+
     if (tnode.hash_join_node.__isset.partition_exprs) {
         // the same column can appear more than once in either lateral side of eq_join_conjuncts, but multiple
         // occurrences are accounted for once when determining local shuffle partition_exprs for bucket shuffle join.
@@ -196,6 +205,13 @@ Status HashJoinNode::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(Expr::prepare(_build_expr_ctxs, state));
     RETURN_IF_ERROR(Expr::prepare(_probe_expr_ctxs, state));
     RETURN_IF_ERROR(Expr::prepare(_other_join_conjunct_ctxs, state));
+    if (_asof_join_condition_build_expr_ctx != nullptr) {
+        RETURN_IF_ERROR(_asof_join_condition_build_expr_ctx->prepare(state));
+    }
+
+    if (_asof_join_condition_probe_expr_ctx != nullptr) {
+        RETURN_IF_ERROR(_asof_join_condition_probe_expr_ctx->prepare(state));
+    }
 
     HashTableParam param;
     _init_hash_table_param(&param, state);
@@ -234,6 +250,22 @@ void HashJoinNode::_init_hash_table_param(HashTableParam* param, RuntimeState* r
         expr_context->root()->get_slot_ids(&expr_slots);
         predicate_slots.insert(expr_slots.begin(), expr_slots.end());
     }
+
+    if (_asof_join_condition_build_expr_ctx && _asof_join_condition_probe_expr_ctx) {
+        std::vector<SlotId> build_slots, probe_slots;
+        _asof_join_condition_probe_expr_ctx->root()->get_slot_ids(&probe_slots);
+        _asof_join_condition_build_expr_ctx->root()->get_slot_ids(&build_slots);
+
+        DCHECK_EQ(probe_slots.size(), 1);
+        DCHECK_EQ(build_slots.size(), 1);
+
+        LogicalType probe_type = _asof_join_condition_probe_expr_ctx->root()->type().type;
+        LogicalType build_type = _asof_join_condition_build_expr_ctx->root()->type().type;
+        SlotId build_slot = build_slots[0], probe_slot = probe_slots[0];
+        param->asof_join_condition_desc = {probe_slot, probe_type, build_slot, build_type, _asof_join_condition_op};
+        predicate_slots.insert({build_slot, probe_slot});
+    }
+
     param->predicate_slots = std::move(predicate_slots);
 
     for (auto i = 0; i < _build_expr_ctxs.size(); i++) {
@@ -255,6 +287,14 @@ Status HashJoinNode::open(RuntimeState* state) {
     RETURN_IF_ERROR(Expr::open(_build_expr_ctxs, state));
     RETURN_IF_ERROR(Expr::open(_probe_expr_ctxs, state));
     RETURN_IF_ERROR(Expr::open(_other_join_conjunct_ctxs, state));
+    if (_asof_join_condition_build_expr_ctx != nullptr) {
+        RETURN_IF_ERROR(_asof_join_condition_build_expr_ctx->open(state));
+    }
+
+    if (_asof_join_condition_probe_expr_ctx != nullptr) {
+        RETURN_IF_ERROR(_asof_join_condition_probe_expr_ctx->open(state));
+    }
+
 
     {
         build_timer.stop();
@@ -445,6 +485,12 @@ void HashJoinNode::close(RuntimeState* state) {
     Expr::close(_build_expr_ctxs, state);
     Expr::close(_probe_expr_ctxs, state);
     Expr::close(_other_join_conjunct_ctxs, state);
+    if (_asof_join_condition_build_expr_ctx != nullptr) {
+        _asof_join_condition_build_expr_ctx->close(state);
+    }
+    if (_asof_join_condition_probe_expr_ctx != nullptr) {
+        _asof_join_condition_probe_expr_ctx->close(state);
+    }
 
     _ht.close();
 
@@ -492,7 +538,9 @@ pipeline::OpFactories HashJoinNode::_decompose_to_pipeline(pipeline::PipelineBui
                           _other_join_conjunct_ctxs, _conjunct_ctxs, child(1)->row_desc(), child(0)->row_desc(),
                           child(1)->type(), child(0)->type(), child(1)->conjunct_ctxs().empty(), _build_runtime_filters,
                           _output_slots, _output_slots, context->degree_of_parallelism(), _distribution_mode,
-                          _enable_late_materialization, _enable_partition_hash_join, _is_skew_join, _common_expr_ctxs);
+                          _enable_late_materialization, _enable_partition_hash_join, _is_skew_join, _common_expr_ctxs,
+                          _asof_join_condition_op, _asof_join_condition_probe_expr_ctx,
+                          _asof_join_condition_build_expr_ctx);
     auto hash_joiner_factory = std::make_shared<starrocks::pipeline::HashJoinerFactory>(param);
 
     // Create a shared RefCountedRuntimeFilterCollector
@@ -582,10 +630,12 @@ pipeline::OpFactories HashJoinNode::_decompose_to_pipeline(pipeline::PipelineBui
     }
 
     // Use ChunkAccumulateOperator, when any following condition occurs:
-    // - not left outer join,
+    // - not left/asof left outer join,
     // - left outer join, with conjuncts or runtime filters.
-    bool need_accumulate_chunk = _join_type != TJoinOp::LEFT_OUTER_JOIN || !_conjunct_ctxs.empty() ||
-                                 !_other_join_conjunct_ctxs.empty() || lhs_operators.back()->has_runtime_filters();
+    bool need_accumulate_chunk =
+            (_join_type != TJoinOp::LEFT_OUTER_JOIN && _join_type != TJoinOp::ASOF_LEFT_OUTER_JOIN) ||
+            !_conjunct_ctxs.empty() || !_other_join_conjunct_ctxs.empty() ||
+            lhs_operators.back()->has_runtime_filters();
     if (need_accumulate_chunk) {
         may_add_chunk_accumulate_operator(lhs_operators, context, id());
     }
@@ -906,6 +956,7 @@ Status HashJoinNode::_process_other_conjunct(ChunkPtr* chunk) {
     switch (_join_type) {
     case TJoinOp::LEFT_OUTER_JOIN:
     case TJoinOp::FULL_OUTER_JOIN:
+    case TJoinOp::ASOF_LEFT_OUTER_JOIN:
         return _process_outer_join_with_other_conjunct(chunk, _output_probe_column_count, _output_build_column_count);
     case TJoinOp::RIGHT_OUTER_JOIN:
     case TJoinOp::LEFT_SEMI_JOIN:

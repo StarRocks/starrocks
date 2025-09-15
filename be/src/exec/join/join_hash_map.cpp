@@ -52,6 +52,10 @@ private:
     template <LogicalType LT>
     static std::pair<bool, JoinHashMapMethodUnaryType> _try_use_linear_chained(RuntimeState* state,
                                                                                JoinHashTableItems* table_items);
+
+    // Helper method to get fallback hash map method type based on join type
+    template <LogicalType LT>
+    static std::pair<bool, JoinHashMapMethodUnaryType> _get_fallback_method(bool is_asof_join_type);
 };
 
 std::tuple<JoinKeyConstructorUnaryType, JoinHashMapMethodUnaryType>
@@ -161,16 +165,25 @@ JoinHashMapMethodUnaryType JoinHashMapSelector::_determine_hash_map_method(
                 return hash_map_type;
             }
 
-            return JoinHashMapMethodTypeTraits<JoinHashMapMethodType::BUCKET_CHAINED, LT>::unary_type;
+            return _get_fallback_method<LT>(is_asof_join(table_items->join_type)).second;
         }
     });
 }
 
 template <LogicalType LT>
+std::pair<bool, JoinHashMapMethodUnaryType> JoinHashMapSelector::_get_fallback_method(bool is_asof_join_type) {
+    return {false, is_asof_join_type
+                           ? JoinHashMapMethodTypeTraits<JoinHashMapMethodType::LINEAR_CHAINED_ASOF, LT>::unary_type
+                           : JoinHashMapMethodTypeTraits<JoinHashMapMethodType::BUCKET_CHAINED, LT>::unary_type};
+}
+
+template <LogicalType LT>
 std::pair<bool, JoinHashMapMethodUnaryType> JoinHashMapSelector::_try_use_range_direct_mapping(
         RuntimeState* state, JoinHashTableItems* table_items) {
+    bool is_asof_join_type = is_asof_join(table_items->join_type);
+
     if (!state->enable_hash_join_range_direct_mapping_opt()) {
-        return {false, JoinHashMapMethodUnaryType::BUCKET_CHAINED_INT};
+        return _get_fallback_method<LT>(is_asof_join_type);
     }
 
     using KeyConstructor = typename JoinKeyConstructorTypeTraits<JoinKeyConstructorType::ONE_KEY, LT>::BuildType;
@@ -181,12 +194,12 @@ std::pair<bool, JoinHashMapMethodUnaryType> JoinHashMapSelector::_try_use_range_
 
     // `max_value - min_value + 1` will be overflow.
     if (min_value == std::numeric_limits<int64_t>::min() && max_value == std::numeric_limits<int64_t>::max()) {
-        return {false, JoinHashMapMethodUnaryType::BUCKET_CHAINED_INT};
+        return _get_fallback_method<LT>(is_asof_join_type);
     }
 
     const uint64_t value_interval = static_cast<uint64_t>(max_value) - min_value + 1;
     if (value_interval >= std::numeric_limits<uint32_t>::max()) {
-        return {false, JoinHashMapMethodUnaryType::BUCKET_CHAINED_INT};
+        return _get_fallback_method<LT>(is_asof_join_type);
     }
 
     table_items->min_value = min_value;
@@ -226,19 +239,20 @@ std::pair<bool, JoinHashMapMethodUnaryType> JoinHashMapSelector::_try_use_range_
         }
     }
 
-    return {false, JoinHashMapMethodUnaryType::BUCKET_CHAINED_INT};
+    return _get_fallback_method<LT>(is_asof_join_type);
 }
 
 template <LogicalType LT>
 std::pair<bool, JoinHashMapMethodUnaryType> JoinHashMapSelector::_try_use_linear_chained(
         RuntimeState* state, JoinHashTableItems* table_items) {
+    bool is_asof_join_type = is_asof_join(table_items->join_type);
     if (!state->enable_hash_join_linear_chained_opt()) {
-        return {false, JoinHashMapMethodTypeTraits<JoinHashMapMethodType::BUCKET_CHAINED, LT>::unary_type};
+        return _get_fallback_method<LT>(is_asof_join_type);
     }
 
     const uint64_t bucket_size = JoinHashMapHelper::calc_bucket_size(table_items->row_count + 1);
     if (bucket_size > LinearChainedJoinHashMap<LT>::max_supported_bucket_size()) {
-        return {false, JoinHashMapMethodTypeTraits<JoinHashMapMethodType::BUCKET_CHAINED, LT>::unary_type};
+        return _get_fallback_method<LT>(is_asof_join_type);
     }
 
     const bool is_left_anti_join_without_other_conjunct =
@@ -347,6 +361,7 @@ void JoinHashTable::create(const HashTableParam& param) {
     _table_items->with_other_conjunct = param.with_other_conjunct;
     _table_items->join_type = param.join_type;
     _table_items->enable_late_materialization = param.enable_late_materialization;
+    _table_items->asof_join_condition_desc = param.asof_join_condition_desc;
 
     if (_table_items->join_type == TJoinOp::RIGHT_SEMI_JOIN || _table_items->join_type == TJoinOp::RIGHT_ANTI_JOIN ||
         _table_items->join_type == TJoinOp::RIGHT_OUTER_JOIN) {
@@ -354,12 +369,20 @@ void JoinHashTable::create(const HashTableParam& param) {
     } else if (_table_items->join_type == TJoinOp::LEFT_SEMI_JOIN ||
                _table_items->join_type == TJoinOp::LEFT_ANTI_JOIN ||
                _table_items->join_type == TJoinOp::NULL_AWARE_LEFT_ANTI_JOIN ||
-               _table_items->join_type == TJoinOp::LEFT_OUTER_JOIN) {
+               _table_items->join_type == TJoinOp::LEFT_OUTER_JOIN ||
+               _table_items->join_type == TJoinOp::ASOF_LEFT_OUTER_JOIN) {
         _table_items->right_to_nullable = true;
     } else if (_table_items->join_type == TJoinOp::FULL_OUTER_JOIN) {
         _table_items->left_to_nullable = true;
         _table_items->right_to_nullable = true;
     }
+
+    if (is_asof_join(_table_items->join_type)) {
+        auto variant_index = get_asof_variant_index(_table_items->asof_join_condition_desc.build_logical_type,
+                                                    _table_items->asof_join_condition_desc.condition_op);
+        _table_items->asof_index_vector = create_asof_index_vector(variant_index);
+    }
+
     _table_items->join_keys = param.join_keys;
 
     _init_probe_column(param);
@@ -694,6 +717,7 @@ void JoinHashTable::remove_duplicate_index(Filter* filter) {
     if (_is_empty_map) {
         switch (_table_items->join_type) {
         case TJoinOp::LEFT_OUTER_JOIN:
+        case TJoinOp::ASOF_LEFT_OUTER_JOIN:
         case TJoinOp::LEFT_ANTI_JOIN:
         case TJoinOp::FULL_OUTER_JOIN:
         case TJoinOp::NULL_AWARE_LEFT_ANTI_JOIN: {
@@ -712,6 +736,7 @@ void JoinHashTable::remove_duplicate_index(Filter* filter) {
     DCHECK_LT(0, _table_items->row_count);
     switch (_table_items->join_type) {
     case TJoinOp::LEFT_OUTER_JOIN:
+    case TJoinOp::ASOF_LEFT_OUTER_JOIN:
         _remove_duplicate_index_for_left_outer_join(filter);
         break;
     case TJoinOp::LEFT_SEMI_JOIN:

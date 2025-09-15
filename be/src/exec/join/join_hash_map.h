@@ -52,7 +52,8 @@ public:
         case TJoinOp::FULL_OUTER_JOIN:
         case TJoinOp::LEFT_ANTI_JOIN:
         case TJoinOp::NULL_AWARE_LEFT_ANTI_JOIN:
-        case TJoinOp::LEFT_OUTER_JOIN: {
+        case TJoinOp::LEFT_OUTER_JOIN:
+        case TJoinOp::ASOF_LEFT_OUTER_JOIN: {
             _probe_state->count = (*probe_chunk)->num_rows();
             _probe_output<false>(probe_chunk, chunk);
             _build_output<false>(chunk);
@@ -320,6 +321,36 @@ private:
     void _probe_from_ht_for_left_outer_left_anti_full_outer_join_with_other_conjunct(
             RuntimeState* state, const ImmBuffer<CppType> build_data, const ImmBuffer<CppType> probe_data);
 
+    // for AsOf inner join
+    template <bool first_probe, bool is_collision_free_and_unique>
+    void _probe_from_ht_for_asof_inner_join(RuntimeState* state, const ImmBuffer<CppType> build_data,
+                                            const ImmBuffer<CppType> probe_data);
+    // Note: This coroutine version is never called for ASOF JOIN as coroutines are disabled
+    // It exists only to satisfy template instantiation requirements
+    HashTableProbeState::ProbeCoroutine _probe_from_ht_for_asof_inner_join(RuntimeState* state,
+                                                                           const ImmBuffer<CppType> build_data,
+                                                                           const ImmBuffer<CppType> probe_data) {
+        co_return;
+    };
+
+    // for asof left outer join
+    template <bool first_probe, bool is_collision_free_and_unique>
+    void _probe_from_ht_for_asof_left_outer_join(RuntimeState* state, const ImmBuffer<CppType> build_data,
+                                                 const ImmBuffer<CppType> probe_data);
+    // Note: This coroutine version is never called for ASOF JOIN as coroutines are disabled
+    // It exists only to satisfy template instantiation requirements
+    HashTableProbeState::ProbeCoroutine _probe_from_ht_for_asof_left_outer_join(RuntimeState* state,
+                                                                                const ImmBuffer<CppType> build_data,
+                                                                                const ImmBuffer<CppType> probe_data) {
+        co_return;
+    };
+
+    // for asof left outer join with other conjunct
+    template <bool first_probe, bool is_collision_free_and_unique>
+    void _probe_from_ht_for_asof_left_outer_join_with_other_conjunct(RuntimeState* state,
+                                                                     const ImmBuffer<CppType> build_data,
+                                                                     const ImmBuffer<CppType> probe_data);
+
     JoinHashTableItems* _table_items = nullptr;
     HashTableProbeState* _probe_state = nullptr;
 };
@@ -438,6 +469,7 @@ private:
                                             JoinHashMapForNonSmallKey(BUCKET_CHAINED),             //
                                             JoinHashMapForNonSmallKey(LINEAR_CHAINED),             //
                                             JoinHashMapForNonSmallKey(LINEAR_CHAINED_SET),         //
+                                            JoinHashMapForNonSmallKey(LINEAR_CHAINED_ASOF),        //
                                             JoinHashMapForIntBigintKey(RANGE_DIRECT_MAPPING),      //
                                             JoinHashMapForIntBigintKey(RANGE_DIRECT_MAPPING_SET),  //
                                             JoinHashMapForIntBigintKey(DENSE_RANGE_DIRECT_MAPPING) //
