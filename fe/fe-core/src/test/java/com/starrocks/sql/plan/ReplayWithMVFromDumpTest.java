@@ -15,7 +15,6 @@
 package com.starrocks.sql.plan;
 
 import com.starrocks.common.FeConstants;
-import com.starrocks.sql.optimizer.rule.transformation.materialization.MVTestBase;
 import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.jupiter.api.BeforeAll;
@@ -38,7 +37,6 @@ public class ReplayWithMVFromDumpTest extends ReplayFromDumpTestBase {
         connectContext.getSessionVariable().setMaterializedViewRewriteMode("force");
         connectContext.getSessionVariable().setEnableViewBasedMvRewrite(true);
         FeConstants.isReplayFromQueryDump = true;
-        MVTestBase.disableMVRewriteConsiderDataLayout();
     }
 
     @Test
