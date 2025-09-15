@@ -299,29 +299,4 @@ public class ReplayWithMVFromDumpTest extends ReplayFromDumpTestBase {
             PlanTestBase.assertContains(replayPair.second, "tbl_mock_239", "MaterializedView: true");
         }
     }
-<<<<<<< HEAD
-=======
-
-    @Test
-    public void testViewBasedRewrite3() throws Exception {
-        String fileContent = getDumpInfoFromFile("query_dump/view_based_rewrite1");
-        QueryDumpInfo queryDumpInfo = getDumpInfoFromJson(fileContent);
-        SessionVariable sessionVariable = queryDumpInfo.getSessionVariable();
-        QueryDebugOptions debugOptions = new QueryDebugOptions();
-        debugOptions.setEnableQueryTraceLog(true);
-        sessionVariable.setQueryDebugOptions(debugOptions.toString());
-        Pair<QueryDumpInfo, String> replayPair = getPlanFragment(fileContent, sessionVariable, TExplainLevel.NORMAL);
-        String plan = replayPair.second;
-        PlanTestBase.assertContains(plan, "single_mv_ads_biz_customer_combine_td_for_task_2y");
-    }
-
-    @Test
-    public void testChooseBest() throws Exception {
-        Pair<QueryDumpInfo, String> replayPair =
-                getPlanFragment(getDumpInfoFromFile("query_dump/materialized-view/choose_best_mv1"),
-                        connectContext.getSessionVariable(), TExplainLevel.NORMAL);
-        String plan = replayPair.second;
-        PlanTestBase.assertContains(plan, "rocketview_v4", "rocketview_v4_mv2");
-    }
->>>>>>> 46739ddb91 ([Enhancement] Choose best candidate mv with considering input query data layout (#62830))
 }
