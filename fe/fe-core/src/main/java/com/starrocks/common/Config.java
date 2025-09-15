@@ -1499,6 +1499,10 @@ public class Config extends ConfigBase {
     )
     public static String mv_rewrite_consider_data_layout_mode = "enable";
 
+    @ConfField(mutable = true, comment = "Whether to enable automatic repairing of materialized views " +
+            "that are broken due to base table schema changes")
+    public static boolean enable_mv_automatic_repairing_for_broken_base_tables = true;
+
     /**
      * The number of query retries.
      * A query may retry if we encounter RPC exception and no result has been sent to user.
