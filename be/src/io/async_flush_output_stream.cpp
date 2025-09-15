@@ -125,10 +125,13 @@ Status AsyncFlushOutputStream::close() {
     }
 
     auto close_task = [&]() {
-        SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(_runtime_state->instance_mem_tracker());
-        CurrentThread::current().set_query_id(_runtime_state->query_id());
-        CurrentThread::current().set_fragment_instance_id(_runtime_state->fragment_instance_id());
-        auto status = _file->close();
+        Status status;
+        {
+            SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(_runtime_state->instance_mem_tracker());
+            CurrentThread::current().set_query_id(_runtime_state->query_id());
+            CurrentThread::current().set_fragment_instance_id(_runtime_state->fragment_instance_id());
+            status = _file->close();
+        }
         {
             std::scoped_lock lock(_mutex);
             _io_status.update(status);
