@@ -24,11 +24,6 @@ import com.starrocks.persist.Storage;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.NodeMgr;
 import com.starrocks.server.StorageVolumeMgr;
-<<<<<<< HEAD
-import com.starrocks.server.WarehouseManager;
-=======
-import com.starrocks.sql.ast.BrokerDesc;
->>>>>>> ec460c2c34 ([Enhancement] Enhance cluster snapshot restore to support warehouse (#63023))
 import com.starrocks.staros.StarMgrServer;
 import com.starrocks.system.Backend;
 import com.starrocks.system.ComputeNode;
