@@ -30,6 +30,7 @@ import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
+import com.starrocks.common.Status;
 import com.starrocks.common.util.concurrent.MarkedCountDownLatch;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
@@ -40,12 +41,16 @@ import com.starrocks.proto.TxnInfoPB;
 import com.starrocks.proto.TxnTypePB;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.WarehouseManager;
+import com.starrocks.system.SystemInfoService;
 import com.starrocks.task.AgentBatchTask;
 import com.starrocks.task.AgentTaskExecutor;
 import com.starrocks.task.AgentTaskQueue;
 import com.starrocks.task.TabletMetadataUpdateAgentTask;
+import com.starrocks.task.TabletTaskExecutor;
+import com.starrocks.thrift.TStatusCode;
 import com.starrocks.thrift.TTaskType;
 import io.opentelemetry.api.trace.StatusCode;
+import org.apache.hadoop.util.ThreadUtil;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -57,6 +62,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 import javax.validation.constraints.NotNull;
 
 public abstract class LakeTableAlterMetaJobBase extends AlterJobV2 {
@@ -99,12 +105,32 @@ public abstract class LakeTableAlterMetaJobBase extends AlterJobV2 {
             throw new AlterCancelException("table does not exist, tableName:" + tableName);
         }
 
+        int numReplicas = 0;
+        int numIndexes = 0;
+        List<PhysicalPartition> physicalPartitions = Lists.newArrayList();
         Locker locker = new Locker();
         locker.lockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(table.getId()), LockType.READ);
         try {
             partitions.addAll(table.getPartitions());
+            for (Partition partition : partitions) {
+                for (PhysicalPartition physicalPartition : partition.getSubPartitions()) {
+                    numReplicas += physicalPartition.storageReplicaCount();
+                    numIndexes += physicalPartition.getMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE).size();
+                    physicalPartitions.add(physicalPartition);
+                }
+            }
         } finally {
             locker.unLockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(table.getId()), LockType.READ);
+        }
+
+        int numAliveNodes = 0;
+        SystemInfoService systemInfoService = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
+        final List<Long> computeNodeIds = GlobalStateMgr.
+                getCurrentState().getWarehouseMgr().getAllComputeNodeIds(computeResource);
+        for (long nodeId : computeNodeIds) {
+            if (systemInfoService.getBackendOrComputeNode(nodeId).isAlive()) {
+                ++numAliveNodes;
+            }
         }
 
         if (this.watershedTxnId == -1) {
@@ -115,8 +141,16 @@ public abstract class LakeTableAlterMetaJobBase extends AlterJobV2 {
         }
 
         try {
-            for (Partition partition : partitions) {
-                updatePartitionTabletMeta(db, table, partition);
+            if (Config.enable_alter_table_schema_parallel) {
+                LOG.info("start to alter meta {} partitions concurrently for table {}.{} with {} replicas in warehouse {}",
+                        partitions.size(), db.getFullName(), table.getName(), numReplicas, warehouseId);
+                updatePartitionTabletMetaConcurrently(db, table, physicalPartitions, numReplicas, numAliveNodes, numIndexes);
+            } else {
+                LOG.info("start to alter meta {} partitions sequentially for table {}.{} with {} replicas in warehouse {}",
+                        partitions.size(), db.getFullName(), table.getName(), numReplicas, warehouseId);
+                for (Partition partition : partitions) {
+                    updatePartitionTabletMeta(db, table, partition);
+                }
             }
         } catch (DdlException e) {
             throw new AlterCancelException(e.getMessage());
@@ -587,5 +621,131 @@ public abstract class LakeTableAlterMetaJobBase extends AlterJobV2 {
         }
 
         GlobalStateMgr.getCurrentState().getLocalMetastore().handleMVRepair(db, table, partitionRepairInfos);
+    }
+
+    private void updatePartitionTabletMetaConcurrently(Database db, LakeTable table,
+                                                       List<PhysicalPartition> partitions, int numReplicas,
+                                                       int numBackends, int numIndexes) throws DdlException {
+        if (partitions.isEmpty()) {
+            return;
+        }
+
+        long start = System.currentTimeMillis();
+        int timeout = Math.max(1, numReplicas / numBackends) * Config.tablet_create_timeout_second;
+        int maxTimeout = numIndexes * Config.max_create_table_timeout_second;
+        timeout = Math.min(timeout, maxTimeout);
+        MarkedCountDownLatch<Long, Set<Long>> countDownLatch = new MarkedCountDownLatch<>(numReplicas, true);
+        Map<Long, List<Long>> taskSignatures = new HashMap<>();
+
+        try {
+            int numFinishedReplicas;
+            int numSendedReplicas = 0;
+            long startTime = System.currentTimeMillis();
+            long maxWaitTimeMs = timeout * 1000L;
+
+            for (PhysicalPartition partition : partitions) {
+                if (!countDownLatch.getStatus().ok()) {
+                    break;
+                }
+                Locker locker = new Locker();
+                List<MaterializedIndex> indexList;
+                locker.lockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(table.getId()), LockType.READ);
+                try {
+                    indexList = new ArrayList<>(partition.getMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE));
+                } finally {
+                    locker.unLockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(table.getId()), LockType.READ);
+                }
+                for (MaterializedIndex index : indexList) {
+                    List<TabletMetadataUpdateAgentTask> tasks = buildUpdateTabletMetaTasks(db, table, partition, index);
+                    AgentBatchTask agentBatchTask = sendUpdateTabletMetaTasks(tasks, countDownLatch);
+                    LOG.info("Sent update tablet metadata task. tableName={} partitionId={} indexId={} taskNum={}",
+                            tableName, partition.getId(), index.getId(), agentBatchTask.getTaskNum());
+                    for (TabletMetadataUpdateAgentTask task : tasks) {
+                        List<Long> signatures = taskSignatures.computeIfAbsent(task.getBackendId(), k -> new ArrayList<>());
+                        signatures.add(task.getSignature());
+                        numSendedReplicas += task.getTablets().size();
+                    }
+                    numFinishedReplicas = numReplicas - (int) countDownLatch.getCount();
+                    while (numSendedReplicas - numFinishedReplicas >
+                            Config.tablet_meta_update_max_pending_replicas_per_be * numBackends) {
+                        long currentTime = System.currentTimeMillis();
+                        if (currentTime > startTime + maxWaitTimeMs) {
+                            throw new TimeoutException("Wait in updatePartitionTabletMetaConcurrently exceeded timeout");
+                        }
+                        ThreadUtil.sleepAtLeastIgnoreInterrupts(100);
+                        numFinishedReplicas = numReplicas - (int) countDownLatch.getCount();
+                    }
+                }
+            }
+
+            LOG.info("update partition tablet meta concurrently for {}, waiting for all tasks finish with timeout {}s",
+                    table.getName(), timeout);
+            TabletTaskExecutor.waitForFinished(countDownLatch, timeout);
+            LOG.info("update partition tablet meta concurrently for {}, all tasks finished, took {}ms",
+                    table.getName(), System.currentTimeMillis() - start);
+
+        } catch (Exception e) {
+            LOG.warn("Failed to execute updatePartitionTabletMetaConcurrently", e);
+            countDownLatch.countDownToZero(new Status(TStatusCode.UNKNOWN, e.getMessage()));
+            throw new DdlException(e.getMessage());
+        } finally {
+            if (!countDownLatch.getStatus().ok()) {
+                for (Map.Entry<Long, List<Long>> entry : taskSignatures.entrySet()) {
+                    for (Long signature : entry.getValue()) {
+                        AgentTaskQueue.removeTask(entry.getKey(), TTaskType.UPDATE_TABLET_META_INFO, signature);
+                    }
+                }
+            }
+        }
+    }
+
+    private List<TabletMetadataUpdateAgentTask> buildUpdateTabletMetaTasks(Database db, OlapTable table,
+                                                                           PhysicalPartition partition,
+                                                                           MaterializedIndex index) throws DdlException {
+        addDirtyPartitionIndex(partition.getId(), index.getId(), index);
+
+        // be id -> <tablet id,schemaHash>
+        Map<Long, Set<Long>> beIdToTabletSet = Maps.newHashMap();
+        List<Tablet> tablets;
+
+        Locker locker = new Locker();
+        locker.lockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(table.getId()), LockType.READ);
+        try {
+            tablets = new ArrayList<>(index.getTablets());
+        } finally {
+            locker.unLockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(table.getId()), LockType.READ);
+        }
+
+        WarehouseManager warehouseManager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
+        for (Tablet tablet : tablets) {
+            Long backendId = warehouseManager.getAliveComputeNodeId(computeResource, tablet.getId());
+            if (backendId == null) {
+                throw new AlterCancelException("no alive node");
+            }
+            Set<Long> set = beIdToTabletSet.computeIfAbsent(backendId, k -> Sets.newHashSet());
+            set.add(tablet.getId());
+        }
+
+        List<TabletMetadataUpdateAgentTask> tasks = new ArrayList<>();
+        for (Map.Entry<Long, Set<Long>> kv : beIdToTabletSet.entrySet()) {
+            TabletMetadataUpdateAgentTask task = createTask(partition, index, kv.getKey(), kv.getValue());
+            Preconditions.checkState(task != null, "task is null");
+            task.setTxnId(watershedTxnId);
+            tasks.add(task);
+        }
+
+        return tasks;
+    }
+    private AgentBatchTask sendUpdateTabletMetaTasks(List<TabletMetadataUpdateAgentTask> tasks,
+                                                     MarkedCountDownLatch<Long, Set<Long>> countDownLatch) {
+        AgentBatchTask agentBatchTask = new AgentBatchTask();
+        for (TabletMetadataUpdateAgentTask task : tasks) {
+            task.setLatch(countDownLatch);
+            countDownLatch.addMark(task.getBackendId(), task.getTablets());
+            agentBatchTask.addTask(task);
+        }
+        AgentTaskQueue.addBatchTask(agentBatchTask);
+        AgentTaskExecutor.submit(agentBatchTask);
+        return agentBatchTask;
     }
 }

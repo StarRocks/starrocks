@@ -1521,6 +1521,13 @@ public class Config extends ConfigBase {
             "If actual replica count exceeds this, replicas will be created concurrently.")
     public static int create_table_max_serial_replicas = 128;
 
+    @ConfField(mutable = true, comment = "Enable parallel execution for alter table schema operations. " +
+            "When enabled, schema changes can be processed concurrently to improve performance.")
+    public static boolean enable_alter_table_schema_parallel = true;
+
+    @ConfField(mutable = true, comment = "Maximum number of pending tablet metadata update per backend.")
+    public static int tablet_meta_update_max_pending_replicas_per_be = 200;
+
     // Configurations for backup and restore
     /**
      * Plugins' path for BACKUP and RESTORE operations. Currently, deprecated.

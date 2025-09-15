@@ -341,6 +341,11 @@ Status UpdateConfigAction::update_config(const std::string& name, const std::str
             auto thread_pool = ExecEnv::GetInstance()->agent_server()->get_thread_pool(TTaskType::CREATE);
             return thread_pool->update_max_threads(config::create_tablet_worker_count);
         });
+        _config_callback.emplace("update_tablet_meta_info_worker_count", [&]() -> Status {
+            LOG(INFO) << "set update_tablet_meta_info_worker_count:" << config::update_tablet_meta_info_worker_count;
+            auto thread_pool = ExecEnv::GetInstance()->agent_server()->get_thread_pool(TTaskType::UPDATE_TABLET_META_INFO);
+            return thread_pool->update_max_threads(config::update_tablet_meta_info_worker_count);
+        });
         _config_callback.emplace("check_consistency_worker_count", [&]() -> Status {
             auto thread_pool = ExecEnv::GetInstance()->agent_server()->get_thread_pool(TTaskType::CHECK_CONSISTENCY);
             return thread_pool->update_max_threads(std::max(1, config::check_consistency_worker_count));

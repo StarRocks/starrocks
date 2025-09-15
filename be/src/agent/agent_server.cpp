@@ -251,8 +251,8 @@ Status AgentServer::Impl::init() {
         BUILD_DYNAMIC_TASK_THREAD_POOL(move_dir, 0, calc_real_num_threads(config::download_worker_count),
                                        std::numeric_limits<int>::max(), _thread_pool_move_dir);
 
-        BUILD_DYNAMIC_TASK_THREAD_POOL(update_tablet_meta_info, 0, 1, std::numeric_limits<int>::max(),
-                                       _thread_pool_update_tablet_meta_info);
+        BUILD_DYNAMIC_TASK_THREAD_POOL(update_tablet_meta_info, 0, config::update_tablet_meta_info_worker_count,
+                                       std::numeric_limits<int>::max(), _thread_pool_update_tablet_meta_info);
 
         BUILD_DYNAMIC_TASK_THREAD_POOL(drop_auto_increment_map_dir, 0, 1, std::numeric_limits<int>::max(),
                                        _thread_pool_drop_auto_increment_map);
