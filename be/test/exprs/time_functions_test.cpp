@@ -4541,7 +4541,7 @@ TEST_F(TimeFunctionsTest, hourFromUnixTime) {
         columns.emplace_back(tc);
         ColumnPtr result = TimeFunctions::hour_from_unixtime(_utils->get_fn_ctx(), columns).value();
 
-        auto hours = ColumnHelper::cast_to<TYPE_INT>(result);
+        auto hours = ColumnHelper::cast_to<TYPE_TINYINT>(result);
         for (size_t i = 0; i < sizeof(expected) / sizeof(expected[0]); ++i) {
             EXPECT_EQ(expected[i], hours->get_data()[i]) << "Failed for basic positive at index " << i;
         }
@@ -4574,7 +4574,7 @@ TEST_F(TimeFunctionsTest, hourFromUnixTime) {
         columns.emplace_back(tc);
         ColumnPtr result = TimeFunctions::hour_from_unixtime(_utils->get_fn_ctx(), columns).value();
 
-        auto hours = ColumnHelper::cast_to<TYPE_INT>(result);
+        auto hours = ColumnHelper::cast_to<TYPE_TINYINT>(result);
         for (size_t i = 0; i < sizeof(expected_negative) / sizeof(expected_negative[0]); ++i) {
             EXPECT_EQ(expected_negative[i], hours->get_data()[i])
                     << "Failed for timezone offset at index " << i << " with value " << tc->get_data()[i];
@@ -4609,7 +4609,7 @@ TEST_F(TimeFunctionsTest, hourFromUnixTime) {
         columns.emplace_back(tc);
         ColumnPtr result = TimeFunctions::hour_from_unixtime(_utils->get_fn_ctx(), columns).value();
 
-        auto hours = ColumnHelper::cast_to<TYPE_INT>(result);
+        auto hours = ColumnHelper::cast_to<TYPE_TINYINT>(result);
         for (size_t i = 0; i < sizeof(expected_mixed) / sizeof(expected_mixed[0]); ++i) {
             EXPECT_EQ(expected_mixed[i], hours->get_data()[i])
                     << "Failed for mixed timezone offset at index " << i << " with value " << tc->get_data()[i];
@@ -4646,14 +4646,14 @@ TEST_F(TimeFunctionsTest, hourFromUnixTime) {
         ASSERT_EQ(8, nullable_result->size());
 
         // Check that results are in correct order
-        EXPECT_EQ(3, nullable_result->get(0).get_int32()); // 0 -> hour 3
-        EXPECT_TRUE(nullable_result->is_null(1));          // null
-        EXPECT_EQ(4, nullable_result->get(2).get_int32()); // 3600 -> hour 4
-        EXPECT_TRUE(nullable_result->is_null(3));          // null
-        EXPECT_EQ(5, nullable_result->get(4).get_int32()); // 7200 -> hour 5
-        EXPECT_EQ(2, nullable_result->get(5).get_int32()); // 82800 -> hour 2 (next day)
-        EXPECT_TRUE(nullable_result->is_null(6));          // null
-        EXPECT_EQ(6, nullable_result->get(7).get_int32()); // 10800 -> hour 6
+        EXPECT_EQ(3, nullable_result->get(0).get_int8()); // 0 -> hour 3
+        EXPECT_TRUE(nullable_result->is_null(1));         // null
+        EXPECT_EQ(4, nullable_result->get(2).get_int8()); // 3600 -> hour 4
+        EXPECT_TRUE(nullable_result->is_null(3));         // null
+        EXPECT_EQ(5, nullable_result->get(4).get_int8()); // 7200 -> hour 5
+        EXPECT_EQ(2, nullable_result->get(5).get_int8()); // 82800 -> hour 2 (next day)
+        EXPECT_TRUE(nullable_result->is_null(6));         // null
+        EXPECT_EQ(6, nullable_result->get(7).get_int8()); // 10800 -> hour 6
     }
 
     // Test 5: Edge cases for hour wrapping with timezone offset and negative input (should return null)
@@ -4696,7 +4696,7 @@ TEST_F(TimeFunctionsTest, hourFromUnixTime) {
         // Check non-negative cases
         for (size_t i = 0; i < 4; ++i) {
             EXPECT_FALSE(nullable_result->is_null(i)) << "Unexpected null at index " << i;
-            EXPECT_EQ(expected_edge[i], nullable_result->get(i).get_int32())
+            EXPECT_EQ(expected_edge[i], nullable_result->get(i).get_int8())
                     << "Failed for edge case with timezone offset at index " << i << " with value "
                     << tc->get(i).get_int64();
         }
