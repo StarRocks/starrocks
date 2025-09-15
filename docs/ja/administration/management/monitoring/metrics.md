@@ -1677,3 +1677,51 @@ StarRocks クラスタのモニタリングサービスの構築方法につい�
 
 - 単位: Count
 - 説明: ブラックリストに登録された SQL がインターセプトされた回数。
+
+### starrocks_fe_scheduled_pending_tablet_num
+
+- 単位: Count
+- タイプ: Instantaneous
+- 説明: Pending 状態の FE でスケジュールされたクローンタスクの数（BALANCE タイプと REPAIR タイプの両方を含む）。
+
+### starrocks_fe_scheduled_running_tablet_num
+
+- 単位: Count
+- タイプ: Instantaneous
+- 説明: Running 状態の FE でスケジュールされたクローンタスクの数（BALANCE タイプと REPAIR タイプの両方を含む）。
+
+### starrocks_fe_clone_task_total
+
+- 単位: Count
+- タイプ: Cumulative
+- 説明: クラスタ内のクローンタスクの総数。
+
+### starrocks_fe_clone_task_success
+
+- 単位: Count
+- タイプ: Cumulative
+- 説明: クラスタ内で正常に実行されたクローンタスクの数。
+
+### starrocks_fe_clone_task_copy_bytes
+
+- 単位: Bytes
+- タイプ: Cumulative
+- 説明: クラスタ内のクローンタスクによってコピーされたファイルの合計サイズ（INTER_NODE タイプと INTRA_NODE タイプの両方を含む）。
+
+### starrocks_fe_clone_task_copy_duration_ms
+
+- 単位: ms
+- タイプ: Cumulative
+- 説明: クラスタ内のクローンタスクがコピーに消費した合計時間（INTER_NODE タイプと INTRA_NODE タイプの両方を含む）。
+
+### starrocks_be_clone_task_copy_bytes
+
+- 単位: Bytes
+- タイプ: Cumulative
+- 説明: BE ノード内のクローンタスクによってコピーされたファイルの合計サイズ（INTER_NODE タイプと INTRA_NODE タイプの両方を含む）。
+
+### starrocks_be_clone_task_copy_duration_ms
+
+- 単位: ms
+- タイプ: Cumulative
+- 説明: BE ノード内のクローンタスクがコピーに消費した合計時間（INTER_NODE タイプと INTRA_NODE タイプの両方を含む）。
