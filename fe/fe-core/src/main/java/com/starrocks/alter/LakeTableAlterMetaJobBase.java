@@ -133,6 +133,10 @@ public abstract class LakeTableAlterMetaJobBase extends AlterJobV2 {
             }
         }
 
+        if (numAliveNodes == 0) {
+            throw new AlterCancelException("no alive compute nodes");
+        }
+
         if (this.watershedTxnId == -1) {
             this.watershedTxnId = globalStateMgr.getGlobalTransactionMgr().getTransactionIDGenerator()
                     .getNextTransactionId();

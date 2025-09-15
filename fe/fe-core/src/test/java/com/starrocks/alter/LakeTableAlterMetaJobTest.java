@@ -41,6 +41,8 @@ import com.starrocks.sql.ast.AlterTableStmt;
 import com.starrocks.sql.ast.CreateDbStmt;
 import com.starrocks.sql.ast.CreateTableStmt;
 import com.starrocks.sql.ast.ModifyTablePropertiesClause;
+import com.starrocks.system.ComputeNode;
+import com.starrocks.system.SystemInfoService;
 import com.starrocks.task.TabletMetadataUpdateAgentTask;
 import com.starrocks.task.TabletMetadataUpdateAgentTaskFactory;
 import com.starrocks.thrift.TCompactionStrategy;
@@ -231,6 +233,17 @@ public class LakeTableAlterMetaJobTest {
                 return mockedWarehouseManager;
             }
         };
+        
+        // Mock SystemInfoService to return a mock ComputeNode that is not alive
+        new MockUp<SystemInfoService>() {
+            @Mock
+            public ComputeNode getBackendOrComputeNode(long nodeId) {
+                ComputeNode mockNode = new ComputeNode(nodeId, "127.0.0.1", 9030);
+                mockNode.setAlive(true); // Set to not alive to trigger the failure
+                return mockNode;
+            }
+        };
+
         mockedWarehouseManager.setComputeNodeId(null);
         Assertions.assertEquals(AlterJobV2.JobState.PENDING, job.getJobState());
         job.run();
