@@ -897,7 +897,7 @@ jobs:
 
           echo "##### Package: ${tar_path}" >> $GITHUB_STEP_SUMMARY
           echo "cluster_name=${CLUSTER_NAME}" >> $GITHUB_OUTPUT
-          ./bin/deploy-cluster.sh -c ${CLUSTER_NAME} --output ${tar_path} --with-coverage
+          ./bin/deploy-cluster.sh -c ${CLUSTER_NAME} --output ${tar_path} --with-coverage --arm
 
       - name: Clean ENV
         if: always()
