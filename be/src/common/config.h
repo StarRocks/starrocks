@@ -1757,4 +1757,6 @@ CONF_mInt64(split_exchanger_buffer_chunk_num, "1000");
 
 // when to split hashmap/hashset into two level hashmap/hashset, negative number means use default value
 CONF_mInt64(two_level_memory_threshold, "-1");
+// Whether use murmur_hash3_x64_64 to calculate hash64
+CONF_mBool(enable_murmur_hash3_x64_64_for_bitmap_hash64_function, "false");
 } // namespace starrocks::config

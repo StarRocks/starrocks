@@ -126,7 +126,12 @@ StatusOr<ColumnPtr> BitmapFunctions::bitmap_hash64(FunctionContext* context, con
         BitmapValue bitmap;
         if (!viewer.is_null(row)) {
             auto slice = viewer.value(row);
-            uint64_t hash_value = HashUtil::xx_hash3_64(slice.data, slice.size, HashUtil::XXHASH3_64_SEED);
+            uint64_t hash_value;
+            if (config::enable_murmur_hash3_x64_64_for_bitmap_hash64_function) {
+                murmur_hash3_x64_64(slice.data, slice.size, HashUtil::XXHASH3_64_SEED, &hash_value);
+            } else {
+                hash_value = HashUtil::xx_hash3_64(slice.data, slice.size, HashUtil::XXHASH3_64_SEED);
+            }
             bitmap.add(hash_value);
         }
         builder.append(&bitmap);
