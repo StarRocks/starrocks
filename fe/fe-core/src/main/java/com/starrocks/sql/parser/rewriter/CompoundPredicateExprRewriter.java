@@ -55,24 +55,16 @@ public class CompoundPredicateExprRewriter {
             return input;
         }
         CompoundPredicate.Operator op = compoundPredicate.getOp();
-        Expr left = compoundPredicate.getChild(0);
-        Expr right = compoundPredicate.getChild(1);
-
-        // Flatten left and right subtrees if they are the same operator
         List<Expr> operands = new ArrayList<>();
-        if (left instanceof CompoundPredicate && ((CompoundPredicate) left).getOp() == op) {
-            operands.addAll(flattenOperands(left, op));
-        } else {
-            Expr rewrittenLeft = rewrite(left);
-            operands.add(rewrittenLeft);
+        for (Expr child : compoundPredicate.getChildren()) {
+            // Flatten left and right subtrees if they are the same operator
+            if (child instanceof CompoundPredicate && ((CompoundPredicate) child).getOp() == op) {
+                operands.addAll(flattenOperands(child, op));
+            } else {
+                Expr rewrittenLeft = rewrite(child);
+                operands.add(rewrittenLeft);
+            }
         }
-        if (right instanceof CompoundPredicate && ((CompoundPredicate) right).getOp() == op) {
-            operands.addAll(flattenOperands(right, op));
-        } else {
-            Expr rewrittenRight = rewrite(right);
-            operands.add(rewrittenRight);
-        }
-
         // Optimize OR predicates of the form: col = v1 OR col = v2 OR ... => col IN (v1, v2, ...)
         if (op == CompoundPredicate.Operator.OR) {
             InPredicate inPredicate = tryConvertOrToInPredicate(operands);
@@ -110,11 +102,8 @@ public class CompoundPredicateExprRewriter {
             if (current instanceof CompoundPredicate) {
                 CompoundPredicate cp = (CompoundPredicate) current;
                 if (cp.getOp() == op) {
-                    if (cp.getChild(1) != null) {
-                        stack.push(cp.getChild(1));
-                    }
-                    if (cp.getChild(0) != null) {
-                        stack.push(cp.getChild(0));
+                    for (Expr child : cp.getChildren()) {
+                        stack.push(child);
                     }
                     continue;
                 }
