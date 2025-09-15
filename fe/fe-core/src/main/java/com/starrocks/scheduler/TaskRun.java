@@ -243,6 +243,13 @@ public class TaskRun implements Comparable<TaskRun> {
 
         if (parentRunCtx != null) {
             context.setParentConnectContext(parentRunCtx);
+            // Propagate submitter's remote IP into the internal context so components
+            // that rely on ConnectContext.getRemoteIP() can behave consistently.
+            // parentRunCtx may come from an external MySQL session and contains the real client IP.
+            String parentRemoteIp = parentRunCtx.getRemoteIP();
+            if (!Strings.isNullOrEmpty(parentRemoteIp)) {
+                context.setRemoteIP(parentRemoteIp);
+            }
         }
         context.setGlobalStateMgr(GlobalStateMgr.getCurrentState());
         context.setCurrentCatalog(task.getCatalogName());
@@ -335,7 +342,19 @@ public class TaskRun implements Comparable<TaskRun> {
         // If this is the first task run of the job, use its uuid as the job id.
         taskRunContext.setTaskRunId(taskRunId);
         taskRunContext.setCtx(runCtx);
-        taskRunContext.setRemoteIp(runCtx.getMysqlChannel().getRemoteHostPortString());
+        // Prefer the submitter's real remote host:port if available, otherwise fall back.
+        String remoteHostPort = "";
+        if (parentRunCtx != null && parentRunCtx.getMysqlChannel() != null) {
+            remoteHostPort = parentRunCtx.getMysqlChannel().getRemoteHostPortString();
+        }
+        if (Strings.isNullOrEmpty(remoteHostPort) && parentRunCtx != null) {
+            // Fallback to plain remote IP
+            remoteHostPort = parentRunCtx.getRemoteIP();
+        }
+        if (Strings.isNullOrEmpty(remoteHostPort) && runCtx.getMysqlChannel() != null) {
+            remoteHostPort = runCtx.getMysqlChannel().getRemoteHostPortString();
+        }
+        taskRunContext.setRemoteIp(remoteHostPort == null ? "" : remoteHostPort);
         taskRunContext.setProperties(taskRunContextProperties);
         taskRunContext.setPriority(status.getPriority());
         taskRunContext.setTaskType(type);
