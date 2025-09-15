@@ -138,6 +138,8 @@ public:
     virtual size_t reserved_bytes(const ChunkPtr& chunk) { return chunk != nullptr ? chunk->memory_usage() : 0; }
 
     virtual void cancel() {}
+    bool is_use_german_string() const { return _use_german_string; }
+    void set_use_german_string(bool value) { this->_use_german_string = value; }
 
 protected:
     size_t _get_number_of_order_by_columns() const { return _sort_exprs->size(); }
@@ -149,6 +151,7 @@ protected:
     const SortDescs _sort_desc;
     const std::string _sort_keys;
     const bool _is_topn;
+    bool _use_german_string = false;
 
     RuntimeProfile::Counter* _build_timer = nullptr;
     RuntimeProfile::Counter* _sort_timer = nullptr;
