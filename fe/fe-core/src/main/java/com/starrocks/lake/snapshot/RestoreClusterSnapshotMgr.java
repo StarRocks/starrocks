@@ -24,11 +24,6 @@ import com.starrocks.persist.Storage;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.NodeMgr;
 import com.starrocks.server.StorageVolumeMgr;
-<<<<<<< HEAD
-import com.starrocks.server.WarehouseManager;
-=======
-import com.starrocks.sql.ast.BrokerDesc;
->>>>>>> ec460c2c34 ([Enhancement] Enhance cluster snapshot restore to support warehouse (#63023))
 import com.starrocks.staros.StarMgrServer;
 import com.starrocks.system.Backend;
 import com.starrocks.system.ComputeNode;
@@ -223,34 +218,19 @@ public class RestoreClusterSnapshotMgr {
         // Drop old backend nodes
         for (Backend be : systemInfoService.getIdToBackend().values()) {
             LOG.info("Drop old backend {}", be);
-<<<<<<< HEAD
-            systemInfoService.dropBackend(be.getHost(), be.getHeartbeatPort(),
-                    WarehouseManager.DEFAULT_WAREHOUSE_NAME, false);
-=======
-            systemInfoService.dropBackend(be.getHost(), be.getHeartbeatPort(), null, null, false);
->>>>>>> ec460c2c34 ([Enhancement] Enhance cluster snapshot restore to support warehouse (#63023))
+            systemInfoService.dropBackend(be.getHost(), be.getHeartbeatPort(), null, false);
         }
 
         // Drop old compute nodes
         for (ComputeNode cn : systemInfoService.getIdComputeNode().values()) {
             LOG.info("Drop old compute node {}", cn);
-<<<<<<< HEAD
-            systemInfoService.dropComputeNode(cn.getHost(), cn.getHeartbeatPort(),
-                    WarehouseManager.DEFAULT_WAREHOUSE_NAME);
-=======
-            systemInfoService.dropComputeNode(cn.getHost(), cn.getHeartbeatPort(), null, null);
->>>>>>> ec460c2c34 ([Enhancement] Enhance cluster snapshot restore to support warehouse (#63023))
+            systemInfoService.dropComputeNode(cn.getHost(), cn.getHeartbeatPort(), null);
         }
 
         // Add new compute nodes
         for (ClusterSnapshotConfig.ComputeNode cn : computeNodes) {
             LOG.info("Add new compute node {}", cn);
-<<<<<<< HEAD
-            systemInfoService.addComputeNode(cn.getHost(), cn.getHeartbeatServicePort(),
-                    WarehouseManager.DEFAULT_WAREHOUSE_NAME);
-=======
-            systemInfoService.addComputeNode(cn.getHost(), cn.getHeartbeatServicePort(), cn.getWarehouse(), cn.getCNGroup());
->>>>>>> ec460c2c34 ([Enhancement] Enhance cluster snapshot restore to support warehouse (#63023))
+            systemInfoService.addComputeNode(cn.getHost(), cn.getHeartbeatServicePort(), cn.getWarehouse());
         }
     }
 
