@@ -947,7 +947,7 @@ public class DatabaseTransactionMgr {
                         states = states.subList(0, Math.max(i, 1));
                         break;
                     }
-                    // Handle replication tansaction singly
+                    // Handle replication transaction singly
                     // e.g. assume there are 4 txns in `states`: <txn_normal_0, txn_rep_0, txn_normal_1, txn_normal_2>
                     // 3 txn batch will be generated as: <txn_normal_0>, <txn_rep>, <txn_normal_1, txn_normal_2>
                     if (state.getTransactionType() == TransactionType.TXN_REPLICATION) {
