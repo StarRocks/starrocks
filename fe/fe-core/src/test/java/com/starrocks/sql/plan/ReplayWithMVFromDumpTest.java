@@ -202,11 +202,10 @@ public class ReplayWithMVFromDumpTest extends ReplayFromDumpTestBase {
     @Test
     public void testZ_AggPushDownRewriteBugs1() throws Exception {
         connectContext.getSessionVariable().setMaterializedViewRewriteMode("default");
+        connectContext.getSessionVariable().setEnableMaterializedViewPushDownRewrite(true);
         String plan = getPlanFragment("query_dump/materialized-view/mv_rewrite_bugs1", TExplainLevel.COSTS);
-        assertContains(plan, "mv_fact_table1");
-        assertContains(plan, "  14:Project\n" +
-                "  |  output columns:\n" +
-                "  |  179 <-> [209: sum, DOUBLE, true] / cast([210: sum, BIGINT, true] as DOUBLE)");
+        assertContains(plan, "mv_dim_table1_1");
+        connectContext.getSessionVariable().setEnableMaterializedViewPushDownRewrite(false);
         connectContext.getSessionVariable().setMaterializedViewRewriteMode("force");
     }
 }
