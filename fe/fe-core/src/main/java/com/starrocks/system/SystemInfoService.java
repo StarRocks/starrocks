@@ -443,17 +443,12 @@ public class SystemInfoService implements GsonPostProcessable {
         }
     }
 
-<<<<<<< HEAD
-    public void dropComputeNode(String host, int heartbeatPort, String warehouse)
-=======
     /*
-     * The arg warehouse and cnGroupName can be null or empty,
-     * which means ignore warehouse and cngroup when dropping compute node, 
-     * otherwise they will be checked and an exception will be thrown if they are not matched.
-     * If the warehouse is null or empty, the cnGroupName will be ignored.
+     * The arg warehouse can be null or empty,
+     * which means ignore warehouse when dropping compute node, 
+     * otherwise it will be checked and an exception will be thrown if it is not matched.
      */
-    public void dropComputeNode(String host, int heartbeatPort, String warehouse, String cnGroupName)
->>>>>>> ec460c2c34 ([Enhancement] Enhance cluster snapshot restore to support warehouse (#63023))
+    public void dropComputeNode(String host, int heartbeatPort, String warehouse)
             throws DdlException {
         ComputeNode dropComputeNode = getComputeNodeWithHeartbeatPort(host, heartbeatPort);
         if (dropComputeNode == null) {
@@ -461,33 +456,18 @@ public class SystemInfoService implements GsonPostProcessable {
                     NetUtils.getHostPortInAccessibleFormat(host, heartbeatPort) + "]");
         }
 
-<<<<<<< HEAD
         // check if warehouseName is right
-        Warehouse wh = GlobalStateMgr.getCurrentState().getWarehouseMgr().getWarehouseAllowNull(dropComputeNode.getWarehouseId());
-        if (wh != null && !warehouse.equalsIgnoreCase(wh.getName())) {
+        Warehouse wh = GlobalStateMgr.getCurrentState().getWarehouseMgr()
+                .getWarehouseAllowNull(dropComputeNode.getWarehouseId());
+        if (wh != null && !Strings.isNullOrEmpty(warehouse) && !warehouse.equalsIgnoreCase(wh.getName())) {
             throw new DdlException("compute node [" + host + ":" + heartbeatPort +
                     "] does not exist in warehouse " + warehouse);
-=======
-        if (!Strings.isNullOrEmpty(warehouse)) {
-            // check if warehouseName is right
-            Warehouse wh = GlobalStateMgr.getCurrentState().getWarehouseMgr()
-                    .getWarehouseAllowNull(dropComputeNode.getWarehouseId());
-            if (wh != null) {
-                if (!warehouse.equalsIgnoreCase(wh.getName())) {
-                    throw new DdlException("compute node [" + host + ":" + heartbeatPort +
-                            "] does not exist in warehouse " + warehouse);
-                }
-                if (!Strings.isNullOrEmpty(cnGroupName)) {
-                    // validate cnGroupName if provided
-                    wh.validateRemoveNodeFromCNGroup(dropComputeNode, cnGroupName);
-                }
-            }
-            // Allow drop compute node if `wh` is null for whatever reason
->>>>>>> ec460c2c34 ([Enhancement] Enhance cluster snapshot restore to support warehouse (#63023))
         }
 
         // try to record the historical backend nodes
-        tryUpdateHistoricalComputeNodes(warehouse);
+        if (wh != null) {
+            tryUpdateHistoricalComputeNodes(wh.getName());
+        }
 
         // update idToComputeNode
         idToComputeNodeRef.remove(dropComputeNode.getId());
@@ -575,20 +555,14 @@ public class SystemInfoService implements GsonPostProcessable {
         });
     }
 
-<<<<<<< HEAD
-    // final entry of dropping backend
-    public void dropBackend(String host, int heartbeatPort, String warehouse, boolean needCheckWithoutForce) throws DdlException {
-=======
     /*
      * Final entry of dropping backend.
-     * The arg warehouse and cnGroupName can be null or empty,
-     * which means ignore warehouse and cngroup when dropping compute node, 
-     * otherwise they will be checked and an exception will be thrown if they are not matched.
-     * If the warehouse is null or empty, the cnGroupName will be ignored.
+     * The arg warehouse can be null or empty,
+     * which means ignore warehouse when dropping backend node, 
+     * otherwise it will be checked and an exception will be thrown if it is not matched.
      */
-    public void dropBackend(String host, int heartbeatPort, String warehouse, String cnGroupName,
-                            boolean needCheckWithoutForce) throws DdlException {
->>>>>>> ec460c2c34 ([Enhancement] Enhance cluster snapshot restore to support warehouse (#63023))
+    public void dropBackend(String host, int heartbeatPort, String warehouse, boolean needCheckWithoutForce)
+            throws DdlException {
         Backend droppedBackend = getBackendWithHeartbeatPort(host, heartbeatPort);
 
         if (droppedBackend == null) {
@@ -596,35 +570,15 @@ public class SystemInfoService implements GsonPostProcessable {
                     NetUtils.getHostPortInAccessibleFormat(host, heartbeatPort) + "]");
         }
 
-<<<<<<< HEAD
         // check if warehouseName is right
-        Warehouse wh = GlobalStateMgr.getCurrentState().getWarehouseMgr().getWarehouseAllowNull(droppedBackend.getWarehouseId());
-        if (wh != null && !warehouse.equalsIgnoreCase(wh.getName())) {
+        Warehouse wh = GlobalStateMgr.getCurrentState().getWarehouseMgr()
+                .getWarehouseAllowNull(droppedBackend.getWarehouseId());
+        if (wh != null && !Strings.isNullOrEmpty(warehouse) && !warehouse.equalsIgnoreCase(wh.getName())) {
             LOG.warn("warehouseName in dropBackends is not equal, " +
                             "warehouseName from dropBackendClause is {}, while actual one is {}",
                     warehouse, wh.getName());
             throw new DdlException("backend [" + host + ":" + heartbeatPort +
                     "] does not exist in warehouse " + warehouse);
-=======
-        if (!Strings.isNullOrEmpty(warehouse)) {
-            // check if warehouseName is right
-            Warehouse wh = GlobalStateMgr.getCurrentState().getWarehouseMgr()
-                    .getWarehouseAllowNull(droppedBackend.getWarehouseId());
-            if (wh != null) {
-                if (!warehouse.equalsIgnoreCase(wh.getName())) {
-                    LOG.warn("warehouseName in dropBackends is not equal, " +
-                                    "warehouseName from dropBackendClause is {}, while actual one is {}",
-                            warehouse, wh.getName());
-                    throw new DdlException("backend [" + host + ":" + heartbeatPort +
-                            "] does not exist in warehouse " + warehouse);
-                }
-                if (!Strings.isNullOrEmpty(cnGroupName)) {
-                    // validate cnGroupName if provided
-                    wh.validateRemoveNodeFromCNGroup(droppedBackend, cnGroupName);
-                }
-            }
-            // allow dropping the node if `wh` is null for whatever reason
->>>>>>> ec460c2c34 ([Enhancement] Enhance cluster snapshot restore to support warehouse (#63023))
         }
 
         if (needCheckWithoutForce) {
@@ -636,7 +590,9 @@ public class SystemInfoService implements GsonPostProcessable {
         }
 
         // try to record the historical backend nodes
-        tryUpdateHistoricalBackends(warehouse);
+        if (wh != null) {
+            tryUpdateHistoricalBackends(wh.getName());
+        }
 
         // update idToBackend
         idToBackendRef.remove(droppedBackend.getId());
