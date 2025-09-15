@@ -61,8 +61,15 @@ public class ClusterSnapshotConfigTest {
         frontend1.setType(frontend2.getType());
 
         ClusterSnapshotConfig.ComputeNode computeNode1 = config.getComputeNodes().get(0);
+<<<<<<< HEAD
         Assert.assertEquals("172.26.92.11", computeNode1.getHost());
         Assert.assertEquals(9050, computeNode1.getHeartbeatServicePort());
+=======
+        Assertions.assertEquals("172.26.92.11", computeNode1.getHost());
+        Assertions.assertEquals(9050, computeNode1.getHeartbeatServicePort());
+        Assertions.assertEquals("default_warehouse", computeNode1.getWarehouse());
+        Assertions.assertEquals("default_cngroup", computeNode1.getCNGroup());
+>>>>>>> ec460c2c34 ([Enhancement] Enhance cluster snapshot restore to support warehouse (#63023))
 
         ClusterSnapshotConfig.ComputeNode computeNode2 = config.getComputeNodes().get(1);
         Assert.assertEquals("172.26.92.12", computeNode2.getHost());
@@ -71,6 +78,8 @@ public class ClusterSnapshotConfigTest {
         computeNode1.toString();
         computeNode1.setHost(computeNode2.getHost());
         computeNode1.setHeartbeatServicePort(computeNode2.getHeartbeatServicePort());
+        computeNode1.setWarehouse(computeNode2.getWarehouse());
+        computeNode1.setCNGroup(computeNode2.getCNGroup());
 
         ClusterSnapshotConfig.StorageVolume storageVolume1 = config.getStorageVolumes().get(0);
         Assert.assertEquals("my_s3_volume", storageVolume1.getName());
