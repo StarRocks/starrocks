@@ -1636,6 +1636,54 @@ StarRocks クラスタのモニタリングサービスの構築方法につい�
 - 単位: Count
 - 説明: パイプライン PREPARE スレッドプールにおけるキュータスクの数。これは瞬時値です。
 
+### starrocks_be_exec_state_report_active_threads
+
+- 単位: Count
+- タイプ: Instantaneous
+- 説明: Fragment インスタンスの実行状態を報告するスレッドプール内で実行中のタスクの数。
+
+### starrocks_be_exec_state_report_running_threads
+
+- 単位: Count
+- タイプ: Instantaneous
+- 説明: Fragment インスタンスの実行状態を報告するスレッドプールのスレッド数。最小値は 1、最大値は 2。
+
+### starrocks_be_exec_state_report_threadpool_size
+
+- 単位: Count
+- タイプ: Instantaneous
+- 説明: Fragment インスタンスの実行状態を報告するスレッドプールの最大スレッド数。デフォルトは 2 です。
+
+### starrocks_be_exec_state_report_queue_count
+
+- 単位: Count
+- タイプ: Instantaneous
+- 説明: Fragment インスタンスの実行状態を報告するスレッドプールにキューイングされるタスクの数。最大値は 1000 です。
+
+### starrocks_be_priority_exec_state_report_active_threads
+
+- 単位: Count
+- タイプ: Instantaneous
+- 説明: Fragment インスタンスの最終的な実行状態を報告するスレッドプール内で実行中のタスクの数。
+
+### starrocks_be_priority_exec_state_report_running_threads
+
+- 単位: Count
+- タイプ: Instantaneous
+- 説明: Fragment インスタンスの最終的な実行状態を報告するスレッドプールのスレッド数。最小値は 1、最大値は 2。
+
+### starrocks_be_priority_exec_state_report_threadpool_size
+
+- 単位: Count
+- タイプ: Instantaneous
+- 説明: Fragment インスタンスの最終的な実行状態を報告するスレッドプールの最大スレッド数。デフォルトは 2 です。
+
+### starrocks_be_priority_exec_state_report_queue_count
+
+- 単位: Count
+- タイプ: Instantaneous
+- 説明: Fragment インスタンスの最終的な実行状態を報告するスレッドプールにキューイングされるタスクの数。最大値は 2147483647 です。
+
 ### starrocks_fe_routine_load_jobs
 
 - 単位: Count
