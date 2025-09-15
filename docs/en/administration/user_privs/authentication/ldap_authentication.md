@@ -50,14 +50,14 @@ Starting from v3.5.0, StarRocks supports recording and passing user Distinguishe
    - User's complete DN (for DN-based group matching)
 
 2. **Group Resolution Phase**: LDAPGroupProvider determines the matching strategy based on the `ldap_user_search_attr` parameter configuration:
-   - **When `ldap_user_search_attr` is configured**: Uses username as the key for group matching
-   - **When `ldap_user_search_attr` is not configured**: Uses DN as the key for group matching
+   - **When `ldap_user_search_attr` is configured**, it uses username as the key for group matching.
+   - **When `ldap_user_search_attr` is not configured**, it uses DN as the key for group matching.
 
 ### Use Cases
 
-- **Traditional LDAP Environment**: Group members use simple usernames (such as `cn` attribute), configure the `ldap_user_search_attr` parameter
-- **Microsoft AD Environment**: Group members may lack username attributes, do not configure `ldap_user_search_attr` parameter, use DN matching directly
-- **Mixed Environment**: Supports flexible switching between both matching methods
+- **Traditional LDAP Environment**: Group members use simple usernames (such as `cn` attribute). Administrtors need to configure `ldap_user_search_attr`.
+- **Microsoft AD Environment**: Group members may lack username attributes. `ldap_user_search_attr` cannot be configured. The system will use DN directly for matching.
+- **Mixed Environment**: Flexible switching between both matching methods is supported.
 
 ## Create a user with LDAP
 
