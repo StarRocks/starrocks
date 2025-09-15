@@ -27,8 +27,15 @@ from sqlalchemy import log
 from sqlalchemy import types as sqltypes
 from sqlalchemy import util
 
-
-@dataclasses.dataclass(kw_only=True)
+# kw_only is added in python 3.10
+# https://docs.python.org/3/library/dataclasses.html#dataclasses.dataclass
+# To support python 3.9, we need to check if kw_only is in dataclasses.__all__
+# If it is, we can use it, otherwise we can't
+# This is a workaround for the lack of kw_only in python 3.9
+# We use a dict to pass the kw_only argument if it is available
+# This way, we can keep the code compatible with both python 3.9 and 3.10+
+# This is a temporary solution until we drop support for python 3.9 in the future
+@dataclasses.dataclass(**dict(kw_only=True) if 'KW_ONLY' in dataclasses.__all__ else {})
 class ReflectedState(object):
     """Stores informations about table or view."""
 
