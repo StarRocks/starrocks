@@ -24,6 +24,8 @@ StatusOr<InvertedImplementType> get_inverted_imp_type(const TabletIndex& tablet_
         const auto& imp_type = inverted_imp_prop->second;
         if (boost::algorithm::to_lower_copy(imp_type) == TYPE_CLUCENE) {
             return InvertedImplementType::CLUCENE;
+        } else if (boost::algorithm::to_lower_copy(imp_type) == TYPE_BUILTIN) {
+            return InvertedImplementType::BUILTIN;
         } else {
             return Status::InvalidArgument("Do not support imp_type : " + imp_type);
         }
@@ -42,6 +44,8 @@ std::string inverted_index_parser_type_to_string(InvertedIndexParserType parser_
         return INVERTED_INDEX_PARSER_ENGLISH;
     case InvertedIndexParserType::PARSER_CHINESE:
         return INVERTED_INDEX_PARSER_CHINESE;
+    case InvertedIndexParserType::PARSER_BUILTIN_ENGLISH:
+        return INVERTED_INDEX_PARSER_BUILTIN_ENGLISH;
     default:
         return INVERTED_INDEX_PARSER_UNKNOWN;
     }
@@ -57,6 +61,8 @@ InvertedIndexParserType get_inverted_index_parser_type_from_string(const std::st
         return InvertedIndexParserType::PARSER_ENGLISH;
     } else if (lower_value == INVERTED_INDEX_PARSER_CHINESE) {
         return InvertedIndexParserType::PARSER_CHINESE;
+    } else if (lower_value == INVERTED_INDEX_PARSER_BUILTIN_ENGLISH) {
+        return InvertedIndexParserType::PARSER_BUILTIN_ENGLISH;
     }
 
     return InvertedIndexParserType::PARSER_UNKNOWN;
