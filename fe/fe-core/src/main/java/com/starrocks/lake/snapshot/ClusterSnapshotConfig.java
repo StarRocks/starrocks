@@ -149,9 +149,6 @@ public class ClusterSnapshotConfig {
         @JsonProperty("warehouse")
         private String warehouse = WarehouseManager.DEFAULT_WAREHOUSE_NAME;
 
-        @JsonProperty("cngroup")
-        private String cngroup;
-
         public String getHost() {
             return host;
         }
@@ -176,18 +173,10 @@ public class ClusterSnapshotConfig {
             this.warehouse = warehouse;
         }
 
-        public String getCNGroup() {
-            return cngroup;
-        }
-
-        public void setCNGroup(String cngroup) {
-            this.cngroup = cngroup;
-        }
-
         @Override
         public String toString() {
             return "ComputeNode [host=" + host + ", heartbeatServicePort=" + heartbeatServicePort +
-                    ", warehouse=" + warehouse + ", cngroup=" + cngroup + "]";
+                    ", warehouse=" + warehouse + "]";
         }
     }
 
