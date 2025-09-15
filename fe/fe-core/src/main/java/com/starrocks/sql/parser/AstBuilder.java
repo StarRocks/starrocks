@@ -549,6 +549,7 @@ import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
+import java.util.Deque;
 import java.util.HashMap;
 import java.util.IdentityHashMap;
 import java.util.Iterator;
@@ -7248,7 +7249,7 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
     private CompoundPredicate buildCompoundPredicateIterative(
             com.starrocks.sql.parser.StarRocksParser.LogicalBinaryContext context) {
         // Stack to store LogicalBinaryNode records
-        java.util.Deque<LogicalBinaryNode> nodeStack = new java.util.ArrayDeque<>();
+        Deque<LogicalBinaryNode> nodeStack = new java.util.ArrayDeque<>();
         com.starrocks.sql.parser.StarRocksParser.LogicalBinaryContext current = context;
 
         // Traverse left as long as we see LogicalBinaryContext, storing each one's operator and context
