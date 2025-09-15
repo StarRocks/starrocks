@@ -25,10 +25,12 @@ import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.common.QueryDebugOptions;
 import com.starrocks.sql.optimizer.dump.QueryDumpInfo;
 import com.starrocks.system.BackendResourceStat;
 import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.utframe.StarRocksAssert;
+import com.starrocks.utframe.StarRocksTestBase;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Mock;
 import mockit.MockUp;
@@ -46,7 +48,7 @@ import java.util.Objects;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
-public class ReplayFromDumpTestBase {
+public class ReplayFromDumpTestBase extends StarRocksTestBase {
     public static ConnectContext connectContext;
     public static StarRocksAssert starRocksAssert;
 
@@ -85,6 +87,7 @@ public class ReplayFromDumpTestBase {
         connectContext.getSessionVariable().setCboPushDownAggregateMode(-1);
         connectContext.setQueryId(UUIDUtil.genUUID());
         connectContext.setExecutionId(UUIDUtil.toTUniqueId(connectContext.getQueryId()));
+        super.before();
     }
 
     @AfterClass
@@ -181,5 +184,16 @@ public class ReplayFromDumpTestBase {
         return new Pair<>(queryDumpInfo,
                 UtFrameUtils.getNewPlanAndFragmentFromDump(connectContext, queryDumpInfo).second.
                         getExplainString(level));
+    }
+
+    public String getPlanFragment(String fileName, TExplainLevel explainLevel) throws Exception {
+        String fileContent = getDumpInfoFromFile(fileName);
+        QueryDumpInfo queryDumpInfo = getDumpInfoFromJson(fileContent);
+        SessionVariable sessionVariable = queryDumpInfo.getSessionVariable();
+        QueryDebugOptions queryDebugOptions = new QueryDebugOptions();
+        queryDebugOptions.setEnableQueryTraceLog(true);
+        sessionVariable.setQueryDebugOptions(queryDebugOptions.toString());
+        Pair<QueryDumpInfo, String> result = getPlanFragment(fileContent, sessionVariable, explainLevel);
+        return result.second;
     }
 }

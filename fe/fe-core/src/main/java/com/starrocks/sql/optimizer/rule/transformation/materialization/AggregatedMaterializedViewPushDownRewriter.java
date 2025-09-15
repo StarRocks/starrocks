@@ -227,6 +227,10 @@ public class AggregatedMaterializedViewPushDownRewriter extends MaterializedView
         public AggregatePushDownContext visitLogicalAggregate(OptExpression optExpression,
                                                               AggregatePushDownContext context) {
             LogicalAggregationOperator aggOp = optExpression.getOp().cast();
+            if (!aggOp.getType().isAnyGlobal()) {
+                logMVRewrite(mvRewriteContext, "Agg type {} is not supported for push down", aggOp.getType());
+                return visit(optExpression, context);
+            }
             // check whether agg function is supported
             if (aggOp.getAggregations().values().stream().anyMatch(c -> !isSupportedAggFunctionPushDown(c))) {
                 logMVRewrite(mvRewriteContext, "Agg function {} is not supported for push down", aggOp.getAggregations());
@@ -328,6 +332,15 @@ public class AggregatedMaterializedViewPushDownRewriter extends MaterializedView
             if (!rewriteInfo.getRemappingUnChecked().isPresent()) {
                 return AggRewriteInfo.NOT_REWRITE;
             }
+<<<<<<< HEAD
+=======
+            LogicalAggregationOperator aggOp = optExpression.getOp().cast();
+            if (!aggOp.getType().isAnyGlobal()) {
+                logMVRewrite(mvRewriteContext, "Agg type {} is not supported for push down", aggOp.getType());
+                return AggRewriteInfo.NOT_REWRITE;
+            }
+            OptExpression childOpt = rewriteInfo.getOp().get();
+>>>>>>> ace10b8644 ([BugFix] Fix mv agg pushdown rewrite bugs (#63060))
 
             final LogicalAggregationOperator aggregate = optExpression.getOp().cast();
             final Map<ColumnRefOperator, CallOperator> aggregations = aggregate.getAggregations();
