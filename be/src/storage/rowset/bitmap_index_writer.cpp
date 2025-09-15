@@ -409,6 +409,14 @@ public:
 
     inline void reset_rowid(size_t rid) override { _rid = rid; }
 
+    void reserve(size_t count, size_t byte_size) override {
+        if (!config::enable_reserve_memory_for_bitmap_index) {
+            return;
+        }
+        _mem_index.reserve(count + _mem_index.size());
+        _pool.allocate_with_reserve(1, byte_size + 1);
+    }
+
     void merge_index_from(std::vector<std::unique_ptr<BitmapIndexWriter>> others) override {
         size_t merge_index_size = _mem_index.size();
         for (auto& other : others) {

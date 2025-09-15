@@ -1731,4 +1731,6 @@ CONF_mInt64(split_exchanger_buffer_chunk_num, "1000");
 CONF_mInt64(two_level_memory_threshold, "-1");
 
 CONF_mInt64(builtin_inverted_writer_dop, "1");
+
+CONF_mBool(enable_reserve_memory_for_bitmap_index, "true");
 } // namespace starrocks::config

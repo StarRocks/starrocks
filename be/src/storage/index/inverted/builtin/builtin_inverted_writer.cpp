@@ -187,15 +187,22 @@ void BuiltinInvertedWriterImpl<field_type>::add_values(const void* values, size_
 template <LogicalType field_type>
 void BuiltinInvertedWriterImpl<field_type>::_do_add_values(const void* values, size_t count, const BuiltinInvertedWriterContext* context) {
     auto* val = (Slice*)values;
+    std::vector<std::string> builtin_row_buffer(count);
+    std::vector<std::vector<SliceToken>> builtin_tokens(count);
+
+    std::vector<std::vector<std::string>> lunce_tokens(count);
+    size_t token_count = 0;
+    size_t byte_count = 0;
+    
     for (int i = 0; i < count; ++i) {
         const char* s = val->data;
         size_t size = val->size;
         if (_parser_type == InvertedIndexParserType::PARSER_BUILTIN_ENGLISH) {
-            std::string mutable_text(val->data, val->size);
-            std::vector<SliceToken> tokens;
-            context->builtin_analyzer->tokenize(mutable_text.data(), mutable_text.length(), tokens);
-            for (const auto& token : tokens) {
-                context->writer->add_value_with_current_rowid((void*) &(token.text));
+            builtin_row_buffer[i] = std::move(std::string(val->data, val->size));
+            context->builtin_analyzer->tokenize(builtin_row_buffer[i].data(), builtin_row_buffer[i].length(), builtin_tokens[i]);
+            token_count += builtin_tokens[i].size();
+            for (const auto& token : builtin_tokens[i]) {
+                byte_count += token.text.size;
             }
         } else {
             // Data in Slice does not contained any null-terminated. Any api in Boost/std
@@ -210,13 +217,28 @@ void BuiltinInvertedWriterImpl<field_type>::_do_add_values(const void* values, s
             while (stream->next(&token)) {
                 if (token.termLength() != 0) {
                     std::string str = boost::locale::conv::utf_to_utf<char>(token.termBuffer(), token.termBuffer() + token.termLength());
-                    Slice s(str);
-                    context->writer->add_value_with_current_rowid((void*) &s);
+                    lunce_tokens[i].emplace_back(std::move(str));
+                    byte_count += str.size();
+                    token_count += 1;
                 }
             }
         }
-
         ++val;
+    }
+
+    context->writer->reserve(token_count, byte_count);
+    for (int i = 0; i < count; ++i) {
+        if (_parser_type == InvertedIndexParserType::PARSER_BUILTIN_ENGLISH) {
+            for (const auto& token : builtin_tokens[i]) {
+                context->writer->add_value_with_current_rowid((void*) &(token.text));
+            }
+        } else {
+            for (const auto& token : lunce_tokens[i]) {
+                Slice s(token);
+                context->writer->add_value_with_current_rowid((void*) &(s));
+            }
+        }
+
         context->writer->incre_rowid();
     }
 }

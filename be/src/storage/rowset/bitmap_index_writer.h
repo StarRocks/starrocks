@@ -70,6 +70,8 @@ public:
 
     virtual void reset_rowid(size_t rid) = 0;
 
+    virtual void reserve(size_t count, size_t byte_size) = 0;
+
     virtual void merge_index_from(std::vector<std::unique_ptr<BitmapIndexWriter>> others) = 0;
 
 private:
