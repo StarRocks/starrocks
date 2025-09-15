@@ -85,6 +85,7 @@ import org.apache.logging.log4j.Logger;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
+import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
@@ -502,7 +503,7 @@ public class KafkaRoutineLoadJob extends RoutineLoadJob {
                 Long.valueOf((totalRows - errorRows - unselectedRows) * 1000 / totalTaskExcutionTimeMs));
         summary.put("committedTaskNum", Long.valueOf(committedTaskNum));
         summary.put("abortedTaskNum", Long.valueOf(abortedTaskNum));
-        summary.put("partitionLagTime", getRoutineLoadLagTime());
+        summary.put("partitionLagTime", new HashMap<>(getRoutineLoadLagTime()));
         Gson gson = new GsonBuilder().disableHtmlEscaping().create();
         return gson.toJson(summary);
     }
@@ -871,6 +872,10 @@ public class KafkaRoutineLoadJob extends RoutineLoadJob {
     private void updateLagTimeMetricsFromProgress() {
         try {
             KafkaProgress progress = (KafkaProgress) getTimestampProgress();
+            if (progress == null) {
+                LOG.warn("Progres is null for Kafka job {}:{}", id, name);
+                return;
+            }
             Map<Integer, Long> partitionTimestamps = progress.getPartitionIdToOffset();
             Map<Integer, Long> partitionLagTimes = Maps.newHashMap();
             
