@@ -20,14 +20,15 @@
 
 #include <coroutine>
 #include <cstdint>
+#include <optional>
 #include <set>
+#include <variant>
 
 #include "column/chunk.h"
-#include "column/column_hash.h"
 #include "column/column_helper.h"
 #include "column/vectorized_fwd.h"
+#include "exec/sorting/sort_helper.h"
 #include "simd/simd.h"
-#include "util/phmap/phmap.h"
 #include "util/runtime_profile.h"
 
 namespace starrocks {
@@ -42,11 +43,66 @@ struct JoinKeyDesc {
     ColumnRef* col_ref = nullptr;
 };
 
+struct AsofJoinConditionDesc {
+    SlotId probe_slot_id;
+    LogicalType probe_logical_type;
+    SlotId build_slot_id;
+    LogicalType build_logical_type;
+    TExprOpcode::type condition_op = TExprOpcode::INVALID_OPCODE;
+};
+
 struct HashTableSlotDescriptor {
     SlotDescriptor* slot;
     bool need_output;
     bool need_lazy_materialize = false;
 };
+
+template <typename CppType, TExprOpcode::type OpCode>
+class AsofIndex {
+public:
+    struct Entry {
+        CppType asof_value;
+        uint32_t row_index;
+
+        Entry() = default;
+        Entry(CppType value, uint32_t index) : asof_value(value), row_index(index) {}
+    };
+
+private:
+    using Entries = std::vector<Entry>;
+
+    static constexpr bool is_descending = (OpCode == TExprOpcode::GE || OpCode == TExprOpcode::GT);
+    static constexpr bool is_strict = (OpCode == TExprOpcode::LT || OpCode == TExprOpcode::GT);
+
+    Entries _entries;
+
+public:
+    void add_row(CppType asof_value, uint32_t row_index) { _entries.emplace_back(asof_value, row_index); }
+
+    void sort();
+
+    uint32_t find_asof_match(CppType probe_value) const;
+
+    size_t size() const { return _entries.size(); }
+    bool empty() const { return _entries.empty(); }
+    void clear() { _entries.clear(); }
+
+private:
+    void _bound_search_iteration(CppType probe_value, size_t& low, size_t& size) const;
+};
+
+#define ASOF_INDEX_BUFFER_TYPES(T)                                                                                  \
+    Buffer<std::unique_ptr<AsofIndex<T, TExprOpcode::LT>>>, Buffer<std::unique_ptr<AsofIndex<T, TExprOpcode::LE>>>, \
+            Buffer<std::unique_ptr<AsofIndex<T, TExprOpcode::GT>>>,                                                 \
+            Buffer<std::unique_ptr<AsofIndex<T, TExprOpcode::GE>>>
+
+using AsofIndexBufferVariant =
+        std::variant<ASOF_INDEX_BUFFER_TYPES(int64_t),       // 0-3: Buffer<AsofIndex<int64_t, OP>*>
+                     ASOF_INDEX_BUFFER_TYPES(DateValue),     // 4-7: Buffer<AsofIndex<DateValue, OP>*>
+                     ASOF_INDEX_BUFFER_TYPES(TimestampValue) // 8-11: Buffer<AsofIndex<TimestampValue, OP>*>
+                     >;
+
+#undef ASOF_INDEX_BUFFER_TYPES
 
 struct JoinHashTableItems {
     //TODO: memory continues problem?
@@ -63,6 +119,7 @@ struct JoinHashTableItems {
     // about the bucket-chained hash table of this kind.
     Buffer<uint32_t> first;
     Buffer<uint32_t> next;
+    Buffer<uint8_t> fps;
 
     Buffer<uint8_t> key_bitset;
     struct DenseGroup {
@@ -98,8 +155,26 @@ struct JoinHashTableItems {
     bool enable_late_materialization = false;
     bool is_collision_free_and_unique = false;
 
+    AsofJoinConditionDesc asof_join_condition_desc;
+
+    AsofIndexBufferVariant asof_index_vector;
+
     float get_keys_per_bucket() const { return keys_per_bucket; }
     bool ht_cache_miss_serious() const { return cache_miss_serious; }
+
+    void resize_asof_index_vector(size_t size) {
+        std::visit([size](auto& buffer) { buffer.resize(size); }, asof_index_vector);
+    }
+
+    void finalize_asof_index_vector() {
+        std::visit(
+                [](auto& buffer) {
+                    for (auto& ptr : buffer) {
+                        if (ptr) ptr->sort();
+                    }
+                },
+                asof_index_vector);
+    }
 
     void calculate_ht_info(size_t key_bytes) {
         if (used_buckets != 0) {
@@ -175,6 +250,7 @@ struct HashTableProbeState {
     RuntimeProfile::Counter* output_probe_column_timer = nullptr;
     RuntimeProfile::Counter* output_build_column_timer = nullptr;
     RuntimeProfile::Counter* probe_counter = nullptr;
+    ColumnPtr asof_temporal_condition_column = nullptr;
 
     HashTableProbeState()
             : build_index_column(UInt32Column::create()),
@@ -270,9 +346,219 @@ struct HashTableParam {
     std::set<SlotId> predicate_slots;
     std::vector<JoinKeyDesc> join_keys;
 
+    AsofJoinConditionDesc asof_join_condition_desc;
+
     RuntimeProfile::Counter* search_ht_timer = nullptr;
     RuntimeProfile::Counter* output_build_column_timer = nullptr;
     RuntimeProfile::Counter* output_probe_column_timer = nullptr;
     RuntimeProfile::Counter* probe_counter = nullptr;
 };
+
+inline bool is_asof_join(TJoinOp::type join_type) {
+    return join_type == TJoinOp::ASOF_INNER_JOIN || join_type == TJoinOp::ASOF_LEFT_OUTER_JOIN;
+}
+
+constexpr size_t get_asof_variant_index(LogicalType logical_type, TExprOpcode::type opcode) {
+    size_t base = (logical_type == TYPE_BIGINT) ? 0 : (logical_type == TYPE_DATE) ? 4 : 8;
+    size_t offset = (opcode == TExprOpcode::LT)   ? 0
+                    : (opcode == TExprOpcode::LE) ? 1
+                    : (opcode == TExprOpcode::GT) ? 2
+                                                  : 3;
+    return base + offset;
+}
+
+#define CREATE_ASOF_VECTOR_CASE(TYPE, BASE_INDEX)                           \
+    case BASE_INDEX + 0:                                                    \
+        return Buffer<std::unique_ptr<AsofIndex<TYPE, TExprOpcode::LT>>>{}; \
+    case BASE_INDEX + 1:                                                    \
+        return Buffer<std::unique_ptr<AsofIndex<TYPE, TExprOpcode::LE>>>{}; \
+    case BASE_INDEX + 2:                                                    \
+        return Buffer<std::unique_ptr<AsofIndex<TYPE, TExprOpcode::GT>>>{}; \
+    case BASE_INDEX + 3:                                                    \
+        return Buffer<std::unique_ptr<AsofIndex<TYPE, TExprOpcode::GE>>>{};
+
+inline AsofIndexBufferVariant create_asof_index_vector(size_t variant_index) {
+    switch (variant_index) {
+        CREATE_ASOF_VECTOR_CASE(int64_t, 0)
+        CREATE_ASOF_VECTOR_CASE(DateValue, 4)
+        CREATE_ASOF_VECTOR_CASE(TimestampValue, 8)
+    default:
+        __builtin_unreachable();
+    }
+}
+
+#undef CREATE_ASOF_BUFFER_CASE
+
+template <size_t VariantIndex>
+constexpr auto& get_asof_index_vector_static(JoinHashTableItems* table_items) {
+    static_assert(VariantIndex < 12, "Invalid variant index");
+    return std::get<VariantIndex>(table_items->asof_index_vector);
+}
+
+template <size_t VariantIndex>
+#define CREATE_ASOF_INDEX_CASE(TYPE, BASE_INDEX)                                          \
+    if constexpr (VariantIndex == BASE_INDEX + 0) {                                       \
+        vector[asof_lookup_index] = std::make_unique<AsofIndex<TYPE, TExprOpcode::LT>>(); \
+    } else if constexpr (VariantIndex == BASE_INDEX + 1) {                                \
+        vector[asof_lookup_index] = std::make_unique<AsofIndex<TYPE, TExprOpcode::LE>>(); \
+    } else if constexpr (VariantIndex == BASE_INDEX + 2) {                                \
+        vector[asof_lookup_index] = std::make_unique<AsofIndex<TYPE, TExprOpcode::GT>>(); \
+    } else if constexpr (VariantIndex == BASE_INDEX + 3) {                                \
+        vector[asof_lookup_index] = std::make_unique<AsofIndex<TYPE, TExprOpcode::GE>>(); \
+    } else
+
+void create_asof_index(JoinHashTableItems* table_items, uint32_t asof_lookup_index) {
+    auto& vector = get_asof_index_vector_static<VariantIndex>(table_items);
+
+    CREATE_ASOF_INDEX_CASE(int64_t, 0)
+    CREATE_ASOF_INDEX_CASE(DateValue, 4)
+    CREATE_ASOF_INDEX_CASE(TimestampValue, 8) {
+        static_assert(VariantIndex < 12, "Invalid variant index");
+    }
+}
+
+#undef CREATE_ASOF_INDEX_CASE
+
+template <LogicalType LT, TExprOpcode::type OP>
+class AsofJoinTemporalRowProcessor {
+public:
+    template <typename EquiJoinIndexLocator>
+    static void process_rows(JoinHashTableItems* table_items, const auto& keys,
+                             const ImmBuffer<uint8_t>* equi_join_key_nulls,
+                             EquiJoinIndexLocator&& equi_join_index_locator) {
+        using AsofCppType = RunTimeCppType<LT>;
+        static constexpr size_t variant_index = get_asof_variant_index(LT, OP);
+
+        const ColumnPtr& asof_temporal_col =
+                table_items->build_chunk->get_column_by_slot_id(table_items->asof_join_condition_desc.build_slot_id);
+        const auto* data_col = ColumnHelper::get_data_column_by_type<LT>(asof_temporal_col.get());
+        const NullColumn* asof_temporal_col_nulls_column = ColumnHelper::get_null_column(asof_temporal_col);
+        const Buffer<uint8_t>* asof_temporal_col_nulls =
+                asof_temporal_col_nulls_column ? &const_cast<NullColumn*>(asof_temporal_col_nulls_column)->get_data() : nullptr;
+        const AsofCppType* __restrict asof_temporal_data = data_col->immutable_data().data();
+
+        const bool has_equi_join_key_nulls = (equi_join_key_nulls != nullptr);
+        const bool has_asof_temporal_nulls = (asof_temporal_col_nulls != nullptr);
+
+        auto process_rows_impl = [&]<bool HasEquiJoinKeyNulls, bool HasAsofTemporalNulls>() {
+            auto& asof_index_vector = get_asof_index_vector_static<variant_index>(table_items);
+            const uint32_t num_rows = table_items->row_count + 1;
+
+            const uint8_t* __restrict asof_temporal_null_data =
+                    HasAsofTemporalNulls ? asof_temporal_col_nulls->data() : nullptr;
+            const uint8_t* __restrict equi_key_null_data = HasEquiJoinKeyNulls ? equi_join_key_nulls->data() : nullptr;
+            
+            auto is_null_row = [&](uint32_t i) {
+                if constexpr (HasEquiJoinKeyNulls) {
+                    if (equi_key_null_data[i] != 0) return true;
+                }
+                if constexpr (HasAsofTemporalNulls) {
+                    if (asof_temporal_null_data[i] != 0) return true;
+                }
+                return false;
+            };
+
+            for (uint32_t i = 1; i < num_rows; ++i) {
+                if (is_null_row(i)) continue;
+
+                uint32_t equi_join_bucket_index = equi_join_index_locator(table_items, keys, i);
+
+                if (!asof_index_vector[equi_join_bucket_index]) {
+                    create_asof_index<variant_index>(table_items, equi_join_bucket_index);
+                }
+                asof_index_vector[equi_join_bucket_index]->add_row(asof_temporal_data[i], i);
+            }
+        };
+
+        if (!has_equi_join_key_nulls && !has_asof_temporal_nulls) {
+            process_rows_impl.template operator()<false, false>();
+        } else if (has_equi_join_key_nulls && !has_asof_temporal_nulls) {
+            process_rows_impl.template operator()<true, false>();
+        } else if (!has_equi_join_key_nulls) {
+            process_rows_impl.template operator()<false, true>();
+        } else {
+            process_rows_impl.template operator()<true, true>();
+        }
+    }
+};
+
+struct AsofJoinTemporalTypeOpcodeDispatcher {
+    template <typename Func>
+    static void dispatch(LogicalType asof_type, TExprOpcode::type opcode, Func&& func) {
+        switch (asof_type) {
+        case TYPE_BIGINT:
+            dispatch_impl<TYPE_BIGINT>(opcode, std::forward<Func>(func));
+            break;
+        case TYPE_DATE:
+            dispatch_impl<TYPE_DATE>(opcode, std::forward<Func>(func));
+            break;
+        case TYPE_DATETIME:
+            dispatch_impl<TYPE_DATETIME>(opcode, std::forward<Func>(func));
+            break;
+        default:
+            LOG(ERROR) << "ASOF JOIN: Unsupported type: " << asof_type;
+            CHECK(false) << "ASOF JOIN: Unsupported type";
+            __builtin_unreachable();
+        }
+    }
+
+private:
+    template <LogicalType ASOF_LT, typename Func>
+    static void dispatch_impl(TExprOpcode::type opcode, Func&& func) {
+        switch (opcode) {
+        case TExprOpcode::LT:
+            func(std::integral_constant<LogicalType, ASOF_LT>{},
+                 std::integral_constant<TExprOpcode::type, TExprOpcode::LT>{});
+            break;
+        case TExprOpcode::LE:
+            func(std::integral_constant<LogicalType, ASOF_LT>{},
+                 std::integral_constant<TExprOpcode::type, TExprOpcode::LE>{});
+            break;
+        case TExprOpcode::GT:
+            func(std::integral_constant<LogicalType, ASOF_LT>{},
+                 std::integral_constant<TExprOpcode::type, TExprOpcode::GT>{});
+            break;
+        case TExprOpcode::GE:
+            func(std::integral_constant<LogicalType, ASOF_LT>{},
+                 std::integral_constant<TExprOpcode::type, TExprOpcode::GE>{});
+            break;
+        default:
+            __builtin_unreachable();
+        }
+    }
+};
+
+class AsofJoinDispatcher {
+public:
+    template <typename EquiJoinIndexLocator>
+    static void dispatch_and_process(JoinHashTableItems* table_items, const auto& keys,
+                                     const ImmBuffer<uint8_t>* equi_join_key_nulls,
+                                     EquiJoinIndexLocator&& equi_join_index_locator) {
+        LogicalType asof_type = table_items->asof_join_condition_desc.build_logical_type;
+        TExprOpcode::type opcode = table_items->asof_join_condition_desc.condition_op;
+
+        auto body = [&](auto tag_lt, auto tag_op) {
+            static constexpr LogicalType Lt = decltype(tag_lt)::value;
+            static constexpr TExprOpcode::type Op = decltype(tag_op)::value;
+            AsofJoinTemporalRowProcessor<Lt, Op>::process_rows(
+                    table_items, keys, equi_join_key_nulls,
+                    std::forward<EquiJoinIndexLocator>(equi_join_index_locator));
+        };
+
+        AsofJoinTemporalTypeOpcodeDispatcher::dispatch(asof_type, opcode, body);
+    }
+};
+
+class AsofJoinProbeDispatcher {
+public:
+    template <typename Func>
+    static void dispatch(LogicalType asof_type, TExprOpcode::type opcode, Func&& body) {
+        AsofJoinTemporalTypeOpcodeDispatcher::dispatch(asof_type, opcode, [&](auto tag_lt, auto tag_op) {
+            static constexpr LogicalType Lt = decltype(tag_lt)::value;
+            static constexpr TExprOpcode::type Op = decltype(tag_op)::value;
+            body.template operator()<Lt, Op>();
+        });
+    }
+};
+
 } // namespace starrocks

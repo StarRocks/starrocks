@@ -42,5 +42,38 @@ INSERT INTO user_status VALUES
 (102, '2024-01-01 13:00:00', 'VIP', 800),
 (102, '2024-01-02 12:00:00', 'PREMIUM', 950);
 
+-- Test 1: ASOF INNER JOIN
+SELECT o.order_id, o.user_id, o.order_time, us.status_time, us.status, us.credit_score
+FROM orders o
+ASOF INNER JOIN user_status us ON o.user_id = us.user_id AND o.order_time >= us.status_time
+ORDER BY o.order_id;
+
+-- Test 2: ASOF LEFT OUTER JOIN
+SELECT o.order_id, o.user_id, o.order_time, us.status_time, us.status, us.credit_score
+FROM orders o
+ASOF LEFT JOIN user_status us ON o.user_id = us.user_id AND o.order_time >= us.status_time
+ORDER BY o.order_id;
+
+-- Test 3: ASOF JOIN with different temporal operators
+SELECT o.order_id, o.user_id, o.order_time, us.status_time, us.status, us.credit_score
+FROM orders o
+ASOF INNER JOIN user_status us ON o.user_id = us.user_id AND o.order_time > us.status_time
+ORDER BY o.order_id;
+
+-- Test 4: ASOF JOIN with WHERE filter
+SELECT o.order_id, o.user_id, o.order_time, us.status_time, us.status, us.credit_score
+FROM orders o
+ASOF INNER JOIN user_status us ON o.user_id = us.user_id AND o.order_time >= us.status_time
+WHERE o.amount > 150
+ORDER BY o.order_id;
+
+-- Test 5: ASOF JOIN with aggregation
+SELECT o.user_id, COUNT(*) as order_count, MAX(us.credit_score) as max_credit_score
+FROM orders o
+ASOF LEFT JOIN user_status us ON o.user_id = us.user_id AND o.order_time >= us.status_time
+GROUP BY o.user_id
+ORDER BY o.user_id;
+
+-- Test 6: Verify ASOF JOIN in execution plan
 function: assert_explain_contains('SELECT * FROM orders o ASOF LEFT JOIN user_status us ON o.user_id = us.user_id AND o.order_time >= us.status_time', 'ASOF LEFT OUTER JOIN')
 
