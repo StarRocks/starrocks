@@ -1678,3 +1678,51 @@ For more information on how to build a monitoring service for your StarRocks clu
 
 - Unit: Count
 - Description: The number of times blacklisted sql have been intercepted.
+
+### starrocks_fe_scheduled_pending_tablet_num
+
+- Unit: Count
+- Type: Instantaneous
+- Description: The number of Clone tasks in Pending state FE scheduled, including both BALANCE and REPAIR types.
+
+### starrocks_fe_scheduled_running_tablet_num
+
+- Unit: Count
+- Type: Instantaneous
+- Description: The number of Clone tasks in Running state FE scheduled, including both BALANCE and REPAIR types.
+
+### starrocks_fe_clone_task_total
+
+- Unit: Count
+- Type: Cumulative
+- Description: The total number of Clone tasks in the cluster.
+
+### starrocks_fe_clone_task_success
+
+- Unit: Count
+- Type: Cumulative
+- Description: The number of successfully executed Clone tasks in the cluster.
+
+### starrocks_fe_clone_task_copy_bytes
+
+- Unit: Bytes
+- Type: Cumulative
+- Description: The total file size copied by Clone tasks in the cluster, including both INTER_NODE and INTRA_NODE types.
+
+### starrocks_fe_clone_task_copy_duration_ms
+
+- Unit: ms
+- Type: Cumulative
+- Description: The total time for copy consumed by Clone tasks in the cluster, including both INTER_NODE and INTRA_NODE types.
+
+### starrocks_be_clone_task_copy_bytes
+
+- Unit: Bytes
+- Type: Cumulative
+- Description: The total file size copied by Clone tasks in the BE node, including both INTER_NODE and INTRA_NODE types.
+
+### starrocks_be_clone_task_copy_duration_ms
+
+- Unit: ms
+- Type: Cumulative
+- Description: The total time for copy consumed by Clone tasks in the BE node, including both INTER_NODE and INTRA_NODE types.
