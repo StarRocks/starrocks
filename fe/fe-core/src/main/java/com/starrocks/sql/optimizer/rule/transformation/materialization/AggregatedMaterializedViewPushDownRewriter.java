@@ -162,6 +162,10 @@ public final class AggregatedMaterializedViewPushDownRewriter extends Materializ
         public AggregatePushDownContext visitLogicalAggregate(OptExpression optExpression,
                                                               AggregatePushDownContext context) {
             LogicalAggregationOperator aggOp = optExpression.getOp().cast();
+            if (!aggOp.getType().isAnyGlobal()) {
+                logMVRewrite(mvRewriteContext, "Agg type {} is not supported for push down", aggOp.getType());
+                return visit(optExpression, context);
+            }
             // check whether agg function is supported
             if (aggOp.getAggregations().values().stream().anyMatch(c -> !isSupportedAggFunctionPushDown(c))) {
                 logMVRewrite(mvRewriteContext, "Agg function {} is not supported for push down", aggOp.getAggregations());
@@ -261,6 +265,11 @@ public final class AggregatedMaterializedViewPushDownRewriter extends Materializ
         @Override
         public AggRewriteInfo visitLogicalAggregate(OptExpression optExpression, AggRewriteInfo rewriteInfo) {
             if (!rewriteInfo.getRemappingUnChecked().isPresent()) {
+                return AggRewriteInfo.NOT_REWRITE;
+            }
+            LogicalAggregationOperator aggOp = optExpression.getOp().cast();
+            if (!aggOp.getType().isAnyGlobal()) {
+                logMVRewrite(mvRewriteContext, "Agg type {} is not supported for push down", aggOp.getType());
                 return AggRewriteInfo.NOT_REWRITE;
             }
             OptExpression childOpt = rewriteInfo.getOp().get();
