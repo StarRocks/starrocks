@@ -33,11 +33,31 @@ If you wish to authenticate users by means of StarRocks retrieving them directly
 authentication_ldap_simple_bind_base_dn =
 # Add the name of the attribute that identifies the user in the LDAP object. Default: uid.
 authentication_ldap_simple_user_search_attr =
-# Add the DN of the administrator account to be used when retrieving users.
+# Add the admin DN for retrieving users.
 authentication_ldap_simple_bind_root_dn =
-# Add the password of theAdministrator account to be used when retrieving users.
+# Add the admin password for retrieving users.
 authentication_ldap_simple_bind_root_pwd =
 ```
+
+## DN Matching Mechanism
+
+Starting from v3.5.0, StarRocks supports recording and passing user Distinguished Name (DN) information during LDAP authentication to provide more accurate group resolution.
+
+### How it Works
+
+1. **Authentication Phase**: LDAPAuthProvider records both pieces of information after successful user authentication:
+   - Login username (for traditional group matching)
+   - User's complete DN (for DN-based group matching)
+
+2. **Group Resolution Phase**: LDAPGroupProvider determines the matching strategy based on the `ldap_user_search_attr` parameter configuration:
+   - **When `ldap_user_search_attr` is configured**: Uses username as the key for group matching
+   - **When `ldap_user_search_attr` is not configured**: Uses DN as the key for group matching
+
+### Use Cases
+
+- **Traditional LDAP Environment**: Group members use simple usernames (such as `cn` attribute), configure the `ldap_user_search_attr` parameter
+- **Microsoft AD Environment**: Group members may lack username attributes, do not configure `ldap_user_search_attr` parameter, use DN matching directly
+- **Mixed Environment**: Supports flexible switching between both matching methods
 
 ## Create a user with LDAP
 

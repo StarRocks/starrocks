@@ -79,6 +79,15 @@ PROPERTIES (
 - Required: Yes
 - Description: The user's attribute used to log in to the LDAP service, for example, `uid`.
 
+**DN Passing Mechanism**: LDAP security integration supports DN passing functionality:
+
+- After successful authentication, the system records both the user's login name and complete DN
+- When combined with Group Provider, DN information is automatically passed to the group provider
+- If Group Provider does not configure the `ldap_user_search_attr` parameter, DN will be used for group matching
+- This mechanism is particularly suitable for complex LDAP environments like Microsoft AD
+
+For more details, see the DN matching mechanism description in [Authenticate User Groups](../group_provider.md).
+
 ##### authentication_ldap_simple_bind_root_dn
 
 - Required: Yes

@@ -39,6 +39,26 @@ authentication_ldap_simple_bind_root_dn =
 authentication_ldap_simple_bind_root_pwd =
 ```
 
+## DN 匹配机制
+
+StarRocks 支持在 LDAP 认证过程中记录和传递用户的 Distinguished Name (DN) 信息，以提供更准确的组解析功能。
+
+### 工作原理
+
+1. **认证阶段**：LDAPAuthProvider 在用户认证成功后会同时记录：
+   - 登录用户名（用于传统组匹配）
+   - 用户的完整 DN（用于基于 DN 的组匹配）
+
+2. **组解析阶段**：LDAPGroupProvider 根据 `ldap_user_search_attr` 参数的配置决定匹配策略：
+   - **配置了 `ldap_user_search_attr`**：使用用户名作为组匹配的 key
+   - **未配置 `ldap_user_search_attr`**：使用 DN 作为组匹配的 key
+
+### 适用场景
+
+- **传统 LDAP 环境**：组成员使用简单用户名（如 `cn` 属性），配置 `ldap_user_search_attr` 参数
+- **Microsoft AD 环境**：组成员可能缺少用户名属性，不配置 `ldap_user_search_attr` 参数，直接使用 DN 匹配
+- **混合环境**：支持两种匹配方式的灵活切换
+
 ## 使用 LDAP 创建用户
 
 创建用户时，通过 `IDENTIFIED WITH authentication_ldap_simple AS 'xxx'` 指定认证方式为 LDAP 认证。xxx 是用户在 LDAP 中的 DN（Distinguished Name）。

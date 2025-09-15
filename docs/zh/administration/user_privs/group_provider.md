@@ -161,6 +161,13 @@ LDAP 服务器可以识别的自定义组过滤器。它将被直接发送到您
 
 指定如何从成员属性值中提取用户标识符。您可以显式定义一个属性（例如，`cn` 或 `uid`）或使用正则表达式。
 
+**DN 匹配机制**
+
+- **配置了 `ldap_user_search_attr`**：从组成员 DN 中提取指定属性的值作为用户名，组查找时使用登录用户名作为 key
+- **未配置 `ldap_user_search_attr`**：直接使用完整的 DN 作为用户标识，组查找时使用认证时记录的 DN 作为 key
+
+这种设计使得 LDAP Group Provider 能够适应不同的 LDAP 环境，特别是 Microsoft AD 等复杂环境。
+
 #### `ldap_cache_arg` 参数组
 
 用于定义 LDAP 组信息缓存行为的参数。
@@ -220,6 +227,50 @@ PROPERTIES(
 ```
 
 上述示例使用 `ldap_group_filter` 搜索具有 `groupOfNames` objectClass 和 `cn` 为 `testgroup` 的组。因此，在 `ldap_group_identifier_attr` 中指定 `cn` 以识别该组。`ldap_group_member_attr` 设置为 `member`，以便在 `groupOfNames` objectClass 中使用 `member` 属性识别成员。`ldap_user_search_attr` 设置为表达式 `uid=([^,]+)`，用于识别 `member` 属性中的用户。
+
+### Microsoft AD 环境示例
+
+假设一个 Microsoft AD 服务器包含以下组和成员信息：
+
+```Plain
+-- 组信息
+# ADGroup, Groups, company.com
+dn: CN=ADGroup,OU=Groups,DC=company,DC=com
+objectClass: group
+cn: ADGroup
+member: CN=John Doe,OU=Users,DC=company,DC=com
+member: CN=Jane Smith,OU=Users,DC=company,DC=com
+
+-- 用户信息
+# John Doe, Users, company.com
+dn: CN=John Doe,OU=Users,DC=company,DC=com
+objectClass: user
+cn: John Doe
+sAMAccountName: johndoe
+```
+
+为 Microsoft AD 环境创建一个 Group Provider：
+
+```SQL
+CREATE GROUP PROVIDER ad_group_provider 
+PROPERTIES(
+    "type"="ldap", 
+    "ldap_conn_url"="ldap://ad.company.com:389",
+    "ldap_bind_root_dn"="CN=admin,OU=Users,DC=company,DC=com",
+    "ldap_bind_root_pwd"="password",
+    "ldap_bind_base_dn"="DC=company,DC=com",
+    "ldap_group_filter"="(&(objectClass=group)(cn=ADGroup))",
+    "ldap_group_identifier_attr"="cn",
+    "ldap_group_member_attr"="member"
+    -- 注意：不配置 ldap_user_search_attr，系统将使用完整 DN 进行匹配
+)
+```
+
+在这个示例中，由于没有配置 `ldap_user_search_attr`，系统将：
+1. 在组缓存构建时，直接使用完整的 DN（如 `CN=John Doe,OU=Users,DC=company,DC=com`）作为用户标识
+2. 在组查找时，使用认证时记录的 DN 作为 key 来查找用户所属的组
+
+这种方式特别适合 Microsoft AD 环境，因为 AD 中的组成员可能缺少简单的用户名属性。
 
 ## 将 Group Provider 与安全集成结合
 

@@ -161,6 +161,13 @@ The attribute that represents group members. Valid values: `member` and `memberU
 
 Specifies how to extract the user identifier from the member attribute value. You can explicitly define an attribute (for example, `cn` or `uid`) or use a regular expression.
 
+**DN Matching Mechanism**:
+
+- **When `ldap_user_search_attr` is configured**: Extracts the value of the specified attribute from group member DNs as usernames, uses login username as key during group lookup
+- **When `ldap_user_search_attr` is not configured**: Uses the complete DN directly as user identifier, uses the DN recorded during authentication as key during group lookup
+
+This design enables LDAP Group Provider to adapt to different LDAP environments, especially complex environments like Microsoft AD.
+
 #### `ldap_cache_arg` parameter group
 
 The argument used to define the cache behavior for the LDAP group information.
@@ -220,6 +227,50 @@ PROPERTIES(
 ```
 
 The above example uses `ldap_group_filter` to search for a group with the `groupOfNames` objectClass and a `cn` of `testgroup`. Therefore, `cn` is specified in `ldap_group_identifier_attr` to identify the group. `ldap_group_member_attr` is set to `member` so that the `member` attribute is used in the `groupOfNames` objectClass to identify members. `ldap_user_search_attr` is set to an expression `uid=([^,]+)`, which is used to identify users in the `member` attribute.
+
+### Microsoft AD Environment Example
+
+Suppose a Microsoft AD server contains the following group and member information:
+
+```Plain
+-- Group information
+# ADGroup, Groups, company.com
+dn: CN=ADGroup,OU=Groups,DC=company,DC=com
+objectClass: group
+cn: ADGroup
+member: CN=John Doe,OU=Users,DC=company,DC=com
+member: CN=Jane Smith,OU=Users,DC=company,DC=com
+
+-- User information
+# John Doe, Users, company.com
+dn: CN=John Doe,OU=Users,DC=company,DC=com
+objectClass: user
+cn: John Doe
+sAMAccountName: johndoe
+```
+
+Create a Group Provider for Microsoft AD environment:
+
+```SQL
+CREATE GROUP PROVIDER ad_group_provider 
+PROPERTIES(
+    "type"="ldap", 
+    "ldap_conn_url"="ldap://ad.company.com:389",
+    "ldap_bind_root_dn"="CN=admin,OU=Users,DC=company,DC=com",
+    "ldap_bind_root_pwd"="password",
+    "ldap_bind_base_dn"="DC=company,DC=com",
+    "ldap_group_filter"="(&(objectClass=group)(cn=ADGroup))",
+    "ldap_group_identifier_attr"="cn",
+    "ldap_group_member_attr"="member"
+    -- Note: Do not configure ldap_user_search_attr, system will use complete DN for matching
+)
+```
+
+In this example, since `ldap_user_search_attr` is not configured, the system will:
+1. During group cache construction, directly use the complete DN (such as `CN=John Doe,OU=Users,DC=company,DC=com`) as user identifier
+2. During group lookup, use the DN recorded during authentication as key to find user's groups
+
+This approach is particularly suitable for Microsoft AD environments, as group members in AD may lack simple username attributes.
 
 ## Combine group provider with a security integration
 
