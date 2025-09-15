@@ -263,6 +263,15 @@ public abstract class StorageVolumeMgr implements Writable, GsonPostProcessable 
                 validateLocations(svType, locations);
                 newStorageVolume = new StorageVolume(oldStorageVolume.getId(), name, svType, locations, params,
                         enabled.orElse(oldStorageVolume.getEnabled()), comment);
+
+                if (oldStorageVolume.getVTabletId() != -1) {
+                    newStorageVolume.setVTabletId(oldStorageVolume.getVTabletId());
+                }
+
+                if (oldStorageVolume.getVTabletGroupId() != -1) {
+                    newStorageVolume.setVTabletGroupId(oldStorageVolume.getVTabletGroupId());
+                }
+
                 locationChangedStorageVolumeId = newStorageVolume.getId();
             }
 
@@ -272,6 +281,11 @@ public abstract class StorageVolumeMgr implements Writable, GsonPostProcessable 
         if (locationChangedStorageVolumeId != null) {
             updateTableStorageInfo(locationChangedStorageVolumeId);
         }
+    }
+
+    public void updateStorageVolumeVTabletMapping(String name, long vTabletId, long vTabletGroupId)
+            throws DdlException {
+        throw new DdlException("Not implemented");
     }
 
     public void setDefaultStorageVolume(SetDefaultStorageVolumeStmt stmt) {
@@ -525,4 +539,9 @@ public abstract class StorageVolumeMgr implements Writable, GsonPostProcessable 
     protected abstract List<List<Long>> getBindingsOfBuiltinStorageVolume();
 
     protected abstract void updateTableStorageInfo(String storageVolumeId) throws DdlException;
+
+    public abstract long getOrCreateVirtualTabletId(String storageVolumeName, String srcServiceId)
+            throws MetaNotFoundException;
+
+    public abstract boolean hasStorageVolumeBindAsVirtualGroup(long shardGroupId);
 }
