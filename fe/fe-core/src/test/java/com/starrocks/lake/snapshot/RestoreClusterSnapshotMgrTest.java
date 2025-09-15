@@ -134,6 +134,7 @@ public class RestoreClusterSnapshotMgrTest {
         Assertions.assertTrue(RestoreClusterSnapshotMgr.getRestoredSnapshotInfo().getStarMgrJournalId() == 10L);
         Assertions.assertTrue(RestoreClusterSnapshotMgr.isRestoring());
 
+        RestoreClusterSnapshotMgr.getConfig().getComputeNodes().get(0).setCNGroup(null);
         ClusterSnapshotConfig.StorageVolume sv1 = RestoreClusterSnapshotMgr.getConfig().getStorageVolumes().get(0);
         ClusterSnapshotConfig.StorageVolume sv2 = RestoreClusterSnapshotMgr.getConfig().getStorageVolumes().get(1);
         RestoreClusterSnapshotMgr.getConfig().getStorageVolumes().remove(0);
