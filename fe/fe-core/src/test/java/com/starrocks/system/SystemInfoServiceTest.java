@@ -208,6 +208,42 @@ public class SystemInfoServiceTest {
     }
 
     @Test
+    public void testDropBackendWithoutWarehouse() throws Exception {
+        new MockUp<RunMode>() {
+            @Mock
+            public RunMode getCurrentRunMode() {
+                return RunMode.SHARED_DATA;
+            }
+        };
+
+        Backend be = new Backend(10001, "newHost", 1000);
+        service.addBackend(be);
+
+        LocalMetastore localMetastore = new LocalMetastore(globalStateMgr, null, null);
+
+        WarehouseManager warehouseManager = new WarehouseManager();
+        warehouseManager.initDefaultWarehouse();
+
+        new MockUp<GlobalStateMgr>() {
+            @Mock
+            public LocalMetastore getLocalMetastore() {
+                return localMetastore;
+            }
+
+            @Mock
+            public WarehouseManager getWarehouseMgr() {
+                return warehouseManager;
+            }
+        };
+
+        service.addBackend(be);
+        be.setStarletPort(1001);
+        service.dropBackend("newHost", 1000, null, false);
+        Backend beIP = service.getBackendWithHeartbeatPort("newHost", 1000);
+        Assert.assertNull(beIP);
+    }
+
+    @Test
     public void testReplayDropBackend() throws Exception {
         new MockUp<RunMode>() {
             @Mock

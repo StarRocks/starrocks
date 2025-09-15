@@ -373,6 +373,11 @@ public class SystemInfoService implements GsonPostProcessable {
         }
     }
 
+    /*
+     * The arg warehouse can be null or empty,
+     * which means ignore warehouse when dropping compute node, 
+     * otherwise it will be checked and an exception will be thrown if it is not matched.
+     */
     public void dropComputeNode(String host, int heartbeatPort, String warehouse)
             throws DdlException {
         ComputeNode dropComputeNode = getComputeNodeWithHeartbeatPort(host, heartbeatPort);
@@ -381,11 +386,14 @@ public class SystemInfoService implements GsonPostProcessable {
                     NetUtils.getHostPortInAccessibleFormat(host, heartbeatPort) + "]");
         }
 
-        // check if warehouseName is right
-        Warehouse wh = GlobalStateMgr.getCurrentState().getWarehouseMgr().getWarehouseAllowNull(dropComputeNode.getWarehouseId());
-        if (wh != null && !warehouse.equalsIgnoreCase(wh.getName())) {
-            throw new DdlException("compute node [" + host + ":" + heartbeatPort +
-                    "] does not exist in warehouse " + warehouse);
+        if (!Strings.isNullOrEmpty(warehouse)) {
+            // check if warehouseName is right
+            Warehouse wh = GlobalStateMgr.getCurrentState().getWarehouseMgr()
+                    .getWarehouseAllowNull(dropComputeNode.getWarehouseId());
+            if (wh != null && !warehouse.equalsIgnoreCase(wh.getName())) {
+                throw new DdlException("compute node [" + host + ":" + heartbeatPort +
+                        "] does not exist in warehouse " + warehouse);
+            }
         }
 
         // update idToComputeNode
@@ -474,8 +482,14 @@ public class SystemInfoService implements GsonPostProcessable {
         });
     }
 
-    // final entry of dropping backend
-    public void dropBackend(String host, int heartbeatPort, String warehouse, boolean needCheckWithoutForce) throws DdlException {
+    /*
+     * Final entry of dropping backend.
+     * The arg warehouse can be null or empty,
+     * which means ignore warehouse when dropping backend node, 
+     * otherwise it will be checked and an exception will be thrown if it is not matched.
+     */
+    public void dropBackend(String host, int heartbeatPort, String warehouse, boolean needCheckWithoutForce)
+            throws DdlException {
         Backend droppedBackend = getBackendWithHeartbeatPort(host, heartbeatPort);
 
         if (droppedBackend == null) {
@@ -483,14 +497,17 @@ public class SystemInfoService implements GsonPostProcessable {
                     NetUtils.getHostPortInAccessibleFormat(host, heartbeatPort) + "]");
         }
 
-        // check if warehouseName is right
-        Warehouse wh = GlobalStateMgr.getCurrentState().getWarehouseMgr().getWarehouseAllowNull(droppedBackend.getWarehouseId());
-        if (wh != null && !warehouse.equalsIgnoreCase(wh.getName())) {
-            LOG.warn("warehouseName in dropBackends is not equal, " +
-                            "warehouseName from dropBackendClause is {}, while actual one is {}",
-                    warehouse, wh.getName());
-            throw new DdlException("backend [" + host + ":" + heartbeatPort +
-                    "] does not exist in warehouse " + warehouse);
+        if (!Strings.isNullOrEmpty(warehouse)) {
+            // check if warehouseName is right
+            Warehouse wh = GlobalStateMgr.getCurrentState().getWarehouseMgr()
+                    .getWarehouseAllowNull(droppedBackend.getWarehouseId());
+            if (wh != null && !warehouse.equalsIgnoreCase(wh.getName())) {
+                LOG.warn("warehouseName in dropBackends is not equal, " +
+                                "warehouseName from dropBackendClause is {}, while actual one is {}",
+                        warehouse, wh.getName());
+                throw new DdlException("backend [" + host + ":" + heartbeatPort +
+                        "] does not exist in warehouse " + warehouse);
+            }
         }
 
         if (needCheckWithoutForce) {
