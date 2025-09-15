@@ -7,6 +7,7 @@ set(EXEC_FILES
         ./column/column_view_test.cpp
         ./column/array_view_column_test.cpp
         ./column/binary_column_test.cpp
+        ./column/german_string_test.cpp
         ./column/chunk_test.cpp
         ./column/column_helper_test.cpp
         ./column/const_column_test.cpp

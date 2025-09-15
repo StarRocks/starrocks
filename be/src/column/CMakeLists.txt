@@ -45,4 +45,5 @@ add_library(Column STATIC
         column_view/column_view_base.cpp
         column_view/column_view_helper.cpp
         variant_column.cpp
+        german_string.cpp
 )
