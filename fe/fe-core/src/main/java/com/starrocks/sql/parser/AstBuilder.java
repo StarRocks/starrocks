@@ -524,6 +524,7 @@ import com.starrocks.sql.ast.warehouse.cngroup.CreateCnGroupStmt;
 import com.starrocks.sql.ast.warehouse.cngroup.DropCnGroupStmt;
 import com.starrocks.sql.ast.warehouse.cngroup.EnableDisableCnGroupStmt;
 import com.starrocks.sql.common.PListCell;
+import com.starrocks.sql.parser.rewriter.CompoundPredicateExprRewriter;
 import com.starrocks.sql.util.EitherOr;
 import com.starrocks.statistic.StatsConstants;
 import com.starrocks.transaction.GtidGenerator;
@@ -596,6 +597,8 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
             Lists.newArrayList(FunctionSet.SUBSTR, FunctionSet.SUBSTRING,
                     FunctionSet.FROM_UNIXTIME, FunctionSet.FROM_UNIXTIME_MS,
                     FunctionSet.STR2DATE);
+    // rewriter
+    private static final CompoundPredicateExprRewriter COMPOUND_PREDICATE_EXPR_REWRITER = new CompoundPredicateExprRewriter();
 
     protected AstBuilder(long sqlMode) {
         this(sqlMode, new IdentityHashMap<>());
@@ -7237,11 +7240,50 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
                 null, createPos(context));
     }
 
+    private record LogicalBinaryNode(com.starrocks.sql.parser.StarRocksParser.LogicalBinaryContext context,
+                                     CompoundPredicate.Operator operator) {}
+
+    // Iteratively build a left-deep CompoundPredicate tree for LogicalBinaryContext,
+    // allowing each node to have its own operator, using LogicalBinaryNode for clarity.
+    private CompoundPredicate buildCompoundPredicateIterative(
+            com.starrocks.sql.parser.StarRocksParser.LogicalBinaryContext context) {
+        // Stack to store LogicalBinaryNode records
+        java.util.Deque<LogicalBinaryNode> nodeStack = new java.util.ArrayDeque<>();
+        com.starrocks.sql.parser.StarRocksParser.LogicalBinaryContext current = context;
+
+        // Traverse left as long as we see LogicalBinaryContext, storing each one's operator and context
+        while (current.left instanceof com.starrocks.sql.parser.StarRocksParser.LogicalBinaryContext) {
+            com.starrocks.sql.parser.StarRocksParser.LogicalBinaryContext leftCtx =
+                    (com.starrocks.sql.parser.StarRocksParser.LogicalBinaryContext) current.left;
+            nodeStack.push(new LogicalBinaryNode(current, getLogicalBinaryOperator(current.operator)));
+            current = leftCtx;
+        }
+
+        // The leftmost node
+        Expr result = (Expr) visit(current.left);
+
+        // Rebuild the tree from left to right, using each stored LogicalBinaryNode
+        while (!nodeStack.isEmpty()) {
+            LogicalBinaryNode node = nodeStack.pop();
+            Expr right = (Expr) visit(node.context.right);
+            result = new CompoundPredicate(node.operator(), result, right, createPos(node.context()));
+        }
+        // Finally, handle the original context's right with its own operator
+        CompoundPredicate.Operator lastOp = getLogicalBinaryOperator(current.operator);
+        Expr right = (Expr) visit(current.right);
+        return new CompoundPredicate(lastOp, result, right, createPos(current));
+    }
+
     @Override
     public ParseNode visitLogicalBinary(com.starrocks.sql.parser.StarRocksParser.LogicalBinaryContext context) {
-        Expr left = (Expr) visit(context.left);
-        Expr right = (Expr) visit(context.right);
-        return new CompoundPredicate(getLogicalBinaryOperator(context.operator), left, right, createPos(context));
+        if (Config.compound_predicate_flatten_threshold > 0) {
+            CompoundPredicate result = buildCompoundPredicateIterative(context);
+            return COMPOUND_PREDICATE_EXPR_REWRITER.rewrite(result);
+        } else {
+            Expr left = (Expr) visit(context.left);
+            Expr right = (Expr) visit(context.right);
+            return new CompoundPredicate(getLogicalBinaryOperator(context.operator), left, right, createPos(context));
+        }
     }
 
     private static CompoundPredicate.Operator getLogicalBinaryOperator(Token token) {
