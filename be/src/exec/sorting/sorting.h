@@ -39,9 +39,13 @@ Status sort_and_tie_column(const std::atomic<bool>& cancel, ColumnPtr& column, c
 Status sort_and_tie_column(const std::atomic<bool>& cancel, const ColumnPtr& column, const SortDesc& sort_desc,
                            SmallPermutation& permutation, Tie& tie, std::pair<int, int> range, const bool build_tie);
 
-// Sort multiple columns using column-wise algorithm, output the order in permutation array
+// Sort multiple columns using column-wise algorithm, the final order is stored in the Permutation argument
 Status sort_and_tie_columns(const std::atomic<bool>& cancel, const Columns& columns, const SortDescs& sort_desc,
                             Permutation* permutation);
+
+// Sort multiple columns using column-wise algorithm, the order changes are reflected in the given SmallPermutation
+Status sort_and_tie_columns(const std::atomic<bool>& cancel, const Columns& columns, const SortDescs& sort_desc,
+                            SmallPermutation& permutation);
 
 /// Usually used to sort array columns.
 ///

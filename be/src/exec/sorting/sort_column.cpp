@@ -503,18 +503,30 @@ Status sort_and_tie_columns(const std::atomic<bool>& cancel, const Columns& colu
         return Status::OK();
     }
     size_t num_rows = columns[0]->size();
-    Tie tie(num_rows, 1);
-    std::pair<int, int> range{0, num_rows};
     SmallPermutation small_perm = create_small_permutation(num_rows);
+    RETURN_IF_ERROR(sort_and_tie_columns(cancel, columns, sort_desc, small_perm));
+    restore_small_permutation(small_perm, *permutation);
+
+    return Status::OK();
+}
+
+Status sort_and_tie_columns(const std::atomic<bool>& cancel, const Columns& columns, const SortDescs& sort_desc,
+                            SmallPermutation& permutation) {
+    if (columns.size() < 1) {
+        return Status::OK();
+    }
+    const size_t num_rows = columns.at(0)->size();
+    DCHECK(permutation.size() == num_rows);
+
+    Tie tie(num_rows, 1);
+    std::pair<int, int> range{0, static_cast<int>(num_rows)};
 
     for (int col_index = 0; col_index < columns.size(); col_index++) {
         ColumnPtr column = columns[col_index];
         bool build_tie = col_index != columns.size() - 1;
-        RETURN_IF_ERROR(sort_and_tie_column(cancel, column, sort_desc.get_column_desc(col_index), small_perm, tie,
+        RETURN_IF_ERROR(sort_and_tie_column(cancel, column, sort_desc.get_column_desc(col_index), permutation, tie,
                                             range, build_tie));
     }
-
-    restore_small_permutation(small_perm, *permutation);
 
     return Status::OK();
 }
