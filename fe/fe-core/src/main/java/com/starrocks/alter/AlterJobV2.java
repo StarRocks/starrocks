@@ -45,6 +45,7 @@ import com.starrocks.catalog.OlapTable.OlapTableState;
 import com.starrocks.catalog.TabletInvertedIndex;
 import com.starrocks.catalog.UserIdentity;
 import com.starrocks.common.Config;
+import com.starrocks.common.ThreadPoolManager;
 import com.starrocks.common.TraceManager;
 import com.starrocks.common.io.Writable;
 import com.starrocks.common.util.concurrent.lock.LockType;
@@ -68,6 +69,8 @@ import java.util.Optional;
 import java.util.concurrent.Callable;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
+import java.util.concurrent.ThreadPoolExecutor;
+import javax.validation.constraints.NotNull;
 
 /*
  * Version 2 of AlterJob, for replacing the old version of AlterJob.
@@ -124,7 +127,11 @@ public abstract class AlterJobV2 implements Writable {
 
     protected Span span;
 
-    protected Future<Boolean> publishVersionFuture = null;
+    protected Future<Boolean> publishVersionJobFuture = null;
+
+    private ThreadPoolExecutor publishVersionTaskExecutor = null;
+
+    private static final int LAKE_PUBLISH_TASK_MAX_QUEUE_SIZE = 4096;
 
     public AlterJobV2(long jobId, JobType jobType, long dbId, long tableId, String tableName, long timeoutMs) {
         this.jobId = jobId;
@@ -354,16 +361,16 @@ public abstract class AlterJobV2 implements Writable {
     }
 
     protected boolean publishVersion() {
-        if (publishVersionFuture == null) {
+        if (publishVersionJobFuture == null) {
             Callable<Boolean> task = () -> {
                 return lakePublishVersion();
             };
-            publishVersionFuture = GlobalStateMgr.getCurrentState().getLakeAlterPublishExecutor().submit(task);
+            publishVersionJobFuture = GlobalStateMgr.getCurrentState().getLakeAlterJobPublishExecutor().submit(task);
             return false;
         } else {
-            if (publishVersionFuture.isDone()) {
+            if (publishVersionJobFuture.isDone()) {
                 try {
-                    return publishVersionFuture.get();
+                    return publishVersionJobFuture.get();
                 } catch (InterruptedException | ExecutionException e) {
                     return false;
                 }
@@ -371,6 +378,14 @@ public abstract class AlterJobV2 implements Writable {
                 return false;
             }
         }
+    }
+
+    public @NotNull ThreadPoolExecutor getPublishVersionTaskExecutor() {
+        if (publishVersionTaskExecutor == null) {
+            publishVersionTaskExecutor = ThreadPoolManager.newDaemonFixedThreadPool(Config.lake_publish_version_max_threads,
+                    LAKE_PUBLISH_TASK_MAX_QUEUE_SIZE, "alter-publish-task", false);
+        }
+        return publishVersionTaskExecutor;
     }
 
     private void finishHook() {
