@@ -198,6 +198,17 @@ void LocalTabletsChannel::add_chunk(Chunk* chunk, const PTabletWriterAddChunkReq
         response->mutable_status()->add_error_msgs("no packet_seq in PTabletWriterAddChunkRequest");
         return;
     }
+    if (UNLIKELY(!request.has_timeout_ms())) {
+        response->mutable_status()->set_status_code(TStatusCode::INVALID_ARGUMENT);
+        response->mutable_status()->add_error_msgs("missing timeout_ms in PTabletWriterAddChunkRequest");
+        return;
+    }
+    if (UNLIKELY(request.timeout_ms() < 0)) {
+        response->mutable_status()->set_status_code(TStatusCode::INVALID_ARGUMENT);
+        response->mutable_status()->add_error_msgs(
+                fmt::format("negtive timeout_ms {} in PTabletWriterAddChunkRequest", request.timeout_ms()));
+        return;
+    }
 
     {
         std::lock_guard lock(_senders[request.sender_id()].lock);
@@ -361,7 +372,8 @@ void LocalTabletsChannel::add_chunk(Chunk* chunk, const PTabletWriterAddChunkReq
         }
         int64_t start_wait_time = MonotonicMillis();
         for (auto& [node_id, delta_writers] : unfinished_replicas_grouped_by_primary_node) {
-            int64_t left_timeout_ms = std::max((uint64_t)0, request.timeout_ms() - watch.elapsed_time() / 1000000);
+            int64_t elapsed_ms = static_cast<int64_t>(watch.elapsed_time() / NANOSECS_PER_MILLIS);
+            int64_t left_timeout_ms = std::max<int64_t>(0, request.timeout_ms() - elapsed_ms);
             SecondaryReplicasWaiter waiter(request.id(), _txn_id, request.sink_id(), left_timeout_ms, start_wait_time,
                                            delta_writers);
             Status status = waiter.wait();
@@ -1246,7 +1258,7 @@ SecondaryReplicasWaiter::SecondaryReplicasWaiter(PUniqueId load_id, int64_t txn_
         : _load_id(std::move(load_id)),
           _txn_id(txn_id),
           _sink_id(sink_id),
-          _timeout_ns(timeout_ms * NANOSECS_PER_MILLIS),
+          _timeout_ns(std::max((int64_t)0, timeout_ms) * NANOSECS_PER_MILLIS),
           _delta_writers(std::move(delta_writers)),
           _eos_time_ms(eos_time_ms),
           _last_get_replica_status_time_ms(eos_time_ms) {}
@@ -1441,7 +1453,7 @@ void SecondaryReplicasWaiter::_try_diagnose_stack_strace_on_primary(int unfinish
     SET_IGNORE_OVERCROWDED(closure->cntl, load);
     PLoadDiagnoseRequest request;
     request.mutable_id()->set_hi(_load_id.hi());
-    request.mutable_id()->set_hi(_load_id.lo());
+    request.mutable_id()->set_lo(_load_id.lo());
     request.set_txn_id(_txn_id);
     request.set_stack_trace(true);
     closure->ref();
