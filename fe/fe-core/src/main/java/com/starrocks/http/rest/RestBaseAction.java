@@ -41,11 +41,7 @@ import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.starrocks.authorization.AccessDeniedException;
 import com.starrocks.authorization.AuthorizationMgr;
-<<<<<<< HEAD
-=======
-import com.starrocks.catalog.UserIdentity;
 import com.starrocks.common.Config;
->>>>>>> a79d85173b ([Enhancement] Implement ProfileActionV2 and QueryDetailActionV2 to obtain query information across all FEs (#61345))
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.Pair;
@@ -60,11 +56,8 @@ import com.starrocks.http.HttpUtils;
 import com.starrocks.http.WebUtils;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
-<<<<<<< HEAD
 import com.starrocks.sql.ast.UserIdentity;
-=======
 import com.starrocks.system.Frontend;
->>>>>>> a79d85173b ([Enhancement] Implement ProfileActionV2 and QueryDetailActionV2 to obtain query information across all FEs (#61345))
 import com.starrocks.thrift.TNetworkAddress;
 import io.netty.handler.codec.http.HttpHeaderNames;
 import io.netty.handler.codec.http.HttpMethod;
