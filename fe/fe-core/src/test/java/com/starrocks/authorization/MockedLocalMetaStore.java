@@ -113,6 +113,20 @@ public class MockedLocalMetaStore extends LocalMetastore {
     }
 
     @Override
+    public Table getTable(Long dbId, Long tableId) {
+        for (Database database : databaseSet.values()) {
+            if (database.getId() == dbId) {
+                for (Table table : tableMap.values()) {
+                    if (table.getId() == tableId) {
+                        return table;
+                    }
+                }
+            }
+        }
+        return null;
+    }
+
+    @Override
     public List<Table> getTables(Long dbId) {
         return new ArrayList<>(tableMap.values());
     }

@@ -17,7 +17,7 @@ package com.starrocks.sql.ast;
 import com.starrocks.sql.parser.NodePosition;
 
 public class ShowGrantsStmt extends ShowStmt {
-    private UserRef user;
+    private final UserRef user;
     private final String groupOrRole;
     private final GrantType grantType;
 
@@ -41,10 +41,6 @@ public class ShowGrantsStmt extends ShowStmt {
 
     public String getGroupOrRole() {
         return groupOrRole;
-    }
-
-    public void setUser(UserRef user) {
-        this.user = user;
     }
 
     public GrantType getGrantType() {
