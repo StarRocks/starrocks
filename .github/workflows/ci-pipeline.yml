@@ -305,7 +305,9 @@ jobs:
           linux_distro: ${{ matrix.linux }}
         run: |
           cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull && git checkout test_arm && source lib/init.sh
-          ./bin/run-pr-update-image.sh
+          # ./bin/run-pr-update-image.sh
+          echo "image_cache_id=imc-t4n7gz91wu8sy396koxn" >> $GITHUB_OUTPUT
+          echo "imc-t4n7gz91wu8sy396koxn" > ${GITHUB_WORKSPACE}/image_cache.info
 
       - name: Upload Thirdparty Result
         uses: actions/upload-artifact@v4
@@ -876,7 +878,7 @@ jobs:
           CLUSTER_NAME: ci-admit
         run: |
           cd ci-tool && source lib/init.sh
-          ./bin/elastic-cluster.sh --template ${CLUSTER_NAME} --linuxdistro ${LINUX_DISTRO}
+          ./bin/elastic-cluster.sh --template ${CLUSTER_NAME} --linuxdistro ${LINUX_DISTRO} --arm
           cp conf/starrocks_deploy.conf /var/local/env/${PR_NUMBER}-starrocks_deploy.conf
           echo "deploy_conf_file=/var/local/env/${PR_NUMBER}-starrocks_deploy.conf" >> $GITHUB_OUTPUT
 
