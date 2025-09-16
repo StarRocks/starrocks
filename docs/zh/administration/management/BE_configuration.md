@@ -1726,7 +1726,7 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 类型：Int
 - 单位：MB
 - 是否动态：是
-- 描述：The maximum size of a JSON file that can be streamed into StarRocks.
+- 描述：流式导入单个 JSON 文件大小的上限。
 - 引入版本：-
 
 ##### streaming_load_rpc_max_alive_time_sec
@@ -1735,7 +1735,7 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 类型：Int
 - 单位：Seconds
 - 是否动态：否
-- 描述：流式导入单个 JSON 文件大小的上限。
+- 描述：Stream Load 的 RPC 超时时长。
 - 引入版本：-
 
 ##### write_buffer_size
