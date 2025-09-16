@@ -608,6 +608,11 @@ public class PublishVersionDaemon extends FrontendDaemon {
                 stateBatch.putBeTablets(partitionId, nodeToTablets);
             }
         } catch (Exception e) {
+            for (int i = 0; i < transactionStates.size(); i++) {
+                TransactionState txnState = transactionStates.get(i);
+                // Avoid holding txn write lock here; setting errMsg is best-effort for diagnostics
+                txnState.setErrorMsg("Fail to publish partition " + partitionId + " error " + e.getMessage());
+            }
             LOG.error("Fail to publish partition {} of txnIds {}:", partitionId,
                     txnInfos.stream().map(i -> i.txnId).collect(Collectors.toList()), e);
             return false;
@@ -885,6 +890,9 @@ public class PublishVersionDaemon extends FrontendDaemon {
             }
             return true;
         } catch (Throwable e) {
+            // Avoid holding txn write lock here; setting errMsg is best-effort for diagnostics
+            txnState.setErrorMsg("Fail to publish partition " + partitionCommitInfo.getPhysicalPartitionId()
+                    + " error " + e.getMessage());
             // prevent excessive logging
             if (partitionCommitInfo.getVersionTime() < 0 &&
                     Math.abs(partitionCommitInfo.getVersionTime()) + 10000 < System.currentTimeMillis()) {
