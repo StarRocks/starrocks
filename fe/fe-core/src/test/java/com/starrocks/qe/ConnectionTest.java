@@ -113,7 +113,6 @@ public class ConnectionTest {
         result = ExecuteEnv.getInstance().getScheduler()
                 .registerConnection(createConnectContextForUser("test"));
         Assertions.assertFalse(result.first);
-        System.out.println(result.second);
         Assertions.assertTrue(result.second.contains("Reach user-level"));
     }
 
@@ -162,7 +161,6 @@ public class ConnectionTest {
         com.starrocks.sql.analyzer.Analyzer.analyze(stmt, starRocksAssert.getCtx());
         starRocksAssert.getCtx().setCurrentUserIdentity(new UserIdentity("test", "%"));
         ShowResultSet resultSet = ShowExecutor.execute(stmt, starRocksAssert.getCtx());
-        System.out.println(resultSet.getResultRows());
         Assertions.assertEquals(1, resultSet.getResultRows().size());
         Assertions.assertTrue(resultSet.getResultRows().get(0).contains("test"));
 

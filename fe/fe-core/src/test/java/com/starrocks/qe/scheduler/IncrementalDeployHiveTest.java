@@ -62,7 +62,7 @@ public class IncrementalDeployHiveTest extends SchedulerConnectorTestBase {
         new MockUp<Deployer>() {
             @Mock
             public void deployFragments(DeployState deployState) {
-                System.out.println("----- deploy fragments ------");
+                logSysInfo("----- deploy fragments ------");
                 final List<List<FragmentInstanceExecState>> state =
                         deployState.getThreeStageExecutionsToDeploy();
                 int scanRangeNumber = 0;
@@ -76,7 +76,7 @@ public class IncrementalDeployHiveTest extends SchedulerConnectorTestBase {
                             }
                             for (List<TScanRangeParams> v : params.getPer_node_scan_ranges().values()) {
                                 for (TScanRangeParams p : v) {
-                                    System.out.println(p + ", " + System.identityHashCode(p));
+                                    logSysInfo(p + ", " + System.identityHashCode(p));
                                 }
                             }
                         }
@@ -106,11 +106,11 @@ public class IncrementalDeployHiveTest extends SchedulerConnectorTestBase {
         Assertions.assertEquals(workload.size(), 3);
         Map<String, List<THdfsScanRange>> fileRangesMap = new HashMap<>();
         for (Map.Entry<TUniqueId, List<TScanRangeParams>> kv : workload.entrySet()) {
-            System.out.println("----- checking fragment: " + kv.getKey() + "-----");
+            logSysInfo("----- checking fragment: " + kv.getKey() + "-----");
             List<TScanRangeParams> v = kv.getValue();
             for (int index = 0; index < v.size(); index++) {
                 TScanRangeParams p = v.get(index);
-                System.out.println(p + ", " + System.identityHashCode(p));
+                logSysInfo(p + ", " + System.identityHashCode(p));
                 if (p.isEmpty()) {
                     if (!p.has_more) {
                         Assertions.assertTrue((index + 1) == v.size());
@@ -125,7 +125,7 @@ public class IncrementalDeployHiveTest extends SchedulerConnectorTestBase {
         }
 
         for (Map.Entry<String, List<THdfsScanRange>> kv : fileRangesMap.entrySet()) {
-            System.out.println("----- checking file: " + kv.getKey() + "-----");
+            logSysInfo("----- checking file: " + kv.getKey() + "-----");
             List<THdfsScanRange> fileRangess = kv.getValue();
             fileRangess.sort(new Comparator<THdfsScanRange>() {
                 @Override

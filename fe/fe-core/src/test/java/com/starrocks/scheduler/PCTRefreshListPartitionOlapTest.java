@@ -1569,11 +1569,9 @@ public class PCTRefreshListPartitionOlapTest extends MVTestBase {
         executeInsertSql(sql2);
 
         List<String> s1PartitionNames = extractColumnValues(sql1, 0);
-        System.out.println(s1PartitionNames);
         addListPartition("s1", s1PartitionNames);
 
         List<String> s2PartitionNames = extractColumnValues(sql2, 0);
-        System.out.println(s2PartitionNames);
         addListPartition("s2", s2PartitionNames);
         starRocksAssert.withRefreshedMaterializedView(String.format("CREATE MATERIALIZED VIEW %s\n" +
                         "PARTITION BY col1\n" +

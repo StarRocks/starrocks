@@ -671,8 +671,8 @@ public class MaterializedViewTest extends StarRocksTestBase {
         ShowCreateTableStmt showCreateTableStmt =
                     (ShowCreateTableStmt) UtFrameUtils.parseStmtWithNewParser(showCreateSql, connectContext);
         ShowResultSet showResultSet = ShowExecutor.execute(showCreateTableStmt, connectContext);
-        System.out.println(showResultSet.getMetaData().toString());
-        System.out.println(showResultSet.getResultRows());
+        logSysInfo(showResultSet.getMetaData().toString());
+        logSysInfo(showResultSet.getResultRows());
     }
 
     @Test
@@ -720,7 +720,7 @@ public class MaterializedViewTest extends StarRocksTestBase {
         ShowCreateTableStmt showCreateTableStmt =
                     (ShowCreateTableStmt) UtFrameUtils.parseStmtWithNewParser(showCreateSql, connectContext);
         ShowResultSet showResultSet = ShowExecutor.execute(showCreateTableStmt, connectContext);
-        System.out.println(showResultSet.getResultRows());
+        logSysInfo(showResultSet.getResultRows());
     }
 
     private String getShowMVResult(String mvName) throws Exception {
@@ -728,11 +728,11 @@ public class MaterializedViewTest extends StarRocksTestBase {
         ShowCreateTableStmt showCreateTableStmt =
                 (ShowCreateTableStmt) UtFrameUtils.parseStmtWithNewParser(showCreateSql, connectContext);
         ShowResultSet showResultSet = ShowExecutor.execute(showCreateTableStmt, connectContext);
-        System.out.println(showResultSet.getResultRows());
+        logSysInfo(showResultSet.getResultRows());
         List<List<String>> result = showResultSet.getResultRows();
         Assertions.assertEquals(1, result.size());
         String actual = result.get(0).get(1);
-        System.out.println(actual);
+        logSysInfo(actual);
         return actual;
     }
 

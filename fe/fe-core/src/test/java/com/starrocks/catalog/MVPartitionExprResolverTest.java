@@ -205,7 +205,6 @@ public class MVPartitionExprResolverTest extends MVTestBase {
                         ") t group by k1",
         };
         for (String sql : sqls) {
-            System.out.println(sql);
             checkMVPartitionExprs(sql, slot, 2);
         }
     }
@@ -506,7 +505,6 @@ public class MVPartitionExprResolverTest extends MVTestBase {
                     taskRun.executeTaskRun();
                     PartitionBasedMvRefreshProcessor processor = (PartitionBasedMvRefreshProcessor) taskRun.getProcessor();
                     Set<String> mvPartitionsToRefresh = processor.getMVTaskRunExtraMessage().getMvPartitionsToRefresh();
-                    System.out.println(mvPartitionsToRefresh);
                     Assertions.assertTrue(mvPartitionsToRefresh.contains("p20220101_20220102"));
                     Map<String, Set<String>> refBasePartitionsToRefreshMap =
                             processor.getMVTaskRunExtraMessage().getRefBasePartitionsToRefreshMap();
