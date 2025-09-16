@@ -3392,7 +3392,7 @@ public class Config extends ConfigBase {
     public static String default_mv_partition_refresh_strategy = "strict";
 
     @ConfField(mutable = true, comment = "Check the schema of materialized view's base table strictly or not")
-    public static boolean enable_active_materialized_view_schema_strict_check = true;
+    public static boolean enable_active_materialized_view_schema_strict_check = false;
 
     @ConfField(mutable = true,
             comment = "The default behavior of whether REFRESH IMMEDIATE or not, " +
