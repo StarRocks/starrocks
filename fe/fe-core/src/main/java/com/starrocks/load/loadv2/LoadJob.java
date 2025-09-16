@@ -927,6 +927,15 @@ public abstract class LoadJob extends AbstractTxnStateChangeCallback implements 
         }
         runtimeDetails.put(LoadConstants.RUNTIME_DETAILS_LOAD_ID, Joiner.on(", ").join(loadIds));
         runtimeDetails.put(LoadConstants.RUNTIME_DETAILS_TXN_ID, transactionId);
+        TransactionState txnState = GlobalStateMgr.getCurrentState()
+                .getGlobalTransactionMgr().getTransactionState(dbId, transactionId);
+        if (txnState != null) {
+            // NOTE: Do NOT acquire txnState write lock here to avoid lock inversion with
+            // DatabaseTransactionMgr.finishTransaction() where txnState write lock is held
+            // and LoadJob lock is requested in callbacks. Reading errMsg without locking is acceptable
+            // for diagnostics, even if slightly stale.
+            runtimeDetails.put(LoadConstants.RUNTIME_DETAILS_TXN_ERROR_MSG, txnState.getErrMsg());
+        }
         runtimeDetails.putAll(loadingStatus.getLoadStatistic().toRuntimeDetails());
         Gson gson = new Gson();
         return gson.toJson(runtimeDetails);
