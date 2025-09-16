@@ -740,6 +740,20 @@ public class Config extends ConfigBase {
     public static boolean enable_https = false;
 
     /**
+     *  Property to whitelist ssl cipher suites, comma separated list, with regex support.
+     *  If both whitelist and blacklist are set, blacklist takes precedence.
+     */
+    @ConfField
+    public static String ssl_cipher_whitelist = "";
+
+    /**
+     *  Property to blacklist ssl cipher suites, comma separated list, with regex support.
+     *  If both whitelist and blacklist are set, blacklist takes precedence.
+     */
+    @ConfField
+    public static String ssl_cipher_blacklist = "";
+
+    /**
      * Configs for query queue v2.
      * The configs {@code query_queue_v2_xxx} are effective only when {@code enable_query_queue_v2} is true.
      * @see com.starrocks.qe.scheduler.slot.QueryQueueOptions
