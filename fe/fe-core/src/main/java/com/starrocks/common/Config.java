@@ -1488,6 +1488,10 @@ public class Config extends ConfigBase {
             "in materialized view creation/ctas")
     public static boolean transform_type_prefer_string_for_varchar = true;
 
+    @ConfField(mutable = true, comment = "Whether to enable automatic repairing of materialized views " +
+            "that are broken due to base table schema changes")
+    public static boolean enable_mv_automatic_repairing_for_broken_base_tables = true;
+
     @ConfField(mutable = true, comment = "Whether materialized view rewrite should consider underlying table data layout " +
             "(e.g., colocation property, table sort keys) when deciding rewrite applicability: enable/disable/force"
     )
