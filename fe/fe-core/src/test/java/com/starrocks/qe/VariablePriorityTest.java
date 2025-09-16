@@ -17,6 +17,8 @@ package com.starrocks.qe;
 import com.starrocks.authentication.AuthenticationMgr;
 import com.starrocks.authentication.UserProperty;
 import com.starrocks.catalog.UserIdentity;
+import com.starrocks.common.util.UUIDUtil;
+import com.starrocks.proto.PQueryStatistics;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.ExecuteAsStmt;
 import com.starrocks.sql.ast.SetListItem;
@@ -25,6 +27,9 @@ import com.starrocks.sql.ast.SystemVariable;
 import com.starrocks.sql.ast.UserRef;
 import com.starrocks.sql.ast.expression.StringLiteral;
 import com.starrocks.sql.parser.NodePosition;
+import com.starrocks.thrift.TMasterOpRequest;
+import com.starrocks.thrift.TMasterOpResult;
+import com.starrocks.thrift.TUserIdentity;
 import mockit.Mock;
 import mockit.MockUp;
 import mockit.Mocked;
@@ -37,6 +42,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.UUID;
 import java.util.stream.Collectors;
 
 public class VariablePriorityTest {
@@ -268,5 +274,86 @@ public class VariablePriorityTest {
         // Verify that session variables are not modified by user properties
         // (ephemeral users don't have user properties)
         Assertions.assertEquals(120, context.getSessionVariable().getQueryTimeoutS());
+    }
+
+    @Test
+    public void testForward(@Mocked LeaderOpExecutor leaderOpExecutor) throws Exception {
+        new MockUp<StmtExecutor>() {
+            @Mock
+            public PQueryStatistics getQueryStatisticsForAuditLog() {
+                return null;
+            }
+
+            @Mock
+            public LeaderOpExecutor getLeaderOpExecutor() {
+                return leaderOpExecutor;
+            }
+        };
+
+        new MockUp<LeaderOpExecutor>() {
+            @Mock
+            public TMasterOpResult getResult() {
+                return new TMasterOpResult();
+            }
+        };
+
+        new MockUp<GlobalStateMgr>() {
+            @Mock
+            public Long getMaxJournalId() {
+                return 1L;
+            }
+        };
+
+        // Create users with different user properties
+        UserProperty user1Property = new UserProperty();
+        Map<String, String> user1SessionVars = new HashMap<>();
+        user1SessionVars.put("query_timeout", "300");
+        user1Property.setSessionVariables(user1SessionVars);
+
+        // Mock authentication manager to return user properties
+        new MockUp<AuthenticationMgr>() {
+            @Mock
+            public UserProperty getUserProperty(String userName) {
+                return user1Property;
+            }
+        };
+
+        TMasterOpRequest request = new TMasterOpRequest();
+        request.setCatalog("default");
+        request.setDb("testDb1");
+        request.setUser("u1");
+        request.setSql("select 1");
+        request.setIsInternalStmt(true);
+        //request.setModified_variables_sql("set query_timeout = 10");
+        request.setCurrent_user_ident(new TUserIdentity().setUsername("root").setHost("127.0.0.1"));
+        request.setQueryId(UUIDUtil.genTUniqueId());
+        request.setSession_id(UUID.randomUUID().toString());
+        request.setIsLastStmt(true);
+
+        // mock context
+        ConnectContext ctx = new ConnectContext();
+        ConnectProcessor processor = new ConnectProcessor(ctx);
+        TMasterOpResult result = processor.proxyExecute(request);
+        Assertions.assertNotNull(result);
+        Assertions.assertEquals(300, ctx.getSessionVariable().getQueryTimeoutS());
+
+        request = new TMasterOpRequest();
+        request.setCatalog("default");
+        request.setDb("testDb1");
+        request.setUser("u1");
+        request.setSql("select 1");
+        request.setIsInternalStmt(true);
+        request.setModified_variables_sql("set query_timeout = 10");
+        request.setCurrent_user_ident(new TUserIdentity().setUsername("root").setHost("127.0.0.1"));
+        request.setQueryId(UUIDUtil.genTUniqueId());
+        request.setSession_id(UUID.randomUUID().toString());
+        request.setIsLastStmt(true);
+
+        // mock context
+        ctx = new ConnectContext();
+        processor = new ConnectProcessor(ctx);
+        result = processor.proxyExecute(request);
+        Assertions.assertNotNull(result);
+        Assertions.assertEquals(10, ctx.getSessionVariable().getQueryTimeoutS());
     }
 }
