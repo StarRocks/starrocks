@@ -630,8 +630,9 @@ public class DatabaseTransactionMgrTest {
         assertEquals(1, stateBatchesList.size());
         assertEquals(1, stateBatchesList.get(0).size());
 
-        // add one more transaction, the batch chosen should only have one transaction,
-        // and it should be the replication transaction
+        // Add one more normal transaction after the replication transaction.
+        // The batching logic should process the replication transaction in its own batch first,
+        // and then the new normal transaction will be in a separate batch.
         long transactionId9 = masterTransMgr
                 .beginTransaction(GlobalStateMgrTestUtil.testDbId1,
                         Lists.newArrayList(GlobalStateMgrTestUtil.testTableId1),
