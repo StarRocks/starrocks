@@ -19,11 +19,7 @@
 
 namespace starrocks {
 
-//==============================================================================
-// SimpleCharPredicate Implementation
-//==============================================================================
-
-SimpleCharPredicate::SimpleCharPredicate() {
+SimpleAnalyzer::SimpleAnalyzer(bool normalize_case) :  _normalize_case(normalize_case) {
     // Initialize lookup tables based on ASCII character classification
     // This is simplified compared to CLucene's full Unicode support
     for (size_t i = 0; i < LOOKUP_SIZE; ++i) {
@@ -35,33 +31,6 @@ SimpleCharPredicate::SimpleCharPredicate() {
         // Normalize table: convert uppercase to lowercase
         _normalize_table[i] = std::tolower(static_cast<unsigned char>(c));
     }
-}
-
-bool SimpleCharPredicate::is_token_char(char c) const {
-    size_t index = static_cast<unsigned char>(c);
-    if (index >= LOOKUP_SIZE) {
-        return false; // Non-ASCII characters are not considered token chars in this simplified version
-    }
-    return _token_char_table[index];
-}
-
-char SimpleCharPredicate::normalize(char c) const {
-    size_t index = static_cast<unsigned char>(c);
-    if (index >= LOOKUP_SIZE) {
-        return c; // Return unchanged for non-ASCII
-    }
-    return _normalize_table[index];
-}
-
-//==============================================================================
-// SimpleAnalyzer Implementation
-//==============================================================================
-
-SimpleAnalyzer::SimpleAnalyzer(
-    size_t max_token_length,
-    bool normalize_case
-) : _max_token_length(max_token_length), _normalize_case(normalize_case) {
-    _predicate = std::make_shared<SimpleCharPredicate>();
 }
 
 void SimpleAnalyzer::tokenize(char* mutable_text, size_t text_size, std::vector<SliceToken>& tokens) const {
@@ -79,7 +48,7 @@ void SimpleAnalyzer::tokenize(char* mutable_text, size_t text_size, std::vector<
         char c = mutable_text[offset];
 
         // Skip non-token characters
-        if (!_predicate->is_token_char(c)) {
+        if (!_is_token_char(c)) {
             ++offset;
             continue;
         }
@@ -89,12 +58,7 @@ void SimpleAnalyzer::tokenize(char* mutable_text, size_t text_size, std::vector<
         size_t token_length = 0;
 
         // Find end of token
-        while (offset < text_size && _predicate->is_token_char(mutable_text[offset])) {
-            // Check token length limit (in characters)
-            if (token_length >= _max_token_length) {
-                break;
-            }
-
+        while (offset < text_size && _is_token_char(mutable_text[offset])) {
             ++offset;
             ++token_length;
         }
@@ -103,7 +67,7 @@ void SimpleAnalyzer::tokenize(char* mutable_text, size_t text_size, std::vector<
         if (token_length > 0) {
             if (_normalize_case) {
                 for (size_t i = 0; i < token_length; ++i) {
-                    mutable_text[token_start + i] = _predicate->normalize(mutable_text[token_start + i]);
+                    mutable_text[token_start + i] = _normalize(mutable_text[token_start + i]);
                 }
             }
             tokens.emplace_back(mutable_text + token_start, token_length, position++);

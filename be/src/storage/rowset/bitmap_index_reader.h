@@ -36,6 +36,7 @@
 
 #include <roaring/roaring.hh>
 
+#include "column/column_helper.h"
 #include "common/status.h"
 #include "fs/fs.h"
 #include "gen_cpp/segment.pb.h"

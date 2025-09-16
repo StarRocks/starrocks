@@ -43,10 +43,8 @@ public:
             : _builtin_writer(std::move(writer)) {
         static_assert(field_type == TYPE_CHAR || field_type == TYPE_VARCHAR);
         _parser_type = get_inverted_index_parser_type_from_string(
-                get_parser_string_from_properties(inverted_index->index_properties()));
-        // must in tokenize mode
-        DCHECK(!(_parser_type == InvertedIndexParserType::PARSER_UNKNOWN ||
-                 _parser_type == InvertedIndexParserType::PARSER_UNKNOWN));
+                       get_parser_string_from_properties(inverted_index->index_properties()));
+        DCHECK(_parser_type != InvertedIndexParserType::PARSER_UNKNOWN);
     }
 
     Status init() override;
@@ -76,27 +74,24 @@ Status BuiltinInvertedWriterImpl<field_type>::init() {
     if (_parser_type == InvertedIndexParserType::PARSER_STANDARD) {
         _analyzer = std::make_unique<lucene::analysis::standard::StandardAnalyzer>();
     } else if (_parser_type == InvertedIndexParserType::PARSER_ENGLISH) {
-        _analyzer = std::make_unique<lucene::analysis::SimpleAnalyzer>();
+        _builtin_analyzer = std::make_unique<SimpleAnalyzer>();
     } else if (_parser_type == InvertedIndexParserType::PARSER_CHINESE) {
         auto chinese_analyzer = _CLNEW lucene::analysis::LanguageBasedAnalyzer();
         chinese_analyzer->setLanguage(L"cjk");
         _analyzer.reset(chinese_analyzer);
-    } else if (_parser_type == InvertedIndexParserType::PARSER_BUILTIN_ENGLISH) {
-        _builtin_analyzer = std::make_unique<SimpleAnalyzer>();
-    } else {
-        // ANALYSER_NOT_SET, ANALYSER_NONE use default SimpleAnalyzer
-        _analyzer = std::make_unique<lucene::analysis::SimpleAnalyzer>();
     }
     return Status::OK();
 }
 
 template <LogicalType field_type>
 void BuiltinInvertedWriterImpl<field_type>::add_values(const void* values, size_t count) {
-    auto* val = (Slice*)values;
+    const Slice* val = static_cast<const Slice*>(values);
     for (int i = 0; i < count; ++i) {
         const char* s = val->data;
         size_t size = val->size;
-        if (_parser_type == InvertedIndexParserType::PARSER_BUILTIN_ENGLISH) {
+        if (_parser_type == InvertedIndexParserType::PARSER_NONE) {
+            _builtin_writer->add_value_with_current_rowid((void*) val);
+        } else if (_parser_type == InvertedIndexParserType::PARSER_ENGLISH) {
             std::string mutable_text(val->data, val->size);
             std::vector<SliceToken> tokens;
             _builtin_analyzer->tokenize(mutable_text.data(), mutable_text.length(), tokens);
@@ -104,10 +99,11 @@ void BuiltinInvertedWriterImpl<field_type>::add_values(const void* values, size_
                 _builtin_writer->add_value_with_current_rowid((void*) &(token.text));
             }
         } else {
-            // Data in Slice does not contained any null-terminated. Any api in Boost/std
-            // which write the result into a given memory area does not fit in this case.
-            // So we still use boost::locale::conv::utf_to_utf<TCHAR> to construct a new
-            // wstring in every loop for the correctness.
+            // For all kinds of CLucene analyzers, we need to process the text as follows:
+            // 1. Convert the text to wstring
+            // 2. Tokenize the wstring
+            // 3. Convert the tokens to string
+            // 4. Add the string to the bitmap index
             std::wstring tchar = boost::locale::conv::utf_to_utf<TCHAR>(s, s + size);
     
             _char_string_reader->init(tchar.c_str(), tchar.size(), false);
@@ -139,6 +135,7 @@ Status BuiltinInvertedWriterImpl<field_type>::finish(WritableFile* wfile, Column
 Status BuiltinInvertedWriter::create(const TypeInfoPtr& typeinfo, TabletIndex* tablet_index, std::unique_ptr<InvertedWriter>* res) {
     std::unique_ptr<BitmapIndexWriter> writer;
     RETURN_IF_ERROR(BitmapIndexWriter::create(typeinfo, &writer));
+    writer->set_dictionary_compression(CompressionTypePB::ZSTD);
 
     LogicalType type = typeinfo->type();
     switch (type) {

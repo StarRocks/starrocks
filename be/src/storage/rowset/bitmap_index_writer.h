@@ -67,6 +67,12 @@ public:
     virtual uint64_t size() const = 0;
 
     virtual void incre_rowid() = 0;
+
+    void set_dictionary_compression(CompressionTypePB compression) { _dictionary_compression = compression; }
+
+protected:
+    CompressionTypePB _dictionary_compression = LZ4;
+
 private:
 
     BitmapIndexWriter(const BitmapIndexWriter&) = delete;

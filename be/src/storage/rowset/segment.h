@@ -201,7 +201,7 @@ public:
     bool has_loaded_index() const;
 
     Status new_inverted_index_iterator(uint32_t cid, InvertedIndexIterator** iter, const SegmentReadOptions& opts,
-                                        const IndexReadOptions& index_opt);
+                                       const IndexReadOptions& index_opt);
 
     const ShortKeyIndexDecoder* decoder() const { return _sk_index_decoder.get(); }
 

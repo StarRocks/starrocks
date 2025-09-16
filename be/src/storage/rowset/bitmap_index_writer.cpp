@@ -143,11 +143,11 @@ public:
     BitmapUpdateContextRefOrSingleValue& operator=(const BitmapUpdateContextRefOrSingleValue& rhs) = delete;
     BitmapUpdateContextRefOrSingleValue(BitmapUpdateContextRefOrSingleValue&& rhs) noexcept {
         _value = rhs._value;
-        rhs._value = 1; // reset
+        rhs._value = 1; // make sure not delete when rhs is destroyed
     }
     BitmapUpdateContextRefOrSingleValue& operator=(BitmapUpdateContextRefOrSingleValue&& rhs) noexcept {
         this->_value = rhs._value;
-        rhs._value = 1; // reset
+        rhs._value = 1; // make sure not delete when rhs is destroyed
         return *this;
     }
     BitmapUpdateContextRefOrSingleValue(uint32_t value) { _value = (value << 1) | 1; }
@@ -278,20 +278,6 @@ public:
         return finish(wfile, meta);
     }
 
-    uint64_t size() const override {
-        uint64_t size = 0;
-        size += _null_bitmap.getSizeInBytes(false);
-        for (BitmapUpdateContextRefOrSingleValue* update_context : _late_update_context_vector) {
-            update_context->flush_pending_adds();
-            update_context->late_update_size(&_reverted_index_size);
-        }
-        _late_update_context_vector.clear();
-        size += _reverted_index_size;
-        size += _mem_index.size() * sizeof(CppType);
-        size += _pool.total_allocated_bytes();
-        return size;
-    }
-
     Status finish(WritableFile* wfile, BitmapIndexPB* meta) override {
         meta->set_bitmap_type(BitmapIndexPB::ROARING_BITMAP);
         meta->set_has_null(!_null_bitmap.isEmpty());
@@ -307,7 +293,7 @@ public:
             options.write_ordinal_index = false;
             options.write_value_index = true;
             options.encoding = EncodingInfo::get_default_encoding(_typeinfo->type(), true);
-            options.compression = CompressionTypePB::ZSTD;
+            options.compression = _dictionary_compression;
 
             IndexedColumnWriter dict_column_writer(options, _typeinfo, wfile);
             RETURN_IF_ERROR(dict_column_writer.init());
@@ -376,6 +362,20 @@ public:
         return Status::OK();
     }
 
+    uint64_t size() const override {
+        uint64_t size = 0;
+        size += _null_bitmap.getSizeInBytes(false);
+        for (BitmapUpdateContextRefOrSingleValue* update_context : _late_update_context_vector) {
+            update_context->flush_pending_adds();
+            update_context->late_update_size(&_reverted_index_size);
+        }
+        _late_update_context_vector.clear();
+        size += _reverted_index_size;
+        size += _mem_index.size() * sizeof(CppType);
+        size += _pool.total_allocated_bytes();
+        return size;
+    }
+
     inline void incre_rowid() override { _rid++; }
 
 private:
@@ -385,6 +385,8 @@ private:
     // row id list for null value
     Roaring _null_bitmap;
     // unique value to its row id list
+    // Use UnorderedMemoryIndexType during loading and sort it when finish is more efficient than only
+    // use OrderedMemoryIndexType. Especially for the case of built-in inverted index workload.
     UnorderedMemoryIndexType _mem_index;
     MemPool _pool;
 

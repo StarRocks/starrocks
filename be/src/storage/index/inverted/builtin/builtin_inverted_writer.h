@@ -21,7 +21,8 @@ namespace starrocks {
 class TabletIndex;
 class BuiltinInvertedWriter : public InvertedWriter {
 public:
-public:
+    static Status create(const TypeInfoPtr& typeinfo, TabletIndex* tablet_index, std::unique_ptr<InvertedWriter>* res);
+
     BuiltinInvertedWriter(const BuiltinInvertedWriter&) = delete;
 
     const BuiltinInvertedWriter& operator=(const BuiltinInvertedWriter&) = delete;
@@ -29,8 +30,6 @@ public:
     BuiltinInvertedWriter() = default;
 
     ~BuiltinInvertedWriter() override = default;
-
-    static Status create(const TypeInfoPtr& typeinfo, TabletIndex* tablet_index, std::unique_ptr<InvertedWriter>* res);
 };
 
 } // namespace starrocks
