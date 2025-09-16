@@ -162,6 +162,17 @@ StarRocks がグループ内のユーザーを識別する方法を制御する�
 
 メンバー属性値からユーザー識別子を抽出する方法を指定します。明示的に属性を定義することも（例: `cn` または `uid`）、正規表現を使用することもできます。
 
+:::note
+
+**DN マッチングメカニズム**
+
+- **`ldap_user_search_attr` が設定されている場合**、システムはグループメンバーの DN から指定された値を抽出し、それをユーザー名として使用します。また、グループ検索時にはログインユーザー名をキーとして使用します。
+- **`ldap_user_search_attr` が設定されていない場合**、システムは完全な DN を直接ユーザー識別子として使用し、グループ検索時には認証時に記録された DN をキーとして使用します。
+
+この設計により、LDAP Group Provider は様々な LDAP 環境、特に Microsoft ADの ような複雑な環境に適応できます。
+
+:::
+
 #### `ldap_cache_arg` パラメーターグループ
 
 LDAP グループ情報のキャッシュ動作を定義するために使用される引数。
@@ -221,6 +232,49 @@ PROPERTIES(
 ```
 
 上記の例では、`ldap_group_filter` を使用して `groupOfNames` objectClass と `cn` が `testgroup` のグループを検索します。したがって、`cn` はグループを識別するために `ldap_group_identifier_attr` に指定されます。`ldap_group_member_attr` は `member` に設定されており、`groupOfNames` objectClass でメンバーを識別するために `member` 属性が使用されます。`ldap_user_search_attr` は `uid=([^,]+)` という式に設定されており、`member` 属性内のユーザーを識別するために使用されます。
+
+### Microsoft AD環境の例
+
+Microsoft AD サーバーに以下のグループとメンバー情報が存在すると仮定します：
+
+```Plain
+-- グループ情報
+# ADGroup, Groups, company.com
+dn: CN=ADGroup,OU=Groups,DC=company,DC=com
+objectClass: group
+cn: ADGroup
+member: CN=John Doe,OU=Users,DC=company,DC=com
+member: CN=Jane Smith,OU=Users,DC=company,DC=com
+-- ユーザー情報
+# John Doe, Users, company.com
+dn: CN=John Doe,OU=Users,DC=company,DC=com
+objectClass: user
+cn: John Doe
+sAMAccountName: johndoe
+```
+
+Microsoft AD 環境用の Group Provider を作成する:
+
+```SQL
+CREATE GROUP PROVIDER ad_group_provider 
+PROPERTIES(
+    "type"="ldap", 
+    "ldap_conn_url"="ldap://ad.company.com:389",
+    "ldap_bind_root_dn"="CN=admin,OU=Users,DC=company,DC=com",
+    "ldap_bind_root_pwd"="password",
+    "ldap_bind_base_dn"="DC=company,DC=com",
+    "ldap_group_filter"="(&(objectClass=group)(cn=ADGroup))",
+    "ldap_group_identifier_attr"="cn",
+    "ldap_group_member_attr"="member"
+    -- Note: Do not configure ldap_user_search_attr, system will use complete DN for matching
+)
+```
+
+この例では、`ldap_user_search_attr` が設定されていないため、システムは以下を行います：
+1. グループキャッシュ構築時、完全な DN（例：`CN=John Doe,OU=Users,DC=company,DC=com`）をユーザー識別子として直接使用します。
+2. グループ検索時、認証時に記録されたDNをキーとしてユーザーのグループを検索します。
+
+このアプローチは、Microsoft AD 環境において特に適しています。AD のグループメンバーには単純なユーザー名属性が存在しない場合があるためです。
 
 ## Group Provider をセキュリティインテグレーションと組み合わせる
 
