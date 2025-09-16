@@ -39,7 +39,7 @@ public class HttpSSLContextLoader {
     }
 
     private static SslContext createSSLContext() throws Exception {
-        KeyStore keyStore = KeyStore.getInstance("JKS");
+        KeyStore keyStore = KeyStore.getInstance(Config.ssl_keystore_type);
         try (InputStream keyStoreIS = new FileInputStream(Config.ssl_keystore_location)) {
             if (Strings.isNullOrEmpty(Config.ssl_keystore_password)) {
                 throw new IllegalArgumentException("The SSL keystore password cannot be null or empty.");
