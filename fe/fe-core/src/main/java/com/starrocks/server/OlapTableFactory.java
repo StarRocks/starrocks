@@ -454,10 +454,13 @@ public class OlapTableFactory implements AbstractTableFactory {
             }
 
             // replicated storage
-            table.setEnableReplicatedStorage(
-                    PropertyAnalyzer.analyzeBooleanProp(
-                            properties, PropertyAnalyzer.PROPERTIES_REPLICATED_STORAGE,
-                            Config.enable_replicated_storage_as_default_engine));
+            if (table.isOlapTableOrMaterializedView()) {
+                // never set replicated storage for cloud native table.
+                table.setEnableReplicatedStorage(
+                        PropertyAnalyzer.analyzeBooleanProp(
+                                properties, PropertyAnalyzer.PROPERTIES_REPLICATED_STORAGE,
+                                Config.enable_replicated_storage_as_default_engine));
+            }
 
             if (table.enableReplicatedStorage().equals(false)) {
                 for (Column col : baseSchema) {
