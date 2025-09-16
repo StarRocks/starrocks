@@ -35,7 +35,7 @@ public:
 
     virtual void add_nulls(uint32_t count) = 0;
 
-    virtual Status finish([[maybe_unused]] WritableFile* wfile, [[maybe_unused]] ColumnMetaPB* meta) = 0;
+    virtual Status finish(WritableFile* wfile, ColumnMetaPB* meta) = 0;
 
     virtual uint64_t size() const = 0;
 };

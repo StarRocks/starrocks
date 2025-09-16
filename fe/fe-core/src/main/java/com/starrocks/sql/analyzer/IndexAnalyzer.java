@@ -55,6 +55,7 @@ import java.util.stream.Collectors;
 
 import static com.starrocks.common.InvertedIndexParams.CommonIndexParamKey.IMP_LIB;
 import static com.starrocks.common.InvertedIndexParams.IndexParamsKey.PARSER;
+import static com.starrocks.common.InvertedIndexParams.InvertedIndexImpType.BUILTIN;
 import static com.starrocks.common.InvertedIndexParams.InvertedIndexImpType.CLUCENE;
 
 /**
@@ -161,9 +162,6 @@ public class IndexAnalyzer {
         if (!validGinColumnType(column)) {
             throw new SemanticException("The inverted index can only be build on column with type of CHAR/STRING/VARCHAR type.");
         }
-        if (RunMode.isSharedDataMode()) {
-            throw new SemanticException("The inverted index does not support shared data mode");
-        }
         if (!Config.enable_experimental_gin) {
             throw new SemanticException(
                     "The inverted index is disabled, enable it by setting FE config `enable_experimental_gin` to true");
@@ -174,6 +172,10 @@ public class IndexAnalyzer {
             String impValue = properties.get(impLibKey);
             if (!(CLUCENE.name().equalsIgnoreCase(impValue) || BUILTIN.name().equalsIgnoreCase(impValue))) {
                 throw new SemanticException("Only support clucene or builtin implement for now. ");
+            }
+
+            if (!BUILTIN.name().equalsIgnoreCase(impValue) && RunMode.isSharedDataMode()) {
+                throw new SemanticException("Clucene inverted index does not support shared data mode");
             }
         }
 

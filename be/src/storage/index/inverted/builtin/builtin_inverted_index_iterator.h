@@ -26,12 +26,14 @@ public:
                                  std::unique_ptr<BitmapIndexIterator>& bitmap_itr) :
             InvertedIndexIterator(index_meta, reader), _bitmap_itr(std::move(bitmap_itr)), _like_context(nullptr) {}
 
+    ~BuiltinInvertedIndexIterator() override = default;
+
     Status read_from_inverted_index(const std::string& column_name, const void* query_value,
                                     InvertedIndexQueryType query_type, roaring::Roaring* bit_map) override;
 
     Status read_null(const std::string& column_name, roaring::Roaring* bit_map) override;
 
-    ~BuiltinInvertedIndexIterator() override;
+    Status close() override;
 private:
     Status _equal_query(const Slice* search_query, roaring::Roaring* bit_map);
 

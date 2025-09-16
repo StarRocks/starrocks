@@ -186,7 +186,7 @@ public:
         }
     }
 
-    Status finish([[maybe_unused]] WritableFile* wfile, [[maybe_unused]] ColumnMetaPB* meta) override {
+    Status finish(WritableFile* wfile, ColumnMetaPB* meta) override {
         lucene::store::Directory* dir = nullptr;
         lucene::store::IndexOutput* null_bitmap_out = nullptr;
         lucene::store::IndexOutput* data_out = nullptr;

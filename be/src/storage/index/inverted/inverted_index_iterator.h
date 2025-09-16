@@ -35,7 +35,7 @@ public:
     virtual ~InvertedIndexIterator() = default;
 
     virtual Status read_from_inverted_index(const std::string& column_name, const void* query_value,
-                                    InvertedIndexQueryType query_type, roaring::Roaring* bit_map);
+                                            InvertedIndexQueryType query_type, roaring::Roaring* bit_map);
 
     virtual Status read_null(const std::string& column_name, roaring::Roaring* bit_map);
 
@@ -44,6 +44,8 @@ public:
     virtual InvertedIndexReaderType get_inverted_index_reader_type() const;
 
     virtual bool is_untokenized() const { return _analyser_type == InvertedIndexParserType::PARSER_NONE; }
+
+    virtual Status close() { return Status::OK(); }
 
 protected:
     const std::shared_ptr<TabletIndex> _index_meta;

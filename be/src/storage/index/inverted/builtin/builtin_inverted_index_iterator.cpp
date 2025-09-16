@@ -23,11 +23,32 @@
 #include "storage/chunk_helper.h"
 
 namespace starrocks {
+static std::string get_next_prefix(const Slice& prefix_s) {
+    std::string next_prefix = prefix_s.to_string();
 
-BuiltinInvertedIndexIterator::~BuiltinInvertedIndexIterator() {
-    if (_like_context) {
-        (void) LikePredicate::like_close(_like_context.get(), FunctionContext::FunctionStateScope::THREAD_LOCAL);
+    int n = next_prefix.length();
+    int i = n - 1;
+    while (i >= 0) {
+        unsigned char byte_val = static_cast<unsigned char>(next_prefix[i]);
+        if (byte_val == 0xFF) {
+            next_prefix[i] = static_cast<char>(0x00);
+            i--;
+        } else {
+            next_prefix[i] = static_cast<char>(byte_val + 1);
+            break;
+        }
     }
+    if (i < 0) {
+        next_prefix = std::string(1, static_cast<char>(0x01)) + next_prefix;
+    }
+    return next_prefix;
+}
+
+Status BuiltinInvertedIndexIterator::close() {
+    if (!_like_context) {
+        return Status::OK();
+    }
+    return LikePredicate::like_close(_like_context.get(), FunctionContext::FunctionStateScope::THREAD_LOCAL);
 }
 
 Status BuiltinInvertedIndexIterator::_equal_query(const Slice* search_query, roaring::Roaring* bit_map) {
@@ -53,23 +74,7 @@ Status BuiltinInvertedIndexIterator::_wildcard_query(const Slice* search_query, 
 
     if (first_wildcard_pos != 0) {
         Slice prefix_s(search_query->data, first_wildcard_pos);
-        std::string next_prefix = prefix_s.to_string();
-
-        int n = next_prefix.length();
-        int i = n - 1;
-        while (i >= 0) {
-            unsigned char byte_val = static_cast<unsigned char>(next_prefix[i]);
-            if (byte_val == 0xFF) {
-                next_prefix[i] = static_cast<char>(0x00);
-                i--;
-            } else {
-                next_prefix[i] = static_cast<char>(byte_val + 1);
-                break;
-            }
-        }
-        if (i < 0) {
-            next_prefix = std::string(1, static_cast<char>(0x01)) + prefix_s.to_string();
-        }
+        std::string next_prefix = std::move(get_next_prefix(prefix_s));
         Slice next_prefix_s(next_prefix);
 
         auto seek = [&](const Slice& bound) -> StatusOr<std::pair<rowid_t, std::string>> {
@@ -128,6 +133,11 @@ Status BuiltinInvertedIndexIterator::_wildcard_query(const Slice* search_query, 
 }
 
 Status BuiltinInvertedIndexIterator::_init_like_context(const Slice& s) {
+    if (_like_context) {
+        RETURN_IF_ERROR(LikePredicate::like_close(_like_context.get(), FunctionContext::FunctionStateScope::THREAD_LOCAL));
+        _like_context.reset(nullptr);
+    }
+
     _like_context = std::make_unique<FunctionContext>();
     auto ptr = BinaryColumn::create();
     ptr->append_datum(Datum(s));
@@ -140,7 +150,7 @@ Status BuiltinInvertedIndexIterator::_init_like_context(const Slice& s) {
 }
 
 Status BuiltinInvertedIndexIterator::read_from_inverted_index(const std::string& column_name, const void* query_value,
-                                                       InvertedIndexQueryType query_type, roaring::Roaring* bit_map) {
+                                                              InvertedIndexQueryType query_type, roaring::Roaring* bit_map) {
     const auto* search_query = reinterpret_cast<const Slice*>(query_value);
     switch (query_type) {
     case InvertedIndexQueryType::EQUAL_QUERY: {

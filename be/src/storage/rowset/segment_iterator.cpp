@@ -2529,6 +2529,12 @@ Status SegmentIterator::_apply_inverted_index() {
         }
     }
 
+    for (auto* iter : _inverted_index_iterators) {
+        if (iter != nullptr) {
+            RETURN_IF_ERROR(iter->close());
+        }
+    }
+
     _opts.stats->rows_gin_filtered += input_rows - _scan_range.span_size();
     return Status::OK();
 }

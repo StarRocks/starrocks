@@ -49,45 +49,6 @@ struct SliceToken {
 };
 
 /**
- * @brief Character predicate interface for text tokenization
- * Defines how to determine token characters and normalize them
- */
-class CharPredicate {
-public:
-    virtual ~CharPredicate() = default;
-
-    /**
-     * @brief Check if character should be included in token
-     * @param c Character to check
-     * @return true if character is part of token
-     */
-    virtual bool is_token_char(char c) const = 0;
-
-    /**
-     * @brief Normalize character (e.g., convert to lowercase)
-     * @param c Character to normalize
-     * @return Normalized character
-     */
-    virtual char normalize(char c) const = 0;
-};
-
-/**
- * @brief Optimized character predicate with lookup tables for ASCII text
- * Based on CLucene's isalnumHits and isalphaNormalizeHits arrays
- */
-class SimpleCharPredicate : public CharPredicate {
-public:
-    SimpleCharPredicate();
-    bool is_token_char(char c) const override;
-    char normalize(char c) const override;
-
-private:
-    static const size_t LOOKUP_SIZE = 256;
-    bool _token_char_table[LOOKUP_SIZE];
-    char _normalize_table[LOOKUP_SIZE];
-};
-
-/**
  * @brief Core tokenizer implementation for simple text analysis
  * Simplified version of CLucene's CharTokenizer using Slice-based tokens
  */
@@ -95,13 +56,10 @@ class SimpleAnalyzer {
 public:
     /**
      * @brief Constructor
-     * @param max_token_length Maximum token length (default: 255)
      * @param normalize_case Whether to normalize case (default: false for maximum performance)
      */
-    explicit SimpleAnalyzer(
-        size_t max_token_length = 255,
-        bool normalize_case = true
-    );
+    SimpleAnalyzer(bool normalize_case = true);
+    ~SimpleAnalyzer() = default;
 
     /**
      * @brief Tokenize text and output tokens to provided vector
@@ -111,22 +69,38 @@ public:
      */
     void tokenize(char* mutable_text, size_t text_size, std::vector<SliceToken>& tokens) const;
 
-    /**
-     * @brief Set maximum token length
-     * @param length Maximum length for tokens
-     */
-    void set_max_token_length(size_t length) { _max_token_length = length; }
-
-    /**
-     * @brief Get maximum token length
-     * @return Current maximum token length
-     */
-    size_t get_max_token_length() const { return _max_token_length; }
-
 private:
-    std::shared_ptr<CharPredicate> _predicate;
-    size_t _max_token_length;
+    static const size_t LOOKUP_SIZE = 256;
+
+    /**
+     * @brief Check if character should be included in token
+     * @param c Character to check
+     * @return true if character is part of token
+     */
+    inline bool _is_token_char(char c) const {
+        size_t index = static_cast<unsigned char>(c);
+        if (index >= LOOKUP_SIZE) {
+            return false; // Non-ASCII characters are not considered token chars
+        }
+        return _token_char_table[index];
+    }
+    
+    /**
+     * @brief Normalize character (e.g., convert to lowercase)
+     * @param c Character to normalize
+     * @return Normalized character
+     */
+    inline char _normalize(char c) const {
+        size_t index = static_cast<unsigned char>(c);
+        if (index >= LOOKUP_SIZE) {
+            return c; // Return unchanged for non-ASCII
+        }
+        return _normalize_table[index];
+    }
+
     bool _normalize_case;
+    bool _token_char_table[LOOKUP_SIZE];
+    char _normalize_table[LOOKUP_SIZE];
 };
 
 } // namespace starrocks

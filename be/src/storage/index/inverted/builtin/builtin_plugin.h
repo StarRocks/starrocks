@@ -28,7 +28,7 @@ public:
     BuiltinPlugin(BuiltinPlugin const&) = delete;
     void operator=(BuiltinPlugin const&) = delete;
 
-    Status create_inverted_index_writer(TypeInfoPtr typeinfo, [[maybe_unused]] std::string field_name, [[maybe_unused]] std::string path,
+    Status create_inverted_index_writer(TypeInfoPtr typeinfo, std::string field_name, std::string path,
                                         TabletIndex* tablet_index, std::unique_ptr<InvertedWriter>* res) override;
 
     Status create_inverted_index_reader(std::string path, const std::shared_ptr<TabletIndex>& tablet_index,
