@@ -161,12 +161,16 @@ LDAP 服务器可以识别的自定义组过滤器。它将被直接发送到您
 
 指定如何从成员属性值中提取用户标识符。您可以显式定义一个属性（例如，`cn` 或 `uid`）或使用正则表达式。
 
+:::note
+
 **DN 匹配机制**
 
-- **配置了 `ldap_user_search_attr`**：从组成员 DN 中提取指定属性的值作为用户名，组查找时使用登录用户名作为 key
-- **未配置 `ldap_user_search_attr`**：直接使用完整的 DN 作为用户标识，组查找时使用认证时记录的 DN 作为 key
+- **如配置了 `ldap_user_search_attr`**，则从组成员 DN 中提取指定属性的值作为用户名，组查找时使用登录用户名作为 Key。
+- **如未配置 `ldap_user_search_attr`**，则直接使用完整的 DN 作为用户标识，组查找时使用认证时记录的 DN 作为 Key。
 
 这种设计使得 LDAP Group Provider 能够适应不同的 LDAP 环境，特别是 Microsoft AD 等复杂环境。
+
+:::
 
 #### `ldap_cache_arg` 参数组
 
@@ -267,8 +271,8 @@ PROPERTIES(
 ```
 
 在这个示例中，由于没有配置 `ldap_user_search_attr`，系统将：
-1. 在组缓存构建时，直接使用完整的 DN（如 `CN=John Doe,OU=Users,DC=company,DC=com`）作为用户标识
-2. 在组查找时，使用认证时记录的 DN 作为 key 来查找用户所属的组
+1. 在组缓存构建时，直接使用完整的 DN（如 `CN=John Doe,OU=Users,DC=company,DC=com`）作为用户标识。
+2. 在组查找时，使用认证时记录的 DN 作为 key 来查找用户所属的组。
 
 这种方式特别适合 Microsoft AD 环境，因为 AD 中的组成员可能缺少简单的用户名属性。
 
