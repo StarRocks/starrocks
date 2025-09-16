@@ -331,7 +331,7 @@ public class MvRewriteListPartitionTest extends MVTestBase {
                                 "SELECT * from mv1 where province = 'guangdong'",
                         };
                         for (String query : sqls) {
-                            System.out.println("start to check: " + query);
+                            logSysInfo("start to check: " + query);
                             String plan = getFragmentPlan(query);
                             PlanTestBase.assertContains(plan, "UNION", "mv1", "t2");
                         }

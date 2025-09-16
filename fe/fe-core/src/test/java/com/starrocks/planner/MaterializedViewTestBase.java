@@ -137,7 +137,7 @@ public class MaterializedViewTestBase extends PlanTestBase {
                     String mvName = getMVName();
                     String mvSQL = String.format("CREATE MATERIALIZED VIEW %s \n" +
                             " REFRESH MANUAL \n%s AS %s", mvName, properties, mv);
-                    System.out.println(mvSQL);
+                    logSysInfo(mvSQL);
                     starRocksAssert.withMaterializedView(mvSQL);
                 }
 
@@ -149,7 +149,7 @@ public class MaterializedViewTestBase extends PlanTestBase {
                     this.rewritePlan = planAndTrace.first.getExplainString(TExplainLevel.NORMAL);
                 }
                 if (!Strings.isNullOrEmpty(traceLogModule)) {
-                    System.out.println(this.rewritePlan);
+                    logSysInfo(this.rewritePlan);
                 }
                 this.traceLog = planAndTrace.second;
             } catch (Exception e) {
@@ -157,7 +157,7 @@ public class MaterializedViewTestBase extends PlanTestBase {
                 this.exception = e;
             } finally {
                 if (!Strings.isNullOrEmpty(traceLogModule)) {
-                    System.out.println(traceLog);
+                    logSysInfo(traceLog);
                 }
                 if (mv != null && !mv.isEmpty()) {
                     try {

@@ -24,7 +24,7 @@ import org.junit.jupiter.api.BeforeEach;
 
 public abstract class WarehouseTestBase extends StarRocksTestBase {
     @BeforeEach
-    public void before() {
+    public void before() throws Exception {
         new MockUp<RunMode>() {
             @Mock
             public RunMode getCurrentRunMode() {

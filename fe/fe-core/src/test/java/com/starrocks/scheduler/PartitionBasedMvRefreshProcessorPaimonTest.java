@@ -101,7 +101,6 @@ public class PartitionBasedMvRefreshProcessorPaimonTest extends MVTestBase {
                     String query = "SELECT d, count(pk) FROM " +
                             "`paimon0`.`pmn_db1`.`partitioned_table` as a group by d;";
                     String plan = getFragmentPlan(query);
-                    System.out.println(plan);
                     PlanTestBase.assertContains(plan, "     TABLE: paimon_parttbl_mv1\n" +
                             "     PREAGGREGATION: ON\n" +
                             "     partitions=10/10\n" +

@@ -224,7 +224,6 @@ public class PartitionBasedMvRefreshProcessorIcebergTest extends MVTestBase {
 
         MvTaskRunContext mvContext = processor.getMvContext();
         ExecPlan execPlan = mvContext.getExecPlan();
-        System.out.println(execPlan);
         assertPlanContains(execPlan, "3: ts >= '2020-01-01 00:00:00', 3: ts < '2021-01-01 00:00:00'");
 
         // test rewrite
@@ -258,7 +257,6 @@ public class PartitionBasedMvRefreshProcessorIcebergTest extends MVTestBase {
         Collection<Partition> partitions = partitionedMaterializedView.getPartitions();
         Assertions.assertEquals(5, partitions.size());
 
-        System.out.println(partitions.stream().map(Partition::getName).collect(Collectors.toList()));
         Set<String> expectedPartitionNames = ImmutableSet.of("p20220301000000", "p20220101000000", "p20220401000000",
                 "p20220201000000", "p20220501000000");
         Assertions.assertEquals(expectedPartitionNames,

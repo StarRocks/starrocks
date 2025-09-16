@@ -82,9 +82,7 @@ public class ReplayFromDumpTestBase extends StarRocksTestBase {
     }
 
     @BeforeEach
-    public void before() {
-        super.before();
-
+    public void before() throws Exception {
         BackendResourceStat.getInstance().reset();
         connectContext.getSessionVariable().setCboPushDownAggregateMode(-1);
         connectContext.setQueryId(UUIDUtil.genUUID());

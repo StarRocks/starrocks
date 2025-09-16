@@ -47,8 +47,8 @@ public class ViewPlanTest extends PlanTestBase {
         String sqlPlan = getFragmentPlan(sql);
         String viewPlan = getFragmentPlan("select * from " + viewName);
 
-        System.out.println(sqlPlan);
-        System.out.println(viewPlan);
+        logSysInfo(sqlPlan);
+        logSysInfo(viewPlan);
 
         sqlPlan = sqlPlan.replaceAll("bitmap_union_count\\(", "count");
         viewPlan = viewPlan.replaceAll("bitmap_union_count\\(", "count");

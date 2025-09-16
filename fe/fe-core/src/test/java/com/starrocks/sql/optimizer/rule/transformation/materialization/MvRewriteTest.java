@@ -1738,7 +1738,6 @@ public class MvRewriteTest extends MVTestBase {
                     "on a.v1=b.v1 " +
                     "where a.v1=1 and b.v2=1 ;";
             String plan = getFragmentPlan(query);
-            System.out.println(plan);
             PlanTestBase.assertContains(plan, " TABLE: test_partition_tbl_mv3\n" +
                     "     PREAGGREGATION: ON\n" +
                     "     PREDICATES: 8: a_v1 = 1, 12: b_v2 = 1\n" +
@@ -1768,7 +1767,6 @@ public class MvRewriteTest extends MVTestBase {
                     "on a.v1=b.v1 " +
                     "where a.v1=1 and b.v2=1 ;";
             String plan = getFragmentPlan(query);
-            System.out.println(plan);
             PlanTestBase.assertNotContains(plan, "PREDICATES: 8: a_v1 = 1, 11: b_v1 = 1, 12: b_v2 = 1\n" +
                     "     partitions=6/6\n" +
                     "     rollup: test_partition_tbl_mv3");

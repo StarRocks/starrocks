@@ -88,7 +88,6 @@ public class GroupingSetsTest extends PlanTestBase {
         String sql = "select v1, grouping(v1) as b, sum(v3) " +
                 "   from t0 group by grouping sets((), (v1)) order by v1, b";
         String plan = getFragmentPlan(sql);
-        System.out.println(plan);
         Assertions.assertTrue(plan.contains("14:Project\n" +
                 "  |  <slot 12> : 12: v1\n" +
                 "  |  <slot 14> : 14: sum\n" +
@@ -114,7 +113,6 @@ public class GroupingSetsTest extends PlanTestBase {
         String sql = "select v1, v2, grouping_id(v1, v2) as b, sum(v3) " +
                 "from t0 group by grouping sets((), (v1, v2)) order by v1, b";
         String plan = getFragmentPlan(sql);
-        System.out.println(plan);
         Assertions.assertTrue(plan.contains("14:Project\n" +
                 "  |  <slot 13> : 13: v1\n" +
                 "  |  <slot 14> : 14: v2\n" +
@@ -151,7 +149,6 @@ public class GroupingSetsTest extends PlanTestBase {
         String sql = "select v1, v2, sum(v3) " +
                 "from t0 group by grouping sets((), (v1, v2)) order by v1, v2";
         String plan = getFragmentPlan(sql);
-        System.out.println(plan);
         Assertions.assertTrue(plan.contains("  7:Project\n" +
                 "  |  <slot 7> : 7: sum\n" +
                 "  |  <slot 8> : NULL\n" +
@@ -171,7 +168,6 @@ public class GroupingSetsTest extends PlanTestBase {
         String sql = "select v1, grouping(v1) as b, sum(v3) " +
                 "   from t0 group by rollup(v1, v2) order by v1, b";
         String plan = getFragmentPlan(sql);
-        System.out.println(plan);
         Assertions.assertTrue(plan.contains("21:Project\n" +
                 "  |  <slot 19> : 19: v1\n" +
                 "  |  <slot 22> : 22: sum\n" +
@@ -193,7 +189,6 @@ public class GroupingSetsTest extends PlanTestBase {
         String sql = "select v1, grouping_id(v1) as b, count(1) " +
                 "   from t0 group by rollup(v1, v2, v3) order by v1, b";
         String plan = getFragmentPlan(sql);
-        System.out.println(plan);
         Assertions.assertTrue(plan.contains("  1:UNION\n" +
                 "  |  \n" +
                 "  |----15:EXCHANGE\n" +
@@ -339,7 +334,6 @@ public class GroupingSetsTest extends PlanTestBase {
             String sql = "select t1b, t1c, t1d, sum(id_decimal) " +
                     "   from test_all_type group by rollup(t1b, t1c, t1d)";
             String plan = getCostExplain(sql);
-            System.out.println(plan);
             assertContains(plan, "  8:AGGREGATE (update serialize)\n" +
                     "  |  STREAMING\n" +
                     "  |  aggregate: sum[([13: sum, DECIMAL128(38,2), true]); args: DECIMAL128; " +

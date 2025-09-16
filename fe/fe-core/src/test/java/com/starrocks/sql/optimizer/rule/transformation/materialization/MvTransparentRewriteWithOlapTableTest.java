@@ -1301,7 +1301,6 @@ public class MvTransparentRewriteWithOlapTableTest extends MVTestBase {
                                     "from mock_tbl1\n" +
                                     "group by date_trunc('day', data_date)";
                             String plan = getFragmentPlan(query, TExplainLevel.VERBOSE);
-                            System.out.println(plan);
                             PlanTestBase.assertContains(plan, "test_mv1");
                             PlanTestBase.assertContains(plan, " 0:UNION\n" +
                                     "  |  output exprs:\n" +
