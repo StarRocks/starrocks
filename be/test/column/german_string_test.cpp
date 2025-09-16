@@ -188,7 +188,7 @@ TEST(GermanStringTest, test_german_string_compare) {
         GermanString gs0("", 0, allocator.allocate(0));
         GermanString gs4("abcd", 4, allocator.allocate(4));
         GermanString gs12("abcdabcdabcd", 12, allocator.allocate(12));
-        GermanString gs16("abcdabcdabcd", 16, allocator.allocate(16));
+        GermanString gs16("abcdabcdabcdefgh", 16, allocator.allocate(16));
         ASSERT_TRUE(gs0 < gs4);
         ASSERT_TRUE(gs0 < gs12);
         ASSERT_TRUE(gs0 < gs16);
