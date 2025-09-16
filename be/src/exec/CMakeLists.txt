@@ -182,6 +182,7 @@ set(EXEC_FILES
     sorting/merge_column.cpp
     sorting/merge_path.cpp
     sorting/merge_cascade.cpp
+    sorting/new_sort.cpp
     sorting/sort_column.cpp
     sorting/sort_permute.cpp
     connector_scan_node.cpp

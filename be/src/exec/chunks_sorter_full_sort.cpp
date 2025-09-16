@@ -16,6 +16,7 @@
 
 #include "column/vectorized_fwd.h"
 #include "exec/sorting/merge.h"
+#include "exec/sorting/new_sort.h"
 #include "exec/sorting/sort_permute.h"
 #include "exec/sorting/sorting.h"
 #include "exprs/expr.h"
@@ -91,33 +92,26 @@ Status ChunksSorterFullSort::_partial_sort(RuntimeState* state) {
     RETURN_IF_ERROR(_unsorted_chunk->upgrade_if_overflow());
 
     SCOPED_TIMER(_sort_timer);
-    auto do_sort = [&state, this]<class Perm>(Perm& permutation) {
-        DataSegment segment(_sort_exprs, _unsorted_chunk);
-        RETURN_IF_ERROR(
-                sort_and_tie_columns(state->cancelled_ref(), segment.order_by_columns, _sort_desc, permutation));
-        const size_t input_size = _unsorted_chunk->num_rows();
-        const size_t output_chunk_size = state->chunk_size();
-        const size_t chunk_count = (input_size + output_chunk_size - 1) / output_chunk_size;
-        _sorted_chunks.resize(chunk_count);
-        for (size_t i = 0; i < chunk_count; ++i) {
-            const size_t range_begin = i * output_chunk_size;
-            const size_t range_size = std::min(input_size, (i + 1) * output_chunk_size) - range_begin;
-            ChunkUniquePtr sorted_chunk = _unsorted_chunk->clone_empty(range_size);
-            materialize_by_permutation_single(sorted_chunk.get(), _unsorted_chunk,
-                                              array_view{permutation.data() + range_begin, range_size});
-            _sorted_chunks.at(chunk_count - 1 - i) = std::move(sorted_chunk);
-        }
+    DataSegment segment(_sort_exprs, _unsorted_chunk);
+    std::unique_ptr<InlinedData> inlined_data_ptr{};
+    RETURN_IF_ERROR(inline_data(segment.order_by_columns, inlined_data_ptr));
+    auto& inlined_data = *inlined_data_ptr;
+    RETURN_IF_ERROR(sort(state->cancelled_ref(), segment.order_by_columns, inlined_data, _sort_desc));
+    const size_t input_size = _unsorted_chunk->num_rows();
+    const size_t output_chunk_size = state->chunk_size();
+    const size_t chunk_count = (input_size + output_chunk_size - 1) / output_chunk_size;
+    _sorted_chunks.resize(chunk_count);
 
-        return Status::OK();
-    };
-
-    if (_unsorted_chunk->num_rows() <= std::numeric_limits<uint32_t>::max()) {
-        SmallPermutation permutation = create_small_permutation(_staging_unsorted_rows);
-        RETURN_IF_ERROR(do_sort(permutation));
-    } else {
-        LargePermutation permutation = create_large_permutation(_staging_unsorted_rows);
-        RETURN_IF_ERROR(do_sort(permutation));
+    auto order_by_indexes = get_order_by_indexes(_unsorted_chunk->columns(), segment.order_by_columns);
+    for (size_t i = 0; i < chunk_count; ++i) {
+        const size_t range_begin = i * output_chunk_size;
+        const size_t range_end = std::min(input_size, (i + 1) * output_chunk_size);
+        ChunkUniquePtr sorted_chunk = _unsorted_chunk->clone_empty(range_end - range_begin);
+        RETURN_IF_ERROR(materialize(*sorted_chunk, _unsorted_chunk, order_by_indexes, inlined_data,
+                                    SortRange{range_begin, range_end}));
+        _sorted_chunks.at(chunk_count - 1 - i) = std::move(sorted_chunk);
     }
+
     _total_rows += _unsorted_chunk->num_rows();
     _unsorted_chunk.reset();
     _staging_unsorted_rows = 0;
