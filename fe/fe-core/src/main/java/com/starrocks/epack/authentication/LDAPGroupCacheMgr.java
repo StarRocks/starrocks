@@ -110,7 +110,7 @@ public class LDAPGroupCacheMgr extends FrontendDaemon {
                 member2Groups.remove(entry.getKey());
                 continue;
             }
-            if (securityIntegration.getType().equals(SecurityIntegration.SECURITY_INTEGRATION_TYPE_LDAP)) {
+            if (securityIntegration.getType().equals(LDAPSecurityIntegration.SECURITY_INTEGRATION_TYPE_LDAP)) {
                 LDAPSecurityIntegration ldapSecurityIntegration = (LDAPSecurityIntegration) securityIntegration;
                 long refreshInterval = ldapSecurityIntegration.getLdapCacheRefreshInterval();
                 long start = System.currentTimeMillis();

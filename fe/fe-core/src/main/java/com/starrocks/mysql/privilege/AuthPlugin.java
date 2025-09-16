@@ -22,8 +22,8 @@ import com.starrocks.authentication.LDAPAuthProvider;
 import com.starrocks.authentication.OAuth2AuthenticationProvider;
 import com.starrocks.authentication.OAuth2Context;
 import com.starrocks.authentication.PlainPasswordAuthenticationProvider;
-import com.starrocks.authentication.SecurityIntegration;
 import com.starrocks.common.Config;
+import com.starrocks.epack.authentication.LDAPSecurityIntegration;
 import com.starrocks.mysql.MysqlPassword;
 import org.json.JSONObject;
 
@@ -145,7 +145,7 @@ public class AuthPlugin {
         if (serverPluginName.equalsIgnoreCase(Server.MYSQL_NATIVE_PASSWORD.toString())) {
             return Client.MYSQL_NATIVE_PASSWORD.toString();
         } else if (serverPluginName.equalsIgnoreCase(Server.AUTHENTICATION_LDAP_SIMPLE.toString())
-                || serverPluginName.equalsIgnoreCase(SecurityIntegration.SECURITY_INTEGRATION_TYPE_LDAP)) {
+                || serverPluginName.equalsIgnoreCase(LDAPSecurityIntegration.SECURITY_INTEGRATION_TYPE_LDAP)) {
             return Client.MYSQL_CLEAR_PASSWORD.toString();
         } else if (serverPluginName.equalsIgnoreCase(Server.AUTHENTICATION_KERBEROS.toString())) {
             return Client.AUTHENTICATION_KERBEROS_CLIENT.toString();

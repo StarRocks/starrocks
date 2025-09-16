@@ -10,6 +10,7 @@ import com.starrocks.authentication.SecurityIntegration;
 import com.starrocks.authorization.PrivilegeException;
 import com.starrocks.common.DdlException;
 import com.starrocks.epack.authentication.AuthenticationMgrEPack;
+import com.starrocks.epack.authentication.LDAPSecurityIntegration;
 import com.starrocks.epack.persist.EditLogEPack;
 import com.starrocks.server.GlobalStateMgr;
 import org.apache.logging.log4j.LogManager;
@@ -120,7 +121,7 @@ public class RoleMappingMetaMgr {
             nameToRoleMappingMap.put(roleMapping.getName(), roleMapping);
             roleToRoleMappingsMap.computeIfAbsent(roleMapping.getRoleName(),
                     k -> Sets.newHashSet()).add(roleMapping.getName());
-            if (integrationType.equals(SecurityIntegration.SECURITY_INTEGRATION_TYPE_LDAP)) {
+            if (integrationType.equals(LDAPSecurityIntegration.SECURITY_INTEGRATION_TYPE_LDAP)) {
                 LDAPRoleMapping ldapRoleMapping = (LDAPRoleMapping) roleMapping;
                 Set<String> groups = ldapRoleMapping.getGroupSet();
                 Map<String, List<String>> groupDnToRoleList =

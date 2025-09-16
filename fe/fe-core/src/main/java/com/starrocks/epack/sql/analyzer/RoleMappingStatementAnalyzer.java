@@ -4,6 +4,7 @@ package com.starrocks.epack.sql.analyzer;
 
 import com.starrocks.authentication.SecurityIntegration;
 import com.starrocks.epack.authentication.AuthenticationMgrEPack;
+import com.starrocks.epack.authentication.LDAPSecurityIntegration;
 import com.starrocks.epack.authorization.LDAPRoleMapping;
 import com.starrocks.epack.authorization.RoleMapping;
 import com.starrocks.epack.sql.ast.AlterRoleMappingStatement;
@@ -52,7 +53,7 @@ public class RoleMappingStatementAnalyzer {
             if (securityIntegration == null) {
                 throw new SemanticException("security integration '" + securityIntegrationName + "' doesn't exist");
             }
-            if (Objects.equals(securityIntegration.getType(), SecurityIntegration.SECURITY_INTEGRATION_TYPE_LDAP)) {
+            if (Objects.equals(securityIntegration.getType(), LDAPSecurityIntegration.SECURITY_INTEGRATION_TYPE_LDAP)) {
                 if (!propertyMap.containsKey(LDAPRoleMapping.ROLE_MAPPING_PROPERTY_GROUP_LIST_KEY)) {
                     throw new SemanticException("missing required property: " +
                             LDAPRoleMapping.ROLE_MAPPING_PROPERTY_GROUP_LIST_KEY);

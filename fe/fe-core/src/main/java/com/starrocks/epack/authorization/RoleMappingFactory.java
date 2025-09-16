@@ -14,8 +14,8 @@
 
 package com.starrocks.epack.authorization;
 
-import com.starrocks.authentication.SecurityIntegration;
 import com.starrocks.authorization.PrivilegeException;
+import com.starrocks.epack.authentication.LDAPSecurityIntegration;
 
 import java.util.Map;
 import java.util.Objects;
@@ -24,7 +24,7 @@ public class RoleMappingFactory {
     public static RoleMapping createRoleMapping(String name, Map<String, String> propertyMap,
                                                 String integrationType)
             throws PrivilegeException {
-        if (Objects.equals(integrationType, SecurityIntegration.SECURITY_INTEGRATION_TYPE_LDAP)) {
+        if (Objects.equals(integrationType, LDAPSecurityIntegration.SECURITY_INTEGRATION_TYPE_LDAP)) {
             return new LDAPRoleMapping(name, propertyMap, integrationType);
         } else {
             throw new PrivilegeException("unsupported '" + integrationType + "' type when creating role mapping '" + name + "'");

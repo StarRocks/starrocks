@@ -44,12 +44,14 @@ import javax.net.ssl.SSLContext;
 /**
  * Security integration specified in `Config.authentication_chain`.
  * Authentication for this integration is provided by member `authenticationProvider`.
- *
+ * <p>
  * LDAP Security Integration has been deprecated and will be removed in subsequent versions
  */
 @Deprecated
 public class LDAPSecurityIntegration extends SecurityIntegration {
     private static final Logger LOG = LogManager.getLogger(LDAPSecurityIntegration.class);
+
+    public static final String SECURITY_INTEGRATION_TYPE_LDAP = "ldap";
 
     public static final String LDAP_SEC_INTEGRATION_PROP_ROOT_DN_KEY = "ldap_bind_root_dn";
     public static final String LDAP_SEC_INTEGRATION_PROP_ROOT_PWD_KEY = "ldap_bind_root_pwd";

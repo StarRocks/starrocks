@@ -33,6 +33,7 @@ import com.starrocks.common.StarRocksException;
 import com.starrocks.datacache.DataCacheMgr;
 import com.starrocks.datacache.DataCacheSelectExecutor;
 import com.starrocks.datacache.DataCacheSelectMetrics;
+import com.starrocks.epack.authentication.LDAPSecurityIntegration;
 import com.starrocks.lake.snapshot.ClusterSnapshotMgrEPack;
 import com.starrocks.load.EtlJobType;
 import com.starrocks.plugin.PluginInfo;
@@ -641,7 +642,7 @@ public class DDLStmtExecutor {
                 AuthenticationMgr authenticationMgr = GlobalStateMgr.getCurrentState().getAuthenticationMgr();
 
                 String type = stmt.getPropertyMap().get(SecurityIntegration.SECURITY_INTEGRATION_PROPERTY_TYPE_KEY);
-                if (Objects.equals(type, SecurityIntegration.SECURITY_INTEGRATION_TYPE_LDAP) &&
+                if (Objects.equals(type, LDAPSecurityIntegration.SECURITY_INTEGRATION_TYPE_LDAP) &&
                         !Config.enable_create_ldap_security_integration) {
                     throw new SemanticException("Not support create ldap security integration, " +
                             "You can use AUTHENTICATION_LDAP_SIMPLE security integration and ldap group provider instead.");
