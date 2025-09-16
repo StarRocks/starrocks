@@ -53,7 +53,10 @@ public enum JoinOperator {
     // NOT IN subqueries. It can have a single equality join conjunct
     // that returns TRUE when the rhs is NULL.
     NULL_AWARE_LEFT_ANTI_JOIN("NULL AWARE LEFT ANTI JOIN", "▷*",
-            TJoinOp.NULL_AWARE_LEFT_ANTI_JOIN);
+            TJoinOp.NULL_AWARE_LEFT_ANTI_JOIN),
+
+    ASOF_INNER_JOIN("ASOF INNER JOIN", "⋈ₐ", TJoinOp.ASOF_INNER_JOIN),
+    ASOF_LEFT_OUTER_JOIN("ASOF LEFT OUTER JOIN", "⟕ₐ", TJoinOp.ASOF_LEFT_OUTER_JOIN);
 
     private final String description;
     private final String algebra;
@@ -79,7 +82,7 @@ public enum JoinOperator {
     }
 
     public boolean isOuterJoin() {
-        return this == LEFT_OUTER_JOIN || this == RIGHT_OUTER_JOIN || this == FULL_OUTER_JOIN;
+        return this == LEFT_OUTER_JOIN || this == RIGHT_OUTER_JOIN || this == FULL_OUTER_JOIN || this == ASOF_LEFT_OUTER_JOIN;
     }
 
     public boolean isSemiAntiJoin() {
@@ -167,8 +170,24 @@ public enum JoinOperator {
         return Sets.newHashSet(INNER_JOIN, CROSS_JOIN);
     }
 
-    public boolean canGenerateRuntimeFilter() {
-        return !(isLeftOuterJoin() || isFullOuterJoin() || isLeftAntiJoin());
+    public boolean isAsofJoin() {
+        return this == ASOF_INNER_JOIN || this == ASOF_LEFT_OUTER_JOIN;
+    }
+
+    public boolean isAsofInnerJoin() {
+        return this == ASOF_INNER_JOIN;
+    }
+
+    public boolean isAsofLeftOuterJoin() {
+        return this == ASOF_LEFT_OUTER_JOIN;
+    }
+
+    public boolean isAnyInnerJoin() {
+        return this == INNER_JOIN || this == ASOF_INNER_JOIN;
+    }
+
+    public boolean isAnyLeftOuterJoin() {
+        return this == LEFT_OUTER_JOIN || this == ASOF_LEFT_OUTER_JOIN;
     }
 }
 
