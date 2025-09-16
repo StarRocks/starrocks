@@ -7266,7 +7266,6 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
 
         // The leftmost leaf expression
         Expr result = (Expr) visit(current.left);
-
         // Rebuild the tree from the bottom up (leftmost to root)
         while (!nodeStack.isEmpty()) {
             LogicalBinaryNode node = nodeStack.pop();

@@ -25,6 +25,7 @@ import com.starrocks.sql.ast.expression.IntLiteral;
 import com.starrocks.sql.ast.expression.SlotRef;
 import com.starrocks.sql.ast.expression.StringLiteral;
 import com.starrocks.sql.ast.expression.TableName;
+import com.starrocks.utframe.StarRocksTestBase;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -35,7 +36,7 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-public class CompoundPredicateExprRewriterTest {
+public class CompoundPredicateExprRewriterTest extends StarRocksTestBase {
 
     private CompoundPredicateExprRewriter rewriter;
     private int originalThreshold;
