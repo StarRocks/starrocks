@@ -162,7 +162,6 @@ public:
             _schema->column(0).type() == LogicalType::TYPE_CHAR) {
             _enable_pk_parallel_execution = true;
         }
-        return;
     }
 
     bool enable_pk_parallel_execution() const { return _enable_pk_parallel_execution; }
