@@ -26,7 +26,7 @@ under the License.
     <parent>
         <groupId>com.starrocks</groupId>
         <artifactId>starrocks-fe</artifactId>
-        <version>3.4.0</version>
+        <version>main</version>
         <relativePath>../pom.xml</relativePath>
     </parent>
 
@@ -892,7 +892,6 @@ under the License.
     </dependencies>
 
     <build>
-        <finalName>starrocks-fe</finalName>
         <plugins>
             <!-- fe proto precompile plugin-->
             <plugin>
@@ -1099,30 +1098,6 @@ under the License.
                 </executions>
             </plugin>
 
-            <!-- copy all dependency libs to target lib dir -->
-            <plugin>
-                <groupId>org.apache.maven.plugins</groupId>
-                <artifactId>maven-dependency-plugin</artifactId>
-                <version>3.1.1</version>
-                <executions>
-                    <execution>
-                        <id>copy-dependencies</id>
-                        <phase>package</phase>
-                        <goals>
-                            <goal>copy-dependencies</goal>
-                        </goals>
-                        <configuration>
-                            <outputDirectory>${project.build.directory}/lib</outputDirectory>
-                            <overWriteReleases>false</overWriteReleases>
-                            <overWriteSnapshots>false</overWriteSnapshots>
-                            <overWriteIfNewer>true</overWriteIfNewer>
-                            <skip>${skip.plugin}</skip>
-                            <!-- exclude test only jars(junit&mysql-connector), GPL jar(mysql-connector) must be excluded in release package -->
-                            <includeScope>runtime</includeScope>
-                        </configuration>
-                    </execution>
-                </executions>
-            </plugin>
 
             <plugin>
                 <groupId>org.codehaus.mojo</groupId>
