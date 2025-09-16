@@ -684,7 +684,11 @@ public class QueryRuntimeProfile {
         return matcher.matches() ? Optional.of(matcher.group(1)) : Optional.empty();
     }
 
-    private List<String> getUnfinishedInstanceIds() {
+    public List<String> getUnfinishedInstanceIds() {
+        if (profileDoneSignal == null) {
+            return Lists.newArrayList();
+        }
+
         return profileDoneSignal.getLeftMarks().stream()
                 .map(Map.Entry::getKey)
                 .map(DebugUtil::printId)
