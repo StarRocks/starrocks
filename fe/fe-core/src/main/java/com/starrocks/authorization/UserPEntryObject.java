@@ -139,8 +139,9 @@ public class UserPEntryObject implements PEntryObject {
         } else {
             if (userIdentity.isEphemeral()) {
                 return "EXTERNAL USER " + userIdentity.toString();
+            } else {
+                return "USER " + userIdentity.toString();
             }
-            return userIdentity.toString();
         }
     }
 }

@@ -1,0 +1,86 @@
+-- name: test_show_impersonate_grants
+CREATE GROUP PROVIDER `test_execute_as_file_group_provider` PROPERTIES ("group_file_url" = "group_mapping", "type" = "file");
+-- result:
+-- !result
+admin set frontend config ("group_provider"="test_execute_as_file_group_provider");
+-- result:
+-- !result
+drop user if exists test_impersonate;
+-- result:
+-- !result
+create user test_impersonate;
+-- result:
+-- !result
+grant impersonate on user root to test_impersonate;
+-- result:
+-- !result
+drop role if exists r1;
+-- result:
+-- !result
+create role r1;
+-- result:
+-- !result
+grant impersonate on user test_impersonate to role r1;
+-- result:
+-- !result
+grant r1 to external group r1_group;
+-- result:
+-- !result
+drop role if exists r2;
+-- result:
+-- !result
+create role r2;
+-- result:
+-- !result
+grant impersonate on user test_impersonate to role r2;
+-- result:
+-- !result
+grant r2 to external group r2_group;
+-- result:
+-- !result
+grant impersonate on external user u1 to test_impersonate;
+-- result:
+-- !result
+grant impersonate on external user u2 to test_impersonate;
+-- result:
+-- !result
+show grants for user test_impersonate;
+-- result:
+'test_impersonate'@'%'	default_catalog	GRANT IMPERSONATE ON USER 'root'@'%' TO USER 'test_impersonate'@'%'
+'test_impersonate'@'%'	default_catalog	GRANT IMPERSONATE ON EXTERNAL USER 'u1'@'%' TO USER 'test_impersonate'@'%'
+'test_impersonate'@'%'	default_catalog	GRANT IMPERSONATE ON EXTERNAL USER 'u2'@'%' TO USER 'test_impersonate'@'%'
+-- !result
+show grants for external group r1_group;
+-- result:
+r1_group	None	GRANT 'r1' TO EXTERNAL GROUP r1_group
+-- !result
+show grants for external group r2_group;
+-- result:
+r2_group	None	GRANT 'r2' TO EXTERNAL GROUP r2_group
+-- !result
+show grants for role r1;
+-- result:
+r1	default_catalog	GRANT IMPERSONATE ON USER 'test_impersonate'@'%' TO ROLE 'r1'
+-- !result
+show grants for role r2;
+-- result:
+r2	default_catalog	GRANT IMPERSONATE ON USER 'test_impersonate'@'%' TO ROLE 'r2'
+-- !result
+drop user if exists test_impersonate;
+-- result:
+-- !result
+drop role if exists r1;
+-- result:
+-- !result
+drop role if exists r2;
+-- result:
+-- !result
+drop database if exists test_execute_as_d1;
+-- result:
+-- !result
+drop database if exists test_execute_as_d2;
+-- result:
+-- !result
+drop group provider test_execute_as_file_group_provider;
+-- result:
+-- !result

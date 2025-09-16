@@ -240,7 +240,9 @@ public class AST2StringVisitor implements AstVisitorEPack<String, Void> {
                         sb.append(ObjectTypeEPack.WAREHOUSE.name()).append(" ");
                     }
                 } else {
-                    sb.append(stmt.getObjectType().name()).append(" ");
+                    if (!stmt.getObjectType().equals(ObjectType.USER)) {
+                        sb.append(stmt.getObjectType().name()).append(" ");
+                    }
                 }
 
                 List<String> objectString = new ArrayList<>();

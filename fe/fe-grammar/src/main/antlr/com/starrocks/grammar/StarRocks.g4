@@ -2031,7 +2031,7 @@ revokePrivilegeStatement
 showGrantsStatement
     : SHOW GRANTS
     | SHOW GRANTS FOR USER? user
-    | SHOW GRANTS FOR GROUP identifierOrString
+    | SHOW GRANTS FOR EXTERNAL GROUP identifierOrString
     | SHOW GRANTS FOR ROLE identifierOrString
     ;
 
