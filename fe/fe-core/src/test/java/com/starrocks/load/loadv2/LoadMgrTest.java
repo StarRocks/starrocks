@@ -413,8 +413,8 @@ public class LoadMgrTest {
                 loadMgr, "dbIdToLabelToLoadJobs");
 
         // The job should be removed
-        Assertions.assertFalse(idToLoadJob.containsKey(insertJob.id));
-        Assertions.assertTrue(dbIdToLabelToLoadJobs.getOrDefault(100L, new HashMap<>()).get("end_label") == null);
+        Assert.assertFalse(idToLoadJob.containsKey(insertJob.id));
+        Assert.assertTrue(dbIdToLabelToLoadJobs.getOrDefault(100L, new HashMap<>()).get("end_label") == null);
 
         // recover config
         Config.label_keep_max_second = origKeep;
@@ -446,8 +446,8 @@ public class LoadMgrTest {
         Map<Long, Map<String, List<LoadJob>>> dbIdToLabelToLoadJobs = Deencapsulation.getField(
                 loadMgr, "dbIdToLabelToLoadJobs");
 
-        Assertions.assertFalse(idToLoadJob.containsKey(insertJob.id));
-        Assertions.assertTrue(dbIdToLabelToLoadJobs.getOrDefault(200L, new HashMap<>()).get("insert_label") == null);
+        Assert.assertFalse(idToLoadJob.containsKey(insertJob.id));
+        Assert.assertTrue(dbIdToLabelToLoadJobs.getOrDefault(200L, new HashMap<>()).get("insert_label") == null);
 
         // recover config
         Config.label_keep_max_second = origKeep;
