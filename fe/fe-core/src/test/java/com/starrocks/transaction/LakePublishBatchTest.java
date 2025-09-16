@@ -629,7 +629,7 @@ public class LakePublishBatchTest {
             batches = globalTransactionMgr.getReadyPublishTransactionsBatch();
             Assertions.assertEquals(1, batches.size());
             Assertions.assertEquals(1, batches.get(0).size());
-            // backend_streaming transaction
+            // normal transaction
             Assertions.assertEquals(TransactionType.TXN_NORMAL,
                     batches.get(0).getTransactionStates().get(0).getTransactionType());
 
