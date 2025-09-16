@@ -114,6 +114,7 @@ public:
     static LakeServiceBrpcStubCache* getInstance();
     StatusOr<std::shared_ptr<starrocks::LakeService_RecoverableStub>> get_stub(const std::string& host, int port);
     void cleanup_expired(const butil::EndPoint& endpoint);
+    void shutdown();
 
 private:
     LakeServiceBrpcStubCache();
