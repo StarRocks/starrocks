@@ -693,6 +693,15 @@ struct TEqJoinCondition {
   3: optional Opcodes.TExprOpcode opcode;
 }
 
+struct TAsofJoinCondition {
+  // left-hand side of the asof condition (probe side)
+  1: required Exprs.TExpr left;
+  // right-hand side of the asof condition (build side)
+  2: required Exprs.TExpr right;
+  // operator for asof join: LT, LE, GT, GE
+  3: required Opcodes.TExprOpcode opcode;
+}
+
 enum TStreamingPreaggregationMode {
   AUTO,
   FORCE_STREAMING,
@@ -718,7 +727,9 @@ enum TJoinOp {
   // on the build side. Those NULLs are considered candidate matches, and therefore could
   // be rejected (ANTI-join), based on the other join conjuncts. This is in contrast
   // to LEFT_ANTI_JOIN where NULLs are not matches and therefore always returned.
-  NULL_AWARE_LEFT_ANTI_JOIN
+  NULL_AWARE_LEFT_ANTI_JOIN,
+  ASOF_INNER_JOIN,
+  ASOF_LEFT_OUTER_JOIN
 }
 
 enum TJoinDistributionMode {
@@ -768,6 +779,8 @@ struct THashJoinNode {
   58: optional bool is_skew_join = false
 
   59: optional map<Types.TSlotId, Exprs.TExpr> common_slot_map
+
+  70: optional TAsofJoinCondition asof_join_condition
 }
 
 struct TMergeJoinNode {
