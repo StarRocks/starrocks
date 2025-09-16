@@ -322,13 +322,17 @@ public class FineGrainedRangePredicateRule extends TransformationRule {
                                                             List<BinaryPredicateOperator> colPredicates) {
         BinaryPredicateOperator leftDayBeginPredicate = colPredicates.get(0);
         BinaryPredicateOperator rightDayEndPredicate = colPredicates.get(1);
-
         BinaryType firstType = leftDayBeginPredicate.getBinaryType();
         BinaryType secondType = rightDayEndPredicate.getBinaryType();
 
         //  make sure predicate is "col >= left And col <= right"
         if (BinaryType.LE.equals(firstType) || BinaryType.LT.equals(firstType)) {
             Collections.swap(colPredicates, 0, 1);
+            // swap left and right to keep the correct order
+            leftDayBeginPredicate = colPredicates.get(0);
+            rightDayEndPredicate = colPredicates.get(1);
+            firstType = leftDayBeginPredicate.getBinaryType();
+            secondType = rightDayEndPredicate.getBinaryType();
         }
 
         // calculate time points first
