@@ -7246,33 +7246,34 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
 
     // Iteratively build a left-deep CompoundPredicate tree for LogicalBinaryContext,
     // allowing each node to have its own operator, using LogicalBinaryNode for clarity.
+    // Corrected: Properly builds left-deep tree by pushing all contexts and operators, 
+    // and reconstructing from the bottom up, preserving associativity.
     private CompoundPredicate buildCompoundPredicateIterative(
             com.starrocks.sql.parser.StarRocksParser.LogicalBinaryContext context) {
-        // Stack to store LogicalBinaryNode records
+        // Stack to store all contexts and their operators from leftmost to root
         Deque<LogicalBinaryNode> nodeStack = new java.util.ArrayDeque<>();
         com.starrocks.sql.parser.StarRocksParser.LogicalBinaryContext current = context;
 
-        // Traverse left as long as we see LogicalBinaryContext, storing each one's operator and context
-        while (current.left instanceof com.starrocks.sql.parser.StarRocksParser.LogicalBinaryContext) {
-            com.starrocks.sql.parser.StarRocksParser.LogicalBinaryContext leftCtx =
-                    (com.starrocks.sql.parser.StarRocksParser.LogicalBinaryContext) current.left;
+        // Traverse all the way down the left chain, pushing each context and operator
+        while (true) {
             nodeStack.push(new LogicalBinaryNode(current, getLogicalBinaryOperator(current.operator)));
-            current = leftCtx;
+            if (current.left instanceof com.starrocks.sql.parser.StarRocksParser.LogicalBinaryContext) {
+                current = (com.starrocks.sql.parser.StarRocksParser.LogicalBinaryContext) current.left;
+            } else {
+                break;
+            }
         }
 
-        // The leftmost node
+        // The leftmost leaf expression
         Expr result = (Expr) visit(current.left);
 
-        // Rebuild the tree from left to right, using each stored LogicalBinaryNode
+        // Rebuild the tree from the bottom up (leftmost to root)
         while (!nodeStack.isEmpty()) {
             LogicalBinaryNode node = nodeStack.pop();
             Expr right = (Expr) visit(node.context.right);
             result = new CompoundPredicate(node.operator(), result, right, createPos(node.context()));
         }
-        // Finally, handle the original context's right with its own operator
-        CompoundPredicate.Operator lastOp = getLogicalBinaryOperator(current.operator);
-        Expr right = (Expr) visit(current.right);
-        return new CompoundPredicate(lastOp, result, right, createPos(current));
+        return (CompoundPredicate) result;
     }
 
     @Override
