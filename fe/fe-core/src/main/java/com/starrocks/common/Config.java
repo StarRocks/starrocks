@@ -1488,10 +1488,14 @@ public class Config extends ConfigBase {
             "in materialized view creation/ctas")
     public static boolean transform_type_prefer_string_for_varchar = true;
 
-
     @ConfField(mutable = true, comment = "Whether to enable automatic repairing of materialized views " +
             "that are broken due to base table schema changes")
     public static boolean enable_mv_automatic_repairing_for_broken_base_tables = true;
+
+    @ConfField(mutable = true, comment = "Whether materialized view rewrite should consider underlying table data layout " +
+            "(e.g., colocation property, table sort keys) when deciding rewrite applicability: enable/disable/force"
+    )
+    public static String mv_rewrite_consider_data_layout_mode = "enable";
 
     /**
      * The number of query retries.
@@ -3392,7 +3396,7 @@ public class Config extends ConfigBase {
     public static String default_mv_partition_refresh_strategy = "strict";
 
     @ConfField(mutable = true, comment = "Check the schema of materialized view's base table strictly or not")
-    public static boolean enable_active_materialized_view_schema_strict_check = true;
+    public static boolean enable_active_materialized_view_schema_strict_check = false;
 
     @ConfField(mutable = true,
             comment = "The default behavior of whether REFRESH IMMEDIATE or not, " +

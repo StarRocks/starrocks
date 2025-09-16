@@ -280,6 +280,192 @@ public class SystemInfoServiceTest {
     }
 
     @Test
+    public void testDropBackendWithoutWarehouse() throws Exception {
+        new MockUp<RunMode>() {
+            @Mock
+            public RunMode getCurrentRunMode() {
+                return RunMode.SHARED_DATA;
+            }
+        };
+
+        Boolean savedConfig = Config.enable_trace_historical_node;
+        Config.enable_trace_historical_node = true;
+
+        Backend be = new Backend(10001, "newHost", 1000);
+        service.addBackend(be);
+
+        LocalMetastore localMetastore = new LocalMetastore(globalStateMgr, null, null);
+
+        WarehouseManager warehouseManager = new WarehouseManager();
+        warehouseManager.initDefaultWarehouse();
+
+        new MockUp<GlobalStateMgr>() {
+            @Mock
+            public LocalMetastore getLocalMetastore() {
+                return localMetastore;
+            }
+
+            @Mock
+            public WarehouseManager getWarehouseMgr() {
+                return warehouseManager;
+            }
+        };
+
+        new MockUp<WarehouseManager>() {
+            @Mock
+            public ComputeResource acquireComputeResource(CRAcquireContext acquireContext) {
+                return WarehouseManager.DEFAULT_RESOURCE;
+            }
+        };
+        service.addBackend(be);
+        be.setStarletPort(1001);
+        service.dropBackend("newHost", 1000, null, null, false);
+        Backend beIP = service.getBackendWithHeartbeatPort("newHost", 1000);
+        Assertions.assertNull(beIP);
+
+        Config.enable_trace_historical_node = savedConfig;
+    }
+
+    @Test
+    public void testDropComputeNodeWithoutWarehouse() throws Exception {
+        new MockUp<RunMode>() {
+            @Mock
+            public RunMode getCurrentRunMode() {
+                return RunMode.SHARED_DATA;
+            }
+        };
+
+        Boolean savedConfig = Config.enable_trace_historical_node;
+        Config.enable_trace_historical_node = true;
+
+        ComputeNode cn = new ComputeNode(10001, "newHost", 1000);
+        service.addComputeNode(cn);
+
+        LocalMetastore localMetastore = new LocalMetastore(globalStateMgr, null, null);
+
+        WarehouseManager warehouseManager = new WarehouseManager();
+        warehouseManager.initDefaultWarehouse();
+
+        new MockUp<GlobalStateMgr>() {
+            @Mock
+            public LocalMetastore getLocalMetastore() {
+                return localMetastore;
+            }
+
+            @Mock
+            public WarehouseManager getWarehouseMgr() {
+                return warehouseManager;
+            }
+        };
+
+        new MockUp<WarehouseManager>() {
+            @Mock
+            public ComputeResource acquireComputeResource(CRAcquireContext acquireContext) {
+                return WarehouseManager.DEFAULT_RESOURCE;
+            }
+        };
+        service.addComputeNode(cn);
+        cn.setStarletPort(1001);
+        service.dropComputeNode("newHost", 1000, null, null);
+        ComputeNode cnIP = service.getComputeNodeWithHeartbeatPort("newHost", 1000);
+        Assertions.assertNull(cnIP);
+
+        Config.enable_trace_historical_node = savedConfig;
+    }
+
+    @Test
+    public void testDropBackendWithInvalidWarehouse() throws Exception {
+        new MockUp<RunMode>() {
+            @Mock
+            public RunMode getCurrentRunMode() {
+                return RunMode.SHARED_DATA;
+            }
+        };
+
+        Boolean savedConfig = Config.enable_trace_historical_node;
+        Config.enable_trace_historical_node = true;
+
+        Backend be = new Backend(10001, "newHost", 1000);
+        service.addBackend(be);
+
+        LocalMetastore localMetastore = new LocalMetastore(globalStateMgr, null, null);
+
+        WarehouseManager warehouseManager = new WarehouseManager();
+        warehouseManager.initDefaultWarehouse();
+
+        new MockUp<GlobalStateMgr>() {
+            @Mock
+            public LocalMetastore getLocalMetastore() {
+                return localMetastore;
+            }
+
+            @Mock
+            public WarehouseManager getWarehouseMgr() {
+                return warehouseManager;
+            }
+        };
+
+        new MockUp<WarehouseManager>() {
+            @Mock
+            public ComputeResource acquireComputeResource(CRAcquireContext acquireContext) {
+                return WarehouseManager.DEFAULT_RESOURCE;
+            }
+        };
+        service.addBackend(be);
+        be.setStarletPort(1001);
+        Assertions.assertThrows(DdlException.class,
+                () -> service.dropBackend("newHost", 1000, "not_existed_warehouse", null, false));
+
+        Config.enable_trace_historical_node = savedConfig;
+    }
+
+    @Test
+    public void testDropComputeNodeWithInvalidWarehouse() throws Exception {
+        new MockUp<RunMode>() {
+            @Mock
+            public RunMode getCurrentRunMode() {
+                return RunMode.SHARED_DATA;
+            }
+        };
+
+        Boolean savedConfig = Config.enable_trace_historical_node;
+        Config.enable_trace_historical_node = true;
+
+        ComputeNode cn = new ComputeNode(10001, "newHost", 1000);
+        service.addComputeNode(cn);
+
+        LocalMetastore localMetastore = new LocalMetastore(globalStateMgr, null, null);
+
+        WarehouseManager warehouseManager = new WarehouseManager();
+        warehouseManager.initDefaultWarehouse();
+
+        new MockUp<GlobalStateMgr>() {
+            @Mock
+            public LocalMetastore getLocalMetastore() {
+                return localMetastore;
+            }
+
+            @Mock
+            public WarehouseManager getWarehouseMgr() {
+                return warehouseManager;
+            }
+        };
+
+        new MockUp<WarehouseManager>() {
+            @Mock
+            public ComputeResource acquireComputeResource(CRAcquireContext acquireContext) {
+                return WarehouseManager.DEFAULT_RESOURCE;
+            }
+        };
+        service.addComputeNode(cn);
+        cn.setStarletPort(1001);
+        Assertions.assertThrows(DdlException.class,
+                () -> service.dropComputeNode("newHost", 1000, "not_existed_warehouse", null));
+
+        Config.enable_trace_historical_node = savedConfig;
+    }
+
+    @Test
     public void testReplayUpdateHistoricalNode() throws Exception {
         new MockUp<RunMode>() {
             @Mock

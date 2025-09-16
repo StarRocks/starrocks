@@ -31,6 +31,7 @@ import com.starrocks.catalog.MvRefreshArbiter;
 import com.starrocks.catalog.MvUpdateInfo;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.View;
+import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.Pair;
 import com.starrocks.common.util.RuntimeProfile;
@@ -683,5 +684,13 @@ public class MVTestBase extends StarRocksTestBase {
         Table table = getTable(DB_NAME, viewName);
         Assertions.assertTrue(table instanceof View);
         return (View) table;
+    }
+
+    public static void disableMVRewriteConsiderDataLayout() {
+        Config.mv_rewrite_consider_data_layout_mode = "disable";
+    }
+
+    public static void enableMVRewriteConsiderDataLayout() {
+        Config.mv_rewrite_consider_data_layout_mode = "enable";
     }
 }
