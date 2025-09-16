@@ -1488,18 +1488,11 @@ public class Config extends ConfigBase {
             "in materialized view creation/ctas")
     public static boolean transform_type_prefer_string_for_varchar = true;
 
-<<<<<<< HEAD
-=======
-    @ConfField(mutable = true, comment = "Whether materialized view rewrite should consider underlying table data layout " +
-            "(e.g., colocation property, table sort keys) when deciding rewrite applicability: enable/disable/force"
-    )
-    public static String mv_rewrite_consider_data_layout_mode = "enable";
 
     @ConfField(mutable = true, comment = "Whether to enable automatic repairing of materialized views " +
             "that are broken due to base table schema changes")
     public static boolean enable_mv_automatic_repairing_for_broken_base_tables = true;
 
->>>>>>> 231a243094 ([BugFix] Fix mv repair hive base table bug (#63072))
     /**
      * The number of query retries.
      * A query may retry if we encounter RPC exception and no result has been sent to user.
