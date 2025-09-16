@@ -154,7 +154,7 @@ StatusOr<ColumnPtr> AiFunctions::ai_query(FunctionContext* context, const starro
         }
 
         ModelConfig config;
-        if (config_is_const) {
+        if (config_is_const && const_config) {
             config = *const_config;
         } else {
             JsonValue* json_value = json_viewer.value(row);

@@ -103,6 +103,7 @@ void LLMCache::release_cache() {
 }
 
 CacheMetrics LLMCache::get_metrics() const {
+    std::lock_guard<std::mutex> lock(_mutex);
     CacheMetrics metrics;
     metrics.cache_hits = _cache_hits;
     metrics.cache_misses = _cache_misses;
