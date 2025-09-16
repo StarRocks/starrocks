@@ -2218,6 +2218,7 @@ TEST_F(LakeServiceTest, test_abort_txn2) {
             add_chunk_request.set_sender_id(0);
             add_chunk_request.set_eos(false);
             add_chunk_request.set_packet_seq(i);
+            add_chunk_request.set_timeout_ms(60000);
 
             for (int j = 0; j < chunk_size; j++) {
                 add_chunk_request.add_tablet_ids(_tablet_id);

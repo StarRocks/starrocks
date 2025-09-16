@@ -396,6 +396,17 @@ void LakeTabletsChannel::add_chunk(Chunk* chunk, const PTabletWriterAddChunkRequ
         response->mutable_status()->add_error_msgs("no packet_seq in PTabletWriterAddChunkRequest");
         return;
     }
+    if (UNLIKELY(!request.has_timeout_ms())) {
+        response->mutable_status()->set_status_code(TStatusCode::INVALID_ARGUMENT);
+        response->mutable_status()->add_error_msgs("missing timeout_ms in PTabletWriterAddChunkRequest");
+        return;
+    }
+    if (UNLIKELY(request.timeout_ms() < 0)) {
+        response->mutable_status()->set_status_code(TStatusCode::INVALID_ARGUMENT);
+        response->mutable_status()->add_error_msgs(
+                fmt::format("negtive timeout_ms {} in PTabletWriterAddChunkRequest", request.timeout_ms()));
+        return;
+    }
 
     auto& sender = _senders[request.sender_id()];
 
