@@ -31,11 +31,7 @@ import com.starrocks.common.util.FrontendDaemon;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.lake.LakeTablet;
-<<<<<<< HEAD
-=======
-import com.starrocks.lake.snapshot.ClusterSnapshotMgr;
 import com.starrocks.metric.MetricRepo;
->>>>>>> e36aa29c27 ([Enhancement] Update vacuum metric when vacuum success (#62540))
 import com.starrocks.proto.TabletInfoPB;
 import com.starrocks.proto.VacuumRequest;
 import com.starrocks.proto.VacuumResponse;
