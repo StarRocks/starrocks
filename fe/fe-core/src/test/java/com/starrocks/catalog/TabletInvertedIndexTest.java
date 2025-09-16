@@ -38,7 +38,7 @@ public class TabletInvertedIndexTest {
         tabletInvertedIndex = new TabletInvertedIndex();
         
         // Create test tablet meta
-        tabletMeta = new TabletMeta(1L, 2L, 3L, 4L, TStorageMedium.HDD);
+        tabletMeta = new TabletMeta(1L, 2L, 3L, 4L, 1, TStorageMedium.HDD);
         
         // Create test replicas
         replica1 = new Replica(100L, 1000L, 1L, 123, 0L, 0L, 

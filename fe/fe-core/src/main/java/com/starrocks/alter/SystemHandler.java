@@ -36,11 +36,7 @@ package com.starrocks.alter;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
-<<<<<<< HEAD
-=======
-import com.starrocks.catalog.BrokerMgr;
 import com.starrocks.catalog.CatalogRecycleBin;
->>>>>>> 1d1530ac5c ([Enhancement] Force drop decommissioned backend if all the tablets in recycle bin (#62781))
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.PartitionInfo;
