@@ -201,6 +201,20 @@ Status LakePrimaryIndex::apply_opcompaction(const TabletMetadata& metadata,
     return Status::OK();
 }
 
+Status LakePrimaryIndex::ingest_sst(const FileMetaPB& sst_meta, uint32_t rssid, int64_t version, bool is_compaction,
+                                    DelVectorPtr delvec) {
+    if (!_enable_persistent_index) {
+        return Status::OK();
+    }
+
+    auto* lake_persistent_index = dynamic_cast<LakePersistentIndex*>(_persistent_index.get());
+    if (lake_persistent_index != nullptr) {
+        return lake_persistent_index->ingest_sst(sst_meta, rssid, version, is_compaction, std::move(delvec));
+    } else {
+        return Status::InternalError("Persistent index is not a LakePersistentIndex.");
+    }
+}
+
 Status LakePrimaryIndex::commit(const TabletMetadataPtr& metadata, MetaFileBuilder* builder) {
     TRACE_COUNTER_SCOPE_LATENCY_US("primary_index_commit_latency_us");
     if (!_enable_persistent_index) {

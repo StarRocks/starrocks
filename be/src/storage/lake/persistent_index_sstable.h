@@ -47,7 +47,7 @@ public:
     ~PersistentIndexSstable() = default;
 
     Status init(std::unique_ptr<RandomAccessFile> rf, const PersistentIndexSstablePB& sstable_pb, Cache* cache,
-                bool need_filter = true);
+                TabletManager* tablet_mgr, int64_t tablet_id, bool need_filter = true, DelVectorPtr delvec = nullptr);
 
     static Status build_sstable(const phmap::btree_map<std::string, IndexValueWithVer, std::less<>>& map,
                                 WritableFile* wf, uint64_t* filesz);
@@ -67,11 +67,16 @@ public:
 
     size_t memory_usage() const;
 
+    // `_delvec` should only be modified in `init()` via publish version thread
+    // which is thread-safe. And after that, it should be immutable.
+    DelVectorPtr delvec() const { return _delvec; }
+
 private:
     std::unique_ptr<sstable::Table> _sst{nullptr};
     std::unique_ptr<sstable::FilterPolicy> _filter_policy{nullptr};
     std::unique_ptr<RandomAccessFile> _rf{nullptr};
     PersistentIndexSstablePB _sstable_pb;
+    DelVectorPtr _delvec;
 };
 
 class PersistentIndexSstableStreamBuilder {

@@ -62,6 +62,13 @@ Status LocalPrimaryKeyCompactionConflictResolver::segment_iterator(
     });
 }
 
+Status LocalPrimaryKeyCompactionConflictResolver::segment_iterator(
+        const std::function<Status(const CompactConflictResolveParams&, const std::vector<std::shared_ptr<Segment>>&,
+                                   const std::function<void(uint32_t, const DelVectorPtr&, uint32_t)>&)>& handler) {
+    return Status::NotSupported(
+            "LocalPrimaryKeyCompactionConflictResolver::segment_iterator without read data not supported");
+}
+
 Status LocalPrimaryKeyCompactionConflictResolver::breakpoint_check() {
     return _tablet->updates()->breakpoint_check();
 }

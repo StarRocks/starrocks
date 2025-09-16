@@ -15,6 +15,7 @@
 #pragma once
 
 #include "storage/lake/tablet_metadata.h"
+#include "storage/lake/types_fwd.h"
 #include "storage/primary_key_compaction_conflict_resolver.h"
 #include "storage/tablet_manager.h"
 
@@ -47,6 +48,11 @@ public:
     Schema generate_pkey_schema() override;
     Status segment_iterator(
             const std::function<Status(const CompactConflictResolveParams&, const std::vector<ChunkIteratorPtr>&,
+                                       const std::function<void(uint32_t, const DelVectorPtr&, uint32_t)>&)>& handler)
+            override;
+
+    Status segment_iterator(
+            const std::function<Status(const CompactConflictResolveParams&, const std::vector<SegmentPtr>&,
                                        const std::function<void(uint32_t, const DelVectorPtr&, uint32_t)>&)>& handler)
             override;
 
