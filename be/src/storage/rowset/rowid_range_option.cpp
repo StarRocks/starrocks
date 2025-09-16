@@ -51,4 +51,8 @@ RowidRangeOption::SegmentSplit RowidRangeOption::get_segment_rowid_range(const B
     return segment_it->second;
 }
 
+RowidRangeOptionPtr RowidRangeOption::clone() {
+    return std::make_shared<RowidRangeOption>(*this);
+}
+
 } // namespace starrocks

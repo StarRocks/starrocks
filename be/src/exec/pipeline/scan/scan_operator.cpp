@@ -23,6 +23,7 @@
 #include "exec/pipeline/limit_operator.h"
 #include "exec/pipeline/pipeline_builder.h"
 #include "exec/pipeline/scan/connector_scan_operator.h"
+#include "exec/pipeline/scan/morsel.h"
 #include "exec/pipeline/schedule/common.h"
 #include "exec/workgroup/scan_executor.h"
 #include "exec/workgroup/work_group.h"
@@ -490,6 +491,16 @@ Status ScanOperator::_trigger_next_scan(RuntimeState* state, int chunk_source_in
             }
 
             int64_t delta_cpu_time = chunk_source->get_cpu_time_spent() - prev_cpu_time;
+
+            Morsel* morsel = chunk_source->get_morsel();
+            if (morsel && dynamic_cast<PhysicalSplitScanMorsel*>(morsel) != nullptr) {
+                PhysicalSplitScanMorsel* physical_split_morsel = dynamic_cast<PhysicalSplitScanMorsel*>(morsel);
+                PhysicalSplitMorselQueue* queue = dynamic_cast<PhysicalSplitMorselQueue*>(_morsel_queue);
+                auto rowid_range = physical_split_morsel->get_filtered_scan_range();
+                queue->refine_scan_ranges(rowid_range);
+            }
+
+            // It might destory the chunk source
             _finish_chunk_source_task(state, chunk_source_index, delta_cpu_time,
                                       chunk_source->get_scan_rows() - prev_scan_rows,
                                       chunk_source->get_scan_bytes() - prev_scan_bytes);
