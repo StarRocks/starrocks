@@ -161,12 +161,16 @@ The attribute that represents group members. Valid values: `member` and `memberU
 
 Specifies how to extract the user identifier from the member attribute value. You can explicitly define an attribute (for example, `cn` or `uid`) or use a regular expression.
 
-**DN Matching Mechanism**:
+:::note
 
-- **When `ldap_user_search_attr` is configured**: Extracts the value of the specified attribute from group member DNs as usernames, uses login username as key during group lookup
-- **When `ldap_user_search_attr` is not configured**: Uses the complete DN directly as user identifier, uses the DN recorded during authentication as key during group lookup
+**DN Matching Mechanism**
+
+- **When `ldap_user_search_attr` is configured**, the system extracts the specified value from group member DNs and uses it as usernames, and uses login username as key during group search.
+- **When `ldap_user_search_attr` is not configured**, the system uses the complete DN directly as user identifier, and uses the DN recorded during authentication as key during group search.
 
 This design enables LDAP Group Provider to adapt to different LDAP environments, especially complex environments like Microsoft AD.
+
+:::
 
 #### `ldap_cache_arg` parameter group
 
@@ -267,8 +271,8 @@ PROPERTIES(
 ```
 
 In this example, since `ldap_user_search_attr` is not configured, the system will:
-1. During group cache construction, directly use the complete DN (such as `CN=John Doe,OU=Users,DC=company,DC=com`) as user identifier
-2. During group lookup, use the DN recorded during authentication as key to find user's groups
+1. During group cache construction, directly use the complete DN (for example, `CN=John Doe,OU=Users,DC=company,DC=com`) as user identifier.
+2. During group search, use the DN recorded during authentication as key to search user's groups.
 
 This approach is particularly suitable for Microsoft AD environments, as group members in AD may lack simple username attributes.
 
