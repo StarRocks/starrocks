@@ -21,12 +21,9 @@ import com.starrocks.analysis.SlotDescriptor;
 import com.starrocks.analysis.SlotId;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.catalog.Type;
-<<<<<<< HEAD
-=======
 import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.ast.expression.SlotRef;
 import com.starrocks.utframe.StarRocksTestBase;
->>>>>>> b8f5ba622d ([UT] Optimize FE tests' logging output (#62985))
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;

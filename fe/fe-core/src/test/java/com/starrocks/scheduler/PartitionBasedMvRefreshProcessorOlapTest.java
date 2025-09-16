@@ -1638,13 +1638,9 @@ public class PartitionBasedMvRefreshProcessorOlapTest extends MVTestBase {
                         MvTaskRunContext mvContext =
                                 ((PartitionBasedMvRefreshProcessor) taskRun.getProcessor()).getMvContext();
                         Assertions.assertTrue(mvContext.hasNextBatchPartition());
-<<<<<<< HEAD
                         PartitionBasedMvRefreshProcessor processor =
                                 (PartitionBasedMvRefreshProcessor) taskRun.getProcessor();
-                        System.out.println(processor.getMVTaskRunExtraMessage());
-=======
                         logSysInfo(processor.getMVTaskRunExtraMessage());
->>>>>>> b8f5ba622d ([UT] Optimize FE tests' logging output (#62985))
                         Assertions.assertEquals(Sets.newHashSet("p1"),
                                 processor.getMVTaskRunExtraMessage().getMvPartitionsToRefresh());
 
@@ -1668,13 +1664,9 @@ public class PartitionBasedMvRefreshProcessorOlapTest extends MVTestBase {
                         MvTaskRunContext mvContext =
                                 ((PartitionBasedMvRefreshProcessor) taskRun.getProcessor()).getMvContext();
                         Assertions.assertTrue(!mvContext.hasNextBatchPartition());
-<<<<<<< HEAD
                         PartitionBasedMvRefreshProcessor processor =
                                 (PartitionBasedMvRefreshProcessor) taskRun.getProcessor();
-                        System.out.println(processor.getMVTaskRunExtraMessage());
-=======
                         logSysInfo(processor.getMVTaskRunExtraMessage());
->>>>>>> b8f5ba622d ([UT] Optimize FE tests' logging output (#62985))
                         Assertions.assertEquals(Sets.newHashSet("p2"),
                                 processor.getMVTaskRunExtraMessage().getMvPartitionsToRefresh());
 
@@ -1762,13 +1754,9 @@ public class PartitionBasedMvRefreshProcessorOlapTest extends MVTestBase {
                                             ((PartitionBasedMvRefreshProcessor) taskRun.getProcessor()).getMvContext();
                                     Assertions.assertTrue(isEnd ? !mvContext.hasNextBatchPartition()
                                             : mvContext.hasNextBatchPartition());
-<<<<<<< HEAD
                                     PartitionBasedMvRefreshProcessor processor =
                                             (PartitionBasedMvRefreshProcessor) taskRun.getProcessor();
-                                    System.out.println(processor.getMVTaskRunExtraMessage());
-=======
                                     logSysInfo(processor.getMVTaskRunExtraMessage());
->>>>>>> b8f5ba622d ([UT] Optimize FE tests' logging output (#62985))
                                     Assertions.assertEquals(Sets.newHashSet(tt1Partition),
                                             processor.getMVTaskRunExtraMessage().getMvPartitionsToRefresh());
 
@@ -1847,13 +1835,9 @@ public class PartitionBasedMvRefreshProcessorOlapTest extends MVTestBase {
                         MvTaskRunContext mvContext =
                                 ((PartitionBasedMvRefreshProcessor) taskRun.getProcessor()).getMvContext();
                         Assertions.assertTrue(mvContext.hasNextBatchPartition());
-<<<<<<< HEAD
                         PartitionBasedMvRefreshProcessor processor =
                                 (PartitionBasedMvRefreshProcessor) taskRun.getProcessor();
-                        System.out.println(processor.getMVTaskRunExtraMessage());
-=======
                         logSysInfo(processor.getMVTaskRunExtraMessage());
->>>>>>> b8f5ba622d ([UT] Optimize FE tests' logging output (#62985))
                         Assertions.assertEquals(Sets.newHashSet("p0"),
                                 processor.getMVTaskRunExtraMessage().getMvPartitionsToRefresh());
 
@@ -1878,13 +1862,9 @@ public class PartitionBasedMvRefreshProcessorOlapTest extends MVTestBase {
                         MvTaskRunContext mvContext =
                                 ((PartitionBasedMvRefreshProcessor) taskRun.getProcessor()).getMvContext();
                         Assertions.assertTrue(!mvContext.hasNextBatchPartition());
-<<<<<<< HEAD
                         PartitionBasedMvRefreshProcessor processor =
                                 (PartitionBasedMvRefreshProcessor) taskRun.getProcessor();
-                        System.out.println(processor.getMVTaskRunExtraMessage());
-=======
                         logSysInfo(processor.getMVTaskRunExtraMessage());
->>>>>>> b8f5ba622d ([UT] Optimize FE tests' logging output (#62985))
                         Assertions.assertEquals(Sets.newHashSet("p1"),
                                 processor.getMVTaskRunExtraMessage().getMvPartitionsToRefresh());
 
@@ -1974,13 +1954,8 @@ public class PartitionBasedMvRefreshProcessorOlapTest extends MVTestBase {
                                             tableSnapshotInfo.getRefreshedPartitionInfos().keySet());
 
                                     MVTaskRunExtraMessage extraMessage = processor.getMVTaskRunExtraMessage();
-<<<<<<< HEAD
-                                    System.out.println(processor.getMVTaskRunExtraMessage());
-                                    Assertions.assertEquals(Sets.newHashSet("p202107_202108"),
-=======
                                     logSysInfo(processor.getMVTaskRunExtraMessage());
-                                    Assertions.assertEquals(Sets.newHashSet("p202107_202108", "p202108_202109"),
->>>>>>> b8f5ba622d ([UT] Optimize FE tests' logging output (#62985))
+                                    Assertions.assertEquals(Sets.newHashSet("p202107_202108"),
                                             extraMessage.getMvPartitionsToRefresh());
                                     Assertions.assertEquals(Sets.newHashSet("p0", "p1", "p2"),
                                             extraMessage.getBasePartitionsToRefreshMap().get("mock_tbl"));
