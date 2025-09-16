@@ -1059,9 +1059,23 @@ StatusOr<CompactionTaskPtr> TabletManager::compact(CompactionTaskContext* contex
 // Store a copy of the tablet schema in a separate schema file named SCHEMA_{indexId}.
 Status TabletManager::create_schema_file(int64_t tablet_id, const TabletSchemaPB& schema_pb) {
     auto schema_file_path = _location_provider->schema_file_location(tablet_id, schema_pb.id());
-    VLOG(3) << "Creating schema file of id " << schema_pb.id() << " for tablet " << tablet_id;
-    ProtobufFile file(schema_file_path);
-    RETURN_IF_ERROR(file.save(schema_pb));
+
+   // Check if schema file already exists to avoid duplicate creation
+    std::shared_ptr<FileSystem> fs;
+    ASSIGN_OR_RETURN(fs, FileSystem::CreateSharedFromString(schema_file_path));
+    auto st = fs->path_exists(schema_file_path);
+    if (st.ok()) {
+        // File already exists, just update the in-memory cache
+        VLOG(3) << "Schema file of id " << schema_pb.id() << " for tablet " << tablet_id
+                << " already exists, skipping creation";
+    } else if (st.is_not_found()) {
+        VLOG(3) << "Creating schema file of id " << schema_pb.id() << " for tablet " << tablet_id;
+        ProtobufFile file(schema_file_path);
+        RETURN_IF_ERROR(file.save(schema_pb));
+    } else {
+        // Other error occurred
+        return st;
+    }
 
     // Save the schema into the in-memory cache
     auto [schema, inserted] = GlobalTabletSchemaMap::Instance()->emplace(schema_pb);
