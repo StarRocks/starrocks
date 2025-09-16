@@ -1294,7 +1294,7 @@ public class ConnectContext {
     }
 
     public boolean enableSSL() throws IOException {
-        SSLChannel sslChannel = new SSLChannelImp(SSLContextLoader.getSslContext().createSSLEngine(), mysqlChannel);
+        SSLChannel sslChannel = new SSLChannelImp(SSLContextLoader.newServerEngine(), mysqlChannel);
         if (!sslChannel.init()) {
             return false;
         } else {
