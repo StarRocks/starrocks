@@ -320,7 +320,12 @@ public class LoadMgr implements Writable, MemoryTrackable {
                 .build());
         if (isJobExpired(job, System.currentTimeMillis())) {
             LOG.info("remove expired job: {}", job);
-            unprotectedRemoveJobReleatedMeta(job);
+            writeLock();
+            try {
+                unprotectedRemoveJobReleatedMeta(job);
+            } finally {
+                writeUnlock();
+            }
         }
     }
 
@@ -336,7 +341,12 @@ public class LoadMgr implements Writable, MemoryTrackable {
 
         if (isJobExpired(job, System.currentTimeMillis())) {
             LOG.info("remove expired job: {}", job);
-            unprotectedRemoveJobReleatedMeta(job);
+            writeLock();
+            try {
+                unprotectedRemoveJobReleatedMeta(job);
+            } finally {
+                writeUnlock();
+            }
         }
     }
 
@@ -381,14 +391,15 @@ public class LoadMgr implements Writable, MemoryTrackable {
         // 2. remove from dbIdToLabelToLoadJobs
         Map<String, List<LoadJob>> labelToLoadJobs = dbIdToLabelToLoadJobs.get(dbId);
         List<LoadJob> sameLabelJobs = labelToLoadJobs.get(label);
-        sameLabelJobs.remove(job);
-        if (sameLabelJobs.isEmpty()) {
-            labelToLoadJobs.remove(label);
+        if (sameLabelJobs != null) {
+            sameLabelJobs.remove(job);
+            if (sameLabelJobs.isEmpty()) {
+                labelToLoadJobs.remove(label);
+            }
+            if (labelToLoadJobs.isEmpty()) {
+                dbIdToLabelToLoadJobs.remove(dbId);
+            }
         }
-        if (labelToLoadJobs.isEmpty()) {
-            dbIdToLabelToLoadJobs.remove(dbId);
-        }
-
         // 3. remove spark launcher log
         if (job instanceof SparkLoadJob) {
             ((SparkLoadJob) job).clearSparkLauncherLog();
