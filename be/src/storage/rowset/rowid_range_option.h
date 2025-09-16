@@ -24,6 +24,9 @@ namespace starrocks {
 class BaseRowset;
 class Segment;
 
+struct RowidRangeOption;
+using RowidRangeOptionPtr = std::shared_ptr<RowidRangeOption>;
+
 // It represents a specific rowid range on the segment with `segment_id` of the rowset with `rowset_id`.
 struct RowidRangeOption {
 public:
@@ -39,6 +42,8 @@ public:
 
     bool contains_rowset(const BaseRowset* rowset) const;
     SegmentSplit get_segment_rowid_range(const BaseRowset* rowset, const Segment* segment);
+
+    RowidRangeOptionPtr clone();
 
 public:
     using SetgmentRowidRangeMap = std::unordered_map<uint64_t, SegmentSplit>;

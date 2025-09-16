@@ -84,8 +84,10 @@ struct TabletReaderParams {
     ColumnIdToGlobalDictMap* global_dictmaps = &EMPTY_GLOBAL_DICTMAPS;
     const std::unordered_set<uint32_t>* unused_output_column_ids = &EMPTY_FILTERED_COLUMN_IDS;
 
+    // NOTE: PhysicalSplitMorsel would pass the raneg of morsel to here
     RowidRangeOptionPtr rowid_range_option = nullptr;
     ShortKeyRangesOptionPtr short_key_ranges_option = nullptr;
+    RowidRangeOptionPtr filtered_scan_ranges = nullptr;
 
     bool sorted_by_keys_per_tablet = false;
     RuntimeScanRangePruner runtime_range_pruner;

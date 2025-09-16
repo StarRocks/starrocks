@@ -159,6 +159,7 @@ public:
 
     size_t covered_ranges(size_t size) const;
 
+    void seek(T next);
     void skip(T size);
 
     size_t remaining_rows() const;
@@ -484,6 +485,19 @@ inline size_t SparseRangeIterator<T>::covered_ranges(size_t size) const {
     }
     i += (end > ranges[i].begin());
     return i - _index;
+}
+
+template <typename T>
+inline void SparseRangeIterator<T>::seek(T next) {
+    _next_rowid = next;
+    const std::vector<Range<T>>& ranges = _range->_ranges;
+    _index = 0;
+    while (_index < ranges.size() && ranges[_index].end() <= _next_rowid) {
+        _index++;
+    }
+    if (_index < ranges.size()) {
+        _next_rowid = std::max(_next_rowid, ranges[_index].begin());
+    }
 }
 
 template <typename T>

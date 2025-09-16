@@ -68,8 +68,16 @@ bool ScanMorsel::has_more_scan_ranges(const std::vector<TScanRangeParams>& scan_
     return has_more;
 }
 
+PhysicalSplitScanMorsel::PhysicalSplitScanMorsel(int32_t plan_node_id, const TScanRange& scan_range,
+                                                 RowidRangeOptionPtr rowid_range_option)
+        : ScanMorsel(plan_node_id, scan_range) {
+    _filtered_scan_range = rowid_range_option->clone();
+    _rowid_range_option = std::move(rowid_range_option);
+}
+
 void PhysicalSplitScanMorsel::init_tablet_reader_params(TabletReaderParams* params) {
     params->rowid_range_option = _rowid_range_option;
+    params->filtered_scan_ranges = _filtered_scan_range;
 }
 
 void LogicalSplitScanMorsel::init_tablet_reader_params(TabletReaderParams* params) {
@@ -373,11 +381,11 @@ StatusOr<RowidRangeOptionPtr> PhysicalSplitMorselQueue::_try_get_split_from_sing
 
         SparseRange<> taken_range;
         _segment_range_iter.next_range(_splitted_scan_rows, &taken_range);
-        _num_segment_rest_rows -= taken_range.span_size();
-        if (_num_segment_rest_rows < _splitted_scan_rows) {
+        // _num_segment_rest_rows -= taken_range.span_size();
+        if (_segment_range_iter.remaining_rows() < _splitted_scan_rows) {
             // If there are too few rows left in the segment, take them all this time.
             _segment_range_iter.next_range(_splitted_scan_rows, &taken_range);
-            _num_segment_rest_rows = 0;
+            // _num_segment_rest_rows = 0;
         }
 
         VLOG_ROW << "PhysicalSplitMorselQueue::_try_get_split_from_single_tablet "
@@ -458,16 +466,31 @@ rowid_t PhysicalSplitMorselQueue::_upper_bound_ordinal(Segment* segment, const S
 }
 
 BaseRowset* PhysicalSplitMorselQueue::_cur_rowset() {
+    if (_tablet_idx >= _tablet_rowsets.size()) {
+        return nullptr;
+    }
+    if (_rowset_idx >= _tablet_rowsets[_tablet_idx].size()) {
+        return nullptr;
+    }
     return _tablet_rowsets[_tablet_idx][_rowset_idx].get();
 }
 
 Segment* PhysicalSplitMorselQueue::_cur_segment() {
+    if (_cur_rowset() == nullptr) {
+        return nullptr;
+    }
     const auto& segments = _cur_rowset()->get_segments();
+    if (_segment_idx >= segments.size()) {
+        return nullptr;
+    }
     return _segment_idx >= segments.size() ? nullptr : segments[_segment_idx].get();
 }
 
 bool PhysicalSplitMorselQueue::_is_last_split_of_current_morsel() {
-    if (_num_segment_rest_rows > 0) {
+    // if (_num_segment_rest_rows > 0) {
+    //     return false;
+    // }
+    if (_segment_range_iter.has_more()) {
         return false;
     }
 
@@ -496,7 +519,7 @@ bool PhysicalSplitMorselQueue::_is_last_split_of_current_morsel() {
 }
 
 bool PhysicalSplitMorselQueue::_next_segment() {
-    DCHECK(_num_segment_rest_rows == 0);
+    // DCHECK(_num_segment_rest_rows == 0);
     if (!_has_init_any_segment) {
         _has_init_any_segment = true;
     } else {
@@ -538,7 +561,7 @@ Status PhysicalSplitMorselQueue::_init_segment() {
         RETURN_IF_ERROR(_cur_rowset()->load());
     }
 
-    _num_segment_rest_rows = 0;
+    // _num_segment_rest_rows = 0;
     _segment_scan_range.clear();
 
     auto* segment = _cur_segment();
@@ -570,9 +593,39 @@ Status PhysicalSplitMorselQueue::_init_segment() {
     }
 
     _segment_range_iter = _segment_scan_range.new_iterator();
-    _num_segment_rest_rows = _segment_scan_range.span_size();
+    // _num_segment_rest_rows = _segment_scan_range.span_size();
 
     return Status::OK();
+}
+
+void PhysicalSplitMorselQueue::refine_scan_ranges(const RowidRangeOptionPtr& rowid_range) {
+    std::lock_guard<std::mutex> lock(_mutex);
+
+    auto rowset = _cur_rowset();
+    auto segment = _cur_segment();
+    if (rowset == nullptr || segment == nullptr) return;
+    RowidRangeOption::SegmentSplit split = rowid_range->get_segment_rowid_range(rowset, segment);
+    if (split.is_first_split_of_segment && split.row_id_range) {
+        // Calculate skip based on original range before modification
+        size_t rowid = _segment_range_iter.begin();
+        size_t prev_remain = _segment_range_iter.remaining_rows();
+
+        // Apply the rowid range filter
+        _segment_scan_range &= *split.row_id_range;
+
+        // Create new iterator and skip already processed rows
+        _segment_range_iter = _segment_scan_range.new_iterator();
+        _segment_range_iter.seek(rowid);
+
+        // Update remaining rows and calculate delta
+        // size_t prev = _num_segment_rest_rows;
+        // _num_segment_rest_rows = _segment_range_iter.remaining_rows();
+        // size_t delta = prev - _num_segment_rest_rows;
+        size_t delta = prev_remain - _segment_range_iter.remaining_rows();
+
+        LOG(INFO) << fmt::format("refine_scan_ranges {}/{}: reduced {} rows", rowset->rowset_id().to_string(),
+                                 segment->id(), delta);
+    }
 }
 
 void LogicalSplitMorselQueue::set_key_ranges(const std::vector<std::unique_ptr<OlapScanRange>>& key_ranges) {

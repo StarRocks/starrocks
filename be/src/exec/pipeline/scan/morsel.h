@@ -199,8 +199,7 @@ private:
 
 class PhysicalSplitScanMorsel final : public ScanMorsel {
 public:
-    PhysicalSplitScanMorsel(int32_t plan_node_id, const TScanRange& scan_range, RowidRangeOptionPtr rowid_range_option)
-            : ScanMorsel(plan_node_id, scan_range), _rowid_range_option(std::move(rowid_range_option)) {}
+    PhysicalSplitScanMorsel(int32_t plan_node_id, const TScanRange& scan_range, RowidRangeOptionPtr rowid_range_option);
 
     ~PhysicalSplitScanMorsel() override = default;
 
@@ -212,9 +211,11 @@ public:
     }
 
     RowidRangeOptionPtr get_rowid_range_option() { return _rowid_range_option; }
+    RowidRangeOptionPtr get_filtered_scan_range() { return _filtered_scan_range; }
 
 private:
     RowidRangeOptionPtr _rowid_range_option;
+    RowidRangeOptionPtr _filtered_scan_range;
 };
 
 class LogicalSplitScanMorsel final : public ScanMorsel {
@@ -501,6 +502,13 @@ public:
     bool empty() const override { return _unget_morsel == nullptr && _tablet_idx >= _tablets.size(); }
     StatusOr<MorselPtr> try_get() override;
 
+    // The initial scan ranges encompass the entire dataset without any predicate filtering.
+    // After processing the first morsel, scan ranges can be refined by intersecting with filtered scan ranges.
+    // This refinement achieves the following:
+    // - Prevents redundant scans on the same segment by ensuring subsequent scans are filtered based on previous results.
+    // - Mitigates data skew caused by selective predicates (e.g., on key columns), which could otherwise result in many empty morsels.
+    void refine_scan_ranges(const RowidRangeOptionPtr& rowid_range);
+
     std::string name() const override { return "physical_split_morsel_queue"; }
     Type type() const override { return PHYSICAL_SPLIT; }
 
@@ -540,8 +548,24 @@ private:
     std::vector<SeekRange> _tablet_seek_ranges;
     SparseRange<> _segment_scan_range;
     SparseRangeIterator<> _segment_range_iter;
+
+    enum SegmentState {
+        Init,     // Is executing the first split
+        Refined,  // Already executed the first split
+        Finished, // Already consumed
+    };
+
+    struct RefinedSegment {
+        SegmentState state;
+        bool is_first_split;
+        SparseRange<> scan_range;
+        SparseRangeIterator<> range_iter;
+    };
+
+    std::deque<RefinedSegment> _refined_segments;
+
     // The number of unprocessed rows of the current segment.
-    size_t _num_segment_rest_rows = 0;
+    // size_t _num_segment_rest_rows = 0;
 
     MemPool _mempool;
 };
