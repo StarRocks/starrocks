@@ -37,11 +37,15 @@ package com.starrocks.alter;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.BrokerMgr;
+import com.starrocks.catalog.CatalogRecycleBin;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.PartitionInfo;
+import com.starrocks.catalog.Replica;
+import com.starrocks.catalog.Replica.ReplicaState;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TabletInvertedIndex;
+import com.starrocks.catalog.TabletMeta;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorReport;
@@ -82,6 +86,7 @@ import org.apache.logging.log4j.Logger;
 
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -93,6 +98,8 @@ import java.util.stream.Collectors;
  */
 public class SystemHandler extends AlterHandler {
     private static final Logger LOG = LogManager.getLogger(SystemHandler.class);
+    private static final long RECYCLE_BIN_CHECK_INTERVAL = 10 * 60 * 1000L; // 10 min
+    private long lastRecycleBinCheckTime = 0L;
 
     public SystemHandler() {
         super("cluster");
@@ -355,11 +362,15 @@ public class SystemHandler extends AlterHandler {
             }
 
             List<Long> backendTabletIds = invertedIndex.getTabletIdsByBackendId(beId);
-            if (backendTabletIds.isEmpty()) {
+            if (canDropBackend(backendTabletIds)) {
                 if (Config.drop_backend_after_decommission) {
                     try {
                         systemInfoService.dropBackend(beId);
-                        LOG.info("no tablet on decommission backend {}, drop it", beId);
+                        if (backendTabletIds.isEmpty()) {
+                            LOG.info("no tablet on decommission backend {}, drop it", beId);
+                        } else {
+                            LOG.info("force drop decommission backend {}, the tablets on it are all in recycle bin", beId);
+                        }
                     } catch (DdlException e) {
                         // does not matter, maybe backend not exists
                         LOG.info("backend {} drop failed after decommission {}", beId, e.getMessage());
@@ -371,6 +382,75 @@ public class SystemHandler extends AlterHandler {
                         backendTabletIds.stream().limit(20).collect(Collectors.toList()));
             }
         }
+    }
+
+    /**
+     * If the following conditions are met, it can be forced to drop the backend
+     * 1. All the tablets are in recycle bin.
+     * 2. All the replication number of tablets is bigger than the retained backend number
+     *    (which means there is no backend to migrate, so decommission is blocked),
+     *    and at least one healthy replica on retained backend.
+     * 3. There are at least 1 available backend.
+     */
+    protected boolean canDropBackend(List<Long> backendTabletIds) {
+        if (backendTabletIds.isEmpty()) {
+            return true;
+        }
+
+        // There is only on replica for shared data mode, so tablets can be migrated to other backends.
+        if (RunMode.isSharedDataMode()) {
+            return false;
+        }
+
+        if (lastRecycleBinCheckTime + RECYCLE_BIN_CHECK_INTERVAL > System.currentTimeMillis()) {
+            return false;
+        }
+        lastRecycleBinCheckTime = System.currentTimeMillis();
+
+        SystemInfoService systemInfoService = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
+        int availableBECnt =  systemInfoService.getAvailableBackends().size();
+        if (availableBECnt < 1) {
+            return false;
+        }
+
+        TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentState().getTabletInvertedIndex();
+        CatalogRecycleBin recycleBin = GlobalStateMgr.getCurrentState().getRecycleBin();
+        List<Backend> retainedBackends = systemInfoService.getRetainedBackends();
+        int retainedHostCnt = (int) retainedBackends.stream().map(Backend::getHost).distinct().count();
+        Set<Long> retainedBackendIds = retainedBackends.stream().map(Backend::getId).collect(Collectors.toSet());
+        for (Long tabletId : backendTabletIds) {
+            TabletMeta tabletMeta = invertedIndex.getTabletMeta(tabletId);
+            if (tabletMeta == null) {
+                continue;
+            }
+
+            if (!recycleBin.isTabletInRecycleBin(tabletMeta)) {
+                return false;
+            }
+
+            Map<Long, Replica> replicas = invertedIndex.getReplicas(tabletId);
+            if (replicas == null) {
+                continue;
+            }
+            // It means the replica can be migrated to retained backends.
+            if (replicas.size() <= retainedHostCnt) {
+                return false;
+            }
+
+            // Make sure there is at least one normal replica on retained backends.
+            boolean hasNormalReplica = false;
+            for (Replica replica : replicas.values()) {
+                if (replica.getState() == ReplicaState.NORMAL && retainedBackendIds.contains(replica.getBackendId())) {
+                    hasNormalReplica = true;
+                    break;
+                }
+            }
+            if (!hasNormalReplica) {
+                return false;
+            }
+        }
+
+        return true;
     }
 
     @Override
