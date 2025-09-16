@@ -2027,7 +2027,7 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
 
     @Override
 
-    public ParseNode visitSubmitTaskStatement(StarRocksParser.SubmitTaskStatementContext context) {
+    public ParseNode visitSubmitTaskStatement(com.starrocks.sql.parser.StarRocksParser.SubmitTaskStatementContext context) {
         if (context.RECOMMENDATIONS() != null) {
             String name = ((StringLiteral) visit(context.taskName)).getStringValue();
             TableName tableName = qualifiedNameToTableName(getQualifiedName(context.qualifiedName()));
@@ -2892,7 +2892,8 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
 
     // ------------------------------------------- Manual Snapshot Statement -------------------------------------------
     @Override
-    public ParseNode visitCreateClusterSnapshotStatement(StarRocksParser.CreateClusterSnapshotStatementContext context) {
+    public ParseNode visitCreateClusterSnapshotStatement(
+            com.starrocks.sql.parser.StarRocksParser.CreateClusterSnapshotStatementContext context) {
         String snapshotName = getIdentifierName(context.snapshotName);
         boolean ifNotExists = context.IF() != null;
         String comment = context.comment() != null ? ((StringLiteral) visit(context.comment())).getStringValue() : null;
@@ -2904,7 +2905,8 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
     }
 
     @Override
-    public ParseNode visitDropClusterSnapshotStatement(StarRocksParser.DropClusterSnapshotStatementContext context) {
+    public ParseNode visitDropClusterSnapshotStatement(
+            com.starrocks.sql.parser.StarRocksParser.DropClusterSnapshotStatementContext context) {
         String snapshotName = getIdentifierName(context.snapshotName);
         boolean ifExists = context.IF() != null;
         return new DropClusterSnapshotStmt(snapshotName, ifExists, createPos(context));
@@ -6837,9 +6839,9 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
     }
 
     @Override
-    public ParseNode visitGrantRoleToGroup(StarRocksParser.GrantRoleToGroupContext context) {
+    public ParseNode visitGrantRoleToGroup(com.starrocks.sql.parser.StarRocksParser.GrantRoleToGroupContext context) {
         List<String> roleNameList = new ArrayList<>();
-        for (StarRocksParser.IdentifierOrStringContext oneContext : context.identifierOrStringList()
+        for (com.starrocks.sql.parser.StarRocksParser.IdentifierOrStringContext oneContext : context.identifierOrStringList()
                 .identifierOrString()) {
             roleNameList.add(((Identifier) visit(oneContext)).getValue());
         }
@@ -6849,7 +6851,7 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
     }
 
     @Override
-    public ParseNode visitGrantRoleToRole(StarRocksParser.GrantRoleToRoleContext context) {
+    public ParseNode visitGrantRoleToRole(com.starrocks.sql.parser.StarRocksParser.GrantRoleToRoleContext context) {
         List<String> roleNameList = new ArrayList<>();
         for (com.starrocks.sql.parser.StarRocksParser.IdentifierOrStringContext oneContext : context.identifierOrStringList()
                 .identifierOrString()) {
@@ -6872,9 +6874,9 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
     }
 
     @Override
-    public ParseNode visitRevokeRoleFromGroup(StarRocksParser.RevokeRoleFromGroupContext context) {
+    public ParseNode visitRevokeRoleFromGroup(com.starrocks.sql.parser.StarRocksParser.RevokeRoleFromGroupContext context) {
         List<String> roleNameList = new ArrayList<>();
-        for (StarRocksParser.IdentifierOrStringContext oneContext : context.identifierOrStringList()
+        for (com.starrocks.sql.parser.StarRocksParser.IdentifierOrStringContext oneContext : context.identifierOrStringList()
                 .identifierOrString()) {
             roleNameList.add(((Identifier) visit(oneContext)).getValue());
         }
@@ -6884,7 +6886,7 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
     }
 
     @Override
-    public ParseNode visitRevokeRoleFromRole(StarRocksParser.RevokeRoleFromRoleContext context) {
+    public ParseNode visitRevokeRoleFromRole(com.starrocks.sql.parser.StarRocksParser.RevokeRoleFromRoleContext context) {
         List<String> roleNameList = new ArrayList<>();
         for (com.starrocks.sql.parser.StarRocksParser.IdentifierOrStringContext oneContext : context.identifierOrStringList()
                 .identifierOrString()) {
@@ -6994,8 +6996,8 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
                 .map(user -> {
                     UserRef userRef = (UserRef) visit(user);
                     // Create a new UserRef with isExternal based on the EXTERNAL keyword
-                    return new UserRef(userRef.getUser(), userRef.getHost(), 
-                                     userRef.isDomain(), isExternal, userRef.getPos());
+                    return new UserRef(userRef.getUser(), userRef.getHost(),
+                            userRef.isDomain(), isExternal, userRef.getPos());
                 }).collect(toList());
         GrantRevokePrivilegeObjects objects = new GrantRevokePrivilegeObjects();
         objects.setUserPrivilegeObjectList(users);
@@ -7013,8 +7015,8 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
                 .map(user -> {
                     UserRef userRef = (UserRef) visit(user);
                     // Create a new UserRef with isExternal based on the EXTERNAL keyword
-                    return new UserRef(userRef.getUser(), userRef.getHost(), 
-                                     userRef.isDomain(), isExternal, userRef.getPos());
+                    return new UserRef(userRef.getUser(), userRef.getHost(),
+                            userRef.isDomain(), isExternal, userRef.getPos());
                 }).collect(toList());
         GrantRevokePrivilegeObjects objects = new GrantRevokePrivilegeObjects();
         objects.setUserPrivilegeObjectList(users);
@@ -9088,13 +9090,13 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
 
     // tunespace
     @Override
-    public ParseNode visitCreateTunespaceStatement(StarRocksParser.CreateTunespaceStatementContext ctx) {
+    public ParseNode visitCreateTunespaceStatement(com.starrocks.sql.parser.StarRocksParser.CreateTunespaceStatementContext ctx) {
         TableName tableName = qualifiedNameToTableName(getQualifiedName(ctx.qualifiedName()));
         return new CreateTunespaceStmt(tableName, ctx.IF() != null);
     }
 
     @Override
-    public ParseNode visitDropTunespaceStatement(StarRocksParser.DropTunespaceStatementContext ctx) {
+    public ParseNode visitDropTunespaceStatement(com.starrocks.sql.parser.StarRocksParser.DropTunespaceStatementContext ctx) {
         boolean ifExists = ctx.IF() != null && ctx.EXISTS() != null;
         QualifiedName qualifiedName = getQualifiedName(ctx.qualifiedName());
         TableName targetTableName = qualifiedNameToTableName(qualifiedName);
@@ -9102,7 +9104,8 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
     }
 
     @Override
-    public ParseNode visitTruncateTunespaceStatement(StarRocksParser.TruncateTunespaceStatementContext ctx) {
+    public ParseNode visitTruncateTunespaceStatement(
+            com.starrocks.sql.parser.StarRocksParser.TruncateTunespaceStatementContext ctx) {
         QualifiedName qualifiedName = getQualifiedName(ctx.qualifiedName());
         TableName targetTableName = qualifiedNameToTableName(qualifiedName);
         Token start = ctx.start;
@@ -9112,7 +9115,7 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
     }
 
     @Override
-    public ParseNode visitAlterTunespaceStatement(StarRocksParser.AlterTunespaceStatementContext ctx) {
+    public ParseNode visitAlterTunespaceStatement(com.starrocks.sql.parser.StarRocksParser.AlterTunespaceStatementContext ctx) {
         TableName tableName = qualifiedNameToTableName(getQualifiedName(ctx.qualifiedName()));
         if (ctx.alterTunespaceClause().APPEND() != null) {
             String queryName = Optional.ofNullable(ctx.alterTunespaceClause().queryName)
@@ -9147,7 +9150,8 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
     }
 
     @Override
-    public ParseNode visitShowRecommendationsStatement(StarRocksParser.ShowRecommendationsStatementContext ctx) {
+    public ParseNode visitShowRecommendationsStatement(
+            com.starrocks.sql.parser.StarRocksParser.ShowRecommendationsStatementContext ctx) {
         ShowRecommendationsStmt stmt;
         if (ctx.taskName != null) {
             String name = ((StringLiteral) visit(ctx.taskName)).getStringValue();
@@ -9204,7 +9208,7 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
         return new FunctionArgsDef(typeDefList, isVariadic);
     }
 
-    protected String getIdentifierName(StarRocksParser.IdentifierContext context) {
+    protected String getIdentifierName(com.starrocks.sql.parser.StarRocksParser.IdentifierContext context) {
         return ((Identifier) visit(context)).getValue();
     }
 
@@ -9212,7 +9216,7 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
         return qualifiedNameToTableName(getQualifiedName(context));
     }
 
-    protected QualifiedName getQualifiedName(StarRocksParser.QualifiedNameContext context) {
+    protected QualifiedName getQualifiedName(com.starrocks.sql.parser.StarRocksParser.QualifiedNameContext context) {
         List<String> parts = new ArrayList<>();
         NodePosition pos = createPos(context);
         for (ParseTree c : context.children) {
@@ -9485,7 +9489,7 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
         }
     }
 
-    protected Map<String, String> getProperties(StarRocksParser.PropertiesContext context) {
+    protected Map<String, String> getProperties(com.starrocks.sql.parser.StarRocksParser.PropertiesContext context) {
         Map<String, String> properties = new HashMap<>();
         if (context != null && context.property() != null) {
             List<Property> propertyList = visit(context.property(), Property.class);

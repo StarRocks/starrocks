@@ -14,7 +14,7 @@
 
 package com.starrocks.http.rest;
 
-import com.starrocks.authentication.AuthenticationContext;
+import com.starrocks.authentication.AccessControlContext;
 import com.starrocks.authentication.AuthenticationException;
 import com.starrocks.authentication.OAuth2AuthenticationProvider;
 import com.starrocks.authentication.OAuth2Context;
@@ -42,7 +42,7 @@ public class OAuth2Test {
     private OAuth2Context oAuth2Context;
     private OAuth2AuthenticationProvider oAuth2Provider;
     private OAuth2Action oAuth2Action;
-    private AuthenticationContext authContext;
+    private AccessControlContext authContext;
     private UserIdentity userIdentity;
 
     @BeforeEach
@@ -65,7 +65,7 @@ public class OAuth2Test {
 
         oAuth2Provider = new OAuth2AuthenticationProvider(oAuth2Context);
         oAuth2Action = new OAuth2Action(null);
-        authContext = new AuthenticationContext();
+        authContext = new AccessControlContext();
         userIdentity = UserIdentity.createEphemeralUserIdent("testuser", "localhost");
     }
 

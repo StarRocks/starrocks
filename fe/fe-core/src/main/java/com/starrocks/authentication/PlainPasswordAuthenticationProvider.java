@@ -38,7 +38,7 @@ public class PlainPasswordAuthenticationProvider implements AuthenticationProvid
     }
 
     public void authenticate(
-            AuthenticationContext authContext,
+            AccessControlContext authContext,
             UserIdentity userIdentity,
             byte[] authResponse) throws AuthenticationException {
         AuthenticationMgrEPack authenticationMgr =
@@ -97,7 +97,7 @@ public class PlainPasswordAuthenticationProvider implements AuthenticationProvid
     }
 
     @Override
-    public byte[] authSwitchRequestPacket(AuthenticationContext authContext, String user, String host)
+    public byte[] authSwitchRequestPacket(AccessControlContext authContext, String user, String host)
             throws AuthenticationException {
         return authContext.getAuthDataSalt();
     }

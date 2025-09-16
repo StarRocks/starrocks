@@ -18,6 +18,7 @@ import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Joiner;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
+import com.starrocks.authentication.UserIdentityUtils;
 import com.starrocks.authorization.AccessDeniedException;
 import com.starrocks.authorization.PrivilegeType;
 import com.starrocks.catalog.Database;
@@ -73,7 +74,7 @@ public class SysFeLocks {
     public static TFeLocksRes listLocks(TFeLocksReq request, boolean authenticate) throws TException {
         TAuthInfo auth = request.getAuth_info();
         ConnectContext context = new ConnectContext();
-        context.setAuthInfoFromThrift(auth);
+        UserIdentityUtils.setAuthInfoFromThrift(context, auth);
 
         // authorize
         try {

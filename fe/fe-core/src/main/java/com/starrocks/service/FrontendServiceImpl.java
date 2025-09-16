@@ -453,15 +453,15 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             catalogName = params.getCatalog_name();
         }
 
-        ConnectContext context = new ConnectContext();
         UserIdentity currentUser;
         if (params.isSetCurrent_user_ident()) {
-            context.setAuthInfoFromThrift(params.current_user_ident);
+            currentUser = UserIdentityUtils.fromThrift(params.current_user_ident);
         } else {
             currentUser = UserIdentity.createAnalyzedUserIdentWithIp(params.user, params.user_ip);
-            context.setCurrentUserIdentity(currentUser);
-            context.setCurrentRoleIds(currentUser);
         }
+        ConnectContext context = new ConnectContext();
+        context.setCurrentUserIdentity(currentUser);
+        context.setCurrentRoleIds(currentUser);
 
         MetadataMgr metadataMgr = GlobalStateMgr.getCurrentState().getMetadataMgr();
         List<String> dbNames = metadataMgr.listDbNames(context, catalogName);
@@ -509,14 +509,16 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             catalogName = params.getCatalog_name();
         }
 
-        ConnectContext context = new ConnectContext();
+        UserIdentity currentUser = null;
         if (params.isSetCurrent_user_ident()) {
-            context.setAuthInfoFromThrift(params.current_user_ident);
+            currentUser = UserIdentityUtils.fromThrift(params.current_user_ident);
         } else {
-            UserIdentity currentUser = UserIdentity.createAnalyzedUserIdentWithIp(params.user, params.user_ip);
-            context.setCurrentUserIdentity(currentUser);
-            context.setCurrentRoleIds(currentUser);
+            currentUser = UserIdentity.createAnalyzedUserIdentWithIp(params.user, params.user_ip);
         }
+
+        ConnectContext context = new ConnectContext();
+        context.setCurrentUserIdentity(currentUser);
+        context.setCurrentRoleIds(currentUser);
 
         MetadataMgr metadataMgr = GlobalStateMgr.getCurrentState().getMetadataMgr();
         Database db = metadataMgr.getDb(context, catalogName, params.db);
@@ -666,7 +668,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
     @Override
     public TColumnStatsUsageRes getColumnStatsUsage(TColumnStatsUsageReq request) throws TException {
         ConnectContext context = new ConnectContext();
-        context.setAuthInfoFromThrift(request.getAuth_info());
+        UserIdentityUtils.setAuthInfoFromThrift(context, request.getAuth_info());
 
         TColumnStatsUsageRes result = ColumnStatsUsageSystemTable.query(request);
         result.getItems().removeIf(item -> {
@@ -688,7 +690,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
     public TAnalyzeStatusRes getAnalyzeStatus(TAnalyzeStatusReq request) throws TException {
         TAnalyzeStatusRes res = AnalyzeStatusSystemTable.query(request);
         ConnectContext context = new ConnectContext();
-        context.setAuthInfoFromThrift(request.getAuth_info());
+        UserIdentityUtils.setAuthInfoFromThrift(context, request.getAuth_info());
 
         res.getItems().removeIf(item -> {
             try {
@@ -794,14 +796,15 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         result.setColumns(columns);
 
         // database privs should be checked in analysis phrase
-        ConnectContext context = new ConnectContext();
+        UserIdentity currentUser = null;
         if (params.isSetCurrent_user_ident()) {
-            context.setAuthInfoFromThrift(params.current_user_ident);
+            currentUser = UserIdentityUtils.fromThrift(params.current_user_ident);
         } else {
-            UserIdentity currentUser = UserIdentity.createAnalyzedUserIdentWithIp(params.user, params.user_ip);
-            context.setCurrentUserIdentity(currentUser);
-            context.setCurrentRoleIds(currentUser);
+            currentUser = UserIdentity.createAnalyzedUserIdentWithIp(params.user, params.user_ip);
         }
+        ConnectContext context = new ConnectContext();
+        context.setCurrentUserIdentity(currentUser);
+        context.setCurrentRoleIds(currentUser);
 
         long limit = params.isSetLimit() ? params.getLimit() : -1;
 
@@ -2941,7 +2944,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
     public TUserSecurityPolicyResponse increasePasswordErrorTimes(TUserSecurityPolicyRequest request)
             throws TException {
         ConnectContext context = new ConnectContext();
-        context.setAuthInfoFromThrift(request.authInfo.current_user_ident);
+        UserIdentityUtils.setAuthInfoFromThrift(context, request.authInfo.current_user_ident);
 
         AuthenticationMgr authenticationMgr =
                 GlobalStateMgr.getCurrentState().getAuthenticationMgr();
@@ -3183,7 +3186,8 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         TListConnectionResponse response = new TListConnectionResponse();
 
         ConnectContext context = new ConnectContext();
-        context.setAuthInfoFromThrift(request.getAuth_info());
+        UserIdentityUtils.setAuthInfoFromThrift(context, request.getAuth_info());
+
         String forUser = request.getFor_user();
         boolean showFull = request.isSetShow_full();
 

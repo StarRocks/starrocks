@@ -14,12 +14,11 @@
 
 package com.starrocks.epack.authentication;
 
-import com.starrocks.authentication.AuthenticationContext;
+import com.starrocks.authentication.AccessControlContext;
 import com.starrocks.authentication.AuthenticationException;
 import com.starrocks.authentication.AuthenticationProvider;
 import com.starrocks.authorization.AuthorizationMgr;
 import com.starrocks.catalog.UserIdentity;
-import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.LogManager;
@@ -128,7 +127,7 @@ public class LDAPAuthProviderForExternal implements AuthenticationProvider {
     }
 
     @Override
-    public void authenticate(AuthenticationContext context, UserIdentity userIdentity, byte[] authResponse)
+    public void authenticate(AccessControlContext context, UserIdentity userIdentity, byte[] authResponse)
             throws AuthenticationException {
         LDAPSecurityIntegration ldapSecurityIntegration = (LDAPSecurityIntegration) GlobalStateMgr.getCurrentState()
                 .getAuthenticationMgr().getSecurityIntegration(securityIntegrationName);
@@ -154,7 +153,7 @@ public class LDAPAuthProviderForExternal implements AuthenticationProvider {
                     userIdentity.getUser(), securityIntegrationName);
             throw new AuthenticationException("Cannot map any role ids for security integration");
         } else {
-            ConnectContext.get().setCurrentRoleIds(roleIds);
+            context.setCurrentRoleIds(roleIds);
         }
     }
 }

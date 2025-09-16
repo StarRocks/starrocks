@@ -15,11 +15,13 @@
 package com.starrocks.catalog.system.information;
 
 import com.google.common.collect.Lists;
+import com.starrocks.authentication.UserIdentityUtils;
 import com.starrocks.authorization.AccessDeniedException;
 import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Table;
+import com.starrocks.catalog.UserIdentity;
 import com.starrocks.catalog.system.SystemId;
 import com.starrocks.catalog.system.SystemTable;
 import com.starrocks.cluster.ClusterNamespace;
@@ -70,10 +72,9 @@ public class TasksSystemTable {
         TaskManager taskManager = globalStateMgr.getTaskManager();
         List<Task> taskList = taskManager.filterTasks(params);
         List<TTaskInfo> result = Lists.newArrayList();
-
-        ConnectContext context = new ConnectContext();
+        UserIdentity currentUser = null;
         if (params.isSetCurrent_user_ident()) {
-            context.setAuthInfoFromThrift(params.current_user_ident);
+            currentUser = UserIdentityUtils.fromThrift(params.current_user_ident);
         }
 
         for (Task task : taskList) {
@@ -83,7 +84,11 @@ public class TasksSystemTable {
             }
 
             try {
-                Authorizer.checkAnyActionOnOrInDb(context, InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME, task.getDbName());
+                ConnectContext context = new ConnectContext();
+                context.setCurrentUserIdentity(currentUser);
+                context.setCurrentRoleIds(currentUser);
+                Authorizer.checkAnyActionOnOrInDb(context, InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
+                        task.getDbName());
             } catch (AccessDeniedException e) {
                 continue;
             }

@@ -14,6 +14,7 @@
 
 package com.starrocks.catalog.system.sys;
 
+import com.starrocks.authentication.UserIdentityUtils;
 import com.starrocks.authorization.AccessDeniedException;
 import com.starrocks.catalog.BaseTableInfo;
 import com.starrocks.catalog.Database;
@@ -69,7 +70,7 @@ public class SysObjectDependencies {
         TObjectDependencyRes response = new TObjectDependencyRes();
 
         ConnectContext context = new ConnectContext();
-        context.setAuthInfoFromThrift(auth);
+        UserIdentityUtils.setAuthInfoFromThrift(context, auth);
 
         // list dependencies of mv
         Locker locker = new Locker();

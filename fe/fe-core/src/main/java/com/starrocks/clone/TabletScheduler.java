@@ -42,6 +42,7 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Multimap;
 import com.google.common.collect.Sets;
+import com.starrocks.authentication.UserIdentityUtils;
 import com.starrocks.catalog.CatalogRecycleBin;
 import com.starrocks.catalog.ColocateTableIndex.GroupId;
 import com.starrocks.catalog.DataProperty;
@@ -60,6 +61,7 @@ import com.starrocks.catalog.Replica.ReplicaState;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.catalog.TabletMeta;
+import com.starrocks.catalog.UserIdentity;
 import com.starrocks.clone.BalanceStat.BalanceType;
 import com.starrocks.clone.SchedException.Status;
 import com.starrocks.clone.TabletSchedCtx.Priority;
@@ -73,7 +75,6 @@ import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.leader.ReportHandler;
 import com.starrocks.persist.ReplicaPersistInfo;
-import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.LocalMetastore;
 import com.starrocks.system.Backend;
@@ -2235,9 +2236,9 @@ public class TabletScheduler extends FrontendDaemon {
         String state = request.isSetState() ? request.state : null;
         long limit = request.isSetLimit() ? request.limit : -1;
         List<TabletSchedCtx> tabletCtxs;
-        ConnectContext context = new ConnectContext();
+        UserIdentity currentUser = null;
         if (request.isSetCurrent_user_ident()) {
-            context.setAuthInfoFromThrift(request.current_user_ident);
+            currentUser = UserIdentityUtils.fromThrift(request.current_user_ident);
         }
         synchronized (this) {
             Stream<TabletSchedCtx> all;
@@ -2255,7 +2256,8 @@ public class TabletScheduler extends FrontendDaemon {
                     all = all.filter(t -> t.getState().name().equals(state));
                 }
             }
-            all = all.filter(t -> t.checkPrivForCurrUser(context));
+            final UserIdentity finalUser = currentUser;
+            all = all.filter(t -> t.checkPrivForCurrUser(finalUser));
             if (type != null) {
                 all = all.filter(t -> t.getType().name().equals(type));
             }

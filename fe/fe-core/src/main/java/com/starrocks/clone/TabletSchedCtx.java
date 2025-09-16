@@ -54,6 +54,7 @@ import com.starrocks.catalog.Replica;
 import com.starrocks.catalog.Replica.ReplicaState;
 import com.starrocks.catalog.SchemaInfo;
 import com.starrocks.catalog.Table;
+import com.starrocks.catalog.UserIdentity;
 import com.starrocks.clone.BalanceStat.BalanceType;
 import com.starrocks.clone.SchedException.Status;
 import com.starrocks.clone.TabletScheduler.PathSlot;
@@ -1324,9 +1325,9 @@ public class TabletSchedCtx implements Comparable<TabletSchedCtx> {
         return result;
     }
 
-    public boolean checkPrivForCurrUser(ConnectContext context) {
+    public boolean checkPrivForCurrUser(UserIdentity currentUser) {
         // For backward compatibility
-        if (context == null) {
+        if (currentUser == null) {
             return true;
         }
 
@@ -1341,6 +1342,9 @@ public class TabletSchedCtx implements Comparable<TabletSchedCtx> {
         }
 
         // if user has 'OPERATE' privilege, can see this tablet, for backward compatibility
+        ConnectContext context = new ConnectContext();
+        context.setCurrentUserIdentity(currentUser);
+        context.setCurrentRoleIds(currentUser);
         try {
             Authorizer.checkSystemAction(context, PrivilegeType.OPERATE);
             return true;

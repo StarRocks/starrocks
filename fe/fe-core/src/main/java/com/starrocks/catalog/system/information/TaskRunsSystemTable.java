@@ -23,6 +23,7 @@ import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
+import com.starrocks.catalog.UserIdentity;
 import com.starrocks.catalog.system.SystemId;
 import com.starrocks.catalog.system.SystemTable;
 import com.starrocks.cluster.ClusterNamespace;
@@ -166,11 +167,10 @@ public class TaskRunsSystemTable extends SystemTable {
         List<TTaskRunInfo> tasksResult = Lists.newArrayList();
         result.setTask_runs(tasksResult);
 
-        ConnectContext context = new ConnectContext();
+        UserIdentity currentUser = null;
         if (params.isSetCurrent_user_ident()) {
-            context.setAuthInfoFromThrift(params.current_user_ident);
+            currentUser = UserIdentityUtils.fromThrift(params.current_user_ident);
         }
-
         GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
         TaskManager taskManager = globalStateMgr.getTaskManager();
         List<TaskRunStatus> taskRunList = taskManager.getMatchedTaskRunStatus(params);
@@ -182,7 +182,11 @@ public class TaskRunsSystemTable extends SystemTable {
             }
 
             try {
-                Authorizer.checkAnyActionOnOrInDb(context, InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME, status.getDbName());
+                ConnectContext context = new ConnectContext();
+                context.setCurrentUserIdentity(currentUser);
+                context.setCurrentRoleIds(currentUser);
+                Authorizer.checkAnyActionOnOrInDb(context, InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
+                        status.getDbName());
             } catch (AccessDeniedException e) {
                 continue;
             }

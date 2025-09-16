@@ -37,9 +37,11 @@ package com.starrocks.qe;
 import com.google.common.base.Strings;
 import com.starrocks.authentication.AuthenticationException;
 import com.starrocks.authentication.AuthenticationProvider;
+import com.starrocks.authentication.UserIdentityUtils;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Table;
+import com.starrocks.catalog.UserIdentity;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.ErrorCode;
@@ -431,7 +433,7 @@ public class ConnectProcessor {
                         return;
                     }
 
-                    authenticationProvider.checkLoginSuccess(ctx.getConnectionId(), ctx.getAuthenticationContext());
+                    authenticationProvider.checkLoginSuccess(ctx.getConnectionId(), ctx.getAccessControlContext());
                 } catch (AuthenticationException authenticationException) {
                     if (authenticationException.getErrorCode() != null) {
                         ErrorReport.report(authenticationException.getErrorCode(), authenticationException.getMessage());
@@ -814,7 +816,8 @@ public class ConnectProcessor {
             ctx.getSessionVariable().setEnableInsertStrict(request.enableStrictMode);
         }
         if (request.isSetCurrent_user_ident()) {
-            ctx.setAuthInfoFromThrift(request.current_user_ident);
+            UserIdentity currentUserIdentity = UserIdentityUtils.fromThrift(request.getCurrent_user_ident());
+            ctx.setCurrentUserIdentity(currentUserIdentity);
         }
 
         if (request.isSetUser_roles()) {

@@ -17,6 +17,7 @@ package com.starrocks.service;
 import com.google.common.base.Joiner;
 import com.google.common.collect.Lists;
 import com.google.gson.Gson;
+import com.starrocks.authentication.UserIdentityUtils;
 import com.starrocks.authorization.AccessDeniedException;
 import com.starrocks.authorization.AuthorizationMgr;
 import com.starrocks.authorization.PrivilegeException;
@@ -115,14 +116,15 @@ public class InformationSchemaDataSource {
             catalogName = authInfo.getCatalog_name();
         }
 
-        ConnectContext context = new ConnectContext();
+        UserIdentity currentUser;
         if (authInfo.isSetCurrent_user_ident()) {
-            context.setAuthInfoFromThrift(authInfo.current_user_ident);
+            currentUser = UserIdentityUtils.fromThrift(authInfo.current_user_ident);
         } else {
-            UserIdentity currentUser = UserIdentity.createAnalyzedUserIdentWithIp(authInfo.user, authInfo.user_ip);
-            context.setCurrentUserIdentity(currentUser);
-            context.setCurrentRoleIds(currentUser);
+            currentUser = UserIdentity.createAnalyzedUserIdentWithIp(authInfo.user, authInfo.user_ip);
         }
+        ConnectContext context = new ConnectContext();
+        context.setCurrentUserIdentity(currentUser);
+        context.setCurrentRoleIds(currentUser);
 
         MetadataMgr metadataMgr = GlobalStateMgr.getCurrentState().getMetadataMgr();
         List<String> dbNames = metadataMgr.listDbNames(context, catalogName);
