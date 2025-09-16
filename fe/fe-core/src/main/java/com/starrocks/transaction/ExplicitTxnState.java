@@ -15,6 +15,7 @@
 package com.starrocks.transaction;
 
 import com.google.common.collect.Maps;
+import com.google.gson.Gson;
 import com.starrocks.sql.ast.DmlStmt;
 import com.starrocks.thrift.TUniqueId;
 
@@ -126,5 +127,12 @@ public class ExplicitTxnState {
         public void setDmlStmt(DmlStmt dmlStmt) {
             this.dmlStmt = dmlStmt;
         }
+
+        @Override
+        public String toString() {
+            Gson gson = new Gson();
+            return gson.toJson(this);
+        }
+
     }
 }
