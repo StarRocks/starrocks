@@ -67,6 +67,8 @@ public:
 
     size_t memory_usage() const;
 
+    // `_delvec` should only be modified in `init()` via publish version thread
+    // which is thread-safe. And after that, it should be immutable.
     DelVectorPtr delvec() const { return _delvec; }
 
 private:
