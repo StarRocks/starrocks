@@ -43,7 +43,6 @@ import com.starrocks.authentication.SecurityIntegration;
 import com.starrocks.authentication.UserAuthenticationInfo;
 import com.starrocks.catalog.UserIdentity;
 import com.starrocks.common.Config;
-import com.starrocks.common.ConfigBase;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
@@ -301,7 +300,7 @@ public class MysqlProto {
             provider = AuthenticationProviderFactory.create(authInfo.getAuthPlugin(), authInfo.getAuthString());
         } else {
             for (String authMechanism : Config.authentication_chain) {
-                if (authMechanism.equals(ConfigBase.AUTHENTICATION_CHAIN_MECHANISM_NATIVE)) {
+                if (authMechanism.equals(SecurityIntegration.AUTHENTICATION_CHAIN_MECHANISM_NATIVE)) {
                     continue;
                 }
 

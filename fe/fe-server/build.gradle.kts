@@ -12,16 +12,34 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-rootProject.name = "starrocks-fe"
+plugins {
+    java
+    `maven-publish`
+}
 
-include(
-    "fe-grammar",
-    "fe-parser",
-    "fe-spi",
-    "fe-utils",
-    "fe-testing",
-    "plugin:spark-dpp",
-    "plugin:hive-udf",
-    "fe-core",
-    "fe-server"
-)
+dependencies {
+    implementation(project(":fe-core"))
+
+    implementation("com.google.guava:guava")
+    implementation("commons-cli:commons-cli")
+
+    testImplementation("org.junit.jupiter:junit-jupiter")
+}
+
+tasks.jar {
+    archiveBaseName.set("starrocks-fe")
+    manifest {
+        attributes(
+            "Main-Class" to "com.starrocks.StarRocksFE"
+        )
+    }
+}
+
+tasks.register<Copy>("copyDependencies") {
+    from(configurations.runtimeClasspath)
+    into("${layout.buildDirectory.get()}/lib")
+}
+
+tasks.build {
+    dependsOn("copyDependencies")
+}
