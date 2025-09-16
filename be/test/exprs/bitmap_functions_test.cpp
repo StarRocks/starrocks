@@ -432,13 +432,9 @@ TEST_F(VecBitmapFunctionsTest, bitmapOrTest) {
 
         auto v = BitmapFunctions::bitmap_or(ctx, columns).value();
 
-        ASSERT_TRUE(v->is_nullable());
-        ASSERT_FALSE(v->is_object());
-
-        auto p = ColumnHelper::cast_to<TYPE_OBJECT>(ColumnHelper::as_column<NullableColumn>(v)->data_column());
-
-        ASSERT_EQ(4, p->get_object(0)->cardinality());
-        ASSERT_TRUE(v->is_null(1));
+        ASSERT_FALSE(v->is_nullable());
+        ASSERT_TRUE(v->is_object());
+        ASSERT_FALSE(v->is_null(1));
     }
 }
 

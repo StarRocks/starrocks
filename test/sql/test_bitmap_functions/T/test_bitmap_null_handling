@@ -1,0 +1,124 @@
+-- name: test_bitmap_null_handling
+-- Test NULL handling for bitmap_or, bitmap_andnot, bitmap_xor functions
+-- This test covers the optimization introduced in commit for bitmap NULL value handling
+
+-- Create test tables
+CREATE TABLE `bitmap_null_test` (
+  `id` int(11) NULL COMMENT "",
+  `bitmap_col` bitmap BITMAP_UNION NULL COMMENT ""
+) ENGINE=OLAP
+AGGREGATE KEY(`id`)
+DISTRIBUTED BY HASH(`id`) BUCKETS 1
+PROPERTIES ("replication_num" = "1");
+
+-- Test bitmap_or NULL handling
+-- bitmap_or(NULL, bitmap) = bitmap
+-- bitmap_or(bitmap, NULL) = bitmap
+-- bitmap_or(NULL, NULL) = NULL
+-- bitmap_or(bitmap, bitmap) = normal OR operation
+
+-- Test data preparation
+insert into bitmap_null_test values (1, NULL);
+insert into bitmap_null_test values (2, bitmap_empty());
+insert into bitmap_null_test values (3, to_bitmap(1));
+insert into bitmap_null_test values (4, to_bitmap('2,3,4'));
+
+-- Test bitmap_or with NULL values
+-- Case 1: bitmap_or(NULL, bitmap) should return bitmap
+SELECT bitmap_to_string(bitmap_or(NULL, to_bitmap('1,2,3'))) as result;
+SELECT bitmap_to_string(bitmap_or(NULL, bitmap_empty())) as result;
+SELECT bitmap_to_string(bitmap_or(NULL, to_bitmap(5))) as result;
+
+-- Case 2: bitmap_or(bitmap, NULL) should return bitmap
+SELECT bitmap_to_string(bitmap_or(to_bitmap('1,2,3'), NULL)) as result;
+SELECT bitmap_to_string(bitmap_or(bitmap_empty(), NULL)) as result;
+SELECT bitmap_to_string(bitmap_or(to_bitmap(5), NULL)) as result;
+
+-- Case 3: bitmap_or(NULL, NULL) should return NULL
+SELECT bitmap_to_string(bitmap_or(NULL, NULL)) as result;
+SELECT bitmap_or(NULL, NULL) IS NULL as is_null_result;
+
+-- Case 4: bitmap_or(normal, normal) should work as before
+SELECT bitmap_to_string(bitmap_or(to_bitmap('1,2,3'), to_bitmap('3,4,5'))) as result;
+SELECT bitmap_to_string(bitmap_or(to_bitmap('1,2'), bitmap_empty())) as result;
+
+-- Test bitmap_andnot NULL handling
+-- bitmap_andnot(NULL, bitmap) = NULL
+-- bitmap_andnot(bitmap, NULL) = bitmap
+-- bitmap_andnot(NULL, NULL) = NULL
+-- bitmap_andnot(bitmap, bitmap) = normal ANDNOT operation
+
+-- Case 1: bitmap_andnot(NULL, bitmap) should return NULL
+SELECT bitmap_to_string(bitmap_andnot(NULL, to_bitmap('1,2,3'))) as result;
+SELECT bitmap_andnot(NULL, to_bitmap('1,2,3')) IS NULL as is_null_result;
+
+-- Case 2: bitmap_andnot(bitmap, NULL) should return bitmap
+SELECT bitmap_to_string(bitmap_andnot(to_bitmap('1,2,3'), NULL)) as result;
+SELECT bitmap_to_string(bitmap_andnot(to_bitmap('5,6,7'), NULL)) as result;
+
+-- Case 3: bitmap_andnot(NULL, NULL) should return NULL
+SELECT bitmap_to_string(bitmap_andnot(NULL, NULL)) as result;
+SELECT bitmap_andnot(NULL, NULL) IS NULL as is_null_result;
+
+-- Case 4: bitmap_andnot(normal, normal) should work as before
+SELECT bitmap_to_string(bitmap_andnot(to_bitmap('1,2,3,4,5'), to_bitmap('2,4'))) as result;
+SELECT bitmap_to_string(bitmap_andnot(to_bitmap('1,2,3'), bitmap_empty())) as result;
+
+-- Test bitmap_xor NULL handling
+-- bitmap_xor(NULL, bitmap) = bitmap
+-- bitmap_xor(bitmap, NULL) = bitmap
+-- bitmap_xor(NULL, NULL) = NULL
+-- bitmap_xor(bitmap, bitmap) = normal XOR operation
+
+-- Case 1: bitmap_xor(NULL, bitmap) should return bitmap
+SELECT bitmap_to_string(bitmap_xor(NULL, to_bitmap('1,2,3'))) as result;
+SELECT bitmap_to_string(bitmap_xor(NULL, bitmap_empty())) as result;
+
+-- Case 2: bitmap_xor(bitmap, NULL) should return bitmap
+SELECT bitmap_to_string(bitmap_xor(to_bitmap('1,2,3'), NULL)) as result;
+SELECT bitmap_to_string(bitmap_xor(to_bitmap('5,6'), NULL)) as result;
+
+-- Case 3: bitmap_xor(NULL, NULL) should return NULL
+SELECT bitmap_to_string(bitmap_xor(NULL, NULL)) as result;
+SELECT bitmap_xor(NULL, NULL) IS NULL as is_null_result;
+
+-- Case 4: bitmap_xor(normal, normal) should work as before
+SELECT bitmap_to_string(bitmap_xor(to_bitmap('1,2,3'), to_bitmap('2,3,4'))) as result;
+SELECT bitmap_to_string(bitmap_xor(to_bitmap('1,2'), bitmap_empty())) as result;
+
+-- Test with table data
+-- Insert test data with NULL values
+insert into bitmap_null_test values (5, NULL);
+insert into bitmap_null_test values (6, to_bitmap('10,11,12'));
+
+-- Test bitmap_or with table data
+SELECT id, bitmap_to_string(bitmap_or(bitmap_col, to_bitmap('100'))) as or_result
+FROM bitmap_null_test
+ORDER BY id;
+
+SELECT id, bitmap_to_string(bitmap_or(to_bitmap('200'), bitmap_col)) as or_result
+FROM bitmap_null_test
+ORDER BY id;
+
+-- Test bitmap_andnot with table data
+SELECT id, bitmap_to_string(bitmap_andnot(bitmap_col, to_bitmap('10'))) as andnot_result
+FROM bitmap_null_test
+WHERE id >= 5
+ORDER BY id;
+
+SELECT id, bitmap_to_string(bitmap_andnot(to_bitmap('10,11,12'), bitmap_col)) as andnot_result
+FROM bitmap_null_test
+WHERE id >= 5
+ORDER BY id;
+
+-- Test bitmap_xor with table data
+SELECT id, bitmap_to_string(bitmap_xor(bitmap_col, to_bitmap('100'))) as xor_result
+FROM bitmap_null_test
+ORDER BY id;
+
+SELECT id, bitmap_to_string(bitmap_xor(to_bitmap('200'), bitmap_col)) as xor_result
+FROM bitmap_null_test
+ORDER BY id;
+
+-- Clean up
+DROP TABLE bitmap_null_test;
