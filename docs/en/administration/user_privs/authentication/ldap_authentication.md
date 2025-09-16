@@ -55,7 +55,7 @@ Starting from v3.5.0, StarRocks supports recording and passing user Distinguishe
 
 ### Use Cases
 
-- **Traditional LDAP Environment**: Group members use simple usernames (such as `cn` attribute). Administrtors need to configure `ldap_user_search_attr`.
+- **Traditional LDAP Environment**: Group members use simple usernames (such as `cn` attribute). Administrators need to configure `ldap_user_search_attr`.
 - **Microsoft AD Environment**: Group members may lack username attributes. `ldap_user_search_attr` cannot be configured. The system will use DN directly for matching.
 - **Mixed Environment**: Flexible switching between both matching methods is supported.
 
