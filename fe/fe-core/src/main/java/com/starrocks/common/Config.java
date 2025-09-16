@@ -1440,7 +1440,7 @@ public class Config extends ConfigBase {
 
     @ConfField(mutable = true, comment = "Whether to prefer string type for fixed length varchar column " +
             "in materialized view creation/ctas")
-    public static boolean transform_type_prefer_string_for_varchar = true;
+    public static boolean transform_type_prefer_string_for_varchar = false;
 
     @ConfField(mutable = true, comment = "Whether to enable automatic repairing of materialized views " +
             "that are broken due to base table schema changes")
