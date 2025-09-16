@@ -47,9 +47,9 @@ Status PersistentIndexSstable::init(std::unique_ptr<RandomAccessFile> rf, const 
             _delvec = std::move(delvec);
         } else {
             // otherwise, load delvec from file
-            SegmentReadOptions seg_options;
-            auto delvec_loader = std::make_unique<LakeDelvecLoader>(tablet_mgr, nullptr, true /* fill cache */,
-                                                                    seg_options.lake_io_opts);
+            LakeIOOptions lake_io_opts{.fill_data_cache = true, .skip_disk_cache = false};
+            auto delvec_loader =
+                    std::make_unique<LakeDelvecLoader>(tablet_mgr, nullptr, true /* fill cache */, lake_io_opts);
             RETURN_IF_ERROR(delvec_loader->load(TabletSegmentId(tablet_id, _sstable_pb.shared_rssid()),
                                                 _sstable_pb.shared_version(), &_delvec));
         }

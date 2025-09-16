@@ -48,10 +48,10 @@ Status LakePrimaryKeyCompactionConflictResolver::segment_iterator(
     ASSIGN_OR_RETURN(auto segment_iters, _rowset->get_each_segment_iterator(pkey_schema, false, &stats));
     RETURN_ERROR_IF_FALSE(segment_iters.size() == _rowset->num_segments());
     // init delvec loader
-    SegmentReadOptions seg_options;
+    LakeIOOptions lake_io_opts{.fill_data_cache = true, .skip_disk_cache = false};
 
     auto delvec_loader =
-            std::make_unique<LakeDelvecLoader>(_tablet_mgr, _builder, false /* fill cache */, seg_options.lake_io_opts);
+            std::make_unique<LakeDelvecLoader>(_tablet_mgr, _builder, false /* fill cache */, lake_io_opts);
     // init params
     CompactConflictResolveParams params;
     params.tablet_id = _rowset->tablet_id();
@@ -74,10 +74,10 @@ Status LakePrimaryKeyCompactionConflictResolver::segment_iterator(
     RETURN_IF_ERROR(_rowset->load_segments(&segments, true /* file cache*/));
     RETURN_ERROR_IF_FALSE(segments.size() == _rowset->num_segments());
     // init delvec loader
-    SegmentReadOptions seg_options;
+    LakeIOOptions lake_io_opts{.fill_data_cache = true, .skip_disk_cache = false};
 
     auto delvec_loader =
-            std::make_unique<LakeDelvecLoader>(_tablet_mgr, _builder, false /* fill cache */, seg_options.lake_io_opts);
+            std::make_unique<LakeDelvecLoader>(_tablet_mgr, _builder, false /* fill cache */, lake_io_opts);
     // init params
     CompactConflictResolveParams params;
     params.tablet_id = _rowset->tablet_id();

@@ -175,6 +175,10 @@ LakePersistentIndex::~LakePersistentIndex() {
 }
 
 Status LakePersistentIndex::init(const PersistentIndexSstableMetaPB& sstable_meta) {
+    auto* block_cache = _tablet_mgr->update_mgr()->block_cache();
+    if (block_cache == nullptr) {
+        return Status::InternalError("Block cache is null.");
+    }
     uint64_t max_rss_rowid = 0;
     for (auto& sstable_pb : sstable_meta.sstables()) {
         RandomAccessFileOptions opts;
@@ -184,10 +188,6 @@ Status LakePersistentIndex::init(const PersistentIndexSstableMetaPB& sstable_met
         }
         ASSIGN_OR_RETURN(auto rf, fs::new_random_access_file(
                                           opts, _tablet_mgr->sst_location(_tablet_id, sstable_pb.filename())));
-        auto* block_cache = _tablet_mgr->update_mgr()->block_cache();
-        if (block_cache == nullptr) {
-            return Status::InternalError("Block cache is null.");
-        }
         auto sstable = std::make_unique<PersistentIndexSstable>();
         RETURN_IF_ERROR(sstable->init(std::move(rf), sstable_pb, block_cache->cache(), _tablet_mgr, _tablet_id));
         _sstables.emplace_back(std::move(sstable));
@@ -224,6 +224,10 @@ bool LakePersistentIndex::too_many_rebuild_files() const {
 
 Status LakePersistentIndex::minor_compact() {
     TRACE_COUNTER_SCOPE_LATENCY_US("minor_compact_latency_us");
+    auto* block_cache = _tablet_mgr->update_mgr()->block_cache();
+    if (block_cache == nullptr) {
+        return Status::InternalError("Block cache is null.");
+    }
     auto filename = gen_sst_filename();
     auto location = _tablet_mgr->sst_location(_tablet_id, filename);
     WritableFileOptions wopts;
@@ -249,10 +253,6 @@ Status LakePersistentIndex::minor_compact() {
     sstable_pb.set_filesize(filesize);
     sstable_pb.set_max_rss_rowid(_memtable->max_rss_rowid());
     sstable_pb.set_encryption_meta(encryption_meta);
-    auto* block_cache = _tablet_mgr->update_mgr()->block_cache();
-    if (block_cache == nullptr) {
-        return Status::InternalError("Block cache is null.");
-    }
     TEST_SYNC_POINT_CALLBACK("LakePersistentIndex::minor_compact:inject_predicate", &sstable_pb);
     RETURN_IF_ERROR(sstable->init(std::move(rf), sstable_pb, block_cache->cache(), _tablet_mgr, _tablet_id));
     _sstables.emplace_back(std::move(sstable));
@@ -262,6 +262,10 @@ Status LakePersistentIndex::minor_compact() {
 
 Status LakePersistentIndex::ingest_sst(const FileMetaPB& sst_meta, uint32_t rssid, int64_t version, bool is_compaction,
                                        DelVectorPtr delvec) {
+    auto* block_cache = _tablet_mgr->update_mgr()->block_cache();
+    if (block_cache == nullptr) {
+        return Status::InternalError("Block cache is null.");
+    }
     if (!_memtable->empty()) {
         RETURN_IF_ERROR(flush_memtable());
     }
@@ -273,8 +277,6 @@ Status LakePersistentIndex::ingest_sst(const FileMetaPB& sst_meta, uint32_t rssi
     }
     auto location = _tablet_mgr->sst_location(_tablet_id, sst_meta.name());
     ASSIGN_OR_RETURN(auto rf, fs::new_random_access_file(opts, location));
-    VLOG(2) << "ingest sst " << sst_meta.name() << " to persistent index for tablet " << _tablet_id << " size "
-            << rf->get_size().value() << " " << sst_meta.size();
     PersistentIndexSstablePB sstable_pb;
     sstable_pb.set_filename(sst_meta.name());
     sstable_pb.set_filesize(sst_meta.size());
@@ -285,10 +287,6 @@ Status LakePersistentIndex::ingest_sst(const FileMetaPB& sst_meta, uint32_t rssi
     sstable_pb.set_has_delvec(is_compaction);
     // use UINT32_MAX as max rowid here to indicate all rows of this segment are already contained in this sst
     sstable_pb.set_max_rss_rowid((static_cast<uint64_t>(rssid) << 32) | UINT32_MAX);
-    auto* block_cache = _tablet_mgr->update_mgr()->block_cache();
-    if (block_cache == nullptr) {
-        return Status::InternalError("Block cache is null.");
-    }
     RETURN_IF_ERROR(sstable->init(std::move(rf), sstable_pb, block_cache->cache(), _tablet_mgr, _tablet_id,
                                   true /* need filter */, std::move(delvec)));
     _sstables.emplace_back(std::move(sstable));
@@ -573,6 +571,10 @@ Status LakePersistentIndex::apply_opcompaction(const TxnLogPB_OpCompaction& op_c
     if (op_compaction.input_sstables().empty() || !op_compaction.has_output_sstable()) {
         return Status::OK();
     }
+    auto* block_cache = _tablet_mgr->update_mgr()->block_cache();
+    if (block_cache == nullptr) {
+        return Status::InternalError("Block cache is null.");
+    }
 
     PersistentIndexSstablePB sstable_pb;
     sstable_pb.CopyFrom(op_compaction.output_sstable());
@@ -586,10 +588,6 @@ Status LakePersistentIndex::apply_opcompaction(const TxnLogPB_OpCompaction& op_c
     }
     ASSIGN_OR_RETURN(auto rf,
                      fs::new_random_access_file(opts, _tablet_mgr->sst_location(_tablet_id, sstable_pb.filename())));
-    auto* block_cache = _tablet_mgr->update_mgr()->block_cache();
-    if (block_cache == nullptr) {
-        return Status::InternalError("Block cache is null.");
-    }
     RETURN_IF_ERROR(sstable->init(std::move(rf), sstable_pb, block_cache->cache(), _tablet_mgr, _tablet_id));
 
     std::unordered_set<std::string> filenames;
