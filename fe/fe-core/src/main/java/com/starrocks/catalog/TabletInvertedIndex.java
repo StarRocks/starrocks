@@ -421,6 +421,15 @@ public class TabletInvertedIndex implements MemoryTrackable {
         }
     }
 
+    public Map<Long, Replica> getReplicas(long tabletId) {
+        readLock();
+        try {
+            return this.replicaMetaTable.get(tabletId);
+        } finally {
+            readUnlock();
+        }
+    }
+
     // The caller should hold readLock.
     public Map<Long, Replica> getReplicaMetaWithBackend(Long backendId) {
         return row(backingReplicaMetaTable, backendId);
