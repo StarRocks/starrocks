@@ -95,6 +95,7 @@ public:
     static HttpBrpcStubCache* getInstance();
     StatusOr<std::shared_ptr<PInternalService_RecoverableStub>> get_http_stub(const TNetworkAddress& taddr);
     void cleanup_expired(const butil::EndPoint& endpoint);
+    void shutdown();
 
 private:
     HttpBrpcStubCache();

@@ -32,18 +32,19 @@ BrpcStubCache::BrpcStubCache(ExecEnv* exec_env) : _pipeline_timer(exec_env->pipe
 }
 
 BrpcStubCache::~BrpcStubCache() {
-    std::vector<std::shared_ptr<StubPool>> pools_to_cleanup;
+    std::vector<std::shared_ptr<EndpointCleanupTask<BrpcStubCache>>> task_to_cleanup;
+
     {
         std::lock_guard<SpinLock> l(_lock);
-
         for (auto& stub : _stub_map) {
             pools_to_cleanup.push_back(stub.second);
         }
     }
 
-    for (auto& pool : pools_to_cleanup) {
-        (void)_pipeline_timer->unschedule(pool->_cleanup_task.get());
+    for (auto& task : task_to_cleanup) {
+        _pipeline_timer->unschedule(task.get());
     }
+
     std::lock_guard<SpinLock> l(_lock);
     _stub_map.clear();
 }
@@ -137,6 +138,10 @@ HttpBrpcStubCache::HttpBrpcStubCache() {
 }
 
 HttpBrpcStubCache::~HttpBrpcStubCache() {
+    shutdown();
+}
+
+void HttpBrpcStubCache::shutdown() {
     std::vector<std::shared_ptr<EndpointCleanupTask<HttpBrpcStubCache>>> task_to_cleanup;
 
     {
@@ -146,12 +151,16 @@ HttpBrpcStubCache::~HttpBrpcStubCache() {
         }
     }
 
-    for (auto& task : task_to_cleanup) {
-        _pipeline_timer->unschedule(task.get());
+    if (_pipeline_timer != nullptr) {
+        for (auto& task : task_to_cleanup) {
+            _pipeline_timer->unschedule(task.get());
+        }
     }
 
-    std::lock_guard<SpinLock> l(_lock);
-    _stub_map.clear();
+    {
+        std::lock_guard<SpinLock> l(_lock);
+        _stub_map.clear();
+    }
 }
 
 StatusOr<std::shared_ptr<PInternalService_RecoverableStub>> HttpBrpcStubCache::get_http_stub(
@@ -232,7 +241,7 @@ void LakeServiceBrpcStubCache::shutdown() {
 
     if (_pipeline_timer != nullptr) {
         for (auto& task : task_to_cleanup) {
-            task->unschedule(_pipeline_timer);
+            _pipeline_timer->unschedule(task.get());
         }
     }
 
