@@ -315,8 +315,14 @@ public abstract class LakeTableAlterMetaJobBase extends AlterJobV2 {
                 CompletableFuture<Boolean> publishFuture = CompletableFuture.allOf(
                                 futureList.toArray(new CompletableFuture[0])).
                         thenApply(v -> futureList.stream().allMatch(CompletableFuture::join));
-                if (!publishFuture.get()) {
-                    LOG.error("Fail to alter publish txn batch");
+                try {
+                    if (!publishFuture.get()) {
+                        LOG.error("Fail to alter publish txn batch");
+                        return false;
+                    }
+                } catch (InterruptedException e) {
+                    LOG.warn("InterruptedException during publish version: ", e);
+                    Thread.currentThread().interrupt();
                     return false;
                 }
             }
