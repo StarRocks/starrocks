@@ -16,6 +16,7 @@ package com.starrocks.mysql.ssl;
 
 import com.google.common.base.Strings;
 import com.starrocks.common.Config;
+import com.starrocks.http.SslUtil;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -32,6 +33,8 @@ import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import javax.net.ssl.KeyManagerFactory;
 import javax.net.ssl.SSLContext;
+import javax.net.ssl.SSLEngine;
+import javax.net.ssl.SSLParameters;
 import javax.net.ssl.TrustManager;
 import javax.net.ssl.TrustManagerFactory;
 
@@ -39,6 +42,7 @@ public class SSLContextLoader {
     private static final Logger LOG = LogManager.getLogger(SSLContextLoader.class);
 
     private static SSLContext sslContext;
+    private static volatile String[] filteredCiphers;
 
     private static ScheduledExecutorService scheduledExecutorService;
 
@@ -56,6 +60,7 @@ public class SSLContextLoader {
     public static void load() throws Exception {
         if (!Strings.isNullOrEmpty(Config.ssl_keystore_location)) {
             sslContext = createSSLContext();
+            filteredCiphers = filterCiphers(sslContext);
         }
 
         updateAutoRefreshInterval(Config.ssl_cert_auto_update_interval_s);
@@ -102,6 +107,14 @@ public class SSLContextLoader {
         }
     }
 
+    public static SSLEngine newServerEngine() {
+        SSLEngine engine = sslContext.createSSLEngine();
+        SSLParameters parameters = sslContext.getSupportedSSLParameters();
+        parameters.setCipherSuites(filteredCiphers);
+        engine.setSSLParameters(parameters);
+        return engine;
+    }
+
     private static SSLContext createSSLContext() throws Exception {
         KeyStore keyStore = KeyStore.getInstance("JKS");
         try (InputStream keyStoreIS = new FileInputStream(Config.ssl_keystore_location)) {
@@ -122,6 +135,11 @@ public class SSLContextLoader {
         updateFileMD5();
 
         return sslContext;
+    }
+
+    private static String[] filterCiphers(SSLContext context) {
+        String[] supportedCiphers = context.getSupportedSSLParameters().getCipherSuites();
+        return SslUtil.filterCipherSuites(supportedCiphers);
     }
 
     private static TrustManager[] createTrustManagers(String filepath, String keystorePassword) throws Exception {

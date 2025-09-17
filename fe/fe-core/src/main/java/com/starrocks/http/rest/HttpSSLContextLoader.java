@@ -16,13 +16,17 @@ package com.starrocks.http.rest;
 
 import com.google.common.base.Strings;
 import com.starrocks.common.Config;
+import com.starrocks.http.SslUtil;
 import io.netty.handler.ssl.SslContext;
 import io.netty.handler.ssl.SslContextBuilder;
+import io.netty.handler.ssl.SslProvider;
 
 import java.io.FileInputStream;
 import java.io.InputStream;
 import java.security.KeyStore;
+import java.util.Arrays;
 import javax.net.ssl.KeyManagerFactory;
+import javax.net.ssl.SSLServerSocketFactory;
 
 public class HttpSSLContextLoader {
     private static SslContext sslContext;
@@ -51,7 +55,10 @@ public class HttpSSLContextLoader {
             throw new IllegalArgumentException("SSL key password (Config.ssl_key_password) cannot be null.");
         }
         kmf.init(keyStore, Config.ssl_key_password.toCharArray());
-        SslContext sslContext = SslContextBuilder.forServer(kmf).build();
-        return sslContext;
+
+        String[] supportedCiphers = ((SSLServerSocketFactory) SSLServerSocketFactory.getDefault())
+                .getSupportedCipherSuites();
+        String[] filteredCiphers = SslUtil.filterCipherSuites(supportedCiphers);
+        return SslContextBuilder.forServer(kmf).sslProvider(SslProvider.JDK).ciphers(Arrays.asList(filteredCiphers)).build();
     }
 }
