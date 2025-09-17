@@ -38,7 +38,11 @@ import com.google.common.base.Joiner;
 import com.google.common.base.Splitter;
 import com.google.common.base.Strings;
 import com.google.gson.annotations.SerializedName;
+import com.starrocks.catalog.Catalog;
+import com.starrocks.catalog.Database;
+import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.cluster.ClusterNamespace;
+import com.starrocks.common.Config;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.io.Writable;
@@ -46,13 +50,16 @@ import com.starrocks.persist.gson.GsonPostProcessable;
 import com.starrocks.persist.gson.GsonPreProcessable;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.CatalogMgr;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.parser.NodePosition;
 import org.apache.commons.lang3.StringUtils;
 
 import java.io.IOException;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Objects;
+import java.util.Set;
 
 import static com.starrocks.common.util.Util.normalizeName;
 
@@ -125,6 +132,63 @@ public class TableName implements Writable, GsonPreProcessable, GsonPostProcessa
 
         if (Strings.isNullOrEmpty(tbl)) {
             throw new SemanticException("Table name is null");
+        }
+    }
+
+    public void normalizationOnlyQuery(ConnectContext connectContext) {
+        if (Strings.isNullOrEmpty(tbl)) {
+            throw new SemanticException("Table name is null");
+        }
+
+        if (Strings.isNullOrEmpty(db)) {
+            if (Strings.isNullOrEmpty(connectContext.getDatabase())) {
+                throw new SemanticException("No database selected");
+            }
+            db = connectContext.getDatabase();
+        }
+
+        if (!Strings.isNullOrEmpty(catalog)) {
+            return;
+        }
+        // The catalog configured in the current session is the same as the presto catalog,
+        // so just use the catalog in the session directly
+        // There is no need to distinguish between the olap scenario and the presto scenario
+        if (connectContext.getCurrentCatalog().equalsIgnoreCase(Config.default_presto_catalog)) {
+            catalog = connectContext.getCurrentCatalog();
+            return;
+        }
+
+        // use the default catalog when the cluster is for olap scenario
+        if (!connectContext.getSessionVariable().getSqlDialect().equalsIgnoreCase("trino")) {
+            if (Strings.isNullOrEmpty(connectContext.getCurrentCatalog())) {
+                throw new SemanticException("No catalog selected");
+            }
+            catalog = connectContext.getCurrentCatalog();
+            return;
+        }
+
+        if (Strings.isNullOrEmpty(db) || Strings.isNullOrEmpty(tbl)) {
+            return;
+        }
+
+        // olap db need use default catalog
+        List<Long> dbIds = GlobalStateMgr.getCurrentState().getLocalMetastore().getDbIds();
+        Set<String> internalDbNameList = new HashSet<>();
+        for (Long dbId : dbIds) {
+            Database dbMeta = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
+            internalDbNameList.add(dbMeta.getFullName());
+        }
+        String currentDbName = db;
+        if (internalDbNameList.contains(currentDbName)) {
+            catalog = InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME;
+            return;
+        }
+
+        // reset the catalog as unified_catalog_hms when enable presto translation
+        catalog = Config.default_presto_catalog;
+
+        if (!GlobalStateMgr.getCurrentState().getCatalogMgr().catalogExists(catalog)) {
+            throw new SemanticException("The catalog [" + catalog + "] you chose has not been created yet");
         }
     }
 
