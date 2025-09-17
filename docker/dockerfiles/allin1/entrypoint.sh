@@ -50,6 +50,29 @@ logerror()
     log_stderr "ERROR $@"
 }
 
+# Function to detect CPU cores and set default_unpartitioned_table_bucket_num
+setup_cpu_based_config()
+{
+    # Detect CPU cores
+    if command -v nproc >/dev/null 2>&1; then
+        CPU_CORES=$(nproc)
+    elif [ -f /proc/cpuinfo ]; then
+        CPU_CORES=$(grep -c ^processor /proc/cpuinfo)
+    else
+        # Fallback to 1 if detection fails
+        CPU_CORES=8
+        loginfo "Warning: Could not detect CPU cores, using default value: 1"
+    fi
+    
+    # Calculate bucket number (CPU cores * 2)
+    BUCKET_NUM=$((CPU_CORES * 2))
+    
+    loginfo "Detected CPU cores: $CPU_CORES, setting default_unpartitioned_table_bucket_num to $BUCKET_NUM"
+    
+    # Append the configuration to fe.conf
+    echo "default_unpartitioned_table_bucket_num = $BUCKET_NUM" >> $SR_HOME/fe/conf/fe.conf
+}
+
 update_fe_conf_if_run_in_shared_data_mode()
 {
     if [ ! -f $SR_HOME/fe/meta/image/VERSION ]; then
@@ -92,6 +115,7 @@ mkdir -p $SR_HOME/{supervisor,fe,be,feproxy}/log
 update_feproxy_config
 # use 127.0.0.1 for all the services, include fe/be
 setup_priority_networks
+setup_cpu_based_config
 update_fe_conf_if_run_in_shared_data_mode
 
 # setup supervisor and start
