@@ -1067,7 +1067,11 @@ void TabletUpdates::do_apply() {
 
     {
         std::lock_guard rl(_lock);
-        _check_for_apply();
+        // if _apply_schedule is true, which means there is a delay apply task,
+        // we should not submit a new apply task.
+        if (!_apply_schedule.load()) {
+            _check_for_apply();
+        }
     }
 }
 
