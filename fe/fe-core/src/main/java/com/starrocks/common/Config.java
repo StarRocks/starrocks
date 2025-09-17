@@ -2384,6 +2384,9 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true)
     public static long default_automatic_bucket_size = 4 * 1024 * 1024 * 1024L;
 
+    @ConfField(mutable = true, comment = "Minimum number of buckets of unpartitioned table")
+    public static int default_unpartitioned_table_bucket_num = 16;
+
     /**
      * Used to limit num of agent task for one be. currently only for drop task.
      */

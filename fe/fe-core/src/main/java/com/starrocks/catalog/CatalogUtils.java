@@ -16,6 +16,7 @@ package com.starrocks.catalog;
 
 import com.google.common.collect.Sets;
 import com.starrocks.common.AnalysisException;
+import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
@@ -428,8 +429,7 @@ public class CatalogUtils {
             bucketNum = CatalogUtils.calBucketNumAccordingToBackends();
             // If table is not partitioned, the bucketNum should be at least DEFAULT_UNPARTITIONED_TABLE_BUCKET_NUM
             if (!olapTable.getPartitionInfo().isPartitioned()) {
-                bucketNum = bucketNum > FeConstants.DEFAULT_UNPARTITIONED_TABLE_BUCKET_NUM ?
-                        bucketNum : FeConstants.DEFAULT_UNPARTITIONED_TABLE_BUCKET_NUM;
+                bucketNum = Math.max(bucketNum, Config.default_unpartitioned_table_bucket_num);
             }
             return bucketNum;
         }

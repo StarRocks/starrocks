@@ -1408,6 +1408,9 @@ public class OlapTable extends Table {
                 info.setBucketNum((int) numBucket);
             } else if (info.getBucketNum() == 0) {
                 numBucket = CatalogUtils.calPhysicalPartitionBucketNum();
+                if (!isPartitionedTable()) {
+                    numBucket = Math.max(numBucket, Config.default_unpartitioned_table_bucket_num);
+                }
                 info.setBucketNum((int) numBucket);
             }
         } else {

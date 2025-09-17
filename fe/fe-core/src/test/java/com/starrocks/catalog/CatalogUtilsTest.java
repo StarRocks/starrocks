@@ -14,6 +14,7 @@
 
 package com.starrocks.catalog;
 
+import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
@@ -57,7 +58,7 @@ public class CatalogUtilsTest {
 
         int bucketNum = CatalogUtils.calAvgBucketNumOfRecentPartitions(olapTable, 5, true);
 
-        assertEquals(FeConstants.DEFAULT_UNPARTITIONED_TABLE_BUCKET_NUM, bucketNum);
+        assertEquals(Config.default_unpartitioned_table_bucket_num, bucketNum);
     }
 
     @Test
