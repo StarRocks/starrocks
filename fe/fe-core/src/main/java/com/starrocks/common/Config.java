@@ -3930,6 +3930,19 @@ public class Config extends ConfigBase {
     @ConfField
     public static int deploy_serialization_queue_size = -1;
 
+<<<<<<< HEAD
     @ConfField(mutable = true)
     public static boolean enable_hudi_lib_internal_metadata_table = true;
+=======
+    @ConfField(comment = "Enable case-insensitive catalog/database/table names. " +
+            "Only configurable during cluster initialization, immutable once set.")
+    public static boolean enable_table_name_case_insensitive = false;
+
+    @ConfField(mutable = true, comment = "Enable desensitize sql in query dump")
+    public static boolean enable_desensitize_query_dump = false;
+
+    @ConfField(mutable = true, comment = "The threshold to flatten compound predicate from deep tree to a balanced tree to " +
+            "avoid stack over flow")
+    public static int compound_predicate_flatten_threshold = 512;
+>>>>>>> 7c8a29660a ([Enhancement] Optimize parsing predicates with large number of CompoundPredicates (#63139))
 }
