@@ -62,6 +62,7 @@ public class CompoundPredicate extends Predicate {
         if (e2 != null) {
             children.add(e2);
         }
+        incrDepth();
     }
 
     protected CompoundPredicate(CompoundPredicate other) {
