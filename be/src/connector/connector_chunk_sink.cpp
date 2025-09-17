@@ -85,7 +85,14 @@ Status ConnectorChunkSink::finish() {
     return Status::OK();
 }
 
+void ConnectorChunkSink::push_rollback_action(const std::function<void()>& action) {
+    // Not a very frequent operation, so use unique_lock here is ok.
+    std::unique_lock<std::shared_mutex> wlck(_mutex);
+    _rollback_actions.push_back(std::move(action));
+}
+
 void ConnectorChunkSink::rollback() {
+    std::shared_lock<std::shared_mutex> rlck(_mutex);
     for (auto& action : _rollback_actions) {
         action();
     }

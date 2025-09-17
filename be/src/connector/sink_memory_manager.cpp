@@ -121,9 +121,9 @@ bool SinkMemoryManager::_apply_on_mem_tracker(SinkOperatorMemoryManager* child_m
     while (available_memory() <= low_watermark) {
         child_manager->update_writer_occupied_memory();
         int64_t total_occupied_memory = _total_writer_occupied_memory();
-        LOG_EVERY_SECOND(WARNING) << "consumption: " << mem_tracker->consumption()
-                                  << ", writer_allocated_memory: " << total_occupied_memory
-                                  << ", flush_watermark: " << flush_watermark;
+        LOG_EVERY_SECOND(INFO) << "consumption: " << mem_tracker->consumption()
+                               << ", total_occupied_memory: " << total_occupied_memory
+                               << ", flush_watermark: " << flush_watermark;
         if (total_occupied_memory < flush_watermark) {
             break;
         }
@@ -133,7 +133,14 @@ bool SinkMemoryManager::_apply_on_mem_tracker(SinkOperatorMemoryManager* child_m
         }
     }
 
-    return available_memory() > low_watermark;
+    child_manager->update_releasable_memory();
+    if (available_memory() <= low_watermark && _total_releasable_memory() > 0) {
+        LOG_EVERY_SECOND(WARNING) << "memory usage is still high after flush, : available_memory" << available_memory()
+                                  << ", memory_low_watermark: " << low_watermark
+                                  << ", total_releasable_memory: " << _total_releasable_memory();
+        return false;
+    }
+    return true;
 }
 
 } // namespace starrocks::connector
