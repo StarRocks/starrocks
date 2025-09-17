@@ -20,12 +20,8 @@ import com.starrocks.authentication.UserProperty;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.sql.ast.ExecuteAsStmt;
-<<<<<<< HEAD
-import com.starrocks.sql.ast.UserIdentity;
-=======
 import com.starrocks.sql.ast.SetStmt;
-import com.starrocks.sql.ast.UserRef;
->>>>>>> b70c85739c ([BugFix] Fix the bug where UserProperty priority is lower than Session Variable (#63173))
+import com.starrocks.sql.ast.UserIdentity;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -50,18 +46,7 @@ public class ExecuteAsExecutor {
         Preconditions.checkArgument(!stmt.isAllowRevert());
         LOG.info("{} EXEC AS {} from now on", ctx.getCurrentUserIdentity(), stmt.getToUser());
 
-<<<<<<< HEAD
         UserIdentity userIdentity = stmt.getToUser();
-=======
-        UserRef user = stmt.getToUser();
-        // Create UserIdentity with ephemeral flag for external users
-        UserIdentity userIdentity;
-        if (user.isExternal()) {
-            userIdentity = UserIdentity.createEphemeralUserIdent(user.getUser(), user.getHost());
-        } else {
-            userIdentity = new UserIdentity(user.getUser(), user.getHost(), user.isDomain());
-        }
->>>>>>> b70c85739c ([BugFix] Fix the bug where UserProperty priority is lower than Session Variable (#63173))
         ctx.setCurrentUserIdentity(userIdentity);
 
         // Refresh groups and roles for all users based on security integration

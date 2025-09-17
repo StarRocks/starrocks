@@ -14,9 +14,9 @@
 
 package com.starrocks.qe;
 
+import com.starrocks.analysis.StringLiteral;
 import com.starrocks.authentication.AuthenticationMgr;
 import com.starrocks.authentication.UserProperty;
-import com.starrocks.catalog.UserIdentity;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.proto.PQueryStatistics;
 import com.starrocks.server.GlobalStateMgr;
@@ -24,8 +24,7 @@ import com.starrocks.sql.ast.ExecuteAsStmt;
 import com.starrocks.sql.ast.SetListItem;
 import com.starrocks.sql.ast.SetStmt;
 import com.starrocks.sql.ast.SystemVariable;
-import com.starrocks.sql.ast.UserRef;
-import com.starrocks.sql.ast.expression.StringLiteral;
+import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.thrift.TMasterOpRequest;
 import com.starrocks.thrift.TMasterOpResult;
@@ -181,13 +180,13 @@ public class VariablePriorityTest {
         Assertions.assertEquals(900, context.getSessionVariable().getQueryTimeoutS());
 
         // Execute AS u1
-        ExecuteAsStmt executeAsStmt1 = new ExecuteAsStmt(new UserRef("u1", "%"), false);
+        ExecuteAsStmt executeAsStmt1 = new ExecuteAsStmt(new UserIdentity("u1", "%"), false);
         ExecuteAsExecutor.execute(executeAsStmt1, context);
         // Verify that user1's properties are applied
         Assertions.assertEquals(300, context.getSessionVariable().getQueryTimeoutS());
 
         // Execute AS u2
-        ExecuteAsStmt executeAsStmt2 = new ExecuteAsStmt(new UserRef("u2", "%"), false);
+        ExecuteAsStmt executeAsStmt2 = new ExecuteAsStmt(new UserIdentity("u2", "%"), false);
         ExecuteAsExecutor.execute(executeAsStmt2, context);
         // Verify that user2's properties are applied (overriding user1's)
         Assertions.assertEquals(600, context.getSessionVariable().getQueryTimeoutS());
@@ -243,13 +242,13 @@ public class VariablePriorityTest {
         Assertions.assertEquals(120, context.getSessionVariable().getQueryTimeoutS());
 
         // Execute AS u1
-        ExecuteAsStmt executeAsStmt1 = new ExecuteAsStmt(new UserRef("u1", "%"), false);
+        ExecuteAsStmt executeAsStmt1 = new ExecuteAsStmt(new UserIdentity("u1", "%"), false);
         ExecuteAsExecutor.execute(executeAsStmt1, context);
         // Verify that user1's properties are applied
         Assertions.assertEquals(120, context.getSessionVariable().getQueryTimeoutS());
 
         // Execute AS u2
-        ExecuteAsStmt executeAsStmt2 = new ExecuteAsStmt(new UserRef("u2", "%"), false);
+        ExecuteAsStmt executeAsStmt2 = new ExecuteAsStmt(new UserIdentity("u2", "%"), false);
         ExecuteAsExecutor.execute(executeAsStmt2, context);
         // Verify that user2's properties are applied (overriding user1's)
         Assertions.assertEquals(120, context.getSessionVariable().getQueryTimeoutS());
@@ -268,7 +267,8 @@ public class VariablePriorityTest {
         context.modifySystemVariable(var, true);
 
         // Execute AS with ephemeral user (should not apply user properties)
-        ExecuteAsStmt executeAsStmt = new ExecuteAsStmt(new UserRef("external_user", "%", false, true, NodePosition.ZERO), false);
+        ExecuteAsStmt executeAsStmt =
+                new ExecuteAsStmt(new UserIdentity("external_user", "%", false, true, NodePosition.ZERO), false);
         ExecuteAsExecutor.execute(executeAsStmt, context);
 
         // Verify that session variables are not modified by user properties

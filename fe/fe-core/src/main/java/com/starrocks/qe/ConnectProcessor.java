@@ -35,17 +35,11 @@
 package com.starrocks.qe;
 
 import com.google.common.base.Strings;
-<<<<<<< HEAD
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.analysis.NullLiteral;
 import com.starrocks.authentication.OAuth2Context;
-=======
-import com.starrocks.authentication.AuthenticationException;
-import com.starrocks.authentication.AuthenticationProvider;
-import com.starrocks.authentication.UserIdentityUtils;
 import com.starrocks.authentication.UserProperty;
->>>>>>> b70c85739c ([BugFix] Fix the bug where UserProperty priority is lower than Session Variable (#63173))
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Table;
