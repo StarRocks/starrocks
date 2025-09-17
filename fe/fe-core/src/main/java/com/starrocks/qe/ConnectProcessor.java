@@ -38,6 +38,7 @@ import com.google.common.base.Strings;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.analysis.NullLiteral;
+import com.starrocks.authentication.UserProperty;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Table;
@@ -736,11 +737,27 @@ public class ConnectProcessor {
             ctx.setCurrentUserIdentity(currentUserIdentity);
         }
 
+        if (ctx.getCurrentUserIdentity() == null) {
+            TMasterOpResult result = new TMasterOpResult();
+            ctx.getState().setError(
+                    "Missing current user identity. You need to upgrade this Frontend to the same version as Leader Frontend.");
+            result.setMaxJournalId(GlobalStateMgr.getCurrentState().getMaxJournalId());
+            result.setPacket(getResultPacket());
+            return result;
+        }
+
         if (request.isSetUser_roles()) {
             List<Long> roleIds = request.getUser_roles().getRole_id_list();
             ctx.setCurrentRoleIds(new HashSet<>(roleIds));
         } else {
             ctx.setCurrentRoleIds(new HashSet<>());
+        }
+
+        UserIdentity userIdentity = ctx.getCurrentUserIdentity();
+        if (!userIdentity.isEphemeral()) {
+            UserProperty userProperty = GlobalStateMgr.getCurrentState().getAuthenticationMgr()
+                    .getUserProperty(ctx.getCurrentUserIdentity().getUser());
+            ctx.updateByUserProperty(userProperty);
         }
 
         // after https://github.com/StarRocks/starrocks/pull/43162, we support temporary tables.
@@ -812,18 +829,6 @@ public class ConnectProcessor {
         }
 
         ctx.setThreadLocalInfo();
-
-        if (ctx.getCurrentUserIdentity() == null) {
-            // if we upgrade Master FE first, the request from old FE does not set "current_user_ident".
-            // so ctx.getCurrentUserIdentity() will get null, and causing NullPointerException after using it.
-            // return error directly.
-            TMasterOpResult result = new TMasterOpResult();
-            ctx.getState().setError(
-                    "Missing current user identity. You need to upgrade this Frontend to the same version as Leader Frontend.");
-            result.setMaxJournalId(GlobalStateMgr.getCurrentState().getMaxJournalId());
-            result.setPacket(getResultPacket());
-            return result;
-        }
 
         StmtExecutor executor = null;
         try {

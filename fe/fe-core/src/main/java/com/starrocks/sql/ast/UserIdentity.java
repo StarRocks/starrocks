@@ -113,7 +113,8 @@ public class UserIdentity implements ParseNode, Writable, GsonPostProcessable {
     }
 
     public static UserIdentity fromThrift(TUserIdentity tUserIdent) {
-        return new UserIdentity(tUserIdent.getUsername(), tUserIdent.getHost(), tUserIdent.is_domain);
+        return new UserIdentity(tUserIdent.getUsername(), tUserIdent.getHost(), tUserIdent.is_domain, NodePosition.ZERO,
+                tUserIdent.isIs_ephemeral());
     }
 
     public static UserIdentity createEphemeralUserIdent(String user, String host) {

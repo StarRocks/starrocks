@@ -68,6 +68,7 @@ import org.junit.Assert;
 import org.junit.Before;
 import org.junit.BeforeClass;
 import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
 import org.mockito.Mockito;
 import org.xnio.StreamConnection;
 
@@ -667,5 +668,34 @@ public class ConnectProcessorTest extends DDLTestBase {
 
         TMasterOpResult result = processor.proxyExecute(request);
         Assert.assertNotNull(result);
+    }
+
+    @Test
+    public void testProxyExecuteUserIdentityIsNull() throws Exception {
+        TMasterOpRequest request = new TMasterOpRequest();
+        request.setCatalog("default");
+        request.setDb("testDb1");
+        request.setUser("root");
+        request.setSql("select 1");
+        request.setIsInternalStmt(true);
+        request.setModified_variables_sql("set query_timeout = 10");
+        request.setQueryId(UUIDUtil.genTUniqueId());
+        request.setSession_id(UUID.randomUUID().toString());
+        request.setIsLastStmt(true);
+
+        ConnectContext context = new ConnectContext();
+        ConnectProcessor processor = new ConnectProcessor(context);
+        new mockit.MockUp<StmtExecutor>() {
+            @mockit.Mock
+            public void execute() {}
+            @mockit.Mock
+            public PQueryStatistics getQueryStatisticsForAuditLog() {
+                return null;
+            }
+        };
+
+        TMasterOpResult result = processor.proxyExecute(request);
+        Assertions.assertNotNull(result);
+        Assertions.assertTrue(context.getState().isError());
     }
 }
