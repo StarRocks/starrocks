@@ -1012,6 +1012,9 @@ public final class MetricRepo {
             collectRoutineLoadProcessMetrics(visitor);
         }
 
+        // ADD: Collect Kafka routine load lag time metrics
+        RoutineLoadLagTimeMetricMgr.getInstance().collectRoutineLoadLagTimeMetrics(visitor);
+
         if (Config.memory_tracker_enable) {
             collectMemoryUsageMetrics(visitor);
         }
