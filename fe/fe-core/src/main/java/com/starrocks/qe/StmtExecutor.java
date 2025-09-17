@@ -2966,7 +2966,6 @@ public class StmtExecutor {
                 GlobalStateMgr.getCurrentState().getOperationListenerBus()
                         .onDMLStmtJobTransactionFinish(txnState, database, targetTable, dmlType);
             }
-            recordExecStatsIntoContext();
         }
 
         String errMsg = "";
