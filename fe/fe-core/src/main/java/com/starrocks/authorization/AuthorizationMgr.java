@@ -1248,7 +1248,7 @@ public class AuthorizationMgr {
         }
     }
 
-    public List<String> getGranteeRoleDetailsForGroup(String groupName) {
+    public List<String> getGranteeRoleForGroup(String groupName) {
         roleReadLock();
         try {
             Set<Long> roleIds = getRoleIdListByGroup(groupName);
@@ -1295,7 +1295,7 @@ public class AuthorizationMgr {
         }
     }
 
-    public List<String> getGranteeRoleDetailsForUser(UserIdentity userIdentity) {
+    public List<String> getGranteeRoleForUser(UserIdentity userIdentity) {
         userReadLock();
         try {
             Set<Long> allRoles = getRoleIdsByUserUnlocked(userIdentity);
@@ -1313,13 +1313,7 @@ public class AuthorizationMgr {
                     }
                 }
 
-                if (!parentRoleNameList.isEmpty()) {
-                    return Lists.newArrayList(userIdentity.toString(), null,
-                            AstToSQLBuilder.toSQL(new GrantRoleStmt(parentRoleNameList,
-                                    new UserRef(userIdentity.getUser(), userIdentity.getHost(), userIdentity.isDomain()),
-                                    NodePosition.ZERO)));
-                }
-                return null;
+                return parentRoleNameList;
             } finally {
                 roleReadUnlock();
             }

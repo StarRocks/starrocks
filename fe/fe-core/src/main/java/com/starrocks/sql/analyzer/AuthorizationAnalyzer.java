@@ -495,11 +495,7 @@ public class AuthorizationAnalyzer {
         @Override
         public Void visitShowGrantsStatement(ShowGrantsStmt stmt, ConnectContext session) {
             if (stmt.getGrantType() == GrantType.USER) {
-                if (stmt.getUser() == null) {
-                    UserIdentity userIdentity = session.getCurrentUserIdentity();
-                    UserRef user = new UserRef(userIdentity.getUser(), userIdentity.getHost(), userIdentity.isDomain());
-                    stmt.setUser(user);
-                } else {
+                if (stmt.getUser() != null) {
                     AuthenticationAnalyzer.analyzeUser(stmt.getUser());
                     AuthenticationAnalyzer.checkUserExist(stmt.getUser(), true);
                 }

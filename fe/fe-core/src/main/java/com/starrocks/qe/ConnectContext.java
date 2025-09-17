@@ -504,10 +504,11 @@ public class ConnectContext {
 
     public void setCurrentRoleIds(UserIdentity userIdentity, Set<String> groups) {
         setCurrentRoleIds(userIdentity);
+        Set<Long> roleIds = new HashSet<>(getCurrentRoleIds());
         for (String group : groups) {
-            Set<Long> roleIds = globalStateMgr.getAuthorizationMgr().getRoleIdListByGroup(group);
-            setCurrentRoleIds(roleIds);
+            roleIds.addAll(globalStateMgr.getAuthorizationMgr().getRoleIdListByGroup(group));
         }
+        setCurrentRoleIds(roleIds);
     }
 
     public void setCurrentRoleIds(Set<Long> roleIds) {

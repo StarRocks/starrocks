@@ -40,6 +40,17 @@ public class CreateUserStmt extends BaseCreateAlterUserStmt {
 
     public CreateUserStmt(UserRef user, boolean ifNotExists,
                           UserAuthOption authOption,
+                          List<String> defaultRoles,
+                          Map<String, String> properties,
+                          NodePosition pos) {
+        super(user, authOption, null, null, properties, pos);
+        this.ifNotExists = ifNotExists;
+        this.setRoleType = SetRoleType.ROLE;
+        this.defaultRoles = defaultRoles;
+    }
+
+    public CreateUserStmt(UserRef user, boolean ifNotExists,
+                          UserAuthOption authOption,
                           UserPasswordOption passwordOption,
                           UserLockOption lockOption,
                           List<String> defaultRoles,

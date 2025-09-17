@@ -1458,14 +1458,11 @@ public class AuthorizerStmtVisitor implements AstVisitorExtendInterface<Void, Co
 
     @Override
     public Void visitShowGrantsStatement(ShowGrantsStmt statement, ConnectContext context) {
+        UserRef user = statement.getUser();
         try {
-            if (statement.getGrantType() == GrantType.USER) {
-                UserRef userRef = statement.getUser();
-                if (userRef == null) {
-                    return null;
-                }
-                UserIdentity user = new UserIdentity(userRef.getUser(), userRef.getHost(), userRef.isDomain());
-                if (!user.equals(context.getCurrentUserIdentity())) {
+            if (user != null) {
+                UserIdentity userIdentity = new UserIdentity(user.getUser(), user.getHost(), user.isDomain());
+                if (!userIdentity.equals(context.getCurrentUserIdentity())) {
                     Authorizer.checkSystemAction(context, PrivilegeType.GRANT);
                 }
             } else if (statement.getGrantType() == GrantType.ROLE) {
