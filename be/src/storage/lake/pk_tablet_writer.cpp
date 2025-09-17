@@ -133,7 +133,7 @@ Status HorizontalPkTabletWriter::flush_segment_writer(SegmentPB* segment) {
         }
         _seg_writer.reset();
     }
-    if (_pk_sst_writer->has_file_info()) {
+    if (_pk_sst_writer && _pk_sst_writer->has_file_info()) {
         ASSIGN_OR_RETURN(auto sst_file_info, _pk_sst_writer->flush_sst_writer());
         _ssts.emplace_back(sst_file_info);
     }
