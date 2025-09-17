@@ -1352,7 +1352,7 @@ public class AggregateTest extends PlanTestBase {
                 "select count(distinct t1b), count(distinct t1c), count(distinct t1.a), count(distinct t2.b) " +
                 "from test_all_type join tmp1 t1 join tmp2 t2 join tmp1 t3 join tmp2 t4";
         Pair<String, ExecPlan> pair = UtFrameUtils.getPlanAndFragment(connectContext, sql);
-        System.out.println(pair.first);
+        logSysInfo(pair.first);
         assertContains(pair.first, "CTEAnchor(cteid=1)");
         FeConstants.runningUnitTest = false;
     }
@@ -2653,7 +2653,7 @@ public class AggregateTest extends PlanTestBase {
                 "order by round(count(t1e) * 100.0 / min(t1f) / min(t1f), 4), min(t1f), abs(t1f)";
 
         String plan = getFragmentPlan(sql);
-        System.out.println(plan);
+        logSysInfo(plan);
         assertCContains(plan, "1:AGGREGATE (update finalize)\n" +
                         "  |  output: count(5: t1e), min(6: t1f)\n" +
                         "  |  group by: 1: t1a, 2: t1b",
@@ -2883,7 +2883,6 @@ public class AggregateTest extends PlanTestBase {
     public void testCountIfTypeCheck() throws Exception {
         String sql = "select count_if(v1 is null) from t0";
         String plan = getVerboseExplain(sql);
-        System.out.println(plan);
         assertContains(plan, "aggregate: count_if[(1, [4: expr, BOOLEAN, false]); " +
                 "args: TINYINT,BOOLEAN; result: BIGINT; args nullable: false; result nullable: false]");
     }

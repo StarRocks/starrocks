@@ -81,6 +81,10 @@ public class TransactionStmtExecutor {
     private static final Logger LOG = LogManager.getLogger(TransactionStmtExecutor.class);
 
     public static void beginStmt(ConnectContext context, BeginStmt stmt) {
+        beginStmt(context, stmt, TransactionState.LoadJobSourceType.INSERT_STREAMING);
+    }
+
+    public static void beginStmt(ConnectContext context, BeginStmt stmt, TransactionState.LoadJobSourceType sourceType) {
         GlobalTransactionMgr globalTransactionMgr = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr();
         if (context.getTxnId() != 0) {
             //Repeated begin does not create a new transaction
@@ -95,7 +99,7 @@ public class TransactionStmtExecutor {
                 .getTransactionIDGenerator().getNextTransactionId();
         String label = DebugUtil.printId(context.getExecutionId());
         TransactionState transactionState = new TransactionState(transactionId, label, null,
-                TransactionState.LoadJobSourceType.INSERT_STREAMING,
+                sourceType,
                 new TransactionState.TxnCoordinator(TransactionState.TxnSourceType.FE, FrontendOptions.getLocalHostAddress()),
                 context.getExecTimeout() * 1000L);
 

@@ -913,7 +913,8 @@ public class ShowExecutor {
                             row.add(tConnectionInfo.getIsPending());
                             row.add(tConnectionInfo.getWarehouse());
                             row.add(tConnectionInfo.getCngroup());
-
+                            row.add(tConnectionInfo.getCatalog());
+                            row.add(tConnectionInfo.getQueryId());
                             rowSet.add(row);
                         }
                     } catch (TException e) {

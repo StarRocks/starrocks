@@ -6256,7 +6256,13 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
         Relation right = (Relation) visit(context.rightRelation);
 
         JoinOperator joinType = JoinOperator.INNER_JOIN;
-        if (context.crossOrInnerJoinType() != null) {
+        if (context.asofJoinType() != null) {
+            if (context.asofJoinType().LEFT() != null) {
+                joinType = JoinOperator.ASOF_LEFT_OUTER_JOIN;
+            } else {
+                joinType = JoinOperator.ASOF_INNER_JOIN;
+            }
+        } else if (context.crossOrInnerJoinType() != null) {
             if (context.crossOrInnerJoinType().CROSS() != null) {
                 joinType = JoinOperator.CROSS_JOIN;
             } else {
