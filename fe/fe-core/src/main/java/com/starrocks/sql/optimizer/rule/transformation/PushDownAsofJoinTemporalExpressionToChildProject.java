@@ -38,8 +38,35 @@ import java.util.function.Function;
 import java.util.stream.Collectors;
 
 /**
- * Push down ONLY ASOF temporal condition expressions in JOIN ON to child Projects.
- * If no valid ASOF temporal condition exists, or it's not suitable, do nothing.
+ * Push down ASOF temporal expressions to child Projects for ASOF Join optimization.
+ *
+ * This transformation rule is specifically designed for ASOF Join operations to optimize
+ * temporal expression evaluation by pushing complex expressions down to child Project nodes.
+ *
+ * ASOF Join is a time-series join that matches records based on temporal proximity, typically
+ * using expressions like date_trunc(), date_format(), or other time manipulation functions
+ * in the temporal predicate.
+ *
+ * Transformation Pattern:
+ *           ASOF Join                                     ASOF Join
+ *         /           \                                 /           \
+ *     ScanNode     ScanNode        ==>              Project      Project
+ *                                                     |             |
+ *                                                  ScanNode      ScanNode
+ *
+ * Example:
+ *   Original ASOF join temporal predicate:
+ *     date_trunc('hour', left.dt) >= date_trunc('hour', right.dt)
+ *
+ *   After transformation:
+ *     left_projected_col >= right_projected_col
+ *
+ *   Where:
+ *     - Left Project:  left_projected_col = date_trunc('hour', left.dt)
+ *     - Right Project: right_projected_col = date_trunc('hour', right.dt)
+ *
+ * Note: If the ASOF join condition is invalid or malformed, this rule will skip processing
+ * and leave the validation to subsequent optimization phases for proper error handling.
  */
 public class PushDownAsofJoinTemporalExpressionToChildProject extends TransformationRule {
     public PushDownAsofJoinTemporalExpressionToChildProject() {
