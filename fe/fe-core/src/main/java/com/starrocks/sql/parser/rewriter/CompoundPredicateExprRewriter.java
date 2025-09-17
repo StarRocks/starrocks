@@ -15,12 +15,8 @@
 package com.starrocks.sql.parser.rewriter;
 
 import com.starrocks.common.Config;
-import com.starrocks.sql.ast.expression.BinaryPredicate;
-import com.starrocks.sql.ast.expression.BinaryType;
 import com.starrocks.sql.ast.expression.CompoundPredicate;
 import com.starrocks.sql.ast.expression.Expr;
-import com.starrocks.sql.ast.expression.InPredicate;
-import com.starrocks.sql.ast.expression.LiteralExpr;
 import com.starrocks.sql.parser.NodePosition;
 
 import java.util.ArrayDeque;
@@ -65,14 +61,7 @@ public class CompoundPredicateExprRewriter {
                 operands.add(rewrittenLeft);
             }
         }
-        // Optimize OR predicates of the form: col = v1 OR col = v2 OR ... => col IN (v1, v2, ...)
-        if (op == CompoundPredicate.Operator.OR) {
-            InPredicate inPredicate = tryConvertOrToInPredicate(operands);
-            if (inPredicate != null) {
-                return inPredicate;
-            }
-        }
-
+        // TODO: Optimize OR predicates of the form: col = v1 OR col = v2 OR ... => col IN (v1, v2, ...)
         return buildBalanced(operands, op, 0, operands.size() - 1);
     }
 
@@ -111,54 +100,5 @@ public class CompoundPredicateExprRewriter {
             operands.add(current);
         }
         return operands;
-    }
-
-    /**
-     * If all operands are equality predicates (col = value) on the same column,
-     * convert to an IN predicate: col IN (v1, v2, ...)
-     * Returns null if not convertible.
-     */
-    private InPredicate tryConvertOrToInPredicate(List<Expr> operands) {
-        if (operands.isEmpty()) {
-            return null;
-        }
-        Expr commonPart = null;
-        List<Expr> inList = new ArrayList<>();
-        NodePosition pos = NodePosition.ZERO;
-        for (Expr expr : operands) {
-            if (!(expr instanceof BinaryPredicate)) {
-                return null;
-            }
-            BinaryPredicate bp = (BinaryPredicate) expr;
-            if (bp.getOp() != BinaryType.EQ) {
-                return null;
-            }
-            Expr left = bp.getChild(0);
-            Expr right = bp.getChild(1);
-            // Only support SlotRef = LiteralExpr or LiteralExpr = SlotRef
-            if (right instanceof LiteralExpr) {
-                if (commonPart == null) {
-                    commonPart = left;
-                } else if (!commonPart.equals(left)) {
-                    return null;
-                }
-                inList.add(right);
-                pos = bp.getPos();
-            } else if (left instanceof LiteralExpr) {
-                if (commonPart == null) {
-                    commonPart = right;
-                } else if (!commonPart.equals(right)) {
-                    return null;
-                }
-                inList.add(left);
-                pos = bp.getPos();
-            } else {
-                return null;
-            }
-        }
-        if (commonPart == null || inList.isEmpty()) {
-            return null;
-        }
-        return new InPredicate(commonPart, inList, false, pos);
     }
 }

@@ -20,7 +20,6 @@ import com.starrocks.sql.ast.expression.BinaryType;
 import com.starrocks.sql.ast.expression.BoolLiteral;
 import com.starrocks.sql.ast.expression.CompoundPredicate;
 import com.starrocks.sql.ast.expression.Expr;
-import com.starrocks.sql.ast.expression.InPredicate;
 import com.starrocks.sql.ast.expression.IntLiteral;
 import com.starrocks.sql.ast.expression.SlotRef;
 import com.starrocks.sql.ast.expression.StringLiteral;
@@ -31,7 +30,6 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -143,95 +141,6 @@ public class CompoundPredicateExprRewriterTest extends StarRocksTestBase {
     }
 
     /**
-     * Test OR to IN predicate conversion with SlotRef = LiteralExpr pattern
-     */
-    @Test
-    public void testOrToInPredicateConversion_SlotRefEqualsLiteral() {
-        SlotRef col1 = createSlotRef("col1");
-        IntLiteral val1 = createIntLiteral(1);
-        IntLiteral val2 = createIntLiteral(2);
-        IntLiteral val3 = createIntLiteral(3);
-
-        BinaryPredicate pred1 = createBinaryPredicate(col1, BinaryType.EQ, val1);
-        BinaryPredicate pred2 = createBinaryPredicate(col1, BinaryType.EQ, val2);
-        BinaryPredicate pred3 = createBinaryPredicate(col1, BinaryType.EQ, val3);
-        BinaryPredicate pred4 = createBinaryPredicate(col1, BinaryType.EQ, val3);
-
-        // Create a deep OR chain that exceeds threshold
-        CompoundPredicate compound1 = createCompoundPredicate(CompoundPredicate.Operator.OR,
-                createCompoundPredicate(CompoundPredicate.Operator.OR, pred1, pred2), pred3);
-        CompoundPredicate compound = createCompoundPredicate(CompoundPredicate.Operator.OR,
-                compound1, pred4);
-
-        Expr result = rewriter.rewrite(compound);
-
-        assertTrue(result instanceof InPredicate);
-        InPredicate inPredicate = (InPredicate) result;
-        assertEquals(col1, inPredicate.getChild(0));
-        assertEquals(4, inPredicate.getInElementNum());
-        assertTrue(inPredicate.getChildren().contains(val1));
-        assertTrue(inPredicate.getChildren().contains(val2));
-        assertTrue(inPredicate.getChildren().contains(val3));
-        assertFalse(inPredicate.isNotIn());
-    }
-
-    /**
-     * Test OR to IN predicate conversion with LiteralExpr = SlotRef pattern
-     */
-    @Test
-    public void testOrToInPredicateConversion_LiteralEqualsSlotRef() {
-        SlotRef col1 = createSlotRef("col1");
-        IntLiteral val1 = createIntLiteral(1);
-        IntLiteral val2 = createIntLiteral(2);
-        IntLiteral val3 = createIntLiteral(3);
-
-        BinaryPredicate pred1 = createBinaryPredicate(val1, BinaryType.EQ, col1);
-        BinaryPredicate pred2 = createBinaryPredicate(val2, BinaryType.EQ, col1);
-        BinaryPredicate pred3 = createBinaryPredicate(val3, BinaryType.EQ, col1);
-        BinaryPredicate pred4 = createBinaryPredicate(val3, BinaryType.EQ, col1);
-
-        // Create a deep OR chain that exceeds threshold
-        CompoundPredicate compound1 = createCompoundPredicate(CompoundPredicate.Operator.OR,
-                createCompoundPredicate(CompoundPredicate.Operator.OR, pred1, pred2), pred3);
-        CompoundPredicate compound = createCompoundPredicate(CompoundPredicate.Operator.OR,
-                compound1, pred4);
-
-        Expr result = rewriter.rewrite(compound);
-
-        assertTrue(result instanceof InPredicate);
-        InPredicate inPredicate = (InPredicate) result;
-        assertEquals(col1, inPredicate.getChild(0));
-        assertEquals(4, inPredicate.getInElementNum());
-        assertTrue(inPredicate.getChildren().contains(val1));
-        assertTrue(inPredicate.getChildren().contains(val2));
-        assertTrue(inPredicate.getChildren().contains(val3));
-        assertFalse(inPredicate.isNotIn());
-    }
-
-    /**
-     * Test that OR conversion fails when columns are different
-     */
-    @Test
-    public void testOrToInPredicateConversion_DifferentColumns() {
-        SlotRef col1 = createSlotRef("col1");
-        SlotRef col2 = createSlotRef("col2");
-        IntLiteral val1 = createIntLiteral(1);
-        IntLiteral val2 = createIntLiteral(2);
-
-        BinaryPredicate pred1 = createBinaryPredicate(col1, BinaryType.EQ, val1);
-        BinaryPredicate pred2 = createBinaryPredicate(col2, BinaryType.EQ, val2);
-
-        CompoundPredicate compound = createCompoundPredicate(CompoundPredicate.Operator.OR, pred1, pred2);
-
-        Expr result = rewriter.rewrite(compound);
-
-        // Should not convert to IN predicate, should return balanced tree
-        assertTrue(result instanceof CompoundPredicate);
-        CompoundPredicate resultCompound = (CompoundPredicate) result;
-        assertEquals(CompoundPredicate.Operator.OR, resultCompound.getOp());
-    }
-
-    /**
      * Test that OR conversion fails when operators are not equality
      */
     @Test
@@ -340,55 +249,6 @@ public class CompoundPredicateExprRewriterTest extends StarRocksTestBase {
     }
 
     /**
-     * Test mixed literal types in OR to IN conversion
-     */
-    @Test
-    public void testOrToInPredicateConversion_MixedLiteralTypes() {
-        SlotRef col1 = createSlotRef("col1");
-        IntLiteral val1 = createIntLiteral(1);
-        StringLiteral val2 = createStringLiteral("test");
-        BoolLiteral val3 = createBoolLiteral(true);
-
-        BinaryPredicate pred1 = createBinaryPredicate(col1, BinaryType.EQ, val1);
-        BinaryPredicate pred2 = createBinaryPredicate(col1, BinaryType.EQ, val2);
-        BinaryPredicate pred3 = createBinaryPredicate(col1, BinaryType.EQ, val3);
-        BinaryPredicate pred4 = createBinaryPredicate(col1, BinaryType.EQ, val3);
-
-        // Create a deep OR chain that exceeds threshold
-        CompoundPredicate compound1 = createCompoundPredicate(CompoundPredicate.Operator.OR,
-                createCompoundPredicate(CompoundPredicate.Operator.OR, pred1, pred2), pred3);
-        CompoundPredicate compound = createCompoundPredicate(CompoundPredicate.Operator.OR, compound1, pred4);
-        Expr result = rewriter.rewrite(compound);
-
-        assertTrue(result instanceof InPredicate);
-        InPredicate inPredicate = (InPredicate) result;
-        assertEquals(col1, inPredicate.getChild(0));
-        assertEquals(4, inPredicate.getInElementNum());
-        assertTrue(inPredicate.getChildren().contains(val1));
-        assertTrue(inPredicate.getChildren().contains(val2));
-        assertTrue(inPredicate.getChildren().contains(val3));
-    }
-
-    /**
-     * Test empty operands list in OR to IN conversion
-     */
-    @Test
-    public void testOrToInPredicateConversion_EmptyOperands() {
-        // This test is more of a defensive programming test
-        // The method should handle empty operands gracefully
-        SlotRef col1 = createSlotRef("col1");
-        IntLiteral val1 = createIntLiteral(1);
-
-        BinaryPredicate pred1 = createBinaryPredicate(col1, BinaryType.EQ, val1);
-        CompoundPredicate compound = createCompoundPredicate(CompoundPredicate.Operator.OR, pred1, pred1);
-
-        Expr result = rewriter.rewrite(compound);
-
-        // Should return the original compound predicate since it doesn't exceed threshold
-        assertSame(compound, result);
-    }
-
-    /**
      * Test that NOT operator is not processed for balancing
      */
     @Test
@@ -403,52 +263,5 @@ public class CompoundPredicateExprRewriterTest extends StarRocksTestBase {
 
         // NOT predicates should not be processed for balancing
         assertSame(notPredicate, result);
-    }
-
-    /**
-     * Test complex nested structure with mixed operators
-     */
-    @Test
-    public void testComplexNestedStructure() {
-        SlotRef col1 = createSlotRef("col1");
-        SlotRef col2 = createSlotRef("col2");
-        IntLiteral val1 = createIntLiteral(1);
-        IntLiteral val2 = createIntLiteral(2);
-        IntLiteral val3 = createIntLiteral(3);
-        IntLiteral val4 = createIntLiteral(4);
-        IntLiteral val5 = createIntLiteral(5);
-
-        BinaryPredicate pred1 = createBinaryPredicate(col1, BinaryType.EQ, val1);
-        BinaryPredicate pred2 = createBinaryPredicate(col1, BinaryType.EQ, val2);
-        BinaryPredicate pred3 = createBinaryPredicate(col1, BinaryType.EQ, val3);
-        BinaryPredicate pred4 = createBinaryPredicate(col1, BinaryType.EQ, val3);
-
-        BinaryPredicate pred5 = createBinaryPredicate(col2, BinaryType.EQ, val4);
-
-        // Create a complex nested structure
-        CompoundPredicate leftOr1 = createCompoundPredicate(CompoundPredicate.Operator.OR,
-                createCompoundPredicate(CompoundPredicate.Operator.OR, pred1, pred2), pred3);
-        CompoundPredicate leftOr = createCompoundPredicate(CompoundPredicate.Operator.OR, leftOr1, pred4);
-
-        CompoundPredicate rightOr = createCompoundPredicate(CompoundPredicate.Operator.OR, pred4, pred5);
-        CompoundPredicate compound = createCompoundPredicate(CompoundPredicate.Operator.AND, leftOr, rightOr);
-
-        Expr result = rewriter.rewrite(compound);
-
-        // The left OR should be converted to IN predicate, right OR should be balanced
-        assertTrue(result instanceof CompoundPredicate);
-        CompoundPredicate resultCompound = (CompoundPredicate) result;
-        assertEquals(CompoundPredicate.Operator.AND, resultCompound.getOp());
-
-        // Left child should be IN predicate
-        assertTrue(resultCompound.getChild(0) instanceof InPredicate);
-        InPredicate leftIn = (InPredicate) resultCompound.getChild(0);
-        assertEquals(col1, leftIn.getChild(0));
-        assertEquals(4, leftIn.getInElementNum());
-
-        // Right child should be balanced OR
-        assertTrue(resultCompound.getChild(1) instanceof CompoundPredicate);
-        CompoundPredicate rightResult = (CompoundPredicate) resultCompound.getChild(1);
-        assertEquals(CompoundPredicate.Operator.OR, rightResult.getOp());
     }
 }
