@@ -381,11 +381,9 @@ public class RestBaseAction extends BaseAction {
     }
 
     protected void sendErrorResponse(BaseResponse response, String message, HttpResponseStatus status, BaseRequest request) {
-        response.getContent().append(message);
         sendResult(request,
                 response,
                 status,
-                new RestBaseResultV2<>());
-
+                new RestBaseResultV2<>(status.code(), message));
     }
 }
