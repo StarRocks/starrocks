@@ -12,24 +12,41 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.sql.ast;
 
 import com.starrocks.sql.parser.NodePosition;
 
-public class ShowRolesStmt extends ShowStmt {
+public class ShowAuthenticationStmt extends ShowStmt {
+    private final boolean isAll;
+    private UserRef user;
 
-    public ShowRolesStmt() {
-        this(NodePosition.ZERO);
+    // SHOW AUTHENTICATION -> (null, false)
+    // SHOW ALL AUTHENTICATION -> (null, true)
+    // SHOW AUTHENTICATION FOR xx -> (xx, false)
+    public ShowAuthenticationStmt(UserRef user, boolean isAll) {
+        this(user, isAll, NodePosition.ZERO);
     }
 
-    public ShowRolesStmt(NodePosition pos) {
+    public ShowAuthenticationStmt(UserRef user, boolean isAll, NodePosition pos) {
         super(pos);
+        this.user = user;
+        this.isAll = isAll;
+    }
+
+    public UserRef getUser() {
+        return user;
+    }
+
+    public boolean isAll() {
+        return isAll;
+    }
+
+    public void setUser(UserRef user) {
+        this.user = user;
     }
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitShowRolesStatement(this, context);
+        return visitor.visitShowAuthenticationStatement(this, context);
     }
-
 }

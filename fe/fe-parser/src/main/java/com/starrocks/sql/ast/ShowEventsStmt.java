@@ -12,24 +12,19 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.sql.ast;
 
 import com.starrocks.sql.parser.NodePosition;
 
-public class ShowRolesStmt extends ShowStmt {
+// Show Events statement
+public class ShowEventsStmt extends ShowStmt {
 
-    public ShowRolesStmt() {
-        this(NodePosition.ZERO);
-    }
-
-    public ShowRolesStmt(NodePosition pos) {
+    public ShowEventsStmt(NodePosition pos) {
         super(pos);
     }
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitShowRolesStatement(this, context);
+        return visitor.visitShowEventStatement(this, context);
     }
-
 }

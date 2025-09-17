@@ -15,21 +15,35 @@
 
 package com.starrocks.sql.ast;
 
+import com.starrocks.sql.ast.AdminSetConfigStmt.ConfigType;
 import com.starrocks.sql.parser.NodePosition;
 
-public class ShowRolesStmt extends ShowStmt {
+// admin show frontend config;
+public class AdminShowConfigStmt extends ShowStmt {
+    private final ConfigType type;
 
-    public ShowRolesStmt() {
-        this(NodePosition.ZERO);
+    private final String pattern;
+
+    public AdminShowConfigStmt(ConfigType type, String pattern) {
+        this(type, pattern, NodePosition.ZERO);
     }
 
-    public ShowRolesStmt(NodePosition pos) {
+    public AdminShowConfigStmt(ConfigType type, String pattern, NodePosition pos) {
         super(pos);
+        this.type = type;
+        this.pattern = pattern;
+    }
+
+    public ConfigType getType() {
+        return type;
+    }
+
+    public String getPattern() {
+        return pattern;
     }
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitShowRolesStatement(this, context);
+        return visitor.visitAdminShowConfigStatement(this, context);
     }
-
 }

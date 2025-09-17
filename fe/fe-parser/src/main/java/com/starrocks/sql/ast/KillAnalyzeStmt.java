@@ -17,19 +17,28 @@ package com.starrocks.sql.ast;
 
 import com.starrocks.sql.parser.NodePosition;
 
-public class ShowRolesStmt extends ShowStmt {
+public class KillAnalyzeStmt extends StatementBase {
+    private final long analyzeId;
 
-    public ShowRolesStmt() {
-        this(NodePosition.ZERO);
+    public KillAnalyzeStmt(long analyzeId) {
+        this(analyzeId, NodePosition.ZERO);
     }
 
-    public ShowRolesStmt(NodePosition pos) {
+    public KillAnalyzeStmt(long analyzeId, NodePosition pos) {
         super(pos);
+        this.analyzeId = analyzeId;
+    }
+
+    public boolean isKillAllPendingTasks() {
+        return analyzeId == -1;
+    }
+
+    public long getAnalyzeId() {
+        return analyzeId;
     }
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitShowRolesStatement(this, context);
+        return visitor.visitKillAnalyzeStatement(this, context);
     }
-
 }

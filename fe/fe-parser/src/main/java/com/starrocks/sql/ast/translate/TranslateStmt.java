@@ -12,24 +12,32 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+package com.starrocks.sql.ast.translate;
 
-package com.starrocks.sql.ast;
-
+import com.starrocks.sql.ast.AstVisitor;
+import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.parser.NodePosition;
 
-public class ShowRolesStmt extends ShowStmt {
+public class TranslateStmt extends StatementBase {
+    private final String dialect;
+    private final String translateSQL;
 
-    public ShowRolesStmt() {
-        this(NodePosition.ZERO);
-    }
-
-    public ShowRolesStmt(NodePosition pos) {
+    public TranslateStmt(NodePosition pos, String dialect, String translateSQL) {
         super(pos);
+        this.translateSQL = translateSQL;
+        this.dialect = dialect;
     }
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitShowRolesStatement(this, context);
+        return visitor.visitTranslateStatement(this, context);
     }
 
+    public String getDialect() {
+        return dialect;
+    }
+
+    public String getTranslateSQL() {
+        return translateSQL;
+    }
 }

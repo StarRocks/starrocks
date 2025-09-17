@@ -17,19 +17,26 @@ package com.starrocks.sql.ast;
 
 import com.starrocks.sql.parser.NodePosition;
 
-public class ShowRolesStmt extends ShowStmt {
+public class ShowCatalogsStmt extends ShowStmt {
 
-    public ShowRolesStmt() {
-        this(NodePosition.ZERO);
+    private final String pattern;
+
+    public ShowCatalogsStmt(String pattern) {
+        this(pattern, NodePosition.ZERO);
     }
 
-    public ShowRolesStmt(NodePosition pos) {
+    public ShowCatalogsStmt(String pattern, NodePosition pos) {
         super(pos);
+        this.pattern = pattern;
+    }
+
+    public String getPattern() {
+        return pattern;
     }
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitShowRolesStatement(this, context);
+        return visitor.visitShowCatalogsStatement(this, context);
     }
 
 }

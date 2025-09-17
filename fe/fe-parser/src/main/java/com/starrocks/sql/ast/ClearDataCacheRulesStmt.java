@@ -12,24 +12,18 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.sql.ast;
 
 import com.starrocks.sql.parser.NodePosition;
 
-public class ShowRolesStmt extends ShowStmt {
+public class ClearDataCacheRulesStmt extends DdlStmt {
 
-    public ShowRolesStmt() {
-        this(NodePosition.ZERO);
-    }
-
-    public ShowRolesStmt(NodePosition pos) {
+    public ClearDataCacheRulesStmt(NodePosition pos) {
         super(pos);
     }
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitShowRolesStatement(this, context);
+        return visitor.visitClearDataCacheRulesStatement(this, context);
     }
-
 }

@@ -29,6 +29,6 @@ public class ShowBackendsStmt extends ShowStmt {
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitShowStatement(this, context);
+        return visitor.visitShowBackendsStatement(this, context);
     }
 }

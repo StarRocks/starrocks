@@ -11,25 +11,24 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
-
-
 package com.starrocks.sql.ast;
 
 import com.starrocks.sql.parser.NodePosition;
 
-public class ShowRolesStmt extends ShowStmt {
+public class ShowProfilelistStmt extends ShowStmt {
+    private final int limit;
 
-    public ShowRolesStmt() {
-        this(NodePosition.ZERO);
-    }
-
-    public ShowRolesStmt(NodePosition pos) {
+    public ShowProfilelistStmt(int limit, NodePosition pos) {
         super(pos);
+        this.limit = limit;
     }
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitShowRolesStatement(this, context);
+        return visitor.visitShowProfilelistStatement(this, context);
     }
 
+    public int getLimit() {
+        return limit;
+    }
 }

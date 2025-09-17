@@ -17,19 +17,25 @@ package com.starrocks.sql.ast;
 
 import com.starrocks.sql.parser.NodePosition;
 
-public class ShowRolesStmt extends ShowStmt {
+public class ShowUserStmt extends ShowStmt {
+    private final boolean isAll;
 
-    public ShowRolesStmt() {
-        this(NodePosition.ZERO);
+    public ShowUserStmt(boolean isAll) {
+        this(isAll, NodePosition.ZERO);
     }
 
-    public ShowRolesStmt(NodePosition pos) {
+    public ShowUserStmt(boolean isAll, NodePosition pos) {
         super(pos);
+        this.isAll = isAll;
+    }
+
+    public boolean isAll() {
+        return isAll;
     }
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitShowRolesStatement(this, context);
+        return visitor.visitShowUserStatement(this, context);
     }
-
 }
+

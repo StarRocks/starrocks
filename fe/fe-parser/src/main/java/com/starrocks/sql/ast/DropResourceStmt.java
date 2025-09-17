@@ -17,19 +17,25 @@ package com.starrocks.sql.ast;
 
 import com.starrocks.sql.parser.NodePosition;
 
-public class ShowRolesStmt extends ShowStmt {
+// DROP RESOURCE resource_name
+public class DropResourceStmt extends DdlStmt {
+    private final String resourceName;
 
-    public ShowRolesStmt() {
-        this(NodePosition.ZERO);
+    public DropResourceStmt(String resourceName) {
+        this(resourceName, NodePosition.ZERO);
     }
 
-    public ShowRolesStmt(NodePosition pos) {
+    public DropResourceStmt(String resourceName, NodePosition pos) {
         super(pos);
+        this.resourceName = resourceName;
+    }
+
+    public String getResourceName() {
+        return resourceName;
     }
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitShowRolesStatement(this, context);
+        return visitor.visitDropResourceStatement(this, context);
     }
-
 }

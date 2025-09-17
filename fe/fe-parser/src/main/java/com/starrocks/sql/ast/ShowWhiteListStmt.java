@@ -17,19 +17,20 @@ package com.starrocks.sql.ast;
 
 import com.starrocks.sql.parser.NodePosition;
 
-public class ShowRolesStmt extends ShowStmt {
-
-    public ShowRolesStmt() {
+//SHOW WHITELIST;
+// this statement is unmaintained since 2.0.
+@Deprecated
+public class ShowWhiteListStmt extends ShowStmt {
+    public ShowWhiteListStmt() {
         this(NodePosition.ZERO);
     }
 
-    public ShowRolesStmt(NodePosition pos) {
+    public ShowWhiteListStmt(NodePosition pos) {
         super(pos);
     }
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitShowRolesStatement(this, context);
+        return visitor.visitShowWhiteListStatement(this, context);
     }
-
 }

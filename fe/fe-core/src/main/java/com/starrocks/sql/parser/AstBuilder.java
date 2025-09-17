@@ -84,7 +84,6 @@ import com.starrocks.sql.ast.AlterCatalogStmt;
 import com.starrocks.sql.ast.AlterClause;
 import com.starrocks.sql.ast.AlterDatabaseQuotaStmt;
 import com.starrocks.sql.ast.AlterDatabaseRenameStatement;
-import com.starrocks.sql.ast.AlterLoadErrorUrlClause;
 import com.starrocks.sql.ast.AlterLoadStmt;
 import com.starrocks.sql.ast.AlterMaterializedViewStatusClause;
 import com.starrocks.sql.ast.AlterMaterializedViewStmt;
@@ -4849,12 +4848,6 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
             return ModifyBrokerClause.createAddBrokerClause(brokerName, hostPorts, pos);
         }
         return ModifyBrokerClause.createDropBrokerClause(brokerName, hostPorts, pos);
-    }
-
-    @Override
-    public ParseNode visitAlterLoadErrorUrlClause(
-            com.starrocks.sql.parser.StarRocksParser.AlterLoadErrorUrlClauseContext context) {
-        return new AlterLoadErrorUrlClause(getProperties(context.properties()), createPos(context));
     }
 
     @Override

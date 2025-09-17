@@ -17,19 +17,30 @@ package com.starrocks.sql.ast;
 
 import com.starrocks.sql.parser.NodePosition;
 
-public class ShowRolesStmt extends ShowStmt {
+import java.util.List;
 
-    public ShowRolesStmt() {
-        this(NodePosition.ZERO);
+// use for delete sql's blacklist by ids.
+// indexs is the ids of regular expression's sql
+public class DelSqlBlackListStmt extends StatementBase {
+
+    private final List<Long> indexs;
+
+    public List<Long> getIndexs() {
+        return indexs;
     }
 
-    public ShowRolesStmt(NodePosition pos) {
+    public DelSqlBlackListStmt(List<Long> indexs) {
+        this(indexs, NodePosition.ZERO);
+    }
+
+    public DelSqlBlackListStmt(List<Long> indexs, NodePosition pos) {
         super(pos);
+        this.indexs = indexs;
     }
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitShowRolesStatement(this, context);
+        return visitor.visitDelSqlBlackListStatement(this, context);
     }
-
 }
+

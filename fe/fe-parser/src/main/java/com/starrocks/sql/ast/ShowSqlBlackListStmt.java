@@ -17,19 +17,28 @@ package com.starrocks.sql.ast;
 
 import com.starrocks.sql.parser.NodePosition;
 
-public class ShowRolesStmt extends ShowStmt {
-
-    public ShowRolesStmt() {
+// used to show sql's blacklist
+// format is 
+// Id | Forbidden SQL
+// 
+// for example:
+// +-------+--------------------------------------+
+// | Id | Forbidden SQL                        |
+// +-------+--------------------------------------+
+// | 1     | select count *\(\*\) from .+         |
+// | 2     | select count 2342423 *\(\*\) from .+ |
+// +-------+--------------------------------------+
+public class ShowSqlBlackListStmt extends ShowStmt {
+    public ShowSqlBlackListStmt() {
         this(NodePosition.ZERO);
     }
 
-    public ShowRolesStmt(NodePosition pos) {
+    public ShowSqlBlackListStmt(NodePosition pos) {
         super(pos);
     }
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitShowRolesStatement(this, context);
+        return visitor.visitShowSqlBlackListStatement(this, context);
     }
-
 }

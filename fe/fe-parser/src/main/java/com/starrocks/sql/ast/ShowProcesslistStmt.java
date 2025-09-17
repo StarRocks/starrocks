@@ -12,24 +12,36 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.sql.ast;
 
 import com.starrocks.sql.parser.NodePosition;
 
-public class ShowRolesStmt extends ShowStmt {
+// SHOW PROCESSLIST statement.
+// Used to show connection belong to this user.
+public class ShowProcesslistStmt extends ShowStmt {
+    private final boolean isShowFull;
+    private final String forUser;
 
-    public ShowRolesStmt() {
-        this(NodePosition.ZERO);
+    public ShowProcesslistStmt(boolean isShowFull) {
+        this(isShowFull, null, NodePosition.ZERO);
     }
 
-    public ShowRolesStmt(NodePosition pos) {
+    public ShowProcesslistStmt(boolean isShowFull, String forUser, NodePosition pos) {
         super(pos);
+        this.isShowFull = isShowFull;
+        this.forUser = forUser;
     }
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitShowRolesStatement(this, context);
+        return visitor.visitShowProcesslistStatement(this, context);
     }
 
+    public boolean showFull() {
+        return isShowFull;
+    }
+
+    public String getForUser() {
+        return forUser;
+    }
 }

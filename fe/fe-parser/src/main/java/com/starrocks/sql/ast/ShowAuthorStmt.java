@@ -17,19 +17,19 @@ package com.starrocks.sql.ast;
 
 import com.starrocks.sql.parser.NodePosition;
 
-public class ShowRolesStmt extends ShowStmt {
+// Used to test show executor.
+public class ShowAuthorStmt extends ShowStmt {
 
-    public ShowRolesStmt() {
+    public ShowAuthorStmt() {
         this(NodePosition.ZERO);
     }
 
-    public ShowRolesStmt(NodePosition pos) {
+    public ShowAuthorStmt(NodePosition pos) {
         super(pos);
     }
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitShowRolesStatement(this, context);
+        return visitor.visitShowAuthorStatement(this, context);
     }
-
 }

@@ -12,24 +12,26 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.sql.ast;
 
 import com.starrocks.sql.parser.NodePosition;
 
-public class ShowRolesStmt extends ShowStmt {
+import java.util.List;
 
-    public ShowRolesStmt() {
-        this(NodePosition.ZERO);
+public class DelComputeNodeBlackListStmt extends StatementBase {
+    private final List<Long> computeNodeIds;
+
+    public DelComputeNodeBlackListStmt(NodePosition pos, List<Long> computeNodeIds) {
+        super(pos);
+        this.computeNodeIds = computeNodeIds;
     }
 
-    public ShowRolesStmt(NodePosition pos) {
-        super(pos);
+    public List<Long> getComputeNodeIds() {
+        return computeNodeIds;
     }
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitShowRolesStatement(this, context);
+        return visitor.visitDelComputeNodeBlackListStatement(this, context);
     }
-
 }

@@ -12,24 +12,19 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+package com.starrocks.sql.ast.integration;
 
-package com.starrocks.sql.ast;
-
+import com.starrocks.sql.ast.AstVisitor;
+import com.starrocks.sql.ast.ShowStmt;
 import com.starrocks.sql.parser.NodePosition;
 
-public class ShowRolesStmt extends ShowStmt {
-
-    public ShowRolesStmt() {
-        this(NodePosition.ZERO);
-    }
-
-    public ShowRolesStmt(NodePosition pos) {
+public class ShowSecurityIntegrationStatement extends ShowStmt {
+    public ShowSecurityIntegrationStatement(NodePosition pos) {
         super(pos);
     }
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitShowRolesStatement(this, context);
+        return visitor.visitShowSecurityIntegrationStatement(this, context);
     }
-
 }

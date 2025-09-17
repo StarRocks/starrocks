@@ -12,24 +12,31 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+package com.starrocks.sql.ast.warehouse;
 
-package com.starrocks.sql.ast;
-
+import com.starrocks.sql.ast.AstVisitor;
+import com.starrocks.sql.ast.ShowStmt;
 import com.starrocks.sql.parser.NodePosition;
 
-public class ShowRolesStmt extends ShowStmt {
+// show clusters of a warehouse
+public class ShowClustersStmt extends ShowStmt {
+    private String warehouseName;
 
-    public ShowRolesStmt() {
-        this(NodePosition.ZERO);
+    public ShowClustersStmt(String warehouseName) {
+        this(warehouseName, NodePosition.ZERO);
     }
 
-    public ShowRolesStmt(NodePosition pos) {
+    public ShowClustersStmt(String warehouseName, NodePosition pos) {
         super(pos);
+        this.warehouseName = warehouseName;
+    }
+
+    public String getWarehouseName() {
+        return warehouseName;
     }
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitShowRolesStatement(this, context);
+        return visitor.visitShowClusterStatement(this, context);
     }
-
 }

@@ -85,15 +85,6 @@ public abstract class EnhancedShowStmt extends ShowStmt {
     }
 
     /**
-     * Sets the WHERE clause predicate for filtering results.
-     *
-     * @param predicate The predicate expression (only = and LIKE operators supported)
-     */
-    public void setPredicate(Predicate predicate) {
-        this.predicate = predicate;
-    }
-
-    /**
      * Gets the WHERE clause predicate.
      *
      * @return The predicate expression, or null if no WHERE clause

@@ -12,24 +12,29 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.sql.ast;
 
 import com.starrocks.sql.parser.NodePosition;
 
-public class ShowRolesStmt extends ShowStmt {
+import java.util.UUID;
 
-    public ShowRolesStmt() {
-        this(NodePosition.ZERO);
+// clean all temporary tables created by a specific session.
+// when a session is closed, if there are temporary tables on it,
+// FE will automatically execute this command to delete the temporary table in time.
+public class CleanTemporaryTableStmt extends DdlStmt {
+    private UUID sessionId;
+
+    public CleanTemporaryTableStmt(UUID sessionId) {
+        super(NodePosition.ZERO);
+        this.sessionId = sessionId;
     }
 
-    public ShowRolesStmt(NodePosition pos) {
-        super(pos);
+    public UUID getSessionId() {
+        return sessionId;
     }
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitShowRolesStatement(this, context);
+        return visitor.visitCleanTemporaryTableStatement(this, context);
     }
-
 }

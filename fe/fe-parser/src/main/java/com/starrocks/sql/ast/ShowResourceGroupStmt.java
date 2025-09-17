@@ -12,43 +12,45 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+
 package com.starrocks.sql.ast;
 
 import com.starrocks.sql.parser.NodePosition;
 
-public class ShowGrantsStmt extends ShowStmt {
-    private final UserRef user;
-    private final String groupOrRole;
-    private final GrantType grantType;
+// Show ResourceGroups
+// 1. Show ResourceGroup specified by name
+//  SHOW RESOURCE GROUP <name>
+// 2. Show all ResourceGroups
+//  SHOW RESOURCE GROUPS ALL
+// 3. Show all of ResourceGroups that visible to current user
+//  SHOW RESOURCE GROUPS
 
-    public ShowGrantsStmt(UserRef user, NodePosition pos) {
+public class ShowResourceGroupStmt extends ShowStmt {
+    private final String name;
+    private final boolean listAll;
+    private final boolean verbose;
+
+    public ShowResourceGroupStmt(String name, boolean listAll, boolean verbose, NodePosition pos) {
         super(pos);
-        this.user = user;
-        this.groupOrRole = null;
-        grantType = GrantType.USER;
+        this.name = name;
+        this.listAll = listAll;
+        this.verbose = verbose;
     }
 
-    public ShowGrantsStmt(String groupOrRole, GrantType grantType, NodePosition pos) {
-        super(pos);
-        this.user = null;
-        this.groupOrRole = groupOrRole;
-        this.grantType = grantType;
+    public boolean isListAll() {
+        return listAll;
     }
 
-    public UserRef getUser() {
-        return user;
+    public boolean isVerbose() {
+        return verbose;
     }
 
-    public String getGroupOrRole() {
-        return groupOrRole;
-    }
-
-    public GrantType getGrantType() {
-        return grantType;
+    public String getName() {
+        return name;
     }
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitShowGrantsStatement(this, context);
+        return visitor.visitShowResourceGroupStatement(this, context);
     }
 }

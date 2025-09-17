@@ -17,19 +17,25 @@ package com.starrocks.sql.ast;
 
 import com.starrocks.sql.parser.NodePosition;
 
-public class ShowRolesStmt extends ShowStmt {
+public class UninstallPluginStmt extends DdlStmt {
 
-    public ShowRolesStmt() {
-        this(NodePosition.ZERO);
+    private final String pluginName;
+
+    public UninstallPluginStmt(String pluginName) {
+        this(pluginName, NodePosition.ZERO);
     }
 
-    public ShowRolesStmt(NodePosition pos) {
+    public UninstallPluginStmt(String pluginName, NodePosition pos) {
         super(pos);
+        this.pluginName = pluginName;
+    }
+
+    public String getPluginName() {
+        return pluginName;
     }
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitShowRolesStatement(this, context);
+        return visitor.visitUninstallPluginStatement(this, context);
     }
-
 }

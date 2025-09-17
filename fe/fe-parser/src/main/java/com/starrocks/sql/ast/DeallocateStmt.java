@@ -11,25 +11,30 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
-
-
 package com.starrocks.sql.ast;
 
 import com.starrocks.sql.parser.NodePosition;
 
-public class ShowRolesStmt extends ShowStmt {
+public class DeallocateStmt extends StatementBase {
+    private final String stmtName;
 
-    public ShowRolesStmt() {
-        this(NodePosition.ZERO);
+    public DeallocateStmt(String stmtName) {
+        super(NodePosition.ZERO);
+        this.stmtName = stmtName;
     }
 
-    public ShowRolesStmt(NodePosition pos) {
-        super(pos);
+    public String getStmtName() {
+        return stmtName;
+    }
+
+    @Override
+    public String toSql() {
+        return "DROP PREPARE " + stmtName;
     }
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitShowRolesStatement(this, context);
+        return visitor.visitDeallocatePrepareStatement(this, context);
     }
 
 }

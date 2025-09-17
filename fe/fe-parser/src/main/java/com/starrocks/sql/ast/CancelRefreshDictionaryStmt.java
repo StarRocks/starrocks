@@ -17,19 +17,21 @@ package com.starrocks.sql.ast;
 
 import com.starrocks.sql.parser.NodePosition;
 
-public class ShowRolesStmt extends ShowStmt {
+public class CancelRefreshDictionaryStmt extends CancelStmt {
 
-    public ShowRolesStmt() {
-        this(NodePosition.ZERO);
+    private String dictionaryName;
+
+    public CancelRefreshDictionaryStmt(String dictionaryName, NodePosition pos) {
+        super(pos);
+        this.dictionaryName = dictionaryName;
     }
 
-    public ShowRolesStmt(NodePosition pos) {
-        super(pos);
+    public String getDictionaryName() {
+        return dictionaryName;
     }
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitShowRolesStatement(this, context);
+        return visitor.visitCancelRefreshDictionaryStatement(this, context);
     }
-
 }

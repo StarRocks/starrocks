@@ -11,25 +11,33 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
-
-
 package com.starrocks.sql.ast;
 
 import com.starrocks.sql.parser.NodePosition;
 
-public class ShowRolesStmt extends ShowStmt {
+import java.util.List;
 
-    public ShowRolesStmt() {
-        this(NodePosition.ZERO);
-    }
+public class AnalyzeProfileStmt extends StatementBase {
 
-    public ShowRolesStmt(NodePosition pos) {
+    private final String queryId;
+    private final List<Integer> planNodeIds;
+
+    public AnalyzeProfileStmt(String queryId, List<Integer> planNodeIds, NodePosition pos) {
         super(pos);
+        this.queryId = queryId;
+        this.planNodeIds = planNodeIds;
     }
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitShowRolesStatement(this, context);
+        return visitor.visitAnalyzeProfileStatement(this, context);
     }
 
+    public String getQueryId() {
+        return queryId;
+    }
+
+    public List<Integer> getPlanNodeIds() {
+        return planNodeIds;
+    }
 }

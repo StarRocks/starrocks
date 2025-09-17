@@ -12,24 +12,34 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+package com.starrocks.sql.ast.integration;
 
-package com.starrocks.sql.ast;
-
+import com.starrocks.sql.ast.AstVisitor;
+import com.starrocks.sql.ast.DdlStmt;
 import com.starrocks.sql.parser.NodePosition;
 
-public class ShowRolesStmt extends ShowStmt {
+import java.util.Map;
 
-    public ShowRolesStmt() {
-        this(NodePosition.ZERO);
+public class CreateSecurityIntegrationStatement extends DdlStmt {
+    private final String name;
+    private final Map<String, String> propertyMap;
+
+    public CreateSecurityIntegrationStatement(String name, Map<String, String> propertyMap, NodePosition pos) {
+        super(pos);
+        this.name = name;
+        this.propertyMap = propertyMap;
     }
 
-    public ShowRolesStmt(NodePosition pos) {
-        super(pos);
+    public Map<String, String> getPropertyMap() {
+        return propertyMap;
+    }
+
+    public String getName() {
+        return name;
     }
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitShowRolesStatement(this, context);
+        return visitor.visitCreateSecurityIntegrationStatement(this, context);
     }
-
 }

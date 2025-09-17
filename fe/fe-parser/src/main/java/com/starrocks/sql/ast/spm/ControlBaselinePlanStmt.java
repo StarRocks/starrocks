@@ -12,24 +12,34 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+package com.starrocks.sql.ast.spm;
 
-package com.starrocks.sql.ast;
-
+import com.starrocks.sql.ast.AstVisitor;
+import com.starrocks.sql.ast.DdlStmt;
 import com.starrocks.sql.parser.NodePosition;
 
-public class ShowRolesStmt extends ShowStmt {
+import java.util.List;
 
-    public ShowRolesStmt() {
-        this(NodePosition.ZERO);
+public class ControlBaselinePlanStmt extends DdlStmt {
+    private final boolean isEnable;
+    private final List<Long> baseLineId;
+
+    public ControlBaselinePlanStmt(boolean isEnable, List<Long> baseLineId, NodePosition pos) {
+        super(pos);
+        this.isEnable = isEnable;
+        this.baseLineId = baseLineId;
     }
 
-    public ShowRolesStmt(NodePosition pos) {
-        super(pos);
+    public boolean isEnable() {
+        return isEnable;
+    }
+
+    public List<Long> getBaseLineId() {
+        return baseLineId;
     }
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitShowRolesStatement(this, context);
+        return visitor.visitControlBaselinePlanStatement(this, context);
     }
-
 }
