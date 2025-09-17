@@ -210,6 +210,9 @@ public abstract class Expr extends TreeNode<Expr> implements ParseNode, Cloneabl
     // passed to BE storage engine
     private boolean isIndexOnlyFilter = false;
 
+    // depth is used to indicate the depth of the same operator in the tree
+    protected int depth = 0;
+
     protected Expr() {
         pos = NodePosition.ZERO;
         type = Type.INVALID;
@@ -246,6 +249,7 @@ public abstract class Expr extends TreeNode<Expr> implements ParseNode, Cloneabl
         printSqlInParens = other.printSqlInParens;
         children = Expr.cloneList(other.children);
         hints = Lists.newArrayList(hints);
+        depth = other.depth;
     }
 
     @SuppressWarnings("unchecked")
@@ -276,6 +280,15 @@ public abstract class Expr extends TreeNode<Expr> implements ParseNode, Cloneabl
             return type;
         }
         return originType;
+    }
+
+    public int getDepth() {
+        return depth;
+    }
+
+    public void incrDepth() {
+        int curDepth = children.stream().mapToInt(Expr::getDepth).max().orElse(0);
+        this.depth = curDepth + 1;
     }
 
     private Optional<Expr> replaceLargeStringLiteralImpl() {
