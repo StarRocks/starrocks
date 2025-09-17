@@ -50,67 +50,72 @@ logerror()
     log_stderr "ERROR $@"
 }
 
-# Function to detect CPU cores and set default_unpartitioned_table_bucket_num
+# Function to detect CPU cores with Docker cgroup support
+detect_cpu_cores()
+{
+    # Initialize variables
+    local cpu_cores=""
+    local cgroup_detected=false
+    
+    # Method 1: Check Docker cgroup v2 CPU limit
+    if [ -f /sys/fs/cgroup/cpu.max ]; then
+        local cpu_quota=$(cat /sys/fs/cgroup/cpu.max | cut -d' ' -f1)
+        loginfo "cgroup v2 cpu.max: $cpu_quota"
+        if [ "$cpu_quota" != "max" ] && [ -n "$cpu_quota" ] && [ "$cpu_quota" != "" ]; then
+            cpu_cores=$((cpu_quota / 100000))
+            cgroup_detected=true
+            loginfo "Detected CPU cores from cgroup v2: $cpu_cores"
+        fi
+    # Method 2: Check Docker cgroup v1 CPU limit
+    elif [ -f /sys/fs/cgroup/cpu/cpu.cfs_quota_us ] && [ -f /sys/fs/cgroup/cpu/cpu.cfs_period_us ]; then
+        local cpu_quota=$(cat /sys/fs/cgroup/cpu/cpu.cfs_quota_us)
+        local cpu_period=$(cat /sys/fs/cgroup/cpu/cpu.cfs_period_us)
+        loginfo "cgroup v1 cpu.cfs_quota_us: $cpu_quota, cpu.cfs_period_us: $cpu_period"
+        if [ "$cpu_quota" != "-1" ] && [ -n "$cpu_quota" ] && [ -n "$cpu_period" ] && [ "$cpu_quota" != "" ] && [ "$cpu_period" != "" ]; then
+            cpu_cores=$((cpu_quota / cpu_period))
+            cgroup_detected=true
+            loginfo "Detected CPU cores from cgroup v1: $cpu_cores"
+        fi
+    fi
+    
+    # Method 3: If cgroup detection failed, try nproc (but this might show host CPU count)
+    if [ "$cgroup_detected" = "false" ] || [ -z "$cpu_cores" ] || [ "$cpu_cores" = "0" ]; then
+        if command -v nproc >/dev/null 2>&1; then
+            cpu_cores=$(nproc)
+            loginfo "Using nproc fallback: $cpu_cores cores (may be host CPU count)"
+        elif [ -f /proc/cpuinfo ]; then
+            cpu_cores=$(grep -c ^processor /proc/cpuinfo)
+            loginfo "Using /proc/cpuinfo fallback: $cpu_cores cores (may be host CPU count)"
+        else
+            cpu_cores=8
+            loginfo "Using default fallback: $cpu_cores cores"
+        fi
+    fi
+    
+    # Ensure minimum value and valid integer
+    if [ -z "$cpu_cores" ] || [ "$cpu_cores" -lt 1 ] 2>/dev/null; then
+        cpu_cores=1
+        loginfo "Adjusted CPU cores to minimum value: $cpu_cores"
+    fi
+    
+    # Return the detected CPU cores
+    echo "$cpu_cores"
+}
+
+# Function to setup CPU-based configuration
 setup_cpu_based_config()
 {
     # Ensure fe.conf directory exists
     mkdir -p $SR_HOME/fe/conf
     
-    # Detect CPU cores with Docker cgroup support
-    CPU_CORES=8  # Default fallback value
-    
-    # Method 1: Check Docker cgroup v2 CPU limit
-    if [ -f /sys/fs/cgroup/cpu.max ]; then
-        CPU_QUOTA=$(cat /sys/fs/cgroup/cpu.max | cut -d' ' -f1)
-        if [ "$CPU_QUOTA" != "max" ] && [ -n "$CPU_QUOTA" ]; then
-            CPU_CORES=$(echo "$CPU_QUOTA / 100000" | bc -l | cut -d'.' -f1)
-            loginfo "Detected CPU cores from cgroup v2: $CPU_CORES"
-        fi
-    # Method 2: Check Docker cgroup v1 CPU limit
-    elif [ -f /sys/fs/cgroup/cpu/cpu.cfs_quota_us ] && [ -f /sys/fs/cgroup/cpu/cpu.cfs_period_us ]; then
-        CPU_QUOTA=$(cat /sys/fs/cgroup/cpu/cpu.cfs_quota_us)
-        CPU_PERIOD=$(cat /sys/fs/cgroup/cpu/cpu.cfs_period_us)
-        if [ "$CPU_QUOTA" != "-1" ] && [ -n "$CPU_QUOTA" ] && [ -n "$CPU_PERIOD" ]; then
-            CPU_CORES=$(echo "$CPU_QUOTA / $CPU_PERIOD" | bc -l | cut -d'.' -f1)
-            loginfo "Detected CPU cores from cgroup v1: $CPU_CORES"
-        fi
-    fi
-    
-    # Method 3: If cgroup detection failed, try nproc (but this might show host CPU count)
-    if [ "$CPU_CORES" = "8" ] || [ "$CPU_CORES" = "0" ]; then
-        if command -v nproc >/dev/null 2>&1; then
-            CPU_CORES=$(nproc)
-            loginfo "Using nproc fallback: $CPU_CORES cores (may be host CPU count)"
-        elif [ -f /proc/cpuinfo ]; then
-            CPU_CORES=$(grep -c ^processor /proc/cpuinfo)
-            loginfo "Using /proc/cpuinfo fallback: $CPU_CORES cores (may be host CPU count)"
-        else
-            CPU_CORES=8
-            loginfo "Using default fallback: $CPU_CORES cores"
-        fi
-    fi
-    
-    # Ensure minimum value
-    if [ "$CPU_CORES" -lt 1 ]; then
-        CPU_CORES=1
-        loginfo "Adjusted CPU cores to minimum value: $CPU_CORES"
-    fi
+    # Detect CPU cores
+    local cpu_cores=$(detect_cpu_cores)
     
     # Calculate bucket number (CPU cores * 2)
-    BUCKET_NUM=$((CPU_CORES * 2))
+    local bucket_num=$((cpu_cores * 2))
     
-    loginfo "Final CPU cores: $CPU_CORES, setting default_unpartitioned_table_bucket_num to $BUCKET_NUM"
-    
-    # Append the configuration to fe.conf
-    echo "default_unpartitioned_table_bucket_num = $BUCKET_NUM" >> $SR_HOME/fe/conf/fe.conf
-    
-    # Verify the configuration was written successfully
-    if [ $? -eq 0 ]; then
-        loginfo "Successfully configured default_unpartitioned_table_bucket_num = $BUCKET_NUM"
-    else
-        logerror "Failed to write default_unpartitioned_table_bucket_num configuration"
-        return 1
-    fi
+    loginfo "Final CPU cores: $cpu_cores, setting default_unpartitioned_table_bucket_num to $bucket_num"
+    echo "default_unpartitioned_table_bucket_num = $bucket_num" >> $SR_HOME/fe/conf/fe.conf
 }
 
 update_fe_conf_if_run_in_shared_data_mode()
