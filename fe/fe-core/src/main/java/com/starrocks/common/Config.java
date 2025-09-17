@@ -2616,6 +2616,12 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true)
     public static boolean enable_routine_load_lag_metrics = false;
 
+    /**
+     * Whether to collect routine load latency metrics.
+     */
+    @ConfField(mutable = true)
+    public static boolean enable_routine_load_lag_time_metrics = false;
+
     @ConfField(mutable = true)
     public static boolean enable_collect_query_detail_info = false;
 
