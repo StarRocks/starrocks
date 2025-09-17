@@ -159,6 +159,7 @@ import com.starrocks.sql.ast.AdminShowReplicaStatusStmt;
 import com.starrocks.sql.ast.AstVisitorExtendInterface;
 import com.starrocks.sql.ast.DescStorageVolumeStmt;
 import com.starrocks.sql.ast.DescribeStmt;
+import com.starrocks.sql.ast.EnhancedShowStmt;
 import com.starrocks.sql.ast.GrantPrivilegeStmt;
 import com.starrocks.sql.ast.GrantRevokeClause;
 import com.starrocks.sql.ast.GrantType;
@@ -3058,7 +3059,11 @@ public class ShowExecutor {
         private List<List<String>> doPredicate(ShowStmt showStmt,
                                                ShowResultSetMetaData showResultSetMetaData,
                                                List<List<String>> rows) {
-            Predicate predicate = showStmt.getPredicate();
+            if (!(showStmt instanceof EnhancedShowStmt sortedShowStmt)) {
+                return rows;
+            }
+
+            Predicate predicate = sortedShowStmt.getPredicate();
             if (predicate == null) {
                 return rows;
             }
