@@ -558,6 +558,96 @@ public class LakePublishBatchTest {
         }
     }
 
+<<<<<<< HEAD
+=======
+    @ParameterizedTest
+    @ValueSource(booleans = {false, true})
+    public void testBatchPublishReplicationTransaction(boolean enableAggregation) throws Exception {
+        int minBatchSize = Config.lake_batch_publish_min_version_num;
+        Config.lake_batch_publish_min_version_num = 1;
+
+        String tableName = enableAggregation ? TABLE_AGG_ON : TABLE_AGG_OFF;
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(DB);
+        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), tableName);
+        List<TabletCommitInfo> transTablets = Lists.newArrayList();
+
+        for (Partition partition : table.getPartitions()) {
+            MaterializedIndex baseIndex = partition.getDefaultPhysicalPartition().getBaseIndex();
+            for (Long tabletId : baseIndex.getTabletIds()) {
+                for (Long backendId : GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackendIds()) {
+                    TabletCommitInfo tabletCommitInfo = new TabletCommitInfo(tabletId, backendId);
+                    transTablets.add(tabletCommitInfo);
+                }
+            }
+        }
+
+        GlobalTransactionMgr globalTransactionMgr = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr();
+        long transactionId1 = globalTransactionMgr.
+                beginTransaction(db.getId(), Lists.newArrayList(table.getId()),
+                        "label_replication_1" + "_" + UUIDUtil.genUUID().toString(),
+                        transactionSource,
+                        TransactionState.LoadJobSourceType.REPLICATION, Config.stream_load_default_timeout_second);
+
+        Map<Long, Long> partitionVersions = new HashMap<>();
+        for (Partition partition : table.getPartitions()) {
+            partitionVersions.put(partition.getDefaultPhysicalPartition().getId(),
+                    partition.getDefaultPhysicalPartition().getVisibleVersion() + 2);
+        }
+
+        // commit a transaction
+        VisibleStateWaiter waiter1 = globalTransactionMgr.commitTransaction(db.getId(), transactionId1, transTablets,
+                Lists.newArrayList(), new ReplicationTxnCommitAttachment(partitionVersions, null));
+
+        long transactionId2 = globalTransactionMgr.
+                beginTransaction(db.getId(), Lists.newArrayList(table.getId()),
+                        "label_replication_2" + "_" + UUIDUtil.genUUID().toString(),
+                        transactionSource,
+                        TransactionState.LoadJobSourceType.BACKEND_STREAMING, Config.stream_load_default_timeout_second);
+
+        // commit a transaction
+        VisibleStateWaiter waiter2 = globalTransactionMgr.commitTransaction(db.getId(), transactionId2, transTablets,
+                Lists.newArrayList(), null);
+
+        {
+            List<TransactionStateBatch> batches = globalTransactionMgr.getReadyPublishTransactionsBatch();
+            Assertions.assertEquals(1, batches.size());
+            Assertions.assertEquals(1, batches.get(0).size());
+            // replication transaction
+            Assertions.assertEquals(TransactionType.TXN_REPLICATION,
+                    batches.get(0).getTransactionStates().get(0).getTransactionType());
+
+            PublishVersionDaemon publishVersionDaemon = new PublishVersionDaemon();
+            publishVersionDaemon.runAfterCatalogReady();
+
+            Assertions.assertTrue(waiter1.await(10, TimeUnit.SECONDS));
+
+            // Verify that the transactions have been published
+            TransactionState transactionState1 = globalTransactionMgr.getDatabaseTransactionMgr(db.getId()).
+                    getTransactionState(transactionId1);
+            assertEquals(TransactionStatus.VISIBLE, transactionState1.getTransactionStatus());
+
+            // begin another batch
+            batches = globalTransactionMgr.getReadyPublishTransactionsBatch();
+            Assertions.assertEquals(1, batches.size());
+            Assertions.assertEquals(1, batches.get(0).size());
+            // normal transaction
+            Assertions.assertEquals(TransactionType.TXN_NORMAL,
+                    batches.get(0).getTransactionStates().get(0).getTransactionType());
+
+            publishVersionDaemon.runAfterCatalogReady();
+            Assertions.assertTrue(waiter2.await(10, TimeUnit.SECONDS));
+
+            // Verify that the transactions have been published
+            TransactionState transactionState2 = globalTransactionMgr.getDatabaseTransactionMgr(db.getId()).
+                    getTransactionState(transactionId2);
+
+            assertEquals(TransactionStatus.VISIBLE, transactionState2.getTransactionStatus());
+        }
+
+        Config.lake_batch_publish_min_version_num = minBatchSize;
+    }
+
+>>>>>>> 8736a9d386 ([BugFix] Fix version check failed while appling replication txn with compaction enabled (#62663))
     @Test
     public void testBatchPublishShadowIndex() throws Exception {
         Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(DB);
