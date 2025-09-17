@@ -255,7 +255,7 @@ public class ShowGrantsExecutorTest {
 
         // Test showing grants for non-existent role should throw exception
         ShowGrantsStmt stmt = new ShowGrantsStmt("non_existent_role", GrantType.ROLE, NodePosition.ZERO);
-        
+
         try {
             ShowExecutor.execute(stmt, ctx);
             Assertions.fail("Expected SemanticException for non-existent role");
@@ -365,5 +365,287 @@ public class ShowGrantsExecutorTest {
 
         // Should return empty result for user with no privileges
         Assertions.assertTrue(resultSet.getResultRows().isEmpty());
+    }
+
+    /**
+     * Test case: Show grants for user with direct privilege grants
+     * Test point: Verify that when privileges are directly granted to a user (not through roles),
+     * the show grants result displays the direct privileges correctly
+     */
+    @Test
+    public void testShowGrantsForUserWithDirectPrivilegeGrants() throws Exception {
+        AuthorizationMgr authorizationMgr = new AuthorizationMgr(new DefaultAuthorizationProvider());
+        GlobalStateMgr.getCurrentState().setAuthorizationMgr(authorizationMgr);
+
+        AuthenticationMgr authenticationMgr = new AuthenticationMgr();
+        GlobalStateMgr.getCurrentState().setAuthenticationMgr(authenticationMgr);
+
+        // Create user
+        UserRef directPrivUser = new UserRef("direct_priv_user", "%", false, false, NodePosition.ZERO);
+        authenticationMgr.createUser(
+                new CreateUserStmt(directPrivUser, true, null, List.of(), Map.of(), NodePosition.ZERO));
+
+        ConnectContext ctx = new ConnectContext();
+
+        // Grant catalog privileges directly to user
+        String sql = "grant USAGE, CREATE DATABASE on CATALOG default_catalog to direct_priv_user";
+        GrantPrivilegeStmt grantPrivilegeStmt = (GrantPrivilegeStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+        DDLStmtExecutor.execute(grantPrivilegeStmt, ctx);
+
+        // Grant database privileges directly to user
+        sql = "grant DROP, ALTER on ALL DATABASES to direct_priv_user";
+        grantPrivilegeStmt = (GrantPrivilegeStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+        DDLStmtExecutor.execute(grantPrivilegeStmt, ctx);
+
+        // Grant table privileges directly to user
+        sql = "grant SELECT, INSERT, UPDATE, DELETE on ALL TABLES IN ALL DATABASES to direct_priv_user";
+        grantPrivilegeStmt = (GrantPrivilegeStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+        DDLStmtExecutor.execute(grantPrivilegeStmt, ctx);
+
+        // Grant additional table privileges directly to user
+        sql = "grant EXPORT on ALL TABLES IN ALL DATABASES to direct_priv_user";
+        grantPrivilegeStmt = (GrantPrivilegeStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+        DDLStmtExecutor.execute(grantPrivilegeStmt, ctx);
+
+        // Test showing grants for user with direct privileges
+        ShowGrantsStmt stmt = new ShowGrantsStmt(directPrivUser, NodePosition.ZERO);
+        ShowResultSet resultSet = ShowExecutor.execute(stmt, ctx);
+
+        // Verify that all direct privileges are displayed correctly
+        String resultString = resultSet.getResultRows().toString();
+
+        // Check catalog privileges
+        Assertions.assertTrue(
+                resultString.contains("GRANT USAGE, CREATE DATABASE ON CATALOG default_catalog TO USER 'direct_priv_user'@'%'"),
+                "Should contain catalog privileges: " + resultString);
+
+        // Check database privileges
+        Assertions.assertTrue(resultString.contains("GRANT DROP, ALTER ON ALL DATABASES TO USER 'direct_priv_user'@'%'"),
+                "Should contain database privileges: " + resultString);
+
+        // Check table privileges (ALL TABLES) - permissions are merged into one entry
+        Assertions.assertTrue(resultString.contains("GRANT DELETE, INSERT, SELECT, EXPORT, UPDATE ON ALL TABLES" +
+                        " IN ALL DATABASES TO USER 'direct_priv_user'@'%'"),
+                "Should contain merged table privileges for all tables: " + resultString);
+
+        // Verify that the result contains exactly 3 privilege entries (catalog, database, merged table privileges)
+        Assertions.assertEquals(3, resultSet.getResultRows().size(),
+                "Should have exactly 3 privilege entries, but got: " + resultSet.getResultRows().size());
+    }
+
+    /**
+     * Test case: Show grants for user with specific database and table privileges
+     * Test point: Verify that when privileges are granted on specific databases and tables from MockedLocalMetaStore,
+     * the show grants result displays the specific privileges correctly
+     */
+    @Test
+    public void testShowGrantsForUserWithSpecificDatabaseAndTablePrivileges() throws Exception {
+        AuthorizationMgr authorizationMgr = new AuthorizationMgr(new DefaultAuthorizationProvider());
+        GlobalStateMgr.getCurrentState().setAuthorizationMgr(authorizationMgr);
+
+        AuthenticationMgr authenticationMgr = new AuthenticationMgr();
+        GlobalStateMgr.getCurrentState().setAuthenticationMgr(authenticationMgr);
+
+        // Create user
+        UserRef specificPrivUser = new UserRef("specific_priv_user", "%", false, false, NodePosition.ZERO);
+        authenticationMgr.createUser(
+                new CreateUserStmt(specificPrivUser, true, null, List.of(), Map.of(), NodePosition.ZERO));
+
+        ConnectContext ctx = new ConnectContext();
+
+        // Grant privileges on specific database from MockedLocalMetaStore
+        String sql = "grant CREATE TABLE, DROP, ALTER on DATABASE db to specific_priv_user";
+        GrantPrivilegeStmt grantPrivilegeStmt = (GrantPrivilegeStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+        DDLStmtExecutor.execute(grantPrivilegeStmt, ctx);
+
+        // Grant privileges on specific table from MockedLocalMetaStore
+        sql = "grant SELECT, INSERT on TABLE db.tbl0 to specific_priv_user";
+        grantPrivilegeStmt = (GrantPrivilegeStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+        DDLStmtExecutor.execute(grantPrivilegeStmt, ctx);
+
+        // Grant privileges on another specific table from MockedLocalMetaStore
+        sql = "grant DELETE, UPDATE on TABLE db.tbl1 to specific_priv_user";
+        grantPrivilegeStmt = (GrantPrivilegeStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+        DDLStmtExecutor.execute(grantPrivilegeStmt, ctx);
+
+        // Grant privileges on materialized view from MockedLocalMetaStore
+        sql = "grant SELECT, REFRESH on MATERIALIZED VIEW db.mv1 to specific_priv_user";
+        grantPrivilegeStmt = (GrantPrivilegeStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+        DDLStmtExecutor.execute(grantPrivilegeStmt, ctx);
+
+        // Grant privileges on view from MockedLocalMetaStore
+        sql = "grant SELECT on VIEW db.view1 to specific_priv_user";
+        grantPrivilegeStmt = (GrantPrivilegeStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+        DDLStmtExecutor.execute(grantPrivilegeStmt, ctx);
+
+        // Test showing grants for user with specific privileges
+        ShowGrantsStmt stmt = new ShowGrantsStmt(specificPrivUser, NodePosition.ZERO);
+        ShowResultSet resultSet = ShowExecutor.execute(stmt, ctx);
+
+        // Verify that all specific privileges are displayed correctly
+        String resultString = resultSet.getResultRows().toString();
+
+        // Check database privileges
+        Assertions.assertTrue(
+                resultString.contains("GRANT CREATE TABLE, DROP, ALTER ON DATABASE db TO USER 'specific_priv_user'@'%'"),
+                "Should contain database privileges: " + resultString);
+
+        // Check table privileges (tbl0)
+        Assertions.assertTrue(resultString.contains("GRANT INSERT, SELECT ON TABLE db.tbl0 TO USER 'specific_priv_user'@'%'"),
+                "Should contain table privileges for tbl0: " + resultString);
+
+        // Check table privileges (tbl1)
+        Assertions.assertTrue(resultString.contains("GRANT DELETE, UPDATE ON TABLE db.tbl1 TO USER 'specific_priv_user'@'%'"),
+                "Should contain table privileges for tbl1: " + resultString);
+
+        // Check materialized view privileges
+        Assertions.assertTrue(
+                resultString.contains("GRANT REFRESH, SELECT ON MATERIALIZED VIEW db.mv1 TO USER 'specific_priv_user'@'%'"),
+                "Should contain materialized view privileges: " + resultString);
+
+        // Check view privileges
+        Assertions.assertTrue(resultString.contains("GRANT SELECT ON VIEW db.view1 TO USER 'specific_priv_user'@'%'"),
+                "Should contain view privileges: " + resultString);
+
+        // Verify that the result contains exactly 5 privilege entries
+        Assertions.assertEquals(5, resultSet.getResultRows().size(),
+                "Should have exactly 5 privilege entries, but got: " + resultSet.getResultRows().size());
+    }
+
+    /**
+     * Test case: Show grants for current user (no UserRef specified)
+     * Test point: Verify that when no UserRef is specified in ShowGrantsStmt, it uses the current user from ConnectContext
+     */
+    @Test
+    public void testShowGrantsForCurrentUser() throws Exception {
+        AuthorizationMgr authorizationMgr = new AuthorizationMgr(new DefaultAuthorizationProvider());
+        GlobalStateMgr.getCurrentState().setAuthorizationMgr(authorizationMgr);
+
+        AuthenticationMgr authenticationMgr = new AuthenticationMgr();
+        GlobalStateMgr.getCurrentState().setAuthenticationMgr(authenticationMgr);
+
+        // Create user
+        UserRef currentUser = new UserRef("current_user", "%", false, false, NodePosition.ZERO);
+        authenticationMgr.createUser(
+                new CreateUserStmt(currentUser, true, null, List.of(), Map.of(), NodePosition.ZERO));
+
+        ConnectContext ctx = new ConnectContext();
+
+        // Set current user identity in ConnectContext
+        UserIdentity userIdentity = UserIdentity.createAnalyzedUserIdentWithIp("current_user", "%");
+        ctx.setCurrentUserIdentity(userIdentity);
+
+        // Grant some privileges to the current user
+        String sql = "grant SELECT, INSERT on ALL TABLES IN ALL DATABASES to 'current_user'@'%'";
+        GrantPrivilegeStmt grantPrivilegeStmt = (GrantPrivilegeStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+        DDLStmtExecutor.execute(grantPrivilegeStmt, ctx);
+
+        // Grant database privileges
+        sql = "grant CREATE TABLE, DROP on ALL DATABASES to 'current_user'@'%'";
+        grantPrivilegeStmt = (GrantPrivilegeStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+        DDLStmtExecutor.execute(grantPrivilegeStmt, ctx);
+
+        // Test showing grants for current user (no UserRef specified - first parameter is null)
+        ShowGrantsStmt stmt = new ShowGrantsStmt(null, NodePosition.ZERO);
+        ShowResultSet resultSet = ShowExecutor.execute(stmt, ctx);
+
+        // Verify that the result shows grants for the current user
+        String resultString = resultSet.getResultRows().toString();
+
+        // Check table privileges
+        Assertions.assertTrue(
+                resultString.contains("GRANT INSERT, SELECT ON ALL TABLES IN ALL DATABASES TO USER 'current_user'@'%'"),
+                "Should contain table privileges for current user: " + resultString);
+
+        // Check database privileges
+        Assertions.assertTrue(resultString.contains("GRANT CREATE TABLE, DROP ON ALL DATABASES TO USER 'current_user'@'%'"),
+                "Should contain database privileges for current user: " + resultString);
+
+        // Verify that the result contains exactly 2 privilege entries
+        Assertions.assertEquals(2, resultSet.getResultRows().size(),
+                "Should have exactly 2 privilege entries, but got: " + resultSet.getResultRows().size());
+    }
+
+    /**
+     * Test case: Show grants for user with granted roles
+     * Test point: Verify that when roles are granted to a user, the show grants result displays the role grants correctly
+     */
+    @Test
+    public void testShowGrantsForUserWithGrantedRoles() throws Exception {
+        // Setup
+        AuthorizationMgr authorizationMgr = new AuthorizationMgr(new DefaultAuthorizationProvider());
+        GlobalStateMgr.getCurrentState().setAuthorizationMgr(authorizationMgr);
+
+        AuthenticationMgr authenticationMgr = new AuthenticationMgr();
+        GlobalStateMgr.getCurrentState().setAuthenticationMgr(authenticationMgr);
+
+        ConnectContext ctx = new ConnectContext();
+
+        // Create a test user
+        UserRef testUser = new UserRef("role_granted_user", "%", false, false, NodePosition.ZERO);
+        authenticationMgr.createUser(
+                new CreateUserStmt(testUser, true, null, List.of(), Map.of(), NodePosition.ZERO));
+
+        // Create a test role with some privileges
+        String createRoleSQL = "create role test_role";
+        CreateRoleStmt createRoleStmt = (CreateRoleStmt) UtFrameUtils.parseStmtWithNewParser(createRoleSQL, ctx);
+        DDLStmtExecutor.execute(createRoleStmt, ctx);
+
+        // Grant some privileges to the role
+        String grantPrivilegeSQL = "grant SELECT, INSERT on ALL TABLES IN ALL DATABASES to ROLE test_role";
+        GrantPrivilegeStmt grantPrivilegeStmt = (GrantPrivilegeStmt) UtFrameUtils.parseStmtWithNewParser(grantPrivilegeSQL, ctx);
+        DDLStmtExecutor.execute(grantPrivilegeStmt, ctx);
+
+        // Grant database privileges to the role
+        grantPrivilegeSQL = "grant CREATE TABLE, DROP on ALL DATABASES to ROLE test_role";
+        grantPrivilegeStmt = (GrantPrivilegeStmt) UtFrameUtils.parseStmtWithNewParser(grantPrivilegeSQL, ctx);
+        DDLStmtExecutor.execute(grantPrivilegeStmt, ctx);
+
+        // Grant the role to the user
+        String grantRoleSQL = "grant test_role to 'role_granted_user'@'%'";
+        GrantRoleStmt grantRoleStmt = (GrantRoleStmt) UtFrameUtils.parseStmtWithNewParser(grantRoleSQL, ctx);
+        DDLStmtExecutor.execute(grantRoleStmt, ctx);
+
+        // Grant another role to test multiple role grants
+        createRoleSQL = "create role secondary_role";
+        createRoleStmt = (CreateRoleStmt) UtFrameUtils.parseStmtWithNewParser(createRoleSQL, ctx);
+        DDLStmtExecutor.execute(createRoleStmt, ctx);
+
+        // Grant some privileges to the secondary role
+        grantPrivilegeSQL = "grant DELETE, UPDATE on ALL TABLES IN ALL DATABASES to ROLE secondary_role";
+        grantPrivilegeStmt = (GrantPrivilegeStmt) UtFrameUtils.parseStmtWithNewParser(grantPrivilegeSQL, ctx);
+        DDLStmtExecutor.execute(grantPrivilegeStmt, ctx);
+
+        // Grant the secondary role to the user
+        grantRoleSQL = "grant secondary_role to 'role_granted_user'@'%'";
+        grantRoleStmt = (GrantRoleStmt) UtFrameUtils.parseStmtWithNewParser(grantRoleSQL, ctx);
+        DDLStmtExecutor.execute(grantRoleStmt, ctx);
+
+        // Execute show grants for the user
+        UserRef userRef = new UserRef("role_granted_user", "%", false, false, NodePosition.ZERO);
+        ShowGrantsStmt stmt = new ShowGrantsStmt(userRef, NodePosition.ZERO);
+        ShowResultSet resultSet = ShowExecutor.execute(stmt, ctx);
+
+        // Verify the results
+        Assertions.assertNotNull(resultSet, "Result set should not be null");
+        Assertions.assertFalse(resultSet.getResultRows().isEmpty(), "Should have role grant entries");
+
+        String resultString = resultSet.getResultRows().toString();
+
+        // Check that both roles are granted to the user (they may be merged into one statement)
+        Assertions.assertTrue(resultString.contains("'test_role'") && resultString.contains("'secondary_role'"),
+                "Should contain both test_role and secondary_role grants: " + resultString);
+
+        // Check the format of role grants
+        Assertions.assertTrue(resultString.contains("GRANT") && resultString.contains("TO 'role_granted_user'@'%'"),
+                "Should contain role grant statement for the user: " + resultString);
+
+        // Verify that we have at least 1 role grant entry (roles may be merged)
+        Assertions.assertTrue(resultSet.getResultRows().size() >= 1,
+                "Should have at least 1 role grant entry, but got: " + resultSet.getResultRows().size());
+
+        // Verify no direct privileges are shown (only role grants)
+        Assertions.assertFalse(resultString.contains("GRANT SELECT") || resultString.contains("GRANT INSERT"),
+                "Should not contain direct privileges, only role grants: " + resultString);
     }
 }

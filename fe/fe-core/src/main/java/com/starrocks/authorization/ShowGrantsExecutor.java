@@ -80,6 +80,8 @@ public class ShowGrantsExecutor {
                 UserIdentity userIdentity;
                 if (user == null) {
                     userIdentity = context.getCurrentUserIdentity();
+                    user = new UserRef(userIdentity.getUser(), userIdentity.getHost(), userIdentity.isDomain(),
+                            userIdentity.isEphemeral(), NodePosition.ZERO);
                 } else {
                     userIdentity = new UserIdentity(user.getUser(), user.getHost(), user.isDomain(), user.isExternal());
                 }
@@ -100,7 +102,7 @@ public class ShowGrantsExecutor {
                     Map<ObjectType, List<PrivilegeEntry>> typeToPrivilegeEntryList =
                             authorizationManager.getTypeToPrivilegeEntryListByUser(userIdentity);
                     infos.addAll(privilegeToRowString(authorizationManager,
-                            new GrantRevokeClause(statement.getUser(), null), typeToPrivilegeEntryList));
+                            new GrantRevokeClause(user, null), typeToPrivilegeEntryList));
                 }
             }
             return new ShowResultSet(metaData, infos);

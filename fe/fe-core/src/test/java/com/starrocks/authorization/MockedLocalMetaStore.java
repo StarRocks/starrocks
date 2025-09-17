@@ -49,7 +49,7 @@ public class MockedLocalMetaStore extends LocalMetastore {
         Database db = new Database(idGenerator.getNextId(), "db");
         databaseSet.put("db", db);
 
-        Database db1 = new Database(idGenerator.getNextId(), "db3");
+        Database db1 = new Database(idGenerator.getNextId(), "db1");
         databaseSet.put("db1", db1);
 
         Database db3 = new Database(idGenerator.getNextId(), "db3");
