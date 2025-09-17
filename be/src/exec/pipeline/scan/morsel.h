@@ -22,6 +22,7 @@
 #include "runtime/mem_pool.h"
 #include "storage/olap_common.h"
 #include "storage/range.h"
+#include "storage/rowset/rowid_range_option.h"
 #include "storage/rowset/segment_group.h"
 #include "storage/seek_range.h"
 #include "storage/tablet.h"
@@ -501,14 +502,6 @@ public:
                         const std::vector<OlapTuple>& range_end_key) override;
     bool empty() const override { return _unget_morsel == nullptr && _tablet_idx >= _tablets.size(); }
     StatusOr<MorselPtr> try_get() override;
-
-    // The initial scan ranges encompass the entire dataset without any predicate filtering.
-    // After processing the first morsel, scan ranges can be refined by intersecting with filtered scan ranges.
-    // This refinement achieves the following:
-    // - Prevents redundant scans on the same segment by ensuring subsequent scans are filtered based on previous results.
-    // - Mitigates data skew caused by selective predicates (e.g., on key columns), which could otherwise result in many empty morsels.
-    void refine_scan_ranges(const RowidRangeOptionPtr& rowid_range);
-
     std::string name() const override { return "physical_split_morsel_queue"; }
     Type type() const override { return PHYSICAL_SPLIT; }
 
@@ -548,21 +541,6 @@ private:
     std::vector<SeekRange> _tablet_seek_ranges;
     SparseRange<> _segment_scan_range;
     SparseRangeIterator<> _segment_range_iter;
-
-    enum SegmentState {
-        Init,     // Is executing the first split
-        Refined,  // Already executed the first split
-        Finished, // Already consumed
-    };
-
-    struct RefinedSegment {
-        SegmentState state;
-        bool is_first_split;
-        SparseRange<> scan_range;
-        SparseRangeIterator<> range_iter;
-    };
-
-    std::deque<RefinedSegment> _refined_segments;
 
     // The number of unprocessed rows of the current segment.
     // size_t _num_segment_rest_rows = 0;
@@ -662,6 +640,147 @@ private:
 };
 
 MorselQueuePtr create_empty_morsel_queue();
+
+// PhysicalSplit morsel queue with segment-level refinement for efficient parallel scanning.
+//
+// Segment Refinement Process:
+// 1. For each segment, create an initial morsel dedicated to refinement. This step leverages lightweight indexing to quickly exclude irrelevant rows.
+// 2. Upon successful refinement, the segment is subdivided into multiple morsels, enabling concurrent processing by multiple threads.
+// 3. Each segment transitions through three states:
+//    - Init: Awaiting or undergoing initial refinement.
+//    - Refined: Ready for parallel scan with fine-grained morsels.
+//    - Finished: All morsels from the segment have been consumed.
+//
+// Segment Scanning Strategy:
+// 1. Prefer retrieving morsels from the Refined segments queue, which allows for high parallelism and efficient resource utilization.
+// 2. If no Refined segments are available, select an Init segment and attempt refinement.
+// 3. If refinement is not possible (e.g., due to index limitations), scan the Init segment directly. Note: This fallback may reduce query performance.
+//
+// Queue Structure:
+// - Init Segments Queue: Holds segments pending refinement. Once refined, segments are moved to the Refined queue.
+// - Refined Segments Queue: Contains segments that have been refined and are ready for parallel scanning. Segments are removed once fully processed.
+//
+// Scan Range Refinement:
+// - Initial scan ranges cover the entire dataset without predicate filtering.
+// - After the first morsel is processed, scan ranges are refined by intersecting with filtered results, reducing redundant scans.
+// - This approach:
+//   * Prevents repeated scanning of the same segment by updating scan ranges based on prior results.
+//   * Reduces data skew from highly selective predicates (e.g., on key columns), minimizing the creation of empty morsels.
+class PhysicalSplitMorselQueueV2 final : public SplitMorselQueue {
+public:
+    using SplitMorselQueue::SplitMorselQueue;
+
+    ~PhysicalSplitMorselQueueV2() override = default;
+
+    void set_tablets(const std::vector<BaseTabletSharedPtr>& tablets) override;
+    void set_tablet_rowsets(const std::vector<std::vector<BaseRowsetSharedPtr>>& tablet_rowsets) override;
+
+    void set_key_ranges(const std::vector<std::unique_ptr<OlapScanRange>>& key_ranges) override;
+    void set_key_ranges(const TabletReaderParams::RangeStartOperation& range_start_op,
+                        const TabletReaderParams::RangeEndOperation& range_end_op,
+                        const std::vector<OlapTuple>& range_start_key,
+                        const std::vector<OlapTuple>& range_end_key) override;
+
+    // Queue operations
+    bool empty() const override {
+        return _unget_morsel == nullptr && _init_segments.empty() && _refined_segments.empty();
+    }
+    StatusOr<MorselPtr> try_get() override;
+
+    void refine_scan_ranges(const RowidRangeOptionPtr& rowid_range);
+
+    std::string name() const override { return "physical_split_morsel_queue_v2"; }
+    Type type() const override { return PHYSICAL_SPLIT; }
+
+private:
+    struct RefineSegment;
+    using RefineSegmentPtr = std::shared_ptr<RefineSegment>;
+    using SegmentRef = std::tuple<RowsetId, SegmentId>;
+
+    struct SegmentRefHash {
+        size_t operator()(const SegmentRef& ref) const {
+            const auto& rowset_id = std::get<0>(ref);
+            const auto& segment_id = std::get<1>(ref);
+            size_t seed = HashOfRowsetId()(rowset_id);
+            seed = HashUtil::hash64(&segment_id, sizeof(segment_id), seed);
+            return seed;
+        }
+    };
+
+    enum RefineState {
+        Init,
+        Refining,
+        Refined,
+        Finished,
+    };
+
+    struct RefineSegment {
+        const size_t tablet_idx;
+        const size_t rowset_idx;
+        const size_t segment_idx;
+        const RowsetId rowset_id;
+        const SegmentId segment_id;
+
+        // TODO: merge two state
+        RefineState state = Init;
+        bool inited = false;
+        bool is_first_split = true;
+        SparseRange<> scan_range;
+        SparseRangeIterator<> range_iter;
+
+        RefineSegment(size_t tablet_idx, size_t rowset_idx, size_t segment_idx, RowsetId rowset_id,
+                      SegmentId segment_id)
+                : tablet_idx(tablet_idx),
+                  rowset_idx(rowset_idx),
+                  segment_idx(segment_idx),
+                  rowset_id(rowset_id),
+                  segment_id(segment_id) {}
+
+        SegmentRef ref() { return {rowset_id, segment_id}; }
+
+        // Refine state
+        void set_refining() {
+            DCHECK_EQ(state, Init);
+            state = Refining;
+        }
+        void set_refined() {
+            DCHECK_EQ(state, Refining);
+            state = Refined;
+        }
+        void set_finished() { state = Finished; }
+    };
+
+    rowid_t _lower_bound_ordinal(Segment* segment, const SeekTuple& key, bool lower) const;
+    rowid_t _upper_bound_ordinal(Segment* segment, const SeekTuple& key, bool lower, rowid_t end) const;
+
+    // Load the meta of the new rowset and the index of the new segment,
+    // and find the rowid range of each key range in this segment.
+    Status _init_segment(const RefineSegmentPtr& segment);
+
+    void _inc_split(const RefineSegmentPtr& segment, bool is_last_split);
+    StatusOr<RowidRangeOptionPtr> _split_morsel_from_segment(const RefineSegmentPtr& segment, bool* is_last);
+
+    // Operations on the raw queues
+    RefineSegmentPtr _pickup_segment_from_init();
+    RefineSegmentPtr _pickup_segment_from_refined();
+    void _move_from_init_to_refined(const RefineSegmentPtr& segment);
+    void _remove_from_refined(const RefineSegmentPtr& segment);
+    void _remove_from_init_segments(const RefineSegmentPtr& segment);
+
+private:
+    std::mutex _mutex;
+
+    /// Key ranges passed to the storage layer.
+    TabletReaderParams::RangeStartOperation _range_start_op = TabletReaderParams::RangeStartOperation::GT;
+    TabletReaderParams::RangeEndOperation _range_end_op = TabletReaderParams::RangeEndOperation::LT;
+    std::vector<OlapTuple> _range_start_key;
+    std::vector<OlapTuple> _range_end_key;
+    MemPool _mempool;
+
+    std::unordered_map<SegmentRef, RefineSegmentPtr, SegmentRefHash> _init_segments;
+    std::unordered_map<SegmentRef, RefineSegmentPtr, SegmentRefHash> _refined_segments;
+    std::unordered_map<size_t, std::atomic<int>> _tablet_count_down; // tablet_idx -> num_segments
+};
 
 } // namespace pipeline
 } // namespace starrocks
