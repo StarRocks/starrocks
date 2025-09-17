@@ -30,7 +30,7 @@ StarRocks Tableau JDBC Connector は、Tableau Desktop および Tableau Server 
    - macOS: `~/Library/Tableau/Drivers`
    - Windows: `C:\Program Files\Tableau\Drivers`
 
-3. [StarRocks Tableau JDBC Connector ファイル](https://releases.starrocks.io/resources/starrocks_jdbc-v1.2.0_signed.taco) をダウンロードします。
+3. [StarRocks Tableau JDBC Connector ファイル](https://exchange.tableau.com/products/1079) をダウンロードします。
 4. コネクタファイルを次のディレクトリに保存します。
 
    - macOS: `~/Documents/My Tableau Repository/Connectors`
