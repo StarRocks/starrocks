@@ -524,6 +524,7 @@ import com.starrocks.sql.ast.warehouse.cngroup.CreateCnGroupStmt;
 import com.starrocks.sql.ast.warehouse.cngroup.DropCnGroupStmt;
 import com.starrocks.sql.ast.warehouse.cngroup.EnableDisableCnGroupStmt;
 import com.starrocks.sql.common.PListCell;
+import com.starrocks.sql.parser.rewriter.CompoundPredicateExprRewriter;
 import com.starrocks.sql.util.EitherOr;
 import com.starrocks.statistic.StatsConstants;
 import com.starrocks.transaction.GtidGenerator;
@@ -548,6 +549,7 @@ import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
+import java.util.Deque;
 import java.util.HashMap;
 import java.util.IdentityHashMap;
 import java.util.Iterator;
@@ -597,6 +599,8 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             Lists.newArrayList(FunctionSet.SUBSTR, FunctionSet.SUBSTRING,
                     FunctionSet.FROM_UNIXTIME, FunctionSet.FROM_UNIXTIME_MS,
                     FunctionSet.STR2DATE);
+    // rewriter
+    private static final CompoundPredicateExprRewriter COMPOUND_PREDICATE_EXPR_REWRITER = new CompoundPredicateExprRewriter();
 
     protected AstBuilder(long sqlMode) {
         this(sqlMode, new IdentityHashMap<>());
@@ -7050,11 +7054,57 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                 null, createPos(context));
     }
 
+    private record LogicalBinaryNode(com.starrocks.sql.parser.StarRocksParser.LogicalBinaryContext context,
+                                     CompoundPredicate.Operator operator) {}
+
+    // Iteratively build a left-deep CompoundPredicate tree for LogicalBinaryContext,
+    // allowing each node to have its own operator, using LogicalBinaryNode for clarity.
+    // Corrected: Properly builds left-deep tree by pushing all contexts and operators, 
+    // and reconstructing from the bottom up, preserving associativity.
+    private CompoundPredicate buildCompoundPredicateIterative(
+            com.starrocks.sql.parser.StarRocksParser.LogicalBinaryContext context) {
+        // Stack to store all contexts and their operators from leftmost to root
+        Deque<LogicalBinaryNode> nodeStack = new java.util.ArrayDeque<>();
+        com.starrocks.sql.parser.StarRocksParser.LogicalBinaryContext current = context;
+
+        // Traverse all the way down the left chain, pushing each context and operator
+        while (true) {
+            nodeStack.push(new LogicalBinaryNode(current, getLogicalBinaryOperator(current.operator)));
+            if (current.left instanceof com.starrocks.sql.parser.StarRocksParser.LogicalBinaryContext) {
+                current = (com.starrocks.sql.parser.StarRocksParser.LogicalBinaryContext) current.left;
+            } else {
+                break;
+            }
+        }
+
+        // The leftmost leaf expression
+        Expr result = (Expr) visit(current.left);
+        // Rebuild the tree from the bottom up (leftmost to root)
+        while (!nodeStack.isEmpty()) {
+            LogicalBinaryNode node = nodeStack.pop();
+            Expr right = (Expr) visit(node.context.right);
+            result = new CompoundPredicate(node.operator(), result, right, createPos(node.context()));
+        }
+        return (CompoundPredicate) result;
+    }
+
     @Override
+<<<<<<< HEAD
     public ParseNode visitLogicalBinary(StarRocksParser.LogicalBinaryContext context) {
         Expr left = (Expr) visit(context.left);
         Expr right = (Expr) visit(context.right);
         return new CompoundPredicate(getLogicalBinaryOperator(context.operator), left, right, createPos(context));
+=======
+    public ParseNode visitLogicalBinary(com.starrocks.sql.parser.StarRocksParser.LogicalBinaryContext context) {
+        if (Config.compound_predicate_flatten_threshold > 0) {
+            CompoundPredicate result = buildCompoundPredicateIterative(context);
+            return COMPOUND_PREDICATE_EXPR_REWRITER.rewrite(result);
+        } else {
+            Expr left = (Expr) visit(context.left);
+            Expr right = (Expr) visit(context.right);
+            return new CompoundPredicate(getLogicalBinaryOperator(context.operator), left, right, createPos(context));
+        }
+>>>>>>> 7c8a29660a ([Enhancement] Optimize parsing predicates with large number of CompoundPredicates (#63139))
     }
 
     private static CompoundPredicate.Operator getLogicalBinaryOperator(Token token) {

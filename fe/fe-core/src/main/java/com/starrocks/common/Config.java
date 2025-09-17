@@ -3879,4 +3879,14 @@ public class Config extends ConfigBase {
     @ConfField(comment = "Enable case-insensitive catalog/database/table names. " +
             "Only configurable during cluster initialization, immutable once set.")
     public static boolean enable_table_name_case_insensitive = false;
+<<<<<<< HEAD
+=======
+
+    @ConfField(mutable = true, comment = "Enable desensitize sql in query dump")
+    public static boolean enable_desensitize_query_dump = false;
+
+    @ConfField(mutable = true, comment = "The threshold to flatten compound predicate from deep tree to a balanced tree to " +
+            "avoid stack over flow")
+    public static int compound_predicate_flatten_threshold = 512;
+>>>>>>> 7c8a29660a ([Enhancement] Optimize parsing predicates with large number of CompoundPredicates (#63139))
 }
