@@ -455,6 +455,9 @@ public class LakePublishBatchTest {
 
     @Test
     public void testBatchPublishReplicationTransaction() throws Exception {
+        int minBatchSize = Config.lake_batch_publish_min_version_num;
+        Config.lake_batch_publish_min_version_num = 1;
+
         Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(DB);
         Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), TABLE);
         List<TabletCommitInfo> transTablets = Lists.newArrayList();
@@ -497,24 +500,42 @@ public class LakePublishBatchTest {
                 Lists.newArrayList(), null);
 
         {
-            TransactionStateBatch readyStateBatch = globalTransactionMgr.getReadyPublishTransactionsBatch().get(0);
-            Assertions.assertEquals(2, readyStateBatch.size());
+            List<TransactionStateBatch> batches = globalTransactionMgr.getReadyPublishTransactionsBatch();
+            Assertions.assertEquals(1, batches.size());
+            Assertions.assertEquals(1, batches.get(0).size());
+            // replication transaction
+            Assertions.assertEquals(TransactionType.TXN_REPLICATION,
+                    batches.get(0).getTransactionStates().get(0).getTransactionType());
 
             PublishVersionDaemon publishVersionDaemon = new PublishVersionDaemon();
             publishVersionDaemon.runAfterCatalogReady();
 
             Assertions.assertTrue(waiter1.await(10, TimeUnit.SECONDS));
-            Assertions.assertTrue(waiter2.await(10, TimeUnit.SECONDS));
 
             // Verify that the transactions have been published
             TransactionState transactionState1 = globalTransactionMgr.getDatabaseTransactionMgr(db.getId()).
                     getTransactionState(transactionId1);
+            assertEquals(TransactionStatus.VISIBLE, transactionState1.getTransactionStatus());
+
+            // begin another batch
+            batches = globalTransactionMgr.getReadyPublishTransactionsBatch();
+            Assertions.assertEquals(1, batches.size());
+            Assertions.assertEquals(1, batches.get(0).size());
+            // normal transaction
+            Assertions.assertEquals(TransactionType.TXN_NORMAL,
+                    batches.get(0).getTransactionStates().get(0).getTransactionType());
+
+            publishVersionDaemon.runAfterCatalogReady();
+            Assertions.assertTrue(waiter2.await(10, TimeUnit.SECONDS));
+
+            // Verify that the transactions have been published
             TransactionState transactionState2 = globalTransactionMgr.getDatabaseTransactionMgr(db.getId()).
                     getTransactionState(transactionId2);
 
-            assertEquals(TransactionStatus.VISIBLE, transactionState1.getTransactionStatus());
             assertEquals(TransactionStatus.VISIBLE, transactionState2.getTransactionStatus());
         }
+
+        Config.lake_batch_publish_min_version_num = minBatchSize;
     }
 
     @Test
