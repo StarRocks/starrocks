@@ -169,7 +169,7 @@ Status VerticalPkTabletWriter::write_columns(const Chunk& data, const std::vecto
     DCHECK(is_key);
     RETURN_IF_ERROR(VerticalGeneralTabletWriter::write_columns(data, column_indexes, is_key));
     if (_pk_sst_writers.size() <= _current_writer_index) {
-        DefaultSSTWriter* sst_writer = nullptr;
+        std::unique_ptr<DefaultSSTWriter> sst_writer;
         if (enable_pk_parallel_execution()) {
             sst_writer = std::make_unique<PkTabletSSTWriter>(tablet_schema(), _tablet_mgr, _tablet_id);
         } else {
