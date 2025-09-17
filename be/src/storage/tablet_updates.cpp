@@ -987,8 +987,8 @@ void TabletUpdates::do_apply() {
             config::enable_pk_strict_memcheck ? StorageEngine::instance()->update_manager()->mem_tracker() : nullptr);
     // only 1 thread at max is running this method
     bool first = true;
+    Status apply_st;
     while (!_apply_stopped) {
-        Status apply_st;
         const EditVersionInfo* version_info_apply = nullptr;
         {
             std::lock_guard rl(_lock);
@@ -1067,9 +1067,8 @@ void TabletUpdates::do_apply() {
 
     {
         std::lock_guard rl(_lock);
-        // if _apply_schedule is true, which means there is a delay apply task,
-        // we should not submit a new apply task.
-        if (!_apply_schedule.load()) {
+        // if apply_st is not ok, which means the apply task is failed, we should not submit a new apply task.
+        if (apply_st.ok()) {
             _check_for_apply();
         }
     }
