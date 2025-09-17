@@ -14,9 +14,9 @@
 
 package com.starrocks.sql.parser.rewriter;
 
+import com.starrocks.analysis.CompoundPredicate;
+import com.starrocks.analysis.Expr;
 import com.starrocks.common.Config;
-import com.starrocks.sql.ast.expression.CompoundPredicate;
-import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.parser.NodePosition;
 
 import java.util.ArrayDeque;

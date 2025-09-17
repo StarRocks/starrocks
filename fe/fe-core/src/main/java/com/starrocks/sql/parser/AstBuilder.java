@@ -7054,24 +7054,23 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                 null, createPos(context));
     }
 
-    private record LogicalBinaryNode(com.starrocks.sql.parser.StarRocksParser.LogicalBinaryContext context,
+    private record LogicalBinaryNode(StarRocksParser.LogicalBinaryContext context,
                                      CompoundPredicate.Operator operator) {}
 
     // Iteratively build a left-deep CompoundPredicate tree for LogicalBinaryContext,
     // allowing each node to have its own operator, using LogicalBinaryNode for clarity.
     // Corrected: Properly builds left-deep tree by pushing all contexts and operators, 
     // and reconstructing from the bottom up, preserving associativity.
-    private CompoundPredicate buildCompoundPredicateIterative(
-            com.starrocks.sql.parser.StarRocksParser.LogicalBinaryContext context) {
+    private CompoundPredicate buildCompoundPredicateIterative(StarRocksParser.LogicalBinaryContext context) {
         // Stack to store all contexts and their operators from leftmost to root
         Deque<LogicalBinaryNode> nodeStack = new java.util.ArrayDeque<>();
-        com.starrocks.sql.parser.StarRocksParser.LogicalBinaryContext current = context;
+        StarRocksParser.LogicalBinaryContext current = context;
 
         // Traverse all the way down the left chain, pushing each context and operator
         while (true) {
             nodeStack.push(new LogicalBinaryNode(current, getLogicalBinaryOperator(current.operator)));
-            if (current.left instanceof com.starrocks.sql.parser.StarRocksParser.LogicalBinaryContext) {
-                current = (com.starrocks.sql.parser.StarRocksParser.LogicalBinaryContext) current.left;
+            if (current.left instanceof StarRocksParser.LogicalBinaryContext) {
+                current = (StarRocksParser.LogicalBinaryContext) current.left;
             } else {
                 break;
             }
@@ -7089,13 +7088,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     }
 
     @Override
-<<<<<<< HEAD
     public ParseNode visitLogicalBinary(StarRocksParser.LogicalBinaryContext context) {
-        Expr left = (Expr) visit(context.left);
-        Expr right = (Expr) visit(context.right);
-        return new CompoundPredicate(getLogicalBinaryOperator(context.operator), left, right, createPos(context));
-=======
-    public ParseNode visitLogicalBinary(com.starrocks.sql.parser.StarRocksParser.LogicalBinaryContext context) {
         if (Config.compound_predicate_flatten_threshold > 0) {
             CompoundPredicate result = buildCompoundPredicateIterative(context);
             return COMPOUND_PREDICATE_EXPR_REWRITER.rewrite(result);
@@ -7104,7 +7097,6 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             Expr right = (Expr) visit(context.right);
             return new CompoundPredicate(getLogicalBinaryOperator(context.operator), left, right, createPos(context));
         }
->>>>>>> 7c8a29660a ([Enhancement] Optimize parsing predicates with large number of CompoundPredicates (#63139))
     }
 
     private static CompoundPredicate.Operator getLogicalBinaryOperator(Token token) {
