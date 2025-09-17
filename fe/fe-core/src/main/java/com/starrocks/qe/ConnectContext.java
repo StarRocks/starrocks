@@ -41,7 +41,6 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.starrocks.analysis.StringLiteral;
-import com.starrocks.analysis.VariableExpr;
 import com.starrocks.authentication.UserProperty;
 import com.starrocks.authorization.AccessDeniedException;
 import com.starrocks.authorization.ObjectType;
@@ -77,10 +76,6 @@ import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.SystemVariable;
 import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.sql.ast.UserVariable;
-<<<<<<< HEAD
-=======
-import com.starrocks.sql.ast.expression.StringLiteral;
->>>>>>> b70c85739c ([BugFix] Fix the bug where UserProperty priority is lower than Session Variable (#63173))
 import com.starrocks.sql.optimizer.QueryMaterializationContext;
 import com.starrocks.sql.optimizer.dump.DumpInfo;
 import com.starrocks.sql.optimizer.dump.QueryDumpInfo;
@@ -448,8 +443,8 @@ public class ConnectContext {
 
     public void modifySystemVariable(SystemVariable setVar, boolean onlySetSessionVar) throws DdlException {
         globalStateMgr.getVariableMgr().setSystemVariable(sessionVariable, setVar, onlySetSessionVar);
-        if (!SetType.GLOBAL.equals(setVar.getType())
-                && globalStateMgr.getVariableMgr().shouldForwardToLeader(setVar.getVariable())) {
+        if (!SetType.GLOBAL.equals(setVar.getType()) && globalStateMgr.getVariableMgr()
+                .shouldForwardToLeader(setVar.getVariable())) {
             modifiedSessionVariables.put(setVar.getVariable(), setVar);
         }
     }
