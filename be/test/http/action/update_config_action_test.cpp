@@ -16,9 +16,12 @@
 
 #include <gtest/gtest.h>
 
+#include "agent/agent_common.h"
+#include "agent/agent_server.h"
 #include "cache/block_cache/test_cache_utils.h"
 #include "cache/datacache.h"
 #include "cache/starcache_engine.h"
+#include "common/config.h"
 #include "fs/fs_util.h"
 #include "runtime/exec_env.h"
 #include "storage/persistent_index_load_executor.h"
