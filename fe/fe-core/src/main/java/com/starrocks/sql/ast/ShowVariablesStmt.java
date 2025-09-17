@@ -22,7 +22,7 @@ import com.starrocks.sql.ast.expression.TableName;
 import com.starrocks.sql.parser.NodePosition;
 
 // Show variables statement.
-public class ShowVariablesStmt extends ShowStmt {
+public class ShowVariablesStmt extends EnhancedShowStmt {
     private static final String NAME_COL = "Variable_name";
     private static final String VALUE_COL = "Value";
     private static final String DEFAULT_VALUE = "Default_value";

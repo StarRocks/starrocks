@@ -12,38 +12,17 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.sql.ast;
 
-import com.starrocks.sql.ast.expression.Expr;
-import com.starrocks.sql.ast.expression.Predicate;
 import com.starrocks.sql.parser.NodePosition;
 
-public class ShowProcedureStmt extends EnhancedShowStmt {
-
-    private String pattern;
-    private Expr where;
-
-    public ShowProcedureStmt(String pattern, Expr where) {
-        this(pattern, where, NodePosition.ZERO);
-    }
-
-    public ShowProcedureStmt(String pattern, Expr where, NodePosition pos) {
+public abstract class ShowStmt extends StatementBase {
+    protected ShowStmt(NodePosition pos) {
         super(pos);
-        this.pattern = pattern;
-        this.predicate = (Predicate) where;
-    }
-
-    public ShowProcedureStmt() {
-        super(NodePosition.ZERO);
-    }
-
-    public String getPattern() {
-        return pattern;
     }
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return ((AstVisitorExtendInterface<R, C>) visitor).visitShowProcedureStatement(this, context);
+        return visitor.visitShowStatement(this, context);
     }
 }

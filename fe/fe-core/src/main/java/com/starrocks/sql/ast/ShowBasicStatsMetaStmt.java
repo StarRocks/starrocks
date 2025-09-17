@@ -33,7 +33,7 @@ import com.starrocks.statistic.StatisticUtils;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
 
-public class ShowBasicStatsMetaStmt extends ShowStmt {
+public class ShowBasicStatsMetaStmt extends EnhancedShowStmt {
 
     public ShowBasicStatsMetaStmt(Predicate predicate, List<OrderByElement> orderByElements,
                                   LimitElement limitElement, NodePosition pos) {

@@ -29,7 +29,7 @@ import com.starrocks.sql.parser.NodePosition;
 import static com.starrocks.common.util.Util.normalizeName;
 
 // SHOW TABLES
-public class ShowTableStmt extends ShowStmt {
+public class ShowTableStmt extends EnhancedShowStmt {
     private static final String NAME_COL_PREFIX = "Tables_in_";
     private static final String TYPE_COL = "Table_type";
     private static final TableName TABLE_NAME = new TableName(InfoSchemaDb.DATABASE_NAME, "tables");
