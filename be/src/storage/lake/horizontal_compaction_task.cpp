@@ -35,9 +35,11 @@ Status HorizontalCompactionTask::execute(CancelFunc cancel_func, ThreadPool* flu
     SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(_mem_tracker.get());
 
     int64_t total_num_rows = 0;
+    int64_t input_bytes = 0;
     for (auto& rowset : _input_rowsets) {
         total_num_rows += rowset->num_rows();
         _context->stats->read_segment_count += rowset->num_segments();
+        input_bytes += rowset->data_size_after_deletion();
     }
 
     ASSIGN_OR_RETURN(auto chunk_size, calculate_chunk_size());
@@ -62,6 +64,10 @@ Status HorizontalCompactionTask::execute(CancelFunc cancel_func, ThreadPool* flu
                                                     _tablet_schema /** output rowset schema**/))
     RETURN_IF_ERROR(writer->open());
     DeferOp defer([&]() { writer->close(); });
+
+    if (input_bytes >= config::pk_parallel_execution_threshold_bytes) {
+        writer->try_enable_pk_parallel_execution();
+    }
 
     auto chunk = ChunkHelper::new_chunk(schema, chunk_size);
     auto char_field_indexes = ChunkHelper::get_char_field_indexes(schema);

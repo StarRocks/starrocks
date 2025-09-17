@@ -134,7 +134,7 @@ Status KeyValueMerger::merge(const sstable::Iterator* iter_ptr) {
             _index_value_vers.swap(t);
         }
     } else {
-        flush();
+        RETURN_IF_ERROR(flush());
         _key = key;
         _max_rss_rowid = max_rss_rowid;
         _index_value_vers.emplace_front(version, index_value);
@@ -142,9 +142,9 @@ Status KeyValueMerger::merge(const sstable::Iterator* iter_ptr) {
     return Status::OK();
 }
 
-void KeyValueMerger::flush() {
+Status KeyValueMerger::flush() {
     if (_index_value_vers.empty()) {
-        return;
+        return Status::OK();
     }
 
     IndexValuesWithVerPB index_value_pb;
@@ -159,9 +159,11 @@ void KeyValueMerger::flush() {
         value->set_rowid(index_value_with_ver.second.get_rowid());
     }
     if (index_value_pb.values_size() > 0) {
-        _builder->Add(Slice(_key), Slice(index_value_pb.SerializeAsString()));
+        RETURN_IF_ERROR(_builder->Add(Slice(_key), Slice(index_value_pb.SerializeAsString())));
     }
     _index_value_vers.clear();
+
+    return Status::OK();
 }
 
 LakePersistentIndex::LakePersistentIndex(TabletManager* tablet_mgr, int64_t tablet_id)
@@ -518,7 +520,7 @@ Status LakePersistentIndex::merge_sstables(std::unique_ptr<sstable::Iterator> it
         iter_ptr->Next();
     }
     RETURN_IF_ERROR(iter_ptr->status());
-    merger->finish();
+    RETURN_IF_ERROR(merger->finish());
     return builder->Finish();
 }
 

@@ -29,15 +29,27 @@ namespace starrocks::lake {
 
 class PersistentIndexSstableStreamBuilder;
 
-class PkTabletSSTWriter {
+class DefaultSSTWriter {
+public:
+    virtual Status append_sst_record(const Chunk& data) { return Status::OK(); }
+    virtual Status reset_sst_writer(const std::shared_ptr<LocationProvider>& location_provider,
+                                    const std::shared_ptr<FileSystem>& fs) {
+        return Status::OK();
+    }
+    virtual StatusOr<FileInfo> flush_sst_writer() { return Status::OK(); }
+    virtual bool has_file_info() const { return false; }
+};
+
+class PkTabletSSTWriter : public DefaultSSTWriter {
 public:
     PkTabletSSTWriter(const TabletSchemaCSPtr& tablet_schema_ptr, TabletManager* tablet_mgr, int64_t tablet_id)
             : _tablet_schema_ptr(tablet_schema_ptr), _tablet_mgr(tablet_mgr), _tablet_id(tablet_id) {}
     virtual ~PkTabletSSTWriter() = default;
-    Status append_sst_record(const Chunk& data);
+    Status append_sst_record(const Chunk& data) override;
     Status reset_sst_writer(const std::shared_ptr<LocationProvider>& location_provider,
-                            const std::shared_ptr<FileSystem>& fs);
-    StatusOr<FileInfo> flush_sst_writer();
+                            const std::shared_ptr<FileSystem>& fs) override;
+    StatusOr<FileInfo> flush_sst_writer() override;
+    bool has_file_info() const override { return _pk_sst_builder != nullptr; }
 
 private:
     std::unique_ptr<PersistentIndexSstableStreamBuilder> _pk_sst_builder;
