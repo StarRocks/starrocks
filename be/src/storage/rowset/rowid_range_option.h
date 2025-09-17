@@ -26,6 +26,7 @@ class Segment;
 
 struct RowidRangeOption;
 using RowidRangeOptionPtr = std::shared_ptr<RowidRangeOption>;
+using SegmentId = uint64_t;
 
 // It represents a specific rowid range on the segment with `segment_id` of the rowset with `rowset_id`.
 struct RowidRangeOption {
@@ -37,16 +38,20 @@ public:
 
     RowidRangeOption() = default;
 
+    void add(RowsetId rowset_id, SegmentId segment_id, SparseRangePtr rowid_range, bool is_first_split_of_segment);
     void add(const BaseRowset* rowset, const Segment* segment, SparseRangePtr rowid_range,
              bool is_first_split_of_segment);
 
     bool contains_rowset(const BaseRowset* rowset) const;
     SegmentSplit get_segment_rowid_range(const BaseRowset* rowset, const Segment* segment);
 
+    // Return the segment split if it contains a single split
+    std::optional<std::tuple<RowsetId, SegmentId, SegmentSplit>> get_single_segment() const;
+
     RowidRangeOptionPtr clone();
 
 public:
-    using SetgmentRowidRangeMap = std::unordered_map<uint64_t, SegmentSplit>;
+    using SetgmentRowidRangeMap = std::unordered_map<SegmentId, SegmentSplit>;
     using RowsetRowidRangeMap = std::map<RowsetId, SetgmentRowidRangeMap>;
 
     RowsetRowidRangeMap rowid_range_per_segment_per_rowset;

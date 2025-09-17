@@ -492,10 +492,11 @@ Status ScanOperator::_trigger_next_scan(RuntimeState* state, int chunk_source_in
 
             int64_t delta_cpu_time = chunk_source->get_cpu_time_spent() - prev_cpu_time;
 
+            // Refine the MorselQueue based on executed morsel
             Morsel* morsel = chunk_source->get_morsel();
             if (morsel && dynamic_cast<PhysicalSplitScanMorsel*>(morsel) != nullptr) {
                 PhysicalSplitScanMorsel* physical_split_morsel = dynamic_cast<PhysicalSplitScanMorsel*>(morsel);
-                PhysicalSplitMorselQueue* queue = dynamic_cast<PhysicalSplitMorselQueue*>(_morsel_queue);
+                PhysicalSplitMorselQueueV2* queue = dynamic_cast<PhysicalSplitMorselQueueV2*>(_morsel_queue);
                 auto rowid_range = physical_split_morsel->get_filtered_scan_range();
                 queue->refine_scan_ranges(rowid_range);
             }
