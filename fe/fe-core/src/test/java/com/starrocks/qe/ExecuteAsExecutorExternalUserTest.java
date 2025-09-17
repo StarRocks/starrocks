@@ -24,6 +24,7 @@ import com.starrocks.authentication.UserProperty;
 import com.starrocks.authorization.AuthorizationMgr;
 import com.starrocks.authorization.PrivilegeException;
 import com.starrocks.catalog.UserIdentity;
+import com.starrocks.common.DdlException;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.ExecuteAsStmt;
@@ -423,7 +424,7 @@ public class ExecuteAsExecutorExternalUserTest {
      * Test full flow of ExecuteAs with external user including group and role refresh
      */
     @Test
-    public void testNormal() {
+    public void testNormal() throws DdlException {
         GroupProvider mockedGroupProvider = new GroupProvider("mocked_group_provider", Map.of()) {
             @Override
             public Set<String> getGroup(UserIdentity userIdentity, String distinguishedName) {

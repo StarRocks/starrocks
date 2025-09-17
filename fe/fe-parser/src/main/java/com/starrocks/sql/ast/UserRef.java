@@ -100,8 +100,8 @@ public class UserRef implements ParseNode {
             return false;
         }
         UserRef user1 = (UserRef) object;
-        return isDomain == user1.isDomain && isExternal == user1.isExternal && 
-               Objects.equals(user, user1.user) && Objects.equals(host, user1.host);
+        return isDomain == user1.isDomain && isExternal == user1.isExternal &&
+                Objects.equals(user, user1.user) && Objects.equals(host, user1.host);
     }
 
     @Override

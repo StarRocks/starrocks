@@ -36,8 +36,9 @@ public class ForwardTest {
         request.setDb("information_schema");
         request.setQueryId(UUIDUtil.genTUniqueId());
         final TUserIdentity userIdentity = new TUserIdentity();
-        userIdentity.setUsername("user");
-        userIdentity.setHost("127.0.0.1");
+        userIdentity.setUsername("user1");
+        userIdentity.setHost("%");
+        userIdentity.setIs_ephemeral(true);
         request.setCurrent_user_ident(userIdentity);
         return request;
     }
