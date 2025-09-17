@@ -331,4 +331,34 @@ public interface AstVisitor<R, C> {
     default R visitAlterUserStatement(AlterUserStmt statement, C context) {
         return visitBaseCreateAlterUserStmt(statement, context);
     }
+
+    // ------------------------------------------- Show Statement ----------------------------------------------------
+
+    default R visitShowGrantsStatement(ShowGrantsStmt statement, C context) {
+        return visitShowStatement(statement, context);
+    }
+
+    default R visitShowBackendsStatement(ShowBackendsStmt statement, C context) {
+        return visitShowStatement(statement, context);
+    }
+
+    default R visitShowRolesStatement(ShowRolesStmt statement, C context) {
+        return visitShowStatement(statement, context);
+    }
+
+    default R visitShowBrokerStatement(ShowBrokerStmt statement, C context) {
+        return visitShowStatement(statement, context);
+    }
+
+    default R visitShowComputeNodes(ShowComputeNodesStmt statement, C context) {
+        return visitShowStatement(statement, context);
+    }
+
+    default R visitShowFrontendsStatement(ShowFrontendsStmt statement, C context) {
+        return visitShowStatement(statement, context);
+    }
+
+    default R visitShowEnginesStatement(ShowEnginesStmt statement, C context) {
+        return visitShowStatement(statement, context);
+    }
 }

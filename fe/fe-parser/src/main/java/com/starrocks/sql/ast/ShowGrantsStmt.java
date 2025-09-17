@@ -12,22 +12,43 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.sql.ast;
 
 import com.starrocks.sql.parser.NodePosition;
 
-public class ShowEnginesStmt extends ShowStmt {
+public class ShowGrantsStmt extends ShowStmt {
+    private final UserRef user;
+    private final String groupOrRole;
+    private final GrantType grantType;
 
-    public ShowEnginesStmt() {
-        this(NodePosition.ZERO);
-    }
-
-    public ShowEnginesStmt(NodePosition pos) {
+    public ShowGrantsStmt(UserRef user, NodePosition pos) {
         super(pos);
+        this.user = user;
+        this.groupOrRole = null;
+        grantType = GrantType.USER;
     }
+
+    public ShowGrantsStmt(String groupOrRole, GrantType grantType, NodePosition pos) {
+        super(pos);
+        this.user = null;
+        this.groupOrRole = groupOrRole;
+        this.grantType = grantType;
+    }
+
+    public UserRef getUser() {
+        return user;
+    }
+
+    public String getGroupOrRole() {
+        return groupOrRole;
+    }
+
+    public GrantType getGrantType() {
+        return grantType;
+    }
+
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return ((AstVisitorExtendInterface<R, C>) visitor).visitShowEnginesStatement(this, context);
+        return visitor.visitShowStatement(this, context);
     }
 }

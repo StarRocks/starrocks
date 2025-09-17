@@ -17,18 +17,19 @@ package com.starrocks.sql.ast;
 
 import com.starrocks.sql.parser.NodePosition;
 
-public class ShowBackendsStmt extends ShowStmt {
+public class ShowRolesStmt extends ShowStmt {
 
-    public ShowBackendsStmt() {
+    public ShowRolesStmt() {
         this(NodePosition.ZERO);
     }
 
-    public ShowBackendsStmt(NodePosition pos) {
+    public ShowRolesStmt(NodePosition pos) {
         super(pos);
     }
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return ((AstVisitorExtendInterface<R, C>) visitor).visitShowBackendsStatement(this, context);
+        return visitor.visitShowStatement(this, context);
     }
+
 }

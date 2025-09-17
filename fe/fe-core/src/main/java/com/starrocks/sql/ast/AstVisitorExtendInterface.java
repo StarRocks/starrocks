@@ -481,9 +481,6 @@ public interface AstVisitorExtendInterface<R, C> extends AstVisitor<R, C> {
         return visitDDLStatement(statement, context);
     }
 
-    default R visitShowComputeNodes(ShowComputeNodesStmt statement, C context) {
-        return visitShowStatement(statement, context);
-    }
 
     // ------------------------------------------- Analyze Statement ---------------------------------------------------
 
@@ -615,13 +612,7 @@ public interface AstVisitorExtendInterface<R, C> extends AstVisitor<R, C> {
         return visitShowStatement(statement, context);
     }
 
-    default R visitShowBackendsStatement(ShowBackendsStmt statement, C context) {
-        return visitShowStatement(statement, context);
-    }
 
-    default R visitShowBrokerStatement(ShowBrokerStmt statement, C context) {
-        return visitShowStatement(statement, context);
-    }
 
     default R visitShowDeleteStatement(ShowDeleteStmt statement, C context) {
         return visitShowStatement(statement, context);
@@ -631,9 +622,6 @@ public interface AstVisitorExtendInterface<R, C> extends AstVisitor<R, C> {
         return visitShowStatement(statement, context);
     }
 
-    default R visitShowFrontendsStatement(ShowFrontendsStmt statement, C context) {
-        return visitShowStatement(statement, context);
-    }
 
     default R visitShowTransactionStatement(ShowTransactionStmt statement, C context) {
         return visitShowStatement(statement, context);
@@ -643,9 +631,6 @@ public interface AstVisitorExtendInterface<R, C> extends AstVisitor<R, C> {
         return visitShowStatement(statement, context);
     }
 
-    default R visitShowEnginesStatement(ShowEnginesStmt statement, C context) {
-        return visitShowStatement(statement, context);
-    }
 
     default R visitShowWarningStatement(ShowWarningStmt statement, C context) {
         return visitShowStatement(statement, context);
@@ -773,9 +758,6 @@ public interface AstVisitorExtendInterface<R, C> extends AstVisitor<R, C> {
         return visitDDLStatement(statement, context);
     }
 
-    default R visitShowRolesStatement(ShowRolesStmt statement, C context) {
-        return visitShowStatement(statement, context);
-    }
 
     default R visitGrantRevokeRoleStatement(BaseGrantRevokeRoleStmt statement, C context) {
         return visitDDLStatement(statement, context);
@@ -799,10 +781,6 @@ public interface AstVisitorExtendInterface<R, C> extends AstVisitor<R, C> {
 
     default R visitGrantRevokePrivilegeStatement(BaseGrantRevokePrivilegeStmt statement, C context) {
         return visitDDLStatement(statement, context);
-    }
-
-    default R visitShowGrantsStatement(ShowGrantsStmt statement, C context) {
-        return visitShowStatement(statement, context);
     }
 
     // ------------------------------------------- Security Integration Statement ----------------------------------------------------

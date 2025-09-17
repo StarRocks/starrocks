@@ -16,39 +16,18 @@ package com.starrocks.sql.ast;
 
 import com.starrocks.sql.parser.NodePosition;
 
-public class ShowGrantsStmt extends ShowStmt {
-    private final UserRef user;
-    private final String groupOrRole;
-    private final GrantType grantType;
+public class ShowBrokerStmt extends ShowStmt {
 
-    public ShowGrantsStmt(UserRef user, NodePosition pos) {
+    public ShowBrokerStmt() {
+        this(NodePosition.ZERO);
+    }
+
+    public ShowBrokerStmt(NodePosition pos) {
         super(pos);
-        this.user = user;
-        this.groupOrRole = null;
-        grantType = GrantType.USER;
-    }
-
-    public ShowGrantsStmt(String groupOrRole, GrantType grantType, NodePosition pos) {
-        super(pos);
-        this.user = null;
-        this.groupOrRole = groupOrRole;
-        this.grantType = grantType;
-    }
-
-    public UserRef getUser() {
-        return user;
-    }
-
-    public String getGroupOrRole() {
-        return groupOrRole;
-    }
-
-    public GrantType getGrantType() {
-        return grantType;
     }
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return ((AstVisitorExtendInterface<R, C>) visitor).visitShowGrantsStatement(this, context);
+        return visitor.visitShowStatement(this, context);
     }
 }
