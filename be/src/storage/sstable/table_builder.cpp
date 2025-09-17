@@ -90,13 +90,14 @@ Status TableBuilder::ChangeOptions(const Options& options) {
 Status TableBuilder::Add(const Slice& key, const Slice& value) {
     Rep* r = rep_;
     RETURN_ERROR_IF_FALSE(!r->closed);
-    if (!ok()) return Status::InternalError("TableBuilder is not OK");
+    if (!ok()) return Status::InternalError("TableBuilder has encountered a previous error");
     if (r->num_entries > 0) {
-        RETURN_ERROR_IF_FALSE(r->options.comparator->Compare(key, Slice(r->last_key)) > 0);
+        RETURN_ERROR_IF_FALSE(r->options.comparator->Compare(key, Slice(r->last_key)) > 0,
+                              "Key must be greater than the previously added key according to comparator");
     }
 
     if (r->pending_index_entry) {
-        RETURN_ERROR_IF_FALSE(r->data_block.empty());
+        RETURN_ERROR_IF_FALSE(r->data_block.empty(), "Data block must be empty when pending index entry exists");
         r->options.comparator->FindShortestSeparator(&r->last_key, key);
         std::string handle_encoding;
         r->pending_handle.EncodeTo(&handle_encoding);
