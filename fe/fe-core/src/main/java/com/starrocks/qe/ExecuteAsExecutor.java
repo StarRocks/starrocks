@@ -12,22 +12,14 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.qe;
 
 import com.google.common.base.Preconditions;
 import com.starrocks.authentication.UserProperty;
-<<<<<<< HEAD
-import com.starrocks.sql.ast.ExecuteAsStmt;
-import com.starrocks.sql.ast.UserIdentity;
-=======
-import com.starrocks.catalog.UserIdentity;
-import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.sql.ast.ExecuteAsStmt;
 import com.starrocks.sql.ast.SetStmt;
-import com.starrocks.sql.ast.UserRef;
->>>>>>> b70c85739c ([BugFix] Fix the bug where UserProperty priority is lower than Session Variable (#63173))
+import com.starrocks.sql.ast.UserIdentity;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -38,7 +30,7 @@ public class ExecuteAsExecutor {
      * Only set current user, won't reset any other context, for example, current database.
      * Because mysql client still think that this session is using old databases and will show such hint,
      * which will only confuse the user
-     *
+     * <p>
      * MySQL [test_priv]> execute as test1 with no revert;
      * Query OK, 0 rows affected (0.00 sec)
      * MySQL [test_priv]> select * from test_table2;
@@ -49,25 +41,15 @@ public class ExecuteAsExecutor {
         Preconditions.checkArgument(!stmt.isAllowRevert());
         LOG.info("{} EXEC AS {} from now on", ctx.getCurrentUserIdentity(), stmt.getToUser());
 
-<<<<<<< HEAD
-        UserIdentity user = stmt.getToUser();
-        ctx.setCurrentUserIdentity(user);
-        ctx.setCurrentRoleIds(user);
-=======
-        UserRef user = stmt.getToUser();
-        // Create UserIdentity with ephemeral flag for external users
-        UserIdentity userIdentity;
-        if (user.isExternal()) {
-            userIdentity = UserIdentity.createEphemeralUserIdent(user.getUser(), user.getHost());
-        } else {
-            userIdentity = new UserIdentity(user.getUser(), user.getHost(), user.isDomain());
-        }
+        UserIdentity userIdentity = stmt.getToUser();
         ctx.setCurrentUserIdentity(userIdentity);
->>>>>>> b70c85739c ([BugFix] Fix the bug where UserProperty priority is lower than Session Variable (#63173))
 
-        if (!user.isEphemeral()) {
+        // Refresh groups and roles for all users based on security integration
+        refreshGroupsAndRoles(ctx, userIdentity);
+
+        if (!userIdentity.isEphemeral()) {
             UserProperty userProperty = ctx.getGlobalStateMgr().getAuthenticationMgr()
-                    .getUserProperty(user.getUser());
+                    .getUserProperty(userIdentity.getUser());
             ctx.updateByUserProperty(userProperty);
 
             //Execute As not affect session variables, so we need to reset the session variables
@@ -76,6 +58,20 @@ public class ExecuteAsExecutor {
                 SetExecutor executor = new SetExecutor(ctx, setStmt);
                 executor.execute();
             }
+        }
+    }
+
+    /**
+     * Refresh groups and roles for user based on security integration
+     * This applies to all users (both external and native) to ensure proper permission refresh
+     */
+    private static void refreshGroupsAndRoles(ConnectContext ctx, UserIdentity userIdentity) {
+        try {
+            // Refresh current role IDs based on user + groups
+            ctx.setCurrentRoleIds(userIdentity);
+        } catch (Exception e) {
+            LOG.warn("Failed to refresh groups and roles for user {}: {}", userIdentity, e.getMessage());
+            // Continue execution even if group refresh fails
         }
     }
 }

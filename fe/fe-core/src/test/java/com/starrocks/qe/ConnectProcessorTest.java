@@ -55,6 +55,8 @@ import com.starrocks.sql.analyzer.DDLTestBase;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.sql.common.AuditEncryptionChecker;
+import com.starrocks.thrift.TMasterOpRequest;
+import com.starrocks.thrift.TMasterOpResult;
 import com.starrocks.thrift.TUniqueId;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Expectations;
@@ -65,11 +67,13 @@ import org.junit.Assert;
 import org.junit.Before;
 import org.junit.BeforeClass;
 import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
 import org.mockito.Mockito;
 
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.channels.SocketChannel;
+import java.util.UUID;
 import java.util.concurrent.atomic.AtomicReference;
 
 public class ConnectProcessorTest extends DDLTestBase {
@@ -626,34 +630,6 @@ public class ConnectProcessorTest extends DDLTestBase {
         Assert.assertFalse(Strings.isNullOrEmpty(QueryDetailQueue.getQueryDetailsAfterTime(0).get(0).getSql()));
     }
 
-
-<<<<<<< HEAD
-=======
-        // mock context
-        ConnectContext ctx = UtFrameUtils.initCtxForNewPrivilege(UserIdentity.ROOT);
-        ctx.setCurrentCatalog("default");
-        ctx.setDatabase("testDb1");
-        ctx.setQualifiedUser("root");
-        ctx.setGlobalStateMgr(GlobalStateMgr.getCurrentState());
-        ctx.setCurrentUserIdentity(UserIdentity.ROOT);
-        ctx.setCurrentRoleIds(UserIdentity.ROOT);
-        ctx.setSessionId(java.util.UUID.randomUUID());
-        ctx.setThreadLocalInfo();
-
-        ConnectProcessor processor = new ConnectProcessor(ctx);
-        new mockit.MockUp<StmtExecutor>() {
-            @mockit.Mock
-            public void execute() {}
-            @mockit.Mock
-            public PQueryStatistics getQueryStatisticsForAuditLog() {
-                return null;
-            }
-        };
-
-        TMasterOpResult result = processor.proxyExecute(request);
-        Assertions.assertNotNull(result);
-    }
-
     @Test
     public void testProxyExecuteUserIdentityIsNull() throws Exception {
         TMasterOpRequest request = new TMasterOpRequest();
@@ -661,7 +637,6 @@ public class ConnectProcessorTest extends DDLTestBase {
         request.setDb("testDb1");
         request.setUser("root");
         request.setSql("select 1");
-        request.setIsInternalStmt(true);
         request.setModified_variables_sql("set query_timeout = 10");
         request.setQueryId(UUIDUtil.genTUniqueId());
         request.setSession_id(UUID.randomUUID().toString());
@@ -682,5 +657,4 @@ public class ConnectProcessorTest extends DDLTestBase {
         Assertions.assertNotNull(result);
         Assertions.assertTrue(context.getState().isError());
     }
->>>>>>> b70c85739c ([BugFix] Fix the bug where UserProperty priority is lower than Session Variable (#63173))
 }
