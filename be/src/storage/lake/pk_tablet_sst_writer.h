@@ -31,6 +31,7 @@ class PersistentIndexSstableStreamBuilder;
 
 class DefaultSSTWriter {
 public:
+    virtual ~DefaultSSTWriter() = default;
     virtual Status append_sst_record(const Chunk& data) { return Status::OK(); }
     virtual Status reset_sst_writer(const std::shared_ptr<LocationProvider>& location_provider,
                                     const std::shared_ptr<FileSystem>& fs) {
