@@ -50,7 +50,8 @@ Status KeyValueMerger::merge(const sstable::Iterator* iter_ptr) {
         return Status::OK();
     }
     // filter rows which already been deleted in this sst
-    if (iter_ptr->delvec() != nullptr && iter_ptr->delvec()->roaring()->contains(index_value_ver.values(0).rowid())) {
+    if (iter_ptr->delvec() != nullptr && !iter_ptr->delvec()->empty() &&
+        iter_ptr->delvec()->roaring()->contains(index_value_ver.values(0).rowid())) {
         // this row has been deleted in this sst, skip it
         return Status::OK();
     }
