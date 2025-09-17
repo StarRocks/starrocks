@@ -3879,4 +3879,8 @@ public class Config extends ConfigBase {
     @ConfField(comment = "Enable case-insensitive catalog/database/table names. " +
             "Only configurable during cluster initialization, immutable once set.")
     public static boolean enable_table_name_case_insensitive = false;
+
+    @ConfField(mutable = true, comment = "The threshold to flatten compound predicate from deep tree to a balanced tree to " +
+            "avoid stack over flow")
+    public static int compound_predicate_flatten_threshold = 512;
 }
