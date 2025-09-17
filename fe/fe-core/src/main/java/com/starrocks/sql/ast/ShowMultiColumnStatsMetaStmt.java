@@ -31,7 +31,7 @@ import java.time.format.DateTimeFormatter;
 import java.util.List;
 import java.util.stream.Collectors;
 
-public class ShowMultiColumnStatsMetaStmt extends ShowStmt {
+public class ShowMultiColumnStatsMetaStmt extends EnhancedShowStmt {
     public ShowMultiColumnStatsMetaStmt(Predicate predicate, List<OrderByElement> orderByElements,
                                       LimitElement limitElement, NodePosition pos) {
         super(pos);

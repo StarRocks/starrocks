@@ -39,7 +39,7 @@ import static com.starrocks.common.util.Util.normalizeName;
 //
 // Syntax:
 //      SHOW MATERIALIZED VIEWS { FROM | IN } db
-public class ShowMaterializedViewsStmt extends ShowStmt {
+public class ShowMaterializedViewsStmt extends EnhancedShowStmt {
     private static final List<String> META_DATA = Arrays.asList(
             "id",
             "database_name",

@@ -31,7 +31,7 @@ import com.starrocks.sql.parser.NodePosition;
 import static com.starrocks.common.util.Util.normalizeName;
 
 // SHOW COLUMNS
-public class ShowColumnStmt extends ShowStmt {
+public class ShowColumnStmt extends EnhancedShowStmt {
     private static final TableName TABLE_NAME = new TableName(InfoSchemaDb.DATABASE_NAME, "COLUMNS");
 
     private final TableName tableName;
