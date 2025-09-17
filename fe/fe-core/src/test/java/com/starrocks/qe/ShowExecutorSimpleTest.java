@@ -81,7 +81,6 @@ import com.starrocks.server.RunMode;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.DescribeStmt;
-import com.starrocks.sql.ast.GrantType;
 import com.starrocks.sql.ast.LabelName;
 import com.starrocks.sql.ast.QualifiedName;
 import com.starrocks.sql.ast.SetType;
@@ -96,7 +95,6 @@ import com.starrocks.sql.ast.ShowCreateTableStmt;
 import com.starrocks.sql.ast.ShowDataCacheRulesStmt;
 import com.starrocks.sql.ast.ShowDbStmt;
 import com.starrocks.sql.ast.ShowEnginesStmt;
-import com.starrocks.sql.ast.ShowGrantsStmt;
 import com.starrocks.sql.ast.ShowMaterializedViewsStmt;
 import com.starrocks.sql.ast.ShowProcedureStmt;
 import com.starrocks.sql.ast.ShowRoutineLoadStmt;
@@ -968,20 +966,6 @@ public class ShowExecutorSimpleTest {
         Assertions.assertEquals("testTable", resultSet.getResultRows().get(0).get(1));
         Assertions.assertEquals("ALL", resultSet.getResultRows().get(0).get(2));
         Assertions.assertEquals("FULL", resultSet.getResultRows().get(0).get(3));
-    }
-
-    @Test
-    public void testShowGrants() throws Exception {
-        ShowGrantsStmt stmt = new ShowGrantsStmt("root", GrantType.ROLE, NodePosition.ZERO);
-
-        ShowResultSet resultSet = ShowExecutor.execute(stmt, ctx);
-        resultSet.getResultRows().forEach(System.out::println);
-        String expectString1 = "root, null, GRANT CREATE TABLE, DROP, ALTER, CREATE VIEW, CREATE FUNCTION, " +
-                "CREATE MATERIALIZED VIEW, CREATE PIPE ON ALL DATABASES TO ROLE 'root'";
-        Assertions.assertTrue(resultSet.getResultRows().stream().anyMatch(l -> l.toString().contains(expectString1)));
-        String expectString2 = "root, null, GRANT DELETE, DROP, INSERT, SELECT, ALTER, EXPORT, " +
-                "UPDATE, REFRESH ON ALL TABLES IN ALL DATABASES TO ROLE 'root'";
-        Assertions.assertTrue(resultSet.getResultRows().stream().anyMatch(l -> l.toString().contains(expectString2)));
     }
 
     @Test

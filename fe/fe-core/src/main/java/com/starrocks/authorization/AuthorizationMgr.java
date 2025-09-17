@@ -761,6 +761,10 @@ public class AuthorizationMgr {
         }
     }
 
+    public List<String> getGranteeRoleForGroup(String groupName) {
+        return List.of();
+    }
+
     protected boolean checkAction(PrivilegeCollectionV2 collection, ObjectType objectType,
                                   PrivilegeType privilegeType, List<String> objectNames) throws PrivilegeException {
         if (objectNames == null) {
@@ -1128,7 +1132,7 @@ public class AuthorizationMgr {
         }
     }
 
-    public List<String> getGranteeRoleDetailsForUser(UserIdentity userIdentity) {
+    public List<String> getGranteeRoleForUser(UserIdentity userIdentity) {
         userReadLock();
         try {
             Set<Long> allRoles = getRoleIdsByUserUnlocked(userIdentity);
@@ -1146,13 +1150,7 @@ public class AuthorizationMgr {
                     }
                 }
 
-                if (!parentRoleNameList.isEmpty()) {
-                    return Lists.newArrayList(userIdentity.toString(), null,
-                            AstToSQLBuilder.toSQL(new GrantRoleStmt(parentRoleNameList,
-                                    new UserRef(userIdentity.getUser(), userIdentity.getHost(), userIdentity.isDomain()),
-                                    NodePosition.ZERO)));
-                }
-                return null;
+                return parentRoleNameList;
             } finally {
                 roleReadUnlock();
             }
