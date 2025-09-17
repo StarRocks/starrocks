@@ -294,7 +294,7 @@ public abstract class LakeTableAlterMetaJobBase extends AlterJobV2 {
                                 return false;
                             }
                             return true;
-                        }, getPublishVersionTaskExecutor()).exceptionally(ex -> {
+                        }, GlobalStateMgr.getCurrentState().getPublishVersionDaemon().getLakeTaskExecutor()).exceptionally(ex -> {
                             LOG.error("Failed to publish version batch for lake table alter job {}, txnId={}, " +
                                     "partitionId={}, indexId={}", jobId, watershedTxnId, partitionId, index.getId(), ex);
                             return false;
