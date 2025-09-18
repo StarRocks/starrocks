@@ -36,20 +36,17 @@ enum class InvertedIndexParserType;
 enum class InvertedIndexQueryType;
 class GinQueryOptions;
 
-using CharFilterMap = std::map<std::string, std::string>;
-
 class InvertedIndexAnalyzer {
 public:
-    static StatusOr<std::unique_ptr<lucene::analysis::Analyzer>> create_analyzer(InvertedIndexParserType parser_type);
+    static StatusOr<std::unique_ptr<lucene::analysis::Analyzer>> create_analyzer(
+            const GinQueryOptions* gin_query_options);
+
+    static std::unique_ptr<lucene::util::Reader> create_reader(
+            const std::map<std::string, std::string>& char_filter_map);
 
     static StatusOr<std::vector<std::string>> get_analyse_result(const std::string& search_str,
                                                                  const std::wstring& field_name,
                                                                  const GinQueryOptions* gin_query_options);
-
-    static StatusOr<std::vector<std::string>> get_analyse_result(const std::string& search_str,
-                                                                 const std::wstring& field_name,
-                                                                 const InvertedIndexParserType& parser_type,
-                                                                 const InvertedIndexQueryType& query_type);
 
 private:
     static std::vector<std::string> analyse_result_internal(lucene::util::Reader* reader,

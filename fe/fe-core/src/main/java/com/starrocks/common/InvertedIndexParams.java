@@ -50,7 +50,46 @@ public class InvertedIndexParams {
         /**
          * Whether to omit term frequency and term position when indexing
          */
-        OMIT_TERM_FREQ_AND_POSITION("false");
+        OMIT_TERM_FREQ_AND_POSITION("false"),
+
+        /**
+         * When parser = chinese, which mode will be used to tokenize.
+         * Only 'coarse_grained' and 'fine_grained' are available.
+         */
+        PARSER_MODE("coarse_grained", true),
+
+        /**
+         * Whether support phrase or not. If supports phrase, more storage will be used.
+         */
+        SUPPORT_PHRASE("true", true),
+
+        /**
+         * Specifies preprocessing the text before tokenization, usually to affect tokenization behavior
+         * char_filter_type: specifies different functional char_filters (currently only supports char_replace)
+         *   char_replace replaces each char in the pattern with a char in the replacement
+         * char_filter_pattern: characters to be replaced
+         * char_filter_replacement: replacement character array, optional, defaults to a space character
+         */
+        CHAR_FILTER_TYPE("", false),
+        CHAR_FILTER_PATTERN("", false),
+        CHAR_FILTER_REPLACEMENT("", false),
+
+        /**
+         * Specifies the length limit for non-tokenized string indexes.
+         */
+        IGNORE_ABOVE("256", true),
+
+        /**
+         * Whether to convert tokens to lowercase for case-insensitive matching.
+         */
+        LOWER_CASE("true", true),
+
+        /**
+         * Specifying the stop word list to use, which will affect the behavior of the tokenizer.
+         * If not specify, will use builtin stop words.
+         * If specify 'none', will not use any stop words.
+         */
+        STOPWORDS("", true);
 
         private final String defaultValue;
         private boolean needDefault = false;

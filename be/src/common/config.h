@@ -544,6 +544,7 @@ CONF_String(tmp_file_dir, "tmp");
 CONF_mBool(inverted_index_ram_dir_enable, "false");
 
 CONF_mInt32(inverted_index_read_buffer_size, "4096");
+CONF_mString(inverted_index_dict_path, "${STARROCKS_HOME}/dict");
 
 // For each io buffer size, the maximum number of buffers the IoMgr will hold onto
 // With 1024B through 8MB buffers, this is up to ~2GB of buffers.
