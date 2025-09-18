@@ -50,6 +50,7 @@ public class QueryDetailV2Test extends StarRocksHttpTestCase {
                 .build();
         Response response = networkClient.newCall(request).execute();
         String respStr = response.body().string();
+        Assertions.assertEquals(response.code(), 200);
         Assertions.assertNotNull(respStr);
     }
 
@@ -75,6 +76,7 @@ public class QueryDetailV2Test extends StarRocksHttpTestCase {
                 .build();
         Response response = networkClient.newCall(request).execute();
         String respStr = response.body().string();
+        Assertions.assertEquals(response.code(), 200);
         Assertions.assertTrue(respStr.contains("219a2d5443c542d4-8fc938db37c892e3"));
     }
 
@@ -143,6 +145,7 @@ public class QueryDetailV2Test extends StarRocksHttpTestCase {
                 respStr,
                 new TypeToken<RestBaseResultV2<List<QueryDetail>>>() {
                 }.getType());
+        Assertions.assertEquals(response.code(), 200);
         Assertions.assertEquals(3, queryDetails.getResult().size());
     }
 }
