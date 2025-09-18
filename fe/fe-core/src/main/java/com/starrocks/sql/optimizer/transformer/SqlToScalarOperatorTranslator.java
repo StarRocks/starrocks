@@ -445,7 +445,7 @@ public final class SqlToScalarOperatorTranslator {
         @Override
         public ScalarOperator visitLambdaArguments(LambdaArgument node, Context context) {
             // To avoid the ids of lambda arguments are different after each visit()
-            if (node.getTransformed() == null) {
+            if (node.getTransformed() == null || node.getTransformed().getParent() != columnRefFactory) {
                 node.setTransformed(columnRefFactory.create(node.getName(), node.getType(), node.isNullable(), true));
             }
             return node.getTransformed();
