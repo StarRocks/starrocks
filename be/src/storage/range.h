@@ -206,6 +206,12 @@ public:
     // return a new range that represent the intersection of |this| and |r|.
     SparseRange<T> intersection(const SparseRange<T>& rhs) const;
 
+    // return the complement of this range within the given bounds
+    SparseRange<T> complement(T min_bound, T max_bound) const;
+
+    // return the complement of this range within the bounds of another range
+    SparseRange<T> complement(const SparseRange<T>& bounds) const;
+
     SparseRangeIterator<T> new_iterator() const;
 
     std::string to_string() const;
@@ -224,9 +230,13 @@ public:
 
     SparseRange operator|(const SparseRange& rhs) const;
 
+    SparseRange operator-(const SparseRange& rhs) const;
+
     SparseRange& operator&=(const SparseRange& rhs);
 
     SparseRange& operator|=(const SparseRange& rhs);
+
+    SparseRange& operator-=(const SparseRange& rhs);
 
 private:
     friend class SparseRangeIterator<T>;
@@ -334,6 +344,38 @@ inline SparseRange<T> SparseRange<T>::intersection(const SparseRange<T>& rhs) co
 }
 
 template <typename T>
+inline SparseRange<T> SparseRange<T>::complement(T min_bound, T max_bound) const {
+    if (empty()) {
+        return SparseRange<T>(min_bound, max_bound);
+    }
+
+    SparseRange<T> result;
+    T current_pos = min_bound;
+
+    for (const auto& range : _ranges) {
+        if (current_pos < range.begin()) {
+            result._add_uncheck(Range<T>(current_pos, range.begin()));
+        }
+        current_pos = std::max(current_pos, range.end());
+    }
+
+    if (current_pos < max_bound) {
+        result._add_uncheck(Range<T>(current_pos, max_bound));
+    }
+
+    return result;
+}
+
+template <typename T>
+inline SparseRange<T> SparseRange<T>::complement(const SparseRange<T>& bounds) const {
+    if (bounds.empty()) {
+        return SparseRange<T>();
+    }
+
+    return complement(bounds.begin(), bounds.end());
+}
+
+template <typename T>
 inline void SparseRange<T>::split_and_reverse(size_t expected_range_cnt, size_t chunk_size) {
     if (size() < expected_range_cnt && span_size() > std::max(expected_range_cnt, chunk_size)) {
         size_t expected_size_each_range = 0;
@@ -377,6 +419,26 @@ inline SparseRange<T>& SparseRange<T>::operator|=(const SparseRange<T>& rhs) {
     for (size_t i = 0; i < rhs.size(); i++) {
         add(rhs[i]);
     }
+    return *this;
+}
+
+template <typename T>
+inline SparseRange<T> SparseRange<T>::operator-(const SparseRange<T>& rhs) const {
+    SparseRange<T> result = *this;
+    result -= rhs;
+    return result;
+}
+
+template <typename T>
+inline SparseRange<T>& SparseRange<T>::operator-=(const SparseRange<T>& rhs) {
+    if (empty() || rhs.empty()) {
+        return *this;
+    }
+
+    // Use complement + intersection approach: A - B = A ∩ B'
+    SparseRange<T> rhs_complement = rhs.complement(*this);
+    *this = intersection(rhs_complement);
+
     return *this;
 }
 
