@@ -153,15 +153,17 @@ public class PredicatePushDownTest extends PlanTestBase {
         // The plan should not push down the predicate through the project that contains rand()
         // Instead, the filter should remain above the project
         // The filter should not be pushed down to the scan level
-        assertContains(plan, " 2:Project\n" +
+        assertContains(plan, "3:Project\n" +
                 "  |  <slot 1> : 1: v1\n" +
-                "  |  <slot 4> : 6: rand\n" +
-                "  |  <slot 5> : 6: rand < 0.5\n" +
-                "  |  common expressions:\n" +
-                "  |  <slot 6> : rand()\n" +
+                "  |  <slot 4> : 4: rand\n" +
+                "  |  <slot 5> : 4: rand < 0.5\n" +
                 "  |  \n" +
-                "  1:SELECT\n" +
-                "  |  predicates: rand() < 0.5\n" +
+                "  2:SELECT\n" +
+                "  |  predicates: 4: rand < 0.5\n" +
+                "  |  \n" +
+                "  1:Project\n" +
+                "  |  <slot 1> : 1: v1\n" +
+                "  |  <slot 4> : rand()\n" +
                 "  |  \n" +
                 "  0:OlapScanNode");
     }
