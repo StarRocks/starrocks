@@ -356,28 +356,20 @@ public class TabletStatMgr extends FrontendDaemon {
 
         private void sendTasks() {
             Map<ComputeNode, List<TabletInfo>> beToTabletInfos = new HashMap<>();
+            WarehouseManager manager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
+            Warehouse warehouse = manager.getBackgroundWarehouse();
             for (Tablet tablet : tablets.values()) {
-<<<<<<< HEAD
-                WarehouseManager manager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
-                Warehouse warehouse = manager.getBackgroundWarehouse();
-                ComputeNode node = manager.getComputeNodeAssignedToTablet(warehouse.getName(), (LakeTablet) tablet);
-
-                if (node == null) {
-                    LOG.warn("Stop sending tablet stat task for partition {} because no alive node", debugName());
-                    return;
-=======
                 ComputeNode node;
                 try {
-                    node = warehouseManager.getComputeNodeAssignedToTablet(computeResource, tablet.getId());
+                    node = manager.getComputeNodeAssignedToTablet(warehouse.getName(), (LakeTablet) tablet);
                     if (node == null) {
-                        LOG.warn("Skip sending tablet stat task for partition {} because no alive node", debugName());
+                        LOG.warn("Stop sending tablet stat task for partition {} because no alive node", debugName());
                         continue;
                     }
                 } catch (ErrorReportException e) {
                     LOG.warn("Skip sending tablet stat task for partition {} because exception: {}",
                             debugName(), e.getMessage());
                     continue;
->>>>>>> 4509446f2e ([Enhancement] Improve error handling in TabletStatMgr and WarehouseManager (#61083))
                 }
                 TabletInfo tabletInfo = new TabletInfo();
                 tabletInfo.tabletId = tablet.getId();
