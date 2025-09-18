@@ -394,15 +394,15 @@ TEST_F(LakePersistentIndexTest, test_compaction_strategy_same_max_rss_rowid) {
 
     // Add base sstable (index 0) with large size
     auto* base_sstable = sstable_meta.add_sstables();
-    base_sstable->set_filesize(1000000);  // 1MB
+    base_sstable->set_filesize(1000000); // 1MB
     base_sstable->set_filename("base.sst");
-    base_sstable->set_max_rss_rowid(100);  // Same max_rss_rowid
+    base_sstable->set_max_rss_rowid(100); // Same max_rss_rowid
 
     // Add cumulative sstables with small total size (would trigger cumulative merge normally)
     auto* cumulative_sstable = sstable_meta.add_sstables();
-    cumulative_sstable->set_filesize(50000);  // 50KB - much smaller than base
+    cumulative_sstable->set_filesize(50000); // 50KB - much smaller than base
     cumulative_sstable->set_filename("cumulative1.sst");
-    cumulative_sstable->set_max_rss_rowid(100);  // Same max_rss_rowid as base
+    cumulative_sstable->set_max_rss_rowid(100); // Same max_rss_rowid as base
 
     // Without the fix, this would choose cumulative merge because:
     // base_level_bytes * ratio (1000000 * 0.1 = 100000) > cumulative_level_bytes (50000)
@@ -423,12 +423,12 @@ TEST_F(LakePersistentIndexTest, test_compaction_strategy_same_max_rss_rowid) {
     base_sstable = sstable_meta.add_sstables();
     base_sstable->set_filesize(1000000);
     base_sstable->set_filename("base2.sst");
-    base_sstable->set_max_rss_rowid(100);  // Different max_rss_rowid
+    base_sstable->set_max_rss_rowid(100); // Different max_rss_rowid
 
     cumulative_sstable = sstable_meta.add_sstables();
     cumulative_sstable->set_filesize(50000);
     cumulative_sstable->set_filename("cumulative2.sst");
-    cumulative_sstable->set_max_rss_rowid(200);  // Different max_rss_rowid
+    cumulative_sstable->set_max_rss_rowid(200); // Different max_rss_rowid
 
     LakePersistentIndex::pick_sstables_for_merge(sstable_meta, &sstables, &merge_base_level);
 
