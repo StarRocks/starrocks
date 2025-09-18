@@ -91,7 +91,9 @@ public class AnalyzeJoinTest {
         analyzeFail("select * from (t0 join tnotnull using(v1)) t , t1",
                 "Getting syntax error at line 1, column 43. Detail message: Unexpected input 't', " +
                         "the most similar input is {<EOF>, ';'}.");
-        analyzeFail("select v1 from (t0 join tnotnull using(v1)), t1", "Column 'v1' is ambiguous");
+        // After aligning USING semantics with SQL standard/MySQL, USING columns are coalesced
+        // and unqualified reference is not ambiguous in this case
+        analyzeSuccess("select v1 from (t0 join tnotnull using(v1)), t1");
         analyzeSuccess("select a.v1 from (t0 a join tnotnull b using(v1)), t1");
     }
 
