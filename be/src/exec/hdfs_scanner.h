@@ -352,6 +352,7 @@ struct HdfsScannerContext {
     bool use_count_opt = false;
     bool is_first_split = false;
     bool can_use_file_record_count = false;
+    bool need_count_all_record_count = false;
 
     // used by short circuit cases:
     // get_next just returns chunk for once.
