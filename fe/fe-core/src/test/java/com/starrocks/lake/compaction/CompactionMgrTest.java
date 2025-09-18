@@ -166,6 +166,7 @@ public class CompactionMgrTest {
         PartitionIdentifier partition2 = new PartitionIdentifier(1, 2, 4);
         Assertions.assertEquals(0, compactionMgr.getMaxCompactionScore(), delta);
 
+        // load and compact partition 1
         compactionMgr.handleLoadingFinished(partition1, 2, System.currentTimeMillis(),
                 Quantiles.compute(Lists.newArrayList(1d)));
         Assertions.assertEquals(1, compactionMgr.getMaxCompactionScore(), delta);
@@ -173,10 +174,17 @@ public class CompactionMgrTest {
                 Quantiles.compute(Lists.newArrayList(2d)), 1234, false);
         Assertions.assertEquals(2, compactionMgr.getMaxCompactionScore(), delta);
 
+        // load partition 2
         compactionMgr.handleLoadingFinished(partition2, 2, System.currentTimeMillis(),
                 Quantiles.compute(Lists.newArrayList(3d)));
         Assertions.assertEquals(3, compactionMgr.getMaxCompactionScore(), delta);
 
+        // set partition 2 compaction score to null
+        PartitionStatistics statistics2 = compactionMgr.getStatistics(partition2);
+        statistics2.setCompactionScore(null);
+        Assertions.assertEquals(2, compactionMgr.getMaxCompactionScore(), delta);
+
+        // remove partition 2
         compactionMgr.removePartition(partition2);
         Assertions.assertEquals(2, compactionMgr.getMaxCompactionScore(), delta);
     }
