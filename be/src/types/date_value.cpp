@@ -156,6 +156,8 @@ void DateValue::trunc_to_week() {
 void DateValue::trunc_to_quarter() {
     int year, month, day;
     date::to_date_with_cache(_julian, &year, &month, &day);
+    // Only March needs to add the full number of days in February,
+    // so an extra day should be added only in leap years when the month is March.
     _julian -= quarter_month_day_offset[month] + (day - 1) + (month == 3 && date::is_leap(year));
 }
 
