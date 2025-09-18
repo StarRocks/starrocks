@@ -1,5 +1,3 @@
--- name: test_low_cardinality_parquet_cancel @sequential
-
 -- Prepare Data.
 create external catalog ice_cat_${uuid0}
 properties (
