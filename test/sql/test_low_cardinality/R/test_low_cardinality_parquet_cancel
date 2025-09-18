@@ -1,0 +1,289 @@
+create external catalog ice_cat_${uuid0}
+properties (
+    "type" = "iceberg",
+    "iceberg.catalog.type" = "hive",
+    "hive.metastore.uris" = "${iceberg_catalog_hive_metastore_uris}"
+);
+-- result:
+-- !result
+set catalog ice_cat_${uuid0};
+-- result:
+-- !result
+create database ice_db_${uuid0};
+-- result:
+-- !result
+use ice_db_${uuid0};
+-- result:
+-- !result
+CREATE TABLE __row_util_base (
+  k1 bigint NULL
+);
+-- result:
+-- !result
+insert into __row_util_base select generate_series from TABLE(generate_series(0, 10000 - 1));
+-- result:
+-- !result
+insert into __row_util_base select * from __row_util_base; 
+insert into __row_util_base select * from __row_util_base; 
+insert into __row_util_base select * from __row_util_base; 
+insert into __row_util_base select * from __row_util_base; 
+insert into __row_util_base select * from __row_util_base; 
+insert into __row_util_base select * from __row_util_base;
+-- result:
+-- !result
+insert into __row_util_base select * from __row_util_base;
+-- result:
+-- !result
+CREATE TABLE __row_util (
+  idx bigint NULL
+);
+-- result:
+-- !result
+insert into __row_util select row_number() over() as idx from __row_util_base;
+-- result:
+-- !result
+CREATE TABLE t2 (
+    k1 bigint NULL,
+
+    c_int1 int null,
+    c_int2 int null,
+    c_str1 string null,
+    c_str2 string null
+);
+-- result:
+-- !result
+INSERT INTO t2
+SELECT
+    idx,
+
+    idx,
+    idx,
+
+    concat('varchar-', idx % 100),
+    concat('varchar-', idx % 10)
+FROM __row_util;
+-- result:
+-- !result
+[UC]ANALYZE TABLE t2;
+-- result:
+ice_cat_09d512fb7ac14840955c15127eb73256.ice_db_09d512fb7ac14840955c15127eb73256.t2	analyze	status	OK
+-- !result
+with w1 as (
+    select c_str1, c_str2, c_int1, c_int2 from t2 group by c_str1, c_str2, c_int1, c_int2
+)
+select /*+SET_VAR(cbo_cte_reuse=false)*/ sum(x), sum(y)
+from (
+    select count(tt1.c_str1) as x , count(tt1.c_str2) as y
+    from 
+        w1 tt1 join [shuffle] w1 tt2 on tt1.c_int1 = tt2.c_int1
+    union all 
+    select count(tt1.c_str1) , count(tt1.c_str2)
+    from 
+        w1 tt1 join [shuffle] w1 tt2 on tt1.c_int1 = tt2.c_int1
+    union all 
+    select count(tt1.c_str1) , count(tt1.c_str2)
+    from 
+        t2 tt1 join [shuffle] t2 tt2 on tt1.c_int1 = tt2.c_int1
+    union all 
+    select count(tt1.c_str1) , count(tt1.c_str2)
+    from 
+        t2 tt1 join [shuffle] t2 tt2 on tt1.c_int1 = tt2.c_int1
+    union all 
+    select count(tt1.c_str1) , count(tt1.c_str2)
+    from 
+        w1 tt1 join [shuffle] w1 tt2 on tt1.c_int1 = tt2.c_int1
+    union all 
+    select count(tt1.c_str1) , count(tt1.c_str2)
+    from 
+        w1 tt1 join [shuffle] w1 tt2 on tt1.c_int1 = tt2.c_int1
+)t;
+-- result:
+7680000	7680000
+-- !result
+admin enable failpoint 'parquet_reader_returns_global_dict_not_match_status' with 0.5 probability;
+-- result:
+-- !result
+with w1 as (
+    select c_str1, c_str2, c_int1, c_int2 from t2 group by c_str1, c_str2, c_int1, c_int2
+)
+select /*+SET_VAR(cbo_cte_reuse=false)*/ sum(x), sum(y)
+from (
+    select count(tt1.c_str1) as x , count(tt1.c_str2) as y
+    from 
+        w1 tt1 join [shuffle] w1 tt2 on tt1.c_int1 = tt2.c_int1
+    union all 
+    select count(tt1.c_str1) , count(tt1.c_str2)
+    from 
+        w1 tt1 join [shuffle] w1 tt2 on tt1.c_int1 = tt2.c_int1
+    union all 
+    select count(tt1.c_str1) , count(tt1.c_str2)
+    from 
+        t2 tt1 join [shuffle] t2 tt2 on tt1.c_int1 = tt2.c_int1
+    union all 
+    select count(tt1.c_str1) , count(tt1.c_str2)
+    from 
+        t2 tt1 join [shuffle] t2 tt2 on tt1.c_int1 = tt2.c_int1
+    union all 
+    select count(tt1.c_str1) , count(tt1.c_str2)
+    from 
+        w1 tt1 join [shuffle] w1 tt2 on tt1.c_int1 = tt2.c_int1
+    union all 
+    select count(tt1.c_str1) , count(tt1.c_str2)
+    from 
+        w1 tt1 join [shuffle] w1 tt2 on tt1.c_int1 = tt2.c_int1
+)t;
+-- result:
+7680000	7680000
+-- !result
+with w1 as (
+    select c_str1, c_str2, c_int1, c_int2 from t2 group by c_str1, c_str2, c_int1, c_int2
+)
+select /*+SET_VAR(cbo_cte_reuse=false)*/ sum(x), sum(y)
+from (
+    select count(tt1.c_str1) as x , count(tt1.c_str2) as y
+    from 
+        w1 tt1 join [shuffle] w1 tt2 on tt1.c_int1 = tt2.c_int1
+    union all 
+    select count(tt1.c_str1) , count(tt1.c_str2)
+    from 
+        w1 tt1 join [shuffle] w1 tt2 on tt1.c_int1 = tt2.c_int1
+    union all 
+    select count(tt1.c_str1) , count(tt1.c_str2)
+    from 
+        t2 tt1 join [shuffle] t2 tt2 on tt1.c_int1 = tt2.c_int1
+    union all 
+    select count(tt1.c_str1) , count(tt1.c_str2)
+    from 
+        t2 tt1 join [shuffle] t2 tt2 on tt1.c_int1 = tt2.c_int1
+    union all 
+    select count(tt1.c_str1) , count(tt1.c_str2)
+    from 
+        w1 tt1 join [shuffle] w1 tt2 on tt1.c_int1 = tt2.c_int1
+    union all 
+    select count(tt1.c_str1) , count(tt1.c_str2)
+    from 
+        w1 tt1 join [shuffle] w1 tt2 on tt1.c_int1 = tt2.c_int1
+)t;
+-- result:
+7680000	7680000
+-- !result
+admin enable failpoint 'parquet_reader_returns_global_dict_not_match_status';
+-- result:
+-- !result
+with w1 as (
+    select c_str1, c_str2, c_int1, c_int2 from t2 group by c_str1, c_str2, c_int1, c_int2
+)
+select /*+SET_VAR(cbo_cte_reuse=false)*/ sum(x), sum(y)
+from (
+    select count(tt1.c_str1) as x , count(tt1.c_str2) as y
+    from 
+        w1 tt1 join [shuffle] w1 tt2 on tt1.c_int1 = tt2.c_int1
+    union all 
+    select count(tt1.c_str1) , count(tt1.c_str2)
+    from 
+        w1 tt1 join [shuffle] w1 tt2 on tt1.c_int1 = tt2.c_int1
+    union all 
+    select count(tt1.c_str1) , count(tt1.c_str2)
+    from 
+        t2 tt1 join [shuffle] t2 tt2 on tt1.c_int1 = tt2.c_int1
+    union all 
+    select count(tt1.c_str1) , count(tt1.c_str2)
+    from 
+        t2 tt1 join [shuffle] t2 tt2 on tt1.c_int1 = tt2.c_int1
+    union all 
+    select count(tt1.c_str1) , count(tt1.c_str2)
+    from 
+        w1 tt1 join [shuffle] w1 tt2 on tt1.c_int1 = tt2.c_int1
+    union all 
+    select count(tt1.c_str1) , count(tt1.c_str2)
+    from 
+        w1 tt1 join [shuffle] w1 tt2 on tt1.c_int1 = tt2.c_int1
+)t;
+-- result:
+7680000	7680000
+-- !result
+with w1 as (
+    select c_str1, c_str2, c_int1, c_int2 from t2 group by c_str1, c_str2, c_int1, c_int2
+)
+select /*+SET_VAR(cbo_cte_reuse=false)*/ sum(x), sum(y)
+from (
+    select count(tt1.c_str1) as x , count(tt1.c_str2) as y
+    from 
+        w1 tt1 join [shuffle] w1 tt2 on tt1.c_int1 = tt2.c_int1
+    union all 
+    select count(tt1.c_str1) , count(tt1.c_str2)
+    from 
+        w1 tt1 join [shuffle] w1 tt2 on tt1.c_int1 = tt2.c_int1
+    union all 
+    select count(tt1.c_str1) , count(tt1.c_str2)
+    from 
+        t2 tt1 join [shuffle] t2 tt2 on tt1.c_int1 = tt2.c_int1
+    union all 
+    select count(tt1.c_str1) , count(tt1.c_str2)
+    from 
+        t2 tt1 join [shuffle] t2 tt2 on tt1.c_int1 = tt2.c_int1
+    union all 
+    select count(tt1.c_str1) , count(tt1.c_str2)
+    from 
+        w1 tt1 join [shuffle] w1 tt2 on tt1.c_int1 = tt2.c_int1
+    union all 
+    select count(tt1.c_str1) , count(tt1.c_str2)
+    from 
+        w1 tt1 join [shuffle] w1 tt2 on tt1.c_int1 = tt2.c_int1
+)t;
+-- result:
+7680000	7680000
+-- !result
+admin disable failpoint 'parquet_reader_returns_global_dict_not_match_status';
+-- result:
+-- !result
+with w1 as (
+    select c_str1, c_str2, c_int1, c_int2 from t2 group by c_str1, c_str2, c_int1, c_int2
+)
+select /*+SET_VAR(cbo_cte_reuse=false)*/ sum(x), sum(y)
+from (
+    select count(tt1.c_str1) as x , count(tt1.c_str2) as y
+    from 
+        w1 tt1 join [shuffle] w1 tt2 on tt1.c_int1 = tt2.c_int1
+    union all 
+    select count(tt1.c_str1) , count(tt1.c_str2)
+    from 
+        w1 tt1 join [shuffle] w1 tt2 on tt1.c_int1 = tt2.c_int1
+    union all 
+    select count(tt1.c_str1) , count(tt1.c_str2)
+    from 
+        t2 tt1 join [shuffle] t2 tt2 on tt1.c_int1 = tt2.c_int1
+    union all 
+    select count(tt1.c_str1) , count(tt1.c_str2)
+    from 
+        t2 tt1 join [shuffle] t2 tt2 on tt1.c_int1 = tt2.c_int1
+    union all 
+    select count(tt1.c_str1) , count(tt1.c_str2)
+    from 
+        w1 tt1 join [shuffle] w1 tt2 on tt1.c_int1 = tt2.c_int1
+    union all 
+    select count(tt1.c_str1) , count(tt1.c_str2)
+    from 
+        w1 tt1 join [shuffle] w1 tt2 on tt1.c_int1 = tt2.c_int1
+)t;
+-- result:
+7680000	7680000
+-- !result
+drop table t2 force;
+-- result:
+-- !result
+drop table __row_util force;
+-- result:
+-- !result
+drop table __row_util_base force;
+-- result:
+-- !result
+drop database ice_db_${uuid0};
+-- result:
+-- !result
+drop catalog ice_cat_${uuid0};
+-- result:
+-- !result
+set catalog default_catalog;
+-- result:
+-- !result
