@@ -325,25 +325,10 @@ private:
     template <bool first_probe, bool is_collision_free_and_unique>
     void _probe_from_ht_for_asof_inner_join(RuntimeState* state, const ImmBuffer<CppType> build_data,
                                             const ImmBuffer<CppType> probe_data);
-    // Note: This coroutine version is never called for ASOF JOIN as coroutines are disabled
-    // It exists only to satisfy template instantiation requirements
-    HashTableProbeState::ProbeCoroutine _probe_from_ht_for_asof_inner_join(RuntimeState* state,
-                                                                           const ImmBuffer<CppType> build_data,
-                                                                           const ImmBuffer<CppType> probe_data) {
-        co_return;
-    };
-
     // for asof left outer join
     template <bool first_probe, bool is_collision_free_and_unique>
     void _probe_from_ht_for_asof_left_outer_join(RuntimeState* state, const ImmBuffer<CppType> build_data,
                                                  const ImmBuffer<CppType> probe_data);
-    // Note: This coroutine version is never called for ASOF JOIN as coroutines are disabled
-    // It exists only to satisfy template instantiation requirements
-    HashTableProbeState::ProbeCoroutine _probe_from_ht_for_asof_left_outer_join(RuntimeState* state,
-                                                                                const ImmBuffer<CppType> build_data,
-                                                                                const ImmBuffer<CppType> probe_data) {
-        co_return;
-    };
 
     // for asof left outer join with other conjunct
     template <bool first_probe, bool is_collision_free_and_unique>
@@ -377,7 +362,7 @@ public:
     void set_probe_profile(RuntimeProfile::Counter* search_ht_timer, RuntimeProfile::Counter* output_probe_column_timer,
                            RuntimeProfile::Counter* output_build_column_timer, RuntimeProfile::Counter* probe_counter);
 
-    Status create(const HashTableParam& param);
+    void create(const HashTableParam& param);
     void close();
 
     Status build(RuntimeState* state);

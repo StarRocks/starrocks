@@ -347,7 +347,7 @@ void JoinHashTable::close() {
 }
 
 // may be called more than once if spill
-Status JoinHashTable::create(const HashTableParam& param) {
+void JoinHashTable::create(const HashTableParam& param) {
     _table_items = std::make_shared<JoinHashTableItems>();
     if (_probe_state == nullptr) {
         _probe_state = std::make_unique<HashTableProbeState>();
@@ -380,7 +380,8 @@ Status JoinHashTable::create(const HashTableParam& param) {
     if (is_asof_join(_table_items->join_type)) {
         auto variant_index = get_asof_variant_index(_table_items->asof_join_condition_desc.build_logical_type,
                                                     _table_items->asof_join_condition_desc.condition_op);
-        ASSIGN_OR_RETURN(_table_items->asof_index_vector, create_asof_index_vector(variant_index));
+        DCHECK_LT(variant_index, 12) << "Invalid variant index";
+        _table_items->asof_index_vector = create_asof_index_vector(variant_index);
     }
 
     _table_items->join_keys = param.join_keys;
@@ -389,8 +390,6 @@ Status JoinHashTable::create(const HashTableParam& param) {
     _init_build_column(param);
 
     _init_join_keys();
-
-    return Status::OK();
 }
 
 void JoinHashTable::_init_probe_column(const HashTableParam& param) {

@@ -518,10 +518,11 @@ void JoinHashMap<LT, CT, MT>::_search_ht_impl(RuntimeState* state, const ImmBuff
             DO_PROBE(_probe_from_ht_for_full_outer_join);
             break;
         case TJoinOp::ASOF_INNER_JOIN:
-            DO_PROBE(_probe_from_ht_for_asof_inner_join);
+            _probe_from_ht_for_asof_inner_join<first_probe, is_collision_free_and_unique>(state, build_data, data);
             break;
         case TJoinOp::ASOF_LEFT_OUTER_JOIN:
-            DO_PROBE(_probe_from_ht_for_asof_left_outer_join);
+            _probe_from_ht_for_asof_left_outer_join_with_other_conjunct<first_probe, is_collision_free_and_unique>(
+                    state, build_data, data);
             break;
         default:
             DO_PROBE(_probe_from_ht);
@@ -901,7 +902,6 @@ void JoinHashMap<LT, CT, MT>::_probe_from_ht_for_asof_inner_join(RuntimeState* s
             }
 
             DCHECK_LT(i, asof_temporal_data_column->size());
-
             AsofTemporalCppType probe_temporal_value = asof_temporal_probe_values[i];
 
             uint32_t matched_build_row_index = asof_index_vector[build_index]->find_asof_match(probe_temporal_value);

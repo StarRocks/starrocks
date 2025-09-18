@@ -67,11 +67,7 @@ import com.starrocks.sql.optimizer.rule.transformation.PartitionColumnValueOnlyO
 import com.starrocks.sql.optimizer.rule.transformation.PruneEmptyWindowRule;
 import com.starrocks.sql.optimizer.rule.transformation.PullUpScanPredicateRule;
 import com.starrocks.sql.optimizer.rule.transformation.PushDownAggregateGroupingSetsRule;
-<<<<<<< HEAD
 import com.starrocks.sql.optimizer.rule.transformation.PushDownAsofJoinTemporalExpressionToChildProject;
-=======
-import com.starrocks.sql.optimizer.rule.transformation.PushDownAsofjoinConditionToChildProject;
->>>>>>> 6054fab93c ([Enhancement] pushdown asof join condition project to child operator)
 import com.starrocks.sql.optimizer.rule.transformation.PushDownJoinOnExpressionToChildProject;
 import com.starrocks.sql.optimizer.rule.transformation.PushDownLimitRankingWindowRule;
 import com.starrocks.sql.optimizer.rule.transformation.PushDownPredicateRankingWindowRule;
