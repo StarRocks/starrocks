@@ -7193,14 +7193,14 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
                 propertyMap.put(property.getKey(), property.getValue());
             }
         }
-        return new CreateGroupProviderStmt(name, propertyMap, createPos(context));
+        return new CreateGroupProviderStmt(name, propertyMap, context.IF() != null, createPos(context));
     }
 
     @Override
     public ParseNode visitDropGroupProviderStatement(
             com.starrocks.sql.parser.StarRocksParser.DropGroupProviderStatementContext context) {
         String name = ((Identifier) visit(context.identifier())).getValue();
-        return new DropGroupProviderStmt(name, createPos(context));
+        return new DropGroupProviderStmt(name, context.IF() != null, createPos(context));
     }
 
     @Override

@@ -659,8 +659,10 @@ public class DDLStmtExecutor {
 
         @Override
         public ShowResultSet visitDropGroupProviderStatement(DropGroupProviderStmt statement, ConnectContext context) {
-            AuthenticationMgr authenticationMgr = GlobalStateMgr.getCurrentState().getAuthenticationMgr();
-            authenticationMgr.dropGroupProviderStatement(statement, context);
+            ErrorReport.wrapWithRuntimeException(() -> {
+                AuthenticationMgr authenticationMgr = GlobalStateMgr.getCurrentState().getAuthenticationMgr();
+                authenticationMgr.dropGroupProviderStatement(statement, context);
+            });
             return null;
         }
 
