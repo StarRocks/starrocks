@@ -377,7 +377,7 @@ public class RestBaseAction extends BaseAction {
     }
 
     protected void sendSuccessResponse(BaseResponse response, String content, BaseRequest request) {
-        sendResult(request, response, new RestBaseResultV2<>(content));
+        sendResult(request, response,  RestBaseResultV2.ok(content));
     }
 
     protected void sendErrorResponse(BaseResponse response, String message, HttpResponseStatus status, BaseRequest request) {
