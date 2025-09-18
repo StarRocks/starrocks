@@ -22,6 +22,7 @@ import com.starrocks.catalog.TabletMeta;
 import com.starrocks.server.RunMode;
 import com.starrocks.system.Backend;
 import com.starrocks.system.SystemInfoService;
+import com.starrocks.thrift.TStorageMedium;
 import mockit.Mock;
 import mockit.MockUp;
 import org.junit.jupiter.api.Assertions;
@@ -61,7 +62,7 @@ public class SystemHandlerCanForceDropTest {
         // Mock RunMode to return shared data mode
         new MockUp<RunMode>() {
             @Mock
-            public static boolean isSharedDataMode() {
+            public boolean isSharedDataMode() {
                 return true;
             }
         };
@@ -78,7 +79,7 @@ public class SystemHandlerCanForceDropTest {
         // Mock RunMode to return shared nothing mode
         new MockUp<RunMode>() {
             @Mock
-            public static boolean isSharedDataMode() {
+            public boolean isSharedDataMode() {
                 return false;
             }
         };
@@ -99,7 +100,7 @@ public class SystemHandlerCanForceDropTest {
         // Mock RunMode to return shared nothing mode
         new MockUp<RunMode>() {
             @Mock
-            public static boolean isSharedDataMode() {
+            public boolean isSharedDataMode() {
                 return false;
             }
         };
@@ -124,7 +125,7 @@ public class SystemHandlerCanForceDropTest {
         // Mock RunMode to return shared nothing mode
         new MockUp<RunMode>() {
             @Mock
-            public static boolean isSharedDataMode() {
+            public boolean isSharedDataMode() {
                 return false;
             }
         };
@@ -169,7 +170,7 @@ public class SystemHandlerCanForceDropTest {
         // Mock RunMode to return shared nothing mode
         new MockUp<RunMode>() {
             @Mock
-            public static boolean isSharedDataMode() {
+            public boolean isSharedDataMode() {
                 return false;
             }
         };
@@ -214,7 +215,7 @@ public class SystemHandlerCanForceDropTest {
         // Mock RunMode to return shared nothing mode
         new MockUp<RunMode>() {
             @Mock
-            public static boolean isSharedDataMode() {
+            public boolean isSharedDataMode() {
                 return false;
             }
         };
@@ -259,7 +260,7 @@ public class SystemHandlerCanForceDropTest {
         // Mock RunMode to return shared nothing mode
         new MockUp<RunMode>() {
             @Mock
-            public static boolean isSharedDataMode() {
+            public boolean isSharedDataMode() {
                 return false;
             }
         };
@@ -300,7 +301,7 @@ public class SystemHandlerCanForceDropTest {
         new MockUp<TabletInvertedIndex>() {
             @Mock
             public TabletMeta getTabletMeta(long tabletId) {
-                return new TabletMeta(1L, 1L, 1L, 1L, null, false);
+                return new TabletMeta(1L, 1L, 1L, 1L, 1, TStorageMedium.HDD);
             }
             
             @Mock
@@ -316,7 +317,7 @@ public class SystemHandlerCanForceDropTest {
         new MockUp<TabletInvertedIndex>() {
             @Mock
             public TabletMeta getTabletMeta(long tabletId) {
-                return new TabletMeta(1L, 1L, 1L, 1L, null, false);
+                return new TabletMeta(1L, 1L, 1L, 1L, 1, TStorageMedium.HDD);
             }
             
             @Mock
@@ -332,7 +333,7 @@ public class SystemHandlerCanForceDropTest {
         new MockUp<TabletInvertedIndex>() {
             @Mock
             public TabletMeta getTabletMeta(long tabletId) {
-                return new TabletMeta(1L, 1L, 1L, 1L, null, false);
+                return new TabletMeta(1L, 1L, 1L, 1L, 1, TStorageMedium.HDD);
             }
             
             @Mock
@@ -349,7 +350,7 @@ public class SystemHandlerCanForceDropTest {
         new MockUp<TabletInvertedIndex>() {
             @Mock
             public TabletMeta getTabletMeta(long tabletId) {
-                return new TabletMeta(1L, 1L, 1L, 1L, null, false);
+                return new TabletMeta(1L, 1L, 1L, 1L, 1, TStorageMedium.HDD);
             }
             
             @Mock

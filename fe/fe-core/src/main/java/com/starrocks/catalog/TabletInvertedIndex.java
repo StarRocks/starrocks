@@ -415,19 +415,16 @@ public class TabletInvertedIndex implements MemoryTrackable {
         }
     }
 
-<<<<<<< HEAD
-=======
     public Map<Long, Replica> getReplicas(long tabletId) {
         readLock();
         try {
-            return this.replicaMetaTable.get(tabletId);
+            return this.replicaMetaTable.row(tabletId);
         } finally {
             readUnlock();
         }
     }
 
     // The caller should hold readLock.
->>>>>>> 1d1530ac5c ([Enhancement] Force drop decommissioned backend if all the tablets in recycle bin (#62781))
     public Map<Long, Replica> getReplicaMetaWithBackend(Long backendId) {
         return backingReplicaMetaTable.row(backendId);
     }
