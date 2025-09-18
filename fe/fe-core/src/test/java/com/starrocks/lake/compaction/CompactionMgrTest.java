@@ -183,7 +183,7 @@ public class CompactionMgrTest {
         // set partition 2 compaction score to null
         PartitionStatistics statistics2 = compactionMgr.getStatistics(partition2);
         statistics2.setCompactionScore(null);
-        Assertions.assertEquals(2, compactionMgr.getMaxCompactionScore(), delta);
+        Assert.assertEquals(2, compactionMgr.getMaxCompactionScore(), delta);
 
         // remove partition 2
         compactionMgr.removePartition(partition2);
