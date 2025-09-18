@@ -986,7 +986,7 @@ void TabletUpdates::do_apply() {
     SCOPED_THREAD_LOCAL_SINGLETON_CHECK_MEM_TRACKER_SETTER(
             config::enable_pk_strict_memcheck ? StorageEngine::instance()->update_manager()->mem_tracker() : nullptr);
     // only 1 thread at max is running this method
-    bool first = true;
+    bool apply_operation_performed = false;
     Status apply_st;
     while (!_apply_stopped) {
         const EditVersionInfo* version_info_apply = nullptr;
@@ -997,7 +997,7 @@ void TabletUpdates::do_apply() {
                 break;
             }
             if (_apply_version_idx + 1 >= _edit_version_infos.size()) {
-                if (first) {
+                if (!apply_operation_performed) {
                     LOG(WARNING) << "illegal state: do_apply should not be called when there is "
                                     "nothing to apply: "
                                  << _debug_string(false);
@@ -1024,7 +1024,7 @@ void TabletUpdates::do_apply() {
             LOG(ERROR) << msg;
             _set_error(msg);
         }
-        first = false;
+        apply_operation_performed = true;
         // submit a delay apply task to storage_engine
         if (config::enable_retry_apply && _is_retryable(apply_st) && !apply_st.ok()) {
             //reset pk index, reset rowset_update_states, reset compaction_state
@@ -1068,7 +1068,7 @@ void TabletUpdates::do_apply() {
     {
         std::lock_guard rl(_lock);
         // if apply_st is not ok, which means the apply task is failed, we should not submit a new apply task.
-        if (apply_st.ok()) {
+        if (apply_st.ok() && apply_operation_performed) {
             _check_for_apply();
         }
     }
