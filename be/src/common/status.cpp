@@ -239,6 +239,8 @@ std::string Status::code_as_string() const {
         return "ES invalid offset";
     case TStatusCode::ES_REQUEST_ERROR:
         return "ES request error";
+    case TStatusCode::INVERTED_INDEX_EVALUATE_SKIPPED:
+        return "Inverted index evaluate skipped";
     case TStatusCode::ABORTED:
         return "Aborted";
     case TStatusCode::OLAP_ERR_VERSION_ALREADY_MERGED:

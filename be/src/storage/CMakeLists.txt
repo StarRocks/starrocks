@@ -259,6 +259,7 @@ set(STORAGE_FILES
     index/inverted/inverted_index_iterator.cpp
     index/inverted/inverted_index_option.cpp
     index/inverted/inverted_plugin_factory.cpp
+    index/inverted/char_filter/char_replace_char_filter.cpp
     index/inverted/clucene/clucene_plugin.cpp
     index/inverted/clucene/clucene_inverted_writer.cpp
     index/inverted/clucene/clucene_inverted_reader.cpp

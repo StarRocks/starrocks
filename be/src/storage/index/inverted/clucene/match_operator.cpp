@@ -130,17 +130,16 @@ Status MatchOperator::match(roaring::Roaring& result) {
 }
 
 Status MatchOperator::parser_info(std::string& query, const std::wstring& field_name,
-                                  const InvertedIndexParserType& parser_type, const InvertedIndexQueryType& query_type,
-                                  InvertedIndexQueryInfo& query_info, const bool& sequential_opt) {
+                                  InvertedIndexQueryInfo& query_info, const bool& sequential_opt) const {
     parser_slop(query, query_info);
     ASSIGN_OR_RETURN(query_info.terms,
-                     InvertedIndexAnalyzer::get_analyse_result(query, field_name, parser_type, query_type));
+                     InvertedIndexAnalyzer::get_analyse_result(query, field_name, _gin_query_options));
     if (sequential_opt && query_info.ordered) {
         std::vector<std::string> t_queries;
         boost::split(t_queries, query, boost::algorithm::is_any_of(" "));
         for (auto& t_query : t_queries) {
             ASSIGN_OR_RETURN(auto terms,
-                             InvertedIndexAnalyzer::get_analyse_result(t_query, field_name, parser_type, query_type))
+                             InvertedIndexAnalyzer::get_analyse_result(t_query, field_name, _gin_query_options))
             if (terms.size() >= 2) {
                 query_info.additional_terms.emplace_back(std::move(terms));
             }
@@ -244,8 +243,8 @@ void MatchTermOperator::_filter(const TermIterator& term_docs, const bool& first
 }
 
 Status MatchRangeOperator::_match_internal(roaring::Roaring& result) {
-    std::wstring search_word(_bound.begin(), _bound.end());
-    lucene::index::Term term(_field_name.c_str(), search_word.c_str());
+    std::wstring search_word_ws = boost::locale::conv::utf_to_utf<TCHAR>(_bound);
+    lucene::index::Term term(_field_name.c_str(), search_word_ws.c_str());
     std::unique_ptr<lucene::search::RangeQuery> range_query = create_query(&term);
     RoaringHitCollector result_collector(&result);
     _searcher->_search(range_query.get(), nullptr, &result_collector);
@@ -254,8 +253,8 @@ Status MatchRangeOperator::_match_internal(roaring::Roaring& result) {
 
 Status MatchWildcardOperator::_match_internal(roaring::Roaring& result) {
     auto wildcard_clucene_str = boost::algorithm::replace_all_copy(_wildcard, "%", "*");
-    std::wstring search_word(wildcard_clucene_str.begin(), wildcard_clucene_str.end());
-    lucene::index::Term term(_field_name.c_str(), search_word.c_str());
+    std::wstring search_word_ws = boost::locale::conv::utf_to_utf<TCHAR>(wildcard_clucene_str);
+    lucene::index::Term term(_field_name.c_str(), search_word_ws.c_str());
 
     lucene::search::WildcardQuery wildcard_query(&term);
 
@@ -414,9 +413,8 @@ MatchPhraseOperator::~MatchPhraseOperator() {
 
 Status MatchPhraseOperator::_match_internal(roaring::Roaring& result) {
     InvertedIndexQueryInfo query_info;
-    RETURN_IF_ERROR(parser_info(_search_str, _field_name, _gin_query_options->getParserType(),
-                                InvertedIndexQueryType::MATCH_PHRASE_QUERY, query_info,
-                                _gin_query_options->enablePhraseQuerySequentialOpt()));
+    RETURN_IF_ERROR(
+            parser_info(_search_str, _field_name, query_info, _gin_query_options->enablePhraseQuerySequentialOpt()));
     _slop = query_info.slop;
     if (_slop == 0 || query_info.ordered) {
         if (query_info.ordered) {

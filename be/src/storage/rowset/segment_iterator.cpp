@@ -2376,7 +2376,6 @@ Status SegmentIterator::_apply_inverted_index() {
                 gin_query_options->setEnablePhraseQuerySequentialOpt(_opts.enable_phrase_query_sequential_opt);
                 gin_query_options->setMaxExpansions(_opts.gin_max_expansions);
                 gin_query_options->setParserType(_inverted_index_iterators[cid]->get_inverted_index_analyser_type());
-                gin_query_options->setReaderType(_inverted_index_iterators[cid]->get_inverted_index_reader_type());
 
                 Status res = pred->seek_inverted_index(column_name, _inverted_index_iterators[cid], &row_bitmap,
                                                        gin_query_options.get());
