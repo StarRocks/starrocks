@@ -1015,16 +1015,18 @@ void TabletUpdates::do_apply() {
                 apply_st = _apply_rowset_commit(*version_info_apply);
             }
             StarRocksMetrics::instance()->update_rowset_commit_apply_duration_us.increment(duration_ns / 1000);
+            apply_operation_performed = true;
         } else if (version_info_apply->compaction) {
             // _compaction_running may be false after BE restart, reset it to true
             _compaction_running = true;
             apply_st = _apply_compaction_commit(*version_info_apply);
+            apply_operation_performed = true;
         } else {
             std::string msg = strings::Substitute("bad EditVersionInfo tablet: $0 ", _tablet.tablet_id());
             LOG(ERROR) << msg;
             _set_error(msg);
         }
-        apply_operation_performed = true;
+
         // submit a delay apply task to storage_engine
         if (config::enable_retry_apply && _is_retryable(apply_st) && !apply_st.ok()) {
             //reset pk index, reset rowset_update_states, reset compaction_state
@@ -1068,7 +1070,7 @@ void TabletUpdates::do_apply() {
     {
         std::lock_guard rl(_lock);
         // if apply_st is not ok, which means the apply task is failed, we should not submit a new apply task.
-        if (apply_st.ok() && apply_operation_performed && !is_error()) {
+        if (apply_st.ok() && apply_operation_performed) {
             _check_for_apply();
         }
     }
