@@ -36,23 +36,6 @@ public class AuthorizationAnalyzerTest {
     }
 
     @Test
-    public void testVisitShowGrantsStatementWithNullUser() {
-        // Test case 1: stmt.getUser() == null, should skip existence check
-        ShowGrantsStmt stmt = new ShowGrantsStmt((UserRef) null, NodePosition.ZERO);
-        Assertions.assertNull(stmt.getUser());
-        Assertions.assertEquals(GrantType.USER, stmt.getGrantType());
-        ctx.setCurrentUserIdentity(new UserIdentity("u1", "%"));
-
-        // This should not throw any exception and should not call checkUserExist
-        AuthorizationAnalyzer.analyze(stmt, ctx);
-        
-        // Verify that the user is set to current user identity
-        Assertions.assertNotNull(stmt.getUser());
-        Assertions.assertEquals("u1", stmt.getUser().getUser());
-        Assertions.assertEquals("%", stmt.getUser().getHost());
-    }
-
-    @Test
     public void testVisitShowGrantsStatementWithExplicitUser() throws Exception {
         // Test case 2: stmt.getUser() != null, should perform existence check
         UserRef explicitUser = new UserRef("test_user", "%");

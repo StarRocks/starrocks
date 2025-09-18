@@ -1264,12 +1264,7 @@ public class AuthorizationMgr {
                 }
             }
 
-            if (!parentRoleNameList.isEmpty()) {
-                return Lists.newArrayList(groupName, null,
-                        AstToSQLBuilder.toSQL(new GrantRoleStmt(parentRoleNameList, groupName,
-                                GrantType.GROUP, NodePosition.ZERO)));
-            }
-            return null;
+            return parentRoleNameList;
         } catch (PrivilegeException e) {
             throw new SemanticException(e.getMessage());
         } finally {
