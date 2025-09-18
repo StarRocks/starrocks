@@ -379,6 +379,83 @@ TEST_F(LakePersistentIndexTest, test_memtable_full) {
     config::l0_max_mem_usage = old_l0_max_mem_usage;
 }
 
+TEST_F(LakePersistentIndexTest, test_compaction_strategy_same_max_rss_rowid) {
+    // Test case for the fix: when base sstable's max_rss_rowid is same as cumulative sstable's max_rss_rowid,
+    // we should force to do base merge instead of cumulative merge.
+
+    PersistentIndexSstableMetaPB sstable_meta;
+    std::vector<PersistentIndexSstablePB> sstables;
+    bool merge_base_level = false;
+
+    // Setup: create a scenario where cumulative merge would normally be preferred
+    // but base and cumulative sstables have the same max_rss_rowid
+    sstable_meta.Clear();
+    sstables.clear();
+
+    // Add base sstable (index 0) with large size
+    auto* base_sstable = sstable_meta.add_sstables();
+    base_sstable->set_filesize(1000000);  // 1MB
+    base_sstable->set_filename("base.sst");
+    base_sstable->set_max_rss_rowid(100);  // Same max_rss_rowid
+
+    // Add cumulative sstables with small total size (would trigger cumulative merge normally)
+    auto* cumulative_sstable = sstable_meta.add_sstables();
+    cumulative_sstable->set_filesize(50000);  // 50KB - much smaller than base
+    cumulative_sstable->set_filename("cumulative1.sst");
+    cumulative_sstable->set_max_rss_rowid(100);  // Same max_rss_rowid as base
+
+    // Without the fix, this would choose cumulative merge because:
+    // base_level_bytes * ratio (1000000 * 0.1 = 100000) > cumulative_level_bytes (50000)
+    // But with the fix, it should choose base merge due to same max_rss_rowid
+
+    LakePersistentIndex::pick_sstables_for_merge(sstable_meta, &sstables, &merge_base_level);
+
+    // Verify that base merge is chosen (merge_base_level = true)
+    ASSERT_TRUE(merge_base_level) << "Should force base merge when max_rss_rowid is same";
+    ASSERT_EQ(2, sstables.size()) << "Should include both base and cumulative sstables";
+    ASSERT_EQ("base.sst", sstables[0].filename()) << "Base sstable should be first";
+    ASSERT_EQ("cumulative1.sst", sstables[1].filename()) << "Cumulative sstable should be second";
+
+    // Test the normal case where max_rss_rowid is different
+    sstable_meta.Clear();
+    sstables.clear();
+
+    base_sstable = sstable_meta.add_sstables();
+    base_sstable->set_filesize(1000000);
+    base_sstable->set_filename("base2.sst");
+    base_sstable->set_max_rss_rowid(100);  // Different max_rss_rowid
+
+    cumulative_sstable = sstable_meta.add_sstables();
+    cumulative_sstable->set_filesize(50000);
+    cumulative_sstable->set_filename("cumulative2.sst");
+    cumulative_sstable->set_max_rss_rowid(200);  // Different max_rss_rowid
+
+    LakePersistentIndex::pick_sstables_for_merge(sstable_meta, &sstables, &merge_base_level);
+
+    // This should choose cumulative merge since max_rss_rowid is different
+    ASSERT_FALSE(merge_base_level) << "Should choose cumulative merge when max_rss_rowid is different";
+    ASSERT_EQ(1, sstables.size()) << "Should only include cumulative sstables";
+    ASSERT_EQ("cumulative2.sst", sstables[0].filename()) << "Only cumulative sstable should be included";
+
+    // Test edge case: empty cumulative sstables
+    sstable_meta.Clear();
+    sstables.clear();
+
+    base_sstable = sstable_meta.add_sstables();
+    base_sstable->set_filesize(1000000);
+    base_sstable->set_filename("base3.sst");
+    base_sstable->set_max_rss_rowid(100);
+
+    // No cumulative sstables added
+
+    LakePersistentIndex::pick_sstables_for_merge(sstable_meta, &sstables, &merge_base_level);
+
+    // Should choose base merge since there are no cumulative sstables
+    ASSERT_TRUE(merge_base_level) << "Should choose base merge when no cumulative sstables exist";
+    ASSERT_EQ(1, sstables.size()) << "Should only include base sstable";
+    ASSERT_EQ("base3.sst", sstables[0].filename()) << "Only base sstable should be included";
+}
+
 TEST_F(LakePersistentIndexTest, test_major_compaction_with_predicate) {
     auto l0_max_mem_usage = config::l0_max_mem_usage;
     auto lake_pk_index_cumulative_base_compaction_ratio = config::lake_pk_index_cumulative_base_compaction_ratio;

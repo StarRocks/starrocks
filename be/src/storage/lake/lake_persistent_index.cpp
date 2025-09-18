@@ -448,6 +448,16 @@ void LakePersistentIndex::pick_sstables_for_merge(const PersistentIndexSstableMe
     if (sstables->size() > max_limit) {
         sstables->resize(max_limit);
     }
+    if (!*merge_base_level && sstables->size() > 0 &&
+        sstable_meta.sstables(0).max_rss_rowid() == sstables->back()->max_rss_rowid()) {
+        // If base sstable's max_rss_rowid is same as cumulative sstable's max_rss_rowid,
+        // we should force to do base merge.
+        // That's because in `LakePersistentIndex::apply_opcompaction`, we will sort sstable
+        // by max_rss_rowid, and if they are same, the base sstable will be after cumulative sstable,
+        // which is not what we want.
+        *merge_base_level = true;
+        sstables->insert(sstables->begin(), sstable_meta.sstables(0));
+    }
 }
 
 Status LakePersistentIndex::prepare_merging_iterator(
