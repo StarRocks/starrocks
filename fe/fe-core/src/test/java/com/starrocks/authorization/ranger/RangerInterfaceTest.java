@@ -270,5 +270,6 @@ public class RangerInterfaceTest {
         Assertions.assertEquals("create", controller.convertToAccessType(PrivilegeType.CREATE_DATABASE));
         Assertions.assertEquals("refresh", controller.convertToAccessType(PrivilegeType.REFRESH));
         Assertions.assertEquals("drop", controller.convertToAccessType(PrivilegeType.DROP));
+        Assertions.assertEquals("alter", controller.convertToAccessType(PrivilegeType.ALTER));
     }
 }
