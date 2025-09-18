@@ -14,7 +14,12 @@
 
 package com.starrocks.sql.plan;
 
+import com.starrocks.common.Config;
 import com.starrocks.sql.Explain;
+import com.starrocks.sql.ast.QueryStatement;
+import com.starrocks.sql.ast.StatementBase;
+import com.starrocks.utframe.UtFrameUtils;
+import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
 public class ExplainTest extends PlanTestBase {
@@ -61,5 +66,22 @@ public class ExplainTest extends PlanTestBase {
         plan = getFragmentPlan(sql);
         assertContains(plan, "min(pow(CAST(1: v1 AS DOUBLE), ?))");
 
+    }
+
+
+    @Test
+    public void testExplainUsesConfiguredDefaultLevel() throws Exception {
+        String originalLevel = Config.query_detail_explain_level;
+        Config.query_detail_explain_level = "LOGICAL";
+        try {
+            StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(
+                    "EXPLAIN SELECT * FROM t0", connectContext);
+            Assertions.assertTrue(statementBase instanceof QueryStatement);
+            QueryStatement queryStatement = (QueryStatement) statementBase;
+            Assertions.assertTrue(queryStatement.isExplain());
+            Assertions.assertEquals(StatementBase.ExplainLevel.LOGICAL, queryStatement.getExplainLevel());
+        } finally {
+            Config.query_detail_explain_level = originalLevel;
+        }
     }
 }
