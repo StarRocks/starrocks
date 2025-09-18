@@ -130,8 +130,14 @@ public class PushDownPredicateProjectRule extends TransformationRule {
             return Lists.newArrayList();
         }
 
-        ScalarOperator deterministicPredicateTree =
-                Utils.createCompound(CompoundPredicateOperator.CompoundType.AND, deterministicPredicates);
+        ScalarOperator deterministicPredicateTree;
+        if (nonDeterministicPredicates.isEmpty()) {
+            deterministicPredicateTree = filter.getPredicate();
+        } else {
+            deterministicPredicateTree =
+                    Utils.createCompound(CompoundPredicateOperator.CompoundType.AND, deterministicPredicates);
+        }
+
         ScalarOperator nonDeterministicPredicateTree =
                 Utils.createCompound(CompoundPredicateOperator.CompoundType.AND, nonDeterministicPredicates);
 
