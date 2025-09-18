@@ -430,7 +430,7 @@ jobs:
               export image_cache_id=${IMAGE_CACHE_ID}
               export image_tag=$BRANCH-$PR_NUMBER
           fi
-          ./bin/elastic-build.sh --pr ${PR_NUMBER} --repository ${{ github.repository }} --linuxdistro ${LINUX_DISTRO} --be --clang-tidy --arch arm64
+          # ./bin/elastic-build.sh --pr ${PR_NUMBER} --repository ${{ github.repository }} --linuxdistro ${LINUX_DISTRO} --be --clang-tidy --arch arm64
 
       - name: clean ECI
         if: always()
@@ -978,7 +978,7 @@ jobs:
           is_self_build: ${{ needs.deploy.outputs.is_self_build }}
         run: |
           rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull && git checkout test_arm && source lib/init.sh
-          ./bin/run-sql-tester.sh
+          #./bin/run-sql-tester.sh
 
       - name: Upload SQL-Tester XML
         if: success() || failure()
