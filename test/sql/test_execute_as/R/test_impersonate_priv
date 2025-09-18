@@ -1,0 +1,145 @@
+-- name: test_impersonate_priv
+CREATE GROUP PROVIDER `test_execute_as_file_group_provider` PROPERTIES ("group_file_url" = "group_mapping", "type" = "file");
+-- result:
+-- !result
+admin set frontend config ("group_provider"="test_execute_as_file_group_provider");
+-- result:
+-- !result
+drop user if exists test_impersonate;
+-- result:
+-- !result
+create user test_impersonate;
+-- result:
+-- !result
+grant impersonate on user root to test_impersonate;
+-- result:
+-- !result
+drop role if exists r1;
+-- result:
+-- !result
+create role r1;
+-- result:
+-- !result
+grant impersonate on user test_impersonate to role r1;
+-- result:
+-- !result
+grant r1 to external group r1_group;
+-- result:
+-- !result
+drop role if exists r2;
+-- result:
+-- !result
+create role r2;
+-- result:
+-- !result
+grant impersonate on user test_impersonate to role r2;
+-- result:
+-- !result
+grant r2 to external group r2_group;
+-- result:
+-- !result
+grant impersonate on all users to test_impersonate;
+-- result:
+-- !result
+execute as external user u1 with no revert;
+-- result:
+-- !result
+select current_user();
+-- result:
+'u1'@'%'
+-- !result
+select current_group();
+-- result:
+r1_group
+-- !result
+select current_role();
+-- result:
+root, r1
+-- !result
+execute as test_impersonate with no revert;
+-- result:
+-- !result
+execute as external user u2 with no revert;
+-- result:
+-- !result
+select current_user();
+-- result:
+'u2'@'%'
+-- !result
+select current_group();
+-- result:
+r2_group
+-- !result
+select current_role();
+-- result:
+r2
+-- !result
+execute as external user u3 with no revert;
+-- result:
+E: (5203, 'Access denied; you need (at least one of) the IMPERSONATE privilege(s) on USER u3 for this operation. Please ask the admin to grant permission(s) or try activating existing roles using <set [default] role>. Current role(s): [r2]. Inactivated role(s): NONE.')
+-- !result
+select current_user();
+-- result:
+'u2'@'%'
+-- !result
+execute as test_impersonate with no revert;
+-- result:
+-- !result
+select current_user();
+-- result:
+'test_impersonate'@'%'
+-- !result
+execute as external user u3 with no revert;
+-- result:
+-- !result
+select current_user();
+-- result:
+'u3'@'%'
+-- !result
+select current_group();
+-- result:
+r2_group, r1_group
+-- !result
+select current_role();
+-- result:
+r1, r2
+-- !result
+execute as test_impersonate with no revert;
+-- result:
+-- !result
+execute as root with no revert;
+-- result:
+-- !result
+revoke impersonate on all users from test_impersonate;
+-- result:
+-- !result
+execute as test_impersonate with no revert;
+-- result:
+-- !result
+execute as external user u1 with no revert;
+-- result:
+E: (5203, 'Access denied; you need (at least one of) the IMPERSONATE privilege(s) on USER u1 for this operation. Please ask the admin to grant permission(s) or try activating existing roles using <set [default] role>. Current role(s): NONE. Inactivated role(s): NONE.')
+-- !result
+execute as external user u2 with no revert;
+-- result:
+E: (5203, 'Access denied; you need (at least one of) the IMPERSONATE privilege(s) on USER u2 for this operation. Please ask the admin to grant permission(s) or try activating existing roles using <set [default] role>. Current role(s): NONE. Inactivated role(s): NONE.')
+-- !result
+execute as external user u3 with no revert;
+-- result:
+E: (5203, 'Access denied; you need (at least one of) the IMPERSONATE privilege(s) on USER u3 for this operation. Please ask the admin to grant permission(s) or try activating existing roles using <set [default] role>. Current role(s): NONE. Inactivated role(s): NONE.')
+-- !result
+execute as root with no revert;
+-- result:
+-- !result
+drop user if exists test_impersonate;
+-- result:
+-- !result
+drop role if exists r1;
+-- result:
+-- !result
+drop role if exists r2;
+-- result:
+-- !result
+drop group provider test_execute_as_file_group_provider;
+-- result:
+-- !result
