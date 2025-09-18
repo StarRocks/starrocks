@@ -240,7 +240,7 @@ public class SchemaChangeTypeCompatibility {
      * @return True if the ZoneMap index can be reused for the type promotion, or if ZoneMap is not applicable; otherwise, false.
      */
     public static boolean canReuseZonemapIndex(Type fromType, Type toType) {
-        if (!fromType.supportZonemap()) {
+        if (!fromType.supportZoneMap()) {
             return true;
         }
         return ZONEMAP_REUSE_COMPATIBILITY_MATRIX[fromType.getPrimitiveType().ordinal()][toType.getPrimitiveType().ordinal()];

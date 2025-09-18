@@ -422,36 +422,36 @@ public class TypeTest {
     @Test
     public void testSupportZonemap() {
         // Positive cases: Scalar types that are numeric, date, or string
-        Assertions.assertTrue(Type.TINYINT.supportZonemap());
-        Assertions.assertTrue(Type.SMALLINT.supportZonemap());
-        Assertions.assertTrue(Type.INT.supportZonemap());
-        Assertions.assertTrue(Type.BIGINT.supportZonemap());
-        Assertions.assertTrue(Type.LARGEINT.supportZonemap());
-        Assertions.assertTrue(Type.FLOAT.supportZonemap());
-        Assertions.assertTrue(Type.DOUBLE.supportZonemap());
-        Assertions.assertTrue(Type.DATE.supportZonemap());
-        Assertions.assertTrue(Type.DATETIME.supportZonemap());
-        Assertions.assertTrue(Type.VARCHAR.supportZonemap());
-        Assertions.assertTrue(Type.CHAR.supportZonemap());
-        Assertions.assertTrue(Type.DEFAULT_DECIMALV2.supportZonemap());
-        Assertions.assertTrue(Type.DECIMAL32.supportZonemap());
-        Assertions.assertTrue(Type.DECIMAL64.supportZonemap());
-        Assertions.assertTrue(Type.DECIMAL128.supportZonemap());
-        Assertions.assertTrue(Type.DECIMAL256.supportZonemap());
-        Assertions.assertTrue(ScalarType.createVarcharType(10).supportZonemap());
-        Assertions.assertTrue(ScalarType.createCharType(5).supportZonemap());
+        Assertions.assertTrue(Type.TINYINT.supportZoneMap());
+        Assertions.assertTrue(Type.SMALLINT.supportZoneMap());
+        Assertions.assertTrue(Type.INT.supportZoneMap());
+        Assertions.assertTrue(Type.BIGINT.supportZoneMap());
+        Assertions.assertTrue(Type.LARGEINT.supportZoneMap());
+        Assertions.assertTrue(Type.FLOAT.supportZoneMap());
+        Assertions.assertTrue(Type.DOUBLE.supportZoneMap());
+        Assertions.assertTrue(Type.DATE.supportZoneMap());
+        Assertions.assertTrue(Type.DATETIME.supportZoneMap());
+        Assertions.assertTrue(Type.VARCHAR.supportZoneMap());
+        Assertions.assertTrue(Type.CHAR.supportZoneMap());
+        Assertions.assertTrue(Type.DEFAULT_DECIMALV2.supportZoneMap());
+        Assertions.assertTrue(Type.DECIMAL32.supportZoneMap());
+        Assertions.assertTrue(Type.DECIMAL64.supportZoneMap());
+        Assertions.assertTrue(Type.DECIMAL128.supportZoneMap());
+        Assertions.assertTrue(Type.DECIMAL256.supportZoneMap());
+        Assertions.assertTrue(ScalarType.createVarcharType(10).supportZoneMap());
+        Assertions.assertTrue(ScalarType.createCharType(5).supportZoneMap());
 
         // Negative cases: Non-scalar types or scalar types that are not numeric, date, or string
-        Assertions.assertFalse(Type.NULL.supportZonemap());
-        Assertions.assertFalse(Type.BOOLEAN.supportZonemap()); // Boolean is not numeric, date or string
-        Assertions.assertFalse(Type.HLL.supportZonemap());
-        Assertions.assertFalse(Type.BITMAP.supportZonemap());
-        Assertions.assertFalse(Type.PERCENTILE.supportZonemap());
-        Assertions.assertFalse(Type.JSON.supportZonemap());
-        Assertions.assertFalse(Type.FUNCTION.supportZonemap());
-        Assertions.assertFalse(Type.VARBINARY.supportZonemap());
-        Assertions.assertFalse(Type.ARRAY_INT.supportZonemap());
-        Assertions.assertFalse(Type.MAP_VARCHAR_VARCHAR.supportZonemap());
-        Assertions.assertFalse(new StructType(Lists.newArrayList(Type.INT)).supportZonemap());
+        Assertions.assertFalse(Type.NULL.supportZoneMap());
+        Assertions.assertFalse(Type.BOOLEAN.supportZoneMap()); // Boolean is not numeric, date or string
+        Assertions.assertFalse(Type.HLL.supportZoneMap());
+        Assertions.assertFalse(Type.BITMAP.supportZoneMap());
+        Assertions.assertFalse(Type.PERCENTILE.supportZoneMap());
+        Assertions.assertFalse(Type.JSON.supportZoneMap());
+        Assertions.assertFalse(Type.FUNCTION.supportZoneMap());
+        Assertions.assertFalse(Type.VARBINARY.supportZoneMap());
+        Assertions.assertFalse(Type.ARRAY_INT.supportZoneMap());
+        Assertions.assertFalse(Type.MAP_VARCHAR_VARCHAR.supportZoneMap());
+        Assertions.assertFalse(new StructType(Lists.newArrayList(Type.INT)).supportZoneMap());
     }
 }

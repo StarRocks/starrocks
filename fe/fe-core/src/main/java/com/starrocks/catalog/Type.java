@@ -903,7 +903,7 @@ public abstract class Type implements Cloneable {
                 !isJsonType() && !isOnlyMetricType() && !isFunctionType() && !isBinaryType();
     }
 
-    public boolean supportZonemap() {
+    public boolean supportZoneMap() {
         return isScalarType() && (isNumericType() || isDateType() || isStringType());
     }
 
