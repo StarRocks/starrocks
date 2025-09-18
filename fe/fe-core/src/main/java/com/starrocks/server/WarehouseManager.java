@@ -237,7 +237,8 @@ public class WarehouseManager implements Writable {
         }
     }
 
-    public ComputeNode getComputeNodeAssignedToTablet(String warehouseName, LakeTablet tablet) {
+    public ComputeNode getComputeNodeAssignedToTablet(String warehouseName, LakeTablet tablet)
+            throws ErrorReportException {
         Warehouse warehouse = getWarehouse(warehouseName);
         return getComputeNodeAssignedToTablet(warehouse.getId(), tablet);
     }

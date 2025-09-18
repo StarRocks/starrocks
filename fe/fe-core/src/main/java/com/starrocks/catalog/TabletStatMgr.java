@@ -39,6 +39,7 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.catalog.MaterializedIndex.IndexExtState;
 import com.starrocks.common.Config;
+import com.starrocks.common.ErrorReportException;
 import com.starrocks.common.Pair;
 import com.starrocks.common.util.FrontendDaemon;
 import com.starrocks.common.util.concurrent.lock.LockType;
@@ -355,14 +356,20 @@ public class TabletStatMgr extends FrontendDaemon {
 
         private void sendTasks() {
             Map<ComputeNode, List<TabletInfo>> beToTabletInfos = new HashMap<>();
+            WarehouseManager manager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
+            Warehouse warehouse = manager.getBackgroundWarehouse();
             for (Tablet tablet : tablets.values()) {
-                WarehouseManager manager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
-                Warehouse warehouse = manager.getBackgroundWarehouse();
-                ComputeNode node = manager.getComputeNodeAssignedToTablet(warehouse.getName(), (LakeTablet) tablet);
-
-                if (node == null) {
-                    LOG.warn("Stop sending tablet stat task for partition {} because no alive node", debugName());
-                    return;
+                ComputeNode node;
+                try {
+                    node = manager.getComputeNodeAssignedToTablet(warehouse.getName(), (LakeTablet) tablet);
+                    if (node == null) {
+                        LOG.warn("Stop sending tablet stat task for partition {} because no alive node", debugName());
+                        continue;
+                    }
+                } catch (ErrorReportException e) {
+                    LOG.warn("Skip sending tablet stat task for partition {} because exception: {}",
+                            debugName(), e.getMessage());
+                    continue;
                 }
                 TabletInfo tabletInfo = new TabletInfo();
                 tabletInfo.tabletId = tablet.getId();
