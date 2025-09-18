@@ -17,6 +17,7 @@ package com.starrocks.connector.odps;
 import com.aliyun.odps.Odps;
 import com.aliyun.odps.account.Account;
 import com.aliyun.odps.account.AliyunAccount;
+import com.aliyun.odps.rest.RestClient;
 import com.starrocks.connector.Connector;
 import com.starrocks.connector.ConnectorContext;
 import com.starrocks.connector.ConnectorMetadata;
@@ -49,6 +50,11 @@ public class OdpsConnector implements Connector {
         Odps odpsIns = new Odps(account);
         odpsIns.setEndpoint(properties.get(OdpsProperties.ENDPOINT));
         odpsIns.setDefaultProject(properties.get(OdpsProperties.PROJECT));
+        RestClient restClient = odpsIns.getRestClient();
+        restClient.setRetryTimes(0);
+        restClient.setReadTimeout(30);
+        restClient.setConnectTimeout(10);
+        restClient.setUserAgent("StarRocks");
         return odpsIns;
     }
 

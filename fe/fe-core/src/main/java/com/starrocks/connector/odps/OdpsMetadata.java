@@ -20,6 +20,7 @@ import com.aliyun.odps.PartitionSpec;
 import com.aliyun.odps.Project;
 import com.aliyun.odps.security.SecurityManager;
 import com.aliyun.odps.table.TableIdentifier;
+import com.aliyun.odps.table.configuration.RestOptions;
 import com.aliyun.odps.table.configuration.SplitOptions;
 import com.aliyun.odps.table.enviroment.Credentials;
 import com.aliyun.odps.table.enviroment.EnvironmentSettings;
@@ -108,7 +109,10 @@ public class OdpsMetadata implements ConnectorMetadata {
         this.properties = properties;
         EnvironmentSettings.Builder settingsBuilder =
                 EnvironmentSettings.newBuilder().withServiceEndpoint(odps.getEndpoint())
-                        .withCredentials(Credentials.newBuilder().withAccount(odps.getAccount()).build());
+                        .withCredentials(Credentials.newBuilder().withAccount(odps.getAccount()).build())
+                        .withRestOptions(RestOptions.newBuilder()
+                                .witUserAgent("StarRocks")
+                                .build());
         if (!StringUtils.isNullOrEmpty(properties.get(OdpsProperties.TUNNEL_ENDPOINT))) {
             settingsBuilder.withTunnelEndpoint(properties.get(OdpsProperties.TUNNEL_ENDPOINT));
         }
