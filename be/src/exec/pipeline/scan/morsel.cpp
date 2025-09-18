@@ -1312,8 +1312,8 @@ void PhysicalSplitMorselQueueV2::refine_scan_ranges(const RowidRangeOptionPtr& r
                 size_t rowid = segment->range_iter.begin();
                 size_t prev_remain = segment->range_iter.remaining_rows();
 
-                // Apply the rowid range filter
-                segment->scan_range &= *split.row_id_range;
+                // Remove the specified range from scan_range
+                segment->scan_range -= *split.row_id_range;
                 segment->range_iter = segment->scan_range.new_iterator();
                 segment->range_iter.seek(rowid);
 
