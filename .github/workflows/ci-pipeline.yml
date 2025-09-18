@@ -1096,7 +1096,7 @@ jobs:
           rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull && git checkout test_arm && source lib/init.sh
 
           cd ${{ github.workspace }}/..
-          rm -rf ./StarRocksTest && cp -rf /var/lib/StarRocksTest ./StarRocksTest && cd ./StarRocksTest && git pull && git checkout test_arm >/dev/null
+          rm -rf ./StarRocksTest && cp -rf /var/lib/StarRocksTest ./StarRocksTest && cd ./StarRocksTest && git pull  >/dev/null
 
           if [[ "${TEST_PR}" != "" ]]; then
             echo "Test pr: ${TEST_PR}..."
