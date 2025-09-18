@@ -48,8 +48,8 @@ public:
     METRIC_DEFINE_INT_GAUGE(jvm_heap_used_bytes, MetricUnit::BYTES);
     METRIC_DEFINE_INT_GAUGE(jvm_heap_committed_bytes, MetricUnit::BYTES);
     METRIC_DEFINE_INT_GAUGE(jvm_heap_max_bytes, MetricUnit::BYTES);
-    METRIC_DEFINE_INT_GAUGE(jvm_nonheap_used_bytes, MetricUnit::BYTES);
-    METRIC_DEFINE_INT_GAUGE(jvm_nonheap_committed_bytes, MetricUnit::BYTES);
+    METRIC_DEFINE_INT_GAUGE(jvm_non_heap_used_bytes, MetricUnit::BYTES);
+    METRIC_DEFINE_INT_GAUGE(jvm_non_heap_committed_bytes, MetricUnit::BYTES);
     METRIC_DEFINE_INT_GAUGE(jvm_young_used_bytes, MetricUnit::BYTES);
     METRIC_DEFINE_INT_GAUGE(jvm_young_committed_bytes, MetricUnit::BYTES);
     METRIC_DEFINE_INT_GAUGE(jvm_young_max_bytes, MetricUnit::BYTES);

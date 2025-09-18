@@ -36,38 +36,38 @@ TEST_F(JVMMetricsTest, normal) {
     ASSERT_TRUE(st.ok());
     jvm_metrics.install(&registry);
 
-    ASSERT_NE(nullptr, registry.get_metric("jvm_heap_used_bytes"));
-    ASSERT_NE(nullptr, registry.get_metric("jvm_heap_committed_bytes"));
-    ASSERT_NE(nullptr, registry.get_metric("jvm_heap_max_bytes"));
-    ASSERT_NE(nullptr, registry.get_metric("jvm_nonheap_used_bytes"));
-    ASSERT_NE(nullptr, registry.get_metric("jvm_nonheap_committed_bytes"));
-    ASSERT_NE(nullptr, registry.get_metric("jvm_young_used_bytes"));
-    ASSERT_NE(nullptr, registry.get_metric("jvm_young_committed_bytes"));
-    ASSERT_NE(nullptr, registry.get_metric("jvm_young_max_bytes"));
-    ASSERT_NE(nullptr, registry.get_metric("jvm_young_peak_used_bytes"));
-    ASSERT_NE(nullptr, registry.get_metric("jvm_young_peak_max_bytes"));
-    ASSERT_NE(nullptr, registry.get_metric("jvm_old_used_bytes"));
-    ASSERT_NE(nullptr, registry.get_metric("jvm_old_committed_bytes"));
-    ASSERT_NE(nullptr, registry.get_metric("jvm_old_max_bytes"));
-    ASSERT_NE(nullptr, registry.get_metric("jvm_old_peak_used_bytes"));
-    ASSERT_NE(nullptr, registry.get_metric("jvm_old_peak_max_bytes"));
-    ASSERT_NE(nullptr, registry.get_metric("jvm_survivor_used_bytes"));
-    ASSERT_NE(nullptr, registry.get_metric("jvm_survivor_committed_bytes"));
-    ASSERT_NE(nullptr, registry.get_metric("jvm_survivor_max_bytes"));
-    ASSERT_NE(nullptr, registry.get_metric("jvm_survivor_peak_used_bytes"));
-    ASSERT_NE(nullptr, registry.get_metric("jvm_survivor_peak_max_bytes"));
-    ASSERT_NE(nullptr, registry.get_metric("jvm_perm_used_bytes"));
-    ASSERT_NE(nullptr, registry.get_metric("jvm_perm_committed_bytes"));
-    ASSERT_NE(nullptr, registry.get_metric("jvm_perm_max_bytes"));
-    ASSERT_NE(nullptr, registry.get_metric("jvm_perm_peak_used_bytes"));
-    ASSERT_NE(nullptr, registry.get_metric("jvm_perm_peak_max_bytes"));
+    ASSERT_NE(nullptr, registry.get_metric("jvm_heap_size_bytes{type=\"used\"}"));
+    ASSERT_NE(nullptr, registry.get_metric("jvm_heap_size_bytes{type=\"committed\"}"));
+    ASSERT_NE(nullptr, registry.get_metric("jvm_heap_size_bytes{type=\"max\"}"));
+    ASSERT_NE(nullptr, registry.get_metric("jvm_non_heap_size_bytes{type=\"used\"}"));
+    ASSERT_NE(nullptr, registry.get_metric("jvm_non_heap_size_bytes{type=\"committed\"}"));
+    ASSERT_NE(nullptr, registry.get_metric("jvm_young_size_bytes{type=\"used\"}"));
+    ASSERT_NE(nullptr, registry.get_metric("jvm_young_size_bytes{type=\"committed\"}"));
+    ASSERT_NE(nullptr, registry.get_metric("jvm_young_size_bytes{type=\"max\"}"));
+    ASSERT_NE(nullptr, registry.get_metric("jvm_young_size_bytes{type=\"peak_used\"}"));
+    ASSERT_NE(nullptr, registry.get_metric("jvm_young_size_bytes{type=\"peak_max\"}"));
+    ASSERT_NE(nullptr, registry.get_metric("jvm_old_size_bytes{type=\"used\"}"));
+    ASSERT_NE(nullptr, registry.get_metric("jvm_old_size_bytes{type=\"committed\"}"));
+    ASSERT_NE(nullptr, registry.get_metric("jvm_old_size_bytes{type=\"max\"}"));
+    ASSERT_NE(nullptr, registry.get_metric("jvm_old_size_bytes{type=\"peak_used\"}"));
+    ASSERT_NE(nullptr, registry.get_metric("jvm_old_size_bytes{type=\"peak_max\"}"));
+    ASSERT_NE(nullptr, registry.get_metric("jvm_survivor_size_bytes{type=\"used\"}"));
+    ASSERT_NE(nullptr, registry.get_metric("jvm_survivor_size_bytes{type=\"committed\"}"));
+    ASSERT_NE(nullptr, registry.get_metric("jvm_survivor_size_bytes{type=\"max\"}"));
+    ASSERT_NE(nullptr, registry.get_metric("jvm_survivor_size_bytes{type=\"peak_used\"}"));
+    ASSERT_NE(nullptr, registry.get_metric("jvm_survivor_size_bytes{type=\"peak_max\"}"));
+    ASSERT_NE(nullptr, registry.get_metric("jvm_perm_size_bytes{type=\"used\"}"));
+    ASSERT_NE(nullptr, registry.get_metric("jvm_perm_size_bytes{type=\"committed\"}"));
+    ASSERT_NE(nullptr, registry.get_metric("jvm_perm_size_bytes{type=\"max\"}"));
+    ASSERT_NE(nullptr, registry.get_metric("jvm_perm_size_bytes{type=\"peak_used\"}"));
+    ASSERT_NE(nullptr, registry.get_metric("jvm_perm_size_bytes{type=\"peak_max\"}"));
 
     registry.trigger_hook();
 
     ASSERT_GE(jvm_metrics.jvm_heap_used_bytes.value(), 0);
     ASSERT_GE(jvm_metrics.jvm_heap_committed_bytes.value(), 0);
-    ASSERT_GE(jvm_metrics.jvm_nonheap_used_bytes.value(), 0);
-    ASSERT_GE(jvm_metrics.jvm_nonheap_committed_bytes.value(), 0);
+    ASSERT_GE(jvm_metrics.jvm_non_heap_used_bytes.value(), 0);
+    ASSERT_GE(jvm_metrics.jvm_non_heap_committed_bytes.value(), 0);
 }
 
 } // namespace starrocks

@@ -106,33 +106,34 @@ void JVMMetrics::install(MetricRegistry* registry) {
         return;
     }
 
-#define REGISTER_JVM_METRIC(name) registry->register_metric("jvm_" #name "_bytes", &jvm_##name##_bytes)
+#define REGISTER_JVM_METRIC(name, type) \
+    registry->register_metric("jvm_" #name "_size_bytes{type=\"" #type "\"}", &jvm_##name##_##type##_bytes)
 
-    REGISTER_JVM_METRIC(heap_used);
-    REGISTER_JVM_METRIC(heap_committed);
-    REGISTER_JVM_METRIC(heap_max);
-    REGISTER_JVM_METRIC(nonheap_used);
-    REGISTER_JVM_METRIC(nonheap_committed);
-    REGISTER_JVM_METRIC(young_used);
-    REGISTER_JVM_METRIC(young_committed);
-    REGISTER_JVM_METRIC(young_max);
-    REGISTER_JVM_METRIC(young_peak_used);
-    REGISTER_JVM_METRIC(young_peak_max);
-    REGISTER_JVM_METRIC(old_used);
-    REGISTER_JVM_METRIC(old_committed);
-    REGISTER_JVM_METRIC(old_max);
-    REGISTER_JVM_METRIC(old_peak_used);
-    REGISTER_JVM_METRIC(old_peak_max);
-    REGISTER_JVM_METRIC(survivor_used);
-    REGISTER_JVM_METRIC(survivor_committed);
-    REGISTER_JVM_METRIC(survivor_max);
-    REGISTER_JVM_METRIC(survivor_peak_used);
-    REGISTER_JVM_METRIC(survivor_peak_max);
-    REGISTER_JVM_METRIC(perm_used);
-    REGISTER_JVM_METRIC(perm_committed);
-    REGISTER_JVM_METRIC(perm_max);
-    REGISTER_JVM_METRIC(perm_peak_used);
-    REGISTER_JVM_METRIC(perm_peak_max);
+    REGISTER_JVM_METRIC(heap, used);
+    REGISTER_JVM_METRIC(heap, committed);
+    REGISTER_JVM_METRIC(heap, max);
+    REGISTER_JVM_METRIC(non_heap, used);
+    REGISTER_JVM_METRIC(non_heap, committed);
+    REGISTER_JVM_METRIC(young, used);
+    REGISTER_JVM_METRIC(young, committed);
+    REGISTER_JVM_METRIC(young, max);
+    REGISTER_JVM_METRIC(young, peak_used);
+    REGISTER_JVM_METRIC(young, peak_max);
+    REGISTER_JVM_METRIC(old, used);
+    REGISTER_JVM_METRIC(old, committed);
+    REGISTER_JVM_METRIC(old, max);
+    REGISTER_JVM_METRIC(old, peak_used);
+    REGISTER_JVM_METRIC(old, peak_max);
+    REGISTER_JVM_METRIC(survivor, used);
+    REGISTER_JVM_METRIC(survivor, committed);
+    REGISTER_JVM_METRIC(survivor, max);
+    REGISTER_JVM_METRIC(survivor, peak_used);
+    REGISTER_JVM_METRIC(survivor, peak_max);
+    REGISTER_JVM_METRIC(perm, used);
+    REGISTER_JVM_METRIC(perm, committed);
+    REGISTER_JVM_METRIC(perm, max);
+    REGISTER_JVM_METRIC(perm, peak_used);
+    REGISTER_JVM_METRIC(perm, peak_max);
 
 #undef REGISTER_JVM_METRIC
 }
@@ -144,14 +145,14 @@ Status JVMMetrics::update() {
     jvm_heap_max_bytes.set_value(heap_memory_usage.max);
 
     ASSIGN_OR_RETURN(auto non_heap_memory_usage, get_non_heap_memory_usage());
-    jvm_nonheap_used_bytes.set_value(non_heap_memory_usage.used);
-    jvm_nonheap_committed_bytes.set_value(non_heap_memory_usage.committed);
+    jvm_non_heap_used_bytes.set_value(non_heap_memory_usage.used);
+    jvm_non_heap_committed_bytes.set_value(non_heap_memory_usage.committed);
 
     ASSIGN_OR_RETURN(auto memory_pools, get_memory_pools());
     for (auto& pool : memory_pools) {
-        auto name = pool.name;
-        auto usage = pool.usage;
-        auto peak_usage = pool.peak_usage;
+        auto& name = pool.name;
+        auto& usage = pool.usage;
+        auto& peak_usage = pool.peak_usage;
 
 #define UPDATE_METRIC(name, used, committed, max, peak_used, peak_max) \
     jvm_##name##_used_bytes.set_value(used);                           \
