@@ -99,6 +99,7 @@ public:
     static HttpBrpcStubCache* getInstance();
     StatusOr<std::shared_ptr<PInternalService_RecoverableStub>> get_http_stub(const TNetworkAddress& taddr);
     void cleanup_expired(const butil::EndPoint& endpoint);
+    void shutdown();
 
 private:
     HttpBrpcStubCache();
@@ -113,4 +114,27 @@ private:
     pipeline::PipelineTimer* _pipeline_timer;
 };
 
+<<<<<<< HEAD
+=======
+class LakeServiceBrpcStubCache {
+public:
+    static LakeServiceBrpcStubCache* getInstance();
+    StatusOr<std::shared_ptr<starrocks::LakeService_RecoverableStub>> get_stub(const std::string& host, int port);
+    void cleanup_expired(const butil::EndPoint& endpoint);
+    void shutdown();
+
+private:
+    LakeServiceBrpcStubCache();
+    LakeServiceBrpcStubCache(const LakeServiceBrpcStubCache&) = delete;
+    LakeServiceBrpcStubCache& operator=(const LakeServiceBrpcStubCache&) = delete;
+    ~LakeServiceBrpcStubCache();
+
+    SpinLock _lock;
+    butil::FlatMap<butil::EndPoint, std::pair<std::shared_ptr<LakeService_RecoverableStub>,
+                                              std::shared_ptr<EndpointCleanupTask<LakeServiceBrpcStubCache>>>>
+            _stub_map;
+    pipeline::PipelineTimer* _pipeline_timer;
+};
+
+>>>>>>> 7a67b9bdf6 ([BugFix] Fix use-after-free on pipeline timer during shutdown (#63189))
 } // namespace starrocks
