@@ -32,6 +32,7 @@ public class MvRewriteNestedMVTest extends MVTestBase {
 
         starRocksAssert.withTable(cluster, "depts");
         starRocksAssert.withTable(cluster, "emps");
+        connectContext.getSessionVariable().setCboExtractCommonPlan(false);
     }
 
     @Test
