@@ -91,8 +91,11 @@ public class AnalyzeJoinTest {
         analyzeFail("select * from (t0 join tnotnull using(v1)) t , t1",
                 "Getting syntax error at line 1, column 43. Detail message: Unexpected input 't', " +
                         "the most similar input is {<EOF>, ';'}.");
-        // After aligning USING semantics with SQL standard/MySQL, USING columns are coalesced
-        // and unqualified reference is not ambiguous in this case
+        // Using columns should be coalesced and appear only once in output names
+        QueryRelation query1 = ((QueryStatement) analyzeSuccess(
+                "select * from t0 a join t0 b using(v1)")).getQueryRelation();
+        Assertions.assertEquals("v1,v2,v3,v2,v3", String.join(",", query1.getColumnOutputNames()));
+        // Unqualified reference of using column should be unambiguous
         analyzeSuccess("select v1 from (t0 join tnotnull using(v1)), t1");
         analyzeSuccess("select a.v1 from (t0 a join tnotnull b using(v1)), t1");
     }
