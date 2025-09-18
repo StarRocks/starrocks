@@ -206,8 +206,8 @@ public class CompactionMgr implements MemoryTrackable {
     }
 
     public double getMaxCompactionScore() {
-        return partitionStatisticsHashMap.values().stream().mapToDouble(stat -> stat.getCompactionScore().getMax())
-                .max().orElse(0);
+        return partitionStatisticsHashMap.values().stream().filter(stat -> stat.getCompactionScore() != null)
+                .mapToDouble(stat -> stat.getCompactionScore().getMax()).max().orElse(0);
     }
 
     void enableCompactionAfter(PartitionIdentifier partition, long delayMs) {
