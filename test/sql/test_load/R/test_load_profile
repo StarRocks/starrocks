@@ -16,7 +16,7 @@ t	CREATE TABLE `t` (
 DUPLICATE KEY(`k`)
 DISTRIBUTED BY RANDOM
 PROPERTIES (
-"bucket_size" = "4294967296",
+"bucket_size" = "1073741824",
 "compression" = "LZ4",
 "enable_load_profile" = "true",
 "fast_schema_evolution" = "true",
@@ -35,7 +35,7 @@ t	CREATE TABLE `t` (
 DUPLICATE KEY(`k`)
 DISTRIBUTED BY RANDOM
 PROPERTIES (
-"bucket_size" = "4294967296",
+"bucket_size" = "1073741824",
 "compression" = "LZ4",
 "fast_schema_evolution" = "true",
 "replicated_storage" = "true",
@@ -65,7 +65,7 @@ t	CREATE TABLE `t` (
 DUPLICATE KEY(`k`)
 DISTRIBUTED BY RANDOM
 PROPERTIES (
-"bucket_size" = "4294967296",
+"bucket_size" = "1073741824",
 "compression" = "LZ4",
 "enable_load_profile" = "true",
 "fast_schema_evolution" = "true",
