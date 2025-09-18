@@ -2824,6 +2824,11 @@ public class FrontendServiceImpl implements FrontendService.Iface {
 
     @Override
     public TGetGrantsToRolesOrUserResponse getGrantsTo(TGetGrantsToRolesOrUserRequest request) {
+        UserIdentity currentUser = UserIdentity.ROOT;
+        ConnectContext ctx = ConnectContext.buildInner();
+        ctx.setQualifiedUser(currentUser.getUser());
+        ctx.setCurrentUserIdentity(currentUser);
+        ctx.setThreadLocalInfo();
         return GrantsTo.getGrantsTo(request);
     }
 
