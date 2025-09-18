@@ -28,6 +28,7 @@ static int day_to_first[8] = {0 /*never use*/, 6, 0, 1, 2, 3, 4, 5};
 static constexpr int s_days_in_month[13] = {0, 31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31};
 static int month_to_quarter_end[13] = {0, 3, 3, 3, 6, 6, 6, 9, 9, 9, 12, 12, 12};
 
+// Stores the number of days from the beginning of the quarter up to the 1st day of month i (exclusive).
 static constexpr int quarter_month_day_offset[13] = {
         0,                                                                // placeholder
         0, s_days_in_month[1],  s_days_in_month[1] + s_days_in_month[2],  // quarter 1
