@@ -3386,11 +3386,11 @@ public class JoinTest extends PlanTestBase {
     public void testAsofJoinConditionNormalizeWithFunctions() throws Exception {
         String sql1 = "select t0.v1 from t0 asof join t1 on t0.v1 = t1.v4 and t1.v5 + 1 > t0.v2";
         String plan1 = getFragmentPlan(sql1);
-        assertContains(plan1, "asof join conjunct: 2: v2 < 5: v5 + 1");
+        assertContains(plan1, "asof join conjunct: 2: v2 < 7: add");
 
         String sql2 = "select t0.v1 from t0 asof join t1 on t0.v1 = t1.v4 and t0.v2 * 2 >= t1.v5";
         String plan2 = getFragmentPlan(sql2);
-        assertContains(plan2, "asof join conjunct: 2: v2 * 2 >= 5: v5");
+        assertContains(plan2, "asof join conjunct: 7: multiply >= 5: v5");
 
         String sql3 = "select t0.v1 from t0 asof join t1 on t0.v1 = t1.v4 and date_add(t1.v5, 1) > t0.v2";
         ExceptionChecker.expectThrowsWithMsg(IllegalStateException.class,
@@ -3399,22 +3399,35 @@ public class JoinTest extends PlanTestBase {
 
         String sql4 = "select t0.v1 from t0 asof join t1 on t0.v1 = t1.v4 and unix_timestamp(t1.v5) < t0.v2";
         String plan4 = getFragmentPlan(sql4);
-        assertContains(plan4, "asof join conjunct: 2: v2 > unix_timestamp(CAST(5: v5 AS DATETIME))");
+        assertContains(plan4, "asof join conjunct: 2: v2 > 7: unix_timestamp");
     }
 
     @Test
     public void testAsofJoinConditionNormalizeWithComplexExpressions() throws Exception {
         String sql1 = "select t0.v1 from t0 asof join t1 on t0.v1 = t1.v4 and (t1.v5 + t1.v6) > (t0.v2 - t0.v3)";
         String plan1 = getFragmentPlan(sql1);
-        assertContains(plan1, "asof join conjunct: 2: v2 - 3: v3 < 5: v5 + 6: v6");
+        assertContains(plan1, "3:Project\n" +
+                "  |  <slot 4> : 4: v4\n" +
+                "  |  <slot 8> : 5: v5 + 6: v6\n" +
+                "  |  \n" +
+                "  2:OlapScanNode\n" +
+                "     TABLE: t1");
+        assertContains(plan1, "1:Project\n" +
+                "  |  <slot 1> : 1: v1\n" +
+                "  |  <slot 7> : 2: v2 - 3: v3\n" +
+                "  |  \n" +
+                "  0:OlapScanNode\n" +
+                "     TABLE: t0");
+
+        assertContains(plan1, "asof join conjunct: 7: subtract < 8: add");
 
         String sql2 = "select t0.v1 from t0 asof join t1 on t0.v1 = t1.v4 and CASE WHEN t1.v5 > 0 THEN t1.v5 ELSE 0 END > t0.v2";
         String plan2 = getFragmentPlan(sql2);
-        assertContains(plan2, "asof join conjunct: 2: v2 < if(5: v5 > 0, 5: v5, 0)");
+        assertContains(plan2, "asof join conjunct: 2: v2 < 7: if");
 
         String sql3 = "select t0.v1 from t0 asof join t1 on t0.v1 = t1.v4 and COALESCE(t1.v5, 0) >= t0.v2";
         String plan3 = getFragmentPlan(sql3);
-        assertContains(plan3, "asof join conjunct: 2: v2 <= coalesce(5: v5, 0)");
+        assertContains(plan3, "asof join conjunct: 2: v2 <= 7: coalesce");
     }
 
     @Test

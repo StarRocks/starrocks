@@ -38,6 +38,7 @@ public class SkewJoinV2Test extends PlanTestBase {
         String sqlPlan = getVerboseExplain(sql);
         assertCContains(sqlPlan, "Input Partition: HYBRID_HASH_PARTITIONED\n" +
                 "  RESULT SINK");
+        
         // this is a normal union, which means its local exchanger is PASS_THROUGH
         assertCContains(sqlPlan, "10:UNION\n" +
                 "  |  child exprs:\n" +
