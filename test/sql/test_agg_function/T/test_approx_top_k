@@ -501,7 +501,7 @@ SELECT c_partition, APPROX_TOP_K(c_bool) OVER(PARTITION BY c_partition) FROM t_b
 SELECT c_partition, APPROX_TOP_K(c_bool, 10) OVER(PARTITION BY c_partition) FROM t_bool ORDER BY c_partition;
 SELECT c_partition, APPROX_TOP_K(c_bool, 3, 10) OVER(PARTITION BY c_partition) FROM t_bool ORDER BY c_partition;
 
--- name: test_approx_top_k_tpch
+-- name: test_approx_top_k_tpch @sequential
 function: prepare_data("tpch", "${db[0]}")
 SELECT APPROX_TOP_K(L_LINENUMBER) FROM lineitem;
 SELECT APPROX_TOP_K(L_LINENUMBER, 1) FROM lineitem;
