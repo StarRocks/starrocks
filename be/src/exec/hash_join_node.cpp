@@ -295,7 +295,6 @@ Status HashJoinNode::open(RuntimeState* state) {
         RETURN_IF_ERROR(_asof_join_condition_probe_expr_ctx->open(state));
     }
 
-
     {
         build_timer.stop();
         RETURN_IF_ERROR(child(1)->open(state));

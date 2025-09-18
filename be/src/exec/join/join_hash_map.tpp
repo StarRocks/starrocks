@@ -900,6 +900,8 @@ void JoinHashMap<LT, CT, MT>::_probe_from_ht_for_asof_inner_join(RuntimeState* s
                 continue;
             }
 
+            DCHECK_LT(i, asof_temporal_data_column->size());
+
             AsofTemporalCppType probe_temporal_value = asof_temporal_probe_values[i];
 
             uint32_t matched_build_row_index = asof_index_vector[build_index]->find_asof_match(probe_temporal_value);
@@ -1107,6 +1109,7 @@ void JoinHashMap<LT, CT, MT>::_probe_from_ht_for_asof_left_outer_join(RuntimeSta
                 continue;
             }
 
+            DCHECK_LT(i, asof_temporal_data_column->size());
             AsofTemporalCppType probe_temporal_value = asof_temporal_probe_values[i];
             uint32_t matched_build_row_index = asof_index_vector[build_index]->find_asof_match(probe_temporal_value);
 
@@ -1898,7 +1901,7 @@ void JoinHashMap<LT, CT, MT>::_probe_from_ht_for_asof_left_outer_join_with_other
             LOG(WARNING) << "ASOF LEFT OUTER WITH OTHER CONJUNCT: No valid asof column";
             for (; i < probe_row_count; i++) {
                 _probe_state->probe_index[match_count] = i;
-                _probe_state->build_index[match_count] = 0; // 未匹配
+                _probe_state->build_index[match_count] = 0;
                 match_count++;
             }
 
@@ -1917,6 +1920,7 @@ void JoinHashMap<LT, CT, MT>::_probe_from_ht_for_asof_left_outer_join_with_other
                 continue;
             }
 
+            DCHECK_LT(i, asof_temporal_data_column->size());
             AsofTemporalCppType probe_temporal_value = asof_temporal_probe_values[i];
             uint32_t matched_build_row_index = asof_index_vector[build_index]->find_asof_match(probe_temporal_value);
 

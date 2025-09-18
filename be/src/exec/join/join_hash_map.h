@@ -377,7 +377,7 @@ public:
     void set_probe_profile(RuntimeProfile::Counter* search_ht_timer, RuntimeProfile::Counter* output_probe_column_timer,
                            RuntimeProfile::Counter* output_build_column_timer, RuntimeProfile::Counter* probe_counter);
 
-    void create(const HashTableParam& param);
+    Status create(const HashTableParam& param);
     void close();
 
     Status build(RuntimeState* state);

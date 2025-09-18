@@ -87,9 +87,8 @@ uint32_t AsofIndex<CppType, OpCode>::find_asof_match(CppType probe_value) const 
     size_t size = _entries.size();
     size_t low = 0;
 
+#pragma GCC unroll 3
     while (size >= 8) {
-        _bound_search_iteration(probe_value, low, size);
-        _bound_search_iteration(probe_value, low, size);
         _bound_search_iteration(probe_value, low, size);
     }
 
