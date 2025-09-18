@@ -130,7 +130,7 @@ void DateValue::trunc_to_day() {}
 void DateValue::trunc_to_month() {
     int year, month, day;
     date::to_date_with_cache(_julian, &year, &month, &day);
-    _julian = date::from_date(year, month, 1);
+    _julian -= (day - 1);
 }
 
 void DateValue::trunc_to_year() {
