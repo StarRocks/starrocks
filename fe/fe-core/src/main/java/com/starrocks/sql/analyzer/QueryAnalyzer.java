@@ -906,6 +906,31 @@ public class QueryAnalyzer {
                 scope = new Scope(RelationId.of(join),
                         leftScope.getRelationFields().joinWith(rightScope.getRelationFields()));
             }
+            // When USING clause is present, SQL standard/MySQL expose only one column for each
+            // using-name in the output schema. Deduplicate here by keeping the first occurrence
+            // (left-first ordering in our construction) and dropping subsequent duplicates.
+            if (join.getUsingColNames() != null && !join.getUsingColNames().isEmpty()) {
+                Set<String> usingNamesLower = join.getUsingColNames().stream()
+                        .map(String::toLowerCase)
+                        .collect(Collectors.toSet());
+                Set<String> seen = new HashSet<>();
+                List<Field> deduplicated = new ArrayList<>();
+                for (Field field : scope.getRelationFields().getAllFields()) {
+                    String fieldName = field.getName();
+                    if (fieldName != null) {
+                        String lower = fieldName.toLowerCase();
+                        if (usingNamesLower.contains(lower)) {
+                            if (seen.contains(lower)) {
+                                // skip duplicate USING column from the right side
+                                continue;
+                            }
+                            seen.add(lower);
+                        }
+                    }
+                    deduplicated.add(field);
+                }
+                scope = new Scope(scope.getRelationId(), new RelationFields(deduplicated));
+            }
             join.setScope(scope);
 
             GeneratedColumnExprMappingCollector collector = new GeneratedColumnExprMappingCollector();
