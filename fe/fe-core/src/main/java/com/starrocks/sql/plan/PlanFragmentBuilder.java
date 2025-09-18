@@ -4207,5 +4207,73 @@ public class PlanFragmentBuilder {
                 parentFragment.mergeQueryDictExprs(fragment.getQueryGlobalDictExprs());
             }
         }
+<<<<<<< HEAD
+=======
+
+        private ScalarOperator extractAndValidateAsofTemporalPredicate(List<ScalarOperator> otherJoin,
+                                                            ColumnRefSet leftColumns,
+                                                            ColumnRefSet rightColumns) {
+            List<ScalarOperator> candidates = new ArrayList<>();
+
+            for (ScalarOperator predicate : otherJoin) {
+                if (isValidAsofTemporalPredicate(predicate, leftColumns, rightColumns)) {
+                    candidates.add(predicate);
+                }
+            }
+
+            if (candidates.isEmpty()) {
+                throw new IllegalStateException("ASOF JOIN requires exactly one temporal inequality condition. found: 0");
+            }
+
+            if (candidates.size() > 1) {
+                throw new IllegalStateException(String.format(
+                        "ASOF JOIN requires exactly one temporal inequality condition, found %d: %s",
+                        candidates.size(), candidates));
+            }
+
+            ScalarOperator temporalPredicate = candidates.get(0);
+            for (ScalarOperator child : temporalPredicate.getChildren()) {
+                if (!child.isColumnRef()) {
+                    throw new IllegalStateException(String.format(
+                            "ASOF JOIN temporal condition operands must be column references, found: %s", child));
+                }
+
+                Type operandType = child.getType();
+                if (!operandType.isBigint() && !operandType.isDate() && !operandType.isDatetime()) {
+                    throw new IllegalStateException(String.format(
+                            "ASOF JOIN temporal condition operand must be BIGINT, DATE, or DATETIME in join ON clause, " +
+                                    "found: %s. Predicate: %s", operandType, temporalPredicate));
+                }
+            }
+
+            return candidates.get(0);
+        }
+
+        private boolean isValidAsofTemporalPredicate(ScalarOperator predicate,
+                                                     ColumnRefSet leftColumns,
+                                                     ColumnRefSet rightColumns) {
+            if (!(predicate instanceof BinaryPredicateOperator binaryPredicate)) {
+                return false;
+            }
+
+            if (!binaryPredicate.getBinaryType().isRange()) {
+                return false;
+            }
+
+            ColumnRefSet leftOperandColumns = binaryPredicate.getChild(0).getUsedColumns();
+            ColumnRefSet rightOperandColumns = binaryPredicate.getChild(1).getUsedColumns();
+
+            if (leftOperandColumns.isIntersect(leftColumns) && leftOperandColumns.isIntersect(rightColumns)) {
+                return false;
+            }
+
+            if (rightOperandColumns.isIntersect(leftColumns) && rightOperandColumns.isIntersect(rightColumns)) {
+                return false;
+            }
+
+            return true;
+        }
+
+>>>>>>> 3d394db3e6 ([Enhancement] Push down ASOF JOIN condition projection to child operator (#63200))
     }
 }
