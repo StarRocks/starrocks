@@ -583,7 +583,8 @@ public class DatabaseTransactionMgrTest {
         Table table = masterGlobalStateMgr.getLocalMetastore().getTable(GlobalStateMgrTestUtil.testDbId1,
                 GlobalStateMgrTestUtil.testTableId1);
         for (Partition partition : table.getPartitions()) {
-            partitionVersions.put(partition.getId(), partition.getVisibleVersion() + 2);
+            partitionVersions.put(partition.getDefaultPhysicalPartition().getId(),
+                    partition.getDefaultPhysicalPartition().getVisibleVersion() + 2);
         }
 
         masterTransMgr.commitTransaction(GlobalStateMgrTestUtil.testDbId1, replicationTransactionId1, transTablets,
