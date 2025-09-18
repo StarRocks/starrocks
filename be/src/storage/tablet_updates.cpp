@@ -1068,7 +1068,7 @@ void TabletUpdates::do_apply() {
     {
         std::lock_guard rl(_lock);
         // if apply_st is not ok, which means the apply task is failed, we should not submit a new apply task.
-        if (apply_st.ok() && apply_operation_performed) {
+        if (apply_st.ok() && apply_operation_performed && !is_error()) {
             _check_for_apply();
         }
     }
