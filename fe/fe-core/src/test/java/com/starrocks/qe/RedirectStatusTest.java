@@ -309,7 +309,7 @@ public class RedirectStatusTest {
 
     @Test
     public void testUseDbStmt() {
-        UseDbStmt stmt = new UseDbStmt("test_catalog", "test_db");
+        UseDbStmt stmt = new UseDbStmt("test_catalog", "test_db", NodePosition.ZERO);
         Assertions.assertEquals(RedirectStatus.NO_FORWARD, RedirectStatus.getRedirectStatus(stmt));
     }
 

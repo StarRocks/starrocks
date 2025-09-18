@@ -20,16 +20,21 @@ import com.starrocks.common.DdlException;
 import com.starrocks.common.ExceptionChecker;
 import com.starrocks.common.InvalidConfException;
 import com.starrocks.qe.DDLStmtExecutor;
+import com.starrocks.qe.GlobalVariable;
 import com.starrocks.qe.SetExecutor;
 import com.starrocks.qe.ShowExecutor;
 import com.starrocks.qe.ShowResultSet;
+import com.starrocks.qe.SqlModeHelper;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
 import com.starrocks.sql.ast.AdminSetConfigStmt;
 import com.starrocks.sql.ast.CreateDbStmt;
 import com.starrocks.sql.ast.CreateViewStmt;
+import com.starrocks.sql.ast.DropDbStmt;
 import com.starrocks.sql.ast.SetStmt;
 import com.starrocks.sql.ast.ShowTableStmt;
+import com.starrocks.sql.ast.UseDbStmt;
+import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
@@ -386,5 +391,38 @@ public class TableObjectCaseInsensitiveTest {
     @Test
     public void testGrantCaseInsensitive() {
         analyzeSuccess("grant select on table T0 to root;");
+    }
+
+    @Test
+    public void testUseDb() {
+        String sql = "use TEST_db";
+        UseDbStmt useDbStmt = (UseDbStmt) SqlParser.parseSingleStatement(sql, SqlModeHelper.MODE_DEFAULT);
+        Assertions.assertEquals("test_db", useDbStmt.getDbName());
+
+        sql = "use TEST_DB";
+        useDbStmt = (UseDbStmt) SqlParser.parseSingleStatement(sql, SqlModeHelper.MODE_DEFAULT);
+        Assertions.assertEquals("test_db", useDbStmt.getDbName());
+    }
+
+    @Test
+    public void testCreateDb() {
+        String sql = "CREATE DATABASE TEST_db";
+        CreateDbStmt createDbStmt = (CreateDbStmt) SqlParser.parseSingleStatement(sql, SqlModeHelper.MODE_DEFAULT);
+        Assertions.assertEquals("test_db", createDbStmt.getFullDbName());
+
+        sql = "CREATE DATABASE TEST_DB";
+        createDbStmt = (CreateDbStmt) SqlParser.parseSingleStatement(sql, SqlModeHelper.MODE_DEFAULT);
+        Assertions.assertEquals("test_db", createDbStmt.getFullDbName());
+    }
+
+    @Test
+    public void testDropDb() {
+        String sql = "DROP DATABASE TEST_db";
+        DropDbStmt dropDbStmt = (DropDbStmt) SqlParser.parseSingleStatement(sql, SqlModeHelper.MODE_DEFAULT);
+        Assertions.assertEquals("test_db", dropDbStmt.getDbName());
+
+        sql = "DROP DATABASE TEST_DB";
+        dropDbStmt = (DropDbStmt) SqlParser.parseSingleStatement(sql, SqlModeHelper.MODE_DEFAULT);
+        Assertions.assertEquals("test_db", dropDbStmt.getDbName());
     }
 }

@@ -572,6 +572,8 @@ import static java.util.stream.Collectors.toList;
 public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<ParseNode> {
     private final long sqlMode;
 
+    private boolean caseInsensitive;
+
     private final IdentityHashMap<ParserRuleContext, List<HintNode>> hintMap;
 
     private int placeHolderSlotId = 0;
@@ -601,11 +603,7 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
     // rewriter
     private static final CompoundPredicateExprRewriter COMPOUND_PREDICATE_EXPR_REWRITER = new CompoundPredicateExprRewriter();
 
-    protected AstBuilder(long sqlMode) {
-        this(sqlMode, new IdentityHashMap<>());
-    }
-
-    protected AstBuilder(long sqlMode, IdentityHashMap<ParserRuleContext, List<HintNode>> hintMap) {
+    protected AstBuilder(long sqlMode, boolean caseInsensitive, IdentityHashMap<ParserRuleContext, List<HintNode>> hintMap) {
         this.hintMap = hintMap;
         long hintSqlMode = 0L;
         for (Map.Entry<ParserRuleContext, List<HintNode>> entry : hintMap.entrySet()) {
@@ -617,6 +615,7 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
             }
         }
         this.sqlMode = sqlMode | hintSqlMode;
+        this.caseInsensitive = caseInsensitive;
     }
 
     private static final AstBuilder.AstBuilderFactory INSTANCE = new AstBuilder.AstBuilderFactory();
@@ -629,12 +628,9 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
         protected AstBuilderFactory() {
         }
 
-        public AstBuilder create(long sqlMode) {
-            return new AstBuilder(sqlMode, new IdentityHashMap<>());
-        }
-
-        public AstBuilder create(long sqlMode, IdentityHashMap<ParserRuleContext, List<HintNode>> hintMap) {
-            return new AstBuilder(sqlMode, hintMap);
+        public AstBuilder create(long sqlMode, boolean caseInsensitive,
+                                 IdentityHashMap<ParserRuleContext, List<HintNode>> hintMap) {
+            return new AstBuilder(sqlMode, caseInsensitive, hintMap);
         }
     }
 
@@ -669,9 +665,9 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
         QualifiedName qualifiedName = getQualifiedName(context.qualifiedName());
         List<String> parts = qualifiedName.getParts();
         if (parts.size() == 1) {
-            return new UseDbStmt(null, parts.get(0), pos);
+            return new UseDbStmt(null, normalizeName(parts.get(0)), pos);
         } else if (parts.size() == 2) {
-            return new UseDbStmt(parts.get(0), parts.get(1), pos);
+            return new UseDbStmt(normalizeName(parts.get(0)), normalizeName(parts.get(1)), pos);
         } else {
             throw new ParsingException(PARSER_ERROR_MSG.invalidDbFormat(qualifiedName.toString()),
                     qualifiedName.getPos());
@@ -743,7 +739,7 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
                 properties.put(property.getKey(), property.getValue());
             }
         }
-        return new CreateDbStmt(context.IF() != null, catalogName, dbName.toString(), properties, createPos(context));
+        return new CreateDbStmt(context.IF() != null, normalizeName(catalogName), normalizeName(dbName.toString()), properties, createPos(context));
     }
 
     @Override
@@ -754,7 +750,7 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
         }
 
         QualifiedName dbName = getQualifiedName(context.database);
-        return new DropDbStmt(context.IF() != null, catalogName, dbName.toString(), context.FORCE() != null,
+        return new DropDbStmt(context.IF() != null, normalizeName(catalogName), normalizeName(dbName.toString()), context.FORCE() != null,
                 createPos(context));
     }
 
@@ -7248,7 +7244,8 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
     }
 
     private record LogicalBinaryNode(com.starrocks.sql.parser.StarRocksParser.LogicalBinaryContext context,
-                                     CompoundPredicate.Operator operator) {}
+                                     CompoundPredicate.Operator operator) {
+    }
 
     // Iteratively build a left-deep CompoundPredicate tree for LogicalBinaryContext,
     // allowing each node to have its own operator, using LogicalBinaryNode for clarity.
@@ -9501,6 +9498,10 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
         }
         Collections.sort(res);
         return res;
+    }
+
+    private String normalizeName(String name) {
+        return caseInsensitive && name != null ? name.toLowerCase() : name;
     }
 
     public static IndexDef.IndexType getIndexType(com.starrocks.sql.parser.StarRocksParser.IndexTypeContext indexTypeContext) {

@@ -20,7 +20,6 @@ import com.starrocks.sql.parser.NodePosition;
 
 import java.util.Map;
 
-import static com.starrocks.common.util.Util.normalizeName;
 
 public class CreateDbStmt extends DdlStmt {
     private final boolean ifNotExists;
@@ -40,8 +39,8 @@ public class CreateDbStmt extends DdlStmt {
                         Map<String, String> properties, NodePosition pos) {
         super(pos);
         this.ifNotExists = ifNotExists;
-        this.catalogName = normalizeName(catalogName);
-        this.dbName = normalizeName(dbName);
+        this.catalogName = catalogName;
+        this.dbName = dbName;
         this.properties = properties;
     }
 
@@ -62,7 +61,7 @@ public class CreateDbStmt extends DdlStmt {
     }
 
     public void setCatalogName(String catalogName) {
-        this.catalogName = normalizeName(catalogName);
+        this.catalogName = catalogName;
     }
 
     @Override

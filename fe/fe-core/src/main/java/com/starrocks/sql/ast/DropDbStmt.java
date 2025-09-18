@@ -17,7 +17,6 @@ package com.starrocks.sql.ast;
 
 import com.starrocks.sql.parser.NodePosition;
 
-import static com.starrocks.common.util.Util.normalizeName;
 
 // DROP DB Statement
 public class DropDbStmt extends DdlStmt {
@@ -37,11 +36,10 @@ public class DropDbStmt extends DdlStmt {
     public DropDbStmt(boolean ifExists, String catalog, String dbName, boolean forceDrop, NodePosition pos) {
         super(pos);
         this.ifExists = ifExists;
-        this.catalog = normalizeName(catalog);
-        this.dbName = normalizeName(dbName);
+        this.catalog = catalog;
+        this.dbName = dbName;
         this.forceDrop = forceDrop;
     }
-
 
     public boolean isSetIfExists() {
         return ifExists;
@@ -52,15 +50,11 @@ public class DropDbStmt extends DdlStmt {
     }
 
     public void setCatalogName(String catalogName) {
-        this.catalog = normalizeName(catalogName);
+        this.catalog = catalogName;
     }
 
     public String getDbName() {
         return this.dbName;
-    }
-
-    public void setDbName(String dbName) {
-        this.dbName = normalizeName(dbName);
     }
 
     public boolean isForceDrop() {
