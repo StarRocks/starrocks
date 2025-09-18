@@ -1480,7 +1480,7 @@ SELECT c_partition, APPROX_TOP_K(c_bool, 3, 10) OVER(PARTITION BY c_partition) F
 3	[{"item":null,"count":5}]
 3	[{"item":null,"count":5}]
 -- !result
--- name: test_approx_top_k_tpch
+-- name: test_approx_top_k_tpch @sequential
 function: prepare_data("tpch", "${db[0]}")
 -- result:
 None
