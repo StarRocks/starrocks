@@ -305,9 +305,9 @@ jobs:
           linux_distro: ${{ matrix.linux }}
         run: |
           cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull && git checkout test_arm && source lib/init.sh
-          # ./bin/run-pr-update-image.sh
-          echo "image_cache_id=imc-t4n7gz91wu8sy396koxn" >> $GITHUB_OUTPUT
-          echo "imc-t4n7gz91wu8sy396koxn" > ${GITHUB_WORKSPACE}/image_cache.info
+          ./bin/run-pr-update-image.sh
+          #echo "image_cache_id=imc-t4n7gz91wu8sy396koxn" >> $GITHUB_OUTPUT
+          #echo "imc-t4n7gz91wu8sy396koxn" > ${GITHUB_WORKSPACE}/image_cache.info
 
       - name: Upload Thirdparty Result
         uses: actions/upload-artifact@v4
@@ -374,7 +374,7 @@ jobs:
               export image_cache_id=${IMAGE_CACHE_ID}
               export image_tag=$BRANCH-$PR_NUMBER
           fi
-          # ./bin/elastic-ut.sh --pr ${PR_NUMBER} --module be --repository ${{ github.repository }} --linuxdistro ${LINUX_DISTRO} --with-gcov --arch arm64
+          ./bin/elastic-ut.sh --pr ${PR_NUMBER} --module be --repository ${{ github.repository }} --linuxdistro ${LINUX_DISTRO} --with-gcov --arch arm64
       - name: clean ECI
         if: always()
         run: |
@@ -430,7 +430,7 @@ jobs:
               export image_cache_id=${IMAGE_CACHE_ID}
               export image_tag=$BRANCH-$PR_NUMBER
           fi
-          # ./bin/elastic-build.sh --pr ${PR_NUMBER} --repository ${{ github.repository }} --linuxdistro ${LINUX_DISTRO} --be --clang-tidy --arch arm64
+          ./bin/elastic-build.sh --pr ${PR_NUMBER} --repository ${{ github.repository }} --linuxdistro ${LINUX_DISTRO} --be --clang-tidy --arch arm64
 
       - name: clean ECI
         if: always()
