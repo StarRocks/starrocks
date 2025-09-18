@@ -4282,6 +4282,11 @@ public class PlanFragmentBuilder {
 
             ScalarOperator temporalPredicate = candidates.get(0);
             for (ScalarOperator child : temporalPredicate.getChildren()) {
+                if (!child.isColumnRef()) {
+                    throw new IllegalStateException(String.format(
+                            "ASOF JOIN temporal condition operands must be column references, found: %s", child));
+                }
+
                 Type operandType = child.getType();
                 if (!operandType.isBigint() && !operandType.isDate() && !operandType.isDatetime()) {
                     throw new IllegalStateException(String.format(
