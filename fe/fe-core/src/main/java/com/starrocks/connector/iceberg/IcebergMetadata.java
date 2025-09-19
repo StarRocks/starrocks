@@ -985,8 +985,8 @@ public class IcebergMetadata implements ConnectorMetadata {
         final long snapshotId = tvrVersionRange.end().orElseThrow(() -> new StarRocksConnectorException(
                 "Snapshot ID is not present in tvrVersionRange: " + tvrVersionRange));
         Scan scan;
-        if (tvrVersionRange instanceof  TvrTableDelta &&
-                tvrVersionRange.start().isPresent() && tvrVersionRange.start().isPresent()) {
+        if (tvrVersionRange instanceof TvrTableDelta &&
+                tvrVersionRange.start() != null && tvrVersionRange.start().isPresent()) {
             IncrementalAppendScan incrementalAppendScan = nativeTbl.newIncrementalAppendScan();
             incrementalAppendScan =
                     incrementalAppendScan.fromSnapshotExclusive(tvrVersionRange.from.getVersion());
