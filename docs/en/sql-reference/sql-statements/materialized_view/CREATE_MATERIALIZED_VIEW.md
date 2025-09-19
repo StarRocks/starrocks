@@ -123,6 +123,30 @@ The following table shows the correspondence between the aggregate function in t
 | hll_raw_agg, hll_union_agg, ndv, approx_count_distinct | hll_union                                       |
 | percentile_approx, percentile_union                    | percentile_union                                |
 
+In addition to the above functions, starting from StarRocks v3.4.0, synchronous materialized views also support generic aggregate functions. For more information about generic aggregate functions, see [Generic aggregate function states](../../../table_design/table_types/aggregate_table.md#use-generic-aggregate-states-in-materialized-views).
+
+```SQL
+-- Create a synchronous materialized view test_mv1 to store aggregate states.
+CREATE MATERIALIZED VIEW test_mv1 
+AS
+SELECT 
+    dt,
+    -- Original aggregate functions.
+    min(id) AS min_id,
+    max(id) AS max_id,
+    sum(id) AS sum_id,
+    bitmap_union(to_bitmap(id)) AS bitmap_union_id,
+    hll_union(hll_hash(id)) AS hll_union_id,
+    percentile_union(percentile_hash(id)) AS percentile_union_id,
+    -- Generic aggregate state functions.
+    ds_hll_count_distinct_union(ds_hll_count_distinct_state(id)) AS hll_id,
+    avg_union(avg_state(id)) AS avg_id,
+    array_agg_union(array_agg_state(id)) AS array_agg_id,
+    min_by_union(min_by_state(province, id)) AS min_by_province_id
+FROM t1
+GROUP BY dt;
+```
+
 ## Asynchronous materialized view
 
 ### Syntax
@@ -273,6 +297,11 @@ See [Example -5](#examples) for detailed instructions on multi-column partition 
 
 The sort key of the asynchronous materialized view. If you do not specify the sort key, StarRocks chooses some of the prefix columns from SELECT columns as the sort keys. For example, in `select a, b, c, d`, sort keys can be `a` and `b`. This parameter is supported from StarRocks v3.0 onwards.
 
+> **NOTE**
+> There are two different uses of `ORDER BY` in materialized views:
+> - `ORDER BY` in the CREATE MATERIALIZED VIEW statement defines the sort key of the materialized view, which helps accelerate queries based on the sort key. This does not affect the materialized view's SPJG-based transparent acceleration capability but does not guarantee global ordering of the materialized view's query results.
+> - `ORDER BY` in the materialized view's query definition guarantees global ordering of the query results, but prevents the materialized view from being used for SPJG-based transparent query rewrite. Therefore, `ORDER BY` should not be used in the materialized view's query definition if the MV is used for query rewrite usage.
+
 **INDEX** (optional)
 
 Asynchronous materialized views support ​Bitmap​ and ​BloomFilter​ indexes to accelerate query performance, and their usage is the same as in regular tables. For details on the use cases and information about ​Bitmap​ and ​BloomFilter​ indexes, please refer to：[Bitmap Index](../../../table_design/indexes/Bitmap_index.md) and [Bloom filter Index](../../../table_design/indexes/Bloomfilter_index.md).
@@ -316,6 +345,7 @@ Properties of the asynchronous materialized view. You can modify the properties 
 - `partition_ttl`: The time-to-live (TTL) for partitions. Partitions whose data is within the specified time range are retained. Expired partitions are deleted automatically. Unit: `YEAR`, `MONTH`, `DAY`, `HOUR`, and `MINUTE`. For example, you can specify this property as `2 MONTH`. This property is recommended over `partition_ttl_number`. It is supported from v3.1.5 onwards.
 - `partition_ttl_number`: The number of most recent materialized view partitions to retain. For the partitions with a start time earlier than the current time, after the number of these partitions exceeds this value, less recent partitions will be deleted. StarRocks will periodically check materialized view partitions according to the time interval specified in the FE configuration item `dynamic_partition_check_interval_seconds`, and automatically delete expired partitions. If you enabled the [dynamic partitioning](../../../table_design/data_distribution/dynamic_partitioning.md) strategy, the partitions created in advance are not counted in. When the value is `-1`, all partitions of the materialized view will be preserved. Default: `-1`.
 - `partition_refresh_number`: In a single refresh, the maximum number of partitions to refresh. If the number of partitions to be refreshed exceeds this value, StarRocks will split the refresh task and complete it in batches. Only when the previous batch of partitions is refreshed successfully, StarRocks will continue to refresh the next batch of partitions until all partitions are refreshed. If any of the partitions fail to be refreshed, no subsequent refresh tasks will be generated. When the value is `-1`, the refresh task will not be split. The default value is changed from `-1` to `1` since v3.3, meaning StarRocks refeshes partitions one by one.
+- `partition_refresh_strategy`：The refresh strategy for a materialized view during a single refresh operation. When set to `adaptive`, the number of partitions to refresh will be automatically determined based on the data volume in the base table partitions, significantly improving refresh efficiency. If this property is not specified, the default strategy is `strict`, meaning the number of partitions refreshed in a single operation is strictly controlled by `partition_refresh_number`.
 - `excluded_trigger_tables`: If a base table of the materialized view is listed here, the automatic refresh task will not be triggered when the data in the base table is changed. This parameter only applies to load-triggered refresh strategy, and is usually used together with the property `auto_refresh_partitions_limit`. Format: `[db_name.]table_name`. When the value is an empty string, any data change in all base tables triggers the refresh of the corresponding materialized view. The default value is an empty string.
 
 - `excluded_refresh_tables`: The base tables listed in this property will not be updated to the materialized view when their data changes. Format: `[db_name.]table_name`. The default value is an empty string. When the value is an empty string, any base table data change will trigger the corresponding materialized view refresh.
@@ -793,8 +823,10 @@ PROPERTIES (
 Example 1: Create a non-partitioned materialized view.
 
 ```SQL
+-- create an unpartitioned materialized view sorted by lo_custkey
 CREATE MATERIALIZED VIEW lo_mv1
 DISTRIBUTED BY HASH(`lo_orderkey`)
+ORDER BY `lo_custkey`
 REFRESH ASYNC
 AS
 select
@@ -804,16 +836,17 @@ select
     sum(lo_revenue) as total_revenue, 
     count(lo_shipmode) as shipmode_count
 from lineorder 
-group by lo_orderkey, lo_custkey 
-order by lo_orderkey;
+group by lo_orderkey, lo_custkey;
 ```
 
 Example 2: Create a partitioned materialized view.
 
 ```SQL
+-- create a partitioned materialized view partitioned by `lo_orderdate` and sorted by `lo_custkey`.
 CREATE MATERIALIZED VIEW lo_mv2
 PARTITION BY `lo_orderdate`
 DISTRIBUTED BY HASH(`lo_orderkey`)
+ORDER BY `lo_custkey`
 REFRESH ASYNC START('2023-07-01 10:00:00') EVERY (interval 1 day)
 AS
 select
@@ -824,8 +857,7 @@ select
     sum(lo_revenue) as total_revenue, 
     count(lo_shipmode) as shipmode_count
 from lineorder 
-group by lo_orderkey, lo_orderdate, lo_custkey
-order by lo_orderkey;
+group by lo_orderkey, lo_orderdate, lo_custkey;
 
 -- Use the date_trunc() function to partition the materialized view by month.
 CREATE MATERIALIZED VIEW order_mv1
@@ -996,4 +1028,23 @@ PROPERTIES (
     "query_rewrite_consistency" = "force_mv"
 )
 AS SELECT * from t1;
+```
+
+Example 7: Create a partition materialized view with a specific sort key:
+```SQL
+CREATE MATERIALIZED VIEW lo_mv2
+PARTITION BY `lo_orderdate`
+DISTRIBUTED BY HASH(`lo_orderkey`)
+ORDER BY `lo_custkey`
+REFRESH ASYNC START('2023-07-01 10:00:00') EVERY (interval 1 day)
+AS
+select
+    lo_orderkey,
+    lo_orderdate,
+    lo_custkey, 
+    sum(lo_quantity) as total_quantity, 
+    sum(lo_revenue) as total_revenue, 
+    count(lo_shipmode) as shipmode_count
+from lineorder 
+group by lo_orderkey, lo_orderdate, lo_custkey;
 ```

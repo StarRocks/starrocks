@@ -14,19 +14,12 @@
 
 package com.starrocks.sql.ast.group;
 
-import com.starrocks.catalog.Column;
-import com.starrocks.catalog.ScalarType;
-import com.starrocks.qe.ShowResultSetMetaData;
 import com.starrocks.sql.ast.AstVisitor;
+import com.starrocks.sql.ast.AstVisitorExtendInterface;
 import com.starrocks.sql.ast.ShowStmt;
 import com.starrocks.sql.parser.NodePosition;
 
 public class ShowCreateGroupProviderStmt extends ShowStmt {
-    private static final ShowResultSetMetaData META_DATA =
-            ShowResultSetMetaData.builder()
-                    .addColumn(new Column("Group Provider", ScalarType.createVarchar(60)))
-                    .addColumn(new Column("Create Group Provider", ScalarType.createVarchar(500)))
-                    .build();
 
     private final String groupName;
 
@@ -40,12 +33,7 @@ public class ShowCreateGroupProviderStmt extends ShowStmt {
     }
 
     @Override
-    public ShowResultSetMetaData getMetaData() {
-        return META_DATA;
-    }
-
-    @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitShowCreateGroupProviderStatement(this, context);
+        return ((AstVisitorExtendInterface<R, C>) visitor).visitShowCreateGroupProviderStatement(this, context);
     }
 }

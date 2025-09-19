@@ -42,11 +42,6 @@ import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.google.gson.stream.JsonReader;
 import com.staros.starlet.StarletAgentFactory;
-import com.starrocks.analysis.HintNode;
-import com.starrocks.analysis.SetVarHint;
-import com.starrocks.analysis.StringLiteral;
-import com.starrocks.analysis.TableName;
-import com.starrocks.analysis.UserVariableHint;
 import com.starrocks.authentication.AuthenticationMgr;
 import com.starrocks.authorization.PrivilegeBuiltinConstants;
 import com.starrocks.catalog.Database;
@@ -61,6 +56,7 @@ import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Replica;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Tablet;
+import com.starrocks.catalog.UserIdentity;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
@@ -109,13 +105,17 @@ import com.starrocks.sql.ast.CreateMaterializedViewStatement;
 import com.starrocks.sql.ast.CreateViewStmt;
 import com.starrocks.sql.ast.DeleteStmt;
 import com.starrocks.sql.ast.DmlStmt;
+import com.starrocks.sql.ast.HintNode;
 import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.SystemVariable;
 import com.starrocks.sql.ast.TableRelation;
-import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.sql.ast.UserVariable;
+import com.starrocks.sql.ast.expression.SetVarHint;
+import com.starrocks.sql.ast.expression.StringLiteral;
+import com.starrocks.sql.ast.expression.TableName;
+import com.starrocks.sql.ast.expression.UserVariableHint;
 import com.starrocks.sql.optimizer.LogicalPlanPrinter;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.Optimizer;
@@ -577,7 +577,7 @@ public class UtFrameUtils {
             return Pair.create(planPair.first, planAndTrace);
         } else {
             Tracers.register(connectContext);
-            Tracers.init(connectContext, Tracers.Mode.LOGS, module);
+            Tracers.init(connectContext, "LOGS", module);
             try {
                 Pair<String, ExecPlan> planPair = UtFrameUtils.getPlanAndFragment(connectContext, sql);
                 String pr = Tracers.printLogs();
@@ -588,7 +588,7 @@ public class UtFrameUtils {
             } finally {
                 String pr = Tracers.printLogs();
                 if (!Strings.isNullOrEmpty(pr)) {
-                    System.out.println(pr);
+                    StarRocksTestBase.logSysInfo(pr);
                 }
                 Tracers.close();
             }
@@ -967,6 +967,8 @@ public class UtFrameUtils {
         String replaySql = initMockEnv(connectContext, replayDumpInfo);
         replaySql = LogUtil.removeLineSeparator(replaySql);
         Map<String, Database> dbs = null;
+
+        StarRocksTestBase.registerTrace(connectContext);
         try {
             StatementBase statementBase;
             try (Timer st = Tracers.watchScope("Parse")) {
@@ -995,6 +997,7 @@ public class UtFrameUtils {
         } finally {
             unLock(dbs);
             tearMockEnv();
+            StarRocksTestBase.unRegisterTrace(connectContext);
         }
     }
 
@@ -1323,6 +1326,7 @@ public class UtFrameUtils {
 
         FeConstants.enablePruneEmptyOutputScan = false;
         FeConstants.runningUnitTest = true;
+        Config.mv_refresh_default_planner_optimize_timeout = 300 * 1000; // 5min
 
         if (connectContext != null) {
             // 300s: 5min

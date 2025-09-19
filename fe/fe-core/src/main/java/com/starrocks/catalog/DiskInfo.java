@@ -36,15 +36,10 @@ package com.starrocks.catalog;
 
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.common.Config;
-import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.thrift.TStorageMedium;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
-
-import java.io.DataInput;
-import java.io.DataOutput;
-import java.io.IOException;
 
 public class DiskInfo implements Writable {
     public enum DiskState {
@@ -203,26 +198,7 @@ public class DiskInfo implements Writable {
                 + ", medium: " + storageMedium + "]";
     }
 
-    @Override
-    public void write(DataOutput out) throws IOException {
-        Text.writeString(out, rootPath);
-        out.writeLong(totalCapacityB);
-        out.writeLong(dataUsedCapacityB);
-        out.writeLong(diskAvailableCapacityB);
-        Text.writeString(out, state.name());
-    }
 
-    public void readFields(DataInput in) throws IOException {
-        this.rootPath = Text.readString(in);
-        this.totalCapacityB = in.readLong();
-        this.dataUsedCapacityB = in.readLong();
-        this.diskAvailableCapacityB = in.readLong();
-        this.state = DiskState.valueOf(Text.readString(in));
-    }
 
-    public static DiskInfo read(DataInput in) throws IOException {
-        DiskInfo diskInfo = new DiskInfo();
-        diskInfo.readFields(in);
-        return diskInfo;
-    }
+
 }

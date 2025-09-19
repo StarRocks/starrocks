@@ -15,9 +15,8 @@
 
 package com.starrocks.sql.ast;
 
-import com.starrocks.analysis.Expr;
-import com.starrocks.analysis.RedirectStatus;
-import com.starrocks.analysis.Subquery;
+import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.Subquery;
 import com.starrocks.sql.parser.NodePosition;
 
 import java.util.ArrayList;
@@ -46,10 +45,5 @@ public class ImportWhereStmt extends StatementBase {
         } else {
             return false;
         }
-    }
-
-    @Override
-    public RedirectStatus getRedirectStatus() {
-        return null;
     }
 }

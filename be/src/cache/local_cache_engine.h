@@ -27,7 +27,6 @@ class LocalCacheEngine {
 public:
     virtual ~LocalCacheEngine() = default;
 
-    virtual Status init(const CacheOptions& options) = 0;
     virtual bool is_initialized() const = 0;
 
     // Write data to cache
@@ -70,6 +69,9 @@ public:
 
     // Update the datacache disk space information, such as disk quota or disk path.
     virtual Status update_disk_spaces(const std::vector<DirSpace>& spaces) = 0;
+
+    // Update the datacache inline cache count limit
+    virtual Status update_inline_cache_count_limit(int32_t limit) = 0;
 
     virtual const DataCacheMetrics cache_metrics() const = 0;
 

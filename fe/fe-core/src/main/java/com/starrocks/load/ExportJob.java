@@ -40,15 +40,6 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.google.gson.annotations.SerializedName;
-import com.starrocks.analysis.BaseTableRef;
-import com.starrocks.analysis.BrokerDesc;
-import com.starrocks.analysis.DescriptorTable;
-import com.starrocks.analysis.Expr;
-import com.starrocks.analysis.SlotDescriptor;
-import com.starrocks.analysis.SlotRef;
-import com.starrocks.analysis.TableName;
-import com.starrocks.analysis.TableRef;
-import com.starrocks.analysis.TupleDescriptor;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedIndex;
@@ -66,7 +57,6 @@ import com.starrocks.common.DdlException;
 import com.starrocks.common.Pair;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.Status;
-import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.common.util.BrokerUtil;
 import com.starrocks.common.util.DebugUtil;
@@ -78,8 +68,8 @@ import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.fs.HdfsUtil;
 import com.starrocks.persist.gson.GsonPostProcessable;
-import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.planner.DataPartition;
+import com.starrocks.planner.DescriptorTable;
 import com.starrocks.planner.ExportSink;
 import com.starrocks.planner.MysqlScanNode;
 import com.starrocks.planner.OlapScanNode;
@@ -87,6 +77,8 @@ import com.starrocks.planner.PlanFragment;
 import com.starrocks.planner.PlanFragmentId;
 import com.starrocks.planner.PlanNodeId;
 import com.starrocks.planner.ScanNode;
+import com.starrocks.planner.SlotDescriptor;
+import com.starrocks.planner.TupleDescriptor;
 import com.starrocks.proto.UnlockTabletMetadataRequest;
 import com.starrocks.qe.DefaultCoordinator;
 import com.starrocks.qe.scheduler.Coordinator;
@@ -96,9 +88,15 @@ import com.starrocks.rpc.ThriftConnectionPool;
 import com.starrocks.rpc.ThriftRPCRequestExecutor;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.WarehouseManager;
+import com.starrocks.sql.ast.BrokerDesc;
 import com.starrocks.sql.ast.ExportStmt;
 import com.starrocks.sql.ast.LoadStmt;
 import com.starrocks.sql.ast.PartitionNames;
+import com.starrocks.sql.ast.expression.BaseTableRef;
+import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.SlotRef;
+import com.starrocks.sql.ast.expression.TableName;
+import com.starrocks.sql.ast.expression.TableRef;
 import com.starrocks.system.Backend;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.thrift.TAgentResult;
@@ -118,8 +116,6 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.apache.thrift.TException;
 
-import java.io.DataInput;
-import java.io.DataOutput;
 import java.io.IOException;
 import java.util.Collections;
 import java.util.Iterator;
@@ -1036,11 +1032,8 @@ public class ExportJob implements Writable, GsonPostProcessable {
             return state;
         }
 
-        @Override
-        public void write(DataOutput out) throws IOException {
-            out.writeLong(jobId);
-            Text.writeString(out, state.name());
-        }
+
+
     }
 
     public static class ExportUpdateInfo implements Writable {
@@ -1080,35 +1073,8 @@ public class ExportJob implements Writable, GsonPostProcessable {
             this.failMsg = failMsg;
         }
 
-        @Override
-        public void write(DataOutput out) throws IOException {
-            String json = GsonUtils.GSON.toJson(this, ExportUpdateInfo.class);
-            Text.writeString(out, json);
 
-            // Due to TNetworkAddress unsupport to_json, snapshotPaths can not be seralized to GSON automatically,
-            // here we manually seralize it
-            out.writeInt(snapshotPaths.size());
-            for (Pair<NetworkAddress, String> entry : snapshotPaths) {
-                Text.writeString(out, entry.first.hostname);
-                out.writeInt(entry.first.port);
-                Text.writeString(out, entry.second);
-            }
-        }
 
-        public static ExportUpdateInfo read(DataInput input) throws IOException {
-            ExportUpdateInfo info = GsonUtils.GSON.fromJson(Text.readString(input), ExportUpdateInfo.class);
-
-            int snapshotPathsLen = input.readInt();
-            for (int i = 0; i < snapshotPathsLen; i++) {
-                String hostName = Text.readString(input);
-                int port = input.readInt();
-                String path = Text.readString(input);
-                Pair<NetworkAddress, String> entry = Pair.create(new NetworkAddress(hostName, port), path);
-                info.snapshotPaths.set(i, entry);
-            }
-
-            return info;
-        }
 
         public List<Pair<NetworkAddress, String>> serialize(List<Pair<TNetworkAddress, String>> snapshotPaths) {
             return snapshotPaths

@@ -37,14 +37,9 @@ package com.starrocks.persist;
 import com.google.common.base.Objects;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.catalog.Table;
-import com.starrocks.cluster.ClusterNamespace;
-import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-
-import java.io.DataOutput;
-import java.io.IOException;
 
 public class CreateTableInfo implements Writable {
     public static final Logger LOG = LoggerFactory.getLogger(CreateTableInfo.class);
@@ -78,11 +73,8 @@ public class CreateTableInfo implements Writable {
         return storageVolumeId;
     }
 
-    public void write(DataOutput out) throws IOException {
-        // compatible with old version
-        Text.writeString(out, ClusterNamespace.getFullName(dbName));
-        table.write(out);
-    }
+
+
 
     @Override
     public int hashCode() {

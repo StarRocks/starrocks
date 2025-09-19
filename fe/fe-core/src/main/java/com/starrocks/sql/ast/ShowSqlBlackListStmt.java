@@ -15,9 +15,6 @@
 
 package com.starrocks.sql.ast;
 
-import com.starrocks.catalog.Column;
-import com.starrocks.catalog.ScalarType;
-import com.starrocks.qe.ShowResultSetMetaData;
 import com.starrocks.sql.parser.NodePosition;
 
 // used to show sql's blacklist
@@ -32,13 +29,6 @@ import com.starrocks.sql.parser.NodePosition;
 // | 2     | select count 2342423 *\(\*\) from .+ |
 // +-------+--------------------------------------+
 public class ShowSqlBlackListStmt extends ShowStmt {
-
-    private static final ShowResultSetMetaData META_DATA =
-            ShowResultSetMetaData.builder()
-                    .addColumn(new Column("Id", ScalarType.createVarchar(20)))
-                    .addColumn(new Column("Forbidden SQL", ScalarType.createVarchar(100)))
-                    .build();
-
     public ShowSqlBlackListStmt() {
         this(NodePosition.ZERO);
     }
@@ -49,11 +39,6 @@ public class ShowSqlBlackListStmt extends ShowStmt {
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitShowSqlBlackListStatement(this, context);
-    }
-
-    @Override
-    public ShowResultSetMetaData getMetaData() {
-        return META_DATA;
+        return ((AstVisitorExtendInterface<R, C>) visitor).visitShowSqlBlackListStatement(this, context);
     }
 }

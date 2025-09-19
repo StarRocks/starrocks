@@ -46,6 +46,7 @@ import com.starrocks.common.Status;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.memory.MemoryTrackable;
 import com.starrocks.qe.scheduler.Coordinator;
+import com.starrocks.qe.scheduler.slot.LogicalSlot;
 import com.starrocks.thrift.TBatchReportExecStatusParams;
 import com.starrocks.thrift.TBatchReportExecStatusResult;
 import com.starrocks.thrift.TNetworkAddress;
@@ -168,6 +169,10 @@ public final class QeProcessorImpl implements QeProcessor, MemoryTrackable {
                 continue;
             }
             final String queryIdStr = DebugUtil.printId(info.getConnectContext().getExecutionId());
+            String execState = (
+                    info.getConnectContext().isPending() ?
+                            LogicalSlot.State.REQUIRING :
+                            LogicalSlot.State.ALLOCATED).toQueryStateString();
             final QueryStatisticsItem item = new QueryStatisticsItem.Builder()
                     .customQueryId(context.getCustomQueryId())
                     .queryId(queryIdStr)
@@ -181,6 +186,7 @@ public final class QeProcessorImpl implements QeProcessor, MemoryTrackable {
                     .profile(info.getCoord().getQueryProfile())
                     .warehouseName(info.coord.getWarehouseName())
                     .resourceGroupName(info.coord.getResourceGroupName())
+                    .execState(execState)
                     .build();
 
             querySet.put(queryIdStr, item);
@@ -194,7 +200,7 @@ public final class QeProcessorImpl implements QeProcessor, MemoryTrackable {
             LOG.debug("ReportExecStatus(): fragment_instance_id={}, query_id={}, backend num: {}, ip: {}",
                     DebugUtil.printId(params.fragment_instance_id), DebugUtil.printId(params.query_id),
                     params.backend_num, beAddr);
-            LOG.debug("params: {}", params);
+            LOG.trace("params: {}", params);
         }
         final TReportExecStatusResult result = new TReportExecStatusResult();
         final QueryInfo info = coordinatorMap.get(params.query_id);

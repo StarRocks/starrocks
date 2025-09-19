@@ -389,11 +389,11 @@ insert into dict values(3, 'hello world 3', default, 3 * 10);
 insert into dict values(4, 'hello world 4', default, 4 * 10);
 -- result:
 -- !result
-select count(*) from t where int0 <> dict_mapping("dict", int0, "col_4");
+select count(*) from t where int0 <> dict_mapping("dict", int0, "col_4", true);
 -- result:
 4
 -- !result
-select count(*) from t where int0 = dict_mapping("dict", int0, "col_4");
+select count(*) from t where int0 = dict_mapping("dict", int0, "col_4", true);
 -- result:
 0
 -- !result

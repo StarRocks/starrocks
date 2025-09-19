@@ -15,10 +15,7 @@
 
 package com.starrocks.sql.ast;
 
-import com.starrocks.analysis.Expr;
-import com.starrocks.catalog.Column;
-import com.starrocks.catalog.ScalarType;
-import com.starrocks.qe.ShowResultSetMetaData;
+import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.parser.NodePosition;
 
 import static com.starrocks.sql.ast.SetType.SESSION;
@@ -29,15 +26,6 @@ import static com.starrocks.sql.ast.SetType.SESSION;
  * SHOW [GLOBAL | LOCAL | SESSION] STATUS [LIKE 'pattern' | WHERE expr]
  */
 public class ShowStatusStmt extends ShowStmt {
-
-    private static final String NAME_COL = "Variable_name";
-    private static final String VALUE_COL = "Value";
-    private static final ShowResultSetMetaData META_DATA =
-            ShowResultSetMetaData.builder()
-                    .addColumn(new Column(NAME_COL, ScalarType.createVarchar(20)))
-                    .addColumn(new Column(VALUE_COL, ScalarType.createVarchar(20)))
-                    .build();
-
     private final SetType type;
     private String pattern;
     private Expr where;
@@ -66,12 +54,7 @@ public class ShowStatusStmt extends ShowStmt {
     }
 
     @Override
-    public ShowResultSetMetaData getMetaData() {
-        return META_DATA;
-    }
-
-    @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitShowStatusStatement(this, context);
+        return ((AstVisitorExtendInterface<R, C>) visitor).visitShowStatusStatement(this, context);
     }
 }

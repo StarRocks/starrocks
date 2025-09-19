@@ -335,6 +335,15 @@ public class PushDownSubfieldRule implements TreeRewriteRule {
             visitChild(optExpression, 0, leftContext);
             visitChild(optExpression, 1, rightContext);
 
+            // predicate contains non-push-down subfield(subfield in localContext), it must be restored to
+            // original form.
+            if (predicate.isPresent() &&
+                    predicate.get().getUsedColumns().containsAny(localContext.pushDownExprRefs.keySet())) {
+                ReplaceColumnRefRewriter replaceColumnRefRewriter =
+                        new ReplaceColumnRefRewriter(localContext.pushDownExprRefs, true);
+                predicate = Optional.of(replaceColumnRefRewriter.rewrite(predicate.get()));
+            }
+
             Optional<Operator> project = generatePushDownProject(optExpression, childSubfieldOutputs, localContext);
             if (predicate.isPresent() || onPredicate.isPresent()) {
                 LogicalJoinOperator.Builder builder = LogicalJoinOperator.builder().withOperator(join);

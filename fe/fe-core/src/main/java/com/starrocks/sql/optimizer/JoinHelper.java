@@ -16,9 +16,9 @@ package com.starrocks.sql.optimizer;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
-import com.starrocks.analysis.HintNode;
-import com.starrocks.analysis.JoinOperator;
 import com.starrocks.common.Pair;
+import com.starrocks.sql.ast.HintNode;
+import com.starrocks.sql.ast.expression.JoinOperator;
 import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
@@ -33,7 +33,7 @@ import com.starrocks.sql.optimizer.operator.stream.PhysicalStreamJoinOperator;
 import java.util.List;
 import java.util.stream.Collectors;
 
-import static com.starrocks.analysis.BinaryType.EQ_FOR_NULL;
+import static com.starrocks.sql.ast.expression.BinaryType.EQ_FOR_NULL;
 
 public class JoinHelper {
     private final JoinOperator type;
@@ -87,7 +87,7 @@ public class JoinHelper {
         leftOnCols = Lists.newArrayList();
         rightOnCols = Lists.newArrayList();
 
-        boolean leftTableAggStrict = type.isLeftOuterJoin() || type.isFullOuterJoin();
+        boolean leftTableAggStrict = type.isAnyLeftOuterJoin() || type.isFullOuterJoin();
         boolean rightTableAggStrict = type.isRightOuterJoin() || type.isFullOuterJoin();
 
         for (BinaryPredicateOperator binaryPredicate : equalsPredicate) {
@@ -219,5 +219,36 @@ public class JoinHelper {
         // Cross join only support broadcast join
         return type.isCrossJoin() || JoinOperator.NULL_AWARE_LEFT_ANTI_JOIN.equals(type) ||
                 (type.isInnerJoin() && equalOnPredicate.isEmpty()) || HintNode.HINT_JOIN_BROADCAST.equals(hint);
+    }
+
+    /**
+     * Apply commutative transformation to a binary predicate
+     * For comparison operators (>, <, >=, <=), swap operands and transform operators
+     * For AsOf join scenarios where we need: left_table.column OP right_table.column
+     *
+     * @param predicate The predicate to transform
+     * @param leftColumns Columns from left table
+     * @param rightColumns Columns from right table
+     * @return Transformed predicate with proper left-right operand order
+     */
+    public static ScalarOperator applyCommutativeToPredicates(ScalarOperator predicate,
+                                                             ColumnRefSet leftColumns,
+                                                             ColumnRefSet rightColumns) {
+        if (predicate instanceof BinaryPredicateOperator binaryPred) {
+
+            // Only apply to comparison operators (>, <, >=, <=)
+            if (binaryPred.getBinaryType().isRange()) {
+                if (!leftColumns.containsAll(binaryPred.getChild(0).getUsedColumns()) &&
+                        rightColumns.containsAll(binaryPred.getChild(0).getUsedColumns())) {
+                    return binaryPred.commutative();
+                } else {
+                    return predicate;
+                }
+            } else {
+                return predicate;
+            }
+        } else {
+            return predicate;
+        }
     }
 }

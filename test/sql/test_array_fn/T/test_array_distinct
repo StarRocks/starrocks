@@ -1,4 +1,4 @@
--- name: test_array_distinct
+-- name: test_array_distinct @slow
 
 CREATE TABLE t1 (
     c1 INT,

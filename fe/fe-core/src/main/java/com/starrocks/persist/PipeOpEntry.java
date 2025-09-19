@@ -15,12 +15,7 @@
 package com.starrocks.persist;
 
 import com.google.gson.annotations.SerializedName;
-import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
-import com.starrocks.persist.gson.GsonUtils;
-
-import java.io.DataInput;
-import java.io.IOException;
 
 public class PipeOpEntry implements Writable {
 
@@ -44,13 +39,6 @@ public class PipeOpEntry implements Writable {
     public void setPipeOp(PipeOpType pipeOp) {
         this.pipeOp = pipeOp;
     }
-
-    public static PipeOpEntry read(DataInput input) throws IOException {
-        String json = Text.readString(input);
-        return GsonUtils.GSON.fromJson(json, PipeOpEntry.class);
-    }
-
-
 
     public enum PipeOpType {
         PIPE_OP_CREATE(0),

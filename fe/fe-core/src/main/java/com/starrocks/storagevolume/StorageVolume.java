@@ -29,7 +29,6 @@ import com.staros.proto.GSFileStoreInfo;
 import com.staros.proto.HDFSFileStoreInfo;
 import com.staros.proto.S3FileStoreInfo;
 import com.starrocks.common.DdlException;
-import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.common.proc.BaseProcResult;
 import com.starrocks.connector.share.credential.CloudConfigurationConstants;
@@ -37,11 +36,9 @@ import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.credential.CloudConfigurationFactory;
 import com.starrocks.credential.CloudType;
 import com.starrocks.persist.gson.GsonPostProcessable;
-import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.SemanticException;
 
-import java.io.DataInput;
 import java.io.IOException;
 import java.net.URI;
 import java.util.ArrayList;
@@ -295,6 +292,13 @@ public class StorageVolume implements Writable, GsonPostProcessable {
                     params.put(CloudConfigurationConstants.AWS_S3_NUM_PARTITIONED_PREFIX,
                             Integer.toString(s3FileStoreInfo.getNumPartitionedPrefix()));
                 }
+                if (s3FileStoreInfo.getPathStyleAccess() == 1) {
+                    params.put(CloudConfigurationConstants.AWS_S3_ENABLE_PATH_STYLE_ACCESS,
+                            Boolean.toString(true));
+                } else if (s3FileStoreInfo.getPathStyleAccess() == 2) {
+                    params.put(CloudConfigurationConstants.AWS_S3_ENABLE_PATH_STYLE_ACCESS,
+                            Boolean.toString(false));
+                }
                 AwsCredentialInfo credentialInfo = s3FileStoreInfo.getCredential();
                 if (credentialInfo.hasSimpleCredential()) {
                     params.put(CloudConfigurationConstants.AWS_S3_USE_INSTANCE_PROFILE, "false");
@@ -405,13 +409,6 @@ public class StorageVolume implements Writable, GsonPostProcessable {
             String container = locations.get(0).split("/")[0];
             params.put(CloudConfigurationConstants.AZURE_BLOB_CONTAINER, container);
         }
-    }
-
-
-
-    public static StorageVolume read(DataInput in) throws IOException {
-        String json = Text.readString(in);
-        return GsonUtils.GSON.fromJson(json, StorageVolume.class);
     }
 
     @Override

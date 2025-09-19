@@ -18,17 +18,6 @@ import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
 import com.google.re2j.Pattern;
-import com.starrocks.analysis.Expr;
-import com.starrocks.analysis.FunctionCallExpr;
-import com.starrocks.analysis.FunctionName;
-import com.starrocks.analysis.FunctionParams;
-import com.starrocks.analysis.IntLiteral;
-import com.starrocks.analysis.LargeIntLiteral;
-import com.starrocks.analysis.LiteralExpr;
-import com.starrocks.analysis.NullLiteral;
-import com.starrocks.analysis.OrderByElement;
-import com.starrocks.analysis.StringLiteral;
-import com.starrocks.analysis.UserVariableExpr;
 import com.starrocks.catalog.AggregateFunction;
 import com.starrocks.catalog.ArrayType;
 import com.starrocks.catalog.Function;
@@ -38,16 +27,30 @@ import com.starrocks.catalog.StructField;
 import com.starrocks.catalog.StructType;
 import com.starrocks.catalog.TableFunction;
 import com.starrocks.catalog.Type;
-import com.starrocks.catalog.combinator.AggStateCombinator;
+import com.starrocks.catalog.combinator.AggStateCombineCombinator;
 import com.starrocks.catalog.combinator.AggStateIf;
 import com.starrocks.catalog.combinator.AggStateMergeCombinator;
 import com.starrocks.catalog.combinator.AggStateUnionCombinator;
 import com.starrocks.catalog.combinator.AggStateUtils;
+import com.starrocks.catalog.combinator.StateFunctionCombinator;
+import com.starrocks.catalog.combinator.StateMergeCombinator;
+import com.starrocks.catalog.combinator.StateUnionCombinator;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.Pair;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariableConstants;
-import com.starrocks.sql.ast.ArrayExpr;
+import com.starrocks.sql.ast.OrderByElement;
+import com.starrocks.sql.ast.expression.ArrayExpr;
+import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.FunctionCallExpr;
+import com.starrocks.sql.ast.expression.FunctionName;
+import com.starrocks.sql.ast.expression.FunctionParams;
+import com.starrocks.sql.ast.expression.IntLiteral;
+import com.starrocks.sql.ast.expression.LargeIntLiteral;
+import com.starrocks.sql.ast.expression.LiteralExpr;
+import com.starrocks.sql.ast.expression.NullLiteral;
+import com.starrocks.sql.ast.expression.StringLiteral;
+import com.starrocks.sql.ast.expression.UserVariableExpr;
 import com.starrocks.sql.common.TypeManager;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
@@ -155,10 +158,24 @@ public class FunctionAnalyzer {
             }
         }
         Function fn = functionCallExpr.getFn();
-        if (fn instanceof AggStateCombinator) {
+        final String funcName = fnName.getFunction();
+        if (fn instanceof StateFunctionCombinator) {
             // analyze `_state` combinator function by using its arg function
             FunctionName argFuncName = new FunctionName(AggStateUtils.getAggFuncNameOfCombinator(fnName.getFunction()));
             analyzeBuiltinAggFunction(argFuncName, functionCallExpr.getParams(), functionCallExpr);
+        } else if (fn instanceof AggStateCombineCombinator) {
+            // analyze `_state` combinator function by using its arg function
+            FunctionName argFuncName = new FunctionName(AggStateUtils.getAggFuncNameOfCombinator(fnName.getFunction()));
+            analyzeBuiltinAggFunction(argFuncName, functionCallExpr.getParams(), functionCallExpr);
+        } else if (fn instanceof StateMergeCombinator || fn instanceof StateUnionCombinator) {
+            if (Arrays.stream(fn.getArgs()).anyMatch(Type::isWildcardDecimal)) {
+                throw new SemanticException(String.format("Resolved function %s has no wildcard decimal as argument type",
+                        fn.functionName()), functionCallExpr.getPos());
+            }
+            if (fn.getReturnType().isWildcardDecimal()) {
+                throw new SemanticException(String.format("Resolved function %s has no wildcard decimal as return type",
+                        fn.functionName()), functionCallExpr.getPos());
+            }
         } else if (fn instanceof AggStateUnionCombinator) {
             AggStateUnionCombinator unionCombinator = (AggStateUnionCombinator) fn;
             if (Arrays.stream(fn.getArgs()).anyMatch(Type::isWildcardDecimal)) {
@@ -168,6 +185,13 @@ public class FunctionAnalyzer {
             if (unionCombinator.getReturnType().isWildcardDecimal()) {
                 throw new SemanticException(String.format("Resolved function %s has no wildcard decimal as return type",
                         fn.functionName()), functionCallExpr.getPos());
+            }
+            if (FunctionSet.DS_HLL_COUNT_DISTINCT.equalsIgnoreCase(AggStateUtils.getAggFuncNameOfCombinator(funcName))) {
+                // ds_hll_count_distinct_union's param type should be varbinary type.
+                if (!functionCallExpr.getChild(0).getType().isBinaryType()) {
+                    throw new SemanticException(String.format("Resolved function %s has no binary as argument type",
+                            fn.functionName()), functionCallExpr.getPos());
+                }
             }
         } else if (fn instanceof AggStateMergeCombinator) {
             AggStateMergeCombinator mergeCombinator = (AggStateMergeCombinator) fn;
@@ -179,10 +203,28 @@ public class FunctionAnalyzer {
                 throw new SemanticException(String.format("Resolved function %s has no wildcard decimal as return type",
                         fn.functionName()), functionCallExpr.getPos());
             }
+            if (FunctionSet.DS_HLL_COUNT_DISTINCT.equalsIgnoreCase(AggStateUtils.getAggFuncNameOfCombinator(funcName))) {
+                // ds_hll_count_distinct_union's param type should be varbinary type.
+                if (!functionCallExpr.getChild(0).getType().isBinaryType()) {
+                    throw new SemanticException(String.format("Resolved function %s has no binary as argument type",
+                            fn.functionName()), functionCallExpr.getPos());
+                }
+            }
         } else if (fn instanceof AggStateIf) {
             FunctionName argFuncNameWithoutIf =
                     new FunctionName(AggStateUtils.getAggFuncNameOfCombinator(fnName.getFunction()));
             FunctionParams params = functionCallExpr.getParams();
+            
+            // Validate that the condition parameter (last parameter) is boolean type or can be cast to boolean
+            if (!params.exprs().isEmpty()) {
+                Expr conditionExpr = params.exprs().get(params.exprs().size() - 1);
+                if (!Type.canCastTo(conditionExpr.getType(), Type.BOOLEAN)) {
+                    throw new SemanticException(String.format(
+                        "The condition expression in %s function must be boolean type or castable to boolean, but got %s",
+                        fnName.getFunction(), conditionExpr.getType().toSql()), functionCallExpr.getPos());
+                }
+            }
+            
             FunctionParams functionParamsWithOutIf =
                     new FunctionParams(params.isStar(), params.exprs().subList(0, params.exprs().size() - 1),
                             params.getExprsNames() == null ? null :
@@ -873,7 +915,7 @@ public class FunctionAnalyzer {
             Type returnType = Type.INT;
             if (targetType.isNull()) {
                 targetType = Type.INT;
-            } else {      
+            } else {
                 for (int i = 1; i < argumentTypes.length; i++) {
                     if (argumentTypes[i].isNull()) {
                         //do nothing
@@ -1068,6 +1110,12 @@ public class FunctionAnalyzer {
             ((AggregateFunction) fn).setNullsFirst(nullsFirst);
             boolean outputConst = true;
             if (fnName.equals(FunctionSet.ARRAY_AGG)) {
+                // Check if the first argument is DECIMAL256 type and disable array_agg for it
+                if (argsTypes.length != 0 && argsTypes[0].isArrayType() &&
+                        ((ArrayType) argsTypes[0]).getItemType().isDecimal256()) {
+                    throw new SemanticException("Array function 'array_agg' is not supported for DECIMAL256 type");
+                }
+
                 fn.setRetType(new ArrayType(argsTypes[0]));     // return null if scalar agg with empty input
                 outputConst = argumentIsConstants[0];
             } else {
@@ -1100,10 +1148,7 @@ public class FunctionAnalyzer {
                 newFn.setisAnalyticFn(((AggregateFunction) fn).isAnalyticFn());
                 fn = newFn;
             }
-        } else if (fnName.endsWith(FunctionSet.AGG_STATE_SUFFIX)
-                || fnName.endsWith(FunctionSet.AGG_STATE_UNION_SUFFIX)
-                || fnName.endsWith(FunctionSet.AGG_STATE_MERGE_SUFFIX)
-                || fnName.endsWith(FunctionSet.IF)) {
+        } else if (AggStateUtils.isAggStateCombinator(fnName)) {
             Function func = Expr.getBuiltinFunction(fnName, argumentTypes, Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
             if (func == null) {
                 return null;

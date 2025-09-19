@@ -15,8 +15,7 @@
 
 package com.starrocks.sql.ast;
 
-import com.starrocks.analysis.RedirectStatus;
-import com.starrocks.analysis.TableName;
+import com.starrocks.sql.ast.expression.TableName;
 import com.starrocks.sql.parser.NodePosition;
 
 public class DropStatsStmt extends StatementBase {
@@ -52,11 +51,6 @@ public class DropStatsStmt extends StatementBase {
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitDropStatsStatement(this, context);
-    }
-
-    @Override
-    public RedirectStatus getRedirectStatus() {
-        return RedirectStatus.FORWARD_WITH_SYNC;
+        return ((AstVisitorExtendInterface<R, C>) visitor).visitDropStatsStatement(this, context);
     }
 }

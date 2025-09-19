@@ -35,9 +35,7 @@
 package com.starrocks.alter;
 
 import com.google.common.collect.Lists;
-import com.google.common.collect.Maps;
 import com.starrocks.alter.AlterJobV2.JobState;
-import com.starrocks.analysis.TableName;
 import com.starrocks.backup.CatalogMocker;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.DynamicPartitionProperty;
@@ -54,9 +52,7 @@ import com.starrocks.catalog.Partition.PartitionState;
 import com.starrocks.catalog.Replica;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.DdlException;
-import com.starrocks.common.SchemaVersionAndHash;
 import com.starrocks.common.StarRocksException;
-import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.common.util.ThreadUtil;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.LocalMetastore;
@@ -67,6 +63,7 @@ import com.starrocks.sql.ast.AlterClause;
 import com.starrocks.sql.ast.AlterTableStmt;
 import com.starrocks.sql.ast.ModifyTablePropertiesClause;
 import com.starrocks.sql.ast.ReorderColumnsClause;
+import com.starrocks.sql.ast.expression.TableName;
 import com.starrocks.utframe.MockedWarehouseManager;
 import com.starrocks.utframe.UtFrameUtils;
 import com.starrocks.warehouse.cngroup.ComputeResource;
@@ -80,12 +77,6 @@ import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
-import java.io.DataInputStream;
-import java.io.DataOutputStream;
-import java.io.File;
-import java.io.FileInputStream;
-import java.io.FileOutputStream;
-import java.io.IOException;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -371,39 +362,6 @@ public class SchemaChangeJobV2Test extends DDLTestBase {
         //                DynamicPartitionProperty.ENABLE);
         //        modifyDynamicPartitionWithoutTableProperty(DynamicPartitionProperty.BUCKETS, "30",
         //                    DynamicPartitionProperty.ENABLE);
-    }
-
-    @Test
-    public void testSerializeOfSchemaChangeJob() throws IOException {
-        // prepare file
-        File file = new File(TEST_FILE_NAME);
-        file.createNewFile();
-        file.deleteOnExit();
-        DataOutputStream out = new DataOutputStream(new FileOutputStream(file));
-
-        SchemaChangeJobV2 schemaChangeJobV2 = new SchemaChangeJobV2(1, 1, 1, "test", 600000);
-        Deencapsulation.setField(schemaChangeJobV2, "jobState", AlterJobV2.JobState.FINISHED);
-        Map<Long, SchemaVersionAndHash> indexSchemaVersionAndHashMap = Maps.newHashMap();
-        indexSchemaVersionAndHashMap.put(Long.valueOf(1000), new SchemaVersionAndHash(10, 20));
-        Deencapsulation.setField(schemaChangeJobV2, "indexSchemaVersionAndHashMap", indexSchemaVersionAndHashMap);
-
-        // write schema change job
-        schemaChangeJobV2.write(out);
-        out.flush();
-        out.close();
-
-        // read objects from file
-        DataInputStream in = new DataInputStream(new FileInputStream(file));
-        SchemaChangeJobV2 result = (SchemaChangeJobV2) AlterJobV2.read(in);
-        Assertions.assertEquals(1, result.getJobId());
-        Assertions.assertEquals(AlterJobV2.JobState.FINISHED, result.getJobState());
-
-        Assertions.assertNotNull(Deencapsulation.getField(result, "physicalPartitionIndexMap"));
-        Assertions.assertNotNull(Deencapsulation.getField(result, "physicalPartitionIndexTabletMap"));
-
-        Map<Long, SchemaVersionAndHash> map = Deencapsulation.getField(result, "indexSchemaVersionAndHashMap");
-        Assertions.assertEquals(10, map.get(1000L).schemaVersion);
-        Assertions.assertEquals(20, map.get(1000L).schemaHash);
     }
 
     @Test

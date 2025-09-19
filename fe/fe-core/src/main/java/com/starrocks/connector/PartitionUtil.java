@@ -23,15 +23,6 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Range;
 import com.google.common.collect.Sets;
-import com.starrocks.analysis.BoolLiteral;
-import com.starrocks.analysis.DateLiteral;
-import com.starrocks.analysis.Expr;
-import com.starrocks.analysis.FunctionCallExpr;
-import com.starrocks.analysis.IntLiteral;
-import com.starrocks.analysis.LiteralExpr;
-import com.starrocks.analysis.MaxLiteral;
-import com.starrocks.analysis.NullLiteral;
-import com.starrocks.analysis.SlotRef;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.HivePartitionKey;
@@ -50,6 +41,15 @@ import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.iceberg.IcebergPartitionUtils;
 import com.starrocks.planner.PartitionColumnFilter;
 import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.sql.ast.expression.BoolLiteral;
+import com.starrocks.sql.ast.expression.DateLiteral;
+import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.FunctionCallExpr;
+import com.starrocks.sql.ast.expression.IntLiteral;
+import com.starrocks.sql.ast.expression.LiteralExpr;
+import com.starrocks.sql.ast.expression.MaxLiteral;
+import com.starrocks.sql.ast.expression.NullLiteral;
+import com.starrocks.sql.ast.expression.SlotRef;
 import com.starrocks.sql.common.DmlException;
 import com.starrocks.sql.common.PCell;
 import com.starrocks.sql.common.PListCell;
@@ -82,7 +82,6 @@ import java.util.concurrent.Callable;
 import java.util.concurrent.FutureTask;
 import java.util.stream.Collectors;
 
-import static com.starrocks.connector.iceberg.IcebergApiConverter.PARTITION_NULL_VALUE;
 import static org.apache.hadoop.hive.common.FileUtils.escapePathName;
 import static org.apache.hadoop.hive.common.FileUtils.unescapePathName;
 
@@ -815,11 +814,14 @@ public class PartitionUtil {
             }
 
             Class<?> clazz = spec.javaClasses()[i];
-            String value = partitionField.transform().toHumanString(getPartitionValue(partitionData, i, clazz));
+            String value = null;
+            if (getPartitionValue(partitionData, i, clazz) != null) {
+                value = partitionField.transform().toHumanString(getPartitionValue(partitionData, i, clazz));
+            }
 
             // currently starrocks date literal only support local datetime
             org.apache.iceberg.types.Type icebergType = spec.schema().findType(partitionField.sourceId());
-            if (!value.equals(PARTITION_NULL_VALUE) && partitionField.transform().isIdentity() &&
+            if (value != null && partitionField.transform().isIdentity() &&
                     icebergType.equals(Types.TimestampType.withZone())) {
                 value = ChronoUnit.MICROS.addTo(Instant.ofEpochSecond(0).atZone(TimeUtils.getTimeZone().toZoneId()),
                         getPartitionValue(partitionData, i, clazz)).toLocalDateTime().toString();

@@ -572,6 +572,7 @@ struct TColumnAccessPath {
     3: optional list<TColumnAccessPath> children
     4: optional bool from_predicate
     5: optional Types.TTypeDesc type_desc
+    6: optional bool extended
 }
 
 struct TVectorSearchOptions {
@@ -692,6 +693,15 @@ struct TEqJoinCondition {
   3: optional Opcodes.TExprOpcode opcode;
 }
 
+struct TAsofJoinCondition {
+  // left-hand side of the asof condition (probe side)
+  1: required Exprs.TExpr left;
+  // right-hand side of the asof condition (build side)
+  2: required Exprs.TExpr right;
+  // operator for asof join: LT, LE, GT, GE
+  3: required Opcodes.TExprOpcode opcode;
+}
+
 enum TStreamingPreaggregationMode {
   AUTO,
   FORCE_STREAMING,
@@ -717,7 +727,9 @@ enum TJoinOp {
   // on the build side. Those NULLs are considered candidate matches, and therefore could
   // be rejected (ANTI-join), based on the other join conjuncts. This is in contrast
   // to LEFT_ANTI_JOIN where NULLs are not matches and therefore always returned.
-  NULL_AWARE_LEFT_ANTI_JOIN
+  NULL_AWARE_LEFT_ANTI_JOIN,
+  ASOF_INNER_JOIN,
+  ASOF_LEFT_OUTER_JOIN
 }
 
 enum TJoinDistributionMode {
@@ -765,6 +777,10 @@ struct THashJoinNode {
   56: optional bool late_materialization = false
   57: optional bool enable_partition_hash_join = false
   58: optional bool is_skew_join = false
+
+  59: optional map<Types.TSlotId, Exprs.TExpr> common_slot_map
+
+  70: optional TAsofJoinCondition asof_join_condition
 }
 
 struct TMergeJoinNode {
@@ -804,6 +820,7 @@ struct TNestLoopJoinNode {
     3: optional list<Exprs.TExpr> join_conjuncts
     4: optional string sql_join_conjuncts
     5: optional bool interpolate_passthrough = false
+    6: optional map<Types.TSlotId, Exprs.TExpr> common_slot_map
 }
 
 enum TAggregationOp {
@@ -876,6 +893,9 @@ struct TAggregationNode {
   29: optional bool enable_pipeline_share_limit = false
 
   30: optional list<RuntimeFilter.TRuntimeFilterDescription> build_runtime_filters
+
+  31: optional list<Exprs.TExpr> group_by_min_max
+
 }
 
 struct TRepeatNode {
@@ -1249,7 +1269,8 @@ struct TMetaScanNode {
     // column id to column name
     1: optional map<i32, string> id_to_names
     2: optional list<Descriptors.TColumn> columns
-    3: optional i32 low_cardinality_threshold;
+    3: optional i32 low_cardinality_threshold
+    4: optional list<TColumnAccessPath> column_access_paths
 }
 
 struct TDecodeNode {

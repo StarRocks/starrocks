@@ -15,8 +15,11 @@
 package com.starrocks.lake;
 
 import com.starrocks.lake.compaction.CompactionTxnCommitAttachment;
+import com.starrocks.proto.PUniqueId;
 import com.starrocks.proto.TxnInfoPB;
 import com.starrocks.transaction.TransactionState;
+
+import java.util.stream.Collectors;
 
 public class TxnInfoHelper {
     public static TxnInfoPB fromTransactionState(TransactionState state) {
@@ -34,6 +37,18 @@ public class TxnInfoHelper {
             infoPB.forcePublish = false;
         }
         infoPB.setGtid(state.getGlobalTransactionId());
+        // set load ids
+        if (state.getLoadIds() != null && state.getSourceType() == TransactionState.LoadJobSourceType.INSERT_STREAMING) {
+            infoPB.setLoadIds(state.getLoadIds().stream()
+                    .map(tUniqueId -> {
+                        PUniqueId pUniqueId = new PUniqueId();
+                        pUniqueId.setHi(tUniqueId.getHi());
+                        pUniqueId.setLo(tUniqueId.getLo());
+                        return pUniqueId;
+                    })
+                    .collect(Collectors.toList()));
+        }
+
         return infoPB;
     }
 }

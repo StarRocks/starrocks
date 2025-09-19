@@ -34,19 +34,13 @@
 
 package com.starrocks.catalog;
 
-import com.starrocks.analysis.TypeDef;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.FeConstants;
 import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.sql.ast.expression.TypeDef;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-
-import java.io.DataInputStream;
-import java.io.DataOutputStream;
-import java.io.File;
-import java.io.FileInputStream;
-import java.io.FileOutputStream;
 
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
@@ -161,44 +155,5 @@ public class ColumnTypeTest {
             TypeDef type = TypeDef.createDecimal(8, 9);
             type.analyze();
         });
-    }
-
-    @Test
-    public void testSerialization() throws Exception {
-        // 1. Write objects to file
-        File file = new File("./columnType");
-        file.createNewFile();
-        DataOutputStream dos = new DataOutputStream(new FileOutputStream(file));
-
-        ScalarType type1 = Type.NULL;
-        ColumnType.write(dos, type1);
-
-        ScalarType type2 = ScalarType.createType(PrimitiveType.BIGINT);
-        ColumnType.write(dos, type2);
-
-        ScalarType type3 = ScalarType.createDecimalV2Type(1, 1);
-        ColumnType.write(dos, type3);
-
-        ScalarType type4 = ScalarType.createDecimalV2Type(1, 1);
-        ColumnType.write(dos, type4);
-
-        // 2. Read objects from file
-        DataInputStream dis = new DataInputStream(new FileInputStream(file));
-        Type rType1 = ColumnType.read(dis);
-        Assertions.assertTrue(rType1.equals(type1));
-
-        Type rType2 = ColumnType.read(dis);
-        Assertions.assertTrue(rType2.equals(type2));
-
-        Type rType3 = ColumnType.read(dis);
-
-        // Change it when remove DecimalV2
-        Assertions.assertTrue(rType3.equals(type3) || rType3.equals(type4));
-
-        Assertions.assertFalse(type1.equals(this));
-
-        // 3. delete files
-        dis.close();
-        file.delete();
     }
 }

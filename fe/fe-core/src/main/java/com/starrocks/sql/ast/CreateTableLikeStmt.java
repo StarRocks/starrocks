@@ -15,7 +15,7 @@
 
 package com.starrocks.sql.ast;
 
-import com.starrocks.analysis.TableName;
+import com.starrocks.sql.ast.expression.TableName;
 import com.starrocks.sql.parser.NodePosition;
 
 import java.util.Map;
@@ -100,6 +100,6 @@ public class CreateTableLikeStmt extends DdlStmt {
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitCreateTableLikeStatement(this, context);
+        return ((AstVisitorExtendInterface<R, C>) visitor).visitCreateTableLikeStatement(this, context);
     }
 }

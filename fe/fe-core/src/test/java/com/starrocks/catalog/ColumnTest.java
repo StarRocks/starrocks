@@ -34,8 +34,6 @@
 
 package com.starrocks.catalog;
 
-import com.starrocks.analysis.NullLiteral;
-import com.starrocks.analysis.StringLiteral;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.jmockit.Deencapsulation;
@@ -44,16 +42,13 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.ColumnDef;
 import com.starrocks.sql.ast.ColumnDef.DefaultValueDef;
 import com.starrocks.sql.ast.IndexDef.IndexType;
+import com.starrocks.sql.ast.expression.NullLiteral;
+import com.starrocks.sql.ast.expression.StringLiteral;
 import com.starrocks.thrift.TColumn;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
-import java.io.DataInputStream;
-import java.io.DataOutputStream;
-import java.io.File;
-import java.io.FileInputStream;
-import java.io.FileOutputStream;
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.Set;
@@ -76,66 +71,6 @@ public class ColumnTest {
 
         FakeGlobalStateMgr.setGlobalStateMgr(globalStateMgr);
         FakeGlobalStateMgr.setMetaVersion(FeConstants.META_VERSION);
-    }
-
-    @Test
-    public void testSerialization() throws Exception {
-        // 1. Write objects to file
-        File file = new File("./columnTest");
-        file.createNewFile();
-        DataOutputStream dos = new DataOutputStream(new FileOutputStream(file));
-
-        Column column1 = new Column("user",
-                ScalarType.createCharType(20), false, AggregateType.SUM, "", "");
-        column1.write(dos);
-        Column column2 = new Column("age",
-                ScalarType.createType(PrimitiveType.INT), false, AggregateType.REPLACE, "20", "");
-        column2.write(dos);
-
-        Column column3 = new Column("name", Type.BIGINT);
-        column3.setIsKey(true);
-        column3.write(dos);
-
-        Column column4 = new Column("age",
-                ScalarType.createType(PrimitiveType.INT), false, AggregateType.REPLACE, "20",
-                "");
-        column4.write(dos);
-
-        dos.flush();
-        dos.close();
-
-        // 2. Read objects from file
-        DataInputStream dis = new DataInputStream(new FileInputStream(file));
-        Column rColumn1 = Column.read(dis);
-        Assertions.assertEquals("user", rColumn1.getName());
-        Assertions.assertEquals(PrimitiveType.CHAR, rColumn1.getPrimitiveType());
-        Assertions.assertEquals(AggregateType.SUM, rColumn1.getAggregationType());
-        Assertions.assertEquals("", rColumn1.getDefaultValue());
-        Assertions.assertEquals(0, rColumn1.getScale());
-        Assertions.assertEquals(0, rColumn1.getPrecision());
-        Assertions.assertEquals(20, rColumn1.getStrLen());
-        Assertions.assertFalse(rColumn1.isAllowNull());
-
-        // 3. Test read()
-        Column rColumn2 = Column.read(dis);
-        Assertions.assertEquals("age", rColumn2.getName());
-        Assertions.assertEquals(PrimitiveType.INT, rColumn2.getPrimitiveType());
-        Assertions.assertEquals(AggregateType.REPLACE, rColumn2.getAggregationType());
-        Assertions.assertEquals("20", rColumn2.getDefaultValue());
-
-        Column rColumn3 = Column.read(dis);
-        Assertions.assertTrue(rColumn3.equals(column3));
-
-        Column rColumn4 = Column.read(dis);
-        Assertions.assertTrue(rColumn4.equals(column4));
-
-        Assertions.assertEquals(rColumn2.toString(), column2.toString());
-        Assertions.assertTrue(column1.equals(column1));
-        Assertions.assertFalse(column1.equals(this));
-
-        // 4. delete files
-        dis.close();
-        file.delete();
     }
 
     @Test

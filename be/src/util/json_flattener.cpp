@@ -45,6 +45,7 @@
 #include "exprs/column_ref.h"
 #include "exprs/expr_context.h"
 #include "gutil/casts.h"
+#include "gutil/strings/split.h"
 #include "runtime/types.h"
 #include "storage/rowset/column_reader.h"
 #include "types/logical_type.h"
@@ -86,9 +87,8 @@ void extract_bool(const vpack::Slice* json, NullableColumn* result) {
         if (json->isNone() || json->isNull()) {
             result->append_nulls(1);
         } else if (json->isBool()) {
-            result->null_column()->append(0);
             auto res = json->getBool();
-            down_cast<RunTimeColumnType<TYPE_BOOLEAN>*>(result->data_column().get())->append(res);
+            result->append_datum(res);
         } else if (json->isString()) {
             vpack::ValueLength len;
             const char* str = json->getStringUnchecked(len);
@@ -99,15 +99,14 @@ void extract_bool(const vpack::Slice* json, NullableColumn* result) {
                 if (parseResult != StringParser::PARSE_SUCCESS) {
                     result->append_nulls(1);
                 } else {
-                    down_cast<RunTimeColumnType<TYPE_BOOLEAN>*>(result->data_column().get())->append(b);
+                    result->append_datum(b);
                 }
             } else {
-                down_cast<RunTimeColumnType<TYPE_BOOLEAN>*>(result->data_column().get())->append(r != 0);
+                result->append_datum(r != 0);
             }
         } else if (json->isNumber()) {
-            result->null_column()->append(0);
             auto res = json->getNumber<double>();
-            down_cast<RunTimeColumnType<TYPE_BOOLEAN>*>(result->data_column().get())->append(res != 0);
+            result->append_datum(res != 0);
         } else {
             result->append_nulls(1);
         }
@@ -152,12 +151,13 @@ void merge_number(vpack::Builder* builder, const std::string_view& name, const C
     DCHECK(src->is_nullable());
     auto* nullable_column = down_cast<const NullableColumn*>(src);
     auto* col = down_cast<const RunTimeColumnType<TYPE>*>(nullable_column->data_column().get());
+    const auto data = col->immutable_data().data();
 
     if constexpr (TYPE == LogicalType::TYPE_LARGEINT) {
         // the value is from json, must be uint64_t
-        builder->addUnchecked(name.data(), name.size(), vpack::Value((uint64_t)col->get_data()[idx]));
+        builder->addUnchecked(name.data(), name.size(), vpack::Value((uint64_t)data[idx]));
     } else {
-        builder->addUnchecked(name.data(), name.size(), vpack::Value(col->get_data()[idx]));
+        builder->addUnchecked(name.data(), name.size(), vpack::Value(data[idx]));
     }
 }
 
@@ -826,6 +826,8 @@ bool JsonFlattener::_flatten_json(const vpack::Slice& value, const JsonFlatPath*
             DCHECK(_flat_columns.size() > index);
             DCHECK(_flat_columns[index]->is_nullable());
             auto* c = down_cast<NullableColumn*>(_flat_columns[index].get());
+            DCHECK(flat_json::JSON_EXTRACT_FUNC.contains(child->second->type))
+                    << "unsupported json type: " << child->second->type;
             auto func = flat_json::JSON_EXTRACT_FUNC.at(child->second->type);
             func(&v, c);
             *hit_count += 1;

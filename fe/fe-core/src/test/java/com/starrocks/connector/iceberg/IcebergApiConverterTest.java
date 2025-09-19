@@ -18,7 +18,6 @@ package com.starrocks.connector.iceberg;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
-import com.starrocks.analysis.Expr;
 import com.starrocks.catalog.ArrayType;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.MapType;
@@ -31,10 +30,14 @@ import com.starrocks.connector.hive.RemoteFileInputFormat;
 import com.starrocks.persist.ColumnIdExpr;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.ListPartitionDesc;
+import com.starrocks.sql.ast.OrderByElement;
+import com.starrocks.sql.ast.expression.Expr;
 import org.apache.iceberg.DataFiles;
 import org.apache.iceberg.FileFormat;
 import org.apache.iceberg.PartitionSpec;
 import org.apache.iceberg.Schema;
+import org.apache.iceberg.SortField;
+import org.apache.iceberg.SortOrder;
 import org.apache.iceberg.catalog.Namespace;
 import org.apache.iceberg.types.Types;
 import org.junit.jupiter.api.Test;
@@ -482,7 +485,7 @@ public class IcebergApiConverterTest {
                 "Unsupported partition definition");
     }
 
-    @Test 
+    @Test
     public void testIcebergColumnType() {
         org.apache.iceberg.types.Type type;
         type = IcebergApiConverter.toIcebergColumnType(ScalarType.createType(PrimitiveType.INT));
@@ -510,4 +513,27 @@ public class IcebergApiConverterTest {
         type = IcebergApiConverter.toIcebergColumnType(ScalarType.createType(PrimitiveType.VARBINARY));
         assertEquals(org.apache.iceberg.types.Type.TypeID.BINARY, type.typeId());
     }
+
+    @Test
+    public void testToIcebergSortOrder() {
+        List<Types.NestedField> fields = Lists.newArrayList();
+        fields.add(Types.NestedField.optional(1, "id", new Types.IntegerType()));
+        fields.add(Types.NestedField.optional(2, "dt", new Types.DateType()));
+        fields.add(Types.NestedField.optional(3, "data", new Types.StringType()));
+        Schema schema = new Schema(fields);
+
+        SortOrder nullSortOrder = IcebergApiConverter.toIcebergSortOrder(schema, null);
+        assertEquals(nullSortOrder, null);
+
+        List<OrderByElement> orderByElements = new ArrayList<>();
+        Expr expr1 = ColumnIdExpr.fromSql("id").getExpr();
+        orderByElements.add(new OrderByElement(expr1, true, true));
+        Expr expr2 = ColumnIdExpr.fromSql("dt").getExpr();
+        orderByElements.add(new OrderByElement(expr2, false, false));
+
+        SortOrder sortOrder = IcebergApiConverter.toIcebergSortOrder(schema, orderByElements);
+        List<SortField> sortFields = sortOrder.fields();
+        assertEquals(sortFields.size(), 2);
+    }
+
 }

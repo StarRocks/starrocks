@@ -16,17 +16,11 @@
 package com.starrocks.sql.ast;
 
 import com.google.common.collect.ImmutableSet;
-import com.starrocks.analysis.Expr;
-import com.starrocks.analysis.LimitElement;
-import com.starrocks.analysis.OrderByElement;
-import com.starrocks.analysis.TableName;
-import com.starrocks.catalog.Column;
-import com.starrocks.catalog.ScalarType;
-import com.starrocks.common.AnalysisException;
 import com.starrocks.common.proc.ProcNodeInterface;
-import com.starrocks.common.proc.ProcResult;
 import com.starrocks.common.util.OrderByPair;
-import com.starrocks.qe.ShowResultSetMetaData;
+import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.LimitElement;
+import com.starrocks.sql.ast.expression.TableName;
 import com.starrocks.sql.parser.NodePosition;
 
 import java.util.HashMap;
@@ -98,23 +92,6 @@ public class ShowPartitionsStmt extends ShowStmt {
         return node;
     }
 
-    @Override
-    public ShowResultSetMetaData getMetaData() {
-        ShowResultSetMetaData.Builder builder = ShowResultSetMetaData.builder();
-
-        ProcResult result = null;
-        try {
-            result = node.fetchResult();
-        } catch (AnalysisException e) {
-            return builder.build();
-        }
-
-        for (String col : result.getColumnNames()) {
-            builder.addColumn(new Column(col, ScalarType.createVarchar(30)));
-        }
-        return builder.build();
-    }
-
     public TableName getTbl() {
         return tbl;
     }
@@ -153,6 +130,6 @@ public class ShowPartitionsStmt extends ShowStmt {
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitShowPartitionsStatement(this, context);
+        return ((AstVisitorExtendInterface<R, C>) visitor).visitShowPartitionsStatement(this, context);
     }
 }

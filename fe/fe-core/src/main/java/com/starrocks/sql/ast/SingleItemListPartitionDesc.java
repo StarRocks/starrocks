@@ -17,12 +17,10 @@ package com.starrocks.sql.ast;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
-import com.starrocks.analysis.LiteralExpr;
-import com.starrocks.catalog.PartitionType;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.util.PrintableMap;
-import com.starrocks.sql.analyzer.FeNameFormat;
+import com.starrocks.sql.ast.expression.LiteralExpr;
 import com.starrocks.sql.parser.NodePosition;
 
 import java.util.ArrayList;
@@ -52,7 +50,6 @@ public class SingleItemListPartitionDesc extends SinglePartitionDesc {
     public SingleItemListPartitionDesc(boolean ifNotExists, String partitionName, List<String> values,
                                        Map<String, String> properties, NodePosition pos) {
         super(ifNotExists, partitionName, properties, pos);
-        this.type = PartitionType.LIST;
         this.values = values;
     }
 
@@ -71,13 +68,7 @@ public class SingleItemListPartitionDesc extends SinglePartitionDesc {
         return partitionValues;
     }
 
-    public void analyze(List<ColumnDef> columnDefList, Map<String, String> tableProperties) throws AnalysisException {
-        FeNameFormat.checkPartitionName(this.getPartitionName());
-        analyzeProperties(tableProperties, null);
-
-        if (columnDefList.size() != 1) {
-            throw new AnalysisException("Partition column size should be one when use single list partition ");
-        }
+    public void setColumnDefList(List<ColumnDef> columnDefList) {
         this.columnDefList = columnDefList;
     }
 

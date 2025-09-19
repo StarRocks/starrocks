@@ -17,13 +17,13 @@ package com.starrocks.sql.ast;
 
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
-import com.starrocks.analysis.Expr;
-import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.BaseTableInfo;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Index;
 import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.PartitionType;
+import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.TableName;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.sql.plan.ExecPlan;
@@ -62,7 +62,12 @@ public class CreateMaterializedViewStatement extends DdlStmt {
     private DistributionDesc distributionDesc;
     private final int queryStartIndex;
     private final int queryStopIndex;
-    private final List<String> sortKeys;
+    // It saves the original sort order elements parsing from the order by clause.
+    // Because other sort properties, such as sort-direction and null-orders, are not supported in materialized view now.
+    // We extract its sort columns to `sortKeys` in analyze phase and use the `sortKeys` instead of it in most places.
+    private final List<OrderByElement> orderByElements;
+    // It will be set based on `orderByElements` in analyze
+    private List<String> sortKeys;
     private KeysType keysType = KeysType.DUP_KEYS;
     // view definition of the mv which has been rewritten by AstToSQLBuilder#toSQL
     protected String inlineViewDef;
@@ -107,7 +112,8 @@ public class CreateMaterializedViewStatement extends DdlStmt {
                                            String comment,
                                            RefreshSchemeClause refreshSchemeDesc,
                                            List<Expr> partitionByExprs,
-                                           DistributionDesc distributionDesc, List<String> sortKeys,
+                                           DistributionDesc distributionDesc,
+                                           List<OrderByElement> orderByElements,
                                            Map<String, String> properties,
                                            QueryStatement queryStatement,
                                            int queryStartIndex,
@@ -123,7 +129,7 @@ public class CreateMaterializedViewStatement extends DdlStmt {
         this.refreshSchemeDesc = refreshSchemeDesc;
         this.partitionByExprs = partitionByExprs;
         this.distributionDesc = distributionDesc;
-        this.sortKeys = sortKeys;
+        this.orderByElements = orderByElements;
         this.properties = properties;
         this.queryStartIndex = queryStartIndex;
         this.queryStopIndex = queryStopIndex;
@@ -204,6 +210,14 @@ public class CreateMaterializedViewStatement extends DdlStmt {
 
     public DistributionDesc getDistributionDesc() {
         return distributionDesc;
+    }
+
+    public List<OrderByElement> getOrderByElements() {
+        return orderByElements;
+    }
+
+    public void setSortKeys(List<String> sortKeys) {
+        this.sortKeys = sortKeys;
     }
 
     public List<String> getSortKeys() {
@@ -344,6 +358,6 @@ public class CreateMaterializedViewStatement extends DdlStmt {
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitCreateMaterializedViewStatement(this, context);
+        return ((AstVisitorExtendInterface<R, C>) visitor).visitCreateMaterializedViewStatement(this, context);
     }
 }

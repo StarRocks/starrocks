@@ -36,12 +36,10 @@
 
 #include <gtest/gtest.h>
 
-#include "cache/datacache.h"
 #include "cache/lrucache_engine.h"
 #include "cache/object_cache/page_cache.h"
 #include "common/config.h"
 #include "testutil/assert.h"
-#include "util/logging.h"
 
 namespace starrocks {
 
@@ -52,7 +50,7 @@ public:
 
 protected:
     void SetUp() override {
-        CacheOptions opts{.mem_space_size = 10 * 1024 * 1024};
+        MemCacheOptions opts{.mem_space_size = 10 * 1024 * 1024};
         _lru_cache = std::make_shared<LRUCacheEngine>();
         ASSERT_OK(_lru_cache->init(opts));
 
@@ -239,6 +237,13 @@ TEST_F(StarRocksMetricsTest, Normal) {
         ASSERT_TRUE(metric != nullptr);
         ASSERT_STREQ("22", metric->to_string().c_str());
     }
+    {
+        instance->clone_requests_total.increment(23);
+        auto metric = metrics->get_metric("engine_requests_total",
+                                          MetricLabels().add("type", "clone").add("status", "total"));
+        ASSERT_TRUE(metric != nullptr);
+        ASSERT_STREQ("23", metric->to_string().c_str());
+    }
     //  comapction
     {
         instance->base_compaction_deltas_total.increment(30);
@@ -357,6 +362,8 @@ TEST_F(StarRocksMetricsTest, test_metrics_register) {
     assert_threadpool_metrics_register("replicate_snapshot", instance);
     assert_threadpool_metrics_register("load_channel", instance);
     assert_threadpool_metrics_register("merge_commit", instance);
+    assert_threadpool_metrics_register("exec_state_report", instance);
+    assert_threadpool_metrics_register("priority_exec_state_report", instance);
     ASSERT_NE(nullptr, instance->get_metric("load_channel_add_chunks_total"));
     ASSERT_NE(nullptr, instance->get_metric("load_channel_add_chunks_eos_total"));
     ASSERT_NE(nullptr, instance->get_metric("load_channel_add_chunks_duration_us"));
@@ -374,6 +381,10 @@ TEST_F(StarRocksMetricsTest, test_metrics_register) {
     ASSERT_NE(nullptr, instance->get_metric("delta_writer_wait_replica_duration_us"));
     ASSERT_NE(nullptr, instance->get_metric("delta_writer_txn_commit_duration_us"));
     ASSERT_NE(nullptr, instance->get_metric("memtable_finalize_duration_us"));
+    ASSERT_NE(nullptr, instance->get_metric("clone_task_copy_bytes", MetricLabels().add("type", "INTER_NODE")));
+    ASSERT_NE(nullptr, instance->get_metric("clone_task_copy_bytes", MetricLabels().add("type", "INTRA_NODE")));
+    ASSERT_NE(nullptr, instance->get_metric("clone_task_copy_duration_ms", MetricLabels().add("type", "INTER_NODE")));
+    ASSERT_NE(nullptr, instance->get_metric("clone_task_copy_duration_ms", MetricLabels().add("type", "INTRA_NODE")));
 }
 
 } // namespace starrocks

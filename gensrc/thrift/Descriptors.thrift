@@ -187,6 +187,9 @@ enum TSchemaTableType {
 
     SCH_WAREHOUSE_METRICS,
     SCH_WAREHOUSE_QUERIES,
+
+    SCH_DYNAMIC_TABLET_JOBS,
+    SCH_RECYCLEBIN_CATALOGS,
 }
 
 enum THdfsCompression {
@@ -526,6 +529,12 @@ struct TIcebergPartitionInfo {
     4: optional Exprs.TExpr partition_expr
 }
 
+struct TSortOrder {
+    1: optional list<i32> sort_key_idxes
+    2: optional list<bool> is_ascs;
+    3: optional list<bool> is_null_firsts;
+}
+
 struct TIcebergTable {
     // table location
     1: optional string location
@@ -549,6 +558,9 @@ struct TIcebergTable {
     7: optional TIcebergSchema iceberg_equal_delete_schema
 
     8: optional list<TIcebergPartitionInfo> partition_info
+
+    // Iceberg sort order, used to sort data before writing to Iceberg
+    9: optional TSortOrder sort_order
 }
 
 struct THudiTable {

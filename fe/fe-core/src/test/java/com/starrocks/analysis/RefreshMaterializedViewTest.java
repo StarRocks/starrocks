@@ -38,6 +38,7 @@ import com.starrocks.sql.ast.DropPartitionClause;
 import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.RefreshMaterializedViewStatement;
 import com.starrocks.sql.ast.TruncateTableStmt;
+import com.starrocks.sql.ast.expression.TableName;
 import com.starrocks.sql.common.PListCell;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MVTestBase;
 import com.starrocks.sql.plan.ExecPlan;
@@ -316,10 +317,10 @@ public class RefreshMaterializedViewTest extends MVTestBase {
         } else {
             // publish version is async, so version update may be late
             // for debug
-            System.out.println("p1 visible version:" + p1.getDefaultPhysicalPartition().getVisibleVersion());
-            System.out.println("p2 visible version:" + p2.getDefaultPhysicalPartition().getVisibleVersion());
-            System.out.println("mv1 refresh context" + mv1.getRefreshScheme().getAsyncRefreshContext());
-            System.out.println("mv2 refresh context" + mv2.getRefreshScheme().getAsyncRefreshContext());
+            logSysInfo("p1 visible version:" + p1.getDefaultPhysicalPartition().getVisibleVersion());
+            logSysInfo("p2 visible version:" + p2.getDefaultPhysicalPartition().getVisibleVersion());
+            logSysInfo("mv1 refresh context" + mv1.getRefreshScheme().getAsyncRefreshContext());
+            logSysInfo("mv2 refresh context" + mv2.getRefreshScheme().getAsyncRefreshContext());
         }
     }
 
@@ -1181,7 +1182,7 @@ public class RefreshMaterializedViewTest extends MVTestBase {
                 Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
                 MaterializedView mv =
                         (MaterializedView) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "mv1");
-                System.out.println(mv.getPartitionNames());
+                logSysInfo(mv.getPartitionNames());
             });
         }
         starRocksAssert.dropTable("t1");
@@ -1233,7 +1234,7 @@ public class RefreshMaterializedViewTest extends MVTestBase {
                 MaterializedView mv =
                         (MaterializedView) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "mv1");
                 Assertions.assertEquals(2, mv.getPartitionExprMaps().size());
-                System.out.println(mv.getPartitionNames());
+                logSysInfo(mv.getPartitionNames());
             });
         }
         starRocksAssert.dropTable("t1");
@@ -1282,9 +1283,9 @@ public class RefreshMaterializedViewTest extends MVTestBase {
                 Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
                 MaterializedView mv =
                         (MaterializedView) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "mv1");
-                System.out.println(mv.getPartitionExprMaps());
+                logSysInfo(mv.getPartitionExprMaps());
                 Assertions.assertEquals(2, mv.getPartitionExprMaps().size());
-                System.out.println(mv.getPartitionNames());
+                logSysInfo(mv.getPartitionNames());
             });
         }
         starRocksAssert.dropTable("t1");

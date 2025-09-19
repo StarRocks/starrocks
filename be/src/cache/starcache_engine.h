@@ -26,7 +26,7 @@ public:
     StarCacheEngine() = default;
     virtual ~StarCacheEngine() override = default;
 
-    Status init(const CacheOptions& options) override;
+    Status init(const DiskCacheOptions& options);
     bool is_initialized() const override { return _initialized.load(std::memory_order_relaxed); }
 
     Status write(const std::string& key, const IOBuffer& buffer, WriteCacheOptions* options) override;
@@ -50,6 +50,8 @@ public:
     Status update_mem_quota(size_t quota_bytes, bool flush_to_disk) override;
 
     Status update_disk_spaces(const std::vector<DirSpace>& spaces) override;
+
+    Status update_inline_cache_count_limit(int32_t limit) override;
 
     const StarCacheMetrics starcache_metrics(int level) const;
 

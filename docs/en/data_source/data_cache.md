@@ -197,6 +197,20 @@ SET GLOBAL enable_file_metacache=true;
 >
 > Footer Cache uses the memory module of the Data Cache for data caching. Therefore, you must ensure that the BE parameter `datacache_enable` is set to `true` and configure a reasonable value for `datacache_mem_size`.
 
+## Page Cache
+
+In addition to caching data from files in remote storage during queries against data lakes, StarRocks also supports caching decompressed Parquet page data. Page Cache stores decompressed Parquet page data in memory. When the same page is accessed in subsequent queries, the data can be obtained directly from the cache, avoiding repetitive I/O operations and decompression.
+
+You can enable Page Cache by setting the following system variable:
+
+```SQL
+SET GLOBAL enable_file_pagecache=true;
+```
+
+> **NOTE**
+>
+> Page Cache uses the memory module of the Data Cache for data caching. Therefore, you must ensure that the BE parameter `datacache_enable` is set to `true` and configure a reasonable value for `datacache_mem_size`.
+
 ## I/O Adaptor
 
 To prevent significant tail latency in disk access due to high cache disk I/O load, which can lead to negative optimization of the cache system, Data Cache provides the I/O adaptor feature. This feature routes some cache requests to remote storage when disk load is high, utilizing both local cache and remote storage to improve I/O throughput. This feature is enabled by default.

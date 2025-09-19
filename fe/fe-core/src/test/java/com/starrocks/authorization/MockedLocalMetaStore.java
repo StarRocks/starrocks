@@ -49,7 +49,7 @@ public class MockedLocalMetaStore extends LocalMetastore {
         Database db = new Database(idGenerator.getNextId(), "db");
         databaseSet.put("db", db);
 
-        Database db1 = new Database(idGenerator.getNextId(), "db3");
+        Database db1 = new Database(idGenerator.getNextId(), "db1");
         databaseSet.put("db1", db1);
 
         Database db3 = new Database(idGenerator.getNextId(), "db3");
@@ -110,6 +110,20 @@ public class MockedLocalMetaStore extends LocalMetastore {
     @Override
     public Table getTable(String dbName, String tblName) {
         return tableMap.get(tblName);
+    }
+
+    @Override
+    public Table getTable(Long dbId, Long tableId) {
+        for (Database database : databaseSet.values()) {
+            if (database.getId() == dbId) {
+                for (Table table : tableMap.values()) {
+                    if (table.getId() == tableId) {
+                        return table;
+                    }
+                }
+            }
+        }
+        return null;
     }
 
     @Override

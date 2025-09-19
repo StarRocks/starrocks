@@ -33,11 +33,31 @@ authentication_ldap_simple_ssl_conn_trust_store_pwd =
 authentication_ldap_simple_bind_base_dn =
 # 添加在 LDAP 对象中标识用户的属性名称。默认：uid。
 authentication_ldap_simple_user_search_attr =
-# 添加用于检索用户的管理员账户的 DN。
+# 添加用于检索用户的 Admin DN。
 authentication_ldap_simple_bind_root_dn =
-# 添加用于检索用户的管理员账户的密码。
+# 添加用于检索用户的 Admin 密码。
 authentication_ldap_simple_bind_root_pwd =
 ```
+
+## DN 匹配机制
+
+自 v3.5.0 起，StarRocks 支持在 LDAP 认证过程中记录和传递用户的 Distinguished Name (DN) 信息，以提供更准确的组解析功能。
+
+### 工作原理
+
+1. **认证阶段**：LDAPAuthProvider 在用户认证成功后会同时记录：
+   - 登录用户名（用于传统组匹配）
+   - 用户的完整 DN（用于基于 DN 的组匹配）
+
+2. **组解析阶段**：LDAPGroupProvider 根据 `ldap_user_search_attr` 参数的配置决定匹配策略：
+   - **如配置了 `ldap_user_search_attr`**，则使用用户名作为组匹配的 Key。
+   - **如未配置 `ldap_user_search_attr`**，则使用 DN 作为组匹配的 Key。
+
+### 适用场景
+
+- **传统 LDAP 环境**：组成员使用简单用户名（如 `cn` 属性）。管理员需配置 `ldap_user_search_attr` 参数。
+- **Microsoft AD 环境**：组成员可能缺少用户名属性，无法配置 `ldap_user_search_attr` 参数，则直接使用 DN 匹配。
+- **混合环境**：支持两种匹配方式的灵活切换。
 
 ## 使用 LDAP 创建用户
 
@@ -76,29 +96,28 @@ LDAP 认证要求客户端将明文密码传递给 StarRocks。有三种方式�
 mysql -utom -P8030 -h127.0.0.1 -p --default-auth mysql_clear_password --enable-cleartext-plugin
 ```
 
-### 从 JDBC 客户端连接 LDAP
+### 从 JDBC/ODBC 客户端连接 LDAP
 
 - **JDBC**
 
-由于 JDBC 的默认 MysqlClearPasswordPlugin 需要 SSL 传输，因此需要自定义插件。
+注意：使用JDBC链接时，Server 端必须要启用 SSL。SSL 配置请参考 [SSL 认证](../ssl_authentication.md)。
+
+JDBC 5：
 
 ```java
-public class MysqlClearPasswordPluginWithoutSSL extends MysqlClearPasswordPlugin {
-    @Override  
-    public boolean requiresConfidentiality() {
-        return false;
-    }
-}
+Properties properties = new Properties();
+properties.put("authenticationPlugins", "com.mysql.jdbc.authentication.MysqlClearPasswordPlugin");
+properties.put("defaultAuthenticationPlugin", "com.mysql.jdbc.authentication.MysqlClearPasswordPlugin");
+properties.put("disabledAuthenticationPlugins", "com.mysql.jdbc.authentication.MysqlNativePasswordPlugin");
 ```
 
-连接后，将自定义插件配置到属性中。
+JDBC 8：
 
 ```java
-...
-Properties properties = new Properties();// 将 xxx.xxx.xxx 替换为您的包名
-properties.put("authenticationPlugins", "xxx.xxx.xxx.MysqlClearPasswordPluginWithoutSSL");
-properties.put("defaultAuthenticationPlugin", "xxx.xxx.xxx.MysqlClearPasswordPluginWithoutSSL");
-properties.put("disabledAuthenticationPlugins", "com.mysql.jdbc.authentication.MysqlNativePasswordPlugin");DriverManager.getConnection(url, properties);
+Properties properties = new Properties();
+properties.put("authenticationPlugins", "com.mysql.cj.protocol.a.authentication.MysqlClearPasswordPlugin");
+properties.put("defaultAuthenticationPlugin", "com.mysql.cj.protocol.a.authentication.MysqlClearPasswordPlugin");
+properties.put("disabledAuthenticationPlugins", "com.mysql.cj.protocol.a.authentication.MysqlNativePasswordPlugin");
 ```
 
 - **ODBC**

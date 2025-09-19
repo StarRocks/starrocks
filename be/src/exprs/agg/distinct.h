@@ -16,18 +16,15 @@
 
 #include <algorithm>
 #include <cstring>
-#include <limits>
 #include <string>
-#include <type_traits>
 
 #include "column/array_column.h"
 #include "column/binary_column.h"
 #include "column/column_helper.h"
-#include "column/fixed_length_column.h"
 #include "column/hash_set.h"
 #include "column/type_traits.h"
 #include "column/vectorized_fwd.h"
-#include "exec/aggregator.h"
+#include "exec/aggregator_fwd.h"
 #include "exprs/agg/aggregate.h"
 #include "exprs/agg/aggregate_state_allocator.h"
 #include "exprs/agg/sum.h"
@@ -36,7 +33,6 @@
 #include "glog/logging.h"
 #include "gutil/casts.h"
 #include "runtime/mem_pool.h"
-#include "runtime/memory/counting_allocator.h"
 #include "thrift/protocol/TJSONProtocol.h"
 #include "util/phmap/phmap_dump.h"
 #include "util/slice.h"
@@ -110,7 +106,7 @@ struct AdaptiveSliceHashSet {
     AdaptiveSliceHashSet() { set = std::make_shared<SliceHashSetWithAggStateAllocator>(); }
 
     void try_convert_to_two_level(MemPool* mem_pool) {
-        if (distinct_size % 65536 == 0 && mem_pool->total_allocated_bytes() >= Aggregator::two_level_memory_threshold) {
+        if (distinct_size % 65536 == 0 && mem_pool->total_allocated_bytes() >= agg::two_level_memory_threshold) {
             two_level_set = std::make_shared<SliceTwoLevelHashSetWithAggStateAllocator>();
             two_level_set->reserve(set->capacity());
             two_level_set->insert(set->begin(), set->end());
@@ -369,7 +365,8 @@ public:
         if constexpr (IsSlice<T>) {
             this->data(state).update(ctx->mem_pool(), column->get_slice(row_num));
         } else {
-            this->data(state).update(column->get_data()[row_num]);
+            const auto immutable_data = column->immutable_data();
+            this->data(state).update(immutable_data[row_num]);
         }
     }
 
@@ -386,7 +383,7 @@ public:
         };
 
         std::vector<CacheEntry> cache(chunk_size);
-        const auto& container_data = column->get_data();
+        const auto container_data = GetContainer<LT>::get_data(column);
         for (size_t i = 0; i < chunk_size; ++i) {
             size_t hash_value = agg_state.set.hash_function()(container_data[i]);
             cache[i] = CacheEntry{hash_value};
@@ -417,7 +414,7 @@ public:
         };
 
         std::vector<CacheEntry> cache(chunk_size);
-        const auto& container_data = column->get_data();
+        const auto container_data = GetContainer<LT>::get_data(column);
         for (size_t i = 0; i < chunk_size; ++i) {
             AggDataPtr state = states[i] + state_offset;
             auto& agg_state = this->data(state);
@@ -494,7 +491,7 @@ public:
                 old_size += key.size;
                 dst_column->get_offset()[i + 1] = new_size;
             } else {
-                T key = src_column->get_data()[i];
+                T key = src_column->immutable_data()[i];
 
                 size_t new_size = old_size + sizeof(T);
                 bytes.resize(new_size);
@@ -580,7 +577,7 @@ public:
         if (data_column->is_array()) {
             const auto* array_column = down_cast<const ArrayColumn*>(data_column);
             const auto* column = array_column->elements_column().get();
-            const auto& off = array_column->offsets().get_data();
+            const auto off = array_column->offsets().immutable_data();
             const auto* binary_column = down_cast<const BinaryColumn*>(ColumnHelper::get_data_column(column));
             for (auto i = off[row_num]; i < off[row_num + 1]; i++) {
                 if (!column->is_null(i)) {

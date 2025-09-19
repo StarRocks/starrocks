@@ -14,11 +14,8 @@
 
 package com.starrocks.sql.ast;
 
-import com.starrocks.catalog.Column;
-import com.starrocks.catalog.ScalarType;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.proc.StorageVolumeProcNode;
-import com.starrocks.qe.ShowResultSetMetaData;
 import com.starrocks.sql.parser.NodePosition;
 
 import java.util.List;
@@ -26,17 +23,6 @@ import java.util.List;
 public class DescStorageVolumeStmt extends ShowStmt {
     private final String storageVolumeName;
     private StorageVolumeProcNode node;
-
-    private static final ShowResultSetMetaData META_DATA =
-            ShowResultSetMetaData.builder()
-                    .addColumn(new Column("Name", ScalarType.createVarchar(256)))
-                    .addColumn(new Column("Type", ScalarType.createVarchar(20)))
-                    .addColumn(new Column("IsDefault", ScalarType.createVarchar(20)))
-                    .addColumn(new Column("Location", ScalarType.createVarchar(20)))
-                    .addColumn(new Column("Params", ScalarType.createVarchar(256)))
-                    .addColumn(new Column("Enabled", ScalarType.createVarchar(256)))
-                    .addColumn(new Column("Comment", ScalarType.createVarchar(20)))
-                    .build();
 
     public DescStorageVolumeStmt(String storageVolumeName, NodePosition pos) {
         super(pos);
@@ -53,13 +39,8 @@ public class DescStorageVolumeStmt extends ShowStmt {
     }
 
     @Override
-    public ShowResultSetMetaData getMetaData() {
-        return META_DATA;
-    }
-
-    @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitDescStorageVolumeStatement(this, context);
+        return ((AstVisitorExtendInterface<R, C>) visitor).visitDescStorageVolumeStatement(this, context);
     }
 
     @Override

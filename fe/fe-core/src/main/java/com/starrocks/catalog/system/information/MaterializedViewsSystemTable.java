@@ -16,6 +16,7 @@ package com.starrocks.catalog.system.information;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
+import com.starrocks.authentication.UserIdentityUtils;
 import com.starrocks.authorization.AccessDeniedException;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
@@ -26,6 +27,7 @@ import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
+import com.starrocks.catalog.UserIdentity;
 import com.starrocks.catalog.system.SystemId;
 import com.starrocks.catalog.system.SystemTable;
 import com.starrocks.common.CaseSensibility;
@@ -37,7 +39,6 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ShowMaterializedViewStatus;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.Authorizer;
-import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
@@ -134,7 +135,7 @@ public class MaterializedViewsSystemTable extends SystemTable {
         final List<ScalarOperator> conjuncts = Utils.extractConjuncts(predicate);
 
         ConnectContext context = Preconditions.checkNotNull(ConnectContext.get(), "not a valid connection");
-        TUserIdentity userIdentity = context.getCurrentUserIdentity().toThrift();
+        TUserIdentity userIdentity = UserIdentityUtils.toThrift(context.getCurrentUserIdentity());
         TGetTablesParams params = new TGetTablesParams();
         params.setCurrent_user_ident(userIdentity);
         params.setDb(context.getDatabase());
@@ -214,7 +215,7 @@ public class MaterializedViewsSystemTable extends SystemTable {
         // database privs should be checked in analysis phrase
         long limit = params.isSetLimit() ? params.getLimit() : -1;
         if (params.isSetCurrent_user_ident()) {
-            context.setAuthInfoFromThrift(params.getCurrent_user_ident());
+            UserIdentityUtils.setAuthInfoFromThrift(context, params.getCurrent_user_ident());
         } else {
             UserIdentity currentUser = UserIdentity.createAnalyzedUserIdentWithIp(params.user, params.user_ip);
             context.setCurrentUserIdentity(currentUser);

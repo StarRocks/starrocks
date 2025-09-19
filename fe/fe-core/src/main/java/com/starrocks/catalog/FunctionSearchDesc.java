@@ -35,12 +35,8 @@
 package com.starrocks.catalog;
 
 import com.google.gson.annotations.SerializedName;
-import com.starrocks.analysis.FunctionName;
 import com.starrocks.common.io.Writable;
-
-import java.io.DataInput;
-import java.io.DataOutput;
-import java.io.IOException;
+import com.starrocks.sql.ast.expression.FunctionName;
 
 // Used to search a function
 public class FunctionSearchDesc implements Writable {
@@ -113,31 +109,6 @@ public class FunctionSearchDesc implements Writable {
         return sb.toString();
     }
 
-    @Override
-    public void write(DataOutput out) throws IOException {
-        name.write(out);
-        // write args
-        out.writeShort(argTypes.length);
-        for (Type type : argTypes) {
-            ColumnType.write(out, type);
-        }
-        out.writeBoolean(isVariadic);
-    }
 
-    public void readFields(DataInput in) throws IOException {
-        name = FunctionName.read(in);
-        // read args
-        argTypes = new Type[in.readShort()];
-        for (int i = 0; i < argTypes.length; ++i) {
-            argTypes[i] = ColumnType.read(in);
-        }
-        // read variadic
-        isVariadic = in.readBoolean();
-    }
 
-    public static FunctionSearchDesc read(DataInput input) throws IOException {
-        FunctionSearchDesc function = new FunctionSearchDesc();
-        function.readFields(input);
-        return function;
-    }
 }

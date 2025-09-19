@@ -40,9 +40,6 @@ import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
 import com.starrocks.alter.AlterJobV2;
-import com.starrocks.analysis.FunctionName;
-import com.starrocks.analysis.TableName;
-import com.starrocks.analysis.TypeDef;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Function;
@@ -76,8 +73,8 @@ import com.starrocks.qe.DDLStmtExecutor;
 import com.starrocks.qe.ShowExecutor;
 import com.starrocks.qe.ShowResultSet;
 import com.starrocks.qe.StmtExecutor;
+import com.starrocks.scheduler.MVTaskRunProcessor;
 import com.starrocks.scheduler.MvTaskRunContext;
-import com.starrocks.scheduler.PartitionBasedMvRefreshProcessor;
 import com.starrocks.scheduler.Task;
 import com.starrocks.scheduler.TaskBuilder;
 import com.starrocks.scheduler.TaskManager;
@@ -123,6 +120,9 @@ import com.starrocks.sql.ast.ShowResourceGroupStmt;
 import com.starrocks.sql.ast.ShowStmt;
 import com.starrocks.sql.ast.ShowTabletStmt;
 import com.starrocks.sql.ast.StatementBase;
+import com.starrocks.sql.ast.expression.FunctionName;
+import com.starrocks.sql.ast.expression.TableName;
+import com.starrocks.sql.ast.expression.TypeDef;
 import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.optimizer.rule.mv.MVUtils;
 import com.starrocks.sql.parser.NodePosition;
@@ -996,7 +996,7 @@ public class StarRocksAssert {
             TaskRun taskRun = TaskRunBuilder.newBuilder(task).properties(taskRunProperties).build();
             taskRun.initStatus(UUIDUtil.genUUID().toString(), System.currentTimeMillis());
             taskRun.executeTaskRun();
-            waitingTaskFinish(taskRun);
+            waitTaskRunFinish(taskRun);
         }
         return this;
     }
@@ -1023,6 +1023,21 @@ public class StarRocksAssert {
         }
         return taskRun == null;
     }
+
+    private void waitTaskRunFinish(TaskRun taskRun) {
+        MVTaskRunProcessor mvTaskRunProcessor = (MVTaskRunProcessor) taskRun.getProcessor();
+        MvTaskRunContext mvContext = mvTaskRunProcessor.getMvTaskRunContext();
+        int retryCount = 0;
+        int maxRetry = 50;
+        while (retryCount < maxRetry) {
+            ThreadUtil.sleepAtLeastIgnoreInterrupts(200L);
+            if (mvContext.getNextPartitionStart() == null && mvContext.getNextPartitionEnd() == null) {
+                break;
+            }
+            retryCount++;
+        }
+    }
+
 
     /**
      * Refresh materialized view asynchronously.
@@ -1055,19 +1070,6 @@ public class StarRocksAssert {
         getCtx().executeSql(sql);
         waitRefreshFinished(mv.getId());
         return this;
-    }
-
-    private void waitingTaskFinish(TaskRun taskRun) {
-        MvTaskRunContext mvContext = ((PartitionBasedMvRefreshProcessor) taskRun.getProcessor()).getMvContext();
-        int retryCount = 0;
-        int maxRetry = 5;
-        while (retryCount < maxRetry) {
-            ThreadUtil.sleepAtLeastIgnoreInterrupts(2000L);
-            if (mvContext.getNextPartitionStart() == null && mvContext.getNextPartitionEnd() == null) {
-                break;
-            }
-            retryCount++;
-        }
     }
 
     public void updateTablePartitionVersion(String dbName, String tableName, long version) {

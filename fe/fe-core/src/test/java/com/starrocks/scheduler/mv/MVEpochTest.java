@@ -17,6 +17,8 @@ package com.starrocks.scheduler.mv;
 
 import com.starrocks.catalog.MvId;
 import com.starrocks.common.io.DataOutputBuffer;
+import com.starrocks.common.io.Text;
+import com.starrocks.persist.gson.GsonUtils;
 import org.junit.jupiter.api.Test;
 
 import java.io.ByteArrayInputStream;
@@ -45,11 +47,11 @@ class MVEpochTest {
 
         assertEquals(MVEpoch.EpochState.COMMITTED, epoch.getState());
         DataOutputBuffer buffer = new DataOutputBuffer(1024);
-        epoch.write(buffer);
+        Text.writeString(buffer, GsonUtils.GSON.toJson(epoch, MVEpoch.class));
         byte[] bytes = buffer.getData();
 
         DataInput input = new DataInputStream(new ByteArrayInputStream(buffer.getData()));
-        MVEpoch deserialized = MVEpoch.read(input);
+        MVEpoch deserialized = GsonUtils.GSON.fromJson(Text.readString(input), MVEpoch.class);
         assertEquals(epoch, deserialized);
     }
 }

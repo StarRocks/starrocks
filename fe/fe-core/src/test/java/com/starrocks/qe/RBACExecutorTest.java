@@ -13,17 +13,15 @@
 // limitations under the License.
 package com.starrocks.qe;
 
-import com.starrocks.analysis.FunctionName;
-import com.starrocks.analysis.InformationFunction;
 import com.starrocks.authentication.AuthenticationMgr;
 import com.starrocks.authorization.AccessDeniedException;
 import com.starrocks.authorization.AuthorizationMgr;
 import com.starrocks.authorization.DefaultAuthorizationProvider;
-import com.starrocks.authorization.GrantType;
 import com.starrocks.authorization.PrivilegeType;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.ScalarFunction;
 import com.starrocks.catalog.Type;
+import com.starrocks.catalog.UserIdentity;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.AuthorizationAnalyzer;
@@ -31,18 +29,15 @@ import com.starrocks.sql.analyzer.Authorizer;
 import com.starrocks.sql.analyzer.CreateFunctionAnalyzer;
 import com.starrocks.sql.ast.CreateFunctionStmt;
 import com.starrocks.sql.ast.CreateUserStmt;
-import com.starrocks.sql.ast.GrantPrivilegeStmt;
-import com.starrocks.sql.ast.GrantRoleStmt;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.SetDefaultRoleStmt;
 import com.starrocks.sql.ast.SetRoleStmt;
 import com.starrocks.sql.ast.ShowFunctionsStmt;
-import com.starrocks.sql.ast.ShowGrantsStmt;
 import com.starrocks.sql.ast.ShowRolesStmt;
 import com.starrocks.sql.ast.ShowUserStmt;
 import com.starrocks.sql.ast.StatementBase;
-import com.starrocks.sql.ast.UserIdentity;
-import com.starrocks.sql.parser.NodePosition;
+import com.starrocks.sql.ast.expression.FunctionName;
+import com.starrocks.sql.ast.expression.InformationFunction;
 import com.starrocks.thrift.TFunctionBinaryType;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
@@ -91,46 +86,6 @@ public class RBACExecutorTest {
             StatementBase stmt = UtFrameUtils.parseStmtWithNewParser(sql, ctx);
             DDLStmtExecutor.execute(stmt, ctx);
         }
-    }
-
-    @Test
-    public void testShowGrants() throws Exception {
-        String sql = "grant all on CATALOG default_catalog to u1";
-        GrantPrivilegeStmt grantPrivilegeStmt = (GrantPrivilegeStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
-        DDLStmtExecutor.execute(grantPrivilegeStmt, ctx);
-
-        ShowGrantsStmt stmt = new ShowGrantsStmt(new UserIdentity("u1", "%"), NodePosition.ZERO);
-
-        ShowResultSet resultSet = ShowExecutor.execute(stmt, ctx);
-        Assertions.assertEquals("[['u1'@'%', default_catalog, GRANT USAGE, CREATE DATABASE, DROP, ALTER " +
-                "ON CATALOG default_catalog TO USER 'u1'@'%']]", resultSet.getResultRows().toString());
-
-        sql = "grant all on CATALOG default_catalog to role r1";
-        grantPrivilegeStmt = (GrantPrivilegeStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
-        DDLStmtExecutor.execute(grantPrivilegeStmt, ctx);
-
-        stmt = new ShowGrantsStmt("r1", GrantType.ROLE, NodePosition.ZERO);
-        resultSet = ShowExecutor.execute(stmt, ctx);
-        Assertions.assertEquals("[[r1, default_catalog, GRANT USAGE, CREATE DATABASE, DROP, ALTER " +
-                "ON CATALOG default_catalog TO ROLE 'r1']]", resultSet.getResultRows().toString());
-
-        sql = "grant r1 to role r0";
-        GrantRoleStmt grantRoleStmt = (GrantRoleStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
-        DDLStmtExecutor.execute(grantRoleStmt, ctx);
-
-        sql = "grant r2 to role r0";
-        grantRoleStmt = (GrantRoleStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
-        DDLStmtExecutor.execute(grantRoleStmt, ctx);
-
-        sql = "grant SELECT on TABLE db.tbl0 to role r0";
-        grantPrivilegeStmt = (GrantPrivilegeStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
-        DDLStmtExecutor.execute(grantPrivilegeStmt, ctx);
-
-        stmt = new ShowGrantsStmt("r0", GrantType.ROLE, NodePosition.ZERO);
-        resultSet = ShowExecutor.execute(stmt, ctx);
-        Assertions.assertEquals("[[r0, null, GRANT 'r1', 'r2' TO ROLE r0]," +
-                        " [r0, default_catalog, GRANT SELECT ON TABLE db.tbl0 TO ROLE 'r0']]",
-                resultSet.getResultRows().toString());
     }
 
     @Test

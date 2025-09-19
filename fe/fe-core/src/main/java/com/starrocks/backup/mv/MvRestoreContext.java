@@ -15,13 +15,13 @@
 package com.starrocks.backup.mv;
 
 import com.google.common.collect.Maps;
-import com.starrocks.analysis.TableName;
 import com.starrocks.backup.AbstractJob;
 import com.starrocks.backup.BackupJobInfo;
 import com.starrocks.backup.BackupMeta;
 import com.starrocks.backup.RestoreJob;
 import com.starrocks.catalog.MvId;
 import com.starrocks.catalog.Table;
+import com.starrocks.sql.ast.expression.TableName;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 

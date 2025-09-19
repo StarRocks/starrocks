@@ -20,6 +20,7 @@
 #include "column/datum_convert.h"
 #include "common/status.h"
 #include "gutil/stl_util.h"
+#include "runtime/exec_env.h"
 #include "storage/aggregate_iterator.h"
 #include "storage/chunk_helper.h"
 #include "storage/column_predicate_rewriter.h"
@@ -238,6 +239,14 @@ Status TabletReader::init_compaction_column_paths(const TabletReaderParams& read
         if (readers.size() == num_readers) {
             // must all be flat json type
             JsonPathDeriver deriver;
+
+            if (auto metadata = _tablet_mgr->get_latest_cached_tablet_metadata(_tablet_metadata->id());
+                metadata && metadata->has_flat_json_config()) {
+                auto flat_json_config = std::make_shared<FlatJsonConfig>();
+                flat_json_config->update(metadata->flat_json_config());
+                deriver.init_flat_json_config(flat_json_config.get());
+            }
+
             deriver.derived(readers);
             auto paths = deriver.flat_paths();
             auto types = deriver.flat_types();
@@ -446,13 +455,7 @@ Status TabletReader::init_delete_predicates(const TabletReaderParams& params, De
 
         ConjunctivePredicates conjunctions;
         for (const auto& cond : conds) {
-            ColumnPredicate* pred = pred_parser.parse_thrift_cond(cond);
-            if (pred == nullptr) {
-                LOG(WARNING) << "failed to parse delete condition.column_name[" << cond.column_name
-                             << "], condition_op[" << cond.condition_op << "], condition_values["
-                             << cond.condition_values[0] << "].";
-                continue;
-            }
+            ASSIGN_OR_RETURN(ColumnPredicate * pred, pred_parser.parse_thrift_cond(cond));
             conjunctions.add(pred);
             // save for memory release.
             _predicate_free_list.emplace_back(pred);
@@ -690,7 +693,7 @@ Status TabletReader::parse_seek_range(const TabletSchema& tablet_schema,
         SeekTuple upper;
         RETURN_IF_ERROR(to_seek_tuple(tablet_schema, range_start_key[i], &lower, mempool));
         RETURN_IF_ERROR(to_seek_tuple(tablet_schema, range_end_key[i], &upper, mempool));
-        ranges->emplace_back(SeekRange{std::move(lower), std::move(upper)});
+        ranges->emplace_back(std::move(lower), std::move(upper));
         ranges->back().set_inclusive_lower(lower_inclusive);
         ranges->back().set_inclusive_upper(upper_inclusive);
     }

@@ -15,19 +15,10 @@
 
 package com.starrocks.sql.ast;
 
-import com.starrocks.catalog.Column;
-import com.starrocks.catalog.ScalarType;
-import com.starrocks.qe.ShowResultSetMetaData;
 import com.starrocks.sql.parser.NodePosition;
 
 // Used to test show executor.
 public class ShowAuthorStmt extends ShowStmt {
-    private static final ShowResultSetMetaData META_DATA =
-            ShowResultSetMetaData.builder()
-                    .addColumn(new Column("Name", ScalarType.createVarchar(30)))
-                    .addColumn(new Column("Location", ScalarType.createVarchar(30)))
-                    .addColumn(new Column("Comment", ScalarType.createVarchar(30)))
-                    .build();
 
     public ShowAuthorStmt() {
         this(NodePosition.ZERO);
@@ -38,12 +29,7 @@ public class ShowAuthorStmt extends ShowStmt {
     }
 
     @Override
-    public ShowResultSetMetaData getMetaData() {
-        return META_DATA;
-    }
-
-    @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitShowAuthorStatement(this, context);
+        return ((AstVisitorExtendInterface<R, C>) visitor).visitShowAuthorStatement(this, context);
     }
 }

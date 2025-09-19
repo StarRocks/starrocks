@@ -36,9 +36,6 @@ package com.starrocks.common.util;
 
 import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
-import com.starrocks.analysis.Expr;
-import com.starrocks.analysis.TimestampArithmeticExpr;
-import com.starrocks.analysis.TimestampArithmeticExpr.TimeUnit;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.DynamicPartitionProperty;
 import com.starrocks.catalog.ExpressionRangePartitionInfoV2;
@@ -60,6 +57,9 @@ import com.starrocks.common.FeConstants;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.FeNameFormat;
 import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.TimestampArithmeticExpr;
+import com.starrocks.sql.ast.expression.TimestampArithmeticExpr.TimeUnit;
 import org.apache.commons.collections4.map.CaseInsensitiveMap;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -433,7 +433,7 @@ public class DynamicPartitionUtil {
         PartitionInfo partitionInfo = olapTable.getPartitionInfo();
         PartitionType partitionType = partitionInfo.getType();
         if (!isDynamicPartitionTable(olapTable, partitionInfo, tableProperty)) {
-            LOG.info("unable to schedule olap table {}-{} because dynamic partition is not enabled, " +
+            LOG.debug("unable to schedule olap table {}-{} because dynamic partition is not enabled, " +
                             "partition type: {}, partition column size: {}",
                     table.getName(), table.getId(), partitionType, partitionInfo.getPartitionColumnsSize());
             return false;
@@ -479,7 +479,7 @@ public class DynamicPartitionUtil {
         PartitionInfo partitionInfo = olapTable.getPartitionInfo();
         PartitionType partitionType = partitionInfo.getType();
         if (!isTTLPartitionTable(olapTable, partitionInfo, tableProperty)) {
-            LOG.info("unable to schedule olap table {}-{} because partition ttl is not enabled, " +
+            LOG.debug("unable to schedule olap table {}-{} because partition ttl is not enabled, " +
                             "partition type: {}, partition column size: {}",
                     table.getName(), table.getId(), partitionType, partitionInfo.getPartitionColumnsSize());
             return false;

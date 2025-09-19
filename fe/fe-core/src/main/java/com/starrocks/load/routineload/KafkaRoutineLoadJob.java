@@ -43,7 +43,6 @@ import com.google.common.collect.Maps;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import com.google.gson.annotations.SerializedName;
-import com.starrocks.analysis.RoutineLoadDataSourceProperties;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
@@ -57,7 +56,6 @@ import com.starrocks.common.LoadException;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.Pair;
 import com.starrocks.common.StarRocksException;
-import com.starrocks.common.io.Text;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.common.util.KafkaUtil;
 import com.starrocks.common.util.LogBuilder;
@@ -69,11 +67,13 @@ import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.load.Load;
 import com.starrocks.load.RoutineLoadDesc;
-import com.starrocks.qe.OriginStatement;
+import com.starrocks.metric.RoutineLoadLagTimeMetricMgr;
+import com.starrocks.persist.OriginStatementInfo;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.ast.CreateRoutineLoadStmt;
+import com.starrocks.sql.ast.expression.RoutineLoadDataSourceProperties;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.transaction.TransactionState;
@@ -82,12 +82,10 @@ import org.apache.commons.lang.StringUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import java.io.DataInput;
-import java.io.DataOutput;
-import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
+import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
@@ -505,6 +503,7 @@ public class KafkaRoutineLoadJob extends RoutineLoadJob {
                 Long.valueOf((totalRows - errorRows - unselectedRows) * 1000 / totalTaskExcutionTimeMs));
         summary.put("committedTaskNum", Long.valueOf(committedTaskNum));
         summary.put("abortedTaskNum", Long.valueOf(abortedTaskNum));
+        summary.put("partitionLagTime", new HashMap<>(getRoutineLoadLagTime()));
         Gson gson = new GsonBuilder().disableHtmlEscaping().create();
         return gson.toJson(summary);
     }
@@ -769,42 +768,10 @@ public class KafkaRoutineLoadJob extends RoutineLoadJob {
         return gson.toJson(maskedProperties);
     }
 
-    @Override
-    public void write(DataOutput out) throws IOException {
-        super.write(out);
-        Text.writeString(out, brokerList);
-        Text.writeString(out, topic);
 
-        out.writeInt(customKafkaPartitions.size());
-        for (Integer partitionId : customKafkaPartitions) {
-            out.writeInt(partitionId);
-        }
 
-        out.writeInt(customProperties.size());
-        for (Map.Entry<String, String> property : customProperties.entrySet()) {
-            Text.writeString(out, "property." + property.getKey());
-            Text.writeString(out, property.getValue());
-        }
-    }
 
-    public void readFields(DataInput in) throws IOException {
-        super.readFields(in);
-        brokerList = Text.readString(in);
-        topic = Text.readString(in);
-        int size = in.readInt();
-        for (int i = 0; i < size; i++) {
-            customKafkaPartitions.add(in.readInt());
-        }
 
-        int count = in.readInt();
-        for (int i = 0; i < count; i++) {
-            String propertyKey = Text.readString(in);
-            String propertyValue = Text.readString(in);
-            if (propertyKey.startsWith("property.")) {
-                this.customProperties.put(propertyKey.substring(propertyKey.indexOf(".") + 1), propertyValue);
-            }
-        }
-    }
 
     /**
      * add extra parameter check for changing kafka offset
@@ -813,7 +780,7 @@ public class KafkaRoutineLoadJob extends RoutineLoadJob {
      */
     @Override
     public void modifyJob(RoutineLoadDesc routineLoadDesc, Map<String, String> jobProperties,
-                          RoutineLoadDataSourceProperties dataSourceProperties, OriginStatement originStatement,
+                          RoutineLoadDataSourceProperties dataSourceProperties, OriginStatementInfo originStatement,
                           boolean isReplay) throws DdlException {
         if (!isReplay && dataSourceProperties != null && dataSourceProperties.hasAnalyzedProperties()) {
             List<Pair<Integer, Long>> kafkaPartitionOffsets = dataSourceProperties.getKafkaPartitionOffsets();
@@ -888,5 +855,65 @@ public class KafkaRoutineLoadJob extends RoutineLoadJob {
             }
         }
         updateSubstate(JobSubstate.STABLE, null);
+    }
+
+    @Override
+    public void afterVisible(TransactionState txnState, boolean txnOperated) {
+        super.afterVisible(txnState, txnOperated);
+        // Update lag time metrics when Kafka transaction becomes visible
+        if (Config.enable_routine_load_lag_time_metrics) {
+            updateLagTimeMetricsFromProgress();
+        }
+    }
+
+    /**
+     * Update lag time metrics using current Kafka progress
+     */
+    private void updateLagTimeMetricsFromProgress() {
+        try {
+            KafkaProgress progress = (KafkaProgress) getTimestampProgress();
+            if (progress == null) {
+                LOG.warn("Progres is null for Kafka job {}:{}", id, name);
+                return;
+            }
+            Map<Integer, Long> partitionTimestamps = progress.getPartitionIdToOffset();
+            Map<Integer, Long> partitionLagTimes = Maps.newHashMap();
+            
+            long now = System.currentTimeMillis();
+            for (Map.Entry<Integer, Long> entry : partitionTimestamps.entrySet()) {
+                int partition = entry.getKey();
+                Long timestampValue = entry.getValue();
+                long lag = 0L;
+                //   Check for clock drift (future timestamps)
+                if (timestampValue > now) {
+                    long clockDrift = timestampValue - now;
+                    LOG.warn("Clock drift detected for job {} ({}) partition {}: " +
+                            "timestamp {}ms is {}ms ahead of current time {}ms. ",
+                            id, name, partition, timestampValue, clockDrift, now);
+                } else {
+                    lag = (now - timestampValue) / 1000; // convert to seconds
+                } 
+                partitionLagTimes.put(partition, lag);
+            }
+            
+            if (!partitionLagTimes.isEmpty()) {
+                RoutineLoadLagTimeMetricMgr.getInstance()
+                        .updateRoutineLoadLagTimeMetric(this.getDbId(), this.getName(), partitionLagTimes);
+            }
+        } catch (Exception e) {
+            LOG.warn("Failed to update lag time metrics for Kafka job {} ({}): {}", id, name, e.getMessage(), e);
+        }
+    }
+
+    private Map<Integer, Long> getRoutineLoadLagTime() {
+        try {
+            RoutineLoadLagTimeMetricMgr metricMgr = RoutineLoadLagTimeMetricMgr.getInstance();
+            Map<Integer, Long> lagTimes = metricMgr.getPartitionLagTimes(this.getDbId(), this.getName());
+            return lagTimes != null ? lagTimes : Maps.newHashMap();
+        } catch (Exception e) {
+            LOG.warn("Failed to get routine load lag time for job {} ({}): {}", id, name, e.getMessage(), e);
+            // Return empty map as fallback
+            return Maps.newHashMap();
+        }
     }
 }

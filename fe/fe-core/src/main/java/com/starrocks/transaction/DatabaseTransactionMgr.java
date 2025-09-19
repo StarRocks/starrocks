@@ -185,7 +185,8 @@ public class DatabaseTransactionMgr {
 
         long tid = globalStateMgr.getGlobalTransactionMgr().getTransactionIDGenerator().getNextTransactionId();
         boolean combinedTxnLog = LakeTableHelper.supportCombinedTxnLog(sourceType);
-        boolean fileBundling = LakeTableHelper.fileBundling(dbId, tableIdList);
+        boolean fileBundling = LakeTableHelper.fileBundling(dbId, tableIdList)
+                && LakeTableHelper.isTransactionSupportCombinedTxnLog(sourceType);
         LOG.info("begin transaction: txn_id: {} with label {} from coordinator {}, listner id: {}",
                 tid, label, coordinator, callbackId);
         TransactionState transactionState = new TransactionState(dbId, tableIdList, tid, label, requestId, sourceType,
@@ -326,6 +327,7 @@ public class DatabaseTransactionMgr {
      * @param tabletCommitInfos tabletCommitInfos
      */
     public void prepareTransaction(long transactionId,
+                                   long preparedTimeoutMs,
                                    List<TabletCommitInfo> tabletCommitInfos,
                                    List<TabletFailInfo> tabletFailInfos,
                                    TxnCommitAttachment txnCommitAttachment,
@@ -405,7 +407,7 @@ public class DatabaseTransactionMgr {
 
                 // update transaction state version
                 transactionState.setTransactionStatus(TransactionStatus.PREPARED);
-                transactionState.setPreparedTime(System.currentTimeMillis());
+                transactionState.setPreparedTimeAndTimeout(System.currentTimeMillis(), preparedTimeoutMs);
 
                 for (TransactionStateListener listener : stateListeners) {
                     listener.preWriteCommitLog(transactionState);
@@ -564,7 +566,8 @@ public class DatabaseTransactionMgr {
                                                 @NotNull List<TabletFailInfo> tabletFailInfos,
                                                 @Nullable TxnCommitAttachment txnCommitAttachment)
             throws StarRocksException {
-        prepareTransaction(transactionId, tabletCommitInfos, tabletFailInfos, txnCommitAttachment, false);
+        prepareTransaction(transactionId, TransactionState.DEFAULT_PREPARED_TIMEOUT_MS,
+                tabletCommitInfos, tabletFailInfos, txnCommitAttachment, false);
         return commitPreparedTransaction(transactionId);
     }
 
@@ -781,6 +784,7 @@ public class DatabaseTransactionMgr {
         info.add(txnState.getTransactionStatus().name());
         info.add(txnState.getSourceType().name());
         info.add(TimeUtils.longToTimeString(txnState.getPrepareTime()));
+        info.add(TimeUtils.longToTimeString(txnState.getPreparedTime()));
         info.add(TimeUtils.longToTimeString(txnState.getCommitTime()));
         info.add(TimeUtils.longToTimeString(txnState.getPublishVersionTime()));
         info.add(TimeUtils.longToTimeString(txnState.getFinishTime()));
@@ -788,6 +792,7 @@ public class DatabaseTransactionMgr {
         info.add(String.valueOf(txnState.getErrorReplicas().size()));
         info.add(String.valueOf(txnState.getCallbackId()));
         info.add(String.valueOf(txnState.getTimeoutMs()));
+        info.add(String.valueOf(txnState.getPreparedTimeoutMs()));
         info.add(txnState.getErrMsg());
     }
 
@@ -943,6 +948,13 @@ public class DatabaseTransactionMgr {
                         states = states.subList(0, Math.max(i, 1));
                         break;
                     }
+                    // Handle replication transaction separately
+                    // e.g. assume there are 4 txns in `states`: <txn_normal_0, txn_rep_0, txn_normal_1, txn_normal_2>
+                    // 3 txn batch will be generated as: <txn_normal_0>, <txn_rep>, <txn_normal_1, txn_normal_2>
+                    if (state.getTransactionType() == TransactionType.TXN_REPLICATION) {
+                        states = states.subList(0, Math.max(i, 1));
+                        break;
+                    }
                     Map<Long, PartitionCommitInfo> partitionInfoMap = tableInfo.getIdToPartitionCommitInfo();
                     for (Map.Entry<Long, PartitionCommitInfo> item : partitionInfoMap.entrySet()) {
                         PartitionCommitInfo currTxnInfo = item.getValue();
@@ -1048,7 +1060,7 @@ public class DatabaseTransactionMgr {
                             // quorum publish will make table unstable
                             // so that we wait quorum_publish_wait_time_ms util all backend publish finish
                             // before quorum publish
-                            if (successHealthyReplicaNum != replicaNum
+                            if (successHealthyReplicaNum < replicaNum
                                     && CollectionUtils.isNotEmpty(unfinishedBackends)
                                     && currentTs
                                     - txn.getCommitTime() < Config.quorum_publish_wait_time_ms) {
@@ -1934,7 +1946,10 @@ public class DatabaseTransactionMgr {
             LOG.debug("replay a transaction state batch{}", transactionStateBatch);
             transactionStateBatch.replaySetTransactionStatus();
             Database db = globalStateMgr.getLocalMetastore().getDb(transactionStateBatch.getDbId());
-            updateCatalogAfterVisibleBatch(transactionStateBatch, db);
+            // db may be dropped when doing finishTransactionBatch
+            if (db != null) {
+                updateCatalogAfterVisibleBatch(transactionStateBatch, db);
+            }
 
             unprotectSetTransactionStateBatch(transactionStateBatch);
         } finally {
@@ -2085,7 +2100,8 @@ public class DatabaseTransactionMgr {
                         if (partition == null) {
                             continue;
                         }
-                        if (partition.getVisibleVersion() + 1 != currTxnInfo.getVersion()) {
+                        if (partition.getVisibleVersion() + 1 != currTxnInfo.getVersion() &&
+                                state.getSourceType() != TransactionState.LoadJobSourceType.REPLICATION) {
                             // should't happen
                             String errMsg =
                                     String.format(

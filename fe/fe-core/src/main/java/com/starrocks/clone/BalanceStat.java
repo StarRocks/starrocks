@@ -14,12 +14,23 @@
 
 package com.starrocks.clone;
 
+import com.google.gson.Gson;
+
+import java.util.Collection;
+import java.util.Map;
+import java.util.Set;
+
 public abstract class BalanceStat {
+    public static final String INTER_NODE = "INTER_NODE";
+    public static final String INTRA_NODE = "INTRA_NODE";
+
     public enum BalanceType {
-        CLUSTER_DISK("cluster disk"),
-        CLUSTER_TABLET("cluster tablet"),
-        BACKEND_DISK("backend disk"),
-        BACKEND_TABLET("backend tablet");
+        INTER_NODE_DISK_USAGE("inter-node disk usage"),
+        INTER_NODE_TABLET_DISTRIBUTION("inter-node tablet distribution"),
+        INTRA_NODE_DISK_USAGE("intra-node disk usage"),
+        INTRA_NODE_TABLET_DISTRIBUTION("intra-node tablet distribution"),
+        COLOCATION_GROUP("colocation group"),
+        LABEL_AWARE_LOCATION("label-aware location");
 
         private final String label;
 
@@ -31,6 +42,8 @@ public abstract class BalanceStat {
             return label;
         }
     }
+
+    private static final Gson GSON = new Gson();
 
     // Singleton instance indicating that everything is balanced
     public static final BalanceStat BALANCED_STAT = new BalancedStat();
@@ -46,6 +59,11 @@ public abstract class BalanceStat {
     }
 
     public abstract BalanceType getBalanceType();
+
+    @Override
+    public String toString() {
+        return GSON.toJson(this);
+    }
 
     // Factory methods for different balance stat types
     public static BalanceStat createClusterDiskBalanceStat(long maxBeId, long minBeId, double maxDiskUsage, double minDiskUsage) {
@@ -65,6 +83,15 @@ public abstract class BalanceStat {
     public static BalanceStat createBackendTabletBalanceStat(long beId, String maxPath, String minPath, long maxTabletCount,
                                                              long minTabletCount) {
         return new BackendTabletBalanceStat(beId, maxPath, minPath, maxTabletCount, minTabletCount);
+    }
+
+    public static BalanceStat createColocationGroupBalanceStat(long tabletId, Set<Long> currentBes, Set<Long> bucketSeq) {
+        return new ColocationGroupBalanceStat(tabletId, currentBes, bucketSeq);
+    }
+
+    public static BalanceStat createLabelLocationBalanceStat(long tabletId, Set<Long> currentBes,
+                                                             Map<String, Collection<String>> expectedLocations) {
+        return new LabelLocationBalanceStat(tabletId, currentBes, expectedLocations);
     }
 
     /**
@@ -119,7 +146,7 @@ public abstract class BalanceStat {
         private double minUsedPercent;
 
         public ClusterDiskBalanceStat(long maxBeId, long minBeId, double maxUsedPercent, double minUsedPercent) {
-            super(BalanceType.CLUSTER_DISK, maxBeId, minBeId);
+            super(BalanceType.INTER_NODE_DISK_USAGE, maxBeId, minBeId);
             this.maxUsedPercent = maxUsedPercent;
             this.minUsedPercent = minUsedPercent;
         }
@@ -133,7 +160,7 @@ public abstract class BalanceStat {
         private long minTabletNum;
 
         public ClusterTabletBalanceStat(long maxBeId, long minBeId, long maxTabletNum, long minTabletNum) {
-            super(BalanceType.CLUSTER_TABLET, maxBeId, minBeId);
+            super(BalanceType.INTER_NODE_TABLET_DISTRIBUTION, maxBeId, minBeId);
             this.maxTabletNum = maxTabletNum;
             this.minTabletNum = minTabletNum;
         }
@@ -163,7 +190,7 @@ public abstract class BalanceStat {
         private double minUsedPercent;
 
         public BackendDiskBalanceStat(long beId, String maxPath, String minPath, double maxUsedPercent, double minUsedPercent) {
-            super(BalanceType.BACKEND_DISK, beId, maxPath, minPath);
+            super(BalanceType.INTRA_NODE_DISK_USAGE, beId, maxPath, minPath);
             this.maxUsedPercent = maxUsedPercent;
             this.minUsedPercent = minUsedPercent;
         }
@@ -177,9 +204,41 @@ public abstract class BalanceStat {
         private long minTabletNum;
 
         public BackendTabletBalanceStat(long beId, String maxPath, String minPath, long maxTabletNum, long minTabletNum) {
-            super(BalanceType.BACKEND_TABLET, beId, maxPath, minPath);
+            super(BalanceType.INTRA_NODE_TABLET_DISTRIBUTION, beId, maxPath, minPath);
             this.maxTabletNum = maxTabletNum;
             this.minTabletNum = minTabletNum;
+        }
+    }
+
+    /**
+     * Balance stat for colocate group bucket seq mismatch
+     */
+    private static class ColocationGroupBalanceStat extends UnbalancedStat {
+        private long tabletId;
+        private Set<Long> currentBes;
+        private Set<Long> expectedBes;
+
+        public ColocationGroupBalanceStat(long tabletId, Set<Long> currentBes, Set<Long> expectedBes) {
+            super(BalanceType.COLOCATION_GROUP);
+            this.tabletId = tabletId;
+            this.currentBes = currentBes;
+            this.expectedBes = expectedBes;
+        }
+    }
+
+    /**
+     * Balance stat for label-aware location mismatch
+     */
+    private static class LabelLocationBalanceStat extends UnbalancedStat {
+        private long tabletId;
+        private Set<Long> currentBes;
+        private Map<String, Collection<String>> expectedLocations;
+
+        public LabelLocationBalanceStat(long tabletId, Set<Long> currentBes, Map<String, Collection<String>> expectedLocations) {
+            super(BalanceType.LABEL_AWARE_LOCATION);
+            this.tabletId = tabletId;
+            this.currentBes = currentBes;
+            this.expectedLocations = expectedLocations;
         }
     }
 }

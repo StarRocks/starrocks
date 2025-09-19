@@ -35,7 +35,8 @@ public class HiveMetadataFactory {
     private final IHiveMetastore metastore;
     private final RemoteFileIO remoteFileIO;
     private final long perQueryMetastoreMaxNum;
-    private final long perQueryCacheRemotePathMaxNum;
+    private final long perQueryCacheRemotePathMaxNum; //deprecated
+    private final double perQueryCacheRemotePathMaxMemoryRatio;
     private final ExecutorService pullRemoteFileExecutor;
     private final Executor updateRemoteFilesExecutor;
     private final Executor updateStatisticsExecutor;
@@ -64,7 +65,8 @@ public class HiveMetadataFactory {
         this.metastore = metastore;
         this.remoteFileIO = remoteFileIO;
         this.perQueryMetastoreMaxNum = hmsConf.getPerQueryCacheMaxNum();
-        this.perQueryCacheRemotePathMaxNum = fileConf.getPerQueryCacheMaxSize();
+        this.perQueryCacheRemotePathMaxNum = fileConf.getPerQueryCacheMaxSize(); // deprecated
+        this.perQueryCacheRemotePathMaxMemoryRatio = 0.0; //It is duplicated with Catalog level CachingRemoteFileIO, set as 0.
         this.pullRemoteFileExecutor = pullRemoteFileExecutor;
         this.updateRemoteFilesExecutor = updateRemoteFilesExecutor;
         this.updateStatisticsExecutor = updateStatisticsExecutor;
@@ -82,7 +84,7 @@ public class HiveMetadataFactory {
                 metastore instanceof CachingHiveMetastore,
                 hdfsEnvironment.getConfiguration(), metastoreType, catalogName);
         RemoteFileOperations remoteFileOperations = new RemoteFileOperations(
-                CachingRemoteFileIO.createQueryLevelInstance(remoteFileIO, perQueryCacheRemotePathMaxNum),
+                CachingRemoteFileIO.createQueryLevelInstance(remoteFileIO, perQueryCacheRemotePathMaxMemoryRatio),
                 pullRemoteFileExecutor,
                 updateRemoteFilesExecutor,
                 isRecursive,

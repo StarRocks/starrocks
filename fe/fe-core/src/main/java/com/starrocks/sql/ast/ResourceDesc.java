@@ -12,16 +12,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.sql.ast;
 
 import com.google.common.collect.Maps;
-import com.starrocks.analysis.ParseNode;
-import com.starrocks.catalog.Resource;
-import com.starrocks.common.AnalysisException;
 import com.starrocks.common.util.PrintableMap;
-import com.starrocks.load.EtlJobType;
-import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.parser.NodePosition;
 
 import java.util.Map;
@@ -39,7 +33,6 @@ import java.util.Map;
 public class ResourceDesc implements ParseNode {
     protected String name;
     protected Map<String, String> properties;
-    protected EtlJobType etlJobType;
 
     protected NodePosition pos;
 
@@ -54,7 +47,6 @@ public class ResourceDesc implements ParseNode {
         if (this.properties == null) {
             this.properties = Maps.newHashMap();
         }
-        this.etlJobType = EtlJobType.UNKNOWN;
     }
 
     public String getName() {
@@ -63,21 +55,6 @@ public class ResourceDesc implements ParseNode {
 
     public Map<String, String> getProperties() {
         return properties;
-    }
-
-    public EtlJobType getEtlJobType() {
-        return etlJobType;
-    }
-
-    public void analyze() throws AnalysisException {
-        // check resource exist or not
-        Resource resource = GlobalStateMgr.getCurrentState().getResourceMgr().getResource(getName());
-        if (resource == null) {
-            throw new AnalysisException("Resource does not exist. name: " + getName());
-        }
-        if (resource.getType() == Resource.ResourceType.SPARK) {
-            etlJobType = EtlJobType.SPARK;
-        }
     }
 
     public String toString() {

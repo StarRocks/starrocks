@@ -14,6 +14,7 @@
 
 package com.starrocks.catalog.system.sys;
 
+import com.starrocks.authentication.UserIdentityUtils;
 import com.starrocks.authorization.AccessDeniedException;
 import com.starrocks.catalog.BaseTableInfo;
 import com.starrocks.catalog.Database;
@@ -28,7 +29,6 @@ import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.Authorizer;
-import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;
 import com.starrocks.thrift.TAuthInfo;
 import com.starrocks.thrift.TObjectDependencyItem;
@@ -69,12 +69,8 @@ public class SysObjectDependencies {
         TAuthInfo auth = req.getAuth_info();
         TObjectDependencyRes response = new TObjectDependencyRes();
 
-        UserIdentity currentUser;
-        if (auth.isSetCurrent_user_ident()) {
-            currentUser = UserIdentity.fromThrift(auth.getCurrent_user_ident());
-        } else {
-            currentUser = UserIdentity.createAnalyzedUserIdentWithIp(auth.getUser(), auth.getUser_ip());
-        }
+        ConnectContext context = new ConnectContext();
+        UserIdentityUtils.setAuthInfoFromThrift(context, auth);
 
         // list dependencies of mv
         Locker locker = new Locker();
@@ -91,9 +87,6 @@ public class SysObjectDependencies {
                     }
                     // Only show tables with privilege
                     try {
-                        ConnectContext context = new ConnectContext();
-                        context.setCurrentUserIdentity(currentUser);
-                        context.setCurrentRoleIds(currentUser);
                         Authorizer.checkAnyActionOnTableLikeObject(context, db.getFullName(), table);
                     } catch (AccessDeniedException e) {
                         continue;

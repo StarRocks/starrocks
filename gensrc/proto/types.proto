@@ -107,8 +107,7 @@ enum TxnTypePB {
      TXN_NORMAL = 0;
      TXN_REPLICATION = 1;
      TXN_EMPTY = 2;
-     TXN_SPLIT_TABLET = 3;
-     TXN_MERGE_TABLET = 4;
+     TXN_DYNAMIC_TABLET = 3;
 }
 
 enum ReplicationTxnStatePB {
@@ -230,6 +229,11 @@ message PersistentIndexSstablePB {
     // Filter out rows which do not satisfy the predicate
     // when reading this specific sstable
     optional PersistentIndexSstablePredicatePB predicate = 7;
+    // For sstable generated during data write & compaction process.
+    optional uint32 shared_rssid = 8;
+    optional int64 shared_version = 9;
+    // For sstable generated during compaction process.
+    optional bool has_delvec = 10;
 }
 
 message PersistentIndexSstableMetaPB {

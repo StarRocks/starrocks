@@ -14,39 +14,24 @@ insert into user_tags values('2023-04-14', 3, 'e', 6);
 
 create materialized view user_tags_mv1  distributed by hash(user_id) 
 partition by date_trunc('day', time)
-properties('partition_refresh_strategy' = 'force')
+properties(
+    'partition_refresh_number' = '-1',
+    'partition_refresh_strategy' = 'force'
+)
 refresh deferred manual
 as select user_id, time, count(tag_id) from user_tags group by user_id, time;
 
 refresh materialized view user_tags_mv1 with sync mode;
 select * from user_tags_mv1 order by user_id;
-
-select sleep(2);
 function: wait_async_materialized_view_finish("db_${uuid0}", "user_tags_mv1")
-[UC]task_name=SELECT TASK_NAME FROM information_schema.materialized_views WHERE TABLE_SCHEMA = 'db_${uuid0}' AND TABLE_NAME='user_tags_mv1';
-
-SELECT count(1) FROM information_schema.task_runs WHERE TASK_NAME = '${task_name}';
-SELECT `STATE` FROM information_schema.task_runs WHERE TASK_NAME = '${task_name}' order by CREATE_TIME desc;
+[UC]TASK_NAME=SELECT TASK_NAME FROM information_schema.materialized_views WHERE TABLE_SCHEMA = 'db_${uuid0}' AND TABLE_NAME='user_tags_mv1';
+[UC]REFRESH_COUNT1=SELECT count(1) FROM information_schema.task_runs WHERE TASK_NAME = '${TASK_NAME}';
 
 refresh materialized view user_tags_mv1 with sync mode;
 select * from user_tags_mv1 order by user_id;
-
-select sleep(2);
 function: wait_async_materialized_view_finish("db_${uuid0}", "user_tags_mv1")
-SELECT count(1) FROM information_schema.task_runs WHERE TASK_NAME = '${task_name}';
-SELECT `STATE` FROM information_schema.task_runs WHERE TASK_NAME = '${task_name}' order by CREATE_TIME desc;
+[UC]REFRESH_COUNT2=SELECT count(1) FROM information_schema.task_runs WHERE TASK_NAME = '${TASK_NAME}';
 
-create materialized view user_tags_mv2  distributed by hash(user_id) 
-properties('partition_refresh_strategy' = 'force')
-refresh deferred manual
-as select user_id, time, count(tag_id) from user_tags group by user_id, time;
-refresh materialized view user_tags_mv2 with sync mode;
-select * from user_tags_mv2 order by user_id;
-
-select sleep(2);
-function: wait_async_materialized_view_finish("db_${uuid0}", "user_tags_mv2")
-[UC]task_name=SELECT TASK_NAME FROM information_schema.materialized_views WHERE TABLE_SCHEMA = 'db_${uuid0}' AND TABLE_NAME='user_tags_mv2';
-SELECT count(1) FROM information_schema.task_runs WHERE TASK_NAME = '${task_name}';
-SELECT `STATE` FROM information_schema.task_runs WHERE TASK_NAME = '${task_name}' order by CREATE_TIME desc;
+SELECT '${REFRESH_COUNT1}' = '${REFRESH_COUNT2}';
 
 drop database db_${uuid0} force;

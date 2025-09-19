@@ -15,33 +15,17 @@
 package com.starrocks.sql.ast.spm;
 
 import com.google.common.collect.ImmutableMap;
-import com.starrocks.analysis.Expr;
-import com.starrocks.catalog.Column;
-import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Type;
-import com.starrocks.qe.ShowResultSetMetaData;
 import com.starrocks.sql.ast.AstVisitor;
+import com.starrocks.sql.ast.AstVisitorExtendInterface;
 import com.starrocks.sql.ast.QueryRelation;
 import com.starrocks.sql.ast.ShowStmt;
+import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.parser.NodePosition;
 
 import java.util.Map;
 
 public class ShowBaselinePlanStmt extends ShowStmt {
-
-    private static final ShowResultSetMetaData META_DATA = ShowResultSetMetaData.builder()
-            .addColumn(new Column("Id", ScalarType.createVarchar(60)))
-            .addColumn(new Column("global", ScalarType.createVarchar(10)))
-            .addColumn(new Column("enable", ScalarType.createVarchar(10)))
-            .addColumn(new Column("bindSQLDigest", ScalarType.createVarchar(65535)))
-            .addColumn(new Column("bindSQLHash", ScalarType.createVarchar(60)))
-            .addColumn(new Column("bindSQL", ScalarType.createVarchar(65535)))
-            .addColumn(new Column("planSQL", ScalarType.createVarchar(65535)))
-            .addColumn(new Column("costs", ScalarType.createVarchar(60)))
-            .addColumn(new Column("queryMs", ScalarType.createVarchar(60)))
-            .addColumn(new Column("source", ScalarType.createVarchar(60)))
-            .addColumn(new Column("updateTime", ScalarType.createVarchar(60)))
-            .build();
 
     public static final Map<String, Type> BASELINE_FIELD_META = ImmutableMap.<String, Type>builder()
             .put("id", Type.BIGINT)
@@ -83,12 +67,7 @@ public class ShowBaselinePlanStmt extends ShowStmt {
     }
 
     @Override
-    public ShowResultSetMetaData getMetaData() {
-        return META_DATA;
-    }
-
-    @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitShowBaselinePlanStatement(this, context);
+        return ((AstVisitorExtendInterface<R, C>) visitor).visitShowBaselinePlanStatement(this, context);
     }
 }

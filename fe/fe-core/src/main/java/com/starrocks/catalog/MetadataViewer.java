@@ -34,9 +34,9 @@
 
 package com.starrocks.catalog;
 
+import com.google.common.base.Enums;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
-import com.starrocks.analysis.BinaryType;
 import com.starrocks.catalog.MaterializedIndex.IndexExtState;
 import com.starrocks.catalog.Replica.ReplicaStatus;
 import com.starrocks.catalog.Table.TableType;
@@ -52,6 +52,11 @@ import com.starrocks.sql.ast.AdminShowReplicaDistributionStmt;
 import com.starrocks.sql.ast.AdminShowReplicaStatusStmt;
 import com.starrocks.sql.ast.PartitionNames;
 import com.starrocks.sql.ast.ShowDataDistributionStmt;
+import com.starrocks.sql.ast.expression.BinaryPredicate;
+import com.starrocks.sql.ast.expression.BinaryType;
+import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.SlotRef;
+import com.starrocks.sql.ast.expression.StringLiteral;
 import com.starrocks.system.Backend;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.warehouse.Warehouse;
@@ -64,8 +69,26 @@ import java.util.Map;
 public class MetadataViewer {
 
     public static List<List<String>> getTabletStatus(AdminShowReplicaStatusStmt stmt) throws DdlException {
+        Replica.ReplicaStatus statusFilter = null;
+        BinaryType op = null; // Default to null instead of stmt.getOp()
+        Expr where = stmt.getWhere();
+
+        // Analyze where clause to extract statusFilter and op directly in this method
+        if (where != null) {
+            if (where instanceof BinaryPredicate binaryPredicate) {
+                op = binaryPredicate.getOp();
+                Expr leftChild = binaryPredicate.getChild(0);
+                Expr rightChild = binaryPredicate.getChild(1);
+                String leftKey = ((SlotRef) leftChild).getColumnName();
+                if (rightChild instanceof StringLiteral && leftKey.equalsIgnoreCase("status")) {
+                    statusFilter = Enums.getIfPresent(Replica.ReplicaStatus.class,
+                            ((StringLiteral) rightChild).getStringValue().toUpperCase()).orNull();
+                }
+            }
+        }
+
         return getTabletStatus(stmt.getDbName(), stmt.getTblName(), stmt.getPartitions(),
-                stmt.getStatusFilter(), stmt.getOp());
+                statusFilter, op);
     }
 
     private static List<List<String>> getTabletStatus(String dbName, String tblName, List<String> partitions,
@@ -77,7 +100,7 @@ public class MetadataViewer {
 
         Database db = globalStateMgr.getLocalMetastore().getDb(dbName);
         if (db == null) {
-            throw new DdlException("Database " + dbName + " does not exsit");
+            throw new DdlException("Database " + dbName + " does not exist");
         }
 
         Locker locker = new Locker();
@@ -206,7 +229,7 @@ public class MetadataViewer {
         GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
         Database db = globalStateMgr.getLocalMetastore().getDb(dbName);
         if (db == null) {
-            throw new DdlException("Database " + dbName + " does not exsit");
+            throw new DdlException("Database " + dbName + " does not exist");
         }
 
         Locker locker = new Locker();
@@ -312,7 +335,7 @@ public class MetadataViewer {
         GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
         Database db = globalStateMgr.getLocalMetastore().getDb(dbName);
         if (db == null) {
-            throw new DdlException("Database " + dbName + " does not exsit");
+            throw new DdlException("Database " + dbName + " does not exist");
         }
 
         Locker locker = new Locker();

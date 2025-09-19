@@ -15,7 +15,7 @@
 
 package com.starrocks.sql.ast;
 
-import com.starrocks.analysis.Expr;
+import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.parser.NodePosition;
 
 public class CancelCompactionStmt extends DdlStmt {
@@ -47,6 +47,6 @@ public class CancelCompactionStmt extends DdlStmt {
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitCancelCompactionStatement(this, context);
+        return ((AstVisitorExtendInterface<R, C>) visitor).visitCancelCompactionStatement(this, context);
     }
 }

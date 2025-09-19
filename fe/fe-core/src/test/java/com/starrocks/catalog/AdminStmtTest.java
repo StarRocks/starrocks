@@ -35,9 +35,7 @@
 package com.starrocks.catalog;
 
 import com.google.common.collect.Lists;
-import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Pair;
-import com.starrocks.persist.SetReplicaStatusOperationLog;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.AdminSetReplicaStatusStmt;
@@ -49,12 +47,6 @@ import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
-import java.io.DataInputStream;
-import java.io.DataOutputStream;
-import java.io.File;
-import java.io.FileInputStream;
-import java.io.FileOutputStream;
-import java.io.IOException;
 import java.util.List;
 
 public class AdminStmtTest {
@@ -125,34 +117,4 @@ public class AdminStmtTest {
         replica = GlobalStateMgr.getCurrentState().getTabletInvertedIndex().getReplica(tabletId, backendId);
         Assertions.assertFalse(replica.isBad());
     }
-
-    @Test
-    public void testSetReplicaStatusOperationLog() throws IOException, AnalysisException {
-        String fileName = "./SetReplicaStatusOperationLog";
-        try {
-            // 1. Write objects to file
-            File file = new File(fileName);
-            file.createNewFile();
-            DataOutputStream out = new DataOutputStream(new FileOutputStream(file));
-
-            SetReplicaStatusOperationLog log = new SetReplicaStatusOperationLog(10000, 100001, Replica.ReplicaStatus.BAD);
-            log.write(out);
-            out.flush();
-            out.close();
-
-            // 2. Read objects from file
-            DataInputStream in = new DataInputStream(new FileInputStream(file));
-
-            SetReplicaStatusOperationLog readLog = SetReplicaStatusOperationLog.read(in);
-            Assertions.assertEquals(log.getBackendId(), readLog.getBackendId());
-            Assertions.assertEquals(log.getTabletId(), readLog.getTabletId());
-            Assertions.assertEquals(log.getReplicaStatus(), readLog.getReplicaStatus());
-
-            in.close();
-        } finally {
-            File file = new File(fileName);
-            file.delete();
-        }
-    }
-
 }

@@ -16,6 +16,9 @@ package com.starrocks.sql.optimizer.statistics;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableMap;
+import com.google.gson.Gson;
+import com.starrocks.common.Config;
+import com.starrocks.persist.gson.GsonUtils;
 
 import java.nio.ByteBuffer;
 
@@ -27,7 +30,8 @@ public final class ColumnDict extends StatsVersion {
 
     public ColumnDict(ImmutableMap<ByteBuffer, Integer> dict, long version) {
         super(version, version);
-        Preconditions.checkState(!dict.isEmpty() && dict.size() <= 256,
+        // TODO: The default value of low_cardinality_threshold is 255. Should we set the check size to 255 or 256?
+        Preconditions.checkState(!dict.isEmpty() && dict.size() <= Config.low_cardinality_threshold + 1,
                 "dict size %s is illegal", dict.size());
         this.dict = dict;
     }
@@ -43,5 +47,27 @@ public final class ColumnDict extends StatsVersion {
 
     public int getDictSize() {
         return dict.size();
+    }
+
+    public String toJson() {
+        Gson gson = GsonUtils.GSON;
+        // Manually build a JSON object with all fields
+        // Convert ByteBuffer keys to base64 strings for JSON compatibility
+        java.util.Map<String, Integer> dictMap = new java.util.HashMap<>();
+        for (java.util.Map.Entry<ByteBuffer, Integer> entry : dict.entrySet()) {
+            ByteBuffer key = entry.getKey();
+            // Duplicate to avoid changing position
+            ByteBuffer dup = key.duplicate();
+            byte[] bytes = new byte[dup.remaining()];
+            dup.get(bytes);
+            // Convert bytes to string using UTF-8 encoding
+            String strKey = new String(bytes, java.nio.charset.StandardCharsets.UTF_8);
+            dictMap.put(strKey, entry.getValue());
+        }
+        java.util.Map<String, Object> jsonMap = new java.util.HashMap<>();
+        jsonMap.put("dict", dictMap);
+        jsonMap.put("collectedVersion", collectedVersion);
+        jsonMap.put("version", version);
+        return gson.toJson(jsonMap);
     }
 }

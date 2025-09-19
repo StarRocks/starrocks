@@ -17,6 +17,9 @@
 #include <butil/time.h> // NOLINT
 
 #include "fs/fs.h"
+#include "fs/key_cache.h"
+#include "gen_cpp/types.pb.h"
+#include "storage/lake/lake_delvec_loader.h"
 #include "storage/lake/utils.h"
 #include "storage/sstable/table_builder.h"
 #include "util/trace.h"
@@ -24,7 +27,8 @@
 namespace starrocks::lake {
 
 Status PersistentIndexSstable::init(std::unique_ptr<RandomAccessFile> rf, const PersistentIndexSstablePB& sstable_pb,
-                                    Cache* cache, bool need_filter) {
+                                    Cache* cache, TabletManager* tablet_mgr, int64_t tablet_id, bool need_filter,
+                                    DelVectorPtr delvec) {
     sstable::Options options;
     if (need_filter) {
         _filter_policy.reset(const_cast<sstable::FilterPolicy*>(sstable::NewBloomFilterPolicy(10)));
@@ -36,6 +40,20 @@ Status PersistentIndexSstable::init(std::unique_ptr<RandomAccessFile> rf, const 
     _sst.reset(table);
     _rf = std::move(rf);
     _sstable_pb.CopyFrom(sstable_pb);
+    // load delvec
+    if (_sstable_pb.has_delvec()) {
+        if (delvec) {
+            // If delvec is already provided, use it directly.
+            _delvec = std::move(delvec);
+        } else {
+            // otherwise, load delvec from file
+            LakeIOOptions lake_io_opts{.fill_data_cache = true, .skip_disk_cache = false};
+            auto delvec_loader =
+                    std::make_unique<LakeDelvecLoader>(tablet_mgr, nullptr, true /* fill cache */, lake_io_opts);
+            RETURN_IF_ERROR(delvec_loader->load(TabletSegmentId(tablet_id, _sstable_pb.shared_rssid()),
+                                                _sstable_pb.shared_version(), &_delvec));
+        }
+    }
     return Status::OK();
 }
 
@@ -87,6 +105,22 @@ Status PersistentIndexSstable::multi_get(const Slice* keys, const KeyIndexSet& k
         if (!index_value_with_ver_pb.ParseFromString(index_value_with_vers[i])) {
             return Status::InternalError("parse index value info failed");
         }
+        // Check if this rowid is already filtered by delvec
+        if (_delvec) {
+            if (_delvec->roaring()->contains(index_value_with_ver_pb.values(0).rowid())) {
+                ++i;
+                continue;
+            }
+        }
+        // fill shared rssid & version if have
+        if (_sstable_pb.has_shared_version() && _sstable_pb.shared_version() > 0) {
+            DCHECK(_sstable_pb.has_shared_rssid());
+            for (size_t j = 0; j < index_value_with_ver_pb.values_size(); ++j) {
+                index_value_with_ver_pb.mutable_values(j)->set_rssid(_sstable_pb.shared_rssid());
+                index_value_with_ver_pb.mutable_values(j)->set_version(_sstable_pb.shared_version());
+            }
+        }
+
         if (index_value_with_ver_pb.values_size() > 0) {
             if (version < 0) {
                 values[key_index] = build_index_value(index_value_with_ver_pb.values(0));
@@ -108,6 +142,68 @@ Status PersistentIndexSstable::multi_get(const Slice* keys, const KeyIndexSet& k
 
 size_t PersistentIndexSstable::memory_usage() const {
     return (_sst != nullptr) ? _sst->memory_usage() : 0;
+}
+
+PersistentIndexSstableStreamBuilder::PersistentIndexSstableStreamBuilder(std::unique_ptr<WritableFile> wf,
+                                                                         std::string encryption_meta)
+        : _wf(std::move(wf)), _finished(false), _encryption_meta(std::move(encryption_meta)) {
+    _filter_policy.reset(const_cast<sstable::FilterPolicy*>(sstable::NewBloomFilterPolicy(10)));
+    sstable::Options options;
+    options.filter_policy = _filter_policy.get();
+    _table_builder = std::make_unique<sstable::TableBuilder>(options, _wf.get());
+}
+
+Status PersistentIndexSstableStreamBuilder::add(const Slice& key) {
+    if (_finished) {
+        return Status::InvalidArgument("Builder already finished");
+    }
+
+    if (!_status.ok()) {
+        return _status;
+    }
+
+    IndexValuesWithVerPB index_value_pb;
+    auto* val = index_value_pb.add_values();
+    val->set_rowid(_sst_rowid++);
+
+    _table_builder->Add(key, Slice(index_value_pb.SerializeAsString()));
+    _status = _table_builder->status();
+    return _status;
+}
+
+Status PersistentIndexSstableStreamBuilder::finish(uint64_t* file_size) {
+    if (_finished) {
+        return Status::InvalidArgument("Builder already finished");
+    }
+
+    if (!_status.ok()) {
+        return _status;
+    }
+
+    _status = _table_builder->Finish();
+    if (_status.ok()) {
+        _finished = true;
+        if (file_size != nullptr) {
+            *file_size = _table_builder->FileSize();
+        }
+    }
+    return _status;
+}
+
+uint64_t PersistentIndexSstableStreamBuilder::num_entries() const {
+    return _table_builder ? _table_builder->NumEntries() : 0;
+}
+
+FileInfo PersistentIndexSstableStreamBuilder::file_info() const {
+    FileInfo file_info;
+    file_info.path = file_name(_wf->filename());
+    file_info.size = _table_builder ? _table_builder->FileSize() : 0;
+    file_info.encryption_meta = _encryption_meta;
+    return file_info;
+}
+
+Status PersistentIndexSstableStreamBuilder::status() const {
+    return _status;
 }
 
 } // namespace starrocks::lake

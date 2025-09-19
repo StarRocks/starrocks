@@ -15,8 +15,8 @@
 
 package com.starrocks.sql.plan;
 
-import com.starrocks.sql.analyzer.AstToStringBuilder;
 import com.starrocks.sql.ast.NormalizedTableFunctionRelation;
+import com.starrocks.sql.formatter.AST2SQLVisitor;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Mock;
 import mockit.MockUp;
@@ -134,7 +134,7 @@ public class DigestTest extends PlanTestBase {
 
     @Test
     public void testAnalyzeError() throws Exception {
-        new MockUp<AstToStringBuilder.AST2StringBuilderVisitor>() {
+        new MockUp<AST2SQLVisitor>() {
             @Mock
             public String visitNormalizedTableFunction(NormalizedTableFunctionRelation node, Void scope) {
                 throw new NullPointerException();

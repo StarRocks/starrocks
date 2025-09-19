@@ -13,7 +13,7 @@
 // limitations under the License.
 package com.starrocks.sql.optimizer.statistics;
 
-class StatsVersion {
+public class StatsVersion {
     protected final long collectedVersion;
     protected long version;
 
@@ -32,5 +32,13 @@ class StatsVersion {
 
     public void updateVersion(long version) {
         this.version = version;
+    }
+
+    @Override
+    public String toString() {
+        return "StatsVersion{" +
+                "history=" + collectedVersion +
+                ", version=" + version +
+                '}';
     }
 }

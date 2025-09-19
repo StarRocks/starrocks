@@ -24,7 +24,6 @@ import com.starrocks.catalog.OlapTable.OlapTableState;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Replica;
 import com.starrocks.common.Config;
-import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.common.util.ThreadUtil;
 import com.starrocks.scheduler.Constants;
 import com.starrocks.server.GlobalStateMgr;
@@ -38,12 +37,6 @@ import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
-import java.io.DataInputStream;
-import java.io.DataOutputStream;
-import java.io.File;
-import java.io.FileInputStream;
-import java.io.FileOutputStream;
-import java.io.IOException;
 import java.util.List;
 import java.util.Map;
 
@@ -186,28 +179,6 @@ public class OnlineOptimizeJobV2Test extends DDLTestBase {
         replica1.setState(Replica.ReplicaState.NORMAL);
         optimizeJob.runPendingJob();
         Assertions.assertEquals(JobState.WAITING_TXN, optimizeJob.getJobState());
-    }
-
-    @Test
-    public void testSerializeOfOptimizeJob() throws IOException {
-        // prepare file
-        File file = new File(TEST_FILE_NAME);
-        file.createNewFile();
-        file.deleteOnExit();
-        DataOutputStream out = new DataOutputStream(new FileOutputStream(file));
-
-        OnlineOptimizeJobV2 optimizeJobV2 = new OnlineOptimizeJobV2(1, 1, 1, "test", 600000);
-        Deencapsulation.setField(optimizeJobV2, "jobState", AlterJobV2.JobState.FINISHED);
-
-        // write schema change job
-        optimizeJobV2.write(out);
-        out.flush();
-        out.close();
-
-        DataInputStream in = new DataInputStream(new FileInputStream(file));
-        OnlineOptimizeJobV2 result = (OnlineOptimizeJobV2) AlterJobV2.read(in);
-        Assertions.assertEquals(1, result.getJobId());
-        Assertions.assertEquals(AlterJobV2.JobState.FINISHED, result.getJobState());
     }
 
     @Test

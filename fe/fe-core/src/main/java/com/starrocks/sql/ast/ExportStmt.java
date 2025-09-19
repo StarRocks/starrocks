@@ -20,11 +20,6 @@ import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
-import com.starrocks.analysis.BrokerDesc;
-import com.starrocks.analysis.Delimiter;
-import com.starrocks.analysis.RedirectStatus;
-import com.starrocks.analysis.TableName;
-import com.starrocks.analysis.TableRef;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Partition;
@@ -39,6 +34,9 @@ import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.sql.ast.expression.Delimiter;
+import com.starrocks.sql.ast.expression.TableName;
+import com.starrocks.sql.ast.expression.TableRef;
 import com.starrocks.sql.parser.NodePosition;
 
 import java.net.URI;
@@ -339,12 +337,7 @@ public class ExportStmt extends StatementBase {
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitExportStatement(this, context);
-    }
-
-    @Override
-    public RedirectStatus getRedirectStatus() {
-        return RedirectStatus.FORWARD_WITH_SYNC;
+        return ((AstVisitorExtendInterface<R, C>) visitor).visitExportStatement(this, context);
     }
 
     @Override

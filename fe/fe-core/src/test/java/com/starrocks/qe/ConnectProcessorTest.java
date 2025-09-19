@@ -37,8 +37,11 @@ package com.starrocks.qe;
 import com.google.common.base.Strings;
 import com.google.common.collect.Sets;
 import com.starrocks.analysis.AccessTestUtil;
+import com.starrocks.authentication.AccessControlContext;
 import com.starrocks.authentication.AuthenticationMgr;
+import com.starrocks.authentication.PlainPasswordAuthenticationProvider;
 import com.starrocks.authorization.PrivilegeBuiltinConstants;
+import com.starrocks.catalog.UserIdentity;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.mysql.MysqlCapability;
@@ -47,13 +50,13 @@ import com.starrocks.mysql.MysqlCommand;
 import com.starrocks.mysql.MysqlEofPacket;
 import com.starrocks.mysql.MysqlErrPacket;
 import com.starrocks.mysql.MysqlOkPacket;
+import com.starrocks.mysql.MysqlPassword;
 import com.starrocks.mysql.MysqlSerializer;
 import com.starrocks.plugin.AuditEvent.AuditEventBuilder;
 import com.starrocks.proto.PQueryStatistics;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.DDLTestBase;
 import com.starrocks.sql.ast.StatementBase;
-import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.thrift.TMasterOpRequest;
 import com.starrocks.thrift.TMasterOpResult;
 import com.starrocks.thrift.TUniqueId;
@@ -316,6 +319,14 @@ public class ConnectProcessorTest extends DDLTestBase {
                 context.getCapability();
                 minTimes = 0;
                 result = MysqlCapability.DEFAULT_CAPABILITY;
+
+                context.getAccessControlContext();
+                minTimes = 0;
+                result = new AccessControlContext();
+
+                context.getAuthenticationProvider();
+                minTimes = 0;
+                result = new PlainPasswordAuthenticationProvider(MysqlPassword.EMPTY_PASSWORD);
             }
         };
 
@@ -665,5 +676,34 @@ public class ConnectProcessorTest extends DDLTestBase {
 
         TMasterOpResult result = processor.proxyExecute(request);
         Assertions.assertNotNull(result);
+    }
+
+    @Test
+    public void testProxyExecuteUserIdentityIsNull() throws Exception {
+        TMasterOpRequest request = new TMasterOpRequest();
+        request.setCatalog("default");
+        request.setDb("testDb1");
+        request.setUser("root");
+        request.setSql("select 1");
+        request.setIsInternalStmt(true);
+        request.setModified_variables_sql("set query_timeout = 10");
+        request.setQueryId(UUIDUtil.genTUniqueId());
+        request.setSession_id(UUID.randomUUID().toString());
+        request.setIsLastStmt(true);
+
+        ConnectContext context = new ConnectContext();
+        ConnectProcessor processor = new ConnectProcessor(context);
+        new mockit.MockUp<StmtExecutor>() {
+            @mockit.Mock
+            public void execute() {}
+            @mockit.Mock
+            public PQueryStatistics getQueryStatisticsForAuditLog() {
+                return null;
+            }
+        };
+
+        TMasterOpResult result = processor.proxyExecute(request);
+        Assertions.assertNotNull(result);
+        Assertions.assertTrue(context.getState().isError());
     }
 }

@@ -14,14 +14,20 @@
 
 package com.starrocks.sql.analyzer;
 
-import com.starrocks.analysis.Expr;
-import com.starrocks.analysis.StringLiteral;
+import com.google.common.collect.Sets;
+import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
+import com.starrocks.lake.LakeMaterializedView;
+import com.starrocks.lake.LakeTable;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.server.RunMode;
 import com.starrocks.sql.ast.QueryStatement;
+import com.starrocks.sql.ast.StatementBase;
+import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.StringLiteral;
 import com.starrocks.sql.optimizer.operator.ColumnFilterConverter;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
@@ -30,6 +36,8 @@ import com.starrocks.utframe.UtFrameUtils;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
+
+import java.util.Set;
 
 public class AnalyzerUtilsTest {
 
@@ -40,7 +48,7 @@ public class AnalyzerUtilsTest {
     public static void beforeClass() throws Exception {
         FeConstants.runningUnitTest = true;
         Config.dynamic_partition_enable = false;
-        UtFrameUtils.createMinStarRocksCluster();
+        UtFrameUtils.createMinStarRocksCluster(RunMode.SHARED_DATA);
         // create connect context
         connectContext = UtFrameUtils.createDefaultCtx();
         starRocksAssert = new StarRocksAssert(connectContext);
@@ -54,7 +62,9 @@ public class AnalyzerUtilsTest {
                         "DISTRIBUTED BY HASH(`bill_code`) BUCKETS 10 \n" +
                         "PROPERTIES (\n" +
                         "\"replication_num\" = \"1\"\n" +
-                        ");");
+                        ");")
+                .withMaterializedView("CREATE MATERIALIZED VIEW mv1 REFRESH ASYNC AS " +
+                        "SELECT * FROM bill_detail;");
     }
 
     @Test
@@ -85,4 +95,28 @@ public class AnalyzerUtilsTest {
         Assertions.assertEquals(ScalarType.getOlapMaxVarcharLength(), convertedString.getLength());
     }
 
+    @Test
+    public void testCopyOlapTable() throws Exception {
+        {
+            String sql = "select count(*) from bill_detail;";
+            StatementBase stmt = UtFrameUtils.parseStmtWithNewParser(sql, starRocksAssert.getCtx());
+            Set<OlapTable> tables = Sets.newHashSet();
+            AnalyzerUtils.copyOlapTable(stmt, tables);
+            Assertions.assertEquals(1, tables.size());
+            Assertions.assertInstanceOf(LakeTable.class, tables.iterator().next());
+            Assertions.assertSame(starRocksAssert.getTable("test", "bill_detail"), tables.iterator().next());
+            Assertions.assertTrue(AnalyzerUtils.areTablesCopySafe(stmt));
+        }
+
+        {
+            String sql = "select count(*) from mv1;";
+            StatementBase stmt = UtFrameUtils.parseStmtWithNewParser(sql, starRocksAssert.getCtx());
+            Set<OlapTable> tables = Sets.newHashSet();
+            AnalyzerUtils.copyOlapTable(stmt, tables);
+            Assertions.assertEquals(1, tables.size());
+            Assertions.assertInstanceOf(LakeMaterializedView.class, tables.iterator().next());
+            Assertions.assertSame(starRocksAssert.getTable("test", "mv1"), tables.iterator().next());
+            Assertions.assertTrue(AnalyzerUtils.areTablesCopySafe(stmt));
+        }
+    }
 }

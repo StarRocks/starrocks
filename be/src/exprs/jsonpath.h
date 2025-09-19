@@ -49,12 +49,17 @@ struct ArraySelector {
     virtual void iterate(vpack::Slice array_slice, std::function<void(vpack::Slice)> callback) = 0;
 
     virtual bool match(const ArraySelector& other) const { return type == other.type; };
+
+    // Convert array selector to string representation
+    virtual std::string to_string() const = 0;
 };
 
 struct ArraySelectorNone final : public ArraySelector {
     ArraySelectorNone() { type = NONE; }
 
     void iterate(vpack::Slice array_slice, std::function<void(vpack::Slice)> callback) override { return; }
+
+    std::string to_string() const override { return ""; }
 };
 
 struct ArraySelectorSingle final : public ArraySelector {
@@ -72,6 +77,8 @@ struct ArraySelectorSingle final : public ArraySelector {
         }
         return index == down_cast<const ArraySelectorSingle*>(&other)->index;
     };
+
+    std::string to_string() const override { return "[" + std::to_string(index) + "]"; }
 };
 
 struct ArraySelectorWildcard final : public ArraySelector {
@@ -80,6 +87,8 @@ struct ArraySelectorWildcard final : public ArraySelector {
     static bool match(const std::string& input);
 
     void iterate(vpack::Slice array_slice, std::function<void(vpack::Slice)> callback) override;
+
+    std::string to_string() const override { return "[*]"; }
 };
 
 struct ArraySelectorSlice final : public ArraySelector {
@@ -98,6 +107,8 @@ struct ArraySelectorSlice final : public ArraySelector {
         auto* ass = down_cast<const ArraySelectorSlice*>(&other);
         return left == ass->left && right == ass->right;
     };
+
+    std::string to_string() const override { return "[" + std::to_string(left) + ":" + std::to_string(right) + "]"; }
 };
 
 // JsonPath implement that support array building
@@ -139,6 +150,8 @@ struct JsonPath {
     StatusOr<JsonPath*> relativize(const JsonPath* other, JsonPath* output_root) const;
 
     bool is_empty() const { return paths.empty(); }
+
+    std::string to_string() const;
 
     static StatusOr<JsonPath> parse(Slice path_string);
     static vpack::Slice extract(const JsonValue* json, const JsonPath& jsonpath, vpack::Builder* b);

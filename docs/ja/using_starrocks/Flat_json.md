@@ -64,29 +64,43 @@ FROM <table_name>[_META_];
 
 ## 使用例
 
+- 方法 1: JSON 列を含むテーブルを作成する際、Flat JSON プロパティを設定します。v4.0 からサポートされています。
+
+  ```SQL
+  CREATE TABLE `t1` (
+      `k1` int,
+      `k2` JSON,
+      `k3` VARCHAR(20),
+      `k4` JSON
+  )             
+  DUPLICATE KEY(`k1`)
+  COMMENT "OLAP"
+  DISTRIBUTED BY HASH(`k1`) BUCKETS 2
+  PROPERTIES (
+      "replication_num" = "3",
+      "flat_json.enable" = "true",
+      "flat_json.null.factor" = "0.5",
+      "flat_json.sparsity.factor" = "0.5",
+      "flat_json.column.max" = "50");
+   INSERT INTO t1 (k1,k2) VALUES
+      (11,parse_json('{"str":"test_flat_json","Integer":123456,"Double":3.14158,"Object":{"c":"d"},"arr":[10,20,30],"Bool":false,"null":null}')),
+      (15,parse_json('{"str":"test_str0","Integer":11,"Double":3.14,"Object":{"a":"b"},"arr":[1,2,3],"Bool":true,"null":null}')),
+      (15,parse_json('{"str":"test_str1","Integer":111,"Double":3.14,"Object":{"a":"b"},"arr":[1,2,3],"Bool":true,"null":null}')),
+      (15,parse_json('{"str":"test_str2","Integer":222,"Double":3.14,"Object":{"a":"b"},"arr":[1,2,3],"Bool":true,"null":null}')),
+      (15,parse_json('{"str":"test_str2","Integer":222,"Double":3.14,"Object":{"a":"b"},"arr":[1,2,3],"Bool":true,"null":null}')),
+      (16,parse_json('{"str":"test_str3","Integer":333,"Double":3.14,"Object":{"a":"b"},"arr":[1,2,3],"Bool":true,"null":null}')),
+      (17,parse_json('{"str":"test_str3","Integer":333,"Double":3.14,"Object":{"a":"b"},"arr":[1,2,3],"Bool":true,"null":null}')),
+      (18,parse_json('{"str":"test_str5","Integer":444,"Double":3.14,"Object":{"a":"b"},"arr":[1,2,3],"Bool":true,"null":null}')),
+      (19,parse_json('{"str":"test_str6","Integer":444,"Double":3.14,"Object":{"a":"b"},"arr":[1,2,3],"Bool":true,"null":null}')),
+      (20,parse_json('{"str":"test_str6","Integer":444,"Double":3.14,"Object":{"a":"b"},"arr":[1,2,3],"Bool":true,"null":null}'));
+  ``` 
+
+- 方法 2: テーブルを作成する前に Flat JSON を有効にします。
+
 1. 機能を有効にする（他のセクションを参照）
 2. JSON カラムを持つテーブルを作成します。この例では、INSERT INTO を使用して JSON データをテーブルにロードします。
 
    ```SQL
-    -- method1: JSON カラムを持つテーブルを作成し、作成時に Flat JSON を設定します。これは共有なしクラスタのみをサポートします。
-   CREATE TABLE `t1` (
-       `k1` int,
-       `k2` JSON,
-       `k3` VARCHAR(20),
-       `k4` JSON
-   )             
-   DUPLICATE KEY(`k1`)
-   COMMENT "OLAP"
-   DISTRIBUTED BY HASH(`k1`) BUCKETS 2
-   PROPERTIES (
-     "replication_num" = "3",
-     "flat_json.enable" = "true",
-     "flat_json.null.factor" = "0.5",
-     "flat_json.sparsity.factor" = "0.5",
-     "flat_json.column.max" = "50");
-   )
-   
-   -- method2: Flat JSON 機能を有効にする必要があり、このアプローチは共有なしクラスタと共有データクラスタの両方に適用されます。
    CREATE TABLE `t1` (
        `k1` int,
        `k2` JSON,
@@ -97,19 +111,19 @@ FROM <table_name>[_META_];
    COMMENT "OLAP"
    DISTRIBUTED BY HASH(`k1`) BUCKETS 2
    PROPERTIES ("replication_num" = "3");   
-    
-      
+
+
    INSERT INTO t1 (k1,k2) VALUES
-   (11,parse_json('{"str":"test_flat_json","Integer":123456,"Double":3.14158,"Object":{"c":"d"},"arr":[10,20,30],"Bool":false,"null":null}')),
-   (15,parse_json('{"str":"test_str0","Integer":11,"Double":3.14,"Object":{"a":"b"},"arr":[1,2,3],"Bool":true,"null":null}')),
-   (15,parse_json('{"str":"test_str1","Integer":111,"Double":3.14,"Object":{"a":"b"},"arr":[1,2,3],"Bool":true,"null":null}')),
-   (15,parse_json('{"str":"test_str2","Integer":222,"Double":3.14,"Object":{"a":"b"},"arr":[1,2,3],"Bool":true,"null":null}')),
-   (15,parse_json('{"str":"test_str2","Integer":222,"Double":3.14,"Object":{"a":"b"},"arr":[1,2,3],"Bool":true,"null":null}')),
-   (16,parse_json('{"str":"test_str3","Integer":333,"Double":3.14,"Object":{"a":"b"},"arr":[1,2,3],"Bool":true,"null":null}')),
-   (17,parse_json('{"str":"test_str3","Integer":333,"Double":3.14,"Object":{"a":"b"},"arr":[1,2,3],"Bool":true,"null":null}')),
-   (18,parse_json('{"str":"test_str5","Integer":444,"Double":3.14,"Object":{"a":"b"},"arr":[1,2,3],"Bool":true,"null":null}')),
-   (19,parse_json('{"str":"test_str6","Integer":444,"Double":3.14,"Object":{"a":"b"},"arr":[1,2,3],"Bool":true,"null":null}')),
-   (20,parse_json('{"str":"test_str6","Integer":444,"Double":3.14,"Object":{"a":"b"},"arr":[1,2,3],"Bool":true,"null":null}'));
+      (11,parse_json('{"str":"test_flat_json","Integer":123456,"Double":3.14158,"Object":{"c":"d"},"arr":[10,20,30],"Bool":false,"null":null}')),
+      (15,parse_json('{"str":"test_str0","Integer":11,"Double":3.14,"Object":{"a":"b"},"arr":[1,2,3],"Bool":true,"null":null}')),
+      (15,parse_json('{"str":"test_str1","Integer":111,"Double":3.14,"Object":{"a":"b"},"arr":[1,2,3],"Bool":true,"null":null}')),
+      (15,parse_json('{"str":"test_str2","Integer":222,"Double":3.14,"Object":{"a":"b"},"arr":[1,2,3],"Bool":true,"null":null}')),
+      (15,parse_json('{"str":"test_str2","Integer":222,"Double":3.14,"Object":{"a":"b"},"arr":[1,2,3],"Bool":true,"null":null}')),
+      (16,parse_json('{"str":"test_str3","Integer":333,"Double":3.14,"Object":{"a":"b"},"arr":[1,2,3],"Bool":true,"null":null}')),
+      (17,parse_json('{"str":"test_str3","Integer":333,"Double":3.14,"Object":{"a":"b"},"arr":[1,2,3],"Bool":true,"null":null}')),
+      (18,parse_json('{"str":"test_str5","Integer":444,"Double":3.14,"Object":{"a":"b"},"arr":[1,2,3],"Bool":true,"null":null}')),
+      (19,parse_json('{"str":"test_str6","Integer":444,"Double":3.14,"Object":{"a":"b"},"arr":[1,2,3],"Bool":true,"null":null}')),
+      (20,parse_json('{"str":"test_str6","Integer":444,"Double":3.14,"Object":{"a":"b"},"arr":[1,2,3],"Bool":true,"null":null}'));
    ```
 
 3. `k2` カラムの抽出されたサブカラムを表示します。
@@ -170,20 +184,36 @@ StarRocks 共有なしクラスタは v3.3.0 から Flat JSON をサポートし
 - Flat JSON は共通フィールドカラムと予約フィールドカラムのみを保存し、元の JSON データを追加で保存しません。
 - データをロードする際、共通フィールドは自動的に BIGINT/LARGEINT/DOUBLE/STRING として型推論されます。認識されない型は JSON 型として推論され、予約フィールドカラムは JSON 型として保存されます。
 
-## Flat JSON 機能の有効化（共有なしクラスタのみサポート）
+## テーブルレベルでの Flat JSON 機能の有効化
 
-1. テーブル作成時に、`flat_json.enable` プロパティをテーブルパラメータに設定できます。詳細は [Table Creation](../sql-reference/sql-statements/table_bucket_part_index/CREATE_TABLE.md) を参照してください。
-   Flat JSON 機能は、テーブルプロパティを直接変更することで有効化または再設定することもできます。例：
+テーブルレベルでの Flat JSON 関連プロパティの設定は、v4.0 以降でサポートされています。
+
+1. テーブルを作成する際、`flat_json.enable` を含む Flat JSON に関連するプロパティを設定できます。詳細な手順については、[CREATE TABLE](../sql-reference/sql-statements/table_bucket_part_index/CREATE_TABLE.md#テーブルレベルの-flat-json-プロパティを設定) を参照してください。
+
+   または、これらのプロパティを [ALTER TABLE](../sql-reference/sql-statements/table_bucket_part_index/ALTER_TABLE.md) を使用して設定することもできます。
+
+   例：
+
    ```SQL
-   alter table t1 set ("flat_json.enable" = "true")
-   
-   alter table t1 set ("flat_json.null.factor" = "0.1")
-   
-   alter table t1 set ("flat_json.sparsity.factor" = "0.8")
-   
-   alter table t1 set ("flat_json.column.max" = "90")
+   ALTER TABLE t1 SET ("flat_json.enable" = "true");
+   ALTER TABLE t1 SET ("flat_json.null.factor" = "0.1");
+   ALTER TABLE t1 SET ("flat_json.sparsity.factor" = "0.8");
+   ALTER TABLE t1 SET ("flat_json.column.max" = "90");
    ```
+
 2. FE プルーニング機能を有効化します：`SET GLOBAL cbo_prune_json_subfield = true;`
+
+## 関連するセッション変数
+
+- `cbo_json_v2_rewrite`（デフォルト: true）: JSON v2 のパス書き換えを有効化し、`get_json_*` などの関数を Flat JSON のサブカラムへの直接アクセスに書き換えて、述語プッシュダウンやカラムプルーニングを有効にします。
+- `cbo_json_v2_dict_opt`（デフォルト: true）: パス書き換えで生成された Flat JSON の文字列サブカラムに対して、低カーディナリティ辞書最適化を有効にし、文字列式、GROUP BY、JOIN の高速化に寄与します。
+
+例：
+
+```SQL
+SET cbo_json_v2_rewrite = true;
+SET cbo_json_v2_dict_opt = true;
+```
 
 ## Flat JSON 機能の有効化（バージョン 3.4 以前）
 

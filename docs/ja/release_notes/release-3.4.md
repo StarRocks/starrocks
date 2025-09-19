@@ -4,6 +4,42 @@ displayed_sidebar: docs
 
 # StarRocks version 3.4
 
+## 3.4.7
+
+リリース日：2025年9月1日
+
+### バグ修正
+
+以下の問題を修正しました：
+
+- Routine Load ジョブが `max_filter_ratio` をシリアライズしていませんでした。 [#61755](https://github.com/StarRocks/starrocks/pull/61755)
+- Stream Load の `now(precision)` 関数で精度パラメータが失われる問題。 [#61721](https://github.com/StarRocks/starrocks/pull/61721)
+- Audit Log において、`INSERT INTO SELECT` 文の Scan Rows 結果が正確ではありませんでした。 [#61381](https://github.com/StarRocks/starrocks/pull/61381)
+- クラスターを v3.4.5 にアップグレードした後、`fslib read iops` 指標がアップグレード前より高くなる問題。 [#61724](https://github.com/StarRocks/starrocks/pull/61724)
+- JDBC Catalog を使用して SQLServer にクエリすると、クエリが頻繁にハングする問題。 [#61719](https://github.com/StarRocks/starrocks/pull/61719)
+
+## 3.4.6
+
+リリース日：2025年8月7日
+
+### 改善点
+
+- `INSERT INTO FILES` でデータを Parquet ファイルにエクスポートする際に、[`parquet.version`](https://docs.starrocks.io/docs/ja/sql-reference/sql-functions/table-functions/files.md#parquetversion) を指定してエクスポートする Parquet ファイルのバージョンを選べるようになりました。他のツールでエクスポートされた Parquet ファイルを読み取る際の互換性が向上します。 [#60843](https://github.com/StarRocks/starrocks/pull/60843)
+
+### バグ修正
+
+以下の問題を修正しました：
+
+- `TableMetricsManager` におけるロックの粒度が大きすぎて、インポートジョブが失敗する問題。 [#58911](https://github.com/StarRocks/starrocks/pull/58911)
+- `FILES()` を使用して Parquet データをインポートする際、列名が大文字小文字を区別していた問題。 [#61059](https://github.com/StarRocks/starrocks/pull/61059)
+- ストレージとコンピュートが分離されたクラスタを v3.3 から v3.4 以降にアップグレードした後、キャッシュが有効にならない問題。 [#60973](https://github.com/StarRocks/starrocks/pull/60973)
+- パーティション ID が null の場合にゼロ除算エラーが発生し、BE がクラッシュする問題。 [#60842](https://github.com/StarRocks/starrocks/pull/60842)
+- BE 拡張中に Broker Load ジョブがエラーになる問題。 [#60224](https://github.com/StarRocks/starrocks/pull/60224)
+
+### 動作の変更
+
+- `information_schema.keywords` ビュー内の `keyword` 列は `word` にリネームされ、MySQL の定義と互換性を持たせました。 [#60863](https://github.com/StarRocks/starrocks/pull/60863)
+
 ## 3.4.5
 
 リリース日: 2025年7月10日

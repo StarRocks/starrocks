@@ -36,15 +36,11 @@ package com.starrocks.load.loadv2;
 
 import com.google.common.collect.Lists;
 import com.google.gson.annotations.SerializedName;
-import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
-import com.starrocks.persist.gson.GsonUtils;
 import org.apache.hadoop.yarn.api.records.FinalApplicationStatus;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import java.io.DataInput;
-import java.io.IOException;
 import java.util.Iterator;
 import java.util.List;
 
@@ -224,10 +220,4 @@ public class SparkLoadAppHandle implements Writable {
         }
     }
 
-
-
-    public static SparkLoadAppHandle read(DataInput in) throws IOException {
-        String json = Text.readString(in);
-        return GsonUtils.GSON.fromJson(json, SparkLoadAppHandle.class);
-    }
 }

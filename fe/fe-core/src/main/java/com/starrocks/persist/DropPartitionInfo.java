@@ -35,12 +35,7 @@ package com.starrocks.persist;
 
 import com.google.common.base.Objects;
 import com.google.gson.annotations.SerializedName;
-import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
-import com.starrocks.persist.gson.GsonUtils;
-
-import java.io.DataInput;
-import java.io.IOException;
 
 public class DropPartitionInfo implements Writable {
     @SerializedName(value = "dbId")
@@ -85,13 +80,6 @@ public class DropPartitionInfo implements Writable {
     public boolean isForceDrop() {
         return forceDrop;
     }
-
-    public static DropPartitionInfo read(DataInput in) throws IOException {
-        String json = Text.readString(in);
-        return GsonUtils.GSON.fromJson(json, DropPartitionInfo.class);
-    }
-
-
 
     @Override
     public int hashCode() {

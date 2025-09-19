@@ -16,9 +16,10 @@ package com.starrocks.sql.parser;
 
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
-import com.starrocks.analysis.Expr;
-import com.starrocks.analysis.FunctionCallExpr;
 import com.starrocks.catalog.FunctionSet;
+import com.starrocks.catalog.combinator.AggStateUtils;
+import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.FunctionCallExpr;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -37,6 +38,9 @@ public class SyntaxSugars {
                 .put(FunctionSet.STRUCT, SyntaxSugars::struct)
                 .put(FunctionSet.BOOLOR_AGG, SyntaxSugars::boolOrAgg)
                 .put(FunctionSet.APPROX_COUNT_DISTINCT_HLL_SKETCH, SyntaxSugars::hllSketchCount)
+                .put(FunctionSet.DS_HLL_ACCUMULATE, SyntaxSugars::dsHllCountDistinctStateUnion)
+                .put(FunctionSet.DS_HLL_COMBINE, SyntaxSugars::dsHllCountDistinctUnion)
+                .put(FunctionSet.DS_HLL_ESTIMATE, SyntaxSugars::dsHllCountDistinctMerge)
                 .build();
     }
 
@@ -82,5 +86,22 @@ public class SyntaxSugars {
 
     private static FunctionCallExpr boolOrAgg(FunctionCallExpr call) {
         return new FunctionCallExpr(FunctionSet.BOOL_OR, call.getChildren());
+    }
+
+    private static FunctionCallExpr dsHllCountDistinctStateUnion(FunctionCallExpr call) {
+        final FunctionCallExpr aggStateFuncExpr =
+                new FunctionCallExpr(AggStateUtils.aggStateFunctionName(FunctionSet.DS_HLL_COUNT_DISTINCT), call.getChildren());
+        return new FunctionCallExpr(AggStateUtils.aggStateUnionFunctionName(FunctionSet.DS_HLL_COUNT_DISTINCT),
+                Lists.newArrayList(aggStateFuncExpr));
+    }
+
+    private static FunctionCallExpr dsHllCountDistinctUnion(FunctionCallExpr call) {
+        return new FunctionCallExpr(AggStateUtils.aggStateUnionFunctionName(FunctionSet.DS_HLL_COUNT_DISTINCT),
+                call.getChildren());
+    }
+
+    private static FunctionCallExpr dsHllCountDistinctMerge(FunctionCallExpr call) {
+        return new FunctionCallExpr(AggStateUtils.aggStateMergeFunctionName(FunctionSet.DS_HLL_COUNT_DISTINCT),
+                call.getChildren());
     }
 }

@@ -24,10 +24,15 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.Type;
+import com.starrocks.common.tvr.TvrDeltaStats;
+import com.starrocks.common.tvr.TvrTableDelta;
+import com.starrocks.common.tvr.TvrTableDeltaTrait;
+import com.starrocks.common.tvr.TvrTableSnapshot;
+import com.starrocks.common.tvr.TvrVersion;
+import com.starrocks.common.tvr.TvrVersionRange;
 import com.starrocks.connector.ConnectorMetadatRequestContext;
 import com.starrocks.connector.ConnectorMetadata;
 import com.starrocks.connector.PartitionInfo;
-import com.starrocks.connector.TableVersionRange;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
@@ -468,10 +473,24 @@ public class MockIcebergMetadata implements ConnectorMetadata {
         }
     }
 
+    public TvrTableSnapshot getCurrentTvrSnapshot(String dbName, com.starrocks.catalog.Table table) {
+        return TvrTableSnapshot.of(TvrVersion.of(1L));
+    }
+
+    public List<TvrTableDeltaTrait> listTableDeltaTraits(String dbName, com.starrocks.catalog.Table table,
+                                                         TvrTableSnapshot fromSnapshotExclusive,
+                                                         TvrTableSnapshot toSnapshotInclusive) {
+        TvrVersionRange currentRange = getCurrentTvrSnapshot(dbName, table);
+        TvrTableDeltaTrait delta = TvrTableDeltaTrait.ofMonotonic(
+                TvrTableDelta.of(TvrVersion.of(1L), currentRange.to),
+                TvrDeltaStats.EMPTY);
+        return Lists.newArrayList(delta);
+    }
+
     @Override
     public Statistics getTableStatistics(OptimizerContext session, com.starrocks.catalog.Table table,
                                          Map<ColumnRefOperator, Column> columns, List<PartitionKey> partitionKeys,
-                                         ScalarOperator predicate, long limit, TableVersionRange version) {
+                                         ScalarOperator predicate, long limit, TvrVersionRange version) {
         MockIcebergTable icebergTable = (MockIcebergTable) table;
         String hiveDb = icebergTable.getCatalogDBName();
         String tblName = icebergTable.getName();

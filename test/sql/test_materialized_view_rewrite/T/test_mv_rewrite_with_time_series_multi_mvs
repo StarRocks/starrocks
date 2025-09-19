@@ -1,4 +1,4 @@
--- name: test_mv_rewrite_with_time_series_multi_mvs
+-- name: test_mv_rewrite_with_time_series_multi_mvs @slow
 CREATE TABLE t0(
  ts datetime,
  v1 INT,

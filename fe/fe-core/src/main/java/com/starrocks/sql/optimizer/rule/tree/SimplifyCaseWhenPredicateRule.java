@@ -19,6 +19,8 @@ import com.starrocks.sql.optimizer.OptExpressionVisitor;
 import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.OperatorBuilderFactory;
 import com.starrocks.sql.optimizer.operator.logical.LogicalJoinOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalRepeatOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalScanOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rewrite.ScalarOperatorRewriter;
 import com.starrocks.sql.optimizer.task.TaskContext;
@@ -40,13 +42,37 @@ public class SimplifyCaseWhenPredicateRule implements TreeRewriteRule {
         private Rewriter() {
         }
 
+        // case when simplification is a null-sensitive Rule.
+        // We should not apply this rule to operators whose child produces a null output.
+        private boolean hasNullableGenerateChild(OptExpression optExpression) {
+            final Operator op = optExpression.getOp();
+            if (op instanceof LogicalRepeatOperator) {
+                return true;
+            }
+            if (op instanceof LogicalJoinOperator join) {
+                return join.getJoinType().isOuterJoin();
+            }
+
+            for (OptExpression input : optExpression.getInputs()) {
+                if (hasNullableGenerateChild(input)) {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
         @Override
         public Optional<OptExpression> visit(OptExpression optExpression, Void context) {
             ScalarOperator predicate = optExpression.getOp().getPredicate();
+            if (hasNullableGenerateChild(optExpression)) {
+                return Optional.empty();
+            }
             if (predicate == null) {
                 return Optional.empty();
             }
-            ScalarOperator newPredicate = ScalarOperatorRewriter.simplifyCaseWhen(predicate);
+            boolean isScan = optExpression.getOp() instanceof LogicalScanOperator;
+            ScalarOperator newPredicate = ScalarOperatorRewriter.simplifyCaseWhen(predicate, isScan);
             if (newPredicate == predicate) {
                 return Optional.empty();
             }
@@ -59,19 +85,19 @@ public class SimplifyCaseWhenPredicateRule implements TreeRewriteRule {
         @Override
         public Optional<OptExpression> visitLogicalJoin(OptExpression optExpression, Void context) {
             LogicalJoinOperator joinOperator = optExpression.getOp().cast();
+            if (hasNullableGenerateChild(optExpression)) {
+                return Optional.empty();
+            }
             Optional<ScalarOperator> optNewOnPredicate =
                     Optional.ofNullable(joinOperator.getOnPredicate()).map(predicate -> {
-                        ScalarOperator newPredicate = ScalarOperatorRewriter.simplifyCaseWhen(predicate);
+                        ScalarOperator newPredicate = ScalarOperatorRewriter.simplifyCaseWhen(predicate, false);
                         return newPredicate == predicate ? null : newPredicate;
                     });
             Optional<ScalarOperator> optNewPredicate =
                     Optional.ofNullable(joinOperator.getPredicate()).map(predicate -> {
-                        ScalarOperator newPredicate = ScalarOperatorRewriter.simplifyCaseWhen(predicate);
+                        ScalarOperator newPredicate = ScalarOperatorRewriter.simplifyCaseWhen(predicate, false);
                         return newPredicate == predicate ? null : newPredicate;
                     });
-            if (!optNewOnPredicate.isPresent() && !optNewPredicate.isPresent()) {
-                return Optional.empty();
-            }
             Operator newOperator = LogicalJoinOperator.builder().withOperator(joinOperator)
                     .setOnPredicate(optNewOnPredicate.orElse(joinOperator.getOnPredicate()))
                     .setPredicate(optNewPredicate.orElse(joinOperator.getPredicate()))

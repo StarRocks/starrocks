@@ -1,4 +1,4 @@
--- name: test_max_min_by_not_filter_nulls_with_nulls @slow @sequential
+-- name: test_max_min_by_not_filter_nulls_with_nulls
 DROP TABLE if exists t0;
 -- result:
 -- !result
@@ -71,11 +71,11 @@ select  (sum(murmur_hash3_32(ifnull(__c_0,0))+murmur_hash3_32(ifnull(a,0))+murmu
 -- !result
 select  (sum(murmur_hash3_32(ifnull(c2,0))+murmur_hash3_32(ifnull(a,0))+murmur_hash3_32(ifnull(b,0)))) as fingerprint from (select c2,max_by(c0,coalesce(c0,0)*1000+c1) over(partition by c2) a,min_by(c0,coalesce(c0,0)*1000+c1) over(partition by c2) b from t0) as t;
 -- result:
--19258865877
+-8717232615
 -- !result
 select  (sum(murmur_hash3_32(ifnull(c0,0))+murmur_hash3_32(ifnull(a,0))+murmur_hash3_32(ifnull(b,0)))) as fingerprint from (select c0,max_by(c2,concat(coalesce(c2,'NULL'),c3)) over(partition by c1) a,min_by(c2,concat(coalesce(c2,'NULL'),c3)) over(partition by c1) b from t0) as t;
 -- result:
-25406211869
+20365175519
 -- !result
 SET new_planner_agg_stage=2;
 -- result:
@@ -117,11 +117,11 @@ select  (sum(murmur_hash3_32(ifnull(__c_0,0))+murmur_hash3_32(ifnull(a,0))+murmu
 -- !result
 select  (sum(murmur_hash3_32(ifnull(c2,0))+murmur_hash3_32(ifnull(a,0))+murmur_hash3_32(ifnull(b,0)))) as fingerprint from (select c2,max_by(c0,coalesce(c0,0)*1000+c1) over(partition by c2) a,min_by(c0,coalesce(c0,0)*1000+c1) over(partition by c2) b from t0) as t;
 -- result:
--19258865877
+-8717232615
 -- !result
 select  (sum(murmur_hash3_32(ifnull(c0,0))+murmur_hash3_32(ifnull(a,0))+murmur_hash3_32(ifnull(b,0)))) as fingerprint from (select c0,max_by(c2,concat(coalesce(c2,'NULL'),c3)) over(partition by c1) a,min_by(c2,concat(coalesce(c2,'NULL'),c3)) over(partition by c1) b from t0) as t;
 -- result:
-25406211869
+20365175519
 -- !result
 SET new_planner_agg_stage=2;
 -- result:
@@ -163,11 +163,11 @@ select  (sum(murmur_hash3_32(ifnull(__c_0,0))+murmur_hash3_32(ifnull(a,0))+murmu
 -- !result
 select  (sum(murmur_hash3_32(ifnull(c2,0))+murmur_hash3_32(ifnull(a,0))+murmur_hash3_32(ifnull(b,0)))) as fingerprint from (select c2,max_by(c0,coalesce(c0,0)*1000+c1) over(partition by c2) a,min_by(c0,coalesce(c0,0)*1000+c1) over(partition by c2) b from t0) as t;
 -- result:
--19258865877
+-8717232615
 -- !result
 select  (sum(murmur_hash3_32(ifnull(c0,0))+murmur_hash3_32(ifnull(a,0))+murmur_hash3_32(ifnull(b,0)))) as fingerprint from (select c0,max_by(c2,concat(coalesce(c2,'NULL'),c3)) over(partition by c1) a,min_by(c2,concat(coalesce(c2,'NULL'),c3)) over(partition by c1) b from t0) as t;
 -- result:
-25406211869
+20365175519
 -- !result
 SET new_planner_agg_stage=3;
 -- result:
@@ -209,11 +209,11 @@ select  (sum(murmur_hash3_32(ifnull(__c_0,0))+murmur_hash3_32(ifnull(a,0))+murmu
 -- !result
 select  (sum(murmur_hash3_32(ifnull(c2,0))+murmur_hash3_32(ifnull(a,0))+murmur_hash3_32(ifnull(b,0)))) as fingerprint from (select c2,max_by(c0,coalesce(c0,0)*1000+c1) over(partition by c2) a,min_by(c0,coalesce(c0,0)*1000+c1) over(partition by c2) b from t0) as t;
 -- result:
--19258865877
+-8717232615
 -- !result
 select  (sum(murmur_hash3_32(ifnull(c0,0))+murmur_hash3_32(ifnull(a,0))+murmur_hash3_32(ifnull(b,0)))) as fingerprint from (select c0,max_by(c2,concat(coalesce(c2,'NULL'),c3)) over(partition by c1) a,min_by(c2,concat(coalesce(c2,'NULL'),c3)) over(partition by c1) b from t0) as t;
 -- result:
-25406211869
+20365175519
 -- !result
 SET new_planner_agg_stage=3;
 -- result:
@@ -255,11 +255,11 @@ select  (sum(murmur_hash3_32(ifnull(__c_0,0))+murmur_hash3_32(ifnull(a,0))+murmu
 -- !result
 select  (sum(murmur_hash3_32(ifnull(c2,0))+murmur_hash3_32(ifnull(a,0))+murmur_hash3_32(ifnull(b,0)))) as fingerprint from (select c2,max_by(c0,coalesce(c0,0)*1000+c1) over(partition by c2) a,min_by(c0,coalesce(c0,0)*1000+c1) over(partition by c2) b from t0) as t;
 -- result:
--19258865877
+-8717232615
 -- !result
 select  (sum(murmur_hash3_32(ifnull(c0,0))+murmur_hash3_32(ifnull(a,0))+murmur_hash3_32(ifnull(b,0)))) as fingerprint from (select c0,max_by(c2,concat(coalesce(c2,'NULL'),c3)) over(partition by c1) a,min_by(c2,concat(coalesce(c2,'NULL'),c3)) over(partition by c1) b from t0) as t;
 -- result:
-25406211869
+20365175519
 -- !result
 SET new_planner_agg_stage=4;
 -- result:
@@ -301,11 +301,11 @@ select  (sum(murmur_hash3_32(ifnull(__c_0,0))+murmur_hash3_32(ifnull(a,0))+murmu
 -- !result
 select  (sum(murmur_hash3_32(ifnull(c2,0))+murmur_hash3_32(ifnull(a,0))+murmur_hash3_32(ifnull(b,0)))) as fingerprint from (select c2,max_by(c0,coalesce(c0,0)*1000+c1) over(partition by c2) a,min_by(c0,coalesce(c0,0)*1000+c1) over(partition by c2) b from t0) as t;
 -- result:
--19258865877
+-8717232615
 -- !result
 select  (sum(murmur_hash3_32(ifnull(c0,0))+murmur_hash3_32(ifnull(a,0))+murmur_hash3_32(ifnull(b,0)))) as fingerprint from (select c0,max_by(c2,concat(coalesce(c2,'NULL'),c3)) over(partition by c1) a,min_by(c2,concat(coalesce(c2,'NULL'),c3)) over(partition by c1) b from t0) as t;
 -- result:
-25406211869
+20365175519
 -- !result
 SET new_planner_agg_stage=4;
 -- result:
@@ -347,11 +347,11 @@ select  (sum(murmur_hash3_32(ifnull(__c_0,0))+murmur_hash3_32(ifnull(a,0))+murmu
 -- !result
 select  (sum(murmur_hash3_32(ifnull(c2,0))+murmur_hash3_32(ifnull(a,0))+murmur_hash3_32(ifnull(b,0)))) as fingerprint from (select c2,max_by(c0,coalesce(c0,0)*1000+c1) over(partition by c2) a,min_by(c0,coalesce(c0,0)*1000+c1) over(partition by c2) b from t0) as t;
 -- result:
--19258865877
+-8717232615
 -- !result
 select  (sum(murmur_hash3_32(ifnull(c0,0))+murmur_hash3_32(ifnull(a,0))+murmur_hash3_32(ifnull(b,0)))) as fingerprint from (select c0,max_by(c2,concat(coalesce(c2,'NULL'),c3)) over(partition by c1) a,min_by(c2,concat(coalesce(c2,'NULL'),c3)) over(partition by c1) b from t0) as t;
 -- result:
-25406211869
+20365175519
 -- !result
 -- name: test_max_min_by_support_window
 CREATE TABLE exam (
@@ -370,12 +370,32 @@ insert into exam values
     (6,'biology',null);
 -- result:
 -- !result
-SELECT max_by(subject, exam_result) over(partition by subject_id) FROM exam;
+SELECT max_by(subject, exam_result) over(partition by subject_id) FROM exam order by 1;
 -- result:
-english
 None
-physics
 chemistry
-music
+english
 math
+music
+physics
+-- !result
+select max_by(tag, tag) from (select 'literal' tag, subject_id from exam) t;
+-- result:
+literal
+-- !result
+select max_by(tag, tag) from (select 1 tag, subject_id from exam) t;
+-- result:
+1
+-- !result
+select max_by(row(tag,tag), tag) from (select 1 tag, subject_id from exam) t;
+-- result:
+{"col1":1,"col2":1}
+-- !result
+select max_by([tag], tag) from (select 1 tag, subject_id from exam) t;
+-- result:
+[1]
+-- !result
+select max_by(map(tag,tag), tag) from (select 1 tag, subject_id from exam) t;
+-- result:
+{1:1}
 -- !result

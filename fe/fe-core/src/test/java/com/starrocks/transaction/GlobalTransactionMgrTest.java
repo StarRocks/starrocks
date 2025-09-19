@@ -847,7 +847,7 @@ public class GlobalTransactionMgrTest {
         assertEquals(0, entity.counterStreamLoadRowsTotal.getValue().intValue());
         assertEquals(0, entity.counterStreamLoadBytesTotal.getValue().intValue());
         assertEquals(0, entity.counterStreamLoadFinishedTotal.getValue().intValue());
-        masterTransMgr.prepareTransaction(GlobalStateMgrTestUtil.testDbId1, transactionId, transTablets,
+        masterTransMgr.prepareTransaction(GlobalStateMgrTestUtil.testDbId1, transactionId, -1, transTablets,
                 Lists.newArrayList(), txnCommitAttachment);
         TransactionState transactionState = fakeEditLog.getTransaction(transactionId);
         assertEquals(TransactionStatus.PREPARED, transactionState.getTransactionStatus());

@@ -251,10 +251,10 @@ void ScanOperator::_detach_chunk_sources() {
 void ScanOperator::update_exec_stats(RuntimeState* state) {
     auto ctx = state->query_ctx();
     if (ctx != nullptr) {
-        ctx->update_pull_rows_stats(_plan_node_id, _pull_row_num_counter->value());
+        ctx->update_pull_rows_stats(_plan_node_id, COUNTER_VALUE(_pull_row_num_counter));
         if (_bloom_filter_eval_context.join_runtime_filter_input_counter != nullptr) {
-            int64_t input_rows = _bloom_filter_eval_context.join_runtime_filter_input_counter->value();
-            int64_t output_rows = _bloom_filter_eval_context.join_runtime_filter_output_counter->value();
+            int64_t input_rows = COUNTER_VALUE(_bloom_filter_eval_context.join_runtime_filter_input_counter);
+            int64_t output_rows = COUNTER_VALUE(_bloom_filter_eval_context.join_runtime_filter_output_counter);
             ctx->update_rf_filter_stats(_plan_node_id, input_rows - output_rows);
         }
     }
@@ -264,11 +264,11 @@ Status ScanOperator::set_finishing(RuntimeState* state) {
     auto notify = scan_defer_notify(this);
     // check when expired, are there running io tasks or submitted tasks
     if (UNLIKELY(state != nullptr && state->query_ctx()->is_query_expired() &&
-                 (_num_running_io_tasks > 0 || _submit_task_counter->value() == 0))) {
+                 (_num_running_io_tasks > 0 || COUNTER_VALUE(_submit_task_counter) == 0))) {
         LOG(WARNING) << "set_finishing scan fragment " << print_id(state->fragment_instance_id()) << " driver_id  "
                      << get_driver_sequence() << " _num_running_io_tasks= " << _num_running_io_tasks
-                     << " _submit_task_counter= " << _submit_task_counter->value()
-                     << " _morsels_counter= " << _morsels_counter->value()
+                     << " _submit_task_counter= " << COUNTER_VALUE(_submit_task_counter)
+                     << " _morsels_counter= " << COUNTER_VALUE(_morsels_counter)
                      << (is_buffer_full() && (num_buffered_chunks() == 0) ? ", buff is full but without local chunks"
                                                                           : "");
     }
@@ -295,6 +295,10 @@ StatusOr<ChunkPtr> ScanOperator::pull_chunk(RuntimeState* state) {
         evaluate_topn_runtime_filters(res.get());
         eval_runtime_bloom_filters(res.get());
         res->owner_info().set_owner_id(owner_id, is_eos);
+    }
+
+    if (_scan_node->limit() != -1 && _op_pull_rows >= _scan_node->limit()) {
+        _morsel_queue->set_reach_limit(true);
     }
 
     return res;
@@ -433,7 +437,7 @@ Status ScanOperator::_trigger_next_scan(RuntimeState* state, int chunk_source_in
     workgroup::ScanTask task;
     task.workgroup = _workgroup;
     // TODO: consider more factors, such as scan bytes and i/o time.
-    task.priority = OlapScanNode::compute_priority(_submit_task_counter->value());
+    task.priority = OlapScanNode::compute_priority(COUNTER_VALUE(_submit_task_counter));
     task.task_group = down_cast<const ScanOperatorFactory*>(_factory)->scan_task_group();
     task.peak_scan_task_queue_size_counter = _peak_scan_task_queue_size_counter;
     const auto io_task_start_nano = MonotonicNanos();
@@ -455,8 +459,8 @@ Status ScanOperator::_trigger_next_scan(RuntimeState* state, int chunk_source_in
             FAIL_POINT_SCOPE(mem_alloc_error);
 #endif
             DeferOp timer_defer([chunk_source]() {
-                COUNTER_SET(chunk_source->scan_timer(),
-                            chunk_source->io_task_wait_timer()->value() + chunk_source->io_task_exec_timer()->value());
+                COUNTER_SET(chunk_source->scan_timer(), COUNTER_VALUE(chunk_source->io_task_wait_timer()) +
+                                                                COUNTER_VALUE(chunk_source->io_task_exec_timer()));
             });
             auto notify = scan_defer_notify(this);
             COUNTER_UPDATE(chunk_source->io_task_wait_timer(), MonotonicNanos() - io_task_start_nano);

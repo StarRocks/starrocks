@@ -12,7 +12,9 @@ import Beta from '../../_assets/commonMarkdown/_beta.mdx'
 
 从版本 3.3.0 开始，StarRocks 支持全文倒排索引，可以将文本拆分成更小的词，并为每个词创建一个索引条目，显示该词与数据文件中对应行号之间的映射关系。对于全文搜索，StarRocks 根据搜索关键词查询倒排索引，快速定位匹配关键词的数据行。
 
-全文倒排索引尚不支持主键表和存算分离集群。
+主键表自 v4.0 起支持全文倒排索引。
+
+全文倒排索引尚不支持存算分离集群。
 
 ## 概述
 
@@ -32,7 +34,11 @@ StarRocks 将其底层数据存储在按列组织的数据文件中。每个数�
 ADMIN SET FRONTEND CONFIG ("enable_experimental_gin" = "true");
 ```
 
-此外，全文倒排索引只能在明细表中创建，并且表属性 `replicated_storage` 需要为 `false`。
+:::note
+在为表创建全文倒排索引时，必须禁用该表的 `replicated_storage` 功能。
+- 对于 v4.0 及更高版本，创建索引时该功能会自动禁用。
+- 对于 v4.0 之前的版本，必须手动将表属性 `replicated_storage` 设置为 `false`。
+:::
 
 #### 在创建表时创建全文倒排索引
 
@@ -92,8 +98,12 @@ ALTER TABLE t DROP index idx;
 
 #### 当索引列已分词时支持的查询
 
-如果全文倒排索引对索引列进行了分词，即 `'parser' = 'standard|english|chinese'`，则仅支持使用 `MATCH` 谓词进行数据过滤，格式需为 `<col_name> (NOT) MATCH '%keyword%'`。`keyword` 必须是字符串字面量，不支持表达式。
+当全文倒排索引列启用分词（`parser` = `standard` | `english` | `chinese`）时，仅支持使用 `MATCH`、`MATCH_ANY` 或 `MATCH_ALL` 谓词进行过滤，格式为：
+- `<col_name> (NOT) MATCH '%keyword%'`
+- `<col_name> (NOT) MATCH_ANY 'keyword1, keyword2'`
+- `<col_name> (NOT) MATCH_ALL 'keyword1, keyword2'`
 
+其中，keyword 必须为字符串字面量，不支持表达式。
 1. 创建一个表并插入几行测试数据。
 
       ```SQL
@@ -130,9 +140,24 @@ ALTER TABLE t DROP index idx;
     MySQL [example_db]> SELECT * FROM t WHERE t.value MATCH "data%";
     ```
 
+3. 使用 `MATCH_ANY` 谓词进行查询。
+
+- 查询 `value` 列包含关键词 `database` 或者包含 `data`的数据行。
+
+    ```SQL
+    MySQL [example_db]> SELECT * FROM t WHERE t.value MATCH_ANY "database data";
+    ```
+4. 使用 `MATCH_ALL` 谓词进行查询。
+
+- 查询 `value` 列既包含关键词 `database` 又包含 `data`的数据行。
+
+    ```SQL
+    MySQL [example_db]> SELECT * FROM t WHERE t.value MATCH_ALL "database data";
+    ```
+  
 **注意：**
 
-- 在查询过程中，可以使用 `%` 进行模糊匹配，格式为 `%keyword%`。但关键词必须包含单词的一部分。例如，如果关键词是 <code>starrocks&nbsp;</code>，则无法匹配单词 `starrocks`，因为它包含空格。
+- 在查询过程中，`MATCH`可以使用 `%` 进行模糊匹配，格式为 `%keyword%`。但关键词必须包含单词的一部分。例如，如果关键词是 <code>starrocks&nbsp;</code>，则无法匹配单词 `starrocks`，因为它包含空格。
 
     ```SQL
     MySQL [example_db]> SELECT * FROM t WHERE t.value MATCH "star%";
@@ -148,7 +173,7 @@ ALTER TABLE t DROP index idx;
     Empty set (0.02 sec)
     ```
 
-- 如果使用英文或多语言分词构建全文倒排索引，存储时会将大写英文单词转换为小写。因此，在查询时，关键词需要是小写而不是大写，以利用全文倒排索引定位数据行。
+- 如果使用英文或多语言分词构建全文倒排索引，存储时会将大写英文单词转换为小写。因此，在使用`MATCH`查询时，关键词需要是小写而不是大写，以利用全文倒排索引定位数据行。
 
     ```SQL
     MySQL [example_db]> INSERT INTO t VALUES (3, "StarRocks is the BEST");
@@ -175,48 +200,48 @@ ALTER TABLE t DROP index idx;
     1 row in set (0.01 sec)
     ```
 
-- 查询条件中的 `MATCH` 谓词必须用作下推谓词，因此必须在 WHERE 子句中并针对索引列执行。
+  - 查询条件中的 `MATCH` 、`MATCH_ANY`或`MATCH_ALL`谓词必须用作下推谓词，因此必须在 WHERE 子句中并针对索引列执行。
 
-    以以下表和测试数据为例：
+      以以下表和测试数据为例：
 
-    ```SQL
-    CREATE TABLE `t_match` (
-        `id1` bigint(20) NOT NULL COMMENT "",
-        `value` varchar(255) NOT NULL COMMENT "",
-        `value_test` varchar(255) NOT NULL COMMENT "",
-        INDEX gin_english (`value`) USING GIN("parser" = "english") COMMENT 'english index'
-    )
-    ENGINE=OLAP 
-    DUPLICATE KEY(`id1`)
-    DISTRIBUTED BY HASH (`id1`) BUCKETS 1 
-    PROPERTIES (
-    "replicated_storage" = "false"
-    );
+      ```SQL
+      CREATE TABLE `t_match` (
+          `id1` bigint(20) NOT NULL COMMENT "",
+          `value` varchar(255) NOT NULL COMMENT "",
+          `value_test` varchar(255) NOT NULL COMMENT "",
+          INDEX gin_english (`value`) USING GIN("parser" = "english") COMMENT 'english index'
+      )
+      ENGINE=OLAP 
+      DUPLICATE KEY(`id1`)
+      DISTRIBUTED BY HASH (`id1`) BUCKETS 1 
+      PROPERTIES (
+      "replicated_storage" = "false"
+      );
     
-    INSERT INTO t_match VALUES (1, "test", "test");
-    ```
+      INSERT INTO t_match VALUES (1, "test", "test");
+      ```
 
-    以下查询语句不符合要求：
+      以下查询语句不符合要求：
 
-    - 因为查询语句中的 `MATCH` 谓词不在 WHERE 子句中，无法下推，导致查询错误。
+      - 因为查询语句中的 `MATCH` 、`MATCH_ANY`或`MATCH_ALL`谓词不在 WHERE 子句中，无法下推，导致查询错误。
 
-        ```SQL
-        MySQL [test]> SELECT value MATCH "test" FROM t_match;
-        ERROR 1064 (HY000): Match can only be used as a pushdown predicate on a column with GIN in a single query.
-        ```
+          ```SQL
+          MySQL [test]> SELECT value MATCH "test" FROM t_match;
+          ERROR 1064 (HY000): Match can only be used as a pushdown predicate on a column with GIN in a single query.
+          ```
 
-    - 因为查询语句中 `MATCH` 谓词执行的列 `value_test` 不是索引列，查询失败。
+      - 因为查询语句中 `MATCH`、`MATCH_ANY`或`MATCH_ALL` 谓词执行的列 `value_test` 不是索引列，查询失败。
 
-        ```SQL
-        MySQL [test]> SELECT * FROM t_match WHERE value_test match "test";
-        ERROR 1064 (HY000): Match can only be used as a pushdown predicate on a column with GIN in a single query.
-        ```
+          ```SQL
+          MySQL [test]> SELECT * FROM t_match WHERE value_test match "test";
+          ERROR 1064 (HY000): Match can only be used as a pushdown predicate on a column with GIN in a single query.
+          ```
 
 #### 当索引列未分词时支持的查询
 
 如果全文倒排索引未对索引列进行分词，即 `'parser' = 'none'`，则查询条件中列出的所有下推谓词均可用于使用全文倒排索引进行数据过滤：
 
-- 表达式谓词: (NOT) LIKE, (NOT) MATCH
+- 表达式谓词: (NOT) LIKE, (NOT) MATCH，(NOT) MATCH_ANY，(NOT) MATCH_ALL
   
   :::note
 

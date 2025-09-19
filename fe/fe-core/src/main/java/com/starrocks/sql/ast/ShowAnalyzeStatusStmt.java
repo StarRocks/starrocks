@@ -16,19 +16,14 @@
 package com.starrocks.sql.ast;
 
 import com.google.common.collect.Lists;
-import com.starrocks.analysis.LimitElement;
-import com.starrocks.analysis.OrderByElement;
-import com.starrocks.analysis.Predicate;
-import com.starrocks.analysis.RedirectStatus;
-import com.starrocks.catalog.Column;
-import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.qe.ConnectContext;
-import com.starrocks.qe.ShowResultSetMetaData;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.Authorizer;
 import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.sql.ast.expression.LimitElement;
+import com.starrocks.sql.ast.expression.Predicate;
 import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.statistic.AnalyzeStatus;
 import com.starrocks.statistic.StatisticUtils;
@@ -39,7 +34,7 @@ import org.apache.logging.log4j.Logger;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
 
-public class ShowAnalyzeStatusStmt extends ShowStmt {
+public class ShowAnalyzeStatusStmt extends EnhancedShowStmt {
     private static final Logger LOG = LogManager.getLogger(ShowAnalyzeStatusStmt.class);
 
     public ShowAnalyzeStatusStmt(Predicate predicate, List<OrderByElement> orderByElements,
@@ -49,21 +44,6 @@ public class ShowAnalyzeStatusStmt extends ShowStmt {
         this.limitElement = limitElement;
         this.orderByElements = orderByElements;
     }
-
-    public static final ShowResultSetMetaData META_DATA =
-            ShowResultSetMetaData.builder()
-                    .addColumn(new Column("Id", ScalarType.createVarchar(60)))
-                    .addColumn(new Column("Database", ScalarType.createVarchar(60)))
-                    .addColumn(new Column("Table", ScalarType.createVarchar(60)))
-                    .addColumn(new Column("Columns", ScalarType.createVarchar(200)))
-                    .addColumn(new Column("Type", ScalarType.createVarchar(20)))
-                    .addColumn(new Column("Schedule", ScalarType.createVarchar(20)))
-                    .addColumn(new Column("Status", ScalarType.createVarchar(20)))
-                    .addColumn(new Column("StartTime", ScalarType.createVarchar(60)))
-                    .addColumn(new Column("EndTime", ScalarType.createVarchar(60)))
-                    .addColumn(new Column("Properties", ScalarType.createVarchar(200)))
-                    .addColumn(new Column("Reason", ScalarType.createVarchar(100)))
-                    .build();
 
     public static List<String> showAnalyzeStatus(ConnectContext context,
                                                  AnalyzeStatus analyzeStatus) throws MetaNotFoundException {
@@ -121,17 +101,7 @@ public class ShowAnalyzeStatusStmt extends ShowStmt {
     }
 
     @Override
-    public ShowResultSetMetaData getMetaData() {
-        return META_DATA;
-    }
-
-    @Override
-    public RedirectStatus getRedirectStatus() {
-        return RedirectStatus.FORWARD_NO_SYNC;
-    }
-
-    @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitShowAnalyzeStatusStatement(this, context);
+        return ((AstVisitorExtendInterface<R, C>) visitor).visitShowAnalyzeStatusStatement(this, context);
     }
 }

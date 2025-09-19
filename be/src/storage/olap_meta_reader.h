@@ -34,6 +34,7 @@ struct OlapMetaReaderParams : MetaReaderParams {
 
     TabletSharedPtr tablet;
     TabletSchemaCSPtr tablet_schema;
+    std::vector<ColumnAccessPathPtr>* column_access_paths = nullptr;
 };
 
 class OlapMetaReader final : public MetaReader {

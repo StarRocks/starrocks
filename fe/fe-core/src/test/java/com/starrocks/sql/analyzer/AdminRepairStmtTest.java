@@ -15,7 +15,6 @@
 
 package com.starrocks.sql.analyzer;
 
-import com.starrocks.analysis.RedirectStatus;
 import com.starrocks.sql.ast.AdminCancelRepairTableStmt;
 import com.starrocks.sql.ast.AdminCheckTabletsStmt;
 import com.starrocks.sql.ast.AdminRepairTableStmt;
@@ -71,7 +70,6 @@ public class AdminRepairStmtTest {
         Assertions.assertTrue(stmt.getProperty().containsKey("type"));
         Assertions.assertEquals("consistency", stmt.getType().name().toLowerCase());
         Assertions.assertEquals(Long.valueOf(10001L), stmt.getTabletIds().get(1));
-        Assertions.assertEquals(RedirectStatus.FORWARD_NO_SYNC, stmt.getRedirectStatus());
         // bad cases
         analyzeFail("ADMIN CHECK TABLET (10000, 10001);");
         analyzeFail("ADMIN CHECK TABLET (10000, 10001) PROPERTIES(\"amory\" = \"consistency\";");

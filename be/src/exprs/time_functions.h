@@ -121,6 +121,23 @@ public:
     DEFINE_VECTORIZED_FN(day_of_week_iso);
 
     /**
+     * Get day of week of the timestamp.
+     * syntax like select weekday("2023-01-03");
+     * result is 1
+     * @param context
+     * @param columns [TimestampColumn] Columns that hold timestamps.
+     * @return  IntColumn Day of the day_of_week_iso:
+     *  - 0: Monday
+     *  - 1: Tuesday
+     *  - 2: Wednesday
+     *  - 3: Thursday
+     *  - 4: Friday
+     *  - 5: Saturday
+     *  - 6: Sunday
+     */
+    DEFINE_VECTORIZED_FN(week_day);
+
+    /**
      * Get day of the timestamp.
      * @param context
      * @param columns [TimestampColumn] Columns that hold timestamps.

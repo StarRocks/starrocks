@@ -38,6 +38,9 @@
 
 #include "column/column_helper.h"
 #include "column/column_viewer.h"
+#include "common/config.h"
+#include "runtime/current_thread.h"
+#include "runtime/exec_env.h"
 #include "storage/chunk_helper.h"
 #include "storage/decimal_type_info.h"
 #include "storage/olap_define.h"
@@ -119,6 +122,25 @@ struct ZoneMapDatum<TYPE_CHAR> : public ZoneMapDatumBase<TYPE_CHAR> {
 template <>
 struct ZoneMapDatum<TYPE_VARCHAR> final : public ZoneMapDatum<TYPE_CHAR> {};
 
+template <>
+struct ZoneMapDatum<TYPE_VARBINARY> final : public ZoneMapDatum<TYPE_CHAR> {
+    void resize_container_for_fit(TypeInfo* type_info, const void* v) override {
+        static const int INIT_SIZE = 64;
+        const Slice* slice = reinterpret_cast<const Slice*>(v);
+        if (slice->size > _length) {
+            _length = std::max<int>(BitUtil::next_power_of_two(slice->size), INIT_SIZE);
+            raw::stl_string_resize_uninitialized(&_value_container, _length);
+            value.data = _value_container.data();
+            value.size = 0;
+        }
+    }
+
+    void reset(TypeInfo* type_info) override {
+        value.data = _value_container.data();
+        value.size = 0;
+    }
+};
+
 template <LogicalType type>
 struct ZoneMap {
     ZoneMapDatum<type> min_value;
@@ -139,6 +161,19 @@ struct ZoneMap {
         dst->set_has_null(has_null);
         dst->set_has_not_null(has_not_null);
     }
+
+    void from_proto(const ZoneMapPB& src, TypeInfo* type_info) {
+        Slice min_slice(src.min());
+        min_value.resize_container_for_fit(type_info, &min_slice);
+        type_info->direct_copy(&min_value.value, &min_slice);
+
+        Slice max_slice(src.max());
+        max_value.resize_container_for_fit(type_info, &max_slice);
+        type_info->direct_copy(&max_value.value, &max_slice);
+
+        has_null = src.has_null();
+        has_not_null = src.has_not_null();
+    }
 };
 
 template <LogicalType type>
@@ -150,6 +185,8 @@ public:
     // length is only used for CHAR/VARCHAR, and used to allocate enough memory for min/max value.
     explicit ZoneMapIndexWriterImpl(TypeInfo* type_info);
 
+    void enable_truncate_string() override { _truncate_string = true; }
+
     void add_values(const void* values, size_t count) override;
 
     void add_nulls(uint32_t count) override { _page_zone_map.has_null |= count > 0; }
@@ -157,11 +194,15 @@ public:
     // mark the end of one data page so that we can finalize the corresponding zone map
     Status flush() override;
 
+    std::optional<ZoneMapPB> get_last_zonemap() override;
+
     Status finish(WritableFile* wfile, ColumnIndexMetaPB* index_meta) override;
 
     uint64_t size() const override { return _estimated_size; }
 
 private:
+    void _truncate_string_minmax_if_needed(ZoneMap<type>* zm);
+
     void _reset_zone_map(ZoneMap<type>* zone_map) {
         // we should allocate max varchar length and set to max for min value
         zone_map->min_value.reset(_type_info);
@@ -178,12 +219,37 @@ private:
     // serialized ZoneMapPB for each data page
     std::vector<std::string> _values;
     uint64_t _estimated_size = 0;
+
+    // Whether truncate the string to `string_prefix_zonemap_prefix_len` length
+    bool _truncate_string = false;
 };
 
 template <LogicalType type>
 ZoneMapIndexWriterImpl<type>::ZoneMapIndexWriterImpl(TypeInfo* type_info) : _type_info(type_info) {
     _reset_zone_map(&_page_zone_map);
     _reset_zone_map(&_segment_zone_map);
+}
+
+// Truncate string min/max values at write time to reduce comparison/metadata overhead.
+// For max values that are truncated, append 0xFF to preserve an upper bound.
+template <LogicalType LT>
+void ZoneMapIndexWriterImpl<LT>::_truncate_string_minmax_if_needed(ZoneMap<LT>* zm) {
+    if (!_truncate_string) {
+        return;
+    }
+    const size_t kPrefixLen = std::max<int32_t>(8, config::string_prefix_zonemap_prefix_len);
+    if constexpr (is_string_type(LT) || is_binary_type(LT)) {
+        auto& min_slice = zm->min_value.value;
+        auto& max_slice = zm->max_value.value;
+        if (min_slice.size > kPrefixLen) {
+            min_slice.size = kPrefixLen;
+        }
+        if (max_slice.size > kPrefixLen) {
+            // Safe, original buffer has length > kPrefixLen, ensure buffer has room for 0xFF
+            max_slice.data[kPrefixLen] = static_cast<char>(0xFF);
+            max_slice.size = kPrefixLen + 1;
+        }
+    }
 }
 
 template <LogicalType type>
@@ -196,10 +262,12 @@ void ZoneMapIndexWriterImpl<type>::add_values(const void* values, size_t count) 
             if (unaligned_load<CppType>(pmin) < _page_zone_map.min_value.value) {
                 _page_zone_map.min_value.resize_container_for_fit(_type_info, pmin);
                 _type_info->direct_copy(&_page_zone_map.min_value.value, pmin);
+                _truncate_string_minmax_if_needed(&_page_zone_map);
             }
             if (unaligned_load<CppType>(pmax) > _page_zone_map.max_value.value) {
                 _page_zone_map.max_value.resize_container_for_fit(_type_info, pmax);
                 _type_info->direct_copy(&_page_zone_map.max_value.value, pmax);
+                _truncate_string_minmax_if_needed(&_page_zone_map);
             }
         } else {
             _page_zone_map.min_value.resize_container_for_fit(_type_info, pmin);
@@ -207,6 +275,7 @@ void ZoneMapIndexWriterImpl<type>::add_values(const void* values, size_t count) 
 
             _page_zone_map.max_value.resize_container_for_fit(_type_info, pmax);
             _type_info->direct_copy(&_page_zone_map.max_value.value, pmax);
+            _truncate_string_minmax_if_needed(&_page_zone_map);
         }
         _page_zone_map.has_not_null = true;
     }
@@ -220,10 +289,12 @@ Status ZoneMapIndexWriterImpl<type>::flush() {
             if (_page_zone_map.min_value.value < _segment_zone_map.min_value.value) {
                 _segment_zone_map.min_value.resize_container_for_fit(_type_info, &_page_zone_map.min_value.value);
                 _type_info->direct_copy(&_segment_zone_map.min_value.value, &_page_zone_map.min_value.value);
+                _truncate_string_minmax_if_needed(&_segment_zone_map);
             }
             if (_page_zone_map.max_value.value > _segment_zone_map.max_value.value) {
                 _segment_zone_map.max_value.resize_container_for_fit(_type_info, &_page_zone_map.max_value.value);
                 _type_info->direct_copy(&_segment_zone_map.max_value.value, &_page_zone_map.max_value.value);
+                _truncate_string_minmax_if_needed(&_segment_zone_map);
             }
         } else {
             _segment_zone_map.min_value.resize_container_for_fit(_type_info, &_page_zone_map.min_value.value);
@@ -231,6 +302,7 @@ Status ZoneMapIndexWriterImpl<type>::flush() {
 
             _segment_zone_map.max_value.resize_container_for_fit(_type_info, &_page_zone_map.max_value.value);
             _type_info->direct_copy(&_segment_zone_map.max_value.value, &_page_zone_map.max_value.value);
+            _truncate_string_minmax_if_needed(&_segment_zone_map);
         }
         _segment_zone_map.has_not_null = true;
     }
@@ -251,6 +323,18 @@ Status ZoneMapIndexWriterImpl<type>::flush() {
     _estimated_size += serialized_zone_map.size() + sizeof(uint32_t);
     _values.push_back(std::move(serialized_zone_map));
     return Status::OK();
+}
+
+template <LogicalType type>
+std::optional<ZoneMapPB> ZoneMapIndexWriterImpl<type>::get_last_zonemap() {
+    if (_values.empty()) {
+        return std::nullopt;
+    }
+    ZoneMapPB zone_map_pb;
+    if (!zone_map_pb.ParseFromString(_values.back())) {
+        return std::nullopt;
+    }
+    return zone_map_pb;
 }
 
 struct ZoneMapIndexWriterBuilder {
@@ -354,6 +438,95 @@ size_t ZoneMapIndexReader::mem_usage() const {
         size += zone_map.SpaceUsedLong();
     }
     return size;
+}
+
+template <LogicalType type>
+class ZoneMapIndexQualityJudgerImpl final : public ZoneMapIndexQualityJudger {
+public:
+    ZoneMapIndexQualityJudgerImpl(TypeInfo* type_info, double overlap_threshold, int32_t sample_pages)
+            : _type_info(type_info), _overlap_threshold(overlap_threshold), _sample_pages(sample_pages) {}
+    ~ZoneMapIndexQualityJudgerImpl() override = default;
+
+    void feed(const ZoneMapPB& page_zone_map) override;
+    CreateIndexDecision make_decision() const override;
+
+private:
+    TypeInfo* _type_info;
+    const double _overlap_threshold;
+    const int32_t _sample_pages;
+    std::vector<ZoneMap<type>> _page_zone_maps;
+};
+
+struct ZoneMapIndexQualityJudgerBuilder {
+    template <LogicalType ftype>
+    std::unique_ptr<ZoneMapIndexQualityJudger> operator()(TypeInfo* type_info, double overlap_threshold,
+                                                          int32_t sample_pages) {
+        return std::make_unique<ZoneMapIndexQualityJudgerImpl<ftype>>(type_info, overlap_threshold, sample_pages);
+    }
+};
+
+std::unique_ptr<ZoneMapIndexQualityJudger> ZoneMapIndexQualityJudger::create(TypeInfo* type_info,
+                                                                             double overlap_threshold,
+                                                                             int32_t sample_pages) {
+    return field_type_dispatch_zonemap_index(type_info->type(), ZoneMapIndexQualityJudgerBuilder(), type_info,
+                                             overlap_threshold, sample_pages);
+}
+
+template <LogicalType type>
+void ZoneMapIndexQualityJudgerImpl<type>::feed(const ZoneMapPB& proto_zone_map) {
+    if (_page_zone_maps.size() < _sample_pages) {
+        ZoneMap<type> zone_map;
+        zone_map.from_proto(proto_zone_map, _type_info);
+        _page_zone_maps.push_back(std::move(zone_map));
+    }
+}
+
+template <LogicalType type>
+struct ZoneMapWrapper {
+    const ZoneMap<type>& zone_map;
+
+    ZoneMapWrapper(const ZoneMap<type>& zone_map) : zone_map(zone_map) {}
+
+    bool is_overlap_with(const ZoneMapWrapper& other) const {
+        // If either zone map has null values, they can potentially overlap
+        // since null values can exist alongside any non-null values
+        if (zone_map.has_null || other.zone_map.has_null) {
+            return true;
+        }
+
+        // For non-null zones, check value range overlap
+        return std::max(zone_map.min_value.value, other.zone_map.min_value.value) <=
+               std::min(zone_map.max_value.value, other.zone_map.max_value.value);
+    }
+};
+
+template <LogicalType type>
+CreateIndexDecision ZoneMapIndexQualityJudgerImpl<type>::make_decision() const {
+    // If not enough sampled pages, return Unknown
+    if (_page_zone_maps.size() < static_cast<size_t>(_sample_pages)) {
+        return CreateIndexDecision::Unknown;
+    }
+
+    std::vector<ZoneMapWrapper<type>> parsed_zonemap;
+    for (auto& zonemap : _page_zone_maps) {
+        parsed_zonemap.emplace_back(zonemap);
+    }
+
+    double total_overlap = 0.0;
+    for (size_t i = 0; i < parsed_zonemap.size(); ++i) {
+        for (size_t j = i + 1; j < parsed_zonemap.size(); ++j) {
+            if (parsed_zonemap[i].is_overlap_with(parsed_zonemap[j])) {
+                total_overlap += 1.0;
+            }
+        }
+    }
+    double overlap_ratio = total_overlap / (parsed_zonemap.size() * (parsed_zonemap.size() - 1) / 2.0);
+    // If overlap ratio is less than or equal to threshold, it's a good index
+    if (overlap_ratio <= _overlap_threshold) {
+        return CreateIndexDecision::Good;
+    } else {
+        return CreateIndexDecision::Bad;
+    }
 }
 
 } // namespace starrocks

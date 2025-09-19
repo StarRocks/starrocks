@@ -69,18 +69,18 @@ Supported source and target data types:
    ./build.sh --hive-udf
    ```
 
-   A JAR package `hive-udf-1.0.0.jar` will be generated in the `fe/hive-udf/` directory.
+   A JAR package `hive-udf-*.jar` will be generated in the `fe/hive-udf/` directory.
 
 2. Upload the JAR package to HDFS.
 
    ```bash
-   hadoop  fs -put -f ./hive-udf-1.0.0.jar hdfs://<hdfs_ip>:<hdfs_port>/hive-udf-1.0.0.jar
+   hadoop  fs -put -f ./hive-udf-*.jar hdfs://<hdfs_ip>:<hdfs_port>/hive-udf-*.jar
    ```
 
 3. Load the JAR package to Hive.
 
    ```bash
-   hive> add jar hdfs://<hdfs_ip>:<hdfs_port>/hive-udf-1.0.0.jar;
+   hive> add jar hdfs://<hdfs_ip>:<hdfs_port>/hive-udf-*.jar;
    ```
 
 4. Load UDF functions.

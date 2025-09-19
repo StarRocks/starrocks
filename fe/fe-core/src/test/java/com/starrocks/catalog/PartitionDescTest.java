@@ -16,10 +16,11 @@
 package com.starrocks.catalog;
 
 import com.google.common.collect.Lists;
-import com.starrocks.analysis.TypeDef;
 import com.starrocks.common.AnalysisException;
+import com.starrocks.common.DdlException;
 import com.starrocks.sql.ast.ColumnDef;
 import com.starrocks.sql.ast.PartitionDesc;
+import com.starrocks.sql.ast.expression.TypeDef;
 import org.apache.commons.lang.NotImplementedException;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -53,24 +54,21 @@ public class PartitionDescTest {
     }
 
     @Test
-    public void testAnalyzeByColumnDefs() {
-        assertThrows(NotImplementedException.class, () -> this.partitionDesc.analyze(columnDefs, otherProperties));
-    }
-
-    @Test
     public void testToSql() {
         assertThrows(NotImplementedException.class, () -> this.partitionDesc.toSql());
     }
 
     @Test
-    public void testToPartitionInfo() {
-        assertThrows(NotImplementedException.class, () -> {
+    public void testPartitionInfoBuilder() {
+        // Since toPartitionInfo method was removed, we now use PartitionInfoBuilder directly
+        // We expect DdlException for unsupported partition types
+        assertThrows(DdlException.class, () -> {
             Column id = new Column("id", Type.BIGINT);
             List<Column> columns = Lists.newArrayList(id);
             Map<String, Long> partitionNameToId = new HashMap<>();
             partitionNameToId.put("p1", 1003L);
-            this.partitionDesc.toPartitionInfo(columns, partitionNameToId, false);
-            throw new NotImplementedException();
+            // Use PartitionInfoBuilder directly instead of toPartitionInfo
+            PartitionInfoBuilder.build(this.partitionDesc, columns, partitionNameToId, false);
         });
     }
 

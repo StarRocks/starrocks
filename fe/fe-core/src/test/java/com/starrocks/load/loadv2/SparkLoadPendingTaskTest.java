@@ -36,8 +36,6 @@ package com.starrocks.load.loadv2;
 
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
-import com.starrocks.analysis.BrokerDesc;
-import com.starrocks.analysis.FunctionCallExpr;
 import com.starrocks.catalog.AggregateType;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ColumnId;
@@ -67,11 +65,14 @@ import com.starrocks.load.loadv2.etl.EtlJobConfig.EtlPartition;
 import com.starrocks.load.loadv2.etl.EtlJobConfig.EtlPartitionInfo;
 import com.starrocks.load.loadv2.etl.EtlJobConfig.EtlTable;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.analyzer.PartitionDescAnalyzer;
+import com.starrocks.sql.ast.BrokerDesc;
 import com.starrocks.sql.ast.DataDescription;
 import com.starrocks.sql.ast.PartitionKeyDesc;
 import com.starrocks.sql.ast.PartitionNames;
 import com.starrocks.sql.ast.PartitionValue;
 import com.starrocks.sql.ast.SingleRangePartitionDesc;
+import com.starrocks.sql.ast.expression.FunctionCallExpr;
 import com.starrocks.sql.common.MetaUtils;
 import mockit.Expectations;
 import mockit.Injectable;
@@ -114,7 +115,7 @@ public class SparkLoadPendingTaskTest {
         long partitionId = 2L;
         DistributionInfo distributionInfo = new HashDistributionInfo(2, Lists.newArrayList(columns.get(0)));
         PartitionInfo partitionInfo = new SinglePartitionInfo();
-        Partition partition = new Partition(partitionId, 21,  "p1", null, distributionInfo);
+        Partition partition = new Partition(partitionId, 21, "p1", null, distributionInfo);
         List<Partition> partitions = Lists.newArrayList(partition);
 
         // file group
@@ -266,11 +267,11 @@ public class SparkLoadPendingTaskTest {
         int distributionColumnIndex = 1;
         DistributionInfo distributionInfo =
                 new HashDistributionInfo(3, Lists.newArrayList(columns.get(distributionColumnIndex)));
-        Partition partition1 = new Partition(partition1Id, 21,  "p1", null,
+        Partition partition1 = new Partition(partition1Id, 21, "p1", null,
                 distributionInfo);
-        Partition partition2 = new Partition(partition2Id, 51,  "p2", null,
+        Partition partition2 = new Partition(partition2Id, 51, "p2", null,
                 new HashDistributionInfo(4, Lists.newArrayList(columns.get(distributionColumnIndex))));
-        Partition partition3 = new Partition(partition3Id, 61,  "tp3", null,
+        Partition partition3 = new Partition(partition3Id, 61, "tp3", null,
                 distributionInfo);
         int partitionColumnIndex = 0;
         List<Partition> partitions = Lists.newArrayList(partition1, partition2);
@@ -278,17 +279,17 @@ public class SparkLoadPendingTaskTest {
                 new RangePartitionInfo(Lists.newArrayList(columns.get(partitionColumnIndex)));
         PartitionKeyDesc partitionKeyDesc1 = new PartitionKeyDesc(Lists.newArrayList(new PartitionValue("10")));
         SingleRangePartitionDesc partitionDesc1 = new SingleRangePartitionDesc(false, "p1", partitionKeyDesc1, null);
-        partitionDesc1.analyze(1, null);
+        PartitionDescAnalyzer.analyzeSingleRangePartitionDesc(partitionDesc1, 1, null);
         partitionInfo.handleNewSinglePartitionDesc(MetaUtils.buildIdToColumn(columns),
                 partitionDesc1, partition1Id, false);
         PartitionKeyDesc partitionKeyDesc2 = new PartitionKeyDesc(Lists.newArrayList(new PartitionValue("20")));
         SingleRangePartitionDesc partitionDesc2 = new SingleRangePartitionDesc(false, "p2", partitionKeyDesc2, null);
-        partitionDesc2.analyze(1, null);
+        PartitionDescAnalyzer.analyzeSingleRangePartitionDesc(partitionDesc2, 1, null);
         partitionInfo.handleNewSinglePartitionDesc(MetaUtils.buildIdToColumn(columns),
                 partitionDesc2, partition2Id, false);
         PartitionKeyDesc partitionKeyDesc3 = new PartitionKeyDesc(Lists.newArrayList(new PartitionValue("10")));
         SingleRangePartitionDesc partitionDesc3 = new SingleRangePartitionDesc(false, "tp3", partitionKeyDesc1, null);
-        partitionDesc3.analyze(1, null);
+        PartitionDescAnalyzer.analyzeSingleRangePartitionDesc(partitionDesc3, 1, null);
         partitionInfo.handleNewSinglePartitionDesc(MetaUtils.buildIdToColumn(columns),
                 partitionDesc3, partition3Id, true);
 

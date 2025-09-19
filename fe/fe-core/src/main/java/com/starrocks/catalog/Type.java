@@ -41,7 +41,6 @@ import com.google.common.collect.ImmutableSortedMap;
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.combinator.AggStateDesc;
 import com.starrocks.common.Pair;
-import com.starrocks.mysql.MysqlColType;
 import com.starrocks.proto.PScalarType;
 import com.starrocks.proto.PTypeDesc;
 import com.starrocks.sql.analyzer.SemanticException;
@@ -821,7 +820,7 @@ public abstract class Type implements Cloneable {
             return true;
         }
 
-        return !isOnlyMetricType() && !isJsonType() && !isFunctionType() && !isBinaryType();
+        return !isOnlyMetricType() && !isJsonType() && !isFunctionType();
     }
 
     public boolean canGroupBy() {
@@ -839,7 +838,7 @@ public abstract class Type implements Cloneable {
             }
             return true;
         }
-        return !isOnlyMetricType() && !isJsonType() && !isFunctionType() && !isBinaryType();
+        return !isOnlyMetricType() && !isJsonType() && !isFunctionType();
     }
 
     public boolean canOrderBy() {
@@ -847,8 +846,7 @@ public abstract class Type implements Cloneable {
         if (isArrayType()) {
             return ((ArrayType) this).getItemType().canOrderBy();
         }
-        return !isOnlyMetricType() && !isJsonType() && !isFunctionType() && !isBinaryType() && !isStructType() &&
-                !isMapType();
+        return !isOnlyMetricType() && !isJsonType() && !isFunctionType() && !isStructType() && !isMapType();
     }
 
     public boolean canPartitionBy() {
@@ -883,8 +881,9 @@ public abstract class Type implements Cloneable {
 
     public boolean canDistributedBy() {
         // TODO(mofei) support distributed by for JSON
+        // Allow VARBINARY as distribution key
         return !isComplexType() && !isFloatingPointType() && !isOnlyMetricType() && !isJsonType()
-                && !isFunctionType() && !isBinaryType();
+                && !isFunctionType();
     }
 
     public boolean canBeWindowFunctionArgumentTypes() {
@@ -1634,78 +1633,7 @@ public abstract class Type implements Cloneable {
         }
     }
 
-    /**
-     * https://dev.mysql.com/doc/internals/en/com-query-response.html#column-definition
-     * column_length (4) -- maximum length of the field
-     * <p>
-     * Maximum length of result of evaluating this item, in number of bytes.
-     * - For character or blob data types, max char length multiplied by max
-     * character size (collation.mbmaxlen).
-     * - For decimal type, it is the precision in digits plus sign (unless
-     * unsigned) plus decimal point (unless it has zero decimals).
-     * - For other numeric types, the default or specific display length.
-     * - For date/time types, the display length (10 for DATE, 10 + optional FSP
-     * for TIME, 19 + optional fsp for datetime/timestamp). fsp is the fractional seconds precision.
-     */
-    public int getMysqlResultSetFieldLength() {
-        switch (this.getPrimitiveType()) {
-            case BOOLEAN:
-                return 1;
-            case TINYINT:
-                return 4;
-            case SMALLINT:
-                return 6;
-            case INT:
-                return 11;
-            case BIGINT:
-                return 20;
-            case LARGEINT:
-                return 40;
-            case DATE:
-                return 10;
-            case DATETIME:
-                return 19;
-            case FLOAT:
-                return 12;
-            case DOUBLE:
-                return 22;
-            case DECIMALV2:
-            case DECIMAL32:
-            case DECIMAL64:
-            case DECIMAL128:
-            case DECIMAL256:
-                // precision + (scale > 0 ? 1 : 0) + (unsigned_flag || !precision ? 0 : 1));
-                ScalarType decimalType = (ScalarType) this;
-                int length = decimalType.getScalarPrecision();
-                // when precision is 0 it means that original length was also 0.
-                if (length == 0) {
-                    return 0;
-                }
-                // scale > 0
-                if (decimalType.getScalarScale() > 0) {
-                    length += 1;
-                }
-                // one byte for sign
-                // one byte for zero, if precision == scale
-                // one byte for overflow but valid decimal
-                return length + 3;
-            case CHAR:
-            case VARCHAR:
-            case HLL:
-            case BITMAP:
-            case VARBINARY:
-                ScalarType charType = ((ScalarType) this);
-                int charLength = charType.getLength();
-                if (charLength == -1) {
-                    charLength = 64;
-                }
-                // utf8 charset
-                return charLength * 3;
-            default:
-                // Treat ARRAY/MAP/STRUCT as VARCHAR(-1)
-                return 60;
-        }
-    }
+
 
     /**
      * @return scalar scale if type is decimal
@@ -1732,35 +1660,6 @@ public abstract class Type implements Cloneable {
             default:
                 return 0;
         }
-    }
-
-    /**
-     * @return 33 (utf8_general_ci) if type is char varchar hll or bitmap
-     * 63 (binary) others
-     * <p>
-     * https://dev.mysql.com/doc/internals/en/com-query-response.html#column-definition
-     * character_set (2) -- is the column character set and is defined in Protocol::CharacterSet.
-     */
-    public int getMysqlResultSetFieldCharsetIndex() {
-        switch (this.getPrimitiveType()) {
-            case CHAR:
-            case VARCHAR:
-            case HLL:
-            case BITMAP:
-                // Because mysql does not have a large int type, mysql will treat it as hex after exceeding bigint
-            case LARGEINT:
-            case JSON:
-                return CHARSET_UTF8;
-            default:
-                return CHARSET_BINARY;
-        }
-    }
-
-    public MysqlColType getMysqlResultType() {
-        if (isScalarType()) {
-            return getPrimitiveType().toMysqlType();
-        }
-        return Type.VARCHAR.getPrimitiveType().toMysqlType();
     }
 
     @Override

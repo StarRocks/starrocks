@@ -38,12 +38,10 @@ import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.gson.annotations.SerializedName;
-import com.starrocks.analysis.BrokerDesc;
 import com.starrocks.backup.Status.ErrCode;
 import com.starrocks.catalog.FsBroker;
 import com.starrocks.common.Config;
 import com.starrocks.common.StarRocksException;
-import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.common.util.BrokerUtil;
 import com.starrocks.common.util.NetUtils;
@@ -54,6 +52,7 @@ import com.starrocks.rpc.ThriftConnectionPool;
 import com.starrocks.rpc.ThriftRPCRequestExecutor;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.service.FrontendOptions;
+import com.starrocks.sql.ast.BrokerDesc;
 import com.starrocks.thrift.TBrokerCheckPathExistRequest;
 import com.starrocks.thrift.TBrokerCheckPathExistResponse;
 import com.starrocks.thrift.TBrokerCloseReaderRequest;
@@ -83,8 +82,6 @@ import org.apache.thrift.transport.TTransportException;
 
 import java.io.BufferedInputStream;
 import java.io.BufferedOutputStream;
-import java.io.DataInput;
-import java.io.DataOutput;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileNotFoundException;
@@ -915,43 +912,6 @@ public class BlobStorage implements Writable {
         return Status.OK;
     }
 
-    public static BlobStorage read(DataInput in) throws IOException {
-        BlobStorage blobStorage = new BlobStorage();
-        blobStorage.readFields(in);
-        return blobStorage;
-    }
 
-    @Override
-    public void write(DataOutput out) throws IOException {
-        // must write type first
-        Text.writeString(out, brokerName);
 
-        out.writeInt(properties.size() + 1);
-        for (Map.Entry<String, String> entry : properties.entrySet()) {
-            Text.writeString(out, entry.getKey());
-            Text.writeString(out, entry.getValue());
-        }
-        Text.writeString(out, "HasBrokerField");
-        Text.writeString(out, String.valueOf(hasBroker));
-    }
-
-    public void readFields(DataInput in) throws IOException {
-        brokerName = Text.readString(in);
-
-        // properties
-        int size = in.readInt();
-        hasBroker = true;
-        for (int i = 0; i < size; i++) {
-            String key = Text.readString(in);
-            String value = Text.readString(in);
-            if (key.equals("HasBrokerField")) {
-                hasBroker = Boolean.valueOf(value);
-                continue;
-            }
-            properties.put(key, value);
-        }
-        if (!hasBroker) {
-            brokerDesc = new BrokerDesc(properties);
-        }
-    }
 }

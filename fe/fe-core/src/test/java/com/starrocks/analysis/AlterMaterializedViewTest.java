@@ -31,6 +31,7 @@ import com.starrocks.sql.analyzer.AnalyzeTestUtil;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AlterMaterializedViewStmt;
 import com.starrocks.sql.ast.RefreshSchemeClause;
+import com.starrocks.sql.ast.SyncRefreshSchemeDesc;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MVTestBase;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.jupiter.api.Assertions;
@@ -67,7 +68,7 @@ public class AlterMaterializedViewTest extends MVTestBase  {
     }
 
     @BeforeEach
-    public void before() {
+    public void before() throws Exception {
         super.before();
         connectContext.setThreadLocalInfo();
     }
@@ -103,7 +104,7 @@ public class AlterMaterializedViewTest extends MVTestBase  {
             AlterMaterializedViewStmt alterMvStmt =
                     (AlterMaterializedViewStmt) UtFrameUtils.parseStmtWithNewParser(alterMvSql, connectContext);
             RefreshSchemeClause refreshSchemeClause = (RefreshSchemeClause) alterMvStmt.getAlterTableClause();
-            Assertions.assertEquals(refreshSchemeClause.getType(), MaterializedView.RefreshType.SYNC);
+            Assertions.assertInstanceOf(SyncRefreshSchemeDesc.class, refreshSchemeClause);
         });
     }
 

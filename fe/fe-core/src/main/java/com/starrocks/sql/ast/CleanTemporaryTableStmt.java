@@ -14,7 +14,6 @@
 
 package com.starrocks.sql.ast;
 
-import com.starrocks.analysis.RedirectStatus;
 import com.starrocks.sql.parser.NodePosition;
 
 import java.util.UUID;
@@ -35,13 +34,7 @@ public class CleanTemporaryTableStmt extends DdlStmt {
     }
 
     @Override
-    public RedirectStatus getRedirectStatus() {
-        return RedirectStatus.FORWARD_NO_SYNC;
-    }
-
-
-    @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitCleanTemporaryTableStatement(this, context);
+        return ((AstVisitorExtendInterface<R, C>) visitor).visitCleanTemporaryTableStatement(this, context);
     }
 }

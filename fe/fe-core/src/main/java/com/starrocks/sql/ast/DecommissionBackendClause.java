@@ -39,6 +39,6 @@ public class DecommissionBackendClause extends BackendClause {
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitDecommissionBackendClause(this, context);
+        return ((AstVisitorExtendInterface<R, C>) visitor).visitDecommissionBackendClause(this, context);
     }
 }

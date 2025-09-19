@@ -15,11 +15,10 @@
 package com.starrocks.catalog.combinator;
 
 import com.google.common.collect.ImmutableList;
-import com.starrocks.analysis.FunctionName;
 import com.starrocks.catalog.AggregateFunction;
 import com.starrocks.catalog.Function;
-import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.Type;
+import com.starrocks.sql.ast.expression.FunctionName;
 import com.starrocks.thrift.TFunctionBinaryType;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -28,11 +27,11 @@ import java.util.List;
 import java.util.Optional;
 
 /**
- * Union combinator for aggregate function to union the agg state to return the immediate result of aggregate function.
- * DESC: immediate_type {agg_func}_union(immediate_type)
- *  input type          : aggregate function's immediate_type
- *  intermediate type   : aggregate function's immediate_type
- *  return type         : aggregate function's immediate_type
+ * Union combinator for aggregate function to union the agg state to return the intermediate result of aggregate function.
+ * DESC: immediate_type {agg_func}_union(intermediate_type)
+ *  input type          : aggregate function's intermediate_type
+ *  intermediate type   : aggregate function's intermediate_type
+ *  return type         : aggregate function's intermediate_type
  */
 public final class AggStateUnionCombinator extends AggregateFunction {
     private static final Logger LOG = LogManager.getLogger(AggStateUnionCombinator.class);
@@ -51,7 +50,7 @@ public final class AggStateUnionCombinator extends AggregateFunction {
     public static Optional<AggStateUnionCombinator> of(AggregateFunction aggFunc) {
         try {
             Type intermediateType = aggFunc.getIntermediateTypeOrReturnType().clone();
-            FunctionName functionName = new FunctionName(aggFunc.functionName() + FunctionSet.AGG_STATE_UNION_SUFFIX);
+            FunctionName functionName = new FunctionName(AggStateUtils.aggStateUnionFunctionName(aggFunc.functionName()));
             AggStateUnionCombinator aggStateUnionFunc = new AggStateUnionCombinator(functionName, intermediateType);
             aggStateUnionFunc.setBinaryType(TFunctionBinaryType.BUILTIN);
             aggStateUnionFunc.setPolymorphic(aggFunc.isPolymorphic());

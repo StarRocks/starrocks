@@ -68,6 +68,7 @@ private:
     void update_realtime_counter(Chunk* chunk);
     void update_counter();
 
+    Status _extend_schema_by_access_paths();
     Status init_column_access_paths(Schema* schema);
     Status prune_schema_by_access_paths(Schema* schema);
 
@@ -181,8 +182,6 @@ private:
     RuntimeProfile::Counter* _prefetch_pending_timer = nullptr;
 
     RuntimeProfile::Counter* _pushdown_access_paths_counter = nullptr;
-    RuntimeProfile::Counter* _access_path_hits_counter = nullptr;
-    RuntimeProfile::Counter* _access_path_unhits_counter = nullptr;
 
     RuntimeProfile::Counter* _record_predicate_filter_timer = nullptr;
     RuntimeProfile::Counter* _record_predicate_filter_counter = nullptr;

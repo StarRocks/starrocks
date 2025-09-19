@@ -24,7 +24,7 @@ create table t1 as select col_int, col_struct, col_struct.c_date from files("pat
 desc t1;
 -- result:
 col_int	int	YES	true	None	
-col_struct	struct<c_int int(11), c_float decimal(38, 9), c_double decimal(38, 9), c_char varchar(30), c_varchar varchar(200), c_date date, c_timestamp datetime, c_boolean boolean>	YES	false	None	
+col_struct	struct<c_int int(11), c_float decimal(38, 9), c_double decimal(38, 9), c_char varchar(1048576), c_varchar varchar(1048576), c_date date, c_timestamp datetime, c_boolean boolean>	YES	false	None	
 c_date	date	YES	false	None	
 -- !result
 

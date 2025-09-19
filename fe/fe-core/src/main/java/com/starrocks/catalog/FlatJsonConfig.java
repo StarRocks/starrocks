@@ -16,15 +16,10 @@ package com.starrocks.catalog;
 
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.common.Config;
-import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.common.util.PropertyAnalyzer;
-import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.thrift.TFlatJsonConfig;
 
-import java.io.DataInput;
-import java.io.DataOutput;
-import java.io.IOException;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -111,13 +106,17 @@ public class FlatJsonConfig implements Writable {
         this.flatJsonColumnMax = flatJsonColumnMax;
     }
 
-
     public Map<String, String> toProperties() {
         Map<String, String> properties = new HashMap<>();
         properties.put(PropertyAnalyzer.PROPERTIES_FLAT_JSON_ENABLE, String.valueOf(flatJsonEnable));
-        properties.put(PropertyAnalyzer.PROPERTIES_FLAT_JSON_NULL_FACTOR, String.valueOf(flatJsonNullFactor));
-        properties.put(PropertyAnalyzer.PROPERTIES_FLAT_JSON_SPARSITY_FACTOR, String.valueOf(flatJsonSparsityFactor));
-        properties.put(PropertyAnalyzer.PROPERTIES_FLAT_JSON_COLUMN_MAX, String.valueOf(flatJsonColumnMax));
+
+        // Only include other flat JSON properties if flat JSON is enabled
+        if (flatJsonEnable) {
+            properties.put(PropertyAnalyzer.PROPERTIES_FLAT_JSON_NULL_FACTOR, String.valueOf(flatJsonNullFactor));
+            properties.put(PropertyAnalyzer.PROPERTIES_FLAT_JSON_SPARSITY_FACTOR,
+                    String.valueOf(flatJsonSparsityFactor));
+            properties.put(PropertyAnalyzer.PROPERTIES_FLAT_JSON_COLUMN_MAX, String.valueOf(flatJsonColumnMax));
+        }
         return properties;
     }
 
@@ -130,14 +129,8 @@ public class FlatJsonConfig implements Writable {
         return tFlatJsonConfig;
     }
 
-    @Override
-    public void write(DataOutput out) throws IOException {
-        Text.writeString(out, GsonUtils.GSON.toJson(this));
-    }
 
-    public static FlatJsonConfig read(DataInput in) throws IOException {
-        return GsonUtils.GSON.fromJson(Text.readString(in), FlatJsonConfig.class);
-    }
+
 
     @Override
     public String toString() {

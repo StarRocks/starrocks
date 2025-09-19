@@ -15,10 +15,9 @@
 
 package com.starrocks.connector.paimon;
 
-import com.starrocks.analysis.BoolLiteral;
 import com.starrocks.catalog.PrimitiveType;
-import com.starrocks.common.util.TimeUtils;
 import com.starrocks.connector.exception.StarRocksConnectorException;
+import com.starrocks.sql.ast.expression.BoolLiteral;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CastOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
@@ -62,7 +61,7 @@ import java.util.List;
 import java.util.Optional;
 import java.util.stream.Collectors;
 
-import static org.apache.paimon.data.Timestamp.fromEpochMillis;
+import static org.apache.paimon.data.Timestamp.fromLocalDateTime;
 
 public class PaimonPredicateConverter extends ScalarOperatorVisitor<Predicate, Void> {
     private static final Logger LOG = LogManager.getLogger(PaimonPredicateConverter.class);
@@ -261,9 +260,7 @@ public class PaimonPredicateConverter extends ScalarOperatorVisitor<Predicate, V
                     LocalDate epochDay = Instant.ofEpochSecond(0).atOffset(ZoneOffset.UTC).toLocalDate();
                     return (int) ChronoUnit.DAYS.between(epochDay, localDate);
                 case DATETIME:
-                    long localDateTime = operator.getDatetime().atZone(TimeUtils.getTimeZone().toZoneId()).toInstant()
-                            .toEpochMilli();
-                    return fromEpochMillis(localDateTime);
+                    return fromLocalDateTime(operator.getDatetime());
                 default:
                     return null;
             }

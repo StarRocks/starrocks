@@ -44,6 +44,7 @@
 #include "common/configbase.h"
 #include "common/logging.h"
 #include "common/process_exit.h"
+#include "connector/connector_sink_executor.h"
 #include "exec/pipeline/driver_limiter.h"
 #include "exec/pipeline/pipeline_driver_executor.h"
 #include "exec/pipeline/query_context.h"
@@ -497,7 +498,7 @@ Status ExecEnv::init(const std::vector<StorePath>& store_paths, bool as_cn) {
 #endif
     _load_channel_mgr = new LoadChannelMgr();
     _load_stream_mgr = new LoadStreamMgr();
-    _brpc_stub_cache = new BrpcStubCache();
+    _brpc_stub_cache = new BrpcStubCache(this);
     _stream_load_executor = new StreamLoadExecutor(this);
     _stream_context_mgr = new StreamContextMgr();
     _transaction_mgr = new TransactionMgr(this);
@@ -516,6 +517,9 @@ Status ExecEnv::init(const std::vector<StorePath>& store_paths, bool as_cn) {
 
     _routine_load_task_executor = new RoutineLoadTaskExecutor(this);
     RETURN_IF_ERROR(_routine_load_task_executor->init());
+
+    _connector_sink_spill_executor = new connector::ConnectorSinkSpillExecutor();
+    RETURN_IF_ERROR(_connector_sink_spill_executor->init());
 
     _small_file_mgr = new SmallFileMgr(this, config::small_file_dir);
     _runtime_filter_worker = new RuntimeFilterWorker(this);
@@ -732,6 +736,7 @@ void ExecEnv::destroy() {
     SAFE_DELETE(_stream_context_mgr);
     SAFE_DELETE(_routine_load_task_executor);
     SAFE_DELETE(_stream_load_executor);
+    SAFE_DELETE(_connector_sink_spill_executor);
     SAFE_DELETE(_fragment_mgr);
     SAFE_DELETE(_load_stream_mgr);
     SAFE_DELETE(_load_channel_mgr);
@@ -760,6 +765,12 @@ void ExecEnv::destroy() {
     // _query_pool_mem_tracker.
     SAFE_DELETE(_runtime_filter_cache);
     SAFE_DELETE(_driver_limiter);
+    if (HttpBrpcStubCache::getInstance() != nullptr) {
+        HttpBrpcStubCache::getInstance()->shutdown();
+    }
+    if (LakeServiceBrpcStubCache::getInstance() != nullptr) {
+        LakeServiceBrpcStubCache::getInstance()->shutdown();
+    }
     SAFE_DELETE(_pipeline_timer);
     SAFE_DELETE(_broker_client_cache);
     SAFE_DELETE(_frontend_client_cache);

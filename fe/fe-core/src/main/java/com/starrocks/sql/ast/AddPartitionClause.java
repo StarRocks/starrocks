@@ -15,7 +15,6 @@
 
 package com.starrocks.sql.ast;
 
-import com.starrocks.alter.AlterOpType;
 import com.starrocks.sql.parser.NodePosition;
 
 import java.util.List;
@@ -64,7 +63,7 @@ public class AddPartitionClause extends AlterTableClause {
                               DistributionDesc distributionDesc,
                               Map<String, String> properties,
                               boolean isTempPartition, NodePosition pos) {
-        super(AlterOpType.ADD_PARTITION, pos);
+        super(pos);
         this.partitionDesc = partitionDesc;
         this.distributionDesc = distributionDesc;
         this.properties = properties;
@@ -85,6 +84,6 @@ public class AddPartitionClause extends AlterTableClause {
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitAddPartitionClause(this, context);
+        return ((AstVisitorExtendInterface<R, C>) visitor).visitAddPartitionClause(this, context);
     }
 }

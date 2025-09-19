@@ -296,6 +296,7 @@ public class MvRewriteUnionTest extends MVTestBase {
 
     @Test
     public void testUnionRewrite7() throws Exception {
+        disableMVRewriteConsiderDataLayout();
         starRocksAssert.withTable("CREATE TABLE multi_mv_table (\n" +
                 "                    k1 INT,\n" +
                 "                    v1 INT,\n" +
@@ -347,6 +348,7 @@ public class MvRewriteUnionTest extends MVTestBase {
         String plan6 = getFragmentPlan(query6);
         PlanTestBase.assertContains(plan6, "mv_agg_1", "emps", "UNION");
         dropMv("test", "mv_agg_1");
+        enableMVRewriteConsiderDataLayout();
     }
 
     @Test
@@ -416,7 +418,7 @@ public class MvRewriteUnionTest extends MVTestBase {
                         );
                         for (Pair<String, String> p : sqls) {
                             String query = p.first;
-                            System.out.println(query);
+                            logSysInfo(query);
                             String plan = getFragmentPlan(query);
                             PlanTestBase.assertContains(plan, ":UNION");
                             PlanTestBase.assertContainsIgnoreColRefs(plan, "union_mv0", p.second);
@@ -448,7 +450,7 @@ public class MvRewriteUnionTest extends MVTestBase {
                                 );
                         for (Pair<String, String> p : sqls) {
                             String query = p.first;
-                            System.out.println(query);
+                            logSysInfo(query);
                             String plan = getFragmentPlan(query);
                             PlanTestBase.assertContains(plan, ":UNION");
                             PlanTestBase.assertContainsIgnoreColRefs(plan, "union_mv0", p.second);

@@ -90,7 +90,7 @@ public class DataCacheSelectMetricsTest {
         dataCacheSelectMetrics.updateLoadDataCacheMetrics(cn1Id, cn1Metrics);
 
         List<List<String>> rows = dataCacheSelectMetrics.getShowResultSet(false).getResultRows();
-        Assertions.assertEquals("6MB,6GB,20s,50.00%", String.join(",", rows.get(0)));
+        Assertions.assertEquals("2MB,2GB,20s,50.00%", String.join(",", rows.get(0)));
         rows = dataCacheSelectMetrics.getShowResultSet(true).getResultRows();
         for (List<String> row : rows) {
             if (row.get(0).equals("127.0.0.2")) {

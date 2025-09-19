@@ -51,6 +51,7 @@ public class TransProcDir implements ProcDirInterface {
             .add("TransactionStatus")
             .add("LoadJobSourceType")
             .add("PrepareTime")
+            .add("PreparedTime")
             .add("CommitTime")
             .add("PublishTime")
             .add("FinishTime")
@@ -58,6 +59,7 @@ public class TransProcDir implements ProcDirInterface {
             .add("ErrorReplicasCount")
             .add("ListenerId")
             .add("TimeoutMs")
+            .add("PreparedTimeoutMs")
             .add("ErrMsg")
             .build();
 

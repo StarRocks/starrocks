@@ -15,19 +15,10 @@
 
 package com.starrocks.sql.ast;
 
-import com.google.common.collect.ImmutableList;
-import com.starrocks.analysis.Expr;
-import com.starrocks.analysis.LimitElement;
-import com.starrocks.analysis.OrderByElement;
-import com.starrocks.analysis.RedirectStatus;
-import com.starrocks.catalog.Column;
-import com.starrocks.catalog.ScalarType;
-import com.starrocks.common.proc.OptimizeProcDir;
 import com.starrocks.common.proc.ProcNodeInterface;
-import com.starrocks.common.proc.RollupProcDir;
-import com.starrocks.common.proc.SchemaChangeProcDir;
 import com.starrocks.common.util.OrderByPair;
-import com.starrocks.qe.ShowResultSetMetaData;
+import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.LimitElement;
 import com.starrocks.sql.parser.NodePosition;
 
 import java.util.ArrayList;
@@ -126,32 +117,7 @@ public class ShowAlterStmt extends ShowStmt {
     }
 
     @Override
-    public ShowResultSetMetaData getMetaData() {
-        ShowResultSetMetaData.Builder builder = ShowResultSetMetaData.builder();
-
-        ImmutableList<String> titleNames = null;
-        if (type == AlterType.ROLLUP || type == AlterType.MATERIALIZED_VIEW) {
-            titleNames = RollupProcDir.TITLE_NAMES;
-        } else if (type == AlterType.COLUMN) {
-            titleNames = SchemaChangeProcDir.TITLE_NAMES;
-        } else if (type == AlterType.OPTIMIZE) {
-            titleNames = OptimizeProcDir.TITLE_NAMES;
-        }
-
-        for (String title : titleNames) {
-            builder.addColumn(new Column(title, ScalarType.createVarchar(30)));
-        }
-
-        return builder.build();
-    }
-
-    @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitShowAlterStatement(this, context);
-    }
-
-    @Override
-    public RedirectStatus getRedirectStatus() {
-        return RedirectStatus.FORWARD_NO_SYNC;
+        return ((AstVisitorExtendInterface<R, C>) visitor).visitShowAlterStatement(this, context);
     }
 }

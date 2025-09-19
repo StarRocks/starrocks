@@ -38,7 +38,7 @@ OutPut Exchange Id: 08
 5:HASH JOIN
 |  join op: INNER JOIN (PARTITIONED)
 |  equal join conjunct: [2: L_PARTKEY, INT, false] = [18: P_PARTKEY, INT, false]
-|  other join predicates: (((((21: P_BRAND = 'Brand#45') AND (24: P_CONTAINER IN ('SM CASE', 'SM BOX', 'SM PACK', 'SM PKG'))) AND ((5: L_QUANTITY >= 5.0) AND (5: L_QUANTITY <= 15.0))) AND (23: P_SIZE <= 5)) OR ((((21: P_BRAND = 'Brand#11') AND (24: P_CONTAINER IN ('MED BAG', 'MED BOX', 'MED PKG', 'MED PACK'))) AND ((5: L_QUANTITY >= 15.0) AND (5: L_QUANTITY <= 25.0))) AND (23: P_SIZE <= 10))) OR ((((21: P_BRAND = 'Brand#21') AND (24: P_CONTAINER IN ('LG CASE', 'LG BOX', 'LG PACK', 'LG PKG'))) AND ((5: L_QUANTITY >= 25.0) AND (5: L_QUANTITY <= 35.0))) AND (23: P_SIZE <= 15))
+|  other join predicates: ((((([21: P_BRAND, CHAR, false] = 'Brand#45') AND ([24: P_CONTAINER, CHAR, false] IN ('SM CASE', 'SM BOX', 'SM PACK', 'SM PKG'))) AND (([5: L_QUANTITY, DOUBLE, false] >= 5.0) AND ([5: L_QUANTITY, DOUBLE, false] <= 15.0))) AND ([23: P_SIZE, INT, false] <= 5)) OR (((([21: P_BRAND, CHAR, false] = 'Brand#11') AND ([24: P_CONTAINER, CHAR, false] IN ('MED BAG', 'MED BOX', 'MED PKG', 'MED PACK'))) AND (([5: L_QUANTITY, DOUBLE, false] >= 15.0) AND ([5: L_QUANTITY, DOUBLE, false] <= 25.0))) AND ([23: P_SIZE, INT, false] <= 10))) OR (((([21: P_BRAND, CHAR, false] = 'Brand#21') AND ([24: P_CONTAINER, CHAR, false] IN ('LG CASE', 'LG BOX', 'LG PACK', 'LG PKG'))) AND (([5: L_QUANTITY, DOUBLE, false] >= 25.0) AND ([5: L_QUANTITY, DOUBLE, false] <= 35.0))) AND ([23: P_SIZE, INT, false] <= 15))
 |  build runtime filters:
 |  - filter_id = 0, build_expr = (18: P_PARTKEY), remote = true
 |  output columns: 6, 7
@@ -73,7 +73,7 @@ OutPut Exchange Id: 04
 3:OlapScanNode
 table: part, rollup: part
 preAggregation: on
-Predicates: 21: P_BRAND IN ('Brand#45', 'Brand#11', 'Brand#21'), [23: P_SIZE, INT, false] <= 15, 24: P_CONTAINER IN ('SM CASE', 'SM BOX', 'SM PACK', 'SM PKG', 'MED BAG', 'MED BOX', 'MED PKG', 'MED PACK', 'LG CASE', 'LG BOX', 'LG PACK', 'LG PKG'), [23: P_SIZE, INT, false] >= 1
+Predicates: [21: P_BRAND, CHAR, false] IN ('Brand#45', 'Brand#11', 'Brand#21'), [23: P_SIZE, INT, false] <= 15, [24: P_CONTAINER, CHAR, false] IN ('SM CASE', 'SM BOX', 'SM PACK', 'SM PKG', 'MED BAG', 'MED BOX', 'MED PKG', 'MED PACK', 'LG CASE', 'LG BOX', 'LG PACK', 'LG PKG'), [23: P_SIZE, INT, false] >= 1
 partitionsRatio=1/1, tabletsRatio=10/10
 actualRows=0, avgRowSize=32.0
 cardinality: 6051300
@@ -105,7 +105,7 @@ OutPut Exchange Id: 02
 0:OlapScanNode
 table: lineitem, rollup: lineitem
 preAggregation: on
-Predicates: [5: L_QUANTITY, DOUBLE, false] >= 5.0, [5: L_QUANTITY, DOUBLE, false] <= 35.0, 15: L_SHIPMODE IN ('AIR', 'AIR REG'), [14: L_SHIPINSTRUCT, CHAR, false] = 'DELIVER IN PERSON'
+Predicates: [5: L_QUANTITY, DOUBLE, false] >= 5.0, [5: L_QUANTITY, DOUBLE, false] <= 35.0, [15: L_SHIPMODE, CHAR, false] IN ('AIR', 'AIR REG'), [14: L_SHIPINSTRUCT, CHAR, false] = 'DELIVER IN PERSON'
 partitionsRatio=1/1, tabletsRatio=20/20
 actualRows=0, avgRowSize=67.0
 cardinality: 26568218
@@ -119,4 +119,3 @@ column statistics:
 * L_SHIPINSTRUCT-->[-Infinity, Infinity, 0.0, 25.0, 4.0] MCV: [[DELIVER IN PERSON:150004800]] ESTIMATE
 * L_SHIPMODE-->[-Infinity, Infinity, 0.0, 10.0, 2.0] ESTIMATE
 [end]
-

@@ -15,8 +15,11 @@
 package com.starrocks.sql.analyzer;
 
 import com.starrocks.catalog.OlapTable;
+import com.starrocks.persist.ColumnIdExpr;
 import com.starrocks.sql.ast.HashDistributionDesc;
 import com.starrocks.sql.ast.OptimizeClause;
+import com.starrocks.sql.ast.OrderByElement;
+import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.parser.NodePosition;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
@@ -38,10 +41,12 @@ public class AlterTableClauseVisitorTest extends DDLTestBase {
         NodePosition nodePosition = new NodePosition(1, 23, 1, 48);
         HashDistributionDesc hashDistributionDesc = new HashDistributionDesc();
 
-        List<String> list = new ArrayList<>();
-        list.add("id");
+        List<OrderByElement> orderByElements = new ArrayList<>();
+        Expr expr = ColumnIdExpr.fromSql("id").getExpr();
+        orderByElements.add(new OrderByElement(expr, true, true));
 
-        OptimizeClause optimizeClause = new OptimizeClause(null, null, hashDistributionDesc, list, null, null, nodePosition);
+        OptimizeClause optimizeClause = new OptimizeClause(null, null, hashDistributionDesc, orderByElements, null, null,
+                nodePosition);
         OlapTable table = new OlapTable();
         AlterTableClauseAnalyzer visitor = new AlterTableClauseAnalyzer(table);
 

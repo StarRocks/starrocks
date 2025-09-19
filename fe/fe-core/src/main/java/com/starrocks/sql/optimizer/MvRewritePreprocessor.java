@@ -33,6 +33,7 @@ import com.starrocks.catalog.HashDistributionInfo;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.MaterializedIndexMeta;
 import com.starrocks.catalog.MaterializedView;
+import com.starrocks.catalog.MaterializedViewRefreshType;
 import com.starrocks.catalog.MvPlanContext;
 import com.starrocks.catalog.MvUpdateInfo;
 import com.starrocks.catalog.OlapTable;
@@ -175,6 +176,8 @@ public class MvRewritePreprocessor {
                     // it's safe used in the optimize context here since the query mv context is not shared across the
                     // connect-context.
                     connectContext.setQueryMVContext(queryMaterializationContext);
+                    // register queryOptExpression
+                    queryMaterializationContext.registerQueryOptExpression(queryOptExpression);
                 }
 
                 // 5. process relate mvs with views
@@ -274,6 +277,10 @@ public class MvRewritePreprocessor {
             // means there is no plan with view
             return;
         }
+        Set<String> viewNames = logicalViewScanOperators.stream()
+                .map(op -> op.getTable().getName()).collect(Collectors.toSet());
+        logMVPrepare(connectContext, "[ViewBasedRewrite] There are {} view scan operators in the query plan",
+                viewNames);
         // optimize logical plan with view
         OptExpression optViewScanExpressions = MvUtils.optimizeViewPlan(
                 logicalPlanWithViewInline, connectContext, requiredColumns, columnRefFactory);
@@ -306,9 +313,13 @@ public class MvRewritePreprocessor {
 
             // add a projection to make predicate push-down rules work.
             Projection projection = viewScanOperator.getProjection();
-            LogicalProjectOperator projectOperator = new LogicalProjectOperator(projection.getColumnRefMap());
-            OptExpression projectionExpr = OptExpression.create(projectOperator, viewScanExpr);
-            return projectionExpr;
+            if (projection != null) {
+                LogicalProjectOperator projectOperator = new LogicalProjectOperator(projection.getColumnRefMap());
+                OptExpression projectionExpr = OptExpression.create(projectOperator, viewScanExpr);
+                return projectionExpr;
+            } else {
+                return viewScanExpr;
+            }
         } else {
             for (OptExpression input : logicalTree.getInputs()) {
                 OptExpression newInput = extractLogicalPlanWithView(input, viewScans);
@@ -657,7 +668,7 @@ public class MvRewritePreprocessor {
                 }
                 // refresh schema
                 MaterializedView.MvRefreshScheme mvRefreshScheme =
-                        new MaterializedView.MvRefreshScheme(MaterializedView.RefreshType.SYNC);
+                        new MaterializedView.MvRefreshScheme(MaterializedViewRefreshType.SYNC);
                 MaterializedView mv;
                 if (olapTable.isCloudNativeTable()) {
                     mv = new LakeMaterializedView(db, mvName, indexMeta, olapTable,

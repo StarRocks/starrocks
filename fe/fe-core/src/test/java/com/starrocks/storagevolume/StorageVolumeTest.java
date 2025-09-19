@@ -28,7 +28,6 @@ import com.staros.proto.S3FileStoreInfo;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ExceptionChecker;
-import com.starrocks.common.io.FastByteArrayOutputStream;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.connector.hadoop.HadoopExt;
 import com.starrocks.connector.share.credential.CloudConfigurationConstants;
@@ -46,8 +45,6 @@ import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
-import java.io.DataInputStream;
-import java.io.DataOutputStream;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -58,6 +55,7 @@ import java.util.HashMap;
 import java.util.Map;
 
 import static com.starrocks.connector.share.credential.CloudConfigurationConstants.AWS_S3_ACCESS_KEY;
+import static com.starrocks.connector.share.credential.CloudConfigurationConstants.AWS_S3_ENABLE_PATH_STYLE_ACCESS;
 import static com.starrocks.connector.share.credential.CloudConfigurationConstants.AWS_S3_ENDPOINT;
 import static com.starrocks.connector.share.credential.CloudConfigurationConstants.AWS_S3_EXTERNAL_ID;
 import static com.starrocks.connector.share.credential.CloudConfigurationConstants.AWS_S3_IAM_ROLE_ARN;
@@ -123,6 +121,7 @@ public class StorageVolumeTest {
         storageParams.put(AWS_S3_ACCESS_KEY, "access_key");
         storageParams.put(AWS_S3_SECRET_KEY, "secret_key");
         storageParams.put(AWS_S3_USE_AWS_SDK_DEFAULT_BEHAVIOR, "false");
+        storageParams.put(AWS_S3_ENABLE_PATH_STYLE_ACCESS, "true");
 
         StorageVolume sv = new StorageVolume("1", "test", "s3", Arrays.asList("s3://abc"),
                 storageParams, true, "");
@@ -133,6 +132,7 @@ public class StorageVolumeTest {
         Assertions.assertTrue(fileStore.hasS3FsInfo());
         S3FileStoreInfo s3FileStoreInfo = fileStore.getS3FsInfo();
         Assertions.assertTrue(s3FileStoreInfo.getCredential().hasSimpleCredential());
+        Assertions.assertEquals(s3FileStoreInfo.getPathStyleAccess(), 1);
         AwsSimpleCredentialInfo simpleCredentialInfo = s3FileStoreInfo.getCredential().getSimpleCredential();
         Assertions.assertEquals("access_key", simpleCredentialInfo.getAccessKey());
         Assertions.assertEquals("secret_key", simpleCredentialInfo.getAccessKeySecret());
@@ -615,6 +615,24 @@ public class StorageVolumeTest {
             Assertions.assertEquals("32", params.get(CloudConfigurationConstants.AWS_S3_NUM_PARTITIONED_PREFIX));
         }
 
+        fsInfoBuilder.getS3FsInfoBuilder()
+                .setPathStyleAccess(1);
+
+        {
+            FileStoreInfo fs = fsInfoBuilder.build();
+            Map<String, String> params = StorageVolume.getParamsFromFileStoreInfo(fs);
+            Assertions.assertEquals("true", params.get(CloudConfigurationConstants.AWS_S3_ENABLE_PATH_STYLE_ACCESS));
+        }
+
+        fsInfoBuilder.getS3FsInfoBuilder()
+                .setPathStyleAccess(2);
+
+        {
+            FileStoreInfo fs = fsInfoBuilder.build();
+            Map<String, String> params = StorageVolume.getParamsFromFileStoreInfo(fs);
+            Assertions.assertEquals("false", params.get(CloudConfigurationConstants.AWS_S3_ENABLE_PATH_STYLE_ACCESS));
+        }
+
         // It's OK to have trailing '/' after bucket name
         fsInfoBuilder.addLocations("s3://bucket/");
         {
@@ -745,34 +763,6 @@ public class StorageVolumeTest {
             Assertions.assertEquals("final_private_key",
                     params.get(CloudConfigurationConstants.GCP_GCS_SERVICE_ACCOUNT_PRIVATE_KEY));
         }
-    }
-
-    @Test
-    public void testSerializationAndDeserialization() throws IOException, DdlException {
-        Map<String, String> storageParams = new HashMap<>();
-        storageParams.put(AWS_S3_REGION, "region");
-        storageParams.put(AWS_S3_ENDPOINT, "endpoint");
-        storageParams.put(AWS_S3_USE_AWS_SDK_DEFAULT_BEHAVIOR, "true");
-
-        StorageVolume sv = new StorageVolume("1", "test", "s3", Arrays.asList("s3://abc"),
-                storageParams, true, "");
-
-        FastByteArrayOutputStream byteArrayOutputStream = new FastByteArrayOutputStream();
-        try (DataOutputStream out = new DataOutputStream(byteArrayOutputStream)) {
-            sv.write(out);
-            out.flush();
-        }
-
-        StorageVolume sv1 = null;
-        try (DataInputStream in = new DataInputStream(byteArrayOutputStream.getInputStream())) {
-            sv1 = StorageVolume.read(in);
-        }
-        byteArrayOutputStream.close();
-        Assertions.assertEquals(sv.getId(), sv1.getId());
-        Assertions.assertEquals(sv.getComment(), sv1.getComment());
-        Assertions.assertEquals(sv.getName(), sv1.getName());
-        Assertions.assertEquals(sv.getEnabled(), sv1.getEnabled());
-        Assertions.assertEquals(CloudType.AWS, sv1.getCloudConfiguration().getCloudType());
     }
 
     @Test

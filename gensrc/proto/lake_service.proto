@@ -41,14 +41,10 @@ message PublishVersionRequest {
     optional bool enable_aggregate_publish = 9;
     // Distribution key column physical names (column id)
     repeated string distribution_columns = 10;
-    // This field is used for 2 cases to specify the splitting tablets info (not included in tablet_ids):
-    // 1. The split tablet transaction, in which the txn type in txn_infos is TXN_SPLIT_TABLET.
-    // 2. The nornal write transaction but need cross-commit during tablet splitting.
-    repeated SplittingTabletInfoPB splitting_tablet_infos = 11;
-    // This field is used for 2 cases to specify the merging tablets info (not included in tablet_ids):
-    // 1. The merge tablet transaction, in which the txn type in txn_infos is TXN_MERGE_TABLET.
-    // 2. The nornal write transaction but need cross-commit during tablet merging.
-    repeated MergingTabletInfoPB merging_tablet_infos = 12;
+    // This field is used for 2 cases to specify the dynamic tablets info (not included in tablet_ids):
+    // 1. The split or merge tablet transaction, in which the txn type in txn_infos is TXN_DYNAMIC_TABLET.
+    // 2. The nornal write transaction but need cross-publish during tablet splitting or merging.
+    optional DynamicTabletsInfoPB dynamic_tablets_info = 11;
 }
 
 message PublishVersionResponse {
@@ -331,11 +327,30 @@ message VacuumResponse {
     optional int64 extra_file_size = 6;
 }
 
+// 1. Before the orphaned data file cleanup starts, VacuumFull will delete metadata files which satisfy the following:
+// (commit_time < grace_timestamp)
+// 2. Then, orphaned data files will be determined. We use min_active_txn_id to filter out new data files, then we open
+// any remaining metadata files and note that the data files referenced are not orphans.
+// 3. all tabletMetadata with versions in retain_versions should be retained when try to vaccum to meta which have
+// commit_time < grace_timestamp. retain_versions must contains the lastest visible version.
+// 4. all tabletMetadata with versions NOT in [min_check_version, max_check_version) should not be vacuumed.
 message VacuumFullRequest {
-    repeated int64 tablet_ids = 1;
-    optional int64 min_check_version = 2;
-    optional int64 max_check_version = 3;
-    optional int64 min_active_txn_id = 4;
+    // The id of the partition to vacuum
+    optional int64 partition_id = 1;
+    // tablet_id can be the id of any of the tablet belongs to the table to be dropped.
+    optional int64 tablet_id = 2;
+    optional int64 min_check_version = 3;
+    optional int64 max_check_version = 4;
+    // Don't delete files with txn_id >= min_active_txn_id
+    optional int64 min_active_txn_id = 5;
+    // Delete metadata files with commit_time < grace_timestamp (set by FE)
+    optional int64 grace_timestamp = 6;
+    // retain version info of tablet metadata
+    // The version here means the version of tablet metadata or the physical partition version
+    // (because vacuun request is send by <node, physical partition>)
+    // All tablet metadata and their data files of these verisons should be retained and can not be
+    // vaccummed.
+    repeated int64 retain_versions = 7;
 }
 
 message VacuumFullResponse {

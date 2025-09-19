@@ -17,15 +17,6 @@ package com.starrocks.load;
 
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
-import com.starrocks.analysis.ArithmeticExpr;
-import com.starrocks.analysis.CompoundPredicate;
-import com.starrocks.analysis.DescriptorTable;
-import com.starrocks.analysis.Expr;
-import com.starrocks.analysis.FunctionCallExpr;
-import com.starrocks.analysis.IntLiteral;
-import com.starrocks.analysis.SlotDescriptor;
-import com.starrocks.analysis.SlotRef;
-import com.starrocks.analysis.TupleDescriptor;
 import com.starrocks.catalog.AggregateType;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.FunctionSet;
@@ -37,9 +28,18 @@ import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.ExceptionChecker;
 import com.starrocks.common.StarRocksException;
+import com.starrocks.planner.DescriptorTable;
+import com.starrocks.planner.SlotDescriptor;
+import com.starrocks.planner.TupleDescriptor;
 import com.starrocks.qe.SqlModeHelper;
 import com.starrocks.sql.ast.ImportColumnDesc;
 import com.starrocks.sql.ast.ImportColumnsStmt;
+import com.starrocks.sql.ast.expression.ArithmeticExpr;
+import com.starrocks.sql.ast.expression.CompoundPredicate;
+import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.FunctionCallExpr;
+import com.starrocks.sql.ast.expression.IntLiteral;
+import com.starrocks.sql.ast.expression.SlotRef;
 import com.starrocks.thrift.TBrokerScanRangeParams;
 import com.starrocks.thrift.TFileFormatType;
 import mockit.Expectations;
@@ -327,8 +327,7 @@ public class LoadTest {
             }
         };
 
-        String columnsSQL =
-                "COLUMNS (" +
+        String columnsSQL = "COLUMNS (" +
                 "   c0,t0,c1,t1," +
                 "   c2=get_json_string(" +
                 "           array_filter(" +
@@ -346,8 +345,8 @@ public class LoadTest {
                 "       '$.id')" +
                 " )";
         columnsFromPath.add("c1");
-        ImportColumnsStmt columnsStmt =
-                com.starrocks.sql.parser.SqlParser.parseImportColumns(columnsSQL, SqlModeHelper.MODE_DEFAULT);
+        ImportColumnsStmt columnsStmt = com.starrocks.sql.parser.SqlParser.parseImportColumns(columnsSQL,
+                SqlModeHelper.MODE_DEFAULT);
         columnExprs.addAll(columnsStmt.getColumns());
         Load.initColumns(table, columnExprs, null, exprsByName, new DescriptorTable(), srcTupleDesc,
                 slotDescByName, params, true, true, columnsFromPath);
@@ -366,23 +365,74 @@ public class LoadTest {
 
         int t0SlotId = slotDescByName.get("t0").getId().asInt();
         int eSlotId = slotDescByName.get("e").getId().asInt();
-        String c2ExprExplain = String.format(
-                "get_json_string[(array_filter(CAST(parse_json(<slot %d>) AS ARRAY<JSON>), " +
-                "array_map(<slot %d> -> get_json_string(<slot %d>, '$.name') = 'Tom', " +
-                "CAST(parse_json(<slot %d>) AS ARRAY<JSON>)))[1], '$.id'); args: JSON,VARCHAR; " +
-                "result: VARCHAR; args nullable: true; result nullable: true]",
+        String c2ExprExplain = String.format("get_json_string[(array_filter[(cast(parse_json[([%d, VARCHAR, true]); "
+                        + "args: VARCHAR; result: JSON; "
+                        + "args nullable: true; result nullable: true] as ARRAY<JSON>), "
+                        + "array_map[([%d, JSON, true] -> get_json_string[([%d, JSON, true], '$.name'); "
+                        + "args: JSON,VARCHAR; result: VARCHAR; args nullable: true; result nullable: true] = 'Tom', "
+                        + "cast(parse_json[([%d, VARCHAR, true]); args: VARCHAR; result: JSON; "
+                        + "args nullable: true; result nullable: true] as ARRAY<JSON>)); "
+                        + "args: FUNCTION,INVALID_TYPE; result: ARRAY<BOOLEAN>; "
+                        + "args nullable: true; result nullable: true]); args: INVALID_TYPE,INVALID_TYPE; "
+                        + "result: ARRAY<JSON>; args nullable: true; result nullable: true][1], '$.id'); "
+                        + "args: JSON,VARCHAR; result: VARCHAR; args nullable: true; result nullable: true]",
                     t0SlotId, eSlotId, eSlotId, t0SlotId);
         Assertions.assertEquals(c2ExprExplain, exprsByName.get("c2").explain());
 
         int t1SlotId = slotDescByName.get("t1").getId().asInt();
         int kSlotId = slotDescByName.get("k").getId().asInt();
         int vSlotId = slotDescByName.get("v").getId().asInt();
-        String c3ExprExplain = String.format(
-                "get_json_string[(map_values(map_filter(CAST(parse_json(<slot %d>) AS MAP<VARCHAR(65533),JSON>), " +
-                "map_values(map_apply((<slot %d>, <slot %d>) -> map{<slot %d>:get_json_string(<slot %d>, '$.name') = 'Jerry'}, " +
-                "CAST(parse_json(<slot %d>) AS MAP<VARCHAR(65533),JSON>)))))[1], '$.id'); args: JSON,VARCHAR; " +
-                "result: VARCHAR; args nullable: true; result nullable: true]",
+        String c3ExprExplain = String.format("get_json_string[(map_values[(map_filter[(cast(parse_json[([%d, VARCHAR, true]); "
+                        + "args: VARCHAR; result: JSON; args nullable: true; result nullable: true] as MAP<VARCHAR(65533),"
+                        + "JSON>), map_values[(map_apply[(([%d, VARCHAR(65533), true], [%d, JSON, true]) -> map{[%d, VARCHAR"
+                        + "(65533), true]:get_json_string[([%d, JSON, true], '$.name'); args: JSON,VARCHAR; result: VARCHAR; "
+                        + "args nullable: true; result nullable: true] = 'Jerry'}, cast(parse_json[([%d, VARCHAR, true]); args: "
+                        + "VARCHAR; result: JSON; args nullable: true; result nullable: true] as MAP<VARCHAR(65533),JSON>)); "
+                        + "args: FUNCTION,INVALID_TYPE; result: MAP<VARCHAR(65533),BOOLEAN>; args nullable: true; result "
+                        + "nullable: true]); args: INVALID_TYPE; result: ARRAY<BOOLEAN>; args nullable: true; result nullable: "
+                        + "true]); args: INVALID_TYPE,INVALID_TYPE; result: MAP<VARCHAR(65533),JSON>; args nullable: true; "
+                        + "result nullable: true]); args: INVALID_TYPE; result: ARRAY<JSON>; args nullable: true; result "
+                        + "nullable: true][1], '$.id'); args: JSON,VARCHAR; result: VARCHAR; args nullable: true; result "
+                        + "nullable: true]",
                 t1SlotId, kSlotId, vSlotId, kSlotId, vSlotId, t1SlotId);
         Assertions.assertEquals(c3ExprExplain, exprsByName.get("c3").explain());
+    }
+    
+    @Test
+    public void testNowPrecision() throws Exception {
+        String c0Name = "c0";
+        columns.add(new Column(c0Name, Type.INT, true, null, true, null, ""));
+        String c1Name = "c1";
+        columns.add(new Column(c1Name, Type.DATETIME, false, null, true, null, ""));
+        String c2Name = "c2";
+        columns.add(new Column(c2Name, Type.DATETIME, false, null, true, null, ""));
+        new Expectations() {
+            {
+                table.getBaseSchema();
+                result = columns;
+                table.getColumn(c0Name);
+                result = columns.get(0);
+                table.getColumn(c1Name);
+                result = columns.get(1);
+                table.getColumn(c2Name);
+                result = columns.get(2);
+            }
+        };
+
+        String columnsSQL = "COLUMNS(c0,c1=now(),c2=now(6))";
+        ImportColumnsStmt columnsStmt =
+                com.starrocks.sql.parser.SqlParser.parseImportColumns(columnsSQL, SqlModeHelper.MODE_DEFAULT);
+        columnExprs.addAll(columnsStmt.getColumns());
+        Load.initColumns(table, columnExprs, null, exprsByName, new DescriptorTable(), srcTupleDesc,
+                slotDescByName, params, true, true, columnsFromPath);
+        Expr c1Expr = exprsByName.get("c1");
+        Assertions.assertNotNull(c1Expr);
+        Assertions.assertEquals(
+                "now[(); args: ; result: DATETIME; args nullable: false; result nullable: false]", c1Expr.explain());
+
+        Expr c2Expr = exprsByName.get("c2");
+        Assertions.assertNotNull(c2Expr);
+        Assertions.assertEquals(
+                "now[(6); args: INT; result: DATETIME; args nullable: false; result nullable: false]", c2Expr.explain());
     }
 }

@@ -110,6 +110,14 @@ public class TabletSchedulerStat {
     public AtomicLong counterCloneTaskFailed = new AtomicLong(0L);
     @StatField("num of clone task timeout")
     public AtomicLong counterCloneTaskTimeout = new AtomicLong(0L);
+    @StatField("copy bytes of inter-node clone task")
+    public AtomicLong counterCloneTaskInterNodeCopyBytes = new AtomicLong(0L);
+    @StatField("copy bytes of intra-node clone task")
+    public AtomicLong counterCloneTaskIntraNodeCopyBytes = new AtomicLong(0L);
+    @StatField("copy duration of inter-node clone task(ms)")
+    public AtomicLong counterCloneTaskInterNodeCopyDurationMs = new AtomicLong(0L);
+    @StatField("copy duration of intra-node clone task(ms)")
+    public AtomicLong counterCloneTaskIntraNodeCopyDurationMs = new AtomicLong(0L);
 
     /*
      * replica unhealthy type
@@ -124,8 +132,6 @@ public class TabletSchedulerStat {
     public AtomicLong counterReplicaLocMismatchErr = new AtomicLong(0L);
     @StatField("num of replica redundant error")
     public AtomicLong counterReplicaRedundantErr = new AtomicLong(0L);
-    @StatField("num of replica missing in cluster error")
-    public AtomicLong counterReplicaMissingInClusterErr = new AtomicLong(0L);
     @StatField("num of balance scheduled")
     public AtomicLong counterBalanceSchedule = new AtomicLong(0L);
     @StatField("num of colocate replica mismatch")

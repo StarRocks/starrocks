@@ -15,8 +15,8 @@
 package com.starrocks.sql.optimizer.rule.transformation;
 
 import com.google.common.collect.Lists;
-import com.starrocks.analysis.ArithmeticExpr;
 import com.starrocks.catalog.PrimitiveType;
+import com.starrocks.sql.ast.expression.ArithmeticExpr;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;

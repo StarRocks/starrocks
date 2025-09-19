@@ -33,6 +33,7 @@
 #include "pipeline/hashjoin/hash_joiner_fwd.h"
 #include "runtime/current_thread.h"
 #include "simd/simd.h"
+#include "storage/chunk_helper.h"
 #include "util/runtime_profile.h"
 
 namespace starrocks {
@@ -73,6 +74,7 @@ HashJoiner::HashJoiner(const HashJoinerParam& param)
           _probe_expr_ctxs(param._probe_expr_ctxs),
           _other_join_conjunct_ctxs(param._other_join_conjunct_ctxs),
           _conjunct_ctxs(param._conjunct_ctxs),
+          _common_expr_ctxs(param._common_expr_ctxs),
           _build_row_descriptor(param._build_row_descriptor),
           _probe_row_descriptor(param._probe_row_descriptor),
           _build_node_type(param._build_node_type),
@@ -82,6 +84,7 @@ HashJoiner::HashJoiner(const HashJoinerParam& param)
           _probe_output_slots(param._probe_output_slots),
           _build_runtime_filters(param._build_runtime_filters.begin(), param._build_runtime_filters.end()),
           _enable_late_materialization(param._enable_late_materialization),
+          _max_dop(param._max_dop),
           _is_skew_join(param._is_skew_join) {
     _is_push_down = param._hash_join_node.is_push_down;
     if (_join_type == TJoinOp::LEFT_ANTI_JOIN && param._hash_join_node.is_rewritten_from_not_in) {
@@ -157,6 +160,11 @@ void HashJoiner::_init_hash_table_param(HashTableParam* param, RuntimeState* sta
     param->column_view_concat_rows_limit = state->column_view_concat_rows_limit();
     param->column_view_concat_bytes_limit = state->column_view_concat_bytes_limit();
     std::set<SlotId> predicate_slots;
+    for (const auto& [slot_id, ctx] : _common_expr_ctxs) {
+        std::vector<SlotId> expr_slots;
+        ctx->root()->get_slot_ids(&expr_slots);
+        predicate_slots.insert(expr_slots.begin(), expr_slots.end());
+    }
     for (ExprContext* expr_context : _conjunct_ctxs) {
         std::vector<SlotId> expr_slots;
         expr_context->root()->get_slot_ids(&expr_slots);
@@ -178,7 +186,7 @@ void HashJoiner::_init_hash_table_param(HashTableParam* param, RuntimeState* sta
         }
     }
 }
-Status HashJoiner::append_chunk_to_ht(const ChunkPtr& chunk) {
+Status HashJoiner::append_chunk_to_ht(RuntimeState* state, const ChunkPtr& chunk) {
     if (_phase != HashJoinPhase::BUILD) {
         return Status::OK();
     }
@@ -187,7 +195,7 @@ Status HashJoiner::append_chunk_to_ht(const ChunkPtr& chunk) {
     }
 
     update_build_rows(chunk->num_rows());
-    return _hash_join_builder->append_chunk(chunk);
+    return _hash_join_builder->append_chunk(state, chunk);
 }
 
 Status HashJoiner::append_chunk_to_spill_buffer(RuntimeState* state, const ChunkPtr& chunk) {
@@ -387,6 +395,9 @@ Status HashJoiner::_calc_filter_for_other_conjunct(ChunkPtr* chunk, Filter& filt
     hit_all = false;
     filter.assign((*chunk)->num_rows(), 1);
 
+    CommonExprEvalScopeGuard guard(*chunk, _common_expr_ctxs);
+    RETURN_IF_ERROR(guard.evaluate());
+
     for (auto* ctx : _other_join_conjunct_ctxs) {
         ASSIGN_OR_RETURN(ColumnPtr column, ctx->evaluate((*chunk).get()))
         size_t true_count = ColumnHelper::count_true_with_notnull(column);
@@ -515,6 +526,8 @@ Status HashJoiner::_process_other_conjunct(ChunkPtr* chunk, JoinHashTable& hash_
 
 Status HashJoiner::_process_where_conjunct(ChunkPtr* chunk) {
     SCOPED_TIMER(probe_metrics().where_conjunct_evaluate_timer);
+    CommonExprEvalScopeGuard guard(*chunk, _common_expr_ctxs);
+    RETURN_IF_ERROR(guard.evaluate());
     return ExecNode::eval_conjuncts(_conjunct_ctxs, (*chunk).get());
 }
 

@@ -36,17 +36,16 @@ package com.starrocks.catalog;
 
 import com.google.common.collect.Lists;
 import com.google.gson.annotations.SerializedName;
-import com.starrocks.analysis.StringLiteral;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.sql.ast.ColumnDef;
+import com.starrocks.sql.ast.expression.StringLiteral;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
-import java.io.DataInput;
 import java.io.DataInputStream;
 import java.io.DataOutput;
 import java.io.DataOutputStream;
@@ -76,10 +75,6 @@ public class ColumnGsonSerializationTest {
             Text.writeString(out, json);
         }
 
-        public static ColumnList read(DataInput in) throws IOException {
-            String json = Text.readString(in);
-            return GsonUtils.GSON.fromJson(json, ColumnList.class);
-        }
     }
 
     @Test
@@ -105,42 +100,4 @@ public class ColumnGsonSerializationTest {
 
         Assertions.assertEquals(c1, readC1);
     }
-
-    @Test
-    public void testSerializeColumnList() throws IOException, AnalysisException {
-        // 1. Write objects to file
-        File file = new File(fileName);
-        file.createNewFile();
-        DataOutputStream out = new DataOutputStream(new FileOutputStream(file));
-
-        Column c1 = new Column("c1", Type.fromPrimitiveType(PrimitiveType.BIGINT), true, null, true,
-                new ColumnDef.DefaultValueDef(true, new StringLiteral("1")), "abc");
-        Column c2 =
-                new Column("c2", ScalarType.createType(PrimitiveType.VARCHAR, 32, -1, -1), true, null, true,
-                        new ColumnDef.DefaultValueDef(true, new StringLiteral("cmy")), "");
-        Column c3 = new Column("c3", ScalarType.createDecimalV2Type(27, 9), false, AggregateType.SUM, false,
-                new ColumnDef.DefaultValueDef(true, new StringLiteral("1.1")),
-                "decimalv2");
-
-        ColumnList columnList = new ColumnList();
-        columnList.columns.add(c1);
-        columnList.columns.add(c2);
-        columnList.columns.add(c3);
-
-        columnList.write(out);
-        out.flush();
-        out.close();
-
-        // 2. Read objects from file
-        DataInputStream in = new DataInputStream(new FileInputStream(file));
-
-        ColumnList readList = ColumnList.read(in);
-        List<Column> columns = readList.columns;
-
-        Assertions.assertEquals(3, columns.size());
-        Assertions.assertEquals(c1, columns.get(0));
-        Assertions.assertEquals(c2, columns.get(1));
-        Assertions.assertEquals(c3, columns.get(2));
-    }
-
 }

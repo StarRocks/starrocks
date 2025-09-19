@@ -20,15 +20,9 @@ package com.starrocks.backup;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
-import org.junit.jupiter.api.Test;
 
-import java.io.DataInputStream;
-import java.io.DataOutputStream;
 import java.io.File;
-import java.io.FileInputStream;
 import java.io.FileNotFoundException;
-import java.io.FileOutputStream;
-import java.io.IOException;
 import java.io.PrintWriter;
 
 public class BackupJobInfoTest {
@@ -186,90 +180,6 @@ public class BackupJobInfoTest {
         File newFile = new File(fileName);
         if (newFile.exists()) {
             newFile.delete();
-        }
-    }
-
-    @Test
-    public void testReadWrite() {
-        BackupJobInfo jobInfo = null;
-        try {
-            jobInfo = BackupJobInfo.fromFile(fileName);
-        } catch (IOException e) {
-            e.printStackTrace();
-            Assertions.fail();
-        }
-        Assertions.assertNotNull(jobInfo);
-
-        Assertions.assertEquals(1522231864000L, jobInfo.backupTime);
-        Assertions.assertEquals("snapshot1", jobInfo.name);
-        Assertions.assertEquals(2, jobInfo.tables.size());
-
-        Assertions.assertEquals(2, jobInfo.getTableInfo("table1").partitions.size());
-        Assertions.assertEquals(2, jobInfo.getTableInfo("table1").getPartInfo("partition1").indexes.size());
-        Assertions.assertEquals(2,
-                jobInfo.getTableInfo("table1").getPartInfo("partition1").getIdx("rollup1").tablets.size());
-
-        File tmpFile = new File("./tmp");
-        try {
-            DataOutputStream out = new DataOutputStream(new FileOutputStream(tmpFile));
-            jobInfo.write(out);
-            out.flush();
-            out.close();
-
-            DataInputStream in = new DataInputStream(new FileInputStream(tmpFile));
-            BackupJobInfo newInfo = BackupJobInfo.read(in);
-            in.close();
-
-            Assertions.assertEquals(jobInfo.backupTime, newInfo.backupTime);
-            Assertions.assertEquals(jobInfo.dbId, newInfo.dbId);
-            Assertions.assertEquals(jobInfo.dbName, newInfo.dbName);
-
-        } catch (IOException e) {
-            e.printStackTrace();
-            Assertions.fail();
-        } finally {
-            tmpFile.delete();
-        }
-    }
-
-    @Test
-    public void testReadWriteWithSubPartition() {
-        BackupJobInfo jobInfo = null;
-        try {
-            jobInfo = BackupJobInfo.fromFile(newFileName);
-        } catch (IOException e) {
-            e.printStackTrace();
-            Assertions.fail();
-        }
-        Assertions.assertNotNull(jobInfo);
-
-        Assertions.assertEquals(1522231864000L, jobInfo.backupTime);
-        Assertions.assertEquals("snapshot1", jobInfo.name);
-        Assertions.assertEquals(1, jobInfo.tables.size());
-
-        Assertions.assertEquals(1, jobInfo.getTableInfo("table1").partitions.size());
-        Assertions.assertEquals(1, jobInfo.getTableInfo("table1").getPartInfo("partition1").indexes.size());
-
-        File tmpFile = new File("./tmp1");
-        try {
-            DataOutputStream out = new DataOutputStream(new FileOutputStream(tmpFile));
-            jobInfo.write(out);
-            out.flush();
-            out.close();
-
-            DataInputStream in = new DataInputStream(new FileInputStream(tmpFile));
-            BackupJobInfo newInfo = BackupJobInfo.read(in);
-            in.close();
-
-            Assertions.assertEquals(jobInfo.backupTime, newInfo.backupTime);
-            Assertions.assertEquals(jobInfo.dbId, newInfo.dbId);
-            Assertions.assertEquals(jobInfo.dbName, newInfo.dbName);
-
-        } catch (IOException e) {
-            e.printStackTrace();
-            Assertions.fail();
-        } finally {
-            tmpFile.delete();
         }
     }
 }

@@ -14,9 +14,9 @@
 
 package com.starrocks.sql.ast;
 
-import com.starrocks.analysis.Expr;
-import com.starrocks.analysis.FunctionCallExpr;
-import com.starrocks.analysis.SlotRef;
+import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.FunctionCallExpr;
+import com.starrocks.sql.ast.expression.SlotRef;
 import com.starrocks.sql.parser.NodePosition;
 
 import java.util.ArrayList;
@@ -102,12 +102,12 @@ public class PivotRelation extends Relation {
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitPivotRelation(this, context);
+        return ((AstVisitorExtendInterface<R, C>) visitor).visitPivotRelation(this, context);
     }
 
     public Map<String, SlotRef> getUsedColumns() {
         Map<String, SlotRef> map = new TreeMap<>(String.CASE_INSENSITIVE_ORDER);
-        AstVisitor<Void, Void> collector = new AstVisitor<Void, Void>() {
+        AstVisitorExtendInterface<Void, Void> collector = new AstVisitorExtendInterface<Void, Void>() {
             @Override
             public Void visitSlot(SlotRef node, Void context) {
                 map.put(node.getColumnName(), node);

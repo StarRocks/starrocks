@@ -21,7 +21,6 @@ import com.starrocks.persist.EditLog;
 import mockit.Mock;
 import mockit.MockUp;
 
-import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
 
@@ -47,11 +46,6 @@ public final class FakeTransactionIDGenerator extends MockUp<TransactionIdGenera
 
     @Mock
     public void write(DataOutput out) throws IOException {
-        // do nothing
-    }
-
-    @Mock
-    public void readFields(DataInput in) throws IOException {
         // do nothing
     }
 

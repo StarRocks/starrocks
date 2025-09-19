@@ -17,8 +17,8 @@ import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
-import com.starrocks.analysis.TableName;
 import com.starrocks.authentication.AuthenticationMgr;
+import com.starrocks.authentication.UserIdentityUtils;
 import com.starrocks.authorization.AccessDeniedException;
 import com.starrocks.authorization.PrivilegeBuiltinConstants;
 import com.starrocks.catalog.Column;
@@ -26,6 +26,7 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
+import com.starrocks.catalog.UserIdentity;
 import com.starrocks.catalog.View;
 import com.starrocks.catalog.system.SystemId;
 import com.starrocks.catalog.system.SystemTable;
@@ -37,7 +38,7 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.Authorizer;
 import com.starrocks.sql.analyzer.SemanticException;
-import com.starrocks.sql.ast.UserIdentity;
+import com.starrocks.sql.ast.expression.TableName;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
@@ -119,7 +120,7 @@ public class ViewsSystemTable extends SystemTable {
     public List<List<ScalarOperator>> evaluate(ScalarOperator predicate) {
         final List<ScalarOperator> conjuncts = Utils.extractConjuncts(predicate);
         ConnectContext context = Preconditions.checkNotNull(ConnectContext.get(), "not a valid connection");
-        TUserIdentity userIdentity = context.getCurrentUserIdentity().toThrift();
+        TUserIdentity userIdentity = UserIdentityUtils.toThrift(context.getCurrentUserIdentity());
         TGetTablesParams params = new TGetTablesParams();
         params.setCurrent_user_ident(userIdentity);
         params.setDb(context.getDatabase());
@@ -235,7 +236,7 @@ public class ViewsSystemTable extends SystemTable {
         long limit = params.isSetLimit() ? params.getLimit() : -1;
         UserIdentity currentUser;
         if (params.isSetCurrent_user_ident()) {
-            currentUser = UserIdentity.fromThrift(params.current_user_ident);
+            currentUser = UserIdentityUtils.fromThrift(params.current_user_ident);
         } else {
             currentUser = UserIdentity.createAnalyzedUserIdentWithIp(params.user, params.user_ip);
         }

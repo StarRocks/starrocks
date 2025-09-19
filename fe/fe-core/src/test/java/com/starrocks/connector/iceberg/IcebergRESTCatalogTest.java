@@ -19,7 +19,6 @@ import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
-import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.IcebergView;
 import com.starrocks.catalog.Table;
@@ -34,6 +33,7 @@ import com.starrocks.sql.ast.AlterViewStmt;
 import com.starrocks.sql.ast.ColWithComment;
 import com.starrocks.sql.ast.CreateViewStmt;
 import com.starrocks.sql.ast.DropTableStmt;
+import com.starrocks.sql.ast.expression.TableName;
 import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Expectations;
@@ -346,7 +346,7 @@ public class IcebergRESTCatalogTest {
         ExceptionChecker.expectThrowsWithMsg(StarRocksConnectorException.class,
                 "Failed to create table using REST Catalog",
                 () -> icebergRESTCatalog.createTable(connectContext, "db", "tbl", null, null, null,
-                        Maps.newHashMap()));
+                        null, Maps.newHashMap()));
 
         new Expectations() {
             {

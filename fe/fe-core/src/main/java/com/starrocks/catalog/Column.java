@@ -38,32 +38,30 @@ import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.alter.SchemaChangeHandler;
-import com.starrocks.analysis.Expr;
-import com.starrocks.analysis.NullLiteral;
-import com.starrocks.analysis.SlotRef;
-import com.starrocks.analysis.StringLiteral;
-import com.starrocks.analysis.TypeDef;
 import com.starrocks.catalog.combinator.AggStateDesc;
 import com.starrocks.common.CaseSensibility;
 import com.starrocks.common.DdlException;
-import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.persist.ColumnIdExpr;
 import com.starrocks.persist.ExpressionSerializedObject;
 import com.starrocks.persist.gson.GsonPostProcessable;
 import com.starrocks.persist.gson.GsonPreProcessable;
-import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.analyzer.AstToSQLBuilder;
 import com.starrocks.sql.ast.ColumnDef;
 import com.starrocks.sql.ast.IndexDef;
+import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.NullLiteral;
+import com.starrocks.sql.ast.expression.SlotRef;
+import com.starrocks.sql.ast.expression.StringLiteral;
+import com.starrocks.sql.ast.expression.TypeDef;
 import com.starrocks.thrift.TAggStateDesc;
+import com.starrocks.thrift.TAggregationType;
 import com.starrocks.thrift.TColumn;
 import org.apache.commons.lang.StringEscapeUtils;
 import org.apache.commons.text.translate.UnicodeUnescaper;
 
-import java.io.DataInput;
 import java.io.IOException;
 import java.time.Instant;
 import java.time.LocalDateTime;
@@ -135,7 +133,8 @@ public class Column implements Writable, GsonPreProcessable, GsonPostProcessable
     @SerializedName(value = "stats")
     private ColumnStats stats;     // cardinality and selectivity etc.
     // Define expr may exist in two forms, one is analyzed, and the other is not analyzed.
-    // Currently, analyzed define expr is only used when creating materialized views, so the define expr in RollupJob must be analyzed.
+    // Currently, analyzed define expr is only used when creating materialized views, so the define expr in RollupJob must be
+    // analyzed.
     // In other cases, such as define expr in `MaterializedIndexMeta`, it may not be analyzed after being relayed.
     private Expr defineExpr; // use to define column in materialize view
     // physicalName is used to store the physical name of the column in the storage layer.
@@ -443,7 +442,7 @@ public class Column implements Writable, GsonPreProcessable, GsonPostProcessable
         tColumn.setIndex_len(this.getOlapColumnIndexSize());
         tColumn.setType_desc(this.type.toThrift());
         if (null != this.aggregationType) {
-            tColumn.setAggregation_type(this.aggregationType.toThrift());
+            tColumn.setAggregation_type(toThrift(aggregationType));
         }
         if (null != this.aggStateDesc) {
             TAggStateDesc tAggStateDesc = this.aggStateDesc.toThrift();
@@ -463,6 +462,33 @@ public class Column implements Writable, GsonPreProcessable, GsonPostProcessable
         tColumn.setCol_unique_id(uniqueId);
 
         return tColumn;
+    }
+
+    public TAggregationType toThrift(AggregateType aggregateType) {
+        switch (aggregateType) {
+            case SUM:
+                return TAggregationType.SUM;
+            case MAX:
+                return TAggregationType.MAX;
+            case MIN:
+                return TAggregationType.MIN;
+            case REPLACE:
+                return TAggregationType.REPLACE;
+            case REPLACE_IF_NOT_NULL:
+                return TAggregationType.REPLACE_IF_NOT_NULL;
+            case NONE:
+                return TAggregationType.NONE;
+            case HLL_UNION:
+                return TAggregationType.HLL_UNION;
+            case BITMAP_UNION:
+                return TAggregationType.BITMAP_UNION;
+            case PERCENTILE_UNION:
+                return TAggregationType.PERCENTILE_UNION;
+            case AGG_STATE_UNION:
+                return TAggregationType.AGG_STATE_UNION;
+            default:
+                return null;
+        }
     }
 
     public void checkSchemaChangeAllowed(Column other) throws DdlException {
@@ -864,13 +890,6 @@ public class Column implements Writable, GsonPreProcessable, GsonPostProcessable
         return true;
     }
 
-
-
-    public static Column read(DataInput in) throws IOException {
-        String json = Text.readString(in);
-        return GsonUtils.GSON.fromJson(json, Column.class);
-    }
-
     public String generatedColumnExprToString() {
         if (generatedColumnExprSerialized != null && generatedColumnExprSerialized.getExpressionSql() != null) {
             return generatedColumnExprSerialized.deserialize().toSql();
@@ -940,5 +959,28 @@ public class Column implements Writable, GsonPreProcessable, GsonPostProcessable
 
     public AggStateDesc getAggStateDesc() {
         return this.aggStateDesc;
+    }
+
+    public static Column fromColumnDef(Table table, ColumnDef columnDef) {
+        Column col = new Column(columnDef.getName(),
+                columnDef.getTypeDef().getType(),
+                columnDef.isKey(),
+                columnDef.getAggregateType(),
+                columnDef.getAggStateDesc(),
+                columnDef.isAllowNull(),
+                columnDef.getDefaultValueDef(),
+                columnDef.getComment(),
+                Column.COLUMN_UNIQUE_ID_INIT_VALUE);
+        col.setIsAutoIncrement(columnDef.isAutoIncrement());
+
+        Expr generatedColumnExpr = columnDef.getGeneratedColumnExpr();
+        if (generatedColumnExpr != null) {
+            if (table != null) {
+                col.setGeneratedColumnExpr(ColumnIdExpr.create(table.getNameToColumn(), generatedColumnExpr));
+            } else {
+                col.setGeneratedColumnExpr(ColumnIdExpr.create(generatedColumnExpr));
+            }
+        }
+        return col;
     }
 }

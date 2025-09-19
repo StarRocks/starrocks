@@ -40,15 +40,12 @@ import com.google.common.collect.Lists;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.clone.BalanceStat;
 import com.starrocks.clone.BalanceStat.BalanceType;
-import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.lake.LakeTablet;
 import com.starrocks.persist.gson.GsonPostProcessable;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.TIndexState;
 
-import java.io.DataOutput;
-import java.io.IOException;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -350,24 +347,8 @@ public class MaterializedIndex extends MetaObject implements Writable, GsonPostP
         return getBalanceStat().getBalanceType();
     }
 
-    @Override
-    public void write(DataOutput out) throws IOException {
-        super.write(out);
 
-        out.writeLong(id);
 
-        Text.writeString(out, state.name());
-        out.writeLong(rowCount);
-
-        int tabletCount = tablets.size();
-        out.writeInt(tabletCount);
-        for (Tablet tablet : tablets) {
-            tablet.write(out);
-        }
-
-        out.writeLong(-1L); // For rollback compatibility of field rollupIndexId
-        out.writeLong(-1L); // For rollback compatibility of field rollupFinishedVersion
-    }
 
     @Override
     public int hashCode() {

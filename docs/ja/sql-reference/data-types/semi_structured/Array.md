@@ -60,7 +60,6 @@ StarRocks テーブルで ARRAY カラムを作成する際には、次の制限
 - v2.1 より前のバージョンでは、ARRAY カラムは重複キーテーブルでのみ作成できます。v2.1 以降では、他のタイプのテーブル（Primary Key、Unique Key、Aggregate）でも ARRAY カラムを作成できます。ただし、集計テーブルでは、そのカラムでデータを集計するために使用される関数が replace() または replace_if_not_null() の場合にのみ ARRAY カラムを作成できます。詳細は [集計テーブル](../../../table_design/table_types/aggregate_table.md) を参照してください。
 - ARRAY カラムはキー カラムとして使用できません。
 - ARRAY カラムはパーティションキー（PARTITION BY に含まれる）またはバケッティングキー（DISTRIBUTED BY に含まれる）として使用できません。
-- DECIMAL V3 は ARRAY でサポートされていません。
 - 配列は最大 14 レベルのネストが可能です。
 
 ## SQL での配列の構築

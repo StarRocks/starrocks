@@ -16,7 +16,6 @@ package com.starrocks.sql.analyzer;
 
 import com.google.common.collect.Sets;
 import com.starrocks.alter.AlterOpType;
-import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.Table;
@@ -30,6 +29,7 @@ import com.starrocks.sql.ast.AlterTableStmt;
 import com.starrocks.sql.ast.CreateIndexClause;
 import com.starrocks.sql.ast.DropIndexClause;
 import com.starrocks.sql.ast.ModifyTablePropertiesClause;
+import com.starrocks.sql.ast.expression.TableName;
 import com.starrocks.sql.common.MetaUtils;
 
 import java.util.List;
@@ -55,7 +55,7 @@ public class AlterTableStatementAnalyzer {
             throw new SemanticException("Database %s is not found", tbl.getCatalogAndDb());
         }
 
-        if (alterClauseList.stream().map(AlterClause::getOpType).anyMatch(AlterOpType::needCheckCapacity)) {
+        if (alterClauseList.stream().map(AlterOpType::getOpType).anyMatch(AlterOpType::needCheckCapacity)) {
             try {
                 GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().checkClusterCapacity();
                 GlobalStateMgr.getCurrentState().getLocalMetastore().checkDataSizeQuota(db);
@@ -87,9 +87,9 @@ public class AlterTableStatementAnalyzer {
     private static void checkAlterOpConflict(List<AlterClause> alterClauses) {
         Set<AlterOpType> checkedAlterOpTypes = Sets.newHashSet();
         for (AlterClause alterClause : alterClauses) {
-            AlterOpType opType = alterClause.getOpType();
+            AlterOpType opType = AlterOpType.getOpType(alterClause);
             for (AlterOpType currentOp : checkedAlterOpTypes) {
-                if (!AlterOpType.COMPATIBITLITY_MATRIX[currentOp.ordinal()][opType.ordinal()]) {
+                if (!AlterOpType.COMPATIBILITY_MATRIX[currentOp.ordinal()][opType.ordinal()]) {
                     throw new SemanticException("Alter operation " + opType + " conflicts with operation " + currentOp);
                 }
             }

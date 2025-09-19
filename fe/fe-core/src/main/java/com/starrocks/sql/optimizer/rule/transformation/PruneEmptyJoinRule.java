@@ -14,9 +14,10 @@
 
 package com.starrocks.sql.optimizer.rule.transformation;
 
+import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
-import com.starrocks.analysis.JoinOperator;
+import com.starrocks.sql.ast.expression.JoinOperator;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.operator.OperatorType;
@@ -61,18 +62,19 @@ public class PruneEmptyJoinRule extends TransformationRule {
 
     @Override
     public List<OptExpression> transform(OptExpression input, OptimizerContext context) {
+        Preconditions.checkState(input.getOp().getProjection() == null);
         LogicalJoinOperator join = input.getOp().cast();
         JoinOperator type = join.getJoinType();
 
         int joinIndex; // 0 left, 1 right
-        if (type.isInnerJoin() || type.isCrossJoin() || type.isSemiJoin()) {
+        if (type.isAnyInnerJoin() || type.isCrossJoin() || type.isSemiJoin()) {
             /* inner join, cross join, semi join
              *      join
              *     /    \     ->  Empty
              *   Empty   B
              */
             return transToEmpty(input, context);
-        } else if (type.isRightOuterJoin() || type.isLeftOuterJoin()) {
+        } else if (type.isRightOuterJoin() || type.isAnyLeftOuterJoin()) {
             /* left outer join        Project (remain B columns(null))
              *     /     \        ->     |
              *    A      Empty           A

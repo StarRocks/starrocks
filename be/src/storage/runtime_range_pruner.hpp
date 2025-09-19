@@ -39,8 +39,8 @@ struct RuntimeColumnPredicateBuilder {
                                                              const SlotDescriptor* slot, int32_t driver_sequence,
                                                              ObjectPool* pool) {
         // keep consistent with ColumnRangeBuilder
-        if constexpr (ltype == TYPE_TIME || ltype == TYPE_NULL || ltype == TYPE_JSON || lt_is_float<ltype> ||
-                      lt_is_binary<ltype>) {
+        if constexpr (ltype == TYPE_TIME || ltype == TYPE_NULL || ltype == TYPE_JSON || ltype == TYPE_VARIANT ||
+                      lt_is_float<ltype> || lt_is_binary<ltype>) {
             DCHECK(false) << "unreachable path";
             return Status::NotSupported("unreachable path");
         } else {
@@ -115,7 +115,8 @@ struct RuntimeColumnPredicateBuilder {
             }
 
             for (auto& f : filters) {
-                ColumnPredicate* p = pool->add(parser->parse_thrift_cond(f));
+                ASSIGN_OR_RETURN(auto p, parser->parse_thrift_cond(f));
+                p = pool->add(p);
                 VLOG(2) << "build runtime predicate:" << p->debug_string();
                 p->set_index_filter_only(f.is_index_filter_only);
                 preds.emplace_back(p);

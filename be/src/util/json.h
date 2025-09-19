@@ -134,6 +134,7 @@ public:
     std::string to_string_uncheck() const;
     int compare(const JsonValue& rhs) const;
     static int compare(const Slice& lhs, const Slice& rhs);
+    static int compare(const VSlice& lhs, const VSlice& rhs);
     int64_t hash() const;
 
 private:

@@ -16,14 +16,12 @@ package com.starrocks.sql.ast;
 
 import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
-import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Index;
+import com.starrocks.sql.ast.expression.TableName;
 import com.starrocks.sql.common.EngineType;
 import com.starrocks.sql.parser.NodePosition;
 
-import java.io.DataInput;
-import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -46,7 +44,7 @@ public class CreateTableStmt extends DdlStmt {
 
     // set in analyze
     private List<Column> columns;
-    private List<String> sortKeys = Lists.newArrayList();
+    private List<OrderByElement> orderByElements;
 
     private List<Index> indexes;
 
@@ -99,9 +97,9 @@ public class CreateTableStmt extends DdlStmt {
                            DistributionDesc distributionDesc,
                            Map<String, String> properties,
                            Map<String, String> extProperties,
-                           String comment, List<AlterClause> ops, List<String> sortKeys) {
+                           String comment, List<AlterClause> ops, List<OrderByElement> orderByElements) {
         this(ifNotExists, isExternal, tableName, columnDefinitions, null, engineName, charsetName, keysDesc, partitionDesc,
-                distributionDesc, properties, extProperties, comment, ops, sortKeys);
+                distributionDesc, properties, extProperties, comment, ops, orderByElements);
     }
 
     public CreateTableStmt(boolean ifNotExists,
@@ -116,10 +114,10 @@ public class CreateTableStmt extends DdlStmt {
                            DistributionDesc distributionDesc,
                            Map<String, String> properties,
                            Map<String, String> extProperties,
-                           String comment, List<AlterClause> rollupAlterClauseList, List<String> sortKeys) {
+                           String comment, List<AlterClause> rollupAlterClauseList, List<OrderByElement> orderByElements) {
         this(ifNotExists, isExternal, tableName, columnDefinitions, indexDefs, engineName, charsetName, keysDesc,
                 partitionDesc, distributionDesc, properties, extProperties, comment, rollupAlterClauseList,
-                sortKeys, NodePosition.ZERO);
+                orderByElements, NodePosition.ZERO);
     }
 
     public CreateTableStmt(boolean ifNotExists,
@@ -134,7 +132,7 @@ public class CreateTableStmt extends DdlStmt {
                            DistributionDesc distributionDesc,
                            Map<String, String> properties,
                            Map<String, String> extProperties,
-                           String comment, List<AlterClause> rollupAlterClauseList, List<String> sortKeys,
+                           String comment, List<AlterClause> rollupAlterClauseList, List<OrderByElement> orderByElements,
                            NodePosition pos) {
         super(pos);
         this.tableName = tableName;
@@ -157,7 +155,7 @@ public class CreateTableStmt extends DdlStmt {
 
         this.tableSignature = -1;
         this.rollupAlterClauseList = rollupAlterClauseList == null ? new ArrayList<>() : rollupAlterClauseList;
-        this.sortKeys = sortKeys;
+        this.orderByElements = orderByElements;
     }
 
     public void addColumnDef(ColumnDef columnDef) {
@@ -220,8 +218,8 @@ public class CreateTableStmt extends DdlStmt {
         return engineName;
     }
 
-    public List<String> getSortKeys() {
-        return sortKeys;
+    public List<OrderByElement> getOrderByElements() {
+        return orderByElements;
     }
 
     public void setEngineName(String engineName) {
@@ -340,12 +338,8 @@ public class CreateTableStmt extends DdlStmt {
         return hasGeneratedColumn;
     }
 
-    public static CreateTableStmt read(DataInput in) throws IOException {
-        throw new RuntimeException("CreateTableStmt serialization is not supported anymore.");
-    }
-
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitCreateTableStatement(this, context);
+        return ((AstVisitorExtendInterface<R, C>) visitor).visitCreateTableStatement(this, context);
     }
 }

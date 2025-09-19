@@ -46,11 +46,10 @@
 #include "common/object_pool.h"
 #include "common/status.h"
 #include "gen_cpp/Types_types.h" // for TUniqueId
-#include "runtime/data_stream_mgr_fwd.h"
 #include "runtime/descriptors.h" // for PlanNodeId
+#include "runtime/local_pass_through_buffer.h"
 #include "runtime/mem_tracker.h"
 #include "runtime/query_statistics.h"
-#include "util/hash.h"
 #include "util/phmap/phmap.h"
 #include "util/runtime_profile.h"
 
@@ -99,11 +98,13 @@ public:
                                                   bool is_pipeline, int32_t degree_of_parallelism, bool keep_order);
 
     Status transmit_chunk(const PTransmitChunkParams& request, ::google::protobuf::Closure** done);
-    Status transmit_chunk(const TUniqueId& fragment_instance_id, const PTransmitChunkParams& request,
-                          ChunkPassThroughVectorPtr chunks, ::google::protobuf::Closure** done);
     // Closes all receivers registered for fragment_instance_id immediately.
     void cancel(const TUniqueId& fragment_instance_id);
     void close();
+
+    void prepare_pass_through_chunk_buffer(const TUniqueId& query_id);
+    void destroy_pass_through_chunk_buffer(const TUniqueId& query_id);
+    PassThroughChunkBuffer* get_pass_through_chunk_buffer(const TUniqueId& query_id);
 
 private:
     friend class DataStreamRecvr;
@@ -130,6 +131,8 @@ private:
     void deregister_recvr(const TUniqueId& fragment_instance_id, PlanNodeId node_id);
 
     inline uint32_t get_bucket(const TUniqueId& fragment_instance_id);
+
+    PassThroughChunkBufferManager _pass_through_chunk_buffer_manager;
 };
 
 } // namespace starrocks

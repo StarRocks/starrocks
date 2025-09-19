@@ -15,8 +15,6 @@
 package com.starrocks.planner;
 
 import com.google.common.collect.Lists;
-import com.starrocks.analysis.TupleDescriptor;
-import com.starrocks.analysis.TupleId;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.HiveTable;
 import com.starrocks.catalog.Type;
@@ -27,7 +25,6 @@ import com.starrocks.connector.ConnectorTableId;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.hive.HiveStorageFormat;
 import com.starrocks.credential.CloudConfiguration;
-import com.starrocks.credential.CloudConfigurationFactory;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.sql.analyzer.AnalyzeTestUtil;
 import com.starrocks.thrift.TCloudType;

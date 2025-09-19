@@ -112,11 +112,18 @@ Flink CDC コネクタと SMT を使用すると、MySQL からサブセカン�
 
 ### 手順
 
-1. [Flink](https://flink.apache.org/downloads.html) をダウンロードします。Flink のバージョンは 1.11 以降がサポートされています。
+| 関連項目                   | パッケージ名                                    | ダウンロードリンク                                                    |
+| ------------------------- | --------------------------------------------- | ----------------------------------------------------------------- |
+| Flink                     | flink-x.x.x-bin-scala_2.12.tgz                | [ここをクリック](https://flink.apache.org/downloads.html)             |
+| Flink CDC コネクタ　       | flink-sql-connector-mysql-cdc-x.x.x.jar       | [ここをクリック](https://github.com/apache/flink-cdc/releases)        |
+| Flink-connector-starrocks | flink-connector-starrocks-x.x.x_flink-x.x.jar | [ここをクリック](https://github.com/StarRocks/starrocks-connector-for-apache-flink/releases) |
+| SMT                       | smt.tar.gz                                    | [ここをクリック](https://cdn-thirdparty.starrocks.com/smt.tar.gz?r=2) |
+
+1. [Flink](https://flink.apache.org/downloads.html) をダウンロードします。Flink 1.11 以降がサポートされています。
 
 2. [Flink CDC コネクタ](https://github.com/ververica/flink-cdc-connectors/releases) をダウンロードします。Flink のバージョンに対応する `flink-sql-connector-mysql-cdc-xxx.jar` をダウンロードしてください。
 
-3. [Flink-connector-starrocks](https://github.com/StarRocks/flink-connector-starrocks) をダウンロードします。
+3. [Flink-connector-starrocks](https://github.com/StarRocks/starrocks-connector-for-apache-flink/releases) をダウンロードします。
 
 4. **flink-sql-connector-mysql-cdc-xxx.jar** と **flink-connector-starrocks-xxx.jar** を **flink-xxx/lib/** にコピーします。
 

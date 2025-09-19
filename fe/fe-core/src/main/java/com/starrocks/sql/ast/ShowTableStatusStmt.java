@@ -14,44 +14,19 @@
 
 package com.starrocks.sql.ast;
 
-import com.starrocks.analysis.Expr;
-import com.starrocks.analysis.ExprSubstitutionMap;
-import com.starrocks.analysis.SlotRef;
-import com.starrocks.analysis.TableName;
-import com.starrocks.catalog.Column;
-import com.starrocks.catalog.PrimitiveType;
-import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.system.information.InfoSchemaDb;
 import com.starrocks.common.AnalysisException;
-import com.starrocks.qe.ShowResultSetMetaData;
+import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.ExprSubstitutionMap;
+import com.starrocks.sql.ast.expression.SlotRef;
+import com.starrocks.sql.ast.expression.TableName;
 import com.starrocks.sql.parser.NodePosition;
 
 import static com.starrocks.common.util.Util.normalizeName;
 
 // SHOW TABLE STATUS
-public class ShowTableStatusStmt extends ShowStmt {
+public class ShowTableStatusStmt extends EnhancedShowStmt {
     private static final TableName TABLE_NAME = new TableName(InfoSchemaDb.DATABASE_NAME, "tables");
-    private static final ShowResultSetMetaData META_DATA =
-            ShowResultSetMetaData.builder()
-                    .addColumn(new Column("Name", ScalarType.createVarchar(64)))
-                    .addColumn(new Column("Engine", ScalarType.createVarchar(10)))
-                    .addColumn(new Column("Version", ScalarType.createType(PrimitiveType.BIGINT)))
-                    .addColumn(new Column("Row_format", ScalarType.createVarchar(64)))
-                    .addColumn(new Column("Rows", ScalarType.createType(PrimitiveType.BIGINT)))
-                    .addColumn(new Column("Avg_row_length", ScalarType.createType(PrimitiveType.BIGINT)))
-                    .addColumn(new Column("Data_length", ScalarType.createType(PrimitiveType.BIGINT)))
-                    .addColumn(new Column("Max_data_length", ScalarType.createType(PrimitiveType.BIGINT)))
-                    .addColumn(new Column("Index_length", ScalarType.createType(PrimitiveType.BIGINT)))
-                    .addColumn(new Column("Data_free", ScalarType.createType(PrimitiveType.BIGINT)))
-                    .addColumn(new Column("Auto_increment", ScalarType.createType(PrimitiveType.BIGINT)))
-                    .addColumn(new Column("Create_time", ScalarType.createType(PrimitiveType.DATETIME)))
-                    .addColumn(new Column("Update_time", ScalarType.createType(PrimitiveType.DATETIME)))
-                    .addColumn(new Column("Check_time", ScalarType.createType(PrimitiveType.DATETIME)))
-                    .addColumn(new Column("Collation", ScalarType.createVarchar(64)))
-                    .addColumn(new Column("Checksum", ScalarType.createType(PrimitiveType.BIGINT)))
-                    .addColumn(new Column("Create_options", ScalarType.createVarchar(64)))
-                    .addColumn(new Column("Comment", ScalarType.createVarchar(64)))
-                    .build();
 
     private String db;
     private final String wild;
@@ -168,12 +143,7 @@ public class ShowTableStatusStmt extends ShowStmt {
     }
 
     @Override
-    public ShowResultSetMetaData getMetaData() {
-        return META_DATA;
-    }
-
-    @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitShowTableStatusStatement(this, context);
+        return ((AstVisitorExtendInterface<R, C>) visitor).visitShowTableStatusStatement(this, context);
     }
 }

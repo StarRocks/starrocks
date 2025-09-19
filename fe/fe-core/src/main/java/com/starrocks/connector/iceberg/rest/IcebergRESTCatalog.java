@@ -27,12 +27,14 @@ import com.starrocks.connector.iceberg.cost.IcebergMetricsReporter;
 import com.starrocks.connector.iceberg.io.IcebergCachingFileIO;
 import com.starrocks.connector.share.iceberg.IcebergAwsClientFactory;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.server.GlobalStateMgr;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.iceberg.CatalogProperties;
 import org.apache.iceberg.PartitionSpec;
 import org.apache.iceberg.Schema;
+import org.apache.iceberg.SortOrder;
 import org.apache.iceberg.Table;
 import org.apache.iceberg.aws.AwsProperties;
 import org.apache.iceberg.catalog.Namespace;
@@ -76,6 +78,7 @@ public class IcebergRESTCatalog implements IcebergCatalog {
     public static final String KEY_VENDED_CREDENTIALS_ENABLED = "vended-credentials-enabled";
     public static final String ICEBERG_CATALOG_SECURITY = "iceberg.catalog.security";
     public static final String KEY_NESTED_NAMESPACE_ENABLED = "rest.nested-namespace-enabled";
+    public static final String USER_AGENT = "header.User-Agent";
 
     private String catalogName = null;
     private final Configuration conf;
@@ -105,6 +108,8 @@ public class IcebergRESTCatalog implements IcebergCatalog {
             restCatalogProperties.put("header.X-Iceberg-Access-Delegation", "vended-credentials");
         }
         restCatalogProperties.put(AwsProperties.CLIENT_FACTORY, IcebergAwsClientFactory.class.getName());
+        restCatalogProperties.put(USER_AGENT, "StarRocks-Iceberg-Connector/" +
+                GlobalStateMgr.getCurrentState().getNodeMgr().getMySelf().getFeVersion());
 
         nestedNamespaceEnabled = PropertyUtil.propertyAsBoolean(restCatalogProperties, KEY_NESTED_NAMESPACE_ENABLED, false);
         // setup oauth2
@@ -292,6 +297,7 @@ public class IcebergRESTCatalog implements IcebergCatalog {
             Schema schema,
             PartitionSpec partitionSpec,
             String location,
+            SortOrder sortOrder,
             Map<String, String> properties) {
 
         Table nativeTable = null;
@@ -300,6 +306,7 @@ public class IcebergRESTCatalog implements IcebergCatalog {
                             TableIdentifier.of(convertDbNameToNamespace(dbName), tableName), schema)
                     .withLocation(location)
                     .withPartitionSpec(partitionSpec)
+                    .withSortOrder(sortOrder)
                     .withProperties(properties)
                     .create();
         } catch (RESTException re) {
@@ -382,6 +389,20 @@ public class IcebergRESTCatalog implements IcebergCatalog {
             }
         } catch (Exception e) {
             LOG.error("Failed to delete uncommitted files", e);
+        }
+    }
+
+    @Override
+    public boolean registerTable(ConnectContext context, String dbName, String tableName, String metadataFileLocation) {
+        try {
+            TableIdentifier tableIdentifier = TableIdentifier.of(convertDbNameToNamespace(dbName), tableName);
+            Table table = delegate.registerTable(buildContext(context), tableIdentifier, metadataFileLocation);
+            return table != null;
+        } catch (RESTException re) {
+            LOG.error("Failed to register table using REST Catalog, for dbName {} tableName {} metadataFileLocation {}", 
+                    dbName, tableName, metadataFileLocation, re);
+            throw new StarRocksConnectorException("Failed to register table using REST Catalog",
+                    new RuntimeException("Failed to register table using REST Catalog, exception: " + re.getMessage(), re));
         }
     }
 

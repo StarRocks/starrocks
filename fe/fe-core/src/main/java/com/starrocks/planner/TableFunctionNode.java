@@ -15,7 +15,6 @@
 package com.starrocks.planner;
 
 import com.google.common.annotations.VisibleForTesting;
-import com.starrocks.analysis.TupleDescriptor;
 import com.starrocks.catalog.TableFunction;
 import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.thrift.TExpr;
@@ -29,7 +28,6 @@ import com.starrocks.thrift.TTableFunctionNode;
 import com.starrocks.thrift.TTypeDesc;
 
 import java.util.List;
-import java.util.stream.Collectors;
 
 public class TableFunctionNode extends PlanNode {
     private final TableFunction tableFunction;

@@ -255,7 +255,7 @@ std::unique_ptr<Chunk> Chunk::clone_empty_with_slot(size_t size) const {
         columns[i] = _columns[i]->clone_empty();
         columns[i]->reserve(size);
     }
-    return std::make_unique<Chunk>(columns, _slot_id_to_index);
+    return std::make_unique<Chunk>(std::move(columns), _slot_id_to_index);
 }
 
 std::unique_ptr<Chunk> Chunk::clone_empty_with_schema() const {
@@ -371,7 +371,9 @@ void Chunk::check_or_die() {
         CHECK(_slot_id_to_index.empty());
     } else {
         for (const ColumnPtr& c : _columns) {
-            CHECK_EQ(num_rows(), c->size());
+            if (!c->is_constant()) {
+                CHECK_EQ(num_rows(), c->size());
+            }
             c->check_or_die();
         }
     }

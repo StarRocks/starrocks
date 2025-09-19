@@ -287,8 +287,8 @@ public class HdfsFsManager {
     // is closed by other thread.
 
     // arguments for s3a
-    protected static final String FS_S3A_ACCESS_KEY = "fs.s3a.access.key";
-    protected static final String FS_S3A_SECRET_KEY = "fs.s3a.secret.key";
+    public static final String FS_S3A_ACCESS_KEY = "fs.s3a.access.key";
+    public static final String FS_S3A_SECRET_KEY = "fs.s3a.secret.key";
     protected static final String FS_S3A_ENDPOINT = "fs.s3a.endpoint";
     // This property is used like 'fs.hdfs.impl.disable.cache'
     protected static final String FS_S3A_IMPL_DISABLE_CACHE = "fs.s3a.impl.disable.cache";
@@ -298,8 +298,8 @@ public class HdfsFsManager {
     protected static final String FS_S3A_AWS_CRED_PROVIDER = "fs.s3a.aws.credentials.provider";
 
     // arguments for ks3
-    protected static final String FS_KS3_ACCESS_KEY = "fs.ks3.AccessKey";
-    protected static final String FS_KS3_SECRET_KEY = "fs.ks3.AccessSecret";
+    public static final String FS_KS3_ACCESS_KEY = "fs.ks3.AccessKey";
+    public static final String FS_KS3_SECRET_KEY = "fs.ks3.AccessSecret";
     protected static final String FS_KS3_ENDPOINT = "fs.ks3.endpoint";
     protected static final String FS_KS3_IMPL = "fs.ks3.impl";
     // This property is used like 'fs.ks3.impl.disable.cache'
@@ -307,8 +307,8 @@ public class HdfsFsManager {
     protected static final String FS_KS3_IMPL_DISABLE_CACHE = "fs.ks3.impl.disable.cache";
 
     // arguments for oss
-    protected static final String FS_OSS_ACCESS_KEY = "fs.oss.accessKeyId";
-    protected static final String FS_OSS_SECRET_KEY = "fs.oss.accessKeySecret";
+    public static final String FS_OSS_ACCESS_KEY = "fs.oss.accessKeyId";
+    public static final String FS_OSS_SECRET_KEY = "fs.oss.accessKeySecret";
     protected static final String FS_OSS_ENDPOINT = "fs.oss.endpoint";
     // This property is used like 'fs.hdfs.impl.disable.cache'
     protected static final String FS_OSS_IMPL_DISABLE_CACHE = "fs.oss.impl.disable.cache";
@@ -316,16 +316,16 @@ public class HdfsFsManager {
     protected static final String FS_OSS_IMPL = "fs.oss.impl";
 
     // arguments for cos
-    protected static final String FS_COS_ACCESS_KEY = "fs.cosn.userinfo.secretId";
-    protected static final String FS_COS_SECRET_KEY = "fs.cosn.userinfo.secretKey";
+    public static final String FS_COS_ACCESS_KEY = "fs.cosn.userinfo.secretId";
+    public static final String FS_COS_SECRET_KEY = "fs.cosn.userinfo.secretKey";
     protected static final String FS_COS_ENDPOINT = "fs.cosn.bucket.endpoint_suffix";
     protected static final String FS_COS_IMPL_DISABLE_CACHE = "fs.cosn.impl.disable.cache";
     protected static final String FS_COS_CONNECTION_SSL_ENABLED = "fs.cos.connection.ssl.enabled";
     protected static final String FS_COS_IMPL = "fs.cosn.impl";
 
     // arguments for obs
-    protected static final String FS_OBS_ACCESS_KEY = "fs.obs.access.key";
-    protected static final String FS_OBS_SECRET_KEY = "fs.obs.secret.key";
+    public static final String FS_OBS_ACCESS_KEY = "fs.obs.access.key";
+    public static final String FS_OBS_SECRET_KEY = "fs.obs.secret.key";
     protected static final String FS_OBS_ENDPOINT = "fs.obs.endpoint";
     // This property is used like 'fs.hdfs.impl.disable.cache'
     protected static final String FS_OBS_IMPL_DISABLE_CACHE = "fs.obs.impl.disable.cache";
@@ -339,8 +339,8 @@ public class HdfsFsManager {
     protected static final String FS_GS_IMPL_DISABLE_CACHE = "fs.gs.impl.disable.cache";
 
     // arguments for tos
-    protected static final String FS_TOS_ACCESS_KEY = "fs.tos.access.key";
-    protected static final String FS_TOS_SECRET_KEY = "fs.tos.secret.key";
+    public static final String FS_TOS_ACCESS_KEY = "fs.tos.access.key";
+    public static final String FS_TOS_SECRET_KEY = "fs.tos.secret.key";
     protected static final String FS_TOS_ENDPOINT = "fs.tos.endpoint";
     // This property is used like 'fs.hdfs.impl.disable.cache'
     protected static final String FS_TOS_IMPL_DISABLE_CACHE = "fs.tos.impl.disable.cache";

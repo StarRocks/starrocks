@@ -21,6 +21,8 @@ import com.starrocks.common.util.DebugUtil;
 import com.starrocks.common.util.RuntimeProfile;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.planner.PlanFragmentId;
+import com.starrocks.planner.PlanNodeId;
+import com.starrocks.planner.ScanNode;
 import com.starrocks.proto.PExecPlanFragmentResult;
 import com.starrocks.proto.PPlanFragmentCancelReason;
 import com.starrocks.proto.StatusPB;
@@ -228,6 +230,9 @@ public class FragmentInstanceExecState {
                     return get();
                 }
             };
+        } finally {
+            serializedRequest = null; // clear serializedRequest after deploy
+            requestToDeploy = null; // clear requestToDeploy after deploy
         }
     }
 
@@ -270,12 +275,15 @@ public class FragmentInstanceExecState {
         TStatusCode code;
         String errMsg = null;
         Throwable failure = null;
+        List<Integer> closedScanNodes = null;
         try {
             PExecPlanFragmentResult result = deployFuture.get(deployTimeoutMs, TimeUnit.MILLISECONDS);
+            closedScanNodes = result.getClosedScanNodes();
             code = TStatusCode.findByValue(result.status.statusCode);
             if (!CollectionUtils.isEmpty(result.status.errorMsgs)) {
                 errMsg = result.status.errorMsgs.get(0);
             }
+
         } catch (ExecutionException e) {
             LOG.warn("catch a execute exception", e);
             code = TStatusCode.THRIFT_RPC_ERROR;
@@ -305,6 +313,15 @@ public class FragmentInstanceExecState {
 
             LOG.warn("exec plan fragment failed, errmsg={}, code={}, fragmentId={}, backend={}:{}",
                     errMsg, code, getFragmentId(), address.hostname, address.port);
+        }
+
+        if (closedScanNodes != null) {
+            for (int id : closedScanNodes) {
+                ScanNode scanNode = fragmentInstance.getExecFragment().getScanNode(new PlanNodeId(id));
+                if (scanNode != null) {
+                    scanNode.setReachLimit();
+                }
+            }
         }
 
         requestToDeploy = null;

@@ -16,7 +16,7 @@
 package com.starrocks.sql.ast;
 
 import com.google.common.collect.Lists;
-import com.starrocks.analysis.TableRef;
+import com.starrocks.sql.ast.expression.TableRef;
 import com.starrocks.sql.parser.NodePosition;
 
 import java.util.List;
@@ -72,6 +72,6 @@ public class AdminRepairTableStmt extends DdlStmt {
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitAdminRepairTableStatement(this, context);
+        return ((AstVisitorExtendInterface<R, C>) visitor).visitAdminRepairTableStatement(this, context);
     }
 }

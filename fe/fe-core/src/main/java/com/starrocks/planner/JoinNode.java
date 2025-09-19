@@ -38,19 +38,16 @@ import com.google.common.base.MoreObjects;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
-import com.starrocks.analysis.BinaryPredicate;
-import com.starrocks.analysis.BinaryType;
-import com.starrocks.analysis.DescriptorTable;
-import com.starrocks.analysis.Expr;
-import com.starrocks.analysis.JoinOperator;
-import com.starrocks.analysis.SlotId;
-import com.starrocks.analysis.SlotRef;
-import com.starrocks.analysis.TableRef;
-import com.starrocks.analysis.TupleId;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.IdGenerator;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
+import com.starrocks.sql.ast.expression.BinaryPredicate;
+import com.starrocks.sql.ast.expression.BinaryType;
+import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.JoinOperator;
+import com.starrocks.sql.ast.expression.SlotRef;
+import com.starrocks.sql.ast.expression.TableRef;
 import com.starrocks.sql.optimizer.operator.UKFKConstraints;
 import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.thrift.TJoinDistributionMode;
@@ -59,6 +56,7 @@ import org.apache.logging.log4j.Logger;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.stream.Collectors;
 
@@ -76,6 +74,8 @@ public abstract class JoinNode extends PlanNode implements RuntimeFilterBuildNod
     protected List<BinaryPredicate> eqJoinConjuncts = Lists.newArrayList();
     // join conjuncts from the JOIN clause that aren't equi-join predicates
     protected List<Expr> otherJoinConjuncts;
+    // ASOF JOIN temporal inequality condition for finding closest match (only one per ASOF JOIN)
+    protected BinaryPredicate asofJoinConjunct;
     protected boolean isPushDown;
     protected DistributionMode distrMode;
     protected String colocateReason = ""; // if can not do colocate join, set reason here
@@ -95,6 +95,7 @@ public abstract class JoinNode extends PlanNode implements RuntimeFilterBuildNod
     // The partitionByExprs which need to check the probe side for partition join.
     protected List<Expr> probePartitionByExprs;
     protected boolean canLocalShuffle = false;
+    protected Map<SlotId, Expr> commonSlotMap;
 
     public List<RuntimeFilterDescription> getBuildRuntimeFilters() {
         return buildRuntimeFilters;
@@ -188,7 +189,7 @@ public abstract class JoinNode extends PlanNode implements RuntimeFilterBuildNod
         SessionVariable sessionVariable = ConnectContext.get().getSessionVariable();
         JoinOperator joinOp = getJoinOp();
         PlanNode inner = getChild(1);
-        if (!joinOp.isInnerJoin() && !joinOp.isLeftSemiJoin() && !joinOp.isRightJoin() && !joinOp.isCrossJoin()) {
+        if (!joinOp.isAnyInnerJoin() && !joinOp.isLeftSemiJoin() && !joinOp.isRightJoin() && !joinOp.isCrossJoin()) {
             return;
         }
 
@@ -358,11 +359,11 @@ public abstract class JoinNode extends PlanNode implements RuntimeFilterBuildNod
                                                                 Expr probeExpr,
                                                                 List<Expr> partitionByExprs) {
         List<Integer> sides = ImmutableList.of();
-        if (joinOp.isLeftAntiJoin() || joinOp.isLeftOuterJoin()) {
+        if (joinOp.isLeftAntiJoin() || joinOp.isAnyLeftOuterJoin()) {
             sides = ImmutableList.of(0);
         } else if (joinOp.isRightAntiJoin() || joinOp.isRightOuterJoin()) {
             sides = ImmutableList.of(1);
-        } else if (joinOp.isInnerJoin() || joinOp.isSemiJoin() || joinOp.isCrossJoin()) {
+        } else if (joinOp.isAnyInnerJoin() || joinOp.isSemiJoin() || joinOp.isCrossJoin()) {
             sides = ImmutableList.of(0, 1);
         }
 
@@ -458,6 +459,11 @@ public abstract class JoinNode extends PlanNode implements RuntimeFilterBuildNod
         partitionExprs = exprs;
     }
 
+    public void setAsofJoinConjunct(Expr asofJoinConjunct) {
+        Preconditions.checkArgument(asofJoinConjunct instanceof BinaryPredicate);
+        this.asofJoinConjunct = (BinaryPredicate) asofJoinConjunct;
+    }
+
     @Override
     public void computeStats() {
     }
@@ -492,6 +498,10 @@ public abstract class JoinNode extends PlanNode implements RuntimeFilterBuildNod
         this.ukfkProperty = ukfkProperty;
     }
 
+    public void setCommonSlotMap(Map<SlotId, Expr> commonSlotMap) {
+        this.commonSlotMap = commonSlotMap;
+    }
+
     @Override
     protected String getNodeExplainString(String detailPrefix, TExplainLevel detailLevel) {
         String distrModeStr =
@@ -511,20 +521,34 @@ public abstract class JoinNode extends PlanNode implements RuntimeFilterBuildNod
         for (BinaryPredicate eqJoinPredicate : eqJoinConjuncts) {
             output.append(detailPrefix).append("equal join conjunct: ");
             if (detailLevel.equals(TExplainLevel.VERBOSE)) {
-                output.append(eqJoinPredicate.explain());
+                output.append(explainExpr(detailLevel, List.of(eqJoinPredicate)));
             } else {
-                output.append(eqJoinPredicate.toSql());
+                output.append(explainExpr(eqJoinPredicate));
             }
             output.append("\n");
         }
+
+        if (asofJoinConjunct != null) {
+            output.append(detailPrefix).append("asof join conjunct: ");
+            output.append(explainExpr(detailLevel, List.of(asofJoinConjunct))).append("\n");
+        }
+
         if (!otherJoinConjuncts.isEmpty()) {
-            output.append(detailPrefix + "other join predicates: ").append(
-                    getVerboseExplain(otherJoinConjuncts, detailLevel) + "\n");
+            output.append(detailPrefix).append("other join predicates: ")
+                    .append(explainExpr(detailLevel, otherJoinConjuncts)).append("\n");
         }
         if (!conjuncts.isEmpty()) {
             output.append(detailPrefix).append("other predicates: ")
-                    .append(getVerboseExplain(conjuncts, detailLevel))
+                    .append(explainExpr(detailLevel, conjuncts))
                     .append("\n");
+        }
+
+        if (commonSlotMap != null && !commonSlotMap.isEmpty()) {
+            output.append(detailPrefix).append("  common sub expr:").append("\n");
+            for (Map.Entry<SlotId, Expr> entry : commonSlotMap.entrySet()) {
+                output.append(detailPrefix).append("  <slot ").append(entry.getKey().toString()).append("> : ")
+                        .append(explainExpr(entry.getValue())).append("\n");
+            }
         }
 
         if (detailLevel == TExplainLevel.VERBOSE) {

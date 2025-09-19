@@ -17,7 +17,7 @@
 #include <butil/fast_rand.h>
 
 namespace starrocks {
-Status LRUCacheEngine::init(const CacheOptions& options) {
+Status LRUCacheEngine::init(const MemCacheOptions& options) {
     _cache = std::make_unique<ShardedLRUCache>(options.mem_space_size);
     _initialized.store(true, std::memory_order_relaxed);
     return Status::OK();
@@ -75,6 +75,10 @@ Status LRUCacheEngine::update_mem_quota(size_t quota_bytes, bool flush_to_disk) 
 
 Status LRUCacheEngine::update_disk_spaces(const std::vector<DirSpace>& spaces) {
     return Status::NotSupported("LRUCache engine don't support update disk spaces");
+}
+
+Status LRUCacheEngine::update_inline_cache_count_limit(int32_t limit) {
+    return Status::NotSupported("LRUCache engine don't support update inline cache count limit");
 }
 
 const DataCacheMetrics LRUCacheEngine::cache_metrics() const {

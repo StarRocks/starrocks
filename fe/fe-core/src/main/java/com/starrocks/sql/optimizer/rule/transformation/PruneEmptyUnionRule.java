@@ -14,6 +14,7 @@
 
 package com.starrocks.sql.optimizer.rule.transformation;
 
+import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.sql.optimizer.OptExpression;
@@ -57,6 +58,7 @@ public class PruneEmptyUnionRule extends TransformationRule {
 
     @Override
     public List<OptExpression> transform(OptExpression input, OptimizerContext context) {
+        Preconditions.checkState(input.getOp().getProjection() == null);
         LogicalUnionOperator unionOperator = (LogicalUnionOperator) input.getOp();
 
         List<List<ColumnRefOperator>> childOutputColumns = Lists.newArrayList();

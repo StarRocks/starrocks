@@ -21,6 +21,7 @@
 
 #include "common/statusor.h"
 #include "compaction_task_context.h"
+#include "gen_cpp/Types_types.h" // for PUniqueId
 #include "gutil/macros.h"
 #include "storage/lake/metadata_iterator.h"
 #include "storage/lake/tablet_metadata.h"
@@ -102,6 +103,9 @@ public:
     static StatusOr<BundleTabletMetadataPtr> parse_bundle_tablet_metadata(const std::string& path,
                                                                           const std::string& serialized_string);
 
+    static StatusOr<TabletMetadataPtrs> get_metas_from_bundle_tablet_metadata(const std::string& location,
+                                                                              FileSystem* input_fs = nullptr);
+
     TabletMetadataPtr get_latest_cached_tablet_metadata(int64_t tablet_id);
 
     StatusOr<TabletMetadataIter> list_tablet_metadata(int64_t tablet_id);
@@ -123,6 +127,8 @@ public:
     Status put_combined_txn_log(const CombinedTxnLogPB& logs);
 
     StatusOr<TxnLogPtr> get_txn_log(int64_t tablet_id, int64_t txn_id);
+
+    StatusOr<TxnLogPtr> get_txn_log(int64_t tablet_id, int64_t txn_id, const PUniqueId& load_id);
 
     StatusOr<TxnLogPtr> get_txn_log(const std::string& path, bool fill_cache = true);
 
@@ -167,6 +173,8 @@ public:
     std::string bundle_tablet_metadata_location(int64_t tablet_id, int64_t version) const;
 
     std::string txn_log_location(int64_t tablet_id, int64_t txn_id) const;
+
+    std::string txn_log_location(int64_t tablet_id, int64_t txn_id, const PUniqueId& load_id) const;
 
     std::string txn_slog_location(int64_t tablet_id, int64_t txn_id) const;
 
@@ -253,6 +261,7 @@ private:
 
     bthreads::singleflight::Group<std::string, StatusOr<TabletSchemaPtr>> _schema_group;
     bthreads::singleflight::Group<std::string, StatusOr<CombinedTxnLogPtr>> _combined_txn_log_group;
+    bthreads::singleflight::Group<std::string, StatusOr<std::string>> _bundle_tablet_metadata_group;
 };
 
 } // namespace starrocks::lake

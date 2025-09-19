@@ -37,7 +37,6 @@ package com.starrocks.sql.optimizer.rewrite;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableSet;
-import com.starrocks.analysis.DecimalLiteral;
 import com.starrocks.authorization.AuthorizationMgr;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Type;
@@ -48,6 +47,7 @@ import com.starrocks.common.util.DateUtils;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.expression.DecimalLiteral;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import net.openhft.hashing.LongHashFunction;
 import org.apache.commons.lang.StringUtils;
@@ -793,6 +793,53 @@ public class ScalarOperatorFunctions {
                 LocalDateTime.ofInstant(Instant.ofEpochSecond(value),
                 TimeUtils.getOrSystemTimeZone(timezone.getVarchar()).toZoneId()));
         return dateFormat(dl, fmtLiteral);
+    }
+
+    @ConstantFunction(name = "to_datetime", argTypes = {BIGINT, INT}, returnType = DATETIME, isMonotonic = true)
+    public static ConstantOperator toDatetime(ConstantOperator unixtime, ConstantOperator scale) {
+        long seconds = unixtime.getBigint();
+        long nanos = 0;
+        int scaleValue = 0;
+        if (scale != null && scale.getInt() > 0) {
+            scaleValue = scale.getInt();
+        }
+        switch (scaleValue) {
+            case 0:
+                break;
+            case 3:
+                nanos = (seconds % 1000) * 1000_000;
+                seconds /= 1000;
+                break;
+            case 6:
+                nanos = (seconds % 1000_000) * 1000;
+                seconds /= 1000_000;
+                break;
+            default:
+                return ConstantOperator.NULL;
+        }
+
+        if (seconds < 0 || seconds > TimeUtils.MAX_UNIX_TIMESTAMP || nanos < 0) {
+            return ConstantOperator.NULL;
+        }
+
+        if (scaleValue == 0) {
+            return ConstantOperator.createDatetime(
+                    LocalDateTime.ofInstant(Instant.ofEpochSecond(seconds), TimeUtils.getTimeZone().toZoneId()));
+        } else {
+            return ConstantOperator.createDatetime(
+                    LocalDateTime.ofInstant(Instant.ofEpochSecond(seconds).plusNanos(nanos),
+                            TimeUtils.getTimeZone().toZoneId()));
+        }
+    }
+
+    @ConstantFunction(name = "to_datetime", argTypes = {BIGINT}, returnType = DATETIME, isMonotonic = true)
+    public static ConstantOperator toDatetime(ConstantOperator unixtime) {
+        long seconds = unixtime.getBigint();
+        if (seconds < 0 || seconds > TimeUtils.MAX_UNIX_TIMESTAMP) {
+            return ConstantOperator.NULL;
+        }
+        return ConstantOperator.createDatetime(
+                LocalDateTime.ofInstant(Instant.ofEpochSecond(seconds), TimeUtils.getTimeZone().toZoneId()));
     }
 
     @ConstantFunction.List(list = {

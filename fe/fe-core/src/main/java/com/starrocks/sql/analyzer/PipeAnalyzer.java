@@ -18,8 +18,6 @@ package com.starrocks.sql.analyzer;
 import com.google.common.base.Strings;
 import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.ImmutableSortedSet;
-import com.starrocks.analysis.OrderByElement;
-import com.starrocks.analysis.SlotRef;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TableFunctionTable;
 import com.starrocks.common.ErrorCode;
@@ -30,11 +28,15 @@ import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.load.pipe.FilePipeSource;
 import com.starrocks.load.pipe.Pipe;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.ShowResultMetaFactory;
+import com.starrocks.qe.ShowResultSetMetaData;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.FileTableFunctionRelation;
 import com.starrocks.sql.ast.InsertStmt;
+import com.starrocks.sql.ast.OrderByElement;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.SelectRelation;
+import com.starrocks.sql.ast.expression.SlotRef;
 import com.starrocks.sql.ast.pipe.AlterPipeSetProperty;
 import com.starrocks.sql.ast.pipe.AlterPipeStmt;
 import com.starrocks.sql.ast.pipe.CreatePipeStmt;
@@ -220,6 +222,7 @@ public class PipeAnalyzer {
             stmt.setDbName(context.getDatabase());
         }
 
+        ShowResultSetMetaData showResultSetMetaData = new ShowResultMetaFactory().getMetadata(stmt);
         // Analyze order by
         if (CollectionUtils.isNotEmpty(stmt.getOrderBy())) {
             List<OrderByPair> orderByPairs = new ArrayList<>();
@@ -229,7 +232,7 @@ public class PipeAnalyzer {
                             "only support order by specific column");
                 }
                 SlotRef slot = (SlotRef) element.getExpr();
-                int index = ShowPipeStmt.findSlotIndex(slot.getColumnName());
+                int index = showResultSetMetaData.getColumnIdx(slot.getColumnName());
                 orderByPairs.add(new OrderByPair(index, !element.getIsAsc()));
             }
             stmt.setOrderByPairs(orderByPairs);

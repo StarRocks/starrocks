@@ -83,10 +83,10 @@ Ranger クラスターを操作する権限がない場合や、この機能が�
 このステップでは、Ranger 上で StarRocks Service を設定し、ユーザーが Ranger を通じて StarRocks オブジェクトに対するアクセス制御を実行できるようにします。
 :::
 
-1. [ranger-servicedef-starrocks.json](https://github.com/StarRocks/ranger/blob/master/agents-common/src/main/resources/service-defs/ranger-servicedef-starrocks.json) を StarRocks FE マシンまたは Ranger マシンの任意のディレクトリにコピーします。
+1. [ranger-servicedef-starrocks.json](https://github.com/StarRocks/starrocks/blob/main/conf/ranger/ranger-servicedef-starrocks.json) を StarRocks FE マシンまたは Ranger マシンの任意のディレクトリにコピーします。
 
    ```SQL
-   wget https://raw.githubusercontent.com/StarRocks/ranger/master/agents-common/src/main/resources/service-defs/ranger-servicedef-starrocks.json
+   wget https://github.com/StarRocks/starrocks/blob/main/conf/ranger/ranger-servicedef-starrocks.json
    ```
 
    :::note
@@ -136,7 +136,7 @@ Ranger クラスターを操作する権限がない場合や、この機能が�
    ![added service](../../../_assets/ranger_added_service.png)
 
 5. **Test connection** をクリックして接続性をテストし、接続が成功したら保存します。ranger-starrocks-plugin をインストールしていない場合は、接続テストをスキップして直接作成できます。
-6. StarRocks クラスターの各 FE マシンで、`fe/conf` フォルダーに [ranger-starrocks-security.xml](https://github.com/StarRocks/ranger/blob/master/plugin-starrocks/conf/ranger-starrocks-security.xml) を作成し、内容をコピーします。次の 2 つのパラメーターを変更し、変更を保存する必要があります。
+6. StarRocks クラスターの各 FE マシンで、`fe/conf` フォルダーに [ranger-starrocks-security.xml](https://github.com/StarRocks/starrocks/blob/main/conf/ranger/ranger-starrocks-security.xml) を作成し、内容をコピーします。次の 2 つのパラメーターを変更し、変更を保存する必要があります。
 
    - `ranger.plugin.starrocks.service.name`: ステップ 4 で作成した StarRocks Service の名前に変更します。
    - `ranger.plugin.starrocks.policy.rest the url`: Ranger Admin のアドレスに変更します。
@@ -167,7 +167,7 @@ Ranger クラスターを操作する権限がない場合や、この機能が�
    ...
    ```
 
-7. (オプション) Ranger の監査ログサービスを使用する場合は、各 FE マシンの `fe/conf` フォルダーに [ranger-starrocks-audit.xml](https://github.com/StarRocks/ranger/blob/master/plugin-starrocks/conf/ranger-starrocks-audit.xml) ファイルを作成します。内容をコピーし、**`xasecure.audit.solr.solr_url` の `solr_url` を自分の `solr_url` に置き換えて**、ファイルを保存します。
+7. (オプション) Ranger の監査ログサービスを使用する場合は、各 FE マシンの `fe/conf` フォルダーに [ranger-starrocks-audit.xml](https://github.com/StarRocks/starrocks/blob/main/conf/ranger/ranger-starrocks-audit.xml) ファイルを作成します。内容をコピーし、**`xasecure.audit.solr.solr_url` の `solr_url` を自分の `solr_url` に置き換えて**、ファイルを保存します。
 
 8. すべての FE 設定ファイルに `access_control = ranger` の設定を追加します。
 

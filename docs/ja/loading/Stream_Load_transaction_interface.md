@@ -25,17 +25,27 @@ Stream Load トランザクションインターフェースは、トランザ�
 
 - `/api/transaction/begin`: 新しいトランザクションを開始します。
 
+- `/api/transaction/prepare`: 現在のトランザクションを事前コミットし、データ変更を一時的に永続化します。トランザクションを事前コミットした後、コミットまたはロールバックを実行できます。トランザクションが事前コミットされた後にクラスターがクラッシュした場合でも、クラスターが復旧した後、トランザクションをコミットし続けることができます。
+
 - `/api/transaction/commit`: 現在のトランザクションをコミットしてデータの変更を永続化します。
 
 - `/api/transaction/rollback`: 現在のトランザクションをロールバックしてデータの変更を中止します。
 
-### トランザクションの事前コミット
-
-Stream Load トランザクションインターフェースは、現在のトランザクションを事前コミットし、データの変更を一時的に永続化するための `/api/transaction/prepare` 操作を提供します。トランザクションを事前コミットした後、トランザクションをコミットまたはロールバックすることができます。トランザクションが事前コミットされた後に StarRocks クラスターがダウンした場合でも、StarRocks クラスターが正常に復旧した後にトランザクションをコミットすることができます。
-
 > **NOTE**
 >
 > トランザクションが事前コミットされた後は、そのトランザクションを使用してデータを書き続けないでください。トランザクションを使用してデータを書き続けると、書き込みリクエストがエラーを返します。
+
+以下の図は、トランザクションの状態と操作の関係を示しています：
+
+```mermaid
+stateDiagram-v2
+    direction LR
+    [*] --> PREPARE : begin
+    PREPARE --> PREPARED : prepare
+    PREPARE --> ABORTED : rollback
+    PREPARED --> COMMITTED : commit
+    PREPARED --> ABORTED : rollback
+```
 
 ### データ書き込み
 
@@ -47,11 +57,11 @@ Stream Load トランザクションインターフェースは、StarRocks の�
 
 ### トランザクションのタイムアウト管理
 
-各 FE の設定ファイルで `stream_load_default_timeout_second` パラメータを使用して、その FE のデフォルトのトランザクションタイムアウト期間を指定できます。
+トランザクションを開始する際、HTTP リクエストヘッダーの `timeout` フィールドを使用して、`PREPARE` 状態から `PREPARED` 状態へのトランザクションのタイムアウト期間（秒単位）を指定できます。この期間内にトランザクションが準備完了状態に達しない場合、自動的に中止されます。このフィールドが指定されていない場合、デフォルト値は FE 設定の [`stream_load_default_timeout_second`](../administration/management/FE_configuration.md#stream_load_default_timeout_second)によって決定されます（デフォルト：600 秒）。
 
-トランザクションを作成する際、HTTP リクエストヘッダーの `timeout` フィールドを使用して、トランザクションのタイムアウト期間を指定できます。
+トランザクションを開始する際、HTTP リクエストヘッダーの `idle_transaction_timeout` フィールドを使用して、トランザクションがアイドル状態のまま保持できるタイムアウト期間（秒単位）を指定できます。この期間内にデータが書き込まれない場合、トランザクションは自動的にロールバックされます。
 
-トランザクションを作成する際、HTTP リクエストヘッダーの `idle_transaction_timeout` フィールドを使用して、トランザクションがアイドル状態でいられるタイムアウト期間を指定することもできます。タイムアウト期間内にデータが書き込まれない場合、トランザクションは自動的にロールバックされます。
+トランザクションを準備する際、HTTP リクエストヘッダーの `prepared_timeout` フィールドを使用して、トランザクションが `PREPARED` 状態から `COMMITTED` 状態に移行するまでのタイムアウト期間（秒単位）を指定できます。この期間内にトランザクションがコミットされない場合、自動的に中止されます。このフィールドが指定されていない場合、デフォルト値は FE 設定の [`prepared_transaction_default_timeout_second`](../administration/management/FE_configuration.md#prepared_transaction_default_timeout_second) によって決定されます（デフォルト：86400秒）。`prepared_timeout` は v3.5.4 以降でサポートされています。
 
 ## 利点
 
@@ -274,6 +284,7 @@ curl --location-trusted -u <jack>:<123456> -H "label:streamload_txn_example1_tab
 curl --location-trusted -u <username>:<password> -H "label:<label_name>" \
     -H "Expect:100-continue" \
     -H "db:<database_name>" \
+    [-H "prepared_timeout:<timeout_seconds>"] \
     -XPOST http://<fe_host>:<fe_http_port>/api/transaction/prepare
 ```
 
@@ -283,8 +294,13 @@ curl --location-trusted -u <username>:<password> -H "label:<label_name>" \
 curl --location-trusted -u <jack>:<123456> -H "label:streamload_txn_example1_table1" \
     -H "Expect:100-continue" \
     -H "db:test_db" \
+    -H "prepared_timeout:300" \
     -XPOST http://<fe_host>:<fe_http_port>/api/transaction/prepare
 ```
+
+> **NOTE**
+>
+> `prepared_timeout` フィールドはオプションです。指定されない場合、デフォルト値は FE 設定 [`prepared_transaction_default_timeout_second`](../administration/management/FE_configuration.md#prepared_transaction_default_timeout_second) によって決定されます（デフォルト: 86400 秒）。`prepared_timeout` は v3.5.4 以降でサポートされています。
 
 #### 戻り結果
 

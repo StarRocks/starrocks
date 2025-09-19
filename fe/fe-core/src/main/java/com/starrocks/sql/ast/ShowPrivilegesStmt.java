@@ -14,38 +14,19 @@
 
 package com.starrocks.sql.ast;
 
-import com.starrocks.catalog.Column;
-import com.starrocks.catalog.ScalarType;
-import com.starrocks.qe.ShowResultSetMetaData;
 import com.starrocks.sql.parser.NodePosition;
 
 public class ShowPrivilegesStmt extends ShowStmt {
-
-    private static final ShowResultSetMetaData META_DATA;
-
-    static {
-        ShowResultSetMetaData.Builder builder = ShowResultSetMetaData.builder();
-
-        builder.addColumn(new Column("Privilege", ScalarType.createVarchar(100)));
-        builder.addColumn(new Column("Context", ScalarType.createVarchar(100)));
-        builder.addColumn(new Column("Comment", ScalarType.createVarchar(300)));
-
-        META_DATA = builder.build();
-    }
-
     public ShowPrivilegesStmt() {
         this(NodePosition.ZERO);
     }
+
     public ShowPrivilegesStmt(NodePosition pos) {
         super(pos);
-    }
-    @Override
-    public ShowResultSetMetaData getMetaData() {
-        return META_DATA;
     }
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitShowPrivilegeStatement(this, context);
+        return ((AstVisitorExtendInterface<R, C>) visitor).visitShowPrivilegeStatement(this, context);
     }
 }

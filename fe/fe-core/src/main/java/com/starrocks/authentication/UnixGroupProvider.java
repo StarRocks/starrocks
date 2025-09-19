@@ -14,8 +14,8 @@
 
 package com.starrocks.authentication;
 
+import com.starrocks.catalog.UserIdentity;
 import com.starrocks.sql.analyzer.SemanticException;
-import com.starrocks.sql.ast.UserIdentity;
 import org.apache.hadoop.security.UserGroupInformation;
 
 import java.util.Map;
@@ -29,7 +29,7 @@ public class UnixGroupProvider extends GroupProvider {
     }
 
     @Override
-    public Set<String> getGroup(UserIdentity userIdentity) {
+    public Set<String> getGroup(UserIdentity userIdentity, String distinguishedName) {
         Set<String> userGroups = Set.of();
 
         UserGroupInformation ugi = UserGroupInformation.createRemoteUser(userIdentity.getUser());

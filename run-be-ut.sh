@@ -91,8 +91,10 @@ OPTS=$(getopt \
   -l 'use-staros' \
   -l 'enable-shared-data' \
   -l 'without-starcache' \
+  -l 'without-java-ext' \
   -l 'with-brpc-keepalive' \
   -l 'without-debug-symbol-split' \
+  -l 'without-java-ext' \
   -o 'j:' \
   -l 'help' \
   -l 'run' \
@@ -323,24 +325,33 @@ cp -r ${STARROCKS_HOME}/be/test/util/test_data ${STARROCKS_TEST_BINARY_DIR}/util
 
 test_files=`find ${STARROCKS_TEST_BINARY_DIR} -type f -perm -111 -name "*test" \
     | grep -v starrocks_test \
+    | grep -v starrocks_dw_test \
     | grep -v bench_test \
+    | grep -v builtin_functions_fuzzy_test \
     | grep -e "$TEST_MODULE" `
 
 echo "[INFO] gtest_filter: $TEST_NAME"
-# run cases in starrocks_test in parallel if has gtest-parallel script.
-# reference: https://github.com/google/gtest-parallel
-if [[ $TEST_MODULE == '.*'  || $TEST_MODULE == 'starrocks_test' ]]; then
-  echo "Run test: ${STARROCKS_TEST_BINARY_DIR}/starrocks_test"
-  if [ ${DRY_RUN} -eq 0 ]; then
-    if [ -x "${GTEST_PARALLEL}" ]; then
-        ${GTEST_PARALLEL} ${STARROCKS_TEST_BINARY_DIR}/starrocks_test \
-            --gtest_filter=${TEST_NAME} \
-            --serialize_test_cases ${GTEST_PARALLEL_OPTIONS}
-    else
-        ${STARROCKS_TEST_BINARY_DIR}/starrocks_test $GTEST_OPTIONS --gtest_filter=${TEST_NAME}
+
+run_test_module() {
+    TARGET=$1
+    # run cases in gunit test in parallel if has gtest-parallel script.
+    # reference: https://github.com/google/gtest-parallel
+    if [[ $TEST_MODULE == '.*'  || $TEST_MODULE == $TARGET ]]; then
+        echo "Run test: ${STARROCKS_TEST_BINARY_DIR}/$TARGET"
+        if [ ${DRY_RUN} -eq 0 ]; then
+            if [ -x "${GTEST_PARALLEL}" ]; then
+                ${GTEST_PARALLEL} ${STARROCKS_TEST_BINARY_DIR}/$TARGET \
+                    --gtest_filter=${TEST_NAME} \
+                    --serialize_test_cases ${GTEST_PARALLEL_OPTIONS}
+            else
+                ${STARROCKS_TEST_BINARY_DIR}/$TARGET $GTEST_OPTIONS --gtest_filter=${TEST_NAME}
+            fi
+        fi
     fi
-  fi
-fi
+}
+
+run_test_module starrocks_test
+run_test_module starrocks_dw_test
 
 for test_bin in $test_files
 do
@@ -352,4 +363,3 @@ do
         fi
     fi
 done
-

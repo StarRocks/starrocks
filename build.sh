@@ -373,14 +373,15 @@ do
 done
 
 # Clean and build generated code
-echo "Build generated code"
-cd ${STARROCKS_HOME}/gensrc
-if [ ${CLEAN} -eq 1 ]; then
-   make clean
-   rm -rf ${STARROCKS_HOME}/fe/fe-core/target
+if [ ${BUILD_BE} -eq 1 ] || [ ${BUILD_FORMAT_LIB} -eq 1 ] ; then
+    echo "Build generated code"
+    cd ${STARROCKS_HOME}/gensrc
+    if [ ${CLEAN} -eq 1 ]; then
+       make clean
+    fi
+    # DO NOT using parallel make(-j) for gensrc
+    make
 fi
-# DO NOT using parallel make(-j) for gensrc
-make
 cd ${STARROCKS_HOME}
 
 if [[ "${MACHINE_TYPE}" == "aarch64" ]]; then
@@ -504,13 +505,13 @@ cd ${STARROCKS_HOME}
 FE_MODULES=
 if [ ${BUILD_FE} -eq 1 ] || [ ${BUILD_SPARK_DPP} -eq 1 ] || [ ${BUILD_HIVE_UDF} -eq 1 ]; then
     if [ ${BUILD_SPARK_DPP} -eq 1 ]; then
-        FE_MODULES="fe-common,spark-dpp"
+        FE_MODULES="fe-testing,plugin/spark-dpp"
     fi
     if [ ${BUILD_HIVE_UDF} -eq 1 ]; then
-        FE_MODULES="fe-common,hive-udf"
+        FE_MODULES="fe-testing,plugin/hive-udf"
     fi
     if [ ${BUILD_FE} -eq 1 ]; then
-        FE_MODULES="hive-udf,fe-common,spark-dpp,fe-core"
+        FE_MODULES="plugin/hive-udf,fe-testing,plugin/spark-dpp,fe-server"
     fi
 fi
 
@@ -521,7 +522,8 @@ if [ ${FE_MODULES}x != ""x ]; then
     if [ ${CLEAN} -eq 1 ]; then
         ${MVN_CMD} clean
     fi
-    ${MVN_CMD} $addon_mvn_opts package -am -pl ${FE_MODULES} -DskipTests -T ${PARALLEL}
+    # clean phase is explicited by `--clean` option, don't bother doing clean again.
+    ${MVN_CMD} $addon_mvn_opts package -am -pl ${FE_MODULES} -DskipTests -Dmaven.clean.skip=true -T ${PARALLEL}
     cd ${STARROCKS_HOME}/java-extensions
     ${MVN_CMD} $addon_mvn_opts package -am -pl hadoop-ext -DskipTests -T ${PARALLEL}
     cd ${STARROCKS_HOME}
@@ -550,19 +552,19 @@ if [ ${BUILD_FE} -eq 1 -o ${BUILD_SPARK_DPP} -eq 1 ]; then
         cp -r -p ${STARROCKS_HOME}/conf/cluster_snapshot.yaml ${STARROCKS_OUTPUT}/fe/conf/
 
         rm -rf ${STARROCKS_OUTPUT}/fe/lib/*
-        cp -r -p ${STARROCKS_HOME}/fe/fe-core/target/lib/* ${STARROCKS_OUTPUT}/fe/lib/
-        cp -r -p ${STARROCKS_HOME}/fe/fe-core/target/starrocks-fe.jar ${STARROCKS_OUTPUT}/fe/lib/
+        cp -r -p ${STARROCKS_HOME}/fe/fe-server/target/lib/* ${STARROCKS_OUTPUT}/fe/lib/
+        cp -r -p ${STARROCKS_HOME}/fe/fe-server/target/starrocks-fe.jar ${STARROCKS_OUTPUT}/fe/lib/
         cp -r -p ${STARROCKS_HOME}/java-extensions/hadoop-ext/target/starrocks-hadoop-ext.jar ${STARROCKS_OUTPUT}/fe/lib/
         cp -r -p ${STARROCKS_HOME}/webroot/* ${STARROCKS_OUTPUT}/fe/webroot/
-        cp -r -p ${STARROCKS_HOME}/fe/spark-dpp/target/spark-dpp-*-jar-with-dependencies.jar ${STARROCKS_OUTPUT}/fe/spark-dpp/
-        cp -r -p ${STARROCKS_HOME}/fe/hive-udf/target/hive-udf-1.0.0.jar ${STARROCKS_OUTPUT}/fe/hive-udf/
+        cp -r -p ${STARROCKS_HOME}/fe/plugin/spark-dpp/target/spark-dpp-*-jar-with-dependencies.jar ${STARROCKS_OUTPUT}/fe/spark-dpp/
+        cp -r -p ${STARROCKS_HOME}/fe/plugin/hive-udf/target/hive-udf-*.jar ${STARROCKS_OUTPUT}/fe/hive-udf/
         cp -r -p ${STARROCKS_THIRDPARTY}/installed/async-profiler ${STARROCKS_OUTPUT}/fe/bin/
         MSG="${MSG} √ ${MSG_FE}"
     elif [ ${BUILD_SPARK_DPP} -eq 1 ]; then
         install -d ${STARROCKS_OUTPUT}/fe/spark-dpp/
         rm -rf ${STARROCKS_OUTPUT}/fe/spark-dpp/*
-        cp -r -p ${STARROCKS_HOME}/fe/spark-dpp/target/spark-dpp-*-jar-with-dependencies.jar ${STARROCKS_OUTPUT}/fe/spark-dpp/
-        cp -r -p ${STARROCKS_HOME}/fe/hive-udf/target/hive-udf-1.0.0.jar ${STARROCKS_HOME}/fe/hive-udf/
+        cp -r -p ${STARROCKS_HOME}/fe/plugin/spark-dpp/target/spark-dpp-*-jar-with-dependencies.jar ${STARROCKS_OUTPUT}/fe/spark-dpp/
+        cp -r -p ${STARROCKS_HOME}/fe/plugin/hive-udf/target/hive-udf-*.jar ${STARROCKS_OUTPUT}/fe/hive-udf/
         MSG="${MSG} √ ${MSG_DPP}"
     fi
 fi

@@ -59,7 +59,7 @@ import java.util.List;
 public class IndicesProcDir implements ProcDirInterface {
     public static final ImmutableList<String> TITLE_NAMES = new ImmutableList.Builder<String>()
             .add("IndexId").add("IndexName").add("State").add("LastConsistencyCheckTime")
-            .add("VirtualBuckets").add("Tablets")
+            .add("TabletBalanceStat").add("VirtualBuckets").add("Tablets")
             .build();
 
     private Database db;
@@ -90,6 +90,7 @@ public class IndicesProcDir implements ProcDirInterface {
                 indexInfo.add(olapTable.getIndexNameById(materializedIndex.getId()));
                 indexInfo.add(materializedIndex.getState());
                 indexInfo.add(TimeUtils.longToTimeString(materializedIndex.getLastCheckTime()));
+                indexInfo.add(materializedIndex.getBalanceStat().toString());
                 indexInfo.add(materializedIndex.getVirtualBuckets().size());
                 indexInfo.add(materializedIndex.getTablets().size());
 

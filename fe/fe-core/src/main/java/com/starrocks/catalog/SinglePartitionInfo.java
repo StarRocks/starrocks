@@ -34,16 +34,11 @@
 
 package com.starrocks.catalog;
 
-import java.io.DataOutput;
-import java.io.IOException;
-
 public class SinglePartitionInfo extends PartitionInfo {
     public SinglePartitionInfo() {
         super(PartitionType.UNPARTITIONED);
     }
 
-    @Override
-    public void write(DataOutput out) throws IOException {
-        super.write(out);
-    }
+
+
 }

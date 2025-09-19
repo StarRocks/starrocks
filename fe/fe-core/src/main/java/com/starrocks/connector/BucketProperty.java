@@ -15,10 +15,15 @@
 package com.starrocks.connector;
 
 import com.starrocks.catalog.Column;
+import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.thrift.TBucketFunction;
 import com.starrocks.thrift.TBucketProperty;
 
+import java.util.List;
 import java.util.Objects;
+import java.util.Optional;
+
+import static com.starrocks.sql.common.ErrorType.INTERNAL_ERROR;
 
 public class BucketProperty {
     private final TBucketFunction bucketFunction;
@@ -56,6 +61,26 @@ public class BucketProperty {
         tBucketProperty.setBucket_func(bucketFunction);
         tBucketProperty.setBucket_num(bucketNum);
         return tBucketProperty;
+    }
+
+    public static Optional<List<BucketProperty>> checkAndGetBucketProperties(
+            List<List<BucketProperty>> bucketProperties) {
+        if (bucketProperties.isEmpty()) {
+            return Optional.empty();
+        }
+        List<BucketProperty> bp0 = bucketProperties.get(0);
+        for (int i = 1; i < bucketProperties.size(); i++) {
+            List<BucketProperty> bp = bucketProperties.get(i);
+            if (bp.size() != bp0.size()) {
+                throw new StarRocksPlannerException("Error when using bucket-aware execution", INTERNAL_ERROR);
+            }
+            for (int j = 0; j < bp0.size(); j++) {
+                if (!bp.get(j).satisfy(bp0.get(j))) {
+                    throw new StarRocksPlannerException("Error when using bucket-aware execution", INTERNAL_ERROR);
+                }
+            }
+        }
+        return Optional.of(bucketProperties.get(0));
     }
 
     @Override

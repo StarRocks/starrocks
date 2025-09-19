@@ -12,21 +12,19 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.scheduler.persist;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
 import com.google.gson.annotations.SerializedName;
+import com.starrocks.catalog.UserIdentity;
 import com.starrocks.cluster.ClusterNamespace;
 import com.starrocks.common.Config;
-import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.scheduler.Constants;
 import com.starrocks.scheduler.TaskRun;
-import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.thrift.TGetTasksParams;
 import com.starrocks.thrift.TResultBatch;
 import io.netty.buffer.ByteBuf;
@@ -37,8 +35,6 @@ import org.apache.commons.collections4.ListUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import java.io.DataInput;
-import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.charset.Charset;
 import java.util.ArrayList;
@@ -464,11 +460,6 @@ public class TaskRunStatus implements Writable {
 
     public void setDefinition(String definition) {
         this.definition = definition;
-    }
-
-    public static TaskRunStatus read(DataInput in) throws IOException {
-        String json = Text.readString(in);
-        return GsonUtils.GSON.fromJson(json, TaskRunStatus.class);
     }
 
     @Override

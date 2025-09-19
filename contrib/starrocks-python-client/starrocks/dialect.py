@@ -15,6 +15,7 @@
 import re
 from textwrap import dedent
 import time
+from typing import Union
 
 from sqlalchemy import Connection, exc, schema as sa_schema
 from sqlalchemy.dialects.mysql.pymysql import MySQLDialect_pymysql
@@ -62,7 +63,9 @@ ischema_names = {
     "double": DOUBLE,
     # === Fixed-precision ===
     "decimal": DECIMAL,
+    "decimal32": DECIMAL,
     "decimal64": DECIMAL,
+    "decimal128": DECIMAL,
     # === String ===
     "varchar": VARCHAR,
     "char": CHAR,
@@ -108,7 +111,9 @@ class StarRocksTypeCompiler(MySQLTypeCompiler):
         return "LARGEINT"
 
     def visit_ARRAY(self, type_, **kw):
-        return "ARRAY<type>"
+        """Compiles the ARRAY type into the correct StarRocks syntax."""
+        inner_type_sql = self.process(type_.item_type, **kw)
+        return f"ARRAY<{inner_type_sql}>"
 
     def visit_MAP(self, type_, **kw):
         return "MAP<keytype,valuetype>"
@@ -239,7 +244,9 @@ class StarRocksDDLCompiler(MySQLDDLCompiler):
 
         # ToDo - Partition
         # ToDo - Distribution
-        # ToDo - Order by
+
+        if "ORDER_BY" in opts:
+            table_opts.append(f"ORDER BY ({opts['ORDER_BY']})")
 
         if "PROPERTIES" in opts:
             props = ",\n".join([f'\t"{k}"="{v}"' for k, v in opts["PROPERTIES"]])
@@ -306,7 +313,11 @@ class StarRocksDDLCompiler(MySQLDDLCompiler):
             colspec.append("AUTO_INCREMENT")
         else:
             default = self.get_column_default_string(column)
-            if default is not None:
+            if default == "AUTO_INCREMENT":
+                colspec[1] = "BIGINT"
+                colspec.append("AUTO_INCREMENT")
+
+            elif default is not None:
                 colspec.append("DEFAULT " + default)
         return " ".join(colspec)
 
@@ -413,7 +424,7 @@ class StarRocksDialect(MySQLDialect_pymysql):
         return _reflection.StarRocksTableDefinitionParser(self, preparer)
 
     def _read_from_information_schema(
-        self, connection: Connection, inf_sch_table: str, charset: str | None = None, **kwargs
+        self, connection: Connection, inf_sch_table: str, charset: Union[str, None] = None, **kwargs
     ):
         def escape_single_quote(s):
             return s.replace("'", "\\'")
@@ -439,7 +450,7 @@ class StarRocksDialect(MySQLDialect_pymysql):
         return rows
     
     @reflection.cache
-    def _setup_parser(self, connection: Connection, table_name: str, schema: str | None = None, **kw):
+    def _setup_parser(self, connection: Connection, table_name: str, schema: Union[str, None] = None, **kw):
         charset = self._connection_charset
         parser = self._tabledef_parser
 

@@ -741,3 +741,96 @@ SELECT * FROM t_auto_increment_insert_partial_update order by id;
 DROP TABLE t_auto_increment_insert_partial_update force;
 -- result:
 -- !result
+-- name: test_auto_increment_partial_update_column_upsert @sequential
+CREATE DATABASE test_auto_increment_partial_update_column_upsert;
+-- result:
+-- !result
+ADMIN SET FRONTEND CONFIG ("auto_increment_cache_size" = "0");
+USE test_auto_increment_partial_update_column_upsert;
+-- result:
+-- !result
+CREATE TABLE `t_auto_increment_partial_update_column_upsert` (
+  `k`  BIGINT NOT NULL COMMENT "",
+  `v1` BIGINT AUTO_INCREMENT,
+  `v2` BIGINT,
+  `v3` BIGINT
+) ENGINE=OLAP 
+PRIMARY KEY(`k`)
+DISTRIBUTED BY HASH(`k`) BUCKETS 1
+PROPERTIES (
+"replicated_storage" = "true",
+"replication_num" = "1"
+);
+-- result:
+-- !result
+INSERT INTO t_auto_increment_partial_update_column_upsert VALUES (1, DEFAULT, 3, 4);
+-- result:
+-- !result
+SELECT * FROM t_auto_increment_partial_update_column_upsert;
+-- result:
+1	1	3	4
+-- !result
+shell: curl --location-trusted -u root: -T ${root_path}/lib/../common/data/stream_load/sr_auto_increment_partial_update_only.csv -XPUT -H partial_update:true  -H partial_update_mode:column -H label:test_auto_increment_partial_update_column_upsert_12345 -H column_separator:, -H columns:k,v2,xx ${url}/api/test_auto_increment_partial_update_column_upsert/t_auto_increment_partial_update_column_upsert/_stream_load
+-- result:
+0
+{
+    "Status": "Success",
+    "Message": "OK"
+}
+-- !result
+sync;
+-- result:
+-- !result
+SELECT * FROM t_auto_increment_partial_update_column_upsert;
+-- result:
+1	1	20	4
+2	2	40	None
+-- !result
+INSERT INTO t_auto_increment_partial_update_column_upsert VALUES (1, 300, 20, 30), (2, 301, 40 ,50);
+-- result:
+-- !result
+SELECT * FROM t_auto_increment_partial_update_column_upsert;
+-- result:
+1	300	20	30
+2	301	40	50
+-- !result
+DROP TABLE t_auto_increment_partial_update_column_upsert;
+-- result:
+-- !result
+DROP DATABASE test_auto_increment_partial_update_column_upsert;
+-- result:
+-- !result
+-- name: test_alter_auto_increment_counter @sequential
+CREATE TABLE `t_alter_auto_increment_counter` (
+  `k`  BIGINT NOT NULL COMMENT "",
+  `v1` BIGINT AUTO_INCREMENT
+) ENGINE=OLAP 
+PRIMARY KEY(`k`)
+DISTRIBUTED BY HASH(`k`) BUCKETS 1
+PROPERTIES (
+"replicated_storage" = "true",
+"replication_num" = "1"
+);
+-- result:
+-- !result
+INSERT INTO t_alter_auto_increment_counter VALUES (1, 1);
+-- result:
+-- !result
+INSERT INTO t_alter_auto_increment_counter VALUES (2, 2);
+-- result:
+-- !result
+ALTER TABLE t_alter_auto_increment_counter AUTO_INCREMENT = 300;
+-- result:
+-- !result
+INSERT INTO t_alter_auto_increment_counter VALUES (3, DEFAULT);
+-- result:
+-- !result
+SELECT * FROM t_alter_auto_increment_counter ORDER BY k;
+-- result:
+1	1
+2	2
+3	300
+-- !result
+DROP TABLE t_alter_auto_increment_counter;
+-- result:
+-- !result

@@ -215,7 +215,7 @@ public class PublishVersionDaemon extends FrontendDaemon {
      *
      * @return the thread pool executor
      */
-    private @NotNull ThreadPoolExecutor getLakeTaskExecutor() {
+    public @NotNull ThreadPoolExecutor getLakeTaskExecutor() {
         if (lakeTaskExecutor == null) {
             int numThreads = getOrFixLakeTaskExecutorThreadPoolMaxSizeConfig();
             lakeTaskExecutor =
@@ -528,8 +528,11 @@ public class PublishVersionDaemon extends FrontendDaemon {
                 LOG.info("partition is null in publish partition batch");
                 return true;
             }
-            if (partition.getVisibleVersion() + 1 != versions.get(0)) {
-                LOG.error("publish partition batch partition.getVisibleVersion() + 1 != version.get(0)" + " "
+
+            // this can happen when the table is doing schema change
+            if (partition.getVisibleVersion() + 1 != versions.get(0) && publishVersionData.getTransactionStates().get(0).
+                    getSourceType() != TransactionState.LoadJobSourceType.REPLICATION) {
+                LOG.debug("publish partition batch partition.getVisibleVersion() + 1 != version.get(0)" + " "
                         + partition.getId() + " " + partition.getVisibleVersion() + " " + versions.get(0));
                 return false;
             }
@@ -613,6 +616,11 @@ public class PublishVersionDaemon extends FrontendDaemon {
                 stateBatch.putBeTablets(partitionId, nodeToTablets);
             }
         } catch (Exception e) {
+            for (int i = 0; i < transactionStates.size(); i++) {
+                TransactionState txnState = transactionStates.get(i);
+                // Avoid holding txn write lock here; setting errMsg is best-effort for diagnostics
+                txnState.setErrorMsg("Fail to publish partition " + partitionId + " error " + e.getMessage());
+            }
             LOG.error("Fail to publish partition {} of txnIds {}:", partitionId,
                     txnInfos.stream().map(i -> i.txnId).collect(Collectors.toList()), e);
             return false;
@@ -892,6 +900,9 @@ public class PublishVersionDaemon extends FrontendDaemon {
             }
             return true;
         } catch (Throwable e) {
+            // Avoid holding txn write lock here; setting errMsg is best-effort for diagnostics
+            txnState.setErrorMsg("Fail to publish partition " + partitionCommitInfo.getPhysicalPartitionId()
+                    + " error " + e.getMessage());
             // prevent excessive logging
             if (partitionCommitInfo.getVersionTime() < 0 &&
                     Math.abs(partitionCommitInfo.getVersionTime()) + 10000 < System.currentTimeMillis()) {

@@ -48,6 +48,7 @@
 #include "storage/rowset/segment.h"
 #include "storage/tablet_schema_map.h"
 #include "testutil/sync_point.h"
+#include "util/defer_op.h"
 #include "util/failpoint/fail_point.h"
 #include "util/raw_container.h"
 #include "util/trace.h"
@@ -63,6 +64,10 @@ static bvar::LatencyRecorder g_put_tablet_metadata_latency("lake", "put_tablet_m
 static bvar::LatencyRecorder g_get_txn_log_latency("lake", "get_txn_log");
 static bvar::LatencyRecorder g_put_txn_log_latency("lake", "put_txn_log");
 static bvar::LatencyRecorder g_del_txn_log_latency("lake", "del_txn_log");
+static bvar::Adder<int64_t> g_read_bundle_tablet_meta_cnt("lake", "lake_read_bundle_tablet_meta_cnt");
+static bvar::Adder<int64_t> g_read_bundle_tablet_meta_real_access_cnt("lake",
+                                                                      "lake_read_bundle_tablet_meta_real_access_cnt");
+static bvar::LatencyRecorder g_read_bundle_tablet_meta_latency("lake", "lake_read_bundle_tablet_meta_latency");
 
 TabletManager::TabletManager(std::shared_ptr<LocationProvider> location_provider, UpdateManager* update_mgr,
                              int64_t cache_capacity)
@@ -100,6 +105,10 @@ std::string TabletManager::bundle_tablet_metadata_location(int64_t tablet_id, in
 
 std::string TabletManager::txn_log_location(int64_t tablet_id, int64_t txn_id) const {
     return _location_provider->txn_log_location(tablet_id, txn_id);
+}
+
+std::string TabletManager::txn_log_location(int64_t tablet_id, int64_t txn_id, const PUniqueId& load_id) const {
+    return _location_provider->txn_log_location(tablet_id, txn_id, load_id);
 }
 
 std::string TabletManager::combined_txn_log_location(int64_t tablet_id, int64_t txn_id) const {
@@ -194,6 +203,12 @@ Status TabletManager::create_tablet(const TCreateTabletReq& req) {
                         strings::Substitute("Unknown persistent index type, tabletId:$0", req.tablet_id));
             }
         }
+    }
+
+    if (req.__isset.flat_json_config) {
+        FlatJsonConfig flat_json_config;
+        flat_json_config.update(req.flat_json_config);
+        flat_json_config.to_pb(tablet_metadata_pb->mutable_flat_json_config());
     }
 
     if (req.__isset.compaction_strategy) {
@@ -491,6 +506,45 @@ StatusOr<BundleTabletMetadataPtr> TabletManager::parse_bundle_tablet_metadata(co
     return bundle_metadata;
 }
 
+StatusOr<TabletMetadataPtrs> TabletManager::get_metas_from_bundle_tablet_metadata(const std::string& location,
+                                                                                  FileSystem* input_fs) {
+    std::unique_ptr<RandomAccessFile> input_file;
+    RandomAccessFileOptions opts{.skip_fill_local_cache = true};
+    if (input_fs == nullptr) {
+        ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(location));
+        ASSIGN_OR_RETURN(input_file, fs->new_random_access_file(opts, location));
+    } else {
+        ASSIGN_OR_RETURN(input_file, input_fs->new_random_access_file(opts, location));
+    }
+    ASSIGN_OR_RETURN(auto serialized_string, input_file->read_all());
+
+    auto file_size = serialized_string.size();
+    ASSIGN_OR_RETURN(auto bundle_metadata, TabletManager::parse_bundle_tablet_metadata(location, serialized_string));
+    TabletMetadataPtrs metadatas;
+    metadatas.reserve(bundle_metadata->tablet_meta_pages().size());
+    for (const auto& tablet_page : bundle_metadata->tablet_meta_pages()) {
+        const PagePointerPB& page_pointer = tablet_page.second;
+        auto offset = page_pointer.offset();
+        auto size = page_pointer.size();
+        RETURN_IF(offset + size > file_size,
+                  Status::InternalError(
+                          fmt::format("Invalid page pointer for tablet {}, offset: {}, size: {}, file size: {}",
+                                      tablet_page.first, offset, size, file_size)));
+
+        auto metadata = std::make_shared<starrocks::TabletMetadataPB>();
+        std::string_view metadata_str = std::string_view(serialized_string.data() + offset);
+        RETURN_IF(
+                !metadata->ParseFromArray(metadata_str.data(), size),
+                Status::InternalError(fmt::format("Failed to parse tablet metadata for tablet {}, offset: {}, size: {}",
+                                                  tablet_page.first, offset, size)));
+        RETURN_IF(metadata->id() != tablet_page.first,
+                  Status::InternalError(fmt::format("Tablet ID mismatch in bundle metadata, expected: {}, found: {}",
+                                                    tablet_page.first, metadata->id())));
+        metadatas.push_back(std::move(metadata));
+    }
+    return metadatas;
+}
+
 DEFINE_FAIL_POINT(tablet_schema_not_found_in_bundle_metadata);
 StatusOr<TabletMetadataPtr> TabletManager::get_single_tablet_metadata(int64_t tablet_id, int64_t version,
                                                                       bool fill_cache, int64_t expected_gtid,
@@ -503,6 +557,7 @@ StatusOr<TabletMetadataPtr> TabletManager::get_single_tablet_metadata(int64_t ta
         return Status::NotFound("Not found expected tablet metadata");
     }
     auto path = bundle_tablet_metadata_location(tablet_id, version);
+    ASSIGN_OR_RETURN(auto real_path, _location_provider->real_location(path));
     std::shared_ptr<FileSystem> file_system;
     if (!fs) {
         ASSIGN_OR_RETURN(file_system, FileSystem::CreateSharedFromString(path));
@@ -514,8 +569,16 @@ StatusOr<TabletMetadataPtr> TabletManager::get_single_tablet_metadata(int64_t ta
     // `read_all` only need to one api call and not increase the IOPS
     // but it will incur additional IO bandwidth overhead
     // Perhaps we need to consider the additional costs of IO bandwidth and IOPS later.
-    ASSIGN_OR_RETURN(auto input_file, file_system->new_random_access_file(opts, path));
-    ASSIGN_OR_RETURN(auto serialized_string, input_file->read_all());
+    g_read_bundle_tablet_meta_cnt << 1;
+    auto t0 = butil::gettimeofday_us();
+    // use real path as key, so that every tablet can share a same path of bundle tablet meta.
+    ASSIGN_OR_RETURN(auto serialized_string,
+                     _bundle_tablet_metadata_group.Do(real_path, [&]() -> StatusOr<std::string> {
+                         g_read_bundle_tablet_meta_real_access_cnt << 1;
+                         ASSIGN_OR_RETURN(auto input_file, file_system->new_random_access_file(opts, path));
+                         return input_file->read_all();
+                     }));
+    g_read_bundle_tablet_meta_latency << (butil::gettimeofday_us() - t0);
 
     auto file_size = serialized_string.size();
     ASSIGN_OR_RETURN(auto bundle_metadata, parse_bundle_tablet_metadata(path, serialized_string));
@@ -679,6 +742,10 @@ StatusOr<TxnLogPtr> TabletManager::get_txn_log(int64_t tablet_id, int64_t txn_id
     return get_txn_log(txn_log_location(tablet_id, txn_id));
 }
 
+StatusOr<TxnLogPtr> TabletManager::get_txn_log(int64_t tablet_id, int64_t txn_id, const PUniqueId& load_id) {
+    return get_txn_log(txn_log_location(tablet_id, txn_id, load_id));
+}
+
 StatusOr<TxnLogPtr> TabletManager::get_txn_slog(int64_t tablet_id, int64_t txn_id) {
     return get_txn_log(txn_slog_location(tablet_id, txn_id));
 }
@@ -701,13 +768,19 @@ Status TabletManager::put_txn_log(const TxnLogPtr& log, const std::string& path)
 
     _metacache->cache_txn_log(path, log);
 
+    VLOG(2) << "put log path " << path << " log " << log->DebugString();
+
     auto t1 = butil::gettimeofday_us();
     g_put_txn_log_latency << (t1 - t0);
     return Status::OK();
 }
 
 Status TabletManager::put_txn_log(const TxnLogPtr& log) {
-    return put_txn_log(log, txn_log_location(log->tablet_id(), log->txn_id()));
+    if (log->has_load_id()) {
+        return put_txn_log(log, txn_log_location(log->tablet_id(), log->txn_id(), log->load_id()));
+    } else {
+        return put_txn_log(log, txn_log_location(log->tablet_id(), log->txn_id()));
+    }
 }
 
 Status TabletManager::put_txn_log(const TxnLog& log) {

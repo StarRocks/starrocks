@@ -23,6 +23,7 @@ import com.starrocks.catalog.Partition;
 import com.starrocks.clone.DynamicPartitionScheduler;
 import com.starrocks.common.util.RuntimeProfile;
 import com.starrocks.connector.iceberg.MockIcebergMetadata;
+import com.starrocks.scheduler.mv.MVPCTBasedRefreshProcessor;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.common.QueryDebugOptions;
 import com.starrocks.sql.optimizer.QueryMaterializationContext;
@@ -144,8 +145,7 @@ public class PartitionBasedMvRefreshProcessorIcebergTest extends MVTestBase {
         Task task = TaskBuilder.buildMvTask(partitionedMaterializedView, testDb.getFullName());
         TaskRun taskRun = TaskRunBuilder.newBuilder(task).build();
         initAndExecuteTaskRun(taskRun);
-        PartitionBasedMvRefreshProcessor processor = (PartitionBasedMvRefreshProcessor)
-                    taskRun.getProcessor();
+        MVPCTBasedRefreshProcessor processor = getPartitionBasedRefreshProcessor(taskRun);
 
         MvTaskRunContext mvContext = processor.getMvContext();
         ExecPlan execPlan = mvContext.getExecPlan();
@@ -168,8 +168,7 @@ public class PartitionBasedMvRefreshProcessorIcebergTest extends MVTestBase {
                     ImmutableList.of("date=2020-01-01"));
         taskRun = TaskRunBuilder.newBuilder(task).build();
         initAndExecuteTaskRun(taskRun);
-        processor = (PartitionBasedMvRefreshProcessor)
-                    taskRun.getProcessor();
+        processor = getPartitionBasedRefreshProcessor(taskRun);
 
         mvContext = processor.getMvContext();
         execPlan = mvContext.getExecPlan();
@@ -221,12 +220,10 @@ public class PartitionBasedMvRefreshProcessorIcebergTest extends MVTestBase {
         Task task = TaskBuilder.buildMvTask(partitionedMaterializedView, testDb.getFullName());
         TaskRun taskRun = TaskRunBuilder.newBuilder(task).build();
         initAndExecuteTaskRun(taskRun);
-        PartitionBasedMvRefreshProcessor processor = (PartitionBasedMvRefreshProcessor)
-                taskRun.getProcessor();
+        MVPCTBasedRefreshProcessor processor = getPartitionBasedRefreshProcessor(taskRun);
 
         MvTaskRunContext mvContext = processor.getMvContext();
         ExecPlan execPlan = mvContext.getExecPlan();
-        System.out.println(execPlan);
         assertPlanContains(execPlan, "3: ts >= '2020-01-01 00:00:00', 3: ts < '2021-01-01 00:00:00'");
 
         // test rewrite
@@ -260,7 +257,6 @@ public class PartitionBasedMvRefreshProcessorIcebergTest extends MVTestBase {
         Collection<Partition> partitions = partitionedMaterializedView.getPartitions();
         Assertions.assertEquals(5, partitions.size());
 
-        System.out.println(partitions.stream().map(Partition::getName).collect(Collectors.toList()));
         Set<String> expectedPartitionNames = ImmutableSet.of("p20220301000000", "p20220101000000", "p20220401000000",
                 "p20220201000000", "p20220501000000");
         Assertions.assertEquals(expectedPartitionNames,
@@ -348,8 +344,8 @@ public class PartitionBasedMvRefreshProcessorIcebergTest extends MVTestBase {
                     () -> {
                         UtFrameUtils.mockEnableQueryContextCache();
                         MaterializedView mv = getMv("test", "test_mv1");
-                        PartitionBasedMvRefreshProcessor processor = refreshMV("test", mv);
-                        RuntimeProfile runtimeProfile = processor.getRuntimeProfile();
+                        MVTaskRunProcessor mvTaskRunProcessor = getMVTaskRunProcessor("test", mv);
+                        RuntimeProfile runtimeProfile = mvTaskRunProcessor.getRuntimeProfile();
                         QueryMaterializationContext.QueryCacheStats queryCacheStats = getQueryCacheStats(runtimeProfile);
                         Assertions.assertTrue(queryCacheStats != null);
                         queryCacheStats.getCounter().forEach((key, value) -> {
@@ -404,8 +400,7 @@ public class PartitionBasedMvRefreshProcessorIcebergTest extends MVTestBase {
             Task task = TaskBuilder.buildMvTask(partitionedMaterializedView, testDb.getFullName());
             TaskRun taskRun = TaskRunBuilder.newBuilder(task).build();
             initAndExecuteTaskRun(taskRun);
-            PartitionBasedMvRefreshProcessor processor = (PartitionBasedMvRefreshProcessor)
-                    taskRun.getProcessor();
+            MVPCTBasedRefreshProcessor processor = getPartitionBasedRefreshProcessor(taskRun);
 
             MvTaskRunContext mvContext = processor.getMvContext();
             ExecPlan execPlan = mvContext.getExecPlan();

@@ -213,6 +213,12 @@ Status SchemaHelper::get_partitions_meta(const SchemaScannerState& state, const 
     });
 }
 
+Status SchemaHelper::listRecycleBinCatalogs(const SchemaScannerState& state, const TListRecycleBinCatalogsParams& req,
+                                            TListRecycleBinCatalogsResult* res) {
+    return _call_rpc(state,
+                     [&req, &res](FrontendServiceConnection& client) { client->listRecycleBinCatalogs(*res, req); });
+}
+
 Status SchemaHelper::get_column_stats_usage(const SchemaScannerState& state, const TColumnStatsUsageReq& var_params,
                                             TColumnStatsUsageRes* var_result) {
     return _call_rpc(state, [&var_params, &var_result](FrontendServiceConnection& client) {
@@ -264,6 +270,12 @@ Status SchemaHelper::get_warehouse_queries(const SchemaScannerState& state, cons
     return _call_rpc(state, [&request, &response](FrontendServiceConnection& client) {
         client->getWarehouseQueries(*response, request);
     });
+}
+
+Status SchemaHelper::get_dynamic_tablet_jobs_info(const SchemaScannerState& state, const TDynamicTabletJobsRequest& req,
+                                                  TDynamicTabletJobsResponse* res) {
+    return _call_rpc(state,
+                     [&req, &res](FrontendServiceConnection& client) { client->getDynamicTabletJobsInfo(*res, req); });
 }
 
 void fill_data_column_with_null(Column* data_column) {

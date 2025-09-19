@@ -33,6 +33,7 @@ import org.apache.iceberg.MetadataTableUtils;
 import org.apache.iceberg.PartitionSpec;
 import org.apache.iceberg.PartitionsTable;
 import org.apache.iceberg.Schema;
+import org.apache.iceberg.SortOrder;
 import org.apache.iceberg.StarRocksIcebergTableScan;
 import org.apache.iceberg.StructLike;
 import org.apache.iceberg.Table;
@@ -93,6 +94,7 @@ public interface IcebergCatalog extends MemoryTrackable {
                                 Schema schema,
                                 PartitionSpec partitionSpec,
                                 String location,
+                                SortOrder sortOrder,
                                 Map<String, String> properties) {
         return false;
     }
@@ -203,6 +205,19 @@ public interface IcebergCatalog extends MemoryTrackable {
 
     default View getView(ConnectContext context, String dbName, String viewName) {
         throw new StarRocksConnectorException("This catalog doesn't loading iceberg view");
+    }
+
+    /**
+     * Register an existing table in the catalog using the given metadata file location.
+     * 
+     * @param context The connect context
+     * @param dbName The database name
+     * @param tableName The table name
+     * @param metadataFileLocation The location of the metadata file
+     * @return true if the table was successfully registered, false otherwise
+     */
+    default boolean registerTable(ConnectContext context, String dbName, String tableName, String metadataFileLocation) {
+        throw new StarRocksConnectorException("This catalog doesn't support registering tables");
     }
 
     default void deleteUncommittedDataFiles(List<String> fileLocations) {

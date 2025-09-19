@@ -14,7 +14,7 @@
 
 #include "exec/aggregate/aggregate_base_node.h"
 
-#include "gutil/strings/substitute.h"
+#include "exec/aggregator.h"
 
 namespace starrocks {
 

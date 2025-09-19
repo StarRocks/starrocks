@@ -37,14 +37,11 @@ package com.starrocks.backup;
 import com.google.common.base.Joiner;
 import com.google.common.base.Preconditions;
 import com.google.common.base.Predicates;
-import com.google.common.base.Strings;
 import com.google.common.collect.ArrayListMultimap;
 import com.google.common.collect.Collections2;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.gson.annotations.SerializedName;
-import com.starrocks.analysis.BrokerDesc;
-import com.starrocks.analysis.TableRef;
 import com.starrocks.backup.Status.ErrCode;
 import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.Database;
@@ -64,7 +61,6 @@ import com.starrocks.catalog.View;
 import com.starrocks.common.Config;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.io.DeepCopy;
-import com.starrocks.common.io.Text;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.common.util.concurrent.lock.LockType;
@@ -74,6 +70,8 @@ import com.starrocks.metric.MetricRepo;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.sql.ast.BrokerDesc;
+import com.starrocks.sql.ast.expression.TableRef;
 import com.starrocks.task.AgentBatchTask;
 import com.starrocks.task.AgentTask;
 import com.starrocks.task.AgentTaskExecutor;
@@ -89,10 +87,7 @@ import com.starrocks.warehouse.WarehouseIdleChecker;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import java.io.DataInput;
-import java.io.DataOutput;
 import java.io.File;
-import java.io.IOException;
 import java.nio.file.FileVisitOption;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -927,103 +922,8 @@ public class BackupJob extends AbstractJob {
         return Joiner.on(", ").join(list);
     }
 
-    public static BackupJob read(DataInput in) throws IOException {
-        BackupJob job = new BackupJob();
-        job.readFields(in);
-        return job;
-    }
 
-    @Override
-    public void write(DataOutput out) throws IOException {
-        super.write(out);
 
-        // table refs
-        out.writeInt(tableRefs.size());
-        for (TableRef tblRef : tableRefs) {
-            tblRef.write(out);
-        }
-
-        // state
-        Text.writeString(out, state.name());
-
-        // times
-        out.writeLong(snapshotFinishedTime);
-        out.writeLong(snapshotUploadFinishedTime);
-
-        // snapshot info
-        out.writeInt(snapshotInfos.size());
-        for (SnapshotInfo info : snapshotInfos.values()) {
-            info.write(out);
-        }
-
-        // backup meta
-        if (backupMeta == null) {
-            out.writeBoolean(false);
-        } else {
-            out.writeBoolean(true);
-            backupMeta.write(out);
-        }
-
-        // No need to persist job info. It is generated then write to file
-
-        // metaInfoFilePath and jobInfoFilePath
-        if (Strings.isNullOrEmpty(localMetaInfoFilePath)) {
-            out.writeBoolean(false);
-        } else {
-            out.writeBoolean(true);
-            Text.writeString(out, localMetaInfoFilePath);
-        }
-
-        if (Strings.isNullOrEmpty(localJobInfoFilePath)) {
-            out.writeBoolean(false);
-        } else {
-            out.writeBoolean(true);
-            Text.writeString(out, localJobInfoFilePath);
-        }
-    }
-
-    public void readFields(DataInput in) throws IOException {
-        super.readFields(in);
-
-        // table refs
-        int size = in.readInt();
-        tableRefs = Lists.newArrayList();
-        for (int i = 0; i < size; i++) {
-            TableRef tblRef = new TableRef();
-            tblRef.readFields(in);
-            tableRefs.add(tblRef);
-        }
-
-        state = BackupJobState.valueOf(Text.readString(in));
-
-        // times
-        snapshotFinishedTime = in.readLong();
-        snapshotUploadFinishedTime = in.readLong();
-
-        // snapshot info
-        size = in.readInt();
-        for (int i = 0; i < size; i++) {
-            SnapshotInfo snapshotInfo = new SnapshotInfo();
-            snapshotInfo.readFields(in);
-            snapshotInfos.put(snapshotInfo.getTabletId(), snapshotInfo);
-        }
-
-        // backup meta
-        if (in.readBoolean()) {
-            backupMeta = BackupMeta.read(in);
-        }
-
-        // No need to persist job info. It is generated then write to file
-
-        // metaInfoFilePath and jobInfoFilePath
-        if (in.readBoolean()) {
-            localMetaInfoFilePath = Text.readString(in);
-        }
-
-        if (in.readBoolean()) {
-            localJobInfoFilePath = Text.readString(in);
-        }
-    }
 
     @Override
     public String toString() {

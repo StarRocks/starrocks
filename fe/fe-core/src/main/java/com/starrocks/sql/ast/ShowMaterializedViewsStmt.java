@@ -16,24 +16,21 @@
 package com.starrocks.sql.ast;
 
 import com.google.common.collect.ImmutableMap;
-import com.starrocks.analysis.BinaryPredicate;
-import com.starrocks.analysis.BinaryType;
-import com.starrocks.analysis.CompoundPredicate;
-import com.starrocks.analysis.Expr;
-import com.starrocks.analysis.ExprSubstitutionMap;
-import com.starrocks.analysis.RedirectStatus;
-import com.starrocks.analysis.SlotRef;
-import com.starrocks.analysis.StringLiteral;
-import com.starrocks.analysis.TableName;
-import com.starrocks.catalog.Column;
 import com.starrocks.catalog.InternalCatalog;
-import com.starrocks.catalog.PrimitiveType;
-import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.system.information.InfoSchemaDb;
 import com.starrocks.common.AnalysisException;
-import com.starrocks.qe.ShowResultSetMetaData;
+import com.starrocks.sql.ast.expression.BinaryPredicate;
+import com.starrocks.sql.ast.expression.BinaryType;
+import com.starrocks.sql.ast.expression.CompoundPredicate;
+import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.ExprSubstitutionMap;
+import com.starrocks.sql.ast.expression.SlotRef;
+import com.starrocks.sql.ast.expression.StringLiteral;
+import com.starrocks.sql.ast.expression.TableName;
 import com.starrocks.sql.parser.NodePosition;
 
+import java.util.Arrays;
+import java.util.List;
 import java.util.Map;
 
 import static com.starrocks.common.util.Util.normalizeName;
@@ -42,37 +39,36 @@ import static com.starrocks.common.util.Util.normalizeName;
 //
 // Syntax:
 //      SHOW MATERIALIZED VIEWS { FROM | IN } db
-public class ShowMaterializedViewsStmt extends ShowStmt {
-    private static final ShowResultSetMetaData META_DATA =
-            ShowResultSetMetaData.builder()
-                    .column("id", ScalarType.createType(PrimitiveType.BIGINT))
-                    .column("database_name", ScalarType.createVarchar(20))
-                    .column("name", ScalarType.createVarchar(50))
-                    .column("refresh_type", ScalarType.createVarchar(10))
-                    .column("is_active", ScalarType.createVarchar(10))
-                    .column("inactive_reason", ScalarType.createVarcharType(64))
-                    .column("partition_type", ScalarType.createVarchar(16))
-                    .column("task_id", ScalarType.createType(PrimitiveType.BIGINT))
-                    .column("task_name", ScalarType.createVarchar(50))
-                    .column("last_refresh_start_time", ScalarType.createType(PrimitiveType.DATETIME))
-                    .column("last_refresh_finished_time", ScalarType.createType(PrimitiveType.DATETIME))
-                    .column("last_refresh_duration", ScalarType.createType(PrimitiveType.DOUBLE))
-                    .column("last_refresh_state", ScalarType.createVarchar(20))
-                    .column("last_refresh_force_refresh", ScalarType.createVarchar(8))
-                    .column("last_refresh_start_partition", ScalarType.createVarchar(1024))
-                    .column("last_refresh_end_partition", ScalarType.createVarchar(1024))
-                    .column("last_refresh_base_refresh_partitions", ScalarType.createVarchar(1024))
-                    .column("last_refresh_mv_refresh_partitions", ScalarType.createVarchar(1024))
-                    .column("last_refresh_error_code", ScalarType.createVarchar(20))
-                    .column("last_refresh_error_message", ScalarType.createVarchar(1024))
-                    .column("rows", ScalarType.createType(PrimitiveType.BIGINT))
-                    .column("text", ScalarType.createVarchar(1024))
-                    .column("extra_message", ScalarType.createVarchar(1024))
-                    .column("query_rewrite_status", ScalarType.createVarchar(64))
-                    .column("creator", ScalarType.createVarchar(64))
-                    .column("last_refresh_process_time", ScalarType.createType(PrimitiveType.DATETIME))
-                    .column("last_refresh_job_id", ScalarType.createVarchar(64))
-                    .build();
+public class ShowMaterializedViewsStmt extends EnhancedShowStmt {
+    private static final List<String> META_DATA = Arrays.asList(
+            "id",
+            "database_name",
+            "name",
+            "refresh_type",
+            "is_active",
+            "inactive_reason",
+            "partition_type",
+            "task_id",
+            "task_name",
+            "last_refresh_start_time",
+            "last_refresh_finished_time",
+            "last_refresh_duration",
+            "last_refresh_state",
+            "last_refresh_force_refresh",
+            "last_refresh_start_partition",
+            "last_refresh_end_partition",
+            "last_refresh_base_refresh_partitions",
+            "last_refresh_mv_refresh_partitions",
+            "last_refresh_error_code",
+            "last_refresh_error_message",
+            "rows",
+            "text",
+            "extra_message",
+            "query_rewrite_status",
+            "creator",
+            "last_refresh_process_time",
+            "last_refresh_job_id"
+    );
 
     private static final Map<String, String> ALIAS_MAP = ImmutableMap.of(
             "id", "MATERIALIZED_VIEW_ID",
@@ -137,16 +133,16 @@ public class ShowMaterializedViewsStmt extends ShowStmt {
         // Columns
         SelectList selectList = new SelectList();
         ExprSubstitutionMap aliasMap = new ExprSubstitutionMap(false);
-        for (Column column : META_DATA.getColumns()) {
-            if (ALIAS_MAP.containsKey(column.getName())) {
-                SelectListItem item = new SelectListItem(new SlotRef(TABLE_NAME, ALIAS_MAP.get(column.getName())),
-                        column.getName());
+        for (String column : META_DATA) {
+            if (ALIAS_MAP.containsKey(column)) {
+                SelectListItem item = new SelectListItem(new SlotRef(TABLE_NAME, ALIAS_MAP.get(column)),
+                        column);
                 selectList.addItem(item);
-                aliasMap.put(new SlotRef(null, column.getName()), item.getExpr().clone(null));
+                aliasMap.put(new SlotRef(null, column), item.getExpr().clone(null));
             } else {
-                SelectListItem item = new SelectListItem(new SlotRef(TABLE_NAME, column.getName()), column.getName());
+                SelectListItem item = new SelectListItem(new SlotRef(TABLE_NAME, column), column);
                 selectList.addItem(item);
-                aliasMap.put(new SlotRef(null, column.getName()), item.getExpr().clone(null));
+                aliasMap.put(new SlotRef(null, column), item.getExpr().clone(null));
             }
         }
         where = where.substitute(aliasMap);
@@ -166,17 +162,7 @@ public class ShowMaterializedViewsStmt extends ShowStmt {
     }
 
     @Override
-    public ShowResultSetMetaData getMetaData() {
-        return META_DATA;
-    }
-
-    @Override
-    public RedirectStatus getRedirectStatus() {
-        return RedirectStatus.FORWARD_NO_SYNC;
-    }
-
-    @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitShowMaterializedViewStatement(this, context);
+        return ((AstVisitorExtendInterface<R, C>) visitor).visitShowMaterializedViewStatement(this, context);
     }
 }

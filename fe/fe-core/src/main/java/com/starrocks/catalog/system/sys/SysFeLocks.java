@@ -18,6 +18,7 @@ import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Joiner;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
+import com.starrocks.authentication.UserIdentityUtils;
 import com.starrocks.authorization.AccessDeniedException;
 import com.starrocks.authorization.PrivilegeType;
 import com.starrocks.catalog.Database;
@@ -35,7 +36,6 @@ import com.starrocks.consistency.LockChecker;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.Authorizer;
-import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.thrift.TAuthInfo;
 import com.starrocks.thrift.TFeLocksItem;
 import com.starrocks.thrift.TFeLocksReq;
@@ -73,19 +73,12 @@ public class SysFeLocks {
     @VisibleForTesting
     public static TFeLocksRes listLocks(TFeLocksReq request, boolean authenticate) throws TException {
         TAuthInfo auth = request.getAuth_info();
-        UserIdentity currentUser;
-        if (auth.isSetCurrent_user_ident()) {
-            currentUser = UserIdentity.fromThrift(auth.getCurrent_user_ident());
-        } else {
-            currentUser = UserIdentity.createAnalyzedUserIdentWithIp(auth.getUser(), auth.getUser_ip());
-        }
+        ConnectContext context = new ConnectContext();
+        UserIdentityUtils.setAuthInfoFromThrift(context, auth);
 
         // authorize
         try {
             if (authenticate) {
-                ConnectContext context = new ConnectContext();
-                context.setCurrentUserIdentity(currentUser);
-                context.setCurrentRoleIds(currentUser);
                 Authorizer.checkSystemAction(context, PrivilegeType.OPERATE);
             }
         } catch (AccessDeniedException e) {

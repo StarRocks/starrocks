@@ -46,7 +46,6 @@ import com.google.common.collect.Range;
 import com.google.common.collect.Sets;
 import com.google.common.collect.Table.Cell;
 import com.google.gson.annotations.SerializedName;
-import com.starrocks.analysis.BrokerDesc;
 import com.starrocks.backup.BackupJobInfo.BackupIndexInfo;
 import com.starrocks.backup.BackupJobInfo.BackupPartitionInfo;
 import com.starrocks.backup.BackupJobInfo.BackupPhysicalPartitionInfo;
@@ -82,9 +81,9 @@ import com.starrocks.catalog.Tablet;
 import com.starrocks.catalog.TabletMeta;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
+import com.starrocks.common.MaterializedViewExceptions;
 import com.starrocks.common.Pair;
 import com.starrocks.common.StarRocksException;
-import com.starrocks.common.io.Text;
 import com.starrocks.common.util.DynamicPartitionUtil;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.common.util.concurrent.MarkedCountDownLatch;
@@ -96,6 +95,7 @@ import com.starrocks.persist.ColocatePersistInfo;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.sql.ast.BrokerDesc;
 import com.starrocks.task.AgentBatchTask;
 import com.starrocks.task.AgentTask;
 import com.starrocks.task.AgentTaskExecutor;
@@ -115,8 +115,6 @@ import com.starrocks.warehouse.WarehouseIdleChecker;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import java.io.DataOutput;
-import java.io.IOException;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
@@ -1673,8 +1671,29 @@ public class RestoreJob extends AbstractJob {
                         try {
                             olapTable.doAfterRestore(mvRestoreContext);
                         } catch (Exception e) {
-                            // no throw exceptions
                             LOG.warn(String.format("rebuild olap table %s failed: ", olapTable.getName()), e);
+
+                            // for mv, set mv to inactive state and drop all partitions to avoid metadata corruption.
+                            // it's safe for mv since users can refresh mv after restore to rebuild mv's data.
+                            if (olapTable.isMaterializedView()) {
+                                LOG.warn("drop materialized view {} partitions because doAfterRestore failed",
+                                        olapTable.getName());
+                                try {
+                                    MaterializedView mv = (MaterializedView) olapTable;
+                                    mv.setInactiveAndReason(MaterializedViewExceptions
+                                                    .inactiveReasonForMetadataTableRestoreCorrupted(mv.getName()));
+                                    // clear version map so can be refreshed later
+                                    mv.getRefreshScheme().getAsyncRefreshContext().clearVisibleVersionMap();
+                                    // drop all partitions
+                                    Set<String> partitionNames = mv.getPartitionNames();
+                                    for (String partitionName : partitionNames) {
+                                        mv.dropPartition(dbId, partitionName, false);
+                                    }
+                                } catch (Exception mvException) {
+                                    LOG.warn("failed to drop partitions of materialized view {}",
+                                            olapTable.getName(), mvException);
+                                }
+                            }
                         }
                     }
                 }
@@ -1783,6 +1802,19 @@ public class RestoreJob extends AbstractJob {
         return Status.OK;
     }
 
+    private void dropPhysicalPartitions(Table restoreTbl) {
+        for (Partition part : restoreTbl.getPartitions()) {
+            // ensure clear all physical partitions, not only for the first one (default physical partition)
+            for (PhysicalPartition physicalPartition : part.getSubPartitions()) {
+                for (MaterializedIndex idx : physicalPartition.getMaterializedIndices(IndexExtState.VISIBLE)) {
+                    for (Tablet tablet : idx.getTablets()) {
+                        globalStateMgr.getTabletInvertedIndex().deleteTablet(tablet.getId());
+                    }
+                }
+            }
+        }
+    }
+
     public void cancelInternal(boolean isReplay) {
         // We need to clean the residual due to current state
         if (!isReplay) {
@@ -1822,15 +1854,12 @@ public class RestoreJob extends AbstractJob {
                 // remove restored tbls
                 for (Table restoreTbl : restoredTbls) {
                     LOG.info("remove restored table when cancelled: {}", restoreTbl.getName());
-                    for (Partition part : restoreTbl.getPartitions()) {
-                        // ensure clear all physical partitions, not only for the first one (default physical partition)
-                        for (PhysicalPartition physicalPartition : part.getSubPartitions()) {
-                            for (MaterializedIndex idx : physicalPartition.getMaterializedIndices(IndexExtState.VISIBLE)) {
-                                for (Tablet tablet : idx.getTablets()) {
-                                    globalStateMgr.getTabletInvertedIndex().deleteTablet(tablet.getId());
-                                }
-                            }
-                        }
+                    // ensure clear all physical partitions even if exception happens
+                    try {
+                        dropPhysicalPartitions(restoreTbl);
+                    } catch (Exception e) {
+                        LOG.warn("drop physical partitions of table {} failed when cancelling restore job",
+                                restoreTbl.getName(), e);
                     }
                     db.dropTable(restoreTbl.getName());
                 }
@@ -1915,64 +1944,8 @@ public class RestoreJob extends AbstractJob {
         }
     }
 
-    @Override
-    public void write(DataOutput out) throws IOException {
-        super.write(out);
 
-        Text.writeString(out, backupTimestamp);
-        jobInfo.write(out);
-        out.writeBoolean(allowLoad);
 
-        Text.writeString(out, state.name());
-
-        if (backupMeta != null) {
-            out.writeBoolean(true);
-            backupMeta.write(out);
-        } else {
-            out.writeBoolean(false);
-        }
-
-        fileMapping.write(out);
-
-        out.writeLong(metaPreparedTime);
-        out.writeLong(snapshotFinishedTime);
-        out.writeLong(downloadFinishedTime);
-
-        out.writeInt(restoreReplicationNum);
-
-        out.writeInt(restoredPartitions.size());
-        for (Pair<String, Partition> entry : restoredPartitions) {
-            Text.writeString(out, entry.first);
-            entry.second.write(out);
-        }
-
-        out.writeInt(restoredTbls.size());
-        for (Table tbl : restoredTbls) {
-            tbl.write(out);
-        }
-
-        out.writeInt(restoredVersionInfo.rowKeySet().size());
-        for (long tblId : restoredVersionInfo.rowKeySet()) {
-            out.writeLong(tblId);
-            out.writeInt(restoredVersionInfo.row(tblId).size());
-            for (Map.Entry<Long, Long> entry : restoredVersionInfo.row(tblId).entrySet()) {
-                out.writeLong(entry.getKey());
-                out.writeLong(entry.getValue());
-                out.writeLong(0); // write a version_hash for compatibility
-            }
-        }
-
-        out.writeInt(snapshotInfos.rowKeySet().size());
-        for (long tabletId : snapshotInfos.rowKeySet()) {
-            out.writeLong(tabletId);
-            Map<Long, SnapshotInfo> map = snapshotInfos.row(tabletId);
-            out.writeInt(map.size());
-            for (Map.Entry<Long, SnapshotInfo> entry : map.entrySet()) {
-                out.writeLong(entry.getKey());
-                entry.getValue().write(out);
-            }
-        }
-    }
 
     @Override
     public String toString() {

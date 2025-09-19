@@ -50,6 +50,8 @@
 #include "common/status.h"
 #include "common/statusor.h"
 #include "gen_cpp/segment.pb.h"
+#include "runtime/current_thread.h"
+#include "runtime/exec_env.h"
 #include "runtime/types.h"
 #include "storage/column_predicate.h"
 #include "storage/index/index_descriptor.h"
@@ -563,6 +565,18 @@ std::pair<ordinal_t, ordinal_t> ColumnReader::get_page_range(size_t page_index) 
     return std::make_pair(_ordinal_index->get_first_ordinal(page_index), _ordinal_index->get_last_ordinal(page_index));
 }
 
+// Iterate the oridinal index to get the total size of all data pages
+int64_t ColumnReader::data_page_footprint() const {
+    RETURN_IF(_ordinal_index == nullptr, 0);
+    int64_t total_size = 0;
+    auto iter = _ordinal_index->begin();
+    while (iter.valid()) {
+        total_size += iter.page().size;
+        iter.next();
+    }
+    return total_size;
+}
+
 Status ColumnReader::zone_map_filter(const std::vector<const ColumnPredicate*>& predicates,
                                      const ColumnPredicate* del_predicate,
                                      std::unordered_set<uint32_t>* del_partial_filtered_pages,
@@ -824,8 +838,9 @@ StatusOr<std::unique_ptr<ColumnIterator>> ColumnReader::_new_json_iterator(Colum
         }
         // dynamic flattern
         // we must dynamic flat json, because we don't know other segment wasn't the paths
-        return create_json_dynamic_flat_iterator(std::move(json_iter), target_paths, target_types,
-                                                 path->is_from_compaction());
+        return create_json_dynamic_flat_iterator(
+                std::move(json_iter), target_paths, target_types,
+                path->is_from_compaction() || (column != nullptr && column->is_extended()));
     }
 
     std::vector<std::string> source_paths;

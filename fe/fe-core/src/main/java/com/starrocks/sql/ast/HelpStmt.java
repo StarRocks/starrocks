@@ -17,29 +17,9 @@
 
 package com.starrocks.sql.ast;
 
-import com.starrocks.catalog.Column;
-import com.starrocks.catalog.ScalarType;
-import com.starrocks.qe.ShowResultSetMetaData;
 import com.starrocks.sql.parser.NodePosition;
 
 public class HelpStmt extends ShowStmt {
-    private static final ShowResultSetMetaData TOPIC_META_DATA =
-            ShowResultSetMetaData.builder()
-                    .addColumn(new Column("name", ScalarType.createVarchar(64)))
-                    .addColumn(new Column("description", ScalarType.createVarchar(1000)))
-                    .addColumn(new Column("example", ScalarType.createVarchar(1000)))
-                    .build();
-    private static final ShowResultSetMetaData CATEGORY_META_DATA =
-            ShowResultSetMetaData.builder()
-                    .addColumn(new Column("source_category_name", ScalarType.createVarchar(64)))
-                    .addColumn(new Column("name", ScalarType.createVarchar(64)))
-                    .addColumn(new Column("is_it_category", ScalarType.createVarchar(1)))
-                    .build();
-    private static final ShowResultSetMetaData KEYWORD_META_DATA =
-            ShowResultSetMetaData.builder()
-                    .addColumn(new Column("name", ScalarType.createVarchar(64)))
-                    .addColumn(new Column("is_it_category", ScalarType.createVarchar(1)))
-                    .build();
     private String mask;
 
     public HelpStmt(String mask) {
@@ -66,20 +46,7 @@ public class HelpStmt extends ShowStmt {
     }
 
     @Override
-    public ShowResultSetMetaData getMetaData() {
-        return TOPIC_META_DATA;
-    }
-
-    public ShowResultSetMetaData getCategoryMetaData() {
-        return CATEGORY_META_DATA;
-    }
-
-    public ShowResultSetMetaData getKeywordMetaData() {
-        return KEYWORD_META_DATA;
-    }
-
-    @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitHelpStatement(this, context);
+        return ((AstVisitorExtendInterface<R, C>) visitor).visitHelpStatement(this, context);
     }
 }

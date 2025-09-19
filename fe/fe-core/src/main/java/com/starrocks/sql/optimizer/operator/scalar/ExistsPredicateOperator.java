@@ -40,7 +40,7 @@ public class ExistsPredicateOperator extends PredicateOperator {
 
     @Override
     public <R, C> R accept(ScalarOperatorVisitor<R, C> visitor, C context) {
-        return visitor.visitExistsPredicate(this, context);
+        return  visitor.visitExistsPredicate(this, context);
     }
 
     @Override

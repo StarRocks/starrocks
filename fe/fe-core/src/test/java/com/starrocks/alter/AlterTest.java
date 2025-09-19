@@ -35,8 +35,6 @@
 package com.starrocks.alter;
 
 import com.google.common.collect.Lists;
-import com.starrocks.analysis.DateLiteral;
-import com.starrocks.analysis.TableName;
 import com.starrocks.authentication.AuthenticationMgr;
 import com.starrocks.catalog.BaseTableInfo;
 import com.starrocks.catalog.Column;
@@ -54,6 +52,7 @@ import com.starrocks.catalog.RangePartitionInfo;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
+import com.starrocks.catalog.UserIdentity;
 import com.starrocks.catalog.constraint.ForeignKeyConstraint;
 import com.starrocks.catalog.constraint.GlobalConstraintManager;
 import com.starrocks.catalog.constraint.TableWithFKConstraint;
@@ -70,7 +69,6 @@ import com.starrocks.common.util.Util;
 import com.starrocks.persist.ListPartitionPersistInfo;
 import com.starrocks.persist.ModifyTablePropertyOperationLog;
 import com.starrocks.persist.OperationType;
-import com.starrocks.persist.PartitionPersistInfoV2;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.DDLStmtExecutor;
 import com.starrocks.scheduler.Constants;
@@ -106,7 +104,8 @@ import com.starrocks.sql.ast.ReorderColumnsClause;
 import com.starrocks.sql.ast.SingleItemListPartitionDesc;
 import com.starrocks.sql.ast.TruncatePartitionClause;
 import com.starrocks.sql.ast.TruncateTableStmt;
-import com.starrocks.sql.ast.UserIdentity;
+import com.starrocks.sql.ast.expression.DateLiteral;
+import com.starrocks.sql.ast.expression.TableName;
 import com.starrocks.sql.plan.ConnectorPlanTestBase;
 import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.utframe.StarRocksAssert;
@@ -121,11 +120,6 @@ import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
-import java.io.DataInputStream;
-import java.io.DataOutputStream;
-import java.io.File;
-import java.io.FileInputStream;
-import java.io.FileOutputStream;
 import java.lang.reflect.Constructor;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -2078,7 +2072,6 @@ public class AlterTest {
                     starRocksAssert.getCtx());
 
         UserIdentity testUser = new UserIdentity("testuser", "%");
-        testUser.analyze();
 
         starRocksAssert.getCtx().setQualifiedUser("testuser");
         starRocksAssert.getCtx().setCurrentUserIdentity(testUser);
@@ -2250,43 +2243,14 @@ public class AlterTest {
                     dataProperty, replicationNum, isInMemory, isTempPartition, values, new ArrayList<>(),
                     partitionInfo.getDataCacheInfo(partitionId));
 
-        // write log
-        File file = new File("./test_serial.log");
-        if (file.exists()) {
-            file.delete();
-        }
-        file.createNewFile();
-        DataOutputStream out = new DataOutputStream(new FileOutputStream(file));
-        partitionPersistInfoOut.write(out);
-
-        // read log
-        DataInputStream in = new DataInputStream(new FileInputStream(file));
-        PartitionPersistInfoV2 partitionPersistInfoIn = PartitionPersistInfoV2.read(in);
-
-        Assertions.assertEquals(dbId, partitionPersistInfoIn.getDbId().longValue());
-        Assertions.assertEquals(tableId, partitionPersistInfoIn.getTableId().longValue());
-        Assertions.assertEquals(partitionId, partitionPersistInfoIn.getPartition().getId());
-        Assertions.assertEquals(partition.getName(), partitionPersistInfoIn.getPartition().getName());
-        Assertions.assertEquals(replicationNum, partitionPersistInfoIn.getReplicationNum());
-        Assertions.assertEquals(isInMemory, partitionPersistInfoIn.isInMemory());
-        Assertions.assertEquals(isTempPartition, partitionPersistInfoIn.isTempPartition());
-        Assertions.assertEquals(dataProperty, partitionPersistInfoIn.getDataProperty());
-
-        List<String> assertValues = partitionPersistInfoIn.asListPartitionPersistInfo().getValues();
-        Assertions.assertEquals(values.size(), assertValues.size());
-        for (int i = 0; i < values.size(); i++) {
-            Assertions.assertEquals(values.get(i), assertValues.get(i));
-        }
-
         // replay log
         partitionInfo.setValues(partitionId, null);
-        GlobalStateMgr.getCurrentState().getLocalMetastore().replayAddPartition(partitionPersistInfoIn);
+        GlobalStateMgr.getCurrentState().getLocalMetastore().replayAddPartition(partitionPersistInfoOut);
         Assertions.assertNotNull(partitionInfo.getIdToValues().get(partitionId));
 
         String dropSQL = "drop table test_partition";
         DropTableStmt dropTableStmt = (DropTableStmt) UtFrameUtils.parseStmtWithNewParser(dropSQL, ctx);
         GlobalStateMgr.getCurrentState().getLocalMetastore().dropTable(dropTableStmt);
-        file.delete();
     }
 
     @Test
@@ -2324,31 +2288,9 @@ public class AlterTest {
         short replicationNum = partitionInfo.getReplicationNum(partitionId);
         boolean isInMemory = partitionInfo.getIsInMemory(partitionId);
         boolean isTempPartition = false;
-        ListPartitionPersistInfo partitionPersistInfoOut = new ListPartitionPersistInfo(dbId, tableId, partition,
+        ListPartitionPersistInfo partitionPersistInfoIn = new ListPartitionPersistInfo(dbId, tableId, partition,
                     dataProperty, replicationNum, isInMemory, isTempPartition, new ArrayList<>(), multiValues,
                     partitionInfo.getDataCacheInfo(partitionId));
-
-        // write log
-        File file = new File("./test_serial.log");
-        if (file.exists()) {
-            file.delete();
-        }
-        file.createNewFile();
-        DataOutputStream out = new DataOutputStream(new FileOutputStream(file));
-        partitionPersistInfoOut.write(out);
-
-        // replay log
-        DataInputStream in = new DataInputStream(new FileInputStream(file));
-        PartitionPersistInfoV2 partitionPersistInfoIn = PartitionPersistInfoV2.read(in);
-
-        Assertions.assertEquals(dbId, partitionPersistInfoIn.getDbId().longValue());
-        Assertions.assertEquals(tableId, partitionPersistInfoIn.getTableId().longValue());
-        Assertions.assertEquals(partitionId, partitionPersistInfoIn.getPartition().getId());
-        Assertions.assertEquals(partition.getName(), partitionPersistInfoIn.getPartition().getName());
-        Assertions.assertEquals(replicationNum, partitionPersistInfoIn.getReplicationNum());
-        Assertions.assertEquals(isInMemory, partitionPersistInfoIn.isInMemory());
-        Assertions.assertEquals(isTempPartition, partitionPersistInfoIn.isTempPartition());
-        Assertions.assertEquals(dataProperty, partitionPersistInfoIn.getDataProperty());
 
         List<List<String>> assertMultiValues = partitionPersistInfoIn.asListPartitionPersistInfo().getMultiValues();
         Assertions.assertEquals(multiValues.size(), assertMultiValues.size());
@@ -2368,7 +2310,6 @@ public class AlterTest {
         String dropSQL = "drop table test_partition";
         DropTableStmt dropTableStmt = (DropTableStmt) UtFrameUtils.parseStmtWithNewParser(dropSQL, ctx);
         GlobalStateMgr.getCurrentState().getLocalMetastore().dropTable(dropTableStmt);
-        file.delete();
     }
 
     @Test

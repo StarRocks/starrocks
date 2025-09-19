@@ -256,6 +256,10 @@ int JsonValue::compare(const Slice& lhs, const Slice& rhs) {
     return sliceCompare(ls, rs);
 }
 
+int JsonValue::compare(const VSlice& lhs, const VSlice& rhs) {
+    return sliceCompare(lhs, rhs);
+}
+
 int64_t JsonValue::hash() const {
     return to_vslice().normalizedHash();
 }

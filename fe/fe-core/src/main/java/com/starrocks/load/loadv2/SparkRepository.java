@@ -38,13 +38,12 @@ import com.google.common.base.Joiner;
 import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
-import com.starrocks.StarRocksFE;
-import com.starrocks.analysis.BrokerDesc;
 import com.starrocks.common.Config;
 import com.starrocks.common.LoadException;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.util.BrokerUtil;
 import com.starrocks.fs.HdfsUtil;
+import com.starrocks.sql.ast.BrokerDesc;
 import com.starrocks.thrift.TBrokerFileStatus;
 import org.apache.commons.codec.digest.DigestUtils;
 import org.apache.logging.log4j.LogManager;
@@ -102,7 +101,7 @@ public class SparkRepository {
         this.brokerDesc = brokerDesc;
         this.currentDppVersion = Config.spark_dpp_version;
         this.currentArchive = new SparkArchive(getRemoteArchivePath(currentDppVersion), currentDppVersion);
-        this.localDppPath = StarRocksFE.STARROCKS_HOME_DIR + DPP_RESOURCE_DIR + SPARK_DPP_JAR;
+        this.localDppPath = Config.STARROCKS_HOME_DIR + DPP_RESOURCE_DIR + SPARK_DPP_JAR;
         if (!Strings.isNullOrEmpty(Config.spark_resource_path)) {
             this.localSpark2xPath = Config.spark_resource_path;
         } else {

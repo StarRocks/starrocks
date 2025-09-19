@@ -37,12 +37,8 @@ package com.starrocks.load;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.gson.annotations.SerializedName;
-import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
-import com.starrocks.persist.gson.GsonUtils;
 
-import java.io.DataInput;
-import java.io.IOException;
 import java.util.List;
 
 public class MultiDeleteInfo implements Writable {
@@ -116,10 +112,6 @@ public class MultiDeleteInfo implements Writable {
         return partitionNames;
     }
 
-    public static MultiDeleteInfo read(DataInput in) throws IOException {
-        return GsonUtils.GSON.fromJson(Text.readString(in), MultiDeleteInfo.class);
-    }
-
     public static MultiDeleteInfo upgrade(DeleteInfo deleteInfo) {
         MultiDeleteInfo multiDeleteInfo = new MultiDeleteInfo(deleteInfo.getDbId(), deleteInfo.getTableId(),
                 deleteInfo.getTableName(), Lists.newArrayList(deleteInfo.getDeleteConditions()));
@@ -127,7 +119,5 @@ public class MultiDeleteInfo implements Writable {
                 Lists.newArrayList(deleteInfo.getPartitionName()));
         return multiDeleteInfo;
     }
-
-
 
 }

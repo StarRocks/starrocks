@@ -108,6 +108,6 @@ public abstract class PredicateOperator extends ArgsScalarOperator {
 
     @Override
     public <R, C> R accept(ScalarOperatorVisitor<R, C> visitor, C context) {
-        return visitor.visitPredicate(this, context);
+        return  visitor.visitPredicate(this, context);
     }
 }

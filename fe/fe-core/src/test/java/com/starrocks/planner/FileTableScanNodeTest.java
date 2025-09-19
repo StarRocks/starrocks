@@ -15,8 +15,6 @@
 package com.starrocks.planner;
 
 import com.google.common.collect.ImmutableList;
-import com.starrocks.analysis.TupleDescriptor;
-import com.starrocks.analysis.TupleId;
 import com.starrocks.catalog.FileTable;
 import com.starrocks.common.DdlException;
 import com.starrocks.connector.RemoteFileBlockDesc;

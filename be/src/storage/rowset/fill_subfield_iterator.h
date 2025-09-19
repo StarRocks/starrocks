@@ -50,6 +50,8 @@ public:
 
     ordinal_t num_rows() const override;
 
+    std::string name() const override { return "FillSubfieldIterator"; }
+
 private:
     ColumnId _cid;
     ColumnAccessPath* _predicate_path;

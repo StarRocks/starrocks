@@ -39,21 +39,24 @@ public:
     void TearDown() override {}
 };
 
-TEST_F(UpdateConfigActionTest, update_datacache_disk_size) {
+TEST_F(UpdateConfigActionTest, update_datacache_config) {
     SCOPED_UPDATE(bool, config::enable_datacache_disk_auto_adjust, false);
     const std::string cache_dir = "./block_cache_for_update_config";
     ASSERT_TRUE(fs::create_directories(cache_dir).ok());
 
     auto cache = std::make_shared<StarCacheEngine>();
-    CacheOptions options = TestCacheUtils::create_simple_options(256 * KB, 0);
+    DiskCacheOptions options = TestCacheUtils::create_simple_options(256 * KB, 0);
     options.dir_spaces.push_back({.path = cache_dir, .size = 50 * MB});
     ASSERT_OK(cache->init(options));
-    DataCache::GetInstance()->set_local_cache(cache);
+    DataCache::GetInstance()->set_local_disk_cache(cache);
 
     UpdateConfigAction action(ExecEnv::GetInstance());
 
+    // update disk size
     ASSERT_ERROR(action.update_config("datacache_disk_size", "-200"));
     ASSERT_OK(action.update_config("datacache_disk_size", "100000000"));
+    // update inline cache limit
+    ASSERT_OK(action.update_config("datacache_inline_item_count_limit", "260344"));
 
     std::vector<DirSpace> spaces;
     cache->disk_spaces(&spaces);

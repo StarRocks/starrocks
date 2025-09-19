@@ -17,10 +17,10 @@ package com.starrocks.qe;
 import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import com.starrocks.alter.SystemHandler;
-import com.starrocks.analysis.FunctionName;
-import com.starrocks.analysis.ParseNode;
 import com.starrocks.authentication.AuthenticationMgr;
+import com.starrocks.authentication.UserAuthenticationInfo;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.UserIdentity;
 import com.starrocks.common.AlreadyExistsException;
 import com.starrocks.common.Config;
 import com.starrocks.common.ConfigBase;
@@ -62,10 +62,11 @@ import com.starrocks.sql.ast.AlterSystemStmt;
 import com.starrocks.sql.ast.AlterTableStmt;
 import com.starrocks.sql.ast.AlterUserStmt;
 import com.starrocks.sql.ast.AlterViewStmt;
-import com.starrocks.sql.ast.AstVisitor;
+import com.starrocks.sql.ast.AstVisitorExtendInterface;
 import com.starrocks.sql.ast.BackupStmt;
 import com.starrocks.sql.ast.BaseGrantRevokePrivilegeStmt;
 import com.starrocks.sql.ast.BaseGrantRevokeRoleStmt;
+import com.starrocks.sql.ast.CallProcedureStatement;
 import com.starrocks.sql.ast.CancelAlterSystemStmt;
 import com.starrocks.sql.ast.CancelAlterTableStmt;
 import com.starrocks.sql.ast.CancelBackupStmt;
@@ -119,6 +120,7 @@ import com.starrocks.sql.ast.GrantPrivilegeStmt;
 import com.starrocks.sql.ast.GrantRoleStmt;
 import com.starrocks.sql.ast.InstallPluginStmt;
 import com.starrocks.sql.ast.LoadStmt;
+import com.starrocks.sql.ast.ParseNode;
 import com.starrocks.sql.ast.PauseRoutineLoadStmt;
 import com.starrocks.sql.ast.RecoverDbStmt;
 import com.starrocks.sql.ast.RecoverPartitionStmt;
@@ -138,6 +140,8 @@ import com.starrocks.sql.ast.SubmitTaskStmt;
 import com.starrocks.sql.ast.SyncStmt;
 import com.starrocks.sql.ast.TruncateTableStmt;
 import com.starrocks.sql.ast.UninstallPluginStmt;
+import com.starrocks.sql.ast.UserRef;
+import com.starrocks.sql.ast.expression.FunctionName;
 import com.starrocks.sql.ast.group.CreateGroupProviderStmt;
 import com.starrocks.sql.ast.group.DropGroupProviderStmt;
 import com.starrocks.sql.ast.integration.AlterSecurityIntegrationStatement;
@@ -203,7 +207,7 @@ public class DDLStmtExecutor {
         }
     }
 
-    public static class StmtExecutorVisitor implements AstVisitor<ShowResultSet, ConnectContext> {
+    public static class StmtExecutorVisitor implements AstVisitorExtendInterface<ShowResultSet, ConnectContext> {
         private static final Logger LOG = LogManager.getLogger(StmtExecutorVisitor.class);
         private static final StmtExecutorVisitor INSTANCE = new StmtExecutorVisitor();
 
@@ -404,7 +408,8 @@ public class DDLStmtExecutor {
                 info.add(taskRunId);
             });
 
-            return new ShowResultSet(RefreshMaterializedViewStatement.META_DATA, Arrays.asList(info));
+            ShowResultSetMetaData metaData = new ShowResultMetaFactory().getMetadata(stmt);
+            return new ShowResultSet(metaData, Arrays.asList(info));
         }
 
         @Override
@@ -436,6 +441,15 @@ public class DDLStmtExecutor {
         public ShowResultSet visitCancelAlterTableStatement(CancelAlterTableStmt stmt, ConnectContext context) {
             ErrorReport.wrapWithRuntimeException(() -> {
                 context.getGlobalStateMgr().getLocalMetastore().cancelAlter(stmt);
+            });
+            return null;
+        }
+
+        @Override
+        public ShowResultSet visitCallProcedureStatement(CallProcedureStatement stmt, ConnectContext context) {
+            ErrorReport.wrapWithRuntimeException(() -> {
+                // Execute the procedure
+                context.getGlobalStateMgr().getMetadataMgr().callProcedure(stmt, context);
             });
             return null;
         }
@@ -532,8 +546,11 @@ public class DDLStmtExecutor {
         @Override
         public ShowResultSet visitAlterUserStatement(AlterUserStmt stmt, ConnectContext context) {
             ErrorReport.wrapWithRuntimeException(() -> {
-                context.getGlobalStateMgr().getAuthenticationMgr()
-                        .alterUser(stmt.getUserIdentity(), stmt.getAuthenticationInfo(), stmt.getProperties());
+                UserRef user = stmt.getUser();
+                UserIdentity userIdentity = new UserIdentity(user.getUser(), user.getHost(), user.isDomain());
+                UserAuthenticationInfo userAuthenticationInfo = new UserAuthenticationInfo(user, stmt.getAuthOption());
+                GlobalStateMgr.getCurrentState().getAuthenticationMgr()
+                        .alterUser(userIdentity, userAuthenticationInfo, stmt.getProperties());
             });
             return null;
         }
@@ -564,11 +581,9 @@ public class DDLStmtExecutor {
                                                                 ConnectContext context) {
             ErrorReport.wrapWithRuntimeException(() -> {
                 if (stmt instanceof GrantPrivilegeStmt) {
-
-                    context.getGlobalStateMgr().getAuthorizationMgr().grant((GrantPrivilegeStmt) stmt);
-
+                    GlobalStateMgr.getCurrentState().getAuthorizationMgr().grant((GrantPrivilegeStmt) stmt);
                 } else {
-                    context.getGlobalStateMgr().getAuthorizationMgr().revoke((RevokePrivilegeStmt) stmt);
+                    GlobalStateMgr.getCurrentState().getAuthorizationMgr().revoke((RevokePrivilegeStmt) stmt);
                 }
             });
             return null;
@@ -1309,7 +1324,7 @@ public class DDLStmtExecutor {
 
         @Override
         public ShowResultSet visitAdminSetAutomatedSnapshotOnStatement(AdminSetAutomatedSnapshotOnStmt stmt,
-                                                                     ConnectContext context) {
+                                                                       ConnectContext context) {
             ErrorReport.wrapWithRuntimeException(() -> {
                 context.getGlobalStateMgr().getClusterSnapshotMgr().setAutomatedSnapshotOn(stmt);
             });

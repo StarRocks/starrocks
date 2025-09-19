@@ -211,9 +211,21 @@ ALTER USER 'jack' SET PROPERTIES ('session.query_timeout' = '600');
 
 ### cbo_eq_base_type
 
-* 描述：用来指定 DECIMAL 类型和 STRING 类型的数据比较时的强制类型，默认按照 `VARCHAR` 类型进行比较，可选 `DECIMAL`（按数值进行比较）。**该变量仅在进行 `=` 和 `!=` 比较时生效。**
+* 描述：用来指定 DECIMAL 类型和 STRING 类型的数据比较时的强制类型，默认按照 `DECIMAL` 类型进行比较，可选 `VARCHAR`（按数值进行比较）。**该变量仅在进行 `=` 和 `!=` 比较时生效。**
 * 类型：String
 * 引入版本：v2.5.14
+
+### cbo_json_v2_dict_opt
+
+* 描述：是否为 JSON v2 路径改写生成的 Flat JSON 字符串子列启用低基数字典优化。开启后，优化器可以为这些子列构建并使用全局字典，从而加速字符串表达式、GROUP BY、JOIN 等操作。
+* 默认值：true
+* 类型：Boolean
+
+### cbo_json_v2_rewrite
+
+* 描述：是否在优化器中启用 JSON v2 路径改写。开启后，会将 JSON 函数（如 `get_json_*`）改写为直接访问 Flat JSON 子列，从而启用谓词下推、列裁剪以及字典优化。
+* 默认值：true
+* 类型：Boolean
 
 ### cbo_materialized_view_rewrite_related_mvs_limit
 
@@ -302,6 +314,12 @@ ALTER USER 'jack' SET PROPERTIES ('session.query_timeout' = '600');
 * 描述：是否开启物化视图查询计划缓存，用于提高物化视图查询改写性能。默认值是 `true`，即开启物化视图查询计划缓存。
 * 默认值：true
 * 引入版本：v2.5.13，v3.0.7，v3.1.4，v3.2.0，v3.3.0
+
+### enable_cbo_based_mv_rewrite
+
+* 描述：是否在 CBO 阶段启用物化视图改写，这可以最大化查询改写成功的可能性（例如，当物化视图和查询之间的连接顺序不同时），但这会增加优化器阶段的执行时间。
+* 默认值：true
+* 引入版本：v3.5.5，v4.0.1
 
 ### enable_parquet_reader_bloom_filter
 
@@ -445,6 +463,12 @@ ALTER USER 'jack' SET PROPERTIES ('session.query_timeout' = '600');
 * 默认值：false，表示不开启。
 * 引入版本：v2.5
 
+### enable_group_by_compressed_key
+
+* 描述：是否利用准确的统计信息来压缩 GROUP BY Key 列。有效值：`true` 和 `false`。
+* 默认值：true
+* 引入版本：v4.0
+
 ### enable_gin_filter
 
 * 描述：查询时是否使用[全文倒排索引](../table_design/indexes/inverted_index.md)。
@@ -476,6 +500,12 @@ ALTER USER 'jack' SET PROPERTIES ('session.query_timeout' = '600');
   * `distributed`：使用分布式方案。
 * 默认值：auto
 * 引入版本：v3.3.3
+
+#### enable_iceberg_column_statistics
+
+* 描述：是否获取列统计信息，例如 `min`、`max`、`null count`、`row size` 和 `ndv`（如果存在 puffin 文件）。当此项设置为 `false` 时，仅收集行数信息。
+* 默认值：false
+* 引入版本：v3.4
 
 ### metadata_collect_query_timeout
 
@@ -518,6 +548,11 @@ ALTER USER 'jack' SET PROPERTIES ('session.query_timeout' = '600');
 * 描述：是否启用短路径查询。默认值：`false`。如果将其设置为 `true`，当[查询满足条件](../table_design/hybrid_table.md#查询数据)（用于评估是否为点查）：WHERE 子句的条件列必须包含所有主键列，并且运算符为 `=` 或者 `IN`，则该查询才会走短路径。
 * 默认值：false
 * 引入版本：v3.2.3
+
+### enable_spm_rewrite
+
+* 描述：是否启用 SQL Plan Manager (SPM) 查询改写功能。启用此功能后，StarRocks 将自动将相应的查询改写为绑定的查询计划，以提升查询性能和稳定性。
+* 默认值：false
 
 ### enable_spill
 
@@ -573,7 +608,7 @@ ALTER USER 'jack' SET PROPERTIES ('session.query_timeout' = '600');
 ### enable_lake_tablet_internal_parallel
 
 * 描述：是否开启存算分离集群内云原生表的 Tablet 并行 Scan.
-* 默认值：false
+* 默认值：true
 * 类型：Boolean
 * 引入版本：v3.3.0
 
@@ -613,6 +648,12 @@ ALTER USER 'jack' SET PROPERTIES ('session.query_timeout' = '600');
 * 默认值：true
 * 引入版本：v3.3.0
 
+### enable_file_pagecache
+
+* 描述：是否启用远端文件页面缓存。`true` 表示开启。页面缓存将解压缩后的 Parquet 页面数据存储在内存中。在后续查询中访问相同页面时，可以直接从缓存中获取数据，避免重复的 I/O 操作和解压缩。此功能与数据缓存协同工作并使用相同的内存模块。启用后，对于具有重复页面访问模式的工作负载，可以显著提高查询性能。
+* 默认值：true
+* 引入版本：v4.0
+
 ### enable_datacache_sharing
 
 - 描述：是否启用 Cache Sharing。设置为 `true` 可启用该功能。Cache Sharing 能够在本地缓存未命中时通过网络访问其他节点上的缓存数据，这有助于减少集群扩展过程中缓存失效造成的性能抖动。只有当 FE 参数 `enable_trace_historical_node` 设置为 `true` 时，此变量才会生效。
@@ -650,6 +691,22 @@ ALTER USER 'jack' SET PROPERTIES ('session.query_timeout' = '600');
 * 描述：是否开启导入自适应并行度。开启后 INSERT INTO 和 Broker Load 自动设置导入并行度，保持和 `pipeline_dop` 一致。新部署的 2.5 版本默认值为 `true`，从 2.4 版本升级上来为 `false`。
 * 默认值：false
 * 引入版本：v2.5
+
+### enable_bucket_aware_execution_on_lake
+
+* 描述：是否针对数据湖（如 Iceberg 表）查询启用 Bucket-aware 执行。启用后，系统通过利用分桶信息来优化查询执行，减少数据 Shuffle 并提高性能。此优化对分桶表的 Join 和 Aggregation 特别有效。
+* 默认值：true
+* 数据类型：Boolean
+* 引入版本：v4.0
+
+### lake_bucket_assign_mode
+
+* 描述：数据湖表查询的分桶分配模式。此变量控制系统执行查询期间启用 Bucket-aware 执行时如何将分桶分配给工作节点。有效值：
+  * `balance`：在工作节点间均匀分配分桶以实现负载均衡，以获取更好的性能。
+  * `elastic`：使用一致性哈希将分桶分配给工作节点，可以在弹性环境中提供更好的负载分配。
+* 默认值：balance
+* 数据类型：String
+* 引入版本：v4.0
 
 ### enable_pipeline_engine
 
@@ -933,7 +990,13 @@ ALTER USER 'jack' SET PROPERTIES ('session.query_timeout' = '600');
 
 ### pipeline_dop
 
-* 描述：一个 Pipeline 实例的并行数量。可通过设置实例的并行数量调整查询并发度。默认值为 0，即系统自适应调整每个 pipeline 的并行度。您也可以设置为大于 0 的数值，通常为 BE 节点 CPU 物理核数的一半。从 3.0 版本开始，支持根据查询并发度自适应调节 `pipeline_dop`。
+* 描述：一个 Pipeline 实例的并行数量。可通过设置实例的并行数量调整查询并发度。默认值为 0，即系统自适应调整每个 pipeline 的并行度。该变量还控制着 OLAP 表上导入作业的并行度。您也可以设置为大于 0 的数值，通常为 BE 节点 CPU 物理核数的一半。从 3.0 版本开始，支持根据查询并发度自适应调节 `pipeline_dop`。
+* 默认值：0
+* 类型：Int
+
+### pipeline_sink_dop
+
+* 描述：用于向 Iceberg 表、Hive 表导入数据以及通过 INSERT INTO FILES() 导出数据的 Sink 并行数量。该参数用于调整这些导入作业的并发性。默认值为 0，即系统自适应调整并行度。您也可以将此变量设置为大于 0 的值。
 * 默认值：0
 * 类型：Int
 
@@ -1224,3 +1287,45 @@ MySQL 服务器的版本，取值等于 FE 参数 `mysql_server_version`。
 
 * 描述：设置通过 Hive Catalog 读取 ORC 文件时，列的对应方式。默认值是 `false`，即按照 Hive 表中列的顺序对应。如果设置为 `true`，则按照列名称对应。
 * 引入版本：v3.1.10
+
+### enable_phased_scheduler
+
+* 描述: 是否启用多阶段调度。当启用多阶段调度时，系统将根据 Fragment 之间的依赖关系进行调度。例如，系统将首先调度 Shuffle Join 的 Build Side Fragment ，然后调度 Probe Side Fragment （注意，与分阶段调度不同，多阶段调度仍处于 MPP 执行模式下）。启用多阶段调度可显著降低大量 UNION ALL 查询的内存使用量。
+* 默认值: false
+* 引入版本: v3.3
+
+### phased_scheduler_max_concurrency
+
+* 描述: 多阶段调度器调度 Leaf Node Fragment 的并发度。例如，默认值表示在大量 UNION ALL Scan 查询中，最多允许同时调度两个 Scan Fragment。
+* 默认值: 2
+* 引入版本: v3.3
+
+### enable_wait_dependent_event
+
+* 描述: 在同一 Fragment 内，Pipeline 是否等待依赖的 Operator 完成执行后再继续执行。例如，在 Left Join 查询中，当启用此功能时，Probe Side Operator 会在 Build Side Operator 完成执行后再开始执行。启用此功能可减少内存使用，但可能增加查询延迟。然而，对于在CTE中重用的查询，启用此功能可能增加内存使用。
+* 默认值: false
+* 引入版本: v3.3
+
+### enable_topn_runtime_filter
+
+* 描述: 是否启用 TopN Runtime Filter。如果启用此功能，对于 ORDER BY LIMIT 查询，将动态构建一个 Runtime Filter 并将其下推到 Scan 阶段进行过滤。
+* 默认值: true
+* 引入版本: v3.3
+
+### enable_partition_hash_join
+
+* 描述: 是否启用自适应 Partition Hash Join。
+* 默认值: true
+* 引入版本: v3.4
+
+### spill_enable_direct_io
+
+* 描述: 是否在 Spill 读写文件时跳过 Page Cache。如果启用此功能，Spill 将使用直接 I/O 模式直接读写文件。直接 I/O 模式可以减少对操作系统 Page Cache 的影响，但可能会导致磁盘读写时间增加。
+* 默认值: false
+* 引入版本: v3.4
+
+### spill_enable_compaction
+
+* 描述: 是否对 Spill 小文件启用 Compaction。启用此功能后，可减少聚合和排序操作的内存使用量。
+* 默认值: true
+* 引入版本: v3.4

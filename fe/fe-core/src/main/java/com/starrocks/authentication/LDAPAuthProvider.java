@@ -14,10 +14,10 @@
 
 package com.starrocks.authentication;
 
+import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
+import com.starrocks.catalog.UserIdentity;
 import com.starrocks.common.util.NetUtils;
-import com.starrocks.qe.ConnectContext;
-import com.starrocks.sql.ast.UserIdentity;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -28,6 +28,7 @@ import java.util.Hashtable;
 import java.util.Optional;
 import javax.naming.Context;
 import javax.naming.NamingEnumeration;
+import javax.naming.PartialResultException;
 import javax.naming.directory.DirContext;
 import javax.naming.directory.InitialDirContext;
 import javax.naming.directory.SearchControls;
@@ -70,7 +71,7 @@ public class LDAPAuthProvider implements AuthenticationProvider {
     }
 
     @Override
-    public void authenticate(ConnectContext context, UserIdentity userIdentity, byte[] authResponse)
+    public void authenticate(AccessControlContext authContext, UserIdentity userIdentity, byte[] authResponse)
             throws AuthenticationException {
         //clear password terminate string
         byte[] clearPassword = authResponse;
@@ -79,11 +80,17 @@ public class LDAPAuthProvider implements AuthenticationProvider {
         }
 
         try {
+            String distinguishedName;
             if (!Strings.isNullOrEmpty(ldapUserDN)) {
-                checkPassword(ldapUserDN, new String(clearPassword, StandardCharsets.UTF_8));
+                distinguishedName = ldapUserDN;
             } else {
-                checkPasswordByRoot(userIdentity.getUser(), new String(clearPassword, StandardCharsets.UTF_8));
+                distinguishedName = findUserDNByRoot(userIdentity.getUser());
             }
+            Preconditions.checkNotNull(distinguishedName);
+            checkPassword(distinguishedName, new String(clearPassword, StandardCharsets.UTF_8));
+
+            // set distinguished name to auth context
+            authContext.setDistinguishedName(distinguishedName);
         } catch (Exception e) {
             LOG.warn("check password failed for user: {}", userIdentity.getUser(), e);
             throw new AuthenticationException(e.getMessage());
@@ -110,7 +117,7 @@ public class LDAPAuthProvider implements AuthenticationProvider {
     }
 
     //bind to ldap server to check password
-    public void checkPassword(String dn, String password) throws Exception {
+    protected void checkPassword(String dn, String password) throws Exception {
         if (Strings.isNullOrEmpty(password)) {
             throw new AuthenticationException("empty password is not allowed for simple authentication");
         }
@@ -142,8 +149,8 @@ public class LDAPAuthProvider implements AuthenticationProvider {
 
     //1. bind ldap server by root dn
     //2. search user
-    //3. if match exactly one, check password
-    public void checkPasswordByRoot(String user, String password) throws Exception {
+    //3. if match exactly one, return the user's actual DN
+    protected String findUserDNByRoot(String user) throws Exception {
         if (Strings.isNullOrEmpty(ldapBindRootPwd)) {
             throw new AuthenticationException("empty password is not allowed for simple authentication");
         }
@@ -178,8 +185,9 @@ public class LDAPAuthProvider implements AuthenticationProvider {
 
             String userDN = null;
             int matched = 0;
-            for (; ; ) {
-                if (results.hasMore()) {
+
+            try {
+                while (results.hasMore()) {
                     matched++;
                     if (matched > 1) {
                         throw new AuthenticationException("searched more than one entry from ldap server for user " + user);
@@ -187,16 +195,16 @@ public class LDAPAuthProvider implements AuthenticationProvider {
 
                     SearchResult result = results.next();
                     userDN = result.getNameInNamespace();
-                } else {
-                    break;
                 }
+            } catch (PartialResultException e) {
+                LOG.warn("ldap search partial result exception", e);
             }
 
             if (matched != 1) {
                 throw new AuthenticationException("ldap search matched user count " + matched);
             }
 
-            checkPassword(userDN, password);
+            return userDN;
         } finally {
             if (ctx != null) {
                 try {

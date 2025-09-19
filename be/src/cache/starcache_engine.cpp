@@ -27,7 +27,7 @@
 
 namespace starrocks {
 
-Status StarCacheEngine::init(const CacheOptions& options) {
+Status StarCacheEngine::init(const DiskCacheOptions& options) {
     starcache::CacheOptions opt;
     opt.mem_quota_bytes = options.mem_space_size;
     for (auto& dir : options.dir_spaces) {
@@ -199,6 +199,10 @@ Status StarCacheEngine::update_disk_spaces(const std::vector<DirSpace>& spaces) 
     Status st = to_status(_cache->update_disk_spaces(disk_spaces));
     _refresh_quota();
     return st;
+}
+
+Status StarCacheEngine::update_inline_cache_count_limit(int32_t limit) {
+    return to_status(_cache->update_inline_cache_count_limit(limit));
 }
 
 const StarCacheMetrics StarCacheEngine::starcache_metrics(int level) const {

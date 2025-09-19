@@ -15,8 +15,8 @@
 package com.starrocks.connector.paimon;
 
 import com.google.common.collect.Lists;
-import com.starrocks.analysis.BinaryType;
 import com.starrocks.catalog.Type;
+import com.starrocks.sql.ast.expression.BinaryType;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CastOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
@@ -365,7 +365,7 @@ public class PaimonPredicateConverterTest {
         result = CONVERTER.convert(new BinaryPredicateOperator(BinaryType.EQ, cast8, stringTime));
         Assertions.assertTrue(result instanceof LeafPredicate);
         LeafPredicate leafPredicate8 = (LeafPredicate) result;
-        Assertions.assertEquals(1735660800000L, ((Timestamp) (leafPredicate8.literals().get(0))).getMillisecond());
+        Assertions.assertEquals(1735689600000L, ((Timestamp) (leafPredicate8.literals().get(0))).getMillisecond());
         // smallInt to string
         ConstantOperator si = ConstantOperator.createSmallInt((short) 200);
         CastOperator cast9 = new CastOperator(Type.VARCHAR, F1);

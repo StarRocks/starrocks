@@ -36,8 +36,6 @@ package com.starrocks.load.loadv2;
 
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
-import com.starrocks.analysis.BrokerDesc;
-import com.starrocks.analysis.LabelName;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.LocalTablet;
@@ -51,7 +49,7 @@ import com.starrocks.catalog.Replica;
 import com.starrocks.catalog.ResourceMgr;
 import com.starrocks.catalog.SparkResource;
 import com.starrocks.catalog.Type;
-import com.starrocks.common.AnalysisException;
+import com.starrocks.catalog.UserIdentity;
 import com.starrocks.common.DataQualityException;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ExceptionChecker;
@@ -63,16 +61,15 @@ import com.starrocks.lake.LakeTable;
 import com.starrocks.lake.LakeTablet;
 import com.starrocks.load.EtlJobType;
 import com.starrocks.load.EtlStatus;
-import com.starrocks.load.loadv2.LoadJob.LoadJobStateUpdateInfo;
-import com.starrocks.load.loadv2.SparkLoadJob.SparkLoadJobStateUpdateInfo;
 import com.starrocks.load.loadv2.etl.EtlJobConfig;
 import com.starrocks.qe.ConnectContext;
-import com.starrocks.qe.OriginStatement;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.BrokerDesc;
 import com.starrocks.sql.ast.DataDescription;
+import com.starrocks.sql.ast.LabelName;
 import com.starrocks.sql.ast.LoadStmt;
+import com.starrocks.sql.ast.OriginStatement;
 import com.starrocks.sql.ast.ResourceDesc;
-import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.task.AgentBatchTask;
 import com.starrocks.task.AgentTaskExecutor;
 import com.starrocks.task.LeaderTaskExecutor;
@@ -91,12 +88,6 @@ import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
-import java.io.DataInputStream;
-import java.io.DataOutputStream;
-import java.io.File;
-import java.io.FileInputStream;
-import java.io.FileOutputStream;
-import java.io.IOException;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -212,7 +203,6 @@ public class SparkLoadJobTest {
 
         try {
             Assertions.assertTrue(resource.getSparkConfigs().isEmpty());
-            resourceDesc.analyze();
             BulkLoadJob bulkLoadJob = BulkLoadJob.fromLoadStmt(loadStmt, null);
             SparkLoadJob sparkLoadJob = (SparkLoadJob) bulkLoadJob;
             // check member
@@ -230,7 +220,7 @@ public class SparkLoadJobTest {
             SparkResource sparkResource = Deencapsulation.getField(sparkLoadJob, "sparkResource");
             Assertions.assertTrue(sparkResource.getSparkConfigs().containsKey("spark.executor.memory"));
             Assertions.assertEquals("1g", sparkResource.getSparkConfigs().get("spark.executor.memory"));
-        } catch (DdlException | AnalysisException e) {
+        } catch (DdlException e) {
             Assertions.fail(e.getMessage());
         }
     }
@@ -575,81 +565,6 @@ public class SparkLoadJobTest {
         job.state = JobState.FINISHED;
         Set<Long> totalTablets = Deencapsulation.invoke(job, "submitPushTasks");
         Assertions.assertTrue(totalTablets.isEmpty());
-    }
-
-    @Test
-    public void testStateUpdateInfoPersist() throws IOException {
-        String fileName = "./testStateUpdateInfoPersistFile";
-        File file = new File(fileName);
-
-        // etl state
-        long id = 1L;
-        JobState state = JobState.ETL;
-        long etlStartTimestamp = 1592366666L;
-        long loadStartTimestamp = -1;
-        Map<String, Pair<String, Long>> tabletMetaToFileInfo = Maps.newHashMap();
-
-        if (file.exists()) {
-            file.delete();
-        }
-        file.createNewFile();
-        DataOutputStream out = new DataOutputStream(new FileOutputStream(file));
-        SparkLoadJobStateUpdateInfo info = new SparkLoadJobStateUpdateInfo(
-                id, state, transactionId, sparkLoadAppHandle, etlStartTimestamp, appId, etlOutputPath,
-                loadStartTimestamp, tabletMetaToFileInfo);
-        info.write(out);
-        out.flush();
-        out.close();
-
-        DataInputStream in = new DataInputStream(new FileInputStream(file));
-        SparkLoadJobStateUpdateInfo replayedInfo = (SparkLoadJobStateUpdateInfo) LoadJobStateUpdateInfo.read(in);
-        Assertions.assertEquals(id, replayedInfo.getJobId());
-        Assertions.assertEquals(state, replayedInfo.getState());
-        Assertions.assertEquals(transactionId, replayedInfo.getTransactionId());
-        Assertions.assertEquals(loadStartTimestamp, replayedInfo.getLoadStartTimestamp());
-        Assertions.assertEquals(etlStartTimestamp, replayedInfo.getEtlStartTimestamp());
-        Assertions.assertEquals(appId, replayedInfo.getAppId());
-        Assertions.assertEquals(etlOutputPath, replayedInfo.getEtlOutputPath());
-        Assertions.assertTrue(replayedInfo.getTabletMetaToFileInfo().isEmpty());
-        in.close();
-
-        // loading state
-        state = JobState.LOADING;
-        loadStartTimestamp = 1592388888L;
-        String tabletMeta = String.format("%d.%d.%d.0.%d", tableId, partitionId, indexId, schemaHash);
-        String filePath =
-                String.format("hdfs://127.0.0.1:10000/starrocks/jobs/1/label6/9/V1.label6.%d.%d.%d.0.%d.parquet",
-                        tableId, partitionId, indexId, schemaHash);
-        long fileSize = 6L;
-        tabletMetaToFileInfo.put(tabletMeta, Pair.create(filePath, fileSize));
-
-        if (file.exists()) {
-            file.delete();
-        }
-        file.createNewFile();
-        out = new DataOutputStream(new FileOutputStream(file));
-        info = new SparkLoadJobStateUpdateInfo(id, state, transactionId, sparkLoadAppHandle, etlStartTimestamp,
-                appId, etlOutputPath, loadStartTimestamp, tabletMetaToFileInfo);
-        info.write(out);
-        out.flush();
-        out.close();
-
-        in = new DataInputStream(new FileInputStream(file));
-        replayedInfo = (SparkLoadJobStateUpdateInfo) LoadJobStateUpdateInfo.read(in);
-        Assertions.assertEquals(state, replayedInfo.getState());
-        Assertions.assertEquals(loadStartTimestamp, replayedInfo.getLoadStartTimestamp());
-        Map<String, Pair<String, Long>> replayedTabletMetaToFileInfo = replayedInfo.getTabletMetaToFileInfo();
-        Assertions.assertEquals(1, replayedTabletMetaToFileInfo.size());
-        Assertions.assertTrue(replayedTabletMetaToFileInfo.containsKey(tabletMeta));
-        Pair<String, Long> replayedFileInfo = replayedTabletMetaToFileInfo.get(tabletMeta);
-        Assertions.assertEquals(filePath, replayedFileInfo.first);
-        Assertions.assertEquals(fileSize, (long) replayedFileInfo.second);
-        in.close();
-
-        // delete file
-        if (file.exists()) {
-            file.delete();
-        }
     }
 
     @Test

@@ -140,6 +140,9 @@ Status JDBCScanner::_init_jdbc_scan_context(RuntimeState* state) {
     // use query timeout or default value of HikariConfig
     int connection_timeout_ms =
             state->query_options().__isset.query_timeout ? state->query_options().query_timeout * 1000 : 30 * 1000;
+    // some driver (like sqlserver) needs connection timeout less than 65536
+    connection_timeout_ms = std::max(connection_timeout_ms, 30 * 1000);
+    connection_timeout_ms = std::min(connection_timeout_ms, 65535 * 1000);
     auto scan_ctx = env->NewObject(scan_context_cls, constructor, driver_class_name, jdbc_url, user, passwd, sql,
                                    statement_fetch_size, connection_pool_size, minimum_idle_connections,
                                    idle_timeout_ms, connection_timeout_ms);

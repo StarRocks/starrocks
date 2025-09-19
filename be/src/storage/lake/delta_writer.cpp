@@ -29,7 +29,6 @@
 #include "runtime/mem_tracker.h"
 #include "storage/delta_writer.h"
 #include "storage/lake/filenames.h"
-#include "storage/lake/load_spill_block_manager.h"
 #include "storage/lake/meta_file.h"
 #include "storage/lake/metacache.h"
 #include "storage/lake/pk_tablet_writer.h"
@@ -38,6 +37,7 @@
 #include "storage/lake/tablet_manager.h"
 #include "storage/lake/tablet_writer.h"
 #include "storage/lake/update_manager.h"
+#include "storage/load_spill_block_manager.h"
 #include "storage/memtable.h"
 #include "storage/memtable_sink.h"
 #include "storage/primary_key_encoder.h"
@@ -90,7 +90,7 @@ public:
                              const PartialUpdateMode& partial_update_mode,
                              const std::map<string, string>* column_to_expr_value, PUniqueId load_id,
                              RuntimeProfile* profile, BundleWritableFileContext* bundle_writable_file_context,
-                             GlobalDictByNameMaps* global_dicts)
+                             GlobalDictByNameMaps* global_dicts, bool is_multi_statements_txn)
             : _tablet_manager(tablet_manager),
               _tablet_id(tablet_id),
               _txn_id(txn_id),
@@ -108,7 +108,8 @@ public:
               _load_id(std::move(load_id)),
               _profile(profile),
               _bundle_writable_file_context(bundle_writable_file_context),
-              _global_dicts(global_dicts) {}
+              _global_dicts(global_dicts),
+              _is_multi_statements_txn(is_multi_statements_txn) {}
 
     ~DeltaWriterImpl() = default;
 
@@ -253,6 +254,7 @@ private:
     BundleWritableFileContext* _bundle_writable_file_context = nullptr;
 
     GlobalDictByNameMaps* _global_dicts = nullptr;
+    bool _is_multi_statements_txn = false;
 };
 
 bool DeltaWriterImpl::is_immutable() const {
@@ -307,9 +309,11 @@ Status DeltaWriterImpl::build_schema_and_writer() {
             !(_tablet_schema->keys_type() == KeysType::PRIMARY_KEYS &&
               (!_merge_condition.empty() || is_partial_update() || _tablet_schema->has_separate_sort_key()))) {
             if (_load_spill_block_mgr == nullptr || !_load_spill_block_mgr->is_initialized()) {
-                _load_spill_block_mgr =
-                        std::make_unique<LoadSpillBlockManager>(UniqueId(_load_id).to_thrift(), _tablet_id, _txn_id,
-                                                                _tablet_manager->tablet_root_location(_tablet_id));
+                _load_spill_block_mgr = std::make_unique<LoadSpillBlockManager>(
+                        UniqueId(_load_id).to_thrift(),
+                        UniqueId(_tablet_id, _txn_id)
+                                .to_thrift(), // use tablet id + txn id to generate fragment instance id
+                        _tablet_manager->tablet_root_location(_tablet_id));
                 RETURN_IF_ERROR(_load_spill_block_mgr->init());
             }
             // Init SpillMemTableSink
@@ -604,6 +608,9 @@ StatusOr<TxnLogPtr> DeltaWriterImpl::finish_with_txnlog(DeltaWriterFinishMode mo
     txn_log->set_tablet_id(_tablet_id);
     txn_log->set_txn_id(_txn_id);
     txn_log->set_partition_id(_partition_id);
+    if (_is_multi_statements_txn) {
+        *txn_log->mutable_load_id() = _load_id;
+    }
     auto op_write = txn_log->mutable_op_write();
 
     for (auto& f : _tablet_writer->files()) {
@@ -620,6 +627,12 @@ StatusOr<TxnLogPtr> DeltaWriterImpl::finish_with_txnlog(DeltaWriterFinishMode mo
         } else {
             return Status::InternalError(fmt::format("unknown file {}", f.path));
         }
+    }
+    for (auto& sst : _tablet_writer->ssts()) {
+        auto* file_meta = op_write->add_ssts();
+        file_meta->set_name(sst.path);
+        file_meta->set_size(sst.size.value());
+        file_meta->set_encryption_meta(sst.encryption_meta);
     }
     op_write->mutable_rowset()->set_num_rows(_tablet_writer->num_rows());
     op_write->mutable_rowset()->set_data_size(_tablet_writer->data_size());
@@ -695,9 +708,18 @@ StatusOr<TxnLogPtr> DeltaWriterImpl::finish_with_txnlog(DeltaWriterFinishMode mo
         FAIL_POINT_TRIGGER_ASSIGN_STATUS_OR_DEFAULT(load_commit_txn, res, COMMIT_TXN_FP_ACTION(_txn_id, _tablet_id),
                                                     tablet.put_txn_log(txn_log));
         RETURN_IF_ERROR(res);
+        VLOG(2) << "Wrote txn log for tablet=" << _tablet_id << " txn=" << _txn_id
+                << " load_id=" << UniqueId(_load_id).to_string();
     } else {
-        auto cache_key = _tablet_manager->txn_log_location(_tablet_id, _txn_id);
-        _tablet_manager->metacache()->cache_txn_log(cache_key, txn_log);
+        if (_is_multi_statements_txn) {
+            auto cache_key = _tablet_manager->txn_log_location(_tablet_id, _txn_id, _load_id);
+            _tablet_manager->metacache()->cache_txn_log(cache_key, txn_log);
+        } else {
+            auto cache_key = _tablet_manager->txn_log_location(_tablet_id, _txn_id);
+            _tablet_manager->metacache()->cache_txn_log(cache_key, txn_log);
+        }
+        VLOG(2) << "Cached txn log for tablet=" << _tablet_id << " txn=" << _txn_id
+                << " load_id=" << UniqueId(_load_id).to_string();
     }
     auto put_txn_log_ts = watch.elapsed_time();
     auto commit_txn_duration_ns = put_txn_log_ts - prepare_txn_log_ts;
@@ -713,6 +735,7 @@ StatusOr<TxnLogPtr> DeltaWriterImpl::finish_with_txnlog(DeltaWriterFinishMode mo
     ADD_COUNTER_RELAXED(_stats.finish_pk_preload_time_ns, pk_preload_duration_ns);
     StarRocksMetrics::instance()->delta_writer_pk_preload_duration_us.increment(pk_preload_duration_ns /
                                                                                 NANOSECS_PER_USEC);
+    VLOG(2) << "txn_log: " << txn_log->DebugString();
     return txn_log;
 }
 
@@ -975,7 +998,7 @@ StatusOr<DeltaWriterBuilder::DeltaWriterPtr> DeltaWriterBuilder::build() {
     auto impl = new DeltaWriterImpl(_tablet_mgr, _tablet_id, _txn_id, _partition_id, _slots, _merge_condition,
                                     _miss_auto_increment_column, _table_id, _immutable_tablet_size, _mem_tracker,
                                     _max_buffer_size, _schema_id, _partial_update_mode, _column_to_expr_value, _load_id,
-                                    _profile, _bundle_writable_file_context, _global_dicts);
+                                    _profile, _bundle_writable_file_context, _global_dicts, _is_multi_statements_txn);
     return std::make_unique<DeltaWriter>(impl);
 }
 

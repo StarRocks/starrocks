@@ -88,8 +88,8 @@ The main frontend module containing all core database functionality:
 - `fe-core/src/main/java/com/starrocks/http/` - HTTP API endpoints
 
 ### Other Frontend Modules
-- `fe-common/` - Common frontend utilities and shared code
-- `plugin-common/` - Plugin framework common components
+- `fe/fe-testing/` - Common test utilities
+- `fe/fe-utils/` - Common utilities and helpers
 - `spark-dpp/` - Spark data preprocessing integration
 - `hive-udf/` - Hive UDF compatibility layer
 

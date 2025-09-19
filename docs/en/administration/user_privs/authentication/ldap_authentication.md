@@ -33,11 +33,31 @@ If you wish to authenticate users by means of StarRocks retrieving them directly
 authentication_ldap_simple_bind_base_dn =
 # Add the name of the attribute that identifies the user in the LDAP object. Default: uid.
 authentication_ldap_simple_user_search_attr =
-# Add the DN of the administrator account to be used when retrieving users.
+# Add the admin DN for retrieving users.
 authentication_ldap_simple_bind_root_dn =
-# Add the password of theAdministrator account to be used when retrieving users.
+# Add the admin password for retrieving users.
 authentication_ldap_simple_bind_root_pwd =
 ```
+
+## DN Matching Mechanism
+
+Starting from v3.5.0, StarRocks supports recording and passing user Distinguished Name (DN) information during LDAP authentication to provide more accurate group resolution.
+
+### How it Works
+
+1. **Authentication Phase**: LDAPAuthProvider records both pieces of information after successful user authentication:
+   - Login username (for traditional group matching)
+   - User's complete DN (for DN-based group matching)
+
+2. **Group Resolution Phase**: LDAPGroupProvider determines the matching strategy based on the `ldap_user_search_attr` parameter configuration:
+   - **When `ldap_user_search_attr` is configured**, it uses username as the key for group matching.
+   - **When `ldap_user_search_attr` is not configured**, it uses DN as the key for group matching.
+
+### Use Cases
+
+- **Traditional LDAP Environment**: Group members use simple usernames (such as `cn` attribute). Administrators need to configure `ldap_user_search_attr`.
+- **Microsoft AD Environment**: Group members may lack username attributes. `ldap_user_search_attr` cannot be configured. The system will use DN directly for matching.
+- **Mixed Environment**: Flexible switching between both matching methods is supported.
 
 ## Create a user with LDAP
 
@@ -76,29 +96,28 @@ Add `--default-auth mysql_clear_password --enable-cleartext-plugin` when executi
 mysql -utom -P8030 -h127.0.0.1 -p --default-auth mysql_clear_password --enable-cleartext-plugin
 ```
 
-### Connect from JDBC client with LDAP
+### Connect from JDBC/ODBC client with LDAP
 
 - **JDBC**
 
-Since JDBC’s default MysqlClearPasswordPlugin requires  SSL transport, a custom plugin is required.
+Note that when you use JDBC connections, you must enable SSL on the server side. For more information, see [SSL Authentication](../ssl_authentication.md).
+
+JDBC 5:
 
 ```java
-public class MysqlClearPasswordPluginWithoutSSL extends MysqlClearPasswordPlugin {
-    @Override  
-    public boolean requiresConfidentiality() {
-        return false;
-    }
-}
+Properties properties = new Properties();
+properties.put("authenticationPlugins", "com.mysql.jdbc.authentication.MysqlClearPasswordPlugin");
+properties.put("defaultAuthenticationPlugin", "com.mysql.jdbc.authentication.MysqlClearPasswordPlugin");
+properties.put("disabledAuthenticationPlugins", "com.mysql.jdbc.authentication.MysqlNativePasswordPlugin");
 ```
 
-Once connected, configure the custom plugin into the property.
+JDBC 8:
 
 ```java
-...
-Properties properties = new Properties();// replace xxx.xxx.xxx to your package name
-properties.put("authenticationPlugins", "xxx.xxx.xxx.MysqlClearPasswordPluginWithoutSSL");
-properties.put("defaultAuthenticationPlugin", "xxx.xxx.xxx.MysqlClearPasswordPluginWithoutSSL");
-properties.put("disabledAuthenticationPlugins", "com.mysql.jdbc.authentication.MysqlNativePasswordPlugin");DriverManager.getConnection(url, properties);
+Properties properties = new Properties();
+properties.put("authenticationPlugins", "com.mysql.cj.protocol.a.authentication.MysqlClearPasswordPlugin");
+properties.put("defaultAuthenticationPlugin", "com.mysql.cj.protocol.a.authentication.MysqlClearPasswordPlugin");
+properties.put("disabledAuthenticationPlugins", "com.mysql.cj.protocol.a.authentication.MysqlNativePasswordPlugin");
 ```
 
 - **ODBC**

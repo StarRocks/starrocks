@@ -15,20 +15,11 @@
 
 package com.starrocks.sql.ast;
 
-import com.google.common.collect.ImmutableList;
-import com.starrocks.analysis.RedirectStatus;
-import com.starrocks.analysis.TableRef;
-import com.starrocks.catalog.Column;
-import com.starrocks.catalog.ScalarType;
-import com.starrocks.qe.ConnectContext;
-import com.starrocks.qe.ShowResultSetMetaData;
+import com.starrocks.sql.ast.expression.TableRef;
 import com.starrocks.sql.parser.NodePosition;
 
 // ADMIN SHOW REPLICA DISTRIBUTION FROM db1.tbl1 PARTITION(p1, p2);
 public class AdminShowReplicaDistributionStmt extends ShowStmt {
-    public static final ImmutableList<String> TITLE_NAMES = new ImmutableList.Builder<String>()
-            .add("BackendId").add("ReplicaNum").add("Graph").add("Percent").build();
-
     private final TableRef tblRef;
 
     public AdminShowReplicaDistributionStmt(TableRef tblRef) {
@@ -57,25 +48,7 @@ public class AdminShowReplicaDistributionStmt extends ShowStmt {
     }
 
     @Override
-    public ShowResultSetMetaData getMetaData() {
-        ShowResultSetMetaData.Builder builder = ShowResultSetMetaData.builder();
-        for (String title : TITLE_NAMES) {
-            builder.addColumn(new Column(title, ScalarType.createVarchar(30)));
-        }
-        return builder.build();
-    }
-
-    @Override
-    public RedirectStatus getRedirectStatus() {
-        if (ConnectContext.get().getSessionVariable().getForwardToLeader()) {
-            return RedirectStatus.FORWARD_NO_SYNC;
-        } else {
-            return RedirectStatus.NO_FORWARD;
-        }
-    }
-
-    @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitAdminShowReplicaDistributionStatement(this, context);
+        return ((AstVisitorExtendInterface<R, C>) visitor).visitAdminShowReplicaDistributionStatement(this, context);
     }
 }

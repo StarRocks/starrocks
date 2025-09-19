@@ -18,9 +18,9 @@
 #include "column/map_column.h"
 #include "column/struct_column.h"
 #include "column/vectorized_fwd.h"
-#include "exprs/agg/agg_state_union.h"
 #include "exprs/agg/aggregate.h"
 #include "exprs/agg/aggregate_state_allocator.h"
+#include "exprs/agg/combinator/agg_state_union.h"
 #include "exprs/agg/factory/aggregate_resolver.hpp"
 #include "runtime/exec_env.h"
 #include "runtime/mem_pool.h"
@@ -53,7 +53,7 @@ template <typename ColumnType, typename StateType>
 class ReplaceAggregator final : public ValueColumnAggregator<ColumnType, StateType> {
 public:
     void aggregate_impl(int row, const ColumnPtr& src) override {
-        const auto* data = down_cast<const ColumnType*>(src.get())->get_data().data();
+        const auto* data = down_cast<const ColumnType*>(src.get())->immutable_data().data();
         this->data() = data[row];
     }
 

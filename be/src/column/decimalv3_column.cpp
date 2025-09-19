@@ -26,7 +26,9 @@ DecimalV3Column<T>::DecimalV3Column(size_t num_rows) {
 
 template <typename T>
 DecimalV3Column<T>::DecimalV3Column(int precision, int scale) : _precision(precision), _scale(scale) {
-    DCHECK(0 <= _scale && _scale <= _precision && _precision <= decimal_precision_limit<T>);
+    DCHECK(0 <= _scale && _scale <= _precision && _precision <= decimal_precision_limit<T>)
+            << "precision: " << _precision << ", scale: " << _scale
+            << ", decimal_precision_limit<T>: " << decimal_precision_limit<T>;
 }
 
 template <typename T>
@@ -60,20 +62,20 @@ int DecimalV3Column<T>::scale() const {
 
 template <typename T>
 void DecimalV3Column<T>::put_mysql_row_buffer(MysqlRowBuffer* buf, size_t idx, bool is_binary_protocol) const {
-    auto& data = this->get_data();
+    const auto data = this->immutable_data();
     auto s = DecimalV3Cast::to_string<T>(data[idx], _precision, _scale);
     buf->push_decimal(s);
 }
 
 template <typename T>
 std::string DecimalV3Column<T>::debug_item(size_t idx) const {
-    auto& data = this->get_data();
+    const auto data = this->immutable_data();
     return DecimalV3Cast::to_string<T>(data[idx], _precision, _scale);
 }
 
 template <typename T>
 void DecimalV3Column<T>::crc32_hash(uint32_t* hash, uint32_t from, uint32_t to) const {
-    const auto& data = this->get_data();
+    const auto data = this->immutable_data();
     // When decimal-v2 columns are used as distribution keys and users try to upgrade
     // decimal-v2 column to decimal-v3 by schema change, decimal128(27,9) shall be the
     // only acceptable target type, so keeping result of crc32_hash on type decimal128(27,9)
@@ -99,7 +101,7 @@ template <typename T>
 int64_t DecimalV3Column<T>::xor_checksum(uint32_t from, uint32_t to) const {
     // The XOR of DecimalV3Column
     // XOR all the decimals one by one
-    auto& data = this->get_data();
+    const auto data = this->immutable_data();
     int64_t xor_checksum = 0;
     const T* src = reinterpret_cast<const T*>(data.data());
 

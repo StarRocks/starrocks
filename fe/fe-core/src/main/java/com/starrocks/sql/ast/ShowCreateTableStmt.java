@@ -12,13 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.sql.ast;
 
-import com.starrocks.analysis.TableName;
-import com.starrocks.catalog.Column;
-import com.starrocks.catalog.ScalarType;
-import com.starrocks.qe.ShowResultSetMetaData;
+import com.starrocks.sql.ast.expression.TableName;
 import com.starrocks.sql.parser.NodePosition;
 
 // SHOW CREATE TABLE statement.
@@ -37,32 +33,6 @@ public class ShowCreateTableStmt extends ShowStmt {
             return value;
         }
     }
-
-    private static final ShowResultSetMetaData META_DATA =
-            ShowResultSetMetaData.builder()
-                    .addColumn(new Column("Table", ScalarType.createVarchar(20)))
-                    .addColumn(new Column("Create Table", ScalarType.createVarchar(30)))
-                    .build();
-
-    private static final ShowResultSetMetaData VIEW_META_DATA =
-            ShowResultSetMetaData.builder()
-                    .addColumn(new Column("View", ScalarType.createVarchar(20)))
-                    .addColumn(new Column("Create View", ScalarType.createVarchar(30)))
-                    .addColumn(new Column("character_set_client", ScalarType.createVarchar(30)))
-                    .addColumn(new Column("collation_connection", ScalarType.createVarchar(30)))
-                    .build();
-
-    private static final ShowResultSetMetaData CONNECTOR_VIEW_META_DATA =
-            ShowResultSetMetaData.builder()
-                    .addColumn(new Column("View", ScalarType.createVarchar(20)))
-                    .addColumn(new Column("Create View", ScalarType.createVarchar(30)))
-                    .build();
-
-    private static final ShowResultSetMetaData MATERIALIZED_VIEW_META_DATA =
-            ShowResultSetMetaData.builder()
-                    .addColumn(new Column("Materialized View", ScalarType.createVarchar(20)))
-                    .addColumn(new Column("Create Materialized View", ScalarType.createVarchar(30)))
-                    .build();
 
     private final TableName tbl;
     private final CreateTableType type;
@@ -93,25 +63,8 @@ public class ShowCreateTableStmt extends ShowStmt {
         return type;
     }
 
-    public static ShowResultSetMetaData getViewMetaData() {
-        return VIEW_META_DATA;
-    }
-
-    public static ShowResultSetMetaData getConnectorViewMetaData() {
-        return CONNECTOR_VIEW_META_DATA;
-    }
-
-    public static ShowResultSetMetaData getMaterializedViewMetaData() {
-        return MATERIALIZED_VIEW_META_DATA;
-    }
-
-    @Override
-    public ShowResultSetMetaData getMetaData() {
-        return META_DATA;
-    }
-
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitShowCreateTableStatement(this, context);
+        return ((AstVisitorExtendInterface<R, C>) visitor).visitShowCreateTableStatement(this, context);
     }
 }

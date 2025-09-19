@@ -14,7 +14,6 @@
 
 package com.starrocks.lake.snapshot;
 
-import com.starrocks.analysis.BrokerDesc;
 import com.starrocks.common.Config;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.fs.HdfsUtil;
@@ -24,7 +23,7 @@ import com.starrocks.persist.Storage;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.NodeMgr;
 import com.starrocks.server.StorageVolumeMgr;
-import com.starrocks.server.WarehouseManager;
+import com.starrocks.sql.ast.BrokerDesc;
 import com.starrocks.staros.StarMgrServer;
 import com.starrocks.system.Backend;
 import com.starrocks.system.ComputeNode;
@@ -214,24 +213,22 @@ public class RestoreClusterSnapshotMgr {
         }
 
         SystemInfoService systemInfoService = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
+        // Drop old backend nodes
         for (Backend be : systemInfoService.getIdToBackend().values()) {
             LOG.info("Drop old backend {}", be);
-            systemInfoService.dropBackend(be.getHost(), be.getHeartbeatPort(),
-                    WarehouseManager.DEFAULT_WAREHOUSE_NAME, "", false);
+            systemInfoService.dropBackend(be.getHost(), be.getHeartbeatPort(), null, null, false);
         }
 
         // Drop old compute nodes
         for (ComputeNode cn : systemInfoService.getIdComputeNode().values()) {
             LOG.info("Drop old compute node {}", cn);
-            systemInfoService.dropComputeNode(cn.getHost(), cn.getHeartbeatPort(),
-                    WarehouseManager.DEFAULT_WAREHOUSE_NAME, "");
+            systemInfoService.dropComputeNode(cn.getHost(), cn.getHeartbeatPort(), null, null);
         }
 
         // Add new compute nodes
         for (ClusterSnapshotConfig.ComputeNode cn : computeNodes) {
             LOG.info("Add new compute node {}", cn);
-            systemInfoService.addComputeNode(cn.getHost(), cn.getHeartbeatServicePort(),
-                    WarehouseManager.DEFAULT_WAREHOUSE_NAME, "");
+            systemInfoService.addComputeNode(cn.getHost(), cn.getHeartbeatServicePort(), cn.getWarehouse(), cn.getCNGroup());
         }
     }
 

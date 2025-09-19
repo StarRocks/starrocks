@@ -109,7 +109,7 @@ PROPERTIES
     "type" = "iceberg",
     MetastoreParams,
     StorageCredentialParams,
-    MetadataUpdateParams
+    MetadataRelatedParams
 )
 ```
 
@@ -465,32 +465,38 @@ If you choose AWS S3 as storage for your Iceberg cluster, take one of the follow
   "aws.s3.region" = "<aws_s3_region>"
   ```
 
+- To choose vended credential (supported from v4.0 onwards) with the REST catalog, configure `StorageCredentialParams` as follows:
+
+  ```SQL
+  "aws.s3.region" = "<aws_s3_region>"
+  ```
+
 `StorageCredentialParams` for AWS S3:
 
 ###### aws.s3.use_instance_profile
 
-Required: Yes
-Description:  Specifies whether to enable the instance profile-based authentication method and the assumed role-based authentication method. Valid values: `true` and `false`. Default value: `false`. 
+- Required: Yes
+- Description:  Specifies whether to enable the instance profile-based authentication method and the assumed role-based authentication method. Valid values: `true` and `false`. Default value: `false`. 
 
 ###### aws.s3.iam_role_arn
 
-Required: No
-Description: The ARN of the IAM role that has privileges on your AWS S3 bucket. If you use the assumed role-based authentication method to access AWS S3, you must specify this parameter.
+- Required: No
+- Description: The ARN of the IAM role that has privileges on your AWS S3 bucket. If you use the assumed role-based authentication method to access AWS S3, you must specify this parameter.
 
 ###### aws.s3.region
 
-Required: Yes
-Description:  The region in which your AWS S3 bucket resides. Example: `us-west-1`.
+- Required: Yes
+- Description:  The region in which your AWS S3 bucket resides. Example: `us-west-1`.
 
 ###### aws.s3.access_key
 
-Required: No
-Description: The access key of your IAM user. If you use the IAM user-based authentication method to access AWS S3, you must specify this parameter.
+- Required: No
+- Description: The access key of your IAM user. If you use the IAM user-based authentication method to access AWS S3, you must specify this parameter.
 
 ###### aws.s3.secret_key
 
-Required: No
-Description:  The secret key of your IAM user. If you use the IAM user-based authentication method to access AWS S3, you must specify this parameter.
+- Required: No
+- Description:  The secret key of your IAM user. If you use the IAM user-based authentication method to access AWS S3, you must specify this parameter.
 
 For information about how to choose an authentication method for accessing AWS S3 and how to configure an access control policy in AWS IAM Console, see [Authentication parameters for accessing AWS S3](../../../integrations/authenticate_to_aws_resources.md#authentication-parameters-for-accessing-aws-s3).
 
@@ -522,28 +528,28 @@ If you choose an S3-compatible storage system, such as MinIO, as storage for you
 
 ###### aws.s3.enable_ssl
 
-Required: Yes
-Description:  Specifies whether to enable SSL connection.<br />Valid values: `true` and `false`. Default value: `true`.
+- Required: Yes
+- Description:  Specifies whether to enable SSL connection.<br />Valid values: `true` and `false`. Default value: `true`.
 
 ###### aws.s3.enable_path_style_access
 
-Required: Yes
-Description: Specifies whether to enable path-style access.<br />Valid values: `true` and `false`. Default value: `false`. For MinIO, you must set the value to `true`.<br />Path-style URLs use the following format: `https://s3.<region_code>.amazonaws.com/<bucket_name>/<key_name>`. For example, if you create a bucket named `DOC-EXAMPLE-BUCKET1` in the US West (Oregon) Region, and you want to access the `alice.jpg` object in that bucket, you can use the following path-style URL: `https://s3.us-west-2.amazonaws.com/DOC-EXAMPLE-BUCKET1/alice.jpg`.
+- Required: Yes
+- Description: Specifies whether to enable path-style access.<br />Valid values: `true` and `false`. Default value: `false`. For MinIO, you must set the value to `true`.<br />Path-style URLs use the following format: `https://s3.<region_code>.amazonaws.com/<bucket_name>/<key_name>`. For example, if you create a bucket named `DOC-EXAMPLE-BUCKET1` in the US West (Oregon) Region, and you want to access the `alice.jpg` object in that bucket, you can use the following path-style URL: `https://s3.us-west-2.amazonaws.com/DOC-EXAMPLE-BUCKET1/alice.jpg`.
 
 ###### aws.s3.endpoint
 
-Required: Yes
-Description: The endpoint that is used to connect to your S3-compatible storage system instead of AWS S3.
+- Required: Yes
+- Description: The endpoint that is used to connect to your S3-compatible storage system instead of AWS S3.
 
 ###### aws.s3.access_key
 
-Required: Yes
-Description: The access key of your IAM user.
+- Required: Yes
+- Description: The access key of your IAM user.
 
 ###### aws.s3.secret_key
 
-Required: Yes
-Description: The secret key of your IAM user.
+- Required: Yes
+- Description: The secret key of your IAM user.
 
 </TabItem>
 
@@ -572,34 +578,36 @@ If you choose Blob Storage as storage for your Iceberg cluster, take one of the 
   "azure.blob.sas_token" = "<storage_account_SAS_token>"
   ```
 
+- To choose REST catalog with vended credential (supported from v4.0 onwards), you do not need to configure `StorageCredentialParams`.
+
 `StorageCredentialParams` for Microsoft Azure:
 
 ###### azure.blob.storage_account
 
-Required: Yes
-Description: The username of your Blob Storage account.
+- Required: Yes
+- Description: The username of your Blob Storage account.
 
 ###### azure.blob.shared_key
 
-Required: Yes
-Description: The shared key of your Blob Storage account.
+- Required: Yes
+- Description: The shared key of your Blob Storage account.
 
 ###### azure.blob.account_name
 
-Required: Yes
-Description: The username of your Blob Storage account.
+- Required: Yes
+- Description: The username of your Blob Storage account.
 
 ###### azure.blob.container
 
-Required: Yes
-Description: The name of the blob container that stores your data.
+- Required: Yes
+- Description: The name of the blob container that stores your data.
 
 ###### azure.blob.sas_token
 
-Required: Yes
-Description: The SAS token that is used to access your Blob Storage account.
+- Required: Yes
+- Description: The SAS token that is used to access your Blob Storage account.
 
-###### Azure Data Lake Storage Gen1
+##### Azure Data Lake Storage Gen1
 
 If you choose Data Lake Storage Gen1 as storage for your Iceberg cluster, take one of the following actions:
 
@@ -619,7 +627,7 @@ Or:
   "azure.adls1.oauth2_endpoint" = "<OAuth_2.0_authorization_endpoint_v2>"
   ```
 
-###### Azure Data Lake Storage Gen2
+##### Azure Data Lake Storage Gen2
 
 If you choose Data Lake Storage Gen2 as storage for your Iceberg cluster, take one of the following actions:
 
@@ -649,6 +657,8 @@ If you choose Data Lake Storage Gen2 as storage for your Iceberg cluster, take o
   "azure.adls2.oauth2_client_secret" = "<service_principal_client_secret>",
   "azure.adls2.oauth2_client_endpoint" = "<service_principal_client_endpoint>"
   ```
+
+- To choose REST catalog with vended credential (supported from v4.0 onwards), you do not need to configure `StorageCredentialParams`.
 
 </TabItem>
 
@@ -692,31 +702,33 @@ If you choose Google GCS as storage for your Iceberg cluster, take one of the fo
     "gcp.gcs.impersonation_service_account" = "<data_google_service_account_email>"
     ```
 
+- To choose REST catalog with vended credential (supported from v4.0 onwards), you do not need to configure `StorageCredentialParams`.
+
 `StorageCredentialParams` for Google GCS:
 
 ###### gcp.gcs.service_account_email
 
-Default value: ""
-Example: "[user@hello.iam.gserviceaccount.com](mailto:user@hello.iam.gserviceaccount.com)"
-Description: The email address in the JSON file generated at the creation of the service account.
+- Default value: ""
+- Example: "[user@hello.iam.gserviceaccount.com](mailto:user@hello.iam.gserviceaccount.com)"
+- Description: The email address in the JSON file generated at the creation of the service account.
 
 ###### gcp.gcs.service_account_private_key_id
 
-Default value: ""
-Example: "61d257bd8479547cb3e04f0b9b6b9ca07af3b7ea"
-Description: The private key ID in the JSON file generated at the creation of the service account.
+- Default value: ""
+- Example: "61d257bd8479547cb3e04f0b9b6b9ca07af3b7ea"
+- Description: The private key ID in the JSON file generated at the creation of the service account.
 
 ###### gcp.gcs.service_account_private_key
 
-Default value: ""
-Example: "-----BEGIN PRIVATE KEY----xxxx-----END PRIVATE KEY-----\n"  
-Description:  The private key in the JSON file generated at the creation of the service account.
+- Default value: ""
+- Example: "-----BEGIN PRIVATE KEY----xxxx-----END PRIVATE KEY-----\n"  
+- Description:  The private key in the JSON file generated at the creation of the service account.
 
 ###### gcp.gcs.impersonation_service_account
 
-Default value: ""  
-Example: "hello"  
-Description: The service account that you want to impersonate.
+- Default value: ""  
+- Example: "hello"  
+- Description: The service account that you want to impersonate.
 
 </TabItem>
 
@@ -724,11 +736,11 @@ Description: The service account that you want to impersonate.
 
 ---
 
-#### MetadataUpdateParams
+#### MetadataRelatedParams
 
-A set of parameters about how StarRocks update the cache of the Iceberg metadata. This parameter set is optional.
+A set of parameters about cache of the Iceberg metadata in StarRocks. This parameter set is optional.
 
-From v3.3.3 onwards, StarRocks supports the [periodic metadata refresh strategy](#appendix-a-periodic-metadata-refresh-strategy). In most cases, you can ignore `MetadataUpdateParams` and do not need to tune the policy parameters in it, because the default values of these parameters already provide you with an out-of-the-box performance. You can adjust the Iceberg metadata parsing mode using the system variable [`plan_mode`](../../../sql-reference/System_variable.md#plan_mode).
+From v3.3.3 onwards, StarRocks supports the [periodic metadata refresh strategy](#appendix-a-periodic-metadata-refresh-strategy). In most cases, you can ignore the parameters below and do not need to tune the policy parameters in it, because the default values of these parameters already provide you with performance out-of-the-box. You can adjust the Iceberg metadata parsing mode using the system variable [`plan_mode`](../../../sql-reference/System_variable.md#plan_mode).
 
 | **Parameter**                                 | **Default**           | **Description**                                              |
 | :-------------------------------------------- | :-------------------- | :----------------------------------------------------------- |
@@ -736,6 +748,12 @@ From v3.3.3 onwards, StarRocks supports the [periodic metadata refresh strategy]
 | iceberg_manifest_cache_with_column_statistics | false                 | Whether to cache the statistics of columns.                  |
 | iceberg_manifest_cache_max_num                | 100000                | The maximum number of Manifest files that can be cached.     |
 | refresh_iceberg_manifest_min_length           | 2 * 1024 * 1024       | The minimum Manifest file length that triggers a Data File Cache refresh. |
+
+Starting from v3.4, StarRocks can obtain statistics of Iceberg tables by reading Iceberg metadata through setting the following parameters, without actively triggering the collection of Iceberg table statistics.
+
+| **Parameter**                                 | **Default**           | **Description**                                         |
+| :-------------------------------------------- | :-------------------- | :-------------------------------------------------------|
+| enable_get_stats_from_external_metadata       | false                 | Whether to obtain statistics from Iceberg metadata. When this item is set to `true`, you can further control which type of statistics to collect through the session variable [`enable_get_stats_from_external_metadata`](../../../sql-reference/System_variable.md#enable_get_stats_from_external_metadata).  |
 
 ### Examples
 
@@ -847,6 +865,27 @@ The following examples create an Iceberg catalog named `iceberg_catalog_hms` or 
       "aws.s3.region" = "us-west-2"
   );
   ```
+
+##### If you choose vended credential
+
+If you choose REST catalog with vended credential, run a command like below:
+
+```SQL
+CREATE EXTERNAL CATALOG polaris_s3
+PROPERTIES
+(
+    "type" = "iceberg",
+    "iceberg.catalog.uri" = "http://xxx:xxx/api/catalog",
+    "iceberg.catalog.type" = "rest",
+    "iceberg.catalog.rest.nested-namespace-enabled"="true",
+    "iceberg.catalog.security" = "oauth2",
+    "iceberg.catalog.oauth2.credential" = "xxxxx:xxxx",
+    "iceberg.catalog.oauth2.scope"='PRINCIPAL_ROLE:ALL',
+    "iceberg.catalog.warehouse" = "iceberg_catalog",
+    "aws.s3.region" = "us-west-2"
+);
+```
+
 </TabItem>
 
 <TabItem value="HDFS" label="HDFS" >
@@ -921,6 +960,22 @@ PROPERTIES
       "azure.blob.storage_account" = "<blob_storage_account_name>",
       "azure.blob.container" = "<blob_container_name>",
       "azure.blob.sas_token" = "<blob_storage_account_SAS_token>"
+  );
+  ```
+
+- If you choose REST catalog with vended credential, run a command like below:
+
+  ```SQL
+  CREATE EXTERNAL CATALOG polaris_azure
+  PROPERTIES (   
+      "type"  =  "iceberg",   
+      "iceberg.catalog.uri"  = "http://xxx:xxx/api/catalog",
+      "iceberg.catalog.type"  =  "rest",
+      "iceberg.catalog.rest.nested-namespace-enabled"="true", 
+      "iceberg.catalog.security" = "oauth2",
+      "iceberg.catalog.oauth2.credential" = "xxxxx:xxxx",
+      "iceberg.catalog.oauth2.scope"='PRINCIPAL_ROLE:ALL',
+      "iceberg.catalog.warehouse" = "iceberg_catalog"
   );
   ```
 
@@ -1000,6 +1055,22 @@ PROPERTIES
   );
   ```
 
+- If you choose REST catalog with vended credential, run a command like below:
+
+  ```SQL
+  CREATE EXTERNAL CATALOG polaris_azure
+  PROPERTIES (   
+      "type"  =  "iceberg",   
+      "iceberg.catalog.uri"  = "http://xxx:xxx/api/catalog",
+      "iceberg.catalog.type"  =  "rest",
+      "iceberg.catalog.rest.nested-namespace-enabled"="true", 
+      "iceberg.catalog.security" = "oauth2",
+      "iceberg.catalog.oauth2.credential" = "xxxxx:xxxx",
+      "iceberg.catalog.oauth2.scope"='PRINCIPAL_ROLE:ALL',
+      "iceberg.catalog.warehouse" = "iceberg_catalog"
+  );
+  ```
+
 </TabItem>
 
 <TabItem value="GCS" label="Google GCS" >
@@ -1065,6 +1136,23 @@ PROPERTIES
         "gcp.gcs.impersonation_service_account" = "<data_google_service_account_email>"
     );
     ```
+
+- If you choose REST catalog with vended credential, run a command like below:
+
+  ```SQL
+  CREATE EXTERNAL CATALOG polaris_gcp
+  PROPERTIES (   
+      "type"  =  "iceberg",   
+      "iceberg.catalog.uri"  = "http://xxx:xxx/api/catalog",
+      "iceberg.catalog.type"  =  "rest",
+      "iceberg.catalog.rest.nested-namespace-enabled"="true", 
+      "iceberg.catalog.security" = "oauth2",
+      "iceberg.catalog.oauth2.credential" = "xxxxx:xxxx",
+      "iceberg.catalog.oauth2.scope"='PRINCIPAL_ROLE:ALL',
+      "iceberg.catalog.warehouse" = "iceberg_catalog"
+  );
+  ```
+
 </TabItem>
 
 </Tabs>
@@ -1528,6 +1616,62 @@ ALTER VIEW iceberg.iceberg_db.iceberg_view2 ADD DIALECT SELECT k1, k2 FROM icebe
 
 ```SQL
 ALTER VIEW iceberg.iceberg_db.iceberg_view2 MODIFY DIALECT SELECT k1, k2, k3 FROM iceberg.iceberg_db.iceberg_table;
+```
+
+### Manual compaction
+
+From v4.0 onwards, StarRocks supports manual compaction on Iceberg tables.
+
+Each time data is loaded into an Iceberg table, new data and metadata files are generated. As time elapses, excessive data files can significantly slow down the query plan generation and cause an impact on the performance.
+
+In this case, you need to perform manual compaction on the table or partitions to merge the small data files, and thereby improve the performance.
+
+#### Syntax
+
+```SQL
+ALTER TABLE [catalog.][database.]table_name 
+EXECUTE rewrite_data_files
+("key"=value [,"key"=value, ...]) 
+[WHERE <predicate>]
+```
+
+#### Parameters
+
+##### `rewrite_data_files` properties
+
+`"key"=value` pairs that declare the manual compaction behaviors. Note that you need to wrap the key in double quotes.
+
+###### `min_file_size_bytes`
+
+- Description: The upper limit of a small data file. Data files whose size is less this value will be merged during the compaction.
+- Unit: Byte
+- Type: Int
+- Default: 268,435,456 (256 MB)
+
+###### `batch_size`
+
+- Description: The maximum size of data that can be processed in each batch.
+- Unit: Byte
+- Type: Int
+- Default: 10,737,418,240 (10 GB)
+
+###### `rewrite_all`
+
+- Description: Whether to rewrite all data files during the compaction, ignoring the parameters that filter data files with specific requirements.
+- Unit: -
+- Type: Boolean
+- Default: false
+
+##### `WHERE` clause
+
+- Description: The filter predicate used to specify the partition(s) to be involved in the compaction.
+
+#### Example
+
+The following example performs manual compaction on specific partitions in the Iceberg table `t1`. The partitions are represented by the clause `WHERE part_col = 'p1'`. In these partitions, data files that are smaller than 134,217,728 bytes (128 MB) will be merged during the compaction.
+
+```SQL
+ALTER TABLE t1 EXECUTE rewrite_data_files("min_file_size_bytes"= 134217728) WHERE part_col = 'p1';
 ```
 
 ---

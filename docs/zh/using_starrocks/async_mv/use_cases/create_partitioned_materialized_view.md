@@ -34,7 +34,7 @@ StarRocks 的异步物化视图支持多种分区策略和函数，方便您实�
 目前，StarRocks 支持在以下数据源中的表上构建分区物化视图：
 
 - **StarRocks Default Catalog 中的 OLAP 表**
-  - 支持的分区策略：Range 分区
+  - 支持的分区策略：Range 分区，List 分区和表达式分区
   - 支持的分区键数据类型：INT、DATE、DATETIME 和 STRING
   - 支持的表类型：主键表、明细表、聚合表和更新表
   - 支持存算一体和存算分离集群
@@ -45,9 +45,7 @@ StarRocks 的异步物化视图支持多种分区策略和函数，方便您实�
 :::note
 
 - 不支持基于非分区基表创建分区物化视图。
-- 对于 StarRocks OLAP 表：
-  - 目前不支持 List 分区和表达式分区。
-  - 基表的两个相邻分区必须具有连续的范围。
+- 对于 StarRocks OLAP 表，基表的两个相邻分区必须具有连续的范围。
 - 对于 External Catalog 中的多级分区基表，只能使用一级分区路径来创建分区物化视图。例如，对于以 `yyyyMMdd/hour` 格式分区的表，只能构建按 `yyyyMMdd` 分区的物化视图。
 - 从 v3.2.3 版本开始，StarRocks 支持在使用 [Partition Transforms (分区变换)](https://iceberg.apache.org/spec/#partition-transforms) 的 Iceberg 表上创建分区物化视图，物化视图将根据变换后的列进行分区。更多信息，参考 [使用物化视图加速数据湖查询 - 选择合适的刷新策略](./data_lake_query_acceleration_with_materialized_views.md#选择合适的刷新策略)。
 
@@ -341,7 +339,11 @@ SELECT * FROM iceberg_catalog.test_db.lineitem_days;
 - **刷新粒度**
 
   您可以使用 `partition_refresh_number` 属性来指定每次刷新操作的粒度。`partition_refresh_number` 控制在单次刷新中，最多刷新的分区数量。如果需要刷新的分区数量超过该值，StarRocks 将拆分这次刷新任务，并分批完成。分区按照时间由远至近的顺序进行刷新（不包括提前创建的未来分区）。当值为 `-1` 时，将不会拆分刷新任务。自 v3.3 起，默认值由 `-1` 变为 `1`，表示 StarRocks 每次只刷新一个分区。
-
+  
+  您还可以通过 `partition_refresh_strategy` 属性来控制物化视图的刷新策略。该参数支持以下两种取值：
+  - "strict"（默认）：分区刷新严格按照 partition_refresh_number 控制粒度；
+  - "adaptive"：根据基表分区的数据量，自适应地调整每次刷新的分区数量，提升刷新效率。
+  
 - **物化范围**
 
   物化数据的范围由 `partition_ttl_number`（v3.1.5 之前的版本）或 `partition_ttl`（推荐用于 v3.1.5 及更高版本）属性控制。`partition_ttl_number` 用于指定要保留的最新分区的数量，`partition_ttl` 用于指定要保留的物化视图数据的时间范围。在每次刷新过程中，StarRocks 会按时间顺序排列分区，并且仅保留符合 TTL 要求的分区。

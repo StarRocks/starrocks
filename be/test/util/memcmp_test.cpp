@@ -26,6 +26,7 @@ int vsigned(T v) {
     return (v >> (sizeof(T) * 8 - 1)) & 1;
 }
 
+#if defined(__SSE4_2__)
 TEST(sse_memcmp, Test) {
     ASSERT_EQ(vsigned((int)-1), 1);
     ASSERT_EQ(vsigned((int)1), 0);
@@ -99,5 +100,6 @@ TEST(sse_memcmp, Test) {
         ASSERT_EQ(res, res2);
     }
 }
+#endif
 
 } // namespace starrocks

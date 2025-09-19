@@ -14,9 +14,6 @@
 
 package com.starrocks.sql.ast;
 
-import com.starrocks.analysis.ColumnPosition;
-import com.starrocks.analysis.ParseNode;
-import com.starrocks.analysis.TypeDef;
 import com.starrocks.catalog.ArrayType;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ScalarType;
@@ -24,6 +21,7 @@ import com.starrocks.catalog.StructField;
 import com.starrocks.catalog.StructType;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
+import com.starrocks.sql.ast.expression.TypeDef;
 import com.starrocks.sql.parser.NodePosition;
 
 import java.util.List;

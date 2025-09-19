@@ -63,6 +63,7 @@ struct RowsetSegmentId {
 
 // from source rowid -> upt rowid
 using RowidPairs = std::pair<uint32_t, uint32_t>;
+inline auto RowidPairsCompFn = [](const RowidPairs& a, const RowidPairs& b) { return a.first < b.first; };
 
 struct ColumnPartialUpdateState {
     bool inited = false;
@@ -89,6 +90,12 @@ struct ColumnPartialUpdateState {
                 rss_rowid_to_update_rowid[rssid].emplace_back(rowid, upt_row_id);
             } else {
                 insert_rowids.push_back(upt_row_id);
+            }
+        }
+        // sort RowidPairs via source rowid
+        for (auto& each : rss_rowid_to_update_rowid) {
+            if (!std::is_sorted(each.second.begin(), each.second.end(), RowidPairsCompFn)) {
+                std::sort(each.second.begin(), each.second.end(), RowidPairsCompFn);
             }
         }
 #ifndef BE_TEST
@@ -248,6 +255,9 @@ private:
     std::map<uint32_t, DeltaColumnGroupPtr> _rssid_to_delta_column_group;
     std::map<string, string> _column_to_expr_value;
 };
+
+void split_rowid_pairs(const std::vector<RowidPairs>& rowid_pairs, std::vector<uint32_t>* sorted_source_rowids,
+                       std::vector<uint32_t>* unsorted_upt_rowids, StreamChunkContainer* container);
 
 inline std::ostream& operator<<(std::ostream& os, const RowsetColumnUpdateState& o) {
     os << o.to_string();

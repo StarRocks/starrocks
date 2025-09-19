@@ -15,11 +15,7 @@
 
 package com.starrocks.sql.ast;
 
-import com.starrocks.analysis.Expr;
-import com.starrocks.catalog.Column;
-import com.starrocks.catalog.PrimitiveType;
-import com.starrocks.catalog.ScalarType;
-import com.starrocks.qe.ShowResultSetMetaData;
+import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.parser.NodePosition;
 
 /**
@@ -29,16 +25,6 @@ import com.starrocks.sql.parser.NodePosition;
  * [LIKE 'pattern' | WHERE expr]
  */
 public class ShowCollationStmt extends ShowStmt {
-    private static final ShowResultSetMetaData META_DATA =
-            ShowResultSetMetaData.builder()
-                    .addColumn(new Column("Collation", ScalarType.createVarchar(20)))
-                    .addColumn(new Column("Charset", ScalarType.createVarchar(20)))
-                    .addColumn(new Column("Id", ScalarType.createType(PrimitiveType.BIGINT)))
-                    .addColumn(new Column("Default", ScalarType.createVarchar(20)))
-                    .addColumn(new Column("Compiled", ScalarType.createVarchar(20)))
-                    .addColumn(new Column("Sortlen", ScalarType.createType(PrimitiveType.BIGINT)))
-                    .build();
-
     private String pattern;
     private Expr where;
 
@@ -61,12 +47,7 @@ public class ShowCollationStmt extends ShowStmt {
     }
 
     @Override
-    public ShowResultSetMetaData getMetaData() {
-        return META_DATA;
-    }
-
-    @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitShowCollationStatement(this, context);
+        return ((AstVisitorExtendInterface<R, C>) visitor).visitShowCollationStatement(this, context);
     }
 }

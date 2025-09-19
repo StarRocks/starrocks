@@ -15,7 +15,6 @@
 package com.starrocks.lake.backup;
 
 import com.google.common.collect.Maps;
-import com.starrocks.analysis.TableRef;
 import com.starrocks.backup.BackupJob;
 import com.starrocks.backup.SnapshotInfo;
 import com.starrocks.backup.Status;
@@ -26,9 +25,7 @@ import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Tablet;
-import com.starrocks.common.io.Text;
 import com.starrocks.lake.LakeTable;
-import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.proto.LockTabletMetadataRequest;
 import com.starrocks.proto.LockTabletMetadataResponse;
 import com.starrocks.proto.Snapshot;
@@ -40,15 +37,13 @@ import com.starrocks.rpc.LakeService;
 import com.starrocks.rpc.RpcException;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.WarehouseManager;
+import com.starrocks.sql.ast.expression.TableRef;
 import com.starrocks.system.Backend;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.thrift.THdfsProperties;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import java.io.DataInput;
-import java.io.DataOutput;
-import java.io.IOException;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
@@ -205,16 +200,8 @@ public class LakeBackupJob extends BackupJob {
         }
     }
 
-    @Override
-    public void write(DataOutput out) throws IOException {
-        Text.writeString(out, type.name());
-        Text.writeString(out, GsonUtils.GSON.toJson(this));
-    }
 
-    public static LakeBackupJob read(DataInput in) throws IOException {
-        String json = Text.readString(in);
-        return GsonUtils.GSON.fromJson(json, LakeBackupJob.class);
-    }
+
 
     @Override
     @java.lang.SuppressWarnings("squid:S2142")  // allow catch InterruptedException

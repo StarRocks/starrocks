@@ -957,8 +957,8 @@ struct ColumnRangeBuilder {
     template <LogicalType ltype, typename E, CompoundNodeType Type>
     Status operator()(ChunkPredicateBuilder<E, Type>* parent, const SlotDescriptor* slot,
                       std::map<std::string, ColumnValueRangeType>* column_value_ranges) {
-        if constexpr (ltype == TYPE_TIME || ltype == TYPE_NULL || ltype == TYPE_JSON || lt_is_float<ltype> ||
-                      lt_is_binary<ltype>) {
+        if constexpr (ltype == TYPE_TIME || ltype == TYPE_NULL || ltype == TYPE_JSON || ltype == TYPE_VARIANT ||
+                      lt_is_float<ltype> || lt_is_binary<ltype>) {
             return Status::OK();
         } else {
             // Treat tinyint and boolean as int
@@ -1113,8 +1113,8 @@ Status ChunkPredicateBuilder<E, Type>::_get_column_predicates(PredicateParser* p
                                                               ColumnPredicatePtrs& col_preds_owner) {
     auto process_filter_conditions = [&]<typename ConditionType>(const std::vector<ConditionType>& filters) {
         for (const auto& filter : filters) {
-            std::unique_ptr<ColumnPredicate> p(parser->parse_thrift_cond(filter));
-            RETURN_IF(!p, Status::RuntimeError("invalid filter"));
+            ASSIGN_OR_RETURN(auto raw_p, parser->parse_thrift_cond(filter));
+            std::unique_ptr<ColumnPredicate> p(raw_p);
             p->set_index_filter_only(filter.is_index_filter_only);
             col_preds_owner.emplace_back(std::move(p));
         }
@@ -1127,8 +1127,8 @@ Status ChunkPredicateBuilder<E, Type>::_get_column_predicates(PredicateParser* p
     }
 
     for (auto& f : is_null_vector) {
-        std::unique_ptr<ColumnPredicate> p(parser->parse_thrift_cond(f));
-        RETURN_IF(!p, Status::RuntimeError("invalid filter"));
+        ASSIGN_OR_RETURN(auto raw_p, parser->parse_thrift_cond(f));
+        std::unique_ptr<ColumnPredicate> p(raw_p);
         col_preds_owner.emplace_back(std::move(p));
     }
 
@@ -1226,6 +1226,11 @@ Status ChunkPredicateBuilder<E, Type>::build_column_expr_predicates() {
         const SlotDescriptor* slot_desc = slots[index];
         LogicalType ltype = slot_desc->type().type;
         if (!support_column_expr_predicate(ltype)) {
+            continue;
+        }
+
+        // string column may use local dict optimiztion, throw exception will take unexcept result
+        if (is_string_type(ltype) && _opts.runtime_state->query_options().allow_throw_exception) {
             continue;
         }
 

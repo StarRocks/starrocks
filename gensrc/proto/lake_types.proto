@@ -45,6 +45,7 @@ message FileMetaPB {
     optional int64 size = 2;
     // Whether this file shared by multiple tablets
     optional bool shared = 3 [default=false];
+    optional bytes encryption_meta = 4;
 }
 
 message DelvecMetadataPB {
@@ -173,6 +174,8 @@ message TabletMetadataPB {
     optional int64 gtid = 19 [default=0];
     // compaction strategy
     optional CompactionStrategyPB compaction_strategy = 20;
+    // flat json
+    optional FlatJsonConfigPB flat_json_config = 21;
 }
 
 message MetadataUpdateInfoPB {
@@ -182,6 +185,7 @@ message MetadataUpdateInfoPB {
     optional PersistentIndexTypePB persistent_index_type = 3;
     optional bool bundle_tablet_metadata = 4;
     optional CompactionStrategyPB compaction_strategy = 5;
+    optional FlatJsonConfigPB flat_json_config = 6;
 }
 
 message BundleTabletMetadataPB {
@@ -199,6 +203,7 @@ message TxnLogPB {
         // for partial update, record dest rewrite segment names to avoid gc
         repeated string rewrite_segments = 4;
         repeated bytes del_encryption_metas = 5;
+        repeated FileMetaPB ssts = 6;
     }
 
     message OpCompaction {
@@ -216,6 +221,7 @@ message TxnLogPB {
         // x and y might be new segments
         optional int32 new_segment_offset = 6;
         optional int32 new_segment_count = 7;
+        repeated FileMetaPB ssts = 8;
     }
 
     message OpSchemaChange {
@@ -253,6 +259,7 @@ message TxnLogPB {
     optional OpAlterMetadata op_alter_metadata = 6;
     optional OpReplication op_replication = 7;
     optional int64 partition_id = 8;
+    optional PUniqueId load_id = 9;
 }
 
 message CombinedTxnLogPB {
@@ -270,6 +277,7 @@ message TxnInfoPB {
     optional bool force_publish = 5; // only used for compaction
     optional bool rebuild_pindex = 6;
     optional int64 gtid = 7 [default=0];
+    repeated PUniqueId load_ids = 8;
 }
 
 message SplittingTabletInfoPB {
@@ -280,4 +288,15 @@ message SplittingTabletInfoPB {
 message MergingTabletInfoPB {
     repeated int64 old_tablet_ids = 1;
     optional int64 new_tablet_id = 2;
+}
+
+message IdenticalTabletInfoPB {
+    optional int64 old_tablet_id = 1;
+    optional int64 new_tablet_id = 2;
+}
+
+message DynamicTabletsInfoPB {
+    repeated SplittingTabletInfoPB splitting_tablet_infos = 1;
+    repeated MergingTabletInfoPB merging_tablet_infos = 2;
+    repeated IdenticalTabletInfoPB identical_tablet_infos = 3;
 }

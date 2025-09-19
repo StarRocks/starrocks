@@ -15,7 +15,6 @@
 package com.starrocks.catalog;
 
 import com.google.common.collect.Lists;
-import com.starrocks.analysis.FunctionName;
 import com.starrocks.authentication.AuthenticationMgr;
 import com.starrocks.authorization.AuthorizationMgr;
 import com.starrocks.authorization.DefaultAuthorizationProvider;
@@ -39,7 +38,7 @@ import com.starrocks.sql.ast.CreateUserStmt;
 import com.starrocks.sql.ast.GrantPrivilegeStmt;
 import com.starrocks.sql.ast.RevokePrivilegeStmt;
 import com.starrocks.sql.ast.StatementBase;
-import com.starrocks.sql.ast.UserIdentity;
+import com.starrocks.sql.ast.expression.FunctionName;
 import com.starrocks.thrift.TFunctionBinaryType;
 import com.starrocks.thrift.TGetGrantsToRolesOrUserItem;
 import com.starrocks.thrift.TGetGrantsToRolesOrUserRequest;
@@ -102,10 +101,8 @@ public class InfoSchemaDbTest {
     @Test
     public void testNormal() throws IOException {
         Database db = new InfoSchemaDb();
-
         Assertions.assertFalse(db.registerTableUnlocked(null));
         db.dropTable("authors");
-        db.write(null);
         Assertions.assertNull(GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "authors"));
     }
 
@@ -390,7 +387,7 @@ public class InfoSchemaDbTest {
         item2.setObject_database("db");
         item2.setObject_name("tbl");
         item2.setObject_type("TABLE");
-        item2.setPrivilege_type("DELETE, DROP, INSERT, SELECT, ALTER, EXPORT, UPDATE");
+        item2.setPrivilege_type("DELETE, DROP, INSERT, SELECT, ALTER, EXPORT, UPDATE, REFRESH");
         item2.setIs_grantable(false);
         Assertions.assertTrue(GrantsTo.getGrantsTo(request).grants_to.contains(item2));
 

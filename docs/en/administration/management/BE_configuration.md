@@ -256,6 +256,15 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - Description: The maximum body size of a bRPC.
 - Introduced in: -
 
+##### brpc_stub_expire_s
+
+- Default: 3600
+- Type: Int
+- Unit: Seconds
+- Is mutable: Yes
+- Description: The expire time of BRPC stub cache, default 60 minutes.
+- Introduced in: -
+
 <!--
 ##### brpc_socket_max_unwritten_bytes
 
@@ -2141,6 +2150,42 @@ When this value is set to less than `0`, the system uses the product of its abso
 - Description: Whether to enable memory cache for zonemap index. Memory cache is recommended if you want to use zonemap indexes to accelerate scan.
 - Introduced in: -
 
+##### enable_string_prefix_zonemap
+
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Whether to enable ZoneMap for string (CHAR/VARCHAR) columns using prefix-based min/max. For non-key string columns, the min/max values are truncated to a fixed prefix length configured by `string_prefix_zonemap_prefix_len`.
+- Introduced in: -
+
+##### string_prefix_zonemap_prefix_len
+
+- Default: 16
+- Type: Int
+- Unit: -
+- Is mutable: Yes
+- Description: Prefix length used for string ZoneMap min/max when `enable_string_prefix_zonemap` is enabled.
+- Introduced in: -
+
+##### string_zonemap_overlap_threshold
+
+- Default: 0.8
+- Type: Double
+- Unit: -
+- Is mutable: Yes
+- Description: Threshold for adaptive creation of page-level string ZoneMap. If the estimated overlap ratio across consecutive pages is greater than this threshold, StarRocks skips writing the page-level string ZoneMap. Range: [0.0, 1.0].
+- Introduced in: -
+
+##### string_zonemap_min_pages_for_adaptive_check
+
+- Default: 16
+- Type: Int
+- Unit: -
+- Is mutable: Yes
+- Description: Minimum number of non-empty pages required before applying the adaptive string ZoneMap quality check.
+- Introduced in: -
+
 ##### enable_ordinal_index_memory_page_cache
 
 - Default: true
@@ -3283,6 +3328,15 @@ When this value is set to less than `0`, the system uses the product of its abso
 - Description: The maximum number of sub-fields that can be extracted by Flat JSON. This parameter takes effect only when `enable_json_flat` is set to `true`.
 - Introduced in: v3.3.0
 
+##### json_flat_create_zonemap
+
+- Default: true
+- Type: Boolean
+- Unit:
+- Is mutable: Yes
+- Description: Whether to create ZoneMaps for flattened JSON sub-columns during write. This parameter takes effect only when `enable_json_flat` is set to `true`.
+- Introduced in: -
+
 ##### enable_compaction_flat_json
 
 - Default: True
@@ -3618,6 +3672,15 @@ When this value is set to less than `0`, the system uses the product of its abso
 - Is mutable: Yes
 - Description: The cache expiration time of starlet filesystem instances.
 - Introduced in: v3.3.15, 3.4.5
+
+##### starlet_write_file_with_tag
+
+- Default: false
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: In a shared-data cluster, whether to tag files written to object storage with object storage tags for convenient custom file management.
+- Introduced in: v3.5.3
 
 ##### lake_compaction_stream_buffer_size_bytes
 
@@ -3984,7 +4047,7 @@ When this value is set to less than `0`, the system uses the product of its abso
 - Default: 0
 - Type: String
 - Unit: -
-- Is mutable: No
+- Is mutable: Yes
 - Description: The maximum amount of data that can be cached in memory. You can set it as a percentage (for example, `10%`) or a physical limit (for example, `10G`, `21474836480`).
 - Introduced in: -
 
@@ -3993,7 +4056,7 @@ When this value is set to less than `0`, the system uses the product of its abso
 - Default: 0
 - Type: String
 - Unit: -
-- Is mutable: No
+- Is mutable: Yes
 - Description: The maximum amount of data that can be cached on a single disk. You can set it as a percentage (for example, `80%`) or a physical limit (for example, `2T`, `500G`). For example, if you use two disks and set the value of the `datacache_disk_size` parameter as `21474836480` (20 GB), a maximum of 40 GB data can be cached on these two disks. The default value is `0`, which indicates that only memory is used to cache data.
 - Introduced in: -
 

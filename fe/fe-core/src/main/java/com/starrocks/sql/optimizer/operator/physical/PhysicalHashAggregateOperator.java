@@ -19,6 +19,7 @@ import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
 import com.starrocks.catalog.FunctionSet;
+import com.starrocks.common.Pair;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariableConstants;
 import com.starrocks.sql.optimizer.OptExpression;
@@ -33,6 +34,7 @@ import com.starrocks.sql.optimizer.operator.OperatorVisitor;
 import com.starrocks.sql.optimizer.operator.Projection;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
+import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import org.apache.commons.collections4.CollectionUtils;
 
@@ -71,6 +73,8 @@ public class PhysicalHashAggregateOperator extends PhysicalOperator {
 
     private boolean forcePreAggregation = false;
 
+    private List<Pair<ConstantOperator, ConstantOperator>> groupByMinMaxStatistic = Lists.newArrayList();
+
     public PhysicalHashAggregateOperator(AggType type,
                                          List<ColumnRefOperator> groupBys,
                                          List<ColumnRefOperator> partitionByColumns,
@@ -104,6 +108,7 @@ public class PhysicalHashAggregateOperator extends PhysicalOperator {
         this.usePerBucketOptmize = aggregateOperator.usePerBucketOptmize;
         this.withoutColocateRequirement = aggregateOperator.withoutColocateRequirement;
         this.distinctColumnDataSkew = aggregateOperator.distinctColumnDataSkew;
+        this.groupByMinMaxStatistic = aggregateOperator.groupByMinMaxStatistic;
     }
 
     public List<ColumnRefOperator> getGroupBys() {
@@ -193,6 +198,13 @@ public class PhysicalHashAggregateOperator extends PhysicalOperator {
 
     public void setDistinctColumnDataSkew(DataSkewInfo distinctColumnDataSkew) {
         this.distinctColumnDataSkew = distinctColumnDataSkew;
+    }
+
+    public void setGroupByMinMaxStatistic(List<Pair<ConstantOperator, ConstantOperator>> groupByMinMaxStatistic) {
+        this.groupByMinMaxStatistic = groupByMinMaxStatistic;
+    }
+    public List<Pair<ConstantOperator, ConstantOperator>> getGroupByMinMaxStatistic() {
+        return this.groupByMinMaxStatistic;
     }
 
     public DataSkewInfo getDistinctColumnDataSkew() {

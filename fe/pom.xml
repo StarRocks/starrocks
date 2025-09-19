@@ -25,15 +25,19 @@ under the License.
 
     <groupId>com.starrocks</groupId>
     <artifactId>starrocks-fe</artifactId>
-    <version>3.4.0</version>
+    <version>main</version>
     <packaging>pom</packaging>
 
     <modules>
-        <module>plugin-common</module>
-        <module>fe-common</module>
-        <module>spark-dpp</module>
+        <module>fe-grammar</module>
+        <module>fe-parser</module>
+        <module>fe-spi</module>
+        <module>fe-utils</module>
+        <module>fe-testing</module>
+        <module>plugin/spark-dpp</module>
+        <module>plugin/hive-udf</module>
         <module>fe-core</module>
-        <module>hive-udf</module>
+        <module>fe-server</module>
     </modules>
 
     <name>starrocks-fe</name>
@@ -62,7 +66,7 @@ under the License.
         <kafka-clients.version>3.4.0</kafka-clients.version>
         <arrow.version>18.0.0</arrow.version>
         <grpc.version>1.63.0</grpc.version>
-        <io.netty.version>4.1.118.Final</io.netty.version>
+        <io.netty.version>4.1.125.Final</io.netty.version>
         <puppycrawl.version>10.21.1</puppycrawl.version>
         <aws-v2-sdk.version>2.29.52</aws-v2-sdk.version>
         <avro.version>1.12.0</avro.version>
@@ -72,7 +76,7 @@ under the License.
         <paimon.version>1.0.1</paimon.version>
         <delta-kernel.version>4.0.0rc1</delta-kernel.version>
         <iceberg.version>1.9.0</iceberg.version>
-        <staros.version>3.5-rc2</staros.version>
+        <staros.version>3.5-rc3</staros.version>
         <!-- hadoop-azure requires no more than jetty10+ -->
         <!-- https://stackoverflow.com/questions/66713254/spark-wasb-and-jetty-11 -->
         <jetty.version>9.4.57.v20241219</jetty.version>
@@ -175,28 +179,51 @@ under the License.
     <dependencyManagement>
         <dependencies>
 
+            <!-- internal modules unified -->
             <dependency>
                 <groupId>com.starrocks</groupId>
-                <artifactId>plugin-common</artifactId>
-                <version>1.0.0</version>
+                <artifactId>fe-grammar</artifactId>
+                <version>${project.version}</version>
             </dependency>
-
             <dependency>
                 <groupId>com.starrocks</groupId>
-                <artifactId>hive-udf</artifactId>
-                <version>1.0.0</version>
+                <artifactId>fe-parser</artifactId>
+                <version>${project.version}</version>
             </dependency>
-
             <dependency>
                 <groupId>com.starrocks</groupId>
-                <artifactId>fe-common</artifactId>
-                <version>1.0.0</version>
+                <artifactId>fe-spi</artifactId>
+                <version>${project.version}</version>
             </dependency>
-
+            <dependency>
+                <groupId>com.starrocks</groupId>
+                <artifactId>fe-utils</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.starrocks</groupId>
+                <artifactId>fe-testing</artifactId>
+                <version>${project.version}</version>
+            </dependency>
             <dependency>
                 <groupId>com.starrocks</groupId>
                 <artifactId>spark-dpp</artifactId>
-                <version>1.0.0</version>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.starrocks</groupId>
+                <artifactId>hive-udf</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.starrocks</groupId>
+                <artifactId>fe-core</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.starrocks</groupId>
+                <artifactId>fe-server</artifactId>
+                <version>${project.version}</version>
             </dependency>
 
             <!-- https://mvnrepository.com/artifact/commons-cli/commons-cli -->

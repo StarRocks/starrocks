@@ -670,7 +670,8 @@ StarRocks 共有データクラスタを使用するには、次のプロパテ�
 PROPERTIES (
     "storage_volume" = "<storage_volume_name>",
     "datacache.enable" = "{ true | false }",
-    "datacache.partition_duration" = "<string_value>"
+    "datacache.partition_duration" = "<string_value>",
+    "file_bundling" = "{ true | false }"
 )
 ```
 
@@ -689,6 +690,26 @@ PROPERTIES (
 
   :::note
   このプロパティは、`datacache.enable` が `true` に設定されている場合にのみ利用可能です。
+  :::
+
+- `file_bundling` (オプション): クラウドネイティブテーブルに対してファイルバンドリング最適化を有効にするかどうか。v4.0 以降でサポートされています。この機能を有効に設定（`true` に設定）すると、システムはロード、コンパクション、またはパブリッシュ操作によって生成されたデータファイルを自動的にバンドルし、外部ストレージシステムへの高頻度アクセスによる API コストを削減します。
+
+  :::note
+  - ファイルバンドリングは、StarRocks v4.0 以降を搭載した共有データクラスターでのみ利用可能です。
+  - ファイルバンドリングは、v4.0 以降で作成されたテーブルに対してデフォルトで有効化されています。これは FE 設定の `enable_file_bundling`（デフォルト: true）によって制御されます。
+  - ファイルバンドリングを有効化した後、クラスターを v3.5.2 以降にダウングレードできます。v3.5.2 より前のバージョンにダウングレードしたい場合は、まずファイルバンドリングを有効化したテーブルを削除する必要があります。
+  - クラスターを v4.0 にアップグレードした後、既存のテーブルに対してファイルバンドリングはデフォルトで無効のままです。
+  - 既存のテーブルに対して、[ALTER TABLE](ALTER_TABLE.md) ステートメントを使用して手動でファイルバンドリングを有効にできます。ただし、以下の制限事項があります：
+    - v4.0 以前に作成されたロールアップインデックスを持つテーブルでは、ファイルバンドリングを有効にできません。v4.0 以降でインデックスを削除し再作成した後、そのテーブルでファイルバンドリングを有効にできます。
+    - 特定の期間内に `file_bundling` プロパティを **繰り返し **変更することはできません。そうでない場合、システムはエラーを返します。`file_bundling` プロパティが変更可能かどうかを確認するには、次の SQL ステートメントを実行してください：
+
+      ```SQL
+      SELECT METADATA_SWITCH_VERSION FROM information_schema.partitions_meta WHERE TABLE_NAME = '<table_name>';
+      ```
+
+      `file_bundling` プロパティを変更できるのは、`0` が返される場合のみです。非ゼロ値は、`METADATA_SWITCH_VERSION` に対応するデータバージョンが GC メカニズムによってまだ回収されていないことを示します。データバージョンが回収されるまで待つ必要があります。
+
+      この間隔を短縮するには、FE の動的設定 `lake_autovacuum_grace_period_minutes` の値を低く設定します。ただし、`file_bundling` プロパティを変更した後は、設定を元の値に戻すことを忘れないでください。
   :::
 
 ### 高速スキーマ進化
@@ -763,27 +784,25 @@ v3.5.0 以降、StarRocks 内部テーブルは共通パーティション式 TT
 ALTER TABLE tbl SET('partition_retention_condition' = '');
 ```
 
-### フラット JSON 設定の構成 (現在は共有なしクラスタのみサポート)
+### テーブルレベルの Flat JSON プロパティを設定
 
-フラット JSON 属性を使用したい場合、`properties` で指定してください。詳細については、[Flat JSON](../../../using_starrocks/Flat_json.md) を参照してください。
+v3.3 から、StarRocks は JSON データクエリの効率を向上させ、JSON の使用複雑さを軽減するため、[Flat JSON](../../../using_starrocks/Flat_json.md) 機能を導入しました。この機能は、特定の B E設定項目とシステム変数によって制御されていました。そのため、グローバルにのみ有効化（または無効化）可能です。
+
+v4.0 以降、テーブルレベルで Flat JSON 関連のプロパティを設定できます。
 
 ```SQL
 PROPERTIES (
-    "flat_json.enable" = "true|false",
-    "flat_json.null.factor" = "0-1",
-    "flat_json.sparsity.factor" = "0-1",
-    "flat_json.column.max" = "${integer_value}"
+    "flat_json.enable" = "{ true | false }",
+    "flat_json.null.factor" = "",
+    "flat_json.sparsity.factor" = "",
+    "flat_json.column.max" = ""
 )
 ```
 
-**プロパティ**
-
-| プロパティ                    | 必須 | 説明                                                                                                                                                                                                                                                       |
-| --------------------------- |----------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| `flat_json.enable`    | No       | フラット JSON 機能を有効にするかどうか。この機能が有効になると、新しくロードされた JSON データが自動的にフラット化され、JSON クエリのパフォーマンスが向上します。                                                                                                 |
-| `flat_json.null.factor` | No      | フラット JSON のために抽出する列の NULL 値の割合。このしきい値を超える NULL 値の割合を持つ列は抽出されません。このパラメータは `flat_json.enable` が true に設定されている場合にのみ有効です。 デフォルト値: 0.3。 |
-| `flat_json.sparsity.factor`     | No      | フラット JSON のために同じ名前を持つ列の割合。この値より低い割合を持つ同じ名前の列は抽出されません。このパラメータは `flat_json.enable` が true に設定されている場合にのみ有効です。デフォルト値: 0.9。    |
-| `flat_json.column.max`       | No      | フラット JSON によって抽出できるサブフィールドの最大数。このパラメータは `flat_json.enable` が true に設定されている場合にのみ有効です。 デフォルト値: 100。 |
+- `flat_json.enable` (オプション): Flat JSON 機能を有効にするかどうか。この機能を有効にすると、新たに読み込まれた JSON データが自動的にフラット化され、JSON クエリのパフォーマンスが向上します。
+- `flat_json.null.factor` (オプション): 列内の NULL 値の割合の閾値。この閾値を超えるNULL値の割合を持つ列は、Flat JSON によって抽出されません。このパラメーターは、`flat_json.enable` が `true` に設定されている場合のみ有効になります。 デフォルト値: `0.3`。
+- `flat_json.sparsity.factor` (オプション): 同じ名前を持つ列の割合の閾値。同じ名前を持つ列の割合がこの値未満の場合、Flat JSON ではその列が抽出されません。このパラメーターは、`flat_json.enable` が `true` に設定されている場合のみ有効になります。デフォルト値: `0.9`。
+- `flat_json.column.max` (オプション): Flat JSON で抽出可能なサブフィールドの最大数。このパラメーターは、`flat_json.enable` が `true` に設定されている場合のみ有効になります。 デフォルト値: `100`。
 
 ## 例
 
@@ -1127,11 +1146,7 @@ PARTITION BY RANGE (k1)
 DISTRIBUTED BY HASH(k2);
 ```
 
-### フラット JSON をサポートするテーブル
-
-:::note
-フラット JSON は現在、共有なしクラスタのみでサポートされています。
-:::
+### Flat JSON プロパティを持つテーブル
 
 ```SQL
 CREATE TABLE example_db.example_table

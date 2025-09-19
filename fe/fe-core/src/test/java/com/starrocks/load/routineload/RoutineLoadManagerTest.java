@@ -36,10 +36,8 @@ package com.starrocks.load.routineload;
 
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
-import com.starrocks.analysis.LabelName;
-import com.starrocks.analysis.ParseNode;
-import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.UserIdentity;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
@@ -50,19 +48,22 @@ import com.starrocks.common.StarRocksException;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.persist.EditLog;
+import com.starrocks.persist.OriginStatementInfo;
 import com.starrocks.persist.RoutineLoadOperation;
 import com.starrocks.persist.metablock.SRMetaBlockReader;
 import com.starrocks.persist.metablock.SRMetaBlockReaderV2;
 import com.starrocks.qe.ConnectContext;
-import com.starrocks.qe.OriginStatement;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.ast.ColumnSeparator;
 import com.starrocks.sql.ast.CreateRoutineLoadStmt;
+import com.starrocks.sql.ast.LabelName;
+import com.starrocks.sql.ast.OriginStatement;
+import com.starrocks.sql.ast.ParseNode;
 import com.starrocks.sql.ast.PauseRoutineLoadStmt;
 import com.starrocks.sql.ast.ResumeRoutineLoadStmt;
 import com.starrocks.sql.ast.StopRoutineLoadStmt;
-import com.starrocks.sql.ast.UserIdentity;
+import com.starrocks.sql.ast.expression.TableName;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.TKafkaRLTaskProgress;
 import com.starrocks.thrift.TLoadSourceType;
@@ -982,7 +983,7 @@ public class RoutineLoadManagerTest {
         long discardJobId = 1L;
         RoutineLoadJob discardJob = new KafkaRoutineLoadJob(discardJobId, "discardJob",
                 1, 1, "xxx", "xxtopic");
-        discardJob.setOrigStmt(new OriginStatement(createSQL, 0));
+        discardJob.setOrigStmt(new OriginStatementInfo(createSQL, 0));
         leaderLoadManager.addRoutineLoadJob(discardJob, db);
         discardJob.updateState(RoutineLoadJob.JobState.CANCELLED,
                 new ErrorReason(InternalErrorCode.CREATE_TASKS_ERR, "fake"), false);
@@ -992,21 +993,12 @@ public class RoutineLoadManagerTest {
         long goodJobId = 2L;
         RoutineLoadJob goodJob = new KafkaRoutineLoadJob(goodJobId, "goodJob",
                 1, 1, "xxx", "xxtopic");
-        goodJob.setOrigStmt(new OriginStatement(createSQL, 0));
+        goodJob.setOrigStmt(new OriginStatementInfo(createSQL, 0));
         leaderLoadManager.addRoutineLoadJob(goodJob, db);
         goodJob.updateState(RoutineLoadJob.JobState.CANCELLED,
                 new ErrorReason(InternalErrorCode.CREATE_TASKS_ERR, "fake"), false);
         Assertions.assertNotNull(leaderLoadManager.getJob(discardJobId));
         Assertions.assertNotNull(leaderLoadManager.getJob(goodJobId));
-
-        // 3. save image & reload
-        UtFrameUtils.PseudoImage pseudoImage = new UtFrameUtils.PseudoImage();
-        leaderLoadManager.write(pseudoImage.getDataOutputStream());
-        RoutineLoadMgr restartedRoutineLoadManager = new RoutineLoadMgr();
-        restartedRoutineLoadManager.readFields(pseudoImage.getDataInputStream());
-        // discard expired job
-        Assertions.assertNull(restartedRoutineLoadManager.getJob(discardJobId));
-        Assertions.assertNotNull(restartedRoutineLoadManager.getJob(goodJobId));
 
         // 4. clean expire
         leaderLoadManager.cleanOldRoutineLoadJobs();
@@ -1031,14 +1023,14 @@ public class RoutineLoadManagerTest {
 
         RoutineLoadJob kafkaRoutineLoadJob = new KafkaRoutineLoadJob(1L, "kafkaJob",
                 1, 1, "xxx", "xxtopic");
-        kafkaRoutineLoadJob.setOrigStmt(new OriginStatement(createSQL, 0));
+        kafkaRoutineLoadJob.setOrigStmt(new OriginStatementInfo(createSQL, 0));
         leaderLoadManager.addRoutineLoadJob(kafkaRoutineLoadJob, db);
 
         createSQL = "CREATE ROUTINE LOAD db0.routine_load_2 ON t1 " +
                 "PROPERTIES(\"format\" = \"json\",\"jsonpaths\"=\"[\\\"$.k1\\\",\\\"$.k2.\\\\\\\"k2.1\\\\\\\"\\\"]\") " +
                 "FROM PULSAR(\"pulsar_service_url\" = \"xxx.xxx.xxx.xxx:xxx\",\"pulsar_topic\" = \"topic_0\");";
         RoutineLoadJob pulsarRoutineLoadJob = new PulsarRoutineLoadJob(2L, "pulsarJob", 1, 1, "xxxx", "xxx", "xxx");
-        pulsarRoutineLoadJob.setOrigStmt(new OriginStatement(createSQL, 0));
+        pulsarRoutineLoadJob.setOrigStmt(new OriginStatementInfo(createSQL, 0));
         leaderLoadManager.addRoutineLoadJob(pulsarRoutineLoadJob, db);
 
         UtFrameUtils.PseudoImage pseudoImage = new UtFrameUtils.PseudoImage();

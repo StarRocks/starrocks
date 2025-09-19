@@ -55,58 +55,7 @@ namespace starrocks {
 constexpr uint8_t SORT_KEY_NULL_FIRST_MARKER = 0x00;
 constexpr uint8_t SORT_KEY_NORMAL_MARKER = 0x01;
 
-template <class UT>
-UT to_bigendian(UT v);
-
-template <>
-uint8_t to_bigendian(uint8_t v) {
-    return v;
-}
-template <>
-uint16_t to_bigendian(uint16_t v) {
-    return BigEndian::FromHost16(v);
-}
-template <>
-uint32_t to_bigendian(uint32_t v) {
-    return BigEndian::FromHost32(v);
-}
-template <>
-uint64_t to_bigendian(uint64_t v) {
-    return BigEndian::FromHost64(v);
-}
-template <>
-uint128_t to_bigendian(uint128_t v) {
-    return BigEndian::FromHost128(v);
-}
-
-template <class T>
-void encode_integral(const T& v, std::string* dest) {
-    if constexpr (std::is_signed<T>::value) {
-        typedef typename std::make_unsigned<T>::type UT;
-        UT uv = v;
-        uv ^= static_cast<UT>(1) << (sizeof(UT) * 8 - 1);
-        uv = to_bigendian(uv);
-        dest->append(reinterpret_cast<const char*>(&uv), sizeof(uv));
-    } else {
-        T nv = to_bigendian(v);
-        dest->append(reinterpret_cast<const char*>(&nv), sizeof(nv));
-    }
-}
-
-template <class T>
-void decode_integral(Slice* src, T* v) {
-    if constexpr (std::is_signed<T>::value) {
-        typedef typename std::make_unsigned<T>::type UT;
-        UT uv = *(UT*)(src->data);
-        uv = to_bigendian(uv);
-        uv ^= static_cast<UT>(1) << (sizeof(UT) * 8 - 1);
-        *v = uv;
-    } else {
-        T nv = *(T*)(src->data);
-        *v = to_bigendian(nv);
-    }
-    src->remove_prefix(sizeof(T));
-}
+using namespace encoding_utils;
 
 template <int LEN>
 static bool SSEEncodeChunk(const uint8_t** srcp, uint8_t** dstp) {
@@ -164,7 +113,8 @@ static inline void EncodeChunkLoop(const uint8_t** srcp, uint8_t** dstp, int len
     }
 }
 
-inline void encode_slice(const Slice& s, std::string* dst, bool is_last) {
+// Implementation of encoding_utils::encode_slice
+void encoding_utils::encode_slice(const Slice& s, std::string* dst, bool is_last) {
     if (is_last) {
         dst->append(s.data, s.size);
     } else {

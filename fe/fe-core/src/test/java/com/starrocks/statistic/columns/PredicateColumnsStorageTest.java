@@ -14,7 +14,6 @@
 
 package com.starrocks.statistic.columns;
 
-import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Table;
@@ -23,6 +22,7 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SimpleExecutor;
 import com.starrocks.scheduler.history.TableKeeper;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.expression.TableName;
 import com.starrocks.sql.plan.PlanTestBase;
 import com.starrocks.statistic.StatisticsMetaManager;
 import com.starrocks.thrift.TResultBatch;
@@ -40,13 +40,13 @@ import java.util.List;
 
 class PredicateColumnsStorageTest extends PlanTestBase {
 
-    private static String feName;
+    private static int feName;
 
     @BeforeAll
     public static void beforeAll() throws Exception {
         StatisticsMetaManager m = new StatisticsMetaManager();
         m.createStatisticsTablesForTest();
-        feName = GlobalStateMgr.getCurrentState().getNodeMgr().getNodeName();
+        feName = GlobalStateMgr.getCurrentState().getNodeMgr().getMySelf().getFid();
     }
 
     @Test
@@ -99,7 +99,7 @@ class PredicateColumnsStorageTest extends PlanTestBase {
         // TODO: vacuum
         instance.vacuum(lastPersist);
         Mockito.verify(repo).executeDML("DELETE FROM _statistics_.predicate_columns " +
-                "WHERE fe_id=" + Strings.quote(feName) +
+                "WHERE fe_id=" + Strings.quote(Integer.toString(feName)) +
                 " AND last_used < '2024-11-10 01:00:00'");
 
         guard.close();

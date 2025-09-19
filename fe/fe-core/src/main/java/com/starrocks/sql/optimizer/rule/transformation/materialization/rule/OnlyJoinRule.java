@@ -15,14 +15,15 @@
 
 package com.starrocks.sql.optimizer.rule.transformation.materialization.rule;
 
+import com.starrocks.sql.optimizer.OptExpression;
+import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.pattern.Pattern;
 import com.starrocks.sql.optimizer.rule.RuleType;
+import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;
 
-/*
- *
- * Here is the rule for pattern Join
- *
+/**
+ *  OnlyJoinRule is used to match SPJ query pattern and rewrite it by mv.
  */
 public class OnlyJoinRule extends BaseMaterializedViewRewriteRule {
     private static final OnlyJoinRule INSTANCE = new OnlyJoinRule();
@@ -35,4 +36,16 @@ public class OnlyJoinRule extends BaseMaterializedViewRewriteRule {
         return INSTANCE;
     }
 
+    @Override
+    public boolean check(OptExpression input, OptimizerContext context) {
+        // NOTE:
+        // 1. For only-join rule, only SPJ is supported
+        // 2. Don't limit the input must contain a join because it may be a single table query but we still can rewrite it
+        //    in this rule, because of a multi table plan after some rules(eg: FineGrainedRangePredicateRule) may
+        //    become a single table plan.
+        if (!MvUtils.isLogicalSPJ(input)) {
+            return false;
+        }
+        return super.check(input, context);
+    }
 }

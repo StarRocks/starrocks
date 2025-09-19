@@ -17,7 +17,7 @@ package com.starrocks.sql.optimizer.rule.transformation;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
-import com.starrocks.analysis.JoinOperator;
+import com.starrocks.sql.ast.expression.JoinOperator;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.Utils;
@@ -94,7 +94,8 @@ public class EliminateJoinWithConstantRule extends TransformationRule {
         JoinOperator joinType = joinOperator.getJoinType();
         // anti/full outer join cannot be eliminated.
         // semi join needs to distinct output which cannot be eliminated.
-        if (joinType.isAntiJoin() || joinType.isFullOuterJoin() || joinType.isSemiJoin()) {
+        // ASOF join has temporal ordering semantics and cannot be eliminated with constants.
+        if (joinType.isAntiJoin() || joinType.isFullOuterJoin() || joinType.isSemiJoin() || joinType.isAsofJoin()) {
             return false;
         }
         if (constantIndex == 0) {

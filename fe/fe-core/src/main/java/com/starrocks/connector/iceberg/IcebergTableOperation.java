@@ -19,8 +19,12 @@ public enum IcebergTableOperation {
     FAST_FORWARD,
     CHERRYPICK_SNAPSHOT,
     REMOVE_ORPHAN_FILES,
+    ROLLBACK_TO_SNAPSHOT,
+    REWRITE_DATA_FILES,
+    ADD_FILES,
     UNKNOWN;
 
+    
     public static IcebergTableOperation fromString(String opStr) {
         for (IcebergTableOperation op : IcebergTableOperation.values()) {
             if (op.name().equalsIgnoreCase(opStr)) {
@@ -29,4 +33,21 @@ public enum IcebergTableOperation {
         }
         return UNKNOWN;
     }
+    
+    public enum RewriteFileOption {
+        REWRITE_ALL,  // rewrite all the files under the specified partitions, ignore other param like min_file_size_bytes, default false
+        MIN_FILE_SIZE_BYTES, // to filter data file by size, default 256MB
+        BATCH_SIZE, // the max size of total data files to rewrite at one time, default 10GB
+        UNKNOWN;
+
+        public static RewriteFileOption fromString(String catStr) {
+            for (RewriteFileOption c : values()) {
+                if (c.name().equalsIgnoreCase(catStr)) {
+                    return c;
+                }
+            }
+            return UNKNOWN;
+        }
+    }
+
 }

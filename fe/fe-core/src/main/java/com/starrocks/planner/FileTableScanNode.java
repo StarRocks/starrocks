@@ -15,8 +15,6 @@
 package com.starrocks.planner;
 
 import com.google.common.base.MoreObjects;
-import com.starrocks.analysis.SlotDescriptor;
-import com.starrocks.analysis.TupleDescriptor;
 import com.starrocks.catalog.FileTable;
 import com.starrocks.catalog.Type;
 import com.starrocks.connector.RemoteFileBlockDesc;
@@ -137,11 +135,11 @@ public class FileTableScanNode extends ScanNode {
 
         if (!scanNodePredicates.getNonPartitionConjuncts().isEmpty()) {
             output.append(prefix).append("NON-PARTITION PREDICATES: ").append(
-                    getExplainString(scanNodePredicates.getNonPartitionConjuncts())).append("\n");
+                    explainExpr(scanNodePredicates.getNonPartitionConjuncts())).append("\n");
         }
         if (!scanNodePredicates.getMinMaxConjuncts().isEmpty()) {
             output.append(prefix).append("MIN/MAX PREDICATES: ").append(
-                    getExplainString(scanNodePredicates.getMinMaxConjuncts())).append("\n");
+                    explainExpr(scanNodePredicates.getMinMaxConjuncts())).append("\n");
         }
 
         output.append(prefix).append(String.format("cardinality=%s", cardinality));

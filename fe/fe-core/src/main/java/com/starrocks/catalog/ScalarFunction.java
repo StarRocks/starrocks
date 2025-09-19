@@ -37,23 +37,17 @@ package com.starrocks.catalog;
 import com.google.common.collect.Maps;
 import com.google.gson.Gson;
 import com.google.gson.annotations.SerializedName;
-import com.starrocks.analysis.FunctionName;
-import com.starrocks.common.io.Text;
 import com.starrocks.sql.ast.CreateFunctionStmt;
 import com.starrocks.sql.ast.HdfsURI;
+import com.starrocks.sql.ast.expression.FunctionName;
 import com.starrocks.thrift.TFunction;
 import com.starrocks.thrift.TFunctionBinaryType;
 import com.starrocks.thrift.TScalarFunction;
 import org.apache.logging.log4j.util.Strings;
 
-import java.io.DataInput;
-import java.io.DataOutput;
-import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
-
-import static com.starrocks.common.io.IOUtils.writeOptionString;
 
 /**
  * Internal representation of a scalar function.
@@ -267,28 +261,8 @@ public class ScalarFunction extends Function {
         return fn;
     }
 
-    @Override
-    public void write(DataOutput output) throws IOException {
-        // 1. type
-        FunctionType.SCALAR.write(output);
-        // 2. parent
-        super.writeFields(output);
-        // 3.symbols
-        Text.writeString(output, symbolName);
-        writeOptionString(output, prepareFnSymbol);
-        writeOptionString(output, closeFnSymbol);
-    }
 
-    public void readFields(DataInput input) throws IOException {
-        super.readFields(input);
-        symbolName = Text.readString(input);
-        if (input.readBoolean()) {
-            prepareFnSymbol = Text.readString(input);
-        }
-        if (input.readBoolean()) {
-            closeFnSymbol = Text.readString(input);
-        }
-    }
+
 
     @Override
     public String getProperties() {

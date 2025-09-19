@@ -1,0 +1,24 @@
+-- name: test_spm_baseline_query @sequential
+
+create table t1 (
+    k1 int,
+    k2 int,
+    k3 string
+)
+duplicate key(k1)
+distributed by hash(k1) buckets 1
+properties("replication_num" = "1");
+
+truncate table _statistics_.spm_baselines;
+
+create baseline using select * from t1 where k1 = 1;
+create baseline using select * from t1 where k2 = 10;
+create baseline using select * from t1 where k3 = 'test';
+
+show baseline;
+
+show baseline where enable = TRUE;
+
+show baseline on select * from t1 where k1 = 1;
+show baseline on select * from t1 where k2 = 10;
+show baseline on select * from t1 where k3 = 'test';

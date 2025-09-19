@@ -552,8 +552,8 @@ displayed_sidebar: docs
 #### 共有データクラスタ
 
 - 永続性インデックスを有効にできない主キーテーブルのサポートを追加しました。
-- 各データ行に対してグローバルに一意の ID を有効にし、データ管理を簡素化する [AUTO_INCREMENT](https://docs.starrocks.io/docs/sql-reference/sql-statements/auto_increment/) 列属性をサポートします。
-- [ロード中にパーティションを自動的に作成し、パーティション式を使用してパーティションルールを定義することをサポートします](https://docs.starrocks.io/docs/table_design/expression_partitioning/)。これにより、パーティション作成がより簡単に使用でき、柔軟になります。
+- 各データ行に対してグローバルに一意の ID を有効にし、データ管理を簡素化する [AUTO_INCREMENT](https://docs.starrocks.io/docs/sql-reference/sql-statements/table_bucket_part_index/auto_increment/) 列属性をサポートします。
+- [ロード中にパーティションを自動的に作成し、パーティション式を使用してパーティションルールを定義することをサポートします](https://docs.starrocks.io/docs/table_design/data_distribution/expression_partitioning/)。これにより、パーティション作成がより簡単に使用でき、柔軟になります。
 - 共有データ StarRocks クラスタで、ユーザーがストレージの場所と認証情報を構成できる [ストレージボリュームの抽象化](https://docs.starrocks.io/docs/deployment/shared_data/s3#use-your-shared-data-starrocks-cluster) をサポートします。ユーザーはデータベースまたはテーブルを作成する際に既存のストレージボリュームを直接参照でき、認証構成が容易になります。
 
 #### データレイク分析

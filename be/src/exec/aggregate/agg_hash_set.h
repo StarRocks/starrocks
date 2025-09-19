@@ -14,19 +14,17 @@
 
 #pragma once
 
+#include <any>
+
 #include "column/column_hash.h"
-#include "column/column_helper.h"
 #include "column/hash_set.h"
 #include "column/type_traits.h"
 #include "column/vectorized_fwd.h"
 #include "exec/aggregate/agg_profile.h"
 #include "gutil/casts.h"
 #include "runtime/mem_pool.h"
-#include "runtime/runtime_state.h"
 #include "util/fixed_hash_map.h"
-#include "util/hash_util.hpp"
 #include "util/phmap/phmap.h"
-#include "util/runtime_profile.h"
 
 namespace starrocks {
 
@@ -111,14 +109,6 @@ struct AggHashSet {
     }
 };
 
-template <typename T>
-struct no_prefetch_set : std::false_type {};
-template <PhmapSeed seed>
-struct no_prefetch_set<Int8AggHashSet<seed>> : std::true_type {};
-
-template <class T>
-constexpr bool is_no_prefetch_set = no_prefetch_set<T>::value;
-
 // handle one number hash key
 template <LogicalType logical_type, typename HashSet>
 struct AggHashSetOfOneNumberKey : public AggHashSet<HashSet, AggHashSetOfOneNumberKey<logical_type, HashSet>> {
@@ -147,12 +137,10 @@ struct AggHashSetOfOneNumberKey : public AggHashSet<HashSet, AggHashSetOfOneNumb
 
         if constexpr (is_no_prefetch_set<HashSet>) {
             this->template build_set_noprefetch<compute_and_allocate>(chunk_size, key_columns, pool, not_founds);
+        } else if (this->hash_set.bucket_count() < prefetch_threhold) {
+            this->template build_set_noprefetch<compute_and_allocate>(chunk_size, key_columns, pool, not_founds);
         } else {
-            if (this->hash_set.bucket_count() < prefetch_threhold) {
-                this->template build_set_noprefetch<compute_and_allocate>(chunk_size, key_columns, pool, not_founds);
-            } else {
-                this->template build_set_prefetch<compute_and_allocate>(chunk_size, key_columns, pool, not_founds);
-            }
+            this->template build_set_prefetch<compute_and_allocate>(chunk_size, key_columns, pool, not_founds);
         }
     }
 
@@ -160,7 +148,7 @@ struct AggHashSetOfOneNumberKey : public AggHashSet<HashSet, AggHashSetOfOneNumb
     ALWAYS_NOINLINE void build_set_noprefetch(size_t chunk_size, const Columns& key_columns, MemPool* pool,
                                               Filter* not_founds) {
         const auto* column = down_cast<const ColumnType*>(key_columns[0].get());
-        const auto& keys = column->get_data();
+        const auto keys = column->immutable_data();
 
         for (size_t i = 0; i < chunk_size; ++i) {
             if constexpr (compute_and_allocate) {
@@ -175,7 +163,7 @@ struct AggHashSetOfOneNumberKey : public AggHashSet<HashSet, AggHashSetOfOneNumb
     ALWAYS_NOINLINE void build_set_prefetch(size_t chunk_size, const Columns& key_columns, MemPool* pool,
                                             Filter* not_founds) {
         const auto* column = down_cast<const ColumnType*>(key_columns[0].get());
-        const auto& keys = column->get_data();
+        const auto keys = column->immutable_data();
 
         AGG_HASH_SET_PRECOMPUTE_HASH_VALS();
         for (size_t i = 0; i < chunk_size; ++i) {
@@ -248,7 +236,7 @@ struct AggHashSetOfOneNullableNumberKey
         const auto* nullable_column = down_cast<const NullableColumn*>(key_columns[0].get());
         const auto* data_column = down_cast<const ColumnType*>(nullable_column->data_column().get());
         const auto& null_data = nullable_column->null_column_data();
-        const auto& keys = data_column->get_data();
+        const auto keys = data_column->immutable_data();
 
         if (nullable_column->has_null()) {
             for (size_t i = 0; i < chunk_size; ++i) {
@@ -278,7 +266,7 @@ struct AggHashSetOfOneNullableNumberKey
                                             Filter* not_founds) {
         const auto* nullable_column = down_cast<const NullableColumn*>(key_columns[0].get());
         const auto* data_column = down_cast<const ColumnType*>(nullable_column->data_column().get());
-        const auto& keys = data_column->get_data();
+        const auto keys = data_column->immutable_data();
 
         AGG_HASH_SET_PRECOMPUTE_HASH_VALS();
         for (size_t i = 0; i < chunk_size; ++i) {
@@ -534,13 +522,13 @@ struct AggHashSetOfSerializedKey : public AggHashSet<HashSet, AggHashSetOfSerial
             not_founds->assign(chunk_size, 0);
         }
 
-        size_t cur_max_one_row_size = get_max_serialize_size(key_columns);
-        if (UNLIKELY(cur_max_one_row_size > max_one_row_size)) {
-            max_one_row_size = cur_max_one_row_size;
+        max_one_row_size = get_max_serialize_size(key_columns);
+        size_t new_buffer_size = max_one_row_size * chunk_size + SLICE_MEMEQUAL_OVERFLOW_PADDING;
+        if (UNLIKELY(new_buffer_size > _mem_pool->total_allocated_bytes())) {
             _mem_pool->clear();
             // reserved extra SLICE_MEMEQUAL_OVERFLOW_PADDING bytes to prevent SIMD instructions
             // from accessing out-of-bound memory.
-            _buffer = _mem_pool->allocate(max_one_row_size * _chunk_size + SLICE_MEMEQUAL_OVERFLOW_PADDING);
+            _buffer = _mem_pool->allocate(new_buffer_size);
         }
 
         for (const auto& key_column : key_columns) {
@@ -754,10 +742,94 @@ struct AggHashSetOfSerializedKeyFixedSize : public AggHashSet<HashSet, AggHashSe
     uint8_t* buffer;
     ResultVector results;
     Buffer<Slice> tmp_slices;
-    // std::vector<Slice> tmp_slices;
 
     int32_t _chunk_size;
     std::vector<size_t> hashes;
+};
+
+template <typename HashSet>
+struct AggHashSetCompressedFixedSize : public AggHashSet<HashSet, AggHashSetCompressedFixedSize<HashSet>> {
+    using Base = AggHashSet<HashSet, AggHashSetCompressedFixedSize<HashSet>>;
+    using Iterator = typename HashSet::iterator;
+    using KeyType = typename HashSet::key_type;
+    using FixedSizeSliceKey = typename HashSet::key_type;
+    using ResultVector = typename std::vector<FixedSizeSliceKey>;
+
+    bool has_null_column = false;
+    static constexpr size_t max_fixed_size = sizeof(FixedSizeSliceKey);
+
+    template <class... Args>
+    AggHashSetCompressedFixedSize(int32_t chunk_size, Args&&... args)
+            : Base(chunk_size, std::forward<Args>(args)...), _chunk_size(chunk_size) {
+        fixed_keys.reserve(chunk_size);
+    }
+
+    // When compute_and_allocate=false:
+    // Elements queried in HashSet will be added to HashSet
+    // elements that cannot be queried are not processed,
+    // and are mainly used in the first stage of two-stage aggregation when aggr reduction is low
+    template <bool compute_and_allocate>
+    void build_set(size_t chunk_size, const Columns& key_columns, MemPool* pool, Filter* not_founds) {
+        if constexpr (!compute_and_allocate) {
+            DCHECK(not_founds);
+            not_founds->assign(chunk_size, 0);
+        }
+
+        auto* buffer = reinterpret_cast<uint8_t*>(fixed_keys.data());
+        memset(buffer, 0x0, sizeof(FixedSizeSliceKey) * chunk_size);
+        bitcompress_serialize(key_columns, bases, offsets, chunk_size, sizeof(FixedSizeSliceKey), fixed_keys.data());
+
+        if constexpr (is_no_prefetch_set<HashSet>) {
+            this->template build_set_noprefetch<compute_and_allocate>(chunk_size, pool, not_founds);
+        } else if (this->hash_set.bucket_count() < prefetch_threhold) {
+            this->template build_set_noprefetch<compute_and_allocate>(chunk_size, pool, not_founds);
+        } else {
+            this->template build_set_prefetch<compute_and_allocate>(chunk_size, pool, not_founds);
+        }
+    }
+
+    template <bool compute_and_allocate>
+    ALWAYS_NOINLINE void build_set_prefetch(size_t chunk_size, MemPool* pool, Filter* not_founds) {
+        auto* keys = reinterpret_cast<FixedSizeSliceKey*>(fixed_keys.data());
+        AGG_HASH_SET_PRECOMPUTE_HASH_VALS();
+
+        for (size_t i = 0; i < chunk_size; ++i) {
+            AGG_HASH_SET_PREFETCH_HASH_VAL();
+            if constexpr (compute_and_allocate) {
+                this->hash_set.emplace_with_hash(hashes[i], keys[i]);
+            } else {
+                (*not_founds)[i] = this->hash_set.find(keys[i], hashes[i]) == this->hash_set.end();
+            }
+        }
+    }
+
+    template <bool compute_and_allocate>
+    ALWAYS_NOINLINE void build_set_noprefetch(size_t chunk_size, MemPool* pool, Filter* not_founds) {
+        for (size_t i = 0; i < chunk_size; ++i) {
+            if constexpr (compute_and_allocate) {
+                this->hash_set.insert(fixed_keys[i]);
+            } else {
+                (*not_founds)[i] = !this->hash_set.contains(fixed_keys[i]);
+            }
+        }
+    }
+
+    void insert_keys_to_columns(ResultVector& keys, Columns& key_columns, int32_t chunk_size) {
+        bitcompress_deserialize(key_columns, bases, offsets, used_bits, chunk_size, sizeof(FixedSizeSliceKey),
+                                keys.data());
+    }
+
+    static constexpr bool has_single_null_key = false;
+    bool has_null_key = false;
+
+    std::vector<int> used_bits;
+    std::vector<int> offsets;
+    std::vector<std::any> bases;
+    std::vector<FixedSizeSliceKey> fixed_keys;
+    std::vector<size_t> hashes;
+    ResultVector results;
+
+    int32_t _chunk_size;
 };
 
 } // namespace starrocks

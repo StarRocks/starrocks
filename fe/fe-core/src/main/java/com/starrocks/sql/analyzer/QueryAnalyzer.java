@@ -20,22 +20,6 @@ import com.google.common.base.Strings;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
-import com.starrocks.analysis.BinaryPredicate;
-import com.starrocks.analysis.BinaryType;
-import com.starrocks.analysis.BoolLiteral;
-import com.starrocks.analysis.CaseExpr;
-import com.starrocks.analysis.CaseWhenClause;
-import com.starrocks.analysis.CompoundPredicate;
-import com.starrocks.analysis.Expr;
-import com.starrocks.analysis.FunctionCallExpr;
-import com.starrocks.analysis.HintNode;
-import com.starrocks.analysis.IntLiteral;
-import com.starrocks.analysis.JoinOperator;
-import com.starrocks.analysis.LiteralExpr;
-import com.starrocks.analysis.OrderByElement;
-import com.starrocks.analysis.ParseNode;
-import com.starrocks.analysis.SlotRef;
-import com.starrocks.analysis.TableName;
 import com.starrocks.authorization.SecurityPolicyRewriteRule;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ConnectorView;
@@ -62,14 +46,16 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.MetadataMgr;
 import com.starrocks.sql.ast.AstTraverser;
-import com.starrocks.sql.ast.AstVisitor;
+import com.starrocks.sql.ast.AstVisitorExtendInterface;
 import com.starrocks.sql.ast.CTERelation;
 import com.starrocks.sql.ast.ExceptRelation;
-import com.starrocks.sql.ast.FieldReference;
 import com.starrocks.sql.ast.FileTableFunctionRelation;
+import com.starrocks.sql.ast.HintNode;
 import com.starrocks.sql.ast.IntersectRelation;
 import com.starrocks.sql.ast.JoinRelation;
 import com.starrocks.sql.ast.NormalizedTableFunctionRelation;
+import com.starrocks.sql.ast.OrderByElement;
+import com.starrocks.sql.ast.ParseNode;
 import com.starrocks.sql.ast.PartitionNames;
 import com.starrocks.sql.ast.PivotAggregation;
 import com.starrocks.sql.ast.PivotRelation;
@@ -88,6 +74,20 @@ import com.starrocks.sql.ast.TableRelation;
 import com.starrocks.sql.ast.UnionRelation;
 import com.starrocks.sql.ast.ValuesRelation;
 import com.starrocks.sql.ast.ViewRelation;
+import com.starrocks.sql.ast.expression.BinaryPredicate;
+import com.starrocks.sql.ast.expression.BinaryType;
+import com.starrocks.sql.ast.expression.BoolLiteral;
+import com.starrocks.sql.ast.expression.CaseExpr;
+import com.starrocks.sql.ast.expression.CaseWhenClause;
+import com.starrocks.sql.ast.expression.CompoundPredicate;
+import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.FieldReference;
+import com.starrocks.sql.ast.expression.FunctionCallExpr;
+import com.starrocks.sql.ast.expression.IntLiteral;
+import com.starrocks.sql.ast.expression.JoinOperator;
+import com.starrocks.sql.ast.expression.LiteralExpr;
+import com.starrocks.sql.ast.expression.SlotRef;
+import com.starrocks.sql.ast.expression.TableName;
 import com.starrocks.sql.common.MetaUtils;
 import com.starrocks.sql.common.TypeManager;
 import com.starrocks.sql.optimizer.dump.HiveMetaStoreTableDumpInfo;
@@ -129,7 +129,7 @@ public class QueryAnalyzer {
         new Visitor().process(node, parent);
     }
 
-    private class GeneratedColumnExprMappingCollector implements AstVisitor<Void, Scope> {
+    private class GeneratedColumnExprMappingCollector implements AstVisitorExtendInterface<Void, Scope> {
         public GeneratedColumnExprMappingCollector() {
         }
 
@@ -284,7 +284,7 @@ public class QueryAnalyzer {
         }
     }
 
-    private class Visitor implements AstVisitor<Scope, Scope> {
+    private class Visitor implements AstVisitorExtendInterface<Scope, Scope> {
         public Visitor() {
         }
 
@@ -802,6 +802,9 @@ public class QueryAnalyzer {
             Scope leftScope = process(join.getLeft(), parentScope);
             Scope rightScope;
             if (join.getRight() instanceof TableFunctionRelation || join.isLateral()) {
+                if (join.getJoinOp().isAsofJoin()) {
+                    throw new SemanticException("ASOF join is not supported with lateral join");
+                }
                 if (!(join.getRight() instanceof TableFunctionRelation)) {
                     throw new SemanticException("Only support lateral join with UDTF");
                 } else if (!join.getJoinOp().isInnerJoin() && !join.getJoinOp().isCrossJoin() &&
@@ -860,6 +863,12 @@ public class QueryAnalyzer {
                     throw new SemanticException("WHERE clause must evaluate to a boolean: actual type %s",
                             joinEqual.getType());
                 }
+
+                // Validate ASOF JOIN conditions
+                if (join.getJoinOp().isAsofJoin()) {
+                    validateAsofJoinConditions(joinEqual);
+                }
+
                 // check the join on predicate, example:
                 // we have col_json, we can't join on table_a.col_json = table_b.col_json,
                 // but we can join on cast(table_a.col_json->"a" as int) = cast(table_b.col_json->"a" as int)
@@ -867,7 +876,7 @@ public class QueryAnalyzer {
                 // and table_a.col_struct.a = table_b.col_struct.a
                 checkJoinEqual(joinEqual);
             } else {
-                if (join.getJoinOp().isOuterJoin() || join.getJoinOp().isSemiAntiJoin()) {
+                if (join.getJoinOp().isOuterJoin() || join.getJoinOp().isSemiAntiJoin() || join.getJoinOp().isAsofJoin()) {
                     throw new SemanticException(join.getJoinOp() + " requires an ON or USING clause.");
                 }
             }
@@ -880,7 +889,7 @@ public class QueryAnalyzer {
                 scope = new Scope(RelationId.of(join), leftScope.getRelationFields());
             } else if (join.getJoinOp().isRightSemiAntiJoin()) {
                 scope = new Scope(RelationId.of(join), rightScope.getRelationFields());
-            } else if (join.getJoinOp().isLeftOuterJoin()) {
+            } else if (join.getJoinOp().isAnyLeftOuterJoin()) {
                 List<Field> rightFields = getFieldsWithNullable(rightScope);
                 scope = new Scope(RelationId.of(join),
                         leftScope.getRelationFields().joinWith(new RelationFields(rightFields)));
@@ -913,6 +922,15 @@ public class QueryAnalyzer {
                 newFields.add(newField);
             }
             return newFields;
+        }
+
+        private void validateAsofJoinConditions(Expr joinPredicate) {
+            if (joinPredicate == null) {
+                throw new SemanticException("ASOF JOIN requires ON clause with join conditions");
+            }
+
+            AsofJoinConditionValidator validator = new AsofJoinConditionValidator();
+            validator.validate(joinPredicate);
         }
 
         private Expr analyzeJoinUsing(List<String> usingColNames, Scope left, Scope right) {
@@ -1556,7 +1574,7 @@ public class QueryAnalyzer {
     // eg: select trim(c1) as a, trim(c2) as b, concat(a,',', b) from t1
     // Note: alias in where clause is not handled now
     // eg: select trim(c1) as a, trim(c2) as b, concat(a,',', b) from t1 where a != 'x'
-    private static class RewriteAliasVisitor implements AstVisitor<Expr, Void> {
+    private static class RewriteAliasVisitor implements AstVisitorExtendInterface<Expr, Void> {
         private final Map<String, Expr> aliases = new HashMap<>();
         private final Set<String> aliasesMaybeAmbiguous = new HashSet<>();
         private final Map<String, Expr> resolvedAliases = new HashMap<>();
@@ -1664,6 +1682,69 @@ public class QueryAnalyzer {
                 resolvingAlias.removeLast();
             }
             return null;
+        }
+    }
+
+    private static class AsofJoinConditionValidator {
+        private int equalityPredicateCount = 0;
+        private int inequalityPredicateCount = 0;
+        private boolean containsOrOperator = false;
+
+        public void validate(Expr joinPredicate) {
+            visit(joinPredicate);
+
+            if (equalityPredicateCount == 0) {
+                throw new SemanticException("ASOF JOIN requires at least one equality condition in join ON clause");
+            }
+
+            if (inequalityPredicateCount == 0) {
+                throw new SemanticException("ASOF JOIN requires exactly one temporal inequality condition in join ON clause");
+            }
+
+            if (inequalityPredicateCount > 1) {
+                throw new SemanticException("ASOF JOIN supports only one inequality condition in join ON clause, found: " +
+                        inequalityPredicateCount);
+            }
+        }
+
+        private void visit(Expr expr) {
+            if (expr instanceof CompoundPredicate compound) {
+                if (compound.getOp() == CompoundPredicate.Operator.OR) {
+                    containsOrOperator = true;
+                }
+                visit(compound.getChild(0));
+                visit(compound.getChild(1));
+            } else if (expr instanceof BinaryPredicate binary) {
+                if (binary.getOp() == BinaryType.EQ) {
+                    equalityPredicateCount++;
+                } else if (binary.getOp().isRange()) {
+                    inequalityPredicateCount++;
+                    validateTemporalConditionTypes(binary);
+                } else {
+                    throw new SemanticException("ASOF JOIN does not support '" + binary.getOp() + "' operator " +
+                            "in join ON clause");
+                }
+            }
+
+            if (containsOrOperator) {
+                throw new SemanticException("ASOF JOIN conditions do not support OR operators in join ON clause");
+            }
+        }
+
+        private void validateTemporalConditionTypes(BinaryPredicate predicate) {
+            Type leftType = predicate.getChild(0).getType();
+            Type rightType = predicate.getChild(1).getType();
+
+            if (!isTemporalOrderingType(leftType) || !isTemporalOrderingType(rightType)) {
+                throw new SemanticException(
+                        "ASOF JOIN temporal condition supports only BIGINT, DATE, or DATETIME types in join ON clause, found: " +
+                                leftType.toSql() + " and " + rightType.toSql() + ". predicate: " + predicate.toMySql()
+                );
+            }
+        }
+
+        private boolean isTemporalOrderingType(Type type) {
+            return type.isBigint() || type.isDate() || type.isDatetime();
         }
     }
 }

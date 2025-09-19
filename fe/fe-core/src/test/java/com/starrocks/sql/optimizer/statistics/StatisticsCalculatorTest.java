@@ -17,18 +17,18 @@ package com.starrocks.sql.optimizer.statistics;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
-import com.starrocks.analysis.BinaryType;
-import com.starrocks.analysis.JoinOperator;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.FeConstants;
-import com.starrocks.connector.TableVersionRange;
+import com.starrocks.common.tvr.TvrTableSnapshot;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.MetadataMgr;
+import com.starrocks.sql.ast.expression.BinaryType;
+import com.starrocks.sql.ast.expression.JoinOperator;
 import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.optimizer.ExpressionContext;
 import com.starrocks.sql.optimizer.Group;
@@ -309,7 +309,7 @@ public class StatisticsCalculatorTest {
         BinaryPredicateOperator predicateOperator = new BinaryPredicateOperator(BinaryType.LT,
                     partitionColumn, ConstantOperator.createInt(50));
         LogicalIcebergScanOperator icebergScanOperator = new LogicalIcebergScanOperator(icebergTable, refToColumn,
-                    columnToRef, -1, predicateOperator, TableVersionRange.empty());
+                    columnToRef, -1, predicateOperator, TvrTableSnapshot.empty());
 
         GroupExpression groupExpression = new GroupExpression(icebergScanOperator, Lists.newArrayList());
         groupExpression.setGroup(new Group(0));

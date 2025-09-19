@@ -14,12 +14,12 @@
 package com.starrocks.authorization;
 
 import com.google.common.collect.Lists;
-import com.starrocks.analysis.FunctionName;
-import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.ScalarFunction;
 import com.starrocks.catalog.Type;
+import com.starrocks.catalog.UserIdentity;
 import com.starrocks.qe.ConnectContext;
-import com.starrocks.sql.ast.UserIdentity;
+import com.starrocks.sql.ast.expression.FunctionName;
+import com.starrocks.sql.ast.expression.TableName;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 

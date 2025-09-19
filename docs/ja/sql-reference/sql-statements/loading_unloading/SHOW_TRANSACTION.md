@@ -25,12 +25,14 @@ Coordinator: FE: 10.74.167.16
 TransactionStatus: VISIBLE
 LoadJobSourceType: INSERT_STREAMING
 PrepareTime: 2020-01-09 14:59:07
+PreparedTime: 2020-01-09 14:59:08
 CommitTime: 2020-01-09 14:59:09
 FinishTime: 2020-01-09 14:59:09
 Reason:
 ErrorReplicasCount: 0
 ListenerId: -1
 TimeoutMs: 300000
+PreparedTimeoutMs: 86400000
 ```
 
 * TransactionId: トランザクション ID
@@ -43,12 +45,14 @@ TimeoutMs: 300000
 * ABORTED: トランザクションが失敗
 * LoadJobSourceType: インポートタスクのタイプ
 * PrepareTime: トランザクションの開始時間
+* PreparedTime: トランスアクションが正常に準備された時点（v3.5.4からサポートされています）
 * CommitTime: トランザクションが正常にコミットされた時間
 * FinishTime: データが見えるようになった時間
 * Reason: エラーメッセージ
 * ErrorReplicasCount: エラーのあるレプリカの数
 * ListenerId: 関連するインポートジョブの ID
-* TimeoutMs: トランザクションのタイムアウト時間（ミリ秒）
+* TimeoutMs: トランザクションが `PREPARE` 状態から `PREPARED` 状態に移行するまでのタイムアウト時間（ミリ秒単位）
+* PreparedTimeoutMs: トランザクションが `PREPARED` 状態から `COMMITTED` 状態に移行するまでのタイムアウト時間（ミリ秒単位）（v3.5.4からサポートされています）
 
 ## 例
 

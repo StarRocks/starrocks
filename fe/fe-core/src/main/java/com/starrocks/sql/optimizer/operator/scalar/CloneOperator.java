@@ -67,7 +67,7 @@ public class CloneOperator extends ArgsScalarOperator {
 
     @Override
     public <R, C> R accept(ScalarOperatorVisitor<R, C> visitor, C context) {
-        return visitor.visitCloneOperator(this, context);
+        return  visitor.visitCloneOperator(this, context);
     }
 
     @Override

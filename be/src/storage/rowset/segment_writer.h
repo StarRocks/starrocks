@@ -46,6 +46,7 @@
 #include "gutil/macros.h"
 #include "io/input_stream.h"
 #include "runtime/global_dict/types.h"
+#include "runtime/global_dict/types_fwd_decl.h"
 #include "storage/row_store_encoder_factory.h"
 #include "storage/tablet_schema.h"
 
@@ -161,6 +162,9 @@ private:
     Status _write_raw_data(const std::vector<Slice>& slices);
     void _init_column_meta(ColumnMetaPB* meta, uint32_t column_id, const TabletColumn& column);
     void _verify_footer();
+
+    // Check global dictionary validity for a single column writer
+    void _check_column_global_dict_valid(ColumnWriter* column_writer, uint32_t column_index);
 
     uint32_t _segment_id;
     TabletSchemaCSPtr _tablet_schema;

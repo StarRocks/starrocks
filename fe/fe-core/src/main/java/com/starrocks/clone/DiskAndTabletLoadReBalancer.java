@@ -98,10 +98,10 @@ public class DiskAndTabletLoadReBalancer extends Rebalancer {
             // balance cluster
             if (!isClusterDiskBalanced(clusterStat, medium)) {
                 alternativeTablets = balanceClusterDisk(clusterStat, medium);
-                balanceType = BalanceType.CLUSTER_DISK;
+                balanceType = BalanceType.INTER_NODE_DISK_USAGE;
             } else {
                 alternativeTablets = balanceClusterTablet(clusterStat, medium);
-                balanceType = BalanceType.CLUSTER_TABLET;
+                balanceType = BalanceType.INTER_NODE_TABLET_DISTRIBUTION;
             }
             if (!alternativeTablets.isEmpty()) {
                 break;
@@ -110,10 +110,10 @@ public class DiskAndTabletLoadReBalancer extends Rebalancer {
             // balance backend
             if (!isBackendDiskBalanced(clusterStat, medium)) {
                 alternativeTablets = balanceBackendDisk(clusterStat, medium);
-                balanceType = BalanceType.BACKEND_DISK;
+                balanceType = BalanceType.INTRA_NODE_DISK_USAGE;
             } else {
                 alternativeTablets = balanceBackendTablet(clusterStat, medium);
-                balanceType = BalanceType.BACKEND_TABLET;
+                balanceType = BalanceType.INTRA_NODE_TABLET_DISTRIBUTION;
             }
         } while (false);
 
@@ -137,7 +137,8 @@ public class DiskAndTabletLoadReBalancer extends Rebalancer {
         long replicaSize = tabletCtx.getSrcReplica().getDataSize();
         boolean isLocalBalance = (tabletCtx.getDestBackendId() == tabletCtx.getSrcBackendId());
         // tabletCtx may wait a long time from the pending state to the running state, so we must double-check the task
-        if (tabletCtx.getBalanceType() == BalanceType.CLUSTER_DISK || tabletCtx.getBalanceType() == BalanceType.BACKEND_DISK) {
+        if (tabletCtx.getBalanceType() == BalanceType.INTER_NODE_DISK_USAGE ||
+                tabletCtx.getBalanceType() == BalanceType.INTRA_NODE_DISK_USAGE) {
             BackendLoadStatistic srcBeStat = clusterStat.getBackendLoadStatistic(tabletCtx.getSrcBackendId());
             BackendLoadStatistic destBeStat = clusterStat.getBackendLoadStatistic(tabletCtx.getDestBackendId());
             if (srcBeStat == null || destBeStat == null) {
@@ -623,7 +624,7 @@ public class DiskAndTabletLoadReBalancer extends Rebalancer {
                         schedCtx.setOrigPriority(TabletSchedCtx.Priority.LOW);
                         schedCtx.setSrc(replica);
                         schedCtx.setDest(lBackend.getId(), destPathHash);
-                        schedCtx.setBalanceType(BalanceType.CLUSTER_DISK);
+                        schedCtx.setBalanceType(BalanceType.INTER_NODE_DISK_USAGE);
                         selectedTablets.add(tabletId);
                         alternativeTablets.add(schedCtx);
 
@@ -653,10 +654,22 @@ public class DiskAndTabletLoadReBalancer extends Rebalancer {
             }
             // neither the number of tablets select in high load BE nor low load BE exceeds limit,
             // change group index in succession.
-            if ((h + l) % 2 == 0) {
+            // If either highGroup or lowGroup has only one backend, we always move the other index.
+            // This prevents getting stuck in an infinite loop due to modulo operation with size 1.
+            // Otherwise, we alternate h and l based on (h + l) % 2 to iterate through both groups.
+            if (highGroup.size() == 1) {
+                // Only one backend in highGroup, so increment lowGroup index
+                l++;
+            } else if (lowGroup.size() == 1) {
+                // Only one backend in lowGroup, so increment highGroup index
                 h++;
             } else {
-                l++;
+                // Both groups have multiple backends, alternate selection to balance iteration
+                if ((h + l) % 2 == 0) {
+                    h++;
+                } else {
+                    l++;
+                }
             }
         }
 
@@ -856,7 +869,7 @@ public class DiskAndTabletLoadReBalancer extends Rebalancer {
                 schedCtx.setOrigPriority(TabletSchedCtx.Priority.LOW);
                 schedCtx.setSrc(replica);
                 schedCtx.setDest(beId, destPathHash);
-                schedCtx.setBalanceType(BalanceType.BACKEND_DISK);
+                schedCtx.setBalanceType(BalanceType.INTRA_NODE_DISK_USAGE);
                 alternativeTablets.add(schedCtx);
 
                 if (alternativeTablets.size() >= Config.tablet_sched_max_balancing_tablets) {
@@ -1458,7 +1471,8 @@ public class DiskAndTabletLoadReBalancer extends Rebalancer {
                     tabletMeta.getPhysicalPartitionId(),
                     tabletMeta.getIndexId(), tabletId, System.currentTimeMillis());
             schedCtx.setOrigPriority(TabletSchedCtx.Priority.LOW);
-            schedCtx.setBalanceType(isLocalBalance ? BalanceType.BACKEND_TABLET : BalanceType.CLUSTER_TABLET);
+            schedCtx.setBalanceType(isLocalBalance ?
+                    BalanceType.INTRA_NODE_TABLET_DISTRIBUTION : BalanceType.INTER_NODE_TABLET_DISTRIBUTION);
             schedCtx.setSrc(replica);
 
             // update state
@@ -1692,6 +1706,8 @@ public class DiskAndTabletLoadReBalancer extends Rebalancer {
                         continue;
                     }
 
+                    boolean isLabelLocationTable = olapTbl.getLocation() != null;
+
                     for (Partition partition : globalStateMgr.getLocalMetastore().getAllPartitionsIncludeRecycleBin(olapTbl)) {
                         partitionChecked++;
                         if (partitionChecked % partitionBatchNum == 0) {
@@ -1794,11 +1810,15 @@ public class DiskAndTabletLoadReBalancer extends Rebalancer {
 
                                 boolean isTabletBalanced = pStat.skew >= 0 && pStat.skew <= 1;
                                 if (isTabletBalanced) {
-                                    idx.setBalanceStat(BalanceStat.BALANCED_STAT);
+                                    if (isLocalBalance || !isLabelLocationTable) {
+                                        idx.setBalanceStat(BalanceStat.BALANCED_STAT);
+                                    }
                                 } else if (isLocalBalance) {
+                                    // tablet not balanced && is local balance
                                     idx.setBalanceStat(BalanceStat.createBackendTabletBalanceStat(
                                             bePaths.first, getPath(maxKey), getPath(minKey), maxNum, minNum));
-                                } else {
+                                } else if (!isLabelLocationTable) {
+                                    // tablet not balanced && not local balance && table not use label location
                                     idx.setBalanceStat(
                                             BalanceStat.createClusterTabletBalanceStat(maxKey, minKey, maxNum, minNum));
                                 }

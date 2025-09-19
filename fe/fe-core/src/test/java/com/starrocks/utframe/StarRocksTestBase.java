@@ -15,10 +15,14 @@
 package com.starrocks.utframe;
 
 import com.google.common.base.Preconditions;
+import com.google.common.base.Strings;
 import com.google.common.collect.Sets;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Table;
+import com.starrocks.common.profile.Tracers;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.common.QueryDebugOptions;
 import org.apache.commons.collections.CollectionUtils;
 import org.apache.commons.collections4.ListUtils;
 import org.apache.commons.lang3.StringUtils;
@@ -36,13 +40,16 @@ import java.util.Set;
 public abstract class StarRocksTestBase {
     protected static final Logger LOG = LogManager.getLogger(StarRocksTestBase.class);
 
+    // Whether print log to system out
+    protected static boolean isOutputSystemOut = false;
+
     // StarRocksAssert is a class that provides methods to interact with StarRocks.
     protected static StarRocksAssert starRocksAssert;
     // existedTables is a set that contains all tables that have been created.
     protected static Set<Table> existedTables = Sets.newHashSet();
 
     @BeforeEach
-    public void before() {
+    public void before() throws Exception {
         if (starRocksAssert != null) {
             collectTables(starRocksAssert, existedTables);
         }
@@ -56,6 +63,54 @@ public abstract class StarRocksTestBase {
             } catch (Exception e) {
                 // ignore exception
             }
+        }
+    }
+
+    public static void logSysInfo(boolean info) {
+        if (isOutputSystemOut || LOG.isInfoEnabled()) {
+            System.out.println(info);
+        }
+    }
+
+    public static void logSysInfo(int info) {
+        if (isOutputSystemOut || LOG.isInfoEnabled()) {
+            System.out.println(info);
+        }
+    }
+
+    public static void logSysInfo(long info) {
+        if (isOutputSystemOut || LOG.isInfoEnabled()) {
+            System.out.println(info);
+        }
+    }
+
+    public static void logSysInfo(float info) {
+        if (isOutputSystemOut || LOG.isInfoEnabled()) {
+            System.out.println(info);
+        }
+    }
+
+    public static void logSysInfo(double info) {
+        if (isOutputSystemOut || LOG.isInfoEnabled()) {
+            System.out.println(info);
+        }
+    }
+
+    public static void logSysInfo(char[] info) {
+        if (isOutputSystemOut || LOG.isInfoEnabled()) {
+            System.out.println(info);
+        }
+    }
+
+    public static void logSysInfo(String info) {
+        if (isOutputSystemOut || LOG.isInfoEnabled()) {
+            System.out.println(info);
+        }
+    }
+
+    public static void logSysInfo(Object... info) {
+        if (isOutputSystemOut || LOG.isInfoEnabled()) {
+            System.out.println(info);
         }
     }
 
@@ -92,5 +147,36 @@ public abstract class StarRocksTestBase {
                         testDb.getFullName(), testDb.getMaterializedViews().size());
             }
         }
+    }
+
+    public static void registerTrace(ConnectContext connectContext) {
+        if (connectContext == null) {
+            return;
+        }
+        QueryDebugOptions debugOptions = connectContext.getSessionVariable().getQueryDebugOptions();
+        boolean isPrintTrace = debugOptions.isEnableQueryTraceLog();
+        if (!isPrintTrace) {
+            return;
+        }
+        Tracers.register(connectContext);
+        Tracers.Mode traceMode = debugOptions.getTraceMode();
+        Tracers.Module traceModule = debugOptions.getTraceModule();
+        Tracers.init(connectContext, traceMode.name(), traceModule.name());
+    }
+
+    public static void unRegisterTrace(ConnectContext connectContext) {
+        if (connectContext == null) {
+            return;
+        }
+        QueryDebugOptions debugOptions = connectContext.getSessionVariable().getQueryDebugOptions();
+        boolean isPrintTrace = debugOptions.isEnableQueryTraceLog();
+        if (!isPrintTrace) {
+            return;
+        }
+        String pr = Tracers.printLogs();
+        if (!Strings.isNullOrEmpty(pr)) {
+            System.out.println(pr);
+        }
+        Tracers.close();
     }
 }

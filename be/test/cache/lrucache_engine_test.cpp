@@ -74,7 +74,7 @@ void LRUCacheEngineTest::_check_found(int value) {
 
 void LRUCacheEngineTest::SetUp() {
     _cache = std::make_shared<LRUCacheEngine>();
-    CacheOptions opts{.mem_space_size = _capacity};
+    MemCacheOptions opts{.mem_space_size = _capacity};
     ASSERT_OK(_cache->init(opts));
 }
 
@@ -190,6 +190,10 @@ TEST_F(LRUCacheEngineTest, test_metrics) {
     ASSERT_EQ(metrics.usage, _kv_size * 128);
     ASSERT_EQ(metrics.capacity, _capacity);
     ASSERT_EQ(metrics.object_item_count, 0);
+}
+
+TEST_F(LRUCacheEngineTest, adjust_inline_cache_count_limit) {
+    ASSERT_TRUE(_cache->update_inline_cache_count_limit(0).is_not_supported());
 }
 
 } // namespace starrocks

@@ -265,6 +265,20 @@ vpack::Slice JsonPath::extract(const JsonValue* json, const JsonPath& jsonpath, 
     return JsonPathPiece::extract(json, jsonpath.paths, b);
 }
 
+std::string JsonPath::to_string() const {
+    std::string result = "$";
+    for (size_t i = 0; i < paths.size(); i++) {
+        const auto& piece = paths[i];
+        if (!piece.key.empty() && piece.key != "$") {
+            result += "." + piece.key;
+        }
+        if (piece.array_selector) {
+            result += piece.array_selector->to_string();
+        }
+    }
+    return result;
+}
+
 bool JsonPath::starts_with(const JsonPath* other) const {
     if (other->paths.size() > paths.size()) {
         // this: a.b, other: a.b.c.d

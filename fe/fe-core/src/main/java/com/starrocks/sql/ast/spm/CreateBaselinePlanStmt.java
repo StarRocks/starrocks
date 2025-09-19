@@ -14,8 +14,8 @@
 
 package com.starrocks.sql.ast.spm;
 
-import com.starrocks.analysis.RedirectStatus;
 import com.starrocks.sql.ast.AstVisitor;
+import com.starrocks.sql.ast.AstVisitorExtendInterface;
 import com.starrocks.sql.ast.DdlStmt;
 import com.starrocks.sql.ast.QueryRelation;
 import com.starrocks.sql.parser.NodePosition;
@@ -47,13 +47,7 @@ public class CreateBaselinePlanStmt extends DdlStmt {
     }
 
     @Override
-    public RedirectStatus getRedirectStatus() {
-        // @todo: check is global
-        return RedirectStatus.NO_FORWARD;
-    }
-
-    @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitCreateBaselinePlanStatement(this, context);
+        return ((AstVisitorExtendInterface<R, C>) visitor).visitCreateBaselinePlanStatement(this, context);
     }
 }

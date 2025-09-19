@@ -23,6 +23,7 @@ import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
 
 import java.util.Map;
 
+
 public interface DumpInfo {
     default void setOriginStmt(String stmt) {
     }

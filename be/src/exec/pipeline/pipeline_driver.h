@@ -31,6 +31,7 @@
 #include "exec/pipeline/scan/scan_operator.h"
 #include "exec/pipeline/schedule/common.h"
 #include "exec/pipeline/schedule/observer.h"
+#include "exec/pipeline/schedule/pipeline_timer.h"
 #include "exec/pipeline/source_operator.h"
 #include "exec/workgroup/work_group_fwd.h"
 #include "exprs/runtime_filter_bank.h"
@@ -269,22 +270,22 @@ public:
         switch (_state) {
         case DriverState::INPUT_EMPTY: {
             auto elapsed_time = _input_empty_timer_sw->elapsed_time();
-            if (_first_input_empty_timer->value() == 0) {
-                _first_input_empty_timer->update(elapsed_time);
+            if (COUNTER_VALUE(_first_input_empty_timer) == 0) {
+                COUNTER_UPDATE(_first_input_empty_timer, elapsed_time);
             } else {
-                _followup_input_empty_timer->update(elapsed_time);
+                COUNTER_UPDATE(_followup_input_empty_timer, elapsed_time);
             }
-            _input_empty_timer->update(elapsed_time);
+            COUNTER_UPDATE(_input_empty_timer, elapsed_time);
             break;
         }
         case DriverState::OUTPUT_FULL:
-            _output_full_timer->update(_output_full_timer_sw->elapsed_time());
+            COUNTER_UPDATE(_output_full_timer, _output_full_timer_sw->elapsed_time());
             break;
         case DriverState::PRECONDITION_BLOCK:
-            _precondition_block_timer->update(_precondition_block_timer_sw->elapsed_time());
+            COUNTER_UPDATE(_precondition_block_timer, _precondition_block_timer_sw->elapsed_time());
             break;
         case DriverState::PENDING_FINISH:
-            _pending_finish_timer->update(_pending_finish_timer_sw->elapsed_time());
+            COUNTER_UPDATE(_pending_finish_timer, _pending_finish_timer_sw->elapsed_time());
             break;
         default:
             break;
@@ -330,7 +331,7 @@ public:
     bool precondition_prepared() const { return _precondition_prepared; }
     void start_timers();
     void stop_timers();
-    int64_t get_active_time() const { return _active_timer->value(); }
+    int64_t get_active_time() const { return COUNTER_VALUE(_active_timer); }
     void submit_operators();
     // Notify all the unfinished operators to be finished.
     // It is usually used when the sink operator is finished, or the fragment is cancelled or expired.

@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+keywords: ['jian kong']
 ---
 
 # 使用 Prometheus 和 Grafana 监控报警

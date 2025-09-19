@@ -531,5 +531,18 @@ public class Util {
         return objectsUnResolved;
     }
 
-
+    /**
+     * To align with BE's string_to_bool function, the following string values are considered as true.
+     */
+    public static boolean stringToBool(String str) {
+        if (str == null) {
+            return false;
+        }
+        str = str.trim().toLowerCase();
+        if ("true".equals(str) || "1".equals(str) || "true".equals(str.stripTrailing())) {
+            return true;
+        } else {
+            return false;
+        }
+    }
 }

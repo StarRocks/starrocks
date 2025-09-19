@@ -21,12 +21,18 @@ import com.starrocks.planner.PlanFragment;
 import com.starrocks.planner.ScanNode;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.common.StarRocksPlannerException;
+import com.starrocks.sql.optimizer.base.ColumnIdentifier;
+import com.starrocks.sql.optimizer.statistics.IMinMaxStatsMgr;
+import com.starrocks.sql.optimizer.statistics.StatsVersion;
 import com.starrocks.system.BackendResourceStat;
 import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.utframe.UtFrameUtils;
+import mockit.Expectations;
 import org.apache.commons.lang3.StringUtils;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
+
+import java.util.Optional;
 
 import static org.hamcrest.CoreMatchers.containsString;
 import static org.hamcrest.MatcherAssert.assertThat;
@@ -668,16 +674,16 @@ public class AggregateTest extends PlanTestBase {
         FeConstants.runningUnitTest = true;
         String sql = "select count(distinct t1a,t1b), avg(t1c) from test_all_type";
         String plan = getVerboseExplain(sql);
-        assertContains(plan, " 2:AGGREGATE (update serialize)\n" +
-                "  |  aggregate: count[(if[(1: t1a IS NULL, NULL, [2: t1b, SMALLINT, true]); " +
-                "args: BOOLEAN,SMALLINT,SMALLINT; result: SMALLINT; args nullable: true; result nullable: true]); " +
-                "args: SMALLINT; result: BIGINT; args nullable: true; result nullable: false], " +
-                "avg[([12: avg, VARBINARY, true]); args: INT; result: VARBINARY; args nullable: true; " +
-                "result nullable: true]");
-        assertContains(plan, " 1:AGGREGATE (update serialize)\n" +
-                "  |  aggregate: avg[([3: t1c, INT, true]); args: INT; result: VARBINARY; " +
-                "args nullable: true; result nullable: true]\n" +
-                "  |  group by: [1: t1a, VARCHAR, true], [2: t1b, SMALLINT, true]");
+        assertContains(plan, "2:AGGREGATE (update serialize)\n"
+                + "  |  aggregate: count[(if[([1: t1a, VARCHAR, true] IS NULL, NULL, [2: t1b, SMALLINT, true]); "
+                + "args: BOOLEAN,SMALLINT,SMALLINT; result: SMALLINT; args nullable: true; result nullable: true]); "
+                + "args: SMALLINT; result: BIGINT; args nullable: true; result nullable: false], "
+                + "avg[([12: avg, VARBINARY, true]); args: INT; result: VARBINARY; args nullable: true; "
+                + "result nullable: true]\n");
+        assertContains(plan, "1:AGGREGATE (update serialize)\n"
+                + "  |  aggregate: avg[([3: t1c, INT, true]); args: INT; result: VARBINARY; "
+                + "args nullable: true; result nullable: true]\n"
+                + "  |  group by: [1: t1a, VARCHAR, true], [2: t1b, SMALLINT, true]");
         FeConstants.runningUnitTest = false;
     }
 
@@ -686,13 +692,13 @@ public class AggregateTest extends PlanTestBase {
         FeConstants.runningUnitTest = true;
         String sql = "select count(distinct t1a,t1b) from test_all_type";
         String plan = getVerboseExplain(sql);
-        assertContains(plan, "2:AGGREGATE (update serialize)\n" +
-                "  |  aggregate: count[(if[(1: t1a IS NULL, NULL, [2: t1b, SMALLINT, true]); " +
-                "args: BOOLEAN,SMALLINT,SMALLINT; result: SMALLINT; args nullable: true; " +
-                "result nullable: true]); args: SMALLINT; result: BIGINT; args nullable: true; result nullable: false]");
-        assertContains(plan, "4:AGGREGATE (merge finalize)\n" +
-                "  |  aggregate: count[([11: count, BIGINT, false]); args: SMALLINT; " +
-                "result: BIGINT; args nullable: true; result nullable: false]");
+        assertContains(plan, "2:AGGREGATE (update serialize)\n"
+                + "  |  aggregate: count[(if[([1: t1a, VARCHAR, true] IS NULL, NULL, [2: t1b, SMALLINT, true]); "
+                + "args: BOOLEAN,SMALLINT,SMALLINT; result: SMALLINT; args nullable: true; "
+                + "result nullable: true]); args: SMALLINT; result: BIGINT; args nullable: true; result nullable: false]");
+        assertContains(plan, "4:AGGREGATE (merge finalize)\n"
+                + "  |  aggregate: count[([11: count, BIGINT, false]); args: SMALLINT; "
+                + "result: BIGINT; args nullable: true; result nullable: false]");
         FeConstants.runningUnitTest = false;
     }
 
@@ -1346,7 +1352,7 @@ public class AggregateTest extends PlanTestBase {
                 "select count(distinct t1b), count(distinct t1c), count(distinct t1.a), count(distinct t2.b) " +
                 "from test_all_type join tmp1 t1 join tmp2 t2 join tmp1 t3 join tmp2 t4";
         Pair<String, ExecPlan> pair = UtFrameUtils.getPlanAndFragment(connectContext, sql);
-        System.out.println(pair.first);
+        logSysInfo(pair.first);
         assertContains(pair.first, "CTEAnchor(cteid=1)");
         FeConstants.runningUnitTest = false;
     }
@@ -1921,11 +1927,11 @@ public class AggregateTest extends PlanTestBase {
         // with nullable column
         sql = "select min(t1b) from test_all_type";
         plan = getFragmentPlan(sql);
-        assertContains(plan, "  1:AGGREGATE (update finalize)\n" +
-                "  |  output: min(2: t1b)\n" +
-                "  |  group by: \n" +
-                "  |  \n" +
-                "  0:OlapScanNode");
+        assertContains(plan, "AGGREGATE (update serialize)\n"
+                + "  |  output: min(min_t1b)\n"
+                + "  |  group by: \n"
+                + "  |  \n"
+                + "  0:MetaScan");
         sql = "select count(t1b) from test_all_type";
         plan = getFragmentPlan(sql);
         assertContains(plan, "  1:AGGREGATE (update finalize)\n" +
@@ -1941,6 +1947,7 @@ public class AggregateTest extends PlanTestBase {
                 "  |  group by: \n" +
                 "  |  \n" +
                 "  0:OlapScanNode");
+        connectContext.getSessionVariable().setEnableRewriteSimpleAggToMetaScan(false);
     }
 
     @Test
@@ -1982,6 +1989,7 @@ public class AggregateTest extends PlanTestBase {
         assertContains(plan, "<slot 8> : 11: bitmap_count\n" +
                 "  |  <slot 9> : 12: bitmap_count\n" +
                 "  |  <slot 10> : 11: bitmap_count - 12: bitmap_count");
+        connectContext.getSessionVariable().setEnableRewriteSimpleAggToMetaScan(false);
     }
 
     @Test
@@ -2645,7 +2653,7 @@ public class AggregateTest extends PlanTestBase {
                 "order by round(count(t1e) * 100.0 / min(t1f) / min(t1f), 4), min(t1f), abs(t1f)";
 
         String plan = getFragmentPlan(sql);
-        System.out.println(plan);
+        logSysInfo(plan);
         assertCContains(plan, "1:AGGREGATE (update finalize)\n" +
                         "  |  output: count(5: t1e), min(6: t1f)\n" +
                         "  |  group by: 1: t1a, 2: t1b",
@@ -2875,7 +2883,6 @@ public class AggregateTest extends PlanTestBase {
     public void testCountIfTypeCheck() throws Exception {
         String sql = "select count_if(v1 is null) from t0";
         String plan = getVerboseExplain(sql);
-        System.out.println(plan);
         assertContains(plan, "aggregate: count_if[(1, [4: expr, BOOLEAN, false]); " +
                 "args: TINYINT,BOOLEAN; result: BIGINT; args nullable: false; result nullable: false]");
     }
@@ -3027,5 +3034,91 @@ public class AggregateTest extends PlanTestBase {
                 "  |  \n" +
                 "  0:OlapScanNode\n" +
                 "     TABLE: tbl1");
+    }
+
+    @Test
+    public void testGroupByCompressedKey() throws Exception {
+        final IMinMaxStatsMgr minMaxStatsMgr = IMinMaxStatsMgr.internalInstance();
+
+        new Expectations(minMaxStatsMgr) {
+            {
+                minMaxStatsMgr.getStats((ColumnIdentifier) any, (StatsVersion) any);
+                result = Optional.of(new IMinMaxStatsMgr.ColumnMinMax("0", "1"));
+                minMaxStatsMgr.getStats((ColumnIdentifier) any, (StatsVersion) any);
+                result = Optional.of(new IMinMaxStatsMgr.ColumnMinMax("0", "1"));
+                minMaxStatsMgr.getStats((ColumnIdentifier) any, (StatsVersion) any);
+                result = Optional.of(new IMinMaxStatsMgr.ColumnMinMax("0", "1"));
+            }
+        };
+
+        String sql = "select distinct v1, v2, v3 from t0";
+        String plan = getVerboseExplain(sql);
+        assertContains(plan, "group by min-max stats:");
+        plan = getThriftPlan(sql);
+        assertContains(plan, "group_by_min_max:[TExpr(");
+    }
+
+    @Test
+    public void testAggregateFilterSyntax() throws Exception {
+        // Test basic FILTER syntax with boolean expression
+        String sql = "select count(*) filter (where v1 > 5) from t0";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "count_if");
+
+        // Test FILTER with complex boolean expression
+        sql = "select sum(v2) filter (where v1 > 5 and v2 < 10) from t0";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "sum_if");
+
+        // Test FILTER with logical operators
+        sql = "select avg(v3) filter (where v1 = 1 or v2 = 2) from t0";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "avg_if");
+
+        // Test FILTER with NOT operator
+        sql = "select max(v1) filter (where not (v2 > 10)) from t0";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "max_if");
+    }
+
+    @Test
+    public void testAggregateFilterBooleanTypeValidation() throws Exception {
+        // Test that numeric expressions in FILTER are now allowed (can be cast to boolean)
+        String sql = "select count(*) filter (where v1) from t0";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "count_if");
+
+        // Test that string expressions in FILTER are also allowed (can be cast to boolean) 
+        sql = "select sum(v2) filter (where 'true') from t0";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "sum_if");
+    }
+
+    @Test
+    public void testAggIfFunctionBooleanTypeValidation() throws Exception {
+        // Test sum_if with correct boolean condition
+        String sql = "select sum_if(v2, v1 > 5) from t0";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "sum_if");
+
+        // Test count_if with correct boolean condition
+        sql = "select count_if(v1 > 0 and v2 < 100) from t0";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "count_if");
+
+        // Test that numeric conditions in sum_if are now allowed (can be cast to boolean)
+        sql = "select sum_if(v2, v1) from t0";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "sum_if");
+
+        // Test that numeric conditions in count_if are now allowed (can be cast to boolean)
+        sql = "select count_if(v2) from t0";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "count_if");
+
+        // Test string conditions are also allowed
+        sql = "select sum_if(v2, 'true') from t0";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "sum_if");
     }
 }

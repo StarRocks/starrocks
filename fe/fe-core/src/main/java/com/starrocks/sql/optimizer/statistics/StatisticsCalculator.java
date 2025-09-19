@@ -22,10 +22,6 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Range;
 import com.google.common.collect.Sets;
-import com.starrocks.analysis.DateLiteral;
-import com.starrocks.analysis.JoinOperator;
-import com.starrocks.analysis.LiteralExpr;
-import com.starrocks.analysis.MaxLiteral;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.KuduTable;
 import com.starrocks.catalog.ListPartitionInfo;
@@ -39,14 +35,19 @@ import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Pair;
+import com.starrocks.common.tvr.TvrTableSnapshot;
+import com.starrocks.common.tvr.TvrVersionRange;
 import com.starrocks.connector.PartitionUtil;
-import com.starrocks.connector.TableVersionRange;
 import com.starrocks.connector.iceberg.IcebergMORParams;
 import com.starrocks.connector.statistics.ConnectorTableColumnStats;
 import com.starrocks.connector.statistics.StatisticsUtils;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.expression.DateLiteral;
+import com.starrocks.sql.ast.expression.JoinOperator;
+import com.starrocks.sql.ast.expression.LiteralExpr;
+import com.starrocks.sql.ast.expression.MaxLiteral;
 import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.optimizer.ExpressionContext;
@@ -535,13 +536,13 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
                                         Map<ColumnRefOperator, Column> colRefToColumnMetaMap) {
         if (context.getStatistics() == null) {
             String catalogName = table.getCatalogName();
-            TableVersionRange version;
+            TvrVersionRange version;
             IcebergMORParams icebergMORParams;
             if (node.isLogical()) {
-                version = ((LogicalIcebergScanOperator) node).getTableVersionRange();
+                version = ((LogicalIcebergScanOperator) node).getTvrVersionRange();
                 icebergMORParams = ((LogicalIcebergScanOperator) node).getMORParam();
             } else {
-                version = ((PhysicalIcebergScanOperator) node).getTableVersionRange();
+                version = ((PhysicalIcebergScanOperator) node).getTvrVersionRange();
                 icebergMORParams = ((PhysicalIcebergScanOperator) node).getMORParams();
             }
 
@@ -581,7 +582,7 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
             String catalogName = table.getCatalogName();
             Statistics stats = GlobalStateMgr.getCurrentState().getMetadataMgr().getTableStatistics(
                     optimizerContext, catalogName, table, columnRefOperatorColumnMap, null,
-                    node.getPredicate(), node.getLimit(), TableVersionRange.empty());
+                    node.getPredicate(), node.getLimit(), TvrTableSnapshot.empty());
             context.setStatistics(stats);
 
             if (node.isLogical()) {
@@ -657,7 +658,7 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
             String catalogName = table.getCatalogName();
             Statistics stats = GlobalStateMgr.getCurrentState().getMetadataMgr().getTableStatistics(
                     optimizerContext, catalogName, table, columnRefOperatorColumnMap, null,
-                    node.getPredicate(), node.getLimit(), TableVersionRange.empty());
+                    node.getPredicate(), node.getLimit(), TvrTableSnapshot.empty());
             context.setStatistics(stats);
             if (node.isLogical()) {
                 boolean hasUnknownColumns = stats.getColumnStatistics().values().stream()
@@ -706,7 +707,7 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
             String catalogName = ((KuduTable) table).getCatalogName();
             Statistics stats = GlobalStateMgr.getCurrentState().getMetadataMgr().getTableStatistics(
                     optimizerContext, catalogName, table, columnRefOperatorColumnMap, null,
-                    node.getPredicate(), -1, TableVersionRange.empty());
+                    node.getPredicate(), -1, TvrTableSnapshot.empty());
             context.setStatistics(stats);
         }
 
@@ -1213,6 +1214,7 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
                 joinStatsBuilder = Statistics.buildFrom(crossJoinStats);
                 break;
             case INNER_JOIN:
+            case ASOF_INNER_JOIN:
                 if (eqOnPredicates.isEmpty()) {
                     joinStatsBuilder = Statistics.buildFrom(crossJoinStats);
                     break;
@@ -1222,6 +1224,11 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
             case LEFT_OUTER_JOIN:
                 joinStatsBuilder = Statistics.buildFrom(innerJoinStats);
                 joinStatsBuilder.setOutputRowCount(max(innerRowCount, leftRowCount));
+                computeNullFractionForOuterJoin(leftRowCount, innerRowCount, rightStatistics, joinStatsBuilder);
+                break;
+            case ASOF_LEFT_OUTER_JOIN:
+                joinStatsBuilder = Statistics.buildFrom(innerJoinStats);
+                joinStatsBuilder.setOutputRowCount(leftRowCount);
                 computeNullFractionForOuterJoin(leftRowCount, innerRowCount, rightStatistics, joinStatsBuilder);
                 break;
             case LEFT_SEMI_JOIN:
@@ -1277,6 +1284,14 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
         } else if (joinType.isFullOuterJoin()) {
             estimateStatistics = Statistics.buildFrom(estimateStatistics)
                     .setOutputRowCount(Math.max(estimateStatistics.getOutputRowCount(), joinStats.getOutputRowCount()))
+                    .build();
+        } else if (joinType.isAsofInnerJoin()) {
+            estimateStatistics = Statistics.buildFrom(estimateStatistics)
+                    .setOutputRowCount(Math.max(Math.min(estimateStatistics.getOutputRowCount(), leftRowCount), 1))
+                    .build();
+        } else if (joinType.isAsofLeftOuterJoin()) {
+            estimateStatistics = Statistics.buildFrom(estimateStatistics)
+                    .setOutputRowCount(Math.max(1, leftRowCount))
                     .build();
         }
 

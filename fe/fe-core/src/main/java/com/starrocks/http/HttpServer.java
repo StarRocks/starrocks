@@ -98,6 +98,8 @@ import com.starrocks.http.rest.TableRowCountAction;
 import com.starrocks.http.rest.TableSchemaAction;
 import com.starrocks.http.rest.TransactionLoadAction;
 import com.starrocks.http.rest.TriggerAction;
+import com.starrocks.http.rest.v2.ProfileActionV2;
+import com.starrocks.http.rest.v2.QueryDetailActionV2;
 import com.starrocks.http.rest.v2.TablePartitionAction;
 import com.starrocks.metric.GaugeMetric;
 import com.starrocks.metric.GaugeMetricImpl;
@@ -223,8 +225,10 @@ public class HttpServer {
         ColocateMetaService.UpdateGroupAction.registerAction(controller);
         GlobalDictMetaService.ForbitTableAction.registerAction(controller);
         ProfileAction.registerAction(controller);
+        ProfileActionV2.registerAction(controller);
         QueryProgressAction.registerAction(controller);
         QueryDetailAction.registerAction(controller);
+        QueryDetailActionV2.registerAction(controller);
         ConnectionAction.registerAction(controller);
         ShowDataAction.registerAction(controller);
         QueryDumpAction.registerAction(controller);
@@ -353,7 +357,7 @@ public class HttpServer {
 
         GaugeMetricImpl<Long> httpWorkersNum = new GaugeMetricImpl<>(
                 HTTP_WORKERS_NUM, Metric.MetricUnit.NOUNIT, "the number of http workers");
-        httpWorkersNum.setValue(0L);
+        httpWorkersNum.setValue((long) workerGroup.executorCount());
         httpMetricRegistry.registerGauge(httpWorkersNum);
 
         GaugeMetric<Long> pendingTasks = new GaugeMetric<>(HTTP_WORKER_PENDING_TASKS_NUM, Metric.MetricUnit.NOUNIT,

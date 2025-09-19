@@ -84,9 +84,6 @@ public class OperationType {
     @IgnorableOnReplayFailed
     public static final short OP_REMOVE_ALTER_JOB_V2 = 125;
 
-    @Deprecated
-    public static final short OP_ADD_REPLICA = 42;
-
     public static final short OP_SET_REPLICA_STATUS = 47;
 
     @IgnorableOnReplayFailed
@@ -144,8 +141,6 @@ public class OperationType {
     public static final short OP_DROP_RESOURCE = 277;
 
     // NOTICE newly added type starts from 10000, to avoid conflicting with community added type
-
-    public static final short OP_META_VERSION_V2 = 10000;
 
     @IgnorableOnReplayFailed
     public static final short OP_SWAP_TABLE = 10001;
@@ -544,6 +539,9 @@ public class OperationType {
     public static final short OP_CREATE_STREAM_LOAD_TASK_V2 = 13070;
 
     @IgnorableOnReplayFailed
+    public static final short OP_CREATE_MULTI_STMT_STREAM_LOAD_TASK = 13071;
+
+    @IgnorableOnReplayFailed
     public static final short OP_MODIFY_COLUMN_COMMENT = 13080;
 
     // storage volume
@@ -638,6 +636,21 @@ public class OperationType {
 
     @IgnorableOnReplayFailed
     public static final short OP_REMOVE_DYNAMIC_TABLET_JOB_LOG = 13551;
+
+    // New V2 operations for logEdit to logJsonObject migration
+    public static final short OP_SAVE_NEXTID_V2 = 13552;
+    
+    @IgnorableOnReplayFailed
+    public static final short OP_ERASE_DB_V2 = 13553;
+    
+    @IgnorableOnReplayFailed
+    public static final short OP_ERASE_PARTITION_V2 = 13554;
+    
+    @IgnorableOnReplayFailed
+    public static final short OP_DROP_ALL_BROKER_V2 = 13555;
+    
+    @IgnorableOnReplayFailed
+    public static final short OP_DROP_REPOSITORY_V2 = 13556;
 
     /**
      * NOTICE: OperationType cannot use a value exceeding 20000, please follow the above sequence number

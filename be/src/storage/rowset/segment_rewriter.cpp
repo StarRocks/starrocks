@@ -30,7 +30,7 @@ Status SegmentRewriter::rewrite_partial_update(const FileInfo& src, FileInfo* de
     if (UNLIKELY(column_ids.empty())) {
         // In shared-nothing mode, this size can be null, and we don't need it so it's ok to return zero;
         dest->size = src.size.value_or(0);
-        return fs::copy_file(src.path, dest->path, kBufferSize);
+        return fs::copy_file(src.path, dest->path, kBufferSize).status();
     }
     ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(dest->path));
     RandomAccessFileOptions ropts;

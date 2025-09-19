@@ -25,6 +25,8 @@ import org.junit.jupiter.api.Test;
 import java.util.Arrays;
 import java.util.List;
 import java.util.regex.Pattern;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 import static com.starrocks.sql.optimizer.statistics.CachedStatisticStorageTest.DEFAULT_CREATE_TABLE_TEMPLATE;
 
@@ -162,13 +164,13 @@ public class TablePruningCTETest extends TablePruningTestBase {
         String q = getSqlList("sql/tpch_pk_tables/", "q5").get(0);
         String plan = checkHashJoinCountWithOnlyRBO(q, 3);
         plan = plan.replaceAll("\\d+:\\s*", "");
-        Assertions.assertTrue(plan.contains("Predicates: " +
-                "l_suppkey IN (1, 2, 100), " +
-                "l_partkey IN (200, 1000), " +
-                "l_partkey IN (200, 1000), " +
-                "l_suppkey IN (1, 2, 100), " +
-                "[l_orderkey, BIGINT, false] >= 1, " +
-                "[l_orderkey, BIGINT, false] <= 1000"));
+        Assertions.assertTrue(plan.contains("Predicates: "
+                + "[l_suppkey, BIGINT, false] IN (1, 2, 100), "
+                + "[l_partkey, BIGINT, false] IN (200, 1000), "
+                + "[l_partkey, BIGINT, false] IN (200, 1000), "
+                + "[l_suppkey, BIGINT, false] IN (1, 2, 100), "
+                + "[l_orderkey, BIGINT, false] >= 1, "
+                + "[l_orderkey, BIGINT, false] <= 1000"), plan);
     }
 
     @Test
@@ -358,5 +360,91 @@ public class TablePruningCTETest extends TablePruningTestBase {
             String plan = checkHashJoinCountWithBothRBOAndCBO(sql, n);
             Assertions.assertFalse(plan.contains("NESTLOOP"));
         }
+    }
+
+    @Test
+    public void testNestedCte() {
+        String sql = "with cte0 as(\n" +
+                "select distinct l_orderkey,l_quantity, l_partkey, l_suppkey, l_linenumber\n" +
+                "from lineitem\n" +
+                "),\n" +
+                "cte1 as(\n" +
+                "select count(distinct l_linenumber) as n, l_orderkey, l_partkey, l_suppkey\n" +
+                "from cte0\n" +
+                "group by l_orderkey, l_partkey, l_suppkey\n" +
+                "),\n" +
+                "cte2 as(\n" +
+                "select count(distinct l_quantity) as n, l_orderkey, l_partkey, l_suppkey\n" +
+                "from cte0\n" +
+                "group by l_orderkey, l_partkey, l_suppkey\n" +
+                "),\n" +
+                "cte3 as(\n" +
+                "select l_orderkey,l_partkey, l_suppkey, sum(n) over(partition by l_orderkey,l_partkey) as sum0\n" +
+                "from cte1\n" +
+                "),\n" +
+                "cte4 as(\n" +
+                "select l_orderkey,l_partkey, l_suppkey, sum(n) over(partition by l_orderkey,l_suppkey) as sum1\n" +
+                "from cte2\n" +
+                "),\n" +
+                "cte5 as(\n" +
+                "select l_orderkey,l_partkey, l_suppkey, sum(n) over(partition by l_partkey) as sum2\n" +
+                "from cte1\n" +
+                "),\n" +
+                "cte6 as(\n" +
+                "select l_orderkey,l_partkey, l_suppkey, sum(n) over(partition by l_suppkey) as sum3\n" +
+                "from cte2\n" +
+                ")\n" +
+                "select /*+SET_VAR(cbo_cte_reuse_rate=0)*/ a.l_orderkey, a.l_partkey, a.l_suppkey, sum0, sum1,sum2,sum3\n" +
+                "from cte3 a \n" +
+                "inner join cte4 b on \n" +
+                "   a.l_orderkey = b.l_orderkey and a.l_partkey = a.l_partkey and a.l_suppkey = b.l_suppkey\n" +
+                "inner join cte5 c on \n" +
+                "   a.l_orderkey = c.l_orderkey and a.l_partkey = c.l_partkey and a.l_suppkey = c.l_suppkey\n" +
+                "inner join cte6 d on \n" +
+                "   a.l_orderkey = d.l_orderkey and a.l_partkey = d.l_partkey and a.l_suppkey = d.l_suppkey;";
+        checkHashJoinCountWithBothRBOAndCBO(sql, 3);
+    }
+
+    @Test
+    public void testCteConsumerAsPruneFrontier() throws Exception {
+        String subquery = getSqlList("sql/tpch_pk_tables/", "lineitem_flat_subquery").get(0);
+        String viewSql = "CREATE VIEW lineitem_flat_view AS " + subquery;
+        starRocksAssert.withView(viewSql);
+
+        String cte = getSqlList("sql/tpch_pk_tables/", "lineitem_flat_cte").get(0);
+        String sql = String.format("with lineitem_flat as (select * from lineitem_flat_view),\n" +
+                "cteA as (\n" +
+                "select l_orderkey,l_partkey,l_suppkey,sum(l_quantity) as sum_qty\n" +
+                "from lineitem_flat \n" +
+                "group by l_orderkey,l_partkey,l_suppkey\n" +
+                "),\n" +
+                "cteB as(\n" +
+                "select l_orderkey,l_partkey,avg(l_quantity) as avg_qty\n" +
+                "from lineitem_flat \n" +
+                "group by l_orderkey,l_partkey\n" +
+                "),\n" +
+                "cteC as(\n" +
+                "select \n" +
+                "   l_orderkey,\n" +
+                "   count(distinct l_partkey) as uniq_partkey, \n" +
+                "   count(distinct l_suppkey) as uniq_suppkey, \n" +
+                "   count(distinct l_quantity) as uniq_qty\n" +
+                "from lineitem_flat \n" +
+                "group by l_orderkey\n" +
+                ")\n" +
+                "\n" +
+                "select /*+SET_VAR(enable_cbo_table_prune=true,enable_rbo_table_prune=true)*/\n" +
+                "t.l_orderkey, t.l_partkey, t.l_suppkey, sum_qty, avg_qty, uniq_partkey, uniq_suppkey, uniq_qty\n" +
+                "from lineitem_flat t\n" +
+                "     join cteA a on t.l_orderkey = a.l_orderkey AND t.l_partkey = a.l_partkey " +
+                "           AND t.l_suppkey = a.l_suppkey\n" +
+                "     join cteB b on t.l_orderkey = b.l_orderkey AND t.l_partkey = b.l_partkey\n" +
+                "     join cteC c on t.l_orderkey = c.l_orderkey\n", cte);
+        String plan = UtFrameUtils.getVerboseFragmentPlan(starRocksAssert.getCtx(), sql);
+        List<String> tables = Stream.of(plan.split("\n"))
+                .filter(ln -> ln.matches("^\\s*table:\\s*\\S+,.*$"))
+                .collect(Collectors.toList());
+        Assertions.assertTrue(tables.size() > 0, plan);
+        Assertions.assertTrue(tables.stream().allMatch(ln -> ln.contains("lineitem")), plan);
     }
 }

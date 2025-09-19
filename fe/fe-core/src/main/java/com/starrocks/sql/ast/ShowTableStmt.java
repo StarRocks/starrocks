@@ -15,24 +15,21 @@
 
 package com.starrocks.sql.ast;
 
-import com.starrocks.analysis.BinaryPredicate;
-import com.starrocks.analysis.BinaryType;
-import com.starrocks.analysis.CompoundPredicate;
-import com.starrocks.analysis.Expr;
-import com.starrocks.analysis.ExprSubstitutionMap;
-import com.starrocks.analysis.SlotRef;
-import com.starrocks.analysis.StringLiteral;
-import com.starrocks.analysis.TableName;
-import com.starrocks.catalog.Column;
-import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.system.information.InfoSchemaDb;
-import com.starrocks.qe.ShowResultSetMetaData;
+import com.starrocks.sql.ast.expression.BinaryPredicate;
+import com.starrocks.sql.ast.expression.BinaryType;
+import com.starrocks.sql.ast.expression.CompoundPredicate;
+import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.ExprSubstitutionMap;
+import com.starrocks.sql.ast.expression.SlotRef;
+import com.starrocks.sql.ast.expression.StringLiteral;
+import com.starrocks.sql.ast.expression.TableName;
 import com.starrocks.sql.parser.NodePosition;
 
 import static com.starrocks.common.util.Util.normalizeName;
 
 // SHOW TABLES
-public class ShowTableStmt extends ShowStmt {
+public class ShowTableStmt extends EnhancedShowStmt {
     private static final String NAME_COL_PREFIX = "Tables_in_";
     private static final String TYPE_COL = "Table_type";
     private static final TableName TABLE_NAME = new TableName(InfoSchemaDb.DATABASE_NAME, "tables");
@@ -113,23 +110,12 @@ public class ShowTableStmt extends ShowStmt {
                 finalWhere, null, null), this.origStmt);
     }
 
-    @Override
-    public ShowResultSetMetaData getMetaData() {
-        ShowResultSetMetaData.Builder builder = ShowResultSetMetaData.builder();
-        builder.addColumn(
-                new Column(NAME_COL_PREFIX + db, ScalarType.createVarchar(20)));
-        if (isVerbose) {
-            builder.addColumn(new Column(TYPE_COL, ScalarType.createVarchar(20)));
-        }
-        return builder.build();
-    }
-
     public void setDb(String db) {
         this.db = normalizeName(db);
     }
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitShowTableStatement(this, context);
+        return ((AstVisitorExtendInterface<R, C>) visitor).visitShowTableStatement(this, context);
     }
 }

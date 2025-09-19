@@ -18,13 +18,8 @@
 package com.starrocks.persist;
 
 import com.google.gson.annotations.SerializedName;
-import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.load.routineload.RoutineLoadJob.JobState;
-
-import java.io.DataInput;
-import java.io.DataOutput;
-import java.io.IOException;
 
 public class RoutineLoadOperation implements Writable {
     @SerializedName("id")
@@ -48,20 +43,6 @@ public class RoutineLoadOperation implements Writable {
         return jobState;
     }
 
-    public static RoutineLoadOperation read(DataInput in) throws IOException {
-        RoutineLoadOperation operation = new RoutineLoadOperation();
-        operation.readFields(in);
-        return operation;
-    }
 
-    @Override
-    public void write(DataOutput out) throws IOException {
-        out.writeLong(id);
-        Text.writeString(out, jobState.name());
-    }
 
-    public void readFields(DataInput in) throws IOException {
-        id = in.readLong();
-        jobState = JobState.valueOf(Text.readString(in));
-    }
 }

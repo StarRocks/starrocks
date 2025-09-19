@@ -207,8 +207,7 @@ void OlapChunkSource::_init_counter(RuntimeState* state) {
     // IOTime
     _io_timer = ADD_CHILD_TIMER(_runtime_profile, "IOTime", IO_TASK_EXEC_TIMER_NAME);
 
-    _access_path_hits_counter = ADD_COUNTER(_runtime_profile, "AccessPathHits", TUnit::UNIT);
-    _access_path_unhits_counter = ADD_COUNTER(_runtime_profile, "AccessPathUnhits", TUnit::UNIT);
+    // FlatJSON
 }
 
 Status OlapChunkSource::_get_tablet(const TInternalScanRange* scan_range) {
@@ -339,6 +338,7 @@ Status OlapChunkSource::_init_scanner_columns(std::vector<uint32_t>& scanner_col
         } else {
             index = _tablet_schema->field_index(slot->col_name());
         }
+
         if (index < 0) {
             std::stringstream ss;
             ss << "invalid field name: " << slot->col_name();
@@ -483,6 +483,51 @@ Status OlapChunkSource::_prune_schema_by_access_paths(Schema* schema) {
     return Status::OK();
 }
 
+// Extend the schema fields based on the column access paths.
+// This ensures that only the necessary subfields required by the query are retained in the schema.
+Status OlapChunkSource::_extend_schema_by_access_paths() {
+    auto access_paths = _scan_ctx->column_access_paths();
+    bool need_extend =
+            std::any_of(access_paths->begin(), access_paths->end(), [](auto& path) { return path->is_extended(); });
+    if (!need_extend) {
+        return {};
+    }
+
+    TabletSchemaSPtr tmp_schema = TabletSchema::copy(*_tablet_schema);
+    int field_number = tmp_schema->num_columns();
+    for (auto& path : *access_paths) {
+        if (!path->is_extended()) {
+            continue;
+        }
+        int root_column_index = _tablet_schema->field_index(path->path());
+        RETURN_IF(root_column_index < 0, Status::RuntimeError("unknown access path: " + path->path()));
+
+        LogicalType value_type = path->value_type().type;
+        TabletColumn column;
+        column.set_name(path->linear_path());
+        column.set_unique_id(++field_number);
+        column.set_type(value_type);
+        column.set_length(path->value_type().len);
+        column.set_is_nullable(true);
+        // Record root column unique id to make it robust across schema changes
+        int32_t root_uid = _tablet_schema->column(static_cast<size_t>(root_column_index)).unique_id();
+        column.set_extended_info(std::make_unique<ExtendedColumnInfo>(path.get(), root_uid));
+
+        // For UNIQUE/AGG tables, extended flat JSON subcolumns act as value columns and
+        // must have a valid aggregation method for pre-aggregation. Use REPLACE, which is
+        // consistent with value-column semantics in these models.
+        auto keys_type = _tablet_schema->keys_type();
+        if (keys_type == KeysType::UNIQUE_KEYS || keys_type == KeysType::AGG_KEYS) {
+            column.set_aggregation(StorageAggregateType::STORAGE_AGGREGATE_REPLACE);
+        }
+
+        tmp_schema->append_column(column);
+        VLOG(2) << "extend the access path column: " << path->linear_path();
+    }
+    _tablet_schema = tmp_schema;
+    return {};
+}
+
 Status OlapChunkSource::_init_olap_reader(RuntimeState* runtime_state) {
     const TOlapScanNode& thrift_olap_scan_node = _scan_node->thrift_olap_scan_node();
     // output columns of `this` OlapScanner, i.e, the final output columns of `get_chunk`.
@@ -514,6 +559,8 @@ Status OlapChunkSource::_init_olap_reader(RuntimeState* runtime_state) {
         }
     }
 
+    // Extend the tablet_schema with access path columns
+    RETURN_IF_ERROR(_extend_schema_by_access_paths());
     RETURN_IF_ERROR(_init_global_dicts(&_params));
     RETURN_IF_ERROR(_init_unused_output_columns(thrift_olap_scan_node.unused_output_column_name));
     RETURN_IF_ERROR(_init_reader_params(_scan_ctx->key_ranges()));
@@ -747,10 +794,16 @@ void OlapChunkSource::_update_counter() {
     if (_reader->stats().decode_dict_ns > 0) {
         RuntimeProfile::Counter* c = ADD_CHILD_TIMER(_runtime_profile, "DictDecode", IO_TASK_EXEC_TIMER_NAME);
         COUNTER_UPDATE(c, _reader->stats().decode_dict_ns);
+        RuntimeProfile::Counter* count =
+                ADD_CHILD_COUNTER(_runtime_profile, "DictDecodeCount", TUnit::UNIT, IO_TASK_EXEC_TIMER_NAME);
+        COUNTER_UPDATE(count, _reader->stats().decode_dict_count);
     }
     if (_reader->stats().late_materialize_ns > 0) {
         RuntimeProfile::Counter* c = ADD_CHILD_TIMER(_runtime_profile, "LateMaterialize", IO_TASK_EXEC_TIMER_NAME);
         COUNTER_UPDATE(c, _reader->stats().late_materialize_ns);
+        RuntimeProfile::Counter* rows =
+                ADD_CHILD_COUNTER(_runtime_profile, "LateMaterializeRows", TUnit::UNIT, IO_TASK_EXEC_TIMER_NAME);
+        COUNTER_UPDATE(rows, _reader->stats().late_materialize_rows);
     }
     if (_reader->stats().del_filter_ns > 0) {
         RuntimeProfile::Counter* c1 = ADD_CHILD_TIMER(_runtime_profile, "DeleteFilter", IO_TASK_EXEC_TIMER_NAME);
@@ -761,6 +814,7 @@ void OlapChunkSource::_update_counter() {
 
     if (_reader->stats().flat_json_hits.size() > 0 || _reader->stats().merge_json_hits.size() > 0) {
         std::string access_path_hits = "AccessPathHits";
+        auto _access_path_hits_counter = ADD_COUNTER(_runtime_profile, access_path_hits, TUnit::UNIT);
         int64_t total = 0;
         for (auto& [k, v] : _reader->stats().flat_json_hits) {
             std::string path = fmt::format("[Hit]{}", k);
@@ -784,6 +838,8 @@ void OlapChunkSource::_update_counter() {
     }
     if (_reader->stats().dynamic_json_hits.size() > 0) {
         std::string access_path_unhits = "AccessPathUnhits";
+        RuntimeProfile::Counter* _access_path_unhits_counter =
+                ADD_COUNTER(_runtime_profile, access_path_unhits, TUnit::UNIT);
         int64_t total = 0;
         for (auto& [k, v] : _reader->stats().dynamic_json_hits) {
             std::string path = fmt::format("[Unhit]{}", k);
@@ -795,6 +851,21 @@ void OlapChunkSource::_update_counter() {
             COUNTER_UPDATE(path_counter, v);
         }
         COUNTER_UPDATE(_access_path_unhits_counter, total);
+    }
+    if (_reader->stats().extract_json_hits.size() > 0) {
+        const std::string counter_name = "AccessPathExtract";
+        RuntimeProfile::Counter* counter = ADD_COUNTER(_runtime_profile, counter_name, TUnit::UNIT);
+        int64_t total = 0;
+        for (auto& [k, v] : _reader->stats().extract_json_hits) {
+            std::string path = fmt::format("[Extract]{}", k);
+            auto* path_counter = _runtime_profile->get_counter(path);
+            if (path_counter == nullptr) {
+                path_counter = ADD_CHILD_COUNTER(_runtime_profile, path, TUnit::UNIT, counter_name);
+            }
+            total += v;
+            COUNTER_UPDATE(path_counter, v);
+        }
+        COUNTER_UPDATE(counter, total);
     }
 
     std::string parent_name = "SegmentRead";

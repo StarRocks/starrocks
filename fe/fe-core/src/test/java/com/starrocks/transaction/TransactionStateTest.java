@@ -25,10 +25,12 @@ import com.starrocks.catalog.LocalTablet;
 import com.starrocks.catalog.Replica;
 import com.starrocks.catalog.Replica.ReplicaState;
 import com.starrocks.catalog.Tablet;
+import com.starrocks.common.Config;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.proto.TxnFinishStatePB;
+import com.starrocks.thrift.TUniqueId;
 import com.starrocks.transaction.TransactionState.LoadJobSourceType;
 import com.starrocks.transaction.TransactionState.TxnCoordinator;
 import com.starrocks.transaction.TransactionState.TxnSourceType;
@@ -44,6 +46,10 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 public class TransactionStateTest {
 
@@ -123,7 +129,7 @@ public class TransactionStateTest {
 
         String json = GsonUtils.GSON.toJson(transactionState);
         TransactionState readTransactionState = GsonUtils.GSON.fromJson(json, TransactionState.class);
-        Assertions.assertTrue(readTransactionState.isNewFinish());
+        assertTrue(readTransactionState.isNewFinish());
     }
 
     @Test
@@ -165,26 +171,93 @@ public class TransactionStateTest {
         state.setTabletCommitInfos(infos);
 
         // replica state is not normal and clone
-        Assertions.assertFalse(state.checkReplicaNeedSkip(tablet0, new Replica(1L, 1L, ReplicaState.ALTER, 1L, 0), pcInfo));
-        Assertions.assertFalse(
+        assertFalse(state.checkReplicaNeedSkip(tablet0, new Replica(1L, 1L, ReplicaState.ALTER, 1L, 0), pcInfo));
+        assertFalse(
                 state.checkReplicaNeedSkip(tablet0, new Replica(1L, 1L, ReplicaState.SCHEMA_CHANGE, 1L, 0), pcInfo));
-        Assertions.assertTrue(state.checkReplicaNeedSkip(tablet0, new Replica(1L, 1L, ReplicaState.NORMAL, 1L, 0), pcInfo));
-        Assertions.assertTrue(state.checkReplicaNeedSkip(tablet0, new Replica(1L, 1L, ReplicaState.CLONE, 1L, 0), pcInfo));
+        assertTrue(state.checkReplicaNeedSkip(tablet0, new Replica(1L, 1L, ReplicaState.NORMAL, 1L, 0), pcInfo));
+        assertTrue(state.checkReplicaNeedSkip(tablet0, new Replica(1L, 1L, ReplicaState.CLONE, 1L, 0), pcInfo));
 
         // replica is in tabletCommitInfos
-        Assertions.assertFalse(state.checkReplicaNeedSkip(tablet1, new Replica(2L, 10001L, ReplicaState.NORMAL, 99L, 0), pcInfo));
-        Assertions.assertFalse(state.checkReplicaNeedSkip(tablet1, new Replica(3L, 10002L, ReplicaState.NORMAL, 99L, 0), pcInfo));
-        Assertions.assertFalse(state.checkReplicaNeedSkip(tablet2, new Replica(4L, 10002L, ReplicaState.NORMAL, 99L, 0), pcInfo));
+        assertFalse(state.checkReplicaNeedSkip(tablet1, new Replica(2L, 10001L, ReplicaState.NORMAL, 99L, 0), pcInfo));
+        assertFalse(state.checkReplicaNeedSkip(tablet1, new Replica(3L, 10002L, ReplicaState.NORMAL, 99L, 0), pcInfo));
+        assertFalse(state.checkReplicaNeedSkip(tablet2, new Replica(4L, 10002L, ReplicaState.NORMAL, 99L, 0), pcInfo));
 
         // replica current version >= commit version
-        Assertions.assertFalse(state.checkReplicaNeedSkip(tablet0, new Replica(1L, 1L, ReplicaState.NORMAL, 100L, 0), pcInfo));
+        assertFalse(state.checkReplicaNeedSkip(tablet0, new Replica(1L, 1L, ReplicaState.NORMAL, 100L, 0), pcInfo));
 
         // follower tabletCommitInfos is null
         Deencapsulation.setField(state, "tabletCommitInfos", null);
-        Assertions.assertFalse(state.checkReplicaNeedSkip(tablet0, new Replica(5L, 1L, ReplicaState.NORMAL, 1L, 0), pcInfo));
+        assertFalse(state.checkReplicaNeedSkip(tablet0, new Replica(5L, 1L, ReplicaState.NORMAL, 1L, 0), pcInfo));
 
         // follower tabletCommitInfos is null and unknownReplicas contains the replica
         state.addUnknownReplica(5L);
-        Assertions.assertTrue(state.checkReplicaNeedSkip(tablet0, new Replica(5L, 1L, ReplicaState.NORMAL, 1L, 0), pcInfo));
+        assertTrue(state.checkReplicaNeedSkip(tablet0, new Replica(5L, 1L, ReplicaState.NORMAL, 1L, 0), pcInfo));
+    }
+
+    @Test
+    public void testTimeout() {
+        {
+            TransactionState txn = new TransactionState(1000L, Lists.newArrayList(20000L),
+                    3000, "label123", UUIDUtil.genTUniqueId(),
+                    LoadJobSourceType.BACKEND_STREAMING, new TxnCoordinator(TxnSourceType.BE, "127.0.0.1"), 50000L,
+                    1000L);
+
+            txn.setTransactionStatus(TransactionStatus.PREPARE);
+            txn.setPrepareTime(1);
+            assertEquals(1, txn.getPrepareTime());
+            assertFalse(txn.isTimeout(500));
+            assertTrue(txn.isTimeout(1500));
+
+            txn.setTransactionStatus(TransactionStatus.PREPARED);
+            txn.setPreparedTimeAndTimeout(2000, TransactionState.DEFAULT_PREPARED_TIMEOUT_MS);
+            assertEquals(Config.prepared_transaction_default_timeout_second * 1000L, txn.getPreparedTimeoutMs());
+            assertFalse(txn.isTimeout(2000 + Config.prepared_transaction_default_timeout_second * 1000L));
+            assertTrue(txn.isTimeout(2000 + Config.prepared_transaction_default_timeout_second * 1000L + 10));
+
+            txn.setTransactionStatus(TransactionStatus.COMMITTED);
+            assertFalse(txn.isTimeout(4000));
+        }
+
+        {
+            TransactionState txn = new TransactionState(1000L, Lists.newArrayList(20000L),
+                    3000, "label123", UUIDUtil.genTUniqueId(),
+                    LoadJobSourceType.BACKEND_STREAMING, new TxnCoordinator(TxnSourceType.BE, "127.0.0.1"), 50000L,
+                    1000L);
+
+            txn.setTransactionStatus(TransactionStatus.PREPARE);
+            txn.setPrepareTime(1);
+            assertEquals(1, txn.getPrepareTime());
+            assertFalse(txn.isTimeout(500));
+            assertTrue(txn.isTimeout(1500));
+
+            txn.setTransactionStatus(TransactionStatus.PREPARED);
+            txn.setPreparedTimeAndTimeout(2000, 1000);
+            assertEquals(1000, txn.getPreparedTimeoutMs());
+            assertFalse(txn.isTimeout(2500));
+            assertTrue(txn.isTimeout(3500));
+
+            txn.setTransactionStatus(TransactionStatus.COMMITTED);
+            assertFalse(txn.isTimeout(4000));
+        }
+    }
+
+    @Test
+    public void testAddLoadId() {
+        TransactionState txn = new TransactionState(1000L, Lists.newArrayList(20000L, 20001L),
+                3000, "label_addLoadId", UUIDUtil.genTUniqueId(),
+                LoadJobSourceType.BACKEND_STREAMING, new TxnCoordinator(TxnSourceType.BE, "127.0.0.1"), 50000L,
+                60 * 1000L);
+
+        TUniqueId id1 = UUIDUtil.genTUniqueId();
+        TUniqueId id2 = UUIDUtil.genTUniqueId();
+
+        txn.addLoadId(id1);
+        txn.addLoadId(id2);
+
+        List<TUniqueId> ids = txn.getLoadIds();
+        Assertions.assertNotNull(ids);
+        assertEquals(2, ids.size());
+        assertEquals(id1, ids.get(0));
+        assertEquals(id2, ids.get(1));
     }
 }

@@ -16,18 +16,28 @@ package com.starrocks.lake;
 
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.GlobalStateMgrTestUtil;
+import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.PhysicalPartition;
+import com.starrocks.catalog.Table;
+import com.starrocks.catalog.Tablet;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
+import com.starrocks.common.jmockit.Deencapsulation;
+import com.starrocks.lake.snapshot.ClusterSnapshotMgr;
 import com.starrocks.lake.vacuum.AutovacuumDaemon;
+import com.starrocks.lake.vacuum.FullVacuumDaemon;
 import com.starrocks.proto.StatusPB;
+import com.starrocks.proto.VacuumFullRequest;
+import com.starrocks.proto.VacuumFullResponse;
 import com.starrocks.proto.VacuumRequest;
 import com.starrocks.proto.VacuumResponse;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.rpc.BrpcProxy;
 import com.starrocks.rpc.LakeService;
+import com.starrocks.rpc.LakeServiceWithMetrics;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.LocalMetastore;
 import com.starrocks.server.RunMode;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.system.ComputeNode;
@@ -35,6 +45,8 @@ import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import com.starrocks.warehouse.Warehouse;
 import com.starrocks.warehouse.cngroup.ComputeResource;
+import mockit.Mock;
+import mockit.MockUp;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
@@ -43,6 +55,10 @@ import org.mockito.MockedStatic;
 
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Set;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Future;
 
 import static org.mockito.ArgumentMatchers.anyLong;
@@ -116,7 +132,7 @@ public class VacuumTest {
 
         warehouseManager = mock(WarehouseManager.class);
         computeNode = mock(ComputeNode.class);
-        
+
 
         when(warehouseManager.getBackgroundWarehouse()).thenReturn(mock(Warehouse.class));
         when(warehouseManager.getComputeNodeAssignedToTablet((ComputeResource) any(), anyLong()))
@@ -124,7 +140,7 @@ public class VacuumTest {
 
         when(computeNode.getHost()).thenReturn("localhost");
         when(computeNode.getBrpcPort()).thenReturn(8080);
-        
+
     }
 
     @AfterAll
@@ -203,7 +219,7 @@ public class VacuumTest {
             mockBrpcProxyStatic.when(() -> BrpcProxy.getLakeService(anyString(), anyInt())).thenReturn(lakeService);
             autovacuumDaemon.testVacuumPartitionImpl(db, olapTable2, partition);
         }
-        
+
         Assertions.assertEquals(5L, partition.getLastSuccVacuumVersion());
 
         mockResponse.vacuumedVersion = 7L;
@@ -254,6 +270,132 @@ public class VacuumTest {
         }
         Assertions.assertEquals(7L, partition.getLastSuccVacuumVersion());
         Assertions.assertEquals(0L, partition.getMetadataSwitchVersion());
+    }
+
+    @Test
+    public void testFullVacuumBasic() {
+        GlobalStateMgr currentState = GlobalStateMgr.getCurrentState();
+        FullVacuumDaemon fullVacuumDaemon = new FullVacuumDaemon();
+
+        Set<Long> allTabletIds = new HashSet<>();
+        long testDbId = 0;
+        List<Long> dbIds = currentState.getLocalMetastore().getDbIds();
+        for (Long dbId : dbIds) {
+            Database currDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
+            if (currDb != null && !currDb.isSystemDatabase()) {
+                testDbId = dbId;
+                break;
+            }
+        }
+        final Database sourceDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(testDbId);
+        for (Table tbl : sourceDb.getTables()) {
+            if (tbl.isOlapTable()) {
+                OlapTable olapTbl = (OlapTable) tbl;
+                for (PhysicalPartition part : olapTbl.getPhysicalPartitions()) {
+                    part.setLastFullVacuumTime(1L);
+                    for (MaterializedIndex index : part.getMaterializedIndices(MaterializedIndex.IndexExtState.ALL)) {
+                        allTabletIds.addAll(index.getTablets().stream().map(Tablet::getId).toList());
+                    }
+                }
+            }
+        }
+
+        new MockUp<PhysicalPartition>() {
+            @Mock
+            public long getVisibleVersion() {
+                return 10L;
+            }
+        };
+
+        new MockUp<Table>() {
+            @Mock
+            public boolean isCloudNativeTableOrMaterializedView() {
+                return true;
+            }
+        };
+
+        new MockUp<LocalMetastore>() {
+            @Mock
+            public Database getDb(long dbId) {
+                return sourceDb;
+            }
+
+            @Mock
+            public List<Table> getTables(Long dbId) {
+                return sourceDb.getTables();
+            }
+        };
+
+        new MockUp<WarehouseManager>() {
+            @Mock
+            public ComputeNode getComputeNodeAssignedToTablet(ComputeResource computeResource, long tabletId) {
+                return new ComputeNode();
+            }
+        };
+
+        new MockUp<BrpcProxy>() {
+            @Mock
+            public LakeService getLakeService(String host, int port) {
+                return new LakeServiceWithMetrics(null);
+            }
+        };
+        
+        new MockUp<LakeServiceWithMetrics>() {
+            @Mock
+            public Future<VacuumFullResponse> vacuumFull(VacuumFullRequest request) {
+                VacuumFullResponse resp = new VacuumFullResponse();
+                resp.status = new StatusPB();
+                resp.status.statusCode = 0;
+                resp.vacuumedFiles = 1L;
+                resp.vacuumedFileSize = 1L;
+                return CompletableFuture.completedFuture(resp);
+            }
+        };
+
+        final StarOSAgent starOSAgent = new StarOSAgent();
+        final ClusterSnapshotMgr clusterSnapshotMgr = new ClusterSnapshotMgr();
+        final WarehouseManager curWarehouseManager = new WarehouseManager();
+        new MockUp<GlobalStateMgr>() {
+            @Mock
+            public ClusterSnapshotMgr getClusterSnapshotMgr() {
+                return clusterSnapshotMgr;
+            }
+
+            @Mock
+            public WarehouseManager getWarehouseMgr() {
+                return curWarehouseManager;
+            }
+
+            @Mock
+            public StarOSAgent getStarOSAgent() {
+                return starOSAgent;
+            }
+        };
+
+        new MockUp<VacuumFullRequest>() {
+            @Mock
+            public void setRetainVersions(List<Long> retainVersions) {
+                Assertions.assertEquals(1, retainVersions.size());
+                return;
+            }
+        };
+
+        new MockUp<ClusterSnapshotMgr>() {
+            @Mock
+            public long getSafeDeletionTimeMs() {
+                return 454545L;
+            }
+        };
+
+        FeConstants.runningUnitTest = false;
+        int oldValue1 = Config.lake_fullvacuum_parallel_partitions;
+        long oldValue2 = Config.lake_fullvacuum_partition_naptime_seconds;
+        Config.lake_fullvacuum_parallel_partitions = 1;
+        Config.lake_fullvacuum_partition_naptime_seconds = 0;
+        Deencapsulation.invoke(fullVacuumDaemon, "runAfterCatalogReady");
+        Config.lake_fullvacuum_partition_naptime_seconds = oldValue2;
+        Config.lake_fullvacuum_parallel_partitions = oldValue1;
+        FeConstants.runningUnitTest = true;
     }
 
     @Test

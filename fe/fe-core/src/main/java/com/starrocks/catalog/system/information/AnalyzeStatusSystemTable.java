@@ -15,17 +15,18 @@
 package com.starrocks.catalog.system.information;
 
 import com.google.common.collect.Lists;
-import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.system.SystemId;
 import com.starrocks.catalog.system.SystemTable;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.util.DateUtils;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.ShowResultSetMetaData;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.sql.ast.ShowAnalyzeStatusStmt;
+import com.starrocks.sql.ast.expression.TableName;
 import com.starrocks.statistic.AnalyzeStatus;
 import com.starrocks.statistic.NativeAnalyzeStatus;
 import com.starrocks.statistic.StatisticUtils;
@@ -48,8 +49,22 @@ public class AnalyzeStatusSystemTable extends SystemTable {
     private static final String NAME = "analyze_status";
     private static final List<Column> COLUMNS;
 
+    public static final ShowResultSetMetaData META_DATA =
+            ShowResultSetMetaData.builder()
+                    .addColumn(new Column("Id", ScalarType.createVarchar(60)))
+                    .addColumn(new Column("Database", ScalarType.createVarchar(60)))
+                    .addColumn(new Column("Table", ScalarType.createVarchar(60)))
+                    .addColumn(new Column("Columns", ScalarType.createVarchar(200)))
+                    .addColumn(new Column("Type", ScalarType.createVarchar(20)))
+                    .addColumn(new Column("Schedule", ScalarType.createVarchar(20)))
+                    .addColumn(new Column("Status", ScalarType.createVarchar(20)))
+                    .addColumn(new Column("StartTime", ScalarType.createVarchar(60)))
+                    .addColumn(new Column("EndTime", ScalarType.createVarchar(60)))
+                    .addColumn(new Column("Properties", ScalarType.createVarchar(200)))
+                    .addColumn(new Column("Reason", ScalarType.createVarchar(100)))
+                    .build();
     static {
-        COLUMNS = Lists.newArrayList(ShowAnalyzeStatusStmt.META_DATA.getColumns());
+        COLUMNS = Lists.newArrayList(META_DATA.getColumns());
         COLUMNS.add(1, new Column("Catalog", createNameType()));
     }
 
@@ -86,7 +101,6 @@ public class AnalyzeStatusSystemTable extends SystemTable {
                 }
             }
             TAnalyzeStatusItem item = new TAnalyzeStatusItem();
-            itemList.add(item);
             item.setCatalog_name("");
             item.setDatabase_name("");
             item.setTable_name("");
@@ -103,6 +117,7 @@ public class AnalyzeStatusSystemTable extends SystemTable {
                     continue;
                 }
             } catch (MetaNotFoundException ignored) {
+                continue;
             }
 
             String columnStr = "ALL";
@@ -120,6 +135,7 @@ public class AnalyzeStatusSystemTable extends SystemTable {
             item.setEnd_time(DateUtils.formatDateTimeUnix(analyze.getEndTime()));
             item.setProperties(analyze.getProperties() == null ? "{}" : analyze.getProperties().toString());
             item.setReason(analyze.getReason());
+            itemList.add(item);
         }
 
         return res;

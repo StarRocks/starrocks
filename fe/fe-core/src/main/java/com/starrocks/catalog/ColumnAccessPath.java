@@ -15,7 +15,9 @@
 package com.starrocks.catalog;
 
 import com.google.api.client.util.Lists;
-import com.starrocks.analysis.StringLiteral;
+import com.google.common.base.Preconditions;
+import com.starrocks.sql.ast.expression.StringLiteral;
+import com.starrocks.sql.optimizer.rule.tree.prunesubfield.SubfieldAccessPathNormalizer;
 import com.starrocks.thrift.TAccessPathType;
 import com.starrocks.thrift.TColumnAccessPath;
 
@@ -57,6 +59,11 @@ public class ColumnAccessPath {
 
     private boolean fromPredicate;
 
+    // Extended access path from json predicate
+    // WHERE get_json_int(c1, 'f1') > 100 => c1.f1 > 100
+    // Along with the expression transformation, it will generate an extended AccessPath
+    private boolean extended;
+
     // flat json used, to mark the type of the leaf
     private Type valueType;
 
@@ -65,7 +72,52 @@ public class ColumnAccessPath {
         this.path = path;
         this.children = Lists.newArrayList();
         this.fromPredicate = false;
+        this.extended = false;
         this.valueType = valueType;
+    }
+
+    /**
+     * Create a linear path like a.b.c, one node has at most one child node
+     */
+    public static ColumnAccessPath createLinearPath(List<String> path, Type valueType) {
+        Preconditions.checkArgument(path != null && !path.isEmpty(), "Path must not be empty");
+        ColumnAccessPath root = new ColumnAccessPath(TAccessPathType.ROOT, path.get(0), valueType);
+        ColumnAccessPath curr = root;
+        for (String field : path.subList(1, path.size())) {
+            ColumnAccessPath node = new ColumnAccessPath(TAccessPathType.FIELD, field, valueType);
+            curr.addChildPath(node);
+            curr = node;
+        }
+        return root;
+    }
+
+    public static ColumnAccessPath createFromLinearPath(String linearPath, Type valueType) {
+        List<String> pieces = SubfieldAccessPathNormalizer.parseSimpleJsonPath(linearPath);
+        if (pieces.isEmpty()) {
+            throw new IllegalArgumentException("illegal json path: " + linearPath);
+        }
+        return createLinearPath(pieces, valueType);
+    }
+
+    /**
+     * Return the string representation of linear path like a.b.c
+     */
+    public String getLinearPath() {
+        StringBuilder sb = new StringBuilder();
+        ColumnAccessPath iter = this;
+        while (iter != null) {
+            if (!sb.isEmpty()) {
+                sb.append(".");
+            }
+            sb.append(iter.getPath());
+            if (!iter.children.isEmpty()) {
+                assert iter.children.size() == 1;
+                iter = iter.children.get(0);
+            } else {
+                iter = null;
+            }
+        }
+        return sb.toString();
     }
 
     public void setType(TAccessPathType type) {
@@ -98,6 +150,14 @@ public class ColumnAccessPath {
 
     public boolean isFromPredicate() {
         return fromPredicate;
+    }
+
+    public boolean isExtended() {
+        return extended;
+    }
+
+    public void setExtended(boolean extended) {
+        this.extended = extended;
     }
 
     public boolean hasChildPath(String path) {
@@ -174,6 +234,7 @@ public class ColumnAccessPath {
         tColumnAccessPath.setPath(new StringLiteral(path).treeToThrift());
         tColumnAccessPath.setChildren(children.stream().map(ColumnAccessPath::toThrift).collect(Collectors.toList()));
         tColumnAccessPath.setFrom_predicate(fromPredicate);
+        tColumnAccessPath.setExtended(extended);
         if (valueType != null) {
             tColumnAccessPath.setType_desc(valueType.toThrift());
         }

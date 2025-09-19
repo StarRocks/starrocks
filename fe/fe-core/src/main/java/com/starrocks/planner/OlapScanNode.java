@@ -43,15 +43,6 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Range;
 import com.google.common.collect.Sets;
-import com.starrocks.analysis.DescriptorTable;
-import com.starrocks.analysis.Expr;
-import com.starrocks.analysis.FunctionCallExpr;
-import com.starrocks.analysis.LiteralExpr;
-import com.starrocks.analysis.SlotDescriptor;
-import com.starrocks.analysis.SlotId;
-import com.starrocks.analysis.SlotRef;
-import com.starrocks.analysis.StringLiteral;
-import com.starrocks.analysis.TupleDescriptor;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ColumnId;
 import com.starrocks.catalog.DistributionInfo;
@@ -81,6 +72,7 @@ import com.starrocks.common.FeConstants;
 import com.starrocks.common.Pair;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.VectorSearchOptions;
+import com.starrocks.connector.BucketProperty;
 import com.starrocks.lake.LakeTablet;
 import com.starrocks.persist.ColumnIdExpr;
 import com.starrocks.qe.ConnectContext;
@@ -91,6 +83,11 @@ import com.starrocks.server.WarehouseManager;
 import com.starrocks.service.FrontendOptions;
 import com.starrocks.sql.ast.PartitionNames;
 import com.starrocks.sql.ast.TableSampleClause;
+import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.FunctionCallExpr;
+import com.starrocks.sql.ast.expression.LiteralExpr;
+import com.starrocks.sql.ast.expression.SlotRef;
+import com.starrocks.sql.ast.expression.StringLiteral;
 import com.starrocks.sql.common.MetaUtils;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.system.ComputeNode;
@@ -109,8 +106,8 @@ import com.starrocks.thrift.TScanRange;
 import com.starrocks.thrift.TScanRangeLocation;
 import com.starrocks.thrift.TScanRangeLocations;
 import com.starrocks.thrift.TTableSampleOptions;
-import com.starrocks.warehouse.cngroup.ComputeResource;
 import com.starrocks.warehouse.Warehouse;
+import com.starrocks.warehouse.cngroup.ComputeResource;
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -325,6 +322,11 @@ public class OlapScanNode extends ScanNode {
             }
         }
         return bucketNum;
+    }
+
+    @Override
+    public Optional<List<BucketProperty>> getBucketProperties() throws StarRocksException {
+        return Optional.empty();
     }
 
     public void setBucketExprs(List<Expr> bucketExprs) {
@@ -843,7 +845,7 @@ public class OlapScanNode extends ScanNode {
             }
             if (!conjuncts.isEmpty()) {
                 output.append(prefix).append("PREDICATES: ").append(
-                        getExplainString(conjuncts)).append("\n");
+                        explainExpr(conjuncts)).append("\n");
             }
         } else {
             if (isPreAggregation) {
@@ -853,7 +855,7 @@ public class OlapScanNode extends ScanNode {
                         .append("\n");
             }
             if (!conjuncts.isEmpty()) {
-                output.append(prefix).append("Predicates: ").append(getVerboseExplain(conjuncts)).append("\n");
+                output.append(prefix).append("Predicates: ").append(explainExpr(TExplainLevel.VERBOSE, conjuncts)).append("\n");
             }
             if (!dictStringIdToIntIds.isEmpty()) {
                 List<String> flatDictList = dictStringIdToIntIds.entrySet().stream().limit(5)

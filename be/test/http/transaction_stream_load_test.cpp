@@ -20,6 +20,8 @@
 #include <gtest/gtest.h>
 #include <rapidjson/document.h>
 
+#include <string>
+
 #include "gen_cpp/FrontendService_types.h"
 #include "gen_cpp/HeartbeatService_types.h"
 #include "http/http_channel.h"
@@ -66,7 +68,7 @@ public:
         config::streaming_load_max_mb = 1;
 
         _env._load_stream_mgr = new LoadStreamMgr();
-        _env._brpc_stub_cache = new BrpcStubCache();
+        _env._brpc_stub_cache = new BrpcStubCache(&_env);
         _env._stream_load_executor = new StreamLoadExecutor(&_env);
         _env._stream_context_mgr = new StreamContextMgr();
         _env._transaction_mgr = new TransactionMgr(&_env);
@@ -344,51 +346,148 @@ TEST_F(TransactionStreamLoadActionTest, txn_commit_success) {
     }
 }
 
-TEST_F(TransactionStreamLoadActionTest, txn_prepared_success) {
+// Setup transaction stream load flow for prepare testing
+void setup_prepare_txn_test(TransactionManagerAction& txn_action, ExecEnv* env, evhttp_request* ev_request) {
+    // Begin transaction
+    HttpRequest b(ev_request);
+    b._headers.emplace(HttpHeaders::AUTHORIZATION, "Basic cm9vdDo=");
+    b._headers.emplace(HttpHeaders::CONTENT_LENGTH, "0");
+    b._headers.emplace(HTTP_LABEL_KEY, "123");
+    b._params.emplace(HTTP_TXN_OP_KEY, TXN_BEGIN);
+    txn_action.handle(&b);
+
+    rapidjson::Document doc;
+    doc.Parse(k_response_str.c_str());
+    ASSERT_STREQ("OK", doc["Status"].GetString());
+
+    // Perform load
+    TransactionStreamLoadAction action(env);
+    HttpRequest request(ev_request);
+    request.set_handler(&action);
+
+    request._headers.emplace(HttpHeaders::AUTHORIZATION, "Basic cm9vdDo=");
+    request._headers.emplace(HttpHeaders::CONTENT_LENGTH, "16");
+    request._headers.emplace(HTTP_LABEL_KEY, "123");
+    action.on_header(&request);
+    action.handle(&request);
+
+    doc.Parse(k_response_str.c_str());
+    ASSERT_STREQ("OK", doc["Status"].GetString());
+}
+
+TEST_F(TransactionStreamLoadActionTest, txn_prepared_success_without_timeout) {
     TransactionManagerAction txn_action(&_env);
+    setup_prepare_txn_test(txn_action, &_env, _evhttp_req);
 
-    {
-        HttpRequest b(_evhttp_req);
-        b._headers.emplace(HttpHeaders::AUTHORIZATION, "Basic cm9vdDo=");
-        b._headers.emplace(HttpHeaders::CONTENT_LENGTH, "0");
-        b._headers.emplace(HTTP_LABEL_KEY, "123");
-        b._params.emplace(HTTP_TXN_OP_KEY, TXN_BEGIN);
-        txn_action.handle(&b);
+    // Enable sync point to capture the prepared_timeout_second value
+    SyncPoint::GetInstance()->EnableProcessing();
+    DeferOp defer([]() {
+        SyncPoint::GetInstance()->ClearCallBack("StreamLoadExecutor::prepare_txn:rpc");
+        SyncPoint::GetInstance()->DisableProcessing();
+    });
 
-        rapidjson::Document doc;
-        doc.Parse(k_response_str.c_str());
-        ASSERT_STREQ("OK", doc["Status"].GetString());
-    }
+    SyncPoint::GetInstance()->SetCallBack("StreamLoadExecutor::prepare_txn:rpc", [&](void* arg) {
+        auto* request = static_cast<TLoadTxnCommitRequest*>(arg);
+        EXPECT_FALSE(request->__isset.prepared_timeout_second);
+    });
 
-    {
-        TransactionStreamLoadAction action(&_env);
+    HttpRequest b(_evhttp_req);
+    b._headers.emplace(HttpHeaders::AUTHORIZATION, "Basic cm9vdDo=");
+    b._headers.emplace(HttpHeaders::CONTENT_LENGTH, "0");
+    b._headers.emplace(HTTP_LABEL_KEY, "123");
+    b._params.emplace(HTTP_TXN_OP_KEY, TXN_PREPARE);
+    txn_action.handle(&b);
 
-        HttpRequest request(_evhttp_req);
-        request.set_handler(&action);
+    rapidjson::Document doc;
+    doc.Parse(k_response_str.c_str());
+    ASSERT_STREQ("OK", doc["Status"].GetString());
+}
 
-        request._headers.emplace(HttpHeaders::AUTHORIZATION, "Basic cm9vdDo=");
-        request._headers.emplace(HttpHeaders::CONTENT_LENGTH, "16");
-        request._headers.emplace(HTTP_LABEL_KEY, "123");
-        action.on_header(&request);
-        action.handle(&request);
+TEST_F(TransactionStreamLoadActionTest, txn_prepared_success_with_timeout) {
+    TransactionManagerAction txn_action(&_env);
+    setup_prepare_txn_test(txn_action, &_env, _evhttp_req);
 
-        rapidjson::Document doc;
-        doc.Parse(k_response_str.c_str());
-        ASSERT_STREQ("OK", doc["Status"].GetString());
-    }
+    // Enable sync point to capture the prepared_timeout_second value
+    SyncPoint::GetInstance()->EnableProcessing();
+    DeferOp defer([]() {
+        SyncPoint::GetInstance()->ClearCallBack("StreamLoadExecutor::prepare_txn:rpc");
+        SyncPoint::GetInstance()->DisableProcessing();
+    });
 
-    {
-        HttpRequest b(_evhttp_req);
-        b._headers.emplace(HttpHeaders::AUTHORIZATION, "Basic cm9vdDo=");
-        b._headers.emplace(HttpHeaders::CONTENT_LENGTH, "0");
-        b._headers.emplace(HTTP_LABEL_KEY, "123");
-        b._params.emplace(HTTP_TXN_OP_KEY, TXN_PREPARE);
-        txn_action.handle(&b);
+    SyncPoint::GetInstance()->SetCallBack("StreamLoadExecutor::prepare_txn:rpc", [&](void* arg) {
+        auto* request = static_cast<TLoadTxnCommitRequest*>(arg);
+        EXPECT_TRUE(request->__isset.prepared_timeout_second);
+        EXPECT_EQ(300, request->prepared_timeout_second);
+    });
 
-        rapidjson::Document doc;
-        doc.Parse(k_response_str.c_str());
-        ASSERT_STREQ("OK", doc["Status"].GetString());
-    }
+    HttpRequest b(_evhttp_req);
+    b._headers.emplace(HttpHeaders::AUTHORIZATION, "Basic cm9vdDo=");
+    b._headers.emplace(HttpHeaders::CONTENT_LENGTH, "0");
+    b._headers.emplace(HTTP_LABEL_KEY, "123");
+    b._headers.emplace(HTTP_PREPARED_TIMEOUT, "300");
+    b._params.emplace(HTTP_TXN_OP_KEY, TXN_PREPARE);
+    txn_action.handle(&b);
+
+    rapidjson::Document doc;
+    doc.Parse(k_response_str.c_str());
+    ASSERT_STREQ("OK", doc["Status"].GetString());
+}
+
+TEST_F(TransactionStreamLoadActionTest, txn_prepared_with_invalid_timeout) {
+    TransactionManagerAction txn_action(&_env);
+    setup_prepare_txn_test(txn_action, &_env, _evhttp_req);
+
+    // Test invalid timeout format
+    HttpRequest b(_evhttp_req);
+    b._headers.emplace(HttpHeaders::AUTHORIZATION, "Basic cm9vdDo=");
+    b._headers.emplace(HttpHeaders::CONTENT_LENGTH, "0");
+    b._headers.emplace(HTTP_LABEL_KEY, "123");
+    b._headers.emplace(HTTP_PREPARED_TIMEOUT, "invalid_timeout");
+    b._params.emplace(HTTP_TXN_OP_KEY, TXN_PREPARE);
+    txn_action.handle(&b);
+
+    rapidjson::Document doc;
+    doc.Parse(k_response_str.c_str());
+    ASSERT_STREQ("INVALID_ARGUMENT", doc["Status"].GetString());
+    ASSERT_NE(nullptr, std::strstr(doc["Message"].GetString(), "Invalid prepared_timeout: invalid_timeout"));
+}
+
+TEST_F(TransactionStreamLoadActionTest, txn_prepared_with_negative_timeout) {
+    TransactionManagerAction txn_action(&_env);
+    setup_prepare_txn_test(txn_action, &_env, _evhttp_req);
+
+    // Test negative timeout value
+    HttpRequest b(_evhttp_req);
+    b._headers.emplace(HttpHeaders::AUTHORIZATION, "Basic cm9vdDo=");
+    b._headers.emplace(HttpHeaders::CONTENT_LENGTH, "0");
+    b._headers.emplace(HTTP_LABEL_KEY, "123");
+    b._headers.emplace(HTTP_PREPARED_TIMEOUT, "-1");
+    b._params.emplace(HTTP_TXN_OP_KEY, TXN_PREPARE);
+    txn_action.handle(&b);
+
+    rapidjson::Document doc;
+    doc.Parse(k_response_str.c_str());
+    ASSERT_STREQ("INVALID_ARGUMENT", doc["Status"].GetString());
+    ASSERT_NE(nullptr, std::strstr(doc["Message"].GetString(), "Invalid prepared_timeout: -1"));
+}
+
+TEST_F(TransactionStreamLoadActionTest, txn_prepared_with_zero_timeout) {
+    TransactionManagerAction txn_action(&_env);
+    setup_prepare_txn_test(txn_action, &_env, _evhttp_req);
+
+    // Test zero timeout value
+    HttpRequest b(_evhttp_req);
+    b._headers.emplace(HttpHeaders::AUTHORIZATION, "Basic cm9vdDo=");
+    b._headers.emplace(HttpHeaders::CONTENT_LENGTH, "0");
+    b._headers.emplace(HTTP_LABEL_KEY, "123");
+    b._headers.emplace(HTTP_PREPARED_TIMEOUT, "0");
+    b._params.emplace(HTTP_TXN_OP_KEY, TXN_PREPARE);
+    txn_action.handle(&b);
+
+    rapidjson::Document doc;
+    doc.Parse(k_response_str.c_str());
+    ASSERT_STREQ("INVALID_ARGUMENT", doc["Status"].GetString());
+    ASSERT_NE(nullptr, std::strstr(doc["Message"].GetString(), "Invalid prepared_timeout: 0"));
 }
 
 TEST_F(TransactionStreamLoadActionTest, txn_put_fail) {
