@@ -92,4 +92,16 @@ RowidRangeOptionPtr RowidRangeOption::clone() {
     return std::make_shared<RowidRangeOption>(*this);
 }
 
+std::string RowidRangeOption::to_string() const {
+    std::stringstream ss;
+    ss << "RowidRangeOption: ";
+    for (const auto& [rowset_id, segment_map] : rowid_range_per_segment_per_rowset) {
+        ss << "rowset_id: " << rowset_id.to_string() << " ";
+        for (const auto& [segment_id, segment_split] : segment_map) {
+            ss << "segment_id: " << segment_id << " " << segment_split.row_id_range->to_string() << " ";
+        }
+    }
+    return ss.str();
+}
+
 } // namespace starrocks

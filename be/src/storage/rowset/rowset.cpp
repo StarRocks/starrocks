@@ -826,7 +826,7 @@ Status Rowset::get_segment_iterators(const Schema& schema, const RowsetReadOptio
             if (rowid_range == nullptr) {
                 continue;
             }
-            seg_options.rowid_range_option = rowid_range;
+            seg_options.rowid_range_option = std::move(rowid_range);
             seg_options.is_first_split_of_segment = is_first_split_of_segment;
 
             if (options.filtered_scan_range != nullptr) {

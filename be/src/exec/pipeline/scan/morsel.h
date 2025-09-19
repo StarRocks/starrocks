@@ -548,7 +548,7 @@ private:
     SparseRangeIterator<> _segment_range_iter;
 
     // The number of unprocessed rows of the current segment.
-    // size_t _num_segment_rest_rows = 0;
+    size_t _num_segment_rest_rows = 0;
 
     MemPool _mempool;
 };
@@ -687,9 +687,7 @@ public:
                         const std::vector<OlapTuple>& range_end_key) override;
 
     // Queue operations
-    bool empty() const override {
-        return _unget_morsel == nullptr && _init_segments.empty() && _refined_segments.empty();
-    }
+    bool empty() const override;
     StatusOr<MorselPtr> try_get() override;
 
     void refine_scan_ranges(const RowidRangeOptionPtr& rowid_range);
@@ -754,7 +752,7 @@ private:
         }
         void set_finished() { state = Finished; }
 
-        std::string id_string() const { return rowset_id.to_string() + "/" + std::to_string(segment_id); }
+        std::string id_string() const { return fmt::format("{}/{}/{}", tablet_idx, rowset_idx, segment_idx); }
     };
 
     rowid_t _lower_bound_ordinal(Segment* segment, const SeekTuple& key, bool lower) const;
@@ -777,7 +775,7 @@ private:
     void _remove_from_init_segments(const RefineSegmentPtr& segment);
 
 private:
-    std::mutex _mutex;
+    mutable std::mutex _mutex;
 
     /// Key ranges passed to the storage layer.
     TabletReaderParams::RangeStartOperation _range_start_op = TabletReaderParams::RangeStartOperation::GT;

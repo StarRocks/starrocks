@@ -148,7 +148,7 @@ TEST_F(PhysicalSplitMorselQueueV2Test, IntegratedWorkflowTest) {
 
     // Verify initial state
     EXPECT_EQ(queue.max_degree_of_parallelism(), _degree_of_parallelism);
-    EXPECT_EQ(queue.type(), MorselQueue::PHYSICAL_SPLIT);
+    EXPECT_EQ(queue.type(), MorselQueue::PHYSICAL_SPLIT_V2);
     EXPECT_EQ(queue.name(), "physical_split_morsel_queue_v2");
 
     // 2. Create real tablets and rowsets
@@ -197,10 +197,9 @@ TEST_F(PhysicalSplitMorselQueueV2Test, IntegratedWorkflowTest) {
         auto rowid_range = std::make_shared<RowidRangeOption>();
         auto [rowset, segment, split] = rowid_ranges[i];
         size_t refined_rows = _segment_rows / 2;
-        auto range = std::make_shared<SparseRange<>>(0, refined_rows);
+        auto range = std::make_shared<SparseRange<>>(refined_rows, _segment_rows);
         rowid_range->add(rowset, segment, range, split);
         queue.refine_scan_ranges(rowid_range);
-        sum_range -= *range;
 
         // after refinement, we should be able to get the refined morsel
         auto refined_segment = queue.try_get();
@@ -233,7 +232,7 @@ TEST_F(PhysicalSplitMorselQueueV2Test, IntegratedWorkflowTest) {
             sum_range |= *refined_split.row_id_range;
         }
 
-        ASSERT_EQ(_segment_rows - refined_rows, sum_range.span_size());
+        ASSERT_EQ(_segment_rows, sum_range.span_size());
     }
 
     while (!queue.empty()) {
