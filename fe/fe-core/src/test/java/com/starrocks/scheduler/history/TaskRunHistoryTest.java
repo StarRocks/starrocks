@@ -344,9 +344,7 @@ public class TaskRunHistoryTest {
         properties.put("datacache", "{\"enable\": \"true\"}");
         status.setProperties(properties);
         String json = GsonUtils.GSON.toJson(status);
-        System.out.println(json);
         TaskRunStatus dst = GsonUtils.GSON.fromJson(json, TaskRunStatus.class);
-        System.out.println(dst);
         Assertions.assertEquals(json, GsonUtils.GSON.toJson(status));
     }
     @Test
@@ -356,9 +354,7 @@ public class TaskRunHistoryTest {
         properties.put("datacache", "{\"enable\": \"true\"}");
         status.setProperties(properties);
         String json = GsonUtils.GSON.toJson(status);
-        System.out.println(json);
         String res = MessageFormat.format("{0}", Strings.quote(status.toJSON()));
-        System.out.println(res);
         Assertions.assertTrue(res.contains("\"datacache\":\"{\\\"enable\\\": \\\"true\\\"}\""));
     }
 

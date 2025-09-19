@@ -6,12 +6,11 @@
     <parent>
         <groupId>com.starrocks</groupId>
         <artifactId>starrocks-fe</artifactId>
-        <version>3.4.0</version>
+        <version>main</version>
         <relativePath>../pom.xml</relativePath>
     </parent>
 
     <artifactId>fe-parser</artifactId>
-    <version>1.0.0</version>
     <packaging>jar</packaging>
 
     <properties>
@@ -21,6 +20,10 @@
     </properties>
 
     <dependencies>
+        <dependency>
+            <groupId>com.starrocks</groupId>
+            <artifactId>fe-grammar</artifactId>
+        </dependency>
         <dependency>
             <groupId>org.antlr</groupId>
             <artifactId>antlr4-runtime</artifactId>

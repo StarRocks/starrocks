@@ -132,7 +132,7 @@ public class TPCDSPushAggTest extends TPCDS1TTestBase {
         connectContext.getSessionVariable().setOptimizerExecuteTimeout(3000000000L);
         String sql = "Q75";
         String plan = getPlan(1, sql);
-        System.out.println(plan);
+        logSysInfo(plan);
     }
 
     private int getAggNum(int cboPushDownAggregateMode, String sql) throws Exception {

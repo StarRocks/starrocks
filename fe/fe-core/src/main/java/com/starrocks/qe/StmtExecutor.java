@@ -167,6 +167,7 @@ import com.starrocks.sql.ast.DropHistogramStmt;
 import com.starrocks.sql.ast.DropStatsStmt;
 import com.starrocks.sql.ast.DropTableStmt;
 import com.starrocks.sql.ast.DropTemporaryTableStmt;
+import com.starrocks.sql.ast.EnhancedShowStmt;
 import com.starrocks.sql.ast.ExecuteAsStmt;
 import com.starrocks.sql.ast.ExecuteScriptStmt;
 import com.starrocks.sql.ast.ExecuteStmt;
@@ -568,11 +569,11 @@ public class StmtExecutor {
                     context.getDumpInfo().setOriginStmt(parsedStmt.getOrigStmt().originStmt);
                     context.getDumpInfo().setStatement(parsedStmt);
                 }
-                if (parsedStmt instanceof ShowStmt) {
+                if (parsedStmt instanceof EnhancedShowStmt) {
                     com.starrocks.sql.analyzer.Analyzer.analyze(parsedStmt, context);
                     Authorizer.check(parsedStmt, context);
 
-                    QueryStatement selectStmt = ((ShowStmt) parsedStmt).toSelectStmt();
+                    QueryStatement selectStmt = ((EnhancedShowStmt) parsedStmt).toSelectStmt();
                     if (selectStmt != null) {
                         parsedStmt = selectStmt;
                         execPlan = StatementPlanner.plan(parsedStmt, context);

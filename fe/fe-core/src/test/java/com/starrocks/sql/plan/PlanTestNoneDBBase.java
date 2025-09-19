@@ -41,6 +41,7 @@ import com.starrocks.sql.optimizer.LogicalPlanPrinter;
 import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.utframe.StarRocksAssert;
+import com.starrocks.utframe.StarRocksTestBase;
 import com.starrocks.utframe.UtFrameUtils;
 import kotlin.text.Charsets;
 import org.apache.commons.collections4.CollectionUtils;
@@ -71,7 +72,7 @@ import java.util.stream.Stream;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-public class PlanTestNoneDBBase {
+public class PlanTestNoneDBBase extends StarRocksTestBase {
     // use a unique dir so that it won't be conflict with other unit test which
     // may also start a Mocked Frontend
     public static ConnectContext connectContext;
@@ -288,7 +289,7 @@ public class PlanTestNoneDBBase {
         Pair<ExecPlan, String> execPlanWithQuery = result.second;
         String traceLog = execPlanWithQuery.second;
         if (!Strings.isNullOrEmpty(traceLog)) {
-            System.out.println(traceLog);
+            logSysInfo(traceLog);
         }
         return execPlanWithQuery.first.getExplainString(TExplainLevel.NORMAL);
     }
@@ -381,8 +382,8 @@ public class PlanTestNoneDBBase {
             } catch (IOException e) {
                 e.printStackTrace();
             }
-            System.out.println("DEBUG MODE!");
-            System.out.println("DEBUG FILE: " + debugFile.getPath());
+            logSysInfo("DEBUG MODE!");
+            logSysInfo("DEBUG FILE: " + debugFile.getPath());
         }
 
         Pattern regex = Pattern.compile("\\[plan-(\\d+)]");
@@ -419,7 +420,7 @@ public class PlanTestNoneDBBase {
                         // will create new file
                         if (null == writer) {
                             writer = new BufferedWriter(new FileWriter(debugFile, true));
-                            System.out.println("DEBUG MODE!");
+                            logSysInfo("DEBUG MODE!");
                         }
                         continue;
                     case "[planCount]":
@@ -511,7 +512,7 @@ public class PlanTestNoneDBBase {
                 }
             }
         } catch (Exception e) {
-            System.out.println(sql);
+            logSysInfo(sql);
             e.printStackTrace();
             Assertions.fail();
         }
@@ -567,7 +568,7 @@ public class PlanTestNoneDBBase {
 
             ExecPlan execPlan = pair.second.first;
             if (debugOptions.isEnableQueryTraceLog()) {
-                System.out.println(pair.second.second);
+                logSysInfo(pair.second.second);
             }
             if (hasResult && !isDebug) {
                 checkWithIgnoreTabletList(result.toString().trim(), pair.first.trim());
@@ -838,7 +839,7 @@ public class PlanTestNoneDBBase {
 
     protected static void createTables(String dirName, List<String> fileNames) {
         getSqlList(dirName, fileNames).forEach(createTblSql -> {
-            System.out.println("create table sql:" + createTblSql);
+            logSysInfo("create table sql:" + createTblSql);
             try {
                 starRocksAssert.withTable(createTblSql);
             } catch (Exception e) {
@@ -849,7 +850,7 @@ public class PlanTestNoneDBBase {
 
     protected static void createMaterializedViews(String dirName, List<String> fileNames) {
         getSqlList(dirName, fileNames).forEach(sql -> {
-            System.out.println("create mv sql:" + sql);
+            logSysInfo("create mv sql:" + sql);
             try {
                 starRocksAssert.withMaterializedView(sql);
             } catch (Exception e) {
@@ -861,7 +862,7 @@ public class PlanTestNoneDBBase {
     protected static List<String> getSqlList(String dirName, List<String> fileNames) {
         ClassLoader loader = PlanTestBase.class.getClassLoader();
         List<String> createTableSqlList = fileNames.stream().map(n -> {
-            System.out.println("file name:" + n);
+            logSysInfo("file name:" + n);
             try {
                 return CharStreams.toString(
                         new InputStreamReader(
@@ -877,7 +878,7 @@ public class PlanTestNoneDBBase {
 
     public static String getFileContent(String fileName) throws Exception {
         ClassLoader loader = PlanTestNoneDBBase.class.getClassLoader();
-        System.out.println("file name:" + fileName);
+        logSysInfo("file name:" + fileName);
         String content = "";
         try {
             content = CharStreams.toString(

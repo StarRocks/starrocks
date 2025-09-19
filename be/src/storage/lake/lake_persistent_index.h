@@ -137,6 +137,9 @@ public:
 
     Status minor_compact();
 
+    Status ingest_sst(const FileMetaPB& sst_meta, uint32_t rssid, int64_t version, bool is_compaction,
+                      DelVectorPtr delvec);
+
     static Status major_compact(TabletManager* tablet_mgr, const TabletMetadata& metadata, TxnLogPB* txn_log);
 
     Status apply_opcompaction(const TxnLogPB_OpCompaction& op_compaction);

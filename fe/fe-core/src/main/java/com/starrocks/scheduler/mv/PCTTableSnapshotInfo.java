@@ -14,23 +14,20 @@
 package com.starrocks.scheduler.mv;
 
 import com.google.common.base.Preconditions;
-import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Range;
 import com.starrocks.catalog.BaseTableInfo;
 import com.starrocks.catalog.Column;
-import com.starrocks.catalog.HiveTable;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.Table;
+import com.starrocks.common.Config;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.connector.ConnectorPartitionTraits;
-import com.starrocks.connector.HivePartitionDataInfo;
 import com.starrocks.connector.PartitionUtil;
-import com.starrocks.connector.TableUpdateArbitrator;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.common.ListPartitionDiffer;
@@ -207,22 +204,8 @@ public class PCTTableSnapshotInfo extends BaseTableSnapshotInfo {
 
             MaterializedView.BasePartitionInfo basePartitionInfo = new MaterializedView.BasePartitionInfo(
                     -1, modifiedTime, modifiedTime);
-
-            if (table instanceof HiveTable
-                    && ((HiveTable) table).getHiveTableType() == HiveTable.HiveTableType.EXTERNAL_TABLE) {
-                TableUpdateArbitrator.UpdateContext updateContext = new TableUpdateArbitrator.UpdateContext(
-                        table, -1, Lists.newArrayList(partitionName));
-                TableUpdateArbitrator arbitrator = TableUpdateArbitrator.create(updateContext);
-                if (arbitrator != null) {
-                    Map<String, Optional<HivePartitionDataInfo>> partitionDataInfos = arbitrator.getPartitionDataInfos();
-                    Preconditions.checkState(partitionDataInfos.size() == 1);
-
-                    if (partitionDataInfos.get(partitionName).isPresent()) {
-                        HivePartitionDataInfo hivePartitionDataInfo = partitionDataInfos.get(partitionName).get();
-                        basePartitionInfo.setExtLastFileModifiedTime(hivePartitionDataInfo.getLastFileModifiedTime());
-                        basePartitionInfo.setFileNumber(hivePartitionDataInfo.getFileNumber());
-                    }
-                }
+            if (Config.enable_mv_automatic_repairing_for_broken_base_tables) {
+                MVPCTMetaRepairer.collectTableRepairInfo(table, partitionName, basePartitionInfo);
             }
             refreshedPartitionInfos.put(partitionName, basePartitionInfo);
         }

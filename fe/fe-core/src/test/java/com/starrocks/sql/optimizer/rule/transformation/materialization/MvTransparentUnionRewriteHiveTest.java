@@ -163,7 +163,7 @@ public class MvTransparentUnionRewriteHiveTest extends MVTestBase {
                                 "     rollup: mv0", // case 3
                 };
                 for (int i = 0; i < sqls.length; i++) {
-                    System.out.println("start to test case " + i);
+                    logSysInfo("start to test case " + i);
                     String query = sqls[i];
                     String plan = getFragmentPlan(query);
                     PlanTestBase.assertContains(plan, ":UNION", ": mv0", ": lineitem_par");
@@ -309,7 +309,7 @@ public class MvTransparentUnionRewriteHiveTest extends MVTestBase {
                 };
                 // lineitem and order have no intersected dates.
                 for (String query : sqls) {
-                    System.out.println(query);
+                    logSysInfo(query);
                     String plan = getFragmentPlan(query);
                     PlanTestBase.assertContains(plan, ":UNION", ": mv0", ": lineitem_par");
                 }
@@ -328,7 +328,7 @@ public class MvTransparentUnionRewriteHiveTest extends MVTestBase {
                 };
                 // lineitem and order have no intersected dates.
                 for (String query : sqls) {
-                    System.out.println(query);
+                    logSysInfo(query);
                     String plan = getFragmentPlan(query);
                     PlanTestBase.assertContains(plan, ": lineitem_par");
                     PlanTestBase.assertNotContains(plan, ":UNION", ": mv0");
@@ -385,7 +385,7 @@ public class MvTransparentUnionRewriteHiveTest extends MVTestBase {
                                         "     rollup: mv0", // case 3
                         };
                         for (int i = 0; i < sqls.length; i++) {
-                            System.out.println("start to test case " + i);
+                            logSysInfo("start to test case " + i);
                             String query = sqls[i];
                             String plan = getFragmentPlan(query);
                             PlanTestBase.assertContains(plan, ":UNION", ": mv0", ": lineitem_par");

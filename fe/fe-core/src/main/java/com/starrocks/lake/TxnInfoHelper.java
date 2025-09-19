@@ -38,7 +38,7 @@ public class TxnInfoHelper {
         }
         infoPB.setGtid(state.getGlobalTransactionId());
         // set load ids
-        if (state.getLoadIds() != null) {
+        if (state.getLoadIds() != null && state.getSourceType() == TransactionState.LoadJobSourceType.INSERT_STREAMING) {
             infoPB.setLoadIds(state.getLoadIds().stream()
                     .map(tUniqueId -> {
                         PUniqueId pUniqueId = new PUniqueId();
