@@ -17,6 +17,20 @@ This tutorial covers:
 - Analyzing the data with SELECT and JOIN
 - Basic data transformation (the **T** in ETL)
 
+:::tip video
+
+Follow along with the video if you prefer:
+<iframe
+  width="560"
+  height="315"
+  src="https://www.youtube.com/embed/h7F4U6xEA5M"
+  title="StarRocks in 5 - Getting Started With StarRocks on Docker"
+  frameborder="0"
+  allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+  allowfullscreen
+></iframe>
+:::
+
 The data used is provided by NYC OpenData and the National Centers for Environmental Information.
 
 Both of these datasets are very large, and because this tutorial is intended to help you get exposed to working with StarRocks we are not going to load data for the past 120 years. You can run the Docker image and load this data on a machine with 4 GB RAM assigned to Docker. For larger fault-tolerant and scalable deployments we have other documentation and will provide that later.
