@@ -40,12 +40,17 @@ void Tracer::release_instance() {
     Instance().shutdown();
 }
 
+static inline opentelemetry::nostd::shared_ptr<opentelemetry::trace::Tracer> create_no_op_tracer() {
+    return opentelemetry::trace::Provider::GetTracerProvider()->GetTracer("no-op", OPENTELEMETRY_SDK_VERSION);
+}
+
 void Tracer::init(const std::string& service_name) {
     if (!config::jaeger_endpoint.empty()) {
         opentelemetry::exporter::jaeger::JaegerExporterOptions opts;
         vector<string> host_port = strings::Split(config::jaeger_endpoint, ":");
         if (host_port.size() != 2) {
             LOG(WARNING) << "bad jaeger_endpoint " << config::jaeger_endpoint;
+            _tracer = create_no_op_tracer();
             return;
         }
         opts.endpoint = host_port[0];
@@ -63,7 +68,7 @@ void Tracer::init(const std::string& service_name) {
                 new opentelemetry::sdk::trace::TracerProvider(std::move(processor), jaeger_resource));
         _tracer = provider->GetTracer(service_name, OPENTELEMETRY_SDK_VERSION);
     } else {
-        _tracer = opentelemetry::trace::Provider::GetTracerProvider()->GetTracer("no-op", OPENTELEMETRY_SDK_VERSION);
+        _tracer = create_no_op_tracer();
     }
 }
 
