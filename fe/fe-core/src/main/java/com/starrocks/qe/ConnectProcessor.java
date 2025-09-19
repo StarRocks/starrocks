@@ -302,7 +302,9 @@ public class ConnectProcessor {
                 return "this is a desensitized invalid sql";
             }
             return SqlCredentialRedactor.redact(origStmt);
-        } else if (AuditEncryptionChecker.needEncrypt(parsedStmt) || Config.enable_sql_desensitize_in_log) {
+        } else if (AuditEncryptionChecker.needEncrypt(parsedStmt)) {
+            return SqlCredentialRedactor.redact(origStmt);
+        } else if (Config.enable_sql_desensitize_in_log) {
             // Some information like username, password in the stmt should not be printed.
             return AstToSQLBuilder.toSQL(parsedStmt, FormatOptions.allEnable()
                             .setColumnSimplifyTableName(false)
