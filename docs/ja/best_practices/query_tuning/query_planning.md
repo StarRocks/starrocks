@@ -101,6 +101,10 @@ StarRocks のプランは階層的です。
 
 ### クエリプランの例
 
+:::tip
+これは、TPC-DS ベンチマークからのクエリ 96 です。
+:::
+
 ```sql
 EXPLAIN select  count(*)
 from store_sales
