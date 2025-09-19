@@ -739,7 +739,8 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
                 properties.put(property.getKey(), property.getValue());
             }
         }
-        return new CreateDbStmt(context.IF() != null, normalizeName(catalogName), normalizeName(dbName.toString()), properties, createPos(context));
+        return new CreateDbStmt(context.IF() != null, normalizeName(catalogName), normalizeName(dbName.toString()), properties,
+                createPos(context));
     }
 
     @Override
@@ -750,7 +751,8 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
         }
 
         QualifiedName dbName = getQualifiedName(context.database);
-        return new DropDbStmt(context.IF() != null, normalizeName(catalogName), normalizeName(dbName.toString()), context.FORCE() != null,
+        return new DropDbStmt(context.IF() != null, normalizeName(catalogName), normalizeName(dbName.toString()),
+                context.FORCE() != null,
                 createPos(context));
     }
 

@@ -318,6 +318,20 @@ public interface AstVisitor<R, C> {
         return visitDDLStatement(statement, context);
     }
 
+    // ---------------------------------------- Database Statement -----------------------------------------------------
+
+    default R visitUseDbStatement(UseDbStmt statement, C context) {
+        return visitStatement(statement, context);
+    }
+
+    default R visitCreateDbStatement(CreateDbStmt statement, C context) {
+        return visitDDLStatement(statement, context);
+    }
+
+    default R visitDropDbStatement(DropDbStmt statement, C context) {
+        return visitDDLStatement(statement, context);
+    }
+
     // ------------------------------------------- User Statement ----------------------------------------------------
 
     default R visitBaseCreateAlterUserStmt(BaseCreateAlterUserStmt statement, C context) {

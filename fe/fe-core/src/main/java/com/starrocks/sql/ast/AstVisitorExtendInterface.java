@@ -153,23 +153,11 @@ public interface AstVisitorExtendInterface<R, C> extends AstVisitor<R, C> {
 
     // ---------------------------------------- Database Statement -----------------------------------------------------
 
-    default R visitUseDbStatement(UseDbStmt statement, C context) {
-        return visitStatement(statement, context);
-    }
-
     default R visitShowDatabasesStatement(ShowDbStmt statement, C context) {
         return visitShowStatement(statement, context);
     }
 
     default R visitAlterDatabaseQuotaStatement(AlterDatabaseQuotaStmt statement, C context) {
-        return visitDDLStatement(statement, context);
-    }
-
-    default R visitCreateDbStatement(CreateDbStmt statement, C context) {
-        return visitDDLStatement(statement, context);
-    }
-
-    default R visitDropDbStatement(DropDbStmt statement, C context) {
         return visitDDLStatement(statement, context);
     }
 

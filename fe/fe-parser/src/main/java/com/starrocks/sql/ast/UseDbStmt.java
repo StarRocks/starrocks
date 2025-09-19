@@ -12,37 +12,23 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.sql.ast;
 
 import com.starrocks.sql.parser.NodePosition;
 
-
-// DROP DB Statement
-public class DropDbStmt extends DdlStmt {
-    private final boolean ifExists;
+/**
+ * Representation of a USE [catalog.]db statement.
+ * Queries from MySQL client will not generate UseDbStmt, it will be handled by the COM_INIT_DB protocol.
+ * Queries from JDBC will be handled by COM_QUERY protocol, it will generate UseDbStmt.
+ */
+public class UseDbStmt extends StatementBase {
     private String catalog;
-    private String dbName;
-    private final boolean forceDrop;
+    private final String database;
 
-    public DropDbStmt(boolean ifExists, String dbName, boolean forceDrop) {
-        this(ifExists, dbName, forceDrop, NodePosition.ZERO);
-    }
-
-    public DropDbStmt(boolean ifExists, String dbName, boolean forceDrop, NodePosition pos) {
-        this(ifExists, "", dbName, forceDrop, pos);
-    }
-
-    public DropDbStmt(boolean ifExists, String catalog, String dbName, boolean forceDrop, NodePosition pos) {
+    public UseDbStmt(String catalog, String database, NodePosition pos) {
         super(pos);
-        this.ifExists = ifExists;
         this.catalog = catalog;
-        this.dbName = dbName;
-        this.forceDrop = forceDrop;
-    }
-
-    public boolean isSetIfExists() {
-        return ifExists;
+        this.database = database;
     }
 
     public String getCatalogName() {
@@ -54,16 +40,19 @@ public class DropDbStmt extends DdlStmt {
     }
 
     public String getDbName() {
-        return this.dbName;
+        return this.database;
     }
 
-    public boolean isForceDrop() {
-        return this.forceDrop;
+    public String getIdentifier() {
+        if (catalog == null) {
+            return database;
+        } else {
+            return catalog + "." + database;
+        }
     }
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return ((AstVisitorExtendInterface<R, C>) visitor).visitDropDbStatement(this, context);
+        return visitor.visitUseDbStatement(this, context);
     }
-
 }
