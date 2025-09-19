@@ -44,6 +44,7 @@ public:
 
     bool contains_rowset(const BaseRowset* rowset) const;
     SegmentSplit get_segment_rowid_range(const BaseRowset* rowset, const Segment* segment);
+    bool empty() const;
 
     // Return the segment split if it contains a single split
     std::optional<std::tuple<RowsetId, SegmentId, SegmentSplit>> get_single_segment() const;

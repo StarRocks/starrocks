@@ -47,6 +47,16 @@ bool RowidRangeOption::contains_rowset(const BaseRowset* rowset) const {
     return rowid_range_per_segment_per_rowset.find(rowset->rowset_id()) != rowid_range_per_segment_per_rowset.end();
 }
 
+bool RowidRangeOption::empty() const {
+    if (rowid_range_per_segment_per_rowset.empty()) {
+        return true;
+    } else if (rowid_range_per_segment_per_rowset.size() == 1) {
+        return rowid_range_per_segment_per_rowset.begin()->second.empty();
+    } else {
+        return false;
+    }
+}
+
 std::optional<std::tuple<RowsetId, SegmentId, RowidRangeOption::SegmentSplit>> RowidRangeOption::get_single_segment()
         const {
     if (rowid_range_per_segment_per_rowset.size() != 1) {

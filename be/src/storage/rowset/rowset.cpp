@@ -826,13 +826,16 @@ Status Rowset::get_segment_iterators(const Schema& schema, const RowsetReadOptio
             if (rowid_range == nullptr) {
                 continue;
             }
-            auto [filtered_scan_range, ignore] =
-                    options.filtered_scan_range->get_segment_rowid_range(this, seg_ptr.get());
-            if (filtered_scan_range) {
-                seg_options.filtered_scan_range = filtered_scan_range;
-            }
             seg_options.rowid_range_option = rowid_range;
             seg_options.is_first_split_of_segment = is_first_split_of_segment;
+
+            if (options.filtered_scan_range != nullptr) {
+                auto [filtered_scan_range, ignore] =
+                        options.filtered_scan_range->get_segment_rowid_range(this, seg_ptr.get());
+                if (filtered_scan_range) {
+                    seg_options.filtered_scan_range = filtered_scan_range;
+                }
+            }
         } else if (options.short_key_ranges_option != nullptr) { // logical split.
             seg_options.is_first_split_of_segment = options.short_key_ranges_option->is_first_split_of_tablet;
         } else {

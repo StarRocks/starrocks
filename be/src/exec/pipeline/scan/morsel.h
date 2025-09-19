@@ -16,6 +16,7 @@
 
 #include <mutex>
 #include <optional>
+#include <utility>
 
 #include "exec/query_cache/ticket_checker.h"
 #include "gen_cpp/InternalService_types.h"
@@ -212,11 +213,14 @@ public:
     }
 
     RowidRangeOptionPtr get_rowid_range_option() { return _rowid_range_option; }
+    void set_filtered_scan_range(RowidRangeOptionPtr filtered_scan_range) {
+        _filtered_scan_range = std::move(filtered_scan_range);
+    }
     RowidRangeOptionPtr get_filtered_scan_range() { return _filtered_scan_range; }
 
 private:
     RowidRangeOptionPtr _rowid_range_option;
-    RowidRangeOptionPtr _filtered_scan_range;
+    RowidRangeOptionPtr _filtered_scan_range = nullptr;
 };
 
 class LogicalSplitScanMorsel final : public ScanMorsel {
@@ -759,6 +763,8 @@ private:
     // Load the meta of the new rowset and the index of the new segment,
     // and find the rowid range of each key range in this segment.
     Status _init_segment(const RefineSegmentPtr& segment);
+    Segment* get_raw_segment(const RefineSegmentPtr& segment);
+    SegmentSharedPtr get_segment_ptr(const RefineSegmentPtr& segment);
 
     void _inc_split(const RefineSegmentPtr& segment, bool is_last_split);
     StatusOr<RowidRangeOptionPtr> _split_morsel_from_segment(const RefineSegmentPtr& segment, bool* is_last);
