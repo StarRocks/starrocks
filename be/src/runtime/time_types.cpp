@@ -518,6 +518,10 @@ bool date::is_leap(int year) {
     return ((year % 4) == 0) && ((year % 100 != 0) || ((year % 400) == 0 && year));
 }
 
+bool date::is_leap_for_julian(int year) {
+    return (year % 4 == 0) && ((year % 100 != 0) || (year % 400 == 0));
+}
+
 void date::to_string(int year, int month, int day, char* to) {
     uint32_t temp;
     temp = year / 100;

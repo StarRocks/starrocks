@@ -112,6 +112,10 @@ public:
     static int get_days_after_monday(JulianDate julian);
 
     static bool is_leap(int year);
+    // For historical reasons, our `is_leap` function treats year 0 as a non-leap year. However, in mathematics and
+    // in the Julian representation, year 0 is considered a leap year. Therefore, when performing day shifts based on
+    // the Julian representation, year 0 should be treated as a leap year.
+    static bool is_leap_for_julian(int year);
 
     static int64_t standardize_date(int64_t value);
 
