@@ -148,9 +148,7 @@ void StarRocksIndexOutput::flushBuffer(const uint8_t* b, const int32_t size) {
         }
     } else {
         VLOG(1) << "skip flush buffer, reason: "
-                << (b == nullptr ? "buffer is nullptr."
-                    : size < 0   ? "negative buffer size."
-                                 : "zero buffer size.");
+                << (b == nullptr ? "buffer is nullptr." : size < 0 ? "negative buffer size." : "zero buffer size.");
     }
 }
 
@@ -372,8 +370,7 @@ const char* StarRocksMergedDirectory::getObjectName() const {
 }
 
 bool StarRocksMergedDirectory::doDeleteFile(const char* name) {
-    _CLTHROWA(CL_ERR_UnsupportedOperation,
-              fmt::format("Delete file is not supported in {}", getObjectName()).c_str());
+    _CLTHROWA(CL_ERR_UnsupportedOperation, fmt::format("Delete file is not supported in {}", getObjectName()).c_str());
 }
 
 StatusOr<std::shared_ptr<StarRocksMergingDirectory>> StarRocksFSDirectoryFactory::getDirectory(
