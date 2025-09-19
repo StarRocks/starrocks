@@ -63,6 +63,7 @@ import com.starrocks.catalog.OlapTable.OlapTableState;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.Replica;
+import com.starrocks.catalog.SchemaChangeTypeCompatibility;
 import com.starrocks.catalog.SchemaInfo;
 import com.starrocks.catalog.StructField;
 import com.starrocks.catalog.StructType;
@@ -908,6 +909,10 @@ public class SchemaChangeHandler extends AlterHandler {
             if (column.isKey()) {
                 return false;
             }
+        }
+
+        if (!SchemaChangeTypeCompatibility.canReuseZonemapIndex(oriColumn.getType(), modColumn.getType())) {
+            fastSchemaEvolution = false;
         }
 
         return fastSchemaEvolution;
