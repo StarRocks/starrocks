@@ -101,6 +101,10 @@ StarRocks计划是分层的：
 
 ### 示例查询计划
 
+:::tip
+这是 TPC-DS 基准测试中的第 96 个查询。
+:::
+
 ```sql
 EXPLAIN select  count(*)
 from store_sales
