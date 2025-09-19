@@ -147,7 +147,7 @@ public:
         auto& src_null_data = src_nullable_column->null_column()->get_data();
         auto& dst_null_data = dst_nullable_column->null_column()->get_data();
 
-        size_t size = src_column->size();
+        size_t size = dst_null_data->size();
         memcpy(dst_null_data.data(), src_null_data.data(), size);
         convert_int_to_int<SourceType, DestType>(src_data.data(), dst_data.data(), size);
         dst_nullable_column->set_has_null(src_nullable_column->has_null());
