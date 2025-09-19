@@ -69,25 +69,30 @@ public class LakeTableAsyncFastSchemaChangeJobTest {
         GlobalStateMgr.getCurrentState().getLocalMetastore().alterTable(connectContext, stmt);
     }
 
-    private LakeTableAsyncFastSchemaChangeJob getAlterJob(Table table) {
+    private AlterJobV2 getAlterJob(Table table, boolean expectFastSchemaEvolution) {
         AlterJobMgr alterJobMgr = GlobalStateMgr.getCurrentState().getAlterJobMgr();
         List<AlterJobV2> jobs = alterJobMgr.getSchemaChangeHandler().getUnfinishedAlterJobV2ByTableId(table.getId());
         Assertions.assertEquals(1, jobs.size());
         AlterJobV2 alterJob = jobs.get(0);
-        Assertions.assertTrue(alterJob instanceof LakeTableAsyncFastSchemaChangeJob);
-        return (LakeTableAsyncFastSchemaChangeJob) alterJob;
-    }
-
-    private LakeTableAsyncFastSchemaChangeJob removeAlterJob(Table table) {
-        LakeTableAsyncFastSchemaChangeJob job = getAlterJob(table);
-        AlterHandler handler = GlobalStateMgr.getCurrentState().getAlterJobMgr().getSchemaChangeHandler();
-        handler.alterJobsV2.remove(job.getJobId());
-        return job;
+        Assertions.assertEquals(expectFastSchemaEvolution, alterJob instanceof LakeTableAsyncFastSchemaChangeJob);
+        return alterJob;
     }
 
     private AlterJobV2 mustAlterTable(Table table, String sql) throws Exception {
         alterTable(connectContext, sql);
-        AlterJobV2 alterJob = getAlterJob(table);
+        AlterJobV2 alterJob = getAlterJob(table, true);
+        alterJob.run();
+        while (alterJob.getJobState() != AlterJobV2.JobState.FINISHED) {
+            alterJob.run();
+            Thread.sleep(100);
+        }
+        Assertions.assertEquals(AlterJobV2.JobState.FINISHED, alterJob.getJobState());
+        return alterJob;
+    }
+
+    private AlterJobV2 executeAlterAndWaitFinish(Table table, String sql, boolean expectFastSchemaEvolution) throws Exception {
+        alterTable(connectContext, sql);
+        AlterJobV2 alterJob = getAlterJob(table, expectFastSchemaEvolution);
         alterJob.run();
         while (alterJob.getJobState() != AlterJobV2.JobState.FINISHED) {
             alterJob.run();
@@ -270,15 +275,23 @@ public class LakeTableAsyncFastSchemaChangeJobTest {
     @Test
     public void testModifyColumnType() throws Exception {
         LakeTable table = createTable(connectContext, "CREATE TABLE t_modify_type" +
-                    "(c0 INT, c1 INT, c2 VARCHAR(5), c3 DATE)" +
-                    "DUPLICATE KEY(c0) DISTRIBUTED BY HASH(c0) " +
-                    "BUCKETS 1 PROPERTIES('fast_schema_evolution'='true')");
+                "(c0 INT, c1 INT, c2 FLOAT, c3 DATE, c4 VARCHAR(10))" +
+                "DUPLICATE KEY(c0) DISTRIBUTED BY HASH(c0) " +
+                "BUCKETS 1 PROPERTIES('fast_schema_evolution'='true')");
         long oldSchemaId = table.getIndexIdToMeta().get(table.getBaseIndexId()).getSchemaId();
+
+        // zonemap index can be reused
         {
-            mustAlterTable(table, "ALTER TABLE t_modify_type MODIFY COLUMN c1 BIGINT, MODIFY COLUMN c2 VARCHAR(10)," +
-                        "MODIFY COLUMN c3 DATETIME");
+            String alterSql = """
+                        ALTER TABLE t_modify_type 
+                            MODIFY COLUMN c1 BIGINT,
+                            MODIFY COLUMN c2 DOUBLE,
+                            MODIFY COLUMN c3 DATETIME,
+                            MODIFY COLUMN c4 VARCHAR(20)
+                        """;
+            executeAlterAndWaitFinish(table, alterSql, true);
             List<Column> columns = table.getBaseSchema();
-            Assertions.assertEquals(4, columns.size());
+            Assertions.assertEquals(5, columns.size());
 
             Assertions.assertEquals("c0", columns.get(0).getName());
             Assertions.assertEquals(0, columns.get(0).getUniqueId());
@@ -290,15 +303,28 @@ public class LakeTableAsyncFastSchemaChangeJobTest {
 
             Assertions.assertEquals("c2", columns.get(2).getName());
             Assertions.assertEquals(2, columns.get(2).getUniqueId());
-            Assertions.assertEquals(PrimitiveType.VARCHAR, columns.get(2).getType().getPrimitiveType());
-            Assertions.assertEquals(10, ((ScalarType) columns.get(2).getType()).getLength());
+            Assertions.assertEquals(ScalarType.DOUBLE, columns.get(2).getType());
 
             Assertions.assertEquals("c3", columns.get(3).getName());
             Assertions.assertEquals(3, columns.get(3).getUniqueId());
             Assertions.assertEquals(ScalarType.DATETIME, columns.get(3).getType());
 
+            Assertions.assertEquals("c4", columns.get(4).getName());
+            Assertions.assertEquals(4, columns.get(4).getUniqueId());
+            Assertions.assertEquals(PrimitiveType.VARCHAR, columns.get(4).getType().getPrimitiveType());
+            Assertions.assertEquals(20, ((ScalarType) columns.get(4).getType()).getLength());
+
             Assertions.assertTrue(table.getIndexIdToMeta().get(table.getBaseIndexId()).getSchemaId() > oldSchemaId);
             Assertions.assertEquals(OlapTable.OlapTableState.NORMAL, table.getState());
+        }
+
+        // zonemap index can not be reused
+        {
+            executeAlterAndWaitFinish(table, "ALTER TABLE t_modify_type MODIFY COLUMN c3 DATE", false);
+            Assertions.assertEquals(ScalarType.DATE, table.getBaseSchema().get(3).getType());
+
+            executeAlterAndWaitFinish(table, "ALTER TABLE t_modify_type MODIFY COLUMN c4 INT", false);
+            Assertions.assertEquals(ScalarType.INT, table.getBaseSchema().get(4).getType());
         }
     }
 }
