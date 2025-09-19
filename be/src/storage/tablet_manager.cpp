@@ -447,11 +447,14 @@ Status TabletManager::drop_tablet(TTabletId tablet_id, TabletDropFlag flag) {
             (void)dropped_tablet->set_tablet_state(TABLET_SHUTDOWN);
         }
 
+<<<<<<< HEAD
         // Remove tablet meta from storage, crash the program if failed.
         if (auto st = _remove_tablet_meta(dropped_tablet); !st.ok()) {
             LOG(FATAL) << "Fail to remove tablet meta: " << st;
         }
 
+=======
+>>>>>>> 2981ce997a ([BugFix] fix delvec no found issue when drop tablet and queries run concurrently (#63291))
         // Remove the tablet directory in background to avoid holding the lock of tablet map shard for long.
         std::unique_lock l(_shutdown_tablets_lock);
         _add_shutdown_tablet_unlocked(tablet_id, std::move(drop_info));
