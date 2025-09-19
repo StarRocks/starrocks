@@ -604,14 +604,14 @@ StatusOr<std::vector<ZoneMapDetail>> ColumnReader::get_raw_zone_map(const IndexR
 
     LogicalType type = _encoding_info->type();
     int32_t num_pages = _zonemap_index->num_pages();
-    std::vector<ZoneMapDetail> result(num_pages);
+    std::vector<ZoneMapDetail> result;
+    result.reserve(num_pages);
 
-    for (auto& zm : _zonemap_index->page_zone_maps()) {
+    for (const auto& zm : _zonemap_index->page_zone_maps()) {
         ZoneMapDetail detail;
         RETURN_IF_ERROR(_parse_zone_map(type, zm, &detail));
-        result.emplace_back(detail);
+        result.emplace_back(std::move(detail));
     }
-
     return result;
 }
 
