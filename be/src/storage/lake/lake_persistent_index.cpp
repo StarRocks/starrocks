@@ -454,7 +454,13 @@ void LakePersistentIndex::pick_sstables_for_merge(const PersistentIndexSstableMe
         // we should force to do base merge.
         // That's because in `LakePersistentIndex::apply_opcompaction`, we will sort sstable
         // by max_rss_rowid, and if they are same, the base sstable will be after cumulative sstable,
-        // which is not what we want.
+        // which is not what we want. E.g.
+        //  t1 : (base sst: max_rss_rowid = 4, cumulative sst: max_rss_rowid = 4, cumulative sst: max_rss_rowid = 4)
+        //  t2 : do cumulative compaction, merge these two cumulative sst, and get new (cumulative sst: max_rss_rowid = 4).
+        //  t3 : apply new cumulative sst, now the order is:
+        //       (cumulative sst: max_rss_rowid = 4, base sst: max_rss_rowid = 4)
+        //       which is wrong, because base sst should be before cumulative sst.
+        // so we force to do base merge here.
         *merge_base_level = true;
         sstables->insert(sstables->begin(), sstable_meta.sstables(0));
     }

@@ -265,7 +265,7 @@ TEST_F(LakePersistentIndexTest, test_compaction_strategy) {
         for (int i = 0; i < N; i++) {
             sstable_pb = sstable_meta.add_sstables();
             sstable_pb->set_filesize(sub_size);
-            sstable_pb->set_max_rssid(i);
+            sstable_pb->set_max_rss_rowid(i);
         }
         LakePersistentIndex::pick_sstables_for_merge(sstable_meta, &sstables, &merge_base_level);
         if (is_base) {
