@@ -24,10 +24,18 @@ static const std::string s_day_name[] = {"Sunday", "Monday", "Tuesday", "Wednesd
 static const char* s_month_name[] = {"",     "January", "February",  "March",   "April",    "May",      "June",
                                      "July", "August",  "September", "October", "November", "December", nullptr};
 
-static int month_to_quarter[13] = {0, 1, 1, 1, 4, 4, 4, 7, 7, 7, 10, 10, 10};
 static int day_to_first[8] = {0 /*never use*/, 6, 0, 1, 2, 3, 4, 5};
 static constexpr int s_days_in_month[13] = {0, 31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31};
 static int month_to_quarter_end[13] = {0, 3, 3, 3, 6, 6, 6, 9, 9, 9, 12, 12, 12};
+
+// Stores the number of days from the beginning of the quarter up to the 1st day of month i (exclusive).
+static constexpr int quarter_month_day_offset[13] = {
+        0,                                                                // placeholder
+        0, s_days_in_month[1],  s_days_in_month[1] + s_days_in_month[2],  // quarter 1
+        0, s_days_in_month[4],  s_days_in_month[4] + s_days_in_month[5],  // quarter 2
+        0, s_days_in_month[7],  s_days_in_month[7] + s_days_in_month[8],  // quarter 3
+        0, s_days_in_month[10], s_days_in_month[10] + s_days_in_month[11] // quarter 4
+};
 
 const DateValue DateValue::MAX_DATE_VALUE{date::MAX_DATE};
 const DateValue DateValue::MIN_DATE_VALUE{date::MIN_DATE};
@@ -130,7 +138,7 @@ void DateValue::trunc_to_day() {}
 void DateValue::trunc_to_month() {
     int year, month, day;
     date::to_date_with_cache(_julian, &year, &month, &day);
-    _julian = date::from_date(year, month, 1);
+    _julian -= (day - 1);
 }
 
 void DateValue::trunc_to_year() {
@@ -148,7 +156,9 @@ void DateValue::trunc_to_week() {
 void DateValue::trunc_to_quarter() {
     int year, month, day;
     date::to_date_with_cache(_julian, &year, &month, &day);
-    _julian = date::from_date(year, month_to_quarter[month], 1);
+    // Only March needs to add the full number of days in February,
+    // so an extra day should be added only in leap years when the month is March.
+    _julian -= quarter_month_day_offset[month] + (day - 1) + (month == 3 && date::is_leap_for_julian(year));
 }
 
 void DateValue::set_end_of_month() {
