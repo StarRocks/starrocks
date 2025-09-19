@@ -127,20 +127,47 @@ inline std::string gen_segment_filename(int64_t txn_id) {
     return fmt::format("{:016x}_{}.dat", txn_id, generate_uuid_string());
 }
 
+// Helper function to extract uuid from filename, which is used in shared-data cross cluster migration
 inline std::string extract_uuid_from(const std::string& file_name) {
-    auto pos = file_name.find('_');
-    if (UNLIKELY(!is_segment(file_name) || !is_del(file_name) || pos != 16 || file_name.size() < 21)) {
+    if (UNLIKELY(!is_segment(file_name) && !is_del(file_name) && !is_sst(file_name) && !is_delvec(file_name))) {
+        // not a valid file
         return {};
     }
-    return file_name.substr(pos + 1, file_name.size() - pos - 4);
+
+    size_t dot_pos = file_name.find_last_of('.');
+    // sst file only has uuid as name, no txn_id prefix
+    if (is_sst(file_name)) {
+        return file_name.substr(0, dot_pos);
+    }
+
+    // file_name should have format like {:016x}_uuid.ext
+    size_t split_pos = file_name.find('_');
+    if (UNLIKELY(split_pos != 16)) {
+        return {};
+    }
+    return file_name.substr(split_pos + 1, dot_pos - split_pos - 1);
 }
 
-inline std::string gen_segment_filename_from(int64_t txn_id, const std::string& old_file_name) {
+// Helper function to generate a new filename from old filename, which is used in shared-data cross cluster migration
+inline std::string gen_filename_from(int64_t txn_id, const std::string& old_file_name) {
+    if (is_sst(old_file_name)) {
+        // sst file's name will keep no change,
+        return old_file_name;
+    }
+
+    if (UNLIKELY(!is_segment(old_file_name) && !is_del(old_file_name) && !is_delvec(old_file_name))) {
+        // not a valid file
+        return {};
+    }
+
     auto uuid = extract_uuid_from(old_file_name);
     if (UNLIKELY(uuid.empty())) {
         return {};
     }
-    return fmt::format("{:016x}_{}.dat", txn_id, uuid);
+
+    size_t dot_pos = old_file_name.find_last_of('.');
+    std::string_view extension = std::string_view(old_file_name).substr(dot_pos);
+    return fmt::format("{:016x}_{}{}", txn_id, uuid, extension);
 }
 
 inline std::string gen_cols_filename(int64_t txn_id) {
@@ -151,24 +178,8 @@ inline std::string gen_del_filename(int64_t txn_id) {
     return fmt::format("{:016x}_{}.del", txn_id, generate_uuid_string());
 }
 
-inline std::string gen_del_filename_from(int64_t txn_id, const std::string& old_file_name) {
-    auto uuid = extract_uuid_from(old_file_name);
-    if (UNLIKELY(uuid.empty())) {
-        return {};
-    }
-    return fmt::format("{:016x}_{}.del", txn_id, uuid);
-}
-
 inline std::string gen_sst_filename() {
     return fmt::format("{}.sst", generate_uuid_string());
-}
-
-inline std::string gen_sst_filename_from(int64_t txn_id, const std::string& old_file_name) {
-    auto uuid = extract_uuid_from(old_file_name);
-    if (UNLIKELY(uuid.empty())) {
-        return {};
-    }
-    return fmt::format("{:016x}_{}.sst", txn_id, uuid);
 }
 
 inline std::optional<int64_t> extract_txn_id_prefix(std::string_view file_name) {
