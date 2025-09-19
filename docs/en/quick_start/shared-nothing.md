@@ -17,9 +17,8 @@ This tutorial covers:
 - Analyzing the data with SELECT and JOIN
 - Basic data transformation (the **T** in ETL)
 
-:::tip video
+## Follow along with the video if you prefer
 
-Follow along with the video if you prefer:
 <iframe
   width="560"
   height="315"
@@ -29,7 +28,6 @@ Follow along with the video if you prefer:
   allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
   allowfullscreen
 ></iframe>
-:::
 
 The data used is provided by NYC OpenData and the National Centers for Environmental Information.
 
