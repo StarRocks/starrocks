@@ -34,8 +34,6 @@
 
 package com.starrocks.catalog;
 
-import com.starrocks.mysql.MysqlCodec;
-
 public class SchemaChangeTypeCompatibility {
     private static Boolean[][] schemaChangeMatrix;
 
