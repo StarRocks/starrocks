@@ -51,6 +51,8 @@ public:
 
     RowidRangeOptionPtr clone();
 
+    std::string to_string() const;
+
 public:
     using SetgmentRowidRangeMap = std::unordered_map<SegmentId, SegmentSplit>;
     using RowsetRowidRangeMap = std::map<RowsetId, SetgmentRowidRangeMap>;
