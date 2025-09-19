@@ -62,8 +62,8 @@ private:
     std::shared_ptr<connector::SinkMemoryManager> _sink_mem_mgr;
     connector::SinkOperatorMemoryManager* _op_mem_mgr; // child of _sink_mem_mgr
 
-    bool _no_more_input = false;
-    bool _is_cancelled = false;
+    std::atomic<bool> _no_more_input = false;
+    std::atomic<bool> _is_cancelled = false;
     FragmentContext* _fragment_context;
 };
 
