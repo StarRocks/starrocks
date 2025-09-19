@@ -576,8 +576,6 @@ Status SegmentIterator::_init() {
     bool need_refine = _opts.filtered_scan_range && _opts.is_first_split_of_segment;
     if (need_refine) {
         _scan_range.add(Range<>(0, num_rows()));
-        _opts.filtered_scan_range->clear();
-        _opts.filtered_scan_range->add(Range<>(0, num_rows()));
     } else {
         RETURN_IF_ERROR(_get_row_ranges_by_rowid_range());
     }
@@ -613,7 +611,6 @@ Status SegmentIterator::_init() {
     // in subsequent scan tasks. This ensures that the filtered scan range is reused efficiently.
     if (need_refine) {
         *_opts.filtered_scan_range = _scan_range;
-        VLOG(2) << fmt::format("refine segemnt {} to {} rows", _segment->id(), _scan_range.span_size());
         if (_opts.rowid_range_option != nullptr) {
             _scan_range &= (*_opts.rowid_range_option);
         }
