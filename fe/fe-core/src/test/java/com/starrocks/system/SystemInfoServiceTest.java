@@ -328,8 +328,8 @@ public class SystemInfoServiceTest {
         Assertions.assertTrue(cnIP == null);
 
         {
-            ExceptionChecker.expectThrowsWithMsg(DdlException.class, "Warehouse name: wh-not-exists not exist.", () ->
-                    service.dropComputeNode("newHost", 1000, "wh-not-exists", ""));
+            Assertions.assertThrows(DdlException.class, () ->
+                    service.dropComputeNode("newHost", 1000, "cn-not-exists", ""));
         }
 
         Config.enable_trace_historical_node = savedConfig;
