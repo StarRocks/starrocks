@@ -339,6 +339,7 @@ public:
         SPLIT,
         LOGICAL_SPLIT,
         PHYSICAL_SPLIT,
+        PHYSICAL_SPLIT_V2,
         BUCKET_SEQUENCE,
     };
     MorselQueue() = default;
@@ -690,7 +691,7 @@ public:
     void refine_scan_ranges(const RowidRangeOptionPtr& rowid_range);
 
     std::string name() const override { return "physical_split_morsel_queue_v2"; }
-    Type type() const override { return PHYSICAL_SPLIT; }
+    Type type() const override { return PHYSICAL_SPLIT_V2; }
 
 private:
     struct RefineSegment;
@@ -748,6 +749,8 @@ private:
             state = Refined;
         }
         void set_finished() { state = Finished; }
+
+        std::string id_string() const { return rowset_id.to_string() + "/" + std::to_string(segment_id); }
     };
 
     rowid_t _lower_bound_ordinal(Segment* segment, const SeekTuple& key, bool lower) const;
