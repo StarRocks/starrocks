@@ -425,7 +425,7 @@ public class PaimonMetadata implements ConnectorMetadata {
         PredicateSearchKey filter = PredicateSearchKey.of(paimonTable.getCatalogDBName(),
                 paimonTable.getCatalogTableName(), snapshotId, params.getPredicate());
         if (!paimonSplits.containsKey(filter)) {
-            ReadBuilder readBuilder = paimonTable.getNativeTable().newReadBuilder();
+            ReadBuilder readBuilder = paimonNativeTable.newReadBuilder();
             int[] projected =
                     params.getFieldNames().stream().mapToInt(name -> (paimonTable.getFieldNames().indexOf(name))).toArray();
             List<Predicate> predicates = extractPredicates(paimonTable, params.getPredicate());
