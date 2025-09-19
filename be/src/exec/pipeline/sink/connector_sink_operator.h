@@ -64,6 +64,7 @@ private:
 
     std::atomic<bool> _no_more_input = false;
     std::atomic<bool> _is_cancelled = false;
+    std::atomic<int> _finishing_times = 0;
     FragmentContext* _fragment_context;
 };
 
