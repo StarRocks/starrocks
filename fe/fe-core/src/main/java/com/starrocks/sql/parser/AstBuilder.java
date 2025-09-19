@@ -84,7 +84,6 @@ import com.starrocks.sql.ast.AlterCatalogStmt;
 import com.starrocks.sql.ast.AlterClause;
 import com.starrocks.sql.ast.AlterDatabaseQuotaStmt;
 import com.starrocks.sql.ast.AlterDatabaseRenameStatement;
-import com.starrocks.sql.ast.AlterLoadErrorUrlClause;
 import com.starrocks.sql.ast.AlterLoadStmt;
 import com.starrocks.sql.ast.AlterMaterializedViewStatusClause;
 import com.starrocks.sql.ast.AlterMaterializedViewStmt;
@@ -4852,12 +4851,6 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
     }
 
     @Override
-    public ParseNode visitAlterLoadErrorUrlClause(
-            com.starrocks.sql.parser.StarRocksParser.AlterLoadErrorUrlClauseContext context) {
-        return new AlterLoadErrorUrlClause(getProperties(context.properties()), createPos(context));
-    }
-
-    @Override
     public ParseNode visitCreateImageClause(com.starrocks.sql.parser.StarRocksParser.CreateImageClauseContext context) {
         return new CreateImageClause(createPos(context));
     }
@@ -7193,14 +7186,14 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
                 propertyMap.put(property.getKey(), property.getValue());
             }
         }
-        return new CreateGroupProviderStmt(name, propertyMap, createPos(context));
+        return new CreateGroupProviderStmt(name, propertyMap, context.IF() != null, createPos(context));
     }
 
     @Override
     public ParseNode visitDropGroupProviderStatement(
             com.starrocks.sql.parser.StarRocksParser.DropGroupProviderStatementContext context) {
         String name = ((Identifier) visit(context.identifier())).getValue();
-        return new DropGroupProviderStmt(name, createPos(context));
+        return new DropGroupProviderStmt(name, context.IF() != null, createPos(context));
     }
 
     @Override

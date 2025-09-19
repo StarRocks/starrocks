@@ -903,6 +903,10 @@ public abstract class Type implements Cloneable {
                 !isJsonType() && !isOnlyMetricType() && !isFunctionType() && !isBinaryType();
     }
 
+    public boolean supportZoneMap() {
+        return isScalarType() && (isNumericType() || isDateType() || isStringType());
+    }
+
     public static final String NOT_SUPPORT_JOIN_ERROR_MSG =
             "Type (nested) percentile/hll/bitmap/json not support join";
 
