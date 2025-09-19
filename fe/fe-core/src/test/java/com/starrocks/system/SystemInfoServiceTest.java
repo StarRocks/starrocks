@@ -17,7 +17,6 @@ package com.starrocks.system;
 import com.google.api.client.util.Maps;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
-import com.starrocks.common.ExceptionChecker;
 import com.starrocks.common.Pair;
 import com.starrocks.lake.StarOSAgent;
 import com.starrocks.persist.EditLog;
