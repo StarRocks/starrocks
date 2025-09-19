@@ -917,6 +917,23 @@ public class SchemaChangeHandler extends AlterHandler {
             fastSchemaEvolution = false;
         }
 
+        // Check whether manually created indexes support fast schema evolution. The rules are as follows:
+        // 1. The index can be reused after type conversion, and BE has made necessary changes,
+        //    such as casting new type values to old type values before querying the index.
+        // 2. The index cannot be reused, and BE has made changes to skip it during queries.
+        // Currently, BLOOMFILTER and NGRAMBF indexes use rule 2 to support fast schema evolution. BE-side changes
+        // for other indexes are not yet ready, so fast schema change is temporarily disabled for them. This feature
+        // will be gradually enabled for these indexes once BE support is in place.
+        List<Index> existedIndexes = olapTable.getIndexes();
+        for (Index index : existedIndexes) {
+            if (index.getColumns().contains(oriColumn.getColumnId())) {
+                if (index.getIndexType() != IndexDef.IndexType.NGRAMBF) {
+                    fastSchemaEvolution = false;
+                    break;
+                }
+            }
+        }
+
         return fastSchemaEvolution;
     }
 
