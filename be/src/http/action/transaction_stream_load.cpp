@@ -120,6 +120,14 @@ void TransactionManagerAction::handle(HttpRequest* req) {
         return _send_error_reply(req, Status::InvalidArgument(fmt::format("empty label")));
     }
 
+    // HTTP_TRANSACTION_TYPE header is used for multi-statement transactions and should only be sent to FE
+    // (Frontend) nodes. BE (Backend) nodes cannot process multi-statement transaction requests.
+    if (!req->header(HTTP_TRANSACTION_TYPE).empty()) {
+        return _send_error_reply(
+                req, Status::InvalidArgument(
+                             "Multi-statement transaction requests can only be sent to FE nodes, not BE nodes"));
+    }
+
     if (boost::iequals(txn_op, TXN_BEGIN)) {
         st = _exec_env->transaction_mgr()->begin_transaction(req, &resp);
     } else if (boost::iequals(txn_op, TXN_COMMIT) || boost::iequals(txn_op, TXN_PREPARE)) {
