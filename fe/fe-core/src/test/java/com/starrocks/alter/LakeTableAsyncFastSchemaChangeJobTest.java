@@ -266,15 +266,30 @@ public class LakeTableAsyncFastSchemaChangeJobTest {
     @Test
     public void testModifyColumnType() throws Exception {
         LakeTable table = createTable(connectContext, "CREATE TABLE t_modify_type" +
-                    "(c0 INT, c1 INT, c2 VARCHAR(5), c3 DATE)" +
-                    "DUPLICATE KEY(c0) DISTRIBUTED BY HASH(c0) " +
-                    "BUCKETS 1 PROPERTIES('fast_schema_evolution'='true')");
+                "(c0 INT, c1 INT, c2 FLOAT, c3 DATE, c4 VARCHAR(10))" +
+                "DUPLICATE KEY(c0) DISTRIBUTED BY HASH(c0) " +
+                "BUCKETS 1 PROPERTIES('fast_schema_evolution'='true')");
         long oldSchemaId = table.getIndexIdToMeta().get(table.getBaseIndexId()).getSchemaId();
+
+        // zonemap index can be reused
         {
+<<<<<<< HEAD
             mustAlterTable(table, "ALTER TABLE t_modify_type MODIFY COLUMN c1 BIGINT, MODIFY COLUMN c2 VARCHAR(10)," +
                         "MODIFY COLUMN c3 DATETIME");
             List<Column> columns = table.getBaseSchema();
             Assert.assertEquals(4, columns.size());
+=======
+            String alterSql = """
+                        ALTER TABLE t_modify_type 
+                            MODIFY COLUMN c1 BIGINT,
+                            MODIFY COLUMN c2 DOUBLE,
+                            MODIFY COLUMN c3 DATETIME,
+                            MODIFY COLUMN c4 VARCHAR(20)
+                        """;
+            executeAlterAndWaitFinish(table, alterSql, true);
+            List<Column> columns = table.getBaseSchema();
+            Assertions.assertEquals(5, columns.size());
+>>>>>>> b9fdfcd6c0 ([BugFix] Fix incompatible zonemap reuse for fast schema evolution in shared-data (#63143))
 
             Assert.assertEquals("c0", columns.get(0).getName());
             Assert.assertEquals(0, columns.get(0).getUniqueId());
@@ -284,17 +299,42 @@ public class LakeTableAsyncFastSchemaChangeJobTest {
             Assert.assertEquals(1, columns.get(1).getUniqueId());
             Assert.assertEquals(ScalarType.BIGINT, columns.get(1).getType());
 
+<<<<<<< HEAD
             Assert.assertEquals("c2", columns.get(2).getName());
             Assert.assertEquals(2, columns.get(2).getUniqueId());
             Assert.assertEquals(PrimitiveType.VARCHAR, columns.get(2).getType().getPrimitiveType());
             Assert.assertEquals(10, ((ScalarType) columns.get(2).getType()).getLength());
+=======
+            Assertions.assertEquals("c2", columns.get(2).getName());
+            Assertions.assertEquals(2, columns.get(2).getUniqueId());
+            Assertions.assertEquals(ScalarType.DOUBLE, columns.get(2).getType());
+>>>>>>> b9fdfcd6c0 ([BugFix] Fix incompatible zonemap reuse for fast schema evolution in shared-data (#63143))
 
             Assert.assertEquals("c3", columns.get(3).getName());
             Assert.assertEquals(3, columns.get(3).getUniqueId());
             Assert.assertEquals(ScalarType.DATETIME, columns.get(3).getType());
 
+<<<<<<< HEAD
             Assert.assertTrue(table.getIndexIdToMeta().get(table.getBaseIndexId()).getSchemaId() > oldSchemaId);
             Assert.assertEquals(OlapTable.OlapTableState.NORMAL, table.getState());
+=======
+            Assertions.assertEquals("c4", columns.get(4).getName());
+            Assertions.assertEquals(4, columns.get(4).getUniqueId());
+            Assertions.assertEquals(PrimitiveType.VARCHAR, columns.get(4).getType().getPrimitiveType());
+            Assertions.assertEquals(20, ((ScalarType) columns.get(4).getType()).getLength());
+
+            Assertions.assertTrue(table.getIndexIdToMeta().get(table.getBaseIndexId()).getSchemaId() > oldSchemaId);
+            Assertions.assertEquals(OlapTable.OlapTableState.NORMAL, table.getState());
+>>>>>>> b9fdfcd6c0 ([BugFix] Fix incompatible zonemap reuse for fast schema evolution in shared-data (#63143))
+        }
+
+        // zonemap index can not be reused
+        {
+            executeAlterAndWaitFinish(table, "ALTER TABLE t_modify_type MODIFY COLUMN c3 DATE", false);
+            Assertions.assertEquals(ScalarType.DATE, table.getBaseSchema().get(3).getType());
+
+            executeAlterAndWaitFinish(table, "ALTER TABLE t_modify_type MODIFY COLUMN c4 INT", false);
+            Assertions.assertEquals(ScalarType.INT, table.getBaseSchema().get(4).getType());
         }
     }
 }
