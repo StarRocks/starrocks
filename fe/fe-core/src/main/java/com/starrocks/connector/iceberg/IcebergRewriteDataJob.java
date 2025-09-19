@@ -21,7 +21,6 @@ import com.starrocks.planner.IcebergScanNode;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.StmtExecutor;
 import com.starrocks.sql.StatementPlanner;
-import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AlterTableStmt;
 import com.starrocks.sql.ast.IcebergRewriteStmt;
 import com.starrocks.sql.ast.InsertStmt;
@@ -75,7 +74,9 @@ public class IcebergRewriteDataJob {
 
         IcebergScanNode targetNode = scanNodes.stream().findFirst().orElse(null);
         if (targetNode == null) {
-            throw new SemanticException("No valid IcebergScanNode found for rewrite.");
+            LOG.info("No IcebergScanNode of table " + ((InsertStmt) parsedStmt).getTableName() + 
+                        " found for rewrite, prepare becomes no-op.");
+            return;
         }
 
         this.rewriteData = new IcebergRewriteData();
@@ -85,6 +86,11 @@ public class IcebergRewriteDataJob {
     }
 
     public void execute() throws Exception {
+        if (scanNodes == null || scanNodes.isEmpty()) {
+            LOG.info("No IcebergScanNode for empty table, rewrite data job execute skipped.");
+            return;
+        }
+
         if (rewriteStmt == null || execPlan == null || rewriteData == null) {
             throw new IllegalStateException("Must call prepare() before execute()");
         }
