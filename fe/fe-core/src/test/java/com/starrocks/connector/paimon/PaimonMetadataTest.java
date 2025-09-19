@@ -24,11 +24,16 @@ import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.Config;
+import com.starrocks.common.ExceptionChecker;
+import com.starrocks.common.tvr.TvrTableSnapshot;
+import com.starrocks.common.tvr.TvrVersionRange;
 import com.starrocks.connector.ConnectorMetadatRequestContext;
 import com.starrocks.connector.ConnectorProperties;
+import com.starrocks.connector.ConnectorTableVersion;
 import com.starrocks.connector.ConnectorType;
 import com.starrocks.connector.GetRemoteFilesParams;
 import com.starrocks.connector.HdfsEnvironment;
+import com.starrocks.connector.PointerType;
 import com.starrocks.connector.RemoteFileInfo;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.hive.ConnectorTableMetadataProcessor;
@@ -87,6 +92,9 @@ import org.apache.paimon.table.sink.BatchTableCommit;
 import org.apache.paimon.table.sink.BatchTableWrite;
 import org.apache.paimon.table.sink.BatchWriteBuilder;
 import org.apache.paimon.table.sink.CommitMessage;
+import org.apache.paimon.table.sink.StreamTableCommit;
+import org.apache.paimon.table.sink.StreamTableWrite;
+import org.apache.paimon.table.sink.StreamWriteBuilder;
 import org.apache.paimon.table.source.DataSplit;
 import org.apache.paimon.table.source.InnerTableScan;
 import org.apache.paimon.table.source.ReadBuilder;
@@ -122,6 +130,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
+import static com.starrocks.catalog.Type.INT;
+import static com.starrocks.catalog.Type.VARCHAR;
 import static org.apache.paimon.io.DataFileMeta.DUMMY_LEVEL;
 import static org.apache.paimon.io.DataFileMeta.EMPTY_MAX_KEY;
 import static org.apache.paimon.io.DataFileMeta.EMPTY_MIN_KEY;
@@ -258,6 +268,9 @@ public class PaimonMetadataTest {
                 result = paimonSystemTable;
                 paimonSystemTable.latestSnapshotId();
                 result = new Exception("Readonly Table tbl1$manifests does not support currentSnapshot.");
+                // accoding to PaimonMetadata::getTableVersionRange，the snapshot id of system table is -1L,
+                // so the above paimonSystemTable.latestSnapshotId() would not be called.
+                minTimes = 0;
                 paimonSystemTable.newReadBuilder();
                 result = readBuilder;
                 readBuilder.withFilter((List<Predicate>) any).withProjection((int[]) any).newScan();
@@ -267,7 +280,8 @@ public class PaimonMetadataTest {
         PaimonTable paimonTable = (PaimonTable) metadata.getTable(connectContext, "db1", "tbl1$manifests");
         List<String> requiredNames = Lists.newArrayList("file_name", "file_size");
         List<RemoteFileInfo> result =
-                metadata.getRemoteFiles(paimonTable, GetRemoteFilesParams.newBuilder().setFieldNames(requiredNames).build());
+                metadata.getRemoteFiles(paimonTable, GetRemoteFilesParams.newBuilder().setFieldNames(requiredNames)
+                        .setTableVersionRange(TvrTableSnapshot.of(Optional.of(-1L))).build());
         assertEquals(1, result.size());
     }
 
@@ -342,8 +356,10 @@ public class PaimonMetadataTest {
         };
         PaimonTable paimonTable = (PaimonTable) metadata.getTable(connectContext, "db1", "tbl1");
         List<String> requiredNames = Lists.newArrayList("f2", "dt");
+        // accoding to PaimonMetadata::getTableVersionRange, empty table's snapshot id is -1L.
         List<RemoteFileInfo> result =
-                metadata.getRemoteFiles(paimonTable, GetRemoteFilesParams.newBuilder().setFieldNames(requiredNames).build());
+                metadata.getRemoteFiles(paimonTable, GetRemoteFilesParams.newBuilder().setFieldNames(requiredNames)
+                        .setTableVersionRange(TvrTableSnapshot.of(Optional.of(-1L))).build());
         assertEquals(1, result.size());
         assertEquals(1, result.get(0).getFiles().size());
         PaimonRemoteFileDesc desc = (PaimonRemoteFileDesc) result.get(0).getFiles().get(0);
@@ -429,7 +445,9 @@ public class PaimonMetadataTest {
 
         // no predicate, limit 1
         PaimonMetadata metadata = new PaimonMetadata("paimon", environment, catalog, properties);
-        GetRemoteFilesParams params = GetRemoteFilesParams.newBuilder().setFieldNames(fieldNames).setLimit(1).build();
+        // commit one batch data, so the latest snapshot id is 1L.
+        GetRemoteFilesParams params = GetRemoteFilesParams.newBuilder().setFieldNames(fieldNames).setLimit(1)
+                .setTableVersionRange(TvrTableSnapshot.of(Optional.of(1L)).build();
         List<RemoteFileInfo> result = metadata.getRemoteFiles(metadata.getTable(connectContext, "test_db", "test_table"), params);
         assertEquals(1, result.size());
         assertEquals(1, result.get(0).getFiles().size());
@@ -438,7 +456,8 @@ public class PaimonMetadataTest {
 
         // no predicate, no limit
         metadata = new PaimonMetadata("paimon", environment, catalog, properties);
-        params = GetRemoteFilesParams.newBuilder().setFieldNames(fieldNames).setLimit(-1).build();
+        params = GetRemoteFilesParams.newBuilder().setFieldNames(fieldNames).setLimit(-1)
+                .setTableVersionRange(TvrTableSnapshot.of(Optional.of(1L)).build();
         result = metadata.getRemoteFiles(metadata.getTable(connectContext, "test_db", "test_table"), params);
         assertEquals(1, result.size());
         assertEquals(1, result.get(0).getFiles().size());
@@ -452,7 +471,7 @@ public class PaimonMetadataTest {
         // partition predicate, limit 1
         metadata = new PaimonMetadata("paimon", environment, catalog, properties);
         params = GetRemoteFilesParams.newBuilder().setFieldNames(fieldNames).setPredicate(createDateEqualPredicate)
-                .setLimit(1).build();
+                .setLimit(1).setTableVersionRange(TvrTableSnapshot.of(Optional.of(1L)).build();
         result = metadata.getRemoteFiles(metadata.getTable(connectContext, "test_db", "test_table"), params);
         assertEquals(1, result.size());
         assertEquals(1, result.get(0).getFiles().size());
@@ -462,7 +481,7 @@ public class PaimonMetadataTest {
         // partition predicate, no limit
         metadata = new PaimonMetadata("paimon", environment, catalog, properties);
         params = GetRemoteFilesParams.newBuilder().setFieldNames(fieldNames).setPredicate(createDateEqualPredicate)
-                .setLimit(-1).build();
+                .setLimit(-1).setTableVersionRange(TvrTableSnapshot.of(Optional.of(1L)).build();
         result = metadata.getRemoteFiles(metadata.getTable(connectContext, "test_db", "test_table"), params);
         assertEquals(1, result.size());
         assertEquals(1, result.get(0).getFiles().size());
@@ -476,7 +495,7 @@ public class PaimonMetadataTest {
         // none partition predicate, limit 1
         metadata = new PaimonMetadata("paimon", environment, catalog, properties);
         params = GetRemoteFilesParams.newBuilder().setFieldNames(fieldNames).setPredicate(userEqualPredicate)
-                .setLimit(1).build();
+                .setLimit(1).setTableVersionRange(TvrTableSnapshot.of(Optional.of(1L)).build();
         result = metadata.getRemoteFiles(metadata.getTable(connectContext, "test_db", "test_table"), params);
         assertEquals(1, result.size());
         assertEquals(1, result.get(0).getFiles().size());
@@ -490,7 +509,7 @@ public class PaimonMetadataTest {
         metadata = new PaimonMetadata("paimon", environment, catalog, properties);
         params = GetRemoteFilesParams.newBuilder().setFieldNames(fieldNames)
                 .setPredicate(Utils.compoundAnd(createDateGreaterPredicate, userEqualPredicate))
-                .setLimit(1).build();
+                .setLimit(1).setTableVersionRange(TvrTableSnapshot.of(Optional.of(1L)).build();
         result = metadata.getRemoteFiles(metadata.getTable(connectContext, "test_db", "test_table"), params);
         assertEquals(1, result.size());
         assertEquals(1, result.get(0).getFiles().size());
@@ -511,7 +530,7 @@ public class PaimonMetadataTest {
         // partition with function predicate, limit 1
         metadata = new PaimonMetadata("paimon", environment, catalog, properties);
         params = GetRemoteFilesParams.newBuilder().setFieldNames(fieldNames).setPredicate(createDateCoalescePredicate)
-                .setLimit(1).build();
+                .setLimit(1).setTableVersionRange(TvrTableSnapshot.of(Optional.of(1L)).build();
         result = metadata.getRemoteFiles(metadata.getTable(connectContext, "test_db", "test_table"), params);
         assertEquals(1, result.size());
         assertEquals(1, result.get(0).getFiles().size());
@@ -745,5 +764,249 @@ public class PaimonMetadataTest {
                 metadata.getTableStatistics(optimizerContext, paimonTable, colRefToColumnMetaMap,
                         null, null, -1, null);
         assertEquals(tableStatistics.getColumnStatistics().size(), colRefToColumnMetaMap.size());
+    }
+
+    @Test
+    public void testGetSnapshotIdFromVersion() throws Exception {
+
+        //1.initialize env、db、table、load data
+        java.nio.file.Path tmpDir = Files.createTempDirectory("tmp_");
+
+        Catalog catalog = CatalogFactory.createCatalog(CatalogContext.create(new Path(tmpDir.toString())));
+
+        catalog.createDatabase("test_db", true);
+
+        Schema.Builder schemaBuilder = Schema.newBuilder();
+        schemaBuilder.column("order_id", DataTypes.STRING());
+        schemaBuilder.column("order_date", DataTypes.STRING());
+
+        Options options = new Options();
+        options.set(CoreOptions.BUCKET, 2);
+        options.set(CoreOptions.BUCKET_KEY, "order_id");
+        schemaBuilder.options(options.toMap());
+
+        Schema schema = schemaBuilder.build();
+
+        Identifier identifier = Identifier.create("test_db", "test_table");
+        catalog.createTable(identifier, schema, true);
+
+        org.apache.paimon.table.Table table = catalog.getTable(identifier);
+        StreamWriteBuilder writeBuilder = table.newStreamWriteBuilder();
+        StreamTableWrite write = writeBuilder.newWrite();
+
+        List<CommitMessage> messages;
+        StreamTableCommit commit = writeBuilder.newCommit();
+
+        //load first batch data, generate snapshot 1
+        messages = write.prepareCommit(false, 0);
+        GenericRow record1 = GenericRow.of(BinaryString.fromString("1001"), BinaryString.fromString("2025-09-01"));
+        GenericRow record2 = GenericRow.of(BinaryString.fromString("1002"), BinaryString.fromString("2025-09-02"));
+        write.write(record1);
+        write.write(record2);
+        commit.commit(0, messages);
+
+        //load second batch data, generate snapshot 2
+        messages = write.prepareCommit(false, 1);
+        GenericRow record3 = GenericRow.of(BinaryString.fromString("1003"), BinaryString.fromString("2025-09-03"));
+        GenericRow record4 = GenericRow.of(BinaryString.fromString("1004"), BinaryString.fromString("2025-09-04"));
+        write.write(record3);
+        write.write(record4);
+        commit.commit(1, messages);
+
+        HdfsEnvironment environment = new HdfsEnvironment();
+        ConnectorProperties properties = new ConnectorProperties(ConnectorType.PAIMON);
+        PaimonMetadata metadata = new PaimonMetadata("paimon", environment, catalog, properties);
+        long snapshotId;
+        ConstantOperator constantOperator;
+        ConnectorTableVersion tableVersion;
+
+        //2 check
+        //2.1 check specify timestamp
+        constantOperator = new ConstantOperator("9999-12-31", VARCHAR);
+        tableVersion = new ConnectorTableVersion(PointerType.TEMPORAL, constantOperator);
+        snapshotId = metadata.getSnapshotIdFromVersion(table, tableVersion);
+        assertEquals(snapshotId, 2L);
+
+        constantOperator = new ConstantOperator("9999-12-31 12:00:00", VARCHAR);
+        tableVersion = new ConnectorTableVersion(PointerType.TEMPORAL, constantOperator);
+        snapshotId = metadata.getSnapshotIdFromVersion(table, tableVersion);
+        assertEquals(snapshotId, 2L);
+
+        constantOperator = new ConstantOperator("9999-12-31 12:00:00.100", VARCHAR);
+        tableVersion = new ConnectorTableVersion(PointerType.TEMPORAL, constantOperator);
+        snapshotId = metadata.getSnapshotIdFromVersion(table, tableVersion);
+        assertEquals(snapshotId, 2L);
+
+        constantOperator = new ConstantOperator("9999-12-31aaa", VARCHAR);
+        tableVersion = new ConnectorTableVersion(PointerType.TEMPORAL, constantOperator);
+        ConnectorTableVersion finalTableVersion1 = tableVersion;
+        ExceptionChecker.expectThrowsWithMsg(StarRocksConnectorException.class,
+                "Invalid temporal version [9999-12-31aaa]",
+                () -> metadata.getSnapshotIdFromVersion(table, finalTableVersion1));
+
+        //2.2 check specify snapshot id
+        constantOperator = new ConstantOperator(1, INT);
+        tableVersion = new ConnectorTableVersion(PointerType.VERSION, constantOperator);
+        snapshotId = metadata.getSnapshotIdFromVersion(table, tableVersion);
+        assertEquals(snapshotId, 1L);
+
+        constantOperator = new ConstantOperator("1234", INT);
+        tableVersion = new ConnectorTableVersion(PointerType.VERSION, constantOperator);
+        ConnectorTableVersion finalTableVersion2 = tableVersion;
+        ExceptionChecker.expectThrowsWithMsg(StarRocksConnectorException.class,
+                "test_db.test_table does not include snapshot: 1234",
+                () -> metadata.getSnapshotIdFromVersion(table, finalTableVersion2));
+
+        //2.3 check specify tag
+        ((FileStoreTable) table).createTag("t_1", 1L); //create tag base snapshot 1
+        constantOperator = new ConstantOperator("tag:t_1", VARCHAR);
+        tableVersion = new ConnectorTableVersion(PointerType.VERSION, constantOperator);
+        snapshotId = metadata.getSnapshotIdFromVersion(table, tableVersion);
+        assertEquals(snapshotId, 1L);
+
+        ((FileStoreTable) table).createTag("t_2"); //create tag base latest snapshot
+        constantOperator = new ConstantOperator("tag:t_2", VARCHAR);
+        tableVersion = new ConnectorTableVersion(PointerType.VERSION, constantOperator);
+        snapshotId = metadata.getSnapshotIdFromVersion(table, tableVersion);
+        assertEquals(snapshotId, 2L);
+
+        constantOperator = new ConstantOperator("tag:t_not_exist", VARCHAR);
+        tableVersion = new ConnectorTableVersion(PointerType.VERSION, constantOperator);
+        ConnectorTableVersion finalTableVersion3 = tableVersion;
+        ExceptionChecker.expectThrowsWithMsg(StarRocksConnectorException.class,
+                "test_db.test_table does not include tag: t_not_exist",
+                () -> metadata.getSnapshotIdFromVersion(table, finalTableVersion3));
+
+        //2.4 check sepcify branch
+        //2.4.1 check branch base exist tag
+        ((FileStoreTable) table).createBranch("b_1", "t_1"); //create branch base tag t_1
+        constantOperator = new ConstantOperator("branch:b_1", VARCHAR);
+        tableVersion = new ConnectorTableVersion(PointerType.VERSION, constantOperator);
+        snapshotId = metadata.getSnapshotIdFromVersion(table, tableVersion);
+        assertEquals(snapshotId, 1L);
+
+        //2.4.2 check empty branch
+        ((FileStoreTable) table).createBranch("b_2"); //create empty  branch
+        FileStoreTable tableBranch = ((FileStoreTable) table).switchToBranch("b_2");
+        //load first batch data to b_2 branch, generate snapshot 1
+        GenericRow record5 = GenericRow.of(BinaryString.fromString("3001"), BinaryString.fromString("2025-09-05"));
+        GenericRow record6 = GenericRow.of(BinaryString.fromString("3002"), BinaryString.fromString("2025-09-06"));
+        write = tableBranch.newWrite("root");
+        commit = tableBranch.newCommit("root");
+        write.write(record5);
+        write.write(record6);
+        messages = write.prepareCommit(false, 0);
+        commit.commit(0, messages);
+        //load second batch data to b_2 branch, generate snapshot 2
+        GenericRow record7 = GenericRow.of(BinaryString.fromString("4001"), BinaryString.fromString("2025-09-07"));
+        GenericRow record8 = GenericRow.of(BinaryString.fromString("4002"), BinaryString.fromString("2025-09-08"));
+        write = tableBranch.newWrite("root");
+        commit = tableBranch.newCommit("root");
+        write.write(record7);
+        write.write(record8);
+        messages = write.prepareCommit(false, 1);
+        commit.commit(1, messages);
+
+        constantOperator = new ConstantOperator("branch:b_2", VARCHAR);
+        tableVersion = new ConnectorTableVersion(PointerType.VERSION, constantOperator);
+        snapshotId = metadata.getSnapshotIdFromVersion(table, tableVersion);
+        assertEquals(snapshotId, 2L);
+
+        //2.4.3 check not exist branch
+        constantOperator = new ConstantOperator("branch:b_not_exist", VARCHAR);
+        tableVersion = new ConnectorTableVersion(PointerType.VERSION, constantOperator);
+        ConnectorTableVersion finalTableVersion4 = tableVersion;
+        ExceptionChecker.expectThrowsWithMsg(StarRocksConnectorException.class,
+                "test_db.test_table does not include branch: b_not_exist",
+                () -> metadata.getSnapshotIdFromVersion(table, finalTableVersion4));
+
+        //2.5 check other error format specify
+        constantOperator = new ConstantOperator("branchabcd:b_1", VARCHAR);
+        tableVersion = new ConnectorTableVersion(PointerType.VERSION, constantOperator);
+        ConnectorTableVersion finalTableVersion5 = tableVersion;
+        ExceptionChecker.expectThrowsWithMsg(StarRocksConnectorException.class,
+                "Please input corrent format like branch:branch_name or tag:tag_name",
+                () -> metadata.getSnapshotIdFromVersion(table, finalTableVersion5));
+
+        //3 clean env
+        catalog.dropTable(identifier, true);
+        catalog.dropDatabase("test_db", true, true);
+        Files.delete(tmpDir);
+    }
+
+    @Test
+    public void testGetTableVersionRange() throws Exception {
+        //1.initialize env、db、table、load data
+        java.nio.file.Path tmpDir = Files.createTempDirectory("tmp_");
+
+        Catalog catalog = CatalogFactory.createCatalog(CatalogContext.create(new Path(tmpDir.toString())));
+
+        catalog.createDatabase("test_db", true);
+
+        Schema.Builder schemaBuilder = Schema.newBuilder();
+        schemaBuilder.column("order_id", DataTypes.STRING());
+        schemaBuilder.column("order_date", DataTypes.STRING());
+
+        Options options = new Options();
+        options.set(CoreOptions.BUCKET, 2);
+        options.set(CoreOptions.BUCKET_KEY, "order_id");
+        schemaBuilder.options(options.toMap());
+
+        Schema schema = schemaBuilder.build();
+
+        Identifier identifier = Identifier.create("test_db", "test_table");
+        catalog.createTable(identifier, schema, true);
+
+        com.starrocks.catalog.Table table = metadata.getTable(connectContext, "test_db", "test_table");
+        PaimonTable paimonTable = (PaimonTable) table;
+        org.apache.paimon.table.Table nativeTable = catalog.getTable(identifier);
+        StreamWriteBuilder writeBuilder = nativeTable.newStreamWriteBuilder();
+        StreamTableWrite write = writeBuilder.newWrite();
+
+        List<CommitMessage> messages;
+        StreamTableCommit commit = writeBuilder.newCommit();
+
+        //load first batch data, genarate snapshot 1
+        messages = write.prepareCommit(false, 0);
+        GenericRow record1 = GenericRow.of(BinaryString.fromString("1001"), BinaryString.fromString("2025-09-01"));
+        GenericRow record2 = GenericRow.of(BinaryString.fromString("1002"), BinaryString.fromString("2025-09-02"));
+        write.write(record1);
+        write.write(record2);
+        commit.commit(0, messages);
+
+        //load second batch data, generate snapshot 2
+        messages = write.prepareCommit(false, 1);
+        GenericRow record3 = GenericRow.of(BinaryString.fromString("1003"), BinaryString.fromString("2025-09-03"));
+        GenericRow record4 = GenericRow.of(BinaryString.fromString("1004"), BinaryString.fromString("2025-09-04"));
+        write.write(record3);
+        write.write(record4);
+        commit.commit(1, messages);
+        paimonTable.setPaimonNativeTable(nativeTable);
+
+        HdfsEnvironment environment = new HdfsEnvironment();
+        ConnectorProperties properties = new ConnectorProperties(ConnectorType.PAIMON);
+        PaimonMetadata metadata = new PaimonMetadata("paimon", environment, catalog, properties);
+        long snapshotId;
+        ConstantOperator constantOperator;
+        ConnectorTableVersion tableVersion;
+
+        //2 check
+        //2.1 check startVersion and endVersion are empty
+        Optional<ConnectorTableVersion> startVersion = Optional.empty();
+        Optional<ConnectorTableVersion> endVersion = Optional.empty();
+        TvrVersionRange tvrVersionRange = metadata.getTableVersionRange("test_db", table, startVersion, endVersion);
+        assertEquals(tvrVersionRange.toString(), "Snapshot@(2)");
+
+        //2.2 check startVersion is empty, endVersion is not empty
+        startVersion = Optional.empty();
+        constantOperator = new ConstantOperator(1, INT);
+        endVersion = Optional.of(new ConnectorTableVersion(PointerType.VERSION, constantOperator));
+        tvrVersionRange = metadata.getTableVersionRange("test_db", table, startVersion, endVersion);
+        assertEquals(tvrVersionRange.toString(), "Delta@[MIN,1]");
+
+        //3.clean env
+        catalog.dropTable(identifier, true);
+        catalog.dropDatabase("test_db", true, true);
+        Files.delete(tmpDir);
     }
 }

@@ -22,6 +22,7 @@ import com.starrocks.catalog.PaimonTable;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.profile.Timer;
 import com.starrocks.common.profile.Tracers;
+import com.starrocks.common.tvr.TvrVersionRange;
 import com.starrocks.connector.CatalogConnector;
 import com.starrocks.connector.ConnectorMetadatRequestContext;
 import com.starrocks.connector.GetRemoteFilesParams;
@@ -72,6 +73,7 @@ public class PaimonScanNode extends ScanNode {
     private static final Logger LOG = LogManager.getLogger(PaimonScanNode.class);
     private final AtomicLong partitionIdGen = new AtomicLong(0L);
     private final PaimonTable paimonTable;
+    private TvrVersionRange tvrVersionRange;
     private final HDFSScanNodePredicates scanNodePredicates = new HDFSScanNodePredicates();
     private final List<TScanRangeLocations> scanRangeLocationsList = new ArrayList<>();
     private CloudConfiguration cloudConfiguration = null;
@@ -128,8 +130,8 @@ public class PaimonScanNode extends ScanNode {
         List<String> fieldNames =
                 tupleDescriptor.getSlots().stream().map(s -> s.getColumn().getName()).collect(Collectors.toList());
         GetRemoteFilesParams params =
-                GetRemoteFilesParams.newBuilder().setPredicate(predicate).setFieldNames(fieldNames).setLimit(limit)
-                        .build();
+                GetRemoteFilesParams.newBuilder().setPredicate(predicate).setFieldNames(fieldNames)
+                        .setTableVersionRange(tvrVersionRange).setLimit(limit).build();
         List<RemoteFileInfo> fileInfos;
         try (Timer ignored = Tracers.watchScope(EXTERNAL, paimonTable.getCatalogTableName() + ".getPaimonRemoteFileInfos")) {
             fileInfos = GlobalStateMgr.getCurrentState().getMetadataMgr().getRemoteFiles(paimonTable, params);
@@ -336,6 +338,10 @@ public class PaimonScanNode extends ScanNode {
 
     private long nextPartitionId() {
         return partitionIdGen.getAndIncrement();
+    }
+
+    public void setTvrVersionRange(TvrVersionRange tvrVersionRange) {
+        this.tvrVersionRange = tvrVersionRange;
     }
 
     @Override
