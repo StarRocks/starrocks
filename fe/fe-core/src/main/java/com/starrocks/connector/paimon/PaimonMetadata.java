@@ -368,7 +368,7 @@ public class PaimonMetadata implements ConnectorMetadata {
                         throw new StarRocksConnectorException("%s does not include branch: %s",
                                 table.fullName(), refName.split(":")[1]);
                     }
-                    snapshotId = paimonTable.latestSnapshotId().getAsLong();
+                    snapshotId = paimonTable.latestSnapshotId().isPresent() ? paimonTable.latestSnapshotId().getAsLong() : -1L;
                 } else {
                     //if tag, format like tag:t_1, return the snapshot that the tag referenced
                     TagManager tagManager =  ((DataTable) table).tagManager();
@@ -418,14 +418,14 @@ public class PaimonMetadata implements ConnectorMetadata {
             }
         }
         TvrVersionRange version = params.getTableVersionRange();
-        snapshotId = version.end().get();
+        snapshotId = version.end().isPresent() ? version.end().get() : -1L;
         Map<String, String> options = new HashMap<>();
         options.put(CoreOptions.SCAN_SNAPSHOT_ID.key(), String.valueOf(snapshotId));
         org.apache.paimon.table.Table paimonNativeTable = paimonTable.getNativeTable().copy(options);
         PredicateSearchKey filter = PredicateSearchKey.of(paimonTable.getCatalogDBName(),
                 paimonTable.getCatalogTableName(), snapshotId, params.getPredicate());
         if (!paimonSplits.containsKey(filter)) {
-            ReadBuilder readBuilder = paimonTable.getNativeTable().newReadBuilder();
+            ReadBuilder readBuilder = paimonNativeTable.newReadBuilder();
             int[] projected =
                     params.getFieldNames().stream().mapToInt(name -> (paimonTable.getFieldNames().indexOf(name))).toArray();
             List<Predicate> predicates = extractPredicates(paimonTable, params.getPredicate());

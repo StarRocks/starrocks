@@ -447,7 +447,7 @@ public class PaimonMetadataTest {
         PaimonMetadata metadata = new PaimonMetadata("paimon", environment, catalog, properties);
         // commit one batch data, so the latest snapshot id is 1L.
         GetRemoteFilesParams params = GetRemoteFilesParams.newBuilder().setFieldNames(fieldNames).setLimit(1)
-                .setTableVersionRange(TvrTableSnapshot.of(Optional.of(1L)).build();
+                .setTableVersionRange(TvrTableSnapshot.of(Optional.of(1L))).build();
         List<RemoteFileInfo> result = metadata.getRemoteFiles(metadata.getTable(connectContext, "test_db", "test_table"), params);
         assertEquals(1, result.size());
         assertEquals(1, result.get(0).getFiles().size());
@@ -457,7 +457,7 @@ public class PaimonMetadataTest {
         // no predicate, no limit
         metadata = new PaimonMetadata("paimon", environment, catalog, properties);
         params = GetRemoteFilesParams.newBuilder().setFieldNames(fieldNames).setLimit(-1)
-                .setTableVersionRange(TvrTableSnapshot.of(Optional.of(1L)).build();
+                .setTableVersionRange(TvrTableSnapshot.of(Optional.of(1L))).build();
         result = metadata.getRemoteFiles(metadata.getTable(connectContext, "test_db", "test_table"), params);
         assertEquals(1, result.size());
         assertEquals(1, result.get(0).getFiles().size());
@@ -471,7 +471,7 @@ public class PaimonMetadataTest {
         // partition predicate, limit 1
         metadata = new PaimonMetadata("paimon", environment, catalog, properties);
         params = GetRemoteFilesParams.newBuilder().setFieldNames(fieldNames).setPredicate(createDateEqualPredicate)
-                .setLimit(1).setTableVersionRange(TvrTableSnapshot.of(Optional.of(1L)).build();
+                .setLimit(1).setTableVersionRange(TvrTableSnapshot.of(Optional.of(1L))).build();
         result = metadata.getRemoteFiles(metadata.getTable(connectContext, "test_db", "test_table"), params);
         assertEquals(1, result.size());
         assertEquals(1, result.get(0).getFiles().size());
@@ -481,7 +481,7 @@ public class PaimonMetadataTest {
         // partition predicate, no limit
         metadata = new PaimonMetadata("paimon", environment, catalog, properties);
         params = GetRemoteFilesParams.newBuilder().setFieldNames(fieldNames).setPredicate(createDateEqualPredicate)
-                .setLimit(-1).setTableVersionRange(TvrTableSnapshot.of(Optional.of(1L)).build();
+                .setLimit(-1).setTableVersionRange(TvrTableSnapshot.of(Optional.of(1L))).build();
         result = metadata.getRemoteFiles(metadata.getTable(connectContext, "test_db", "test_table"), params);
         assertEquals(1, result.size());
         assertEquals(1, result.get(0).getFiles().size());
@@ -495,7 +495,7 @@ public class PaimonMetadataTest {
         // none partition predicate, limit 1
         metadata = new PaimonMetadata("paimon", environment, catalog, properties);
         params = GetRemoteFilesParams.newBuilder().setFieldNames(fieldNames).setPredicate(userEqualPredicate)
-                .setLimit(1).setTableVersionRange(TvrTableSnapshot.of(Optional.of(1L)).build();
+                .setLimit(1).setTableVersionRange(TvrTableSnapshot.of(Optional.of(1L))).build();
         result = metadata.getRemoteFiles(metadata.getTable(connectContext, "test_db", "test_table"), params);
         assertEquals(1, result.size());
         assertEquals(1, result.get(0).getFiles().size());
@@ -509,7 +509,7 @@ public class PaimonMetadataTest {
         metadata = new PaimonMetadata("paimon", environment, catalog, properties);
         params = GetRemoteFilesParams.newBuilder().setFieldNames(fieldNames)
                 .setPredicate(Utils.compoundAnd(createDateGreaterPredicate, userEqualPredicate))
-                .setLimit(1).setTableVersionRange(TvrTableSnapshot.of(Optional.of(1L)).build();
+                .setLimit(1).setTableVersionRange(TvrTableSnapshot.of(Optional.of(1L))).build();
         result = metadata.getRemoteFiles(metadata.getTable(connectContext, "test_db", "test_table"), params);
         assertEquals(1, result.size());
         assertEquals(1, result.get(0).getFiles().size());
@@ -530,7 +530,7 @@ public class PaimonMetadataTest {
         // partition with function predicate, limit 1
         metadata = new PaimonMetadata("paimon", environment, catalog, properties);
         params = GetRemoteFilesParams.newBuilder().setFieldNames(fieldNames).setPredicate(createDateCoalescePredicate)
-                .setLimit(1).setTableVersionRange(TvrTableSnapshot.of(Optional.of(1L)).build();
+                .setLimit(1).setTableVersionRange(TvrTableSnapshot.of(Optional.of(1L))).build();
         result = metadata.getRemoteFiles(metadata.getTable(connectContext, "test_db", "test_table"), params);
         assertEquals(1, result.size());
         assertEquals(1, result.get(0).getFiles().size());
