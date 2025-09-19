@@ -1,47 +1,304 @@
 -- name: test_dcg_column_mode_update_data_accuracy
 -- Test DCG mode partial update followed by row mode insert
 -- This verifies that DCG data is not lost during row mode operations
+-- Enhanced to cover various DCG error handling paths and edge cases
 
--- Create table with primary key
+-- Test 1: Basic DCG functionality
 CREATE TABLE t1(id int, os string, version string) PRIMARY KEY (id) PROPERTIES ("replication_num" = "1");
 -- result:
 -- !result
 
--- Insert initial data
 INSERT INTO t1(id, os, version) VALUES (1, '1', '1');
 -- result:
 -- !result
 
--- Verify initial data
 SELECT * FROM t1;
 -- result:
 1	1	1
 -- !result
 
--- Set partial update mode to column mode
 SET partial_update_mode = 'column';
 -- result:
 -- !result
 
--- Update os column in column mode (this creates DCG data)
 UPDATE t1 SET os = '2' WHERE id = 1;
 -- result:
 -- !result
 
--- Verify the update worked
 SELECT * FROM t1;
 -- result:
 1	2	1
 -- !result
 
--- Insert new row with same primary key but different version (row mode)
--- This should trigger get_column_values with DCG loading
+-- Switch to row mode - triggers get_column_values with DCG loading
+SET partial_update_mode = 'auto';
+-- result:
+-- !result
+
 INSERT INTO t1 (id, version) VALUES (1, '2');
 -- result:
 -- !result
 
--- Verify final result: os should be '2' (from DCG update) and version should be '2' (from insert)
 SELECT * FROM t1;
 -- result:
 1	2	2
+-- !result
+
+-- Test 2: Multiple DCG segments with scattered column updates
+CREATE TABLE t2(id int, c1 string, c2 string, c3 int, c4 string) PRIMARY KEY (id) PROPERTIES ("replication_num" = "1");
+-- result:
+-- !result
+
+INSERT INTO t2 VALUES (1, 'a1', 'b1', 10, 'd1'), (2, 'a2', 'b2', 20, 'd2');
+-- result:
+-- !result
+
+SET partial_update_mode = 'column';
+-- result:
+-- !result
+
+UPDATE t2 SET c1 = 'updated_c1' WHERE id = 1;
+-- result:
+-- !result
+
+UPDATE t2 SET c3 = 999 WHERE id = 1;
+-- result:
+-- !result
+
+UPDATE t2 SET c4 = 'updated_c4' WHERE id = 2;
+-- result:
+-- !result
+
+SET partial_update_mode = 'auto';
+-- result:
+-- !result
+
+INSERT INTO t2 (id, c2) VALUES (1, 'new_c2');
+-- result:
+-- !result
+
+INSERT INTO t2 (id, c1, c3) VALUES (2, 'new_c1', 888);
+-- result:
+-- !result
+
+SELECT * FROM t2 ORDER BY id;
+-- result:
+1	updated_c1	new_c2	999	d1
+2	new_c1	b2	888	updated_c4
+-- !result
+
+-- Test 3: DCG with NULL values and mixed types
+CREATE TABLE t3(id int, str_val string, int_val int, nullable_str string) PRIMARY KEY (id) PROPERTIES ("replication_num" = "1");
+-- result:
+-- !result
+
+INSERT INTO t3 VALUES (1, 'initial', 100, NULL), (2, 'has_value', 200, 'not_null');
+-- result:
+-- !result
+
+SET partial_update_mode = 'column';
+-- result:
+-- !result
+
+UPDATE t3 SET str_val = NULL WHERE id = 1;
+-- result:
+-- !result
+
+UPDATE t3 SET nullable_str = 'was_null' WHERE id = 1;
+-- result:
+-- !result
+
+UPDATE t3 SET int_val = -999 WHERE id = 2;
+-- result:
+-- !result
+
+SET partial_update_mode = 'auto';
+-- result:
+-- !result
+
+INSERT INTO t3 (id, int_val) VALUES (1, 500);
+-- result:
+-- !result
+
+INSERT INTO t3 (id, str_val) VALUES (2, 'row_update');
+-- result:
+-- !result
+
+SELECT * FROM t3 ORDER BY id;
+-- result:
+1	NULL	500	was_null
+2	row_update	-999	not_null
+-- !result
+
+-- Test 4: DCG with default values
+CREATE TABLE t4(id int, col1 string DEFAULT 'default_val', col2 int DEFAULT 42) PRIMARY KEY (id) PROPERTIES ("replication_num" = "1");
+-- result:
+-- !result
+
+INSERT INTO t4(id) VALUES (1);
+-- result:
+-- !result
+
+SET partial_update_mode = 'column';
+-- result:
+-- !result
+
+UPDATE t4 SET col1 = 'dcg_value' WHERE id = 1;
+-- result:
+-- !result
+
+SET partial_update_mode = 'auto';
+-- result:
+-- !result
+
+INSERT INTO t4 (id, col2) VALUES (1, 123);
+-- result:
+-- !result
+
+SELECT * FROM t4;
+-- result:
+1	dcg_value	123
+-- !result
+
+-- Test 5: DCG with empty strings and boundary values
+CREATE TABLE t5(id int, str_col string, zero_val int, neg_val int) PRIMARY KEY (id) PROPERTIES ("replication_num" = "1");
+-- result:
+-- !result
+
+INSERT INTO t5 VALUES (1, 'original', 1, 1);
+-- result:
+-- !result
+
+SET partial_update_mode = 'column';
+-- result:
+-- !result
+
+UPDATE t5 SET str_col = '' WHERE id = 1;
+-- result:
+-- !result
+
+UPDATE t5 SET zero_val = 0 WHERE id = 1;
+-- result:
+-- !result
+
+UPDATE t5 SET neg_val = -2147483648 WHERE id = 1;
+-- result:
+-- !result
+
+SET partial_update_mode = 'auto';
+-- result:
+-- !result
+
+INSERT INTO t5 (id) VALUES (1);
+-- result:
+-- !result
+
+SELECT * FROM t5;
+-- result:
+1		0	-2147483648
+-- !result
+
+-- Test 6: DCG with consecutive updates (DCG overwriting)
+CREATE TABLE t6(id int, counter int, description string) PRIMARY KEY (id) PROPERTIES ("replication_num" = "1");
+-- result:
+-- !result
+
+INSERT INTO t6 VALUES (1, 0, 'initial');
+-- result:
+-- !result
+
+SET partial_update_mode = 'column';
+-- result:
+-- !result
+
+UPDATE t6 SET counter = 1 WHERE id = 1;
+-- result:
+-- !result
+
+UPDATE t6 SET description = 'first' WHERE id = 1;
+-- result:
+-- !result
+
+UPDATE t6 SET counter = 2 WHERE id = 1;
+-- result:
+-- !result
+
+UPDATE t6 SET description = 'final' WHERE id = 1;
+-- result:
+-- !result
+
+SET partial_update_mode = 'auto';
+-- result:
+-- !result
+
+INSERT INTO t6 (id) VALUES (1);
+-- result:
+-- !result
+
+SELECT * FROM t6;
+-- result:
+1	2	final
+-- !result
+
+-- Test 7: DCG with multiple primary keys and string lengths
+CREATE TABLE t7(id1 int, id2 string, short_str string, long_str string) PRIMARY KEY (id1, id2) PROPERTIES ("replication_num" = "1");
+-- result:
+-- !result
+
+INSERT INTO t7 VALUES (1, 'a', 'x', REPEAT('long_', 50));
+-- result:
+-- !result
+
+SET partial_update_mode = 'column';
+-- result:
+-- !result
+
+UPDATE t7 SET short_str = 'updated' WHERE id1 = 1 AND id2 = 'a';
+-- result:
+-- !result
+
+UPDATE t7 SET long_str = REPEAT('very_long_', 100) WHERE id1 = 1 AND id2 = 'a';
+-- result:
+-- !result
+
+SET partial_update_mode = 'auto';
+-- result:
+-- !result
+
+INSERT INTO t7 (id1, id2) VALUES (1, 'a');
+-- result:
+-- !result
+
+SELECT id1, id2, short_str, LENGTH(long_str) as long_str_len FROM t7;
+-- result:
+1	a	updated	1000
+-- !result
+
+-- Clean up
+DROP TABLE t1;
+-- result:
+-- !result
+
+DROP TABLE t2;
+-- result:
+-- !result
+
+DROP TABLE t3;
+-- result:
+-- !result
+
+DROP TABLE t4;
+-- result:
+-- !result
+
+DROP TABLE t5;
+-- result:
+-- !result
+
+DROP TABLE t6;
+-- result:
+-- !result
+
+DROP TABLE t7;
+-- result:
 -- !result 

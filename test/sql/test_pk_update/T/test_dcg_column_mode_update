@@ -2,27 +2,110 @@
 -- Test DCG mode partial update followed by row mode insert
 -- This verifies that DCG data is not lost during row mode operations
 
--- Create table with primary key
+-- Test 1: Basic DCG functionality
 CREATE TABLE t1(id int, os string, version string) PRIMARY KEY (id) PROPERTIES ("replication_num" = "1");
 
--- Insert initial data
 INSERT INTO t1(id, os, version) VALUES (1, '1', '1');
-
--- Verify initial data
 SELECT * FROM t1;
 
--- Set partial update mode to column mode
 SET partial_update_mode = 'column';
-
--- Update os column in column mode (this creates DCG data)
 UPDATE t1 SET os = '2' WHERE id = 1;
-
--- Verify the update worked
 SELECT * FROM t1;
 
--- Insert new row with same primary key but different version (row mode)
--- This should trigger get_column_values with DCG loading
+-- Switch to row mode - triggers get_column_values with DCG loading
+SET partial_update_mode = 'auto';
 INSERT INTO t1 (id, version) VALUES (1, '2');
+SELECT * FROM t1;
 
--- Verify final result: os should be '2' (from DCG update) and version should be '2' (from insert)
-SELECT * FROM t1; 
+-- Test 2: Multiple DCG segments with scattered column updates
+CREATE TABLE t2(id int, c1 string, c2 string, c3 int, c4 string) PRIMARY KEY (id) PROPERTIES ("replication_num" = "1");
+
+INSERT INTO t2 VALUES (1, 'a1', 'b1', 10, 'd1'), (2, 'a2', 'b2', 20, 'd2');
+
+SET partial_update_mode = 'column';
+UPDATE t2 SET c1 = 'updated_c1' WHERE id = 1;
+UPDATE t2 SET c3 = 999 WHERE id = 1;
+UPDATE t2 SET c4 = 'updated_c4' WHERE id = 2;
+
+SET partial_update_mode = 'auto';
+INSERT INTO t2 (id, c2) VALUES (1, 'new_c2');
+INSERT INTO t2 (id, c1, c3) VALUES (2, 'new_c1', 888);
+SELECT * FROM t2 ORDER BY id;
+
+-- Test 3: DCG with NULL values and mixed types
+CREATE TABLE t3(id int, str_val string, int_val int, nullable_str string) PRIMARY KEY (id) PROPERTIES ("replication_num" = "1");
+
+INSERT INTO t3 VALUES (1, 'initial', 100, NULL), (2, 'has_value', 200, 'not_null');
+
+SET partial_update_mode = 'column';
+UPDATE t3 SET str_val = NULL WHERE id = 1;
+UPDATE t3 SET nullable_str = 'was_null' WHERE id = 1;
+UPDATE t3 SET int_val = -999 WHERE id = 2;
+
+SET partial_update_mode = 'auto';
+INSERT INTO t3 (id, int_val) VALUES (1, 500);
+INSERT INTO t3 (id, str_val) VALUES (2, 'row_update');
+SELECT * FROM t3 ORDER BY id;
+
+-- Test 4: DCG with default values
+CREATE TABLE t4(id int, col1 string DEFAULT 'default_val', col2 int DEFAULT 42) PRIMARY KEY (id) PROPERTIES ("replication_num" = "1");
+
+INSERT INTO t4(id) VALUES (1);
+
+SET partial_update_mode = 'column';
+UPDATE t4 SET col1 = 'dcg_value' WHERE id = 1;
+
+SET partial_update_mode = 'auto';
+INSERT INTO t4 (id, col2) VALUES (1, 123);
+SELECT * FROM t4;
+
+-- Test 5: DCG with empty strings and boundary values
+CREATE TABLE t5(id int, str_col string, zero_val int, neg_val int) PRIMARY KEY (id) PROPERTIES ("replication_num" = "1");
+
+INSERT INTO t5 VALUES (1, 'original', 1, 1);
+
+SET partial_update_mode = 'column';
+UPDATE t5 SET str_col = '' WHERE id = 1;
+UPDATE t5 SET zero_val = 0 WHERE id = 1;
+UPDATE t5 SET neg_val = -2147483648 WHERE id = 1;
+
+SET partial_update_mode = 'auto';
+INSERT INTO t5 (id) VALUES (1);
+SELECT * FROM t5;
+
+-- Test 6: DCG with consecutive updates (DCG overwriting)
+CREATE TABLE t6(id int, counter int, description string) PRIMARY KEY (id) PROPERTIES ("replication_num" = "1");
+
+INSERT INTO t6 VALUES (1, 0, 'initial');
+
+SET partial_update_mode = 'column';
+UPDATE t6 SET counter = 1 WHERE id = 1;
+UPDATE t6 SET description = 'first' WHERE id = 1;
+UPDATE t6 SET counter = 2 WHERE id = 1;
+UPDATE t6 SET description = 'final' WHERE id = 1;
+
+SET partial_update_mode = 'auto';
+INSERT INTO t6 (id) VALUES (1);
+SELECT * FROM t6;
+
+-- Test 7: DCG with multiple primary keys and string lengths
+CREATE TABLE t7(id1 int, id2 string, short_str string, long_str string) PRIMARY KEY (id1, id2) PROPERTIES ("replication_num" = "1");
+
+INSERT INTO t7 VALUES (1, 'a', 'x', REPEAT('long_', 50));
+
+SET partial_update_mode = 'column';
+UPDATE t7 SET short_str = 'updated' WHERE id1 = 1 AND id2 = 'a';
+UPDATE t7 SET long_str = REPEAT('very_long_', 100) WHERE id1 = 1 AND id2 = 'a';
+
+SET partial_update_mode = 'auto';
+INSERT INTO t7 (id1, id2) VALUES (1, 'a');
+SELECT id1, id2, short_str, LENGTH(long_str) as long_str_len FROM t7;
+
+-- Clean up
+DROP TABLE t1;
+DROP TABLE t2;
+DROP TABLE t3;
+DROP TABLE t4;
+DROP TABLE t5;
+DROP TABLE t6;
+DROP TABLE t7; 
