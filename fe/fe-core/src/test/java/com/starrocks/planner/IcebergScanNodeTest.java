@@ -93,15 +93,16 @@ public class IcebergScanNodeTest {
     class TestableIcebergConnectorScanRangeSource extends IcebergConnectorScanRangeSource {
         public TestableIcebergConnectorScanRangeSource(IcebergConnectorScanRangeSource original) {
             super(
-                Deencapsulation.getField(original, "table"),
-                Deencapsulation.getField(original, "remoteFileInfoSource"),
-                Deencapsulation.getField(original, "morParams"),
-                Deencapsulation.getField(original, "desc"),
-                Deencapsulation.getField(original, "bucketProperties"),
-                Deencapsulation.getField(original, "recordScanFiles")
+                    Deencapsulation.getField(original, "table"),
+                    Deencapsulation.getField(original, "remoteFileInfoSource"),
+                    Deencapsulation.getField(original, "morParams"),
+                    Deencapsulation.getField(original, "desc"),
+                    Deencapsulation.getField(original, "bucketProperties"),
+                    Deencapsulation.getField(original, "partitionIdGenerator"),
+                    Deencapsulation.getField(original, "recordScanFiles")
             );
         }
-    
+
         @Override
         public List<TScanRangeLocations> toScanRanges(FileScanTask fileScanTask) {
             return Collections.singletonList(new TScanRangeLocations());

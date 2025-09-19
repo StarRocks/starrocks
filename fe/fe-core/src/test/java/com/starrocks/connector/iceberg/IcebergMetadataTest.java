@@ -1106,7 +1106,7 @@ public class IcebergMetadataTest extends TableTestBase {
         Assertions.assertEquals(3, ((IcebergRemoteFileInfo) res.get(0)).getFileScanTask().file().recordCount());
 
         PredicateSearchKey filter = PredicateSearchKey.of("db", "table", 1, null);
-        Assertions.assertEquals("Filter{databaseName='db', tableName='table', snapshotId=1, predicate=true}",
+        Assertions.assertEquals("Filter{databaseName='db', tableName='table', version=Snapshot@(1), predicate=true}",
                 filter.toString());
     }
 
