@@ -10,9 +10,9 @@ If you use CelerData Manager to deploy your cluster, you can only use the Manage
 
 ## Overview
 
-A warehouse in a share-data cluster is a group of Compute Nodes (CNs) that can provide with you the required compute resources (CPU/Memory/Temporary storage) to perform query, ingestion, and data processing tasks. Each warehouse serves as an individual compute resource pool, which allows you to isolate compute resources physically.
+A warehouse in a shared-data cluster is a group of Compute Nodes (CNs) that can provide with you the required compute resources (CPU/Memory/Temporary storage) to perform query, ingestion, and data processing tasks. Each warehouse serves as an individual compute resource pool, which allows you to isolate compute resources physically.
 
-In a share-data cluster, data is shared among multiple warehouses, yet distinct warehouses maintain the physical isolation of compute and memory resources. Therefore, you can create multiple warehouses tailored to different business needs, such as ad hoc query warehouse, ETL warehouse, and compaction warehouse, and effortlessly route specific tasks to the respective warehouse.
+In a shared-data cluster, data is shared among multiple warehouses, yet distinct warehouses maintain the physical isolation of compute and memory resources. Therefore, you can create multiple warehouses tailored to different business needs, such as ad hoc query warehouse, ETL warehouse, and compaction warehouse, and effortlessly route specific tasks to the respective warehouse.
 
 ### Benefits
 
@@ -401,7 +401,7 @@ FROM order_list INNER JOIN goods ON goods.item_id1 = order_list.item_id2
 GROUP BY order_id;
 ```
 
-After the materialized view is created, you can view the property `warehouse` by executing `SHOW MATERIALIZED VIEWS` or `SHOW CREATE MATERIALIZED VIEW`. It will also be recorded in **fe.audit.log**.
+After the materialized view is created, you can view the property `warehouse` by executing `SHOW MATERIALIZED VIEWS` or `SHOW CREATE MATERIALIZED VIEW`. It will also be recorded in **`fe.audit.log`**.
 
 ### Set warehouse for Compaction
 
@@ -413,7 +413,7 @@ By default, Compaction tasks are running on `default_warehouse`. You can change 
     ADMIN SET FRONTEND CONFIG ("lake_compaction_warehouse" = "<warehouse_name>");
     ```
 
-- To permanently change the the default Compaction warehouse, add the following configuration item to the FE configuration file **fe.conf**, and restart FE:
+- To permanently change the default Compaction warehouse, add the following configuration item to the FE configuration file **`fe.conf`**, and restart FE:
 
   - ```SQL
     lake_compaction_warehouse = <warehouse_name>
