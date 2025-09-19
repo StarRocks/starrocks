@@ -928,6 +928,8 @@ CONF_mInt64(tablet_internal_parallel_min_splitted_scan_rows, "16384");
 CONF_mInt64(tablet_internal_parallel_max_splitted_scan_rows, "1048576");
 // Default is 512MB.
 CONF_mInt64(tablet_internal_parallel_max_splitted_scan_bytes, "536870912");
+// V1 or V2
+CONF_mBool(tabelt_internal_parallel_v2, "true");
 //
 // Only when scan_dop is not less than min_scan_dop, this table can use tablet internal parallel,
 // where scan_dop = estimated_scan_rows / splitted_scan_rows.

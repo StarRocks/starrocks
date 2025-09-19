@@ -459,7 +459,11 @@ StatusOr<pipeline::MorselQueuePtr> OlapScanNode::convert_scan_range_to_morsel_qu
     // Split tablet physically.
     ASSIGN_OR_RETURN(bool ok, _could_split_tablet_physically(scan_ranges));
     if (ok) {
-        return std::make_unique<pipeline::PhysicalSplitMorselQueueV2>(std::move(morsels), scan_dop, splitted_scan_rows);
+        if (config::tabelt_internal_parallel_v2) {
+            return std::make_unique<pipeline::PhysicalSplitMorselQueueV2>(std::move(morsels), scan_dop, splitted_scan_rows);
+        } else {
+            return std::make_unique<pipeline::PhysicalSplitMorselQueue>(std::move(morsels), scan_dop, splitted_scan_rows);
+        }
     }
 
     return std::make_unique<pipeline::LogicalSplitMorselQueue>(std::move(morsels), scan_dop, splitted_scan_rows);

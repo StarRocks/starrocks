@@ -1094,9 +1094,14 @@ void PhysicalSplitMorselQueueV2::set_tablet_rowsets(
     // initialize the refine queue
     for (size_t i = 0; i < _tablets.size(); ++i) {
         for (size_t j = 0; j < _tablet_rowsets[i].size(); ++j) {
-            for (size_t segment_idx = 0; segment_idx < _tablet_rowsets[i][j]->get_segments().size(); ++segment_idx) {
-                auto rowset_id = _tablet_rowsets[i][j]->rowset_id();
-                auto tablet_segments = _tablet_rowsets[i][j]->get_segments();
+            // TODO: lazy load
+            auto& rowset = _tablet_rowsets[i][j];
+            Status st = rowset->load();
+            CHECK(st.ok()) << "Failed to load rowset: " << rowset->rowset_id();
+
+            auto tablet_segments = rowset->get_segments();
+            for (size_t segment_idx = 0; segment_idx < tablet_segments.size(); ++segment_idx) {
+                auto rowset_id = rowset->rowset_id();
                 auto segment_id = tablet_segments[segment_idx]->id();
                 auto refine_segment = std::make_shared<RefineSegment>(i, j, segment_idx, rowset_id, segment_id);
                 _init_segments.emplace(refine_segment->ref(), refine_segment);
@@ -1112,6 +1117,10 @@ void PhysicalSplitMorselQueueV2::set_tablet_rowsets(
         }
         _tablet_count_down.emplace(i, num_segments);
     }
+
+    VLOG(2) << fmt::format(
+            "PhysicalSplitMorselQueueV2::set_tablet_rowsets: tablets={}, tablet_rowsets={}, init_segments={}",
+            _tablets.size(), _tablet_rowsets.size(), _init_segments.size());
 }
 
 PhysicalSplitMorselQueueV2::RefineSegmentPtr PhysicalSplitMorselQueueV2::_pickup_segment_from_init() {
@@ -1121,10 +1130,12 @@ PhysicalSplitMorselQueueV2::RefineSegmentPtr PhysicalSplitMorselQueueV2::_pickup
     for (auto& [k, segment] : _init_segments) {
         if (segment->state == RefineState::Init) {
             segment->set_refining();
+            VLOG(2) << "PhysicalSplitMorselQueueV2::_pickup_segment_from_init: " << segment->id_string();
             return segment;
         }
     }
     // otherwise return the first segment
+    VLOG(2) << "PhysicalSplitMorselQueueV2::_pickup_segment_from_init: " << _init_segments.begin()->second->id_string();
     return _init_segments.begin()->second;
 }
 
@@ -1132,18 +1143,23 @@ PhysicalSplitMorselQueueV2::RefineSegmentPtr PhysicalSplitMorselQueueV2::_pickup
     if (_refined_segments.empty()) {
         return nullptr;
     }
+    VLOG(2) << "PhysicalSplitMorselQueueV2::_pickup_segment_from_refined: "
+            << _refined_segments.begin()->second->id_string();
     return _refined_segments.begin()->second;
 }
 
 void PhysicalSplitMorselQueueV2::_move_from_init_to_refined(const RefineSegmentPtr& segment) {
     _refined_segments.emplace(segment->ref(), segment);
     _init_segments.erase(segment->ref());
+    VLOG(2) << "PhysicalSplitMorselQueueV2::move_from_init_to_refined: " << segment->id_string();
 }
 void PhysicalSplitMorselQueueV2::_remove_from_init_segments(const RefineSegmentPtr& segment) {
     _init_segments.erase(segment->ref());
+    VLOG(2) << "PhysicalSplitMorselQueueV2::_remove_from_init_segments: " << segment->id_string();
 }
 void PhysicalSplitMorselQueueV2::_remove_from_refined(const RefineSegmentPtr& segment) {
     _refined_segments.erase(segment->ref());
+    VLOG(2) << "PhysicalSplitMorselQueueV2::_remove_from_refined: refined_segments=" << segment->id_string();
 }
 
 StatusOr<RowidRangeOptionPtr> PhysicalSplitMorselQueueV2::_split_morsel_from_segment(const RefineSegmentPtr& segment,
@@ -1182,6 +1198,9 @@ StatusOr<RowidRangeOptionPtr> PhysicalSplitMorselQueueV2::_split_morsel_from_seg
     } else {
         *is_last = false;
     }
+
+    VLOG(2) << fmt::format("MorselQueueV2: split morsel from segment segment_id={} segment_size={}",
+                           segment->id_string(), num_taken_rows);
 
     return rowid_range;
 }
@@ -1291,6 +1310,8 @@ Status PhysicalSplitMorselQueueV2::_init_segment(const RefineSegmentPtr& segment
 
     segment->range_iter = segment->scan_range.new_iterator();
     segment->inited = true;
+    VLOG(2) << fmt::format("MorselQueueV2: init segment segment_id={} segment_size={}", segment->id_string(),
+                           segment->scan_range.span_size());
     return Status::OK();
 }
 
@@ -1309,18 +1330,26 @@ void PhysicalSplitMorselQueueV2::refine_scan_ranges(const RowidRangeOptionPtr& r
                 segment->set_refined();
 
                 // Calculate skip based on original range before modification
+                VLOG(2) << fmt::format("refine from segment: segment={} rows={}", segment->id_string(),
+                                       split.row_id_range->span_size());
                 size_t rowid = segment->range_iter.begin();
                 size_t prev_remain = segment->range_iter.remaining_rows();
 
-                // Remove the specified range from scan_range
-                segment->scan_range -= *split.row_id_range;
+                // Intersect the refine range
+                segment->scan_range &= *split.row_id_range;
+                if (segment->scan_range.empty()) {
+                    _remove_from_refined(segment);
+                    VLOG(2) << fmt::format("refine_scan_ranges: remove the empty segment {}", segment->id_string());
+                    continue;
+                }
                 segment->range_iter = segment->scan_range.new_iterator();
                 segment->range_iter.seek(rowid);
 
-                size_t delta = prev_remain - segment->range_iter.remaining_rows();
-
-                VLOG(2) << fmt::format("refine_scan_ranges {}/{}: reduced {} rows", segment->rowset_id.to_string(),
-                                       segment->segment_id, delta);
+                if (VLOG_IS_ON(2)) {
+                    size_t delta = prev_remain - segment->range_iter.remaining_rows();
+                    VLOG(2) << fmt::format("refine_scan_ranges segment_id={}: reduced {} rows, remain {}",
+                                           segment->id_string(), delta, segment->range_iter.remaining_rows());
+                }
             }
         }
     }

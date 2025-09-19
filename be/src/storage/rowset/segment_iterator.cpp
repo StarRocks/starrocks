@@ -573,14 +573,13 @@ Status SegmentIterator::_init() {
     RETURN_IF_ERROR(_init_ann_reader());
     // filter by index stage
     // Use indexes and predicates to filter some data page
-    RETURN_IF_ERROR(_get_row_ranges_by_rowid_range());
-
-    SparseRange<> specified_scan_range = _scan_range;
-    _scan_range.clear();
-    _scan_range.add(Range<>(0, num_rows()));
-    if (_opts.filtered_scan_range && _opts.is_first_split_of_segment) {
+    bool need_refine = _opts.filtered_scan_range && _opts.is_first_split_of_segment;
+    if (need_refine) {
+        _scan_range.add(Range<>(0, num_rows()));
         _opts.filtered_scan_range->clear();
         _opts.filtered_scan_range->add(Range<>(0, num_rows()));
+    } else {
+        RETURN_IF_ERROR(_get_row_ranges_by_rowid_range());
     }
 
     RETURN_IF_ERROR(_get_row_ranges_by_keys());
@@ -612,10 +611,13 @@ Status SegmentIterator::_init() {
 
     // Update the rowid_range_option with the current scan_range to avoid redundant computations
     // in subsequent scan tasks. This ensures that the filtered scan range is reused efficiently.
-    if (_opts.filtered_scan_range != nullptr && _opts.is_first_split_of_segment) {
-        *_opts.filtered_scan_range &= _scan_range;
+    if (need_refine) {
+        *_opts.filtered_scan_range = _scan_range;
+        VLOG(2) << fmt::format("refine segemnt {} to {} rows", _segment->id(), _scan_range.span_size());
+        if (_opts.rowid_range_option != nullptr) {
+            _scan_range &= (*_opts.rowid_range_option);
+        }
     }
-    _scan_range &= specified_scan_range;
 
     _range_iter = _scan_range.new_iterator();
 
