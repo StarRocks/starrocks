@@ -1427,6 +1427,7 @@ public class AuthorizerStmtVisitor implements AstVisitorExtendInterface<Void, Co
     public Void visitShowGrantsStatement(ShowGrantsStmt statement, ConnectContext context) {
         UserRef user = statement.getUser();
         try {
+            // if user == null mean show current user grants
             if (user != null) {
                 UserIdentity userIdentity = new UserIdentity(user.getUser(), user.getHost(), user.isDomain());
                 if (!userIdentity.equals(context.getCurrentUserIdentity())) {

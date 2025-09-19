@@ -48,8 +48,10 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
@@ -808,27 +810,65 @@ public class SelectAnalyzer {
         ExpressionAnalyzer.analyzeExpression(expr, analyzeState, scope, session);
     }
 
+    // Use a HashSet to store unique pairs of (name, originExpression)
+    // Use a custom key class or a string representation for the pair
+    private static class NameExprKey {
+        private final String name;
+        private final Expr originExpr;
+
+        NameExprKey(String name, Expr originExpr) {
+            this.name = name;
+            this.originExpr = originExpr;
+        }
+
+        @Override
+        public boolean equals(Object o) {
+            if (this == o) {
+                return true;
+            }
+            if (o == null || getClass() != o.getClass()) {
+                return false;
+            }
+            NameExprKey that = (NameExprKey) o;
+            return Objects.equals(name, that.name) &&
+                    Objects.equals(originExpr, that.originExpr);
+        }
+
+        @Override
+        public int hashCode() {
+            return Objects.hash(name, originExpr);
+        }
+    }
 
     // The Scope used by order by allows parsing of the same column,
     // such as 'select v1 as v, v1 as v from t0 order by v'
     // but normal parsing does not allow it. So add a de-duplication operation here.
-    private List<Field> removeDuplicateField(List<Field> originalFields) {
+    public List<Field> removeDuplicateField(List<Field> originalFields) {
         List<Field> allFields = Lists.newArrayList();
-        for (Field field : originalFields) {
-            if (session.getSessionVariable().isEnableStrictOrderBy()) {
-                if (field.getName() != null && field.getOriginExpression() != null &&
-                        allFields.stream().anyMatch(f -> f.getOriginExpression() != null
-                                && f.getName() != null && field.getName().equals(f.getName())
-                                && field.getOriginExpression().equals(f.getOriginExpression()))) {
-                    continue;
+        if (session.getSessionVariable().isEnableStrictOrderBy()) {
+            Set<NameExprKey> visited = new HashSet<>();
+            for (Field field : originalFields) {
+                if (field.getName() != null && field.getOriginExpression() != null) {
+                    NameExprKey key = new NameExprKey(field.getName(), field.getOriginExpression());
+                    if (visited.contains(key)) {
+                        continue;
+                    }
+                    visited.add(key);
                 }
-            } else {
-                if (field.getName() != null &&
-                        allFields.stream().anyMatch(f -> f.getName() != null && field.getName().equals(f.getName()))) {
-                    continue;
-                }
+                allFields.add(field);
             }
-            allFields.add(field);
+        } else {
+            // Use a HashSet to store unique field names
+            Set<String> visited = new HashSet<>();
+            for (Field field : originalFields) {
+                if (field.getName() != null) {
+                    if (visited.contains(field.getName())) {
+                        continue;
+                    }
+                    visited.add(field.getName());
+                }
+                allFields.add(field);
+            }
         }
         return allFields;
     }

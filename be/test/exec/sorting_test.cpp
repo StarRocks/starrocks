@@ -20,9 +20,12 @@
 #include <random>
 #include <utility>
 
+#include "column/array_column.h"
 #include "column/chunk.h"
 #include "column/column.h"
 #include "column/column_helper.h"
+#include "column/const_column.h"
+#include "column/decimalv3_column.h"
 #include "column/vectorized_fwd.h"
 #include "exec/sorting/merge.h"
 #include "exec/sorting/merge_path.h"
@@ -241,12 +244,135 @@ TEST(SortingTest, materialize_by_permutation_int) {
     input1->append(1024);
     input2->append(2048);
 
-    ColumnPtr merged = Int32Column::create();
-    Permutation perm{{0, 0}, {1, 0}};
-    materialize_column_by_permutation(merged.get(), {input1, input2}, perm);
-    ASSERT_EQ(2, merged->size());
-    ASSERT_EQ(1024, merged->get(0).get_int32());
-    ASSERT_EQ(2048, merged->get(1).get_int32());
+    {
+        ColumnPtr merged = Int32Column::create();
+        Permutation perm{{0, 0}, {1, 0}};
+        materialize_column_by_permutation(merged.get(), {input1, input2}, perm);
+        ASSERT_EQ(2, merged->size());
+        ASSERT_EQ(1024, merged->get(0).get_int32());
+        ASSERT_EQ(2048, merged->get(1).get_int32());
+    }
+    // Empty permutation
+    {
+        ColumnPtr merged = Int32Column::create();
+        Permutation perm{};
+        materialize_column_by_permutation(merged.get(), {input1, input2}, perm);
+        ASSERT_EQ(0, merged->size());
+    }
+}
+
+TEST(SortingTest, materialize_by_permutation_decimalv3) {
+    using ColumnType = DecimalV3Column<int32_t>;
+    ColumnType::Ptr input1 = ColumnType::create();
+    ColumnType::Ptr input2 = ColumnType::create();
+    input1->append(1024);
+    input1->append(1337);
+    input2->append(2048);
+    input2->append(2456);
+
+    {
+        ColumnPtr merged = input1->clone_empty();
+        Permutation perm{{0, 1}, {1, 1}, {1, 0}, {0, 0}};
+        materialize_column_by_permutation(merged.get(), {input1, input2}, perm);
+        ASSERT_EQ(4, merged->size());
+        ASSERT_EQ(1337, merged->get(0).get_int32());
+        ASSERT_EQ(2456, merged->get(1).get_int32());
+        ASSERT_EQ(2048, merged->get(2).get_int32());
+        ASSERT_EQ(1024, merged->get(3).get_int32());
+    }
+    // Empty permutation
+    {
+        ColumnPtr merged = input1->clone_empty();
+        Permutation perm{};
+        materialize_column_by_permutation(merged.get(), {input1, input2}, perm);
+        ASSERT_EQ(0, merged->size());
+    }
+}
+
+TEST(SortingTest, materialize_by_permutation_array) {
+    auto int_data_col = Int32Column::create();
+    std::vector<int32_t> nums{1, 2, -99, 3, 4, 5, 6};
+    int_data_col->append_numbers(nums.data(), sizeof(int32_t) * nums.size());
+    auto int_null_col = UInt8Column::create();
+    std::vector<uint8_t> nulls{0, 0, 1, 0, 0, 0, 0};
+    int_null_col->append_numbers(nulls.data(), sizeof(uint8_t) * nulls.size());
+    auto int_col = NullableColumn::create(std::move(int_data_col), std::move(int_null_col));
+
+    auto offsets_col = UInt32Column::create();
+    std::vector<uint32_t> offsets{0, 1, 1, 1, 4, 6, 7};
+    offsets_col->append_numbers(offsets.data(), sizeof(uint32_t) * offsets.size());
+    auto array_data_col = ArrayColumn::create(std::move(int_col), std::move(offsets_col));
+
+    ColumnPtr materialized = array_data_col->clone_empty();
+    SmallPermutation perm{{0}, {2}, {4}, {1}, {3}, {5}};
+    materialize_column_by_permutation_single(materialized.get(), array_data_col, perm);
+
+    auto array_cmp = [](const std::vector<std::optional<int32_t>>& cmp_vec, const DatumArray& arr) {
+        ASSERT_EQ(cmp_vec.size(), arr.size());
+        for (size_t i = 0; i < arr.size(); ++i) {
+            if (!cmp_vec.at(i).has_value()) {
+                ASSERT_TRUE(arr.at(i).is_null());
+                continue;
+            }
+            ASSERT_EQ(cmp_vec.at(i), arr.at(i).get_int32());
+        }
+    };
+
+    ASSERT_EQ(6, materialized->size());
+    array_cmp({1}, materialized->get(0).get_array());
+    array_cmp({}, materialized->get(1).get_array());
+    array_cmp({4, 5}, materialized->get(2).get_array());
+    array_cmp({}, materialized->get(3).get_array());
+    array_cmp({2, std::nullopt, 3}, materialized->get(4).get_array());
+    array_cmp({6}, materialized->get(5).get_array());
+}
+
+TEST(SortingTest, materialize_by_permutation_struct) {
+    std::vector<std::string> field_name{"id", "name"};
+    NullableColumn::Ptr id = NullableColumn::create(UInt64Column::create(), NullColumn::create());
+    NullableColumn::Ptr name = NullableColumn::create(BinaryColumn::create(), NullColumn::create());
+    StructColumn::Ptr column = StructColumn::create(Columns{id, name}, field_name);
+
+    ASSERT_TRUE(column->is_struct());
+    ASSERT_FALSE(column->is_nullable());
+    ASSERT_EQ(0, column->size());
+
+    DatumStruct struct1{uint64_t(1), Slice("smith")};
+    DatumStruct struct2{uint64_t(2), Slice("cruise")};
+    DatumStruct struct3{uint64_t(3), Slice("hello")};
+    column->append_datum(struct1);
+    column->append_datum(struct2);
+    column->append_datum(struct3);
+
+    ColumnPtr materialized = column->clone_empty();
+    SmallPermutation perm{{2}, {0}, {1}};
+    materialize_column_by_permutation_single(materialized.get(), column, perm);
+    ASSERT_EQ(3, materialized->size());
+    ASSERT_EQ("{id:3,name:'hello'}", materialized->debug_item(0));
+    ASSERT_EQ("{id:1,name:'smith'}", materialized->debug_item(1));
+    ASSERT_EQ("{id:2,name:'cruise'}", materialized->debug_item(2));
+}
+
+TEST(SortingTest, materialize_by_permutation_json) {
+    // clang-format off
+    std::vector<JsonValue> jsons = {
+    JsonValue::parse(R"( {"k1": 1, "k2": 2} )").value(),
+    JsonValue::parse(R"( {"k1": 2, "k2": 4} )").value(),
+    JsonValue::parse(R"( {"k1": 3, "k2": 6} )").value()
+    };
+    // clang-format on
+
+    ColumnPtr json_column = JsonColumn::create();
+    for (auto& json : jsons) {
+        json_column->append_datum(&json);
+    }
+    ColumnPtr materialized = json_column->clone_empty();
+    SmallPermutation perm{{1}, {2}, {0}};
+    materialize_column_by_permutation_single(materialized.get(), json_column, perm);
+    ASSERT_EQ(3, materialized->size());
+    ASSERT_EQ(jsons.at(1), *materialized->get(0).get_json());
+    ASSERT_EQ(jsons.at(2), *materialized->get(1).get_json());
+    ASSERT_EQ(jsons.at(0), *materialized->get(2).get_json());
 }
 
 TEST(SortingTest, steal_chunk) {

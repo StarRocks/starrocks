@@ -611,10 +611,6 @@ public interface AstVisitorExtendInterface<R, C> extends AstVisitor<R, C> {
 
     // ---------------------------------------- Show Statement ---------------------------------------------------------
 
-    default R visitShowStatement(ShowStmt statement, C context) {
-        return visitStatement(statement, context);
-    }
-
     default R visitShowAuthorStatement(ShowAuthorStmt statement, C context) {
         return visitShowStatement(statement, context);
     }

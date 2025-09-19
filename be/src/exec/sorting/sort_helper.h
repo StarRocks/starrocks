@@ -17,6 +17,7 @@
 #include <algorithm>
 #include <concepts>
 
+#include "column/german_string.h"
 #include "column/nullable_column.h"
 #include "column/type_traits.h"
 #include "column/vectorized_fwd.h"
@@ -45,6 +46,16 @@ struct SorterComparator {
 template <>
 struct SorterComparator<Slice> {
     static int compare(const Slice& lhs, const Slice& rhs) {
+        int x = lhs.compare(rhs);
+        if (x > 0) return 1;
+        if (x < 0) return -1;
+        return x;
+    }
+};
+
+template <>
+struct SorterComparator<GermanString> {
+    static int compare(const GermanString& lhs, const GermanString& rhs) {
         int x = lhs.compare(rhs);
         if (x > 0) return 1;
         if (x < 0) return -1;

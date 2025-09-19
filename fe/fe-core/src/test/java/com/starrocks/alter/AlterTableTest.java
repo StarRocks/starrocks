@@ -38,6 +38,7 @@ import com.starrocks.system.Backend;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.TStorageType;
 import com.starrocks.utframe.StarRocksAssert;
+import com.starrocks.utframe.StarRocksTestBase;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
@@ -49,7 +50,7 @@ import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
-public class AlterTableTest {
+public class AlterTableTest extends StarRocksTestBase {
     private static ConnectContext connectContext;
     private static StarRocksAssert starRocksAssert;
 
@@ -323,7 +324,7 @@ public class AlterTableTest {
 
         // add label to backend
         SystemInfoService systemInfoService = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
-        System.out.println(systemInfoService.getBackends());
+        logSysInfo(systemInfoService.getBackends());
         List<Long> backendIds = systemInfoService.getBackendIds();
         Backend backend = systemInfoService.getBackend(backendIds.get(0));
         String modifyBackendPropSqlStr = "alter system modify backend '" + backend.getHost() +
@@ -378,7 +379,7 @@ public class AlterTableTest {
         localMetastoreFollower.replayModifyTableProperty(OperationType.OP_ALTER_TABLE_PROPERTIES, info);
         OlapTable olapTable = (OlapTable) localMetastoreFollower.getDb("test")
                     .getTable("test_location_alter");
-        System.out.println(olapTable.getLocation());
+        logSysInfo(olapTable.getLocation());
         Assertions.assertEquals(1, olapTable.getLocation().size());
         Assertions.assertTrue(olapTable.getLocation().containsKey("rack"));
 
@@ -388,7 +389,7 @@ public class AlterTableTest {
         localMetastoreFollower.replayModifyTableProperty(OperationType.OP_ALTER_TABLE_PROPERTIES, info);
         olapTable = (OlapTable) localMetastoreFollower.getDb("test")
                     .getTable("test_location_alter");
-        System.out.println(olapTable.getLocation());
+        logSysInfo(olapTable.getLocation());
         Assertions.assertNull(olapTable.getLocation());
     }
 
@@ -398,7 +399,7 @@ public class AlterTableTest {
 
         // add label to backend
         SystemInfoService systemInfoService = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
-        System.out.println(systemInfoService.getBackends());
+        logSysInfo(systemInfoService.getBackends());
         List<Long> backendIds = systemInfoService.getBackendIds();
         Backend backend = systemInfoService.getBackend(backendIds.get(0));
         String modifyBackendPropSqlStr = "alter system modify backend '" + backend.getHost() +
@@ -439,7 +440,7 @@ public class AlterTableTest {
 
         // add label to backend
         SystemInfoService systemInfoService = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
-        System.out.println(systemInfoService.getBackends());
+        logSysInfo(systemInfoService.getBackends());
         List<Long> backendIds = systemInfoService.getBackendIds();
         Backend backend = systemInfoService.getBackend(backendIds.get(0));
         String modifyBackendPropSqlStr = "alter system modify backend '" + backend.getHost() +
@@ -469,7 +470,7 @@ public class AlterTableTest {
         try {
             DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(sql, connectContext), connectContext);
         } catch (DdlException e) {
-            System.out.println(e.getMessage());
+            logSysInfo(e.getMessage());
             Assertions.assertTrue(e.getMessage().contains("table has location property and cannot be colocated"));
         }
     }

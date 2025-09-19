@@ -122,4 +122,55 @@ Status PrimaryKeyCompactionConflictResolver::execute() {
     return mapper_iter.status();
 }
 
+Status PrimaryKeyCompactionConflictResolver::execute_without_update_index() {
+    // init rows mapper iter
+    ASSIGN_OR_RETURN(auto filename, filename());
+    RowsMapperIterator mapper_iter;
+    RETURN_IF_ERROR(mapper_iter.open(filename));
+
+    // 1. iterate all segment in output rowset
+    RETURN_IF_ERROR(segment_iterator(
+            [&](const CompactConflictResolveParams& params, const std::vector<std::shared_ptr<Segment>>& segments,
+                const std::function<void(uint32_t, const DelVectorPtr&, uint32_t)>& handle_delvec_result_func) {
+                std::map<uint32_t, DelVectorPtr> rssid_to_delvec;
+                for (size_t segment_id = 0; segment_id < segments.size(); segment_id++) {
+                    RETURN_IF_ERROR(breakpoint_check());
+                    // 2. get input rssid & rowids, so we can generate delvec
+                    vector<uint32_t> tmp_deletes;
+                    std::vector<uint64_t> rssid_rowids;
+                    RETURN_IF_ERROR(mapper_iter.next_values(segments[segment_id]->num_rows(), &rssid_rowids));
+                    DCHECK(segments[segment_id]->num_rows() == rssid_rowids.size());
+                    for (int i = 0; i < rssid_rowids.size(); i++) {
+                        const uint32_t rssid = rssid_rowids[i] >> 32;
+                        const uint32_t rowid = rssid_rowids[i] & 0xffffffff;
+                        if (rssid_to_delvec.count(rssid) == 0) {
+                            // get delvec by loader
+                            DelVectorPtr delvec_ptr;
+                            {
+                                TRACE_COUNTER_SCOPE_LATENCY_US("compaction_delvec_loader_latency_us");
+                                RETURN_IF_ERROR(params.delvec_loader->load({params.tablet_id, rssid},
+                                                                           params.base_version, &delvec_ptr));
+                            }
+                            rssid_to_delvec[rssid] = delvec_ptr;
+                        }
+                        if (!rssid_to_delvec[rssid]->empty() && rssid_to_delvec[rssid]->roaring()->contains(rowid)) {
+                            // Input row had been deleted, so we need to delete it from output rowset
+                            tmp_deletes.push_back(i);
+                        }
+                    }
+                    // 3. generate final delvec
+                    DelVectorPtr dv = std::make_shared<DelVector>();
+                    if (tmp_deletes.empty()) {
+                        dv->init(params.new_version, nullptr, 0);
+                    } else {
+                        dv->init(params.new_version, tmp_deletes.data(), tmp_deletes.size());
+                    }
+                    handle_delvec_result_func(params.rowset_id + segment_id, dv, tmp_deletes.size());
+                }
+                return Status::OK();
+            }));
+
+    return mapper_iter.status();
+}
+
 } // namespace starrocks

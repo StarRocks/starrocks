@@ -30,6 +30,7 @@ import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TableFunction;
 import com.starrocks.catalog.Type;
+import com.starrocks.catalog.View;
 import com.starrocks.common.Pair;
 import com.starrocks.common.tvr.TvrVersionRange;
 import com.starrocks.connector.ConnectorTableVersion;
@@ -167,19 +168,18 @@ public class RelationTransformer implements AstVisitorExtendInterface<LogicalPla
     private final ExpressionMapping outer;
     private final CTETransformerContext cteContext;
     private final List<ColumnRefOperator> correlation = new ArrayList<>();
-    private final boolean inlineView;
-    private final boolean enableViewBasedMvRewrite;
     private final MVTransformerContext mvTransformerContext;
 
     public RelationTransformer(ColumnRefFactory columnRefFactory, ConnectContext session) {
         this(columnRefFactory, session,
                 new ExpressionMapping(new Scope(RelationId.anonymous(), new RelationFields())),
-                new CTETransformerContext(session.getSessionVariable().getCboCTEMaxLimit()));
+                new CTETransformerContext(session.getSessionVariable().getCboCTEMaxLimit()),
+                new MVTransformerContext(session, true));
     }
 
     public RelationTransformer(ColumnRefFactory columnRefFactory, ConnectContext session, ExpressionMapping outer,
-                               CTETransformerContext cteContext) {
-        this(new TransformerContext(columnRefFactory, session, outer, cteContext, null));
+                               CTETransformerContext cteContext, MVTransformerContext mvTransformerContext) {
+        this(new TransformerContext(columnRefFactory, session, outer, cteContext, mvTransformerContext));
     }
 
     public RelationTransformer(TransformerContext context) {
@@ -187,8 +187,6 @@ public class RelationTransformer implements AstVisitorExtendInterface<LogicalPla
         this.session = context.getSession();
         this.outer = context.getOuter();
         this.cteContext = context.getCteContext();
-        this.inlineView = context.isInlineView();
-        this.enableViewBasedMvRewrite = context.isEnableViewBasedMvRewrite();
         this.mvTransformerContext = context.getMVTransformerContext();
     }
 
@@ -245,7 +243,7 @@ public class RelationTransformer implements AstVisitorExtendInterface<LogicalPla
             LogicalPlan producerPlan =
                     new RelationTransformer(columnRefFactory, session,
                             new ExpressionMapping(new Scope(RelationId.anonymous(), new RelationFields())),
-                            cteContext).transform(cteRelation.getCteQueryStatement().getQueryRelation());
+                            cteContext, mvTransformerContext).transform(cteRelation.getCteQueryStatement().getQueryRelation());
             OptExprBuilder produceOptBuilder =
                     new OptExprBuilder(produceOperator, Lists.newArrayList(producerPlan.getRootBuilder()),
                             producerPlan.getRootBuilder().getExpressionMapping());
@@ -288,7 +286,7 @@ public class RelationTransformer implements AstVisitorExtendInterface<LogicalPla
     @Override
     public LogicalPlan visitSelect(SelectRelation node, ExpressionMapping context) {
         QueryTransformer queryTransformer = new QueryTransformer(columnRefFactory, session, cteContext,
-                inlineView, mvTransformerContext);
+                mvTransformerContext);
         LogicalPlan logicalPlan = queryTransformer.plan(node, outer);
         return logicalPlan;
     }
@@ -878,30 +876,44 @@ public class RelationTransformer implements AstVisitorExtendInterface<LogicalPla
     @Override
     public LogicalPlan visitView(ViewRelation node, ExpressionMapping context) {
         LogicalPlan logicalPlan = transform(node.getQueryStatement().getQueryRelation());
-        List<ColumnRefOperator> newOutputColumns = inlineView ? null : Lists.newArrayList();
-        if (inlineView) {
+
+        boolean isInlineView = isInlineView();
+        boolean isEnableViewBasedRewrite = isEnableViewBasedRewrite(node.getView());
+        if (isInlineView) {
             // expand views in logical plan
             OptExprBuilder builder = new OptExprBuilder(
                     logicalPlan.getRoot().getOp(),
                     logicalPlan.getRootBuilder().getInputs(),
                     new ExpressionMapping(node.getScope(), logicalPlan.getOutputColumn(), logicalPlan.getRootBuilder()
                             .getColumnRefToConstOperators()));
-            if (enableViewBasedMvRewrite) {
-                LogicalViewScanOperator viewScanOperator = buildViewScan(logicalPlan, node, newOutputColumns);
+            if (isEnableViewBasedRewrite) {
+                List<ColumnRefOperator> newOutputColumns = Lists.newArrayList();
+                LogicalViewScanOperator viewScanOperator = buildViewScan(logicalPlan, node, newOutputColumns, true);
                 builder.getRoot().getOp().setEquivalentOp(viewScanOperator);
             }
             return new LogicalPlan(builder, logicalPlan.getOutputColumn(), logicalPlan.getCorrelation());
         } else {
             // do not expand views in logical plan
-            LogicalViewScanOperator viewScanOperator = buildViewScan(logicalPlan, node, newOutputColumns);
+            List<ColumnRefOperator> newOutputColumns = Lists.newArrayList();
+            LogicalViewScanOperator viewScanOperator = buildViewScan(logicalPlan, node, newOutputColumns, false);
             OptExprBuilder scanBuilder = new OptExprBuilder(viewScanOperator, Collections.emptyList(),
                     new ExpressionMapping(node.getScope(), newOutputColumns));
             return new LogicalPlan(scanBuilder, newOutputColumns, List.of());
         }
     }
 
-    private LogicalViewScanOperator buildViewScan(
-            LogicalPlan logicalPlan, ViewRelation node, List<ColumnRefOperator> outputVariables) {
+    private boolean isInlineView() {
+        return mvTransformerContext != null ? mvTransformerContext.isInlineView() : true;
+    }
+
+    private boolean isEnableViewBasedRewrite(View view) {
+        return mvTransformerContext != null ? mvTransformerContext.isEnableViewBasedMVRewrite(view) : false;
+    }
+
+    private LogicalViewScanOperator buildViewScan(LogicalPlan logicalPlan,
+                                                  ViewRelation node,
+                                                  List<ColumnRefOperator> outputVariables,
+                                                  boolean isInlineView) {
         ImmutableMap.Builder<ColumnRefOperator, Column> colRefToColumnMetaMapBuilder = ImmutableMap.builder();
         ImmutableMap.Builder<Column, ColumnRefOperator> columnMetaToColRefMapBuilder = ImmutableMap.builder();
 
@@ -953,7 +965,7 @@ public class RelationTransformer implements AstVisitorExtendInterface<LogicalPla
         LogicalViewScanOperator scanOperator = new LogicalViewScanOperator(relationId,
                 node.getView(), columnRefOperatorToColumn, columnMetaToColRefMap,
                 new ColumnRefSet(logicalPlan.getOutputColumn()), newExprMapping, projectionMap);
-        if (inlineView) {
+        if (isInlineView) {
             // add a projection to make sure output columns keep the same,
             // because LogicalViewScanOperator should be logically equivalent to logicalPlan
             Projection projection = new Projection(projectionMap);
@@ -1144,7 +1156,7 @@ public class RelationTransformer implements AstVisitorExtendInterface<LogicalPla
         List<Expr> groupKeys = node.getGroupByKeys();
         List<FunctionCallExpr> aggFunctions = node.getRewrittenAggFunctions();
         QueryTransformer queryTransformer = new QueryTransformer(columnRefFactory, session, cteContext,
-                inlineView, mvTransformerContext);
+                mvTransformerContext);
         OptExprBuilder builder = queryTransformer.aggregate(
                 queryPlan.getRootBuilder(), groupKeys, aggFunctions, null, ImmutableList.of());
 
@@ -1209,14 +1221,14 @@ public class RelationTransformer implements AstVisitorExtendInterface<LogicalPla
         //  We need to extract the equivalence conditions to meet query analysis and
         //  avoid hash joins without equivalence conditions
         if (scalarOperator.isConstant() && scalarOperator.getType().isBoolean()
-                && !node.getJoinOp().isCrossJoin() && !node.getJoinOp().isInnerJoin()) {
+                && !node.getJoinOp().isCrossJoin() && !node.getJoinOp().isAnyInnerJoin()) {
             ScalarOperator scalarOperatorWithoutRewrite = Utils.compoundAnd(scalarConjuncts);
             List<BinaryPredicateOperator> eqPredicate = JoinHelper.getEqualsPredicate(
                     new ColumnRefSet(leftOutputColumns),
                     new ColumnRefSet(rightOutputColumns),
                     Utils.extractConjuncts(scalarOperatorWithoutRewrite));
 
-            if (eqPredicate.size() > 0) {
+            if (!eqPredicate.isEmpty()) {
                 scalarOperator = Utils.compoundAnd(eqPredicate.get(0), scalarOperator);
             }
         }
@@ -1378,7 +1390,7 @@ public class RelationTransformer implements AstVisitorExtendInterface<LogicalPla
             Map<ColumnRefOperator, ScalarOperator> leftConstMap, Map<ColumnRefOperator, ScalarOperator> rightConstMap,
             JoinOperator joinOperator) {
         // outJoin may generate null values, so it may not safe to use const value
-        if (joinOperator.isLeftOuterJoin()) {
+        if (joinOperator.isAnyLeftOuterJoin()) {
             rightConstMap = new HashMap<>();
         } else if (joinOperator.isRightJoin()) {
             leftConstMap = new HashMap<>();

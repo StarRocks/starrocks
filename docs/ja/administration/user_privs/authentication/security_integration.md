@@ -79,6 +79,19 @@ PROPERTIES (
 - 必須: はい
 - 説明: LDAP サービスにログインするために使用されるユーザーの属性。例: `uid`。
 
+:::note
+
+**DN パス機構**: LDAP セキュリティインテグレーションは DN パス機能をサポートします。
+
+- 認証成功後、システムはユーザーのログイン名と完全な DN の両方を記録します。
+- Group Provider と組み合わせると、DN 情報が自動的にグループプロバイダに渡されます。
+- Group Provider で `ldap_user_search_attr` が設定されていない場合、グループマッチングには DN が使用されます。
+- このメカニズムは Microsoft AD のような複雑な LDAP 環境に特に適しています。
+
+詳細は[ユーザーグループの認証](../group_provider.md)の DN マッチングメカニズムを参照してください。
+
+:::
+
 ##### authentication_ldap_simple_bind_root_dn
 
 - 必須: はい

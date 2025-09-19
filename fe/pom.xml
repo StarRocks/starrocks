@@ -25,7 +25,7 @@ under the License.
 
     <groupId>com.starrocks</groupId>
     <artifactId>starrocks-fe</artifactId>
-    <version>3.4.0</version>
+    <version>main</version>
     <packaging>pom</packaging>
 
     <modules>
@@ -37,6 +37,7 @@ under the License.
         <module>plugin/spark-dpp</module>
         <module>plugin/hive-udf</module>
         <module>fe-core</module>
+        <module>fe-server</module>
     </modules>
 
     <name>starrocks-fe</name>
@@ -178,28 +179,51 @@ under the License.
     <dependencyManagement>
         <dependencies>
 
+            <!-- internal modules unified -->
+            <dependency>
+                <groupId>com.starrocks</groupId>
+                <artifactId>fe-grammar</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.starrocks</groupId>
+                <artifactId>fe-parser</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.starrocks</groupId>
+                <artifactId>fe-spi</artifactId>
+                <version>${project.version}</version>
+            </dependency>
             <dependency>
                 <groupId>com.starrocks</groupId>
                 <artifactId>fe-utils</artifactId>
-                <version>1.0.0</version>
+                <version>${project.version}</version>
             </dependency>
-
-            <dependency>
-                <groupId>com.starrocks</groupId>
-                <artifactId>hive-udf</artifactId>
-                <version>1.0.0</version>
-            </dependency>
-
             <dependency>
                 <groupId>com.starrocks</groupId>
                 <artifactId>fe-testing</artifactId>
-                <version>1.0.0</version>
+                <version>${project.version}</version>
             </dependency>
-
             <dependency>
                 <groupId>com.starrocks</groupId>
                 <artifactId>spark-dpp</artifactId>
-                <version>1.0.0</version>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.starrocks</groupId>
+                <artifactId>hive-udf</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.starrocks</groupId>
+                <artifactId>fe-core</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.starrocks</groupId>
+                <artifactId>fe-server</artifactId>
+                <version>${project.version}</version>
             </dependency>
 
             <!-- https://mvnrepository.com/artifact/commons-cli/commons-cli -->
