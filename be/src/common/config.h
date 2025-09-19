@@ -1087,6 +1087,8 @@ CONF_Int64(rpc_connect_timeout_ms, "30000");
 CONF_Int32(max_batch_publish_latency_ms, "100");
 
 // Config for opentelemetry tracing.
+// Valid example: jaeger_endpoint = localhost:14268
+// Invalid example: jaeger_endpoint = http://localhost:14268
 CONF_String(jaeger_endpoint, "");
 
 // Config for query debug trace
