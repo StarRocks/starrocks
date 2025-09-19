@@ -199,13 +199,7 @@ public class EntityConvertUtils {
 
             for (ScalarOperator child : children) {
                 ScalarOperator convertibleChild;
-                // For NOT, we cannot do partial pushdown
-                if (type == CompoundPredicateOperator.CompoundType.NOT) {
-                    convertibleChild = getConvertiblePredicate(child, partitionColumns);
-                } else {
-                    convertibleChild = getConvertiblePredicate(child, partitionColumns);
-                }
-
+                convertibleChild = getConvertiblePredicate(child, partitionColumns);
                 if (convertibleChild != null) {
                     convertibleChildren.add(convertibleChild);
                 }
