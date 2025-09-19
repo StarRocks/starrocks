@@ -477,8 +477,6 @@ public class InsertPlanner {
             sinkFragment.setSink(dataSink);
             sinkFragment.setLoadGlobalDicts(globalDicts);
             return execPlan;
-        } catch (StarRocksException e) {
-            throw new RuntimeException(e);
         }
     }
 
