@@ -765,6 +765,12 @@ void ExecEnv::destroy() {
     // _query_pool_mem_tracker.
     SAFE_DELETE(_runtime_filter_cache);
     SAFE_DELETE(_driver_limiter);
+    if (HttpBrpcStubCache::getInstance() != nullptr) {
+        HttpBrpcStubCache::getInstance()->shutdown();
+    }
+    if (LakeServiceBrpcStubCache::getInstance() != nullptr) {
+        LakeServiceBrpcStubCache::getInstance()->shutdown();
+    }
     SAFE_DELETE(_pipeline_timer);
     SAFE_DELETE(_broker_client_cache);
     SAFE_DELETE(_frontend_client_cache);

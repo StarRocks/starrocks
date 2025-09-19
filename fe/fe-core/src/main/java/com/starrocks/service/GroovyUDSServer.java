@@ -14,7 +14,7 @@
 
 package com.starrocks.service;
 
-import com.starrocks.StarRocksFE;
+import com.starrocks.common.Config;
 import com.starrocks.common.util.Daemon;
 import com.starrocks.server.GlobalStateMgr;
 import groovy.lang.Binding;
@@ -44,7 +44,7 @@ public class GroovyUDSServer extends Daemon {
     }
 
     private String socketPath =
-            (StarRocksFE.STARROCKS_HOME_DIR == null ? "/tmp" : StarRocksFE.STARROCKS_HOME_DIR) + "/groovy_debug.sock";
+            (Config.STARROCKS_HOME_DIR == null ? "/tmp" : Config.STARROCKS_HOME_DIR) + "/groovy_debug.sock";
 
     GroovyUDSServer() {
         super("GroovyUDSServer");

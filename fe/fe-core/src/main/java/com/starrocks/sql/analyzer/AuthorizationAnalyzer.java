@@ -36,6 +36,7 @@ import com.starrocks.sql.ast.BaseGrantRevokeRoleStmt;
 import com.starrocks.sql.ast.CreateRoleStmt;
 import com.starrocks.sql.ast.DropRoleStmt;
 import com.starrocks.sql.ast.FunctionArgsDef;
+import com.starrocks.sql.ast.GrantType;
 import com.starrocks.sql.ast.SetDefaultRoleStmt;
 import com.starrocks.sql.ast.SetRoleStmt;
 import com.starrocks.sql.ast.ShowGrantsStmt;
@@ -486,15 +487,13 @@ public class AuthorizationAnalyzer {
 
         @Override
         public Void visitShowGrantsStatement(ShowGrantsStmt stmt, ConnectContext session) {
-            if (stmt.getUser() != null) {
-                AuthenticationAnalyzer.analyzeUser(stmt.getUser());
-                AuthenticationAnalyzer.checkUserExist(stmt.getUser(), true);
-            } else if (stmt.getGroupOrRole() != null) {
+            if (stmt.getGrantType() == GrantType.USER) {
+                if (stmt.getUser() != null) {
+                    AuthenticationAnalyzer.analyzeUser(stmt.getUser());
+                    AuthenticationAnalyzer.checkUserExist(stmt.getUser(), true);
+                }
+            } else if (stmt.getGrantType() == GrantType.ROLE) {
                 validRoleName(stmt.getGroupOrRole(), "There is no such grant defined for role " + stmt.getGroupOrRole(), true);
-            } else {
-                UserIdentity userIdentity = session.getCurrentUserIdentity();
-                UserRef user = new UserRef(userIdentity.getUser(), userIdentity.getHost(), userIdentity.isDomain());
-                stmt.setUser(user);
             }
 
             return null;

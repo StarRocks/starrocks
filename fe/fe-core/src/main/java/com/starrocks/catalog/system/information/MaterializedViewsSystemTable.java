@@ -215,7 +215,7 @@ public class MaterializedViewsSystemTable extends SystemTable {
         // database privs should be checked in analysis phrase
         long limit = params.isSetLimit() ? params.getLimit() : -1;
         if (params.isSetCurrent_user_ident()) {
-            context.setAuthInfoFromThrift(params.getCurrent_user_ident());
+            UserIdentityUtils.setAuthInfoFromThrift(context, params.getCurrent_user_ident());
         } else {
             UserIdentity currentUser = UserIdentity.createAnalyzedUserIdentWithIp(params.user, params.user_ip);
             context.setCurrentUserIdentity(currentUser);

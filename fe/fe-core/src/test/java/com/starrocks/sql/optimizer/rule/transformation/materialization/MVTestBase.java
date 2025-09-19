@@ -28,6 +28,8 @@ import com.starrocks.catalog.MvPlanContext;
 import com.starrocks.catalog.MvRefreshArbiter;
 import com.starrocks.catalog.MvUpdateInfo;
 import com.starrocks.catalog.Table;
+import com.starrocks.catalog.View;
+import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.Pair;
 import com.starrocks.common.util.RuntimeProfile;
@@ -173,7 +175,7 @@ public abstract class MVTestBase extends StarRocksTestBase {
         Pair<ExecPlan, String> execPlanWithQuery = result.second;
         String traceLog = execPlanWithQuery.second;
         if (!Strings.isNullOrEmpty(traceLog)) {
-            System.out.println(traceLog);
+            logSysInfo(traceLog);
         }
         return execPlanWithQuery.first.getExplainString(level);
     }
@@ -482,7 +484,7 @@ public abstract class MVTestBase extends StarRocksTestBase {
         try {
             String addPartitionSql = String.format("ALTER TABLE %s ADD " +
                     "PARTITION %s VALUES [(%s),(%s))", tbl, pName, toPartitionVal(pVal1), toPartitionVal(pVal2));
-            System.out.println(addPartitionSql);
+            logSysInfo(addPartitionSql);
             starRocksAssert.alterTable(addPartitionSql);
 
             // insert values
@@ -782,5 +784,19 @@ public abstract class MVTestBase extends StarRocksTestBase {
             partitions.put(pName, pListCell);
             addListPartition(tbl, pName, val);
         }
+    }
+
+    public View getView(String viewName) {
+        Table table = getTable(DB_NAME, viewName);
+        Assertions.assertTrue(table instanceof View);
+        return (View) table;
+    }
+
+    public static void disableMVRewriteConsiderDataLayout() {
+        Config.mv_rewrite_consider_data_layout_mode = "disable";
+    }
+
+    public static void enableMVRewriteConsiderDataLayout() {
+        Config.mv_rewrite_consider_data_layout_mode = "enable";
     }
 }

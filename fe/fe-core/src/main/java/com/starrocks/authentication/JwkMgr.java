@@ -15,7 +15,7 @@
 package com.starrocks.authentication;
 
 import com.nimbusds.jose.jwk.JWKSet;
-import com.starrocks.StarRocksFE;
+import com.starrocks.common.Config;
 
 import java.io.FileInputStream;
 import java.io.IOException;
@@ -30,7 +30,7 @@ public class JwkMgr {
             if (jwksUrl.startsWith("http://") || jwksUrl.startsWith("https://")) {
                 jwksInputStream = new URL(jwksUrl).openStream();
             } else {
-                String filePath = StarRocksFE.STARROCKS_HOME_DIR + "/conf/" + jwksUrl;
+                String filePath = Config.STARROCKS_HOME_DIR + "/conf/" + jwksUrl;
                 jwksInputStream = new FileInputStream(filePath);
             }
             return JWKSet.load(jwksInputStream);

@@ -31,7 +31,7 @@ import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
 
-public class ShowAnalyzeJobStmt extends ShowStmt {
+public class ShowAnalyzeJobStmt extends EnhancedShowStmt {
 
     public ShowAnalyzeJobStmt(Predicate predicate, List<OrderByElement> orderByElements,
                               LimitElement limitElement, NodePosition pos) {

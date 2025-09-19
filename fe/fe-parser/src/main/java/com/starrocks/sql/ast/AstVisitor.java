@@ -47,6 +47,10 @@ public interface AstVisitor<R, C> {
         return visitStatement(statement, context);
     }
 
+    default R visitShowStatement(ShowStmt statement, C context) {
+        return visitStatement(statement, context);
+    }
+
     // ------------------------------------------- Group Provider Statement ----------------------------------------------------
 
     default R visitCreateGroupProviderStatement(CreateGroupProviderStmt statement, C context) {

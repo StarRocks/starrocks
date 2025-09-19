@@ -2445,10 +2445,19 @@ namedArgument
     ;
 
 joinRelation
-    : crossOrInnerJoinType bracketHint?
+    : asofJoinType bracketHint?
+            rightRelation=relationPrimary joinCriteria
+    | crossOrInnerJoinType bracketHint?
             LATERAL? rightRelation=relationPrimary joinCriteria?
     | outerAndSemiJoinType bracketHint?
             LATERAL? rightRelation=relationPrimary joinCriteria
+    ;
+
+asofJoinType
+    : ASOF JOIN
+    | ASOF INNER JOIN
+    | ASOF LEFT JOIN
+    | ASOF LEFT OUTER JOIN
     ;
 
 crossOrInnerJoinType
