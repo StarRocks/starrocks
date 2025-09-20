@@ -313,7 +313,7 @@ Status DeltaWriterImpl::build_schema_and_writer() {
                         UniqueId(_load_id).to_thrift(),
                         UniqueId(_tablet_id, _txn_id)
                                 .to_thrift(), // use tablet id + txn id to generate fragment instance id
-                        _tablet_manager->tablet_root_location(_tablet_id));
+                        _tablet_manager->tablet_root_location(_tablet_id), nullptr);
                 RETURN_IF_ERROR(_load_spill_block_mgr->init());
             }
             // Init SpillMemTableSink

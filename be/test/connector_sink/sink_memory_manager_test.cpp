@@ -101,7 +101,7 @@ TEST_F(SinkMemoryManagerTest, kill_victim) {
 
     auto partition_chunk_writer_ctx =
             std::make_shared<SpillPartitionChunkWriterContext>(SpillPartitionChunkWriterContext{
-                    nullptr, nullptr, 1024, false, _fragment_context.get(), tuple_desc, nullptr});
+                    nullptr, nullptr, 1024, false, nullptr, _fragment_context.get(), tuple_desc, nullptr});
 
     auto sink_mem_mgr = std::make_shared<SinkOperatorMemoryManager>();
     std::map<PartitionKey, PartitionChunkWriterPtr> partition_chunk_writers;
