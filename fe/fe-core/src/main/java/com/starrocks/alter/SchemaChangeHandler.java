@@ -51,6 +51,7 @@ import com.starrocks.catalog.AggregateType;
 import com.starrocks.catalog.ArrayType;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ColumnId;
+import com.starrocks.catalog.ColumnType;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Index;
 import com.starrocks.catalog.KeysType;
@@ -902,6 +903,10 @@ public class SchemaChangeHandler extends AlterHandler {
             if (column.isKey()) {
                 return false;
             }
+        }
+
+        if (!ColumnType.canReuseZonemapIndex(oriColumn.getType(), modColumn.getType())) {
+            fastSchemaEvolution = false;
         }
 
         return fastSchemaEvolution;
