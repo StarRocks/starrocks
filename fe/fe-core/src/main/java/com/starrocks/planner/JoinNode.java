@@ -58,7 +58,9 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.stream.Collectors;
 
@@ -95,6 +97,7 @@ public abstract class JoinNode extends PlanNode implements RuntimeFilterBuildNod
     // The partitionByExprs which need to check the probe side for partition join.
     protected List<Expr> probePartitionByExprs;
     protected boolean canLocalShuffle = false;
+    protected Map<SlotId, Expr> commonSlotMap;
 
     public List<RuntimeFilterDescription> getBuildRuntimeFilters() {
         return buildRuntimeFilters;
@@ -492,6 +495,10 @@ public abstract class JoinNode extends PlanNode implements RuntimeFilterBuildNod
         this.ukfkProperty = ukfkProperty;
     }
 
+    public void setCommonSlotMap(Map<SlotId, Expr> commonSlotMap) {
+        this.commonSlotMap = commonSlotMap;
+    }
+
     @Override
     protected String getNodeExplainString(String detailPrefix, TExplainLevel detailLevel) {
         String distrModeStr =
@@ -525,6 +532,14 @@ public abstract class JoinNode extends PlanNode implements RuntimeFilterBuildNod
             output.append(detailPrefix).append("other predicates: ")
                     .append(getVerboseExplain(conjuncts, detailLevel))
                     .append("\n");
+        }
+
+        if (commonSlotMap != null && !commonSlotMap.isEmpty()) {
+            output.append(detailPrefix + "  common sub expr:" + "\n");
+            for (Map.Entry<SlotId, Expr> entry : commonSlotMap.entrySet()) {
+                output.append(detailPrefix + "  <slot " + entry.getKey().toString() + "> : "
+                        + getExplainString(Arrays.asList(entry.getValue())) + "\n");
+            }
         }
 
         if (detailLevel == TExplainLevel.VERBOSE) {
