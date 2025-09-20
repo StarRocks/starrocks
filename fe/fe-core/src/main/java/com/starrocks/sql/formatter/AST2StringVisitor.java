@@ -273,6 +273,8 @@ public class AST2StringVisitor implements AstVisitorExtendInterface<String, Void
 
         if (statement.getGrantType().equals(GrantType.ROLE)) {
             sqlBuilder.append("ROLE ").append(statement.getRoleOrGroup());
+        } else if (statement.getGrantType().equals(GrantType.GROUP)) {
+            sqlBuilder.append("EXTERNAL GROUP ").append(statement.getRoleOrGroup());
         } else {
             sqlBuilder.append(statement.getUser());
         }

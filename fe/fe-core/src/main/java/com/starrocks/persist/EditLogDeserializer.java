@@ -230,6 +230,8 @@ public class EditLogDeserializer {
             .put(OperationType.OP_UPDATE_USER_PRIVILEGE_V2, UserPrivilegeCollectionInfo.class)
             .put(OperationType.OP_DROP_ROLE_V2, RolePrivilegeCollectionInfo.class)
             .put(OperationType.OP_UPDATE_ROLE_PRIVILEGE_V2, RolePrivilegeCollectionInfo.class)
+            .put(OperationType.OP_GRANT_ROLE_TO_GROUP, UpdateGroupToRoleLog.class)
+            .put(OperationType.OP_REVOKE_ROLE_FROM_GROUP, UpdateGroupToRoleLog.class)
             .put(OperationType.OP_MV_JOB_STATE, MVMaintenanceJob.class)
             .put(OperationType.OP_MV_EPOCH_UPDATE, MVEpoch.class)
             .put(OperationType.OP_MODIFY_TABLE_ADD_OR_DROP_COLUMNS, TableAddOrDropColumnsInfo.class)

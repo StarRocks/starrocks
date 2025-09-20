@@ -468,7 +468,7 @@ public class AuthorizationAnalyzer {
          */
         @Override
         public Void visitGrantRevokeRoleStatement(BaseGrantRevokeRoleStmt stmt, ConnectContext session) {
-            if (stmt.getUser() != null) {
+            if (stmt.getGrantType() == GrantType.USER) {
                 AuthenticationAnalyzer.analyzeUser(stmt.getUser());
                 AuthenticationAnalyzer.checkUserExist(stmt.getUser(), true);
                 if (AuthenticationAnalyzer.needProtectAdminUser(stmt.getUser(), session)) {
@@ -477,8 +477,11 @@ public class AuthorizationAnalyzer {
                 }
                 stmt.getGranteeRole().forEach(role ->
                         validRoleName(role, "Can not granted/revoke role to/from user", true));
-            } else {
+            } else if (stmt.getGrantType() == GrantType.ROLE) {
                 validRoleName(stmt.getRoleOrGroup(), "Can not granted/revoke role to/from role", true);
+                stmt.getGranteeRole().forEach(role ->
+                        validRoleName(role, "Can not granted/revoke role to/from user", true));
+            } else if (stmt.getGrantType() == GrantType.GROUP) {
                 stmt.getGranteeRole().forEach(role ->
                         validRoleName(role, "Can not granted/revoke role to/from user", true));
             }
