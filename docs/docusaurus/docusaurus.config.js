@@ -33,7 +33,17 @@ const config = {
   onBrokenAnchors: "ignore",
   onBrokenLinks: "ignore",
   onBrokenMarkdownLinks: "throw",
-
+  scripts: [
+    {
+      src: "https://widget.kapa.ai/kapa-widget.bundle.js",
+      "data-website-id": "7647399c-0b2f-4b29-bfa6-9c83d439244c",
+      "data-project-name": "StarRocks",
+      "data-project-color": "#3B0064",
+      "data-project-logo": "/img/logo.svg",
+      "data-modal-disclaimer": "Need text here",
+      async: true,
+    },
+  ],
   future: {
     experimental_faster: true,
   },
