@@ -2115,23 +2115,6 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 描述：启用 `enable_string_prefix_zonemap` 时用于字符串 Zonemap 最小值/最大值的前缀长度。
 - 引入版本：-
 
-##### string_zonemap_overlap_threshold
-
-- 默认值：0.8
-- 类型：Double
-- 单位：-
-- 是否动态：是
-- 描述：字符串页级 Zonemap 自适应创建的阈值。如果连续页之间的估算重叠比例大于该阈值，将跳过写入该页级 Zonemap。取值范围：[0.0, 1.0]。
-- 引入版本：-
-
-##### string_zonemap_min_pages_for_adaptive_check
-
-- 默认值：16
-- 类型：Int
-- 单位：-
-- 是否动态：是
-- 描述：应用自适应检查前所需的非空页的最小数量。
-- 引入版本：-
 
 ##### enable_ordinal_index_memory_page_cache
 

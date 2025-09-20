@@ -1453,23 +1453,6 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 説明: `enable_string_prefix_zonemap` が有効な場合に、文字列ゾーンマップの最小値/最大値に使用する前置長。
 - 導入バージョン: -
 
-##### string_zonemap_overlap_threshold
-
-- デフォルト: 0.8
-- タイプ: Double
-- 単位: -
-- 可変: はい
-- 説明: 文字列ページレベルのゾーンマップを自動作成するためのしきい値。連続するページ間の推定オーバーラップ率がこの値を超える場合、ページレベルのゾーンマップの書き込みをスキップします。範囲: [0.0, 1.0]。
-- 導入バージョン: -
-
-##### string_zonemap_min_pages_for_adaptive_check
-
-- デフォルト: 16
-- タイプ: Int
-- 単位: -
-- 可変: はい
-- 説明: 自適応チェックを適用する前に必要な非空ページの最小数。
-- 導入バージョン: -
 
 ##### enable_ordinal_index_memory_page_cache
 
