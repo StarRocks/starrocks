@@ -437,11 +437,12 @@ private:
                                                      const FooterPointerPB* partial_rowset_footer,
                                                      size_t* foot_size_hint);
 
-    std::vector<SegmentSharedPtr> _segments;
-
     std::atomic<bool> is_compacting{false};
 
     KeysType _keys_type;
+
+protected:
+    std::vector<SegmentSharedPtr> _segments;
 };
 
 struct adopt_acquire_t {
