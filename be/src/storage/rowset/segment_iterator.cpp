@@ -210,6 +210,28 @@ private:
         bool always_build_rowid() const { return use_vector_index && !use_ivfpq; }
     };
 
+    // Inverted index related context, only created when needed
+    struct InvertedIndexContext {
+        InvertedIndexContext() = default;
+        ~InvertedIndexContext() = default;
+
+        // Inverted index state
+        bool has_inverted_index = false;
+        std::vector<InvertedIndexIterator*> inverted_index_iterators;
+        std::unordered_set<ColumnId> prune_cols_candidate_by_inverted_index;
+
+        // Cleanup method to properly delete iterators
+        void cleanup() {
+            for (auto* iter : inverted_index_iterators) {
+                if (iter != nullptr) {
+                    delete iter;
+                }
+            }
+            inverted_index_iterators.clear();
+            has_inverted_index = false;
+        }
+    };
+
     Status _init();
     Status _try_to_update_ranges_by_runtime_filter();
     Status _do_get_next(Chunk* result, vector<rowid_t>* rowid);
@@ -313,9 +335,13 @@ private:
 
     IndexReadOptions _index_read_options(ColumnId cid) const;
 
+    Status _init_reader_from_file(const std::string& index_path, const std::shared_ptr<TabletIndex>& tablet_index_meta,
+                                  const std::map<std::string, std::string>& query_params);
+
 private:
     using RawColumnIterators = std::vector<std::unique_ptr<ColumnIterator>>;
     using ColumnDecoders = std::vector<ColumnDecoder>;
+
     std::shared_ptr<Segment> _segment;
     std::unordered_map<std::string, std::shared_ptr<Segment>> _dcg_segments;
     SegmentReadOptions _opts;
@@ -369,20 +395,15 @@ private:
     int _reserve_chunk_size = 0;
 
     bool _inited = false;
-    bool _has_inverted_index = false;
-
-    std::vector<InvertedIndexIterator*> _inverted_index_iterators;
 
     std::unordered_map<ColumnId, ColumnAccessPath*> _column_access_paths;
     std::unordered_map<ColumnId, ColumnAccessPath*> _predicate_column_access_paths;
 
-    std::unordered_set<ColumnId> _prune_cols_candidate_by_inverted_index;
-
     // Vector index context - only created when needed
     std::unique_ptr<VectorIndexContext> _vector_index_ctx;
 
-    Status _init_reader_from_file(const std::string& index_path, const std::shared_ptr<TabletIndex>& tablet_index_meta,
-                                  const std::map<std::string, std::string>& query_params);
+    // Inverted index context - only created when needed
+    std::unique_ptr<InvertedIndexContext> _inverted_index_ctx;
 };
 
 // ScanContext method implementations
@@ -1914,7 +1935,7 @@ Status SegmentIterator::_build_context(ScanContext* ctx) {
             ctx->_skip_dict_decode_indexes.push_back(false);
         } else {
             ctx->_skip_dict_decode_indexes.push_back(true);
-            if (_prune_cols_candidate_by_inverted_index.count(f->id())) {
+            if (_inverted_index_ctx && _inverted_index_ctx->prune_cols_candidate_by_inverted_index.count(f->id())) {
                 // The column is pruneable if and only if:
                 // 1. column in _prune_cols_candidate_by_inverted_index
                 // 2. column not in output schema
@@ -2418,7 +2439,11 @@ Status SegmentIterator::_apply_del_vector() {
 }
 
 Status SegmentIterator::_init_inverted_index_iterators() {
-    _inverted_index_iterators.resize(ChunkHelper::max_column_id(_schema) + 1, nullptr);
+    if (!_inverted_index_ctx) {
+        _inverted_index_ctx = std::make_unique<InvertedIndexContext>();
+    }
+
+    _inverted_index_ctx->inverted_index_iterators.resize(ChunkHelper::max_column_id(_schema) + 1, nullptr);
     std::unordered_map<ColumnId, ColumnUID> cid_2_ucid;
 
     for (auto& field : _schema.fields()) {
@@ -2428,9 +2453,10 @@ Status SegmentIterator::_init_inverted_index_iterators() {
         ColumnId cid = pair.first;
         ColumnUID ucid = cid_2_ucid[cid];
 
-        if (_inverted_index_iterators[cid] == nullptr) {
-            RETURN_IF_ERROR(_segment->new_inverted_index_iterator(ucid, &_inverted_index_iterators[cid], _opts));
-            _has_inverted_index |= (_inverted_index_iterators[cid] != nullptr);
+        if (_inverted_index_ctx->inverted_index_iterators[cid] == nullptr) {
+            RETURN_IF_ERROR(_segment->new_inverted_index_iterator(
+                    ucid, &_inverted_index_ctx->inverted_index_iterators[cid], _opts));
+            _inverted_index_ctx->has_inverted_index |= (_inverted_index_ctx->inverted_index_iterators[cid] != nullptr);
         }
     }
     return Status::OK();
@@ -2441,7 +2467,9 @@ Status SegmentIterator::_apply_inverted_index() {
     RETURN_IF(!_opts.enable_gin_filter, Status::OK());
 
     RETURN_IF_ERROR(_init_inverted_index_iterators());
-    RETURN_IF(!_has_inverted_index, Status::OK());
+    if (!_inverted_index_ctx || !_inverted_index_ctx->has_inverted_index) {
+        return Status::OK();
+    }
     SCOPED_RAW_TIMER(&_opts.stats->gin_index_filter_ns);
 
     roaring::Roaring row_bitmap = range2roaring(_scan_range);
@@ -2455,7 +2483,7 @@ Status SegmentIterator::_apply_inverted_index() {
     }
 
     for (const auto& [cid, pred_list] : _opts.pred_tree.get_immediate_column_predicate_map()) {
-        InvertedIndexIterator* inverted_iter = _inverted_index_iterators[cid];
+        InvertedIndexIterator* inverted_iter = _inverted_index_ctx->inverted_index_iterators[cid];
         if (inverted_iter == nullptr) {
             continue;
         }
@@ -2464,8 +2492,10 @@ Status SegmentIterator::_apply_inverted_index() {
                   Status::InternalError(strings::Substitute("No fid can be mapped by cid $0", cid)));
         std::string column_name(_schema.field(it->second)->name());
         for (const ColumnPredicate* pred : pred_list) {
-            if (_inverted_index_iterators[cid]->is_untokenized() || pred->type() == PredicateType::kExpr) {
-                Status res = pred->seek_inverted_index(column_name, _inverted_index_iterators[cid], &row_bitmap);
+            if (_inverted_index_ctx->inverted_index_iterators[cid]->is_untokenized() ||
+                pred->type() == PredicateType::kExpr) {
+                Status res = pred->seek_inverted_index(column_name, _inverted_index_ctx->inverted_index_iterators[cid],
+                                                       &row_bitmap);
                 if (res.ok()) {
                     erased_preds.emplace(pred);
                     erased_pred_col_ids.emplace(cid);
@@ -2487,7 +2517,7 @@ Status SegmentIterator::_apply_inverted_index() {
             if (!new_cid_to_predicates.contains(cid)) {
                 // predicate for pred->column_id() has been total erased by
                 // inverted index filtering.These columns may can be pruned.
-                _prune_cols_candidate_by_inverted_index.insert(cid);
+                _inverted_index_ctx->prune_cols_candidate_by_inverted_index.insert(cid);
             }
         }
     }
@@ -2714,10 +2744,8 @@ void SegmentIterator::close() {
 
     _bitmap_index_evaluator.close();
 
-    for (auto* iter : _inverted_index_iterators) {
-        if (iter != nullptr) {
-            delete iter;
-        }
+    if (_inverted_index_ctx) {
+        _inverted_index_ctx->cleanup();
     }
 }
 
