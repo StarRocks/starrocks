@@ -278,6 +278,61 @@ public class SystemInfoServiceTest {
 
         Config.enable_trace_historical_node = savedConfig;
     }
+    @Test
+    public void testDropComputeNode2() throws Exception {
+        new MockUp<RunMode>() {
+            @Mock
+            public RunMode getCurrentRunMode() {
+                return RunMode.SHARED_DATA;
+            }
+        };
+
+        Boolean savedConfig = Config.enable_trace_historical_node;
+        Config.enable_trace_historical_node = true;
+
+        ComputeNode cn = new ComputeNode(10001, "newHost", 1000);
+        service.addComputeNode(cn);
+
+        LocalMetastore localMetastore = new LocalMetastore(globalStateMgr, null, null);
+
+        WarehouseManager warehouseManager = new WarehouseManager();
+        warehouseManager.initDefaultWarehouse();
+
+        new Expectations() {
+            {
+                service.getComputeNodeWithHeartbeatPort("newHost", 1000);
+                minTimes = 0;
+                result = cn;
+
+                globalStateMgr.getLocalMetastore();
+                minTimes = 0;
+                result = localMetastore;
+
+                globalStateMgr.getWarehouseMgr();
+                minTimes = 0;
+                result = warehouseManager;
+            }
+        };
+
+        new MockUp<WarehouseManager>() {
+            @Mock
+            public ComputeResource acquireComputeResource(CRAcquireContext acquireContext) {
+                return WarehouseManager.DEFAULT_RESOURCE;
+            }
+        };
+        service.addComputeNode(cn);
+        cn.setStarletPort(1001);
+        service.dropComputeNode("newHost", 1000, "", "");
+        ComputeNode cnIP = service.getComputeNodeWithHeartbeatPort("newHost", 1000);
+        Assertions.assertTrue(cnIP == null);
+
+        {
+            Assertions.assertThrows(DdlException.class, () ->
+                    service.dropComputeNode("newHost", 1000, "cn-not-exists", ""));
+        }
+
+        Config.enable_trace_historical_node = savedConfig;
+    }
 
     @Test
     public void testDropBackendWithoutWarehouse() throws Exception {
