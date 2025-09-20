@@ -22,6 +22,7 @@
 #include "column/column_access_path.h"
 #include "column/type_traits.h"
 #include "common/compiler_util.h"
+#include "common/config.h"
 #include "common/status.h"
 #include "exec/olap_scan_prepare.h"
 #include "exec/pipeline/limit_operator.h"
@@ -474,7 +475,7 @@ StatusOr<bool> OlapScanNode::_could_tablet_internal_parallel(
     }
     bool force_split = tablet_internal_parallel_mode == TTabletInternalParallelMode::type::FORCE_SPLIT;
     // The enough number of tablets shouldn't use tablet internal parallel.
-    if (!force_split && num_total_scan_ranges >= pipeline_dop) {
+    if (!force_split && num_total_scan_ranges >= pipeline_dop * config::io_tasks_per_scan_operator) {
         return false;
     }
 
