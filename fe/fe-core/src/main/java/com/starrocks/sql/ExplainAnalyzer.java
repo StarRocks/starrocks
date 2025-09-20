@@ -936,11 +936,177 @@ public class ExplainAnalyzer {
 
             if (CollectionUtils.isNotEmpty(mergedUniqueMetrics.getChildCounterMap().get(RuntimeProfile.ROOT_COUNTER))) {
                 appendDetailLine("Counters:");
-                metricTraverser.accept(name -> true, true);
+                appendGroupedMetrics(mergedUniqueMetrics, nodeInfo);
             }
 
             popIndent(); // metric indent
         }
+    }
+
+    private void appendGroupedMetrics(RuntimeProfile uniqueMetrics, NodeInfo nodeInfo) {
+        pushIndent(GraphElement.LEAF_METRIC_INDENT);
+
+        // Scan Filters & Row Processing
+        appendDetailLine("ScanFilters:");
+        pushIndent(GraphElement.LEAF_METRIC_INDENT);
+        appendFilterMetrics(uniqueMetrics, nodeInfo, "BitmapIndexFilter");
+        appendFilterMetrics(uniqueMetrics, nodeInfo, "ZoneMapFilter");
+        appendFilterMetrics(uniqueMetrics, nodeInfo, "PredFilter");
+        appendFilterMetrics(uniqueMetrics, nodeInfo, "BloomFilterFilter");
+        appendFilterMetrics(uniqueMetrics, nodeInfo, "ShortKeyFilter");
+        appendFilterMetrics(uniqueMetrics, nodeInfo, "GinFilter");
+        appendFilterMetrics(uniqueMetrics, nodeInfo, "VectorIndexFilter");
+        appendFilterMetrics(uniqueMetrics, nodeInfo, "DelVecFilter");
+        appendFilterMetrics(uniqueMetrics, nodeInfo, "RuntimeFilter");
+        popIndent(); // ScanFilters indent
+
+        appendDetailLine("RowProcessing:");
+        pushIndent(GraphElement.LEAF_METRIC_INDENT);
+        appendMetric(uniqueMetrics, nodeInfo, "RawRowsRead");
+        appendMetric(uniqueMetrics, nodeInfo, "RowsRead");
+        appendMetric(uniqueMetrics, nodeInfo, "RemainingRowsAfterShortKeyFilter");
+        appendMetric(uniqueMetrics, nodeInfo, "DictDecode");
+        appendMetric(uniqueMetrics, nodeInfo, "DictDecodeCount");
+        appendMetric(uniqueMetrics, nodeInfo, "ChunkCopy");
+        popIndent(); // RowProcessing indent
+
+        // I/O Metrics
+        appendDetailLine("IOMetrics:");
+        pushIndent(GraphElement.LEAF_METRIC_INDENT);
+        appendMetric(uniqueMetrics, nodeInfo, "IOTime");
+        appendMetric(uniqueMetrics, nodeInfo, "BytesRead");
+        appendMetric(uniqueMetrics, nodeInfo, "CompressedBytesRead");
+        appendMetric(uniqueMetrics, nodeInfo, "UncompressedBytesRead");
+        appendMetric(uniqueMetrics, nodeInfo, "ReadPagesNum");
+        appendMetric(uniqueMetrics, nodeInfo, "CachedPagesNum");
+        appendMetric(uniqueMetrics, nodeInfo, "BlockFetch");
+        appendMetric(uniqueMetrics, nodeInfo, "BlockFetchCount");
+        appendMetric(uniqueMetrics, nodeInfo, "BlockSeek");
+        appendMetric(uniqueMetrics, nodeInfo, "BlockSeekCount");
+        appendMetric(uniqueMetrics, nodeInfo, "DecompressTime");
+        popIndent(); // IOMetrics indent
+
+        // Segment Processing
+        appendDetailLine("SegmentProcessing:");
+        pushIndent(GraphElement.LEAF_METRIC_INDENT);
+        appendMetric(uniqueMetrics, nodeInfo, "TabletCount");
+        appendMetric(uniqueMetrics, nodeInfo, "SegmentsReadCount");
+        appendMetric(uniqueMetrics, nodeInfo, "RowsetsReadCount");
+        appendMetric(uniqueMetrics, nodeInfo, "TotalColumnsDataPageCount");
+        appendMetric(uniqueMetrics, nodeInfo, "ColumnIteratorInit");
+        appendMetric(uniqueMetrics, nodeInfo, "BitmapIndexIteratorInit");
+        appendMetric(uniqueMetrics, nodeInfo, "FlatJsonInit");
+        appendMetric(uniqueMetrics, nodeInfo, "FlatJsonMerge");
+        popIndent(); // SegmentProcessing indent
+
+        // Task Management
+        appendDetailLine("TaskManagement:");
+        pushIndent(GraphElement.LEAF_METRIC_INDENT);
+        appendMetric(uniqueMetrics, nodeInfo, "IOTaskExecTime");
+        appendMetric(uniqueMetrics, nodeInfo, "IOTaskWaitTime");
+        appendMetric(uniqueMetrics, nodeInfo, "SubmitTaskCount");
+        appendMetric(uniqueMetrics, nodeInfo, "SubmitTaskTime");
+        appendMetric(uniqueMetrics, nodeInfo, "PrepareChunkSourceTime");
+        appendMetric(uniqueMetrics, nodeInfo, "MorselsCount");
+        appendMetric(uniqueMetrics, nodeInfo, "PeakIOTasks");
+        appendMetric(uniqueMetrics, nodeInfo, "PeakScanTaskQueueSize");
+        popIndent(); // TaskManagement indent
+
+        // Memory Usage
+        appendDetailLine("MemoryUsage:");
+        pushIndent(GraphElement.LEAF_METRIC_INDENT);
+        appendMetric(uniqueMetrics, nodeInfo, "PeakChunkBufferMemoryUsage");
+        appendMetric(uniqueMetrics, nodeInfo, "PeakChunkBufferSize");
+        appendMetric(uniqueMetrics, nodeInfo, "ChunkBufferCapacity");
+        appendMetric(uniqueMetrics, nodeInfo, "DefaultChunkBufferCapacity");
+        popIndent(); // MemoryUsage indent
+
+        // Other Metrics
+        appendDetailLine("OtherMetrics:");
+        pushIndent(GraphElement.LEAF_METRIC_INDENT);
+        appendMetric(uniqueMetrics, nodeInfo, "CreateSegmentIter");
+        appendMetric(uniqueMetrics, nodeInfo, "GetDelVec");
+        appendMetric(uniqueMetrics, nodeInfo, "GetDeltaColumnGroup");
+        appendMetric(uniqueMetrics, nodeInfo, "GetRowsets");
+        appendMetric(uniqueMetrics, nodeInfo, "ReadPKIndex");
+        appendMetric(uniqueMetrics, nodeInfo, "GetVectorRowRangesTime");
+        appendMetric(uniqueMetrics, nodeInfo, "ProcessVectorDistanceAndIdTime");
+        appendMetric(uniqueMetrics, nodeInfo, "VectorSearchTime");
+        appendMetric(uniqueMetrics, nodeInfo, "PushdownAccessPaths");
+        appendMetric(uniqueMetrics, nodeInfo, "PushdownPredicates");
+        popIndent(); // OtherMetrics indent
+
+        popIndent(); // main indent
+    }
+
+    private void appendFilterMetrics(RuntimeProfile uniqueMetrics, NodeInfo nodeInfo, String filterName) {
+        Counter timeCounter = uniqueMetrics.getCounter(filterName);
+        Counter rowsCounter = uniqueMetrics.getCounter(filterName + "Rows");
+
+        if (timeCounter == null && rowsCounter == null) {
+            return;
+        }
+
+        List<Object> items = Lists.newArrayList();
+        items.add(filterName);
+        items.add(": ");
+
+        if (rowsCounter != null) {
+            items.add("Rows: ");
+            items.add(rowsCounter);
+            if (timeCounter != null) {
+                items.add(", ");
+            }
+        }
+
+        if (timeCounter != null) {
+            items.add("Time: ");
+            items.add(timeCounter);
+
+            Counter minCounter = uniqueMetrics.getCounter(RuntimeProfile.MERGED_INFO_PREFIX_MIN + filterName);
+            Counter maxCounter = uniqueMetrics.getCounter(RuntimeProfile.MERGED_INFO_PREFIX_MAX + filterName);
+            if (minCounter != null || maxCounter != null) {
+                items.add(" [");
+                items.add("min=");
+                items.add(minCounter);
+                items.add(", max=");
+                items.add(maxCounter);
+                items.add("]");
+            }
+        }
+
+        appendDetailLine(items.toArray());
+    }
+
+    private void appendMetric(RuntimeProfile uniqueMetrics, NodeInfo nodeInfo, String name) {
+        Counter counter = uniqueMetrics.getCounter(name);
+        if (counter == null) {
+            return;
+        }
+
+        Counter minCounter = uniqueMetrics.getCounter(RuntimeProfile.MERGED_INFO_PREFIX_MIN + name);
+        Counter maxCounter = uniqueMetrics.getCounter(RuntimeProfile.MERGED_INFO_PREFIX_MAX + name);
+        boolean needHighlight = colorExplainOutput && nodeInfo.isTimeConsumingMetric(uniqueMetrics, name);
+
+        List<Object> items = Lists.newArrayList();
+        if (needHighlight) {
+            items.add(getBackGround());
+        }
+        items.add(name);
+        items.add(": ");
+        items.add(counter);
+        if (minCounter != null || maxCounter != null) {
+            items.add(" [");
+            items.add("min=");
+            items.add(minCounter);
+            items.add(", max=");
+            items.add(maxCounter);
+            items.add("]");
+        }
+        if (needHighlight) {
+            items.add(ANSI_RESET);
+        }
+        appendDetailLine(items.toArray());
     }
 
     private void appendDetailMetric(NodeInfo nodeInfo, RuntimeProfile uniqueMetrics, String name,
