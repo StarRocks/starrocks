@@ -262,10 +262,11 @@ TEST_F(LakePersistentIndexTest, test_compaction_strategy) {
         auto* sstable_pb = sstable_meta.add_sstables();
         sstable_pb->set_filesize(1000000);
         sstable_pb->set_filename("aaa.sst");
+        sstable_pb->set_max_rss_rowid(0);
         for (int i = 0; i < N; i++) {
             sstable_pb = sstable_meta.add_sstables();
             sstable_pb->set_filesize(sub_size);
-            sstable_pb->set_max_rss_rowid(i);
+            sstable_pb->set_max_rss_rowid(i + 1);
         }
         LakePersistentIndex::pick_sstables_for_merge(sstable_meta, &sstables, &merge_base_level);
         if (is_base) {
