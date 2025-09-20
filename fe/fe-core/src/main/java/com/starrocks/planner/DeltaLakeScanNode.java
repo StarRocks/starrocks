@@ -131,7 +131,12 @@ public class DeltaLakeScanNode extends ScanNode {
     protected String getNodeExplainString(String prefix, TExplainLevel detailLevel) {
         StringBuilder output = new StringBuilder();
 
-        output.append(prefix).append("TABLE: ").append(deltaLakeTable.getName()).append("\n");
+        output.append(prefix)
+            .append("TABLE: ")
+            .append(deltaLakeTable.getCatalogDBName())
+            .append(".")
+            .append(deltaLakeTable.getName())
+            .append("\n");
 
         if (null != sortColumn) {
             output.append(prefix).append("SORT COLUMN: ").append(sortColumn).append("\n");
