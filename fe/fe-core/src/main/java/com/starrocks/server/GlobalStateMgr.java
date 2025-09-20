@@ -1711,6 +1711,11 @@ public class GlobalStateMgr {
         for (Database db : localMetastore.getIdToDb().values()) {
             for (Table table : db.getTables()) {
                 try {
+                    // Skip MaterializedView, which are processed in processMvRelatedMeta()
+                    if (table.isMaterializedView()) {
+                        continue;
+                    }
+
                     table.onReload();
 
                     if (table.isTemporaryTable()) {
