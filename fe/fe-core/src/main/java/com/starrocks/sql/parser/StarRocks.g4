@@ -1855,11 +1855,11 @@ showCreateSecurityIntegrationStatement
 // ------------------------------------------- Group Provider Statement ------------------------------------------
 
 createGroupProviderStatement
-    : CREATE GROUP PROVIDER identifier properties
+    : CREATE GROUP PROVIDER (IF NOT EXISTS)? identifier properties
     ;
 
 dropGroupProviderStatement
-    : DROP GROUP PROVIDER identifier
+    : DROP GROUP PROVIDER (IF EXISTS)? identifier
     ;
 
 showGroupProvidersStatement
