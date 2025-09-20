@@ -89,4 +89,16 @@ struct LakeIOOptions {
     std::shared_ptr<starrocks::lake::LocationProvider> location_provider;
 };
 
+class TmpFileDirs {
+public:
+    explicit TmpFileDirs(const std::vector<StorePath>& store_paths);
+
+    Status init();
+    std::string get_tmp_file_dir();
+
+private:
+    std::vector<std::string> _tmp_file_dirs;
+    std::atomic_size_t _next_index{0}; // use for round-robin
+};
+
 } // namespace starrocks

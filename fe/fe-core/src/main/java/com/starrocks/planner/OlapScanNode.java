@@ -1044,6 +1044,9 @@ public class OlapScanNode extends ScanNode {
             if (ConnectContext.get() != null) {
                 msg.lake_scan_node.setEnable_column_expr_predicate(
                         ConnectContext.get().getSessionVariable().isEnableColumnExprPredicate());
+                msg.lake_scan_node.setEnable_prune_column_after_index_filter(
+                        ConnectContext.get().getSessionVariable().isEnablePruneColumnAfterIndexFilter());
+                msg.lake_scan_node.setEnable_gin_filter(ConnectContext.get().getSessionVariable().isEnableGinFilter());
             }
             msg.lake_scan_node.setDict_string_id_to_int_ids(dictStringIdToIntIds);
 
