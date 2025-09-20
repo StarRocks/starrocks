@@ -56,6 +56,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
 import javax.validation.constraints.NotNull;
 
@@ -273,6 +274,7 @@ public abstract class LakeTableAlterMetaJobBase extends AlterJobV2 {
             // 2. the table is enable `file_bundling` and this task is not change `file_bundling`
             //    to false.
             boolean useAggregatePublish = enableFileBundling() || (isFileBundling && !disableFileBundling());
+            List<CompletableFuture<Boolean>> futureList = new ArrayList<>();
             for (long partitionId : physicalPartitionIndexMap.rowKeySet()) {
                 long commitVersion = commitVersionMap.get(partitionId);
                 Map<Long, MaterializedIndex> dirtyIndexMap = physicalPartitionIndexMap.row(partitionId);
@@ -281,13 +283,47 @@ public abstract class LakeTableAlterMetaJobBase extends AlterJobV2 {
                     if (!useAggregatePublish) {
                         Utils.publishVersion(index.getTablets(), txnInfo, commitVersion - 1, commitVersion,
                                 computeResource, false);
+                        CompletableFuture<Boolean> future = CompletableFuture.supplyAsync(() -> {
+                            try {
+                                Utils.publishVersion(index.getTablets(), txnInfo, commitVersion - 1, commitVersion,
+                                        computeResource, false);
+                            } catch (Exception e) {
+                                LOG.error("Failed to publish version for index {} in " +
+                                                "partition {} during lake table alter job {}, txnId={}, commitVersion={}", 
+                                        index.getId(), partitionId, jobId, watershedTxnId, commitVersion, e);
+                                return false;
+                            }
+                            return true;
+                        }, GlobalStateMgr.getCurrentState().getPublishVersionDaemon().getLakeTaskExecutor()).exceptionally(ex -> {
+                            LOG.error("Failed to publish version batch for lake table alter job {}, txnId={}, " +
+                                    "partitionId={}, indexId={}", jobId, watershedTxnId, partitionId, index.getId(), ex);
+                            return false;
+                        });
+                        futureList.add(future);
                     } else {
                         tablets.addAll(index.getTablets());
                     }
                 }
+
                 if (useAggregatePublish) {
                     Utils.aggregatePublishVersion(tablets, Lists.newArrayList(txnInfo), commitVersion - 1, commitVersion, 
                                 null, null, computeResource, null);
+                }
+            }
+
+            if (!useAggregatePublish) {
+                CompletableFuture<Boolean> publishFuture = CompletableFuture.allOf(
+                                futureList.toArray(new CompletableFuture[0])).
+                        thenApply(v -> futureList.stream().allMatch(CompletableFuture::join));
+                try {
+                    if (!publishFuture.get()) {
+                        LOG.error("Fail to alter publish txn batch");
+                        return false;
+                    }
+                } catch (InterruptedException e) {
+                    LOG.warn("InterruptedException during publish version: ", e);
+                    Thread.currentThread().interrupt();
+                    return false;
                 }
             }
             return true;
