@@ -41,7 +41,6 @@ CSVFileWriter::CSVFileWriter(std::string location, std::shared_ptr<csv::OutputSt
 CSVFileWriter::~CSVFileWriter() = default;
 
 Status CSVFileWriter::init() {
-
     RETURN_IF_ERROR(ColumnEvaluator::init(_column_evaluators));
     _column_converters.reserve(_types.size());
     for (auto& type : _types) {
@@ -162,18 +161,18 @@ StatusOr<WriterAndStream> CSVFileWriterFactory::create(const std::string& path) 
     // Create appropriate output stream based on compression type
     std::shared_ptr<csv::OutputStream> csv_output_stream;
     if (_compression_type == TCompressionType::GZIP) {
-        csv_output_stream = std::make_shared<csv::CompressedAsyncOutputStreamFile>(
-                async_output_stream.get(), _compression_type, 1024 * 1024);
+        csv_output_stream = std::make_shared<csv::CompressedAsyncOutputStreamFile>(async_output_stream.get(),
+                                                                                   _compression_type, 1024 * 1024);
     } else if (_compression_type == TCompressionType::NO_COMPRESSION) {
         csv_output_stream = std::make_shared<csv::AsyncOutputStreamFile>(async_output_stream.get(), 1024 * 1024);
     } else {
         return Status::NotSupported(fmt::format("Compression type {} is not supported for CSV format",
-                                               static_cast<int>(_compression_type)));
+                                                static_cast<int>(_compression_type)));
     }
 
-    auto writer =
-            std::make_unique<CSVFileWriter>(final_path, csv_output_stream, _column_names, types, std::move(column_evaluators),
-                                            _compression_type, _parsed_options, rollback_action);
+    auto writer = std::make_unique<CSVFileWriter>(final_path, csv_output_stream, _column_names, types,
+                                                  std::move(column_evaluators), _compression_type, _parsed_options,
+                                                  rollback_action);
     return WriterAndStream{
             .writer = std::move(writer),
             .stream = std::move(async_output_stream),

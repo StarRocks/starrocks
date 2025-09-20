@@ -41,7 +41,7 @@ Status CompressedAsyncOutputStreamFile::_sync(const char* data, size_t size) {
         return _compress_gzip(data, size);
     default:
         return Status::NotSupported(strings::Substitute("Compression type $0 is not supported for CSV format",
-                                                       static_cast<int>(_compression_type)));
+                                                        static_cast<int>(_compression_type)));
     }
 }
 
