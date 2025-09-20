@@ -7000,14 +7000,14 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                 propertyMap.put(property.getKey(), property.getValue());
             }
         }
-        return new CreateGroupProviderStmt(name, propertyMap, createPos(context));
+        return new CreateGroupProviderStmt(name, propertyMap, context.IF() != null, createPos(context));
     }
 
     @Override
     public ParseNode visitDropGroupProviderStatement(
             StarRocksParser.DropGroupProviderStatementContext context) {
         String name = ((Identifier) visit(context.identifier())).getValue();
-        return new DropGroupProviderStmt(name, createPos(context));
+        return new DropGroupProviderStmt(name, context.IF() != null, createPos(context));
     }
 
     @Override
