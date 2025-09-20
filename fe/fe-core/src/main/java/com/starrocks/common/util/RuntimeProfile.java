@@ -401,6 +401,25 @@ public class RuntimeProfile {
         ProfileFormatter formater = new DefaultProfileFormatter();
         return formater.format(this);
     }
+    
+    // New tiered formatting methods for improved readability
+    public String toStringTiered(TieredProfileFormatter.MetricTier maxTier, boolean showZeroValues, 
+                                 boolean showRuleOfThumb, boolean groupMetrics) {
+        ProfileFormatter formatter = new TieredProfileFormatter(maxTier, showZeroValues, showRuleOfThumb, groupMetrics);
+        return formatter.format(this);
+    }
+    
+    public String toStringBasic() {
+        return toStringTiered(TieredProfileFormatter.MetricTier.BASIC, false, true, true);
+    }
+    
+    public String toStringAdvanced() {
+        return toStringTiered(TieredProfileFormatter.MetricTier.ADVANCED, false, true, true);
+    }
+    
+    public String toStringTrace() {
+        return toStringTiered(TieredProfileFormatter.MetricTier.TRACE, true, false, true);
+    }
 
     public static String printCounter(Counter counter) {
         if (counter == null) {
