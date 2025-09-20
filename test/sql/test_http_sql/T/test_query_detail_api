@@ -1,0 +1,36 @@
+-- name: test_query_detail_api @sequential
+use ${db[0]};
+CREATE TABLE `query_detail_test_table` (
+    `id` bigint,
+    `name` varchar(100),
+    `value` double,
+    `created_time` datetime
+) 
+DUPLICATE KEY(`id`)
+COMMENT "Test table for query detail API"
+PROPERTIES (
+    "replication_num" = "1"
+);
+INSERT INTO query_detail_test_table VALUES 
+(1, 'test1', 10.5, '2024-01-01 10:00:00'),
+(2, 'test2', 20.5, '2024-01-02 11:00:00'),
+(3, 'test3', 30.5, '2024-01-03 12:00:00'),
+(4, 'test4', 40.5, '2024-01-04 13:00:00'),
+(5, 'test5', 50.5, '2024-01-05 14:00:00');
+
+-- normal query
+select sum(id) from query_detail_test_table;
+shell: current_time=$(date +%s); curl -X GET '${url}/api/query_detail?event_time='$((current_time - 1)) -u 'root:' | jq '.[-1] | {scanRows, scanBytes, returnRows, state}'
+shell: current_time=$(date +%s); curl -X GET '${url}/api/query_detail?event_time='$((current_time - 1)) -u 'root:' | jq '.[-1] | (.cpuCostNs > 0 and .memCostBytes > 0)'
+
+-- error query
+SELECT * FROM non_existent_table;
+shell: current_time=$(date +%s); curl -X GET '${url}/api/query_detail?event_time='$((current_time - 1)) -u 'root:' | jq '.[-1] | {scanRows, scanBytes, returnRows, state}'
+shell: current_time=$(date +%s); curl -X GET '${url}/api/query_detail?event_time='$((current_time - 1)) -u 'root:' | jq '.[-1] | (.cpuCostNs == 0 and .memCostBytes == 0)'
+
+-- timeout query
+select /*+set_var(query_timeout=1)*/ sum(id), sleep(5) from query_detail_test_table;
+shell: current_time=$(date +%s); curl -X GET '${url}/api/query_detail?event_time='$((current_time - 1)) -u 'root:' | jq '.[-1] | {scanRows, scanBytes, returnRows, state}'
+shell: current_time=$(date +%s); curl -X GET '${url}/api/query_detail?event_time='$((current_time - 1)) -u 'root:' | jq '.[-1] | (.cpuCostNs == 0 and .memCostBytes == 0)'
+
+DROP TABLE query_detail_test_table;
