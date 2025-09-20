@@ -127,110 +127,23 @@ protected:
 private:
     struct ScanContext {
         ScanContext() = default;
-
         ~ScanContext() = default;
 
+        // Release all chunk resources to free memory
+        void close();
+        // Seek all column iterators to the specified ordinal position
+        Status seek_columns(ordinal_t pos);
+        // Read column data from the specified range into the chunk
+        // Handles column pruning and delete state tracking
+        Status read_columns(Chunk* chunk, const SparseRange<>& range);
+        // Calculate total memory usage of all chunks in this context
+        int64_t memory_usage() const;
+        // Get the number of column iterators in this context
+        size_t column_size();
+        // Generate a JSON string representation of the context state for debugging
+        std::string to_string() const;
+
         OlapReaderStatistics* stats = nullptr;
-
-        void close() {
-            _read_chunk.reset();
-            _dict_chunk.reset();
-            _final_chunk.reset();
-            _adapt_global_dict_chunk.reset();
-        }
-
-        Status seek_columns(ordinal_t pos) {
-            for (auto iter : _column_iterators) {
-                RETURN_IF_ERROR(iter->seek_to_ordinal(pos));
-            }
-            return Status::OK();
-        }
-
-        Status read_columns(Chunk* chunk, const SparseRange<>& range) {
-            bool may_has_del_row = chunk->delete_state() != DEL_NOT_SATISFIED;
-            std::vector<size_t> pruned_cols;
-            size_t pruned_col_size = 0;
-            size_t num_rows = chunk->num_rows();
-            for (size_t i = 0; i < _column_iterators.size(); i++) {
-                ColumnPtr& col = chunk->get_column_by_index(i);
-                if (_prune_column_after_index_filter && _prune_cols.count(i)) {
-                    pruned_cols.push_back(i);
-                    continue;
-                }
-                RETURN_IF_ERROR(_column_iterators[i]->next_batch(range, col.get()));
-                if (pruned_col_size == 0) {
-                    pruned_col_size = col->size();
-                }
-                DCHECK_EQ(pruned_col_size, col->size());
-                DCHECK_EQ(num_rows + range.span_size(), col->size());
-                may_has_del_row |= (col->delete_state() != DEL_NOT_SATISFIED);
-            }
-            for (size_t i : pruned_cols) {
-                ColumnPtr& col = chunk->get_column_by_index(i);
-                // make sure each pruned column has the same size as the unpruneable one.
-                col->resize(pruned_col_size);
-            }
-            chunk->set_delete_state(may_has_del_row ? DEL_PARTIAL_SATISFIED : DEL_NOT_SATISFIED);
-            return Status::OK();
-        }
-
-        int64_t memory_usage() const {
-            int64_t usage = 0;
-            usage += (_read_chunk != nullptr) ? _read_chunk->memory_usage() : 0;
-            usage += (_dict_chunk.get() != _read_chunk.get()) ? _dict_chunk->memory_usage() : 0;
-            usage += (_final_chunk.get() != _dict_chunk.get()) ? _final_chunk->memory_usage() : 0;
-            usage += (_adapt_global_dict_chunk.get() != _final_chunk.get()) ? _adapt_global_dict_chunk->memory_usage()
-                                                                            : 0;
-            return usage;
-        }
-
-        size_t column_size() { return _column_iterators.size(); }
-
-        std::string to_string() const {
-            std::ostringstream oss;
-            oss << "{";
-            oss << "\"_read_schema\": " << _read_schema.to_string() << ",";
-            oss << "\"_dict_decode_schema\": " << _dict_decode_schema.to_string() << ",";
-            oss << "\"_is_dict_column\": [";
-            for (size_t i = 0; i < _is_dict_column.size(); ++i) {
-                oss << (_is_dict_column[i] ? "true" : "false");
-                if (i + 1 < _is_dict_column.size()) oss << ", ";
-            }
-            oss << "],";
-            oss << "\"_column_iterators\": " << _column_iterators.size() << ",";
-            oss << "\"_subfield_columns\": [";
-            for (size_t i = 0; i < _subfield_columns.size(); ++i) {
-                oss << _subfield_columns[i];
-                if (i + 1 < _subfield_columns.size()) oss << ", ";
-            }
-            oss << "],";
-            oss << "\"_subfield_iterators\": " << _subfield_iterators.size() << ",";
-            oss << "\"_skip_dict_decode_indexes\": [";
-            for (size_t i = 0; i < _skip_dict_decode_indexes.size(); ++i) {
-                oss << (_skip_dict_decode_indexes[i] ? "true" : "false");
-                if (i + 1 < _skip_dict_decode_indexes.size()) oss << ", ";
-            }
-            oss << "],";
-            oss << "\"_read_index_map\": [";
-            for (size_t i = 0; i < _read_index_map.size(); ++i) {
-                oss << _read_index_map[i];
-                if (i + 1 < _read_index_map.size()) oss << ", ";
-            }
-            oss << "],";
-            oss << "\"_has_dict_column\": " << (_has_dict_column ? "true" : "false") << ",";
-            oss << "\"_late_materialize\": " << (_late_materialize ? "true" : "false") << ",";
-            oss << "\"_has_force_dict_encode\": " << (_has_force_dict_encode ? "true" : "false") << ",";
-            oss << "\"_prune_cols\": [";
-            size_t prune_count = 0;
-            for (auto idx : _prune_cols) {
-                if (prune_count++ > 0) oss << ", ";
-                oss << idx;
-            }
-            oss << "],";
-            oss << "\"_prune_column_after_index_filter\": " << (_prune_column_after_index_filter ? "true" : "false");
-            oss << "}";
-            return oss.str();
-        }
 
         Schema _read_schema;
         Schema _dict_decode_schema;
@@ -460,6 +373,109 @@ private:
     Status _init_reader_from_file(const std::string& index_path, const std::shared_ptr<TabletIndex>& tablet_index_meta,
                                   const std::map<std::string, std::string>& query_params);
 };
+
+// ScanContext method implementations
+
+void SegmentIterator::ScanContext::close() {
+    _read_chunk.reset();
+    _dict_chunk.reset();
+    _final_chunk.reset();
+    _adapt_global_dict_chunk.reset();
+}
+
+Status SegmentIterator::ScanContext::seek_columns(ordinal_t pos) {
+    for (auto iter : _column_iterators) {
+        RETURN_IF_ERROR(iter->seek_to_ordinal(pos));
+    }
+    return Status::OK();
+}
+
+Status SegmentIterator::ScanContext::read_columns(Chunk* chunk, const SparseRange<>& range) {
+    bool may_has_del_row = chunk->delete_state() != DEL_NOT_SATISFIED;
+    std::vector<size_t> pruned_cols;
+    size_t pruned_col_size = 0;
+    size_t num_rows = chunk->num_rows();
+    for (size_t i = 0; i < _column_iterators.size(); i++) {
+        ColumnPtr& col = chunk->get_column_by_index(i);
+        if (_prune_column_after_index_filter && _prune_cols.count(i)) {
+            pruned_cols.push_back(i);
+            continue;
+        }
+        RETURN_IF_ERROR(_column_iterators[i]->next_batch(range, col.get()));
+        if (pruned_col_size == 0) {
+            pruned_col_size = col->size();
+        }
+        DCHECK_EQ(pruned_col_size, col->size());
+        DCHECK_EQ(num_rows + range.span_size(), col->size());
+        may_has_del_row |= (col->delete_state() != DEL_NOT_SATISFIED);
+    }
+    for (size_t i : pruned_cols) {
+        ColumnPtr& col = chunk->get_column_by_index(i);
+        // make sure each pruned column has the same size as the unpruneable one.
+        col->resize(pruned_col_size);
+    }
+    chunk->set_delete_state(may_has_del_row ? DEL_PARTIAL_SATISFIED : DEL_NOT_SATISFIED);
+    return Status::OK();
+}
+
+int64_t SegmentIterator::ScanContext::memory_usage() const {
+    int64_t usage = 0;
+    usage += (_read_chunk != nullptr) ? _read_chunk->memory_usage() : 0;
+    usage += (_dict_chunk.get() != _read_chunk.get()) ? _dict_chunk->memory_usage() : 0;
+    usage += (_final_chunk.get() != _dict_chunk.get()) ? _final_chunk->memory_usage() : 0;
+    usage += (_adapt_global_dict_chunk.get() != _final_chunk.get()) ? _adapt_global_dict_chunk->memory_usage() : 0;
+    return usage;
+}
+
+size_t SegmentIterator::ScanContext::column_size() {
+    return _column_iterators.size();
+}
+
+std::string SegmentIterator::ScanContext::to_string() const {
+    std::ostringstream oss;
+    oss << "{";
+    oss << "\"_read_schema\": " << _read_schema.to_string() << ",";
+    oss << "\"_dict_decode_schema\": " << _dict_decode_schema.to_string() << ",";
+    oss << "\"_is_dict_column\": [";
+    for (size_t i = 0; i < _is_dict_column.size(); ++i) {
+        oss << (_is_dict_column[i] ? "true" : "false");
+        if (i + 1 < _is_dict_column.size()) oss << ", ";
+    }
+    oss << "],";
+    oss << "\"_column_iterators\": " << _column_iterators.size() << ",";
+    oss << "\"_subfield_columns\": [";
+    for (size_t i = 0; i < _subfield_columns.size(); ++i) {
+        oss << _subfield_columns[i];
+        if (i + 1 < _subfield_columns.size()) oss << ", ";
+    }
+    oss << "],";
+    oss << "\"_subfield_iterators\": " << _subfield_iterators.size() << ",";
+    oss << "\"_skip_dict_decode_indexes\": [";
+    for (size_t i = 0; i < _skip_dict_decode_indexes.size(); ++i) {
+        oss << (_skip_dict_decode_indexes[i] ? "true" : "false");
+        if (i + 1 < _skip_dict_decode_indexes.size()) oss << ", ";
+    }
+    oss << "],";
+    oss << "\"_read_index_map\": [";
+    for (size_t i = 0; i < _read_index_map.size(); ++i) {
+        oss << _read_index_map[i];
+        if (i + 1 < _read_index_map.size()) oss << ", ";
+    }
+    oss << "],";
+    oss << "\"_has_dict_column\": " << (_has_dict_column ? "true" : "false") << ",";
+    oss << "\"_late_materialize\": " << (_late_materialize ? "true" : "false") << ",";
+    oss << "\"_has_force_dict_encode\": " << (_has_force_dict_encode ? "true" : "false") << ",";
+    oss << "\"_prune_cols\": [";
+    size_t prune_count = 0;
+    for (auto idx : _prune_cols) {
+        if (prune_count++ > 0) oss << ", ";
+        oss << idx;
+    }
+    oss << "],";
+    oss << "\"_prune_column_after_index_filter\": " << (_prune_column_after_index_filter ? "true" : "false");
+    oss << "}";
+    return oss.str();
+}
 
 SegmentIterator::SegmentIterator(std::shared_ptr<Segment> segment, Schema schema, SegmentReadOptions options)
         : ChunkIterator(std::move(schema), options.chunk_size),
