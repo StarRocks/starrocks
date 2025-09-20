@@ -2353,6 +2353,13 @@ public class OlapTable extends Table {
         this.idToColumn = newIdToColumn;
     }
 
+    public List<Column> getVisibleColumnsWithoutGeneratedColumn() {
+        List<Column> schema = Lists.newArrayList(getBaseSchemaWithoutGeneratedColumn());
+        // remove hidden columns
+        schema.removeIf(Column::isHiddenColumn);
+        return schema;
+    }
+
     public List<Column> getBaseSchemaWithoutGeneratedColumn() {
         if (!hasGeneratedColumn()) {
             return getSchemaByIndexId(baseIndexId);
