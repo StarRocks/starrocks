@@ -471,7 +471,7 @@ public class Column implements Writable, GsonPreProcessable, GsonPostProcessable
             throw new DdlException("Dest column name is empty");
         }
 
-        if (!ColumnType.isSchemaChangeAllowed(type, other.type)) {
+        if (!SchemaChangeTypeCompatibility.isSchemaChangeAllowed(type, other.type)) {
             throw new DdlException("Can not change " + getType() + " to " + other.getType());
         }
 

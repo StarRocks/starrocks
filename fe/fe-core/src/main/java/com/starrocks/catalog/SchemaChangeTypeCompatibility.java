@@ -34,7 +34,7 @@
 
 package com.starrocks.catalog;
 
-public abstract class ColumnType {
+public class SchemaChangeTypeCompatibility {
     private static Boolean[][] schemaChangeMatrix;
 
     static {
@@ -150,11 +150,98 @@ public abstract class ColumnType {
         return false;
     }
 
-    static boolean isSchemaChangeAllowed(Type lhs, Type rhs) {
+    public static boolean isSchemaChangeAllowed(Type lhs, Type rhs) {
         if (lhs.isDecimalV3() || rhs.isDecimalV3()) {
             return isSchemaChangeAllowedInvolvingDecimalV3(lhs, rhs);
         }
         return schemaChangeMatrix[lhs.getPrimitiveType().ordinal()][rhs.getPrimitiveType().ordinal()];
+    }
+
+    /**
+     * Matrix defining allowed type conversions for ZoneMap index reuse during schema change.
+     * ZoneMap indexes store min/max values and nullability information (has_null, has_not_null) for data blocks.
+     * For a ZoneMap index to be reusable after a type conversion, the following conditions must be met:
+     * 1. The type conversion must be monotonically non-decreasing, ensuring that the original min/max values remain valid
+     *    min/max boundaries after conversion.
+     * 2. The type conversion must not change non-null values to null, ensuring that has_null/has_not_null metadata
+     *    remains accurate.
+     *
+     * For example, converting a `STRING` column to an `INT` column can not reuse zonemap index:
+     * - Min/Max change: For values like "16", "423", "5", "97" in string format, min is "16" and max is "97".
+     *   After conversion to integers (5, 16, 97, 423), the min becomes 5 and max becomes 423. The original zonemap
+     *   (min="16", max="97") would incorrectly prune valid data (e.g., a query for `WHERE col = 5`).
+     * - Nullability change: If the string column contains values like "abc", converting it to `INT` would result in `NULL`.
+     *   If the original column had `has_null=false`, this conversion would make the zonemap's nullability metadata incorrect.
+     */
+    private static final Boolean[][] ZONEMAP_REUSE_COMPATIBILITY_MATRIX;
+
+    static {
+        ZONEMAP_REUSE_COMPATIBILITY_MATRIX = new Boolean[PrimitiveType.values().length][PrimitiveType.values().length];
+        for (int i = 0; i < ZONEMAP_REUSE_COMPATIBILITY_MATRIX.length; i++) {
+            for (int j = 0; j < ZONEMAP_REUSE_COMPATIBILITY_MATRIX[i].length; j++) {
+                ZONEMAP_REUSE_COMPATIBILITY_MATRIX[i][j] = (i > 0 && i == j); // 0 is PrimitiveType.INVALID_TYPE
+            }
+        }
+
+        // Integer family
+        ZONEMAP_REUSE_COMPATIBILITY_MATRIX[PrimitiveType.TINYINT.ordinal()][PrimitiveType.SMALLINT.ordinal()] = true;
+        ZONEMAP_REUSE_COMPATIBILITY_MATRIX[PrimitiveType.TINYINT.ordinal()][PrimitiveType.INT.ordinal()] = true;
+        ZONEMAP_REUSE_COMPATIBILITY_MATRIX[PrimitiveType.TINYINT.ordinal()][PrimitiveType.BIGINT.ordinal()] = true;
+        ZONEMAP_REUSE_COMPATIBILITY_MATRIX[PrimitiveType.TINYINT.ordinal()][PrimitiveType.LARGEINT.ordinal()] = true;
+        ZONEMAP_REUSE_COMPATIBILITY_MATRIX[PrimitiveType.TINYINT.ordinal()][PrimitiveType.DOUBLE.ordinal()] = true;
+
+        ZONEMAP_REUSE_COMPATIBILITY_MATRIX[PrimitiveType.SMALLINT.ordinal()][PrimitiveType.INT.ordinal()] = true;
+        ZONEMAP_REUSE_COMPATIBILITY_MATRIX[PrimitiveType.SMALLINT.ordinal()][PrimitiveType.BIGINT.ordinal()] = true;
+        ZONEMAP_REUSE_COMPATIBILITY_MATRIX[PrimitiveType.SMALLINT.ordinal()][PrimitiveType.LARGEINT.ordinal()] = true;
+        ZONEMAP_REUSE_COMPATIBILITY_MATRIX[PrimitiveType.SMALLINT.ordinal()][PrimitiveType.DOUBLE.ordinal()] = true;
+
+        ZONEMAP_REUSE_COMPATIBILITY_MATRIX[PrimitiveType.INT.ordinal()][PrimitiveType.BIGINT.ordinal()] = true;
+        ZONEMAP_REUSE_COMPATIBILITY_MATRIX[PrimitiveType.INT.ordinal()][PrimitiveType.LARGEINT.ordinal()] = true;
+        ZONEMAP_REUSE_COMPATIBILITY_MATRIX[PrimitiveType.INT.ordinal()][PrimitiveType.DOUBLE.ordinal()] = true;
+
+        ZONEMAP_REUSE_COMPATIBILITY_MATRIX[PrimitiveType.BIGINT.ordinal()][PrimitiveType.LARGEINT.ordinal()] = true;
+        ZONEMAP_REUSE_COMPATIBILITY_MATRIX[PrimitiveType.BIGINT.ordinal()][PrimitiveType.DOUBLE.ordinal()] = true;
+
+        // Floating-point family
+        ZONEMAP_REUSE_COMPATIBILITY_MATRIX[PrimitiveType.FLOAT.ordinal()][PrimitiveType.DOUBLE.ordinal()] = true;
+
+        // Decimal family
+        ZONEMAP_REUSE_COMPATIBILITY_MATRIX[PrimitiveType.DECIMALV2.ordinal()][PrimitiveType.DECIMAL128.ordinal()] = true;
+
+        ZONEMAP_REUSE_COMPATIBILITY_MATRIX[PrimitiveType.DECIMAL32.ordinal()][PrimitiveType.DECIMAL64.ordinal()] = true;
+        ZONEMAP_REUSE_COMPATIBILITY_MATRIX[PrimitiveType.DECIMAL32.ordinal()][PrimitiveType.DECIMAL128.ordinal()] = true;
+        ZONEMAP_REUSE_COMPATIBILITY_MATRIX[PrimitiveType.DECIMAL32.ordinal()][PrimitiveType.DECIMAL256.ordinal()] = true;
+
+        ZONEMAP_REUSE_COMPATIBILITY_MATRIX[PrimitiveType.DECIMAL64.ordinal()][PrimitiveType.DECIMAL128.ordinal()] = true;
+        ZONEMAP_REUSE_COMPATIBILITY_MATRIX[PrimitiveType.DECIMAL64.ordinal()][PrimitiveType.DECIMAL256.ordinal()] = true;
+
+        ZONEMAP_REUSE_COMPATIBILITY_MATRIX[PrimitiveType.DECIMAL128.ordinal()][PrimitiveType.DECIMAL256.ordinal()] = true;
+
+        // Date/Datetime family
+        ZONEMAP_REUSE_COMPATIBILITY_MATRIX[PrimitiveType.DATE.ordinal()][PrimitiveType.DATETIME.ordinal()] = true;
+
+        // String family
+        ZONEMAP_REUSE_COMPATIBILITY_MATRIX[PrimitiveType.CHAR.ordinal()][PrimitiveType.VARCHAR.ordinal()] = true;
+    }
+
+    /**
+     * Determines if a type conversion allows ZoneMap indexes to be reused.
+     * <p>
+     * This method evaluates two conditions:
+     * 1. If the source type does not support ZoneMap, no index exists to reuse, so it returns true.
+     * 2. For ZoneMap-supported source types, it checks if the target type is within the predefined compatibility matrix.
+     * <p>
+     * It assumes {@link #isSchemaChangeAllowed(Type, Type)} has been checked.
+     *
+     * @param fromType The original column type.
+     * @param toType   The new column type.
+     * @return True if the ZoneMap index can be reused for the type promotion, or if ZoneMap is not applicable; otherwise, false.
+     */
+    public static boolean canReuseZonemapIndex(Type fromType, Type toType) {
+        if (!fromType.supportZoneMap()) {
+            return true;
+        }
+        return ZONEMAP_REUSE_COMPATIBILITY_MATRIX[fromType.getPrimitiveType().ordinal()][toType.getPrimitiveType().ordinal()];
     }
 }
 
