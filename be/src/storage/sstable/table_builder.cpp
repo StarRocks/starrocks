@@ -87,16 +87,17 @@ Status TableBuilder::ChangeOptions(const Options& options) {
     return Status::OK();
 }
 
-void TableBuilder::Add(const Slice& key, const Slice& value) {
+Status TableBuilder::Add(const Slice& key, const Slice& value) {
     Rep* r = rep_;
-    assert(!r->closed);
-    if (!ok()) return;
+    RETURN_ERROR_IF_FALSE(!r->closed);
+    if (!ok()) return Status::InternalError("TableBuilder has encountered a previous error");
     if (r->num_entries > 0) {
-        assert(r->options.comparator->Compare(key, Slice(r->last_key)) > 0);
+        RETURN_ERROR_IF_FALSE(r->options.comparator->Compare(key, Slice(r->last_key)) > 0,
+                              "Key must be greater than the previously added key according to comparator");
     }
 
     if (r->pending_index_entry) {
-        assert(r->data_block.empty());
+        RETURN_ERROR_IF_FALSE(r->data_block.empty(), "Data block must be empty when pending index entry exists");
         r->options.comparator->FindShortestSeparator(&r->last_key, key);
         std::string handle_encoding;
         r->pending_handle.EncodeTo(&handle_encoding);
@@ -116,6 +117,7 @@ void TableBuilder::Add(const Slice& key, const Slice& value) {
     if (estimated_block_size >= r->options.block_size) {
         Flush();
     }
+    return Status::OK();
 }
 
 void TableBuilder::Flush() {

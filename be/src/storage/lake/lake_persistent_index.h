@@ -48,10 +48,10 @@ public:
 
     Status merge(const sstable::Iterator* iter_ptr);
 
-    void finish() { flush(); }
+    Status finish() { return flush(); }
 
 private:
-    void flush();
+    Status flush();
 
 private:
     std::string _key;

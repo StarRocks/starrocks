@@ -47,12 +47,15 @@ public:
     // No thread safe, UT only
     spill::BlockPtr get_block(size_t gid, size_t bid);
     std::vector<spill::BlockGroup>& block_groups() { return _block_groups; }
+    size_t total_bytes() const { return _total_bytes; }
 
 private:
     // Mutex for the container.
     std::mutex _mutex;
     // Blocks generated when loading. Each block group contains multiple blocks which are ordered.
     std::vector<spill::BlockGroup> _block_groups;
+    // total groups bytes
+    size_t _total_bytes = 0;
 };
 
 class LoadSpillBlockManager {
@@ -85,6 +88,8 @@ public:
     const TUniqueId& load_id() const { return _load_id; }
 
     const TUniqueId& fragment_instance_id() const { return _fragment_instance_id; }
+
+    size_t total_bytes() const { return _block_container ? _block_container->total_bytes() : 0; }
 
 private:
     TUniqueId _load_id;                                        // Unique ID for the load.
