@@ -1359,14 +1359,14 @@ void SecondaryReplicasWaiter::_send_replica_status_request(int unfinished_tablet
     }
     int num_unfinished_tablets = request.tablet_ids_size();
     _replica_status_closure->ref();
-#ifndef BE_TEST
-    stub->get_load_replica_status(&_replica_status_closure->cntl, &request, &_replica_status_closure->result,
-                                  _replica_status_closure);
-#else
+#ifdef BE_TEST
     std::pair<PLoadReplicaStatusRequest*, ReusableClosure<PLoadReplicaStatusResult>*> rpc_pair{&request,
-                                                                                               _replica_status_closure};
-    TEST_SYNC_POINT_CALLBACK("LocalTabletsChannel::rpc::get_load_replica_status", &rpc_pair);
+                                                                                           _replica_status_closure};
 #endif
+    TEST_SYNC_POINT_CALLBACK_OR_STMT("LocalTabletsChannel::rpc::get_load_replica_status", &rpc_pair, 
+        stub->get_load_replica_status(&_replica_status_closure->cntl, &request, &_replica_status_closure->result,
+                                    _replica_status_closure);
+    );
     LOG(INFO) << "send request to get load replica status, txn_id: " << _txn_id << ", load_id: " << print_id(_load_id)
               << ", primary replica: [" << primary_replica.host() << ":" << primary_replica.port()
               << "], num unfinished tablets: " << num_unfinished_tablets;

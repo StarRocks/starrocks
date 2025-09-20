@@ -65,11 +65,16 @@ struct SyncPoint::Data {
         std::lock_guard<std::mutex> lock(mutex_);
         callbacks_[point] = callback;
     }
+    bool HasCallBack(const std::string& point) {
+        std::lock_guard<std::mutex> lock(mutex_);
+        return callbacks_.find(point) != callbacks_.end();
+    }
 
     void ClearCallBack(const std::string& point);
     void ClearAllCallBacks();
     void EnableProcessing() { enabled_ = true; }
     void DisableProcessing() { enabled_ = false; }
+    bool IsProcessingEnabled() { return enabled_; }
     void ClearTrace() {
         std::lock_guard<std::mutex> lock(mutex_);
         cleared_points_.clear();

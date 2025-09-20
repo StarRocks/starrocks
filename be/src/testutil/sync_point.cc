@@ -55,6 +55,10 @@ void SyncPoint::SetCallBack(const std::string& point, const std::function<void(v
     impl_->SetCallBack(point, callback);
 }
 
+bool SyncPoint::HasCallBack(const std::string& point) {
+    return impl_->HasCallBack(point);
+}
+
 void SyncPoint::ClearCallBack(const std::string& point) {
     impl_->ClearCallBack(point);
 }
@@ -69,6 +73,10 @@ void SyncPoint::EnableProcessing() {
 
 void SyncPoint::DisableProcessing() {
     impl_->DisableProcessing();
+}
+
+bool SyncPoint::IsProcessingEnabled() {
+    return impl_->IsProcessingEnabled();
 }
 
 void SyncPoint::ClearTrace() {

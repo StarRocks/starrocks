@@ -70,6 +70,7 @@ public:
 #define TEST_SYNC_POINT(x)
 #define TEST_IDX_SYNC_POINT(x, index)
 #define TEST_SYNC_POINT_CALLBACK(x, y)
+#define TEST_SYNC_POINT_CALLBACK_OR_STMT(x, y, stmt) stmt
 #define INIT_SYNC_POINT_SINGLETONS()
 #define TEST_ERROR_POINT(x)
 #define TEST_SUCC_POINT(x)
@@ -116,6 +117,9 @@ public:
     // TEST_IDX_SYNC_POINT was used.
     void SetCallBack(const std::string& point, const std::function<void(void*)>& callback);
 
+    // Whether the sync point has a callback
+    bool HasCallBack(const std::string& point);
+
     // Clear callback function by point
     void ClearCallBack(const std::string& point);
 
@@ -127,6 +131,9 @@ public:
 
     // disable sync point processing
     void DisableProcessing();
+
+    // Whether the sync point processing is enabled
+    bool IsProcessingEnabled();
 
     // remove the execution trace of all sync points
     void ClearTrace();
@@ -169,6 +176,16 @@ private:
 #define TEST_SYNC_POINT(x) starrocks::SyncPoint::GetInstance()->Process(x)
 #define TEST_IDX_SYNC_POINT(x, index) starrocks::SyncPoint::GetInstance()->Process(x + std::to_string(index))
 #define TEST_SYNC_POINT_CALLBACK(x, y) starrocks::SyncPoint::GetInstance()->Process(x, y)
+// Execute the stmt if the sync point is not enabled or no callback is registered
+#define TEST_SYNC_POINT_CALLBACK_OR_STMT(x, y, stmt)                       \
+    do {                                                                   \
+        auto instance = starrocks::SyncPoint::GetInstance();               \
+        if (instance->IsProcessingEnabled() && instance->HasCallBack(x)) { \
+            instance->Process(x, y);                                       \
+        } else {                                                           \
+            stmt;                                                          \
+        }                                                                  \
+    } while (0)
 #define INIT_SYNC_POINT_SINGLETONS() (void)starrocks::SyncPoint::GetInstance();
 #define TEST_ERROR_POINT(x)                                   \
     do {                                                      \
