@@ -370,7 +370,7 @@ public class PaimonMetadata implements ConnectorMetadata {
                     }
                     snapshotId = paimonTable.latestSnapshotId().isPresent() ? paimonTable.latestSnapshotId().getAsLong() : -1L;
                 } else {
-                    //if tag, format like tag:t_1, return the snapshot that the tag referenced 
+                    //if tag, format like tag:t_1, return the snapshot that the tag referenced
                     TagManager tagManager =  ((DataTable) table).tagManager();
                     if (!tagManager.tagExists(refName.split(":")[1])) {
                         throw new StarRocksConnectorException("%s does not include tag: %s",
