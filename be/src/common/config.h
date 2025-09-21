@@ -328,12 +328,6 @@ CONF_mBool(enable_ordinal_index_memory_page_cache, "true");
 CONF_mBool(enable_string_prefix_zonemap, "true");
 // Prefix length used for string ZoneMap min/max when enabled
 CONF_mInt32(string_prefix_zonemap_prefix_len, "16");
-// Adaptive creation of string zonemap index based on page overlap quality.
-// If the estimated overlap ratio across consecutive pages is greater than this threshold,
-// skip writing the page-level string zonemap index. Range: [0.0, 1.0].
-CONF_mDouble(string_zonemap_overlap_threshold, "0.8");
-// Minimum number of non-empty pages before applying the adaptive check.
-CONF_mInt32(string_zonemap_min_pages_for_adaptive_check, "16");
 
 // ========================== ZONEMAP END ===================================
 
