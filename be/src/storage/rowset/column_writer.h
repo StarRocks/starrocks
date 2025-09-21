@@ -138,7 +138,6 @@ class OrdinalIndexWriter;
 class PageBuilder;
 class BloomFilterIndexWriter;
 class ZoneMapIndexWriter;
-class ZoneMapIndexQualityJudger;
 
 class ColumnWriter {
 public:
@@ -300,7 +299,6 @@ private:
 
     std::unique_ptr<OrdinalIndexWriter> _ordinal_index_builder;
     std::unique_ptr<ZoneMapIndexWriter> _zone_map_index_builder;
-    std::unique_ptr<ZoneMapIndexQualityJudger> _zone_map_index_quality_judger;
     std::unique_ptr<BitmapIndexWriter> _bitmap_index_builder;
     std::unique_ptr<BloomFilterIndexWriter> _bloom_filter_index_builder;
     std::unique_ptr<InvertedWriter> _inverted_index_builder;
