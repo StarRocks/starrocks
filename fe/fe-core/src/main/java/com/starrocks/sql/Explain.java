@@ -46,6 +46,7 @@ import com.starrocks.sql.optimizer.operator.physical.PhysicalFilterOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalHashAggregateOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalHiveScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalHudiScanOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalIcebergEqualityDeleteScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalIcebergScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalIntersectOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalJDBCScanOperator;
@@ -244,6 +245,23 @@ public class Explain {
             PhysicalIcebergScanOperator scan = (PhysicalIcebergScanOperator) optExpression.getOp();
 
             StringBuilder sb = new StringBuilder("- ICEBERG-SCAN [")
+                    .append(scan.getTable().getCatalogTableName())
+                    .append("]")
+                    .append(buildOutputColumns(scan,
+                            "[" + scan.getOutputColumns().stream().map(EXPR_PRINTER::print)
+                                    .collect(Collectors.joining(", ")) + "]"))
+                    .append("\n");
+            buildCostEstimate(sb, optExpression, context.step);
+            buildCommonProperty(sb, scan, context.step);
+            return new OperatorStr(sb.toString(), context.step, Collections.emptyList());
+        }
+
+        @Override
+        public OperatorStr visitPhysicalIcebergEqualityDeleteScan(OptExpression optExpression,
+                                                                 OperatorPrinter.ExplainContext context) {
+            PhysicalIcebergEqualityDeleteScanOperator scan = (PhysicalIcebergEqualityDeleteScanOperator) optExpression.getOp();
+
+            StringBuilder sb = new StringBuilder("- ICEBERG-EQUALITY-DELETE-SCAN [")
                     .append(scan.getTable().getCatalogTableName())
                     .append("]")
                     .append(buildOutputColumns(scan,
