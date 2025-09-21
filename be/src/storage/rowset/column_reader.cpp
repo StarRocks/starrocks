@@ -632,6 +632,17 @@ Status ColumnReader::_zone_map_filter(const std::vector<const ColumnPredicate*>&
         return Status::OK();
     }
 
+    // This addresses a zone map filtering issue that occurs when a column's type is CHAR but the
+    // predicate's type is VARCHAR, often seen after fast schema evolution converts a CHAR column
+    // to VARCHAR. The zone map may still contain CHAR values with padding bytes (e.g., "abc\0\0\0\0\0\0\0").
+    // If these values are parsed as VARCHAR, the padding bytes are preserved, leading to incorrect
+    // comparisons with VARCHAR predicates (e.g., "abc"). By forcing the parsing type to CHAR,
+    // `datum_from_string` in `_parse_zone_map()` strips these padding bytes, ensuring consistent
+    // comparison semantics between zone map entries and predicate values.
+    if (_column_type == TYPE_CHAR && lt == TYPE_VARCHAR) {
+        lt = TYPE_CHAR;
+    }
+
     auto page_satisfies_zone_map_filter = [&](const ZoneMapDetail& detail) {
         if constexpr (PredRelation == CompoundNodeType::AND) {
             return std::ranges::all_of(predicates, [&](const auto* pred) { return pred->zone_map_filter(detail); });
@@ -665,6 +676,11 @@ bool ColumnReader::segment_zone_map_filter(const std::vector<const ColumnPredica
         return true;
     }
     LogicalType lt = predicates[0]->type_info()->type();
+    // Apply the same fix for segment-level zone map filtering to ensure consistency
+    // during fast schema evolution from CHAR to VARCHAR.
+    if (_column_type == TYPE_CHAR && lt == TYPE_VARCHAR) {
+        lt = TYPE_CHAR;
+    }
     ZoneMapDetail detail;
     auto st = _parse_zone_map(lt, *_segment_zone_map, &detail);
     CHECK(st.ok()) << st;
