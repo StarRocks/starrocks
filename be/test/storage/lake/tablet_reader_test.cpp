@@ -365,6 +365,16 @@ TEST_F(LakeDuplicateTabletReaderWithDeleteTest, test_read_success) {
         writer->close();
     }
 
+    { // Add empty delete_predicate, won't affect anything
+        auto* rowset = _tablet_metadata->add_rowsets();
+        rowset->set_overlapped(false);
+        rowset->set_num_rows(0);
+        rowset->set_data_size(0);
+
+        auto* empty_delete_predicate = rowset->mutable_delete_predicate();
+        empty_delete_predicate->set_version(-1);
+    }
+
     {
         auto* rowset = _tablet_metadata->add_rowsets();
         rowset->set_overlapped(false);
@@ -385,6 +395,12 @@ TEST_F(LakeDuplicateTabletReaderWithDeleteTest, test_read_success) {
         in_predicate->add_values("44");
         in_predicate->add_values("0");
         in_predicate->add_values("1");
+
+        // This is to simulate the bug where a delete predicate references a non-existent column.
+        auto* invalid_binary_predicate = delete_predicate->add_binary_predicates();
+        invalid_binary_predicate->set_column_name("c0c"); // column name doesn't exist
+        invalid_binary_predicate->set_op("=");
+        invalid_binary_predicate->set_value("30");
     }
 
     // write tablet metadata

@@ -457,8 +457,9 @@ Status TabletReader::init_delete_predicates(const TabletReaderParams& params, De
             // save for memory release.
             _predicate_free_list.emplace_back(pred);
         }
-
-        dels->add(index, conjunctions);
+        if (!conjunctions.empty()) {
+            dels->add(index, conjunctions);
+        }
     }
 
     return Status::OK();
