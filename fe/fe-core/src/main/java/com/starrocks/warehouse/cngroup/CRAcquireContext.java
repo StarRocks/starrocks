@@ -67,7 +67,7 @@ public class CRAcquireContext {
         final Warehouse warehouse = warehouseManager.getWarehouse(warehouseName);
         if (warehouse == null) {
             throw ErrorReportException.report(ErrorCode.ERR_UNKNOWN_WAREHOUSE,
-                    String.format("name: %d", warehouseName));
+                    String.format("name: %s", warehouseName));
         }
         return new CRAcquireContext(warehouse.getId(), CRAcquireStrategy.STANDARD, null);
     }

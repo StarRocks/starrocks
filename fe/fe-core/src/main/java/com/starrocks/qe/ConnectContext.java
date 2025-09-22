@@ -998,20 +998,26 @@ public class ConnectContext {
         if (this.computeResource == null) {
             acquireComputeResource();
         } else {
+            final WarehouseManager warehouseManager = globalStateMgr.getWarehouseMgr();
             // throw exception if the current warehouse is not exist.
-            if (!globalStateMgr.getWarehouseMgr().warehouseExists(this.getCurrentWarehouseName())) {
+            if (!warehouseManager.warehouseExists(this.getCurrentWarehouseName())) {
                 String errMsg = String.format("Current connection's warehouse(%s) does not exist, please " +
                                 "set to another warehouse.", this.getCurrentWarehouseName());
                 this.resetComputeResource();
                 throw new RuntimeException(errMsg);
             }
-            // throw exception if the current compute resource is not available.
-            // and reset compute resource, so that we can acquire a new one next time.
-            if (!globalStateMgr.getWarehouseMgr().isResourceAvailable(computeResource)) {
-                String errMsg = String.format("Current connection's compute resource(%s) is not available:%s, please " +
-                                "try again.", this.getCurrentWarehouseName(), computeResource);
-                this.resetComputeResource();
-                throw new RuntimeException(errMsg);
+            if (!warehouseManager.isResourceAvailable(computeResource)) {
+                if (state != null && !state.isRunning()) {
+                    // if the query is not running, we can acquire a new compute resource.
+                    acquireComputeResource();
+                } else {
+                    // throw exception if the current compute resource is not available.
+                    // and reset compute resource, so that we can acquire a new one next time.
+                    String errMsg = String.format("Current connection's compute resource(%s) is not available:%s, please " +
+                            "try again.", this.getCurrentWarehouseName(), computeResource);
+                    this.resetComputeResource();
+                    throw new RuntimeException(errMsg);
+                }
             }
         }
         return this.computeResource;
