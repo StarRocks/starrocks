@@ -20,14 +20,24 @@ import com.starrocks.sql.parser.NodePosition;
 
 public class DropGroupProviderStmt extends DdlStmt {
     private final String name;
+    private final boolean ifExists;
 
     public DropGroupProviderStmt(String name, NodePosition pos) {
+        this(name, false, pos);
+    }
+
+    public DropGroupProviderStmt(String name, boolean ifExists, NodePosition pos) {
         super(pos);
         this.name = name;
+        this.ifExists = ifExists;
     }
 
     public String getName() {
         return name;
+    }
+
+    public boolean isIfExists() {
+        return ifExists;
     }
 
     @Override
