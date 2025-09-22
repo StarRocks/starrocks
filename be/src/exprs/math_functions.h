@@ -311,8 +311,7 @@ public:
 
     template <LogicalType TYPE>
     DEFINE_VECTORIZED_FN(is_nan) {
-        return VectorizedStrictUnaryFunction<is_nanImpl>::template evaluate<TYPE, TYPE_BOOLEAN>(
-                VECTORIZED_FN_ARGS(0));
+        return VectorizedStrictUnaryFunction<is_nanImpl>::template evaluate<TYPE, TYPE_BOOLEAN>(VECTORIZED_FN_ARGS(0));
     }
 
     // @todo: these functions belong to math function?
