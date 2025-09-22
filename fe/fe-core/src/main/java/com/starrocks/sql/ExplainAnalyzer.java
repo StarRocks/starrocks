@@ -954,13 +954,6 @@ public class ExplainAnalyzer {
             appendGroupedMetricsForJoin(uniqueMetrics, nodeInfo);
         } else if (nodeInfo.element.instanceOf(AggregationNode.class)) {
             appendGroupedMetricsForAggregate(uniqueMetrics, nodeInfo);
-        } else if (nodeInfo.element.instanceOf(ExchangeNode.class)) {
-            appendGroupedMetricsForExchange(uniqueMetrics, nodeInfo);
-        } else if (nodeInfo.element.instanceOf(UnionNode.class)) {
-            appendGroupedMetricsForUnion(uniqueMetrics, nodeInfo);
-        } else if (nodeInfo.element.instanceOf(OlapTableSink.class)
-                || nodeInfo.element.instanceOf(MultiCastDataSink.class)) {
-            appendGroupedMetricsForSink(uniqueMetrics, nodeInfo);
         } else if (nodeInfo.element.instanceOf(ScanNode.class)) {
             appendGroupedMetricsForScan(uniqueMetrics, nodeInfo);
         } else {
@@ -969,67 +962,37 @@ public class ExplainAnalyzer {
         return true;
     }
 
-    private void appendGroupedMetricsForExchange(RuntimeProfile uniqueMetrics, NodeInfo nodeInfo) {
-        pushIndent(GraphElement.LEAF_METRIC_INDENT);
-        appendDetailLine("Shuffle:");
-        pushIndent(GraphElement.LEAF_METRIC_INDENT);
-        appendMetric(uniqueMetrics, nodeInfo, "NetworkTime");
-        appendMetric(uniqueMetrics, nodeInfo, "BytesSent");
-        appendMetric(uniqueMetrics, nodeInfo, "BytesReceived");
-        appendMetric(uniqueMetrics, nodeInfo, "BlocksSent");
-        appendMetric(uniqueMetrics, nodeInfo, "BlocksReceived");
-        appendMetric(uniqueMetrics, nodeInfo, "SerializeTime");
-        appendMetric(uniqueMetrics, nodeInfo, "DeserializeTime");
-        appendMetric(uniqueMetrics, nodeInfo, "SendTime");
-        appendMetric(uniqueMetrics, nodeInfo, "RecvTime");
-        appendMetric(uniqueMetrics, nodeInfo, "DataStreamSenderTime");
-        appendMetric(uniqueMetrics, nodeInfo, "DataStreamReceiverTime");
-        popIndent();
-
-        appendDetailLine("RowTransfer:");
-        pushIndent(GraphElement.LEAF_METRIC_INDENT);
-        appendMetric(uniqueMetrics, nodeInfo, "RowsSent");
-        appendMetric(uniqueMetrics, nodeInfo, "RowsReceived");
-        appendMetric(uniqueMetrics, nodeInfo, "PushRowNum");
-        appendMetric(uniqueMetrics, nodeInfo, "PullRowNum");
-        popIndent();
-
-        appendGroupedMetricsOthers(uniqueMetrics, nodeInfo, getExchangeKnownMetrics());
-
-        popIndent();
-    }
-
     private void appendGroupedMetricsForJoin(RuntimeProfile uniqueMetrics, NodeInfo nodeInfo) {
         pushIndent(GraphElement.LEAF_METRIC_INDENT);
 
-        appendDetailLine("BuildSide:");
+        appendDetailLine("HashTable:");
         pushIndent(GraphElement.LEAF_METRIC_INDENT);
-        appendMetric(uniqueMetrics, nodeInfo, "BuildRows");
-        appendMetric(uniqueMetrics, nodeInfo, "BuildTime");
-        appendMetric(uniqueMetrics, nodeInfo, "BuildHashTableMemoryUsage");
-        appendMetric(uniqueMetrics, nodeInfo, "HashBuckets");
-        appendMetric(uniqueMetrics, nodeInfo, "HashCollisions");
-        appendMetric(uniqueMetrics, nodeInfo, "BuildSpillBytes");
-        appendMetric(uniqueMetrics, nodeInfo, "BuildSpillTime");
+        appendMetric(uniqueMetrics, nodeInfo, "BuildBuckets");
+        appendMetric(uniqueMetrics, nodeInfo, "BuildKeysPerBucket%");
+        appendMetric(uniqueMetrics, nodeInfo, "BuildHashTableTime");
+        appendMetric(uniqueMetrics, nodeInfo, "BuildConjunctEvaluateTime");
+        appendMetric(uniqueMetrics, nodeInfo, "HashTableMemoryUsage");
+        appendMetric(uniqueMetrics, nodeInfo, "PartitionNums");
+        appendMetric(uniqueMetrics, nodeInfo, "PartitionProbeOverhead");
         popIndent();
 
         appendDetailLine("ProbeSide:");
         pushIndent(GraphElement.LEAF_METRIC_INDENT);
-        appendMetric(uniqueMetrics, nodeInfo, "ProbeRows");
-        appendMetric(uniqueMetrics, nodeInfo, "ProbeTime");
-        appendMetric(uniqueMetrics, nodeInfo, "JoinOutputRows");
-        appendMetric(uniqueMetrics, nodeInfo, "RowsAfterJoinFilter");
-        appendMetric(uniqueMetrics, nodeInfo, "JoinConjunctEvaluateTime");
-        appendMetric(uniqueMetrics, nodeInfo, "ProbeSpillBytes");
-        appendMetric(uniqueMetrics, nodeInfo, "ProbeSpillTime");
+        appendMetric(uniqueMetrics, nodeInfo, "SearchHashTableTime");
+        appendMetric(uniqueMetrics, nodeInfo, "probeCount");
+        appendMetric(uniqueMetrics, nodeInfo, "ProbeConjunctEvaluateTime");
+        appendMetric(uniqueMetrics, nodeInfo, "CopyRightTableChunkTime");
+        appendMetric(uniqueMetrics, nodeInfo, "OtherJoinConjunctEvaluateTime");
+        appendMetric(uniqueMetrics, nodeInfo, "OutputBuildColumnTime");
+        appendMetric(uniqueMetrics, nodeInfo, "OutputProbeColumnTime");
+        appendMetric(uniqueMetrics, nodeInfo, "WhereConjunctEvaluateTime");
         popIndent();
 
         appendDetailLine("RuntimeFilter:");
         pushIndent(GraphElement.LEAF_METRIC_INDENT);
         appendMetric(uniqueMetrics, nodeInfo, "RuntimeFilterBuildTime");
-        appendMetric(uniqueMetrics, nodeInfo, "RuntimeFilterPushDownTime");
-        appendMetric(uniqueMetrics, nodeInfo, "RuntimeFilterInputRows");
-        appendMetric(uniqueMetrics, nodeInfo, "RuntimeFilterOutputRows");
+        appendMetric(uniqueMetrics, nodeInfo, "RuntimeFilterNum");
+        appendMetric(uniqueMetrics, nodeInfo, "PartialRuntimeMembershipFilterBytes");
         popIndent();
 
         appendGroupedMetricsOthers(uniqueMetrics, nodeInfo, getJoinKnownMetrics());
@@ -1042,62 +1005,38 @@ public class ExplainAnalyzer {
 
         appendDetailLine("Aggregation:");
         pushIndent(GraphElement.LEAF_METRIC_INDENT);
-        appendMetric(uniqueMetrics, nodeInfo, "AggInputRows");
-        appendMetric(uniqueMetrics, nodeInfo, "AggOutputRows");
-        appendMetric(uniqueMetrics, nodeInfo, "AggComputeTime");
-        appendMetric(uniqueMetrics, nodeInfo, "HashAggBuildTime");
-        appendMetric(uniqueMetrics, nodeInfo, "HashAggProbeTime");
-        appendMetric(uniqueMetrics, nodeInfo, "HashBuckets");
-        appendMetric(uniqueMetrics, nodeInfo, "HashCollisions");
+        appendMetric(uniqueMetrics, nodeInfo, "AggFuncComputeTime");
+        appendMetric(uniqueMetrics, nodeInfo, "ExprComputeTime");
+        appendMetric(uniqueMetrics, nodeInfo, "ExprReleaseTime");
+        appendMetric(uniqueMetrics, nodeInfo, "HashTableSize");
         appendMetric(uniqueMetrics, nodeInfo, "HashTableMemoryUsage");
-        appendMetric(uniqueMetrics, nodeInfo, "SpillBytes");
-        appendMetric(uniqueMetrics, nodeInfo, "SpillTime");
         popIndent();
 
-        appendDetailLine("Distinct:");
+        appendDetailLine("Memory Management:");
         pushIndent(GraphElement.LEAF_METRIC_INDENT);
-        appendMetric(uniqueMetrics, nodeInfo, "DistinctInputRows");
-        appendMetric(uniqueMetrics, nodeInfo, "DistinctOutputRows");
-        appendMetric(uniqueMetrics, nodeInfo, "DistinctTime");
+        appendMetric(uniqueMetrics, nodeInfo, "ChunkBufferPeakMem");
+        appendMetric(uniqueMetrics, nodeInfo, "ChunkBufferPeakSize");
+        appendMetric(uniqueMetrics, nodeInfo, "StateAllocate");
+        appendMetric(uniqueMetrics, nodeInfo, "StateDestroy");
+        popIndent();
+
+        appendDetailLine("Result Processing:");
+        pushIndent(GraphElement.LEAF_METRIC_INDENT);
+        appendMetric(uniqueMetrics, nodeInfo, "GetResultsTime");
+        appendMetric(uniqueMetrics, nodeInfo, "ResultAggAppendTime");
+        appendMetric(uniqueMetrics, nodeInfo, "ResultGroupByAppendTime");
+        appendMetric(uniqueMetrics, nodeInfo, "ResultIteratorTime");
+        popIndent();
+
+        appendDetailLine("Data Flow:");
+        pushIndent(GraphElement.LEAF_METRIC_INDENT);
+        appendMetric(uniqueMetrics, nodeInfo, "InputRowCount");
+        appendMetric(uniqueMetrics, nodeInfo, "PassThroughRowCount");
+        appendMetric(uniqueMetrics, nodeInfo, "StreamingTime");
+        appendMetric(uniqueMetrics, nodeInfo, "RowsReturned");
         popIndent();
 
         appendGroupedMetricsOthers(uniqueMetrics, nodeInfo, getAggregateKnownMetrics());
-
-        popIndent();
-    }
-
-    private void appendGroupedMetricsForUnion(RuntimeProfile uniqueMetrics, NodeInfo nodeInfo) {
-        pushIndent(GraphElement.LEAF_METRIC_INDENT);
-        appendDetailLine("Union:");
-        pushIndent(GraphElement.LEAF_METRIC_INDENT);
-        appendMetric(uniqueMetrics, nodeInfo, "InputRows");
-        appendMetric(uniqueMetrics, nodeInfo, "OutputRows");
-        appendMetric(uniqueMetrics, nodeInfo, "MergeTime");
-        appendMetric(uniqueMetrics, nodeInfo, "SourceCount");
-        popIndent();
-
-        appendGroupedMetricsOthers(uniqueMetrics, nodeInfo, getUnionKnownMetrics());
-
-        popIndent();
-    }
-
-    private void appendGroupedMetricsForSink(RuntimeProfile uniqueMetrics, NodeInfo nodeInfo) {
-        pushIndent(GraphElement.LEAF_METRIC_INDENT);
-
-        appendDetailLine("Sink:");
-        pushIndent(GraphElement.LEAF_METRIC_INDENT);
-        appendMetric(uniqueMetrics, nodeInfo, "WriteTime");
-        appendMetric(uniqueMetrics, nodeInfo, "FlushTime");
-        appendMetric(uniqueMetrics, nodeInfo, "CommitTime");
-        appendMetric(uniqueMetrics, nodeInfo, "RetryCount");
-        appendMetric(uniqueMetrics, nodeInfo, "BufferedBytes");
-        appendMetric(uniqueMetrics, nodeInfo, "BufferedRows");
-        appendMetric(uniqueMetrics, nodeInfo, "BytesWritten");
-        appendMetric(uniqueMetrics, nodeInfo, "RowsWritten");
-        appendMetric(uniqueMetrics, nodeInfo, "ShuffleBytes");
-        popIndent();
-
-        appendGroupedMetricsOthers(uniqueMetrics, nodeInfo, getSinkKnownMetrics());
 
         popIndent();
     }
@@ -1755,11 +1694,20 @@ public class ExplainAnalyzer {
 
     private Set<String> getJoinKnownMetrics() {
         return Sets.newHashSet(
+                // HashTable group metrics
+                "BuildBuckets", "BuildKeysPerBucket%", "BuildHashTableTime", "BuildConjunctEvaluateTime",
+                "HashTableMemoryUsage", "PartitionNums", "PartitionProbeOverhead",
+                // ProbeSide group metrics
+                "SearchHashTableTime", "probeCount", "ProbeConjunctEvaluateTime", "CopyRightTableChunkTime",
+                "OtherJoinConjunctEvaluateTime", "OutputBuildColumnTime", "OutputProbeColumnTime",
+                "WhereConjunctEvaluateTime",
+                // RuntimeFilter group metrics
+                "RuntimeFilterBuildTime", "RuntimeFilterNum", "PartialRuntimeMembershipFilterBytes",
+                // Legacy metrics (kept for backward compatibility)
                 "BuildRows", "BuildTime", "BuildHashTableMemoryUsage", "HashBuckets", "HashCollisions",
                 "BuildSpillBytes", "BuildSpillTime", "ProbeRows", "ProbeTime", "JoinOutputRows",
                 "RowsAfterJoinFilter", "JoinConjunctEvaluateTime", "ProbeSpillBytes", "ProbeSpillTime",
-                "RuntimeFilterBuildTime", "RuntimeFilterPushDownTime", "RuntimeFilterInputRows",
-                "RuntimeFilterOutputRows"
+                "RuntimeFilterPushDownTime", "RuntimeFilterInputRows", "RuntimeFilterOutputRows"
         );
     }
 
@@ -1767,7 +1715,12 @@ public class ExplainAnalyzer {
         return Sets.newHashSet(
                 "AggInputRows", "AggOutputRows", "AggComputeTime", "HashAggBuildTime", "HashAggProbeTime",
                 "HashBuckets", "HashCollisions", "HashTableMemoryUsage", "SpillBytes", "SpillTime",
-                "DistinctInputRows", "DistinctOutputRows", "DistinctTime"
+                "DistinctInputRows", "DistinctOutputRows", "DistinctTime",
+                // Additional metrics from real data
+                "AggFuncComputeTime", "ChunkBufferPeakMem", "ChunkBufferPeakSize", "ExprComputeTime",
+                "ExprReleaseTime", "GetResultsTime", "HashTableSize", "InputRowCount", "PassThroughRowCount",
+                "ResultAggAppendTime", "ResultGroupByAppendTime", "ResultIteratorTime", "RowsReturned",
+                "StateAllocate", "StateDestroy", "StreamingTime"
         );
     }
 
