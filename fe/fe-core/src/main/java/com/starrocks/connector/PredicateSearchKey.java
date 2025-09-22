@@ -14,6 +14,8 @@
 
 package com.starrocks.connector;
 
+import com.starrocks.common.tvr.TvrTableSnapshot;
+import com.starrocks.common.tvr.TvrVersionRange;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 
@@ -22,17 +24,25 @@ import java.util.Objects;
 public class PredicateSearchKey {
     private final String databaseName;
     private final String tableName;
-    private final long snapshotId;
+    private final TvrVersionRange version;
     private final ScalarOperator predicate;
 
-    public static PredicateSearchKey of(String databaseName, String tableName, long snapshotId, ScalarOperator predicate) {
-        return new PredicateSearchKey(databaseName, tableName, snapshotId, predicate == null ? ConstantOperator.TRUE : predicate);
+    public static PredicateSearchKey of(String databaseName, String tableName,
+                                        long snapshotId, ScalarOperator predicate) {
+        return of(databaseName, tableName, TvrTableSnapshot.of(snapshotId), predicate);
     }
 
-    public PredicateSearchKey(String databaseName, String tableName, long snapshotId, ScalarOperator predicate) {
+    public static PredicateSearchKey of(String databaseName, String tableName,
+                                        TvrVersionRange tvrVersionRange,
+                                        ScalarOperator predicate) {
+        return new PredicateSearchKey(databaseName, tableName, tvrVersionRange,
+                predicate == null ? ConstantOperator.TRUE : predicate);
+    }
+
+    public PredicateSearchKey(String databaseName, String tableName, TvrVersionRange version, ScalarOperator predicate) {
         this.databaseName = databaseName;
         this.tableName = tableName;
-        this.snapshotId = snapshotId;
+        this.version = version;
         this.predicate = predicate;
     }
 
@@ -44,8 +54,8 @@ public class PredicateSearchKey {
         return tableName;
     }
 
-    public long getSnapshotId() {
-        return snapshotId;
+    public TvrVersionRange getVersion() {
+        return version;
     }
 
     @Override
@@ -58,7 +68,7 @@ public class PredicateSearchKey {
             return false;
         }
         PredicateSearchKey that = (PredicateSearchKey) o;
-        return snapshotId == that.snapshotId &&
+        return Objects.equals(version, that.version) &&
                 Objects.equals(databaseName, that.databaseName) &&
                 Objects.equals(tableName, that.tableName) &&
                 predicate.equivalent(that.predicate);
@@ -66,14 +76,14 @@ public class PredicateSearchKey {
 
     @Override
     public int hashCode() {
-        return Objects.hash(databaseName, tableName, snapshotId, predicate);
+        return Objects.hash(databaseName, tableName, version, predicate);
     }
 
     @Override
     public String toString() {
         return "Filter{" + "databaseName='" + databaseName + '\'' +
                 ", tableName='" + tableName + '\'' +
-                ", snapshotId=" + snapshotId +
+                ", version=" + version +
                 ", predicate=" + predicate +
                 '}';
     }

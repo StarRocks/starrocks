@@ -80,10 +80,8 @@ import static com.starrocks.scheduler.TaskRun.MV_UNCOPYABLE_PROPERTIES;
 public class MVIVMBasedMVRefreshProcessor extends BaseMVRefreshProcessor {
     // This map is used to store the temporary tvr version range for each base table
     private final Map<BaseTableInfo, TvrVersionRange> tempMvTvrVersionRangeMap = Maps.newConcurrentMap();
-
     // whether the next task run is needed
     private boolean hasNextTaskRun = false;
-
     public MVIVMBasedMVRefreshProcessor(Database db, MaterializedView mv,
                                         MvTaskRunContext mvContext,
                                         IMaterializedViewMetricsEntity mvEntity) {
@@ -106,7 +104,7 @@ public class MVIVMBasedMVRefreshProcessor extends BaseMVRefreshProcessor {
                 TvrTableSnapshotInfo tvrTableSnapshotInfo = (TvrTableSnapshotInfo) snapshotInfo;
 
                 tvrTableSnapshotInfo.setTvrSnapshot(changedVersionRange);
-                tempMvTvrVersionRangeMap.put(snapshotInfo.getBaseTableInfo(), TvrTableSnapshot.of(changedVersionRange.to));
+                tempMvTvrVersionRangeMap.put(snapshotInfo.getBaseTableInfo(), changedVersionRange);
                 // update the snapshot info with the changed version range
                 tvrTableSnapshotInfo.setTvrSnapshot(changedVersionRange);
             }
@@ -307,18 +305,20 @@ public class MVIVMBasedMVRefreshProcessor extends BaseMVRefreshProcessor {
         TvrTableSnapshot fromSnapshot = maxTvrDelta.fromSnapshot();
         TvrTableSnapshot toSnapshot = maxTvrDelta.toSnapshot();
         long addedRows = 0;
+        long addedFileSize = 0;
         for (TvrTableDeltaTrait deltaTrait : tableDeltaTraits) {
             // TODO: We may need to handle the case where the deltaTrait is not append-only.
             if (!deltaTrait.isAppendOnly()) {
                 throw new SemanticException("TvrTableDeltaTrait is not append-only for base table: %s.%s",
                         baseTableInfo.getDbName(), baseTableInfo.getTableName());
             }
-            addedRows += deltaTrait.getTvrDeltaStats().getChangedRows();
+            addedRows += deltaTrait.getTvrDeltaStats().getAddedRows();
+            addedFileSize += deltaTrait.getTvrDeltaStats().getAddedFileSize();
 
-            if (addedRows >= Config.mv_max_rows_per_refresh) {
-                logger.info("Base table: {}, db: {}, added rows: {}, snapshot:{}" +
+            if (addedRows >= Config.mv_max_rows_per_refresh || addedFileSize >= Config.mv_max_bytes_per_refresh) {
+                logger.info("Base table: {}, db: {}, added rows: {}, added file size:{}, snapshot:{}" +
                                 "reached the max rows per refresh, stop processing further deltas",
-                        baseTableInfo.getTableName(), baseTableInfo.getDbName(), addedRows, deltaTrait);
+                        baseTableInfo.getTableName(), baseTableInfo.getDbName(), addedRows, addedFileSize, deltaTrait);
                 break;
             }
             logger.info("Base table: {}, db: {}, deltaTrait: {}, added rows: {}, fromSnapshot: {}, toSnapshot: {}",
