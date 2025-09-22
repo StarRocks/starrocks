@@ -3,7 +3,7 @@
 create database analyze_test_${uuid0};
 use analyze_test_${uuid0};
 
- CREATE TABLE `t1` (
+CREATE TABLE `t1` (
     `k1`  date,
     `k2`  datetime,
     `k3`  char(20),
@@ -67,7 +67,7 @@ FROM
 SELECT column_name, buckets FROM _statistics_.histogram_statistics where table_name='analyze_test_${uuid0}.t1' order by column_name;
 
 
- CREATE TABLE `t2` (
+CREATE TABLE `t2` (
     `k1`  date,
     `k2`  datetime,
     `k3`  char(20),
@@ -124,5 +124,8 @@ FROM
     (SELECT * FROM TABLE(generate_series(1, 10000, 3))  AS t(s1) ) r;
 
 
-[UC] ANALYZE TABLE t2 UPDATE HISTOGRAM ON k1, k2, k3, k4, k5, k6, k7, k8, k9, k10, k11, k12, k13 PROPERTIES('histogram_sample_ratio'='1.0', 'histogram_mcv_size'='0', 'histogram_collect_ndv' = 'true') ;
+[UC] ANALYZE TABLE t2 UPDATE HISTOGRAM ON k1, k2, k3, k4, k5, k6, k7, k8, k9, k10, k11, k12, k13 PROPERTIES('histogram_sample_ratio'='1.0', 'histogram_mcv_size'='0', 'histogram_collect_bucket_ndv_mode' = 'hll') ;
+SELECT column_name, buckets FROM _statistics_.histogram_statistics where table_name='analyze_test_${uuid0}.t2' order by column_name;
+
+[UC] ANALYZE TABLE t2 UPDATE HISTOGRAM ON k1, k2, k3, k4, k5, k6, k7, k8, k9, k10, k11, k12, k13 PROPERTIES('histogram_sample_ratio'='1.0', 'histogram_mcv_size'='0', 'histogram_collect_bucket_ndv_mode' = 'sample') ;
 SELECT column_name, buckets FROM _statistics_.histogram_statistics where table_name='analyze_test_${uuid0}.t2' order by column_name;

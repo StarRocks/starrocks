@@ -118,15 +118,15 @@ LIMIT 10;
 -- !result
 [UC] ANALYZE FULL TABLE t1;
 -- result:
-analyze_test_252a40f00cef40969761819bc6f5e66e.t1	analyze	status	OK
+analyze_test_500d94de346d47a281f7062436520c7b.t1	analyze	status	OK
 -- !result
 [UC] ANALYZE FULL TABLE t2;
 -- result:
-analyze_test_252a40f00cef40969761819bc6f5e66e.t2	analyze	status	OK
+analyze_test_500d94de346d47a281f7062436520c7b.t2	analyze	status	OK
 -- !result
 [UC] ANALYZE FULL TABLE t3;
 -- result:
-analyze_test_252a40f00cef40969761819bc6f5e66e.t3	analyze	status	OK
+analyze_test_500d94de346d47a281f7062436520c7b.t3	analyze	status	OK
 -- !result
 SELECT min,max,row_count,hll_cardinality(ndv) FROM _statistics_.column_statistics WHERE table_name = 'analyze_test_${uuid0}.t1' and column_name = 'k1';
 -- result:
@@ -166,15 +166,15 @@ None
 -- !result
 [UC] ANALYZE TABLE t1 UPDATE HISTOGRAM ON k1,k2,k3 PROPERTIES('histogram_sample_ratio' = '1.0');
 -- result:
-analyze_test_252a40f00cef40969761819bc6f5e66e.t1	histogram	status	OK
+analyze_test_500d94de346d47a281f7062436520c7b.t1	histogram	status	OK
 -- !result
 [UC] ANALYZE TABLE t2 UPDATE HISTOGRAM ON k1,k2,k3 PROPERTIES('histogram_sample_ratio' = '1.0');
 -- result:
-analyze_test_252a40f00cef40969761819bc6f5e66e.t2	histogram	status	OK
+analyze_test_500d94de346d47a281f7062436520c7b.t2	histogram	status	OK
 -- !result
 [UC] ANALYZE TABLE t3 UPDATE HISTOGRAM ON k1,k2,k3 PROPERTIES('histogram_sample_ratio' = '1.0', "histogram_mcv_size" = '0');
 -- result:
-analyze_test_252a40f00cef40969761819bc6f5e66e.t3	histogram	status	OK
+analyze_test_500d94de346d47a281f7062436520c7b.t3	histogram	status	OK
 -- !result
 set enable_stats_to_optimize_skew_join = false;
 -- result:
@@ -263,15 +263,15 @@ None
 -- !result
 [UC] ANALYZE TABLE t1 UPDATE HISTOGRAM ON k1,k2,k3 PROPERTIES('histogram_sample_ratio' = '1.0', "histogram_mcv_size" = '400');
 -- result:
-analyze_test_252a40f00cef40969761819bc6f5e66e.t1	histogram	status	OK
+analyze_test_500d94de346d47a281f7062436520c7b.t1	histogram	status	OK
 -- !result
 [UC] ANALYZE TABLE t2 UPDATE HISTOGRAM ON k1,k2,k3 PROPERTIES('histogram_sample_ratio' = '1.0', "histogram_mcv_size" = '400');
 -- result:
-analyze_test_252a40f00cef40969761819bc6f5e66e.t2	histogram	status	OK
+analyze_test_500d94de346d47a281f7062436520c7b.t2	histogram	status	OK
 -- !result
 [UC] ANALYZE TABLE t3 UPDATE HISTOGRAM ON k1,k2,k3 PROPERTIES('histogram_sample_ratio' = '1.0', "histogram_mcv_size" = '400');
 -- result:
-analyze_test_252a40f00cef40969761819bc6f5e66e.t3	histogram	status	OK
+analyze_test_500d94de346d47a281f7062436520c7b.t3	histogram	status	OK
 -- !result
 function: assert_explain_costs_contains('SELECT COUNT(*) FROM t1 JOIN t2 USING (k1)', 'cardinality: 45150', 'cardinality: 45150', 'cardinality: 4589949')
 -- result:
@@ -291,15 +291,15 @@ None
 -- !result
 [UC] ANALYZE TABLE t1 UPDATE HISTOGRAM ON k1,k2,k3 WITH 256 BUCKETS PROPERTIES('histogram_sample_ratio' = '1.0', "histogram_mcv_size" = '100');
 -- result:
-analyze_test_252a40f00cef40969761819bc6f5e66e.t1	histogram	status	OK
+analyze_test_500d94de346d47a281f7062436520c7b.t1	histogram	status	OK
 -- !result
 [UC] ANALYZE TABLE t2 UPDATE HISTOGRAM ON k1,k2,k3 WITH 256 BUCKETS PROPERTIES('histogram_sample_ratio' = '1.0', "histogram_mcv_size" = '100');
 -- result:
-analyze_test_252a40f00cef40969761819bc6f5e66e.t2	histogram	status	OK
+analyze_test_500d94de346d47a281f7062436520c7b.t2	histogram	status	OK
 -- !result
 [UC] ANALYZE TABLE t3 UPDATE HISTOGRAM ON k1,k2,k3 WITH 256 BUCKETS PROPERTIES('histogram_sample_ratio' = '1.0', "histogram_mcv_size" = '0');
 -- result:
-analyze_test_252a40f00cef40969761819bc6f5e66e.t3	histogram	status	OK
+analyze_test_500d94de346d47a281f7062436520c7b.t3	histogram	status	OK
 -- !result
 function: assert_explain_costs_contains('SELECT COUNT(*) FROM t1 JOIN t2 USING (k1)', 'cardinality: 45150', 'cardinality: 45150', 'cardinality: 4562636')
 -- result:
@@ -328,23 +328,47 @@ insert into test_escaped_string select "bbbbbbb";
 -- !result
 [UC] analyze table test_escaped_string update histogram on k1;
 -- result:
-analyze_test_252a40f00cef40969761819bc6f5e66e.test_escaped_string	histogram	status	OK
+analyze_test_500d94de346d47a281f7062436520c7b.test_escaped_string	histogram	status	OK
 -- !result
 function: assert_explain_costs_contains('select k1 from test_escaped_string', 'MCV')
 -- result:
 None
 -- !result
-[UC] ANALYZE TABLE t1 UPDATE HISTOGRAM ON k1,k2,k3 PROPERTIES('histogram_sample_ratio' = '1.0', 'histogram_collect_ndv' = 'true');
+[UC] ANALYZE TABLE t1 UPDATE HISTOGRAM ON k1,k2,k3 PROPERTIES('histogram_sample_ratio' = '1.0', 'histogram_collect_bucket_ndv_mode' = 'hll');
 -- result:
-analyze_test_3ab3ff1269b643abaa243f0131369fed.t1	histogram	status	OK
+analyze_test_500d94de346d47a281f7062436520c7b.t1	histogram	status	OK
 -- !result
-[UC] ANALYZE TABLE t2 UPDATE HISTOGRAM ON k1,k2,k3 PROPERTIES('histogram_sample_ratio' = '1.0', 'histogram_collect_ndv' = 'true');
+[UC] ANALYZE TABLE t2 UPDATE HISTOGRAM ON k1,k2,k3 PROPERTIES('histogram_sample_ratio' = '1.0', 'histogram_collect_bucket_ndv_mode' = 'hll');
 -- result:
-analyze_test_3ab3ff1269b643abaa243f0131369fed.t2	histogram	status	OK
+analyze_test_500d94de346d47a281f7062436520c7b.t2	histogram	status	OK
 -- !result
-[UC] ANALYZE TABLE t3 UPDATE HISTOGRAM ON k1,k2,k3 PROPERTIES('histogram_sample_ratio' = '1.0', "histogram_mcv_size" = '0', 'histogram_collect_ndv' = 'true');
+[UC] ANALYZE TABLE t3 UPDATE HISTOGRAM ON k1,k2,k3 PROPERTIES('histogram_sample_ratio' = '1.0', "histogram_mcv_size" = '0', 'histogram_collect_bucket_ndv_mode' = 'hll');
 -- result:
-analyze_test_3ab3ff1269b643abaa243f0131369fed.t3	histogram	status	OK
+analyze_test_500d94de346d47a281f7062436520c7b.t3	histogram	status	OK
+-- !result
+SELECT buckets,mcv FROM _statistics_.histogram_statistics WHERE table_name = 'analyze_test_${uuid0}.t1' and column_name = 'k1';
+-- result:
+[["2020-04-11","2020-04-12","399","199","2"],["2020-04-13","2020-04-14","794","197","2"],["2020-04-15","2020-04-16","1185","195","2"],["2020-04-17","2020-04-18","1572","193","2"],["2020-04-19","2020-04-20","1955","191","2"],["2020-04-21","2020-04-22","2334","189","2"],["2020-04-23","2020-04-24","2709","187","2"],["2020-04-25","2020-04-26","3080","185","2"],["2020-04-27","2020-04-28","3447","183","2"],["2020-04-29","2020-04-30","3810","181","2"],["2020-05-01","2020-05-02","4169","179","2"],["2020-05-03","2020-05-04","4524","177","2"],["2020-05-05","2020-05-06","4875","175","2"],["2020-05-07","2020-05-08","5222","173","2"],["2020-05-09","2020-05-10","5565","171","2"],["2020-05-11","2020-05-12","5904","169","2"],["2020-05-13","2020-05-14","6239","167","2"],["2020-05-15","2020-05-16","6570","165","2"],["2020-05-17","2020-05-18","6897","163","2"],["2020-05-19","2020-05-20","7220","161","2"],["2020-05-21","2020-05-22","7539","159","2"],["2020-05-23","2020-05-24","7854","157","2"],["2020-05-25","2020-05-27","8319","154","3"],["2020-05-28","2020-05-30","8775","151","3"],["2020-05-31","2020-06-02","9222","148","3"],["2020-06-03","2020-06-05","9660","145","3"],["2020-06-06","2020-06-08","10089","142","3"],["2020-06-09","2020-06-11","10509","139","3"],["2020-06-12","2020-06-14","10920","136","3"],["2020-06-15","2020-06-17","11322","133","3"],["2020-06-18","2020-06-20","11715","130","3"],["2020-06-21","2020-06-23","12099","127","3"],["2020-06-24","2020-06-26","12474","124","3"],["2020-06-27","2020-06-29","12840","121","3"],["2020-06-30","2020-07-02","13197","118","3"],["2020-07-03","2020-07-05","13545","115","3"],["2020-07-06","2020-07-08","13884","112","3"],["2020-07-09","2020-07-11","14214","109","3"],["2020-07-12","2020-07-14","14535","106","3"],["2020-07-15","2020-07-18","14949","102","4"],["2020-07-19","2020-07-22","15347","98","4"],["2020-07-23","2020-07-26","15729","94","4"],["2020-07-27","2020-07-30","16095","90","4"],["2020-07-31","2020-08-03","16445","86","4"],["2020-08-04","2020-08-07","16779","82","4"],["2020-08-08","2020-08-11","17097","78","4"],["2020-08-12","2020-08-16","17472","73","5"],["2020-08-17","2020-08-21","17822","68","5"],["2020-08-22","2020-08-26","18147","63","5"],["2020-08-27","2020-09-01","18504","57","6"],["2020-09-02","2020-09-07","18825","51","6"],["2020-09-08","2020-09-14","19154","44","7"],["2020-09-15","2020-09-22","19470","36","8"],["2020-09-23","2020-10-03","19800","25","11"],["2020-10-04","2020-10-27","20100","1","24"]]	[["2020-02-20","251"],["2020-02-21","250"],["2020-02-22","249"],["2020-02-23","248"],["2020-02-24","247"],["2020-02-25","246"],["2020-02-26","245"],["2020-02-27","244"],["2020-02-17","254"],["2020-02-18","253"],["2020-02-19","252"],["2020-03-02","240"],["2020-03-01","241"],["2020-03-04","238"],["2020-03-03","239"],["2020-03-06","236"],["2020-03-05","237"],["2020-02-28","243"],["2020-02-29","242"],["2020-01-30","272"],["2020-01-31","271"],["2020-02-01","270"],["2020-02-02","269"],["2020-02-03","268"],["2020-02-04","267"],["2020-02-05","266"],["2020-01-27","275"],["2020-01-28","274"],["2020-01-29","273"],["2020-02-10","261"],["2020-02-11","260"],["2020-02-12","259"],["2020-02-13","258"],["2020-02-14","257"],["2020-02-15","256"],["2020-02-16","255"],["2020-02-06","265"],["2020-02-07","264"],["2020-02-08","263"],["2020-02-09","262"],["2020-04-01","210"],["2020-01-10","292"],["2020-04-03","208"],["2020-01-11","291"],["2020-04-02","209"],["2020-01-12","290"],["2020-04-05","206"],["2020-01-13","289"],["2020-04-04","207"],["2020-01-14","288"],["2020-04-07","204"],["2020-01-15","287"],["2020-04-06","205"],["2020-03-31","211"],["2020-03-30","212"],["2020-01-05","297"],["2020-01-06","296"],["2020-03-29","213"],["2020-01-07","295"],["2020-01-08","294"],["2020-01-09","293"],["2020-01-20","282"],["2020-01-21","281"],["2020-01-22","280"],["2020-01-23","279"],["2020-01-24","278"],["2020-01-25","277"],["2020-01-26","276"],["2020-04-10","201"],["2020-01-16","286"],["2020-04-09","202"],["2020-01-17","285"],["2020-04-08","203"],["2020-01-18","284"],["2020-01-19","283"],["2020-03-11","231"],["2020-03-10","232"],["2020-03-13","229"],["2020-03-12","230"],["2020-03-15","227"],["2020-03-14","228"],["2020-03-17","225"],["2020-03-16","226"],["2020-03-08","234"],["2020-03-07","235"],["2020-03-09","233"],["2020-03-22","220"],["2020-03-21","221"],["2020-03-24","218"],["2020-03-23","219"],["2020-03-26","216"],["2020-01-02","300"],["2020-03-25","217"],["2020-01-03","299"],["2020-03-28","214"],["2020-01-04","298"],["2020-03-27","215"],["2020-03-20","222"],["2020-03-19","223"],["2020-03-18","224"]]
+-- !result
+SELECT buckets,mcv FROM _statistics_.histogram_statistics WHERE table_name = 'analyze_test_${uuid0}.t2' and column_name = 'k1';
+-- result:
+[["2020-01-01","2020-01-25","325","25","25"],["2020-01-26","2020-02-05","666","36","11"],["2020-02-06","2020-02-13","990","44","8"],["2020-02-14","2020-02-20","1326","51","7"],["2020-02-21","2020-02-26","1653","57","6"],["2020-02-27","2020-03-03","2016","63","6"],["2020-03-04","2020-03-08","2346","68","5"],["2020-03-09","2020-03-13","2701","73","5"],["2020-03-14","2020-03-18","3081","78","5"],["2020-03-19","2020-03-22","3403","82","4"],["2020-03-23","2020-03-26","3741","86","4"],["2020-03-27","2020-03-30","4095","90","4"],["2020-03-31","2020-04-03","4465","94","4"],["2020-04-04","2020-04-07","4851","98","4"],["2020-04-08","2020-04-11","5253","102","4"],["2020-04-12","2020-04-15","5671","106","4"],["2020-04-16","2020-04-18","5995","109","3"],["2020-04-19","2020-04-21","6328","112","3"],["2020-04-22","2020-04-24","6670","115","3"],["2020-04-25","2020-04-27","7021","118","3"],["2020-04-28","2020-04-30","7381","121","3"],["2020-05-01","2020-05-03","7750","124","3"],["2020-05-04","2020-05-06","8128","127","3"],["2020-05-07","2020-05-09","8515","130","3"],["2020-05-10","2020-05-12","8911","133","3"],["2020-05-13","2020-05-15","9316","136","3"],["2020-05-16","2020-05-18","9730","139","3"],["2020-05-19","2020-05-21","10153","142","3"],["2020-05-22","2020-05-24","10585","145","3"],["2020-05-25","2020-05-27","11026","148","3"],["2020-05-28","2020-05-30","11476","151","3"],["2020-05-31","2020-06-02","11935","154","3"],["2020-06-03","2020-06-05","12403","157","3"],["2020-06-06","2020-06-07","12720","159","2"],["2020-06-08","2020-06-09","13041","161","2"],["2020-06-10","2020-06-11","13366","163","2"],["2020-06-12","2020-06-13","13695","165","2"],["2020-06-14","2020-06-15","14028","167","2"],["2020-06-16","2020-06-17","14365","169","2"],["2020-06-18","2020-06-19","14706","171","2"],["2020-06-20","2020-06-21","15051","173","2"],["2020-06-22","2020-06-23","15400","175","2"],["2020-06-24","2020-06-25","15753","177","2"],["2020-06-26","2020-06-27","16110","179","2"],["2020-06-28","2020-06-29","16471","181","2"],["2020-06-30","2020-07-01","16836","183","2"],["2020-07-02","2020-07-03","17205","185","2"],["2020-07-04","2020-07-05","17578","187","2"],["2020-07-06","2020-07-07","17955","189","2"],["2020-07-08","2020-07-09","18336","191","2"],["2020-07-10","2020-07-11","18721","193","2"],["2020-07-12","2020-07-13","19110","195","2"],["2020-07-14","2020-07-15","19503","197","2"],["2020-07-16","2020-07-17","19900","199","2"],["2020-07-18","2020-07-18","20100","200","1"]]	[["2020-08-07","220"],["2020-08-06","219"],["2020-08-05","218"],["2020-08-04","217"],["2020-08-09","222"],["2020-08-08","221"],["2020-07-30","212"],["2020-07-31","213"],["2020-08-03","216"],["2020-08-02","215"],["2020-08-01","214"],["2020-08-18","231"],["2020-08-17","230"],["2020-08-16","229"],["2020-08-15","228"],["2020-08-19","232"],["2020-08-10","223"],["2020-08-14","227"],["2020-08-13","226"],["2020-08-12","225"],["2020-08-11","224"],["2020-10-26","300"],["2020-10-25","299"],["2020-07-19","201"],["2020-09-30","274"],["2020-10-19","293"],["2020-07-27","209"],["2020-10-18","292"],["2020-07-28","210"],["2020-07-25","207"],["2020-07-26","208"],["2020-10-15","289"],["2020-10-14","288"],["2020-10-17","291"],["2020-07-29","211"],["2020-10-16","290"],["2020-07-20","202"],["2020-07-23","205"],["2020-07-24","206"],["2020-07-21","203"],["2020-07-22","204"],["2020-10-22","296"],["2020-10-21","295"],["2020-10-24","298"],["2020-10-23","297"],["2020-10-20","294"],["2020-10-08","282"],["2020-09-19","263"],["2020-10-07","281"],["2020-09-18","262"],["2020-09-17","261"],["2020-10-09","283"],["2020-09-16","260"],["2020-10-04","278"],["2020-10-03","277"],["2020-10-06","280"],["2020-10-05","279"],["2020-09-11","255"],["2020-09-10","254"],["2020-09-15","259"],["2020-09-14","258"],["2020-09-13","257"],["2020-09-12","256"],["2020-10-11","285"],["2020-10-10","284"],["2020-10-13","287"],["2020-10-12","286"],["2020-09-29","273"],["2020-09-28","272"],["2020-09-27","271"],["2020-09-22","266"],["2020-09-21","265"],["2020-09-20","264"],["2020-09-26","270"],["2020-09-25","269"],["2020-09-24","268"],["2020-09-23","267"],["2020-10-02","276"],["2020-10-01","275"],["2020-08-29","242"],["2020-08-28","241"],["2020-08-27","240"],["2020-08-26","239"],["2020-08-21","234"],["2020-08-20","233"],["2020-08-25","238"],["2020-08-24","237"],["2020-08-23","236"],["2020-08-22","235"],["2020-09-08","252"],["2020-09-07","251"],["2020-09-06","250"],["2020-09-05","249"],["2020-09-09","253"],["2020-08-31","244"],["2020-08-30","243"],["2020-09-04","248"],["2020-09-03","247"],["2020-09-02","246"],["2020-09-01","245"]]
+-- !result
+SELECT buckets,mcv FROM _statistics_.histogram_statistics WHERE table_name = 'analyze_test_${uuid0}.t3' and column_name = 'k1';
+-- result:
+[["2020-01-02","2020-01-06","1500","300","5"],["2020-01-07","2020-01-11","3000","300","5"],["2020-01-12","2020-01-16","4500","300","5"],["2020-01-17","2020-01-21","6000","300","5"],["2020-01-22","2020-01-26","7500","300","5"],["2020-01-27","2020-01-31","9000","300","5"],["2020-02-01","2020-02-05","10500","300","5"],["2020-02-06","2020-02-10","12000","300","5"],["2020-02-11","2020-02-15","13500","300","5"],["2020-02-16","2020-02-20","15000","300","5"],["2020-02-21","2020-02-25","16500","300","5"],["2020-02-26","2020-03-01","18000","300","5"],["2020-03-02","2020-03-06","19500","300","5"],["2020-03-07","2020-03-11","21000","300","5"],["2020-03-12","2020-03-16","22500","300","5"],["2020-03-17","2020-03-21","24000","300","5"],["2020-03-22","2020-03-26","25500","300","5"],["2020-03-27","2020-03-31","27000","300","5"],["2020-04-01","2020-04-05","28500","300","5"],["2020-04-06","2020-04-10","30000","300","5"],["2020-04-11","2020-04-15","31500","300","5"],["2020-04-16","2020-04-20","33000","300","5"],["2020-04-21","2020-04-25","34500","300","5"],["2020-04-26","2020-04-30","36000","300","5"],["2020-05-01","2020-05-05","37500","300","5"],["2020-05-06","2020-05-10","39000","300","5"],["2020-05-11","2020-05-15","40500","300","5"],["2020-05-16","2020-05-20","42000","300","5"],["2020-05-21","2020-05-25","43500","300","5"],["2020-05-26","2020-05-30","45000","300","5"],["2020-05-31","2020-06-04","46500","300","5"],["2020-06-05","2020-06-09","48000","300","5"],["2020-06-10","2020-06-14","49500","300","5"],["2020-06-15","2020-06-19","51000","300","5"],["2020-06-20","2020-06-24","52500","300","5"],["2020-06-25","2020-06-29","54000","300","5"],["2020-06-30","2020-07-04","55500","300","5"],["2020-07-05","2020-07-09","57000","300","5"],["2020-07-10","2020-07-14","58500","300","5"],["2020-07-15","2020-07-19","60000","300","5"],["2020-07-20","2020-07-24","61500","300","5"],["2020-07-25","2020-07-29","63000","300","5"],["2020-07-30","2020-08-03","64500","300","5"],["2020-08-04","2020-08-08","66000","300","5"],["2020-08-09","2020-08-13","67500","300","5"],["2020-08-14","2020-08-18","69000","300","5"],["2020-08-19","2020-08-23","70500","300","5"],["2020-08-24","2020-08-28","72000","300","5"],["2020-08-29","2020-09-02","73500","300","5"],["2020-09-03","2020-09-07","75000","300","5"],["2020-09-08","2020-09-12","76500","300","5"],["2020-09-13","2020-09-17","78000","300","5"],["2020-09-18","2020-09-22","79500","300","5"],["2020-09-23","2020-09-27","81000","300","5"],["2020-09-28","2020-10-02","82500","300","5"],["2020-10-03","2020-10-07","84000","300","5"],["2020-10-08","2020-10-12","85500","300","5"],["2020-10-13","2020-10-17","87000","300","5"],["2020-10-18","2020-10-22","88500","300","5"],["2020-10-23","2020-10-27","90000","300","5"]]	None
+-- !result
+[UC] ANALYZE TABLE t1 UPDATE HISTOGRAM ON k1,k2,k3 PROPERTIES('histogram_sample_ratio' = '1.0', 'histogram_collect_bucket_ndv_mode' = 'sample');
+-- result:
+analyze_test_500d94de346d47a281f7062436520c7b.t1	histogram	status	OK
+-- !result
+[UC] ANALYZE TABLE t2 UPDATE HISTOGRAM ON k1,k2,k3 PROPERTIES('histogram_sample_ratio' = '1.0', 'histogram_collect_bucket_ndv_mode' = 'sample');
+-- result:
+analyze_test_500d94de346d47a281f7062436520c7b.t2	histogram	status	OK
+-- !result
+[UC] ANALYZE TABLE t3 UPDATE HISTOGRAM ON k1,k2,k3 PROPERTIES('histogram_sample_ratio' = '1.0', "histogram_mcv_size" = '0', 'histogram_collect_bucket_ndv_mode' = 'sample');
+-- result:
+analyze_test_500d94de346d47a281f7062436520c7b.t3	histogram	status	OK
 -- !result
 SELECT buckets,mcv FROM _statistics_.histogram_statistics WHERE table_name = 'analyze_test_${uuid0}.t1' and column_name = 'k1';
 -- result:
@@ -529,15 +553,15 @@ SELECT COUNT(*) FROM (t4 n1 JOIN t5 n2 ON n1.k1 = n2.k1) JOIN t6 n3 ON n1.k3 = n
 -- !result
 [UC] ANALYZE TABLE t4 UPDATE HISTOGRAM ON k1,k2,k3 PROPERTIES('histogram_sample_ratio' = '1.0', "histogram_mcv_size" = '0');
 -- result:
-analyze_test_3ab3ff1269b643abaa243f0131369fed.t4	histogram	status	OK
+analyze_test_500d94de346d47a281f7062436520c7b.t4	histogram	status	OK
 -- !result
 [UC] ANALYZE TABLE t5 UPDATE HISTOGRAM ON k1,k2,k3 PROPERTIES('histogram_sample_ratio' = '1.0', "histogram_mcv_size" = '0');
 -- result:
-analyze_test_3ab3ff1269b643abaa243f0131369fed.t5	histogram	status	OK
+analyze_test_500d94de346d47a281f7062436520c7b.t5	histogram	status	OK
 -- !result
 [UC] ANALYZE TABLE t6 UPDATE HISTOGRAM ON k1,k2,k3 PROPERTIES('histogram_sample_ratio' = '1.0', "histogram_mcv_size" = '0');
 -- result:
-analyze_test_3ab3ff1269b643abaa243f0131369fed.t6	histogram	status	OK
+analyze_test_500d94de346d47a281f7062436520c7b.t6	histogram	status	OK
 -- !result
 function: assert_explain_verbose_contains('SELECT COUNT(*) FROM t4 WHERE k1="2020-02-01"', 'cardinality: 76')
 -- result:
@@ -567,17 +591,57 @@ function: assert_explain_costs_contains('SELECT COUNT(*) FROM (t4 n1 JOIN t5 n2 
 -- result:
 None
 -- !result
-[UC] ANALYZE TABLE t4 UPDATE HISTOGRAM ON k1,k2,k3 PROPERTIES('histogram_sample_ratio' = '1.0', "histogram_mcv_size" = '0', 'histogram_collect_ndv' = 'true');
+[UC] ANALYZE TABLE t4 UPDATE HISTOGRAM ON k1,k2,k3 PROPERTIES('histogram_sample_ratio' = '1.0', "histogram_mcv_size" = '0', 'histogram_collect_bucket_ndv_mode' = 'hll');
 -- result:
-analyze_test_3ab3ff1269b643abaa243f0131369fed.t4	histogram	status	OK
+analyze_test_500d94de346d47a281f7062436520c7b.t4	histogram	status	OK
 -- !result
-[UC] ANALYZE TABLE t5 UPDATE HISTOGRAM ON k1,k2,k3 PROPERTIES('histogram_sample_ratio' = '1.0', "histogram_mcv_size" = '0', 'histogram_collect_ndv' = 'true');
+[UC] ANALYZE TABLE t5 UPDATE HISTOGRAM ON k1,k2,k3 PROPERTIES('histogram_sample_ratio' = '1.0', "histogram_mcv_size" = '0', 'histogram_collect_bucket_ndv_mode' = 'hll');
 -- result:
-analyze_test_3ab3ff1269b643abaa243f0131369fed.t5	histogram	status	OK
+analyze_test_500d94de346d47a281f7062436520c7b.t5	histogram	status	OK
 -- !result
-[UC] ANALYZE TABLE t6 UPDATE HISTOGRAM ON k1,k2,k3 PROPERTIES('histogram_sample_ratio' = '1.0', "histogram_mcv_size" = '0', 'histogram_collect_ndv' = 'true');
+[UC] ANALYZE TABLE t6 UPDATE HISTOGRAM ON k1,k2,k3 PROPERTIES('histogram_sample_ratio' = '1.0', "histogram_mcv_size" = '0', 'histogram_collect_bucket_ndv_mode' = 'hll');
 -- result:
-analyze_test_3ab3ff1269b643abaa243f0131369fed.t6	histogram	status	OK
+analyze_test_500d94de346d47a281f7062436520c7b.t6	histogram	status	OK
+-- !result
+function: assert_explain_verbose_contains('SELECT COUNT(*) FROM t4 WHERE k1="2020-02-01"', 'cardinality: 270')
+-- result:
+None
+-- !result
+function: assert_explain_verbose_contains('SELECT COUNT(*) FROM t5 WHERE k1="2020-05-12"', 'cardinality: 132')
+-- result:
+None
+-- !result
+function: assert_explain_verbose_contains('SELECT COUNT(*) FROM t5 WHERE k1="2020-07-11"', 'cardinality: 193')
+-- result:
+None
+-- !result
+function: assert_explain_costs_contains('SELECT COUNT(*) FROM t4 JOIN t5 USING (k1)', 'cardinality: 30100', 'cardinality: 30100', 'cardinality: 2162260')
+-- result:
+None
+-- !result
+function: assert_explain_costs_contains('SELECT COUNT(*) FROM t4 JOIN t5 USING (k1) WHERE t4.k1 BETWEEN "2020-01-21" AND "2020-01-30" ', 'cardinality: 99', 'cardinality: 1523', 'cardinality: 861')
+-- result:
+None
+-- !result
+function: assert_explain_costs_contains('SELECT COUNT(*) FROM (t4 n1 JOIN t5 n2 ON n1.k1 = n2.k1) JOIN t6 n3 ON n1.k1 = n3.k1', 'cardinality: 30100', 'cardinality: 30100', 'cardinality: 60000', 'cardinality: 2162260', 'cardinality: 656323320')
+-- result:
+None
+-- !result
+function: assert_explain_costs_contains('SELECT COUNT(*) FROM (t4 n1 JOIN t5 n2 ON n1.k1 = n2.k1) JOIN t6 n3 ON n1.k3 = n3.k3', 'cardinality: 30100', 'cardinality: 30100', 'cardinality: 60000', 'cardinality: 2162260', 'cardinality: 478298162')
+-- result:
+None
+-- !result
+[UC] ANALYZE TABLE t4 UPDATE HISTOGRAM ON k1,k2,k3 PROPERTIES('histogram_sample_ratio' = '1.0', "histogram_mcv_size" = '0', 'histogram_collect_bucket_ndv_mode' = 'sample');
+-- result:
+analyze_test_500d94de346d47a281f7062436520c7b.t4	histogram	status	OK
+-- !result
+[UC] ANALYZE TABLE t5 UPDATE HISTOGRAM ON k1,k2,k3 PROPERTIES('histogram_sample_ratio' = '1.0', "histogram_mcv_size" = '0', 'histogram_collect_bucket_ndv_mode' = 'sample');
+-- result:
+analyze_test_500d94de346d47a281f7062436520c7b.t5	histogram	status	OK
+-- !result
+[UC] ANALYZE TABLE t6 UPDATE HISTOGRAM ON k1,k2,k3 PROPERTIES('histogram_sample_ratio' = '1.0', "histogram_mcv_size" = '0', 'histogram_collect_bucket_ndv_mode' = 'sample');
+-- result:
+analyze_test_500d94de346d47a281f7062436520c7b.t6	histogram	status	OK
 -- !result
 function: assert_explain_verbose_contains('SELECT COUNT(*) FROM t4 WHERE k1="2020-02-01"', 'cardinality: 270')
 -- result:

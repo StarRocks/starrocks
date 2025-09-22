@@ -90,7 +90,7 @@ public:
 
             hash = HashUtil::murmur_hash64A(s.data, s.size, HashUtil::MURMUR_SEED);
         } else {
-            const auto& v = column->get_data();
+            const auto v = column->immutable_data();
             bucket_it = std::upper_bound(
                     buckets.begin(), buckets.end(), v[row_num],
                     [](auto& value, Bucket<LT>& bucket) { return bucket.is_less_equal_to_upper(value); });
