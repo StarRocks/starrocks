@@ -5779,6 +5779,124 @@ TEST_F(ArrayFunctionsTest, array_repeat) {
     }
 }
 
+template <LogicalType Type>
+void array_top_n_test(Datum value_high, Datum value_mid, Datum value_low, Datum null_value) {
+    using ColumnType = RunTimeColumnType<Type>;
+    using ValueType = RunTimeCppType<Type>;
+
+    // Test array: [high, low, null, mid, high, low] with n=3 -> should return [high, high, mid]
+    auto array_column = ArrayColumn::create(ColumnType::create(), UInt32Column::create());
+    
+    // Test data
+    DatumArray test_array = {value_high, value_low, null_value, value_mid, value_high, value_low};
+    array_column->append_datum(Datum(test_array));
+    
+    // Empty array case
+    array_column->append_datum(Datum(DatumArray{}));
+    
+    // Single element array
+    array_column->append_datum(Datum(DatumArray{value_high}));
+    
+    // All null elements
+    array_column->append_datum(Datum(DatumArray{null_value, null_value, null_value}));
+
+    // Count column: [3, 2, 5, 1]
+    auto count_column = Int32Column::create();
+    count_column->append(3);  // For first array, should return top 3
+    count_column->append(2);  // For empty array, should return []
+    count_column->append(5);  // For single element, should return [high] (all available)
+    count_column->append(1);  // For all nulls, should return [null]
+
+    // Normal case test
+    Columns columns = {array_column, count_column};
+    auto result = ArrayFunctions::array_top_n(nullptr, columns).value();
+    ASSERT_TRUE(result->is_array());
+
+    auto* result_array = down_cast<ArrayColumn*>(result.get());
+    ASSERT_EQ(4, result_array->size());
+
+    // Test result for first array: should be [high, high, mid] 
+    auto result_0 = result_array->get(0).get<DatumArray>();
+    ASSERT_EQ(3, result_0.size());
+    ASSERT_EQ(value_high, result_0[0]);
+    ASSERT_EQ(value_high, result_0[1]);  
+    ASSERT_EQ(value_mid, result_0[2]);
+
+    // Test result for empty array: should be []
+    auto result_1 = result_array->get(1).get<DatumArray>();
+    ASSERT_EQ(0, result_1.size());
+
+    // Test result for single element with large n: should be [high]
+    auto result_2 = result_array->get(2).get<DatumArray>();
+    ASSERT_EQ(1, result_2.size());
+    ASSERT_EQ(value_high, result_2[0]);
+
+    // Test result for all nulls: should be [null]
+    auto result_3 = result_array->get(3).get<DatumArray>();
+    ASSERT_EQ(1, result_3.size());
+    ASSERT_TRUE(result_3[0].is_null());
+
+    // Test with zero and negative counts
+    auto zero_neg_count_column = Int32Column::create();
+    zero_neg_count_column->append(0);   // Should return empty array
+    zero_neg_count_column->append(-1);  // Should return empty array
+
+    auto array_for_zero_neg = ArrayColumn::create(ColumnType::create(), UInt32Column::create());
+    array_for_zero_neg->append_datum(Datum(test_array));
+    array_for_zero_neg->append_datum(Datum(test_array));
+
+    Columns zero_neg_columns = {array_for_zero_neg, zero_neg_count_column};
+    auto zero_neg_result = ArrayFunctions::array_top_n(nullptr, zero_neg_columns).value();
+    auto* zero_neg_array = down_cast<ArrayColumn*>(zero_neg_result.get());
+    
+    // Both should return empty arrays
+    auto zero_result = zero_neg_array->get(0).get<DatumArray>();
+    ASSERT_EQ(0, zero_result.size());
+    auto neg_result = zero_neg_array->get(1).get<DatumArray>();
+    ASSERT_EQ(0, neg_result.size());
+
+    // Test nullable array columns
+    auto nullable_array = NullableColumn::create(ArrayColumn::create(ColumnType::create(), UInt32Column::create()), NullColumn::create());
+    nullable_array->append_datum(Datum(test_array));
+    nullable_array->append_nulls(1);  // null array
+    
+    auto nullable_count = Int32Column::create();
+    nullable_count->append(2);
+    nullable_count->append(2);
+
+    Columns nullable_columns = {nullable_array, nullable_count};
+    auto nullable_result = ArrayFunctions::array_top_n(nullptr, nullable_columns).value();
+    ASSERT_TRUE(nullable_result->is_nullable());
+    auto* nullable_result_column = down_cast<NullableColumn*>(nullable_result.get());
+    
+    // First row should have valid result
+    ASSERT_FALSE(nullable_result_column->is_null(0));
+    auto nullable_first = nullable_result_column->get(0).get<DatumArray>();
+    ASSERT_EQ(2, nullable_first.size());
+    ASSERT_EQ(value_high, nullable_first[0]);
+    ASSERT_EQ(value_high, nullable_first[1]);
+    
+    // Second row should be null
+    ASSERT_TRUE(nullable_result_column->is_null(1));
+}
+
+TEST_F(ArrayFunctionsTest, array_top_n) {
+    array_top_n_test<TYPE_INT>(Datum((int32_t)100), Datum((int32_t)5), Datum((int32_t)1), Datum());
+    array_top_n_test<TYPE_BIGINT>(Datum((int64_t)100), Datum((int64_t)5), Datum((int64_t)1), Datum());
+    array_top_n_test<TYPE_FLOAT>(Datum((float)100.0), Datum((float)5.0), Datum((float)1.0), Datum());
+    array_top_n_test<TYPE_DOUBLE>(Datum((double)100.0), Datum((double)5.0), Datum((double)1.0), Datum());
+    array_top_n_test<TYPE_DECIMALV2>(Datum(DecimalV2Value("100.0")), Datum(DecimalV2Value("5.0")),
+                                     Datum(DecimalV2Value("1.0")), Datum());
+    array_top_n_test<TYPE_BOOLEAN>(Datum((uint8_t)1), Datum((uint8_t)1), Datum((uint8_t)0), Datum());
+    array_top_n_test<TYPE_DATE>(Datum(DateValue::create(2023, 12, 31)),
+                                Datum(DateValue::create(2023, 6, 15)),
+                                Datum(DateValue::create(2023, 1, 1)), Datum());
+    array_top_n_test<TYPE_DATETIME>(Datum(TimestampValue::create(2023, 12, 31, 23, 59, 59)),
+                                   Datum(TimestampValue::create(2023, 6, 15, 12, 0, 0)),
+                                   Datum(TimestampValue::create(2023, 1, 1, 0, 0, 1)), Datum());
+    array_top_n_test<TYPE_VARCHAR>(Datum(Slice("zzz")), Datum(Slice("g")), Datum(Slice("a")), Datum());
+}
+
 TEST_F(ArrayFunctionsTest, array_repeat_array) {
     {
         Datum element_0 = DatumArray{(int32_t)0};
