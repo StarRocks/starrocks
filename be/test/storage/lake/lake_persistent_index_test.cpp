@@ -387,8 +387,6 @@ TEST_F(LakePersistentIndexTest, test_memtable_full) {
     config::l0_max_mem_usage = old_l0_max_mem_usage;
 }
 
-<<<<<<< HEAD
-=======
 TEST_F(LakePersistentIndexTest, test_compaction_strategy_same_max_rss_rowid) {
     // Test case for the fix: when base sstable's max_rss_rowid is same as cumulative sstable's max_rss_rowid,
     // we should force to do base merge instead of cumulative merge.
@@ -465,106 +463,4 @@ TEST_F(LakePersistentIndexTest, test_compaction_strategy_same_max_rss_rowid) {
     ASSERT_EQ(0, sstables.size()) << "Should be empty since no cumulative sstables exist";
 }
 
-TEST_F(LakePersistentIndexTest, test_major_compaction_with_predicate) {
-    auto l0_max_mem_usage = config::l0_max_mem_usage;
-    auto lake_pk_index_cumulative_base_compaction_ratio = config::lake_pk_index_cumulative_base_compaction_ratio;
-    SyncPoint::GetInstance()->SetCallBack("LakePersistentIndex::minor_compact:inject_predicate", [](void* arg) {
-        PersistentIndexSstablePB* sstable_pb = (PersistentIndexSstablePB*)arg;
-        auto sstable_predicate_pb = sstable_pb->mutable_predicate();
-        auto record_predicate_pb = sstable_predicate_pb->mutable_record_predicate();
-
-        record_predicate_pb->set_type(RecordPredicatePB::COLUMN_HASH_IS_CONGRUENT);
-        auto column_hash_is_congruent_pb = record_predicate_pb->mutable_column_hash_is_congruent();
-        column_hash_is_congruent_pb->set_modulus(16);
-        column_hash_is_congruent_pb->set_remainder(0);
-        column_hash_is_congruent_pb->add_column_names("c0");
-    });
-    SyncPoint::GetInstance()->EnableProcessing();
-
-    DeferOp defer([&]() {
-        SyncPoint::GetInstance()->ClearCallBack("LakePersistentIndex::minor_compact:inject_predicate");
-        SyncPoint::GetInstance()->DisableProcessing();
-        config::lake_pk_index_cumulative_base_compaction_ratio = lake_pk_index_cumulative_base_compaction_ratio;
-        config::l0_max_mem_usage = l0_max_mem_usage;
-    });
-
-    config::l0_max_mem_usage = 1024 * 1024 * 1024;
-    using Key = int32_t;
-    const int M = 5;
-    const int N = 100;
-    vector<Key> total_keys;
-    vector<Slice> total_key_slices;
-    vector<IndexValue> total_values;
-    vector<size_t> idxes;
-    vector<uint8_t> hits;
-    total_key_slices.reserve(M * N);
-    total_keys.reserve(M * N);
-    auto tablet_id = _tablet_metadata->id();
-    auto index = std::make_unique<LakePersistentIndex>(_tablet_mgr.get(), tablet_id);
-    ASSERT_OK(index->init(_tablet_metadata->sstable_meta()));
-    int k = 0;
-    for (int i = 0; i < M; ++i) {
-        vector<Key> keys;
-        keys.reserve(N);
-        vector<Slice> key_slices;
-        key_slices.reserve(N);
-        vector<IndexValue> values;
-        values.reserve(N);
-        for (int j = 0; j < N; j++) {
-            int32_t cur_k = i * N + j;
-            int32_t cur_v = j * 2;
-            keys.emplace_back(cur_k);
-            total_keys.emplace_back(cur_k);
-
-            uint32_t hash = 0;
-            auto key_column = Int32Column::create();
-            key_column->append(keys[j]);
-            key_column->crc32_hash(&(hash), 0, 1);
-            hits.push_back(hash % 16 == 0);
-
-            key_slices.emplace_back((uint8_t*)(&keys[j]), sizeof(Key));
-            total_key_slices.emplace_back((uint8_t*)(&total_keys[k]), sizeof(Key));
-            values.emplace_back(cur_v);
-            total_values.emplace_back(cur_v);
-
-            ++k;
-        }
-        index->prepare(EditVersion(i, 0), 0);
-        vector<IndexValue> upsert_old_values(keys.size());
-        ASSERT_OK(index->upsert(N, key_slices.data(), values.data(), upsert_old_values.data()));
-        // generate sst files.
-        index->flush_memtable();
-    }
-    ASSERT_TRUE(index->memory_usage() > 0);
-
-    Tablet tablet(_tablet_mgr.get(), tablet_id);
-    auto tablet_metadata_ptr = std::make_shared<TabletMetadata>();
-    tablet_metadata_ptr->CopyFrom(*_tablet_metadata);
-    MetaFileBuilder builder(tablet, tablet_metadata_ptr);
-    // commit sst files
-    ASSERT_OK(index->commit(&builder));
-
-    vector<IndexValue> get_values = vector<IndexValue>(M * N, IndexValue(NullIndexValue));
-    auto hit_count = SIMD::count_nonzero(hits.data(), hits.size());
-    auto txn_log = std::make_shared<TxnLogPB>();
-    // try to compact sst files.
-    ASSERT_OK(LakePersistentIndex::major_compact(_tablet_mgr.get(), *tablet_metadata_ptr, txn_log.get()));
-    ASSERT_TRUE(txn_log->op_compaction().input_sstables_size() == M);
-    ASSERT_TRUE(txn_log->op_compaction().has_output_sstable() || hit_count == 0);
-    ASSERT_OK(index->apply_opcompaction(txn_log->op_compaction()));
-    ASSERT_OK(index->get(M * N, total_key_slices.data(), get_values.data()));
-    ASSERT_TRUE(hit_count < M * N);
-
-    for (int i = 0; i < M * N; i++) {
-        ASSERT_TRUE(!(total_values[i] == IndexValue(NullIndexValue)));
-        if (hits[i]) {
-            ASSERT_TRUE(!(get_values[i] == IndexValue(NullIndexValue)));
-            ASSERT_EQ(total_values[i], get_values[i]);
-        } else {
-            ASSERT_EQ(IndexValue(NullIndexValue), get_values[i]);
-        }
-    }
-}
-
->>>>>>> bb7a7ace8c ([BugFix] Fix pk index cumulative compaction strategy when max_rss_rowid is same (#63277))
 } // namespace starrocks::lake
