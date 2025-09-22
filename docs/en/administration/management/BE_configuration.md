@@ -2159,23 +2159,6 @@ When this value is set to less than `0`, the system uses the product of its abso
 - Description: Prefix length used for string ZoneMap min/max when `enable_string_prefix_zonemap` is enabled.
 - Introduced in: -
 
-##### string_zonemap_overlap_threshold
-
-- Default: 0.8
-- Type: Double
-- Unit: -
-- Is mutable: Yes
-- Description: Threshold for adaptive creation of page-level string ZoneMap. If the estimated overlap ratio across consecutive pages is greater than this threshold, StarRocks skips writing the page-level string ZoneMap. Range: [0.0, 1.0].
-- Introduced in: -
-
-##### string_zonemap_min_pages_for_adaptive_check
-
-- Default: 16
-- Type: Int
-- Unit: -
-- Is mutable: Yes
-- Description: Minimum number of non-empty pages required before applying the adaptive string ZoneMap quality check.
-- Introduced in: -
 
 ##### enable_ordinal_index_memory_page_cache
 
