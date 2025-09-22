@@ -333,12 +333,6 @@ CONF_mBool(enable_ordinal_index_memory_page_cache, "true");
 CONF_mBool(enable_string_prefix_zonemap, "true");
 // Prefix length used for string ZoneMap min/max when enabled
 CONF_mInt32(string_prefix_zonemap_prefix_len, "16");
-// Adaptive creation of string zonemap index based on page overlap quality.
-// If the estimated overlap ratio across consecutive pages is greater than this threshold,
-// skip writing the page-level string zonemap index. Range: [0.0, 1.0].
-CONF_mDouble(string_zonemap_overlap_threshold, "0.8");
-// Minimum number of non-empty pages before applying the adaptive check.
-CONF_mInt32(string_zonemap_min_pages_for_adaptive_check, "16");
 
 // ========================== ZONEMAP END ===================================
 
@@ -936,6 +930,9 @@ CONF_mInt64(tablet_internal_parallel_min_scan_dop, "4");
 // Only the num rows of lake tablet less than lake_tablet_rows_splitted_ratio * splitted_scan_rows, than the lake tablet can be splitted.
 CONF_mDouble(lake_tablet_rows_splitted_ratio, "1.5");
 
+// Allow skipping invalid delete_predicate in order to get the segment data back, and do manual correction.
+CONF_mBool(lake_tablet_ignore_invalid_delete_predicate, "false");
+
 // The bitmap serialize version.
 CONF_Int16(bitmap_serialize_version, "1");
 // The max hdfs file handle.
@@ -1094,6 +1091,8 @@ CONF_Int64(rpc_connect_timeout_ms, "30000");
 CONF_Int32(max_batch_publish_latency_ms, "100");
 
 // Config for opentelemetry tracing.
+// Valid example: jaeger_endpoint = localhost:14268
+// Invalid example: jaeger_endpoint = http://localhost:14268
 CONF_String(jaeger_endpoint, "");
 
 // Config for query debug trace

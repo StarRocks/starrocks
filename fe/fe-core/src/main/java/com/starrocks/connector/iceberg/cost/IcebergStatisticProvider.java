@@ -14,7 +14,6 @@
 
 package com.starrocks.connector.iceberg.cost;
 
-import com.google.common.collect.AbstractSequentialIterator;
 import com.google.common.collect.HashMultimap;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.IcebergTable;
@@ -31,20 +30,19 @@ import org.apache.iceberg.DataFile;
 import org.apache.iceberg.FileScanTask;
 import org.apache.iceberg.PartitionData;
 import org.apache.iceberg.PartitionField;
-import org.apache.iceberg.Snapshot;
 import org.apache.iceberg.StatisticsFile;
 import org.apache.iceberg.Table;
 import org.apache.iceberg.puffin.StandardBlobTypes;
 import org.apache.iceberg.types.Comparators;
 import org.apache.iceberg.types.Type;
 import org.apache.iceberg.types.Types;
+import org.apache.iceberg.util.SnapshotUtil;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
-import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -52,14 +50,11 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.function.Predicate;
 import java.util.stream.Collectors;
-import javax.annotation.Nullable;
 
-import static com.google.common.base.Verify.verifyNotNull;
 import static com.google.common.collect.ImmutableMap.toImmutableMap;
 import static com.google.common.collect.Iterables.getOnlyElement;
 import static com.google.common.collect.Streams.stream;
 import static com.starrocks.connector.ColumnTypeConverter.fromIcebergType;
-import static java.util.Objects.requireNonNull;
 import static java.util.function.Function.identity;
 import static java.util.stream.Collectors.toMap;
 
@@ -125,8 +120,8 @@ public class IcebergStatisticProvider {
                 }
             }
 
-            PredicateSearchKey key = PredicateSearchKey.of(icebergTable.getCatalogDBName(), icebergTable.getCatalogTableName(),
-                    version.end().get(), predicate);
+            PredicateSearchKey key = PredicateSearchKey.of(icebergTable.getCatalogDBName(),
+                    icebergTable.getCatalogTableName(), version, predicate);
             IcebergFileStats icebergFileStats;
             if (!icebergFileStatistics.containsKey(key)) {
                 icebergFileStats = new IcebergFileStats(1);
@@ -379,14 +374,11 @@ public class IcebergStatisticProvider {
         Map<Integer, Long> colIdToNdv = new HashMap<>();
         Set<Integer> remainingColumnIds = new HashSet<>(columnIds);
 
-        long snapshotId;
-        if (version.end().isPresent()) {
-            snapshotId = version.end().get();
-        } else {
+        if (version == null || version.isEmpty()) {
             return colIdToNdv;
         }
 
-        getLatestStatsFile(icebergTable.getNativeTable(), snapshotId).ifPresent(statisticsFile -> {
+        getLatestStatsFile(icebergTable.getNativeTable(), version).ifPresent(statisticsFile -> {
             Map<Integer, BlobMetadata> colIdToBlobMeta = statisticsFile.blobMetadata().stream()
                     .filter(blobMetadata -> blobMetadata.type().equals(StandardBlobTypes.APACHE_DATASKETCHES_THETA_V1))
                     .filter(blobMetadata -> blobMetadata.fields().size() == 1)
@@ -407,7 +399,7 @@ public class IcebergStatisticProvider {
         return colIdToNdv;
     }
 
-    public static Optional<StatisticsFile> getLatestStatsFile(Table table, long snapshotId) {
+    public static Optional<StatisticsFile> getLatestStatsFile(Table table, TvrVersionRange version) {
         if (table.statisticsFiles().isEmpty()) {
             return Optional.empty();
         }
@@ -420,29 +412,15 @@ public class IcebergStatisticProvider {
                             throw new StarRocksConnectorException("Unexpected duplicate statistics files %s, %s", colId, sf);
                         }));
 
-        return stream(lookupSnapshots(table, snapshotId))
+        return stream(lookupSnapshots(table, version))
                 .map(snapshotIdToStatsFile::get)
                 .filter(Objects::nonNull)
                 .findFirst();
     }
 
-    private static Iterator<Long> lookupSnapshots(Table icebergTable, long startingSnapshotId) {
-        return new AbstractSequentialIterator<Long>(startingSnapshotId) {
-            @Override
-            protected Long computeNext(Long parentId) {
-                requireNonNull(parentId, "previous is null");
-
-                @Nullable
-                Snapshot snapshot = icebergTable.snapshot(parentId);
-                if (snapshot == null) {
-                    return null;
-                }
-                if (snapshot.parentId() == null) {
-                    return null;
-                }
-
-                return verifyNotNull(snapshot.parentId(), "snapshot parent id is null");
-            }
-        };
+    private static Iterable<Long> lookupSnapshots(Table icebergTable, TvrVersionRange version) {
+        return SnapshotUtil.ancestorIdsBetween(version.to().getVersion(), version.from().getVersion(), (Long snapshotId) -> {
+            return icebergTable.snapshot(snapshotId);
+        });
     }
 }
