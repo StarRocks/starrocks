@@ -1126,7 +1126,7 @@ public class ExplainAnalyzer {
         if (timeCounter == null && rowsCounter == null) {
             return;
         }
-        if (rowsCounter.getValue() == 0L) {
+        if (rowsCounter == null || rowsCounter.getValue() == 0L) {
             return;
         }
 
