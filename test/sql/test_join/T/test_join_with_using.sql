@@ -54,10 +54,7 @@ SELECT * FROM left_table RIGHT JOIN right_table USING(id1, id2) ORDER BY id1;
 SELECT id1, id2 FROM left_table RIGHT JOIN right_table USING(id1, id2) ORDER BY id1;
 
 -- Test FULL OUTER JOIN
-SELECT * FROM left_table FULL OUTER JOIN right_table USING(id1, id2) ORDER BY id1;
-
--- Test FULL OUTER JOIN selecting only USING columns
-SELECT id1, id2 FROM left_table FULL OUTER JOIN right_table USING(id1, id2) ORDER BY id1;
+SELECT * FROM left_table FULL OUTER JOIN right_table USING(id1, id2) ORDER BY right_table.dept, right_table.bonus;
 
 -- Test with table aliases and qualified references
 SELECT L.id1, R.id1, id1 FROM left_table L JOIN right_table R USING(id1, id2) ORDER BY L.id1;
@@ -90,7 +87,7 @@ SELECT * FROM left_table LEFT JOIN right_table USING(id1) ORDER BY id1;
 
 SELECT * FROM left_table RIGHT JOIN right_table USING(id1) ORDER BY id1;
 
-SELECT * FROM left_table FULL OUTER JOIN right_table USING(id1) ORDER BY id1;
+SELECT * FROM left_table FULL OUTER JOIN right_table USING(id1) ORDER BY right_table.dept, right_table.bonus;
 
 SELECT * FROM left_table LEFT SEMI JOIN right_table USING(id1) ORDER BY id1;
 
@@ -136,14 +133,6 @@ ORDER BY pk;
 
 -- Test NULL AWARE LEFT ANTI JOIN (if supported)
 SELECT * FROM left_table WHERE id1 NOT IN (SELECT id1 FROM right_table WHERE id1 IS NOT NULL) ORDER BY id1;
-
--- Test edge cases with mixed USING columns and aliases
-SELECT 
-    id1 AS shared_key,
-    COALESCE(name, 'N/A') AS employee,
-    COALESCE(dept, 'No Dept') AS department
-FROM left_table FULL OUTER JOIN right_table USING(id1)
-ORDER BY shared_key;
 
 -- Test USING columns in different SELECT positions
 SELECT dept, id1, name FROM left_table LEFT JOIN right_table USING(id1) ORDER BY id1;

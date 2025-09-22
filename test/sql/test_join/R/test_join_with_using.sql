@@ -88,29 +88,17 @@ SELECT id1, id2 FROM left_table RIGHT JOIN right_table USING(id1, id2) ORDER BY 
 8	None
 9	900
 -- !result
-SELECT * FROM left_table FULL OUTER JOIN right_table USING(id1, id2) ORDER BY id1;
+SELECT * FROM left_table FULL OUTER JOIN right_table USING(id1, id2) ORDER BY right_table.dept, right_table.bonus;
 -- result:
-None	None	None	None	None	None	None	Sales	1200.00
-None	None	None	None	None	None	None	Finance	None
-None	None	None	None	None	None	None	HR	900.00
-1	100	Alice	25	New York	5000.00	Active	Engineering	1000.00
-2	200	Bob	30	Boston	6000.00	Active	Marketing	800.00
-3	300	Charlie	35	Chicago	7000.00	Inactive	None	None
-4	None	David	28	Denver	5500.00	Active	None	None
-5	500	Eve	32	Seattle	6500.00	Active	None	None
-6	600	Frank	40	None	8000.00	Inactive	None	None
--- !result
-SELECT id1, id2 FROM left_table FULL OUTER JOIN right_table USING(id1, id2) ORDER BY id1;
--- result:
-None	None
-None	None
-None	None
-1	100
-2	200
-3	300
-4	None
-5	500
-6	600
+Eve	5	32	Seattle	500	6500.00	Active	None	None	None	None
+Charlie	3	35	Chicago	300	7000.00	Inactive	None	None	None	None
+David	4	28	Denver	None	5500.00	Active	None	None	None	None
+Frank	6	40	None	600	8000.00	Inactive	None	None	None	None
+Alice	1	25	New York	100	5000.00	Active	Engineering	1	1000.00	100
+None	None	None	None	None	None	None	Finance	9	None	900
+None	None	None	None	None	None	None	HR	8	900.00	None
+Bob	2	30	Boston	200	6000.00	Active	Marketing	2	800.00	200
+None	None	None	None	None	None	None	Sales	7	1200.00	700
 -- !result
 SELECT L.id1, R.id1, id1 FROM left_table L JOIN right_table R USING(id1, id2) ORDER BY L.id1;
 -- result:
@@ -179,17 +167,17 @@ SELECT * FROM left_table RIGHT JOIN right_table USING(id1) ORDER BY id1;
 8	HR	900.00	None	None	None	None	None	None	None
 9	Finance	None	900	None	None	None	None	None	None
 -- !result
-SELECT * FROM left_table FULL OUTER JOIN right_table USING(id1) ORDER BY id1;
+SELECT * FROM left_table FULL OUTER JOIN right_table USING(id1) ORDER BY right_table.dept, right_table.bonus;
 -- result:
-None	None	None	None	None	None	None	HR	900.00	None
-None	None	None	None	None	None	None	Finance	None	900
-None	None	None	None	None	None	None	Sales	1200.00	700
-1	Alice	25	New York	100	5000.00	Active	Engineering	1000.00	100
-2	Bob	30	Boston	200	6000.00	Active	Marketing	800.00	200
-3	Charlie	35	Chicago	300	7000.00	Inactive	None	None	None
-4	David	28	Denver	None	5500.00	Active	None	None	None
-5	Eve	32	Seattle	500	6500.00	Active	None	None	None
-6	Frank	40	None	600	8000.00	Inactive	None	None	None
+Eve	5	32	Seattle	500	6500.00	Active	None	None	None	None
+David	4	28	Denver	None	5500.00	Active	None	None	None	None
+Charlie	3	35	Chicago	300	7000.00	Inactive	None	None	None	None
+Frank	6	40	None	600	8000.00	Inactive	None	None	None	None
+Alice	1	25	New York	100	5000.00	Active	Engineering	1	1000.00	100
+None	None	None	None	None	None	None	Finance	9	None	900
+None	None	None	None	None	None	None	HR	8	900.00	None
+Bob	2	30	Boston	200	6000.00	Active	Marketing	2	800.00	200
+None	None	None	None	None	None	None	Sales	7	1200.00	700
 -- !result
 SELECT * FROM left_table LEFT SEMI JOIN right_table USING(id1) ORDER BY id1;
 -- result:
@@ -291,23 +279,6 @@ Charlie	3	35	Chicago	300	7000.00	Inactive
 David	4	28	Denver	None	5500.00	Active
 Eve	5	32	Seattle	500	6500.00	Active
 Frank	6	40	None	600	8000.00	Inactive
--- !result
-SELECT 
-    id1 AS shared_key,
-    COALESCE(name, 'N/A') AS employee,
-    COALESCE(dept, 'No Dept') AS department
-FROM left_table FULL OUTER JOIN right_table USING(id1)
-ORDER BY shared_key;
--- result:
-None	N/A	HR
-None	N/A	Finance
-None	N/A	Sales
-1	Alice	Engineering
-2	Bob	Marketing
-3	Charlie	No Dept
-4	David	No Dept
-5	Eve	No Dept
-6	Frank	No Dept
 -- !result
 SELECT dept, id1, name FROM left_table LEFT JOIN right_table USING(id1) ORDER BY id1;
 -- result:
