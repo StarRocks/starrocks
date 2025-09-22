@@ -1157,6 +1157,7 @@ public class IcebergMetadataTest extends TableTestBase {
 
     @Test
     public void testRefreshTableException(@Mocked CachingIcebergCatalog icebergCatalog) {
+        ConnectContext ctx = new ConnectContext();
         new Expectations() {
             {
                 icebergCatalog.refreshTable(anyString, anyString, null);

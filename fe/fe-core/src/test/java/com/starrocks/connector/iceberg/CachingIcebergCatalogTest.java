@@ -14,6 +14,7 @@
 
 package com.starrocks.connector.iceberg;
 
+import com.starrocks.catalog.Database;
 import com.starrocks.catalog.IcebergTable;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.connector.ConnectorMetadatRequestContext;
@@ -110,5 +111,37 @@ public class CachingIcebergCatalogTest {
             List<String> res = cachingIcebergCatalog.listPartitionNames(table, requestContext, null);
             Assertions.assertEquals(res.size(), 0);
         }
+    }
+
+    @Test
+    public void testGetDB(@Mocked IcebergCatalog icebergCatalog, @Mocked Database db) {
+        new Expectations() {
+            {
+                icebergCatalog.getDB("test");
+                result = db;
+                minTimes = 1;
+            }
+        };
+        CachingIcebergCatalog cachingIcebergCatalog = new CachingIcebergCatalog(CATALOG_NAME, icebergCatalog,
+                DEFAULT_CATALOG_PROPERTIES, Executors.newSingleThreadExecutor());
+        Assertions.assertEquals(db, cachingIcebergCatalog.getDB("test"));
+        Assertions.assertEquals(db, cachingIcebergCatalog.getDB("test"));
+    }
+
+    @Test
+    public void testGetTable(@Mocked IcebergCatalog icebergCatalog, @Mocked Table nativeTable) {
+        new Expectations() {
+            {
+                icebergCatalog.getTable("test", "table");
+                result = nativeTable;
+                minTimes = 1;
+            }
+        };
+        //test for cache
+        CachingIcebergCatalog cachingIcebergCatalog = new CachingIcebergCatalog(CATALOG_NAME, icebergCatalog,
+                DEFAULT_CATALOG_PROPERTIES, Executors.newSingleThreadExecutor());
+        Assertions.assertEquals(nativeTable, cachingIcebergCatalog.getTable("test", "table"));
+        Assertions.assertEquals(nativeTable, cachingIcebergCatalog.getTable("test", "table"));
+        cachingIcebergCatalog.invalidateCache("test", "table");
     }
 }
