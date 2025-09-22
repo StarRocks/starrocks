@@ -23,6 +23,7 @@ import com.starrocks.analysis.IsNullPredicate;
 import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.analysis.Predicate;
 import com.starrocks.analysis.SlotRef;
+import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.Partition;
@@ -47,6 +48,7 @@ import com.starrocks.rpc.BrpcProxy;
 import com.starrocks.rpc.LakeService;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.DeleteStmt;
+import com.starrocks.sql.common.DmlException;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.transaction.TabletCommitInfo;
@@ -101,7 +103,7 @@ public class LakeDeleteJob extends DeleteJob {
 
         // create delete predicate
         List<Predicate> conditions = getDeleteConditions();
-        DeletePredicatePB deletePredicate = createDeletePredicate(conditions);
+        DeletePredicatePB deletePredicate = createDeletePredicate(table, conditions);
 
         // send delete data request to BE
         try {
@@ -140,7 +142,15 @@ public class LakeDeleteJob extends DeleteJob {
         commit(db, getTimeoutMs());
     }
 
-    private DeletePredicatePB createDeletePredicate(List<Predicate> conditions) {
+    private static String getTableColumnId(Table table, String columnName) throws DmlException {
+        Column column = table.getColumn(columnName);
+        if (column == null) {
+            throw new DmlException(String.format("Cannot find column by name: %s", columnName));
+        }
+        return column.getColumnId().getId();
+    }
+
+    private DeletePredicatePB createDeletePredicate(Table table, List<Predicate> conditions) {
         DeletePredicatePB deletePredicate = new DeletePredicatePB();
         deletePredicate.version = -1; // Required but unused
         deletePredicate.binaryPredicates = Lists.newArrayList();
@@ -150,20 +160,23 @@ public class LakeDeleteJob extends DeleteJob {
             if (condition instanceof BinaryPredicate) {
                 BinaryPredicate binaryPredicate = (BinaryPredicate) condition;
                 BinaryPredicatePB binaryPredicatePB = new BinaryPredicatePB();
-                binaryPredicatePB.columnName = ((SlotRef) binaryPredicate.getChild(0)).getColumnName();
+                String columnName = ((SlotRef) binaryPredicate.getChild(0)).getColumnName();
+                binaryPredicatePB.columnName = getTableColumnId(table, columnName);
                 binaryPredicatePB.op = binaryPredicate.getOp().toString();
                 binaryPredicatePB.value = ((LiteralExpr) binaryPredicate.getChild(1)).getStringValue();
                 deletePredicate.binaryPredicates.add(binaryPredicatePB);
             } else if (condition instanceof IsNullPredicate) {
                 IsNullPredicate isNullPredicate = (IsNullPredicate) condition;
                 IsNullPredicatePB isNullPredicatePB = new IsNullPredicatePB();
-                isNullPredicatePB.columnName = ((SlotRef) isNullPredicate.getChild(0)).getColumnName();
+                String columnName = ((SlotRef) isNullPredicate.getChild(0)).getColumnName();
+                isNullPredicatePB.columnName = getTableColumnId(table, columnName);
                 isNullPredicatePB.isNotNull = isNullPredicate.isNotNull();
                 deletePredicate.isNullPredicates.add(isNullPredicatePB);
             } else if (condition instanceof InPredicate) {
                 InPredicate inPredicate = (InPredicate) condition;
                 InPredicatePB inPredicatePB = new InPredicatePB();
-                inPredicatePB.columnName = ((SlotRef) inPredicate.getChild(0)).getColumnName();
+                String columnName = ((SlotRef) inPredicate.getChild(0)).getColumnName();
+                inPredicatePB.columnName = getTableColumnId(table, columnName);
                 inPredicatePB.isNotIn = inPredicate.isNotIn();
                 inPredicatePB.values = Lists.newArrayList();
                 for (int i = 1; i <= inPredicate.getInElementNum(); i++) {
