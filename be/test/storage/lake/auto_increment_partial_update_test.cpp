@@ -415,13 +415,22 @@ TEST_F(LakeAutoIncrementPartialUpdateTest, test_resolve_conflict) {
     SyncPoint::GetInstance()->DisableProcessing();
 }
 
-// Covers the non-null auto_increment_state path in UpdateManager::get_column_values(), involving
-// reading auto_increment_state->segment_id and rowids (corresponding to lines 736, 737 in update_manager.cpp).
 TEST_F(LakeAutoIncrementPartialUpdateTest, test_auto_increment_fetch_from_segment_for_new_rows) {
     recreate_schema(1);
     auto chunk0 = generate_data(kChunkSize, false);
-    auto chunk_partial_missing_auto =
-            generate_data(kChunkSize, true); // Only (c0, c1=0), triggering auto-increment completion
+    // Build partial with NEW keys to ensure new_rows > 0 so that with_default == true
+    // Only (c0, c1=0), triggering auto-increment completion
+    std::vector<int> new_keys(kChunkSize);
+    std::vector<int64_t> zeros(kChunkSize, 0);
+    for (int i = 0; i < kChunkSize; i++) new_keys[i] = i + kChunkSize; // shift keys
+    auto c0_new = Int32Column::create();
+    auto c1_zero = Int64Column::create();
+    c0_new->append_numbers(new_keys.data(), new_keys.size() * sizeof(int));
+    c1_zero->append_numbers(zeros.data(), zeros.size() * sizeof(int64_t));
+    Chunk::SlotHashMap partial_map;
+    partial_map[0] = 0;
+    partial_map[1] = 1;
+    Chunk chunk_partial_missing_auto({std::move(c0_new), std::move(c1_zero)}, partial_map); // Only (c0, c1=0)
     auto indexes = std::vector<uint32_t>(kChunkSize);
     for (int i = 0; i < kChunkSize; i++) indexes[i] = i;
 
@@ -473,8 +482,8 @@ TEST_F(LakeAutoIncrementPartialUpdateTest, test_auto_increment_fetch_from_segmen
     }
     config::write_buffer_size = old_size;
 
-    // Verification: c1 auto-increment field should maintain (c1 - 1 == c0), and c2 should be the same as c1 (according to generation rules)
-    ASSERT_EQ(kChunkSize, check(version, [](int c0, int c1, int c2) { return (c1 - 1 == c0) && (c1 - 1 == c2); }));
+    // Verification: both original and new rows satisfy (c1 - 1 == c0) and (c2 == c1)
+    ASSERT_EQ(kChunkSize * 2, check(version, [](int c0, int c1, int c2) { return (c1 - 1 == c0) && (c1 - 1 == c2); }));
 }
 
 } // namespace starrocks::lake

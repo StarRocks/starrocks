@@ -477,6 +477,196 @@ TEST_P(LakePartialUpdateTest, test_partial_update_with_condition) {
     }
 }
 
+TEST_P(LakePartialUpdateTest, test_dcg_not_found_and_fallback_to_segment) {
+    // Prepare base full data
+    auto chunk0 = generate_data(kChunkSize, 0, false, 3);
+    auto indexes = std::vector<uint32_t>(kChunkSize);
+    for (int i = 0; i < kChunkSize; i++) indexes[i] = i;
+
+    auto version = 1;
+    auto tablet_id = _tablet_metadata->id();
+    for (int i = 0; i < 2; i++) {
+        auto txn_id = next_id();
+        ASSIGN_OR_ABORT(auto delta_writer, DeltaWriterBuilder()
+                                                   .set_tablet_manager(_tablet_mgr.get())
+                                                   .set_tablet_id(tablet_id)
+                                                   .set_txn_id(txn_id)
+                                                   .set_partition_id(_partition_id)
+                                                   .set_mem_tracker(_mem_tracker.get())
+                                                   .set_schema_id(_tablet_schema->id())
+                                                   .build());
+        ASSERT_OK(delta_writer->open());
+        ASSERT_OK(delta_writer->write(chunk0, indexes.data(), indexes.size()));
+        ASSERT_OK(delta_writer->finish_with_txnlog());
+        delta_writer->close();
+        ASSERT_OK(publish_single_version(tablet_id, version + 1, txn_id).status());
+        version++;
+    }
+
+    // Column mode update on one column to create DCG for c1 only
+    auto partial_c1 = generate_data(kChunkSize, 0, true, 7); // (c0, c1)
+    {
+        auto txn_id = next_id();
+        ASSIGN_OR_ABORT(auto delta_writer, DeltaWriterBuilder()
+                                                   .set_tablet_manager(_tablet_mgr.get())
+                                                   .set_tablet_id(tablet_id)
+                                                   .set_txn_id(txn_id)
+                                                   .set_partition_id(_partition_id)
+                                                   .set_mem_tracker(_mem_tracker.get())
+                                                   .set_schema_id(_tablet_schema->id())
+                                                   .set_slot_descriptors(&_slot_pointers)
+                                                   .set_partial_update_mode(PartialUpdateMode::COLUMN_UPDATE_MODE)
+                                                   .build());
+        ASSERT_OK(delta_writer->open());
+        ASSERT_OK(delta_writer->write(partial_c1, indexes.data(), indexes.size()));
+        ASSERT_OK(delta_writer->finish_with_txnlog());
+        delta_writer->close();
+        ASSERT_OK(publish_single_version(tablet_id, version + 1, txn_id).status());
+        version++;
+    }
+
+    // Row mode read to fetch unmodified c2: we provide (c0, c1) so the writer schema matches slots (2 columns),
+    // and get_column_values() will read unmodified c2. Since DCG has only c1, reading c2 triggers DCG NotFound fallback.
+    std::vector<int> keys_only(kChunkSize);
+    std::vector<int> c1_vals(kChunkSize);
+    for (int i = 0; i < kChunkSize; i++) {
+        keys_only[i] = i;
+        c1_vals[i] = i * 7; // consistent with partial_c1 ratio
+    }
+    auto c0_col = Int32Column::create();
+    auto c1_col = Int32Column::create();
+    c0_col->append_numbers(keys_only.data(), keys_only.size() * sizeof(int));
+    c1_col->append_numbers(c1_vals.data(), c1_vals.size() * sizeof(int));
+    Chunk::SlotHashMap slot_kv;
+    slot_kv[0] = 0; // c0
+    slot_kv[1] = 1; // c1
+    Chunk keys_c1_chunk({std::move(c0_col), std::move(c1_col)}, slot_kv);
+
+    {
+        auto txn_id = next_id();
+        ASSIGN_OR_ABORT(auto delta_writer, DeltaWriterBuilder()
+                                                   .set_tablet_manager(_tablet_mgr.get())
+                                                   .set_tablet_id(tablet_id)
+                                                   .set_txn_id(txn_id)
+                                                   .set_partition_id(_partition_id)
+                                                   .set_mem_tracker(_mem_tracker.get())
+                                                   .set_schema_id(_tablet_schema->id())
+                                                   .set_slot_descriptors(&_slot_pointers)
+                                                   .set_partial_update_mode(PartialUpdateMode::ROW_MODE)
+                                                   .build());
+        ASSERT_OK(delta_writer->open());
+        ASSERT_OK(delta_writer->write(keys_c1_chunk, indexes.data(), indexes.size()));
+        ASSERT_OK(delta_writer->finish_with_txnlog());
+        delta_writer->close();
+        ASSERT_OK(publish_single_version(tablet_id, version + 1, txn_id).status());
+        version++;
+    }
+
+    // Verify c2 is still from original segment (fallback) or default, and c1 reflects DCG update
+    ASSERT_EQ(kChunkSize, check(version, [](int c0, int c1, int c2) { return (c1 == c0 * 7) && (c2 == c0 * 4); }));
+}
+
+// Explicitly test DCG column file missing: column_file_by_idx returns a path but the file is removed,
+// so new_dcg_segment fails and get_column_values should surface an InternalError during publish.
+TEST_P(LakePartialUpdateTest, test_dcg_segment_missing_files_returns_error) {
+    auto chunk0 = generate_data(kChunkSize, 0, false, 3);
+    auto partial_c1 = generate_data(kChunkSize, 0, true, 7); // (c0, c1) to generate DCG for c1
+    auto indexes = std::vector<uint32_t>(kChunkSize);
+    for (int i = 0; i < kChunkSize; i++) indexes[i] = i;
+
+    auto version = 1;
+    auto tablet_id = _tablet_metadata->id();
+
+    // Base full write
+    {
+        auto txn_id = next_id();
+        ASSIGN_OR_ABORT(auto delta_writer, DeltaWriterBuilder()
+                                                   .set_tablet_manager(_tablet_mgr.get())
+                                                   .set_tablet_id(tablet_id)
+                                                   .set_txn_id(txn_id)
+                                                   .set_partition_id(_partition_id)
+                                                   .set_mem_tracker(_mem_tracker.get())
+                                                   .set_schema_id(_tablet_schema->id())
+                                                   .build());
+        ASSERT_OK(delta_writer->open());
+        ASSERT_OK(delta_writer->write(chunk0, indexes.data(), indexes.size()));
+        ASSERT_OK(delta_writer->finish_with_txnlog());
+        delta_writer->close();
+        ASSERT_OK(publish_single_version(tablet_id, version + 1, txn_id).status());
+        version++;
+    }
+
+    // Column mode partial update to create DCG
+    {
+        auto txn_id = next_id();
+        ASSIGN_OR_ABORT(auto delta_writer, DeltaWriterBuilder()
+                                                   .set_tablet_manager(_tablet_mgr.get())
+                                                   .set_tablet_id(tablet_id)
+                                                   .set_txn_id(txn_id)
+                                                   .set_partition_id(_partition_id)
+                                                   .set_mem_tracker(_mem_tracker.get())
+                                                   .set_schema_id(_tablet_schema->id())
+                                                   .set_slot_descriptors(&_slot_pointers)
+                                                   .set_partial_update_mode(PartialUpdateMode::COLUMN_UPDATE_MODE)
+                                                   .build());
+        ASSERT_OK(delta_writer->open());
+        ASSERT_OK(delta_writer->write(partial_c1, indexes.data(), indexes.size()));
+        ASSERT_OK(delta_writer->finish_with_txnlog());
+        delta_writer->close();
+        ASSERT_OK(publish_single_version(tablet_id, version + 1, txn_id).status());
+        version++;
+    }
+
+    // Remove generated DCG column files with absolute path to force Segment::open failure inside new_dcg_segment
+    {
+        ASSIGN_OR_ABORT(auto md, _tablet_mgr->get_tablet_metadata(tablet_id, version));
+        for (const auto& kv : md->dcg_meta().dcgs()) {
+            const auto& dcg_ver = kv.second;
+            for (const auto& rel : dcg_ver.column_files()) {
+                auto abs = _tablet_mgr->segment_location(tablet_id, rel);
+                (void)fs::remove(abs);
+            }
+        }
+    }
+
+    // Row mode partial update providing only primary keys with single-column slots,
+    // so c1,c2 are unmodified and need to be read; c1 prefers DCG -> error
+    std::vector<int> keys_only(kChunkSize);
+    for (int i = 0; i < kChunkSize; i++) keys_only[i] = i;
+    auto c0_only = Int32Column::create();
+    c0_only->append_numbers(keys_only.data(), keys_only.size() * sizeof(int));
+    Chunk::SlotHashMap slot_only;
+    slot_only[0] = 0; // only c0
+    Chunk c0_only_chunk({std::move(c0_only)}, slot_only);
+    // Build local slot descriptors with single column (c0) to match chunk schema
+    std::vector<SlotDescriptor> local_slots;
+    local_slots.emplace_back(0, "c0", TypeDescriptor{LogicalType::TYPE_INT});
+    std::vector<SlotDescriptor*> local_slot_ptrs;
+    local_slot_ptrs.emplace_back(&local_slots[0]);
+
+    StatusOr<TabletMetadataPtr> pub_st = Status::OK();
+    {
+        auto txn_id = next_id();
+        ASSIGN_OR_ABORT(auto delta_writer, DeltaWriterBuilder()
+                                                   .set_tablet_manager(_tablet_mgr.get())
+                                                   .set_tablet_id(tablet_id)
+                                                   .set_txn_id(txn_id)
+                                                   .set_partition_id(_partition_id)
+                                                   .set_mem_tracker(_mem_tracker.get())
+                                                   .set_schema_id(_tablet_schema->id())
+                                                   .set_slot_descriptors(&local_slot_ptrs)
+                                                   .set_partial_update_mode(PartialUpdateMode::ROW_MODE)
+                                                   .build());
+        ASSERT_OK(delta_writer->open());
+        ASSERT_OK(delta_writer->write(c0_only_chunk, indexes.data(), indexes.size()));
+        ASSERT_OK(delta_writer->finish_with_txnlog());
+        delta_writer->close();
+        pub_st = publish_single_version(tablet_id, version + 1, txn_id);
+    }
+    // Expect publish failed due to DCG segment open failure
+    ASSERT_FALSE(pub_st.status().ok());
+}
+
 TEST_P(LakePartialUpdateTest, test_write_multi_segment) {
     auto chunk0 = generate_data(kChunkSize, 0, false, 3);
     auto chunk1 = generate_data(kChunkSize, 0, true, 3);
