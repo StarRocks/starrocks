@@ -34,6 +34,9 @@ Status ConjunctivePredicates::evaluate_or(const Chunk* chunk, uint8_t* selection
 
 Status ConjunctivePredicates::evaluate(const Chunk* chunk, uint8_t* selection, uint16_t from, uint16_t to) const {
     FAIL_POINT_TRIGGER_RETURN_ERROR(random_error);
+    if (empty()) {
+        return Status::OK();
+    }
     DCHECK_LE(to, chunk->num_rows());
     if (!_vec_preds.empty()) {
         const ColumnPredicate* pred = _vec_preds[0];
@@ -50,6 +53,9 @@ Status ConjunctivePredicates::evaluate(const Chunk* chunk, uint8_t* selection, u
 
 Status ConjunctivePredicates::evaluate_or(const Chunk* chunk, uint8_t* selection, uint16_t from, uint16_t to) const {
     DCHECK_LE(to, chunk->num_rows());
+    if (empty()) {
+        return Status::OK();
+    }
     std::unique_ptr<uint8_t[]> buff(new uint8_t[chunk->num_rows()]);
     RETURN_IF_ERROR(evaluate(chunk, buff.get(), from, to));
     const uint8_t* p = buff.get();

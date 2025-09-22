@@ -22,6 +22,9 @@ namespace starrocks {
 
 void DeletePredicates::add(int32_t version, ConjunctivePredicates preds) {
     // fast path.
+    if (preds.empty()) {
+        return;
+    }
     if (_version_predicates.empty() || version > _version_predicates.back()._version) {
         _version_predicates.emplace_back(version, std::move(preds));
         return;
