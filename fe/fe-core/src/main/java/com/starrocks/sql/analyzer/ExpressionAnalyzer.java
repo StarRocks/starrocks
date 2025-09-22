@@ -482,7 +482,7 @@ public class ExpressionAnalyzer {
                 } catch (AnalysisException e) {
                     throw new SemanticException(e.getMessage());
                 }
-            } else if (node.getType() == null || node.getType().isInvalid()) {
+            } else {
                 node.setType(Type.ARRAY_NULL);
             }
             return null;
