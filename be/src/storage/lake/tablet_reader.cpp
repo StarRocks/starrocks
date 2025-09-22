@@ -446,6 +446,7 @@ Status TabletReader::init_delete_predicates(const TabletReaderParams& params, De
 
         ConjunctivePredicates conjunctions;
         for (const auto& cond : conds) {
+<<<<<<< HEAD
             ColumnPredicate* pred = pred_parser.parse_thrift_cond(cond);
             if (pred == nullptr) {
                 LOG(WARNING) << "failed to parse delete condition.column_name[" << cond.column_name
@@ -454,11 +455,26 @@ Status TabletReader::init_delete_predicates(const TabletReaderParams& params, De
                 continue;
             }
             conjunctions.add(pred);
+=======
+            auto pred_or = pred_parser.parse_thrift_cond(cond);
+            if (!pred_or.ok()) {
+                if (LIKELY(!config::lake_tablet_ignore_invalid_delete_predicate)) {
+                    return pred_or.status();
+                } else {
+                    LOG(WARNING) << "failed to parse delete condition.column_name[" << cond.column_name
+                                 << "], condition_op[" << cond.condition_op << "], condition_values["
+                                 << (cond.condition_values.empty() ? "<empty>" : cond.condition_values[0]) << "].";
+                    continue;
+                }
+            }
+            conjunctions.add(pred_or.value());
+>>>>>>> 9cd12321c1 ([BugFix] fix delete predicate edge case (#63339))
             // save for memory release.
-            _predicate_free_list.emplace_back(pred);
+            _predicate_free_list.emplace_back(pred_or.value());
         }
-
-        dels->add(index, conjunctions);
+        if (!conjunctions.empty()) {
+            dels->add(index, conjunctions);
+        }
     }
 
     return Status::OK();
