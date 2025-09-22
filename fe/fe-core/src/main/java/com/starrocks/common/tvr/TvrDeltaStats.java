@@ -14,31 +14,52 @@
 
 package com.starrocks.common.tvr;
 
+import org.apache.iceberg.Snapshot;
+import org.apache.iceberg.SnapshotSummary;
+
+import static java.util.Optional.ofNullable;
+
 public class TvrDeltaStats {
-    public static final TvrDeltaStats EMPTY = new TvrDeltaStats(0);
+    public static final TvrDeltaStats EMPTY = new TvrDeltaStats(0, 0);
 
     private final long addedRows;
+    private final long addedFileSize;
 
-    public TvrDeltaStats(long addedRows) {
+    public TvrDeltaStats(long addedRows, long addedFileSize) {
         this.addedRows = addedRows;
+        this.addedFileSize = addedFileSize;
     }
 
-    public static TvrDeltaStats of(Long addedRows) {
-        if (addedRows == null || addedRows == 0) {
+    public static TvrDeltaStats of(Long addedRows, Long addedFileSize) {
+        long rows = ofNullable(addedRows).orElse(0L);
+        long fileSize = ofNullable(addedFileSize).orElse(0L);
+        return new TvrDeltaStats(rows, fileSize);
+    }
+
+    public static TvrDeltaStats of(Snapshot snapshot) {
+        if (snapshot == null || snapshot.summary() == null) {
             return EMPTY;
-        } else {
-            return new TvrDeltaStats(addedRows);
         }
+        Long addedRows = Long.parseLong(snapshot.summary()
+                .getOrDefault(SnapshotSummary.ADDED_RECORDS_PROP, "0"));
+        Long addedFileSize = Long.parseLong(snapshot.summary()
+                .getOrDefault(SnapshotSummary.ADDED_FILE_SIZE_PROP, "0"));
+        return of(addedRows, addedFileSize);
     }
 
-    public long getChangedRows() {
+    public long getAddedRows() {
         return addedRows;
+    }
+
+    public long getAddedFileSize() {
+        return addedFileSize;
     }
 
     @Override
     public String toString() {
         return "Stats{" +
                 "addedRows=" + addedRows +
+                ", addedFileSize=" + addedFileSize +
                 '}';
     }
 }
