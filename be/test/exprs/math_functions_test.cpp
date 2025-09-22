@@ -1812,4 +1812,74 @@ TEST_F(VecMathFunctionsTest, IcbergTransTest) {
     }
 }
 
+TEST_F(VecMathFunctionsTest, is_nanTest) {
+    // Test is_nan with double values
+    {
+        Columns columns;
+        auto tc1 = DoubleColumn::create();
+        tc1->append(1.0);
+        tc1->append(std::numeric_limits<double>::quiet_NaN());
+        tc1->append(-2.5);
+        tc1->append(std::numeric_limits<double>::infinity());
+        tc1->append(-std::numeric_limits<double>::infinity());
+        tc1->append(0.0);
+        columns.emplace_back(std::move(tc1));
+
+        std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
+        ColumnPtr result = MathFunctions::is_nan<TYPE_DOUBLE>(ctx.get(), columns).value();
+
+        auto v = ColumnHelper::cast_to<TYPE_BOOLEAN>(result);
+        ASSERT_FALSE(v->get_data()[0]); // 1.0 is not NaN
+        ASSERT_TRUE(v->get_data()[1]);  // NaN is NaN
+        ASSERT_FALSE(v->get_data()[2]); // -2.5 is not NaN
+        ASSERT_FALSE(v->get_data()[3]); // infinity is not NaN
+        ASSERT_FALSE(v->get_data()[4]); // -infinity is not NaN
+        ASSERT_FALSE(v->get_data()[5]); // 0.0 is not NaN
+    }
+
+    // Test is_nan with float values
+    {
+        Columns columns;
+        auto tc1 = FloatColumn::create();
+        tc1->append(1.0f);
+        tc1->append(std::numeric_limits<float>::quiet_NaN());
+        tc1->append(-2.5f);
+        tc1->append(std::numeric_limits<float>::infinity());
+        tc1->append(0.0f);
+        columns.emplace_back(std::move(tc1));
+
+        std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
+        ColumnPtr result = MathFunctions::is_nan<TYPE_FLOAT>(ctx.get(), columns).value();
+
+        auto v = ColumnHelper::cast_to<TYPE_BOOLEAN>(result);
+        ASSERT_FALSE(v->get_data()[0]); // 1.0f is not NaN
+        ASSERT_TRUE(v->get_data()[1]);  // NaN is NaN
+        ASSERT_FALSE(v->get_data()[2]); // -2.5f is not NaN
+        ASSERT_FALSE(v->get_data()[3]); // infinity is not NaN
+        ASSERT_FALSE(v->get_data()[4]); // 0.0f is not NaN
+    }
+
+    // Test is_nan with nullable columns
+    {
+        Columns columns;
+        auto tc1 = DoubleColumn::create();
+        tc1->append(1.0);
+        tc1->append(std::numeric_limits<double>::quiet_NaN());
+
+        auto nulls = UInt8Column::create();
+        nulls->append(0);
+        nulls->append(1); // second element is null
+
+        auto nullable_column = NullableColumn::create(std::move(tc1), std::move(nulls));
+        columns.emplace_back(std::move(nullable_column));
+
+        std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
+        ColumnPtr result = MathFunctions::is_nan<TYPE_DOUBLE>(ctx.get(), columns).value();
+
+        auto nullable_result = ColumnHelper::cast_to<TYPE_BOOLEAN>(result);
+        ASSERT_FALSE(nullable_result->get_data()[0]); // 1.0 is not NaN
+        ASSERT_EQ(true, result->is_null(1));          // NULL input should return NULL
+    }
+}
+
 } // namespace starrocks

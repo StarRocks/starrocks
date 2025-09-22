@@ -1,0 +1,98 @@
+-- name: test_is_nan_function
+
+CREATE TABLE test_is_nan (
+    id INT,
+    value_double DOUBLE,
+    value_float FLOAT,
+    value_int INT,
+    value_bigint BIGINT,
+    value_decimal DECIMALV2(10, 2)
+) ENGINE=OLAP
+DUPLICATE KEY(id)
+DISTRIBUTED BY HASH(id) BUCKETS 3
+PROPERTIES (
+    "replication_num" = "1"
+);
+
+-- Insert test data with various numeric values including NaN
+INSERT INTO test_is_nan VALUES
+-- Test case 1: Normal numbers (should return false)
+(1, 1.5, 1.5, 1, 1, 1.0),
+-- Test case 2: Positive infinity (should return false)
+(2, CAST('inf' AS DOUBLE), CAST('inf' AS FLOAT), NULL, NULL, NULL),
+-- Test case 3: Negative infinity (should return false)
+(3, CAST('-inf' AS DOUBLE), CAST('-inf' AS FLOAT), NULL, NULL, NULL),
+-- Test case 4: NaN values (should return true)
+(4, CAST('nan' AS DOUBLE), CAST('nan' AS FLOAT), NULL, NULL, NULL),
+-- Test case 5: Zero values (should return false)
+(5, 0.0, 0.0, 0, 0, 0.0),
+-- Test case 6: Negative zero (should return false)
+(6, -0.0, -0.0, NULL, NULL, NULL),
+-- Test case 7: Very large numbers (should return false)
+(7, 1.7976931348623157E+308, 3.40282347E+38, NULL, NULL, NULL),
+-- Test case 8: Very small numbers (should return false)
+(8, 2.2250738585072014E-308, 1.17549435E-38, NULL, NULL, NULL),
+-- Test case 9: NULL values (should return NULL)
+(9, NULL, NULL, NULL, NULL, NULL),
+-- Test case 10: Mixed regular and special values
+(10, 3.14159, 3.14159, 100, 1000000, 99.99);
+
+-- Test DOUBLE type with various values
+SELECT id, value_double AS input_value, is_nan(value_double) AS result FROM test_is_nan ORDER BY id;
+
+-- Test FLOAT type with various values  
+SELECT id, value_float AS input_value, is_nan(value_float) AS result FROM test_is_nan ORDER BY id;
+
+-- Test with constant DOUBLE NaN
+SELECT is_nan(CAST('nan' AS DOUBLE)) AS result;
+
+-- Test with constant FLOAT NaN
+SELECT is_nan(CAST('nan' AS FLOAT)) AS result;
+
+-- Test with constant DOUBLE infinity
+SELECT is_nan(CAST('inf' AS DOUBLE)) AS result;
+
+-- Test with constant FLOAT infinity
+SELECT is_nan(CAST('inf' AS FLOAT)) AS result;
+
+-- Test with constant DOUBLE negative infinity
+SELECT is_nan(CAST('-inf' AS DOUBLE)) AS result;
+
+-- Test with constant FLOAT negative infinity
+SELECT is_nan(CAST('-inf' AS FLOAT)) AS result;
+
+-- Test with normal DOUBLE values
+SELECT is_nan(1.0) AS result;
+SELECT is_nan(0.0) AS result;
+SELECT is_nan(-1.0) AS result;
+SELECT is_nan(3.14159) AS result;
+
+-- Test with normal FLOAT values
+SELECT is_nan(CAST(1.0 AS FLOAT)) AS result;
+SELECT is_nan(CAST(0.0 AS FLOAT)) AS result;
+SELECT is_nan(CAST(-1.0 AS FLOAT)) AS result;
+SELECT is_nan(CAST(3.14159 AS FLOAT)) AS result;
+
+-- Test with NULL values
+SELECT is_nan(NULL) AS result;
+
+-- Test with integer types (should work without NaN, always return false)
+SELECT id, value_int, is_nan(value_int) AS result FROM test_is_nan WHERE value_int IS NOT NULL ORDER BY id;
+
+SELECT id, value_bigint, is_nan(value_bigint) AS result FROM test_is_nan WHERE value_bigint IS NOT NULL ORDER BY id;
+
+SELECT id, value_decimal, is_nan(value_decimal) AS result FROM test_is_nan WHERE value_decimal IS NOT NULL ORDER BY id;
+
+-- Test inline expressions with NaN
+SELECT is_nan(CAST('nan' AS DOUBLE)) AS result;
+
+-- Test with arithmetic operations that result in NaN
+SELECT is_nan(0.0 / 0.0) AS result;
+SELECT is_nan(CAST('nan' AS DOUBLE) + 1.0) AS result;
+
+-- Test with arithmetic operations that result in infinity
+SELECT is_nan(1.0 / 0.0) AS result;
+SELECT is_nan(-1.0 / 0.0) AS result;
+
+-- Clean up
+DROP TABLE test_is_nan;

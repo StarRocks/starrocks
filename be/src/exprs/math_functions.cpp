@@ -48,6 +48,10 @@ DEFINE_UNARY_FN_WITH_IMPL(NanCheck, value) {
     return std::isnan(value);
 }
 
+DEFINE_UNARY_FN_WITH_IMPL(is_nanImpl, v) {
+    return std::isnan(v);
+}
+
 DEFINE_UNARY_FN_WITH_IMPL(InfNanCheck, value) {
     return std::isinf(value) || std::isnan(value);
 }
