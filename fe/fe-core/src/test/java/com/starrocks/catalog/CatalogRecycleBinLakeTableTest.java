@@ -37,6 +37,7 @@ import com.starrocks.sql.ast.RecoverDbStmt;
 import com.starrocks.sql.ast.RecoverPartitionStmt;
 import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.utframe.UtFrameUtils;
+import com.starrocks.warehouse.cngroup.ComputeResource;
 import mockit.Expectations;
 import mockit.Mock;
 import mockit.MockUp;
@@ -61,6 +62,18 @@ public class CatalogRecycleBinLakeTableTest {
 
     @BeforeAll
     public static void beforeClass() {
+        new MockUp<ConnectContext>() {
+            @Mock
+            public ComputeResource getCurrentComputeResource() {
+                return WarehouseManager.DEFAULT_RESOURCE;
+            }
+        };
+        new MockUp<WarehouseManager>() {
+            @Mock
+            public boolean isResourceAvailable(ComputeResource computeResource) {
+                return true;
+            }
+        };
         UtFrameUtils.createMinStarRocksCluster(RunMode.SHARED_DATA);
         GlobalStateMgr.getCurrentState().getWarehouseMgr().initDefaultWarehouse();
         GlobalStateMgr.getCurrentState().getRecycleBin().setStop();
