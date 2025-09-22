@@ -59,6 +59,7 @@ import com.starrocks.connector.metadata.MetadataCollectJob;
 import com.starrocks.connector.metadata.MetadataTableType;
 import com.starrocks.connector.metadata.iceberg.IcebergMetadataCollectJob;
 import com.starrocks.persist.EditLog;
+import com.starrocks.planner.DescriptorTable;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.LocalMetastore;
@@ -95,8 +96,10 @@ import com.starrocks.statistic.ExternalAnalyzeJob;
 import com.starrocks.statistic.StatsConstants;
 import com.starrocks.thrift.TIcebergColumnStats;
 import com.starrocks.thrift.TIcebergDataFile;
+import com.starrocks.thrift.TIcebergTable;
 import com.starrocks.thrift.TResultSinkType;
 import com.starrocks.thrift.TSinkCommitInfo;
+import com.starrocks.thrift.TTableDescriptor;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Expectations;
@@ -110,6 +113,7 @@ import org.apache.iceberg.DataFiles;
 import org.apache.iceberg.FileScanTask;
 import org.apache.iceberg.MetricsModes;
 import org.apache.iceberg.NullOrder;
+import org.apache.iceberg.PartitionSpec;
 import org.apache.iceberg.Schema;
 import org.apache.iceberg.Snapshot;
 import org.apache.iceberg.SortOrder;
@@ -123,6 +127,7 @@ import org.apache.iceberg.catalog.TableIdentifier;
 import org.apache.iceberg.exceptions.NoSuchNamespaceException;
 import org.apache.iceberg.hive.HiveCatalog;
 import org.apache.iceberg.hive.HiveTableOperations;
+import org.apache.iceberg.types.Types;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
@@ -153,6 +158,7 @@ import static com.starrocks.connector.iceberg.IcebergMetadata.FILE_FORMAT;
 import static com.starrocks.connector.iceberg.IcebergMetadata.LOCATION_PROPERTY;
 import static com.starrocks.connector.iceberg.IcebergTableOperation.REMOVE_ORPHAN_FILES;
 import static com.starrocks.connector.iceberg.IcebergTableOperation.ROLLBACK_TO_SNAPSHOT;
+import static org.apache.iceberg.types.Types.NestedField.required;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 public class IcebergMetadataTest extends TableTestBase {
@@ -1488,6 +1494,57 @@ public class IcebergMetadataTest extends TableTestBase {
         List<PartitionInfo> partitions = metadata.getPartitions(icebergTable, ImmutableList.of("k2=2", "k2=3"));
         Assertions.assertEquals(2, partitions.size());
         Assertions.assertTrue(partitions.stream().anyMatch(x -> x.getModifiedTime() == -1));
+    }
+
+
+    @Test
+    public void testPartitionWithReservedName() {
+        // Create a schema with a column named "partition" (which is a reserved word)
+        Schema schemaWithPartitionColumn = new Schema(
+                required(1, "id", Types.IntegerType.get()),
+                required(2, "partition", Types.StringType.get())
+        );
+        
+        PartitionSpec specWithPartitionColumn = PartitionSpec.builderFor(schemaWithPartitionColumn)
+                .identity("partition")
+                .bucket("partition", 32)
+                .truncate("partition", 32)
+                .build();
+        
+        TestTables.TestTable testTable = create(schemaWithPartitionColumn, specWithPartitionColumn, "test_partition_table", 1);
+
+        List<Column> columns = Lists.newArrayList(
+                new Column("id", INT),
+                new Column("partition", STRING)
+        );
+        
+        IcebergTable icebergTable = new IcebergTable(1, "srTableName", CATALOG_NAME, "resource_name", "db_name",
+                "table_name", "", columns, testTable, Maps.newHashMap());
+        
+        List<String> partitionColumnNames = icebergTable.getPartitionColumnNames();
+
+        Assertions.assertNotNull(partitionColumnNames);
+        Assertions.assertEquals(3, partitionColumnNames.size());
+        Assertions.assertEquals("partition", partitionColumnNames.get(0));
+        Assertions.assertEquals("partition", partitionColumnNames.get(1));
+        Assertions.assertEquals("partition", partitionColumnNames.get(2));
+
+        List<String> partitionColumnNamesWithTransform = icebergTable.getPartitionColumnNamesWithTransform();
+        Assertions.assertNotNull(partitionColumnNamesWithTransform);
+        Assertions.assertEquals(3, partitionColumnNamesWithTransform.size());
+        Assertions.assertEquals("`partition`", partitionColumnNamesWithTransform.get(0));
+        Assertions.assertEquals("bucket(`partition`, 32)", partitionColumnNamesWithTransform.get(1));
+        Assertions.assertEquals("truncate(`partition`, 32)", partitionColumnNamesWithTransform.get(2));
+
+        // convert the icebergTable into a thrift value 
+        List<DescriptorTable.ReferencedPartitionInfo> partitions = Lists.newArrayList();
+        TTableDescriptor tableDescriptor = icebergTable.toThrift(partitions);
+        Assertions.assertNotNull(tableDescriptor);
+        TIcebergTable tIcebergTable = tableDescriptor.icebergTable;
+        Assertions.assertEquals(3, tIcebergTable.getPartition_column_names().size());
+        Assertions.assertEquals("partition", tIcebergTable.getPartition_column_names().get(0));
+        Assertions.assertEquals("partition", tIcebergTable.getPartition_column_names().get(1));
+        Assertions.assertEquals("partition", tIcebergTable.getPartition_column_names().get(2));
     }
 
     @Test
