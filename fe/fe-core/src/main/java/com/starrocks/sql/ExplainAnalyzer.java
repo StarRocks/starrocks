@@ -1724,27 +1724,6 @@ public class ExplainAnalyzer {
         );
     }
 
-    private Set<String> getExchangeKnownMetrics() {
-        return Sets.newHashSet(
-                "NetworkTime", "BytesSent", "BytesReceived", "BlocksSent", "BlocksReceived",
-                "SerializeTime", "DeserializeTime", "SendTime", "RecvTime", "DataStreamSenderTime",
-                "DataStreamReceiverTime", "RowsSent", "RowsReceived", "PushRowNum", "PullRowNum"
-        );
-    }
-
-    private Set<String> getUnionKnownMetrics() {
-        return Sets.newHashSet(
-                "InputRows", "OutputRows", "MergeTime", "SourceCount"
-        );
-    }
-
-    private Set<String> getSinkKnownMetrics() {
-        return Sets.newHashSet(
-                "WriteTime", "FlushTime", "CommitTime", "RetryCount", "BufferedBytes",
-                "BufferedRows", "BytesWritten", "RowsWritten", "ShuffleBytes"
-        );
-    }
-
     private Set<String> getScanKnownMetrics() {
         return Sets.newHashSet(
                 "ShortKeyFilter", "ShortKeyFilterRows", "BitmapIndexFilter", "BitmapIndexFilterRows",
@@ -1760,7 +1739,7 @@ public class ExplainAnalyzer {
                 "MorselsCount", "PeakIOTasks", "PeakScanTaskQueueSize", "PeakChunkBufferMemoryUsage",
                 "PeakChunkBufferSize", "ChunkBufferCapacity", "DefaultChunkBufferCapacity",
                 "CreateSegmentIter", "GetDelVec", "GetDeltaColumnGroup", "GetRowsets", "ReadPKIndex",
-                "GetVectorRowRangesTime", "ProcessVectorDistanceAndIdTime", "VectorSearchTime",
+                "ProcessVectorDistanceAndIdTime", "VectorSearchTime",
                 "PushdownAccessPaths", "PushdownPredicates"
         );
     }

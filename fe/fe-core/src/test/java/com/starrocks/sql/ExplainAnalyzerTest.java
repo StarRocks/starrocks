@@ -18,8 +18,11 @@ import com.starrocks.common.util.Counter;
 import com.starrocks.common.util.ProfileManager;
 import com.starrocks.common.util.ProfilingExecPlan;
 import com.starrocks.common.util.RuntimeProfile;
+import com.starrocks.planner.AggregationNode;
+import com.starrocks.planner.JoinNode;
 import com.starrocks.planner.ResultSink;
 import com.starrocks.planner.ScanNode;
+import com.starrocks.planner.SortNode;
 import com.starrocks.thrift.TUnit;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -32,11 +35,10 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 public class ExplainAnalyzerTest {
     private RuntimeProfile mockProfile;
-    private ProfilingExecPlan mockPlan;
 
     @BeforeEach
-    public void setUp() throws NoSuchFieldException, IllegalAccessException {
-        // Create mock profile structure
+    public void setUp() {
+        // Only initialize basic profile structure, each test will create its own operator profiles
         mockProfile = new RuntimeProfile("Query");
 
         // Create Summary profile
@@ -81,8 +83,16 @@ public class ExplainAnalyzerTest {
         fragmentProfile.addCounter("FragmentInstancePrepareTime", RuntimeProfile.ROOT_COUNTER,
                 new Counter(TUnit.TIME_NS, null, 1000));
         executionProfile.addChild(fragmentProfile);
+    }
 
-        // Create OLAP_SCAN operator profile (id must match plan_node_id pattern)
+    @AfterEach
+    public void tearDown() {
+        mockProfile = null;
+    }
+
+    @Test
+    public void testScanOperator() throws NoSuchFieldException, IllegalAccessException {
+        // Create OLAP_SCAN operator profile
         RuntimeProfile olapScanProfile = new RuntimeProfile("OLAP_SCAN (plan_node_id=0)");
         olapScanProfile.addCounter("TotalTime", RuntimeProfile.ROOT_COUNTER,
                 new Counter(TUnit.TIME_NS, null, 228000000));
@@ -91,7 +101,7 @@ public class ExplainAnalyzerTest {
                 new Counter(TUnit.TIME_NS, null, 197000000));
         olapScanProfile.addCounter("OutputRows", RuntimeProfile.ROOT_COUNTER, new Counter(TUnit.UNIT, null, 8553457));
 
-        // Create CommonMetrics profile that ExplainAnalyzer expects
+        // Create CommonMetrics profile
         RuntimeProfile commonMetrics = new RuntimeProfile("CommonMetrics");
         commonMetrics.addCounter("OperatorTotalTime", RuntimeProfile.ROOT_COUNTER,
                 new Counter(TUnit.TIME_NS, null, 228000000));
@@ -102,142 +112,55 @@ public class ExplainAnalyzerTest {
                 new Counter(TUnit.BYTES, null, 512 * 1024));
         olapScanProfile.addChild(commonMetrics);
 
-        // Create UniqueMetrics profile with grouped metrics
+        // Create UniqueMetrics profile with scan-specific metrics
         RuntimeProfile uniqueMetrics = new RuntimeProfile("UniqueMetrics");
-
-        // Scan Filters
-        uniqueMetrics.addCounter("BitmapIndexFilter", RuntimeProfile.ROOT_COUNTER, new Counter(TUnit.TIME_NS, null, 0));
-        uniqueMetrics.addCounter("BitmapIndexFilterRows", RuntimeProfile.ROOT_COUNTER,
-                new Counter(TUnit.UNIT, null, 0));
         uniqueMetrics.addCounter("ZoneMapFilter", RuntimeProfile.ROOT_COUNTER, new Counter(TUnit.TIME_NS, null, 28208));
         uniqueMetrics.addCounter("ZoneMapFilterRows", RuntimeProfile.ROOT_COUNTER,
                 new Counter(TUnit.UNIT, null, 37558774));
         uniqueMetrics.addCounter("PredFilter", RuntimeProfile.ROOT_COUNTER, new Counter(TUnit.TIME_NS, null, 184998));
         uniqueMetrics.addCounter("PredFilterRows", RuntimeProfile.ROOT_COUNTER,
                 new Counter(TUnit.UNIT, null, 45617439));
-        uniqueMetrics.addCounter("BloomFilterFilter", RuntimeProfile.ROOT_COUNTER,
-                new Counter(TUnit.TIME_NS, null, 2340));
-        uniqueMetrics.addCounter("BloomFilterFilterRows", RuntimeProfile.ROOT_COUNTER,
-                new Counter(TUnit.UNIT, null, 0));
         uniqueMetrics.addCounter("ShortKeyFilter", RuntimeProfile.ROOT_COUNTER, new Counter(TUnit.TIME_NS, null, 3916));
         uniqueMetrics.addCounter("ShortKeyFilterRows", RuntimeProfile.ROOT_COUNTER,
                 new Counter(TUnit.UNIT, null, -51182470));
-
-        // Row Processing
         uniqueMetrics.addCounter("RawRowsRead", RuntimeProfile.ROOT_COUNTER, new Counter(TUnit.UNIT, null, 54170896));
         uniqueMetrics.addCounter("RowsRead", RuntimeProfile.ROOT_COUNTER, new Counter(TUnit.UNIT, null, 8553457));
-        uniqueMetrics.addCounter("RemainingRowsAfterShortKeyFilter", RuntimeProfile.ROOT_COUNTER,
-                new Counter(TUnit.UNIT, null, 153182454));
-        uniqueMetrics.addCounter("DictDecode", RuntimeProfile.ROOT_COUNTER, new Counter(TUnit.TIME_NS, null, 479337));
-        uniqueMetrics.addCounter("DictDecodeCount", RuntimeProfile.ROOT_COUNTER,
-                new Counter(TUnit.UNIT, null, 8553457));
-        uniqueMetrics.addCounter("ChunkCopy", RuntimeProfile.ROOT_COUNTER, new Counter(TUnit.TIME_NS, null, 40600));
-
-        // I/O Metrics
         uniqueMetrics.addCounter("IOTime", RuntimeProfile.ROOT_COUNTER, new Counter(TUnit.TIME_NS, null, 16403));
         uniqueMetrics.addCounter("BytesRead", RuntimeProfile.ROOT_COUNTER,
                 new Counter(TUnit.BYTES, null, 37 * 1024 * 1024));
-        uniqueMetrics.addCounter("CompressedBytesRead", RuntimeProfile.ROOT_COUNTER,
-                new Counter(TUnit.BYTES, null, 37 * 1024 * 1024));
-        uniqueMetrics.addCounter("UncompressedBytesRead", RuntimeProfile.ROOT_COUNTER,
-                new Counter(TUnit.BYTES, null, 308 * 1024));
-        uniqueMetrics.addCounter("ReadPagesNum", RuntimeProfile.ROOT_COUNTER, new Counter(TUnit.UNIT, null, 13475));
-        uniqueMetrics.addCounter("CachedPagesNum", RuntimeProfile.ROOT_COUNTER, new Counter(TUnit.UNIT, null, 12781));
-        uniqueMetrics.addCounter("BlockFetch", RuntimeProfile.ROOT_COUNTER, new Counter(TUnit.TIME_NS, null, 5603000));
-        uniqueMetrics.addCounter("BlockFetchCount", RuntimeProfile.ROOT_COUNTER, new Counter(TUnit.UNIT, null, 13480));
-        uniqueMetrics.addCounter("BlockSeek", RuntimeProfile.ROOT_COUNTER, new Counter(TUnit.TIME_NS, null, 182919));
-        uniqueMetrics.addCounter("BlockSeekCount", RuntimeProfile.ROOT_COUNTER, new Counter(TUnit.UNIT, null, 10847));
-        uniqueMetrics.addCounter("DecompressTime", RuntimeProfile.ROOT_COUNTER,
-                new Counter(TUnit.TIME_NS, null, 19813));
-
-        // Segment Processing
         uniqueMetrics.addCounter("TabletCount", RuntimeProfile.ROOT_COUNTER, new Counter(TUnit.UNIT, null, 13));
         uniqueMetrics.addCounter("SegmentsReadCount", RuntimeProfile.ROOT_COUNTER, new Counter(TUnit.UNIT, null, 1921));
-        uniqueMetrics.addCounter("RowsetsReadCount", RuntimeProfile.ROOT_COUNTER, new Counter(TUnit.UNIT, null, 627));
-        uniqueMetrics.addCounter("TotalColumnsDataPageCount", RuntimeProfile.ROOT_COUNTER,
-                new Counter(TUnit.UNIT, null, 187867));
-        uniqueMetrics.addCounter("ColumnIteratorInit", RuntimeProfile.ROOT_COUNTER,
-                new Counter(TUnit.TIME_NS, null, 967830));
-        uniqueMetrics.addCounter("BitmapIndexIteratorInit", RuntimeProfile.ROOT_COUNTER,
-                new Counter(TUnit.TIME_NS, null, 17860));
-        uniqueMetrics.addCounter("FlatJsonInit", RuntimeProfile.ROOT_COUNTER, new Counter(TUnit.TIME_NS, null, 2412));
-        uniqueMetrics.addCounter("FlatJsonMerge", RuntimeProfile.ROOT_COUNTER,
-                new Counter(TUnit.TIME_NS, null, 69318000));
-
-        // Task Management
         uniqueMetrics.addCounter("IOTaskExecTime", RuntimeProfile.ROOT_COUNTER,
                 new Counter(TUnit.TIME_NS, null, 11372000));
-        uniqueMetrics.addCounter("IOTaskWaitTime", RuntimeProfile.ROOT_COUNTER,
-                new Counter(TUnit.TIME_NS, null, 101996));
-        uniqueMetrics.addCounter("SubmitTaskCount", RuntimeProfile.ROOT_COUNTER, new Counter(TUnit.UNIT, null, 527));
-        uniqueMetrics.addCounter("SubmitTaskTime", RuntimeProfile.ROOT_COUNTER,
-                new Counter(TUnit.TIME_NS, null, 137910));
-        uniqueMetrics.addCounter("PrepareChunkSourceTime", RuntimeProfile.ROOT_COUNTER,
-                new Counter(TUnit.TIME_NS, null, 6270000));
-        uniqueMetrics.addCounter("MorselsCount", RuntimeProfile.ROOT_COUNTER, new Counter(TUnit.UNIT, null, 527));
-        uniqueMetrics.addCounter("PeakIOTasks", RuntimeProfile.ROOT_COUNTER, new Counter(TUnit.UNIT, null, 3));
-        uniqueMetrics.addCounter("PeakScanTaskQueueSize", RuntimeProfile.ROOT_COUNTER,
-                new Counter(TUnit.UNIT, null, 8));
-
-        // Memory Usage
         uniqueMetrics.addCounter("PeakChunkBufferMemoryUsage", RuntimeProfile.ROOT_COUNTER,
                 new Counter(TUnit.BYTES, null, 12 * 1024 * 1024));
-        uniqueMetrics.addCounter("PeakChunkBufferSize", RuntimeProfile.ROOT_COUNTER, new Counter(TUnit.UNIT, null, 42));
-        uniqueMetrics.addCounter("ChunkBufferCapacity", RuntimeProfile.ROOT_COUNTER,
-                new Counter(TUnit.UNIT, null, 1024));
-        uniqueMetrics.addCounter("DefaultChunkBufferCapacity", RuntimeProfile.ROOT_COUNTER,
-                new Counter(TUnit.UNIT, null, 1024));
-
-        // Other Metrics
-        uniqueMetrics.addCounter("CreateSegmentIter", RuntimeProfile.ROOT_COUNTER,
-                new Counter(TUnit.TIME_NS, null, 102503));
-        uniqueMetrics.addCounter("GetDelVec", RuntimeProfile.ROOT_COUNTER, new Counter(TUnit.TIME_NS, null, 0));
-        uniqueMetrics.addCounter("GetDeltaColumnGroup", RuntimeProfile.ROOT_COUNTER,
-                new Counter(TUnit.TIME_NS, null, 13908));
-        uniqueMetrics.addCounter("GetRowsets", RuntimeProfile.ROOT_COUNTER, new Counter(TUnit.TIME_NS, null, 10708));
-        uniqueMetrics.addCounter("ReadPKIndex", RuntimeProfile.ROOT_COUNTER, new Counter(TUnit.TIME_NS, null, 0));
-        uniqueMetrics.addCounter("GetVectorRowRangesTime", RuntimeProfile.ROOT_COUNTER,
-                new Counter(TUnit.TIME_NS, null, 0));
-        uniqueMetrics.addCounter("ProcessVectorDistanceAndIdTime", RuntimeProfile.ROOT_COUNTER,
-                new Counter(TUnit.TIME_NS, null, 0));
-        uniqueMetrics.addCounter("VectorSearchTime", RuntimeProfile.ROOT_COUNTER, new Counter(TUnit.TIME_NS, null, 0));
-        uniqueMetrics.addCounter("PushdownAccessPaths", RuntimeProfile.ROOT_COUNTER, new Counter(TUnit.UNIT, null, 0));
-        uniqueMetrics.addCounter("PushdownPredicates", RuntimeProfile.ROOT_COUNTER, new Counter(TUnit.UNIT, null, 3));
-
+        uniqueMetrics.addCounter("Unknown", RuntimeProfile.ROOT_COUNTER,
+                new Counter(TUnit.BYTES, null, 12 * 1024 * 1024));
         olapScanProfile.addChild(uniqueMetrics);
 
-        // Create pipeline profile structure that ProfileNodeParser expects
+        // Create pipeline profile structure
         RuntimeProfile pipelineProfile = new RuntimeProfile("Pipeline 0");
         pipelineProfile.addChild(olapScanProfile);
-        fragmentProfile.addChild(pipelineProfile);
+        mockProfile.getChild("Execution").getChild("Fragment 0").addChild(pipelineProfile);
 
-        // Create mock plan and seed minimal topology so ExplainAnalyzer can bind nodes
-        mockPlan = new ProfilingExecPlan();
+        // Create mock plan with ScanNode
+        ProfilingExecPlan scanPlan = new ProfilingExecPlan();
         Field level = ProfilingExecPlan.class.getDeclaredField("profileLevel");
         level.setAccessible(true);
-        level.setInt(mockPlan, 1);
+        level.setInt(scanPlan, 1);
 
         Field fragmentsField = ProfilingExecPlan.class.getDeclaredField("fragments");
         fragmentsField.setAccessible(true);
         @SuppressWarnings("unchecked")
         List<ProfilingExecPlan.ProfilingFragment> fragments =
-                (List<ProfilingExecPlan.ProfilingFragment>) fragmentsField.get(mockPlan);
+                (List<ProfilingExecPlan.ProfilingFragment>) fragmentsField.get(scanPlan);
         ProfilingExecPlan.ProfilingElement root =
                 new ProfilingExecPlan.ProfilingElement(0, ScanNode.class);
         ProfilingExecPlan.ProfilingElement sink =
                 new ProfilingExecPlan.ProfilingElement(-1, ResultSink.class);
         fragments.add(new ProfilingExecPlan.ProfilingFragment(sink, root));
-    }
 
-    @AfterEach
-    public void tearDown() {
-        mockProfile = null;
-        mockPlan = null;
-    }
-
-    @Test
-    public void testScanOperator() {
-        String result = ExplainAnalyzer.analyze(mockPlan, mockProfile, List.of(0), false);
+        String result = ExplainAnalyzer.analyze(scanPlan, mockProfile, List.of(0), false);
 
         assertTrue(result.contains("ScanFilters"), result);
         assertTrue(result.contains("RowProcessing"), result);
@@ -245,12 +168,297 @@ public class ExplainAnalyzerTest {
         assertTrue(result.contains("SegmentProcessing"), result);
         assertTrue(result.contains("IOTask"), result);
         assertTrue(result.contains("IOBuffer"), result);
-        assertTrue(result.contains("IOBuffer"), result);
-        assertTrue(result.contains("Others"), result);
-
         assertTrue(result.contains("ZoneMapFilter: "), result);
         assertTrue(result.contains("PredFilter: "), result);
         assertTrue(result.contains("ShortKeyFilter:"), result);
+        assertTrue(result.contains("Others"), result);
+    }
+
+    @Test
+    public void testAggregationOperator() throws NoSuchFieldException, IllegalAccessException {
+        // Create mock profile for aggregation operator
+        RuntimeProfile aggProfile = new RuntimeProfile("HASH_AGG (plan_node_id=1)");
+        aggProfile.addCounter("TotalTime", RuntimeProfile.ROOT_COUNTER,
+                new Counter(TUnit.TIME_NS, null, 150000000));
+        aggProfile.addCounter("CPUTime", RuntimeProfile.ROOT_COUNTER, new Counter(TUnit.TIME_NS, null, 120000000));
+        aggProfile.addCounter("OutputRows", RuntimeProfile.ROOT_COUNTER, new Counter(TUnit.UNIT, null, 100000));
+
+        // Create CommonMetrics profile
+        RuntimeProfile commonMetrics = new RuntimeProfile("CommonMetrics");
+        commonMetrics.addCounter("OperatorTotalTime", RuntimeProfile.ROOT_COUNTER,
+                new Counter(TUnit.TIME_NS, null, 150000000));
+        commonMetrics.addCounter("PullRowNum", RuntimeProfile.ROOT_COUNTER, new Counter(TUnit.UNIT, null, 1000000));
+        commonMetrics.addCounter("OperatorPeakMemoryUsage", RuntimeProfile.ROOT_COUNTER,
+                new Counter(TUnit.BYTES, null, 64 * 1024 * 1024));
+        commonMetrics.addCounter("OperatorAllocatedMemoryUsage", RuntimeProfile.ROOT_COUNTER,
+                new Counter(TUnit.BYTES, null, 32 * 1024 * 1024));
+        aggProfile.addChild(commonMetrics);
+
+        // Create UniqueMetrics profile with aggregation-specific metrics
+        RuntimeProfile uniqueMetrics = new RuntimeProfile("UniqueMetrics");
+
+        // Aggregation metrics
+        uniqueMetrics.addCounter("AggFuncComputeTime", RuntimeProfile.ROOT_COUNTER,
+                new Counter(TUnit.TIME_NS, null, 80000000));
+        uniqueMetrics.addCounter("ExprComputeTime", RuntimeProfile.ROOT_COUNTER,
+                new Counter(TUnit.TIME_NS, null, 20000000));
+        uniqueMetrics.addCounter("ExprReleaseTime", RuntimeProfile.ROOT_COUNTER,
+                new Counter(TUnit.TIME_NS, null, 1000000));
+        uniqueMetrics.addCounter("HashTableSize", RuntimeProfile.ROOT_COUNTER,
+                new Counter(TUnit.UNIT, null, 10000));
+        uniqueMetrics.addCounter("HashTableMemoryUsage", RuntimeProfile.ROOT_COUNTER,
+                new Counter(TUnit.BYTES, null, 16 * 1024 * 1024));
+
+        // Memory Management metrics
+        uniqueMetrics.addCounter("ChunkBufferPeakMem", RuntimeProfile.ROOT_COUNTER,
+                new Counter(TUnit.BYTES, null, 8 * 1024 * 1024));
+        uniqueMetrics.addCounter("ChunkBufferPeakSize", RuntimeProfile.ROOT_COUNTER,
+                new Counter(TUnit.UNIT, null, 100));
+        uniqueMetrics.addCounter("StateAllocate", RuntimeProfile.ROOT_COUNTER,
+                new Counter(TUnit.TIME_NS, null, 5000000));
+        uniqueMetrics.addCounter("StateDestroy", RuntimeProfile.ROOT_COUNTER,
+                new Counter(TUnit.TIME_NS, null, 2000000));
+
+        // Result Processing metrics
+        uniqueMetrics.addCounter("GetResultsTime", RuntimeProfile.ROOT_COUNTER,
+                new Counter(TUnit.TIME_NS, null, 10000000));
+        uniqueMetrics.addCounter("ResultAggAppendTime", RuntimeProfile.ROOT_COUNTER,
+                new Counter(TUnit.TIME_NS, null, 5000000));
+        uniqueMetrics.addCounter("ResultGroupByAppendTime", RuntimeProfile.ROOT_COUNTER,
+                new Counter(TUnit.TIME_NS, null, 3000000));
+        uniqueMetrics.addCounter("ResultIteratorTime", RuntimeProfile.ROOT_COUNTER,
+                new Counter(TUnit.TIME_NS, null, 2000000));
+
+        // Data Flow metrics
+        uniqueMetrics.addCounter("InputRowCount", RuntimeProfile.ROOT_COUNTER,
+                new Counter(TUnit.UNIT, null, 1000000));
+        uniqueMetrics.addCounter("PassThroughRowCount", RuntimeProfile.ROOT_COUNTER,
+                new Counter(TUnit.UNIT, null, 50000));
+        uniqueMetrics.addCounter("StreamingTime", RuntimeProfile.ROOT_COUNTER,
+                new Counter(TUnit.TIME_NS, null, 15000000));
+        uniqueMetrics.addCounter("RowsReturned", RuntimeProfile.ROOT_COUNTER,
+                new Counter(TUnit.UNIT, null, 100000));
+
+        aggProfile.addChild(uniqueMetrics);
+
+        // Create pipeline profile structure
+        RuntimeProfile pipelineProfile = new RuntimeProfile("Pipeline 1");
+        pipelineProfile.addChild(aggProfile);
+        mockProfile.getChild("Execution").getChild("Fragment 0").addChild(pipelineProfile);
+
+        // Create mock plan with AggregationNode
+        ProfilingExecPlan aggPlan = new ProfilingExecPlan();
+        Field level = ProfilingExecPlan.class.getDeclaredField("profileLevel");
+        level.setAccessible(true);
+        level.setInt(aggPlan, 1);
+
+        Field fragmentsField = ProfilingExecPlan.class.getDeclaredField("fragments");
+        fragmentsField.setAccessible(true);
+        @SuppressWarnings("unchecked")
+        List<ProfilingExecPlan.ProfilingFragment> fragments =
+                (List<ProfilingExecPlan.ProfilingFragment>) fragmentsField.get(aggPlan);
+        ProfilingExecPlan.ProfilingElement root =
+                new ProfilingExecPlan.ProfilingElement(1, AggregationNode.class);
+        ProfilingExecPlan.ProfilingElement sink =
+                new ProfilingExecPlan.ProfilingElement(-1, ResultSink.class);
+        fragments.add(new ProfilingExecPlan.ProfilingFragment(sink, root));
+
+        String result = ExplainAnalyzer.analyze(aggPlan, mockProfile, List.of(1), false);
+
+        assertTrue(result.contains("Aggregation:"), result);
+        assertTrue(result.contains("Memory Management:"), result);
+        assertTrue(result.contains("Result Processing:"), result);
+        assertTrue(result.contains("Data Flow:"), result);
+        assertTrue(result.contains("AggFuncComputeTime: "), result);
+        assertTrue(result.contains("HashTableSize: "), result);
+        assertTrue(result.contains("InputRowCount: "), result);
+    }
+
+    @Test
+    public void testJoinOperator() throws NoSuchFieldException, IllegalAccessException {
+        // Create mock profile for join operator
+        RuntimeProfile joinProfile = new RuntimeProfile("HASH_JOIN (plan_node_id=2)");
+        joinProfile.addCounter("TotalTime", RuntimeProfile.ROOT_COUNTER,
+                new Counter(TUnit.TIME_NS, null, 200000000));
+        joinProfile.addCounter("CPUTime", RuntimeProfile.ROOT_COUNTER, new Counter(TUnit.TIME_NS, null, 180000000));
+        joinProfile.addCounter("OutputRows", RuntimeProfile.ROOT_COUNTER, new Counter(TUnit.UNIT, null, 500000));
+
+        // Create CommonMetrics profile
+        RuntimeProfile commonMetrics = new RuntimeProfile("CommonMetrics");
+        commonMetrics.addCounter("OperatorTotalTime", RuntimeProfile.ROOT_COUNTER,
+                new Counter(TUnit.TIME_NS, null, 200000000));
+        commonMetrics.addCounter("PullRowNum", RuntimeProfile.ROOT_COUNTER, new Counter(TUnit.UNIT, null, 2000000));
+        commonMetrics.addCounter("OperatorPeakMemoryUsage", RuntimeProfile.ROOT_COUNTER,
+                new Counter(TUnit.BYTES, null, 128 * 1024 * 1024));
+        commonMetrics.addCounter("OperatorAllocatedMemoryUsage", RuntimeProfile.ROOT_COUNTER,
+                new Counter(TUnit.BYTES, null, 64 * 1024 * 1024));
+        joinProfile.addChild(commonMetrics);
+
+        // Create UniqueMetrics profile with join-specific metrics
+        RuntimeProfile uniqueMetrics = new RuntimeProfile("UniqueMetrics");
+
+        // HashTable metrics
+        uniqueMetrics.addCounter("BuildBuckets", RuntimeProfile.ROOT_COUNTER,
+                new Counter(TUnit.UNIT, null, 100000));
+        uniqueMetrics.addCounter("BuildKeysPerBucket%", RuntimeProfile.ROOT_COUNTER,
+                new Counter(TUnit.UNIT, null, 85));
+        uniqueMetrics.addCounter("BuildHashTableTime", RuntimeProfile.ROOT_COUNTER,
+                new Counter(TUnit.TIME_NS, null, 50000000));
+        uniqueMetrics.addCounter("BuildConjunctEvaluateTime", RuntimeProfile.ROOT_COUNTER,
+                new Counter(TUnit.TIME_NS, null, 10000000));
+        uniqueMetrics.addCounter("HashTableMemoryUsage", RuntimeProfile.ROOT_COUNTER,
+                new Counter(TUnit.BYTES, null, 32 * 1024 * 1024));
+        uniqueMetrics.addCounter("PartitionNums", RuntimeProfile.ROOT_COUNTER,
+                new Counter(TUnit.UNIT, null, 4));
+        uniqueMetrics.addCounter("PartitionProbeOverhead", RuntimeProfile.ROOT_COUNTER,
+                new Counter(TUnit.TIME_NS, null, 2000000));
+
+        // ProbeSide metrics
+        uniqueMetrics.addCounter("SearchHashTableTime", RuntimeProfile.ROOT_COUNTER,
+                new Counter(TUnit.TIME_NS, null, 80000000));
+        uniqueMetrics.addCounter("probeCount", RuntimeProfile.ROOT_COUNTER,
+                new Counter(TUnit.UNIT, null, 2000000));
+        uniqueMetrics.addCounter("ProbeConjunctEvaluateTime", RuntimeProfile.ROOT_COUNTER,
+                new Counter(TUnit.TIME_NS, null, 15000000));
+        uniqueMetrics.addCounter("CopyRightTableChunkTime", RuntimeProfile.ROOT_COUNTER,
+                new Counter(TUnit.TIME_NS, null, 10000000));
+        uniqueMetrics.addCounter("OtherJoinConjunctEvaluateTime", RuntimeProfile.ROOT_COUNTER,
+                new Counter(TUnit.TIME_NS, null, 5000000));
+        uniqueMetrics.addCounter("OutputBuildColumnTime", RuntimeProfile.ROOT_COUNTER,
+                new Counter(TUnit.TIME_NS, null, 8000000));
+        uniqueMetrics.addCounter("OutputProbeColumnTime", RuntimeProfile.ROOT_COUNTER,
+                new Counter(TUnit.TIME_NS, null, 12000000));
+        uniqueMetrics.addCounter("WhereConjunctEvaluateTime", RuntimeProfile.ROOT_COUNTER,
+                new Counter(TUnit.TIME_NS, null, 3000000));
+
+        // RuntimeFilter metrics
+        uniqueMetrics.addCounter("RuntimeFilterBuildTime", RuntimeProfile.ROOT_COUNTER,
+                new Counter(TUnit.TIME_NS, null, 5000000));
+        uniqueMetrics.addCounter("RuntimeFilterNum", RuntimeProfile.ROOT_COUNTER,
+                new Counter(TUnit.UNIT, null, 2));
+        uniqueMetrics.addCounter("PartialRuntimeMembershipFilterBytes", RuntimeProfile.ROOT_COUNTER,
+                new Counter(TUnit.BYTES, null, 1024 * 1024));
+
+        joinProfile.addChild(uniqueMetrics);
+
+        // Create pipeline profile structure
+        RuntimeProfile pipelineProfile = new RuntimeProfile("Pipeline 2");
+        pipelineProfile.addChild(joinProfile);
+        mockProfile.getChild("Execution").getChild("Fragment 0").addChild(pipelineProfile);
+
+        // Create mock plan with JoinNode
+        ProfilingExecPlan joinPlan = new ProfilingExecPlan();
+        Field level = ProfilingExecPlan.class.getDeclaredField("profileLevel");
+        level.setAccessible(true);
+        level.setInt(joinPlan, 1);
+
+        Field fragmentsField = ProfilingExecPlan.class.getDeclaredField("fragments");
+        fragmentsField.setAccessible(true);
+        @SuppressWarnings("unchecked")
+        List<ProfilingExecPlan.ProfilingFragment> fragments =
+                (List<ProfilingExecPlan.ProfilingFragment>) fragmentsField.get(joinPlan);
+        ProfilingExecPlan.ProfilingElement root =
+                new ProfilingExecPlan.ProfilingElement(2, JoinNode.class);
+        ProfilingExecPlan.ProfilingElement sink =
+                new ProfilingExecPlan.ProfilingElement(-1, ResultSink.class);
+        fragments.add(new ProfilingExecPlan.ProfilingFragment(sink, root));
+
+        String result = ExplainAnalyzer.analyze(joinPlan, mockProfile, List.of(2), false);
+
+        assertTrue(result.contains("HashTable:"), result);
+        assertTrue(result.contains("ProbeSide:"), result);
+        assertTrue(result.contains("RuntimeFilter:"), result);
+        assertTrue(result.contains("BuildBuckets: "), result);
+        assertTrue(result.contains("SearchHashTableTime: "), result);
+        assertTrue(result.contains("RuntimeFilterNum: "), result);
+    }
+
+    @Test
+    public void testSortOperator() throws NoSuchFieldException, IllegalAccessException {
+        // Create mock profile for sort operator
+        RuntimeProfile sortProfile = new RuntimeProfile("SORT (plan_node_id=3)");
+        sortProfile.addCounter("TotalTime", RuntimeProfile.ROOT_COUNTER,
+                new Counter(TUnit.TIME_NS, null, 120000000));
+        sortProfile.addCounter("CPUTime", RuntimeProfile.ROOT_COUNTER, new Counter(TUnit.TIME_NS, null, 100000000));
+        sortProfile.addCounter("OutputRows", RuntimeProfile.ROOT_COUNTER, new Counter(TUnit.UNIT, null, 200000));
+
+        // Create CommonMetrics profile
+        RuntimeProfile commonMetrics = new RuntimeProfile("CommonMetrics");
+        commonMetrics.addCounter("OperatorTotalTime", RuntimeProfile.ROOT_COUNTER,
+                new Counter(TUnit.TIME_NS, null, 120000000));
+        commonMetrics.addCounter("PullRowNum", RuntimeProfile.ROOT_COUNTER, new Counter(TUnit.UNIT, null, 2000000));
+        commonMetrics.addCounter("OperatorPeakMemoryUsage", RuntimeProfile.ROOT_COUNTER,
+                new Counter(TUnit.BYTES, null, 256 * 1024 * 1024));
+        commonMetrics.addCounter("OperatorAllocatedMemoryUsage", RuntimeProfile.ROOT_COUNTER,
+                new Counter(TUnit.BYTES, null, 128 * 1024 * 1024));
+        sortProfile.addChild(commonMetrics);
+
+        // Create UniqueMetrics profile with sort-specific metrics
+        RuntimeProfile uniqueMetrics = new RuntimeProfile("UniqueMetrics");
+
+        // Sort-specific metrics
+        uniqueMetrics.addCounter("SortTime", RuntimeProfile.ROOT_COUNTER,
+                new Counter(TUnit.TIME_NS, null, 80000000));
+        uniqueMetrics.addCounter("SortKeys", RuntimeProfile.ROOT_COUNTER,
+                new Counter(TUnit.UNIT, null, 2));
+        uniqueMetrics.addCounter("SortRows", RuntimeProfile.ROOT_COUNTER,
+                new Counter(TUnit.UNIT, null, 2000000));
+        uniqueMetrics.addCounter("SortMemoryUsage", RuntimeProfile.ROOT_COUNTER,
+                new Counter(TUnit.BYTES, null, 64 * 1024 * 1024));
+        uniqueMetrics.addCounter("SortSpillBytes", RuntimeProfile.ROOT_COUNTER,
+                new Counter(TUnit.BYTES, null, 32 * 1024 * 1024));
+        uniqueMetrics.addCounter("SortSpillTime", RuntimeProfile.ROOT_COUNTER,
+                new Counter(TUnit.TIME_NS, null, 10000000));
+        uniqueMetrics.addCounter("SortMergeTime", RuntimeProfile.ROOT_COUNTER,
+                new Counter(TUnit.TIME_NS, null, 15000000));
+        uniqueMetrics.addCounter("SortPartitionTime", RuntimeProfile.ROOT_COUNTER,
+                new Counter(TUnit.TIME_NS, null, 5000000));
+        uniqueMetrics.addCounter("SortChunkSize", RuntimeProfile.ROOT_COUNTER,
+                new Counter(TUnit.UNIT, null, 4096));
+        uniqueMetrics.addCounter("SortChunkCount", RuntimeProfile.ROOT_COUNTER,
+                new Counter(TUnit.UNIT, null, 500));
+        uniqueMetrics.addCounter("SortCompareTime", RuntimeProfile.ROOT_COUNTER,
+                new Counter(TUnit.TIME_NS, null, 20000000));
+        uniqueMetrics.addCounter("SortCopyTime", RuntimeProfile.ROOT_COUNTER,
+                new Counter(TUnit.TIME_NS, null, 10000000));
+        uniqueMetrics.addCounter("SortLimit", RuntimeProfile.ROOT_COUNTER,
+                new Counter(TUnit.UNIT, null, 100000));
+        uniqueMetrics.addCounter("SortOffset", RuntimeProfile.ROOT_COUNTER,
+                new Counter(TUnit.UNIT, null, 0));
+
+        sortProfile.addChild(uniqueMetrics);
+
+        // Create pipeline profile structure
+        RuntimeProfile pipelineProfile = new RuntimeProfile("Pipeline 3");
+        pipelineProfile.addChild(sortProfile);
+        mockProfile.getChild("Execution").getChild("Fragment 0").addChild(pipelineProfile);
+
+        // Create mock plan with SortNode
+        ProfilingExecPlan sortPlan = new ProfilingExecPlan();
+        Field level = ProfilingExecPlan.class.getDeclaredField("profileLevel");
+        level.setAccessible(true);
+        level.setInt(sortPlan, 1);
+
+        Field fragmentsField = ProfilingExecPlan.class.getDeclaredField("fragments");
+        fragmentsField.setAccessible(true);
+        @SuppressWarnings("unchecked")
+        List<ProfilingExecPlan.ProfilingFragment> fragments =
+                (List<ProfilingExecPlan.ProfilingFragment>) fragmentsField.get(sortPlan);
+        ProfilingExecPlan.ProfilingElement root =
+                new ProfilingExecPlan.ProfilingElement(3, SortNode.class);
+        ProfilingExecPlan.ProfilingElement sink =
+                new ProfilingExecPlan.ProfilingElement(-1, ResultSink.class);
+        fragments.add(new ProfilingExecPlan.ProfilingFragment(sink, root));
+
+        String result = ExplainAnalyzer.analyze(sortPlan, mockProfile, List.of(3), false);
+
+        assertTrue(result.contains("Others:"), result);
+        assertTrue(result.contains("SortTime: "), result);
+        assertTrue(result.contains("SortKeys: "), result);
+        assertTrue(result.contains("SortRows: "), result);
+        assertTrue(result.contains("SortMemoryUsage: "), result);
+        assertTrue(result.contains("SortSpillBytes: "), result);
+        assertTrue(result.contains("SortMergeTime: "), result);
     }
 
 }
