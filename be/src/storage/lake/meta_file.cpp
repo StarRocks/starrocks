@@ -509,6 +509,10 @@ Status MetaFileBuilder::_finalize_delvec(int64_t version, int64_t txn_id) {
     for (const auto& item : _tablet_meta->delvec_meta().delvecs()) {
         refered_versions.insert(item.second.version());
     }
+    // collect version from sstable delvecs
+    for (const auto& sst : _tablet_meta->sstable_meta().sstables()) {
+        refered_versions.insert(sst.delvec().version());
+    }
 
     auto itr = _tablet_meta->mutable_delvec_meta()->mutable_version_to_file()->begin();
     for (; itr != _tablet_meta->mutable_delvec_meta()->mutable_version_to_file()->end();) {
@@ -599,51 +603,56 @@ void MetaFileBuilder::finalize_sstable_meta(const PersistentIndexSstableMetaPB& 
     _tablet_meta->mutable_sstable_meta()->CopyFrom(sstable_meta);
 }
 
+// get delvec by DelvecPagePB
+Status get_del_vec(TabletManager* tablet_mgr, const TabletMetadata& metadata, const DelvecPagePB& delvec_page,
+                   bool fill_cache, const LakeIOOptions& lake_io_opts, DelVector* delvec) {
+    VLOG(2) << fmt::format("get_del_vec {} tabletid {}", delvec_page.ShortDebugString(), metadata.id());
+    std::string buf;
+    raw::stl_string_resize_uninitialized(&buf, delvec_page.size());
+    // find in cache
+    std::string cache_key = delvec_cache_key(metadata.id(), delvec_page);
+    auto cached_delvec = tablet_mgr->metacache()->lookup_delvec(cache_key);
+    if (cached_delvec != nullptr) {
+        delvec->copy_from(*cached_delvec);
+        return Status::OK();
+    }
+
+    // lookup delvec file name and then read it
+    auto iter = metadata.delvec_meta().version_to_file().find(delvec_page.version());
+    if (iter == metadata.delvec_meta().version_to_file().end()) {
+        LOG(ERROR) << "Can't find delvec file name for tablet: " << metadata.id()
+                   << ", version: " << delvec_page.version();
+        return Status::InternalError("Can't find delvec file name");
+    }
+    const auto& delvec_name = iter->second.name();
+    RandomAccessFileOptions opts{.skip_fill_local_cache = !lake_io_opts.fill_data_cache};
+    std::unique_ptr<RandomAccessFile> rf;
+    if (lake_io_opts.fs && lake_io_opts.location_provider) {
+        ASSIGN_OR_RETURN(rf,
+                         lake_io_opts.fs->new_random_access_file(
+                                 opts, lake_io_opts.location_provider->delvec_location(metadata.id(), delvec_name)));
+    } else {
+        ASSIGN_OR_RETURN(rf, fs::new_random_access_file(opts, tablet_mgr->delvec_location(metadata.id(), delvec_name)));
+    }
+    RETURN_IF_ERROR(rf->read_at_fully(delvec_page.offset(), buf.data(), delvec_page.size()));
+    // parse delvec
+    RETURN_IF_ERROR(delvec->load(delvec_page.version(), buf.data(), delvec_page.size()));
+    // put in cache
+    if (fill_cache) {
+        auto delvec_cache_ptr = std::make_shared<DelVector>();
+        delvec_cache_ptr->copy_from(*delvec);
+        tablet_mgr->metacache()->cache_delvec(cache_key, delvec_cache_ptr);
+    }
+    TRACE("end load delvec");
+    return Status::OK();
+}
+
 Status get_del_vec(TabletManager* tablet_mgr, const TabletMetadata& metadata, uint32_t segment_id, bool fill_cache,
                    const LakeIOOptions& lake_io_opts, DelVector* delvec) {
     // find delvec by segment id
     auto iter = metadata.delvec_meta().delvecs().find(segment_id);
     if (iter != metadata.delvec_meta().delvecs().end()) {
-        VLOG(2) << fmt::format("get_del_vec {} segid {}", metadata.delvec_meta().ShortDebugString(), segment_id);
-        std::string buf;
-        raw::stl_string_resize_uninitialized(&buf, iter->second.size());
-        // find in cache
-        std::string cache_key = delvec_cache_key(metadata.id(), iter->second);
-        auto cached_delvec = tablet_mgr->metacache()->lookup_delvec(cache_key);
-        if (cached_delvec != nullptr) {
-            delvec->copy_from(*cached_delvec);
-            return Status::OK();
-        }
-
-        // lookup delvec file name and then read it
-        auto iter2 = metadata.delvec_meta().version_to_file().find(iter->second.version());
-        if (iter2 == metadata.delvec_meta().version_to_file().end()) {
-            LOG(ERROR) << "Can't find delvec file name for tablet: " << metadata.id()
-                       << ", version: " << iter->second.version();
-            return Status::InternalError("Can't find delvec file name");
-        }
-        const auto& delvec_name = iter2->second.name();
-        RandomAccessFileOptions opts{.skip_fill_local_cache = !lake_io_opts.fill_data_cache};
-        std::unique_ptr<RandomAccessFile> rf;
-        if (lake_io_opts.fs && lake_io_opts.location_provider) {
-            ASSIGN_OR_RETURN(
-                    rf, lake_io_opts.fs->new_random_access_file(
-                                opts, lake_io_opts.location_provider->delvec_location(metadata.id(), delvec_name)));
-        } else {
-            ASSIGN_OR_RETURN(rf,
-                             fs::new_random_access_file(opts, tablet_mgr->delvec_location(metadata.id(), delvec_name)));
-        }
-        RETURN_IF_ERROR(rf->read_at_fully(iter->second.offset(), buf.data(), iter->second.size()));
-        // parse delvec
-        RETURN_IF_ERROR(delvec->load(iter->second.version(), buf.data(), iter->second.size()));
-        // put in cache
-        if (fill_cache) {
-            auto delvec_cache_ptr = std::make_shared<DelVector>();
-            delvec_cache_ptr->copy_from(*delvec);
-            tablet_mgr->metacache()->cache_delvec(cache_key, delvec_cache_ptr);
-        }
-        TRACE("end load delvec");
-        return Status::OK();
+        return get_del_vec(tablet_mgr, metadata, iter->second, fill_cache, lake_io_opts, delvec);
     }
     VLOG(2) << fmt::format("get_del_vec not found, segmentid {} tablet_meta {}", segment_id,
                            metadata.delvec_meta().ShortDebugString());
