@@ -511,9 +511,26 @@ public class ConnectContext {
         return currentRoleIds;
     }
 
+    public void setCurrentRoleIds(Set<Long> roleIds) {
+        this.currentRoleIds = roleIds;
+    }
+
+    public void setCurrentRoleIds(UserIdentity userIdentity, Set<String> groups) {
+        Set<Long> roleIds = getRoleIdsByUser(userIdentity);
+        for (String group : groups) {
+            roleIds.addAll(globalStateMgr.getAuthorizationMgr().getRoleIdListByGroup(group));
+        }
+        setCurrentRoleIds(roleIds);
+    }
+
     public void setCurrentRoleIds(UserIdentity user) {
+        Set<Long> roleIds = getRoleIdsByUser(user);
+        setCurrentRoleIds(roleIds);
+    }
+
+    private Set<Long> getRoleIdsByUser(UserIdentity user) {
         if (user.isEphemeral()) {
-            this.currentRoleIds = new HashSet<>();
+            return new HashSet<>();
         } else {
             try {
                 Set<Long> defaultRoleIds;
@@ -522,19 +539,12 @@ public class ConnectContext {
                 } else {
                     defaultRoleIds = globalStateMgr.getAuthorizationMgr().getDefaultRoleIdsByUser(user);
                 }
-                this.currentRoleIds = defaultRoleIds;
+                return defaultRoleIds;
             } catch (PrivilegeException e) {
                 LOG.warn("Set current role fail : {}", e.getMessage());
+                return new HashSet<>();
             }
         }
-    }
-
-    public void setCurrentRoleIds(Set<Long> roleIds) {
-        this.currentRoleIds = roleIds;
-    }
-
-    public void setCurrentRoleIds(UserIdentity userIdentity, Set<String> groups) {
-        setCurrentRoleIds(userIdentity);
     }
 
     public void setAuthInfoFromThrift(TAuthInfo authInfo) {

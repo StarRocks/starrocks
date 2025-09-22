@@ -334,6 +334,8 @@ public class AstToStringBuilder {
 
             if (statement.getGrantType().equals(GrantType.ROLE)) {
                 sqlBuilder.append("ROLE ").append(statement.getRoleOrGroup());
+            } else if (statement.getGrantType().equals(GrantType.GROUP)) {
+                sqlBuilder.append("EXTERNAL GROUP ").append(statement.getRoleOrGroup());
             } else {
                 sqlBuilder.append(statement.getUserIdentity());
             }
@@ -621,8 +623,8 @@ public class AstToStringBuilder {
                     sqlBuilder.append(" EXCLUDE ( ");
                     sqlBuilder.append(
                             item.getExcludedColumns().stream()
-                            .map(col -> "`" + col + "`")
-                            .collect(Collectors.joining(","))
+                                    .map(col -> "`" + col + "`")
+                                    .collect(Collectors.joining(","))
                     );
                     sqlBuilder.append(" ) ");
                 }

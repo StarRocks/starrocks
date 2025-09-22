@@ -16,6 +16,7 @@ package com.starrocks.authentication;
 
 import com.starrocks.authorization.AuthorizationMgr;
 import com.starrocks.authorization.DefaultAuthorizationProvider;
+import com.starrocks.authorization.GrantType;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.mysql.MysqlPassword;
@@ -27,6 +28,7 @@ import com.starrocks.sql.analyzer.Analyzer;
 import com.starrocks.sql.ast.CreateRoleStmt;
 import com.starrocks.sql.ast.CreateUserStmt;
 import com.starrocks.sql.ast.ExecuteAsStmt;
+import com.starrocks.sql.ast.GrantRoleStmt;
 import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.sql.parser.NodePosition;
 import mockit.Mock;
@@ -79,28 +81,33 @@ public class ExecuteAsExecutorTest {
         LDAPGroupProvider ldapGroupProvider = (LDAPGroupProvider) authenticationMgr.getGroupProvider(groupName);
 
         Map<String, Set<String>> groups = new HashMap<>();
-        groups.put("impersonate_user", Set.of("group1", "group2"));
-        groups.put("u1", Set.of("group3"));
-        groups.put("u2", Set.of("group4"));
+        groups.put("u1", Set.of("group1"));
+        groups.put("u2", Set.of("group2"));
+        groups.put("u3", Set.of("group1", "group2"));
         ldapGroupProvider.setUserToGroupCache(groups);
     }
 
     @Test
-    public void testExecuteAs() throws Exception {
+    public void testExecuteAsGetGroups() throws Exception {
+        ConnectContext context = new ConnectContext();
+
         authorizationMgr.createRole(new CreateRoleStmt(List.of("r1"), true, ""));
         authorizationMgr.createRole(new CreateRoleStmt(List.of("r2"), true, ""));
 
         CreateUserStmt createUserStmt =
-                new CreateUserStmt(new UserIdentity("impersonate_user", "%"), true, null, List.of(), Map.of(), NodePosition.ZERO);
-        Analyzer.analyze(createUserStmt, new ConnectContext());
+                new CreateUserStmt(new UserIdentity("impersonate_user", "%"), true, null, List.of(), Map.of(),
+                        NodePosition.ZERO);
+        Analyzer.analyze(createUserStmt, context);
         authenticationMgr.createUser(createUserStmt);
 
-        createUserStmt = new CreateUserStmt(new UserIdentity("u1", "%"), true, null, List.of("r1"), Map.of(), NodePosition.ZERO);
-        Analyzer.analyze(createUserStmt, new ConnectContext());
+        createUserStmt = new CreateUserStmt(new UserIdentity("u1", "%"), true, null, List.of("r1"), Map.of(),
+                NodePosition.ZERO);
+        Analyzer.analyze(createUserStmt, context);
         authenticationMgr.createUser(createUserStmt);
 
-        createUserStmt = new CreateUserStmt(new UserIdentity("u2", "%"), true, null, List.of("r2"), Map.of(), NodePosition.ZERO);
-        Analyzer.analyze(createUserStmt, new ConnectContext());
+        createUserStmt = new CreateUserStmt(new UserIdentity("u2", "%"), true, null, List.of("r2"), Map.of(),
+                NodePosition.ZERO);
+        Analyzer.analyze(createUserStmt, context);
         authenticationMgr.createUser(createUserStmt);
 
         long roleId1 = authorizationMgr.getRoleIdByNameAllowNull("r1");
@@ -108,20 +115,80 @@ public class ExecuteAsExecutorTest {
 
         // login as impersonate_user
 
-        ConnectContext context = new ConnectContext();
         AuthenticationHandler.authenticate(context, "impersonate_user", "%", MysqlPassword.EMPTY_PASSWORD);
 
         Assertions.assertEquals("impersonate_user", context.getQualifiedUser());
-        Assertions.assertEquals(Set.of("group1", "group2"), context.getGroups());
+        Assertions.assertEquals(Set.of(), context.getGroups());
 
         ExecuteAsStmt executeAsStmt = new ExecuteAsStmt(new UserIdentity("u1", "%"), false);
         ExecuteAsExecutor.execute(executeAsStmt, context);
-        Assertions.assertEquals(Set.of("group3"), context.getGroups());
+        Assertions.assertEquals(Set.of("group1"), context.getGroups());
         Assertions.assertEquals(Set.of(roleId1), context.getCurrentRoleIds());
 
         ExecuteAsStmt executeAsStmt2 = new ExecuteAsStmt(new UserIdentity("u2", "%"), false);
         ExecuteAsExecutor.execute(executeAsStmt2, context);
-        Assertions.assertEquals(Set.of("group4"), context.getGroups());
+        Assertions.assertEquals(Set.of("group2"), context.getGroups());
         Assertions.assertEquals(Set.of(roleId2), context.getCurrentRoleIds());
+    }
+
+    @Test
+    public void testExecuteAsGroupWithRoles() throws Exception {
+        ConnectContext context = new ConnectContext();
+
+        authorizationMgr.createRole(new CreateRoleStmt(List.of("r1"), true, ""));
+        authorizationMgr.createRole(new CreateRoleStmt(List.of("r2"), true, ""));
+        authorizationMgr.createRole(new CreateRoleStmt(List.of("r3"), true, ""));
+
+        CreateUserStmt createUserStmt =
+                new CreateUserStmt(new UserIdentity("impersonate_user", "%"), true, null, List.of(), Map.of(), NodePosition.ZERO);
+        Analyzer.analyze(createUserStmt, context);
+        authenticationMgr.createUser(createUserStmt);
+
+        createUserStmt = new CreateUserStmt(new UserIdentity("u1", "%"), true, null, List.of("r1"), Map.of(), NodePosition.ZERO);
+        Analyzer.analyze(createUserStmt, context);
+        authenticationMgr.createUser(createUserStmt);
+
+        createUserStmt = new CreateUserStmt(new UserIdentity("u2", "%"), true, null, List.of("r2"), Map.of(), NodePosition.ZERO);
+        Analyzer.analyze(createUserStmt, context);
+        authenticationMgr.createUser(createUserStmt);
+
+        createUserStmt = new CreateUserStmt(new UserIdentity("u3", "%"), true, null, List.of("r3"), Map.of(), NodePosition.ZERO);
+        Analyzer.analyze(createUserStmt, context);
+        authenticationMgr.createUser(createUserStmt);
+
+        long roleId1 = authorizationMgr.getRoleIdByNameAllowNull("r1");
+        long roleId2 = authorizationMgr.getRoleIdByNameAllowNull("r2");
+        long roleId3 = authorizationMgr.getRoleIdByNameAllowNull("r3");
+
+        authorizationMgr.grantRole(new GrantRoleStmt(List.of("r1"), "group1", GrantType.GROUP, NodePosition.ZERO));
+        authorizationMgr.grantRole(new GrantRoleStmt(List.of("r2"), "group2", GrantType.GROUP, NodePosition.ZERO));
+
+        // login as impersonate_user
+
+        AuthenticationHandler.authenticate(context, "impersonate_user", "%", MysqlPassword.EMPTY_PASSWORD);
+
+        Assertions.assertEquals("impersonate_user", context.getQualifiedUser());
+        Assertions.assertEquals(Set.of(), context.getGroups());
+
+        ExecuteAsStmt executeAsStmt = new ExecuteAsStmt(new UserIdentity("u1", "%"), false);
+        ExecuteAsExecutor.execute(executeAsStmt, context);
+        Assertions.assertEquals(Set.of("group1"), context.getGroups());
+        Assertions.assertEquals(Set.of(roleId1), context.getCurrentRoleIds());
+
+        ExecuteAsStmt executeAsStmt2 = new ExecuteAsStmt(new UserIdentity("u2", "%"), false);
+        ExecuteAsExecutor.execute(executeAsStmt2, context);
+        Assertions.assertEquals(Set.of("group2"), context.getGroups());
+        Assertions.assertEquals(Set.of(roleId2), context.getCurrentRoleIds());
+
+        ExecuteAsStmt executeAsStmt3 = new ExecuteAsStmt(new UserIdentity("u3", "%"), false);
+        ExecuteAsExecutor.execute(executeAsStmt3, context);
+        Assertions.assertEquals(Set.of("group1", "group2"), context.getGroups());
+        Assertions.assertEquals(Set.of(roleId1, roleId2, roleId3), context.getCurrentRoleIds());
+
+        ExecuteAsStmt executeAsStmt4 =
+                new ExecuteAsStmt(new UserIdentity("impersonate_user", "%", false, true, NodePosition.ZERO), false);
+        ExecuteAsExecutor.execute(executeAsStmt4, context);
+        Assertions.assertEquals(Set.of(), context.getGroups());
+        Assertions.assertEquals(Set.of(), context.getCurrentRoleIds());
     }
 }

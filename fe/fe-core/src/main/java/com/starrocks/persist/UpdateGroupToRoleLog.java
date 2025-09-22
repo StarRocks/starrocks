@@ -12,25 +12,30 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package com.starrocks.sql.ast;
+package com.starrocks.persist;
 
-import com.starrocks.authorization.GrantType;
-import com.starrocks.sql.parser.NodePosition;
+import com.google.gson.annotations.SerializedName;
+import com.starrocks.common.io.Writable;
 
 import java.util.List;
 
-public class GrantRoleStmt extends BaseGrantRevokeRoleStmt {
+public class UpdateGroupToRoleLog implements Writable {
+    @SerializedName(value = "g")
+    private String group;
 
-    public GrantRoleStmt(List<String> granteeRole, UserIdentity userIdent, NodePosition pos) {
-        super(granteeRole, userIdent, pos);
+    @SerializedName(value = "r")
+    private List<Long> roleIdList;
+
+    public UpdateGroupToRoleLog(String group, List<Long> roleIdList) {
+        this.group = group;
+        this.roleIdList = roleIdList;
     }
 
-    public GrantRoleStmt(List<String> granteeRole, String group, GrantType grantType, NodePosition pos) {
-        super(granteeRole, group, grantType, pos);
+    public String getGroup() {
+        return group;
     }
 
-    @Override
-    public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitGrantRoleStatement(this, context);
+    public List<Long> getRoleIdList() {
+        return roleIdList;
     }
 }
