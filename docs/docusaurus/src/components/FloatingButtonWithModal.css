@@ -1,0 +1,78 @@
+/* Floating Button Styles */
+.floating-action-button {
+  position: fixed; /* Fixes the position relative to the viewport */
+  bottom: 20px; /* Distance from the bottom of the viewport */
+  right: 20px; /* Distance from the right of the viewport */
+  z-index: 999; /* Ensures it stays on top of other content */
+  background-color: var(--ifm-color-primary); /* Use a Docusaurus theme variable */
+  color: white;
+  border-radius: 50%; /* Makes it a circle */
+  width: 60px;
+  height: 60px;
+  border: none;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+  cursor: pointer;
+  transition: transform 0.2s ease-in-out;
+}
+
+.floating-action-button:hover {
+  transform: scale(1.1);
+}
+
+/* Modal and Iframe Styles (same as before) */
+.ResizableIframeModal-Overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(0, 0, 0, 0.75);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 1000;
+}
+
+.ResizableIframeModal-Content {
+  position: relative;
+  background: var(--ifm-background-color);
+  padding: 10px;
+  border-radius: 8px;
+  max-width: 90vw;
+  max-height: 90vh;
+}
+
+.modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 10px;
+}
+
+.modal-header h3 {
+  margin: 0;
+}
+
+.close-button {
+  background: none;
+  border: none;
+  font-size: 24px;
+  cursor: pointer;
+  padding: 0;
+}
+
+.react-resizable-handle {
+  position: absolute;
+  width: 10px;
+  height: 10px;
+  bottom: 0;
+  right: 0;
+  cursor: se-resize;
+  background-color: var(--ifm-color-primary);
+  border-radius: 2px;
+}
+
+.ResizableIframeModal-Content iframe {
+  display: block;
+  overflow: auto;
+}

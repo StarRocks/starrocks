@@ -9,7 +9,9 @@ import {
 import {useKeyboardNavigation} from '@docusaurus/theme-common/internal';
 import SkipToContent from '@theme/SkipToContent';
 import AnnouncementBar from '@theme/AnnouncementBar';
-import FloatingModal from '@site/src/components/FloatingModal'; // Import your component
+
+import FloatingButtonWithModal from '@site/src/components/FloatingButtonWithModal';
+
 import Navbar from '@theme/Navbar';
 import Footer from '@theme/Footer';
 import LayoutProvider from '@theme/Layout/Provider';
@@ -49,7 +51,10 @@ export default function Layout(props) {
       </div>
 
       {!noFooter && <Footer />}
-      <FloatingModal /> {/* Add your component here */}
+       <FloatingButtonWithModal
+        modalTitle="Ask AI"
+        iframeSrc="https://ai-agent.starrocks.com/"
+      />
     </LayoutProvider>
   );
 }
