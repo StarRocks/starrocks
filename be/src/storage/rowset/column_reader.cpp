@@ -369,10 +369,7 @@ Status ColumnReader::_calculate_row_ranges(const std::vector<uint32_t>& page_ind
 }
 
 LogicalType ColumnReader::_get_zone_map_parse_type(const ColumnPredicate* predicate) const {
-    if (predicate == nullptr) {
-        return _column_type;
-    }
-
+    DCHECK(predicate != nullptr);
     // The type of the predicate may be different from the data type in the segment
     // file, often seen after fast schema evolution, e.g., the predicate type may be
     // 'BIGINT' while the data type is 'INT', so it's necessary to use the type of

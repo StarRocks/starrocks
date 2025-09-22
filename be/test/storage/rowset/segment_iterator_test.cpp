@@ -75,7 +75,7 @@ private:
             col.set_length(128);
             col.set_index_length(16);
         } else if (type == TYPE_CHAR) {
-            col.set_type("VARCHAR");
+            col.set_type("CHAR");
             col.set_length(20);
             col.set_index_length(20);
         }
