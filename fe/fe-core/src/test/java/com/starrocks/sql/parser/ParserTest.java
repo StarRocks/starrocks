@@ -20,6 +20,7 @@ import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.Pair;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.GlobalVariable;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.qe.SqlModeHelper;
 import com.starrocks.qe.VariableMgr;
@@ -48,6 +49,7 @@ import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
 
+import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CountDownLatch;
@@ -280,10 +282,11 @@ class ParserTest {
         final Expr[] exprs = new Expr[2];
         Thread t1 = new Thread(() -> {
             synchronized (lock) {
-                StarRocksLexer lexer = new StarRocksLexer(new CaseInsensitiveStream(CharStreams.fromString(sql)));
+                com.starrocks.sql.parser.StarRocksLexer lexer =
+                        new com.starrocks.sql.parser.StarRocksLexer(new CaseInsensitiveStream(CharStreams.fromString(sql)));
                 lexer.setSqlMode(SqlModeHelper.MODE_DEFAULT);
                 CommonTokenStream tokenStream = new CommonTokenStream(lexer);
-                StarRocksParser parser = new StarRocksParser(tokenStream);
+                com.starrocks.sql.parser.StarRocksParser parser = new com.starrocks.sql.parser.StarRocksParser(tokenStream);
                 parser.removeErrorListeners();
                 parser.addErrorListener(new BaseErrorListener());
                 parser.removeParseListeners();
@@ -292,9 +295,12 @@ class ParserTest {
                 } catch (InterruptedException e) {
                     fail(e.getMessage());
                 }
-                List<StarRocksParser.SingleStatementContext> sqlStatements = parser.sqlStatements().singleStatement();
-                QueryStatement statement = (QueryStatement) new AstBuilder(SqlModeHelper.MODE_DEFAULT)
-                        .visitSingleStatement(sqlStatements.get(0));
+                List<com.starrocks.sql.parser.StarRocksParser.SingleStatementContext> sqlStatements =
+                        parser.sqlStatements().singleStatement();
+                QueryStatement statement =
+                        (QueryStatement) new AstBuilder(SqlModeHelper.MODE_DEFAULT, GlobalVariable.enableTableNameCaseInsensitive,
+                                new IdentityHashMap<>())
+                                .visitSingleStatement(sqlStatements.get(0));
                 SelectList item = ((SelectRelation) statement.getQueryRelation()).getSelectList();
                 exprs[0] = item.getItems().get(0).getExpr();
                 latch.countDown();
@@ -304,16 +310,19 @@ class ParserTest {
 
         Thread t2 = new Thread(() -> {
             synchronized (lock) {
-                StarRocksLexer lexer = new StarRocksLexer(new CaseInsensitiveStream(CharStreams.fromString(sql)));
+                com.starrocks.sql.parser.StarRocksLexer lexer =
+                        new com.starrocks.sql.parser.StarRocksLexer(new CaseInsensitiveStream(CharStreams.fromString(sql)));
                 long sqlMode = SqlModeHelper.MODE_DEFAULT | SqlModeHelper.MODE_PIPES_AS_CONCAT;
                 lexer.setSqlMode(sqlMode);
                 CommonTokenStream tokenStream = new CommonTokenStream(lexer);
-                StarRocksParser parser = new StarRocksParser(tokenStream);
+                com.starrocks.sql.parser.StarRocksParser parser = new com.starrocks.sql.parser.StarRocksParser(tokenStream);
                 parser.removeErrorListeners();
                 parser.addErrorListener(new BaseErrorListener());
                 parser.removeParseListeners();
-                List<StarRocksParser.SingleStatementContext> sqlStatements = parser.sqlStatements().singleStatement();
-                QueryStatement statement = (QueryStatement) new AstBuilder(sqlMode)
+                List<com.starrocks.sql.parser.StarRocksParser.SingleStatementContext> sqlStatements =
+                        parser.sqlStatements().singleStatement();
+                QueryStatement statement = (QueryStatement) new AstBuilder(sqlMode, GlobalVariable.enableTableNameCaseInsensitive,
+                        new IdentityHashMap<>())
                         .visitSingleStatement(sqlStatements.get(0));
                 SelectList item = ((SelectRelation) statement.getQueryRelation()).getSelectList();
                 exprs[1] = item.getItems().get(0).getExpr();
@@ -435,15 +444,16 @@ class ParserTest {
             builder.append(exprString);
         }
 
-        AstBuilder astBuilder = new AstBuilder(SqlModeHelper.MODE_DEFAULT);
-        StarRocksLexer lexer = new StarRocksLexer(
+        AstBuilder astBuilder = new AstBuilder(SqlModeHelper.MODE_DEFAULT, GlobalVariable.enableTableNameCaseInsensitive,
+                new IdentityHashMap<>());
+        com.starrocks.sql.parser.StarRocksLexer lexer = new com.starrocks.sql.parser.StarRocksLexer(
                 new CaseInsensitiveStream(CharStreams.fromString(builder.toString())));
         lexer.setSqlMode(SqlModeHelper.MODE_DEFAULT);
         CommonTokenStream tokenStream = new CommonTokenStream(lexer);
-        StarRocksParser parser = new StarRocksParser(tokenStream);
+        com.starrocks.sql.parser.StarRocksParser parser = new com.starrocks.sql.parser.StarRocksParser(tokenStream);
         parser.getInterpreter().setPredictionMode(PredictionMode.LL);
         long start = System.currentTimeMillis();
-        StarRocksParser.ExpressionContext context1 = parser.expression();
+        com.starrocks.sql.parser.StarRocksParser.ExpressionContext context1 = parser.expression();
         Expr expr1 = (Expr) astBuilder.visit(context1);
         long end = System.currentTimeMillis();
         long timeOfLL = end - start;
@@ -452,7 +462,7 @@ class ParserTest {
         parser.reset();
         parser.getInterpreter().setPredictionMode(PredictionMode.SLL);
         start = System.currentTimeMillis();
-        StarRocksParser.ExpressionContext context2 = parser.expression();
+        com.starrocks.sql.parser.StarRocksParser.ExpressionContext context2 = parser.expression();
         Expr expr2 = (Expr) astBuilder.visit(context2);
         end = System.currentTimeMillis();
         long timeOfSLL = end - start;

@@ -12,12 +12,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.sql.analyzer;
-
 
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.GlobalVariable;
 import com.starrocks.sql.ast.AlterClause;
 import com.starrocks.sql.ast.AlterTableStmt;
 import com.starrocks.sql.ast.ModifyBackendClause;
@@ -37,12 +36,12 @@ import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
 import java.lang.reflect.Field;
+import java.util.IdentityHashMap;
 import java.util.List;
 
 public class AstBuilderTest {
 
     private static ConnectContext connectContext;
-
 
     @BeforeAll
     public static void beforeClass() throws Exception {
@@ -62,7 +61,8 @@ public class AstBuilderTest {
         StarRocksParser parser = new StarRocksParser(tokenStream);
         StarRocksParser.SqlStatementsContext sqlStatements = parser.sqlStatements();
 
-        AstBuilder astBuilder = AstBuilder.getInstance().create(32);
+        AstBuilder astBuilder =
+                AstBuilder.getInstance().create(32, GlobalVariable.enableTableNameCaseInsensitive, new IdentityHashMap<>());
         StatementBase statement = (StatementBase) astBuilder.visitSingleStatement(sqlStatements.singleStatement(0));
         Field field = statement.getClass().getDeclaredField("alterClause");
         field.setAccessible(true);
@@ -78,7 +78,8 @@ public class AstBuilderTest {
         CommonTokenStream tokenStream = new CommonTokenStream(lexer);
         StarRocksParser parser = new StarRocksParser(tokenStream);
         StarRocksParser.SqlStatementsContext sqlStatements = parser.sqlStatements();
-        AstBuilder astBuilder = AstBuilder.getInstance().create(32);
+        AstBuilder astBuilder =
+                AstBuilder.getInstance().create(32, GlobalVariable.enableTableNameCaseInsensitive, new IdentityHashMap<>());
         StatementBase statement = (StatementBase) astBuilder.visitSingleStatement(sqlStatements.singleStatement(0));
         Field field = statement.getClass().getDeclaredField("alterClause");
         field.setAccessible(true);
