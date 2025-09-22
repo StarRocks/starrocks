@@ -329,6 +329,12 @@ public class SystemInfoServiceTest {
                 return WarehouseManager.DEFAULT_RESOURCE;
             }
         };
+        new MockUp<EditLog>() {
+            @Mock
+            public void logDropBackend(DropBackendInfo info, WALApplier applier) {
+                applier.apply(info);
+            }
+        };
         service.addBackend(be);
         be.setStarletPort(1001);
         service.dropBackend("newHost", 1000, null, null, false);
@@ -374,6 +380,12 @@ public class SystemInfoServiceTest {
             @Mock
             public ComputeResource acquireComputeResource(CRAcquireContext acquireContext) {
                 return WarehouseManager.DEFAULT_RESOURCE;
+            }
+        };
+        new MockUp<EditLog>() {
+            @Mock
+            public void logDropComputeNode(DropComputeNodeLog log, WALApplier applier) {
+                applier.apply(log);
             }
         };
         service.addComputeNode(cn);
