@@ -964,7 +964,7 @@ public class ExplainAnalyzer {
         } else if (nodeInfo.element.instanceOf(ScanNode.class)) {
             appendGroupedMetricsForScan(uniqueMetrics, nodeInfo);
         } else {
-            return false;
+            appendGroupedMetricsForOthers(uniqueMetrics, nodeInfo);
         }
         return true;
     }
@@ -993,6 +993,8 @@ public class ExplainAnalyzer {
         appendMetric(uniqueMetrics, nodeInfo, "PushRowNum");
         appendMetric(uniqueMetrics, nodeInfo, "PullRowNum");
         popIndent();
+
+        appendGroupedMetricsOthers(uniqueMetrics, nodeInfo, getExchangeKnownMetrics());
 
         popIndent();
     }
@@ -1030,6 +1032,8 @@ public class ExplainAnalyzer {
         appendMetric(uniqueMetrics, nodeInfo, "RuntimeFilterOutputRows");
         popIndent();
 
+        appendGroupedMetricsOthers(uniqueMetrics, nodeInfo, getJoinKnownMetrics());
+
         popIndent();
     }
 
@@ -1057,6 +1061,8 @@ public class ExplainAnalyzer {
         appendMetric(uniqueMetrics, nodeInfo, "DistinctTime");
         popIndent();
 
+        appendGroupedMetricsOthers(uniqueMetrics, nodeInfo, getAggregateKnownMetrics());
+
         popIndent();
     }
 
@@ -1069,6 +1075,9 @@ public class ExplainAnalyzer {
         appendMetric(uniqueMetrics, nodeInfo, "MergeTime");
         appendMetric(uniqueMetrics, nodeInfo, "SourceCount");
         popIndent();
+
+        appendGroupedMetricsOthers(uniqueMetrics, nodeInfo, getUnionKnownMetrics());
+
         popIndent();
     }
 
@@ -1087,6 +1096,8 @@ public class ExplainAnalyzer {
         appendMetric(uniqueMetrics, nodeInfo, "RowsWritten");
         appendMetric(uniqueMetrics, nodeInfo, "ShuffleBytes");
         popIndent();
+
+        appendGroupedMetricsOthers(uniqueMetrics, nodeInfo, getSinkKnownMetrics());
 
         popIndent();
     }
@@ -1164,19 +1175,7 @@ public class ExplainAnalyzer {
         appendMetric(uniqueMetrics, nodeInfo, "DefaultChunkBufferCapacity");
         popIndent();
 
-        appendDetailLine("Others:");
-        pushIndent(GraphElement.LEAF_METRIC_INDENT);
-        appendMetric(uniqueMetrics, nodeInfo, "CreateSegmentIter");
-        appendMetric(uniqueMetrics, nodeInfo, "GetDelVec");
-        appendMetric(uniqueMetrics, nodeInfo, "GetDeltaColumnGroup");
-        appendMetric(uniqueMetrics, nodeInfo, "GetRowsets");
-        appendMetric(uniqueMetrics, nodeInfo, "ReadPKIndex");
-        appendMetric(uniqueMetrics, nodeInfo, "GetVectorRowRangesTime");
-        appendMetric(uniqueMetrics, nodeInfo, "ProcessVectorDistanceAndIdTime");
-        appendMetric(uniqueMetrics, nodeInfo, "VectorSearchTime");
-        appendMetric(uniqueMetrics, nodeInfo, "PushdownAccessPaths");
-        appendMetric(uniqueMetrics, nodeInfo, "PushdownPredicates");
-        popIndent();
+        appendGroupedMetricsOthers(uniqueMetrics, nodeInfo, getScanKnownMetrics());
 
         popIndent(); // main indent
     }
@@ -1705,5 +1704,111 @@ public class ExplainAnalyzer {
                 operatorIdx = 0;
             }
         }
+    }
+
+    private void appendGroupedMetricsOthers(RuntimeProfile uniqueMetrics, NodeInfo nodeInfo, Set<String> knownMetrics) {
+        Set<String> allMetrics = uniqueMetrics.getCounterMap().keySet();
+        Set<String> otherMetrics = Sets.newTreeSet();
+
+        for (String metric : allMetrics) {
+            if (!knownMetrics.contains(metric) &&
+                    !metric.startsWith(RuntimeProfile.MERGED_INFO_PREFIX_MIN) &&
+                    !metric.startsWith(RuntimeProfile.MERGED_INFO_PREFIX_MAX) &&
+                    !EXCLUDE_DETAIL_METRIC_NAMES.contains(metric)) {
+                otherMetrics.add(metric);
+            }
+        }
+
+        if (!otherMetrics.isEmpty()) {
+            appendDetailLine("Others:");
+            pushIndent(GraphElement.LEAF_METRIC_INDENT);
+            for (String metric : otherMetrics) {
+                appendMetric(uniqueMetrics, nodeInfo, metric);
+            }
+            popIndent();
+        }
+    }
+
+    private void appendGroupedMetricsForOthers(RuntimeProfile uniqueMetrics, NodeInfo nodeInfo) {
+        pushIndent(GraphElement.LEAF_METRIC_INDENT);
+        appendDetailLine("Others:");
+        pushIndent(GraphElement.LEAF_METRIC_INDENT);
+
+        Set<String> allMetrics = uniqueMetrics.getCounterMap().keySet();
+        Set<String> otherMetrics = Sets.newTreeSet();
+
+        for (String metric : allMetrics) {
+            if (!metric.startsWith(RuntimeProfile.MERGED_INFO_PREFIX_MIN) &&
+                    !metric.startsWith(RuntimeProfile.MERGED_INFO_PREFIX_MAX) &&
+                    !EXCLUDE_DETAIL_METRIC_NAMES.contains(metric)) {
+                otherMetrics.add(metric);
+            }
+        }
+
+        for (String metric : otherMetrics) {
+            appendMetric(uniqueMetrics, nodeInfo, metric);
+        }
+
+        popIndent();
+        popIndent();
+    }
+
+    private Set<String> getJoinKnownMetrics() {
+        return Sets.newHashSet(
+                "BuildRows", "BuildTime", "BuildHashTableMemoryUsage", "HashBuckets", "HashCollisions",
+                "BuildSpillBytes", "BuildSpillTime", "ProbeRows", "ProbeTime", "JoinOutputRows",
+                "RowsAfterJoinFilter", "JoinConjunctEvaluateTime", "ProbeSpillBytes", "ProbeSpillTime",
+                "RuntimeFilterBuildTime", "RuntimeFilterPushDownTime", "RuntimeFilterInputRows",
+                "RuntimeFilterOutputRows"
+        );
+    }
+
+    private Set<String> getAggregateKnownMetrics() {
+        return Sets.newHashSet(
+                "AggInputRows", "AggOutputRows", "AggComputeTime", "HashAggBuildTime", "HashAggProbeTime",
+                "HashBuckets", "HashCollisions", "HashTableMemoryUsage", "SpillBytes", "SpillTime",
+                "DistinctInputRows", "DistinctOutputRows", "DistinctTime"
+        );
+    }
+
+    private Set<String> getExchangeKnownMetrics() {
+        return Sets.newHashSet(
+                "NetworkTime", "BytesSent", "BytesReceived", "BlocksSent", "BlocksReceived",
+                "SerializeTime", "DeserializeTime", "SendTime", "RecvTime", "DataStreamSenderTime",
+                "DataStreamReceiverTime", "RowsSent", "RowsReceived", "PushRowNum", "PullRowNum"
+        );
+    }
+
+    private Set<String> getUnionKnownMetrics() {
+        return Sets.newHashSet(
+                "InputRows", "OutputRows", "MergeTime", "SourceCount"
+        );
+    }
+
+    private Set<String> getSinkKnownMetrics() {
+        return Sets.newHashSet(
+                "WriteTime", "FlushTime", "CommitTime", "RetryCount", "BufferedBytes",
+                "BufferedRows", "BytesWritten", "RowsWritten", "ShuffleBytes"
+        );
+    }
+
+    private Set<String> getScanKnownMetrics() {
+        return Sets.newHashSet(
+                "ShortKeyFilter", "ShortKeyFilterRows", "BitmapIndexFilter", "BitmapIndexFilterRows",
+                "BloomFilterFilter", "BloomFilterFilterRows", "ZoneMapFilter", "ZoneMapFilterRows",
+                "PredFilter", "PredFilterRows", "GinFilter", "GinFilterRows", "VectorIndexFilter",
+                "VectorIndexFilterRows", "DelVecFilter", "DelVecFilterRows", "RuntimeFilter", "RuntimeFilterRows",
+                "RawRowsRead", "RowsRead", "DictDecode", "DictDecodeCount", "ChunkCopy",
+                "IOTime", "BytesRead", "CompressedBytesRead", "UncompressedBytesRead", "ReadPagesNum",
+                "CachedPagesNum", "BlockFetch", "BlockFetchCount", "BlockSeek", "BlockSeekCount", "DecompressTime",
+                "TabletCount", "SegmentsReadCount", "RowsetsReadCount", "TotalColumnsDataPageCount",
+                "ColumnIteratorInit", "BitmapIndexIteratorInit", "FlatJsonInit", "FlatJsonMerge",
+                "IOTaskExecTime", "IOTaskWaitTime", "SubmitTaskCount", "SubmitTaskTime", "PrepareChunkSourceTime",
+                "MorselsCount", "PeakIOTasks", "PeakScanTaskQueueSize", "PeakChunkBufferMemoryUsage",
+                "PeakChunkBufferSize", "ChunkBufferCapacity", "DefaultChunkBufferCapacity",
+                "CreateSegmentIter", "GetDelVec", "GetDeltaColumnGroup", "GetRowsets", "ReadPKIndex",
+                "GetVectorRowRangesTime", "ProcessVectorDistanceAndIdTime", "VectorSearchTime",
+                "PushdownAccessPaths", "PushdownPredicates"
+        );
     }
 }
