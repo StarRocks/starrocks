@@ -528,6 +528,15 @@ public class LocalWarehouse extends Warehouse implements GsonPostProcessable {
         }
     }
 
+    public void replayAlterWarehouse(LocalWarehouse otherWarehouse) {
+        // recover the warehouse state from the otherWarehouse
+        this.state = otherWarehouse.state;
+        this.createdTime = otherWarehouse.createdTime;
+        this.resumedTime = otherWarehouse.resumedTime;
+        this.updatedTime = otherWarehouse.updatedTime;
+        setProperty(otherWarehouse.getProperty());
+    }
+
     @Override
     public void alterCNGroup(AlterCnGroupStmt stmt) throws DdlException {
         // delegate the properties management to StarOS

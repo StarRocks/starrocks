@@ -29,6 +29,7 @@ import com.starrocks.persist.EditLog;
 import com.starrocks.persist.EditLogDeserializer;
 import com.starrocks.persist.OperationType;
 import com.starrocks.persist.gson.GsonUtils;
+import com.starrocks.qe.scheduler.slot.BaseSlotManager;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
 import com.starrocks.server.WarehouseManager;
@@ -43,16 +44,20 @@ import mockit.Mock;
 import mockit.MockUp;
 import mockit.Mocked;
 import mockit.Verifications;
+import org.apache.commons.lang3.tuple.Pair;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
 
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicReference;
 
@@ -60,6 +65,9 @@ public class WarehouseManagerEPackTest {
 
     @Mocked
     private EditLog editLog;
+
+    @Mocked
+    BaseSlotManager slotManager;
 
     @Before
     public void before() {
@@ -127,6 +135,10 @@ public class WarehouseManagerEPackTest {
             public EditLog getEditLog() {
                 return editLog;
             }
+            @Mock
+            public BaseSlotManager getSlotManager() {
+                return slotManager;
+            }
         };
 
         { // the warehouse is created with default properties
@@ -185,6 +197,10 @@ public class WarehouseManagerEPackTest {
             @Mock
             public EditLog getEditLog() {
                 return editLog;
+            }
+            @Mock
+            public BaseSlotManager getSlotManager() {
+                return slotManager;
             }
         };
         {
@@ -251,7 +267,12 @@ public class WarehouseManagerEPackTest {
             public EditLog getEditLog() {
                 return editLog;
             }
+            @Mock
+            public BaseSlotManager getSlotManager() {
+                return slotManager;
+            }
         };
+
         long workerGroupId = GlobalStateMgr.getCurrentState().getNextId();
         new MockUp<StarOSAgentEpack>() {
             @Mock
@@ -333,12 +354,14 @@ public class WarehouseManagerEPackTest {
 
     @Test
     public void testGetBackgroundComputeResource() throws DdlException {
-        WarehouseManagerEPack mgr = new WarehouseManagerEPack();
-        mgr.initDefaultWarehouse();
         new MockUp<GlobalStateMgr>() {
             @Mock
             public EditLog getEditLog() {
                 return editLog;
+            }
+            @Mock
+            public BaseSlotManager getSlotManager() {
+                return slotManager;
             }
         };
         long workerGroupId = GlobalStateMgr.getCurrentState().getNextId();
@@ -349,6 +372,9 @@ public class WarehouseManagerEPackTest {
                 return workerGroupId;
             }
         };
+        WarehouseManagerEPack mgr = new WarehouseManagerEPack();
+        mgr.initDefaultWarehouse();
+
         CreateWarehouseStmt createStmt = new CreateWarehouseStmt(false, "wh1", Maps.newHashMap(), "");
         ExceptionChecker.expectThrowsNoException(() -> mgr.createWarehouse(createStmt));
         Warehouse warehouse = mgr.getWarehouse("wh1");
@@ -370,5 +396,92 @@ public class WarehouseManagerEPackTest {
         ComputeResource r2 = mgr.getBackgroundComputeResource(100);
         Assert.assertEquals(r2.getWarehouseId(), 0);
         Assert.assertEquals(r2.getWorkerGroupId(), 0);
+    }
+
+    @Test
+    public void testSuspendWarehouseAndReplay() throws IOException, DdlException {
+        new MockUp<GlobalStateMgr>() {
+            @Mock
+            public EditLog getEditLog() {
+                return editLog;
+            }
+            @Mock
+            public BaseSlotManager getSlotManager() {
+                return slotManager;
+            }
+        };
+        long workerGroupId = GlobalStateMgr.getCurrentState().getNextId();
+        new MockUp<StarOSAgentEpack>() {
+            @Mock
+            public long createWorkerGroup(String size, int replicaNumber, ReplicationType replicationType,
+                                          WarmupLevel warmupLevel) throws DdlException {
+                return workerGroupId;
+            }
+        };
+
+        List<Pair<Short, String>> logs = new ArrayList<>();
+        new MockUp<EditLog>() {
+            @Mock
+            public void logJsonObject(short op, Object w) {
+                try {
+                    String jsonStr = GsonUtils.GSON.toJson(w, w.getClass());
+                    logs.add(Pair.of(op, jsonStr));
+                } catch (Exception e) {
+                    Assertions.fail("cannot write json");
+                }
+            }
+        };
+
+
+        String warehouseName = "wh1";
+        long resumeTime = 0;
+        {
+            WarehouseManagerEPack mgr = new WarehouseManagerEPack();
+            CreateWarehouseStmt createStmt = new CreateWarehouseStmt(false, warehouseName, Maps.newHashMap(), "");
+            ExceptionChecker.expectThrowsNoException(() -> mgr.createWarehouse(createStmt));
+
+            Warehouse warehouse = mgr.getWarehouse(warehouseName);
+            Assertions.assertNotNull(warehouse);
+            Assertions.assertInstanceOf(LocalWarehouse.class, warehouse);
+            LocalWarehouse localWarehouse = (LocalWarehouse) warehouse;
+            Assertions.assertEquals(LocalWarehouse.WarehouseState.AVAILABLE, localWarehouse.getState());
+
+            SuspendWarehouseStmt suspendStat = new SuspendWarehouseStmt(warehouseName);
+            ExceptionChecker.expectThrowsNoException(() -> mgr.suspendWarehouse(suspendStat));
+
+            Assertions.assertEquals(LocalWarehouse.WarehouseState.SUSPENDED, localWarehouse.getState());
+            resumeTime = localWarehouse.getResumeTime();
+        }
+
+        // should be two logs, one for create, one for suspend
+        Assertions.assertEquals(2L, logs.size());
+
+        { // replay the editLog to suspend the warehouse
+            WarehouseManagerEPack mgr = new WarehouseManagerEPack();
+            Assertions.assertNull(mgr.getWarehouseAllowNull(warehouseName));
+
+            // replay edit log
+            for (Pair<Short, String> log : logs) {
+                short opCode = log.getLeft();
+                String jsonStr = log.getRight();
+                LocalWarehouse replayWh = GsonUtils.GSON.fromJson(jsonStr, LocalWarehouse.class);
+
+                if (opCode == OperationType.OP_CREATE_WAREHOUSE) {
+                    mgr.replayCreateWarehouse(replayWh);
+                } else if (opCode == OperationType.OP_ALTER_WAREHOUSE) {
+                    mgr.replayAlterWarehouse(replayWh);
+                } else {
+                    Assert.fail("unexpected op code: " + opCode);
+                }
+            }
+
+            // verify the replayed result
+            Warehouse warehouse = mgr.getWarehouse(warehouseName);
+            Assertions.assertNotNull(warehouse);
+            Assertions.assertInstanceOf(LocalWarehouse.class, warehouse);
+            LocalWarehouse localWarehouse = (LocalWarehouse) warehouse;
+            Assertions.assertEquals(LocalWarehouse.WarehouseState.SUSPENDED, localWarehouse.getState());
+            Assertions.assertEquals(resumeTime, localWarehouse.getResumeTime());
+        }
     }
 }

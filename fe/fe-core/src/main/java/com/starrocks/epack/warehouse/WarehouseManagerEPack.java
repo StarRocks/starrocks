@@ -407,9 +407,8 @@ public class WarehouseManagerEPack extends WarehouseManager {
     @Override
     public void replayAlterWarehouse(Warehouse warehouse) {
         try (LockCloseable ignored = new LockCloseable(rwLock.writeLock())) {
-            // Lightweight update the warehouse info instead of entire replacement
             LocalWarehouse originWh = (LocalWarehouse) getWarehouse(warehouse.getId());
-            originWh.setProperty(((LocalWarehouse) warehouse).getProperty());
+            originWh.replayAlterWarehouse((LocalWarehouse) warehouse);
         }
     }
 
