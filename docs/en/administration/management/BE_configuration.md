@@ -2602,15 +2602,6 @@ When this value is set to less than `0`, the system uses the product of its abso
 - Introduced in: -
 -->
 
-##### lake_tablet_ignore_invalid_delete_predicate
-
-- Default: false
-- Type: Boolean
-- Unit: -
-- Is mutable: Yes
-- Description: A boolean value to control whether ignore invalid delete predicates in tablet rowset metadata which may be introduced by logic deletion to a duplicate key table after the column name renamed.
-- Introduced in: v4.0
-
 <!--
 ##### bitmap_serialize_version
 
