@@ -1732,9 +1732,7 @@ Status SegmentIterator::_do_get_next(Chunk* result, vector<rowid_t>* rowid) {
 }
 
 FieldPtr SegmentIterator::_make_field(size_t i) {
-    if (!_vector_index_ctx) {
-        return std::make_shared<Field>(i, "", get_type_info(TYPE_FLOAT), false);
-    }
+    DCHECK(_vector_index_ctx != nullptr);
     return std::make_shared<Field>(i, _vector_index_ctx->vector_distance_column_name, get_type_info(TYPE_FLOAT), false);
 }
 
