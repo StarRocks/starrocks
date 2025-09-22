@@ -914,7 +914,7 @@ public class SchemaChangeHandler extends AlterHandler {
         }
 
         if (!SchemaChangeTypeCompatibility.canReuseZonemapIndex(oriColumn.getType(), modColumn.getType())) {
-            fastSchemaEvolution = false;
+            return false;
         }
 
         // Check whether manually created indexes support fast schema evolution. The rules are as follows:
@@ -928,8 +928,7 @@ public class SchemaChangeHandler extends AlterHandler {
         for (Index index : existedIndexes) {
             if (index.getColumns().contains(oriColumn.getColumnId())) {
                 if (index.getIndexType() != IndexDef.IndexType.NGRAMBF) {
-                    fastSchemaEvolution = false;
-                    break;
+                    return false;
                 }
             }
         }
