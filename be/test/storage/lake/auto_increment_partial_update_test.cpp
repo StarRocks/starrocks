@@ -415,4 +415,66 @@ TEST_F(LakeAutoIncrementPartialUpdateTest, test_resolve_conflict) {
     SyncPoint::GetInstance()->DisableProcessing();
 }
 
+// Covers the non-null auto_increment_state path in UpdateManager::get_column_values(), involving
+// reading auto_increment_state->segment_id and rowids (corresponding to lines 736, 737 in update_manager.cpp).
+TEST_F(LakeAutoIncrementPartialUpdateTest, test_auto_increment_fetch_from_segment_for_new_rows) {
+    recreate_schema(1);
+    auto chunk0 = generate_data(kChunkSize, false);
+    auto chunk_partial_missing_auto =
+            generate_data(kChunkSize, true); // Only (c0, c1=0), triggering auto-increment completion
+    auto indexes = std::vector<uint32_t>(kChunkSize);
+    for (int i = 0; i < kChunkSize; i++) indexes[i] = i;
+
+    auto version = 1;
+    auto tablet_id = _tablet_metadata->id();
+    // 1) First write a full version to ensure base data exists
+    {
+        auto txn_id = next_id();
+        ASSIGN_OR_ABORT(auto delta_writer, DeltaWriterBuilder()
+                                                   .set_tablet_manager(_tablet_mgr.get())
+                                                   .set_tablet_id(tablet_id)
+                                                   .set_txn_id(txn_id)
+                                                   .set_partition_id(_partition_id)
+                                                   .set_mem_tracker(_mem_tracker.get())
+                                                   .set_schema_id(_tablet_schema->id())
+                                                   .build());
+        ASSERT_OK(delta_writer->open());
+        ASSERT_OK(delta_writer->write(chunk0, indexes.data(), indexes.size()));
+        ASSERT_OK(delta_writer->finish_with_txnlog());
+        delta_writer->close();
+        ASSERT_OK(publish_single_version(tablet_id, version + 1, txn_id).status());
+        version++;
+    }
+
+    // 2) Perform multi-segment partial update writes, triggering auto_increment_partial_update_state construction,
+    // and reading back from source based on segment_id and rowids in get_column_values() (covers lines 736, 737)
+    const int64_t old_size = config::write_buffer_size;
+    config::write_buffer_size = 1; // Force multi-segment
+    {
+        auto txn_id = next_id();
+        ASSIGN_OR_ABORT(auto delta_writer, DeltaWriterBuilder()
+                                                   .set_tablet_manager(_tablet_mgr.get())
+                                                   .set_tablet_id(tablet_id)
+                                                   .set_txn_id(txn_id)
+                                                   .set_partition_id(_partition_id)
+                                                   .set_mem_tracker(_mem_tracker.get())
+                                                   .set_schema_id(_tablet_schema->id())
+                                                   .set_slot_descriptors(&_slot_pointers)
+                                                   .set_miss_auto_increment_column(true)
+                                                   .set_table_id(next_id())
+                                                   .build());
+        ASSERT_OK(delta_writer->open());
+        ASSERT_OK(delta_writer->write(chunk_partial_missing_auto, indexes.data(), indexes.size()));
+        ASSERT_OK(delta_writer->write(chunk_partial_missing_auto, indexes.data(), indexes.size()));
+        ASSERT_OK(delta_writer->finish_with_txnlog());
+        delta_writer->close();
+        ASSERT_OK(publish_single_version(tablet_id, version + 1, txn_id).status());
+        version++;
+    }
+    config::write_buffer_size = old_size;
+
+    // Verification: c1 auto-increment field should maintain (c1 - 1 == c0), and c2 should be the same as c1 (according to generation rules)
+    ASSERT_EQ(kChunkSize, check(version, [](int c0, int c1, int c2) { return (c1 - 1 == c0) && (c1 - 1 == c2); }));
+}
+
 } // namespace starrocks::lake

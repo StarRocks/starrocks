@@ -273,6 +273,133 @@ TEST_P(LakePartialUpdateTest, test_write) {
     }
 }
 
+// This test case covers the following logic:
+// - with_default branch in get_column_values() (default values and column_to_expr_value override)
+// - Column mode generates DCG then switches to row mode, triggering need_dcg_check and DCG loading paths
+TEST_P(LakePartialUpdateTest, test_dcg_then_row_mode_with_default_and_expr_override) {
+    auto chunk0 = generate_data(kChunkSize, 0, false, 3);
+    auto chunk_partial_same_keys = generate_data(kChunkSize, 0, true, 3);
+
+    // Construct a batch of "new primary key" partial update data, containing only (c0, c1)
+    // c0 = i + kChunkSize, c1 = i * 3 (values don't matter much, keeping consistent ratio with generate_data)
+    std::vector<int> new_keys(kChunkSize);
+    std::vector<int> new_vals(kChunkSize);
+    for (int i = 0; i < kChunkSize; i++) {
+        new_keys[i] = i + kChunkSize;
+        new_vals[i] = new_keys[i] * 3;
+    }
+    auto c0_new = Int32Column::create();
+    auto c1_new = Int32Column::create();
+    c0_new->append_numbers(new_keys.data(), new_keys.size() * sizeof(int));
+    c1_new->append_numbers(new_vals.data(), new_vals.size() * sizeof(int));
+    Chunk chunk_partial_new_keys({c0_new, c1_new}, _slot_cid_map);
+
+    auto indexes = std::vector<uint32_t>(kChunkSize);
+    for (int i = 0; i < kChunkSize; i++) indexes[i] = i;
+
+    auto version = 1;
+    auto tablet_id = _tablet_metadata->id();
+
+    // 1) Basic full writes (3 versions)
+    for (int i = 0; i < 3; i++) {
+        auto txn_id = next_id();
+        ASSIGN_OR_ABORT(auto delta_writer, DeltaWriterBuilder()
+                                                   .set_tablet_manager(_tablet_mgr.get())
+                                                   .set_tablet_id(tablet_id)
+                                                   .set_txn_id(txn_id)
+                                                   .set_partition_id(_partition_id)
+                                                   .set_mem_tracker(_mem_tracker.get())
+                                                   .set_schema_id(_tablet_schema->id())
+                                                   .build());
+        ASSERT_OK(delta_writer->open());
+        ASSERT_OK(delta_writer->write(chunk0, indexes.data(), indexes.size()));
+        ASSERT_OK(delta_writer->finish_with_txnlog());
+        delta_writer->close();
+        ASSERT_OK(publish_single_version(tablet_id, version + 1, txn_id).status());
+        version++;
+    }
+
+    // 2) Column mode (COLUMN_UPDATE_MODE) partial update, generating DCG
+    {
+        auto txn_id = next_id();
+        ASSIGN_OR_ABORT(auto delta_writer, DeltaWriterBuilder()
+                                                   .set_tablet_manager(_tablet_mgr.get())
+                                                   .set_tablet_id(tablet_id)
+                                                   .set_txn_id(txn_id)
+                                                   .set_partition_id(_partition_id)
+                                                   .set_mem_tracker(_mem_tracker.get())
+                                                   .set_schema_id(_tablet_schema->id())
+                                                   .set_slot_descriptors(&_slot_pointers)
+                                                   .set_partial_update_mode(PartialUpdateMode::COLUMN_UPDATE_MODE)
+                                                   .build());
+        ASSERT_OK(delta_writer->open());
+        ASSERT_OK(delta_writer->write(chunk_partial_same_keys, indexes.data(), indexes.size()));
+        ASSERT_OK(delta_writer->finish_with_txnlog());
+        delta_writer->close();
+        ASSERT_OK(publish_single_version(tablet_id, version + 1, txn_id).status());
+        version++;
+    }
+
+    // 3) Row mode (ROW_MODE) partial update (same primary keys), only providing (c0, c1), triggering need_dcg_check and DCG loading
+    {
+        auto txn_id = next_id();
+        ASSIGN_OR_ABORT(auto delta_writer, DeltaWriterBuilder()
+                                                   .set_tablet_manager(_tablet_mgr.get())
+                                                   .set_tablet_id(tablet_id)
+                                                   .set_txn_id(txn_id)
+                                                   .set_partition_id(_partition_id)
+                                                   .set_mem_tracker(_mem_tracker.get())
+                                                   .set_schema_id(_tablet_schema->id())
+                                                   .set_slot_descriptors(&_slot_pointers)
+                                                   .set_partial_update_mode(PartialUpdateMode::ROW_MODE)
+                                                   .build());
+        ASSERT_OK(delta_writer->open());
+        ASSERT_OK(delta_writer->write(chunk_partial_same_keys, indexes.data(), indexes.size()));
+        ASSERT_OK(delta_writer->finish_with_txnlog());
+        delta_writer->close();
+        ASSERT_OK(publish_single_version(tablet_id, version + 1, txn_id).status());
+        version++;
+    }
+
+    // 4) Row mode (ROW_MODE) partial update (new primary keys), covering with_default branch, and overriding default values via column_to_expr_value
+    {
+        std::map<std::string, std::string> expr_overrides;
+        // Override the default value of unprovided column c2 from schema default (10) to 77
+        expr_overrides.emplace("c2", "77");
+
+        auto txn_id = next_id();
+        ASSIGN_OR_ABORT(auto delta_writer, DeltaWriterBuilder()
+                                                   .set_tablet_manager(_tablet_mgr.get())
+                                                   .set_tablet_id(tablet_id)
+                                                   .set_txn_id(txn_id)
+                                                   .set_partition_id(_partition_id)
+                                                   .set_mem_tracker(_mem_tracker.get())
+                                                   .set_schema_id(_tablet_schema->id())
+                                                   .set_slot_descriptors(&_slot_pointers)
+                                                   .set_partial_update_mode(PartialUpdateMode::ROW_MODE)
+                                                   .set_column_to_expr_value(&expr_overrides)
+                                                   .build());
+        ASSERT_OK(delta_writer->open());
+        ASSERT_OK(delta_writer->write(chunk_partial_new_keys, indexes.data(), indexes.size()));
+        ASSERT_OK(delta_writer->finish_with_txnlog());
+        delta_writer->close();
+        ASSERT_OK(publish_single_version(tablet_id, version + 1, txn_id).status());
+        version++;
+    }
+
+    // Verification:
+    // - Old primary keys [0, kChunkSize) still satisfy c1 = c0*3, c2 = c0*4
+    // - New primary keys [kChunkSize, 2*kChunkSize) satisfy c1 = c0*3, and c2 is overridden by expr to 77
+    ASSERT_EQ(kChunkSize * 2, check(version, [&](int c0, int c1, int c2) {
+                  if (c0 < kChunkSize) {
+                      return (c1 == c0 * 3) && (c2 == c0 * 4);
+                  } else if (c0 < kChunkSize * 2) {
+                      return (c1 == c0 * 3) && (c2 == 77);
+                  }
+                  return false;
+              }));
+}
+
 TEST_P(LakePartialUpdateTest, test_partial_update_with_condition) {
     if (GetParam().partial_update_mode == PartialUpdateMode::COLUMN_UPDATE_MODE) {
         return;
