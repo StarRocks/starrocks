@@ -925,6 +925,11 @@ public class SelectAnalyzer {
 
         JoinRelation joinRelation = getJoinRelationWithUsing(fromRelation);
 
+        // TODO(stephen): Support FULL OUTER JOIN USING with proper COALESCE semantics
+        if (joinRelation.getJoinOp().isFullOuterJoin()) {
+            return scope.getRelationFields().getAllFields();
+        }
+
         Set<String> usingColSet = joinRelation.getUsingColNames().stream()
                 .map(String::toLowerCase)
                 .collect(Collectors.toSet());

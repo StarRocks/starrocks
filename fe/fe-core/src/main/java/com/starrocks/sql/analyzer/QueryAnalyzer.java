@@ -956,9 +956,10 @@ public class QueryAnalyzer {
         }
 
         private RelationFields createJoinRelationFields(RelationFields joinedFields, JoinRelation join) {
-            if (CollectionUtils.isNotEmpty(join.getUsingColNames())) {
+            if (CollectionUtils.isNotEmpty(join.getUsingColNames()) && !join.getJoinOp().isFullOuterJoin()) {
                 return new CoalescedJoinFields(joinedFields.getAllFields(), join.getUsingColNames(), join.getJoinOp());
             } else {
+                // TODO: Support FULL OUTER JOIN USING with proper COALESCE semantics
                 return joinedFields;
             }
         }
