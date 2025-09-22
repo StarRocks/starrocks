@@ -457,6 +457,7 @@ SET(DW_TEST_FILES
     ./storage/decimal12_test.cpp
     ./storage/default_compaction_policy_test.cpp
     ./storage/delete_handler_test.cpp
+    ./storage/delete_predicates_test.cpp
     ./storage/delta_column_group_test.cpp
     ./storage/delta_writer_test.cpp
     ./storage/del_vector_test.cpp
