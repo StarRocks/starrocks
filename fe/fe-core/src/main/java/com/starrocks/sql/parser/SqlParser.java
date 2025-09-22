@@ -75,7 +75,7 @@ public class SqlParser {
         }
     }
 
-    private static List<StatementBase> parseWithTrinoDialect(String sql, SessionVariable sessionVariable) {
+    public static List<StatementBase> parseWithTrinoDialect(String sql, SessionVariable sessionVariable) {
         List<StatementBase> statements = Lists.newArrayList();
         try {
             StatementSplitter splitter = new StatementSplitter(sql);

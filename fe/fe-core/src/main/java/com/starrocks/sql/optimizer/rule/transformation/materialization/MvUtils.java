@@ -17,6 +17,7 @@ package com.starrocks.sql.optimizer.rule.transformation.materialization;
 
 import com.google.common.base.Preconditions;
 import com.google.common.base.Predicates;
+import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Range;
@@ -493,11 +494,22 @@ public class MvUtils {
                 || (operator instanceof LogicalAggregationOperator);
     }
 
-    public static StatementBase parse(MaterializedView mv,
-                                      String sql,
-                                      ConnectContext connectContext) {
+    public static StatementBase parseDefinedQuery(MaterializedView mv,
+                                                  String sql,
+                                                  ConnectContext connectContext) {
         StatementBase mvStmt;
+        String origSqlDialect = connectContext.getSessionVariable().getSqlDialect();
+        long origSqlMode = connectContext.getSessionVariable().getSqlMode();
         try {
+            // sql_dialect
+            String sqlDialect = mv.getQuerySqlDialect();
+            if (!Strings.isNullOrEmpty(sqlDialect)) {
+                connectContext.getSessionVariable().setSqlDialect(sqlDialect);
+            }
+            // sql_mode
+            long sqlMode = mv.getQuerySqlMode();
+            connectContext.getSessionVariable().setSqlMode(sqlMode);
+
             List<StatementBase> statementBases =
                     com.starrocks.sql.parser.SqlParser.parse(sql, connectContext.getSessionVariable());
             Preconditions.checkState(statementBases.size() == 1);
@@ -505,6 +517,9 @@ public class MvUtils {
         } catch (ParsingException parsingException) {
             LOG.warn("parse mv{}'s sql:{} failed", mv.getName(), sql, parsingException);
             return null;
+        } finally {
+            connectContext.getSessionVariable().setSqlDialect(origSqlDialect);
+            connectContext.getSessionVariable().setSqlMode(origSqlMode);
         }
         return mvStmt;
     }
@@ -1383,14 +1398,11 @@ public class MvUtils {
         }
     }
 
-    public static ParseNode getQueryAst(String query, ConnectContext connectContext) {
+    public static ParseNode getQueryAst(MaterializedView mv,
+                                        String query,
+                                        ConnectContext connectContext) {
         try {
-            List<StatementBase> statementBases =
-                    com.starrocks.sql.parser.SqlParser.parse(query, connectContext.getSessionVariable());
-            if (statementBases.size() != 1) {
-                return null;
-            }
-            StatementBase stmt = statementBases.get(0);
+            StatementBase stmt = parseDefinedQuery(mv, query, connectContext);
             Analyzer.analyze(stmt, connectContext);
             return stmt;
         } catch (ParsingException parsingException) {

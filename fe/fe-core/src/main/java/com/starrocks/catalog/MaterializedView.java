@@ -73,6 +73,7 @@ import com.starrocks.sql.analyzer.RelationId;
 import com.starrocks.sql.analyzer.Scope;
 import com.starrocks.sql.analyzer.SelectAnalyzer;
 import com.starrocks.sql.ast.ParseNode;
+import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.ast.expression.SlotRef;
 import com.starrocks.sql.ast.expression.TableName;
@@ -2359,7 +2360,7 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
                 try {
                     String currentDBName = Strings.isNullOrEmpty(originalDBName) ? db.getOriginName() : originalDBName;
                     connectContext.setDatabase(currentDBName);
-                    this.defineQueryParseNode = MvUtils.getQueryAst(originalViewDefineSql, connectContext);
+                    this.defineQueryParseNode = MvUtils.getQueryAst(this, originalViewDefineSql, connectContext);
                 } catch (Exception e) {
                     // ignore
                     LOG.warn("parse original view define sql failed:", e);
@@ -2368,7 +2369,7 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
             if (this.defineQueryParseNode == null) {
                 try {
                     connectContext.setDatabase(db.getOriginName());
-                    this.defineQueryParseNode = MvUtils.getQueryAst(viewDefineSql, connectContext);
+                    this.defineQueryParseNode = MvUtils.getQueryAst(this, viewDefineSql, connectContext);
                 } catch (Exception e) {
                     // ignore
                     LOG.warn("parse view define sql failed:", e);
@@ -2394,5 +2395,40 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
             }
             return outputColumns;
         }
+    }
+
+    /**
+     * Get the sql mode for mv's defined query.
+     */
+    public long getQuerySqlMode() {
+        if (tableProperty == null || tableProperty.getProperties() == null) {
+            return 32L;
+        }
+        return getQuerySqlMode(tableProperty.getProperties());
+    }
+
+    public static long getQuerySqlMode(Map<String, String> props) {
+        if (props == null) {
+            return 32L;
+        }
+        String val = props.getOrDefault(PropertyAnalyzer.PROPERTIES_MV_SESSION_SQL_MODE, "");
+        return Long.parseLong(val);
+    }
+
+    /**
+     * Get the sql dialect for mv's defined query.
+     */
+    public String getQuerySqlDialect() {
+        if (tableProperty == null || tableProperty.getProperties() == null) {
+            return "";
+        }
+        return getQuerySqlDialect(tableProperty.getProperties());
+    }
+
+    public static String getQuerySqlDialect(Map<String, String> props) {
+        if (props == null) {
+            return "";
+        }
+        return props.getOrDefault(PropertyAnalyzer.PROPERTIES_MV_SESSION_SQL_DIALECT, "");
     }
 }

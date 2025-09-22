@@ -73,7 +73,7 @@ public class MaterializedViewOptimizer {
         ColumnRefFactory columnRefFactory = new ColumnRefFactory();
         String mvSql = mv.getViewDefineSql();
         // parse mv's defined query
-        StatementBase stmt = MvUtils.parse(mv, mvSql, connectContext);
+        StatementBase stmt = MvUtils.parseDefinedQuery(mv, mvSql, connectContext);
         if (stmt == null) {
             return new MvPlanContext(false, "MV Plan parse failed");
         }

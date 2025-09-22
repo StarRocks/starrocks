@@ -29,6 +29,7 @@ import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.MapType;
+import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.StructField;
@@ -44,6 +45,7 @@ import com.starrocks.common.NotImplementedException;
 import com.starrocks.common.Pair;
 import com.starrocks.common.util.DateUtils;
 import com.starrocks.common.util.TimeUtils;
+import com.starrocks.connector.parser.trino.TrinoParserUtils;
 import com.starrocks.mysql.MysqlPassword;
 import com.starrocks.mysql.privilege.AuthPlugin;
 import com.starrocks.qe.ConnectContext;
@@ -2100,10 +2102,6 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
 
         String comment =
                 context.comment() == null ? null : ((StringLiteral) visit(context.comment().string())).getStringValue();
-        QueryStatement queryStatement = (QueryStatement) visit(context.queryStatement());
-        int queryStartIndex = context.queryStatement().start.getStartIndex();
-        int queryStopIndex = context.queryStatement().stop.getStopIndex() + 1;
-
         RefreshSchemeClause refreshSchemeDesc = null;
         Map<String, String> properties = new HashMap<>();
         List<Expr> partitionByExprs = null;
@@ -2182,6 +2180,23 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
                 refreshSchemeDesc = new ManualRefreshSchemeDesc(RefreshSchemeClause.RefreshMoment.IMMEDIATE, NodePosition.ZERO);
             }
         }
+
+        int queryStartIndex = context.queryStatement().start.getStartIndex();
+        int queryStopIndex = context.queryStatement().stop.getStopIndex() + 1;
+        // check defined query's sql dialect
+        QueryStatement queryStatement;
+        String sqlDialect = MaterializedView.getQuerySqlDialect(properties);
+        ConnectContext connectContext = ConnectContext.get() == null ? ConnectContext.build():
+                ConnectContext.get();
+        if (SqlDialect.TRINO_DIALECT.equalsIgnoreCase(sqlDialect)) {
+            // Use Trino dialect to generate query statement
+            String queryText = context.start.getInputStream().getText(new Interval(queryStartIndex, queryStopIndex));
+            List<StatementBase> stmts = SqlParser.parseWithTrinoDialect(queryText, connectContext.getSessionVariable());
+            queryStatement = (QueryStatement) stmts.get(0);
+        } else {
+            queryStatement = (QueryStatement) visit(context.queryStatement());
+        }
+
         if (refreshSchemeDesc instanceof SyncRefreshSchemeDesc) {
             if (CollectionUtils.isNotEmpty(partitionByExprs)) {
                 throw new ParsingException(PARSER_ERROR_MSG.forbidClauseInMV("SYNC refresh type", "PARTITION BY"),
