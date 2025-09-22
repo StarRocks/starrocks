@@ -85,6 +85,61 @@ a {
     var(--ifm-transition-timing-default);
 }
 
+/* Modal overlay */
+.modal-overlay {
+  background: rgba(0, 0, 0, 0.8);
+}
+
+/* Launch button (text) */
+.modal-launch-btn {
+  background-color: var(--ifm-color-primary);
+  color: white;
+  border: none;
+  padding: 0.6rem 1rem;
+  border-radius: 0.5rem;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.25);
+  cursor: pointer;
+  transition: background-color 0.2s ease;
+}
+
+.modal-launch-btn:hover {
+  background-color: var(--ifm-color-primary-dark);
+}
+
+/* Close button inside modal */
+.modal-close-btn {
+  background-color: #e53e3e;
+  color: white;
+  padding: 0.3rem 0.8rem;
+  border-radius: 0.4rem;
+  border: none;
+  cursor: pointer;
+}
+
+.modal-close-btn:hover {
+  background-color: #c53030;
+}
+
+/* Small floating icon button */
+.help-icon-btn {
+  background-color: var(--ifm-color-primary);
+  color: white;
+  border: none;
+  border-radius: 50%;
+  width: 44px;
+  height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.25);
+  cursor: pointer;
+  transition: background-color 0.2s ease;
+}
+
+.help-icon-btn:hover {
+  background-color: var(--ifm-color-primary-dark);
+}
+
 /* When we generate PDF files:
  
  - avoid breaks in the middle of:
@@ -108,3 +163,4 @@ a {
         display: none;
     }
 }
+
