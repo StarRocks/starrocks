@@ -418,6 +418,14 @@ TEST_F(LakeAutoIncrementPartialUpdateTest, test_resolve_conflict) {
 TEST_F(LakeAutoIncrementPartialUpdateTest, test_auto_increment_fetch_from_segment_for_new_rows) {
     recreate_schema(1);
     auto chunk0 = generate_data(kChunkSize, false);
+    
+    // Setup SyncPoint for auto increment ID allocation
+    SyncPoint::GetInstance()->EnableProcessing();
+    SyncPoint::GetInstance()->SetCallBack("StorageEngine::get_next_increment_id_interval.1", [](void* arg) {
+        auto& meta = *(std::shared_ptr<AutoIncrementMeta>*)(arg);
+        meta->min = 1;
+        meta->max = kChunkSize * 2;
+    });
     // Build partial with NEW keys to ensure new_rows > 0 so that with_default == true
     // Only (c0, c1=0), triggering auto-increment completion
     std::vector<int> new_keys(kChunkSize);
@@ -484,6 +492,10 @@ TEST_F(LakeAutoIncrementPartialUpdateTest, test_auto_increment_fetch_from_segmen
 
     // Verification: both original and new rows satisfy (c1 - 1 == c0) and (c2 == c1)
     ASSERT_EQ(kChunkSize * 2, check(version, [](int c0, int c1, int c2) { return (c1 - 1 == c0) && (c1 - 1 == c2); }));
+    
+    // Cleanup SyncPoint
+    SyncPoint::GetInstance()->ClearAllCallBacks();
+    SyncPoint::GetInstance()->DisableProcessing();
 }
 
 } // namespace starrocks::lake
