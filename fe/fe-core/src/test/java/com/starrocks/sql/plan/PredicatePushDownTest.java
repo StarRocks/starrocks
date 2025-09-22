@@ -112,4 +112,62 @@ public class PredicatePushDownTest extends PlanTestBase {
             assertContains(plan, "<slot 5> : coalesce((3: v3 >= 1) AND (3: v3 <= 3), FALSE)");
         }
     }
+<<<<<<< HEAD
+=======
+
+    @Test
+    public void testRangeExtract() throws Exception {
+        {
+            String sql = "select * from t0 where (v1 < 3 and v1 > 2) and v2 > v1";
+            String plan = getFragmentPlan(sql);
+            assertContains(plan, "2: v2 > 2");
+        }
+        {
+            String sql = "select * from t0 where (v1 < 3 and v1 > 2) and v2 >= v1";
+            String plan = getFragmentPlan(sql);
+            assertContains(plan, "2: v2 > 2");
+        }
+        {
+            String sql = "select * from t0 where (v1 <= 3 and v1 >= 2) and v2 > v1";
+            String plan = getFragmentPlan(sql);
+            assertContains(plan, "2: v2 > 2");
+        }
+        {
+            String sql = "select * from t0 where (v1 <= 3 and v1 >= 2) and v2 >= v1";
+            String plan = getFragmentPlan(sql);
+            assertContains(plan, "2: v2 >= 2");
+        }
+        {
+            String sql = "select * from t0 join t1 where v1 <= 3 and v4 = v1 and v5 < v1";
+            String plan = getFragmentPlan(sql);
+            assertContains(plan, "5: v5 < 3");
+        }
+    }
+
+    @Test
+    public void testNonDeterministicFunctionInCTE() throws Exception {
+        // Test that predicates with non-deterministic functions are not pushed down through Project
+        // This prevents rand() from being calculated twice in CTE scenarios
+        String sql = "WITH input AS (SELECT v1, rand() AS rn FROM t0) " +
+                "SELECT v1, rn, rn < 0.5 FROM input WHERE rn < 0.5";
+        String plan = getFragmentPlan(sql);
+
+        // The plan should not push down the predicate through the project that contains rand()
+        // Instead, the filter should remain above the project
+        // The filter should not be pushed down to the scan level
+        assertContains(plan, "3:Project\n" +
+                "  |  <slot 1> : 1: v1\n" +
+                "  |  <slot 4> : 4: rand\n" +
+                "  |  <slot 5> : 4: rand < 0.5\n" +
+                "  |  \n" +
+                "  2:SELECT\n" +
+                "  |  predicates: 4: rand < 0.5\n" +
+                "  |  \n" +
+                "  1:Project\n" +
+                "  |  <slot 1> : 1: v1\n" +
+                "  |  <slot 4> : rand()\n" +
+                "  |  \n" +
+                "  0:OlapScanNode");
+    }
+>>>>>>> e0ce1d4b42 ([BugFix] fix non-deterministic predicate push down problem (#62827))
 }
