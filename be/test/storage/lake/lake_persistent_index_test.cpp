@@ -455,5 +455,4 @@ TEST_F(LakePersistentIndexTest, test_compaction_strategy_same_max_rss_rowid) {
     ASSERT_EQ(0, sstables.size()) << "Should be empty since no cumulative sstables exist";
 }
 
->>>>>>> bb7a7ace8c ([BugFix] Fix pk index cumulative compaction strategy when max_rss_rowid is same (#63277))
 } // namespace starrocks::lake
