@@ -613,7 +613,6 @@ public class RelationTransformer implements AstVisitorExtendInterface<LogicalPla
                     new ExpressionMapping(node.getScope(), outputVariables), columnRefFactory);
         }
 
-        // TODO: merge with tableVersionRange
         TvrVersionRange tableVersionRange;
         if (node.getTvrVersionRange() != null) {
             tableVersionRange = node.getTvrVersionRange();

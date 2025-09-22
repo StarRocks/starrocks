@@ -93,15 +93,16 @@ public class IcebergScanNodeTest {
     class TestableIcebergConnectorScanRangeSource extends IcebergConnectorScanRangeSource {
         public TestableIcebergConnectorScanRangeSource(IcebergConnectorScanRangeSource original) {
             super(
-                Deencapsulation.getField(original, "table"),
-                Deencapsulation.getField(original, "remoteFileInfoSource"),
-                Deencapsulation.getField(original, "morParams"),
-                Deencapsulation.getField(original, "desc"),
-                Deencapsulation.getField(original, "bucketProperties"),
-                Deencapsulation.getField(original, "recordScanFiles")
+                    Deencapsulation.getField(original, "table"),
+                    Deencapsulation.getField(original, "remoteFileInfoSource"),
+                    Deencapsulation.getField(original, "morParams"),
+                    Deencapsulation.getField(original, "desc"),
+                    Deencapsulation.getField(original, "bucketProperties"),
+                    Deencapsulation.getField(original, "partitionIdGenerator"),
+                    Deencapsulation.getField(original, "recordScanFiles")
             );
         }
-    
+
         @Override
         public List<TScanRangeLocations> toScanRanges(FileScanTask fileScanTask) {
             return Collections.singletonList(new TScanRangeLocations());
@@ -151,7 +152,7 @@ public class IcebergScanNodeTest {
 
         IcebergScanNode scanNode = new IcebergScanNode(
                 new PlanNodeId(0), desc, catalog,
-                tableMORParams, IcebergMORParams.DATA_FILE_WITHOUT_EQ_DELETE);
+                tableMORParams, IcebergMORParams.DATA_FILE_WITHOUT_EQ_DELETE, null);
         scanNode.setTvrVersionRange(TvrTableSnapshot.of(Optional.of(12345L)));
 
         IcebergRemoteFileInfo remoteFileInfo = new IcebergRemoteFileInfo(fileScanTask);
@@ -202,7 +203,8 @@ public class IcebergScanNodeTest {
         }};
 
         IcebergConnectorScanRangeSource scanSource = new IcebergConnectorScanRangeSource(
-                null, mockSource, null, null, Optional.empty(), true  // recordScanFiles = true
+                null, mockSource, null, null, Optional.empty(),
+                PartitionIdGenerator.of(), true  // recordScanFiles = true
         ) {
             private int callCount = 0;
 
@@ -611,8 +613,9 @@ public class IcebergScanNodeTest {
                 remoteFileInfoSource,
                 morParams,
                 tupleDesc,
-                Optional.empty()
-        );
+                Optional.empty(),
+                PartitionIdGenerator.of()
+                );
 
         List<FileScanTask> result = source.getSourceFileScanOutputs(
                 10, // maxSize
@@ -752,8 +755,9 @@ public class IcebergScanNodeTest {
                 remoteFileInfoSource,
                 morParams,
                 tupleDesc,
-                Optional.empty()
-        );
+                Optional.empty(),
+                PartitionIdGenerator.of()
+                );
         Mockito.when(scanNode.getSourceRange()).thenReturn(fakeSourceRange);
         StmtExecutor executor = Mockito.mock(StmtExecutor.class);
         new MockUp<StmtExecutor>() {
@@ -872,7 +876,7 @@ public class IcebergScanNodeTest {
 
         IcebergScanNode scanNode = new IcebergScanNode(
                 new PlanNodeId(0), desc, "IcebergScanNode",
-                IcebergTableMORParams.EMPTY, IcebergMORParams.DATA_FILE_WITHOUT_EQ_DELETE);
+                IcebergTableMORParams.EMPTY, IcebergMORParams.DATA_FILE_WITHOUT_EQ_DELETE, null);
 
         // Create three bucket properties
         List<BucketProperty> bucketProperties = new ArrayList<>();

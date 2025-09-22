@@ -100,7 +100,7 @@ public class TvrTableDeltaTraitTest {
             String result = empty.toString();
             Assertions.assertTrue(result.contains("Delta@[MIN,MIN]"));
             Assertions.assertTrue(result.contains("MONOTONIC"));
-            Assertions.assertTrue(result.contains("{addedRows=0}"));
+            Assertions.assertTrue(result.contains("addedRows=0"));
         }
         // Test regular versions
         TvrVersion version100 = TvrVersion.of(100L);
@@ -111,7 +111,7 @@ public class TvrTableDeltaTraitTest {
             String result = trait.toString();
             Assertions.assertTrue(result.contains("Delta@[100,200]"));
             Assertions.assertTrue(result.contains("MONOTONIC"));
-            Assertions.assertTrue(result.contains("{addedRows=0}"));
+            Assertions.assertTrue(result.contains("addedRows=0"));
         }
 
         // Test with MIN and MAX versions
@@ -121,7 +121,7 @@ public class TvrTableDeltaTraitTest {
             String result = minMaxTrait.toString();
             Assertions.assertTrue(result.contains("Delta@[MIN,MAX]"));
             Assertions.assertTrue(result.contains("MONOTONIC"));
-            Assertions.assertTrue(result.contains("{addedRows=0}"));
+            Assertions.assertTrue(result.contains("addedRows=0"));
         }
     }
 }
