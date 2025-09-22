@@ -12,12 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.sql.ast;
 
 import com.starrocks.sql.parser.NodePosition;
-
-import static com.starrocks.common.util.Util.normalizeName;
 
 /**
  * Representation of a USE [catalog.]db statement.
@@ -28,14 +25,10 @@ public class UseDbStmt extends StatementBase {
     private String catalog;
     private final String database;
 
-    public UseDbStmt(String catalog, String database) {
-        this(catalog, database, NodePosition.ZERO);
-    }
-
     public UseDbStmt(String catalog, String database, NodePosition pos) {
         super(pos);
-        this.catalog = normalizeName(catalog);
-        this.database = normalizeName(database);
+        this.catalog = catalog;
+        this.database = database;
     }
 
     public String getCatalogName() {
@@ -43,7 +36,7 @@ public class UseDbStmt extends StatementBase {
     }
 
     public void setCatalogName(String catalogName) {
-        this.catalog = normalizeName(catalogName);
+        this.catalog = catalogName;
     }
 
     public String getDbName() {
@@ -60,6 +53,6 @@ public class UseDbStmt extends StatementBase {
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return ((AstVisitorExtendInterface<R, C>) visitor).visitUseDbStatement(this, context);
+        return visitor.visitUseDbStatement(this, context);
     }
 }
