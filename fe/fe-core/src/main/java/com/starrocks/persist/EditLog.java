@@ -1046,6 +1046,17 @@ public class EditLog {
                     globalStateMgr.getAuthorizationMgr().replayUpdateRolePrivilegeCollection(info);
                     break;
                 }
+                case OperationType.OP_GRANT_ROLE_TO_GROUP: {
+                    UpdateGroupToRoleLog log = (UpdateGroupToRoleLog) journal.data();
+                    globalStateMgr.getAuthorizationMgr().replayGrantRoleToGroup(log.getRoleIdList(), log.getGroup());
+                    break;
+                }
+
+                case OperationType.OP_REVOKE_ROLE_FROM_GROUP: {
+                    UpdateGroupToRoleLog log = (UpdateGroupToRoleLog) journal.data();
+                    globalStateMgr.getAuthorizationMgr().replayRevokeRoleFromGroup(log.getRoleIdList(), log.getGroup());
+                    break;
+                }
                 case OperationType.OP_DROP_ROLE_V2: {
                     RolePrivilegeCollectionInfo info = (RolePrivilegeCollectionInfo) journal.data();
                     globalStateMgr.getAuthorizationMgr().replayDropRole(info);

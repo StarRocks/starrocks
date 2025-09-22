@@ -28,7 +28,9 @@ import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.FeConstants;
 import com.starrocks.persist.ImageWriter;
+import com.starrocks.persist.OperationType;
 import com.starrocks.persist.RolePrivilegeCollectionInfo;
+import com.starrocks.persist.UpdateGroupToRoleLog;
 import com.starrocks.persist.metablock.MapEntryConsumer;
 import com.starrocks.persist.metablock.SRMetaBlockEOFException;
 import com.starrocks.persist.metablock.SRMetaBlockException;
@@ -81,6 +83,9 @@ public class AuthorizationMgr {
 
     protected Map<UserIdentity, UserPrivilegeCollectionV2> userToPrivilegeCollection;
     protected Map<Long, RolePrivilegeCollectionV2> roleIdToPrivilegeCollection;
+
+    @SerializedName(value = "gr")
+    private Map<String, Set<Long>> groupToRoleList;
 
     private static final int MAX_NUM_CACHED_MERGED_PRIVILEGE_COLLECTION = 1000;
     private static final int CACHED_MERGED_PRIVILEGE_COLLECTION_EXPIRE_MIN = 60;
@@ -135,6 +140,7 @@ public class AuthorizationMgr {
         roleNameToId = new HashMap<>();
         userToPrivilegeCollection = new HashMap<>();
         roleIdToPrivilegeCollection = new HashMap<>();
+        groupToRoleList = new HashMap<>();
         userLock = new ReentrantReadWriteLock();
         roleLock = new ReentrantReadWriteLock();
     }
@@ -148,6 +154,7 @@ public class AuthorizationMgr {
         roleLock = new ReentrantReadWriteLock();
         userToPrivilegeCollection = new HashMap<>();
         roleIdToPrivilegeCollection = new HashMap<>();
+        groupToRoleList = new HashMap<>();
         initBuiltinRolesAndUsers();
     }
 
@@ -519,6 +526,7 @@ public class AuthorizationMgr {
         try {
             switch (stmt.getGrantType()) {
                 case USER -> grantRoleToUser(stmt.getGranteeRole(), stmt.getUserIdentity());
+                case GROUP -> grantRoleToGroup(stmt.getGranteeRole(), stmt.getRoleOrGroup());
                 case ROLE -> grantRoleToRole(stmt.getGranteeRole(), stmt.getRoleOrGroup());
             }
         } catch (PrivilegeException e) {
@@ -570,6 +578,43 @@ public class AuthorizationMgr {
             LOG.info("grant role {} to user {}", Joiner.on(", ").join(parentRoleName), user);
         } finally {
             userWriteUnlock();
+        }
+    }
+
+    protected void grantRoleToGroup(List<String> parentRoleName, String groupName) throws PrivilegeException {
+        lockForRoleUpdate();
+        List<Long> roleIdList = Lists.newArrayList();
+        try {
+            for (String role : parentRoleName) {
+                Long roleId = getRoleIdByNameAllowNull(role);
+                if (roleId == null) {
+                    throw new PrivilegeException("role name '" + role + "' not found");
+                }
+
+                groupToRoleList.putIfAbsent(groupName, new HashSet<>());
+                Set<Long> roleSet = groupToRoleList.get(groupName);
+                roleSet.add(roleId);
+
+                roleIdList.add(roleId);
+            }
+        } finally {
+            unlockForRoleUpdate();
+        }
+
+        UpdateGroupToRoleLog log = new UpdateGroupToRoleLog(groupName, roleIdList);
+        GlobalStateMgr.getCurrentState().getEditLog().logJsonObject(OperationType.OP_GRANT_ROLE_TO_GROUP, log);
+    }
+
+    public void replayGrantRoleToGroup(List<Long> roleIdList, String groupName) {
+        lockForRoleUpdate();
+        try {
+            for (Long roleId : roleIdList) {
+                groupToRoleList.putIfAbsent(groupName, new HashSet<>());
+                Set<Long> roleSet = groupToRoleList.get(groupName);
+                roleSet.add(roleId);
+            }
+        } finally {
+            unlockForRoleUpdate();
         }
     }
 
@@ -651,6 +696,7 @@ public class AuthorizationMgr {
         try {
             switch (stmt.getGrantType()) {
                 case USER -> revokeRoleFromUser(stmt.getGranteeRole(), stmt.getUserIdentity());
+                case GROUP -> revokeRoleFromGroup(stmt.getGranteeRole(), stmt.getRoleOrGroup());
                 case ROLE -> revokeRoleFromRole(stmt.getGranteeRole(), stmt.getRoleOrGroup());
             }
         } catch (PrivilegeException e) {
@@ -682,6 +728,45 @@ public class AuthorizationMgr {
             LOG.info("revoke role {} from user {}", roleNameList.toString(), user);
         } finally {
             userWriteUnlock();
+        }
+    }
+
+    protected void revokeRoleFromGroup(List<String> parentRoleNameList, String groupName) throws PrivilegeException {
+        lockForRoleUpdate();
+        List<Long> roleIdList = Lists.newArrayList();
+        try {
+            for (String role : parentRoleNameList) {
+                Long roleId = getRoleIdByNameAllowNull(role);
+                if (roleId == null) {
+                    throw new PrivilegeException("role name '" + role + "' not found");
+                }
+
+                Set<Long> roleSet = groupToRoleList.get(groupName);
+                if (roleSet != null) {
+                    roleSet.remove(roleId);
+                }
+
+                roleIdList.add(roleId);
+            }
+        } finally {
+            unlockForRoleUpdate();
+        }
+
+        UpdateGroupToRoleLog log = new UpdateGroupToRoleLog(groupName, roleIdList);
+        GlobalStateMgr.getCurrentState().getEditLog().logJsonObject(OperationType.OP_REVOKE_ROLE_FROM_GROUP, log);
+    }
+
+    public void replayRevokeRoleFromGroup(List<Long> roleIdList, String groupName) {
+        lockForRoleUpdate();
+        try {
+            for (Long roleId : roleIdList) {
+                Set<Long> roleSet = groupToRoleList.get(groupName);
+                if (roleSet != null) {
+                    roleSet.remove(roleId);
+                }
+            }
+        } finally {
+            unlockForRoleUpdate();
         }
     }
 
@@ -748,6 +833,15 @@ public class AuthorizationMgr {
             return userCollection.getAllRoles();
         } finally {
             manager.userReadUnlock();
+        }
+    }
+
+    public Set<Long> getRoleIdListByGroup(String groupName) {
+        roleReadLock();
+        try {
+            return groupToRoleList.getOrDefault(groupName, Set.of());
+        } finally {
+            roleReadUnlock();
         }
     }
 
@@ -878,6 +972,7 @@ public class AuthorizationMgr {
         try {
             userReadLock();
             Set<Long> validRoleIds;
+
             if (userIdentity.isEphemeral()) {
                 Preconditions.checkState(roleIdsSpecified != null,
                         "ephemeral use should always have current role ids specified");
@@ -893,6 +988,10 @@ public class AuthorizationMgr {
                 if (roleIdsSpecified != null) {
                     validRoleIds.retainAll(roleIdsSpecified);
                 }
+            }
+
+            for (String group : groups) {
+                validRoleIds.addAll(getRoleIdListByGroup(group));
             }
 
             try {
@@ -1091,6 +1190,35 @@ public class AuthorizationMgr {
             if (!parentRoleNameList.isEmpty()) {
                 return Lists.newArrayList(roleName, null, AstToSQLBuilder.toSQL(
                         new GrantRoleStmt(parentRoleNameList, roleName, GrantType.ROLE, NodePosition.ZERO)));
+            }
+            return null;
+        } catch (PrivilegeException e) {
+            throw new SemanticException(e.getMessage());
+        } finally {
+            roleReadUnlock();
+        }
+    }
+
+    public List<String> getGranteeRoleDetailsForGroup(String groupName) {
+        roleReadLock();
+        try {
+            Set<Long> roleIds = getRoleIdListByGroup(groupName);
+
+            List<String> parentRoleNameList = new ArrayList<>();
+            for (Long parentRoleId : roleIds) {
+                // Because the drop role is an asynchronous behavior, the parentRole may not exist.
+                // Here, for the role that does not exist, choose to ignore it directly
+                RolePrivilegeCollectionV2 parentRolePriv =
+                        getRolePrivilegeCollectionUnlocked(parentRoleId, false);
+                if (parentRolePriv != null) {
+                    parentRoleNameList.add(parentRolePriv.getName());
+                }
+            }
+
+            if (!parentRoleNameList.isEmpty()) {
+                return Lists.newArrayList(groupName, null,
+                        AstToSQLBuilder.toSQL(new GrantRoleStmt(parentRoleNameList, groupName,
+                                GrantType.GROUP, NodePosition.ZERO)));
             }
             return null;
         } catch (PrivilegeException e) {
@@ -1767,6 +1895,7 @@ public class AuthorizationMgr {
         pluginVersion = ret.pluginVersion;
         userToPrivilegeCollection = ret.userToPrivilegeCollection;
         roleIdToPrivilegeCollection = ret.roleIdToPrivilegeCollection;
+        groupToRoleList = ret.groupToRoleList;
 
         // Initialize the Authorizer class in advance during the loading phase
         // to prevent loading errors and lack of permissions.

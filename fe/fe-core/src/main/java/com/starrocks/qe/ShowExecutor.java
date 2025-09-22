@@ -2070,14 +2070,18 @@ public class ShowExecutor {
                             authorizationManager.getTypeToPrivilegeEntryListByRole(statement.getGroupOrRole());
                     infos.addAll(privilegeToRowString(authorizationManager,
                             new GrantRevokeClause(null, statement.getGroupOrRole()), typeToPrivilegeEntryList));
-                } else {
-                    UserIdentity userIdentity = statement.getUserIdent();
-                    List<String> granteeRole = authorizationManager.getGranteeRoleDetailsForUser(userIdentity);
+                } else if (statement.getGrantType().equals(GrantType.GROUP)) {
+                    List<String> granteeRole = authorizationManager.getGranteeRoleDetailsForGroup(statement.getGroupOrRole());
                     if (granteeRole != null) {
                         infos.add(granteeRole);
                     }
-
+                } else {
+                    UserIdentity userIdentity = statement.getUserIdent();
                     if (!userIdentity.isEphemeral()) {
+                        List<String> granteeRole = authorizationManager.getGranteeRoleDetailsForUser(userIdentity);
+                        if (granteeRole != null) {
+                            infos.add(granteeRole);
+                        }
                         Map<ObjectType, List<PrivilegeEntry>> typeToPrivilegeEntryList =
                                 authorizationManager.getTypeToPrivilegeEntryListByUser(statement.getUserIdent());
                         infos.addAll(privilegeToRowString(authorizationManager,

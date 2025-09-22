@@ -20,6 +20,7 @@ import com.starrocks.analysis.FunctionName;
 import com.starrocks.analysis.TableName;
 import com.starrocks.authentication.AuthenticationMgr;
 import com.starrocks.authorization.AuthorizationMgr;
+import com.starrocks.authorization.GrantType;
 import com.starrocks.authorization.ObjectType;
 import com.starrocks.authorization.PEntryObject;
 import com.starrocks.authorization.PrivilegeBuiltinConstants;
@@ -472,7 +473,7 @@ public class AuthorizationAnalyzer {
          */
         @Override
         public Void visitGrantRevokeRoleStatement(BaseGrantRevokeRoleStmt stmt, ConnectContext session) {
-            if (stmt.getUserIdentity() != null) {
+            if (stmt.getGrantType() == GrantType.USER) {
                 analyseUser(stmt.getUserIdentity(), true);
                 if (needProtectAdminUser(stmt.getUserIdentity(), session)) {
                     throw new SemanticException("roles of 'admin' user cannot be changed because of " +
@@ -480,8 +481,11 @@ public class AuthorizationAnalyzer {
                 }
                 stmt.getGranteeRole().forEach(role ->
                         validRoleName(role, "Can not granted/revoke role to/from user", true));
-            } else {
+            } else if (stmt.getGrantType() == GrantType.ROLE) {
                 validRoleName(stmt.getRoleOrGroup(), "Can not granted/revoke role to/from role", true);
+                stmt.getGranteeRole().forEach(role ->
+                        validRoleName(role, "Can not granted/revoke role to/from user", true));
+            } else if (stmt.getGrantType() == GrantType.GROUP) {
                 stmt.getGranteeRole().forEach(role ->
                         validRoleName(role, "Can not granted/revoke role to/from user", true));
             }
@@ -490,12 +494,14 @@ public class AuthorizationAnalyzer {
 
         @Override
         public Void visitShowGrantsStatement(ShowGrantsStmt stmt, ConnectContext session) {
-            if (stmt.getUserIdent() != null) {
-                analyseUser(stmt.getUserIdent(), true);
-            } else if (stmt.getGroupOrRole() != null) {
+            if (stmt.getGrantType() == GrantType.USER) {
+                if (stmt.getUserIdent() == null) {
+                    stmt.setUserIdent(session.getCurrentUserIdentity());
+                } else {
+                    analyseUser(stmt.getUserIdent(), true);
+                }
+            } else if (stmt.getGrantType() == GrantType.ROLE) {
                 validRoleName(stmt.getGroupOrRole(), "There is no such grant defined for role " + stmt.getGroupOrRole(), true);
-            } else {
-                stmt.setUserIdent(session.getCurrentUserIdentity());
             }
 
             return null;
