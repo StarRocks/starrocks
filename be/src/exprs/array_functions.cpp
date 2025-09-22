@@ -1717,7 +1717,7 @@ StatusOr<ColumnPtr> ArrayFunctions::array_top_n(FunctionContext* ctx, const Colu
     if (columns[0]->is_nullable()) {
         is_nullable = true;
         has_null = columns[0]->has_null();
-        
+
         const auto* src_nullable_column = down_cast<const NullableColumn*>(columns[0].get());
         array_column = down_cast<const ArrayColumn*>(src_nullable_column->data_column().get());
         null_result = NullColumn::create(*src_nullable_column->null_column());
@@ -1730,7 +1730,7 @@ StatusOr<ColumnPtr> ArrayFunctions::array_top_n(FunctionContext* ctx, const Colu
     if (columns[1]->is_nullable()) {
         is_nullable = true;
         has_null = (columns[1]->has_null() || has_null);
-        
+
         const auto* src_nullable_column = down_cast<const NullableColumn*>(columns[1].get());
         count_column = down_cast<const Int32Column*>(src_nullable_column->data_column().get());
         if (null_result) {
@@ -1758,7 +1758,7 @@ StatusOr<ColumnPtr> ArrayFunctions::array_top_n(FunctionContext* ctx, const Colu
     // Process each row
     for (size_t i = 0; i < chunk_size; i++) {
         int32_t n = count_column->get(i).get_int32();
-        
+
         // Handle edge cases
         if (n <= 0) {
             // If count is 0 or negative, return empty array
@@ -1771,7 +1771,7 @@ StatusOr<ColumnPtr> ArrayFunctions::array_top_n(FunctionContext* ctx, const Colu
         Datum v = array_column->get(i);
         const auto& items = v.get<DatumArray>();
         size_t array_size = items.size();
-        
+
         if (array_size == 0) {
             // Empty input array, return empty array
             auto& dest_offsets = dest_data_column->offsets_column()->get_data();
@@ -1782,12 +1782,12 @@ StatusOr<ColumnPtr> ArrayFunctions::array_top_n(FunctionContext* ctx, const Colu
         // Create indices for sorting
         std::vector<size_t> indices(array_size);
         std::iota(indices.begin(), indices.end(), 0);
-        
+
         // Sort indices based on values in descending order
         std::sort(indices.begin(), indices.end(), [&items](size_t a, size_t b) {
             const Datum& datum_a = items[a];
             const Datum& datum_b = items[b];
-            
+
             // Handle null values - nulls are considered smaller and go to the end
             if (datum_a.is_null() && datum_b.is_null()) {
                 return false; // equal
@@ -1798,14 +1798,14 @@ StatusOr<ColumnPtr> ArrayFunctions::array_top_n(FunctionContext* ctx, const Colu
             if (datum_b.is_null()) {
                 return true; // non-null is larger, goes to front
             }
-            
+
             // Compare non-null values in descending order
             return datum_a > datum_b;
         });
 
         // Take top n elements (or all if n > array_size)
         size_t result_size = std::min(static_cast<size_t>(n), array_size);
-        
+
         auto& dest_data = dest_data_column->elements_column();
         for (size_t j = 0; j < result_size; j++) {
             const Datum& datum = items[indices[j]];
