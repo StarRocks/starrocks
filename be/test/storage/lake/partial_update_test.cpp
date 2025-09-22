@@ -2605,7 +2605,7 @@ TEST_F(LakeColumnUpsertModeTest, test_handle_delete_files) {
         // Note: last column is op; create a separate slot map for chunk with ops
         Chunk::SlotHashMap ops_slot_map;
         ops_slot_map[0] = 0; // c0 -> table column 0
-        ops_slot_map[1] = 1; // c1 -> table column 1  
+        ops_slot_map[1] = 1; // c1 -> table column 1
         ops_slot_map[2] = 2; // c2 -> table column 2
         ops_slot_map[3] = 3; // ops column -> slot 3
         Chunk chunk_with_ops({std::move(c0), std::move(c1), std::move(c2), std::move(cop)}, ops_slot_map);
@@ -2615,7 +2615,7 @@ TEST_F(LakeColumnUpsertModeTest, test_handle_delete_files) {
         // Create slot descriptors including operation column
         std::vector<SlotDescriptor> op_slots;
         op_slots.emplace_back(0, "c0", TypeDescriptor{LogicalType::TYPE_INT});
-        op_slots.emplace_back(1, "c1", TypeDescriptor{LogicalType::TYPE_INT});  
+        op_slots.emplace_back(1, "c1", TypeDescriptor{LogicalType::TYPE_INT});
         op_slots.emplace_back(2, "c2", TypeDescriptor{LogicalType::TYPE_INT});
         op_slots.emplace_back(3, "__op", TypeDescriptor{LogicalType::TYPE_TINYINT}); // operation column
         std::vector<SlotDescriptor*> op_slot_pointers;
