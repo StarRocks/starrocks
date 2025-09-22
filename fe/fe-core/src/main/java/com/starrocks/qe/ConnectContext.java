@@ -457,7 +457,6 @@ public class ConnectContext {
         accessControlContext.setCurrentUserIdentity(currentUserIdentity);
     }
 
-
     public void setPasswordExpired(boolean passwordExpired) {
         accessControlContext.setPasswordExpired(passwordExpired);
     }
@@ -478,14 +477,26 @@ public class ConnectContext {
         return accessControlContext.getCurrentRoleIds();
     }
 
-    public void setCurrentRoleIds(UserIdentity user) {
-        if (user.isEphemeral()) {
-            if (!accessControlContext.getCurrentRoleIds().isEmpty()) {
-                // Deprecate LDAP Security Integration will set role id in the AuthProvider
-                return;
-            }
+    public void setCurrentRoleIds(Set<Long> roleIds) {
+        accessControlContext.setCurrentRoleIds(roleIds);
+    }
 
-            accessControlContext.setCurrentRoleIds(new HashSet<>());
+    public void setCurrentRoleIds(UserIdentity user) {
+        Set<Long> roleIds = getRoleIdsByUser(user);
+        accessControlContext.setCurrentRoleIds(roleIds);
+    }
+
+    public void setCurrentRoleIds(UserIdentity userIdentity, Set<String> groups) {
+        Set<Long> roleIds = getRoleIdsByUser(userIdentity);
+        for (String group : groups) {
+            roleIds.addAll(globalStateMgr.getAuthorizationMgr().getRoleIdListByGroup(group));
+        }
+        setCurrentRoleIds(roleIds);
+    }
+
+    private Set<Long> getRoleIdsByUser(UserIdentity user) {
+        if (user.isEphemeral()) {
+            return new HashSet<>();
         } else {
             try {
                 Set<Long> defaultRoleIds;
@@ -494,24 +505,12 @@ public class ConnectContext {
                 } else {
                     defaultRoleIds = globalStateMgr.getAuthorizationMgr().getDefaultRoleIdsByUser(user);
                 }
-                accessControlContext.setCurrentRoleIds(defaultRoleIds);
+                return defaultRoleIds;
             } catch (PrivilegeException e) {
                 LOG.warn("Set current role fail : {}", e.getMessage());
+                return new HashSet<>();
             }
         }
-    }
-
-    public void setCurrentRoleIds(UserIdentity userIdentity, Set<String> groups) {
-        setCurrentRoleIds(userIdentity);
-        Set<Long> roleIds = new HashSet<>(getCurrentRoleIds());
-        for (String group : groups) {
-            roleIds.addAll(globalStateMgr.getAuthorizationMgr().getRoleIdListByGroup(group));
-        }
-        setCurrentRoleIds(roleIds);
-    }
-
-    public void setCurrentRoleIds(Set<Long> roleIds) {
-        accessControlContext.setCurrentRoleIds(roleIds);
     }
 
     public Set<String> getGroups() {

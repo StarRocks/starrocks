@@ -1,5 +1,5 @@
 -- name: test_execute_as_external_user
-CREATE GROUP PROVIDER `test_execute_as_file_group_provider` PROPERTIES ("group_file_url" = "group_mapping", "type" = "file");
+CREATE GROUP PROVIDER  IF NOT EXISTS `test_execute_as_file_group_provider` PROPERTIES ("group_file_url" = "group_mapping", "type" = "file");
 admin set frontend config ("group_provider"="test_execute_as_file_group_provider");
 
 drop user if exists test_impersonate;
@@ -52,4 +52,4 @@ drop role if exists r1;
 drop role if exists r2;
 drop database if exists test_execute_as_d1;
 drop database if exists test_execute_as_d2;
-drop group provider test_execute_as_file_group_provider;
+drop group provider IF EXISTS test_execute_as_file_group_provider;

@@ -20,6 +20,7 @@ import com.starrocks.catalog.UserIdentity;
 import com.starrocks.common.Config;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.Pair;
+import com.starrocks.epack.authentication.LDAPAuthProviderForExternal;
 import com.starrocks.epack.authentication.LDAPSecurityIntegration;
 import com.starrocks.mysql.privilege.AuthPlugin;
 import com.starrocks.qe.ConnectContext;
@@ -206,8 +207,14 @@ public class AuthenticationHandler {
         Set<String> groups = getGroups(context.getCurrentUserIdentity(), context.getDistinguishedName(),
                 authenticationResult.groupProviderName);
         context.setGroups(groups);
-        // Set current role IDs based on the authenticated user and groups
-        context.setCurrentRoleIds(authenticationResult.authenticatedUser, groups);
+
+        if (context.getAuthenticationProvider() != null &&
+                context.getAuthenticationProvider() instanceof LDAPAuthProviderForExternal) {
+            // For LDAP external auth, has set role id in LDAPAuthProviderForExternal#authenticate
+        } else {
+            // Set current role IDs based on the authenticated user and groups
+            context.setCurrentRoleIds(authenticationResult.authenticatedUser, groups);
+        }
 
         // Step 5: Validate group access permissions
         // If authentication result specifies allowed groups, verify user belongs to at least one

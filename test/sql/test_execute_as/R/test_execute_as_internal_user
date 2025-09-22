@@ -1,5 +1,5 @@
 -- name: test_execute_as_internal_user
-CREATE GROUP PROVIDER `test_execute_as_file_group_provider` PROPERTIES ("group_file_url" = "group_mapping", "type" = "file");
+CREATE GROUP PROVIDER IF NOT EXISTS `test_execute_as_file_group_provider` PROPERTIES ("group_file_url" = "group_mapping", "type" = "file");
 -- result:
 -- !result
 admin set frontend config ("group_provider"="test_execute_as_file_group_provider");
@@ -155,6 +155,6 @@ drop user if exists u1;
 drop user if exists u2;
 -- result:
 -- !result
-drop group provider test_execute_as_file_group_provider;
+drop group provider IF EXISTS test_execute_as_file_group_provider;
 -- result:
 -- !result

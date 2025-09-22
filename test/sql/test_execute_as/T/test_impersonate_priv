@@ -1,6 +1,6 @@
 -- name: test_impersonate_priv
 
-CREATE GROUP PROVIDER `test_execute_as_file_group_provider` PROPERTIES ("group_file_url" = "group_mapping", "type" = "file");
+CREATE GROUP PROVIDER IF NOT EXISTS `test_execute_as_file_group_provider` PROPERTIES ("group_file_url" = "group_mapping", "type" = "file");
 admin set frontend config ("group_provider"="test_execute_as_file_group_provider");
 
 drop user if exists test_impersonate;
@@ -31,15 +31,6 @@ select current_user();
 select current_group();
 select current_role();
 
-execute as external user u3 with no revert;
-select current_user();
-execute as test_impersonate with no revert;
-select current_user();
-execute as external user u3 with no revert;
-select current_user();
-select current_group();
-select current_role();
-
 execute as test_impersonate with no revert;
 execute as root with no revert;
 revoke impersonate on all users from test_impersonate;
@@ -47,10 +38,9 @@ revoke impersonate on all users from test_impersonate;
 execute as test_impersonate with no revert;
 execute as external user u1 with no revert;
 execute as external user u2 with no revert;
-execute as external user u3 with no revert;
 
 execute as root with no revert;
 drop user if exists test_impersonate;
 drop role if exists r1;
 drop role if exists r2;
-drop group provider test_execute_as_file_group_provider;
+drop group provider IF EXISTS test_execute_as_file_group_provider;

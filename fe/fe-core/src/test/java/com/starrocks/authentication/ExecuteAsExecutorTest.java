@@ -17,6 +17,7 @@ package com.starrocks.authentication;
 import com.starrocks.authorization.AuthorizationMgr;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
+import com.starrocks.common.ErrorReportException;
 import com.starrocks.epack.authentication.AuthenticationMgrEPack;
 import com.starrocks.epack.authorization.AuthorizationMgrEPack;
 import com.starrocks.epack.authorization.AuthorizationProviderEPack;
@@ -24,12 +25,20 @@ import com.starrocks.mysql.MysqlPassword;
 import com.starrocks.persist.EditLog;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ExecuteAsExecutor;
+import com.starrocks.qe.SqlModeHelper;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.analyzer.Analyzer;
+import com.starrocks.sql.analyzer.Authorizer;
 import com.starrocks.sql.ast.CreateRoleStmt;
 import com.starrocks.sql.ast.CreateUserStmt;
 import com.starrocks.sql.ast.ExecuteAsStmt;
+import com.starrocks.sql.ast.GrantPrivilegeStmt;
+import com.starrocks.sql.ast.GrantRoleStmt;
+import com.starrocks.sql.ast.GrantType;
+import com.starrocks.sql.ast.RevokePrivilegeStmt;
 import com.starrocks.sql.ast.UserRef;
 import com.starrocks.sql.parser.NodePosition;
+import com.starrocks.sql.parser.SqlParser;
 import mockit.Mock;
 import mockit.MockUp;
 import org.junit.jupiter.api.Assertions;
@@ -80,9 +89,9 @@ public class ExecuteAsExecutorTest {
         LDAPGroupProvider ldapGroupProvider = (LDAPGroupProvider) authenticationMgr.getGroupProvider(groupName);
 
         Map<String, Set<String>> groups = new HashMap<>();
-        groups.put("impersonate_user", Set.of("group1", "group2"));
-        groups.put("u1", Set.of("group3"));
-        groups.put("u2", Set.of("group4"));
+        groups.put("u1", Set.of("group1"));
+        groups.put("u2", Set.of("group2"));
+        groups.put("u3", Set.of("group1", "group2"));
         ldapGroupProvider.setUserToGroupCache(groups);
     }
 
@@ -108,16 +117,123 @@ public class ExecuteAsExecutorTest {
         AuthenticationHandler.authenticate(context, "impersonate_user", "%", MysqlPassword.EMPTY_PASSWORD);
 
         Assertions.assertEquals("impersonate_user", context.getAccessControlContext().getQualifiedUser());
-        Assertions.assertEquals(Set.of("group1", "group2"), context.getGroups());
+        Assertions.assertEquals(Set.of(), context.getGroups());
 
         ExecuteAsStmt executeAsStmt = new ExecuteAsStmt(new UserRef("u1", "%"), false);
         ExecuteAsExecutor.execute(executeAsStmt, context);
-        Assertions.assertEquals(Set.of("group3"), context.getGroups());
+        Assertions.assertEquals(Set.of("group1"), context.getGroups());
         Assertions.assertEquals(Set.of(roleId1), context.getCurrentRoleIds());
 
         ExecuteAsStmt executeAsStmt2 = new ExecuteAsStmt(new UserRef("u2", "%"), false);
         ExecuteAsExecutor.execute(executeAsStmt2, context);
-        Assertions.assertEquals(Set.of("group4"), context.getGroups());
+        Assertions.assertEquals(Set.of("group2"), context.getGroups());
         Assertions.assertEquals(Set.of(roleId2), context.getCurrentRoleIds());
+    }
+
+    @Test
+    public void testExecuteAs2() throws Exception {
+        authorizationMgr.createRole(new CreateRoleStmt(List.of("r1"), true, ""));
+        authorizationMgr.createRole(new CreateRoleStmt(List.of("r2"), true, ""));
+
+        authenticationMgr.createUser(
+                new CreateUserStmt(new UserRef("impersonate_user", "%"), true, null, null, null, List.of(), Map.of(),
+                        NodePosition.ZERO));
+
+        long roleId1 = authorizationMgr.getRoleIdByNameAllowNull("r1");
+        authorizationMgr.grantRole(new GrantRoleStmt(List.of("r1"), "group1", GrantType.GROUP, NodePosition.ZERO));
+        long roleId2 = authorizationMgr.getRoleIdByNameAllowNull("r2");
+        authorizationMgr.grantRole(new GrantRoleStmt(List.of("r2"), "group2", GrantType.GROUP, NodePosition.ZERO));
+
+        ConnectContext context = new ConnectContext();
+        AuthenticationHandler.authenticate(context, "impersonate_user", "%", MysqlPassword.EMPTY_PASSWORD);
+        Assertions.assertEquals("impersonate_user", context.getAccessControlContext().getQualifiedUser());
+        Assertions.assertEquals(Set.of(), context.getGroups());
+
+        ExecuteAsStmt executeAsStmt = new ExecuteAsStmt(new UserRef("u1", "%", false, true, NodePosition.ZERO), false);
+        ExecuteAsExecutor.execute(executeAsStmt, context);
+        Assertions.assertEquals(Set.of("group1"), context.getGroups());
+        Assertions.assertEquals(Set.of(roleId1), context.getCurrentRoleIds());
+
+        ExecuteAsStmt executeAsStmt2 = new ExecuteAsStmt(new UserRef("u2", "%", false, true, NodePosition.ZERO), false);
+        ExecuteAsExecutor.execute(executeAsStmt2, context);
+        Assertions.assertEquals(Set.of("group2"), context.getGroups());
+        Assertions.assertEquals(Set.of(roleId2), context.getCurrentRoleIds());
+
+        ExecuteAsStmt executeAsStmt3 = new ExecuteAsStmt(new UserRef("u3", "%", false, true, NodePosition.ZERO), false);
+        ExecuteAsExecutor.execute(executeAsStmt3, context);
+        Assertions.assertEquals(Set.of("group1", "group2"), context.getGroups());
+        Assertions.assertEquals(Set.of(roleId1, roleId2), context.getCurrentRoleIds());
+
+        ExecuteAsStmt executeAsStmt4 =
+                new ExecuteAsStmt(new UserRef("impersonate_user", "%", false, true, NodePosition.ZERO), false);
+        ExecuteAsExecutor.execute(executeAsStmt4, context);
+        Assertions.assertEquals(Set.of(), context.getGroups());
+        Assertions.assertEquals(Set.of(), context.getCurrentRoleIds());
+    }
+
+    @Test
+    public void testExecuteAs3() throws Exception {
+        ConnectContext context = new ConnectContext();
+
+        authenticationMgr.createUser(
+                new CreateUserStmt(new UserRef("impersonate_user", "%"), true, null, null, null, List.of(), Map.of(),
+                        NodePosition.ZERO));
+        GrantPrivilegeStmt grantPrivilegeStmt = (GrantPrivilegeStmt) SqlParser.parseSingleStatement(
+                "grant impersonate on all users to impersonate_user", SqlModeHelper.MODE_DEFAULT);
+        Analyzer.analyze(grantPrivilegeStmt, context);
+        authorizationMgr.grant(grantPrivilegeStmt);
+
+        AuthenticationHandler.authenticate(context, "impersonate_user", "%", MysqlPassword.EMPTY_PASSWORD);
+        Assertions.assertEquals("impersonate_user", context.getAccessControlContext().getQualifiedUser());
+        Assertions.assertEquals(Set.of(), context.getGroups());
+
+        ExecuteAsStmt executeAsStmt = new ExecuteAsStmt(new UserRef("u1", "%", false, true, NodePosition.ZERO), false);
+        Authorizer.check(executeAsStmt, context);
+
+        ExecuteAsStmt executeAsStmt2 = new ExecuteAsStmt(new UserRef("u2", "%", false, true, NodePosition.ZERO), false);
+        Authorizer.check(executeAsStmt2, context);
+
+        ExecuteAsStmt executeAsStmt3 = new ExecuteAsStmt(new UserRef("u3", "%", false, true, NodePosition.ZERO), false);
+        Authorizer.check(executeAsStmt3, context);
+
+        RevokePrivilegeStmt revokePrivilegeStmt = (RevokePrivilegeStmt) SqlParser.parseSingleStatement(
+                "revoke impersonate on all users from impersonate_user", SqlModeHelper.MODE_DEFAULT);
+        Analyzer.analyze(revokePrivilegeStmt, context);
+        authorizationMgr.revoke(revokePrivilegeStmt);
+
+        Assertions.assertThrows(ErrorReportException.class, () -> Authorizer.check(executeAsStmt, context));
+        Assertions.assertThrows(ErrorReportException.class, () -> Authorizer.check(executeAsStmt2, context));
+        Assertions.assertThrows(ErrorReportException.class, () -> Authorizer.check(executeAsStmt3, context));
+    }
+
+    @Test
+    public void testExecuteAs4() throws Exception {
+        ConnectContext context = new ConnectContext();
+
+        authenticationMgr.createUser(
+                new CreateUserStmt(new UserRef("impersonate_user", "%"), true, null, null, null, List.of(), Map.of(),
+                        NodePosition.ZERO));
+        GrantPrivilegeStmt grantPrivilegeStmt = (GrantPrivilegeStmt) SqlParser.parseSingleStatement(
+                "grant impersonate on external user u1 to impersonate_user", SqlModeHelper.MODE_DEFAULT);
+        Analyzer.analyze(grantPrivilegeStmt, context);
+        authorizationMgr.grant(grantPrivilegeStmt);
+
+        AuthenticationHandler.authenticate(context, "impersonate_user", "%", MysqlPassword.EMPTY_PASSWORD);
+        Assertions.assertEquals("impersonate_user", context.getAccessControlContext().getQualifiedUser());
+        Assertions.assertEquals(Set.of(), context.getGroups());
+
+        ExecuteAsStmt executeAsStmt = new ExecuteAsStmt(new UserRef("u1", "%", false, true, NodePosition.ZERO), false);
+        Authorizer.check(executeAsStmt, context);
+
+        ExecuteAsStmt executeAsStmt2 = new ExecuteAsStmt(new UserRef("u2", "%", false, true, NodePosition.ZERO), false);
+        Assertions.assertThrows(ErrorReportException.class, () -> Authorizer.check(executeAsStmt2, context));
+
+        RevokePrivilegeStmt revokePrivilegeStmt = (RevokePrivilegeStmt) SqlParser.parseSingleStatement(
+                "revoke impersonate on external user u1 from impersonate_user", SqlModeHelper.MODE_DEFAULT);
+        Analyzer.analyze(revokePrivilegeStmt, context);
+        authorizationMgr.revoke(revokePrivilegeStmt);
+
+        Assertions.assertThrows(ErrorReportException.class, () -> Authorizer.check(executeAsStmt, context));
+        Assertions.assertThrows(ErrorReportException.class, () -> Authorizer.check(executeAsStmt2, context));
     }
 }

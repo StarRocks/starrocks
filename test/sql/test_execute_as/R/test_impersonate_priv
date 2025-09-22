@@ -1,5 +1,5 @@
 -- name: test_impersonate_priv
-CREATE GROUP PROVIDER `test_execute_as_file_group_provider` PROPERTIES ("group_file_url" = "group_mapping", "type" = "file");
+CREATE GROUP PROVIDER IF NOT EXISTS `test_execute_as_file_group_provider` PROPERTIES ("group_file_url" = "group_mapping", "type" = "file");
 -- result:
 -- !result
 admin set frontend config ("group_provider"="test_execute_as_file_group_provider");
@@ -54,7 +54,7 @@ r1_group
 -- !result
 select current_role();
 -- result:
-root, r1
+r1
 -- !result
 execute as test_impersonate with no revert;
 -- result:
@@ -73,36 +73,6 @@ r2_group
 select current_role();
 -- result:
 r2
--- !result
-execute as external user u3 with no revert;
--- result:
-E: (5203, 'Access denied; you need (at least one of) the IMPERSONATE privilege(s) on USER u3 for this operation. Please ask the admin to grant permission(s) or try activating existing roles using <set [default] role>. Current role(s): [r2]. Inactivated role(s): NONE.')
--- !result
-select current_user();
--- result:
-'u2'@'%'
--- !result
-execute as test_impersonate with no revert;
--- result:
--- !result
-select current_user();
--- result:
-'test_impersonate'@'%'
--- !result
-execute as external user u3 with no revert;
--- result:
--- !result
-select current_user();
--- result:
-'u3'@'%'
--- !result
-select current_group();
--- result:
-r2_group, r1_group
--- !result
-select current_role();
--- result:
-r1, r2
 -- !result
 execute as test_impersonate with no revert;
 -- result:
@@ -124,10 +94,6 @@ execute as external user u2 with no revert;
 -- result:
 E: (5203, 'Access denied; you need (at least one of) the IMPERSONATE privilege(s) on USER u2 for this operation. Please ask the admin to grant permission(s) or try activating existing roles using <set [default] role>. Current role(s): NONE. Inactivated role(s): NONE.')
 -- !result
-execute as external user u3 with no revert;
--- result:
-E: (5203, 'Access denied; you need (at least one of) the IMPERSONATE privilege(s) on USER u3 for this operation. Please ask the admin to grant permission(s) or try activating existing roles using <set [default] role>. Current role(s): NONE. Inactivated role(s): NONE.')
--- !result
 execute as root with no revert;
 -- result:
 -- !result
@@ -140,6 +106,6 @@ drop role if exists r1;
 drop role if exists r2;
 -- result:
 -- !result
-drop group provider test_execute_as_file_group_provider;
+drop group provider IF EXISTS test_execute_as_file_group_provider;
 -- result:
 -- !result
