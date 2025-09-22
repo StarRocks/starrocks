@@ -532,22 +532,22 @@ Status UpdateManager::_handle_column_upsert_mode(const TxnLogPB_OpWrite& op_writ
         return Status::OK();
     }
 
-    RssidFileInfoContainer rssid_fileinfo_container2;
-    rssid_fileinfo_container2.add_rssid_to_file(*metadata);
-    RowsetUpdateStateParams params2{
+    RssidFileInfoContainer rssid_fileinfo_container;
+    rssid_fileinfo_container.add_rssid_to_file(*metadata);
+    RowsetUpdateStateParams params{
             .op_write = op_write,
             .tablet_schema = std::make_shared<TabletSchema>(metadata->schema()),
             .metadata = metadata,
             .tablet = tablet,
-            .container = rssid_fileinfo_container2,
+            .container = rssid_fileinfo_container,
     };
-    RowsetUpdateState state2;
-    state2.init(params2);
+    RowsetUpdateState state;
+    state.init(params);
     for (uint32_t segment_id = 0; segment_id < op_write.rowset().segments_size(); segment_id++) {
-        RETURN_IF_ERROR(state2.load_segment(segment_id, params2, base_version, false /*resolve*/, false));
+        RETURN_IF_ERROR(state.load_segment(segment_id, params, base_version, false /*resolve*/, false));
     }
 
-    auto tschema = params2.tablet_schema;
+    auto tschema = params.tablet_schema;
     std::vector<uint32_t> pk_cids;
     for (size_t i = 0; i < tschema->num_key_columns(); i++) pk_cids.push_back((uint32_t)i);
     Schema pkey_schema = ChunkHelper::convert_schema(tschema, pk_cids);
@@ -572,7 +572,7 @@ Status UpdateManager::_handle_column_upsert_mode(const TxnLogPB_OpWrite& op_writ
     uint64_t total_rows = 0;
     std::map<uint32_t, size_t> segment_id_to_add_dels_new_acc;
     for (uint32_t seg = 0; seg < op_write.rowset().segments_size(); ++seg) {
-        const auto& cps = state2.parital_update_states(seg);
+        const auto& cps = state.parital_update_states(seg);
         // use src_rss_rowids == UINT64_MAX to detect insert_rowids
         std::vector<uint32_t> insert_rowids;
         insert_rowids.reserve(cps.src_rss_rowids.size());
