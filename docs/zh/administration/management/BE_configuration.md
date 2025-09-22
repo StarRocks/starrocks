@@ -4092,6 +4092,15 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 描述：Data Cache 内联对象数量上限。当缓存的 Block 对象特别小时，Data Cache 会选择使用内联方式将 Block 数据和元数据一起缓存在内存中。
 - 引入版本：v3.4.0
 
+##### enable_connector_sink_spill
+
+- 默认值：true
+- 类型：Boolean
+- 单位：-
+- 是否动态：是
+- 描述：是否支持在外表写入时进行数据spill。该功能能够避免当内存不足时导致生成大量小文件问题，当前仅支持Iceberg数据写入时的spill功能。
+- 引入版本：v4.0.0
+
 <!--
 ##### datacache_unified_instance_enable
 
