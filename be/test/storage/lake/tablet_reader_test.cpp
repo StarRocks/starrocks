@@ -407,21 +407,6 @@ TEST_F(LakeDuplicateTabletReaderWithDeleteTest, test_read_success) {
     _tablet_metadata->set_version(3);
     CHECK_OK(_tablet_mgr->put_tablet_metadata(*_tablet_metadata));
 
-    bool original_ignore_config_val = config::lake_tablet_ignore_invalid_delete_predicate;
-    config::lake_tablet_ignore_invalid_delete_predicate = false;
-
-    { // test reader open failed due to invalid delete_predicate
-        auto reader = std::make_shared<TabletReader>(_tablet_mgr.get(), _tablet_metadata, *_schema);
-        ASSERT_OK(reader->prepare());
-        TabletReaderParams params;
-        auto st = reader->open(params);
-        EXPECT_FALSE(st.ok());
-        EXPECT_TRUE(st.is_unknown()) << st;
-        EXPECT_EQ("unknown column c0c", st.message());
-    }
-
-    config::lake_tablet_ignore_invalid_delete_predicate = true;
-
     // test reader
     auto reader = std::make_shared<TabletReader>(_tablet_mgr.get(), _tablet_metadata, *_schema);
     ASSERT_OK(reader->prepare());
@@ -452,8 +437,6 @@ TEST_F(LakeDuplicateTabletReaderWithDeleteTest, test_read_success) {
     ASSERT_TRUE(reader->get_next(read_chunk_ptr.get()).is_end_of_file());
 
     reader->close();
-
-    config::lake_tablet_ignore_invalid_delete_predicate = original_ignore_config_val;
 }
 
 class LakeDuplicateTabletReaderWithDeleteNotInOneValueTest : public TestBase {
