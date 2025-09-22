@@ -48,16 +48,13 @@ import org.assertj.core.util.Lists;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.MethodOrderer;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestInfo;
-import org.junit.jupiter.api.TestMethodOrder;
 
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Future;
 
-@TestMethodOrder(MethodOrderer.MethodName.class)
 public class CatalogRecycleBinLakeTableTest {
     private static final Logger LOG = LogManager.getLogger(CatalogRecycleBinLakeTableTest.class);
 
@@ -65,18 +62,6 @@ public class CatalogRecycleBinLakeTableTest {
 
     @BeforeAll
     public static void beforeClass() {
-        new MockUp<ConnectContext>() {
-            @Mock
-            public ComputeResource getCurrentComputeResource() {
-                return WarehouseManager.DEFAULT_RESOURCE;
-            }
-        };
-        new MockUp<WarehouseManager>() {
-            @Mock
-            public boolean isResourceAvailable(ComputeResource computeResource) {
-                return true;
-            }
-        };
         UtFrameUtils.createMinStarRocksCluster(RunMode.SHARED_DATA);
         GlobalStateMgr.getCurrentState().getWarehouseMgr().initDefaultWarehouse();
         GlobalStateMgr.getCurrentState().getRecycleBin().setStop();
@@ -250,6 +235,12 @@ public class CatalogRecycleBinLakeTableTest {
             @Mock
             public LakeService getLakeService(TNetworkAddress address) throws RpcException {
                 return lakeService;
+            }
+        };
+        new MockUp<ConnectContext>() {
+            @Mock
+            public ComputeResource getCurrentComputeResource() {
+                return WarehouseManager.DEFAULT_RESOURCE;
             }
         };
         new Expectations() {
