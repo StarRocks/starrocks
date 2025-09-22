@@ -862,7 +862,7 @@ INSERT INTO t_auto_increment_partial_update_column_upsert_2 VALUES (1, 2, 3, DEF
 -- !result
 SELECT * FROM t_auto_increment_partial_update_column_upsert_2;
 -- result:
-1	2 3	1	4
+1	2	3	1	4
 -- !result
 shell: curl --location-trusted -u root: -T ${root_path}/lib/../common/data/stream_load/sr_auto_increment_partial_update_only.csv -XPUT -H partial_update:true  -H partial_update_mode:column -H label:test_auto_increment_partial_update_column_upsert_12345 -H column_separator:, -H columns:k,v2,xx ${url}/api/test_auto_increment_partial_update_column_upsert_2/t_auto_increment_partial_update_column_upsert_2/_stream_load
 -- result:
@@ -877,16 +877,16 @@ sync;
 -- !result
 SELECT * FROM t_auto_increment_partial_update_column_upsert_2;
 -- result:
-1	1	20	1 4
-2	None	40	2 None
+1	1	20	1	4
+2	None	40	2	None
 -- !result
 INSERT INTO t_auto_increment_partial_update_column_upsert_2 VALUES (1, 300, 20, DEFAULT, 30), (2, 301, 40, DEFAULT, 50);
 -- result:
 -- !result
 SELECT * FROM t_auto_increment_partial_update_column_upsert_2;
 -- result:
-1	300	20	3 30
-2	301	40	4 50
+1	300	20	3	30
+2	301	40	4	50
 -- !result
 DROP TABLE t_auto_increment_partial_update_column_upsert_2;
 -- result:
