@@ -936,19 +936,35 @@ public class SelectAnalyzer {
         
         // Determine which table to prefer for USING columns (COALESCE semantics)
         boolean preferRightTable = joinRelation.getJoinOp() != null && joinRelation.getJoinOp().isRightJoin();
+        boolean isFullOuterJoin = joinRelation.getJoinOp() != null && joinRelation.getJoinOp().isFullOuterJoin();
         
-        // Iterate through all fields to find USING columns, selecting appropriate table's field
+        // Collect all fields by column name for FULL OUTER JOIN COALESCE generation
+        Map<String, List<Field>> fieldsGroupedByName = new LinkedHashMap<>();
         for (Field field : allFields) {
             if (field.getName() != null && usingColSet.contains(field.getName().toLowerCase())) {
                 String key = field.getName().toLowerCase();
-                if (!usingFields.containsKey(key)) {
-                    // First occurrence: always use it
-                    usingFields.put(key, field);
-                } else if (preferRightTable) {
-                    // Second occurrence in RIGHT JOIN: replace left table field with right table field
-                    usingFields.put(key, field);
-                }
+                fieldsGroupedByName.computeIfAbsent(key, k -> new ArrayList<>()).add(field);
             }
+        }
+        
+        // Generate appropriate fields for USING columns
+        for (Map.Entry<String, List<Field>> entry : fieldsGroupedByName.entrySet()) {
+            String columnName = entry.getKey();
+            List<Field> fieldsForColumn = entry.getValue();
+            
+            Field selectedField;
+            if (isFullOuterJoin && fieldsForColumn.size() >= 2) {
+                // FULL OUTER JOIN: create COALESCE field
+                selectedField = createCoalescedFieldForStar(fieldsForColumn);
+            } else if (preferRightTable && fieldsForColumn.size() >= 2) {
+                // RIGHT JOIN: prefer right table field (last one)
+                selectedField = fieldsForColumn.get(fieldsForColumn.size() - 1);
+            } else {
+                // Other JOINs: prefer left table field (first one)
+                selectedField = fieldsForColumn.get(0);
+            }
+            
+            usingFields.put(columnName, selectedField);
         }
         List<Field> result = new ArrayList<>(usingFields.values());
 
@@ -968,6 +984,46 @@ public class SelectAnalyzer {
         }
 
         return result;
+    }
+
+    /**
+     * Creates a field with COALESCE(left.col, right.col) expression for FULL OUTER JOIN USING in SELECT *.
+     * This ensures that in FULL OUTER JOIN, USING columns show non-null values from either table.
+     */
+    private Field createCoalescedFieldForStar(List<Field> fieldsForColumn) {
+        if (fieldsForColumn.size() < 2) {
+            // Fallback to left table field if we don't have both left and right
+            return fieldsForColumn.get(0);
+        }
+
+        Field leftField = fieldsForColumn.get(0);
+        Field rightField = fieldsForColumn.get(fieldsForColumn.size() - 1);
+
+        // Create SlotRef expressions for both fields
+        SlotRef leftSlotRef = new SlotRef(leftField.getRelationAlias(), leftField.getName());
+        SlotRef rightSlotRef = new SlotRef(rightField.getRelationAlias(), rightField.getName());
+
+        // Create COALESCE(left.col, right.col) function call
+        FunctionCallExpr coalesceExpr = new FunctionCallExpr(FunctionSet.COALESCE, Arrays.asList(leftSlotRef, rightSlotRef));
+
+        // Determine the result type (should be compatible with both input types)
+        Type resultType = Type.getAssignmentCompatibleType(leftField.getType(), rightField.getType(), true);
+        if (resultType == null || resultType.isInvalid()) {
+            // Fallback to left field type if types are incompatible
+            resultType = leftField.getType();
+        }
+
+        // Create a new field with the COALESCE expression
+        // Use the column name from the left field (USING column name)
+        // Set relationAlias to null since this is a computed column spanning both tables
+        return new Field(
+            leftField.getName(),
+            resultType,
+            null, // No specific table alias for coalesced column
+            coalesceExpr,
+            true, // visible
+            leftField.isNullable() && rightField.isNullable() // nullable only if both are nullable
+        );
     }
 
     private void addNonUsingFieldsByCount(List<Field> allFields, Set<String> usingColSet, 

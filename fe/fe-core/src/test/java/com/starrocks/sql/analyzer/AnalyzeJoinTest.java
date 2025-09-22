@@ -93,7 +93,7 @@ public class AnalyzeJoinTest {
                         "the most similar input is {<EOF>, ';'}.");
         analyzeFail("select v1 from (t0 join tnotnull using(v1)), t1", "Column 'v1' is ambiguous");
         analyzeSuccess("select a.v1 from (t0 a join tnotnull b using(v1)), t1");
-        analyzeSuccess("select v1 from t0 join tnotnull using(v1)");
+        analyzeSuccess("select v1 from t0 fullouter join tnotnull using(v1)");
     }
 
     @Test

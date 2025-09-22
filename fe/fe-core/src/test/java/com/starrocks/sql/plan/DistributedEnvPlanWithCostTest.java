@@ -1429,6 +1429,24 @@ public class DistributedEnvPlanWithCostTest extends DistributedEnvPlanTestBase {
     }
 
     @Test
+    public void testMultiTableJoin() throws Exception {
+        String sql = "WITH w1 as (SELECT count(d_date) as cnt, d_datekey FROM dates_n group by d_datekey) " +
+                    "SELECT * from dates_n join [colocate] w1 using(d_datekey)";
+        String plan = getVerboseExplain(sql);
+        assertNotContains(plan, "LocalShuffleColumns");
+        assertContains(plan, "  3:HASH JOIN\n" +
+                "  |  join op: INNER JOIN (COLOCATE)\n" +
+                "  |  colocate: true\n" +
+                "  |  equal join conjunct: [1: d_datekey, INT, true] = [18: d_datekey, INT, true]\n" +
+                "  |  build runtime filters:\n" +
+                "  |  - filter_id = 0, build_expr = (18: d_datekey), remote = false\n" +
+                "  |  cardinality: 2300\n" +
+                "  |  \n" +
+                "  |----2:AGGREGATE (update finalize)");
+
+    }
+
+    @Test
     public void testAggExecuteInOneTablet() throws Exception {
         String sql;
         String plan;
@@ -1463,7 +1481,6 @@ public class DistributedEnvPlanWithCostTest extends DistributedEnvPlanTestBase {
                 "  |  equal join conjunct: [1: d_datekey, INT, true] = [18: d_datekey, INT, true]\n" +
                 "  |  build runtime filters:\n" +
                 "  |  - filter_id = 0, build_expr = (18: d_datekey), remote = false\n" +
-                "  |  output columns: 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 35\n" +
                 "  |  cardinality: 2300\n" +
                 "  |  \n" +
                 "  |----2:AGGREGATE (update finalize)");
