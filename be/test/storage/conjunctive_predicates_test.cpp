@@ -169,6 +169,42 @@ TEST(ConjunctivePredicatesTest, test_evaluate) {
     }
 }
 
+TEST(ConjunctivePredicatesTest, test_empty_predicates) {
+    SchemaPtr schema(new Schema());
+    auto c0_field = std::make_shared<Field>(0, "c0", TYPE_INT, true);
+    schema->append(c0_field);
+    auto c0 = ChunkHelper::column_from_field(*c0_field);
+
+    // +------+
+    // | c0   |
+    // +------+
+    // | NULL |
+    // |    1 |
+    // |    2 |
+    // |    3 |
+    // +------+
+    c0->append_datum(Datum());
+    c0->append_datum(Datum(1));
+    c0->append_datum(Datum(2));
+    c0->append_datum(Datum(3));
+
+    ChunkPtr chunk = std::make_shared<Chunk>(Columns{std::move(c0)}, schema);
+
+    std::vector<uint8_t> selection = {1, 0, 1, 0};
+    EXPECT_EQ("1,0,1,0", to_string(selection));
+
+    ConjunctivePredicates conjuncts;
+
+    conjuncts.evaluate(chunk.get(), selection.data());
+    EXPECT_EQ("1,0,1,0", to_string(selection));
+
+    conjuncts.evaluate_or(chunk.get(), selection.data());
+    EXPECT_EQ("1,0,1,0", to_string(selection));
+
+    conjuncts.evaluate_and(chunk.get(), selection.data());
+    EXPECT_EQ("1,0,1,0", to_string(selection));
+}
+
 // NOLINTNEXTLINE
 TEST(ConjunctivePredicatesTest, test_evaluate_and) {
     SchemaPtr schema(new Schema());
