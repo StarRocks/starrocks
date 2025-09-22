@@ -45,7 +45,6 @@ import com.starrocks.common.NotImplementedException;
 import com.starrocks.common.Pair;
 import com.starrocks.common.util.DateUtils;
 import com.starrocks.common.util.TimeUtils;
-import com.starrocks.connector.parser.trino.TrinoParserUtils;
 import com.starrocks.mysql.MysqlPassword;
 import com.starrocks.mysql.privilege.AuthPlugin;
 import com.starrocks.qe.ConnectContext;
@@ -2186,7 +2185,7 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
         // check defined query's sql dialect
         QueryStatement queryStatement;
         String sqlDialect = MaterializedView.getQuerySqlDialect(properties);
-        ConnectContext connectContext = ConnectContext.get() == null ? ConnectContext.build():
+        ConnectContext connectContext = ConnectContext.get() == null ? ConnectContext.build() :
                 ConnectContext.get();
         if (SqlDialect.TRINO_DIALECT.equalsIgnoreCase(sqlDialect)) {
             // Use Trino dialect to generate query statement
