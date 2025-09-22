@@ -1,4 +1,4 @@
--- name: test_arrays_overlap
+-- name: test_arrays_overlap @mac
 
 CREATE TABLE array_test (
 pk bigint not null ,

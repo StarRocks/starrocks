@@ -1,4 +1,4 @@
--- name: test_array_distinct @slow
+-- name: test_array_distinct @slow @mac
 CREATE TABLE t1 (
     c1 INT,
     c2 ARRAY<BIGINT>

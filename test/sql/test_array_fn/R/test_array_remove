@@ -1,4 +1,4 @@
--- name: test_array_remove_all_type
+-- name: test_array_remove_all_type @mac
 CREATE TABLE test_array_remove (
     id INT,
     array_boolean ARRAY<BOOLEAN>,

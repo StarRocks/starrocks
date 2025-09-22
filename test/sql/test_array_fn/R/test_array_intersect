@@ -1,4 +1,4 @@
--- name: test_array_intersect
+-- name: test_array_intersect @mac
 CREATE TABLE test_array_intersect (
     id INT,
     array_boolean ARRAY<BOOLEAN>,

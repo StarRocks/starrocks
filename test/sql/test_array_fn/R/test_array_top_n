@@ -1,0 +1,170 @@
+-- name: test_array_top_n_all_types
+CREATE TABLE test_array_top_n (
+    id INT,
+    array_int ARRAY<INT>,
+    array_bigint ARRAY<BIGINT>,
+    array_float ARRAY<FLOAT>,
+    array_double ARRAY<DOUBLE>,
+    array_decimalv2 ARRAY<DECIMALV2(10, 2)>,
+    array_boolean ARRAY<BOOLEAN>,
+    array_date ARRAY<DATE>,
+    array_datetime ARRAY<DATETIME>,
+    array_varchar ARRAY<VARCHAR(100)>
+) ENGINE=OLAP
+DUPLICATE KEY(id)
+DISTRIBUTED BY HASH(id) BUCKETS 3
+PROPERTIES (
+    "replication_num" = "1"
+);
+-- result:
+-- !result
+INSERT INTO test_array_top_n VALUES
+(1, [100, 1, NULL, 5, 100, 1], [100, 1, NULL, 5, 100, 1], [100.0, 1.0, NULL, 5.0, 100.0, 1.0],
+ [100.0, 1.0, NULL, 5.0, 100.0, 1.0], [100.0, 1.0, NULL, 5.0, 100.0, 1.0], [true, false, NULL, true, true, false],
+ ['2023-12-31', '2023-01-01', NULL, '2023-06-15', '2023-12-31', '2023-01-01'],
+ ['2023-12-31 23:59:59', '2023-01-01 00:00:01', NULL, '2023-06-15 12:00:00', '2023-12-31 23:59:59', '2023-01-01 00:00:01'],
+ ['zzz', 'a', NULL, 'g', 'zzz', 'a']),
+(2, [], [], [], [], [], [], [], [], []),
+(3, [100], [100], [100.0], [100.0], [100.0], [true], ['2023-12-31'], ['2023-12-31 23:59:59'], ['zzz']),
+(4, [NULL, NULL, NULL], [NULL, NULL, NULL], [NULL, NULL, NULL], [NULL, NULL, NULL], [NULL, NULL, NULL],
+ [NULL, NULL, NULL], [NULL, NULL, NULL], [NULL, NULL, NULL], [NULL, NULL, NULL]),
+(5, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL),
+(6, [5, 5, 5, 3, 3], [5, 5, 5, 3, 3], [5.0, 5.0, 5.0, 3.0, 3.0], [5.0, 5.0, 5.0, 3.0, 3.0],
+ [5.0, 5.0, 5.0, 3.0, 3.0], [true, true, true, false, false],
+ ['2023-05-05', '2023-05-05', '2023-05-05', '2023-03-03', '2023-03-03'],
+ ['2023-05-05 12:00:00', '2023-05-05 12:00:00', '2023-05-05 12:00:00', '2023-03-03 10:00:00', '2023-03-03 10:00:00'],
+ ['eee', 'eee', 'eee', 'ccc', 'ccc']);
+-- result:
+-- !result
+SELECT id, array_top_n(array_int, 3) AS result FROM test_array_top_n ORDER BY id;
+-- result:
+1	[100,100,5]
+2	[]
+3	[100]
+4	[null,null,null]
+5	None
+6	[5,5,5]
+-- !result
+SELECT id, array_top_n(array_bigint, 3) AS result FROM test_array_top_n ORDER BY id;
+-- result:
+1	[100,100,5]
+2	[]
+3	[100]
+4	[null,null,null]
+5	None
+6	[5,5,5]
+-- !result
+SELECT id, array_top_n(array_float, 3) AS result FROM test_array_top_n ORDER BY id;
+-- result:
+1	[100,100,5]
+2	[]
+3	[100]
+4	[null,null,null]
+5	None
+6	[5,5,5]
+-- !result
+SELECT id, array_top_n(array_double, 3) AS result FROM test_array_top_n ORDER BY id;
+-- result:
+1	[100,100,5]
+2	[]
+3	[100]
+4	[null,null,null]
+5	None
+6	[5,5,5]
+-- !result
+SELECT id, array_top_n(array_decimalv2, 3) AS result FROM test_array_top_n ORDER BY id;
+-- result:
+1	[100,100,5]
+2	[]
+3	[100]
+4	[null,null,null]
+5	None
+6	[5,5,5]
+-- !result
+SELECT id, array_top_n(array_boolean, 3) AS result FROM test_array_top_n ORDER BY id;
+-- result:
+1	[1,1,1]
+2	[]
+3	[1]
+4	[null,null,null]
+5	None
+6	[1,1,1]
+-- !result
+SELECT id, array_top_n(array_date, 3) AS result FROM test_array_top_n ORDER BY id;
+-- result:
+1	["2023-12-31","2023-12-31","2023-06-15"]
+2	[]
+3	["2023-12-31"]
+4	[null,null,null]
+5	None
+6	["2023-05-05","2023-05-05","2023-05-05"]
+-- !result
+SELECT id, array_top_n(array_datetime, 3) AS result FROM test_array_top_n ORDER BY id;
+-- result:
+1	["2023-12-31 23:59:59","2023-12-31 23:59:59","2023-06-15 12:00:00"]
+2	[]
+3	["2023-12-31 23:59:59"]
+4	[null,null,null]
+5	None
+6	["2023-05-05 12:00:00","2023-05-05 12:00:00","2023-05-05 12:00:00"]
+-- !result
+SELECT id, array_top_n(array_varchar, 3) AS result FROM test_array_top_n ORDER BY id;
+-- result:
+1	["zzz","zzz","g"]
+2	[]
+3	["zzz"]
+4	[null,null,null]
+5	None
+6	["eee","eee","eee"]
+-- !result
+SELECT id, array_top_n(array_int, 0) AS result FROM test_array_top_n WHERE id = 1 ORDER BY id;
+-- result:
+1	[]
+-- !result
+SELECT id, array_top_n(array_int, -1) AS result FROM test_array_top_n WHERE id = 1 ORDER BY id;
+-- result:
+1	[]
+-- !result
+SELECT id, array_top_n(array_int, 10) AS result FROM test_array_top_n WHERE id = 1 ORDER BY id;
+-- result:
+1	[100,100,5,1,1,null]
+-- !result
+SELECT id, array_top_n(array_int, 1) AS result FROM test_array_top_n WHERE id = 1 ORDER BY id;
+-- result:
+1	[100]
+-- !result
+SELECT id, array_top_n(array_int, 1) AS result FROM test_array_top_n WHERE id = 4 ORDER BY id;
+-- result:
+4	[null]
+-- !result
+SELECT id, array_top_n(array_int, 3) AS result FROM test_array_top_n WHERE id = 6 ORDER BY id;
+-- result:
+6	[5,5,5]
+-- !result
+SELECT array_top_n([1, 100, 2, 5, 3], 3) AS result;
+-- result:
+[100,5,3]
+-- !result
+SELECT array_top_n([1, 100, 2, 5, 3], 3) AS result;
+-- result:
+[100,5,3]
+-- !result
+SELECT array_top_n(['hello', 'world', 'aaa', 'zzz', 'mmm'], 3) AS result;
+-- result:
+["zzz","world","mmm"]
+-- !result
+SELECT array_top_n([1, NULL, 100, NULL, 5], 3) AS result;
+-- result:
+[100,5,1]
+-- !result
+SELECT array_top_n([], 3) AS result;
+-- result:
+[]
+-- !result
+SELECT array_top_n(NULL, 3) AS result;
+-- result:
+None
+-- !result
+DROP TABLE test_array_top_n;
+-- result:
+-- !result
