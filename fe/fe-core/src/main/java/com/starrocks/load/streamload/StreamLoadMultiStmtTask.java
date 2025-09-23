@@ -156,8 +156,18 @@ public class StreamLoadMultiStmtTask extends AbstractStreamLoadTask {
     }
 
     public void beginTxn(TransactionResult resp) {
+        // Ensure a non-empty label is generated in TransactionStmtExecutor.beginStmt
+        // by providing a valid executionId. Use the pre-generated loadId as executionId.
+        if (context.getExecutionId() == null) {
+            context.setExecutionId(loadId);
+        }
+        // Also propagate compute resource so the txn carries the same resource context.
+        if (context.getCurrentComputeResource() == null) {
+            context.setCurrentComputeResource(computeResource);
+        }
+
         TransactionStmtExecutor.beginStmt(context, new BeginStmt(NodePosition.ZERO),
-                TransactionState.LoadJobSourceType.MULTI_STATEMENT_STREAMING);
+                TransactionState.LoadJobSourceType.MULTI_STATEMENT_STREAMING, label);
         this.txnId = context.getTxnId();
         LOG.info("start transaction id {}", txnId);
     }
