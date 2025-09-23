@@ -91,6 +91,7 @@ import com.starrocks.sql.ast.ViewRelation;
 import com.starrocks.sql.common.MetaUtils;
 import com.starrocks.sql.common.TypeManager;
 import com.starrocks.sql.optimizer.dump.HiveMetaStoreTableDumpInfo;
+import org.apache.commons.collections.CollectionUtils;
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -882,20 +883,20 @@ public class QueryAnalyzer {
                 scope = new Scope(RelationId.of(join), rightScope.getRelationFields());
             } else if (join.getJoinOp().isLeftOuterJoin()) {
                 List<Field> rightFields = getFieldsWithNullable(rightScope);
-                scope = new Scope(RelationId.of(join),
-                        leftScope.getRelationFields().joinWith(new RelationFields(rightFields)));
+                RelationFields joinedFields = leftScope.getRelationFields().joinWith(new RelationFields(rightFields));
+                scope = new Scope(RelationId.of(join), createJoinRelationFields(joinedFields, join));
             } else if (join.getJoinOp().isRightOuterJoin()) {
                 List<Field> leftFields = getFieldsWithNullable(leftScope);
-                scope = new Scope(RelationId.of(join),
-                        new RelationFields(leftFields).joinWith(rightScope.getRelationFields()));
+                RelationFields joinedFields = new RelationFields(leftFields).joinWith(rightScope.getRelationFields());
+                scope = new Scope(RelationId.of(join), createJoinRelationFields(joinedFields, join));
             } else if (join.getJoinOp().isFullOuterJoin()) {
                 List<Field> rightFields = getFieldsWithNullable(rightScope);
                 List<Field> leftFields = getFieldsWithNullable(leftScope);
-                scope = new Scope(RelationId.of(join),
-                        new RelationFields(leftFields).joinWith(new RelationFields(rightFields)));
+                RelationFields joinedFields = new RelationFields(leftFields).joinWith(new RelationFields(rightFields));
+                scope = new Scope(RelationId.of(join), createJoinRelationFields(joinedFields, join));
             } else {
-                scope = new Scope(RelationId.of(join),
-                        leftScope.getRelationFields().joinWith(rightScope.getRelationFields()));
+                RelationFields joinedFields = leftScope.getRelationFields().joinWith(rightScope.getRelationFields());
+                scope = new Scope(RelationId.of(join), createJoinRelationFields(joinedFields, join));
             }
             join.setScope(scope);
 
@@ -934,6 +935,15 @@ public class QueryAnalyzer {
                 }
             }
             return joinEqual;
+        }
+
+        private RelationFields createJoinRelationFields(RelationFields joinedFields, JoinRelation join) {
+            if (CollectionUtils.isNotEmpty(join.getUsingColNames()) && !join.getJoinOp().isFullOuterJoin()) {
+                return new CoalescedJoinFields(joinedFields.getAllFields(), join.getUsingColNames(), join.getJoinOp());
+            } else {
+                // TODO: Support FULL OUTER JOIN USING with proper COALESCE semantics
+                return joinedFields;
+            }
         }
 
         private void analyzeJoinHints(JoinRelation join) {
