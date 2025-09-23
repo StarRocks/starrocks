@@ -777,7 +777,7 @@ public class StmtExecutor {
                                 String queryId = DebugUtil.printId(context.getExecutionId());
                                 ProfileManager.getInstance().removeProfile(queryId);
                                 // reset compute resource
-                                context.tryAcquireResource(true);
+                                context.ensureCurrentComputeResourceAvailable();
                             } else {
                                 // Release all resources after the query finish as soon as possible, as query profile is
                                 // asynchronous which can be delayed a long time.
