@@ -576,6 +576,8 @@ CONF_mBool(enable_token_check, "true");
 // to open/close system metrics
 CONF_Bool(enable_system_metrics, "true");
 
+CONF_Bool(enable_jvm_metrics, "false");
+
 CONF_mBool(enable_prefetch, "true");
 
 // Number of cores StarRocks will used, this will effect only when it's greater than 0.

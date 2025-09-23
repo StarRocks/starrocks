@@ -114,9 +114,13 @@ set(UTIL_FILES
   internal_service_recoverable_stub.cpp
   lake_service_recoverable_stub.cpp
   byte_buffer.cpp
+<<<<<<< HEAD
+=======
+  variant_util.cpp
+  jvm_metrics.cpp
+>>>>>>> d93cbaf2c5 ([Enhancement] Add be jvm memory metrics (#62210))
 )
 
 add_library(Util STATIC
     ${UTIL_FILES}
 )
-

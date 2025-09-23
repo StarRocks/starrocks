@@ -573,7 +573,12 @@ set(EXEC_FILES
         ./udf/java/java_data_converter_test.cpp
         ./udf/java/java_udf_test.cpp
         ./util/table_metrics_mgr_test.cpp
+<<<<<<< HEAD
         )
+=======
+        ./util/jvm_metrics_test.cpp
+)
+>>>>>>> d93cbaf2c5 ([Enhancement] Add be jvm memory metrics (#62210))
 
 if (${USE_AVX512})
     list(APPEND EXEC_FILES ./simd/delta_decode_test.cpp)
@@ -613,3 +618,9 @@ ADD_BE_TEST(storage/lake/compaction_task_test)
 
 # Standalone executable for builtin_functions_fuzzy_test
 ADD_BE_TEST(fuzzy/builtin_functions_fuzzy_test)
+<<<<<<< HEAD
+=======
+
+add_dependencies(starrocks_dw_test engine_storage_migration_task_test compaction_task_test builtin_functions_fuzzy_test)
+add_dependencies(starrocks_dw_test engine_storage_migration_task_test compaction_task_test builtin_functions_fuzzy_test)
+>>>>>>> d93cbaf2c5 ([Enhancement] Add be jvm memory metrics (#62210))
