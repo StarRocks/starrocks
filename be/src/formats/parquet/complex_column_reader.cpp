@@ -15,14 +15,18 @@
 #include "formats/parquet/complex_column_reader.h"
 
 #include "column/array_column.h"
+#include "column/binary_column.h"
 #include "column/map_column.h"
 #include "column/struct_column.h"
+#include "column/variant_column.h"
 #include "exprs/literal.h"
 #include "formats/parquet/predicate_filter_evaluator.h"
 #include "formats/parquet/schema.h"
 #include "gutil/casts.h"
 #include "gutil/strings/substitute.h"
 #include "storage/column_expr_predicate.h"
+#include "types/variant_value.h"
+#include "util/slice.h"
 
 namespace starrocks::parquet {
 
@@ -640,6 +644,110 @@ void StructColumnReader::_handle_null_rows(uint8_t* is_nulls, bool* has_null, si
             }
         }
     }
+}
+
+// VariantColumnReader
+
+Status VariantColumnReader::read_range(const Range<uint64_t>& range, const Filter* filter, ColumnPtr& dst) {
+    VariantColumn* variant_column = nullptr;
+    NullableColumn* nullable_column = nullptr;
+    if (dst->is_nullable()) {
+        nullable_column = down_cast<NullableColumn*>(dst.get());
+        DCHECK(nullable_column->mutable_data_column()->is_variant());
+        variant_column = down_cast<VariantColumn*>(nullable_column->mutable_data_column());
+    } else {
+        DCHECK(dst->is_variant());
+        DCHECK(!get_column_parquet_field()->is_nullable);
+        variant_column = down_cast<VariantColumn*>(dst.get());
+    }
+
+    ColumnPtr metadata_col = BinaryColumn::create();
+    ColumnPtr value_col = BinaryColumn::create();
+    RETURN_IF_ERROR(_metadata_reader->read_range(range, filter, metadata_col));
+    RETURN_IF_ERROR(_value_reader->read_range(range, filter, value_col));
+
+    const auto* metadata_column = down_cast<BinaryColumn*>(metadata_col.get());
+    const auto* value_column = down_cast<BinaryColumn*>(value_col.get());
+
+    // Get definition levels to determine which variant groups are null
+    level_t* def_levels = nullptr;
+    level_t* rep_levels = nullptr;
+    size_t num_levels = 0;
+    _metadata_reader->get_levels(&def_levels, &rep_levels, &num_levels);
+    // Use definition levels to determine null values
+    const LevelInfo level_info = get_column_parquet_field()->level_info;
+
+    DCHECK_EQ(metadata_column->size(), value_column->size());
+
+    const size_t expected_size = range.span_size();
+    const size_t actual_rows = metadata_column->size();
+    variant_column->reserve(expected_size);
+
+    if (def_levels != nullptr && num_levels > 0) {
+        size_t data_idx = 0;
+
+        for (size_t i = 0; i < expected_size && i < num_levels; ++i) {
+            if (def_levels[i] >= level_info.max_def_level) {
+                if (data_idx < actual_rows) {
+                    const Slice metadata_slice = metadata_column->get_slice(data_idx);
+                    const Slice value_slice = value_column->get_slice(data_idx);
+
+                    const std::string_view metadata_view(metadata_slice.data, metadata_slice.size);
+                    const std::string_view value_view(value_slice.data, value_slice.size);
+
+                    VariantValue variant_value(metadata_view, value_view);
+                    variant_column->append(variant_value);
+                    data_idx++;
+                } else {
+                    variant_column->append(VariantValue::of_null());
+                }
+            } else {
+                // Variant group is null at definition level
+                variant_column->append(VariantValue::of_null());
+            }
+        }
+
+        // If we still have fewer rows than expected, fill with nulls
+        if (size_t current_size = variant_column->size(); current_size < expected_size) {
+            size_t to_fill = expected_size - current_size;
+            variant_column->append_nulls(to_fill);
+        }
+    } else {
+        return Status::InternalError(
+                        "Variant column requires definition levels for null value determination");
+    }
+
+    // Handle nullable column null flags
+    if (dst->is_nullable()) {
+        DCHECK(nullable_column != nullptr);
+        if (def_levels != nullptr && num_levels > 0) {
+            NullColumn null_column(expected_size);
+            auto& is_nulls = null_column.get_data();
+            bool has_null = false;
+            for (size_t i = 0; i < expected_size && i < num_levels; ++i) {
+                if (def_levels[i] >= level_info.max_def_level) {
+                    is_nulls[i] = 0; // Variant group exists
+                } else {
+                    is_nulls[i] = 1; // Variant group is null
+                    has_null = true;
+                }
+            }
+
+            for (size_t i = num_levels; i < expected_size; ++i) {
+                is_nulls[i] = 1;
+                has_null = true;
+            }
+
+            nullable_column->mutable_null_column()->swap_column(null_column);
+            nullable_column->set_has_null(has_null);
+        } else {
+            NullColumn null_column(expected_size, 0);
+            nullable_column->mutable_null_column()->swap_column(null_column);
+            nullable_column->set_has_null(false);
+        }
+    }
+
+    return Status::OK();
 }
 
 } // namespace starrocks::parquet
