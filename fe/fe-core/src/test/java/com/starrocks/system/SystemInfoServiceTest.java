@@ -17,6 +17,7 @@ package com.starrocks.system;
 import com.google.api.client.util.Maps;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
+import com.starrocks.common.ErrorCode;
 import com.starrocks.common.Pair;
 import com.starrocks.lake.StarOSAgent;
 import com.starrocks.persist.EditLog;
@@ -293,26 +294,8 @@ public class SystemInfoServiceTest {
         ComputeNode cn = new ComputeNode(10001, "newHost", 1000);
         service.addComputeNode(cn);
 
-        LocalMetastore localMetastore = new LocalMetastore(globalStateMgr, null, null);
-
         WarehouseManager warehouseManager = new WarehouseManager();
         warehouseManager.initDefaultWarehouse();
-
-        new Expectations() {
-            {
-                service.getComputeNodeWithHeartbeatPort("newHost", 1000);
-                minTimes = 0;
-                result = cn;
-
-                globalStateMgr.getLocalMetastore();
-                minTimes = 0;
-                result = localMetastore;
-
-                globalStateMgr.getWarehouseMgr();
-                minTimes = 0;
-                result = warehouseManager;
-            }
-        };
 
         new MockUp<WarehouseManager>() {
             @Mock
@@ -322,14 +305,17 @@ public class SystemInfoServiceTest {
         };
         service.addComputeNode(cn);
         cn.setStarletPort(1001);
+
+        {
+            Assertions.assertThrows(DdlException.class, () ->
+                    service.dropComputeNode("newHost", 1000, "warehousename-cn-not-exists", ""),
+                    ErrorCode.ERR_UNKNOWN_WAREHOUSE.formatErrorMsg("name: warehousename-cn-not-exists"));
+        }
+
         service.dropComputeNode("newHost", 1000, "", "");
         ComputeNode cnIP = service.getComputeNodeWithHeartbeatPort("newHost", 1000);
         Assertions.assertNull(cnIP);
 
-        {
-            Assertions.assertThrows(DdlException.class, () ->
-                    service.dropComputeNode("newHost", 1000, "warehousename-cn-not-exists", ""));
-        }
 
         Config.enable_trace_historical_node = savedConfig;
     }
