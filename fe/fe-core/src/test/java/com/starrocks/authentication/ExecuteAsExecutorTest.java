@@ -14,23 +14,31 @@
 
 package com.starrocks.authentication;
 
+import com.starrocks.authorization.AccessDeniedException;
 import com.starrocks.authorization.AuthorizationMgr;
 import com.starrocks.authorization.DefaultAuthorizationProvider;
 import com.starrocks.authorization.GrantType;
+import com.starrocks.authorization.PrivilegeType;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
+import com.starrocks.common.ErrorReportException;
 import com.starrocks.mysql.MysqlPassword;
 import com.starrocks.persist.EditLog;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ExecuteAsExecutor;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.Analyzer;
+import com.starrocks.sql.analyzer.Authorizer;
 import com.starrocks.sql.ast.CreateRoleStmt;
 import com.starrocks.sql.ast.CreateUserStmt;
 import com.starrocks.sql.ast.ExecuteAsStmt;
+import com.starrocks.sql.ast.GrantPrivilegeStmt;
 import com.starrocks.sql.ast.GrantRoleStmt;
+import com.starrocks.sql.ast.RevokePrivilegeStmt;
+import com.starrocks.sql.ast.RevokeRoleStmt;
 import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.sql.parser.NodePosition;
+import com.starrocks.utframe.UtFrameUtils;
 import mockit.Mock;
 import mockit.MockUp;
 import org.junit.jupiter.api.Assertions;
@@ -190,5 +198,129 @@ public class ExecuteAsExecutorTest {
         ExecuteAsExecutor.execute(executeAsStmt4, context);
         Assertions.assertEquals(Set.of(), context.getGroups());
         Assertions.assertEquals(Set.of(), context.getCurrentRoleIds());
+    }
+
+    @Test
+    public void testImpersonatePermissionWithRoleGroupUser() throws Exception {
+        ConnectContext context = new ConnectContext();
+
+        // Create roles
+        authorizationMgr.createRole(new CreateRoleStmt(List.of("impersonate_role"), true, ""));
+
+        // Create users
+        CreateUserStmt createUserStmt =
+                new CreateUserStmt(new UserIdentity("admin_user", "%"), true, null, List.of(), Map.of(), NodePosition.ZERO);
+        Analyzer.analyze(createUserStmt, context);
+        authenticationMgr.createUser(createUserStmt);
+
+        createUserStmt =
+                new CreateUserStmt(new UserIdentity("target_user", "%"), true, null, List.of(), Map.of(), NodePosition.ZERO);
+        Analyzer.analyze(createUserStmt, context);
+        authenticationMgr.createUser(createUserStmt);
+
+        createUserStmt =
+                new CreateUserStmt(new UserIdentity("group_user", "%"), true, null, List.of(), Map.of(), NodePosition.ZERO);
+        Analyzer.analyze(createUserStmt, context);
+        authenticationMgr.createUser(createUserStmt);
+
+        // Grant impersonate permission to role
+        GrantPrivilegeStmt grantStmt = (GrantPrivilegeStmt) UtFrameUtils.parseStmtWithNewParser(
+                "GRANT IMPERSONATE ON USER target_user TO ROLE impersonate_role",
+                new ConnectContext());
+        authorizationMgr.grant(grantStmt);
+
+        // Grant role to external group
+        GrantRoleStmt grantRoleStmt =
+                new GrantRoleStmt(List.of("impersonate_role"), "test_group", GrantType.GROUP, NodePosition.ZERO);
+        authorizationMgr.grantRole(grantRoleStmt);
+
+        // Set up LDAP group mapping for group_user to belong to test_group
+        LDAPGroupProvider ldapGroupProvider = (LDAPGroupProvider) authenticationMgr.getGroupProvider("ldap_group_provider");
+        Map<String, Set<String>> groups = new HashMap<>();
+        groups.put("group_user", Set.of("test_group"));
+        ldapGroupProvider.setUserToGroupCache(groups);
+
+        // Test 1: User with impersonate permission through role-group can execute as target user
+        AuthenticationHandler.authenticate(context, "group_user", "%", MysqlPassword.EMPTY_PASSWORD);
+
+        // Verify user has the role through group membership
+        long roleId = authorizationMgr.getRoleIdByNameAllowNull("impersonate_role");
+        Assertions.assertEquals(Set.of("test_group"), context.getGroups());
+        Assertions.assertEquals(Set.of(roleId), context.getCurrentRoleIds());
+
+        // Verify impersonate permission check passes
+        UserIdentity targetUser = new UserIdentity("target_user", "%");
+        try {
+            Authorizer.checkUserAction(context, targetUser, PrivilegeType.IMPERSONATE);
+            // If no exception is thrown, permission check passed
+        } catch (AccessDeniedException e) {
+            Assertions.fail("User should have impersonate permission through role-group membership");
+        }
+
+        // Execute as target user should succeed
+        ExecuteAsStmt executeAsStmt = new ExecuteAsStmt(new UserIdentity("target_user", "%"), false);
+        ExecuteAsExecutor.execute(executeAsStmt, context);
+        Assertions.assertEquals("target_user", context.getCurrentUserIdentity().getUser());
+
+        // Test 2: Revoke impersonate permission from role
+        RevokePrivilegeStmt revokeStmt = (RevokePrivilegeStmt) UtFrameUtils.parseStmtWithNewParser(
+                "REVOKE IMPERSONATE ON USER target_user FROM ROLE impersonate_role",
+                new ConnectContext());
+        authorizationMgr.revoke(revokeStmt);
+
+        // Re-authenticate to refresh context
+        AuthenticationHandler.authenticate(context, "group_user", "%", MysqlPassword.EMPTY_PASSWORD);
+
+        // Verify user still has the role through group membership
+        Assertions.assertEquals(Set.of("test_group"), context.getGroups());
+        Assertions.assertEquals(Set.of(roleId), context.getCurrentRoleIds());
+
+        // Verify impersonate permission check now fails
+        Assertions.assertThrows(AccessDeniedException.class,
+                () -> Authorizer.checkUserAction(context, targetUser, PrivilegeType.IMPERSONATE));
+
+        // Execute as target user should fail
+        Assertions.assertThrows(ErrorReportException.class, () -> Authorizer.check(executeAsStmt, context));
+
+        // Test 3: Grant impersonate permission back to role
+        grantStmt = (GrantPrivilegeStmt) UtFrameUtils.parseStmtWithNewParser(
+                "GRANT IMPERSONATE ON USER target_user TO ROLE impersonate_role",
+                new ConnectContext());
+        authorizationMgr.grant(grantStmt);
+
+        // Re-authenticate to refresh context
+        AuthenticationHandler.authenticate(context, "group_user", "%", MysqlPassword.EMPTY_PASSWORD);
+
+        // Verify impersonate permission check passes again
+        try {
+            Authorizer.checkUserAction(context, targetUser, PrivilegeType.IMPERSONATE);
+            // If no exception is thrown, permission check passed
+        } catch (AccessDeniedException e) {
+            Assertions.fail("User should have impersonate permission after re-granting to role");
+        }
+
+        // Execute as target user should succeed again
+        ExecuteAsExecutor.execute(executeAsStmt, context);
+        Assertions.assertEquals("target_user", context.getCurrentUserIdentity().getUser());
+
+        // Test 4: Revoke role from group
+        RevokeRoleStmt
+                revokeRoleStmt =
+                new RevokeRoleStmt(List.of("impersonate_role"), "test_group", GrantType.GROUP, NodePosition.ZERO);
+        authorizationMgr.revokeRole(revokeRoleStmt);
+
+        // Re-authenticate to refresh context
+        AuthenticationHandler.authenticate(context, "group_user", "%", MysqlPassword.EMPTY_PASSWORD);
+
+        // Verify user no longer has the role
+        Assertions.assertEquals(Set.of("test_group"), context.getGroups());
+        Assertions.assertEquals(Set.of(), context.getCurrentRoleIds());
+
+        // Verify impersonate permission check fails
+        Assertions.assertThrows(AccessDeniedException.class,
+                () -> Authorizer.checkUserAction(context, targetUser, PrivilegeType.IMPERSONATE));
+
+        // Execute as target user should fail
+        Assertions.assertThrows(ErrorReportException.class, () -> Authorizer.check(executeAsStmt, context));
     }
 }
