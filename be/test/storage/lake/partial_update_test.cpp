@@ -2605,10 +2605,10 @@ TEST_F(LakeColumnUpsertModeTest, test_handle_delete_files) {
 
         // Note: last column is op; create a separate slot map for chunk with ops
         Chunk::SlotHashMap ops_slot_map;
-        ops_slot_map[0] = 0; // c0 -> table column 0
-        ops_slot_map[1] = 1; // c1 -> table column 1
-        ops_slot_map[2] = 2; // c2 -> table column 2
-        ops_slot_map[3] = 3; // ops column -> slot 3
+        ops_slot_map[0] = 0;
+        ops_slot_map[1] = 1;
+        ops_slot_map[2] = 2;
+        ops_slot_map[3] = 3;
         Chunk chunk_with_ops({std::move(c0), std::move(c1), std::move(c2), std::move(cop)}, ops_slot_map);
         std::vector<uint32_t> idx(kChunkSize);
         for (int i = 0; i < kChunkSize; i++) idx[i] = i;
@@ -2618,7 +2618,7 @@ TEST_F(LakeColumnUpsertModeTest, test_handle_delete_files) {
         op_slots.emplace_back(0, "c0", TypeDescriptor{LogicalType::TYPE_INT});
         op_slots.emplace_back(1, "c1", TypeDescriptor{LogicalType::TYPE_INT});
         op_slots.emplace_back(2, "c2", TypeDescriptor{LogicalType::TYPE_INT});
-        op_slots.emplace_back(3, "__op", TypeDescriptor{LogicalType::TYPE_TINYINT}); // operation column
+        op_slots.emplace_back(3, "__op", TypeDescriptor{LogicalType::TYPE_TINYINT});
         std::vector<SlotDescriptor*> op_slot_pointers;
         for (auto& slot : op_slots) {
             op_slot_pointers.emplace_back(&slot);
@@ -2633,6 +2633,7 @@ TEST_F(LakeColumnUpsertModeTest, test_handle_delete_files) {
                                          .set_mem_tracker(_mem_tracker.get())
                                          .set_schema_id(_tablet_schema->id())
                                          .set_slot_descriptors(&op_slot_pointers)
+                                         .set_partial_update_mode(PartialUpdateMode::COLUMN_UPSERT_MODE)
                                          .build());
         ASSERT_OK(dw->open());
         ASSERT_OK(dw->write(chunk_with_ops, idx.data(), idx.size()));
