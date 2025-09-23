@@ -23,6 +23,7 @@
 #include "exec/olap_utils.h"
 #include "storage/chunk_helper.h"
 #include "storage/lake/tablet_reader.h"
+#include "storage/olap_define.h"
 #include "storage/range.h"
 #include "storage/rowset/rowid_range_option.h"
 #include "storage/rowset/rowset.h"
@@ -66,6 +67,10 @@ bool ScanMorsel::has_more_scan_ranges(const std::vector<TScanRangeParams>& scan_
         }
     }
     return has_more;
+}
+
+bool PhysicalSplitScanMorsel::can_reuse(ScanMorsel& other) {
+    return get_olap_scan_range()->tablet_id == other.get_olap_scan_range()->tablet_id;
 }
 
 void PhysicalSplitScanMorsel::init_tablet_reader_params(TabletReaderParams* params) {

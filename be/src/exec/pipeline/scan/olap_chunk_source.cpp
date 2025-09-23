@@ -42,6 +42,7 @@
 #include "storage/runtime_range_pruner.hpp"
 #include "storage/storage_engine.h"
 #include "storage/tablet_index.h"
+#include "storage/tablet_reader_params.h"
 #include "types/logical_type.h"
 #include "util/runtime_profile.h"
 #include "util/table_metrics.h"
@@ -100,6 +101,21 @@ Status OlapChunkSource::prepare(RuntimeState* state) {
     _init_counter(state);
 
     RETURN_IF_ERROR(_init_olap_reader(_runtime_state));
+
+    return Status::OK();
+}
+
+int64_t OlapChunkSource::tablet_id() const {
+    return _tablet->tablet_id();
+}
+
+Status OlapChunkSource::reuse(MorselPtr&& morsel) {
+    _morsel = std::move(morsel);
+
+    // update rowid_range in TabletReaderParams
+    _morsel->init_tablet_reader_params(&_params);
+    _params.reuse_chunk_source = true;
+    RETURN_IF_ERROR(_reader->reuse(_params));
 
     return Status::OK();
 }

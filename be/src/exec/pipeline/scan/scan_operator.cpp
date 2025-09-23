@@ -386,8 +386,8 @@ Status ScanOperator::_try_to_trigger_next_scan(RuntimeState* state) {
 
 void ScanOperator::_close_chunk_source_unlocked(RuntimeState* state, int chunk_source_index) {
     if (_chunk_sources[chunk_source_index] != nullptr) {
-        _chunk_sources[chunk_source_index]->close(state);
-        _chunk_sources[chunk_source_index] = nullptr;
+        // _chunk_sources[chunk_source_index]->close(state);
+        // _chunk_sources[chunk_source_index] = nullptr;
         detach_chunk_source(chunk_source_index);
     }
 }
@@ -595,12 +595,28 @@ Status ScanOperator::_pickup_morsel(RuntimeState* state, int chunk_source_index)
 
         {
             SCOPED_TIMER(_prepare_chunk_source_timer);
-            _chunk_sources[chunk_source_index] = create_chunk_source(std::move(morsel), chunk_source_index);
-            auto status = _chunk_sources[chunk_source_index]->prepare(state);
-            if (!status.ok()) {
-                _chunk_sources[chunk_source_index] = nullptr;
-                static_cast<void>(set_finishing(state));
-                return status;
+            auto& source_ref = _chunk_sources[chunk_source_index];
+            // FIXME: check if it's the same tablet
+            if (source_ref != nullptr) {
+                bool can_reuse = source_ref->get_morsel()->can_reuse(*morsel);
+                if (can_reuse) {
+                    Status st = source_ref->reuse(std::move(morsel));
+                    DCHECK(st.ok()) << st.message();
+                    VLOG(2) << "reuse chunk_source success";
+                } else {
+                    source_ref->close(state);
+                    source_ref = nullptr;
+                }
+            }
+
+            if (source_ref == nullptr) {
+                source_ref = create_chunk_source(std::move(morsel), chunk_source_index);
+                auto status = source_ref->prepare(state);
+                if (!status.ok()) {
+                    source_ref = nullptr;
+                    static_cast<void>(set_finishing(state));
+                    return status;
+                }
             }
         }
 
