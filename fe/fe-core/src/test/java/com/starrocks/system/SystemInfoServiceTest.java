@@ -324,7 +324,7 @@ public class SystemInfoServiceTest {
         cn.setStarletPort(1001);
         service.dropComputeNode("newHost", 1000, "", "");
         ComputeNode cnIP = service.getComputeNodeWithHeartbeatPort("newHost", 1000);
-        Assertions.assertTrue(cnIP == null);
+        Assertions.assertNull(cnIP);
 
         {
             Assertions.assertThrows(DdlException.class, () ->
