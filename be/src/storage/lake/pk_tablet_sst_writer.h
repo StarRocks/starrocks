@@ -45,7 +45,7 @@ class PkTabletSSTWriter : public DefaultSSTWriter {
 public:
     PkTabletSSTWriter(const TabletSchemaCSPtr& tablet_schema_ptr, TabletManager* tablet_mgr, int64_t tablet_id)
             : _tablet_schema_ptr(tablet_schema_ptr), _tablet_mgr(tablet_mgr), _tablet_id(tablet_id) {}
-    virtual ~PkTabletSSTWriter() = default;
+    ~PkTabletSSTWriter() override = default;
     Status append_sst_record(const Chunk& data) override;
     Status reset_sst_writer(const std::shared_ptr<LocationProvider>& location_provider,
                             const std::shared_ptr<FileSystem>& fs) override;
