@@ -90,7 +90,7 @@ public class ExecuteAsExecutor {
             ctx.setGroups(groups);
 
             // Refresh current role IDs based on user + groups
-            ctx.setCurrentRoleIds(userIdentity);
+            ctx.setCurrentRoleIds(userIdentity, groups);
 
             LOG.info("Refreshed groups {} and roles for user {}", groups, userIdentity);
         } catch (Exception e) {

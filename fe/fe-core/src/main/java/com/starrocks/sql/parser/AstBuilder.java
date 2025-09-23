@@ -6755,6 +6755,18 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
     }
 
     @Override
+    public ParseNode visitGrantRoleToGroup(StarRocksParser.GrantRoleToGroupContext context) {
+        List<String> roleNameList = new ArrayList<>();
+        for (StarRocksParser.IdentifierOrStringContext oneContext : context.identifierOrStringList()
+                .identifierOrString()) {
+            roleNameList.add(((Identifier) visit(oneContext)).getValue());
+        }
+
+        return new GrantRoleStmt(roleNameList, ((Identifier) visit(context.identifierOrString())).getValue(),
+                GrantType.GROUP, createPos(context));
+    }
+
+    @Override
     public ParseNode visitGrantRoleToRole(com.starrocks.sql.parser.StarRocksParser.GrantRoleToRoleContext context) {
         List<String> roleNameList = new ArrayList<>();
         for (com.starrocks.sql.parser.StarRocksParser.IdentifierOrStringContext oneContext : context.identifierOrStringList()
@@ -6775,6 +6787,18 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
         }
 
         return new RevokeRoleStmt(roleNameList, (UserRef) visit(context.user()), createPos(context));
+    }
+
+    @Override
+    public ParseNode visitRevokeRoleFromGroup(StarRocksParser.RevokeRoleFromGroupContext context) {
+        List<String> roleNameList = new ArrayList<>();
+        for (StarRocksParser.IdentifierOrStringContext oneContext : context.identifierOrStringList()
+                .identifierOrString()) {
+            roleNameList.add(((Identifier) visit(oneContext)).getValue());
+        }
+
+        return new RevokeRoleStmt(roleNameList, ((Identifier) visit(context.identifierOrString())).getValue(),
+                GrantType.GROUP, createPos(context));
     }
 
     @Override
@@ -6840,6 +6864,9 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
         if (context.ROLE() != null) {
             Identifier role = (Identifier) visit(context.identifierOrString());
             return new ShowGrantsStmt(role.getValue(), GrantType.ROLE, pos);
+        } else if (context.GROUP() != null) {
+            Identifier group = (Identifier) visit(context.identifierOrString());
+            return new ShowGrantsStmt(group.getValue(), GrantType.GROUP, pos);
         } else {
             UserRef userId = context.user() == null ? null : (UserRef) visit(context.user());
             return new ShowGrantsStmt(userId, pos);
