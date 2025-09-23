@@ -54,12 +54,15 @@ public:
     void append(const VariantValue* object);
     void append(VariantValue&& object);
     void append(const VariantValue& object);
+    bool append_nulls(size_t count) override;
 
     bool is_variant() const override { return true; }
 
     std::string get_name() const override { return "variant"; }
 
     void put_mysql_row_buffer(MysqlRowBuffer* buf, size_t idx, bool is_binary_protocol = false) const override;
+
+    std::string debug_item(size_t idx) const override;
 };
 
 } // namespace starrocks

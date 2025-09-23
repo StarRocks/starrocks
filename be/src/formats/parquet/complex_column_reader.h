@@ -15,6 +15,8 @@
 #pragma once
 
 #include "formats/parquet/column_reader.h"
+#include "scalar_column_reader.h"
+#include "stored_column_reader.h"
 
 namespace starrocks::parquet {
 
@@ -244,6 +246,59 @@ private:
     std::map<std::string, ColumnReaderPtr> _child_readers;
     // First non-nullptr child ColumnReader, used to get def & rep levels
     const std::unique_ptr<ColumnReader>* _def_rep_level_child_reader = nullptr;
+};
+
+// VariantColumnReader handles the reading of Parquet columns that represent variant types.
+// It uses two ScalarColumnReader instances: one for reading metadata (type information)
+// and another for reading the actual variant values.
+class VariantColumnReader final : public ColumnReader {
+public:
+    // Constructor that accepts pre-built ScalarColumnReader objects
+    explicit VariantColumnReader(const ParquetField* parquet_field,
+                                std::unique_ptr<ScalarColumnReader>&& metadata_reader,
+                                std::unique_ptr<ScalarColumnReader>&& value_reader)
+            : ColumnReader(parquet_field),
+              _metadata_reader(std::move(metadata_reader)),
+              _value_reader(std::move(value_reader)) {
+        // Both readers must be non-null for VariantColumnReader to function correctly
+        DCHECK(_metadata_reader != nullptr) << "VariantColumnReader: metadata reader cannot be null";
+        DCHECK(_value_reader != nullptr) << "VariantColumnReader: value reader cannot be null";
+    }
+
+    ~VariantColumnReader() override = default;
+
+    Status prepare() override {
+        RETURN_IF_ERROR(_metadata_reader->prepare());
+        RETURN_IF_ERROR(_value_reader->prepare());
+        return Status::OK();
+    }
+
+    Status read_range(const Range<uint64_t>& range, const Filter* filter, ColumnPtr& dst) override;
+
+    void get_levels(level_t** def_levels, level_t** rep_levels, size_t* num_levels) override {
+        // Use value reader to get levels since it determines nullability
+        _value_reader->get_levels(def_levels, rep_levels, num_levels);
+    }
+
+    void set_need_parse_levels(bool need_parse_levels) override {
+        _metadata_reader->set_need_parse_levels(need_parse_levels);
+        _value_reader->set_need_parse_levels(need_parse_levels);
+    }
+
+    void collect_column_io_range(std::vector<io::SharedBufferedInputStream::IORange>* ranges, int64_t* end_offset,
+                                 ColumnIOTypeFlags types, bool active) override {
+        _metadata_reader->collect_column_io_range(ranges, end_offset, types, active);
+        _value_reader->collect_column_io_range(ranges, end_offset, types, active);
+    }
+
+    void select_offset_index(const SparseRange<uint64_t>& range, const uint64_t rg_first_row) override {
+        _metadata_reader->select_offset_index(range, rg_first_row);
+        _value_reader->select_offset_index(range, rg_first_row);
+    }
+
+private:
+    std::unique_ptr<ScalarColumnReader> _metadata_reader;
+    std::unique_ptr<ScalarColumnReader> _value_reader;
 };
 
 } // namespace starrocks::parquet
