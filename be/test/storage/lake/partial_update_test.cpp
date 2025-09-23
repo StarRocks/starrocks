@@ -2684,7 +2684,7 @@ TEST_F(LakeColumnUpsertModeTest, test_handle_delete_files) {
 }
 
 // Test bundle file offsets and encryption handling in column mode partial update
-TEST_F(LakePartialUpdateTest, test_bundle_files_and_encryption_handling) {
+TEST_F(LakeColumnUpsertModeTest, test_bundle_files_and_encryption_handling) {
     // Enable TDE for this test
     const bool old_enable_tde = config::enable_transparent_data_encryption;
     config::enable_transparent_data_encryption = true;
@@ -2807,14 +2807,6 @@ TEST_F(LakePartialUpdateTest, test_bundle_files_and_encryption_handling) {
         // Manually modify the txn log to add bundle file offsets and encryption metas
         ASSIGN_OR_ABORT(auto original_txn_log, _tablet_mgr->get_txn_log(tablet_id, txn_id));
         auto new_txn_log = std::make_shared<TxnLogPB>(*original_txn_log);
-        auto* rowset = new_txn_log->mutable_op_write()->mutable_rowset();
-
-        // Add fake bundle file offsets
-        rowset->add_bundle_file_offsets(0); // First segment at offset 0 (not bundled)
-        rowset->add_segment_size(1024);     // Fake segment size
-
-        // Add encryption meta for TDE
-        rowset->add_segment_encryption_metas("fake_encryption_meta");
 
         // Add column-to-expr-value override for c2
         auto* column_to_expr_value =
@@ -2873,7 +2865,7 @@ TEST_F(LakePartialUpdateTest, test_bundle_files_and_encryption_handling) {
 }
 
 // Test default value handling and null column filling
-TEST_F(LakePartialUpdateTest, test_default_value_and_null_handling) {
+TEST_F(LakeColumnUpsertModeTest, test_default_value_and_null_handling) {
     auto tablet_metadata = std::make_shared<TabletMetadataPB>();
     tablet_metadata->set_id(next_id());
     tablet_metadata->set_version(1);
