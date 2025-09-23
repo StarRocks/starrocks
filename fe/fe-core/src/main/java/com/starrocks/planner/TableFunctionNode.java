@@ -117,4 +117,9 @@ public class TableFunctionNode extends PlanNode {
     public List<Integer> getOuterSlots() {
         return outerSlots;
     }
+
+    @VisibleForTesting
+    public TableFunction getTableFunction() {
+        return tableFunction;
+    }
 }
