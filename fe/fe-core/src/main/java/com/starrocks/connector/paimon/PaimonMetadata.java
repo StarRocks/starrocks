@@ -49,6 +49,7 @@ import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
 import com.starrocks.sql.optimizer.statistics.Statistics;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+import org.apache.paimon.CoreOptions;
 import org.apache.paimon.catalog.CachingCatalog;
 import org.apache.paimon.catalog.Catalog;
 import org.apache.paimon.catalog.Identifier;
@@ -154,6 +155,7 @@ public class PaimonMetadata implements ConnectorMetadata {
 
         try {
             List<org.apache.paimon.partition.Partition> partitions = paimonNativeCatalog.listPartitions(identifier);
+            String partitionLegacyName = paimonTable.options().get(CoreOptions.PARTITION_GENERATE_LEGCY_NAME);
             for (org.apache.paimon.partition.Partition partition : partitions) {
                 String partitionPath = PartitionPathUtils.generatePartitionPath(partition.spec(), dataTableRowType);
                 String[] partitionValues = Arrays.stream(partitionPath.split("/"))
@@ -162,7 +164,8 @@ public class PaimonMetadata implements ConnectorMetadata {
                 Partition srPartition = getPartition(partition.recordCount(),
                         partition.fileSizeInBytes(), partition.fileCount(),
                         partitionColumnNames, partitionColumnTypes, partitionValues,
-                        Timestamp.fromEpochMillis(partition.lastFileCreationTime()));
+                        Timestamp.fromEpochMillis(partition.lastFileCreationTime()),
+                        partitionLegacyName);
                 this.partitionInfos.put(srPartition.getPartitionName(), srPartition);
             }
         } catch (Catalog.TableNotExistException e) {
@@ -176,7 +179,8 @@ public class PaimonMetadata implements ConnectorMetadata {
                                    List<String> partitionColumnNames,
                                    List<DataType> partitionColumnTypes,
                                    String[] partitionValues,
-                                   Timestamp lastUpdateTime) {
+                                   Timestamp lastUpdateTime,
+                                   String partitionLegacyName) {
         if (partitionValues.length != partitionColumnNames.size()) {
             String errorMsg = String.format("The length of partitionValues %s is not equal to " +
                     "the partitionColumnNames %s.", partitionValues.length, partitionColumnNames.size());
@@ -188,7 +192,9 @@ public class PaimonMetadata implements ConnectorMetadata {
             String column = partitionColumnNames.get(i);
             String value = partitionValues[i].trim();
             if (partitionColumnTypes.get(i) instanceof DateType) {
-                value = DateTimeUtils.formatDate(Integer.parseInt(value));
+                if (!"false".equals(partitionLegacyName)) {
+                    value = DateTimeUtils.formatDate(Integer.parseInt(value));
+                }
             }
             sb.append(column).append("=").append(value);
             sb.append("/");
