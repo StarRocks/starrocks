@@ -1180,6 +1180,7 @@ public class NodeMgr {
         frontends.clear();
         frontendIds.clear();
 
+        frontend.setAlive(true);
         frontends.put(frontend.getNodeName(), frontend);
         frontendIds.put(frontend.getFid(), frontend);
         // reset helper nodes

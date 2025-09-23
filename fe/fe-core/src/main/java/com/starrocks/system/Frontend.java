@@ -72,7 +72,6 @@ public class Frontend extends JsonWriter {
     private String heartbeatErrMsg = "";
     private String feVersion;
 
-    @SerializedName("alive")
     private boolean isAlive = false;
 
     private int heartbeatRetryTimes = 0;
