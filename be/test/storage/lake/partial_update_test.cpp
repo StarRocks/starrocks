@@ -2683,4 +2683,330 @@ TEST_F(LakeColumnUpsertModeTest, test_handle_delete_files) {
     }
 }
 
+// Test bundle file offsets and encryption handling in column mode partial update
+TEST_F(LakePartialUpdateTest, test_bundle_files_and_encryption_handling) {
+    // Enable TDE for this test
+    const bool old_enable_tde = config::enable_transparent_data_encryption;
+    config::enable_transparent_data_encryption = true;
+    DeferOp tde_defer([&]() { config::enable_transparent_data_encryption = old_enable_tde; });
+
+    auto tablet_metadata = std::make_shared<TabletMetadataPB>();
+    tablet_metadata->set_id(next_id());
+    tablet_metadata->set_version(1);
+    tablet_metadata->set_next_rowset_id(1);
+
+    // Schema with default values
+    auto schema = tablet_metadata->mutable_schema();
+    schema->set_id(next_id());
+    schema->set_num_short_key_columns(1);
+    schema->set_keys_type(PRIMARY_KEYS);
+    schema->set_num_rows_per_row_block(65535);
+
+    auto c0 = schema->add_column();
+    c0->set_unique_id(next_id());
+    c0->set_name("c0");
+    c0->set_type("INT");
+    c0->set_is_key(true);
+    c0->set_is_nullable(false);
+
+    auto c1 = schema->add_column();
+    c1->set_unique_id(next_id());
+    c1->set_name("c1");
+    c1->set_type("INT");
+    c1->set_is_key(false);
+    c1->set_is_nullable(true);
+    c1->set_aggregation("REPLACE");
+    c1->set_default_value("100");
+
+    auto c2 = schema->add_column();
+    c2->set_unique_id(next_id());
+    c2->set_name("c2");
+    c2->set_type("INT");
+    c2->set_is_key(false);
+    c2->set_is_nullable(true);
+    c2->set_aggregation("REPLACE");
+
+    auto tablet_schema = TabletSchema::create(*schema);
+    CHECK_OK(_tablet_mgr->put_tablet_metadata(*tablet_metadata));
+
+    auto tablet_id = tablet_metadata->id();
+    auto version = 1;
+
+    // Create some initial data
+    std::vector<int> v0 = {1, 2, 3};
+    std::vector<int> v1 = {10, 20, 30};
+    std::vector<int> v2 = {40, 50, 60};
+
+    auto c0_col = Int32Column::create();
+    auto c1_col = Int32Column::create();
+    auto c2_col = Int32Column::create();
+    c0_col->append_numbers(v0.data(), v0.size() * sizeof(int));
+    c1_col->append_numbers(v1.data(), v1.size() * sizeof(int));
+    c2_col->append_numbers(v2.data(), v2.size() * sizeof(int));
+
+    Chunk::SlotHashMap slot_map;
+    slot_map[0] = 0;
+    slot_map[1] = 1;
+    slot_map[2] = 2;
+    auto chunk_full = Chunk({std::move(c0_col), std::move(c1_col), std::move(c2_col)}, slot_map);
+
+    auto indexes = std::vector<uint32_t>{0, 1, 2};
+
+    // Initial full write
+    {
+        auto txn_id = next_id();
+        ASSIGN_OR_ABORT(auto delta_writer, DeltaWriterBuilder()
+                                                   .set_tablet_manager(_tablet_mgr.get())
+                                                   .set_tablet_id(tablet_id)
+                                                   .set_txn_id(txn_id)
+                                                   .set_partition_id(_partition_id)
+                                                   .set_mem_tracker(_mem_tracker.get())
+                                                   .set_schema_id(_tablet_schema->id())
+                                                   .build());
+        ASSERT_OK(delta_writer->open());
+        ASSERT_OK(delta_writer->write(chunk_full, indexes.data(), indexes.size()));
+        ASSERT_OK(delta_writer->finish_with_txnlog());
+        delta_writer->close();
+        ASSERT_OK(publish_single_version(tablet_id, version + 1, txn_id).status());
+        version++;
+    }
+
+    // Column mode partial update - adding new rows with expression override
+    std::vector<int> new_keys = {4, 5};
+    auto c0_partial = Int32Column::create();
+    c0_partial->append_numbers(new_keys.data(), new_keys.size() * sizeof(int));
+
+    Chunk::SlotHashMap partial_slot_map;
+    partial_slot_map[0] = 0;
+    auto chunk_partial = Chunk({std::move(c0_partial)}, partial_slot_map);
+
+    std::vector<SlotDescriptor> slots;
+    slots.emplace_back(0, "c0", TypeDescriptor{LogicalType::TYPE_INT});
+    std::vector<SlotDescriptor*> slot_pointers;
+    slot_pointers.emplace_back(&slots[0]);
+
+    auto indexes_partial = std::vector<uint32_t>{0, 1};
+
+    {
+        auto txn_id = next_id();
+        ASSIGN_OR_ABORT(auto delta_writer, DeltaWriterBuilder()
+                                                   .set_tablet_manager(_tablet_mgr.get())
+                                                   .set_tablet_id(tablet_id)
+                                                   .set_txn_id(txn_id)
+                                                   .set_partition_id(_partition_id)
+                                                   .set_mem_tracker(_mem_tracker.get())
+                                                   .set_schema_id(_tablet_schema->id())
+                                                   .set_slot_descriptors(&slot_pointers)
+                                                   .set_partial_update_mode(PartialUpdateMode::COLUMN_UPSERT_MODE)
+                                                   .build());
+        ASSERT_OK(delta_writer->open());
+        ASSERT_OK(delta_writer->write(chunk_partial, indexes_partial.data(), indexes_partial.size()));
+        ASSERT_OK(delta_writer->finish_with_txnlog());
+        delta_writer->close();
+
+        // Manually modify the txn log to add bundle file offsets and encryption metas
+        ASSIGN_OR_ABORT(auto original_txn_log, _tablet_mgr->get_txn_log(tablet_id, txn_id));
+        auto new_txn_log = std::make_shared<TxnLogPB>(*original_txn_log);
+        auto* rowset = new_txn_log->mutable_op_write()->mutable_rowset();
+
+        // Add fake bundle file offsets
+        rowset->add_bundle_file_offsets(0); // First segment at offset 0 (not bundled)
+        rowset->add_segment_size(1024);     // Fake segment size
+
+        // Add encryption meta for TDE
+        rowset->add_segment_encryption_metas("fake_encryption_meta");
+
+        // Add column-to-expr-value override for c2
+        auto* column_to_expr_value =
+                new_txn_log->mutable_op_write()->mutable_txn_meta()->mutable_column_to_expr_value();
+        (*column_to_expr_value)["c2"] = "200";
+
+        ASSERT_OK(_tablet_mgr->put_txn_log(new_txn_log));
+
+        ASSERT_OK(publish_single_version(tablet_id, version + 1, txn_id).status());
+        version++;
+    }
+
+    // Verify results - new rows should have default value for c1 but expression value for c2
+    ASSIGN_OR_ABORT(auto metadata, _tablet_mgr->get_tablet_metadata(tablet_id, version));
+    auto reader_schema = std::make_shared<Schema>(ChunkHelper::convert_schema(tablet_schema));
+    auto reader = std::make_shared<TabletReader>(_tablet_mgr.get(), metadata, *reader_schema);
+    ASSERT_OK(reader->prepare());
+    ASSERT_OK(reader->open(TabletReaderParams()));
+    auto result_chunk = ChunkHelper::new_chunk(*reader_schema, 128);
+
+    int total_rows = 0;
+    bool found_new_rows = false;
+
+    while (true) {
+        auto st = reader->get_next(result_chunk.get());
+        if (st.is_end_of_file()) {
+            break;
+        }
+        CHECK_OK(st);
+        total_rows += result_chunk->num_rows();
+
+        auto cols = result_chunk->columns();
+        for (int i = 0; i < result_chunk->num_rows(); i++) {
+            auto c0_val = cols[0]->get(i).get_int32();
+            auto c1_datum = cols[1]->get(i);
+            auto c2_datum = cols[2]->get(i);
+
+            // Check if this is one of the new rows
+            if (c0_val == 4 || c0_val == 5) {
+                if (!c1_datum.is_null()) {
+                    auto c1_val = c1_datum.get_int32();
+                    EXPECT_EQ(100, c1_val); // Should have default value
+                }
+                if (!c2_datum.is_null()) {
+                    auto c2_val = c2_datum.get_int32();
+                    EXPECT_EQ(200, c2_val); // Should have expression override value
+                }
+                found_new_rows = true;
+            }
+        }
+        result_chunk->reset();
+    }
+
+    EXPECT_TRUE(found_new_rows);
+    EXPECT_EQ(5, total_rows);
+}
+
+// Test default value handling and null column filling
+TEST_F(LakePartialUpdateTest, test_default_value_and_null_handling) {
+    auto tablet_metadata = std::make_shared<TabletMetadataPB>();
+    tablet_metadata->set_id(next_id());
+    tablet_metadata->set_version(1);
+    tablet_metadata->set_next_rowset_id(1);
+
+    // Schema with various default scenarios
+    auto schema = tablet_metadata->mutable_schema();
+    schema->set_id(next_id());
+    schema->set_num_short_key_columns(1);
+    schema->set_keys_type(PRIMARY_KEYS);
+    schema->set_num_rows_per_row_block(65535);
+
+    auto c0 = schema->add_column();
+    c0->set_unique_id(next_id());
+    c0->set_name("c0");
+    c0->set_type("INT");
+    c0->set_is_key(true);
+    c0->set_is_nullable(false);
+
+    // Column with default value
+    auto c1 = schema->add_column();
+    c1->set_unique_id(next_id());
+    c1->set_name("c1");
+    c1->set_type("INT");
+    c1->set_is_key(false);
+    c1->set_is_nullable(true);
+    c1->set_aggregation("REPLACE");
+    c1->set_default_value("100");
+
+    // Nullable column without default (should get null)
+    auto c2 = schema->add_column();
+    c2->set_unique_id(next_id());
+    c2->set_name("c2");
+    c2->set_type("INT");
+    c2->set_is_key(false);
+    c2->set_is_nullable(true);
+    c2->set_aggregation("REPLACE");
+
+    // Non-nullable column without default (should get type default)
+    auto c3 = schema->add_column();
+    c3->set_unique_id(next_id());
+    c3->set_name("c3");
+    c3->set_type("INT");
+    c3->set_is_key(false);
+    c3->set_is_nullable(false);
+    c3->set_aggregation("REPLACE");
+
+    auto tablet_schema = TabletSchema::create(*schema);
+    CHECK_OK(_tablet_mgr->put_tablet_metadata(*tablet_metadata));
+
+    auto tablet_id = tablet_metadata->id();
+    auto version = 1;
+
+    // Column upsert with only primary key - should trigger all default handling paths
+    std::vector<int> new_keys = {1, 2};
+    auto c0_partial = Int32Column::create();
+    c0_partial->append_numbers(new_keys.data(), new_keys.size() * sizeof(int));
+
+    Chunk::SlotHashMap partial_slot_map;
+    partial_slot_map[0] = 0;
+    auto chunk_partial = Chunk({std::move(c0_partial)}, partial_slot_map);
+
+    std::vector<SlotDescriptor> slots;
+    slots.emplace_back(0, "c0", TypeDescriptor{LogicalType::TYPE_INT});
+    std::vector<SlotDescriptor*> slot_pointers;
+    slot_pointers.emplace_back(&slots[0]);
+
+    auto indexes_partial = std::vector<uint32_t>{0, 1};
+
+    {
+        auto txn_id = next_id();
+        ASSIGN_OR_ABORT(auto delta_writer, DeltaWriterBuilder()
+                                                   .set_tablet_manager(_tablet_mgr.get())
+                                                   .set_tablet_id(tablet_id)
+                                                   .set_txn_id(txn_id)
+                                                   .set_partition_id(_partition_id)
+                                                   .set_mem_tracker(_mem_tracker.get())
+                                                   .set_schema_id(_tablet_schema->id())
+                                                   .set_slot_descriptors(&slot_pointers)
+                                                   .set_partial_update_mode(PartialUpdateMode::COLUMN_UPSERT_MODE)
+                                                   .build());
+        ASSERT_OK(delta_writer->open());
+        ASSERT_OK(delta_writer->write(chunk_partial, indexes_partial.data(), indexes_partial.size()));
+        ASSERT_OK(delta_writer->finish_with_txnlog());
+        delta_writer->close();
+        ASSERT_OK(publish_single_version(tablet_id, version + 1, txn_id).status());
+        version++;
+    }
+
+    // Verify default value handling
+    ASSIGN_OR_ABORT(auto metadata, _tablet_mgr->get_tablet_metadata(tablet_id, version));
+    auto reader_schema = std::make_shared<Schema>(ChunkHelper::convert_schema(tablet_schema));
+    auto reader = std::make_shared<TabletReader>(_tablet_mgr.get(), metadata, *reader_schema);
+    ASSERT_OK(reader->prepare());
+    ASSERT_OK(reader->open(TabletReaderParams()));
+    auto result_chunk = ChunkHelper::new_chunk(*reader_schema, 128);
+
+    int total_rows = 0;
+    bool found_correct_defaults = false;
+
+    while (true) {
+        auto st = reader->get_next(result_chunk.get());
+        if (st.is_end_of_file()) {
+            break;
+        }
+        CHECK_OK(st);
+        total_rows += result_chunk->num_rows();
+
+        auto cols = result_chunk->columns();
+        for (int i = 0; i < result_chunk->num_rows(); i++) {
+            auto c0_val = cols[0]->get(i).get_int32();
+            auto c1_datum = cols[1]->get(i);
+            auto c2_datum = cols[2]->get(i);
+            auto c3_datum = cols[3]->get(i);
+
+            if (c0_val == 1 || c0_val == 2) {
+                // c1 has default value
+                if (!c1_datum.is_null()) {
+                    EXPECT_EQ(100, c1_datum.get_int32());
+                }
+                // c2 is nullable without default - should be null
+                EXPECT_TRUE(c2_datum.is_null());
+                // c3 is non-nullable without default - should get type default (0)
+                EXPECT_FALSE(c3_datum.is_null());
+                EXPECT_EQ(0, c3_datum.get_int32());
+                found_correct_defaults = true;
+            }
+        }
+        result_chunk->reset();
+    }
+
+    EXPECT_TRUE(found_correct_defaults);
+    EXPECT_EQ(2, total_rows);
+}
+
 } // namespace starrocks::lake
