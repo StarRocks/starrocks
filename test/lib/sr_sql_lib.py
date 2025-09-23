@@ -2774,3 +2774,321 @@ out.append("${{dictMgr.NO_DICT_STRING_COLUMNS.contains(cid)}}")
             return True
 
         return False
+<<<<<<< HEAD
+=======
+
+    def get_transaction_meta(self, db_name, label, column_separator, *column_names):
+        """
+        Get transaction metadata by label and column names.
+        :param db_name: database name
+        :param label: transaction label
+        :param column_separator: separator for concatenating column values
+        :param column_names: column names to retrieve
+        :return: concatenated column values or error message if not found
+        """
+        # Column name to index mapping based on show proc output
+        column_mapping = {
+            'TransactionId': 0,
+            'Label': 1,
+            'Coordinator': 2,
+            'TransactionStatus': 3,
+            'LoadJobSourceType': 4,
+            'PrepareTime': 5,
+            'PreparedTime': 6,
+            'CommitTime': 7,
+            'PublishTime': 8,
+            'FinishTime': 9,
+            'Reason': 10,
+            'ErrorReplicasCount': 11,
+            'ListenerId': 12,
+            'TimeoutMs': 13,
+            'PreparedTimeoutMs': 14,
+            'ErrMsg': 15
+        }
+        
+        sql = f"show proc '/transactions/{db_name}/finished'"
+        log.info(f"Executing SQL: {sql}")
+        result = self.execute_sql(sql, True)
+        
+        if not result["status"]:
+            error_msg = f"Failed to execute SQL: {result}"
+            log.error(error_msg)
+            return error_msg
+            
+        if "result" not in result or len(result["result"]) == 0:
+            error_msg = f"No transactions found in database {db_name}"
+            log.info(error_msg)
+            return error_msg
+            
+        log.info(f"Found {len(result['result'])} transactions in database {db_name}")
+        
+        # Find the row matching the label
+        target_row = None
+        for row in result["result"]:
+            if len(row) > 1 and row[1] == label:  # Label is at index 1
+                target_row = row
+                log.info(f"Found transaction with label '{label}'")
+                break
+                
+        if target_row is None:
+            error_msg = f"No transaction found with label '{label}' in database {db_name}"
+            log.info(error_msg)
+            return error_msg
+            
+        # Extract column values
+        column_values = []
+        for column_name in column_names:
+            if column_name not in column_mapping:
+                error_msg = f"Unknown column name: {column_name}"
+                log.error(error_msg)
+                return error_msg
+                
+            column_index = column_mapping[column_name]
+            if column_index >= len(target_row):
+                error_msg = f"Column index {column_index} out of range for column {column_name}"
+                log.error(error_msg)
+                return error_msg
+                
+            column_values.append(str(target_row[column_index]))
+            log.info(f"Column {column_name} = {target_row[column_index]}")
+            
+        result_str = column_separator.join(column_values)
+        log.info(f"Final result: {result_str}")
+        return result_str
+
+    def get_timestamp_ms(self):
+        """
+        Get current timestamp in milliseconds
+        """
+        import time
+        timestamp_ms = int(time.time() * 1000)
+        # print(f"Generated timestamp: {timestamp_ms}")
+        return timestamp_ms
+
+    def get_last_query_id(self):
+        """
+        Get the query_id of the last query
+        """
+        sql = "select last_query_id()"
+        result = self.execute_sql(sql, True)
+
+        if not result["status"]:
+            # print(f"Failed to get last query id: {result}")
+            return None
+
+        if "result" not in result or len(result["result"]) == 0:
+            # print("No query id found")
+            return None
+
+        query_id = result["result"][0][0]
+        # print(f"Last query id: {query_id}")
+        return query_id
+
+    def get_query_detail_by_api(self, timestamp_ms, query_id):
+        """
+        Get query detail information through API
+        """
+        import json
+        import subprocess
+
+        # Build API URL and curl command
+        api_url = f"http://{self.mysql_host}:{self.http_port}/api/query_detail?event_time={timestamp_ms}"
+        # print(f"API URL: {api_url}")
+        # print(f"Looking for query_id: {query_id}")
+
+        try:
+            # Use curl command to send HTTP request
+            cmd = f"curl -s --location-trusted -u {self.mysql_user}:{self.mysql_password} '{api_url}'"
+            # print(f"Curl command: {cmd}")
+
+            result = subprocess.run(
+                cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, encoding="utf-8", timeout=30, shell=True
+            )
+
+            if result.returncode != 0:
+                # print(
+                #     f"Curl command failed with return code {result.returncode}")
+                # print(f"Stderr: {result.stderr}")
+                return None
+
+            if not result.stdout.strip():
+                # print("Empty response from API")
+                return None
+
+            # print(f"Raw API response: {result.stdout[:500]}...")  # Only show first 500 characters
+
+            query_details = json.loads(result.stdout)
+            # print(f"Retrieved {len(query_details)} query details")
+            # print(
+            #     f"Available query_ids: {[detail.get('queryId') for detail in query_details]}")
+
+            # Find matching query_id, prioritize records with FINISHED state
+            finished_detail = None
+            other_detail = None
+
+            for detail in query_details:
+                if detail.get("queryId") == query_id:
+                    state = detail.get("state", "")
+                    # print(
+                    #     f"Found query detail for query_id: {query_id}, state: {state}")
+                    if state == "FINISHED":
+                        finished_detail = detail
+                    else:
+                        other_detail = detail
+
+            # Return FINISHED state record first, otherwise return other state record
+            if finished_detail:
+                # print(f"Using FINISHED query detail for query_id: {query_id}")
+                return finished_detail
+            elif other_detail:
+                # print(
+                #     f"Using non-FINISHED query detail for query_id: {query_id}, state: {other_detail.get('state')}")
+                return other_detail
+            else:
+                # print(f"No query detail found for query_id: {query_id}")
+                # print(
+                #     f"Available query_ids: {[detail.get('queryId') for detail in query_details]}")
+                return None
+
+        except json.JSONDecodeError as e:
+            # print(f"Failed to parse JSON response: {e}")
+            # print(
+            #     f"Response: {result.stdout if 'result' in locals() else 'No response'}")
+            return None
+        except Exception as e:
+            # print(f"Failed to get query detail: {e}")
+            # print(f"API URL: {api_url}")
+            # print(f"Query ID: {query_id}")
+            return None
+
+    def assert_query_detail_field(self, query_detail, field_name, expected_value=None):
+        """
+        Validate field values in query detail
+        """
+        if query_detail is None:
+            # print("Query detail is None")
+            return False
+
+        if field_name not in query_detail:
+            # print(f"Field {field_name} not found in query detail")
+            return False
+
+        actual_value = query_detail[field_name]
+        # print(f"Field {field_name}: {actual_value}")
+
+        if expected_value is not None:
+            if actual_value != expected_value:
+                # print(
+                #     f"Field {field_name} mismatch: expected {expected_value}, got {actual_value}")
+                return False
+
+        return True
+
+    def query_detail_check(self, sql=None, expected_scan_rows=None, expected_return_rows=None):
+        """
+        Comprehensive function to test query detail API using assertions to validate results
+        
+        Args:
+            sql: SQL statement to execute
+            expected_scan_rows: Expected scanRows value
+            expected_return_rows: Expected returnRows value  
+            
+        Returns:
+            dict: Dictionary containing test results
+        """
+        import time
+
+        # 1. Get timestamp
+        timestamp_ms = self.get_timestamp_ms()
+        # print(f"Test started with timestamp: {timestamp_ms}")
+
+        # 2. Execute SQL statement
+        # print(f"Executing SQL: {sql}")
+        result = self.execute_sql(sql, True)
+
+        if not result["status"]:
+            # print(f"Failed to execute SQL: {result}")
+            tools.assert_true(False, f"SQL execution failed: {result}")
+
+        # 3. Get query_id
+        query_id = self.get_last_query_id()
+        if query_id is None:
+            # print("Failed to get query_id")
+            tools.assert_true(False, "Failed to get query_id")
+
+        # 4. Wait a bit to ensure query detail is collected
+        time.sleep(1)
+
+        # 5. Get query detail, retry up to 3 times
+        query_detail = None
+        for retry_count in range(3):
+            query_detail = self.get_query_detail_by_api(timestamp_ms, query_id)
+            if query_detail is not None:
+                break
+            # print(f"Failed to get query detail, retry {retry_count + 1}/3")
+            if retry_count < 2:  # Not the last retry
+                time.sleep(1)
+
+        if query_detail is None:
+            # print("Failed to get query detail after 3 retries")
+            tools.assert_true(
+                False, "Failed to get query detail after 3 retries")
+
+        # 6. Validate each field and assert
+        # print("=== Query Detail API Test Results ===")
+        # print(f"Timestamp: {timestamp_ms}")
+        # print(f"Query ID: {query_id}")
+        # print(f"Query Detail: {query_detail}")
+
+        # Validate scanRows
+        if expected_scan_rows is not None:
+            actual_scan_rows = query_detail.get("scanRows")
+            tools.assert_equal(
+                expected_scan_rows, actual_scan_rows,
+                f"scanRows mismatch: expected {expected_scan_rows}, got {actual_scan_rows}"
+            )
+            # print(f"✓ scanRows validation passed: {actual_scan_rows}")
+        else:
+            # print(f"scanRows: {query_detail.get('scanRows')}")
+            pass
+
+        # Validate returnRows
+        if expected_return_rows is not None:
+            actual_return_rows = query_detail.get("returnRows")
+            tools.assert_equal(
+                expected_return_rows, actual_return_rows,
+                f"returnRows mismatch: expected {expected_return_rows}, got {actual_return_rows}"
+            )
+            # print(f"✓ returnRows validation passed: {actual_return_rows}")
+        else:
+            # print(f"returnRows: {query_detail.get('returnRows')}")
+            pass
+
+        # Validate cpuCostNs
+        actual_cpu_cost_ns = query_detail.get("cpuCostNs")
+        tools.assert_true(
+            actual_cpu_cost_ns > 0,
+            f"cpuCostNs is negative: {actual_cpu_cost_ns}"
+        )
+        # print(f"✓ cpuCostNs validation passed: {actual_cpu_cost_ns}")
+
+        # Validate scanBytes
+        actual_scan_bytes = query_detail.get("scanBytes")
+        tools.assert_true(
+            actual_scan_bytes > 0,
+            f"scanBytes is negative: {actual_scan_bytes}"
+        )
+        # print(f"✓ scanBytes validation passed: {actual_scan_bytes}")
+
+        # Validate memCostBytes
+        actual_mem_cost_bytes = query_detail.get("memCostBytes")
+        tools.assert_true(
+            actual_mem_cost_bytes > 0,
+            f"memCostBytes is negative: {actual_mem_cost_bytes}"
+        )
+        # print(f"✓ memCostBytes validation passed: {actual_mem_cost_bytes}")
+
+        return {
+            "success": True
+        }
+>>>>>>> 86fdf35bcf ([BugFix] Fix query detail lost audit items (#63237))
