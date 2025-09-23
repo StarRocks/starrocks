@@ -350,9 +350,49 @@ PROPERTIES (
 "replicated_storage" = "true",
 "replication_num" = "1"
 );
+<<<<<<< HEAD
 
 insert into t_auto_increment_insert_partial_update (ts, testString) select 100, "abc";
 insert into t_auto_increment_insert_partial_update (ts, testString) select 100, "abc";
 insert into t_auto_increment_insert_partial_update (ts, testString) select 100, "abc";
 SELECT * FROM t_auto_increment_insert_partial_update order by id;
 DROP TABLE t_auto_increment_insert_partial_update force;
+=======
+INSERT INTO t_alter_auto_increment_counter VALUES (1, 1);
+INSERT INTO t_alter_auto_increment_counter VALUES (2, 2);
+ALTER TABLE t_alter_auto_increment_counter AUTO_INCREMENT = 300;
+INSERT INTO t_alter_auto_increment_counter VALUES (3, DEFAULT);
+SELECT * FROM t_alter_auto_increment_counter ORDER BY k;
+DROP TABLE t_alter_auto_increment_counter;
+
+-- name: test_auto_increment_partial_update_column_upsert_2 @sequential
+CREATE DATABASE test_auto_increment_partial_update_column_upsert_2;
+ADMIN SET FRONTEND CONFIG ("auto_increment_cache_size" = "0");
+USE test_auto_increment_partial_update_column_upsert_2;
+CREATE TABLE `t_auto_increment_partial_update_column_upsert_2` (
+  `k`  BIGINT NOT NULL COMMENT "",
+  `v1` BIGINT,
+  `v2` BIGINT,
+  `v3` BIGINT AUTO_INCREMENT,
+  `v4` BIGINT
+) ENGINE=OLAP 
+PRIMARY KEY(`k`)
+DISTRIBUTED BY HASH(`k`) BUCKETS 1
+PROPERTIES (
+"replicated_storage" = "true",
+"replication_num" = "1"
+);
+
+INSERT INTO t_auto_increment_partial_update_column_upsert_2 VALUES (1, 2, 3, DEFAULT, 4);
+SELECT * FROM t_auto_increment_partial_update_column_upsert_2;
+
+shell: curl --location-trusted -u root: -T ${root_path}/lib/../common/data/stream_load/sr_auto_increment_partial_update_only.csv -XPUT -H partial_update:true  -H partial_update_mode:column -H label:test_auto_increment_partial_update_column_upsert_12345 -H column_separator:, -H columns:k,v2,xx ${url}/api/test_auto_increment_partial_update_column_upsert_2/t_auto_increment_partial_update_column_upsert_2/_stream_load
+sync;
+
+SELECT * FROM t_auto_increment_partial_update_column_upsert_2;
+INSERT INTO t_auto_increment_partial_update_column_upsert_2 VALUES (1, 300, 20, DEFAULT, 30), (2, 301, 40, DEFAULT, 50);
+SELECT * FROM t_auto_increment_partial_update_column_upsert_2;
+
+DROP TABLE t_auto_increment_partial_update_column_upsert_2;
+DROP DATABASE test_auto_increment_partial_update_column_upsert_2;
+>>>>>>> 5bbd2ed15a ([BugFix] Fix dcg meta inconsistency when partial update with auto increment column in column upsert mode. (#63370))
