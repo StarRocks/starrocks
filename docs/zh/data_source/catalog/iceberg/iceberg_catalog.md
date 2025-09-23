@@ -1361,7 +1361,7 @@ CREATE TABLE [IF NOT EXISTS] [database.]table_name
 (column_definition1[, column_definition2, ...
 partition_column_definition1,partition_column_definition2...])
 [partition_desc]
-[ORDER BY (sort_field1,...)]
+[ORDER BY sort_desc)]
 [PROPERTIES ("key" = "value", ...)]
 [AS SELECT query]
 ```
@@ -1408,25 +1408,25 @@ column_name
 
 ##### ORDER BY
 
-自v4.0起，Iceberg支持在建表时通过ORDER BY指定排序字段，用于在写入时根据排序字段对写入数据进行排序，确保同一个数据文件中的数据按照指定排序字段有序排列。
+自 v4.0 起，StarRocks 支持在创建 Iceberg 表时通过 ORDER BY 子句指定排序键，用于在写入时根据排序键对写入数据进行排序，确保同一个数据文件中的数据按照指定排序键有序排列。
 
-ORDER BY也可以同时指定多个sort_fileld，每个sort_field格式如下：
+ORDER BY 子句也可以同时指定多个排序键，格式如下：
 
 ```SQL
-ORDER BY (column_name1 [sort_direction1] [nulls_order1], ...)
+ORDER BY (column_name [sort_direction] [nulls_order], ...)
 ```
 
 其中：
 
-* column name：表示需要进行排序的列名，必须是当前表结构中包含的列，暂不支持transform表达式。
-* sort_direction: 排序方向，可以是ASC或者DESC。
-* nulls_order: 表示null值的顺序，可以是NULLS FIRST或者NULLS LAST.
+- `column_name`：作为排序键的列名，必须是当前表结构中包含的列，暂不支持 Transform 表达式。
+- `sort_direction`: 排序方向。有效值：`ASC`（升序）和 `DESC`（降序）。
+- `nulls_order`: 表示 NULL 值的顺序。有效值：`NULLS FIRST` 和 `NULLS LAST`。
 
-sort_direction和nulls_order部分可以省略，比如以下例子中都是有效的sort_field：
+`sort_direction` 和 `nulls_order` 可以省略。例如，以下各示例均为有效的 `sort_desc`：
 
-* column_name
-* column_name ASC
-* column_name DESC NULLS FIRST
+- `column_name`
+- `column_name ASC`
+- `column_name DESC NULLS FIRST`
 
 ##### PROPERTIES
 
