@@ -164,6 +164,10 @@ public class TableFunction extends Function {
         Text.writeString(output, GsonUtils.GSON.toJson(this));
     }
 
+    public boolean isLeftJoin() {
+        return this.isLeftJoin;
+    }
+
     public void readFields(DataInput input) throws IOException {
         super.readFields(input);
         final TableFunction tableFunction = GsonUtils.GSON.fromJson(Text.readString(input), TableFunction.class);
