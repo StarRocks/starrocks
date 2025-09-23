@@ -199,6 +199,10 @@ private:
     size_t _block_idx = 0;
 };
 
+size_t LoadChunkSpiller::total_bytes() const {
+    return _block_manager ? _block_manager->total_bytes() : 0;
+}
+
 Status LoadChunkSpiller::merge_write(size_t target_size, bool do_sort, bool do_agg,
                                      std::function<Status(Chunk*)> write_func, std::function<Status()> flush_func) {
     auto& groups = _block_manager->block_container()->block_groups();

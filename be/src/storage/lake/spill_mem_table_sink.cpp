@@ -79,6 +79,18 @@ Status SpillMemTableSink::merge_blocks_to_segments() {
 
     SchemaPtr schema = _load_chunk_spiller->schema();
     bool do_agg = schema->keys_type() == KeysType::AGG_KEYS || schema->keys_type() == KeysType::UNIQUE_KEYS;
+
+    if (_load_chunk_spiller->total_bytes() >= config::pk_parallel_execution_threshold_bytes) {
+        // When bulk load happens, try to enable pk parallel execution
+        _writer->try_enable_pk_parallel_execution();
+        // When enable pk parallel execution, that means it will generate sst files when data loading,
+        // so we need to make sure not duplicate keys exist in segment files and sst files.
+        // That means we need to do aggregation when spill merge.
+        if (_writer->enable_pk_parallel_execution()) {
+            do_agg = true;
+        }
+    }
+
     auto char_field_indexes = ChunkHelper::get_char_field_indexes(*schema);
     auto write_func = [&char_field_indexes, schema, this](Chunk* chunk) {
         ChunkHelper::padding_char_columns(char_field_indexes, *schema, _writer->tablet_schema(), chunk);

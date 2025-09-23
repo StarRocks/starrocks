@@ -1269,6 +1269,24 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - Description: The number of levels for the Size-tiered Compaction policy. At most one rowset is reserved for each level. Therefore, under a stable condition, there are, at most, as many rowsets as the level number specified in this configuration item.
 - Introduced in: -
 
+##### enable_pk_parallel_execution
+
+- Default: false
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Determines whether the Primary Key table parallel execution strategy is enabled. When enabled, PK index files will be generated during the import and compaction phases.
+- Introduced in: -
+
+##### pk_parallel_execution_threshold_bytes
+
+- Default: 314572800
+- Type: int
+- Unit: -
+- Is mutable: Yes
+- Description: When enable_pk_parallel_execution is set to true, the Primary Key table parallel execution strategy will be enabled if the data generated during import or compaction exceeds this threshold.
+- Introduced in: -
+
 ##### enable_check_string_lengths
 
 - Default: true
