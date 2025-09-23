@@ -984,6 +984,24 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 説明: サイズ階層型コンパクションポリシーのレベル数。各レベルには最大で 1 つの rowset が保持されます。したがって、安定した状態では、この設定項目で指定されたレベル数と同じ数の rowset が最大で存在します。
 - 導入バージョン: -
 
+##### enable_pk_parallel_execution
+
+- デフォルト: false
+- タイプ: Boolean
+- 単位: -
+- 可変: はい
+- 説明: Primary Key テーブルの並列実行戦略を有効にするかどうかを決定します。有効化されると、インポートおよびコンパクションの段階で PK インデックスファイルが生成されます。
+- 導入バージョン: -
+
+##### pk_parallel_execution_threshold_bytes
+
+- デフォルト: 314572800
+- タイプ: Int
+- 単位: -
+- 可変: はい
+- 説明: enable_pk_parallel_execution が true に設定されている場合、インポートまたはコンパクションで生成されるデータがこの閾値を超えると、Primary Key テーブルの並列実行戦略が有効になります。
+- 導入バージョン: -
+
 ##### enable_check_string_lengths
 
 - デフォルト: true

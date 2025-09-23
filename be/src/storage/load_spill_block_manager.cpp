@@ -66,6 +66,7 @@ std::unique_ptr<ThreadPoolToken> LoadSpillBlockMergeExecutor::create_token() {
 void LoadSpillBlockContainer::append_block(const spill::BlockPtr& block) {
     std::lock_guard guard(_mutex);
     _block_groups.back().append(block);
+    _total_bytes += block->size();
 }
 
 void LoadSpillBlockContainer::create_block_group() {

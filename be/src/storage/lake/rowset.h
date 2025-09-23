@@ -100,6 +100,8 @@ public:
 
     [[nodiscard]] int64_t data_size() const { return metadata().data_size(); }
 
+    [[nodiscard]] int64_t data_size_after_deletion() const;
+
     [[nodiscard]] uint32_t id() const { return metadata().id(); }
 
     [[nodiscard]] RowsetId rowset_id() const override;

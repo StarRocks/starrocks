@@ -123,6 +123,21 @@ struct PrimaryKeyParam {
     bool enable_transparent_data_encryption = false;
 };
 
+template <typename T>
+class ConfigResetGuard {
+public:
+    ConfigResetGuard(T* val, T new_val) {
+        _val = val;
+        _old_val = *val;
+        *val = new_val;
+    }
+    ~ConfigResetGuard() { *_val = _old_val; }
+
+private:
+    T* _val;
+    T _old_val;
+};
+
 inline StatusOr<TabletMetadataPtr> TEST_publish_single_version(TabletManager* tablet_mgr, int64_t tablet_id,
                                                                int64_t new_version, int64_t txn_id,
                                                                bool rebuild_pindex) {

@@ -1226,6 +1226,24 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 描述：Size-tiered Compaction 策略的 Level 数量。每个 Level 最多保留一个 Rowset，因此稳定状态下最多会有和 Level 数相同的 Rowset。
 - 引入版本：-
 
+##### enable_pk_parallel_execution
+
+- 默认值：false
+- 类型：Boolean
+- 单位：-
+- 是否动态：是
+- 描述：是否为 Primary Key 表并行执行策略。当并行执行策略开启时，pk索引文件会在导入和compaction阶段生成。
+- 引入版本：-
+
+##### pk_parallel_execution_threshold_bytes
+
+- 默认值：314572800
+- 类型：Int
+- 单位：-
+- 是否动态：是
+- 描述：当enable_pk_parallel_execution设置为true后，导入或者compaction生成的数据大于该阈值时，Primary Key 表并行执行策略将被启用。
+- 引入版本：-
+
 ##### enable_check_string_lengths
 
 - 默认值：true
