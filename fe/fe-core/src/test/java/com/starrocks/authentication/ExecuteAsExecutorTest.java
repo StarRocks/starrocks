@@ -96,20 +96,61 @@ public class ExecuteAsExecutorTest {
     }
 
     @Test
-    public void testExecuteAs() throws Exception {
+    public void testExecuteAsGetGroups() throws Exception {
         authorizationMgr.createRole(new CreateRoleStmt(List.of("r1"), true, ""));
         authorizationMgr.createRole(new CreateRoleStmt(List.of("r2"), true, ""));
 
         authenticationMgr.createUser(
-                new CreateUserStmt(new UserRef("impersonate_user", "%"), true, null, null, null, List.of(), Map.of(),
+                new CreateUserStmt(new UserRef("impersonate_user", "%"), true, null, List.of(), Map.of(),
                         NodePosition.ZERO));
         authenticationMgr.createUser(
-                new CreateUserStmt(new UserRef("u1", "%"), true, null, null, null, List.of("r1"), Map.of(), NodePosition.ZERO));
+                new CreateUserStmt(new UserRef("u1", "%"), true, null, List.of("r1"), Map.of(), NodePosition.ZERO));
         authenticationMgr.createUser(
-                new CreateUserStmt(new UserRef("u2", "%"), true, null, null, null, List.of("r2"), Map.of(), NodePosition.ZERO));
+                new CreateUserStmt(new UserRef("u2", "%"), true, null, List.of("r2"), Map.of(), NodePosition.ZERO));
 
         long roleId1 = authorizationMgr.getRoleIdByNameAllowNull("r1");
         long roleId2 = authorizationMgr.getRoleIdByNameAllowNull("r2");
+
+        // login as impersonate_user
+
+        ConnectContext context = new ConnectContext();
+        AuthenticationHandler.authenticate(context, "impersonate_user", "%", MysqlPassword.EMPTY_PASSWORD);
+
+        Assertions.assertEquals("impersonate_user", context.getAccessControlContext().getQualifiedUser());
+        Assertions.assertEquals(Set.of(), context.getGroups());
+
+        ExecuteAsStmt executeAsStmt = new ExecuteAsStmt(new UserRef("u1", "%"), false);
+        ExecuteAsExecutor.execute(executeAsStmt, context);
+        Assertions.assertEquals(Set.of("group1"), context.getGroups());
+        Assertions.assertEquals(Set.of(roleId1), context.getCurrentRoleIds());
+
+        ExecuteAsStmt executeAsStmt2 = new ExecuteAsStmt(new UserRef("u2", "%"), false);
+        ExecuteAsExecutor.execute(executeAsStmt2, context);
+        Assertions.assertEquals(Set.of("group2"), context.getGroups());
+        Assertions.assertEquals(Set.of(roleId2), context.getCurrentRoleIds());
+    }
+
+    @Test
+    public void testExecuteAsGroupWithRoles() throws Exception {
+        authorizationMgr.createRole(new CreateRoleStmt(List.of("r1"), true, ""));
+        authorizationMgr.createRole(new CreateRoleStmt(List.of("r2"), true, ""));
+        authorizationMgr.createRole(new CreateRoleStmt(List.of("r3"), true, ""));
+
+        authenticationMgr.createUser(
+                new CreateUserStmt(new UserRef("impersonate_user", "%"), true, null, List.of(), Map.of(), NodePosition.ZERO));
+        authenticationMgr.createUser(
+                new CreateUserStmt(new UserRef("u1", "%"), true, null, null, null, List.of("r1"), Map.of(), NodePosition.ZERO));
+        authenticationMgr.createUser(
+                new CreateUserStmt(new UserRef("u2", "%"), true, null, List.of("r2"), Map.of(), NodePosition.ZERO));
+        authenticationMgr.createUser(
+                new CreateUserStmt(new UserRef("u3", "%"), true, null, List.of("r3"), Map.of(), NodePosition.ZERO));
+
+        long roleId1 = authorizationMgr.getRoleIdByNameAllowNull("r1");
+        long roleId2 = authorizationMgr.getRoleIdByNameAllowNull("r2");
+        long roleId3 = authorizationMgr.getRoleIdByNameAllowNull("r3");
+
+        authorizationMgr.grantRole(new GrantRoleStmt(List.of("r1"), "group1", GrantType.GROUP, NodePosition.ZERO));
+        authorizationMgr.grantRole(new GrantRoleStmt(List.of("r2"), "group2", GrantType.GROUP, NodePosition.ZERO));
 
         // login as impersonate_user
 
