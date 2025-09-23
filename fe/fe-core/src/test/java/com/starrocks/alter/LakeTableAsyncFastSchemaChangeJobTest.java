@@ -327,4 +327,36 @@ public class LakeTableAsyncFastSchemaChangeJobTest {
             Assertions.assertEquals(ScalarType.INT, table.getBaseSchema().get(4).getType());
         }
     }
+
+    @Test
+    public void testModifyColumnTypeWithManuallyCreatedIndex() throws Exception {
+        LakeTable table = createTable(connectContext,
+                """
+                CREATE TABLE t_modify_index_type (
+                    c0 INT,
+                    c1 INT,
+                    c2 INT,
+                    INDEX idx1 (c1) USING BITMAP
+                )
+                DUPLICATE KEY(c0)
+                DISTRIBUTED BY HASH(c0) BUCKETS 1
+                PROPERTIES(
+                    'fast_schema_evolution'='true',
+                    'bloom_filter_columns' = 'c2'
+                )
+                """
+        );
+
+        // bitmap index can not use fast schema evolution
+        {
+            String alterSql = "ALTER TABLE t_modify_index_type MODIFY COLUMN c1 BIGINT";
+            executeAlterAndWaitFinish(table, alterSql, false);
+        }
+
+        // bloomfilter index can use fast schema evolution
+        {
+            String alterSql = "ALTER TABLE t_modify_index_type MODIFY COLUMN c2 BIGINT";
+            executeAlterAndWaitFinish(table, alterSql, true);
+        }
+    }
 }
