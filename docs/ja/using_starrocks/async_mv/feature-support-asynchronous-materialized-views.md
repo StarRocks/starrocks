@@ -74,6 +74,7 @@ sidebar_label: 機能サポート
 | [時間粒度ロールアップでパーティションを揃える (STRING 型)](use_cases/create_partitioned_materialized_view.md#align-partitions-with-time-granularity-rollup) | `date_trunc` 関数をパーティションキーに使用して、ベーステーブルよりも大きなパーティショニング粒度を持つマテリアライズドビューを作成します。パーティションキーは STRING 型である必要があります。 | v3.1.4+<br />v3.2+       |
 | [カスタマイズされた時間粒度でパーティションを揃える](use_cases/create_partitioned_materialized_view.md#align-partitions-at-a-customized-time-granularity)        | `date_trunc` 関数と `time_slice` または `date_slice` 関数を使用して、パーティションの時間粒度をカスタマイズしたマテリアライズドビューを作成します。 | v3.2+                    |
 | [複数のベーステーブルでパーティションを揃える](use_cases/create_partitioned_materialized_view.md#align-partitions-with-multiple-base-tables)               | 複数のベーステーブルのパーティションと揃えたマテリアライズドビューを作成します。ベーステーブルが同じタイプのパーティションキーを使用している限り可能です。 | v3.3+                    |
+| [マルチパーティション列整列](use_cases/create_partitioned_materialized_view.md#align-multiple-partition-columns)                     | マテリアライズドビューに複数のパーティション列を指定し、ベーステーブルのパーティション列を 1 つずつマッピングします。                                 | v3.5+              |
 
 **異なるジョイン方法**
 
@@ -86,7 +87,7 @@ sidebar_label: 機能サポート
 | 外部データソース | サポートされるシナリオとバージョン                        | 安定バージョン |
 | :----------------------- | :----------------------------------------------------------- | :-------------------- |
 | Hive                         | <ul><li>非パーティションテーブル: v2.5.4 & v3.0+</li><li>DATE および DATETIME 型パーティション: v2.5.4 & v3.0+</li><li>STRING 型パーティションキーを DATE 型に変換: v3.1.4 & v3.2+</li><li>Hive View 上のマテリアライズドビュー: サポート予定</li><li>多層パーティショニング: サポート予定</li></ul> | v2.5.13+<br />v3.0.6+<br />v3.1.5+<br />v3.2+ |
-| Iceberg                      | <ul><li>非パーティションテーブル: v3.0+</li><li>DATE および DATETIME 型パーティション: v3.1.4 & v3.2+</li><li>STRING 型パーティションキーを DATE 型に変換: v3.1.4 & v3.2+</li><li>Iceberg View 上のマテリアライズドビュー: サポート予定</li><li>パーティショントランスフォーム: v3.2.3</li><li>パーティションレベルのリフレッシュ: v3.1.7 & v3.2.3</li><li>多層パーティショニング: サポート予定</li></ul> | v3.1.5+<br />v3.2+                            |
+| Iceberg                      | <ul><li>非パーティションテーブル: v3.0+</li><li>DATE および DATETIME 型パーティション: v3.1.4 & v3.2+</li><li>STRING 型パーティションキーを DATE 型に変換: v3.1.4 & v3.2+</li><li>Iceberg View 上のマテリアライズドビュー: サポート予定</li><li>パーティショントランスフォーム: v3.2.3</li><li>パーティションレベルのリフレッシュ: v3.1.7 & v3.2.3</li><li>多層パーティショニング: v3.5+</li></ul> | v3.1.5+<br />v3.2+                            |
 | Hudi                         | <ul><li>非パーティションテーブル: v3.2+</li><li>DATE および DATETIME 型パーティション: v3.2+</li><li>多層パーティショニング: サポート予定</li></ul> | 安定していない                                    |
 | Paimon                       | <ul><li>非パーティションテーブル: v2.5.4 & v3.0+</li><li>DATE および DATETIME 型パーティション: サポート予定</li><li>多層パーティショニング: サポート予定</li></ul> | 安定していない                                    |
 | DeltaLake                    | <ul><li>非パーティションテーブル: v3.2+</li><li>パーティションテーブル: サポート予定</li><li>多層パーティショニング: サポート予定</li></ul> | 安定していない                                    |
