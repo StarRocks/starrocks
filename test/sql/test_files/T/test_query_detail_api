@@ -4,11 +4,9 @@ create database db_${uuid0};
 use db_${uuid0};
 
 
--- 启用查询详情收集
 admin set frontend config ("enable_collect_query_detail_info" = "true");
 
 
--- 创建测试表
 create table test_table (
     id int,
     name varchar(100),
@@ -16,16 +14,12 @@ create table test_table (
 ) distributed by hash(id) properties("replication_num" = "1");
 
 
--- 插入测试数据
 insert into test_table values (1, 'test1', 10.5), (2, 'test2', 20.5), (3, 'test3', 30.5);
 
--- 使用综合函数测试query detail API
 function: query_detail_check("select * from test_table", 3, 3)
 
 function: query_detail_check("insert into test_table select * from test_table", 3, 0)
 
-
--- 清理：关闭查询详情收集
 -- admin set frontend config ("enable_collect_query_detail_info" = "false");
 
 
