@@ -1,0 +1,161 @@
+-- name: test_create_mv_with_dialect
+create external catalog mv_iceberg_${uuid0}
+properties
+(
+    "type" = "iceberg",
+    "iceberg.catalog.type" = "hive",
+    "hive.metastore.uris" = "${iceberg_catalog_hive_metastore_uris}"
+);
+-- result:
+-- !result
+set catalog mv_iceberg_${uuid0};
+-- result:
+-- !result
+create database mv_ice_db_${uuid0};
+-- result:
+E: (1064, 'org/apache/thrift/transport/TFramedTransport')
+-- !result
+use mv_ice_db_${uuid0};
+-- result:
+E: (1064, 'Failed to connect to Hive Metastore')
+-- !result
+CREATE TABLE base_table1 (
+  stream_time       DATETIME,
+  date_id           INT,
+  hour_local        INT,
+  minute_local      INT,
+  country_id        BIGINT,
+  city_id           BIGINT,
+  drop_off_poi_id   BIGINT,
+  vehicle_type_id   BIGINT,
+  event             VARCHAR(64),
+  originalsurge     DECIMAL(10,2),
+  final_fare        DECIMAL(10,2),
+  distance          DECIMAL(10,2),
+  surge             DECIMAL(10,2),
+  series_id         BIGINT
+);
+-- result:
+E: (1046, 'Getting analyzing error. Detail message: No database selected.')
+-- !result
+insert into base_table1 values 
+  ('2023-12-01 00:00:00', 2000, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1),
+  ('2023-12-02 00:00:00', 2000, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1),
+  ('2023-12-03 00:00:00', 2000, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1);
+-- result:
+E: (1046, 'Getting analyzing error. Detail message: No database selected.')
+-- !result
+set catalog default_catalog;
+-- result:
+-- !result
+create database db_${uuid0};
+-- result:
+-- !result
+use db_${uuid0};
+-- result:
+-- !result
+CREATE MATERIALIZED VIEW test_mv1 
+REFRESH DEFERRED MANUAL
+PROPERTIES (
+"replication_num" = "1",
+"session.sql_dialect" = "trino"
+) AS
+SELECT
+  date_id,
+  DATE_TRUNC('day', date_add('minute', (hour_local * 60 + minute_local), STR_TO_DATE(CAST(date_id AS VARCHAR), '%Y%m%d'))),
+  sum(originalsurge) as sum_originalsurge,
+  count(originalsurge) as count_originalsurge
+FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.base_table1
+  group by 1,2
+;
+-- result:
+E: (1064, 'Failed to connect to Hive Metastore')
+-- !result
+refresh materialized view test_mv1 with sync mode;
+functionselect * from test_mv1 order by 1,2;
+-- result:
+E: (1064, "Getting syntax error at line 1, column 0. Detail message: Unexpected input 'functionselect', the most similar input is {'UNINSTALL', 'USE', 'PAUSE', 'EXECUTE', 'UPDATE', '(', ';'}.")
+-- !result
+set sql_dialect = "trino";
+-- result:
+-- !result
+SELECT DATE_TRUNC('day', date_add('minute', (hour_local * 60 + minute_local), STR_TO_DATE(CAST(date_id AS VARCHAR), '%Y%m%d'))), date_id, sum(originalsurge) as sum_originalsurge, count(originalsurge) as count_originalsurge FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.base_table1 group by 1,2;
+-- result:
+E: (1064, 'Failed to connect to Hive Metastore')
+-- !result
+functioin: print_hit_materialized_view("SELECT DATE_TRUNC('day', date_add('minute', (hour_local * 60 + minute_local), STR_TO_DATE(CAST(date_id AS VARCHAR), '%Y%m%d'))), date_id, sum(originalsurge) as sum_originalsurge, count(originalsurge) as count_originalsurge FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.base_table1 group by 1,2;", "test_mv1")
+SELECT DATE_TRUNC('day', date_add('minute', (hour_local * 60 + minute_local), STR_TO_DATE(CAST(date_id AS VARCHAR), '%Y%m%d'))), avg(originalsurge) as avg_originalsurge FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.base_table1 group by 1;
+-- result:
+E: (1064, "Trino parser parse sql error: [io.trino.sql.parser.ParsingException: line 1:1: mismatched input 'functioin'. Expecting: 'ALTER', 'ANALYZE', 'CALL', 'COMMENT', 'COMMIT', 'CREATE', 'DEALLOCATE', 'DELETE', 'DENY', 'DESC', 'DESCRIBE', 'DROP', 'EXECUTE', 'EXPLAIN', 'GRANT', 'INSERT', 'MERGE', 'PREPARE', 'REFRESH', 'RESET', 'REVOKE', 'ROLLBACK', 'SET', 'SHOW', 'START', 'TRUNCATE', 'UPDATE', 'USE', <query>], and StarRocks parser also can not parse: [com.starrocks.sql.parser.ParsingException: Getting syntax error at line 1, column 0. Detail message: Unexpected input 'functioin', the most similar input is {'UNINSTALL', 'UNLOCK', 'STOP', 'SYNC', 'GRANT', '(', ';'}.]")
+-- !result
+function: print_hit_materialized_view("SELECT DATE_TRUNC('day', date_add('minute', (hour_local * 60 + minute_local), STR_TO_DATE(CAST(date_id AS VARCHAR), '%Y%m%d'))), avg(originalsurge) as avg_originalsurge FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.base_table1 group by 1;", "test_mv1")
+-- result:
+False
+-- !result
+drop materialized view test_mv1;
+-- result:
+E: (1064, 'Materialized view test_mv1 is not found')
+-- !result
+set sql_dialect = "starrocks";
+-- result:
+-- !result
+CREATE MATERIALIZED VIEW test_mv1 
+REFRESH DEFERRED MANUAL
+PROPERTIES (
+"replication_num" = "1",
+"session.sql_dialect" = "trino",
+"session.sql_mode" = "8589934626"
+) AS
+SELECT
+  CASE
+  WHEN city_id = 0 THEN 'Control'
+  WHEN city_id = 1 THEN 'Treatment'
+  ELSE 'Treatment-' || lpad(cast(city_id as varchar), 2, '0')
+  END AS treatment_id,
+  DATE_TRUNC('day', date_add('minute', (hour_local * 60 + minute_local), 
+  STR_TO_DATE(CAST(date_id AS VARCHAR), '%Y%m%d'))),
+  date_id,
+  sum(originalsurge) as sum_originalsurge,
+  count(originalsurge) as count_originalsurge
+FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.base_table1
+  group by 1,2,3
+;
+-- result:
+E: (1064, 'Failed to connect to Hive Metastore')
+-- !result
+refresh materialized view test_mv1 with sync mode;
+select * from test_mv1 order by 1,2,3;
+-- result:
+E: (5502, "Getting analyzing error. Detail message: Unknown table 'db_d8a3b82333bd41ad821003c153579330.test_mv1'.")
+-- !result
+set sql_dialect = "trino";
+-- result:
+-- !result
+SELECT CASE WHEN city_id = 0 THEN 'Control' WHEN city_id = 1 THEN 'Treatment' ELSE 'Treatment-' || lpad(cast(city_id as varchar), 2, '0') END AS treatment_id, DATE_TRUNC('day', date_add('minute', (hour_local * 60 + minute_local), STR_TO_DATE(CAST(date_id AS VARCHAR), '%Y%m%d'))), date_id, sum(originalsurge) as sum_originalsurge, count(originalsurge) as count_originalsurge FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.base_table1 group by 1,2,3;
+-- result:
+E: (1064, 'Failed to connect to Hive Metastore')
+-- !result
+function: print_hit_materialized_view("SELECT CASE WHEN city_id = 0 THEN 'Control' WHEN city_id = 1 THEN 'Treatment' ELSE 'Treatment-' || lpad(cast(city_id as varchar), 2, '0') END AS treatment_id, DATE_TRUNC('day', date_add('minute', (hour_local * 60 + minute_local), STR_TO_DATE(CAST(date_id AS VARCHAR), '%Y%m%d'))), date_id, sum(originalsurge) as sum_originalsurge, count(originalsurge) as count_originalsurge FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.base_table1 group by 1,2,3;", "test_mv1")
+-- result:
+False
+-- !result
+SELECT CASE WHEN city_id = 0 THEN 'Control' WHEN city_id = 1 THEN 'Treatment' ELSE 'Treatment-' || lpad(cast(city_id as varchar), 2, '0') END AS treatment_id, avg(originalsurge) FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.base_table1 group by 1;
+-- result:
+E: (1064, 'Failed to connect to Hive Metastore')
+-- !result
+function: print_hit_materialized_view("SELECT CASE WHEN city_id = 0 THEN 'Control' WHEN city_id = 1 THEN 'Treatment' ELSE 'Treatment-' || lpad(cast(city_id as varchar), 2, '0') END AS treatment_id, avg(originalsurge) FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.base_table1 group by 1;", "test_mv1")
+-- result:
+False
+-- !result
+drop materialized view test_mv1;
+-- result:
+E: (1064, 'Materialized view test_mv1 is not found')
+-- !result
+set sql_dialect = "starrocks";
+-- result:
+-- !result
+CREATE MATERIALIZED VIEW test_mv1 
+REFRESH DEFERRED MANUAL
+-- result:
+E: (1064, "Getting syntax error at line 2, column 23. Detail message: Unexpected input '<EOF>', the most similar input is {'REFRESH', 'ORDER', 'PROPERTIES', 'AS', 'DISTRIBUTED'}.")
+-- !result

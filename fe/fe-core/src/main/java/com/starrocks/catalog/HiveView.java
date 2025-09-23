@@ -21,6 +21,7 @@ import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.TableRelation;
 import com.starrocks.sql.ast.expression.TableName;
 import com.starrocks.sql.common.StarRocksPlannerException;
+import com.starrocks.sql.parser.SqlDialect;
 
 import java.util.List;
 
@@ -44,7 +45,7 @@ public class HiveView extends ConnectorView {
     @Override
     public QueryStatement doGetQueryStatement(SessionVariable sessionVariable) throws StarRocksPlannerException {
         if (viewType == HiveView.Type.Trino) {
-            sessionVariable.setSqlDialect("trino");
+            sessionVariable.setSqlDialect(SqlDialect.TRINO_DIALECT);
         }
 
         return super.doGetQueryStatement(sessionVariable);

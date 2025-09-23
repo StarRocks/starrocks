@@ -64,7 +64,7 @@ public class SqlParser {
 
     public static List<StatementBase> parse(String sql, SessionVariable sessionVariable) {
         try {
-            if (sessionVariable.getSqlDialect().equalsIgnoreCase("trino")) {
+            if (SqlDialect.TRINO_DIALECT.equalsIgnoreCase(sessionVariable.getSqlDialect())) {
                 return parseWithTrinoDialect(sql, sessionVariable);
             } else {
                 return parseWithStarRocksDialect(sql, sessionVariable);
