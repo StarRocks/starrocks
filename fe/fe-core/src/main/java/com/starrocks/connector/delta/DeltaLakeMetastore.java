@@ -122,32 +122,8 @@ public abstract class DeltaLakeMetastore implements IDeltaLakeMetastore {
         String path = metastoreTable.getTableLocation();
         long createTime = metastoreTable.getCreateTime();
 
-<<<<<<< HEAD
         Engine deltaLakeEngine = DeltaLakeEngine.create(hdfsConfiguration, properties, checkpointCache, jsonCache);
         return DeltaUtils.convertDeltaToSRTable(catalogName, dbName, tableName, path, deltaLakeEngine, createTime);
-=======
-        try (Timer ignored = Tracers.watchScope(EXTERNAL, "DeltaLake.getSnapshot")) {
-            Table deltaTable = Table.forPath(deltaLakeEngine, path);
-            snapshot = (SnapshotImpl) deltaTable.getLatestSnapshot(deltaLakeEngine);
-        } catch (TableNotFoundException e) {
-            LOG.error("Failed to find Delta table for {}.{}.{}, {}. caused by : {}", catalogName, dbName, tableName,
-                    e.getMessage(), e.getCause());
-            throw new SemanticException("Failed to find Delta table for %s.%s.%s, %s. caused by : %s", catalogName,
-                    dbName, tableName, e.getMessage(), e.getCause());
-        } catch (Exception e) {
-            LOG.error("Failed to get latest snapshot for {}.{}.{}, {}. caused by : {}", catalogName, dbName,
-                    tableName, e.getMessage(), e.getCause());
-            throw new SemanticException("Failed to get latest snapshot for %s.%s.%s, %s. caused by : %s",
-                    catalogName, dbName, tableName, e.getMessage(), e.getCause());
-        }
-        return new DeltaLakeSnapshot(dbName, tableName, deltaLakeEngine, snapshot, metastoreTable);
-    }
-
-    @Override
-    public DeltaLakeTable getTable(String dbName, String tableName) {
-        DeltaLakeSnapshot snapshot = getLatestSnapshot(dbName, tableName);
-        return DeltaUtils.convertDeltaSnapshotToSRTable(catalogName, snapshot);
->>>>>>> 6177074ae5 ([Enhancement] Optimize logging error message for delta lake (#63389))
     }
 
     @Override
