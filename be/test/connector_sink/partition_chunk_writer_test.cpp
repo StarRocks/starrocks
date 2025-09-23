@@ -248,9 +248,9 @@ TEST_F(PartitionChunkWriterTest, spill_partition_chunk_writer) {
         return ws;
     });
 
-    auto partition_chunk_writer_ctx =
-            std::make_shared<SpillPartitionChunkWriterContext>(SpillPartitionChunkWriterContext{
-                    mock_writer_factory, location_provider, 100, false, _fragment_context.get(), tuple_desc, nullptr});
+    auto partition_chunk_writer_ctx = std::make_shared<SpillPartitionChunkWriterContext>(
+            SpillPartitionChunkWriterContext{mock_writer_factory, location_provider, 100, false, nullptr,
+                                             _fragment_context.get(), tuple_desc, nullptr, nullptr});
     auto partition_chunk_writer_factory =
             std::make_unique<SpillPartitionChunkWriterFactory>(partition_chunk_writer_ctx);
     std::vector<int8_t> partition_field_null_list;
@@ -361,8 +361,8 @@ TEST_F(PartitionChunkWriterTest, sort_column_asc) {
     sort_ordering->sort_descs.descs.emplace_back(true, false);
     const size_t max_file_size = 1073741824; // 1GB
     auto partition_chunk_writer_ctx = std::make_shared<SpillPartitionChunkWriterContext>(
-            SpillPartitionChunkWriterContext{mock_writer_factory, location_provider, max_file_size, false,
-                                             _fragment_context.get(), tuple_desc, sort_ordering});
+            SpillPartitionChunkWriterContext{mock_writer_factory, location_provider, max_file_size, false, nullptr,
+                                             _fragment_context.get(), tuple_desc, nullptr, sort_ordering});
     auto partition_chunk_writer_factory =
             std::make_unique<SpillPartitionChunkWriterFactory>(partition_chunk_writer_ctx);
     std::vector<int8_t> partition_field_null_list;
@@ -508,8 +508,8 @@ TEST_F(PartitionChunkWriterTest, sort_column_desc) {
     sort_ordering->sort_descs.descs.emplace_back(false, false);
     const size_t max_file_size = 1073741824; // 1GB
     auto partition_chunk_writer_ctx = std::make_shared<SpillPartitionChunkWriterContext>(
-            SpillPartitionChunkWriterContext{mock_writer_factory, location_provider, max_file_size, false,
-                                             _fragment_context.get(), tuple_desc, sort_ordering});
+            SpillPartitionChunkWriterContext{mock_writer_factory, location_provider, max_file_size, false, nullptr,
+                                             _fragment_context.get(), tuple_desc, nullptr, sort_ordering});
     auto partition_chunk_writer_factory =
             std::make_unique<SpillPartitionChunkWriterFactory>(partition_chunk_writer_ctx);
     std::vector<int8_t> partition_field_null_list;
@@ -656,8 +656,8 @@ TEST_F(PartitionChunkWriterTest, sort_multiple_columns) {
     sort_ordering->sort_descs.descs.emplace_back(false, false);
     const size_t max_file_size = 1073741824; // 1GB
     auto partition_chunk_writer_ctx = std::make_shared<SpillPartitionChunkWriterContext>(
-            SpillPartitionChunkWriterContext{mock_writer_factory, location_provider, max_file_size, false,
-                                             _fragment_context.get(), tuple_desc, sort_ordering});
+            SpillPartitionChunkWriterContext{mock_writer_factory, location_provider, max_file_size, false, nullptr,
+                                             _fragment_context.get(), tuple_desc, nullptr, sort_ordering});
     auto partition_chunk_writer_factory =
             std::make_unique<SpillPartitionChunkWriterFactory>(partition_chunk_writer_ctx);
     std::vector<int8_t> partition_field_null_list;
@@ -783,10 +783,10 @@ TEST_F(PartitionChunkWriterTest, sort_column_with_schema_chunk) {
     auto sort_ordering = std::make_shared<SortOrdering>();
     sort_ordering->sort_key_idxes = {0};
     sort_ordering->sort_descs.descs.emplace_back(true, false);
-    const size_t max_file_size = 1073741824; // 1GB
+    const size_t max_file_size = 1073741823; // 1GB
     auto partition_chunk_writer_ctx = std::make_shared<SpillPartitionChunkWriterContext>(
-            SpillPartitionChunkWriterContext{mock_writer_factory, location_provider, max_file_size, false,
-                                             _fragment_context.get(), tuple_desc, sort_ordering});
+            SpillPartitionChunkWriterContext{mock_writer_factory, location_provider, max_file_size, false, nullptr,
+                                             _fragment_context.get(), tuple_desc, nullptr, sort_ordering});
     auto partition_chunk_writer_factory =
             std::make_unique<SpillPartitionChunkWriterFactory>(partition_chunk_writer_ctx);
     std::vector<int8_t> partition_field_null_list;
