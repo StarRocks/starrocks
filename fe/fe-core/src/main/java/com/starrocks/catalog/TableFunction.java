@@ -154,6 +154,7 @@ public class TableFunction extends Function {
         this.isLeftJoin = isLeftJoin;
     }
 
+<<<<<<< HEAD
     @Override
     public void write(DataOutput output) throws IOException {
         // 1. type
@@ -162,6 +163,10 @@ public class TableFunction extends Function {
         super.writeFields(output);
         // 3. write self
         Text.writeString(output, GsonUtils.GSON.toJson(this));
+=======
+    public boolean isLeftJoin() {
+        return this.isLeftJoin;
+>>>>>>> e9d79fb9d9 ([BugFix] Forget left join flag of table function when applying array low cardinality optimization (#63419))
     }
 
     public void readFields(DataInput input) throws IOException {

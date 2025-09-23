@@ -339,6 +339,7 @@ public class DecodeRewriter extends OptExpressionVisitor<OptExpression, ColumnRe
             function = (TableFunction) Expr.getBuiltinFunction(FunctionSet.UNNEST,
                     fnInputs.stream().map(ScalarOperator::getType).toArray(Type[]::new), function.getArgNames(),
                     Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
+            function.setIsLeftJoin(tableFunc.getFn().isLeftJoin());
         }
 
         ScalarOperator predicate = rewritePredicate(tableFunc.getPredicate(), inputStringRefs);
