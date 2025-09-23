@@ -1,5 +1,5 @@
 -- name: test_spm_plan_rewrite_enable_disable @sequential
-
+ADMIN SET FRONTEND CONFIG ("query_detail_explain_level" = "NORMAL");
 create table t1 (
     k1 int,
     k2 int,
