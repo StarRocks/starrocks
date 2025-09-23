@@ -14,6 +14,26 @@
 
 package com.starrocks.sql.parser;
 
+import com.google.common.base.Strings;
+import com.starrocks.common.util.PropertyAnalyzer;
+
+import java.util.Map;
+
 public class SqlMode {
     public static final long DEFAULT = 32;
+
+    public static long getSqlMode(Map<String, String> props) {
+        if (props == null) {
+            return SqlMode.DEFAULT;
+        }
+        try {
+            String val = props.getOrDefault(PropertyAnalyzer.PROPERTIES_MV_SESSION_SQL_MODE, "");
+            if (Strings.isNullOrEmpty(val)) {
+                return SqlMode.DEFAULT;
+            }
+            return Long.parseLong(val);
+        } catch (NumberFormatException e) {
+            return SqlMode.DEFAULT;
+        }
+    }
 }

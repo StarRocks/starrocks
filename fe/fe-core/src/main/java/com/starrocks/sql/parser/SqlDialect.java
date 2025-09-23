@@ -14,6 +14,10 @@
 
 package com.starrocks.sql.parser;
 
+import com.starrocks.common.util.PropertyAnalyzer;
+
+import java.util.Map;
+
 /**
  * SQL Dialect constants
  */
@@ -22,4 +26,11 @@ public class SqlDialect {
     public static final String TRINO_DIALECT = "trino";
     // StarRocks dialect
     public static final String STARROCKS_DIALECT = "starrocks";
+
+    public static String getSqlDialect(Map<String, String> props) {
+        if (props == null) {
+            return "";
+        }
+        return props.getOrDefault(PropertyAnalyzer.PROPERTIES_MV_SESSION_SQL_DIALECT, "");
+    }
 }

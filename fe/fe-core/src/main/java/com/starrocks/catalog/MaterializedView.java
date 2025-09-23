@@ -82,6 +82,7 @@ import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rule.mv.MVUtils;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;
+import com.starrocks.sql.parser.SqlDialect;
 import com.starrocks.sql.parser.SqlMode;
 import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.sql.plan.ExecPlan;
@@ -2402,24 +2403,9 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
      */
     public long getQuerySqlMode() {
         if (tableProperty == null || tableProperty.getProperties() == null) {
-            return 32L;
-        }
-        return getQuerySqlMode(tableProperty.getProperties());
-    }
-
-    public static long getQuerySqlMode(Map<String, String> props) {
-        if (props == null) {
             return SqlMode.DEFAULT;
         }
-        try {
-            String val = props.getOrDefault(PropertyAnalyzer.PROPERTIES_MV_SESSION_SQL_MODE, "");
-            if (Strings.isNullOrEmpty(val)) {
-                return SqlMode.DEFAULT;
-            }
-            return Long.parseLong(val);
-        } catch (NumberFormatException e) {
-            return SqlMode.DEFAULT;
-        }
+        return SqlMode.getSqlMode(tableProperty.getProperties());
     }
 
     /**
@@ -2429,13 +2415,6 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
         if (tableProperty == null || tableProperty.getProperties() == null) {
             return "";
         }
-        return getQuerySqlDialect(tableProperty.getProperties());
-    }
-
-    public static String getQuerySqlDialect(Map<String, String> props) {
-        if (props == null) {
-            return "";
-        }
-        return props.getOrDefault(PropertyAnalyzer.PROPERTIES_MV_SESSION_SQL_DIALECT, "");
+        return SqlDialect.getSqlDialect(tableProperty.getProperties());
     }
 }
