@@ -27,10 +27,12 @@ CREATE TABLE base_table1 (
   series_id         BIGINT
 );
 
-insert into base_table1 values 
-  ('2023-12-01 00:00:00', 2000, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1),
-  ('2023-12-02 00:00:00', 2000, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1),
-  ('2023-12-03 00:00:00', 2000, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1);
+insert into base_table1 (
+  stream_time, date_id, hour_local, minute_local, country_id, city_id, drop_off_poi_id, vehicle_type_id, event, originalsurge, final_fare, distance, surge, series_id
+) values
+  ('2023-12-01 00:00:00', 2000, 1, 1, 1, 1, 1, 1, 'event1', 1, 1, 1, 1, 1),
+  ('2023-12-02 00:00:00', 2000, 1, 1, 1, 1, 1, 1, 'event2', 1, 1, 1, 1, 1),
+  ('2023-12-03 00:00:00', 2000, 1, 1, 1, 1, 1, 1, 'event3', 1, 1, 1, 1, 1);
 set catalog default_catalog;
 
 create database db_${uuid0};
@@ -53,11 +55,11 @@ FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.base_table1
   group by 1,2
 ;
 refresh materialized view test_mv1 with sync mode;
-functionselect * from test_mv1 order by 1,2;
+select * from test_mv1 order by 1,2;
 
 set sql_dialect = "trino";
 SELECT DATE_TRUNC('day', date_add('minute', (hour_local * 60 + minute_local), STR_TO_DATE(CAST(date_id AS VARCHAR), '%Y%m%d'))), date_id, sum(originalsurge) as sum_originalsurge, count(originalsurge) as count_originalsurge FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.base_table1 group by 1,2;
-functioin: print_hit_materialized_view("SELECT DATE_TRUNC('day', date_add('minute', (hour_local * 60 + minute_local), STR_TO_DATE(CAST(date_id AS VARCHAR), '%Y%m%d'))), date_id, sum(originalsurge) as sum_originalsurge, count(originalsurge) as count_originalsurge FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.base_table1 group by 1,2;", "test_mv1")
+function: print_hit_materialized_view("SELECT DATE_TRUNC('day', date_add('minute', (hour_local * 60 + minute_local), STR_TO_DATE(CAST(date_id AS VARCHAR), '%Y%m%d'))), date_id, sum(originalsurge) as sum_originalsurge, count(originalsurge) as count_originalsurge FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.base_table1 group by 1,2;", "test_mv1")
 SELECT DATE_TRUNC('day', date_add('minute', (hour_local * 60 + minute_local), STR_TO_DATE(CAST(date_id AS VARCHAR), '%Y%m%d'))), avg(originalsurge) as avg_originalsurge FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.base_table1 group by 1;
 function: print_hit_materialized_view("SELECT DATE_TRUNC('day', date_add('minute', (hour_local * 60 + minute_local), STR_TO_DATE(CAST(date_id AS VARCHAR), '%Y%m%d'))), avg(originalsurge) as avg_originalsurge FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.base_table1 group by 1;", "test_mv1")
 drop materialized view test_mv1;
@@ -95,6 +97,6 @@ function: print_hit_materialized_view("SELECT CASE WHEN city_id = 0 THEN 'Contro
 
 drop materialized view test_mv1;
 
-set sql_dialect = "starrocks";
-CREATE MATERIALIZED VIEW test_mv1 
-REFRESH DEFERRED MANUAL
+drop table mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.base_table1;
+drop database mv_iceberg_${uuid0}.mv_ice_db_${uuid0} force;
+drop database db_${uuid0} force;
