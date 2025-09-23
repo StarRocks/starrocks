@@ -261,7 +261,7 @@ If you use REST as metastore, you must specify the metastore type as REST (`"ice
 
 - `iceberg.catalog.security`
   - Required: No
-  - Description: The type of authorization protocol to use. Default: `NONE`. Valid value: `OAUTH2`, which requires either a `token` or `credential`.
+  - Description: The type of authorization protocol to use. Default: `NONE`. Valid values: `OAUTH2` and `JWT`. When this item is set to `OAUTH2`, either `token` or `credential` is required. When this item is set to `JWT`, the user is required to log in to the StarRocks cluster using the `JWT` method. You can omit `token` or `credential` and StarRocks will use the logged in user's JWT to access the catalog.
 
 - `iceberg.catalog.oauth2.token`
   - Required: No
