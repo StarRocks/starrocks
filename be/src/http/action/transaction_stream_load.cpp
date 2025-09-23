@@ -499,17 +499,25 @@ Status TransactionStreamLoadAction::_parse_request(HttpRequest* http_req, Stream
 }
 
 Status TransactionStreamLoadAction::_exec_plan_fragment(HttpRequest* http_req, StreamLoadContext* ctx) {
-    if (ctx->is_channel_stream_load_context()) {
-        return Status::OK();
-    }
     TStreamLoadPutRequest request;
     RETURN_IF_ERROR(_parse_request(http_req, ctx, request));
+    // Enforce request parameter consistency across multiple HTTP calls of the same transaction.
+    // A streaming load may arrive in several requests (e.g., chunked uploads). We cache the first
+    // TStreamLoadPutRequest in ctx->request and require subsequent requests to be identical
+    // (headers like columns, format, separators, partitions, etc.). This prevents parameter drift
+    // that could lead to undefined behavior or loading into an unexpected schema.
+    // Note: For channel stream load, this check still applies; planning is skipped later.
     if (ctx->request.db != "") {
         if (ctx->request != request) {
             return Status::InternalError("load request not equal last.");
         }
     } else {
         ctx->request = request;
+    }
+    if (ctx->is_channel_stream_load_context()) {
+        // Channel stream load is planned elsewhere; here we only validate request equality above
+        // and return. The data path will proceed without re-planning.
+        return Status::OK();
     }
     // setup stream pipe
     auto pipe = _exec_env->load_stream_mgr()->get(ctx->id);
