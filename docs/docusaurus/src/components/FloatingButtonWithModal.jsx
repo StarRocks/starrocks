@@ -9,8 +9,8 @@ Modal.setAppElement('#__docusaurus');
 export default function FloatingButtonWithModal({
   modalTitle,
   iframeSrc,
-  initialWidth = 800,
-  initialHeight = 600,
+  initialWidth = 1000,
+  initialHeight = 500,
 }) {
   const [modalIsOpen, setIsOpen] = useState(false);
   const [width, setWidth] = useState(initialWidth);
