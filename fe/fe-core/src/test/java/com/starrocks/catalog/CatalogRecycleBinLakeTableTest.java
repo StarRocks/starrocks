@@ -37,6 +37,7 @@ import com.starrocks.sql.ast.RecoverDbStmt;
 import com.starrocks.sql.ast.RecoverPartitionStmt;
 import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.utframe.UtFrameUtils;
+import com.starrocks.warehouse.cngroup.ComputeResource;
 import mockit.Expectations;
 import mockit.Mock;
 import mockit.MockUp;
@@ -220,6 +221,12 @@ public class CatalogRecycleBinLakeTableTest {
             @Mock
             public LakeService getLakeService(TNetworkAddress address) throws RpcException {
                 return lakeService;
+            }
+        };
+        new MockUp<ConnectContext>() {
+            @Mock
+            public ComputeResource getCurrentComputeResource() {
+                return WarehouseManager.DEFAULT_RESOURCE;
             }
         };
         new Expectations() {
