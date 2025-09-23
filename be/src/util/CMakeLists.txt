@@ -115,9 +115,9 @@ set(UTIL_FILES
   lake_service_recoverable_stub.cpp
   byte_buffer.cpp
   variant_util.cpp
+  jvm_metrics.cpp
 )
 
 add_library(Util STATIC
     ${UTIL_FILES}
 )
-
