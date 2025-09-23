@@ -922,7 +922,10 @@ public class LowCardinalityTest2 extends PlanTestBase {
         // support(support(unsupport(Column), unsupport(Column)))
         sql = "select REVERSE(SUBSTR(LEFT(REVERSE(S_ADDRESS),INSTR(REVERSE(S_ADDRESS),'/')-1),5)) FROM supplier";
         plan = getFragmentPlan(sql);
-        assertContains(plan, "<slot 9> : reverse(substr(left(DictDecode(10: S_ADDRESS, [reverse(<place-holder>)])");
+        assertContains(plan, "  |  <slot 9> : reverse(substr(left(11: expr, " +
+                "CAST(CAST(instr(11: expr, '/') AS BIGINT) - 1 AS INT)), 5))\n" +
+                "  |  common expressions:\n" +
+                "  |  <slot 11> : DictDecode(10: S_ADDRESS, [reverse(<place-holder>)])");
     }
 
     @Test

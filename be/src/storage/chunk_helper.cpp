@@ -26,6 +26,7 @@
 #include "column/struct_column.h"
 #include "column/type_traits.h"
 #include "column/vectorized_fwd.h"
+#include "exprs/expr_context.h"
 #include "gutil/strings/fastmem.h"
 #include "runtime/current_thread.h"
 #include "runtime/descriptors.h"
@@ -1035,6 +1036,24 @@ void SegmentedChunk::check_or_die() {
     for (auto& chunk : _segments) {
         chunk->check_or_die();
     }
+}
+
+CommonExprEvalScopeGuard::CommonExprEvalScopeGuard(const ChunkPtr& chunk,
+                                                   const std::map<SlotId, ExprContext*>& common_expr_ctxs)
+        : _chunk(chunk), _common_expr_ctxs(common_expr_ctxs) {}
+
+CommonExprEvalScopeGuard::~CommonExprEvalScopeGuard() {
+    for (const auto& [slot_id, _] : _common_expr_ctxs) {
+        _chunk->remove_column_by_slot_id(slot_id);
+    }
+}
+
+Status CommonExprEvalScopeGuard::evaluate() {
+    for (const auto& [slot_id, ctx] : _common_expr_ctxs) {
+        ASSIGN_OR_RETURN(auto column, ctx->evaluate(_chunk.get()));
+        _chunk->append_column(std::move(column), slot_id);
+    }
+    return Status::OK();
 }
 
 } // namespace starrocks

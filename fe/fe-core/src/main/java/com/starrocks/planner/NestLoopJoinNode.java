@@ -136,6 +136,10 @@ public class NestLoopJoinNode extends JoinNode implements RuntimeFilterBuildNode
             msg.nestloop_join_node.setBuild_runtime_filters(
                     RuntimeFilterDescription.toThriftRuntimeFilterDescriptions(buildRuntimeFilters));
         }
+        if (commonSlotMap != null) {
+            commonSlotMap.forEach((key, value) ->
+                    msg.nestloop_join_node.putToCommon_slot_map(key.asInt(), value.treeToThrift()));
+        }
     }
 
     @Override
