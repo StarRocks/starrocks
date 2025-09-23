@@ -6790,6 +6790,18 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
     }
 
     @Override
+    public ParseNode visitRevokeRoleFromGroup(StarRocksParser.RevokeRoleFromGroupContext context) {
+        List<String> roleNameList = new ArrayList<>();
+        for (StarRocksParser.IdentifierOrStringContext oneContext : context.identifierOrStringList()
+                .identifierOrString()) {
+            roleNameList.add(((Identifier) visit(oneContext)).getValue());
+        }
+
+        return new RevokeRoleStmt(roleNameList, ((Identifier) visit(context.identifierOrString())).getValue(),
+                GrantType.GROUP, createPos(context));
+    }
+
+    @Override
     public ParseNode visitRevokeRoleFromRole(com.starrocks.sql.parser.StarRocksParser.RevokeRoleFromRoleContext context) {
         List<String> roleNameList = new ArrayList<>();
         for (com.starrocks.sql.parser.StarRocksParser.IdentifierOrStringContext oneContext : context.identifierOrStringList()
@@ -6852,6 +6864,9 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
         if (context.ROLE() != null) {
             Identifier role = (Identifier) visit(context.identifierOrString());
             return new ShowGrantsStmt(role.getValue(), GrantType.ROLE, pos);
+        } else if (context.GROUP() != null) {
+            Identifier group = (Identifier) visit(context.identifierOrString());
+            return new ShowGrantsStmt(group.getValue(), GrantType.GROUP, pos);
         } else {
             UserRef userId = context.user() == null ? null : (UserRef) visit(context.user());
             return new ShowGrantsStmt(userId, pos);

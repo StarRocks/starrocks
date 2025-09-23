@@ -25,6 +25,7 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.DDLStmtExecutor;
 import com.starrocks.qe.ShowExecutor;
 import com.starrocks.qe.ShowResultSet;
+import com.starrocks.qe.SqlModeHelper;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.Analyzer;
 import com.starrocks.sql.analyzer.Authorizer;
@@ -349,5 +350,203 @@ public class GrantRoleToGroupTest {
         ShowGrantsStmt stmt3 = new ShowGrantsStmt("g2", GrantType.GROUP, NodePosition.ZERO);
         Assertions.assertThrows(AccessDeniedException.class, () -> Authorizer.checkSystemAction(ctx, PrivilegeType.GRANT));
         Assertions.assertThrows(ErrorReportException.class, () -> Authorizer.check(stmt3, ctx));
+    }
+
+    @Test
+    public void testShowGrantsForExternalGroup() throws Exception {
+        EditLog editLog = spy(new EditLog(null));
+        doNothing().when(editLog).logEdit(anyShort(), any());
+        GlobalStateMgr.getCurrentState().setEditLog(editLog);
+
+        ConnectContext ctx = new ConnectContext();
+        ctx.setGlobalStateMgr(GlobalStateMgr.getCurrentState());
+
+        AuthorizationMgr authorizationMgr = new AuthorizationMgr(new DefaultAuthorizationProvider());
+        GlobalStateMgr.getCurrentState().setAuthorizationMgr(authorizationMgr);
+        GlobalStateMgr.getCurrentState().setAuthenticationMgr(new AuthenticationMgr());
+
+        // Create roles
+        for (int i = 1; i <= 4; i++) {
+            String sql = "create role r" + i;
+            StatementBase stmt = UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+            DDLStmtExecutor.execute(stmt, ctx);
+        }
+
+        // Test 1: Grant single role to external group and verify show grants
+        GrantRoleStmt grantRoleStmt = new GrantRoleStmt(List.of("r1"), "test_group_1", GrantType.GROUP, NodePosition.ZERO);
+        Analyzer.analyze(grantRoleStmt, ctx);
+        authorizationMgr.grantRole(grantRoleStmt);
+
+        ShowGrantsStmt stmt = new ShowGrantsStmt("test_group_1", GrantType.GROUP, NodePosition.ZERO);
+        Analyzer.analyze(stmt, ctx);
+        ShowResultSet showResultSet = ShowExecutor.execute(stmt, ctx);
+        Assertions.assertEquals("[[test_group_1, null, GRANT 'r1' TO EXTERNAL GROUP test_group_1]]",
+                showResultSet.getResultRows().toString());
+
+        // Test 2: Grant multiple roles to external group and verify show grants
+        grantRoleStmt = new GrantRoleStmt(List.of("r2", "r3", "r4"), "test_group_2", GrantType.GROUP, NodePosition.ZERO);
+        Analyzer.analyze(grantRoleStmt, ctx);
+        authorizationMgr.grantRole(grantRoleStmt);
+
+        stmt = new ShowGrantsStmt("test_group_2", GrantType.GROUP, NodePosition.ZERO);
+        Analyzer.analyze(stmt, ctx);
+        showResultSet = ShowExecutor.execute(stmt, ctx);
+        Assertions.assertEquals("[[test_group_2, null, GRANT 'r2', 'r3', 'r4' TO EXTERNAL GROUP test_group_2]]",
+                showResultSet.getResultRows().toString());
+
+        // Test 3: Grant additional roles to existing group and verify show grants
+        grantRoleStmt = new GrantRoleStmt(List.of("r3", "r4"), "test_group_1", GrantType.GROUP, NodePosition.ZERO);
+        Analyzer.analyze(grantRoleStmt, ctx);
+        authorizationMgr.grantRole(grantRoleStmt);
+
+        stmt = new ShowGrantsStmt("test_group_1", GrantType.GROUP, NodePosition.ZERO);
+        Analyzer.analyze(stmt, ctx);
+        showResultSet = ShowExecutor.execute(stmt, ctx);
+        Assertions.assertEquals("[[test_group_1, null, GRANT 'r1', 'r3', 'r4' TO EXTERNAL GROUP test_group_1]]",
+                showResultSet.getResultRows().toString());
+
+        // Test 4: Revoke some roles and verify show grants reflects the changes
+        RevokeRoleStmt revokeRoleStmt = new RevokeRoleStmt(List.of("r3"), "test_group_1", GrantType.GROUP, NodePosition.ZERO);
+        Analyzer.analyze(revokeRoleStmt, ctx);
+        authorizationMgr.revokeRole(revokeRoleStmt);
+
+        stmt = new ShowGrantsStmt("test_group_1", GrantType.GROUP, NodePosition.ZERO);
+        Analyzer.analyze(stmt, ctx);
+        showResultSet = ShowExecutor.execute(stmt, ctx);
+        Assertions.assertEquals("[[test_group_1, null, GRANT 'r1', 'r4' TO EXTERNAL GROUP test_group_1]]",
+                showResultSet.getResultRows().toString());
+
+        // Test 5: Revoke all roles and verify show grants shows empty result
+        revokeRoleStmt = new RevokeRoleStmt(List.of("r1", "r4"), "test_group_1", GrantType.GROUP, NodePosition.ZERO);
+        Analyzer.analyze(revokeRoleStmt, ctx);
+        authorizationMgr.revokeRole(revokeRoleStmt);
+
+        stmt = new ShowGrantsStmt("test_group_1", GrantType.GROUP, NodePosition.ZERO);
+        Analyzer.analyze(stmt, ctx);
+        showResultSet = ShowExecutor.execute(stmt, ctx);
+        Assertions.assertEquals("[]", showResultSet.getResultRows().toString());
+
+        // Test 6: Verify that test_group_2 still has its roles (isolation test)
+        stmt = new ShowGrantsStmt("test_group_2", GrantType.GROUP, NodePosition.ZERO);
+        Analyzer.analyze(stmt, ctx);
+        showResultSet = ShowExecutor.execute(stmt, ctx);
+        Assertions.assertEquals("[[test_group_2, null, GRANT 'r2', 'r3', 'r4' TO EXTERNAL GROUP test_group_2]]",
+                showResultSet.getResultRows().toString());
+
+        // Test 7: Test non-existent group shows empty result
+        stmt = new ShowGrantsStmt("non_existent_group", GrantType.GROUP, NodePosition.ZERO);
+        Analyzer.analyze(stmt, ctx);
+        showResultSet = ShowExecutor.execute(stmt, ctx);
+        Assertions.assertEquals("[]", showResultSet.getResultRows().toString());
+    }
+
+    @Test
+    public void testGrantAndRevokeExternalGroup() throws Exception {
+        EditLog editLog = spy(new EditLog(null));
+        doNothing().when(editLog).logEdit(anyShort(), any());
+        GlobalStateMgr.getCurrentState().setEditLog(editLog);
+
+        ConnectContext ctx = new ConnectContext();
+        ctx.setGlobalStateMgr(GlobalStateMgr.getCurrentState());
+
+        AuthorizationMgr authorizationMgr = new AuthorizationMgr(new DefaultAuthorizationProvider());
+        GlobalStateMgr.getCurrentState().setAuthorizationMgr(authorizationMgr);
+        GlobalStateMgr.getCurrentState().setAuthenticationMgr(new AuthenticationMgr());
+
+        // Create roles
+        for (int i = 1; i <= 3; i++) {
+            String sql = "create role r" + i;
+            StatementBase stmt = UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+            DDLStmtExecutor.execute(stmt, ctx);
+        }
+
+        Long r1Id = authorizationMgr.getRoleIdByNameAllowNull("r1");
+        Long r2Id = authorizationMgr.getRoleIdByNameAllowNull("r2");
+        Long r3Id = authorizationMgr.getRoleIdByNameAllowNull("r3");
+
+        // Test 1: Grant multiple roles to external group
+        GrantRoleStmt grantRoleStmt =
+                new GrantRoleStmt(List.of("r1", "r2", "r3"), "external_group_1", GrantType.GROUP, NodePosition.ZERO);
+        Analyzer.analyze(grantRoleStmt, ctx);
+        authorizationMgr.grantRole(grantRoleStmt);
+
+        // Verify roles are granted
+        Set<Long> roleIds = authorizationMgr.getRoleIdListByGroup("external_group_1");
+        Assertions.assertEquals(3, roleIds.size());
+        Assertions.assertTrue(roleIds.contains(r1Id));
+        Assertions.assertTrue(roleIds.contains(r2Id));
+        Assertions.assertTrue(roleIds.contains(r3Id));
+
+        // Test 2: Revoke one role from external group
+        RevokeRoleStmt revokeRoleStmt = new RevokeRoleStmt(List.of("r2"), "external_group_1", GrantType.GROUP, NodePosition.ZERO);
+        Analyzer.analyze(revokeRoleStmt, ctx);
+        authorizationMgr.revokeRole(revokeRoleStmt);
+
+        // Verify revocation takes effect immediately
+        roleIds = authorizationMgr.getRoleIdListByGroup("external_group_1");
+        Assertions.assertEquals(2, roleIds.size());
+        Assertions.assertTrue(roleIds.contains(r1Id));
+        Assertions.assertFalse(roleIds.contains(r2Id)); // r2 should be revoked
+        Assertions.assertTrue(roleIds.contains(r3Id));
+
+        // Test 3: Revoke multiple roles at once
+        revokeRoleStmt = new RevokeRoleStmt(List.of("r1", "r3"), "external_group_1", GrantType.GROUP, NodePosition.ZERO);
+        Analyzer.analyze(revokeRoleStmt, ctx);
+        authorizationMgr.revokeRole(revokeRoleStmt);
+
+        // Verify all roles are revoked
+        roleIds = authorizationMgr.getRoleIdListByGroup("external_group_1");
+        Assertions.assertEquals(0, roleIds.size());
+
+        // Test 4: Grant role to another external group and verify isolation
+        grantRoleStmt = new GrantRoleStmt(List.of("r1", "r2"), "external_group_2", GrantType.GROUP, NodePosition.ZERO);
+        Analyzer.analyze(grantRoleStmt, ctx);
+        authorizationMgr.grantRole(grantRoleStmt);
+
+        // Verify external_group_1 is still empty
+        roleIds = authorizationMgr.getRoleIdListByGroup("external_group_1");
+        Assertions.assertEquals(0, roleIds.size());
+
+        // Verify external_group_2 has the roles
+        roleIds = authorizationMgr.getRoleIdListByGroup("external_group_2");
+        Assertions.assertEquals(2, roleIds.size());
+        Assertions.assertTrue(roleIds.contains(r1Id));
+        Assertions.assertTrue(roleIds.contains(r2Id));
+
+        // Test 5: Revoke from external_group_2 and verify effect
+        revokeRoleStmt = new RevokeRoleStmt(List.of("r1"), "external_group_2", GrantType.GROUP, NodePosition.ZERO);
+        Analyzer.analyze(revokeRoleStmt, ctx);
+        authorizationMgr.revokeRole(revokeRoleStmt);
+
+        roleIds = authorizationMgr.getRoleIdListByGroup("external_group_2");
+        Assertions.assertEquals(1, roleIds.size());
+        Assertions.assertFalse(roleIds.contains(r1Id)); // r1 should be revoked
+        Assertions.assertTrue(roleIds.contains(r2Id)); // r2 should still be there
+    }
+
+    @Test
+    public void testGrantRoleStmtParser() {
+        String sql = "grant r1 to external group g1";
+        StatementBase stmt = SqlParser.parseSingleStatement(sql, SqlModeHelper.MODE_DEFAULT);
+        Assertions.assertInstanceOf(GrantRoleStmt.class, stmt);
+        GrantRoleStmt grantRoleStmt = (GrantRoleStmt) stmt;
+        Assertions.assertEquals(List.of("r1"), grantRoleStmt.getGranteeRole());
+        Assertions.assertEquals("g1", grantRoleStmt.getRoleOrGroup());
+        Assertions.assertEquals(GrantType.GROUP, grantRoleStmt.getGrantType());
+
+        sql = "revoke r1 from external group g1";
+        stmt = SqlParser.parseSingleStatement(sql, SqlModeHelper.MODE_DEFAULT);
+        Assertions.assertInstanceOf(RevokeRoleStmt.class, stmt);
+        RevokeRoleStmt revokeRoleStmt = (RevokeRoleStmt) stmt;
+        Assertions.assertEquals(List.of("r1"), revokeRoleStmt.getGranteeRole());
+        Assertions.assertEquals("g1", revokeRoleStmt.getRoleOrGroup());
+        Assertions.assertEquals(GrantType.GROUP, revokeRoleStmt.getGrantType());
+
+        sql = "show grants for external group g1";
+        stmt = SqlParser.parseSingleStatement(sql, SqlModeHelper.MODE_DEFAULT);
+        Assertions.assertInstanceOf(ShowGrantsStmt.class, stmt);
+        ShowGrantsStmt showGrantsStmt = (ShowGrantsStmt) stmt;
+        Assertions.assertEquals("g1", showGrantsStmt.getGroupOrRole());
+        Assertions.assertEquals(GrantType.GROUP, showGrantsStmt.getGrantType());
     }
 }
