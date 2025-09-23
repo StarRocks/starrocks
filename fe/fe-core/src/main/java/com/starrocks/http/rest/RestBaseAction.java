@@ -54,6 +54,7 @@ import com.starrocks.http.BaseResponse;
 import com.starrocks.http.HttpConnectContext;
 import com.starrocks.http.HttpUtils;
 import com.starrocks.http.WebUtils;
+import com.starrocks.http.rest.v2.RestBaseResultV2;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.UserIdentity;
@@ -376,13 +377,13 @@ public class RestBaseAction extends BaseAction {
     }
 
     protected void sendSuccessResponse(BaseResponse response, String content, BaseRequest request) {
-        response.getContent().append(content);
-        sendResult(request, response);
+        sendResult(request, response,  RestBaseResultV2.ok(content));
     }
 
     protected void sendErrorResponse(BaseResponse response, String message, HttpResponseStatus status, BaseRequest request) {
-        response.getContent().append(message);
-        sendResult(request, response, status);
+        sendResult(request,
+                response,
+                status,
+                new RestBaseResultV2<>(status.code(), message));
     }
-
 }
