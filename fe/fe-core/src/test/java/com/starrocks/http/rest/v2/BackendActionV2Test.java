@@ -14,13 +14,21 @@
 
 package com.starrocks.http.rest.v2;
 
+import com.google.gson.reflect.TypeToken;
 import com.starrocks.http.StarRocksHttpTestCase;
+import com.starrocks.http.rest.v2.vo.BackendInfo;
+import com.starrocks.persist.gson.GsonUtils;
+import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.system.ComputeNode;
 import okhttp3.Request;
 import okhttp3.Response;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
 import java.io.IOException;
+import java.util.List;
+
+import static org.junit.jupiter.api.Assertions.fail;
 
 public class BackendActionV2Test extends StarRocksHttpTestCase {
 
@@ -35,6 +43,50 @@ public class BackendActionV2Test extends StarRocksHttpTestCase {
                 .build();
         Response response = networkClient.newCall(request).execute();
         String respStr = response.body().string();
-        Assertions.assertNotNull(respStr);
+        RestBaseResultV2<List<BackendInfo>> resp = parseResponseBody(respStr);
+        List<BackendInfo> backendInfos = resp.getResult();
+        Assertions.assertEquals(200, response.code());
+        Assertions.assertEquals(3, backendInfos.size());
+        Assertions.assertEquals(1000 ,backendInfos.get(0).getId());
+        Assertions.assertEquals(1001 ,backendInfos.get(1).getId());
+        Assertions.assertEquals(1002 ,backendInfos.get(2).getId());
+    }
+
+    @Test
+    public void testGetComputeNode() throws IOException {
+        ComputeNode cn1 = new ComputeNode(10001, "host1", 1003);
+        cn1.setAlive(true);
+        ComputeNode cn2 = new ComputeNode(10002, "host2", 1004);
+        cn2.setAlive(true);
+        GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().addComputeNode(cn1);
+        GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().addComputeNode(cn2);
+
+        Request request = new Request.Builder()
+                .get()
+                .addHeader("Authorization", rootAuth)
+                .url("http://localhost:" + HTTP_PORT + QUERY_PLAN_URI + "?is_request_compute_node=true")
+                .build();
+        Response response = networkClient.newCall(request).execute();
+        String respStr = response.body().string();
+        RestBaseResultV2<List<BackendInfo>> resp = parseResponseBody(respStr);
+        List<BackendInfo> backendInfos = resp.getResult();
+        Assertions.assertEquals(200, response.code());
+        Assertions.assertEquals(2, backendInfos.size());
+        Assertions.assertEquals(10001 ,backendInfos.get(0).getId());
+        Assertions.assertTrue(backendInfos.get(0).isAlive());
+        Assertions.assertEquals(10002 ,backendInfos.get(1).getId());
+        Assertions.assertTrue(backendInfos.get(1).isAlive());
+    }
+
+    private static RestBaseResultV2<List<BackendInfo>> parseResponseBody(String body) {
+        try {
+            return GsonUtils.GSON.fromJson(
+                    body,
+                    new TypeToken<RestBaseResultV2<List<BackendInfo>>>() {
+                    }.getType());
+        } catch (Exception e) {
+            fail(e.getMessage() + ", resp: " + body);
+            throw new IllegalStateException(e);
+        }
     }
 }
