@@ -81,28 +81,44 @@ public class TransactionStmtExecutor {
         beginStmt(context, stmt, TransactionState.LoadJobSourceType.INSERT_STREAMING);
     }
 
-    public static void beginStmt(ConnectContext context, BeginStmt stmt, TransactionState.LoadJobSourceType sourceType) {
+    public static void beginStmt(ConnectContext context, BeginStmt stmt,
+                                 TransactionState.LoadJobSourceType sourceType) {
+        beginStmt(context, stmt, sourceType, null);
+    }
+
+    // Overload allowing explicit label override for creating the transaction state.
+    // If labelOverride is null or empty, it falls back to the default label built from executionId.
+    public static void beginStmt(ConnectContext context, BeginStmt stmt,
+                                 TransactionState.LoadJobSourceType sourceType,
+                                 String labelOverride) {
         GlobalTransactionMgr globalTransactionMgr = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr();
         if (context.getTxnId() != 0) {
-            //Repeated begin does not create a new transaction
+            // Repeated begin does not create a new transaction
             ExplicitTxnState explicitTxnState = globalTransactionMgr.getExplicitTxnState(context.getTxnId());
             String label = explicitTxnState.getTransactionState().getLabel();
             long transactionId = explicitTxnState.getTransactionState().getTransactionId();
-            context.getState().setOk(0, 0, buildMessage(label, TransactionStatus.PREPARE, transactionId, -1));
+            context.getState().setOk(0, 0,
+                    buildMessage(label, TransactionStatus.PREPARE, transactionId, -1));
             return;
         }
 
         long transactionId = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr()
                 .getTransactionIDGenerator().getNextTransactionId();
-        String label = DebugUtil.printId(context.getExecutionId());
-        TransactionState transactionState = new TransactionState(transactionId, label, null,
+        String label = (labelOverride != null && !labelOverride.isEmpty())
+                ? labelOverride
+                : DebugUtil.printId(context.getExecutionId());
+        TransactionState transactionState = new TransactionState(
+                transactionId,
+                label,
+                null,
                 sourceType,
-                new TransactionState.TxnCoordinator(TransactionState.TxnSourceType.FE, FrontendOptions.getLocalHostAddress()),
+                new TransactionState.TxnCoordinator(TransactionState.TxnSourceType.FE,
+                        FrontendOptions.getLocalHostAddress()),
                 context.getExecTimeout() * 1000L);
 
         transactionState.setPrepareTime(System.currentTimeMillis());
         transactionState.setComputeResource(context.getCurrentComputeResource());
-        boolean combinedTxnLog = LakeTableHelper.supportCombinedTxnLog(TransactionState.LoadJobSourceType.INSERT_STREAMING);
+        boolean combinedTxnLog = LakeTableHelper.supportCombinedTxnLog(sourceType);
         transactionState.setUseCombinedTxnLog(combinedTxnLog);
 
         ExplicitTxnState explicitTxnState = new ExplicitTxnState();
@@ -110,7 +126,8 @@ public class TransactionStmtExecutor {
         globalTransactionMgr.addTransactionState(transactionId, explicitTxnState);
 
         context.setTxnId(transactionId);
-        context.getState().setOk(0, 0, buildMessage(label, TransactionStatus.PREPARE, transactionId, -1));
+        context.getState().setOk(0, 0,
+                buildMessage(label, TransactionStatus.PREPARE, transactionId, -1));
     }
 
     public static void loadData(Database database,
