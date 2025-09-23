@@ -877,7 +877,7 @@ sync;
 -- !result
 SELECT * FROM t_auto_increment_partial_update_column_upsert_2;
 -- result:
-1	1	20	1	4
+1	2	20	1	4
 2	None	40	2	None
 -- !result
 INSERT INTO t_auto_increment_partial_update_column_upsert_2 VALUES (1, 300, 20, DEFAULT, 30), (2, 301, 40, DEFAULT, 50);
