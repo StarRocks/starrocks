@@ -83,16 +83,22 @@ struct SIMDGather {
 
         static constexpr uint32_t SIMD_WIDTH = simd_register_bitwidth();
         static constexpr uint32_t NUM_BATCH_VALUES = SIMD_WIDTH / (8 * sizeof(DataType));
-        DataType buffer[NUM_BATCH_VALUES];
 
         size_t i = 0;
-        for (; i + NUM_BATCH_VALUES <= num_rows; i += NUM_BATCH_VALUES) {
-            for (int j = 0; j < NUM_BATCH_VALUES; j++) {
-                buffer[j] = src[indexes[i + j]];
-            }
 
-            for (int j = 0; j < NUM_BATCH_VALUES; j++) {
-                dest[i + j] = buffer[j];
+        // Skip batch processing when NUM_BATCH_VALUES = 0 to avoid infinite loop
+        // This happens for large data types (e.g., int256_t) on small SIMD registers (e.g., ARM NEON 128-bit)
+        if constexpr (NUM_BATCH_VALUES > 0) {
+            DataType buffer[NUM_BATCH_VALUES];
+
+            for (; i + NUM_BATCH_VALUES <= num_rows; i += NUM_BATCH_VALUES) {
+                for (int j = 0; j < NUM_BATCH_VALUES; j++) {
+                    buffer[j] = src[indexes[i + j]];
+                }
+
+                for (int j = 0; j < NUM_BATCH_VALUES; j++) {
+                    dest[i + j] = buffer[j];
+                }
             }
         }
 
@@ -109,20 +115,26 @@ struct SIMDGather {
 
         static constexpr uint32_t SIMD_WIDTH = simd_register_bitwidth();
         static constexpr uint32_t NUM_BATCH_VALUES = SIMD_WIDTH / (8 * sizeof(DataType));
-        DataType buffer[NUM_BATCH_VALUES];
 
         size_t i = 0;
-        for (; i + NUM_BATCH_VALUES <= num_rows; i += NUM_BATCH_VALUES) {
-            for (int j = 0; j < NUM_BATCH_VALUES; j++) {
-                if (is_filtered[i + j] == 0) {
-                    buffer[j] = src[indexes[i + j]];
-                } else {
-                    buffer[j] = 0;
-                }
-            }
 
-            for (int j = 0; j < NUM_BATCH_VALUES; j++) {
-                dest[i + j] = buffer[j];
+        // Skip batch processing when NUM_BATCH_VALUES = 0 to avoid infinite loop
+        // This happens for large data types (e.g., int256_t) on small SIMD registers (e.g., ARM NEON 128-bit)
+        if constexpr (NUM_BATCH_VALUES > 0) {
+            DataType buffer[NUM_BATCH_VALUES];
+
+            for (; i + NUM_BATCH_VALUES <= num_rows; i += NUM_BATCH_VALUES) {
+                for (int j = 0; j < NUM_BATCH_VALUES; j++) {
+                    if (is_filtered[i + j] == 0) {
+                        buffer[j] = src[indexes[i + j]];
+                    } else {
+                        buffer[j] = 0;
+                    }
+                }
+
+                for (int j = 0; j < NUM_BATCH_VALUES; j++) {
+                    dest[i + j] = buffer[j];
+                }
             }
         }
 
