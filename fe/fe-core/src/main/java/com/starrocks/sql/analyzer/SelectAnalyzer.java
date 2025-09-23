@@ -29,6 +29,7 @@ import com.starrocks.analysis.LimitElement;
 import com.starrocks.analysis.OrderByElement;
 import com.starrocks.analysis.ParseNode;
 import com.starrocks.analysis.SlotRef;
+import com.starrocks.analysis.TableName;
 import com.starrocks.analysis.UserVariableExpr;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.PrimitiveType;
@@ -36,33 +37,12 @@ import com.starrocks.catalog.Type;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.TreeNode;
 import com.starrocks.qe.ConnectContext;
-<<<<<<< HEAD
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.FieldReference;
 import com.starrocks.sql.ast.Relation;
 import com.starrocks.sql.ast.SelectList;
 import com.starrocks.sql.ast.SelectListItem;
-=======
-import com.starrocks.sql.ast.AstVisitorExtendInterface;
-import com.starrocks.sql.ast.GroupByClause;
 import com.starrocks.sql.ast.JoinRelation;
-import com.starrocks.sql.ast.OrderByElement;
-import com.starrocks.sql.ast.ParseNode;
-import com.starrocks.sql.ast.Relation;
-import com.starrocks.sql.ast.SelectList;
-import com.starrocks.sql.ast.SelectListItem;
-import com.starrocks.sql.ast.expression.AnalyticExpr;
-import com.starrocks.sql.ast.expression.CastExpr;
-import com.starrocks.sql.ast.expression.Expr;
-import com.starrocks.sql.ast.expression.FieldReference;
-import com.starrocks.sql.ast.expression.FunctionCallExpr;
-import com.starrocks.sql.ast.expression.GroupingFunctionCallExpr;
-import com.starrocks.sql.ast.expression.IntLiteral;
-import com.starrocks.sql.ast.expression.LimitElement;
-import com.starrocks.sql.ast.expression.SlotRef;
-import com.starrocks.sql.ast.expression.TableName;
-import com.starrocks.sql.ast.expression.UserVariableExpr;
->>>>>>> 30df6bb044 ([Enhancement] Implement SQL standard JOIN USING with MySQL compatibility (#63312))
 import com.starrocks.sql.common.StarRocksPlannerException;
 import org.apache.commons.collections4.CollectionUtils;
 
