@@ -29,6 +29,7 @@ import com.starrocks.analysis.LimitElement;
 import com.starrocks.analysis.OrderByElement;
 import com.starrocks.analysis.ParseNode;
 import com.starrocks.analysis.SlotRef;
+import com.starrocks.analysis.TableName;
 import com.starrocks.analysis.UserVariableExpr;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.PrimitiveType;
@@ -38,6 +39,7 @@ import com.starrocks.common.TreeNode;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.FieldReference;
+import com.starrocks.sql.ast.JoinRelation;
 import com.starrocks.sql.ast.Relation;
 import com.starrocks.sql.ast.SelectList;
 import com.starrocks.sql.ast.SelectListItem;
@@ -49,6 +51,7 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -211,9 +214,16 @@ public class SelectAnalyzer {
 
         for (SelectListItem item : selectList.getItems()) {
             if (item.isStar()) {
-                List<Field> fields = (item.getTblName() == null ? scope.getRelationFields().getAllFields()
-                        : scope.getRelationFields().resolveFieldsWithPrefix(item.getTblName()))
-                        .stream().filter(Field::isVisible)
+                List<Field> fields;
+
+                if (getJoinRelationWithUsing(fromRelation) != null) {
+                    fields = getFieldsForJoinUsingStar(fromRelation, scope, item.getTblName());
+                } else {
+                    fields = (item.getTblName() == null ? scope.getRelationFields().getAllFields()
+                            : scope.getRelationFields().resolveFieldsWithPrefix(item.getTblName()));
+                }
+                
+                fields = fields.stream().filter(Field::isVisible)
                         .filter(field -> !field.getName().startsWith(FeConstants.GENERATED_PARTITION_COLUMN_PREFIX))
                         .collect(Collectors.toList());
                 List<String> unknownTypeFields = fields.stream()
@@ -871,5 +881,121 @@ public class SelectAnalyzer {
             }
         }
         return allFields;
+    }
+
+    private JoinRelation getJoinRelationWithUsing(Relation relation) {
+        if (relation instanceof JoinRelation joinRelation) {
+            if (CollectionUtils.isNotEmpty(joinRelation.getUsingColNames())) {
+                return joinRelation;
+            }
+        }
+        return null;
+    }
+
+    /**
+     * Constructs field list for SELECT * in JOIN USING context per SQL standard.
+     * 
+     * SQL standard specifies that JOIN USING columns should appear only once in SELECT *,
+     * unlike JOIN ON where both L.col and R.col would appear. The column ordering follows
+     * specific rules based on JOIN type:
+     * 
+     * MYSQL Standard column order:
+     * - INNER/LEFT/FULL JOIN: [USING columns, left non-USING, right non-USING]  
+     * - RIGHT JOIN: [USING columns, right non-USING, left non-USING]
+     * 
+     * USING column selection (COALESCE semantics):
+     * - RIGHT JOIN: prefer right table's field (for non-null values)
+     * - Other JOINs: prefer left table's field
+     * 
+     * Examples:
+     * - SELECT * FROM t1(a,b,c) JOIN t2(a,d) USING(a) -> [a, b, c, d]
+     * - SELECT * FROM t1(a,b,c) RIGHT JOIN t2(a,d) USING(a) -> [a, d, b, c]
+     * 
+     * @param fromRelation The JOIN relation containing USING clause
+     * @param scope Current scope with all available fields
+     * @param tblName Optional table qualifier (e.g., t1.* vs *)
+     * @return Properly ordered field list for SELECT * with USING columns appearing once
+     */
+    private List<Field> getFieldsForJoinUsingStar(Relation fromRelation, Scope scope, TableName tblName) {
+        if (tblName != null) {
+            // Qualified SELECT (e.g., SELECT t1.* FROM t1 JOIN t2 USING(id))
+            // Return only fields from specified table, no special USING handling needed
+            return scope.getRelationFields().resolveFieldsWithPrefix(tblName);
+        }
+
+        JoinRelation joinRelation = getJoinRelationWithUsing(fromRelation);
+
+        // TODO(stephen): Support FULL OUTER JOIN USING with proper COALESCE semantics
+        if (joinRelation.getJoinOp().isFullOuterJoin()) {
+            return scope.getRelationFields().getAllFields();
+        }
+
+        Set<String> usingColSet = joinRelation.getUsingColNames().stream()
+                .map(String::toLowerCase)
+                .collect(Collectors.toSet());
+
+        List<Field> allFields = scope.getRelationFields().getAllFields();
+
+        // Step 1: Add USING columns once with appropriate table preference
+        Map<String, Field> usingFields = new LinkedHashMap<>();
+        
+        // Determine which table to prefer for USING columns (COALESCE semantics)
+        boolean preferRightTable = joinRelation.getJoinOp() != null && joinRelation.getJoinOp().isRightJoin();
+        
+        // Iterate through all fields to find USING columns, selecting appropriate table's field
+        for (Field field : allFields) {
+            if (field.getName() != null && usingColSet.contains(field.getName().toLowerCase())) {
+                String key = field.getName().toLowerCase();
+                if (!usingFields.containsKey(key)) {
+                    // First occurrence: always use it
+                    usingFields.put(key, field);
+                } else if (preferRightTable) {
+                    // Second occurrence in RIGHT JOIN: replace left table field with right table field
+                    usingFields.put(key, field);
+                }
+            }
+        }
+        List<Field> result = new ArrayList<>(usingFields.values());
+
+        // Step 2: Add non-USING columns in MYSQL SQL standard compliant order
+        // Get original field counts to accurately separate left and right table fields
+        int leftFieldCount = joinRelation.getLeft().getScope().getRelationFields().getAllFields().size();
+        int rightFieldCount = joinRelation.getRight().getScope().getRelationFields().getAllFields().size();
+        
+        if (preferRightTable) {
+            // RIGHT JOIN: [USING cols, right non-USING, left non-USING] per SQL standard
+            addNonUsingFieldsByCount(allFields, usingColSet, result, leftFieldCount, rightFieldCount, false);
+            addNonUsingFieldsByCount(allFields, usingColSet, result, leftFieldCount, rightFieldCount, true);
+        } else {
+            // Other JOINs: [USING cols, left non-USING, right non-USING] per SQL standard
+            addNonUsingFieldsByCount(allFields, usingColSet, result, leftFieldCount, rightFieldCount, true);
+            addNonUsingFieldsByCount(allFields, usingColSet, result, leftFieldCount, rightFieldCount, false);
+        }
+
+        return result;
+    }
+
+    private void addNonUsingFieldsByCount(List<Field> allFields, Set<String> usingColSet, 
+                                          List<Field> result, int leftFieldCount, int rightFieldCount,
+                                          boolean addLeftTable) {
+        int startIdx;
+        int endIdx;
+        if (addLeftTable) {
+            // Add left table fields: indices [0, leftFieldCount)
+            startIdx = 0;
+            endIdx = leftFieldCount;
+        } else {
+            // Add right table fields: indices [leftFieldCount, leftFieldCount + rightFieldCount)
+            startIdx = leftFieldCount;
+            endIdx = leftFieldCount + rightFieldCount;
+        }
+        
+        // Add non-USING fields from the specified table range
+        for (int i = startIdx; i < endIdx && i < allFields.size(); i++) {
+            Field field = allFields.get(i);
+            if (field.getName() == null || !usingColSet.contains(field.getName().toLowerCase())) {
+                result.add(field);
+            }
+        }
     }
 }
