@@ -223,9 +223,8 @@ public class MaterializedViewTextBasedRewriteTest extends MaterializedViewTestBa
     public void testMvAstCache() {
         String query = "select user_id, time, bitmap_union(to_bitmap(tag_id)) from user_tags group by user_id, time " +
                 "order by user_id, time;";
-        MaterializedView mv = getMv("test", query);
-        ParseNode parseNode1 = MvUtils.getQueryAst(mv, query, connectContext);
-        ParseNode parseNode2 = MvUtils.getQueryAst(mv, query, connectContext);
+        ParseNode parseNode1 = MvUtils.getQueryAst(null, query, connectContext);
+        ParseNode parseNode2 = MvUtils.getQueryAst(null, query, connectContext);
         Assertions.assertFalse(parseNode2.equals(parseNode1));
 
         CachingMvPlanContextBuilder.AstKey astKey1 = new CachingMvPlanContextBuilder.AstKey(parseNode1);

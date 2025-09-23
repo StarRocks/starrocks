@@ -501,21 +501,23 @@ public class MvUtils {
         String origSqlDialect = connectContext.getSessionVariable().getSqlDialect();
         long origSqlMode = connectContext.getSessionVariable().getSqlMode();
         try {
-            // sql_dialect
-            String sqlDialect = mv.getQuerySqlDialect();
-            if (!Strings.isNullOrEmpty(sqlDialect)) {
-                connectContext.getSessionVariable().setSqlDialect(sqlDialect);
+            if (mv != null) {
+                // sql_dialect
+                String sqlDialect = mv.getQuerySqlDialect();
+                if (!Strings.isNullOrEmpty(sqlDialect)) {
+                    connectContext.getSessionVariable().setSqlDialect(sqlDialect);
+                }
+                // sql_mode
+                long sqlMode = mv.getQuerySqlMode();
+                connectContext.getSessionVariable().setSqlMode(sqlMode);
             }
-            // sql_mode
-            long sqlMode = mv.getQuerySqlMode();
-            connectContext.getSessionVariable().setSqlMode(sqlMode);
 
             List<StatementBase> statementBases =
                     com.starrocks.sql.parser.SqlParser.parse(sql, connectContext.getSessionVariable());
             Preconditions.checkState(statementBases.size() == 1);
             mvStmt = statementBases.get(0);
         } catch (ParsingException parsingException) {
-            LOG.warn("parse mv{}'s sql:{} failed", mv.getName(), sql, parsingException);
+            LOG.warn("parse mv{}'s sql:{} failed", mv != null ? mv.getName() : "", sql, parsingException);
             return null;
         } finally {
             connectContext.getSessionVariable().setSqlDialect(origSqlDialect);
