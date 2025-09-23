@@ -29,7 +29,6 @@ import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.MapType;
-import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.StructField;
@@ -2183,10 +2182,10 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
         int queryStartIndex = context.queryStatement().start.getStartIndex();
         int queryStopIndex = context.queryStatement().stop.getStopIndex() + 1;
         // check defined query's sql dialect
-        QueryStatement queryStatement;
-        String sqlDialect = MaterializedView.getQuerySqlDialect(properties);
+        String sqlDialect = SqlDialect.getSqlDialect(properties);
         ConnectContext connectContext = ConnectContext.get() == null ? ConnectContext.build() :
                 ConnectContext.get();
+        QueryStatement queryStatement;
         if (SqlDialect.TRINO_DIALECT.equalsIgnoreCase(sqlDialect)) {
             // Use Trino dialect to generate query statement
             String queryText = context.start.getInputStream().getText(new Interval(queryStartIndex, queryStopIndex));
