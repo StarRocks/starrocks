@@ -27,6 +27,7 @@ import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.StructField;
 import com.starrocks.catalog.StructType;
 import com.starrocks.catalog.Type;
+import com.starrocks.common.DdlException;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.Pair;
 import com.starrocks.connector.ConnectorViewDefinition;
@@ -75,11 +76,13 @@ import org.apache.logging.log4j.Logger;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
@@ -146,11 +149,12 @@ public class IcebergApiConverter {
         return new Schema(icebergSchema.asStructType().fields());
     }
 
-    public static SortOrder toIcebergSortOrder(Schema schema, List<OrderByElement> orderByElements) {
+    public static SortOrder toIcebergSortOrder(Schema schema, List<OrderByElement> orderByElements) throws DdlException {
         if (orderByElements == null) {
             return null;
         }
 
+        Set<String> addedSortKey = new HashSet<>();
         SortOrder.Builder builder = SortOrder.builderFor(schema);
         for (OrderByElement orderByElement : orderByElements) {
             String columnName = orderByElement.castAsSlotRef();
@@ -160,6 +164,9 @@ public class IcebergApiConverter {
                 builder.asc(columnName, nullOrder);
             } else {
                 builder.desc(columnName, nullOrder);
+            }
+            if (!addedSortKey.add(columnName)) {
+                throw new DdlException("Duplicate sort key column " + columnName + " is not allowed.");
             }
         }
 

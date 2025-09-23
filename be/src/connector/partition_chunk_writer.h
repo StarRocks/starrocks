@@ -14,19 +14,15 @@
 
 #pragma once
 
-#include <fmt/format.h>
-
-#include <map>
-
 #include "column/chunk.h"
 #include "common/status.h"
 #include "connector/utils.h"
 #include "formats/file_writer.h"
 #include "fs/fs.h"
 #include "runtime/exec_env.h"
-#include "runtime/runtime_state.h"
 #include "storage/load_chunk_spiller.h"
 #include "util/threadpool.h"
+#include "util/uid_util.h"
 
 namespace starrocks::connector {
 
@@ -51,8 +47,10 @@ struct PartitionChunkWriterContext {
 struct BufferPartitionChunkWriterContext : public PartitionChunkWriterContext {};
 
 struct SpillPartitionChunkWriterContext : public PartitionChunkWriterContext {
+    std::shared_ptr<FileSystem> fs;
     pipeline::FragmentContext* fragment_context = nullptr;
     TupleDescriptor* tuple_desc = nullptr;
+    std::vector<std::unique_ptr<ColumnEvaluator>>* column_evaluators;
     std::shared_ptr<SortOrdering> sort_ordering;
 };
 
@@ -173,7 +171,7 @@ private:
 
     Status _write_chunk(Chunk* chunk);
 
-    void _merge_chunks();
+    Status _merge_chunks();
 
     SchemaPtr _make_schema();
 
@@ -184,13 +182,17 @@ private:
     void _handle_err(const Status& st);
 
 private:
+    std::shared_ptr<FileSystem> _fs = nullptr;
     pipeline::FragmentContext* _fragment_context = nullptr;
     TupleDescriptor* _tuple_desc = nullptr;
+    std::vector<std::unique_ptr<ColumnEvaluator>>* _column_evaluators;
     std::shared_ptr<SortOrdering> _sort_ordering;
     std::unique_ptr<ThreadPoolToken> _chunk_spill_token;
     std::unique_ptr<ThreadPoolToken> _block_merge_token;
     std::unique_ptr<LoadSpillBlockManager> _load_spill_block_mgr;
     std::shared_ptr<LoadChunkSpiller> _load_chunk_spiller;
+    //std::function<StatusOr<ColumnPtr>(Chunk*, size_t)> _column_eval_func;
+    TUniqueId _writer_id;
 
     std::list<ChunkPtr> _chunks;
     int64_t _chunk_bytes_usage = 0;
@@ -198,6 +200,7 @@ private:
     ChunkPtr _result_chunk;
     ChunkPtr _base_chunk;
     SchemaPtr _schema;
+    std::unordered_map<int, int> _col_index_map; // result chunk index -> chunk index
 
     static const int64_t kWaitMilliseconds;
 };

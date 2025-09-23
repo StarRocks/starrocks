@@ -28,6 +28,7 @@
 #include <ostream>
 #include <utility>
 
+#include "column/column_helper.h"
 #include "formats/file_writer.h"
 #include "formats/parquet/arrow_memory_pool.h"
 #include "formats/parquet/chunk_writer.h"
@@ -42,6 +43,7 @@
 
 namespace starrocks {
 class Chunk;
+class ColumnHelper;
 } // namespace starrocks
 
 namespace starrocks::formats {
