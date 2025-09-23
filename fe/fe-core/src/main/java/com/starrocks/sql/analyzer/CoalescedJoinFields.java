@@ -15,8 +15,8 @@
 package com.starrocks.sql.analyzer;
 
 import com.google.common.collect.ImmutableList;
-import com.starrocks.sql.ast.expression.JoinOperator;
-import com.starrocks.sql.ast.expression.SlotRef;
+import com.starrocks.analysis.JoinOperator;
+import com.starrocks.analysis.SlotRef;
 
 import java.util.List;
 import java.util.Set;
