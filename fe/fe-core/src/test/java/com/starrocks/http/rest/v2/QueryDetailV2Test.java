@@ -14,11 +14,12 @@
 
 package com.starrocks.http.rest.v2;
 
-import com.google.gson.Gson;
+import com.google.gson.reflect.TypeToken;
 import com.starrocks.common.Pair;
 import com.starrocks.ha.FrontendNodeType;
 import com.starrocks.http.StarRocksHttpTestCase;
 import com.starrocks.http.rest.RestBaseAction;
+import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.qe.QueryDetail;
 import com.starrocks.qe.QueryDetailQueue;
 import com.starrocks.server.GlobalStateMgr;
@@ -49,6 +50,7 @@ public class QueryDetailV2Test extends StarRocksHttpTestCase {
                 .build();
         Response response = networkClient.newCall(request).execute();
         String respStr = response.body().string();
+        Assertions.assertEquals(response.code(), 200);
         Assertions.assertNotNull(respStr);
     }
 
@@ -74,6 +76,7 @@ public class QueryDetailV2Test extends StarRocksHttpTestCase {
                 .build();
         Response response = networkClient.newCall(request).execute();
         String respStr = response.body().string();
+        Assertions.assertEquals(response.code(), 200);
         Assertions.assertTrue(respStr.contains("219a2d5443c542d4-8fc938db37c892e3"));
     }
 
@@ -138,8 +141,11 @@ public class QueryDetailV2Test extends StarRocksHttpTestCase {
                 .build();
         Response response = networkClient.newCall(request).execute();
         String respStr = Objects.requireNonNull(response.body()).string();
-        Gson gson = new Gson();
-        QueryDetail[] details = gson.fromJson(respStr, QueryDetail[].class);
-        Assertions.assertEquals(3, details.length);
+        RestBaseResultV2<List<QueryDetail>> queryDetails = GsonUtils.GSON.fromJson(
+                respStr,
+                new TypeToken<RestBaseResultV2<List<QueryDetail>>>() {
+                }.getType());
+        Assertions.assertEquals(response.code(), 200);
+        Assertions.assertEquals(3, queryDetails.getResult().size());
     }
 }
