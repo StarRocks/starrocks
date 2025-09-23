@@ -71,7 +71,9 @@ public class HiveTableSink extends DataSink {
         } else {
             this.compressionType = sessionVariable.getConnectorSinkCompressionCodec();
         }
-        this.targetMaxFileSize = sessionVariable.getConnectorSinkTargetMaxFileSize();
+
+        this.targetMaxFileSize = sessionVariable.getConnectorSinkTargetMaxFileSize() > 0 ?
+            sessionVariable.getConnectorSinkTargetMaxFileSize() : 1024L * 1024 * 1024;
         String catalogName = hiveTable.getCatalogName();
         Connector connector = GlobalStateMgr.getCurrentState().getConnectorMgr().getConnector(catalogName);
         Preconditions.checkState(connector != null,

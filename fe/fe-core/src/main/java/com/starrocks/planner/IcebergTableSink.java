@@ -59,7 +59,8 @@ public class IcebergTableSink extends DataSink {
         this.fileFormat = nativeTable.properties().getOrDefault(DEFAULT_FILE_FORMAT, DEFAULT_FILE_FORMAT_DEFAULT)
                 .toLowerCase();
         this.compressionType = sessionVariable.getConnectorSinkCompressionCodec();
-        this.targetMaxFileSize = sessionVariable.getConnectorSinkTargetMaxFileSize();
+        this.targetMaxFileSize = sessionVariable.getConnectorSinkTargetMaxFileSize() > 0 ?
+            sessionVariable.getConnectorSinkTargetMaxFileSize() : 1024L * 1024 * 1024;
         this.targetBranch = targetBranch;
 
         String catalogName = icebergTable.getCatalogName();
@@ -100,6 +101,7 @@ public class IcebergTableSink extends DataSink {
         TDataSink tDataSink = new TDataSink(TDataSinkType.ICEBERG_TABLE_SINK);
         TIcebergTableSink tIcebergTableSink = new TIcebergTableSink();
         tIcebergTableSink.setTarget_table_id(targetTableId);
+        tIcebergTableSink.setTuple_id(desc.getId().asInt());
         tIcebergTableSink.setLocation(location);
         tIcebergTableSink.setFile_format(fileFormat);
         tIcebergTableSink.setIs_static_partition_sink(isStaticPartitionSink);
