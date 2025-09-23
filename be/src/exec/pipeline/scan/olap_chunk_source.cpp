@@ -409,6 +409,10 @@ Status OlapChunkSource::_init_column_access_paths(Schema* schema) {
             } else {
                 LOG(WARNING) << "failed to convert column access path: " << res.status();
             }
+        } else if (path->is_root() && !path->children().empty()) {
+            // Check if this is a ROOT path for JSON field that has been pruned
+            // For JSON fields, the root column might be pruned but sub-paths are still needed
+            VLOG_ROW << "Skipping pruned JSON root path: " << root;
         } else {
             LOG(WARNING) << "failed to find column in schema: " << root;
         }

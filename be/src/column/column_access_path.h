@@ -74,6 +74,8 @@ public:
 
     bool is_index() const { return _type == TAccessPathType::type::INDEX; }
 
+    bool is_root() const { return _type == TAccessPathType::type::ROOT; }
+
     bool is_from_predicate() const { return _from_predicate; }
 
     bool is_extended() const { return _extended; }
