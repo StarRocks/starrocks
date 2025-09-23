@@ -112,6 +112,7 @@ Flink connector JAR 文件的命名格式如下：
 | sink.max-retries                  | No       | 3             | Stream Load 失败后的重试次数。超过该数量上限，则数据导入任务报错。取值范围：[0, 10]。该参数只在 `sink.version` 为 `V1` 才会生效。 |
 | sink.connect.timeout-ms           | No       |  30000        | 与 FE 建立 HTTP 连接的超时时间。取值范围：[100, 60000]。  Flink connector v1.2.9 之前，默认值为 `1000`。  |
 | sink.socket.timeout-ms            | No       | -1            | 此参数自 Flink connector 1.2.10 开始支持。HTTP 客户端等待数据的超时时间。单位：毫秒。默认值 `-1` 表示没有超时时间。|
+| sink.sanitize-error-log          | No           | false             | 此参数自 Flink connector 1.2.12 开始支持。用于控制是否对错误日志中的敏感数据进行清理，保护生产环境数据安全。当此项设置为 `true` 时，Stream Load 错误日志中的敏感行数据和列值将在连接器和 SDK 日志中被屏蔽。为保持向后兼容性，默认值为 `false`。 |
 | sink.wait-for-continue.timeout-ms | No       | 10000         | 此参数自 Flink connector 1.2.7 开始支持。等待 FE HTTP 100-continue 应答的超时时间。取值范围：[3000, 60000]。 |
 | sink.ignore.update-before         | No       | TRUE          | 此参数自 Flink connector 1.2.8 开始支持。将数据导入到主键表时，是否忽略来自 Flink 的 UPDATE_BEFORE 记录。如果将此参数设置为 false，则将该记录在主键表中视为 DELETE 操作。 |
 | sink.parallelism                  | No       | NONE          | 写入的并行度。仅适用于 Flink SQL。如果未设置， Flink planner 将决定并行度。**在多并行度的场景中，用户需要确保数据按正确顺序写入。** |
@@ -124,6 +125,7 @@ Flink connector JAR 文件的命名格式如下：
 | sink.properties.partial_update_mode | No     | row           | 指定部分更新的模式，取值包括 `row` 和 `column`。<ul><li>`row`（默认值），指定使用行模式执行部分更新，比较适用于较多列且小批量的实时更新场景。</li><li>`column`，指定使用列模式执行部分更新，比较适用于少数列并且大量行的批处理更新场景。在该场景，开启列模式，更新速度更快。例如，在一个包含 100 列的表中，每次更新 10 列（占比 10%）并更新所有行，则开启列模式，更新性能将提高 10 倍。</li></ul>  |
 | sink.properties.strict_mode       | No       | false         | 是否为 Stream Load 启用严格模式。在导入数据中出现不合格行（如列值不一致）时，严格模式会影响导入行为。有效值： `true` 和 `false`。具体参考 [STREAM LOAD](../sql-reference/sql-statements/loading_unloading/STREAM_LOAD.md)。 |
 | sink.properties.compression       | No       | NONE          | 用于 Stream Load 的压缩算法。有效值：`lz4_frame`。压缩 JSON 格式需要 Flink Connector 1.2.10+ 和 StarRocks v3.2.7+。压缩 CSV 格式仅需要 Flink Connector 1.2.11+。 |
+| sink.properties.prepared_timeout  | No           | NONE              | 自 Flink Connector 1.2.12版本起支持，且仅当 `sink.version` 为 `V2` 时生效。需StarRocks 3.5.4 及以上版本。设置事务 Stream Load 阶段从 `PREPARED` 到 `COMMITTED` 的超时时间（单位：秒）。通常仅需在 exactly-once 模式下设置；at-least-once 模式通常无需设置（Connector 默认值为 300 秒）。若在精确一次模式下未设置，则采用 StarRocks FE 配置项 `prepared_transaction_default_timeout_second`（默认 86400 秒）。详见[StarRocks 事务超时管理](./Stream_Load_transaction_interface.md#超时管理)。 |
 
 ## 数据类型映射
 
@@ -167,23 +169,24 @@ Flink connector JAR 文件的命名格式如下：
   - 如果 Flink connector 版本为 1.2.8 及更高，则建议指定 `sink.label-prefix` 的值。需要注意的是，label 前缀在 StarRocks 的所有类型的导入作业中必须是唯一的，包括 Flink job、Routine Load 和 Broker Load。
 
     - 如果指定了 label 前缀，Flink connector 将使用 label 前缀清理因为 Flink job 失败而生成的未完成事务，例如在checkpoint 进行过程中 Flink job 失败。如果使用 `SHOW PROC '/transactions/<db_id>/running';` 查看这些事务在 StarRock 的状态，则返回结果会显示事务通常处于 `PREPARED` 状态。当 Flink job 从 checkpoint 恢复时，Flink connector 将根据 label 前缀和 checkpoint 中的信息找到这些未完成的事务，并中止事务。当 Flink job 因某种原因退出时，由于采用了两阶段提交机制来实现 exactly-once语义，Flink connector 无法中止事务。当 Flink 作业退出时，Flink connector 尚未收到来自 Flink checkpoint coordinator 的通知，说明这些事务是否应包含在成功的 checkpoint 中，如果中止这些事务，则可能导致数据丢失。您可以在这篇[文章](https://flink.apache.org/2018/02/28/an-overview-of-end-to-end-exactly-once-processing-in-apache-flink-with-apache-kafka-too/)中了解如何在 Flink 中实现端到端的 exactly-once。
-    - 如果未指定 label 前缀，则未完成的事务将在超时后由 StarRocks 清理。然而，如果 Flink job 在事务超时之前频繁失败，则运行中的事务数量可能会达到 StarRocks 的 `max_running_txn_num_per_db` 限制。超时长度由 StarRocks FE 配置 `prepared_transaction_default_timeout_second` 控制，默认值为 `86400`（1天）。如果未指定 label 前缀，您可以设置一个较小的值，使事务更快超时。
+
+    - 若未指定 label 前缀，StarRocks 仅会在超时后清理滞留事务。但若 Flink 作业在事务超时前频繁失败，运行中的事务数量可能达到 StarRocks `max_running_txn_num_per_db` 的限制。当标签前缀未指定时，可为 `PREPARED` 事务设置更短的超时时间使其更快失效。关于预备状态超时设置方法，请参阅以下说明。
 
 - 如果您确定 Flink job 将在长时间停止后最终会使用 checkpoint 或 savepoint 恢复，则为避免数据丢失，请调整以下 StarRocks 配置：
 
-  - `prepared_transaction_default_timeout_second`：StarRocks FE 参数，默认值为 `86400`。此参数值需要大于 Flink job 的停止时间。否则，在重新启动 Flink job 之前，可能会因事务超时而中止未完成事务，这些事务可能包含在成功 checkpoint 中的，如果中止，则会导致数据丢失。
-  
-    请注意，当您设置一个较大的值时，则建议指定 `sink.label-prefix` 的值，则 Flink connector 可以根据 label 前缀和检查点中的一些信息来清理未完成的事务，而不是因事务超时后由 StarRocks 清理（这可能会导致数据丢失）。
+  - 调整 `PREPARED` 事务超时。关于如何设置超时，请参阅以下说明。
+
+    该超时时间需大于 Flink 作业的停机时间。否则，在重启 Flink 作业前，包含在成功 checkpoint 中的滞留事务可能因超时而被中止，导致数据丢失。
+
+    请注意：当您将此配置值设为较大数值时，建议同时指定 `sink.label-prefix` 的值，以便根据标签前缀和检查点中的信息清理滞留事务，而非依赖超时机制（后者可能导致数据丢失）。
 
   - `label_keep_max_second` 和 `label_keep_max_num`：StarRocks FE 参数，默认值分别为 `259200` 和 `1000`。更多信息，参见[FE 配置](./loading_introduction/loading_considerations.md#fe-配置)。`label_keep_max_second` 的值需要大于 Flink job 的停止时间。否则，Flink connector 无法使用保存在 Flink 的 savepoint 或 checkpoint 中的事务 label 来检查事务在 StarRocks 中的状态，并判断这些事务是否已提交，最终可能导致数据丢失。
 
-  您可以使用 `ADMIN SET FRONTEND CONFIG` 修改上述配置。
+- 如何设置 `PREPARED` 事务的超时时间
 
-    ```SQL
-    ADMIN SET FRONTEND CONFIG ("prepared_transaction_default_timeout_second" = "3600");
-    ADMIN SET FRONTEND CONFIG ("label_keep_max_second" = "259200");
-    ADMIN SET FRONTEND CONFIG ("label_keep_max_num" = "1000");
-    ```
+  - 对于 Connector 1.2.12+ 和 StarRocks 3.5.4+，可通过配置连接器参数 `sink.properties.prepared_timeout` 设置超时值。默认情况下该值未设置，此时将回退至 StarRocks FE 的全局配置 `prepared_transaction_default_timeout_second`（默认值为 `86400`）。
+
+  - 对于其他版本的连接器或 StarRocks，可通过配置 StarRocks FE 的全局配置项 `prepared_transaction_default_timeout_second`（默认值为 `86400`）来设置超时。
 
 ### Flush 策略
 
