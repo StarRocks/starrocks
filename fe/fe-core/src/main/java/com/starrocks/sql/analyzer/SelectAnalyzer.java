@@ -39,10 +39,10 @@ import com.starrocks.common.TreeNode;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.FieldReference;
+import com.starrocks.sql.ast.JoinRelation;
 import com.starrocks.sql.ast.Relation;
 import com.starrocks.sql.ast.SelectList;
 import com.starrocks.sql.ast.SelectListItem;
-import com.starrocks.sql.ast.JoinRelation;
 import com.starrocks.sql.common.StarRocksPlannerException;
 import org.apache.commons.collections4.CollectionUtils;
 
