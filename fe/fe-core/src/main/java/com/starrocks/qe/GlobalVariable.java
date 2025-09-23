@@ -109,9 +109,11 @@ public final class GlobalVariable {
     public static final String AUTOMV_RECOMMENDATIONS_TASK_EXPIRE_TIME  = "automv_recommendations_task_expire_time";
     public static final String AUTOMV_RECOMMENDATIONS_TASK_PENDING_LIMIT  = "automv_recommendations_task_pending_limit";
 
+    // cngroup
     public static final String CNGROUP_RESOURCE_USAGE_FRESH_RATIO = "cngroup_resource_usage_fresh_ratio";
     public static final String CNGROUP_LOW_WATERMARK_RUNNING_QUERY_COUNT  = "cngroup_low_watermark_running_query_count";
     public static final String CNGROUP_LOW_WATERMARK_CPU_USED_PERMILLE = "cngroup_low_watermark_cpu_used_permille";
+    public static final String CNGROUP_SCHEDULE_MODE = "cngroup_schedule_mode";
 
     public static final String ENABLE_QUERY_HISTORY = "enable_query_history";
 
@@ -313,6 +315,9 @@ public final class GlobalVariable {
 
     @VariableMgr.VarAttr(name = CNGROUP_LOW_WATERMARK_CPU_USED_PERMILLE)
     private static long cngroupLowWatermarkCPUUsedPermille = 600;
+
+    @VariableMgr.VarAttr(name = CNGROUP_SCHEDULE_MODE)
+    private static String cngroupScheduleMode = "standard";
 
     @VariableMgr.VarAttr(name = ENABLE_QUERY_HISTORY, flag = VariableMgr.GLOBAL)
     public static boolean enableQueryHistory = false;
@@ -623,6 +628,15 @@ public final class GlobalVariable {
     public static String getAutoMVStringTimeFormats() {
         return autoMVStringTimeFormats;
     }
+
+    public static void setCngroupScheduleMode(String mode) {
+        cngroupScheduleMode = mode;
+    }
+
+    public static String getCngroupScheduleMode() {
+        return cngroupScheduleMode;
+    }
+
     // Don't allow create instance.
 
     public static void setAutoMVEnable11mvSelectivityEvaluation(boolean flag) {
