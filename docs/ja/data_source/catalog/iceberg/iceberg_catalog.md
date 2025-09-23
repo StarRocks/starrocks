@@ -261,7 +261,7 @@ REST catalog 用の `MetastoreParams`:
 
 - `iceberg.catalog.security`
   - 必須: いいえ
-  - 説明: 使用する認証プロトコルのタイプ。デフォルト: `NONE`。有効な値: `OAUTH2`。`OAUTH2` 認証プロトコルには `token` または `credential` が必要です。
+  - 説明: 使用する認証プロトコルのタイプ。デフォルト: `NONE`。有効な値: `OAUTH2` および `JWT`。この項目が `OAUTH2` に設定されている場合、`token` または `credential` のいずれかが必要です。この項目が `JWT` に設定されている場合、ユーザーは `JWT` メソッドを使用して StarRocks クラスターにログインする必要があります。`token` または `credential` を省略することも可能です。その場合、StarRocks はログイン済みユーザーの JWT を使用して Catalog にアクセスします。
 
 - `iceberg.catalog.oauth2.token`
   - 必須: いいえ
