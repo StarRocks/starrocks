@@ -187,6 +187,12 @@ Maven プロジェクトの `pom.xml` ファイルに、以下の形式で Flink
 **デフォルト値**: -1<br/>
 **説明**: 1.2.10 以降でサポートされています。HTTP クライアントがデータを待機する時間。単位: ms。デフォルト値 `-1` はタイムアウトがないことを意味します。
 
+### sink.sanitize-error-log
+
+**必須**: いいえ<br/>
+**デフォルト値**: false<br/>
+**説明**: 1.2.12以降でサポートされています。 生産環境のセキュリティのために、エラーログ内の機密データをサニタイズするかどうか。 この項目が` true` に設定されている場合、Stream Load エラーログ内の機密行データおよび列値は、コネクタと SDK の両方のログで編集されます。 互換性維持のため、デフォルト値は `false` です。
+
 ### sink.wait-for-continue.timeout-ms
 
 **必須**: いいえ<br/>
@@ -259,6 +265,12 @@ Maven プロジェクトの `pom.xml` ファイルに、以下の形式で Flink
 **デフォルト値**: NONE<br/>
 **説明**: Stream Load に使用する圧縮アルゴリズム。有効な値：`lz4_frame`。JSON フォーマットの圧縮には、Flink connector 1.2.10+ と StarRocks v3.2.7+ が必要です。CSV フォーマットの圧縮には、Flink コネクタ 1.2.11+ のみが必要です。
 
+### sink.properties.prepared_timeout
+
+**必須**: いいえ<br/>
+**デフォルト値**: NONE<br/>
+**説明**: Flink コネクタ 1.2.12 以降でサポートされ、`sink.version` が `V2` に設定されている場合にのみ有効です。StarRocks 3.5.4 以降が必要です。トランザクションストリームロードフェーズにおける `PREPARED` から `COMMITTED` までのタイムアウトを秒単位で設定します。通常、exactly-once のみに必要です。at-least-once では通常設定不要（コネクタのデフォルトは300秒）。exactly-once で設定されていない場合、StarRocks FE 設定の `prepared_transaction_default_timeout_second`（デフォルト 86400 秒）が適用されます。詳細は[StarRocks トランザクションのタイムアウト管理](./Stream_Load_transaction_interface.md#トランザクションのタイムアウト管理)を参照してください。
+
 ## Flink と StarRocks 間のデータ型マッピング
 
 | Flink データ型                   | StarRocks データ型   |
@@ -299,23 +311,31 @@ Maven プロジェクトの `pom.xml` ファイルに、以下の形式で Flink
 
     - ラベルプレフィックスが指定されている場合、Flink コネクタはラベルプレフィックスを使用して、Flink の失敗シナリオ（例えば、Flink ジョブがチェックポイントが進行中のときに失敗する場合）で生成される可能性のある残存トランザクションをクリーンアップします。これらの残存トランザクションは、`SHOW PROC '/transactions/<db_id>/running';` を使用して StarRocks で表示すると、一般的に `PREPARED` ステータスにあります。Flink ジョブがチェックポイントから復元されると、Flink コネクタはラベルプレフィックスとチェックポイント内の情報に基づいてこれらの残存トランザクションを見つけ、それらを中止します。Flink ジョブが終了すると、exactly-once を実装するための二段階コミットメカニズムのため、Flink コネクタはそれらを中止できません。Flink ジョブが終了すると、Flink コネクタはトランザクションが成功したチェックポイントに含まれるべきかどうかについて Flink チェックポイントコーディネーターから通知を受け取っていないため、これらのトランザクションが中止されるとデータが失われる可能性があります。Flink でエンドツーエンドの exactly-once を達成する方法についての概要は、この [ブログ記事](https://flink.apache.org/2018/02/28/an-overview-of-end-to-end-exactly-once-processing-in-apache-flink-with-apache-kafka-too/) を参照してください。
 
+<<<<<<< HEAD
     - ラベルプレフィックスが指定されていない場合、残存トランザクションはタイムアウト後にのみ StarRocks によってクリーンアップされます。ただし、Flink ジョブがトランザクションがタイムアウトする前に頻繁に失敗すると、実行中のトランザクションの数が StarRocks の `max_running_txn_num_per_db` の制限に達する可能性があります。タイムアウトの長さは、StarRocks FE の設定 `prepared_transaction_default_timeout_second` によって制御され、デフォルト値は `86400`（1 日）です。ラベルプレフィックスが指定されていない場合、トランザクションがより早く期限切れになるように、これに小さい値を設定できます。
+=======
+    - ラベルプレフィックスが指定されていない場合、長期間実行中のトランザクションはタイムアウト後にのみ StarRocks によってクリーンアップされます。ただし、トランザクションがタイムアウトする前にFlinkジョブが頻繁に失敗すると、実行中のトランザクション数がStarRocksの `max_running_txn_num_per_db` 制限に達する可能性があります。ラベルプレフィックスが指定されていない場合、`PREPARED` トランザクションのタイムアウトを短く設定することで、より早く期限切れにすることができます。準備済みトランザクションのタイムアウト設定方法については以下を参照してください。
+>>>>>>> 44fed437f5 ([Doc] Flink Connector 1.2.12 Doc (#63386))
 
 - Flink ジョブが停止または継続的なフェイルオーバーのために長時間のダウンタイムの後に最終的にチェックポイントまたはセーブポイントから回復することを確信している場合、データ損失を避けるために次の StarRocks 設定を調整してください。
 
+<<<<<<< HEAD
   - `prepared_transaction_default_timeout_second`: StarRocks FE の設定、デフォルト値は `86400`。この設定の値は、Flink ジョブのダウンタイムよりも大きくする必要があります。そうしないと、Flink ジョブを再起動する前にタイムアウトのために成功したチェックポイントに含まれる残存トランザクションが中止され、データ損失が発生する可能性があります。
 
     この設定に大きな値を設定する場合、ラベルプレフィックスの値を指定することをお勧めします。これにより、チェックポイント内の情報とラベルプレフィックスに基づいて残存トランザクションがクリーンアップされ、タイムアウトによるクリーンアップ（データ損失を引き起こす可能性がある）を避けることができます。
+=======
+  - `PREPARED` トランザクションのタイムアウトを調整します。タイムアウトの設定方法については以下を参照してください。
+
+    タイムアウトは Flink ジョブのダウンタイムよりも長く設定する必要があります。そうしないと、正常なチェックポイントに含まれる未処理トランザクションが、Flink ジョブを再起動する前にタイムアウトにより中止され、データ損失が発生する可能性があります。
+>>>>>>> 44fed437f5 ([Doc] Flink Connector 1.2.12 Doc (#63386))
 
   - `label_keep_max_second` および `label_keep_max_num`: StarRocks FE の設定、デフォルト値はそれぞれ `259200` および `1000` です。詳細については、[FE 設定](./loading_introduction/loading_considerations.md#fe-configurations) を参照してください。`label_keep_max_second` の値は Flink ジョブのダウンタイムよりも大きくする必要があります。そうしないと、Flink コネクタは Flink のセーブポイントまたはチェックポイントに保存されたトランザクションラベルを使用して StarRocks 内のトランザクションの状態を確認し、それらのトランザクションがコミットされているかどうかを判断できず、最終的にデータ損失が発生する可能性があります。
 
-  これらの設定は変更可能であり、`ADMIN SET FRONTEND CONFIG` を使用して変更できます。
+- PREPARED トランザクションのタイムアウト設定方法
 
-  ```SQL
-    ADMIN SET FRONTEND CONFIG ("prepared_transaction_default_timeout_second" = "3600");
-    ADMIN SET FRONTEND CONFIG ("label_keep_max_second" = "259200");
-    ADMIN SET FRONTEND CONFIG ("label_keep_max_num" = "1000");
-  ```
+  - コネクタ 1.2.12 以降および StarRocks 3.5.4 以降では、コネクタパラメータ `sink.properties.prepared_timeout` を設定することでタイムアウトを設定できます。デフォルトでは値は設定されておらず、StarRocks FE のグローバル設定 `prepared_transaction_default_timeout_second`（デフォルト値は `86400`）がフォールバックされます。
+
+  - その他のバージョンのコネクタまたは StarRocks では、StarRocks FEのグローバル設定 `prepared_transaction_default_timeout_second`（デフォルト値は`86400`）を設定することでタイムアウトを設定できます。
 
 ### フラッシュポリシー
 
