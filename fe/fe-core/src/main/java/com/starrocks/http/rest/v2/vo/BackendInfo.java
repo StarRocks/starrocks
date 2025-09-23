@@ -14,53 +14,75 @@
 
 package com.starrocks.http.rest.v2.vo;
 
-import java.io.Serializable;
+import com.google.gson.annotations.SerializedName;
 
-public class BackendInfo implements Serializable {
+public class BackendInfo {
 
+    @SerializedName("id")
     private Long id;
 
+    @SerializedName("hostName")
     private String hostName;
 
+    @SerializedName("heartPort")
     private Long heartPort;
 
+    @SerializedName("bePort")
     private String bePort;
 
+    @SerializedName("httpPort")
     private String httpPort;
 
+    @SerializedName("brpcPort")
     private String brpcPort;
 
+    @SerializedName("state")
     private String state;
 
+    @SerializedName("startTime")
     private String startTime;
 
+    @SerializedName("lastReportTabletsTime")
     private String lastReportTabletsTime;
 
+    @SerializedName("version")
     private String version;
 
+    @SerializedName("lastUpdateTime")
     private String lastUpdateTime;
 
+    @SerializedName("memUsed")
     private Long memUsed;
 
+    @SerializedName("memLimit")
     private Long memLimit;
 
+    @SerializedName("cpuUsedPermille")
     private int cpuUsedPermille;
 
+    @SerializedName("cpuCores")
     private int cpuCores;
 
+    @SerializedName("dataUsedCapacity")
     private Long dataUsedCapacity;
 
+    @SerializedName("dataTotalCapacity")
     private Long dataTotalCapacity;
 
+    @SerializedName("availableCapacity")
     private Long availableCapacity;
 
+    @SerializedName("totalCapacity")
     private Long totalCapacity;
 
+    @SerializedName("lastMissingHeartbeatTime")
     private Long lastMissingHeartbeatTime;
 
+    @SerializedName("heartbeatErrMsg")
     private String heartbeatErrMsg;
 
-    private String backendType;
+    @SerializedName("isAlive")
+    private boolean isAlive;
 
     public BackendInfo() {
     }
@@ -231,5 +253,13 @@ public class BackendInfo implements Serializable {
 
     public void setHeartbeatErrMsg(String heartbeatErrMsg) {
         this.heartbeatErrMsg = heartbeatErrMsg;
+    }
+
+    public boolean isAlive() {
+        return isAlive;
+    }
+
+    public void setAlive(boolean alive) {
+        isAlive = alive;
     }
 }

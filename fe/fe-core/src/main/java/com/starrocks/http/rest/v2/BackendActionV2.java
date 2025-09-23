@@ -90,6 +90,7 @@ public class BackendActionV2 extends RestBaseAction {
                 backendInfo.setHttpPort(String.valueOf(computeNode.getHttpPort()));
                 backendInfo.setBrpcPort(String.valueOf(computeNode.getBrpcPort()));
                 backendInfo.setState(computeNode.getBackendState().name());
+                backendInfo.setAlive(computeNode.getIsAlive().get());
                 backendInfo.setStartTime(TimeUtils.longToTimeString(computeNode.getLastStartTime()));
                 backendInfo.setVersion(computeNode.getVersion());
                 backendInfo.setLastUpdateTime(TimeUtils.longToTimeString(computeNode.getLastUpdateMs()));
@@ -120,6 +121,7 @@ public class BackendActionV2 extends RestBaseAction {
                 backendInfo.setHttpPort(String.valueOf(backend.getHttpPort()));
                 backendInfo.setBrpcPort(String.valueOf(backend.getBrpcPort()));
                 backendInfo.setState(backend.getBackendState().name());
+                backendInfo.setAlive(backend.getIsAlive().get());
                 backendInfo.setStartTime(TimeUtils.longToTimeString(backend.getLastStartTime()));
                 backendInfo.setLastReportTabletsTime(backend.getBackendStatus().lastSuccessReportTabletsTime);
                 backendInfo.setVersion(backend.getVersion());
