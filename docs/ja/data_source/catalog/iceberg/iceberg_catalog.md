@@ -1325,6 +1325,7 @@ CREATE TABLE [IF NOT EXISTS] [database.]table_name
 (column_definition1[, column_definition2, ...
 partition_column_definition1,partition_column_definition2...])
 [partition_desc]
+[ORDER BY sort_desc)]
 [PROPERTIES ("key" = "value", ...)]
 [AS SELECT query]
 ```
@@ -1368,6 +1369,26 @@ column_name
 パーティション列は非パーティション列の後に定義される必要があります。パーティション列は FLOAT、DOUBLE、DECIMAL、および DATETIME を除くすべてのデータ型をサポートし、デフォルト値として `NULL` を使用することはできません。
 
 :::
+
+##### ORDER BY
+
+v4.0 以降、StarRocks は ORDER BY 句を介して Iceberg テーブルのソートキーを指定する機能をサポートしています。これにより、指定されたソートキーに基づいて同一データファイル内のデータを並べ替えることが可能です。
+
+ORDER BY 句には複数のソートキーを含めることができ、以下の形式で指定します：
+
+```SQL
+ORDER BY (column_name [sort_direction] [nulls_order], ...)
+```
+
+- `column_name`: ソートキーとして使用する列の名前。テーブルスキーマに存在する列でなければなりません。現在、Transform 式はサポートされていません。
+- `sort_direction`: ソート方向。有効な値：`ASC`（昇順）および `DESC`（降順）。
+- `nulls_order`: NULL値の順序。有効な値: `NULLS FIRST` および `NULLS LAST`。
+
+`sort_direction` および `nulls_order` はオプションです。例えば、以下の各々は有効な `sort_desc` です：
+
+- `column_name`
+- `column_name ASC`
+- `column_name DESC NULLS FIRST`
 
 ##### PROPERTIES
 
