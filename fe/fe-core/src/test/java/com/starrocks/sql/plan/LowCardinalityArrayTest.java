@@ -14,12 +14,16 @@
 
 package com.starrocks.sql.plan;
 
+import com.google.common.collect.Lists;
 import com.starrocks.common.FeConstants;
+import com.starrocks.planner.TableFunctionNode;
 import com.starrocks.utframe.StarRocksAssert;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
+
+import java.util.List;
 
 public class LowCardinalityArrayTest extends PlanTestBase {
 
@@ -802,5 +806,26 @@ public class LowCardinalityArrayTest extends PlanTestBase {
         Assertions.assertTrue(plan.contains("Global Dict Exprs:\n"
                 + "    14: DictDefine(13: a1, [<place-holder>])\n"
                 + "    15: DictDefine(13: a1, [concat(<place-holder>, 'xxx')])"), plan);
+    }
+
+    @Test
+    public void testArrayLowCardinalityOptimizationOnLateralLeftJoin() throws Exception {
+        String sql = "  select s1.v1, s1.v2, t.a1 a1, t.a2 a2\n" +
+                "  from s1 left join unnest(s1.a1, s1.a2)t(a1,a2) on true";
+        String plan = getFragmentPlan(sql);
+        Assertions.assertTrue(plan.contains("  2:Decode\n" +
+                "  |  <dict id 9> : <string id 5>\n" +
+                "  |  <dict id 10> : <string id 6>\n" +
+                "  |  \n" +
+                "  1:TableValueFunction\n" +
+                "  |  tableFunctionName: unnest\n" +
+                "  |  columns: [unnest]\n" +
+                "  |  returnTypes: [INT, INT]"), plan);
+        ExecPlan execPlan = getExecPlan(sql);
+        List<TableFunctionNode> tfNodes = Lists.newArrayList();
+        execPlan.getTopFragment().getPlanRoot().collect(TableFunctionNode.class, tfNodes);
+        Assertions.assertEquals(1, tfNodes.size());
+        TableFunctionNode tableFunctionNode = tfNodes.get(0);
+        Assertions.assertTrue(tableFunctionNode.getTableFunction().isLeftJoin());
     }
 }
