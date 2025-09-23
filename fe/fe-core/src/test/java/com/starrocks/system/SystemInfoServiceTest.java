@@ -328,7 +328,7 @@ public class SystemInfoServiceTest {
 
         {
             Assertions.assertThrows(DdlException.class, () ->
-                    service.dropComputeNode("newHost", 1000, "cn-not-exists", ""));
+                    service.dropComputeNode("newHost", 1000, "warehousename-cn-not-exists", ""));
         }
 
         Config.enable_trace_historical_node = savedConfig;
