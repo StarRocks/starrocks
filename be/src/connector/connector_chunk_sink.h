@@ -65,6 +65,8 @@ public:
     void set_status(const Status& status);
 
 protected:
+    void push_rollback_action(const std::function<void()>& action);
+
     AsyncFlushStreamPoller* _io_poller = nullptr;
     SinkOperatorMemoryManager* _op_mem_mgr = nullptr;
 

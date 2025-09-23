@@ -27,6 +27,7 @@ import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.StructType;
 import com.starrocks.catalog.Type;
+import com.starrocks.common.DdlException;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.hive.RemoteFileInputFormat;
 import com.starrocks.persist.ColumnIdExpr;
@@ -522,8 +523,12 @@ public class IcebergApiConverterTest {
         fields.add(Types.NestedField.optional(3, "data", new Types.StringType()));
         Schema schema = new Schema(fields);
 
-        SortOrder nullSortOrder = IcebergApiConverter.toIcebergSortOrder(schema, null);
-        assertEquals(nullSortOrder, null);
+        try {
+            SortOrder nullSortOrder = IcebergApiConverter.toIcebergSortOrder(schema, null);
+            assertEquals(nullSortOrder, null);
+        } catch (DdlException e) {
+            assertTrue(false);
+        }
 
         List<OrderByElement> orderByElements = new ArrayList<>();
         Expr expr1 = ColumnIdExpr.fromSql("id").getExpr();
@@ -531,9 +536,26 @@ public class IcebergApiConverterTest {
         Expr expr2 = ColumnIdExpr.fromSql("dt").getExpr();
         orderByElements.add(new OrderByElement(expr2, false, false));
 
-        SortOrder sortOrder = IcebergApiConverter.toIcebergSortOrder(schema, orderByElements);
+        SortOrder sortOrder = null;
+        try {
+            sortOrder = IcebergApiConverter.toIcebergSortOrder(schema, orderByElements);
+        } catch (DdlException e) {
+            assertTrue(false);
+        }
         List<SortField> sortFields = sortOrder.fields();
         assertEquals(sortFields.size(), 2);
+
+        // duplicate sorted columns
+        Expr expr3 = ColumnIdExpr.fromSql("id").getExpr();
+        orderByElements.add(new OrderByElement(expr3, true, true));
+
+        sortOrder = null;
+        try {
+            sortOrder = IcebergApiConverter.toIcebergSortOrder(schema, orderByElements);
+        } catch (DdlException e) {
+            assertTrue(true);
+        }
+        assertEquals(sortOrder, null);
     }
 
 }
