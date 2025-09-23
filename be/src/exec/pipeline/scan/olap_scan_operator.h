@@ -62,6 +62,7 @@ public:
     Status do_prepare(RuntimeState* state) override;
     void do_close(RuntimeState* state) override;
     ChunkSourcePtr create_chunk_source(MorselPtr morsel, int32_t chunk_source_index) override;
+    bool support_chunk_source_reuse() const override { return true; }
 
     int64_t get_scan_table_id() const override;
     std::string get_name() const override;

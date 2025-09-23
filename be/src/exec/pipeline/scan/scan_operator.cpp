@@ -386,8 +386,10 @@ Status ScanOperator::_try_to_trigger_next_scan(RuntimeState* state) {
 
 void ScanOperator::_close_chunk_source_unlocked(RuntimeState* state, int chunk_source_index) {
     if (_chunk_sources[chunk_source_index] != nullptr) {
-        // _chunk_sources[chunk_source_index]->close(state);
-        // _chunk_sources[chunk_source_index] = nullptr;
+        if (!support_chunk_source_reuse()) {
+            _chunk_sources[chunk_source_index]->close(state);
+            _chunk_sources[chunk_source_index] = nullptr;
+        }
         detach_chunk_source(chunk_source_index);
     }
 }
@@ -597,7 +599,7 @@ Status ScanOperator::_pickup_morsel(RuntimeState* state, int chunk_source_index)
             SCOPED_TIMER(_prepare_chunk_source_timer);
             auto& source_ref = _chunk_sources[chunk_source_index];
             // FIXME: check if it's the same tablet
-            if (source_ref != nullptr) {
+            if (source_ref != nullptr && support_chunk_source_reuse()) {
                 bool can_reuse = source_ref->get_morsel()->can_reuse(*morsel);
                 if (can_reuse) {
                     Status st = source_ref->reuse(std::move(morsel));
