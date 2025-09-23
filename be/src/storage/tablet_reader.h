@@ -50,6 +50,8 @@ public:
 
     Status prepare();
 
+    Status reuse(TabletReaderParams& _params);
+
     // Precondition: the last method called must have been `prepare()`.
     Status open(const TabletReaderParams& read_params);
 
@@ -63,6 +65,7 @@ public:
     void set_delete_predicates_version(Version version) { _delete_predicates_version = version; }
 
     Status get_segment_iterators(const TabletReaderParams& params, std::vector<ChunkIteratorPtr>* iters);
+    Status get_segment_iterators2(const TabletReaderParams& params, std::vector<ChunkIteratorPtr>* iters);
 
     static Status parse_seek_range(const TabletSchemaCSPtr& tablet_schema,
                                    TabletReaderParams::RangeStartOperation range_start_op,

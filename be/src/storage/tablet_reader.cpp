@@ -25,7 +25,6 @@
 #include "gen_cpp/tablet_schema.pb.h"
 #include "gutil/stl_util.h"
 #include "primary_key_encoder.h"
-#include "service/backend_options.h"
 #include "storage/aggregate_iterator.h"
 #include "storage/chunk_helper.h"
 #include "storage/column_predicate.h"
@@ -38,6 +37,9 @@
 #include "storage/predicate_parser.h"
 #include "storage/rowset/column_reader.h"
 #include "storage/rowset/rowid_range_option.h"
+#include "storage/rowset/rowset.h"
+#include "storage/rowset/rowset_options.h"
+#include "storage/rowset/short_key_range_option.h"
 #include "storage/seek_range.h"
 #include "storage/tablet.h"
 #include "storage/tablet_updates.h"
@@ -302,7 +304,8 @@ Status TabletReader::_init_collector_for_pk_index_read() {
     rs_opts.rowid_range_option->add(rowset.get(), rowset->segments()[segment_idx].get(), rowid_range, true);
 
     std::vector<ChunkIteratorPtr> iters;
-    RETURN_IF_ERROR(rowset->get_segment_iterators(schema(), rs_opts, &iters));
+    SegmentReadOptions seg_opts;
+    RETURN_IF_ERROR(rowset->get_segment_iterators(schema(), rs_opts, seg_opts, &iters));
 
     if (iters.size() != 1) {
         return Status::InternalError(
@@ -339,8 +342,86 @@ Status TabletReader::do_get_next(Chunk* chunk, std::vector<RowSourceMask>* sourc
     return Status::OK();
 }
 
+Status TabletReader::reuse(TabletReaderParams& params) {
+    _collect_iter->close();
+    _collect_iter.reset();
+
+    auto rs_opts = params.reuse_rowset_options();
+
+    rs_opts->rowid_range_option = params.rowid_range_option;
+    rs_opts->short_key_ranges_option = params.short_key_ranges_option;
+    // rs_opts->prune_column_after_index_filter = params.prune_column_after_index_filter;
+    // rs_opts->enable_gin_filter = params.enable_gin_filter;
+
+    auto seg_opts = params.reuse_segment_options();
+    seg_opts->is_cancelled = (rs_opts->runtime_state != nullptr) ? &rs_opts->runtime_state->cancelled_ref() : nullptr;
+
+    std::vector<ChunkIteratorPtr> iters;
+    for (auto& rowset : _rowsets) {
+        if (params.rowid_range_option != nullptr && !params.rowid_range_option->contains_rowset(rowset.get())) {
+            continue;
+        }
+
+        RETURN_IF_ERROR(rowset->get_segment_iterators(schema(), *rs_opts, *seg_opts, &iters));
+    }
+
+    for (auto& rowset : _rowsets) {
+        if (params.rowid_range_option != nullptr && !params.rowid_range_option->contains_rowset(rowset.get())) {
+            continue;
+        }
+
+        seg_opts->rowset_path = rowset->rowset_path();
+        seg_opts->rowsetid = rowset->rowset_meta()->rowset_id();
+        seg_opts->rowset_id = rowset->rowset_meta()->get_rowset_seg_id();
+
+        if (rs_opts->delete_predicates != nullptr) {
+            seg_opts->delete_predicates = rs_opts->delete_predicates->get_predicates(rowset->end_version());
+        }
+
+        if (rs_opts->short_key_ranges_option != nullptr) {
+            seg_opts->short_key_ranges = rs_opts->short_key_ranges_option->short_key_ranges;
+        }
+
+        for (auto& seg_ptr : rowset->segments()) {
+            if (seg_ptr->num_rows() == 0) {
+                continue;
+            }
+
+            if (seg_opts->rowid_range_option != nullptr) { // physical split.
+                auto [rowid_range, is_first_split_of_segment] =
+                        rs_opts->rowid_range_option->get_segment_rowid_range(rowset.get(), seg_ptr.get());
+                if (rowid_range == nullptr) {
+                    continue;
+                }
+                seg_opts->rowid_range_option = std::move(rowid_range);
+                seg_opts->is_first_split_of_segment = is_first_split_of_segment;
+            }
+
+            // TODO: avoid create a new iterator for each segment
+            auto res = seg_ptr->new_iterator(schema(), *seg_opts);
+            if (res.status().is_end_of_file()) {
+                continue;
+            }
+            if (!res.ok()) {
+                return res.status();
+            }
+            iters.emplace_back(std::move(res).value());
+        }
+    }
+
+    if (iters.empty()) {
+        _collect_iter = new_empty_iterator(schema(), params.chunk_size);
+    } else if (iters.size() == 1) {
+        _collect_iter = std::move(iters[0]);
+    } else {
+        _collect_iter = new_union_iterator(std::move(iters));
+    }
+
+    return Status::OK();
+}
+
 Status TabletReader::get_segment_iterators(const TabletReaderParams& params, std::vector<ChunkIteratorPtr>* iters) {
-    RowsetReadOptions rs_opts;
+    RowsetReadOptions& rs_opts = const_cast<RowsetReadOptions&>(params.reuse_state.rs_opts);
     KeysType keys_type = _tablet_schema->keys_type();
     RETURN_IF_ERROR(_init_predicates(params));
     RETURN_IF_ERROR(_init_delete_predicates(params, &_delete_predicates));
@@ -389,12 +470,13 @@ Status TabletReader::get_segment_iterators(const TabletReaderParams& params, std
     }
 
     SCOPED_RAW_TIMER(&_stats.create_segment_iter_ns);
+    SegmentReadOptions& seg_opts = const_cast<SegmentReadOptions&>(params.reuse_state.seg_opts);
     for (auto& rowset : _rowsets) {
         if (params.rowid_range_option != nullptr && !params.rowid_range_option->contains_rowset(rowset.get())) {
             continue;
         }
 
-        RETURN_IF_ERROR(rowset->get_segment_iterators(schema(), rs_opts, iters));
+        RETURN_IF_ERROR(rowset->get_segment_iterators(schema(), rs_opts, seg_opts, iters));
     }
     return Status::OK();
 }
