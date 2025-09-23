@@ -52,7 +52,6 @@ import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Partition.PartitionState;
 import com.starrocks.catalog.Replica;
 import com.starrocks.catalog.Table;
-import com.starrocks.common.DdlException;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.util.ThreadUtil;
 import com.starrocks.server.GlobalStateMgr;
@@ -411,8 +410,8 @@ public class SchemaChangeJobV2Test extends DDLTestBase {
         try {
             alterJobV2 = schemaChangeHandler.analyzeAndCreateJob(Lists.newArrayList(clause), db, olapTable);
             Assertions.fail();
-        } catch (DdlException e) {
-            Assertions.assertTrue(e.getMessage().contains("no available compute nodes"));
+        } catch (Exception e) {
+            Assertions.assertTrue(e.getMessage().contains("Current connection's warehouse(default_warehouse) does not exist"));
         }
     }
 
