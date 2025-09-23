@@ -47,9 +47,9 @@ public class BackendActionV2Test extends StarRocksHttpTestCase {
         List<BackendInfo> backendInfos = resp.getResult();
         Assertions.assertEquals(200, response.code());
         Assertions.assertEquals(3, backendInfos.size());
-        Assertions.assertEquals(1000 ,backendInfos.get(0).getId());
-        Assertions.assertEquals(1001 ,backendInfos.get(1).getId());
-        Assertions.assertEquals(1002 ,backendInfos.get(2).getId());
+        Assertions.assertEquals(1000, backendInfos.get(0).getId());
+        Assertions.assertEquals(1001, backendInfos.get(1).getId());
+        Assertions.assertEquals(1002, backendInfos.get(2).getId());
     }
 
     @Test
@@ -72,9 +72,9 @@ public class BackendActionV2Test extends StarRocksHttpTestCase {
         List<BackendInfo> backendInfos = resp.getResult();
         Assertions.assertEquals(200, response.code());
         Assertions.assertEquals(2, backendInfos.size());
-        Assertions.assertEquals(10001 ,backendInfos.get(0).getId());
+        Assertions.assertEquals(10001, backendInfos.get(0).getId());
         Assertions.assertTrue(backendInfos.get(0).isAlive());
-        Assertions.assertEquals(10002 ,backendInfos.get(1).getId());
+        Assertions.assertEquals(10002, backendInfos.get(1).getId());
         Assertions.assertTrue(backendInfos.get(1).isAlive());
     }
 
