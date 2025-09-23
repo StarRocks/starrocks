@@ -79,7 +79,10 @@ bool ParquetMetaHelper::_is_valid_type(const ParquetField* parquet_field, const 
             }
         }
     } else if (parquet_field->type == ColumnType::STRUCT) {
-        if (!type_descriptor->field_ids.empty()) {
+        if (type_descriptor->type == LogicalType::TYPE_VARIANT) {
+            // variant type currently can be mapped to struct type in parquet
+            has_valid_child = true;
+        } else if (!type_descriptor->field_ids.empty()) {
             std::unordered_map<int32_t, const TypeDescriptor*> field_id_2_type;
             for (size_t idx = 0; idx < type_descriptor->children.size(); idx++) {
                 field_id_2_type.emplace(type_descriptor->field_ids[idx], &type_descriptor->children[idx]);
