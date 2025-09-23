@@ -149,6 +149,9 @@ public class TableFunction extends Function {
         this.isLeftJoin = isLeftJoin;
     }
 
+    public boolean isLeftJoin() {
+        return this.isLeftJoin;
+    }
 
 
 
