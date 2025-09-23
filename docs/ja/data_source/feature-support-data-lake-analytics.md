@@ -198,7 +198,9 @@ v3.3.0以降、StarRocksは上記のメタデータ読み取りおよびキャ�
 
 ### Iceberg ビュー
 
-StarRocks は v3.3.2 以降、Iceberg ビューのクエリをサポートしています。現在、StarRocks を通じて作成された Iceberg ビューのみがサポートされています。
+StarRocks は、v3.3.2 以降、Iceberg ビューのクエリにサポートし、v3.5 以降、Iceberg ビューの作成にサポートしています。
+
+現在、StarRocks を通じて作成された Iceberg ビューのみがサポートされています。v3.5 から、既存の Iceberg ビューに StarRocks の構文スタイル定義を追加できるようになりました。
 
 ### クエリ統計インターフェース
 
