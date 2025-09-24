@@ -15,6 +15,7 @@
 package com.starrocks.sql.plan;
 
 import com.google.common.collect.Lists;
+import com.starrocks.catalog.FunctionSet;
 import com.starrocks.common.FeConstants;
 import com.starrocks.planner.TableFunctionNode;
 import com.starrocks.utframe.StarRocksAssert;
@@ -24,6 +25,8 @@ import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
+import java.util.stream.Collectors;
+import java.util.stream.IntStream;
 
 public class LowCardinalityArrayTest extends PlanTestBase {
 
@@ -827,5 +830,236 @@ public class LowCardinalityArrayTest extends PlanTestBase {
         Assertions.assertEquals(1, tfNodes.size());
         TableFunctionNode tableFunctionNode = tfNodes.get(0);
         Assertions.assertTrue(tableFunctionNode.getTableFunction().isLeftJoin());
+    }
+    @Test
+    public void testWindowFunOptimizationInWindowAboveUnnest() throws Exception {
+        String sql = "with cte as(\n" +
+                "  select s1.v1, s1.v2, t.a1 a1\n" +
+                "  from s1,unnest(s1.a1)t(a1) \n" +
+                ")\n" +
+                "select v1, v2, lead(a1) over(partition by v1 order by v2)\n" +
+                "from cte;";
+        String plan = getVerboseExplain(sql);
+        Assertions.assertTrue(plan.contains("  6:Decode\n" +
+                "  |  <dict id 9> : <string id 6>\n" +
+                "  |  cardinality: 1\n" +
+                "  |  \n" +
+                "  5:Project\n" +
+                "  |  output columns:\n" +
+                "  |  1 <-> [1: v1, BIGINT, true]\n" +
+                "  |  2 <-> [2: v2, INT, true]\n" +
+                "  |  9 <-> [9: lead(5: a1, 1, null), INT, true]\n" +
+                "  |  cardinality: 1\n" +
+                "  |  \n" +
+                "  4:ANALYTIC\n" +
+                "  |  functions: [, lead[([8: a1, INT, true], 1, NULL); " +
+                "args: INT; result: INT; args nullable: true; result nullable: true], ]\n" +
+                "  |  partition by: [1: v1, BIGINT, true]\n" +
+                "  |  order by: [2: v2, INT, true] ASC\n" +
+                "  |  window: ROWS BETWEEN UNBOUNDED PRECEDING AND 1 FOLLOWING\n" +
+                "  |  cardinality: 1"), plan);
+    }
+
+    @Test
+    public void testOrderByClauseOptimizationInWindowAboveUnnest() throws Exception {
+        String sql = "with cte as(\n" +
+                "  select s1.v1, s1.v2, t.a1 a1\n" +
+                "  from s1,unnest(s1.a1)t(a1) \n" +
+                ")\n" +
+                "select v1, a1, lead(v2) over(partition by v1 order by a1)\n" +
+                "from cte;";
+        String plan = getVerboseExplain(sql);
+        Assertions.assertTrue(plan.contains("  6:Decode\n" +
+                "  |  <dict id 8> : <string id 5>\n" +
+                "  |  cardinality: 1\n" +
+                "  |  \n" +
+                "  5:Project\n" +
+                "  |  output columns:\n" +
+                "  |  1 <-> [1: v1, BIGINT, true]\n" +
+                "  |  6 <-> [6: lead(2: v2, 1, null), INT, true]\n" +
+                "  |  8 <-> [8: a1, INT, true]\n" +
+                "  |  cardinality: 1\n" +
+                "  |  \n" +
+                "  4:ANALYTIC\n" +
+                "  |  functions: [, lead[([2: v2, INT, true], 1, NULL); " +
+                "args: INT; result: INT; args nullable: true; result nullable: true], ]\n" +
+                "  |  partition by: [1: v1, BIGINT, true]\n" +
+                "  |  order by: [8: a1, INT, true] ASC\n" +
+                "  |  window: ROWS BETWEEN UNBOUNDED PRECEDING AND 1 FOLLOWING\n" +
+                "  |  cardinality: 1"), plan);
+    }
+
+    @Test
+    public void testSupportedWindowFunctions() throws Exception {
+        String sqlFmt = "with cte as(\n" +
+                "  select s1.v1, s1.v2, t.a1 a1\n" +
+                "  from s1,unnest(s1.a1)t(a1) \n" +
+                ")\n" +
+                "select v1, a1, {WINDOW_FUN}(a1) over(partition by v1 order by a1)\n" +
+                "from cte;";
+
+        String[] windowFuncs = new String[] {
+                FunctionSet.LEAD,
+                FunctionSet.LAG,
+                FunctionSet.FIRST_VALUE,
+                FunctionSet.LAST_VALUE,
+                FunctionSet.MAX,
+                FunctionSet.MIN,
+                FunctionSet.COUNT};
+
+        for (String wf : windowFuncs) {
+            String q = sqlFmt.replace("{WINDOW_FUN}", wf);
+            String plan = getVerboseExplain(q);
+            String[] lines = plan.split("\n");
+            List<Integer> decodeNodeLines = IntStream.range(0, lines.length).boxed()
+                    .filter(lineno -> lines[lineno]
+                            .matches("^\\s*\\d+:Decode\\s*$"))
+                    .collect(Collectors.toList());
+
+            List<Integer> analyticNodeLines = IntStream.range(0, lines.length).boxed()
+                    .filter(lineno -> lines[lineno]
+                            .matches("^\\s*\\d+:ANALYTIC\\s*$"))
+                    .collect(Collectors.toList());
+            Assertions.assertEquals(1, decodeNodeLines.size(), plan);
+            Assertions.assertEquals(1, analyticNodeLines.size(), plan);
+            Assertions.assertTrue(decodeNodeLines.get(0) < analyticNodeLines.get(0), plan);
+        }
+    }
+
+    @Test
+    public void testNotSupportedWindowFunctions() throws Exception {
+        String sqlFmt = "with cte as(\n" +
+                "  select s1.v1, s1.v2, t.a1 a1\n" +
+                "  from s1,unnest(s1.a1)t(a1) \n" +
+                ")\n" +
+                "select v1, a1, {WINDOW_FUN}(a1) over(partition by v1)\n" +
+                "from cte;";
+
+        String[] windowFuncs = new String[] {
+                FunctionSet.SUM,
+                FunctionSet.AVG,
+        };
+
+        for (String wf : windowFuncs) {
+            String q = sqlFmt.replace("{WINDOW_FUN}", wf);
+            String plan = getVerboseExplain(q);
+            String[] lines = plan.split("\n");
+            List<Integer> decodeNodeLines = IntStream.range(0, lines.length).boxed()
+                    .filter(lineno -> lines[lineno]
+                            .matches("^\\s*\\d+:Decode\\s*$"))
+                    .collect(Collectors.toList());
+
+            List<Integer> analyticNodeLines = IntStream.range(0, lines.length).boxed()
+                    .filter(lineno -> lines[lineno]
+                            .matches("^\\s*\\d+:ANALYTIC\\s*$"))
+                    .collect(Collectors.toList());
+            Assertions.assertEquals(1, decodeNodeLines.size(), plan);
+            Assertions.assertEquals(1, analyticNodeLines.size(), plan);
+            Assertions.assertTrue(decodeNodeLines.get(0) > analyticNodeLines.get(0), plan);
+        }
+    }
+
+    @Test
+    public void testdWindowFunctionCount() throws Exception {
+        String sql1 = "with cte as(\n" +
+                "  select s1.v1, s1.v2, t.a1 a1\n" +
+                "  from s1,unnest(s1.a1)t(a1) \n" +
+                ")\n" +
+                "select v1, count(a1) over (partition by v1)\n" +
+                "from cte;";
+
+        String sql2 = "with cte as(\n" +
+                "  select s1.v1, s1.v2, t.a1 a1\n" +
+                "  from s1,unnest(s1.a1)t(a1) \n" +
+                ")\n" +
+                "select v1, count(a1) over (partition by v1)\n" +
+                "from cte;";
+
+        String plan1 = getVerboseExplain(sql1);
+        Assertions.assertTrue(plan1.contains("  5:Project\n" +
+                "  |  output columns:\n" +
+                "  |  1 <-> [1: v1, BIGINT, true]\n" +
+                "  |  6 <-> [6: count(5: a1), BIGINT, false]\n" +
+                "  |  cardinality: 1\n" +
+                "  |  \n" +
+                "  4:ANALYTIC\n" +
+                "  |  functions: [, count[([8: a1, INT, true]); args: INT; result: BIGINT;" +
+                " args nullable: true; result nullable: false], ]\n" +
+                "  |  partition by: [1: v1, BIGINT, true]\n" +
+                "  |  cardinality: 1"), plan1);
+        String plan2 = getVerboseExplain(sql2);
+        Assertions.assertTrue(plan2.contains("  5:Project\n" +
+                "  |  output columns:\n" +
+                "  |  1 <-> [1: v1, BIGINT, true]\n" +
+                "  |  6 <-> [6: count(5: a1), BIGINT, false]\n" +
+                "  |  cardinality: 1\n" +
+                "  |  \n" +
+                "  4:ANALYTIC\n" +
+                "  |  functions: [, count[([8: a1, INT, true]); args: INT; result: BIGINT;" +
+                " args nullable: true; result nullable: false], ]\n" +
+                "  |  partition by: [1: v1, BIGINT, true]\n" +
+                "  |  cardinality: 1"), plan2);
+    }
+
+    @Test
+    public void testPartitionByClauseOptimizationInWindowAboveUnnest() throws Exception {
+        String sql = "with cte as(\n" +
+                "  select s1.v1, s1.v2, t.a1 a1\n" +
+                "  from s1,unnest(s1.a1)t(a1) \n" +
+                ")\n" +
+                "select v1, a1, lead(v2) over(partition by a1 order by v1)\n" +
+                "from cte;";
+        String plan = getVerboseExplain(sql);
+        Assertions.assertTrue(plan.contains("  6:Decode\n" +
+                "  |  <dict id 8> : <string id 5>\n" +
+                "  |  cardinality: 1\n" +
+                "  |  \n" +
+                "  5:Project\n" +
+                "  |  output columns:\n" +
+                "  |  1 <-> [1: v1, BIGINT, true]\n" +
+                "  |  6 <-> [6: lead(2: v2, 1, null), INT, true]\n" +
+                "  |  8 <-> [8: a1, INT, true]\n" +
+                "  |  cardinality: 1\n" +
+                "  |  \n" +
+                "  4:ANALYTIC\n" +
+                "  |  functions: [, lead[([2: v2, INT, true], 1, NULL); args: INT; result: INT; " +
+                "args nullable: true; result nullable: true], ]\n" +
+                "  |  partition by: [8: a1, INT, true]\n" +
+                "  |  order by: [1: v1, BIGINT, true] ASC\n" +
+                "  |  window: ROWS BETWEEN UNBOUNDED PRECEDING AND 1 FOLLOWING\n" +
+                "  |  cardinality: 1"), plan);
+    }
+
+    @Test
+    public void testOptimizationInWindowAboveUnnest() throws Exception {
+        String sql = "with cte as(\n" +
+                "  select s1.v1, s1.v2, t.a1 a1, t.a2 a2\n" +
+                "  from s1,unnest(s1.a1, s1.a2)t(a1,a2) \n" +
+                ")\n" +
+                "select v1, v2, a1, a2, lead(a1) over(partition by a2 order by substr(a1, 1, 3))\n" +
+                "from cte;";
+        String plan = getVerboseExplain(sql);
+        Assertions.assertTrue(plan.contains("  7:Decode\n" +
+                "  |  <dict id 17> : <string id 9>\n" +
+                "  |  <dict id 19> : <string id 12>\n" +
+                "  |  <dict id 16> : <string id 6>\n" +
+                "  |  cardinality: 1\n" +
+                "  |  \n" +
+                "  6:Project\n" +
+                "  |  output columns:\n" +
+                "  |  7 <-> [7: v1, BIGINT, true]\n" +
+                "  |  8 <-> [8: v2, INT, true]\n" +
+                "  |  16 <-> [16: a2, INT, true]\n" +
+                "  |  17 <-> [17: a1, INT, true]\n" +
+                "  |  19 <-> [19: lead(9: a1, 1, null), INT, true]\n" +
+                "  |  cardinality: 1\n" +
+                "  |  \n" +
+                "  5:ANALYTIC\n" +
+                "  |  functions: [, lead[([17: a1, INT, true], 1, NULL); args: INT; result: INT; " +
+                "args nullable: true; result nullable: true], ]\n" +
+                "  |  partition by: [16: a2, INT, true]\n" +
+                "  |  order by: [18: substr, INT, true] ASC\n" +
+                "  |  window: ROWS BETWEEN UNBOUNDED PRECEDING AND 1 FOLLOWING\n" +
+                "  |  cardinality: 1"), plan);
     }
 }
