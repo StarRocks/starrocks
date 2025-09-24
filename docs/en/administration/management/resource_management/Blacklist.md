@@ -5,7 +5,7 @@ sidebar_position: 80
 
 # Blacklist Management
 
-In some cases, administrators need to disable certain patterns of SQL to avoid SQL from triggering cluster crashes or unexpected high concurrent queries. The blacklist is only for Query STMT, INSERT STMT and CTAS STMT.
+In some cases, administrators need to disable certain patterns of SQL to avoid SQL from triggering cluster crashes or unexpected high concurrent queries. The blacklist is only for SELECT statements, INSERT statements (from v3.1 onwards), and CTAS statements (from v3.4 onwards).
 
 StarRocks allows users to add, view, and delete SQL blacklists.
 
@@ -65,6 +65,24 @@ ADD SQLBLACKLIST "select id_int from test_all_type_select1 order by id_int limit
 
 ~~~sql
 ADD SQLBLACKLIST "select id_int \\* 4, id_tinyint, id_varchar from test_all_type_nullable except select id_int, id_tinyint, id_varchar from test_basic except select (id_int \\* 9 \\- 8) \\/ 2, id_tinyint, id_varchar from test_all_type_nullable2 except select id_int, id_tinyint, id_varchar from test_basic_nullable"
+~~~
+
+* Prohibit all INSERT INTO statements:
+
+~~~sql
+ADD SQLBLACKLIST "(?i)^insert\\s+into\\s+.*";
+~~~
+
+* Prohibit all INSERT INTO ... VALUES statements:
+
+~~~sql
+ADD SQLBLACKLIST "(?i)^insert\\s+into\\s+.*values\\s*\\(";
+~~~
+
+* Prohibit all INSERT INTO ... VALUES statements except those against the system-defined view `_statistics_.column_statistics`:
+
+~~~sql
+ADD SQLBLACKLIST "(?i)^insert\\s+into\\s+(?!column_statistics\\b).*values\\s*\\(";
 ~~~
 
 ## View blacklist
