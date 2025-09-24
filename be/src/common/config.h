@@ -333,12 +333,6 @@ CONF_mBool(enable_ordinal_index_memory_page_cache, "true");
 CONF_mBool(enable_string_prefix_zonemap, "true");
 // Prefix length used for string ZoneMap min/max when enabled
 CONF_mInt32(string_prefix_zonemap_prefix_len, "16");
-// Adaptive creation of string zonemap index based on page overlap quality.
-// If the estimated overlap ratio across consecutive pages is greater than this threshold,
-// skip writing the page-level string zonemap index. Range: [0.0, 1.0].
-CONF_mDouble(string_zonemap_overlap_threshold, "0.8");
-// Minimum number of non-empty pages before applying the adaptive check.
-CONF_mInt32(string_zonemap_min_pages_for_adaptive_check, "16");
 
 // ========================== ZONEMAP END ===================================
 
@@ -417,6 +411,11 @@ CONF_Bool(enable_event_based_compaction_framework, "true");
 
 CONF_Bool(enable_size_tiered_compaction_strategy, "true");
 CONF_mBool(enable_pk_size_tiered_compaction_strategy, "true");
+// Enable parallel execution within tablet for primary key tables.
+CONF_mBool(enable_pk_parallel_execution, "false");
+// The minimum threshold of data size for enabling pk parallel execution.
+// Default is 300MB.
+CONF_mInt64(pk_parallel_execution_threshold_bytes, "314572800");
 // We support real-time compaction strategy for primary key tables in shared-data mode.
 // This real-time compaction strategy enables compacting rowsets across multiple levels simultaneously.
 // The parameter `size_tiered_max_compaction_level` defines the maximum compaction level allowed in a single compaction task.
@@ -586,6 +585,8 @@ CONF_mBool(enable_token_check, "true");
 
 // to open/close system metrics
 CONF_Bool(enable_system_metrics, "true");
+
+CONF_Bool(enable_jvm_metrics, "false");
 
 CONF_mBool(enable_prefetch, "true");
 
@@ -934,6 +935,9 @@ CONF_mInt64(tablet_internal_parallel_min_scan_dop, "4");
 // Only the num rows of lake tablet less than lake_tablet_rows_splitted_ratio * splitted_scan_rows, than the lake tablet can be splitted.
 CONF_mDouble(lake_tablet_rows_splitted_ratio, "1.5");
 
+// Allow skipping invalid delete_predicate in order to get the segment data back, and do manual correction.
+CONF_mBool(lake_tablet_ignore_invalid_delete_predicate, "false");
+
 // The bitmap serialize version.
 CONF_Int16(bitmap_serialize_version, "1");
 // The max hdfs file handle.
@@ -1092,6 +1096,8 @@ CONF_Int64(rpc_connect_timeout_ms, "30000");
 CONF_Int32(max_batch_publish_latency_ms, "100");
 
 // Config for opentelemetry tracing.
+// Valid example: jaeger_endpoint = localhost:14268
+// Invalid example: jaeger_endpoint = http://localhost:14268
 CONF_String(jaeger_endpoint, "");
 
 // Config for query debug trace

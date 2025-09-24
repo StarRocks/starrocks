@@ -1214,6 +1214,7 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
                 joinStatsBuilder = Statistics.buildFrom(crossJoinStats);
                 break;
             case INNER_JOIN:
+            case ASOF_INNER_JOIN:
                 if (eqOnPredicates.isEmpty()) {
                     joinStatsBuilder = Statistics.buildFrom(crossJoinStats);
                     break;
@@ -1223,6 +1224,11 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
             case LEFT_OUTER_JOIN:
                 joinStatsBuilder = Statistics.buildFrom(innerJoinStats);
                 joinStatsBuilder.setOutputRowCount(max(innerRowCount, leftRowCount));
+                computeNullFractionForOuterJoin(leftRowCount, innerRowCount, rightStatistics, joinStatsBuilder);
+                break;
+            case ASOF_LEFT_OUTER_JOIN:
+                joinStatsBuilder = Statistics.buildFrom(innerJoinStats);
+                joinStatsBuilder.setOutputRowCount(leftRowCount);
                 computeNullFractionForOuterJoin(leftRowCount, innerRowCount, rightStatistics, joinStatsBuilder);
                 break;
             case LEFT_SEMI_JOIN:
@@ -1278,6 +1284,14 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
         } else if (joinType.isFullOuterJoin()) {
             estimateStatistics = Statistics.buildFrom(estimateStatistics)
                     .setOutputRowCount(Math.max(estimateStatistics.getOutputRowCount(), joinStats.getOutputRowCount()))
+                    .build();
+        } else if (joinType.isAsofInnerJoin()) {
+            estimateStatistics = Statistics.buildFrom(estimateStatistics)
+                    .setOutputRowCount(Math.max(Math.min(estimateStatistics.getOutputRowCount(), leftRowCount), 1))
+                    .build();
+        } else if (joinType.isAsofLeftOuterJoin()) {
+            estimateStatistics = Statistics.buildFrom(estimateStatistics)
+                    .setOutputRowCount(Math.max(1, leftRowCount))
                     .build();
         }
 

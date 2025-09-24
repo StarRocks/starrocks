@@ -190,7 +190,7 @@ public class FilterUnusedColumnTest extends PlanTestBase {
             // tags_id is can be pushdown, and only used by the pushdownable predicate.
             String sql = "select timestamp from primary_table where k3 = \"test\" and tags_id = 1;";
             String plan = getThriftPlan(sql);
-            System.out.println(plan);
+            logSysInfo(plan);
             assertContains(plan, "unused_output_column_name:[tags_id]");
         }
         {
@@ -198,7 +198,7 @@ public class FilterUnusedColumnTest extends PlanTestBase {
             // but it also be the output column.
             String sql = "select tags_id from primary_table where k3 = \"test\" and tags_id = 1;";
             String plan = getThriftPlan(sql);
-            System.out.println(plan);
+            logSysInfo(plan);
             assertContains(plan, "unused_output_column_name:[]");
         }
         {
@@ -206,7 +206,7 @@ public class FilterUnusedColumnTest extends PlanTestBase {
             // but it also be used by the non-pushdownable predicate.
             String sql = "select k3 from primary_table where timestamp + tags_id = \"test\" and tags_id = 1;";
             String plan = getThriftPlan(sql);
-            System.out.println(plan);
+            logSysInfo(plan);
             assertContains(plan, "unused_output_column_name:[]");
         }
         {
@@ -214,7 +214,7 @@ public class FilterUnusedColumnTest extends PlanTestBase {
             // but it also be used by the non-pushdownable predicate.
             String sql = "select timestamp from primary_table where k3 + tags_id = \"test\" and tags_id = 1;";
             String plan = getThriftPlan(sql);
-            System.out.println(plan);
+            logSysInfo(plan);
             assertContains(plan, "unused_output_column_name:[]");
         }
     }

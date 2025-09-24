@@ -29,7 +29,6 @@ public class PListCellTest {
         {
             PListCell s1 = new PListCell(ImmutableList.of(ImmutableList.of("2024-01-01")));
             String ser = s1.serialize();
-            System.out.println(ser);
             PListCell s2 = PListCell.deserialize(ser);
             Assertions.assertEquals(s1, s2);
         }
@@ -37,7 +36,6 @@ public class PListCellTest {
         {
             PListCell s1 = new PListCell(ImmutableList.of(ImmutableList.of("beijing", "2024-01-01")));
             String ser = s1.serialize();
-            System.out.println(ser);
             PListCell s2 = PListCell.deserialize(ser);
             Assertions.assertEquals(s1, s2);
         }
@@ -48,7 +46,6 @@ public class PListCellTest {
                     ImmutableList.of("shanghai", "2024-01-02")
             ));
             String ser = s1.serialize();
-            System.out.println(ser);
             PListCell s2 = PListCell.deserialize(ser);
             Assertions.assertEquals(s1, s2);
         }
@@ -64,7 +61,6 @@ public class PListCellTest {
                             new PListCell(ImmutableList.of(ImmutableList.of("2024-01-02")))
                     );
             String ser = PListCell.batchSerialize(s1);
-            System.out.println(ser);
             Set<PListCell> s2 = PListCell.batchDeserialize(ser);
             Assertions.assertEquals(s1, s2);
         }
@@ -76,7 +72,6 @@ public class PListCellTest {
                             new PListCell(ImmutableList.of(ImmutableList.of("beijing", "2024-01-02")))
                     );
             String ser = PListCell.batchSerialize(s1);
-            System.out.println(ser);
             Set<PListCell> s2 = PListCell.batchDeserialize(ser);
             Assertions.assertEquals(s1, s2);
         }
@@ -87,7 +82,6 @@ public class PListCellTest {
                     ImmutableList.of("shanghai", "2024-01-02")
             ));
             String ser = s1.serialize();
-            System.out.println(ser);
             PListCell s2 = PListCell.deserialize(ser);
             Assertions.assertEquals(s1, s2);
         }
@@ -104,7 +98,6 @@ public class PListCellTest {
                             ))
                     );
             String ser = PListCell.batchSerialize(s1);
-            System.out.println(ser);
             Set<PListCell> s2 = PListCell.batchDeserialize(ser);
             Assertions.assertEquals(s1, s2);
         }

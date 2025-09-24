@@ -1635,6 +1635,54 @@ For more information on how to build a monitoring service for your StarRocks clu
 - Unit: Count
 - Description: Queued task count in the pipeline PREPARE thread pool. This is an instantaneous value.
 
+### starrocks_be_exec_state_report_active_threads
+
+- Unit: Count
+- Type: Instantaneous
+- Description: The number of tasks being executed in the thread pool that reports the execution status of the Fragment instance.
+
+### starrocks_be_exec_state_report_running_threads
+
+- Unit: Count
+- Type: Instantaneous
+- Description: The number of threads in the thread pool that reports the execution status of the Fragment instance, with a minimum of 1 and a maximum of 2.
+
+### starrocks_be_exec_state_report_threadpool_size
+
+- Unit: Count
+- Type: Instantaneous
+- Description: The maximum number of threads in the thread pool that reports the execution status of the Fragment instance, defaults to 2.
+
+### starrocks_be_exec_state_report_queue_count
+
+- Unit: Count
+- Type: Instantaneous
+- Description: The number of tasks queued in the thread pool that reports the execution status of the Fragment instance, up to a maximum of 1000.
+
+### starrocks_be_priority_exec_state_report_active_threads
+
+- Unit: Count
+- Type: Instantaneous
+- Description: The number of tasks being executed in the thread pool that reports the final execution state of the Fragment instance.
+
+### starrocks_be_priority_exec_state_report_running_threads
+
+- Unit: Count
+- Type: Instantaneous
+- Description: The number of threads in the thread pool that reports the final execution status of the Fragment instance, with a minimum of 1 and a maximum of 2.
+
+### starrocks_be_priority_exec_state_report_threadpool_size
+
+- Unit: Count
+- Type: Instantaneous
+- Description: The maximum number of threads in the thread pool that reports the final execution status of the Fragment instance, defaults to 2.
+
+### starrocks_be_priority_exec_state_report_queue_count
+
+- Unit: Count
+- Type: Instantaneous
+- Description: The number of tasks queued in the thread pool that reports the final execution status of the Fragment instance, up to a maximum of 2147483647.
+
 ### starrocks_fe_routine_load_jobs
 
 - Unit: Count
@@ -1674,7 +1722,60 @@ For more information on how to build a monitoring service for your StarRocks clu
 - Unit: -
 - Description: The maximum Kafka partition offset lag for each Routine Load job. It is collected only when the FE configuration `enable_routine_load_lag_metrics` is set to `true` and the offset lag is greater than or equal to the FE configuration `min_routine_load_lag_for_metrics`. By default, `enable_routine_load_lag_metrics` is `false`, and `min_routine_load_lag_for_metrics` is `10000`.
 
+### starrocks_fe_routine_load_max_lag_time_of_partition
+
+- Unit: Seconds
+- Description: The maximum Kafka partition offset timestamp lag for each Routine Load job. It is collected only when the FE configuration `enable_routine_load_lag_time_metrics` is set to `true`. By default, `enable_routine_load_lag_time_metrics` is `false`.
+
 ### starrocks_fe_sql_block_hit_count
 
 - Unit: Count
 - Description: The number of times blacklisted sql have been intercepted.
+
+### starrocks_fe_scheduled_pending_tablet_num
+
+- Unit: Count
+- Type: Instantaneous
+- Description: The number of Clone tasks in Pending state FE scheduled, including both BALANCE and REPAIR types.
+
+### starrocks_fe_scheduled_running_tablet_num
+
+- Unit: Count
+- Type: Instantaneous
+- Description: The number of Clone tasks in Running state FE scheduled, including both BALANCE and REPAIR types.
+
+### starrocks_fe_clone_task_total
+
+- Unit: Count
+- Type: Cumulative
+- Description: The total number of Clone tasks in the cluster.
+
+### starrocks_fe_clone_task_success
+
+- Unit: Count
+- Type: Cumulative
+- Description: The number of successfully executed Clone tasks in the cluster.
+
+### starrocks_fe_clone_task_copy_bytes
+
+- Unit: Bytes
+- Type: Cumulative
+- Description: The total file size copied by Clone tasks in the cluster, including both INTER_NODE and INTRA_NODE types.
+
+### starrocks_fe_clone_task_copy_duration_ms
+
+- Unit: ms
+- Type: Cumulative
+- Description: The total time for copy consumed by Clone tasks in the cluster, including both INTER_NODE and INTRA_NODE types.
+
+### starrocks_be_clone_task_copy_bytes
+
+- Unit: Bytes
+- Type: Cumulative
+- Description: The total file size copied by Clone tasks in the BE node, including both INTER_NODE and INTRA_NODE types.
+
+### starrocks_be_clone_task_copy_duration_ms
+
+- Unit: ms
+- Type: Cumulative
+- Description: The total time for copy consumed by Clone tasks in the BE node, including both INTER_NODE and INTRA_NODE types.

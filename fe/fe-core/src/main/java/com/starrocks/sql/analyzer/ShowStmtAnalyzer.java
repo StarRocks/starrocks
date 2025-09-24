@@ -46,6 +46,7 @@ import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.AstVisitorExtendInterface;
 import com.starrocks.sql.ast.DescribeStmt;
+import com.starrocks.sql.ast.EnhancedShowStmt;
 import com.starrocks.sql.ast.OrderByElement;
 import com.starrocks.sql.ast.ShowAlterStmt;
 import com.starrocks.sql.ast.ShowAnalyzeJobStmt;
@@ -570,7 +571,11 @@ public class ShowStmtAnalyzer {
         }
 
         private void analyzeShowPredicate(ShowStmt showStmt) {
-            Predicate predicate = showStmt.getPredicate();
+            if (!(showStmt instanceof EnhancedShowStmt sortedShowStmt)) {
+                return;
+            }
+
+            Predicate predicate = sortedShowStmt.getPredicate();
             if (predicate == null) {
                 return;
             }
@@ -808,7 +813,7 @@ public class ShowStmtAnalyzer {
             return null;
         }
 
-        public void analyzeOrderByItems(ShowStmt node) {
+        public void analyzeOrderByItems(EnhancedShowStmt node) {
             ShowResultSetMetaData metaData = new ShowResultMetaFactory().getMetadata(node);
             List<OrderByElement> orderByElements = node.getOrderByElements();
             if (orderByElements != null && !orderByElements.isEmpty()) {

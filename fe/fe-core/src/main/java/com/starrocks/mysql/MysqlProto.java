@@ -43,7 +43,6 @@ import com.starrocks.authentication.SecurityIntegration;
 import com.starrocks.authentication.UserAuthenticationInfo;
 import com.starrocks.catalog.UserIdentity;
 import com.starrocks.common.Config;
-import com.starrocks.common.ConfigBase;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
@@ -301,7 +300,7 @@ public class MysqlProto {
             provider = AuthenticationProviderFactory.create(authInfo.getAuthPlugin(), authInfo.getAuthString());
         } else {
             for (String authMechanism : Config.authentication_chain) {
-                if (authMechanism.equals(ConfigBase.AUTHENTICATION_CHAIN_MECHANISM_NATIVE)) {
+                if (authMechanism.equals(SecurityIntegration.AUTHENTICATION_CHAIN_MECHANISM_NATIVE)) {
                     continue;
                 }
 
@@ -325,7 +324,7 @@ public class MysqlProto {
             MysqlCodec.writeNulTerminateString(outputStream, switchAuthPlugin);
 
             byte[] authSwitchRequestPacket =
-                    provider.authSwitchRequestPacket(context.getAuthenticationContext(), user,
+                    provider.authSwitchRequestPacket(context.getAccessControlContext(), user,
                             context.getMysqlChannel().getRemoteIp());
             if (authSwitchRequestPacket != null) {
                 MysqlCodec.writeBytes(outputStream, authSwitchRequestPacket);
@@ -333,7 +332,7 @@ public class MysqlProto {
             MysqlCodec.writeInt1(outputStream, 0);
         } else {
             // AuthMoreData Packet
-            byte[] authMoreDataPacket = provider.authMoreDataPacket(context.getAuthenticationContext(), user,
+            byte[] authMoreDataPacket = provider.authMoreDataPacket(context.getAccessControlContext(), user,
                     context.getMysqlChannel().getRemoteIp());
             if (authMoreDataPacket != null) {
                 MysqlCodec.writeInt1(outputStream, (byte) 0x01);

@@ -186,6 +186,7 @@ public class MvRewriteMetricsTest extends MVTestBase {
 
     @Test
     public void testMvMetricsWithValidMvId() {
+        disableMVRewriteConsiderDataLayout();
         String mvName = "mv0";
         String sql = String.format("CREATE MATERIALIZED VIEW %s" +
                 " REFRESH DEFERRED MANUAL " +
@@ -215,7 +216,7 @@ public class MvRewriteMetricsTest extends MVTestBase {
                 JsonMetricVisitor visitor = new JsonMetricVisitor("starrocks_fe");
                 MaterializedViewMetricsRegistry.collectMaterializedViewMetrics(visitor, true);
                 String json = visitor.build();
-                System.out.println(json);
+                logSysInfo(json);
                 Assertions.assertTrue(json.contains("mv_refresh_jobs"));
                 Assertions.assertTrue(json.contains("mv_refresh_total_success_jobs"));
                 Assertions.assertTrue(json.contains("mv_refresh_total_retry_meta_count"));
@@ -228,7 +229,7 @@ public class MvRewriteMetricsTest extends MVTestBase {
                 JsonMetricVisitor visitor = new JsonMetricVisitor("starrocks_fe");
                 MaterializedViewMetricsRegistry.collectMaterializedViewMetrics(visitor, true);
                 String json = visitor.build();
-                System.out.println(json);
+                logSysInfo(json);
                 Assertions.assertTrue(json.contains("mv_refresh_jobs"));
                 Assertions.assertTrue(json.contains("mv_refresh_total_success_jobs"));
                 Assertions.assertTrue(json.contains("mv_refresh_total_retry_meta_count"));
@@ -259,7 +260,7 @@ public class MvRewriteMetricsTest extends MVTestBase {
                 JsonMetricVisitor visitor = new JsonMetricVisitor("starrocks_fe");
                 MaterializedViewMetricsRegistry.collectMaterializedViewMetrics(visitor, true);
                 String json = visitor.build();
-                System.out.println(json);
+                logSysInfo(json);
                 Assertions.assertTrue(json.contains("mv_refresh_jobs"));
                 Assertions.assertTrue(json.contains("mv_refresh_total_success_jobs"));
                 Assertions.assertTrue(json.contains("mv_refresh_total_empty_jobs"));
@@ -270,6 +271,7 @@ public class MvRewriteMetricsTest extends MVTestBase {
                 Assertions.assertTrue(json.contains("mv_query_total_matched_count"));
             }
         });
+        enableMVRewriteConsiderDataLayout();
     }
 
     @Test
@@ -279,7 +281,7 @@ public class MvRewriteMetricsTest extends MVTestBase {
         JsonMetricVisitor visitor = new JsonMetricVisitor("starrocks_fe");
         MaterializedViewMetricsRegistry.collectMaterializedViewMetrics(visitor, true);
         String json = visitor.build();
-        System.out.println(json);
+        logSysInfo(json);
         Assertions.assertTrue(json.equals("[]"));
     }
 
@@ -292,7 +294,7 @@ public class MvRewriteMetricsTest extends MVTestBase {
             JsonMetricVisitor visitor = new JsonMetricVisitor("starrocks_fe");
             MaterializedViewMetricsRegistry.collectMaterializedViewMetrics(visitor, true);
             String json = visitor.build();
-            System.out.println(json);
+            logSysInfo(json);
             Assertions.assertTrue(json.equals("[]"));
         }
 
@@ -310,7 +312,7 @@ public class MvRewriteMetricsTest extends MVTestBase {
             JsonMetricVisitor visitor = new JsonMetricVisitor("starrocks_fe");
             MaterializedViewMetricsRegistry.collectMaterializedViewMetrics(visitor, true);
             String json = visitor.build();
-            System.out.println(json);
+            logSysInfo(json);
             Assertions.assertEquals("[]", json);
         }
     }

@@ -618,12 +618,8 @@ public class PublishVersionDaemon extends FrontendDaemon {
         } catch (Exception e) {
             for (int i = 0; i < transactionStates.size(); i++) {
                 TransactionState txnState = transactionStates.get(i);
-                txnState.writeLock();
-                try {
-                    txnState.setErrorMsg("Fail to publish partition " + partitionId + " error " + e.getMessage());
-                } finally {
-                    txnState.writeUnlock();
-                }
+                // Avoid holding txn write lock here; setting errMsg is best-effort for diagnostics
+                txnState.setErrorMsg("Fail to publish partition " + partitionId + " error " + e.getMessage());
             }
             LOG.error("Fail to publish partition {} of txnIds {}:", partitionId,
                     txnInfos.stream().map(i -> i.txnId).collect(Collectors.toList()), e);
@@ -904,13 +900,9 @@ public class PublishVersionDaemon extends FrontendDaemon {
             }
             return true;
         } catch (Throwable e) {
-            txnState.writeLock();
-            try {
-                txnState.setErrorMsg("Fail to publish partition " + partitionCommitInfo.getPhysicalPartitionId()
-                        + " error " + e.getMessage());
-            } finally {
-                txnState.writeUnlock();
-            }
+            // Avoid holding txn write lock here; setting errMsg is best-effort for diagnostics
+            txnState.setErrorMsg("Fail to publish partition " + partitionCommitInfo.getPhysicalPartitionId()
+                    + " error " + e.getMessage());
             // prevent excessive logging
             if (partitionCommitInfo.getVersionTime() < 0 &&
                     Math.abs(partitionCommitInfo.getVersionTime()) + 10000 < System.currentTimeMillis()) {

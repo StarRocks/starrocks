@@ -836,11 +836,7 @@ protected:
     std::shared_ptr<MemoryFileSystem> _fs;
 };
 
-TEST_F(ZoneMapIndexBuilderIntegrationTest, AdaptiveIndexCreation) {
-    // Set configuration for adaptive behavior
-    config::string_zonemap_min_pages_for_adaptive_check = 3;
-    config::string_zonemap_overlap_threshold = 0.5;
-
+TEST_F(ZoneMapIndexBuilderIntegrationTest, ZoneMapIndexCreation) {
     // Create a string column writer with zone map enabled
     TabletColumn varchar_column = create_varchar_key(0);
     ColumnWriterOptions opts;
@@ -859,12 +855,12 @@ TEST_F(ZoneMapIndexBuilderIntegrationTest, AdaptiveIndexCreation) {
     // Create in-memory file system for testing
     auto fs = std::make_shared<MemoryFileSystem>();
     ASSERT_TRUE(fs->create_dir("/tmp").ok());
-    ASSIGN_OR_ABORT(auto wfile, fs->new_writable_file("/tmp/zonemap_adaptive_test"));
+    ASSIGN_OR_ABORT(auto wfile, fs->new_writable_file("/tmp/zonemap_test"));
 
     auto writer = std::make_unique<ScalarColumnWriter>(opts, type_info, wfile.get());
     ASSERT_TRUE(writer->init().ok());
 
-    // Add 3 pages with low overlap (should result in "Good" decision)
+    // Add 3 pages of data
     // Page 1: a-c
     BinaryColumn col1;
     col1.append(Slice("a"));
@@ -889,20 +885,19 @@ TEST_F(ZoneMapIndexBuilderIntegrationTest, AdaptiveIndexCreation) {
     ASSERT_TRUE(writer->append(col3).ok());
     ASSERT_TRUE(writer->finish_current_page().ok());
 
-    // Finish writing - this should trigger the quality judger decision
+    // Finish writing
     ASSERT_TRUE(writer->finish().ok());
 
-    // Write the zone map index - this is required to actually write the index to the file
+    // Write the zone map index - zone map is now always created when need_zone_map is true
     ASSERT_TRUE(writer->write_zone_map().ok());
 
     // Close the file
     ASSERT_OK(wfile->close());
 
     // Verify that the file was created and has content
-    // This indicates that the zone map index was created (not skipped by quality judger)
-    ASSERT_TRUE(fs->path_exists("/tmp/zonemap_adaptive_test").ok());
+    ASSERT_TRUE(fs->path_exists("/tmp/zonemap_test").ok());
     // Check that the file size is greater than 0
-    ASSIGN_OR_ABORT(auto file_size, fs->get_file_size("/tmp/zonemap_adaptive_test"));
+    ASSIGN_OR_ABORT(auto file_size, fs->get_file_size("/tmp/zonemap_test"));
     ASSERT_GT(file_size, 0);
 }
 

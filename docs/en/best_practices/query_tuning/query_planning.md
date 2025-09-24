@@ -103,6 +103,10 @@ You can control this merging behavior through the session variable `pipeline_pro
 
 ### Example Query Plan
 
+:::tip
+This is query 96 from the TPC-DS benchmark.
+:::
+
 ```sql
 EXPLAIN select  count(*)
 from store_sales

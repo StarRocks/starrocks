@@ -48,10 +48,10 @@ public:
 
     Status merge(const sstable::Iterator* iter_ptr);
 
-    void finish() { flush(); }
+    Status finish() { return flush(); }
 
 private:
-    void flush();
+    Status flush();
 
 private:
     std::string _key;
@@ -136,6 +136,9 @@ public:
     Status insert(size_t n, const Slice* keys, const IndexValue* values, int64_t version);
 
     Status minor_compact();
+
+    Status ingest_sst(const FileMetaPB& sst_meta, uint32_t rssid, int64_t version, bool is_compaction,
+                      DelVectorPtr delvec);
 
     static Status major_compact(TabletManager* tablet_mgr, const TabletMetadata& metadata, TxnLogPB* txn_log);
 

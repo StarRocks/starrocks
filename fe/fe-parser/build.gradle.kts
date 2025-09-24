@@ -23,7 +23,6 @@ java {
 }
 
 group = "com.starrocks"
-version = "1.0.0"
 
 dependencies {
     implementation("org.antlr:antlr4-runtime")

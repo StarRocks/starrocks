@@ -30,6 +30,7 @@ import com.starrocks.catalog.system.information.InfoSchemaDb;
 import com.starrocks.catalog.system.sys.SysDb;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
+import com.starrocks.common.util.Util;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.GlobalStateMgr;
@@ -176,7 +177,9 @@ public class DropStmtAnalyzer {
                 if (Strings.isNullOrEmpty(context.getCurrentCatalog())) {
                     throw new SemanticException(PARSER_ERROR_MSG.noCatalogSelected());
                 }
-                statement.setCatalogName(context.getCurrentCatalog());
+
+                String normalizedCatalogName = Util.normalizeName(context.getCurrentCatalog());
+                statement.setCatalogName(normalizedCatalogName);
             }
 
             MetaUtils.checkCatalogExistAndReport(statement.getCatalogName());

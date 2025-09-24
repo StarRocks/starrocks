@@ -4,6 +4,8 @@ displayed_sidebar: docs
 
 # ALTER TABLE
 
+import Beta from '../../../_assets/commonMarkdown/_beta.mdx'
+
 ## 描述
 
 修改现有表，包括：
@@ -12,7 +14,7 @@ displayed_sidebar: docs
 - [修改表注释](#修改表的注释31-版本起)
 - [修改分区（增删分区和修改分区属性）](#操作-partition-相关语法)
 - [修改分桶方式和分桶数量](#修改分桶方式和分桶数量自-32-版本起)
-- [修改列（增删列和修改列顺序）](#修改列增删列和修改列顺序)
+- [修改列（增删列和修改列顺序和注释）](#修改列添加删除列改变列的顺序或注释)
 - [创建或删除 rollup index](#操作-rollup-index-语法)
 - [修改 bitmap index](#bitmap-index-修改)
 - [修改表的属性](#修改表的属性)
@@ -37,7 +39,7 @@ alter_clause1[, alter_clause2, ...]
 - comment: 修改表的注释。**从 3.1 版本开始支持。**
 - partition: 修改分区属性，删除分区，增加分区。
 - bucket：修改分桶方式和分桶数量。
-- column: 增加列，删除列，调整列顺序，修改列类型。*
+- column: 增加列，删除列，调整列顺序，修改列类型以及注释
 - rollup: 创建或删除 Rollup。
 - index: 修改索引。
 - swap: 原子替换两张表。
@@ -47,7 +49,6 @@ alter_clause1[, alter_clause2, ...]
 ## 限制和使用注意事项
 
 - 在一个ALTER TABLE语句中不能同时对分区、列和 Rollup 进行操作。
-- 列注释不能被修改。
 - 一个表一次只能有一个正在进行的schema change操作。不能同时在一个表上运行两个schema change命令。
 - 对分桶、列和 Rollup 的操作是异步操作。任务提交后会立即返回成功消息。可以运行[SHOW ALTER TABLE](SHOW_ALTER.md)命令检查进度，并运行[CANCEL ALTER TABLE](CANCEL_ALTER_TABLE.md)命令取消操作。
 - 对重命名、注释、分区、索引和原子替换的操作是同步操作，命令返回表示执行已完成。
@@ -99,10 +100,6 @@ RENAME COLUMN <old_col_name> [ TO ] <new_col_name>
 ```sql
 ALTER TABLE [<db_name>.]<tbl_name> COMMENT = "<new table comment>";
 ```
-
-:::tip
-目前，列注释不能被修改。
-:::
 
 ### 修改分区
 
@@ -436,7 +433,7 @@ INSERT INTO details (event_time, event_type, user_id, device_code, channel) VALU
   ALTER TABLE details DISTRIBUTED BY HASH(user_id, event_time) BUCKETS 10;
   ```
 
-### 修改列（添加/删除列，改变列的顺序）
+### 修改列（添加/删除列，改变列的顺序或注释）
 
 #### 在指定索引的指定位置添加列
 
@@ -514,16 +511,18 @@ DROP COLUMN column_name
 1. 不能删除分区列。
 2. 如果从基础索引中删除列，并且该列包含在 Rollup 中，也会被删除。
 
-#### 修改指定索引的列类型和列位置
+#### 修改列类型、位置、注释和其他属性
 
 语法：
 
 ```sql
 ALTER TABLE [<db_name>.]<tbl_name>
-MODIFY COLUMN column_name column_type [KEY | agg_type] [NULL | NOT NULL] [DEFAULT "default_value"]
-[AFTER column_name|FIRST]
-[FROM rollup_index_name]
-[PROPERTIES ("key"="value", ...)]
+MODIFY COLUMN <column_name> 
+[ column_type [ KEY | agg_type ] ] [ NULL | NOT NULL ] 
+[ DEFAULT "<default_value>"] [ COMMENT "<new_column_comment>" ]
+[ AFTER <column_name> | FIRST ]
+[ FROM rollup_index_name ]
+[ PROPERTIES ("key"="value", ...) ]
 ```
 
 注意：
@@ -544,6 +543,7 @@ MODIFY COLUMN column_name column_type [KEY | agg_type] [NULL | NOT NULL] [DEFAUL
    - 将INT转换为DATE（如果INT数据转换失败，原始数据保持不变）
 
 6. 不支持从NULL转换为NOT NULL。
+7. 您可以在单个 MODIFY COLUMN 子句中修改多个属性。但某些属性的组合不支持。
 
 #### 重新排序指定索引的列
 
@@ -603,8 +603,6 @@ DISTRIBUTED BY HASH(order_id);
 ```SQL
 ALTER TABLE orders ORDER BY (dt, revenue, state);
 ```
-
-import Beta from '../../../_assets/commonMarkdown/_beta.mdx'
 
 #### 修改STRUCT列以添加或删除字段
 

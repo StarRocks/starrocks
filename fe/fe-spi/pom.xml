@@ -7,12 +7,11 @@
     <parent>
         <groupId>com.starrocks</groupId>
         <artifactId>starrocks-fe</artifactId>
-        <version>3.4.0</version>
+        <version>main</version>
         <relativePath>../pom.xml</relativePath>
     </parent>
 
     <artifactId>fe-spi</artifactId>
-    <version>1.0.0</version>
     <packaging>jar</packaging>
 
     <properties>

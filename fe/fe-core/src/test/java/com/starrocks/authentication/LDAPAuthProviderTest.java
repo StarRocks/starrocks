@@ -95,7 +95,7 @@ class LDAPAuthProviderTest {
                 "ou=People,dc=starrocks,dc=com", "uid",
                 providedDN);
 
-        AuthenticationContext authCtx = new AuthenticationContext();
+        AccessControlContext authCtx = new AccessControlContext();
         UserIdentity user = UserIdentity.createEphemeralUserIdent("ldap_user", "%");
         byte[] authResponse = "password\0".getBytes(StandardCharsets.UTF_8);
 
@@ -114,7 +114,7 @@ class LDAPAuthProviderTest {
                 /* ldapUserDN */ null
         );
 
-        AuthenticationContext authCtx = new AuthenticationContext();
+        AccessControlContext authCtx = new AccessControlContext();
         UserIdentity user = UserIdentity.createEphemeralUserIdent("ldap_user", "%");
         byte[] authResponse = "password\0".getBytes(StandardCharsets.UTF_8);
 

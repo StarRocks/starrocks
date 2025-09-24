@@ -47,7 +47,8 @@ public class Binder {
     // `nextIdx` marks the current idx which iterates calling `next()` method and it's used for MULTI_JOIN pattern
     // to optimize iteration expansions.
     private int nextIdx = 0;
-
+    // if the binder is exhausted, no need to check again
+    private boolean isExhausted = false;
     /**
      * Extract a expression from GroupExpression which match the given pattern
      *
@@ -101,7 +102,7 @@ public class Binder {
             this.groupExpressionIndex.set(lastNode, lastNodeIndex + 1);
 
             expression = match(pattern, groupExpression);
-        } while (expression == null && this.groupExpressionIndex.size() != 1);
+        } while (!isExhausted && expression == null && this.groupExpressionIndex.size() != 1);
 
         nextIdx++;
         return expression;
@@ -206,7 +207,7 @@ public class Binder {
         public OptExpression match(GroupExpression ge) {
             // 1. Check if the entire tree is MULTI_JOIN
             // 2. Enumerate GE
-            if (ge == null || !isMultiJoin(ge)) {
+            if (ge == null || isExhausted || !isMultiJoin(ge)) {
                 return null;
             }
 
@@ -217,14 +218,20 @@ public class Binder {
          * Check whether the binder is exhausted.
          */
         private boolean exhausted() {
-            if (loopCount++ % CHECK_EXHAUSTED_INTERVAL == 0) {
-                final long elapsed = watch.elapsed(TimeUnit.MILLISECONDS);
-                final boolean exhausted = elapsed > timeLimit;
-                if (exhausted) {
+            if (isExhausted) {
+                return true;
+            }
+            // Only check elapsed time every CHECK_EXHAUSTED_INTERVAL iterations
+            if ((++loopCount % CHECK_EXHAUSTED_INTERVAL) == 0) {
+                long elapsed = watch.elapsed(TimeUnit.MILLISECONDS);
+                if (elapsed > timeLimit) {
+                    isExhausted = true;
+                    // Log only once to avoid log flooding
                     Tracers.log(Tracers.Module.MV, args ->
-                            String.format("[MV TRACE] MultiJoinBinder %s exhausted(loop:%s)\n", this, loopCount));
+                            String.format("[MV TRACE] MultiJoinBinder exhausted after %d loops (elapsed: %d ms, limit: %d ms)%n",
+                                    loopCount, elapsed, timeLimit));
+                    return true;
                 }
-                return exhausted;
             }
             return false;
         }
@@ -279,6 +286,7 @@ public class Binder {
             }
             // directly return if next has rewritten by mv
             if (next.hasAppliedMVRules()) {
+                groupExpressionIndex.remove(groupTraceKey);
                 return next;
             }
 
@@ -294,7 +302,7 @@ public class Binder {
 
                 next = group.getLogicalExpressions().get(valueIndex);
                 if (next.hasAppliedMVRules()) {
-                    groupExpressionIndex.set(groupTraceKey, valueIndex);
+                    groupExpressionIndex.remove(groupTraceKey);
                     return next;
                 }
             }

@@ -38,7 +38,7 @@ public class TxnInfoHelperTest {
         Mockito.when(state.getTransactionId()).thenReturn(42L);
         Mockito.when(state.isUseCombinedTxnLog()).thenReturn(true);
         Mockito.when(state.getCommitTime()).thenReturn(5000L); // ms
-        Mockito.when(state.getSourceType()).thenReturn(TransactionState.LoadJobSourceType.LAKE_COMPACTION);
+        Mockito.when(state.getSourceType()).thenReturn(TransactionState.LoadJobSourceType.INSERT_STREAMING);
 
         CompactionTxnCommitAttachment attachment = Mockito.mock(CompactionTxnCommitAttachment.class);
         Mockito.when(attachment.getForceCommit()).thenReturn(true);
@@ -56,7 +56,7 @@ public class TxnInfoHelperTest {
         assertEquals(42L, info.txnId.longValue());
         assertTrue(info.combinedTxnLog);
         assertEquals(5L, info.commitTime.longValue()); // seconds
-        assertTrue(info.forcePublish);
+        assertFalse(info.forcePublish);
         // Compare gtid as long
         assertEquals(1001L, info.getGtid().longValue());
 

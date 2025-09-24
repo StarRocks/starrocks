@@ -167,6 +167,7 @@ import com.starrocks.sql.ast.DropHistogramStmt;
 import com.starrocks.sql.ast.DropStatsStmt;
 import com.starrocks.sql.ast.DropTableStmt;
 import com.starrocks.sql.ast.DropTemporaryTableStmt;
+import com.starrocks.sql.ast.EnhancedShowStmt;
 import com.starrocks.sql.ast.ExecuteAsStmt;
 import com.starrocks.sql.ast.ExecuteScriptStmt;
 import com.starrocks.sql.ast.ExecuteStmt;
@@ -315,7 +316,6 @@ public class StmtExecutor {
     private List<ByteBuffer> proxyResultBuffer = null;
     private ShowResultSet proxyResultSet = null;
     private PQueryStatistics statisticsForAuditLog;
-    private boolean statisticsConsumed = false;
     private List<StmtExecutor> subStmtExecutors;
     private Optional<Boolean> isForwardToLeaderOpt = Optional.empty();
     private HttpResultSender httpResultSender;
@@ -568,11 +568,11 @@ public class StmtExecutor {
                     context.getDumpInfo().setOriginStmt(parsedStmt.getOrigStmt().originStmt);
                     context.getDumpInfo().setStatement(parsedStmt);
                 }
-                if (parsedStmt instanceof ShowStmt) {
+                if (parsedStmt instanceof EnhancedShowStmt) {
                     com.starrocks.sql.analyzer.Analyzer.analyze(parsedStmt, context);
                     Authorizer.check(parsedStmt, context);
 
-                    QueryStatement selectStmt = ((ShowStmt) parsedStmt).toSelectStmt();
+                    QueryStatement selectStmt = ((EnhancedShowStmt) parsedStmt).toSelectStmt();
                     if (selectStmt != null) {
                         parsedStmt = selectStmt;
                         execPlan = StatementPlanner.plan(parsedStmt, context);
@@ -656,7 +656,7 @@ public class StmtExecutor {
         }
 
         try {
-            context.getState().setIsQuery(parsedStmt instanceof QueryStatement);
+            context.getState().setIsQuery(context.isQueryStmt(parsedStmt));
             if (parsedStmt.isExistQueryScopeHint()) {
                 processQueryScopeHint();
             }
@@ -776,7 +776,7 @@ public class StmtExecutor {
                                 String queryId = DebugUtil.printId(context.getExecutionId());
                                 ProfileManager.getInstance().removeProfile(queryId);
                                 // reset compute resource
-                                context.tryAcquireResource(true);
+                                context.ensureCurrentComputeResourceAvailable();
                             } else {
                                 // Release all resources after the query finish as soon as possible, as query profile is
                                 // asynchronous which can be delayed a long time.
@@ -2382,46 +2382,28 @@ public class StmtExecutor {
     }
 
     public PQueryStatistics getQueryStatisticsForAuditLog() {
-        // for one StmtExecutor, only consume PQueryStatistics once
-        // so call getQueryStatisticsForAuditLog will return a emtpy PQueryStatistics if this is not the first call
-        if (statisticsConsumed) {
-            // create a empty PQueryStatistics
-            PQueryStatistics stats = normalizeQueryStatistics(null);
-            statisticsForAuditLog = stats;
-            return stats;
+        if (statisticsForAuditLog == null && coord != null) {
+            statisticsForAuditLog = coord.getAuditStatistics();
         }
-
-        PQueryStatistics stats = statisticsForAuditLog;
-        if (stats == null && coord != null) {
-            // for insert stmt
-            stats = coord.getAuditStatistics();
+        if (statisticsForAuditLog == null) {
+            statisticsForAuditLog = new PQueryStatistics();
         }
-
-        stats = normalizeQueryStatistics(stats);
-
-        statisticsForAuditLog = stats;
-        statisticsConsumed = true;
-        return stats;
-    }
-
-    private PQueryStatistics normalizeQueryStatistics(PQueryStatistics stats) {
-        PQueryStatistics normalized = (stats != null) ? stats : new PQueryStatistics();
-        if (normalized.scanBytes == null) {
-            normalized.scanBytes = 0L;
+        if (statisticsForAuditLog.scanBytes == null) {
+            statisticsForAuditLog.scanBytes = 0L;
         }
-        if (normalized.scanRows == null) {
-            normalized.scanRows = 0L;
+        if (statisticsForAuditLog.scanRows == null) {
+            statisticsForAuditLog.scanRows = 0L;
         }
-        if (normalized.cpuCostNs == null) {
-            normalized.cpuCostNs = 0L;
+        if (statisticsForAuditLog.cpuCostNs == null) {
+            statisticsForAuditLog.cpuCostNs = 0L;
         }
-        if (normalized.memCostBytes == null) {
-            normalized.memCostBytes = 0L;
+        if (statisticsForAuditLog.memCostBytes == null) {
+            statisticsForAuditLog.memCostBytes = 0L;
         }
-        if (normalized.spillBytes == null) {
-            normalized.spillBytes = 0L;
+        if (statisticsForAuditLog.spillBytes == null) {
+            statisticsForAuditLog.spillBytes = 0L;
         }
-        return normalized;
+        return statisticsForAuditLog;
     }
 
     public void handleInsertOverwrite(InsertStmt insertStmt) throws Exception {
@@ -2984,7 +2966,6 @@ public class StmtExecutor {
                 GlobalStateMgr.getCurrentState().getOperationListenerBus()
                         .onDMLStmtJobTransactionFinish(txnState, database, targetTable, dmlType);
             }
-            recordExecStatsIntoContext();
         }
 
         String errMsg = "";

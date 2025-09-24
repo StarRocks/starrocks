@@ -1084,7 +1084,6 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
         }
     }
 
-
     @Override
     public void dropPartition(long dbId, String partitionName, boolean isForceDrop) {
         super.dropPartition(dbId, partitionName, isForceDrop);

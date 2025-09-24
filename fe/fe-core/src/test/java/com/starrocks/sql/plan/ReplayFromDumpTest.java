@@ -14,11 +14,13 @@
 
 package com.starrocks.sql.plan;
 
+import com.starrocks.catalog.View;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.Pair;
 import com.starrocks.common.profile.Tracers;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.common.QueryDebugOptions;
 import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
@@ -26,6 +28,7 @@ import com.starrocks.sql.optimizer.base.CTEProperty;
 import com.starrocks.sql.optimizer.dump.QueryDumpInfo;
 import com.starrocks.sql.optimizer.rule.RuleSet;
 import com.starrocks.sql.optimizer.rule.transformation.JoinAssociativityRule;
+import com.starrocks.sql.optimizer.transformer.MVTransformerContext;
 import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Mock;
@@ -748,7 +751,6 @@ public class ReplayFromDumpTest extends ReplayFromDumpTestBase {
         Pair<QueryDumpInfo, String> replayPair =
                 getPlanFragment(getDumpInfoFromFile("query_dump/pushdown_distinct_agg_below_window2"),
                         null, TExplainLevel.NORMAL);
-        System.out.println(replayPair.second);
         Assertions.assertTrue(replayPair.second.contains("  3:ANALYTIC\n" +
                 "  |  functions: [, sum(5: sum), ]\n" +
                 "  |  partition by: 1: TIME\n" +
@@ -1104,7 +1106,6 @@ public class ReplayFromDumpTest extends ReplayFromDumpTestBase {
         QueryDumpInfo queryDumpInfo = getDumpInfoFromJson(dumpString);
         Pair<QueryDumpInfo, String> replayPair = getPlanFragment(dumpString, queryDumpInfo.getSessionVariable(),
                 TExplainLevel.NORMAL);
-        System.out.println(Tracers.printScopeTimer());
         String ss = Tracers.printScopeTimer();
         int start = ss.indexOf("PhysicalRewrite[") + "PhysicalRewrite[".length();
         int end = ss.indexOf("]", start);
@@ -1182,5 +1183,27 @@ public class ReplayFromDumpTest extends ReplayFromDumpTestBase {
         } finally {
             FeConstants.USE_MOCK_DICT_MANAGER = false;
         }
+    }
+
+    @Test
+    public void testViewBasedRewrite1() throws Exception {
+        String fileContent = getDumpInfoFromFile("query_dump/view_based_rewrite1");
+        QueryDumpInfo queryDumpInfo = getDumpInfoFromJson(fileContent);
+        SessionVariable sessionVariable = queryDumpInfo.getSessionVariable();
+        QueryDebugOptions debugOptions = new QueryDebugOptions();
+        debugOptions.setEnableQueryTraceLog(true);
+        sessionVariable.setQueryDebugOptions(debugOptions.toString());
+        new MockUp<MVTransformerContext>() {
+            /**
+             * {@link com.starrocks.sql.optimizer.transformer.MVTransformerContext#isEnableViewBasedMVRewrite(View)} ()}
+             */
+            @Mock
+            public boolean isEnableViewBasedMVRewrite(View view) {
+                return true;
+            }
+        };
+        Pair<QueryDumpInfo, String> replayPair = getCostPlanFragment(fileContent, sessionVariable);
+        String plan = replayPair.second;
+        PlanTestBase.assertContains(plan, "single_mv_ads_biz_customer_combine_td_for_task_2y");
     }
 }

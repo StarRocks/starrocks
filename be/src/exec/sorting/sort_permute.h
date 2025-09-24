@@ -54,6 +54,7 @@ using InlinePermutation = std::vector<InlinePermuteItem<T>>;
 using Permutation = std::vector<PermutationItem>;
 using PermutationView = array_view<PermutationItem>;
 using SmallPermutation = std::vector<SmallPermuteItem>;
+using SmallPermutationView = array_view<SmallPermuteItem>;
 
 template <class T, bool CheckBound = false>
 static inline InlinePermutation<T> create_inline_permutation(const SmallPermutation& other, const auto& container) {
@@ -104,9 +105,11 @@ inline void permutate_to_selective(const Permutation& perm, std::vector<uint32_t
 }
 
 // Materialize chunk by permutation
-void materialize_by_permutation(Chunk* dst, const std::vector<ChunkPtr>& chunks, const PermutationView& perm);
-void materialize_column_by_permutation(Column* dst, const std::vector<const Column*>& columns,
-                                       const PermutationView& perm);
+void materialize_by_permutation(Chunk* dst, const std::vector<ChunkPtr>& chunk, PermutationView perm);
+void materialize_by_permutation_single(Chunk* dst, const ChunkPtr& chunk, SmallPermutationView perm);
+
+void materialize_column_by_permutation(Column* dst, const std::vector<const Column*>& columns, PermutationView perm);
+void materialize_column_by_permutation_single(Column* dst, const Column* column, SmallPermutationView perm);
 
 // Tie and TieIterator
 // Tie is a compact representation of equal ranges in a vector, in which `1` means equal and `0` means not equal.

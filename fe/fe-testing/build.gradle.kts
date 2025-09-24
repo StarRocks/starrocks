@@ -23,7 +23,6 @@ java {
 }
 
 group = "com.starrocks"
-version = "1.0.0"
 
 // Note: There are no explicit dependencies in the original pom.xml for this module
 

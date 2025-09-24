@@ -7,6 +7,7 @@ set(EXEC_FILES
         ./column/column_view_test.cpp
         ./column/array_view_column_test.cpp
         ./column/binary_column_test.cpp
+        ./column/german_string_test.cpp
         ./column/chunk_test.cpp
         ./column/column_helper_test.cpp
         ./column/const_column_test.cpp
@@ -265,7 +266,6 @@ set(EXEC_FILES
         ./io/shared_buffered_input_stream_test.cpp
         ./io/spill_test.cpp
         ./io/spill_block_manager_test.cpp
-     
         ./runtime/agg_state_desc_test.cpp
         ./runtime/arrow_result_writer_test.cpp
         ./runtime/buffer_control_block_test.cpp
@@ -417,9 +417,10 @@ set(EXEC_FILES
         ./udf/java/java_data_converter_test.cpp
         ./udf/java/java_udf_test.cpp
         ./util/table_metrics_mgr_test.cpp
+        ./util/jvm_metrics_test.cpp
         ./util/llm_cache_test.cpp
         ./util/llm_query_service_test.cpp
-        )
+)
 
 if (${USE_AVX512})
     list(APPEND EXEC_FILES ./simd/delta_decode_test.cpp)
@@ -460,6 +461,7 @@ SET(DW_TEST_FILES
     ./storage/decimal12_test.cpp
     ./storage/default_compaction_policy_test.cpp
     ./storage/delete_handler_test.cpp
+    ./storage/delete_predicates_test.cpp
     ./storage/delta_column_group_test.cpp
     ./storage/delta_writer_test.cpp
     ./storage/del_vector_test.cpp
@@ -503,6 +505,7 @@ SET(DW_TEST_FILES
     ./storage/lake/tablet_test.cpp
     ./storage/lake/tablet_writer_test.cpp
     ./storage/lake/transactions_test.cpp
+    ./storage/lake/pk_tablet_sst_writer_test.cpp
     ./storage/lake/txn_log_applier_test.cpp
     ./storage/lake/vacuum_test.cpp
     ./storage/lake/write_combined_txn_log_test.cpp
@@ -632,4 +635,3 @@ ADD_BE_TEST(fuzzy/builtin_functions_fuzzy_test)
 
 add_dependencies(starrocks_dw_test engine_storage_migration_task_test compaction_task_test builtin_functions_fuzzy_test)
 add_dependencies(starrocks_dw_test engine_storage_migration_task_test compaction_task_test builtin_functions_fuzzy_test)
-

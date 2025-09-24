@@ -19,7 +19,7 @@ import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.ast.expression.Predicate;
 import com.starrocks.sql.parser.NodePosition;
 
-public class ShowProcedureStmt extends ShowStmt {
+public class ShowProcedureStmt extends EnhancedShowStmt {
 
     private String pattern;
     private Expr where;

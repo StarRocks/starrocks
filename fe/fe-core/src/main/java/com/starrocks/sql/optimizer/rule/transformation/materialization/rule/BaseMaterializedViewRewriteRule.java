@@ -17,6 +17,7 @@ package com.starrocks.sql.optimizer.rule.transformation.materialization.rule;
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.Table;
+import com.starrocks.common.Config;
 import com.starrocks.common.profile.Tracers;
 import com.starrocks.metric.IMaterializedViewMetricsEntity;
 import com.starrocks.metric.MaterializedViewMetricsRegistry;
@@ -94,6 +95,26 @@ public abstract class BaseMaterializedViewRewriteRule extends TransformationRule
         return false;
     }
 
+
+    /**
+     * Whether to choose the best mv based on data layout.
+     */
+    public boolean isChooseBestMVBasedDataLayout(OptExpression input) {
+        BestMvSelector.ChooseMode chooseMode =
+                BestMvSelector.ChooseMode.of(Config.mv_rewrite_consider_data_layout_mode);
+        switch (chooseMode) {
+            case DISABLE -> {
+                return false;
+            }
+            case ENABLE -> {
+                return MvUtils.isLogicalSP(input);
+            } case FORCE -> {
+                return true;
+            }
+        }
+        return false;
+    }
+
     @Override
     public List<OptExpression> transform(OptExpression queryExpression, OptimizerContext context) {
         try {
@@ -101,13 +122,10 @@ public abstract class BaseMaterializedViewRewriteRule extends TransformationRule
             if (expressions == null || expressions.isEmpty()) {
                 return Lists.newArrayList();
             }
-            if (context.isInMemoPhase()) {
-                return expressions;
-            } else {
-                // in rule phase, only return the best one result
-                BestMvSelector bestMvSelector = new BestMvSelector(expressions, context, queryExpression, this);
-                return Lists.newArrayList(bestMvSelector.selectBest());
-            }
+            // in rbo/cbo phase, only return the best one result
+            BestMvSelector bestMvSelector = new BestMvSelector(expressions, context, queryExpression, this);
+            boolean isConsiderQueryDataLayout = isChooseBestMVBasedDataLayout(queryExpression);
+            return bestMvSelector.selectBest(isConsiderQueryDataLayout);
         } catch (Exception e) {
             String errMsg = ExceptionUtils.getStackTrace(e);
             // for mv rewrite rules, do not disturb query when exception.

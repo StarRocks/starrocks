@@ -1226,6 +1226,24 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 描述：Size-tiered Compaction 策略的 Level 数量。每个 Level 最多保留一个 Rowset，因此稳定状态下最多会有和 Level 数相同的 Rowset。
 - 引入版本：-
 
+##### enable_pk_parallel_execution
+
+- 默认值：false
+- 类型：Boolean
+- 单位：-
+- 是否动态：是
+- 描述：是否为 Primary Key 表并行执行策略。当并行执行策略开启时，pk索引文件会在导入和compaction阶段生成。
+- 引入版本：-
+
+##### pk_parallel_execution_threshold_bytes
+
+- 默认值：314572800
+- 类型：Int
+- 单位：-
+- 是否动态：是
+- 描述：当enable_pk_parallel_execution设置为true后，导入或者compaction生成的数据大于该阈值时，Primary Key 表并行执行策略将被启用。
+- 引入版本：-
+
 ##### enable_check_string_lengths
 
 - 默认值：true
@@ -1749,7 +1767,7 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 类型：Int
 - 单位：MB
 - 是否动态：是
-- 描述：The maximum size of a JSON file that can be streamed into StarRocks.
+- 描述：流式导入单个 JSON 文件大小的上限。
 - 引入版本：-
 
 ##### streaming_load_rpc_max_alive_time_sec
@@ -1758,7 +1776,7 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 类型：Int
 - 单位：Seconds
 - 是否动态：否
-- 描述：流式导入单个 JSON 文件大小的上限。
+- 描述：Stream Load 的 RPC 超时时长。
 - 引入版本：-
 
 ##### write_buffer_size
@@ -2115,23 +2133,6 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 描述：启用 `enable_string_prefix_zonemap` 时用于字符串 Zonemap 最小值/最大值的前缀长度。
 - 引入版本：-
 
-##### string_zonemap_overlap_threshold
-
-- 默认值：0.8
-- 类型：Double
-- 单位：-
-- 是否动态：是
-- 描述：字符串页级 Zonemap 自适应创建的阈值。如果连续页之间的估算重叠比例大于该阈值，将跳过写入该页级 Zonemap。取值范围：[0.0, 1.0]。
-- 引入版本：-
-
-##### string_zonemap_min_pages_for_adaptive_check
-
-- 默认值：16
-- 类型：Int
-- 单位：-
-- 是否动态：是
-- 描述：应用自适应检查前所需的非空页的最小数量。
-- 引入版本：-
 
 ##### enable_ordinal_index_memory_page_cache
 
@@ -4108,6 +4109,15 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 是否动态：否
 - 描述：Data Cache 内联对象数量上限。当缓存的 Block 对象特别小时，Data Cache 会选择使用内联方式将 Block 数据和元数据一起缓存在内存中。
 - 引入版本：v3.4.0
+
+##### enable_connector_sink_spill
+
+- 默认值：true
+- 类型：Boolean
+- 单位：-
+- 是否动态：是
+- 描述：是否支持在外表写入时启用数据 Spill。启用该功能能够避免当内存不足时写入外表导致生成大量小文件问题。当前仅支持向 Iceberg 表写入数据时启用 Spill 功能。
+- 引入版本：v4.0.0
 
 <!--
 ##### datacache_unified_instance_enable

@@ -93,7 +93,7 @@ public class CachingIcebergCatalog implements IcebergCatalog {
         boolean enableCache = icebergProperties.isEnableIcebergMetadataCache();
         this.databases = newCacheBuilder(icebergProperties.getIcebergMetaCacheTtlSec(),
                 enableCache ? DEFAULT_CACHE_NUM : NEVER_CACHE).build();
-        this.tables = newCacheBuilder(icebergProperties.getIcebergTableCacheTtlSec(),
+        this.tables = newCacheBuilder(icebergProperties.getIcebergMetaCacheTtlSec(),
                 enableCache ? DEFAULT_CACHE_NUM : NEVER_CACHE).build();
         this.partitionCache = newCacheBuilder(icebergProperties.getIcebergMetaCacheTtlSec(),
                 enableCache ? DEFAULT_CACHE_NUM : NEVER_CACHE).build(

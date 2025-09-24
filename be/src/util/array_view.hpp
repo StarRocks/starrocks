@@ -16,12 +16,16 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <type_traits>
 
 namespace starrocks {
 // TODO: using CXX20 std::span instead of this class
 template <typename T>
 class array_view {
 public:
+    // Defined as in std::span (see https://en.cppreference.com/w/cpp/container/span.html)
+    using value_type = std::remove_cv_t<T>;
+
     array_view(T* ptr, size_t len) noexcept : _ptr(ptr), _len(len) {}
     template <class Container>
     array_view(const Container& container) noexcept : _ptr(container.data()), _len(container.size()) {}

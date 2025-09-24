@@ -143,7 +143,22 @@ public class IcebergPartitionTraits extends DefaultTraits {
 
     @Override
     public PartitionKey createPartitionKeyWithType(List<String> values, List<Type> types) throws AnalysisException {
-        PartitionKey partitionKey = super.createPartitionKeyWithType(values, types);
+        Preconditions.checkState(values.size() == types.size(),
+                "columns size is %s, but values size is %s", types.size(), values.size());
+
+        PartitionKey partitionKey = createEmptyKey();
+        for (int i = 0; i < values.size(); i++) {
+            String rawValue = values.get(i);
+            Type type = types.get(i);
+            LiteralExpr exprValue;
+            if (rawValue == null) {
+                exprValue = NullLiteral.create(type);
+            } else {
+                exprValue = LiteralExpr.create(rawValue, type);
+            }
+            partitionKey.pushColumn(exprValue, type.getPrimitiveType());
+        }
+
         for (int i = 0; i < types.size(); i++) {
             LiteralExpr exprValue = partitionKey.getKeys().get(i);
             if (exprValue.getType().isDecimalV3()) {

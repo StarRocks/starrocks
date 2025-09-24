@@ -53,7 +53,7 @@ public class GroupProviderStatementAnalyzer {
             groupProvider.checkProperty();
 
             AuthenticationMgr authenticationMgr = GlobalStateMgr.getCurrentState().getAuthenticationMgr();
-            if (authenticationMgr.getGroupProvider(statement.getName()) != null) {
+            if (authenticationMgr.getGroupProvider(statement.getName()) != null && !statement.isIfNotExists()) {
                 throw new SemanticException("Group Provider '" + statement.getName() + "' already exists");
             }
             return null;
@@ -62,7 +62,7 @@ public class GroupProviderStatementAnalyzer {
         @Override
         public Void visitDropGroupProviderStatement(DropGroupProviderStmt statement, ConnectContext context) {
             AuthenticationMgr authenticationMgr = GlobalStateMgr.getCurrentState().getAuthenticationMgr();
-            if (authenticationMgr.getGroupProvider(statement.getName()) == null) {
+            if (authenticationMgr.getGroupProvider(statement.getName()) == null && !statement.isIfExists()) {
                 throw new SemanticException("Group Provider '" + statement.getName() + "' not found");
             }
 

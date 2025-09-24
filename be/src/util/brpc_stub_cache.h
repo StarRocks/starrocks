@@ -54,7 +54,7 @@ constexpr int TIMER_TASK_RUNNING = 1;
 class ExecEnv;
 
 template <typename StubCacheT>
-class EndpointCleanupTask : public starrocks::pipeline::PipelineTimerTask {
+class EndpointCleanupTask : public starrocks::pipeline::LightTimerTask {
 public:
     EndpointCleanupTask(StubCacheT* cache, const butil::EndPoint& endpoint) : _cache(cache), _endpoint(endpoint){};
     void Run() override { _cache->cleanup_expired(_endpoint); }
@@ -82,7 +82,7 @@ private:
 
         std::vector<std::shared_ptr<PInternalService_RecoverableStub>> _stubs;
         int64_t _idx;
-        EndpointCleanupTask<BrpcStubCache>* _cleanup_task = nullptr;
+        std::shared_ptr<EndpointCleanupTask<BrpcStubCache>> _cleanup_task;
     };
 
     SpinLock _lock;
@@ -95,6 +95,7 @@ public:
     static HttpBrpcStubCache* getInstance();
     StatusOr<std::shared_ptr<PInternalService_RecoverableStub>> get_http_stub(const TNetworkAddress& taddr);
     void cleanup_expired(const butil::EndPoint& endpoint);
+    void shutdown();
 
 private:
     HttpBrpcStubCache();
@@ -114,6 +115,7 @@ public:
     static LakeServiceBrpcStubCache* getInstance();
     StatusOr<std::shared_ptr<starrocks::LakeService_RecoverableStub>> get_stub(const std::string& host, int port);
     void cleanup_expired(const butil::EndPoint& endpoint);
+    void shutdown();
 
 private:
     LakeServiceBrpcStubCache();

@@ -536,21 +536,40 @@ mysql> SHOW PROC '/replications';
 
 ```sql
 MySQL > show proc '/current_queries';
-+---------------------+---------------+--------------------------------------+--------------+----------+------+------------+--------------+-------------+---------------+----------+----------+-------------------+---------------+---------------+
-| StartTime           | feIp          | QueryId                              | ConnectionId | Database | User | ScanBytes  | ScanRows     | MemoryUsage | DiskSpillSize | CPUTime  | ExecTime | Warehouse         | CustomQueryId | ResourceGroup |
-+---------------------+---------------+--------------------------------------+--------------+----------+------+------------+--------------+-------------+---------------+----------+----------+-------------------+---------------+---------------+
-| 2025-03-07 02:00:19 | 172.26.92.227 | ddbd69b9-fab4-11ef-8063-461f20abc3f0 | 11           | tpcds_2  | root | 120.573 MB | 5859503 rows | 296.432 MB  | 0.000 B       | 27.888 s | 3.153 s  | default_warehouse |               | rg1           |
-+---------------------+---------------+--------------------------------------+--------------+----------+------+------------+--------------+-------------+---------------+----------+----------+-------------------+---------------+---------------+
++---------------------+---------------+--------------------------------------+--------------+----------+------+------------+--------------+-------------+---------------+----------+----------+-----------+-------------------+---------------+---------------+
+| StartTime           | feIp          | QueryId                              | ConnectionId | Database | User | ScanBytes  | ScanRows     | MemoryUsage | DiskSpillSize | CPUTime  | ExecTime | ExecState | Warehouse         | CustomQueryId | ResourceGroup |
++---------------------+---------------+--------------------------------------+--------------+----------+------+------------+--------------+-------------+---------------+----------+----------+-----------+-------------------+---------------+---------------+
+| 2025-03-07 02:00:19 | 172.26.92.227 | ddbd69b9-fab4-11ef-8063-461f20abc3f0 | 11           | tpcds_2  | root | 120.573 MB | 5859503 rows | 296.432 MB  | 0.000 B       | 27.888 s | 3.153 s  | RUNNING   | default_warehouse |               | rg1           |
++---------------------+---------------+--------------------------------------+--------------+----------+------+------------+--------------+-------------+---------------+----------+----------+-----------+-------------------+---------------+---------------+
 ```
 
 **Example 16: Shows the information of running queries on all FE nodes in the cluster.**
 
 ```sql
 MySQL > show proc '/global_current_queries';
-+---------------------+---------------+--------------------------------------+--------------+----------+------+------------+--------------+-------------+---------------+---------+----------+-------------------+---------------+---------------+
-| StartTime           | feIp          | QueryId                              | ConnectionId | Database | User | ScanBytes  | ScanRows     | MemoryUsage | DiskSpillSize | CPUTime | ExecTime | Warehouse         | CustomQueryId | ResourceGroup |
-+---------------------+---------------+--------------------------------------+--------------+----------+------+------------+--------------+-------------+---------------+---------+----------+-------------------+---------------+---------------+
-| 2025-03-07 02:02:47 | 172.26.92.227 | 3603d566-fab5-11ef-8063-461f20abc3f0 | 12           | tpcds_2  | root | 100.886 MB | 4899036 rows | 114.491 MB  | 0.000 B       | 5.700 s | 0.713 s  | default_warehouse |               | rg1           |
-+---------------------+---------------+--------------------------------------+--------------+----------+------+------------+--------------+-------------+---------------+---------+----------+-------------------+---------------+---------------+
++---------------------+---------------+--------------------------------------+--------------+----------+------+------------+--------------+-------------+---------------+---------+----------+-----------+-------------------+---------------+---------------+
+| StartTime           | feIp          | QueryId                              | ConnectionId | Database | User | ScanBytes  | ScanRows     | MemoryUsage | DiskSpillSize | CPUTime | ExecTime | ExecState | Warehouse         | CustomQueryId | ResourceGroup |
++---------------------+---------------+--------------------------------------+--------------+----------+------+------------+--------------+-------------+---------------+---------+----------+-----------+-------------------+---------------+---------------+
+| 2025-03-07 02:02:47 | 172.26.92.227 | 3603d566-fab5-11ef-8063-461f20abc3f0 | 12           | tpcds_2  | root | 100.886 MB | 4899036 rows | 114.491 MB  | 0.000 B       | 5.700 s | 0.713 s  | RUNNING   | default_warehouse |               | rg1           |
++---------------------+---------------+--------------------------------------+--------------+----------+------+------------+--------------+-------------+---------------+---------+----------+-----------+-------------------+---------------+---------------+
+
+| **Return**   | **Description**                                                     |
+| ------------ | ------------------------------------------------------------------- |
+| StartTime    | The time when the query started execution.                          |
+| feIp         | The IP address of the FE node processing the query.                 |
+| QueryId      | The unique identifier for the query.                                |
+| ConnectionId | The connection ID associated with the query.                        |
+| Database     | The database where the query is executed.                           |
+| User         | The user who submitted the query.                                   |
+| ScanBytes    | The amount of data scanned by the query.                            |
+| ScanRows     | The number of rows scanned by the query.                            |
+| MemoryUsage  | The current memory usage of the query.                              |
+| DiskSpillSize| The amount of data spilled to disk during query execution.          |
+| CPUTime      | The total CPU time consumed by the query.                           |
+| ExecTime     | The total execution time of the query.                              |
+| ExecState    | The execution state of the query. Valid values: `RUNNING`, `PENDING`. |
+| Warehouse    | The compute warehouse processing the query.                          |
+| CustomQueryId| Custom query identifier if specified.                               |
+| ResourceGroup| The resource group assigned to the query.                           |
 
 ```

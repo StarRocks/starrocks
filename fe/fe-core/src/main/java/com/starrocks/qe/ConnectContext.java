@@ -40,9 +40,8 @@ import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
-import com.starrocks.authentication.AuthenticationContext;
+import com.starrocks.authentication.AccessControlContext;
 import com.starrocks.authentication.AuthenticationProvider;
-import com.starrocks.authentication.UserIdentityUtils;
 import com.starrocks.authentication.UserProperty;
 import com.starrocks.authorization.AccessDeniedException;
 import com.starrocks.authorization.ObjectType;
@@ -83,16 +82,13 @@ import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.SystemVariable;
 import com.starrocks.sql.ast.UserVariable;
 import com.starrocks.sql.ast.expression.StringLiteral;
-import com.starrocks.sql.ast.expression.VariableExpr;
 import com.starrocks.sql.optimizer.QueryMaterializationContext;
 import com.starrocks.sql.optimizer.dump.DumpInfo;
 import com.starrocks.sql.optimizer.dump.QueryDumpInfo;
 import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.sql.spm.SQLPlanStorage;
-import com.starrocks.thrift.TAuthInfo;
 import com.starrocks.thrift.TPipelineProfileLevel;
 import com.starrocks.thrift.TUniqueId;
-import com.starrocks.thrift.TUserIdentity;
 import com.starrocks.thrift.TWorkGroup;
 import com.starrocks.warehouse.Warehouse;
 import com.starrocks.warehouse.cngroup.ComputeResource;
@@ -169,17 +165,8 @@ public class ConnectContext {
     // Db
     protected String currentDb = "";
 
-    // Authentication context that encapsulates authentication and authorization information
-    protected AuthenticationContext authenticationContext = new AuthenticationContext();
-
-    // currentRoleIds is the role that has taken effect in the current session.
-    // Note that this set is not all roles belonging to the current user.
-    // `execute as` will modify currentRoleIds and assign the active role of the impersonate user to currentRoleIds.
-    // For specific logic, please refer to setCurrentRoleIds.
-    private Set<Long> currentRoleIds = new HashSet<>();
-
-    // groups of current user
-    private Set<String> groups = new HashSet<>();
+    // Unified access control context holding authentication and authorization information
+    protected AccessControlContext accessControlContext = new AccessControlContext();
 
     // Serializer used to pack MySQL packet.
     protected MysqlSerializer serializer;
@@ -227,9 +214,6 @@ public class ConnectContext {
 
     protected boolean isMetadataContext = false;
     protected boolean needQueued = true;
-
-    // Bypass the authorizer check for certain cases
-    protected boolean bypassAuthorizerCheck = false;
 
     protected DumpInfo dumpInfo;
 
@@ -458,36 +442,53 @@ public class ConnectContext {
     }
 
     public String getQualifiedUser() {
-        return authenticationContext.getQualifiedUser();
+        return accessControlContext.getQualifiedUser();
     }
 
     public void setQualifiedUser(String qualifiedUser) {
-        authenticationContext.setQualifiedUser(qualifiedUser);
+        accessControlContext.setQualifiedUser(qualifiedUser);
     }
 
     public UserIdentity getCurrentUserIdentity() {
-        return authenticationContext.getCurrentUserIdentity();
+        return accessControlContext.getCurrentUserIdentity();
     }
 
     public void setCurrentUserIdentity(UserIdentity currentUserIdentity) {
-        authenticationContext.setCurrentUserIdentity(currentUserIdentity);
+        accessControlContext.setCurrentUserIdentity(currentUserIdentity);
     }
 
     public void setDistinguishedName(String distinguishedName) {
-        authenticationContext.setDistinguishedName(distinguishedName);
+        accessControlContext.setDistinguishedName(distinguishedName);
     }
 
     public String getDistinguishedName() {
-        return authenticationContext.getDistinguishedName();
+        return accessControlContext.getDistinguishedName();
     }
 
     public Set<Long> getCurrentRoleIds() {
-        return currentRoleIds;
+        return accessControlContext.getCurrentRoleIds();
+    }
+
+    public void setCurrentRoleIds(Set<Long> roleIds) {
+        accessControlContext.setCurrentRoleIds(roleIds);
     }
 
     public void setCurrentRoleIds(UserIdentity user) {
+        Set<Long> roleIds = getRoleIdsByUser(user);
+        accessControlContext.setCurrentRoleIds(roleIds);
+    }
+
+    public void setCurrentRoleIds(UserIdentity userIdentity, Set<String> groups) {
+        Set<Long> roleIds = getRoleIdsByUser(userIdentity);
+        for (String group : groups) {
+            roleIds.addAll(globalStateMgr.getAuthorizationMgr().getRoleIdListByGroup(group));
+        }
+        setCurrentRoleIds(roleIds);
+    }
+
+    private Set<Long> getRoleIdsByUser(UserIdentity user) {
         if (user.isEphemeral()) {
-            this.currentRoleIds = new HashSet<>();
+            return new HashSet<>();
         } else {
             try {
                 Set<Long> defaultRoleIds;
@@ -496,90 +497,65 @@ public class ConnectContext {
                 } else {
                     defaultRoleIds = globalStateMgr.getAuthorizationMgr().getDefaultRoleIdsByUser(user);
                 }
-                this.currentRoleIds = defaultRoleIds;
+                return defaultRoleIds;
             } catch (PrivilegeException e) {
                 LOG.warn("Set current role fail : {}", e.getMessage());
+                return new HashSet<>();
             }
         }
     }
 
-    public void setCurrentRoleIds(Set<Long> roleIds) {
-        this.currentRoleIds = roleIds;
-    }
-
-    public void setCurrentRoleIds(UserIdentity userIdentity, Set<String> groups) {
-        setCurrentRoleIds(userIdentity);
-    }
-
-    public void setAuthInfoFromThrift(TAuthInfo authInfo) {
-        if (authInfo.isSetCurrent_user_ident()) {
-            setAuthInfoFromThrift(authInfo.getCurrent_user_ident());
-        } else {
-            setCurrentUserIdentity(UserIdentity.createAnalyzedUserIdentWithIp(authInfo.user, authInfo.user_ip));
-            setCurrentRoleIds(getCurrentUserIdentity());
-        }
-    }
-
-    public void setAuthInfoFromThrift(TUserIdentity tUserIdent) {
-        setCurrentUserIdentity(UserIdentityUtils.fromThrift(tUserIdent));
-        if (tUserIdent.isSetCurrent_role_ids()) {
-            setCurrentRoleIds(new HashSet<>(tUserIdent.current_role_ids.getRole_id_list()));
-        } else {
-            setCurrentRoleIds(getCurrentUserIdentity());
-        }
-    }
-
     public Set<String> getGroups() {
-        return groups;
+        return accessControlContext.getGroups();
     }
 
     public void setGroups(Set<String> groups) {
-        this.groups = groups;
+        accessControlContext.setGroups(groups);
     }
 
     public String getAuthToken() {
-        return authenticationContext.getAuthToken();
+        return accessControlContext.getAuthToken();
     }
 
     public void setAuthToken(String authToken) {
-        authenticationContext.setAuthToken(authToken);
+        accessControlContext.setAuthToken(authToken);
     }
 
     public AuthenticationProvider getAuthenticationProvider() {
-        return authenticationContext.getAuthenticationProvider();
+        return accessControlContext.getAuthenticationProvider();
     }
 
     public void setAuthPlugin(String authPlugin) {
-        authenticationContext.setAuthPlugin(authPlugin);
+        accessControlContext.setAuthPlugin(authPlugin);
     }
 
     public String getAuthPlugin() {
-        return authenticationContext.getAuthPlugin();
+        return accessControlContext.getAuthPlugin();
     }
 
     public void setAuthDataSalt(byte[] authDataSalt) {
-        authenticationContext.setAuthDataSalt(authDataSalt);
+        accessControlContext.setAuthDataSalt(authDataSalt);
     }
 
     public String getSecurityIntegration() {
-        return authenticationContext.getSecurityIntegration();
+        return accessControlContext.getSecurityIntegration();
     }
 
     public void setSecurityIntegration(String securityIntegration) {
-        authenticationContext.setSecurityIntegration(securityIntegration);
+        accessControlContext.setSecurityIntegration(securityIntegration);
     }
 
     /**
      * Get the authentication context for this connection
      */
-    public AuthenticationContext getAuthenticationContext() {
-        return authenticationContext;
+    public AccessControlContext getAccessControlContext() {
+        return accessControlContext;
     }
 
     public void modifySystemVariable(SystemVariable setVar, boolean onlySetSessionVar) throws DdlException {
         globalStateMgr.getVariableMgr().setSystemVariable(sessionVariable, setVar, onlySetSessionVar);
-        if (!SetType.GLOBAL.equals(setVar.getType()) && globalStateMgr.getVariableMgr()
-                .shouldForwardToLeader(setVar.getVariable())) {
+        if (!SetType.GLOBAL.equals(setVar.getType())
+                && globalStateMgr.getVariableMgr().shouldForwardToLeader(setVar.getVariable())) {
             modifiedSessionVariables.put(setVar.getVariable(), setVar);
         }
     }
@@ -988,23 +964,30 @@ public class ConnectContext {
 
     public void setCurrentWarehouse(String currentWarehouse) {
         this.sessionVariable.setWarehouseName(currentWarehouse);
-        this.computeResource = null;
+        this.resetComputeResource();
     }
 
     public void setCurrentWarehouseId(long warehouseId) {
         Warehouse warehouse = globalStateMgr.getWarehouseMgr().getWarehouse(warehouseId);
         this.sessionVariable.setWarehouseName(warehouse.getName());
-        this.computeResource = null;
+        this.resetComputeResource();
     }
 
     public void setCurrentComputeResource(ComputeResource computeResource) {
         this.computeResource = computeResource;
     }
 
-    public synchronized void tryAcquireResource(boolean force) {
-        if (!force && this.computeResource != null) {
-            return;
-        }
+    /**
+     * Reset the current compute resource, so that we can acquire a new one next time.
+     */
+    public void resetComputeResource() {
+        this.computeResource = null;
+    }
+
+    /**
+     * Acquire a compute resource from warehouse manager.
+     */
+    private synchronized void acquireComputeResource() {
         // once warehouse is set, needs to choose the available cngroup
         // try to acquire cn group id once the warehouse is set
         final long warehouseId = this.getCurrentWarehouseId();
@@ -1023,23 +1006,50 @@ public class ConnectContext {
             return WarehouseManager.DEFAULT_RESOURCE;
         }
         if (this.computeResource == null) {
-            tryAcquireResource(false);
+            acquireComputeResource();
+        } else {
+            final WarehouseManager warehouseManager = globalStateMgr.getWarehouseMgr();
+            // throw exception if the current warehouse is not exist.
+            if (!warehouseManager.warehouseExists(this.getCurrentWarehouseName())) {
+                String errMsg = String.format("Current connection's warehouse(%s) does not exist, please " +
+                                "set to another warehouse.", this.getCurrentWarehouseName());
+                this.resetComputeResource();
+                throw new RuntimeException(errMsg);
+            }
+            if (!warehouseManager.isResourceAvailable(computeResource)) {
+                if (state != null && !state.isRunning()) {
+                    // if the query is not running, we can acquire a new compute resource.
+                    acquireComputeResource();
+                } else {
+                    // throw exception if the current compute resource is not available.
+                    // and reset compute resource, so that we can acquire a new one next time.
+                    String errMsg = String.format("Current connection's compute resource(%s) is not available:%s, please " +
+                            "try again.", this.getCurrentWarehouseName(), computeResource);
+                    this.resetComputeResource();
+                    throw new RuntimeException(errMsg);
+                }
+            }
         }
         return this.computeResource;
     }
 
     /**
      * Get the name of the current compute resource.
+     * During the execution of a statement, the compute resource should be fixed.
      * NOTE: this method will not acquire compute resource if it is not set.
-     *
      * @return: the name of the current compute resource, or empty string if not set.
      */
     public String getCurrentComputeResourceName() {
         if (!RunMode.isSharedDataMode() || this.computeResource == null) {
             return "";
         }
-        final WarehouseManager warehouseManager = globalStateMgr.getWarehouseMgr();
-        return warehouseManager.getComputeResourceName(this.computeResource);
+        try {
+            final WarehouseManager warehouseManager = globalStateMgr.getWarehouseMgr();
+            return warehouseManager.getComputeResourceName(this.computeResource);
+        } catch (Exception e) {
+            LOG.warn("get compute resource name failed, resource: {}", this.computeResource, e);
+            return "";
+        }
     }
 
     /**
@@ -1052,6 +1062,24 @@ public class ConnectContext {
             return WarehouseManager.DEFAULT_RESOURCE;
         }
         return this.computeResource;
+    }
+
+    /**
+     * This method will acquire a new compute resource if the current one is not available.
+     * To ensure the compute resource is unique during the execution of a statement, check this method
+     * before executing a statement.
+     */
+    public void ensureCurrentComputeResourceAvailable() {
+        if (!RunMode.isSharedDataMode() || this.computeResource == null) {
+            return;
+        }
+        final WarehouseManager warehouseManager = globalStateMgr.getWarehouseMgr();
+        if (!warehouseManager.isResourceAvailable(computeResource)) {
+            this.computeResource = warehouseManager.acquireComputeResource(this.getCurrentWarehouseId());
+        } else {
+            // acquire compute resource again to for better-schedule balance
+            acquireComputeResource();
+        }
     }
 
     public void setParentConnectContext(ConnectContext parent) {
@@ -1095,11 +1123,11 @@ public class ConnectContext {
     }
 
     public boolean isBypassAuthorizerCheck() {
-        return bypassAuthorizerCheck;
+        return accessControlContext.isBypassAuthorizerCheck();
     }
 
     public void setBypassAuthorizerCheck(boolean value) {
-        this.bypassAuthorizerCheck = value;
+        accessControlContext.setBypassAuthorizerCheck(value);
     }
 
     public ConnectContext getParent() {
@@ -1327,7 +1355,7 @@ public class ConnectContext {
     }
 
     public boolean enableSSL() throws IOException {
-        SSLChannel sslChannel = new SSLChannelImp(SSLContextLoader.getSslContext().createSSLEngine(), mysqlChannel);
+        SSLChannel sslChannel = new SSLChannelImp(SSLContextLoader.newServerEngine(), mysqlChannel);
         if (!sslChannel.init()) {
             return false;
         } else {
@@ -1459,37 +1487,25 @@ public class ConnectContext {
             // set session variables
             Map<String, String> sessionVariables = userProperty.getSessionVariables();
             for (Map.Entry<String, String> entry : sessionVariables.entrySet()) {
-                String currentValue = globalStateMgr.getVariableMgr().getValue(
-                        sessionVariable, new VariableExpr(entry.getKey()));
-                if (!currentValue.equalsIgnoreCase(
-                        globalStateMgr.getVariableMgr().getDefaultValue(entry.getKey()))) {
-                    // If the current session variable is not default value, we should respect it.
-                    continue;
-                }
                 SystemVariable variable = new SystemVariable(entry.getKey(), new StringLiteral(entry.getValue()));
-                modifySystemVariable(variable, true);
+                globalStateMgr.getVariableMgr().setSystemVariable(sessionVariable, variable, true);
             }
 
             // set catalog and database
-            boolean dbHasBeenSetByUser = !getCurrentCatalog().equals(
-                    globalStateMgr.getVariableMgr().getDefaultValue(SessionVariable.CATALOG))
-                    || !getDatabase().isEmpty();
-            if (!dbHasBeenSetByUser) {
-                String catalog = userProperty.getCatalog();
-                String database = userProperty.getDatabase();
-                if (catalog.equals(UserProperty.CATALOG_DEFAULT_VALUE)) {
-                    if (!database.equals(UserProperty.DATABASE_DEFAULT_VALUE)) {
-                        changeCatalogDb(userProperty.getCatalogDbName());
-                    }
-                } else {
-                    if (database.equals(UserProperty.DATABASE_DEFAULT_VALUE)) {
-                        changeCatalog(catalog);
-                    } else {
-                        changeCatalogDb(userProperty.getCatalogDbName());
-                    }
-                    SystemVariable variable = new SystemVariable(SessionVariable.CATALOG, new StringLiteral(catalog));
-                    modifySystemVariable(variable, true);
+            String catalog = userProperty.getCatalog();
+            String database = userProperty.getDatabase();
+            if (catalog.equals(UserProperty.CATALOG_DEFAULT_VALUE)) {
+                if (!database.equals(UserProperty.DATABASE_DEFAULT_VALUE)) {
+                    changeCatalogDb(userProperty.getCatalogDbName());
                 }
+            } else {
+                if (database.equals(UserProperty.DATABASE_DEFAULT_VALUE)) {
+                    changeCatalog(catalog);
+                } else {
+                    changeCatalogDb(userProperty.getCatalogDbName());
+                }
+                SystemVariable variable = new SystemVariable(SessionVariable.CATALOG, new StringLiteral(catalog));
+                globalStateMgr.getVariableMgr().setSystemVariable(sessionVariable, variable, true);
             }
         } catch (Exception e) {
             LOG.warn("set session env failed: ", e);
@@ -1588,6 +1604,10 @@ public class ConnectContext {
             row.add(sessionVariable.getWarehouseName());
             // cngroup
             row.add(getCurrentComputeResourceName());
+            // catalog
+            row.add(sessionVariable.getCatalog());
+            // query id
+            row.add(queryId == null ? null : queryId.toString());
             return row;
         }
     }

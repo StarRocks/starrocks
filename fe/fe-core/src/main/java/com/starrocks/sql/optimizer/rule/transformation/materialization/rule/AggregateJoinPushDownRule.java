@@ -91,6 +91,11 @@ public class AggregateJoinPushDownRule extends BaseMaterializedViewRewriteRule {
         return super.check(input, context);
     }
 
+    @Override
+    public boolean isChooseBestMVBasedDataLayout(OptExpression expression) {
+        return false;
+    }
+
     /**
      * MV can only contain LogicalScanOperator, LogicalProjectOperator, LogicalAggregationOperator for mv push down rewrite.
      */

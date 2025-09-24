@@ -79,13 +79,15 @@ public class RewriteDataFilesProcedure extends IcebergTableProcedure {
         long minFileSizeBytes = args.get(MIN_FILE_SIZE_BYTES) != null ? args.get(MIN_FILE_SIZE_BYTES)
                 .castTo(Type.BIGINT)
                 .map(ConstantOperator::getBigint)
-                .orElseThrow(() -> new StarRocksConnectorException("invalid argument type for %s, expected BIGINT",
+                .filter(v -> v > 0)
+                .orElseThrow(() -> new StarRocksConnectorException("invalid argument type for %s, expected positive BIGINT",
                         MIN_FILE_SIZE_BYTES))
                 : DEFAULT_MIN_FILE_SIZE_BYTES;
         long batchSize = args.get(BATCH_SIZE) != null ? args.get(BATCH_SIZE)
                 .castTo(Type.BIGINT)
                 .map(ConstantOperator::getBigint)
-                .orElseThrow(() -> new StarRocksConnectorException("invalid argument type for %s, expected BIGINT",
+                .filter(v -> v > 0)
+                .orElseThrow(() -> new StarRocksConnectorException("invalid argument type for %s, expected positive BIGINT",
                         BATCH_SIZE))
                 : DEFAULT_BATCH_SIZE;
 

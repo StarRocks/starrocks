@@ -106,7 +106,7 @@ public class TPCDSCTERatioTest extends TPCDS1TTestBase {
             actual.add(inline.getExplainString(StatementBase.ExplainLevel.NORMAL).contains("MultiCastDataSinks"));
         }
 
-        System.out.println();
+        logSysInfo();
         print(expect, actual);
     }
 

@@ -49,6 +49,19 @@ Status KeyValueMerger::merge(const sstable::Iterator* iter_ptr) {
     if (index_value_ver.values_size() == 0) {
         return Status::OK();
     }
+    // filter rows which already been deleted in this sst
+    if (iter_ptr->delvec() != nullptr && !iter_ptr->delvec()->empty() &&
+        iter_ptr->delvec()->roaring()->contains(index_value_ver.values(0).rowid())) {
+        // this row has been deleted in this sst, skip it
+        return Status::OK();
+    }
+    // fill shared version & rssid if have
+    if (iter_ptr->shared_version() > 0) {
+        for (size_t i = 0; i < index_value_ver.values_size(); ++i) {
+            index_value_ver.mutable_values(i)->set_version(iter_ptr->shared_version());
+            index_value_ver.mutable_values(i)->set_rssid(iter_ptr->shared_rssid());
+        }
+    }
 
     /*
      * Do not distinguish between base compaction and cumulative compaction here.
@@ -122,7 +135,7 @@ Status KeyValueMerger::merge(const sstable::Iterator* iter_ptr) {
             _index_value_vers.swap(t);
         }
     } else {
-        flush();
+        RETURN_IF_ERROR(flush());
         _key = key;
         _max_rss_rowid = max_rss_rowid;
         _index_value_vers.emplace_front(version, index_value);
@@ -130,9 +143,9 @@ Status KeyValueMerger::merge(const sstable::Iterator* iter_ptr) {
     return Status::OK();
 }
 
-void KeyValueMerger::flush() {
+Status KeyValueMerger::flush() {
     if (_index_value_vers.empty()) {
-        return;
+        return Status::OK();
     }
 
     IndexValuesWithVerPB index_value_pb;
@@ -147,9 +160,11 @@ void KeyValueMerger::flush() {
         value->set_rowid(index_value_with_ver.second.get_rowid());
     }
     if (index_value_pb.values_size() > 0) {
-        _builder->Add(Slice(_key), Slice(index_value_pb.SerializeAsString()));
+        RETURN_IF_ERROR(_builder->Add(Slice(_key), Slice(index_value_pb.SerializeAsString())));
     }
     _index_value_vers.clear();
+
+    return Status::OK();
 }
 
 LakePersistentIndex::LakePersistentIndex(TabletManager* tablet_mgr, int64_t tablet_id)
@@ -163,6 +178,10 @@ LakePersistentIndex::~LakePersistentIndex() {
 }
 
 Status LakePersistentIndex::init(const PersistentIndexSstableMetaPB& sstable_meta) {
+    auto* block_cache = _tablet_mgr->update_mgr()->block_cache();
+    if (block_cache == nullptr) {
+        return Status::InternalError("Block cache is null.");
+    }
     uint64_t max_rss_rowid = 0;
     for (auto& sstable_pb : sstable_meta.sstables()) {
         RandomAccessFileOptions opts;
@@ -172,12 +191,8 @@ Status LakePersistentIndex::init(const PersistentIndexSstableMetaPB& sstable_met
         }
         ASSIGN_OR_RETURN(auto rf, fs::new_random_access_file(
                                           opts, _tablet_mgr->sst_location(_tablet_id, sstable_pb.filename())));
-        auto* block_cache = _tablet_mgr->update_mgr()->block_cache();
-        if (block_cache == nullptr) {
-            return Status::InternalError("Block cache is null.");
-        }
         auto sstable = std::make_unique<PersistentIndexSstable>();
-        RETURN_IF_ERROR(sstable->init(std::move(rf), sstable_pb, block_cache->cache()));
+        RETURN_IF_ERROR(sstable->init(std::move(rf), sstable_pb, block_cache->cache(), _tablet_mgr, _tablet_id));
         _sstables.emplace_back(std::move(sstable));
         max_rss_rowid = std::max(max_rss_rowid, sstable_pb.max_rss_rowid());
     }
@@ -212,6 +227,10 @@ bool LakePersistentIndex::too_many_rebuild_files() const {
 
 Status LakePersistentIndex::minor_compact() {
     TRACE_COUNTER_SCOPE_LATENCY_US("minor_compact_latency_us");
+    auto* block_cache = _tablet_mgr->update_mgr()->block_cache();
+    if (block_cache == nullptr) {
+        return Status::InternalError("Block cache is null.");
+    }
     auto filename = gen_sst_filename();
     auto location = _tablet_mgr->sst_location(_tablet_id, filename);
     WritableFileOptions wopts;
@@ -237,14 +256,45 @@ Status LakePersistentIndex::minor_compact() {
     sstable_pb.set_filesize(filesize);
     sstable_pb.set_max_rss_rowid(_memtable->max_rss_rowid());
     sstable_pb.set_encryption_meta(encryption_meta);
+    TEST_SYNC_POINT_CALLBACK("LakePersistentIndex::minor_compact:inject_predicate", &sstable_pb);
+    RETURN_IF_ERROR(sstable->init(std::move(rf), sstable_pb, block_cache->cache(), _tablet_mgr, _tablet_id));
+    _sstables.emplace_back(std::move(sstable));
+    TRACE_COUNTER_INCREMENT("minor_compact_times", 1);
+    return Status::OK();
+}
+
+Status LakePersistentIndex::ingest_sst(const FileMetaPB& sst_meta, uint32_t rssid, int64_t version, bool is_compaction,
+                                       DelVectorPtr delvec) {
     auto* block_cache = _tablet_mgr->update_mgr()->block_cache();
     if (block_cache == nullptr) {
         return Status::InternalError("Block cache is null.");
     }
-    TEST_SYNC_POINT_CALLBACK("LakePersistentIndex::minor_compact:inject_predicate", &sstable_pb);
-    RETURN_IF_ERROR(sstable->init(std::move(rf), sstable_pb, block_cache->cache()));
+    if (!_memtable->empty()) {
+        RETURN_IF_ERROR(flush_memtable());
+    }
+    TRACE_COUNTER_SCOPE_LATENCY_US("ingest_sst_latency_us");
+    auto sstable = std::make_unique<PersistentIndexSstable>();
+    RandomAccessFileOptions opts;
+    if (!sst_meta.encryption_meta().empty()) {
+        ASSIGN_OR_RETURN(opts.encryption_info, KeyCache::instance().unwrap_encryption_meta(sst_meta.encryption_meta()));
+    }
+    auto location = _tablet_mgr->sst_location(_tablet_id, sst_meta.name());
+    ASSIGN_OR_RETURN(auto rf, fs::new_random_access_file(opts, location));
+    PersistentIndexSstablePB sstable_pb;
+    sstable_pb.set_filename(sst_meta.name());
+    sstable_pb.set_filesize(sst_meta.size());
+    sstable_pb.set_shared_rssid(rssid);
+    sstable_pb.set_shared_version(version);
+    sstable_pb.set_encryption_meta(sst_meta.encryption_meta());
+    // sstable generated by compaction need delvec to resolve conflict.
+    sstable_pb.set_has_delvec(is_compaction);
+    // use UINT32_MAX - 1 as max rowid here to indicate all rows of this segment are already contained in this sst.
+    // We don't use UINT32_MAX as max rowid because it is reserved for delete rows.
+    sstable_pb.set_max_rss_rowid((static_cast<uint64_t>(rssid) << 32) | (UINT32_MAX - 1));
+    RETURN_IF_ERROR(sstable->init(std::move(rf), sstable_pb, block_cache->cache(), _tablet_mgr, _tablet_id,
+                                  true /* need filter */, std::move(delvec)));
     _sstables.emplace_back(std::move(sstable));
-    TRACE_COUNTER_INCREMENT("minor_compact_times", 1);
+    TRACE_COUNTER_INCREMENT("ingest_sst_times", 1);
     return Status::OK();
 }
 
@@ -402,6 +452,22 @@ void LakePersistentIndex::pick_sstables_for_merge(const PersistentIndexSstableMe
     if (sstables->size() > max_limit) {
         sstables->resize(max_limit);
     }
+    if (!*merge_base_level && sstables->size() > 0 &&
+        sstable_meta.sstables(0).max_rss_rowid() == sstables->back().max_rss_rowid()) {
+        // If base sstable's max_rss_rowid is same as cumulative sstable's max_rss_rowid,
+        // we should force to do base merge.
+        // That's because in `LakePersistentIndex::apply_opcompaction`, we will sort sstable
+        // by max_rss_rowid, and if they are same, the base sstable will be after cumulative sstable,
+        // which is not what we want. E.g.
+        //  t1 : (base sst: max_rss_rowid = 4, cumulative sst: max_rss_rowid = 4, cumulative sst: max_rss_rowid = 4)
+        //  t2 : do cumulative compaction, merge these two cumulative sst, and get new (cumulative sst: max_rss_rowid = 4).
+        //  t3 : apply new cumulative sst, now the order is:
+        //       (cumulative sst: max_rss_rowid = 4, base sst: max_rss_rowid = 4)
+        //       which is wrong, because base sst should be before cumulative sst.
+        // so we force to do base merge here.
+        *merge_base_level = true;
+        sstables->insert(sstables->begin(), sstable_meta.sstables(0));
+    }
 }
 
 Status LakePersistentIndex::prepare_merging_iterator(
@@ -437,7 +503,8 @@ Status LakePersistentIndex::prepare_merging_iterator(
         ASSIGN_OR_RETURN(auto rf, fs::new_random_access_file(
                                           opts, tablet_mgr->sst_location(metadata.id(), sstable_pb.filename())));
         auto merging_sstable = std::make_shared<PersistentIndexSstable>();
-        RETURN_IF_ERROR(merging_sstable->init(std::move(rf), sstable_pb, nullptr, false /** no filter **/));
+        RETURN_IF_ERROR(merging_sstable->init(std::move(rf), sstable_pb, nullptr, tablet_mgr, metadata.id(),
+                                              false /** no filter **/));
         merging_sstables->push_back(merging_sstable);
         // Pass `max_rss_rowid` to iterator, will be used when compaction.
         read_options.max_rss_rowid = sstable_pb.max_rss_rowid();
@@ -445,6 +512,9 @@ Status LakePersistentIndex::prepare_merging_iterator(
             ASSIGN_OR_RETURN(read_options.predicate,
                              sstable::SstablePredicate::create(metadata.schema(), sstable_pb.predicate()));
         }
+        read_options.shared_rssid = sstable_pb.shared_rssid();
+        read_options.shared_version = sstable_pb.shared_version();
+        read_options.delvec = merging_sstable->delvec();
         sstable::Iterator* iter = merging_sstable->new_iterator(read_options);
         iters.emplace_back(iter);
         // add input sstable.
@@ -468,7 +538,7 @@ Status LakePersistentIndex::merge_sstables(std::unique_ptr<sstable::Iterator> it
         iter_ptr->Next();
     }
     RETURN_IF_ERROR(iter_ptr->status());
-    merger->finish();
+    RETURN_IF_ERROR(merger->finish());
     return builder->Finish();
 }
 
@@ -521,6 +591,10 @@ Status LakePersistentIndex::apply_opcompaction(const TxnLogPB_OpCompaction& op_c
     if (op_compaction.input_sstables().empty() || !op_compaction.has_output_sstable()) {
         return Status::OK();
     }
+    auto* block_cache = _tablet_mgr->update_mgr()->block_cache();
+    if (block_cache == nullptr) {
+        return Status::InternalError("Block cache is null.");
+    }
 
     PersistentIndexSstablePB sstable_pb;
     sstable_pb.CopyFrom(op_compaction.output_sstable());
@@ -534,11 +608,7 @@ Status LakePersistentIndex::apply_opcompaction(const TxnLogPB_OpCompaction& op_c
     }
     ASSIGN_OR_RETURN(auto rf,
                      fs::new_random_access_file(opts, _tablet_mgr->sst_location(_tablet_id, sstable_pb.filename())));
-    auto* block_cache = _tablet_mgr->update_mgr()->block_cache();
-    if (block_cache == nullptr) {
-        return Status::InternalError("Block cache is null.");
-    }
-    RETURN_IF_ERROR(sstable->init(std::move(rf), sstable_pb, block_cache->cache()));
+    RETURN_IF_ERROR(sstable->init(std::move(rf), sstable_pb, block_cache->cache(), _tablet_mgr, _tablet_id));
 
     std::unordered_set<std::string> filenames;
     for (const auto& input_sstable : op_compaction.input_sstables()) {

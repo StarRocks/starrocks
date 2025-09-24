@@ -37,7 +37,7 @@ package com.starrocks.qe;
 import com.google.common.base.Strings;
 import com.google.common.collect.Sets;
 import com.starrocks.analysis.AccessTestUtil;
-import com.starrocks.authentication.AuthenticationContext;
+import com.starrocks.authentication.AccessControlContext;
 import com.starrocks.authentication.AuthenticationMgr;
 import com.starrocks.authentication.PlainPasswordAuthenticationProvider;
 import com.starrocks.authorization.PrivilegeBuiltinConstants;
@@ -320,9 +320,9 @@ public class ConnectProcessorTest extends DDLTestBase {
                 minTimes = 0;
                 result = MysqlCapability.DEFAULT_CAPABILITY;
 
-                context.getAuthenticationContext();
+                context.getAccessControlContext();
                 minTimes = 0;
-                result = new AuthenticationContext();
+                result = new AccessControlContext();
 
                 context.getAuthenticationProvider();
                 minTimes = 0;
@@ -676,5 +676,34 @@ public class ConnectProcessorTest extends DDLTestBase {
 
         TMasterOpResult result = processor.proxyExecute(request);
         Assertions.assertNotNull(result);
+    }
+
+    @Test
+    public void testProxyExecuteUserIdentityIsNull() throws Exception {
+        TMasterOpRequest request = new TMasterOpRequest();
+        request.setCatalog("default");
+        request.setDb("testDb1");
+        request.setUser("root");
+        request.setSql("select 1");
+        request.setIsInternalStmt(true);
+        request.setModified_variables_sql("set query_timeout = 10");
+        request.setQueryId(UUIDUtil.genTUniqueId());
+        request.setSession_id(UUID.randomUUID().toString());
+        request.setIsLastStmt(true);
+
+        ConnectContext context = new ConnectContext();
+        ConnectProcessor processor = new ConnectProcessor(context);
+        new mockit.MockUp<StmtExecutor>() {
+            @mockit.Mock
+            public void execute() {}
+            @mockit.Mock
+            public PQueryStatistics getQueryStatisticsForAuditLog() {
+                return null;
+            }
+        };
+
+        TMasterOpResult result = processor.proxyExecute(request);
+        Assertions.assertNotNull(result);
+        Assertions.assertTrue(context.getState().isError());
     }
 }

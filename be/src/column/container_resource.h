@@ -78,6 +78,8 @@ public:
         return false;
     }
 
+    bool owned() const { return _handle != nullptr; }
+
 private:
     std::shared_ptr<PageHandle> _handle;
 

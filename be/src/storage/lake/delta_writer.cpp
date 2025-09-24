@@ -313,7 +313,7 @@ Status DeltaWriterImpl::build_schema_and_writer() {
                         UniqueId(_load_id).to_thrift(),
                         UniqueId(_tablet_id, _txn_id)
                                 .to_thrift(), // use tablet id + txn id to generate fragment instance id
-                        _tablet_manager->tablet_root_location(_tablet_id));
+                        _tablet_manager->tablet_root_location(_tablet_id), nullptr);
                 RETURN_IF_ERROR(_load_spill_block_mgr->init());
             }
             // Init SpillMemTableSink
@@ -627,6 +627,12 @@ StatusOr<TxnLogPtr> DeltaWriterImpl::finish_with_txnlog(DeltaWriterFinishMode mo
         } else {
             return Status::InternalError(fmt::format("unknown file {}", f.path));
         }
+    }
+    for (auto& sst : _tablet_writer->ssts()) {
+        auto* file_meta = op_write->add_ssts();
+        file_meta->set_name(sst.path);
+        file_meta->set_size(sst.size.value());
+        file_meta->set_encryption_meta(sst.encryption_meta);
     }
     op_write->mutable_rowset()->set_num_rows(_tablet_writer->num_rows());
     op_write->mutable_rowset()->set_data_size(_tablet_writer->data_size());

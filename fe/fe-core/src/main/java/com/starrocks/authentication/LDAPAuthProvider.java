@@ -71,7 +71,7 @@ public class LDAPAuthProvider implements AuthenticationProvider {
     }
 
     @Override
-    public void authenticate(AuthenticationContext authContext, UserIdentity userIdentity, byte[] authResponse)
+    public void authenticate(AccessControlContext authContext, UserIdentity userIdentity, byte[] authResponse)
             throws AuthenticationException {
         //clear password terminate string
         byte[] clearPassword = authResponse;

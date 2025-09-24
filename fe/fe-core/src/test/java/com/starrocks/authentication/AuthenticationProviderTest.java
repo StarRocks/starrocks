@@ -68,7 +68,7 @@ public class AuthenticationProviderTest {
                     .create(info.getAuthPlugin(), new String(info.getPassword()));
 
             byte[] scramble = MysqlPassword.scramble(seed, password);
-            provider.authenticate(ctx.getAuthenticationContext(), testUserIdentity, scramble);
+            provider.authenticate(ctx.getAccessControlContext(), testUserIdentity, scramble);
         }
 
         // no password
@@ -76,11 +76,11 @@ public class AuthenticationProviderTest {
         UserAuthOptionAnalyzer.analyzeAuthOption(testUser, null);
         UserAuthenticationInfo info = new UserAuthenticationInfo(testUser, null);
         ctx.setAuthDataSalt(new byte[0]);
-        provider.authenticate(ctx.getAuthenticationContext(), testUserIdentity, new byte[0]);
+        provider.authenticate(ctx.getAccessControlContext(), testUserIdentity, new byte[0]);
         try {
             ctx.setAuthDataSalt("x".getBytes(StandardCharsets.UTF_8));
             provider.authenticate(
-                    ctx.getAuthenticationContext(),
+                    ctx.getAccessControlContext(),
                     testUserIdentity,
                     "xx".getBytes(StandardCharsets.UTF_8));
             Assertions.fail();
@@ -98,7 +98,7 @@ public class AuthenticationProviderTest {
         try {
             ctx.setAuthDataSalt(seed);
             provider.authenticate(
-                    ctx.getAuthenticationContext(),
+                    ctx.getAccessControlContext(),
                     testUserIdentity,
                     MysqlPassword.scramble(seed, "xx"));
             Assertions.fail();
@@ -109,7 +109,7 @@ public class AuthenticationProviderTest {
         try {
             ctx.setAuthDataSalt(seed);
             provider.authenticate(
-                    ctx.getAuthenticationContext(),
+                    ctx.getAccessControlContext(),
                     testUserIdentity,
                     MysqlPassword.scramble(seed, "bb"));
 
@@ -121,7 +121,7 @@ public class AuthenticationProviderTest {
             byte[] remotePassword = "bb".getBytes(StandardCharsets.UTF_8);
             ctx.setAuthDataSalt(null);
             provider.authenticate(
-                    ctx.getAuthenticationContext(),
+                    ctx.getAccessControlContext(),
                     testUserIdentity,
                     remotePassword);
 

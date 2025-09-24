@@ -133,6 +133,21 @@ public:
         return current_->predicate();
     }
 
+    uint32_t shared_rssid() const override {
+        assert(Valid());
+        return current_->shared_rssid();
+    }
+
+    int64_t shared_version() const override {
+        assert(Valid());
+        return current_->shared_version();
+    }
+
+    DelVectorPtr delvec() const override {
+        assert(Valid());
+        return current_->delvec();
+    }
+
 private:
     // Which direction is the iterator moving?
     enum Direction { kForward, kReverse };
