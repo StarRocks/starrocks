@@ -1326,6 +1326,7 @@ CREATE TABLE [IF NOT EXISTS] [database.]table_name
 (column_definition1[, column_definition2, ...
 partition_column_definition1,partition_column_definition2...])
 [partition_desc]
+[ORDER BY sort_desc)]
 [PROPERTIES ("key" = "value", ...)]
 [AS SELECT query]
 ```
@@ -1369,6 +1370,27 @@ Currently, StarRocks supports partition transformation expressions defined in th
 Partition columns must be defined following non-partition columns. Partition columns support all data types excluding FLOAT, DOUBLE, DECIMAL, and DATETIME and cannot use `NULL` as the default value.
 
 :::
+
+
+##### ORDER BY
+
+From v4.0 onwards, StarRocks supports specifying sort keys for an Iceberg table via the ORDER BY clause, which can be used to sort the data in the same data file according to the specified sort key.
+
+The ORDER BY clause can contain more than one sort key, in the following format:
+
+```SQL
+ORDER BY (column_name [sort_direction] [nulls_order], ...)
+```
+
+- `column_name`: The name of the column to be used as the sort key. It must be a column existed in the table schema. Currently, Transform expressions are not supported.
+- `sort_direction`: Sorting direction. Valid values: `ASC` (Default) and `DESC`.
+- `nulls_order`: The order of NULL values. Valid values: `NULLS FIRST` (Default when `ASC` is specified) and `NULLS LAST` (Default when `DESC` is specified).
+
+`sort_direction` and `nulls_order` are optional. For example, each of the following is a valid `sort_desc`:
+
+- `column_name`
+- `column_name ASC`
+- `column_name DESC NULLS FIRST`
 
 ##### PROPERTIES
 
