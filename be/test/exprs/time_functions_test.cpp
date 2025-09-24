@@ -4727,4 +4727,10 @@ TEST_F(TimeFunctionsTest, hourFromUnixTime) {
     }
 }
 
+TEST_F(TimeFunctionsTest, currentTimezoneTest) {
+    ColumnPtr result = TimeFunctions::current_timezone(futils.get_fn_ctx(), Columns()).value();
+    ASSERT_TRUE(result->is_constant());
+    auto v = ColumnHelper::get_const_value<TYPE_VARCHAR>(result);
+    ASSERT_EQ("Asia/Shanghai", v);
+}
 } // namespace starrocks
