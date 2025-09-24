@@ -15,6 +15,7 @@
 package com.starrocks.epack.authentication;
 
 import com.google.common.collect.Lists;
+import com.starrocks.authentication.AccessControlContext;
 import com.starrocks.authentication.AuthenticationException;
 import com.starrocks.authentication.AuthenticationHandler;
 import com.starrocks.authentication.AuthenticationMgr;
@@ -343,7 +344,7 @@ public class SecurityIntegrationTest {
 
         new MockUp<LDAPAuthProviderForExternal>() {
             @Mock
-            public void authenticate(ConnectContext context, UserIdentity userIdentity, byte[] authResponse)
+            public void authenticate(AccessControlContext context, UserIdentity userIdentity, byte[] authResponse)
                     throws AuthenticationException {
             }
         };
