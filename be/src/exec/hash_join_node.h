@@ -113,6 +113,10 @@ private:
     TJoinDistributionMode::type _distribution_mode = TJoinDistributionMode::NONE;
     std::set<SlotId> _output_slots;
 
+    ExprContext* _asof_join_condition_build_expr_ctx = nullptr;
+    ExprContext* _asof_join_condition_probe_expr_ctx = nullptr;
+    TExprOpcode::type _asof_join_condition_op = TExprOpcode::INVALID_OPCODE;
+
     bool _is_push_down = false;
     bool _enable_late_materialization = false;
 

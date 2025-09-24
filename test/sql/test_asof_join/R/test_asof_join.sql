@@ -49,6 +49,62 @@ INSERT INTO user_status VALUES
 (102, '2024-01-02 12:00:00', 'PREMIUM', 950);
 -- result:
 -- !result
+SELECT o.order_id, o.user_id, o.order_time, us.status_time, us.status, us.credit_score
+FROM orders o
+ASOF INNER JOIN user_status us ON o.user_id = us.user_id AND o.order_time >= us.status_time
+ORDER BY o.order_id;
+-- result:
+1	101	2024-01-01 10:00:00	2024-01-01 08:00:00	NORMAL	750
+2	101	2024-01-01 15:30:00	2024-01-01 14:00:00	VIP	850
+3	102	2024-01-01 11:00:00	2024-01-01 09:00:00	NORMAL	700
+4	102	2024-01-01 16:00:00	2024-01-01 13:00:00	VIP	800
+5	101	2024-01-02 09:00:00	2024-01-02 08:00:00	PREMIUM	900
+6	102	2024-01-02 14:00:00	2024-01-02 12:00:00	PREMIUM	950
+-- !result
+SELECT o.order_id, o.user_id, o.order_time, us.status_time, us.status, us.credit_score
+FROM orders o
+ASOF LEFT JOIN user_status us ON o.user_id = us.user_id AND o.order_time >= us.status_time
+ORDER BY o.order_id;
+-- result:
+1	101	2024-01-01 10:00:00	2024-01-01 08:00:00	NORMAL	750
+2	101	2024-01-01 15:30:00	2024-01-01 14:00:00	VIP	850
+3	102	2024-01-01 11:00:00	2024-01-01 09:00:00	NORMAL	700
+4	102	2024-01-01 16:00:00	2024-01-01 13:00:00	VIP	800
+5	101	2024-01-02 09:00:00	2024-01-02 08:00:00	PREMIUM	900
+6	102	2024-01-02 14:00:00	2024-01-02 12:00:00	PREMIUM	950
+-- !result
+SELECT o.order_id, o.user_id, o.order_time, us.status_time, us.status, us.credit_score
+FROM orders o
+ASOF INNER JOIN user_status us ON o.user_id = us.user_id AND o.order_time > us.status_time
+ORDER BY o.order_id;
+-- result:
+1	101	2024-01-01 10:00:00	2024-01-01 08:00:00	NORMAL	750
+2	101	2024-01-01 15:30:00	2024-01-01 14:00:00	VIP	850
+3	102	2024-01-01 11:00:00	2024-01-01 09:00:00	NORMAL	700
+4	102	2024-01-01 16:00:00	2024-01-01 13:00:00	VIP	800
+5	101	2024-01-02 09:00:00	2024-01-02 08:00:00	PREMIUM	900
+6	102	2024-01-02 14:00:00	2024-01-02 12:00:00	PREMIUM	950
+-- !result
+SELECT o.order_id, o.user_id, o.order_time, us.status_time, us.status, us.credit_score
+FROM orders o
+ASOF INNER JOIN user_status us ON o.user_id = us.user_id AND o.order_time >= us.status_time
+WHERE o.amount > 150
+ORDER BY o.order_id;
+-- result:
+2	101	2024-01-01 15:30:00	2024-01-01 14:00:00	VIP	850
+4	102	2024-01-01 16:00:00	2024-01-01 13:00:00	VIP	800
+5	101	2024-01-02 09:00:00	2024-01-02 08:00:00	PREMIUM	900
+6	102	2024-01-02 14:00:00	2024-01-02 12:00:00	PREMIUM	950
+-- !result
+SELECT o.user_id, COUNT(*) as order_count, MAX(us.credit_score) as max_credit_score
+FROM orders o
+ASOF LEFT JOIN user_status us ON o.user_id = us.user_id AND o.order_time >= us.status_time
+GROUP BY o.user_id
+ORDER BY o.user_id;
+-- result:
+101	3	900
+102	3	950
+-- !result
 function: assert_explain_contains('SELECT * FROM orders o ASOF LEFT JOIN user_status us ON o.user_id = us.user_id AND o.order_time >= us.status_time', 'ASOF LEFT OUTER JOIN')
 -- result:
 None
