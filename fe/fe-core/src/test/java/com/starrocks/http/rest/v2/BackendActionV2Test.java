@@ -23,6 +23,7 @@ import com.starrocks.system.ComputeNode;
 import okhttp3.Request;
 import okhttp3.Response;
 import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import java.io.IOException;
@@ -33,6 +34,13 @@ import static org.junit.jupiter.api.Assertions.fail;
 public class BackendActionV2Test extends StarRocksHttpTestCase {
 
     private static final String QUERY_PLAN_URI = "/api/v2/backend";
+
+    @BeforeEach
+    @Override
+    public void setUp() throws Exception {
+        super.setUp();
+        assignCN();
+    }
 
     @Test
     public void testGetBackend() throws IOException {
@@ -88,5 +96,12 @@ public class BackendActionV2Test extends StarRocksHttpTestCase {
             fail(e.getMessage() + ", resp: " + body);
             throw new IllegalStateException(e);
         }
+    }
+
+    private static void assignCN() {
+        ComputeNode cn1 = new ComputeNode(10001, "host1", 1003);
+        cn1.setAlive(true);
+        ComputeNode cn2 = new ComputeNode(10002, "host2", 1004);
+        cn2.setAlive(true);
     }
 }
