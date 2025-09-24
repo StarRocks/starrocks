@@ -21,7 +21,6 @@
 #include "types/logical_type.h"
 
 namespace starrocks {
-
 // Type traits from aggregate functions
 template <LogicalType lt, typename = guard::Guard>
 struct AggDataTypeTraits {};
@@ -41,6 +40,7 @@ struct AggDataTypeTraits<lt, FixedLengthLTGuard<lt>> {
     static RefType get_ref(const ValueType& value) { return value; }
 
     static void update_max(ValueType& current, const RefType& input) { current = std::max<ValueType>(current, input); }
+
     static void update_min(ValueType& current, const RefType& input) { current = std::min<ValueType>(current, input); }
 
     static bool is_equal(const RefType& lhs, const RefType& rhs) { return lhs == rhs; }
@@ -56,7 +56,9 @@ struct AggDataTypeTraits<lt, ObjectFamilyLTGuard<lt>> {
     using RefType = RunTimeCppType<lt>;
 
     static void assign_value(ValueType& value, RefType ref) { value = *ref; }
+
     static void assign_value(ColumnType* column, size_t row, const RefType& ref) { *column->get_object(row) = *ref; }
+
     static void assign_value(ColumnType* column, size_t row, const ValueType& ref) { *column->get_object(row) = ref; }
 
     static void append_value(ColumnType* column, const ValueType& value) { column->append(&value); }
@@ -65,10 +67,30 @@ struct AggDataTypeTraits<lt, ObjectFamilyLTGuard<lt>> {
     static const RefType get_row_ref(const ColumnType& column, size_t row) { return column.get_object(row); }
 
     static void update_max(ValueType& current, const RefType& input) { current = std::max<ValueType>(current, *input); }
+
     static void update_min(ValueType& current, const RefType& input) { current = std::min<ValueType>(current, *input); }
 
     static bool is_equal(const RefType& lhs, const RefType& rhs) { return *lhs == *rhs; }
     static bool equals(const ValueType& lhs, const RefType& rhs) { return lhs == *rhs; }
+};
+
+// For pointer ref types
+template <LogicalType lt>
+struct AggDataTypeTraits<lt, ArrayGuard<lt>> {
+    using ColumnType = RunTimeColumnType<lt>;
+    using ValueType = RunTimeCppType<lt>;
+
+    static void assign_value(ValueType& value, ValueType ref) { value = ref; }
+
+    static void append_value(ColumnType* column, const ValueType& value) { column->append_datum(value); }
+
+    // return temporary Datum, so not using const reference as return type
+    static ValueType get_row_ref(const ColumnType& column, size_t row) {
+        return column.get(row).template get<ValueType>();
+    }
+
+    static bool is_equal(const ValueType& lhs, const ValueType& rhs) { return lhs == rhs; }
+    static bool equals(const ValueType& lhs, const ValueType& rhs) { return lhs == rhs; }
 };
 
 template <LogicalType lt>
@@ -96,6 +118,7 @@ struct AggDataTypeTraits<lt, StringLTGuard<lt>> {
             memcpy(current.data(), input.data, input.size);
         }
     }
+
     static void update_min(ValueType& current, const RefType& input) {
         if (Slice(current.data(), current.size()).compare(input) > 0) {
             current.resize(input.size);
@@ -110,5 +133,4 @@ template <LogicalType lt>
 using AggDataValueType = typename AggDataTypeTraits<lt>::ValueType;
 template <LogicalType lt>
 using AggDataRefType = typename AggDataTypeTraits<lt>::RefType;
-
 } // namespace starrocks
