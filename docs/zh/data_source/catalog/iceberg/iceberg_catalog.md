@@ -787,7 +787,7 @@ Google GCS 的 `StorageCredentialParams`：
 从 v3.4 起，StarRocks 在没有主动触发收集 Iceberg 表统计信息的情况下，可以通过设置以下参数读取 Iceberg 的元数据来获取 Iceberg 表的统计信息。
 
 | **参数**                                       | **默认值**             | **描述**                       |
-| :-------------------------------------------- | :-------------------- | :----------------------------- | 
+| :-------------------------------------------- | :-------------------- | :----------------------------- |
 | enable_get_stats_from_external_metadata       | false                 | 是否允许系统从 Iceberg 元数据中获取统计信息。当此项设置为 `true` 时，您可以通过会话变量 [`enable_get_stats_from_external_metadata`](../../../sql-reference/System_variable.md#enable_get_stats_from_external_metadata) 进一步控制要收集的统计信息类型。 |
 
 ### 示例
@@ -1361,6 +1361,7 @@ CREATE TABLE [IF NOT EXISTS] [database.]table_name
 (column_definition1[, column_definition2, ...
 partition_column_definition1,partition_column_definition2...])
 [partition_desc]
+[ORDER BY sort_desc)]
 [PROPERTIES ("key" = "value", ...)]
 [AS SELECT query]
 ```
@@ -1404,6 +1405,28 @@ column_name
 分区列必须在非分区列之后定义。分区列支持所有数据类型，除 FLOAT、DOUBLE、DECIMAL 和 DATETIME 外，并且不能使用 `NULL` 作为默认值。
 
 :::
+
+##### ORDER BY
+
+自 v4.0 起，StarRocks 支持在创建 Iceberg 表时通过 ORDER BY 子句指定排序键，用于在写入时根据排序键对写入数据进行排序，确保同一个数据文件中的数据按照指定排序键有序排列。
+
+ORDER BY 子句也可以同时指定多个排序键，格式如下：
+
+```SQL
+ORDER BY (column_name [sort_direction] [nulls_order], ...)
+```
+
+其中：
+
+- `column_name`：作为排序键的列名，必须是当前表结构中包含的列，暂不支持 Transform 表达式。
+- `sort_direction`：排序方向。有效值：`ASC`（默认）和 `DESC`。
+- `nulls_order`：NULL 值的排序顺序。有效值：`NULLS FIRST`（当指定 `ASC` 时默认）和 `NULLS LAST`（当指定 `DESC` 时默认）。
+
+`sort_direction` 和 `nulls_order` 可以省略。例如，以下各示例均为有效的 `sort_desc`：
+
+- `column_name`
+- `column_name ASC`
+- `column_name DESC NULLS FIRST`
 
 ##### PROPERTIES
 

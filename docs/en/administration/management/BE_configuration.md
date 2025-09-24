@@ -4169,6 +4169,15 @@ When this value is set to less than `0`, the system uses the product of its abso
 - Description: The maximum number of inline cache items in Data Cache. For some particularly small cache blocks, Data Cache stores them in `inline` mode, which caches the block data and metadata together in memory.
 - Introduced in: v3.4.0
 
+##### enable_connector_sink_spill
+
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Whether to enable Spilling for writes to external tables. Enabling this feature prevents the generation of a large number of small files as a result of writing to an external table when memory is insufficient. Currently, this feature only supports writing to Iceberg tables.
+- Introduced in: v4.0.0
+
 <!--
 ##### datacache_unified_instance_enable
 
