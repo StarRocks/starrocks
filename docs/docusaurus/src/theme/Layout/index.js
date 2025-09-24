@@ -53,7 +53,7 @@ export default function Layout(props) {
       {!noFooter && <Footer />}
        <FloatingButtonWithModal
         modalTitle="Ask AI"
-        iframeSrc="https://ai-agent.starrocks.com/"
+        iframeSrc="https://ai-agent.starrocks.com/chat/"
       />
     </LayoutProvider>
   );
