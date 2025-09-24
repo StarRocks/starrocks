@@ -3032,87 +3032,6 @@ out.append("${{dictMgr.NO_DICT_STRING_COLUMNS.contains(cid)}}")
             return True
 
         return False
-<<<<<<< HEAD
-=======
-
-    def get_transaction_meta(self, db_name, label, column_separator, *column_names):
-        """
-        Get transaction metadata by label and column names.
-        :param db_name: database name
-        :param label: transaction label
-        :param column_separator: separator for concatenating column values
-        :param column_names: column names to retrieve
-        :return: concatenated column values or error message if not found
-        """
-        # Column name to index mapping based on show proc output
-        column_mapping = {
-            'TransactionId': 0,
-            'Label': 1,
-            'Coordinator': 2,
-            'TransactionStatus': 3,
-            'LoadJobSourceType': 4,
-            'PrepareTime': 5,
-            'PreparedTime': 6,
-            'CommitTime': 7,
-            'PublishTime': 8,
-            'FinishTime': 9,
-            'Reason': 10,
-            'ErrorReplicasCount': 11,
-            'ListenerId': 12,
-            'TimeoutMs': 13,
-            'PreparedTimeoutMs': 14,
-            'ErrMsg': 15
-        }
-        
-        sql = f"show proc '/transactions/{db_name}/finished'"
-        log.info(f"Executing SQL: {sql}")
-        result = self.execute_sql(sql, True)
-        
-        if not result["status"]:
-            error_msg = f"Failed to execute SQL: {result}"
-            log.error(error_msg)
-            return error_msg
-            
-        if "result" not in result or len(result["result"]) == 0:
-            error_msg = f"No transactions found in database {db_name}"
-            log.info(error_msg)
-            return error_msg
-            
-        log.info(f"Found {len(result['result'])} transactions in database {db_name}")
-        
-        # Find the row matching the label
-        target_row = None
-        for row in result["result"]:
-            if len(row) > 1 and row[1] == label:  # Label is at index 1
-                target_row = row
-                log.info(f"Found transaction with label '{label}'")
-                break
-                
-        if target_row is None:
-            error_msg = f"No transaction found with label '{label}' in database {db_name}"
-            log.info(error_msg)
-            return error_msg
-            
-        # Extract column values
-        column_values = []
-        for column_name in column_names:
-            if column_name not in column_mapping:
-                error_msg = f"Unknown column name: {column_name}"
-                log.error(error_msg)
-                return error_msg
-                
-            column_index = column_mapping[column_name]
-            if column_index >= len(target_row):
-                error_msg = f"Column index {column_index} out of range for column {column_name}"
-                log.error(error_msg)
-                return error_msg
-                
-            column_values.append(str(target_row[column_index]))
-            log.info(f"Column {column_name} = {target_row[column_index]}")
-            
-        result_str = column_separator.join(column_values)
-        log.info(f"Final result: {result_str}")
-        return result_str
 
     def get_timestamp_ms(self):
         """
@@ -3349,4 +3268,3 @@ out.append("${{dictMgr.NO_DICT_STRING_COLUMNS.contains(cid)}}")
         return {
             "success": True
         }
->>>>>>> 86fdf35bcf ([BugFix] Fix query detail lost audit items (#63237))
