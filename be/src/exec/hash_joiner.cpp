@@ -85,7 +85,10 @@ HashJoiner::HashJoiner(const HashJoinerParam& param)
           _build_runtime_filters(param._build_runtime_filters.begin(), param._build_runtime_filters.end()),
           _enable_late_materialization(param._enable_late_materialization),
           _max_dop(param._max_dop),
-          _is_skew_join(param._is_skew_join) {
+          _is_skew_join(param._is_skew_join),
+          _asof_join_condition_op(param._asof_join_condition_op),
+          _asof_join_condition_probe_expr_ctx(param._asof_join_condition_probe_expr_ctx),
+          _asof_join_condition_build_expr_ctx(param._asof_join_condition_build_expr_ctx) {
     _is_push_down = param._hash_join_node.is_push_down;
     if (_join_type == TJoinOp::LEFT_ANTI_JOIN && param._hash_join_node.is_rewritten_from_not_in) {
         _join_type = TJoinOp::NULL_AWARE_LEFT_ANTI_JOIN;
@@ -175,6 +178,22 @@ void HashJoiner::_init_hash_table_param(HashTableParam* param, RuntimeState* sta
         expr_context->root()->get_slot_ids(&expr_slots);
         predicate_slots.insert(expr_slots.begin(), expr_slots.end());
     }
+
+    if (_asof_join_condition_build_expr_ctx && _asof_join_condition_probe_expr_ctx) {
+        std::vector<SlotId> build_slots, probe_slots;
+        _asof_join_condition_probe_expr_ctx->root()->get_slot_ids(&probe_slots);
+        _asof_join_condition_build_expr_ctx->root()->get_slot_ids(&build_slots);
+
+        DCHECK_EQ(probe_slots.size(), 1);
+        DCHECK_EQ(build_slots.size(), 1);
+
+        LogicalType probe_type = _asof_join_condition_probe_expr_ctx->root()->type().type;
+        LogicalType build_type = _asof_join_condition_build_expr_ctx->root()->type().type;
+        SlotId build_slot = build_slots[0], probe_slot = probe_slots[0];
+        param->asof_join_condition_desc = {probe_slot, probe_type, build_slot, build_type, _asof_join_condition_op};
+        predicate_slots.insert({build_slot, probe_slot});
+    }
+
     param->predicate_slots = std::move(predicate_slots);
 
     for (auto i = 0; i < _build_expr_ctxs.size(); i++) {
@@ -186,6 +205,7 @@ void HashJoiner::_init_hash_table_param(HashTableParam* param, RuntimeState* sta
         }
     }
 }
+
 Status HashJoiner::append_chunk_to_ht(RuntimeState* state, const ChunkPtr& chunk) {
     if (_phase != HashJoinPhase::BUILD) {
         return Status::OK();
@@ -506,6 +526,7 @@ Status HashJoiner::_process_other_conjunct(ChunkPtr* chunk, JoinHashTable& hash_
     switch (_join_type) {
     case TJoinOp::LEFT_OUTER_JOIN:
     case TJoinOp::FULL_OUTER_JOIN:
+    case TJoinOp::ASOF_LEFT_OUTER_JOIN:
         return _process_outer_join_with_other_conjunct(chunk, _output_probe_column_count, _output_build_column_count,
                                                        hash_table);
     case TJoinOp::RIGHT_OUTER_JOIN:
