@@ -669,12 +669,12 @@ Status ColumnReader::_zone_map_filter(const std::vector<const ColumnPredicate*>&
     int32_t page_size = _zonemap_index->num_pages();
 
     // Skip pages that are completely outside the scan range to reduce overhead
-    if (!scan_range.empty()) {
+    if (!scan_range.empty() && scan_range.is_sorted()) {
         auto ordinal_iter = _ordinal_index->seek_at_or_before(scan_range.begin());
         for (; ordinal_iter.valid(); ordinal_iter.next()) {
             int32_t page_index = ordinal_iter.page_index();
             ordinal_t last = ordinal_iter.last_ordinal();
-            if (last > scan_range.end()) {
+            if (last >= scan_range.end()) {
                 break;
             }
 
