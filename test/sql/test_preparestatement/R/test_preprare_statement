@@ -1,4 +1,10 @@
 -- name: test_prepare_statement
+create database test_prepare_1;
+-- result:
+-- !result
+use test_prepare_1;
+-- result:
+-- !result
 CREATE TABLE IF NOT EXISTS prepare_stmt (
     k1 INT,
     k2 TINYINT Default '20',
@@ -132,11 +138,31 @@ SET @customer_key = 2;
 -- !result
 EXECUTE select_customer_stmt USING @customer_key;
 -- result:
-2	b	b	b
+2 b b b
+-- !result
+admin set frontend config ("enable_collect_query_detail_info" = "true");
+-- result:
+-- !result
+function: assert_prepare_execute('test_prepare_1', "SELECT customer_key, customer_row_value_0, customer_row_value_1, customer_row_value_2 FROM customer_row WHERE customer_key = ?", ['1'])
+-- result:
+None
+-- !result
+shell: current_time=$(date +%s); curl -X GET '${url}/api/query_detail?event_time='$((current_time - 1)) -u 'root:' | jq '.[-1] | {sql: (.sql | gsub("EXECUTE `[^`]*`"; "EXECUTE"))}'
+-- result:
+0
+{
+  "sql": "EXECUTE USING '1'"
+}
+-- !result
+admin set frontend config ("enable_collect_query_detail_info" = "false");
+-- result:
 -- !result
 DROP PREPARE select_customer_stmt;
 -- result:
 -- !result
 DROP TABLE customer_row FORCE;
+-- result:
+-- !result
+DROP DATABASE test_prepare_1;
 -- result:
 -- !result

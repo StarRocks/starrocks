@@ -1,4 +1,6 @@
 -- name: test_prepare_statement
+create database test_prepare_1;
+use test_prepare_1;
 CREATE TABLE IF NOT EXISTS prepare_stmt (
     k1 INT,
     k2 TINYINT Default '20',
@@ -74,5 +76,13 @@ EXECUTE select_customer_stmt USING @customer_key;
 SET @customer_key = 2;
 EXECUTE select_customer_stmt USING @customer_key;
 
+admin set frontend config ("enable_collect_query_detail_info" = "true");
+
+
+function: assert_prepare_execute('test_prepare_1', "SELECT customer_key, customer_row_value_0, customer_row_value_1, customer_row_value_2 FROM customer_row WHERE customer_key = ?", ['1'])
+shell: current_time=$(date +%s); curl -X GET '${url}/api/query_detail?event_time='$((current_time - 1)) -u 'root:' | jq '.[-1] | {sql: (.sql | gsub("EXECUTE `[^`]*`"; "EXECUTE"))}'
+
+admin set frontend config ("enable_collect_query_detail_info" = "false");
 DROP PREPARE select_customer_stmt;
 DROP TABLE customer_row FORCE;
+DROP DATABASE test_prepare_1;
