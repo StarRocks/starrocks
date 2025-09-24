@@ -127,8 +127,9 @@ public class WarehouseManagerEPack extends WarehouseManager {
             checkWarehouseState(warehouse);
             Cluster cluster = warehouse.getClusterByWorkGroupId(cnGroupResource.getWorkerGroupId());
             if (cluster == null) {
-                throw ErrorReportException.report(ErrorCode.ERR_UNKNOWN_WAREHOUSE,
-                        String.format("resource: %s", computeResource));
+                LOG.warn("Failed to get compute resource name for computeResource: {}, cluster is null",
+                        computeResource);
+                return "";
             }
             return cluster.getName();
         } catch (Exception e) {
