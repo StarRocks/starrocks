@@ -566,28 +566,29 @@ public class IcebergApiConverter {
 
     public static String toPartitionField(PartitionSpec spec, PartitionField field, Boolean withTransfomPrefix) {
         String name = spec.schema().findColumnName(field.sourceId());
+        String escapedName =  "`" + name + "`";
         String transform = field.transform().toString();
         String prefix = withTransfomPrefix ? FeConstants.ICEBERG_TRANSFORM_EXPRESSION_PREFIX : "";
 
         switch (transform) {
             case "identity":
-                return name;
+                return escapedName;
             case "year":
             case "month":
             case "day":
             case "hour":
             case "void":
-                return prefix + format("%s(%s)", transform, name);
+                return prefix + format("%s(%s)", transform, escapedName);
         }
 
         Matcher matcher = ICEBERG_BUCKET_PATTERN.matcher(transform);
         if (matcher.matches()) {
-            return prefix + format("bucket(%s, %s)", name, matcher.group(1));
+            return prefix + format("bucket(%s, %s)", escapedName, matcher.group(1));
         }
 
         matcher = ICEBERG_TRUNCATE_PATTERN.matcher(transform);
         if (matcher.matches()) {
-            return prefix + format("truncate(%s, %s)", name, matcher.group(1));
+            return prefix + format("truncate(%s, %s)", escapedName, matcher.group(1));
         }
 
         throw new StarRocksConnectorException("Unsupported partition transform: " + field);
