@@ -27,7 +27,7 @@ namespace starrocks::lake {
 class LakePersistentIndexTest : public TestBase {
 public:
     LakePersistentIndexTest() : TestBase(kTestDirectory) {
-        _tablet_metadata = std::make_unique<TabletMetadata>();
+        _tablet_metadata = std::make_shared<TabletMetadata>();
         _tablet_metadata->set_id(next_id());
         _tablet_metadata->set_version(1);
         _tablet_metadata->set_enable_persistent_index(true);
@@ -70,7 +70,7 @@ protected:
 
     constexpr static const char* const kTestDirectory = "test_lake_persistent_index";
 
-    std::unique_ptr<TabletMetadata> _tablet_metadata;
+    std::shared_ptr<TabletMetadata> _tablet_metadata;
 };
 
 TEST_F(LakePersistentIndexTest, test_basic_api) {
