@@ -1259,7 +1259,12 @@ public class IcebergMetadata implements ConnectorMetadata {
 
         IcebergTable table = (IcebergTable) getTable(new ConnectContext(), dbName, tableName);
         org.apache.iceberg.Table nativeTbl = table.getNativeTable();
-        Transaction transaction = nativeTbl.newTransaction();
+        Transaction transaction = null;
+        if (isRewrite) {
+            transaction = Transactions.replaceTableTransaction(nativeTbl.name(), nativeTbl.operations(), nativeTbl.reporter());
+        } else {
+            transaction = nativeTbl.newTransaction();
+        }
         BatchWrite batchWrite = getBatchWrite(transaction, isOverwrite, isRewrite);
 
         if (branch != null) {

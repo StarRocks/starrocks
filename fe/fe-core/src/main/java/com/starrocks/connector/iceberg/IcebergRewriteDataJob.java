@@ -37,6 +37,10 @@ import java.util.List;
 import java.util.concurrent.CompletionService;
 import java.util.concurrent.ExecutorCompletionService;
 import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.ThreadLocalRandom;
+import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
 import static org.apache.iceberg.util.ThreadPools.newWorkerPool;
@@ -73,7 +77,7 @@ public class IcebergRewriteDataJob {
     }
 
     public void prepare() throws Exception {
-        context.getSessionVariable().setQueryTimeoutS(259200);
+        context.getSessionVariable().setQueryTimeoutS(SessionVariable.MAX_QUERY_TIMEOUT);
         this.parsedStmt = com.starrocks.sql.parser.SqlParser
                 .parse(insertSql, context.getSessionVariable())
                 .get(0);
@@ -145,6 +149,7 @@ public class IcebergRewriteDataJob {
         if (rewriteStmt == null || execPlan == null || rewriteData == null) {
             throw new IllegalStateException("Must call prepare() before execute()");
         }
+        ScheduledExecutorService scheduler = Executors.newScheduledThreadPool(1);
         ExecutorService executorService = newWorkerPool(originAlterStmt.getCatalogName() 
                 + "-sr-iceberg-compaction-worker-pool", (int) batchParallelism);
         CompletionService<Void> ecs = new ExecutorCompletionService<>(executorService);
@@ -154,7 +159,7 @@ public class IcebergRewriteDataJob {
         try {
             int taskCount = 0;
             while (rewriteData.hasMoreTaskGroup()) {
-                List<RemoteFileInfo> res = rewriteData.nextTaskGroup();
+                final List<RemoteFileInfo> res = rewriteData.nextTaskGroup();
                 final boolean isFirst = (taskCount == 0);
                 if (inFlight >= batchParallelism + 1) { // +1 is for buffer
                     try {
@@ -169,30 +174,32 @@ public class IcebergRewriteDataJob {
                         inFlight--;
                     }
                 }
-                ecs.submit(() -> {
-                    ConnectContext subCtx = buildSubConnectContext(context, isFirst);
+                scheduler.schedule(() -> {
+                    ecs.submit(() -> {
+                        ConnectContext subCtx = buildSubConnectContext(context, isFirst);
 
-                    IcebergRewriteStmt localStmt = new IcebergRewriteStmt((InsertStmt) parsedStmt, rewriteAll);
-                    ExecPlan localPlan = StatementPlanner.plan(parsedStmt, subCtx);
+                        IcebergRewriteStmt localStmt = new IcebergRewriteStmt((InsertStmt) parsedStmt, rewriteAll);
+                        ExecPlan localPlan = StatementPlanner.plan(parsedStmt, subCtx);
 
-                    List<IcebergScanNode> localScanNodes = localPlan.getFragments().stream()
-                            .flatMap(f -> f.collectScanNodes().values().stream())
-                            .filter(s -> s instanceof IcebergScanNode && "IcebergScanNode".equals(s.getPlanNodeName()))
-                            .map(s -> (IcebergScanNode) s)
-                            .collect(Collectors.toList());
+                        List<IcebergScanNode> localScanNodes = localPlan.getFragments().stream()
+                                .flatMap(f -> f.collectScanNodes().values().stream())
+                                .filter(s -> s instanceof IcebergScanNode && "IcebergScanNode".equals(s.getPlanNodeName()))
+                                .map(s -> (IcebergScanNode) s)
+                                .collect(Collectors.toList());
 
-                    if (localScanNodes.isEmpty()) {
-                        LOG.info("No IcebergScanNode in sub plan. Skip one task group.");
+                        if (localScanNodes.isEmpty()) {
+                            LOG.info("No IcebergScanNode in sub plan. Skip one task group.");
+                            return null;
+                        }
+                        for (IcebergScanNode sn : localScanNodes) {
+                            sn.rebuildScanRange(res);
+                        }
+
+                        StmtExecutor exec = StmtExecutor.newInternalExecutor(subCtx, localStmt);
+                        exec.handleDMLStmt(localPlan, localStmt);
                         return null;
-                    }
-                    for (IcebergScanNode sn : localScanNodes) {
-                        sn.rebuildScanRange(res);
-                    }
-
-                    StmtExecutor exec = StmtExecutor.newInternalExecutor(subCtx, localStmt);
-                    exec.handleDMLStmt(localPlan, localStmt);
-                    return null;
-                });
+                    });
+                }, ThreadLocalRandom.current().nextLong(50, 200), TimeUnit.MILLISECONDS);
                 inFlight++;
                 submitted++;
                 taskCount++;
@@ -219,6 +226,9 @@ public class IcebergRewriteDataJob {
                     originAlterStmt.getDbName(), originAlterStmt.getTableName());
             context.getState().setError(e.getMessage());
             return;
+        } finally {
+            scheduler.shutdown();
+            executorService.shutdownNow();
         }
     }
 }
