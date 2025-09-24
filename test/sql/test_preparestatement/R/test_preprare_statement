@@ -138,7 +138,7 @@ SET @customer_key = 2;
 -- !result
 EXECUTE select_customer_stmt USING @customer_key;
 -- result:
-2 b b b
+2	b	b	b
 -- !result
 admin set frontend config ("enable_collect_query_detail_info" = "true");
 -- result:
