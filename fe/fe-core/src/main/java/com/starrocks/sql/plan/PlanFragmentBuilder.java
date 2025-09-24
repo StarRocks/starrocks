@@ -119,6 +119,7 @@ import com.starrocks.server.LocalMetastore;
 import com.starrocks.server.RunMode;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.service.FrontendOptions;
+import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.analyzer.DecimalV3FunctionAnalyzer;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AssertNumRowsElement;
@@ -2195,6 +2196,7 @@ public class PlanFragmentBuilder {
                 AggregateFunction aggrFn = (AggregateFunction) aggExpr.getFn();
                 Type intermediateType = aggrFn.getIntermediateType() != null ?
                         aggrFn.getIntermediateType() : aggrFn.getReturnType();
+                intermediateType = AnalyzerUtils.replaceNullType2Boolean(intermediateType);
                 intermediateSlotDesc.setType(intermediateType);
                 intermediateSlotDesc.setIsNullable(aggrFn.isNullable());
                 intermediateSlotDesc.setIsMaterialized(true);
