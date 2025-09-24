@@ -328,7 +328,9 @@ public class StmtExecutor {
 
     public static StmtExecutor newInternalExecutor(ConnectContext ctx, StatementBase parsedStmt) {
         // Set query source to INTERNAL for system/internal queries only if not already set
-        ctx.setQuerySource(QueryDetail.QuerySource.INTERNAL);
+        if (ctx.getQuerySource().equals(QueryDetail.QuerySource.EXTERNAL)) {
+            ctx.setQuerySource(QueryDetail.QuerySource.INTERNAL);
+        }
         return new StmtExecutor(ctx, parsedStmt, true);
     }
 

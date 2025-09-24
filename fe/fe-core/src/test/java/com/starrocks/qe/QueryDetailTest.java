@@ -15,17 +15,29 @@
 package com.starrocks.qe;
 
 import com.google.gson.Gson;
+import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.UserIdentity;
 import com.starrocks.common.Config;
 import com.starrocks.common.util.UUIDUtil;
+import com.starrocks.plugin.AuditEvent;
+import com.starrocks.scheduler.MVTaskRunProcessor;
+import com.starrocks.scheduler.SqlTaskRunProcessor;
+import com.starrocks.scheduler.Task;
+import com.starrocks.scheduler.TaskBuilder;
+import com.starrocks.scheduler.TaskRun;
+import com.starrocks.scheduler.TaskRunBuilder;
+import com.starrocks.scheduler.TaskRunContext;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.parser.SqlParser;
+import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
+import mockit.Mocked;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
+import java.util.UUID;
 
 public class QueryDetailTest {
     @Test
@@ -46,11 +58,13 @@ public class QueryDetailTest {
     }
 
     private static ConnectContext connectContext;
+    private static StarRocksAssert starRocksAssert;
 
     @BeforeAll
     public static void beforeClass() throws Exception {
         UtFrameUtils.createMinStarRocksCluster();
         connectContext = UtFrameUtils.initCtxForNewPrivilege(UserIdentity.ROOT);
+        starRocksAssert = new StarRocksAssert(connectContext);
         Config.enable_collect_query_detail_info = true;
     }
 
@@ -64,6 +78,10 @@ public class QueryDetailTest {
         // Create a new context for this test
         ConnectContext testContext = new ConnectContext();
         testContext.setGlobalStateMgr(connectContext.getGlobalStateMgr());
+        testContext.setCurrentUserIdentity(connectContext.getCurrentUserIdentity());
+        testContext.setQualifiedUser(connectContext.getQualifiedUser());
+        testContext.setDatabase("test_db");
+        testContext.setCurrentCatalog("default_catalog");
         testContext.setQueryId(UUIDUtil.genUUID());
         testContext.setStartTime();
 
@@ -75,10 +93,18 @@ public class QueryDetailTest {
         // Add running query detail
         executor.addRunningQueryDetail(statement);
 
-        // Verify query source is EXTERNAL
+        // Simulate auditAfterExec to set querySource in AuditEvent
+        ConnectProcessor processor = new ConnectProcessor(testContext);
+        processor.auditAfterExec(sql, statement, null);
+
+        // Verify QueryDetail query source is EXTERNAL
         QueryDetail queryDetail = testContext.getQueryDetail();
         Assertions.assertNotNull(queryDetail);
         Assertions.assertEquals(QueryDetail.QuerySource.EXTERNAL, queryDetail.getQuerySource());
+
+        // Verify AuditEvent query source is EXTERNAL
+        AuditEvent event = testContext.getAuditEventBuilder().build();
+        Assertions.assertEquals("EXTERNAL", event.querySource);
     }
 
     @Test
@@ -91,6 +117,10 @@ public class QueryDetailTest {
         // Create a new context for this test
         ConnectContext testContext = new ConnectContext();
         testContext.setGlobalStateMgr(connectContext.getGlobalStateMgr());
+        testContext.setCurrentUserIdentity(connectContext.getCurrentUserIdentity());
+        testContext.setQualifiedUser(connectContext.getQualifiedUser());
+        testContext.setDatabase("test_db");
+        testContext.setCurrentCatalog("default_catalog");
         testContext.setQueryId(UUIDUtil.genUUID());
         testContext.setStartTime();
 
@@ -102,52 +132,98 @@ public class QueryDetailTest {
         // Add running query detail
         executor.addRunningQueryDetail(statement);
 
-        // Verify query source is INTERNAL
+        // Simulate auditAfterExec to set querySource in AuditEvent
+        ConnectProcessor processor = new ConnectProcessor(testContext);
+        processor.auditAfterExec(sql, statement, null);
+
+        // Verify QueryDetail query source is INTERNAL
         QueryDetail queryDetail = testContext.getQueryDetail();
         Assertions.assertNotNull(queryDetail);
         Assertions.assertEquals(QueryDetail.QuerySource.INTERNAL, queryDetail.getQuerySource());
+
+        // Verify AuditEvent query source is INTERNAL
+        AuditEvent event = testContext.getAuditEventBuilder().build();
+        Assertions.assertEquals("INTERNAL", event.querySource);
     }
 
     @Test
-    public void testTaskQuerySource() throws Exception {
+    public void testTaskQuerySource(@Mocked StatementBase mockStmt) throws Exception {
         // Test task query using SqlTaskRunProcessor
         String sql = "SELECT 1";
-
-        // Create a mock TaskRunContext
-        com.starrocks.scheduler.TaskRunContext taskRunContext = new com.starrocks.scheduler.TaskRunContext();
 
         // Create a new context for this test
         ConnectContext testContext = new ConnectContext();
         testContext.setGlobalStateMgr(connectContext.getGlobalStateMgr());
+        testContext.setCurrentUserIdentity(connectContext.getCurrentUserIdentity());
+        testContext.setQualifiedUser(connectContext.getQualifiedUser());
+        testContext.setDatabase("test_db");
+        testContext.setCurrentCatalog("default_catalog");
         testContext.setQueryId(UUIDUtil.genUUID());
         testContext.setStartTime();
-        testContext.setDatabase("testDb");
-        testContext.setQualifiedUser("root");
-        testContext.setCurrentCatalog("default_catalog");
 
-        // Set the context in TaskRunContext
+        Task task = new Task("test_task");
+        task.setDefinition(sql);
+        task.setCatalogName("default_catalog");
+        task.setDbName("test_db");
+
+        TaskRun taskRun = new TaskRun();
+        taskRun.setTask(task);
+        taskRun.setConnectContext(testContext);
+        taskRun.setProperties(new java.util.HashMap<>());
+        taskRun.initStatus(UUID.randomUUID().toString(), System.currentTimeMillis());
+
+        TaskRunContext taskRunContext = taskRun.buildTaskRunContext();
         taskRunContext.setCtx(testContext);
-        taskRunContext.setDefinition(sql);
-        taskRunContext.setRemoteIp("127.0.0.1");
 
-        // Create and execute SqlTaskRunProcessor
-        com.starrocks.scheduler.SqlTaskRunProcessor processor = new com.starrocks.scheduler.SqlTaskRunProcessor();
+        SqlTaskRunProcessor processor = new SqlTaskRunProcessor();
+        processor.processTaskRun(taskRunContext);
 
-        // Mock the execution to avoid actual SQL execution
-        try {
-            processor.processTaskRun(taskRunContext);
-        } catch (Exception e) {
-            // Expected to fail due to mock setup, but querySource should be set
-        }
-
-        // Verify query source is TASK
-        QueryDetail queryDetail = testContext.getQueryDetail();
-        Assertions.assertNotNull(queryDetail);
-        Assertions.assertEquals(QueryDetail.QuerySource.TASK, queryDetail.getQuerySource());
+        Assertions.assertEquals(QueryDetail.QuerySource.TASK, testContext.getQuerySource());
+        AuditEvent event = testContext.getAuditEventBuilder().build();
+        Assertions.assertEquals(QueryDetail.QuerySource.TASK.name(), event.querySource);
     }
 
     @Test
     public void testMVQuerySource() throws Exception {
-        // TODO
+        String dbName = "test_mv_query_source_db";
+        String tableName = "test_mv_query_source_table";
+        String mvName = "test_mv_query_source";
+
+        starRocksAssert
+                .withDatabase(dbName)
+                .useDatabase(dbName)
+                .withTable("CREATE TABLE " + tableName + " (id INT, name VARCHAR(100)) " +
+                        "PROPERTIES('replication_num'='1')");
+        String mvSql = "CREATE MATERIALIZED VIEW " + mvName +
+                " REFRESH DEFERRED MANUAL AS SELECT id, name FROM " + tableName;
+        starRocksAssert.ddl(mvSql);
+
+        MaterializedView mv = starRocksAssert.getMv(dbName, mvName);
+
+        Task task = TaskBuilder.buildMvTask(mv, dbName);
+        java.util.Map<String, String> testProperties = task.getProperties();
+        testProperties.put(TaskRun.IS_TEST, "true");
+        TaskRun taskRun = TaskRunBuilder.newBuilder(task).build();
+        taskRun.initStatus(UUID.randomUUID().toString(), System.currentTimeMillis());
+
+        MVTaskRunProcessor processor = (MVTaskRunProcessor) taskRun.getProcessor();
+
+        TaskRunContext taskRunContext = taskRun.buildTaskRunContext();
+        processor.prepare(taskRunContext);
+
+        processor.processTaskRun(taskRunContext);
+
+        ConnectContext mvCtx = taskRunContext.getCtx();
+
+        // Manually call auditAfterExec to set querySource in AuditEvent
+        ConnectProcessor connectProcessor = new ConnectProcessor(mvCtx);
+        connectProcessor.auditAfterExec("REFRESH MATERIALIZED VIEW " + mvName, null, null);
+
+        Assertions.assertEquals(QueryDetail.QuerySource.MV, mvCtx.getQuerySource());
+        AuditEvent event = mvCtx.getAuditEventBuilder().build();
+        Assertions.assertEquals("MV", event.querySource);
+
+        starRocksAssert.dropDatabase(dbName);
+
     }
 }
