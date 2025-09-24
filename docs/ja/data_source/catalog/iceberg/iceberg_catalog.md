@@ -1381,8 +1381,8 @@ ORDER BY (column_name [sort_direction] [nulls_order], ...)
 ```
 
 - `column_name`: ソートキーとして使用する列の名前。テーブルスキーマに存在する列でなければなりません。現在、Transform 式はサポートされていません。
-- `sort_direction`: ソート方向。有効な値：`ASC`（昇順）および `DESC`（降順）。
-- `nulls_order`: NULL値の順序。有効な値: `NULLS FIRST` および `NULLS LAST`。
+- `sort_direction`: ソート方向。有効な値: `ASC` (デフォルト) および `DESC`。
+- `nulls_order`: NULL 値の順序。有効な値: `NULLS FIRST` (`ASC` 指定時のデフォルト) および `NULLS LAST` (`DESC` 指定時のデフォルト)。
 
 `sort_direction` および `nulls_order` はオプションです。例えば、以下の各々は有効な `sort_desc` です：
 
