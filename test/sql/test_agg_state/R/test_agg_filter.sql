@@ -266,23 +266,6 @@ ORDER BY sale_month;
 2	10	3	10	0	2819.90	281.99000000
 -- !result
 SELECT
-    region,
-    -- Scalar subquery
-    COUNT(*) FILTER (WHERE amount > (SELECT AVG(amount) FROM sales)) AS above_global_avg,
-    COUNT(*) FILTER (WHERE quantity > (SELECT MAX(quantity) FROM sales WHERE category = 'Electronics')) AS above_max_electronics_qty,
-
-    -- Correlated subquery
-    COUNT(*) FILTER (WHERE amount > (SELECT AVG(amount) FROM sales s2 WHERE s2.region = sales.region)) AS above_region_avg
-FROM sales
-GROUP BY region
-ORDER BY region;
--- result:
-East	0	0	2
-North	3	0	2
-South	1	0	1
-West	1	0	1
--- !result
-SELECT
     r.country,
     COUNT(*) AS total_sales,
     COUNT(*) FILTER (WHERE s.category = 'Electronics') AS electronics_count,

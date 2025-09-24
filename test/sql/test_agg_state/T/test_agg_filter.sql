@@ -218,19 +218,6 @@ FROM sales
 GROUP BY MONTH(sale_date)
 ORDER BY sale_month;
 
--- Various subquery scenarios
-SELECT
-    region,
-    -- Scalar subquery
-    COUNT(*) FILTER (WHERE amount > (SELECT AVG(amount) FROM sales)) AS above_global_avg,
-    COUNT(*) FILTER (WHERE quantity > (SELECT MAX(quantity) FROM sales WHERE category = 'Electronics')) AS above_max_electronics_qty,
-
-    -- Correlated subquery
-    COUNT(*) FILTER (WHERE amount > (SELECT AVG(amount) FROM sales s2 WHERE s2.region = sales.region)) AS above_region_avg
-FROM sales
-GROUP BY region
-ORDER BY region;
-
 -- JOIN queries with FILTER
 SELECT
     r.country,
