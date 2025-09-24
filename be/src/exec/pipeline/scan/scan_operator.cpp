@@ -598,7 +598,6 @@ Status ScanOperator::_pickup_morsel(RuntimeState* state, int chunk_source_index)
         {
             SCOPED_TIMER(_prepare_chunk_source_timer);
             auto& source_ref = _chunk_sources[chunk_source_index];
-            // FIXME: check if it's the same tablet
             if (source_ref != nullptr && support_chunk_source_reuse()) {
                 bool can_reuse = source_ref->get_morsel()->can_reuse(*morsel);
                 if (can_reuse) {
