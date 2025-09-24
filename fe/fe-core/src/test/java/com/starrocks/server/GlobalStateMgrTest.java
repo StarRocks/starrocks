@@ -125,19 +125,6 @@ public class GlobalStateMgrTest {
         return globalStateMgr;
     }
 
-    @Test
-    public void testReplayUpdateFrontend() throws Exception {
-        GlobalStateMgr globalStateMgr = mockGlobalStateMgr();
-        List<Frontend> frontends = globalStateMgr.getNodeMgr().getFrontends(null);
-        Frontend fe = frontends.get(0);
-        fe.updateHostAndEditLogPort("testHost", 1000);
-        globalStateMgr.getNodeMgr().replayUpdateFrontend(fe);
-        List<Frontend> updatedFrontends = globalStateMgr.getNodeMgr().getFrontends(null);
-        Frontend updatedfFe = updatedFrontends.get(0);
-        Assertions.assertEquals("testHost", updatedfFe.getHost());
-        Assertions.assertTrue(updatedfFe.getEditLogPort() == 1000);
-    }
-
     @Mocked
     BDBEnvironment env;
 

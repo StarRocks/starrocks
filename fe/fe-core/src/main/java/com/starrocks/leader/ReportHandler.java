@@ -869,7 +869,7 @@ public class ReportHandler extends Daemon implements MemoryTrackable {
             return;
         }
 
-        backend.updateDisks(backendDisks);
+        backend.updateDisks(backendDisks,  GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo());
         long cost = System.currentTimeMillis() - start;
         if (cost > MAX_REPORT_HANDLING_TIME_LOGGING_THRESHOLD_MS) {
             LOG.info("finished to handle disk report from backend {}, cost: {} ms",

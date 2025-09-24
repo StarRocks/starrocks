@@ -60,6 +60,8 @@ compile_commands.json
 .classpath
 .vimspector.json
 .gdb_history
+fe/plugin/hive-udf/target
+fe/plugin/spark-dpp/target
 
 # ignore generated files
 StarRocksLex.tokens
@@ -92,6 +94,6 @@ be/tags
 build/
 cmake-build-debug/
 CMakeLists.txt
-
 .claude
 CLAUDE.md
+.clangd

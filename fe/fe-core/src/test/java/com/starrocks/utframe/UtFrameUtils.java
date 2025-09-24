@@ -1211,6 +1211,8 @@ public class UtFrameUtils {
                 }
                 fakeJournalWriter = null;
             }
+            masterJournalQueue.clear();
+            followerJournalQueue.clear();
         }
     }
 

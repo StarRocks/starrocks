@@ -18,6 +18,7 @@ package com.starrocks.sql.analyzer;
 import com.starrocks.catalog.UserIdentity;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.persist.OperationType;
+import com.starrocks.persist.UpdateBackendInfo;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.DDLStmtExecutor;
 import com.starrocks.qe.ShowExecutor;
@@ -185,16 +186,17 @@ public class AlterSystemStmtAnalyzerTest extends StarRocksTestBase {
         // test replay
         NodeMgr nodeMgrFollower = new NodeMgr();
         nodeMgrFollower.load(initialImage.getMetaBlockReader());
-        Backend persistentState =
-                (Backend) UtFrameUtils.PseudoJournalReplayer.replayNextJournal(OperationType.OP_BACKEND_STATE_CHANGE_V2);
-        nodeMgrFollower.getClusterInfo().updateInMemoryStateBackend(persistentState);
+        UpdateBackendInfo info =
+                (UpdateBackendInfo) UtFrameUtils.PseudoJournalReplayer
+                        .replayNextJournal(OperationType.OP_BACKEND_STATE_CHANGE_V2);
+        nodeMgrFollower.getClusterInfo().replayBackendStateChange(info);
         Assertions.assertEquals("{c=d}",
-                nodeMgrFollower.getClusterInfo().getBackend(persistentState.getId()).getLocation().toString());
+                nodeMgrFollower.getClusterInfo().getBackend(info.getId()).getLocation().toString());
 
         // test restart
         NodeMgr nodeMgrLeader = new NodeMgr();
         nodeMgrLeader.load(finalImage.getMetaBlockReader());
         Assertions.assertEquals("{c=d}",
-                nodeMgrLeader.getClusterInfo().getBackend(persistentState.getId()).getLocation().toString());
+                nodeMgrLeader.getClusterInfo().getBackend(info.getId()).getLocation().toString());
     }
 }
