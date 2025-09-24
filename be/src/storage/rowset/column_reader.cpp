@@ -368,6 +368,27 @@ Status ColumnReader::_calculate_row_ranges(const std::vector<uint32_t>& page_ind
     return Status::OK();
 }
 
+LogicalType ColumnReader::_get_zone_map_parse_type(const ColumnPredicate* predicate) const {
+    DCHECK(predicate != nullptr);
+    // The type of the predicate may be different from the data type in the segment
+    // file, often seen after fast schema evolution, e.g., the predicate type may be
+    // 'BIGINT' while the data type is 'INT', so it's necessary to use the type of
+    // the predicate to parse the zone map string.
+    LogicalType type = predicate->type_info()->type();
+
+    // This addresses a zone map filtering issue that occurs when converting a CHAR columna
+    // to VARCHAR. The zone map may still contain CHAR values with padding bytes (e.g., "abc\0\0\0\0\0\0\0").
+    // If these values are parsed as VARCHAR, the padding bytes are preserved, leading to incorrect
+    // comparisons with VARCHAR predicates (e.g., "abc"). By forcing the parsing type to CHAR,
+    // `datum_from_string` in `_parse_zone_map()` strips these padding bytes, ensuring consistent
+    // comparison semantics between zone map entries and predicate values.
+    if (_column_type == TYPE_CHAR && type == TYPE_VARCHAR) {
+        type = TYPE_CHAR;
+    }
+
+    return type;
+}
+
 Status ColumnReader::_parse_zone_map(LogicalType type, const ZoneMapPB& zm, ZoneMapDetail* detail) const {
     // DECIMAL32/DECIMAL64/DECIMAL128 stored as INT32/INT64/INT128
     // The DECIMAL type will be delegated to INT type.
@@ -620,17 +641,15 @@ Status ColumnReader::_zone_map_filter(const std::vector<const ColumnPredicate*>&
                                       const ColumnPredicate* del_predicate,
                                       std::unordered_set<uint32_t>* del_partial_filtered_pages,
                                       std::vector<uint32_t>* pages) {
-    // The type of the predicate may be different from the data type in the segment
-    // file, e.g., the predicate type may be 'BIGINT' while the data type is 'INT',
-    // so it's necessary to use the type of the predicate to parse the zone map string.
-    LogicalType lt;
+    const ColumnPredicate* predicate;
     if (!predicates.empty()) {
-        lt = predicates[0]->type_info()->type();
+        predicate = predicates[0];
     } else if (del_predicate) {
-        lt = del_predicate->type_info()->type();
+        predicate = del_predicate;
     } else {
         return Status::OK();
     }
+    LogicalType lt = _get_zone_map_parse_type(predicate);
 
     auto page_satisfies_zone_map_filter = [&](const ZoneMapDetail& detail) {
         if constexpr (PredRelation == CompoundNodeType::AND) {
@@ -664,7 +683,7 @@ bool ColumnReader::segment_zone_map_filter(const std::vector<const ColumnPredica
     if (_segment_zone_map == nullptr || predicates.empty()) {
         return true;
     }
-    LogicalType lt = predicates[0]->type_info()->type();
+    LogicalType lt = _get_zone_map_parse_type(predicates[0]);
     ZoneMapDetail detail;
     auto st = _parse_zone_map(lt, *_segment_zone_map, &detail);
     CHECK(st.ok()) << st;

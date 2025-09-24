@@ -11,34 +11,33 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
-
 package com.starrocks.persist;
 
 import com.google.gson.annotations.SerializedName;
-import com.starrocks.catalog.FsBroker;
+import com.starrocks.catalog.DiskInfo;
 import com.starrocks.common.io.Writable;
 
-import java.util.List;
+public class UpdateDiskInfo implements Writable {
+    @SerializedName(value = "r")
+    private final String rootPath;
 
-public class ModifyBrokerInfo implements Writable {
-    @SerializedName("bn")
-    public String brokerName;
-    @SerializedName("ba")
-    public List<FsBroker> brokerAddresses;
+    @SerializedName(value = "s")
+    private DiskInfo.DiskState state;
 
-    public ModifyBrokerInfo() {
+    public UpdateDiskInfo(String rootPath, DiskInfo.DiskState state) {
+        this.rootPath = rootPath;
+        this.state = state;
     }
 
-    public ModifyBrokerInfo(String brokerName, List<FsBroker> brokerAddresses) {
-        this.brokerName = brokerName;
-        this.brokerAddresses = brokerAddresses;
+    public String getRootPath() {
+        return rootPath;
     }
 
-    public String getName() {
-        return brokerName;
+    public DiskInfo.DiskState getState() {
+        return state;
     }
 
-    public List<FsBroker> getAddresses() {
-        return brokerAddresses;
+    public void setState(DiskInfo.DiskState state) {
+        this.state = state;
     }
 }

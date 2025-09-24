@@ -19,6 +19,7 @@ import com.starrocks.ha.FrontendNodeType;
 import com.starrocks.journal.bdbje.BDBJEJournal;
 import com.starrocks.leader.CheckpointController;
 import com.starrocks.persist.EditLog;
+import com.starrocks.persist.WALApplier;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.NodeMgr;
 import com.starrocks.system.Frontend;
@@ -59,7 +60,8 @@ public class GlobalConnectionIdTest {
     public void testFrontendId() throws DdlException {
         new MockUp<EditLog>() {
             @Mock
-            public void logJsonObject(short op, Object obj) {
+            public void logJsonObject(short op, Object obj, WALApplier walApplier) {
+                walApplier.apply(obj);
             }
         };
 
