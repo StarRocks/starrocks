@@ -471,7 +471,7 @@ public class IcebergConnectorScanRangeSource extends ConnectorScanRangeSource {
             Class<?> javaClass = type.typeId().javaClass();
 
             String partitionValue;
-
+            boolean partitionValueIsNull = (PartitionUtil.getPartitionValue(partition, index, javaClass) == null);
             // currently starrocks date literal only support local datetime
             if (type.equals(Types.TimestampType.withZone())) {
                 Long value = PartitionUtil.getPartitionValue(partition, index, javaClass);
@@ -485,9 +485,11 @@ public class IcebergConnectorScanRangeSource extends ConnectorScanRangeSource {
                 partitionValue = field.transform().toHumanString(type, PartitionUtil.getPartitionValue(
                         partition, index, javaClass));
             }
-
-            partitionValues.add(partitionValue);
-
+            if (!partitionValueIsNull) {
+                partitionValues.add(partitionValue);
+            } else {
+                partitionValues.add(null);
+            } 
             cols.add(table.getColumn(field.name()));
         });
 
