@@ -4,12 +4,19 @@ create table t1 (id int, data array<float>) engine = olap distributed by hash(id
 
 insert into t1 values(1, array<float>[0.1, 0.2, 0.3]), (2, array<float>[0.2, 0.1, 0.3]), (3, array<float>[0.3, 0.2, 0.1]);
 
-select cosine_similarity(array<float>[0.1, 0.2, 0.3], data) as dist, id from t1 order by dist desc;
+select round(cosine_similarity(array<float>[0.1, 0.2, 0.3], data), 3) as dist, id from t1 order by dist desc, id;
 
-select cosine_similarity(array<float>[0.1, 0.2, 0.3], array<float>[0.1, 0.2, 0.3]) as dist;
+select round(cosine_similarity(array<float>[0.1, 0.2, 0.3], array<float>[0.1, 0.2, 0.3]), 3) as dist;
 
-select cosine_similarity_norm(array<float>[0.1, 0.2, 0.3], array<float>[0.1, 0.2, 0.3]) as dist;
+select round(cosine_similarity_norm(array<float>[0.1, 0.2, 0.3], array<float>[0.1, 0.2, 0.3]), 3) as dist;
 
+<<<<<<< HEAD
+=======
+select round(l2_distance(array<float>[0.1, 0.2, 0.3], data), 3)as dist, id from t1 order by dist desc, id;
+
+select round(l2_distance(array<float>[0.1, 0.2, 0.3], array<float>[0.1, 0.2, 0.3]), 3) as dist;
+
+>>>>>>> 3b0bee9731 ([UT] fix unstable distance function cases because of precision (#63502))
 --------------- cross join -----------------
 
 create table test_cosine (id int, data array<float>) ENGINE=olap DUPLICATE KEY (id) DISTRIBUTED BY HASH(id) properties ("replication_num" = "1");
@@ -18,6 +25,14 @@ insert into test_cosine values (1, array<float>[0.1, 0.2, 0.3]), (2, array<float
 insert into test_cosine values (3, array<float>[0.15, 0.25, 0.32]), (4, array<float>[0.12, 0.11, 0.32]);
 insert into test_cosine values (5, array<float>[0.25, 0.12, 0.13]), (6, array<float>[0.22, 0.01, 0.39]);
 
+<<<<<<< HEAD
 select id, data, cosine_similarity(array<float>[0.1, 0.2, 0.3], data) as sim from test_cosine order by sim desc;
 select a.id, b.id, a.data, b.data, cosine_similarity(a.data, b.data) as sim from test_cosine as a cross join test_cosine as b;
 select a.id, b.id, a.data, b.data, cosine_similarity(a.data, b.data) as sim from test_cosine as a cross join test_cosine as b order by sim desc;
+=======
+select id, data, round(cosine_similarity(array<float>[0.1, 0.2, 0.3], data), 3) as sim from test_vector order by sim desc, id;
+select a.id, b.id, a.data, b.data, round(cosine_similarity(a.data, b.data), 3) as sim from test_vector as a cross join test_vector as b order by sim desc, a.id, b.id;
+select a.id, b.id, a.data, b.data, round(cosine_similarity(a.data, b.data), 3) as sim from test_vector as a cross join test_vector as b order by sim desc, a.id, b.id;
+
+select id, data, round(l2_distance(array<float>[0.1, 0.2, 0.3], data), 3) as sim from test_vector order by sim desc, id;
+>>>>>>> 3b0bee9731 ([UT] fix unstable distance function cases because of precision (#63502))
