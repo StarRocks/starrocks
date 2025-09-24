@@ -2725,22 +2725,15 @@ public class SchemaChangeHandler extends AlterHandler {
 
     public void updateTableConstraint(Database db, String tableName, Map<String, String> properties)
             throws DdlException {
-        Locker locker = new Locker();
-        if (!locker.lockDatabaseAndCheckExist(db, LockType.READ)) {
+        if (db == null || !db.isExist()) {
             throw new DdlException(String.format("db:%s does not exists.", db.getFullName()));
         }
-        TableProperty tableProperty;
-        OlapTable olapTable;
-        try {
-            Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), tableName);
-            if (table == null) {
-                throw new DdlException(String.format("table:%s does not exist", tableName));
-            }
-            olapTable = (OlapTable) table;
-            tableProperty = olapTable.getTableProperty();
-        } finally {
-            locker.unLockDatabase(db.getId(), LockType.READ);
+        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), tableName);
+        if (table == null) {
+            throw new DdlException(String.format("table:%s does not exist", tableName));
         }
+        OlapTable olapTable = (OlapTable) table;
+        TableProperty tableProperty = olapTable.getTableProperty();
 
         boolean hasChanged = false;
         if (tableProperty != null) {
@@ -2789,6 +2782,8 @@ public class SchemaChangeHandler extends AlterHandler {
         if (!hasChanged) {
             return;
         }
+
+        Locker locker = new Locker();
         locker.lockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(olapTable.getId()), LockType.WRITE);
         try {
             GlobalStateMgr.getCurrentState().getLocalMetastore().modifyTableConstraint(db, tableName, properties);

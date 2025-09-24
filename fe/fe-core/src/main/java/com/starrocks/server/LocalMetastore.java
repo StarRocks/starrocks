@@ -1229,14 +1229,13 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
     private void addPartitions(ConnectContext ctx, Database db, String tableName, List<PartitionDesc> partitionDescs,
                                boolean isTempPartition, DistributionDesc distributionDesc) throws DdlException {
         DistributionInfo distributionInfo;
-        OlapTable olapTable;
+        OlapTable olapTable = checkTable(db, tableName);
         OlapTable copiedTable;
 
         Locker locker = new Locker();
-        locker.lockDatabase(db.getId(), LockType.READ);
+        locker.lockTableWithIntensiveDbLock(db.getId(), olapTable.getId(), LockType.READ);
         Set<String> checkExistPartitionName = Sets.newConcurrentHashSet();
         try {
-            olapTable = checkTable(db, tableName);
 
             // get partition info
             PartitionInfo partitionInfo = olapTable.getPartitionInfo();
@@ -1257,7 +1256,7 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
             copiedTable.setDefaultDistributionInfo(distributionInfo);
             checkExistPartitionName = CatalogUtils.checkPartitionNameExistForAddPartitions(olapTable, partitionDescs);
         } finally {
-            locker.unLockDatabase(db.getId(), LockType.READ);
+            locker.unLockTableWithIntensiveDbLock(db.getId(), olapTable.getId(), LockType.READ);
         }
 
         Preconditions.checkNotNull(distributionInfo);
@@ -1281,7 +1280,7 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
                     .flatMap(p -> p.stream()).collect(Collectors.toList()), ctx.getCurrentComputeResource());
 
             // check again
-            if (!locker.lockDatabaseAndCheckExist(db, LockType.WRITE)) {
+            if (!locker.lockTableAndCheckDbExist(db, olapTable.getId(), LockType.WRITE)) {
                 throw new DdlException("db " + db.getFullName()
                         + "(" + db.getId() + ") has been dropped");
             }
@@ -1320,7 +1319,7 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
                         existPartitionNameSet);
             } finally {
                 cleanExistPartitionNameSet(existPartitionNameSet, partitionNameToTabletSet);
-                locker.unLockDatabase(db.getId(), LockType.WRITE);
+                locker.unLockTableWithIntensiveDbLock(db.getId(), olapTable.getId(), LockType.WRITE);
             }
         } catch (DdlException e) {
             cleanTabletIdSetForAll(tabletIdSetForAll);
@@ -1633,13 +1632,12 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
         try {
             table.setAutomaticBucketing(true);
 
-            OlapTable olapTable;
+            OlapTable olapTable = checkTable(db, table.getId());
             OlapTable copiedTable;
 
             Locker locker = new Locker();
-            locker.lockDatabase(db.getId(), LockType.READ);
+            locker.lockTableWithIntensiveDbLock(db.getId(), olapTable.getId(), LockType.READ);
             try {
-                olapTable = checkTable(db, table.getId());
 
                 if (partition.getDistributionInfo().getType() != DistributionInfo.DistributionInfoType.RANDOM) {
                     throw new DdlException("Only support adding physical partition to random distributed table");
@@ -1647,7 +1645,7 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
 
                 copiedTable = AnalyzerUtils.getShadowCopyTable(olapTable);
             } finally {
-                locker.unLockDatabase(db.getId(), LockType.READ);
+                locker.unLockTableWithIntensiveDbLock(db.getId(), olapTable.getId(), LockType.READ);
             }
 
             Preconditions.checkNotNull(olapTable);
@@ -1664,7 +1662,7 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
             buildPartitions(db, copiedTable, subPartitions, computeResource);
 
             // check again
-            if (!locker.lockDatabaseAndCheckExist(db, LockType.WRITE)) {
+            if (!locker.lockTableAndCheckDbExist(db, olapTable.getId(), LockType.WRITE)) {
                 throw new DdlException("db " + db.getFullName()
                         + "(" + db.getId() + ") has been dropped");
             }
@@ -1688,7 +1686,7 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
                 // add partition log
                 addSubPartitionLog(db, olapTable, partition, subPartitions);
             } finally {
-                locker.unLockDatabase(db.getId(), LockType.WRITE);
+                locker.unLockTableWithIntensiveDbLock(db.getId(), olapTable.getId(), LockType.WRITE);
             }
         } finally {
             table.setAutomaticBucketing(false);
@@ -2863,21 +2861,20 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
             locker.unLockDatabase(db.getId(), LockType.READ);
         }
 
-        if (!locker.lockDatabaseAndCheckExist(db, LockType.WRITE)) {
+        Table table = getTable(db.getFullName(), tableName);
+        if (table == null) {
+            throw new DdlException("create materialized failed. table:" + tableName + " not exist");
+        }
+        if (!table.isOlapOrCloudNativeTable()) {
+            throw new DdlException("Do not support create synchronous materialized view(rollup) on " +
+                    table.getType().name() + " table[" + tableName + "]");
+        }
+        OlapTable olapTable = (OlapTable) table;
+
+        if (!locker.lockTableAndCheckDbExist(db, olapTable.getId(), LockType.WRITE)) {
             throw new DdlException("create materialized failed. database:" + db.getFullName() + " not exist");
         }
         try {
-            Table table = getTable(db.getFullName(), tableName);
-            if (table == null) {
-                throw new DdlException("create materialized failed. table:" + tableName + " not exist");
-            }
-
-            if (!table.isOlapOrCloudNativeTable()) {
-                throw new DdlException("Do not support create synchronous materialized view(rollup) on " +
-                        table.getType().name() + " table[" + tableName + "]");
-            }
-
-            OlapTable olapTable = (OlapTable) table;
             if (olapTable.getKeysType() == KeysType.PRIMARY_KEYS) {
                 throw new DdlException(
                         "Do not support create materialized view on primary key table[" + tableName + "]");
@@ -2890,7 +2887,7 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
 
             materializedViewHandler.processCreateMaterializedView(stmt, db, olapTable);
         } finally {
-            locker.unLockDatabase(db.getId(), LockType.WRITE);
+            locker.unLockTableWithIntensiveDbLock(db.getId(), olapTable.getId(), LockType.WRITE);
         }
     }
 
