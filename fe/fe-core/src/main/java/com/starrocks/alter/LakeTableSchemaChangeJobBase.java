@@ -54,15 +54,15 @@ public abstract class LakeTableSchemaChangeJobBase extends AlterJobV2 {
     }
 
     @Nullable
-    protected ReadLockedDatabase getReadLockedDatabase(long dbId) {
+    protected ReadLockedTable getReadLockedTable(long dbId, long tableId) {
         Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
-        return db != null ? new ReadLockedDatabase(db) : null;
+        return db != null ? new ReadLockedTable(db, tableId) : null;
     }
 
     @Nullable
-    protected WriteLockedDatabase getWriteLockedDatabase(long dbId) {
+    protected WriteLockedTable getWriteLockedTable(long dbId, long tableId) {
         Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
-        return db != null ? new WriteLockedDatabase(db) : null;
+        return db != null ? new WriteLockedTable(db, tableId) : null;
     }
 
     // Check whether transactions of the given database which txnId is less than 'watershedTxnId' are finished.
@@ -72,44 +72,47 @@ public abstract class LakeTableSchemaChangeJobBase extends AlterJobV2 {
         return globalTxnMgr.isPreviousTransactionsFinished(txnId, dbId, Lists.newArrayList(tableId));
     }
 
-    protected abstract static class LockedDatabase implements AutoCloseable {
+    protected abstract static class LockedTable implements AutoCloseable {
         protected final Database db;
+        protected final long tableId;
         protected Locker locker;
 
-        LockedDatabase(@NotNull Database db) {
+        LockedTable(@NotNull Database db,
+                    long tableId) {
             this.locker = new Locker();
-            lock(db);
+            this.tableId = tableId;
             this.db = db;
+            lock();
         }
 
-        abstract void lock(Database db);
+        abstract void lock();
 
-        abstract void unlock(Database db);
+        abstract void unlock();
 
         @Nullable
-        OlapTable getTable(long tableId) {
+        OlapTable getTable() {
             return (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), tableId);
         }
 
         @Override
         public void close() {
-            unlock(db);
+            unlock();
         }
     }
 
-    protected static class ReadLockedDatabase extends LockedDatabase {
-        ReadLockedDatabase(@NotNull Database db) {
-            super(db);
+    protected static class ReadLockedTable extends LockedTable {
+        ReadLockedTable(@NotNull Database db, long tableId) {
+            super(db, tableId);
         }
 
         @Override
-        void lock(Database db) {
-            locker.lockDatabase(db.getId(), LockType.READ);
+        void lock() {
+            locker.lockTableWithIntensiveDbLock(db.getId(), tableId, LockType.READ);
         }
 
         @Override
-        void unlock(Database db) {
-            locker.unLockDatabase(db.getId(), LockType.READ);
+        void unlock() {
+            locker.unLockTableWithIntensiveDbLock(db.getId(), tableId, LockType.READ);
         }
 
         public String getFullName() {
@@ -117,25 +120,25 @@ public abstract class LakeTableSchemaChangeJobBase extends AlterJobV2 {
         }
     }
 
-    protected static class WriteLockedDatabase extends LockedDatabase {
-        WriteLockedDatabase(@NotNull Database db) {
-            super(db);
+    protected static class WriteLockedTable extends LockedTable {
+        WriteLockedTable(@NotNull Database db, long tableId) {
+            super(db, tableId);
         }
 
         @Override
-        void lock(Database db) {
-            locker.lockDatabase(db.getId(), LockType.WRITE);
+        void lock() {
+            locker.lockTableWithIntensiveDbLock(db.getId(), tableId, LockType.WRITE);
         }
 
         @Override
-        void unlock(Database db) {
-            locker.unLockDatabase(db.getId(), LockType.WRITE);
+        void unlock() {
+            locker.unLockTableWithIntensiveDbLock(db.getId(), tableId, LockType.WRITE);
         }
     }
 
     protected boolean tableExists() {
-        try (ReadLockedDatabase db = getReadLockedDatabase(dbId)) {
-            return db != null && db.getTable(tableId) != null;
+        try (ReadLockedTable db = getReadLockedTable(dbId, tableId)) {
+            return db != null && db.getTable() != null;
         }
     }
 
@@ -145,11 +148,11 @@ public abstract class LakeTableSchemaChangeJobBase extends AlterJobV2 {
     }
 
     @NotNull
-    OlapTable getTableOrThrow(@Nullable LockedDatabase db, long tableId) throws AlterCancelException {
+    OlapTable getTableOrThrow(@Nullable LockedTable db, long tableId) throws AlterCancelException {
         if (db == null) {
             throw new AlterCancelException("Database does not exist");
         }
-        OlapTable table = db.getTable(tableId);
+        OlapTable table = db.getTable();
         if (table == null) {
             throw new AlterCancelException("Table does not exist. tableId=" + tableId);
         }

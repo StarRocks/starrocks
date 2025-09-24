@@ -277,7 +277,7 @@ public class HiveTable extends Table {
             throw new StarRocksConnectorException("Not found database " + dbName);
         }
         Locker locker = new Locker();
-        locker.lockDatabase(db.getId(), LockType.WRITE);
+        locker.lockTableWithIntensiveDbLock(db.getId(), this.id, LockType.WRITE);
         try {
             this.fullSchema.clear();
             this.nameToColumn.clear();
@@ -292,7 +292,7 @@ public class HiveTable extends Table {
                 GlobalStateMgr.getCurrentState().getEditLog().logModifyTableColumn(log);
             }
         } finally {
-            locker.unLockDatabase(db.getId(), LockType.WRITE);
+            locker.unLockTableWithIntensiveDbLock(db.getId(), this.id, LockType.WRITE);
         }
     }
 

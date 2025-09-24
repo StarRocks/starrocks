@@ -566,7 +566,7 @@ public class StarMgrMetaSyncer extends FrontendDaemon {
             return;
         }
         Locker locker = new Locker();
-        locker.lockDatabase(db.getId(), LockType.WRITE);
+        locker.lockTableWithIntensiveDbLock(db.getId(), table.getId(), LockType.WRITE);
         try {
             // check db and table again
             if (GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(db.getId()) == null) {
@@ -578,7 +578,7 @@ public class StarMgrMetaSyncer extends FrontendDaemon {
             GlobalStateMgr.getCurrentState().getColocateTableIndex().updateLakeTableColocationInfo(table, true /* isJoin */,
                     null /* expectGroupId */);
         } finally {
-            locker.unLockDatabase(db.getId(), LockType.WRITE);
+            locker.unLockTableWithIntensiveDbLock(db.getId(), table.getId(), LockType.WRITE);
         }
     }
 
