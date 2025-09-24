@@ -193,8 +193,8 @@ public class PaimonMetadata implements ConnectorMetadata {
         }
         sb.deleteCharAt(sb.length() - 1);
         String partitionName = sb.toString();
-
-        return new Partition(partitionName, convertToSystemDefaultTime(Timestamp.fromEpochMillis(partition.lastFileCreationTime())),
+        Timestamp lastUpdateTime = Timestamp.fromEpochMillis(partition.lastFileCreationTime());
+        return new Partition(partitionName, convertToSystemDefaultTime(lastUpdateTime),
                 partition.recordCount(), partition.fileSizeInBytes(), partition.fileCount());
     }
 
