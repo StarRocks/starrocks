@@ -137,16 +137,8 @@ public:
     /// |pred_relation| is the relation among |predicates|, it can be AND or OR.
     virtual Status get_row_ranges_by_zone_map(const std::vector<const ColumnPredicate*>& predicates,
                                               const ColumnPredicate* del_predicate, SparseRange<>* row_ranges,
-                                              CompoundNodeType pred_relation) {
-        return get_row_ranges_by_zone_map(predicates, del_predicate, row_ranges, pred_relation, SparseRange<>());
-    }
-
-    /// Store the row ranges that satisfy the given predicates into |row_ranges|.
-    /// |pred_relation| is the relation among |predicates|, it can be AND or OR.
-    // Optimized version, which can pass |scan_range| to reduce filtering overhead.
-    virtual Status get_row_ranges_by_zone_map(const std::vector<const ColumnPredicate*>& predicates,
-                                              const ColumnPredicate* del_predicate, SparseRange<>* row_ranges,
-                                              CompoundNodeType pred_relation, const SparseRange<>& scan_range) {
+                                              CompoundNodeType pred_relation,
+                                              const SparseRange<>& scan_range = SparseRange<>()) {
         row_ranges->add({0, static_cast<rowid_t>(num_rows())});
         return Status::OK();
     }
