@@ -1383,8 +1383,8 @@ ORDER BY (column_name [sort_direction] [nulls_order], ...)
 ```
 
 - `column_name`: The name of the column to be used as the sort key. It must be a column existed in the table schema. Currently, Transform expressions are not supported.
-- `sort_direction`: Sorting direction. Valid values: `ASC` (ascending) and `DESC` (descending).
-- `nulls_order`: The order of NULL values. Valid values: `NULLS FIRST` and `NULLS LAST`.
+- `sort_direction`: Sorting direction. Valid values: `ASC` (Default) and `DESC`.
+- `nulls_order`: The order of NULL values. Valid values: `NULLS FIRST` (Default when `ASC` is specified) and `NULLS LAST` (Default when `DESC` is specified).
 
 `sort_direction` and `nulls_order` are optional. For example, each of the following is a valid `sort_desc`:
 
