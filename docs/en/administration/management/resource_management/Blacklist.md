@@ -5,11 +5,7 @@ sidebar_position: 80
 
 # Blacklist Management
 
-<<<<<<< HEAD
-In some cases, administrators need to disable certain patterns of SQL to avoid SQL from triggering cluster crashes or unexpected high concurrent queries.
-=======
 In some cases, administrators need to disable certain patterns of SQL to avoid SQL from triggering cluster crashes or unexpected high concurrent queries. The blacklist is only for SELECT statements, INSERT statements (from v3.1 onwards), and CTAS statements (from v3.4 onwards).
->>>>>>> 6e343ed0ad ([Doc] Update SQL Blacklist Doc (#63457))
 
 StarRocks allows users to add, view, and delete SQL blacklists.
 
