@@ -28,25 +28,28 @@
   bottom: 0;
   display: flex;
   justify-content: center;
-  align-items: center;
-  z-index: 1000;
+  align-items: top;
+  z-index: 800;
 }
 
 .ResizableIframeModal-Content {
   position: relative;
-  background-color: blue;
-  padding: 10px;
+  /*background-color: blue;*/
+  background-color: white;
+  border: 2px solid black;
+  padding: 2px;
   border-radius: 8px;
   max-width: 90vw;
   max-height: 90vh;
 }
 
 .modal-header {
-  background: blue;
+  /*background: blue;*/
+  background: white;
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 10px;
+  margin-bottom: 2px;
 }
 
 .modal-header h3 {
@@ -68,7 +71,7 @@
   bottom: 0;
   right: 0;
   cursor: se-resize;
-  background-color: var(--ifm-color-primary);
+  background-color: blue;
   border-radius: 2px;
 }
 
