@@ -45,6 +45,8 @@ import com.starrocks.catalog.DiskInfo;
 import com.starrocks.catalog.DiskInfo.DiskState;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.Pair;
+import com.starrocks.persist.UpdateBackendInfo;
+import com.starrocks.persist.UpdateDiskInfo;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.TDisk;
 import com.starrocks.thrift.TStorageMedium;
@@ -235,7 +237,7 @@ public class Backend extends ComputeNode {
         return exceedLimit;
     }
 
-    public void updateDisks(Map<String, TDisk> backendDisks) {
+    public void updateDisks(Map<String, TDisk> backendDisks, SystemInfoService systemInfoService) {
         // The very first time to init the path info
         if (!initPathInfo) {
             boolean allPathHashUpdated = true;
@@ -247,25 +249,21 @@ public class Backend extends ComputeNode {
             }
             if (allPathHashUpdated) {
                 initPathInfo = true;
-                GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo()
-                        .updatePathInfo(new ArrayList<>(disksRef.values()), Lists.newArrayList());
+                systemInfoService.updatePathInfo(new ArrayList<>(disksRef.values()), Lists.newArrayList());
             }
         }
 
         // update status or add new diskInfo
-        Map<String, DiskInfo> newDiskInfos = Maps.newHashMap();
+        Map<String, UpdateDiskInfo> updateDiskInfoMap = Maps.newHashMap();
         List<DiskInfo> addedDisks = Lists.newArrayList();
         List<DiskInfo> removedDisks = Lists.newArrayList();
         /*
-         * set isChanged to true only if new disk is added or old disk is dropped.
-         * we ignore the change of capacity, because capacity info is only used in master FE.
+         * set isChanged to true only if a new disk is added or old disk is dropped or disk state is changed.
+         * we ignore the change of capacity because capacity info is only used in master FE.
          */
         boolean isChanged = false;
         for (TDisk tDisk : backendDisks.values()) {
             String rootPath = tDisk.getRoot_path();
-            long totalCapacityB = tDisk.getDisk_total_capacity();
-            long dataUsedCapacityB = tDisk.getData_used_capacity();
-            long diskAvailableCapacityB = tDisk.getDisk_available_capacity();
             boolean isUsed = tDisk.isUsed();
 
             DiskInfo diskInfo = disksRef.get(rootPath);
@@ -275,29 +273,21 @@ public class Backend extends ComputeNode {
                 isChanged = true;
                 LOG.info("add new disk info. backendId: {}, rootPath: {}", getId(), rootPath);
             }
-            newDiskInfos.put(rootPath, diskInfo);
-
-            diskInfo.setTotalCapacityB(totalCapacityB);
-            diskInfo.setDataUsedCapacityB(dataUsedCapacityB);
-            diskInfo.setAvailableCapacityB(diskAvailableCapacityB);
-            if (tDisk.isSetPath_hash()) {
-                diskInfo.setPathHash(tDisk.getPath_hash());
-            }
-
-            if (tDisk.isSetStorage_medium()) {
-                diskInfo.setStorageMedium(tDisk.getStorage_medium());
-            }
+            UpdateDiskInfo updateDiskInfo = new UpdateDiskInfo(rootPath, diskInfo.getState());
+            updateDiskInfoMap.put(rootPath, updateDiskInfo);
 
             // if the disk state is decommissioned/disable, ignore the report state from BE,
             // because these states is set by user.
             if (diskInfo.getState() != DiskState.DECOMMISSIONED && diskInfo.getState() != DiskState.DISABLED) {
                 if (isUsed) {
-                    if (diskInfo.setState(DiskState.ONLINE)) {
+                    if (diskInfo.getState() != DiskState.ONLINE) {
                         isChanged = true;
+                        updateDiskInfo.setState(DiskState.ONLINE);
                     }
                 } else {
-                    if (diskInfo.setState(DiskState.OFFLINE)) {
+                    if (diskInfo.getState() != DiskState.OFFLINE) {
                         isChanged = true;
+                        updateDiskInfo.setState(DiskState.OFFLINE);
                     }
                 }
             }
@@ -315,15 +305,52 @@ public class Backend extends ComputeNode {
         }
 
         if (isChanged) {
-            // update disksRef
-            disksRef = new ConcurrentHashMap<>(newDiskInfos);
-            GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().updatePathInfo(addedDisks, removedDisks);
             // log disk changing
-            GlobalStateMgr.getCurrentState().getEditLog().logBackendStateChange(this);
+            UpdateBackendInfo updateBackendInfo = new UpdateBackendInfo(getId());
+            updateBackendInfo.setDiskInfoMap(updateDiskInfoMap);
+            GlobalStateMgr.getCurrentState().getEditLog().logBackendStateChange(
+                    updateBackendInfo, wal -> systemInfoService.replayBackendStateChange((UpdateBackendInfo) wal));
+            systemInfoService.updatePathInfo(addedDisks, removedDisks);
+        }
+
+        // update leader side disk info
+        for (TDisk tDisk : backendDisks.values()) {
+            String rootPath = tDisk.getRoot_path();
+            DiskInfo diskInfo = disksRef.get(rootPath);
+            diskInfo.setTotalCapacityB(tDisk.getDisk_total_capacity());
+            diskInfo.setDataUsedCapacityB(tDisk.getData_used_capacity());
+            diskInfo.setAvailableCapacityB(tDisk.getDisk_available_capacity());
+            if (tDisk.isSetPath_hash()) {
+                diskInfo.setPathHash(tDisk.getPath_hash());
+            }
+
+            if (tDisk.isSetStorage_medium()) {
+                diskInfo.setStorageMedium(tDisk.getStorage_medium());
+            }
         }
     }
 
-    public void decommissionDisk(String rootPath) throws DdlException {
+    public void replayUpdateDiskInfo(Map<String, UpdateDiskInfo> info) {
+        // add or update
+        for (UpdateDiskInfo updateDiskInfo : info.values()) {
+            String rootPath = updateDiskInfo.getRootPath();
+            DiskInfo diskInfo = disksRef.computeIfAbsent(rootPath, DiskInfo::new);
+            diskInfo.setState(updateDiskInfo.getState());
+        }
+
+        // remove
+        List<String> pathToRemove = new ArrayList<>();
+        for (DiskInfo diskInfo : disksRef.values()) {
+            if (!info.containsKey(diskInfo.getRootPath())) {
+                pathToRemove.add(diskInfo.getRootPath());
+            }
+        }
+        for (String path : pathToRemove) {
+            disksRef.remove(path);
+        }
+    }
+
+    public void checkDecommissionDisk(String rootPath) throws DdlException {
         DiskInfo diskInfo = disksRef.get(rootPath);
         if (diskInfo == null) {
             throw new DdlException("Disk: " + rootPath + " does not exist");
@@ -331,14 +358,28 @@ public class Backend extends ComputeNode {
         if (diskInfo.getState() == DiskState.DISABLED) {
             throw new DdlException("Disk " + rootPath + " is in DISABLED state, can not decommission");
         }
+    }
+
+    public void decommissionDisk(String rootPath) throws DdlException {
+        DiskInfo diskInfo = disksRef.get(rootPath);
+        if (diskInfo == null) {
+            return;
+        }
         diskInfo.setState(DiskState.DECOMMISSIONED);
         LOG.info("disk {} is set to DECOMMISSIONED", rootPath);
+    }
+
+    public void checkCancelDecommissionDisk(String rootPath) throws DdlException {
+        DiskInfo diskInfo = disksRef.get(rootPath);
+        if (diskInfo == null) {
+            throw new DdlException("Disk: " + rootPath + " does not exist");
+        }
     }
 
     public void cancelDecommissionDisk(String rootPath) throws DdlException {
         DiskInfo diskInfo = disksRef.get(rootPath);
         if (diskInfo == null) {
-            throw new DdlException("Disk: " + rootPath + " does not exist");
+            return;
         }
         if (diskInfo.getState() == DiskState.DECOMMISSIONED) {
             diskInfo.setState(DiskState.ONLINE);
@@ -346,7 +387,7 @@ public class Backend extends ComputeNode {
         }
     }
 
-    public void disableDisk(String rootPath) throws DdlException {
+    public void checkDisableDisk(String rootPath) throws DdlException {
         DiskInfo diskInfo = disksRef.get(rootPath);
         if (diskInfo == null) {
             throw new DdlException("Disk: " + rootPath + " does not exist");
@@ -354,19 +395,15 @@ public class Backend extends ComputeNode {
         if (diskInfo.getState() == DiskState.DECOMMISSIONED) {
             throw new DdlException("Disk " + rootPath + " is in DECOMMISSIONED state, can not disable");
         }
-        diskInfo.setState(DiskState.DISABLED);
-        LOG.info("disk {} is set to DISABLED", rootPath);
     }
 
-    public void cancelDisableDisk(String rootPath) throws DdlException {
+    public void disableDisk(String rootPath) throws DdlException {
         DiskInfo diskInfo = disksRef.get(rootPath);
         if (diskInfo == null) {
-            throw new DdlException("Disk: " + rootPath + " does not exist");
+            return;
         }
-        if (diskInfo.getState() == DiskState.DISABLED) {
-            diskInfo.setState(DiskState.ONLINE);
-            LOG.info("disk {} is recovered to ONLINE, previous state is DISABLED", rootPath);
-        }
+        diskInfo.setState(DiskState.DISABLED);
+        LOG.info("disk {} is set to DISABLED", rootPath);
     }
 
     public String getDiskRootPath(long pathHash) {

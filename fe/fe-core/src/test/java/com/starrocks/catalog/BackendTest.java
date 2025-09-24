@@ -40,6 +40,7 @@ import com.starrocks.common.FeConstants;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.Backend;
 import com.starrocks.system.BackendHbResponse;
+import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.TDisk;
 import com.starrocks.thrift.TStorageMedium;
 import org.junit.jupiter.api.Assertions;
@@ -111,14 +112,16 @@ public class BackendTest {
         diskInfos.put(disk3.getRoot_path(), disk3);
 
         // first update
-        backend.updateDisks(diskInfos);
+        SystemInfoService systemInfoService = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
+        systemInfoService.replayAddBackend(backend);
+        backend.updateDisks(diskInfos,  GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo());
         Assertions.assertEquals(disk1.getDisk_total_capacity() + disk2.getDisk_total_capacity(),
                 backend.getTotalCapacityB());
         Assertions.assertEquals(1, backend.getAvailableCapacityB());
 
         // second update
         diskInfos.remove(disk1.getRoot_path());
-        backend.updateDisks(diskInfos);
+        backend.updateDisks(diskInfos,  GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo());
         Assertions.assertEquals(disk2.getDisk_total_capacity(), backend.getTotalCapacityB());
         Assertions.assertEquals(disk2.getDisk_available_capacity() + 1, backend.getAvailableCapacityB());
     }
