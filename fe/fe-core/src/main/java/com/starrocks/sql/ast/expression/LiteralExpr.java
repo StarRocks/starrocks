@@ -176,7 +176,7 @@ public abstract class LiteralExpr extends Expr implements Comparable<LiteralExpr
                 break;
             case DATE:
             case DATETIME:
-                literalExpr = new DateLiteral("0000-00-00 00:00:00", type);
+                literalExpr = new DateLiteral("1970-01-01 00:00:00", type);
                 break;
             default:
                 throw new AnalysisException("Type[" + type.toSql() + "] not supported.");
