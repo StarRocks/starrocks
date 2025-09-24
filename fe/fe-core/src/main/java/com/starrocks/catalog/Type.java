@@ -725,6 +725,10 @@ public abstract class Type implements Cloneable {
         return PrimitiveType.STRING_TYPE_LIST.contains(this.getPrimitiveType());
     }
 
+    public boolean isStringArrayType() {
+        return isArrayType() && ((ArrayType) this).getItemType().isStringType();
+    }
+
     // only metric types have the following constraint:
     // 1. don't support as key column
     // 2. don't support filter
