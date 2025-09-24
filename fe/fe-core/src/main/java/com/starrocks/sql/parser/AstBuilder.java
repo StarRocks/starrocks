@@ -6875,9 +6875,9 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
     }
 
     @Override
-    public ParseNode visitRevokeRoleFromGroup(com.starrocks.sql.parser.StarRocksParser.RevokeRoleFromGroupContext context) {
+    public ParseNode visitRevokeRoleFromGroup(StarRocksParser.RevokeRoleFromGroupContext context) {
         List<String> roleNameList = new ArrayList<>();
-        for (com.starrocks.sql.parser.StarRocksParser.IdentifierOrStringContext oneContext : context.identifierOrStringList()
+        for (StarRocksParser.IdentifierOrStringContext oneContext : context.identifierOrStringList()
                 .identifierOrString()) {
             roleNameList.add(((Identifier) visit(oneContext)).getValue());
         }
