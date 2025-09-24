@@ -1419,8 +1419,8 @@ ORDER BY (column_name [sort_direction] [nulls_order], ...)
 其中：
 
 - `column_name`：作为排序键的列名，必须是当前表结构中包含的列，暂不支持 Transform 表达式。
-- `sort_direction`: 排序方向。有效值：`ASC`（升序）和 `DESC`（降序）。
-- `nulls_order`: 表示 NULL 值的顺序。有效值：`NULLS FIRST` 和 `NULLS LAST`。
+- `sort_direction`：排序方向。有效值：`ASC`（默认）和 `DESC`。
+- `nulls_order`：NULL 值的排序顺序。有效值：`NULLS FIRST`（当指定 `ASC` 时默认）和 `NULLS LAST`（当指定 `DESC` 时默认）。
 
 `sort_direction` 和 `nulls_order` 可以省略。例如，以下各示例均为有效的 `sort_desc`：
 
