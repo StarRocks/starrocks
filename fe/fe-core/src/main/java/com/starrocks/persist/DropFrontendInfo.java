@@ -11,10 +11,21 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
-
 package com.starrocks.persist;
 
-public interface WALApplier {
+import com.google.gson.annotations.SerializedName;
+import com.starrocks.common.io.Writable;
 
-    void apply(Object wal);
+public class DropFrontendInfo implements Writable {
+
+    @SerializedName(value = "n")
+    String nodeName;
+
+    public DropFrontendInfo(String nodeName) {
+        this.nodeName = nodeName;
+    }
+
+    public String getNodeName() {
+        return nodeName;
+    }
 }

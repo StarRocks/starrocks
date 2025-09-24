@@ -62,38 +62,38 @@ public class BDBHATest {
     public void testAddAndDropFollower() throws Exception {
         BDBJEJournal journal = (BDBJEJournal) GlobalStateMgr.getCurrentState().getJournal();
         BDBEnvironment environment = journal.getBdbEnvironment();
+        NodeMgr nodeMgr = GlobalStateMgr.getCurrentState().getNodeMgr();
 
         // add two followers
-        GlobalStateMgr.getCurrentState().getNodeMgr()
-                .addFrontend(FrontendNodeType.FOLLOWER, "192.168.2.3", 9010);
+        nodeMgr.addFrontend(FrontendNodeType.FOLLOWER, "192.168.2.3", 9010);
         Assertions.assertEquals(1,
                 environment.getReplicatedEnvironment().getRepMutableConfig().getElectableGroupSizeOverride());
-        GlobalStateMgr.getCurrentState().getNodeMgr()
-                .addFrontend(FrontendNodeType.FOLLOWER, "192.168.2.4", 9010);
+        nodeMgr.addFrontend(FrontendNodeType.FOLLOWER, "192.168.2.4", 9010);
         Assertions.assertEquals(1,
                 environment.getReplicatedEnvironment().getRepMutableConfig().getElectableGroupSizeOverride());
 
+        Frontend frontend = nodeMgr.getFeByHost("192.168.2.4");
+        FrontendHbResponse hb = new FrontendHbResponse(frontend.getNodeName(), frontend.getQueryPort(),
+                frontend.getRpcPort(), 1000, System.currentTimeMillis(), System.currentTimeMillis(),
+                "v1", 0.5f, 1, null);
         // one joined successfully
-        new Frontend(FrontendNodeType.FOLLOWER, "node1", "192.168.2.4", 9010)
-                .handleHbResponse(new FrontendHbResponse("n1", 8030, 9050,
-                                1000, System.currentTimeMillis(), System.currentTimeMillis(), "v1", 0.5f, 1, null),
-                        false);
+        frontend.handleHbResponse(hb, false);
         Assertions.assertEquals(2,
                 environment.getReplicatedEnvironment().getRepMutableConfig().getElectableGroupSizeOverride());
 
         // the other one is dropped
-        GlobalStateMgr.getCurrentState().getNodeMgr().dropFrontend(FrontendNodeType.FOLLOWER, "192.168.2.3", 9010);
+        nodeMgr.dropFrontend(FrontendNodeType.FOLLOWER, "192.168.2.3", 9010);
 
         Assertions.assertEquals(0,
                 environment.getReplicatedEnvironment().getRepMutableConfig().getElectableGroupSizeOverride());
 
         UtFrameUtils.PseudoImage image1 = new UtFrameUtils.PseudoImage();
-        GlobalStateMgr.getCurrentState().getNodeMgr().save(image1.getImageWriter());
+        nodeMgr.save(image1.getImageWriter());
         SRMetaBlockReader reader = new SRMetaBlockReaderV2(image1.getJsonReader());
-        NodeMgr nodeMgr = new NodeMgr();
-        nodeMgr.load(reader);
+        NodeMgr nodeMgr2 = new NodeMgr();
+        nodeMgr2.load(reader);
         reader.close();
-        Assertions.assertEquals(GlobalStateMgr.getCurrentState().getNodeMgr().getRemovedFrontendNames().size(), 1);
-        Assertions.assertEquals(GlobalStateMgr.getCurrentState().getNodeMgr().getHelperNodes().size(), 2);
+        Assertions.assertEquals(1, nodeMgr2.getRemovedFrontendNames().size());
+        Assertions.assertEquals(2, nodeMgr2.getHelperNodes().size());
     }
 }
