@@ -125,11 +125,7 @@ public class DeltaLakeParquetHandler extends DefaultParquetHandler {
                     currentFile = deltaLakeFileStatus.getPath();
                     if (LogReplay.containsAddOrRemoveFileActions(physicalSchema)) {
                         Pair<DeltaLakeFileStatus, StructType> key = Pair.create(deltaLakeFileStatus, physicalSchema);
-                        if (checkpointCache.getIfPresent(key) != null || predicate.isEmpty()) {
-                            currentColumnarBatchList = checkpointCache.get(key);
-                        } else {
-                            currentColumnarBatchList = readParquetFile(currentFile, physicalSchema, hadoopConf);
-                        }
+                        currentColumnarBatchList = checkpointCache.get(key);
                     } else {
                         currentColumnarBatchList = readParquetFile(currentFile, physicalSchema, hadoopConf);
                     }
