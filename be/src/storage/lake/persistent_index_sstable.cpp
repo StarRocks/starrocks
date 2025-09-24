@@ -70,7 +70,7 @@ Status PersistentIndexSstable::build_sstable(const phmap::btree_map<std::string,
         value->set_version(v.first);
         value->set_rssid(v.second.get_rssid());
         value->set_rowid(v.second.get_rowid());
-        builder.Add(Slice(k), Slice(index_value_pb.SerializeAsString()));
+        RETURN_IF_ERROR(builder.Add(Slice(k), Slice(index_value_pb.SerializeAsString())));
     }
     RETURN_IF_ERROR(builder.Finish());
     *filesz = builder.FileSize();
@@ -158,17 +158,12 @@ Status PersistentIndexSstableStreamBuilder::add(const Slice& key) {
         return Status::InvalidArgument("Builder already finished");
     }
 
-    if (!_status.ok()) {
-        return _status;
-    }
-
     IndexValuesWithVerPB index_value_pb;
     auto* val = index_value_pb.add_values();
     val->set_rowid(_sst_rowid++);
 
-    _table_builder->Add(key, Slice(index_value_pb.SerializeAsString()));
-    _status = _table_builder->status();
-    return _status;
+    RETURN_IF_ERROR(_table_builder->Add(key, Slice(index_value_pb.SerializeAsString())));
+    return _table_builder->status();
 }
 
 Status PersistentIndexSstableStreamBuilder::finish(uint64_t* file_size) {
@@ -176,18 +171,12 @@ Status PersistentIndexSstableStreamBuilder::finish(uint64_t* file_size) {
         return Status::InvalidArgument("Builder already finished");
     }
 
-    if (!_status.ok()) {
-        return _status;
+    RETURN_IF_ERROR(_table_builder->Finish());
+    _finished = true;
+    if (file_size != nullptr) {
+        *file_size = _table_builder->FileSize();
     }
-
-    _status = _table_builder->Finish();
-    if (_status.ok()) {
-        _finished = true;
-        if (file_size != nullptr) {
-            *file_size = _table_builder->FileSize();
-        }
-    }
-    return _status;
+    return _table_builder->status();
 }
 
 uint64_t PersistentIndexSstableStreamBuilder::num_entries() const {
@@ -200,10 +189,6 @@ FileInfo PersistentIndexSstableStreamBuilder::file_info() const {
     file_info.size = _table_builder ? _table_builder->FileSize() : 0;
     file_info.encryption_meta = _encryption_meta;
     return file_info;
-}
-
-Status PersistentIndexSstableStreamBuilder::status() const {
-    return _status;
 }
 
 } // namespace starrocks::lake

@@ -463,7 +463,7 @@ public class EditLog {
                 case OperationType.OP_DROP_COMPUTE_NODE: {
                     DropComputeNodeLog dropComputeNodeLog = (DropComputeNodeLog) journal.data();
                     GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo()
-                            .replayDropComputeNode(dropComputeNodeLog.getComputeNodeId());
+                            .replayDropComputeNode(dropComputeNodeLog);
                     break;
                 }
                 case OperationType.OP_ADD_BACKEND_V2: {
@@ -472,8 +472,8 @@ public class EditLog {
                     break;
                 }
                 case OperationType.OP_DROP_BACKEND_V2: {
-                    Backend be = (Backend) journal.data();
-                    GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().replayDropBackend(be);
+                    DropBackendInfo info = (DropBackendInfo) journal.data();
+                    GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().replayDropBackend(info);
                     break;
                 }
                 case OperationType.OP_UPDATE_HISTORICAL_NODE: {
@@ -482,8 +482,8 @@ public class EditLog {
                     break;
                 }
                 case OperationType.OP_BACKEND_STATE_CHANGE_V2: {
-                    Backend be = (Backend) journal.data();
-                    GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().updateInMemoryStateBackend(be);
+                    UpdateBackendInfo info = (UpdateBackendInfo) journal.data();
+                    GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().replayBackendStateChange(info);
                     break;
                 }
                 case OperationType.OP_ADD_FIRST_FRONTEND_V2:
@@ -493,21 +493,22 @@ public class EditLog {
                     break;
                 }
                 case OperationType.OP_REMOVE_FRONTEND_V2: {
-                    Frontend fe = (Frontend) journal.data();
-                    globalStateMgr.getNodeMgr().replayDropFrontend(fe);
-                    if (fe.getNodeName().equals(GlobalStateMgr.getCurrentState().getNodeMgr().getNodeName())) {
-                        throw new JournalInconsistentException("current fe " + fe + " is removed. will exit");
+                    DropFrontendInfo dropFrontendInfo = (DropFrontendInfo) journal.data();
+                    globalStateMgr.getNodeMgr().replayDropFrontend(dropFrontendInfo);
+                    if (dropFrontendInfo.getNodeName().equals(GlobalStateMgr.getCurrentState().getNodeMgr().getNodeName())) {
+                        throw new JournalInconsistentException("current fe "
+                                + dropFrontendInfo.getNodeName() + " is removed. will exit");
                     }
                     break;
                 }
                 case OperationType.OP_UPDATE_FRONTEND_V2: {
-                    Frontend fe = (Frontend) journal.data();
-                    globalStateMgr.getNodeMgr().replayUpdateFrontend(fe);
+                    UpdateFrontendInfo info = (UpdateFrontendInfo) journal.data();
+                    globalStateMgr.getNodeMgr().replayUpdateFrontend(info);
                     break;
                 }
                 case OperationType.OP_RESET_FRONTENDS: {
                     Frontend fe = (Frontend) journal.data();
-                    globalStateMgr.getNodeMgr().replayResetFrontends(fe);
+                    globalStateMgr.getNodeMgr().applyResetFrontends(fe);
                     break;
                 }
                 case OperationType.OP_TIMESTAMP_V2: {
@@ -522,12 +523,12 @@ public class EditLog {
                 }
                 case OperationType.OP_ADD_BROKER_V2: {
                     final ModifyBrokerInfo param = (ModifyBrokerInfo) journal.data();
-                    globalStateMgr.getBrokerMgr().replayAddBrokers(param.brokerName, param.brokerAddresses);
+                    globalStateMgr.getBrokerMgr().replayAddBrokers(param);
                     break;
                 }
                 case OperationType.OP_DROP_BROKER_V2: {
                     final ModifyBrokerInfo param = (ModifyBrokerInfo) journal.data();
-                    globalStateMgr.getBrokerMgr().replayDropBrokers(param.brokerName, param.brokerAddresses);
+                    globalStateMgr.getBrokerMgr().replayDropBrokers(param);
                     break;
                 }
                 case OperationType.OP_DROP_ALL_BROKER: {
@@ -1310,15 +1311,6 @@ public class EditLog {
         waitInfinity(task);
     }
 
-    /**
-     * Apply the in-memory change in WALApplier.
-     */
-    public void logEdit(short op, Writable writable, WALApplier applier) {
-        JournalTask task = submitLog(op, writable, -1);
-        waitInfinity(task);
-        applier.apply(writable);
-    }
-
     public void logJsonObject(short op, Object obj) {
         logEdit(op, new Writable() {
             @Override
@@ -1326,6 +1318,19 @@ public class EditLog {
                 Text.writeString(out, GsonUtils.GSON.toJson(obj));
             }
         });
+    }
+
+    /**
+     * Apply the in-memory change in WALApplier.
+     */
+    public void logJsonObject(short op, Object obj, WALApplier applier) {
+        logEdit(op, new Writable() {
+            @Override
+            public void write(DataOutput out) throws IOException {
+                Text.writeString(out, GsonUtils.GSON.toJson(obj));
+            }
+        });
+        applier.apply(obj);
     }
 
     /**
@@ -1561,40 +1566,36 @@ public class EditLog {
         }, -1);
     }
 
-    public void logAddComputeNode(ComputeNode computeNode) {
-        logJsonObject(OperationType.OP_ADD_COMPUTE_NODE, computeNode);
+    public void logAddComputeNode(ComputeNode computeNode, WALApplier applier) {
+        logJsonObject(OperationType.OP_ADD_COMPUTE_NODE, computeNode, applier);
     }
 
-    public void logAddBackend(Backend be) {
-        logJsonObject(OperationType.OP_ADD_BACKEND_V2, be);
+    public void logAddBackend(Backend be, WALApplier applier) {
+        logJsonObject(OperationType.OP_ADD_BACKEND_V2, be, applier);
     }
 
-    public void logDropComputeNode(DropComputeNodeLog log) {
-        logJsonObject(OperationType.OP_DROP_COMPUTE_NODE, log);
+    public void logDropComputeNode(DropComputeNodeLog log, WALApplier applier) {
+        logJsonObject(OperationType.OP_DROP_COMPUTE_NODE, log, applier);
     }
 
-    public void logDropBackend(Backend be) {
-        logJsonObject(OperationType.OP_DROP_BACKEND_V2, be);
+    public void logDropBackend(DropBackendInfo info, WALApplier applier) {
+        logJsonObject(OperationType.OP_DROP_BACKEND_V2, info, applier);
     }
 
-    public void logUpdateHistoricalNode(UpdateHistoricalNodeLog log) {
-        logJsonObject(OperationType.OP_UPDATE_HISTORICAL_NODE, log);
+    public void logUpdateHistoricalNode(UpdateHistoricalNodeLog log, WALApplier applier) {
+        logJsonObject(OperationType.OP_UPDATE_HISTORICAL_NODE, log, applier);
     }
 
-    public void logAddFrontend(Frontend fe) {
-        logJsonObject(OperationType.OP_ADD_FRONTEND_V2, fe);
+    public void logAddFrontend(Frontend fe, WALApplier applier) {
+        logJsonObject(OperationType.OP_ADD_FRONTEND_V2, fe, applier);
     }
 
-    public void logAddFirstFrontend(Frontend fe) {
-        logJsonObject(OperationType.OP_ADD_FIRST_FRONTEND_V2, fe);
+    public void logRemoveFrontend(DropFrontendInfo dropFrontendInfo, WALApplier applier) {
+        logJsonObject(OperationType.OP_REMOVE_FRONTEND_V2, dropFrontendInfo, applier);
     }
 
-    public void logRemoveFrontend(Frontend fe) {
-        logJsonObject(OperationType.OP_REMOVE_FRONTEND_V2, fe);
-    }
-
-    public void logUpdateFrontend(Frontend fe) {
-        logJsonObject(OperationType.OP_UPDATE_FRONTEND_V2, fe);
+    public void logUpdateFrontend(UpdateFrontendInfo info, WALApplier applier) {
+        logJsonObject(OperationType.OP_UPDATE_FRONTEND_V2, info, applier);
     }
 
     public void logFinishMultiDelete(MultiDeleteInfo info) {
@@ -1629,12 +1630,12 @@ public class EditLog {
         logJsonObject(OperationType.OP_LEADER_INFO_CHANGE_V2, info);
     }
 
-    public void logResetFrontends(Frontend frontend) {
-        logJsonObject(OperationType.OP_RESET_FRONTENDS, frontend);
+    public void logResetFrontends(Frontend frontend, WALApplier walApplier) {
+        logJsonObject(OperationType.OP_RESET_FRONTENDS, frontend, walApplier);
     }
 
-    public void logBackendStateChange(Backend be) {
-        logJsonObject(OperationType.OP_BACKEND_STATE_CHANGE_V2, be);
+    public void logBackendStateChange(UpdateBackendInfo info, WALApplier applier) {
+        logJsonObject(OperationType.OP_BACKEND_STATE_CHANGE_V2, info, applier);
     }
 
     public void logDatabaseRename(DatabaseInfo databaseInfo) {
@@ -1657,16 +1658,16 @@ public class EditLog {
         logJsonObject(OperationType.OP_RENAME_PARTITION_V2, tableInfo);
     }
 
-    public void logAddBroker(ModifyBrokerInfo info) {
-        logJsonObject(OperationType.OP_ADD_BROKER_V2, info);
+    public void logAddBroker(ModifyBrokerInfo info, WALApplier applier) {
+        logJsonObject(OperationType.OP_ADD_BROKER_V2, info, applier);
     }
 
-    public void logDropBroker(ModifyBrokerInfo info) {
-        logJsonObject(OperationType.OP_DROP_BROKER_V2, info);
+    public void logDropBroker(ModifyBrokerInfo info, WALApplier applier) {
+        logJsonObject(OperationType.OP_DROP_BROKER_V2, info, applier);
     }
 
-    public void logDropAllBroker(String brokerName) {
-        logJsonObject(OperationType.OP_DROP_ALL_BROKER_V2, new DropBrokerLog(brokerName));
+    public void logDropAllBroker(String brokerName, WALApplier applier) {
+        logJsonObject(OperationType.OP_DROP_ALL_BROKER_V2, new DropBrokerLog(brokerName), applier);
     }
 
     public void logExportCreate(ExportJob job) {
@@ -2192,16 +2193,16 @@ public class EditLog {
         logJsonObject(OperationType.OP_MODIFY_DICTIONARY_MGR, info);
     }
 
-    public void logDecommissionDisk(DecommissionDiskInfo info) {
-        logJsonObject(OperationType.OP_DECOMMISSION_DISK, info);
+    public void logDecommissionDisk(DecommissionDiskInfo info, WALApplier applier) {
+        logJsonObject(OperationType.OP_DECOMMISSION_DISK, info, applier);
     }
 
-    public void logCancelDecommissionDisk(CancelDecommissionDiskInfo info) {
-        logJsonObject(OperationType.OP_CANCEL_DECOMMISSION_DISK, info);
+    public void logCancelDecommissionDisk(CancelDecommissionDiskInfo info, WALApplier applier) {
+        logJsonObject(OperationType.OP_CANCEL_DECOMMISSION_DISK, info, applier);
     }
 
-    public void logDisableDisk(DisableDiskInfo info) {
-        logJsonObject(OperationType.OP_DISABLE_DISK, info);
+    public void logDisableDisk(DisableDiskInfo info, WALApplier applier) {
+        logJsonObject(OperationType.OP_DISABLE_DISK, info, applier);
     }
 
     public void logRecoverPartitionVersion(PartitionVersionRecoveryInfo info) {

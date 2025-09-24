@@ -19,10 +19,14 @@ import com.starrocks.catalog.OlapTable;
 import com.starrocks.common.Config;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.jmockit.Deencapsulation;
+import com.starrocks.common.util.DebugUtil;
 import com.starrocks.http.rest.TransactionResult;
 import com.starrocks.server.WarehouseManager;
-import com.starrocks.thrift.TNetworkAddress;
+import com.starrocks.thrift.TUniqueId;
 import com.starrocks.transaction.TransactionState;
+import com.starrocks.transaction.TransactionStmtExecutor;
+import mockit.Mock;
+import mockit.MockUp;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -35,29 +39,10 @@ public class StreamLoadMultiStmtTaskTest {
 
     @BeforeEach
     public void setUp() {
-        db = new Database(20000, "test_db");
-        multiTask = new StreamLoadMultiStmtTask(1L, db, "label_multi", "userA", "127.0.0.1", 10000L,
-                System.currentTimeMillis(), WarehouseManager.DEFAULT_RESOURCE);
-    }
-
-    @Test
-    public void testTryLoadExistingSubTask() throws Exception {
-        // prepare a sub task manually and put into taskMaps
-        StreamLoadTask sub = new StreamLoadTask(10L, new Database(), new OlapTable(), "label_multi", "userA",
-                "127.0.0.1", 5000, 1, 0, System.currentTimeMillis(), WarehouseManager.DEFAULT_RESOURCE);
-        Deencapsulation.setField(sub, "tableName", "t1");
-        Deencapsulation.invoke(sub, "setState", StreamLoadTask.State.LOADING);
-        java.util.Map<Integer, TNetworkAddress> addrMap = com.google.common.collect.Maps.newHashMap();
-        addrMap.put(0, new TNetworkAddress("beHost", 8040));
-        Deencapsulation.setField(sub, "channelIdToBEHTTPAddress", addrMap);
-        @SuppressWarnings("unchecked") java.util.Map<String, StreamLoadTask> map =
-                (java.util.Map<String, StreamLoadTask>) Deencapsulation.getField(multiTask, "taskMaps");
-        map.put("t1", sub);
-        TransactionResult resp = new TransactionResult();
-        TNetworkAddress addr = multiTask.tryLoad(0, "t1", resp);
-        Assertions.assertTrue(resp.stateOK());
-        Assertions.assertNotNull(addr);
-        Assertions.assertEquals("t1", multiTask.getTableName());
+        // Initialize basic fixtures
+        db = new Database(1L, "test_db");
+        multiTask = new StreamLoadMultiStmtTask(1L, db, "label_multi", "u", "127.0.0.1",
+                1000L, System.currentTimeMillis(), WarehouseManager.DEFAULT_RESOURCE);
     }
 
     @Test
@@ -88,6 +73,45 @@ public class StreamLoadMultiStmtTaskTest {
         multiTask.manualCancelTask(resp);
         Assertions.assertEquals("CANCELLED", multiTask.getStateName());
         Assertions.assertTrue(multiTask.endTimeMs() > 0);
+    }
+
+    @Test
+    public void testBeginTxnSetsExecutionIdAndResource() throws Exception {
+        // Capture loadId from task for later comparison
+        TUniqueId expectedLoadId = (TUniqueId) Deencapsulation.getField(multiTask, "loadId");
+
+        // Mock static beginStmt to assert context is pre-populated and set a fake txnId
+        new MockUp<TransactionStmtExecutor>() {
+            @Mock
+            public void beginStmt(com.starrocks.qe.ConnectContext ctx,
+                                  com.starrocks.sql.ast.txn.BeginStmt stmt,
+                                  TransactionState.LoadJobSourceType sourceType,
+                                  String labelOverride) {
+                // executionId must be set and convertible to non-empty label
+                Assertions.assertNotNull(ctx.getExecutionId());
+                String label = DebugUtil.printId(ctx.getExecutionId());
+                Assertions.assertNotNull(label);
+                Assertions.assertFalse(label.isEmpty());
+
+                // executionId should equal task.loadId
+                Assertions.assertEquals(expectedLoadId.getHi(), ctx.getExecutionId().getHi());
+                Assertions.assertEquals(expectedLoadId.getLo(), ctx.getExecutionId().getLo());
+
+                // compute resource should be propagated
+                Assertions.assertEquals(WarehouseManager.DEFAULT_RESOURCE, ctx.getCurrentComputeResource());
+
+                // labelOverride should equal the multi-statement task's label
+                Assertions.assertEquals("label_multi", labelOverride);
+
+                // simulate txn id assignment inside begin
+                ctx.setTxnId(987654321L);
+            }
+        };
+
+        TransactionResult resp = new TransactionResult();
+        multiTask.beginTxn(resp);
+        Assertions.assertTrue(resp.stateOK());
+        Assertions.assertEquals(987654321L, multiTask.getTxnId());
     }
 
     @Test
@@ -133,6 +157,6 @@ public class StreamLoadMultiStmtTaskTest {
         multiTask.afterVisible(txnState, true);
         multiTask.replayOnVisible(txnState);
         List<List<String>> show = multiTask.getShowInfo();
-        Assertions.assertTrue(show.isEmpty() || show.size() >= 0);
+        Assertions.assertEquals(2, show.size());
     }
 }

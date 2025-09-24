@@ -88,14 +88,12 @@ public:
 
     uint64_t num_entries() const;
     FileInfo file_info() const;
-    Status status() const;
     std::string file_path() const { return _wf->filename(); }
 
 private:
     std::unique_ptr<sstable::TableBuilder> _table_builder;
     std::unique_ptr<sstable::FilterPolicy> _filter_policy;
     std::unique_ptr<WritableFile> _wf;
-    Status _status;
     bool _finished;
     std::string _encryption_meta;
     uint32_t _sst_rowid = 0;
