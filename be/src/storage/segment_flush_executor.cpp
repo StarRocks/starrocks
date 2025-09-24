@@ -25,6 +25,7 @@
 #include "gen_cpp/Types_types.h"
 #include "gen_cpp/internal_service.pb.h"
 #include "runtime/current_thread.h"
+#include "service/backend_options.h"
 #include "service/brpc.h"
 #include "storage/delta_writer.h"
 
@@ -178,7 +179,9 @@ Status SegmentFlushToken::submit(DeltaWriter* writer, brpc::Controller* cntl,
     ClosureGuard closure_guard(done);
     Status token_st = status();
     if (!token_st.ok()) {
-        Status st = Status::InternalError("Segment flush token is not ok. The status: " + token_st.to_string());
+        Status st = Status::InternalError(
+                fmt::format("Secondary replica on host {} failed to flush segment, tablet_id: {}. Reason: {}",
+                            BackendOptions::get_localhost(), writer->tablet()->tablet_id(), token_st.to_string()));
         st.to_protobuf(response->mutable_status());
         return st;
     }

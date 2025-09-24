@@ -21,10 +21,12 @@
 
 #include "fs/fs_posix.h"
 #include "gen_cpp/data.pb.h"
+#include "gutil/strings/join.h"
 #include "runtime/current_thread.h"
 #include "runtime/exec_env.h"
 #include "runtime/load_fail_point.h"
 #include "runtime/mem_tracker.h"
+#include "service/backend_options.h"
 #include "storage/delta_writer.h"
 #include "util/brpc_stub_cache.h"
 #include "util/raw_container.h"
@@ -383,14 +385,26 @@ void ReplicateToken::_sync_segment(std::unique_ptr<SegmentPB> segment, bool eos)
         }
 
         if (_failed_node_id.size() > _max_fail_replica_num) {
-            LOG(WARNING) << "Failed to sync segment err " << st << " by " << debug_string() << " fail_num "
-                         << _failed_node_id.size() << " max_fail_num " << _max_fail_replica_num;
+            std::vector<const ReplicateChannel*> failed_channels;
             for (const auto& [_, channel] : _replicate_channels) {
                 if (_failed_node_id.count(channel->node_id()) == 0) {
                     channel->cancel(Status::InternalError("failed replica num exceed max fail num"));
+                } else {
+                    failed_channels.push_back(channel.get());
                 }
             }
-            return set_status(st);
+            std::string failed_replica_hosts = JoinMapped(
+                    failed_channels, [](const ReplicateChannel* ch) { return ch->host(); }, ",");
+
+            auto err_msg = fmt::format(
+                    "failed to sync segment to enough replicas. tablet_id={}, "
+                    "num_failed_replicas={}, max_allowed_failed_replicas={}, primary_replica={}, failed_replicas=[{}], "
+                    "last_error='{}'",
+                    _opt->tablet_id, _failed_node_id.size(), _max_fail_replica_num, BackendOptions::get_localhost(),
+                    failed_replica_hosts, st.to_string());
+
+            LOG(WARNING) << err_msg;
+            return set_status(Status::InternalError(err_msg));
         }
     }
 }
