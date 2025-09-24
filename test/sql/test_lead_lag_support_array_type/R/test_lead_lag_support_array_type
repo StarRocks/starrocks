@@ -1,0 +1,136 @@
+-- name: test_lead_lag_support_array_type
+CREATE TABLE `t0` (
+  `c0` int(11) NULL COMMENT "",
+  `c1` int(11) NULL COMMENT "",
+  `c2` varchar(65533) NULL COMMENT "",
+  `c3` varchar(65533) NULL COMMENT "",
+  `c4` array<varchar(65533)> NULL COMMENT ""
+) ENGINE=OLAP 
+DUPLICATE KEY(`c0`, `c1`, `c2`)
+DISTRIBUTED BY RANDOM
+PROPERTIES (
+"replication_num" = "1"
+);
+-- result:
+-- !result
+insert into t0 select 
+    i%10 as c0,
+    i as c1,
+    if (i % 3=0, NULL, concat("foo_",i)) as c2,
+    if (i % 3=0, NULL, concat("bar_",i)) as c3,
+    if (i % 3=0, NULL, [concat("foo_",i),concat("bar_",i)]) as c4
+from table(generate_series(1,10000)) t(i);
+-- result:
+-- !result
+with cte as(
+select 
+     first_value(c2) over(partition by c0 order by c1) a,
+     first_value(c3) over(partition by c0 order by c1) b,
+     first_value(c4) over(partition by c0 order by c1) c
+from t0
+),
+cte1 as(
+select concat(a, ",", b)=array_join(c, ",") pred from cte
+)
+select assert_true(count(pred)=count(if(pred,1,NULL))) from cte1;
+-- result:
+1
+-- !result
+with cte as(
+select 
+     first_value(c2 ignore nulls) over(partition by c0 order by c1) a,
+     first_value(c3 ignore nulls) over(partition by c0 order by c1) b,
+     first_value(c4 ignore nulls) over(partition by c0 order by c1) c
+from t0
+),
+cte1 as(
+select concat(a, ",", b)=array_join(c, ",") pred from cte
+)
+select assert_true(count(pred)=count(if(pred,1,NULL))) from cte1;
+-- result:
+1
+-- !result
+with cte as(
+select 
+     last_value(c2) over(partition by c0 order by c1) a,
+     last_value(c3) over(partition by c0 order by c1) b,
+     last_value(c4) over(partition by c0 order by c1) c
+from t0
+),
+cte1 as(
+select concat(a, ",", b)=array_join(c, ",") pred from cte
+)
+select assert_true(count(pred)=count(if(pred,1,NULL))) from cte1;
+-- result:
+1
+-- !result
+with cte as(
+select 
+     last_value(c2 ignore nulls) over(partition by c0 order by c1) a,
+     last_value(c3 ignore nulls) over(partition by c0 order by c1) b,
+     last_value(c4 ignore nulls) over(partition by c0 order by c1) c
+from t0
+),
+cte1 as(
+select concat(a, ",", b)=array_join(c, ",") pred from cte
+)
+select assert_true(count(pred)=count(if(pred,1,NULL))) from cte1;
+-- result:
+1
+-- !result
+with cte as(
+select 
+     lead(c2) over(partition by c0 order by c1) a,
+     lead(c3) over(partition by c0 order by c1) b,
+     lead(c4) over(partition by c0 order by c1) c
+from t0
+),
+cte1 as(
+select concat(a, ",", b)=array_join(c, ",") pred from cte
+)
+select assert_true(count(pred)=count(if(pred,1,NULL))) from cte1;
+-- result:
+1
+-- !result
+with cte as(
+select 
+     lead(c2 ignore nulls) over(partition by c0 order by c1) a,
+     lead(c3 ignore nulls) over(partition by c0 order by c1) b,
+     lead(c4 ignore nulls) over(partition by c0 order by c1) c
+from t0
+),
+cte1 as(
+select concat(a, ",", b)=array_join(c, ",") pred from cte
+)
+select assert_true(count(pred)=count(if(pred,1,NULL))) from cte1;
+-- result:
+1
+-- !result
+with cte as(
+select 
+     lag(c2) over(partition by c0 order by c1) a,
+     lag(c3) over(partition by c0 order by c1) b,
+     lag(c4) over(partition by c0 order by c1) c
+from t0
+),
+cte1 as(
+select concat(a, ",", b)=array_join(c, ",") pred from cte
+)
+select assert_true(count(pred)=count(if(pred,1,NULL))) from cte1;
+-- result:
+1
+-- !result
+with cte as(
+select 
+     lag(c2 ignore nulls) over(partition by c0 order by c1) a,
+     lag(c3 ignore nulls) over(partition by c0 order by c1) b,
+     lag(c4 ignore nulls) over(partition by c0 order by c1) c
+from t0
+),
+cte1 as(
+select concat(a, ",", b)=array_join(c, ",") pred from cte
+)
+select assert_true(count(pred)=count(if(pred,1,NULL))) from cte1;
+-- result:
+1
+-- !result
