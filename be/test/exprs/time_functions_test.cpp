@@ -4727,4 +4727,14 @@ TEST_F(TimeFunctionsTest, hourFromUnixTime) {
     }
 }
 
+TEST_F(TimeFunctionsTest, currentTimezoneTest) {
+    TQueryGlobals globals;
+    globals.__set_time_zone("America/Los_Angeles");
+    starrocks::RuntimeState state(globals);
+    starrocks::FunctionUtils futils(&state);
+    ColumnPtr result = TimeFunctions::current_timezone(futils.get_fn_ctx(), Columns()).value();
+    ASSERT_TRUE(result->is_constant());
+    auto v = ColumnHelper::get_const_value<TYPE_VARCHAR>(result);
+    ASSERT_EQ("America/Los_Angeles", v);
+}
 } // namespace starrocks
