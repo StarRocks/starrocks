@@ -11,7 +11,7 @@ For more about SQL Blacklist, see [Manage SQL Blacklist](../../../../administrat
 :::tip
 
 - This operation requires the SYSTEM-level BLACKLIST privilege. You can follow the instructions in [GRANT](../../account-management/GRANT.md) to grant this privilege.
-- Currently, StarRocks supports adding SELECT statements to the SQL Blacklist.
+- The blacklist is only for SELECT statements, INSERT statements (from v3.1 onwards), and CTAS statements (from v3.4 onwards).
 
 :::
 
@@ -59,4 +59,22 @@ mysql> ADD SQLBLACKLIST
         from test_all_type_nullable2 
     except select id_int, id_tinyint, id_varchar 
         from test_basic_nullable";
+```
+
+Example 5: Prohibit all INSERT INTO statements:
+
+```sql
+ADD SQLBLACKLIST "(?i)^insert\\s+into\\s+.*";
+```
+
+Example 6: Prohibit all INSERT INTO ... VALUES statements:
+
+```sql
+ADD SQLBLACKLIST "(?i)^insert\\s+into\\s+.*values\\s*\\(";
+```
+
+Example 7: Prohibit all INSERT INTO ... VALUES statements except those against the system-defined view `_statistics_.column_statistics`:
+
+```sql
+ADD SQLBLACKLIST "(?i)^insert\\s+into\\s+(?!column_statistics\\b).*values\\s*\\(";
 ```

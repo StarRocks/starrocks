@@ -5,7 +5,7 @@ sidebar_position: 80
 
 # ブラックリスト管理
 
-場合によっては、管理者が特定のSQLパターンを無効にして、SQLがクラスタのクラッシュや予期しない高い同時実行クエリを引き起こすのを避ける必要があります。
+場合によっては、管理者が特定のSQLパターンを無効にして、SQLがクラスタのクラッシュや予期しない高い同時実行クエリを引き起こすのを避ける必要があります。ブラックリストは、SELECT ステートメント、INSERT ステートメント（v3.1 以降）、および CTAS ステートメント（v3.4 以降）にのみ適用されます。
 
 StarRocksは、ユーザーがSQLブラックリストを追加、表示、削除することを可能にします。
 
@@ -65,6 +65,24 @@ ADD SQLBLACKLIST "select id_int from test_all_type_select1 order by id_int limit
 
 ~~~sql
 ADD SQLBLACKLIST "select id_int \\* 4, id_tinyint, id_varchar from test_all_type_nullable except select id_int, id_tinyint, id_varchar from test_basic except select (id_int \\* 9 \\- 8) \\/ 2, id_tinyint, id_varchar from test_all_type_nullable2 except select id_int, id_tinyint, id_varchar from test_basic_nullable"
+~~~
+
+* すべての INSERT INTO ステートメントを禁止する:
+
+~~~sql
+ADD SQLBLACKLIST "(?i)^insert\\s+into\\s+.*";
+~~~
+
+* すべての INSERT INTO ... VALUES ステートメントを禁止する:
+
+~~~sql
+ADD SQLBLACKLIST "(?i)^insert\\s+into\\s+.*values\\s*\\(";
+~~~
+
+* システム定義ビュー `_statistics_.column_statistics` に対するものを除き、すべての INSERT INTO ... VALUES ステートメントを禁止する:
+
+~~~sql
+ADD SQLBLACKLIST "(?i)^insert\\s+into\\s+(?!column_statistics\\b).*values\\s*\\(";
 ~~~
 
 ## ブラックリストの表示
