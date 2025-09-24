@@ -46,8 +46,12 @@ Status PersistentIndexSstable::init(std::unique_ptr<RandomAccessFile> rf, const 
             // If delvec is already provided, use it directly.
             _delvec = std::move(delvec);
         } else {
-            DCHECK(metadata != nullptr);
-            DCHECK(tablet_mgr != nullptr);
+            if (metadata == nullptr) {
+                return Status::InvalidArgument("metadata is null when loading delvec from file");
+            }
+            if (tablet_mgr == nullptr) {
+                return Status::InvalidArgument("tablet_mgr is null when loading delvec from file");
+            }
             // otherwise, load delvec from file
             LakeIOOptions lake_io_opts{.fill_data_cache = true, .skip_disk_cache = false};
             auto delvec_loader =

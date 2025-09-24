@@ -511,7 +511,9 @@ Status MetaFileBuilder::_finalize_delvec(int64_t version, int64_t txn_id) {
     }
     // collect version from sstable delvecs
     for (const auto& sst : _tablet_meta->sstable_meta().sstables()) {
-        refered_versions.insert(sst.delvec().version());
+        if (sst.has_delvec() && sst.delvec().size() > 0) {
+            refered_versions.insert(sst.delvec().version());
+        }
     }
 
     auto itr = _tablet_meta->mutable_delvec_meta()->mutable_version_to_file()->begin();

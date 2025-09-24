@@ -492,7 +492,7 @@ TEST_F(LakePersistentIndexTest, test_major_compaction_with_predicate) {
     total_key_slices.reserve(M * N);
     total_keys.reserve(M * N);
     auto tablet_id = _tablet_metadata->id();
-    auto index = std::make_unique<LakePersistentIndex>(tablet_mgr.get(), tablet_id);
+    auto index = std::make_unique<LakePersistentIndex>(_tablet_mgr.get(), tablet_id);
     ASSERT_OK(index->init(_tablet_metadata));
     int k = 0;
     for (int i = 0; i < M; ++i) {
