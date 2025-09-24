@@ -12,8 +12,65 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// This file has been split into separate files for better compilation performance:
-// - aggregate_resolver_sumcount_only.cpp: contains register_sumcount()
-// - aggregate_resolver_distinct.cpp: contains register_distinct()
-//
-// The original implementations have been moved to the respective files above.
+#include "column/type_traits.h"
+#include "exprs/agg/factory/aggregate_factory.hpp"
+#include "exprs/agg/factory/aggregate_resolver.hpp"
+#include "exprs/agg/sum.h"
+#include "types/logical_type.h"
+
+namespace starrocks {
+
+struct SumDispatcher {
+    template <LogicalType lt>
+    void operator()(AggregateFuncResolver* resolver) {
+        if constexpr (lt_is_decimal<lt> && !lt_is_decimal256<lt>) {
+            resolver->add_decimal_mapping<lt, TYPE_DECIMAL128, true>("decimal_sum");
+        } else if constexpr (lt_is_decimal256<lt>) {
+            resolver->add_decimal_mapping<lt, TYPE_DECIMAL256, true>("decimal_sum");
+        } else if constexpr (lt_is_numeric<lt> || lt_is_decimalv2<lt>) {
+            using SumState = SumAggregateState<RunTimeCppType<SumResultLT<lt>>>;
+            resolver->add_aggregate_mapping<lt, SumResultLT<lt>, SumState>(
+                    "sum", true, AggregateFactory::MakeSumAggregateFunction<lt>());
+        }
+    }
+};
+
+VALUE_GUARD(LogicalType, StorageSumLTGuard, lt_is_sum_in_storage, TYPE_BOOLEAN, TYPE_TINYINT, TYPE_SMALLINT, TYPE_INT,
+            TYPE_BIGINT, TYPE_LARGEINT, TYPE_FLOAT, TYPE_DOUBLE, TYPE_DECIMAL, TYPE_DECIMALV2, TYPE_DECIMAL32,
+            TYPE_DECIMAL64, TYPE_DECIMAL128);
+
+struct StorageSumDispatcher {
+    template <LogicalType lt>
+    void operator()(AggregateFuncResolver* resolver) {
+        if constexpr (lt_is_sum_in_storage<lt>) {
+            using SumState = SumAggregateState<RunTimeCppType<lt>>;
+            resolver->add_aggregate_mapping<lt, lt, SumState>(
+                    "sum", true,
+                    std::make_shared<SumAggregateFunction<lt, RunTimeCppType<lt>, lt, RunTimeCppType<lt>>>());
+        }
+    }
+};
+
+void AggregateFuncResolver::register_sumcount() {
+    for (auto type : aggregate_types()) {
+        type_dispatch_all(type, SumDispatcher(), this);
+    }
+
+    // In storage layer, sum result type is the same as input type.
+    // So we need to add these functions here to support it.
+    // Some of the following functions will be the same as the above ones.
+    for (auto type : aggregate_types()) {
+        type_dispatch_all(type, StorageSumDispatcher(), this);
+    }
+
+    _infos_mapping.emplace(std::make_tuple("count", TYPE_BIGINT, TYPE_BIGINT, false, false),
+                           AggregateFactory::MakeCountAggregateFunction<false>());
+    _infos_mapping.emplace(std::make_tuple("count", TYPE_BIGINT, TYPE_BIGINT, true, false),
+                           AggregateFactory::MakeCountAggregateFunction<true>());
+    _infos_mapping.emplace(std::make_tuple("count", TYPE_BIGINT, TYPE_BIGINT, false, true),
+                           AggregateFactory::MakeCountNullableAggregateFunction<false>());
+    _infos_mapping.emplace(std::make_tuple("count", TYPE_BIGINT, TYPE_BIGINT, true, true),
+                           AggregateFactory::MakeCountNullableAggregateFunction<true>());
+}
+
+} // namespace starrocks
