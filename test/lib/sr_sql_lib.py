@@ -1442,7 +1442,7 @@ class StarrocksSQLApiLib(object):
         else:
             if exp.startswith(REGEX_FLAG):
                 log.info("[check regex]: %s" % exp[len(REGEX_FLAG) :])
-                tools.assert_regexp_matches(
+                tools.assert_regex(
                     r"%s" % str(act),
                     exp[len(REGEX_FLAG) :],
                     "sql result not match regex:\n- [SQL]: %s\n- [exp]: %s\n- [act]: %s\n---"
@@ -3155,7 +3155,7 @@ out.append("${{dictMgr.NO_DICT_STRING_COLUMNS.contains(cid)}}")
             act.append(processed_row)
 
         log.info("[check regex]: %s" % exp[len(REGEX_FLAG) :])
-        tools.assert_regexp_matches(
+        tools.assert_regex(
             r"%s" % str(act),
             exp[len(REGEX_FLAG) :],
             "sql result not match regex:\n- [SQL]: %s\n- [exp]: %s\n- [act]: %s\n---"
