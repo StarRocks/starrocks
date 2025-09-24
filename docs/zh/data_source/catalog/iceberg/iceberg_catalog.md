@@ -275,7 +275,7 @@ REST catalog 的 `MetastoreParams`：
 
 必需：否
 
-描述：要使用的授权协议类型。默认值：`NONE`。有效值：`OAUTH2`，需要 `token` 或 `credential`。
+描述：要使用的授权协议类型。默认值：`NONE`。有效值：`OAUTH2` 和 `JWT`。当设置为 `OAUTH2` 时，需要指定 `iceberg.catalog.oauth2.token` 或 `iceberg.catalog.oauth2.credential`。当设置为 `JWT` 时，可省略  `token` 或 `credential`，需要使用 `JWT` 方式登录 StarRocks 集群。StarRocks 会使用登陆用户的 JWT 令牌访问 Catalog。
 
 ###### iceberg.catalog.oauth2.token
 
