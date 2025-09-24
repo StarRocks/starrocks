@@ -8,6 +8,7 @@ Modal.setAppElement('#__docusaurus');
 
 export default function FloatingButtonWithModal({
   modalTitle,
+  modalDisclaimer,
   iframeSrc,
   initialWidth = 1000,
   initialHeight = 500,
@@ -52,6 +53,9 @@ export default function FloatingButtonWithModal({
           <div className="modal-header">
             <h3>{modalTitle}</h3>
             <button onClick={closeModal} className="close-button">&times;</button>
+          </div>
+          <div>
+            <p>{modalDisclaimer}</p>
           </div>
           <iframe
             src={iframeSrc}
