@@ -1226,123 +1226,142 @@ public class LowCardinalityTest2 extends PlanTestBase {
                 "select row_number() over( partition by L_COMMENT order by L_PARTKEY) as rm from lineitem" +
                 ") t where rm < 10";
         plan = getCostExplain(sql);
+<<<<<<< HEAD
         assertContains(plan, "  4:ANALYTIC\n" +
                 "  |  functions: [, row_number[(); args: ; result: BIGINT; args nullable: false; result nullable: true], ]\n"
                 +
                 "  |  partition by: [16: L_COMMENT, VARCHAR(44), false]\n" +
                 "  |  order by: [2: L_PARTKEY, INT, false] ASC");
         assertContains(plan, "  3:Decode\n" +
+=======
+        assertContains(plan, "  4:Decode\n" +
+>>>>>>> 0c45329a51 ([Enhancement] Low cardinality optimization on analytic operator obove  table functions (#63378))
                 "  |  <dict id 20> : <string id 16>");
-        assertContains(plan, "  2:SORT\n" +
-                "  |  order by: [20, INT, false] ASC, [2, INT, false] ASC\n" +
-                "  |  analytic partition by: [20, INT, false]");
-        assertContains(plan, "  1:PARTITION-TOP-N\n" +
-                "  |  partition by: [20: L_COMMENT, INT, false] ");
-        assertContains(plan, "  |  order by: [20, INT, false] ASC, [2, INT, false] ASC");
+
+        assertContains(plan, "  3:ANALYTIC\n" +
+                "  |  functions: [, row_number[(); args: ; result: BIGINT; " +
+                "args nullable: false; result nullable: true], ]\n" +
+                "  |  partition by: [20: L_COMMENT, INT, false]\n" +
+                "  |  order by: [2: L_PARTKEY, INT, false] ASC\n" +
+                "  |  window: ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW");
 
         // row number
         sql = "select * from (select L_COMMENT,l_quantity, row_number() over " +
                 "(partition by L_COMMENT order by l_quantity desc) rn from lineitem )t where rn <= 10;";
         plan = getCostExplain(sql);
+<<<<<<< HEAD
         assertContains(plan, "  4:ANALYTIC\n" +
                 "  |  functions: [, row_number[(); args: ; result: BIGINT; args nullable: false; result nullable: true], ]\n"
                 +
                 "  |  partition by: [16: L_COMMENT, VARCHAR(44), false]\n" +
                 "  |  order by: [5: L_QUANTITY, DOUBLE, false] DESC");
         assertContains(plan, "  3:Decode\n" +
+=======
+        assertContains(plan, "  4:Decode\n" +
+>>>>>>> 0c45329a51 ([Enhancement] Low cardinality optimization on analytic operator obove  table functions (#63378))
                 "  |  <dict id 19> : <string id 16>");
-        assertContains(plan, "  2:SORT\n" +
-                "  |  order by: [19, INT, false] ASC, [5, DOUBLE, false] DESC\n" +
-                "  |  analytic partition by: [19, INT, false]");
-        assertContains(plan, "  1:PARTITION-TOP-N\n" +
-                "  |  partition by: [19: L_COMMENT, INT, false] \n" +
-                "  |  partition limit: 10\n" +
-                "  |  order by: [19, INT, false] ASC, [5, DOUBLE, false] DESC\n" +
-                "  |  offset: 0");
+        assertContains(plan, "  3:ANALYTIC\n" +
+                "  |  functions: [, row_number[(); args: ; result: BIGINT; " +
+                "args nullable: false; result nullable: true], ]\n" +
+                "  |  partition by: [19: L_COMMENT, INT, false]\n" +
+                "  |  order by: [5: L_QUANTITY, DOUBLE, false] DESC\n" +
+                "  |  window: ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW");
 
         // rank
         sql = "select * from (select L_COMMENT,l_quantity, rank() over " +
                 "(partition by L_COMMENT order by l_quantity desc) rn from lineitem )t where rn <= 10;";
         plan = getCostExplain(sql);
+<<<<<<< HEAD
         assertContains(plan, "  4:ANALYTIC\n" +
                 "  |  functions: [, rank[(); args: ; result: BIGINT; args nullable: false; result nullable: true], ]\n"
                 +
                 "  |  partition by: [16: L_COMMENT, VARCHAR(44), false]\n" +
                 "  |  order by: [5: L_QUANTITY, DOUBLE, false] DESC");
         assertContains(plan, "  3:Decode\n" +
+=======
+        assertContains(plan, "  4:Decode\n" +
+>>>>>>> 0c45329a51 ([Enhancement] Low cardinality optimization on analytic operator obove  table functions (#63378))
                 "  |  <dict id 19> : <string id 16>");
-        assertContains(plan, "  2:SORT\n" +
-                "  |  order by: [19, INT, false] ASC, [5, DOUBLE, false] DESC\n" +
-                "  |  analytic partition by: [19, INT, false]");
-        assertContains(plan, "  1:PARTITION-TOP-N\n" +
-                "  |  type: RANK\n" +
-                "  |  partition by: [19: L_COMMENT, INT, false] \n" +
-                "  |  partition limit: 10\n" +
-                "  |  order by: [19, INT, false] ASC, [5, DOUBLE, false] DESC");
+        assertContains(plan, "  3:ANALYTIC\n" +
+                "  |  functions: [, rank[(); args: ; result: BIGINT; " +
+                "args nullable: false; result nullable: true], ]\n" +
+                "  |  partition by: [19: L_COMMENT, INT, false]\n" +
+                "  |  order by: [5: L_QUANTITY, DOUBLE, false] DESC\n" +
+                "  |  window: RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW");
 
         // mul-column partition by
         sql = "select * from (select L_COMMENT,l_quantity, rank() over " +
                 "(partition by L_COMMENT, l_shipmode order by l_quantity desc) rn from lineitem )t where rn <= 10;";
         plan = getCostExplain(sql);
+<<<<<<< HEAD
         assertContains(plan, "  4:ANALYTIC\n" +
                 "  |  functions: [, rank[(); args: ; result: BIGINT; args nullable: false; result nullable: true], ]\n"
                 +
                 "  |  partition by: [16: L_COMMENT, VARCHAR(44), false], [15: L_SHIPMODE, VARCHAR, false]\n" +
                 "  |  order by: [5: L_QUANTITY, DOUBLE, false] DESC");
         assertContains(plan, "  3:Decode\n" +
+=======
+        assertContains(plan, "  4:Decode\n" +
+>>>>>>> 0c45329a51 ([Enhancement] Low cardinality optimization on analytic operator obove  table functions (#63378))
                 "  |  <dict id 19> : <string id 16>");
-        assertContains(plan, "  2:SORT\n" +
-                "  |  order by: [19, INT, false] ASC, [15, VARCHAR, false] ASC, [5, DOUBLE, false] DESC\n" +
-                "  |  analytic partition by: [19, INT, false], [15: L_SHIPMODE, VARCHAR, false]");
-        assertContains(plan, "  1:PARTITION-TOP-N\n" +
-                "  |  type: RANK\n" +
-                "  |  partition by: [19: L_COMMENT, INT, false] , [15: L_SHIPMODE, CHAR, false] \n" +
-                "  |  partition limit: 10\n" +
-                "  |  order by: [19, INT, false] ASC, [15, VARCHAR, false] ASC, [5, DOUBLE, false] DESC\n" +
-                "  |  offset: 0");
+        assertContains(plan, "  3:ANALYTIC\n" +
+                "  |  functions: [, rank[(); args: ; result: BIGINT; " +
+                "args nullable: false; result nullable: true], ]\n" +
+                "  |  partition by: [19: L_COMMENT, INT, false], [15: L_SHIPMODE, VARCHAR, false]\n" +
+                "  |  order by: [5: L_QUANTITY, DOUBLE, false] DESC\n" +
+                "  |  window: RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW");
 
         // partition column with expr
         sql = "SELECT S_ADDRESS, MAX(S_SUPPKEY) over(partition by S_COMMENT order by S_NAME) FROM supplier_nullable";
         plan = getCostExplain(sql);
-        assertContains(plan, "  3:ANALYTIC\n" +
-                "  |  functions: [, max[([1: S_SUPPKEY, INT, false]); args: INT; result: INT; " +
-                "args nullable: false; result nullable: true], ]\n" +
-                "  |  partition by: [7: S_COMMENT, VARCHAR(101), false]\n" +
-                "  |  order by: [2: S_NAME, VARCHAR, false] ASC");
-        assertContains(plan, "  2:Decode\n" +
-                "  |  <dict id 10> : <string id 3>\n" +
-                "  |  <dict id 11> : <string id 7>");
-        assertContains(plan, "  1:SORT\n" +
-                "  |  order by: [11, INT, false] ASC, [2, VARCHAR, false] ASC\n" +
-                "  |  analytic partition by: [11, INT, false]");
+        assertContains(plan, "  4:Decode\n" +
+                "  |  <dict id 10> : <string id 3>");
+        assertContains(plan, "  3:Project\n" +
+                "  |  output columns:\n" +
+                "  |  9 <-> [9: max(1: S_SUPPKEY), INT, true]\n" +
+                "  |  10 <-> [10: S_ADDRESS, INT, true]");
+        assertContains(plan, "  2:ANALYTIC\n" +
+                "  |  functions: [, max[([1: S_SUPPKEY, INT, false]); " +
+                "args: INT; result: INT; args nullable: false; result nullable: true], ]\n" +
+                "  |  partition by: [11: S_COMMENT, INT, false]\n" +
+                "  |  order by: [2: S_NAME, VARCHAR, false] ASC\n" +
+                "  |  window: RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW");
 
         sql = "SELECT S_ADDRESS, MAX(S_SUPPKEY) over(partition by concat(S_COMMENT, 'a') order by S_NAME) FROM supplier_nullable";
         plan = getCostExplain(sql);
-        assertContains(plan, "  4:ANALYTIC\n" +
-                "  |  functions: [, max[([9: S_SUPPKEY, INT, false]); args: INT; result: INT; " +
-                "args nullable: false; result nullable: true], ]\n" +
-                "  |  partition by: [17: concat, VARCHAR, true]\n" +
-                "  |  order by: [2: S_NAME, VARCHAR, false] ASC");
-        assertContains(plan, "  3:Decode\n" +
-                "  |  <dict id 20> : <string id 17>");
+        assertContains(plan, "  3:ANALYTIC\n" +
+                "  |  functions: [, max[([9: S_SUPPKEY, INT, false]); " +
+                "args: INT; result: INT; args nullable: false; result nullable: true], ]\n" +
+                "  |  partition by: [20: concat, INT, true]\n" +
+                "  |  order by: [2: S_NAME, VARCHAR, false] ASC\n" +
+                "  |  window: RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW");
         assertContains(plan, "  2:SORT\n" +
                 "  |  order by: [20, INT, true] ASC, [2, VARCHAR, false] ASC\n" +
-                "  |  analytic partition by: [20, INT, true]");
+                "  |  analytic partition by: [20: concat, INT, true]");
+
+        assertContains(plan, "  1:Project\n" +
+                "  |  output columns:\n" +
+                "  |  2 <-> [2: S_NAME, CHAR, false]\n" +
+                "  |  9 <-> [1: S_SUPPKEY, INT, false]\n" +
+                "  |  11 <-> [3: S_ADDRESS, VARCHAR, true]\n" +
+                "  |  20 <-> DictDefine([19: S_COMMENT, INT, false], [concat[(<place-holder>, 'a'); " +
+                "args: VARCHAR; result: VARCHAR; args nullable: false; result nullable: true]])\n");
 
         // partition column is not dict column
         sql = "SELECT S_ADDRESS, MAX(S_SUPPKEY) over(partition by S_NAME order by S_COMMENT) FROM supplier_nullable";
         plan = getCostExplain(sql);
-        assertContains(plan, "  3:ANALYTIC\n" +
-                "  |  functions: [, max[([1: S_SUPPKEY, INT, false]); args: INT; result: INT; " +
-                "args nullable: false; result nullable: true], ]\n" +
+        assertContains(plan, "  4:Decode\n" +
+                "  |  <dict id 10> : <string id 3>");
+        assertContains(plan, "  3:Project\n" +
+                "  |  output columns:\n" +
+                "  |  9 <-> [9: max(1: S_SUPPKEY), INT, true]\n" +
+                "  |  10 <-> [10: S_ADDRESS, INT, true]");
+        assertContains(plan, "  2:ANALYTIC\n" +
+                "  |  functions: [, max[([1: S_SUPPKEY, INT, false]); " +
+                "args: INT; result: INT; args nullable: false; result nullable: true], ]\n" +
                 "  |  partition by: [2: S_NAME, VARCHAR, false]\n" +
-                "  |  order by: [7: S_COMMENT, VARCHAR(101), false] ASC");
-        assertContains(plan, "  2:Decode\n" +
-                "  |  <dict id 10> : <string id 3>\n" +
-                "  |  <dict id 11> : <string id 7>");
-        assertContains(plan, "  1:SORT\n" +
-                "  |  order by: [2, VARCHAR, false] ASC, [11, INT, false] ASC\n" +
-                "  |  analytic partition by: [2: S_NAME, VARCHAR, false]");
+                "  |  order by: [11: S_COMMENT, INT, false] ASC\n" +
+                "  |  window: RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW");
 
         // there is not DecodeNode
         sql = "SELECT /*+SET_VAR(cbo_enable_low_cardinality_optimize=false)*/" +
@@ -1493,14 +1512,12 @@ public class LowCardinalityTest2 extends PlanTestBase {
 
         // window function with full order by
         sql = "select rank() over (order by S_ADDRESS) as rk from supplier_nullable";
-        plan = getFragmentPlan(sql);
-        assertContains(plan, "  4:ANALYTIC\n" +
-                "  |  functions: [, rank(), ]\n" +
-                "  |  order by: 3: S_ADDRESS ASC\n" +
+        plan = getVerboseExplain(sql);
+        assertContains(plan, "  3:ANALYTIC\n" +
+                "  |  functions: [, rank[(); args: ; result: BIGINT; args nullable: false; result nullable: true], ]\n" +
+                "  |  order by: [10: S_ADDRESS, INT, true] ASC\n" +
                 "  |  window: RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW\n" +
-                "  |  \n" +
-                "  3:Decode\n" +
-                "  |  <dict id 10> : <string id 3>");
+                "  |  cardinality: 1");
 
         // Decode node under sort node
         sql = "select S_ADDRESS, S_COMMENT from (select S_ADDRESS, " +
@@ -2109,16 +2126,15 @@ public class LowCardinalityTest2 extends PlanTestBase {
                 "FROM supplier " +
                 "ORDER BY S_ADDRESS, S_COMMENT;\n";
 
-        String plan = getFragmentPlan(sql);
-        assertContains(plan, "  3:Decode\n" +
+        String plan = getVerboseExplain(sql);
+        assertContains(plan, "  6:Decode\n" +
                 "  |  <dict id 10> : <string id 3>\n" +
                 "  |  <dict id 11> : <string id 7>");
-        assertContains(plan, "  5:SORT\n" +
-                "  |  order by: <slot 3> 3: S_ADDRESS ASC, <slot 7> 7: S_COMMENT ASC\n" +
-                "  |  offset: 0");
-        assertContains(plan, "  1:SORT\n" +
-                "  |  order by: <slot 10> 10: S_ADDRESS ASC, <slot 11> 11: S_COMMENT ASC\n" +
-                "  |  offset: 0");
+        assertContains(plan, "  3:ANALYTIC\n" +
+                "  |  functions: [, first_value[([5: S_PHONE, VARCHAR, false]); " +
+                "args: VARCHAR; result: VARCHAR; args nullable: false; result nullable: true], ]\n" +
+                "  |  order by: [10: S_ADDRESS, INT, false] ASC, [11: S_COMMENT, INT, false] ASC\n" +
+                "  |  window: ROWS BETWEEN 1 PRECEDING AND 1 FOLLOWING");
     }
 
     @Test
@@ -2215,4 +2231,43 @@ public class LowCardinalityTest2 extends PlanTestBase {
                 "args nullable: true; result nullable: false]\n" +
                 "  |  cardinality: 1");
     }
+<<<<<<< HEAD
+=======
+    
+    @Test
+    public void testWindowFunction() throws Exception {
+        String sql = "SELECT\n" +
+                "    t.S_ADDRESS,\n" +
+                "    t.min_date_create\n" +
+                "FROM\n" +
+                "    (\n" +
+                "        SELECT\n" +
+                "            tt.S_ADDRESS,\n" +
+                "            MIN(tt.S_ADDRESS) OVER (PARTITION BY tt.S_ADDRESS) AS min_date_create,\n" +
+                "            ROW_NUMBER () OVER (\n" +
+                "                PARTITION BY tt.S_ADDRESS\n" +
+                "                ORDER BY\n" +
+                "                    tt.S_ADDRESS\n" +
+                "            ) AS row_num\n" +
+                "        FROM\n" +
+                "            supplier tt\n" +
+                "    ) t\n" +
+                "WHERE\n" +
+                "    t.row_num = 1;";
+        String plan = getVerboseExplain(sql);
+        assertContains(plan, "  7:Decode\n" +
+                "  |  <dict id 12> : <string id 3>\n" +
+                "  |  <dict id 13> : <string id 9>\n" +
+                "  |  <dict id 14> : <string id 11>\n" +
+                "  |  cardinality: 1\n" +
+                "  |  \n" +
+                "  6:ANALYTIC\n" +
+                "  |  functions: [, row_number[(); args: ; result: BIGINT; " +
+                "args nullable: false; result nullable: true], ]\n" +
+                "  |  partition by: [12: S_ADDRESS, INT, false]\n" +
+                "  |  order by: [12: S_ADDRESS, INT, false] ASC\n" +
+                "  |  window: ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW\n" +
+                "  |  cardinality: 1");
+    }
+>>>>>>> 0c45329a51 ([Enhancement] Low cardinality optimization on analytic operator obove  table functions (#63378))
 }
