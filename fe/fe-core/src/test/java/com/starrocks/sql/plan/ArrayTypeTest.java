@@ -769,4 +769,84 @@ public class ArrayTypeTest extends PlanTestBase {
         plan = getCostExplain(sql);
         assertNotContains(plan, "ColumnAccessPath: [/d_1/OFFSET]");
     }
+<<<<<<< HEAD
+=======
+
+    @Test
+    public void testDecimal256ArrayFunctionsRestriction() {
+        Throwable exception = assertThrows(SemanticException.class, () ->
+                getFragmentPlan("select array_sum(d_1) from adec256"));
+        assertThat(exception.getMessage(), containsString("Array function 'array_sum' is not supported for DECIMAL256 type"));
+
+        exception = assertThrows(SemanticException.class, () ->
+                getFragmentPlan("select array_avg(d_2) from adec256"));
+        assertThat(exception.getMessage(), containsString("Array function 'array_avg' is not supported for DECIMAL256 type"));
+
+        exception = assertThrows(SemanticException.class, () ->
+                getFragmentPlan("select array_max(d_3) from adec256"));
+        assertThat(exception.getMessage(), containsString("Array function 'array_max' is not supported for DECIMAL256 type"));
+
+        exception = assertThrows(SemanticException.class, () ->
+                getFragmentPlan("select array_min(d_1) from adec256"));
+        assertThat(exception.getMessage(), containsString("Array function 'array_min' is not supported for DECIMAL256 type"));
+
+        exception = assertThrows(SemanticException.class, () ->
+                getFragmentPlan("select array_distinct(d_2) from adec256"));
+        assertThat(exception.getMessage(), containsString("Array function 'array_distinct' is not supported " +
+                "for DECIMAL256 type"));
+
+        exception = assertThrows(SemanticException.class, () ->
+                getFragmentPlan("select array_sort(d_3) from adec256"));
+        assertThat(exception.getMessage(), containsString("Array function 'array_sort' is not supported for DECIMAL256 type"));
+
+        exception = assertThrows(SemanticException.class, () ->
+                getFragmentPlan("select array_concat(d_1, d_2) from adec256"));
+        assertThat(exception.getMessage(), containsString("Array function 'array_concat' is not supported for DECIMAL256 type"));
+
+        exception = assertThrows(SemanticException.class, () ->
+                getFragmentPlan("select array_slice(d_1, 1, 2) from adec256"));
+        assertThat(exception.getMessage(), containsString("Array function 'array_slice' is not supported for DECIMAL256 type"));
+
+        exception = assertThrows(SemanticException.class, () ->
+                getFragmentPlan("select array_contains(d_2, cast(1.0 as decimal(76,20))) from adec256"));
+        assertThat(exception.getMessage(), containsString("Array function 'array_contains' is not supported " +
+                "for DECIMAL256 type"));
+
+        exception = assertThrows(SemanticException.class, () ->
+                getFragmentPlan("select array_position(d_3, cast(0 as decimal(76,0))) from adec256"));
+        assertThat(exception.getMessage(), containsString("Array function 'array_position' is not supported for " +
+                "DECIMAL256 type"));
+
+        exception = assertThrows(SemanticException.class, () ->
+                getFragmentPlan("select array_intersect(d_1, d_2) from adec256"));
+        assertThat(exception.getMessage(), containsString("Array function 'array_intersect' is not supported for " +
+                "DECIMAL256 type"));
+
+        exception = assertThrows(SemanticException.class, () ->
+                getFragmentPlan("select array_difference(d_1) from adec256"));
+        assertThat(exception.getMessage(), containsString("Array function 'array_difference' is not supported for" +
+                " DECIMAL256 type"));
+
+        exception = assertThrows(SemanticException.class, () ->
+                getFragmentPlan("select array_agg(d_2) from adec256"));
+        assertThat(exception.getMessage(), containsString("Array function 'array_agg' is not supported " +
+                "for DECIMAL256 type"));
+
+        exception = assertThrows(SemanticException.class, () ->
+                getFragmentPlan("select reverse(d_3) from adec256"));
+        assertThat(exception.getMessage(), containsString("Array function 'reverse' is not supported for" +
+                " DECIMAL256 type"));
+    }
+
+    @Test
+    public void testArrayNull() throws Exception {
+        String sql = "with test_cte as (\n"
+                + "    select array<varchar>[] as some_array\n"
+                + ")\n"
+                + "select array_agg(some_array)\n"
+                + "from test_cte;";
+        String plan = getThriftPlan(sql);
+        assertContains(plan, "function_name:array_agg");
+    }
+>>>>>>> 55e5a292e9 ([BugFix] Fix array type analyze (#63371))
 }
