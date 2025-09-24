@@ -53,6 +53,7 @@ export default function Layout(props) {
       {!noFooter && <Footer />}
        <FloatingButtonWithModal
         modalTitle="Ask AI"
+        modalDisclaimer="AI-generated answers are based on StarRocks documentation and other sources. The sources used will be linked with the answer. Test provided answers on non-production systems before production use."
         iframeSrc="https://ai-agent.starrocks.com/chat/"
       />
     </LayoutProvider>
