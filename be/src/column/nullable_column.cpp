@@ -426,12 +426,7 @@ void NullableColumn::check_or_die() const {
     DCHECK_EQ(_null_column->size(), _data_column->size());
     // when _has_null=true, the column may have no null value, so don't check.
     if (!_has_null) {
-<<<<<<< HEAD
-        CHECK(!SIMD::contain_nonzero(_null_column->get_data(), 0));
-=======
-        auto null_data = _null_column->immutable_data();
-        DCHECK(!SIMD::contain_nonzero(null_data, 0));
->>>>>>> 28062f336c ([BugFix] change CHECK to DCHECK in nullablecolumn to prevent the crash (#63553))
+        DCHECK(!SIMD::contain_nonzero(_null_column->get_data(), 0));
     }
     _data_column->check_or_die();
     _null_column->check_or_die();
