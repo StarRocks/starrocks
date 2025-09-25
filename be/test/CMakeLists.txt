@@ -493,7 +493,7 @@ SET(DW_TEST_FILES
     ./storage/lake/replication_txn_manager_test.cpp
     ./storage/lake/rowset_test.cpp
     ./storage/lake/schema_change_test.cpp
-    ./storage/lake/shared_data_replication_txn_manager_test.cpp
+    ./storage/lake/lake_replication_txn_manager_test.cpp
     ./storage/lake/spill_mem_table_sink_test.cpp
     ./storage/lake/starlet_location_provider_test.cpp
     ./storage/lake/tablet_manager_test.cpp

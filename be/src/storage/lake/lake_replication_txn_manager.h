@@ -22,6 +22,7 @@
 #include "storage/replication_utils.h"
 
 namespace starrocks {
+struct FileEncryptionPair;
 class TabletMetadataPB;
 class FileSystem;
 } // namespace starrocks
@@ -46,8 +47,10 @@ public:
     // Helper function to build existed filename UUIDs map from target tablet metadata
     // For files that replicated from source storage, we keep the `uuid` part of file name, and use it to decide if the file
     // is already replicated to target storage. Map from UUID to target filename.
-    StatusOr<std::unordered_map<std::string, std::string>> build_existed_filename_uuids_map(int64_t target_tablet_id,
-                                                                                            int64_t data_version);
+    // Also, in order to support file encryption, we also need to keep the encryption meta.
+    Status build_existed_filename_uuids_map(
+            const TabletMetadataPtr& target_data_version_tablet_meta,
+            std::unordered_map<std::string, std::pair<std::string, std::string>>& existed_filename_uuids);
 
     // Helper function to create replication txn log with converted metadata
     StatusOr<std::shared_ptr<TabletMetadataPB>> convert_and_build_new_tablet_meta(
@@ -55,15 +58,15 @@ public:
             TTransactionId txn_id, int64_t data_version, const std::string& src_data_dir,
             std::unordered_map<std::string, size_t>& segment_name_to_size_map,
             std::map<std::string, std::string>& file_locations,
-            std::unordered_map<std::string, std::pair<std::string, FileEncryptionInfo>>& filename_map);
+            std::unordered_map<std::string, std::pair<std::string, FileEncryptionPair>>& filename_map);
 
     // Helper functions for filename conversion and building file mappings
     StatusOr<bool> determine_final_filename(
             const std::string& src_filename, TTransactionId txn_id,
-            const std::unordered_map<std::string, std::string>& existed_filename_uuids, std::string& final_filename,
-            int64_t target_tablet_id, const std::string& src_data_dir,
+            const std::unordered_map<std::string, std::pair<std::string, std::string>>& existed_filename_uuids,
+            std::string& final_filename, int64_t target_tablet_id, const std::string& src_data_dir,
             std::map<std::string, std::string>& file_locations,
-            std::unordered_map<std::string, std::pair<std::string, FileEncryptionInfo>>& filename_map);
+            std::unordered_map<std::string, std::pair<std::string, FileEncryptionPair>>& filename_map);
 
 private:
     TabletManager* _tablet_manager;

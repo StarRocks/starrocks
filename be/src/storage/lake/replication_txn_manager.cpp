@@ -254,7 +254,7 @@ Status ReplicationTxnManager::replicate_remote_snapshot(const TReplicateSnapshot
                                                         const TSnapshotInfo& src_snapshot_info,
                                                         const TabletMetadataPtr& tablet_metadata) {
     auto txn_log = std::make_shared<TxnLog>();
-    std::unordered_map<std::string, std::pair<std::string, FileEncryptionInfo>> filename_map;
+    std::unordered_map<std::string, std::pair<std::string, FileEncryptionPair>> filename_map;
     const TabletSchemaPB* source_schema_pb = nullptr;
 
     if (!is_primary_key(*tablet_metadata)) { // None-pk table
@@ -387,7 +387,7 @@ Status ReplicationTxnManager::replicate_remote_snapshot(const TReplicateSnapshot
 
 Status ReplicationTxnManager::convert_rowset_meta(
         const RowsetMeta& rowset_meta, TTransactionId transaction_id, TxnLogPB::OpWrite* op_write,
-        std::unordered_map<std::string, std::pair<std::string, FileEncryptionInfo>>* filename_map) {
+        std::unordered_map<std::string, std::pair<std::string, FileEncryptionPair>>* filename_map) {
     if (rowset_meta.is_column_mode_partial_update()) {
         return Status::NotSupported("Column mode partial update is not supported in shared-data mode");
     }
@@ -411,14 +411,13 @@ Status ReplicationTxnManager::convert_rowset_meta(
         std::string new_segment_filename = gen_segment_filename(transaction_id);
 
         rowset_metadata->add_segments(new_segment_filename);
-        FileEncryptionInfo encryption_info;
+        FileEncryptionPair encryption_pair;
         if (config::enable_transparent_data_encryption) {
-            ASSIGN_OR_RETURN(auto pair, KeyCache::instance().create_encryption_meta_pair_using_current_kek());
-            rowset_metadata->add_segment_encryption_metas(pair.encryption_meta);
-            encryption_info = std::move(pair.info);
+            ASSIGN_OR_RETURN(encryption_pair, KeyCache::instance().create_encryption_meta_pair_using_current_kek());
+            rowset_metadata->add_segment_encryption_metas(encryption_pair.encryption_meta);
         }
         auto pair = filename_map->emplace(std::move(old_segment_filename),
-                                          std::pair(std::move(new_segment_filename), std::move(encryption_info)));
+                                          std::pair(std::move(new_segment_filename), std::move(encryption_pair)));
         if (!pair.second) {
             return Status::Corruption("Duplicated segment file: " + pair.first->first);
         }
@@ -436,14 +435,13 @@ Status ReplicationTxnManager::convert_rowset_meta(
         std::string new_del_filename = gen_del_filename(transaction_id);
 
         op_write->add_dels(new_del_filename);
-        FileEncryptionInfo encryption_info;
+        FileEncryptionPair encryption_pair;
         if (config::enable_transparent_data_encryption) {
-            ASSIGN_OR_RETURN(auto pair, KeyCache::instance().create_encryption_meta_pair_using_current_kek());
-            op_write->add_del_encryption_metas(pair.encryption_meta);
-            encryption_info = std::move(pair.info);
+            ASSIGN_OR_RETURN(encryption_pair, KeyCache::instance().create_encryption_meta_pair_using_current_kek());
+            op_write->add_del_encryption_metas(encryption_pair.encryption_meta);
         }
         auto pair = filename_map->emplace(std::move(old_del_filename),
-                                          std::pair(std::move(new_del_filename), std::move(encryption_info)));
+                                          std::pair(std::move(new_del_filename), std::move(encryption_pair)));
         if (!pair.second) {
             return Status::Corruption("Duplicated del file: " + pair.first->first);
         }
@@ -489,7 +487,7 @@ Status ReplicationTxnManager::convert_delete_predicate_pb(DeletePredicatePB* del
 // Helper function to create replication txn log with converted metadata
 FileConverterCreatorFunc ReplicationTxnManager::build_file_converters(
         const TabletManager* tablet_manager, const TReplicateSnapshotRequest& request,
-        const std::unordered_map<std::string, std::pair<std::string, FileEncryptionInfo>>& filename_map,
+        const std::unordered_map<std::string, std::pair<std::string, FileEncryptionPair>>& filename_map,
         std::unordered_map<uint32_t, uint32_t>& column_unique_id_map, std::vector<std::string>& files_to_delete) {
     auto file_converters = [tablet_manager, request, filename_map, &column_unique_id_map, &files_to_delete](
                                    const std::string& file_name,
@@ -511,7 +509,8 @@ FileConverterCreatorFunc ReplicationTxnManager::build_file_converters(
         auto segment_location = tablet_manager->segment_location(request.tablet_id, iter->second.first);
         WritableFileOptions opts{.sync_on_close = true,
                                  .mode = FileSystem::CREATE_OR_OPEN_WITH_TRUNCATE,
-                                 .encryption_info = iter->second.second};
+                                 .encryption_info = iter->second.second.info};
+
         ASSIGN_OR_RETURN(auto output_file, fs::new_writable_file(opts, segment_location));
 
         files_to_delete.push_back(std::move(segment_location));

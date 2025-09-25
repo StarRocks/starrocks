@@ -23,7 +23,6 @@
 #include "storage/lake/txn_log.h"
 #include "storage/lake/types_fwd.h"
 #include "storage/olap_common.h"
-#include "storage/olap_define.h"
 #include "storage/rowset/rowset_meta.h"
 #include "tablet_manager.h"
 
@@ -49,7 +48,7 @@ public:
 
     static FileConverterCreatorFunc build_file_converters(
             const TabletManager* tablet_manager, const TReplicateSnapshotRequest& request,
-            const std::unordered_map<std::string, std::pair<std::string, FileEncryptionInfo>>& filename_map,
+            const std::unordered_map<std::string, std::pair<std::string, FileEncryptionPair>>& filename_map,
             std::unordered_map<uint32_t, uint32_t>& column_unique_id_map, std::vector<std::string>& files_to_delete);
 
 private:
@@ -62,7 +61,7 @@ private:
 
     static Status convert_rowset_meta(
             const RowsetMeta& rowset_meta, TTransactionId transaction_id, TxnLogPB::OpWrite* op_write,
-            std::unordered_map<std::string, std::pair<std::string, FileEncryptionInfo>>* segment_filename_map);
+            std::unordered_map<std::string, std::pair<std::string, FileEncryptionPair>>* segment_filename_map);
 
     static Status convert_delete_predicate_pb(DeletePredicatePB* delete_predicate);
 
