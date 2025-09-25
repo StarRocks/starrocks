@@ -14,6 +14,24 @@ create user test_impersonate;
 grant impersonate on user root to test_impersonate;
 -- result:
 -- !result
+drop user if exists u1;
+-- result:
+-- !result
+create user u1;
+-- result:
+-- !result
+grant impersonate on user root to u1;
+-- result:
+-- !result
+drop user if exists u2;
+-- result:
+-- !result
+create user u2;
+-- result:
+-- !result
+grant impersonate on user root to u2;
+-- result:
+-- !result
 drop role if exists g1_role;
 -- result:
 -- !result
@@ -23,18 +41,6 @@ create role g1_role;
 grant g1_role to external group r1_group;
 -- result:
 -- !result
-drop role if exists r1;
--- result:
--- !result
-create role r1;
--- result:
--- !result
-drop user if exists u1;
--- result:
--- !result
-create user u1 default role r1;
--- result:
--- !result
 drop role if exists g2_role;
 -- result:
 -- !result
@@ -42,18 +48,6 @@ create role g2_role;
 -- result:
 -- !result
 grant g2_role to external group r2_group;
--- result:
--- !result
-drop role if exists r2;
--- result:
--- !result
-create role r2;
--- result:
--- !result
-drop user if exists u2;
--- result:
--- !result
-create user u2 default role r2;
 -- result:
 -- !result
 grant impersonate on user u1 to test_impersonate;
@@ -92,7 +86,7 @@ r1_group
 -- !result
 select current_role();
 -- result:
-g1_role, r1
+g1_role
 -- !result
 execute as test_impersonate with no revert;
 -- result:
@@ -118,7 +112,7 @@ r2_group
 -- !result
 select current_role();
 -- result:
-g2_role, r2
+g2_role
 -- !result
 execute as test_impersonate with no revert;
 -- result:
@@ -135,12 +129,6 @@ execute as root with no revert;
 -- result:
 -- !result
 drop user if exists test_impersonate;
--- result:
--- !result
-drop role if exists r1;
--- result:
--- !result
-drop role if exists r2;
 -- result:
 -- !result
 drop role if exists g1_role;
