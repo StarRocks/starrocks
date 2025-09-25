@@ -69,6 +69,8 @@ import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.analyzer.Authorizer;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.CleanTemporaryTableStmt;
+import com.starrocks.sql.ast.ExecuteStmt;
+import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.SetListItem;
 import com.starrocks.sql.ast.SetStmt;
 import com.starrocks.sql.ast.SetType;
@@ -276,6 +278,20 @@ public class ConnectContext {
 
     public static void remove() {
         threadLocalInfo.remove();
+    }
+
+    public boolean isQueryStmt(StatementBase statement) {
+        if (statement instanceof QueryStatement) {
+            return true;
+        }
+        if (statement instanceof ExecuteStmt) {
+            ExecuteStmt executeStmt = (ExecuteStmt) statement;
+            PrepareStmtContext prepareStmtContext = getPreparedStmt(executeStmt.getStmtName());
+            if (prepareStmtContext != null) {
+                return prepareStmtContext.getStmt().getInnerStmt() instanceof QueryStatement;
+            }
+        }
+        return false;
     }
 
     public boolean isSend() {

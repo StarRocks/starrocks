@@ -541,7 +541,17 @@ public class ConnectProcessor {
 
             executor = new StmtExecutor(ctx, executeStmt);
             ctx.setExecutor(executor);
-            executor.execute();
+
+            boolean isQuery = ctx.isQueryStmt(executeStmt);
+            ctx.getState().setIsQuery(isQuery);
+
+            if (enableAudit && isQuery) {
+                executor.addRunningQueryDetail(executeStmt);
+                executor.execute();
+                executor.addFinishedQueryDetail();
+            } else {
+                executor.execute();
+            }
 
             if (enableAudit) {
                 auditAfterExec(originStmt, executor.getParsedStmt(), executor.getQueryStatisticsForAuditLog());
