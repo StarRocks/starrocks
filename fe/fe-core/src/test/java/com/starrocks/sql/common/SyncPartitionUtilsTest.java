@@ -813,20 +813,35 @@ public class SyncPartitionUtilsTest {
         {
             // MONTH
             Pair<String, String> result = getDateTruncFuncTransform(baseRange, "MONTH");
+<<<<<<< HEAD
             Assert.assertEquals("2020-01-01 12:34:56", result.first);
             Assert.assertEquals("2020-02-01 12:34:56", result.second);
+=======
+            Assertions.assertEquals("2020-01-01 00:00:00", result.first);
+            Assertions.assertEquals("2020-02-01 00:00:00", result.second);
+>>>>>>> a736842c67 ([BugFix] Fix date_trunc partition pruning with combined predicates causing EMPTYSET (#63464))
         }
         {
             // QUARTER
             Pair<String, String> result = getDateTruncFuncTransform(baseRange, "QUARTER");
+<<<<<<< HEAD
             Assert.assertEquals("2020-01-01 12:34:56", result.first);
             Assert.assertEquals("2020-04-01 12:34:56", result.second);
+=======
+            Assertions.assertEquals("2020-01-01 00:00:00", result.first);
+            Assertions.assertEquals("2020-04-01 00:00:00", result.second);
+>>>>>>> a736842c67 ([BugFix] Fix date_trunc partition pruning with combined predicates causing EMPTYSET (#63464))
         }
         {
             // YEAR
             Pair<String, String> result = getDateTruncFuncTransform(baseRange, "YEAR");
+<<<<<<< HEAD
             Assert.assertEquals("2020-01-01 12:34:56", result.first);
             Assert.assertEquals("2021-01-01 12:34:56", result.second);
+=======
+            Assertions.assertEquals("2020-01-01 00:00:00", result.first);
+            Assertions.assertEquals("2021-01-01 00:00:00", result.second);
+>>>>>>> a736842c67 ([BugFix] Fix date_trunc partition pruning with combined predicates causing EMPTYSET (#63464))
         }
     }
 
