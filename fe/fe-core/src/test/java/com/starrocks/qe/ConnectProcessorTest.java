@@ -52,6 +52,7 @@ import com.starrocks.privilege.PrivilegeBuiltinConstants;
 import com.starrocks.proto.PQueryStatistics;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.DDLTestBase;
+import com.starrocks.sql.ast.PrepareStmt;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.sql.common.AuditEncryptionChecker;
@@ -656,5 +657,37 @@ public class ConnectProcessorTest extends DDLTestBase {
         TMasterOpResult result = processor.proxyExecute(request);
         Assertions.assertNotNull(result);
         Assertions.assertTrue(context.getState().isError());
+    }
+
+    @Test
+    public void testStmtExecute() throws Exception {
+        int stmtId = 1;
+        MysqlSerializer serializer = MysqlSerializer.newInstance();
+        serializer.writeInt1(MysqlCommand.COM_STMT_EXECUTE.getCommandCode());
+        serializer.writeInt4(stmtId);
+        serializer.writeInt1(0); // flags
+        serializer.writeInt4(0); // flags
+        ByteBuffer packet = serializer.toByteBuffer();
+
+        ConnectContext ctx = initMockContext(mockChannel(packet), GlobalStateMgr.getCurrentState());
+
+        String sql = "PREPARE stmt1 FROM select * from testDb1.testTable1";
+        PrepareStmt stmt = (PrepareStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+        ctx.putPreparedStmt(String.valueOf(stmtId), new PrepareStmtContext(stmt, ctx, null));
+
+        ConnectProcessor processor = new ConnectProcessor(ctx);
+        // Mock statement executor
+        // Create mock for StmtExecutor using MockUp instead of @Mocked parameter
+        new MockUp<StmtExecutor>() {
+            @Mock
+            public PQueryStatistics getQueryStatisticsForAuditLog() {
+                return statistics;
+            }
+        };
+
+        processor.processOnce();
+
+        Assertions.assertEquals(MysqlCommand.COM_STMT_EXECUTE, myContext.getCommand());
+        Assertions.assertTrue(ctx.getState().isQuery());
     }
 }
