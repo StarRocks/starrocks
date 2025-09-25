@@ -117,7 +117,8 @@ public class GroupProviderPermissionTest {
         Analyzer.analyze(createUserStmt, context);
         authenticationMgr.createUser(createUserStmt);
 
-        createUserStmt = new CreateUserStmt(new UserIdentity("security_user", "%"), true, null, List.of(), Map.of(), NodePosition.ZERO);
+        createUserStmt =
+                new CreateUserStmt(new UserIdentity("security_user", "%"), true, null, List.of(), Map.of(), NodePosition.ZERO);
         Analyzer.analyze(createUserStmt, context);
         authenticationMgr.createUser(createUserStmt);
 

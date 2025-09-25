@@ -120,7 +120,8 @@ public class SecurityIntegrationPermissionTest {
         Analyzer.analyze(createUserStmt, context);
         authenticationMgr.createUser(createUserStmt);
 
-        createUserStmt = new CreateUserStmt(new UserIdentity("security_user", "%"), true, null, List.of(), Map.of(), NodePosition.ZERO);
+        createUserStmt =
+                new CreateUserStmt(new UserIdentity("security_user", "%"), true, null, List.of(), Map.of(), NodePosition.ZERO);
         Analyzer.analyze(createUserStmt, context);
         authenticationMgr.createUser(createUserStmt);
 
@@ -693,7 +694,8 @@ public class SecurityIntegrationPermissionTest {
 
         // Create the test user first
         authenticationMgr.createUser(
-                new CreateUserStmt(new UserIdentity("comprehensive_user", "%"), true, null, List.of(), Map.of(), NodePosition.ZERO));
+                new CreateUserStmt(new UserIdentity("comprehensive_user", "%"), true, null, List.of(), Map.of(),
+                        NodePosition.ZERO));
 
         // Grant SECURITY privilege directly to user
         GrantPrivilegeStmt grantStmt = (GrantPrivilegeStmt) UtFrameUtils.parseStmtWithNewParser(
