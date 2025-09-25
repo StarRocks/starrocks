@@ -223,7 +223,7 @@ public interface IcebergCatalog extends MemoryTrackable {
     default void deleteUncommittedDataFiles(List<String> fileLocations) {
     }
 
-    default void refreshTable(String dbName, String tableName, ExecutorService refreshExecutor) {
+    default void refreshTable(String dbName, String tableName, ConnectContext ctx, ExecutorService refreshExecutor) {
     }
 
     default void invalidatePartitionCache(String dbName, String tableName) {
