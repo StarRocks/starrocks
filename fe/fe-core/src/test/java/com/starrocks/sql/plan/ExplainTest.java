@@ -83,5 +83,6 @@ public class ExplainTest extends PlanTestBase {
         } finally {
             Config.query_detail_explain_level = originalLevel;
         }
+
     }
 }
