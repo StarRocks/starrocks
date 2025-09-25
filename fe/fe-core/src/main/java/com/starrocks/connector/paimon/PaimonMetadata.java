@@ -75,6 +75,7 @@ import org.apache.paimon.types.DateType;
 import org.apache.paimon.types.RowType;
 import org.apache.paimon.utils.DateTimeUtils;
 import org.apache.paimon.utils.PartitionPathUtils;
+import org.apache.paimon.utils.StringUtils;
 
 import java.time.LocalDateTime;
 import java.time.ZoneId;
@@ -155,7 +156,7 @@ public class PaimonMetadata implements ConnectorMetadata {
 
         try {
             List<org.apache.paimon.partition.Partition> partitions = paimonNativeCatalog.listPartitions(identifier);
-            String partitionLegacyName = paimonTable.options().get(CoreOptions.PARTITION_GENERATE_LEGCY_NAME.key());
+            boolean partitionLegacyName = getPartitionLegacyName(paimonTable);
             for (org.apache.paimon.partition.Partition partition : partitions) {
                 String partitionPath = PartitionPathUtils.generatePartitionPath(partition.spec(), dataTableRowType);
                 String[] partitionValues = Arrays.stream(partitionPath.split("/"))
@@ -170,11 +171,17 @@ public class PaimonMetadata implements ConnectorMetadata {
         }
     }
 
+    private boolean getPartitionLegacyName(org.apache.paimon.table.Table paimonTable) {
+        String partitionLegacyName = paimonTable.options().get(CoreOptions.PARTITION_GENERATE_LEGCY_NAME.key());
+        //If the user does not explicitly set this option, the result is null,but its default value is true.
+        return StringUtils.isEmpty(partitionLegacyName) || Boolean.parseBoolean(partitionLegacyName);
+    }
+
     private Partition getPartition(org.apache.paimon.partition.Partition partition,
                                    List<String> partitionColumnNames,
                                    List<DataType> partitionColumnTypes,
                                    String[] partitionValues,
-                                   String partitionLegacyName) {
+                                   boolean partitionLegacyName) {
         if (partitionValues.length != partitionColumnNames.size()) {
             String errorMsg = String.format("The length of partitionValues %s is not equal to " +
                     "the partitionColumnNames %s.", partitionValues.length, partitionColumnNames.size());
@@ -185,7 +192,7 @@ public class PaimonMetadata implements ConnectorMetadata {
         for (int i = 0; i < partitionValues.length; i++) {
             String column = partitionColumnNames.get(i);
             String value = partitionValues[i].trim();
-            if (partitionColumnTypes.get(i) instanceof DateType && !Boolean.parseBoolean(partitionLegacyName)) {
+            if (partitionColumnTypes.get(i) instanceof DateType && !partitionLegacyName) {
                 value = DateTimeUtils.formatDate(Integer.parseInt(value));
             }
             sb.append(column).append("=").append(value);
@@ -423,7 +430,6 @@ public class PaimonMetadata implements ConnectorMetadata {
         return builder.build();
 
     }
-
 
     private ColumnStatistic buildColumnStatistic(Column column, Map<String, ColStats<?>> colStatsMap,
                                                  long rowCount) {
