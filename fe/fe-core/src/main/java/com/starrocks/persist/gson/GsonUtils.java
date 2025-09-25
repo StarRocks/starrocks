@@ -476,6 +476,7 @@ public class GsonUtils {
             .addSerializationExclusionStrategy(new HiddenAnnotationExclusionStrategy())
             .addDeserializationExclusionStrategy(new HiddenAnnotationExclusionStrategy())
             .enableComplexMapKeySerialization()
+            .registerTypeAdapterFactory(new SubtypeSkippingTypeAdapterFactory())
             .registerTypeHierarchyAdapter(Table.class, new GuavaTableAdapter())
             .registerTypeHierarchyAdapter(Multimap.class, new GuavaMultimapAdapter())
             .registerTypeHierarchyAdapter(ColumnId.class, new ColumnIdAdapter())
