@@ -348,7 +348,7 @@ Status ReplicationUtils::download_lake_segment_file(const std::string& src_file_
         ASSIGN_OR_RETURN(src_file_size, src_file->get_size());
     }
 
-    LOG(INFO) << "Start reading lake segment file, src file: " << src_file_path << ", src file size: " << src_file_size;
+    VLOG(3) << "Start reading lake segment file, src file: " << src_file_path << ", src file size: " << src_file_size;
     ASSIGN_OR_RETURN(auto converter, file_converters(src_file_name, src_file_size));
     if (converter == nullptr) {
         return Status::OK();
@@ -365,8 +365,6 @@ Status ReplicationUtils::download_lake_segment_file(const std::string& src_file_
         int64_t count = std::min(buff_size, src_file_size - offset);
         RETURN_IF_ERROR(src_file->read_at_fully(offset, buf, count));
         offset += count;
-        LOG(INFO) << "Read lake segment file, src file: " << src_file_path << ", src file size: " << src_file_size
-                  << ", offset: " << offset << ", count: " << count;
         RETURN_IF_ERROR(converter->append(buf, count));
     }
     LOG(INFO) << "Finish read lake segment file, src file: " << src_file_path << ", src file size: " << src_file_size;

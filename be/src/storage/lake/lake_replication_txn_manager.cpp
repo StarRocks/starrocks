@@ -71,26 +71,20 @@ Status LakeReplicationTxnManager::replicate_lake_remote_storage(const TReplicate
             _remote_location_provider->segment_root_location(src_tablet_id, src_db_id, src_table_id, src_partition_id);
     // `shared_src_fs` is used to access storage of src cluster
     auto shared_src_fs = new_fs_starlet(virtual_tablet_id);
+    ASSIGN_OR_RETURN(auto src_tablet_meta,
+                     build_source_tablet_meta(src_tablet_id, src_visible_version, src_meta_dir, shared_src_fs));
 #else
     auto src_meta_dir = "test_lake_replication/meta";
     auto src_data_dir = "test_lake_replication/data";
     auto shared_src_fs_st_or = FileSystem::CreateSharedFromString(src_data_dir);
     auto shared_src_fs = shared_src_fs_st_or.value();
+    ASSIGN_OR_RETURN(auto src_tablet_meta,
+                     _tablet_manager->get_tablet_metadata(src_tablet_id, src_visible_version, false, 0, nullptr));
 #endif
 
     LOG(INFO) << "Lake replicate storage task, built source meta and data dir, meta dir: " << src_meta_dir
               << ", data dir: " << src_data_dir << ", txn_id: " << txn_id << ", src_tablet_id: " << src_tablet_id
               << ", tablet_id: " << target_tablet_id;
-
-#ifndef BE_TEST
-    ASSIGN_OR_RETURN(auto src_tablet_meta,
-                     build_source_tablet_meta(src_tablet_id, src_visible_version, src_meta_dir, shared_src_fs));
-#else
-    ASSIGN_OR_RETURN(auto src_tablet_meta,
-                     _tablet_manager->get_tablet_metadata(src_tablet_id, src_visible_version, false, 0, nullptr));
-#endif
-
-    VLOG(3) << "src_tablet_meta got";
 
     // `file_locations` is the mapping between source and target file locations,
     // it contains all files that need to replicate from source to target storage
@@ -113,8 +107,8 @@ Status LakeReplicationTxnManager::replicate_lake_remote_storage(const TReplicate
                                                 src_data_dir, segment_name_to_size_map, file_locations, filename_map));
     txn_log->mutable_op_replication()->mutable_tablet_metadata()->CopyFrom(*new_metadata);
 
-    LOG(INFO) << "Lake replicate storage task, have built new tablet meta, tablet_id: " << target_tablet_id
-              << ", txn_id:" << txn_id << ", start calculate column unique id map..";
+    VLOG(3) << "Lake replicate storage task, have built new tablet meta, tablet_id: " << target_tablet_id
+            << ", txn_id:" << txn_id << ", start calculate column unique id map..";
     // calc column unique id to adapt for fast schema change
     const TabletSchemaPB* source_schema_pb = &src_tablet_meta->schema();
     if (source_schema_pb == nullptr) {
@@ -128,7 +122,7 @@ Status LakeReplicationTxnManager::replicate_lake_remote_storage(const TReplicate
     ReplicationUtils::calc_column_unique_id_map(source_schema_pb->column(), target_tablet_metadata->schema().column(),
                                                 &column_unique_id_map);
 
-    LOG(INFO) << "Lake replicate storage task, start to replicate files from src to target cluster, txn_id: " << txn_id;
+    VLOG(3) << "Lake replicate storage task, start to replicate files from src to target cluster, txn_id: " << txn_id;
     std::vector<std::string> files_to_delete;
     CancelableDefer clean_files([&files_to_delete]() { lake::delete_files_async(std::move(files_to_delete)); });
 
@@ -143,8 +137,8 @@ Status LakeReplicationTxnManager::replicate_lake_remote_storage(const TReplicate
         }
         const auto& target_file_location = it->second;
 
-        LOG(INFO) << "Lake replicate storage task, start to replicate file, src file: " << src_file_location
-                  << ", target: " << target_file_location;
+        VLOG(3) << "Lake replicate storage task, start to replicate file, src file: " << src_file_location
+                << ", target: " << target_file_location;
         // check if need to convert segment file while downloading
         if (is_segment(src_file_name) && !column_unique_id_map.empty()) {
             // file_size might be empty, in that case we'll get it while downloading the file
