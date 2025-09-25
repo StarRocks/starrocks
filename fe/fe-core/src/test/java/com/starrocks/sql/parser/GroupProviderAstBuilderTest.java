@@ -18,11 +18,8 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.sql.ast.group.CreateGroupProviderStmt;
 import com.starrocks.sql.ast.group.DropGroupProviderStmt;
-<<<<<<< HEAD
-=======
 import com.starrocks.sql.ast.group.ShowCreateGroupProviderStmt;
 import com.starrocks.sql.ast.group.ShowGroupProvidersStmt;
->>>>>>> a73849377d ([UT] Fix unstability security test case (#63520))
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Assertions;
