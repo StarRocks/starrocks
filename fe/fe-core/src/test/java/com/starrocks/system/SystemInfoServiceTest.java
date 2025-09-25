@@ -315,6 +315,13 @@ public class SystemInfoServiceTest {
                 return WarehouseManager.DEFAULT_RESOURCE;
             }
         };
+
+        new MockUp<EditLog>() {
+            @Mock
+            public void logDropComputeNode(DropComputeNodeLog log, WALApplier applier) {
+                applier.apply(log);
+            }
+        };
         cn.setStarletPort(1001);
 
         {
