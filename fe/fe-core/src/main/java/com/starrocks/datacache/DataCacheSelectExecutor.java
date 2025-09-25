@@ -52,6 +52,7 @@ public class DataCacheSelectExecutor {
         final List<ComputeResource> computeResources = computeResourceProvider.getComputeResources(wh);
 
         List<StmtExecutor> subStmtExecutors = Lists.newArrayList();
+        boolean isFirstSubContext = true;
         for (ComputeResource computeResource : computeResources) {
             if (!computeResourceProvider.isResourceAvailable(computeResource)) {
                 // skip if this compute resource is not available
@@ -59,10 +60,10 @@ public class DataCacheSelectExecutor {
                 continue;
             }
 
-            long workerGroupIdx = computeResource.getWorkerGroupId();
-            ConnectContext subContext = buildCacheSelectConnectContext(statement, connectContext, workerGroupIdx == 0);
+            ConnectContext subContext = buildCacheSelectConnectContext(statement, connectContext, isFirstSubContext);
             subContext.setCurrentComputeResource(computeResource);
             StmtExecutor subStmtExecutor = StmtExecutor.newInternalExecutor(subContext, insertStmt);
+            isFirstSubContext = false;
             // Register new StmtExecutor into current ConnectContext's StmtExecutor, so we can handle ctrl+c command
             // If DataCacheSelect is forward to leader, connectContext's Executor is null
             if (connectContext.getExecutor() != null) {
