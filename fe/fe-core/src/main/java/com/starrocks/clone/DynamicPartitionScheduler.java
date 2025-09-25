@@ -421,7 +421,7 @@ public class DynamicPartitionScheduler extends FrontendDaemon {
 
         Locker locker = new Locker();
         for (DropPartitionClause dropPartitionClause : dropPartitionClauses) {
-            if (!locker.lockDatabaseAndCheckExist(db, LockType.WRITE)) {
+            if (!locker.lockTableAndCheckDbExist(db, tableId, LockType.WRITE)) {
                 LOG.warn("db: {}({}) has been dropped, skip", db.getFullName(), db.getId());
                 return false;
             }
@@ -434,7 +434,7 @@ public class DynamicPartitionScheduler extends FrontendDaemon {
             } catch (DdlException e) {
                 runtimeInfoCollector.recordDropPartitionFailedMsg(db.getOriginName(), tableName, e.getMessage());
             } finally {
-                locker.unLockDatabase(db.getId(), LockType.WRITE);
+                locker.unLockTableWithIntensiveDbLock(db.getId(), tableId, LockType.WRITE);
             }
         }
 

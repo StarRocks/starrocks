@@ -343,7 +343,8 @@ public abstract class BaseMVRefreshProcessor {
 
                 // first lock and drop partitions from a visible map
                 Locker locker = new Locker();
-                if (!locker.lockDatabaseAndCheckExist(db, this.mv, LockType.WRITE)) {
+                if (!locker.tryLockTableWithIntensiveDbLock(db.getId(), mv.getId(), LockType.WRITE,
+                        Config.mv_refresh_try_lock_timeout_ms, TimeUnit.MILLISECONDS)) {
                     logger.warn("failed to lock database: {} in syncPartitions for force refresh", db.getFullName());
                     throw new DmlException("Force refresh failed, database:" + db.getFullName() + " not exist");
                 }
@@ -818,7 +819,8 @@ public abstract class BaseMVRefreshProcessor {
 
         Locker locker = new Locker();
         // update the meta if succeed
-        if (!locker.lockDatabaseAndCheckExist(db, this.mv, LockType.WRITE)) {
+        if (!locker.tryLockTableWithIntensiveDbLock(db.getId(), mv.getId(), LockType.WRITE,
+                Config.mv_refresh_try_lock_timeout_ms, TimeUnit.MILLISECONDS)) {
             logger.warn("failed to lock database: {} in updateMeta for mv refresh", db.getFullName());
             throw new DmlException("update meta failed. database:" + db.getFullName() + " not exist");
         }

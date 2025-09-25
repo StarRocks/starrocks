@@ -232,26 +232,24 @@ public class AlterJobExecutor implements AstVisitorExtendInterface<Void, Connect
         // check db
         final TableName mvName = stmt.getMvName();
         Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(mvName.getDb());
-        if (db == null) {
+        if (db == null || !db.isExist()) {
             throw new SemanticException("Database %s is not found", mvName.getCatalogAndDb());
         }
+        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(mvName.getDb(), mvName.getTbl());
+        if (table == null) {
+            throw new SemanticException("Table %s is not found", mvName);
+        }
+        if (!table.isMaterializedView()) {
+            throw new SemanticException("The specified table [" + mvName + "] is not a view");
+        }
+        this.db = db;
+        this.table = table;
 
         Locker locker = new Locker();
-        if (!locker.lockDatabaseAndCheckExist(db, LockType.WRITE)) {
+        if (!locker.lockTableAndCheckDbExist(db, table.getId(), LockType.WRITE)) {
             throw new AlterJobException("alter materialized failed. database:" + db.getFullName() + " not exist");
         }
-
         try {
-            Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(mvName.getDb(), mvName.getTbl());
-            if (table == null) {
-                throw new SemanticException("Table %s is not found", mvName);
-            }
-            if (!table.isMaterializedView()) {
-                throw new SemanticException("The specified table [" + mvName + "] is not a view");
-            }
-            this.db = db;
-            this.table = table;
-
             MaterializedView materializedView = (MaterializedView) table;
             // check materialized view state
             if (materializedView.getState() != OlapTable.OlapTableState.NORMAL) {
@@ -264,7 +262,7 @@ public class AlterJobExecutor implements AstVisitorExtendInterface<Void, Connect
             GlobalStateMgr.getCurrentState().getMaterializedViewMgr().rebuildMaintainMV(materializedView);
             return null;
         } finally {
-            locker.unLockDatabase(db.getId(), LockType.WRITE);
+            locker.unLockTableWithIntensiveDbLock(db.getId(), table.getId(), LockType.WRITE);
         }
     }
 
