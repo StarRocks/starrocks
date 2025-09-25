@@ -161,22 +161,16 @@ public class ColumnDefAnalyzer {
             if (defaultValueDef.isSet) {
                 throw new AnalysisException(String.format("Invalid default value for '%s'", name));
             }
-
-            columnDef.setDefaultValueDef(ColumnDef.DefaultValueDef.EMPTY_VALUE);
         }
         if (type.isBitmapType()) {
             if (defaultValueDef.isSet) {
                 throw new AnalysisException(String.format("Invalid default value for '%s'", name));
             }
-            columnDef.setDefaultValueDef(ColumnDef.DefaultValueDef.EMPTY_VALUE);
         }
         if (aggregateType == AggregateType.REPLACE_IF_NOT_NULL) {
             // If aggregate type is REPLACE_IF_NOT_NULL, we set it nullable.
             // If default value is not set, we set it NULL
             columnDef.setAllowNull(true);
-            if (!defaultValueDef.isSet) {
-                columnDef.setDefaultValueDef(ColumnDef.DefaultValueDef.NULL_DEFAULT_VALUE);
-            }
         }
 
         if (!isAllowNull && defaultValueDef == ColumnDef.DefaultValueDef.NULL_DEFAULT_VALUE) {
