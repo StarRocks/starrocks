@@ -33,20 +33,32 @@ std::unordered_map<std::string, NDVEstimatorType> estimator_name_to_type = {
 } // namespace
 
 int64_t DUJ1Estimator::estimate(int64_t sample_row, int64_t sample_distinct, int64_t count_once, double sample_ratio) {
+    if (sample_ratio == 0.0) {
+        return 0;
+    }
     return static_cast<int64_t>(sample_row * sample_distinct / (sample_row - count_once + count_once * sample_ratio));
 }
 
 int64_t LinearEstimator::estimate(int64_t /*sample_row*/, int64_t sample_distinct, int64_t /*count_once*/,
                                   double sample_ratio) {
+    if (sample_ratio == 0.0) {
+        return 0;
+    }
     return static_cast<int64_t>(sample_distinct / sample_ratio);
 }
 
 int64_t PolynomialEstimator::estimate(int64_t /*sample_row*/, int64_t sample_distinct, int64_t /*count_once*/,
                                       double sample_ratio) {
+    if (sample_ratio == 0.0) {
+        return 0;
+    }
     return static_cast<int64_t>(sample_distinct / (1 - std::pow((1 - sample_ratio), 3)));
 }
 
 int64_t GEEEstimator::estimate(int64_t sample_row, int64_t sample_distinct, int64_t count_once, double sample_ratio) {
+    if (sample_ratio == 0.0) {
+        return 0;
+    }
     return static_cast<int64_t>(sample_distinct + (std::sqrt(1 / sample_ratio) - 1) * count_once);
 }
 

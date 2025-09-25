@@ -59,7 +59,7 @@ struct Bucket {
     Bucket() = default;
 
     Bucket(RefType input_lower, RefType input_upper, size_t count, size_t upper_repeats)
-            : count(count), upper_repeats(upper_repeats), count_in_bucket(1) {
+            : count(count), upper_repeats(upper_repeats), count_in_bucket(1), distinct_count(0) {
         AggDataTypeTraits<LT>::assign_value(lower, input_lower);
         AggDataTypeTraits<LT>::assign_value(upper, input_upper);
     }
