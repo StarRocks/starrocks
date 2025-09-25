@@ -18,18 +18,18 @@ import com.starrocks.authorization.AccessDeniedException;
 import com.starrocks.authorization.AuthorizationMgr;
 import com.starrocks.authorization.DefaultAuthorizationProvider;
 import com.starrocks.authorization.PrivilegeType;
-import com.starrocks.catalog.UserIdentity;
 import com.starrocks.persist.EditLog;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ExecuteAsExecutor;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.analyzer.Analyzer;
 import com.starrocks.sql.analyzer.Authorizer;
 import com.starrocks.sql.ast.CreateRoleStmt;
 import com.starrocks.sql.ast.CreateUserStmt;
 import com.starrocks.sql.ast.ExecuteAsStmt;
 import com.starrocks.sql.ast.GrantPrivilegeStmt;
 import com.starrocks.sql.ast.RevokePrivilegeStmt;
-import com.starrocks.sql.ast.UserRef;
+import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.sql.ast.group.CreateGroupProviderStmt;
 import com.starrocks.sql.ast.group.DropGroupProviderStmt;
 import com.starrocks.sql.ast.group.ShowCreateGroupProviderStmt;
@@ -110,11 +110,16 @@ public class GroupProviderPermissionTest {
      * Setup test users and roles with appropriate privileges
      */
     private void setupTestUsersAndRoles() throws Exception {
+        ConnectContext context = new ConnectContext();
         // Create test users
-        authenticationMgr.createUser(
-                new CreateUserStmt(new UserRef("u1", "%"), true, null, List.of(), Map.of(), NodePosition.ZERO));
-        authenticationMgr.createUser(
-                new CreateUserStmt(new UserRef("security_user", "%"), true, null, List.of(), Map.of(), NodePosition.ZERO));
+        CreateUserStmt createUserStmt =
+                new CreateUserStmt(new UserIdentity("u1", "%"), true, null, List.of(), Map.of(), NodePosition.ZERO);
+        Analyzer.analyze(createUserStmt, context);
+        authenticationMgr.createUser(createUserStmt);
+
+        createUserStmt = new CreateUserStmt(new UserIdentity("security_user", "%"), true, null, List.of(), Map.of(), NodePosition.ZERO);
+        Analyzer.analyze(createUserStmt, context);
+        authenticationMgr.createUser(createUserStmt);
 
         // Create a role with SECURITY privilege
         authorizationMgr.createRole(new CreateRoleStmt(List.of("security_role"), true, ""));
@@ -127,7 +132,7 @@ public class GroupProviderPermissionTest {
 
         // Grant the role to security_user
         authorizationMgr.grantRole(new com.starrocks.sql.ast.GrantRoleStmt(
-                List.of("security_role"), new UserRef("security_user", "%"), NodePosition.ZERO));
+                List.of("security_role"), new UserIdentity("security_user", "%"), NodePosition.ZERO));
         Long role = authorizationMgr.getRoleIdByNameAllowNull("security_role");
         authorizationMgr.setUserDefaultRole(Set.of(role), new UserIdentity("security_user", "%"));
     }
@@ -154,7 +159,7 @@ public class GroupProviderPermissionTest {
         }, "Non-admin user should not have SECURITY privilege");
 
         ConnectContext context = new ConnectContext();
-        ExecuteAsExecutor.execute(new ExecuteAsStmt(new UserRef("security_user", "%"), false), context);
+        ExecuteAsExecutor.execute(new ExecuteAsStmt(new UserIdentity("security_user", "%"), false), context);
         // Test permission check - should succeed for user with SECURITY privilege
         Assertions.assertDoesNotThrow(() -> {
             Authorizer.checkSystemAction(context, PrivilegeType.SECURITY);
@@ -184,7 +189,7 @@ public class GroupProviderPermissionTest {
         }, "Non-admin user should not have SECURITY privilege for SHOW CREATE GROUP PROVIDER");
 
         ConnectContext context = new ConnectContext();
-        ExecuteAsExecutor.execute(new ExecuteAsStmt(new UserRef("security_user", "%"), false), context);
+        ExecuteAsExecutor.execute(new ExecuteAsStmt(new UserIdentity("security_user", "%"), false), context);
         // Test permission check - should succeed for user with SECURITY privilege
         Assertions.assertDoesNotThrow(() -> {
             Authorizer.checkSystemAction(context, PrivilegeType.SECURITY);
@@ -214,7 +219,7 @@ public class GroupProviderPermissionTest {
             Authorizer.checkSystemAction(userCtx, PrivilegeType.SECURITY);
         }, "Non-admin user should not have SECURITY privilege for DROP GROUP PROVIDER");
 
-        ExecuteAsExecutor.execute(new ExecuteAsStmt(new UserRef("security_user", "%"), false), securityUserCtx);
+        ExecuteAsExecutor.execute(new ExecuteAsStmt(new UserIdentity("security_user", "%"), false), securityUserCtx);
         // Test permission check - should succeed for user with SECURITY privilege
         Assertions.assertDoesNotThrow(() -> {
             Authorizer.checkSystemAction(securityUserCtx, PrivilegeType.SECURITY);
@@ -246,7 +251,7 @@ public class GroupProviderPermissionTest {
             Authorizer.checkSystemAction(userCtx, PrivilegeType.SECURITY);
         }, "Non-admin user should not have SECURITY privilege for CREATE GROUP PROVIDER");
 
-        ExecuteAsExecutor.execute(new ExecuteAsStmt(new UserRef("security_user", "%"), false), securityUserCtx);
+        ExecuteAsExecutor.execute(new ExecuteAsStmt(new UserIdentity("security_user", "%"), false), securityUserCtx);
         // Test permission check - should succeed for user with SECURITY privilege
         Assertions.assertDoesNotThrow(() -> {
             Authorizer.checkSystemAction(securityUserCtx, PrivilegeType.SECURITY);
@@ -266,7 +271,7 @@ public class GroupProviderPermissionTest {
         Assertions.assertNotNull(createStmt, "Create statement should parse successfully");
         Assertions.assertEquals("test_provider", createStmt.getName(), "Provider name should match");
 
-        ExecuteAsExecutor.execute(new ExecuteAsStmt(new UserRef("security_user", "%"), false), securityUserCtx);
+        ExecuteAsExecutor.execute(new ExecuteAsStmt(new UserIdentity("security_user", "%"), false), securityUserCtx);
         // Test permission check - root user should have SECURITY privilege
         Assertions.assertDoesNotThrow(() -> {
             Authorizer.checkSystemAction(rootCtx, PrivilegeType.SECURITY);
@@ -280,7 +285,7 @@ public class GroupProviderPermissionTest {
         Assertions.assertNotNull(showCreateStmt, "Show create statement should parse successfully");
         Assertions.assertEquals("test_provider", showCreateStmt.getName(), "Provider name should match");
 
-        ExecuteAsExecutor.execute(new ExecuteAsStmt(new UserRef("security_user", "%"), false), securityUserCtx);
+        ExecuteAsExecutor.execute(new ExecuteAsStmt(new UserIdentity("security_user", "%"), false), securityUserCtx);
         // Test permission check - root user should have SECURITY privilege
         Assertions.assertDoesNotThrow(() -> {
             Authorizer.checkSystemAction(rootCtx, PrivilegeType.SECURITY);
@@ -292,7 +297,7 @@ public class GroupProviderPermissionTest {
                 (ShowGroupProvidersStmt) SqlParser.parseSingleStatement(showAllSql, rootCtx.getSessionVariable().getSqlMode());
         Assertions.assertNotNull(showAllStmt, "Show all statement should parse successfully");
 
-        ExecuteAsExecutor.execute(new ExecuteAsStmt(new UserRef("security_user", "%"), false), securityUserCtx);
+        ExecuteAsExecutor.execute(new ExecuteAsStmt(new UserIdentity("security_user", "%"), false), securityUserCtx);
         // Test permission check - root user should have SECURITY privilege
         Assertions.assertDoesNotThrow(() -> {
             Authorizer.checkSystemAction(rootCtx, PrivilegeType.SECURITY);
@@ -305,7 +310,7 @@ public class GroupProviderPermissionTest {
         Assertions.assertNotNull(dropStmt, "Drop statement should parse successfully");
         Assertions.assertEquals("test_provider", dropStmt.getName(), "Provider name should match");
 
-        ExecuteAsExecutor.execute(new ExecuteAsStmt(new UserRef("security_user", "%"), false), securityUserCtx);
+        ExecuteAsExecutor.execute(new ExecuteAsStmt(new UserIdentity("security_user", "%"), false), securityUserCtx);
         // Test permission check - root user should have SECURITY privilege
         Assertions.assertDoesNotThrow(() -> {
             Authorizer.checkSystemAction(rootCtx, PrivilegeType.SECURITY);
@@ -334,7 +339,7 @@ public class GroupProviderPermissionTest {
             Authorizer.checkSystemAction(userCtx, PrivilegeType.SECURITY);
         }, "User should not have SECURITY privilege even in impersonation context");
 
-        ExecuteAsExecutor.execute(new ExecuteAsStmt(new UserRef("security_user", "%"), false), securityUserCtx);
+        ExecuteAsExecutor.execute(new ExecuteAsStmt(new UserIdentity("security_user", "%"), false), securityUserCtx);
         // Test permission check - should succeed for user with SECURITY privilege
         Assertions.assertDoesNotThrow(() -> {
             Authorizer.checkSystemAction(securityUserCtx, PrivilegeType.SECURITY);
@@ -365,7 +370,7 @@ public class GroupProviderPermissionTest {
                 Authorizer.checkSystemAction(userCtx, PrivilegeType.SECURITY);
             }, "Non-admin user should not have SECURITY privilege for: " + sql);
 
-            ExecuteAsExecutor.execute(new ExecuteAsStmt(new UserRef("security_user", "%"), false), securityUserCtx);
+            ExecuteAsExecutor.execute(new ExecuteAsStmt(new UserIdentity("security_user", "%"), false), securityUserCtx);
             // Permission check should succeed for user with SECURITY privilege
             Assertions.assertDoesNotThrow(() -> {
                 Authorizer.checkSystemAction(securityUserCtx, PrivilegeType.SECURITY);
@@ -397,7 +402,7 @@ public class GroupProviderPermissionTest {
             Authorizer.checkSystemAction(userCtx, PrivilegeType.SECURITY);
         }, "Non-admin user should not have SECURITY privilege for quoted identifiers");
 
-        ExecuteAsExecutor.execute(new ExecuteAsStmt(new UserRef("security_user", "%"), false), securityUserCtx);
+        ExecuteAsExecutor.execute(new ExecuteAsStmt(new UserIdentity("security_user", "%"), false), securityUserCtx);
         // Permission check should succeed for user with SECURITY privilege
         Assertions.assertDoesNotThrow(() -> {
             Authorizer.checkSystemAction(securityUserCtx, PrivilegeType.SECURITY);
@@ -429,7 +434,7 @@ public class GroupProviderPermissionTest {
             Authorizer.checkSystemAction(userCtx, PrivilegeType.SECURITY);
         }, "Non-admin user should not have SECURITY privilege for complex properties");
 
-        ExecuteAsExecutor.execute(new ExecuteAsStmt(new UserRef("security_user", "%"), false), securityUserCtx);
+        ExecuteAsExecutor.execute(new ExecuteAsStmt(new UserIdentity("security_user", "%"), false), securityUserCtx);
         // Permission check should succeed for user with SECURITY privilege
         Assertions.assertDoesNotThrow(() -> {
             Authorizer.checkSystemAction(securityUserCtx, PrivilegeType.SECURITY);
@@ -482,7 +487,7 @@ public class GroupProviderPermissionTest {
             Authorizer.checkSystemAction(userCtx, PrivilegeType.SECURITY);
         }, "Non-admin user should not have SECURITY privilege for LDAP type");
 
-        ExecuteAsExecutor.execute(new ExecuteAsStmt(new UserRef("security_user", "%"), false), securityUserCtx);
+        ExecuteAsExecutor.execute(new ExecuteAsStmt(new UserIdentity("security_user", "%"), false), securityUserCtx);
         // All types should pass permission check for user with SECURITY privilege
         Assertions.assertDoesNotThrow(() -> {
             Authorizer.checkSystemAction(securityUserCtx, PrivilegeType.SECURITY);
@@ -509,7 +514,7 @@ public class GroupProviderPermissionTest {
             Authorizer.checkSystemAction(userCtx, PrivilegeType.SECURITY);
         }, "Non-admin user should not have SECURITY privilege for unsupported type");
 
-        ExecuteAsExecutor.execute(new ExecuteAsStmt(new UserRef("security_user", "%"), false), securityUserCtx);
+        ExecuteAsExecutor.execute(new ExecuteAsStmt(new UserIdentity("security_user", "%"), false), securityUserCtx);
         // Permission check should succeed for user with SECURITY privilege
         Assertions.assertDoesNotThrow(() -> {
             Authorizer.checkSystemAction(securityUserCtx, PrivilegeType.SECURITY);
@@ -558,17 +563,17 @@ public class GroupProviderPermissionTest {
         // Create a new user for this test
         ConnectContext testUserCtx = UtFrameUtils.initCtxForNewPrivilege(
                 UserIdentity.createAnalyzedUserIdentWithIp("test_user", "%"));
-        
+
         // Create the test user first
         authenticationMgr.createUser(
-                new CreateUserStmt(new UserRef("test_user", "%"), true, null, List.of(), Map.of(), NodePosition.ZERO));
-        
+                new CreateUserStmt(new UserIdentity("test_user", "%"), true, null, List.of(), Map.of(), NodePosition.ZERO));
+
         // Grant role to user
         authorizationMgr.grantRole(new com.starrocks.sql.ast.GrantRoleStmt(
-                List.of("security_role"), new UserRef("test_user", "%"), NodePosition.ZERO));
+                List.of("security_role"), new UserIdentity("test_user", "%"), NodePosition.ZERO));
         Long role = authorizationMgr.getRoleIdByNameAllowNull("security_role");
         authorizationMgr.setUserDefaultRole(Set.of(role), new UserIdentity("test_user", "%"));
-        
+
         // Update ConnectContext with the new role information
         testUserCtx.setCurrentRoleIds(new UserIdentity("test_user", "%"));
 
@@ -598,17 +603,17 @@ public class GroupProviderPermissionTest {
         // Create a new user for this test
         ConnectContext testUserCtx = UtFrameUtils.initCtxForNewPrivilege(
                 UserIdentity.createAnalyzedUserIdentWithIp("test_user2", "%"));
-        
+
         // Create the test user first
         authenticationMgr.createUser(
-                new CreateUserStmt(new UserRef("test_user2", "%"), true, null, List.of(), Map.of(), NodePosition.ZERO));
-        
+                new CreateUserStmt(new UserIdentity("test_user2", "%"), true, null, List.of(), Map.of(), NodePosition.ZERO));
+
         // Grant role to user
         authorizationMgr.grantRole(new com.starrocks.sql.ast.GrantRoleStmt(
-                List.of("security_role"), new UserRef("test_user2", "%"), NodePosition.ZERO));
+                List.of("security_role"), new UserIdentity("test_user2", "%"), NodePosition.ZERO));
         Long role = authorizationMgr.getRoleIdByNameAllowNull("security_role");
         authorizationMgr.setUserDefaultRole(Set.of(role), new UserIdentity("test_user2", "%"));
-        
+
         // Update ConnectContext with the new role information
         testUserCtx.setCurrentRoleIds(new UserIdentity("test_user2", "%"));
 
@@ -638,17 +643,18 @@ public class GroupProviderPermissionTest {
         // Create a user with SECURITY privilege
         ConnectContext testUserCtx = UtFrameUtils.initCtxForNewPrivilege(
                 UserIdentity.createAnalyzedUserIdentWithIp("comprehensive_user", "%"));
-        
+
         // Create the test user first
         authenticationMgr.createUser(
-                new CreateUserStmt(new UserRef("comprehensive_user", "%"), true, null, List.of(), Map.of(), NodePosition.ZERO));
-        
+                new CreateUserStmt(new UserIdentity("comprehensive_user", "%"), true, null, List.of(), Map.of(),
+                        NodePosition.ZERO));
+
         // Grant SECURITY privilege directly to user
         GrantPrivilegeStmt grantStmt = (GrantPrivilegeStmt) UtFrameUtils.parseStmtWithNewParser(
                 "GRANT SECURITY ON SYSTEM TO USER comprehensive_user",
                 new ConnectContext());
         authorizationMgr.grant(grantStmt);
-        
+
         // Update ConnectContext with the user identity
         testUserCtx.setCurrentUserIdentity(new UserIdentity("comprehensive_user", "%"));
 
@@ -701,7 +707,7 @@ public class GroupProviderPermissionTest {
         RevokePrivilegeStmt revokeStmt = (RevokePrivilegeStmt) UtFrameUtils.parseStmtWithNewParser(
                 "REVOKE SECURITY ON SYSTEM FROM USER u1",
                 new ConnectContext());
-        
+
         // This should not throw an exception, but should be handled gracefully
         Assertions.assertDoesNotThrow(() -> {
             authorizationMgr.revoke(revokeStmt);
@@ -722,26 +728,26 @@ public class GroupProviderPermissionTest {
         // Create a user with SECURITY privilege
         ConnectContext testUserCtx = UtFrameUtils.initCtxForNewPrivilege(
                 UserIdentity.createAnalyzedUserIdentWithIp("type_test_user", "%"));
-        
+
         // Create the test user first
         authenticationMgr.createUser(
-                new CreateUserStmt(new UserRef("type_test_user", "%"), true, null, List.of(), Map.of(), NodePosition.ZERO));
-        
+                new CreateUserStmt(new UserIdentity("type_test_user", "%"), true, null, List.of(), Map.of(), NodePosition.ZERO));
+
         // Grant SECURITY privilege directly to user
         GrantPrivilegeStmt grantStmt = (GrantPrivilegeStmt) UtFrameUtils.parseStmtWithNewParser(
                 "GRANT SECURITY ON SYSTEM TO USER type_test_user",
                 new ConnectContext());
         authorizationMgr.grant(grantStmt);
-        
+
         // Update ConnectContext with the user identity
         testUserCtx.setCurrentUserIdentity(new UserIdentity("type_test_user", "%"));
 
         // Test different Group Provider types
         String[] providerTypes = {"unix", "file", "ldap"};
-        
+
         for (String type : providerTypes) {
             String sql = "CREATE GROUP PROVIDER IF NOT EXISTS " + type + "_provider PROPERTIES(\"type\" = \"" + type + "\")";
-            
+
             // Parse should succeed
             Object stmt = SqlParser.parseSingleStatement(sql, testUserCtx.getSessionVariable().getSqlMode());
             Assertions.assertNotNull(stmt, "Statement should parse successfully for type: " + type);
@@ -761,7 +767,7 @@ public class GroupProviderPermissionTest {
         // Test all Group Provider types should fail after revoke
         for (String type : providerTypes) {
             String sql = "CREATE GROUP PROVIDER IF NOT EXISTS " + type + "_provider PROPERTIES(\"type\" = \"" + type + "\")";
-            
+
             // Permission check should fail for user without SECURITY privilege
             Assertions.assertThrows(AccessDeniedException.class, () -> {
                 Authorizer.checkSystemAction(testUserCtx, PrivilegeType.SECURITY);

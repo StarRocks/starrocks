@@ -18,18 +18,18 @@ import com.starrocks.authorization.AccessDeniedException;
 import com.starrocks.authorization.AuthorizationMgr;
 import com.starrocks.authorization.DefaultAuthorizationProvider;
 import com.starrocks.authorization.PrivilegeType;
-import com.starrocks.catalog.UserIdentity;
 import com.starrocks.persist.EditLog;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ExecuteAsExecutor;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.analyzer.Analyzer;
 import com.starrocks.sql.analyzer.Authorizer;
 import com.starrocks.sql.ast.CreateRoleStmt;
 import com.starrocks.sql.ast.CreateUserStmt;
 import com.starrocks.sql.ast.ExecuteAsStmt;
 import com.starrocks.sql.ast.GrantPrivilegeStmt;
 import com.starrocks.sql.ast.RevokePrivilegeStmt;
-import com.starrocks.sql.ast.UserRef;
+import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.sql.ast.integration.AlterSecurityIntegrationStatement;
 import com.starrocks.sql.ast.integration.CreateSecurityIntegrationStatement;
 import com.starrocks.sql.ast.integration.DropSecurityIntegrationStatement;
@@ -113,11 +113,16 @@ public class SecurityIntegrationPermissionTest {
      * Setup test users and roles with appropriate privileges
      */
     private void setupTestUsersAndRoles() throws Exception {
+        ConnectContext context = new ConnectContext();
         // Create test users
-        authenticationMgr.createUser(
-                new CreateUserStmt(new UserRef("u1", "%"), true, null, List.of(), Map.of(), NodePosition.ZERO));
-        authenticationMgr.createUser(
-                new CreateUserStmt(new UserRef("security_user", "%"), true, null, List.of(), Map.of(), NodePosition.ZERO));
+        CreateUserStmt createUserStmt =
+                new CreateUserStmt(new UserIdentity("u1", "%"), true, null, List.of(), Map.of(), NodePosition.ZERO);
+        Analyzer.analyze(createUserStmt, context);
+        authenticationMgr.createUser(createUserStmt);
+
+        createUserStmt = new CreateUserStmt(new UserIdentity("security_user", "%"), true, null, List.of(), Map.of(), NodePosition.ZERO);
+        Analyzer.analyze(createUserStmt, context);
+        authenticationMgr.createUser(createUserStmt);
 
         // Create a role with SECURITY privilege
         authorizationMgr.createRole(new CreateRoleStmt(List.of("security_role"), true, ""));
@@ -130,7 +135,7 @@ public class SecurityIntegrationPermissionTest {
 
         // Grant the role to security_user
         authorizationMgr.grantRole(new com.starrocks.sql.ast.GrantRoleStmt(
-                List.of("security_role"), new UserRef("security_user", "%"), NodePosition.ZERO));
+                List.of("security_role"), new UserIdentity("security_user", "%"), NodePosition.ZERO));
         Long role = authorizationMgr.getRoleIdByNameAllowNull("security_role");
         authorizationMgr.setUserDefaultRole(Set.of(role), new UserIdentity("security_user", "%"));
     }
@@ -163,7 +168,7 @@ public class SecurityIntegrationPermissionTest {
             Authorizer.checkSystemAction(userCtx, PrivilegeType.SECURITY);
         }, "Non-admin user should not have SECURITY privilege for CREATE SECURITY INTEGRATION");
 
-        ExecuteAsExecutor.execute(new ExecuteAsStmt(new UserRef("security_user", "%"), false), securityUserCtx);
+        ExecuteAsExecutor.execute(new ExecuteAsStmt(new UserIdentity("security_user", "%"), false), securityUserCtx);
         // Test permission check - should succeed for user with SECURITY privilege
         Assertions.assertDoesNotThrow(() -> {
             Authorizer.checkSystemAction(securityUserCtx, PrivilegeType.SECURITY);
@@ -191,7 +196,7 @@ public class SecurityIntegrationPermissionTest {
             Authorizer.checkSystemAction(userCtx, PrivilegeType.SECURITY);
         }, "Non-admin user should not have SECURITY privilege for SHOW SECURITY INTEGRATIONS");
 
-        ExecuteAsExecutor.execute(new ExecuteAsStmt(new UserRef("security_user", "%"), false), securityUserCtx);
+        ExecuteAsExecutor.execute(new ExecuteAsStmt(new UserIdentity("security_user", "%"), false), securityUserCtx);
         // Test permission check - should succeed for user with SECURITY privilege
         Assertions.assertDoesNotThrow(() -> {
             Authorizer.checkSystemAction(securityUserCtx, PrivilegeType.SECURITY);
@@ -221,7 +226,7 @@ public class SecurityIntegrationPermissionTest {
             Authorizer.checkSystemAction(userCtx, PrivilegeType.SECURITY);
         }, "Non-admin user should not have SECURITY privilege for SHOW CREATE SECURITY INTEGRATION");
 
-        ExecuteAsExecutor.execute(new ExecuteAsStmt(new UserRef("security_user", "%"), false), securityUserCtx);
+        ExecuteAsExecutor.execute(new ExecuteAsStmt(new UserIdentity("security_user", "%"), false), securityUserCtx);
         // Test permission check - should succeed for user with SECURITY privilege
         Assertions.assertDoesNotThrow(() -> {
             Authorizer.checkSystemAction(securityUserCtx, PrivilegeType.SECURITY);
@@ -250,7 +255,7 @@ public class SecurityIntegrationPermissionTest {
             Authorizer.checkSystemAction(userCtx, PrivilegeType.SECURITY);
         }, "Non-admin user should not have SECURITY privilege for DROP SECURITY INTEGRATION");
 
-        ExecuteAsExecutor.execute(new ExecuteAsStmt(new UserRef("security_user", "%"), false), securityUserCtx);
+        ExecuteAsExecutor.execute(new ExecuteAsStmt(new UserIdentity("security_user", "%"), false), securityUserCtx);
         // Test permission check - should succeed for user with SECURITY privilege
         Assertions.assertDoesNotThrow(() -> {
             Authorizer.checkSystemAction(securityUserCtx, PrivilegeType.SECURITY);
@@ -282,7 +287,7 @@ public class SecurityIntegrationPermissionTest {
             Authorizer.checkSystemAction(userCtx, PrivilegeType.SECURITY);
         }, "Non-admin user should not have SECURITY privilege for ALTER SECURITY INTEGRATION");
 
-        ExecuteAsExecutor.execute(new ExecuteAsStmt(new UserRef("security_user", "%"), false), securityUserCtx);
+        ExecuteAsExecutor.execute(new ExecuteAsStmt(new UserIdentity("security_user", "%"), false), securityUserCtx);
         // Test permission check - should succeed for user with SECURITY privilege
         Assertions.assertDoesNotThrow(() -> {
             Authorizer.checkSystemAction(securityUserCtx, PrivilegeType.SECURITY);
@@ -387,7 +392,7 @@ public class SecurityIntegrationPermissionTest {
             Authorizer.checkSystemAction(userCtx, PrivilegeType.SECURITY);
         }, "User should not have SECURITY privilege even in impersonation context");
 
-        ExecuteAsExecutor.execute(new ExecuteAsStmt(new UserRef("security_user", "%"), false), securityUserCtx);
+        ExecuteAsExecutor.execute(new ExecuteAsStmt(new UserIdentity("security_user", "%"), false), securityUserCtx);
         // Test permission check - should succeed for user with SECURITY privilege
         Assertions.assertDoesNotThrow(() -> {
             Authorizer.checkSystemAction(securityUserCtx, PrivilegeType.SECURITY);
@@ -416,7 +421,7 @@ public class SecurityIntegrationPermissionTest {
             Authorizer.checkSystemAction(userCtx, PrivilegeType.SECURITY);
         }, "Non-admin user should not have SECURITY privilege for quoted identifiers");
 
-        ExecuteAsExecutor.execute(new ExecuteAsStmt(new UserRef("security_user", "%"), false), securityUserCtx);
+        ExecuteAsExecutor.execute(new ExecuteAsStmt(new UserIdentity("security_user", "%"), false), securityUserCtx);
         // Permission check should succeed for user with SECURITY privilege
         Assertions.assertDoesNotThrow(() -> {
             Authorizer.checkSystemAction(securityUserCtx, PrivilegeType.SECURITY);
@@ -449,7 +454,7 @@ public class SecurityIntegrationPermissionTest {
             Authorizer.checkSystemAction(userCtx, PrivilegeType.SECURITY);
         }, "Non-admin user should not have SECURITY privilege for complex properties");
 
-        ExecuteAsExecutor.execute(new ExecuteAsStmt(new UserRef("security_user", "%"), false), securityUserCtx);
+        ExecuteAsExecutor.execute(new ExecuteAsStmt(new UserIdentity("security_user", "%"), false), securityUserCtx);
         // Permission check should succeed for user with SECURITY privilege
         Assertions.assertDoesNotThrow(() -> {
             Authorizer.checkSystemAction(securityUserCtx, PrivilegeType.SECURITY);
@@ -481,7 +486,7 @@ public class SecurityIntegrationPermissionTest {
                 Authorizer.checkSystemAction(userCtx, PrivilegeType.SECURITY);
             }, "Non-admin user should not have SECURITY privilege for: " + sql);
 
-            ExecuteAsExecutor.execute(new ExecuteAsStmt(new UserRef("security_user", "%"), false), securityUserCtx);
+            ExecuteAsExecutor.execute(new ExecuteAsStmt(new UserIdentity("security_user", "%"), false), securityUserCtx);
             // Permission check should succeed for user with SECURITY privilege
             Assertions.assertDoesNotThrow(() -> {
                 Authorizer.checkSystemAction(securityUserCtx, PrivilegeType.SECURITY);
@@ -529,7 +534,7 @@ public class SecurityIntegrationPermissionTest {
             Authorizer.checkSystemAction(userCtx, PrivilegeType.SECURITY);
         }, "Non-admin user should not have SECURITY privilege for SAML type");
 
-        ExecuteAsExecutor.execute(new ExecuteAsStmt(new UserRef("security_user", "%"), false), securityUserCtx);
+        ExecuteAsExecutor.execute(new ExecuteAsStmt(new UserIdentity("security_user", "%"), false), securityUserCtx);
         // All types should pass permission check for user with SECURITY privilege
         Assertions.assertDoesNotThrow(() -> {
             Authorizer.checkSystemAction(securityUserCtx, PrivilegeType.SECURITY);
@@ -557,7 +562,7 @@ public class SecurityIntegrationPermissionTest {
             Authorizer.checkSystemAction(userCtx, PrivilegeType.SECURITY);
         }, "Non-admin user should not have SECURITY privilege for unsupported type");
 
-        ExecuteAsExecutor.execute(new ExecuteAsStmt(new UserRef("security_user", "%"), false), securityUserCtx);
+        ExecuteAsExecutor.execute(new ExecuteAsStmt(new UserIdentity("security_user", "%"), false), securityUserCtx);
         // Permission check should succeed for user with SECURITY privilege
         Assertions.assertDoesNotThrow(() -> {
             Authorizer.checkSystemAction(securityUserCtx, PrivilegeType.SECURITY);
@@ -609,11 +614,11 @@ public class SecurityIntegrationPermissionTest {
 
         // Create the test user first
         authenticationMgr.createUser(
-                new CreateUserStmt(new UserRef("test_user", "%"), true, null, List.of(), Map.of(), NodePosition.ZERO));
+                new CreateUserStmt(new UserIdentity("test_user", "%"), true, null, List.of(), Map.of(), NodePosition.ZERO));
 
         // Grant role to user
         authorizationMgr.grantRole(new com.starrocks.sql.ast.GrantRoleStmt(
-                List.of("security_role"), new UserRef("test_user", "%"), NodePosition.ZERO));
+                List.of("security_role"), new UserIdentity("test_user", "%"), NodePosition.ZERO));
         Long role = authorizationMgr.getRoleIdByNameAllowNull("security_role");
         authorizationMgr.setUserDefaultRole(Set.of(role), new UserIdentity("test_user", "%"));
 
@@ -645,18 +650,18 @@ public class SecurityIntegrationPermissionTest {
     public void testRevokeRoleFromUser() throws Exception {
         // Create the test user first
         authenticationMgr.createUser(
-                new CreateUserStmt(new UserRef("test_user2", "%"), true, null, List.of(), Map.of(), NodePosition.ZERO));
+                new CreateUserStmt(new UserIdentity("test_user2", "%"), true, null, List.of(), Map.of(), NodePosition.ZERO));
 
         // Grant role to user
         authorizationMgr.grantRole(new com.starrocks.sql.ast.GrantRoleStmt(
-                List.of("security_role"), new UserRef("test_user2", "%"), NodePosition.ZERO));
+                List.of("security_role"), new UserIdentity("test_user2", "%"), NodePosition.ZERO));
         Long role = authorizationMgr.getRoleIdByNameAllowNull("security_role");
         Set<Long> defaultRoles = new HashSet<>();
         defaultRoles.add(role);
         authorizationMgr.setUserDefaultRole(defaultRoles, new UserIdentity("test_user2", "%"));
 
         ConnectContext testUserCtx = new ConnectContext();
-        ExecuteAsExecutor.execute(new ExecuteAsStmt(new UserRef("test_user2", "%"), false), testUserCtx);
+        ExecuteAsExecutor.execute(new ExecuteAsStmt(new UserIdentity("test_user2", "%"), false), testUserCtx);
 
         // Update ConnectContext with the new role information
         testUserCtx.setCurrentRoleIds(new UserIdentity("test_user2", "%"));
@@ -668,7 +673,7 @@ public class SecurityIntegrationPermissionTest {
 
         // Now revoke role from user
         authorizationMgr.revokeRole(new com.starrocks.sql.ast.RevokeRoleStmt(
-                List.of("security_role"), new UserRef("test_user2", "%"), NodePosition.ZERO));
+                List.of("security_role"), new UserIdentity("test_user2", "%"), NodePosition.ZERO));
 
         // Verify user no longer has SECURITY privilege
         Assertions.assertThrows(AccessDeniedException.class, () -> {
@@ -688,7 +693,7 @@ public class SecurityIntegrationPermissionTest {
 
         // Create the test user first
         authenticationMgr.createUser(
-                new CreateUserStmt(new UserRef("comprehensive_user", "%"), true, null, List.of(), Map.of(), NodePosition.ZERO));
+                new CreateUserStmt(new UserIdentity("comprehensive_user", "%"), true, null, List.of(), Map.of(), NodePosition.ZERO));
 
         // Grant SECURITY privilege directly to user
         GrantPrivilegeStmt grantStmt = (GrantPrivilegeStmt) UtFrameUtils.parseStmtWithNewParser(
