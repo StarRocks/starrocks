@@ -1,0 +1,88 @@
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+syntax = "proto3";
+
+import "star_status.proto";
+
+package staros;
+option java_package = "com.staros.proto";
+option java_multiple_files = true;
+
+message ServiceComponentInfo {
+    string service_component_name = 1;
+}
+
+message ServiceTemplateInfo {
+    string service_template_name = 1;
+    repeated ServiceComponentInfo service_component_info = 2;
+}
+
+message RegisterServiceRequest {
+    ServiceTemplateInfo service_template_info = 1;
+}
+
+message RegisterServiceResponse {
+    StarStatus status = 1;
+}
+
+message DeregisterServiceRequest {
+    string service_template_name = 1;
+}
+
+message DeregisterServiceResponse {
+    StarStatus status = 1;
+}
+
+message BootstrapServiceRequest {
+    string service_template_name = 1;
+    string service_name = 2;
+}
+
+message BootstrapServiceResponse {
+    StarStatus status = 1;
+    string service_id = 2;
+}
+
+message ShutdownServiceRequest {
+    string service_id = 1;
+}
+
+message ShutdownServiceResponse {
+    StarStatus status = 1;
+}
+
+message GetServiceRequest {
+    oneof identifier {
+        string service_id = 1;
+        string service_name = 2;
+    }
+}
+
+enum ServiceState {
+    RUNNING = 0;
+    SHUTDOWN = 1;
+}
+
+message ServiceInfo {
+    string service_template_name = 1;
+    string service_name = 2;
+    string service_id = 3;
+    ServiceState service_state = 4;
+}
+
+message GetServiceResponse {
+    StarStatus status = 1;
+    ServiceInfo service_info = 2;
+}
