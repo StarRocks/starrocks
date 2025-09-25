@@ -234,9 +234,17 @@ using RpcLoadDisagnosePair = std::pair<PLoadDiagnoseRequest*, ReusableClosure<PL
 
 TEST_F(LocalTabletsChannelTest, test_add_chunk_not_exist_tablet) {
     _create_tablets(1);
-    // open as a secondary replica of 3 replicas
+
     ReplicaInfo replica_info{_tablets[0]->tablet_id(), _nodes};
-    _open_channel(_nodes[1].node_id(), {replica_info});
+    PTabletWriterOpenRequest request;
+    _create_open_request(_nodes[1].node_id(), {replica_info}, &request);
+    // turn off _is_replicated_storage to avoid launching secondary waiter
+    request.set_is_replicated_storage(false);
+
+    std::shared_ptr<OlapTableSchemaParam> schema_param(new OlapTableSchemaParam());
+    ASSERT_OK(schema_param->init(request.schema()));
+    PTabletWriterOpenResult response;
+    ASSERT_OK(_tablets_channel->open(request, &response, schema_param, false));
 
     PTabletWriterAddChunkRequest add_chunk_request;
     add_chunk_request.mutable_id()->CopyFrom(_load_id);
