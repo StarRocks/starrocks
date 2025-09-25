@@ -315,7 +315,6 @@ public class SystemInfoServiceTest {
                 return WarehouseManager.DEFAULT_RESOURCE;
             }
         };
-        service.addComputeNode(cn);
         cn.setStarletPort(1001);
 
         {
