@@ -1,0 +1,93 @@
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+syntax = "proto3";
+
+package staros;
+
+option java_package = "com.staros.proto";
+option java_multiple_files = true;
+
+message Status {
+    int32 code = 1;
+    string message = 2;
+}
+
+message ProvisionResourceRequest {
+    // identity of the resource, can be queryable by this name
+    string name = 1;
+    int32 num_of_nodes = 2;
+    // number of cpus per node
+    string cpus = 3;
+    // number of memories per node
+    string memories = 4;
+    // image for the node
+    string image = 5;
+    // annotation/labels for the nodes
+    map<string, string> annotations = 6;
+}
+
+message ProvisionResourceResponse {
+    Status status = 1;
+    repeated NodeInfo infos = 2;
+}
+
+message DeleteResourceRequest {
+    string name = 1;
+}
+
+message DeleteResourceResponse {
+    Status status = 1;
+}
+
+message GetResourceRequest {
+    string name = 1;
+}
+
+message NodeInfo {
+    // identify the node, could be IP address or FQDN name
+    string host = 1;
+    // other information, e.g. avg cpu/load/memory/health e.t.c.
+}
+
+message GetResourceResponse {
+    Status status = 1;
+    repeated NodeInfo infos = 2;
+}
+
+message ScaleResourceRequest {
+    // identity of the resource, can be queryable by this name
+    string name = 1;
+    int32 num_of_nodes = 2;
+    // number of cpus per node
+    string cpus = 3;
+    // number of memories per node
+    string memories = 4;
+    // image for the node
+    string image = 5;
+    // annotation/labels for the nodes
+    map<string, string> annotations = 6;
+}
+
+message ScaleResourceResponse {
+    Status status = 1;
+    repeated NodeInfo infos = 2;
+}
+
+service ResourceProvisioner {
+    rpc provisionResource(ProvisionResourceRequest) returns (ProvisionResourceResponse) {}
+    rpc deleteResource(DeleteResourceRequest) returns (DeleteResourceResponse) {}
+    rpc scaleResource(ScaleResourceRequest) returns (ScaleResourceResponse) {}
+    rpc getResource(GetResourceRequest) returns (GetResourceResponse) {}
+}
