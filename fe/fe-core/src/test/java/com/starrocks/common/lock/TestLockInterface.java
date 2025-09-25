@@ -31,7 +31,6 @@ import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
 
-import java.util.List;
 import java.util.concurrent.TimeUnit;
 
 public class TestLockInterface {
@@ -66,7 +65,11 @@ public class TestLockInterface {
         Database database = new Database(rid, "db");
         database.setExist(false);
         Locker locker = new Locker();
+<<<<<<< HEAD
         Assert.assertFalse(locker.lockDatabaseAndCheckExist(database, rid2, LockType.READ));
+=======
+        Assertions.assertFalse(locker.lockTableAndCheckDbExist(database, rid2, LockType.READ));
+>>>>>>> 0b7231250d ([Enhancement] Optimize mv relatd locks (backport #63481) (#63546))
     }
 
     @Test
@@ -204,6 +207,7 @@ public class TestLockInterface {
     }
 
     @Test
+<<<<<<< HEAD
     public void testReentrantReadWriteTryLock() {
         List<Database> dbs = Lists.newArrayList();
         for (int i = 0; i < 10; i++) {
@@ -244,6 +248,8 @@ public class TestLockInterface {
     }
 
     @Test
+=======
+>>>>>>> 0b7231250d ([Enhancement] Optimize mv relatd locks (backport #63481) (#63546))
     public void testTryLockTablesWithIntensiveDbLock2() throws LockException {
         long rid = 1L;
         Database database = new Database(rid, "db");
