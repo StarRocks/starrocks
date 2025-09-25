@@ -362,20 +362,7 @@ public class InsertOverwriteJobRunner {
         if (!db.isExist()) {
             throw new DmlException("insert overwrite commit failed because locking db:%s failed", dbId);
         }
-<<<<<<< HEAD
-        OlapTable targetTable;
-        try {
-            targetTable = checkAndGetTable(db, tableId);
-        } finally {
-            locker.unLockTableWithIntensiveDbLock(db.getId(), tableId, LockType.READ);
-=======
         OlapTable targetTable = checkAndGetTable(db, tableId);
-        // acquire compute resource
-        ComputeResource computeResource = context.getCurrentComputeResource();
-        if (computeResource == null) {
-            throw new DmlException("insert overwrite commit failed because no available resource");
->>>>>>> e9820a48e4 ([Enhancement] Optimize mv relatd locks (#63481))
-        }
         PartitionUtils.createAndAddTempPartitionsForTable(db, targetTable, postfix,
                 job.getSourcePartitionIds(), job.getTmpPartitionIds(), null, job.getWarehouseId());
         createPartitionElapse = System.currentTimeMillis() - createPartitionStartTimestamp;
