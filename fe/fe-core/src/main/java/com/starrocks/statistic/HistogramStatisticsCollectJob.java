@@ -292,7 +292,7 @@ public class HistogramStatisticsCollectJob extends StatisticsCollectJob {
                                       Long bucketNum, Map<String, String> mostCommonValues, String columnName,
                                       Type columnType) {
         VelocityContext context = buildBaseContext(database, table, columnName);
-        context.put("histogramFunction", buildHistogramFunction(db, table, sampleRatio, bucketNum, columnName, false));
+        context.put("histogramFunction", buildHistogramFunction(database, table, sampleRatio, bucketNum, columnName, false));
         context.put("sampleRatio", sampleRatio);
         context.put("totalRows", Config.histogram_max_sample_row_count);
         addMcvExcludeToContext(context, mostCommonValues, columnName, columnType);
