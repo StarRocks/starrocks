@@ -917,6 +917,38 @@ public class LowCardinalityArrayTest extends PlanTestBase {
     }
 
     @Test
+    public void testNotSupportedWindowFunctionLeadLagWithSpecifiedDefaultValue() throws Exception {
+        String sqlFmt = "with cte as(\n" +
+                "  select s1.v1, s1.v2, t.a1 a1\n" +
+                "  from s1,unnest(s1.a1)t(a1) \n" +
+                ")\n" +
+                "select v1, a1, {WINDOW_FUN}(a1, 1, 'ABCD') over(partition by v1)\n" +
+                "from cte;";
+
+        String[] windowFuncs = new String[] {
+                FunctionSet.LEAD,
+                FunctionSet.LAG
+        };
+
+        for (String wf : windowFuncs) {
+            String q = sqlFmt.replace("{WINDOW_FUN}", wf);
+            String plan = getVerboseExplain(q);
+            String[] lines = plan.split("\n");
+            List<Integer> decodeNodeLines = IntStream.range(0, lines.length).boxed()
+                    .filter(lineno -> lines[lineno]
+                            .matches("^\\s*\\d+:Decode\\s*$"))
+                    .collect(Collectors.toList());
+
+            List<Integer> analyticNodeLines = IntStream.range(0, lines.length).boxed()
+                    .filter(lineno -> lines[lineno]
+                            .matches("^\\s*\\d+:ANALYTIC\\s*$"))
+                    .collect(Collectors.toList());
+            Assertions.assertEquals(1, decodeNodeLines.size(), plan);
+            Assertions.assertEquals(1, analyticNodeLines.size(), plan);
+            Assertions.assertTrue(decodeNodeLines.get(0) > analyticNodeLines.get(0), plan);
+        }
+    }
+    @Test
     public void testdWindowFunctionCount() throws Exception {
         String sql1 = "with cte as(\n" +
                 "  select s1.v1, s1.v2, t.a1 a1\n" +
