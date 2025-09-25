@@ -1,4 +1,4 @@
--- name: test_show_impersonate_grants
+-- name: test_show_impersonate_grants @sequential
 CREATE GROUP PROVIDER IF NOT EXISTS `test_execute_as_file_group_provider` PROPERTIES ("group_file_url" = "group_mapping", "type" = "file");
 admin set frontend config ("group_provider"="test_execute_as_file_group_provider");
 

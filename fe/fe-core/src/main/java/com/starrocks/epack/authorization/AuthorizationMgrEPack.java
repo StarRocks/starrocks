@@ -78,40 +78,57 @@ public class AuthorizationMgrEPack extends AuthorizationMgr {
 
     public void initBuiltinRolesAndUsersEPack() {
         try {
-            List<PEntryObject> allWarehousePriv = new ArrayList<>();
-            allWarehousePriv.add(provider.generateObject(ObjectTypeEPack.WAREHOUSE,
-                    Lists.newArrayList("*")));
-            List<PEntryObject> allFailoverGroupPriv = new ArrayList<>();
-            allFailoverGroupPriv.add(provider.generateObject(ObjectTypeEPack.FAILOVER_GROUP,
-                    Lists.newArrayList("*")));
-
             RolePrivilegeCollectionV2 rootPrivCollection = getRolePrivilegeCollection(PrivilegeBuiltinConstants.ROOT_ROLE_ID);
-            rootPrivCollection.grantWithoutAssertMutable(ObjectTypeEPack.WAREHOUSE,
-                    provider.getAvailablePrivType(ObjectTypeEPack.WAREHOUSE), allWarehousePriv, false);
-            rootPrivCollection.grantWithoutAssertMutable(ObjectTypeEPack.FAILOVER_GROUP,
-                    provider.getAvailablePrivType(ObjectTypeEPack.FAILOVER_GROUP), allFailoverGroupPriv, false);
 
-            RolePrivilegeCollectionV2 dbAdminPrivCollection = getRolePrivilegeCollection(
-                    PrivilegeBuiltinConstants.DB_ADMIN_ROLE_ID);
+            rootPrivCollection.grantWithoutAssertMutable(
+                    ObjectTypeEPack.MASKING_POLICY,
+                    provider.getAvailablePrivType(ObjectTypeEPack.MASKING_POLICY),
+                    List.of(provider.generateObject(ObjectTypeEPack.MASKING_POLICY, Lists.newArrayList("*", "*", "*"))),
+                    false
+            );
 
-            dbAdminPrivCollection.grantWithoutAssertMutable(ObjectType.SYSTEM,
-                    List.of(PrivilegeTypeEPack.CREATE_FAILOVER_GROUP),
-                    Arrays.asList(new PEntryObject[] { null }),
+            rootPrivCollection.grantWithoutAssertMutable(
+                    ObjectTypeEPack.ROW_ACCESS_POLICY,
+                    provider.getAvailablePrivType(ObjectTypeEPack.ROW_ACCESS_POLICY),
+                    List.of(provider.generateObject(ObjectTypeEPack.ROW_ACCESS_POLICY, Lists.newArrayList("*", "*", "*"))),
+                    false
+            );
+
+            rootPrivCollection.grantWithoutAssertMutable(
+                    ObjectTypeEPack.FAILOVER_GROUP,
+                    provider.getAvailablePrivType(ObjectTypeEPack.FAILOVER_GROUP),
+                    List.of(provider.generateObject(ObjectTypeEPack.FAILOVER_GROUP, Lists.newArrayList("*"))),
                     false);
 
-            dbAdminPrivCollection.grantWithoutAssertMutable(ObjectTypeEPack.FAILOVER_GROUP,
-                    provider.getAvailablePrivType(ObjectTypeEPack.FAILOVER_GROUP), allFailoverGroupPriv, false);
+            RolePrivilegeCollectionV2 dbAdminPrivCollection =
+                    getRolePrivilegeCollection(PrivilegeBuiltinConstants.DB_ADMIN_ROLE_ID);
 
-            RolePrivilegeCollectionV2 clusterAdminPrivCollection =
-                    getRolePrivilegeCollection(PrivilegeBuiltinConstants.CLUSTER_ADMIN_ROLE_ID);
+            dbAdminPrivCollection.grantWithoutAssertMutable(
+                    ObjectTypeEPack.MASKING_POLICY,
+                    provider.getAvailablePrivType(ObjectTypeEPack.MASKING_POLICY),
+                    List.of(provider.generateObject(ObjectTypeEPack.MASKING_POLICY, Lists.newArrayList("*", "*", "*"))),
+                    false
+            );
 
-            clusterAdminPrivCollection.grantWithoutAssertMutable(ObjectType.SYSTEM,
-                    List.of(PrivilegeTypeEPack.CREATE_WAREHOUSE),
+            dbAdminPrivCollection.grantWithoutAssertMutable(
+                    ObjectTypeEPack.ROW_ACCESS_POLICY,
+                    provider.getAvailablePrivType(ObjectTypeEPack.ROW_ACCESS_POLICY),
+                    List.of(provider.generateObject(ObjectTypeEPack.ROW_ACCESS_POLICY, Lists.newArrayList("*", "*", "*"))),
+                    false
+            );
+
+            dbAdminPrivCollection.grantWithoutAssertMutable(
+                    ObjectType.SYSTEM,
+                    List.of(PrivilegeTypeEPack.CREATE_FAILOVER_GROUP),
                     Arrays.asList(new PEntryObject[] {null}),
                     false);
 
-            clusterAdminPrivCollection.grantWithoutAssertMutable(ObjectTypeEPack.WAREHOUSE,
-                    provider.getAvailablePrivType(ObjectTypeEPack.WAREHOUSE), allWarehousePriv, false);            
+            dbAdminPrivCollection.grantWithoutAssertMutable(
+                    ObjectTypeEPack.FAILOVER_GROUP,
+                    provider.getAvailablePrivType(ObjectTypeEPack.FAILOVER_GROUP),
+                    List.of(provider.generateObject(ObjectTypeEPack.FAILOVER_GROUP, Lists.newArrayList("*"))),
+                    false);
+
         } catch (PrivilegeException e) {
             // all initial privileges are supposed to be legal
             throw new RuntimeException("Fatal error when initializing built-in role and user", e);

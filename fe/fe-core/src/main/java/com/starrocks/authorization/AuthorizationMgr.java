@@ -29,12 +29,7 @@ import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.FeConstants;
 import com.starrocks.epack.authorization.AuthorizationProviderEPack;
-import com.starrocks.epack.authorization.ObjectTypeEPack;
-import com.starrocks.epack.authorization.PolicyPEntryObject;
-import com.starrocks.epack.authorization.PrivilegeBuiltinConstantsEPack;
-import com.starrocks.epack.authorization.PrivilegeTypeEPack;
 import com.starrocks.epack.authorization.RoleMappingMetaMgr;
-import com.starrocks.epack.sql.ast.PolicyType;
 import com.starrocks.persist.ImageWriter;
 import com.starrocks.persist.OperationType;
 import com.starrocks.persist.RolePrivilegeCollectionInfo;
@@ -195,9 +190,7 @@ public class AuthorizationMgr {
                     ObjectType.PIPE,
                     ObjectType.GLOBAL_FUNCTION,
                     ObjectType.STORAGE_VOLUME,
-                    ObjectType.WAREHOUSE,
-                    ObjectTypeEPack.MASKING_POLICY,
-                    ObjectTypeEPack.ROW_ACCESS_POLICY);
+                    ObjectType.WAREHOUSE);
 
             for (ObjectType objectType : objectTypes) {
                 initPrivilegeCollectionAllObjects(rolePrivilegeCollection, objectType,
@@ -231,8 +224,6 @@ public class AuthorizationMgr {
                     ObjectType.MATERIALIZED_VIEW,
                     ObjectType.RESOURCE,
                     ObjectType.RESOURCE_GROUP,
-                    ObjectTypeEPack.MASKING_POLICY,
-                    ObjectTypeEPack.ROW_ACCESS_POLICY,
                     ObjectType.FUNCTION,
                     ObjectType.GLOBAL_FUNCTION,
                     ObjectType.STORAGE_VOLUME,
@@ -302,28 +293,6 @@ public class AuthorizationMgr {
             // all initial privileges are supposed to be legal
             throw new RuntimeException("Fatal error when initializing built-in role and user", e);
         }
-
-        initBuiltinRolesAndUsersEPack();
-    }
-
-    private void initBuiltinRolesAndUsersEPack() {
-        // security_admin role
-        RolePrivilegeCollectionV2 rolePrivilegeCollection = initBuiltinRoleUnlocked(
-                PrivilegeBuiltinConstantsEPack.SECURITY_ADMIN_ROLE_ID,
-                PrivilegeBuiltinConstantsEPack.SECURITY_ADMIN_ROLE_NAME,
-                "built-in security administration role");
-        // GRANT SECURITY ON SYSTEM
-        try {
-            initPrivilegeCollections(
-                    rolePrivilegeCollection,
-                    ObjectType.SYSTEM,
-                    Arrays.asList(PrivilegeTypeEPack.SECURITY, PrivilegeType.OPERATE),
-                    null,
-                    false);
-        } catch (PrivilegeException e) {
-            throw new RuntimeException("Fatal error when initializing built-in role and user for EPack", e);
-        }
-        rolePrivilegeCollection.disableMutable(); // not mutable
     }
 
     // called by initBuiltinRolesAndUsers()
@@ -378,16 +347,6 @@ public class AuthorizationMgr {
             collection.grant(objectType, actionList, objects, false);
         } else if (ObjectType.SYSTEM.equals(objectType)) {
             collection.grant(objectType, actionList, Arrays.asList(new PEntryObject[] {null}), false);
-        } else if (ObjectTypeEPack.MASKING_POLICY.equals(objectType)) {
-            PEntryObject pEntryObject = PolicyPEntryObject.generate(PolicyType.MASKING,
-                    Lists.newArrayList("*", "*", "*"));
-            objects.add(pEntryObject);
-            collection.grant(objectType, actionList, objects, false);
-        } else if (ObjectTypeEPack.ROW_ACCESS_POLICY.equals(objectType)) {
-            PEntryObject pEntryObject = PolicyPEntryObject.generate(PolicyType.ROW_ACCESS,
-                    Lists.newArrayList("*", "*", "*"));
-            objects.add(pEntryObject);
-            collection.grant(objectType, actionList, objects, false);
         } else {
             throw new PrivilegeException("unsupported type " + objectType);
         }
@@ -1533,7 +1492,7 @@ public class AuthorizationMgr {
     }
 
     public boolean isBuiltinRole(String name) {
-        return PrivilegeBuiltinConstantsEPack.BUILT_IN_ROLE_NAMES.contains(name);
+        return PrivilegeBuiltinConstants.BUILT_IN_ROLE_NAMES.contains(name);
     }
 
     public String getRoleComment(String name) {
