@@ -49,6 +49,7 @@ using TabletAndRowsets = std::tuple<std::shared_ptr<Tablet>, std::vector<BaseRow
 class CompactionScheduler;
 class Metacache;
 class VersionedTablet;
+class SegmentWarmupManager;
 
 class TabletManager {
     friend class Tablet;
@@ -184,6 +185,8 @@ public:
 
     CompactionScheduler* compaction_scheduler() { return _compaction_scheduler.get(); }
 
+    SegmentWarmupManager* segment_warmup_manager() { return _segment_warmup_mgr.get(); }
+
     void update_metacache_limit(size_t limit);
 
     // The return value will never be null.
@@ -244,6 +247,7 @@ private:
     std::unique_ptr<Metacache> _metacache;
     std::unique_ptr<CompactionScheduler> _compaction_scheduler;
     UpdateManager* _update_mgr = nullptr;
+    std::unique_ptr<SegmentWarmupManager> _segment_warmup_mgr;
 
     std::shared_mutex _meta_lock;
     std::unordered_map<int64_t, int64_t> _tablet_in_writing_size;

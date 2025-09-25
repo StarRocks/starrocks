@@ -50,6 +50,10 @@ struct CompactionTaskStats {
     int64_t io_count_local_disk = 0;
     int64_t io_count_remote = 0;
     int64_t in_queue_time_sec = 0;
+    // peer cache stats
+    int64_t io_bytes_read_peer_cache = 0;
+    int64_t io_count_peer_cache = 0;
+    int64_t io_ns_read_peer_cache = 0;
     int64_t read_segment_count = 0;
     int64_t write_segment_count = 0;
     int64_t write_segment_bytes = 0;
@@ -67,11 +71,12 @@ struct CompactionTaskStats {
 // Context of a single tablet compaction task.
 struct CompactionTaskContext : public butil::LinkNode<CompactionTaskContext> {
     explicit CompactionTaskContext(int64_t txn_id_, int64_t tablet_id_, int64_t version_, bool force_base_compaction_,
-                                   std::shared_ptr<CompactionTaskCallback> cb_)
+                                   std::shared_ptr<CompactionTaskCallback> cb_, std::vector<std::string> peer_nodes_ = {})
             : txn_id(txn_id_),
               tablet_id(tablet_id_),
               version(version_),
               force_base_compaction(force_base_compaction_),
+              peer_nodes(std::move(peer_nodes_)),
               callback(std::move(cb_)) {}
 
 #ifndef NDEBUG
@@ -84,6 +89,7 @@ struct CompactionTaskContext : public butil::LinkNode<CompactionTaskContext> {
     const int64_t tablet_id;
     const int64_t version;
     const bool force_base_compaction;
+    const std::vector<std::string> peer_nodes; // peer cache nodes from FE (list of IP addresses/hostnames)
     std::atomic<int64_t> start_time{0};
     std::atomic<int64_t> finish_time{0};
     std::atomic<bool> skipped{false};

@@ -232,7 +232,8 @@ public:
 
         const auto& read_stats = (*stream_st)->get_io_stats();
         auto stats = std::make_unique<io::NumericStatistics>();
-        stats->reserve(22);
+
+        stats->reserve(25);
         stats->append(kBytesReadLocalDisk, read_stats.bytes_read_local_disk);
         stats->append(kBytesWriteLocalDisk, read_stats.bytes_write_local_disk);
         stats->append(kBytesReadRemote, read_stats.bytes_read_remote);
@@ -255,6 +256,9 @@ public:
         stats->append(kIONsReadLocalDiskIndex, index_read_stats.io_ns_read_local_disk);
         stats->append(kIONsWriteLocalDiskIndex, index_read_stats.io_ns_write_local_disk);
         stats->append(kIONsRemoteIndex, index_read_stats.io_ns_read_remote);
+        stats->append(kBytesReadPeerCache, read_stats.bytes_read_peer_cache);
+        stats->append(kIOCountPeerCache, read_stats.io_count_peer_cache);
+        stats->append(kIONsReadPeerCache, read_stats.io_ns_read_peer_cache);
         return std::move(stats);
     }
 
@@ -373,6 +377,10 @@ public:
         opt.enable_data_cache = enable_datacache;
         if (info.size.has_value()) {
             opt.file_size = info.size.value();
+        }
+        // Set peer nodes for peer cache
+        if (!opts.peer_nodes.empty()) {
+            opt.peer_nodes = opts.peer_nodes;
         }
         auto file_st = (*fs_st)->open(pair.first, std::move(opt));
 

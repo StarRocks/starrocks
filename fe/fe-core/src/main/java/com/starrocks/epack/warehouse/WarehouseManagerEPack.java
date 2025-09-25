@@ -587,6 +587,11 @@ public class WarehouseManagerEPack extends WarehouseManager {
         return DEFAULT_WAREHOUSE_ID;
     }
 
+    public Warehouse getCompactionServiceWarehouse() {
+        return getWarehouse(Config.lake_compaction_service_warehouse);
+    }
+
+
     @Override
     public Warehouse getBackgroundWarehouse() {
         return getWarehouse(Config.lake_background_warehouse);

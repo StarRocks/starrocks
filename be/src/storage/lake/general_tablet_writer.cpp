@@ -23,6 +23,7 @@
 #include "runtime/current_thread.h"
 #include "serde/column_array_serde.h"
 #include "storage/lake/filenames.h"
+#include "storage/lake/segment_warmup_manager.h"
 #include "storage/lake/tablet_manager.h"
 #include "storage/lake/vacuum.h"
 #include "storage/rowset/segment_writer.h"
@@ -171,6 +172,21 @@ Status HorizontalGeneralTabletWriter::flush_segment_writer(SegmentPB* segment) {
             }
         }
 
+        // Async warmup: send segment to peer nodes immediately after it's written
+        // This allows warmup to happen in parallel with writing next segments
+        auto* warmup_mgr = _tablet_mgr->segment_warmup_manager();
+        if (warmup_mgr) {
+            // TODO: Get warehouse_id from context
+            int64_t warehouse_id = 0;
+            // Use peer nodes from writer (set by compaction task) or empty for memtable flush
+            warmup_mgr->warm_up_segment_async(_tablet_id, segment_path, warehouse_id, _peer_nodes);
+            if (!_peer_nodes.empty()) {
+                LOG(INFO) << "Triggered async warmup for segment. tablet_id=" << _tablet_id
+                        << " segment=" << segment_name << " size=" << segment_size
+                        << " peer_nodes=" << _peer_nodes.size();
+            }
+        }
+
         _seg_writer.reset();
     }
     return Status::OK();
@@ -291,6 +307,10 @@ Status VerticalGeneralTabletWriter::flush_columns() {
 }
 
 Status VerticalGeneralTabletWriter::finish(SegmentPB* segment) {
+    auto* warmup_mgr = _tablet_mgr->segment_warmup_manager();
+    // TODO: Get warehouse_id from context
+    int64_t warehouse_id = 0;
+    
     for (auto& segment_writer : _segment_writers) {
         uint64_t segment_size = 0;
         uint64_t footer_position = 0;
@@ -301,6 +321,18 @@ Status VerticalGeneralTabletWriter::finish(SegmentPB* segment) {
         _data_size += segment_size;
         collect_writer_stats(_stats, segment_writer.get());
         _stats.segment_count++;
+        
+        // Async warmup: send segment to peer nodes immediately after it's finalized
+        if (warmup_mgr) {
+            // Use peer nodes from writer (set by compaction task) or empty for memtable flush
+            warmup_mgr->warm_up_segment_async(_tablet_id, segment_path, warehouse_id, _peer_nodes);
+            if (!_peer_nodes.empty()) {
+                LOG(INFO) << "Triggered async warmup for vertical segment. tablet_id=" << _tablet_id
+                        << " segment=" << segment_name << " size=" << segment_size
+                        << " peer_nodes=" << _peer_nodes.size();
+            }
+        }
+        
         segment_writer.reset();
     }
     _segment_writers.clear();

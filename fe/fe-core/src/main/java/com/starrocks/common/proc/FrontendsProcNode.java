@@ -103,9 +103,9 @@ public class FrontendsProcNode implements ProcNodeInterface {
 
         for (Frontend fe : globalStateMgr.getNodeMgr().getFrontends(null /* all */)) {
             List<String> info = new ArrayList<String>();
-            info.add(Integer.toString(fe.getFid()));
             info.add(fe.getNodeName());
             info.add(fe.getHost());
+            info.add(Integer.toString(fe.getFid()));
 
             info.add(Integer.toString(fe.getEditLogPort()));
             info.add(Integer.toString(Config.http_port));

@@ -327,7 +327,8 @@ public class CompactionSchedulerTest {
             PhysicalPartition p10 = new PhysicalPartition(physicalPartitionId, "p10", partitionId, index1);
             partition1.addSubPartition(p10);
 
-            Map<Long, List<Long>> resultMap = compactionScheduler.collectPartitionTablets(p10, warehouseId);
+            Map<Long, List<String>> tabletsToPeerCacheNode = new HashMap<>();
+            Map<Long, List<Long>> resultMap = compactionScheduler.collectPartitionTablets(p10, warehouseId, tabletsToPeerCacheNode,false);
             Assertions.assertEquals(2, resultMap.size());
             List<Long> tabletListOnC1 = resultMap.get(c1.getId());
             Assertions.assertEquals(1, tabletListOnC1.size());
@@ -351,7 +352,8 @@ public class CompactionSchedulerTest {
             PhysicalPartition p20 = new PhysicalPartition(physicalPartitionId, "p20", partitionId, null);
             partition2.addSubPartition(p20);
 
-            Map<Long, List<Long>> resultMap = compactionScheduler.collectPartitionTablets(p20, warehouseId);
+            Map<Long, List<String>> tabletsToPeerCacheNode = new HashMap<>();
+            Map<Long, List<Long>> resultMap = compactionScheduler.collectPartitionTablets(p20, warehouseId, tabletsToPeerCacheNode, false);
             // no compute node for tablet3
             Assertions.assertEquals(0, resultMap.size());
         }
@@ -369,7 +371,8 @@ public class CompactionSchedulerTest {
             PhysicalPartition p20 = new PhysicalPartition(physicalPartitionId, "p20", partitionId, null);
             partition.addSubPartition(p20);
 
-            Map<Long, List<Long>> resultMap = compactionScheduler.collectPartitionTablets(p20, warehouseId);
+            Map<Long, List<String>> tabletsToPeerCacheNode = new HashMap<>();
+            Map<Long, List<Long>> resultMap = compactionScheduler.collectPartitionTablets(p20, warehouseId, tabletsToPeerCacheNode, false);
             // exception found for tablet4
             Assertions.assertEquals(0, resultMap.size());
         }

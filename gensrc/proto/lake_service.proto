@@ -94,6 +94,11 @@ message DeleteTxnLogResponse {
     optional StatusPB status = 1;
 }
 
+// Peer nodes list for a single tablet
+message TabletPeerNodesList {
+    repeated string peer_nodes = 1;
+}
+
 message CompactRequest {
     repeated int64 tablet_ids = 1;
     optional int64 txn_id = 2;
@@ -102,6 +107,8 @@ message CompactRequest {
     optional bool allow_partial_success = 5;
     optional bytes encryption_meta = 6;
     optional bool force_base_compaction = 7;
+    // peer cache nodes for warm-up, one list per tablet (aligned with tablet_ids by index)
+    repeated TabletPeerNodesList tablet_peer_nodes = 8;
 }
 
 message CompactStat {
@@ -316,6 +323,34 @@ message VacuumFullResponse {
     optional int64 vacuumed_file_size = 3;
 }
 
+message BlockData {
+    // Cache key for the block
+    optional string cache_key = 1;
+    // Offset in the segment file
+    optional int64 offset = 2;
+    // Size of the block
+    optional int64 size = 3;
+    // NOTE: Block data is NOT included in protobuf to avoid serialization overhead.
+    // Actual block data is transmitted via brpc attachment (IOBuf) for zero-copy efficiency.
+    // See segment_warmup_manager.cpp for implementation details.
+}
+
+message WarmUpSegmentRequest {
+    // Tablet id, used for logging and tracking
+    optional int64 tablet_id = 1;
+    // Segment file path
+    optional string segment_path = 2;
+    // Block metadata (cache_key, offset, size)
+    // Actual block data is transmitted via brpc attachment for zero-copy efficiency
+    repeated BlockData blocks = 3;
+}
+
+message WarmUpSegmentResponse {
+    optional StatusPB status = 1;
+    // Number of blocks successfully cached
+    optional int32 cached_block_count = 2;
+}
+
 service LakeService {
     rpc publish_version(PublishVersionRequest) returns (PublishVersionResponse);
     rpc publish_log_version(PublishLogVersionRequest) returns (PublishLogVersionResponse);
@@ -335,5 +370,6 @@ service LakeService {
     rpc abort_compaction(AbortCompactionRequest) returns (AbortCompactionResponse);
     rpc vacuum(VacuumRequest) returns (VacuumResponse);
     rpc vacuum_full(VacuumFullRequest) returns (VacuumFullResponse);
+    rpc warm_up_segment(WarmUpSegmentRequest) returns (WarmUpSegmentResponse);
 }
 

@@ -27,6 +27,7 @@
 #include "fs/fs.h"
 #include "fs/fs_util.h"
 #include "gutil/strings/util.h"
+#include "runtime/exec_env.h"
 #include "storage/lake/cloud_native_index_compaction_task.h"
 #include "storage/lake/compaction_policy.h"
 #include "storage/lake/compaction_scheduler.h"
@@ -36,6 +37,7 @@
 #include "storage/lake/location_provider.h"
 #include "storage/lake/meta_file.h"
 #include "storage/lake/metacache.h"
+#include "storage/lake/segment_warmup_manager.h"
 #include "storage/lake/tablet.h"
 #include "storage/lake/tablet_metadata.h"
 #include "storage/lake/txn_log.h"
@@ -71,10 +73,22 @@ TabletManager::TabletManager(std::shared_ptr<LocationProvider> location_provider
           _compaction_scheduler(std::make_unique<CompactionScheduler>(this)),
           _update_mgr(update_mgr) {
     _update_mgr->set_tablet_mgr(this);
+    
+    // Initialize segment warmup manager
+    auto* env = ExecEnv::GetInstance();
+    if (env != nullptr) {
+        _segment_warmup_mgr = std::make_unique<SegmentWarmupManager>(env, this);
+    }
 }
 
 TabletManager::TabletManager(std::shared_ptr<LocationProvider> location_provider, int64_t cache_capacity)
-        : _location_provider(std::move(location_provider)), _metacache(std::make_unique<Metacache>(cache_capacity)) {}
+        : _location_provider(std::move(location_provider)), _metacache(std::make_unique<Metacache>(cache_capacity)) {
+    // Initialize segment warmup manager
+    auto* env = ExecEnv::GetInstance();
+    if (env != nullptr) {
+        _segment_warmup_mgr = std::make_unique<SegmentWarmupManager>(env, this);
+    }
+}
 
 TabletManager::~TabletManager() = default;
 
@@ -1049,7 +1063,7 @@ StatusOr<SegmentPtr> TabletManager::load_segment(const FileInfo& segment_info, i
         } else {
             ASSIGN_OR_RETURN(fs, FileSystem::CreateSharedFromString(segment_info.path));
         }
-        segment = std::make_shared<Segment>(std::move(fs), segment_info, segment_id, std::move(tablet_schema), this);
+        segment = std::make_shared<starrocks::Segment>(std::move(fs), segment_info, segment_id, std::move(tablet_schema), this);
         if (fill_metadata_cache) {
             // NOTE: the returned segment may be not the same as the parameter passed in
             // Use the one in cache if the same key already exists

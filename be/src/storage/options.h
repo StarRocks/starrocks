@@ -87,6 +87,9 @@ struct LakeIOOptions {
     bool cache_file_only = false; // only used for CACHE SELECT
     std::shared_ptr<FileSystem> fs;
     std::shared_ptr<starrocks::lake::LocationProvider> location_provider;
+    // Peer nodes for peer cache (list of IP addresses/hostnames)
+    // Example: {"192.168.1.10", "192.168.1.11"}
+    std::vector<std::string> peer_nodes;
 };
 
 class TmpFileDirs {

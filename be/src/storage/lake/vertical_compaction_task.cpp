@@ -51,6 +51,8 @@ Status VerticalCompactionTask::execute(CancelFunc cancel_func, ThreadPool* flush
             CompactionUtils::get_segment_max_rows(config::max_segment_file_size, _total_num_rows, _total_data_size);
     ASSIGN_OR_RETURN(auto writer, _tablet.new_writer_with_schema(kVertical, _txn_id, max_rows_per_segment, flush_pool,
                                                                  true /** is compaction**/, _tablet_schema));
+    // Set peer nodes for segment warmup
+    writer->set_peer_nodes(_context->peer_nodes);
     RETURN_IF_ERROR(writer->open());
     DeferOp defer([&]() { writer->close(); });
 
@@ -101,6 +103,10 @@ Status VerticalCompactionTask::execute(CancelFunc cancel_func, ThreadPool* flush
 
     LOG(INFO) << "Vertical compaction finished. tablet: " << _tablet.id() << ", txn_id: " << _txn_id
               << ", statistics: " << _context->stats->to_json_stats();
+
+    // Note: Segment warmup is now triggered automatically in writer->finish()
+    // Each segment is warmed up asynchronously as soon as it's finalized, allowing
+    // warmup to happen in parallel with finalizing other segments.
 
     return Status::OK();
 }
@@ -161,8 +167,10 @@ Status VerticalCompactionTask::compact_column_group(bool is_key, int column_grou
     reader_params.profile = nullptr;
     reader_params.use_page_cache = false;
     reader_params.column_access_paths = &_column_access_paths;
+    // Use peer nodes from context (FE passed via compaction request)
     reader_params.lake_io_opts = {.fill_data_cache = config::lake_enable_vertical_compaction_fill_data_cache,
-                                  .buffer_size = config::lake_compaction_stream_buffer_size_bytes};
+                                  .buffer_size = config::lake_compaction_stream_buffer_size_bytes,
+                                  .peer_nodes = _context->peer_nodes};
     RETURN_IF_ERROR(reader.open(reader_params));
 
     CompactionTaskStats prev_stats;

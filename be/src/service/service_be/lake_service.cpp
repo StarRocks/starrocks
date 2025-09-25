@@ -20,6 +20,7 @@
 #include <butil/time.h> // NOLINT
 
 #include "agent/agent_server.h"
+#include "cache/block_cache/block_cache.h"
 #include "common/config.h"
 #include "common/status.h"
 #include "fs/fs_util.h"
@@ -72,6 +73,10 @@ ThreadPool* vacuum_thread_pool(ExecEnv* env) {
 
 ThreadPool* get_tablet_stats_thread_pool(ExecEnv* env) {
     return get_thread_pool(env, TTaskType::UPDATE_TABLET_META_INFO);
+}
+
+ThreadPool* warmup_thread_pool(ExecEnv* env) {
+    return get_thread_pool(env, TTaskType::MAKE_SNAPSHOT);
 }
 
 int get_num_publish_queued_tasks(void*) {
@@ -1051,6 +1056,121 @@ void LakeServiceImpl::vacuum_full(::google::protobuf::RpcController* controller,
     }
 
     latch.wait();
+}
+
+void LakeServiceImpl::warm_up_segment(::google::protobuf::RpcController* controller,
+                                      const ::starrocks::WarmUpSegmentRequest* request,
+                                      ::starrocks::WarmUpSegmentResponse* response,
+                                      ::google::protobuf::Closure* done) {
+    brpc::ClosureGuard guard(done);
+    auto cntl = static_cast<brpc::Controller*>(controller);
+
+    if (request->blocks_size() == 0) {
+        cntl->SetFailed("missing blocks");
+        return;
+    }
+
+    LOG(INFO) << "Received warm_up_segment request. tablet_id=" << request->tablet_id()
+              << " segment_path=" << request->segment_path() << " block_count=" << request->blocks_size();
+
+    // Check if tablet belongs to this CN node
+#if defined(USE_STAROS) && !defined(BUILD_FORMAT_LIB)
+    if (_tablet_mgr != nullptr && !_tablet_mgr->is_tablet_in_worker(request->tablet_id())) {
+        VLOG(2) << "Tablet no longer belongs to this CN node, skip warmup. tablet_id=" << request->tablet_id();
+        // Return success since no warmup is needed
+        response->set_cached_block_count(0);
+        Status::OK().to_protobuf(response->mutable_status());
+        return;
+    }
+#endif
+
+    // Get BlockCache instance
+    auto block_cache = BlockCache::instance();
+    if (!block_cache->available()) {
+        Status::NotSupported("BlockCache is not available").to_protobuf(response->mutable_status());
+        return;
+    }
+
+    auto thread_pool = warmup_thread_pool(_env);
+    if (UNLIKELY(thread_pool == nullptr)) {
+        LOG(WARNING) << "Warmup thread pool is not available. Cannot warm up segment.";
+        Status::InternalError("Warmup thread pool is not available").to_protobuf(response->mutable_status());
+        return;
+    }
+
+    // Get attachment (block data)
+    butil::IOBuf& attachment = cntl->request_attachment();
+    
+    if (attachment.size() == 0) {
+        LOG(WARNING) << "Received warmup request with empty attachment. tablet_id=" << request->tablet_id();
+        Status::InvalidArgument("Empty attachment").to_protobuf(response->mutable_status());
+        return;
+    }
+    
+    VLOG(2) << "Received warmup request. tablet_id=" << request->tablet_id()
+            << " blocks=" << request->blocks_size()
+            << " attachment_size=" << attachment.size();
+
+    // Return success immediately and process blocks asynchronously
+    // This avoids blocking the RPC thread
+    response->set_cached_block_count(request->blocks_size());
+    Status::OK().to_protobuf(response->mutable_status());
+
+    // Release the guard to send response immediately
+    guard.reset(nullptr);
+
+    // Copy attachment data for async processing
+    // We need to copy because the attachment will be destroyed after RPC returns
+    butil::IOBuf attachment_copy;
+    attachment_copy.append(attachment);
+
+    // Process blocks asynchronously in thread pool
+    auto task = [tablet_id = request->tablet_id(), segment_path = request->segment_path(), 
+                 blocks = std::vector<BlockData>(request->blocks().begin(), request->blocks().end()),
+                 attachment_copy = std::move(attachment_copy),
+                 block_cache]() mutable {
+        int32_t cached_count = 0;
+        
+        // Read block data from attachment (zero-copy)
+        for (const auto& block : blocks) {
+            // Check if we have enough data in attachment
+            if (attachment_copy.size() < block.size()) {
+                LOG(WARNING) << "Not enough data in attachment. tablet_id=" << tablet_id
+                             << " expected=" << block.size() << " available=" << attachment_copy.size();
+                break;
+            }
+            
+            // Read block data from attachment
+            std::string buffer;
+            buffer.resize(block.size());
+            size_t copied = attachment_copy.cutn(buffer.data(), block.size());
+            
+            if (copied != block.size()) {
+                LOG(WARNING) << "Failed to read from attachment. tablet_id=" << tablet_id
+                             << " expected=" << block.size() << " copied=" << copied;
+                continue;
+            }
+            
+            // Write to cache
+            Status st = block_cache->write(block.cache_key(), block.offset(), block.size(), buffer.data());
+            if (st.ok()) {
+                cached_count++;
+            } else {
+                LOG(WARNING) << "Failed to cache block. tablet_id=" << tablet_id
+                             << " cache_key=" << block.cache_key() << " offset=" << block.offset()
+                             << " size=" << block.size() << " error=" << st;
+            }
+        }
+        
+        VLOG(2) << "Finished async warm_up_segment. tablet_id=" << tablet_id
+                << " cached_blocks=" << cached_count << "/" << blocks.size();
+    };
+
+    auto st = thread_pool->submit_func(std::move(task));
+    if (!st.ok()) {
+        LOG(WARNING) << "Failed to submit warmup task to thread pool. tablet_id=" << request->tablet_id()
+                     << " error=" << st;
+    }
 }
 
 } // namespace starrocks

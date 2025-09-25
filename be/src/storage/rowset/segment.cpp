@@ -255,7 +255,8 @@ Status Segment::_open(size_t* footer_length_hint, const FooterPointerPB* partial
                       const LakeIOOptions& lake_io_opts) {
     SegmentFooterPB footer;
     RandomAccessFileOptions opts{.skip_fill_local_cache = !lake_io_opts.fill_data_cache,
-                                 .buffer_size = lake_io_opts.buffer_size};
+                                 .buffer_size = lake_io_opts.buffer_size,
+                                 .peer_nodes = lake_io_opts.peer_nodes};
 
     if (!_segment_file_info.encryption_meta.empty()) {
         ASSIGN_OR_RETURN(auto info, KeyCache::instance().unwrap_encryption_meta(_segment_file_info.encryption_meta));

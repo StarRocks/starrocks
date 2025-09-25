@@ -134,6 +134,9 @@ struct RandomAccessFileOptions {
     bool skip_disk_cache = false;
     OperationKind op_type = OperationKind::UNDEFINED;
     int64_t tablet_id = 0;
+
+    // Peer nodes for peer cache (list of IP addresses/hostnames)
+    std::vector<std::string> peer_nodes;
 };
 
 struct DirEntry {

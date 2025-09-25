@@ -58,6 +58,10 @@ DECLARE_int32(fs_buffer_prefetch_threadpool_size);
 DECLARE_bool(fs_enable_buffer_prefetch);
 // starmgr grpc client deadline in milliseconds
 DECLARE_int32(starmgr_client_rpc_timeout_ms);
+// enable peer cache for sharing cache between starlet nodes
+DECLARE_bool(enable_peer_cache);
+// force local cache miss for testing peer cache and remote storage
+DECLARE_bool(force_local_cache_miss);
 
 namespace starrocks {
 
@@ -548,6 +552,8 @@ void init_staros_worker(const std::shared_ptr<starcache::StarCache>& star_cache)
     fslib::FLAGS_index_cache_block_size_bytes = config::starlet_index_cache_block_size_bytes;
     fslib::FLAGS_star_cache_enable_stat = config::starlet_enable_cache_stat;
     fslib::FLAGS_star_cache_tablet_meta_size_bytes = config::starlet_tablet_meta_size_bytes;
+    fslib::FLAGS_enable_peer_cache = config::starlet_enable_peer_cache;
+    fslib::FLAGS_force_local_cache_miss = config::starlet_force_local_cache_miss;
 
     staros::starlet::StarletConfig starlet_config;
     starlet_config.rpc_port = config::starlet_port;

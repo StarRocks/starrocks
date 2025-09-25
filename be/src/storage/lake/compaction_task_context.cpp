@@ -34,6 +34,10 @@ void CompactionTaskStats::collect(const OlapReaderStatistics& reader_stats) {
     column_iterator_init_ns = reader_stats.column_iterator_init_ns;
     io_count_local_disk = reader_stats.io_count_local_disk;
     io_count_remote = reader_stats.io_count_remote;
+    // peer cache stats
+    io_bytes_read_peer_cache = reader_stats.bytes_read_peer_cache;
+    io_count_peer_cache = reader_stats.io_count_peer_cache;
+    io_ns_read_peer_cache = reader_stats.io_ns_read_peer_cache;
     // read segment count is managed else where
     // read_segment_count = reader_stats.segments_read_count;
 }
@@ -54,6 +58,9 @@ CompactionTaskStats CompactionTaskStats::operator+(const CompactionTaskStats& th
     diff.column_iterator_init_ns += that.column_iterator_init_ns;
     diff.io_count_local_disk += that.io_count_local_disk;
     diff.io_count_remote += that.io_count_remote;
+    diff.io_bytes_read_peer_cache += that.io_bytes_read_peer_cache;
+    diff.io_count_peer_cache += that.io_count_peer_cache;
+    diff.io_ns_read_peer_cache += that.io_ns_read_peer_cache;
     // read segment count is managed else where
     // diff.read_segment_count += that.read_segment_count;
     diff.write_segment_count += that.write_segment_count;
@@ -75,6 +82,9 @@ CompactionTaskStats CompactionTaskStats::operator-(const CompactionTaskStats& th
     diff.column_iterator_init_ns -= that.column_iterator_init_ns;
     diff.io_count_local_disk -= that.io_count_local_disk;
     diff.io_count_remote -= that.io_count_remote;
+    diff.io_bytes_read_peer_cache -= that.io_bytes_read_peer_cache;
+    diff.io_count_peer_cache -= that.io_count_peer_cache;
+    diff.io_ns_read_peer_cache -= that.io_ns_read_peer_cache;
     // read segment count is managed else where
     // diff.read_segment_count -= that.read_segment_count;
     diff.write_segment_count -= that.write_segment_count;
@@ -97,6 +107,11 @@ std::string CompactionTaskStats::to_json_stats() {
     root.AddMember("read_remote_mb", rapidjson::Value(io_bytes_read_remote / BYTES_UNIT_MB), allocator);
     root.AddMember("read_remote_count", rapidjson::Value(io_count_remote), allocator);
     root.AddMember("read_local_count", rapidjson::Value(io_count_local_disk), allocator);
+    // peer cache stats
+    root.AddMember("read_peer_cache_mb", rapidjson::Value(io_bytes_read_peer_cache / BYTES_UNIT_MB), allocator);
+    root.AddMember("read_peer_cache_count", rapidjson::Value(io_count_peer_cache), allocator);
+    root.AddMember("read_peer_cache_sec", rapidjson::Value(io_ns_read_peer_cache / TIME_UNIT_NS_PER_SECOND), allocator);
+
     root.AddMember("segment_init_sec", rapidjson::Value(segment_init_ns / TIME_UNIT_NS_PER_SECOND), allocator);
     root.AddMember("column_iterator_init_sec", rapidjson::Value(column_iterator_init_ns / TIME_UNIT_NS_PER_SECOND),
                    allocator);

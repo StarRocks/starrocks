@@ -190,6 +190,7 @@ set(STORAGE_FILES
     lake/compaction_task.cpp
     lake/compaction_task_context.cpp
     lake/horizontal_compaction_task.cpp
+    lake/segment_warmup_manager.cpp
     lake/delta_writer.cpp
     lake/vacuum.cpp
     lake/general_tablet_writer.cpp

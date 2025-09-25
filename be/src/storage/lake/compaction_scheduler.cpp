@@ -256,16 +256,40 @@ void CompactionScheduler::compact(::google::protobuf::RpcController* controller,
                                         st.detailed_message());
         }
     }
+    LOG(INFO) << "debug compact request " << request->DebugString();
     // By default, all the tablet compaction tasks with the same txn id will be executed in the same
     // thread to avoid blocking other transactions, but if there are idle threads, they will steal
     // tasks from busy threads to execute.
     auto cb = std::make_shared<CompactionTaskCallback>(this, request, response, done);
+    
+    // Create compaction contexts for each tablet with corresponding peer nodes
     std::vector<std::unique_ptr<CompactionTaskContext>> contexts_vec;
+    int tablet_index = 0;
+    int total_peer_nodes = 0;
+    
     for (auto tablet_id : request->tablet_ids()) {
+        // Get peer nodes for this specific tablet (if available)
+        std::vector<std::string> peer_nodes_for_tablet;
+        if (tablet_index < request->tablet_peer_nodes_size()) {
+            const auto& tablet_peer_nodes = request->tablet_peer_nodes(tablet_index);
+            for (int i = 0; i < tablet_peer_nodes.peer_nodes_size(); ++i) {
+                peer_nodes_for_tablet.push_back(tablet_peer_nodes.peer_nodes(i));
+            }
+            total_peer_nodes += peer_nodes_for_tablet.size();
+        }
+        
         auto context = std::make_unique<CompactionTaskContext>(request->txn_id(), tablet_id, request->version(),
-                                                               request->force_base_compaction(), cb);
+                                                               request->force_base_compaction(), cb, 
+                                                               std::move(peer_nodes_for_tablet));
         contexts_vec.push_back(std::move(context));
+        tablet_index++;
         // DO NOT touch `context` from here!
+    }
+    
+    if (total_peer_nodes > 0) {
+        LOG(INFO) << "Compaction txn_id=" << request->txn_id() 
+                  << " tablets=" << request->tablet_ids_size()
+                  << " total_peer_nodes=" << total_peer_nodes;
     }
     // initialize last check time, compact request is received right after FE sends it, so consider it valid now
     cb->set_last_check_time(time(nullptr));

@@ -253,6 +253,10 @@ public class WarehouseManager implements Writable {
         return DEFAULT_WAREHOUSE_ID;
     }
 
+    public Warehouse getCompactionServiceWarehouse() {
+        return getWarehouse(DEFAULT_WAREHOUSE_ID);
+    }
+
     public Warehouse getBackgroundWarehouse() {
         return getWarehouse(DEFAULT_WAREHOUSE_ID);
     }

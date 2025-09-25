@@ -51,14 +51,18 @@ Status HorizontalCompactionTask::execute(CancelFunc cancel_func, ThreadPool* flu
     reader_params.chunk_size = chunk_size;
     reader_params.profile = nullptr;
     reader_params.use_page_cache = false;
+    // Use peer nodes from context (FE passed via compaction request)
     reader_params.lake_io_opts = {.fill_data_cache = true,
-                                  .buffer_size = config::lake_compaction_stream_buffer_size_bytes};
+                                  .buffer_size = config::lake_compaction_stream_buffer_size_bytes,
+                                  .peer_nodes = _context->peer_nodes};
     reader_params.column_access_paths = &_column_access_paths;
     RETURN_IF_ERROR(reader.open(reader_params));
 
     ASSIGN_OR_RETURN(auto writer,
                      _tablet.new_writer_with_schema(kHorizontal, _txn_id, 0, flush_pool, true /** compaction **/,
                                                     _tablet_schema /** output rowset schema**/))
+    // Set peer nodes for segment warmup
+    writer->set_peer_nodes(_context->peer_nodes);
     RETURN_IF_ERROR(writer->open());
     DeferOp defer([&]() { writer->close(); });
 
@@ -130,6 +134,10 @@ Status HorizontalCompactionTask::execute(CancelFunc cancel_func, ThreadPool* flu
 
     LOG(INFO) << "Horizontal compaction finished. tablet: " << _tablet.id() << ", txn_id: " << _txn_id
               << ", statistics: " << _context->stats->to_json_stats();
+
+    // Note: Segment warmup is now triggered automatically in writer->flush_segment_writer()
+    // Each segment is warmed up asynchronously as soon as it's written, allowing
+    // warmup to happen in parallel with writing other segments.
 
     return Status::OK();
 }
