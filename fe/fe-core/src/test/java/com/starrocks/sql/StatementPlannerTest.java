@@ -15,12 +15,18 @@
 package com.starrocks.sql;
 
 import com.starrocks.common.FeConstants;
+import com.starrocks.planner.OlapTableSink;
+import com.starrocks.planner.PlanFragment;
 import com.starrocks.sql.analyzer.PlannerMetaLocker;
+import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.StatementBase;
+import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.sql.plan.PlanTestBase;
+import com.starrocks.thrift.TPartialUpdateMode;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.jupiter.api.Test;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -53,4 +59,42 @@ class StatementPlannerTest extends PlanTestBase {
         }
     }
 
+    @Test
+    public void testInsertPartialUpdateMode() throws Exception {
+        {
+            FeConstants.runningUnitTest = true;
+            connectContext.getSessionVariable().setPartialUpdateMode("column");
+            String sql = "insert into tprimary_multi_cols (pk, v1) values (1, '1')";
+            StatementBase stmt = UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
+            InsertPlanner planner = new InsertPlanner();
+            ExecPlan plan = planner.plan((InsertStmt) stmt, connectContext);
+            assertEquals(TPartialUpdateMode.COLUMN_UPSERT_MODE, getPartialUpdateMode(plan));
+        }
+
+        {
+            FeConstants.runningUnitTest = true;
+            connectContext.getSessionVariable().setPartialUpdateMode("auto");
+            String sql = "insert into tprimary_multi_cols (pk, v1) values (1, '1')";
+            StatementBase stmt = UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
+            InsertPlanner planner = new InsertPlanner();
+            ExecPlan plan = planner.plan((InsertStmt) stmt, connectContext);
+            assertEquals(TPartialUpdateMode.COLUMN_UPSERT_MODE, getPartialUpdateMode(plan));
+        }
+
+        {
+            FeConstants.runningUnitTest = true;
+            connectContext.getSessionVariable().setPartialUpdateMode("auto");
+            String sql = "insert into tprimary_multi_cols (pk, v1, v2) values (1, '1', 1)";
+            StatementBase stmt = UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
+            InsertPlanner planner = new InsertPlanner();
+            ExecPlan plan = planner.plan((InsertStmt) stmt, connectContext);
+            assertEquals(TPartialUpdateMode.AUTO_MODE, getPartialUpdateMode(plan));
+        }
+    }
+
+    private TPartialUpdateMode getPartialUpdateMode(ExecPlan plan) {
+        PlanFragment fragment = plan.getFragments().get(0);
+        OlapTableSink sink = (OlapTableSink) fragment.getSink();
+        return sink.getPartialUpdateMode();
+    }
 }
