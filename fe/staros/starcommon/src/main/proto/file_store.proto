@@ -1,0 +1,236 @@
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+syntax = "proto3";
+
+import "star_status.proto";
+
+package staros;
+
+option java_package = "com.staros.proto";
+option java_multiple_files = true;
+
+enum FileStoreType {
+    INVALID = 0;
+    S3 = 1;
+    HDFS = 2;
+    AZBLOB = 3;
+    ADLS2 = 4;
+    GS = 5;
+}
+
+// StarRocks supports four authenticate methods for aws
+// Default: using sdk default way
+// Simple: user must provide ak/sk pair
+// InstanceProfile: a privileged role should be attached to ec2 instance
+// AssumeRole: one role attached to the ec2 instance should be authorized to assume other privileged roles
+enum AwsCredentialType {
+    DEFAULT = 0;
+    SIMPLE = 1;
+    INSTANCE_PROFILE = 2;
+    ASSUME_ROLE = 3;
+}
+
+// nothing needed
+message AwsDefaultCredentialInfo {}
+
+message AwsSimpleCredentialInfo {
+    string access_key = 1;
+    string access_key_secret = 2;
+    bool   encrypted = 3; // ak/sk is encrypted or not
+}
+
+// nothing needed, instance profile provided by administrator
+message AwsInstanceProfileCredentialInfo {
+
+}
+
+message AwsAssumeIamRoleCredentialInfo {
+    string iam_role_arn = 1;
+    string external_id = 2;
+}
+
+message AwsCredentialInfo {
+    oneof credential {
+        AwsDefaultCredentialInfo default_credential = 1;
+        AwsSimpleCredentialInfo simple_credential = 2;
+        AwsInstanceProfileCredentialInfo profile_credential = 3;
+        AwsAssumeIamRoleCredentialInfo assume_role_credential = 4;
+    }
+}
+
+message S3FileStoreInfo {
+    string bucket = 1;
+    string region = 2;
+    string endpoint = 3;
+    AwsCredentialInfo credential = 4;
+    string path_prefix = 5; // sub path related to the bucket
+    // whether partitioned_prefix is enabled or not, default: false
+    bool partitioned_prefix_enabled = 6;
+    // number of partitioned prefix
+    uint32 num_partitioned_prefix = 7;
+    // 0: auto (not set), 1: path style, 2: virtual host style
+    uint32 path_style_access = 8;
+}
+
+message HDFSFileStoreInfo {
+    string url = 1;
+    // HADOOP_USER_NAME
+    string username = 2;
+    // key-value pairs representing core-site.xml/hdfs-site.xml
+    map<string, string> configuration = 3;
+}
+
+message AzBlobCredentialInfo {
+    string shared_key = 1;
+    string sas_token = 2;
+    string tenant_id = 3;
+    string client_id = 4;
+    string client_secret = 5;
+    string client_certificate_path = 6;
+    string authority_host = 7;
+}
+
+message AzBlobFileStoreInfo {
+    string endpoint = 1;
+    string path = 2;
+    AzBlobCredentialInfo credential = 3;
+}
+
+message ADLS2CredentialInfo {
+    string shared_key = 1;
+    string sas_token = 2;
+    string tenant_id = 3;
+    string client_id = 4;
+    string client_secret = 5;
+    string client_certificate_path = 6;
+    string authority_host = 7;
+}
+
+message ADLS2FileStoreInfo {
+    string endpoint = 1;
+    string path = 2;
+    ADLS2CredentialInfo credential = 3;
+}
+
+message GSFileStoreInfo {
+    string endpoint = 1;
+    string path = 2;
+    bool use_compute_engine_service_account = 3;
+    string service_account_email = 4;
+    string service_account_private_key_id = 5;
+    string service_account_private_key = 6;
+    string impersonation = 7;
+}
+
+message FileStoreInfo {
+    FileStoreType fs_type = 1;
+    string fs_key = 2;
+    S3FileStoreInfo s3_fs_info = 3;
+    HDFSFileStoreInfo hdfs_fs_info = 4;
+    AzBlobFileStoreInfo azblob_fs_info = 5;
+    string fs_name = 6;
+    bool enabled = 7;
+    bool is_default = 8 [deprecated = true];
+    string comment = 9;
+    repeated string locations = 10;
+    int64 version = 11;
+    ADLS2FileStoreInfo adls2_fs_info = 12;
+    GSFileStoreInfo gs_fs_info = 13;
+    map<string, string> properties = 14;
+}
+
+message FileCacheInfo {
+    bool enable_cache = 1;
+    int64 ttl_seconds = 2 [deprecated = true];
+    bool async_write_back = 3;
+}
+
+message FilePathInfo {
+    FileStoreInfo fs_info = 1;
+    string full_path = 2;
+}
+
+message AllocateFilePathRequest {
+    string service_id = 1;
+    FileStoreType fs_type = 2;
+    string suffix = 3;
+    string fs_key = 4;
+    string custom_root_dir = 5;
+}
+
+message AllocateFilePathResponse {
+    StarStatus status = 1;
+    FilePathInfo path_info = 2;
+}
+
+message AddFileStoreRequest {
+    FileStoreInfo fs_info = 1;
+    string service_id = 2;
+}
+
+message AddFileStoreResponse {
+    StarStatus status = 1;
+    string fs_key = 2;
+}
+
+message RemoveFileStoreRequest {
+    string fs_name = 1;
+    string fs_key = 2;
+    string service_id = 3;
+}
+
+message RemoveFileStoreResponse {
+    StarStatus status = 1;
+}
+
+message ListFileStoreRequest {
+    string service_id = 1;
+    // fs type is optional, if it is not specified, all types of file stores are listed
+    FileStoreType fs_type = 2;
+}
+
+message ListFileStoreResponse {
+    StarStatus status = 1;
+    repeated FileStoreInfo fs_infos = 2;
+}
+
+message UpdateFileStoreRequest {
+    FileStoreInfo fs_info = 1;
+    string service_id = 2;
+}
+
+message UpdateFileStoreResponse {
+    StarStatus status = 1;
+}
+
+message ReplaceFileStoreRequest {
+    string service_id = 1;
+    FileStoreInfo fs_info = 2;
+}
+
+message ReplaceFileStoreResponse {
+    StarStatus status = 1;
+}
+
+message GetFileStoreRequest {
+    string service_id = 1;
+    string fs_name = 2;
+    string fs_key = 3;
+}
+
+message GetFileStoreResponse {
+    StarStatus status = 1;
+    FileStoreInfo fs_info = 2;
+}
