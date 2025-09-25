@@ -86,13 +86,13 @@ public class UpdateAnalyzer {
         }
 
         if (table.isOlapTable() || table.isCloudNativeTable()) {
-            if (session.getSessionVariable().getPartialUpdateMode().equals("column")) {
+            if (session.getSessionVariable().getPartialUpdateMode().equalsIgnoreCase("column")) {
                 // use partial update by column
                 updateStmt.setUsePartialUpdate();
                 if (((OlapTable) table).hasRowStorageType()) {
                     throw new SemanticException("column_with_row table do not support column mode update");
                 }
-            } else if (session.getSessionVariable().getPartialUpdateMode().equals("auto")) {
+            } else if (session.getSessionVariable().getPartialUpdateMode().equalsIgnoreCase("auto")) {
                 // decide by default rules
                 if (updateStmt.getWherePredicate() == null) {
                     if (checkIfUsePartialUpdate(assignmentList.size(), table.getBaseSchema().size())) {

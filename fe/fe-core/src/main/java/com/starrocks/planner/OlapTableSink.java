@@ -222,6 +222,10 @@ public class OlapTableSink extends DataSink {
         this.missAutoIncrementColumn = true;
     }
 
+    public TPartialUpdateMode getPartialUpdateMode() {
+        return partialUpdateMode;
+    }
+
     public void updateLoadId(TUniqueId newLoadId) {
         tDataSink.getOlap_table_sink().setLoad_id(newLoadId);
     }
