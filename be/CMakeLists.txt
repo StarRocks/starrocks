@@ -670,6 +670,10 @@ if (CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
         # ignore warning from apache-orc
         set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} -Wno-switch-default")
     endif ()
+    # Add -rtlib=compiler-rt for ARM architecture to fix LLVM bug 16404
+    if ("${CMAKE_BUILD_TARGET_ARCH}" STREQUAL "aarch64")
+        set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} -rtlib=compiler-rt")
+    endif()
 else ()
     if (CMAKE_CXX_COMPILER_VERSION VERSION_GREATER_EQUAL "14.0.0")
         # ignore error from apache-orc
