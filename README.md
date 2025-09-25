@@ -130,6 +130,8 @@ This project is used by the following companies. Learn more about their use case
 
 - [Airbnb](https://www.youtube.com/watch?v=AzDxEZuMBwM&ab_channel=StarRocks_labs)
 - [Airtable](https://medium.com/airtable-eng/live-shard-data-archive-export-and-ingestion-to-starrocks-for-validation-6af555e8b3fe)
+- [Alibaba](https://www.youtube.com/watch?v=7N34q65mthk)
+- [Celonis](https://www.youtube.com/watch?v=Jm-D0xvOtek)
 - [Coinbase](https://www.youtube.com/watch?v=3Z9jSCaHnYg&list=PL0eWwaesODdhBhKSnvpfIEAB9sgk8rKmy)
 - [Demandbase](https://starrocks.medium.com/demandbase-ditches-denormalization-by-switching-off-clickhouse-44195d795a83)
 - [Didi](https://www.starrocks.io/blog/reduced-80-cost-didis-journey-from-multiple-olap-engines-to-starrocks)
