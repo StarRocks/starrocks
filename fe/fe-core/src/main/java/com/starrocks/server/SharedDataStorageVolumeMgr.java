@@ -104,7 +104,7 @@ public class SharedDataStorageVolumeMgr extends StorageVolumeMgr {
     }
 
     /**
-     * restore `storageVolumeIdToVTabletGroupId` at startup time of all FEs
+     * restore `storageVolumeIdToVTabletGroupId` at startup time of FE leader
      */
     public void restoreStorageVolumeToVTabletGroupMappings() {
         // make sure to clean all expired keys who might have already been removed on other leader FE
