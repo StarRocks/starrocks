@@ -809,6 +809,11 @@ void JsonFlattener::flatten(const Column* json_column) {
     for (auto& col : _flat_columns) {
         DCHECK_EQ(col->size(), json_column->size());
     }
+
+    // IMPORTANT: Check column integrity to prevent NullableColumn inconsistency
+    for (auto& col : _flat_columns) {
+        col->check_or_die();
+    }
 }
 
 template <bool REMAIN>
@@ -1019,9 +1024,14 @@ ColumnPtr JsonMerger::merge(const Columns& columns) {
     _src_columns.clear();
     if (_output_nullable) {
         down_cast<NullableColumn*>(_result.get())->update_has_null();
+        // IMPORTANT: Check column integrity to prevent NullableColumn inconsistency
+        _result->check_or_die();
         return _result;
     } else {
-        return down_cast<NullableColumn*>(_result.get())->data_column();
+        auto data_column = down_cast<NullableColumn*>(_result.get())->data_column();
+        // IMPORTANT: Check column integrity to prevent NullableColumn inconsistency
+        data_column->check_or_die();
+        return data_column;
     }
 }
 
@@ -1442,6 +1452,12 @@ Status HyperJsonTransformer::trans(const Columns& columns) {
             DCHECK_EQ(rows, _dst_columns[i]->size());
         }
     }
+
+    // IMPORTANT: Check column integrity to prevent NullableColumn inconsistency
+    for (auto& col : _dst_columns) {
+        col->check_or_die();
+    }
+
     return Status::OK();
 }
 
