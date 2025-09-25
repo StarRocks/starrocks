@@ -157,8 +157,8 @@ void extract_json(const vpack::Slice* json, NullableColumn* result) {
     if (json->isNone()) {
         result->append_nulls(1);
     } else {
-        JsonValue json_value(*json);
-        result->append_datum(Datum(&json_value));
+        down_cast<JsonColumn*>(result->data_column().get())->append(JsonValue(*json));
+        result->null_column()->append(0);
     }
 }
 
