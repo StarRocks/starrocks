@@ -821,16 +821,23 @@ public class Utils {
     }
 
     public static boolean hasNonDeterministicFunc(ScalarOperator operator) {
-        for (ScalarOperator child : operator.getChildren()) {
-            if (child instanceof CallOperator) {
-                CallOperator call = (CallOperator) child;
-                String fnName = call.getFnName();
-                if (FunctionSet.nonDeterministicFunctions.contains(fnName)) {
-                    return true;
-                }
-            }
+        if (hasNonDeterministicFuncImpl(operator)) {
+            return true;
+        }
 
+        for (ScalarOperator child : operator.getChildren()) {
             if (hasNonDeterministicFunc(child)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static boolean hasNonDeterministicFuncImpl(ScalarOperator operator) {
+        if (operator instanceof CallOperator) {
+            CallOperator call = (CallOperator) operator;
+            String fnName = call.getFnName();
+            if (FunctionSet.nonDeterministicFunctions.contains(fnName)) {
                 return true;
             }
         }
