@@ -586,10 +586,21 @@ public class DecodeCollector extends OptExpressionVisitor<DecodeInfo, DecodeInfo
         ColumnRefSet disableColumns = new ColumnRefSet();
         for (ColumnRefOperator key : windowOp.getAnalyticCall().keySet()) {
             CallOperator windowCallOp = windowOp.getAnalyticCall().get(key);
-            if (!LOW_CARD_WINDOW_FUNCTIONS.contains(windowCallOp.getFnName())) {
+            String fnName = windowCallOp.getFnName();
+            if (!LOW_CARD_WINDOW_FUNCTIONS.contains(fnName)) {
                 disableColumns.union(windowCallOp.getUsedColumns());
                 disableColumns.union(key);
                 continue;
+            }
+
+            // LEAD/LAG with specified default value can not adopt low-cardinality optimization
+            if ((fnName.equals(FunctionSet.LEAD) || fnName.equals(FunctionSet.LAG))) {
+                ScalarOperator lastArg = windowCallOp.getArguments().get(windowCallOp.getArguments().size() - 1);
+                if (!lastArg.isConstantNull()) {
+                    disableColumns.union(windowCallOp.getUsedColumns());
+                    disableColumns.union(key);
+                    continue;
+                }
             }
 
             Map<Boolean, List<ScalarOperator>> argGroups = windowCallOp.getChildren().stream()
