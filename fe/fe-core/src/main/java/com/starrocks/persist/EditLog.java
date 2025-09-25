@@ -1415,17 +1415,6 @@ public class EditLog {
         applier.apply(obj);
     }
 
-    public void logJsonObject(short op, Writable writable, WALApplier applier) {
-        JournalTask task = submitLog(op, new Writable() {
-            @Override
-            public void write(DataOutput out) throws IOException {
-                Text.writeString(out, GsonUtils.GSON.toJson(writable));
-            }
-        }, -1);
-        waitInfinity(task);
-        applier.apply(writable);
-    }
-
     /**
      * submit log in queue and return immediately
      */
