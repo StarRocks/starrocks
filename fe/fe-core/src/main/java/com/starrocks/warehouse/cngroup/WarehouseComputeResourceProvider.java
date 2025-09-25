@@ -14,7 +14,7 @@
 
 package com.starrocks.warehouse.cngroup;
 
-import com.google.api.client.util.Lists;
+import com.google.common.collect.Lists;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReportException;
 import com.starrocks.common.StarRocksException;
@@ -45,6 +45,14 @@ public final class WarehouseComputeResourceProvider implements ComputeResourcePr
     @Override
     public ComputeResource ofComputeResource(long warehouseId, long workerGroupId) {
         return WarehouseComputeResource.of(warehouseId);
+    }
+
+    @Override
+    public List<ComputeResource> getComputeResources(Warehouse warehouse) {
+        if (warehouse == null) {
+            throw ErrorReportException.report(ErrorCode.ERR_UNKNOWN_WAREHOUSE, "warehouse is null");
+        }
+        return Lists.newArrayList(WarehouseComputeResource.of(warehouse.getId()));
     }
 
     @Override
