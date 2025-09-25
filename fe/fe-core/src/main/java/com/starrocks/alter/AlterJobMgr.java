@@ -145,13 +145,11 @@ public class AlterJobMgr {
         // check db
         String dbName = stmt.getDbName();
         Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbName);
-        if (db == null) {
+        if (db == null || !db.isExist()) {
             ErrorReport.reportDdlException(ErrorCode.ERR_BAD_DB_ERROR, dbName);
         }
-        Locker locker = new Locker();
-        if (!locker.lockDatabaseAndCheckExist(db, LockType.WRITE)) {
-            throw new DdlException("drop materialized failed. database:" + db.getFullName() + " not exist");
-        }
+
+        OlapTable targetTable = null;
         try {
             Table table = null;
             boolean hasfindTable = false;
@@ -184,21 +182,30 @@ public class AlterJobMgr {
                         "Do not support non-OLAP table [" + table.getName() + "] when drop materialized view");
             }
             // check table state
-            OlapTable olapTable = (OlapTable) table;
-            if (olapTable.getState() != OlapTableState.NORMAL) {
-                throw InvalidOlapTableStateException.of(olapTable.getState(), olapTable.getName());
+            targetTable = (OlapTable) table;
+            if (targetTable.getState() != OlapTableState.NORMAL) {
+                throw InvalidOlapTableStateException.of(targetTable.getState(), targetTable.getName());
             }
-            // drop materialized view
-            materializedViewHandler.processDropMaterializedView(stmt, db, olapTable);
-
         } catch (MetaNotFoundException e) {
             if (stmt.isSetIfExists()) {
                 LOG.info(e.getMessage());
             } else {
                 throw e;
             }
+        }
+        if (targetTable == null) {
+            return;
+        }
+
+        Locker locker = new Locker();
+        if (!locker.lockTableAndCheckDbExist(db, targetTable.getId(), LockType.WRITE)) {
+            throw new AlterJobException("alter materialized failed. database:" + db.getFullName() + " not exist");
+        }
+        try {
+            // drop materialized view
+            materializedViewHandler.processDropMaterializedView(stmt, db, targetTable);
         } finally {
-            locker.unLockDatabase(db.getId(), LockType.WRITE);
+            locker.unLockTableWithIntensiveDbLock(db.getId(), targetTable.getId(), LockType.WRITE);
         }
     }
 
