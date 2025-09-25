@@ -76,29 +76,16 @@ public class MVVersionManager {
         if (!isOlapTableRefreshed && !isExternalTableRefreshed) {
             return;
         }
-<<<<<<< HEAD
-        Collection<Map<String, MaterializedView.BasePartitionInfo>> allChangedPartitionInfos =
-                snapshotBaseTables.values()
-                        .stream()
-                        .map(snapshot -> snapshot.getRefreshedPartitionInfos())
-                        .collect(Collectors.toList());
-        long maxChangedTableRefreshTime = MvUtils.getMaxTablePartitionInfoRefreshTime(allChangedPartitionInfos);
-        mv.getRefreshScheme().setLastRefreshTime(maxChangedTableRefreshTime);
-=======
-
         long maxChangedTableRefreshTime = 0L;
-        for (BaseTableSnapshotInfo snapshot : snapshotBaseTables.values()) {
-            if (snapshot instanceof PCTTableSnapshotInfo) {
-                Map<String, MaterializedView.BasePartitionInfo> partitionInfos =
-                        ((PCTTableSnapshotInfo) snapshot).getRefreshedPartitionInfos();
-                long refreshTime = MvUtils.getMaxTablePartitionInfoRefreshTime(partitionInfos);
-                if (refreshTime > maxChangedTableRefreshTime) {
-                    maxChangedTableRefreshTime = refreshTime;
-                }
+        for (TableSnapshotInfo snapshot : snapshotBaseTables.values()) {
+            Map<String, MaterializedView.BasePartitionInfo> partitionInfos =
+                    snapshot.getRefreshedPartitionInfos();
+            long refreshTime = MvUtils.getMaxTablePartitionInfoRefreshTime(partitionInfos);
+            if (refreshTime > maxChangedTableRefreshTime) {
+                maxChangedTableRefreshTime = refreshTime;
             }
         }
         mvRefreshScheme.setLastRefreshTime(maxChangedTableRefreshTime);
->>>>>>> e9820a48e4 ([Enhancement] Optimize mv relatd locks (#63481))
         updateEditLogAfterVersionMetaChanged(mv, maxChangedTableRefreshTime);
 
         // trigger timeless info event since mv version changed
@@ -141,13 +128,8 @@ public class MVVersionManager {
             }
             Long tableId = snapshotTable.getId();
             Map<String, MaterializedView.BasePartitionInfo> currentTablePartitionInfo =
-<<<<<<< HEAD
-                    currentVersionMap.get(tableId);
-            Map<String, MaterializedView.BasePartitionInfo> partitionInfoMap = snapshotInfo.getRefreshedPartitionInfos();
-=======
                     currentVersionMap.computeIfAbsent(tableId, (v) -> Maps.newConcurrentMap());
-            Map<String, MaterializedView.BasePartitionInfo> partitionInfoMap = pctTableSnapshotInfo.getRefreshedPartitionInfos();
->>>>>>> e9820a48e4 ([Enhancement] Optimize mv relatd locks (#63481))
+            Map<String, MaterializedView.BasePartitionInfo> partitionInfoMap = snapshotInfo.getRefreshedPartitionInfos();
             logger.debug("Update materialized view {} meta for base table {} with partitions info: {}, old partition infos:{}",
                     mv.getName(), snapshotTable.getName(), partitionInfoMap, currentTablePartitionInfo);
             currentTablePartitionInfo.putAll(partitionInfoMap);
@@ -204,17 +186,10 @@ public class MVVersionManager {
                         snapshotTable.getName(), snapshotInfo.getRefreshedPartitionInfos(), mv.getName());
                 continue;
             }
-<<<<<<< HEAD
-            currentVersionMap.computeIfAbsent(baseTableInfo, (v) -> Maps.newConcurrentMap());
-            Map<String, MaterializedView.BasePartitionInfo> currentTablePartitionInfo = currentVersionMap.get(baseTableInfo);
-            Map<String, MaterializedView.BasePartitionInfo> partitionInfoMap = snapshotInfo.getRefreshedPartitionInfos();
-=======
-
             // Use computeIfAbsent to avoid unnecessary map creation
             Map<String, MaterializedView.BasePartitionInfo> currentTablePartitionInfo =
                     currentVersionMap.computeIfAbsent(baseTableInfo, v -> Maps.newConcurrentMap());
-            Map<String, MaterializedView.BasePartitionInfo> partitionInfoMap = pctTableSnapshotInfo.getRefreshedPartitionInfos();
->>>>>>> e9820a48e4 ([Enhancement] Optimize mv relatd locks (#63481))
+            Map<String, MaterializedView.BasePartitionInfo> partitionInfoMap = snapshotInfo.getRefreshedPartitionInfos();
             logger.debug("Update materialized view {} meta for external base table {} with partitions info: {}, " +
                             "old partition infos:{}", mv.getName(), snapshotTable.getName(),
                     partitionInfoMap, currentTablePartitionInfo);

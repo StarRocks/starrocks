@@ -903,7 +903,8 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
 
         Locker locker = new Locker();
         // update the meta if succeed
-        if (!locker.lockDatabaseAndCheckExist(db, this.mv, LockType.WRITE)) {
+        if (!locker.tryLockTableWithIntensiveDbLock(db.getId(), mv.getId(), LockType.WRITE,
+                Config.mv_refresh_try_lock_timeout_ms, TimeUnit.MILLISECONDS)) {
             logger.warn("failed to lock database: {} in updateMeta for mv refresh", db.getFullName());
             throw new DmlException("update meta failed. database:" + db.getFullName() + " not exist");
         }
