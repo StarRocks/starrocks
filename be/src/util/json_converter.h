@@ -96,6 +96,9 @@ static StatusOr<RunTimeCppType<ResultType>> get_number_from_vpjson(const vpack::
     return Status::JsonFormatError("not a number");
 }
 
+// Converts a JSON value to the specified type and appends it to the result column.
+// Performs type conversion as needed to match the target type.
+// TODO(murphy): it's duplicated with extract_number/extract_bool/extract_string in json_flattener.cpp
 template <LogicalType ResultType, bool AllowThrowException>
 static Status cast_vpjson_to(const vpack::Slice& slice, ColumnBuilder<ResultType>& result) {
     if constexpr (!lt_is_arithmetic<ResultType> && !lt_is_string<ResultType> && ResultType != TYPE_JSON) {
@@ -180,6 +183,7 @@ static Status cast_vpjson_to(const vpack::Slice& slice, ColumnBuilder<ResultType
             }
         }
     } catch (const vpack::Exception& e) {
+        LOG(WARNING) << "vpack::Exception in cast_vpjson_to: " << e.what();
         if constexpr (AllowThrowException) {
             return Status::JsonFormatError(fmt::format("cast from JSON to {} failed", type_to_string(ResultType)));
         }
