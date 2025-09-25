@@ -229,7 +229,7 @@ public class InsertOverwriteJobRunner {
             throw new DmlException("database id:%s does not exist", dbId);
         }
         Locker locker = new Locker();
-        if (!locker.lockDatabaseAndCheckExist(db, tableId, LockType.WRITE)) {
+        if (!locker.lockTableAndCheckDbExist(db, tableId, LockType.WRITE)) {
             throw new DmlException("insert overwrite commit failed because locking db:%s failed", dbId);
         }
 
@@ -357,19 +357,13 @@ public class InsertOverwriteJobRunner {
         }
         long createPartitionStartTimestamp = System.currentTimeMillis();
         Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
-        if (db == null) {
+        if (db == null || !db.isExist()) {
             throw new DmlException("database id:%s does not exist", dbId);
         }
-        Locker locker = new Locker();
-        if (!locker.lockDatabaseAndCheckExist(db, tableId, LockType.READ)) {
+        if (!db.isExist()) {
             throw new DmlException("insert overwrite commit failed because locking db:%s failed", dbId);
         }
-        OlapTable targetTable;
-        try {
-            targetTable = checkAndGetTable(db, tableId);
-        } finally {
-            locker.unLockTableWithIntensiveDbLock(db.getId(), tableId, LockType.READ);
-        }
+        OlapTable targetTable = checkAndGetTable(db, tableId);
         // acquire compute resource
         ComputeResource computeResource = context.getCurrentComputeResource();
         if (computeResource == null) {
@@ -385,21 +379,21 @@ public class InsertOverwriteJobRunner {
         LOG.info("insert overwrite job {} start to garbage collect", job.getJobId());
 
         Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
-        if (db == null) {
+        if (db == null || !db.isExist()) {
             throw new DmlException("database id:%s does not exist", dbId);
         }
+        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), tableId);
+        if (table == null) {
+            throw new DmlException("table:%d does not exist in database:%s", tableId, db.getFullName());
+        }
+        Preconditions.checkState(table instanceof OlapTable);
+        OlapTable targetTable = (OlapTable) table;
+
         Locker locker = new Locker();
-        if (!locker.lockDatabaseAndCheckExist(db, tableId, LockType.WRITE)) {
+        if (!locker.lockTableAndCheckDbExist(db, tableId, LockType.WRITE)) {
             throw new DmlException("insert overwrite commit failed because locking db:%s failed", dbId);
         }
-
         try {
-            Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), tableId);
-            if (table == null) {
-                throw new DmlException("table:%d does not exist in database:%s", tableId, db.getFullName());
-            }
-            Preconditions.checkState(table instanceof OlapTable);
-            OlapTable targetTable = (OlapTable) table;
             Set<Tablet> sourceTablets = Sets.newHashSet();
             if (job.getTmpPartitionIds() != null) {
                 for (long pid : job.getTmpPartitionIds()) {
@@ -475,7 +469,7 @@ public class InsertOverwriteJobRunner {
             throw new DmlException("database id:%s does not exist", dbId);
         }
         Locker locker = new Locker();
-        if (!locker.lockDatabaseAndCheckExist(db, tableId, LockType.WRITE)) {
+        if (!locker.lockTableAndCheckDbExist(db, tableId, LockType.WRITE)) {
             throw new DmlException("insert overwrite commit failed because locking db:%s failed", dbId);
         }
         OlapTable tmpTargetTable = null;
@@ -591,7 +585,7 @@ public class InsertOverwriteJobRunner {
             throw new DmlException("database id:%s does not exist", dbId);
         }
         Locker locker = new Locker();
-        if (!locker.lockDatabaseAndCheckExist(db, tableId, LockType.READ)) {
+        if (!locker.lockTableAndCheckDbExist(db, tableId, LockType.READ)) {
             throw new DmlException("insert overwrite commit failed because locking db:%s failed", dbId);
         }
         try {
