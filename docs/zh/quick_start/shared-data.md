@@ -116,14 +116,22 @@ minio          25 seconds ago   Up 24 seconds             0.0.0.0:9000-9001->900
 
 ### 打开 MinIO Web UI
 
-从浏览器进入 `http://localhost:9001/access-keys`。登录用的用户名和密码已经在 Docker Compose 文件中指定，分别为 `miniouser` 和 `miniopassword`。成功登录后，点击 **Create access key +** 创建密钥。
+从浏览器进入 `http://localhost:9001/access-keys`。登录用的用户名和密码已经在 Docker Compose 文件中指定，分别为 `miniouser` 和 `miniopassword`。UI 中将显示存在一对访问密钥 `AAAAAAAAAAAAAAAAAAAA`，其密钥值已在 Docker Compose 文件中指定，为`BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB`。
 
-MinIO 将生成一对密钥，点击 **Create** 生成并下载密钥。
+![View the MinIO access key](../_assets/quick-start/MinIO-view-key.png)
 
-![点击 Create](../_assets/quick-start/MinIO-create.png)
+:::tip
+如果 MinIO Web UI 中未显示访问密钥，你可以检查 `minio_mc` 服务的日志：
 
-:::note
-系统不会自动保存密钥，所以请确认保存密钥后再离开页面。
+```bash
+docker compose logs minio_mc
+```
+
+尝试重新运行 `minio_mc` Pod：
+
+```bash
+docker compose run minio_mc
+```
 :::
 
 ---
