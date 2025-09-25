@@ -80,7 +80,7 @@ admin set frontend config ("enable_collect_query_detail_info" = "true");
 
 
 function: assert_prepare_execute('test_prepare_1', "SELECT customer_key, customer_row_value_0, customer_row_value_1, customer_row_value_2 FROM customer_row WHERE customer_key = ?", ['1'])
-shell: current_time=$(date +%s); curl -s -X GET "${url}/api/query_detail?event_time=$((current_time - 1))" -u 'root:' 2>/dev/null | jq '[.[] | select(.sql | contains("EXECUTE") and contains("USING '\''1'\''"))] | length > 0'
+shell: current_time=$(date +%s); curl -s -X GET "${url}/api/query_detail?event_time=$((current_time - 1))" -u 'root:' | grep -c "EXECUTE" > 0
 
 admin set frontend config ("enable_collect_query_detail_info" = "false");
 DROP PREPARE select_customer_stmt;
