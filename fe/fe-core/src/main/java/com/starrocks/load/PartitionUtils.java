@@ -64,7 +64,7 @@ public class PartitionUtils {
                 .createTempPartitionsFromPartitions(db, targetTable, postfix, sourcePartitionIds,
                         tmpPartitionIds, distributionDesc, warehouseId);
         Locker locker = new Locker();
-        if (!locker.lockDatabaseAndCheckExist(db, LockType.WRITE)) {
+        if (!locker.lockTableAndCheckDbExist(db, targetTable.getId(), LockType.WRITE)) {
             throw new DdlException("create and add partition failed. database:{}" + db.getFullName() + " not exist");
         }
         boolean success = false;
@@ -150,7 +150,7 @@ public class PartitionUtils {
                     LOG.warn("clear tablets from inverted index failed", t);
                 }
             }
-            locker.unLockDatabase(db.getId(), LockType.WRITE);
+            locker.unLockTableWithIntensiveDbLock(db.getId(), targetTable.getId(), LockType.WRITE);
         }
     }
 

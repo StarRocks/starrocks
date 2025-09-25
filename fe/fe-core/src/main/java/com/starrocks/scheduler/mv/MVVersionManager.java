@@ -27,7 +27,7 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;
 import org.apache.logging.log4j.Logger;
 
-import java.util.Collection;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -76,6 +76,7 @@ public class MVVersionManager {
         if (!isOlapTableRefreshed && !isExternalTableRefreshed) {
             return;
         }
+<<<<<<< HEAD
         Collection<Map<String, MaterializedView.BasePartitionInfo>> allChangedPartitionInfos =
                 snapshotBaseTables.values()
                         .stream()
@@ -83,6 +84,21 @@ public class MVVersionManager {
                         .collect(Collectors.toList());
         long maxChangedTableRefreshTime = MvUtils.getMaxTablePartitionInfoRefreshTime(allChangedPartitionInfos);
         mv.getRefreshScheme().setLastRefreshTime(maxChangedTableRefreshTime);
+=======
+
+        long maxChangedTableRefreshTime = 0L;
+        for (BaseTableSnapshotInfo snapshot : snapshotBaseTables.values()) {
+            if (snapshot instanceof PCTTableSnapshotInfo) {
+                Map<String, MaterializedView.BasePartitionInfo> partitionInfos =
+                        ((PCTTableSnapshotInfo) snapshot).getRefreshedPartitionInfos();
+                long refreshTime = MvUtils.getMaxTablePartitionInfoRefreshTime(partitionInfos);
+                if (refreshTime > maxChangedTableRefreshTime) {
+                    maxChangedTableRefreshTime = refreshTime;
+                }
+            }
+        }
+        mvRefreshScheme.setLastRefreshTime(maxChangedTableRefreshTime);
+>>>>>>> e9820a48e4 ([Enhancement] Optimize mv relatd locks (#63481))
         updateEditLogAfterVersionMetaChanged(mv, maxChangedTableRefreshTime);
 
         // trigger timeless info event since mv version changed
@@ -124,10 +140,14 @@ public class MVVersionManager {
                 continue;
             }
             Long tableId = snapshotTable.getId();
-            currentVersionMap.computeIfAbsent(tableId, (v) -> Maps.newConcurrentMap());
             Map<String, MaterializedView.BasePartitionInfo> currentTablePartitionInfo =
+<<<<<<< HEAD
                     currentVersionMap.get(tableId);
             Map<String, MaterializedView.BasePartitionInfo> partitionInfoMap = snapshotInfo.getRefreshedPartitionInfos();
+=======
+                    currentVersionMap.computeIfAbsent(tableId, (v) -> Maps.newConcurrentMap());
+            Map<String, MaterializedView.BasePartitionInfo> partitionInfoMap = pctTableSnapshotInfo.getRefreshedPartitionInfos();
+>>>>>>> e9820a48e4 ([Enhancement] Optimize mv relatd locks (#63481))
             logger.debug("Update materialized view {} meta for base table {} with partitions info: {}, old partition infos:{}",
                     mv.getName(), snapshotTable.getName(), partitionInfoMap, currentTablePartitionInfo);
             currentTablePartitionInfo.putAll(partitionInfoMap);
@@ -136,8 +156,15 @@ public class MVVersionManager {
             // remove partition info of not-exist partition for snapshot table from version map
             if (snapshotTable.isOlapOrCloudNativeTable()) {
                 OlapTable snapshotOlapTable = (OlapTable) snapshotTable;
-                currentTablePartitionInfo.keySet().removeIf(partitionName ->
-                        !snapshotOlapTable.getVisiblePartitionNames().contains(partitionName));
+                Set<String> visiblePartitionNames = snapshotOlapTable.getVisiblePartitionNames();
+                // Use iterator to avoid creating intermediate collections and for better performance
+                Iterator<String> keyIter = currentTablePartitionInfo.keySet().iterator();
+                while (keyIter.hasNext()) {
+                    String partitionName = keyIter.next();
+                    if (!visiblePartitionNames.contains(partitionName)) {
+                        keyIter.remove();
+                    }
+                }
             }
             isOlapTableRefreshed = true;
         }
@@ -177,19 +204,40 @@ public class MVVersionManager {
                         snapshotTable.getName(), snapshotInfo.getRefreshedPartitionInfos(), mv.getName());
                 continue;
             }
+<<<<<<< HEAD
             currentVersionMap.computeIfAbsent(baseTableInfo, (v) -> Maps.newConcurrentMap());
             Map<String, MaterializedView.BasePartitionInfo> currentTablePartitionInfo = currentVersionMap.get(baseTableInfo);
             Map<String, MaterializedView.BasePartitionInfo> partitionInfoMap = snapshotInfo.getRefreshedPartitionInfos();
+=======
+
+            // Use computeIfAbsent to avoid unnecessary map creation
+            Map<String, MaterializedView.BasePartitionInfo> currentTablePartitionInfo =
+                    currentVersionMap.computeIfAbsent(baseTableInfo, v -> Maps.newConcurrentMap());
+            Map<String, MaterializedView.BasePartitionInfo> partitionInfoMap = pctTableSnapshotInfo.getRefreshedPartitionInfos();
+>>>>>>> e9820a48e4 ([Enhancement] Optimize mv relatd locks (#63481))
             logger.debug("Update materialized view {} meta for external base table {} with partitions info: {}, " +
                             "old partition infos:{}", mv.getName(), snapshotTable.getName(),
                     partitionInfoMap, currentTablePartitionInfo);
             // overwrite old partition names
             currentTablePartitionInfo.putAll(partitionInfoMap);
 
-            // FIXME: If base table's partition has been dropped, should drop the according version partition too?
-            // remove partition info of not-exist partition for snapshot table from version map
-            Set<String> partitionNames = Sets.newHashSet(PartitionUtil.getPartitionNames(snapshotTable));
-            currentTablePartitionInfo.keySet().removeIf(partitionName -> !partitionNames.contains(partitionName));
+            // Remove partition info for partitions that no longer exist in the snapshot table
+            List<String> partitionNamesList = PartitionUtil.getPartitionNames(snapshotTable);
+            if (!partitionNamesList.isEmpty()) {
+                Set<String> partitionNames = Sets.newHashSetWithExpectedSize(partitionNamesList.size());
+                partitionNames.addAll(partitionNamesList);
+                // Remove using iterator for better performance on concurrent maps
+                Iterator<String> iter = currentTablePartitionInfo.keySet().iterator();
+                while (iter.hasNext()) {
+                    String partitionName = iter.next();
+                    if (!partitionNames.contains(partitionName)) {
+                        iter.remove();
+                    }
+                }
+            } else {
+                // If no partitions exist, clear all
+                currentTablePartitionInfo.clear();
+            }
         }
         return true;
     }
