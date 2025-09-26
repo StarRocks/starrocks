@@ -17,7 +17,9 @@ package com.starrocks.sql.plan;
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.common.FeConstants;
+import com.starrocks.planner.AnalyticEvalNode;
 import com.starrocks.planner.TableFunctionNode;
+import com.starrocks.sql.ast.expression.FunctionCallExpr;
 import com.starrocks.utframe.StarRocksAssert;
 import org.junit.AfterClass;
 import org.junit.Assert;
@@ -912,6 +914,34 @@ public class LowCardinalityArrayTest extends PlanTestBase {
             Assertions.assertEquals(1, decodeNodeLines.size(), plan);
             Assertions.assertEquals(1, analyticNodeLines.size(), plan);
             Assertions.assertTrue(decodeNodeLines.get(0) > analyticNodeLines.get(0), plan);
+        }
+    }
+
+    @Test
+    public void testWindowFunctionsIgnoreNulls() throws Exception {
+        String sqlFmt = "with cte as(\n" +
+                "  select s1.v1, s1.v2, t.a1 a1\n" +
+                "  from s1,unnest(s1.a1)t(a1) \n" +
+                ")\n" +
+                "select v1, a1, {WINDOW_FUN}(a1 ignore nulls) over(partition by v1)\n" +
+                "from cte;";
+
+        String[] windowFuncs = new String[] {
+                FunctionSet.LEAD,
+                FunctionSet.LAG,
+                FunctionSet.FIRST_VALUE,
+                FunctionSet.LAST_VALUE
+        };
+
+        for (String wf : windowFuncs) {
+            String q = sqlFmt.replace("{WINDOW_FUN}", wf);
+            ExecPlan plan = getExecPlan(q);
+            List<AnalyticEvalNode> analyticEvalNodes = Lists.newArrayList();
+            plan.getTopFragment().getPlanRoot().collect(AnalyticEvalNode.class, analyticEvalNodes);
+            Assertions.assertEquals(1, analyticEvalNodes.size());
+            Assertions.assertEquals(1, analyticEvalNodes.get(0).getAnalyticFnCalls().size());
+            FunctionCallExpr expr = (FunctionCallExpr) analyticEvalNodes.get(0).getAnalyticFnCalls().get(0);
+            Assertions.assertTrue(expr.getIgnoreNulls());
         }
     }
 
