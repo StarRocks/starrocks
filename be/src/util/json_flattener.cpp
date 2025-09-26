@@ -61,17 +61,18 @@ template <LogicalType TYPE>
 void extract_number(const vpack::Slice* json, NullableColumn* result) {
     // NOTE: this function catch all vpack exceptions, so it must be exception-safe, instead of modifying the result into
     // an inconsistence state where null_column and data_column have different sizes.
+    using CppType = RunTimeCppType<TYPE>;
     Datum datum;
     try {
         if (LIKELY(json->isNumber() || json->isString())) {
             auto st = get_number_from_vpjson<TYPE>(*json);
             if (st.ok()) {
-                datum.set(st.value());
+                datum.set<CppType>(st.value());
             }
         } else if (json->isNone() || json->isNull()) {
             datum.set_null();
         } else if (json->isBool()) {
-            datum.set(json->getBool());
+            datum.set<CppType>(static_cast<CppType>(json->getBool()));
         } else {
             datum.set_null();
         }
@@ -90,13 +91,14 @@ void extract_number(const vpack::Slice* json, NullableColumn* result) {
 void extract_bool(const vpack::Slice* json, NullableColumn* result) {
     // NOTE: this function catch all vpack exceptions, so it must be exception-safe, instead of modifying the result into
     // an inconsistence state where null_column and data_column have different sizes.
+    using CppType = RunTimeCppType<TYPE_BOOLEAN>;
     Datum datum;
     try {
         if (json->isNone() || json->isNull()) {
             datum.set_null();
         } else if (json->isBool()) {
             auto res = json->getBool();
-            datum.set(res);
+            datum.set<CppType>(res);
         } else if (json->isString()) {
             vpack::ValueLength len;
             const char* str = json->getStringUnchecked(len);
@@ -107,14 +109,14 @@ void extract_bool(const vpack::Slice* json, NullableColumn* result) {
                 if (parseResult != StringParser::PARSE_SUCCESS) {
                     datum.set_null();
                 } else {
-                    datum.set(b);
+                    datum.set<CppType>(b);
                 }
             } else {
-                datum.set(r != 0);
+                datum.set<CppType>(r != 0);
             }
         } else if (json->isNumber()) {
             auto res = json->getNumber<double>();
-            datum.set(res != 0);
+            datum.set<CppType>(res != 0);
         } else {
             datum.set_null();
         }
