@@ -21,6 +21,7 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.MvId;
 import com.starrocks.catalog.Table;
+import com.starrocks.common.Config;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.connector.ConnectorTableInfo;
@@ -34,6 +35,7 @@ import org.apache.logging.log4j.Logger;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.TimeUnit;
 
 public class MVMetaVersionRepairer {
     private static final Logger LOG = LogManager.getLogger(MVMetaVersionRepairer.class);
@@ -69,7 +71,8 @@ public class MVMetaVersionRepairer {
 
             // acquire mvDb + mv write lock to modify meta of mv
             Locker locker = new Locker();
-            if (!locker.lockDatabaseAndCheckExist(mvDb, mv, LockType.WRITE)) {
+            if (!locker.tryLockTableWithIntensiveDbLock(mvDb, mv.getId(), LockType.WRITE,
+                    Config.mv_refresh_try_lock_timeout_ms, TimeUnit.MILLISECONDS)) {
                 continue;
             }
             try {
@@ -99,8 +102,7 @@ public class MVMetaVersionRepairer {
         LOG.info("repair base table {} version changes for mv {}, changed versions:{}",
                 table.getName(), mv.getName(), changedVersions);
         // update edit log
-        long maxChangedTableRefreshTime =
-                MvUtils.getMaxTablePartitionInfoRefreshTime(Lists.newArrayList(changedVersions));
+        long maxChangedTableRefreshTime = MvUtils.getMaxTablePartitionInfoRefreshTime(changedVersions);
         MVVersionManager.updateEditLogAfterVersionMetaChanged(mv, maxChangedTableRefreshTime);
         LOG.info("Update edit log after version changed for mv {}, maxChangedTableRefreshTime:{}",
                 mv.getName(), maxChangedTableRefreshTime);
