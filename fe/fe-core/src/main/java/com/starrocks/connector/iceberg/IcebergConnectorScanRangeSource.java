@@ -396,6 +396,11 @@ public class IcebergConnectorScanRangeSource extends ConnectorScanRangeSource {
     @VisibleForTesting
     public long addPartition(FileScanTask task) throws AnalysisException {
         PartitionSpec spec = task.spec();
+
+        if (!partitionSlotIdsCache.containsKey(spec.specId())) {
+            partitionSlotIdsCache.put(spec.specId(), buildPartitionSlotIds(task.spec()));
+        }
+
         // Make sure the partition data with byte[], decimal value object etc. can get the same hash code.
         StructLike origPartition = task.partition();
         StructLikeWrapper partitionWrapper = StructLikeWrapper.forType(spec.partitionType());
@@ -419,10 +424,6 @@ public class IcebergConnectorScanRangeSource extends ConnectorScanRangeSource {
 
         partitionKeyToId.put(partition, partitionId);
         referencedPartitions.put(partitionId, referencedPartitionInfo);
-        if (!partitionSlotIdsCache.containsKey(spec.specId())) {
-            partitionSlotIdsCache.put(spec.specId(), buildPartitionSlotIds(task.spec()));
-        }
-
         return partitionId;
     }
 
