@@ -4,7 +4,7 @@ displayed_sidebar: docs
 
 # fe_locks
 
-`fe_locks` provides information about metadata locks in StarRocks Frontend (FE).
+`fe_locks` provides information about metadata locks in StarRocks FE.
 
 The following fields are provided in `fe_locks`:
 
