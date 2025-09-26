@@ -12,11 +12,12 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#include "storage/lake/lake_replication_txn_manager.h"
+
 #include <fmt/format.h>
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
-#include <fstream>
 #include <random>
 
 #include "column/chunk.h"
@@ -25,7 +26,6 @@
 #include "column/schema.h"
 #include "column/vectorized_fwd.h"
 #include "common/config.h"
-#include "fs/fs.h"
 #include "fs/key_cache.h"
 #include "gutil/strings/join.h"
 #include "runtime/exec_env.h"
@@ -34,11 +34,9 @@
 #include "storage/lake/delta_writer.h"
 #include "storage/lake/fixed_location_provider.h"
 #include "storage/lake/join_path.h"
-#include "storage/lake/lake_replication_txn_manager.h"
 #include "storage/lake/meta_file.h"
 #include "storage/lake/tablet_manager.h"
 #include "storage/lake/tablet_reader.h"
-#include "storage/lake/tablet_writer.h"
 #include "storage/lake/transactions.h"
 #include "storage/lake/update_manager.h"
 #include "storage/options.h"
