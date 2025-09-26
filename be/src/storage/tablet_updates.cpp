@@ -951,6 +951,7 @@ void TabletUpdates::_check_for_apply() {
         std::lock_guard<std::mutex> lg(_apply_running_lock);
         // reset _apply_running to false, so that next time _check_for_apply can submit task again
         _apply_running = false;
+        _apply_stopped_cond.notify_all();
     }
 }
 
