@@ -24,6 +24,7 @@ import com.starrocks.sql.optimizer.operator.logical.LogicalFilterOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalProjectOperator;
 import com.starrocks.sql.optimizer.operator.pattern.Pattern;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
+import com.starrocks.sql.optimizer.operator.scalar.CaseWhenOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CompoundPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.LambdaFunctionOperator;
@@ -36,6 +37,8 @@ import com.starrocks.sql.optimizer.rewrite.scalar.ReduceCastRule;
 import com.starrocks.sql.optimizer.rewrite.scalar.ScalarOperatorRewriteRule;
 import com.starrocks.sql.optimizer.rewrite.scalar.SimplifiedPredicateRule;
 import com.starrocks.sql.optimizer.rule.RuleType;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 import java.util.HashSet;
 import java.util.List;
@@ -44,6 +47,8 @@ import java.util.Optional;
 import java.util.Set;
 
 public class PushDownPredicateProjectRule extends TransformationRule {
+    private static final Logger LOG = LogManager.getLogger(PushDownPredicateProjectRule.class);
+
     private static final List<ScalarOperatorRewriteRule> PROJECT_REWRITE_PREDICATE_RULE = Lists.newArrayList(
             // Don't need add cast because all expression has been cast
             // The purpose here is for simplify the expression
@@ -52,6 +57,18 @@ public class PushDownPredicateProjectRule extends TransformationRule {
             new FoldConstantsRule(),
             new SimplifiedPredicateRule()
     );
+
+    private int whenCount(ScalarOperator op) {
+        if (op == null) {
+            return 0;
+        }
+
+        if (op instanceof CaseWhenOperator) {
+            int n = ((CaseWhenOperator) op).getWhenClauseSize();
+            return n;
+        }
+        return 0;
+    }
 
     public PushDownPredicateProjectRule() {
         super(RuleType.TF_PUSH_DOWN_PREDICATE_PROJECT,
@@ -95,6 +112,25 @@ public class PushDownPredicateProjectRule extends TransformationRule {
         OptExpression child = input.getInputs().get(0);
 
         LogicalProjectOperator project = (LogicalProjectOperator) (child.getOp());
+
+        if (context.getSessionVariable().getMaxCaseWhenForPushDown() > 0) {
+            // XXX
+            // Prevent predicate pushdown for large case statement
+
+            Map<ColumnRefOperator, ScalarOperator> m = project.getColumnRefMap();
+            int count = 0;
+            for (var entry : m.entrySet()) {
+                int n = whenCount(entry.getValue());
+                LOG.warn("entry count {}", n);
+                count += n;
+            }
+            LOG.warn("total count {}", count);
+
+            if (count > context.getSessionVariable().getMaxCaseWhenForPushDown()) {
+                LOG.warn("prevent pushdown total count {}", count);
+                return Lists.newArrayList();
+            }
+        }
 
         if (!context.getSessionVariable().getEnableLambdaPushDown()) {
             Map<ColumnRefOperator, ScalarOperator> m = project.getColumnRefMap();

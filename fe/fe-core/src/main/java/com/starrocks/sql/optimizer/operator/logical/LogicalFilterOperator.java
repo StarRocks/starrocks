@@ -29,6 +29,8 @@ import java.util.ArrayList;
 import java.util.List;
 
 public class LogicalFilterOperator extends LogicalOperator {
+    // xxx
+    public boolean pdvisited = false;
     public LogicalFilterOperator(ScalarOperator predicate) {
         super(OperatorType.LOGICAL_FILTER);
         this.predicate = predicate;

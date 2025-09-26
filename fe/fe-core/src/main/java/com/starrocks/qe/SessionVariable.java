@@ -244,6 +244,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String MAX_PUSHDOWN_CONDITIONS_PER_COLUMN = "max_pushdown_conditions_per_column";
 
     public static final String ENABLE_LAMBDA_PUSHDOWN = "enable_lambda_pushdown";
+
+    public static final String MAX_CASE_WHEN_FOR_PUSHDOWN = "max_casewhen_for_pushdown";
+    public static final String REPLACE_PREDICATE_WITH_FILTER = "replace_predicate_with_filter";
+
     // use new execution engine instead of the old one if enable_pipeline_engine is true,
     // the new execution engine split a fragment into pipelines, then create several drivers
     // from the pipeline for parallel executing, threads from global pool pick out the
@@ -1464,6 +1468,12 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     private int maxPushdownConditionsPerColumn = -1;
     @VariableMgr.VarAttr(name = ENABLE_LAMBDA_PUSHDOWN)
     private boolean enableLambdaPushdown = true;
+
+    @VariableMgr.VarAttr(name = MAX_CASE_WHEN_FOR_PUSHDOWN)
+    private int maxCaseWhenForPushDown = 0;
+
+    @VariableMgr.VarAttr(name = REPLACE_PREDICATE_WITH_FILTER)
+    private boolean replacePredicateWithFilter = false;
 
     @VariableMgr.VarAttr(name = HASH_JOIN_PUSH_DOWN_RIGHT_TABLE)
     private boolean hashJoinPushDownRightTable = true;
@@ -4136,6 +4146,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public boolean getEnableLambdaPushDown() {
         return enableLambdaPushdown;
+    }
+
+    public int getMaxCaseWhenForPushDown() {
+        return maxCaseWhenForPushDown;
+    }
+
+    public boolean getReplacePredicateWithFilter() {
+        return replacePredicateWithFilter;
     }
 
     public void setEnableLambdaPushdown(boolean enableLambdaPushdown) {
