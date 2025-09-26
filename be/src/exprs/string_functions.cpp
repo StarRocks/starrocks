@@ -3585,9 +3585,9 @@ static ColumnPtr regexp_extract_all_general(FunctionContext* context, re2::RE2::
         offset_col->append(index);
     }
 
-    auto array =
-            ArrayColumn::create(NullableColumn::create(str_col, NullColumn::create(str_col->size(), 0)), offset_col);
-    return NullableColumn::create(array, nl_col);
+    auto array = ArrayColumn::create(NullableColumn::create(std::move(str_col), NullColumn::create(str_col->size(), 0)),
+                                     std::move(offset_col));
+    return NullableColumn::create(std::move(array), std::move(nl_col));
 }
 
 static ColumnPtr regexp_extract_all_const_pattern(re2::RE2* const_re, const Columns& columns) {
@@ -3626,12 +3626,12 @@ static ColumnPtr regexp_extract_all_const_pattern(re2::RE2* const_re, const Colu
         offset_col->append(index);
     }
 
-    auto array =
-            ArrayColumn::create(NullableColumn::create(str_col, NullColumn::create(str_col->size(), 0)), offset_col);
+    auto array = ArrayColumn::create(NullableColumn::create(std::move(str_col), NullColumn::create(str_col->size(), 0)),
+                                     std::move(offset_col));
     if (ColumnHelper::is_all_const(columns)) {
-        return ConstColumn::create(array, columns[0]->size());
+        return ConstColumn::create(std::move(array), columns[0]->size());
     }
-    return NullableColumn::create(array, nl_col);
+    return NullableColumn::create(std::move(array), std::move(nl_col));
 }
 
 static ColumnPtr regexp_extract_all_const(re2::RE2* const_re, const Columns& columns) {
@@ -3644,10 +3644,10 @@ static ColumnPtr regexp_extract_all_const(re2::RE2* const_re, const Columns& col
     auto offset_col = UInt32Column::create();
     offset_col->append(0);
 
-    NullColumnPtr nl_col;
+    NullColumn::MutablePtr nl_col;
     if (columns[0]->is_nullable()) {
         auto x = down_cast<const NullableColumn*>(columns[0].get())->null_column();
-        nl_col = ColumnHelper::as_column<NullColumn>(x->clone());
+        nl_col = NullColumn::static_pointer_cast(x->clone());
     } else {
         nl_col = NullColumn::create(size, 0);
     }
@@ -3656,12 +3656,13 @@ static ColumnPtr regexp_extract_all_const(re2::RE2* const_re, const Columns& col
     int max_matches = 1 + const_re->NumberOfCapturingGroups();
     if (group < 0 || group >= max_matches) {
         offset_col->append_value_multiple_times(&index, size);
-        auto array = ArrayColumn::create(NullableColumn::create(str_col, NullColumn::create(0, 0)), offset_col);
+        auto array = ArrayColumn::create(NullableColumn::create(std::move(str_col), NullColumn::create(0, 0)),
+                                         std::move(offset_col));
 
         if (ColumnHelper::is_all_const(columns)) {
-            return ConstColumn::create(array, columns[0]->size());
+            return ConstColumn::create(std::move(array), columns[0]->size());
         }
-        return NullableColumn::create(array, nl_col);
+        return NullableColumn::create(std::move(array), std::move(nl_col));
     }
 
     // Prepare arguments for FindAndConsumeN (only needed when group > 0)
@@ -3689,13 +3690,13 @@ static ColumnPtr regexp_extract_all_const(re2::RE2* const_re, const Columns& col
         offset_col->append(index);
     }
 
-    auto array =
-            ArrayColumn::create(NullableColumn::create(str_col, NullColumn::create(str_col->size(), 0)), offset_col);
+    auto array = ArrayColumn::create(NullableColumn::create(std::move(str_col), NullColumn::create(str_col->size(), 0)),
+                                     std::move(offset_col));
 
     if (ColumnHelper::is_all_const(columns)) {
-        return ConstColumn::create(array, columns[0]->size());
+        return ConstColumn::create(std::move(array), columns[0]->size());
     }
-    return NullableColumn::create(array, nl_col);
+    return NullableColumn::create(std::move(array), std::move(nl_col));
 }
 
 StatusOr<ColumnPtr> StringFunctions::regexp_extract_all(FunctionContext* context, const Columns& columns) {
