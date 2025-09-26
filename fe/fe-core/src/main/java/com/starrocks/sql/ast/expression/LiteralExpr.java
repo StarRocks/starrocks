@@ -137,6 +137,54 @@ public abstract class LiteralExpr extends Expr implements Comparable<LiteralExpr
         }
     }
 
+    public static LiteralExpr createDefault(Type type) throws AnalysisException {
+        Preconditions.checkArgument(type.isValid());
+        LiteralExpr literalExpr = null;
+        switch (type.getPrimitiveType()) {
+            case NULL_TYPE:
+                literalExpr = new NullLiteral();
+                break;
+            case BOOLEAN:
+                literalExpr = new BoolLiteral(false);
+                break;
+            case TINYINT:
+            case SMALLINT:
+            case INT:
+            case BIGINT:
+                literalExpr = new IntLiteral(0, type);
+                break;
+            case LARGEINT:
+                literalExpr = new LargeIntLiteral("0");
+                break;
+            case FLOAT:
+            case DOUBLE:
+                literalExpr = new FloatLiteral(0.0, type);
+                break;
+            case DECIMALV2:
+            case DECIMAL32:
+            case DECIMAL64:
+            case DECIMAL128:
+            case DECIMAL256:
+                literalExpr = new DecimalLiteral("0");
+                break;
+            case CHAR:
+            case VARCHAR:
+            case BINARY:
+            case VARBINARY:
+            case HLL:
+                literalExpr = new StringLiteral("");
+                break;
+            case DATE:
+            case DATETIME:
+                literalExpr = new DateLiteral("1970-01-01 00:00:00", type);
+                break;
+            default:
+                throw new AnalysisException("Type[" + type.toSql() + "] not supported.");
+        }
+        Preconditions.checkNotNull(literalExpr);
+        return literalExpr;
+    }
+
     /*
      * return real object value
      */

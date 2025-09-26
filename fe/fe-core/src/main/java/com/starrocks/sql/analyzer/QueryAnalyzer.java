@@ -696,7 +696,8 @@ public class QueryAnalyzer {
                         // reduce unnecessary columns init, but must init key columns/bucket columns/partition columns
                         continue;
                     }
-                    boolean visible = baseSchema.contains(column);
+                    // only output visible columns
+                    boolean visible = column.isVisible() && baseSchema.contains(column);
                     SlotRef slot = new SlotRef(tableName, column.getName(), column.getName());
                     Field field = new Field(column.getName(), column.getType(), tableName, slot, visible,
                             column.isAllowNull());
