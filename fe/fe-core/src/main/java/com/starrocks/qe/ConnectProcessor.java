@@ -598,7 +598,7 @@ public class ConnectProcessor {
             ExecuteStmt executeStmt = new ExecuteStmt(String.valueOf(stmtId), exprs);
             // audit will affect performance
             boolean enableAudit = ctx.getSessionVariable().isAuditExecuteStmt();
-            String originStmt = enableAudit ? executeStmt.toSql() : "/* omit */";
+            String originStmt = executeStmt.toSql();
             executeStmt.setOrigStmt(new OriginStatement(originStmt, 0));
 
             executor = new StmtExecutor(ctx, executeStmt);
