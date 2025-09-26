@@ -1198,7 +1198,8 @@ Status UpdateManager::light_publish_primary_compaction(const TxnLogPB_OpCompacti
         RETURN_IF_ERROR(resolver->execute());
     }
     // 3. ingest ssts to index
-    DCHECK(delvecs.size() == op_compaction.ssts_size());
+    DCHECK(op_compaction.ssts_size() == 0 || delvecs.size() == op_compaction.ssts_size())
+            << "delvecs.size(): " << delvecs.size() << ", op_compaction.ssts_size(): " << op_compaction.ssts_size();
     for (int i = 0; i < op_compaction.ssts_size(); i++) {
         // metadata.next_rowset_id() + i is the rssid of output rowset's i-th segment
         RETURN_IF_ERROR(index.ingest_sst(op_compaction.ssts(i), metadata.next_rowset_id() + i, metadata.version(),
