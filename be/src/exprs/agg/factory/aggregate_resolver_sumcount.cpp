@@ -13,7 +13,6 @@
 // limitations under the License.
 
 #include "column/type_traits.h"
-#include "exprs/agg/distinct.h"
 #include "exprs/agg/factory/aggregate_factory.hpp"
 #include "exprs/agg/factory/aggregate_resolver.hpp"
 #include "exprs/agg/sum.h"
@@ -52,25 +51,6 @@ struct StorageSumDispatcher {
     }
 };
 
-struct DistinctDispatcher {
-    template <LogicalType lt>
-    void operator()(AggregateFuncResolver* resolver) {
-        if constexpr (lt_is_aggregate<lt>) {
-            using DistinctState = DistinctAggregateState<lt, SumResultLT<lt>>;
-            using DistinctState2 = DistinctAggregateStateV2<lt, SumResultLT<lt>>;
-            resolver->add_aggregate_mapping<lt, TYPE_BIGINT, DistinctState>(
-                    "multi_distinct_count", false, AggregateFactory::MakeCountDistinctAggregateFunction<lt>());
-            resolver->add_aggregate_mapping<lt, TYPE_BIGINT, DistinctState2>(
-                    "multi_distinct_count2", false, AggregateFactory::MakeCountDistinctAggregateFunctionV2<lt>());
-
-            resolver->add_aggregate_mapping<lt, SumResultLT<lt>, DistinctState>(
-                    "multi_distinct_sum", false, AggregateFactory::MakeSumDistinctAggregateFunction<lt>());
-            resolver->add_aggregate_mapping<lt, SumResultLT<lt>, DistinctState2>(
-                    "multi_distinct_sum2", false, AggregateFactory::MakeSumDistinctAggregateFunctionV2<lt>());
-        }
-    }
-};
-
 void AggregateFuncResolver::register_sumcount() {
     for (auto type : aggregate_types()) {
         type_dispatch_all(type, SumDispatcher(), this);
@@ -91,12 +71,6 @@ void AggregateFuncResolver::register_sumcount() {
                            AggregateFactory::MakeCountNullableAggregateFunction<false>());
     _infos_mapping.emplace(std::make_tuple("count", TYPE_BIGINT, TYPE_BIGINT, true, true),
                            AggregateFactory::MakeCountNullableAggregateFunction<true>());
-}
-
-void AggregateFuncResolver::register_distinct() {
-    for (auto type : aggregate_types()) {
-        type_dispatch_all(type, DistinctDispatcher(), this);
-    }
 }
 
 } // namespace starrocks
