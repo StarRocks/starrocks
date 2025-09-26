@@ -111,7 +111,8 @@ public class ColumnFilterConverter {
             if (FunctionSet.SUBSTRING.equalsIgnoreCase(functionName) ||
                     FunctionSet.SUBSTR.equalsIgnoreCase(functionName)) {
                 Expr firstExpr = node.getChild(0);
-                if (firstExpr instanceof SlotRef slotRef) {
+                if (firstExpr instanceof SlotRef) {
+                    SlotRef slotRef = firstExpr.cast();
                     if (columnRef.getName().equals(slotRef.getColumnName())) {
                         node.setChild(0, new StringLiteral(constant.getVarchar()));
                         return true;
@@ -120,7 +121,8 @@ public class ColumnFilterConverter {
             } else if (FunctionSet.FROM_UNIXTIME.equalsIgnoreCase(functionName) ||
                     FunctionSet.FROM_UNIXTIME_MS.equalsIgnoreCase(functionName)) {
                 Expr firstExpr = node.getChild(0);
-                if (firstExpr instanceof SlotRef slotRef) {
+                if (firstExpr instanceof SlotRef) {
+                    SlotRef slotRef = firstExpr.cast();
                     if (columnRef.getName().equals(slotRef.getColumnName())) {
                         node.setChild(0, new IntLiteral(constant.getBigint()));
                         return true;
@@ -216,10 +218,12 @@ public class ColumnFilterConverter {
         if (!(table instanceof OlapTable)) {
             return false;
         }
-        if (!(predicate.getChild(0) instanceof CallOperator call) ||
-                !(predicate.getChild(1) instanceof ConstantOperator rhsConst)) {
+        if (!(predicate.getChild(0) instanceof CallOperator) ||
+                !(predicate.getChild(1) instanceof ConstantOperator)) {
             return false;
         }
+        CallOperator call = predicate.getChild(0).cast();
+        ConstantOperator rhsConst = predicate.getChild(1).cast();
         if (!FunctionSet.DATE_TRUNC.equals(call.getFnName())) {
             return false;
         }
@@ -318,9 +322,10 @@ public class ColumnFilterConverter {
                 return predicate;
             }
             ScalarOperator evaluation = ScalarOperatorEvaluator.INSTANCE.evaluation(callOperator);
-            if (!(evaluation instanceof ConstantOperator result)) {
+            if (!(evaluation instanceof ConstantOperator)) {
                 return predicate;
             }
+            ConstantOperator result = evaluation.cast();
             predicate = predicate.clone();
             Optional<ConstantOperator> castResult = result.castTo(predicateExpr.getType());
 
