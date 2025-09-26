@@ -829,20 +829,20 @@ public class SyncPartitionUtilsTest {
         {
             // MONTH
             Pair<String, String> result = getDateTruncFuncTransform(baseRange, "MONTH");
-            Assert.assertEquals("2020-01-01 12:34:56", result.first);
-            Assert.assertEquals("2020-02-01 12:34:56", result.second);
+            Assert.assertEquals("2020-01-01 00:00:00", result.first);
+            Assert.assertEquals("2020-02-01 00:00:00", result.second);
         }
         {
             // QUARTER
             Pair<String, String> result = getDateTruncFuncTransform(baseRange, "QUARTER");
-            Assert.assertEquals("2020-01-01 12:34:56", result.first);
-            Assert.assertEquals("2020-04-01 12:34:56", result.second);
+            Assert.assertEquals("2020-01-01 00:00:00", result.first);
+            Assert.assertEquals("2020-04-01 00:00:00", result.second);
         }
         {
             // YEAR
             Pair<String, String> result = getDateTruncFuncTransform(baseRange, "YEAR");
-            Assert.assertEquals("2020-01-01 12:34:56", result.first);
-            Assert.assertEquals("2021-01-01 12:34:56", result.second);
+            Assert.assertEquals("2020-01-01 00:00:00", result.first);
+            Assert.assertEquals("2021-01-01 00:00:00", result.second);
         }
     }
 
