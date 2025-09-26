@@ -42,6 +42,7 @@ import java.util.Optional;
 import java.util.Set;
 
 import static com.starrocks.sql.optimizer.rule.tree.lowcardinality.DecodeCollector.LOW_CARD_ARRAY_FUNCTIONS;
+import static com.starrocks.sql.optimizer.rule.tree.lowcardinality.DecodeCollector.LOW_CARD_WINDOW_FUNCTIONS;
 
 /*
  * DecodeContext is used to store the information needed for decoding
@@ -337,6 +338,9 @@ class DecodeContext {
                     // count, count_distinct, approx_count_distinct:
                     // return type don't update
                     return new CallOperator(call.getFnName(), call.getType(), newChildren, fn,
+                            call.isDistinct(), call.isRemovedDistinct());
+                } else if (LOW_CARD_WINDOW_FUNCTIONS.contains(call.getFnName())) {
+                    return new CallOperator(call.getFnName(), fn.getReturnType(), newChildren, fn,
                             call.isDistinct(), call.isRemovedDistinct());
                 }
             }
