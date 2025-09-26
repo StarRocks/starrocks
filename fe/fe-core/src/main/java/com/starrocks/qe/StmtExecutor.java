@@ -2424,7 +2424,7 @@ public class StmtExecutor {
         InsertOverwriteJob job = new InsertOverwriteJob(GlobalStateMgr.getCurrentState().getNextId(),
                 insertStmt, db.getId(), olapTable.getId(), context.getCurrentWarehouseId(),
                 insertStmt.isDynamicOverwrite());
-        if (!locker.lockDatabaseAndCheckExist(db, LockType.WRITE)) {
+        if (!locker.lockTableAndCheckDbExist(db, olapTable.getId(), LockType.WRITE)) {
             throw new DmlException("database:%s does not exist.", db.getFullName());
         }
         try {
@@ -2434,7 +2434,7 @@ public class StmtExecutor {
                     job.isDynamicOverwrite());
             GlobalStateMgr.getCurrentState().getEditLog().logCreateInsertOverwrite(info);
         } finally {
-            locker.unLockDatabase(db.getId(), LockType.WRITE);
+            locker.unLockTableWithIntensiveDbLock(db.getId(), olapTable.getId(), LockType.WRITE);
         }
         insertStmt.setOverwriteJobId(job.getJobId());
         InsertOverwriteJobMgr manager = GlobalStateMgr.getCurrentState().getInsertOverwriteJobMgr();

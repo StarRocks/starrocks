@@ -529,11 +529,11 @@ void NullableColumn::put_mysql_row_buffer(MysqlRowBuffer* buf, size_t idx, bool 
 }
 
 void NullableColumn::check_or_die() const {
-    CHECK_EQ(_null_column->size(), _data_column->size());
+    DCHECK_EQ(_null_column->size(), _data_column->size());
     // when _has_null=true, the column may have no null value, so don't check.
     if (!_has_null) {
         auto null_data = _null_column->immutable_data();
-        CHECK(!SIMD::contain_nonzero(null_data, 0));
+        DCHECK(!SIMD::contain_nonzero(null_data, 0));
     }
     _data_column->check_or_die();
     _null_column->check_or_die();
