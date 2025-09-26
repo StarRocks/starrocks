@@ -823,9 +823,21 @@ public class MvRewritePreprocessor {
         // If query tables are set which means use related mv for non lock optimization,
         // copy mv's metadata into a ready-only object.
         MaterializedView copiedMV = (context.getQueryTables() != null) ? copyOnlyMaterializedView(mv) : mv;
+        return buildMaterializationContext(context, copiedMV, mvPlanContext, mvUpdateInfo,
+                baseTables, intersectingTables, mvPlan, level);
+    }
+
+    private static MaterializationContext buildMaterializationContext(OptimizerContext context,
+                                                                      MaterializedView mv,
+                                                                      MvPlanContext mvPlanContext,
+                                                                      MvUpdateInfo mvUpdateInfo,
+                                                                      List<Table> baseTables,
+                                                                      List<Table> intersectingTables,
+                                                                      OptExpression mvPlan,
+                                                                      int level) {
         List<ColumnRefOperator> mvOutputColumns = mvPlanContext.getOutputColumns();
         MaterializationContext materializationContext =
-                new MaterializationContext(context, copiedMV, mvPlan, context.getColumnRefFactory(),
+                new MaterializationContext(context, mv, mvPlan, context.getColumnRefFactory(),
                         mvPlanContext.getRefFactory(), baseTables, intersectingTables,
                         mvPartialPartitionPredicates, mvUpdateInfo, mvOutputColumns, level);
         // generate scan mv plan here to reuse it in rule applications
@@ -834,7 +846,7 @@ public class MvRewritePreprocessor {
         materializationContext.setScanMvOperator(scanMvOp);
         // should keep the sequence of schema
         List<ColumnRefOperator> scanMvOutputColumns = Lists.newArrayList();
-        for (Column column : copiedMV.getOrderedOutputColumns()) {
+        for (Column column : mv.getOrderedOutputColumns()) {
             scanMvOutputColumns.add(scanMvOp.getColumnReference(column));
         }
         Preconditions.checkState(mvOutputColumns.size() == scanMvOutputColumns.size());
@@ -850,7 +862,6 @@ public class MvRewritePreprocessor {
             outputMapping.put(mvOutputColumns.get(i), scanMvOutputColumns.get(i));
         }
         materializationContext.setOutputMapping(outputMapping);
-
         return materializationContext;
     }
 
