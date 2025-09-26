@@ -4,7 +4,7 @@ displayed_sidebar: docs
 
 # fe_locks
 
-`fe_locks` は StarRocks フロントエンド（FE）のメタデータロックに関する情報を提供します。
+`fe_locks` は StarRocks FE のメタデータロックに関する情報を提供します。
 
 `fe_locks` には以下のフィールドが提供されています:
 
