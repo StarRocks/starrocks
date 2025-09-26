@@ -70,6 +70,8 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 
+import static com.starrocks.sql.common.SyncPartitionUtils.getLowerDateTime;
+import static com.starrocks.sql.common.SyncPartitionUtils.nextUpperDateTime;
 import static com.starrocks.sql.common.TimeUnitUtils.TIME_MAP;
 
 /**
@@ -199,7 +201,96 @@ public class ColumnFilterConverter {
             return;
         }
 
+        // Fast path: build range for date_trunc(...) on expression-partitioned tables; if handled, return.
+        if (predicate instanceof BinaryPredicateOperator
+                && predicate.getChild(0) instanceof CallOperator
+                && buildDateTruncRange((BinaryPredicateOperator) predicate, result, table)) {
+            return;
+        }
+
         predicate.accept(COLUMN_FILTER_VISITOR, result);
+    }
+
+    // Build a PartitionColumnFilter range for date_trunc predicates. Returns true if handled.
+    private static boolean buildDateTruncRange(BinaryPredicateOperator predicate,
+                                               Map<String, PartitionColumnFilter> result,
+                                               Table table) {
+        if (!(table instanceof OlapTable)) {
+            return false;
+        }
+        if (!(predicate.getChild(0) instanceof CallOperator) ||
+                !(predicate.getChild(1) instanceof ConstantOperator)) {
+            return false;
+        }
+        CallOperator call = predicate.getChild(0).cast();
+        ConstantOperator rhsConst = predicate.getChild(1).cast();
+        if (!FunctionSet.DATE_TRUNC.equals(call.getFnName())) {
+            return false;
+        }
+        PartitionInfo pinfo = ((OlapTable) table).getPartitionInfo();
+        if (!(pinfo instanceof ExpressionRangePartitionInfo)) {
+            return false;
+        }
+        ExpressionRangePartitionInfo exprInfo = (ExpressionRangePartitionInfo) pinfo;
+        if (!checkPartitionExprsContainsOperator(exprInfo.getPartitionExprs(table.getIdToColumn()), call)) {
+            return false;
+        }
+
+        try {
+            // Partition column and RHS constant as literal
+            ColumnRefOperator columnRef = Utils.extractColumnRef(predicate.getChild(0)).get(0);
+            LiteralExpr rhsLiteral = convertLiteral(columnRef.getType(), rhsConst);
+            if (!(rhsLiteral instanceof DateLiteral) || !(call.getChild(0) instanceof ConstantOperator)) {
+                return false;
+            }
+            // Time unit and normalized endpoints
+            String granularity = ((ConstantOperator) call.getChild(0)).getVarchar().toLowerCase();
+            LocalDateTime rhsDateTime = ((DateLiteral) rhsLiteral).toLocalDateTime();
+            LocalDateTime periodStart = getLowerDateTime(rhsDateTime, granularity);
+            LocalDateTime nextPeriodStart = nextUpperDateTime(periodStart, granularity);
+
+            DateLiteral startLit = new DateLiteral(periodStart, rhsLiteral.getType());
+            DateLiteral nextStartLit = new DateLiteral(nextPeriodStart, rhsLiteral.getType());
+
+            PartitionColumnFilter filter = result.getOrDefault(columnRef.getName(), new PartitionColumnFilter());
+            boolean isAligned = rhsDateTime.equals(periodStart);
+            switch (predicate.getBinaryType()) {
+                case EQ: {
+                    // If RHS constant is not aligned to the granularity, equality can never be true.
+                    // Build an empty interval: [L, L)
+                    if (!isAligned) {
+                        filter.setLowerBound(startLit, true);
+                        filter.setUpperBound(startLit, false);
+                    } else {
+                        filter.setLowerBound(startLit, true);
+                        filter.setUpperBound(nextStartLit, false);
+                    }
+                    break;
+                }
+                case GE:
+                    // If not aligned, minimal satisfying dt starts from next period start [U, +inf)
+                    filter.setLowerBound(isAligned ? startLit : nextStartLit, true);
+                    break;
+                case GT:
+                    filter.setLowerBound(nextStartLit, true);
+                    break;
+                case LE:
+                    filter.setUpperBound(nextStartLit, false);
+                    break;
+                case LT:
+                    // If not aligned, T(dt) < C allows dt < U; if aligned, dt < L
+                    filter.setUpperBound(isAligned ? startLit : nextStartLit, false);
+                    break;
+                default:
+                    return false;
+            }
+            filter.setFromFunctionCall();
+            result.put(columnRef.getName(), filter);
+            return true;
+        } catch (Exception e) {
+            LOG.warn("build date_trunc column filter failed", e);
+            return false;
+        }
     }
 
     // Replace the predicate of the query with the predicate of the partition expression and evaluate.
@@ -234,11 +325,11 @@ public class ColumnFilterConverter {
             if (!(evaluation instanceof ConstantOperator)) {
                 return predicate;
             }
+            ConstantOperator result = evaluation.cast();
             predicate = predicate.clone();
-            ConstantOperator result = (ConstantOperator) evaluation;
             Optional<ConstantOperator> castResult = result.castTo(predicateExpr.getType());
 
-            if (!castResult.isPresent()) {
+            if (castResult.isEmpty()) {
                 return predicate;
             }
             result = castResult.get();
