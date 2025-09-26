@@ -69,11 +69,15 @@ public class DeltaUtils {
             Table deltaTable = Table.forPath(deltaEngine, path);
             snapshot = (SnapshotImpl) deltaTable.getLatestSnapshot(deltaEngine);
         } catch (TableNotFoundException e) {
-            LOG.error("Failed to find Delta table for {}.{}.{}, {}", catalog, dbName, tblName, e.getMessage());
-            throw new SemanticException("Failed to find Delta table for " + catalog + "." + dbName + "." + tblName);
+            LOG.error("Failed to find Delta table for {}.{}.{}, {}. caused by : {}", catalog, dbName, tblName,
+                    e.getMessage(), e.getCause());
+            throw new SemanticException("Failed to find Delta table for %s.%s.%s, %s. caused by : %s", catalog,
+                    dbName, tblName, e.getMessage(), e.getCause());
         } catch (Exception e) {
-            LOG.error("Failed to get latest snapshot for {}.{}.{}, {}", catalog, dbName, tblName, e.getMessage());
-            throw new SemanticException("Failed to get latest snapshot for " + catalog + "." + dbName + "." + tblName);
+            LOG.error("Failed to get latest snapshot for {}.{}.{}, {}. caused by : {}", catalog, dbName,
+                    tblName, e.getMessage(), e.getCause());
+            throw new SemanticException("Failed to get latest snapshot for %s.%s.%s, %s. caused by : %s",
+                    catalog, dbName, tblName, e.getMessage(), e.getCause());
         }
 
         StructType deltaSchema = snapshot.getSchema(deltaEngine);
