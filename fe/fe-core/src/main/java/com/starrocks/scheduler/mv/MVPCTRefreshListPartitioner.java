@@ -80,7 +80,7 @@ public final class MVPCTRefreshListPartitioner extends MVPCTRefreshPartitioner {
     public boolean syncAddOrDropPartitions() throws LockTimeoutException {
         // collect mv partition items with lock
         Locker locker = new Locker();
-        if (!locker.tryLockTableWithIntensiveDbLock(db.getId(), mv.getId(),
+        if (!locker.tryLockTableWithIntensiveDbLock(db, mv.getId(),
                 LockType.READ, Config.mv_refresh_try_lock_timeout_ms, TimeUnit.MILLISECONDS)) {
             throw new LockTimeoutException("Failed to lock database: " + db.getFullName() + " in syncPartitionsForList");
         }
@@ -93,7 +93,7 @@ public final class MVPCTRefreshListPartitioner extends MVPCTRefreshPartitioner {
                 return false;
             }
         } finally {
-            locker.unLockTableWithIntensiveDbLock(db.getId(), mv.getId(), LockType.READ);
+            locker.unLockTableWithIntensiveDbLock(db, mv.getId(), LockType.READ);
         }
 
         {

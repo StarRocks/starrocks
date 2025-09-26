@@ -823,13 +823,14 @@ public class MvRewritePreprocessor {
         // If query tables are set which means use related mv for non lock optimization,
         // copy mv's metadata into a ready-only object.
         MaterializedView copiedMV = (context.getQueryTables() != null) ? copyOnlyMaterializedView(mv) : mv;
-        return buildMaterializationContext(context, copiedMV, mvPlanContext, mvUpdateInfo,
+        return buildMaterializationContext(context, copiedMV, mvPlanContext, mvPartialPartitionPredicates, mvUpdateInfo,
                 baseTables, intersectingTables, mvPlan, level);
     }
 
     private static MaterializationContext buildMaterializationContext(OptimizerContext context,
                                                                       MaterializedView mv,
                                                                       MvPlanContext mvPlanContext,
+                                                                     ScalarOperator mvPartialPartitionPredicates,
                                                                       MvUpdateInfo mvUpdateInfo,
                                                                       List<Table> baseTables,
                                                                       List<Table> intersectingTables,

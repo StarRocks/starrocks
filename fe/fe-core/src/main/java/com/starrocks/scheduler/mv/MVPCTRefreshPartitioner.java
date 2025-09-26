@@ -259,7 +259,7 @@ public abstract class MVPCTRefreshPartitioner {
     protected void dropPartition(Database db, MaterializedView materializedView, String mvPartitionName) {
         String dropPartitionName = materializedView.getPartition(mvPartitionName).getName();
         Locker locker = new Locker();
-        if (!locker.tryLockTableWithIntensiveDbLock(db.getId(), materializedView.getId(), LockType.WRITE,
+        if (!locker.tryLockTableWithIntensiveDbLock(db, materializedView.getId(), LockType.WRITE,
                 Config.mv_refresh_try_lock_timeout_ms, TimeUnit.MILLISECONDS)) {
             logger.warn("Fail to lock database {} in drop partition for mv refresh {}", db.getFullName(),
                     materializedView.getName());
