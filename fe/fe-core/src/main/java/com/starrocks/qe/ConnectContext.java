@@ -64,6 +64,7 @@ import com.starrocks.mysql.ssl.SSLChannel;
 import com.starrocks.mysql.ssl.SSLChannelImp;
 import com.starrocks.mysql.ssl.SSLContextLoader;
 import com.starrocks.plugin.AuditEvent.AuditEventBuilder;
+import com.starrocks.qe.QueryDetail.QuerySource;
 import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.MetadataMgr;
@@ -241,6 +242,9 @@ public class ConnectContext {
     // QueryMaterializationContext is different from MaterializationContext that it keeps the context during the query
     // lifecycle instead of per materialized view.
     private QueryMaterializationContext queryMVContext;
+
+    // Query source to distinguish different types of queries
+    private QuerySource querySource = QuerySource.EXTERNAL;
 
     // In order to ensure the correctness of imported data, in some cases, we don't use connector metadata cache for
     // `insert into table select external table`. Currently, this feature only supports hive table.
@@ -1164,6 +1168,14 @@ public class ConnectContext {
 
     public void setQueryMVContext(QueryMaterializationContext queryMVContext) {
         this.queryMVContext = queryMVContext;
+    }
+
+    public QuerySource getQuerySource() {
+        return querySource;
+    }
+
+    public void setQuerySource(QuerySource querySource) {
+        this.querySource = querySource;
     }
 
     public void startAcceptQuery(ConnectProcessor connectProcessor) {
