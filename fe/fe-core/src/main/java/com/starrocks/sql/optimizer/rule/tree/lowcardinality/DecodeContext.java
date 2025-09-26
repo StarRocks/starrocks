@@ -340,8 +340,11 @@ class DecodeContext {
                     return new CallOperator(call.getFnName(), call.getType(), newChildren, fn,
                             call.isDistinct(), call.isRemovedDistinct());
                 } else if (LOW_CARD_WINDOW_FUNCTIONS.contains(call.getFnName())) {
-                    return new CallOperator(call.getFnName(), fn.getReturnType(), newChildren, fn,
+                    CallOperator newCall = new CallOperator(call.getFnName(), fn.getReturnType(), newChildren, fn,
                             call.isDistinct(), call.isRemovedDistinct());
+                    //encoded window functions should set ignore null flag
+                    newCall.setIgnoreNulls(call.getIgnoreNulls());
+                    return newCall;
                 }
             }
 
