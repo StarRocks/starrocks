@@ -16,6 +16,7 @@ package com.starrocks.qe.scheduler.dag;
 
 import com.starrocks.common.UserException;
 import com.starrocks.proto.PPlanFragmentCancelReason;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.scheduler.Coordinator;
 import com.starrocks.qe.scheduler.Deployer;
 import com.starrocks.qe.scheduler.slot.DeployState;
@@ -37,9 +38,43 @@ public class AllAtOnceExecutionSchedule implements ExecutionSchedule {
     private ExecutionDAG dag;
     private volatile boolean cancelled = false;
 
+<<<<<<< HEAD
     class DeployMoreScanRangesTask implements Runnable {
         List<DeployState> states;
         private ExecutorService executorService;
+=======
+    class TracerContext implements AutoCloseable {
+        Tracers savedTracers;
+        ConnectContext savedConnectContext;
+
+        TracerContext(Tracers currentTracers, ConnectContext connectContext) {
+            if (currentTracers != null) {
+                savedTracers = Tracers.get();
+                Tracers.set(currentTracers);
+            }
+            if (connectContext != null) {
+                savedConnectContext = ConnectContext.get();
+                ConnectContext.set(connectContext);
+            }
+        }
+
+        @Override
+        public void close() {
+            if (savedTracers != null) {
+                Tracers.set(savedTracers);
+            }
+            if (savedConnectContext != null) {
+                ConnectContext.set(savedConnectContext);
+            }
+        }
+    }
+
+    class DeployScanRangesTask implements Runnable {
+        List<DeployState> states;
+        ExecutorService executorService;
+        Tracers currentTracers;
+        ConnectContext currentConnectContext;
+>>>>>>> 2c0473b510 ([BugFix] connect context is missing in deploy scan range threads (#63544))
 
         DeployMoreScanRangesTask(List<DeployState> states, ExecutorService executorService) {
             this.states = states;
@@ -48,6 +83,7 @@ public class AllAtOnceExecutionSchedule implements ExecutionSchedule {
 
         @Override
         public void run() {
+<<<<<<< HEAD
             while (!cancelled && !states.isEmpty()) {
                 try {
                     states = coordinator.assignIncrementalScanRangesToDeployStates(deployer, states);
@@ -61,6 +97,24 @@ public class AllAtOnceExecutionSchedule implements ExecutionSchedule {
                     LOG.warn("Failed to assign incremental scan ranges to deploy states", e);
                     coordinator.cancel(PPlanFragmentCancelReason.INTERNAL_ERROR, e.getMessage());
                     throw new RuntimeException(e);
+=======
+            if (cancelled || states.isEmpty()) {
+                return;
+            }
+            try (TracerContext tracerContext = new TracerContext(currentTracers, currentConnectContext)) {
+                runOnce();
+            }
+            // If run in the executor service, we need to start the next turn.
+            // To submit this task again so all queries could get the same opportunity to run by queueing up
+            start();
+        }
+
+        public void runOnce() {
+            try (Timer timer = Tracers.watchScope(Tracers.Module.SCHEDULER, "DeployScanRanges")) {
+                states = coordinator.assignIncrementalScanRangesToDeployStates(deployer, states);
+                if (states.isEmpty()) {
+                    return;
+>>>>>>> 2c0473b510 ([BugFix] connect context is missing in deploy scan range threads (#63544))
                 }
             }
         }
@@ -92,7 +146,13 @@ public class AllAtOnceExecutionSchedule implements ExecutionSchedule {
 
         ExecutorService executorService = null;
         if (option.useQueryDeployExecutor) {
+<<<<<<< HEAD
             executorService = GlobalStateMgr.getCurrentState().getQueryDeployExecutor();
+=======
+            deployScanRangesTask.executorService = GlobalStateMgr.getCurrentState().getQueryDeployExecutor();
+            deployScanRangesTask.currentTracers = Tracers.get();
+            deployScanRangesTask.currentConnectContext = ConnectContext.get();
+>>>>>>> 2c0473b510 ([BugFix] connect context is missing in deploy scan range threads (#63544))
         }
 
         DeployMoreScanRangesTask task = new DeployMoreScanRangesTask(states, executorService);
