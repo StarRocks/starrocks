@@ -3646,8 +3646,8 @@ static ColumnPtr regexp_extract_all_const(re2::RE2* const_re, const Columns& col
 
     NullColumnPtr nl_col;
     if (columns[0]->is_nullable()) {
-        auto x = down_cast<NullableColumn*>(columns[0].get())->null_column();
-        nl_col = ColumnHelper::as_column<NullColumn>(x->clone_shared());
+        auto x = down_cast<const NullableColumn*>(columns[0].get())->null_column();
+        nl_col = ColumnHelper::as_column<NullColumn>(x->clone());
     } else {
         nl_col = NullColumn::create(size, 0);
     }
