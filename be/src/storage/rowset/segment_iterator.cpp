@@ -114,6 +114,9 @@ public:
 
     void close() override;
 
+    // Reset the iterator to scan a new range, reusing the existing setup
+    Status reset(const SparseRange<>& scan_range) override;
+
 protected:
     Status do_get_next(Chunk* chunk) override;
     Status do_get_next(Chunk* chunk, vector<uint32_t>* rowid) override;
@@ -238,6 +241,7 @@ private:
 
     template <bool check_global_dict>
     Status _init_column_iterators(const Schema& schema);
+    Status _filter_scan_range();
     Status _get_row_ranges_by_keys();
     StatusOr<SparseRange<>> _get_row_ranges_by_key_ranges();
     StatusOr<SparseRange<>> _get_row_ranges_by_short_key_ranges();
@@ -305,6 +309,9 @@ private:
     Status _init_inverted_index_iterators();
 
     Status _apply_inverted_index();
+
+    // Apply common index filtering logic used by both _init and reset
+    Status _apply_index_filtering();
 
     Status _read(Chunk* chunk, vector<rowid_t>* rowid, size_t n);
 
@@ -581,6 +588,31 @@ SegmentIterator::SegmentIterator(std::shared_ptr<Segment> segment, Schema schema
     }
 }
 
+Status SegmentIterator::_filter_scan_range() {
+    // Apply various index filters to the current scan range
+    RETURN_IF_ERROR(_get_row_ranges_by_keys());
+
+    // Apply del vector before or after all index filters based on config
+    bool apply_del_vec_after_all_index_filter = config::apply_del_vec_after_all_index_filter;
+    if (!apply_del_vec_after_all_index_filter) {
+        RETURN_IF_ERROR(_apply_del_vector());
+    }
+
+    // Apply index-based filters
+    RETURN_IF_ERROR(_apply_bitmap_index());
+    RETURN_IF_ERROR(_get_row_ranges_by_zone_map());
+    RETURN_IF_ERROR(_get_row_ranges_by_bloom_filter());
+    RETURN_IF_ERROR(_apply_inverted_index());
+
+    if (apply_del_vec_after_all_index_filter) {
+        RETURN_IF_ERROR(_apply_del_vector());
+    }
+
+    RETURN_IF_ERROR(_get_row_ranges_by_vector_index());
+
+    return Status::OK();
+}
+
 Status SegmentIterator::_init() {
     SCOPED_RAW_TIMER(&_opts.stats->segment_init_ns);
     if (_opts.is_cancelled != nullptr && _opts.is_cancelled->load(std::memory_order_acquire)) {
@@ -618,23 +650,13 @@ Status SegmentIterator::_init() {
     RETURN_IF_ERROR(_check_low_cardinality_optimization());
     RETURN_IF_ERROR(_init_column_iterators<true>(_schema));
     RETURN_IF_ERROR(_init_ann_reader());
+
     // filter by index stage
-    // Use indexes and predicates to filter some data page
+    // Initialize the basic scan range first (only in _init, not in reset)
     RETURN_IF_ERROR(_get_row_ranges_by_rowid_range());
-    RETURN_IF_ERROR(_get_row_ranges_by_keys());
-    bool apply_del_vec_after_all_index_filter = config::apply_del_vec_after_all_index_filter;
-    if (!apply_del_vec_after_all_index_filter) {
-        RETURN_IF_ERROR(_apply_del_vector());
-    }
-    // Support prefilter for now
-    RETURN_IF_ERROR(_apply_bitmap_index());
-    RETURN_IF_ERROR(_get_row_ranges_by_zone_map());
-    RETURN_IF_ERROR(_get_row_ranges_by_bloom_filter());
-    RETURN_IF_ERROR(_apply_inverted_index());
-    if (apply_del_vec_after_all_index_filter) {
-        RETURN_IF_ERROR(_apply_del_vector());
-    }
-    RETURN_IF_ERROR(_get_row_ranges_by_vector_index());
+    RETURN_IF_ERROR(_filter_scan_range());
+
+    // sample data
     RETURN_IF_ERROR(_apply_data_sampling());
 
     // rewrite stage
@@ -2748,6 +2770,27 @@ void SegmentIterator::close() {
     if (_inverted_index_ctx) {
         _inverted_index_ctx->cleanup();
     }
+}
+
+Status SegmentIterator::reset(const SparseRange<>& scan_range) {
+    // Check if iterator is properly initialized
+    if (!_inited) {
+        return Status::InternalError("SegmentIterator not initialized");
+    }
+
+    // Update the scan range
+    _scan_range = scan_range;
+    _cur_rowid = 0;
+    RETURN_IF_ERROR(_filter_scan_range());
+    // Reset the range iterator to the beginning of the new scan range
+    _range_iter = _scan_range.new_iterator();
+
+    // Update IO coalesce column iterators for the new scan range
+    for (auto column_index : _io_coalesce_column_index) {
+        RETURN_IF_ERROR(_column_iterators[column_index]->convert_sparse_range_to_io_range(_scan_range));
+    }
+
+    return Status::OK();
 }
 
 // put the field that has predicated on it ahead of those without one, for handle late
