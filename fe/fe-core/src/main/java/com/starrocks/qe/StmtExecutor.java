@@ -320,6 +320,10 @@ public class StmtExecutor {
     }
 
     public static StmtExecutor newInternalExecutor(ConnectContext ctx, StatementBase parsedStmt) {
+        // Set query source to INTERNAL for system/internal queries only if not already set
+        if (ctx.getQuerySource().equals(QueryDetail.QuerySource.EXTERNAL)) {
+            ctx.setQuerySource(QueryDetail.QuerySource.INTERNAL);
+        }
         return new StmtExecutor(ctx, parsedStmt, true);
     }
 
@@ -3072,6 +3076,10 @@ public class StmtExecutor {
         }
 
         boolean isQuery = context.isQueryStmt(parsedStmt);
+<<<<<<< HEAD
+=======
+
+>>>>>>> 6e2a6a5fea ([Enhancement] add querySource in the QueryDetail & AuditEvent (#63480))
         QueryDetail queryDetail = new QueryDetail(
                 DebugUtil.printId(context.getQueryId()),
                 isQuery,
@@ -3085,6 +3093,8 @@ public class StmtExecutor {
                 Optional.ofNullable(context.getResourceGroup()).map(TWorkGroup::getName).orElse(""),
                 context.getCurrentWarehouseName(),
                 context.getCurrentCatalog());
+        // Set query source from context
+        queryDetail.setQuerySource(context.getQuerySource());
         context.setQueryDetail(queryDetail);
         // copy queryDetail, cause some properties can be changed in future
         QueryDetailQueue.addQueryDetail(queryDetail.copy());
