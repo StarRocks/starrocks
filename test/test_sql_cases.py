@@ -105,6 +105,9 @@ class TestSQLCases(sr_sql_lib.StarrocksSQLApiLib):
         for config in default_configs:
             sql = "ADMIN SET FRONTEND CONFIG (%s)" % config
             self.execute_sql(sql)
+        # to avoid partition ttl scheduelr impacting the test result, enlarge the scheduler interval
+        sql = "ADMIN SET FRONTEND CONFIG 'dynamic_partition_check_interval_seconds' = '1200'"
+        self.execute_sql(sql)
 
     @sql_annotation.ignore_timeout()
     def tearDown(self):
@@ -112,6 +115,10 @@ class TestSQLCases(sr_sql_lib.StarrocksSQLApiLib):
         super().tearDown()
 
         log.info("[TearDown begin]: %s" % self.case_info.name)
+
+        # reset the scheduler interval
+        sql = "ADMIN SET FRONTEND CONFIG 'dynamic_partition_check_interval_seconds' = '600'"
+        self.execute_sql(sql)
 
         for each_db in self.db:
             self.drop_database(each_db)
