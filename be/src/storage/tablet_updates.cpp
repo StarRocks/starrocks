@@ -946,9 +946,11 @@ void TabletUpdates::_check_for_apply() {
             std::make_shared<ApplyCommitTask>(std::static_pointer_cast<Tablet>(_tablet.shared_from_this())));
     auto st = StorageEngine::instance()->update_manager()->apply_thread_pool()->submit(std::move(task));
     if (!st.ok()) {
-        std::string msg =
-                strings::Substitute("submit apply task failed: $0 $1", st.to_string(), _debug_string(false, false));
-        LOG(FATAL) << msg;
+        LOG(ERROR) << strings::Substitute("submit apply task failed: $0 $1", st.to_string(),
+                                          _debug_string(false, false));
+        std::lock_guard<std::mutex> lg(_apply_running_lock);
+        // reset _apply_running to false, so that next time _check_for_apply can submit task again
+        _apply_running = false;
     }
 }
 
