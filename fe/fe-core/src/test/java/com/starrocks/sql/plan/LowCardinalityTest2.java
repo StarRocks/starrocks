@@ -1348,8 +1348,7 @@ public class LowCardinalityTest2 extends PlanTestBase {
                 "  |  2 <-> [2: S_NAME, CHAR, false]\n" +
                 "  |  9 <-> [1: S_SUPPKEY, INT, false]\n" +
                 "  |  11 <-> [3: S_ADDRESS, VARCHAR, true]\n" +
-                "  |  20 <-> DictDefine([19: S_COMMENT, INT, false], [concat[(<place-holder>, 'a'); " +
-                "args: VARCHAR; result: VARCHAR; args nullable: false; result nullable: true]])\n");
+                "  |  20 <-> DictDefine(19: S_COMMENT, [concat(<place-holder>, 'a')])");
 
         // partition column is not dict column
         sql = "SELECT S_ADDRESS, MAX(S_SUPPKEY) over(partition by S_NAME order by S_COMMENT) FROM supplier_nullable";
