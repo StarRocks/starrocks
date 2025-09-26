@@ -14,13 +14,13 @@
 
 package com.starrocks.qe;
 
+import com.google.common.collect.Maps;
 import com.google.gson.Gson;
 import com.starrocks.catalog.MaterializedView;
-import com.starrocks.catalog.UserIdentity;
 import com.starrocks.common.Config;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.plugin.AuditEvent;
-import com.starrocks.scheduler.MVTaskRunProcessor;
+import com.starrocks.scheduler.PartitionBasedMvRefreshProcessor;
 import com.starrocks.scheduler.SqlTaskRunProcessor;
 import com.starrocks.scheduler.Task;
 import com.starrocks.scheduler.TaskBuilder;
@@ -28,6 +28,7 @@ import com.starrocks.scheduler.TaskRun;
 import com.starrocks.scheduler.TaskRunBuilder;
 import com.starrocks.scheduler.TaskRunContext;
 import com.starrocks.sql.ast.StatementBase;
+import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
@@ -172,8 +173,10 @@ public class QueryDetailTest {
         taskRun.setProperties(new java.util.HashMap<>());
         taskRun.initStatus(UUID.randomUUID().toString(), System.currentTimeMillis());
 
-        TaskRunContext taskRunContext = taskRun.buildTaskRunContext();
+        TaskRunContext taskRunContext = new TaskRunContext();
         taskRunContext.setCtx(testContext);
+        taskRunContext.setDefinition(sql);
+        taskRunContext.setTaskRun(taskRun);
 
         SqlTaskRunProcessor processor = new SqlTaskRunProcessor();
         processor.processTaskRun(taskRunContext);
@@ -206,14 +209,20 @@ public class QueryDetailTest {
         TaskRun taskRun = TaskRunBuilder.newBuilder(task).build();
         taskRun.initStatus(UUID.randomUUID().toString(), System.currentTimeMillis());
 
-        MVTaskRunProcessor processor = (MVTaskRunProcessor) taskRun.getProcessor();
+        PartitionBasedMvRefreshProcessor processor = (PartitionBasedMvRefreshProcessor) taskRun.getProcessor();
 
-        TaskRunContext taskRunContext = taskRun.buildTaskRunContext();
+        TaskRunContext taskRunContext = new TaskRunContext();
+        ConnectContext mvCtx = taskRun.buildTaskRunConnectContext();
+        // Set query source to MV for materialized view refresh
+        mvCtx.setQuerySource(QueryDetail.QuerySource.MV);
+        taskRunContext.setCtx(mvCtx);
+        taskRunContext.setDefinition(task.getDefinition());
+        taskRunContext.setTaskRun(taskRun);
+        taskRunContext.setProperties(Maps.newHashMap());
+        taskRunContext.getProperties().put(TaskRun.MV_ID, String.valueOf(mv.getMvId().getId()));
         processor.prepare(taskRunContext);
 
         processor.processTaskRun(taskRunContext);
-
-        ConnectContext mvCtx = taskRunContext.getCtx();
 
         // Manually call auditAfterExec to set querySource in AuditEvent
         ConnectProcessor connectProcessor = new ConnectProcessor(mvCtx);

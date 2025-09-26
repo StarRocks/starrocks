@@ -3076,10 +3076,6 @@ public class StmtExecutor {
         }
 
         boolean isQuery = context.isQueryStmt(parsedStmt);
-<<<<<<< HEAD
-=======
-
->>>>>>> 6e2a6a5fea ([Enhancement] add querySource in the QueryDetail & AuditEvent (#63480))
         QueryDetail queryDetail = new QueryDetail(
                 DebugUtil.printId(context.getQueryId()),
                 isQuery,
