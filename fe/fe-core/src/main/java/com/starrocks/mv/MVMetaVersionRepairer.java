@@ -71,7 +71,7 @@ public class MVMetaVersionRepairer {
 
             // acquire mvDb + mv write lock to modify meta of mv
             Locker locker = new Locker();
-            if (!locker.tryLockTableWithIntensiveDbLock(mvDb.getId(), mv.getId(), LockType.WRITE,
+            if (!locker.tryLockTableWithIntensiveDbLock(mvDb, mv.getId(), LockType.WRITE,
                     Config.mv_refresh_try_lock_timeout_ms, TimeUnit.MILLISECONDS)) {
                 continue;
             }
