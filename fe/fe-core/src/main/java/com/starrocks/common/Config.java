@@ -3425,8 +3425,9 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true)
     public static int default_mv_partition_refresh_number = 1;
 
-    @ConfField(mutable = true)
-    public static String default_mv_partition_refresh_strategy = "strict";
+    @ConfField(mutable = true, comment = "The default refresh strategy for materialized view partition refresh, " +
+            "adaptive by default")
+    public static String default_mv_partition_refresh_strategy = "adaptive";
 
     @ConfField(mutable = true)
     public static String default_mv_refresh_mode = "pct";
