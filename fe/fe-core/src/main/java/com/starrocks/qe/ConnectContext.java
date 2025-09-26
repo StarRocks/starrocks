@@ -288,6 +288,10 @@ public class ConnectContext {
         return threadLocalInfo.get();
     }
 
+    public static void set(ConnectContext ctx) {
+        threadLocalInfo.set(ctx);
+    }
+
     public static SessionVariable getSessionVariableOrDefault() {
         ConnectContext ctx = get();
         return (ctx != null) ? ctx.sessionVariable : SessionVariable.DEFAULT_SESSION_VARIABLE;
