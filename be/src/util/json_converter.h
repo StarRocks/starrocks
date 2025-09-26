@@ -183,10 +183,10 @@ static Status cast_vpjson_to(const vpack::Slice& slice, ColumnBuilder<ResultType
             }
         }
     } catch (const vpack::Exception& e) {
-        LOG(WARNING) << "vpack::Exception in cast_vpjson_to: " << e.what();
         if constexpr (AllowThrowException) {
             return Status::JsonFormatError(fmt::format("cast from JSON to {} failed", type_to_string(ResultType)));
         }
+        LOG(INFO) << "vpack::Exception in cast_vpjson_to: " << e.what();
         result.append_null();
     }
     return Status::OK();

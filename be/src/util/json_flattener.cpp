@@ -76,7 +76,7 @@ void extract_number(const vpack::Slice* json, NullableColumn* result) {
             datum.set_null();
         }
     } catch (const vpack::Exception& e) {
-        LOG(WARNING) << "vpack::Exception in extract_number: " << e.what();
+        LOG(INFO) << "vpack::Exception in extract_number: " << e.what();
         datum.set_null();
     }
 
@@ -119,7 +119,7 @@ void extract_bool(const vpack::Slice* json, NullableColumn* result) {
             datum.set_null();
         }
     } catch (const vpack::Exception& e) {
-        LOG(WARNING) << "vpack::Exception in extract_bool: " << e.what();
+        LOG(INFO) << "vpack::Exception in extract_bool: " << e.what();
         datum.set_null();
     }
 
@@ -148,7 +148,7 @@ void extract_string(const vpack::Slice* json, NullableColumn* result) {
             result->append_datum(Datum(Slice(str)));
         }
     } catch (const vpack::Exception& e) {
-        LOG(WARNING) << "vpack::Exception in extract_string: " << e.what();
+        LOG(INFO) << "vpack::Exception in extract_string: " << e.what();
         result->append_nulls(1);
     }
 }
