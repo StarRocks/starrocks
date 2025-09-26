@@ -549,6 +549,9 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
     // This is the original user's view define SQL which can be used to generate ast key in text based rewrite.
     @SerializedName(value = "originalViewDefineSql")
     private String originalViewDefineSql;
+    // This is the rewritten view define SQL which is used to generate IVM refresh tasks.
+    @SerializedName(value = "ivmDefineSql")
+    private String ivmDefineSql;
     // This is the original database name when the mv is created.
     private String originalDBName;
     // Deprecated field which is used to store single partition ref table exprs of the mv in old version.
@@ -737,6 +740,15 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
         this.originalViewDefineSql = originalViewDefineSql;
     }
 
+    public String setIvmDefineSql(String ivmDefineSql) {
+        this.ivmDefineSql = ivmDefineSql;
+        return this.ivmDefineSql;
+    }
+
+    public String getIvmDefineSql() {
+        return ivmDefineSql;
+    }
+
     public String getOriginalDBName() {
         return originalDBName;
     }
@@ -750,7 +762,11 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
     }
 
     public String getIVMTaskDefinition() {
-        return String.format("INSERT INTO `%s` %s", getName(), getViewDefineSql());
+        String ivmDefineSql = getIvmDefineSql();
+        if (Strings.isNullOrEmpty(ivmDefineSql)) {
+            ivmDefineSql = getViewDefineSql();
+        }
+        return String.format("INSERT INTO `%s` %s", getName(), ivmDefineSql);
     }
 
     /**
@@ -2384,7 +2400,7 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
      * @return: mv's defined output columns in the defined order
      */
     public List<Column> getOrderedOutputColumns() {
-        final List<Column> baseSchema = getBaseSchemaWithoutGeneratedColumn();
+        final List<Column> baseSchema = getVisibleColumnsWithoutGeneratedColumn();
         if (CollectionUtils.isEmpty(this.queryOutputIndices)) {
             return baseSchema;
         } else {

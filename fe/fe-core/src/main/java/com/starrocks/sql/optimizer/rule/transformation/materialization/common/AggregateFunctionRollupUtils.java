@@ -14,13 +14,17 @@
 
 package com.starrocks.sql.optimizer.rule.transformation.materialization.common;
 
+import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Lists;
+import com.starrocks.catalog.AggregateFunction;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.Type;
+import com.starrocks.catalog.combinator.AggStateCombineCombinator;
 import com.starrocks.catalog.combinator.AggStateUnionCombinator;
+import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
@@ -108,6 +112,18 @@ public class AggregateFunctionRollupUtils {
         return null;
     }
 
+    public static boolean isSupportedAggFunctionRollup(CallOperator aggCall) {
+        if (aggCall == null) {
+            return false;
+        }
+        String funcName = aggCall.getFnName();
+        if (REWRITE_ROLLUP_FUNCTION_MAP.containsKey(funcName)) {
+            return true;
+        }
+
+        return false;
+    }
+
     public static ScalarOperator genRollupProject(CallOperator aggCall, ColumnRefOperator oldColRef,
                                                   boolean hasGroupByKeys) {
         if (!hasGroupByKeys && aggCall.getFnName().equals(FunctionSet.COUNT)) {
@@ -187,6 +203,18 @@ public class AggregateFunctionRollupUtils {
                     .updateArgType(new Type[] { targetColumn.getType() });
             return new CallOperator(aggCall.getFnName(), aggCall.getType(), Lists.newArrayList(targetColumn),
                     newFunc);
+        }
+    }
+
+    public static CallOperator getIntermediateStateAggregateFunc(CallOperator aggCall) {
+        Preconditions.checkArgument(aggCall.getFunction() instanceof AggregateFunction);
+        Function aggFunc = aggCall.getFunction();
+        if (aggFunc instanceof AggStateUnionCombinator || aggFunc instanceof AggStateCombineCombinator) {
+            // If the agg call is already an intermediate state aggregate function, return it directly.
+            return aggCall;
+        } else {
+            throw new SemanticException(
+                    "Unsupported aggregate function for intermediate state aggregate: %s", aggCall);
         }
     }
 }

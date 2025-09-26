@@ -222,7 +222,7 @@ public class MaterializedViewTransparentRewriteRule extends TransformationRule {
                 mv, mvPlanContext, mvUpdateInfo, queryTables, 0);
         logMVRewrite(mvContext, "Get mv transparent plan failed, and redirect to mv's defined query");
         Map<Column, ColumnRefOperator> columnToColumnRefMap = olapScanOperator.getColumnMetaToColRefMap();
-        List<Column> mvColumns = mv.getBaseSchemaWithoutGeneratedColumn();
+        List<Column> mvColumns = mv.getOrderedOutputColumns();
         List<ColumnRefOperator> expectOutputColumns = mvColumns.stream()
                 .map(c -> columnToColumnRefMap.get(c))
                 .collect(Collectors.toList());
