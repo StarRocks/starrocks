@@ -167,7 +167,7 @@ While the usage of temporary tables is similar to that of native tables, there a
 - ALTER TABLE statements are not supported.
 - Creating views and materialized views based on temporary tables is not supported.
 - EXPORT statements are not supported.
-- Submitting asynchronous tasks with SUBMIT TASK for creating temporary tables is not supported.
+- Creating temporary tables with asynchronous tasks using SUBMIT TASK is not supported.
 
 ### More features
 
