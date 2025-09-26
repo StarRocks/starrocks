@@ -118,7 +118,7 @@ uint8_t* encode_string_lz4(const void* data, size_t size, uint8_t* buff, int enc
         throw std::runtime_error(
                 fmt::format("The input size for compression should be less than {}", LZ4_MAX_INPUT_SIZE));
     }
-    uint64_t encode_size =
+    int64_t encode_size =
             LZ4_compress_fast(reinterpret_cast<const char*>(data), reinterpret_cast<char*>(buff + sizeof(uint64_t)),
                               size, LZ4_compressBound(size), std::max(1, std::abs(encode_level / 10000) % 100));
     if (encode_size <= 0) {
@@ -135,7 +135,7 @@ uint8_t* encode_string_lz4(const void* data, size_t size, uint8_t* buff, int enc
 const uint8_t* decode_string_lz4(const uint8_t* buff, void* target, size_t size) {
     uint64_t encode_size = 0;
     buff = read_little_endian_64(buff, &encode_size);
-    uint64_t decode_size = LZ4_decompress_safe(reinterpret_cast<const char*>(buff), reinterpret_cast<char*>(target),
+    int64_t decode_size = LZ4_decompress_safe(reinterpret_cast<const char*>(buff), reinterpret_cast<char*>(target),
                                                encode_size, size);
     if (decode_size <= 0) {
         throw std::runtime_error("lz4 decompress error.");
