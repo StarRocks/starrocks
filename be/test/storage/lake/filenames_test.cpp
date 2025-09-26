@@ -56,6 +56,13 @@ TEST_F(FilenamesTest, extract_uuid_from) {
         ASSERT_EQ("6bc1edf0-fba6-4aa1-b0d4-ee5b88ef156b", uuid);
     }
 
+    // Test valid cols file names
+    {
+        std::string file_name = "0000000000000003_6bc1edf0-fba6-4aa1-b0d4-ee5b88ef156b.cols";
+        std::string uuid = extract_uuid_from(file_name);
+        ASSERT_EQ("6bc1edf0-fba6-4aa1-b0d4-ee5b88ef156b", uuid);
+    }
+
     // Test invalid file names - wrong extension
     {
         std::string file_name = "0000000000000003_6bc1edf0-fba6-4aa1-b0d4-ee5b88ef156b.txt";
@@ -115,6 +122,13 @@ TEST_F(FilenamesTest, gen_segment_filename_from) {
         std::string old_file_name = "0000000000000003_6bc1edf0-fba6-4aa1-b0d4-ee5b88ef156b.delvec";
         std::string new_file_name = gen_filename_from(new_txn_id, old_file_name);
         ASSERT_EQ("0000000000000004_6bc1edf0-fba6-4aa1-b0d4-ee5b88ef156b.delvec", new_file_name);
+    }
+
+    // Test valid cols file input
+    {
+        std::string old_file_name = "0000000000000003_6bc1edf0-fba6-4aa1-b0d4-ee5b88ef156b.cols";
+        std::string new_file_name = gen_filename_from(new_txn_id, old_file_name);
+        ASSERT_EQ("0000000000000004_6bc1edf0-fba6-4aa1-b0d4-ee5b88ef156b.cols", new_file_name);
     }
 
     // Test invalid old file name

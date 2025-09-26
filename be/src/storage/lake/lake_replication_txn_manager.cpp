@@ -241,6 +241,23 @@ Status LakeReplicationTxnManager::build_existed_filename_uuids_map(
         }
     }
 
+    // Collect UUIDs from dcg files
+    if (target_data_version_tablet_meta->has_dcg_meta()) {
+        const auto& dcg_meta = target_data_version_tablet_meta->dcg_meta();
+        for (const auto& [_, dcg_ver_pb] : dcg_meta.dcgs()) {
+            bool has_encryption_meta = dcg_ver_pb.column_files_size() == dcg_ver_pb.encryption_metas_size();
+            for (int i = 0; i < dcg_ver_pb.column_files_size(); ++i) {
+                const auto& dcg_filename = dcg_ver_pb.column_files(i);
+                if (has_encryption_meta) {
+                    existed_filename_uuids.emplace(extract_uuid_from(dcg_filename),
+                                                   std::make_pair(dcg_filename, dcg_ver_pb.encryption_metas(i)));
+                } else {
+                    existed_filename_uuids.emplace(extract_uuid_from(dcg_filename), std::make_pair(dcg_filename, ""));
+                }
+            }
+        }
+    }
+
     return Status::OK();
 }
 
@@ -266,7 +283,7 @@ StatusOr<std::shared_ptr<TabletMetadataPB>> LakeReplicationTxnManager::convert_a
     // Replace the tablet id with target tablet id
     new_metadata->set_id(target_tablet_id);
     new_metadata->mutable_rowsets()->Clear();
-    new_metadata->mutable_delvec_meta()->mutable_delvecs()->clear();
+    new_metadata->mutable_dcg_meta()->mutable_dcgs()->clear();
     new_metadata->mutable_sstable_meta()->Clear();
 
     // deal with segments and dels
@@ -413,6 +430,47 @@ StatusOr<std::shared_ptr<TabletMetadataPB>> LakeReplicationTxnManager::convert_a
                     if (it != existed_filename_uuids.end()) {
                         const std::string& existing_encryption_meta = it->second.second;
                         item.set_encryption_meta(existing_encryption_meta);
+                    }
+                }
+            }
+        }
+    }
+
+    // deal with dcg
+    if (src_tablet_meta->has_dcg_meta()) {
+        DeltaColumnGroupMetadataPB* dest_meta = new_metadata->mutable_dcg_meta();
+        dest_meta->CopyFrom(src_tablet_meta->dcg_meta());
+        for (auto& [segment_id, dcg_ver_pb] : *dest_meta->mutable_dcgs()) {
+            for (int i = 0; i < dcg_ver_pb.column_files_size(); ++i) {
+                auto src_dcg_filename = dcg_ver_pb.column_files(i);
+                std::string final_dcg_filename;
+                ASSIGN_OR_RETURN(
+                        auto is_existed,
+                        determine_final_filename(src_dcg_filename, txn_id, existed_filename_uuids, final_dcg_filename,
+                                                 target_tablet_id, src_data_dir, file_locations, filename_map));
+                dcg_ver_pb.set_column_files(i, final_dcg_filename);
+
+                if (config::enable_transparent_data_encryption) {
+                    if (!is_existed) {
+                        // dcg file doesn't exist, use the newly generated encryption metadata
+                        std::pair<std::string, FileEncryptionPair> pair = filename_map[src_dcg_filename];
+                        if (dcg_ver_pb.encryption_metas_size() > i) {
+                            dcg_ver_pb.set_encryption_metas(i, pair.second.encryption_meta);
+                        } else {
+                            dcg_ver_pb.add_encryption_metas(pair.second.encryption_meta);
+                        }
+                    } else {
+                        // dcg file already exists, use the existing encryption metadata from target tablet
+                        auto uuid = extract_uuid_from(src_dcg_filename);
+                        auto it = existed_filename_uuids.find(uuid);
+                        if (it != existed_filename_uuids.end()) {
+                            const std::string& existing_encryption_meta = it->second.second;
+                            if (dcg_ver_pb.encryption_metas_size() > i) {
+                                dcg_ver_pb.set_encryption_metas(i, existing_encryption_meta);
+                            } else {
+                                dcg_ver_pb.add_encryption_metas(existing_encryption_meta);
+                            }
+                        }
                     }
                 }
             }

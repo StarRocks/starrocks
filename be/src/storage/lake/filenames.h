@@ -74,6 +74,10 @@ inline bool is_sst(std::string_view file_name) {
     return HasSuffixString(file_name, ".sst");
 }
 
+inline bool is_cols(std::string_view file_name) {
+    return HasSuffixString(file_name, ".cols");
+}
+
 inline std::string tablet_metadata_filename(int64_t tablet_id, int64_t version) {
     return fmt::format("{:016X}_{:016X}.meta", tablet_id, version);
 }
@@ -129,7 +133,8 @@ inline std::string gen_segment_filename(int64_t txn_id) {
 
 // Helper function to extract uuid from filename, which is used in shared-data cross cluster migration
 inline std::string extract_uuid_from(const std::string& file_name) {
-    if (UNLIKELY(!is_segment(file_name) && !is_del(file_name) && !is_sst(file_name) && !is_delvec(file_name))) {
+    if (UNLIKELY(!is_segment(file_name) && !is_del(file_name) && !is_sst(file_name) && !is_delvec(file_name) &&
+                 !is_cols(file_name))) {
         // not a valid file
         return {};
     }
@@ -155,7 +160,8 @@ inline std::string gen_filename_from(int64_t txn_id, const std::string& old_file
         return old_file_name;
     }
 
-    if (UNLIKELY(!is_segment(old_file_name) && !is_del(old_file_name) && !is_delvec(old_file_name))) {
+    if (UNLIKELY(!is_segment(old_file_name) && !is_del(old_file_name) && !is_delvec(old_file_name)) &&
+        !is_cols(old_file_name)) {
         // not a valid file
         return {};
     }
