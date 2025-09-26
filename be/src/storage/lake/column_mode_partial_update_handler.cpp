@@ -384,7 +384,9 @@ Status ColumnModePartialUpdateHandler::execute(const RowsetUpdateStateParams& pa
     std::vector<ColumnUID> unique_update_column_ids;
     for (ColumnId cid : txn_meta.partial_update_column_ids()) {
         if (cid >= params.tablet_schema->num_key_columns()) {
-            update_column_ids.push_back(cid);
+            if (!params.tablet_schema->column(cid).is_auto_increment()) {
+                update_column_ids.push_back(cid);
+            }
         }
     }
     for (uint32_t uid : txn_meta.partial_update_column_unique_ids()) {
@@ -395,7 +397,7 @@ Status ColumnModePartialUpdateHandler::execute(const RowsetUpdateStateParams& pa
             LOG(ERROR) << msg;
             return Status::InternalError(msg);
         }
-        if (!params.tablet_schema->column(cid).is_key()) {
+        if (!params.tablet_schema->column(cid).is_key() && !params.tablet_schema->column(cid).is_auto_increment()) {
             unique_update_column_ids.push_back(uid);
         }
     }
@@ -463,7 +465,11 @@ Status ColumnModePartialUpdateHandler::execute(const RowsetUpdateStateParams& pa
     for (const auto& each : rss_upt_id_to_rowid_pairs) {
         builder->append_dcg(each.first, dcg_column_file_with_encryption_metas[each.first], dcg_column_ids[each.first]);
     }
-    builder->apply_column_mode_partial_update(params.op_write);
+    // COLUMN_UPDATE_MODE: remove segments that contain only updated columns
+    // COLUMN_UPSERT_MODE: keep segments; upper layer will append delvec/PK index changes and new rowsets
+    if (params.op_write.txn_meta().partial_update_mode() == PartialUpdateMode::COLUMN_UPDATE_MODE) {
+        builder->apply_column_mode_partial_update(params.op_write);
+    }
 
     TRACE_COUNTER_INCREMENT("pcu_rss_cnt", rss_upt_id_to_rowid_pairs.size());
     TRACE_COUNTER_INCREMENT("pcu_upt_cnt", _partial_update_states.size());
