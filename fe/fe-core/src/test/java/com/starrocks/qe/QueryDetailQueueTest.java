@@ -41,6 +41,7 @@ import com.starrocks.sql.plan.PlanTestBase;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.Assert;
 import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
 
 import java.util.List;
 
@@ -63,7 +64,8 @@ public class QueryDetailQueueTest extends PlanTestBase {
 
         Gson gson = new Gson();
         String jsonString = gson.toJson(queryDetails);
-        String queryDetailString = "[{\"eventTime\":" + startQueryDetail.getEventTime() + "," +
+        String queryDetailString = "[{\"querySource\":\"EXTERNAL\"," +
+                "\"eventTime\":" + startQueryDetail.getEventTime() + "," +
                 "\"queryId\":\"219a2d5443c542d4-8fc938db37c892e3\"," +
                 "\"isQuery\":false," +
                 "\"remoteIP\":\"127.0.0.1\"," +
@@ -87,7 +89,7 @@ public class QueryDetailQueueTest extends PlanTestBase {
                 "\"warehouse\":\"default_warehouse\"," +
                 "\"catalog\":\"default_catalog\"," +
                 "\"queryFeMemory\":0}]";
-        Assert.assertEquals(jsonString, queryDetailString);
+        Assertions.assertEquals(queryDetailString, jsonString);
 
         queryDetails = QueryDetailQueue.getQueryDetailsAfterTime(startQueryDetail.getEventTime());
         Assert.assertEquals(0, queryDetails.size());

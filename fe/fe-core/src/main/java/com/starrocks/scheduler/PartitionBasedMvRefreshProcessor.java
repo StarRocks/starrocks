@@ -57,6 +57,7 @@ import com.starrocks.connector.PartitionUtil;
 import com.starrocks.metric.IMaterializedViewMetricsEntity;
 import com.starrocks.metric.MaterializedViewMetricsRegistry;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.QueryDetail;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.qe.StmtExecutor;
 import com.starrocks.scheduler.mv.MVPCTMetaRepairer;
@@ -504,12 +505,15 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
         long startTime = System.currentTimeMillis();
         // 1. Prepare context
         ConnectContext ctx = mvContext.getCtx();
+        // Set query source to MV for materialized view refresh
+        ctx.setQuerySource(QueryDetail.QuerySource.MV);
         ctx.getAuditEventBuilder().reset();
         ctx.getAuditEventBuilder()
                 .setTimestamp(System.currentTimeMillis())
                 .setClientIp(mvContext.getRemoteIp())
                 .setUser(ctx.getQualifiedUser())
                 .setDb(ctx.getDatabase())
+                .setQuerySource(QueryDetail.QuerySource.MV.name())
                 .setWarehouse(ctx.getCurrentWarehouseName());
 
         // 2. Prepare variables
