@@ -27,8 +27,8 @@
 namespace starrocks::lake {
 
 Status PersistentIndexSstable::init(std::unique_ptr<RandomAccessFile> rf, const PersistentIndexSstablePB& sstable_pb,
-                                    Cache* cache, TabletManager* tablet_mgr, int64_t tablet_id, bool need_filter,
-                                    DelVectorPtr delvec) {
+                                    Cache* cache, bool need_filter, DelVectorPtr delvec,
+                                    const TabletMetadataPtr& metadata, TabletManager* tablet_mgr) {
     sstable::Options options;
     if (need_filter) {
         _filter_policy.reset(const_cast<sstable::FilterPolicy*>(sstable::NewBloomFilterPolicy(10)));
@@ -41,17 +41,22 @@ Status PersistentIndexSstable::init(std::unique_ptr<RandomAccessFile> rf, const 
     _rf = std::move(rf);
     _sstable_pb.CopyFrom(sstable_pb);
     // load delvec
-    if (_sstable_pb.has_delvec()) {
+    if (_sstable_pb.has_delvec() && _sstable_pb.delvec().size() > 0) {
         if (delvec) {
             // If delvec is already provided, use it directly.
             _delvec = std::move(delvec);
         } else {
+            if (metadata == nullptr) {
+                return Status::InvalidArgument("metadata is null when loading delvec from file");
+            }
+            if (tablet_mgr == nullptr) {
+                return Status::InvalidArgument("tablet_mgr is null when loading delvec from file");
+            }
             // otherwise, load delvec from file
             LakeIOOptions lake_io_opts{.fill_data_cache = true, .skip_disk_cache = false};
             auto delvec_loader =
                     std::make_unique<LakeDelvecLoader>(tablet_mgr, nullptr, true /* fill cache */, lake_io_opts);
-            RETURN_IF_ERROR(delvec_loader->load(TabletSegmentId(tablet_id, _sstable_pb.shared_rssid()),
-                                                _sstable_pb.shared_version(), &_delvec));
+            RETURN_IF_ERROR(delvec_loader->load_from_meta(metadata, _sstable_pb.delvec(), &_delvec));
         }
     }
     return Status::OK();

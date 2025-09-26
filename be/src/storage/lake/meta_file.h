@@ -78,6 +78,15 @@ public:
 
     const TabletMetadata* tablet_meta() const { return _tablet_meta.get(); }
 
+    const DelvecPagePB& delvec_page(uint32_t segment_id) const {
+        static DelvecPagePB empty;
+        auto it = _delvecs.find(segment_id);
+        if (it != _delvecs.end()) {
+            return it->second;
+        }
+        return empty;
+    }
+
 private:
     // update delvec in tablet meta
     Status _finalize_delvec(int64_t version, int64_t txn_id);
@@ -113,6 +122,8 @@ private:
     PendingRowsetData _pending_rowset_data;
 };
 
+Status get_del_vec(TabletManager* tablet_mgr, const TabletMetadata& metadata, const DelvecPagePB& delvec_page,
+                   bool fill_cache, const LakeIOOptions& lake_io_opts, DelVector* delvec);
 Status get_del_vec(TabletManager* tablet_mgr, const TabletMetadata& metadata, uint32_t segment_id, bool fill_cache,
                    const LakeIOOptions& lake_io_opts, DelVector* delvec);
 bool is_primary_key(TabletMetadata* metadata);

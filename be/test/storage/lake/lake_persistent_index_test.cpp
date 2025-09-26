@@ -27,7 +27,7 @@ namespace starrocks::lake {
 class LakePersistentIndexTest : public TestBase {
 public:
     LakePersistentIndexTest() : TestBase(kTestDirectory) {
-        _tablet_metadata = std::make_unique<TabletMetadata>();
+        _tablet_metadata = std::make_shared<TabletMetadata>();
         _tablet_metadata->set_id(next_id());
         _tablet_metadata->set_version(1);
         _tablet_metadata->set_enable_persistent_index(true);
@@ -70,7 +70,7 @@ protected:
 
     constexpr static const char* const kTestDirectory = "test_lake_persistent_index";
 
-    std::unique_ptr<TabletMetadata> _tablet_metadata;
+    std::shared_ptr<TabletMetadata> _tablet_metadata;
 };
 
 TEST_F(LakePersistentIndexTest, test_basic_api) {
@@ -91,7 +91,7 @@ TEST_F(LakePersistentIndexTest, test_basic_api) {
     }
     auto tablet_id = _tablet_metadata->id();
     auto index = std::make_unique<LakePersistentIndex>(_tablet_mgr.get(), tablet_id);
-    ASSERT_OK(index->init(_tablet_metadata->sstable_meta()));
+    ASSERT_OK(index->init(_tablet_metadata));
     ASSERT_OK(index->insert(N, key_slices.data(), values.data(), 0));
     ASSERT_TRUE(index->memory_usage() > 0);
 
@@ -172,7 +172,7 @@ TEST_F(LakePersistentIndexTest, test_replace) {
 
     auto tablet_id = _tablet_metadata->id();
     auto index = std::make_unique<LakePersistentIndex>(_tablet_mgr.get(), tablet_id);
-    ASSERT_OK(index->init(_tablet_metadata->sstable_meta()));
+    ASSERT_OK(index->init(_tablet_metadata));
     ASSERT_OK(index->insert(N, key_slices.data(), values.data(), false));
 
     //replace
@@ -202,7 +202,7 @@ TEST_F(LakePersistentIndexTest, test_major_compaction) {
     total_keys.reserve(M * N);
     auto tablet_id = _tablet_metadata->id();
     auto index = std::make_unique<LakePersistentIndex>(_tablet_mgr.get(), tablet_id);
-    ASSERT_OK(index->init(_tablet_metadata->sstable_meta()));
+    ASSERT_OK(index->init(_tablet_metadata));
     int k = 0;
     for (int i = 0; i < M; ++i) {
         vector<Key> keys;
@@ -241,7 +241,7 @@ TEST_F(LakePersistentIndexTest, test_major_compaction) {
     get_values.reserve(M * N);
     auto txn_log = std::make_shared<TxnLogPB>();
     // try to compact sst files.
-    ASSERT_OK(LakePersistentIndex::major_compact(_tablet_mgr.get(), *tablet_metadata_ptr, txn_log.get()));
+    ASSERT_OK(LakePersistentIndex::major_compact(_tablet_mgr.get(), tablet_metadata_ptr, txn_log.get()));
     ASSERT_TRUE(txn_log->op_compaction().input_sstables_size() > 0);
     ASSERT_TRUE(txn_log->op_compaction().has_output_sstable());
     ASSERT_OK(index->apply_opcompaction(txn_log->op_compaction()));
@@ -304,7 +304,7 @@ TEST_F(LakePersistentIndexTest, test_compaction_strategy) {
 TEST_F(LakePersistentIndexTest, test_insert_delete) {
     auto tablet_id = _tablet_metadata->id();
     auto index = std::make_unique<LakePersistentIndex>(_tablet_mgr.get(), tablet_id);
-    ASSERT_OK(index->init(_tablet_metadata->sstable_meta()));
+    ASSERT_OK(index->init(_tablet_metadata));
 
     auto l0_max_mem_usage = config::l0_max_mem_usage;
     config::l0_max_mem_usage = 10;
@@ -355,7 +355,7 @@ TEST_F(LakePersistentIndexTest, test_insert_delete) {
 TEST_F(LakePersistentIndexTest, test_memtable_full) {
     auto tablet_id = _tablet_metadata->id();
     auto index = std::make_unique<LakePersistentIndex>(_tablet_mgr.get(), tablet_id);
-    ASSERT_OK(index->init(_tablet_metadata->sstable_meta()));
+    ASSERT_OK(index->init(_tablet_metadata));
 
     size_t old_l0_max_mem_usage = config::l0_max_mem_usage;
     config::l0_max_mem_usage = 1073741824;
@@ -493,7 +493,7 @@ TEST_F(LakePersistentIndexTest, test_major_compaction_with_predicate) {
     total_keys.reserve(M * N);
     auto tablet_id = _tablet_metadata->id();
     auto index = std::make_unique<LakePersistentIndex>(_tablet_mgr.get(), tablet_id);
-    ASSERT_OK(index->init(_tablet_metadata->sstable_meta()));
+    ASSERT_OK(index->init(_tablet_metadata));
     int k = 0;
     for (int i = 0; i < M; ++i) {
         vector<Key> keys;
@@ -540,7 +540,7 @@ TEST_F(LakePersistentIndexTest, test_major_compaction_with_predicate) {
     auto hit_count = SIMD::count_nonzero(hits.data(), hits.size());
     auto txn_log = std::make_shared<TxnLogPB>();
     // try to compact sst files.
-    ASSERT_OK(LakePersistentIndex::major_compact(_tablet_mgr.get(), *tablet_metadata_ptr, txn_log.get()));
+    ASSERT_OK(LakePersistentIndex::major_compact(_tablet_mgr.get(), tablet_metadata_ptr, txn_log.get()));
     ASSERT_TRUE(txn_log->op_compaction().input_sstables_size() == M);
     ASSERT_TRUE(txn_log->op_compaction().has_output_sstable() || hit_count == 0);
     ASSERT_OK(index->apply_opcompaction(txn_log->op_compaction()));
