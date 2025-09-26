@@ -115,24 +115,10 @@ class TestSQLCases(sr_sql_lib.StarrocksSQLApiLib):
         super().tearDown()
 
         log.info("[TearDown begin]: %s" % self.case_info.name)
-<<<<<<< HEAD
-=======
 
         # reset the scheduler interval
         sql = "ADMIN SET FRONTEND CONFIG 'dynamic_partition_check_interval_seconds' = '600'"
         self.execute_sql(sql)
-
-        # run custom cleanup (always)
-        try:
-            if hasattr(self.case_info, "cleanup"):
-                for stmt in self.case_info.cleanup:
-                    try:
-                        self.execute_single_statement(stmt, -1, False)
-                    except Exception as e:
-                        log.warning(f"cleanup stmt error: {e}")
-        except Exception as e:
-            log.warning(f"cleanup error: {e}")
->>>>>>> ee28a4b9ac ([UT] Avoid partition ttl scheduler affecting tests (#63615))
 
         for each_db in self.db:
             self.drop_database(each_db)
