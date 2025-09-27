@@ -65,12 +65,6 @@ class Schema;
 extern const char* const k_segment_magic;
 extern const uint32_t k_segment_magic_length;
 
-class SegmentFileMark {
-public:
-    std::string rowset_path_prefix;
-    std::string rowset_id;
-};
-
 struct SegmentWriterOptions {
 #ifdef BE_TEST
     uint32_t num_rows_per_block = 100;
@@ -79,7 +73,7 @@ struct SegmentWriterOptions {
 #endif
     GlobalDictByNameMaps* global_dicts = nullptr;
     std::vector<int32_t> referenced_column_ids;
-    SegmentFileMark segment_file_mark;
+    std::variant<std::string, std::pair<std::string, std::string>> segment_file_mark;
     std::string encryption_meta;
     bool is_compaction = false;
     std::shared_ptr<FlatJsonConfig> flat_json_config = nullptr;
@@ -162,6 +156,8 @@ private:
     Status _write_raw_data(const std::vector<Slice>& slices);
     void _init_column_meta(ColumnMetaPB* meta, uint32_t column_id, const TabletColumn& column);
     void _verify_footer();
+    Status _write_inverted_index_if_necessary();
+    StatusOr<std::string> _get_inverted_index_file_path(const int64_t& index_id) const;
 
     // Check global dictionary validity for a single column writer
     void _check_column_global_dict_valid(ColumnWriter* column_writer, uint32_t column_index);

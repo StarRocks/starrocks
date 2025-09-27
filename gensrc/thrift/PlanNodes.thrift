@@ -676,6 +676,10 @@ struct TLakeScanNode {
   33: optional bool output_asc_hint
   34: optional bool partition_order_hint
 
+  // gin
+  35: optional bool enable_prune_column_after_index_filter
+  36: optional bool enable_gin_filter
+
   //back pressure
   38: optional bool enable_topn_filter_back_pressure
   39: optional i32 back_pressure_max_rounds
