@@ -12,12 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.sql.ast;
 
 import com.starrocks.sql.parser.NodePosition;
-
-import static com.starrocks.common.util.Util.normalizeName;
 
 /*
   Use catalog specified by catalog name
@@ -36,34 +33,19 @@ import static com.starrocks.common.util.Util.normalizeName;
         use "CATALOG hive_metastore_catalog"
  */
 public class UseCatalogStmt extends StatementBase {
-    private final String catalogParts;
+    private final String catalogName;
 
-    private String catalogName;
-
-    public UseCatalogStmt(String catalogParts) {
-        this(catalogParts, NodePosition.ZERO);
-    }
-
-    public UseCatalogStmt(String catalogParts, NodePosition pos) {
+    public UseCatalogStmt(String catalogName, NodePosition pos) {
         super(pos);
-        this.catalogParts = normalizeName(catalogParts);
-        this.catalogName = normalizeName(catalogParts);
-    }
-
-    public String getCatalogParts() {
-        return catalogParts;
+        this.catalogName = catalogName;
     }
 
     public String getCatalogName() {
         return catalogName;
     }
 
-    public void setCatalogName(String catalogName) {
-        this.catalogName = normalizeName(catalogName);
-    }
-
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return ((AstVisitorExtendInterface<R, C>) visitor).visitUseCatalogStatement(this, context);
+        return visitor.visitUseCatalogStatement(this, context);
     }
 }

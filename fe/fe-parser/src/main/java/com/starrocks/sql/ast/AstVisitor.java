@@ -440,6 +440,18 @@ public interface AstVisitor<R, C> {
         return visitStatement(statement, context);
     }
 
+    default R visitUseCatalogStatement(UseCatalogStmt statement, C context) {
+        return visitStatement(statement, context);
+    }
+
+    default R visitSetCatalogStatement(SetCatalogStmt statement, C context) {
+        return visitStatement(statement, context);
+    }
+
+    default R visitDropCatalogStatement(DropCatalogStmt statement, C context) {
+        return visitDDLStatement(statement, context);
+    }
+
     default R visitCreateDbStatement(CreateDbStmt statement, C context) {
         return visitDDLStatement(statement, context);
     }

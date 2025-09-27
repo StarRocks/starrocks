@@ -12,12 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.sql.ast;
 
 import com.starrocks.sql.parser.NodePosition;
-
-import static com.starrocks.common.util.Util.normalizeName;
 
 /*
   Set catalog specified by catalog name
@@ -30,16 +27,15 @@ public class SetCatalogStmt extends StatementBase {
 
     public SetCatalogStmt(String catalogName, NodePosition pos) {
         super(pos);
-        this.catalogName = normalizeName(catalogName);
+        this.catalogName = catalogName;
     }
 
     public String getCatalogName() {
         return catalogName;
     }
 
-
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return ((AstVisitorExtendInterface<R, C>) visitor).visitSetCatalogStatement(this, context);
+        return visitor.visitSetCatalogStatement(this, context);
     }
 }
