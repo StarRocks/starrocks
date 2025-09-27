@@ -42,6 +42,9 @@ select * from t;
 
 
 -- name: test_multi_list_function
+ADMIN SET FRONTEND CONFIG ("query_detail_explain_level" = "NORMAL");
+-- result:
+-- !result
 create table t(k1 int, k2 datetime, v int) partition by k1,date_trunc('day', k2);
 -- result:
 -- !result
