@@ -24,6 +24,7 @@ import com.starrocks.schema.MTable;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.optimizer.CachingMvPlanContextBuilder;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MVTestBase;
+import com.starrocks.utframe.TestLoopTimeout;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
@@ -132,7 +133,12 @@ public class MvRefreshConcurrencyTest extends MVTestBase {
 
                 // refresh mv with concurrency
                 int finishedCount = 0;
+                TestLoopTimeout timeout = new TestLoopTimeout("wait for MV refresh to finish");
                 while (finishedCount != mvNum) {
+                    // Check for timeout to prevent dead loop
+                    if (timeout.checkTimeout()) {
+                        break;
+                    }
                     finishedCount = refreshFinishedMVCount(mvs);
                 }
                 Assertions.assertTrue(finishedCount == mvNum);

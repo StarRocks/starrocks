@@ -21,6 +21,7 @@ import com.starrocks.pseudocluster.PseudoClusterUtils;
 import com.starrocks.pseudocluster.Tablet;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.SystemInfoService;
+import com.starrocks.utframe.TestLoopTimeout;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
@@ -137,7 +138,12 @@ public class DiskUsageSimTest {
         // wait for full clone finished
         long tabletId = cluster.listTablets("test", "test").get(0);
         Tablet tablet = be.getTablet(tabletId);
+        TestLoopTimeout timeout = new TestLoopTimeout("wait for full clone to finish");
         while (true) {
+            // Check for timeout to prevent dead loop
+            if (timeout.checkTimeout()) {
+                break;
+            }
             if (tablet.getCloneExecuted() >= 2) {
                 break;
             }
