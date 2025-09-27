@@ -350,8 +350,13 @@ public class KafkaRoutineLoadJob extends RoutineLoadJob {
         LOG.debug("current concurrent task number is min"
                         + "(partition num: {}, desire task concurrent num: {}, alive be num: {}, config: {})",
                 partitionNum, desireTaskConcurrentNum, aliveNodeNum, Config.max_routine_load_task_concurrent_num);
-        currentTaskConcurrentNum = Math.min(Math.min(partitionNum, Math.min(desireTaskConcurrentNum, aliveNodeNum)),
-                Config.max_routine_load_task_concurrent_num);
+        if (Config.routine_load_task_ignore_node_num) {
+            currentTaskConcurrentNum = Math.min(Math.min(partitionNum, desireTaskConcurrentNum),
+                    Config.max_routine_load_task_concurrent_num);
+        } else {
+            currentTaskConcurrentNum = Math.min(Math.min(partitionNum, Math.min(desireTaskConcurrentNum, aliveNodeNum)),
+                    Config.max_routine_load_task_concurrent_num);
+        }
         return currentTaskConcurrentNum;
     }
 
