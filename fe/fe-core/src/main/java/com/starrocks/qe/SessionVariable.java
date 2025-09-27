@@ -4152,8 +4152,20 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         return maxCaseWhenForPushDown;
     }
 
+    public void setMaxCaseWhenForPushDown(int maxCaseWhenForPushDown) {
+        this.maxCaseWhenForPushDown = maxCaseWhenForPushDown;
+    }
+
+    public void setMaxCaseWhenForPushdown(int maxCaseWhenPushdown) {
+        this.maxCaseWhenForPushDown = maxCaseWhenPushdown;
+    }
+
     public boolean getReplacePredicateWithFilter() {
         return replacePredicateWithFilter;
+    }
+
+    public void setReplacePredicateWithFilter(boolean replacePrediateWithFilter) {
+        this.replacePredicateWithFilter = replacePrediateWithFilter;
     }
 
     public void setEnableLambdaPushdown(boolean enableLambdaPushdown) {

@@ -987,6 +987,72 @@ public class CTEPlanTest extends PlanTestBase {
     }
 
     @ParameterizedTest
+    @ValueSource(ints = {0, 1})
+    public void testFilterPushdownJoinTrue(int forceReuseNodeCount) throws Exception {
+        connectContext.getSessionVariable().setCboCTEForceReuseNodeCount(forceReuseNodeCount);
+        String sql = "select * from t0 join t1 on (t0.v1 = t1.v4) where t0.v1 + t1.v4 > 10";
+        connectContext.getSessionVariable().setReplacePredicateWithFilter(true);
+        defaultCTEReuse();
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "  6:SELECT\n" +
+                "  |  predicates: 1: v1 + 4: v4 > 10");
+    }
+
+    @ParameterizedTest
+    @ValueSource(ints = {0, 1})
+    public void testFilterPushdownJoin1True(int forceReuseNodeCount) throws Exception {
+        connectContext.getSessionVariable().setCboCTEForceReuseNodeCount(forceReuseNodeCount);
+        String sql = "select * from t0 join t1 on (t0.v1 = t1.v4) where t0.v1 > 10";
+        connectContext.getSessionVariable().setReplacePredicateWithFilter(true);
+        defaultCTEReuse();
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "  1:SELECT\n" +
+                "  |  predicates: 1: v1 > 10");
+    }
+
+    @ParameterizedTest
+    @ValueSource(ints = {0, 1})
+    public void testFilterPushdownJoinFalse(int forceReuseNodeCount) throws Exception {
+        connectContext.getSessionVariable().setCboCTEForceReuseNodeCount(forceReuseNodeCount);
+        String sql = "select * from t0 join t1 on (t0.v1 = t1.v4) where t0.v1 + t1.v4 > 10";
+        connectContext.getSessionVariable().setReplacePredicateWithFilter(false);
+        defaultCTEReuse();
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, " 3:HASH JOIN\n" +
+                "  |  join op: INNER JOIN (BROADCAST)\n" +
+                "  |  colocate: false, reason: \n" +
+                "  |  equal join conjunct: 1: v1 = 4: v4\n" +
+                "  |  other join predicates: 1: v1 + 4: v4 > 10");
+    }
+
+    @ParameterizedTest
+    @ValueSource(ints = {0, 1})
+    public void testFilterPushdownTrue(int forceReuseNodeCount) throws Exception {
+        connectContext.getSessionVariable().setCboCTEForceReuseNodeCount(forceReuseNodeCount);
+        String sql = "select * from t0 where v1 = 10";
+        connectContext.getSessionVariable().setReplacePredicateWithFilter(true);
+        defaultCTEReuse();
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, " 1:SELECT\n" +
+                "  |  predicates: 1: v1 = 10\n" +
+                "  |  ");
+    }
+
+    @ParameterizedTest
+    @ValueSource(ints = {0, 1})
+    public void testFilterPushdownFalse(int forceReuseNodeCount) throws Exception {
+        connectContext.getSessionVariable().setCboCTEForceReuseNodeCount(forceReuseNodeCount);
+        String sql = "select * from t0 where v1 = 10";
+        connectContext.getSessionVariable().setReplacePredicateWithFilter(false);
+        defaultCTEReuse();
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "0:OlapScanNode\n" +
+                "     TABLE: t0\n" +
+                "     PREAGGREGATION: ON\n" +
+                "     PREDICATES: 1: v1 = 10");
+    }
+
+    @ParameterizedTest
     @ValueSource(ints = {0})
     public void testConstantCTE(int forceReuseNodeCount) throws Exception {
         connectContext.getSessionVariable().setCboCTEForceReuseNodeCount(forceReuseNodeCount);

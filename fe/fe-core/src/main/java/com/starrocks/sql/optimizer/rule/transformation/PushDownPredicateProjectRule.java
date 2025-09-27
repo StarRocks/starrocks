@@ -58,18 +58,6 @@ public class PushDownPredicateProjectRule extends TransformationRule {
             new SimplifiedPredicateRule()
     );
 
-    private int whenCount(ScalarOperator op) {
-        if (op == null) {
-            return 0;
-        }
-
-        if (op instanceof CaseWhenOperator) {
-            int n = ((CaseWhenOperator) op).getWhenClauseSize();
-            return n;
-        }
-        return 0;
-    }
-
     public PushDownPredicateProjectRule() {
         super(RuleType.TF_PUSH_DOWN_PREDICATE_PROJECT,
                 Pattern.create(OperatorType.LOGICAL_FILTER).
@@ -112,25 +100,6 @@ public class PushDownPredicateProjectRule extends TransformationRule {
         OptExpression child = input.getInputs().get(0);
 
         LogicalProjectOperator project = (LogicalProjectOperator) (child.getOp());
-
-        if (context.getSessionVariable().getMaxCaseWhenForPushDown() > 0) {
-            // XXX
-            // Prevent predicate pushdown for large case statement
-
-            Map<ColumnRefOperator, ScalarOperator> m = project.getColumnRefMap();
-            int count = 0;
-            for (var entry : m.entrySet()) {
-                int n = whenCount(entry.getValue());
-                LOG.warn("entry count {}", n);
-                count += n;
-            }
-            LOG.warn("total count {}", count);
-
-            if (count > context.getSessionVariable().getMaxCaseWhenForPushDown()) {
-                LOG.warn("prevent pushdown total count {}", count);
-                return Lists.newArrayList();
-            }
-        }
 
         if (!context.getSessionVariable().getEnableLambdaPushDown()) {
             Map<ColumnRefOperator, ScalarOperator> m = project.getColumnRefMap();

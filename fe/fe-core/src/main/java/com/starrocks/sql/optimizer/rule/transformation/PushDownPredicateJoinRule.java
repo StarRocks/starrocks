@@ -48,13 +48,14 @@ public class PushDownPredicateJoinRule extends TransformationRule {
     @Override
     public List<OptExpression> transform(OptExpression input, OptimizerContext context) {
         LogicalFilterOperator filter = (LogicalFilterOperator) input.getOp();
-        if (filter.pdvisited) {
+        if (filter.pushdownVisited) {
             return Lists.newArrayList();
         }
 
         OptExpression joinOpt = input.getInputs().get(0);
         JoinPredicatePushdown joinPredicatePushdown = new JoinPredicatePushdown(
                 joinOpt, false, false, context.getColumnRefFactory(), context);
+
         return Lists.newArrayList(joinPredicatePushdown.pushdown(filter.getPredicate()));
     }
 }
