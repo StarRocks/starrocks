@@ -1467,9 +1467,6 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VariableMgr.VarAttr(name = ENABLE_LAMBDA_PUSHDOWN)
     private boolean enableLambdaPushdown = true;
 
-    @VariableMgr.VarAttr(name = MAX_CASE_WHEN_FOR_PUSHDOWN)
-    private int maxCaseWhenForPushDown = 0;
-
     @VariableMgr.VarAttr(name = REPLACE_PREDICATE_WITH_FILTER)
     private boolean replacePredicateWithFilter = false;
 
