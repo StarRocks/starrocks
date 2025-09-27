@@ -24,7 +24,6 @@ import com.starrocks.sql.optimizer.operator.logical.LogicalFilterOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalProjectOperator;
 import com.starrocks.sql.optimizer.operator.pattern.Pattern;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
-import com.starrocks.sql.optimizer.operator.scalar.CaseWhenOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CompoundPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.LambdaFunctionOperator;
@@ -37,8 +36,6 @@ import com.starrocks.sql.optimizer.rewrite.scalar.ReduceCastRule;
 import com.starrocks.sql.optimizer.rewrite.scalar.ScalarOperatorRewriteRule;
 import com.starrocks.sql.optimizer.rewrite.scalar.SimplifiedPredicateRule;
 import com.starrocks.sql.optimizer.rule.RuleType;
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
 
 import java.util.HashSet;
 import java.util.List;
@@ -47,8 +44,6 @@ import java.util.Optional;
 import java.util.Set;
 
 public class PushDownPredicateProjectRule extends TransformationRule {
-    private static final Logger LOG = LogManager.getLogger(PushDownPredicateProjectRule.class);
-
     private static final List<ScalarOperatorRewriteRule> PROJECT_REWRITE_PREDICATE_RULE = Lists.newArrayList(
             // Don't need add cast because all expression has been cast
             // The purpose here is for simplify the expression

@@ -69,7 +69,6 @@ public class PushDownPredicateScanRule extends TransformationRule {
     @Override
     public boolean check(OptExpression input, OptimizerContext context) {
         if (context.getSessionVariable().getReplacePredicateWithFilter()) {
-            // XXX
             return false;
         }
         return true;

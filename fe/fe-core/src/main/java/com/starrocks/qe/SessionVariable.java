@@ -244,8 +244,6 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String MAX_PUSHDOWN_CONDITIONS_PER_COLUMN = "max_pushdown_conditions_per_column";
 
     public static final String ENABLE_LAMBDA_PUSHDOWN = "enable_lambda_pushdown";
-
-    public static final String MAX_CASE_WHEN_FOR_PUSHDOWN = "max_casewhen_for_pushdown";
     public static final String REPLACE_PREDICATE_WITH_FILTER = "replace_predicate_with_filter";
 
     // use new execution engine instead of the old one if enable_pipeline_engine is true,
@@ -4147,19 +4145,6 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public boolean getEnableLambdaPushDown() {
         return enableLambdaPushdown;
     }
-
-    public int getMaxCaseWhenForPushDown() {
-        return maxCaseWhenForPushDown;
-    }
-
-    public void setMaxCaseWhenForPushDown(int maxCaseWhenForPushDown) {
-        this.maxCaseWhenForPushDown = maxCaseWhenForPushDown;
-    }
-
-    public void setMaxCaseWhenForPushdown(int maxCaseWhenPushdown) {
-        this.maxCaseWhenForPushDown = maxCaseWhenPushdown;
-    }
-
     public boolean getReplacePredicateWithFilter() {
         return replacePredicateWithFilter;
     }
