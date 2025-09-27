@@ -64,6 +64,10 @@ public class LogicalAggregationOperator extends LogicalOperator {
 
     private DataSkewInfo distinctColumnDataSkew = null;
 
+    // Only set when partial topN is pushed above local aggregation. In this case streaming aggregation has to be
+    // forced to pre-aggregate because the data has to be fully reduced before evaluating the topN.
+    private boolean topNLocalAgg = false;
+
     // If the AggType is not GLOBAL, it means we have split the agg hence the isSplit should be true.
     // `this.isSplit = !type.isGlobal() || isSplit;` helps us do the work.
     // If you want to manually set this value, you could invoke setOnlyLocalAggregate().
@@ -132,6 +136,14 @@ public class LogicalAggregationOperator extends LogicalOperator {
 
     public DataSkewInfo getDistinctColumnDataSkew() {
         return distinctColumnDataSkew;
+    }
+
+    public boolean isTopNLocalAgg() {
+        return topNLocalAgg;
+    }
+
+    public void setTopNLocalAgg(boolean topNLocalAgg) {
+        this.topNLocalAgg = topNLocalAgg;
     }
 
     public boolean checkGroupByCountDistinct() {
@@ -261,12 +273,13 @@ public class LogicalAggregationOperator extends LogicalOperator {
         return isSplit == that.isSplit &&
                 type == that.type && Objects.equals(aggregations, that.aggregations) &&
                 Objects.equals(groupingKeys, that.groupingKeys) &&
-                Objects.equals(partitionByColumns, that.partitionByColumns);
+                Objects.equals(partitionByColumns, that.partitionByColumns) &&
+                topNLocalAgg == that.topNLocalAgg;
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(super.hashCode(), type, isSplit, aggregations, groupingKeys, partitionByColumns);
+        return Objects.hash(super.hashCode(), type, isSplit, aggregations, groupingKeys, partitionByColumns, topNLocalAgg);
     }
 
     public static Builder builder() {
@@ -299,6 +312,7 @@ public class LogicalAggregationOperator extends LogicalOperator {
             builder.aggregations = aggregationOperator.aggregations;
             builder.isSplit = aggregationOperator.isSplit;
             builder.distinctColumnDataSkew = aggregationOperator.distinctColumnDataSkew;
+            builder.topNLocalAgg = aggregationOperator.topNLocalAgg;
             return this;
         }
 
@@ -340,6 +354,11 @@ public class LogicalAggregationOperator extends LogicalOperator {
 
         public DataSkewInfo getDistinctColumnDataSkew() {
             return builder.distinctColumnDataSkew;
+        }
+
+        public Builder setTopNLocalAgg(boolean topNLocalAgg) {
+            builder.topNLocalAgg = topNLocalAgg;
+            return this;
         }
     }
 }
