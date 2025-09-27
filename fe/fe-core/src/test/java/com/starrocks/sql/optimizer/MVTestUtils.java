@@ -15,9 +15,11 @@
 package com.starrocks.sql.optimizer;
 
 import com.starrocks.alter.AlterJobV2;
+import com.starrocks.common.Config;
 import com.starrocks.common.util.ThreadUtil;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.utframe.StarRocksTestBase;
+import com.starrocks.utframe.TestLoopTimeout;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.junit.jupiter.api.Assertions;

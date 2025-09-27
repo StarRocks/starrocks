@@ -18,6 +18,7 @@
 package com.starrocks.utframe;
 
 import com.google.common.collect.Lists;
+import com.google.common.collect.Maps;
 import com.google.common.collect.Queues;
 import com.starrocks.leader.LeaderImpl;
 import com.starrocks.proto.AbortCompactionRequest;
@@ -444,7 +445,7 @@ public class MockedBackend {
                     break;
                 }
             }
-            //            return new TTabletStatResult(Maps.newHashMap());
+            return new TTabletStatResult(Maps.newHashMap());
         }
 
         @Override

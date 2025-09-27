@@ -17,9 +17,9 @@ package com.starrocks.pseudocluster;
 import com.starrocks.clone.TabletScheduler;
 import com.starrocks.common.Config;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.utframe.TestLoopTimeout;
 import com.starrocks.thrift.TGetTabletScheduleRequest;
 import com.starrocks.thrift.TGetTabletScheduleResponse;
+import com.starrocks.utframe.TestLoopTimeout;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 
