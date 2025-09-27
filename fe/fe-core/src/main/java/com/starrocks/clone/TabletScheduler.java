@@ -1092,8 +1092,8 @@ public class TabletScheduler extends FrontendDaemon {
             throw new SchedException(Status.UNRECOVERABLE, "db " + tabletCtx.getDbId() + " not exist");
         }
         Locker locker = new Locker();
+        locker.lockDatabase(db.getId(), LockType.WRITE);
         try {
-            locker.lockDatabase(db.getId(), LockType.WRITE);
             checkMetaExist(tabletCtx);
             if (deleteBackendDropped(tabletCtx, force)
                     || deleteBadReplica(tabletCtx, force)
@@ -1333,8 +1333,8 @@ public class TabletScheduler extends FrontendDaemon {
             throw new SchedException(Status.UNRECOVERABLE, "db " + tabletCtx.getDbId() + " not exist");
         }
         Locker locker = new Locker();
+        locker.lockDatabase(db.getId(), LockType.WRITE);
         try {
-            locker.lockDatabase(db.getId(), LockType.WRITE);
             checkMetaExist(tabletCtx);
             List<Replica> replicas = tabletCtx.getReplicas();
             for (Replica replica : replicas) {

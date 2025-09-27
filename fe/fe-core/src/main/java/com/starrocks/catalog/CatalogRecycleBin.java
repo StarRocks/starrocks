@@ -36,11 +36,11 @@ package com.starrocks.catalog;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
-import com.google.common.collect.HashBasedTable;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Range;
 import com.google.common.collect.Sets;
+import com.google.common.collect.Tables;
 import com.google.common.reflect.TypeToken;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.catalog.MaterializedIndex.IndexExtState;
@@ -67,7 +67,6 @@ import org.apache.logging.log4j.Logger;
 
 import java.io.IOException;
 import java.util.Collection;
-import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
@@ -120,14 +119,14 @@ public class CatalogRecycleBin extends FrontendDaemon implements Writable {
 
     public CatalogRecycleBin() {
         super("recycle bin");
-        idToDatabase = Maps.newHashMap();
-        idToTableInfo = HashBasedTable.create();
-        nameToTableInfo = HashBasedTable.create();
-        idToPartition = Maps.newHashMap();
-        idToRecycleTime = Maps.newHashMap();
-        enableEraseLater = new HashSet<>();
-        asyncDeleteForPartitions = Maps.newHashMap();
-        asyncDeleteForTables = Maps.newHashMap();
+        idToDatabase = Maps.newConcurrentMap();
+        idToTableInfo = Tables.newCustomTable(Maps.newConcurrentMap(), () -> Maps.newConcurrentMap());
+        nameToTableInfo = Tables.newCustomTable(Maps.newConcurrentMap(), () -> Maps.newConcurrentMap());
+        idToPartition = Maps.newConcurrentMap();
+        idToRecycleTime = Maps.newConcurrentMap();
+        enableEraseLater = Sets.newConcurrentHashSet();
+        asyncDeleteForPartitions = Maps.newConcurrentMap();
+        asyncDeleteForTables = Maps.newConcurrentMap();
     }
 
     private void removeRecycleMarkers(Long id) {

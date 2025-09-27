@@ -268,25 +268,25 @@ public class ColocateMetaService {
                 writeResponse(request, response, HttpResponseStatus.BAD_REQUEST);
                 return;
             }
+            OlapTable table = (OlapTable) globalStateMgr.getLocalMetastore().getTableIncludeRecycleBin(db, tableId);
+            if (table == null) {
+                response.appendContent("Non-exist table");
+                writeResponse(request, response, HttpResponseStatus.BAD_REQUEST);
+                return;
+            }
+            if (!table.isCloudNativeTable()) {
+                response.appendContent("Not-supported table type");
+                writeResponse(request, response, HttpResponseStatus.BAD_REQUEST);
+                return;
+            }
             Locker locker = new Locker();
-            locker.lockDatabase(db.getId(), LockType.WRITE);
+            locker.lockTableWithIntensiveDbLock(db.getId(), table.getId(), LockType.WRITE);
             try {
-                OlapTable table = (OlapTable) globalStateMgr.getLocalMetastore().getTableIncludeRecycleBin(db, tableId);
-                if (table == null) {
-                    response.appendContent("Non-exist table");
-                    writeResponse(request, response, HttpResponseStatus.BAD_REQUEST);
-                    return;
-                }
-                if (!table.isCloudNativeTable()) {
-                    response.appendContent("Not-supported table type");
-                    writeResponse(request, response, HttpResponseStatus.BAD_REQUEST);
-                    return;
-                }
                 colocateIndex.updateLakeTableColocationInfo(table, isJoin, groupId);
                 response.appendContent("update succeed");
                 sendResult(request, response);
             } finally {
-                locker.unLockDatabase(db.getId(), LockType.WRITE);
+                locker.unLockTableWithIntensiveDbLock(db.getId(), table.getId(), LockType.WRITE);
             }
         }
     }

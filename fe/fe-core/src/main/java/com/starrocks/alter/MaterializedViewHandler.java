@@ -1074,27 +1074,23 @@ public class MaterializedViewHandler extends AlterHandler {
         }
 
         AlterJobV2 materializedViewJob = null;
-        Locker locker = new Locker();
-        locker.lockDatabase(db.getId(), LockType.WRITE);
-        try {
-            for (Table table : GlobalStateMgr.getCurrentState().getLocalMetastore().getTables(db.getId())) {
-                if (table instanceof OlapTable) {
-                    List<AlterJobV2> rollupJobV2List = getUnfinishedAlterJobV2ByTableId(table.getId());
-                    for (AlterJobV2 alterJobV2 : rollupJobV2List) {
-                        if (alterJobV2 instanceof RollupJobV2) {
-                            if (((RollupJobV2) alterJobV2).getRollupIndexName().equals(tableName)) {
-                                materializedViewJob = alterJobV2;
-                            }
-                        } else if (alterJobV2 instanceof LakeRollupJob) {
-                            if (((LakeRollupJob) alterJobV2).getRollupIndexName().equals(tableName)) {
-                                materializedViewJob = alterJobV2;
-                            }
+        for (Table table : GlobalStateMgr.getCurrentState().getLocalMetastore().getTables(db.getId())) {
+            if (table instanceof OlapTable) {
+                List<AlterJobV2> rollupJobV2List = getUnfinishedAlterJobV2ByTableId(table.getId());
+                for (AlterJobV2 alterJobV2 : rollupJobV2List) {
+                    if (alterJobV2 instanceof RollupJobV2) {
+                        if (((RollupJobV2) alterJobV2).getRollupIndexName().equals(tableName)) {
+                            materializedViewJob = alterJobV2;
+                            break;
+                        }
+                    } else if (alterJobV2 instanceof LakeRollupJob) {
+                        if (((LakeRollupJob) alterJobV2).getRollupIndexName().equals(tableName)) {
+                            materializedViewJob = alterJobV2;
+                            break;
                         }
                     }
                 }
             }
-        } finally {
-            locker.unLockDatabase(db.getId(), LockType.WRITE);
         }
 
         if (materializedViewJob == null) {
