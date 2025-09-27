@@ -35,6 +35,7 @@ import com.starrocks.qe.scheduler.slot.LogicalSlot;
 import com.starrocks.qe.scheduler.slot.SlotManager;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.NodeMgr;
+import com.starrocks.utframe.TestLoopTimeout;
 import com.starrocks.sql.ast.ShowRunningQueriesStmt;
 import com.starrocks.system.Backend;
 import com.starrocks.system.ComputeNode;
@@ -530,7 +531,12 @@ public class QueryQueueManagerTest extends SchedulerTestBase {
         threads.forEach(Thread::start);
 
         boolean allFinished = false;
+        TestLoopTimeout timeout = new TestLoopTimeout("wait for all queries to finish");
         while (!allFinished) {
+            // Check for timeout to prevent dead loop
+            if (timeout.checkTimeout()) {
+                break;
+            }
             groupToCoords.forEach((group, coords) -> {
                 int limit = group.getConcurrency_limit();
                 if (limit <= 0) {
