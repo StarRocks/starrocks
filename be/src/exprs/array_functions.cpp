@@ -14,7 +14,9 @@
 
 #include "exprs/array_functions.h"
 
+#include <algorithm>
 #include <memory>
+#include <numeric>
 
 #include "column/array_column.h"
 #include "column/column_hash.h"
@@ -1693,6 +1695,134 @@ StatusOr<ColumnPtr> ArrayFunctions::repeat(FunctionContext* ctx, const Columns& 
 
     if (null_result) {
         return NullableColumn::create(std::move(dest_column), std::move(null_result));
+    } else {
+        return dest_column;
+    }
+}
+
+// array_top_n(array_column, count) -> top_n_array
+StatusOr<ColumnPtr> ArrayFunctions::array_top_n(FunctionContext* ctx, const Columns& columns) {
+    RETURN_IF_COLUMNS_ONLY_NULL(columns);
+
+    size_t chunk_size = columns[0]->size();
+    ColumnPtr src_column = ColumnHelper::unpack_and_duplicate_const_column(chunk_size, columns[0]);
+    ColumnPtr dest_column = src_column->clone_empty();
+
+    bool is_nullable = false;
+    bool has_null = false;
+    NullColumnPtr null_result = nullptr;
+
+    // Handle array column nullability
+    const ArrayColumn* array_column = nullptr;
+    if (columns[0]->is_nullable()) {
+        is_nullable = true;
+        has_null = columns[0]->has_null();
+
+        const auto* src_nullable_column = down_cast<const NullableColumn*>(columns[0].get());
+        array_column = down_cast<const ArrayColumn*>(src_nullable_column->data_column().get());
+        null_result = NullColumn::create(*src_nullable_column->null_column());
+    } else {
+        array_column = down_cast<const ArrayColumn*>(src_column.get());
+    }
+
+    // Handle count column nullability
+    const Int32Column* count_column = nullptr;
+    if (columns[1]->is_nullable()) {
+        is_nullable = true;
+        has_null = (columns[1]->has_null() || has_null);
+
+        const auto* src_nullable_column = down_cast<const NullableColumn*>(columns[1].get());
+        count_column = down_cast<const Int32Column*>(src_nullable_column->data_column().get());
+        if (null_result) {
+            null_result = FunctionHelper::union_null_column(null_result, src_nullable_column->null_column());
+        } else {
+            null_result = NullColumn::create(*src_nullable_column->null_column());
+        }
+    } else {
+        count_column = down_cast<const Int32Column*>(
+                ColumnHelper::unpack_and_duplicate_const_column(chunk_size, columns[1]).get());
+    }
+
+    // Setup destination column
+    ArrayColumn* dest_data_column = nullptr;
+    if (is_nullable) {
+        auto& dest_nullable_column = down_cast<NullableColumn&>(*dest_column);
+        dest_data_column = down_cast<ArrayColumn*>(dest_nullable_column.data_column().get());
+        auto& dest_null_data = dest_nullable_column.null_column_data();
+        dest_null_data = null_result->get_data();
+        dest_nullable_column.set_has_null(has_null);
+    } else {
+        dest_data_column = down_cast<ArrayColumn*>(dest_column.get());
+    }
+
+    // Process each row
+    for (size_t i = 0; i < chunk_size; i++) {
+        int32_t n = count_column->get(i).get_int32();
+
+        // Handle edge cases
+        if (n <= 0) {
+            // If count is 0 or negative, return empty array
+            auto& dest_offsets = dest_data_column->offsets_column()->get_data();
+            dest_offsets.emplace_back(dest_offsets.back());
+            continue;
+        }
+
+        // Get the array elements for this row
+        Datum v = array_column->get(i);
+        const auto& items = v.get<DatumArray>();
+        size_t array_size = items.size();
+
+        if (array_size == 0) {
+            // Empty input array, return empty array
+            auto& dest_offsets = dest_data_column->offsets_column()->get_data();
+            dest_offsets.emplace_back(dest_offsets.back());
+            continue;
+        }
+
+        // Create indices for sorting
+        std::vector<size_t> indices(array_size);
+        std::iota(indices.begin(), indices.end(), 0);
+
+        // Sort indices based on values in descending order
+        std::sort(indices.begin(), indices.end(), [&items](size_t a, size_t b) {
+            const Datum& datum_a = items[a];
+            const Datum& datum_b = items[b];
+
+            // Handle null values - nulls are considered smaller and go to the end
+            if (datum_a.is_null() && datum_b.is_null()) {
+                return false; // equal
+            }
+            if (datum_a.is_null()) {
+                return false; // null is smaller, goes to end (reverse order)
+            }
+            if (datum_b.is_null()) {
+                return true; // non-null is larger, goes to front
+            }
+
+            // Compare non-null values in descending order
+            return datum_a > datum_b;
+        });
+
+        // Take top n elements (or all if n > array_size)
+        size_t result_size = std::min(static_cast<size_t>(n), array_size);
+
+        auto& dest_data = dest_data_column->elements_column();
+        for (size_t j = 0; j < result_size; j++) {
+            const Datum& datum = items[indices[j]];
+            if (datum.is_null()) {
+                dest_data->append_nulls(1);
+            } else {
+                dest_data->append_datum(datum);
+            }
+        }
+
+        // Update offsets
+        auto& dest_offsets = dest_data_column->offsets_column()->get_data();
+        dest_offsets.emplace_back(dest_offsets.back() + result_size);
+    }
+
+    if (is_nullable) {
+        return dest_column;
     } else {
         return dest_column;
     }
