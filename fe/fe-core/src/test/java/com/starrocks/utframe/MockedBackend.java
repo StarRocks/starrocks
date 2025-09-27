@@ -327,8 +327,13 @@ public class MockedBackend {
                 if (!workerThreadStarted) {
                     workerThreadStarted = true;
                     new Thread(() -> {
+                        TestLoopTimeout timeout = new TestLoopTimeout("MockedBackend worker thread");
                         while (true) {
                             try {
+                                // Check for timeout to prevent dead loop
+                                if (timeout.checkTimeout()) {
+                                    break;
+                                }
                                 TaskWrapper taskWrapper = sharedTaskQueue.take();
                                 TFinishTaskRequest finishTaskRequest = new TFinishTaskRequest(taskWrapper.backend,
                                         taskWrapper.request.getTask_type(), taskWrapper.request.getSignature(),
@@ -426,11 +431,17 @@ public class MockedBackend {
 
         @Override
         public TTabletStatResult get_tablet_stat() {
+            TestLoopTimeout timeout = new TestLoopTimeout("get_tablet_stat");
             while (true) {
                 try {
+                    // Check for timeout to prevent dead loop
+                    if (timeout.checkTimeout()) {
+                        break;
+                    }
                     Thread.sleep(10000);
                 } catch (InterruptedException e) {
                     e.printStackTrace();
+                    break;
                 }
             }
             //            return new TTabletStatResult(Maps.newHashMap());
