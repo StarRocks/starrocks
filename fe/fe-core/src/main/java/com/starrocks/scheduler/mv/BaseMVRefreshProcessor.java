@@ -170,6 +170,11 @@ public abstract class BaseMVRefreshProcessor {
                                                                         Table table);
 
     /**
+     * Generate the next task run to be processed and set it to the nextTaskRun field.
+     */
+    public abstract void generateNextTaskRunIfNeeded();
+
+    /**
      * Get the retry times for the mv refresh processor.
      *
      * @param connectContext the current connect context
