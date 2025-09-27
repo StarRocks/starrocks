@@ -18,6 +18,7 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.AstVisitorExtendInterface;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.translate.TranslateStmt;
+import com.starrocks.sql.parser.SqlDialect;
 
 public class TranslateAnalyzer {
     public static void analyze(StatementBase statement, ConnectContext context) {
@@ -32,7 +33,7 @@ public class TranslateAnalyzer {
         @Override
         public Void visitTranslateStatement(TranslateStmt statement, ConnectContext context) {
             String dialect = statement.getDialect();
-            if (!dialect.equalsIgnoreCase("trino")) {
+            if (!SqlDialect.TRINO_DIALECT.equalsIgnoreCase(dialect)) {
                 throw new SemanticException(String.format("Unsupported dialect: %s, only support trino dialect now", dialect));
             }
             return null;

@@ -222,7 +222,7 @@ public class UtFrameUtils {
         StatementBase statementBase;
         try {
             statementBase =
-                        com.starrocks.sql.parser.SqlParser.parse(originStmt, ctx.getSessionVariable().getSqlMode()).get(0);
+                        com.starrocks.sql.parser.SqlParser.parse(originStmt, ctx.getSessionVariable()).get(0);
             com.starrocks.sql.analyzer.Analyzer.analyze(statementBase, ctx);
         } catch (ParsingException | SemanticException e) {
             System.err.println("parse failed: " + e.getMessage());
@@ -241,7 +241,7 @@ public class UtFrameUtils {
         StatementBase statementBase;
         try {
             statementBase =
-                        com.starrocks.sql.parser.SqlParser.parse(originStmt, ctx.getSessionVariable().getSqlMode()).get(0);
+                        com.starrocks.sql.parser.SqlParser.parse(originStmt, ctx.getSessionVariable()).get(0);
         } catch (ParsingException e) {
             if (e.getMessage() == null) {
                 throw e;
@@ -488,7 +488,8 @@ public class UtFrameUtils {
         connectContext.setDumpInfo(new QueryDumpInfo(connectContext));
 
         List<StatementBase> statements =
-                    com.starrocks.sql.parser.SqlParser.parse(sql, connectContext.getSessionVariable().getSqlMode());
+                    com.starrocks.sql.parser.SqlParser.parse(sql, connectContext.getSessionVariable());
+
         connectContext.getDumpInfo().setOriginStmt(sql);
         SessionVariable oldSessionVariable = connectContext.getSessionVariable();
         StatementBase statementBase = statements.get(0);
@@ -672,7 +673,7 @@ public class UtFrameUtils {
                 try {
                     StatementBase viewStatement =
                                 SqlParser.parse(createTableStmt.getInlineViewDef(),
-                                            connectContext.getSessionVariable().getSqlMode()).get(0);
+                                            connectContext.getSessionVariable()).get(0);
                     com.starrocks.sql.analyzer.Analyzer.analyze(viewStatement, connectContext);
                 } catch (Exception e) {
                     System.out.println("invalid view def: " + createTableStmt.getInlineViewDef()
