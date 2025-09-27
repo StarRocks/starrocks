@@ -556,6 +556,11 @@ public class TableProperty implements Writable, GsonPostProcessable {
         return this;
     }
 
+    // return true if the partition refresh number is set in properties
+    public boolean isSetPartitionRefreshNumber() {
+        return properties.containsKey(PropertyAnalyzer.PROPERTIES_PARTITION_REFRESH_NUMBER);
+    }
+
     public TableProperty buildPartitionRefreshNumber() {
         partitionRefreshNumber =
                 Integer.parseInt(properties.getOrDefault(PropertyAnalyzer.PROPERTIES_PARTITION_REFRESH_NUMBER,

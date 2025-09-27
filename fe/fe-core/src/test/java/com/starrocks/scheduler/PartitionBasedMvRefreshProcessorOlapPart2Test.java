@@ -432,7 +432,7 @@ public class PartitionBasedMvRefreshProcessorOlapPart2Test extends MVTestBase {
                     TGetTasksParams params = new TGetTasksParams();
                     params.setTask_name(task.getName());
                     List<TaskRunStatus> statuses = tm.getMatchedTaskRunStatus(params);
-                    while (statuses.size() != 1) {
+                    while (statuses.size() < 1) {
                         statuses = tm.getMatchedTaskRunStatus(params);
                         Thread.sleep(100);
                     }
@@ -492,7 +492,7 @@ public class PartitionBasedMvRefreshProcessorOlapPart2Test extends MVTestBase {
                                 params.setTask_name(task.getName());
                                 TaskManager tm = GlobalStateMgr.getCurrentState().getTaskManager();
                                 List<TaskRunStatus> statuses = tm.getMatchedTaskRunStatus(params);
-                                while (statuses.size() != 1) {
+                                while (statuses.size() < 1) {
                                     statuses = tm.getMatchedTaskRunStatus(params);
                                     Thread.sleep(100);
                                 }

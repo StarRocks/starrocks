@@ -92,6 +92,7 @@ import org.apache.commons.collections.CollectionUtils;
 import org.apache.commons.collections4.ListUtils;
 import org.apache.commons.collections4.MapUtils;
 import org.apache.commons.lang3.StringUtils;
+import org.apache.hadoop.yarn.webapp.hamlet2.Hamlet;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -159,7 +160,7 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
         ADAPTIVE;
 
         public static PartitionRefreshStrategy defaultValue() {
-            return STRICT;
+            return ADAPTIVE;
         }
     }
 
@@ -1396,6 +1397,12 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
      * Return the partition refresh strategy of the materialized view.
      */
     public PartitionRefreshStrategy getPartitionRefreshStrategy() {
+        // if mv has `partition_refresh_number` property, use it first.
+        TableProperty tableProperty = getTableProperty();
+        if (tableProperty.isSetPartitionRefreshNumber()) {
+            return PartitionRefreshStrategy.STRICT;
+        }
+        // otherwise, use `partition_refresh_strategy` property.
         if (tableProperty == null || tableProperty.getPartitionRefreshStrategy() == null) {
             return PartitionRefreshStrategy.defaultValue();
         }
