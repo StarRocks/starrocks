@@ -52,10 +52,17 @@ public class MarkedCountDownLatch<K, V> extends CountDownLatch {
     private final Multimap<K, V> marks;
     private final List<Runnable> listeners = Lists.newArrayList();
     private Status st = Status.OK;
+    private Boolean useCollectionSize = false;
 
     public MarkedCountDownLatch(int count) {
         super(count);
         marks = HashMultimap.create();
+    }
+
+    public MarkedCountDownLatch(int count, Boolean useCollectionSize) {
+        super(count);
+        marks = HashMultimap.create();
+        this.useCollectionSize = useCollectionSize;
     }
 
     public synchronized void addMark(K key, V value) {
@@ -69,7 +76,20 @@ public class MarkedCountDownLatch<K, V> extends CountDownLatch {
 
     public synchronized boolean markedCountDown(K key, V value) {
         if (marks.remove(key, value)) {
-            super.countDown();
+            if (!useCollectionSize) {
+                super.countDown();
+            } else {
+                int countDownTimes = 1;
+                if (value instanceof java.util.Collection) {
+                    countDownTimes = ((java.util.Collection<?>) value).size();
+                } else if (value instanceof java.util.Map) {
+                    countDownTimes = ((java.util.Map<?, ?>) value).size();
+                }
+
+                for (int i = 0; i < countDownTimes; i++) {
+                    super.countDown();
+                }
+            }
             triggerListeners();
             return true;
         }
