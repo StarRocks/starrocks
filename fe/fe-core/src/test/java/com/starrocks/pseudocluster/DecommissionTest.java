@@ -17,6 +17,7 @@ package com.starrocks.pseudocluster;
 import com.starrocks.clone.ColocateTableBalancer;
 import com.starrocks.common.Config;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.utframe.TestLoopTimeout;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
@@ -74,7 +75,12 @@ public class DecommissionTest {
         int oldTabletNum = decommissionBE.getTabletManager().getNumTablet();
         cluster.runSql(null, String.format("ALTER SYSTEM DECOMMISSION BACKEND \"%s\"", decommissionBE.getHostHeartbeatPort()));
         Random rand = new Random(0);
+        TestLoopTimeout timeout = new TestLoopTimeout("wait for decommission to finish");
         while (true) {
+            // Check for timeout to prevent dead loop
+            if (timeout.checkTimeout()) {
+                break;
+            }
             int curTabletNum = decommissionBE.getTabletManager().getNumTablet();
             System.out.printf("%s #tablets: %d/%d: fullClone: %d wait...\n", new Date(), curTabletNum, oldTabletNum,
                     Tablet.getTotalFullClone());
