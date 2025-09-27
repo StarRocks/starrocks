@@ -73,10 +73,10 @@ Status BufferPartitionChunkWriter::init() {
 }
 
 Status BufferPartitionChunkWriter::write(Chunk* chunk) {
-    RETURN_IF_ERROR(create_file_writer_if_needed());
-    if (_file_writer->get_written_bytes() >= _max_file_size) {
+    if (_file_writer && _file_writer->get_written_bytes() >= _max_file_size) {
         commit_file();
     }
+    RETURN_IF_ERROR(create_file_writer_if_needed());
     return _file_writer->write(chunk);
 }
 
@@ -120,9 +120,6 @@ Status SpillPartitionChunkWriter::init() {
     RETURN_IF_ERROR(_load_spill_block_mgr->init());
     _load_chunk_spiller = std::make_unique<LoadChunkSpiller>(_load_spill_block_mgr.get(),
                                                              _fragment_context->runtime_state()->runtime_profile());
-    if (_column_evaluators) {
-        RETURN_IF_ERROR(ColumnEvaluator::init(*_column_evaluators));
-    }
     return Status::OK();
 }
 
