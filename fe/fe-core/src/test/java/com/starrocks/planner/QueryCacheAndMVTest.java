@@ -177,8 +177,7 @@ public class QueryCacheAndMVTest extends MVTestBase {
                         "DISTRIBUTED BY HASH(`id`) BUCKETS 10\n" +
                         "REFRESH DEFERRED MANUAL\n" +
                         "PROPERTIES (\n" +
-                        "\"replication_num\" = \"1\",\n" +
-                        "\"storage_medium\" = \"HDD\"\n" +
+                        "\"replication_num\" = \"1\"" +
                         ")\n" +
                         "AS SELECT id, data, ts  FROM `iceberg0`.`partitioned_transforms_db`.`t0_year` as a;");
         Database testDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
