@@ -85,6 +85,7 @@ public class QueryDetailQueueTest extends PlanTestBase {
                 "\"cpuCostNs\":1002," +
                 "\"memCostBytes\":100003," +
                 "\"spillBytes\":-1," +
+                "\"cacheMissRatio\":0.0," +
                 "\"warehouse\":\"default_warehouse\"," +
                 "\"catalog\":\"default_catalog\"," +
                 "\"queryFeMemory\":0}]";

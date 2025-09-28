@@ -67,6 +67,7 @@ import com.starrocks.mysql.MysqlProto;
 import com.starrocks.mysql.MysqlSerializer;
 import com.starrocks.mysql.MysqlServerStatusFlag;
 import com.starrocks.mysql.RequestPackage;
+import com.starrocks.plugin.AuditEvent;
 import com.starrocks.plugin.AuditEvent.EventType;
 import com.starrocks.proto.PQueryStatistics;
 import com.starrocks.rpc.RpcException;
@@ -282,10 +283,29 @@ public class ConnectProcessor {
 
         ctx.getAuditEventBuilder().setFeIp(FrontendOptions.getLocalHostAddress());
 
+<<<<<<< HEAD
         if (parsedStmt != null && AuditEncryptionChecker.needEncrypt(parsedStmt)) {
             // Some information like username, password in the stmt should not be printed.
             ctx.getAuditEventBuilder().setStmt(AstToSQLBuilder.toSQLOrDefault(parsedStmt, origStmt));
         } else if (parsedStmt == null) {
+=======
+        ctx.getAuditEventBuilder().setStmt(formatStmt(origStmt, parsedStmt));
+
+        AuditEvent auditEvent = ctx.getAuditEventBuilder().build();
+        if (ctx.getState().isQuery() && ctx.getState().getStateType() != QueryState.MysqlStateType.ERR) {
+            // multiply LONG by 10 so in metric system we can have more accurate result
+            MetricRepo.HISTO_CACHE_MISS_RATIO.update((long) (auditEvent.getCacheMissRatio() * 10));
+        }
+        GlobalStateMgr.getCurrentState().getAuditEventProcessor().handleAuditEvent(auditEvent);
+    }
+
+    private String formatStmt(String origStmt, StatementBase parsedStmt) {
+        if (!Config.enable_audit_sql) {
+            return "?";
+        }
+        boolean needEncrypt = AuditEncryptionChecker.needEncrypt(parsedStmt);
+        if (parsedStmt == null) {
+>>>>>>> 7332b66284 ([Enhancement] support cache hit ratio in audit log and metric system)
             // invalid sql, record the original statement to avoid audit log can't replay
             // but redact sensitive credentials first
             ctx.getAuditEventBuilder().setStmt(SqlCredentialRedactor.redact(origStmt));
