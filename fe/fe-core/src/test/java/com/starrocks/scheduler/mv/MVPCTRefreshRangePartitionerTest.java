@@ -31,7 +31,6 @@ import org.mockito.Mockito;
 
 import java.util.Arrays;
 import java.util.HashMap;
-import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -47,6 +46,7 @@ public class MVPCTRefreshRangePartitionerTest {
         MaterializedView mv = mock(MaterializedView.class);
         when(mv.getTableProperty()).thenReturn(mock(TableProperty.class));
         when(mv.getPartitionInfo()).thenReturn(mock(PartitionInfo.class));
+        when(mv.isPartitionedTable()).thenReturn(true);
 
         OlapTable refTable1 = Mockito.mock(OlapTable.class);
         Set<String> refTablePartition1 = Set.of("partition1", "partition2");
@@ -67,12 +67,11 @@ public class MVPCTRefreshRangePartitionerTest {
         // TODO: make range cells
         List<PCellWithName> partitions = Arrays.asList(PCellWithName.of("mv_p1", new PCellNone()),
                 PCellWithName.of("mv_p2", new PCellNone()));
-        Iterator<PCellWithName> iter = partitions.iterator();
         MVRefreshParams mvRefreshParams = new MVRefreshParams(mv, new HashMap<>());
         MVPCTRefreshRangePartitioner partitioner = new MVPCTRefreshRangePartitioner(mvContext, null,
                 null, mv, mvRefreshParams);
         MVAdaptiveRefreshException exception = Assertions.assertThrows(MVAdaptiveRefreshException.class,
-                () -> partitioner.getAdaptivePartitionRefreshNumber(iter));
+                () -> partitioner.getAdaptivePartitionRefreshNumber(PCellSortedSet.of(partitions)));
         Assertions.assertTrue(exception.getMessage().contains("Missing too many partition stats"));
     }
 
