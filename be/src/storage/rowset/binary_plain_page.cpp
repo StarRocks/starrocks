@@ -168,9 +168,9 @@ template <LogicalType Type>
 void BinaryPlainPageDecoder<Type>::batch_string_at_index(Slice* dst, const int32_t* idx, size_t size) const {
     if (_parsed_datas.has_value()) {
         const std::vector<Slice>& parsed_data = *_parsed_datas;
-        [[maybe_unused]] const Slice* parsed_data_ptr = parsed_data.data();
         static_assert(sizeof(Slice) == sizeof(__int128));
 #ifdef __SSE4_2__
+        const Slice* parsed_data_ptr = parsed_data.data();
 #pragma GCC unroll 2
         for (int i = 0; i < size; ++i) {
             DCHECK_LT(idx[i], parsed_data.size());
