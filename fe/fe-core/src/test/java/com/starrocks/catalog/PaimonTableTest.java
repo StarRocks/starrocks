@@ -146,10 +146,14 @@ public class PaimonTableTest {
         //2.1 check not system table
         PaimonTable paimonNotSystemTable = (PaimonTable) metadata.getTable(connectContext, "test_db", "test_table");
         org.junit.jupiter.api.Assertions.assertEquals(paimonNotSystemTable.getUUID().split("\\.").length, 4);
+        org.junit.jupiter.api.Assertions.assertTrue(
+                paimonNotSystemTable.getUUID().contains("paimon_catalog.test_db.test_table"));
 
         //2.2 check system table
         PaimonTable paimonSystemTable = (PaimonTable) metadata.getTable(connectContext, "test_db", "test_table$snapshots");
         org.junit.jupiter.api.Assertions.assertEquals(paimonSystemTable.getUUID().split("\\.").length, 4);
+        org.junit.jupiter.api.Assertions.assertTrue(
+                paimonSystemTable.getUUID().contains("paimon_catalog.test_db.test_table$snapshots"));
 
         //3.clean env
         catalog.dropTable(identifier, true);
