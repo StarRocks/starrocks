@@ -95,6 +95,7 @@ public class QueryDetail implements Serializable {
     private long cpuCostNs = -1;
     private long memCostBytes = -1;
     private long spillBytes = -1;
+    private float cacheMissRatio = 0;
     private String warehouse = WarehouseManager.DEFAULT_WAREHOUSE_NAME;
     private String digest;
     private String catalog;
@@ -162,6 +163,7 @@ public class QueryDetail implements Serializable {
         queryDetail.cpuCostNs = this.cpuCostNs;
         queryDetail.memCostBytes = this.memCostBytes;
         queryDetail.spillBytes = this.spillBytes;
+        queryDetail.cacheMissRatio = this.cacheMissRatio;
         queryDetail.warehouse = this.warehouse;
         queryDetail.digest = this.digest;
         queryDetail.resourceGroupName = this.resourceGroupName;
@@ -357,6 +359,19 @@ public class QueryDetail implements Serializable {
 
     public void setSpillBytes(long spillBytes) {
         this.spillBytes = spillBytes;
+    }
+
+    public void calculateCacheMissRatio(long readLocalCnt, long readRemoteCnt) {
+        long readTotalCnt = readLocalCnt + readRemoteCnt;
+        if (readTotalCnt > 0) {
+            cacheMissRatio = ((float) readRemoteCnt * 100) / readTotalCnt;
+        } else {
+            cacheMissRatio = 0;
+        }
+    }
+
+    public float getCacheMissRatio() {
+        return cacheMissRatio;
     }
 
     public void setWarehouse(String warehouse) {
