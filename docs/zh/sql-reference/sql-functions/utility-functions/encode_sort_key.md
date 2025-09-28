@@ -22,7 +22,7 @@ encode_sort_key(column1, column2, ..., columnN)
 
 ## 支持的数据类型
 
-### 支持的类型
+支持以下数据类型：
 
 | 数据类型 | 描述 |
 |----------|------|
@@ -39,9 +39,7 @@ encode_sort_key(column1, column2, ..., columnN)
 | `DATETIME` | 日期时间值 |
 | `TIMESTAMP` | 时间戳值 |
 
-### 不支持的类型
-
-以下复杂类型不受支持，将返回错误：
+不支持以下复杂类型，将返回错误：
 
 - `JSON`
 - `ARRAY`
@@ -62,8 +60,8 @@ encode_sort_key(column1, column2, ..., columnN)
 
 ### NULL 处理
 
-- 每列每行都获得一个NULL标记（NULL为0x00，非NULL为0x01）
-- 即使是非空列也添加NULL标记以确保编码一致性
+- 每列每行都获得一个 NULL 标记（NULL 为 0x00，非 NULL 为 0x01）
+- 即使是非空列也添加 NULL 标记以确保编码一致性
 - 使用分隔字节（0x00）分隔列（最后一列后除外）
 
 ## 示例
@@ -102,7 +100,7 @@ CREATE TABLE json_data (
 
 ### 数据类型限制
 
-复杂类型如JSON、ARRAY、MAP和STRUCT无法直接编码。使用JSON提取函数获取原始值：
+复杂类型如 JSON、ARRAY、MAP 和 STRUCT 无法直接编码。使用 JSON 提取函数获取原始值：
 
 ```sql
 -- 替代: encode_sort_key(json_col)
@@ -111,7 +109,7 @@ CREATE TABLE json_data (
 
 ### 性能考虑
 
-- 每次调用`encode_sort_key`都需要编码所有输入列
+- 每次调用 `encode_sort_key` 都需要编码所有输入列
 - 二进制键可能比原始数据大得多
 - 使用生成列避免重复编码
 
@@ -120,4 +118,3 @@ CREATE TABLE json_data (
 - 保持列数合理（通常< 10）
 - 尽可能使用较短的字符串列
 - 对于很长的字符串考虑使用哈希函数
-
