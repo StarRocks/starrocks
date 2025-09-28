@@ -1050,7 +1050,9 @@ public class ExplainAnalyzer {
         appendFilterMetrics(uniqueMetrics, nodeInfo, "ShortKeyFilter");
         appendFilterMetrics(uniqueMetrics, nodeInfo, "BitmapIndexFilter");
         appendFilterMetrics(uniqueMetrics, nodeInfo, "BloomFilterFilter");
-        appendFilterMetrics(uniqueMetrics, nodeInfo, "ZoneMapFilter");
+        appendFilterMetrics(uniqueMetrics, nodeInfo, "ZoneMapIndexFilter");
+        appendFilterMetrics(uniqueMetrics, nodeInfo, "SegmentZoneMapFilter");
+        appendFilterMetrics(uniqueMetrics, nodeInfo, "SegmentRuntimeZoneMapFilter");
         appendFilterMetrics(uniqueMetrics, nodeInfo, "PredFilter");
         appendFilterMetrics(uniqueMetrics, nodeInfo, "GinFilter");
         appendFilterMetrics(uniqueMetrics, nodeInfo, "VectorIndexFilter");
@@ -1079,7 +1081,7 @@ public class ExplainAnalyzer {
         appendMetric(uniqueMetrics, nodeInfo, "BlockFetchCount");
         appendMetric(uniqueMetrics, nodeInfo, "BlockSeek");
         appendMetric(uniqueMetrics, nodeInfo, "BlockSeekCount");
-        appendMetric(uniqueMetrics, nodeInfo, "DecompressTime");
+        appendMetric(uniqueMetrics, nodeInfo, "DecompressT");
         popIndent();
 
         appendDetailLine("SegmentProcessing:");

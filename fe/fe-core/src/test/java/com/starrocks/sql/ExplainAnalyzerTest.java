@@ -114,8 +114,9 @@ public class ExplainAnalyzerTest {
 
         // Create UniqueMetrics profile with scan-specific metrics
         RuntimeProfile uniqueMetrics = new RuntimeProfile("UniqueMetrics");
-        uniqueMetrics.addCounter("ZoneMapFilter", RuntimeProfile.ROOT_COUNTER, new Counter(TUnit.TIME_NS, null, 28208));
-        uniqueMetrics.addCounter("ZoneMapFilterRows", RuntimeProfile.ROOT_COUNTER,
+        uniqueMetrics.addCounter("ZoneMapIndexFilter", RuntimeProfile.ROOT_COUNTER,
+                new Counter(TUnit.TIME_NS, null, 28208));
+        uniqueMetrics.addCounter("ZoneMapIndexFilterRows", RuntimeProfile.ROOT_COUNTER,
                 new Counter(TUnit.UNIT, null, 37558774));
         uniqueMetrics.addCounter("PredFilter", RuntimeProfile.ROOT_COUNTER, new Counter(TUnit.TIME_NS, null, 184998));
         uniqueMetrics.addCounter("PredFilterRows", RuntimeProfile.ROOT_COUNTER,
@@ -168,7 +169,7 @@ public class ExplainAnalyzerTest {
         assertTrue(result.contains("SegmentProcessing"), result);
         assertTrue(result.contains("IOTask"), result);
         assertTrue(result.contains("IOBuffer"), result);
-        assertTrue(result.contains("ZoneMapFilter: "), result);
+        assertTrue(result.contains("ZoneMapIndexFilter: "), result);
         assertTrue(result.contains("PredFilter: "), result);
         assertTrue(result.contains("ShortKeyFilter:"), result);
         assertTrue(result.contains("Others"), result);
