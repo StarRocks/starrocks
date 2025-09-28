@@ -104,7 +104,7 @@ public abstract class Type implements Cloneable {
             PrimitiveType.INVALID_TYPE, PrimitiveType.NULL_TYPE, PrimitiveType.DECIMALV2,
             PrimitiveType.DECIMAL32, PrimitiveType.DECIMAL64, PrimitiveType.DECIMAL128, PrimitiveType.DECIMAL256,
             PrimitiveType.TIME, PrimitiveType.JSON, PrimitiveType.FUNCTION,
-            PrimitiveType.BINARY, PrimitiveType.VARBINARY);
+            PrimitiveType.BINARY, PrimitiveType.VARBINARY, PrimitiveType.VARIANT);
 
     // Static constant types for scalar types that don't require additional information.
     public static final ScalarType INVALID = new ScalarType(PrimitiveType.INVALID_TYPE);
@@ -156,6 +156,7 @@ public abstract class Type implements Cloneable {
     public static final ScalarType BITMAP = new ScalarType(PrimitiveType.BITMAP);
     public static final ScalarType PERCENTILE = new ScalarType(PrimitiveType.PERCENTILE);
     public static final ScalarType JSON = new ScalarType(PrimitiveType.JSON);
+    public static final ScalarType VARIANT = new ScalarType(PrimitiveType.VARIANT);
     public static final ScalarType UNKNOWN_TYPE = ScalarType.createUnknownType();
     public static final ScalarType FUNCTION = new ScalarType(PrimitiveType.FUNCTION);
     public static final ScalarType VARBINARY = new ScalarType(PrimitiveType.VARBINARY);
@@ -228,6 +229,7 @@ public abstract class Type implements Cloneable {
                     .add(ANY_MAP)
                     .add(ANY_STRUCT)
                     .add(JSON)
+                    .add(VARIANT)
                     .add(FUNCTION)
                     .add(VARBINARY)
                     .add(UNKNOWN_TYPE)
@@ -584,6 +586,24 @@ public abstract class Type implements Cloneable {
             compatibilityMatrix[scalar.ordinal()][VARBINARY.ordinal()] = PrimitiveType.INVALID_TYPE;
         }
 
+        // VARIANT
+        for (PrimitiveType type : PrimitiveType.VARIANT_COMPATIBLE_TYPE) {
+            ScalarType scalar = ScalarType.createType(type);
+            compatibilityMatrix[scalar.ordinal()][VARIANT.ordinal()] = type;
+        }
+        for (PrimitiveType type : PrimitiveType.VARIANT_UNCOMPATIBLE_TYPE) {
+            ScalarType scalar = ScalarType.createType(type);
+            compatibilityMatrix[scalar.ordinal()][VARIANT.ordinal()] = PrimitiveType.INVALID_TYPE;
+        }
+        compatibilityMatrix[VARIANT.ordinal()][DATE.ordinal()] = PrimitiveType.INVALID_TYPE;
+        compatibilityMatrix[VARIANT.ordinal()][DATETIME.ordinal()] = PrimitiveType.INVALID_TYPE;
+        compatibilityMatrix[VARIANT.ordinal()][TIME.ordinal()] = PrimitiveType.INVALID_TYPE;
+        compatibilityMatrix[VARIANT.ordinal()][DECIMAL32.ordinal()] = PrimitiveType.INVALID_TYPE;
+        compatibilityMatrix[VARIANT.ordinal()][DECIMAL64.ordinal()] = PrimitiveType.INVALID_TYPE;
+        compatibilityMatrix[VARIANT.ordinal()][DECIMAL128.ordinal()] = PrimitiveType.INVALID_TYPE;
+        compatibilityMatrix[VARIANT.ordinal()][DECIMAL256.ordinal()] = PrimitiveType.INVALID_TYPE;
+        compatibilityMatrix[VARIANT.ordinal()][UNKNOWN_TYPE.ordinal()] = PrimitiveType.INVALID_TYPE;
+
         // Check all the necessary entries that should be filled.
         // ignore binary
         for (int i = 0; i < PrimitiveType.values().length - 2; ++i) {
@@ -805,7 +825,7 @@ public abstract class Type implements Cloneable {
     public boolean canApplyToNumeric() {
         // TODO(mofei) support sum, avg for JSON
         return !isOnlyMetricType() && !isJsonType() && !isFunctionType() && !isBinaryType() && !isStructType() &&
-                !isMapType() && !isArrayType();
+                !isMapType() && !isArrayType() && !isVariantType();
     }
 
     public boolean canJoinOn() {
@@ -824,7 +844,8 @@ public abstract class Type implements Cloneable {
             return true;
         }
 
-        return !isOnlyMetricType() && !isJsonType() && !isFunctionType();
+        return !isOnlyMetricType() && !isJsonType() && !isFunctionType() &&
+                !isVariantType();
     }
 
     public boolean canGroupBy() {
@@ -842,7 +863,8 @@ public abstract class Type implements Cloneable {
             }
             return true;
         }
-        return !isOnlyMetricType() && !isJsonType() && !isFunctionType();
+        return !isOnlyMetricType() && !isJsonType() && !isFunctionType() &&
+                !isVariantType();
     }
 
     public boolean canOrderBy() {
@@ -850,7 +872,8 @@ public abstract class Type implements Cloneable {
         if (isArrayType()) {
             return ((ArrayType) this).getItemType().canOrderBy();
         }
-        return !isOnlyMetricType() && !isJsonType() && !isFunctionType() && !isStructType() && !isMapType();
+        return !isOnlyMetricType() && !isJsonType() && !isFunctionType() && !isStructType() &&
+                !isMapType() && !isVariantType();
     }
 
     public boolean canPartitionBy() {
@@ -859,7 +882,7 @@ public abstract class Type implements Cloneable {
             return ((ArrayType) this).getItemType().canPartitionBy();
         }
         return !isOnlyMetricType() && !isJsonType() && !isFunctionType() && !isBinaryType() && !isStructType() &&
-                !isMapType();
+                !isMapType() && !isVariantType();
     }
 
     public boolean canDistinct() {
@@ -874,20 +897,20 @@ public abstract class Type implements Cloneable {
             return ((MapType) this).getKeyType().canDistinct() && ((MapType) this).getValueType().canDistinct();
         }
         return !isOnlyMetricType() && !isJsonType() && !isFunctionType() && !isBinaryType() && !isStructType() &&
-                !isMapType();
+                !isMapType() && !isVariantType();
     }
 
     public boolean canStatistic() {
         // TODO(mofei) support statistic by for JSON
         return !isOnlyMetricType() && !isJsonType() && !isStructType() && !isFunctionType()
-                && !isBinaryType();
+                && !isBinaryType() && !isVariantType();
     }
 
     public boolean canDistributedBy() {
         // TODO(mofei) support distributed by for JSON
         // Allow VARBINARY as distribution key
         return !isComplexType() && !isFloatingPointType() && !isOnlyMetricType() && !isJsonType()
-                && !isFunctionType();
+                && !isFunctionType() && !isVariantType();
     }
 
     public boolean canBeWindowFunctionArgumentTypes() {
@@ -933,6 +956,10 @@ public abstract class Type implements Cloneable {
 
     public boolean isJsonType() {
         return isScalarType(PrimitiveType.JSON);
+    }
+
+    public boolean isVariantType() {
+        return isScalarType(PrimitiveType.VARIANT);
     }
 
     public boolean isPercentile() {

@@ -77,6 +77,7 @@ public enum PrimitiveType {
     DECIMAL256("DECIMAL256", 32, TPrimitiveType.DECIMAL256),
 
     JSON("JSON", 16, TPrimitiveType.JSON),
+    VARIANT("VARIANT", 16, TPrimitiveType.VARIANT),
 
     FUNCTION("FUNCTION", 8, TPrimitiveType.FUNCTION),
 
@@ -118,6 +119,16 @@ public enum PrimitiveType {
     public static final ImmutableList<PrimitiveType> JSON_UNCOMPATIBLE_TYPE =
             ImmutableList.of(DATE, DATETIME, TIME, HLL, BITMAP, PERCENTILE, FUNCTION, VARBINARY);
 
+    public static final ImmutableList<PrimitiveType> VARIANT_COMPATIBLE_TYPE =
+            new ImmutableList.Builder<PrimitiveType>()
+                    .add(BOOLEAN)
+                    .addAll(NUMBER_TYPE_LIST)
+                    .addAll(STRING_TYPE_LIST)
+                    .build();
+
+    public static final ImmutableList<PrimitiveType> VARIANT_UNCOMPATIBLE_TYPE =
+            ImmutableList.of(DATE, DATETIME, TIME, HLL, BITMAP, PERCENTILE, FUNCTION, VARBINARY);
+
     private static final ImmutableList<PrimitiveType> TIME_TYPE_LIST =
             ImmutableList.of(TIME, DATE, DATETIME);
 
@@ -145,7 +156,7 @@ public enum PrimitiveType {
     static {
         ImmutableSetMultimap.Builder<PrimitiveType, PrimitiveType> builder = ImmutableSetMultimap.builder();
         builder.putAll(NULL_TYPE, BASIC_TYPE_LIST);
-        builder.putAll(NULL_TYPE, ImmutableList.of(HLL, BITMAP, PERCENTILE, JSON, VARBINARY));
+        builder.putAll(NULL_TYPE, ImmutableList.of(HLL, BITMAP, PERCENTILE, JSON, VARBINARY, VARIANT));
 
         builder.putAll(BOOLEAN, BASIC_TYPE_LIST);
         builder.putAll(TINYINT, BASIC_TYPE_LIST);
@@ -188,6 +199,10 @@ public enum PrimitiveType {
             builder.put(type, JSON);
             builder.put(JSON, type);
         }
+
+        // VARIANT
+        builder.putAll(VARIANT, VARIANT);
+        builder.putAll(VARIANT, NULL_TYPE);
 
         IMPLICIT_CAST_MAP = builder.build();
     }
@@ -441,6 +456,7 @@ public enum PrimitiveType {
                 typeSize = 1024 * 1024;
                 break;
             case JSON:
+            case VARIANT:
                 typeSize = 1024;
                 break;
             default:
@@ -506,6 +522,10 @@ public enum PrimitiveType {
 
     public boolean isJsonType() {
         return this == JSON;
+    }
+
+    public boolean isVariantType() {
+        return this == VARIANT;
     }
 
     public boolean isFunctionType() {
