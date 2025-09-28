@@ -591,7 +591,7 @@ public abstract class Type implements Cloneable {
             ScalarType scalar = ScalarType.createType(type);
             compatibilityMatrix[scalar.ordinal()][VARIANT.ordinal()] = type;
         }
-        for (PrimitiveType type : PrimitiveType.VARIANT_UNCOMPATIBLE_TYPE) {
+        for (PrimitiveType type : PrimitiveType.VARIANT_INCOMPATIBLE_TYPES) {
             ScalarType scalar = ScalarType.createType(type);
             compatibilityMatrix[scalar.ordinal()][VARIANT.ordinal()] = PrimitiveType.INVALID_TYPE;
         }

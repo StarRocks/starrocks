@@ -126,7 +126,7 @@ public enum PrimitiveType {
                     .addAll(STRING_TYPE_LIST)
                     .build();
 
-    public static final ImmutableList<PrimitiveType> VARIANT_UNCOMPATIBLE_TYPE =
+    public static final ImmutableList<PrimitiveType> VARIANT_INCOMPATIBLE_TYPES =
             ImmutableList.of(DATE, DATETIME, TIME, HLL, BITMAP, PERCENTILE, FUNCTION, VARBINARY);
 
     private static final ImmutableList<PrimitiveType> TIME_TYPE_LIST =
