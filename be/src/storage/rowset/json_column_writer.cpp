@@ -109,6 +109,11 @@ Status FlatJsonColumnWriter::_flat_column(std::vector<ColumnPtr>& json_datas) {
         flattener.flatten(json_data);
         _flat_columns = flattener.mutable_result();
 
+        // IMPORTANT: Check flattener result integrity to prevent  inconsistency
+        for (const auto& flat_col : _flat_columns) {
+            flat_col->check_or_die();
+        }
+
         // recode null column in 1st
         if (_json_meta->is_nullable()) {
             auto nulls = NullColumn::create();
@@ -202,6 +207,12 @@ Status FlatJsonColumnWriter::_init_flat_writers() {
 Status FlatJsonColumnWriter::_write_flat_column() {
     DCHECK(!_flat_columns.empty());
     DCHECK_EQ(_flat_columns.size(), _flat_writers.size());
+
+    // IMPORTANT: Final integrity check before writing to prevent  inconsistency
+    for (const auto& flat_col : _flat_columns) {
+        flat_col->check_or_die();
+    }
+
     // flat datas
     for (size_t i = 0; i < _flat_columns.size(); i++) {
         RETURN_IF_ERROR(_flat_writers[i]->append(*_flat_columns[i]));
