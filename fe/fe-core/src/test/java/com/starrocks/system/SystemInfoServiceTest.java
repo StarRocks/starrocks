@@ -384,6 +384,14 @@ public class SystemInfoServiceTest {
         };
         service.addBackend(be);
         be.setStarletPort(1001);
+
+        {
+            Assertions.assertThrows(DdlException.class, () ->
+                            service.dropBackend("newHost", 1000, "warehousename-cn-not-exists",
+                                    "", false),
+                    ErrorCode.ERR_UNKNOWN_WAREHOUSE.formatErrorMsg("name: warehousename-cn-not-exists"));
+        }
+
         service.dropBackend("newHost", 1000, null, null, false);
         Backend beIP = service.getBackendWithHeartbeatPort("newHost", 1000);
         Assertions.assertNull(beIP);
