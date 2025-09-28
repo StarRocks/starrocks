@@ -1000,7 +1000,7 @@ public class MvRewriteTest extends MVTestBase {
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\"" +
                 ");");
-        starRocksAssert.withMaterializedView(" CREATE MATERIALIZED VIEW test_mv1\n" +
+        starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW test_mv1\n" +
                 "DISTRIBUTED BY RANDOM\n" +
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\"\n" +
