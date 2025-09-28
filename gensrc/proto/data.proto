@@ -49,6 +49,8 @@ message PQueryStatistics {
     optional int64 transmitted_bytes = 7;
     repeated QueryStatisticsItemPB stats_items = 10;
     repeated NodeExecStatsItemPB node_exec_stats_items = 11;
+    optional int64 read_local_cnt = 12;
+    optional int64 read_remote_cnt = 13;
 }
 
 message QueryStatisticsItemPB {

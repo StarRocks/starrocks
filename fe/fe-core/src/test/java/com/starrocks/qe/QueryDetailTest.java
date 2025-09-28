@@ -55,6 +55,9 @@ public class QueryDetailTest {
 
         queryDetail.setLatency(10);
         Assertions.assertEquals(-1, copyOfQueryDetail.getLatency());
+
+        queryDetail.calculateCacheMissRatio(100, 100);
+        Assertions.assertEquals((float) 50, queryDetail.getCacheMissRatio());
     }
 
     private static ConnectContext connectContext;

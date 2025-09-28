@@ -35,6 +35,7 @@
 package com.starrocks.plugin;
 
 import com.google.common.base.Joiner;
+import com.starrocks.server.RunMode;
 import com.starrocks.server.WarehouseManager;
 
 import java.lang.annotation.Retention;
@@ -64,6 +65,7 @@ public class AuditEvent {
         String value() default "";
 
         boolean ignore_zero() default false;
+        boolean ignore_empty() default false;
     }
 
     public EventType type;
@@ -164,6 +166,33 @@ public class AuditEvent {
 
     @AuditField(value = "QuerySource")
     public String querySource = "";
+
+    public long readLocalCnt = 0;
+    public long readRemoteCnt = 0;
+    @AuditField(value = "CacheHitRatio", ignore_empty = true)
+    public String cacheHitRatio = "";
+
+    public void calculateCacheHitRatio() {
+        if (!isQuery || RunMode.isSharedNothingMode()) {
+            return;
+        }
+        long readTotalCnt = readLocalCnt + readRemoteCnt;
+        if (readTotalCnt > 0) {
+            float percent = ((float) readLocalCnt * 100) / readTotalCnt;
+            cacheHitRatio = String.format("%.1f", percent) + "%";
+        } else {
+            cacheHitRatio = "100%";
+        }
+    }
+
+    public float getCacheMissRatio() {
+        long readTotalCnt = readLocalCnt + readRemoteCnt;
+        if (readTotalCnt > 0) {
+            return ((float) readRemoteCnt * 100) / readTotalCnt;
+        } else {
+            return 0;
+        }
+    }
 
     public static class AuditEventBuilder {
 
@@ -296,6 +325,16 @@ public class AuditEvent {
             } else {
                 auditEvent.spilledBytes += spilledBytes;
             }
+            return this;
+        }
+
+        public AuditEventBuilder addReadLocalCnt(long readLocalCnt) {
+            auditEvent.readLocalCnt += readLocalCnt;
+            return this;
+        }
+
+        public AuditEventBuilder addReadRemoteCnt(long readRemoteCnt) {
+            auditEvent.readRemoteCnt += readRemoteCnt;
             return this;
         }
 
@@ -433,6 +472,7 @@ public class AuditEvent {
         }
 
         public AuditEvent build() {
+            this.auditEvent.calculateCacheHitRatio();
             return this.auditEvent;
         }
 
@@ -443,6 +483,8 @@ public class AuditEvent {
             this.auditEvent.scanBytes = event.scanBytes;
             this.auditEvent.scanRows = event.scanRows;
             this.auditEvent.spilledBytes = event.spilledBytes;
+            this.auditEvent.readLocalCnt = event.readLocalCnt;
+            this.auditEvent.readRemoteCnt = event.readRemoteCnt;
             this.auditEvent.returnRows = event.returnRows;
             this.auditEvent.transmittedBytes = event.transmittedBytes;
         }

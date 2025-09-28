@@ -121,7 +121,7 @@ void LakeDataSource::close(RuntimeState* state) {
     if (_reader) {
         // close reader to update statistics before update counters
         _reader->close();
-        update_counter();
+        update_counter(state);
     }
     if (_prj_iter) {
         _prj_iter->close();
@@ -696,7 +696,7 @@ void LakeDataSource::update_realtime_counter(Chunk* chunk) {
     _cpu_time_spent_ns = stats.decompress_ns + stats.vec_cond_ns + stats.del_filter_ns;
 }
 
-void LakeDataSource::update_counter() {
+void LakeDataSource::update_counter(RuntimeState* state) {
     COUNTER_UPDATE(_create_seg_iter_timer, _reader->stats().create_segment_iter_ns);
     COUNTER_UPDATE(_rows_read_counter, _num_rows_read);
 
@@ -891,6 +891,9 @@ void LakeDataSource::update_counter() {
     if (_reader->stats().json_flatten_ns > 0) {
         RuntimeProfile::Counter* c = ADD_CHILD_TIMER(_runtime_profile, "FlatJsonFlatten", parent_name);
         COUNTER_UPDATE(c, _reader->stats().json_flatten_ns);
+    }
+    if (state && state->query_ctx()) {
+        state->query_ctx()->incr_read_stats(_reader->stats().io_count_local_disk, _reader->stats().io_count_remote);
     }
 }
 

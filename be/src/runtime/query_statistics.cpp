@@ -44,6 +44,8 @@ void QueryStatistics::to_pb(PQueryStatistics* statistics) {
     statistics->set_cpu_cost_ns(cpu_ns);
     statistics->set_mem_cost_bytes(mem_cost_bytes);
     statistics->set_spill_bytes(spill_bytes);
+    statistics->set_read_local_cnt(read_local_cnt);
+    statistics->set_read_remote_cnt(read_remote_cnt);
     statistics->set_transmitted_bytes(transmitted_bytes);
     {
         std::lock_guard l(_lock);
@@ -74,6 +76,8 @@ void QueryStatistics::to_params(TAuditStatistics* params) {
     params->__set_cpu_cost_ns(cpu_ns);
     params->__set_mem_cost_bytes(mem_cost_bytes);
     params->__set_spill_bytes(spill_bytes);
+    params->__set_read_local_cnt(read_local_cnt);
+    params->__set_read_remote_cnt(read_remote_cnt);
     params->__set_transmitted_bytes(transmitted_bytes);
     {
         std::lock_guard l(_lock);
@@ -90,8 +94,11 @@ void QueryStatistics::clear() {
     scan_rows = 0;
     scan_bytes = 0;
     cpu_ns = 0;
+    mem_cost_bytes = 0;
     returned_rows = 0;
     spill_bytes = 0;
+    read_local_cnt = 0;
+    read_remote_cnt = 0;
     transmitted_bytes = 0;
     _stats_items.clear();
     _exec_stats_items.clear();
@@ -169,6 +176,16 @@ void QueryStatistics::merge(int sender_id, QueryStatistics& other) {
         this->spill_bytes += spill_bytes;
     }
 
+    int64_t read_local_cnt = other.read_local_cnt.load();
+    if (other.read_local_cnt.compare_exchange_strong(read_local_cnt, 0)) {
+        this->read_local_cnt += read_local_cnt;
+    }
+
+    int64_t read_remote_cnt = other.read_remote_cnt.load();
+    if (other.read_remote_cnt.compare_exchange_strong(read_remote_cnt, 0)) {
+        this->read_remote_cnt += read_remote_cnt;
+    }
+
     int64_t transmitted_bytes = other.transmitted_bytes.load();
     if (other.transmitted_bytes.compare_exchange_strong(transmitted_bytes, 0)) {
         this->transmitted_bytes += transmitted_bytes;
@@ -207,6 +224,12 @@ void QueryStatistics::merge_pb(const PQueryStatistics& statistics) {
     }
     if (statistics.has_spill_bytes()) {
         spill_bytes += statistics.spill_bytes();
+    }
+    if (statistics.has_read_local_cnt()) {
+        read_local_cnt += statistics.read_local_cnt();
+    }
+    if (statistics.has_read_remote_cnt()) {
+        read_remote_cnt += statistics.read_remote_cnt();
     }
     if (statistics.has_mem_cost_bytes()) {
         mem_cost_bytes = std::max<int64_t>(mem_cost_bytes, statistics.mem_cost_bytes());
