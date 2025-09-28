@@ -544,7 +544,7 @@ public abstract class MVPCTRefreshPartitioner {
         return false;
     }
 
-    protected void dropPartition(Database db, MaterializedView materializedView, String mvPartitionName) {
+    public void dropPartition(Database db, MaterializedView materializedView, String mvPartitionName) {
         String dropPartitionName = materializedView.getPartition(mvPartitionName).getName();
         Locker locker = new Locker();
         if (!locker.tryLockTableWithIntensiveDbLock(db.getId(), materializedView.getId(), LockType.WRITE,
