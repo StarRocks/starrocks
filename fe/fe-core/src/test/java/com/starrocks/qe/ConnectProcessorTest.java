@@ -764,7 +764,7 @@ public class ConnectProcessorTest extends DDLTestBase {
             }
             
             @Mock
-            public void init(ConnectContext context, String traceMode, String traceModule) {
+            public void init(ConnectContext context, Tracers.Mode traceMode, String traceModule) {
                 tracersInitialized.set(true);
             }
         };
