@@ -650,6 +650,7 @@ if (CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
         set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} -Werror")
     endif()
     set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} -Wno-unused-parameter -Wno-documentation -Wno-weak-vtables")
+    set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} -Wno-unknown-warning-option")
     # Turn on following warning as error explicitly
     set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} -Werror=string-plus-int")
     set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} -Werror=pessimizing-move")
