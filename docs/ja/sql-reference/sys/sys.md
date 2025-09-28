@@ -61,6 +61,7 @@ OBJECT_DATABASE: NULL
 | [role_edges](./role_edges.md)                   | ロールの被付与者を記録します。                          |
 | [object_dependencies](./object_dependencies.md) | 非同期マテリアライズドビューの依存関係を記録します。        |
 | [policy_references](./policy_references.md)     | オブジェクトの行アクセスポリシーおよび列マスキングポリシーの参照を記録します。|
+| [fe_locks](./fe_locks.md)                       | StarRocks FE のメタデータロックに関する情報をを記録します。 |
 
 :::note
 
