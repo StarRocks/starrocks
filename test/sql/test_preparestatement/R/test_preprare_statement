@@ -147,7 +147,7 @@ function: assert_prepare_execute('test_prepare_1', "SELECT customer_key, custome
 -- result:
 None
 -- !result
-shell: current_time=$(date +%s); curl -s -X GET "${url}/api/query_detail?event_time=$((current_time - 1))" -u 'root:' | grep -c "EXECUTE" > 0
+shell: current_time=$(date +%s); curl -s -X GET "${url}/api/query_detail?event_time=$((current_time - 1))" -u 'root:' | grep -c "SELECT customer_key" > 0
 -- result:
 0
 -- !result
