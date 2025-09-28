@@ -1,4 +1,4 @@
--- name: test_execute_as_internal_user
+-- name: test_execute_as_internal_user @sequential
 CREATE GROUP PROVIDER IF NOT EXISTS `test_execute_as_file_group_provider` PROPERTIES ("group_file_url" = "group_mapping", "type" = "file");
 -- result:
 -- !result

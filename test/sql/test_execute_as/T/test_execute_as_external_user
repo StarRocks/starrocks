@@ -1,4 +1,4 @@
--- name: test_execute_as_external_user @sequential
+-- name: test_execute_as_external_user
 CREATE GROUP PROVIDER  IF NOT EXISTS `test_execute_as_file_group_provider` PROPERTIES ("group_file_url" = "group_mapping", "type" = "file");
 admin set frontend config ("group_provider"="test_execute_as_file_group_provider");
 
