@@ -332,7 +332,7 @@ public class CreateMaterializedViewTest extends MVTestBase {
     }
 
     @BeforeEach
-    public void setup(TestInfo testInfo) {
+    public void setup(TestInfo testInfo) throws Exception {
         Optional<Method> testMethod = testInfo.getTestMethod();
         if (testMethod.isPresent()) {
             this.name = testMethod.get().getName();
@@ -5896,5 +5896,17 @@ public class CreateMaterializedViewTest extends MVTestBase {
                     "as select v1.date, v1.id from mv1 as v1; ";
             starRocksAssert.withMaterializedView(sql);
         }
+    }
+    @Test
+    public void testPartitionByDateTruncWithNestedMV3() throws Exception {
+        String sql = "create materialized view mv1 " +
+                "partition by date_trunc('month', date) " +
+                "distributed by random " +
+                "REFRESH DEFERRED MANUAL " +
+                "PROPERTIES (\n" +
+                "'replication_num' = '1'\n" +
+                ") \n" +
+                "as select 'This is a test',123,v1.date, v1.id from iceberg0.partitioned_db.t2 as v1; ";
+        starRocksAssert.withMaterializedView(sql);
     }
 }
