@@ -147,6 +147,10 @@ public class Column implements Writable, GsonPreProcessable, GsonPostProcessable
     private ExpressionSerializedObject generatedColumnExprSerialized;
     private ColumnIdExpr generatedColumnExpr;
 
+    // Whether this column is a hidden column, hidden columns are used to store some internal data(eg: _ROW_ID).
+    @SerializedName(value = "isHidden")
+    private boolean isHidden;
+
     // Only for persist
     public Column() {
         this.name = "";
@@ -421,6 +425,18 @@ public class Column implements Writable, GsonPreProcessable, GsonPostProcessable
 
     public boolean isGeneratedColumn() {
         return generatedColumnExpr != null;
+    }
+
+    public boolean isVisible() {
+        return !isHidden;
+    }
+
+    public boolean isHidden() {
+        return isHidden;
+    }
+
+    public void setIsHidden(boolean hidden) {
+        isHidden = hidden;
     }
 
     public boolean isShadowColumn() {

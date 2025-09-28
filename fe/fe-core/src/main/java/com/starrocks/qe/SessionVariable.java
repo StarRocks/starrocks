@@ -3919,8 +3919,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         return this.maxPipelineDop;
     }
 
+    // TODO(murphy) support this variable
+    // It's always false since version 3.5, due to incompatibility with event-based scheduling
     public boolean isEnableSharedScan() {
-        return enableSharedScan;
+        return false;
     }
 
     public int getResourceGroupId() {

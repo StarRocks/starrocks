@@ -75,6 +75,8 @@ public class CreateMaterializedViewStatement extends DdlStmt {
     private String simpleViewDef;
     // original view definition of the mv query without any rewrite which can be used in text based rewrite.
     private String originalViewDefineSql;
+    // IVM view definition of the mv which is rewritten by IVMAnalyzer#rewrite
+    private String ivmViewDef;
     // current db name when creating mv
     private String originalDBName;
     private List<BaseTableInfo> baseTableInfos;
@@ -258,6 +260,14 @@ public class CreateMaterializedViewStatement extends DdlStmt {
 
     public void setOriginalViewDefineSql(String originalViewDefineSql) {
         this.originalViewDefineSql = originalViewDefineSql;
+    }
+
+    public String getIvmViewDef() {
+        return ivmViewDef;
+    }
+
+    public void setIvmViewDef(String ivmViewDef) {
+        this.ivmViewDef = ivmViewDef;
     }
 
     public int getQueryStartIndex() {
