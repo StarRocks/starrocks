@@ -315,7 +315,7 @@ public class RedirectStatusTest {
 
     @Test
     public void testUseCatalogStmt() {
-        UseCatalogStmt stmt = new UseCatalogStmt("test_catalog");
+        UseCatalogStmt stmt = new UseCatalogStmt("test_catalog", NodePosition.ZERO);
         Assertions.assertEquals(RedirectStatus.NO_FORWARD, RedirectStatus.getRedirectStatus(stmt));
     }
 
