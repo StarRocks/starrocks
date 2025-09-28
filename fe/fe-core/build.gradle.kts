@@ -434,6 +434,9 @@ tasks.test {
     forkEvery = 1
 
     maxHeapSize = "4096m"
+    
+    // Limit each test to 5 minutes (300 seconds)
+    timeout = Duration.ofMinutes(5)
 
     testLogging {
         // Events to log, like you have

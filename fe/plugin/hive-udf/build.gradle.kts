@@ -62,4 +62,7 @@ tasks.test {
     val failIfNoSpecifiedTests: String by project
     val failIfNoSpecifiedTestsValue = project.findProperty("failIfNoSpecifiedTests") ?: "false"
     systemProperty("failIfNoSpecifiedTests", failIfNoSpecifiedTestsValue)
+    
+    // Limit each test to 5 minutes (300 seconds)
+    timeout = Duration.ofMinutes(5)
 }

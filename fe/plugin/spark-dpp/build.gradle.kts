@@ -70,6 +70,9 @@ tasks.withType<Test> {
 
     // Equivalent to reuseForks=false in Maven
     forkEvery = 1
+    
+    // Limit each test to 5 minutes (300 seconds)
+    timeout = Duration.ofMinutes(5)
 }
 
 tasks.withType<JavaCompile> {
