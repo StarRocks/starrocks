@@ -15,7 +15,6 @@
 package com.starrocks.sql.analyzer;
 
 import com.google.common.base.Strings;
-import com.starrocks.common.util.Util;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.AstVisitorExtendInterface;
 import com.starrocks.sql.ast.RecoverDbStmt;
@@ -42,32 +41,26 @@ public class BasicDbStmtAnalyzer {
 
         @Override
         public Void visitUseDbStatement(UseDbStmt statement, ConnectContext context) {
-            String catalogName = Util.normalizeName(getCatalogNameIfNotSet(statement.getCatalogName(), context));
-            statement.setCatalogName(catalogName);
+            if (Strings.isNullOrEmpty(context.getCurrentCatalog())) {
+                throw new SemanticException(PARSER_ERROR_MSG.noCatalogSelected());
+            }
             return null;
         }
 
         @Override
         public Void visitRecoverDbStatement(RecoverDbStmt statement, ConnectContext context) {
-            statement.setCatalogName(getCatalogNameIfNotSet(statement.getCatalogName(), context));
+            if (Strings.isNullOrEmpty(context.getCurrentCatalog())) {
+                throw new SemanticException(PARSER_ERROR_MSG.noCatalogSelected());
+            }
             return null;
         }
 
         @Override
         public Void visitShowCreateDbStatement(ShowCreateDbStmt statement, ConnectContext context) {
-            statement.setCatalogName(getCatalogNameIfNotSet(statement.getCatalogName(), context));
-            return null;
-        }
-
-        private String getCatalogNameIfNotSet(String currentCatalogName, ConnectContext context) {
-            String result = currentCatalogName;
-            if (currentCatalogName == null) {
-                if (Strings.isNullOrEmpty(context.getCurrentCatalog())) {
-                    throw new SemanticException(PARSER_ERROR_MSG.noCatalogSelected());
-                }
-                result = context.getCurrentCatalog();
+            if (Strings.isNullOrEmpty(context.getCurrentCatalog())) {
+                throw new SemanticException(PARSER_ERROR_MSG.noCatalogSelected());
             }
-            return result;
+            return null;
         }
     }
 }

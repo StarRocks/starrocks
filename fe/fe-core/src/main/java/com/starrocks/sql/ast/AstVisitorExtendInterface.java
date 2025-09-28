@@ -108,17 +108,11 @@ public interface AstVisitorExtendInterface<R, C> extends AstVisitor<R, C> {
         return visitDDLStatement(statement, context);
     }
 
-    default R visitShowCreateDbStatement(ShowCreateDbStmt statement, C context) {
-        return visitShowStatement(statement, context);
-    }
 
     default R visitAlterDatabaseRenameStatement(AlterDatabaseRenameStatement statement, C context) {
         return visitDDLStatement(statement, context);
     }
 
-    default R visitRecoverDbStatement(RecoverDbStmt statement, C context) {
-        return visitDDLStatement(statement, context);
-    }
 
     default R visitShowDataDistributionStatement(ShowDataDistributionStmt statement, C context) {
         return visitShowStatement(statement, context);
@@ -251,20 +245,6 @@ public interface AstVisitorExtendInterface<R, C> extends AstVisitor<R, C> {
     }
 
     default R visitDropMaterializedViewStatement(DropMaterializedViewStmt statement, C context) {
-        return visitDDLStatement(statement, context);
-    }
-
-    // ---------------------------------------- Catalog Statement ------------------------------------------------------
-
-    default R visitCreateCatalogStatement(CreateCatalogStmt statement, C context) {
-        return visitDDLStatement(statement, context);
-    }
-
-    default R visitShowCreateExternalCatalogStatement(ShowCreateExternalCatalogStmt statement, C context) {
-        return visitShowStatement(statement, context);
-    }
-
-    default R visitAlterCatalogStatement(AlterCatalogStmt statement, C context) {
         return visitDDLStatement(statement, context);
     }
 
