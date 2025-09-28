@@ -68,18 +68,6 @@ The function uses different encoding strategies for different data types to ensu
 
 ## Examples
 
-### Basic usage
-
-```sql
-SELECT 
-    id,
-    name,
-    score,
-    encode_sort_key(name, score) as sort_key
-FROM students
-ORDER BY sort_key;
-```
-
 ### Generated sort key column
 
 ```sql
@@ -108,15 +96,6 @@ CREATE TABLE json_data (
         )
     )
 ) ORDER BY (sort_key);
-```
-
-### Range queries
-
-```sql
--- Find all records with region='US' and score between 80 and 90
-SELECT * FROM user_analytics
-WHERE sort_key >= encode_sort_key('US', 90.0, '1900-01-01')
-  AND sort_key < encode_sort_key('US', 80.0, '1900-01-01');
 ```
 
 ## Limitations

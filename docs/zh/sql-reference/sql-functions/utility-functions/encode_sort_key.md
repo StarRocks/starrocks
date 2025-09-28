@@ -68,18 +68,6 @@ encode_sort_key(column1, column2, ..., columnN)
 
 ## 示例
 
-### 基本用法
-
-```sql
-SELECT 
-    id,
-    name,
-    score,
-    encode_sort_key(name, score) as sort_key
-FROM students
-ORDER BY sort_key;
-```
-
 ### 生成排序键列
 
 ```sql
@@ -108,15 +96,6 @@ CREATE TABLE json_data (
         )
     )
 ) ORDER BY (sort_key);
-```
-
-### 范围查询
-
-```sql
--- 查找region='US'且score在80到90之间的所有记录
-SELECT * FROM user_analytics
-WHERE sort_key >= encode_sort_key('US', 90.0, '1900-01-01')
-  AND sort_key < encode_sort_key('US', 80.0, '1900-01-01');
 ```
 
 ## 限制
