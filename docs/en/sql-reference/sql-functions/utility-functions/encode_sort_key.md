@@ -22,7 +22,7 @@ Returns a value of the VARBINARY type representing the composite sort key.
 
 ## Supported data types
 
-### Supported types
+The following data types are supported:
 
 | Data Type | Description |
 |-----------|-------------|
@@ -38,8 +38,6 @@ Returns a value of the VARBINARY type representing the composite sort key.
 | `DATE` | Date value |
 | `DATETIME` | Date and time value |
 | `TIMESTAMP` | Timestamp value |
-
-### Unsupported types
 
 The following complex types are not supported and will return an error:
 
@@ -120,4 +118,3 @@ Complex types like JSON, ARRAY, MAP, and STRUCT cannot be directly encoded. Use 
 - Keep the number of columns reasonable (typically < 10)
 - Prefer shorter string columns when possible
 - Consider using hash functions for very long strings
-
