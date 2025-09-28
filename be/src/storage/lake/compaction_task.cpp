@@ -90,4 +90,21 @@ Status CompactionTask::fill_compaction_segment_info(TxnLogPB_OpCompaction* op_co
     return Status::OK();
 }
 
+bool CompactionTask::should_enable_pk_parallel_execution(int64_t input_bytes) {
+    if (_tablet.get_schema()->keys_type() != KeysType::PRIMARY_KEYS) {
+        return false;
+    }
+    // pk parallel execution is only work when all conditions are met:
+    // 1. whether use cloud native index
+    // 2. whether use light compaction publish
+    // 3. whether input_bytes is large enough
+    auto metadata = _tablet.metadata();
+    bool use_cloud_native_index = metadata->enable_persistent_index() &&
+                                  metadata->persistent_index_type() == PersistentIndexTypePB::CLOUD_NATIVE;
+    bool use_light_compaction_publish = config::enable_light_pk_compaction_publish &&
+                                        StorageEngine::instance()->get_persistent_index_store(_tablet.id()) != nullptr;
+    return use_cloud_native_index && use_light_compaction_publish &&
+           input_bytes >= config::pk_parallel_execution_threshold_bytes;
+}
+
 } // namespace starrocks::lake

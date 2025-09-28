@@ -58,7 +58,7 @@ Status VerticalCompactionTask::execute(CancelFunc cancel_func, ThreadPool* flush
     RETURN_IF_ERROR(writer->open());
     DeferOp defer([&]() { writer->close(); });
 
-    if (input_bytes >= config::pk_parallel_execution_threshold_bytes) {
+    if (should_enable_pk_parallel_execution(input_bytes)) {
         writer->try_enable_pk_parallel_execution();
     }
 
