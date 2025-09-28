@@ -1099,11 +1099,11 @@ public class TabletScheduler extends FrontendDaemon {
                     || deleteBadReplica(tabletCtx, force)
                     || deleteBackendUnavailable(tabletCtx, force)
                     || deleteCloneOrDecommissionReplica(tabletCtx, force)
-                    || deleteLocationMismatchReplica(tabletCtx, force)
                     || deleteReplicaWithFailedVersion(tabletCtx, force)
                     || deleteReplicaWithLowerVersion(tabletCtx, force)
                     || deleteReplicaOnSameHost(tabletCtx, force)
                     || deleteReplicaChosenByRebalancer(tabletCtx, force)
+                    || deleteLocationMismatchReplica(tabletCtx, force)
                     || deleteReplicaOnHighLoadBackend(tabletCtx, force)) {
                 // if we delete at least one redundant replica, we still throw a SchedException with status FINISHED
                 // to remove this tablet from the pendingTablets(consider it as finished)
