@@ -121,6 +121,3 @@ Complex types like JSON, ARRAY, MAP, and STRUCT cannot be directly encoded. Use 
 - Prefer shorter string columns when possible
 - Consider using hash functions for very long strings
 
-### Version compatibility
-
-The internal encoding format may change between StarRocks versions. Avoid storing encoded keys for long-term persistence.
