@@ -145,8 +145,3 @@ Complex types like JSON, ARRAY, MAP, and STRUCT cannot be directly encoded. Use 
 ### Version compatibility
 
 The internal encoding format may change between StarRocks versions. Avoid storing encoded keys for long-term persistence.
-
-## Related functions
-
-- [hash](../hash-functions/hash.md): Create hash-based keys for equality comparisons
-- [concat](../string-functions/concat.md): String concatenation for simple composite keys

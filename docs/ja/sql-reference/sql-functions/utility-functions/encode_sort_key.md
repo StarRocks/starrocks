@@ -145,8 +145,3 @@ JSON、ARRAY、MAP、STRUCTなどの複雑な型は直接エンコードでき�
 ### バージョン互換性
 
 StarRocksバージョン間で内部エンコーディング形式が変更される可能性があります。長期永続化のためにエンコードされたキーを保存しないでください。
-
-## 関連関数
-
-- [hash](../hash-functions/hash.md): 等価比較用のハッシュベースのキーを作成
-- [concat](../string-functions/concat.md): シンプルな複合キー用の文字列連結

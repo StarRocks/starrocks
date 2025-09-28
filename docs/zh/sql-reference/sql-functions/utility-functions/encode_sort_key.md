@@ -145,8 +145,3 @@ WHERE sort_key >= encode_sort_key('US', 90.0, '1900-01-01')
 ### 版本兼容性
 
 StarRocks版本间的内部编码格式可能发生变化。避免为长期持久化存储编码键。
-
-## 相关函数
-
-- [hash](../hash-functions/hash.md): 为相等比较创建基于哈希的键
-- [concat](../string-functions/concat.md): 简单复合键的字符串连接
