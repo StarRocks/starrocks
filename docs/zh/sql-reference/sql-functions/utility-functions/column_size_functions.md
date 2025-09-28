@@ -13,7 +13,7 @@ displayed_sidebar: docs
 ### 语法
 
 ```SQL
-column_size(column_name)
+SELECT column_size(column_name) FROM table_name [_META_];
 ```
 
 ### 参数
@@ -31,7 +31,7 @@ column_size(column_name)
 ### 语法
 
 ```SQL
-column_compressed_size(column_name)
+SELECT column_compressed_size(column_name) FROM table_name [_META_];
 ```
 
 ### 参数
@@ -47,8 +47,8 @@ column_compressed_size(column_name)
 - 两个函数都必须与 `[_META_]` 提示一起使用才能访问元数据信息。
 - 这些函数使用 META_SCAN 操作符扫描底层段文件的元数据。
 - 对于复杂数据类型（JSON、ARRAY、MAP、STRUCT），这些函数递归计算所有子列的大小。
-- `column_size` 返回所有段中列数据的总内存占用。
-- `column_compressed_size` 返回通过序数索引范围的数据页大小求和计算的总压缩大小。
+- `column_size` 返回未压缩的列大小。
+- `column_compressed_size` 返回压缩的磁盘大小。
 
 ## 示例
 
@@ -61,7 +61,3 @@ SELECT
     column_compressed_size(description) as desc_compressed_size
 FROM products [_META_];
 ```
-
-## 相关函数
-
-- [META_SCAN 操作符](../../../using_starrocks/Cost_based_optimizer.md): 有关元数据扫描的更多信息。

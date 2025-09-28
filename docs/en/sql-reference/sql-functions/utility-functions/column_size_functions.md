@@ -13,7 +13,7 @@ Returns the decompressed size of a column in bytes.
 ### Syntax
 
 ```SQL
-column_size(column_name)
+SELECT column_size(column_name) FROM table_name [_META_];
 ```
 
 ### Parameters
@@ -31,7 +31,7 @@ Returns the compressed size of a column in bytes.
 ### Syntax
 
 ```SQL
-column_compressed_size(column_name)
+SELECT column_compressed_size(column_name) FROM table_name [_META_];
 ```
 
 ### Parameters
@@ -47,8 +47,8 @@ Returns the compressed size of the column in bytes as a BIGINT value.
 - Both functions must be used with the `[_META_]` hint to access metadata information.
 - The functions scan the metadata of underlying segment files using the META_SCAN operator.
 - For complex data types (JSON, ARRAY, MAP, STRUCT), the functions recursively calculate the size of all sub-columns.
-- `column_size` returns the total memory footprint of the column data across all segments.
-- `column_compressed_size` returns the total compressed size calculated by summing data page sizes via ordinal index ranges.
+- `column_size` returns the uncompressed column size.
+- `column_compressed_size` returns the compressed on-disk size.
 
 ## Examples
 
@@ -61,7 +61,3 @@ SELECT
     column_compressed_size(description) as desc_compressed_size
 FROM products [_META_];
 ```
-
-## See also
-
-- [META_SCAN operator](../../../using_starrocks/Cost_based_optimizer.md): For more information about metadata scanning.
