@@ -773,7 +773,7 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
     @Override
     public ParseNode visitShowCreateDbStatement(com.starrocks.sql.parser.StarRocksParser.ShowCreateDbStatementContext context) {
         String dbName = ((Identifier) visit(context.identifier())).getValue();
-        return new ShowCreateDbStmt(dbName, createPos(context));
+        return new ShowCreateDbStmt(normalizeName(dbName), createPos(context));
     }
 
     @Override
@@ -787,7 +787,7 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
     @Override
     public ParseNode visitRecoverDbStmt(com.starrocks.sql.parser.StarRocksParser.RecoverDbStmtContext context) {
         String dbName = ((Identifier) visit(context.identifier())).getValue();
-        return new RecoverDbStmt(dbName, createPos(context));
+        return new RecoverDbStmt(normalizeName(dbName), createPos(context));
     }
 
     @Override
@@ -2361,7 +2361,7 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
             com.starrocks.sql.parser.StarRocksParser.CreateExternalCatalogStatementContext context) {
         boolean ifNotExists = context.IF() != null;
         Identifier identifier = (Identifier) visit(context.identifierOrString());
-        String catalogName = identifier.getValue();
+        String catalogName = normalizeName(identifier.getValue());
         String comment = null;
         if (context.comment() != null) {
             comment = ((StringLiteral) visit(context.comment())).getStringValue();
@@ -2390,7 +2390,7 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
     public ParseNode visitShowCreateExternalCatalogStatement(
             com.starrocks.sql.parser.StarRocksParser.ShowCreateExternalCatalogStatementContext context) {
         Identifier identifier = (Identifier) visit(context.catalogName);
-        String catalogName = identifier.getValue();
+        String catalogName = normalizeName(identifier.getValue());
         return new ShowCreateExternalCatalogStmt(catalogName, createPos(context));
     }
 
@@ -2406,7 +2406,7 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
 
     @Override
     public ParseNode visitAlterCatalogStatement(com.starrocks.sql.parser.StarRocksParser.AlterCatalogStatementContext context) {
-        String catalogName = ((Identifier) visit(context.catalogName)).getValue();
+        String catalogName = normalizeName(((Identifier) visit(context.catalogName)).getValue());
         AlterClause alterClause = (AlterClause) visit(context.modifyPropertiesClause());
         return new AlterCatalogStmt(catalogName, alterClause, createPos(context));
     }

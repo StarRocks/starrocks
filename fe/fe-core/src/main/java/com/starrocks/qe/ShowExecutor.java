@@ -687,7 +687,7 @@ public class ShowExecutor {
 
         @Override
         public ShowResultSet visitShowCreateDbStatement(ShowCreateDbStmt statement, ConnectContext context) {
-            String catalogName = statement.getCatalogName();
+            String catalogName = context.getCurrentCatalog();
             String dbName = statement.getDb();
             List<List<String>> rows = Lists.newArrayList();
 
