@@ -631,17 +631,17 @@ public final class AggregatedMaterializedViewRewriter extends MaterializedViewRe
         // add projection to make sure that the output columns keep the same with the origin query
         if (queryAgg.getProjection() == null) {
             for (int i = 0; i < originalGroupKeys.size(); i++) {
-                addProjection(newProjection, originalGroupKeys.get(i), newGroupByKeyColumnRefs.get(i));
+                addIntoProjection(newProjection, originalGroupKeys.get(i), newGroupByKeyColumnRefs.get(i));
             }
             for (Map.Entry<ColumnRefOperator, CallOperator> entry : queryAgg.getAggregations().entrySet()) {
-                addProjection(newProjection, entry.getKey(), queryColumnRefToScalarMap.get(entry.getKey()));
+                addIntoProjection(newProjection, entry.getKey(), queryColumnRefToScalarMap.get(entry.getKey()));
             }
         } else {
             Map<ColumnRefOperator, ScalarOperator> originalMap = queryAgg.getProjection().getColumnRefMap();
             ReplaceColumnRefRewriter rewriter = new ReplaceColumnRefRewriter(queryColumnRefToScalarMap);
             for (Map.Entry<ColumnRefOperator, ScalarOperator> entry : originalMap.entrySet()) {
                 ScalarOperator rewritten = rewriter.rewrite(entry.getValue());
-                addProjection(newProjection, entry.getKey(), rewritten);
+                addIntoProjection(newProjection, entry.getKey(), rewritten);
             }
         }
         Projection projection = new Projection(newProjection);
@@ -652,9 +652,12 @@ public final class AggregatedMaterializedViewRewriter extends MaterializedViewRe
         return rewriteOp;
     }
 
-    private void addProjection(Map<ColumnRefOperator, ScalarOperator> newProjection,
-                               ColumnRefOperator columnRefOperator,
-                               ScalarOperator scalarOperator) {
+    /**
+     * Add columnRefOperator and scalarOperator into newProjection and ensure their type is the same.
+     */
+    private void addIntoProjection(Map<ColumnRefOperator, ScalarOperator> newProjection,
+                                   ColumnRefOperator columnRefOperator,
+                                   ScalarOperator scalarOperator) {
         // Ensure columnRefOperator's type is exactly the same as scalarOperator's type,
         // This can happen when mv and the query's type are different but they are the same columns, such as:
         // query: char(4)
@@ -769,7 +772,7 @@ public final class AggregatedMaterializedViewRewriter extends MaterializedViewRe
 
                 ColumnRefOperator outerProject = context.getQueryRefFactory()
                                 .create(copyProject, copyProject.getType(), copyProject.isNullable());
-                addProjection(newProjection, outerProject, copyProject);
+                addIntoProjection(newProjection, outerProject, copyProject);
                 newAggregations.put(innerAgg, realAggregate);
 
                 // replace original projection
@@ -869,7 +872,7 @@ public final class AggregatedMaterializedViewRewriter extends MaterializedViewRe
                     aggColRef.isNullable());
             aggregateMapping.put(aggColRef, newAggColRef);
             rewrittens.put(newAggColRef, newAggregate);
-            addProjection(newProjection, newAggColRef, genRollupProject(aggCall, newAggColRef, hasGroupByKeys));
+            addIntoProjection(newProjection, newAggColRef, genRollupProject(aggCall, newAggColRef, hasGroupByKeys));
         }
 
         return rewrittens;
