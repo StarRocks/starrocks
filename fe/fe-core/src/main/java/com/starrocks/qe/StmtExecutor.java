@@ -982,6 +982,8 @@ public class StmtExecutor {
         context.getAuditEventBuilder().addScanBytes(execStats.getScanBytes() != null ? execStats.getScanBytes() : 0);
         context.getAuditEventBuilder().addScanRows(execStats.getScanRows() != null ? execStats.getScanRows() : 0);
         context.getAuditEventBuilder().addSpilledBytes(execStats.spillBytes != null ? execStats.spillBytes : 0);
+        context.getAuditEventBuilder().addReadLocalCnt(execStats.readLocalCnt != null ? execStats.readLocalCnt : 0);
+        context.getAuditEventBuilder().addReadRemoteCnt(execStats.readRemoteCnt != null ? execStats.readRemoteCnt : 0);
         context.getAuditEventBuilder().setReturnRows(execStats.returnedRows == null ? 0 : execStats.returnedRows);
         context.getAuditEventBuilder().addTransmittedBytes(execStats.transmittedBytes != null ? execStats.transmittedBytes : 0);
     }
@@ -2432,6 +2434,12 @@ public class StmtExecutor {
         if (statisticsForAuditLog.spillBytes == null) {
             statisticsForAuditLog.spillBytes = 0L;
         }
+        if (statisticsForAuditLog.readLocalCnt == null) {
+            statisticsForAuditLog.readLocalCnt = 0L;
+        }
+        if (statisticsForAuditLog.readRemoteCnt == null) {
+            statisticsForAuditLog.readRemoteCnt = 0L;
+        }
         return statisticsForAuditLog;
     }
 
@@ -3240,6 +3248,8 @@ public class StmtExecutor {
             queryDetail.setCpuCostNs(statistics.cpuCostNs == null ? -1 : statistics.cpuCostNs);
             queryDetail.setMemCostBytes(statistics.memCostBytes == null ? -1 : statistics.memCostBytes);
             queryDetail.setSpillBytes(statistics.spillBytes == null ? -1 : statistics.spillBytes);
+            queryDetail.calculateCacheMissRatio(statistics.readLocalCnt == null ? 0 : statistics.readLocalCnt,
+                    statistics.readRemoteCnt == null ? 0 : statistics.readRemoteCnt);
         }
         queryDetail.setCatalog(ctx.getCurrentCatalog());
 
