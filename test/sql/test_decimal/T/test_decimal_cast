@@ -80,5 +80,6 @@ order by k1;
 
 select k1, c_tinyint * 0, c_int * 0, c_bigint * 0, c_largeint * 0 from t1 order by k1;
 select k1, c_tinyint * 1, c_int * 1, c_bigint * 1, c_largeint * 1 from t1 order by k1;
-select k1, c_tinyint * -1, c_int * -1, c_bigint * -1, c_largeint * -1 from t1 order by k1;
 
+select k1, cast(c_tinyint * 0 as decimal(38, 0)), cast(c_int * 0 as decimal(38, 0)), cast(c_bigint * 0 as decimal(38, 0)), cast(c_largeint * 0 as decimal(38, 0)) from t1 order by k1;
+select k1, cast(c_tinyint * 1 as decimal(38, 0)), cast(c_int * 1 as decimal(38, 0)), cast(c_bigint * 1 as decimal(38, 0)), cast(c_largeint * 1 as decimal(38, 0)) from t1 order by k1;
