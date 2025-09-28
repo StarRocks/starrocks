@@ -1414,8 +1414,8 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
         PartitionRefreshStrategy partitionRefreshStrategy =
                 PartitionRefreshStrategy.of(tableProperty.getPartitionRefreshStrategy());
         if (tableProperty.isSetPartitionRefreshStrategy()
-                && PartitionRefreshStrategy.ADAPTIVE.equals(partitionRefreshStrategy)) {
-            return PartitionRefreshStrategy.ADAPTIVE;
+                && !PartitionRefreshStrategy.STRICT.equals(partitionRefreshStrategy)) {
+            return partitionRefreshStrategy;
         } else {
             // if mv has `partition_refresh_number` property, use it first.
             // for compatibility, if `partition_refresh_number` is set and not equal to 1,
