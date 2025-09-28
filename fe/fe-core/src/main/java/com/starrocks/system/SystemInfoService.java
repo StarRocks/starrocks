@@ -629,7 +629,8 @@ public class SystemInfoService implements GsonPostProcessable {
         boolean needCheckWithoutForce = !dropBackendClause.isForce();
 
         for (Pair<String, Integer> pair : hostPortPairs) {
-            dropBackend(pair.first, pair.second, dropBackendClause.getWarehouse(), dropBackendClause.cngroupName, needCheckWithoutForce);
+            dropBackend(pair.first, pair.second, dropBackendClause.getWarehouse(), dropBackendClause.cngroupName,
+                    needCheckWithoutForce);
         }
     }
 
