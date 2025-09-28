@@ -268,7 +268,7 @@ TEST_F(SpillMemTableSinkTest, test_out_of_disk_space) {
     ASSERT_OK(block_manager->init());
     std::unique_ptr<TabletWriter> tablet_writer = std::make_unique<HorizontalGeneralTabletWriter>(
             _tablet_mgr.get(), tablet_id, _tablet_schema, txn_id, false);
-    SpillMemTableSink sink(block_manager.get(), tablet_writer.get(), &_dummy_runtime_profile, true);
+    SpillMemTableSink sink(block_manager.get(), tablet_writer.get(), &_dummy_runtime_profile);
     auto chunk = gen_data(kChunkSize, 0);
     starrocks::SegmentPB segment0;
     ASSERT_OK(sink.flush_chunk(*chunk, &segment0, false));
