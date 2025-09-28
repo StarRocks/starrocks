@@ -1205,7 +1205,8 @@ public class ExplainAnalyzer {
         }
         Counter minCounter = uniqueMetrics.getCounter(RuntimeProfile.MERGED_INFO_PREFIX_MIN + name);
         Counter maxCounter = uniqueMetrics.getCounter(RuntimeProfile.MERGED_INFO_PREFIX_MAX + name);
-        boolean needHighlight = enableHighlight && colorExplainOutput && nodeInfo.isTimeConsumingMetric(uniqueMetrics, name);
+        boolean needHighlight =
+                enableHighlight && colorExplainOutput && nodeInfo.isTimeConsumingMetric(uniqueMetrics, name);
         List<Object> items = Lists.newArrayList();
         if (needHighlight) {
             items.add(getBackGround());
@@ -1729,9 +1730,10 @@ public class ExplainAnalyzer {
     private Set<String> getScanKnownMetrics() {
         return Sets.newHashSet(
                 "ShortKeyFilter", "ShortKeyFilterRows", "BitmapIndexFilter", "BitmapIndexFilterRows",
-                "BloomFilterFilter", "BloomFilterFilterRows", "ZoneMapFilter", "ZoneMapFilterRows",
+                "BloomFilterFilter", "BloomFilterFilterRows", "ZoneMapIndexFilter", "ZoneMapIndexFilterRows",
                 "PredFilter", "PredFilterRows", "GinFilter", "GinFilterRows", "VectorIndexFilter",
                 "VectorIndexFilterRows", "DelVecFilter", "DelVecFilterRows", "RuntimeFilter", "RuntimeFilterRows",
+                "SegmentRuntimeZoneMapFilterRows", "SegmentZoneMapFilterRows",
                 "RawRowsRead", "RowsRead", "DictDecode", "DictDecodeCount", "ChunkCopy",
                 "IOTime", "BytesRead", "CompressedBytesRead", "UncompressedBytesRead", "ReadPagesNum",
                 "CachedPagesNum", "BlockFetch", "BlockFetchCount", "BlockSeek", "BlockSeekCount", "DecompressTime",
