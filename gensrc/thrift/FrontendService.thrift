@@ -787,6 +787,8 @@ struct TAuditStatistics {
     8: optional i64 spill_bytes
     10: optional i64 transmitted_bytes
     9: optional list<TAuditStatisticsItem> stats_items
+    11: optional i64 read_local_cnt
+    12: optional i64 read_remote_cnt
 }
 
 struct TReportAuditStatisticsParams {

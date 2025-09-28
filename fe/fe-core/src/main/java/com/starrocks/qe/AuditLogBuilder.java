@@ -109,6 +109,12 @@ public class AuditLogBuilder extends Plugin implements AuditPlugin {
                         continue;
                     }
                 }
+                if (value instanceof String) {
+                    String stringValue = (String) value;
+                    if ((stringValue == null || stringValue.isEmpty()) && af.ignore_empty()) {
+                        continue;
+                    }
+                }
 
                 if (Config.audit_log_json_format) {
                     logMap.put(af.value(), value);
