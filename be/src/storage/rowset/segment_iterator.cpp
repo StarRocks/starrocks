@@ -2790,6 +2790,13 @@ Status SegmentIterator::reset(const SparseRange<>& scan_range) {
         RETURN_IF_ERROR(_column_iterators[column_index]->convert_sparse_range_to_io_range(_scan_range));
     }
 
+    // Reset context to the beginning of the new scan range
+    if (_context != nullptr) {
+        for (ColumnIterator* iter : _context->_column_iterators) {
+            RETURN_IF_ERROR(iter->seek_to_ordinal(scan_range.begin()));
+        }
+    }
+
     return Status::OK();
 }
 

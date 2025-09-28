@@ -15,6 +15,7 @@
 #pragma once
 
 #include <memory>
+#include <unordered_map>
 #include <vector>
 
 #include "column/chunk.h"
@@ -23,6 +24,7 @@
 #include "storage/row_source_mask.h"
 #include "storage/rowset/rowset.h"
 #include "storage/rowset/rowset_options.h"
+#include "storage/rowset/segment_options.h"
 #include "storage/seek_range.h"
 #include "storage/tablet.h"
 #include "storage/tablet_reader_params.h"
@@ -92,6 +94,10 @@ private:
     Status _init_collector_for_pk_index_read();
     Status _init_compaction_column_paths(const TabletReaderParams& read_params);
 
+    // Helper method to generate cache key for segment iterator
+    std::string _generate_segment_cache_key(const RowsetSharedPtr& rowset, const SegmentSharedPtr& segment,
+                                            const SegmentReadOptions& options);
+
     TabletSharedPtr _tablet;
     TabletSchemaCSPtr _tablet_schema;
     Version _version;
@@ -107,6 +113,14 @@ private:
 
     std::vector<RowsetSharedPtr> _rowsets;
     std::shared_ptr<ChunkIterator> _collect_iter;
+
+    // Cache for segment iterators to enable reuse
+    struct CachedSegmentIterator {
+        ChunkIteratorPtr iterator;
+        SegmentReadOptions last_options;
+        bool is_initialized = false;
+    };
+    std::unordered_map<std::string, CachedSegmentIterator> _cached_segment_iterators;
 
     OlapReaderStatistics _stats;
 
