@@ -35,6 +35,7 @@ import com.starrocks.sql.optimizer.operator.logical.LogicalAggregationOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalUnionOperator;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
+import com.starrocks.sql.optimizer.operator.scalar.CastOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rewrite.ReplaceColumnRefRewriter;
@@ -630,17 +631,17 @@ public final class AggregatedMaterializedViewRewriter extends MaterializedViewRe
         // add projection to make sure that the output columns keep the same with the origin query
         if (queryAgg.getProjection() == null) {
             for (int i = 0; i < originalGroupKeys.size(); i++) {
-                newProjection.put(originalGroupKeys.get(i), newGroupByKeyColumnRefs.get(i));
+                addProjection(newProjection, originalGroupKeys.get(i), newGroupByKeyColumnRefs.get(i));
             }
             for (Map.Entry<ColumnRefOperator, CallOperator> entry : queryAgg.getAggregations().entrySet()) {
-                newProjection.put(entry.getKey(), queryColumnRefToScalarMap.get(entry.getKey()));
+                addProjection(newProjection, entry.getKey(), queryColumnRefToScalarMap.get(entry.getKey()));
             }
         } else {
             Map<ColumnRefOperator, ScalarOperator> originalMap = queryAgg.getProjection().getColumnRefMap();
             ReplaceColumnRefRewriter rewriter = new ReplaceColumnRefRewriter(queryColumnRefToScalarMap);
             for (Map.Entry<ColumnRefOperator, ScalarOperator> entry : originalMap.entrySet()) {
                 ScalarOperator rewritten = rewriter.rewrite(entry.getValue());
-                newProjection.put(entry.getKey(), rewritten);
+                addProjection(newProjection, entry.getKey(), rewritten);
             }
         }
         Projection projection = new Projection(newProjection);
@@ -649,6 +650,23 @@ public final class AggregatedMaterializedViewRewriter extends MaterializedViewRe
         OptExpression rewriteOp = OptExpression.create(newAggOp, mvOptExpr);
         deriveLogicalProperty(rewriteOp);
         return rewriteOp;
+    }
+
+    private void addProjection(Map<ColumnRefOperator, ScalarOperator> newProjection,
+                               ColumnRefOperator columnRefOperator,
+                               ScalarOperator scalarOperator) {
+        // Ensure columnRefOperator's type is exactly the same as scalarOperator's type,
+        // This can happen when mv and the query's type are different but they are the same columns, such as:
+        // query: char(4)
+        // mv   : varchar(-1)
+        if (!columnRefOperator.getType().equals(scalarOperator.getType())) {
+            // add cast if type is not the same
+            // TODO: may it's safe to remove the cast if the type is compatible
+            ScalarOperator newScalarOperator = new CastOperator(columnRefOperator.getType(), scalarOperator, true);
+            newProjection.put(columnRefOperator, newScalarOperator);
+        } else {
+            newProjection.put(columnRefOperator, scalarOperator);
+        }
     }
 
     /**
@@ -751,7 +769,7 @@ public final class AggregatedMaterializedViewRewriter extends MaterializedViewRe
 
                 ColumnRefOperator outerProject = context.getQueryRefFactory()
                                 .create(copyProject, copyProject.getType(), copyProject.isNullable());
-                newProjection.put(outerProject, copyProject);
+                addProjection(newProjection, outerProject, copyProject);
                 newAggregations.put(innerAgg, realAggregate);
 
                 // replace original projection
@@ -851,7 +869,7 @@ public final class AggregatedMaterializedViewRewriter extends MaterializedViewRe
                     aggColRef.isNullable());
             aggregateMapping.put(aggColRef, newAggColRef);
             rewrittens.put(newAggColRef, newAggregate);
-            newProjection.put(newAggColRef, genRollupProject(aggCall, newAggColRef, hasGroupByKeys));
+            addProjection(newProjection, newAggColRef, genRollupProject(aggCall, newAggColRef, hasGroupByKeys));
         }
 
         return rewrittens;
