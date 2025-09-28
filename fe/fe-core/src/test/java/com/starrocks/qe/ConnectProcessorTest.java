@@ -40,6 +40,7 @@ import com.starrocks.analysis.AccessTestUtil;
 import com.starrocks.authentication.AuthenticationMgr;
 import com.starrocks.authorization.PrivilegeBuiltinConstants;
 import com.starrocks.common.jmockit.Deencapsulation;
+import com.starrocks.common.profile.Tracers;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.mysql.MysqlCapability;
 import com.starrocks.mysql.MysqlChannel;
@@ -72,6 +73,9 @@ import org.xnio.StreamConnection;
 
 import java.io.IOException;
 import java.nio.ByteBuffer;
+import java.nio.ByteOrder;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicReference;
 
@@ -727,5 +731,113 @@ public class ConnectProcessorTest extends DDLTestBase {
 
         Assertions.assertEquals(MysqlCommand.COM_STMT_EXECUTE, myContext.getCommand());
         Assertions.assertTrue(ctx.getState().isQuery());
+    }
+
+    /**
+     * Test handleExecute method with tracing for query statements
+     */
+    @Test
+    public void testHandleExecuteTracingForQuery() throws Exception {
+        // Create a prepared statement packet for COM_STMT_EXECUTE
+        ByteBuffer executePacket = createExecutePacket(1, new ArrayList<>());
+        ConnectContext ctx = initMockContext(mockChannel(executePacket), GlobalStateMgr.getCurrentState());
+        
+        // Create a prepared statement context with a query statement
+        PrepareStmt prepareStmt = createMockPrepareStmt("SELECT 1 + 2");
+        PrepareStmtContext prepareCtx = new PrepareStmtContext(prepareStmt, ctx, null);
+        ctx.putPreparedStmt("1", prepareCtx);
+        
+        ConnectProcessor processor = new ConnectProcessor(ctx);
+        
+        // Track method calls
+        AtomicReference<Boolean> tracersRegistered = new AtomicReference<>(false);
+        AtomicReference<Boolean> tracersInitialized = new AtomicReference<>(false);
+        
+        // Mock Tracers
+        new MockUp<Tracers>() {
+            @Mock
+            public void register(ConnectContext context) {
+                tracersRegistered.set(true);
+            }
+            
+            @Mock
+            public void init(ConnectContext context, Tracers.Mode traceMode, String traceModule) {
+                tracersInitialized.set(true);
+            }
+        };
+        
+        // Mock StmtExecutor
+        new MockUp<StmtExecutor>() {
+            @Mock
+            public void execute() throws Exception {
+                // Do nothing for test
+            }
+            
+            @Mock
+            public PQueryStatistics getQueryStatisticsForAuditLog() {
+                return statistics;
+            }
+            
+            @Mock
+            public StatementBase getParsedStmt() {
+                return prepareStmt;
+            }
+        };
+        
+        processor.processOnce();
+        
+        // Verify that tracers are properly initialized for query statements
+        Assertions.assertTrue(tracersRegistered.get(), "Tracers should be registered for query statements");
+        Assertions.assertTrue(tracersInitialized.get(), "Tracers should be initialized for query statements");
+        Assertions.assertEquals(MysqlCommand.COM_STMT_EXECUTE, myContext.getCommand());
+        Assertions.assertEquals("SELECT 1 + 2 AS `1 + 2`", processor.executor.getOriginStmtInString());
+    }
+    
+    /**
+     * Helper method to create a COM_STMT_EXECUTE packet
+     */
+    private ByteBuffer createExecutePacket(int stmtId, List<Object> params) {
+        MysqlSerializer serializer = MysqlSerializer.newInstance();
+        
+        // Command type COM_STMT_EXECUTE (0x17 = 23)
+        serializer.writeInt1(23);
+        
+        // Statement ID
+        serializer.writeInt4(stmtId);
+        
+        // Flags (0 = CURSOR_TYPE_NO_CURSOR)
+        serializer.writeInt1(0);
+        
+        // Iteration count (always 1)
+        serializer.writeInt4(1);
+        
+        // NULL bitmap (empty for no parameters)
+        int nullBitmapLength = (params.size() + 7) / 8;
+        if (nullBitmapLength > 0) {
+            byte[] nullBitmap = new byte[nullBitmapLength];
+            serializer.writeBytes(nullBitmap);
+        }
+        
+        // new_params_bind_flag (0 = types not included)
+        if (params.size() > 0) {
+            serializer.writeInt1(0);
+        }
+        
+        return serializer.toByteBuffer().order(ByteOrder.LITTLE_ENDIAN);
+    }
+    
+    /**
+     * Helper method to create a mock PrepareStmt
+     */
+    private PrepareStmt createMockPrepareStmt(String sql) {
+        try {
+            // Create a simple statement for testing
+            StatementBase innerStmt = UtFrameUtils.parseStmtWithNewParser(sql,
+                    UtFrameUtils.initCtxForNewPrivilege(UserIdentity.ROOT));
+            return new PrepareStmt("test_stmt", innerStmt, null);
+        } catch (Exception e) {
+            // Return a simple mock for test purposes
+            return new PrepareStmt("test_stmt", null, null);
+        }
     }
 }
