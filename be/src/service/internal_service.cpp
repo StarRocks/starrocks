@@ -470,23 +470,12 @@ Status PInternalServiceImplBase<T>::_exec_plan_fragment(brpc::Controller* cntl, 
                             MAX_CHUNK_SIZE, batch_size));
     }
 
-    bool is_pipeline = t_request.__isset.is_pipeline && t_request.is_pipeline;
+    bool is_pipeline = t_request.__isset.is_pipeline ? t_request.is_pipeline : true;
     VLOG(1) << "exec plan fragment, fragment_instance_id=" << print_id(t_request.params.fragment_instance_id)
             << ", coord=" << t_request.coord << ", backend=" << t_request.backend_num << ", is_pipeline=" << is_pipeline
             << ", chunk_size=" << t_request.query_options.batch_size;
-    if (is_pipeline) {
-        return _exec_plan_fragment_by_pipeline(t_request, t_request);
-    } else {
-        bool has_schema_table_sink = t_request.__isset.fragment && t_request.fragment.__isset.output_sink &&
-                                     t_request.fragment.output_sink.type == TDataSinkType::SCHEMA_TABLE_SINK;
-        // SchemaTableSink is not supported on the Pipeline engine, we have to allow it to be executed on non-pipeline engine temporarily,
-        // this will be removed in the future.
-        if (has_schema_table_sink) {
-            return _exec_plan_fragment_by_non_pipeline(t_request);
-        }
-        return Status::InvalidArgument(
-                "non-pipeline engine is no longer supported since 3.2, please set enable_pipeline_engine=true.");
-    }
+    // Force pipeline execution path
+    return _exec_plan_fragment_by_pipeline(t_request, t_request);
 }
 
 template <typename T>

@@ -95,7 +95,13 @@ Status BackendServiceBase::start_plan_fragment_execution(const TExecPlanFragment
     if (!exec_params.fragment.__isset.output_sink) {
         return Status::InternalError("missing sink in plan fragment");
     }
-    return _exec_env->fragment_mgr()->exec_plan_fragment(exec_params);
+    // Always execute with pipeline engine
+    pipeline::FragmentExecutor fragment_executor;
+    auto status = fragment_executor.prepare(_exec_env, exec_params, exec_params);
+    if (status.ok()) {
+        return fragment_executor.execute(_exec_env);
+    }
+    return status.is_duplicate_rpc_invocation() ? Status::OK() : status;
 }
 
 void BackendServiceBase::cancel_plan_fragment(TCancelPlanFragmentResult& return_val,
