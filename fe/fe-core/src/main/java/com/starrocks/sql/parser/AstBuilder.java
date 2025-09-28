@@ -685,14 +685,29 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
     @Override
     public ParseNode visitUseCatalogStatement(com.starrocks.sql.parser.StarRocksParser.UseCatalogStatementContext context) {
         StringLiteral literal = (StringLiteral) visit(context.string());
-        return new UseCatalogStmt(literal.getValue(), createPos(context));
+        String catalogParts = literal.getValue();
+        
+        // Parse and validate catalog name from the string literal
+        if (catalogParts == null || catalogParts.trim().isEmpty()) {
+            throw new ParsingException("You have an error in your SQL. The correct syntax is: USE 'CATALOG catalog_name'.",
+                    createPos(context));
+        }
+        
+        String[] splitParts = catalogParts.split("\\s+");
+        if (splitParts.length != 2 || !splitParts[0].equalsIgnoreCase("CATALOG")) {
+            throw new ParsingException("You have an error in your SQL. The correct syntax is: USE 'CATALOG catalog_name'.",
+                    createPos(context));
+        }
+        
+        String catalogName = normalizeName(splitParts[1]);
+        return new UseCatalogStmt(catalogName, createPos(context));
     }
 
     @Override
     public ParseNode visitSetCatalogStatement(com.starrocks.sql.parser.StarRocksParser.SetCatalogStatementContext context) {
         Identifier identifier = (Identifier) visit(context.identifierOrString());
         String catalogName = identifier.getValue();
-        return new SetCatalogStmt(catalogName, createPos(context));
+        return new SetCatalogStmt(normalizeName(catalogName), createPos(context));
     }
 
     @Override
@@ -2409,7 +2424,7 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
         Identifier identifier = (Identifier) visit(context.catalogName);
         boolean ifExists = context.IF() != null;
         String catalogName = identifier.getValue();
-        return new DropCatalogStmt(catalogName, ifExists, createPos(context));
+        return new DropCatalogStmt(normalizeName(catalogName), ifExists, createPos(context));
     }
 
     @Override
@@ -6875,9 +6890,9 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
     }
 
     @Override
-    public ParseNode visitRevokeRoleFromGroup(StarRocksParser.RevokeRoleFromGroupContext context) {
+    public ParseNode visitRevokeRoleFromGroup(com.starrocks.sql.parser.StarRocksParser.RevokeRoleFromGroupContext context) {
         List<String> roleNameList = new ArrayList<>();
-        for (StarRocksParser.IdentifierOrStringContext oneContext : context.identifierOrStringList()
+        for (com.starrocks.sql.parser.StarRocksParser.IdentifierOrStringContext oneContext : context.identifierOrStringList()
                 .identifierOrString()) {
             roleNameList.add(((Identifier) visit(oneContext)).getValue());
         }

@@ -303,21 +303,8 @@ public interface AstVisitorExtendInterface<R, C> extends AstVisitor<R, C> {
         return visitDDLStatement(statement, context);
     }
 
-    default R visitDropCatalogStatement(DropCatalogStmt statement, C context) {
-        return visitDDLStatement(statement, context);
-    }
-
-
     default R visitShowCreateExternalCatalogStatement(ShowCreateExternalCatalogStmt statement, C context) {
         return visitShowStatement(statement, context);
-    }
-
-    default R visitUseCatalogStatement(UseCatalogStmt statement, C context) {
-        return visitStatement(statement, context);
-    }
-
-    default R visitSetCatalogStatement(SetCatalogStmt statement, C context) {
-        return visitStatement(statement, context);
     }
 
     default R visitAlterCatalogStatement(AlterCatalogStmt statement, C context) {
