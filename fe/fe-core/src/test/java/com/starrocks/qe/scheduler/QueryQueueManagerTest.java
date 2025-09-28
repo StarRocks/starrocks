@@ -50,7 +50,7 @@ import com.starrocks.thrift.TStatus;
 import com.starrocks.thrift.TStatusCode;
 import com.starrocks.thrift.TUniqueId;
 import com.starrocks.thrift.TWorkGroup;
-import com.starrocks.utframe.TestLoopTimeout;
+import com.starrocks.utframe.LoopTimeoutChecker;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Mock;
 import mockit.MockUp;
@@ -531,7 +531,7 @@ public class QueryQueueManagerTest extends SchedulerTestBase {
         threads.forEach(Thread::start);
 
         boolean allFinished = false;
-        TestLoopTimeout timeout = new TestLoopTimeout("wait for all queries to finish");
+        LoopTimeoutChecker timeout = new LoopTimeoutChecker("wait for all queries to finish");
         while (!allFinished) {
             // Check for timeout to prevent dead loop
             if (timeout.checkTimeout()) {

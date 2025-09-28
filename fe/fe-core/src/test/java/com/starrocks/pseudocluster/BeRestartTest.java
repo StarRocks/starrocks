@@ -16,7 +16,7 @@ package com.starrocks.pseudocluster;
 
 import com.starrocks.common.Config;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.utframe.TestLoopTimeout;
+import com.starrocks.utframe.LoopTimeoutChecker;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Disabled;
@@ -102,7 +102,7 @@ public class BeRestartTest {
                 return true;
             }
         };
-        TestLoopTimeout timeout = new TestLoopTimeout("wait for all tablets to reach version");
+        LoopTimeoutChecker timeout = new LoopTimeoutChecker("wait for all tablets to reach version");
         while (true) {
             // Check for timeout to prevent dead loop
             if (timeout.checkTimeout()) {

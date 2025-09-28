@@ -14,15 +14,15 @@
 
 package com.starrocks.utframe;
 
-import com.starrocks.common.Config;
+import com.starrocks.common.FeConstants;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 /**
  * Utility class to help prevent dead loops in test cases by providing timeout protection.
  */
-public class TestLoopTimeout {
-    private static final Logger LOG = LogManager.getLogger(TestLoopTimeout.class);
+public class LoopTimeoutChecker {
+    private static final Logger LOG = LogManager.getLogger(LoopTimeoutChecker.class);
     
     private final long startTime;
     private final long timeoutMs;
@@ -33,10 +33,10 @@ public class TestLoopTimeout {
      * 
      * @param operationName Name of the operation for logging purposes
      */
-    public TestLoopTimeout(String operationName) {
+    public LoopTimeoutChecker(String operationName) {
         this.operationName = operationName;
         this.startTime = System.currentTimeMillis();
-        this.timeoutMs = Config.test_loop_max_timeout_seconds * 1000L;
+        this.timeoutMs = FeConstants.MAX_LOOP_TIMEOUT_SECOND  * 1000L;
     }
     
     /**
@@ -45,7 +45,7 @@ public class TestLoopTimeout {
      * @param operationName Name of the operation for logging purposes
      * @param timeoutSeconds Custom timeout in seconds
      */
-    public TestLoopTimeout(String operationName, int timeoutSeconds) {
+    public LoopTimeoutChecker(String operationName, int timeoutSeconds) {
         this.operationName = operationName;
         this.startTime = System.currentTimeMillis();
         this.timeoutMs = timeoutSeconds * 1000L;
@@ -67,8 +67,8 @@ public class TestLoopTimeout {
      */
     public boolean checkTimeout() {
         if (isTimeoutExceeded()) {
-            LOG.warn("{} timeout after {} seconds, operation: {}", 
-                    operationName, Config.test_loop_max_timeout_seconds, operationName);
+            LOG.warn("{} timeout after {}(ms), operation: {}",
+                    operationName, timeoutMs, operationName);
             return true;
         }
         return false;
@@ -82,7 +82,7 @@ public class TestLoopTimeout {
     public void throwIfTimeout() {
         if (isTimeoutExceeded()) {
             throw new RuntimeException(operationName + " timeout after " + 
-                    Config.test_loop_max_timeout_seconds + " seconds!");
+                    timeoutMs + "(ms)!");
         }
     }
     

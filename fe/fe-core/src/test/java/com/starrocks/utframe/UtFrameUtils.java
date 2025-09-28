@@ -1134,7 +1134,7 @@ public class UtFrameUtils {
             fakeJournalWriter = new Thread(new Runnable() {
                 @Override
                 public void run() {
-                    TestLoopTimeout timeout = new TestLoopTimeout("fakeJournalWriter");
+                    LoopTimeoutChecker timeout = new LoopTimeoutChecker("fakeJournalWriter");
                     while (true) {
                         try {
                             // Check for timeout to prevent dead loop
@@ -1164,7 +1164,7 @@ public class UtFrameUtils {
 
         public static synchronized Writable replayNextJournal(short expectCode) throws Exception {
             assert (followerJournalQueue != null);
-            TestLoopTimeout timeout = new TestLoopTimeout("replayNextJournal");
+            LoopTimeoutChecker timeout = new LoopTimeoutChecker("replayNextJournal");
             while (true) {
                 // Check for timeout to prevent dead loop
                 timeout.throwIfTimeout();

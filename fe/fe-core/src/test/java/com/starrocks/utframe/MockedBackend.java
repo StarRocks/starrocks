@@ -328,7 +328,7 @@ public class MockedBackend {
                 if (!workerThreadStarted) {
                     workerThreadStarted = true;
                     new Thread(() -> {
-                        TestLoopTimeout timeout = new TestLoopTimeout("MockedBackend worker thread");
+                        LoopTimeoutChecker timeout = new LoopTimeoutChecker("MockedBackend worker thread");
                         while (true) {
                             try {
                                 // Check for timeout to prevent dead loop
@@ -432,7 +432,7 @@ public class MockedBackend {
 
         @Override
         public TTabletStatResult get_tablet_stat() {
-            TestLoopTimeout timeout = new TestLoopTimeout("get_tablet_stat");
+            LoopTimeoutChecker timeout = new LoopTimeoutChecker("get_tablet_stat");
             while (true) {
                 try {
                     // Check for timeout to prevent dead loop

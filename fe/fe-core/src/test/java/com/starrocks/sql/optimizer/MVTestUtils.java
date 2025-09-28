@@ -15,11 +15,10 @@
 package com.starrocks.sql.optimizer;
 
 import com.starrocks.alter.AlterJobV2;
-import com.starrocks.common.Config;
 import com.starrocks.common.util.ThreadUtil;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.utframe.LoopTimeoutChecker;
 import com.starrocks.utframe.StarRocksTestBase;
-import com.starrocks.utframe.TestLoopTimeout;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.junit.jupiter.api.Assertions;
@@ -39,12 +38,10 @@ public class MVTestUtils extends StarRocksTestBase {
             if (alterJobV2.getType() != AlterJobV2.JobType.ROLLUP) {
                 continue;
             }
-            TestLoopTimeout timeout = new TestLoopTimeout("rollup job " + alterJobV2.getJobId());
+            LoopTimeoutChecker timeout = new LoopTimeoutChecker("rollup job " + alterJobV2.getJobId());
             while (!alterJobV2.getJobState().isFinalState()) {
                 // Check for timeout to prevent dead loop
                 if (timeout.checkTimeout()) {
-                    logSysInfo("rollup job " + alterJobV2.getJobId() + " timeout after " + 
-                            Config.test_loop_max_timeout_seconds + " seconds, current state: " + alterJobV2.getJobState());
                     break;
                 }
                 logSysInfo(
@@ -57,15 +54,13 @@ public class MVTestUtils extends StarRocksTestBase {
     public static void waitForSchemaChangeAlterJobFinish() {
         Map<Long, AlterJobV2> alterJobs = GlobalStateMgr.getCurrentState().getSchemaChangeHandler().getAlterJobsV2();
         for (AlterJobV2 alterJobV2 : alterJobs.values()) {
-            TestLoopTimeout timeout = new TestLoopTimeout("alter job " + alterJobV2.getJobId());
+            LoopTimeoutChecker timeout = new LoopTimeoutChecker("alter job " + alterJobV2.getJobId());
             while (!alterJobV2.getJobState().isFinalState()) {
                 if (alterJobV2.getType() != AlterJobV2.JobType.SCHEMA_CHANGE) {
                     continue;
                 }
                 // Check for timeout to prevent dead loop
                 if (timeout.checkTimeout()) {
-                    logSysInfo("alter job " + alterJobV2.getJobId() + " timeout after " + 
-                            Config.test_loop_max_timeout_seconds + " seconds, current state: " + alterJobV2.getJobState());
                     break;
                 }
                 LOG.info(
@@ -86,15 +81,13 @@ public class MVTestUtils extends StarRocksTestBase {
     }
 
     public static boolean waitForSchemaChangeAlterJobFinish(AlterJobV2 alterJobV2) {
-        TestLoopTimeout timeout = new TestLoopTimeout("alter job " + alterJobV2.getJobId());
+        LoopTimeoutChecker timeout = new LoopTimeoutChecker("alter job " + alterJobV2.getJobId());
         while (!alterJobV2.getJobState().isFinalState()) {
             if (alterJobV2.getType() != AlterJobV2.JobType.SCHEMA_CHANGE) {
                 return false;
             }
             // Check for timeout to prevent dead loop
             if (timeout.checkTimeout()) {
-                logSysInfo("alter job " + alterJobV2.getJobId() + " timeout after " + 
-                        Config.test_loop_max_timeout_seconds + " seconds, current state: " + alterJobV2.getJobState());
                 return false;
             }
             LOG.info(

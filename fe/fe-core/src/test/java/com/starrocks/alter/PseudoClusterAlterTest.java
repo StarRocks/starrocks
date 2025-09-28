@@ -17,7 +17,7 @@ package com.starrocks.alter;
 import com.starrocks.common.Config;
 import com.starrocks.pseudocluster.PseudoCluster;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.utframe.TestLoopTimeout;
+import com.starrocks.utframe.LoopTimeoutChecker;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
@@ -48,7 +48,7 @@ public class PseudoClusterAlterTest {
         cluster.runSqls("test", createTableSql, insertSql, insertSql, insertSql);
         // after introducing light schema change, add/drop column will not trigger schema change task, so change to add index
         cluster.runSql("test", "alter table " + table + " add index age_bitmap(age) using bitmap");
-        TestLoopTimeout timeout1 = new TestLoopTimeout("wait for alter job to finish");
+        LoopTimeoutChecker timeout1 = new LoopTimeoutChecker("wait for alter job to finish");
         while (true) {
             // Check for timeout to prevent dead loop
             if (timeout1.checkTimeout()) {
@@ -75,7 +75,7 @@ public class PseudoClusterAlterTest {
         String insertSql = PseudoCluster.buildInsertSql("test", table);
         cluster.runSqls("test", createTableSql, insertSql, insertSql, insertSql);
         cluster.runSql("test", "alter table " + table + " add index age_bitmap(age) using bitmap");
-        TestLoopTimeout timeout2 = new TestLoopTimeout("wait for alter job to finish");
+        LoopTimeoutChecker timeout2 = new LoopTimeoutChecker("wait for alter job to finish");
         while (true) {
             // Check for timeout to prevent dead loop
             if (timeout2.checkTimeout()) {
@@ -121,7 +121,7 @@ public class PseudoClusterAlterTest {
         });
         concurrentInsertThread.start();
         cluster.runSql("test", "alter table " + table + " add index age_bitmap(age) using bitmap");
-        TestLoopTimeout timeout3 = new TestLoopTimeout("wait for alter job to finish");
+        LoopTimeoutChecker timeout3 = new LoopTimeoutChecker("wait for alter job to finish");
         while (true) {
             // Check for timeout to prevent dead loop
             if (timeout3.checkTimeout()) {

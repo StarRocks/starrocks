@@ -14,7 +14,7 @@
 
 package com.starrocks.service;
 
-import com.starrocks.utframe.TestLoopTimeout;
+import com.starrocks.utframe.LoopTimeoutChecker;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -93,7 +93,7 @@ class GroovyUDSServerTest {
             writer.println(":exit");
             writer.flush();
             try {
-                TestLoopTimeout timeout = new TestLoopTimeout("read server output");
+                LoopTimeoutChecker timeout = new LoopTimeoutChecker("read server output");
                 while (true) {
                     // Check for timeout to prevent dead loop
                     if (timeout.checkTimeout()) {

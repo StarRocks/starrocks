@@ -1014,7 +1014,7 @@ public class StarRocksAssert {
         TaskRunManager taskRunManager = tm.getTaskRunManager();
         TaskRunScheduler taskRunScheduler = taskRunManager.getTaskRunScheduler();
         TaskRun taskRun = taskRunScheduler.getRunnableTaskRun(task.getId());
-        TestLoopTimeout timeout = new TestLoopTimeout("waitTaskRunFinish for task " + task.getId());
+        LoopTimeoutChecker timeout = new LoopTimeoutChecker("waitTaskRunFinish for task " + task.getId());
         int count = 0;
         while (taskRun != null && count < 1200) {
             if (timeout.checkTimeout()) {
@@ -1030,7 +1030,7 @@ public class StarRocksAssert {
     private void waitTaskRunFinish(TaskRun taskRun) {
         MVTaskRunProcessor mvTaskRunProcessor = (MVTaskRunProcessor) taskRun.getProcessor();
         MvTaskRunContext mvContext = mvTaskRunProcessor.getMvTaskRunContext();
-        TestLoopTimeout timeout = new TestLoopTimeout("waitTaskRunFinish");
+        LoopTimeoutChecker timeout = new LoopTimeoutChecker("waitTaskRunFinish");
         int retryCount = 0;
         int maxRetry = 50;
         while (retryCount < maxRetry) {
@@ -1182,7 +1182,7 @@ public class StarRocksAssert {
                         GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(database.getId(), alterJobV2.getTableId());
             Preconditions.checkState(table instanceof OlapTable);
             OlapTable olapTable = (OlapTable) table;
-            TestLoopTimeout timeout = new TestLoopTimeout("checkAlterJob for table " + olapTable.getName());
+            LoopTimeoutChecker timeout = new LoopTimeoutChecker("checkAlterJob for table " + olapTable.getName());
             int retry = 0;
             while (olapTable.getState() != OlapTable.OlapTableState.NORMAL && retry++ < 6000) {
                 if (timeout.checkTimeout()) {
@@ -1206,7 +1206,7 @@ public class StarRocksAssert {
                     GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(database.getId(), alterJobV2.getTableId());
             Preconditions.checkState(table instanceof OlapTable);
             OlapTable olapTable = (OlapTable) table;
-            TestLoopTimeout timeout = new TestLoopTimeout("checkSchemaChangeJob for table " + olapTable.getName());
+            LoopTimeoutChecker timeout = new LoopTimeoutChecker("checkSchemaChangeJob for table " + olapTable.getName());
             int retry = 0;
             while (olapTable.getState() != OlapTable.OlapTableState.NORMAL && retry++ < 6000) {
                 if (timeout.checkTimeout()) {

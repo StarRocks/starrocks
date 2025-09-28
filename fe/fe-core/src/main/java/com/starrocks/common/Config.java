@@ -3497,13 +3497,6 @@ public class Config extends ConfigBase {
     public static int catalog_metadata_cache_size = 500;
 
     /**
-     * Maximum timeout for while loops in test cases to prevent dead loops.
-     * Default is 5 minutes (300 seconds).
-     */
-    @ConfField(mutable = true, comment = "Maximum timeout in seconds for while loops in test cases to prevent dead loops")
-    public static int test_loop_max_timeout_seconds = 300; // 5 minutes
-
-    /**
      * mv plan cache expire interval in seconds
      */
     @Deprecated

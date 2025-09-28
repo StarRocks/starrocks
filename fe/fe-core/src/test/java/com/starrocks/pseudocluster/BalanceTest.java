@@ -19,7 +19,7 @@ import com.starrocks.common.Config;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.TGetTabletScheduleRequest;
 import com.starrocks.thrift.TGetTabletScheduleResponse;
-import com.starrocks.utframe.TestLoopTimeout;
+import com.starrocks.utframe.LoopTimeoutChecker;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 
@@ -60,7 +60,7 @@ public class BalanceTest {
         }
         List<Long> beIds = cluster.addBackends(3);
         Random rand = new Random(0);
-        TestLoopTimeout timeout = new TestLoopTimeout("wait for balance to finish");
+        LoopTimeoutChecker timeout = new LoopTimeoutChecker("wait for balance to finish");
         while (true) {
             // Check for timeout to prevent dead loop
             if (timeout.checkTimeout()) {

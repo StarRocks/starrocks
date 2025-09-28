@@ -108,8 +108,8 @@ import com.starrocks.sql.ast.expression.DateLiteral;
 import com.starrocks.sql.ast.expression.TableName;
 import com.starrocks.sql.plan.ConnectorPlanTestBase;
 import com.starrocks.thrift.TStorageMedium;
+import com.starrocks.utframe.LoopTimeoutChecker;
 import com.starrocks.utframe.StarRocksAssert;
-import com.starrocks.utframe.TestLoopTimeout;
 import com.starrocks.utframe.UtFrameUtils;
 import com.starrocks.warehouse.DefaultWarehouse;
 import com.starrocks.warehouse.Warehouse;
@@ -2861,7 +2861,7 @@ public class AlterTest {
             connectContext.executeSql("alter materialized view fk_mv_1 set " +
                         "( 'foreign_key_constraints'='site_access_time_slice(site_id)" +
                         " REFERENCES site_access_date_trunc(site_id)'); ");
-            TestLoopTimeout timeout = new TestLoopTimeout("wait for fk_mv_1 journal replay");
+            LoopTimeoutChecker timeout = new LoopTimeoutChecker("wait for fk_mv_1 journal replay");
             while (true) {
                 // Check for timeout to prevent dead loop
                 if (timeout.checkTimeout()) {
@@ -2893,7 +2893,7 @@ public class AlterTest {
             connectContext.executeSql("alter materialized view fk_mv_2 set " +
                         "( 'foreign_key_constraints'='hive0.tpch.lineitem(l_orderkey) " +
                         "REFERENCES hive0.tpch.orders(o_orderkey)'); ");
-            TestLoopTimeout timeout2 = new TestLoopTimeout("wait for fk_mv_2 journal replay");
+            LoopTimeoutChecker timeout2 = new LoopTimeoutChecker("wait for fk_mv_2 journal replay");
             while (true) {
                 // Check for timeout to prevent dead loop
                 if (timeout2.checkTimeout()) {

@@ -27,7 +27,7 @@ import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.AlterSystemStmtAnalyzer;
 import com.starrocks.system.Backend;
-import com.starrocks.utframe.TestLoopTimeout;
+import com.starrocks.utframe.LoopTimeoutChecker;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Assertions;
@@ -181,7 +181,7 @@ public class LocationMismatchRepairTest {
         cluster.runSql("test", sql);
         System.out.println("=========================");
         long start = System.currentTimeMillis();
-        TestLoopTimeout timeout1 = new TestLoopTimeout("wait for location mismatch clone tasks");
+        LoopTimeoutChecker timeout1 = new LoopTimeoutChecker("wait for location mismatch clone tasks");
         while (true) {
             // Check for timeout to prevent dead loop
             if (timeout1.checkTimeout()) {
@@ -255,7 +255,7 @@ public class LocationMismatchRepairTest {
         // wait for decommission finished
         for (Pair<PseudoBackend, Integer> pair : decommissionedBackends) {
             PseudoBackend decommissionBE = pair.first;
-            TestLoopTimeout timeout2 = new TestLoopTimeout("wait for decommission to finish");
+            LoopTimeoutChecker timeout2 = new LoopTimeoutChecker("wait for decommission to finish");
             while (true) {
                 // Check for timeout to prevent dead loop
                 if (timeout2.checkTimeout()) {
@@ -360,7 +360,7 @@ public class LocationMismatchRepairTest {
         cluster.runSql("test", sql);
         System.out.println("=========================");
         long start = System.currentTimeMillis();
-        TestLoopTimeout timeout3 = new TestLoopTimeout("wait for MV location mismatch clone tasks");
+        LoopTimeoutChecker timeout3 = new LoopTimeoutChecker("wait for MV location mismatch clone tasks");
         while (true) {
             // Check for timeout to prevent dead loop
             if (timeout3.checkTimeout()) {
