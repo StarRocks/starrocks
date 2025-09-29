@@ -219,31 +219,34 @@ public class SplitMultiPhaseAggRule extends SplitAggregateRule {
                     connectThreeStageAgg(localExpr, distinctGlobal, global, oldAgg.getGroupingKeys(), true));
         }
 
-        // 3-stage: Local(GB k1,v1) -> Distinct Global(GB k1,v1; PB v1)    -> Local(GB v1) -> Global(GB v1; PB v1)
-        //
-        // The reason why the Global split is set to false is that:
-        // CostModel considers `Local Agg(GB v1)->Global(v1)` to have a lower cost than `Global(GB v1)`, which leads to a situation
+        // Two candidates:
+        // - 3-stage: [Local(GB k1,v1) -> Distinct Global(GB k1,v1; PB v1) -> Local(GB v1) -> Global(GB v1; PB v1)]
+        //      - Physical3 : [Local(GB k1,v1) -> Exchange(v1) -> Distinct Global(GB k1,v1) -> Local(GB v1) -> Global(GB v1)],
+        //            which will be rewritten by PruneAggregateNodeRule to:
+        //            [Local(GB k1,v1) -> Exchange(v1) -> Distinct Global(GB k1,v1) -> Global(GB v1)]
+        // - 4-stage: [Local(GB k1,v1) -> Distinct Global(GB k1,v1; PB k1,v1) -> Local(GB v1) -> Global(GB v1; PB v1)]
+        //      - Physical41: [Local(GB k1,v1) -> Distinct Global(GB k1,v1) -> Local(GB v1) -> Exchange(v1) -> Global(GB v1)],
+        //            when the child satisfies (k1,v1) distribution and will be rewritten by PruneAggregateNodeRule to:
+        //            [Distinct Global(GB k1,v1) -> Local(GB v1) -> Exchange(v1) -> Global(GB v1)]
+        //      - Physical42: [Local(GB k1,v1) -> Exchange(k1,v1) -> Distinct Global(GB k1,v1) -> Local(GB v1) -> Exchange(v1) -> Global(GB v1)],
+        //           when the child does not satisfy (k1,v1) distribution.
+
+        // Compared the cost of 3-stage and 4-stage:
+        // - If the child satisfies (k1,v1) distribution, the cost of 4-stage(Physical41) is lower than that of 3-stage(Physical3).
+        //     because in Physical41, the child of Exchange(v1) is Local(GB v1), whereas in Physical3, the child of Exchange(v1)
+        //     is Local(GB k1,v1). The cardinality of Local(GB v1) is always greater than or equal to the output of Local(GB k1,v1).
+        // - Otherwise, the cost of 3-stage(Physical3) is lower than that of 4-stage(Physical42).
+        //     because Physical42 has one more Exchange(k1,v1) than Physical3.
+
+        // Why the 3-stage plan is first transformed into a 4-stage plan, and then the redundant Local node is pruned in the PruneAggregateNodeRule?
+        // CostModel considers `Local(GB v1)->Global(v1)` to have a lower cost than `Global(GB v1)`, which leads to a situation
         // where the cost of the 3-stage plan:
         //     [Local(GB k1,v1) -> Exchange(v1) -> Distinct Global(GB k1,v1) -> Global(GB v1)]
         // is higher than that of the 4-stage plan:
         //     [Local(GB k1,v1) -> Exchange(k1,v1) -> Distinct Global(GB k1,v1) -> Local(GB v1) -> Exchange(v1) -> Global(GB v1)].
-        // Therefore, in order to ensure that the 3-stage plan is chosen under normal circumstances, the 3-stage plan is first
-        // transformed into a 4-stage plan, and then the redundant Local node is pruned in the PruneAggregateNodeRule.
         OptExpression threeStageAgg =
                 connectThreeStageAgg(localExpr, distinctGlobal, global, oldAgg.getGroupingKeys(), false);
 
-        // 4-stage: Local(GB k1,v1) -> Distinct Global(GB k1,v1; PB k1,v1) -> Local(GB v1) -> Global(GB v1; PB v1)
-        //
-        // The timing for choosing the 4-stage plan is when the child of Local(GB k1,v1) satisfies the distribution (k1,v1).
-        // In this case, the actual 4-stage plan is:
-        //     [Local(GB k1, v1) -> Distinct Global(GB k1, v1) -> Local(GB v1) -> Exchange(v1) -> Global(GB v1)],
-        // whose cost is lower than the 3-stage plan:
-        //     [Local(GB k1, v1) -> Exchange(v1) -> Distinct Global(GB k1, v1) -> Local(GB v1) -> Global(GB v1)],
-        // because in the 4-stage plan, the child of Exchange(v1) is Local(GB v1), whereas in the 3-stage plan, the child of Exchange(v1)
-        // is Local(GB k1, v1). The cardinality of Local(GB v1) is always greater than or equal to the output of Local(GB k1, v1).
-        //
-        // Furthermore, after applying the PruneAggregateNodeRule, the 4-stage plan becomes:
-        // [MergedLocal(GB k1, v1) -> Local(GB v1) -> Exchange(v1) -> Global(GB v1; PB v1)]
         LogicalAggregationOperator global4 = new LogicalAggregationOperator.Builder().withOperator(global).build();
         LogicalAggregationOperator distinctGlobal4 =
                 new LogicalAggregationOperator.Builder().withOperator(distinctGlobal).build();
