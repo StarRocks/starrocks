@@ -38,6 +38,7 @@ public class SkewJoinV2Test extends PlanTestBase {
         String sqlPlan = getVerboseExplain(sql);
         assertCContains(sqlPlan, "Input Partition: HYBRID_HASH_PARTITIONED\n" +
                 "  RESULT SINK");
+        
         // this is a normal union, which means its local exchanger is PASS_THROUGH
         assertCContains(sqlPlan, "10:UNION\n" +
                 "  |  child exprs:\n" +
@@ -218,5 +219,12 @@ public class SkewJoinV2Test extends PlanTestBase {
                 "  |  cardinality: 1\n" +
                 "  |  \n" +
                 "  4:HASH JOIN");
+    }
+
+    @Test
+    public void testSkewJoinV2WithAsofLeftJoin() throws Exception {
+        String sql = "select v2, v5 from t0 asof left join[skew|t0.v1(1,2)] t1 on v1 = v4 and v2 >= v5";
+        String sqlPlan = getVerboseExplain(sql);
+        assertCContains(sqlPlan, "join op: ASOF LEFT OUTER JOIN (PARTITIONED)");
     }
 }
