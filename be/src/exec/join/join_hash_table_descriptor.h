@@ -431,7 +431,7 @@ public:
         const Buffer<uint8_t>* asof_temporal_col_nulls =
                 asof_temporal_col_nulls_column ? &const_cast<NullColumn*>(asof_temporal_col_nulls_column)->get_data()
                                                : nullptr;
-        const AsofCppType* __restrict asof_temporal_data = data_col->immutable_data().data();
+        const AsofCppType* __restrict asof_temporal_data = data_col->get_data().data();
 
         const bool has_equi_join_key_nulls = (equi_join_key_nulls != nullptr);
         const bool has_asof_temporal_nulls = (asof_temporal_col_nulls != nullptr);

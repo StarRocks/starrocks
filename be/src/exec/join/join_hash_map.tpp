@@ -14,9 +14,9 @@
 
 #pragma once
 
-#include "simd/gather.h"
 #include "column/column.h"
 #include "exec/join/join_hash_table_descriptor.h"
+#include "simd/gather.h"
 #include "simd/simd.h"
 #include "util/runtime_profile.h"
 
@@ -845,9 +845,8 @@ HashTableProbeState::ProbeCoroutine JoinHashMap<LT, CT, MT>::_probe_from_ht(Runt
 
 template <LogicalType LT, JoinKeyConstructorType CT, JoinHashMapMethodType MT>
 template <bool first_probe, bool is_collision_free_and_unique>
-void JoinHashMap<LT, CT, MT>::_probe_from_ht_for_asof_inner_join(RuntimeState* state,
-                                                                 const ImmBuffer<CppType> build_data,
-                                                                 const ImmBuffer<CppType> probe_data) {
+void JoinHashMap<LT, CT, MT>::_probe_from_ht_for_asof_inner_join(RuntimeState* state, const Buffer<CppType>& build_data,
+                                                                 const Buffer<CppType>& probe_data) {
     _probe_state->match_flag = JoinMatchFlag::NORMAL;
     size_t match_count = 0;
     constexpr bool one_to_many = false;
@@ -881,7 +880,7 @@ void JoinHashMap<LT, CT, MT>::_probe_from_ht_for_asof_inner_join(RuntimeState* s
                 ColumnHelper::get_data_column_by_type<ASOF_LT>(_probe_state->asof_temporal_condition_column.get());
         const NullColumn* asof_temporal_col_nulls =
                 ColumnHelper::get_null_column(_probe_state->asof_temporal_condition_column);
-        const AsofTemporalCppType* asof_temporal_probe_values = asof_temporal_data_column->immutable_data().data();
+        const AsofTemporalCppType* asof_temporal_probe_values = asof_temporal_data_column->get_data().data();
 
         if (!_probe_state->asof_temporal_condition_column || _probe_state->asof_temporal_condition_column->empty()) {
             PROBE_OVER();
@@ -1051,8 +1050,8 @@ void JoinHashMap<LT, CT, MT>::_probe_from_ht_for_left_outer_join(RuntimeState* s
 template <LogicalType LT, JoinKeyConstructorType CT, JoinHashMapMethodType MT>
 template <bool first_probe, bool is_collision_free_and_unique>
 void JoinHashMap<LT, CT, MT>::_probe_from_ht_for_asof_left_outer_join(RuntimeState* state,
-                                                                      const ImmBuffer<CppType> build_data,
-                                                                      const ImmBuffer<CppType> probe_data) {
+                                                                      const Buffer<CppType>& build_data,
+                                                                      const Buffer<CppType>& probe_data) {
     _probe_state->match_flag = JoinMatchFlag::NORMAL;
     size_t match_count = 0;
     constexpr bool one_to_many = false;
@@ -1090,7 +1089,7 @@ void JoinHashMap<LT, CT, MT>::_probe_from_ht_for_asof_left_outer_join(RuntimeSta
                 ColumnHelper::get_data_column_by_type<ASOF_LT>(_probe_state->asof_temporal_condition_column.get());
         const NullColumn* asof_temporal_col_nulls =
                 ColumnHelper::get_null_column(_probe_state->asof_temporal_condition_column);
-        const AsofTemporalCppType* asof_temporal_probe_values = asof_temporal_data_column->immutable_data().data();
+        const AsofTemporalCppType* asof_temporal_probe_values = asof_temporal_data_column->get_data().data();
 
         if (!_probe_state->asof_temporal_condition_column || _probe_state->asof_temporal_condition_column->empty()) {
             LOG(WARNING) << "ASOF LEFT OUTER: No valid asof column";
@@ -1855,7 +1854,7 @@ void JoinHashMap<LT, CT, MT>::_probe_from_ht_for_left_outer_left_anti_full_outer
 template <LogicalType LT, JoinKeyConstructorType CT, JoinHashMapMethodType MT>
 template <bool first_probe, bool is_collision_free_and_unique>
 void JoinHashMap<LT, CT, MT>::_probe_from_ht_for_asof_left_outer_join_with_other_conjunct(
-        RuntimeState* state, const ImmBuffer<CppType> build_data, const ImmBuffer<CppType> probe_data) {
+        RuntimeState* state, const Buffer<CppType>& build_data, const Buffer<CppType>& probe_data) {
     _probe_state->match_flag = JoinMatchFlag::NORMAL;
     size_t match_count = 0;
     constexpr bool one_to_many = false;
@@ -1891,7 +1890,7 @@ void JoinHashMap<LT, CT, MT>::_probe_from_ht_for_asof_left_outer_join_with_other
                 ColumnHelper::get_data_column_by_type<ASOF_LT>(_probe_state->asof_temporal_condition_column.get());
         const NullColumn* asof_temporal_col_nulls =
                 ColumnHelper::get_null_column(_probe_state->asof_temporal_condition_column);
-        const AsofTemporalCppType* asof_temporal_probe_values = asof_temporal_data_column->immutable_data().data();
+        const AsofTemporalCppType* asof_temporal_probe_values = asof_temporal_data_column->get_data().data();
 
         if (!_probe_state->asof_temporal_condition_column || _probe_state->asof_temporal_condition_column->empty()) {
             LOG(WARNING) << "ASOF LEFT OUTER WITH OTHER CONJUNCT: No valid asof column";

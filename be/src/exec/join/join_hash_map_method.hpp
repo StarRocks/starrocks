@@ -14,9 +14,9 @@
 
 #pragma once
 
-#include "join_hash_map_method.h"
 #include "exec/join/join_hash_map_helper.h"
 #include "exec/join/join_hash_table_descriptor.h"
+#include "join_hash_map_method.h"
 #include "simd/gather.h"
 
 namespace starrocks {
@@ -135,9 +135,9 @@ void LinearChainedJoinHashMap<LT, NeedBuildChained>::build_prepare(RuntimeState*
 }
 
 template <LogicalType LT, bool NeedBuildChained>
-void LinearChainedJoinHashMap<LT, NeedBuildChained>::construct_hash_table(
-        JoinHashTableItems* table_items, const Buffer<CppType>&keys,
-        const Buffer<uint8_t>* is_nulls) {
+void LinearChainedJoinHashMap<LT, NeedBuildChained>::construct_hash_table(JoinHashTableItems* table_items,
+                                                                          const Buffer<CppType>& keys,
+                                                                          const Buffer<uint8_t>* is_nulls) {
     const auto num_rows = 1 + table_items->row_count;
     const uint32_t bucket_size_mask = table_items->bucket_size - 1;
     auto* __restrict next = table_items->next.data();
@@ -265,16 +265,16 @@ void LinearChainedJoinHashMap<LT, NeedBuildChained>::construct_hash_table(
             auto equi_join_bucket_locator = [&](JoinHashTableItems*, const Buffer<CppType>& keys_ref, uint32_t i) {
                 return linear_probe.template operator()<false, true>(keys_ref, i, [](uint32_t) { return false; });
             };
-            AsofJoinDispatcher::dispatch_and_process(
-                    table_items, keys, is_nulls != nullptr ? is_nulls : nullptr, equi_join_bucket_locator);
+            AsofJoinDispatcher::dispatch_and_process(table_items, keys, is_nulls != nullptr ? is_nulls : nullptr,
+                                                     equi_join_bucket_locator);
         } else {
             auto is_null_predicate = [&](const uint32_t index) { return equi_join_key_nulls[index] != 0; };
-            auto equi_join_bucket_locator = [&, is_null_predicate](JoinHashTableItems*,
-                                                                   const Buffer<CppType>& keys_ref, uint32_t i) {
+            auto equi_join_bucket_locator = [&, is_null_predicate](JoinHashTableItems*, const Buffer<CppType>& keys_ref,
+                                                                   uint32_t i) {
                 return linear_probe.template operator()<false, true>(keys_ref, i, is_null_predicate);
             };
-            AsofJoinDispatcher::dispatch_and_process(
-                    table_items, keys, is_nulls != nullptr ? is_nulls : nullptr, equi_join_bucket_locator);
+            AsofJoinDispatcher::dispatch_and_process(table_items, keys, is_nulls != nullptr ? is_nulls : nullptr,
+                                                     equi_join_bucket_locator);
         }
         table_items->finalize_asof_index_vector();
     };
@@ -433,8 +433,7 @@ void LinearChainedAsofJoinHashMap<LT>::construct_hash_table(JoinHashTableItems* 
     auto* __restrict bucket_first_indices = table_items->first.data();
     auto* __restrict bucket_fingerprints = table_items->fps.data();
 
-    auto equi_join_bucket_locator = [&](JoinHashTableItems*, const Buffer<CppType>&,
-                                        uint32_t row_index) -> uint32_t {
+    auto equi_join_bucket_locator = [&](JoinHashTableItems*, const Buffer<CppType>&, uint32_t row_index) -> uint32_t {
         uint32_t bucket_number = temp_bucket_numbers[row_index];
         const uint8_t fingerprint = temp_fingerprints[row_index];
         uint32_t probe_attempts = 1;
@@ -454,17 +453,15 @@ void LinearChainedAsofJoinHashMap<LT>::construct_hash_table(JoinHashTableItems* 
         return bucket_first_indices[bucket_number];
     };
 
-    AsofJoinDispatcher::dispatch_and_process(table_items, keys, is_nulls != nullptr? is_nulls : nullptr,
+    AsofJoinDispatcher::dispatch_and_process(table_items, keys, is_nulls != nullptr ? is_nulls : nullptr,
                                              equi_join_bucket_locator);
     table_items->finalize_asof_index_vector();
 }
 
 template <LogicalType LT>
 void LinearChainedAsofJoinHashMap<LT>::lookup_init(const JoinHashTableItems& table_items,
-                                                   HashTableProbeState* probe_state,
-                                                   const Buffer<CppType>& build_keys,
-                                                   const Buffer<CppType>& probe_keys,
-                                                   const Buffer<uint8_t>* is_nulls) {
+                                                   HashTableProbeState* probe_state, const Buffer<CppType>& build_keys,
+                                                   const Buffer<CppType>& probe_keys, const Buffer<uint8_t>* is_nulls) {
     auto process = [&]<bool IsNullable>() {
         const uint32_t bucket_size_mask = table_items.bucket_size - 1;
         const uint32_t row_count = probe_state->probe_row_count;

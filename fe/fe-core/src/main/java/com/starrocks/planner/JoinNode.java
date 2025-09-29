@@ -534,7 +534,12 @@ public abstract class JoinNode extends PlanNode implements RuntimeFilterBuildNod
 
         if (asofJoinConjunct != null) {
             output.append(detailPrefix).append("asof join conjunct: ");
-            output.append(explainExpr(detailLevel, List.of(asofJoinConjunct))).append("\n");
+            if (detailLevel.equals(TExplainLevel.VERBOSE)) {
+                output.append(asofJoinConjunct.explain());
+            } else {
+                output.append(asofJoinConjunct.toSql());
+            }
+            output.append("\n");
         }
 
         if (!otherJoinConjuncts.isEmpty()) {
