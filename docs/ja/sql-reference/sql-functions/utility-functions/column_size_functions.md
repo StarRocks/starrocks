@@ -13,6 +13,7 @@ displayed_sidebar: docs
 ### 構文
 
 ```SQL
+-- ヒント内の角括弧 [] を省略しないでください。
 SELECT column_size(column_name) FROM table_name [_META_];
 ```
 
@@ -31,6 +32,7 @@ SELECT column_size(column_name) FROM table_name [_META_];
 ### 構文
 
 ```SQL
+-- ヒント内の角括弧 [] を省略しないでください。
 SELECT column_compressed_size(column_name) FROM table_name [_META_];
 ```
 
