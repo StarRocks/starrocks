@@ -13,6 +13,7 @@ displayed_sidebar: docs
 ### 语法
 
 ```SQL
+-- 请勿省略 Hint 中的括号[]。
 SELECT column_size(column_name) FROM table_name [_META_];
 ```
 
@@ -31,6 +32,7 @@ SELECT column_size(column_name) FROM table_name [_META_];
 ### 语法
 
 ```SQL
+-- 请勿省略 Hint 中的括号[]。
 SELECT column_compressed_size(column_name) FROM table_name [_META_];
 ```
 
