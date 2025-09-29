@@ -337,13 +337,3 @@ select sec_to_time(-1);
 select sec_to_time(3024000);
 select sec_to_time(-3024000);
 
-
-
--- name: sec_to_time
-select sec_to_time(NULL);
-select sec_to_time(0);
-select sec_to_time(1);
-select sec_to_time(-1);
-select sec_to_time(3024000);
-select sec_to_time(-3024000);
-
