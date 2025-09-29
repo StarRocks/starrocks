@@ -12,16 +12,21 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.sql.optimizer.rule.tree;
 
+import com.google.common.collect.Maps;
 import com.starrocks.common.FeConstants;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptExpressionVisitor;
 import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalHashAggregateOperator;
+import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
+import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
+import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.task.TaskContext;
+
+import java.util.Map;
 
 /*
  * Because of local property, we could generate three/four stage plan like:
@@ -85,17 +90,80 @@ public class PruneAggregateNodeRule implements TreeRewriteRule {
 
         @Override
         public OptExpression visitPhysicalHashAggregate(OptExpression optExpression, Void context) {
-            PhysicalHashAggregateOperator parentOperator = (PhysicalHashAggregateOperator) optExpression.getOp();
+            PhysicalHashAggregateOperator parentAgg = (PhysicalHashAggregateOperator) optExpression.getOp();
             Operator childOperator = optExpression.inputAt(0).getOp();
 
-            if (parentOperator.getType().isDistinctGlobal() && childOperator instanceof PhysicalHashAggregateOperator) {
-                PhysicalHashAggregateOperator hashAggregateOperator = (PhysicalHashAggregateOperator) childOperator;
-                hashAggregateOperator.setMergedLocalAgg(true);
-                hashAggregateOperator.setProjection(parentOperator.getProjection());
-                return optExpression.inputAt(0);
-            } else {
+            if (!(childOperator instanceof PhysicalHashAggregateOperator)) {
                 return visit(optExpression, context);
             }
+            PhysicalHashAggregateOperator childAgg = (PhysicalHashAggregateOperator) childOperator;
+
+            if (parentAgg.getType().isDistinctGlobal()) {
+                childAgg.setMergedLocalAgg(true);
+                childAgg.setProjection(parentAgg.getProjection());
+                return optExpression.inputAt(0);
+            }
+
+            if (ConnectContext.get().getSessionVariable().isEnableCostBasedMultiStageAgg() &&
+                    parentAgg.getType().isGlobal() && parentAgg.isSplit() &&
+                    childAgg.getType().isLocal() && childAgg.isSplit() && !childAgg.isMergedLocalAgg()) {
+                OptExpression newAgg = mergeTwoPhaseAgg(parentAgg, childAgg, optExpression, optExpression.inputAt(0));
+                if (newAgg != null) {
+                    return newAgg;
+                }
+            }
+
+            return visit(optExpression, context);
+        }
+
+        private OptExpression mergeTwoPhaseAgg(PhysicalHashAggregateOperator globalAgg,
+                                               PhysicalHashAggregateOperator localAgg,
+                                               OptExpression globalExpr,
+                                               OptExpression localExpr) {
+            Map<ColumnRefOperator, CallOperator> newAggregationMap = Maps.newHashMap();
+            for (Map.Entry<ColumnRefOperator, CallOperator> entry : globalAgg.getAggregations().entrySet()) {
+                ColumnRefOperator globalColumn = entry.getKey();
+                CallOperator globalAggregation = entry.getValue();
+
+                if (globalAggregation.getArguments().isEmpty()) {
+                    return null;
+                }
+
+                ScalarOperator argument = globalAggregation.getArguments().get(0);
+                if (!(argument instanceof ColumnRefOperator)) {
+                    return null;
+                }
+
+                // The first argument of split global Aggregation is the output column ref of local Aggregation.
+                ColumnRefOperator localAggColumnRef = (ColumnRefOperator) argument;
+                CallOperator localAggregation = localAgg.getAggregations().get(localAggColumnRef);
+                if (localAggregation == null) {
+                    return null;
+                }
+
+                CallOperator newGlobalAggregation = new CallOperator(
+                        globalAggregation.getFnName(),
+                        globalAggregation.getType(),
+                        localAggregation.getArguments(),
+                        globalAggregation.getFunction(),
+                        localAggregation.isDistinct(),
+                        localAggregation.isRemovedDistinct()
+                );
+                newAggregationMap.put(globalColumn, newGlobalAggregation);
+            }
+
+            globalAgg.setAggregations(newAggregationMap);
+            globalAgg.setSplit(false);
+
+            return OptExpression.builder()
+                    .setOp(globalAgg)
+                    .setInputs(localExpr.getInputs())
+                    .setLogicalProperty(globalExpr.getLogicalProperty())
+                    .setRequiredProperties(globalExpr.getRequiredProperties())
+                    .setStatistics(localExpr.getStatistics())
+                    .setCost(localExpr.getCost() + globalExpr.getCost())
+                    .build();
         }
     }
+
 }

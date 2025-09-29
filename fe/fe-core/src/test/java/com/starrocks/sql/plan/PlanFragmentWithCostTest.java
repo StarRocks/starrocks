@@ -2411,4 +2411,9 @@ public class PlanFragmentWithCostTest extends PlanWithCostTestBase {
             connectContext.getSessionVariable().setBroadcastRowCountLimit(originLimit);
         }
     }
+
+    @Test
+    public void testCostBasedMultiStageAgg() {
+        runFileUnitTest("optimized-plan/cost_based_multi_stage_agg", true);
+    }
 }
