@@ -49,6 +49,7 @@ import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
 import com.starrocks.sql.optimizer.statistics.Statistics;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+import org.apache.paimon.CoreOptions;
 import org.apache.paimon.catalog.CachingCatalog;
 import org.apache.paimon.catalog.Catalog;
 import org.apache.paimon.catalog.Identifier;
@@ -74,6 +75,7 @@ import org.apache.paimon.types.DateType;
 import org.apache.paimon.types.RowType;
 import org.apache.paimon.utils.DateTimeUtils;
 import org.apache.paimon.utils.PartitionPathUtils;
+import org.apache.paimon.utils.StringUtils;
 
 import java.time.LocalDateTime;
 import java.time.ZoneId;
@@ -154,15 +156,14 @@ public class PaimonMetadata implements ConnectorMetadata {
 
         try {
             List<org.apache.paimon.partition.Partition> partitions = paimonNativeCatalog.listPartitions(identifier);
+            boolean partitionLegacyName = getPartitionLegacyName(paimonTable);
             for (org.apache.paimon.partition.Partition partition : partitions) {
                 String partitionPath = PartitionPathUtils.generatePartitionPath(partition.spec(), dataTableRowType);
                 String[] partitionValues = Arrays.stream(partitionPath.split("/"))
                         .map(part -> part.split("=")[1])
                         .toArray(String[]::new);
-                Partition srPartition = getPartition(partition.recordCount(),
-                        partition.fileSizeInBytes(), partition.fileCount(),
-                        partitionColumnNames, partitionColumnTypes, partitionValues,
-                        Timestamp.fromEpochMillis(partition.lastFileCreationTime()));
+                Partition srPartition = getPartition(partition, partitionColumnNames, partitionColumnTypes,
+                        partitionValues, partitionLegacyName);
                 this.partitionInfos.put(srPartition.getPartitionName(), srPartition);
             }
         } catch (Catalog.TableNotExistException e) {
@@ -170,13 +171,17 @@ public class PaimonMetadata implements ConnectorMetadata {
         }
     }
 
-    private Partition getPartition(Long recordCount,
-                                   Long fileSizeInBytes,
-                                   Long fileCount,
+    private boolean getPartitionLegacyName(org.apache.paimon.table.Table paimonTable) {
+        String partitionLegacyName = paimonTable.options().get(CoreOptions.PARTITION_GENERATE_LEGCY_NAME.key());
+        //If the user does not explicitly set this option, the result is null,but its default value is true.
+        return StringUtils.isEmpty(partitionLegacyName) || Boolean.parseBoolean(partitionLegacyName);
+    }
+
+    private Partition getPartition(org.apache.paimon.partition.Partition partition,
                                    List<String> partitionColumnNames,
                                    List<DataType> partitionColumnTypes,
                                    String[] partitionValues,
-                                   Timestamp lastUpdateTime) {
+                                   boolean partitionLegacyName) {
         if (partitionValues.length != partitionColumnNames.size()) {
             String errorMsg = String.format("The length of partitionValues %s is not equal to " +
                     "the partitionColumnNames %s.", partitionValues.length, partitionColumnNames.size());
@@ -187,7 +192,7 @@ public class PaimonMetadata implements ConnectorMetadata {
         for (int i = 0; i < partitionValues.length; i++) {
             String column = partitionColumnNames.get(i);
             String value = partitionValues[i].trim();
-            if (partitionColumnTypes.get(i) instanceof DateType) {
+            if (partitionColumnTypes.get(i) instanceof DateType && partitionLegacyName) {
                 value = DateTimeUtils.formatDate(Integer.parseInt(value));
             }
             sb.append(column).append("=").append(value);
@@ -195,9 +200,9 @@ public class PaimonMetadata implements ConnectorMetadata {
         }
         sb.deleteCharAt(sb.length() - 1);
         String partitionName = sb.toString();
-
+        Timestamp lastUpdateTime = Timestamp.fromEpochMillis(partition.lastFileCreationTime());
         return new Partition(partitionName, convertToSystemDefaultTime(lastUpdateTime),
-                recordCount, fileSizeInBytes, fileCount);
+                partition.recordCount(), partition.fileSizeInBytes(), partition.fileCount());
     }
 
     private Long convertToSystemDefaultTime(Timestamp lastUpdateTime) {
@@ -425,7 +430,6 @@ public class PaimonMetadata implements ConnectorMetadata {
         return builder.build();
 
     }
-
 
     private ColumnStatistic buildColumnStatistic(Column column, Map<String, ColStats<?>> colStatsMap,
                                                  long rowCount) {
