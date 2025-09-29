@@ -118,6 +118,7 @@ import org.apache.iceberg.StarRocksIcebergTableScan;
 import org.apache.iceberg.TableScan;
 import org.apache.iceberg.Transaction;
 import org.apache.iceberg.catalog.TableIdentifier;
+import org.apache.iceberg.exceptions.CommitFailedException;
 import org.apache.iceberg.exceptions.CommitStateUnknownException;
 import org.apache.iceberg.exceptions.NoSuchNamespaceException;
 import org.apache.iceberg.exceptions.NoSuchTableException;
@@ -1309,8 +1310,11 @@ public class IcebergMetadata implements ConnectorMetadata {
                         .map(TIcebergDataFile::getPath)
                         .collect(Collectors.toList());
                 icebergCatalog.deleteUncommittedDataFiles(toDeleteFiles);
+            } else if (e instanceof CommitFailedException) {
+                // If the commit fails, the transaction is aborted and no further action is required.
+                LOG.warn("Iceberg commit failed, the transaction will be aborted or retry.");
+                throw e;
             }
-            LOG.error("Failed to commit iceberg transaction on {}.{}", dbName, tableName, e);
             throw new StarRocksConnectorException(e.getMessage());
         } finally {
             // Do we really need that? because partition cache is associated with snapshotId
