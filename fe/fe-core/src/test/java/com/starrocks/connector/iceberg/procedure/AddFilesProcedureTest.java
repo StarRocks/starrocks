@@ -176,16 +176,21 @@ public class AddFilesProcedureTest {
         IcebergTableProcedureContext context = createMockContext(table, catalog);
 
         Map<String, ConstantOperator> args = new HashMap<>();
-        args.put("source_table", ConstantOperator.createVarchar("test_table"));
+        args.put("source_table", ConstantOperator.createVarchar("test_catalog.test_db.test_table"));
 
+        // This test will now validate the new source table functionality
+        // The test should fail due to missing Hive table access, not "not implemented"
         StarRocksConnectorException exception = assertThrows(StarRocksConnectorException.class,
                 () -> procedure.execute(context, args));
 
-        assertTrue(exception.getMessage().contains("Adding files from source_table is not yet implemented"));
+        // The exception should be about Hive table access, not "not implemented"
+        assertTrue(exception.getMessage().contains("Failed to access source table") || 
+                   exception.getMessage().contains("not found") ||
+                   exception.getMessage().contains("not a Hive table"));
     }
 
     @Test
-    public void testCreateDataFileWithMetrics() throws Exception {
+    public void testCreateDataFileFromLocationWithMetrics() throws Exception {
         AddFilesProcedure procedure = AddFilesProcedure.getInstance();
 
         // Mock table schema and partition spec
