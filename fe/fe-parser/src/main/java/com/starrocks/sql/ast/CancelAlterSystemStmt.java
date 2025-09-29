@@ -12,38 +12,39 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+
 package com.starrocks.sql.ast;
 
 import com.starrocks.sql.parser.NodePosition;
 
+import java.util.LinkedList;
 import java.util.List;
 
-public class AddBackendClause extends BackendClause {
-    private final String warehouse;
-    private final String cngroupName;
+public class CancelAlterSystemStmt extends CancelStmt {
 
-    public AddBackendClause(List<String> hostPorts, String warehouse) {
-        super(hostPorts, NodePosition.ZERO);
-        this.warehouse = warehouse;
-        this.cngroupName = "";
+    protected List<String> hostPorts;
+    private final List<HostPort> hostPortPairs;
+
+    public CancelAlterSystemStmt(List<String> hostPorts) {
+        this(hostPorts, NodePosition.ZERO);
     }
 
-    public AddBackendClause(List<String> hostPorts, String warehouse, String cngroupName, NodePosition pos) {
-        super(hostPorts, pos);
-        this.warehouse = warehouse;
-        this.cngroupName = cngroupName;
+    public CancelAlterSystemStmt(List<String> hostPorts, NodePosition pos) {
+        super(pos);
+        this.hostPorts = hostPorts;
+        this.hostPortPairs = new LinkedList<>();
     }
 
-    public String getWarehouse() {
-        return warehouse;
+    public List<String> getHostPorts() {
+        return hostPorts;
     }
 
-    public String getCNGroupName() {
-        return cngroupName;
+    public List<HostPort> getHostPortPairs() {
+        return hostPortPairs;
     }
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return ((AstVisitorExtendInterface<R, C>) visitor).visitAddBackendClause(this, context);
+        return visitor.visitCancelAlterSystemStatement(this, context);
     }
 }

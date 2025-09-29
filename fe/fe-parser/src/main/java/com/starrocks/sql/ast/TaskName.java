@@ -14,29 +14,20 @@
 
 package com.starrocks.sql.ast;
 
-import com.starrocks.sql.parser.NodePosition;
+public class TaskName {
+    private final String dbName;
+    private final String name;
 
-public class DropTagClause extends AlterTableClause {
-
-    private final String tag;
-    private final boolean ifExists;
-
-    public DropTagClause(NodePosition pos, String tag, boolean ifExists) {
-        super(pos);
-        this.tag = tag;
-        this.ifExists = ifExists;
+    public TaskName(String dbName, String name) {
+        this.dbName = dbName;
+        this.name = name;
     }
 
-    public String getTag() {
-        return tag;
+    public String getDbName() {
+        return dbName;
     }
 
-    public boolean isIfExists() {
-        return ifExists;
-    }
-
-    @Override
-    public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return ((AstVisitorExtendInterface<R, C>) visitor).visitDropTagClause(this, context);
+    public String getName() {
+        return name;
     }
 }
