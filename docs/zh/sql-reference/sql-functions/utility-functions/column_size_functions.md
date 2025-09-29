@@ -4,7 +4,7 @@ displayed_sidebar: docs
 
 # column_size & column_compressed_size
 
-这些函数返回表列的大小信息，用于存储分析和优化。两个函数都与 `[_META_]` 提示一起使用来检查段文件元数据。
+这些函数返回表列的大小信息，用于存储分析和优化。两个函数都与 `[_META_]` 提示一起使用来检查 Segment 文件元数据。
 
 ## column_size
 
@@ -23,7 +23,7 @@ SELECT column_size(column_name) FROM table_name [_META_];
 
 ### 返回值
 
-返回列的未压缩大小（以字节为单位）作为 BIGINT 值。
+返回 BIGINT 值，代表列的未压缩大小（以字节为单位）。
 
 ## column_compressed_size
 
@@ -42,7 +42,7 @@ SELECT column_compressed_size(column_name) FROM table_name [_META_];
 
 ### 返回值
 
-返回列的压缩大小（以字节为单位）作为 BIGINT 值。
+返回 BIGINT 值，代表列的压缩大小（以字节为单位）。
 
 ## 使用说明
 
