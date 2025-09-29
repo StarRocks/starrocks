@@ -1050,7 +1050,9 @@ public class ExplainAnalyzer {
         appendFilterMetrics(uniqueMetrics, nodeInfo, "ShortKeyFilter");
         appendFilterMetrics(uniqueMetrics, nodeInfo, "BitmapIndexFilter");
         appendFilterMetrics(uniqueMetrics, nodeInfo, "BloomFilterFilter");
-        appendFilterMetrics(uniqueMetrics, nodeInfo, "ZoneMapFilter");
+        appendFilterMetrics(uniqueMetrics, nodeInfo, "ZoneMapIndexFilter");
+        appendFilterMetrics(uniqueMetrics, nodeInfo, "SegmentZoneMapFilter");
+        appendFilterMetrics(uniqueMetrics, nodeInfo, "SegmentRuntimeZoneMapFilter");
         appendFilterMetrics(uniqueMetrics, nodeInfo, "PredFilter");
         appendFilterMetrics(uniqueMetrics, nodeInfo, "GinFilter");
         appendFilterMetrics(uniqueMetrics, nodeInfo, "VectorIndexFilter");
@@ -1079,7 +1081,7 @@ public class ExplainAnalyzer {
         appendMetric(uniqueMetrics, nodeInfo, "BlockFetchCount");
         appendMetric(uniqueMetrics, nodeInfo, "BlockSeek");
         appendMetric(uniqueMetrics, nodeInfo, "BlockSeekCount");
-        appendMetric(uniqueMetrics, nodeInfo, "DecompressTime");
+        appendMetric(uniqueMetrics, nodeInfo, "DecompressT");
         popIndent();
 
         appendDetailLine("SegmentProcessing:");
@@ -1203,7 +1205,8 @@ public class ExplainAnalyzer {
         }
         Counter minCounter = uniqueMetrics.getCounter(RuntimeProfile.MERGED_INFO_PREFIX_MIN + name);
         Counter maxCounter = uniqueMetrics.getCounter(RuntimeProfile.MERGED_INFO_PREFIX_MAX + name);
-        boolean needHighlight = enableHighlight && colorExplainOutput && nodeInfo.isTimeConsumingMetric(uniqueMetrics, name);
+        boolean needHighlight =
+                enableHighlight && colorExplainOutput && nodeInfo.isTimeConsumingMetric(uniqueMetrics, name);
         List<Object> items = Lists.newArrayList();
         if (needHighlight) {
             items.add(getBackGround());
@@ -1727,9 +1730,10 @@ public class ExplainAnalyzer {
     private Set<String> getScanKnownMetrics() {
         return Sets.newHashSet(
                 "ShortKeyFilter", "ShortKeyFilterRows", "BitmapIndexFilter", "BitmapIndexFilterRows",
-                "BloomFilterFilter", "BloomFilterFilterRows", "ZoneMapFilter", "ZoneMapFilterRows",
+                "BloomFilterFilter", "BloomFilterFilterRows", "ZoneMapIndexFilter", "ZoneMapIndexFilterRows",
                 "PredFilter", "PredFilterRows", "GinFilter", "GinFilterRows", "VectorIndexFilter",
                 "VectorIndexFilterRows", "DelVecFilter", "DelVecFilterRows", "RuntimeFilter", "RuntimeFilterRows",
+                "SegmentRuntimeZoneMapFilterRows", "SegmentZoneMapFilterRows",
                 "RawRowsRead", "RowsRead", "DictDecode", "DictDecodeCount", "ChunkCopy",
                 "IOTime", "BytesRead", "CompressedBytesRead", "UncompressedBytesRead", "ReadPagesNum",
                 "CachedPagesNum", "BlockFetch", "BlockFetchCount", "BlockSeek", "BlockSeekCount", "DecompressTime",
