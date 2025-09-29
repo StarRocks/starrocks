@@ -650,6 +650,7 @@ if (CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
         set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} -Werror")
     endif()
     set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} -Wno-unused-parameter -Wno-documentation -Wno-weak-vtables")
+    set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} -Wno-unknown-warning-option")
     # Turn on following warning as error explicitly
     set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} -Werror=string-plus-int")
     set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} -Werror=pessimizing-move")
@@ -670,6 +671,10 @@ if (CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
         # ignore warning from apache-orc
         set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} -Wno-switch-default")
     endif ()
+    # Add -rtlib=compiler-rt for ARM architecture to fix LLVM bug: https://bugs.llvm.org/show_bug.cgi?id=16404
+    if ("${CMAKE_BUILD_TARGET_ARCH}" STREQUAL "aarch64")
+        set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} -rtlib=compiler-rt")
+    endif()
 else ()
     if (CMAKE_CXX_COMPILER_VERSION VERSION_GREATER_EQUAL "14.0.0")
         # ignore error from apache-orc
