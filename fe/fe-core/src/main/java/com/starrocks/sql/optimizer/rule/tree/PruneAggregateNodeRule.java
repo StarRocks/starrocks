@@ -107,9 +107,11 @@ public class PruneAggregateNodeRule implements TreeRewriteRule {
             if (ConnectContext.get().getSessionVariable().isEnableCostBasedMultiStageAgg() &&
                     parentAgg.getType().isGlobal() && parentAgg.isSplit() &&
                     childAgg.getType().isLocal() && childAgg.isSplit() && !childAgg.isMergedLocalAgg()) {
-                OptExpression newAgg = mergeTwoPhaseAgg(parentAgg, childAgg, optExpression, optExpression.inputAt(0));
-                if (newAgg != null) {
-                    return newAgg;
+                OptExpression newAggExpr = mergeTwoPhaseAgg(parentAgg, childAgg, optExpression, optExpression.inputAt(0));
+                if (newAggExpr != null) {
+                    // Continue to process child nodes. For example, as for Local->DistinctGlobal->Local->Global, after merging
+                    // Local->Global, we should continue to process DistinctGlobal->Local.
+                    return visit(newAggExpr, context);
                 }
             }
 

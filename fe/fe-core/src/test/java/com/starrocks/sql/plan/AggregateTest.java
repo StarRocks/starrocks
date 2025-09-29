@@ -3140,9 +3140,10 @@ public class AggregateTest extends PlanTestBase {
             sql = "SELECT count(distinct v2), bitmap_union_count(to_bitmap(v2)) from t0 group by v3;";
             plan = getCostExplain(sql);
             assertContains(plan, "  5:AGGREGATE (update finalize)\n" +
-                    "  |  aggregate: " +
-                    "count[([2: v2, BIGINT, true]); args: BIGINT; result: BIGINT; args nullable: true; result nullable: false], " +
-                    "bitmap_union_count[([6: bitmap_union_count, BIGINT, false]); args: BITMAP; result: BIGINT; args nullable: true; " +
+                    "  |  aggregate: count[([2: v2, BIGINT, true]); args: BIGINT; result: BIGINT; " +
+                    "args nullable: true; result nullable: false], " +
+                    "bitmap_union_count[([6: bitmap_union_count, BIGINT, false]); " +
+                    "args: BITMAP; result: BIGINT; args nullable: true; " +
                     "result nullable: false]\n" +
                     "  |  group by: [3: v3, BIGINT, true]\n" +
                     "  |  cardinality: 1\n" +
@@ -3152,7 +3153,8 @@ public class AggregateTest extends PlanTestBase {
                     "  |  * bitmap_union_count-->[-Infinity, Infinity, 0.0, 1.0, 1.0] UNKNOWN\n" +
                     "  |  \n" +
                     "  4:AGGREGATE (merge serialize)\n" +
-                    "  |  aggregate: bitmap_union_count[([6: bitmap_union_count, BITMAP, false]); args: BITMAP; result: BIGINT; " +
+                    "  |  aggregate: bitmap_union_count[([6: bitmap_union_count, BITMAP, false]); " +
+                    "args: BITMAP; result: BIGINT; " +
                     "args nullable: true; result nullable: false]\n" +
                     "  |  group by: [2: v2, BIGINT, true], [3: v3, BIGINT, true]\n" +
                     "  |  cardinality: 1");
