@@ -8524,6 +8524,8 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
             explainLevel = StatementBase.ExplainLevel.ANALYZE;
         } else if (context.VERBOSE() != null) {
             explainLevel = StatementBase.ExplainLevel.VERBOSE;
+        } else if (context.TYPE() != null) {
+            explainLevel = StatementBase.ExplainLevel.TYPE;
         } else if (context.COSTS() != null) {
             explainLevel = StatementBase.ExplainLevel.COSTS;
         } else if (context.SCHEDULER() != null) {
