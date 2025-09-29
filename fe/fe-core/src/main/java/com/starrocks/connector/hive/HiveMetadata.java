@@ -64,6 +64,7 @@ import com.starrocks.statistic.StatisticUtils;
 import com.starrocks.thrift.THiveFileInfo;
 import com.starrocks.thrift.TSinkCommitInfo;
 import org.apache.hadoop.fs.Path;
+import org.apache.hadoop.hive.serde.serdeConstants;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -82,6 +83,9 @@ import static com.starrocks.server.CatalogMgr.ResourceMappingCatalog.isResourceM
 public class HiveMetadata implements ConnectorMetadata {
     private static final Logger LOG = LogManager.getLogger(HiveMetadata.class);
     public static final String STARROCKS_QUERY_ID = "starrocks_query_id";
+    public static final String FIELD_DELIMITOR = serdeConstants.FIELD_DELIM;
+    public static final String SERIALIZATION_FORMAT = serdeConstants.SERIALIZATION_FORMAT;
+
     private final String catalogName;
     private final HdfsEnvironment hdfsEnvironment;
     private final HiveMetastoreOperations hmsOps;
@@ -367,10 +371,14 @@ public class HiveMetadata implements ConnectorMetadata {
         HiveTable table = (HiveTable) getTable(new ConnectContext(), dbName, tableName);
         String stagingDir = commitInfos.get(0).getStaging_dir();
         boolean isOverwrite = commitInfos.get(0).isIs_overwrite();
+        String fieldDelimiter = table.getSerdeProperties().get(HiveMetadata.FIELD_DELIMITOR);
+        String serializationFormat = table.getSerdeProperties().get(HiveMetadata.SERIALIZATION_FORMAT);
+
 
         List<PartitionUpdate> partitionUpdates = commitInfos.stream()
                 .map(TSinkCommitInfo::getHive_file_info)
-                .map(fileInfo -> PartitionUpdate.get(fileInfo, stagingDir, table.getTableLocation()))
+                .map(fileInfo -> PartitionUpdate.get(fileInfo, stagingDir,
+                        table.getTableLocation(), fieldDelimiter, serializationFormat))
                 .collect(Collectors.collectingAndThen(Collectors.toList(), PartitionUpdate::merge));
 
         List<String> partitionColNames = table.getPartitionColumnNames();

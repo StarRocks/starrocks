@@ -15,9 +15,15 @@
 
 package com.starrocks.connector.hive;
 
+import com.starrocks.common.Config;
+import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.thrift.TTextFileDesc;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 public class TextFileFormatDesc {
+
+    private static final Logger LOG = LogManager.getLogger(TextFileFormatDesc.class);
 
     private final String fieldDelim;
 
@@ -38,7 +44,7 @@ public class TextFileFormatDesc {
 
     public TextFileFormatDesc(String fieldDelim, String lineDelim, String collectionDelim, String mapkeyDelim,
                               int skipHeaderLineCount) {
-        this.fieldDelim = fieldDelim;
+        this.fieldDelim = parseFieldDelimiter(fieldDelim);
         this.lineDelim = lineDelim;
         this.collectionDelim = collectionDelim;
         this.mapkeyDelim = mapkeyDelim;
@@ -81,6 +87,18 @@ public class TextFileFormatDesc {
         }
         desc.setSkip_header_line_count(skipHeaderLineCount);
         return desc;
+    }
+
+    public String parseFieldDelimiter(String fieldDelim) {
+        if (!Config.enable_hive_table_text_field_delimiter_enhancement) {
+            return fieldDelim;
+        }
+        try {
+            return HiveFieldDelimiter.convert(fieldDelim);
+        } catch (StarRocksConnectorException e) {
+            LOG.warn("hive table [field.delim] convert fail, reason is: ", e);
+        }
+        return fieldDelim;
     }
 
     @Override
