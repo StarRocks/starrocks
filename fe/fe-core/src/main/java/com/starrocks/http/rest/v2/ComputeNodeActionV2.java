@@ -20,32 +20,35 @@ import com.starrocks.http.BaseRequest;
 import com.starrocks.http.BaseResponse;
 import com.starrocks.http.IllegalArgException;
 import com.starrocks.http.rest.RestBaseAction;
-import com.starrocks.http.rest.v2.vo.BackendNodeInfo;
+import com.starrocks.http.rest.v2.vo.ComputeNodeInfo;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.system.Backend;
+import com.starrocks.system.ComputeNode;
 import io.netty.handler.codec.http.HttpMethod;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 import java.util.ArrayList;
 import java.util.List;
 
-public class BackendActionV2 extends RestBaseAction {
+public class ComputeNodeActionV2 extends RestBaseAction {
+    private static final Logger LOG = LogManager.getLogger(ComputeNodeActionV2.class);
 
-    public BackendActionV2(ActionController controller) {
+    public ComputeNodeActionV2(ActionController controller) {
         super(controller);
     }
 
     public static void registerAction(ActionController controller) throws IllegalArgException {
-        controller.registerHandler(HttpMethod.GET, "/api/v2/backend", new BackendActionV2(controller));
+        controller.registerHandler(HttpMethod.GET, "/api/v2/computeNode", new ComputeNodeActionV2(controller));
     }
 
     @Override
     protected void executeWithoutPassword(BaseRequest request, BaseResponse response) {
-        List<BackendNodeInfo> backendNodeInfos = new ArrayList<>();
-        ImmutableMap<Long, Backend> backendMap =
-                GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getIdToBackend();
-        for (Backend backend : backendMap.values()) {
-            BackendNodeInfo backendNodeInfo = new BackendNodeInfo(backend);
-            backendNodeInfos.add(backendNodeInfo);
+        List<ComputeNodeInfo> backendNodeInfos = new ArrayList<>();
+        ImmutableMap<Long, ComputeNode> backendMap =
+                GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getIdComputeNode();
+        for (ComputeNode computeNode : backendMap.values()) {
+            ComputeNodeInfo computeNodeInfo = new ComputeNodeInfo(computeNode);
+            backendNodeInfos.add(computeNodeInfo);
         }
         sendResult(request, response, new RestBaseResultV2<>(backendNodeInfos));
     }
