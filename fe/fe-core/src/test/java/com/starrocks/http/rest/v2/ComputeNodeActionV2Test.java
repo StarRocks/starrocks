@@ -17,7 +17,10 @@ package com.starrocks.http.rest.v2;
 import com.google.gson.reflect.TypeToken;
 import com.starrocks.http.StarRocksHttpTestCase;
 import com.starrocks.http.rest.v2.vo.BackendNodeInfo;
+import com.starrocks.http.rest.v2.vo.ComputeNodeInfo;
 import com.starrocks.persist.gson.GsonUtils;
+import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.system.ComputeNode;
 import okhttp3.Request;
 import okhttp3.Response;
 import org.junit.jupiter.api.Assertions;
@@ -28,12 +31,17 @@ import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.fail;
 
-public class BackendActionV2Test extends StarRocksHttpTestCase {
+public class ComputeNodeActionV2Test extends StarRocksHttpTestCase {
 
-    private static final String QUERY_PLAN_URI = "/api/v2/backend";
+    private static final String QUERY_PLAN_URI = "/api/v2/computeNode";
+
+    @Override
+    protected void doSetUp() throws Exception {
+        assignCN();
+    }
 
     @Test
-    public void testGetBackend() throws IOException {
+    public void testGetComputeNode() throws IOException {
         Request request = new Request.Builder()
                 .get()
                 .addHeader("Authorization", rootAuth)
@@ -41,14 +49,13 @@ public class BackendActionV2Test extends StarRocksHttpTestCase {
                 .build();
         Response response = networkClient.newCall(request).execute();
         String respStr = response.body().string();
-        RestBaseResultV2<List<BackendNodeInfo>> resp = parseResponseBody(respStr);
-        List<BackendNodeInfo> backendNodeInfos = resp.getResult();
+        RestBaseResultV2<List<ComputeNodeInfo>> resp = parseResponseBody(respStr);
+        List<ComputeNodeInfo> computeNodeInfos = resp.getResult();
         Assertions.assertEquals(200, response.code());
-        Assertions.assertEquals(3, backendNodeInfos.size());
+        Assertions.assertEquals(2, computeNodeInfos.size());
     }
 
-
-    private static RestBaseResultV2<List<BackendNodeInfo>> parseResponseBody(String body) {
+    private static RestBaseResultV2<List<ComputeNodeInfo>> parseResponseBody(String body) {
         try {
             return GsonUtils.GSON.fromJson(
                     body,
@@ -58,5 +65,14 @@ public class BackendActionV2Test extends StarRocksHttpTestCase {
             fail(e.getMessage() + ", resp: " + body);
             throw new IllegalStateException(e);
         }
+    }
+
+    private static void assignCN() {
+        ComputeNode cn1 = new ComputeNode(10001, "host1", 1003);
+        cn1.setAlive(true);
+        ComputeNode cn2 = new ComputeNode(10002, "host2", 1004);
+        cn2.setAlive(true);
+        GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().addComputeNode(cn1);
+        GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().addComputeNode(cn2);
     }
 }
