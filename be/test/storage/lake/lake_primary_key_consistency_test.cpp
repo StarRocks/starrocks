@@ -395,12 +395,12 @@ public:
         return force_flush_guard;
     }
 
-    // 50% chance to enable pk parallel execution
+    // 20% chance to enable pk parallel execution
     std::unique_ptr<ConfigResetGuard<bool>> random_pk_parallel_execution() {
         std::unique_ptr<ConfigResetGuard<bool>> pk_parallel_execution_guard;
         uint32_t r = _random_generator->random() % 100;
-        if (r < 50) {
-            // 50% chance to enable pk parallel execution
+        if (r < 20) {
+            // 20% chance to enable pk parallel execution
             pk_parallel_execution_guard =
                     std::make_unique<ConfigResetGuard<bool>>(&config::enable_pk_parallel_execution, true);
         }
