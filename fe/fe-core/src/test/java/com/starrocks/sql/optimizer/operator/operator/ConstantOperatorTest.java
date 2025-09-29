@@ -158,6 +158,12 @@ public class ConstantOperatorTest {
             ConstantOperator var2 = ConstantOperator.createTinyInt((byte) 20);
             Assertions.assertEquals(10, var1.distance(var2));
             Assertions.assertEquals(-10, var2.distance(var1));
+            
+            // tinyint edge cases
+            ConstantOperator tinyMax = ConstantOperator.createTinyInt(Byte.MAX_VALUE);
+            ConstantOperator tinyMin = ConstantOperator.createTinyInt(Byte.MIN_VALUE);
+            Assertions.assertEquals(255L, tinyMax.distance(tinyMin));
+            Assertions.assertEquals(-255L, tinyMin.distance(tinyMax));
         }
 
         {
@@ -166,6 +172,12 @@ public class ConstantOperatorTest {
             ConstantOperator var2 = ConstantOperator.createSmallInt((short) 20);
             Assertions.assertEquals(10, var1.distance(var2));
             Assertions.assertEquals(-10, var2.distance(var1));
+            
+            // smallint edge cases
+            ConstantOperator smallMax = ConstantOperator.createSmallInt(Short.MAX_VALUE);
+            ConstantOperator smallMin = ConstantOperator.createSmallInt(Short.MIN_VALUE);
+            Assertions.assertEquals(65535L, smallMax.distance(smallMin));
+            Assertions.assertEquals(-65535L, smallMin.distance(smallMax));
         }
 
         {
@@ -174,6 +186,27 @@ public class ConstantOperatorTest {
             ConstantOperator var2 = ConstantOperator.createInt(20);
             Assertions.assertEquals(10, var1.distance(var2));
             Assertions.assertEquals(-10, var2.distance(var1));
+        }
+
+        {
+            // int edge cases - test for integer overflow fix
+            ConstantOperator intMax = ConstantOperator.createInt(Integer.MAX_VALUE);
+            ConstantOperator intMin = ConstantOperator.createInt(Integer.MIN_VALUE);
+            ConstantOperator testValue = ConstantOperator.createInt(1234567890);
+            ConstantOperator zero = ConstantOperator.createInt(0);
+            
+            // Test case that previously caused overflow: INT_MAX - INT_MIN should be 4294967295
+            Assertions.assertEquals(4294967295L, intMax.distance(intMin));
+            Assertions.assertEquals(-4294967295L, intMin.distance(intMax));
+            
+            // Test case from issue #63669: test_value - INT_MIN should be 3382051538
+            Assertions.assertEquals(3382051538L, testValue.distance(intMin));
+            
+            // Test case: INT_MAX - test_value should be 912915757
+            Assertions.assertEquals(912915757L, intMax.distance(testValue));
+            
+            // Test case: zero - INT_MIN should be 2147483648
+            Assertions.assertEquals(2147483648L, zero.distance(intMin));
         }
 
         {

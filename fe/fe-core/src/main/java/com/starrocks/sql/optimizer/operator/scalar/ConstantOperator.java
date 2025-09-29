@@ -677,11 +677,11 @@ public final class ConstantOperator extends ScalarOperator implements Comparable
 
     public long distance(ConstantOperator other) {
         if (type.isTinyint()) {
-            return other.getTinyInt() - getTinyInt();
+            return (long) other.getTinyInt() - (long) getTinyInt();
         } else if (type.isSmallint()) {
-            return other.getSmallint() - getSmallint();
+            return (long) other.getSmallint() - (long) getSmallint();
         } else if (type.isInt()) {
-            return other.getInt() - getInt();
+            return (long) other.getInt() - (long) getInt();
         } else if (type.isBigint()) {
             return other.getBigint() - getBigint();
         } else if (type.isLargeint()) {
