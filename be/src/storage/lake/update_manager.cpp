@@ -47,6 +47,11 @@
 
 namespace starrocks::lake {
 
+static bool use_cloud_native_pk_index(const TabletMetadata& metadata) {
+    return metadata.enable_persistent_index() &&
+           metadata.persistent_index_type() == PersistentIndexTypePB::CLOUD_NATIVE;
+}
+
 UpdateManager::UpdateManager(std::shared_ptr<LocationProvider> location_provider, MemTracker* mem_tracker)
         : _index_cache(std::numeric_limits<size_t>::max()),
           _update_state_cache(std::numeric_limits<size_t>::max()),
@@ -279,8 +284,10 @@ Status UpdateManager::publish_primary_key_tablet(const TxnLogPB_OpWrite& op_writ
         TRACE_COUNTER_SCOPE_LATENCY_US("update_index_latency_us");
         DCHECK(state.upserts(segment_id) != nullptr);
         if (condition_column < 0) {
-            RETURN_IF_ERROR(_do_update(rowset_id, segment_id, state.upserts(segment_id), index, &new_deletes,
-                                       op_write.ssts_size() > 0 /* read pk index only when ingest sst */));
+            RETURN_IF_ERROR(
+                    _do_update(rowset_id, segment_id, state.upserts(segment_id), index, &new_deletes,
+                               op_write.ssts_size() > 0 &&
+                                       use_cloud_native_pk_index(*metadata) /* read pk index only when ingest sst */));
         } else {
             RETURN_IF_ERROR(_do_update_with_condition(params, rowset_id, segment_id, condition_column,
                                                       state.upserts(segment_id)->pk_column, index, &new_deletes));
@@ -293,11 +300,11 @@ Status UpdateManager::publish_primary_key_tablet(const TxnLogPB_OpWrite& op_writ
         _index_cache.update_object_size(index_entry, index.memory_usage());
         state.release_segment(segment_id);
         _update_state_cache.update_object_size(state_entry, state.memory_usage());
-        if (op_write.ssts_size() > 0 && condition_column < 0) {
+        if (op_write.ssts_size() > 0 && condition_column < 0 && use_cloud_native_pk_index(*metadata)) {
             // TODO support condition column with sst ingestion.
             // rowset_id + segment_id is the rssid of this segment
             RETURN_IF_ERROR(index.ingest_sst(op_write.ssts(segment_id), rowset_id + segment_id, metadata->version(),
-                                             false /* no compaction */, nullptr));
+                                             DelvecPagePB() /* empty */, nullptr));
         }
     }
 
@@ -1192,23 +1199,27 @@ Status UpdateManager::light_publish_primary_compaction(const TxnLogPB_OpCompacti
     auto resolver = std::make_unique<LakePrimaryKeyCompactionConflictResolver>(&metadata, &output_rowset, _tablet_mgr,
                                                                                builder, &index, txn_id, base_version,
                                                                                &segment_id_to_add_dels, &delvecs);
-    if (op_compaction.ssts_size() > 0) {
+    if (op_compaction.ssts_size() > 0 && use_cloud_native_pk_index(metadata)) {
         RETURN_IF_ERROR(resolver->execute_without_update_index());
     } else {
         RETURN_IF_ERROR(resolver->execute());
     }
-    // 3. ingest ssts to index
-    DCHECK(delvecs.size() == op_compaction.ssts_size());
-    for (int i = 0; i < op_compaction.ssts_size(); i++) {
-        // metadata.next_rowset_id() + i is the rssid of output rowset's i-th segment
-        RETURN_IF_ERROR(index.ingest_sst(op_compaction.ssts(i), metadata.next_rowset_id() + i, metadata.version(),
-                                         true /* is compaction */, delvecs[i].second));
-    }
-    _index_cache.update_object_size(index_entry, index.memory_usage());
-    // 4. update TabletMeta and write to meta file
+    // 3. add delvec to builder
     for (auto&& each : delvecs) {
         builder->append_delvec(each.second, each.first);
     }
+    // 4. ingest ssts to index
+    DCHECK(op_compaction.ssts_size() == 0 || delvecs.size() == op_compaction.ssts_size())
+            << "delvecs.size(): " << delvecs.size() << ", op_compaction.ssts_size(): " << op_compaction.ssts_size();
+    for (int i = 0; i < op_compaction.ssts_size() && use_cloud_native_pk_index(metadata); i++) {
+        // metadata.next_rowset_id() + i is the rssid of output rowset's i-th segment
+        DelvecPagePB delvec_page_pb = builder->delvec_page(metadata.next_rowset_id() + i);
+        delvec_page_pb.set_version(metadata.version());
+        RETURN_IF_ERROR(index.ingest_sst(op_compaction.ssts(i), metadata.next_rowset_id() + i, metadata.version(),
+                                         delvec_page_pb, delvecs[i].second));
+    }
+    _index_cache.update_object_size(index_entry, index.memory_usage());
+    // 5. update TabletMeta
     builder->apply_opcompaction(op_compaction, max_rowset_id, tablet_schema->id());
     RETURN_IF_ERROR(builder->update_num_del_stat(segment_id_to_add_dels));
     RETURN_IF_ERROR(index.apply_opcompaction(metadata, op_compaction));
@@ -1551,7 +1562,7 @@ void UpdateManager::set_enable_persistent_index(int64_t tablet_id, bool enable_p
     }
 }
 
-Status UpdateManager::execute_index_major_compaction(const TabletMetadata& metadata, TxnLogPB* txn_log) {
+Status UpdateManager::execute_index_major_compaction(const TabletMetadataPtr& metadata, TxnLogPB* txn_log) {
     return LakePersistentIndex::major_compact(_tablet_mgr, metadata, txn_log);
 }
 
