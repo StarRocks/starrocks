@@ -13,6 +13,7 @@ Returns the decompressed size of a column in bytes.
 ### Syntax
 
 ```SQL
+-- Do not omit the brackets [] in the hint.
 SELECT column_size(column_name) FROM table_name [_META_];
 ```
 
@@ -31,6 +32,7 @@ Returns the compressed size of a column in bytes.
 ### Syntax
 
 ```SQL
+-- Do not omit the brackets [] in the hint.
 SELECT column_compressed_size(column_name) FROM table_name [_META_];
 ```
 
