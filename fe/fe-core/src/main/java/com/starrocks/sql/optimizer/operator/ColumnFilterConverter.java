@@ -123,8 +123,20 @@ public class ColumnFilterConverter {
                 Expr firstExpr = node.getChild(0);
                 if (firstExpr instanceof SlotRef slotRef) {
                     if (columnRef.getName().equals(slotRef.getColumnName())) {
-                        node.setChild(0, new IntLiteral(constant.getBigint()));
-                        return true;
+                        try {
+                            // Preserve the original column's integer width to match the analyzed
+                            // function signature in partition expressions and avoid FE assertions.
+                            if (columnRef.getType().equals(Type.INT)) {
+                                node.setChild(0, new IntLiteral(constant.getInt(), Type.INT));
+                            } else {
+                                // Default to BIGINT for other integer widths (e.g. BIGINT)
+                                node.setChild(0, new IntLiteral(constant.getBigint(), Type.BIGINT));
+                            }
+                            return true;
+                        } catch (Exception e) {
+                            // If the constant doesn't fit the target type, skip rewriting.
+                            return false;
+                        }
                     }
                 }
             }
