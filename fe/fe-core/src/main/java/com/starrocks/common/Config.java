@@ -2384,16 +2384,18 @@ public class Config extends ConfigBase {
     public static long hive_meta_cache_refresh_interval_s = 60;
 
     /**
+     * Implicit for users
      * Hive metastore cache ttl
      */
     @ConfField
     public static long hive_meta_cache_ttl_s = 3600L * 24L;
 
     /**
+     * Implicit for users
      * Remote file's metadata from hdfs or s3 cache ttl
      */
     @ConfField
-    public static long remote_file_cache_ttl_s = 3600 * 36L;
+    public static long remote_file_cache_ttl_s = 3600 * 24L;
 
     /**
      * The maximum number of partitions to fetch from the metastore in one RPC.
