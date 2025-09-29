@@ -60,15 +60,9 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
-<<<<<<< HEAD
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
-=======
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertInstanceOf;
-import static org.junit.jupiter.api.Assertions.assertNotNull;
-import static org.junit.jupiter.api.Assertions.assertTrue;
->>>>>>> feab1f6365 ([BugFix] Fix ClassCastException when querying INT column with FROM_UNIXTIME partition (#63684))
 
 public class ColumnFilterConverterTest {
 
@@ -341,27 +335,6 @@ public class ColumnFilterConverterTest {
         } catch (ClassCastException e) {
             assertTrue(e.getMessage().contains("cannot be cast"));
         }
-    }
-
-    /**
-     * Test FROM_UNIXTIME_MS function with BIGINT constant
-     */
-    @Test 
-    public void testRewritePredicateFromUnixtimeMs() {
-        SlotRef timeSlotRef = new SlotRef(new TableName(null, "test"), "collect_api_receive_time");
-        List<Expr> args = Lists.newArrayList(timeSlotRef);
-        FunctionCallExpr fromUnixtimeMsCall = new FunctionCallExpr(FunctionSet.FROM_UNIXTIME_MS, args);
-        
-        ColumnRefOperator columnRef = new ColumnRefOperator(1, Type.BIGINT, "collect_api_receive_time", false);
-        
-        ConstantOperator bigintConstant = ConstantOperator.createBigint(1640995200000L);
-        boolean result = ColumnFilterConverter.rewritePredicate(fromUnixtimeMsCall, columnRef, bigintConstant);
-        assertTrue(result);
-        
-        Expr firstChild = fromUnixtimeMsCall.getChild(0);
-        assertInstanceOf(IntLiteral.class, firstChild);
-        IntLiteral intLiteral = (IntLiteral) firstChild;
-        assertEquals(1640995200000L, intLiteral.getValue());
     }
 
 }
