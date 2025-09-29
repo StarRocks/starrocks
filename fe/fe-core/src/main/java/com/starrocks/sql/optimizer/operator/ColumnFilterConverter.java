@@ -124,7 +124,16 @@ public class ColumnFilterConverter {
                 if (firstExpr instanceof SlotRef) {
                     SlotRef slotRef = firstExpr.cast();
                     if (columnRef.getName().equals(slotRef.getColumnName())) {
-                        node.setChild(0, new IntLiteral(constant.getBigint()));
+                        // FROM_UNIXTIME supports INT and BIGINT, FROM_UNIXTIME_MS supports only BIGINT
+                        long value;
+                        if (constant.getType().isInt()) {
+                            value = constant.getInt();
+                        } else if (constant.getType().isBigint()) {
+                            value = constant.getBigint();
+                        } else {
+                            value = constant.getBigint();
+                        }
+                        node.setChild(0, new IntLiteral(value, constant.getType()));
                         return true;
                     }
                 }

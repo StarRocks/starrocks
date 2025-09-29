@@ -60,8 +60,15 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
+<<<<<<< HEAD
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
+=======
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+>>>>>>> feab1f6365 ([BugFix] Fix ClassCastException when querying INT column with FROM_UNIXTIME partition (#63684))
 
 public class ColumnFilterConverterTest {
 
@@ -268,6 +275,93 @@ public class ColumnFilterConverterTest {
         ExpressionRangePartitionInfoV2 partitionInfo = (ExpressionRangePartitionInfoV2) ((OlapTable) table).getPartitionInfo();
         ScalarOperator afterConvert = ColumnFilterConverter.convertPredicate(predicate, partitionInfo, table.getIdToColumn());
         Assert.assertEquals(2921712368984L, ((ConstantOperator) afterConvert.getChild(1)).getValue());
+    }
+
+    @Test
+    public void testFromUnixtimePartitionWithIntConstant() throws Exception {
+        starRocksAssert.withTable("CREATE TABLE `int32test` (\n" +
+                "  `collect_api_receive_time` int(11) NOT NULL DEFAULT \"0\" COMMENT \"time\"\n" +
+                ") ENGINE=OLAP \n" +
+                "DUPLICATE KEY(`collect_api_receive_time`)\n" +
+                "PARTITION BY RANGE(from_unixtime(collect_api_receive_time))()\n" +
+                "DISTRIBUTED BY HASH(`collect_api_receive_time`) BUCKETS 2 \n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\"\n" +
+                ");");
+
+        // Test INT constant (this would cause ClassCastException before the fix)
+        ColumnRefOperator intColumnRef = new ColumnRefOperator(1, Type.INT, "collect_api_receive_time", false);
+        ConstantOperator intConstant = ConstantOperator.createInt(0);  // INT type constant
+        ScalarOperator intPredicate = new BinaryPredicateOperator(BinaryType.GT, intColumnRef, intConstant);
+
+        Table intTable = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test")
+                .getTable("int32test");
+        ExpressionRangePartitionInfoV2 intPartitionInfo = (ExpressionRangePartitionInfoV2) ((OlapTable) intTable)
+                .getPartitionInfo();
+        
+        // This should not throw ClassCastException after the fix
+        ScalarOperator afterConvertInt = ColumnFilterConverter.convertPredicate(
+                intPredicate, intPartitionInfo, intTable.getIdToColumn());
+        assertNotNull(afterConvertInt);
+        
+        // Test BIGINT constant (this should work before and after the fix)
+        ConstantOperator bigintConstant = ConstantOperator.createBigint(0L);  // BIGINT type constant
+        ScalarOperator bigintPredicate = new BinaryPredicateOperator(BinaryType.GT, intColumnRef, bigintConstant);
+        
+        ScalarOperator afterConvertBigint = ColumnFilterConverter.convertPredicate(
+                bigintPredicate, intPartitionInfo, intTable.getIdToColumn());
+        assertNotNull(afterConvertBigint);
+        
+        // Test that both INT and BIGINT constants produce equivalent results
+        assertEquals(afterConvertInt.getClass(), afterConvertBigint.getClass());
+    }
+
+    @Test
+    public void testRewritePredicateFromUnixtimeWithDifferentIntTypes() {
+        SlotRef timeSlotRef = new SlotRef(new TableName(null, "test"), "collect_api_receive_time");
+        List<Expr> args = Lists.newArrayList(timeSlotRef);
+        FunctionCallExpr fromUnixtimeCall = new FunctionCallExpr(FunctionSet.FROM_UNIXTIME, args);
+        
+        ColumnRefOperator columnRef = new ColumnRefOperator(1, Type.INT, "collect_api_receive_time", false);
+        
+        ConstantOperator intConstant = ConstantOperator.createInt(1000);
+        boolean result1 = ColumnFilterConverter.rewritePredicate(fromUnixtimeCall, columnRef, intConstant);
+        assertTrue(result1);
+        
+        ConstantOperator tinyintConstant = ConstantOperator.createTinyInt((byte) 5);
+        try {
+            ColumnFilterConverter.rewritePredicate(fromUnixtimeCall, columnRef, tinyintConstant);
+        } catch (ClassCastException e) {
+            assertTrue(e.getMessage().contains("cannot be cast"));
+        }
+        
+        ConstantOperator smallintConstant = ConstantOperator.createSmallInt((short) 100);
+        try {
+            ColumnFilterConverter.rewritePredicate(fromUnixtimeCall, columnRef, smallintConstant);
+        } catch (ClassCastException e) {
+            assertTrue(e.getMessage().contains("cannot be cast"));
+        }
+    }
+
+    /**
+     * Test FROM_UNIXTIME_MS function with BIGINT constant
+     */
+    @Test 
+    public void testRewritePredicateFromUnixtimeMs() {
+        SlotRef timeSlotRef = new SlotRef(new TableName(null, "test"), "collect_api_receive_time");
+        List<Expr> args = Lists.newArrayList(timeSlotRef);
+        FunctionCallExpr fromUnixtimeMsCall = new FunctionCallExpr(FunctionSet.FROM_UNIXTIME_MS, args);
+        
+        ColumnRefOperator columnRef = new ColumnRefOperator(1, Type.BIGINT, "collect_api_receive_time", false);
+        
+        ConstantOperator bigintConstant = ConstantOperator.createBigint(1640995200000L);
+        boolean result = ColumnFilterConverter.rewritePredicate(fromUnixtimeMsCall, columnRef, bigintConstant);
+        assertTrue(result);
+        
+        Expr firstChild = fromUnixtimeMsCall.getChild(0);
+        assertInstanceOf(IntLiteral.class, firstChild);
+        IntLiteral intLiteral = (IntLiteral) firstChild;
+        assertEquals(1640995200000L, intLiteral.getValue());
     }
 
 }
