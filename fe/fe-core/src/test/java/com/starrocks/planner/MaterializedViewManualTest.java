@@ -293,6 +293,7 @@ public class MaterializedViewManualTest extends MaterializedViewTestBase {
                 ")\n" +
                 "DISTRIBUTED BY HASH(`order_id`)";
         starRocksAssert.withTable(tableSQL);
+        
         String mv = "CREATE MATERIALIZED VIEW `test_partition_expr_mv1`\n" +
                 "PARTITION BY ds \n" +
                 "DISTRIBUTED BY RANDOM \n" +

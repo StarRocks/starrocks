@@ -60,15 +60,10 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
-<<<<<<< HEAD
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
-=======
-import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
-import static org.junit.jupiter.api.Assertions.assertNotNull;
-import static org.junit.jupiter.api.Assertions.assertTrue;
->>>>>>> feab1f6365 ([BugFix] Fix ClassCastException when querying INT column with FROM_UNIXTIME partition (#63684))
 
 public class ColumnFilterConverterTest {
 
