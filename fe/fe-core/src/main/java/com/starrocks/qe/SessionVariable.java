@@ -5335,7 +5335,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public boolean isEnableFullSortUseGermanString() {
         return this.enableFullSortUseGermanString;
     }
-    
+
     // Control the hash function used in exchange sink operator for hash partitioning
     // When true, use crc32_hash instead of fnv_hash
     @VariableMgr.VarAttr(name = "use_crc32_hash_for_exchange")
@@ -5433,11 +5433,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         tResult.setGroup_concat_max_len(groupConcatMaxLen);
         tResult.setRpc_http_min_size(rpcHttpMinSize);
         tResult.setInterleaving_group_size(interleavingGroupSize);
-<<<<<<< HEAD
-=======
-        tResult.setEnable_predicate_col_late_materialize(enablePredicateColLateMaterialize);
         tResult.setUse_crc32_hash_for_exchange(useCrc32HashForExchange);
->>>>>>> 998d31bf54 (use crc hash for exchange)
 
         TCompressionType loadCompressionType =
                 CompressionUtils.findTCompressionByName(loadTransmissionCompressionType);
