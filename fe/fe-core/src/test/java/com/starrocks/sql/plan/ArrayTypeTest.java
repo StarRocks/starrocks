@@ -769,4 +769,15 @@ public class ArrayTypeTest extends PlanTestBase {
         plan = getCostExplain(sql);
         assertNotContains(plan, "ColumnAccessPath: [/d_1/OFFSET]");
     }
+
+    @Test
+    public void testArrayNull() throws Exception {
+        String sql = "with test_cte as (\n"
+                + "    select array<varchar>[] as some_array\n"
+                + ")\n"
+                + "select array_agg(some_array)\n"
+                + "from test_cte;";
+        String plan = getThriftPlan(sql);
+        assertContains(plan, "function_name:array_agg");
+    }
 }
