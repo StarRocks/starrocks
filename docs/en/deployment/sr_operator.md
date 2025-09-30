@@ -2,9 +2,9 @@
 displayed_sidebar: docs
 ---
 
-# Deploy StarRocks with Operator
+# StarRocks Kubernetes Operator
 
-This topic introduces how to use the StarRocks Operator to automate the deployment and management of a StarRocks cluster on a Kubernetes cluster.
+Automate deployment and management of a StarRocks cluster on a Kubernetes cluster with the StarRocks Kubernetes Operator.
 
 :::note
 The StarRocks k8s operator was designed to be a level 2 operator.   See https://sdk.operatorframework.io/docs/overview/operator-capabilities/ to understand more about the capabilities of a level 2 operator. 
@@ -25,7 +25,7 @@ You can use the cloud-managed Kubernetes service, such as an [Amazon Elastic Kub
   1. Check that [the following command-line tools are installed in your environment](https://docs.aws.amazon.com/eks/latest/userguide/getting-started.html):
      1. Install and configure AWS command-line tool AWS CLI.
      2. Install EKS cluster command-line tool eksctl.
-     3. Install Kubernetes cluster command-line tool kubectl.
+     3. Install the Kubernetes cluster command-line tool kubectl.
   2. Use one of the following methods to create an EKS cluster:
      1. [Use eksctl to quickly create an EKS cluster](https://docs.aws.amazon.com/eks/latest/userguide/getting-started-eksctl.html).
      2. [Manually create an EKS cluster with the AWS console and AWS CLI](https://docs.aws.amazon.com/eks/latest/userguide/getting-started-console.html).
@@ -38,7 +38,7 @@ You can use the cloud-managed Kubernetes service, such as an [Amazon Elastic Kub
 
   Follow the instructions provided in [Bootstrapping clusters with kubeadm](https://kubernetes.io/docs/setup/production-environment/tools/kubeadm/) to create a self-managed Kubernetes cluster. You can use [Minikube](https://kubernetes.io/docs/tutorials/kubernetes-basics/create-cluster/cluster-intro/) and [Docker Desktop](https://docs.docker.com/desktop/) to create a single-node private Kubernetes cluster with minimum steps.
 
-### Deploy StarRocks Operator
+### Deploy StarRocks Kubernetes Operator
 
 1. Add the custom resource StarRocksCluster.
 
@@ -116,9 +116,9 @@ starrockscluster-sample-fe-1          1/1     Running   0          21h
 starrockscluster-sample-fe-2          1/1     Running   0          22h
 ```
 
-> **Note**
->
-> If some pods cannot start after a long period of time, you can use `kubectl logs -n starrocks <pod_name>` to view the log information or use `kubectl -n starrocks describe pod <pod_name>` to view the event information to locate the problem.
+:::tip
+If some pods cannot start after a long period of time, you can use `kubectl logs -n starrocks <pod_name>` to view the log information or use `kubectl -n starrocks describe pod <pod_name>` to view the event information to locate the problem.
+:::
 
 ## Manage StarRocks Cluster
 
@@ -126,10 +126,10 @@ starrockscluster-sample-fe-2          1/1     Running   0          22h
 
 The components of the StarRocks cluster can be accessed through their associated Services, such as the FE Service. For detailed descriptions of Services and their access addresses, see [api.md](https://github.com/StarRocks/starrocks-kubernetes-operator/blob/main/doc/api.md) and [Services](https://kubernetes.io/docs/concepts/services-networking/service/).
 
-> **NOTE**
->
-> - Only the FE Service is deployed by default. If you need to deploy the BE Service and CN Service, you need to configure `starRocksBeSpec` and `starRocksCnSpec` in the StarRocks cluster configuration file.
-> - The name of a Service is `<cluster name>-<component name>-service` by default, for example, `starrockscluster-sample-fe-service`. You can also specify the Service name in the spec of each component.
+:::note
+- Only the FE Service is deployed by default. If you need to deploy the BE Service and CN Service, you need to configure `starRocksBeSpec` and `starRocksCnSpec` in the StarRocks cluster configuration file.
+- The name of a Service is `<cluster name>-<component name>-service` by default, for example, `starrockscluster-sample-fe-service`. You can also specify the Service name in the spec of each component.
+:::
 
 #### Access StarRocks Cluster from within Kubernetes Cluster
 
@@ -243,9 +243,9 @@ The scaling process lasts for a while. You can use the command `kubectl -n starr
 
 Run the command `kubectl -n starrocks edit src starrockscluster-sample` to configure the automatic scaling policy for the CN cluster. You can specify the resource metrics for CNs as the average CPU utilization, average memory usage, elastic scaling threshold, upper elastic scaling limit, and lower elastic scaling limit. The upper elastic scaling limit and lower elastic scaling limit specify the maximum number and minimum number of CNs allowed for elastic scaling.
 
-> **NOTE**
->
-> If the automatic scaling policy for the CN cluster is configured, delete the `replicas` field from the `starRocksCnSpec` in the StarRocks cluster configuration file.
+:::note
+If the automatic scaling policy for the CN cluster is configured, delete the `replicas` field from the `starRocksCnSpec` in the StarRocks cluster configuration file.
+:::
 
 Kubernetes also supports using `behavior` to customize scaling behaviors according to business scenarios, helping you achieve rapid or slow scaling or disable scaling. For more information about automatic scaling policies, see [Horizontal Pod Scaling](https://kubernetes.io/docs/tasks/run-application/horizontal-pod-autoscale/).
 
