@@ -20,7 +20,6 @@ import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.OperatorBuilderFactory;
 import com.starrocks.sql.optimizer.operator.logical.LogicalJoinOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalRepeatOperator;
-import com.starrocks.sql.optimizer.operator.logical.LogicalScanOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rewrite.ScalarOperatorRewriter;
 import com.starrocks.sql.optimizer.task.TaskContext;
@@ -72,8 +71,7 @@ public class SimplifyCaseWhenPredicateRule implements TreeRewriteRule {
             if (predicate == null) {
                 return Optional.empty();
             }
-            boolean isScan = optExpression.getOp() instanceof LogicalScanOperator;
-            ScalarOperator newPredicate = ScalarOperatorRewriter.simplifyCaseWhen(predicate, isScan);
+            ScalarOperator newPredicate = ScalarOperatorRewriter.simplifyCaseWhen(predicate, true);
             if (newPredicate == predicate) {
                 return Optional.empty();
             }
@@ -91,12 +89,12 @@ public class SimplifyCaseWhenPredicateRule implements TreeRewriteRule {
             }
             Optional<ScalarOperator> optNewOnPredicate =
                     Optional.ofNullable(joinOperator.getOnPredicate()).map(predicate -> {
-                        ScalarOperator newPredicate = ScalarOperatorRewriter.simplifyCaseWhen(predicate, false);
+                        ScalarOperator newPredicate = ScalarOperatorRewriter.simplifyCaseWhen(predicate, true);
                         return newPredicate == predicate ? null : newPredicate;
                     });
             Optional<ScalarOperator> optNewPredicate =
                     Optional.ofNullable(joinOperator.getPredicate()).map(predicate -> {
-                        ScalarOperator newPredicate = ScalarOperatorRewriter.simplifyCaseWhen(predicate, false);
+                        ScalarOperator newPredicate = ScalarOperatorRewriter.simplifyCaseWhen(predicate, true);
                         return newPredicate == predicate ? null : newPredicate;
                     });
             Operator newOperator = LogicalJoinOperator.builder().withOperator(joinOperator)
