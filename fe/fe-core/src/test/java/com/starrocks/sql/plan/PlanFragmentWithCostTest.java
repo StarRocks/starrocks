@@ -55,6 +55,14 @@ public class PlanFragmentWithCostTest extends PlanWithCostTestBase {
     @BeforeEach
     public void before() {
         connectContext.getSessionVariable().setNewPlanerAggStage(0);
+
+        GlobalStateMgr globalStateMgr = connectContext.getGlobalStateMgr();
+        OlapTable t0 = (OlapTable) globalStateMgr.getLocalMetastore().getDb("test").getTable("t0");
+        setTableStatistics(t0, NUM_TABLE0_ROWS);
+        OlapTable t1 = (OlapTable) globalStateMgr.getLocalMetastore().getDb("test").getTable("t1");
+        setTableStatistics(t1, 10000);
+        OlapTable t2 = (OlapTable) globalStateMgr.getLocalMetastore().getDb("test").getTable("t1");
+        setTableStatistics(t2, NUM_TABLE2_ROWS);
     }
 
     private static final String V1 = "v1";
