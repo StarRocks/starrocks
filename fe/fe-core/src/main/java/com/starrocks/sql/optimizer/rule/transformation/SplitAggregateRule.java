@@ -132,6 +132,9 @@ public abstract class SplitAggregateRule extends TransformationRule {
                 && !FeConstants.runningUnitTest
                 && CollectionUtils.isNotEmpty(operator.getGroupingKeys())
                 && ConnectContext.get().getSessionVariable().isCboEnableSingleNodePreferTwoStageAggregate()) {
+            // for single node's distinct, we prefer two phase agg when partition by column in exchange is not skew
+            // since in such case, there is no scale problem
+            // otherwise prefer four phase agg in isThreeStageMoreEfficient() since it has the best scalability
             List<ColumnRefOperator> partitionByColumns = operator.getPartitionByColumns();
 
             Statistics inputStatistics = input.getGroupExpression().inputAt(0).getStatistics();
