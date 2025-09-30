@@ -707,6 +707,10 @@ public class ConnectContext {
         endTime = Instant.now();
     }
 
+    public Instant getEndTime() {
+        return endTime;
+    }
+
     public void updateReturnRows(int returnRows) {
         this.returnRows += returnRows;
     }
