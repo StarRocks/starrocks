@@ -256,10 +256,13 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String ENABLE_PIPELINE = "enable_pipeline";
 
     public static final String ENABLE_RUNTIME_ADAPTIVE_DOP = "enable_runtime_adaptive_dop";
+    public static final String ENABLE_RUNTIME_ADAPTIVE_DOP_IN_MULTI_CORE = "enable_runtime_adaptive_dop_in_multi_core";
+
     public static final String ADAPTIVE_DOP_MAX_BLOCK_ROWS_PER_DRIVER_SEQ =
             "runtime_adaptive_dop_max_block_rows_per_driver_seq";
     public static final String ADAPTIVE_DOP_MAX_OUTPUT_AMPLIFICATION_FACTOR =
             "runtime_adaptive_dop_max_output_amplification_factor";
+    public static final String SINGLE_NODE_LARGE_CORE_NUM = "single_node_large_core_num";
 
     public static final String ENABLE_PIPELINE_ENGINE = "enable_pipeline_engine";
 
@@ -1000,8 +1003,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VariableMgr.VarAttr(name = ENABLE_RUNTIME_ADAPTIVE_DOP)
     private boolean enableRuntimeAdaptiveDop = false;
 
+    @VariableMgr.VarAttr(name = ENABLE_RUNTIME_ADAPTIVE_DOP_IN_MULTI_CORE)
+    private boolean enableRuntimeAdaptiveDopInMultiCore = true;
+
     @VariableMgr.VarAttr(name = ADAPTIVE_DOP_MAX_BLOCK_ROWS_PER_DRIVER_SEQ, flag = VariableMgr.INVISIBLE)
     private long adaptiveDopMaxBlockRowsPerDriverSeq = 4096L * 4;
+
+    @VariableMgr.VarAttr(name = SINGLE_NODE_LARGE_CORE_NUM, flag = VariableMgr.INVISIBLE)
+    private long singleNodeLargeCoreNum = 160L;
 
     // Effective when it is positive.
     @VariableMgr.VarAttr(name = ADAPTIVE_DOP_MAX_OUTPUT_AMPLIFICATION_FACTOR, flag = VariableMgr.INVISIBLE)
@@ -3844,11 +3853,17 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     }
 
     public boolean isEnableRuntimeAdaptiveDop() {
-        return enablePipelineEngine && enableRuntimeAdaptiveDop;
+        return enablePipelineEngine && (enableRuntimeAdaptiveDop ||
+                enableRuntimeAdaptiveDopInMultiCore && ConnectContext.get() != null &&
+                        ConnectContext.get().isSingleNodeWithLargeNumberCpuCores());
     }
 
     public long getAdaptiveDopMaxBlockRowsPerDriverSeq() {
         return adaptiveDopMaxBlockRowsPerDriverSeq;
+    }
+
+    public long getSingleNodeLargeCoreNum() {
+        return singleNodeLargeCoreNum;
     }
 
     public long getAdaptiveDopMaxOutputAmplificationFactor() {
