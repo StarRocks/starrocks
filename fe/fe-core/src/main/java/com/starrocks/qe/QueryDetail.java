@@ -46,6 +46,18 @@ public class QueryDetail implements Serializable {
         CANCELLED
     }
 
+    /**
+     * QuerySource distinguishes the origin of a query.
+     */
+    public enum QuerySource {
+        EXTERNAL,  // User-initiated queries
+        INTERNAL,  // System/internal queries
+        MV,        // Materialized view refresh
+        TASK       // Task-submitted queries
+    }
+
+    private QuerySource querySource = QuerySource.EXTERNAL;
+
     // When query received, FE will construct a QueryDetail
     // object. This object will set queryId, startTime, sql
     // fields. As well state is be set as RUNNING.
@@ -119,9 +131,9 @@ public class QueryDetail implements Serializable {
     }
 
     public QueryDetail(String queryId, boolean isQuery, int connId, String remoteIP,
-                        long startTime, long endTime, long latency, QueryMemState state,
-                        String database, String sql, String user, String resourceGroupName,
-                        String warehouse, String catalog) {
+                       long startTime, long endTime, long latency, QueryMemState state,
+                       String database, String sql, String user, String resourceGroupName,
+                       String warehouse, String catalog) {
         this(queryId, isQuery, connId, remoteIP, startTime, endTime, latency,
                 state, database, sql, user, resourceGroupName, catalog);
         this.warehouse = warehouse;
@@ -155,6 +167,7 @@ public class QueryDetail implements Serializable {
         queryDetail.resourceGroupName = this.resourceGroupName;
         queryDetail.catalog = this.catalog;
         queryDetail.queryFeMemory = this.queryFeMemory;
+        queryDetail.querySource = this.querySource;
         return queryDetail;
     }
 
@@ -376,5 +389,13 @@ public class QueryDetail implements Serializable {
 
     public long getQueryFeMemory() {
         return queryFeMemory;
+    }
+
+    public QuerySource getQuerySource() {
+        return querySource;
+    }
+
+    public void setQuerySource(QuerySource querySource) {
+        this.querySource = querySource;
     }
 }
