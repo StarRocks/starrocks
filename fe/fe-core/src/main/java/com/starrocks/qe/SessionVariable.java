@@ -959,6 +959,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public static final String ENABLE_FULL_SORT_USE_GERMAN_STRING = "enable_full_sort_use_german_string";
 
+    public static final String USE_CRC32_HASH_FOR_EXCHANGE = "use_crc32_hash_for_exchange";
+
     public static final List<String> DEPRECATED_VARIABLES = ImmutableList.<String>builder()
             .add(CODEGEN_LEVEL)
             .add(MAX_EXECUTION_TIME)
@@ -1964,6 +1966,11 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VarAttr(name = ENABLE_FULL_SORT_USE_GERMAN_STRING)
     private boolean enableFullSortUseGermanString = true;
+
+    // Control the hash function used in exchange sink operator for hash partitioning
+    // When true, use crc32_hash instead of fnv_hash
+    @VarAttr(name = USE_CRC32_HASH_FOR_EXCHANGE)
+    private boolean useCrc32HashForExchange = true;
 
     public int getCboPruneJsonSubfieldDepth() {
         return cboPruneJsonSubfieldDepth;
@@ -5335,11 +5342,6 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public boolean isEnableFullSortUseGermanString() {
         return this.enableFullSortUseGermanString;
     }
-
-    // Control the hash function used in exchange sink operator for hash partitioning
-    // When true, use crc32_hash instead of fnv_hash
-    @VariableMgr.VarAttr(name = "use_crc32_hash_for_exchange")
-    private boolean useCrc32HashForExchange = true;
 
     public boolean isUseCrc32HashForExchange() {
         return useCrc32HashForExchange;
