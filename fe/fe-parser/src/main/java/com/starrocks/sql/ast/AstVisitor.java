@@ -681,4 +681,8 @@ public interface AstVisitor<R, C> {
     default R visitAlterCatalogStatement(AlterCatalogStmt statement, C context) {
         return visitDDLStatement(statement, context);
     }
+
+    default R visitShowDataDistributionStatement(ShowDataDistributionStmt statement, C context) {
+        return visitShowStatement(statement, context);
+    }
 }

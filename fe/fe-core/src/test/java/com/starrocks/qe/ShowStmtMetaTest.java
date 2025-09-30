@@ -21,6 +21,7 @@ import com.starrocks.sql.ast.AdminShowConfigStmt;
 import com.starrocks.sql.ast.AdminShowReplicaDistributionStmt;
 import com.starrocks.sql.ast.AdminShowReplicaStatusStmt;
 import com.starrocks.sql.ast.LabelName;
+import com.starrocks.sql.ast.QualifiedName;
 import com.starrocks.sql.ast.SetType;
 import com.starrocks.sql.ast.ShowAlterStmt;
 import com.starrocks.sql.ast.ShowAnalyzeJobStmt;
@@ -96,6 +97,7 @@ import com.starrocks.sql.ast.ShowUserStmt;
 import com.starrocks.sql.ast.ShowVariablesStmt;
 import com.starrocks.sql.ast.ShowWarningStmt;
 import com.starrocks.sql.ast.ShowWhiteListStmt;
+import com.starrocks.sql.ast.TableDef;
 import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.ast.expression.TableName;
 import com.starrocks.sql.ast.expression.TableRef;
@@ -937,9 +939,8 @@ public class ShowStmtMetaTest {
 
     @Test
     public void testShowDataDistributionStmt() {
-        TableName tableName = new TableName("test_db", "test_table");
-        TableRef tableRef = new TableRef(tableName, null, null, NodePosition.ZERO);
-        ShowDataDistributionStmt stmt = new ShowDataDistributionStmt(tableRef);
+        TableDef tableDef = new TableDef(QualifiedName.of(List.of("test_db", "test_table")), null, NodePosition.ZERO);
+        ShowDataDistributionStmt stmt = new ShowDataDistributionStmt(tableDef);
         ShowResultSetMetaData metaData = new ShowResultMetaFactory().getMetadata(stmt);
         Assertions.assertEquals(8, metaData.getColumnCount());
         Assertions.assertEquals("PartitionName", metaData.getColumn(0).getName());
