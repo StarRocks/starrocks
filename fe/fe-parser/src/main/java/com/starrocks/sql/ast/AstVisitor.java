@@ -661,4 +661,8 @@ public interface AstVisitor<R, C> {
     default R visitShowSecurityIntegrationStatement(ShowSecurityIntegrationStatement statement, C context) {
         return visitShowStatement(statement, context);
     }
+
+    default R visitShowDataDistributionStatement(ShowDataDistributionStmt statement, C context) {
+        return visitShowStatement(statement, context);
+    }
 }
