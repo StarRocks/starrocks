@@ -19,6 +19,7 @@ import com.starrocks.common.FeConstants;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptExpressionVisitor;
+import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalHashAggregateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
@@ -122,6 +123,10 @@ public class PruneAggregateNodeRule implements TreeRewriteRule {
                                                PhysicalHashAggregateOperator localAgg,
                                                OptExpression globalExpr,
                                                OptExpression localExpr) {
+            if (Utils.mustGenerateMultiStageAggregate(localAgg, localExpr.inputAt(0).getOp())) {
+                return null;
+            }
+
             Map<ColumnRefOperator, CallOperator> newAggregationMap = Maps.newHashMap();
             for (Map.Entry<ColumnRefOperator, CallOperator> entry : globalAgg.getAggregations().entrySet()) {
                 ColumnRefOperator globalColumn = entry.getKey();

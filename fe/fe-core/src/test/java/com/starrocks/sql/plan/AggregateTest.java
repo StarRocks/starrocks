@@ -3163,6 +3163,32 @@ public class AggregateTest extends PlanTestBase {
                     "count(distinct v2), bitmap_union_count(to_bitmap(v2)) from t0 group by v3;";
             String disabledPlan = getCostExplain(sql);
             Assertions.assertEquals(disabledPlan, plan);
+
+            // distinct group_concat cannot merge two phase agg to one phase agg.
+            sql = "select group_concat(distinct 1,2 order by 1,2) from t0 group by v1 order by 1;";
+            plan = getFragmentPlan(sql);
+            assertContains(plan, "  2:AGGREGATE (merge finalize)\n" +
+                    "  |  output: group_concat(4: group_concat, '1', '2', ',')\n" +
+                    "  |  group by: 1: v1\n" +
+                    "  |  \n" +
+                    "  1:AGGREGATE (update serialize)\n" +
+                    "  |  STREAMING\n" +
+                    "  |  output: group_concat(DISTINCT '1', '2', ',')\n" +
+                    "  |  group by: 1: v1\n" +
+                    "  |  \n" +
+                    "  0:OlapScanNode");
+
+            // distinct avg cannot merge two phase agg to one phase agg.
+            sql = "select avg(distinct v2) from t0 group by v1";
+            plan  = getFragmentPlan(sql);
+            assertContains(plan, "  2:AGGREGATE (update finalize)\n" +
+                    "  |  output: avg(2: v2)\n" +
+                    "  |  group by: 1: v1\n" +
+                    "  |  \n" +
+                    "  1:AGGREGATE (update serialize)\n" +
+                    "  |  group by: 1: v1, 2: v2\n" +
+                    "  |  \n" +
+                    "  0:OlapScanNode");
         } finally {
             FeConstants.runningUnitTest = false;
         }
