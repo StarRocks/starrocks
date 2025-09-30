@@ -77,6 +77,7 @@ import com.starrocks.clone.TabletScheduler;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
+import com.starrocks.common.FeConstants;
 import com.starrocks.common.InvalidOlapTableStateException;
 import com.starrocks.common.Pair;
 import com.starrocks.common.io.DeepCopy;
@@ -1367,15 +1368,19 @@ public class OlapTable extends Table {
         return defaultDistributionInfo;
     }
 
-    /*
-     * Infer the distribution info based on partitions and cluster status
+    /**
+     * Infer the distribution info based on partitions and cluster status:
+     * - For hash distribution, if bucket num is not set, we will set it to
+     *  average bucket num of recent partitions.
+     * - For random distribution, if mutable bucket num is not set, we will set it with a deduced value.
      */
     public void inferDistribution(DistributionInfo info) throws DdlException {
         if (info.getType() == DistributionInfo.DistributionInfoType.HASH) {
             // infer bucket num
             if (info.getBucketNum() == 0) {
                 int numBucket = CatalogUtils.calAvgBucketNumOfRecentPartitions(this,
-                        5, Config.enable_auto_tablet_distribution);
+                        FeConstants.DEFAULT_INFER_BUCKET_NUM_RECENT_PARTITION_NUM,
+                        Config.enable_auto_tablet_distribution);
                 info.setBucketNum(numBucket);
             }
         } else if (info.getType() == DistributionInfo.DistributionInfoType.RANDOM) {

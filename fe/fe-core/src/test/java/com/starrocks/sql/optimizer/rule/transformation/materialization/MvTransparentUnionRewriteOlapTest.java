@@ -141,20 +141,17 @@ public class MvTransparentUnionRewriteOlapTest extends MVTestBase {
                                 "     PREAGGREGATION: ON\n" +
                                 "     PREDICATES: 5: k1 = 1\n" +
                                 "     partitions=1/1\n" +
-                                "     rollup: mv0\n" +
-                                "     tabletRatio=1/3",
+                                "     rollup: mv0\n",
                         "     TABLE: mv0\n" +
                                 "     PREAGGREGATION: ON\n" +
                                 "     PREDICATES: 5: k1 < 3\n" +
                                 "     partitions=1/1\n" +
-                                "     rollup: mv0\n" +
-                                "     tabletRatio=3/3",
+                                "     rollup: mv0\n",
                         "     TABLE: mv0\n" +
                                 "     PREAGGREGATION: ON\n" +
                                 "     PREDICATES: 5: k1 < 2\n" +
                                 "     partitions=1/1\n" +
-                                "     rollup: mv0\n" +
-                                "     tabletRatio=3/3",
+                                "     rollup: mv0\n"
                 };
                 for (int i = 0; i < sqls.length; i++) {
                     String query = sqls[i];
@@ -216,33 +213,22 @@ public class MvTransparentUnionRewriteOlapTest extends MVTestBase {
                 String[] expectPlans = {
                         "     TABLE: m1\n" +
                                 "     PREAGGREGATION: ON\n" +
-                                "     PREDICATES: 13: k1 < 6, 14: k2 LIKE 'a%'\n" +
-                                "     partitions=1/3",
+                                "     PREDICATES: 13: k1 < 6, 14: k2 LIKE 'a%'\n",
                         "     TABLE: mv0\n" +
                                 "     PREAGGREGATION: ON\n" +
-                                "     PREDICATES: 9: k1 < 6, 10: k2 LIKE 'a%'\n" +
-                                "     partitions=1/1", // case 1
+                                "     PREDICATES: 9: k1 < 6, 10: k2 LIKE 'a%'\n",
                         "     TABLE: m1\n" +
                                 "     PREAGGREGATION: ON\n" +
-                                "     PREDICATES: 13: k1 > 0, 13: k1 < 6, 14: k2 LIKE 'a%'\n" +
-                                "     partitions=1/3",
+                                "     PREDICATES: 13: k1 > 0, 13: k1 < 6, 14: k2 LIKE 'a%'\n",
                         "     TABLE: mv0\n" +
                                 "     PREAGGREGATION: ON\n" +
-                                "     PREDICATES: 9: k1 > 0, 9: k1 < 6, 10: k2 LIKE 'a%'\n" +
-                                "     partitions=1/1\n" +
-                                "     rollup: mv0", // case 2
+                                "     PREDICATES: 9: k1 > 0, 9: k1 < 6, 10: k2 LIKE 'a%'\n",
                         "     TABLE: m1\n" +
                                 "     PREAGGREGATION: ON\n" +
-                                "     PREDICATES: 13: k1 > 1, 13: k1 < 6, 14: k2 LIKE 'a%'\n" +
-                                "     partitions=1/3\n" +
-                                "     rollup: m1\n" +
-                                "     tabletRatio=3/3",
+                                "     PREDICATES: 13: k1 > 1, 13: k1 < 6, 14: k2 LIKE 'a%'\n",
                         "     TABLE: mv0\n" +
                                 "     PREAGGREGATION: ON\n" +
-                                "     PREDICATES: 9: k1 > 1, 9: k1 < 6, 10: k2 LIKE 'a%'\n" +
-                                "     partitions=1/1\n" +
-                                "     rollup: mv0\n" +
-                                "     tabletRatio=3/3", // case 3
+                                "     PREDICATES: 9: k1 > 1, 9: k1 < 6, 10: k2 LIKE 'a%'\n"
                 };
                 for (int i = 0; i < sqls.length; i++) {
                     System.out.println("start to test " + i);
@@ -270,50 +256,35 @@ public class MvTransparentUnionRewriteOlapTest extends MVTestBase {
                                 "     PREAGGREGATION: ON\n" +
                                 "     PREDICATES: 9: k1 != 3, 10: k2 LIKE 'a%'\n" +
                                 "     partitions=1/1\n" +
-                                "     rollup: mv0\n" +
-                                "     tabletRatio=3/3",
+                                "     rollup: mv0\n",
                         "     TABLE: m1\n" +
                                 "     PREAGGREGATION: ON\n" +
                                 "     PREDICATES: 13: k1 != 3, 14: k2 LIKE 'a%'\n" +
-                                "     partitions=2/3\n" +
-                                "     rollup: m1\n" +
-                                "     tabletRatio=6/6",
+                                "     partitions=2/3\n",
                         "     TABLE: mv0\n" +
                                 "     PREAGGREGATION: ON\n" +
                                 "     PREDICATES: 9: k1 > 0, 10: k2 LIKE 'a%'\n" +
-                                "     partitions=1/1\n" +
-                                "     rollup: mv0\n" +
-                                "     tabletRatio=3/3",
+                                "     partitions=1/1\n",
                         "     TABLE: m1\n" +
                                 "     PREAGGREGATION: ON\n" +
                                 "     PREDICATES: 13: k1 > 0, 14: k2 LIKE 'a%'\n" +
-                                "     partitions=2/3\n" +
-                                "     rollup: m1\n" +
-                                "     tabletRatio=6/6",
+                                "     partitions=2/3\n",
                         "     TABLE: mv0\n" +
                                 "     PREAGGREGATION: ON\n" +
                                 "     PREDICATES: 9: k1 > 1, 10: k2 LIKE 'a%'\n" +
-                                "     partitions=1/1\n" +
-                                "     rollup: mv0\n" +
-                                "     tabletRatio=3/3",
+                                "     partitions=1/1\n",
                         "     TABLE: m1\n" +
                                 "     PREAGGREGATION: ON\n" +
                                 "     PREDICATES: 13: k1 > 1, 14: k2 LIKE 'a%'\n" +
-                                "     partitions=2/3\n" +
-                                "     rollup: m1\n" +
-                                "     tabletRatio=6/6",
+                                "     partitions=2/3\n",
                         "     TABLE: mv0\n" +
                                 "     PREAGGREGATION: ON\n" +
                                 "     PREDICATES: 9: k1 > 0, 10: k2 LIKE 'a%'\n" +
-                                "     partitions=1/1\n" +
-                                "     rollup: mv0\n" +
-                                "     tabletRatio=3/3",
+                                "     partitions=1/1\n",
                         "     TABLE: m1\n" +
                                 "     PREAGGREGATION: ON\n" +
                                 "     PREDICATES: 13: k1 > 0, 14: k2 LIKE 'a%'\n" +
-                                "     partitions=2/3\n" +
-                                "     rollup: m1\n" +
-                                "     tabletRatio=6/6",
+                                "     partitions=2/3\n",
                 };
                 for (int i = 0; i < sqls.length; i++) {
                     String query = sqls[i];

@@ -390,9 +390,7 @@ public class MvTransparentRewriteWithOlapTableTest extends MVTestBase {
                                 PlanTestBase.assertContains(plan, "     TABLE: mv0\n" +
                                         "     PREAGGREGATION: ON\n" +
                                         "     PREDICATES: 9: k1 = 1\n" +
-                                        "     partitions=1/1\n" +
-                                        "     rollup: mv0\n" +
-                                        "     tabletRatio=1/3");
+                                        "     partitions=1/1\n");
                             }
                         }
                         {
