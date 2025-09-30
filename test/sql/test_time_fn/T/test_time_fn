@@ -336,4 +336,3 @@ select sec_to_time(1);
 select sec_to_time(-1);
 select sec_to_time(3024000);
 select sec_to_time(-3024000);
-
