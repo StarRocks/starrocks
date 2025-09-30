@@ -387,8 +387,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
             "cbo_push_down_aggregate_on_broadcast_join_row_count_limit";
     public static final String CBO_ENABLE_INTERSECT_ADD_DISTINCT = "cbo_enable_intersect_add_distinct";
     public static final String CBO_ENABLE_HISTOGRAM_JOIN_ESTIMATION = "cbo_enable_histogram_join_estimation";
-    public static final String CBO_ENABLE_SINGLE_NODE_PREFER_TWO_STAGE_AGGREGATE =
-            "cbo_enable_single_node_prefer_two_stage_aggregate";
+    public static final String CBO_ENABLE_SINGLE_NODE_PREFER_TWO_OR_FOUR_STAGE_AGGREGATE =
+            "cbo_enable_single_node_prefer_two_or_four_stage_aggregate";
 
     public static final String CBO_JSON_V2_REWRITE = "cbo_json_v2_rewrite";
     public static final String CBO_JSON_V2_DICT_OPT = "cbo_json_v2_dict_opt";
@@ -1749,8 +1749,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VarAttr(name = CBO_ENABLE_HISTOGRAM_JOIN_ESTIMATION, flag = VariableMgr.INVISIBLE)
     private boolean cboEnableHistogramJoinEstimation = true;
 
-    @VarAttr(name = CBO_ENABLE_SINGLE_NODE_PREFER_TWO_STAGE_AGGREGATE, flag = VariableMgr.INVISIBLE)
-    private boolean cboEnableSingleNodePreferTwoStageAggregate = true;
+    @VarAttr(name = CBO_ENABLE_SINGLE_NODE_PREFER_TWO_OR_FOUR_STAGE_AGGREGATE, flag = VariableMgr.INVISIBLE)
+    private boolean cboEnableSingleNodePreferTwoOrFourStageAggregate = true;
 
     @VariableMgr.VarAttr(name = PARSE_TOKENS_LIMIT)
     private int parseTokensLimit = 3500000;
@@ -4206,12 +4206,12 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         this.cboEnableHistogramJoinEstimation = cboEnableHistogramJoinEstimation;
     }
 
-    public boolean isCboEnableSingleNodePreferTwoStageAggregate() {
-        return cboEnableSingleNodePreferTwoStageAggregate;
+    public boolean isCboEnableSingleNodePreferTwoOrFourStageAggregate() {
+        return cboEnableSingleNodePreferTwoOrFourStageAggregate;
     }
 
-    public void setCboEnableSingleNodePreferTwoStageAggregate(boolean value) {
-        this.cboEnableSingleNodePreferTwoStageAggregate = value;
+    public void setCboEnableSingleNodePreferTwoOrFourStageAggregate(boolean value) {
+        this.cboEnableSingleNodePreferTwoOrFourStageAggregate = value;
     }
 
     public boolean isCboPushDownDistinctBelowWindow() {
