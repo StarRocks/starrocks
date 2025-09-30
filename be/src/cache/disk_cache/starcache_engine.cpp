@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "cache/starcache_engine.h"
+#include "cache/disk_cache/starcache_engine.h"
 
 #include <filesystem>
 

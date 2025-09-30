@@ -12,16 +12,15 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "cache/block_cache/block_cache.h"
+#include "cache/disk_cache/block_cache.h"
 
 #include <gtest/gtest.h>
 
 #include <cstring>
 #include <filesystem>
 
-#include "cache/block_cache/test_cache_utils.h"
+#include "cache/disk_cache/test_cache_utils.h"
 #include "cache/datacache_utils.h"
-#include "common/logging.h"
 #include "common/statusor.h"
 #include "fs/fs_util.h"
 #include "testutil/assert.h"
@@ -30,10 +29,6 @@ namespace starrocks {
 
 class BlockCacheTest : public ::testing::Test {
 protected:
-    static void SetUpTestCase() {}
-
-    static void TearDownTestCase() {}
-
     void SetUp() override {
         _saved_enable_auto_adjust = config::enable_datacache_disk_auto_adjust;
         config::enable_datacache_disk_auto_adjust = false;

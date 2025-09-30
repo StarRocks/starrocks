@@ -15,7 +15,7 @@
 #pragma once
 
 #include "cache/cache_metrics.h"
-#include "cache/local_disk_cache_engine.h"
+#include "cache/disk_cache/local_disk_cache_engine.h"
 #include "gen_cpp/DataCache_types.h"
 #include "storage/options.h"
 

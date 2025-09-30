@@ -16,9 +16,9 @@
 
 #include "cache/datacache_utils.h"
 #include "cache/disk_space_monitor.h"
-#include "cache/lrucache_engine.h"
+#include "cache/mem_cache/lrucache_engine.h"
+#include "cache/mem_cache/page_cache.h"
 #include "cache/mem_space_monitor.h"
-#include "cache/object_cache/page_cache.h"
 #include "common/status.h"
 #include "gutil/strings/split.h"
 #include "gutil/strings/strip.h"
@@ -28,7 +28,7 @@
 
 #ifdef WITH_STARCACHE
 #include "cache/peer_cache_engine.h"
-#include "cache/starcache_engine.h"
+#include "cache/disk_cache/starcache_engine.h"
 #endif
 
 namespace starrocks {
