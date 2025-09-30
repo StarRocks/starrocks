@@ -33,6 +33,7 @@ fe_plugins/output
 fe/mocked
 fe/ut_ports
 fe/*/target
+fe/*/bin
 fe/plugin/*/target/
 fe/fe-core/gen
 fe/fe-grammar/gen

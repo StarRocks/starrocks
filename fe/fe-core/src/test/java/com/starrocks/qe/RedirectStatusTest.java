@@ -938,7 +938,7 @@ public class RedirectStatusTest {
         QueryStatement queryStatement = new QueryStatement(selectRelation);
 
         InsertStmt insertStmt = new InsertStmt(new TableName(), queryStatement);
-        SubmitTaskStmt stmt = new SubmitTaskStmt(new TaskName("", "", NodePosition.ZERO), 0, insertStmt, NodePosition.ZERO);
+        SubmitTaskStmt stmt = new SubmitTaskStmt(new TaskName("", ""), 0, insertStmt, NodePosition.ZERO);
         Assertions.assertEquals(RedirectStatus.FORWARD_WITH_SYNC, RedirectStatus.getRedirectStatus(stmt));
     }
 

@@ -12,36 +12,38 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+
 package com.starrocks.sql.ast;
 
 import com.starrocks.sql.parser.NodePosition;
 
+import java.util.LinkedList;
 import java.util.List;
 
-public class DropComputeNodeClause extends ComputeNodeClause {
-    public String warehouse;
-    public String cngroupName;
+public class BackendClause extends AlterClause {
+    protected List<String> hostPortsUnResolved;
+    protected List<HostPort> hostPortPairs;
 
-    public DropComputeNodeClause(List<String> hostPorts, String warehouse) {
-        this(hostPorts, warehouse, "", NodePosition.ZERO);
+    protected BackendClause(List<String> hostPortsUnResolved, NodePosition pos) {
+        super(pos);
+        this.hostPortsUnResolved = hostPortsUnResolved;
+        this.hostPortPairs = new LinkedList<>();
     }
 
-    public DropComputeNodeClause(List<String> hostPorts, String warehouse, String cnGroupName, NodePosition pos) {
-        super(hostPorts, pos);
-        this.warehouse = warehouse;
-        this.cngroupName = cnGroupName;
+    public List<HostPort> getHostPortPairs() {
+        return hostPortPairs;
     }
 
-    public String getWarehouse() {
-        return warehouse;
+    public void setHostPortPairs(List<HostPort> hostPortPairs) {
+        this.hostPortPairs = hostPortPairs;
     }
 
-    public String getCNGroupName() {
-        return cngroupName;
+    public List<String> getHostPortsUnResolved() {
+        return hostPortsUnResolved;
     }
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return ((AstVisitorExtendInterface<R, C>) visitor).visitDropComputeNodeClause(this, context);
+        return visitor.visitBackendClause(this, context);
     }
 }

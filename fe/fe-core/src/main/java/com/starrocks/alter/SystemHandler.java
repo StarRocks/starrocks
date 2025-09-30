@@ -46,6 +46,7 @@ import com.starrocks.catalog.TabletMeta;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorReport;
+import com.starrocks.common.Pair;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.ha.FrontendNodeType;
 import com.starrocks.qe.ShowResultSet;
@@ -66,6 +67,7 @@ import com.starrocks.sql.ast.DropBackendClause;
 import com.starrocks.sql.ast.DropComputeNodeClause;
 import com.starrocks.sql.ast.DropFollowerClause;
 import com.starrocks.sql.ast.DropObserverClause;
+import com.starrocks.sql.ast.HostPort;
 import com.starrocks.sql.ast.ModifyBackendClause;
 import com.starrocks.sql.ast.ModifyBrokerClause;
 import com.starrocks.sql.ast.ModifyFrontendAddressClause;
@@ -76,6 +78,7 @@ import org.apache.commons.lang.NotImplementedException;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -196,10 +199,10 @@ public class SystemHandler extends AlterHandler {
                 BrokerMgr brokerMgr = GlobalStateMgr.getCurrentState().getBrokerMgr();
                 switch (clause.getOp()) {
                     case OP_ADD:
-                        brokerMgr.addBrokers(clause.getBrokerName(), clause.getHostPortPairs());
+                        brokerMgr.addBrokers(clause.getBrokerName(), convertHostPortsToPairs(clause.getHostPortPairs()));
                         break;
                     case OP_DROP:
-                        brokerMgr.dropBrokers(clause.getBrokerName(), clause.getHostPortPairs());
+                        brokerMgr.dropBrokers(clause.getBrokerName(), convertHostPortsToPairs(clause.getHostPortPairs()));
                         break;
                     case OP_DROP_ALL:
                         brokerMgr.dropAllBroker(clause.getBrokerName());
@@ -363,5 +366,11 @@ public class SystemHandler extends AlterHandler {
     @Override
     public List<List<Comparable>> getAlterJobInfosByDb(Database db) {
         throw new NotImplementedException();
+    }
+
+    private static Collection<Pair<String, Integer>> convertHostPortsToPairs(Collection<HostPort> hostPorts) {
+        return hostPorts.stream()
+                .map(hostPort -> new Pair<>(hostPort.getHost(), hostPort.getPort()))
+                .collect(java.util.stream.Collectors.toList());
     }
 }

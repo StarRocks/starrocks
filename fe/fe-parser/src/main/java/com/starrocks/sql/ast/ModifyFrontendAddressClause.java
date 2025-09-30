@@ -15,30 +15,33 @@
 
 package com.starrocks.sql.ast;
 
-import com.starrocks.alter.DecommissionType;
 import com.starrocks.sql.parser.NodePosition;
 
-import java.util.List;
+public class ModifyFrontendAddressClause extends FrontendClause {
 
-public class DecommissionBackendClause extends BackendClause {
+    protected String srcHost;
+    protected String destHost;
 
-    private DecommissionType type;
-
-    public DecommissionBackendClause(List<String> hostPorts) {
-        this(hostPorts, NodePosition.ZERO);
+    public ModifyFrontendAddressClause(String srcHost, String destHost) {
+        this(srcHost, destHost, NodePosition.ZERO);
     }
 
-    public DecommissionBackendClause(List<String> hostPorts, NodePosition pos) {
-        super(hostPorts, pos);
-        type = DecommissionType.SystemDecommission;
+    public ModifyFrontendAddressClause(String srcHost, String destHost, NodePosition pos) {
+        super("", pos);
+        this.srcHost = srcHost;
+        this.destHost = destHost;
     }
 
-    public void setType(DecommissionType type) {
-        this.type = type;
+    public String getSrcHost() {
+        return srcHost;
+    }
+
+    public String getDestHost() {
+        return destHost;
     }
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return ((AstVisitorExtendInterface<R, C>) visitor).visitDecommissionBackendClause(this, context);
+        return visitor.visitModifyFrontendHostClause(this, context);
     }
 }
