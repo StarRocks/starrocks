@@ -3806,11 +3806,12 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         enablePipelineLevelMultiPartitionedRf = on;
         if (on) {
             enableRuntimeAdaptiveDop = false;
+            enableRuntimeAdaptiveDopInMultiCore = false;
         }
     }
 
     public boolean isEnablePipelineLevelMultiPartitionedRf() {
-        return enablePipelineLevelMultiPartitionedRf && enablePipelineEngine;
+        return enablePipelineLevelMultiPartitionedRf && enablePipelineEngine && !isEnableRuntimeAdaptiveDop();
     }
 
     public boolean isMVPlanner() {
