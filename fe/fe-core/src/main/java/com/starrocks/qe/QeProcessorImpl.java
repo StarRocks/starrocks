@@ -62,6 +62,7 @@ import com.starrocks.thrift.TUniqueId;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.time.Instant;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
@@ -168,6 +169,19 @@ public final class QeProcessorImpl implements QeProcessor, MemoryTrackable {
             if (info.sql == null || context == null) {
                 continue;
             }
+
+            if (context.getEndTime() != null && Instant.now().isBefore(context.getEndTime())) {
+                LOG.warn("query {} end time is {}, but doesn't clean from coordinator",
+                        DebugUtil.printId(entry.getKey()), context.getEndTime());
+                continue;
+            }
+            if (!context.getState().isRunning() || info.coord.isDone()) {
+                LOG.warn("query {} is not running, context state: {}, coord state {}, "
+                                + "but doesn't clean from coordinator",
+                        DebugUtil.printId(entry.getKey()), context.getState(), info.coord.isDone());
+                continue;
+            }
+
             final String queryIdStr = DebugUtil.printId(info.getConnectContext().getExecutionId());
             String execState = (
                     info.getConnectContext().isPending() ?
