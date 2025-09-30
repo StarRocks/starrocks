@@ -28,9 +28,11 @@ public class JsonPathRewriteTest extends PlanTestBase {
 
     @BeforeAll
     public static void beforeAll() throws Exception {
-        starRocksAssert.withTable("create table extend_predicate( c1 int, c2 json ) properties('replication_num'='1')");
+        starRocksAssert.withTable("create table extend_predicate( c1 int, c2 json) properties('replication_num'='1')");
         starRocksAssert.withTable("create table extend_predicate2( c1 int, c2 json ) properties" +
                 "('replication_num'='1')");
+        starRocksAssert.withTable("create table extend_predicate3( c1 int, c2 string) " +
+                "properties('replication_num'='1')");
 
         FeConstants.USE_MOCK_DICT_MANAGER = true;
         connectContext.getSessionVariable().setEnableLowCardinalityOptimize(true);
@@ -212,6 +214,12 @@ public class JsonPathRewriteTest extends PlanTestBase {
                                 "     Table: extend_predicate\n" +
                                 "     <id 6> : dict_merge_c2.f1\n",
                         "     ExtendedColumnAccessPath: [/c2(varchar)/f1(varchar)]\n"
+                ),
+                // [21] Test parameter type validation - get_json_string(string, string) should not be rewritten
+                Arguments.of(
+                        "select get_json_string(c2, 'f1') from extend_predicate3",
+                        "get_json_string(2: c2, 'f1')",
+                        ""
                 )
         );
     }
