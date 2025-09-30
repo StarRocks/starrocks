@@ -65,9 +65,6 @@ public class AggregatePushDownUtils {
                                                      AggregatePushDownContext ctx,
                                                      OptExpression optExpression,
                                                      Rule rule) {
-        // ensure optExpression has derived logical property, otherwise OptExpression.getOutputColumns will fail
-        MvUtils.deriveLogicalProperty(optExpression);
-
         final ColumnRefFactory queryColumnRefFactory = mvRewriteContext.getMaterializationContext().getQueryRefFactory();
         final List<Table> queryTables = MvUtils.getAllTables(optExpression);
         final ReplaceColumnRefRewriter queryColumnRefRewriter =
