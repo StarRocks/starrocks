@@ -16,34 +16,34 @@ package com.starrocks.sql.ast;
 
 import com.starrocks.sql.parser.NodePosition;
 
-public class DropTaskStmt extends DdlStmt {
+import java.util.List;
 
-    private final TaskName taskName;
-    private final boolean force;
-    private final boolean ifExists;
+public class AddBackendClause extends BackendClause {
+    private final String warehouse;
+    private final String cngroupName;
 
-    public DropTaskStmt(TaskName taskName, boolean ifExists, boolean force, NodePosition pos) {
-        super(pos);
-        this.taskName = taskName;
-        this.force = force;
-        this.ifExists = ifExists;
+    public AddBackendClause(List<String> hostPorts, String warehouse) {
+        super(hostPorts, NodePosition.ZERO);
+        this.warehouse = warehouse;
+        this.cngroupName = "";
     }
 
-    public TaskName getTaskName() {
-        return taskName;
+    public AddBackendClause(List<String> hostPorts, String warehouse, String cngroupName, NodePosition pos) {
+        super(hostPorts, pos);
+        this.warehouse = warehouse;
+        this.cngroupName = cngroupName;
     }
 
-    public boolean isForce() {
-        return force;
+    public String getWarehouse() {
+        return warehouse;
     }
 
-    public boolean isSetIfExists() {
-        return ifExists;
+    public String getCNGroupName() {
+        return cngroupName;
     }
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return ((AstVisitorExtendInterface<R, C>) visitor).visitDropTaskStmt(this, context);
+        return visitor.visitAddBackendClause(this, context);
     }
-
 }

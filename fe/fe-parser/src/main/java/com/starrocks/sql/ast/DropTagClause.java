@@ -12,40 +12,31 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.sql.ast;
 
-import com.starrocks.common.Pair;
 import com.starrocks.sql.parser.NodePosition;
 
-import java.util.LinkedList;
-import java.util.List;
+public class DropTagClause extends AlterTableClause {
 
-public class CancelAlterSystemStmt extends CancelStmt {
+    private final String tag;
+    private final boolean ifExists;
 
-    protected List<String> hostPorts;
-    private final List<Pair<String, Integer>> hostPortPairs;
-
-    public CancelAlterSystemStmt(List<String> hostPorts) {
-        this(hostPorts, NodePosition.ZERO);
-    }
-
-    public CancelAlterSystemStmt(List<String> hostPorts, NodePosition pos) {
+    public DropTagClause(NodePosition pos, String tag, boolean ifExists) {
         super(pos);
-        this.hostPorts = hostPorts;
-        this.hostPortPairs = new LinkedList<>();
+        this.tag = tag;
+        this.ifExists = ifExists;
     }
 
-    public List<String> getHostPorts() {
-        return hostPorts;
+    public String getTag() {
+        return tag;
     }
 
-    public List<Pair<String, Integer>> getHostPortPairs() {
-        return hostPortPairs;
+    public boolean isIfExists() {
+        return ifExists;
     }
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return ((AstVisitorExtendInterface<R, C>) visitor).visitCancelAlterSystemStatement(this, context);
+        return visitor.visitDropTagClause(this, context);
     }
 }

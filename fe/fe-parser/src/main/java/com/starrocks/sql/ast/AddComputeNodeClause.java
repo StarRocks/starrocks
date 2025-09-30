@@ -12,36 +12,32 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.sql.ast;
 
 import com.starrocks.sql.parser.NodePosition;
 
-public class ModifyFrontendAddressClause extends FrontendClause {
+import java.util.List;
 
-    protected String srcHost;
-    protected String destHost;
+public class AddComputeNodeClause extends ComputeNodeClause {
+    private final String warehouse;
+    private final String cngroupName;
 
-    public ModifyFrontendAddressClause(String srcHost, String destHost) {
-        this(srcHost, destHost, NodePosition.ZERO);
+    public AddComputeNodeClause(List<String> hostPorts, String warehouse, String cngroupName, NodePosition pos) {
+        super(hostPorts, pos);
+        this.warehouse = warehouse;
+        this.cngroupName = cngroupName;
     }
 
-    public ModifyFrontendAddressClause(String srcHost, String destHost, NodePosition pos) {
-        super("", pos);
-        this.srcHost = srcHost;
-        this.destHost = destHost;
+    public String getWarehouse() {
+        return warehouse;
     }
 
-    public String getSrcHost() {
-        return srcHost;
-    }
-
-    public String getDestHost() {
-        return destHost;
+    public String getCNGroupName() {
+        return cngroupName;
     }
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return ((AstVisitorExtendInterface<R, C>) visitor).visitModifyFrontendHostClause(this, context);
+        return visitor.visitAddComputeNodeClause(this, context);
     }
 }

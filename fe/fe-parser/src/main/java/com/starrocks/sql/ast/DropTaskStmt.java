@@ -12,39 +12,38 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.sql.ast;
 
-import com.starrocks.common.Pair;
 import com.starrocks.sql.parser.NodePosition;
 
-import java.util.LinkedList;
-import java.util.List;
+public class DropTaskStmt extends DdlStmt {
 
-public class BackendClause extends AlterClause {
-    protected List<String> hostPortsUnResolved;
-    protected List<Pair<String, Integer>> hostPortPairs;
+    private final TaskName taskName;
+    private final boolean force;
+    private final boolean ifExists;
 
-    protected BackendClause(List<String> hostPortsUnResolved, NodePosition pos) {
+    public DropTaskStmt(TaskName taskName, boolean ifExists, boolean force, NodePosition pos) {
         super(pos);
-        this.hostPortsUnResolved = hostPortsUnResolved;
-        this.hostPortPairs = new LinkedList<>();
+        this.taskName = taskName;
+        this.force = force;
+        this.ifExists = ifExists;
     }
 
-    public List<Pair<String, Integer>> getHostPortPairs() {
-        return hostPortPairs;
+    public TaskName getTaskName() {
+        return taskName;
     }
 
-    public void setHostPortPairs(List<Pair<String, Integer>> hostPortPairs) {
-        this.hostPortPairs = hostPortPairs;
+    public boolean isForce() {
+        return force;
     }
 
-    public List<String> getHostPortsUnResolved() {
-        return hostPortsUnResolved;
+    public boolean isSetIfExists() {
+        return ifExists;
     }
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return ((AstVisitorExtendInterface<R, C>) visitor).visitBackendClause(this, context);
+        return visitor.visitDropTaskStmt(this, context);
     }
+
 }
