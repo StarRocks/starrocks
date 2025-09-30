@@ -1840,6 +1840,19 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
     @Override
     public void inferDistribution(DistributionInfo info) throws DdlException {
         if (info.getBucketNum() == 0) {
+            // if mv has been already refreshed, deduce bucket num from existing tablets
+            boolean hasRefreshed = getVisiblePartitions().stream().anyMatch(Partition::hasData);
+            if (hasRefreshed) {
+                int numBucket = CatalogUtils.calAvgBucketNumOfRecentPartitions(this,
+                        FeConstants.DEFAULT_INFER_BUCKET_NUM_RECENT_PARTITION_NUM,
+                        Config.enable_auto_tablet_distribution);
+                // use the numBucket only when it's greater than 1, otherwise skip
+                if (numBucket > 1) {
+                    info.setBucketNum(numBucket);
+                    return;
+                }
+            }
+
             int inferredBucketNum = 0;
             for (BaseTableInfo base : getBaseTableInfos()) {
                 Optional<Table> optTable = MvUtils.getTable(base);
@@ -1849,8 +1862,11 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
                 Table table = optTable.get();
                 if (table.isNativeTableOrMaterializedView()) {
                     OlapTable olapTable = (OlapTable) table;
-                    DistributionInfo dist = olapTable.getDefaultDistributionInfo();
-                    inferredBucketNum = Math.max(inferredBucketNum, dist.getBucketNum());
+                    // deduce bucket num from base table rather than use its distribution info
+                    int numBucket = CatalogUtils.calAvgBucketNumOfRecentPartitions(olapTable,
+                            FeConstants.DEFAULT_INFER_BUCKET_NUM_RECENT_PARTITION_NUM,
+                            Config.enable_auto_tablet_distribution);
+                    inferredBucketNum = Math.max(inferredBucketNum, numBucket);
                 }
             }
             if (inferredBucketNum == 0) {
