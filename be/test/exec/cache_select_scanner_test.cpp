@@ -18,7 +18,7 @@
 
 #include <memory>
 
-#include "cache/block_cache/block_cache.h"
+#include "cache/disk_cache/block_cache.h"
 #include "column/column_helper.h"
 #include "exec/hdfs_scanner_orc.h"
 #include "exec/hdfs_scanner_parquet.h"

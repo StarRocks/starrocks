@@ -34,7 +34,7 @@
 
 #pragma once
 
-#include "cache/object_cache/page_cache.h"
+#include "cache/mem_cache/page_cache.h"
 #include "gutil/macros.h" // for DISALLOW_COPY
 #include "storage/rowset/page_handle_fwd.h"
 #include "util/slice.h"

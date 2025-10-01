@@ -565,7 +565,8 @@ set(EXEC_FILES
         ./storage/record_predicate/record_predicate_helper_test.cpp
         ./storage/sstable/sstable_predicate_test.cpp
         ./cache/datacache_utils_test.cpp
-        ./cache/block_cache/block_cache_hit_rate_counter_test.cpp
+        ./cache/disk_cache/block_cache_hit_rate_counter_test.cpp
+        ./cache/mem_cache/page_cache_test.cpp
         ./cache/peer_cache_test.cpp
         ./util/thrift_rpc_helper_test.cpp
         ./util/thrift_client_test.cpp
@@ -583,9 +584,9 @@ endif()
 
 if ("${WITH_STARCACHE}" STREQUAL "ON")
     list(APPEND EXEC_FILES ./cache/disk_space_monitor_test.cpp)
-    list(APPEND EXEC_FILES ./cache/lrucache_engine_test.cpp)
-    list(APPEND EXEC_FILES ./cache/starcache_engine_test.cpp)
-    list(APPEND EXEC_FILES ./cache/block_cache/block_cache_test.cpp)
+    list(APPEND EXEC_FILES ./cache/disk_cache/starcache_engine_test.cpp)
+    list(APPEND EXEC_FILES ./cache/disk_cache/block_cache_test.cpp)
+    list(APPEND EXEC_FILES ./cache/mem_cache/lrucache_engine_test.cpp)
     list(APPEND EXEC_FILES ./io/cache_input_stream_test.cpp)
 endif ()
 
