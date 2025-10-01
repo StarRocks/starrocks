@@ -527,7 +527,7 @@ void RuntimeState::update_load_datacache_metrics(TReportExecStatusParams* load_p
 #endif // USE_STAROS
     } else {
         // TODO: mem_metrics + disk_metrics
-        const LocalCacheEngine* cache = DataCache::GetInstance()->local_disk_cache();
+        const LocalDiskCacheEngine* cache = DataCache::GetInstance()->local_disk_cache();
         if (cache != nullptr && cache->is_initialized()) {
             TDataCacheMetrics t_metrics{};
             DataCacheUtils::set_metrics_from_thrift(t_metrics, cache->cache_metrics());
