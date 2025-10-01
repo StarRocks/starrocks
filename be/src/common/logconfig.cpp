@@ -27,7 +27,7 @@
 #include <mutex>
 
 #include "cache/datacache.h"
-#include "cache/object_cache/page_cache.h"
+#include "cache/mem_cache/page_cache.h"
 #include "common/config.h"
 #include "gutil/endian.h"
 #include "gutil/stringprintf.h"

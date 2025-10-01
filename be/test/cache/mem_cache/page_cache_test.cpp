@@ -32,11 +32,11 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#include "cache/object_cache/page_cache.h"
+#include "cache/mem_cache/page_cache.h"
 
 #include <gtest/gtest.h>
 
-#include "cache/lrucache_engine.h"
+#include "cache/mem_cache/lrucache_engine.h"
 #include "testutil/assert.h"
 
 namespace starrocks {
@@ -54,7 +54,7 @@ protected:
 };
 
 void StoragePageCacheTest::SetUp() {
-    CacheOptions opts{.mem_space_size = _capacity};
+    MemCacheOptions opts{.mem_space_size = _capacity};
     _lru_cache = std::make_shared<LRUCacheEngine>();
     ASSERT_OK(_lru_cache->init(opts));
     _page_cache = std::make_shared<StoragePageCache>(_lru_cache.get());
@@ -96,7 +96,7 @@ TEST_F(StoragePageCacheTest, normal) {
         PageCacheHandle handle;
 
         ObjectCacheWriteOptions opts;
-        ASSERT_OK(_page_cache->insert(key, data.get(), &opts, &handle));
+        ASSERT_OK(_page_cache->insert(key, data.get(), opts, &handle));
         ASSERT_EQ(handle.data(), data.get());
         auto* check_data = data.release();
 
