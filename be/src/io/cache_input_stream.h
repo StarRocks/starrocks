@@ -17,8 +17,8 @@
 #include <memory>
 #include <string>
 
-#include "cache/block_cache/block_cache.h"
-#include "cache/block_cache/io_buffer.h"
+#include "cache/disk_cache/block_cache.h"
+#include "cache/disk_cache/io_buffer.h"
 #include "io/shared_buffered_input_stream.h"
 
 namespace starrocks::io {
