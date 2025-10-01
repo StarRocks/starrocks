@@ -19,8 +19,8 @@
 #include <cstring>
 #include <filesystem>
 
-#include "cache/disk_cache/test_cache_utils.h"
 #include "cache/datacache_utils.h"
+#include "cache/disk_cache/test_cache_utils.h"
 #include "common/statusor.h"
 #include "fs/fs_util.h"
 #include "testutil/assert.h"
