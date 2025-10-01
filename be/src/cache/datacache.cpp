@@ -27,8 +27,8 @@
 #include "util/parse_util.h"
 
 #ifdef WITH_STARCACHE
-#include "cache/peer_cache_engine.h"
 #include "cache/disk_cache/starcache_engine.h"
+#include "cache/peer_cache_engine.h"
 #endif
 
 namespace starrocks {
