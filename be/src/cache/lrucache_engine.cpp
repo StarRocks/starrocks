@@ -23,20 +23,8 @@ Status LRUCacheEngine::init(const MemCacheOptions& options) {
     return Status::OK();
 }
 
-Status LRUCacheEngine::write(const std::string& key, const IOBuffer& buffer, WriteCacheOptions* options) {
-    return Status::NotSupported("LRUCache engine don't support write block");
-}
-
-Status LRUCacheEngine::read(const std::string& key, size_t off, size_t size, IOBuffer* buffer,
-                            ReadCacheOptions* options) {
-    return Status::NotSupported("LRUCache engine don't support read block");
-}
-
 Status LRUCacheEngine::insert(const std::string& key, void* value, size_t size, ObjectCacheDeleter deleter,
                               ObjectCacheHandlePtr* handle, const ObjectCacheWriteOptions& options) {
-    if (!_check_write(size, options)) {
-        return Status::InternalError("cache insertion is rejected");
-    }
     auto* lru_handle = _cache->insert(key, value, size, deleter, static_cast<CachePriority>(options.priority));
     if (handle) {
         *handle = reinterpret_cast<ObjectCacheHandlePtr>(lru_handle);
@@ -71,14 +59,6 @@ Status LRUCacheEngine::remove(const std::string& key) {
 Status LRUCacheEngine::update_mem_quota(size_t quota_bytes, bool flush_to_disk) {
     _cache->set_capacity(quota_bytes);
     return Status::OK();
-}
-
-Status LRUCacheEngine::update_disk_spaces(const std::vector<DirSpace>& spaces) {
-    return Status::NotSupported("LRUCache engine don't support update disk spaces");
-}
-
-Status LRUCacheEngine::update_inline_cache_count_limit(int32_t limit) {
-    return Status::NotSupported("LRUCache engine don't support update inline cache count limit");
 }
 
 const DataCacheMetrics LRUCacheEngine::cache_metrics() const {
@@ -142,27 +122,6 @@ const ObjectCacheMetrics LRUCacheEngine::metrics() const {
     // Unsupported
     m.object_item_count = 0;
     return m;
-}
-
-bool LRUCacheEngine::_check_write(size_t charge, const ObjectCacheWriteOptions& options) const {
-    if (options.evict_probability >= 100) {
-        return true;
-    }
-    if (options.evict_probability <= 0) {
-        return false;
-    }
-
-    /*
-    // TODO: The cost of this call may be relatively high, and it needs to be optimized later.
-    if (_cache->get_memory_usage() + charge <= _cache->get_capacity()) {
-        return true;
-    }
-    */
-
-    if (butil::fast_rand_less_than(100) < options.evict_probability) {
-        return true;
-    }
-    return false;
 }
 
 } // namespace starrocks

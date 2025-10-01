@@ -16,7 +16,7 @@
 
 #include <atomic>
 
-#include "cache/local_cache_engine.h"
+#include "cache/local_disk_cache_engine.h"
 #include "cache/remote_cache_engine.h"
 #include "common/status.h"
 
@@ -33,7 +33,7 @@ public:
     ~BlockCache();
 
     // Init the block cache instance
-    Status init(const BlockCacheOptions& options, std::shared_ptr<LocalCacheEngine> local_cache,
+    Status init(const BlockCacheOptions& options, std::shared_ptr<LocalDiskCacheEngine> local_cache,
                 std::shared_ptr<RemoteCacheEngine> remote_cache);
 
     // Write data buffer to cache, the `offset` must be aligned by block size
@@ -73,15 +73,14 @@ public:
     bool is_initialized() const { return _initialized.load(std::memory_order_relaxed); }
 
     bool available() const { return is_initialized() && _local_cache->available(); }
-    bool mem_cache_available() const { return is_initialized() && _local_cache->mem_cache_available(); }
 
-    std::shared_ptr<LocalCacheEngine> local_cache() { return _local_cache; }
+    std::shared_ptr<LocalDiskCacheEngine> local_cache() { return _local_cache; }
 
     static const size_t MAX_BLOCK_SIZE;
 
 private:
     size_t _block_size = 0;
-    std::shared_ptr<LocalCacheEngine> _local_cache;
+    std::shared_ptr<LocalDiskCacheEngine> _local_cache;
     std::shared_ptr<RemoteCacheEngine> _remote_cache;
     std::atomic<bool> _initialized = false;
 };
