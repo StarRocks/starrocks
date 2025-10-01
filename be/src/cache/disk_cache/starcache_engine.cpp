@@ -85,7 +85,7 @@ Status StarCacheEngine::write(const std::string& key, const IOBuffer& buffer, Di
     } else {
         opts.mode = starcache::WriteOptions::WriteMode::WRITE_THROUGH;
     }
-    opts.evict_probability = options->evict_probability;
+    opts.evict_probability = 100;
     opts.ignore_inline = true;
     Status st;
     {
