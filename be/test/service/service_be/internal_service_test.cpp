@@ -181,11 +181,11 @@ TEST_F(InternalServiceTest, test_fetch_datacache_via_brpc) {
         ASSERT_FALSE(st.ok());
     }
 
-    std::shared_ptr<BlockCache> cache(new BlockCache);
+    std::shared_ptr<BlockCache> cache;
     {
-        DiskCacheOptions options = TestCacheUtils::create_simple_options(256 * KB, 20 * MB);
+        DiskCacheOptions options = TestCacheUtils::create_simple_options(256 * KB, 0, 20 * MB);
         options.inline_item_count_limit = 1000;
-        auto cache = TestCacheUtils::create_cache(options);
+        cache = TestCacheUtils::create_cache(options);
 
         const size_t cache_size = 1024;
         const std::string cache_key = "test_file";
