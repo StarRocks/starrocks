@@ -28,9 +28,9 @@ public:
     Status init(const MemCacheOptions& options);
     bool is_initialized() const override { return _initialized.load(std::memory_order_relaxed); }
 
-    Status insert(const std::string& key, void* value, size_t size, ObjectCacheDeleter deleter,
-                  ObjectCacheHandlePtr* handle, const ObjectCacheWriteOptions& options) override;
-    Status lookup(const std::string& key, ObjectCacheHandlePtr* handle, ObjectCacheReadOptions* options) override;
+    Status insert(const std::string& key, void* value, size_t size, MemCacheDeleter deleter,
+                  MemCacheHandlePtr* handle, const MemCacheWriteOptions& options) override;
+    Status lookup(const std::string& key, MemCacheHandlePtr* handle, MemCacheReadOptions* options) override;
 
     bool exist(const std::string& key) const override;
     Status remove(const std::string& key) override;
@@ -45,8 +45,8 @@ public:
     bool available() const override { return is_initialized() && has_mem_cache(); }
     bool mem_cache_available() const override { return is_initialized() && has_mem_cache(); }
 
-    void release(ObjectCacheHandlePtr handle) override;
-    const void* value(ObjectCacheHandlePtr handle) override;
+    void release(MemCacheHandlePtr handle) override;
+    const void* value(MemCacheHandlePtr handle) override;
 
     Status adjust_mem_quota(int64_t delta, size_t min_capacity) override;
 
@@ -56,8 +56,6 @@ public:
     size_t lookup_count() const override;
 
     size_t hit_count() const override;
-
-    const ObjectCacheMetrics metrics() const override;
 
     Status prune() override;
 

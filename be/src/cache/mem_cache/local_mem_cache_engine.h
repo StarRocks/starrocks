@@ -14,12 +14,35 @@
 
 #pragma once
 
-#include "cache/cache_options.h"
+#include "cache/cache_metrics.h"
 #include "cache/disk_cache/io_buffer.h"
-#include "cache/mem_cache/cache_types.h"
 #include "common/status.h"
 
 namespace starrocks {
+class CacheKey;
+
+struct MemCacheOptions {
+    size_t mem_space_size = 0;
+};
+
+struct MemCacheWriteOptions {
+    // The priority of the cache object, only support 0 and 1 now.
+    int8_t priority = 0;
+};
+
+struct MemCacheReadOptions {};
+
+struct MemCacheHandle {};
+
+using MemCacheHandlePtr = MemCacheHandle*;
+
+// using CacheDeleter = std::function<void(const std::string&, void*)>;
+//
+// We only use the deleter function of the lru cache temporarily.
+// Maybe a std::function object or a function pointer like `void (*)(std::string&, void*)` which
+// independent on lru cache is more appropriate, but it is not easy to convert them to the lru
+// cache deleter when using a lru cache module.
+using MemCacheDeleter = void (*)(const CacheKey&, void*);
 
 class LocalMemCacheEngine {
 public:
@@ -28,22 +51,22 @@ public:
     virtual bool is_initialized() const = 0;
 
     // Insert object to cache
-    virtual Status insert(const std::string& key, void* value, size_t size, ObjectCacheDeleter deleter,
-                          ObjectCacheHandlePtr* handle, const ObjectCacheWriteOptions& options) = 0;
+    virtual Status insert(const std::string& key, void* value, size_t size, MemCacheDeleter deleter,
+                          MemCacheHandlePtr* handle, const MemCacheWriteOptions& options) = 0;
 
     // Lookup object from cache, the `handle` wraps the object pointer.
     // As long as the handle object is not destroyed and the user does not manually call the `handle->release()`
     // function, the corresponding pointer will never be freed by the cache system.
-    virtual Status lookup(const std::string& key, ObjectCacheHandlePtr* handle,
-                          ObjectCacheReadOptions* options = nullptr) = 0;
+    virtual Status lookup(const std::string& key, MemCacheHandlePtr* handle,
+                          MemCacheReadOptions* options = nullptr) = 0;
 
     // Release a handle returned by a previous insert() or lookup().
     // The handle must have not been released yet.
-    virtual void release(ObjectCacheHandlePtr handle) = 0;
+    virtual void release(MemCacheHandlePtr handle) = 0;
 
     // Return the value in the given handle returned by a previous insert() or lookup().
     // The handle must have not been released yet.
-    virtual const void* value(ObjectCacheHandlePtr handle) = 0;
+    virtual const void* value(MemCacheHandlePtr handle) = 0;
 
     virtual bool exist(const std::string& key) const = 0;
 
@@ -73,9 +96,6 @@ public:
 
     // Get the cache hit count.
     virtual size_t hit_count() const = 0;
-
-    // Get all cache metrics together.
-    virtual const ObjectCacheMetrics metrics() const = 0;
 
     // Remove all cache entries that are not actively in use.
     virtual Status prune() = 0;
