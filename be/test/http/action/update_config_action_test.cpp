@@ -16,9 +16,9 @@
 
 #include <gtest/gtest.h>
 
-#include "cache/block_cache/test_cache_utils.h"
 #include "cache/datacache.h"
-#include "cache/starcache_engine.h"
+#include "cache/disk_cache/starcache_engine.h"
+#include "cache/disk_cache/test_cache_utils.h"
 #include "fs/fs_util.h"
 #include "runtime/exec_env.h"
 #include "storage/persistent_index_load_executor.h"

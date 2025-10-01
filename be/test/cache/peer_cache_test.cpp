@@ -15,8 +15,8 @@
 #include <fmt/format.h>
 #include <gtest/gtest.h>
 
-#include "cache/block_cache/io_buffer.h"
 #include "cache/cache_options.h"
+#include "cache/disk_cache/io_buffer.h"
 #include "cache/peer_cache_engine.h"
 #include "common/statusor.h"
 

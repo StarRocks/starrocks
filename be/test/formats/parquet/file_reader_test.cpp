@@ -20,10 +20,10 @@
 #include <random>
 #include <set>
 
-#include "cache/block_cache/block_cache.h"
-#include "cache/block_cache/test_cache_utils.h"
-#include "cache/lrucache_engine.h"
-#include "cache/starcache_engine.h"
+#include "cache/disk_cache/block_cache.h"
+#include "cache/disk_cache/starcache_engine.h"
+#include "cache/disk_cache/test_cache_utils.h"
+#include "cache/mem_cache/lrucache_engine.h"
 #include "column/column_helper.h"
 #include "column/fixed_length_column.h"
 #include "common/logging.h"

@@ -36,8 +36,8 @@
 
 #include <gtest/gtest.h>
 
-#include "cache/lrucache_engine.h"
-#include "cache/object_cache/page_cache.h"
+#include "cache/mem_cache/lrucache_engine.h"
+#include "cache/mem_cache/page_cache.h"
 #include "common/config.h"
 #include "testutil/assert.h"
 

@@ -21,7 +21,7 @@
 #include "runtime/exec_env.h"
 
 #ifdef WITH_STARCACHE
-#include "cache/starcache_engine.h"
+#include "cache/disk_cache/starcache_engine.h"
 #endif
 
 namespace starrocks {

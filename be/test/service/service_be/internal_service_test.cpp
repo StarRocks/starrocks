@@ -19,8 +19,8 @@
 
 #include <memory>
 
-#include "cache/block_cache/test_cache_utils.h"
 #include "cache/datacache.h"
+#include "cache/disk_cache/test_cache_utils.h"
 #include "common/utils.h"
 #include "exec/tablet_sink_index_channel.h"
 #include "runtime/exec_env.h"

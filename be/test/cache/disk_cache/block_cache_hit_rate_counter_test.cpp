@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "cache/block_cache/block_cache_hit_rate_counter.hpp"
+#include "cache/disk_cache/block_cache_hit_rate_counter.hpp"
 
 #include <gtest/gtest.h>
 

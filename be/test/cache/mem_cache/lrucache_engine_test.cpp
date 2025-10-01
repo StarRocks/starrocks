@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "cache/lrucache_engine.h"
+#include "cache/mem_cache/lrucache_engine.h"
 
 #include <gtest/gtest.h>
 

@@ -21,15 +21,15 @@
 
 #include <string>
 
-#include "cache/block_cache/block_cache_hit_rate_counter.hpp"
-#include "cache/local_disk_cache_engine.h"
+#include "cache/disk_cache/block_cache_hit_rate_counter.hpp"
+#include "cache/disk_cache/local_disk_cache_engine.h"
 #include "http/http_channel.h"
 #include "http/http_headers.h"
 #include "http/http_request.h"
 #include "http/http_status.h"
 
 #ifdef WITH_STARCACHE
-#include "cache/starcache_engine.h"
+#include "cache/disk_cache/starcache_engine.h"
 #endif
 
 namespace starrocks {

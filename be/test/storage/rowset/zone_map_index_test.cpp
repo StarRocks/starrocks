@@ -39,7 +39,7 @@
 #include <memory>
 #include <string>
 
-#include "cache/object_cache/page_cache.h"
+#include "cache/mem_cache/page_cache.h"
 #include "column/binary_column.h"
 #include "common/config.h"
 #include "fs/fs_memory.h"
