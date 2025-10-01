@@ -301,7 +301,7 @@ void SystemMetrics::_update_datacache_mem_tracker() {
     int64_t datacache_mem_bytes = 0;
     auto* datacache_mem_tracker = GlobalEnv::GetInstance()->datacache_mem_tracker();
     if (datacache_mem_tracker) {
-        LocalCacheEngine* local_cache = DataCache::GetInstance()->local_mem_cache();
+        LocalMemCacheEngine* local_cache = DataCache::GetInstance()->local_mem_cache();
         if (local_cache != nullptr && local_cache->is_initialized()) {
             auto datacache_metrics = local_cache->cache_metrics();
             datacache_mem_bytes = datacache_metrics.mem_used_bytes + datacache_metrics.meta_used_bytes;

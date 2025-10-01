@@ -69,7 +69,7 @@ Status SchemaBeDataCacheMetricsScanner::get_next(ChunkPtr* chunk, bool* eos) {
 
     // TODO: Support LRUCacheEngine
     auto* cache = DataCache::GetInstance()->local_disk_cache();
-    if (cache != nullptr && cache->is_initialized() && cache->engine_type() == LocalCacheEngineType::STARCACHE) {
+    if (cache != nullptr && cache->is_initialized()) {
         auto* starcache = reinterpret_cast<StarCacheEngine*>(cache);
         // retrieve different priority's used bytes from level = 2 metrics
         metrics = starcache->starcache_metrics(2);

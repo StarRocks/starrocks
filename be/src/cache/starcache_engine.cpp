@@ -120,74 +120,12 @@ Status StarCacheEngine::read(const std::string& key, size_t off, size_t size, IO
     return st;
 }
 
-Status StarCacheEngine::insert(const std::string& key, void* value, size_t size, ObjectCacheDeleter deleter,
-                               ObjectCacheHandlePtr* handle, const ObjectCacheWriteOptions& options) {
-    starcache::ObjectHandle* obj_hdl = new starcache::ObjectHandle;
-    auto obj_deleter = [deleter, key, value] {
-        // For temporary compatibility with old deleters.
-        CacheKey cache_key(key);
-        deleter(cache_key, value);
-    };
-    starcache::WriteOptions opts;
-    opts.priority = options.priority;
-    opts.ttl_seconds = options.ttl_seconds;
-    opts.overwrite = options.overwrite;
-    opts.evict_probability = options.evict_probability;
-    Status st = to_status(_cache->set_object(key, value, size, obj_deleter, obj_hdl, &opts));
-    if (!st.ok()) {
-        delete obj_hdl;
-    } else if (handle) {
-        // Try release the old handle before fill it with a new one.
-        _try_release_obj_handle(*handle);
-        *handle = reinterpret_cast<ObjectCacheHandlePtr>(obj_hdl);
-    }
-    return st;
-}
-
-Status StarCacheEngine::lookup(const std::string& key, ObjectCacheHandlePtr* handle, ObjectCacheReadOptions* options) {
-    starcache::ObjectHandle* obj_hdl = new starcache::ObjectHandle;
-    // Skip checking options temporarily because there is no valid members in `ObjectCacheReadOptions` now.
-    Status st = to_status(_cache->get_object(key, obj_hdl, nullptr));
-    if (!st.ok()) {
-        delete obj_hdl;
-    } else if (handle) {
-        _try_release_obj_handle(*handle);
-        *handle = reinterpret_cast<ObjectCacheHandlePtr>(obj_hdl);
-    }
-    return st;
-}
-
-void StarCacheEngine::release(ObjectCacheHandlePtr handle) {
-    _try_release_obj_handle(handle);
-}
-
-const void* StarCacheEngine::value(ObjectCacheHandlePtr handle) {
-    auto obj_hdl = reinterpret_cast<starcache::ObjectHandle*>(handle);
-    return obj_hdl->ptr();
-}
-
 bool StarCacheEngine::exist(const std::string& key) const {
     return _cache->exist(key);
 }
 
 Status StarCacheEngine::remove(const std::string& key) {
     return to_status(_cache->remove(key));
-}
-
-Status StarCacheEngine::update_mem_quota(size_t quota_bytes, bool flush_to_disk) {
-    Status st = to_status(_cache->update_mem_quota(quota_bytes, flush_to_disk));
-    _refresh_quota();
-    return st;
-}
-
-Status StarCacheEngine::adjust_mem_quota(int64_t delta, size_t min_capacity) {
-    auto starcache_metrics = _cache->metrics();
-    size_t capacity = starcache_metrics.mem_quota_bytes;
-    int64_t new_capacity = capacity + delta;
-    if (new_capacity < (int64_t)min_capacity) {
-        return Status::InvalidArgument("target capacity is less than the minimum capacity");
-    }
-    return to_status(_cache->update_mem_quota(new_capacity, false));
 }
 
 Status StarCacheEngine::update_disk_spaces(const std::vector<DirSpace>& spaces) {
@@ -239,16 +177,7 @@ Status StarCacheEngine::shutdown() {
 
 void StarCacheEngine::_refresh_quota() {
     auto metrics = starcache_metrics(0);
-    _mem_quota.store(metrics.mem_quota_bytes, std::memory_order_relaxed);
     _disk_quota.store(metrics.disk_quota_bytes, std::memory_order_relaxed);
-}
-
-void StarCacheEngine::_try_release_obj_handle(ObjectCacheHandlePtr handle) {
-    if (handle) {
-        auto obj_hdl = reinterpret_cast<starcache::ObjectHandle*>(handle);
-        obj_hdl->release();
-        delete obj_hdl;
-    }
 }
 
 void StarCacheEngine::disk_spaces(std::vector<DirSpace>* spaces) const {
@@ -257,18 +186,6 @@ void StarCacheEngine::disk_spaces(std::vector<DirSpace>* spaces) const {
     for (auto& dir : metrics.disk_dir_spaces) {
         spaces->push_back({.path = dir.path, .size = dir.quota_bytes});
     }
-}
-
-size_t StarCacheEngine::mem_quota() const {
-    starcache::CacheMetrics metrics = _cache->metrics(0);
-    // TODO: optimizer later
-    return metrics.mem_quota_bytes;
-}
-
-size_t StarCacheEngine::mem_usage() const {
-    // TODO: add meta size?
-    starcache::CacheMetrics metrics = _cache->metrics(0);
-    return metrics.mem_used_bytes;
 }
 
 size_t StarCacheEngine::lookup_count() const {

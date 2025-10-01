@@ -66,9 +66,9 @@ public:
     // Client should call create_global_cache before.
     static StoragePageCache* instance() { return DataCache::GetInstance()->page_cache(); }
 
-    StoragePageCache(LocalCacheEngine* cache_engine) : _cache(cache_engine), _initialized(true) {}
+    StoragePageCache(LocalMemCacheEngine* cache_engine) : _cache(cache_engine), _initialized(true) {}
 
-    void init(LocalCacheEngine* cache_engine) {
+    void init(LocalMemCacheEngine* cache_engine) {
         _cache = cache_engine;
         _initialized.store(true, std::memory_order_relaxed);
     }
@@ -115,7 +115,7 @@ public:
     size_t get_pinned_count() const;
 
 private:
-    LocalCacheEngine* _cache = nullptr;
+    LocalMemCacheEngine* _cache = nullptr;
     std::atomic<bool> _initialized = false;
 };
 
@@ -125,7 +125,12 @@ private:
 class PageCacheHandle {
 public:
     PageCacheHandle() = default;
-    PageCacheHandle(LocalCacheEngine* cache, ObjectCacheHandle* handle) : _cache(cache), _handle(handle) {}
+    PageCacheHandle(LocalMemCacheEngine* cache, ObjectCacheHandle* handle) : _cache(cache), _handle(handle) {}
+
+    // Don't allow copy and assign
+    PageCacheHandle(const PageCacheHandle&) = delete;
+    const PageCacheHandle& operator=(const PageCacheHandle&) = delete;
+
     ~PageCacheHandle() {
         if (_handle != nullptr) {
             StoragePageCacheMetrics::released_page_handle_count++;
@@ -145,16 +150,12 @@ public:
         return *this;
     }
 
-    LocalCacheEngine* cache() const { return _cache; }
+    LocalMemCacheEngine* cache() const { return _cache; }
     const void* data() const { return _cache->value(_handle); }
 
 private:
-    LocalCacheEngine* _cache = nullptr;
+    LocalMemCacheEngine* _cache = nullptr;
     ObjectCacheHandle* _handle = nullptr;
-
-    // Don't allow copy and assign
-    PageCacheHandle(const PageCacheHandle&) = delete;
-    const PageCacheHandle& operator=(const PageCacheHandle&) = delete;
 };
 
 } // namespace starrocks

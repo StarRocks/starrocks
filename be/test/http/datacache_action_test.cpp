@@ -62,7 +62,7 @@ public:
 
 protected:
     evhttp_request* _evhttp_req = nullptr;
-    std::shared_ptr<LocalCacheEngine> _cache;
+    std::shared_ptr<LocalDiskCacheEngine> _cache;
 };
 
 TEST_F(DataCacheActionTest, stat_success) {

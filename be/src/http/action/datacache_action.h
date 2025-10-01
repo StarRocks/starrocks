@@ -28,11 +28,11 @@
 
 namespace starrocks {
 
-class LocalCacheEngine;
+class LocalDiskCacheEngine;
 // TODO: support mem metrics
 class DataCacheAction : public HttpHandler {
 public:
-    explicit DataCacheAction(LocalCacheEngine* local_cache) : _local_cache(local_cache) {}
+    explicit DataCacheAction(LocalDiskCacheEngine* local_cache) : _local_cache(local_cache) {}
     ~DataCacheAction() override = default;
 
     void handle(HttpRequest* req) override;
@@ -44,7 +44,7 @@ private:
     void _handle_app_stat(HttpRequest* req);
     void _handle_error(HttpRequest* req, const std::string& error_msg);
 
-    LocalCacheEngine* _local_cache;
+    LocalDiskCacheEngine* _local_cache;
 };
 
 } // namespace starrocks

@@ -16,20 +16,17 @@
 
 #include <atomic>
 
-#include "cache/local_cache_engine.h"
+#include "cache/local_mem_cache_engine.h"
 #include "util/lru_cache.h"
 
 namespace starrocks {
-class LRUCacheEngine final : public LocalCacheEngine {
+class LRUCacheEngine final : public LocalMemCacheEngine {
 public:
     LRUCacheEngine() = default;
     ~LRUCacheEngine() override = default;
 
     Status init(const MemCacheOptions& options);
     bool is_initialized() const override { return _initialized.load(std::memory_order_relaxed); }
-
-    Status write(const std::string& key, const IOBuffer& buffer, WriteCacheOptions* options) override;
-    Status read(const std::string& key, size_t off, size_t size, IOBuffer* buffer, ReadCacheOptions* options) override;
 
     Status insert(const std::string& key, void* value, size_t size, ObjectCacheDeleter deleter,
                   ObjectCacheHandlePtr* handle, const ObjectCacheWriteOptions& options) override;
@@ -39,22 +36,14 @@ public:
     Status remove(const std::string& key) override;
 
     Status update_mem_quota(size_t quota_bytes, bool flush_to_disk) override;
-    Status update_disk_spaces(const std::vector<DirSpace>& spaces) override;
-    Status update_inline_cache_count_limit(int32_t limit) override;
 
     const DataCacheMetrics cache_metrics() const override;
-    void record_read_remote(size_t size, int64_t latency_us) override {}
-    void record_read_cache(size_t size, int64_t latency_us) override {}
 
     Status shutdown() override;
-    LocalCacheEngineType engine_type() override { return LocalCacheEngineType::LRUCACHE; }
     bool has_mem_cache() const override { return _cache->get_capacity() > 0; }
-    bool has_disk_cache() const override { return false; }
 
     bool available() const override { return is_initialized() && has_mem_cache(); }
     bool mem_cache_available() const override { return is_initialized() && has_mem_cache(); }
-
-    void disk_spaces(std::vector<DirSpace>* spaces) const override {}
 
     void release(ObjectCacheHandlePtr handle) override;
     const void* value(ObjectCacheHandlePtr handle) override;
@@ -73,8 +62,6 @@ public:
     Status prune() override;
 
 private:
-    bool _check_write(size_t charge, const ObjectCacheWriteOptions& options) const;
-
     std::atomic<bool> _initialized = false;
     std::unique_ptr<ShardedLRUCache> _cache;
 };
