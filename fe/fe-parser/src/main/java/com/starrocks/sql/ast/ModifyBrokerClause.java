@@ -15,9 +15,6 @@
 
 package com.starrocks.sql.ast;
 
-import com.google.common.base.Strings;
-import com.starrocks.common.AnalysisException;
-import com.starrocks.common.Pair;
 import com.starrocks.sql.parser.NodePosition;
 
 import java.util.HashSet;
@@ -35,7 +32,7 @@ public class ModifyBrokerClause extends AlterClause {
     private final String brokerName;
     private final List<String> hostPorts;
 
-    protected Set<Pair<String, Integer>> hostPortPairs;
+    protected Set<HostPort> hostPortPairs;
 
     public ModifyBrokerClause(ModifyOp op, String brokerName, List<String> hostPorts, NodePosition pos) {
         super(pos);
@@ -70,18 +67,12 @@ public class ModifyBrokerClause extends AlterClause {
         return hostPorts;
     }
 
-    public Set<Pair<String, Integer>> getHostPortPairs() {
+    public Set<HostPort> getHostPortPairs() {
         return hostPortPairs;
-    }
-
-    public void validateBrokerName() throws AnalysisException {
-        if (Strings.isNullOrEmpty(brokerName)) {
-            throw new AnalysisException("Broker's name can't be empty.");
-        }
     }
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return ((AstVisitorExtendInterface<R, C>) visitor).visitModifyBrokerClause(this, context);
+        return visitor.visitModifyBrokerClause(this, context);
     }
 }

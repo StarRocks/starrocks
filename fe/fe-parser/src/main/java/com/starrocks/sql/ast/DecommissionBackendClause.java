@@ -17,31 +17,20 @@ package com.starrocks.sql.ast;
 
 import com.starrocks.sql.parser.NodePosition;
 
-import static com.starrocks.common.util.Util.normalizeName;
+import java.util.List;
 
-public class TaskName {
+public class DecommissionBackendClause extends BackendClause {
 
-    private String dbName;
-
-    private String name;
-
-    private final NodePosition pos;
-
-    public TaskName(String dbName, String name, NodePosition pos) {
-        this.dbName = normalizeName(dbName);
-        this.name = name;
-        this.pos = pos;
+    public DecommissionBackendClause(List<String> hostPorts) {
+        this(hostPorts, NodePosition.ZERO);
     }
 
-    public String getDbName() {
-        return dbName;
+    public DecommissionBackendClause(List<String> hostPorts, NodePosition pos) {
+        super(hostPorts, pos);
     }
 
-    public String getName() {
-        return name;
-    }
-
-    public void setName(String name) {
-        this.name = name;
+    @Override
+    public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
+        return visitor.visitDecommissionBackendClause(this, context);
     }
 }

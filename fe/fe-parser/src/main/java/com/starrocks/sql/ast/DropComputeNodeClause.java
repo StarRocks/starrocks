@@ -18,14 +18,18 @@ import com.starrocks.sql.parser.NodePosition;
 
 import java.util.List;
 
-public class AddComputeNodeClause extends ComputeNodeClause {
-    private final String warehouse;
-    private final String cngroupName;
+public class DropComputeNodeClause extends ComputeNodeClause {
+    public String warehouse;
+    public String cngroupName;
 
-    public AddComputeNodeClause(List<String> hostPorts, String warehouse, String cngroupName, NodePosition pos) {
+    public DropComputeNodeClause(List<String> hostPorts, String warehouse) {
+        this(hostPorts, warehouse, "", NodePosition.ZERO);
+    }
+
+    public DropComputeNodeClause(List<String> hostPorts, String warehouse, String cnGroupName, NodePosition pos) {
         super(hostPorts, pos);
         this.warehouse = warehouse;
-        this.cngroupName = cngroupName;
+        this.cngroupName = cnGroupName;
     }
 
     public String getWarehouse() {
@@ -38,6 +42,6 @@ public class AddComputeNodeClause extends ComputeNodeClause {
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return ((AstVisitorExtendInterface<R, C>) visitor).visitAddComputeNodeClause(this, context);
+        return visitor.visitDropComputeNodeClause(this, context);
     }
 }

@@ -12,37 +12,35 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+
 package com.starrocks.sql.ast;
 
 import com.starrocks.sql.parser.NodePosition;
 
-public class FrontendClause extends AlterClause {
-    protected String hostPort;
-    protected HostPort hostPortObj;
+import java.util.LinkedList;
+import java.util.List;
 
-    protected FrontendClause(String hostPort, NodePosition pos) {
+public class ComputeNodeClause extends AlterClause {
+
+    protected List<String> hostPorts;
+    private final List<HostPort> hostPortPairs;
+
+    public ComputeNodeClause(List<String> hostPorts, NodePosition pos) {
         super(pos);
-        this.hostPort = hostPort;
+        this.hostPorts = hostPorts;
+        this.hostPortPairs = new LinkedList<>();
     }
 
-    public String getHost() {
-        return hostPortObj != null ? hostPortObj.getHost() : null;
+    public List<HostPort> getHostPortPairs() {
+        return hostPortPairs;
     }
 
-    public int getPort() {
-        return hostPortObj != null ? hostPortObj.getPort() : 0;
-    }
-
-    public String getHostPort() {
-        return hostPort;
-    }
-
-    public void setHostPortObj(HostPort hostPortObj) {
-        this.hostPortObj = hostPortObj;
+    public List<String> getHostPorts() {
+        return hostPorts;
     }
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitFrontendClause(this, context);
+        return visitor.visitComputeNodeClause(this, context);
     }
 }
