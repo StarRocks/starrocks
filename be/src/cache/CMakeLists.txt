@@ -23,15 +23,15 @@ set(CACHE_FILES
   mem_space_monitor.cpp
   datacache.cpp
   datacache_utils.cpp
-  lrucache_engine.cpp
-  block_cache/block_cache.cpp
-  block_cache/io_buffer.cpp
-  block_cache/block_cache_hit_rate_counter.hpp
-  object_cache/page_cache.cpp
+  mem_cache/lrucache_engine.cpp
+  mem_cache/page_cache.cpp
+  disk_cache/block_cache.cpp
+  disk_cache/io_buffer.cpp
+  disk_cache/block_cache_hit_rate_counter.hpp
 )
 
 if (${WITH_STARCACHE} STREQUAL "ON")
-    list(APPEND CACHE_FILES starcache_engine.cpp)
+    list(APPEND CACHE_FILES disk_cache/starcache_engine.cpp)
     list(APPEND CACHE_FILES peer_cache_engine.cpp)
 endif()
 

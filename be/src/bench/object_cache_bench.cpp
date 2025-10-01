@@ -18,9 +18,9 @@
 #include <random>
 
 #include "cache/cache_options.h"
-#include "cache/lrucache_engine.h"
-#include "cache/object_cache/page_cache.h"
-#include "cache/starcache_engine.h"
+#include "cache/disk_cache/starcache_engine.h"
+#include "cache/mem_cache/lrucache_engine.h"
+#include "cache/mem_cache/page_cache.h"
 #include "common/config.h"
 #include "runtime/current_thread.h"
 #include "runtime/exec_env.h"
@@ -105,7 +105,7 @@ std::string ObjectCacheBench::get_cache_type_str(CacheType type) {
 }
 
 void ObjectCacheBench::init_cache(CacheType cache_type) {
-    CacheOptions opt;
+    DiskCacheOptions opt;
     opt.mem_space_size = _capacity;
     opt.block_size = config::datacache_block_size;
     opt.max_flying_memory_mb = config::datacache_max_flying_memory_mb;

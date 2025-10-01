@@ -38,7 +38,7 @@
 #include <string>
 #include <string_view>
 
-#include "cache/object_cache/page_cache.h"
+#include "cache/mem_cache/page_cache.h"
 #include "column/column.h"
 #include "common/logging.h"
 #include "fs/fs.h"

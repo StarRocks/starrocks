@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "cache/block_cache/io_buffer.h"
+#include "cache/disk_cache/io_buffer.h"
 
 #include "gutil/strings/fastmem.h"
 

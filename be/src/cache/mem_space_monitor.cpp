@@ -14,7 +14,7 @@
 
 #include "cache/mem_space_monitor.h"
 
-#include "cache/object_cache/page_cache.h"
+#include "cache/mem_cache/page_cache.h"
 #include "common/config.h"
 #include "runtime/exec_env.h"
 #include "runtime/mem_tracker.h"

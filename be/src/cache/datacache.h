@@ -14,9 +14,9 @@
 
 #pragma once
 
-#include "cache/block_cache/block_cache.h"
-#include "cache/local_disk_cache_engine.h"
-#include "cache/local_mem_cache_engine.h"
+#include "cache/disk_cache/block_cache.h"
+#include "cache/disk_cache/local_disk_cache_engine.h"
+#include "cache/mem_cache/local_mem_cache_engine.h"
 #include "common/status.h"
 
 namespace starrocks {

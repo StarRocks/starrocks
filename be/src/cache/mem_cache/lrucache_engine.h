@@ -16,7 +16,7 @@
 
 #include <atomic>
 
-#include "cache/local_mem_cache_engine.h"
+#include "cache/mem_cache/local_mem_cache_engine.h"
 #include "util/lru_cache.h"
 
 namespace starrocks {

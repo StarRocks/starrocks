@@ -12,11 +12,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "cache/starcache_engine.h"
+#include "cache/disk_cache/starcache_engine.h"
 
 #include <gtest/gtest.h>
 
-#include "cache/block_cache/test_cache_utils.h"
+#include "cache/disk_cache/test_cache_utils.h"
 #include "fs/fs_util.h"
 #include "testutil/assert.h"
 
