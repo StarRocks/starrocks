@@ -34,12 +34,8 @@
 
 #pragma once
 
-<<<<<<< HEAD
-#include "cache/object_cache/page_cache.h"
-#include "gutil/macros.h" // for DISALLOW_COPY
-=======
 #include "cache/mem_cache/page_cache.h"
->>>>>>> d23e5cee79 ([Refactor] refactors the cache module by reorganizing cache-related files (#63759))
+#include "gutil/macros.h" // for DISALLOW_COPY
 #include "storage/rowset/page_handle_fwd.h"
 #include "util/slice.h"
 
