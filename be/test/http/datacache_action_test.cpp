@@ -19,9 +19,9 @@
 #include <gtest/gtest.h>
 #include <rapidjson/document.h>
 
-#include "cache/block_cache/block_cache_hit_rate_counter.hpp"
-#include "cache/block_cache/test_cache_utils.h"
-#include "cache/starcache_engine.h"
+#include "cache/disk_cache/block_cache_hit_rate_counter.hpp"
+#include "cache/disk_cache/starcache_engine.h"
+#include "cache/disk_cache/test_cache_utils.h"
 #include "gen_cpp/HeartbeatService_types.h"
 #include "http/http_channel.h"
 #include "http/http_request.h"
