@@ -48,11 +48,7 @@ namespace starrocks {
 
 class PageCacheHandle;
 class MemTracker;
-<<<<<<< HEAD
-class ObjectCacheWriteOptions;
-=======
 struct MemCacheWriteOptions;
->>>>>>> 35e984856e ([Refactor] Remove some names related to ObjectCache (#63768))
 
 // Page cache min size is 256MB
 static constexpr int64_t kcacheMinSize = 268435456;
