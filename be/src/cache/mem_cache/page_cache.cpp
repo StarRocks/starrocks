@@ -105,7 +105,7 @@ size_t StoragePageCache::get_pinned_count() const {
 }
 
 bool StoragePageCache::lookup(const std::string& key, PageCacheHandle* handle) {
-    ObjectCacheHandle* obj_handle = nullptr;
+    MemCacheHandle* obj_handle = nullptr;
     Status st = _cache->lookup(key, &obj_handle);
     if (!st.ok()) {
         return false;
@@ -115,7 +115,7 @@ bool StoragePageCache::lookup(const std::string& key, PageCacheHandle* handle) {
     return true;
 }
 
-Status StoragePageCache::insert(const std::string& key, std::vector<uint8_t>* data, const ObjectCacheWriteOptions& opts,
+Status StoragePageCache::insert(const std::string& key, std::vector<uint8_t>* data, const MemCacheWriteOptions& opts,
                                 PageCacheHandle* handle) {
 #ifndef BE_TEST
     int64_t mem_size = malloc_usable_size(data->data()) + sizeof(*data);
@@ -131,7 +131,7 @@ Status StoragePageCache::insert(const std::string& key, std::vector<uint8_t>* da
         delete cache_item;
     };
 
-    ObjectCacheHandle* obj_handle = nullptr;
+    MemCacheHandle* obj_handle = nullptr;
     // Use mem size managed by memory allocator as this record charge size.
     // At the same time, we should record this record size for data fetching when lookup.
     Status st = _cache->insert(key, (void*)data, mem_size, deleter, &obj_handle, opts);
@@ -142,9 +142,9 @@ Status StoragePageCache::insert(const std::string& key, std::vector<uint8_t>* da
     return st;
 }
 
-Status StoragePageCache::insert(const std::string& key, void* data, int64_t size, ObjectCacheDeleter deleter,
-                                const ObjectCacheWriteOptions& opts, PageCacheHandle* handle) {
-    ObjectCacheHandle* obj_handle = nullptr;
+Status StoragePageCache::insert(const std::string& key, void* data, int64_t size, MemCacheDeleter deleter,
+                                const MemCacheWriteOptions& opts, PageCacheHandle* handle) {
+    MemCacheHandle* obj_handle = nullptr;
     Status st = _cache->insert(key, data, size, deleter, &obj_handle, opts);
     if (st.ok()) {
         *handle = PageCacheHandle(_cache, obj_handle);

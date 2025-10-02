@@ -29,8 +29,9 @@ public:
     Status init(const DiskCacheOptions& options);
     bool is_initialized() const override { return _initialized.load(std::memory_order_relaxed); }
 
-    Status write(const std::string& key, const IOBuffer& buffer, WriteCacheOptions* options) override;
-    Status read(const std::string& key, size_t off, size_t size, IOBuffer* buffer, ReadCacheOptions* options) override;
+    Status write(const std::string& key, const IOBuffer& buffer, DiskCacheWriteOptions* options) override;
+    Status read(const std::string& key, size_t off, size_t size, IOBuffer* buffer,
+                DiskCacheReadOptions* options) override;
 
     bool exist(const std::string& key) const override;
 
@@ -59,8 +60,6 @@ public:
     size_t lookup_count() const override;
 
     size_t hit_count() const override;
-
-    const ObjectCacheMetrics metrics() const override;
 
     Status prune() override;
 

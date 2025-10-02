@@ -23,21 +23,21 @@ Status LRUCacheEngine::init(const MemCacheOptions& options) {
     return Status::OK();
 }
 
-Status LRUCacheEngine::insert(const std::string& key, void* value, size_t size, ObjectCacheDeleter deleter,
-                              ObjectCacheHandlePtr* handle, const ObjectCacheWriteOptions& options) {
+Status LRUCacheEngine::insert(const std::string& key, void* value, size_t size, MemCacheDeleter deleter,
+                              MemCacheHandlePtr* handle, const MemCacheWriteOptions& options) {
     auto* lru_handle = _cache->insert(key, value, size, deleter, static_cast<CachePriority>(options.priority));
     if (handle) {
-        *handle = reinterpret_cast<ObjectCacheHandlePtr>(lru_handle);
+        *handle = reinterpret_cast<MemCacheHandlePtr>(lru_handle);
     }
     return Status::OK();
 }
 
-Status LRUCacheEngine::lookup(const std::string& key, ObjectCacheHandlePtr* handle, ObjectCacheReadOptions* options) {
+Status LRUCacheEngine::lookup(const std::string& key, MemCacheHandlePtr* handle, MemCacheReadOptions* options) {
     auto* lru_handle = _cache->lookup(CacheKey(key));
     if (!lru_handle) {
         return Status::NotFound("no such entry");
     }
-    *handle = reinterpret_cast<ObjectCacheHandlePtr>(lru_handle);
+    *handle = reinterpret_cast<MemCacheHandlePtr>(lru_handle);
     return Status::OK();
 }
 
@@ -80,12 +80,12 @@ Status LRUCacheEngine::prune() {
     return Status::OK();
 }
 
-void LRUCacheEngine::release(ObjectCacheHandlePtr handle) {
+void LRUCacheEngine::release(MemCacheHandlePtr handle) {
     auto lru_handle = reinterpret_cast<Cache::Handle*>(handle);
     _cache->release(lru_handle);
 }
 
-const void* LRUCacheEngine::value(ObjectCacheHandlePtr handle) {
+const void* LRUCacheEngine::value(MemCacheHandlePtr handle) {
     auto lru_handle = reinterpret_cast<Cache::Handle*>(handle);
     return _cache->value(lru_handle);
 }
@@ -111,17 +111,6 @@ size_t LRUCacheEngine::lookup_count() const {
 
 size_t LRUCacheEngine::hit_count() const {
     return _cache->get_hit_count();
-}
-
-const ObjectCacheMetrics LRUCacheEngine::metrics() const {
-    ObjectCacheMetrics m;
-    m.capacity = _cache->get_capacity();
-    m.usage = _cache->get_memory_usage();
-    m.lookup_count = _cache->get_lookup_count();
-    m.hit_count = _cache->get_hit_count();
-    // Unsupported
-    m.object_item_count = 0;
-    return m;
 }
 
 } // namespace starrocks

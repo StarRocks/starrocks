@@ -22,6 +22,10 @@
 
 namespace starrocks {
 
+struct BlockCacheOptions {
+    size_t block_size = 0;
+};
+
 class BlockCache {
 public:
     using CacheKey = std::string;
@@ -37,18 +41,19 @@ public:
                 std::shared_ptr<RemoteCacheEngine> remote_cache);
 
     // Write data buffer to cache, the `offset` must be aligned by block size
-    Status write(const CacheKey& cache_key, off_t offset, const IOBuffer& buffer, WriteCacheOptions* options = nullptr);
+    Status write(const CacheKey& cache_key, off_t offset, const IOBuffer& buffer,
+                 DiskCacheWriteOptions* options = nullptr);
 
     Status write(const CacheKey& cache_key, off_t offset, size_t size, const char* data,
-                 WriteCacheOptions* options = nullptr);
+                 DiskCacheWriteOptions* options = nullptr);
 
     // Read data from cache, it returns the data size if successful; otherwise the error status
     // will be returned. The offset and size must be aligned by block size.
     Status read(const CacheKey& cache_key, off_t offset, size_t size, IOBuffer* buffer,
-                ReadCacheOptions* options = nullptr);
+                DiskCacheReadOptions* options = nullptr);
 
     StatusOr<size_t> read(const CacheKey& cache_key, off_t offset, size_t size, char* data,
-                          ReadCacheOptions* options = nullptr);
+                          DiskCacheReadOptions* options = nullptr);
 
     bool exist(const CacheKey& cache_key, off_t offset, size_t size) const;
 
@@ -57,7 +62,7 @@ public:
 
     // Read data from remote cache
     Status read_buffer_from_remote_cache(const std::string& cache_key, size_t offset, size_t size, IOBuffer* buffer,
-                                         ReadCacheOptions* options);
+                                         DiskCacheReadOptions* options);
 
     void record_read_local_cache(size_t size, int64_t latency_us);
 

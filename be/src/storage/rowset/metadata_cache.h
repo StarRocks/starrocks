@@ -20,9 +20,9 @@
 #include <variant>
 
 #include "gutil/macros.h"
+#include "util/lru_cache.h"
 
 namespace starrocks {
-class Cache;
 class CacheKey;
 class Rowset;
 

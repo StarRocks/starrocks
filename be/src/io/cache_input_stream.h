@@ -108,9 +108,9 @@ protected:
     virtual Status _read_blocks_from_remote(const int64_t offset, const int64_t size, char* out);
     Status _read_from_cache(const int64_t offset, const int64_t size, const int64_t block_offset,
                             const int64_t block_size, char* out);
-    Status _read_peer_cache(off_t offset, size_t size, IOBuffer* iobuf, ReadCacheOptions* options);
+    Status _read_peer_cache(off_t offset, size_t size, IOBuffer* iobuf, DiskCacheReadOptions* options);
     void _populate_to_cache(const char* src, int64_t offset, int64_t count, const SharedBufferPtr& sb);
-    void _write_cache(int64_t offset, const IOBuffer& iobuf, WriteCacheOptions* options);
+    void _write_cache(int64_t offset, const IOBuffer& iobuf, DiskCacheWriteOptions* options);
 
     void _deduplicate_shared_buffer(const SharedBufferPtr& sb);
     bool _can_ignore_populate_error(const Status& status) const;

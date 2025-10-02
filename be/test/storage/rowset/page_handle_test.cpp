@@ -39,7 +39,7 @@ void PageHandleTest::SetUp() {
 }
 
 TEST_F(PageHandleTest, test_operator_not_owner) {
-    ObjectCacheWriteOptions opts;
+    MemCacheWriteOptions opts;
 
     std::vector<uint8_t>* p1 = new std::vector<uint8_t>(2);
     (*p1)[0] = 0;
