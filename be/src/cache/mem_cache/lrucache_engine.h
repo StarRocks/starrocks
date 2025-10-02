@@ -28,8 +28,8 @@ public:
     Status init(const MemCacheOptions& options);
     bool is_initialized() const override { return _initialized.load(std::memory_order_relaxed); }
 
-    Status insert(const std::string& key, void* value, size_t size, MemCacheDeleter deleter,
-                  MemCacheHandlePtr* handle, const MemCacheWriteOptions& options) override;
+    Status insert(const std::string& key, void* value, size_t size, MemCacheDeleter deleter, MemCacheHandlePtr* handle,
+                  const MemCacheWriteOptions& options) override;
     Status lookup(const std::string& key, MemCacheHandlePtr* handle, MemCacheReadOptions* options) override;
 
     bool exist(const std::string& key) const override;
