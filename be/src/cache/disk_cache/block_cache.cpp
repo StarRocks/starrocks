@@ -45,7 +45,8 @@ Status BlockCache::init(const BlockCacheOptions& options, std::shared_ptr<LocalD
     return Status::OK();
 }
 
-Status BlockCache::write(const CacheKey& cache_key, off_t offset, const IOBuffer& buffer, WriteCacheOptions* options) {
+Status BlockCache::write(const CacheKey& cache_key, off_t offset, const IOBuffer& buffer,
+                         DiskCacheWriteOptions* options) {
     if (offset % _block_size != 0) {
         LOG(WARNING) << "write block key: " << cache_key << " with invalid args, offset: " << offset;
         return Status::InvalidArgument(strings::Substitute("offset must be aligned by block size $0", _block_size));
@@ -62,7 +63,7 @@ Status BlockCache::write(const CacheKey& cache_key, off_t offset, const IOBuffer
 static void empty_deleter(void*) {}
 
 Status BlockCache::write(const CacheKey& cache_key, off_t offset, size_t size, const char* data,
-                         WriteCacheOptions* options) {
+                         DiskCacheWriteOptions* options) {
     if (!data) {
         return Status::InvalidArgument("invalid data buffer");
     }
@@ -73,7 +74,7 @@ Status BlockCache::write(const CacheKey& cache_key, off_t offset, size_t size, c
 }
 
 Status BlockCache::read(const CacheKey& cache_key, off_t offset, size_t size, IOBuffer* buffer,
-                        ReadCacheOptions* options) {
+                        DiskCacheReadOptions* options) {
     if (size == 0) {
         return Status::OK();
     }
@@ -84,7 +85,7 @@ Status BlockCache::read(const CacheKey& cache_key, off_t offset, size_t size, IO
 }
 
 StatusOr<size_t> BlockCache::read(const CacheKey& cache_key, off_t offset, size_t size, char* data,
-                                  ReadCacheOptions* options) {
+                                  DiskCacheReadOptions* options) {
     IOBuffer buffer;
     RETURN_IF_ERROR(read(cache_key, offset, size, &buffer, options));
     buffer.copy_to(data);
@@ -117,7 +118,7 @@ Status BlockCache::remove(const CacheKey& cache_key, off_t offset, size_t size) 
 }
 
 Status BlockCache::read_buffer_from_remote_cache(const std::string& cache_key, size_t offset, size_t size,
-                                                 IOBuffer* buffer, ReadCacheOptions* options) {
+                                                 IOBuffer* buffer, DiskCacheReadOptions* options) {
     if (size == 0) {
         return Status::OK();
     }
