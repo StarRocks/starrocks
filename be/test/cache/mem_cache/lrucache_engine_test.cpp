@@ -36,8 +36,8 @@ protected:
     }
 
     std::shared_ptr<LRUCacheEngine> _cache;
-    ObjectCacheWriteOptions _write_opt;
-    ObjectCacheReadOptions _read_opt;
+    MemCacheWriteOptions _write_opt;
+    MemCacheReadOptions _read_opt;
 
     size_t _capacity = 16384;
     size_t _key_size = sizeof(LRUHandle) - 1 + 6;
@@ -52,7 +52,7 @@ void LRUCacheEngineTest::_insert_data() {
         int* ptr = (int*)malloc(_value_size);
         *ptr = i;
 
-        ObjectCacheHandlePtr handle = nullptr;
+        MemCacheHandlePtr handle = nullptr;
         ASSERT_OK(_cache->insert(key, (void*)ptr, _value_size, &Deleter, &handle, _write_opt));
         _cache->release(handle);
     }
@@ -66,7 +66,7 @@ void LRUCacheEngineTest::_check_not_found(int value) {
 
 void LRUCacheEngineTest::_check_found(int value) {
     std::string key = _int_to_string(6, value);
-    ObjectCacheHandlePtr handle;
+    MemCacheHandlePtr handle;
     ASSERT_OK(_cache->lookup(key, &handle, &_read_opt));
     ASSERT_EQ(*(int*)(_cache->value(handle)), value);
     _cache->release(handle);
@@ -106,7 +106,7 @@ TEST_F(LRUCacheEngineTest, test_value) {
     _insert_data();
 
     std::string key = _int_to_string(6, 30);
-    ObjectCacheHandlePtr handle = nullptr;
+    MemCacheHandlePtr handle = nullptr;
     ASSERT_OK(_cache->lookup(key, &handle, &_read_opt));
 
     const void* value = _cache->value(handle);
@@ -168,27 +168,5 @@ TEST_F(LRUCacheEngineTest, test_shutdown) {
     ASSERT_EQ(_cache->mem_usage(), _kv_size * 128);
     ASSERT_OK(_cache->shutdown());
     ASSERT_EQ(_cache->mem_usage(), 0);
-}
-
-TEST_F(LRUCacheEngineTest, test_metrics) {
-    // insert
-    _insert_data();
-
-    for (int i = 200; i < 300; i++) {
-        _check_not_found(i);
-    }
-
-    for (int i = 50; i < 100; i++) {
-        _check_found(i);
-    }
-
-    ASSERT_EQ(_cache->lookup_count(), 150);
-    ASSERT_EQ(_cache->hit_count(), 50);
-    ObjectCacheMetrics metrics = _cache->metrics();
-    ASSERT_EQ(metrics.lookup_count, 150);
-    ASSERT_EQ(metrics.hit_count, 50);
-    ASSERT_EQ(metrics.usage, _kv_size * 128);
-    ASSERT_EQ(metrics.capacity, _capacity);
-    ASSERT_EQ(metrics.object_item_count, 0);
 }
 } // namespace starrocks

@@ -68,7 +68,7 @@ Status StarCacheEngine::init(const DiskCacheOptions& options) {
     return Status::OK();
 }
 
-Status StarCacheEngine::write(const std::string& key, const IOBuffer& buffer, WriteCacheOptions* options) {
+Status StarCacheEngine::write(const std::string& key, const IOBuffer& buffer, DiskCacheWriteOptions* options) {
     if (!options) {
         return to_status(_cache->set(key, buffer.const_raw_buf(), nullptr));
     }
@@ -104,7 +104,7 @@ Status StarCacheEngine::write(const std::string& key, const IOBuffer& buffer, Wr
 }
 
 Status StarCacheEngine::read(const std::string& key, size_t off, size_t size, IOBuffer* buffer,
-                             ReadCacheOptions* options) {
+                             DiskCacheReadOptions* options) {
     if (!options) {
         return to_status(_cache->read(key, off, size, &buffer->raw_buf(), nullptr));
     }
@@ -196,17 +196,6 @@ size_t StarCacheEngine::lookup_count() const {
 size_t StarCacheEngine::hit_count() const {
     starcache::CacheMetrics metrics = _cache->metrics(1);
     return metrics.detail_l1->hit_count;
-}
-
-const ObjectCacheMetrics StarCacheEngine::metrics() const {
-    auto starcache_metrics = _cache->metrics(2);
-    ObjectCacheMetrics m;
-    m.capacity = starcache_metrics.mem_quota_bytes;
-    m.usage = starcache_metrics.mem_used_bytes;
-    m.lookup_count = starcache_metrics.detail_l1->hit_count + starcache_metrics.detail_l1->miss_count;
-    m.hit_count = starcache_metrics.detail_l1->hit_count;
-    m.object_item_count = starcache_metrics.detail_l2->object_item_count;
-    return m;
 }
 
 Status StarCacheEngine::prune() {

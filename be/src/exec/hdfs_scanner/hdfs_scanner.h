@@ -17,6 +17,7 @@
 #include <atomic>
 #include <boost/algorithm/string.hpp>
 
+#include "cache/cache_options.h"
 #include "connector/deletion_vector/deletion_bitmap.h"
 #include "exec/olap_scan_prepare.h"
 #include "exec/pipeline/scan/morsel.h"

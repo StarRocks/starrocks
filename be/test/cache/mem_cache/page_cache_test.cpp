@@ -71,7 +71,7 @@ TEST_F(StoragePageCacheTest, insert_with_deleter) {
         std::string key("123");
         auto* value = new Value("value_of_123");
         PageCacheHandle handle;
-        ObjectCacheWriteOptions opts;
+        MemCacheWriteOptions opts;
 
         ASSERT_OK(_page_cache->insert(key, (void*)value, 15, deleter, opts, &handle));
         Value* handle_value = (Value*)handle.data();
@@ -95,7 +95,7 @@ TEST_F(StoragePageCacheTest, normal) {
         auto data = std::make_unique<std::vector<uint8_t>>(1024);
         PageCacheHandle handle;
 
-        ObjectCacheWriteOptions opts;
+        MemCacheWriteOptions opts;
         ASSERT_OK(_page_cache->insert(key, data.get(), opts, &handle));
         ASSERT_EQ(handle.data(), data.get());
         auto* check_data = data.release();
@@ -110,7 +110,7 @@ TEST_F(StoragePageCacheTest, normal) {
         auto data = std::make_unique<std::vector<uint8_t>>(1024);
         PageCacheHandle handle;
 
-        ObjectCacheWriteOptions opts{.priority = true};
+        MemCacheWriteOptions opts{.priority = true};
         ASSERT_OK(_page_cache->insert(key, data.get(), opts, &handle));
         ASSERT_EQ(handle.data(), data.get());
         data.release();
@@ -124,7 +124,7 @@ TEST_F(StoragePageCacheTest, normal) {
         key.append(std::to_string(i));
         auto data = std::make_unique<std::vector<uint8_t>>(1024);
         PageCacheHandle handle;
-        ObjectCacheWriteOptions opts;
+        MemCacheWriteOptions opts;
         ASSERT_OK(_page_cache->insert(key, data.get(), opts, &handle));
         data.release();
     }
@@ -191,7 +191,7 @@ TEST_F(StoragePageCacheTest, metrics) {
     {
         // Insert a piece of data, but the application layer does not release it.
         auto data = std::make_unique<std::vector<uint8_t>>(1024);
-        ObjectCacheWriteOptions opts;
+        MemCacheWriteOptions opts;
         ASSERT_OK(_page_cache->insert(key1, data.get(), opts, &handle1));
         data.release();
     }
@@ -200,7 +200,7 @@ TEST_F(StoragePageCacheTest, metrics) {
         // Insert another piece of data and release it from the application layer.
         auto data = std::make_unique<std::vector<uint8_t>>(1024);
         PageCacheHandle handle2;
-        ObjectCacheWriteOptions opts;
+        MemCacheWriteOptions opts;
         ASSERT_OK(_page_cache->insert(key2, data.get(), opts, &handle2));
         data.release();
     }

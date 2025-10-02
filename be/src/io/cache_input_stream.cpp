@@ -125,7 +125,7 @@ Status CacheInputStream::_read_from_cache(const int64_t offset, const int64_t si
     Status res;
     int64_t read_local_cache_ns = 0;
     BlockBuffer block;
-    ReadCacheOptions options;
+    DiskCacheReadOptions options;
     size_t read_size = 0;
     {
         options.use_adaptor = _enable_cache_io_adaptor;
@@ -153,7 +153,7 @@ Status CacheInputStream::_read_from_cache(const int64_t offset, const int64_t si
         read_size = block_size;
 
         if (res.ok() && _enable_populate_cache) {
-            WriteCacheOptions options;
+            DiskCacheWriteOptions options;
             options.async = _enable_async_populate_mode;
             options.evict_probability = _datacache_evict_probability;
             options.priority = _priority;
@@ -203,7 +203,7 @@ Status CacheInputStream::_read_from_cache(const int64_t offset, const int64_t si
     return res;
 }
 
-Status CacheInputStream::_read_peer_cache(off_t offset, size_t size, IOBuffer* iobuf, ReadCacheOptions* options) {
+Status CacheInputStream::_read_peer_cache(off_t offset, size_t size, IOBuffer* iobuf, DiskCacheReadOptions* options) {
     options->remote_host = _peer_host;
     options->remote_port = _peer_port;
     return _cache->read_buffer_from_remote_cache(_cache_key, offset, size, iobuf, options);
@@ -445,7 +445,7 @@ void CacheInputStream::_populate_to_cache(const char* p, int64_t offset, int64_t
     int64_t end = std::min((offset + count + _block_size - 1) / _block_size * _block_size, _size);
     p -= (offset - begin);
     auto f = [sb, this](const char* buf, size_t off, size_t size) {
-        WriteCacheOptions options;
+        DiskCacheWriteOptions options;
         options.async = _enable_async_populate_mode;
         options.evict_probability = _datacache_evict_probability;
         options.priority = _priority;
@@ -474,7 +474,7 @@ void CacheInputStream::_populate_to_cache(const char* p, int64_t offset, int64_t
     return;
 }
 
-void CacheInputStream::_write_cache(int64_t offset, const IOBuffer& iobuf, WriteCacheOptions* options) {
+void CacheInputStream::_write_cache(int64_t offset, const IOBuffer& iobuf, DiskCacheWriteOptions* options) {
     DCHECK(offset % _block_size == 0);
     if (_already_populated_blocks.contains(offset / _block_size)) {
         // Already populate in CacheInputStream's lifecycle, ignore this time

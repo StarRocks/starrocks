@@ -125,7 +125,7 @@ TEST_F(BlockCacheTest, write_with_overwrite_option) {
     std::string value(cache_size, 'a');
     ASSERT_OK(cache->write(cache_key, 0, cache_size, value.c_str()));
 
-    WriteCacheOptions write_options;
+    DiskCacheWriteOptions write_options;
     std::string value2(cache_size, 'b');
     Status st = cache->write(cache_key, 0, cache_size, value2.c_str(), &write_options);
     ASSERT_TRUE(st.is_already_exist());
@@ -182,7 +182,7 @@ TEST_F(BlockCacheTest, read_cache_with_adaptor) {
         char ch = 'a' + i % 26;
         std::string expect_value(batch_size, ch);
         char value[batch_size] = {0};
-        ReadCacheOptions opts;
+        DiskCacheReadOptions opts;
         opts.use_adaptor = true;
         auto res = cache->read(cache_key + std::to_string(i), 0, batch_size, value, &opts);
         ASSERT_TRUE(res.status().is_resource_busy());
@@ -199,7 +199,7 @@ TEST_F(BlockCacheTest, read_cache_with_adaptor) {
         char ch = 'a' + i % 26;
         std::string expect_value(batch_size, ch);
         char value[batch_size] = {0};
-        ReadCacheOptions opts;
+        DiskCacheReadOptions opts;
         opts.use_adaptor = true;
         auto res = cache->read(cache_key + std::to_string(i), 0, batch_size, value, &opts);
         ASSERT_TRUE(res.status().ok());
@@ -286,7 +286,7 @@ TEST_F(BlockCacheTest, read_peer_cache) {
     auto cache = TestCacheUtils::create_cache(options);
 
     IOBuffer iobuf;
-    ReadCacheOptions read_options;
+    DiskCacheReadOptions read_options;
     read_options.remote_host = "127.0.0.1";
     read_options.remote_port = 0;
     auto st = cache->read_buffer_from_remote_cache("test_key", 0, 100, &iobuf, &read_options);
