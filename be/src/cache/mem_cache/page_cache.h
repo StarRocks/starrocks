@@ -48,7 +48,11 @@ namespace starrocks {
 
 class PageCacheHandle;
 class MemTracker;
+<<<<<<< HEAD
 class ObjectCacheWriteOptions;
+=======
+struct MemCacheWriteOptions;
+>>>>>>> 35e984856e ([Refactor] Remove some names related to ObjectCache (#63768))
 
 // Page cache min size is 256MB
 static constexpr int64_t kcacheMinSize = 268435456;
@@ -87,11 +91,11 @@ public:
     // This function is thread-safe, and when two clients insert two same key
     // concurrently, this function can assure that only one page is cached.
     // The in_memory page will have higher priority.
-    Status insert(const std::string& key, std::vector<uint8_t>* data, const ObjectCacheWriteOptions& opts,
+    Status insert(const std::string& key, std::vector<uint8_t>* data, const MemCacheWriteOptions& opts,
                   PageCacheHandle* handle);
 
-    Status insert(const std::string& key, void* data, int64_t size, ObjectCacheDeleter deleter,
-                  const ObjectCacheWriteOptions& opts, PageCacheHandle* handle);
+    Status insert(const std::string& key, void* data, int64_t size, MemCacheDeleter deleter,
+                  const MemCacheWriteOptions& opts, PageCacheHandle* handle);
 
     size_t memory_usage() const { return _cache->mem_usage(); }
 
@@ -121,7 +125,7 @@ private:
 class PageCacheHandle {
 public:
     PageCacheHandle() = default;
-    PageCacheHandle(LocalMemCacheEngine* cache, ObjectCacheHandle* handle) : _cache(cache), _handle(handle) {}
+    PageCacheHandle(LocalMemCacheEngine* cache, MemCacheHandle* handle) : _cache(cache), _handle(handle) {}
 
     // Don't allow copy and assign
     PageCacheHandle(const PageCacheHandle&) = delete;
@@ -150,7 +154,7 @@ public:
 
 private:
     LocalMemCacheEngine* _cache = nullptr;
-    ObjectCacheHandle* _handle = nullptr;
+    MemCacheHandle* _handle = nullptr;
 };
 
 } // namespace starrocks
