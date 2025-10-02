@@ -14,11 +14,15 @@
 
 #pragma once
 
-#include "cache/cache_options.h"
 #include "cache/disk_cache/io_buffer.h"
+#include "cache/disk_cache/local_disk_cache_engine.h"
 #include "common/status.h"
 
 namespace starrocks {
+
+struct RemoteCacheOptions {
+    double skip_read_factor = 0;
+};
 
 class RemoteCacheEngine {
 public:
@@ -28,12 +32,12 @@ public:
     virtual Status init(const RemoteCacheOptions& options) = 0;
 
     // Write data to remote cache
-    virtual Status write(const std::string& key, const IOBuffer& buffer, WriteCacheOptions* options) = 0;
+    virtual Status write(const std::string& key, const IOBuffer& buffer, DiskCacheWriteOptions* options) = 0;
 
     // Read data from remote cache, it returns the data size if successful; otherwise the error status
     // will be returned.
     virtual Status read(const std::string& key, size_t off, size_t size, IOBuffer* buffer,
-                        ReadCacheOptions* options) = 0;
+                        DiskCacheReadOptions* options) = 0;
 
     // Remove data from cache.
     virtual Status remove(const std::string& key) = 0;
