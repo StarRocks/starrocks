@@ -28,6 +28,11 @@ struct MemCacheOptions {
 struct MemCacheWriteOptions {
     // The priority of the cache object, only support 0 and 1 now.
     int8_t priority = 0;
+
+    // The probability to evict other items if the cache space is full, which can help avoid frequent cache replacement
+    // and improve cache hit rate sometimes.
+    // It is expressed as a percentage. If evict_probability is 10, it means the probability to evict other data is 10%.
+    int32_t evict_probability = 100;
 };
 
 struct MemCacheReadOptions {};
