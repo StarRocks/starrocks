@@ -80,6 +80,14 @@ struct DiskCacheReadOptions {
     } stats;
 };
 
+
+struct DataCacheDiskMetrics {
+    DataCacheStatus status;
+
+    size_t disk_quota_bytes;
+    size_t disk_used_bytes;
+};
+
 class LocalDiskCacheEngine {
 public:
     virtual ~LocalDiskCacheEngine() = default;
@@ -105,7 +113,7 @@ public:
     // Update the datacache inline cache count limit
     virtual Status update_inline_cache_count_limit(int32_t limit) = 0;
 
-    virtual const DataCacheMetrics cache_metrics() const = 0;
+    virtual const DataCacheDiskMetrics cache_metrics() const = 0;
 
     virtual void record_read_remote(size_t size, int64_t latency_us) = 0;
 
