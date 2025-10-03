@@ -332,10 +332,10 @@ void __wrap___cxa_throw(void* thrown_exception, std::type_info* info, void (*des
 #elif defined(__GNUC__)
 void __wrap___cxa_throw(void* thrown_exception, void* info, void (*dest)(void*)) {
 #endif
+    // to avoid recursively throwing std::bad_alloc exception when check memory limit in memory tracker.
+    SCOPED_SET_CATCHED(false);
     auto print_level = ExceptionStackContext::get_instance()->get_level();
     if (print_level != 0) {
-        // to avoid recursively throwing std::bad_alloc exception when check memory limit in memory tracker.
-        SCOPED_SET_CATCHED(false);
         string exception_name = ExceptionStackContext::get_exception_name((void*)info);
         if ((print_level == 1 && ExceptionStackContext::get_instance()->prefix_in_white_list(exception_name)) ||
             print_level == -1 ||
