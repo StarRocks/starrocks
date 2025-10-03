@@ -25,6 +25,9 @@ Status LRUCacheEngine::init(const MemCacheOptions& options) {
 
 Status LRUCacheEngine::insert(const std::string& key, void* value, size_t size, MemCacheDeleter deleter,
                               MemCacheHandlePtr* handle, const MemCacheWriteOptions& options) {
+    if (!_check_write(size, options)) {
+        return Status::InternalError("cache insertion is rejected");
+    }
     auto* lru_handle = _cache->insert(key, value, size, deleter, static_cast<CachePriority>(options.priority));
     if (handle) {
         *handle = reinterpret_cast<MemCacheHandlePtr>(lru_handle);
@@ -113,4 +116,24 @@ size_t LRUCacheEngine::hit_count() const {
     return _cache->get_hit_count();
 }
 
+bool LRUCacheEngine::_check_write(size_t charge, const MemCacheWriteOptions& options) const {
+    if (options.evict_probability >= 100) {
+        return true;
+    }
+    if (options.evict_probability <= 0) {
+        return false;
+    }
+
+    /*
+    // TODO: The cost of this call may be relatively high, and it needs to be optimized later.
+    if (_cache->get_memory_usage() + charge <= _cache->get_capacity()) {
+        return true;
+    }
+    */
+
+    if (butil::fast_rand_less_than(100) < options.evict_probability) {
+        return true;
+    }
+    return false;
+}
 } // namespace starrocks

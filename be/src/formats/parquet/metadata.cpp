@@ -471,6 +471,7 @@ StatusOr<FileMetaDataPtr> FileMetaDataParser::get_file_metadata() {
     if (file_metadata_size > 0) {
         auto deleter = [](const starrocks::CacheKey& key, void* value) { delete (FileMetaDataPtr*)value; };
         MemCacheWriteOptions options;
+        options.evict_probability = _datacache_options->datacache_evict_probability;
         auto capture = std::make_unique<FileMetaDataPtr>(file_metadata);
         Status st = _cache->insert(metacache_key, (void*)(capture.get()), file_metadata_size, deleter, options,
                                    &cache_handle);

@@ -153,14 +153,13 @@ Status CacheInputStream::_read_from_cache(const int64_t offset, const int64_t si
         read_size = block_size;
 
         if (res.ok() && _enable_populate_cache) {
-            DiskCacheWriteOptions options;
-            options.async = _enable_async_populate_mode;
-            options.evict_probability = _datacache_evict_probability;
-            options.priority = _priority;
-            options.ttl_seconds = _ttl_seconds;
-            options.frequency = _frequency;
-            options.allow_zero_copy = true;
-            _write_cache(block_offset, block.buffer, &options);
+            DiskCacheWriteOptions write_options;
+            write_options.async = _enable_async_populate_mode;
+            write_options.priority = _priority;
+            write_options.ttl_seconds = _ttl_seconds;
+            write_options.frequency = _frequency;
+            write_options.allow_zero_copy = true;
+            _write_cache(block_offset, block.buffer, &write_options);
         }
     }
 
@@ -447,7 +446,6 @@ void CacheInputStream::_populate_to_cache(const char* p, int64_t offset, int64_t
     auto f = [sb, this](const char* buf, size_t off, size_t size) {
         DiskCacheWriteOptions options;
         options.async = _enable_async_populate_mode;
-        options.evict_probability = _datacache_evict_probability;
         options.priority = _priority;
         options.ttl_seconds = _ttl_seconds;
         options.frequency = _frequency;

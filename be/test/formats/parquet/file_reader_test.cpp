@@ -385,7 +385,7 @@ DataCacheOptions FileReaderTest::_mock_datacache_options() {
                             .enable_datacache_async_populate_mode = true,
                             .enable_datacache_io_adaptor = true,
                             .modification_time = 100000,
-                            .datacache_evict_probability = 0,
+                            .datacache_evict_probability = 100,
                             .datacache_priority = 0,
                             .datacache_ttl_seconds = 0};
 }

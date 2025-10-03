@@ -60,6 +60,8 @@ public:
     Status prune() override;
 
 private:
+    bool _check_write(size_t charge, const MemCacheWriteOptions& options) const;
+
     std::atomic<bool> _initialized = false;
     std::unique_ptr<ShardedLRUCache> _cache;
 };

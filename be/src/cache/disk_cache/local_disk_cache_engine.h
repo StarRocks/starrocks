@@ -57,11 +57,6 @@ struct DiskCacheWriteOptions {
     bool allow_zero_copy = false;
     std::function<void(int, const std::string&)> callback = nullptr;
 
-    // The probability to evict other items if the cache space is full, which can help avoid frequent cache replacement
-    // and improve cache hit rate sometimes.
-    // It is expressed as a percentage. If evict_probability is 10, it means the probability to evict other data is 10%.
-    int32_t evict_probability = 100;
-
     // The base frequency for target cache.
     // When using multiple segment lru, a higher frequency may cause the cache is written to warm segment directly.
     // For the default cache options, that `lru_segment_freq_bits` is 0:
