@@ -244,7 +244,7 @@ I use 8GB for Node, in Netlify I set the build command in the file `netlify.toml
 and locally I use:
 
 ```shell
-NODE_OPTIONS=--max_old_space_size=8192
+NODE_OPTIONS=--max_old_space_size=12192
 ```
 
 ### Install Docusaurus
