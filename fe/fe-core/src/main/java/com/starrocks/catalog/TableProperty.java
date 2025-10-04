@@ -209,15 +209,15 @@ public class TableProperty implements Writable, GsonPostProcessable {
 
     // This property only applies to materialized views
     // It represents the maximum number of partitions that will be refreshed by a TaskRun refresh
-    private int partitionRefreshNumber = Config.default_mv_partition_refresh_number;
+    private int partitionRefreshNumber = INVALID;
 
     // This property only applies to materialized views
     // It represents the mode selected to determine the number of partitions to refresh
-    private String partitionRefreshStrategy = Config.default_mv_partition_refresh_strategy;
+    private String partitionRefreshStrategy = "";
 
     // This property only applies to materialized views/
     // It represents the mode selected to determine how to refresh the materialized view
-    private String mvRefreshMode = Config.default_mv_refresh_mode;
+    private String mvRefreshMode = "";
 
     // This property only applies to materialized views
     // When using the system to automatically refresh, the maximum range of the most recent partitions will be refreshed.
@@ -994,12 +994,21 @@ public class TableProperty implements Writable, GsonPostProcessable {
         this.autoRefreshPartitionsLimit = autoRefreshPartitionsLimit;
     }
 
+    public boolean isSetPartitionRefreshNumber() {
+        return partitionRefreshNumber != INVALID;
+    }
+
     public int getPartitionRefreshNumber() {
-        return partitionRefreshNumber;
+        return partitionRefreshNumber == INVALID ? Config.default_mv_partition_refresh_number : partitionRefreshNumber;
+    }
+
+    public boolean isSetPartitionRefreshStrategy() {
+        return !Strings.isNullOrEmpty(partitionRefreshStrategy);
     }
 
     public String getPartitionRefreshStrategy() {
-        return partitionRefreshStrategy;
+        return Strings.isNullOrEmpty(partitionRefreshStrategy) ? Config.default_mv_partition_refresh_strategy
+                : partitionRefreshStrategy;
     }
 
     public void setPartitionRefreshNumber(int partitionRefreshNumber) {
@@ -1015,7 +1024,7 @@ public class TableProperty implements Writable, GsonPostProcessable {
     }
 
     public String getMvRefreshMode() {
-        return mvRefreshMode;
+        return Strings.isNullOrEmpty(mvRefreshMode) ? Config.default_mv_refresh_mode : mvRefreshMode;
     }
 
     public void setResourceGroup(String resourceGroup) {

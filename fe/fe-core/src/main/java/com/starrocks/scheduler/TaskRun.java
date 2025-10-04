@@ -196,6 +196,14 @@ public class TaskRun implements Comparable<TaskRun> {
         return isKilled;
     }
 
+    public TaskRunStatus getTaskRunStatus() {
+        return status;
+    }
+
+    public void setStatus(TaskRunStatus status) {
+        this.status = status;
+    }
+
     public Map<String, String> refreshTaskProperties(ConnectContext ctx) {
         Map<String, String> newProperties = Maps.newHashMap();
         if (task.getSource() != Constants.TaskSource.MV) {

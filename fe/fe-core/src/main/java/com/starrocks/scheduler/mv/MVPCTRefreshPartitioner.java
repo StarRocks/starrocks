@@ -400,7 +400,7 @@ public abstract class MVPCTRefreshPartitioner {
                 default:
                     return mv.getTableProperty().getPartitionRefreshNumber();
             }
-        } catch (MVAdaptiveRefreshException e) {
+        } catch (Exception e) {
             logger.warn("Adaptive refresh failed for mode '{}', falling back to STRICT mode. Reason: {}",
                     refreshStrategy, e.getMessage(), e);
             return mv.getTableProperty().getPartitionRefreshNumber();
@@ -657,7 +657,9 @@ public abstract class MVPCTRefreshPartitioner {
                 getExpiredPartitionsWithRetention(ttlCondition, toRefreshPartitionMap, isMockPartitionIds);
         if (CollectionUtils.isNotEmpty(toRemovePartitions)) {
             toRemovePartitions.stream()
-                    .forEach(p -> toRefreshPartitions.remove(PCellWithName.of(p, toRefreshPartitionMap.get(p))));
+                    .filter(p -> toRefreshPartitionMap.containsKey(p))
+                    .map(p -> PCellWithName.of(p, toRefreshPartitionMap.get(p)))
+                    .forEach(toRefreshPartitions::remove);
         }
     }
 
