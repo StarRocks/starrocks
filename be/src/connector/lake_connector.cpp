@@ -45,6 +45,10 @@ std::string LakeDataSource::name() const {
 }
 
 Status LakeDataSource::open(RuntimeState* state) {
+    auto ds_open_timer = ADD_TIMER(_runtime_profile, "LakeDataSourceOpenTime");
+    auto tablet_open_timer = ADD_TIMER(_runtime_profile, "LakeTabletReaderOpenTime");
+
+    SCOPED_TIMER(ds_open_timer);
     _runtime_state = state;
     const TLakeScanNode& thrift_lake_scan_node = _provider->_t_lake_scan_node;
     TupleDescriptor* tuple_desc = state->desc_tbl().get_tuple_descriptor(thrift_lake_scan_node.tuple_id);
@@ -113,6 +117,7 @@ Status LakeDataSource::open(RuntimeState* state) {
 
     RETURN_IF_ERROR(build_scan_range(_runtime_state));
 
+    SCOPED_TIMER(tablet_open_timer);
     RETURN_IF_ERROR(init_tablet_reader(_runtime_state));
     return Status::OK();
 }
