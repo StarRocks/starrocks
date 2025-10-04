@@ -815,13 +815,19 @@ public class OlapScanNode extends ScanNode {
     protected String getNodeExplainString(String prefix, TExplainLevel detailLevel) {
         StringBuilder output = new StringBuilder();
 
-        // TODO: unify them
         if (detailLevel != TExplainLevel.VERBOSE) {
-            output.append(prefix).append("TABLE: ").append(olapTable.getName()).append("\n");
+            output.append(prefix)
+                  .append("TABLE: ")
+                  .append(olapTable.getName())
+                  .append("\n");
         } else {
-            output.append(prefix).append("table: ").append(olapTable.getName())
-                    .append(", ").append("rollup: ")
-                    .append(olapTable.getIndexNameById(selectedIndexId)).append("\n");
+            output.append(prefix)
+                  .append("table: ")
+                  .append(olapTable.getName())
+                  .append(", ")
+                  .append("rollup: ")
+                  .append(olapTable.getIndexNameById(selectedIndexId))
+                  .append("\n");
         }
 
         if (null != sortColumn) {
