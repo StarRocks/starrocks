@@ -13,6 +13,7 @@
 // limitations under the License.
 
 #pragma once
+#include "column/array_column.h"
 #include "column/column_helper.h"
 #include "column/nullable_column.h"
 #include "column/vectorized_fwd.h"
@@ -99,6 +100,10 @@ struct ValueWindowStrategy<LT, StringLTGuard<LT>> {
 template <LogicalType LT>
 struct ValueWindowStrategy<LT, JsonGuard<LT>> {
     /// The dst Object column hasn't been resized.
+    static constexpr bool use_append = true;
+};
+template <LogicalType LT>
+struct ValueWindowStrategy<LT, ArrayGuard<LT>> {
     static constexpr bool use_append = true;
 };
 
@@ -562,8 +567,14 @@ class LeadLagWindowFunction final : public ValueWindowFunction<LT, LeadLagState<
         if (default_column->is_nullable()) {
             this->data(state).default_is_null = true;
         } else {
-            auto value = ColumnHelper::get_const_value<LT>(arg2);
-            AggDataTypeTraits<LT>::assign_value(this->data(state).default_value, value);
+            if constexpr (lt_is_array<LT>) {
+                const auto* column = down_cast<const ArrayColumn*>(ColumnHelper::get_data_column(arg2));
+                auto value = column->get(0).template get<DatumArray>();
+                AggDataTypeTraits<LT>::assign_value(this->data(state).default_value, value);
+            } else {
+                auto value = ColumnHelper::get_const_value<LT>(arg2);
+                AggDataTypeTraits<LT>::assign_value(this->data(state).default_value, value);
+            }
         }
 
         if constexpr (ignoreNulls) {
