@@ -35,7 +35,7 @@ public:
     bool exist(const std::string& key) const override;
     Status remove(const std::string& key) override;
 
-    Status update_mem_quota(size_t quota_bytes, bool flush_to_disk) override;
+    Status update_mem_quota(size_t quota_bytes) override;
 
     const DataCacheMetrics cache_metrics() const override;
 

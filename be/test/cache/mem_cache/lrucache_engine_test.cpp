@@ -121,7 +121,7 @@ TEST_F(LRUCacheEngineTest, test_set_capacity) {
     ASSERT_EQ(_cache->mem_quota(), _capacity);
     ASSERT_EQ(_cache->mem_usage(), _kv_size * 128);
 
-    ASSERT_OK(_cache->update_mem_quota(8192, false));
+    ASSERT_OK(_cache->update_mem_quota(8192));
     ASSERT_EQ(_cache->mem_quota(), 8192);
     ASSERT_GT(_cache->mem_usage(), 0);
     ASSERT_LT(_cache->mem_usage(), 8192);

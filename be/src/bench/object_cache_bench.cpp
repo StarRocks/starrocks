@@ -112,7 +112,6 @@ void ObjectCacheBench::init_cache(CacheType cache_type) {
     opt.max_concurrent_inserts = config::datacache_max_concurrent_inserts;
     opt.enable_checksum = config::datacache_checksum_enable;
     opt.enable_direct_io = config::datacache_direct_io_enable;
-    opt.enable_tiered_cache = config::datacache_tiered_cache_enable;
     opt.skip_read_factor = config::datacache_skip_read_factor;
     opt.scheduler_threads_per_cpu = config::datacache_scheduler_threads_per_cpu;
     opt.enable_datacache_persistence = false;

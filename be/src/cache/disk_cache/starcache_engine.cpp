@@ -55,8 +55,6 @@ Status StarCacheEngine::init(const DiskCacheOptions& options) {
     }
     opt.lru_segment_freq_bits = 0;
 
-    _enable_tiered_cache = options.enable_tiered_cache;
-    _enable_datacache_persistence = options.enable_datacache_persistence;
     _cache = std::make_shared<starcache::StarCache>();
     RETURN_IF_ERROR(to_status(_cache->init(opt)));
 
@@ -80,11 +78,7 @@ Status StarCacheEngine::write(const std::string& key, const IOBuffer& buffer, Di
     opts.async = options->async;
     opts.keep_alive = options->allow_zero_copy;
     opts.callback = options->callback;
-    if (!_enable_datacache_persistence && _enable_tiered_cache) {
-        opts.mode = starcache::WriteOptions::WriteMode::WRITE_BACK;
-    } else {
-        opts.mode = starcache::WriteOptions::WriteMode::WRITE_THROUGH;
-    }
+    opts.mode = starcache::WriteOptions::WriteMode::WRITE_THROUGH;
     opts.evict_probability = 100;
     opts.ignore_inline = true;
     Status st;
@@ -110,8 +104,7 @@ Status StarCacheEngine::read(const std::string& key, size_t off, size_t size, IO
     }
     starcache::ReadOptions opts;
     opts.use_adaptor = options->use_adaptor;
-    opts.mode = _enable_tiered_cache ? starcache::ReadOptions::ReadMode::READ_BACK
-                                     : starcache::ReadOptions::ReadMode::READ_THROUGH;
+    opts.mode = starcache::ReadOptions::ReadMode::READ_THROUGH;
     auto st = to_status(_cache->read(key, off, size, &buffer->raw_buf(), &opts));
     if (st.ok()) {
         options->stats.read_mem_bytes = opts.stats.read_mem_bytes;

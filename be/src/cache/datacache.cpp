@@ -241,7 +241,6 @@ StatusOr<DiskCacheOptions> DataCache::_init_disk_cache_options() {
     cache_options.max_concurrent_inserts = config::datacache_max_concurrent_inserts;
     cache_options.enable_checksum = config::datacache_checksum_enable;
     cache_options.enable_direct_io = config::datacache_direct_io_enable;
-    cache_options.enable_tiered_cache = config::datacache_tiered_cache_enable;
     cache_options.skip_read_factor = config::datacache_skip_read_factor;
     cache_options.scheduler_threads_per_cpu = config::datacache_scheduler_threads_per_cpu;
     cache_options.enable_datacache_persistence = config::datacache_persistence_enable;
@@ -284,7 +283,7 @@ void DataCache::try_release_resource_before_core_dump() {
     };
 
     if (_local_mem_cache != nullptr && need_release("data_cache")) {
-        (void)_local_mem_cache->update_mem_quota(0, false);
+        (void)_local_mem_cache->update_mem_quota(0);
     }
 }
 
