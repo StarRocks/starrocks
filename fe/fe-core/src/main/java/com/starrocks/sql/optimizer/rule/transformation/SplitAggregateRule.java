@@ -39,6 +39,7 @@ import org.apache.commons.collections4.CollectionUtils;
 import java.util.Collection;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 import static com.starrocks.qe.SessionVariableConstants.AggregationStage.AUTO;
 import static com.starrocks.qe.SessionVariableConstants.AggregationStage.TWO_STAGE;
@@ -130,7 +131,27 @@ public abstract class SplitAggregateRule extends TransformationRule {
                 && isSingleNodeExecution(ConnectContext.get())
                 && !FeConstants.runningUnitTest
                 && CollectionUtils.isNotEmpty(operator.getGroupingKeys())
-                && ConnectContext.get().getSessionVariable().isCboEnableSingleNodePreferTwoStageAggregate()) {
+                && ConnectContext.get().getSessionVariable().isCboEnableSingleNodePreferTwoOrFourStageAggregate()) {
+            // for single node's distinct, we prefer two phase agg when partition by column in exchange is not skew
+            // since in such case, there is no scale problem
+            // otherwise prefer four phase agg in isThreeStageMoreEfficient() since it has the best scalability
+            List<ColumnRefOperator> partitionByColumns = operator.getPartitionByColumns();
+
+            Statistics inputStatistics = input.getGroupExpression().inputAt(0).getStatistics();
+            List<ColumnStatistic> partitionByColumnStatistics = partitionByColumns.stream().
+                    map(inputStatistics::getColumnStatistic).collect(Collectors.toList());
+            if (partitionByColumnStatistics.stream().anyMatch(ColumnStatistic::isUnknown)) {
+                return true;
+            }
+
+            double aggOutputRow =
+                    StatisticsCalculator.computeGroupByStatistics(partitionByColumns, inputStatistics,
+                            Maps.newHashMap());
+            // if partition by column's ndv is too small, two phase agg may not scale
+            if (aggOutputRow <= LOW_AGGREGATE_EFFECT_COEFFICIENT * 10) {
+                return false;
+            }
+
             return true;
         }
 
