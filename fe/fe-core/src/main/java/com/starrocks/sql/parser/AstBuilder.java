@@ -256,6 +256,7 @@ import com.starrocks.sql.ast.OrderByElement;
 import com.starrocks.sql.ast.OriginStatement;
 import com.starrocks.sql.ast.OutFileClause;
 import com.starrocks.sql.ast.ParseNode;
+import com.starrocks.sql.ast.PartitionDef;
 import com.starrocks.sql.ast.PartitionDesc;
 import com.starrocks.sql.ast.PartitionKeyDesc;
 import com.starrocks.sql.ast.PartitionNames;
@@ -396,6 +397,7 @@ import com.starrocks.sql.ast.SwapTableClause;
 import com.starrocks.sql.ast.SyncRefreshSchemeDesc;
 import com.starrocks.sql.ast.SyncStmt;
 import com.starrocks.sql.ast.SystemVariable;
+import com.starrocks.sql.ast.TableDef;
 import com.starrocks.sql.ast.TableFunctionRelation;
 import com.starrocks.sql.ast.TableRelation;
 import com.starrocks.sql.ast.TableRenameClause;
@@ -677,19 +679,19 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
     public ParseNode visitUseCatalogStatement(com.starrocks.sql.parser.StarRocksParser.UseCatalogStatementContext context) {
         StringLiteral literal = (StringLiteral) visit(context.string());
         String catalogParts = literal.getValue();
-        
+
         // Parse and validate catalog name from the string literal
         if (catalogParts == null || catalogParts.trim().isEmpty()) {
             throw new ParsingException("You have an error in your SQL. The correct syntax is: USE 'CATALOG catalog_name'.",
                     createPos(context));
         }
-        
+
         String[] splitParts = catalogParts.split("\\s+");
         if (splitParts.length != 2 || !splitParts[0].equalsIgnoreCase("CATALOG")) {
             throw new ParsingException("You have an error in your SQL. The correct syntax is: USE 'CATALOG catalog_name'.",
                     createPos(context));
         }
-        
+
         String catalogName = normalizeName(splitParts[1]);
         return new UseCatalogStmt(catalogName, createPos(context));
     }
@@ -808,14 +810,15 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
         Token start = context.qualifiedName().start;
         Token stop = context.qualifiedName().stop;
         QualifiedName qualifiedName = getQualifiedName(context.qualifiedName());
-        TableName targetTableName = qualifiedNameToTableName(qualifiedName);
-        PartitionNames partitionNames = null;
+
+        PartitionDef partitionDef = null;
         if (context.partitionNames() != null) {
             stop = context.partitionNames().stop;
-            partitionNames = (PartitionNames) visit(context.partitionNames());
+            PartitionNames partitionNames = (PartitionNames) visit(context.partitionNames());
+            partitionDef = new PartitionDef(partitionNames.getPartitionNames(), partitionNames.isTemp(), partitionNames.getPos());
         }
-        return new ShowDataDistributionStmt(new TableRef(targetTableName, null,
-                partitionNames, createPos(start, stop)),
+
+        return new ShowDataDistributionStmt(new TableDef(normalizeName(qualifiedName), partitionDef, createPos(start, stop)),
                 createPos(context));
     }
 
@@ -9539,6 +9542,15 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
 
     private String normalizeName(String name) {
         return caseInsensitive && name != null ? name.toLowerCase() : name;
+    }
+
+    private QualifiedName normalizeName(QualifiedName qualifiedName) {
+        List<String> parts = new ArrayList<>();
+        for (String part : qualifiedName.getParts()) {
+            parts.add(normalizeName(part));
+        }
+
+        return QualifiedName.of(parts, qualifiedName.getPos());
     }
 
     public static IndexDef.IndexType getIndexType(com.starrocks.sql.parser.StarRocksParser.IndexTypeContext indexTypeContext) {
