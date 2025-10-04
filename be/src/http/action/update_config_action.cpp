@@ -127,7 +127,7 @@ Status UpdateConfigAction::update_config(const std::string& name, const std::str
                 LOG(WARNING) << "Failed to update datacache mem size";
                 return st;
             }
-            return cache->update_mem_quota(mem_size, true);
+            return cache->update_mem_quota(mem_size);
         });
         _config_callback.emplace("datacache_disk_size", [&]() -> Status {
             LocalDiskCacheEngine* cache = DataCache::GetInstance()->local_disk_cache();
