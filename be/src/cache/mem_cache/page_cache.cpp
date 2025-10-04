@@ -75,7 +75,7 @@ void StoragePageCache::prune() {
 }
 
 void StoragePageCache::set_capacity(size_t capacity) {
-    Status st = _cache->update_mem_quota(capacity, false);
+    Status st = _cache->update_mem_quota(capacity);
     LOG_IF(INFO, !st.ok()) << "Fail to set cache capacity to " << capacity << ", reason: " << st.message();
 }
 

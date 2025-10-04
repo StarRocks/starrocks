@@ -68,8 +68,6 @@ private:
 
     std::shared_ptr<starcache::StarCache> _cache;
     std::unique_ptr<starcache::TimeBasedCacheAdaptor> _cache_adaptor;
-    bool _enable_tiered_cache = false;
-    bool _enable_datacache_persistence = false;
     std::atomic<bool> _initialized = false;
 
     std::atomic<size_t> _disk_quota = 0;

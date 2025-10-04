@@ -1299,19 +1299,8 @@ CONF_Bool(datacache_block_buffer_enable, "true");
 // To control how many threads will be created for datacache synchronous tasks.
 // For the default value, it means for every 8 cpu, one thread will be created.
 CONF_Double(datacache_scheduler_threads_per_cpu, "0.125");
-// To control whether cache raw data both in memory and disk.
-// If true, the raw data will be written to the tiered cache composed of memory cache and disk cache,
-// and the memory cache hotter data than disk.
-// If false, the raw data will be written to disk directly and read from disk without promotion.
-// For object data, such as parquet footer object, which can only be cached in memory are not affected
-// by this configuration.
-CONF_Bool(datacache_tiered_cache_enable, "false");
 // Whether to persist cached data
 CONF_Bool(datacache_persistence_enable, "true");
-// DataCache engines, alternatives: starcache, lrucache
-// Set the default value empty to indicate whether it is manually configured by users.
-// If not, we need to adjust the default engine based on build switches like "WITH_STARCACHE".
-CONF_String_enum(datacache_engine, "", ",starcache,lrucache");
 // The interval time (millisecond) for agent report datacache metrics to FE.
 CONF_mInt32(report_datacache_metrics_interval_ms, "60000");
 
@@ -1365,7 +1354,6 @@ CONF_Alias(datacache_block_size, block_cache_block_size);
 CONF_Alias(datacache_max_concurrent_inserts, block_cache_max_concurrent_inserts);
 CONF_Alias(datacache_checksum_enable, block_cache_checksum_enable);
 CONF_Alias(datacache_direct_io_enable, block_cache_direct_io_enable);
-CONF_Alias(datacache_engine, block_cache_engine);
 
 CONF_mInt64(l0_l1_merge_ratio, "10");
 // max wal file size in l0

@@ -83,7 +83,7 @@ public:
     virtual Status adjust_mem_quota(int64_t delta, size_t min_capacity) = 0;
 
     // Update the datacache memory quota.
-    virtual Status update_mem_quota(size_t quota_bytes, bool flush_to_disk) = 0;
+    virtual Status update_mem_quota(size_t quota_bytes) = 0;
 
     virtual const DataCacheMetrics cache_metrics() const = 0;
 
