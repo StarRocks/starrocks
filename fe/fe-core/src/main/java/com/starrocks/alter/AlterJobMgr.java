@@ -235,6 +235,13 @@ public class AlterJobMgr {
                     Lists.newArrayList(MaterializedViewAnalyzer.getBaseTableInfos(mvQueryStatement, !isReplay));
             materializedView.setBaseTableInfos(baseTableInfos);
             materializedView.fixRelationship();
+
+            // resume the mv scheduler
+            TaskManager taskManager = GlobalStateMgr.getCurrentState().getTaskManager();
+            Task task = taskManager.getTask(materializedView);
+            if (task != null) {
+                taskManager.resumeTask(task);
+            }
         } else if (AlterMaterializedViewStatusClause.INACTIVE.equalsIgnoreCase(status)) {
             materializedView.setInactiveAndReason(reason);
             // clear running & pending task runs since the mv has been inactive
@@ -243,6 +250,8 @@ public class AlterJobMgr {
             if (currentTask != null) {
                 TaskRunManager taskRunManager = taskManager.getTaskRunManager();
                 taskRunManager.killTaskRun(currentTask.getId(), true);
+                // suspend the task to avoid scheduling new task runs
+                taskManager.suspendTask(currentTask);
             }
         }
     }

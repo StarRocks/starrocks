@@ -61,11 +61,28 @@ public class ShowMaterializedViewStatus {
 
     public static final String MULTI_TASK_RUN_SEPARATOR = "|";
 
+    public enum ActiveState {
+        ACTIVE,
+        INACTIVE,
+        PAUSED;
+        public String toString() {
+            switch (this) {
+                case ACTIVE:
+                    return "true";
+                case INACTIVE:
+                    return "false";
+                case PAUSED:
+                    return "paused";
+            }
+            return "NULL";
+        }
+    }
+
     private long id;
     private String dbName;
     private String name;
     private String refreshType;
-    private boolean isActive;
+    private ActiveState activeState;
     private String text;
     private long rows;
     private String partitionType;
@@ -333,8 +350,23 @@ public class ShowMaterializedViewStatus {
         } else {
             status.setRefreshType(String.valueOf(mv.getRefreshScheme().getType()));
         }
-        // is_active
-        status.setActive(mv.isActive());
+
+        // task_name
+        final TaskManager taskManager = GlobalStateMgr.getCurrentState().getTaskManager();
+        Task task = taskManager.getTask(TaskBuilder.getMvTaskName(mv.getId()));
+        ActiveState activeState = mv.isActive() ? ActiveState.ACTIVE : ActiveState.INACTIVE;
+        // task id/name
+        if (task != null) {
+            status.setTaskId(task.getId());
+            status.setTaskName(task.getName());
+
+            // if mv is still active & task is paused, then mv is paused.
+            Constants.TaskState taskRunState = task.getState();
+            if (mv.isActive() && Constants.TaskState.PAUSE.equals(taskRunState)) {
+                activeState = ActiveState.PAUSED;
+            }
+        }
+        status.setActive(activeState);
         status.setInactiveReason(Optional.ofNullable(mv.getInactiveReason()).map(String::valueOf).orElse(null));
         // partition info
         if (mv.getPartitionInfo() != null && mv.getPartitionInfo().getType() != null) {
@@ -346,13 +378,6 @@ public class ShowMaterializedViewStatus {
         status.setText(mv.getMaterializedViewDdlStmt(true));
         // rewrite status
         status.setQueryRewriteStatus(mv.getQueryRewriteStatus());
-        // task_name
-        final TaskManager taskManager = GlobalStateMgr.getCurrentState().getTaskManager();
-        Task task = taskManager.getTask(TaskBuilder.getMvTaskName(mv.getId()));
-        if (task != null) {
-            status.setTaskId(task.getId());
-            status.setTaskName(task.getName());
-        }
         status.setLastJobTaskRunStatus(taskTaskStatusJob);
         return status;
     }
@@ -363,7 +388,7 @@ public class ShowMaterializedViewStatus {
         // refresh_type
         status.setRefreshType("ROLLUP");
         // is_active
-        status.setActive(true);
+        status.setActive(ActiveState.ACTIVE);
         // partition type
         if (olapTable.getPartitionInfo() != null && olapTable.getPartitionInfo().getType() != null) {
             status.setPartitionType(olapTable.getPartitionInfo().getType().toString());
@@ -419,12 +444,12 @@ public class ShowMaterializedViewStatus {
         this.refreshType = refreshType;
     }
 
-    public boolean isActive() {
-        return isActive;
+    public ActiveState isActive() {
+        return activeState;
     }
 
-    public void setActive(boolean active) {
-        isActive = active;
+    public void setActive(ActiveState active) {
+        activeState = active;
     }
 
     public String getText() {
@@ -609,7 +634,11 @@ public class ShowMaterializedViewStatus {
         status.setDatabase_name(this.dbName);
         status.setName(this.name);
         status.setRefresh_type(this.refreshType);
-        status.setIs_active(this.isActive ? "true" : "false");
+        String activeState = "false";
+        if (this.activeState != null) {
+            activeState = this.activeState.toString();
+        }
+        status.setIs_active(activeState);
         status.setInactive_reason(this.inactiveReason);
         status.setPartition_type(this.partitionType);
 
@@ -680,7 +709,7 @@ public class ShowMaterializedViewStatus {
         // mv refresh type
         addField(resultRow, refreshType);
         // mv is active?
-        addField(resultRow, isActive);
+        addField(resultRow, activeState == null ? "false" : activeState.toString());
         // mv inactive reason?
         addField(resultRow, inactiveReason);
         // mv partition type
@@ -760,7 +789,7 @@ public class ShowMaterializedViewStatus {
                 ", dbName='" + dbName + '\'' +
                 ", name='" + name + '\'' +
                 ", refreshType='" + refreshType + '\'' +
-                ", isActive=" + isActive +
+                ", isActive=" + activeState +
                 ", text='" + text + '\'' +
                 ", rows=" + rows +
                 ", partitionType='" + partitionType + '\'' +
