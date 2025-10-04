@@ -572,6 +572,10 @@ public:
         return _query_options.__isset.lower_upper_support_utf8 && _query_options.lower_upper_support_utf8;
     }
 
+    bool use_crc32_hash_for_exchange() const {
+        return _query_options.__isset.use_crc32_hash_for_exchange && _query_options.use_crc32_hash_for_exchange;
+    }
+
     DebugActionMgr& debug_action_mgr() { return _debug_action_mgr; }
 
 private:
