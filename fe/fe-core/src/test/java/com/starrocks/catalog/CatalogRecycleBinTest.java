@@ -41,7 +41,6 @@ import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
@@ -595,7 +594,7 @@ public class CatalogRecycleBinTest {
         recycleBin.recycleTable(dbId, table2SameName, true);
         recycleBin.recycleTable(dbId, table2, true);
 
-        Assertions.assertEquals(recycleBin.getTables(dbId), Arrays.asList(table1, table2SameName, table2));
+        Assertions.assertEquals(Sets.newHashSet(recycleBin.getTables(dbId)), Sets.newHashSet(table1, table2SameName, table2));
         Assertions.assertSame(recycleBin.getTable(dbId, table1.getId()), table1);
         Assertions.assertSame(recycleBin.getTable(dbId, table2.getId()), table2);
         Assertions.assertTrue(recycleBin.idToRecycleTime.containsKey(table1.getId()));
@@ -924,7 +923,7 @@ public class CatalogRecycleBinTest {
         recycleBin.recycleTable(dbId, table2SameName, true);
         recycleBin.recycleTable(dbId, table2, true);
 
-        Assertions.assertEquals(recycleBin.getTables(dbId), Arrays.asList(table1, table2SameName, table2));
+        Assertions.assertEquals(Sets.newHashSet(recycleBin.getTables(dbId)), Sets.newHashSet(table1, table2SameName, table2));
         Assertions.assertSame(recycleBin.getTable(dbId, table1.getId()), table1);
         Assertions.assertSame(recycleBin.getTable(dbId, table2.getId()), table2);
         Assertions.assertTrue(recycleBin.idToRecycleTime.containsKey(table1.getId()));

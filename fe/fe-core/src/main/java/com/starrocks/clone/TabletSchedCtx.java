@@ -863,8 +863,8 @@ public class TabletSchedCtx implements Comparable<TabletSchedCtx> {
             throw new SchedException(Status.UNRECOVERABLE, "db " + dbId + " not exist");
         }
         Locker locker = new Locker();
+        locker.lockDatabase(db.getId(), LockType.WRITE);
         try {
-            locker.lockDatabase(db.getId(), LockType.WRITE);
             if (tabletHealthStatus == TabletHealthStatus.REPLICA_MISSING
                     || tabletHealthStatus == TabletHealthStatus.REPLICA_RELOCATING
                     || tabletHealthStatus == TabletHealthStatus.LOCATION_MISMATCH
@@ -937,15 +937,15 @@ public class TabletSchedCtx implements Comparable<TabletSchedCtx> {
         if (db == null) {
             throw new SchedException(Status.UNRECOVERABLE, "db " + dbId + " does not exist");
         }
+        OlapTable olapTable = (OlapTable) globalStateMgr.getLocalMetastore().getTableIncludeRecycleBin(
+                globalStateMgr.getLocalMetastore().getDbIncludeRecycleBin(dbId),
+                tblId);
+        if (olapTable == null) {
+            throw new SchedException(Status.UNRECOVERABLE, "table " + tblId + " does not exist");
+        }
         Locker locker = new Locker();
+        locker.lockTableWithIntensiveDbLock(db.getId(), olapTable.getId(), LockType.WRITE);
         try {
-            locker.lockDatabase(db.getId(), LockType.WRITE);
-            OlapTable olapTable = (OlapTable) globalStateMgr.getLocalMetastore().getTableIncludeRecycleBin(
-                    globalStateMgr.getLocalMetastore().getDbIncludeRecycleBin(dbId),
-                    tblId);
-            if (olapTable == null) {
-                throw new SchedException(Status.UNRECOVERABLE, "table " + tblId + " does not exist");
-            }
             PhysicalPartition physicalPartition = olapTable.getPhysicalPartition(physicalPartitionId);
             if (physicalPartition == null) {
                 throw new SchedException(Status.UNRECOVERABLE, "physical partition " + physicalPartitionId + " does not exist");
@@ -997,7 +997,7 @@ public class TabletSchedCtx implements Comparable<TabletSchedCtx> {
             state = State.RUNNING;
             return task;
         } finally {
-            locker.unLockDatabase(db.getId(), LockType.WRITE);
+            locker.unLockTableWithIntensiveDbLock(db.getId(), olapTable.getId(), LockType.WRITE);
         }
     }
 
@@ -1053,14 +1053,14 @@ public class TabletSchedCtx implements Comparable<TabletSchedCtx> {
         if (db == null) {
             throw new SchedException(Status.UNRECOVERABLE, "db does not exist");
         }
-        Locker locker = new Locker();
-        try {
-            locker.lockDatabase(db.getId(), LockType.WRITE);
-            OlapTable olapTable = (OlapTable) globalStateMgr.getLocalMetastore().getTableIncludeRecycleBin(db, tblId);
-            if (olapTable == null) {
-                throw new SchedException(Status.UNRECOVERABLE, "tbl does not exist");
-            }
+        OlapTable olapTable = (OlapTable) globalStateMgr.getLocalMetastore().getTableIncludeRecycleBin(db, tblId);
+        if (olapTable == null) {
+            throw new SchedException(Status.UNRECOVERABLE, "tbl does not exist");
+        }
 
+        Locker locker = new Locker();
+        locker.lockTableWithIntensiveDbLock(db.getId(), olapTable.getId(), LockType.WRITE);
+        try {
             PhysicalPartition partition = globalStateMgr.getLocalMetastore()
                     .getPhysicalPartitionIncludeRecycleBin(olapTable, physicalPartitionId);
             if (partition == null) {
@@ -1107,7 +1107,7 @@ public class TabletSchedCtx implements Comparable<TabletSchedCtx> {
             }
             throw e;
         } finally {
-            locker.unLockDatabase(db.getId(), LockType.WRITE);
+            locker.unLockTableWithIntensiveDbLock(db.getId(), olapTable.getId(), LockType.WRITE);
         }
 
         if (request.isSetCopy_size()) {

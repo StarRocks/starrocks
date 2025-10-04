@@ -11,18 +11,13 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
-package com.starrocks.common.lock;
+package com.starrocks.common.util.concurrent.lock;
 
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.Database;
 import com.starrocks.common.Config;
 import com.starrocks.common.util.concurrent.QueryableReentrantReadWriteLock;
-import com.starrocks.common.util.concurrent.lock.LockException;
-import com.starrocks.common.util.concurrent.lock.LockManager;
-import com.starrocks.common.util.concurrent.lock.LockParams;
-import com.starrocks.common.util.concurrent.lock.LockType;
-import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.server.GlobalStateMgr;
 import mockit.Mock;
 import mockit.MockUp;
@@ -45,15 +40,6 @@ public class TestLockInterface {
     public void tearDown() {
         Config.lock_manager_enabled = false;
         Config.lock_manager_enable_resolve_deadlock = false;
-    }
-
-    @Test
-    public void testLockAndCheckExist1() {
-        long rid = 1L;
-        Database database = new Database(rid, "db");
-        database.setExist(false);
-        Locker locker = new Locker();
-        Assertions.assertFalse(locker.lockDatabaseAndCheckExist(database, LockType.READ));
     }
 
     @Test

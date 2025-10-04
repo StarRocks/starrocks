@@ -157,7 +157,7 @@ public class LakeRollupJob extends LakeTableSchemaChangeJobBase {
         AgentBatchTask batchTask = new AgentBatchTask();
         MarkedCountDownLatch<Long, Long> countDownLatch;
         final WarehouseManager warehouseManager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
-        try (ReadLockedDatabase db = getReadLockedDatabase(dbId)) {
+        try (ReadLockedTable db = getReadLockedTable(dbId, tableId)) {
             OlapTable table = getTableOrThrow(db, tableId);
             Preconditions.checkState(table.getState() == OlapTable.OlapTableState.ROLLUP);
 
@@ -250,7 +250,7 @@ public class LakeRollupJob extends LakeTableSchemaChangeJobBase {
         sendAgentTaskAndWait(batchTask, countDownLatch, Config.tablet_create_timeout_second * numTablets);
 
         // Add shadow indexes to table.
-        try (WriteLockedDatabase db = getWriteLockedDatabase(dbId)) {
+        try (WriteLockedTable db = getWriteLockedTable(dbId, tableId)) {
             OlapTable table = getTableOrThrow(db, tableId);
             if (table.getState() != OlapTable.OlapTableState.ROLLUP) {
                 throw new IllegalStateException("Table State doesn't equal to ROLLUP, it is " + table.getState() + ".");
@@ -303,7 +303,7 @@ public class LakeRollupJob extends LakeTableSchemaChangeJobBase {
 
         Map<Long, List<TColumn>> indexToThriftColumns = new HashMap<>();
         final WarehouseManager warehouseManager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
-        try (ReadLockedDatabase db = getReadLockedDatabase(dbId)) {
+        try (ReadLockedTable db = getReadLockedTable(dbId, tableId)) {
             OlapTable tbl = getTableOrThrow(db, tableId);
             Preconditions.checkState(tbl.getState() == OlapTable.OlapTableState.ROLLUP);
             // only needs to analyze once
@@ -385,7 +385,7 @@ public class LakeRollupJob extends LakeTableSchemaChangeJobBase {
             }
         }
 
-        try (WriteLockedDatabase db = getWriteLockedDatabase(dbId)) {
+        try (WriteLockedTable db = getWriteLockedTable(dbId, tableId)) {
             OlapTable table = getTableOrThrow(db, tableId);
             commitVersionMap = new HashMap<>();
             for (long physicalPartitionId : physicalPartitionIdToRollupIndex.keySet()) {
@@ -424,8 +424,8 @@ public class LakeRollupJob extends LakeTableSchemaChangeJobBase {
             return;
         }
 
-        try (WriteLockedDatabase db = getWriteLockedDatabase(dbId)) {
-            OlapTable table = (db != null) ? db.getTable(tableId) : null;
+        try (WriteLockedTable db = getWriteLockedTable(dbId, tableId)) {
+            OlapTable table = (db != null) ? db.getTable() : null;
             if (table == null) {
                 LOG.info("database or table been dropped while doing schema change job {}", jobId);
                 return;
@@ -461,8 +461,8 @@ public class LakeRollupJob extends LakeTableSchemaChangeJobBase {
             AgentTaskQueue.removeBatchTask(rollupBatchTask, TTaskType.ALTER);
         }
 
-        try (WriteLockedDatabase db = getWriteLockedDatabase(dbId)) {
-            OlapTable table = (db != null) ? db.getTable(tableId) : null;
+        try (WriteLockedTable db = getWriteLockedTable(dbId, tableId)) {
+            OlapTable table = (db != null) ? db.getTable() : null;
             if (table != null) {
                 removeRollupIndex(table);
             }
@@ -544,8 +544,8 @@ public class LakeRollupJob extends LakeTableSchemaChangeJobBase {
             this.rollupBatchTask = new AgentBatchTask();
         }
 
-        try (WriteLockedDatabase db = getWriteLockedDatabase(dbId)) {
-            OlapTable table = (db != null) ? db.getTable(tableId) : null;
+        try (WriteLockedTable db = getWriteLockedTable(dbId, tableId)) {
+            OlapTable table = (db != null) ? db.getTable() : null;
             if (table == null) {
                 return; // do nothing if the table has been dropped.
             }
@@ -648,8 +648,8 @@ public class LakeRollupJob extends LakeTableSchemaChangeJobBase {
     }
 
     boolean tableHasBeenDropped() {
-        try (ReadLockedDatabase db = getReadLockedDatabase(dbId)) {
-            return db == null || db.getTable(tableId) == null;
+        try (ReadLockedTable db = getReadLockedTable(dbId, tableId)) {
+            return db == null || db.getTable() == null;
         }
     }
 
@@ -664,7 +664,7 @@ public class LakeRollupJob extends LakeTableSchemaChangeJobBase {
     }
 
     boolean readyToPublishVersion() throws AlterCancelException {
-        try (ReadLockedDatabase db = getReadLockedDatabase(dbId)) {
+        try (ReadLockedTable db = getReadLockedTable(dbId, tableId)) {
             OlapTable table = getTableOrThrow(db, tableId);
             for (long partitionId : physicalPartitionIdToRollupIndex.keySet()) {
                 PhysicalPartition partition = table.getPhysicalPartition(partitionId);
@@ -682,7 +682,7 @@ public class LakeRollupJob extends LakeTableSchemaChangeJobBase {
     }
 
     protected boolean lakePublishVersion() {
-        try (ReadLockedDatabase db = getReadLockedDatabase(dbId)) {
+        try (ReadLockedTable db = getReadLockedTable(dbId, tableId)) {
             OlapTable table = getTableOrThrow(db, tableId);
             boolean useAggregatePublish = table.isFileBundling();
             for (long partitionId : physicalPartitionIdToRollupIndex.keySet()) {

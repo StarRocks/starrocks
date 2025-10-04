@@ -252,30 +252,29 @@ public class Database extends MetaObject implements Writable {
     }
 
     public void dropTable(String tableName, boolean isSetIfExists, boolean isForce) throws DdlException {
-        Table table;
+        Table table = nameToTable.get(tableName);
+        if (table == null && isSetIfExists) {
+            return;
+        }
+        if (table == null) {
+            ErrorReport.reportDdlException(ErrorCode.ERR_BAD_TABLE_ERROR, tableName);
+            return;
+        }
+        if (!isForce &&
+                GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().existCommittedTxns(id, table.getId(), null)) {
+            throw new DdlException("There are still some transactions in the COMMITTED state waiting to be completed. " +
+                    "The table [" + table.getName() +
+                    "] cannot be dropped. If you want to forcibly drop(cannot be recovered)," +
+                    " please use \"DROP TABLE <table> FORCE\".");
+        }
         Locker locker = new Locker();
-        locker.lockDatabase(id, LockType.WRITE);
+        locker.lockTableWithIntensiveDbLock(id, table.getId(), LockType.WRITE);
         try {
-            table = nameToTable.get(tableName);
-            if (table == null && isSetIfExists) {
-                return;
-            }
-            if (table == null) {
-                ErrorReport.reportDdlException(ErrorCode.ERR_BAD_TABLE_ERROR, tableName);
-                return;
-            }
-            if (!isForce &&
-                    GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().existCommittedTxns(id, table.getId(), null)) {
-                throw new DdlException("There are still some transactions in the COMMITTED state waiting to be completed. " +
-                        "The table [" + table.getName() +
-                        "] cannot be dropped. If you want to forcibly drop(cannot be recovered)," +
-                        " please use \"DROP TABLE <table> FORCE\".");
-            }
             unprotectDropTable(table.getId(), isForce, false);
             DropInfo info = new DropInfo(id, table.getId(), -1L, isForce);
             GlobalStateMgr.getCurrentState().getEditLog().logDropTable(info);
         } finally {
-            locker.unLockDatabase(id, LockType.WRITE);
+            locker.unLockTableWithIntensiveDbLock(id, table.getId(), LockType.WRITE);
         }
 
         if (isForce) {

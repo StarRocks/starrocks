@@ -359,7 +359,7 @@ public class LakeTableSchemaChangeJob extends LakeTableSchemaChangeJobBase {
         long numTablets = 0;
         AgentBatchTask batchTask = new AgentBatchTask();
         MarkedCountDownLatch<Long, Long> countDownLatch;
-        try (ReadLockedDatabase db = getReadLockedDatabase(dbId)) {
+        try (ReadLockedTable db = getReadLockedTable(dbId, tableId)) {
             OlapTable table = getTableOrThrow(db, tableId);
             Preconditions.checkState(table.getState() == OlapTable.OlapTableState.SCHEMA_CHANGE);
 
@@ -459,7 +459,7 @@ public class LakeTableSchemaChangeJob extends LakeTableSchemaChangeJobBase {
                              waitingCreatingReplica, isCancelling);
 
         // Add shadow indexes to table.
-        try (WriteLockedDatabase db = getWriteLockedDatabase(dbId)) {
+        try (WriteLockedTable db = getWriteLockedTable(dbId, tableId)) {
             OlapTable table = getTableOrThrow(db, tableId);
             Preconditions.checkState(table.getState() == OlapTable.OlapTableState.SCHEMA_CHANGE);
             watershedTxnId = getNextTransactionId();
@@ -508,7 +508,7 @@ public class LakeTableSchemaChangeJob extends LakeTableSchemaChangeJobBase {
 
         LOG.info("previous transactions are all finished, begin to send schema change tasks. job: {}", jobId);
 
-        try (ReadLockedDatabase db = getReadLockedDatabase(dbId)) {
+        try (ReadLockedTable db = getReadLockedTable(dbId, tableId)) {
             OlapTable table = getTableOrThrow(db, tableId);
             Preconditions.checkState(table.getState() == OlapTable.OlapTableState.SCHEMA_CHANGE);
             for (long partitionId : physicalPartitionIndexMap.rowKeySet()) {
@@ -701,7 +701,7 @@ public class LakeTableSchemaChangeJob extends LakeTableSchemaChangeJobBase {
             }
         }
 
-        try (WriteLockedDatabase db = getWriteLockedDatabase(dbId)) {
+        try (WriteLockedTable db = getWriteLockedTable(dbId, tableId)) {
             OlapTable table = getTableOrThrow(db, tableId);
             commitVersionMap = new HashMap<>();
             for (long partitionId : physicalPartitionIndexMap.rowKeySet()) {
@@ -745,8 +745,8 @@ public class LakeTableSchemaChangeJob extends LakeTableSchemaChangeJobBase {
         // Replace the current index with shadow index.
         Set<String> modifiedColumns;
         List<MaterializedIndex> droppedIndexes;
-        try (WriteLockedDatabase db = getWriteLockedDatabase(dbId)) {
-            OlapTable table = (db != null) ? db.getTable(tableId) : null;
+        try (WriteLockedTable db = getWriteLockedTable(dbId, tableId)) {
+            OlapTable table = (db != null) ? db.getTable() : null;
             if (table == null) {
                 LOG.info("database or table been dropped while doing schema change job {}", jobId);
                 return;
@@ -776,7 +776,7 @@ public class LakeTableSchemaChangeJob extends LakeTableSchemaChangeJobBase {
 
     // Note: throws AlterCancelException iff the database or table has been dropped.
     boolean readyToPublishVersion() throws AlterCancelException {
-        try (ReadLockedDatabase db = getReadLockedDatabase(dbId)) {
+        try (ReadLockedTable db = getReadLockedTable(dbId, tableId)) {
             OlapTable table = getTableOrThrow(db, tableId);
             isFileBundling = table.isFileBundling();
             for (long partitionId : physicalPartitionIndexMap.rowKeySet()) {
@@ -828,7 +828,7 @@ public class LakeTableSchemaChangeJob extends LakeTableSchemaChangeJobBase {
                 // For indexes whose schema have not changed, we still need to upgrade the version
                 List<MaterializedIndex> originMaterializedIndex;
                 List<Tablet> allOtherPartitionTablets = new ArrayList<>();
-                try (ReadLockedDatabase db = getReadLockedDatabase(dbId)) {
+                try (ReadLockedTable db = getReadLockedTable(dbId, tableId)) {
                     OlapTable table = getTableOrThrow(db, tableId);
                     PhysicalPartition partition = table.getPhysicalPartition(partitionId);
                     originMaterializedIndex = partition.getMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE);
@@ -900,8 +900,8 @@ public class LakeTableSchemaChangeJob extends LakeTableSchemaChangeJobBase {
     }
 
     boolean tableHasBeenDropped() {
-        try (ReadLockedDatabase db = getReadLockedDatabase(dbId)) {
-            return db == null || db.getTable(tableId) == null;
+        try (ReadLockedTable db = getReadLockedTable(dbId, tableId)) {
+            return db == null || db.getTable() == null;
         }
     }
 
@@ -953,8 +953,8 @@ public class LakeTableSchemaChangeJob extends LakeTableSchemaChangeJobBase {
             // this.schemaChangeBatchTask = other.schemaChangeBatchTask;
         }
 
-        try (WriteLockedDatabase db = getWriteLockedDatabase(dbId)) {
-            OlapTable table = (db != null) ? db.getTable(tableId) : null;
+        try (WriteLockedTable db = getWriteLockedTable(dbId, tableId)) {
+            OlapTable table = (db != null) ? db.getTable() : null;
             if (table == null) {
                 return; // do nothing if the table has been dropped.
             }
@@ -1146,8 +1146,8 @@ public class LakeTableSchemaChangeJob extends LakeTableSchemaChangeJobBase {
             AgentTaskQueue.removeBatchTask(schemaChangeBatchTask, TTaskType.ALTER);
         }
 
-        try (WriteLockedDatabase db = getWriteLockedDatabase(dbId)) {
-            OlapTable table = (db != null) ? db.getTable(tableId) : null;
+        try (WriteLockedTable db = getWriteLockedTable(dbId, tableId)) {
+            OlapTable table = (db != null) ? db.getTable() : null;
             if (table != null) {
                 removeShadowIndex(table);
             }
