@@ -187,6 +187,13 @@ public class MVTaskRunProcessor extends BaseTaskRunProcessor implements MVRefres
                 Preconditions.checkState(mv != null);
                 mvMetricsEntity = MaterializedViewMetricsRegistry.getInstance().getMetricsEntity(mv.getMvId());
                 this.taskRunState = retryProcessTaskRun(context);
+                if (this.taskRunState == Constants.TaskRunState.SUCCESS) {
+                    logger.info("Refresh materialized view {} finished successfully.", mv.getName());
+                    // if success, try to generate next task run
+                    mvRefreshProcessor.generateNextTaskRunIfNeeded();
+                } else {
+                    logger.warn("Refresh materialized view {} failed with state: {}.", mv.getName(), taskRunState);
+                }
                 // update metrics
                 mvMetricsEntity.increaseRefreshJobStatus(taskRunState);
                 connectContext.getState().setOk();

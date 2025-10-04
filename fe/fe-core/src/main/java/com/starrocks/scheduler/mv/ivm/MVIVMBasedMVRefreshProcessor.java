@@ -180,11 +180,6 @@ public class MVIVMBasedMVRefreshProcessor extends BaseMVRefreshProcessor {
             }
         }
 
-        // generate the next task run state
-        if (hasNextTaskRun && !mvContext.getTaskRun().isKilled()) {
-            generateNextTaskRun();
-        }
-
         return Constants.TaskRunState.SUCCESS;
     }
 
@@ -338,7 +333,11 @@ public class MVIVMBasedMVRefreshProcessor extends BaseMVRefreshProcessor {
         return result;
     }
 
-    private void generateNextTaskRun() {
+    @Override
+    public void generateNextTaskRunIfNeeded() {
+        if (!hasNextTaskRun || mvContext.getTaskRun().isKilled()) {
+            return;
+        }
         TaskManager taskManager = GlobalStateMgr.getCurrentState().getTaskManager();
         Map<String, String> properties = mvContext.getProperties();
         long mvId = Long.parseLong(properties.get(MV_ID));
