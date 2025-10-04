@@ -89,6 +89,8 @@ public class FeConstants {
     public static boolean unitTestView = true;
     // Set this flag false to suppress showing local shuffle columns in verbose explain, when running FE unit tests.
     public static boolean showScanNodeLocalShuffleColumnsInExplain = true;
+    // Maximum timeout for while loops in test cases to prevent dead loops.
+    public static int MAX_LOOP_TIMEOUT_SECOND = 180; // 3 minutes
 
     // Set this flag false to suppress showing fragment cost, when running FE unit tests.
     public static boolean showFragmentCost = true;

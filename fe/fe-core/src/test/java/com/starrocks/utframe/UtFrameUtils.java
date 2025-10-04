@@ -1134,8 +1134,13 @@ public class UtFrameUtils {
             fakeJournalWriter = new Thread(new Runnable() {
                 @Override
                 public void run() {
+                    LoopTimeoutChecker timeout = new LoopTimeoutChecker("fakeJournalWriter");
                     while (true) {
                         try {
+                            // Check for timeout to prevent dead loop
+                            if (timeout.checkTimeout()) {
+                                break;
+                            }
                             JournalTask journalTask = masterJournalQueue.take();
                             followerJournalQueue.put(journalTask);
                             journalTask.markSucceed();
@@ -1159,7 +1164,10 @@ public class UtFrameUtils {
 
         public static synchronized Writable replayNextJournal(short expectCode) throws Exception {
             assert (followerJournalQueue != null);
+            LoopTimeoutChecker timeout = new LoopTimeoutChecker("replayNextJournal");
             while (true) {
+                // Check for timeout to prevent dead loop
+                timeout.throwIfTimeout();
                 if (followerJournalQueue.isEmpty()) {
                     throw new Exception("cannot replay next journal because queue is empty!");
                 }

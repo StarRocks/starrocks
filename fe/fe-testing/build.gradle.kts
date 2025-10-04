@@ -29,6 +29,9 @@ group = "com.starrocks"
 tasks.withType<Test> {
     // Configuration from Maven: failIfNoSpecifiedTests=false
     ignoreFailures = true
+    
+    // Limit each test to 5 minutes (300 seconds)
+    timeout = Duration.ofMinutes(5)
 }
 
 tasks.withType<JavaCompile> {

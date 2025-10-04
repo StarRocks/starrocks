@@ -18,6 +18,7 @@ import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Replica;
 import com.starrocks.common.Config;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.utframe.LoopTimeoutChecker;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.junit.jupiter.api.AfterAll;
@@ -63,7 +64,12 @@ public class ReplicaMinReadableVersionTest {
         // so it's minReadableVersion should change to 11
         cluster.runSql(null, "ADMIN SET REPLICA STATUS PROPERTIES(\"tablet_id\" = \"" + tablet.id +
                 "\", \"backend_id\" = \"10001\", \"status\" = \"bad\");", true);
+        LoopTimeoutChecker timeout = new LoopTimeoutChecker("wait for replica min readable version");
         while (true) {
+            // Check for timeout to prevent dead loop
+            if (timeout.checkTimeout()) {
+                break;
+            }
             Replica replica = GlobalStateMgr.getCurrentState().getTabletInvertedIndex().getReplica(tablet.id, 10001);
             if (replica == null) {
                 LOG.info("replica null\n");

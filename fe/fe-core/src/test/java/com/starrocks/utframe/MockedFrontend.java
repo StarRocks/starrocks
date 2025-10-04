@@ -284,7 +284,12 @@ public class MockedFrontend {
                 GlobalStateMgr.getCurrentState().waitForReady();
                 isReady = true;
 
+                LoopTimeoutChecker timeout = new LoopTimeoutChecker("MockedFrontend main thread");
                 while (true) {
+                    // Check for timeout to prevent dead loop
+                    if (timeout.checkTimeout()) {
+                        break;
+                    }
                     Thread.sleep(2000);
                 }
             } catch (Throwable e) {

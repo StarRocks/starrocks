@@ -17,6 +17,7 @@ package com.starrocks.sql.optimizer;
 import com.starrocks.alter.AlterJobV2;
 import com.starrocks.common.util.ThreadUtil;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.utframe.LoopTimeoutChecker;
 import com.starrocks.utframe.StarRocksTestBase;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -37,7 +38,12 @@ public class MVTestUtils extends StarRocksTestBase {
             if (alterJobV2.getType() != AlterJobV2.JobType.ROLLUP) {
                 continue;
             }
+            LoopTimeoutChecker timeout = new LoopTimeoutChecker("rollup job " + alterJobV2.getJobId());
             while (!alterJobV2.getJobState().isFinalState()) {
+                // Check for timeout to prevent dead loop
+                if (timeout.checkTimeout()) {
+                    break;
+                }
                 logSysInfo(
                         "rollup job " + alterJobV2.getJobId() + " is running. state: " + alterJobV2.getJobState());
                 ThreadUtil.sleepAtLeastIgnoreInterrupts(1000L);
@@ -48,9 +54,14 @@ public class MVTestUtils extends StarRocksTestBase {
     public static void waitForSchemaChangeAlterJobFinish() {
         Map<Long, AlterJobV2> alterJobs = GlobalStateMgr.getCurrentState().getSchemaChangeHandler().getAlterJobsV2();
         for (AlterJobV2 alterJobV2 : alterJobs.values()) {
+            LoopTimeoutChecker timeout = new LoopTimeoutChecker("alter job " + alterJobV2.getJobId());
             while (!alterJobV2.getJobState().isFinalState()) {
                 if (alterJobV2.getType() != AlterJobV2.JobType.SCHEMA_CHANGE) {
                     continue;
+                }
+                // Check for timeout to prevent dead loop
+                if (timeout.checkTimeout()) {
+                    break;
                 }
                 LOG.info(
                         "alter job " + alterJobV2.getJobId() + " is running. state: " + alterJobV2.getJobState());
@@ -70,8 +81,13 @@ public class MVTestUtils extends StarRocksTestBase {
     }
 
     public static boolean waitForSchemaChangeAlterJobFinish(AlterJobV2 alterJobV2) {
+        LoopTimeoutChecker timeout = new LoopTimeoutChecker("alter job " + alterJobV2.getJobId());
         while (!alterJobV2.getJobState().isFinalState()) {
             if (alterJobV2.getType() != AlterJobV2.JobType.SCHEMA_CHANGE) {
+                return false;
+            }
+            // Check for timeout to prevent dead loop
+            if (timeout.checkTimeout()) {
                 return false;
             }
             LOG.info(

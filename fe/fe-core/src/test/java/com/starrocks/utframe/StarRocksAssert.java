@@ -1014,9 +1014,12 @@ public class StarRocksAssert {
         TaskRunManager taskRunManager = tm.getTaskRunManager();
         TaskRunScheduler taskRunScheduler = taskRunManager.getTaskRunScheduler();
         TaskRun taskRun = taskRunScheduler.getRunnableTaskRun(task.getId());
-        int maxTimes = 1200;
+        LoopTimeoutChecker timeout = new LoopTimeoutChecker("waitTaskRunFinish for task " + task.getId());
         int count = 0;
-        while (taskRun != null && count < maxTimes) {
+        while (taskRun != null && count < 1200) {
+            if (timeout.checkTimeout()) {
+                break;
+            }
             ThreadUtil.sleepAtLeastIgnoreInterrupts(500L);
             taskRun = taskRunScheduler.getRunnableTaskRun(task.getId());
             count += 1;
@@ -1027,9 +1030,13 @@ public class StarRocksAssert {
     private void waitTaskRunFinish(TaskRun taskRun) {
         MVTaskRunProcessor mvTaskRunProcessor = (MVTaskRunProcessor) taskRun.getProcessor();
         MvTaskRunContext mvContext = mvTaskRunProcessor.getMvTaskRunContext();
+        LoopTimeoutChecker timeout = new LoopTimeoutChecker("waitTaskRunFinish");
         int retryCount = 0;
         int maxRetry = 50;
         while (retryCount < maxRetry) {
+            if (timeout.checkTimeout()) {
+                break;
+            }
             ThreadUtil.sleepAtLeastIgnoreInterrupts(200L);
             if (mvContext.getNextPartitionStart() == null && mvContext.getNextPartitionEnd() == null) {
                 break;
@@ -1175,8 +1182,12 @@ public class StarRocksAssert {
                         GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(database.getId(), alterJobV2.getTableId());
             Preconditions.checkState(table instanceof OlapTable);
             OlapTable olapTable = (OlapTable) table;
+            LoopTimeoutChecker timeout = new LoopTimeoutChecker("checkAlterJob for table " + olapTable.getName());
             int retry = 0;
             while (olapTable.getState() != OlapTable.OlapTableState.NORMAL && retry++ < 6000) {
+                if (timeout.checkTimeout()) {
+                    break;
+                }
                 Thread.sleep(10);
             }
             Assertions.assertEquals(AlterJobV2.JobState.FINISHED, alterJobV2.getJobState());
@@ -1195,8 +1206,12 @@ public class StarRocksAssert {
                     GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(database.getId(), alterJobV2.getTableId());
             Preconditions.checkState(table instanceof OlapTable);
             OlapTable olapTable = (OlapTable) table;
+            LoopTimeoutChecker timeout = new LoopTimeoutChecker("checkSchemaChangeJob for table " + olapTable.getName());
             int retry = 0;
             while (olapTable.getState() != OlapTable.OlapTableState.NORMAL && retry++ < 6000) {
+                if (timeout.checkTimeout()) {
+                    break;
+                }
                 Thread.sleep(10);
             }
             Assertions.assertEquals(AlterJobV2.JobState.FINISHED, alterJobV2.getJobState());

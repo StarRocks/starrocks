@@ -16,6 +16,7 @@ package com.starrocks.transaction;
 
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
+import com.starrocks.utframe.LoopTimeoutChecker;
 import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
@@ -101,7 +102,12 @@ public class TransactionGraphTest {
             Set<Long> writeTableIds = Sets.newHashSet();
             int nWriteTable = Math.max(1, random.nextInt(10));
             for (int j = 0; j < nWriteTable; j++) {
+                LoopTimeoutChecker timeout = new LoopTimeoutChecker("find unique table ID");
                 while (true) {
+                    // Check for timeout to prevent dead loop
+                    if (timeout.checkTimeout()) {
+                        break;
+                    }
                     long tableId = random.nextInt(nTable);
                     if (writeTableIds.contains(tableId)) {
                         continue;
@@ -118,7 +124,12 @@ public class TransactionGraphTest {
                 }
             }
         }
+        LoopTimeoutChecker timeout2 = new LoopTimeoutChecker("process all transactions");
         while (true) {
+            // Check for timeout to prevent dead loop
+            if (timeout2.checkTimeout()) {
+                break;
+            }
             List<Long> result = graph.getTxnsWithoutDependency();
             if (result.isEmpty()) {
                 break;
