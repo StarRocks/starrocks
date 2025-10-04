@@ -30,7 +30,9 @@ import com.starrocks.sql.ast.AdminSetConfigStmt;
 import com.starrocks.sql.ast.CreateDbStmt;
 import com.starrocks.sql.ast.CreateViewStmt;
 import com.starrocks.sql.ast.DropDbStmt;
+import com.starrocks.sql.ast.RecoverDbStmt;
 import com.starrocks.sql.ast.SetStmt;
+import com.starrocks.sql.ast.ShowCreateDbStmt;
 import com.starrocks.sql.ast.ShowTableStmt;
 import com.starrocks.sql.ast.UseDbStmt;
 import com.starrocks.sql.parser.SqlParser;
@@ -423,5 +425,27 @@ public class TableObjectCaseInsensitiveTest {
         sql = "DROP DATABASE TEST_DB";
         dropDbStmt = (DropDbStmt) SqlParser.parseSingleStatement(sql, SqlModeHelper.MODE_DEFAULT);
         Assertions.assertEquals("test_db", dropDbStmt.getDbName());
+    }
+
+    @Test
+    public void testRecoverDb() {
+        String sql = "RECOVER DATABASE TEST_db";
+        RecoverDbStmt recoverDbStmt = (RecoverDbStmt) SqlParser.parseSingleStatement(sql, SqlModeHelper.MODE_DEFAULT);
+        Assertions.assertEquals("test_db", recoverDbStmt.getDbName());
+
+        sql = "RECOVER DATABASE TEST_DB";
+        recoverDbStmt = (RecoverDbStmt) SqlParser.parseSingleStatement(sql, SqlModeHelper.MODE_DEFAULT);
+        Assertions.assertEquals("test_db", recoverDbStmt.getDbName());
+    }
+
+    @Test
+    public void testShowCreateDb() {
+        String sql = "SHOW CREATE DATABASE TEST_db";
+        ShowCreateDbStmt showCreateDbStmt = (ShowCreateDbStmt) SqlParser.parseSingleStatement(sql, SqlModeHelper.MODE_DEFAULT);
+        Assertions.assertEquals("test_db", showCreateDbStmt.getDb());
+
+        sql = "SHOW CREATE DATABASE TEST_DB";
+        showCreateDbStmt = (ShowCreateDbStmt) SqlParser.parseSingleStatement(sql, SqlModeHelper.MODE_DEFAULT);
+        Assertions.assertEquals("test_db", showCreateDbStmt.getDb());
     }
 }
