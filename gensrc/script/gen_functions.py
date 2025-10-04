@@ -210,6 +210,7 @@ def generate_cpp(path):
         "ArrayFunctions",
         "MapFunctions",
         "GinFunctions",
+        "AiFunctions",
     ]
 
     modules_contents = dict()
