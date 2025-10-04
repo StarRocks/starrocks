@@ -113,6 +113,8 @@ private:
     int64_t _bytes_read = 0;
     int64_t _cpu_time_spent_ns = 0;
 
+    int64_t _total_time = 0;
+
     RuntimeProfile::Counter* _bytes_read_counter = nullptr;
     RuntimeProfile::Counter* _rows_read_counter = nullptr;
 

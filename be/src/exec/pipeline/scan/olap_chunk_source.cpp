@@ -658,37 +658,40 @@ Status OlapChunkSource::_read_chunk_from_storage(RuntimeState* state, Chunk* chu
         return Status::Cancelled("canceled state");
     }
 
-    do {
-        RETURN_IF_ERROR(state->check_mem_limit("read chunk from storage"));
-        RETURN_IF_ERROR(_prj_iter->get_next(chunk));
+    {
+        SCOPED_RAW_TIMER(&_total_time);
+        do {
+            RETURN_IF_ERROR(state->check_mem_limit("read chunk from storage"));
+            RETURN_IF_ERROR(_prj_iter->get_next(chunk));
 
-        TRY_CATCH_ALLOC_SCOPE_START()
+            TRY_CATCH_ALLOC_SCOPE_START()
 
-        for (auto slot : _query_slots) {
-            size_t column_index = chunk->schema()->get_field_index_by_name(slot->col_name());
-            chunk->set_slot_id_to_index(slot->id(), column_index);
-        }
+            for (auto slot : _query_slots) {
+                size_t column_index = chunk->schema()->get_field_index_by_name(slot->col_name());
+                chunk->set_slot_id_to_index(slot->id(), column_index);
+            }
 
-        if (!_non_pushdown_pred_tree.empty()) {
-            SCOPED_TIMER(_expr_filter_timer);
-            size_t nrows = chunk->num_rows();
-            _selection.resize(nrows);
-            RETURN_IF_ERROR(_non_pushdown_pred_tree.evaluate(chunk, _selection.data(), 0, nrows));
-            size_t after_rows = chunk->filter(_selection);
-            DCHECK_CHUNK(chunk);
-            COUNTER_UPDATE(_expr_filter_counter, nrows - after_rows);
-        }
-        if (!_scan_ctx->not_push_down_conjuncts().empty()) {
-            SCOPED_TIMER(_expr_filter_timer);
-            size_t before_rows = chunk->num_rows();
-            RETURN_IF_ERROR(ExecNode::eval_conjuncts(_scan_ctx->not_push_down_conjuncts(), chunk));
-            size_t after_rows = chunk->num_rows();
-            COUNTER_UPDATE(_expr_filter_counter, before_rows - after_rows);
-            DCHECK_CHUNK(chunk);
-        }
-        TRY_CATCH_ALLOC_SCOPE_END()
+            if (!_non_pushdown_pred_tree.empty()) {
+                SCOPED_TIMER(_expr_filter_timer);
+                size_t nrows = chunk->num_rows();
+                _selection.resize(nrows);
+                RETURN_IF_ERROR(_non_pushdown_pred_tree.evaluate(chunk, _selection.data(), 0, nrows));
+                size_t after_rows = chunk->filter(_selection);
+                DCHECK_CHUNK(chunk);
+                COUNTER_UPDATE(_expr_filter_counter, nrows - after_rows);
+            }
+            if (!_scan_ctx->not_push_down_conjuncts().empty()) {
+                SCOPED_TIMER(_expr_filter_timer);
+                size_t before_rows = chunk->num_rows();
+                RETURN_IF_ERROR(ExecNode::eval_conjuncts(_scan_ctx->not_push_down_conjuncts(), chunk));
+                size_t after_rows = chunk->num_rows();
+                COUNTER_UPDATE(_expr_filter_counter, before_rows - after_rows);
+                DCHECK_CHUNK(chunk);
+            }
+            TRY_CATCH_ALLOC_SCOPE_END()
 
-    } while (chunk->num_rows() == 0);
+        } while (chunk->num_rows() == 0);
+    }
     _update_realtime_counter(chunk);
     // Improve for select * from table limit x, x is small
     if (_limit != -1 && _num_rows_read >= _limit) {
@@ -703,7 +706,9 @@ void OlapChunkSource::_update_realtime_counter(Chunk* chunk) {
     _num_rows_read += num_rows;
     _scan_rows_num = stats.raw_rows_read;
     _scan_bytes = stats.bytes_read;
-    _cpu_time_spent_ns = stats.decompress_ns + stats.vec_cond_ns + stats.del_filter_ns;
+
+    // cpu time = total time - io time
+    _cpu_time_spent_ns = _total_time - stats.io_ns;
 
     const TQueryOptions& query_options = _runtime_state->query_options();
     if (query_options.__isset.load_job_type && query_options.load_job_type == TLoadJobType::INSERT_QUERY) {
