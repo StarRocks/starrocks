@@ -3922,4 +3922,7 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true, comment = "The threshold to flatten compound predicate from deep tree to a balanced tree to " +
             "avoid stack over flow")
     public static int compound_predicate_flatten_threshold = 512;
+
+    @ConfField(mutable = true, comment = "Enable text column cutting symbol enhancement for hive table")
+    public static boolean enable_hive_table_text_field_delimiter_enhancement = false;
 }
