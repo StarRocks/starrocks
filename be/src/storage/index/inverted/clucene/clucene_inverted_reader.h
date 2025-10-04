@@ -49,26 +49,34 @@ namespace starrocks {
     } catch (...) {            \
     }
 
+class CLuceneFileReader;
 class InvertedIndexIterator;
 enum class InvertedIndexQueryType;
 enum class InvertedIndexReaderType;
 
 class CLuceneInvertedReader : public InvertedReader {
 public:
-    explicit CLuceneInvertedReader(std::string path, const uint32_t index_id)
-            : InvertedReader(std::move(path), index_id) {}
+    explicit CLuceneInvertedReader(std::string path, const uint32_t index_id,
+                                   std::shared_ptr<CLuceneFileReader> inverted_index_reader)
+            : InvertedReader(std::move(path), index_id), _inverted_index_reader(std::move(inverted_index_reader)) {}
 
     static Status create(const std::string& path, const std::shared_ptr<TabletIndex>& tablet_index,
                          LogicalType field_type, std::unique_ptr<InvertedReader>* res);
 
     Status new_iterator(const std::shared_ptr<TabletIndex> index_meta, InvertedIndexIterator** iterator) override;
+
+protected:
+    std::shared_ptr<CLuceneFileReader> _inverted_index_reader;
 };
 
-class FullTextCLuceneInvertedReader : public CLuceneInvertedReader {
+class FullTextCLuceneInvertedReader final : public CLuceneInvertedReader {
 public:
-    explicit FullTextCLuceneInvertedReader(std::string path, const uint32_t index_id,
-                                           InvertedIndexParserType parser_type)
-            : CLuceneInvertedReader(std::move(path), index_id), _parser_type(parser_type) {
+    explicit FullTextCLuceneInvertedReader(std::string path, const std::shared_ptr<TabletIndex>& tablet_index,
+                                           std::shared_ptr<CLuceneFileReader> inverted_index_reader,
+                                           const InvertedIndexParserType& parser_type)
+            : CLuceneInvertedReader(std::move(path), tablet_index->index_id(), std::move(inverted_index_reader)),
+              _tablet_index(tablet_index),
+              _parser_type(parser_type) {
         lucene::search::BooleanQuery::setMaxClauseCount(INT_MAX);
     }
 
@@ -80,6 +88,7 @@ public:
     InvertedIndexReaderType get_inverted_index_reader_type() override { return InvertedIndexReaderType::TEXT; }
 
 private:
+    std::shared_ptr<TabletIndex> _tablet_index;
     InvertedIndexParserType _parser_type;
 };
 
