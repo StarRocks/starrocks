@@ -1389,15 +1389,19 @@ void SecondaryReplicasWaiter::_process_replica_status_response(int unfinished_ta
             for (int i = unfinished_tablet_start_index; i < _delta_writers.size(); i++) {
                 auto delta_writer = _delta_writers[i];
                 if (!is_delta_writer_finished(delta_writer)) {
-                    delta_writer->cancel(Status::Cancelled("can't get status from primary, rpc error: " +
-                                                           _replica_status_closure->cntl.ErrorText()));
+                    delta_writer->cancel(Status::Cancelled(
+                            fmt::format("secondary replica on host {} can't get status from primary replica on host "
+                                        "{}, tablet_id: {}, num_retries: {}, rpc error: {}",
+                                        BackendOptions::get_localhost(), primary_replica.host(),
+                                        delta_writer->writer()->tablet()->tablet_id(), _replica_status_fail_num,
+                                        _replica_status_closure->cntl.ErrorText())));
                     delta_writer->abort(true);
                 }
             }
         }
         LOG(WARNING) << "failed to get load replica status, txn_id: " << _txn_id << ", load_id: " << print_id(_load_id)
                      << ", primary replica: [" << primary_replica.host() << ":" << primary_replica.port()
-                     << "], fail num: " << _replica_status_fail_num
+                     << "], num retries: " << _replica_status_fail_num
                      << ", error: " << _replica_status_closure->cntl.ErrorText();
         return;
     }
