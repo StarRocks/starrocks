@@ -130,8 +130,19 @@ bool UrlParser::parse_url(const Slice& url, UrlPart part, Slice* result) {
 
     case HOST: {
         if (is_relative) return false;
+        int32_t first_slash = _s_slash_search.search(protocol_end);
+        int32_t first_question = _s_question_search.search(protocol_end);
+
+        int32_t end_pos = first_slash;
+        if (first_slash < 0 || (0 <= first_question && first_question < first_slash)) {
+            // Either we did not find a slash, or there is one and the first question mark is
+            // left of the first slash (after the protocol), for example:
+            // http://example.com?dir=/etc
+            end_pos = first_question;
+        }
+        auto host_end = protocol_end.substr(0, end_pos);
         // Find '@'.
-        int32_t start_pos = _s_at_search.search(protocol_end);
+        int32_t start_pos = _s_at_search.search(host_end);
 
         if (start_pos < 0) {
             // No '@' was found, i.e., no user:pass info was given, start after _s_protocol.
@@ -140,15 +151,9 @@ bool UrlParser::parse_url(const Slice& url, UrlPart part, Slice* result) {
             // Skip '@'.
             start_pos += _s_at.size;
         }
-
-        auto host_start = protocol_end.substr(start_pos);
+        auto host_start = host_end.substr(start_pos);
         // Find ':' to strip out port.
-        int32_t end_pos = _s_colon_search.search(host_start);
-
-        if (end_pos < 0) {
-            // No port was given. search for '/' to determine ending position.
-            end_pos = _s_slash_search.search(host_start);
-        }
+        end_pos = _s_colon_search.search(host_start);
 
         *result = host_start.substr(0, end_pos);
         break;
