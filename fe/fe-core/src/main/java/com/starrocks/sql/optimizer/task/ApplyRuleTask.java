@@ -28,6 +28,7 @@ import com.starrocks.sql.optimizer.OptimizerTraceUtil;
 import com.starrocks.sql.optimizer.operator.pattern.Pattern;
 import com.starrocks.sql.optimizer.rule.Binder;
 import com.starrocks.sql.optimizer.rule.Rule;
+import com.starrocks.sql.optimizer.validate.PlanValidator;
 
 import java.util.List;
 
@@ -89,6 +90,18 @@ public class ApplyRuleTask extends OptimizerTask {
             }
             List<OptExpression> targetExpressions;
             OptimizerTraceUtil.logApplyRuleBefore(context.getOptimizerContext(), rule, extractExpr);
+
+            OptExpression beforeTransform = extractExpr;
+            // Save whole tree state before transformation for CTEUniqueChecker
+            OptExpression wholePlanBefore = null;
+            if (context.getOptimizerContext().getSessionVariable().enableOptimizerRuleDebug()) {
+                try {
+                    wholePlanBefore = context.getOptimizerContext().getMemo().getRootGroup().extractLogicalTree();
+                } catch (Exception e) {
+                    // If we can't extract the whole tree, we'll fall back to individual validation
+                }
+            }
+            
             try (Timer ignore = Tracers.watchScope(Tracers.Module.OPTIMIZER, rule.getClass().getSimpleName())) {
                 targetExpressions = rule.transform(extractExpr, context.getOptimizerContext());
             } catch (StarRocksPlannerException e) {
@@ -101,6 +114,23 @@ public class ApplyRuleTask extends OptimizerTask {
 
             newExpressions.addAll(targetExpressions);
             OptimizerTraceUtil.logApplyRuleAfter(rule, targetExpressions);
+
+            // Validation after each rule with detailed debug information
+            if (context.getOptimizerContext().getSessionVariable().enableOptimizerRuleDebug()) {
+                if (wholePlanBefore != null) {
+                    try {
+                        // For CTEUniqueChecker, validate the whole tree after rule application
+                        OptExpression wholePlanAfter = context.getOptimizerContext().getMemo()
+                                .getRootGroup().extractLogicalTree();
+                        PlanValidator.validateAfterRule(wholePlanBefore, wholePlanAfter, rule, context);
+                    } catch (Exception e) {
+                        // If we can't extract the whole tree, fall back to individual expression validation
+                        for (OptExpression expr : targetExpressions) {
+                            PlanValidator.validateAfterRule(beforeTransform, expr, rule, context);
+                        }
+                    }
+                }
+            }
 
             extractExpr = binder.next();
         }

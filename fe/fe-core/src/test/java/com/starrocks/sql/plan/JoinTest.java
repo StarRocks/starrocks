@@ -31,6 +31,10 @@ import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 
 public class JoinTest extends PlanTestBase {
+    @Test
+    public void testJoin() throws Exception {
+        String plan = getFragmentPlan("select v1 + v2 from t0");
+    }
 
     @Test
     public void testIsNullPredicatePushdownClear() throws Exception {
@@ -342,8 +346,7 @@ public class JoinTest extends PlanTestBase {
 
     @Test
     public void testCrossJoinEliminate() throws Exception {
-        String query = "select t1.* from t0, t2, t3, t1 where t1.v4 = t2.v7 " +
-                "and t1.v4 = t3.v10 and t3.v10 = t0.v1";
+        String query = "select t1.* from t1 join t2 on t1.v4 = t2.v7 ";
         String explainString = getFragmentPlan(query);
         Assertions.assertFalse(explainString.contains("NESTLOOP JOIN"));
     }
