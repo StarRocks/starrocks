@@ -98,6 +98,8 @@ import com.starrocks.http.rest.TableRowCountAction;
 import com.starrocks.http.rest.TableSchemaAction;
 import com.starrocks.http.rest.TransactionLoadAction;
 import com.starrocks.http.rest.TriggerAction;
+import com.starrocks.http.rest.v2.BackendActionV2;
+import com.starrocks.http.rest.v2.ComputeNodeActionV2;
 import com.starrocks.http.rest.v2.ProfileActionV2;
 import com.starrocks.http.rest.v2.QueryDetailActionV2;
 import com.starrocks.http.rest.v2.TablePartitionAction;
@@ -237,6 +239,8 @@ public class HttpServer {
         // for stop FE
         StopFeAction.registerAction(controller);
         ExecuteSqlAction.registerAction(controller);
+        BackendActionV2.registerAction(controller);
+        ComputeNodeActionV2.registerAction(controller);
 
         // meta service action
         ImageAction.registerAction(controller);
