@@ -1555,6 +1555,46 @@ public class ScalarOperatorFunctionsTest {
     }
 
     @Test
+    public void testRegexpReplace() {
+        assertTrue(ScalarOperatorFunctions.regexpReplace(
+                ConstantOperator.createNull(Type.VARCHAR),
+                new ConstantOperator("-", Type.VARCHAR),
+                new ConstantOperator("", Type.VARCHAR)
+        ).isNull());
+
+        // invalid regex pattern
+        assertTrue(ScalarOperatorFunctions.regexpReplace(
+                new ConstantOperator("abcd", Type.VARCHAR),
+                new ConstantOperator("[invalid", Type.VARCHAR),
+                new ConstantOperator("xx", Type.VARCHAR)
+        ).isNull());
+
+        assertEquals("", ScalarOperatorFunctions.regexpReplace(
+                new ConstantOperator("", Type.VARCHAR),
+                new ConstantOperator("", Type.VARCHAR),
+                new ConstantOperator("xx", Type.VARCHAR)
+        ).getVarchar());
+
+        assertEquals("xx", ScalarOperatorFunctions.regexpReplace(
+                new ConstantOperator("abcd", Type.VARCHAR),
+                new ConstantOperator(".*", Type.VARCHAR),
+                new ConstantOperator("xx", Type.VARCHAR)
+        ).getVarchar());
+
+        assertEquals("20240806", ScalarOperatorFunctions.regexpReplace(
+                new ConstantOperator("2024-08-06", Type.VARCHAR),
+                new ConstantOperator("-", Type.VARCHAR),
+                new ConstantOperator("", Type.VARCHAR)
+        ).getVarchar());
+
+        assertEquals("foo#bar#baz#", ScalarOperatorFunctions.regexpReplace(
+                new ConstantOperator("foo123bar456baz789", Type.VARCHAR),
+                new ConstantOperator("\\d+", Type.VARCHAR),
+                new ConstantOperator("#", Type.VARCHAR)
+        ).getVarchar());
+    }
+
+    @Test
     public void testLowerUpper() {
         assertEquals("aaa", ScalarOperatorFunctions.lower(
                 new ConstantOperator("AAA", Type.VARCHAR)
