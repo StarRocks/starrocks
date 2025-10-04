@@ -258,6 +258,7 @@ import com.starrocks.warehouse.WarehouseIdleChecker;
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.lang.exception.ExceptionUtils;
 import org.apache.commons.lang3.StringUtils;
+import org.apache.iceberg.exceptions.CommitFailedException;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.apache.thrift.transport.TTransportException;
@@ -2803,9 +2804,16 @@ public class StmtExecutor {
                 IcebergTableSink sink = (IcebergTableSink) execPlan.getFragments().get(0).getSink();
                 IcebergMetadata.IcebergSinkExtra extra = null;
                 extra = fillRewriteFiles(stmt, execPlan, commitInfos, extra);
-
-                context.getGlobalStateMgr().getMetadataMgr().finishSink(
-                        catalogName, dbName, tableName, commitInfos, sink.getTargetBranch(), (Object) extra);
+                for (int i = 0; i < 3; i++) {
+                    try {
+                        context.getGlobalStateMgr().getMetadataMgr().finishSink(
+                                catalogName, dbName, tableName, commitInfos, sink.getTargetBranch(), (Object) extra);
+                    } catch (CommitFailedException e) {
+                        if (i >= 3) {
+                            throw new StarRocksException(e.getMessage(), e);
+                        }
+                    }
+                }
                 txnStatus = TransactionStatus.VISIBLE;
                 label = "FAKE_ICEBERG_SINK_LABEL";
             } else if (targetTable.isHiveTable()) {
