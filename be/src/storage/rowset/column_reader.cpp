@@ -602,16 +602,16 @@ Status ColumnReader::zone_map_filter(const std::vector<const ColumnPredicate*>& 
                                      const ColumnPredicate* del_predicate,
                                      std::unordered_set<uint32_t>* del_partial_filtered_pages,
                                      SparseRange<>* row_ranges, const IndexReadOptions& opts,
-                                     CompoundNodeType pred_relation) {
+                                     CompoundNodeType pred_relation, const SparseRange<>& scan_range) {
     RETURN_IF_ERROR(_load_zonemap_index(opts));
 
     std::vector<uint32_t> page_indexes;
     if (pred_relation == CompoundNodeType::AND) {
         RETURN_IF_ERROR(_zone_map_filter<CompoundNodeType::AND>(predicates, del_predicate, del_partial_filtered_pages,
-                                                                &page_indexes));
+                                                                &page_indexes, scan_range));
     } else {
         RETURN_IF_ERROR(_zone_map_filter<CompoundNodeType::OR>(predicates, del_predicate, del_partial_filtered_pages,
-                                                               &page_indexes));
+                                                               &page_indexes, scan_range));
     }
 
     RETURN_IF_ERROR(_calculate_row_ranges(page_indexes, row_ranges));
@@ -640,8 +640,11 @@ template <CompoundNodeType PredRelation>
 Status ColumnReader::_zone_map_filter(const std::vector<const ColumnPredicate*>& predicates,
                                       const ColumnPredicate* del_predicate,
                                       std::unordered_set<uint32_t>* del_partial_filtered_pages,
-                                      std::vector<uint32_t>* pages) {
+                                      std::vector<uint32_t>* pages, const SparseRange<>& scan_range) {
     const ColumnPredicate* predicate;
+    // The type of the predicate may be different from the data type in the segment
+    // file, e.g., the predicate type may be 'BIGINT' while the data type is 'INT',
+    // so it's necessary to use the type of the predicate to parse the zone map string.
     if (!predicates.empty()) {
         predicate = predicates[0];
     } else if (del_predicate) {
@@ -662,18 +665,46 @@ Status ColumnReader::_zone_map_filter(const std::vector<const ColumnPredicate*>&
 
     const std::vector<ZoneMapPB>& zone_maps = _zonemap_index->page_zone_maps();
     int32_t page_size = _zonemap_index->num_pages();
-    for (int32_t i = 0; i < page_size; ++i) {
-        const ZoneMapPB& zm = zone_maps[i];
-        ZoneMapDetail detail;
-        RETURN_IF_ERROR(_parse_zone_map(lt, zm, &detail));
 
-        if (!page_satisfies_zone_map_filter(detail)) {
-            continue;
+    // Skip pages that are completely outside the scan range to reduce overhead
+    if (!scan_range.empty()) {
+        auto ordinal_iter = _ordinal_index->seek_at_or_before(scan_range.begin());
+        for (; ordinal_iter.valid(); ordinal_iter.next()) {
+            int32_t page_index = ordinal_iter.page_index();
+            ordinal_t last = ordinal_iter.last_ordinal();
+            if (last > scan_range.end()) {
+                break;
+            }
+
+            // parse and check the zonemap
+            const ZoneMapPB& zm = zone_maps[page_index];
+            ZoneMapDetail detail;
+            RETURN_IF_ERROR(_parse_zone_map(lt, zm, &detail));
+
+            if (!page_satisfies_zone_map_filter(detail)) {
+                continue;
+            }
+            pages->emplace_back(page_index);
+
+            if (del_predicate && del_predicate->zone_map_filter(detail)) {
+                del_partial_filtered_pages->emplace(page_index);
+            }
         }
-        pages->emplace_back(i);
+    } else {
+        // fallback to iterate all zonemaps
+        for (int32_t i = 0; i < page_size; ++i) {
+            const ZoneMapPB& zm = zone_maps[i];
+            ZoneMapDetail detail;
+            RETURN_IF_ERROR(_parse_zone_map(lt, zm, &detail));
 
-        if (del_predicate && del_predicate->zone_map_filter(detail)) {
-            del_partial_filtered_pages->emplace(i);
+            if (!page_satisfies_zone_map_filter(detail)) {
+                continue;
+            }
+            pages->emplace_back(i);
+
+            if (del_predicate && del_predicate->zone_map_filter(detail)) {
+                del_partial_filtered_pages->emplace(i);
+            }
         }
     }
     return Status::OK();

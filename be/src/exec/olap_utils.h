@@ -64,6 +64,17 @@ public:
     bool end_include{true};
     OlapTuple begin_scan_range;
     OlapTuple end_scan_range;
+
+    // Returns a string representation of the OlapScanRange for debugging and logging.
+    std::string to_string() const {
+        std::ostringstream oss;
+        oss << "OlapScanRange";
+        oss << (begin_include ? "[" : "(");
+        oss << begin_scan_range;
+        oss << end_scan_range;
+        oss << (end_include ? "]" : ")");
+        return oss.str();
+    }
 } OlapScanRange;
 
 enum SQLFilterOp {
