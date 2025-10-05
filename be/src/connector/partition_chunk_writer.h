@@ -50,7 +50,7 @@ struct SpillPartitionChunkWriterContext : public PartitionChunkWriterContext {
     std::shared_ptr<FileSystem> fs;
     pipeline::FragmentContext* fragment_context = nullptr;
     TupleDescriptor* tuple_desc = nullptr;
-    std::vector<std::unique_ptr<ColumnEvaluator>>* column_evaluators;
+    std::shared_ptr<std::vector<std::unique_ptr<ColumnEvaluator>>> column_evaluators;
     std::shared_ptr<SortOrdering> sort_ordering;
 };
 
@@ -185,13 +185,12 @@ private:
     std::shared_ptr<FileSystem> _fs = nullptr;
     pipeline::FragmentContext* _fragment_context = nullptr;
     TupleDescriptor* _tuple_desc = nullptr;
-    std::vector<std::unique_ptr<ColumnEvaluator>>* _column_evaluators;
+    std::shared_ptr<std::vector<std::unique_ptr<ColumnEvaluator>>> _column_evaluators;
     std::shared_ptr<SortOrdering> _sort_ordering;
     std::unique_ptr<ThreadPoolToken> _chunk_spill_token;
     std::unique_ptr<ThreadPoolToken> _block_merge_token;
     std::unique_ptr<LoadSpillBlockManager> _load_spill_block_mgr;
     std::shared_ptr<LoadChunkSpiller> _load_chunk_spiller;
-    //std::function<StatusOr<ColumnPtr>(Chunk*, size_t)> _column_eval_func;
     TUniqueId _writer_id;
 
     std::list<ChunkPtr> _chunks;
