@@ -19,10 +19,10 @@
 
 #include <filesystem>
 
+#include "cache/mem_cache/local_mem_cache_engine.h"
 #include "fs/fs.h"
 #include "gutil/strings/split.h"
 #include "util/parse_util.h"
-#include "cache/mem_cache/local_mem_cache_engine.h"
 
 namespace starrocks {
 
@@ -33,7 +33,6 @@ void DataCacheUtils::set_metrics_to_thrift(TDataCacheMetrics& t_metrics, const D
 }
 
 void DataCacheUtils::set_metrics_to_thrift(TDataCacheMetrics& t_metrics, const DataCacheMemMetrics& metrics) {
-
     t_metrics.__set_mem_quota_bytes(metrics.mem_quota_bytes);
     t_metrics.__set_mem_used_bytes(metrics.mem_used_bytes);
 }
