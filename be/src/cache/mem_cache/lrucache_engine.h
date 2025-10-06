@@ -37,7 +37,7 @@ public:
 
     Status update_mem_quota(size_t quota_bytes) override;
 
-    const DataCacheMetrics cache_metrics() const override;
+    const DataCacheMemMetrics cache_metrics() const override;
 
     Status shutdown() override;
     bool has_mem_cache() const override { return _cache->get_capacity() > 0; }
