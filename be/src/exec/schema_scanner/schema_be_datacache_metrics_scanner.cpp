@@ -68,9 +68,14 @@ Status SchemaBeDataCacheMetricsScanner::get_next(ChunkPtr* chunk, bool* eos) {
     row.emplace_back(_be_id);
 
     // TODO: Support LRUCacheEngine
-    auto* cache = DataCache::GetInstance()->local_disk_cache();
-    if (cache != nullptr && cache->is_initialized()) {
-        auto* starcache = reinterpret_cast<StarCacheEngine*>(cache);
+    auto* mem_cache = DataCache::GetInstance()->local_mem_cache();
+    DataCacheMemMetrics mem_metrics;
+    if (mem_cache != nullptr && mem_cache->is_initialized()) {
+        mem_metrics = mem_cache->cache_metrics();
+    }
+    auto* disk_cache = DataCache::GetInstance()->local_disk_cache();
+    if (disk_cache != nullptr && disk_cache->is_initialized()) {
+        auto* starcache = reinterpret_cast<StarCacheEngine*>(disk_cache);
         // retrieve different priority's used bytes from level = 2 metrics
         metrics = starcache->starcache_metrics(2);
 
@@ -79,8 +84,8 @@ Status SchemaBeDataCacheMetricsScanner::get_next(ChunkPtr* chunk, bool* eos) {
         row.emplace_back(Slice(status));
         row.emplace_back(metrics.disk_quota_bytes);
         row.emplace_back(metrics.disk_used_bytes);
-        row.emplace_back(metrics.mem_quota_bytes);
-        row.emplace_back(metrics.mem_used_bytes);
+        row.emplace_back(mem_metrics.mem_quota_bytes);
+        row.emplace_back(mem_metrics.mem_used_bytes);
         row.emplace_back(metrics.meta_used_bytes);
 
         const auto& dir_spaces = metrics.disk_dir_spaces;
