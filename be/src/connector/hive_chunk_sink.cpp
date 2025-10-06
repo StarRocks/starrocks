@@ -66,7 +66,8 @@ StatusOr<std::unique_ptr<ConnectorChunkSink>> HiveChunkSinkProvider::create_chun
         ctx->options[formats::ParquetWriterOptions::USE_LEGACY_DECIMAL_ENCODING] = "true";
         ctx->options[formats::ParquetWriterOptions::USE_INT96_TIMESTAMP_ENCODING] = "true";
         file_writer_factory = std::make_shared<formats::ParquetFileWriterFactory>(
-                fs, ctx->compression_type, ctx->options, ctx->data_column_names, std::move(data_column_evaluators),
+                fs, ctx->compression_type, ctx->options, ctx->data_column_names,
+                std::make_shared<std::vector<std::unique_ptr<ColumnEvaluator>>>(std::move(data_column_evaluators)),
                 std::nullopt, ctx->executor, runtime_state);
     } else if (boost::iequals(ctx->format, formats::ORC)) {
         file_writer_factory = std::make_shared<formats::ORCFileWriterFactory>(
