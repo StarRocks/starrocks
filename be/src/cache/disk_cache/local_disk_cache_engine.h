@@ -35,7 +35,6 @@ struct DiskCacheOptions {
     size_t block_size = 0;
     bool enable_checksum = false;
     bool enable_direct_io = false;
-    bool enable_tiered_cache = true;
     bool enable_datacache_persistence = false;
     size_t max_concurrent_inserts = 0;
     size_t max_flying_memory_mb = 0;
