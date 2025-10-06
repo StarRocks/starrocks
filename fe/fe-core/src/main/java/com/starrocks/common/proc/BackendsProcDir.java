@@ -271,7 +271,7 @@ public class BackendsProcDir implements ProcDirInterface {
         for (List<Comparable> backendInfo : comparableBackendInfos) {
             List<String> oneInfo = new ArrayList<String>(backendInfo.size());
             for (Comparable element : backendInfo) {
-                oneInfo.add(element.toString());
+                oneInfo.add(element == null ? "" : element.toString());
             }
             backendInfos.add(oneInfo);
         }
