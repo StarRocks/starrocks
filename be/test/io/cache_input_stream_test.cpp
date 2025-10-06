@@ -59,7 +59,6 @@ public:
         options.enable_checksum = false;
         options.max_concurrent_inserts = 1500000;
         options.max_flying_memory_mb = 100;
-        options.enable_tiered_cache = true;
         options.block_size = block_size;
         options.skip_read_factor = 1.0;
         return options;
@@ -318,7 +317,6 @@ TEST_F(CacheInputStreamTest, test_read_with_adaptor) {
     DiskCacheOptions options = cache_options();
     // Because the cache adaptor only work for disk cache.
     options.dir_spaces.push_back({.path = cache_dir, .size = 300 * 1024 * 1024});
-    options.enable_tiered_cache = false;
     auto block_cache = TestCacheUtils::create_cache(options);
     DataCache::GetInstance()->set_block_cache(block_cache);
 

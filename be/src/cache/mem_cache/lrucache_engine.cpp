@@ -59,7 +59,7 @@ Status LRUCacheEngine::remove(const std::string& key) {
     return Status::OK();
 }
 
-Status LRUCacheEngine::update_mem_quota(size_t quota_bytes, bool flush_to_disk) {
+Status LRUCacheEngine::update_mem_quota(size_t quota_bytes) {
     _cache->set_capacity(quota_bytes);
     return Status::OK();
 }
