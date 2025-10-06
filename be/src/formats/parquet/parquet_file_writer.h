@@ -162,7 +162,7 @@ class ParquetFileWriterFactory : public FileWriterFactory {
 public:
     ParquetFileWriterFactory(std::shared_ptr<FileSystem> fs, TCompressionType::type compression_type,
                              std::map<std::string, std::string> options, std::vector<std::string> column_names,
-                             std::vector<std::unique_ptr<ColumnEvaluator>>&& column_evaluators,
+                             std::shared_ptr<std::vector<std::unique_ptr<ColumnEvaluator>>> column_evaluators,
                              std::optional<std::vector<formats::FileColumnId>> field_ids, PriorityThreadPool* executors,
                              RuntimeState* runtime_state);
 
@@ -178,7 +178,7 @@ private:
     std::shared_ptr<ParquetWriterOptions> _parsed_options;
 
     std::vector<std::string> _column_names;
-    std::vector<std::unique_ptr<ColumnEvaluator>> _column_evaluators;
+    std::shared_ptr<std::vector<std::unique_ptr<ColumnEvaluator>>> _column_evaluators;
     PriorityThreadPool* _executors = nullptr;
     RuntimeState* _runtime_state = nullptr;
 };

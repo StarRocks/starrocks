@@ -1123,10 +1123,11 @@ TEST_F(ParquetFileWriterTest, TestFactory) {
     std::vector<TypeDescriptor> type_descs{type_bool};
 
     auto column_names = _make_type_names(type_descs);
-    auto column_evaluators = ColumnSlotIdEvaluator::from_types(type_descs);
+    auto column_evaluators = std::make_shared<std::vector<std::unique_ptr<ColumnEvaluator>>>(
+            ColumnSlotIdEvaluator::from_types(type_descs));
     auto fs = std::make_shared<MemoryFileSystem>();
     auto factory = formats::ParquetFileWriterFactory(fs, TCompressionType::NO_COMPRESSION, {}, column_names,
-                                                     std::move(column_evaluators), std::nullopt, nullptr, nullptr);
+                                                     column_evaluators, std::nullopt, nullptr, nullptr);
     ASSERT_OK(factory.init());
     auto maybe_writer = factory.create(_file_path);
     ASSERT_OK(maybe_writer.status());
