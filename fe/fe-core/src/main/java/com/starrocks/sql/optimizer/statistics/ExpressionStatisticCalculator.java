@@ -470,6 +470,11 @@ public class ExpressionStatisticCalculator {
                     maxValue = 4294967295.0;
                     distinctValue = rowCount;
                     break;
+                case FunctionSet.XX_HASH3_64:
+                    minValue = Double.NEGATIVE_INFINITY;
+                    maxValue = Double.POSITIVE_INFINITY;
+                    distinctValue = rowCount;
+                    break;
                 case FunctionSet.POSITIVE:
                 case FunctionSet.FLOOR:
                 case FunctionSet.DFLOOR:
