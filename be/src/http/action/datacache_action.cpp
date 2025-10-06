@@ -101,7 +101,8 @@ void DataCacheAction::_handle_stat(HttpRequest* req) {
         auto mem_used_rate = 0.0;
         if (mem_metrics.mem_quota_bytes > 0) {
             mem_used_rate =
-                    std::round(double(mem_metrics.mem_used_bytes) / double(mem_metrics.mem_quota_bytes) * 100.0) / 100.0;
+                    std::round(double(mem_metrics.mem_used_bytes) / double(mem_metrics.mem_quota_bytes) * 100.0) /
+                    100.0;
         }
         auto disk_used_rate = 0.0;
         if (metrics.disk_quota_bytes > 0) {

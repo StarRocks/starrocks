@@ -80,7 +80,6 @@ struct DiskCacheReadOptions {
     } stats;
 };
 
-
 struct DataCacheDiskMetrics {
     DataCacheStatus status;
 
