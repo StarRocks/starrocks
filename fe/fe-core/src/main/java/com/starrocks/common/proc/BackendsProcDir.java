@@ -153,7 +153,7 @@ public class BackendsProcDir implements ProcDirInterface {
             String resolvedip = null;
             backendInfo.add(String.valueOf(backendId));
             backendInfo.add(backend.getHost());
-            if (domainResolver.resolveWithDNS(backend.getHost(), resolvedIPs)) {
+            if (domainResolver.resolveWithDNS(backend.getHost(), resolvedIPs) && !resolvedIPs.isEmpty()) {
                 resolvedip = (String) resolvedIPs.toArray()[0];
             }
             backendInfo.add(resolvedip);

@@ -63,7 +63,7 @@ public class FrontendsProcNode implements ProcNodeInterface {
     private static final Logger LOG = LogManager.getLogger(FrontendsProcNode.class);
 
     public static final ImmutableList<String> TITLE_NAMES = new ImmutableList.Builder<String>()
-            .add("Name").add("HostAddress").add("IP").add("EditLogPort").add("HttpPort").add("QueryPort").add("RpcPort")
+            .add("Id").add("Name").add("HostAddress").add("IP").add("EditLogPort").add("HttpPort").add("QueryPort").add("RpcPort")
             .add("Role").add("ClusterId").add("Join").add("Alive").add("ReplayedJournalId")
             .add("LastHeartbeat").add("IsHelper").add("ErrMsg").add("StartTime").add("Version")
             .build();
@@ -112,7 +112,7 @@ public class FrontendsProcNode implements ProcNodeInterface {
             String resolvedip = null;
             info.add(fe.getNodeName());
             info.add(fe.getHost());
-            if (domainResolver.resolveWithDNS(fe.getHost(), resolvedIPs)) {
+            if (domainResolver.resolveWithDNS(fe.getHost(), resolvedIPs) && !resolvedIPs.isEmpty()) {
                 resolvedip = (String) resolvedIPs.toArray()[0];
             }
             info.add(resolvedip);
