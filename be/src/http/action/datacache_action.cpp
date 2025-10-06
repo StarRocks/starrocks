@@ -23,6 +23,7 @@
 
 #include "cache/disk_cache/block_cache_hit_rate_counter.hpp"
 #include "cache/disk_cache/local_disk_cache_engine.h"
+#include "cache/mem_cache/local_mem_cache_engine.h"
 #include "http/http_channel.h"
 #include "http/http_headers.h"
 #include "http/http_request.h"
@@ -56,7 +57,7 @@ void DataCacheAction::handle(HttpRequest* req) {
     if (!_check_request(req)) {
         return;
     }
-    if (!_local_cache || !_local_cache->is_initialized()) {
+    if (!_disk_cache || !_disk_cache->is_initialized()) {
         _handle_error(req, strings::Substitute("Cache system is not ready"));
     } else if (req->param(ACTION_KEY) == ACTION_STAT) {
         _handle_stat(req);
@@ -79,23 +80,29 @@ void DataCacheAction::_handle(HttpRequest* req, const std::function<void(rapidjs
 void DataCacheAction::_handle_stat(HttpRequest* req) {
     _handle(req, [=](rapidjson::Document& root) {
 #ifdef WITH_STARCACHE
+        DataCacheMemMetrics mem_metrics;
+        if (_mem_cache != nullptr) {
+            mem_metrics = _mem_cache->cache_metrics();
+        }
+
         auto& allocator = root.GetAllocator();
-        auto* starcache = reinterpret_cast<StarCacheEngine*>(_local_cache);
+        auto* starcache = reinterpret_cast<StarCacheEngine*>(_disk_cache);
         auto&& metrics = starcache->starcache_metrics(2);
         std::string status = DataCacheStatusUtils::to_string(static_cast<DataCacheStatus>(metrics.status));
 
         rapidjson::Value status_value;
         status_value.SetString(status.c_str(), status.length(), allocator);
         root.AddMember("status", status_value, allocator);
-        root.AddMember("mem_quota_bytes", rapidjson::Value(metrics.mem_quota_bytes), allocator);
-        root.AddMember("mem_used_bytes", rapidjson::Value(metrics.mem_used_bytes), allocator);
+        root.AddMember("mem_quota_bytes", rapidjson::Value(mem_metrics.mem_quota_bytes), allocator);
+        root.AddMember("mem_used_bytes", rapidjson::Value(mem_metrics.mem_used_bytes), allocator);
         root.AddMember("disk_quota_bytes", rapidjson::Value(metrics.disk_quota_bytes), allocator);
         root.AddMember("disk_used_bytes", rapidjson::Value(metrics.disk_used_bytes), allocator);
 
         auto mem_used_rate = 0.0;
-        if (metrics.mem_quota_bytes > 0) {
+        if (mem_metrics.mem_quota_bytes > 0) {
             mem_used_rate =
-                    std::round(double(metrics.mem_used_bytes) / double(metrics.mem_quota_bytes) * 100.0) / 100.0;
+                    std::round(double(mem_metrics.mem_used_bytes) / double(mem_metrics.mem_quota_bytes) * 100.0) /
+                    100.0;
         }
         auto disk_used_rate = 0.0;
         if (metrics.disk_quota_bytes > 0) {

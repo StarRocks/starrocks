@@ -223,7 +223,6 @@ TEST_F(BlockCacheTest, update_cache_quota) {
 
     {
         auto metrics = local_cache->cache_metrics();
-        ASSERT_EQ(metrics.mem_quota_bytes, options.mem_space_size);
         ASSERT_EQ(metrics.disk_quota_bytes, quota);
     }
 

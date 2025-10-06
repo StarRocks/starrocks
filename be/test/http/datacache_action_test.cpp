@@ -66,7 +66,7 @@ protected:
 };
 
 TEST_F(DataCacheActionTest, stat_success) {
-    DataCacheAction action(_cache.get());
+    DataCacheAction action(_cache.get(), nullptr);
 
     HttpRequest request(_evhttp_req);
     request._method = HttpMethod::GET;
@@ -84,7 +84,7 @@ TEST_F(DataCacheActionTest, app_stat_success) {
     BlockCacheHitRateCounter* counter = BlockCacheHitRateCounter::instance();
     counter->reset();
 
-    DataCacheAction action(_cache.get());
+    DataCacheAction action(_cache.get(), nullptr);
 
     {
         HttpRequest request(_evhttp_req);
@@ -124,7 +124,7 @@ TEST_F(DataCacheActionTest, app_stat_success) {
 
 TEST_F(DataCacheActionTest, stat_with_uninitialized_cache) {
     auto cache = std::make_shared<StarCacheEngine>();
-    DataCacheAction action(cache.get());
+    DataCacheAction action(cache.get(), nullptr);
 
     HttpRequest request(_evhttp_req);
     request._method = HttpMethod::GET;

@@ -21,6 +21,10 @@
 
 namespace starrocks {
 
+#ifdef WITH_STARCACHE
+using StarCacheMetrics = starcache::CacheMetrics;
+#endif
+
 class StarCacheEngine : public LocalDiskCacheEngine {
 public:
     StarCacheEngine() = default;
@@ -43,7 +47,7 @@ public:
 
     const StarCacheMetrics starcache_metrics(int level) const;
 
-    const DataCacheMetrics cache_metrics() const override;
+    const DataCacheDiskMetrics cache_metrics() const override;
 
     void record_read_remote(size_t size, int64_t latency_us) override;
 
