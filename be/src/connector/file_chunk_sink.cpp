@@ -56,8 +56,9 @@ StatusOr<std::unique_ptr<ConnectorChunkSink>> FileChunkSinkProvider::create_chun
     std::shared_ptr<formats::FileWriterFactory> file_writer_factory;
     if (boost::iequals(ctx->format, formats::PARQUET)) {
         file_writer_factory = std::make_shared<formats::ParquetFileWriterFactory>(
-                fs, ctx->compression_type, ctx->options, ctx->column_names, std::move(column_evaluators), std::nullopt,
-                ctx->executor, runtime_state);
+                fs, ctx->compression_type, ctx->options, ctx->column_names,
+                std::make_shared<std::vector<std::unique_ptr<ColumnEvaluator>>>(std::move(column_evaluators)),
+                std::nullopt, ctx->executor, runtime_state);
     } else if (boost::iequals(ctx->format, formats::ORC)) {
         file_writer_factory = std::make_shared<formats::ORCFileWriterFactory>(
                 fs, ctx->compression_type, ctx->options, ctx->column_names, std::move(column_evaluators), ctx->executor,
