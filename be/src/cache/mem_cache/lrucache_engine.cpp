@@ -64,13 +64,8 @@ Status LRUCacheEngine::update_mem_quota(size_t quota_bytes) {
     return Status::OK();
 }
 
-const DataCacheMetrics LRUCacheEngine::cache_metrics() const {
-    return DataCacheMetrics{.status = DataCacheStatus::NORMAL,
-                            .mem_quota_bytes = _cache->get_capacity(),
-                            .mem_used_bytes = _cache->get_memory_usage(),
-                            .disk_quota_bytes = 0,
-                            .disk_used_bytes = 0,
-                            .meta_used_bytes = 0};
+const DataCacheMemMetrics LRUCacheEngine::cache_metrics() const {
+    return DataCacheMemMetrics{.mem_quota_bytes = _cache->get_capacity(), .mem_used_bytes = _cache->get_memory_usage()};
 }
 
 Status LRUCacheEngine::shutdown() {

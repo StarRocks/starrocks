@@ -848,15 +848,22 @@ void* ReportDataCacheMetricsTaskWorkerPool::_worker_thread_callback(void* arg_th
         request.__set_report_version(g_report_version.load(std::memory_order_relaxed));
 
         TDataCacheMetrics t_metrics{};
-        // TODO: mem_metrics + disk_metrics
-        const LocalDiskCacheEngine* cache = DataCache::GetInstance()->local_disk_cache();
-        if (cache != nullptr && cache->is_initialized()) {
-            const auto metrics = cache->cache_metrics();
-            DataCacheUtils::set_metrics_from_thrift(t_metrics, metrics);
-        } else {
-            t_metrics.__set_status(TDataCacheStatus::DISABLED);
-        }
+        const LocalDiskCacheEngine* disk_cache = DataCache::GetInstance()->local_disk_cache();
+        const LocalMemCacheEngine* mem_cache = DataCache::GetInstance()->local_mem_cache();
+        bool disk_cache_inited = disk_cache != nullptr && disk_cache->is_initialized();
+        bool mem_cache_inited = mem_cache != nullptr && mem_cache->is_initialized();
 
+        if (!disk_cache_inited && !mem_cache_inited) {
+            t_metrics.__set_status(TDataCacheStatus::DISABLED);
+        } else {
+            if (mem_cache_inited) {
+                t_metrics.__set_status(TDataCacheStatus::NORMAL);
+                DataCacheUtils::set_metrics_to_thrift(t_metrics, mem_cache->cache_metrics());
+            }
+            if (disk_cache_inited) {
+                DataCacheUtils::set_metrics_to_thrift(t_metrics, disk_cache->cache_metrics());
+            }
+        }
         request.__set_datacache_metrics(t_metrics);
 
         TMasterResult result;

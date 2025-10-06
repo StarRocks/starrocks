@@ -49,6 +49,11 @@ using MemCacheHandlePtr = MemCacheHandle*;
 // cache deleter when using a lru cache module.
 using MemCacheDeleter = void (*)(const CacheKey&, void*);
 
+struct DataCacheMemMetrics {
+    size_t mem_quota_bytes = 0;
+    size_t mem_used_bytes = 0;
+};
+
 class LocalMemCacheEngine {
 public:
     virtual ~LocalMemCacheEngine() = default;
@@ -85,7 +90,7 @@ public:
     // Update the datacache memory quota.
     virtual Status update_mem_quota(size_t quota_bytes) = 0;
 
-    virtual const DataCacheMetrics cache_metrics() const = 0;
+    virtual const DataCacheMemMetrics cache_metrics() const = 0;
 
     virtual Status shutdown() = 0;
 
