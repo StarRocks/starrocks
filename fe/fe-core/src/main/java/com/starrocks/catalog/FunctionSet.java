@@ -325,6 +325,8 @@ public class FunctionSet {
     public static final String MIN_BY = "min_by";
     public static final String MIN_BY_V2 = "min_by_v2";
     public static final String MIN = "min";
+    public static final String MIN_N = "min_n";
+    public static final String MAX_N = "max_n";
     public static final String PERCENTILE_APPROX = "percentile_approx";
     public static final String PERCENTILE_APPROX_WEIGHTED = "percentile_approx_weighted";
     public static final String PERCENTILE_CONT = "percentile_cont";
@@ -1323,6 +1325,17 @@ public class FunctionSet {
             // Max
             addBuiltin(AggregateFunction.createBuiltin(MAX,
                     Lists.newArrayList(t), t, t, true, true, false));
+
+            // min_n(value, n) - returns an array of n minimum values
+            Type arrayType = new ArrayType(t);
+            addBuiltin(AggregateFunction.createBuiltin(MIN_N,
+                    Lists.newArrayList(t, Type.INT), arrayType, Type.VARBINARY,
+                    false, false, false));
+
+            // max_n(value, n) - returns an array of n maximum values
+            addBuiltin(AggregateFunction.createBuiltin(MAX_N,
+                    Lists.newArrayList(t, Type.INT), arrayType, Type.VARBINARY,
+                    false, false, false));
 
             // MAX_BY
             for (Type t1 : SUPPORTED_TYPES) {

@@ -56,6 +56,7 @@
 #include "exprs/agg/variance.h"
 #include "exprs/agg/window.h"
 #include "exprs/agg/window_funnel.h"
+#include "exprs/agg/minmax_n.h"
 #include "types/logical_type.h"
 #include "types/logical_type_infra.h"
 #include "udf/java/java_function_fwd.h"
@@ -140,6 +141,12 @@ public:
     static AggregateFunctionPtr MakeAnyValueAggregateFunction();
 
     static AggregateFunctionPtr MakeAnyValueSemiAggregateFunction() { return new AnyValueSemiAggregateFunction(); }
+
+    template <LogicalType LT>
+    static auto MakeMinNAggregateFunction();
+
+    template <LogicalType LT>
+    static auto MakeMaxNAggregateFunction();
 
     template <typename NestedState, bool IsWindowFunc, bool IgnoreNull = true,
               typename NestedFunctionPtr = AggregateFunctionPtr,
@@ -333,6 +340,16 @@ auto AggregateFactory::MakeMinByAggregateFunction() {
 template <LogicalType LT>
 auto AggregateFactory::MakeMinAggregateFunction() {
     return new MaxMinAggregateFunction<LT, MinAggregateData<LT>, MinElement<LT, MinAggregateData<LT>>>();
+}
+
+template <LogicalType LT>
+auto AggregateFactory::MakeMinNAggregateFunction() {
+    return std::make_shared<MinMaxNAggregateFunction<LT, true>>();
+}
+
+template <LogicalType LT>
+auto AggregateFactory::MakeMaxNAggregateFunction() {
+    return std::make_shared<MinMaxNAggregateFunction<LT, false>>();
 }
 
 template <LogicalType LT>

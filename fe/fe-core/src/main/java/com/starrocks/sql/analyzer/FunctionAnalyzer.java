@@ -543,6 +543,22 @@ public class FunctionAnalyzer {
             }
         }
 
+        if (fnName.getFunction().equals(FunctionSet.MIN_N) || fnName.getFunction().equals(FunctionSet.MAX_N)) {
+            if (functionCallExpr.hasChild(1)) {
+                Expr nExpr = functionCallExpr.getChild(1);
+                Optional<Long> n = extractIntegerValue(nExpr);
+                if (!n.isPresent() || n.get() <= 0) {
+                    throw new SemanticException(
+                            "The second parameter of " + fnName.getFunction() + " must be a constant positive integer: " +
+                                    functionCallExpr.toSql(), nExpr.getPos());
+                }
+                if (n.get() > 10000) {
+                    throw new SemanticException("The second parameter of " + fnName.getFunction() + 
+                            " cannot exceed 10000: " + functionCallExpr.toSql(), nExpr.getPos());
+                }
+            }
+        }
+
         if (fnName.equals(FunctionSet.APPROX_TOP_K)) {
             Optional<Long> k = Optional.empty();
             Optional<Long> counterNum = Optional.empty();
@@ -1274,6 +1290,16 @@ public class FunctionAnalyzer {
             }
             // need to distinct output columns in finalize phase
             ((AggregateFunction) fn).setIsDistinct(isDistinct && (!isAscOrder.isEmpty() || outputConst));
+        } else if (FunctionSet.MIN_N.equals(fnName) || FunctionSet.MAX_N.equals(fnName)) {
+            // min_n/max_n(value, n) returns array<value_type>
+            // Use IS_SUPERTYPE_OF to avoid implicit cast from DATE to INT (which is allowed in IS_NONSTRICT_SUPERTYPE_OF)
+            // IS_SUPERTYPE_OF only allows strict implicit casts (e.g. INT→BIGINT), not precision-loss casts (DATE→INT)
+            fn = Expr.getBuiltinFunction(fnName, argumentTypes, Function.CompareMode.IS_SUPERTYPE_OF);
+            if (fn != null) {
+                fn = fn.copy();
+                // Explicitly set return type to preserve element type (e.g. array<date> not array<int>)
+                fn.setRetType(new ArrayType(argumentTypes[0]));
+            }
         } else if (FunctionSet.PERCENTILE_DISC.equals(fnName) || FunctionSet.LC_PERCENTILE_DISC.equals(fnName)) {
             argumentTypes[1] = FloatType.DOUBLE;
             fn = ExprUtils.getBuiltinFunction(fnName, argumentTypes, Function.CompareMode.IS_IDENTICAL);
