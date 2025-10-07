@@ -54,6 +54,7 @@
 #include "exprs/agg/variance.h"
 #include "exprs/agg/window.h"
 #include "exprs/agg/window_funnel.h"
+#include "exprs/agg/minmax_n.h"
 #include "types/logical_type.h"
 #include "types/logical_type_infra.h"
 #include "udf/java/java_function_fwd.h"
@@ -139,6 +140,12 @@ public:
 
     template <LogicalType LT>
     static AggregateFunctionPtr MakeAnyValueAggregateFunction();
+
+    template <LogicalType LT>
+    static auto MakeMinNAggregateFunction();
+
+    template <LogicalType LT>
+    static auto MakeMaxNAggregateFunction();
 
     static AggregateFunctionPtr MakeAnyValueSemiAggregateFunction() {
         return std::make_shared<AnyValueSemiAggregateFunction>();
@@ -325,6 +332,16 @@ auto AggregateFactory::MakeMinByAggregateFunction() {
 template <LogicalType LT>
 auto AggregateFactory::MakeMinAggregateFunction() {
     return std::make_shared<MaxMinAggregateFunction<LT, MinAggregateData<LT>, MinElement<LT, MinAggregateData<LT>>>>();
+}
+
+template <LogicalType LT>
+auto AggregateFactory::MakeMinNAggregateFunction() {
+    return std::make_shared<MinMaxNAggregateFunction<LT, true>>();
+}
+
+template <LogicalType LT>
+auto AggregateFactory::MakeMaxNAggregateFunction() {
+    return std::make_shared<MinMaxNAggregateFunction<LT, false>>();
 }
 
 template <LogicalType LT>
