@@ -111,7 +111,6 @@ enum class MemTrackerType {
     UPDATE,
     CLONE,
     DATACACHE,
-    POCO_CONNECTION_POOL,
     REPLICATION,
     ROWSET_UPDATE_STATE,
     INDEX_CACHE,
