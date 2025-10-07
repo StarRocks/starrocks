@@ -42,10 +42,8 @@
 #include <cstring>
 #include <ostream>
 
-#include "column/fixed_length_column.h"
 #include "common/logging.h"
 #include "gutil/port.h"
-#include "storage/olap_common.h"
 #include "storage/rowset/bitshuffle_wrapper.h"
 #include "storage/rowset/common.h"
 #include "storage/rowset/options.h"
@@ -54,6 +52,7 @@
 #include "storage/type_traits.h"
 #include "storage/types.h"
 #include "types/date_value.hpp"
+#include "types/logical_type.h"
 #include "util/coding.h"
 #include "util/faststring.h"
 #include "util/slice.h"
@@ -97,12 +96,12 @@ std::string bitshuffle_error_msg(int64_t err);
 //
 //    The header is followed by the bitshuffle-compressed element data.
 //
-template <LogicalType Type>
-class BitshufflePageBuilder final : public PageBuilder {
-    typedef typename TypeTraits<Type>::CppType CppType;
-
+template <LogicalType Type, typename Encoding = BitShuffleEncodingLz4>
+class BitshufflePageBuilderTraits final : public PageBuilder {
 public:
-    explicit BitshufflePageBuilder(const PageBuilderOptions& options)
+    using CppType = typename TypeTraits<Type>::CppType;
+
+    explicit BitshufflePageBuilderTraits(const PageBuilderOptions& options)
             : _max_count(options.data_page_size / SIZE_OF_TYPE) {
         _data.reserve(ALIGN_UP(_max_count, 8u) * SIZE_OF_TYPE);
     }
@@ -131,22 +130,6 @@ public:
         size_t old_sz = _data.size();
         _data.resize(old_sz + SIZE_OF_TYPE);
         _count += 1;
-        if constexpr (SIZE_OF_TYPE == 1) {
-            *reinterpret_cast<uint8_t*>(&_data[old_sz]) = *elem;
-            return 1;
-        }
-        if constexpr (SIZE_OF_TYPE == 2) {
-            *reinterpret_cast<uint16_t*>(&_data[old_sz]) = *reinterpret_cast<const uint16_t*>(elem);
-            return 1;
-        }
-        if constexpr (SIZE_OF_TYPE == 4) {
-            *reinterpret_cast<uint32_t*>(&_data[old_sz]) = *reinterpret_cast<const uint32_t*>(elem);
-            return 1;
-        }
-        if constexpr (SIZE_OF_TYPE == 8) {
-            *reinterpret_cast<uint64_t*>(&_data[old_sz]) = *reinterpret_cast<const uint64_t*>(elem);
-            return 1;
-        }
         memcpy(&_data[old_sz], elem, SIZE_OF_TYPE);
         return 1;
     }
@@ -207,13 +190,13 @@ private:
         }
 
         _compressed_data.resize(_reserved_head_size + BITSHUFFLE_PAGE_HEADER_SIZE +
-                                bitshuffle::compress_lz4_bound(num_elems_after_padding, SIZE_OF_TYPE, 0));
+                                Encoding::encoding_size(num_elems_after_padding, SIZE_OF_TYPE, 0));
 
         uint8_t* compressed_data = _compressed_data.data() + _reserved_head_size;
         uint8_t* uncompressed_data = _data.data();
 
-        int64_t bytes = bitshuffle::compress_lz4(uncompressed_data, &compressed_data[BITSHUFFLE_PAGE_HEADER_SIZE],
-                                                 num_elems_after_padding, SIZE_OF_TYPE, 0);
+        int64_t bytes = Encoding::encode(uncompressed_data, &compressed_data[BITSHUFFLE_PAGE_HEADER_SIZE],
+                                         num_elems_after_padding, SIZE_OF_TYPE, 0);
         CHECK_GE(bytes, 0) << "Fail to bitshuffle compress, " << bitshuffle_error_msg(bytes);
         // update header
         encode_fixed32_le(&compressed_data[0], _count);
@@ -236,6 +219,10 @@ private:
     CppType _last_value;
     bool _finished{false};
 };
+template <LogicalType Type>
+using BitshufflePageBuilder = BitshufflePageBuilderTraits<Type, BitShuffleEncodingLz4>;
+template <LogicalType Type>
+using BitshufflePagePlainBuilder = BitshufflePageBuilderTraits<Type, BitShuffleEncodingPlain>;
 
 template <LogicalType Type>
 class BitShufflePageDecoder final : public PageDecoder {

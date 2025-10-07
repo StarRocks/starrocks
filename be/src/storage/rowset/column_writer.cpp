@@ -150,19 +150,9 @@ public:
 
     OwnedSlice finish() {
         if (_null_encoding == NullEncodingPB::BITSHUFFLE_NULL) {
-            size_t old_size = _null_map.size();
-            _null_map.resize(ALIGN_UP(_null_map.size(), 8u));
-            memset(_null_map.data() + old_size, 0, _null_map.size() - old_size);
-            _encode_buf.resize(bitshuffle::compress_lz4_bound(_null_map.size(), sizeof(uint8_t), 0));
-            int64_t r = bitshuffle::compress_lz4(_null_map.data(), _encode_buf.data(), _null_map.size(),
-                                                 sizeof(uint8_t), 0);
-            if (r < 0) {
-                LOG(ERROR) << "bitshuffle compress failed: " << bitshuffle_error_msg(r);
-                return {};
-            }
-            // before build(), update buffer length to the actual compressed size
-            _encode_buf.resize(r);
-            return _encode_buf.build();
+            return _do_encode<BitShuffleEncodingLz4>();
+        } else if (_null_encoding == NullEncodingPB::BITSHUFFLE_PLAIN_NULL) {
+            return _do_encode<BitShuffleEncodingPlain>();
         } else if (_null_encoding == NullEncodingPB::LZ4_NULL) {
             const BlockCompressionCodec* codec = nullptr;
             CompressionTypePB type = CompressionTypePB::LZ4;
@@ -206,6 +196,22 @@ public:
     NullEncodingPB null_encoding() { return _null_encoding; }
 
 private:
+    template <class Encoder>
+    OwnedSlice _do_encode() {
+        size_t old_size = _null_map.size();
+        _null_map.resize(ALIGN_UP(_null_map.size(), 8u));
+        memset(_null_map.data() + old_size, 0, _null_map.size() - old_size);
+        _encode_buf.resize(Encoder::encoding_size(_null_map.size(), sizeof(uint8_t), 0));
+        int64_t r = Encoder::encode(_null_map.data(), _encode_buf.data(), _null_map.size(), sizeof(uint8_t), 0);
+        if (r < 0) {
+            LOG(ERROR) << "bitshuffle compress failed: " << bitshuffle_error_msg(r);
+            return {};
+        }
+        // before build(), update buffer length to the actual compressed size
+        _encode_buf.resize(r);
+        return _encode_buf.build();
+    }
+
     bool _has_null{false};
     faststring _null_map;
     faststring _encode_buf;
@@ -381,11 +387,13 @@ Status ScalarColumnWriter::init() {
     // create null bitmap builder
     if (is_nullable()) {
         _null_map_builder_v1 = std::make_unique<NullMapRLEBuilder>();
-        NullEncodingPB default_null_encoding = NullEncodingPB::BITSHUFFLE_NULL;
+        NullEncodingPB null_encoding = NullEncodingPB::BITSHUFFLE_NULL;
         if (config::null_encoding == 1) {
-            default_null_encoding = NullEncodingPB::LZ4_NULL;
+            null_encoding = NullEncodingPB::LZ4_NULL;
+        } else if (config::null_encoding == 3) {
+            null_encoding = NullEncodingPB::BITSHUFFLE_PLAIN_NULL;
         }
-        _null_map_builder_v2 = std::make_unique<NullFlagsBuilder>(default_null_encoding);
+        _null_map_builder_v2 = std::make_unique<NullFlagsBuilder>(null_encoding);
     }
     if (_opts.need_zone_map) {
         _has_index_builder = true;
