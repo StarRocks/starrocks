@@ -41,7 +41,7 @@ public:
 
     ~ScanOperator() override;
 
-    static size_t max_buffer_capacity() { return kIOTaskBatchSize; }
+    static size_t max_buffer_capacity() { return config::io_task_batch_size; }
 
     Status prepare(RuntimeState* state) override;
 
@@ -115,9 +115,18 @@ public:
         });
     }
 
-protected:
-    static constexpr size_t kIOTaskBatchSize = 64;
+    // notify the operator with the given driver sequence
+    auto defer_notify(int& driver_seq) {
+        return DeferOp([this, &driver_seq]() {
+            if (driver_seq == _driver_sequence) {
+                _observable.notify_source_observers();
+            } else {
+                _source_factory()->observes().notify_source_observer(driver_seq);
+            }
+        });
+    }
 
+protected:
     // TODO: remove this to the base ScanContext.
     /// Shared scan
     virtual void attach_chunk_source(int32_t source_index) = 0;
@@ -322,6 +331,11 @@ protected:
 
 inline auto scan_defer_notify(ScanOperator* scan_op) {
     return scan_op->defer_notify([scan_op]() -> bool { return scan_op->need_notify_all(); });
+}
+
+// notify the operator with the given driver sequence
+inline auto scan_defer_notify(ScanOperator* scan_op, int& seq) {
+    return scan_op->defer_notify(seq);
 }
 
 pipeline::OpFactories decompose_scan_node_to_pipeline(std::shared_ptr<ScanOperatorFactory> factory, ScanNode* scan_node,

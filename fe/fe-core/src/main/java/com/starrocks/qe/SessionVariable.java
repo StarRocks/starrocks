@@ -1062,8 +1062,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VariableMgr.VarAttr(name = TABLET_INTERNAL_PARALLEL_MODE, flag = VariableMgr.INVISIBLE)
     private String tabletInternalParallelMode = "auto";
 
-    @VariableMgr.VarAttr(name = ENABLE_SHARED_SCAN)
-    private boolean enableSharedScan = false;
+    @VariableMgr.VarAttr(name = ENABLE_SHARED_SCAN) 
+    private boolean enableSharedScan = true;
 
     // max memory used on each fragment instance
     // NOTE: only used for non-pipeline engine and stream_load

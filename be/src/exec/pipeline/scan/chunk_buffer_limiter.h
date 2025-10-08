@@ -126,24 +126,13 @@ public:
     ChunkBufferTokenPtr pin(int num_chunks) override;
     void unpin(int num_chunks);
 
-    bool is_full() const override {
-        if (_pinned_chunks_counter >= _capacity) {
-            _returned_full_event.store(true, std::memory_order_release);
-            return true;
-        }
-        return false;
-    }
     size_t size() const override { return _pinned_chunks_counter; }
     size_t capacity() const override { return _capacity; }
     size_t default_capacity() const override { return _default_capacity; }
     void update_mem_limit(int64_t value) override;
-    bool has_full_events() override {
-        if (!_has_full_event.load(std::memory_order_acquire)) {
-            return false;
-        }
-        bool val = true;
-        return _has_full_event.compare_exchange_strong(val, false);
-    }
+
+    bool is_full() const override;
+    bool has_full_events() override;
 
 private:
 private:
