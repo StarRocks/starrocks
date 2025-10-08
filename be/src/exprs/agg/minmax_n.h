@@ -92,12 +92,12 @@ struct MinMaxNAggregateState {
             temp_heap.pop();
         }
         
-        // Sort: min_n in ascending order, max_n in descending order
+        // Sort: both min_n and max_n in ascending order
         std::sort(values.begin(), values.end(), [](const CppType& a, const CppType& b) {
             if constexpr (IsSlice<CppType>) {
-                return IsMin ? (a.compare(b) < 0) : (a.compare(b) > 0);
+                return a.compare(b) < 0;
             } else {
-                return IsMin ? (a < b) : (a > b);
+                return a < b;
             }
         });
     }
@@ -162,13 +162,13 @@ public:
         if (ctx->get_num_args() > 1) {
             const Column* const_col = ctx->get_constant_column(1);
             if (const_col != nullptr) {
-                // Get the actual data column from ConstColumn
-                const auto* const_column = ColumnHelper::as_raw_column<ConstColumn>(const_col);
-                const Column* data_column = const_column->data_column().get();
-                
-                // Read the value directly from raw data based on type size
-                const uint8_t* raw_data = const_col->raw_data();
-                size_t type_size = data_column->type_size();
+            // Get the actual data column from ConstColumn
+            const auto* const_column = ColumnHelper::as_raw_column<ConstColumn>(const_col);
+            const Column* data_column = const_column->data_column().get();
+            
+            // Read the value directly from raw data based on type size
+            const uint8_t* raw_data = data_column->raw_data();
+            size_t type_size = data_column->type_size();
                 
                 switch (type_size) {
                     case 1: {
@@ -396,7 +396,7 @@ public:
         
         auto* array_column = down_cast<ArrayColumn*>(to);
         
-        // Get sorted values from heap (no mutable cache, thread-safe)
+        // Get sorted values from heap
         std::vector<CppType> values;
         state_impl.get_sorted_values(values);
         
@@ -443,7 +443,7 @@ public:
         DCHECK(dst->is_array());
         auto* array_column = down_cast<ArrayColumn*>(dst);
         
-        // Get sorted values (no mutable cache, thread-safe)
+        // Get sorted values
         std::vector<CppType> values;
         state_impl.get_sorted_values(values);
         
