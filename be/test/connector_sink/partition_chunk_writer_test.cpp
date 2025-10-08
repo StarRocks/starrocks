@@ -208,13 +208,15 @@ TEST_F(PartitionChunkWriterTest, buffer_partition_chunk_writer) {
         chunk->get_column_by_index(0)->append_datum(Slice("aaa"));
 
         // Write chunk
-        auto ret = partition_writer->write(chunk.get());
+        auto ret = partition_writer->write(chunk);
         EXPECT_EQ(ret.ok(), true);
         EXPECT_EQ(writer_helper->written_rows(), 1);
         EXPECT_EQ(writer_helper->result_rows(), 0);
 
         // Flush chunk
         ret = partition_writer->flush();
+        EXPECT_EQ(ret.ok(), true);
+        ret = partition_writer->wait_flush();
         EXPECT_EQ(ret.ok(), true);
         EXPECT_EQ(commited, true);
         EXPECT_EQ(partition_writer->is_finished(), true);
@@ -272,7 +274,7 @@ TEST_F(PartitionChunkWriterTest, spill_partition_chunk_writer) {
         chunk->get_column_by_index(0)->append_datum(Slice("aaa"));
 
         // Write chunk
-        auto ret = partition_writer->write(chunk.get());
+        auto ret = partition_writer->write(chunk);
         EXPECT_EQ(ret.ok(), true);
         EXPECT_GT(partition_writer->get_written_bytes(), 0);
         EXPECT_EQ(partition_writer->get_flushable_bytes(), chunk->bytes_usage());
@@ -298,12 +300,15 @@ TEST_F(PartitionChunkWriterTest, spill_partition_chunk_writer) {
 
         for (size_t i = 0; i < 3; ++i) {
             // Write chunk
-            auto ret = partition_writer->write(chunk.get());
+            auto ret = partition_writer->write(chunk);
             EXPECT_EQ(ret.ok(), true);
             EXPECT_GT(partition_writer->get_written_bytes(), 0);
 
             // Flush chunk
-            ret = partition_writer->_spill();
+            EXPECT_GT(partition_writer->get_flushable_bytes(), 0);
+            ret = partition_writer->flush();
+            EXPECT_EQ(ret.ok(), true);
+            ret = partition_writer->wait_flush();
             EXPECT_EQ(ret.ok(), true);
             Awaitility()
                     .timeout(3 * 1000 * 1000) // 3s
@@ -389,7 +394,7 @@ TEST_F(PartitionChunkWriterTest, sort_column_asc) {
             chunk->get_column_by_index(0)->append_datum(Slice("aaa" + suffix));
 
             // Write chunk
-            auto ret = partition_writer->write(chunk.get());
+            auto ret = partition_writer->write(chunk);
             EXPECT_EQ(ret.ok(), true);
             EXPECT_GT(partition_writer->get_written_bytes(), 0);
         }
@@ -432,12 +437,14 @@ TEST_F(PartitionChunkWriterTest, sort_column_asc) {
             chunk->get_column_by_index(0)->append_datum(Slice("aaa" + suffix));
 
             // Write chunk
-            auto ret = partition_writer->write(chunk.get());
+            auto ret = partition_writer->write(chunk);
             EXPECT_EQ(ret.ok(), true);
             EXPECT_GT(partition_writer->get_written_bytes(), 0);
 
             // Flush chunk
-            ret = partition_writer->_spill();
+            ret = partition_writer->flush();
+            EXPECT_EQ(ret.ok(), true);
+            ret = partition_writer->wait_flush();
             EXPECT_EQ(ret.ok(), true);
             Awaitility()
                     .timeout(3 * 1000 * 1000) // 3s
@@ -536,7 +543,7 @@ TEST_F(PartitionChunkWriterTest, sort_column_desc) {
             chunk->get_column_by_index(0)->append_datum(Slice("aaa" + suffix));
 
             // Write chunk
-            auto ret = partition_writer->write(chunk.get());
+            auto ret = partition_writer->write(chunk);
             EXPECT_EQ(ret.ok(), true);
             EXPECT_GT(partition_writer->get_written_bytes(), 0);
         }
@@ -579,12 +586,14 @@ TEST_F(PartitionChunkWriterTest, sort_column_desc) {
             chunk->get_column_by_index(0)->append_datum(Slice("aaa" + suffix));
 
             // Write chunk
-            auto ret = partition_writer->write(chunk.get());
+            auto ret = partition_writer->write(chunk);
             EXPECT_EQ(ret.ok(), true);
             EXPECT_GT(partition_writer->get_written_bytes(), 0);
 
             // Flush chunk
-            ret = partition_writer->_spill();
+            ret = partition_writer->flush();
+            EXPECT_EQ(ret.ok(), true);
+            ret = partition_writer->wait_flush();
             EXPECT_EQ(ret.ok(), true);
             Awaitility()
                     .timeout(3 * 1000 * 1000) // 3s
@@ -693,12 +702,14 @@ TEST_F(PartitionChunkWriterTest, sort_multiple_columns) {
             chunk->get_column_by_index(1)->append_datum(Slice("111" + suffix));
 
             // Write chunk
-            auto ret = partition_writer->write(chunk.get());
+            auto ret = partition_writer->write(chunk);
             EXPECT_EQ(ret.ok(), true);
             EXPECT_GT(partition_writer->get_written_bytes(), 0);
 
             // Flush chunk
-            ret = partition_writer->_spill();
+            ret = partition_writer->flush();
+            EXPECT_EQ(ret.ok(), true);
+            ret = partition_writer->wait_flush();
             EXPECT_EQ(ret.ok(), true);
             Awaitility()
                     .timeout(3 * 1000 * 1000) // 3s
@@ -813,12 +824,14 @@ TEST_F(PartitionChunkWriterTest, sort_column_with_schema_chunk) {
             chunk->get_column_by_index(0)->append_datum(Slice("aaa" + suffix));
 
             // Write chunk
-            auto ret = partition_writer->write(chunk.get());
+            auto ret = partition_writer->write(chunk);
             EXPECT_EQ(ret.ok(), true);
             EXPECT_GT(partition_writer->get_written_bytes(), 0);
 
             // Flush chunk
-            ret = partition_writer->_spill();
+            ret = partition_writer->flush();
+            EXPECT_EQ(ret.ok(), true);
+            ret = partition_writer->wait_flush();
             EXPECT_EQ(ret.ok(), true);
             Awaitility()
                     .timeout(3 * 1000 * 1000) // 3s

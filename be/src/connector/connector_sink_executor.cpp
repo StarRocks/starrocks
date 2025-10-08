@@ -50,13 +50,16 @@ int ConnectorSinkSpillExecutor::calc_max_thread_num() {
 }
 
 void ChunkSpillTask::run() {
+    SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(_mem_tracker);
     auto res = _load_chunk_spiller->spill(*_chunk);
     if (_cb) {
         _cb(_chunk, res);
     }
+    _chunk.reset();
 }
 
 void MergeBlockTask::run() {
+    SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(_mem_tracker);
     auto st = _writer->merge_blocks();
     if (_cb) {
         _cb(st);

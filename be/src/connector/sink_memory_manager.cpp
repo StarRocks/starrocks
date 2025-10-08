@@ -51,8 +51,9 @@ bool SinkOperatorMemoryManager::kill_victim() {
     // The flush will decrease the writer flushable memory bytes, so it usually
     // will not be choosed in a short time.
     const auto filename = victim->out_stream()->filename();
+    size_t flush_bytes = victim->get_flushable_bytes();
     const auto result = victim->flush();
-    LOG(INFO) << "kill victim: " << filename << ", result: " << result;
+    LOG(INFO) << "kill victim: " << filename << ", result: " << result << ", flushable_bytes: " << flush_bytes;
     return true;
 }
 
@@ -118,7 +119,7 @@ bool SinkMemoryManager::_apply_on_mem_tracker(SinkOperatorMemoryManager* child_m
 
     auto available_memory = [&]() { return mem_tracker->limit() - mem_tracker->consumption(); };
     auto low_watermark = static_cast<int64_t>(mem_tracker->limit() * _low_watermark_ratio);
-    int64_t flush_watermark = _query_tracker->limit() * _urgent_space_ratio;
+    int64_t flush_watermark = mem_tracker->limit() * _urgent_space_ratio;
     while (available_memory() <= low_watermark) {
         child_manager->update_writer_occupied_memory();
         int64_t total_occupied_memory = _total_writer_occupied_memory();

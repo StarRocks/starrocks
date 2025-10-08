@@ -63,9 +63,11 @@ public:
 
     virtual Status init() = 0;
 
-    virtual Status write(Chunk* chunk) = 0;
+    virtual Status write(const ChunkPtr& chunk) = 0;
 
     virtual Status flush() = 0;
+
+    virtual Status wait_flush() = 0;
 
     virtual Status finish() = 0;
 
@@ -118,9 +120,11 @@ public:
 
     Status init() override;
 
-    Status write(Chunk* chunk) override;
+    Status write(const ChunkPtr& chunk) override;
 
     Status flush() override;
+
+    Status wait_flush() override;
 
     Status finish() override;
 
@@ -140,9 +144,11 @@ public:
 
     Status init() override;
 
-    Status write(Chunk* chunk) override;
+    Status write(const ChunkPtr& chunk) override;
 
     Status flush() override;
+
+    Status wait_flush() override;
 
     Status finish() override;
 
@@ -156,7 +162,12 @@ public:
                _file_writer->get_written_bytes();
     }
 
-    int64_t get_flushable_bytes() override { return _chunk_bytes_usage; }
+    int64_t get_flushable_bytes() override {
+        if (!_spill_mode) {
+            return _file_writer ? _file_writer->get_written_bytes() : 0;
+        }
+        return _chunk_bytes_usage;
+    }
 
     Status merge_blocks();
 
@@ -200,6 +211,7 @@ private:
     ChunkPtr _base_chunk;
     SchemaPtr _schema;
     std::unordered_map<int, int> _col_index_map; // result chunk index -> chunk index
+    bool _spill_mode = false;
 
     static const int64_t kWaitMilliseconds;
 };
