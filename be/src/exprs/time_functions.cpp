@@ -24,6 +24,15 @@
 
 #include "column/column_helper.h"
 #include "column/column_viewer.h"
+#include "gutil/port.h"
+
+// Fix for ulong type on macOS
+#ifdef __APPLE__
+#ifndef HAVE_ULONG
+#define HAVE_ULONG 1
+typedef unsigned long ulong;
+#endif
+#endif
 #include "exprs/binary_function.h"
 #include "exprs/unary_function.h"
 #include "runtime/datetime_value.h"
@@ -731,7 +740,7 @@ Status TimeFunctions::to_tera_date_prepare(FunctionContext* context, FunctionCon
     auto format_col = context->get_constant_column(1);
     auto format_str = ColumnHelper::get_const_value<TYPE_VARCHAR>(format_col);
     if (!state->formatter->prepare(format_str)) {
-        return Status::NotSupported(fmt::format("The format parameter {} is invalid", format_str));
+        return Status::NotSupported(fmt::format("The format parameter {} is invalid", format_str.to_string()));
     }
     return Status::OK();
 }
@@ -792,7 +801,7 @@ Status TimeFunctions::to_tera_timestamp_prepare(FunctionContext* context, Functi
     auto format_col = context->get_constant_column(1);
     auto format_str = ColumnHelper::get_const_value<TYPE_VARCHAR>(format_col);
     if (!state->formatter->prepare(format_str)) {
-        return Status::NotSupported(fmt::format("The format parameter {} is invalid", format_str));
+        return Status::NotSupported(fmt::format("The format parameter {} is invalid", format_str.to_string()));
     }
     return Status::OK();
 }
@@ -1619,7 +1628,7 @@ StatusOr<ColumnPtr> TimeFunctions::hour_from_unixtime(FunctionContext* context, 
         }
 
         cctz::time_point<cctz::sys_seconds> t = epoch + cctz::seconds(date);
-        int offset = ctz.lookup_offset(t).offset;
+        int offset = ctz.lookup(t).offset;
         int hour = impl_hour_from_unixtime(date + offset);
         result.append(hour);
     }

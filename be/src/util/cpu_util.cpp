@@ -16,6 +16,14 @@
 
 #include <fmt/format.h>
 
+#ifdef __APPLE__
+#include <mach/mach.h>
+#include <mach/thread_policy.h>
+#include <sys/sysctl.h>
+#else
+#include <sched.h>
+#endif
+
 #include "common/config.h"
 #include "util/thread.h"
 
@@ -31,6 +39,16 @@ void CpuUtil::bind_cpus(Thread* thread, const std::vector<size_t>& cpuids) {
             return 0;
         }
 
+#ifdef __APPLE__
+        // macOS implementation using thread affinity policy
+        thread_affinity_policy_data_t policy;
+        policy.affinity_tag = cpuids.empty() ? 0 : cpuids[0];
+
+        kern_return_t kr = thread_policy_set(pthread_mach_thread_np(thread->pthread_id()), THREAD_AFFINITY_POLICY,
+                                             (thread_policy_t)&policy, THREAD_AFFINITY_POLICY_COUNT);
+        return kr == KERN_SUCCESS ? 0 : -1;
+#else
+        // Linux implementation using cpu_set_t
         cpu_set_t cpuset;
         CPU_ZERO(&cpuset);
         for (const auto cpu_id : cpuids) {
@@ -38,11 +56,13 @@ void CpuUtil::bind_cpus(Thread* thread, const std::vector<size_t>& cpuids) {
         }
 
         return pthread_setaffinity_np(thread->pthread_id(), sizeof(cpu_set_t), &cpuset);
+#endif
     };
 
     if (const int res = do_bind_cpus(); res != 0) {
         LOG(WARNING) << fmt::format("failed to bind cpus [tid={}] [cpuids={}] [error_code={}] [error={}]",
-                                    pthread_self(), to_string(cpuids), res, std::strerror(res));
+                                    reinterpret_cast<uintptr_t>(pthread_self()), to_string(cpuids), res,
+                                    std::strerror(res));
         return;
     }
 

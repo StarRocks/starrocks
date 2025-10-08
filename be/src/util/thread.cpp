@@ -35,6 +35,7 @@
 #include "thread.h"
 
 #include <fmt/format.h>
+#include <sched.h>
 #include <sys/types.h>
 #include <unistd.h>
 
@@ -192,7 +193,7 @@ void ThreadMgr::get_thread_infos(std::vector<BeThreadInfo>& infos) {
             BeThreadInfo& info = infos.emplace_back();
             info.group = thread.second.category();
             info.name = thread.second.name();
-            info.pthread_id = thread.first;
+            info.pthread_id = reinterpret_cast<int64_t>(thread.first);
             info.tid = thread.second.thread_id();
             info.idle = thread.second.thread()->idle();
             info.finished_tasks = thread.second.thread()->finished_tasks();
@@ -246,7 +247,7 @@ Thread* Thread::current_thread() {
 }
 
 int64_t Thread::unique_thread_id() {
-    return static_cast<int64_t>(pthread_self());
+    return reinterpret_cast<int64_t>(pthread_self());
 }
 
 int64_t Thread::current_thread_id() {
@@ -256,6 +257,20 @@ int64_t Thread::current_thread_id() {
 void Thread::set_thread_name(pthread_t t, const std::string& name) {
     // pthread_setname_np's length is restricted to 16 bytes, including the terminating null byte ('\0')
     int ret;
+#ifdef __APPLE__
+    // macOS version only takes one argument (name for current thread)
+    if (t == pthread_self()) {
+        std::string str = name;
+        if (str.length() >= 16) {
+            str.at(15) = '\0';
+        }
+        ret = pthread_setname_np(str.data());
+    } else {
+        // Cannot set name for other threads on macOS
+        ret = 0;
+    }
+#else
+    // Linux version takes thread id and name
     if (name.length() < 16) {
         ret = pthread_setname_np(t, name.data());
     } else {
@@ -263,6 +278,7 @@ void Thread::set_thread_name(pthread_t t, const std::string& name) {
         str.at(15) = '\0';
         ret = pthread_setname_np(t, str.data());
     }
+#endif
     if (ret) {
         LOG(WARNING) << "failed to set thread name: " << name;
     }
@@ -273,7 +289,13 @@ void Thread::set_thread_name(std::thread& t, std::string name) {
     if (name.length() >= 16) {
         name.at(15) = '\0';
     }
+#ifdef __APPLE__
+    // On macOS, can only set name for current thread
+    int ret = pthread_setname_np(name.data());
+#else
+    // On Linux, can set name for any thread
     int ret = pthread_setname_np(t.native_handle(), name.data());
+#endif
     if (ret) {
         LOG(WARNING) << "failed to set thread name: " << name;
     }
@@ -284,7 +306,7 @@ int64_t Thread::wait_for_tid() const {
     while (true) {
         int64_t t = Acquire_Load(&_tid);
         if (t != PARENT_WAITING_TID) return t;
-        boost::detail::yield(loop_count++);
+        sched_yield();
     }
 }
 

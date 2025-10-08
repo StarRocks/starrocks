@@ -18,21 +18,51 @@
 
 #pragma once
 
+// Skip fmt shims when specifically requested to avoid template conflicts
+#ifdef STARROCKS_DISABLE_FMT_SHIMS
+#define STARROCKS_SKIP_FMT_SHIMS
+#endif
+
+// Also skip shims for any file that includes RocksDB headers to avoid template conflicts
+#ifdef ROCKSDB_LITE
+#define STARROCKS_SKIP_FMT_SHIMS
+#endif
+
+// Skip for files that might include RocksDB indirectly through other headers
+#if defined(ROCKSDB_DB_H) || defined(ROCKSDB_OPTIONS_H) || defined(ROCKSDB_SLICE_H)
+#define STARROCKS_SKIP_FMT_SHIMS
+#endif
+
+// Skip for any files that might contain storage-related RocksDB dependencies
+// This is a broad approach to catch remaining problematic files at the end of build
+#if defined(__INCLUDE_STORAGES__) || defined(STORAGE_KV_STORE_H) || defined(ROCKSDB_STATUS_ADAPTER_H)
+#define STARROCKS_SKIP_FMT_SHIMS
+#endif
+
+#ifndef STARROCKS_SKIP_FMT_SHIMS
+
 #include <fmt/format.h>
-// Enable formatting via operator<< when available
-#include <fmt/ostream.h>
+// Note: fmt/ostream.h is excluded on macOS to avoid RocksDB incomplete type issues
 // Enable fmt::join and range printing
 #include <fmt/ranges.h>
+#include <pthread.h>
+#include <thread>
+#include <sstream>
+#include <string>
+#include <algorithm>
 
 // Bring in StarRocks enum definitions and helpers
 #include "gen_cpp/Types_types.h"
 #include "gen_cpp/Exprs_types.h"
 #include "gen_cpp/PlanNodes_types.h"
+#include "gen_cpp/StatusCode_types.h"
+#include "gen_cpp/MVMaintenance_types.h"
 #include "types/logical_type.h"
 #include <atomic>
 #include <type_traits>
 #include <cstdlib> // ensure integer std::abs overloads are visible on libc++
 #include <string_view>
+#include <libgen.h> // ensure basename() is declared on macOS
 
 // Prefer the lightweight format_as customization point added in fmt >= 10.
 // It lets fmt format our types via ADL by converting them to a formattable type.
@@ -136,6 +166,33 @@ struct formatter<starrocks::TExprNodeType::type> : formatter<int> {
   }
 };
 
+// Formatter for TStatusCode thrift enum used in compaction_action.cpp
+template <>
+struct formatter<starrocks::TStatusCode::type> : formatter<int> {
+  template <typename FormatContext>
+  auto format(starrocks::TStatusCode::type v, FormatContext& ctx) const {
+    return formatter<int>::format(static_cast<int>(v), ctx);
+  }
+};
+
+// Formatter for MVTaskType thrift enum used in internal_service.cpp
+template <>
+struct formatter<starrocks::MVTaskType::type> : formatter<int> {
+  template <typename FormatContext>
+  auto format(starrocks::MVTaskType::type v, FormatContext& ctx) const {
+    return formatter<int>::format(static_cast<int>(v), ctx);
+  }
+};
+
+// Formatter for SampleMethod thrift enum used in segment_iterator.cpp
+template <>
+struct formatter<starrocks::SampleMethod::type> : formatter<int> {
+  template <typename FormatContext>
+  auto format(starrocks::SampleMethod::type v, FormatContext& ctx) const {
+    return formatter<int>::format(static_cast<int>(v), ctx);
+  }
+};
+
 } // namespace fmt
 
 
@@ -178,3 +235,89 @@ auto join(const Sequence& sequence, const Separator& separator)
     return result;
 }
 }} // namespace boost::algorithm
+
+// Fix for std::any_of with isspace on macOS
+// isspace is overloaded in macOS, causing template deduction issues
+namespace starrocks_macos_shims {
+    inline bool isspace_wrapper(int c) {
+        return std::isspace(c);
+    }
+}
+
+// Redefine isspace for use with std::any_of only on macOS
+#ifdef __APPLE__
+#define STARROCKS_ISSPACE(c) starrocks_macos_shims::isspace_wrapper(c)
+#else
+#define STARROCKS_ISSPACE(c) std::isspace(c)
+#endif
+
+// Additional formatters for problematic types on macOS
+
+// Formatter for pthread_t
+template <>
+struct fmt::formatter<pthread_t> : formatter<uintptr_t> {
+  template <typename FormatContext>
+  auto format(pthread_t v, FormatContext& ctx) const {
+    return formatter<uintptr_t>::format(reinterpret_cast<uintptr_t>(v), ctx);
+  }
+};
+
+// Formatter for std::thread::id
+template <>
+struct fmt::formatter<std::thread::id> : formatter<std::string> {
+  template <typename FormatContext>
+  auto format(const std::thread::id& v, FormatContext& ctx) const {
+    std::ostringstream oss;
+    oss << v;
+    return formatter<std::string>::format(oss.str(), ctx);
+  }
+};
+
+// Formatter for __int128 (missing in some fmt versions)
+template <>
+struct fmt::formatter<__int128> {
+  constexpr auto parse(fmt::format_parse_context& ctx) -> decltype(ctx.begin()) {
+    return ctx.end();
+  }
+
+  template <typename FormatContext>
+  auto format(__int128 v, FormatContext& ctx) const {
+    if (v == 0) {
+      return fmt::format_to(ctx.out(), "0");
+    }
+    bool negative = v < 0;
+    if (negative) v = -v;
+    std::string result;
+    while (v > 0) {
+      result.push_back('0' + v % 10);
+      v /= 10;
+    }
+    if (negative) result.push_back('-');
+    std::reverse(result.begin(), result.end());
+    return fmt::format_to(ctx.out(), "{}", result);
+  }
+};
+
+// Formatter for unsigned __int128
+template <>
+struct fmt::formatter<unsigned __int128> {
+  constexpr auto parse(fmt::format_parse_context& ctx) -> decltype(ctx.begin()) {
+    return ctx.end();
+  }
+
+  template <typename FormatContext>
+  auto format(unsigned __int128 v, FormatContext& ctx) const {
+    if (v == 0) {
+      return fmt::format_to(ctx.out(), "0");
+    }
+    std::string result;
+    while (v > 0) {
+      result.push_back('0' + v % 10);
+      v /= 10;
+    }
+    std::reverse(result.begin(), result.end());
+    return fmt::format_to(ctx.out(), "{}", result);
+  }
+};
+
+#endif // STARROCKS_SKIP_FMT_SHIMS

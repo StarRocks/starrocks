@@ -14,6 +14,7 @@
 
 #include "cluster_id_mgr.h"
 
+#include <stdio.h>
 #include <sys/file.h>
 #include <sys/stat.h>
 
@@ -54,7 +55,13 @@ Status ClusterIdMgr::init() {
         fp = nullptr;
     });
 
-    int lock_res = flock(fp->_fileno, LOCK_EX | LOCK_NB);
+    int lock_res;
+#ifdef __APPLE__
+    // On macOS, use the portable fileno() to retrieve fd from FILE*
+    lock_res = flock(fileno(fp), LOCK_EX | LOCK_NB);
+#else
+    lock_res = flock(fp->_fileno, LOCK_EX | LOCK_NB);
+#endif
     if (lock_res < 0) {
         RETURN_IF_ERROR_WITH_WARN(
                 Status::IOError(strings::Substitute("failed to flock cluster id file $0", cluster_id_path)),

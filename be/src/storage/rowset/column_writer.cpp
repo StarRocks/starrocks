@@ -42,7 +42,9 @@
 #include "gutil/strings/substitute.h"
 #include "simd/simd.h"
 #include "storage/index/inverted/inverted_index_option.h"
+#ifndef MACOS_DISABLE_CLUCENE
 #include "storage/index/inverted/inverted_plugin_factory.h"
+#endif
 #include "storage/rowset/array_column_writer.h"
 #include "storage/rowset/bitmap_index_writer.h"
 #include "storage/rowset/bitshuffle_page.h"
@@ -426,6 +428,7 @@ Status ScalarColumnWriter::init() {
         }
         RETURN_IF_ERROR(BloomFilterIndexWriter::create(bf_options, _type_info, &_bloom_filter_index_builder));
     }
+#ifndef MACOS_DISABLE_CLUCENE
     if (_opts.need_inverted_index) {
         _has_index_builder = true;
         TabletIndex& inverted_tablet_index = _opts.tablet_index.at(GIN);
@@ -439,6 +442,7 @@ Status ScalarColumnWriter::init() {
             RETURN_IF_ERROR(_inverted_index_builder->init());
         }
     }
+#endif
     return Status::OK();
 }
 
@@ -462,9 +466,11 @@ uint64_t ScalarColumnWriter::estimate_buffer_size() {
     if (_bloom_filter_index_builder != nullptr) {
         size += _bloom_filter_index_builder->size();
     }
+#ifndef MACOS_DISABLE_CLUCENE
     if (_inverted_index_builder != nullptr) {
         size += _inverted_index_builder->size();
     }
+#endif
     return size;
 }
 
@@ -569,9 +575,11 @@ Status ScalarColumnWriter::write_bloom_filter_index() {
 }
 
 Status ScalarColumnWriter::write_inverted_index() {
+#ifndef MACOS_DISABLE_CLUCENE
     if (_inverted_index_builder != nullptr) {
         return _inverted_index_builder->finish();
     }
+#endif
     return Status::OK();
 }
 
@@ -780,12 +788,16 @@ Status ScalarColumnWriter::append(const uint8_t* data, const uint8_t* null_flags
                     INDEX_ADD_NULLS(_zone_map_index_builder, run);
                     INDEX_ADD_NULLS(_bitmap_index_builder, run);
                     INDEX_ADD_NULLS(_bloom_filter_index_builder, run);
+#ifndef MACOS_DISABLE_CLUCENE
                     INDEX_ADD_NULLS(_inverted_index_builder, run);
+#endif
                 } else {
                     INDEX_ADD_VALUES(_zone_map_index_builder, pdata, run);
                     INDEX_ADD_VALUES(_bitmap_index_builder, pdata, run);
                     INDEX_ADD_VALUES(_bloom_filter_index_builder, pdata, run);
+#ifndef MACOS_DISABLE_CLUCENE
                     INDEX_ADD_VALUES(_inverted_index_builder, pdata, run);
+#endif
                 }
                 pdata += type_info()->size() * run;
             }
@@ -793,7 +805,9 @@ Status ScalarColumnWriter::append(const uint8_t* data, const uint8_t* null_flags
             INDEX_ADD_VALUES(_zone_map_index_builder, data, num_written);
             INDEX_ADD_VALUES(_bitmap_index_builder, data, num_written);
             INDEX_ADD_VALUES(_bloom_filter_index_builder, data, num_written);
+#ifndef MACOS_DISABLE_CLUCENE
             INDEX_ADD_VALUES(_inverted_index_builder, data, num_written);
+#endif
         }
 
         _next_rowid += num_written;

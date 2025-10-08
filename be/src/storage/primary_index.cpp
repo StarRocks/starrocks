@@ -1278,8 +1278,8 @@ Status PrimaryIndex::_do_load(Tablet* tablet) {
               << " version:" << apply_version << " #rowset:" << rowsets.size() << " #segment:" << total_segments
               << " data_size:" << total_data_size << " rowsets:" << int_list_to_string(rowset_ids) << " size:" << size()
               << " memory:" << memory_usage() << " duration: " << timer.elapsed_time() / 1000000 << "ms";
-    span->SetAttribute("memory", memory_usage());
-    span->SetAttribute("size", size());
+    span->SetAttribute("memory", static_cast<uint64_t>(memory_usage()));
+    span->SetAttribute("size", static_cast<uint64_t>(size()));
     return Status::OK();
 }
 
