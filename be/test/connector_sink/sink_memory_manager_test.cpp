@@ -57,8 +57,9 @@ public:
             : PartitionChunkWriter(partition, partition_field_null_list, ctx) {}
 
     MOCK_METHOD(Status, init, (), (override));
-    MOCK_METHOD(Status, write, (Chunk * chunk), (override));
+    MOCK_METHOD(Status, write, (const starrocks::ChunkPtr&), (override));
     MOCK_METHOD(Status, finish, (), (override));
+    MOCK_METHOD(Status, wait_flush, (), (override));
     MOCK_METHOD(bool, is_finished, (), (override));
     MOCK_METHOD(int64_t, get_written_bytes, (), (override));
 

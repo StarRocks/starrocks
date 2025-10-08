@@ -45,7 +45,7 @@ public:
 
     const std::vector<std::string>& transform_expr() const { return _transform_exprs; }
 
-    Status add(Chunk* chunk) override;
+    Status add(const ChunkPtr& chunk) override;
 
 private:
     std::vector<std::string> _transform_exprs;
