@@ -44,6 +44,13 @@
 #ifdef USE_STAROS
 #include "fslib/star_cache_handler.h"
 #endif
+#include <fmt/ranges.h>
+
+#include <csignal>
+// Need POSIX signal APIs like sigaction/siginfo_t.
+// NOLINTNEXTLINE(modernize-deprecated-headers)
+#include <signal.h>
+
 #include "fs/encrypt_file.h"
 #include "gutil/cpu.h"
 #include "jemalloc/jemalloc.h"
@@ -164,6 +171,12 @@ struct JemallocStats {
 };
 
 static void retrieve_jemalloc_stats(JemallocStats* stats) {
+    // On macOS, jemalloc may define je_mallctl as mallctl via macro in jemalloc.h
+#ifdef __APPLE__
+#ifndef je_mallctl
+#define je_mallctl mallctl
+#endif
+#endif
     uint64_t epoch = 1;
     size_t sz = sizeof(epoch);
     je_mallctl("epoch", &epoch, &sz, &epoch, sz);
