@@ -207,6 +207,12 @@ add_definitions(-DMACOS_DISABLE_CLUCENE)
 add_definitions(-DMACOS_DISABLE_STARCACHE)
 # Disable spill feature on macOS
 add_definitions(-DMACOS_DISABLE_SPILL)
+# Disable Elasticsearch connector on macOS
+add_definitions(-DMACOS_DISABLE_ES)
+
+# Force-include macOS shim headers across all translation units to avoid
+# touching core source files.
+add_compile_options(-include ${CMAKE_CURRENT_LIST_DIR}/shims/include/starrocks_macos_fmt_shims.h)
 # Ensure starcache/staros code paths are disabled by making the macros undefined
 add_compile_options(-UWITH_STARCACHE -UUSE_STAROS)
 
@@ -723,6 +729,13 @@ list(FILTER STARROCKS_SOURCES EXCLUDE REGEX ".*python_.*\\.cpp$")
 list(FILTER STARROCKS_SOURCES EXCLUDE REGEX ".*/fs/hdfs/.*\\.cpp$")
 list(FILTER STARROCKS_SOURCES EXCLUDE REGEX ".*hdfs.*\\.cpp$")
 
+# Exclude Elasticsearch (ES) related files on macOS
+list(FILTER STARROCKS_SOURCES EXCLUDE REGEX ".*/exec/es/.*\\.cpp$")
+
+# Exclude Avro format and scanner sources (no Avro C++ on macOS)
+list(FILTER STARROCKS_SOURCES EXCLUDE REGEX ".*/formats/avro/.*\\.cpp$")
+list(FILTER STARROCKS_SOURCES EXCLUDE REGEX ".*/exec/file_scanner/avro_.*\\.cpp$")
+
 # Exclude StarCache-related sources (unsupported on macOS build)
 list(FILTER STARROCKS_SOURCES EXCLUDE REGEX ".*/cache/disk_cache/starcache_engine\\.cpp$")
 list(FILTER STARROCKS_SOURCES EXCLUDE REGEX ".*/http/action/datacache_action\\.cpp$")
@@ -761,6 +774,7 @@ list(FILTER STARROCKS_SOURCES EXCLUDE REGEX ".*/data_consumer\\.cpp$")
 # Exclude problematic components
 list(FILTER STARROCKS_SOURCES EXCLUDE REGEX ".*/inverted_plugin_factory\\.cpp$")
 list(FILTER STARROCKS_SOURCES EXCLUDE REGEX ".*clucene.*\\.cpp$")
+list(FILTER STARROCKS_SOURCES EXCLUDE REGEX ".*/exprs/gin_functions\\.cpp$")
 
 # Exclude geo components that need special parsing files
 list(FILTER STARROCKS_SOURCES EXCLUDE REGEX ".*/geo/.*\\.cpp$")

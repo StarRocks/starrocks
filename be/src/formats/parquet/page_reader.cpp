@@ -41,7 +41,7 @@ static constexpr size_t kDefaultPageHeaderSize = 16 * 1024;
 // 16MB is borrowed from Arrow
 static constexpr size_t kMaxPageHeaderSize = 16 * 1024 * 1024;
 
-PageReader::PageReader(io::SeekableInputStream* stream, uint64_t start_offset, uint64_t length, uint64_t num_values,
+PageReader::PageReader(io::SeekableInputStream* stream, size_t start_offset, size_t length, size_t num_values,
                        const ColumnReaderOptions& opts, const tparquet::CompressionCodec::type codec)
         : _stream(stream),
           _finish_offset(start_offset + length),
