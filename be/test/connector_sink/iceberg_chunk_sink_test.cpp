@@ -128,8 +128,7 @@ TEST_F(IcebergChunkSinkTest, test_callback) {
         auto chunk_extra_data = std::make_shared<ChunkExtraColumnsData>(extra_metas, std::move(partition_key_columns));
         // Unlock during merging partition chunks into a full chunk.
         chunk->set_extra_data(chunk_extra_data);
-        Chunk* raw_chunk_ptr = chunk.get();
-        auto ret = sink->add(raw_chunk_ptr);
+        auto ret = sink->add(chunk);
         EXPECT_EQ(ret.ok(), true);
         sink->callback_on_commit(CommitResult{
                 .io_status = Status::OK(),

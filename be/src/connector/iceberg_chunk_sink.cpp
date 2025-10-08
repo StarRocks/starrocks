@@ -124,14 +124,14 @@ StatusOr<std::unique_ptr<ConnectorChunkSink>> IcebergChunkSinkProvider::create_c
                                                          std::move(partition_chunk_writer_factory), runtime_state);
 }
 
-Status IcebergChunkSink::add(Chunk* chunk) {
+Status IcebergChunkSink::add(const ChunkPtr& chunk) {
     std::string partition = DEFAULT_PARTITION;
     bool partitioned = !_partition_column_names.empty();
     std::vector<int8_t> partition_field_null_list;
     if (partitioned) {
         ASSIGN_OR_RETURN(partition, HiveUtils::iceberg_make_partition_name(
                                             _partition_column_names, _partition_column_evaluators,
-                                            dynamic_cast<IcebergChunkSink*>(this)->transform_expr(), chunk,
+                                            dynamic_cast<IcebergChunkSink*>(this)->transform_expr(), chunk.get(),
                                             _support_null_partition, partition_field_null_list));
     }
 

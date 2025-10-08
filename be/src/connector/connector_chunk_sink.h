@@ -47,7 +47,7 @@ public:
 
     Status init();
 
-    virtual Status add(Chunk* chunk);
+    virtual Status add(const ChunkPtr& chunk);
 
     Status finish();
 
@@ -58,7 +58,7 @@ public:
     virtual void callback_on_commit(const CommitResult& result) = 0;
 
     Status write_partition_chunk(const std::string& partition, const vector<int8_t>& partition_field_null_list,
-                                 Chunk* chunk);
+                                 const ChunkPtr& chunk);
 
     Status status();
 
