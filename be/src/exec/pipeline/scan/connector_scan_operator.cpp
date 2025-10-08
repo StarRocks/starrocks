@@ -17,7 +17,6 @@
 #include "exec/connector_scan_node.h"
 #include "exec/pipeline/pipeline_driver.h"
 #include "exec/pipeline/scan/balanced_chunk_buffer.h"
-#include "runtime/exec_env.h"
 #include "runtime/runtime_state.h"
 
 namespace starrocks::pipeline {
@@ -757,7 +756,7 @@ Status ConnectorChunkSource::_read_chunk(RuntimeState* state, ChunkPtr* chunk) {
         RETURN_IF_ERROR(_open_data_source(state, &mem_alloc_failed));
         if (mem_alloc_failed) {
             _mem_alloc_failed_count += 1;
-            return Status::TimedOut("");
+            return Status::EAgain("");
         }
         if (state->is_cancelled()) {
             return Status::Cancelled("canceled state");
