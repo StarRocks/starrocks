@@ -302,6 +302,37 @@ build_glog() {
     log_success "glog built successfully"
 }
 
+generate_hash_memory_shim() {
+    local src_root="$THIRDPARTY_DIR/build/protobuf/protobuf-$PROTOBUF_VERSION"
+    local shim_dir="$src_root/src/google/protobuf/internal"
+    local shim_file="$shim_dir/hash_memory_impl.cc"
+
+    # 1. Ensure target directory exists
+    mkdir -p "$shim_dir"
+
+    # 2. Write shim (overwrite if file already exists)
+    cat > "$shim_file" <<'EOF'
+#ifndef _LIBCPP_HAS_NO_HASH_MEMORY
+#define _LIBCPP_HAS_NO_HASH_MEMORY 1
+#endif
+#include <cstddef>
+namespace std { namespace __1 {
+[[gnu::pure]] size_t
+__hash_memory(const void* __ptr, size_t __size) noexcept
+{
+    // Compatible with old libc++ implementation, protobuf only needs the symbol to exist
+    size_t h = 0;
+    const unsigned char* p = static_cast<const unsigned char*>(__ptr);
+    for (size_t i = 0; i < __size; ++i)
+        h = h * 31 + p[i];
+    return h;
+}
+} }
+EOF
+
+    log_success "shim created at $shim_file"
+}
+
 build_protobuf() {
     # Check if already built
     if [[ -f "$INSTALL_DIR/lib/libprotobuf.a" && -f "$INSTALL_DIR/bin/protoc" ]]; then
@@ -330,20 +361,43 @@ build_protobuf() {
 
     cd "protobuf-$PROTOBUF_VERSION"
 
-    # Build using cmake (protobuf 3.14.0 supports cmake)
-    mkdir -p build && cd build
+    # Build using autotools (standard for protobuf 3.14.0)
+    ./autogen.sh
 
-    cmake ../cmake \
-        -DCMAKE_BUILD_TYPE=Release \
-        -DCMAKE_INSTALL_PREFIX="$INSTALL_DIR" \
-        -DCMAKE_POSITION_INDEPENDENT_CODE=ON \
-        -Dprotobuf_BUILD_TESTS=OFF \
-        -Dprotobuf_BUILD_SHARED_LIBS=OFF \
-        -DCMAKE_CXX_STANDARD=17 \
-        -DCMAKE_POLICY_VERSION_MINIMUM=3.5
+    generate_hash_memory_shim
 
-    make -j"$PARALLEL_JOBS"
+    # Compile the hash memory shim separately and add it to the build
+    local shim_obj="$build_dir/hash_memory_shim.o"
+    $CXX $CXXFLAGS -c src/google/protobuf/internal/hash_memory_impl.cc -o "$shim_obj"
+
+    ./configure \
+        --prefix="$INSTALL_DIR" \
+        --disable-shared \
+        --enable-static \
+        --with-pic \
+        --disable-tests \
+        --disable-examples \
+        --with-zlib \
+        --with-zlib-include="$OPENSSL_ROOT_DIR/include" \
+        --with-zlib-libpath="$OPENSSL_ROOT_DIR/lib" \
+        CC="$CC" \
+        CXX="$CXX" \
+        CFLAGS="$CFLAGS" \
+        CXXFLAGS="$CXXFLAGS" \
+        LDFLAGS="$LDFLAGS $shim_obj"
+
+    make -j"$PARALLEL_JOBS" LDFLAGS="$LDFLAGS $shim_obj"
     make install
+
+    # Fix the protobuf library to include our shim
+    if [[ -f "$INSTALL_DIR/lib/libprotobuf.a" ]]; then
+        # Create a combined libprotobuf with the shim
+        cd "$INSTALL_DIR/lib"
+        cp libprotobuf.a libprotobuf.a.backup
+        ar rcs libprotobuf.a "$shim_obj"
+        ranlib libprotobuf.a 2>/dev/null || true
+        rm -f libprotobuf.a.backup
+    fi
 
     # Verify protoc
     "$INSTALL_DIR/bin/protoc" --version
@@ -364,7 +418,7 @@ build_leveldb() {
     local build_dir="$THIRDPARTY_DIR/build/leveldb"
 
     download_source "leveldb" "$LEVELDB_VERSION" \
-        "https://github.com/google/leveldb/archive/$LEVELDB_VERSION.tar.gz" \
+        "https://github.com/google/leveldb/archive/v$LEVELDB_VERSION.tar.gz" \
         "leveldb-$LEVELDB_VERSION.tar.gz"
 
     mkdir -p "$build_dir"
@@ -375,19 +429,45 @@ build_leveldb() {
     fi
 
     cd "leveldb-$LEVELDB_VERSION"
-    mkdir -p build && cd build
 
-    cmake .. \
-        -DCMAKE_BUILD_TYPE=Release \
-        -DCMAKE_INSTALL_PREFIX="$INSTALL_DIR" \
-        -DCMAKE_POSITION_INDEPENDENT_CODE=ON \
-        -DBUILD_SHARED_LIBS=OFF \
-        -DLEVELDB_BUILD_TESTS=OFF \
-        -DLEVELDB_BUILD_BENCHMARKS=OFF \
-        -DCMAKE_POLICY_VERSION_MINIMUM=3.5
+    # Apply patch to disable SSE on non-x86 architectures (arm64)
+    # Be robust: only apply if not already applied; never reverse interactively.
+    local patch_file="$SCRIPT_DIR/patch/leveldb_build_detect_platform.patch"
+    if [[ -f "$patch_file" ]]; then
+        # Detect whether our marker exists; if not, attempt a forward-only patch.
+        if ! grep -q "Non-x86 architecture detected" build_detect_platform 2>/dev/null; then
+            log_info "Applying leveldb build_detect_platform patch..."
+            if patch -p1 --forward --batch < "$patch_file" >/dev/null; then
+                log_success "leveldb patch applied successfully"
+            else
+                log_warn "leveldb patch could not be applied (maybe already applied). Proceeding."
+            fi
+        else
+            log_success "leveldb patch already applied, skipping"
+        fi
+    else
+        log_warn "leveldb patch not found at $patch_file"
+    fi
 
-    make -j"$PARALLEL_JOBS"
-    make install
+    # Build using Makefile (leveldb 1.20 doesn't use CMake)
+    # Force-disable SSE flags to avoid x86 intrinsics on arm64 even if detection misfires.
+    # Use system compiler to avoid toolchain mismatches.
+    CC=cc CXX=c++ make -j"$PARALLEL_JOBS" PLATFORM_SSEFLAGS="" out-static/libleveldb.a
+
+    # Install manually
+    mkdir -p "$INSTALL_DIR/include/leveldb"
+    mkdir -p "$INSTALL_DIR/lib"
+
+    # Copy headers
+    cp -r include/leveldb/* "$INSTALL_DIR/include/leveldb/"
+
+    # Copy the static library from the correct location
+    if [[ -f "out-static/libleveldb.a" ]]; then
+        cp out-static/libleveldb.a "$INSTALL_DIR/lib/"
+    else
+        log_error "leveldb static library not found in out-static/"
+        return 1
+    fi
 
     log_success "leveldb built successfully"
 }
