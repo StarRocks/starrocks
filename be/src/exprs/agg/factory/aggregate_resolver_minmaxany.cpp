@@ -151,7 +151,7 @@ void AggregateFuncResolver::register_minmaxany() {
         type_dispatch_all(type, MinMaxAnyDispatcher(), this);
     }
 
-    // 注册 min_n(value, n) 和 max_n(value, n) 函数
+    // Register min_n(value, n) and max_n(value, n) functions
     for (auto type : minmax_types) {
         type_dispatch_all(type, MinNDispatcher(), this);
         type_dispatch_all(type, MaxNDispatcher(), this);
