@@ -201,23 +201,52 @@ LEVELDB_VERSION="1.20"
 BRPC_VERSION="1.9.0"
 ROCKSDB_VERSION="6.22.1"
 BITSHUFFLE_VERSION="0.5.1"
-VECTORSCAN_VERSION="5.4.11"
+VECTORSCAN_VERSION="5.4.12"
 VELOCYPACK_VERSION="XYZ1.0"
 
 download_source() {
     local name="$1"
     local version="$2"
-    local url="$3"
+    local primary_url="$3"
     local filename="$4"
+    shift 4
 
     local src_dir="$THIRDPARTY_DIR/src"
     mkdir -p "$src_dir"
 
-    if [[ ! -f "$src_dir/$filename" ]]; then
-        log_info "Downloading $name $version..."
-        curl -fsSL "$url" -o "$src_dir/$filename"
-    else
+    if [[ -f "$src_dir/$filename" ]]; then
         log_success "$name source already downloaded"
+        return 0
+    fi
+
+    log_info "Downloading $name $version..."
+
+    # Build URL list: primary + any fallbacks passed as extra args
+    local urls=("$primary_url")
+    if [[ $# -gt 0 ]]; then
+        while [[ $# -gt 0 ]]; do
+            urls+=("$1")
+            shift
+        done
+    fi
+
+    local success=0
+    local tried_list=()
+    for u in "${urls[@]}"; do
+        if [[ -z "$u" ]]; then
+            continue
+        fi
+        log_info "Trying URL: $u"
+        tried_list+=("$u")
+        if curl -fL -o "$src_dir/$filename" "$u" 2>/dev/null; then
+            success=1
+            break
+        fi
+    done
+
+    if [[ $success -ne 1 ]]; then
+        log_error "Failed to download $name $version. Tried: ${tried_list[*]}"
+        return 1
     fi
 }
 
@@ -547,12 +576,8 @@ build_rocksdb() {
 
     cd "rocksdb-$ROCKSDB_VERSION"
 
-    # Apply macOS patch if exists
-    local patch_file="$ROOT_DIR/thirdparty/patches/rocksdb-$ROCKSDB_VERSION-macos-clang21.patch"
-    if [[ -f "$patch_file" ]]; then
-        log_info "Applying macOS patch for rocksdb..."
-        patch -p1 < "$patch_file"
-    fi
+    # No source patch required on macOS now that warnings-as-errors is disabled
+    # and shared libraries/tests are turned off for RocksDB.
 
     mkdir -p build && cd build
 
@@ -561,6 +586,14 @@ build_rocksdb() {
         -DCMAKE_INSTALL_PREFIX="$INSTALL_DIR" \
         -DCMAKE_POSITION_INDEPENDENT_CODE=ON \
         -DBUILD_SHARED_LIBS=OFF \
+        -DROCKSDB_BUILD_SHARED=OFF \
+        -DCMAKE_CXX_FLAGS="${CXXFLAGS} -D_LIBCPP_HAS_NO_HASH_MEMORY=1 -Wno-error" \
+        -DCMAKE_C_FLAGS="${CFLAGS} -Wno-error" \
+        -DFAIL_ON_WARNINGS=OFF \
+        -DWITH_ALL_TESTS=OFF \
+        -DWITH_CORE_TOOLS=OFF \
+        -DWITH_BENCHMARK_TOOLS=OFF \
+        -DBUILD_TESTING=OFF \
         -DWITH_SNAPPY=ON \
         -DWITH_ZSTD=ON \
         -DWITH_TESTS=OFF \
@@ -605,8 +638,13 @@ build_velocypack() {
         -DCMAKE_INSTALL_PREFIX="$INSTALL_DIR" \
         -DCMAKE_POSITION_INDEPENDENT_CODE=ON \
         -DBUILD_SHARED_LIBS=OFF \
-        -DvelocypackTools=OFF \
-        -DvelocypackTests=OFF \
+        -DCMAKE_CXX_FLAGS="${CXXFLAGS} -D_LIBCPP_HAS_NO_HASH_MEMORY=1" \
+        -DBuildVelocyPackExamples=OFF \
+        -DBuildTools=OFF \
+        -DBuildBench=OFF \
+        -DBuildTests=OFF \
+        -DBuildLargeTests=OFF \
+        -DBuildAsmTest=OFF \
         -DCMAKE_POLICY_VERSION_MINIMUM=3.5
 
     make -j"$PARALLEL_JOBS"
@@ -628,8 +666,11 @@ build_bitshuffle() {
     local build_dir="$THIRDPARTY_DIR/build/bitshuffle"
 
     download_source "bitshuffle" "$BITSHUFFLE_VERSION" \
+        "https://github.com/kiyo-masui/bitshuffle/archive/$BITSHUFFLE_VERSION.tar.gz" \
+        "bitshuffle-$BITSHUFFLE_VERSION.tar.gz" \
+        "https://github.com/kiyo-masui/bitshuffle/archive/refs/tags/$BITSHUFFLE_VERSION.tar.gz" \
         "https://github.com/kiyo-masui/bitshuffle/archive/v$BITSHUFFLE_VERSION.tar.gz" \
-        "bitshuffle-$BITSHUFFLE_VERSION.tar.gz"
+        "https://github.com/kiyo-masui/bitshuffle/archive/refs/tags/v$BITSHUFFLE_VERSION.tar.gz"
 
     mkdir -p "$build_dir"
     cd "$build_dir"
@@ -640,10 +681,12 @@ build_bitshuffle() {
 
     cd "bitshuffle-$BITSHUFFLE_VERSION"
 
-    # Build static library manually
-    "$CC" $CFLAGS -c src/bitshuffle.c -o bitshuffle.o
-    "$CC" $CFLAGS -c src/bitshuffle_core.c -o bitshuffle_core.o
-    "$CC" $CFLAGS -c src/iochain.c -o iochain.o
+    # Build static library manually; include bundled LZ4 headers and sources
+    local BSHUF_CFLAGS="$CFLAGS -I./src -I./lz4"
+    "$CC" $BSHUF_CFLAGS -c src/bitshuffle.c -o bitshuffle.o
+    "$CC" $BSHUF_CFLAGS -c src/bitshuffle_core.c -o bitshuffle_core.o
+    "$CC" $BSHUF_CFLAGS -c src/iochain.c -o iochain.o
+    "$CC" $BSHUF_CFLAGS -c lz4/lz4.c -o lz4.o
 
     "$AR" rcs libbitshuffle.a *.o
 
@@ -683,8 +726,9 @@ build_vectorscan() {
 
     # Download and extract vectorscan source if needed
     download_source "vectorscan" "$VECTORSCAN_VERSION" \
-        "https://github.com/VectorCamp/vectorscan/archive/vectorscan-$VECTORSCAN_VERSION.tar.gz" \
-        "vectorscan-$VECTORSCAN_VERSION.tar.gz"
+        "https://github.com/VectorCamp/vectorscan/archive/refs/tags/vectorscan/$VECTORSCAN_VERSION.tar.gz" \
+        "vectorscan-$VECTORSCAN_VERSION.tar.gz" \
+        "https://github.com/VectorCamp/vectorscan/archive/vectorscan-$VECTORSCAN_VERSION.tar.gz"
 
     mkdir -p "$build_dir"
     cd "$build_dir"
@@ -719,13 +763,51 @@ build_vectorscan() {
         -DBUILD_SHARED_LIBS=OFF \
         -DFAT_RUNTIME=OFF \
         -DBUILD_STATIC_LIBS=ON \
+        -DBUILD_EXAMPLES=OFF \
+        -DBUILD_TOOLS=OFF \
+        -DBUILD_BENCHMARKS=OFF \
+        -DBUILD_UNIT=OFF \
+        -DBUILD_TESTS=OFF \
+        -DBUILD_UNIT_TESTS=OFF \
+        -DENABLE_UNIT_TESTS=OFF \
+        -DCORRECT_PCRE_VERSION=OFF \
+        -DCMAKE_C_FLAGS="${CFLAGS} -Wno-error" \
+        -DCMAKE_CXX_FLAGS="${CXXFLAGS} -D_LIBCPP_HAS_NO_HASH_MEMORY=1 -Wno-error" \
         -DBOOST_ROOT="/opt/homebrew" \
         -DBoost_DIR="/opt/homebrew/lib/cmake/Boost-$boost_version" \
         -DBoost_NO_SYSTEM_PATHS=ON \
         -DCMAKE_POLICY_VERSION_MINIMUM=3.5
 
-    make -j"$PARALLEL_JOBS"
+    # Build only the main library components, skip all tests
+    make -j"$PARALLEL_JOBS" hs hs_compile hs_runtime
+    # Install the libraries that were built
     make install
+
+    # Inject libc++ hash memory shim into libhs.a for macOS arm64
+    if [[ -f "$INSTALL_DIR/lib/libhs.a" ]]; then
+        local shim_src="$build_dir/hash_memory_impl.cc"
+        cat > "$shim_src" <<'EOF'
+#ifndef _LIBCPP_HAS_NO_HASH_MEMORY
+#define _LIBCPP_HAS_NO_HASH_MEMORY 1
+#endif
+#include <cstddef>
+namespace std { namespace __1 {
+[[gnu::pure]] size_t
+__hash_memory(const void* __ptr, size_t __size) noexcept
+{
+    size_t h = 0;
+    const unsigned char* p = static_cast<const unsigned char*>(__ptr);
+    for (size_t i = 0; i < __size; ++i)
+        h = h * 31 + p[i];
+    return h;
+}
+} }
+EOF
+        local shim_obj="$build_dir/hash_memory_shim.o"
+        $CXX $CXXFLAGS -c "$shim_src" -o "$shim_obj"
+        ( cd "$INSTALL_DIR/lib" && ar rcs libhs.a "$shim_obj" && ranlib libhs.a 2>/dev/null || true )
+        log_success "Injected hash_memory shim into libhs.a"
+    fi
 
     log_success "vectorscan built successfully"
 }
