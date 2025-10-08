@@ -96,7 +96,7 @@ LoadChannel::LoadChannel(LoadChannelMgr* mgr, LakeTabletManager* lake_tablet_mgr
 }
 
 LoadChannel::~LoadChannel() {
-    _span->SetAttribute("num_chunk", _num_chunk);
+    _span->SetAttribute("num_chunk", static_cast<unsigned long>(_num_chunk));
     _span->End();
 }
 
