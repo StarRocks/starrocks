@@ -14,7 +14,7 @@
 
 package com.starrocks.sql.common;
 
-import com.google.common.base.Joiner;
+import com.starrocks.common.Config;
 
 import java.util.Iterator;
 import java.util.List;
@@ -123,8 +123,9 @@ public record PCellSortedSet(SortedSet<PCellWithName> partitions) {
         }
         SortedSet<PCellWithName> limitedPartitions = new TreeSet<>(partitions);
         Iterator<PCellWithName> iterator = limitedPartitions.iterator();
+        int removeCount = limitedPartitions.size() - limit;
         int count = 0;
-        while (iterator.hasNext() && count < limitedPartitions.size() - limit) {
+        while (iterator.hasNext() && count < removeCount) {
             iterator.next();
             iterator.remove();
             count++;
@@ -165,7 +166,29 @@ public record PCellSortedSet(SortedSet<PCellWithName> partitions) {
         if (partitions == null || partitions.isEmpty()) {
             return "";
         }
-        return Joiner.on(",").join(getPartitionNames());
+        int maxLen = Config.max_mv_task_run_meta_message_values_length;
+        int size = partitions.size();
+
+        if (size <= maxLen) {
+            // Join all names if under limit
+            return partitions.stream()
+                    .map(PCellWithName::name)
+                    .collect(Collectors.joining(","));
+        } else {
+            int half = maxLen / 2;
+            List<String> names = partitions.stream()
+                    .map(PCellWithName::name)
+                    .collect(Collectors.toList());
+
+            String prefix = names.stream()
+                    .limit(half)
+                    .collect(Collectors.joining(","));
+            String suffix = names.stream()
+                    .skip(size - half)
+                    .collect(Collectors.joining(","));
+
+            return prefix + ",...," + suffix;
+        }
     }
 
     @Override
