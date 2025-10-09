@@ -203,7 +203,7 @@ public class TaskRun implements Comparable<TaskRun> {
     public int getExecuteTimeoutS() {
         // if `query_timeout`/`insert_timeout` is set in the execute option, use it
         int defaultTimeoutS = Config.task_runs_timeout_second;
-        if (properties != null ) {
+        if (properties != null) {
             for (Map.Entry<String, String> entry : properties.entrySet()) {
                 if (entry.getKey().equalsIgnoreCase(SessionVariable.QUERY_TIMEOUT)
                         || entry.getKey().equalsIgnoreCase(SessionVariable.INSERT_TIMEOUT)) {
