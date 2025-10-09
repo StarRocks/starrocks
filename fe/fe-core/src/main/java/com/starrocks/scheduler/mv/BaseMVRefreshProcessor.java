@@ -170,6 +170,11 @@ public abstract class BaseMVRefreshProcessor {
                                                                         Table table);
 
     /**
+     * Generate the next task run to be processed and set it to the nextTaskRun field.
+     */
+    public abstract void generateNextTaskRunIfNeeded();
+
+    /**
      * Get the retry times for the mv refresh processor.
      *
      * @param connectContext the current connect context
@@ -355,9 +360,11 @@ public abstract class BaseMVRefreshProcessor {
                         String partitionName = toRefreshPartitions.partitions().iterator().next().name();
                         Partition partition = mv.getPartition(partitionName);
                         dataProperty = partitionInfo.getDataProperty(partition.getId());
-                    }
-                    for (PCellWithName partName : toRefreshPartitions.partitions()) {
-                        mv.dropPartition(db.getId(), partName.name(), false);
+                        mv.dropPartition(db.getId(), partitionName, false);
+                    } else {
+                        for (PCellWithName partName : toRefreshPartitions.partitions()) {
+                            mvRefreshPartitioner.dropPartition(db, mv, partName.name());
+                        }
                     }
 
                     // for non-partitioned table, we need to build the partition here
