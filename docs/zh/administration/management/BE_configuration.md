@@ -1228,7 +1228,7 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 
 ##### enable_pk_parallel_execution
 
-- 默认值：false
+- 默认值：true
 - 类型：Boolean
 - 单位：-
 - 是否动态：是

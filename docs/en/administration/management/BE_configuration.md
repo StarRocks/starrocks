@@ -1271,7 +1271,7 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 
 ##### enable_pk_parallel_execution
 
-- Default: false
+- Default: true
 - Type: Boolean
 - Unit: -
 - Is mutable: Yes
