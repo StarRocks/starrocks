@@ -417,6 +417,12 @@ public abstract class BaseMVRefreshProcessor {
 
         // insert overwrite mv must set system = true
         insertStmt.setSystem(true);
+        // set a unique load label for MV refresh: mv_{uuid}
+        if (insertStmt.getLabel() == null || insertStmt.getLabel().isEmpty()) {
+            insertStmt.setLabel(
+                    com.starrocks.sql.common.MetaUtils.genMVLabel(
+                            com.starrocks.common.util.UUIDUtil.toTUniqueId(ctx.getQueryId())));
+        }
         // if mv has set sort keys, materialized view's output columns
         // may be different from the defined query's output.
         // so set materialized view's defined outputs as target columns.

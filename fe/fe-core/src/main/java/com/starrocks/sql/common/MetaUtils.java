@@ -154,6 +154,14 @@ public class MetaUtils {
         return "update_" + DebugUtil.printId(executionId);
     }
 
+    /**
+     * Generate a transaction label for MV refresh loads.
+     * The label format is: mv_{uuid}
+     */
+    public static String genMVLabel(TUniqueId executionId) {
+        return "mv_" + DebugUtil.printId(executionId);
+    }
+
     public static ExternalOlapTable syncOLAPExternalTableMeta(ExternalOlapTable externalOlapTable) {
         ExternalOlapTable copiedTable = new ExternalOlapTable();
         externalOlapTable.copyOnlyForQuery(copiedTable);
