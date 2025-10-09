@@ -64,6 +64,7 @@ public class InPredicate extends Predicate {
 
     public InPredicate(Expr compareExpr, List<Expr> inList, boolean isNotIn, NodePosition pos) {
         super(pos);
+
         children.add(compareExpr);
         children.addAll(inList);
         this.isNotIn = isNotIn;

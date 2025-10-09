@@ -26,6 +26,7 @@ import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.ast.expression.FunctionCallExpr;
 import com.starrocks.sql.ast.expression.InPredicate;
 import com.starrocks.sql.ast.expression.IntLiteral;
+import com.starrocks.sql.ast.expression.LargeInPredicate;
 import com.starrocks.sql.ast.expression.LiteralExpr;
 import com.starrocks.sql.ast.expression.Subquery;
 import org.apache.commons.collections4.CollectionUtils;
@@ -146,6 +147,11 @@ public class SPMPlaceholderBuilder {
         }
 
         @Override
+        public ParseNode visitLargeInPredicate(LargeInPredicate node, Expr root) {
+            return node;
+        }
+
+        @Override
         public ParseNode visitLiteral(LiteralExpr node, Expr root) {
             Optional<Expr> placeholder = findPlaceholderExpr(node, root);
             if (placeholder.isPresent()) {
@@ -258,6 +264,11 @@ public class SPMPlaceholderBuilder {
             }
             usePlaceholders.add(spm.get());
             return spm.get();
+        }
+
+        @Override
+        public ParseNode visitLargeInPredicate(LargeInPredicate node, Expr root) {
+            return node;
         }
 
         @Override

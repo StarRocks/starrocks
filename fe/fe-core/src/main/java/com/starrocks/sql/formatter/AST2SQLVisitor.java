@@ -38,6 +38,7 @@ import com.starrocks.sql.ast.expression.CompoundPredicate;
 import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.ast.expression.FieldReference;
 import com.starrocks.sql.ast.expression.InPredicate;
+import com.starrocks.sql.ast.expression.LargeInPredicate;
 import com.starrocks.sql.ast.expression.LimitElement;
 import com.starrocks.sql.ast.expression.LiteralExpr;
 import com.starrocks.sql.ast.expression.MapExpr;
@@ -531,6 +532,25 @@ public class AST2SQLVisitor extends AST2StringVisitor {
         } else {
             strBuilder.append("(");
             strBuilder.append(StringUtils.repeat("?", ", ", node.getChildren().size() - 1));
+            strBuilder.append(")");
+        }
+        return strBuilder.toString();
+    }
+
+    @Override
+    public String visitLargeInPredicate(LargeInPredicate node, Void context) {
+        if (!options.isEnableDigest()) {
+            return super.visitLargeInPredicate(node, context);
+        }
+
+        StringBuilder strBuilder = new StringBuilder();
+        String notStr = (node.isNotIn()) ? "NOT " : "";
+        strBuilder.append(printWithParentheses(node.getCompareExpr())).append(" ").append(notStr).append("IN ");
+        if (options.isEnableMassiveExpr()) {
+            strBuilder.append("(?)");
+        } else {
+            strBuilder.append("(");
+            strBuilder.append(StringUtils.repeat("?", ", ", node.getConstantCount()));
             strBuilder.append(")");
         }
         return strBuilder.toString();
