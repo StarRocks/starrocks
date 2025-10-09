@@ -170,6 +170,11 @@ public:
 
     explicit operator long() const { return static_cast<long>(static_cast<uint64_t>(low)); }
 
+#if defined(__APPLE__)
+    /// macOS/libc++: provide explicit conversion to 64-bit signed
+    explicit operator long long() const { return static_cast<long long>(static_cast<uint64_t>(low)); }
+#endif
+
     explicit operator int128_t() const { return static_cast<__int128>(low); }
 
     /// Convert to signed char
