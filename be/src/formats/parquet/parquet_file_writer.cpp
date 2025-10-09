@@ -266,7 +266,8 @@ StatusOr<::parquet::Compression::type> ParquetFileWriter::_convert_compression_t
 
     // Check if arrow supports indicated compression type
     if (!::parquet::IsCodecSupported(converted_type)) {
-        return Status::NotSupported(fmt::format("not supported compression codec {}", converted_type));
+        return Status::NotSupported(
+                fmt::format("not supported compression codec {}", static_cast<int>(converted_type)));
     }
 
     return converted_type;
