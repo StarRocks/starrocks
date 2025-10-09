@@ -181,13 +181,15 @@ public:
 
     const Column& elements() const { return *_elements; }
     Column& elements() { return *_elements; }
-    ColumnPtr& elements_column() { return _elements; }
-    const ColumnPtr& elements_column() const { return _elements; }
+    ColumnPtr elements_column() const { return _elements; }
+    MutableColumnPtr elements_column_mutable_ptr() { return _elements->as_mutable_ptr(); }
 
     OffsetColumn& offsets() { return *_offsets; }
     const OffsetColumn& offsets() const { return *_offsets; }
-    const OffsetColumnPtr& offsets_column() const { return _offsets; }
-    OffsetColumnPtr& offsets_column() { return _offsets; }
+    OffsetColumnPtr offsets_column() const { return _offsets; }
+    OffsetColumn::MutablePtr offsets_column_mutable_ptr() { 
+        return OffsetColumn::static_pointer_cast(_offsets->as_mutable_ptr()); 
+    }
 
     bool is_nullable() const override { return false; }
 
@@ -231,12 +233,12 @@ private:
                                              const NullColumnPtr& null_data);
 
     // Elements must be NullableColumn to facilitate handling nested types.
-    ColumnPtr _elements;
+    Column::WrappedPtr _elements;
     // Offsets column will store the start position of every array element.
     // Offsets store more one data to indicate the end position.
     // For example, [1, 2, 3], [4, 5, 6].
     // The two element array has three offsets(0, 3, 6)
-    UInt32Column::Ptr _offsets;
+    UInt32Column::WrappedPtr _offsets;
 };
 
 extern template bool ArrayColumn::is_all_array_lengths_equal<true>(const ColumnPtr& v1, const ColumnPtr& v2,

@@ -627,11 +627,21 @@ StatusOr<ColumnPtr> ArrayColumn::upgrade_if_overflow() {
         return Status::InternalError("Size of ArrayColumn exceed the limit");
     }
 
-    return upgrade_helper_func(&_elements);
+    ColumnPtr elements = _elements;
+    auto ret = upgrade_helper_func(&elements);
+    if (ret.ok() && ret.value() == nullptr) {
+        _elements = std::move(elements);
+    }
+    return ret;
 }
 
 StatusOr<ColumnPtr> ArrayColumn::downgrade() {
-    return downgrade_helper_func(&_elements);
+    ColumnPtr elements = _elements;
+    auto ret = downgrade_helper_func(&elements);
+    if (ret.ok() && ret.value() == nullptr) {
+        _elements = std::move(elements);
+    }
+    return ret;
 }
 
 Status ArrayColumn::unfold_const_children(const starrocks::TypeDescriptor& type) {
