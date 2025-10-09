@@ -38,9 +38,13 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.jmockit.Deencapsulation;
+import com.starrocks.load.FailMsg;
+import com.starrocks.qe.scheduler.Coordinator;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.TReportExecStatusParams;
 import com.starrocks.thrift.TUniqueId;
+import com.starrocks.transaction.TabletCommitInfo;
+import com.starrocks.transaction.TabletFailInfo;
 import mockit.Expectations;
 import mockit.Injectable;
 import mockit.Mocked;
@@ -137,5 +141,26 @@ public class InsertLoadJobTest {
             Assertions.assertTrue(loadJob.getTabletCommitInfos().isEmpty());
             Assertions.assertTrue(loadJob.getTabletFailInfos().isEmpty());
         }
+    }
+
+    @Test
+    public void testUnprotectedExecuteCancel(@Mocked GlobalStateMgr globalStateMgr,
+                                             @Mocked Coordinator coordinator) throws Exception {
+        InsertLoadJob insertLoadJob = new InsertLoadJob("label", 1L, 1L, 1000, "", "", coordinator);
+        new Expectations() {
+            {
+                globalStateMgr.getGlobalTransactionMgr().getCallbackFactory().removeCallback(anyLong);
+                times = 1;
+                globalStateMgr.getGlobalTransactionMgr().abortTransaction(anyLong, anyLong, anyString,
+                        (List<TabletCommitInfo>) any, (List<TabletFailInfo>) any, null);
+                times = 1;
+
+                coordinator.cancel(anyString);
+                times = 1;
+            }
+        };
+
+        insertLoadJob.unprotectedExecuteCancel(new FailMsg(FailMsg.CancelType.USER_CANCEL, "user cancel"), true);
+        Assertions.assertEquals(JobState.CANCELLED, insertLoadJob.getState());
     }
 }
