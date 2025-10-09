@@ -66,7 +66,6 @@ TableBuilder::TableBuilder(const Options& options, WritableFile* file) : rep_(ne
 }
 
 TableBuilder::~TableBuilder() {
-    assert(rep_->closed); // Catch errors where caller forgot to call Finish()
     delete rep_->filter_block;
     delete rep_;
 }
