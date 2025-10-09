@@ -68,9 +68,10 @@
 #include "storage/rowset/column_reader.h"
 #include "storage/rowset/segment.h"
 #include "storage/rowset/segment_options.h"
+#include "storage/rowset/zone_map_index.h"
 #include "storage/tablet_meta.h"
 #include "storage/tablet_meta_manager.h"
-#include "storage/tablet_schema_map.h"
+#include "storage/zone_map_detail.h"
 #include "util/coding.h"
 #include "util/crc32c.h"
 #include "util/path_util.h"
@@ -99,7 +100,7 @@ DEFINE_string(root_path, "", "storage root path");
 DEFINE_string(operation, "",
               "valid operation: get_meta, flag, load_meta, delete_meta, delete_rowset_meta, get_persistent_index_meta, "
               "delete_persistent_index_meta, show_meta, check_table_meta_consistency, print_lake_metadata, "
-              "print_lake_bundle_metadata, print_lake_txn_log, print_lake_schema");
+              "print_lake_bundle_metadata, print_lake_txn_log, print_lake_schema, dump_zonemap");
 DEFINE_int64(tablet_id, 0, "tablet_id for tablet meta");
 DEFINE_string(tablet_uid, "", "tablet_uid for tablet meta");
 DEFINE_int64(table_id, 0, "table id for table meta");
@@ -160,6 +161,8 @@ std::string get_usage(const std::string& progname) {
       {progname} --operation=print_pk_dump --file=</path/to/pk/dump/file>
     dump_short_key_index:
       {progname} --operation=dump_short_key_index --file=</path/to/segment/file> --key_column_count=<2>
+    dump_zonemap:
+      {progname} --operation=dump_zonemap --file=</path/to/segment/file> [--column_index=<index>]
     calc_checksum:
       {progname} --operation=calc_checksum [--column_index=<index>] --file=</path/to/segment/file>
     check_table_meta_consistency:
@@ -670,6 +673,9 @@ public:
     Status dump_short_key_index(size_t key_column_count);
     Status calc_checksum();
     Status dump_column_size();
+    Status dump_zonemap();
+    Status dump_column_zonemap(ColumnReader* column_reader, const std::string& column_name,
+                               const std::string& column_type, const std::string& prefix = "");
 
 private:
     struct ColItem {
@@ -1092,6 +1098,165 @@ Status SegmentDump::dump_column_size() {
     return Status::OK();
 }
 
+Status SegmentDump::dump_zonemap() {
+    Status st = _init();
+    if (!st.ok()) {
+        std::cerr << "SegmentDump init failed: " << st << std::endl;
+        return st;
+    }
+
+    // Print format explanation
+    std::cout << "ZoneMap Format: [min, max, has_null, has_not_null, num_rows]" << std::endl;
+    std::cout << "  - min: minimum value (NULL if no non-null values)" << std::endl;
+    std::cout << "  - max: maximum value (NULL if no non-null values)" << std::endl;
+    std::cout << "  - has_null: whether the zone contains null values (true/false)" << std::endl;
+    std::cout << "  - has_not_null: whether the zone contains non-null values (true/false)" << std::endl;
+    std::cout << "  - num_rows: number of rows in this zone" << std::endl;
+    std::cout << std::endl;
+
+    // Get column range to dump
+    std::vector<ColumnId> columns_to_dump;
+    if (_column_index == -1) {
+        // Dump all columns
+        for (ColumnId id = 0; id < _tablet_schema->num_columns(); id++) {
+            columns_to_dump.push_back(id);
+        }
+    } else {
+        // Dump specific column
+        if (_column_index >= _tablet_schema->num_columns()) {
+            std::cerr << "Column index " << _column_index
+                      << " is out of range. Total columns: " << _tablet_schema->num_columns() << std::endl;
+            return Status::InvalidArgument("Column index out of range");
+        }
+        columns_to_dump.push_back(_column_index);
+    }
+
+    // Dump zonemap for each column
+    for (ColumnId column_id : columns_to_dump) {
+        const auto& tablet_column = _tablet_schema->column(column_id);
+        auto column_name = tablet_column.name();
+        auto column_type = tablet_column.type();
+
+        std::cout << "\n=== Column " << column_id << " (" << column_name << ") ===" << std::endl;
+        std::cout << "Type: " << type_to_string(column_type) << std::endl;
+
+        // Get column reader to access zonemap
+        const auto* column_reader = _segment->column(column_id);
+        if (!column_reader) {
+            std::cerr << "Column reader not found for column " << column_id << std::endl;
+            continue;
+        }
+
+        // Check if this is a flatjson column
+        if (column_reader->is_flat_json() && column_reader->sub_readers() != nullptr) {
+            std::cout << "FlatJson column with " << column_reader->sub_readers()->size() << " sub-columns" << std::endl;
+
+            // Dump zonemap for each sub-column
+            for (size_t sub_idx = 0; sub_idx < column_reader->sub_readers()->size(); sub_idx++) {
+                const auto& sub_reader = (*column_reader->sub_readers())[sub_idx];
+                if (!sub_reader) {
+                    continue;
+                }
+
+                std::cout << "\n--- Sub-column " << sub_idx << " (" << sub_reader->name() << ") ---" << std::endl;
+                std::cout << "Type: " << type_to_string(sub_reader->column_type()) << std::endl;
+
+                // Use the common function to dump zonemap
+                Status st = dump_column_zonemap(const_cast<ColumnReader*>(sub_reader.get()), sub_reader->name(),
+                                                std::string(type_to_string(sub_reader->column_type())), "  ");
+                if (!st.ok()) {
+                    std::cerr << "  Failed to dump sub-column zonemap: " << st.message() << std::endl;
+                }
+            }
+        } else {
+            // Regular column - use the common function
+            Status st = dump_column_zonemap(const_cast<ColumnReader*>(column_reader), std::string(column_name),
+                                            std::string(type_to_string(column_type)));
+            if (!st.ok()) {
+                std::cerr << "Failed to dump column zonemap: " << st.message() << std::endl;
+            }
+        }
+    }
+
+    return Status::OK();
+}
+
+Status SegmentDump::dump_column_zonemap(ColumnReader* column_reader, const std::string& column_name,
+                                        const std::string& column_type, const std::string& prefix) {
+    // Check if column has zonemap
+    if (!column_reader->has_zone_map()) {
+        std::cerr << prefix << "No zonemap index found for this column." << std::endl;
+        return Status::OK();
+    }
+
+    // Get zonemap data
+    IndexReadOptions index_opts;
+    index_opts.use_page_cache = false;
+    OlapReaderStatistics stats;
+    index_opts.stats = &stats;
+
+    // Create file stream for reading
+    RandomAccessFileOptions file_opts;
+    auto read_file_res = _fs->new_random_access_file_with_bundling(file_opts, _segment->file_info());
+    if (!read_file_res.ok()) {
+        std::cerr << prefix << "Failed to create file stream: " << read_file_res.status().message() << std::endl;
+        return read_file_res.status();
+    }
+    auto read_file = std::move(read_file_res).value();
+    index_opts.read_file = read_file.get();
+
+    // Load the ordinal index before accessing zonemap
+    Status load_ordinal_status = column_reader->load_ordinal_index(index_opts);
+    if (!load_ordinal_status.ok()) {
+        std::cerr << prefix << "Failed to load ordinal index: " << load_ordinal_status.message() << std::endl;
+        return load_ordinal_status;
+    }
+
+    auto zonemap_result = column_reader->get_raw_zone_map(index_opts);
+    if (!zonemap_result.ok()) {
+        std::cerr << prefix << "Failed to get zonemap: " << zonemap_result.status().message() << std::endl;
+        return zonemap_result.status();
+    }
+
+    const auto& zonemaps = zonemap_result.value();
+    std::cout << prefix << "Number of rows: " << column_reader->num_rows() << std::endl;
+    std::cout << prefix << "Datapages footprint: " << column_reader->data_page_footprint() << std::endl;
+    std::cout << prefix << "Total memory footprint: " << column_reader->total_mem_footprint() << std::endl;
+    std::cout << prefix << "Number of datapages: " << column_reader->num_data_pages() << std::endl;
+    std::cout << prefix << "Number of zonemaps: " << zonemaps.size() << std::endl;
+
+    // Get type info for formatting
+    TypeInfoPtr type_info = get_type_info(delegate_type(column_reader->column_type()));
+
+    // Print segment-level zonemap if available
+    auto segment_zonemap = column_reader->segment_zone_map();
+    if (segment_zonemap) {
+        std::string min_str = "NULL";
+        std::string max_str = "NULL";
+        if (segment_zonemap->has_not_null()) {
+            min_str = segment_zonemap->min();
+            max_str = segment_zonemap->max();
+        }
+        fmt::print("{}Segment: [{}, {}, {}, {}]\n", prefix, min_str, max_str,
+                   segment_zonemap->has_null() ? "true" : "false", segment_zonemap->has_not_null() ? "true" : "false");
+    }
+
+    // Print page-level zonemaps
+    for (size_t page_idx = 0; page_idx < zonemaps.size(); page_idx++) {
+        const auto& zonemap = zonemaps[page_idx];
+        std::string min_str = "NULL";
+        std::string max_str = "NULL";
+        if (zonemap.has_not_null()) {
+            min_str = type_info->to_string(&zonemap.min_value());
+            max_str = type_info->to_string(&zonemap.max_value());
+        }
+        fmt::print("{}Page {}: [{}, {}, {}, {}]\n", prefix, page_idx, min_str, max_str,
+                   zonemap.has_null() ? "true" : "false", zonemap.has_not_null() ? "true" : "false");
+    }
+
+    return Status::OK();
+}
+
 } // namespace starrocks
 
 int meta_tool_main(int argc, char** argv) {
@@ -1213,6 +1378,17 @@ int meta_tool_main(int argc, char** argv) {
         Status st = segment_dump.calc_checksum();
         if (!st.ok()) {
             std::cout << "dump segment data failed: " << st.message() << std::endl;
+            return -1;
+        }
+    } else if (FLAGS_operation == "dump_zonemap") {
+        if (FLAGS_file == "") {
+            std::cout << "no file flag for dump zonemap" << std::endl;
+            return -1;
+        }
+        starrocks::SegmentDump segment_dump(FLAGS_file, FLAGS_column_index);
+        Status st = segment_dump.dump_zonemap();
+        if (!st.ok()) {
+            std::cerr << "dump zonemap failed: " << st.message() << std::endl;
             return -1;
         }
     } else if (FLAGS_operation == "print_lake_metadata") {

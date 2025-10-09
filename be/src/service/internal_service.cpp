@@ -655,7 +655,7 @@ void PInternalServiceImplBase<T>::_fetch_datacache(google::protobuf::RpcControll
     if (!block_cache || !block_cache->available()) {
         st = Status::ServiceUnavailable("block cache is unavailable");
     } else {
-        ReadCacheOptions options;
+        DiskCacheReadOptions options;
         IOBuffer buf;
         st = block_cache->read(request->cache_key(), request->offset(), request->size(), &buf, &options);
         if (st.ok()) {

@@ -1269,6 +1269,24 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - Description: The number of levels for the Size-tiered Compaction policy. At most one rowset is reserved for each level. Therefore, under a stable condition, there are, at most, as many rowsets as the level number specified in this configuration item.
 - Introduced in: -
 
+##### enable_pk_parallel_execution
+
+- Default: false
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Determines whether the Primary Key table parallel execution strategy is enabled. When enabled, PK index files will be generated during the import and compaction phases.
+- Introduced in: -
+
+##### pk_parallel_execution_threshold_bytes
+
+- Default: 314572800
+- Type: int
+- Unit: -
+- Is mutable: Yes
+- Description: When enable_pk_parallel_execution is set to true, the Primary Key table parallel execution strategy will be enabled if the data generated during import or compaction exceeds this threshold.
+- Introduced in: -
+
 ##### enable_check_string_lengths
 
 - Default: true
@@ -2168,23 +2186,6 @@ When this value is set to less than `0`, the system uses the product of its abso
 - Description: Prefix length used for string ZoneMap min/max when `enable_string_prefix_zonemap` is enabled.
 - Introduced in: -
 
-##### string_zonemap_overlap_threshold
-
-- Default: 0.8
-- Type: Double
-- Unit: -
-- Is mutable: Yes
-- Description: Threshold for adaptive creation of page-level string ZoneMap. If the estimated overlap ratio across consecutive pages is greater than this threshold, StarRocks skips writing the page-level string ZoneMap. Range: [0.0, 1.0].
-- Introduced in: -
-
-##### string_zonemap_min_pages_for_adaptive_check
-
-- Default: 16
-- Type: Int
-- Unit: -
-- Is mutable: Yes
-- Description: Minimum number of non-empty pages required before applying the adaptive string ZoneMap quality check.
-- Introduced in: -
 
 ##### enable_ordinal_index_memory_page_cache
 
@@ -2655,6 +2656,15 @@ When this value is set to less than `0`, the system uses the product of its abso
 - Description:
 - Introduced in: -
 -->
+
+##### lake_tablet_ignore_invalid_delete_predicate
+
+- Default: false
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: A boolean value to control whether ignore invalid delete predicates in tablet rowset metadata which may be introduced by logic deletion to a duplicate key table after the column name renamed.
+- Introduced in: v4.0
 
 <!--
 ##### bitmap_serialize_version
@@ -4158,6 +4168,15 @@ When this value is set to less than `0`, the system uses the product of its abso
 - Is mutable: No
 - Description: The maximum number of inline cache items in Data Cache. For some particularly small cache blocks, Data Cache stores them in `inline` mode, which caches the block data and metadata together in memory.
 - Introduced in: v3.4.0
+
+##### enable_connector_sink_spill
+
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Whether to enable Spilling for writes to external tables. Enabling this feature prevents the generation of a large number of small files as a result of writing to an external table when memory is insufficient. Currently, this feature only supports writing to Iceberg tables.
+- Introduced in: v4.0.0
 
 <!--
 ##### datacache_unified_instance_enable

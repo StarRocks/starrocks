@@ -3919,8 +3919,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         return this.maxPipelineDop;
     }
 
+    // TODO(murphy) support this variable
+    // It's always false since version 3.5, due to incompatibility with event-based scheduling
     public boolean isEnableSharedScan() {
-        return enableSharedScan;
+        return false;
     }
 
     public int getResourceGroupId() {
@@ -4928,6 +4930,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public boolean getEnableIcebergIdentityColumnOptimize() {
         return enableIcebergIdentityColumnOptimize;
+    }
+
+    public void setEnableIcebergIdentityColumnOptimize(boolean enableIcebergIdentityColumnOptimize) {
+        this.enableIcebergIdentityColumnOptimize = enableIcebergIdentityColumnOptimize;
     }
 
     public boolean getEnablePlanSerializeConcurrently() {

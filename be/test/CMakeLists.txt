@@ -408,7 +408,8 @@ set(EXEC_FILES
         ./service/service_be/internal_service_test.cpp
         ./service/staros_worker_test.cpp
         ./cache/datacache_utils_test.cpp
-        ./cache/block_cache/block_cache_hit_rate_counter_test.cpp
+        ./cache/disk_cache/block_cache_hit_rate_counter_test.cpp
+        ./cache/mem_cache/page_cache_test.cpp
         ./cache/peer_cache_test.cpp
         ./util/thrift_rpc_helper_test.cpp
         ./util/thrift_client_test.cpp
@@ -416,6 +417,7 @@ set(EXEC_FILES
         ./udf/java/java_data_converter_test.cpp
         ./udf/java/java_udf_test.cpp
         ./util/table_metrics_mgr_test.cpp
+        ./util/jvm_metrics_test.cpp
 )
 
 if (${USE_AVX512})
@@ -457,6 +459,7 @@ SET(DW_TEST_FILES
     ./storage/decimal12_test.cpp
     ./storage/default_compaction_policy_test.cpp
     ./storage/delete_handler_test.cpp
+    ./storage/delete_predicates_test.cpp
     ./storage/delta_column_group_test.cpp
     ./storage/delta_writer_test.cpp
     ./storage/del_vector_test.cpp
@@ -600,9 +603,9 @@ SET(DW_TEST_FILES
 
 if ("${WITH_STARCACHE}" STREQUAL "ON")
     list(APPEND DW_TEST_FILES ./cache/disk_space_monitor_test.cpp)
-    list(APPEND DW_TEST_FILES ./cache/lrucache_engine_test.cpp)
-    list(APPEND DW_TEST_FILES ./cache/starcache_engine_test.cpp)
-    list(APPEND DW_TEST_FILES ./cache/block_cache/block_cache_test.cpp)
+    list(APPEND DW_TEST_FILES ./cache/disk_cache/starcache_engine_test.cpp)
+    list(APPEND DW_TEST_FILES ./cache/disk_cache/block_cache_test.cpp)
+    list(APPEND DW_TEST_FILES ./cache/mem_cache/lrucache_engine_test.cpp)
     list(APPEND DW_TEST_FILES ./io/cache_input_stream_test.cpp)
 endif ()
 
@@ -630,4 +633,3 @@ ADD_BE_TEST(fuzzy/builtin_functions_fuzzy_test)
 
 add_dependencies(starrocks_dw_test engine_storage_migration_task_test compaction_task_test builtin_functions_fuzzy_test)
 add_dependencies(starrocks_dw_test engine_storage_migration_task_test compaction_task_test builtin_functions_fuzzy_test)
-

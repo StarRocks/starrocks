@@ -669,6 +669,10 @@ public class OperationType {
     public static final short OP_DROP_SECURITY_INTEGRATION = 20271;
     public static final short OP_ALTER_SECURITY_INTEGRATION = 20272;
 
+    // Grant Role to Group
+    public static final short OP_GRANT_ROLE_TO_GROUP = 20501;
+    public static final short OP_REVOKE_ROLE_FROM_GROUP = 20502;
+
     public static final ImmutableSet<Short> IGNORABLE_OPERATIONS = buildIgnorableOperations();
 
     private static ImmutableSet<Short> buildIgnorableOperations() {
@@ -694,7 +698,9 @@ public class OperationType {
                     opType != OP_WAREHOUSE_INTERNAL_OP &&
                     opType != OP_CREATE_SECURITY_INTEGRATION &&
                     opType != OP_DROP_SECURITY_INTEGRATION &&
-                    opType != OP_ALTER_SECURITY_INTEGRATION) {
+                    opType != OP_ALTER_SECURITY_INTEGRATION &&
+                    opType != OP_GRANT_ROLE_TO_GROUP &&
+                    opType != OP_REVOKE_ROLE_FROM_GROUP) {
                 LOG.fatal("OperationType cannot use a value exceeding 20000, " +
                         "and an error will be reported if it exceeds : {} = {}", field.getName(), opType);
                 System.exit(-1);

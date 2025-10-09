@@ -12,11 +12,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.sql.parser;
 
 import com.google.common.collect.Lists;
 import com.starrocks.common.Config;
+import com.starrocks.qe.GlobalVariable;
 import com.starrocks.qe.SqlModeHelper;
 import com.starrocks.sql.ast.StatementBase;
 import org.antlr.v4.runtime.BaseErrorListener;
@@ -39,6 +39,7 @@ import org.openjdk.jmh.runner.RunnerException;
 import org.openjdk.jmh.runner.options.Options;
 import org.openjdk.jmh.runner.options.OptionsBuilder;
 
+import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.StringJoiner;
 import java.util.concurrent.TimeUnit;
@@ -102,9 +103,10 @@ public class ParserBench {
     }
 
     private StatementBase parseSql(String sql) {
-        StarRocksLexer lexer = new StarRocksLexer(new CaseInsensitiveStream(CharStreams.fromString(sql)));
+        com.starrocks.sql.parser.StarRocksLexer lexer =
+                new com.starrocks.sql.parser.StarRocksLexer(new CaseInsensitiveStream(CharStreams.fromString(sql)));
         CommonTokenStream tokenStream = new CommonTokenStream(lexer);
-        StarRocksParser parser = new StarRocksParser(tokenStream);
+        com.starrocks.sql.parser.StarRocksParser parser = new com.starrocks.sql.parser.StarRocksParser(tokenStream);
         parser.removeErrorListeners();
         parser.addErrorListener(new BaseErrorListener());
         parser.removeParseListeners();
@@ -112,8 +114,9 @@ public class ParserBench {
             parser.addParseListener(new PostProcessListener(100000000, Config.expr_children_limit));
         }
         parser.getInterpreter().setPredictionMode(mode.equals("SLL") ? PredictionMode.SLL : PredictionMode.LL);
-        StarRocksParser.SqlStatementsContext sqlStatements = parser.sqlStatements();
-        return (StatementBase) new AstBuilder(SqlModeHelper.MODE_DEFAULT)
+        com.starrocks.sql.parser.StarRocksParser.SqlStatementsContext sqlStatements = parser.sqlStatements();
+        return (StatementBase) new AstBuilder(SqlModeHelper.MODE_DEFAULT, GlobalVariable.enableTableNameCaseInsensitive,
+                new IdentityHashMap<>())
                 .visitSingleStatement(sqlStatements.singleStatement(0));
     }
 

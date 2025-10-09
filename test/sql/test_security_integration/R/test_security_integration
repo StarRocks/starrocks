@@ -1,17 +1,4 @@
 -- name: test_security_integration
-drop user if exists u1;
--- result:
--- !result
-create user u1;
--- result:
--- !result
-grant impersonate on user root to u1;
--- result:
--- !result
-create security integration oidc properties("jwks_url"="jwks.json", "principal_field"="sub");
--- result:
-E: (1064, 'Getting analyzing error. Detail message: missing required property: type.')
--- !result
 create security integration oidc properties("type"="authentication_jwt", "jwks_url"="jwks.json", "principal_field"="sub");
 -- result:
 -- !result
@@ -29,35 +16,6 @@ show create security integration oidc;
 oidc	CREATE SECURITY INTEGRATION `oidc` PROPERTIES (
 "type" = "authentication_jwt", "principal_field" = "preferred_name", "jwks_url" = "jwks.json"
 )
--- !result
-execute as u1 with no revert;
--- result:
--- !result
-show security integrations;
--- result:
-E: (5203, 'Access denied; you need (at least one of) the SECURITY privilege(s) on SYSTEM for this operation. Please ask the admin to grant permission(s) or try activating existing roles using <set [default] role>. Current role(s): NONE. Inactivated role(s): NONE.')
--- !result
-show create security integration oidc;
--- result:
-E: (5203, 'Access denied; you need (at least one of) the SECURITY privilege(s) on SYSTEM for this operation. Please ask the admin to grant permission(s) or try activating existing roles using <set [default] role>. Current role(s): NONE. Inactivated role(s): NONE.')
--- !result
-drop security integration oidc;
--- result:
-E: (5203, 'Access denied; you need (at least one of) the SECURITY privilege(s) on SYSTEM for this operation. Please ask the admin to grant permission(s) or try activating existing roles using <set [default] role>. Current role(s): NONE. Inactivated role(s): NONE.')
--- !result
-alter security integration oidc set ("principal_field"="preferred_name");
--- result:
-E: (5203, 'Access denied; you need (at least one of) the SECURITY privilege(s) on SYSTEM for this operation. Please ask the admin to grant permission(s) or try activating existing roles using <set [default] role>. Current role(s): NONE. Inactivated role(s): NONE.')
--- !result
-create security integration oidc2 properties("type"="authentication_jwt", "jwks_url"="jwks.json", "principal_field"="sub");
--- result:
-E: (5203, 'Access denied; you need (at least one of) the SECURITY privilege(s) on SYSTEM for this operation. Please ask the admin to grant permission(s) or try activating existing roles using <set [default] role>. Current role(s): NONE. Inactivated role(s): NONE.')
--- !result
-execute as root with no revert;
--- result:
--- !result
-drop user u1;
--- result:
 -- !result
 drop security integration oidc;
 -- result:

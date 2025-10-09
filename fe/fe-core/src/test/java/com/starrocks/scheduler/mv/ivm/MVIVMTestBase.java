@@ -92,7 +92,7 @@ public abstract class MVIVMTestBase extends MVTestBase {
         }
         // test mv rewrite
         {
-            String plan = getFragmentPlan(mvQuery, "MV");
+            String plan = getFragmentPlan(mvQuery);
             if (isCheckRewrite) {
                 Assertions.assertTrue(plan.contains("test_mv1"));
             }

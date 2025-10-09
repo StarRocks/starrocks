@@ -14,6 +14,7 @@
 
 package com.starrocks.connector.iceberg;
 
+import com.starrocks.common.tvr.TvrVersionRange;
 import com.starrocks.connector.PredicateSearchKey;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
@@ -26,23 +27,23 @@ public class IcebergRemoteFileInfoSourceKey extends PredicateSearchKey {
 
     private IcebergRemoteFileInfoSourceKey(String databaseName,
                                            String tableName,
-                                           long snapshotId,
+                                           TvrVersionRange tvrVersionRange,
                                            ScalarOperator predicate,
                                            long morId,
                                            IcebergMORParams icebergMORParams) {
-        super(databaseName, tableName, snapshotId, predicate);
+        super(databaseName, tableName, tvrVersionRange, predicate);
         this.morId = morId;
         this.icebergMORParams = icebergMORParams;
     }
 
     public static IcebergRemoteFileInfoSourceKey of(String databaseName,
                                                     String tableName,
-                                                    long snapshotId,
+                                                    TvrVersionRange tvrVersionRange,
                                                     ScalarOperator predicate,
                                                     long morId,
                                                     IcebergMORParams icebergMORParams) {
         predicate = predicate == null ? ConstantOperator.TRUE : predicate;
-        return new IcebergRemoteFileInfoSourceKey(databaseName, tableName, snapshotId, predicate, morId, icebergMORParams);
+        return new IcebergRemoteFileInfoSourceKey(databaseName, tableName, tvrVersionRange, predicate, morId, icebergMORParams);
     }
 
     @Override

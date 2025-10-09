@@ -130,6 +130,7 @@ import com.starrocks.sql.ast.ExecuteScriptStmt;
 import com.starrocks.sql.ast.ExportStmt;
 import com.starrocks.sql.ast.FunctionRef;
 import com.starrocks.sql.ast.GrantRoleStmt;
+import com.starrocks.sql.ast.GrantType;
 import com.starrocks.sql.ast.HintNode;
 import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.InstallPluginStmt;
@@ -1427,19 +1428,22 @@ public class AuthorizerStmtVisitor implements AstVisitorExtendInterface<Void, Co
     public Void visitShowGrantsStatement(ShowGrantsStmt statement, ConnectContext context) {
         UserRef user = statement.getUser();
         try {
-            // if user == null mean show current user grants
             if (user != null) {
                 UserIdentity userIdentity = new UserIdentity(user.getUser(), user.getHost(), user.isDomain());
                 if (!userIdentity.equals(context.getCurrentUserIdentity())) {
                     Authorizer.checkSystemAction(context, PrivilegeType.GRANT);
                 }
-            } else if (statement.getGroupOrRole() != null) {
+            } else if (statement.getGrantType() == GrantType.ROLE) {
                 AuthorizationMgr authorizationManager = context.getGlobalStateMgr().getAuthorizationMgr();
                 Set<String> roleNames =
                         authorizationManager.getAllPredecessorRoleNamesByUser(context.getCurrentUserIdentity());
                 if (!roleNames.contains(statement.getGroupOrRole())) {
-                    Authorizer.checkSystemAction(context,
-                            PrivilegeType.GRANT);
+                    Authorizer.checkSystemAction(context, PrivilegeType.GRANT);
+                }
+            } else if (statement.getGrantType() == GrantType.GROUP) {
+                Set<String> groups = context.getGroups();
+                if (groups == null || !groups.contains(statement.getGroupOrRole())) {
+                    Authorizer.checkSystemAction(context, PrivilegeType.GRANT);
                 }
             }
         } catch (AccessDeniedException | PrivilegeException e) {

@@ -91,9 +91,29 @@ public:
                                       const TabletMetadataPtr& metadata, Tablet* tablet, IndexEntry* index_entry,
                                       MetaFileBuilder* builder, int64_t base_version, bool batch_apply = false);
 
+    Status _write_segment_for_upsert(const TxnLogPB_OpWrite& op_write, const TabletSchemaCSPtr& tschema, Tablet* tablet,
+                                     const std::shared_ptr<FileSystem>& fs, int64_t txn_id, uint32_t seg,
+                                     const std::vector<uint32_t>& insert_rowids,
+                                     const std::vector<uint32_t>& update_cids, TxnLogPB_OpWrite* new_rows_op,
+                                     uint64_t* total_rows, ChunkPtr* out_chunk);
+
+    Status _handle_upsert_index_conflicts(const TabletMetadataPtr& metadata, LakePrimaryIndex& index,
+                                          MetaFileBuilder* builder, const Schema& pkey_schema, uint32_t rowset_id,
+                                          const TxnLogPB_OpWrite& new_rows_op, const ChunkPtr& full_chunk,
+                                          std::map<uint32_t, size_t>* segment_id_to_add_dels_new_acc);
+
+    Status _handle_column_upsert_mode(const TxnLogPB_OpWrite& op_write, int64_t txn_id,
+                                      const TabletMetadataPtr& metadata, Tablet* tablet, LakePrimaryIndex& index,
+                                      MetaFileBuilder* builder, int64_t base_version, uint32_t rowset_id);
+
+    Status _handle_delete_files(const TxnLogPB_OpWrite& op_write, int64_t txn_id, const TabletMetadataPtr& metadata,
+                                Tablet* tablet, LakePrimaryIndex& index, IndexEntry* index_entry,
+                                MetaFileBuilder* builder, int64_t base_version, uint32_t del_rebuild_rssid,
+                                const RowsetUpdateStateParams& params);
+
     Status publish_column_mode_partial_update(const TxnLogPB_OpWrite& op_write, int64_t txn_id,
                                               const TabletMetadataPtr& metadata, Tablet* tablet,
-                                              MetaFileBuilder* builder, int64_t base_version);
+                                              IndexEntry* index_entry, MetaFileBuilder* builder, int64_t base_version);
 
     // get rowids from primary index by each upserts
     Status get_rowids_from_pkindex(int64_t tablet_id, int64_t base_version,
@@ -199,7 +219,7 @@ public:
 
     void set_enable_persistent_index(int64_t tablet_id, bool enable_persistent_index);
 
-    Status execute_index_major_compaction(const TabletMetadata& metadata, TxnLogPB* txn_log);
+    Status execute_index_major_compaction(const TabletMetadataPtr& metadata, TxnLogPB* txn_log);
 
     PersistentIndexBlockCache* block_cache() { return _block_cache.get(); }
 

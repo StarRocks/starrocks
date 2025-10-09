@@ -1773,11 +1773,13 @@ showRolesStatement
 grantRoleStatement
     : GRANT identifierOrStringList TO USER? user                                                        #grantRoleToUser
     | GRANT identifierOrStringList TO ROLE identifierOrString                                           #grantRoleToRole
+    | GRANT identifierOrStringList TO EXTERNAL GROUP identifierOrString                                 #grantRoleToGroup
     ;
 
 revokeRoleStatement
     : REVOKE identifierOrStringList FROM USER? user                                                     #revokeRoleFromUser
     | REVOKE identifierOrStringList FROM ROLE identifierOrString                                        #revokeRoleFromRole
+    | REVOKE identifierOrStringList FROM EXTERNAL GROUP identifierOrString                              #revokeRoleFromGroup
     ;
 
 setRoleStatement
@@ -1823,6 +1825,7 @@ revokePrivilegeStatement
 showGrantsStatement
     : SHOW GRANTS
     | SHOW GRANTS FOR USER? user
+    | SHOW GRANTS FOR EXTERNAL GROUP identifierOrString
     | SHOW GRANTS FOR ROLE identifierOrString
     ;
 
@@ -1853,7 +1856,7 @@ privilegeType
     | CREATE (
         DATABASE| TABLE| VIEW| FUNCTION| GLOBAL FUNCTION| MATERIALIZED VIEW|
         RESOURCE| RESOURCE GROUP| EXTERNAL CATALOG | STORAGE VOLUME | WAREHOUSE | CNGROUP | PIPE )
-    | DELETE | DROP | EXPORT | FILE | IMPERSONATE | INSERT | GRANT | NODE | OPERATE
+    | DELETE | DROP | EXPORT | FILE | IMPERSONATE | INSERT | GRANT | NODE | OPERATE | SECURITY
     | PLUGIN | REPOSITORY| REFRESH | SELECT | UPDATE | USAGE
     ;
 

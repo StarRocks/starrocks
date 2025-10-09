@@ -16,8 +16,8 @@
 
 #include <gtest/gtest.h>
 
-#include "cache/lrucache_engine.h"
-#include "cache/object_cache/page_cache.h"
+#include "cache/mem_cache/lrucache_engine.h"
+#include "cache/mem_cache/page_cache.h"
 #include "fs/fs_memory.h"
 #include "storage/rowset/binary_plain_page.h"
 #include "storage/rowset/bitshuffle_page.h"

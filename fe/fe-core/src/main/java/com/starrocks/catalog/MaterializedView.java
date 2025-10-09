@@ -549,6 +549,9 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
     // This is the original user's view define SQL which can be used to generate ast key in text based rewrite.
     @SerializedName(value = "originalViewDefineSql")
     private String originalViewDefineSql;
+    // This is the rewritten view define SQL which is used to generate IVM refresh tasks.
+    @SerializedName(value = "ivmDefineSql")
+    private String ivmDefineSql;
     // This is the original database name when the mv is created.
     private String originalDBName;
     // Deprecated field which is used to store single partition ref table exprs of the mv in old version.
@@ -737,6 +740,15 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
         this.originalViewDefineSql = originalViewDefineSql;
     }
 
+    public String setIvmDefineSql(String ivmDefineSql) {
+        this.ivmDefineSql = ivmDefineSql;
+        return this.ivmDefineSql;
+    }
+
+    public String getIvmDefineSql() {
+        return ivmDefineSql;
+    }
+
     public String getOriginalDBName() {
         return originalDBName;
     }
@@ -750,7 +762,11 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
     }
 
     public String getIVMTaskDefinition() {
-        return String.format("INSERT INTO `%s` %s", getName(), getViewDefineSql());
+        String ivmDefineSql = getIvmDefineSql();
+        if (Strings.isNullOrEmpty(ivmDefineSql)) {
+            ivmDefineSql = getViewDefineSql();
+        }
+        return String.format("INSERT INTO `%s` %s", getName(), ivmDefineSql);
     }
 
     /**
@@ -1835,6 +1851,19 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
     @Override
     public void inferDistribution(DistributionInfo info) throws DdlException {
         if (info.getBucketNum() == 0) {
+            // if mv has been already refreshed, deduce bucket num from existing tablets
+            boolean hasRefreshed = getVisiblePartitions().stream().anyMatch(Partition::hasData);
+            if (hasRefreshed) {
+                int numBucket = CatalogUtils.calAvgBucketNumOfRecentPartitions(this,
+                        FeConstants.DEFAULT_INFER_BUCKET_NUM_RECENT_PARTITION_NUM,
+                        Config.enable_auto_tablet_distribution);
+                // use the numBucket only when it's greater than 1, otherwise skip
+                if (numBucket > 1) {
+                    info.setBucketNum(numBucket);
+                    return;
+                }
+            }
+
             int inferredBucketNum = 0;
             for (BaseTableInfo base : getBaseTableInfos()) {
                 Optional<Table> optTable = MvUtils.getTable(base);
@@ -1844,8 +1873,11 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
                 Table table = optTable.get();
                 if (table.isNativeTableOrMaterializedView()) {
                     OlapTable olapTable = (OlapTable) table;
-                    DistributionInfo dist = olapTable.getDefaultDistributionInfo();
-                    inferredBucketNum = Math.max(inferredBucketNum, dist.getBucketNum());
+                    // deduce bucket num from base table rather than use its distribution info
+                    int numBucket = CatalogUtils.calAvgBucketNumOfRecentPartitions(olapTable,
+                            FeConstants.DEFAULT_INFER_BUCKET_NUM_RECENT_PARTITION_NUM,
+                            Config.enable_auto_tablet_distribution);
+                    inferredBucketNum = Math.max(inferredBucketNum, numBucket);
                 }
             }
             if (inferredBucketNum == 0) {
@@ -2384,7 +2416,7 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
      * @return: mv's defined output columns in the defined order
      */
     public List<Column> getOrderedOutputColumns() {
-        final List<Column> baseSchema = getBaseSchemaWithoutGeneratedColumn();
+        final List<Column> baseSchema = getVisibleColumnsWithoutGeneratedColumn();
         if (CollectionUtils.isEmpty(this.queryOutputIndices)) {
             return baseSchema;
         } else {

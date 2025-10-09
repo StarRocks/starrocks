@@ -316,7 +316,6 @@ public class StmtExecutor {
     private List<ByteBuffer> proxyResultBuffer = null;
     private ShowResultSet proxyResultSet = null;
     private PQueryStatistics statisticsForAuditLog;
-    private boolean statisticsConsumed = false;
     private List<StmtExecutor> subStmtExecutors;
     private Optional<Boolean> isForwardToLeaderOpt = Optional.empty();
     private HttpResultSender httpResultSender;
@@ -328,6 +327,10 @@ public class StmtExecutor {
     }
 
     public static StmtExecutor newInternalExecutor(ConnectContext ctx, StatementBase parsedStmt) {
+        // Set query source to INTERNAL for system/internal queries only if not already set
+        if (ctx.getQuerySource().equals(QueryDetail.QuerySource.EXTERNAL)) {
+            ctx.setQuerySource(QueryDetail.QuerySource.INTERNAL);
+        }
         return new StmtExecutor(ctx, parsedStmt, true);
     }
 
@@ -657,7 +660,7 @@ public class StmtExecutor {
         }
 
         try {
-            context.getState().setIsQuery(parsedStmt instanceof QueryStatement);
+            context.getState().setIsQuery(context.isQueryStmt(parsedStmt));
             if (parsedStmt.isExistQueryScopeHint()) {
                 processQueryScopeHint();
             }
@@ -777,7 +780,7 @@ public class StmtExecutor {
                                 String queryId = DebugUtil.printId(context.getExecutionId());
                                 ProfileManager.getInstance().removeProfile(queryId);
                                 // reset compute resource
-                                context.tryAcquireResource(true);
+                                context.ensureCurrentComputeResourceAvailable();
                             } else {
                                 // Release all resources after the query finish as soon as possible, as query profile is
                                 // asynchronous which can be delayed a long time.
@@ -2383,46 +2386,28 @@ public class StmtExecutor {
     }
 
     public PQueryStatistics getQueryStatisticsForAuditLog() {
-        // for one StmtExecutor, only consume PQueryStatistics once
-        // so call getQueryStatisticsForAuditLog will return a emtpy PQueryStatistics if this is not the first call
-        if (statisticsConsumed) {
-            // create a empty PQueryStatistics
-            PQueryStatistics stats = normalizeQueryStatistics(null);
-            statisticsForAuditLog = stats;
-            return stats;
+        if (statisticsForAuditLog == null && coord != null) {
+            statisticsForAuditLog = coord.getAuditStatistics();
         }
-
-        PQueryStatistics stats = statisticsForAuditLog;
-        if (stats == null && coord != null) {
-            // for insert stmt
-            stats = coord.getAuditStatistics();
+        if (statisticsForAuditLog == null) {
+            statisticsForAuditLog = new PQueryStatistics();
         }
-
-        stats = normalizeQueryStatistics(stats);
-
-        statisticsForAuditLog = stats;
-        statisticsConsumed = true;
-        return stats;
-    }
-
-    private PQueryStatistics normalizeQueryStatistics(PQueryStatistics stats) {
-        PQueryStatistics normalized = (stats != null) ? stats : new PQueryStatistics();
-        if (normalized.scanBytes == null) {
-            normalized.scanBytes = 0L;
+        if (statisticsForAuditLog.scanBytes == null) {
+            statisticsForAuditLog.scanBytes = 0L;
         }
-        if (normalized.scanRows == null) {
-            normalized.scanRows = 0L;
+        if (statisticsForAuditLog.scanRows == null) {
+            statisticsForAuditLog.scanRows = 0L;
         }
-        if (normalized.cpuCostNs == null) {
-            normalized.cpuCostNs = 0L;
+        if (statisticsForAuditLog.cpuCostNs == null) {
+            statisticsForAuditLog.cpuCostNs = 0L;
         }
-        if (normalized.memCostBytes == null) {
-            normalized.memCostBytes = 0L;
+        if (statisticsForAuditLog.memCostBytes == null) {
+            statisticsForAuditLog.memCostBytes = 0L;
         }
-        if (normalized.spillBytes == null) {
-            normalized.spillBytes = 0L;
+        if (statisticsForAuditLog.spillBytes == null) {
+            statisticsForAuditLog.spillBytes = 0L;
         }
-        return normalized;
+        return statisticsForAuditLog;
     }
 
     public void handleInsertOverwrite(InsertStmt insertStmt) throws Exception {
@@ -2443,7 +2428,7 @@ public class StmtExecutor {
         InsertOverwriteJob job = new InsertOverwriteJob(GlobalStateMgr.getCurrentState().getNextId(),
                 insertStmt, db.getId(), olapTable.getId(), context.getCurrentWarehouseId(),
                 insertStmt.isDynamicOverwrite());
-        if (!locker.lockDatabaseAndCheckExist(db, LockType.WRITE)) {
+        if (!locker.lockTableAndCheckDbExist(db, olapTable.getId(), LockType.WRITE)) {
             throw new DmlException("database:%s does not exist.", db.getFullName());
         }
         try {
@@ -2453,7 +2438,7 @@ public class StmtExecutor {
                     job.isDynamicOverwrite());
             GlobalStateMgr.getCurrentState().getEditLog().logCreateInsertOverwrite(info);
         } finally {
-            locker.unLockDatabase(db.getId(), LockType.WRITE);
+            locker.unLockTableWithIntensiveDbLock(db.getId(), olapTable.getId(), LockType.WRITE);
         }
         insertStmt.setOverwriteJobId(job.getJobId());
         InsertOverwriteJobMgr manager = GlobalStateMgr.getCurrentState().getInsertOverwriteJobMgr();
@@ -2985,7 +2970,6 @@ public class StmtExecutor {
                 GlobalStateMgr.getCurrentState().getOperationListenerBus()
                         .onDMLStmtJobTransactionFinish(txnState, database, targetTable, dmlType);
             }
-            recordExecStatsIntoContext();
         }
 
         String errMsg = "";
@@ -3157,8 +3141,8 @@ public class StmtExecutor {
         }
 
         boolean isQuery = context.isQueryStmt(parsedStmt);
-        QueryDetail queryDetail = new QueryDetail(
 
+        QueryDetail queryDetail = new QueryDetail(
                 DebugUtil.printId(context.getQueryId()),
                 isQuery,
                 context.connectionId,
@@ -3171,6 +3155,8 @@ public class StmtExecutor {
                 Optional.ofNullable(context.getResourceGroup()).map(TWorkGroup::getName).orElse(""),
                 context.getCurrentWarehouseName(),
                 context.getCurrentCatalog());
+        // Set query source from context
+        queryDetail.setQuerySource(context.getQuerySource());
         context.setQueryDetail(queryDetail);
         // copy queryDetail, cause some properties can be changed in future
         QueryDetailQueue.addQueryDetail(queryDetail.copy());

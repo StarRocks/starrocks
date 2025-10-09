@@ -44,6 +44,13 @@
 #ifdef USE_STAROS
 #include "fslib/star_cache_handler.h"
 #endif
+#include <fmt/ranges.h>
+
+#include <csignal>
+// Need POSIX signal APIs like sigaction/siginfo_t.
+// NOLINTNEXTLINE(modernize-deprecated-headers)
+#include <signal.h>
+
 #include "fs/encrypt_file.h"
 #include "gutil/cpu.h"
 #include "jemalloc/jemalloc.h"
@@ -164,6 +171,12 @@ struct JemallocStats {
 };
 
 static void retrieve_jemalloc_stats(JemallocStats* stats) {
+    // On macOS, jemalloc may define je_mallctl as mallctl via macro in jemalloc.h
+#ifdef __APPLE__
+#ifndef je_mallctl
+#define je_mallctl mallctl
+#endif
+#endif
     uint64_t epoch = 1;
     size_t sz = sizeof(epoch);
     je_mallctl("epoch", &epoch, &sz, &epoch, sz);
@@ -210,6 +223,7 @@ void jemalloc_tracker_daemon(void* arg_this) {
 
 static void init_starrocks_metrics(const std::vector<StorePath>& store_paths) {
     bool init_system_metrics = config::enable_system_metrics;
+    bool init_jvm_metrics = config::enable_jvm_metrics;
     std::set<std::string> disk_devices;
     std::vector<std::string> network_interfaces;
     std::vector<std::string> paths;
@@ -229,7 +243,8 @@ static void init_starrocks_metrics(const std::vector<StorePath>& store_paths) {
             return;
         }
     }
-    StarRocksMetrics::instance()->initialize(paths, init_system_metrics, disk_devices, network_interfaces);
+    StarRocksMetrics::instance()->initialize(paths, init_system_metrics, init_jvm_metrics, disk_devices,
+                                             network_interfaces);
 }
 
 void sigterm_handler(int signo, siginfo_t* info, void* context) {
