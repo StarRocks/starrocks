@@ -1236,6 +1236,10 @@ public class OlapTable extends Table {
             if (partitionName.startsWith(ExpressionRangePartitionInfo.SHADOW_PARTITION_PREFIX)) {
                 continue;
             }
+            // ensure partitionName is in nameToPartition
+            if (!nameToPartition.containsKey(partitionName)) {
+                continue;
+            }
             rangePartitionMap.put(partitionName, rangePartitionInfo.getRange(partitionId));
         }
         return rangePartitionMap;
@@ -1279,6 +1283,9 @@ public class OlapTable extends Table {
             String partitionName = partitionEntry.getValue().getName();
             // FE and BE at the same time ignore the hidden partition at the same time
             if (partitionName.startsWith(ExpressionRangePartitionInfo.SHADOW_PARTITION_PREFIX)) {
+                continue;
+            }
+            if (!nameToPartition.containsKey(partitionName)) {
                 continue;
             }
             // one item

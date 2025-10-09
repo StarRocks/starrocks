@@ -477,6 +477,8 @@ public final class AggregatedMaterializedViewPushDownRewriter extends Materializ
                     .setPartitionByColumns(groupBys)
                     .build();
             OptExpression optAggOp = OptExpression.create(newAggOp, optExpression);
+            // derive logical property for newly created agg node
+            MvUtils.deriveLogicalProperty(optAggOp);
 
             // rewrite by mv.
             OptExpression rewritten = doRewritePushDownAgg(mvRewriteContext, ctx, optAggOp, rule);
