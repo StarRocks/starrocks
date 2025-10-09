@@ -15,7 +15,10 @@
 package com.starrocks.catalog;
 
 import com.google.common.collect.Lists;
+import com.starrocks.common.Pair;
+import com.starrocks.common.util.TimeUtils;
 import com.starrocks.persist.DictionaryMgrInfo;
+import com.starrocks.proto.PProcessDictionaryCacheRequest;
 import com.starrocks.proto.PProcessDictionaryCacheResult;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.NodeMgr;
@@ -24,7 +27,10 @@ import com.starrocks.system.ComputeNode;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.TNetworkAddress;
 import mockit.Expectations;
+import mockit.Mock;
+import mockit.MockUp;
 import mockit.Mocked;
+import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -64,7 +70,7 @@ public class DictionaryMgrTest {
         resultMap.put(new TNetworkAddress("1", 2), new PProcessDictionaryCacheResult());
         resultMap.put(new TNetworkAddress("2", 3), null);
 
-        new Expectations() {
+        new Expectations(globalStateMgr) {
             {
                 globalStateMgr.getNodeMgr();
                 minTimes = 0;
@@ -80,7 +86,7 @@ public class DictionaryMgrTest {
             }
         };
 
-        new Expectations() {
+        new Expectations(nodeMgr) {
             {
                 nodeMgr.getClusterInfo();
                 minTimes = 0;
@@ -88,7 +94,7 @@ public class DictionaryMgrTest {
             }
         };
 
-        new Expectations() {
+        new Expectations(systemInfoService) {
             {
                 systemInfoService.getBackends();
                 minTimes = 0;
@@ -100,11 +106,11 @@ public class DictionaryMgrTest {
             }
         };
 
-        new Expectations() {
+        new Expectations(dictionaryMgr) {
             {
                 dictionaryMgr.getDictionaryStatistic(dictionary);
                 minTimes = 0;
-                result = resultMap;
+                result = new Pair<>(resultMap, "");
 
                 dictionaryMgr.getDictionariesMapById();
                 minTimes = 0;
@@ -149,5 +155,36 @@ public class DictionaryMgrTest {
         dictionaryMgr.syncDictionaryMeta(dictionaries);
         dictionaryMgr.scheduleTasks();
         dictionaryMgr.replayModifyDictionaryMgr(dictionaryMgrInfo);
+    }
+
+    @Test
+    public void testShowDictionaryError() throws Exception {
+        DictionaryMgr localDictionaryMgr = new DictionaryMgr();
+        List<String> dictionaryKeys = Lists.newArrayList();
+        List<String> dictionaryValues = Lists.newArrayList();
+        dictionaryKeys.add("key");
+        dictionaryValues.add("value");
+        Dictionary dictionary =
+                    new Dictionary(1, "dict", "t", "default_catalog", "testDb", dictionaryKeys, dictionaryValues, null);
+        localDictionaryMgr.addDictionary(dictionary);
+        new MockUp<DictionaryMgr>() {
+            @Mock
+            public static Pair<Boolean, String> processDictionaryCacheInteranl(PProcessDictionaryCacheRequest request,
+                                                                               List<TNetworkAddress> beNodes,
+                                                                               List<PProcessDictionaryCacheResult> results) {
+                return new Pair<>(true, "test error");
+            }
+        };
+
+        new MockUp<TimeUtils>() {
+            @Mock
+            public static synchronized String longToTimeString(long timeStamp) {
+                return "0000-01-01 00:00:00";
+            }
+        };
+
+        List<List<String>> allInfo = localDictionaryMgr.getAllInfo("dict");
+        Assertions.assertTrue(
+                allInfo.get(0).get(allInfo.get(0).size() - 1).contains("Can not get Memory info, errMsg: test error"));
     }
 }
