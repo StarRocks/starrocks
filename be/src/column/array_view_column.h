@@ -185,12 +185,20 @@ public:
     void reset_column() override;
 
     const Column& elements() const { return *_elements; }
-    const ColumnPtr elements_column() const { return _elements; }
+    ColumnPtr elements_column() const { return _elements; }
+    MutableColumnPtr elements_column_mutable_ptr() { return _elements->as_mutable_ptr(); }
 
     const UInt32Column& offsets() const { return *_offsets; }
-    UInt32Column::Ptr& offsets_column() { return _offsets; }
+    UInt32Column::Ptr offsets_column() const { return _offsets; }
+    UInt32Column::MutablePtr offsets_column_mutable_ptr() { 
+        return UInt32Column::static_pointer_cast(_offsets->as_mutable_ptr()); 
+    }
+    
     const UInt32Column& lengths() const { return *_lengths; }
-    UInt32Column::Ptr& lengths_column() { return _lengths; }
+    UInt32Column::Ptr lengths_column() const { return _lengths; }
+    UInt32Column::MutablePtr lengths_column_mutable_ptr() { 
+        return UInt32Column::static_pointer_cast(_lengths->as_mutable_ptr()); 
+    }
 
     bool is_nullable() const override { return false; }
 
@@ -231,8 +239,8 @@ public:
     }
 
 private:
-    ColumnPtr _elements;
-    UInt32Column::Ptr _offsets;
-    UInt32Column::Ptr _lengths;
+    Column::WrappedPtr _elements;
+    UInt32Column::WrappedPtr _offsets;
+    UInt32Column::WrappedPtr _lengths;
 };
 } // namespace starrocks
