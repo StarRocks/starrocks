@@ -167,8 +167,10 @@ public:
     void reset_column() override;
 
     const UInt32Column& offsets() const { return *_offsets; }
-    const UInt32Column::Ptr& offsets_column() const { return _offsets; }
-    UInt32Column::Ptr& offsets_column() { return _offsets; }
+    UInt32Column::Ptr offsets_column() const { return _offsets; }
+    UInt32Column::MutablePtr offsets_column_mutable_ptr() { 
+        return UInt32Column::static_pointer_cast(_offsets->as_mutable_ptr()); 
+    }
 
     bool is_nullable() const override { return false; }
 
@@ -191,12 +193,12 @@ public:
     void check_or_die() const override;
 
     const Column& keys() const { return *_keys; }
-    const ColumnPtr& keys_column() const { return _keys; }
-    ColumnPtr& keys_column() { return _keys; }
+    ColumnPtr keys_column() const { return _keys; }
+    MutableColumnPtr keys_column_mutable_ptr() { return _keys->as_mutable_ptr(); }
 
     const Column& values() const { return *_values; }
-    const ColumnPtr& values_column() const { return _values; }
-    ColumnPtr& values_column() { return _values; }
+    ColumnPtr values_column() const { return _values; }
+    MutableColumnPtr values_column_mutable_ptr() { return _values->as_mutable_ptr(); }
 
     size_t get_map_size(size_t idx) const;
     std::pair<size_t, size_t> get_map_offset_size(size_t idx) const;
@@ -216,15 +218,15 @@ public:
 
 private:
     // Keys must be NullableColumn to facilitate handling nested types.
-    ColumnPtr _keys;
+    Column::WrappedPtr _keys;
     // Values must be NullableColumn to facilitate handling nested types.
-    ColumnPtr _values;
+    Column::WrappedPtr _values;
     // Offsets column will store the start position of every map element.
     // Offsets store more one data to indicate the end position.
     // For example, map Column: m1keys [k1, k2, k3], m2keys [k4, k5, k6]
     //                          m1vals [v1, v2, v3], m2vals [v4, v5, v6]
     // The two element array has three offsets(0, 3, 6)
-    UInt32Column::Ptr _offsets;
+    UInt32Column::WrappedPtr _offsets;
 };
 
 } // namespace starrocks

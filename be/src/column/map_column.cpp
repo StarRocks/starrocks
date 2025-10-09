@@ -694,21 +694,47 @@ StatusOr<ColumnPtr> MapColumn::upgrade_if_overflow() {
         return Status::InternalError("Size of MapColumn exceed the limit");
     }
 
-    auto ret = upgrade_helper_func(&_keys);
+    ColumnPtr keys = _keys;
+    auto ret = upgrade_helper_func(&keys);
     if (!ret.ok()) {
         return ret;
     }
+    if (ret.value() == nullptr) {
+        _keys = std::move(keys);
+    }
 
-    return upgrade_helper_func(&_values);
+    ColumnPtr values = _values;
+    ret = upgrade_helper_func(&values);
+    if (!ret.ok()) {
+        return ret;
+    }
+    if (ret.value() == nullptr) {
+        _values = std::move(values);
+    }
+    
+    return nullptr;
 }
 
 StatusOr<ColumnPtr> MapColumn::downgrade() {
-    auto ret = downgrade_helper_func(&_keys);
+    ColumnPtr keys = _keys;
+    auto ret = downgrade_helper_func(&keys);
     if (!ret.ok()) {
         return ret;
     }
+    if (ret.value() == nullptr) {
+        _keys = std::move(keys);
+    }
 
-    return downgrade_helper_func(&_values);
+    ColumnPtr values = _values;
+    ret = downgrade_helper_func(&values);
+    if (!ret.ok()) {
+        return ret;
+    }
+    if (ret.value() == nullptr) {
+        _values = std::move(values);
+    }
+    
+    return nullptr;
 }
 
 Status MapColumn::unfold_const_children(const starrocks::TypeDescriptor& type) {
