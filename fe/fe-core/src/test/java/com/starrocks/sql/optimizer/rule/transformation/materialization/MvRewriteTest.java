@@ -992,6 +992,8 @@ public class MvRewriteTest extends MvRewriteTestBase {
         String plan = getFragmentPlan(query, TExplainLevel.COSTS);
         PlanTestBase.assertContains(plan, "dict_col=s_name");
         FeConstants.USE_MOCK_DICT_MANAGER = false;
+        starRocksAssert.dropTable("supplier_char");
+        starRocksAssert.dropMaterializedView("test_mv1");
     }
 
     @Test
