@@ -124,9 +124,13 @@ void StructColumn::resize(size_t n) {
 
 StatusOr<ColumnPtr> StructColumn::upgrade_if_overflow() {
     for (auto& column : _fields) {
-        StatusOr<ColumnPtr> status = upgrade_helper_func(&column);
+        ColumnPtr col = column;
+        StatusOr<ColumnPtr> status = upgrade_helper_func(&col);
         if (!status.ok()) {
             return status;
+        }
+        if (status.value() == nullptr) {
+            column = std::move(col);
         }
     }
     return nullptr;
@@ -134,9 +138,13 @@ StatusOr<ColumnPtr> StructColumn::upgrade_if_overflow() {
 
 StatusOr<ColumnPtr> StructColumn::downgrade() {
     for (auto& column : _fields) {
-        StatusOr<ColumnPtr> status = downgrade_helper_func(&column);
+        ColumnPtr col = column;
+        StatusOr<ColumnPtr> status = downgrade_helper_func(&col);
         if (!status.ok()) {
             return status;
+        }
+        if (status.value() == nullptr) {
+            column = std::move(col);
         }
     }
     return nullptr;
@@ -480,7 +488,7 @@ size_t StructColumn::reference_memory_usage(size_t from, size_t size) const {
 void StructColumn::swap_column(Column& rhs) {
     auto& struct_column = down_cast<StructColumn&>(rhs);
     for (size_t i = 0; i < _fields.size(); i++) {
-        _fields[i]->swap_column(*struct_column.fields_column()[i]);
+        _fields[i]->swap_column(*struct_column._fields[i]);
     }
     // _field_names dont need swap
 }
@@ -523,14 +531,36 @@ size_t StructColumn::_find_field_idx_by_name(const std::string& field_name) cons
     return -1;
 }
 
-const ColumnPtr& StructColumn::field_column(const std::string& field_name) const {
+Columns StructColumn::fields() const {
+    Columns result;
+    result.reserve(_fields.size());
+    for (const auto& field : _fields) {
+        result.push_back(field);
+    }
+    return result;
+}
+
+Columns StructColumn::fields_column() const {
+    return fields();
+}
+
+MutableColumns StructColumn::fields_column_mutable() {
+    MutableColumns result;
+    result.reserve(_fields.size());
+    for (auto& field : _fields) {
+        result.push_back(field->as_mutable_ptr());
+    }
+    return result;
+}
+
+ColumnPtr StructColumn::field_column(const std::string& field_name) const {
     size_t idx = _find_field_idx_by_name(field_name);
     return _fields.at(idx);
 }
 
-ColumnPtr& StructColumn::field_column(const std::string& field_name) {
+MutableColumnPtr StructColumn::field_column_mutable(const std::string& field_name) {
     size_t idx = _find_field_idx_by_name(field_name);
-    return _fields[idx];
+    return _fields[idx]->as_mutable_ptr();
 }
 
 Status StructColumn::unfold_const_children(const starrocks::TypeDescriptor& type) {

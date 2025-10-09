@@ -156,12 +156,12 @@ public:
 
     void check_or_die() const override;
 
-    const Columns& fields() const { return _fields; }
-    const Columns& fields_column() const { return _fields; }
-    Columns& fields_column() { return _fields; }
+    Columns fields() const;
+    Columns fields_column() const;
+    MutableColumns fields_column_mutable();
 
-    const ColumnPtr& field_column(const std::string& field_name) const;
-    ColumnPtr& field_column(const std::string& field_name);
+    ColumnPtr field_column(const std::string& field_name) const;
+    MutableColumnPtr field_column_mutable(const std::string& field_name);
 
     const std::vector<std::string>& field_names() const { return _field_names; }
 
@@ -177,7 +177,7 @@ private:
     size_t _find_field_idx_by_name(const std::string& field_name) const;
 
     // A collection that contains StructType's subfield column.
-    Columns _fields;
+    std::vector<Column::WrappedPtr> _fields;
 
     // A collection that contains each struct subfield name.
     // _fields and _field_names should have the same size (_fields.size() == _field_names.size()).
