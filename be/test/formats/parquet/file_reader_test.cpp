@@ -20,9 +20,10 @@
 #include <random>
 #include <set>
 
-#include "cache/block_cache/block_cache.h"
-#include "cache/block_cache/test_cache_utils.h"
-#include "cache/starcache_engine.h"
+#include "cache/disk_cache/block_cache.h"
+#include "cache/disk_cache/starcache_engine.h"
+#include "cache/disk_cache/test_cache_utils.h"
+#include "cache/mem_cache/lrucache_engine.h"
 #include "column/column_helper.h"
 #include "column/fixed_length_column.h"
 #include "common/logging.h"
@@ -384,7 +385,7 @@ DataCacheOptions FileReaderTest::_mock_datacache_options() {
                             .enable_datacache_async_populate_mode = true,
                             .enable_datacache_io_adaptor = true,
                             .modification_time = 100000,
-                            .datacache_evict_probability = 0,
+                            .datacache_evict_probability = 100,
                             .datacache_priority = 0,
                             .datacache_ttl_seconds = 0};
 }
@@ -3347,8 +3348,8 @@ TEST_F(FileReaderTest, TestStructSubfieldNoDecodeNotOutput) {
 }
 
 TEST_F(FileReaderTest, TestReadFooterCache) {
-    DiskCacheOptions options = TestCacheUtils::create_simple_options(256 * KB, 100 * MB);
-    auto local_cache = std::make_shared<StarCacheEngine>();
+    MemCacheOptions options{.mem_space_size = 100 * MB};
+    auto local_cache = std::make_shared<LRUCacheEngine>();
     ASSERT_OK(local_cache->init(options));
     auto cache = std::make_shared<StoragePageCache>(local_cache.get());
 

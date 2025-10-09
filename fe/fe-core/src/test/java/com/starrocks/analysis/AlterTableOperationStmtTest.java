@@ -222,6 +222,10 @@ public class AlterTableOperationStmtTest {
 
         new Expectations() {
             {
+                icebergTable.getTableProcedure(anyString);
+                result = RewriteDataFilesProcedure.getInstance();
+                minTimes = 0;
+
                 icebergTable.getPartitionColumnsIncludeTransformed();
                 result = List.of(new Column("k1", Type.INT, true),
                         new Column("partition_date", Type.DATE, true));

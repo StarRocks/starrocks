@@ -50,7 +50,7 @@ struct SpillPartitionChunkWriterContext : public PartitionChunkWriterContext {
     std::shared_ptr<FileSystem> fs;
     pipeline::FragmentContext* fragment_context = nullptr;
     TupleDescriptor* tuple_desc = nullptr;
-    std::vector<std::unique_ptr<ColumnEvaluator>>* column_evaluators;
+    std::shared_ptr<std::vector<std::unique_ptr<ColumnEvaluator>>> column_evaluators;
     std::shared_ptr<SortOrdering> sort_ordering;
 };
 
@@ -63,9 +63,11 @@ public:
 
     virtual Status init() = 0;
 
-    virtual Status write(Chunk* chunk) = 0;
+    virtual Status write(const ChunkPtr& chunk) = 0;
 
     virtual Status flush() = 0;
+
+    virtual Status wait_flush() = 0;
 
     virtual Status finish() = 0;
 
@@ -118,9 +120,11 @@ public:
 
     Status init() override;
 
-    Status write(Chunk* chunk) override;
+    Status write(const ChunkPtr& chunk) override;
 
     Status flush() override;
+
+    Status wait_flush() override;
 
     Status finish() override;
 
@@ -140,9 +144,11 @@ public:
 
     Status init() override;
 
-    Status write(Chunk* chunk) override;
+    Status write(const ChunkPtr& chunk) override;
 
     Status flush() override;
+
+    Status wait_flush() override;
 
     Status finish() override;
 
@@ -156,7 +162,12 @@ public:
                _file_writer->get_written_bytes();
     }
 
-    int64_t get_flushable_bytes() override { return _chunk_bytes_usage; }
+    int64_t get_flushable_bytes() override {
+        if (!_spill_mode) {
+            return _file_writer ? _file_writer->get_written_bytes() : 0;
+        }
+        return _chunk_bytes_usage;
+    }
 
     Status merge_blocks();
 
@@ -185,13 +196,12 @@ private:
     std::shared_ptr<FileSystem> _fs = nullptr;
     pipeline::FragmentContext* _fragment_context = nullptr;
     TupleDescriptor* _tuple_desc = nullptr;
-    std::vector<std::unique_ptr<ColumnEvaluator>>* _column_evaluators;
+    std::shared_ptr<std::vector<std::unique_ptr<ColumnEvaluator>>> _column_evaluators;
     std::shared_ptr<SortOrdering> _sort_ordering;
     std::unique_ptr<ThreadPoolToken> _chunk_spill_token;
     std::unique_ptr<ThreadPoolToken> _block_merge_token;
     std::unique_ptr<LoadSpillBlockManager> _load_spill_block_mgr;
     std::shared_ptr<LoadChunkSpiller> _load_chunk_spiller;
-    //std::function<StatusOr<ColumnPtr>(Chunk*, size_t)> _column_eval_func;
     TUniqueId _writer_id;
 
     std::list<ChunkPtr> _chunks;
@@ -201,6 +211,7 @@ private:
     ChunkPtr _base_chunk;
     SchemaPtr _schema;
     std::unordered_map<int, int> _col_index_map; // result chunk index -> chunk index
+    bool _spill_mode = false;
 
     static const int64_t kWaitMilliseconds;
 };

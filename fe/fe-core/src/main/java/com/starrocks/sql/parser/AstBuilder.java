@@ -2052,7 +2052,7 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
         NodePosition pos = createPos(context);
         TaskName taskName;
         if (qualifiedName == null) {
-            taskName = new TaskName(null, null, pos);
+            taskName = new TaskName(null, null);
         } else {
             taskName = qualifiedNameToTaskName(qualifiedName);
         }
@@ -9141,9 +9141,9 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
         // Hierarchy: database.table
         List<String> parts = qualifiedName.getParts();
         if (parts.size() == 2) {
-            return new TaskName(parts.get(0), parts.get(1), qualifiedName.getPos());
+            return new TaskName(normalizeName(parts.get(0)), normalizeName(parts.get(1)));
         } else if (parts.size() == 1) {
-            return new TaskName(null, parts.get(0), qualifiedName.getPos());
+            return new TaskName(null, normalizeName(parts.get(0)));
         } else {
             throw new ParsingException(PARSER_ERROR_MSG.invalidTaskFormat(qualifiedName.toString()),
                     qualifiedName.getPos());
