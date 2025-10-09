@@ -1649,4 +1649,15 @@ public class MvUtils {
         }
         return input.length() > maxLength ? input.substring(0, maxLength) : input;
     }
+
+    /**
+     * Ensure the logical property of the given opt expression is derived, and return its output columns.
+     * Ensure optExpression has derived logical property, otherwise OptExpression.getOutputColumns will fail.
+     */
+    public static ColumnRefSet getOutputColumns(OptExpression optExpression) {
+        if (optExpression.getLogicalProperty() == null) {
+            deriveLogicalProperty(optExpression);
+        }
+        return optExpression.getOutputColumns();
+    }
 }
