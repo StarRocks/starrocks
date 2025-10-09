@@ -39,6 +39,7 @@ import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.load.loadv2.InsertLoadJob;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.QueryState;
+import com.starrocks.qe.SessionVariable;
 import com.starrocks.qe.StmtExecutor;
 import com.starrocks.scheduler.persist.TaskRunStatus;
 import com.starrocks.server.GlobalStateMgr;
@@ -194,6 +195,30 @@ public class TaskRun implements Comparable<TaskRun> {
 
     public boolean isKilled() {
         return isKilled;
+    }
+
+    /**
+     * Get the execute timeout in seconds.
+     */
+    public int getExecuteTimeoutS() {
+        // if `query_timeout`/`insert_timeout` is set in the execute option, use it
+        int defaultTimeoutS = Config.task_runs_timeout_second;
+        if (properties != null ) {
+            for (Map.Entry<String, String> entry : properties.entrySet()) {
+                if (entry.getKey().equalsIgnoreCase(SessionVariable.QUERY_TIMEOUT)
+                        || entry.getKey().equalsIgnoreCase(SessionVariable.INSERT_TIMEOUT)) {
+                    try {
+                        int timeout = Integer.parseInt(entry.getValue());
+                        if (timeout > 0) {
+                            defaultTimeoutS = Math.max(timeout, defaultTimeoutS);
+                        }
+                    } catch (NumberFormatException e) {
+                        LOG.warn("invalid timeout value: {}, task run:{}", entry.getValue(), this);
+                    }
+                }
+            }
+        }
+        return defaultTimeoutS;
     }
 
     public Map<String, String> refreshTaskProperties(ConnectContext ctx) {
