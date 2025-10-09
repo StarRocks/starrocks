@@ -396,8 +396,13 @@ public class ExpressionStatisticsCalculatorTest {
         // test xx_hash3_64 function
         callOperator = new CallOperator(FunctionSet.XX_HASH3_64, Type.BIGINT, Lists.newArrayList(columnRefOperator));
         columnStatistic = ExpressionStatisticCalculator.calculate(callOperator, statistics);
-        Assertions.assertEquals(columnStatistic.getMaxValue(), Double.POSITIVE_INFINITY, 0.001);
-        Assertions.assertEquals(columnStatistic.getMinValue(), Double.NEGATIVE_INFINITY, 0.001);
+        Assertions.assertEquals(columnStatistic.getMaxValue(), Long.MAX_VALUE, 0.001);
+        Assertions.assertEquals(columnStatistic.getMinValue(), Long.MIN_VALUE, 0.001);
+        // test xx_hash3_128 function
+        callOperator = new CallOperator(FunctionSet.XX_HASH3_128, Type.BIGINT, Lists.newArrayList(columnRefOperator));
+        columnStatistic = ExpressionStatisticCalculator.calculate(callOperator, statistics);
+        Assertions.assertEquals(columnStatistic.getMaxValue(), 170141183460469231731687303715884105727.0, 0.001);
+        Assertions.assertEquals(columnStatistic.getMinValue(), -170141183460469231731687303715884105728.0, 0.001);
     }
 
     @Test
