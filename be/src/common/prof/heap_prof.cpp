@@ -27,21 +27,45 @@
 namespace starrocks {
 // detail implements for allocator
 static int set_jemalloc_profiling(bool enable) {
-    int ret = je_mallctl("prof.active", nullptr, nullptr, &enable, 1);
-    ret |= je_mallctl("prof.thread_active_init", nullptr, nullptr, &enable, 1);
+    int ret =
+#ifdef __APPLE__
+            mallctl
+#else
+            je_mallctl
+#endif
+            ("prof.active", nullptr, nullptr, &enable, 1);
+    ret |=
+#ifdef __APPLE__
+            mallctl
+#else
+            je_mallctl
+#endif
+            ("prof.thread_active_init", nullptr, nullptr, &enable, 1);
     return ret;
 }
 
 static int has_enable_heap_profile() {
     int value = 0;
     size_t size = sizeof(value);
-    je_mallctl("prof.active", &value, &size, nullptr, 0);
+
+#ifdef __APPLE__
+    mallctl
+#else
+    je_mallctl
+#endif
+            ("prof.active", &value, &size, nullptr, 0);
     return value;
 }
 
 bool dump_snapshot(const std::string& filename) {
     const char* fname = filename.c_str();
-    return je_mallctl("prof.dump", nullptr, nullptr, &fname, sizeof(const char*)) == 0;
+    return (
+#ifdef __APPLE__
+                   mallctl
+#else
+                   je_mallctl
+#endif
+                   ("prof.dump", nullptr, nullptr, &fname, sizeof(const char*))) == 0;
 }
 
 // declare exec from script

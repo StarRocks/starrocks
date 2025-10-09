@@ -205,6 +205,9 @@ if [[ $SKIP_THIRDPARTY -eq 0 ]]; then
         "librocksdb.a"
         "libvelocypack.a"
         "libbitshuffle.a"
+        # vectorscan (hyperscan ABI)
+        "libhs.a"
+        "libhs_runtime.a"
     )
 
     missing_libs=()

@@ -181,6 +181,12 @@ public:
     /// Convert to size_t
     explicit operator size_t() const { return static_cast<size_t>(low); }
 
+#if defined(__APPLE__)
+    /// macOS/libc++: provide explicit conversion to 64-bit unsigned
+    /// Note: uint64_t is a typedef of unsigned long long on macOS, so only define one
+    explicit operator unsigned long long() const { return static_cast<unsigned long long>(static_cast<uint64_t>(low)); }
+#endif
+
     // =============================================================================
     // Unary Operators
     // =============================================================================
@@ -913,6 +919,8 @@ int256_t parse_int256(const std::string& str);
 namespace std {
 
 /// Specialization of make_signed for int256_t
+// On libc++ (macOS), user specializations of standard type traits are disallowed.
+#if !defined(__APPLE__)
 template <>
 struct make_signed<starrocks::int256_t> {
     using type = starrocks::int256_t;
@@ -923,6 +931,7 @@ template <>
 struct make_unsigned<starrocks::int256_t> {
     using type = starrocks::int256_t;
 };
+#endif // !__APPLE__
 
 /// Hash function specialization for int256_t
 template <>
@@ -961,8 +970,9 @@ inline std::ostream& operator<<(std::ostream& os, const starrocks::int256_t& val
 /// Formatter specialization for int256_t (fmt library)
 template <>
 struct fmt::formatter<starrocks::int256_t> : formatter<std::string> {
+    constexpr auto parse(fmt::format_parse_context& ctx) { return formatter<std::string>::parse(ctx); }
     template <typename FormatContext>
-    auto format(const starrocks::int256_t& value, FormatContext& ctx) {
+    auto format(const starrocks::int256_t& value, FormatContext& ctx) const {
         return formatter<std::string>::format(value.to_string(), ctx);
     }
 };
