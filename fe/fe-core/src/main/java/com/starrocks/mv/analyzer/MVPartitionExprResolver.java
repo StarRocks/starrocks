@@ -315,7 +315,8 @@ public class MVPartitionExprResolver {
                             if (item instanceof SlotRef) {
                                 SlotRef result = (SlotRef) item;
                                 TableName actTableName = result.getTblNameWithoutAnalyzed();
-                                if (result.getColumnName() != null && result.getColumnName().equalsIgnoreCase(slot.getColumnName())
+                                if (result.getColumnName() != null
+                                        && result.getColumnName().equalsIgnoreCase(slot.getColumnName())
                                         && (expTableName == null || expTableName.equals(actTableName))) {
                                     return visitExpr(context.withExpr(result).withRelation(relation));
                                 }
@@ -324,7 +325,7 @@ public class MVPartitionExprResolver {
                             if (expTableName != null && expTableName.isFullyQualified()) {
                                 continue;
                             }
-                            if (selectListItem.getAlias() != null && selectListItem.getAlias().equalsIgnoreCase(slot.getColumnName())) {
+                            if (selectListItem.getAlias().equalsIgnoreCase(slot.getColumnName())) {
                                 return visitExpr(context.withExpr(selectListItem.getExpr()).withRelation(relation));
                             }
                         }
