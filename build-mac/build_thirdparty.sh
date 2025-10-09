@@ -204,10 +204,28 @@ BITSHUFFLE_VERSION="0.5.1"
 VECTORSCAN_VERSION="5.4.12"
 VELOCYPACK_VERSION="XYZ1.0"
 
+# datasketches-cpp
+DATASKETCHES_VERSION="4.0.0"
+DATASKETCHES_DOWNLOAD="https://github.com/apache/datasketches-cpp/archive/refs/tags/${DATASKETCHES_VERSION}.tar.gz"
+DATASKETCHES_NAME="datasketches-cpp-${DATASKETCHES_VERSION}.tar.gz"
+DATASKETCHES_SOURCE="datasketches-cpp-${DATASKETCHES_VERSION}"
+
 # RYU (build from source; pinned commit snapshot)
 RYU_DOWNLOAD="https://github.com/ulfjack/ryu/archive/aa31ca9361d21b1a00ee054aac49c87d07e74abc.zip"
 RYU_NAME="ryu-aa31ca9361d21b1a00ee054aac49c87d07e74abc.zip"
 RYU_SOURCE="ryu-aa31ca9361d21b1a00ee054aac49c87d07e74abc"
+
+# icu
+ICU_DOWNLOAD="https://github.com/unicode-org/icu/releases/download/release-76-1/icu4c-76_1-src.zip"
+ICU_NAME="icu4c-76_1-src.zip"
+ICU_SOURCE="icu"
+ICU_MD5SUM="f5f5c827d94af8445766c7023aca7f6b"
+
+# libdivide
+LIBDIVIDE_DOWNLOAD="https://github.com/ridiculousfish/libdivide/archive/refs/tags/v5.2.0.tar.gz"
+LIBDIVIDE_NAME="libdivide-v5.2.0.tar.gz"
+LIBDIVIDE_SOURCE="libdivide-5.2.0"
+LIBDIVIDE_MD5SUM="4ba77777192c295d6de2b86d88f3239a"
 
 download_source() {
     local name="$1"
@@ -703,6 +721,46 @@ build_bitshuffle() {
     log_success "bitshuffle built successfully"
 }
 
+# datasketches (header-only install)
+build_datasketches() {
+    # Check if already installed (pick one representative header)
+    if [[ -d "$INSTALL_DIR/include/datasketches" && -f "$INSTALL_DIR/include/datasketches/hll.hpp" ]]; then
+        log_success "datasketches already installed, skipping"
+        return 0
+    fi
+
+    log_info "Installing datasketches ${DATASKETCHES_VERSION} headers..."
+
+    local src_dir="$THIRDPARTY_DIR/src"
+    local build_dir="$THIRDPARTY_DIR/build/datasketches"
+
+    download_source "datasketches-cpp" "$DATASKETCHES_VERSION" \
+        "$DATASKETCHES_DOWNLOAD" \
+        "$DATASKETCHES_NAME"
+
+    mkdir -p "$build_dir"
+    cd "$build_dir"
+
+    if [[ ! -d "$DATASKETCHES_SOURCE" ]]; then
+        tar -xzf "$src_dir/$DATASKETCHES_NAME"
+    fi
+
+    # Copy public headers into a flat include/datasketches directory, matching Linux build layout
+    mkdir -p "$INSTALL_DIR/include/datasketches"
+    cp -r "$DATASKETCHES_SOURCE"/common/include/* "$INSTALL_DIR/include/datasketches/" || true
+    cp -r "$DATASKETCHES_SOURCE"/cpc/include/* "$INSTALL_DIR/include/datasketches/" || true
+    cp -r "$DATASKETCHES_SOURCE"/fi/include/* "$INSTALL_DIR/include/datasketches/" || true
+    cp -r "$DATASKETCHES_SOURCE"/hll/include/* "$INSTALL_DIR/include/datasketches/" || true
+    cp -r "$DATASKETCHES_SOURCE"/kll/include/* "$INSTALL_DIR/include/datasketches/" || true
+    cp -r "$DATASKETCHES_SOURCE"/quantiles/include/* "$INSTALL_DIR/include/datasketches/" || true
+    cp -r "$DATASKETCHES_SOURCE"/req/include/* "$INSTALL_DIR/include/datasketches/" || true
+    cp -r "$DATASKETCHES_SOURCE"/sampling/include/* "$INSTALL_DIR/include/datasketches/" || true
+    cp -r "$DATASKETCHES_SOURCE"/theta/include/* "$INSTALL_DIR/include/datasketches/" || true
+    cp -r "$DATASKETCHES_SOURCE"/tuple/include/* "$INSTALL_DIR/include/datasketches/" || true
+
+    log_success "datasketches headers installed"
+}
+
 # Build ryu from source and install into $INSTALL_DIR
 build_ryu() {
     # Check if already built
@@ -754,6 +812,85 @@ build_ryu() {
     fi
 
     log_success "ryu built successfully"
+}
+
+build_libdivide() {
+    # Check if already built
+    if [[ -f "$INSTALL_DIR/include/libdivide.h" ]]; then
+        log_success "libdivide already built, skipping"
+        return 0
+    fi
+
+    log_info "Building libdivide..."
+
+    local src_dir="$THIRDPARTY_DIR/src"
+    local build_dir="$THIRDPARTY_DIR/build/libdivide"
+
+    download_source "libdivide" "v5.2.0" \
+        "$LIBDIVIDE_DOWNLOAD" \
+        "$LIBDIVIDE_NAME"
+
+    mkdir -p "$build_dir"
+    cd "$build_dir"
+
+    if [[ ! -d "$LIBDIVIDE_SOURCE" ]]; then
+        tar -xzf "$src_dir/$LIBDIVIDE_NAME"
+    fi
+
+    cd "$LIBDIVIDE_SOURCE"
+
+    # libdivide is header-only, just copy the header
+    cp libdivide.h "$INSTALL_DIR/include/"
+
+    log_success "libdivide built successfully"
+}
+
+build_icu() {
+    # Check if already built
+    if [[ -f "$INSTALL_DIR/lib/libicuuc.a" && -f "$INSTALL_DIR/include/unicode/ucasemap.h" ]]; then
+        log_success "icu already built, skipping"
+        return 0
+    fi
+
+    log_info "Building icu..."
+
+    local src_dir="$THIRDPARTY_DIR/src"
+    local build_dir="$THIRDPARTY_DIR/build/icu"
+
+    download_source "icu" "76-1" \
+        "$ICU_DOWNLOAD" \
+        "$ICU_NAME"
+
+    mkdir -p "$build_dir"
+    cd "$build_dir"
+
+    if [[ ! -d "$ICU_SOURCE" ]]; then
+        unzip -q "$src_dir/$ICU_NAME"
+    fi
+
+    cd "$ICU_SOURCE/source"
+
+    # Fix line endings for shell scripts
+    sed -i '' 's/\r$//' ./runConfigureICU
+    sed -i '' 's/\r$//' ./config.*
+    sed -i '' 's/\r$//' ./configure
+    sed -i '' 's/\r$//' ./mkinstalldirs
+
+    # Clear compile flags to use ICU defaults
+    unset CPPFLAGS
+    unset CXXFLAGS
+    unset CFLAGS
+
+    # Use a subshell to prevent environment variable leakage
+    (
+        export CFLAGS="-O3 -fno-omit-frame-pointer -fPIC"
+        export CXXFLAGS="-O3 -fno-omit-frame-pointer -fPIC"
+        ./runConfigureICU macOS --prefix="$INSTALL_DIR" --enable-static --disable-shared
+        make -j"$PARALLEL_JOBS"
+        make install
+    )
+
+    log_success "icu built successfully"
 }
 
 
@@ -878,7 +1015,10 @@ build_source_deps() {
     build_glog
     build_protobuf
     build_leveldb
+    build_datasketches
     build_ryu
+    build_libdivide
+    build_icu
 
     # Layer 2: Libraries that depend on Layer 1
     build_brpc
@@ -898,6 +1038,8 @@ build_source_deps() {
     ln -sf ../lib/librocksdb.a "$INSTALL_DIR/lib64/librocksdb.a" 2>/dev/null || true
     ln -sf ../lib/libhs.a "$INSTALL_DIR/lib64/libhs.a" 2>/dev/null || true
     ln -sf ../lib/libryu.a "$INSTALL_DIR/lib64/libryu.a" 2>/dev/null || true
+    ln -sf ../lib/libicuuc.a "$INSTALL_DIR/lib64/libicuuc.a" 2>/dev/null || true
+    ln -sf ../lib/libicui18n.a "$INSTALL_DIR/lib64/libicui18n.a" 2>/dev/null || true
 
     log_success "All source dependencies built successfully"
 }
@@ -929,6 +1071,8 @@ main() {
         "libhs.a"
         "libhs_runtime.a"
         "libryu.a"
+        "libicuuc.a"
+        "libicui18n.a"
     )
 
     local missing_libs=()
