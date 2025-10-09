@@ -407,9 +407,9 @@ public class TabletTaskExecutor {
                     sb.append(mark.getValue()); // TabletId
                     sb.append('(');
                     ComputeNode node = GlobalStateMgr.getCurrentState()
-                        .getNodeMgr()
-                        .getClusterInfo()
-                        .getBackendOrComputeNode(mark.getKey());
+                            .getNodeMgr()
+                            .getClusterInfo()
+                            .getBackendOrComputeNode(mark.getKey());
                     sb.append(node != null ? node.getHost() : "N/A");
                     sb.append(") ");
                 }
