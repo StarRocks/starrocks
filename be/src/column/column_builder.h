@@ -27,8 +27,8 @@ template <LogicalType Type>
 class ColumnBuilder {
 public:
     using DataColumn = RunTimeColumnType<Type>;
-    using DataColumnPtr = typename RunTimeColumnType<Type>::Ptr;
-    using NullColumnPtr = NullColumn::Ptr;
+    using DataColumnPtr = typename RunTimeColumnType<Type>::MutablePtr;
+    using NullColumnPtr = NullColumn::MutablePtr;
     using DatumType = RunTimeCppType<Type>;
     using MovableType = RunTimeCppMovableType<Type>;
 
@@ -55,11 +55,7 @@ public:
         }
     }
 
-    ColumnBuilder(DataColumnPtr column, NullColumnPtr null_column, bool has_null)
-            : _column(std::move(column)), _null_column(std::move(null_column)), _has_null(has_null) {}
-
-    ColumnBuilder(typename DataColumn::MutablePtr&& column, typename NullColumn::MutablePtr&& null_column,
-                  bool has_null)
+    ColumnBuilder(DataColumnPtr&& column, NullColumnPtr&& null_column, bool has_null)
             : _column(std::move(column)), _null_column(std::move(null_column)), _has_null(has_null) {}
     //do nothing ctor, members are initialized by its offsprings.
     explicit ColumnBuilder(void*) {}
@@ -128,13 +124,13 @@ public:
         _null_column->resize_uninitialized(size);
     }
 
-    DataColumnPtr data_column() { return _column; }
-    NullColumnPtr null_column() { return _null_column; }
+    DataColumnPtr data_column() { return _column->as_mutable_ptr(); }
+    NullColumnPtr null_column() { return _null_column->as_mutable_ptr(); }
     void set_has_null(bool v) { _has_null = v; }
 
 protected:
-    typename DataColumn::Ptr _column;
-    NullColumn::Ptr _null_column;
+    typename DataColumn::WrappedPtr _column;
+    NullColumn::WrappedPtr _null_column;
     bool _has_null;
 };
 
@@ -215,7 +211,7 @@ public:
         bytes.resize(bytes.size() - n);
     }
 
-    NullColumnPtr get_null_column() { return _null_column; }
+    NullColumnPtr get_null_column() { return _null_column->as_mutable_ptr(); }
 
     NullColumn::Container& get_null_data() { return _null_column->get_data(); }
 
