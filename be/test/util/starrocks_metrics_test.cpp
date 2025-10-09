@@ -36,8 +36,8 @@
 
 #include <gtest/gtest.h>
 
-#include "cache/lrucache_engine.h"
-#include "cache/object_cache/page_cache.h"
+#include "cache/mem_cache/lrucache_engine.h"
+#include "cache/mem_cache/page_cache.h"
 #include "common/config.h"
 #include "testutil/assert.h"
 
@@ -296,7 +296,7 @@ TEST_F(StarRocksMetricsTest, PageCacheMetrics) {
             std::string key("abc0");
             PageCacheHandle handle;
             auto data = std::make_unique<std::vector<uint8_t>>(1024);
-            ObjectCacheWriteOptions opts;
+            MemCacheWriteOptions opts;
             ASSERT_OK(_page_cache->insert(key, data.get(), opts, &handle));
             ASSERT_TRUE(_page_cache->lookup(key, &handle));
             data.release();

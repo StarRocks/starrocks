@@ -18,9 +18,9 @@
 #include <random>
 
 #include "cache/cache_options.h"
-#include "cache/lrucache_engine.h"
-#include "cache/object_cache/page_cache.h"
-#include "cache/starcache_engine.h"
+#include "cache/disk_cache/starcache_engine.h"
+#include "cache/mem_cache/lrucache_engine.h"
+#include "cache/mem_cache/page_cache.h"
 #include "common/config.h"
 #include "runtime/current_thread.h"
 #include "runtime/exec_env.h"
@@ -105,14 +105,13 @@ std::string ObjectCacheBench::get_cache_type_str(CacheType type) {
 }
 
 void ObjectCacheBench::init_cache(CacheType cache_type) {
-    CacheOptions opt;
+    DiskCacheOptions opt;
     opt.mem_space_size = _capacity;
     opt.block_size = config::datacache_block_size;
     opt.max_flying_memory_mb = config::datacache_max_flying_memory_mb;
     opt.max_concurrent_inserts = config::datacache_max_concurrent_inserts;
     opt.enable_checksum = config::datacache_checksum_enable;
     opt.enable_direct_io = config::datacache_direct_io_enable;
-    opt.enable_tiered_cache = config::datacache_tiered_cache_enable;
     opt.skip_read_factor = config::datacache_skip_read_factor;
     opt.scheduler_threads_per_cpu = config::datacache_scheduler_threads_per_cpu;
     opt.enable_datacache_persistence = false;
@@ -146,7 +145,7 @@ void ObjectCacheBench::prepare_sequence_data(StoragePageCache* cache, int64_t co
         auto* ptr = new std::vector<uint8_t>(_page_size);
         (*ptr)[0] = 1;
         PageCacheHandle handle;
-        ObjectCacheWriteOptions options;
+        MemCacheWriteOptions options;
         Status st = cache->insert(key, ptr, options, &handle);
         if (!st.ok()) {
             if (!st.is_already_exist()) {
@@ -162,7 +161,7 @@ void ObjectCacheBench::prepare_data(StoragePageCache* cache, int64_t count) {
         auto* ptr = new std::vector<uint8_t>(_page_size);
         (*ptr)[0] = 1;
         PageCacheHandle handle;
-        ObjectCacheWriteOptions options;
+        MemCacheWriteOptions options;
         Status st = cache->insert(key, ptr, options, &handle);
         if (!st.ok()) {
             if (!st.is_already_exist()) {
@@ -211,7 +210,7 @@ void ObjectCacheBench::random_insert_multi_threads(benchmark::State* state, Stor
         auto* ptr = new std::vector<uint8_t>(page_size);
         (*ptr)[0] = 1;
         PageCacheHandle handle;
-        ObjectCacheWriteOptions options;
+        MemCacheWriteOptions options;
         Status st = cache->insert(key, ptr, options, &handle);
         if (!st.ok()) {
             if (!st.is_already_exist()) {

@@ -38,7 +38,6 @@ import com.google.common.collect.Lists;
 import com.starrocks.catalog.Database;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
-import com.starrocks.common.Pair;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.lake.StarOSAgent;
 import com.starrocks.server.GlobalStateMgr;
@@ -49,6 +48,7 @@ import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AddBackendClause;
 import com.starrocks.sql.ast.AddComputeNodeClause;
 import com.starrocks.sql.ast.DropBackendClause;
+import com.starrocks.sql.ast.HostPort;
 import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.system.Backend;
 import com.starrocks.system.ComputeNode;
@@ -141,7 +141,7 @@ public class SystemInfoServiceTest {
         clearAllBackend();
         AddBackendClause stmt = new AddBackendClause(Lists.newArrayList("192.168.0.1:1234"),
                 WarehouseManager.DEFAULT_WAREHOUSE_NAME);
-        stmt.getHostPortPairs().add(Pair.create("192.168.0.1", 1234));
+        stmt.getHostPortPairs().add(new HostPort("192.168.0.1", 1234));
         try {
             systemInfoService.addBackends(stmt);
         } catch (DdlException e) {
@@ -176,7 +176,7 @@ public class SystemInfoServiceTest {
         AddComputeNodeClause stmt = new AddComputeNodeClause(Lists.newArrayList("192.168.0.1:1234"),
                 WarehouseManager.DEFAULT_WAREHOUSE_NAME, "", NodePosition.ZERO);
 
-        stmt.getHostPortPairs().add(Pair.create("192.168.0.1", 1234));
+        stmt.getHostPortPairs().add(new HostPort("192.168.0.1", 1234));
 
         try {
             systemInfoService.addComputeNodes(stmt);
@@ -198,7 +198,7 @@ public class SystemInfoServiceTest {
         clearAllBackend();
         AddBackendClause stmt = new AddBackendClause(Lists.newArrayList("192.168.0.1:1234"),
                 WarehouseManager.DEFAULT_WAREHOUSE_NAME);
-        stmt.getHostPortPairs().add(Pair.create("192.168.0.1", 1234));
+        stmt.getHostPortPairs().add(new HostPort("192.168.0.1", 1234));
         try {
             systemInfoService.addBackends(stmt);
         } catch (DdlException e) {
@@ -207,7 +207,7 @@ public class SystemInfoServiceTest {
 
         DropBackendClause dropStmt =
                 new DropBackendClause(Lists.newArrayList("192.168.0.1:1234"), true, WarehouseManager.DEFAULT_WAREHOUSE_NAME);
-        dropStmt.getHostPortPairs().add(Pair.create("192.168.0.1", 1234));
+        dropStmt.getHostPortPairs().add(new HostPort("192.168.0.1", 1234));
         try {
             systemInfoService.dropBackends(dropStmt);
         } catch (DdlException e) {
@@ -250,7 +250,7 @@ public class SystemInfoServiceTest {
 
         AddBackendClause stmt2 = new AddBackendClause(Lists.newArrayList("192.168.0.1:1235"),
                 WarehouseManager.DEFAULT_WAREHOUSE_NAME);
-        stmt2.getHostPortPairs().add(Pair.create("192.168.0.1", 1235));
+        stmt2.getHostPortPairs().add(new HostPort("192.168.0.1", 1235));
 
         try {
             systemInfoService.addBackends(stmt2);
@@ -260,7 +260,7 @@ public class SystemInfoServiceTest {
 
         DropBackendClause dropStmt2 =
                 new DropBackendClause(Lists.newArrayList("192.168.0.1:1235"), true, WarehouseManager.DEFAULT_WAREHOUSE_NAME);
-        dropStmt2.getHostPortPairs().add(Pair.create("192.168.0.1", 1235));
+        dropStmt2.getHostPortPairs().add(new HostPort("192.168.0.1", 1235));
 
         try {
             systemInfoService.dropBackends(dropStmt2);
@@ -282,7 +282,7 @@ public class SystemInfoServiceTest {
         clearAllBackend();
         AddComputeNodeClause stmt = new AddComputeNodeClause(Lists.newArrayList("192.168.0.1:1234"),
                 WarehouseManager.DEFAULT_WAREHOUSE_NAME, "", NodePosition.ZERO);
-        stmt.getHostPortPairs().add(Pair.create("192.168.0.1", 1234));
+        stmt.getHostPortPairs().add(new HostPort("192.168.0.1", 1234));
 
         try {
             systemInfoService.addComputeNodes(stmt);

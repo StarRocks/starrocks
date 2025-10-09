@@ -33,6 +33,7 @@ fe_plugins/output
 fe/mocked
 fe/ut_ports
 fe/*/target
+fe/*/bin
 fe/plugin/*/target/
 fe/fe-core/gen
 fe/fe-grammar/gen
@@ -97,3 +98,15 @@ CMakeLists.txt
 .claude
 CLAUDE.md
 .clangd
+
+
+!build-mac/CMakeLists.txt
+# build-mac generated files
+build-mac/.ninja_deps
+build-mac/.ninja_lock
+build-mac/.ninja_log
+build-mac/CMakeCache.txt
+build-mac/CMakeFiles/
+build-mac/build.ninja
+build-mac/build_version.cc
+build-mac/cmake_install.cmake

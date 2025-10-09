@@ -88,6 +88,7 @@ import com.starrocks.sql.ast.CancelAlterSystemStmt;
 import com.starrocks.sql.ast.DecommissionBackendClause;
 import com.starrocks.sql.ast.DropBackendClause;
 import com.starrocks.sql.ast.DropComputeNodeClause;
+import com.starrocks.sql.ast.HostPort;
 import com.starrocks.sql.ast.ModifyBackendClause;
 import com.starrocks.system.Backend.BackendState;
 import com.starrocks.thrift.TNetworkAddress;
@@ -143,12 +144,13 @@ public class SystemInfoService implements GsonPostProcessable {
 
     public void addComputeNodes(AddComputeNodeClause addComputeNodeClause)
             throws DdlException {
-        for (Pair<String, Integer> pair : addComputeNodeClause.getHostPortPairs()) {
-            checkSameNodeExist(pair.first, pair.second);
+        for (HostPort hostPort : addComputeNodeClause.getHostPortPairs()) {
+            checkSameNodeExist(hostPort.getHost(), hostPort.getPort());
         }
 
-        for (Pair<String, Integer> pair : addComputeNodeClause.getHostPortPairs()) {
-            addComputeNode(pair.first, pair.second, addComputeNodeClause.getWarehouse(), addComputeNodeClause.getCNGroupName());
+        for (HostPort hostPort : addComputeNodeClause.getHostPortPairs()) {
+            addComputeNode(hostPort.getHost(), hostPort.getPort(), addComputeNodeClause.getWarehouse(),
+                    addComputeNodeClause.getCNGroupName());
         }
     }
 
@@ -243,12 +245,13 @@ public class SystemInfoService implements GsonPostProcessable {
     }
 
     public void addBackends(AddBackendClause addBackendClause) throws DdlException {
-        for (Pair<String, Integer> pair : addBackendClause.getHostPortPairs()) {
-            checkSameNodeExist(pair.first, pair.second);
+        for (HostPort hostPort : addBackendClause.getHostPortPairs()) {
+            checkSameNodeExist(hostPort.getHost(), hostPort.getPort());
         }
 
-        for (Pair<String, Integer> pair : addBackendClause.getHostPortPairs()) {
-            addBackend(pair.first, pair.second, addBackendClause.getWarehouse(), addBackendClause.getCNGroupName());
+        for (HostPort hostPort : addBackendClause.getHostPortPairs()) {
+            addBackend(hostPort.getHost(), hostPort.getPort(), addBackendClause.getWarehouse(),
+                    addBackendClause.getCNGroupName());
         }
     }
 
@@ -449,11 +452,11 @@ public class SystemInfoService implements GsonPostProcessable {
         long needCapacity = 0L;
         long releaseCapacity = 0L;
         // check if exist
-        for (Pair<String, Integer> pair : decommissionBackendClause.getHostPortPairs()) {
-            Backend backend = getBackendWithHeartbeatPort(pair.first, pair.second);
+        for (HostPort hostPort : decommissionBackendClause.getHostPortPairs()) {
+            Backend backend = getBackendWithHeartbeatPort(hostPort.getHost(), hostPort.getPort());
             if (backend == null) {
                 throw new DdlException("Backend does not exist[" +
-                        NetUtils.getHostPortInAccessibleFormat(pair.first, pair.second) + "]");
+                        NetUtils.getHostPortInAccessibleFormat(hostPort.getHost(), hostPort.getPort()) + "]");
             }
             if (backend.isDecommissioned()) {
                 // already under decommission, ignore it
@@ -534,18 +537,18 @@ public class SystemInfoService implements GsonPostProcessable {
     public void cancelDecommissionBackend(CancelAlterSystemStmt cancelAlterSystemStmt) throws DdlException {
         // check if backends is under decommission
         List<Backend> backends = Lists.newArrayList();
-        List<Pair<String, Integer>> hostPortPairs = cancelAlterSystemStmt.getHostPortPairs();
-        for (Pair<String, Integer> pair : hostPortPairs) {
+        List<HostPort> hostPortPairs = cancelAlterSystemStmt.getHostPortPairs();
+        for (HostPort hostPort : hostPortPairs) {
             // check if exist
-            Backend backend = getBackendWithHeartbeatPort(pair.first, pair.second);
+            Backend backend = getBackendWithHeartbeatPort(hostPort.getHost(), hostPort.getPort());
             if (backend == null) {
                 throw new DdlException("Backend does not exist[" +
-                        NetUtils.getHostPortInAccessibleFormat(pair.first, pair.second) + "]");
+                        NetUtils.getHostPortInAccessibleFormat(hostPort.getHost(), hostPort.getPort()) + "]");
             }
 
             if (!backend.isDecommissioned()) {
                 // it's ok. just log
-                LOG.info("backend is not decommissioned[{}]", pair.first);
+                LOG.info("backend is not decommissioned[{}]", hostPort.getHost());
                 continue;
             }
 
@@ -578,14 +581,14 @@ public class SystemInfoService implements GsonPostProcessable {
             ErrorReport.reportDdlException(ErrorCode.ERR_UNKNOWN_WAREHOUSE, String.format("name: %s", warehouse));
         }
 
-        for (Pair<String, Integer> pair : dropComputeNodeClause.getHostPortPairs()) {
-            dropComputeNode(pair.first, pair.second, warehouse, dropComputeNodeClause.getCNGroupName());
+        for (HostPort hostPort : dropComputeNodeClause.getHostPortPairs()) {
+            dropComputeNode(hostPort.getHost(), hostPort.getPort(), warehouse, dropComputeNodeClause.getCNGroupName());
         }
     }
 
     /*
      * The arg warehouse and cnGroupName can be null or empty,
-     * which means ignore warehouse and cngroup when dropping compute node, 
+     * which means ignore warehouse and cngroup when dropping compute node,
      * otherwise they will be checked and an exception will be thrown if they are not matched.
      * If the warehouse is null or empty, the cnGroupName will be ignored.
      */
@@ -625,7 +628,7 @@ public class SystemInfoService implements GsonPostProcessable {
     }
 
     public void dropBackends(DropBackendClause dropBackendClause) throws DdlException {
-        List<Pair<String, Integer>> hostPortPairs = dropBackendClause.getHostPortPairs();
+        List<HostPort> hostPortPairs = dropBackendClause.getHostPortPairs();
         boolean needCheckWithoutForce = !dropBackendClause.isForce();
 
         String warehouse = dropBackendClause.getWarehouse();
@@ -634,8 +637,8 @@ public class SystemInfoService implements GsonPostProcessable {
             ErrorReport.reportDdlException(ErrorCode.ERR_UNKNOWN_WAREHOUSE, String.format("name: %s", warehouse));
         }
 
-        for (Pair<String, Integer> pair : hostPortPairs) {
-            dropBackend(pair.first, pair.second, warehouse, dropBackendClause.cngroupName, needCheckWithoutForce);
+        for (HostPort hostPort : hostPortPairs) {
+            dropBackend(hostPort.getHost(), hostPort.getPort(), warehouse, dropBackendClause.cngroupName, needCheckWithoutForce);
         }
     }
 
@@ -691,7 +694,7 @@ public class SystemInfoService implements GsonPostProcessable {
     /*
      * Final entry of dropping backend.
      * The arg warehouse and cnGroupName can be null or empty,
-     * which means ignore warehouse and cngroup when dropping compute node, 
+     * which means ignore warehouse and cngroup when dropping compute node,
      * otherwise they will be checked and an exception will be thrown if they are not matched.
      * If the warehouse is null or empty, the cnGroupName will be ignored.
      */
