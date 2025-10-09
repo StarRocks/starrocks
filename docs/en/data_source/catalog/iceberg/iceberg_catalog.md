@@ -1315,7 +1315,7 @@ DROP DATABASE <database_name>;
 
 ### Create an Iceberg table
 
-Similar to the internal databases of StarRocks, if you have the [CREATE TABLE](../../../administration/user_privs/authorization/privilege_item.md#database) privilege on an Iceberg database, you can use the [CREATE TABLE](../../../sql-reference/sql-statements/table_bucket_part_index/CREATE_TABLE.md) or [CREATE TABLE AS SELECT ../../sql-reference/sql-statements/table_bucket_part_index/CREATE_TABLE_AS_SELECT.mdELECT.md) statement to create a table in that Iceberg database. This feature is supported from v3.1 onwards.
+Similar to the internal databases of StarRocks, if you have the [CREATE TABLE](../../../administration/user_privs/authorization/privilege_item.md#database) privilege on an Iceberg database, you can use the [CREATE TABLE](../../../sql-reference/sql-statements/table_bucket_part_index/CREATE_TABLE.md) or [CREATE TABLE AS SELECT](../../../sql-reference/sql-statements/table_bucket_part_index/CREATE_TABLE_AS_SELECT.md) statement to create a table in that Iceberg database. This feature is supported from v3.1 onwards.
 
 [Switch to an Iceberg catalog and a database in it](#switch-to-an-iceberg-catalog-and-a-database-in-it), and then use the following syntax to create an Iceberg table in that database.
 
