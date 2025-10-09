@@ -1004,7 +1004,7 @@ public class PaimonMetadataTest {
         tvrVersionRange = metadata.getTableVersionRange("test_db", table, startVersion, endVersion);
         assertEquals(tvrVersionRange.toString(), "Delta@[MIN,1]");
 
-        //3.clean env
+        //3 clean env 
         catalog.dropTable(identifier, true);
         catalog.dropDatabase("test_db", true, true);
         Files.delete(tmpDir);
