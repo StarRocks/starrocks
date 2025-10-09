@@ -24,6 +24,22 @@
 #include <thread>
 #include <vector>
 
+#ifdef __APPLE__
+#include <pthread.h>
+#include <stdint.h>
+// macOS does not provide sched_getcpu; provide a lightweight fallback
+// that hashes the thread id into [0, hw_concurrency).
+static inline unsigned starrocks_sched_getcpu_fallback() {
+    uint64_t tid = 0;
+    (void)pthread_threadid_np(nullptr, &tid);
+    unsigned n = (unsigned)std::max(1u, (unsigned)std::thread::hardware_concurrency());
+    return (unsigned)(tid % n);
+}
+#define sched_getcpu starrocks_sched_getcpu_fallback
+#else
+#include <sched.h>
+#endif
+
 #include "common/compiler_util.h"
 #include "gutil/macros.h"
 #include "util/cpu_info.h"
