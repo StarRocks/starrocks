@@ -24,9 +24,11 @@ import com.google.common.collect.Sets;
 import com.google.common.util.concurrent.Uninterruptibles;
 import com.starrocks.catalog.BaseTableInfo;
 import com.starrocks.catalog.Column;
+import com.starrocks.catalog.DataProperty;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.OlapTable;
+import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.ResourceGroup;
 import com.starrocks.catalog.Table;
@@ -54,11 +56,13 @@ import com.starrocks.scheduler.TaskRunContext;
 import com.starrocks.scheduler.persist.MVTaskRunExtraMessage;
 import com.starrocks.scheduler.persist.TaskRunStatus;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.LocalMetastore;
 import com.starrocks.sql.analyzer.MaterializedViewAnalyzer;
 import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.PartitionNames;
 import com.starrocks.sql.common.DmlException;
 import com.starrocks.sql.common.PCellSortedSet;
+import com.starrocks.sql.common.PCellWithName;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;
 import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.sql.plan.ExecPlan;
@@ -329,6 +333,50 @@ public abstract class BaseMVRefreshProcessor {
         final Stopwatch stopwatch = Stopwatch.createStarted();
         // collect base table snapshot infos
         this.snapshotBaseTables = collectBaseTableSnapshotInfos();
+
+        if (!mvContext.isExplain() && mvRefreshParams.isNonTentativeForce()) {
+            // drop existing partitions for force refresh
+            PCellSortedSet toRefreshPartitions = mvRefreshPartitioner.getMVPartitionsToRefreshByParams();
+            if (toRefreshPartitions != null && !toRefreshPartitions.isEmpty()) {
+                logger.info("force refresh, drop partitions: [{}]",
+                        Joiner.on(",").join(toRefreshPartitions.getPartitionNames()));
+
+                // first lock and drop partitions from a visible map
+                Locker locker = new Locker();
+                if (!locker.tryLockTableWithIntensiveDbLock(db.getId(), mv.getId(), LockType.WRITE,
+                        Config.mv_refresh_try_lock_timeout_ms, TimeUnit.MILLISECONDS)) {
+                    logger.warn("failed to lock database: {} in syncPartitions for force refresh", db.getFullName());
+                    throw new DmlException("Force refresh failed, database:" + db.getFullName() + " not exist");
+                }
+                try {
+                    PartitionInfo partitionInfo = mv.getPartitionInfo();
+                    DataProperty dataProperty = null;
+                    if (!mv.isPartitionedTable()) {
+                        String partitionName = toRefreshPartitions.partitions().iterator().next().name();
+                        Partition partition = mv.getPartition(partitionName);
+                        dataProperty = partitionInfo.getDataProperty(partition.getId());
+                    }
+                    for (PCellWithName partName : toRefreshPartitions.partitions()) {
+                        mv.dropPartition(db.getId(), partName.name(), false);
+                    }
+
+                    // for non-partitioned table, we need to build the partition here
+                    if (!mv.isPartitionedTable()) {
+                        LocalMetastore localMetastore = GlobalStateMgr.getCurrentState().getLocalMetastore();
+                        ConnectContext connectContext = mvContext.getCtx();
+                        localMetastore.buildNonPartitionOlapTable(db, mv, partitionInfo, dataProperty,
+                                connectContext.getCurrentComputeResource());
+                    }
+                } catch (Exception e) {
+                    logger.warn("failed to drop partitions {} for force refresh",
+                            Joiner.on(",").join(toRefreshPartitions.getPartitionNames()),
+                            DebugUtil.getRootStackTrace(e));
+                    throw new AnalysisException("failed to drop partitions for force refresh: " + e.getMessage());
+                } finally {
+                    locker.unLockTableWithIntensiveDbLock(db.getId(), this.mv.getId(), LockType.WRITE);
+                }
+            }
+        }
         // do sync partitions (add or drop partitions) for materialized view
         boolean result = mvRefreshPartitioner.syncAddOrDropPartitions();
         logger.info("finish sync partitions, cost(ms): {}", stopwatch.elapsed(TimeUnit.MILLISECONDS));
@@ -771,7 +819,8 @@ public abstract class BaseMVRefreshProcessor {
 
         Locker locker = new Locker();
         // update the meta if succeed
-        if (!locker.lockDatabaseAndCheckExist(db, this.mv, LockType.WRITE)) {
+        if (!locker.tryLockTableWithIntensiveDbLock(db.getId(), mv.getId(), LockType.WRITE,
+                Config.mv_refresh_try_lock_timeout_ms, TimeUnit.MILLISECONDS)) {
             logger.warn("failed to lock database: {} in updateMeta for mv refresh", db.getFullName());
             throw new DmlException("update meta failed. database:" + db.getFullName() + " not exist");
         }

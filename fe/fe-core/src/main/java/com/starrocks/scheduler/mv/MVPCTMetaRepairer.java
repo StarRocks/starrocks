@@ -14,12 +14,14 @@
 package com.starrocks.scheduler.mv;
 
 import com.google.common.annotations.VisibleForTesting;
+import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.BaseTableInfo;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.HiveTable;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.Table;
+import com.starrocks.common.Config;
 import com.starrocks.common.MaterializedViewExceptions;
 import com.starrocks.common.Pair;
 import com.starrocks.common.util.concurrent.lock.LockType;
@@ -63,7 +65,7 @@ public class MVPCTMetaRepairer {
      */
     public static void repairMetaIfNeeded(Database db, MaterializedView mv,
                                           List<Pair<Table, BaseTableInfo>> toRepairTables) throws DmlException {
-        if (toRepairTables.isEmpty()) {
+        if (!Config.enable_mv_automatic_repairing_for_broken_base_tables || toRepairTables.isEmpty()) {
             return;
         }
         Optional<Pair<Table, BaseTableInfo>> nonSupportedTableOpt =
@@ -99,6 +101,13 @@ public class MVPCTMetaRepairer {
         }
         if (baseTable.getTableIdentifier().equals(baseTableInfo.getTableIdentifier())) {
             return true;
+        }
+        return isTableSupportedPCTRepair(baseTable);
+    }
+
+    public static boolean isTableSupportedPCTRepair(Table baseTable) {
+        if (baseTable == null) {
+            return false;
         }
         return baseTable instanceof HiveTable;
     }
@@ -187,13 +196,44 @@ public class MVPCTMetaRepairer {
         }
         // acquire db write lock to modify meta of mv
         Locker locker = new Locker();
-        if (!locker.lockDatabaseAndCheckExist(db, mv, LockType.WRITE)) {
+        if (!locker.lockTableAndCheckDbExist(db, mv.getId(), LockType.WRITE)) {
             throw new DmlException("repair mv meta failed. database:" + db.getFullName() + " not exist");
         }
         try {
             MVMetaVersionRepairer.repairExternalBaseTableInfo(mv, oldBaseTableInfo, newTable, updatedPartitionNames);
         } finally {
             locker.unLockTableWithIntensiveDbLock(db.getId(), mv.getId(), LockType.WRITE);
+        }
+    }
+
+    /**
+     * Collect the repair info for the partition of the table, including last file modified time and file number.
+     */
+    public static void collectTableRepairInfo(Table table,
+                                              String partitionName,
+                                              MaterializedView.BasePartitionInfo basePartitionInfo) {
+        if (!Config.enable_mv_automatic_repairing_for_broken_base_tables || table == null
+                || !MVPCTMetaRepairer.isTableSupportedPCTRepair(table)) {
+            return;
+        }
+
+        // collect repair info for partition should not affect the main flow since the table may not need repair.
+        try {
+            TableUpdateArbitrator.UpdateContext updateContext = new TableUpdateArbitrator.UpdateContext(
+                    table, -1, Lists.newArrayList(partitionName));
+            TableUpdateArbitrator arbitrator = TableUpdateArbitrator.create(updateContext);
+            if (arbitrator != null) {
+                Map<String, Optional<HivePartitionDataInfo>> partitionDataInfos = arbitrator.getPartitionDataInfos();
+                Preconditions.checkState(partitionDataInfos.size() == 1);
+                if (partitionDataInfos.get(partitionName).isPresent()) {
+                    HivePartitionDataInfo hivePartitionDataInfo = partitionDataInfos.get(partitionName).get();
+                    basePartitionInfo.setExtLastFileModifiedTime(hivePartitionDataInfo.getLastFileModifiedTime());
+                    basePartitionInfo.setFileNumber(hivePartitionDataInfo.getFileNumber());
+                }
+            }
+        } catch (Exception e) {
+            LOG.warn("collect partition repair info failed, table:{}, partition:{}",
+                    table.getName(), partitionName, e);
         }
     }
 }

@@ -134,7 +134,7 @@ public class RepeatNode extends PlanNode {
         output.append("\n");
         if (!conjuncts.isEmpty()) {
             output.append(detailPrefix).append("PREDICATES: ").append(
-                    getExplainString(conjuncts)).append("\n");
+                    explainExpr(conjuncts)).append("\n");
         }
 
         if (CollectionUtils.isNotEmpty(outputTupleDesc.getSlots()) &&

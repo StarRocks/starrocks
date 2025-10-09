@@ -176,6 +176,8 @@ public class MvRewritePreprocessor {
                     // it's safe used in the optimize context here since the query mv context is not shared across the
                     // connect-context.
                     connectContext.setQueryMVContext(queryMaterializationContext);
+                    // register queryOptExpression
+                    queryMaterializationContext.registerQueryOptExpression(queryOptExpression);
                 }
 
                 // 5. process relate mvs with views
@@ -275,6 +277,10 @@ public class MvRewritePreprocessor {
             // means there is no plan with view
             return;
         }
+        Set<String> viewNames = logicalViewScanOperators.stream()
+                .map(op -> op.getTable().getName()).collect(Collectors.toSet());
+        logMVPrepare(connectContext, "[ViewBasedRewrite] There are {} view scan operators in the query plan",
+                viewNames);
         // optimize logical plan with view
         OptExpression optViewScanExpressions = MvUtils.optimizeViewPlan(
                 logicalPlanWithViewInline, connectContext, requiredColumns, columnRefFactory);
@@ -307,9 +313,13 @@ public class MvRewritePreprocessor {
 
             // add a projection to make predicate push-down rules work.
             Projection projection = viewScanOperator.getProjection();
-            LogicalProjectOperator projectOperator = new LogicalProjectOperator(projection.getColumnRefMap());
-            OptExpression projectionExpr = OptExpression.create(projectOperator, viewScanExpr);
-            return projectionExpr;
+            if (projection != null) {
+                LogicalProjectOperator projectOperator = new LogicalProjectOperator(projection.getColumnRefMap());
+                OptExpression projectionExpr = OptExpression.create(projectOperator, viewScanExpr);
+                return projectionExpr;
+            } else {
+                return viewScanExpr;
+            }
         } else {
             for (OptExpression input : logicalTree.getInputs()) {
                 OptExpression newInput = extractLogicalPlanWithView(input, viewScans);
@@ -827,8 +837,8 @@ public class MvRewritePreprocessor {
         
         // Log summary
         int successCount = mvInfos.size() - timeoutMvNames.size() - failedMvNames.size();
-        logMVPrepare(connectContext, "MV preparation summary: {} successful, {} timeout, {} failed out of {} total",
-                successCount, timeoutMvNames.size(), failedMvNames.size(), mvInfos.size());
+        logMVPrepare(connectContext, "MV preparation summary: {} successful, {} timeout, {} failed out of {} total: {}",
+                successCount, timeoutMvNames.size(), failedMvNames.size(), mvInfos.size(), failedMvNames);
     }
 
     /**
@@ -916,21 +926,33 @@ public class MvRewritePreprocessor {
         // If query tables are set which means use related mv for non lock optimization,
         // copy mv's metadata into a ready-only object.
         MaterializedView copiedMV = (context.getQueryTables() != null) ? copyOnlyMaterializedView(mv) : mv;
+        return buildMaterializationContext(context, copiedMV, mvPlanContext, mvUpdateInfo,
+                baseTables, intersectingTables, mvPlan, level);
+    }
+
+    private static MaterializationContext buildMaterializationContext(OptimizerContext context,
+                                                                      MaterializedView mv,
+                                                                      MvPlanContext mvPlanContext,
+                                                                      MvUpdateInfo mvUpdateInfo,
+                                                                      List<Table> baseTables,
+                                                                      List<Table> intersectingTables,
+                                                                      OptExpression mvPlan,
+                                                                      int level) {
         List<ColumnRefOperator> mvOutputColumns = mvPlanContext.getOutputColumns();
         MaterializationContext materializationContext =
-                new MaterializationContext(context, copiedMV, mvPlan, context.getColumnRefFactory(),
+                new MaterializationContext(context, mv, mvPlan, context.getColumnRefFactory(),
                         mvPlanContext.getRefFactory(), baseTables, intersectingTables,
                         mvUpdateInfo, mvOutputColumns, level);
         // generate scan mv plan here to reuse it in rule applications
         LogicalOlapScanOperator scanMvOp;
         synchronized (materializationContext.getQueryRefFactory()) {
             scanMvOp = createScanMvOperator(mv, materializationContext.getQueryRefFactory(),
-                    mvUpdateInfo.getMvToRefreshPartitionNames());
+                    mvUpdateInfo.getMvToRefreshPartitionNames(), false);
         }
         materializationContext.setScanMvOperator(scanMvOp);
         // should keep the sequence of schema
         List<ColumnRefOperator> scanMvOutputColumns = Lists.newArrayList();
-        for (Column column : copiedMV.getOrderedOutputColumns()) {
+        for (Column column : mv.getOrderedOutputColumns()) {
             scanMvOutputColumns.add(scanMvOp.getColumnReference(column));
         }
         Preconditions.checkState(mvOutputColumns.size() == scanMvOutputColumns.size());
@@ -946,7 +968,6 @@ public class MvRewritePreprocessor {
             outputMapping.put(mvOutputColumns.get(i), scanMvOutputColumns.get(i));
         }
         materializationContext.setOutputMapping(outputMapping);
-
         return materializationContext;
     }
 
@@ -957,9 +978,10 @@ public class MvRewritePreprocessor {
      * - original MV's predicates which can be deduced from MV opt expression and be used
      * for partition/distribution pruning.
      */
-    public static LogicalOlapScanOperator createScanMvOperator(MaterializedView mv,
+    public static LogicalOlapScanOperator createScanMvOperator(OlapTable mv,
                                                                ColumnRefFactory columnRefFactory,
-                                                               Set<String> excludedPartitions) {
+                                                               Set<String> excludedPartitions,
+                                                               boolean isWithHiddenColumns) {
         final ImmutableMap.Builder<ColumnRefOperator, Column> colRefToColumnMetaMapBuilder = ImmutableMap.builder();
         final ImmutableMap.Builder<Column, ColumnRefOperator> columnMetaToColRefMapBuilder = ImmutableMap.builder();
 
@@ -967,7 +989,9 @@ public class MvRewritePreprocessor {
 
         // first add base schema to avoid replaced in full schema.
         Set<String> columnNames = Sets.newHashSet();
-        for (Column column : mv.getBaseSchemaWithoutGeneratedColumn()) {
+        List<Column> baseSchema = isWithHiddenColumns ? mv.getBaseSchemaWithoutGeneratedColumn()
+                : mv.getVisibleColumnsWithoutGeneratedColumn();
+        for (Column column : baseSchema) {
             ColumnRefOperator columnRef = columnRefFactory.create(column.getName(),
                     column.getType(),
                     column.isAllowNull());
@@ -1023,7 +1047,7 @@ public class MvRewritePreprocessor {
                 .build();
     }
 
-    private static DistributionSpec getTableDistributionSpec(MaterializedView mv,
+    private static DistributionSpec getTableDistributionSpec(OlapTable mv,
                                                              Map<Column, ColumnRefOperator> columnMetaToColRefMap) {
         DistributionSpec distributionSpec = null;
         // construct distribution

@@ -194,6 +194,7 @@ set(STORAGE_FILES
     lake/vacuum_full.cpp
     lake/general_tablet_writer.cpp
     lake/pk_tablet_writer.cpp
+    lake/pk_tablet_sst_writer.cpp
     lake/primary_key_compaction_policy.cpp
     lake/replication_txn_manager.cpp
     lake/rowset.cpp
@@ -216,6 +217,7 @@ set(STORAGE_FILES
     lake/lake_primary_key_recover.cpp
     lake/spill_mem_table_sink.cpp
     lake/tablet_retain_info.cpp
+    lake/tablet_writer.cpp
     load_spill_block_manager.cpp
     load_chunk_spiller.cpp
     sstable/block_builder.cpp

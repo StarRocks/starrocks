@@ -25,7 +25,6 @@ import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.Pair;
-import com.starrocks.lake.LakeTable;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptExpressionVisitor;
@@ -186,9 +185,7 @@ public class JsonPathRewriteRule extends TransformationRule {
 
         private Column createExtendedColumn(Table table, String path, ColumnAccessPath jsonPath) {
             if (!table.containColumn(path)) {
-                // TODO: support LakeTable
-                Preconditions.checkState(table instanceof OlapTable && !(table instanceof LakeTable),
-                        "Only OlapTable supports dynamic column addition");
+                Preconditions.checkState(table instanceof OlapTable, "Only support OlapTable");
                 // NOTE: The safety of adding a column dynamically is ensured by the fact that
                 // this rule is only applied during query planning, thus the Table here is already copied for the
                 // query. So this change would not affect the original table schema.
@@ -397,7 +394,9 @@ public class JsonPathRewriteRule extends TransformationRule {
         }
 
         private boolean isSupportedJsonFunction(CallOperator call) {
-            return SUPPORTED_JSON_FUNCTIONS.contains(call.getFnName()) && call.getArguments().size() == 2;
+            return SUPPORTED_JSON_FUNCTIONS.contains(call.getFnName())
+                    && call.getArguments().size() == 2
+                    && call.getChild(0).getType().equals(Type.JSON);
         }
 
         private ScalarOperator rewriteJsonFunction(CallOperator call, ScalarOperatorRewriteContext rewriteContext) {

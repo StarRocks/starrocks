@@ -41,6 +41,7 @@ import com.starrocks.sql.optimizer.base.DistributionCol;
 import com.starrocks.sql.optimizer.base.DistributionSpec;
 import com.starrocks.sql.optimizer.base.EquivalentDescriptor;
 import com.starrocks.sql.optimizer.base.HashDistributionSpec;
+import com.starrocks.sql.optimizer.base.Ordering;
 import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalHashAggregateOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalHiveScanOperator;
@@ -51,6 +52,7 @@ import com.starrocks.sql.optimizer.operator.physical.PhysicalScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalSetOperation;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalTableFunctionOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalTopNOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalWindowOperator;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CaseWhenOperator;
@@ -85,6 +87,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.function.Predicate;
 import java.util.stream.Collectors;
 
 import static com.starrocks.sql.ast.expression.BinaryType.EQ_FOR_NULL;
@@ -103,6 +106,16 @@ public class DecodeCollector extends OptExpressionVisitor<DecodeInfo, DecodeInfo
 
     public static final Set<String> LOW_CARD_AGGREGATE_FUNCTIONS = Sets.newHashSet(FunctionSet.COUNT,
             FunctionSet.MULTI_DISTINCT_COUNT, FunctionSet.MAX, FunctionSet.MIN, FunctionSet.APPROX_COUNT_DISTINCT);
+
+    //TODO(by satanson): it seems that we can support more windows functions in future, at present, we only support
+    // LAG/LEAD/FIRST_VALUE/LAST_VALUE and the aggregations functions which can adopt low cardinality optimization
+    // and used as window function.
+    public static final Set<String> LOW_CARD_WINDOW_FUNCTIONS = Sets.newHashSet(FunctionSet.LAG, FunctionSet.LEAD,
+            FunctionSet.FIRST_VALUE, FunctionSet.LAST_VALUE);
+
+    static {
+        LOW_CARD_WINDOW_FUNCTIONS.addAll(LOW_CARD_AGGREGATE_FUNCTIONS);
+    }
     public static final Set<String> LOW_CARD_LOCAL_AGG_FUNCTIONS = Sets.newHashSet(FunctionSet.COUNT,
             FunctionSet.MAX, FunctionSet.MIN);
 
@@ -562,6 +575,107 @@ public class DecodeCollector extends OptExpressionVisitor<DecodeInfo, DecodeInfo
         return result;
     }
 
+    @Override
+    public DecodeInfo visitPhysicalAnalytic(OptExpression optExpression, DecodeInfo context) {
+        if (context.outputStringColumns.isEmpty()) {
+            return DecodeInfo.EMPTY;
+        }
+        PhysicalWindowOperator windowOp = optExpression.getOp().cast();
+        DecodeInfo info = context.createOutputInfo();
+
+        ColumnRefSet disableColumns = new ColumnRefSet();
+        for (ColumnRefOperator key : windowOp.getAnalyticCall().keySet()) {
+            CallOperator windowCallOp = windowOp.getAnalyticCall().get(key);
+            String fnName = windowCallOp.getFnName();
+            if (!LOW_CARD_WINDOW_FUNCTIONS.contains(fnName)) {
+                disableColumns.union(windowCallOp.getUsedColumns());
+                disableColumns.union(key);
+                continue;
+            }
+
+            // LEAD/LAG with specified default value can not adopt low-cardinality optimization
+            if ((fnName.equals(FunctionSet.LEAD) || fnName.equals(FunctionSet.LAG))) {
+                ScalarOperator lastArg = windowCallOp.getArguments().get(windowCallOp.getArguments().size() - 1);
+                if (!lastArg.isConstantNull()) {
+                    disableColumns.union(windowCallOp.getUsedColumns());
+                    disableColumns.union(key);
+                    continue;
+                }
+            }
+
+            Map<Boolean, List<ScalarOperator>> argGroups = windowCallOp.getChildren().stream()
+                    .filter(Predicate.not(ScalarOperator::isConstant))
+                    .collect(Collectors.partitioningBy(ScalarOperator::isColumnRef));
+
+            List<ScalarOperator> columnRefArgs = argGroups.get(true);
+            List<ScalarOperator> exprArgs = argGroups.get(false);
+
+            // window function must have only one string-type column-ref argument.
+            if (!exprArgs.isEmpty() || columnRefArgs.size() != 1) {
+                disableColumns.union(windowCallOp.getUsedColumns());
+                disableColumns.union(key);
+            }
+        }
+
+        if (!disableColumns.isEmpty()) {
+            info.decodeStringColumns.union(info.inputStringColumns);
+            info.decodeStringColumns.intersect(disableColumns);
+            info.inputStringColumns.except(info.decodeStringColumns);
+        }
+
+        info.outputStringColumns.clear();
+        for (ColumnRefOperator key : windowOp.getAnalyticCall().keySet()) {
+            if (disableColumns.contains(key)) {
+                continue;
+            }
+            CallOperator value = windowOp.getAnalyticCall().get(key);
+            if (!info.inputStringColumns.containsAll(value.getUsedColumns())) {
+                continue;
+            }
+
+            stringAggregateExpressions.computeIfAbsent(key.getId(), x -> Lists.newArrayList()).add(value);
+            // if the function return type is not string or array<string>, then its output column can not be
+            // encoded, however the function evaluation can adopt encoded columns, for examples:
+            // 1. select v1, count(t.a1) over(partition by v1) select t0, unnest(t0.a1) t(a1);
+            // 2. select v1, count(distinct t.a1) over(partition by v1) select t0, unnest(t0.a1) t(a1);
+            // t0.a1 is array<string> column and low-cardinality encoded.
+            if (value.getType().isStringType() || value.getType().isStringArrayType()) {
+                info.outputStringColumns.union(key.getId());
+                stringRefToDefineExprMap.putIfAbsent(key.getId(), value);
+                expressionStringRefCounter.put(key.getId(), 1);
+            }
+        }
+
+        for (ScalarOperator partitionBy : windowOp.getPartitionExpressions()) {
+            Preconditions.checkArgument(partitionBy instanceof ColumnRefOperator);
+            ColumnRefOperator partitionByColumnRef = (ColumnRefOperator) partitionBy;
+            if (info.inputStringColumns.contains(partitionByColumnRef) &&
+                    !info.decodeStringColumns.contains(partitionByColumnRef)) {
+                info.outputStringColumns.union(partitionByColumnRef);
+            }
+        }
+
+        for (Ordering orderBy : windowOp.getOrderByElements()) {
+            ColumnRefOperator orderByColumnRef = orderBy.getColumnRef();
+            if (info.inputStringColumns.contains(orderByColumnRef) &&
+                    !info.decodeStringColumns.contains(orderByColumnRef)) {
+                info.outputStringColumns.union(orderByColumnRef);
+            }
+        }
+
+        // the columns which are not arguments of window functions can also use encoded column;
+        // for an example:
+        // select t.a1, t.a2, lead(t.a1) over(partition by t.a2) select t0, unnest(t0.a1, t0.a2) t(a1,a2);
+        // both t0.a1 and t0.a2 are array<string> and low-cardinality encoded, the output columns: t.a1, t.a2,
+        // lead(t.a1) and t.a2 in partition-by all can adopt encoded columns.
+        ColumnRefSet outerColumnSet = new ColumnRefSet();
+        outerColumnSet.union(context.outputStringColumns);
+        outerColumnSet.intersect(info.inputStringColumns);
+        outerColumnSet.except(info.decodeStringColumns);
+        outerColumnSet.except(disableColumns);
+        info.outputStringColumns.union(outerColumnSet);
+        return info;
+    }
     @Override
     public DecodeInfo visitPhysicalHashAggregate(OptExpression optExpression, DecodeInfo context) {
         if (context.outputStringColumns.isEmpty()) {

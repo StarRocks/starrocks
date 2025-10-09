@@ -569,4 +569,58 @@ TEST_F(JsonFlattenerTest, testComplexJsonExtract2) {
     }
 }
 
+class JsonBoolExtractionTest : public ::testing::TestWithParam<std::tuple<std::string, bool>> {
+public:
+    void SetUp() override { config::enable_json_flat_complex_type = true; }
+    void TearDown() override { config::enable_json_flat_complex_type = false; }
+
+    std::vector<ColumnPtr> test_json(const std::vector<std::string>& inputs, const std::vector<std::string>& paths,
+                                     const std::vector<LogicalType>& types, bool has_remain) {
+        ColumnPtr input = JsonColumn::create();
+        JsonColumn* json_input = down_cast<JsonColumn*>(input.get());
+        for (const auto& json : inputs) {
+            ASSIGN_OR_ABORT(auto json_value, JsonValue::parse(json));
+            json_input->append(&json_value);
+        }
+
+        JsonFlattener flattener(paths, types, has_remain);
+        flattener.flatten(json_input);
+        return flattener.mutable_result();
+    }
+};
+
+TEST_P(JsonBoolExtractionTest, testExtractBoolNullColumnConsistency) {
+    std::string json_input = std::get<0>(GetParam());
+    bool expected_value = std::get<1>(GetParam());
+
+    std::vector<std::string> inputs = {json_input};
+    std::vector<std::string> paths = {"bool_field"};
+    std::vector<LogicalType> types = {TYPE_BOOLEAN};
+
+    auto result_columns = test_json(inputs, paths, types, false);
+    ASSERT_EQ(1, result_columns.size());
+
+    auto* result = down_cast<NullableColumn*>(result_columns[0].get());
+    result->check_or_die();
+    ASSERT_EQ(1, result->size());
+
+    auto* bool_column = down_cast<BooleanColumn*>(result->data_column().get());
+    EXPECT_EQ(expected_value, bool_column->get_data()[0]);
+
+    auto* null_column = down_cast<NullColumn*>(result->null_column().get());
+    EXPECT_EQ(0, null_column->get_data()[0]) << "Null column should contain 0 for non-null values";
+}
+
+INSTANTIATE_TEST_SUITE_P(JsonBoolExtractionCases, JsonBoolExtractionTest,
+                         ::testing::Values(std::make_tuple(R"({"bool_field": true})", true),
+                                           std::make_tuple(R"({"bool_field": false})", false),
+                                           std::make_tuple(R"({"bool_field": 42})", true),
+                                           std::make_tuple(R"({"bool_field": 0})", false),
+                                           std::make_tuple(R"({"bool_field": 1.5})", true),
+                                           std::make_tuple(R"({"bool_field": 0.0})", false),
+                                           std::make_tuple(R"({"bool_field": "true"})", true),
+                                           std::make_tuple(R"({"bool_field": "false"})", false),
+                                           std::make_tuple(R"({"bool_field": "1"})", true),
+                                           std::make_tuple(R"({"bool_field": "0"})", false)));
+
 } // namespace starrocks

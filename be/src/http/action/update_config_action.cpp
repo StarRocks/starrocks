@@ -44,7 +44,7 @@
 #include "agent/agent_common.h"
 #include "agent/agent_server.h"
 #include "cache/datacache.h"
-#include "cache/object_cache/page_cache.h"
+#include "cache/mem_cache/page_cache.h"
 #include "common/configbase.h"
 #include "common/status.h"
 #include "exec/workgroup/scan_executor.h"
@@ -115,7 +115,7 @@ Status UpdateConfigAction::update_config(const std::string& name, const std::str
             return Status::OK();
         });
         _config_callback.emplace("datacache_mem_size", [&]() -> Status {
-            LocalCacheEngine* cache = DataCache::GetInstance()->local_cache();
+            LocalMemCacheEngine* cache = DataCache::GetInstance()->local_mem_cache();
             if (cache == nullptr || !cache->is_initialized()) {
                 return Status::InternalError("Local cache is not initialized");
             }
@@ -127,10 +127,10 @@ Status UpdateConfigAction::update_config(const std::string& name, const std::str
                 LOG(WARNING) << "Failed to update datacache mem size";
                 return st;
             }
-            return cache->update_mem_quota(mem_size, true);
+            return cache->update_mem_quota(mem_size);
         });
         _config_callback.emplace("datacache_disk_size", [&]() -> Status {
-            LocalCacheEngine* cache = DataCache::GetInstance()->local_cache();
+            LocalDiskCacheEngine* cache = DataCache::GetInstance()->local_disk_cache();
             if (cache == nullptr || !cache->is_initialized()) {
                 return Status::InternalError("Local cache is not initialized");
             }
@@ -149,7 +149,7 @@ Status UpdateConfigAction::update_config(const std::string& name, const std::str
             return cache->update_disk_spaces(spaces);
         });
         _config_callback.emplace("datacache_inline_item_count_limit", [&]() -> Status {
-            LocalCacheEngine* cache = DataCache::GetInstance()->local_cache();
+            LocalDiskCacheEngine* cache = DataCache::GetInstance()->local_disk_cache();
             if (cache == nullptr || !cache->is_initialized()) {
                 return Status::InternalError("Local cache is not initialized");
             }

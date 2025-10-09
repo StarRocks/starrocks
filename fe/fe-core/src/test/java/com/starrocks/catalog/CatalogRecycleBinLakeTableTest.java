@@ -37,25 +37,39 @@ import com.starrocks.sql.ast.RecoverDbStmt;
 import com.starrocks.sql.ast.RecoverPartitionStmt;
 import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.utframe.UtFrameUtils;
+import com.starrocks.warehouse.cngroup.ComputeResource;
 import mockit.Expectations;
 import mockit.Mock;
 import mockit.MockUp;
 import mockit.Mocked;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 import org.assertj.core.util.Lists;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.TestInfo;
 
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Future;
 
 public class CatalogRecycleBinLakeTableTest {
+    private static final Logger LOG = LogManager.getLogger(CatalogRecycleBinLakeTableTest.class);
+
+    private String currentCaseName = "";
+
     @BeforeAll
     public static void beforeClass() {
         UtFrameUtils.createMinStarRocksCluster(RunMode.SHARED_DATA);
         GlobalStateMgr.getCurrentState().getWarehouseMgr().initDefaultWarehouse();
         GlobalStateMgr.getCurrentState().getRecycleBin().setStop();
+    }
+
+    @BeforeEach
+    void setUp(TestInfo testInfo) {
+        currentCaseName = testInfo.getDisplayName();
     }
 
     private static Table createTable(ConnectContext connectContext, String sql) throws Exception {
@@ -178,6 +192,7 @@ public class CatalogRecycleBinLakeTableTest {
 
     @Test
     public void testRecycleLakeTable(@Mocked LakeService lakeService) throws Exception {
+        LOG.warn("Start test: {}, lakeService={}", currentCaseName, lakeService);
         CatalogRecycleBin recycleBin = GlobalStateMgr.getCurrentState().getRecycleBin();
         ConnectContext connectContext = UtFrameUtils.createDefaultCtx();
         // create database
@@ -220,6 +235,12 @@ public class CatalogRecycleBinLakeTableTest {
             @Mock
             public LakeService getLakeService(TNetworkAddress address) throws RpcException {
                 return lakeService;
+            }
+        };
+        new MockUp<ConnectContext>() {
+            @Mock
+            public ComputeResource getCurrentComputeResource() {
+                return WarehouseManager.DEFAULT_RESOURCE;
             }
         };
         new Expectations() {
@@ -295,6 +316,7 @@ public class CatalogRecycleBinLakeTableTest {
 
     @Test
     public void testReplayRecycleLakeTable(@Mocked LakeService lakeService) throws Exception {
+        LOG.warn("Start test: {}, lakeService={}", currentCaseName, lakeService);
         final String dbName = "replay_recycle_lake_table_test";
         CatalogRecycleBin recycleBin = GlobalStateMgr.getCurrentState().getRecycleBin();
         ConnectContext connectContext = UtFrameUtils.createDefaultCtx();
@@ -321,6 +343,7 @@ public class CatalogRecycleBinLakeTableTest {
 
     @Test
     public void testRecycleLakeDatabase(@Mocked LakeService lakeService) throws Exception {
+        LOG.warn("Start test: {}, lakeService={}", currentCaseName, lakeService);
         final String dbName = "recycle_lake_database_test";
         CatalogRecycleBin recycleBin = GlobalStateMgr.getCurrentState().getRecycleBin();
         ConnectContext connectContext = UtFrameUtils.createDefaultCtx();
@@ -385,6 +408,7 @@ public class CatalogRecycleBinLakeTableTest {
 
     @Test
     public void testRecycleLakePartition(@Mocked LakeService lakeService) throws Exception {
+        LOG.warn("Start test: {}, lakeService={}", currentCaseName, lakeService);
         final String dbName = "recycle_lake_partition_test";
         CatalogRecycleBin recycleBin = GlobalStateMgr.getCurrentState().getRecycleBin();
         ConnectContext connectContext = UtFrameUtils.createDefaultCtx();
@@ -551,6 +575,7 @@ public class CatalogRecycleBinLakeTableTest {
 
     @Test
     public void testRecycleLakePartitionWithSharedDirectory(@Mocked LakeService lakeService) throws Exception {
+        LOG.warn("Start test: {}, lakeService={}", currentCaseName, lakeService);
         final String dbName = "recycle_partition_shared_directory_test";
         CatalogRecycleBin recycleBin = GlobalStateMgr.getCurrentState().getRecycleBin();
         ConnectContext connectContext = UtFrameUtils.createDefaultCtx();

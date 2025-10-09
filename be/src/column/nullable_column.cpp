@@ -38,7 +38,8 @@ size_t NullableColumn::null_count() const {
     if (!_has_null) {
         return 0;
     }
-    return SIMD::count_nonzero(_null_column->get_data());
+    const auto null_data = _null_column->immutable_data();
+    return SIMD::count_nonzero(null_data);
 }
 
 size_t NullableColumn::null_count(size_t offset, size_t count) const {
@@ -71,6 +72,7 @@ void NullableColumn::append(const Column& src, size_t offset, size_t count) {
     } else if (src.is_nullable()) {
         const auto& src_column = down_cast<const NullableColumn&>(src);
         DCHECK_EQ(src_column._null_column->size(), src_column._data_column->size());
+        const auto null_data = src_column._null_column->immutable_data();
 
         if (!src_column.has_null()) {
             _null_column->resize(_null_column->size() + count);
@@ -78,7 +80,7 @@ void NullableColumn::append(const Column& src, size_t offset, size_t count) {
         } else {
             _null_column->append(*src_column._null_column, offset, count);
             _data_column->append(*src_column._data_column, offset, count);
-            _has_null = _has_null || SIMD::contain_nonzero(src_column._null_column->get_data(), offset, count);
+            _has_null = _has_null || SIMD::contain_nonzero(null_data, offset, count);
         }
     } else {
         _null_column->resize(_null_column->size() + count);
@@ -288,7 +290,8 @@ uint32_t NullableColumn::serialize(size_t idx, uint8_t* pos) const {
         return sizeof(bool) + _data_column->serialize(idx, pos + sizeof(bool));
     }
 
-    bool null = _null_column->get_data()[idx];
+    const auto null_data = _null_column->immutable_data();
+    bool null = null_data[idx];
     strings::memcpy_inlined(pos, &null, sizeof(bool));
 
     if (null) {
@@ -306,9 +309,10 @@ uint32_t NullableColumn::serialize_default(uint8_t* pos) const {
 
 size_t NullableColumn::serialize_batch_at_interval(uint8_t* dst, size_t byte_offset, size_t byte_interval, size_t start,
                                                    size_t count) const {
+    const auto null_data = _null_column->immutable_data();
     _null_column->serialize_batch_at_interval(dst, byte_offset, byte_interval, start, count);
     for (size_t i = start; i < start + count; i++) {
-        if (_null_column->get_data()[i] == 0) {
+        if (null_data[i] == 0) {
             _data_column->serialize(i, dst + (i - start) * byte_interval + byte_offset + 1);
         } else {
             _data_column->serialize_default(dst + (i - start) * byte_interval + byte_offset + 1);
@@ -319,8 +323,9 @@ size_t NullableColumn::serialize_batch_at_interval(uint8_t* dst, size_t byte_off
 
 void NullableColumn::serialize_batch(uint8_t* dst, Buffer<uint32_t>& slice_sizes, size_t chunk_size,
                                      uint32_t max_one_row_size) const {
-    _data_column->serialize_batch_with_null_masks(dst, slice_sizes, chunk_size, max_one_row_size,
-                                                  _null_column->get_data().data(), _has_null);
+    const auto null_data = _null_column->immutable_data();
+    _data_column->serialize_batch_with_null_masks(dst, slice_sizes, chunk_size, max_one_row_size, null_data.data(),
+                                                  _has_null);
 }
 
 const uint8_t* NullableColumn::deserialize_and_append(const uint8_t* pos) {
@@ -350,7 +355,7 @@ void NullableColumn::fnv_hash(uint32_t* hash, uint32_t from, uint32_t to) const 
         return;
     }
 
-    const auto& null_data = _null_column->get_data();
+    const auto null_data = _null_column->immutable_data();
     uint32_t value = 0x9e3779b9;
     while (from < to) {
         uint32_t new_from = from + 1;
@@ -373,7 +378,7 @@ void NullableColumn::fnv_hash_with_selection(uint32_t* hash, uint8_t* selection,
         _data_column->fnv_hash_with_selection(hash, selection, from, to);
         return;
     }
-    const auto& null_data = _null_column->get_data();
+    const auto null_data = _null_column->immutable_data();
     uint32_t value = 0x9e3779b9;
     while (from < to) {
         uint16_t new_from = from + 1;
@@ -397,7 +402,7 @@ void NullableColumn::fnv_hash_selective(uint32_t* hash, uint16_t* sel, uint16_t 
         _data_column->fnv_hash_selective(hash, sel, sel_size);
         return;
     }
-    const auto& null_data = _null_column->get_data();
+    const auto null_data = _null_column->immutable_data();
     uint32_t value = 0x9e3779b9;
     // @TODO can we optimize this?
     for (uint16_t i = 0; i < sel_size; i++) {
@@ -416,7 +421,7 @@ void NullableColumn::crc32_hash(uint32_t* hash, uint32_t from, uint32_t to) cons
         return;
     }
 
-    const auto& null_data = _null_column->get_data();
+    const auto null_data = _null_column->immutable_data();
     // NULL is treat as 0 when crc32 hash for data loading
     static const int INT_VALUE = 0;
     while (from < to) {
@@ -439,7 +444,7 @@ void NullableColumn::crc32_hash_with_selection(uint32_t* hash, uint8_t* selectio
         _data_column->crc32_hash_with_selection(hash, selection, from, to);
         return;
     }
-    const auto& null_data = _null_column->get_data();
+    const auto null_data = _null_column->immutable_data();
     static const int INT_VALUE = 0;
     while (from < to) {
         uint16_t new_from = from + 1;
@@ -462,7 +467,7 @@ void NullableColumn::crc32_hash_selective(uint32_t* hash, uint16_t* sel, uint16_
         _data_column->crc32_hash_selective(hash, sel, sel_size);
         return;
     }
-    const auto& null_data = _null_column->get_data();
+    const auto null_data = _null_column->immutable_data();
     static const int INT_VALUE = 0;
     // @TODO can we optimize this?
     for (uint16_t i = 0; i < sel_size; i++) {
@@ -480,7 +485,7 @@ void NullableColumn::murmur_hash3_x86_32(uint32_t* hash, uint32_t from, uint32_t
         return;
     }
 
-    const auto& null_data = _null_column->get_data();
+    const auto null_data = immutable_null_column_data();
     while (from < to) {
         uint32_t new_from = from + 1;
         while (new_from < to && null_data[from] == null_data[new_from]) {
@@ -500,7 +505,7 @@ int64_t NullableColumn::xor_checksum(uint32_t from, uint32_t to) const {
     }
 
     int64_t xor_checksum = 0;
-    const uint8_t* src = _null_column->get_data().data();
+    const uint8_t* src = _null_column->immutable_data().data();
 
     // The XOR of NullableColumn
     // XOR all the 8-bit integers one by one
@@ -514,7 +519,8 @@ int64_t NullableColumn::xor_checksum(uint32_t from, uint32_t to) const {
 }
 
 void NullableColumn::put_mysql_row_buffer(MysqlRowBuffer* buf, size_t idx, bool is_binary_protocol) const {
-    if (_has_null && _null_column->get_data()[idx]) {
+    auto null_data = _null_column->immutable_data();
+    if (_has_null && null_data[idx]) {
         buf->push_null(is_binary_protocol);
     } else {
         buf->update_field_pos();
@@ -523,10 +529,11 @@ void NullableColumn::put_mysql_row_buffer(MysqlRowBuffer* buf, size_t idx, bool 
 }
 
 void NullableColumn::check_or_die() const {
-    CHECK_EQ(_null_column->size(), _data_column->size());
+    DCHECK_EQ(_null_column->size(), _data_column->size());
     // when _has_null=true, the column may have no null value, so don't check.
     if (!_has_null) {
-        CHECK(!SIMD::contain_nonzero(_null_column->get_data(), 0));
+        auto null_data = _null_column->immutable_data();
+        DCHECK(!SIMD::contain_nonzero(null_data, 0));
     }
     _data_column->check_or_die();
     _null_column->check_or_die();

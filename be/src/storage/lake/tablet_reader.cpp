@@ -20,6 +20,7 @@
 #include "column/datum_convert.h"
 #include "common/status.h"
 #include "gutil/stl_util.h"
+#include "runtime/exec_env.h"
 #include "storage/aggregate_iterator.h"
 #include "storage/chunk_helper.h"
 #include "storage/column_predicate_rewriter.h"
@@ -454,13 +455,24 @@ Status TabletReader::init_delete_predicates(const TabletReaderParams& params, De
 
         ConjunctivePredicates conjunctions;
         for (const auto& cond : conds) {
-            ASSIGN_OR_RETURN(ColumnPredicate * pred, pred_parser.parse_thrift_cond(cond));
-            conjunctions.add(pred);
+            auto pred_or = pred_parser.parse_thrift_cond(cond);
+            if (!pred_or.ok()) {
+                if (LIKELY(!config::lake_tablet_ignore_invalid_delete_predicate)) {
+                    return pred_or.status();
+                } else {
+                    LOG(WARNING) << "failed to parse delete condition.column_name[" << cond.column_name
+                                 << "], condition_op[" << cond.condition_op << "], condition_values["
+                                 << (cond.condition_values.empty() ? "<empty>" : cond.condition_values[0]) << "].";
+                    continue;
+                }
+            }
+            conjunctions.add(pred_or.value());
             // save for memory release.
-            _predicate_free_list.emplace_back(pred);
+            _predicate_free_list.emplace_back(pred_or.value());
         }
-
-        dels->add(index, conjunctions);
+        if (!conjunctions.empty()) {
+            dels->add(index, conjunctions);
+        }
     }
 
     return Status::OK();

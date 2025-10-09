@@ -27,7 +27,7 @@ namespace starrocks::lake {
 class LakePersistentIndexTest : public TestBase {
 public:
     LakePersistentIndexTest() : TestBase(kTestDirectory) {
-        _tablet_metadata = std::make_unique<TabletMetadata>();
+        _tablet_metadata = std::make_shared<TabletMetadata>();
         _tablet_metadata->set_id(next_id());
         _tablet_metadata->set_version(1);
         _tablet_metadata->set_enable_persistent_index(true);
@@ -70,7 +70,7 @@ protected:
 
     constexpr static const char* const kTestDirectory = "test_lake_persistent_index";
 
-    std::unique_ptr<TabletMetadata> _tablet_metadata;
+    std::shared_ptr<TabletMetadata> _tablet_metadata;
 };
 
 TEST_F(LakePersistentIndexTest, test_basic_api) {
@@ -91,7 +91,7 @@ TEST_F(LakePersistentIndexTest, test_basic_api) {
     }
     auto tablet_id = _tablet_metadata->id();
     auto index = std::make_unique<LakePersistentIndex>(_tablet_mgr.get(), tablet_id);
-    ASSERT_OK(index->init(_tablet_metadata->sstable_meta()));
+    ASSERT_OK(index->init(_tablet_metadata));
     ASSERT_OK(index->insert(N, key_slices.data(), values.data(), 0));
     ASSERT_TRUE(index->memory_usage() > 0);
 
@@ -172,7 +172,7 @@ TEST_F(LakePersistentIndexTest, test_replace) {
 
     auto tablet_id = _tablet_metadata->id();
     auto index = std::make_unique<LakePersistentIndex>(_tablet_mgr.get(), tablet_id);
-    ASSERT_OK(index->init(_tablet_metadata->sstable_meta()));
+    ASSERT_OK(index->init(_tablet_metadata));
     ASSERT_OK(index->insert(N, key_slices.data(), values.data(), false));
 
     //replace
@@ -202,7 +202,7 @@ TEST_F(LakePersistentIndexTest, test_major_compaction) {
     total_keys.reserve(M * N);
     auto tablet_id = _tablet_metadata->id();
     auto index = std::make_unique<LakePersistentIndex>(_tablet_mgr.get(), tablet_id);
-    ASSERT_OK(index->init(_tablet_metadata->sstable_meta()));
+    ASSERT_OK(index->init(_tablet_metadata));
     int k = 0;
     for (int i = 0; i < M; ++i) {
         vector<Key> keys;
@@ -241,7 +241,7 @@ TEST_F(LakePersistentIndexTest, test_major_compaction) {
     get_values.reserve(M * N);
     auto txn_log = std::make_shared<TxnLogPB>();
     // try to compact sst files.
-    ASSERT_OK(LakePersistentIndex::major_compact(_tablet_mgr.get(), *tablet_metadata_ptr, txn_log.get()));
+    ASSERT_OK(LakePersistentIndex::major_compact(_tablet_mgr.get(), tablet_metadata_ptr, txn_log.get()));
     ASSERT_TRUE(txn_log->op_compaction().input_sstables_size() > 0);
     ASSERT_TRUE(txn_log->op_compaction().has_output_sstable());
     ASSERT_OK(index->apply_opcompaction(txn_log->op_compaction()));
@@ -262,9 +262,11 @@ TEST_F(LakePersistentIndexTest, test_compaction_strategy) {
         auto* sstable_pb = sstable_meta.add_sstables();
         sstable_pb->set_filesize(1000000);
         sstable_pb->set_filename("aaa.sst");
+        sstable_pb->set_max_rss_rowid(0);
         for (int i = 0; i < N; i++) {
             sstable_pb = sstable_meta.add_sstables();
             sstable_pb->set_filesize(sub_size);
+            sstable_pb->set_max_rss_rowid(i + 1);
         }
         LakePersistentIndex::pick_sstables_for_merge(sstable_meta, &sstables, &merge_base_level);
         if (is_base) {
@@ -302,7 +304,7 @@ TEST_F(LakePersistentIndexTest, test_compaction_strategy) {
 TEST_F(LakePersistentIndexTest, test_insert_delete) {
     auto tablet_id = _tablet_metadata->id();
     auto index = std::make_unique<LakePersistentIndex>(_tablet_mgr.get(), tablet_id);
-    ASSERT_OK(index->init(_tablet_metadata->sstable_meta()));
+    ASSERT_OK(index->init(_tablet_metadata));
 
     auto l0_max_mem_usage = config::l0_max_mem_usage;
     config::l0_max_mem_usage = 10;
@@ -353,7 +355,7 @@ TEST_F(LakePersistentIndexTest, test_insert_delete) {
 TEST_F(LakePersistentIndexTest, test_memtable_full) {
     auto tablet_id = _tablet_metadata->id();
     auto index = std::make_unique<LakePersistentIndex>(_tablet_mgr.get(), tablet_id);
-    ASSERT_OK(index->init(_tablet_metadata->sstable_meta()));
+    ASSERT_OK(index->init(_tablet_metadata));
 
     size_t old_l0_max_mem_usage = config::l0_max_mem_usage;
     config::l0_max_mem_usage = 1073741824;
@@ -377,6 +379,82 @@ TEST_F(LakePersistentIndexTest, test_memtable_full) {
     config::l0_max_mem_usage = index->memory_usage();
     ASSERT_TRUE(index->is_memtable_full());
     config::l0_max_mem_usage = old_l0_max_mem_usage;
+}
+
+TEST_F(LakePersistentIndexTest, test_compaction_strategy_same_max_rss_rowid) {
+    // Test case for the fix: when base sstable's max_rss_rowid is same as cumulative sstable's max_rss_rowid,
+    // we should force to do base merge instead of cumulative merge.
+
+    PersistentIndexSstableMetaPB sstable_meta;
+    std::vector<PersistentIndexSstablePB> sstables;
+    bool merge_base_level = false;
+
+    // Setup: create a scenario where cumulative merge would normally be preferred
+    // but base and cumulative sstables have the same max_rss_rowid
+    sstable_meta.Clear();
+    sstables.clear();
+
+    // Add base sstable (index 0) with large size
+    auto* base_sstable = sstable_meta.add_sstables();
+    base_sstable->set_filesize(1000000); // 1MB
+    base_sstable->set_filename("base.sst");
+    base_sstable->set_max_rss_rowid(100); // Same max_rss_rowid
+
+    // Add cumulative sstables with small total size (would trigger cumulative merge normally)
+    auto* cumulative_sstable = sstable_meta.add_sstables();
+    cumulative_sstable->set_filesize(50000); // 50KB - much smaller than base
+    cumulative_sstable->set_filename("cumulative1.sst");
+    cumulative_sstable->set_max_rss_rowid(100); // Same max_rss_rowid as base
+
+    // Without the fix, this would choose cumulative merge because:
+    // base_level_bytes * ratio (1000000 * 0.1 = 100000) > cumulative_level_bytes (50000)
+    // But with the fix, it should choose base merge due to same max_rss_rowid
+
+    LakePersistentIndex::pick_sstables_for_merge(sstable_meta, &sstables, &merge_base_level);
+
+    // Verify that base merge is chosen (merge_base_level = true)
+    ASSERT_TRUE(merge_base_level) << "Should force base merge when max_rss_rowid is same";
+    ASSERT_EQ(2, sstables.size()) << "Should include both base and cumulative sstables";
+    ASSERT_EQ("base.sst", sstables[0].filename()) << "Base sstable should be first";
+    ASSERT_EQ("cumulative1.sst", sstables[1].filename()) << "Cumulative sstable should be second";
+
+    // Test the normal case where max_rss_rowid is different
+    sstable_meta.Clear();
+    sstables.clear();
+
+    base_sstable = sstable_meta.add_sstables();
+    base_sstable->set_filesize(1000000);
+    base_sstable->set_filename("base2.sst");
+    base_sstable->set_max_rss_rowid(100); // Different max_rss_rowid
+
+    cumulative_sstable = sstable_meta.add_sstables();
+    cumulative_sstable->set_filesize(50000);
+    cumulative_sstable->set_filename("cumulative2.sst");
+    cumulative_sstable->set_max_rss_rowid(200); // Different max_rss_rowid
+
+    LakePersistentIndex::pick_sstables_for_merge(sstable_meta, &sstables, &merge_base_level);
+
+    // This should choose cumulative merge since max_rss_rowid is different
+    ASSERT_FALSE(merge_base_level) << "Should choose cumulative merge when max_rss_rowid is different";
+    ASSERT_EQ(1, sstables.size()) << "Should only include cumulative sstables";
+    ASSERT_EQ("cumulative2.sst", sstables[0].filename()) << "Only cumulative sstable should be included";
+
+    // Test edge case: empty cumulative sstables
+    sstable_meta.Clear();
+    sstables.clear();
+
+    base_sstable = sstable_meta.add_sstables();
+    base_sstable->set_filesize(1000000);
+    base_sstable->set_filename("base3.sst");
+    base_sstable->set_max_rss_rowid(100);
+
+    // No cumulative sstables added
+
+    LakePersistentIndex::pick_sstables_for_merge(sstable_meta, &sstables, &merge_base_level);
+
+    // Should choose base merge since there are no cumulative sstables
+    ASSERT_TRUE(!merge_base_level) << "Should choose cumulative merge when no cumulative sstables exist";
+    ASSERT_EQ(0, sstables.size()) << "Should be empty since no cumulative sstables exist";
 }
 
 TEST_F(LakePersistentIndexTest, test_major_compaction_with_predicate) {
@@ -415,7 +493,7 @@ TEST_F(LakePersistentIndexTest, test_major_compaction_with_predicate) {
     total_keys.reserve(M * N);
     auto tablet_id = _tablet_metadata->id();
     auto index = std::make_unique<LakePersistentIndex>(_tablet_mgr.get(), tablet_id);
-    ASSERT_OK(index->init(_tablet_metadata->sstable_meta()));
+    ASSERT_OK(index->init(_tablet_metadata));
     int k = 0;
     for (int i = 0; i < M; ++i) {
         vector<Key> keys;
@@ -462,7 +540,7 @@ TEST_F(LakePersistentIndexTest, test_major_compaction_with_predicate) {
     auto hit_count = SIMD::count_nonzero(hits.data(), hits.size());
     auto txn_log = std::make_shared<TxnLogPB>();
     // try to compact sst files.
-    ASSERT_OK(LakePersistentIndex::major_compact(_tablet_mgr.get(), *tablet_metadata_ptr, txn_log.get()));
+    ASSERT_OK(LakePersistentIndex::major_compact(_tablet_mgr.get(), tablet_metadata_ptr, txn_log.get()));
     ASSERT_TRUE(txn_log->op_compaction().input_sstables_size() == M);
     ASSERT_TRUE(txn_log->op_compaction().has_output_sstable() || hit_count == 0);
     ASSERT_OK(index->apply_opcompaction(txn_log->op_compaction()));

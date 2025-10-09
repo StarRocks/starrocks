@@ -273,7 +273,7 @@ Status HttpServiceBE::start() {
     _http_handlers.emplace_back(jit_cache_action);
 #endif
 
-    auto* datacache_action = new DataCacheAction(_cache_env->local_cache());
+    auto* datacache_action = new DataCacheAction(_cache_env->local_disk_cache(), _cache_env->local_mem_cache());
     _ev_http_server->register_handler(HttpMethod::GET, "/api/datacache/{action}", datacache_action);
     _http_handlers.emplace_back(datacache_action);
 

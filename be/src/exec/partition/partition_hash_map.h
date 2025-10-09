@@ -297,7 +297,7 @@ protected:
                                  typename HashMap::allocator_type>
                     visited_keys(chunk->num_rows());
 
-            const auto& null_flag_data = nullable_key_column->null_column()->get_data();
+            const auto null_data = nullable_key_column->immutable_null_column_data();
             const auto size = chunk->num_rows();
             // partition_idx=0 is reserved by null key.
             auto next_partition_idx = hash_map.size() + 1;
@@ -305,7 +305,7 @@ protected:
             uint32_t i = 0;
             for (; !is_passthrough && i < size; i++) {
                 PartitionChunks* value_ptr = nullptr;
-                if (null_flag_data[i] == 1) {
+                if (null_data[i] == 1) {
                     value_ptr = &null_key_value;
                 } else {
                     const auto& key = key_loader(i);
@@ -377,7 +377,7 @@ struct PartitionHashMapWithOneNumberKey : public PartitionHashMapBase<false, fal
                       NewPartitionCallback&& new_partition_cb, PartitionChunkConsumer&& partition_chunk_consumer) {
         DCHECK(!key_columns[0]->is_nullable());
         const auto* key_column = down_cast<const ColumnType*>(key_columns[0].get());
-        const auto& key_column_data = key_column->get_data();
+        const auto key_column_data = key_column->immutable_data();
         append_chunk_for_one_key<EnablePassthrough>(
                 hash_map, chunk, [&](uint32_t offset) { return key_column_data[offset]; },
                 [](const FieldType& key) { return key; }, obj_pool,
@@ -402,8 +402,8 @@ struct PartitionHashMapWithOneNullableNumberKey : public PartitionHashMapBase<tr
                       NewPartitionCallback&& new_partition_cb, PartitionChunkConsumer&& partition_chunk_consumer) {
         DCHECK(key_columns[0]->is_nullable());
         const auto* nullable_key_column = ColumnHelper::as_raw_column<const NullableColumn>(key_columns[0].get());
-        const auto& key_column_data =
-                down_cast<const ColumnType*>(nullable_key_column->data_column().get())->get_data();
+        const auto key_column_data =
+                down_cast<const ColumnType*>(nullable_key_column->data_column().get())->immutable_data();
         append_chunk_for_one_nullable_key<EnablePassthrough>(
                 hash_map, null_key_value, chunk, nullable_key_column,
                 [&](uint32_t offset) { return key_column_data[offset]; }, [](const FieldType& key) { return key; },

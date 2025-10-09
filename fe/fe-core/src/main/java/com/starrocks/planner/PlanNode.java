@@ -40,10 +40,14 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.TreeNode;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.ast.expression.ExprSubstitutionMap;
 import com.starrocks.sql.ast.expression.SlotRef;
 import com.starrocks.sql.common.PermutationGenerator;
+import com.starrocks.sql.formatter.ExprExplainVisitor;
+import com.starrocks.sql.formatter.ExprVerboseVisitor;
+import com.starrocks.sql.formatter.FormatOptions;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
@@ -60,6 +64,7 @@ import org.apache.commons.collections.MapUtils;
 import org.roaringbitmap.RoaringBitmap;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.List;
@@ -614,30 +619,34 @@ abstract public class PlanNode extends TreeNode<PlanNode> {
         return output;
     }
 
-    protected String getVerboseExplain(List<? extends Expr> exprs, TExplainLevel level) {
+    protected String getExplainString(List<? extends Expr> exprs) {
         if (exprs == null) {
             return "";
         }
-        StringBuilder output = new StringBuilder();
-        for (int i = 0; i < exprs.size(); ++i) {
-            if (i > 0) {
-                output.append(", ");
-            }
-            if (level.equals(TExplainLevel.NORMAL)) {
-                output.append(exprs.get(i).toSql());
-            } else {
-                output.append(exprs.get(i).explain());
-            }
+        return exprs.stream().map(Expr::toSql).collect(Collectors.joining(", "));
+    }
+
+    protected String explainExpr(Expr... exprs) {
+        return explainExpr(TExplainLevel.NORMAL, Arrays.stream(exprs).toList());
+    }
+
+    protected String explainExpr(List<? extends Expr> exprs) {
+        return explainExpr(TExplainLevel.NORMAL, exprs);
+    }
+
+    protected String explainExpr(TExplainLevel level, List<? extends Expr> exprs) {
+        ConnectContext context = ConnectContext.get();
+        FormatOptions options = FormatOptions.allEnable();
+        if (context == null || !context.getSessionVariable().isEnableDesensitizeExplain()) {
+            options.setEnableDigest(false);
         }
-        return output.toString();
-    }
-
-    protected String getExplainString(List<? extends Expr> exprs) {
-        return getVerboseExplain(exprs, TExplainLevel.NORMAL);
-    }
-
-    protected String getVerboseExplain(List<? extends Expr> exprs) {
-        return getVerboseExplain(exprs, TExplainLevel.VERBOSE);
+        if (TExplainLevel.VERBOSE.equals(level)) {
+            ExprVerboseVisitor v = new ExprVerboseVisitor(options);
+            return exprs.stream().map(v::visit).collect(Collectors.joining(", "));
+        } else {
+            ExprExplainVisitor v = new ExprExplainVisitor(options);
+            return exprs.stream().map(v::visit).collect(Collectors.joining(", "));
+        }
     }
 
     public void appendTrace(StringBuilder sb) {

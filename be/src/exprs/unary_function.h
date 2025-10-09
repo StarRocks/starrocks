@@ -103,7 +103,7 @@ public:
 
         const auto& data_array = GetContainer<Type>::get_data(v1);
 
-        if constexpr (lt_is_string<Type> || lt_is_binary<Type>) {
+        if constexpr (lt_is_string<Type> || lt_is_binary<Type> || lt_is_object_family<Type>) {
             for (int i = 0; i < size; ++i) {
                 r3[i] = OP::template apply<CppType, ResultCppType>(data_array[i]);
             }

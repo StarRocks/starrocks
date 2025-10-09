@@ -90,14 +90,12 @@ public class UseCatalogStmtTest {
 
         Assertions.assertEquals("default_catalog", ctx.getCurrentCatalog());
 
-        executor = new StmtExecutor(ctx, SqlParser.parseSingleStatement(
-                "use 'xxx default_catalog'", ctx.getSessionVariable().getSqlMode()));
-        executor.execute();
-        Assertions.assertSame(ctx.getState().getStateType(), QueryState.MysqlStateType.ERR);
+        Assertions.assertThrows(com.starrocks.sql.parser.ParsingException.class, () ->
+                SqlParser.parseSingleStatement(
+                        "use 'xxx default_catalog'", ctx.getSessionVariable().getSqlMode()));
 
-        executor = new StmtExecutor(ctx, SqlParser.parseSingleStatement(
-                "use 'catalog default_catalog xxx'", ctx.getSessionVariable().getSqlMode()));
-        executor.execute();
-        Assertions.assertSame(ctx.getState().getStateType(), QueryState.MysqlStateType.ERR);
+        Assertions.assertThrows(com.starrocks.sql.parser.ParsingException.class, () ->
+                SqlParser.parseSingleStatement(
+                        "use 'catalog default_catalog xxx'", ctx.getSessionVariable().getSqlMode()));
     }
 }

@@ -53,6 +53,7 @@ import com.starrocks.scheduler.Task;
 import com.starrocks.scheduler.TaskBuilder;
 import com.starrocks.scheduler.TaskManager;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.RunMode;
 import com.starrocks.sql.analyzer.MaterializedViewAnalyzer;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.analyzer.SetStmtAnalyzer;
@@ -279,11 +280,22 @@ public class AlterMVJobExecutor extends AlterJobExecutor {
             properties.remove(PropertyAnalyzer.PROPERTIES_BF_COLUMNS);
         }
 
-        if (!properties.isEmpty()) {
-            if (propClone.containsKey(PropertyAnalyzer.PROPERTIES_COLOCATE_WITH)) {
+        if (properties.containsKey(PropertyAnalyzer.PROPERTIES_COLOCATE_WITH)) {
+            // TODO: when support shared-nothing mode, must check PROPERTIES_LABELS_LOCATION
+            if (RunMode.isSharedNothingMode()) {
                 throw new SemanticException("Modify failed because unsupported properties: " +
-                        "colocate group is not supported for materialized view");
+                        "colocate_with is not supported for materialized view in shared-nothing cluster.");
             }
+            try {
+                String colocateGroup = PropertyAnalyzer.analyzeColocate(properties);
+                GlobalStateMgr.getCurrentState().getColocateTableIndex()
+                        .modifyTableColocate(db, materializedView, colocateGroup, false, null);
+            } catch (DdlException e) {
+                throw new AlterJobException(e.getMessage(), e);
+            }
+        }
+
+        if (!properties.isEmpty()) {
             // analyze properties
             List<SetListItem> setListItems = Lists.newArrayList();
             for (Map.Entry<String, String> entry : properties.entrySet()) {
@@ -481,7 +493,7 @@ public class AlterMVJobExecutor extends AlterJobExecutor {
 
             final MaterializedView.MvRefreshScheme refreshScheme = materializedView.getRefreshScheme();
             Locker locker = new Locker();
-            if (!locker.lockDatabaseAndCheckExist(db, LockType.WRITE)) {
+            if (!locker.lockTableAndCheckDbExist(db, materializedView.getId(), LockType.WRITE)) {
                 throw new DmlException("update meta failed. database:" + db.getFullName() + " not exist");
             }
             try {
@@ -517,7 +529,7 @@ public class AlterMVJobExecutor extends AlterJobExecutor {
                 final ChangeMaterializedViewRefreshSchemeLog log = new ChangeMaterializedViewRefreshSchemeLog(materializedView);
                 GlobalStateMgr.getCurrentState().getEditLog().logMvChangeRefreshScheme(log);
             } finally {
-                locker.unLockDatabase(db.getId(), LockType.WRITE);
+                locker.unLockTableWithIntensiveDbLock(db.getId(), materializedView.getId(), LockType.WRITE);
             }
             LOG.info("change materialized view refresh type {} to {}, id: {}", oldRefreshType,
                     newRefreshType, materializedView.getId());

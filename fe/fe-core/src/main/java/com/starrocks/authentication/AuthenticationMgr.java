@@ -611,6 +611,16 @@ public class AuthenticationMgr {
     // ---------------------------------------- Group Provider Statement --------------------------------------
 
     public void createGroupProviderStatement(CreateGroupProviderStmt stmt, ConnectContext context) throws DdlException {
+        // Check if group provider already exists
+        if (this.nameToGroupProviderMap.containsKey(stmt.getName())) {
+            if (stmt.isIfNotExists()) {
+                // If IF NOT EXISTS is specified, silently return without error
+                return;
+            } else {
+                throw new DdlException("Group provider '" + stmt.getName() + "' already exists");
+            }
+        }
+
         GroupProvider groupProvider = GroupProviderFactory.createGroupProvider(stmt.getName(), stmt.getPropertyMap());
         groupProvider.init();
         this.nameToGroupProviderMap.put(stmt.getName(), groupProvider);
@@ -629,9 +639,19 @@ public class AuthenticationMgr {
         }
     }
 
-    public void dropGroupProviderStatement(DropGroupProviderStmt stmt, ConnectContext context) {
-        GroupProvider groupProvider = this.nameToGroupProviderMap.remove(stmt.getName());
-        groupProvider.destory();
+    public void dropGroupProviderStatement(DropGroupProviderStmt stmt, ConnectContext context) throws DdlException {
+        GroupProvider groupProvider = this.nameToGroupProviderMap.get(stmt.getName());
+        if (groupProvider == null) {
+            if (stmt.isIfExists()) {
+                // If IF EXISTS is specified, silently return without error
+                return;
+            } else {
+                throw new DdlException("Group provider '" + stmt.getName() + "' does not exist");
+            }
+        }
+
+        this.nameToGroupProviderMap.remove(stmt.getName());
+        groupProvider.destroy();
 
         GlobalStateMgr.getCurrentState().getEditLog().logJsonObject(OperationType.OP_DROP_GROUP_PROVIDER,
                 new GroupProviderLog(stmt.getName(), null));
@@ -639,7 +659,7 @@ public class AuthenticationMgr {
 
     public void replayDropGroupProvider(String name) {
         GroupProvider groupProvider = this.nameToGroupProviderMap.remove(name);
-        groupProvider.destory();
+        groupProvider.destroy();
     }
 
     public List<GroupProvider> getAllGroupProviders() {

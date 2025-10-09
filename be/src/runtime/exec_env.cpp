@@ -241,7 +241,6 @@ Status GlobalEnv::_init_mem_tracker() {
     _consistency_mem_tracker =
             regist_tracker(MemTrackerType::CONSISTENCY, consistency_mem_limit, process_mem_tracker());
     _datacache_mem_tracker = regist_tracker(MemTrackerType::DATACACHE, -1, process_mem_tracker());
-    _poco_connection_pool_mem_tracker = regist_tracker(MemTrackerType::POCO_CONNECTION_POOL, -1, process_mem_tracker());
     _replication_mem_tracker = regist_tracker(MemTrackerType::REPLICATION, -1, process_mem_tracker());
 
     MemChunkAllocator::init_metrics();
@@ -498,7 +497,7 @@ Status ExecEnv::init(const std::vector<StorePath>& store_paths, bool as_cn) {
 #endif
     _load_channel_mgr = new LoadChannelMgr();
     _load_stream_mgr = new LoadStreamMgr();
-    _brpc_stub_cache = new BrpcStubCache();
+    _brpc_stub_cache = new BrpcStubCache(this);
     _stream_load_executor = new StreamLoadExecutor(this);
     _stream_context_mgr = new StreamContextMgr();
     _transaction_mgr = new TransactionMgr(this);
@@ -765,6 +764,12 @@ void ExecEnv::destroy() {
     // _query_pool_mem_tracker.
     SAFE_DELETE(_runtime_filter_cache);
     SAFE_DELETE(_driver_limiter);
+    if (HttpBrpcStubCache::getInstance() != nullptr) {
+        HttpBrpcStubCache::getInstance()->shutdown();
+    }
+    if (LakeServiceBrpcStubCache::getInstance() != nullptr) {
+        LakeServiceBrpcStubCache::getInstance()->shutdown();
+    }
     SAFE_DELETE(_pipeline_timer);
     SAFE_DELETE(_broker_client_cache);
     SAFE_DELETE(_frontend_client_cache);

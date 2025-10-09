@@ -47,20 +47,23 @@ public:
     // No thread safe, UT only
     spill::BlockPtr get_block(size_t gid, size_t bid);
     std::vector<spill::BlockGroup>& block_groups() { return _block_groups; }
+    size_t total_bytes() const { return _total_bytes; }
 
 private:
     // Mutex for the container.
     std::mutex _mutex;
     // Blocks generated when loading. Each block group contains multiple blocks which are ordered.
     std::vector<spill::BlockGroup> _block_groups;
+    // total groups bytes
+    size_t _total_bytes = 0;
 };
 
 class LoadSpillBlockManager {
 public:
     // Constructor that initializes the LoadSpillBlockManager with a query ID and remote spill path.
     LoadSpillBlockManager(const TUniqueId& load_id, const TUniqueId& fragment_instance_id,
-                          const std::string& remote_spill_path)
-            : _load_id(load_id), _fragment_instance_id(fragment_instance_id) {
+                          const std::string& remote_spill_path, std::shared_ptr<FileSystem> fs)
+            : _load_id(load_id), _fragment_instance_id(fragment_instance_id), _fs(fs) {
         _remote_spill_path = remote_spill_path + "/load_spill";
     }
 
@@ -86,10 +89,13 @@ public:
 
     const TUniqueId& fragment_instance_id() const { return _fragment_instance_id; }
 
+    size_t total_bytes() const { return _block_container ? _block_container->total_bytes() : 0; }
+
 private:
     TUniqueId _load_id;                                        // Unique ID for the load.
     TUniqueId _fragment_instance_id;                           // Unique ID for the fragment instance.
     std::string _remote_spill_path;                            // Path for remote spill storage.
+    std::shared_ptr<FileSystem> _fs;                           // File system for remote storage.
     std::unique_ptr<spill::DirManager> _remote_dir_manager;    // Manager for remote directories.
     std::unique_ptr<spill::BlockManager> _block_manager;       // Manager for blocks.
     std::unique_ptr<LoadSpillBlockContainer> _block_container; // Container for blocks.

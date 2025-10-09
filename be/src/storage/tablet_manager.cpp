@@ -447,11 +447,7 @@ Status TabletManager::drop_tablet(TTabletId tablet_id, TabletDropFlag flag) {
             // to 'RUNNING' from 'SHUTDOWN'.
             std::unique_lock l(dropped_tablet->get_header_lock());
             (void)dropped_tablet->set_tablet_state(TABLET_SHUTDOWN);
-        }
-
-        // just try to remove the tablet meta. if failed, it will be removed in sweep_shutdown_tablet
-        if (auto st = _remove_tablet_meta(dropped_tablet); !st.ok()) {
-            LOG(WARNING) << "Fail to remove tablet meta. tablet_id=" << tablet_id << " status=" << st;
+            dropped_tablet->save_meta();
         }
 
         // Remove the tablet directory in background to avoid holding the lock of tablet map shard for long.

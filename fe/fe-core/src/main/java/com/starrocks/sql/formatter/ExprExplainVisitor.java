@@ -35,6 +35,7 @@ import com.starrocks.sql.ast.expression.CompoundPredicate;
 import com.starrocks.sql.ast.expression.DateLiteral;
 import com.starrocks.sql.ast.expression.DefaultValueExpr;
 import com.starrocks.sql.ast.expression.DictMappingExpr;
+import com.starrocks.sql.ast.expression.DictQueryExpr;
 import com.starrocks.sql.ast.expression.DictionaryGetExpr;
 import com.starrocks.sql.ast.expression.ExistsPredicate;
 import com.starrocks.sql.ast.expression.Expr;
@@ -76,10 +77,14 @@ import java.util.stream.Collectors;
  * @Todo: merge with AST2StringVisitor
  */
 public class ExprExplainVisitor implements AstVisitorExtendInterface<String, Void> {
-    private final FormatOptions options = FormatOptions.allEnable();
+    private FormatOptions options = FormatOptions.allEnable();
 
     public ExprExplainVisitor() {
         options.setEnableDigest(false);
+    }
+
+    public ExprExplainVisitor(FormatOptions options) {
+        this.options = options;
     }
 
     // ========================================= Helper Methods =========================================
@@ -540,6 +545,11 @@ public class ExprExplainVisitor implements AstVisitorExtendInterface<String, Voi
         return fnName + "(" + visit(node.getChild(0)) + ", ["
                 + visit(node.getChild(1)) + "], "
                 + visit(node.getChild(2)) + ")";
+    }
+
+    @Override
+    public String visitDictQueryExpr(DictQueryExpr node, Void context) {
+        return visitFunctionCall(node, context);
     }
 
     // ========================================= Arrow and Subfield Expressions =========================================

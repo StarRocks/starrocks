@@ -16,7 +16,11 @@ package com.starrocks.authentication;
 
 import com.google.common.base.Strings;
 import com.starrocks.catalog.UserIdentity;
+import com.starrocks.qe.ConnectContext;
+import com.starrocks.thrift.TAuthInfo;
 import com.starrocks.thrift.TUserIdentity;
+
+import java.util.HashSet;
 
 public class UserIdentityUtils {
     
@@ -59,4 +63,25 @@ public class UserIdentityUtils {
         return new UserIdentity(tUserIdent.getUsername(), tUserIdent.getHost(), tUserIdent.is_domain,
                 tUserIdent.is_ephemeral);
     }
+
+    public static void setAuthInfoFromThrift(ConnectContext context, TAuthInfo authInfo) {
+        if (authInfo.isSetCurrent_user_ident()) {
+            setAuthInfoFromThrift(context, authInfo.getCurrent_user_ident());
+        } else {
+            UserIdentity userIdentity = UserIdentity.createAnalyzedUserIdentWithIp(authInfo.user, authInfo.user_ip);
+            context.setCurrentUserIdentity(userIdentity);
+            context.setCurrentRoleIds(userIdentity);
+        }
+    }
+
+    public static void setAuthInfoFromThrift(ConnectContext context, TUserIdentity tUserIdent) {
+        UserIdentity userIdentity = UserIdentityUtils.fromThrift(tUserIdent);
+        context.setCurrentUserIdentity(userIdentity);
+        if (tUserIdent.isSetCurrent_role_ids()) {
+            context.setCurrentRoleIds(new HashSet<>(tUserIdent.current_role_ids.getRole_id_list()));
+        } else {
+            context.setCurrentRoleIds(userIdentity);
+        }
+    }
+
 }

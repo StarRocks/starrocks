@@ -162,6 +162,8 @@ public class FunctionSet {
     public static final String SHA2 = "sha2";
     public static final String SM3 = "sm3";
     public static final String ROW_FINGERPRINT= "row_fingerprint";
+    public static final String FROM_BINARY = "from_binary";
+    public static final String TO_BINARY = "to_binary";
 
     // Vector Index functions:
     public static final String APPROX_COSINE_SIMILARITY = "approx_cosine_similarity";
@@ -1164,7 +1166,7 @@ public class FunctionSet {
 
             // MAX_BY
             for (Type t1 : Type.getSupportedTypes()) {
-                if (t1.isFunctionType() || t1.isNull() || t1.isChar() || t1.isPseudoType()) {
+                if (t1.isFunctionType() || t1.isNull() || t1.isChar()) {
                     continue;
                 }
                 addBuiltin(AggregateFunction.createBuiltin(
@@ -1173,7 +1175,7 @@ public class FunctionSet {
 
             // MIN_BY
             for (Type t1 : Type.getSupportedTypes()) {
-                if (t1.isFunctionType() || t1.isNull() || t1.isChar() || t1.isPseudoType()) {
+                if (t1.isFunctionType() || t1.isNull() || t1.isChar()) {
                     continue;
                 }
                 addBuiltin(AggregateFunction.createBuiltin(

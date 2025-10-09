@@ -479,7 +479,6 @@ public class LowCardinalityTest extends PlanTestBase {
 
         sql = "select count(distinct S_NATIONKEY) from supplier group by S_ADDRESS";
         plan = getThriftPlan(sql);
-        System.out.println(plan);
         Assertions.assertTrue(plan.contains(
                 "partition:TDataPartition(type:RANDOM, partition_exprs:[]), " +
                         "query_global_dicts:[TGlobalDict(columnId:10, strings:[6D 6F 63 6B], ids:[1]"), plan);
@@ -1191,7 +1190,7 @@ public class LowCardinalityTest extends PlanTestBase {
         assertContains(plan, "  2:SORT\n" +
                 "  |  order by: [20, INT, false] ASC, [2, INT, false] ASC");
         Assertions.assertTrue(plan.contains("  1:PARTITION-TOP-N\n" +
-                "  |  partition by: [20: L_COMMENT, INT, false] "));
+                "  |  partition by: [20: L_COMMENT, INT, false] "), plan);
         Assertions.assertTrue(plan.contains("  |  order by: [20, INT, false] ASC, [2, INT, false] ASC"));
 
         // row number

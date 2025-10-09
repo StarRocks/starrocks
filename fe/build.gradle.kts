@@ -19,7 +19,7 @@ plugins {
 
 allprojects {
     group = "com.starrocks"
-    version = "3.4.0"
+    version = "main"
 
     repositories {
         mavenCentral()
@@ -59,7 +59,7 @@ subprojects {
         set("hive-apache.version", "3.1.2-22")
         set("hudi.version", "1.0.2")
         set("iceberg.version", "1.9.0")
-        set("io.netty.version", "4.1.124.Final")
+        set("io.netty.version", "4.1.125.Final")
         set("jackson.version", "2.15.2")
         set("jetty.version", "9.4.57.v20241219")
         set("jprotobuf-starrocks.version", "1.0.0")
@@ -73,7 +73,7 @@ subprojects {
         set("protobuf-java.version", "3.25.5")
         set("puppycrawl.version", "10.21.1")
         set("spark.version", "3.5.5")
-        set("staros.version", "3.5-rc2")
+        set("staros.version", "3.5-rc3")
         set("tomcat.version", "8.5.70")
         // var sync end
     }
@@ -119,11 +119,11 @@ subprojects {
             implementation("com.qcloud:chdfs_hadoop_plugin_network:3.2")
             implementation("com.squareup.okhttp3:okhttp:4.10.0")
             implementation("com.squareup.okio:okio:3.4.0")
-            implementation("com.starrocks:fe-testing:1.0.0")
-            implementation("com.starrocks:hive-udf:1.0.0")
+            implementation("com.starrocks:fe-testing:${project.version}")
+            implementation("com.starrocks:hive-udf:${project.version}")
             implementation("com.starrocks:jprotobuf-starrocks:${project.ext["jprotobuf-starrocks.version"]}")
-            implementation("com.starrocks:fe-utils:1.0.0")
-            implementation("com.starrocks:spark-dpp:1.0.0")
+            implementation("com.starrocks:fe-utils:${project.version}")
+            implementation("com.starrocks:spark-dpp:${project.version}")
             implementation("com.starrocks:starclient:${project.ext["staros.version"]}")
             implementation("com.starrocks:starmanager:${project.ext["staros.version"]}")
             implementation("com.starrocks:starrocks-bdb-je:18.3.20")

@@ -57,4 +57,5 @@ RUN cat be.conf >> $DEPLOYDIR/starrocks/be/conf/be.conf && \
     rm -f be.conf fe.conf && \
     mkdir -p $DEPLOYDIR/starrocks/fe/meta $DEPLOYDIR/starrocks/be/storage && touch /.dockerenv
 
+HEALTHCHECK --interval=30s --timeout=15s --start-period=30s CMD ./health_check.sh
 CMD ./entrypoint.sh

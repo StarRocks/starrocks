@@ -196,7 +196,9 @@ From v3.3.0 onwards, StarRocks supports the metadata reading and caching policie
 
 ### Iceberg views
 
-StarRocks supports querying Iceberg views from v3.3.2 onwards. Currently, only Iceberg views created through StarRocks are supported.
+StarRocks supports querying Iceberg views from v3.3.2 onwards and creating Iceberg views since v3.5.
+
+Currently, only Iceberg views created through StarRocks are supported. Starting with v3.5, adding StarRocks syntax style definitions to existing Iceberg views is supported.
 
 ### Query statistics interfaces
 
@@ -235,6 +237,11 @@ StarRocks supports querying Iceberg views from v3.3.2 onwards. Currently, only I
 - StarRocks supports querying the Parquet-formatted data in Delta Lake, and supports SNAPPY, LZ4, ZSTD, GZIP, and NO_COMPRESSION compression formats for Parquet files.
 - StarRocks does not support querying the MAP-type and STRUCT-type data in Delta Lake.
 - StarRocks supports SHOW CREATE TABLE to view Delta Lake table schema from v3.0.0 onwards.
+- Currently, Delta Lake catalogs support the following table features:
+  - V2 Checkpoint (From v3.3.0 onwards)
+  - Timestamp without Timezone (From v3.3.1 onwards)
+  - Column mapping (From v3.3.6 onwards)
+  - Deletion Vector (From v3.4.1 onwards)
 
 ## JDBC Catalog
 

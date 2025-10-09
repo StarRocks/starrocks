@@ -275,7 +275,7 @@ REST catalog 的 `MetastoreParams`：
 
 必需：否
 
-描述：要使用的授权协议类型。默认值：`NONE`。有效值：`OAUTH2`，需要 `token` 或 `credential`。
+描述：要使用的授权协议类型。默认值：`NONE`。有效值：`OAUTH2` 和 `JWT`。当设置为 `OAUTH2` 时，需要指定 `iceberg.catalog.oauth2.token` 或 `iceberg.catalog.oauth2.credential`。当设置为 `JWT` 时，可省略  `token` 或 `credential`，需要使用 `JWT` 方式登录 StarRocks 集群。StarRocks 会使用登陆用户的 JWT 令牌访问 Catalog。
 
 ###### iceberg.catalog.oauth2.token
 
@@ -500,32 +500,38 @@ PROPERTIES
   "aws.s3.region" = "<aws_s3_region>"
   ```
 
+- 要选择基于 REST Catalog 的 Vended Credential（自 v4.0 起支持），请按以下方式配置 `StorageCredentialParams`：
+
+  ```SQL
+  "aws.s3.region" = "<aws_s3_region>"
+  ```
+
 AWS S3 的 `StorageCredentialParams`：
 
 ###### aws.s3.use_instance_profile
 
-必需：是
-描述：指定是否启用基于实例配置文件的身份验证方法和基于假设角色的身份验证方法。有效值：`true` 和 `false`。默认值：`false`。
+- 必需：是
+- 描述：指定是否启用基于实例配置文件的身份验证方法和基于假设角色的身份验证方法。有效值：`true` 和 `false`。默认值：`false`。
 
 ###### aws.s3.iam_role_arn
 
-必需：否
-描述：在您的 AWS S3 存储桶上具有权限的 IAM 角色的 ARN。如果使用基于假设角色的身份验证方法访问 AWS S3，则必须指定此参数。
+- 必需：否
+- 描述：在您的 AWS S3 存储桶上具有权限的 IAM 角色的 ARN。如果使用基于假设角色的身份验证方法访问 AWS S3，则必须指定此参数。
 
 ###### aws.s3.region
 
-必需：是
-描述：您的 AWS S3 存储桶所在的区域。例如：`us-west-1`。
+- 必需：是
+- 描述：您的 AWS S3 存储桶所在的区域。例如：`us-west-1`。
 
 ###### aws.s3.access_key
 
-必需：否
-描述：您的 IAM 用户的访问密钥。如果使用基于 IAM 用户的身份验证方法访问 AWS S3，则必须指定此参数。
+- 必需：否
+- 描述：您的 IAM 用户的访问密钥。如果使用基于 IAM 用户的身份验证方法访问 AWS S3，则必须指定此参数。
 
 ###### aws.s3.secret_key
 
-必需：否
-描述：您的 IAM 用户的秘密密钥。如果使用基于 IAM 用户的身份验证方法访问 AWS S3，则必须指定此参数。
+- 必需：否
+- 描述：您的 IAM 用户的秘密密钥。如果使用基于 IAM 用户的身份验证方法访问 AWS S3，则必须指定此参数。
 
 有关如何选择访问 AWS S3 的身份验证方法以及如何在 AWS IAM 控制台中配置访问控制策略的信息，请参见 [访问 AWS S3 的身份验证参数](../../../integrations/authenticate_to_aws_resources.md#authentication-parameters-for-accessing-aws-s3)。
 
@@ -557,28 +563,28 @@ MinIO 和其他 S3 兼容系统的 `StorageCredentialParams`：
 
 ###### aws.s3.enable_ssl
 
-必需：是
-描述：指定是否启用 SSL 连接。<br />有效值：`true` 和 `false`。默认值：`true`。
+- 必需：是
+- 描述：指定是否启用 SSL 连接。<br />有效值：`true` 和 `false`。默认值：`true`。
 
 ###### aws.s3.enable_path_style_access
 
-必需：是
-描述：指定是否启用路径样式访问。<br />有效值：`true` 和 `false`。默认值：`false`。对于 MinIO，您必须将值设置为 `true`。<br />路径样式 URL 使用以下格式：`https://s3.<region_code>.amazonaws.com/<bucket_name>/<key_name>`。例如，如果您在美国西部（俄勒冈）区域创建了一个名为 `DOC-EXAMPLE-BUCKET1` 的存储桶，并且您想要访问该存储桶中的 `alice.jpg` 对象，可以使用以下路径样式 URL：`https://s3.us-west-2.amazonaws.com/DOC-EXAMPLE-BUCKET1/alice.jpg`。
+- 必需：是
+- 描述：指定是否启用路径样式访问。<br />有效值：`true` 和 `false`。默认值：`false`。对于 MinIO，您必须将值设置为 `true`。<br />路径样式 URL 使用以下格式：`https://s3.<region_code>.amazonaws.com/<bucket_name>/<key_name>`。例如，如果您在美国西部（俄勒冈）区域创建了一个名为 `DOC-EXAMPLE-BUCKET1` 的存储桶，并且您想要访问该存储桶中的 `alice.jpg` 对象，可以使用以下路径样式 URL：`https://s3.us-west-2.amazonaws.com/DOC-EXAMPLE-BUCKET1/alice.jpg`。
 
 ###### aws.s3.endpoint
 
-必需：是
-描述：用于连接到您的 S3 兼容存储系统而不是 AWS S3 的端点。
+- 必需：是
+- 描述：用于连接到您的 S3 兼容存储系统而不是 AWS S3 的端点。
 
 ###### aws.s3.access_key
 
-必需：是
-描述：您的 IAM 用户的访问密钥。
+- 必需：是
+- 描述：您的 IAM 用户的访问密钥。
 
 ###### aws.s3.secret_key
 
-必需：是
-描述：您的 IAM 用户的秘密密钥。
+- 必需：是
+- 描述：您的 IAM 用户的秘密密钥。
 
 </TabItem>
 
@@ -607,32 +613,34 @@ MinIO 和其他 S3 兼容系统的 `StorageCredentialParams`：
   "azure.blob.sas_token" = "<storage_account_SAS_token>"
   ```
 
+- 要选择基于 REST Catalog 的 Vended Credential（自 v4.0 起支持），则无需配置 `StorageCredentialParams`。
+
 Microsoft Azure 的 `StorageCredentialParams`：
 
 ###### azure.blob.storage_account
 
-必需：是
-描述：您的 Blob Storage 账户的用户名。
+- 必需：是
+- 描述：您的 Blob Storage 账户的用户名。
 
 ###### azure.blob.shared_key
 
-必需：是
-描述：您的 Blob Storage 账户的共享密钥。
+- 必需：是
+- 描述：您的 Blob Storage 账户的共享密钥。
 
 ###### azure.blob.account_name
 
-必需：是
-描述：您的 Blob Storage 账户的用户名。
+- 必需：是
+- 描述：您的 Blob Storage 账户的用户名。
 
 ###### azure.blob.container
 
-必需：是
-描述：存储数据的 blob 容器的名称。
+- 必需：是
+- 描述：存储数据的 blob 容器的名称。
 
 ###### azure.blob.sas_token
 
-必需：是
-描述：用于访问您的 Blob Storage 账户的 SAS 令牌。
+- 必需：是
+- 描述：用于访问您的 Blob Storage 账户的 SAS 令牌。
 
 ###### Azure Data Lake Storage Gen1
 
@@ -685,6 +693,8 @@ Microsoft Azure 的 `StorageCredentialParams`：
   "azure.adls2.oauth2_client_endpoint" = "<service_principal_client_endpoint>"
   ```
 
+- 要选择基于 REST Catalog 的 Vended Credential（自 v4.0 起支持），则无需配置 `StorageCredentialParams`。
+
 </TabItem>
 
 <TabItem value="GCS" label="Google GCS" >
@@ -727,31 +737,33 @@ Microsoft Azure 的 `StorageCredentialParams`：
     "gcp.gcs.impersonation_service_account" = "<data_google_service_account_email>"
     ```
 
+- 要选择基于 REST Catalog 的 Vended Credential（自 v4.0 起支持），则无需配置 `StorageCredentialParams`。
+
 Google GCS 的 `StorageCredentialParams`：
 
 ###### gcp.gcs.service_account_email
 
-默认值： ""
-示例： "[user@hello.iam.gserviceaccount.com](mailto:user@hello.iam.gserviceaccount.com)"
-描述：在创建服务账户时生成的 JSON 文件中的电子邮件地址。
+- 默认值： ""
+- 示例： "[user@hello.iam.gserviceaccount.com](mailto:user@hello.iam.gserviceaccount.com)"
+- 描述：在创建服务账户时生成的 JSON 文件中的电子邮件地址。
 
 ###### gcp.gcs.service_account_private_key_id
 
-默认值： ""
-示例： "61d257bd8479547cb3e04f0b9b6b9ca07af3b7ea"
-描述：在创建服务账户时生成的 JSON 文件中的私钥 ID。
+- 默认值： ""
+- 示例： "61d257bd8479547cb3e04f0b9b6b9ca07af3b7ea"
+- 描述：在创建服务账户时生成的 JSON 文件中的私钥 ID。
 
 ###### gcp.gcs.service_account_private_key
 
-默认值： ""
-示例： "-----BEGIN PRIVATE KEY----xxxx-----END PRIVATE KEY-----\n"  
-描述：在创建服务账户时生成的 JSON 文件中的私钥。
+- 默认值： ""
+- 示例： "-----BEGIN PRIVATE KEY----xxxx-----END PRIVATE KEY-----\n"  
+- 描述：在创建服务账户时生成的 JSON 文件中的私钥。
 
 ###### gcp.gcs.impersonation_service_account
 
-默认值： ""  
-示例： "hello"  
-描述：您要模拟的服务账户。
+- 默认值： ""  
+- 示例： "hello"  
+- 描述：您要模拟的服务账户。
 
 </TabItem>
 
@@ -775,7 +787,7 @@ Google GCS 的 `StorageCredentialParams`：
 从 v3.4 起，StarRocks 在没有主动触发收集 Iceberg 表统计信息的情况下，可以通过设置以下参数读取 Iceberg 的元数据来获取 Iceberg 表的统计信息。
 
 | **参数**                                       | **默认值**             | **描述**                       |
-| :-------------------------------------------- | :-------------------- | :----------------------------- | 
+| :-------------------------------------------- | :-------------------- | :----------------------------- |
 | enable_get_stats_from_external_metadata       | false                 | 是否允许系统从 Iceberg 元数据中获取统计信息。当此项设置为 `true` 时，您可以通过会话变量 [`enable_get_stats_from_external_metadata`](../../../sql-reference/System_variable.md#enable_get_stats_from_external_metadata) 进一步控制要收集的统计信息类型。 |
 
 ### 示例
@@ -888,6 +900,27 @@ Google GCS 的 `StorageCredentialParams`：
       "aws.s3.region" = "us-west-2"
   );
   ```
+
+##### 如果选择 Vended Credential
+
+如果基于 REST Catalog 使用 Vended Credential，请运行如下命令：
+
+```SQL
+CREATE EXTERNAL CATALOG polaris_s3
+PROPERTIES
+(
+    "type" = "iceberg",
+    "iceberg.catalog.uri" = "http://xxx:xxx/api/catalog",
+    "iceberg.catalog.type" = "rest",
+    "iceberg.catalog.rest.nested-namespace-enabled"="true",
+    "iceberg.catalog.security" = "oauth2",
+    "iceberg.catalog.oauth2.credential" = "xxxxx:xxxx",
+    "iceberg.catalog.oauth2.scope"='PRINCIPAL_ROLE:ALL',
+    "iceberg.catalog.warehouse" = "iceberg_catalog",
+    "aws.s3.region" = "us-west-2"
+);
+```
+
 </TabItem>
 
 <TabItem value="HDFS" label="HDFS" >
@@ -962,6 +995,22 @@ PROPERTIES
       "azure.blob.storage_account" = "<blob_storage_account_name>",
       "azure.blob.container" = "<blob_container_name>",
       "azure.blob.sas_token" = "<blob_storage_account_SAS_token>"
+  );
+  ```
+
+- 如果基于 REST Catalog 使用 Vended Credential，请运行如下命令：
+
+  ```SQL
+  CREATE EXTERNAL CATALOG polaris_azure
+  PROPERTIES (   
+      "type"  =  "iceberg",   
+      "iceberg.catalog.uri"  = "http://xxx:xxx/api/catalog",
+      "iceberg.catalog.type"  =  "rest",
+      "iceberg.catalog.rest.nested-namespace-enabled"="true", 
+      "iceberg.catalog.security" = "oauth2",
+      "iceberg.catalog.oauth2.credential" = "xxxxx:xxxx",
+      "iceberg.catalog.oauth2.scope"='PRINCIPAL_ROLE:ALL',
+      "iceberg.catalog.warehouse" = "iceberg_catalog"
   );
   ```
 
@@ -1041,6 +1090,22 @@ PROPERTIES
   );
   ```
 
+- 如果基于 REST Catalog 使用 Vended Credential，请运行如下命令：
+
+  ```SQL
+  CREATE EXTERNAL CATALOG polaris_azure
+  PROPERTIES (   
+      "type"  =  "iceberg",   
+      "iceberg.catalog.uri"  = "http://xxx:xxx/api/catalog",
+      "iceberg.catalog.type"  =  "rest",
+      "iceberg.catalog.rest.nested-namespace-enabled"="true", 
+      "iceberg.catalog.security" = "oauth2",
+      "iceberg.catalog.oauth2.credential" = "xxxxx:xxxx",
+      "iceberg.catalog.oauth2.scope"='PRINCIPAL_ROLE:ALL',
+      "iceberg.catalog.warehouse" = "iceberg_catalog"
+  );
+  ```
+
 </TabItem>
 
 <TabItem value="GCS" label="Google GCS" >
@@ -1106,6 +1171,23 @@ PROPERTIES
         "gcp.gcs.impersonation_service_account" = "<data_google_service_account_email>"
     );
     ```
+
+- 如果基于 REST Catalog 使用 Vended Credential，请运行如下命令：
+
+  ```SQL
+  CREATE EXTERNAL CATALOG polaris_gcp
+  PROPERTIES (   
+      "type"  =  "iceberg",   
+      "iceberg.catalog.uri"  = "http://xxx:xxx/api/catalog",
+      "iceberg.catalog.type"  =  "rest",
+      "iceberg.catalog.rest.nested-namespace-enabled"="true", 
+      "iceberg.catalog.security" = "oauth2",
+      "iceberg.catalog.oauth2.credential" = "xxxxx:xxxx",
+      "iceberg.catalog.oauth2.scope"='PRINCIPAL_ROLE:ALL',
+      "iceberg.catalog.warehouse" = "iceberg_catalog"
+  );
+  ```
+
 </TabItem>
 
 </Tabs>
@@ -1279,6 +1361,7 @@ CREATE TABLE [IF NOT EXISTS] [database.]table_name
 (column_definition1[, column_definition2, ...
 partition_column_definition1,partition_column_definition2...])
 [partition_desc]
+[ORDER BY sort_desc)]
 [PROPERTIES ("key" = "value", ...)]
 [AS SELECT query]
 ```
@@ -1322,6 +1405,28 @@ column_name
 分区列必须在非分区列之后定义。分区列支持所有数据类型，除 FLOAT、DOUBLE、DECIMAL 和 DATETIME 外，并且不能使用 `NULL` 作为默认值。
 
 :::
+
+##### ORDER BY
+
+自 v4.0 起，StarRocks 支持在创建 Iceberg 表时通过 ORDER BY 子句指定排序键，用于在写入时根据排序键对写入数据进行排序，确保同一个数据文件中的数据按照指定排序键有序排列。
+
+ORDER BY 子句也可以同时指定多个排序键，格式如下：
+
+```SQL
+ORDER BY (column_name [sort_direction] [nulls_order], ...)
+```
+
+其中：
+
+- `column_name`：作为排序键的列名，必须是当前表结构中包含的列，暂不支持 Transform 表达式。
+- `sort_direction`：排序方向。有效值：`ASC`（默认）和 `DESC`。
+- `nulls_order`：NULL 值的排序顺序。有效值：`NULLS FIRST`（当指定 `ASC` 时默认）和 `NULLS LAST`（当指定 `DESC` 时默认）。
+
+`sort_direction` 和 `nulls_order` 可以省略。例如，以下各示例均为有效的 `sort_desc`：
+
+- `column_name`
+- `column_name ASC`
+- `column_name DESC NULLS FIRST`
 
 ##### PROPERTIES
 
@@ -1569,6 +1674,62 @@ ALTER VIEW iceberg.iceberg_db.iceberg_view2 ADD DIALECT SELECT k1, k2 FROM icebe
 
 ```SQL
 ALTER VIEW iceberg.iceberg_db.iceberg_view2 MODIFY DIALECT SELECT k1, k2, k3 FROM iceberg.iceberg_db.iceberg_table;
+```
+
+### 手动 Compaction
+
+从 v4.0 开始，StarRocks 支持对 Iceberg 表执行手动 Compaction。
+
+每次将数据导入到 Iceberg 表时，都会生成新的数据文件和元数据文件。随着时间推移，大量的数据文件会显著降低查询计划生成速度，并影响系统性能。
+
+此时需要对表或分区执行手动 Compaction，将小型数据文件合并，从而提升系统性能。
+
+#### 语法
+
+```SQL
+ALTER TABLE [catalog.][database.]table_name 
+EXECUTE rewrite_data_files
+("key"=value [,"key"=value, ...]) 
+[WHERE <predicate>]
+```
+
+#### 参数
+
+##### `rewrite_data_files` 属性
+
+声明手动 Compaction 行为的 `"key"=value` 键值对。请注意，需要用双引号包裹其中的键。
+
+###### `min_file_size_bytes`
+
+- 描述：小型数据文件的上限值。小于该值的数据文件将在 Compaction 过程中被合并。
+- 单位：Byte
+- 类型：Int
+- 默认值：268,435,456（256 MB）
+
+###### `batch_size`
+
+- 描述：每次批处理中可处理的最大数据量。
+- 单位：Byte
+- 类型：Int
+- 默认值：10,737,418,240 (10 GB)
+
+###### `rewrite_all`
+
+- 描述：在 Compaction 过程中，是否忽略用于筛选具有特定条件的数据文件的参数，重写所有数据文件。
+- 单位：-
+- 类型：Boolean
+- 默认值：false
+
+##### `WHERE` 子句
+
+- 描述：用于指定参与 Compaction 操作的分区的过滤谓词。
+
+#### 示例
+
+以下示例对 Iceberg 表 `t1` 中的特定分区执行手动 Compaction。分区由子句 `WHERE part_col = 'p1'` 表示。在这些分区中，小于 134,217,728 字节（128 MB）的数据文件将在 Compaction 过程中被合并。
+
+```SQL
+ALTER TABLE t1 EXECUTE rewrite_data_files("min_file_size_bytes"= 134217728) WHERE part_col = 'p1';
 ```
 
 ---

@@ -15,6 +15,7 @@
 import re
 from textwrap import dedent
 import time
+from typing import Union
 
 from sqlalchemy import Connection, exc, schema as sa_schema
 from sqlalchemy.dialects.mysql.pymysql import MySQLDialect_pymysql
@@ -312,7 +313,11 @@ class StarRocksDDLCompiler(MySQLDDLCompiler):
             colspec.append("AUTO_INCREMENT")
         else:
             default = self.get_column_default_string(column)
-            if default is not None:
+            if default == "AUTO_INCREMENT":
+                colspec[1] = "BIGINT"
+                colspec.append("AUTO_INCREMENT")
+
+            elif default is not None:
                 colspec.append("DEFAULT " + default)
         return " ".join(colspec)
 
@@ -419,7 +424,7 @@ class StarRocksDialect(MySQLDialect_pymysql):
         return _reflection.StarRocksTableDefinitionParser(self, preparer)
 
     def _read_from_information_schema(
-        self, connection: Connection, inf_sch_table: str, charset: str | None = None, **kwargs
+        self, connection: Connection, inf_sch_table: str, charset: Union[str, None] = None, **kwargs
     ):
         def escape_single_quote(s):
             return s.replace("'", "\\'")
@@ -445,7 +450,7 @@ class StarRocksDialect(MySQLDialect_pymysql):
         return rows
     
     @reflection.cache
-    def _setup_parser(self, connection: Connection, table_name: str, schema: str | None = None, **kw):
+    def _setup_parser(self, connection: Connection, table_name: str, schema: Union[str, None] = None, **kw):
         charset = self._connection_charset
         parser = self._tabledef_parser
 

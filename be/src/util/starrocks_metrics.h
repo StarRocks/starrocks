@@ -40,6 +40,9 @@
 #include <vector>
 
 #include "exec/pipeline/pipeline_metrics.h"
+#ifndef MACOS_DISABLE_JAVA
+#include "util/jvm_metrics.h"
+#endif
 #include "util/metrics.h"
 #include "util/system_metrics.h"
 #include "util/table_metrics.h"
@@ -375,6 +378,8 @@ public:
     METRICS_DEFINE_THREAD_POOL(compact_pool);
     METRICS_DEFINE_THREAD_POOL(pindex_load);
     METRICS_DEFINE_THREAD_POOL(put_aggregate_metadata);
+    METRICS_DEFINE_THREAD_POOL(exec_state_report);
+    METRICS_DEFINE_THREAD_POOL(priority_exec_state_report);
 
     METRIC_DEFINE_UINT_GAUGE(load_rpc_threadpool_size, MetricUnit::NOUNIT);
 
@@ -410,7 +415,7 @@ public:
 
     // not thread-safe, call before calling metrics
     void initialize(const std::vector<std::string>& paths = std::vector<std::string>(),
-                    bool init_system_metrics = false,
+                    bool init_system_metrics = false, bool init_jvm_metrics = false,
                     const std::set<std::string>& disk_devices = std::set<std::string>(),
                     const std::vector<std::string>& network_interfaces = std::vector<std::string>());
 
@@ -434,6 +439,9 @@ private:
 
     MetricRegistry _metrics;
     SystemMetrics _system_metrics;
+#ifndef MACOS_DISABLE_JAVA
+    JVMMetrics _jvm_metrics;
+#endif
     TableMetricsManager _table_metrics_mgr;
 };
 

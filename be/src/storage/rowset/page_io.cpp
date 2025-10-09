@@ -38,11 +38,12 @@
 #include <string>
 #include <string_view>
 
-#include "cache/object_cache/page_cache.h"
+#include "cache/mem_cache/page_cache.h"
 #include "column/column.h"
 #include "common/logging.h"
 #include "fs/fs.h"
 #include "gutil/strings/substitute.h"
+#include "runtime/current_thread.h"
 #include "storage/rowset/storage_page_decoder.h"
 #include "util/coding.h"
 #include "util/compression/block_compression.h"
@@ -256,7 +257,7 @@ Status PageIO::read_and_decompress_page(const PageReadOptions& opts, PageHandle*
     *body = Slice(page_slice.data, page_slice.size - 4 - footer_size);
     if (opts.use_page_cache && page_cache_available) {
         // insert this page into cache and return the cache handle
-        ObjectCacheWriteOptions opts;
+        MemCacheWriteOptions opts;
         Status st = cache->insert(cache_key, page.get(), opts, &cache_handle);
         *handle = st.ok() ? PageHandle(std::move(cache_handle)) : PageHandle(page.get());
     } else {

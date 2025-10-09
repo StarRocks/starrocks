@@ -1008,7 +1008,7 @@ TEST_F(AggregateTest, test_sum_nullable) {
 
     const Column& result_data_column = result_column->data_column_ref();
     const auto& result_data = static_cast<const Int64Column&>(result_data_column);
-    ASSERT_EQ(4950, result_data.get_data()[0]);
+    ASSERT_EQ(4950, result_data.immutable_data()[0]);
 }
 
 TEST_F(AggregateTest, test_count_nullable) {
@@ -1056,7 +1056,7 @@ TEST_F(AggregateTest, test_bitmap_nullable) {
     const Column& result_data_column = result_column->data_column_ref();
     const auto& result_data = static_cast<const Int64Column&>(result_data_column);
     ASSERT_EQ(false, result_column->is_null(0));
-    ASSERT_EQ(50, result_data.get_data()[0]);
+    ASSERT_EQ(50, result_data.immutable_data()[0]);
 }
 
 TEST_F(AggregateTest, test_group_concat) {

@@ -45,7 +45,6 @@
 #include "exprs/column_ref.h"
 #include "exprs/expr_context.h"
 #include "gutil/casts.h"
-#include "gutil/strings/split.h"
 #include "runtime/types.h"
 #include "storage/rowset/column_reader.h"
 #include "types/logical_type.h"
@@ -60,36 +59,46 @@ namespace starrocks {
 namespace flat_json {
 template <LogicalType TYPE>
 void extract_number(const vpack::Slice* json, NullableColumn* result) {
+    // NOTE: this function catch all vpack exceptions, so it must be exception-safe, instead of modifying the result into
+    // an inconsistence state where null_column and data_column have different sizes.
+    using CppType = RunTimeCppType<TYPE>;
+    Datum datum;
     try {
         if (LIKELY(json->isNumber() || json->isString())) {
             auto st = get_number_from_vpjson<TYPE>(*json);
             if (st.ok()) {
-                result->null_column()->append(0);
-                down_cast<RunTimeColumnType<TYPE>*>(result->data_column().get())->append(st.value());
-            } else {
-                result->append_nulls(1);
+                datum.set<CppType>(st.value());
             }
         } else if (json->isNone() || json->isNull()) {
-            result->append_nulls(1);
+            datum.set_null();
         } else if (json->isBool()) {
-            result->null_column()->append(0);
-            down_cast<RunTimeColumnType<TYPE>*>(result->data_column().get())->append(json->getBool());
+            datum.set<CppType>(static_cast<CppType>(json->getBool()));
         } else {
-            result->append_nulls(1);
+            datum.set_null();
         }
     } catch (const vpack::Exception& e) {
+        LOG(INFO) << "vpack::Exception in extract_number: " << e.what();
+        datum.set_null();
+    }
+
+    if (datum.is_null()) {
         result->append_nulls(1);
+    } else {
+        result->append_datum(datum);
     }
 }
 
 void extract_bool(const vpack::Slice* json, NullableColumn* result) {
+    // NOTE: this function catch all vpack exceptions, so it must be exception-safe, instead of modifying the result into
+    // an inconsistence state where null_column and data_column have different sizes.
+    using CppType = RunTimeCppType<TYPE_BOOLEAN>;
+    Datum datum;
     try {
         if (json->isNone() || json->isNull()) {
-            result->append_nulls(1);
+            datum.set_null();
         } else if (json->isBool()) {
-            result->null_column()->append(0);
             auto res = json->getBool();
-            down_cast<RunTimeColumnType<TYPE_BOOLEAN>*>(result->data_column().get())->append(res);
+            datum.set<CppType>(res);
         } else if (json->isString()) {
             vpack::ValueLength len;
             const char* str = json->getStringUnchecked(len);
@@ -98,43 +107,50 @@ void extract_bool(const vpack::Slice* json, NullableColumn* result) {
             if (parseResult != StringParser::PARSE_SUCCESS || std::isnan(r) || std::isinf(r)) {
                 bool b = StringParser::string_to_bool(str, len, &parseResult);
                 if (parseResult != StringParser::PARSE_SUCCESS) {
-                    result->append_nulls(1);
+                    datum.set_null();
                 } else {
-                    down_cast<RunTimeColumnType<TYPE_BOOLEAN>*>(result->data_column().get())->append(b);
+                    datum.set<CppType>(b);
                 }
             } else {
-                down_cast<RunTimeColumnType<TYPE_BOOLEAN>*>(result->data_column().get())->append(r != 0);
+                datum.set<CppType>(r != 0);
             }
         } else if (json->isNumber()) {
-            result->null_column()->append(0);
             auto res = json->getNumber<double>();
-            down_cast<RunTimeColumnType<TYPE_BOOLEAN>*>(result->data_column().get())->append(res != 0);
+            datum.set<CppType>(res != 0);
         } else {
-            result->append_nulls(1);
+            datum.set_null();
         }
     } catch (const vpack::Exception& e) {
+        LOG(INFO) << "vpack::Exception in extract_bool: " << e.what();
+        datum.set_null();
+    }
+
+    if (datum.is_null()) {
         result->append_nulls(1);
+    } else {
+        result->append_datum(datum);
     }
 }
 
 void extract_string(const vpack::Slice* json, NullableColumn* result) {
+    // NOTE: this function catch all vpack exceptions, so it must be exception-safe, instead of modifying the result into
+    // an inconsistence state where null_column and data_column have different sizes.
     try {
         if (json->isNone() || json->isNull()) {
             result->append_nulls(1);
         } else if (json->isString()) {
-            result->null_column()->append(0);
             vpack::ValueLength len;
             const char* str = json->getStringUnchecked(len);
-            down_cast<BinaryColumn*>(result->data_column().get())->append(Slice(str, len));
+            result->append_datum(Datum(Slice(str, len)));
         } else {
-            result->null_column()->append(0);
             vpack::Options options = vpack::Options::Defaults;
             options.singleLinePrettyPrint = true;
             options.dumpAttributesInIndexOrder = false;
             std::string str = json->toJson(&options);
-            down_cast<BinaryColumn*>(result->data_column().get())->append(Slice(str));
+            result->append_datum(Datum(Slice(str)));
         }
     } catch (const vpack::Exception& e) {
+        LOG(INFO) << "vpack::Exception in extract_string: " << e.what();
         result->append_nulls(1);
     }
 }
@@ -143,8 +159,8 @@ void extract_json(const vpack::Slice* json, NullableColumn* result) {
     if (json->isNone()) {
         result->append_nulls(1);
     } else {
-        result->null_column()->append(0);
         down_cast<JsonColumn*>(result->data_column().get())->append(JsonValue(*json));
+        result->null_column()->append(0);
     }
 }
 
@@ -153,12 +169,13 @@ void merge_number(vpack::Builder* builder, const std::string_view& name, const C
     DCHECK(src->is_nullable());
     auto* nullable_column = down_cast<const NullableColumn*>(src);
     auto* col = down_cast<const RunTimeColumnType<TYPE>*>(nullable_column->data_column().get());
+    const auto data = col->immutable_data().data();
 
     if constexpr (TYPE == LogicalType::TYPE_LARGEINT) {
         // the value is from json, must be uint64_t
-        builder->addUnchecked(name.data(), name.size(), vpack::Value((uint64_t)col->get_data()[idx]));
+        builder->addUnchecked(name.data(), name.size(), vpack::Value((uint64_t)data[idx]));
     } else {
-        builder->addUnchecked(name.data(), name.size(), vpack::Value(col->get_data()[idx]));
+        builder->addUnchecked(name.data(), name.size(), vpack::Value(data[idx]));
     }
 }
 
@@ -794,6 +811,11 @@ void JsonFlattener::flatten(const Column* json_column) {
     for (auto& col : _flat_columns) {
         DCHECK_EQ(col->size(), json_column->size());
     }
+
+    // IMPORTANT: Check column integrity to prevent NullableColumn inconsistency
+    for (auto& col : _flat_columns) {
+        col->check_or_die();
+    }
 }
 
 template <bool REMAIN>
@@ -1004,9 +1026,14 @@ ColumnPtr JsonMerger::merge(const Columns& columns) {
     _src_columns.clear();
     if (_output_nullable) {
         down_cast<NullableColumn*>(_result.get())->update_has_null();
+        // IMPORTANT: Check column integrity to prevent NullableColumn inconsistency
+        _result->check_or_die();
         return _result;
     } else {
-        return down_cast<NullableColumn*>(_result.get())->data_column();
+        auto data_column = down_cast<NullableColumn*>(_result.get())->data_column();
+        // IMPORTANT: Check column integrity to prevent NullableColumn inconsistency
+        data_column->check_or_die();
+        return data_column;
     }
 }
 
@@ -1427,6 +1454,12 @@ Status HyperJsonTransformer::trans(const Columns& columns) {
             DCHECK_EQ(rows, _dst_columns[i]->size());
         }
     }
+
+    // IMPORTANT: Check column integrity to prevent NullableColumn inconsistency
+    for (auto& col : _dst_columns) {
+        col->check_or_die();
+    }
+
     return Status::OK();
 }
 

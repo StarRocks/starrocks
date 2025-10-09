@@ -69,6 +69,7 @@ import com.starrocks.clone.TabletScheduler;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
+import com.starrocks.common.FeConstants;
 import com.starrocks.common.InvalidOlapTableStateException;
 import com.starrocks.common.Pair;
 import com.starrocks.common.io.DeepCopy;
@@ -112,6 +113,8 @@ import com.starrocks.sql.common.PListCell;
 import com.starrocks.sql.common.PRangeCell;
 import com.starrocks.sql.optimizer.rule.mv.MVUtils;
 import com.starrocks.sql.optimizer.statistics.IDictManager;
+import com.starrocks.system.Backend;
+import com.starrocks.system.ComputeNode;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.task.AgentBatchTask;
 import com.starrocks.task.AgentTask;
@@ -1208,31 +1211,27 @@ public class OlapTable extends Table {
         return partitionInfo;
     }
 
-    public void sendDropAutoIncrementMapTask() {
-        Set<Long> fullBackendId = Sets.newHashSet();
-        for (Partition partition : this.getAllPartitions()) {
-            for (PhysicalPartition physicalPartition : partition.getSubPartitions()) {
-                List<MaterializedIndex> allIndices = physicalPartition
-                        .getMaterializedIndices(MaterializedIndex.IndexExtState.ALL);
-                for (MaterializedIndex materializedIndex : allIndices) {
-                    for (Tablet tablet : materializedIndex.getTablets()) {
-                        Set<Long> backendIds = tablet.getBackendIds();
-                        for (long backendId : backendIds) {
-                            fullBackendId.add(backendId);
-                        }
-                    }
-                }
-            }
+    public boolean sendDropAutoIncrementMapTask() {
+        Set<Long> nodeIds = Sets.newHashSet();
+        List<Backend> backends = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackends();
+        for (Backend backend : backends) {
+            nodeIds.add(backend.getId());
+        }
+
+        List<ComputeNode> computeNodes = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getComputeNodes();
+        for (ComputeNode cn : computeNodes) {
+            nodeIds.add(cn.getId());
         }
 
         AgentBatchTask batchTask = new AgentBatchTask();
 
-        for (long backendId : fullBackendId) {
-            DropAutoIncrementMapTask dropAutoIncrementMapTask = new DropAutoIncrementMapTask(backendId, this.id,
+        for (long nodeId : nodeIds) {
+            DropAutoIncrementMapTask dropAutoIncrementMapTask = new DropAutoIncrementMapTask(nodeId, this.id,
                     GlobalStateMgr.getCurrentState().getNextId());
             batchTask.addTask(dropAutoIncrementMapTask);
         }
 
+        boolean ok = true;
         if (batchTask.getTaskNum() > 0) {
             MarkedCountDownLatch<Long, Long> latch = new MarkedCountDownLatch<>(batchTask.getTaskNum());
             for (AgentTask task : batchTask.getAllTasks()) {
@@ -1244,7 +1243,6 @@ public class OlapTable extends Table {
 
             // estimate timeout, at most 10 min
             long timeout = 60L * 1000L;
-            boolean ok = false;
             try {
                 LOG.info("begin to send drop auto increment map tasks to BE, total {} tasks. timeout: {}",
                         batchTask.getTaskNum(), timeout);
@@ -1256,8 +1254,8 @@ public class OlapTable extends Table {
             if (!ok) {
                 LOG.warn("drop auto increment map tasks failed");
             }
-
         }
+        return ok;
     }
 
     /**
@@ -1393,15 +1391,19 @@ public class OlapTable extends Table {
         return defaultDistributionInfo;
     }
 
-    /*
-     * Infer the distribution info based on partitions and cluster status
+    /**
+     * Infer the distribution info based on partitions and cluster status:
+     * - For hash distribution, if bucket num is not set, we will set it to
+     *  average bucket num of recent partitions.
+     * - For random distribution, if mutable bucket num is not set, we will set it with a deduced value.
      */
     public void inferDistribution(DistributionInfo info) throws DdlException {
         if (info.getType() == DistributionInfo.DistributionInfoType.HASH) {
             // infer bucket num
             if (info.getBucketNum() == 0) {
                 int numBucket = CatalogUtils.calAvgBucketNumOfRecentPartitions(this,
-                        5, Config.enable_auto_tablet_distribution);
+                        FeConstants.DEFAULT_INFER_BUCKET_NUM_RECENT_PARTITION_NUM,
+                        Config.enable_auto_tablet_distribution);
                 info.setBucketNum(numBucket);
             }
         } else if (info.getType() == DistributionInfo.DistributionInfoType.RANDOM) {
@@ -2356,6 +2358,19 @@ public class OlapTable extends Table {
         this.idToColumn = newIdToColumn;
     }
 
+    /**
+     * Get visible columns without generated column.
+     */
+    public List<Column> getVisibleColumnsWithoutGeneratedColumn() {
+        List<Column> schema = Lists.newArrayList(getBaseSchemaWithoutGeneratedColumn());
+        // remove hidden columns
+        schema.removeIf(Column::isHidden);
+        return schema;
+    }
+
+    /**
+     * Get base schema without generated column which may contain hidden columns.
+     */
     public List<Column> getBaseSchemaWithoutGeneratedColumn() {
         if (!hasGeneratedColumn()) {
             return getSchemaByIndexId(baseIndexId);
@@ -3884,5 +3899,20 @@ public class OlapTable extends Table {
             }
         }
         return true;
+    }
+
+    // only used for LakeTable and LakeMaterializedView
+    public List<Long> getShardGroupIds() {
+        if (RunMode.isSharedNothingMode()) {
+            return Lists.newArrayList();
+        }
+        List<Long> shardGroupIds = new ArrayList<>();
+        for (Partition p : getAllPartitions()) {
+            for (MaterializedIndex index : p.getDefaultPhysicalPartition()
+                    .getMaterializedIndices(MaterializedIndex.IndexExtState.ALL)) {
+                shardGroupIds.add(index.getShardGroupId());
+            }
+        }
+        return shardGroupIds;
     }
 }

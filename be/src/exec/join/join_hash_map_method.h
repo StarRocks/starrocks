@@ -14,7 +14,6 @@
 
 #pragma once
 
-#include "join_hash_map_helper.h"
 #include "join_hash_table_descriptor.h"
 
 namespace starrocks {
@@ -59,12 +58,12 @@ public:
     static constexpr bool AreKeysInChainIdentical = false;
 
     static void build_prepare(RuntimeState* state, JoinHashTableItems* table_items);
-    static void construct_hash_table(JoinHashTableItems* table_items, const Buffer<CppType>& keys,
-                                     const Buffer<uint8_t>* is_nulls);
+    static void construct_hash_table(JoinHashTableItems* table_items, const ImmBuffer<CppType>& keys,
+                                     const std::optional<ImmBuffer<uint8_t>> is_nulls);
 
     static void lookup_init(const JoinHashTableItems& table_items, HashTableProbeState* probe_state,
-                            const Buffer<CppType>& build_keys, const Buffer<CppType>& probe_keys,
-                            const Buffer<uint8_t>* is_nulls);
+                            const ImmBuffer<CppType>& build_keys, const ImmBuffer<CppType>& probe_keys,
+                            std::optional<ImmBuffer<uint8_t>> is_nulls);
 
     static bool equal(const CppType& x, const CppType& y) { return x == y; }
 };
@@ -124,12 +123,12 @@ public:
     static constexpr bool AreKeysInChainIdentical = true;
 
     static void build_prepare(RuntimeState* state, JoinHashTableItems* table_items);
-    static void construct_hash_table(JoinHashTableItems* table_items, const Buffer<CppType>& keys,
-                                     const Buffer<uint8_t>* is_nulls);
+    static void construct_hash_table(JoinHashTableItems* table_items, const ImmBuffer<CppType>& keys,
+                                     const std::optional<ImmBuffer<uint8_t>> is_nulls);
 
     static void lookup_init(const JoinHashTableItems& table_items, HashTableProbeState* probe_state,
-                            const Buffer<CppType>& build_keys, const Buffer<CppType>& probe_keys,
-                            const Buffer<uint8_t>* is_nulls);
+                            const ImmBuffer<CppType>& build_keys, const ImmBuffer<CppType>& probe_keys,
+                            const std::optional<ImmBuffer<uint8_t>> is_nulls);
 
     static bool equal(const CppType& x, const CppType& y) { return true; }
 
@@ -150,6 +149,72 @@ private:
 
 template <LogicalType LT>
 using LinearChainedJoinHashSet = LinearChainedJoinHashMap<LT, false>;
+
+// The `LinearChainedAsofJoinHashMap` is specifically designed for ASOF JOIN operations on time-series data.
+// It uses linear probing with separated fingerprint storage and maintains ASOF temporal indexes for efficient
+// time-based matching.
+// - `first` stores the build index for each distinct equi-join key.
+// - `fps` stores the separated fingerprints for fast collision detection.
+// - `asof_index_vector` maintains sorted temporal indexes for ASOF matching logic.
+//
+// Fingerprint Design
+// - Uses 7-bit fingerprints stored separately in the `fps` array, with the highest bit always set to 1
+//   to ensure non-zero values (distinguishable from empty buckets).
+// - Fingerprints range from 0x80 to 0xFF (128 possible values), providing 1/128 ≈ 0.78% collision rate.
+// - The fingerprint is computed using an extended hash space: `bucket_size << 7` and `num_log_buckets + 7`.
+//
+// ASOF Temporal Processing
+// - Each equi-join bucket maintains its own ASOF index containing temporal column values and row indexes.
+// - ASOF indexes are sorted by temporal values to enable efficient binary search during probe phase.
+// - Supports various ASOF operations: LT, LE, GT, GE for different temporal matching requirements.
+//
+// Memory Layout Comparison with LinearChainedJoinHashMap:
+// - LinearChainedJoinHashMap: `first[bucket] = (8-bit FP << 24) | 24-bit build_index` (packed)
+// - LinearChainedAsofJoinHashMap: `first[bucket] = 32-bit build_index`, `fps[bucket] = 8-bit FP` (separated)
+// - Trade-off: Uses 25% more memory per bucket but supports unlimited bucket sizes and easier ASOF processing.
+//
+// Insert and Probe for ASOF JOIN
+// - During insertion, linear probing locates the appropriate bucket for the equi-join key.
+// - For each equi-join bucket, temporal values are added to the corresponding ASOF index.
+// - During probing, equi-join keys are matched first, then ASOF binary search finds temporal matches.
+// - No bucket size limitation (unlike LinearChainedJoinHashMap's 16M bucket limit).
+//
+// The following diagram illustrates the structure of `LinearChainedAsofJoinHashMap`:
+//
+// build keys + temporal    first        fps       asof_index_vector
+//                         ┌───────┐   ┌───┐      ┌─────────────────────┐
+//                         │ index │   │FP │      │ sorted temporal     │
+//                         ├───────┤   ├───┤      │ [(t1,idx1),(t2,idx2)│
+//               ┌────┐ ┌─►│       │   │   │ ┌───►│ (t3,idx3),(t4,idx4)]│
+//    ┌──────┐   │    │ │  ├───────┤   ├───┤ │    ├─────────────────────┤
+//    │ key  ├──►│hash├─┘  │       │   │   │ │    │                     │
+//    └──────┘   │    │ ┌─►├───────┤   ├───┤ │    │                     │
+//               └────┘ │  │ index ├──►│FP ├─┘    ├─────────────────────┤
+//                      │  ├───────┤   ├───┤      │ sorted temporal     │
+//                      │  │       │   │   │      │ [(t5,idx5),(t6,idx6)│
+//                      │  ├───────┤   ├───┤ ┌───►│ (t7,idx7)]          │
+//                      └─►│ index ├──►│FP ├─┘    └─────────────────────┘
+//                         └───────┘   └───┘      ASOF binary search
+//                         No size                for temporal matching
+//                         limitation
+template <LogicalType LT>
+class LinearChainedAsofJoinHashMap {
+public:
+    using CppType = typename RunTimeTypeTraits<LT>::CppType;
+    using ColumnType = typename RunTimeTypeTraits<LT>::ColumnType;
+
+    static constexpr bool AreKeysInChainIdentical = true;
+
+    static void build_prepare(RuntimeState* state, JoinHashTableItems* table_items);
+    static void construct_hash_table(JoinHashTableItems* table_items, const ImmBuffer<CppType>& keys,
+                                     const std::optional<ImmBuffer<uint8_t>> is_nulls);
+
+    static void lookup_init(const JoinHashTableItems& table_items, HashTableProbeState* probe_state,
+                            const ImmBuffer<CppType>& build_keys, const ImmBuffer<CppType>& probe_keys,
+                            const std::optional<ImmBuffer<uint8_t>> is_nulls);
+
+    static bool equal(const CppType& x, const CppType& y) { return true; }
+};
 
 // The bucket-chained linked list formed by first` and `next` is the same as that of `BucketChainedJoinHashMap`.
 //
@@ -189,12 +254,12 @@ public:
     static constexpr bool AreKeysInChainIdentical = true;
 
     static void build_prepare(RuntimeState* state, JoinHashTableItems* table_items);
-    static void construct_hash_table(JoinHashTableItems* table_items, const Buffer<CppType>& keys,
-                                     const Buffer<uint8_t>* is_nulls);
+    static void construct_hash_table(JoinHashTableItems* table_items, const ImmBuffer<CppType>& keys,
+                                     const std::optional<ImmBuffer<uint8_t>> is_nulls);
 
     static void lookup_init(const JoinHashTableItems& table_items, HashTableProbeState* probe_state,
-                            const Buffer<CppType>& build_keys, const Buffer<CppType>& probe_keys,
-                            const Buffer<uint8_t>* is_nulls);
+                            const ImmBuffer<CppType>& build_keys, const ImmBuffer<CppType>& probe_keys,
+                            const std::optional<ImmBuffer<uint8_t>> is_nulls);
 
     static bool equal(const CppType& x, const CppType& y) { return true; }
 };
@@ -240,12 +305,12 @@ public:
     static constexpr bool AreKeysInChainIdentical = true;
 
     static void build_prepare(RuntimeState* state, JoinHashTableItems* table_items);
-    static void construct_hash_table(JoinHashTableItems* table_items, const Buffer<CppType>& keys,
-                                     const Buffer<uint8_t>* is_nulls);
+    static void construct_hash_table(JoinHashTableItems* table_items, const ImmBuffer<CppType>& keys,
+                                     const std::optional<ImmBuffer<uint8_t>> is_nulls);
 
     static void lookup_init(const JoinHashTableItems& table_items, HashTableProbeState* probe_state,
-                            const Buffer<CppType>& build_keys, const Buffer<CppType>& probe_keys,
-                            const Buffer<uint8_t>* is_nulls);
+                            const ImmBuffer<CppType>& build_keys, const ImmBuffer<CppType>& probe_keys,
+                            const std::optional<ImmBuffer<uint8_t>> is_nulls);
 
     static bool equal(const CppType& x, const CppType& y) { return true; }
 };
@@ -262,12 +327,12 @@ public:
     static constexpr bool AreKeysInChainIdentical = true;
 
     static void build_prepare(RuntimeState* state, JoinHashTableItems* table_items);
-    static void construct_hash_table(JoinHashTableItems* table_items, const Buffer<CppType>& keys,
-                                     const Buffer<uint8_t>* is_nulls);
+    static void construct_hash_table(JoinHashTableItems* table_items, const ImmBuffer<CppType>& keys,
+                                     const std::optional<ImmBuffer<uint8_t>> is_nulls);
 
     static void lookup_init(const JoinHashTableItems& table_items, HashTableProbeState* probe_state,
-                            const Buffer<CppType>& build_keys, const Buffer<CppType>& probe_keys,
-                            const Buffer<uint8_t>* is_nulls);
+                            const ImmBuffer<CppType>& build_keys, const ImmBuffer<CppType>& probe_keys,
+                            const std::optional<ImmBuffer<uint8_t>> is_nulls);
 
     static bool equal(const CppType& x, const CppType& y) { return true; }
 };
@@ -318,12 +383,12 @@ public:
     static constexpr bool AreKeysInChainIdentical = true;
 
     static void build_prepare(RuntimeState* state, JoinHashTableItems* table_items);
-    static void construct_hash_table(JoinHashTableItems* table_items, const Buffer<CppType>& keys,
-                                     const Buffer<uint8_t>* is_nulls);
+    static void construct_hash_table(JoinHashTableItems* table_items, const ImmBuffer<CppType>& keys,
+                                     const std::optional<ImmBuffer<uint8_t>> is_nulls);
 
     static void lookup_init(const JoinHashTableItems& table_items, HashTableProbeState* probe_state,
-                            const Buffer<CppType>& build_keys, const Buffer<CppType>& probe_keys,
-                            const Buffer<uint8_t>* is_nulls);
+                            const ImmBuffer<CppType>& build_keys, const ImmBuffer<CppType>& probe_keys,
+                            const std::optional<ImmBuffer<uint8_t>> is_nulls);
 
     static bool equal(const CppType& x, const CppType& y) { return true; }
 };

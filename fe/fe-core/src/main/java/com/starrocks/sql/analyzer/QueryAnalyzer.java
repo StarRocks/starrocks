@@ -91,6 +91,7 @@ import com.starrocks.sql.ast.expression.TableName;
 import com.starrocks.sql.common.MetaUtils;
 import com.starrocks.sql.common.TypeManager;
 import com.starrocks.sql.optimizer.dump.HiveMetaStoreTableDumpInfo;
+import org.apache.commons.collections.CollectionUtils;
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -695,7 +696,8 @@ public class QueryAnalyzer {
                         // reduce unnecessary columns init, but must init key columns/bucket columns/partition columns
                         continue;
                     }
-                    boolean visible = baseSchema.contains(column);
+                    // only output visible columns
+                    boolean visible = column.isVisible() && baseSchema.contains(column);
                     SlotRef slot = new SlotRef(tableName, column.getName(), column.getName());
                     Field field = new Field(column.getName(), column.getType(), tableName, slot, visible,
                             column.isAllowNull());
@@ -802,6 +804,9 @@ public class QueryAnalyzer {
             Scope leftScope = process(join.getLeft(), parentScope);
             Scope rightScope;
             if (join.getRight() instanceof TableFunctionRelation || join.isLateral()) {
+                if (join.getJoinOp().isAsofJoin()) {
+                    throw new SemanticException("ASOF join is not supported with lateral join");
+                }
                 if (!(join.getRight() instanceof TableFunctionRelation)) {
                     throw new SemanticException("Only support lateral join with UDTF");
                 } else if (!join.getJoinOp().isInnerJoin() && !join.getJoinOp().isCrossJoin() &&
@@ -860,6 +865,12 @@ public class QueryAnalyzer {
                     throw new SemanticException("WHERE clause must evaluate to a boolean: actual type %s",
                             joinEqual.getType());
                 }
+
+                // Validate ASOF JOIN conditions
+                if (join.getJoinOp().isAsofJoin()) {
+                    validateAsofJoinConditions(joinEqual);
+                }
+
                 // check the join on predicate, example:
                 // we have col_json, we can't join on table_a.col_json = table_b.col_json,
                 // but we can join on cast(table_a.col_json->"a" as int) = cast(table_b.col_json->"a" as int)
@@ -867,7 +878,7 @@ public class QueryAnalyzer {
                 // and table_a.col_struct.a = table_b.col_struct.a
                 checkJoinEqual(joinEqual);
             } else {
-                if (join.getJoinOp().isOuterJoin() || join.getJoinOp().isSemiAntiJoin()) {
+                if (join.getJoinOp().isOuterJoin() || join.getJoinOp().isSemiAntiJoin() || join.getJoinOp().isAsofJoin()) {
                     throw new SemanticException(join.getJoinOp() + " requires an ON or USING clause.");
                 }
             }
@@ -880,22 +891,22 @@ public class QueryAnalyzer {
                 scope = new Scope(RelationId.of(join), leftScope.getRelationFields());
             } else if (join.getJoinOp().isRightSemiAntiJoin()) {
                 scope = new Scope(RelationId.of(join), rightScope.getRelationFields());
-            } else if (join.getJoinOp().isLeftOuterJoin()) {
+            } else if (join.getJoinOp().isAnyLeftOuterJoin()) {
                 List<Field> rightFields = getFieldsWithNullable(rightScope);
-                scope = new Scope(RelationId.of(join),
-                        leftScope.getRelationFields().joinWith(new RelationFields(rightFields)));
+                RelationFields joinedFields = leftScope.getRelationFields().joinWith(new RelationFields(rightFields));
+                scope = new Scope(RelationId.of(join), createJoinRelationFields(joinedFields, join));
             } else if (join.getJoinOp().isRightOuterJoin()) {
                 List<Field> leftFields = getFieldsWithNullable(leftScope);
-                scope = new Scope(RelationId.of(join),
-                        new RelationFields(leftFields).joinWith(rightScope.getRelationFields()));
+                RelationFields joinedFields = new RelationFields(leftFields).joinWith(rightScope.getRelationFields());
+                scope = new Scope(RelationId.of(join), createJoinRelationFields(joinedFields, join));
             } else if (join.getJoinOp().isFullOuterJoin()) {
                 List<Field> rightFields = getFieldsWithNullable(rightScope);
                 List<Field> leftFields = getFieldsWithNullable(leftScope);
-                scope = new Scope(RelationId.of(join),
-                        new RelationFields(leftFields).joinWith(new RelationFields(rightFields)));
+                RelationFields joinedFields = new RelationFields(leftFields).joinWith(new RelationFields(rightFields));
+                scope = new Scope(RelationId.of(join), createJoinRelationFields(joinedFields, join));
             } else {
-                scope = new Scope(RelationId.of(join),
-                        leftScope.getRelationFields().joinWith(rightScope.getRelationFields()));
+                RelationFields joinedFields = leftScope.getRelationFields().joinWith(rightScope.getRelationFields());
+                scope = new Scope(RelationId.of(join), createJoinRelationFields(joinedFields, join));
             }
             join.setScope(scope);
 
@@ -913,6 +924,15 @@ public class QueryAnalyzer {
                 newFields.add(newField);
             }
             return newFields;
+        }
+
+        private void validateAsofJoinConditions(Expr joinPredicate) {
+            if (joinPredicate == null) {
+                throw new SemanticException("ASOF JOIN requires ON clause with join conditions");
+            }
+
+            AsofJoinConditionValidator validator = new AsofJoinConditionValidator();
+            validator.validate(joinPredicate);
         }
 
         private Expr analyzeJoinUsing(List<String> usingColNames, Scope left, Scope right) {
@@ -934,6 +954,15 @@ public class QueryAnalyzer {
                 }
             }
             return joinEqual;
+        }
+
+        private RelationFields createJoinRelationFields(RelationFields joinedFields, JoinRelation join) {
+            if (CollectionUtils.isNotEmpty(join.getUsingColNames()) && !join.getJoinOp().isFullOuterJoin()) {
+                return new CoalescedJoinFields(joinedFields.getAllFields(), join.getUsingColNames(), join.getJoinOp());
+            } else {
+                // TODO: Support FULL OUTER JOIN USING with proper COALESCE semantics
+                return joinedFields;
+            }
         }
 
         private void analyzeJoinHints(JoinRelation join) {
@@ -1664,6 +1693,69 @@ public class QueryAnalyzer {
                 resolvingAlias.removeLast();
             }
             return null;
+        }
+    }
+
+    private static class AsofJoinConditionValidator {
+        private int equalityPredicateCount = 0;
+        private int inequalityPredicateCount = 0;
+        private boolean containsOrOperator = false;
+
+        public void validate(Expr joinPredicate) {
+            visit(joinPredicate);
+
+            if (equalityPredicateCount == 0) {
+                throw new SemanticException("ASOF JOIN requires at least one equality condition in join ON clause");
+            }
+
+            if (inequalityPredicateCount == 0) {
+                throw new SemanticException("ASOF JOIN requires exactly one temporal inequality condition in join ON clause");
+            }
+
+            if (inequalityPredicateCount > 1) {
+                throw new SemanticException("ASOF JOIN supports only one inequality condition in join ON clause, found: " +
+                        inequalityPredicateCount);
+            }
+        }
+
+        private void visit(Expr expr) {
+            if (expr instanceof CompoundPredicate compound) {
+                if (compound.getOp() == CompoundPredicate.Operator.OR) {
+                    containsOrOperator = true;
+                }
+                visit(compound.getChild(0));
+                visit(compound.getChild(1));
+            } else if (expr instanceof BinaryPredicate binary) {
+                if (binary.getOp() == BinaryType.EQ) {
+                    equalityPredicateCount++;
+                } else if (binary.getOp().isRange()) {
+                    inequalityPredicateCount++;
+                    validateTemporalConditionTypes(binary);
+                } else {
+                    throw new SemanticException("ASOF JOIN does not support '" + binary.getOp() + "' operator " +
+                            "in join ON clause");
+                }
+            }
+
+            if (containsOrOperator) {
+                throw new SemanticException("ASOF JOIN conditions do not support OR operators in join ON clause");
+            }
+        }
+
+        private void validateTemporalConditionTypes(BinaryPredicate predicate) {
+            Type leftType = predicate.getChild(0).getType();
+            Type rightType = predicate.getChild(1).getType();
+
+            if (!isTemporalOrderingType(leftType) || !isTemporalOrderingType(rightType)) {
+                throw new SemanticException(
+                        "ASOF JOIN temporal condition supports only BIGINT, DATE, or DATETIME types in join ON clause, found: " +
+                                leftType.toSql() + " and " + rightType.toSql() + ". predicate: " + predicate.toMySql()
+                );
+            }
+        }
+
+        private boolean isTemporalOrderingType(Type type) {
+            return type.isBigint() || type.isDate() || type.isDatetime();
         }
     }
 }

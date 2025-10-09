@@ -28,6 +28,7 @@
 #include "formats/parquet/column_reader.h"
 #include "formats/parquet/utils.h"
 #include "gutil/strings/substitute.h"
+#include "runtime/current_thread.h"
 #include "runtime/exec_env.h"
 #include "util/raw_container.h"
 #include "util/thrift_util.h"
@@ -91,7 +92,7 @@ Status PageReader::_deal_page_with_cache() {
             return Status::OK();
         }
         RETURN_IF_ERROR(_read_and_decompress_internal(true));
-        ObjectCacheWriteOptions opts{.evict_probability = _opts.datacache_options->datacache_evict_probability};
+        MemCacheWriteOptions opts{.evict_probability = _opts.datacache_options->datacache_evict_probability};
         auto st = _cache->insert(page_cache_key, _cache_buf, opts, &cache_handle);
         if (st.ok()) {
             _page_handle = PageHandle(std::move(cache_handle));

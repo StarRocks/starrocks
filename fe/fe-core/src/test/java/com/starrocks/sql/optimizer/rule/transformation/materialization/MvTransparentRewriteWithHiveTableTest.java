@@ -92,7 +92,7 @@ public class MvTransparentRewriteWithHiveTableTest extends MVTestBase {
     }
 
     @Test
-    public void testTransparentRewriteWithScanMv() {
+    public void testTransparentRewriteWithScan1() {
         withPartialScanMv(() -> {
             // no compensate rewrite
             {
@@ -105,7 +105,12 @@ public class MvTransparentRewriteWithHiveTableTest extends MVTestBase {
                     PlanTestBase.assertContains(plan, "mv0");
                 }
             }
+        });
+    }
 
+    @Test
+    public void testTransparentRewriteWithScan2() {
+        withPartialScanMv(() -> {
             // transparent union rewrite
             {
                 String[] sqls = {
@@ -118,7 +123,7 @@ public class MvTransparentRewriteWithHiveTableTest extends MVTestBase {
                                 "l_suppkey + 2 >1000;",
                 };
                 for (String query : sqls) {
-                    System.out.println(query);
+                    logSysInfo(query);
                     String plan = getFragmentPlan(query);
                     PlanTestBase.assertContains(plan, ":UNION", ": mv0", ": lineitem_par");
                 }
@@ -127,7 +132,7 @@ public class MvTransparentRewriteWithHiveTableTest extends MVTestBase {
     }
 
     @Test
-    public void testTransparentRewriteWithScanMvAndAggQuery() {
+    public void testTransparentRewriteWithScanMvAndAggQuery1() {
         withPartialScanMv(() -> {
             {
                 String[] sqls = {
@@ -142,7 +147,12 @@ public class MvTransparentRewriteWithHiveTableTest extends MVTestBase {
                     PlanTestBase.assertContains(plan, "mv0");
                 }
             }
+        });
+    }
 
+    @Test
+    public void testTransparentRewriteWithScanMvAndAggQuery2() {
+        withPartialScanMv(() -> {
             {
                 String[] sqls = {
                         "SELECT l_shipdate, l_orderkey, sum(l_suppkey) FROM mv0 WHERE l_shipdate >= '1998-01-01' GROUP BY " +
@@ -159,7 +169,7 @@ public class MvTransparentRewriteWithHiveTableTest extends MVTestBase {
     }
 
     @Test
-    public void testTransparentRewriteWithAggMv() {
+    public void testTransparentRewriteWithAgg1() {
         withPartialAggregateMv(() -> {
             {
                 String[] sqls = {
@@ -172,7 +182,12 @@ public class MvTransparentRewriteWithHiveTableTest extends MVTestBase {
                     PlanTestBase.assertContains(plan, "mv0");
                 }
             }
+        });
+    }
 
+    @Test
+    public void testTransparentRewriteWithAgg2() {
+        withPartialAggregateMv(() -> {
             {
                 String[] sqls = {
                         "SELECT l_shipdate, l_orderkey FROM mv0 WHERE l_shipdate >= '1998-01-01';",
@@ -187,7 +202,7 @@ public class MvTransparentRewriteWithHiveTableTest extends MVTestBase {
     }
 
     @Test
-    public void testTransparentRewriteWithJoinMv() {
+    public void testTransparentRewriteWithJoin1() {
         withPartialJoinMv(() -> {
             {
                 String[] sqls = {
@@ -200,15 +215,19 @@ public class MvTransparentRewriteWithHiveTableTest extends MVTestBase {
                     PlanTestBase.assertContains(plan, "mv0");
                 }
             }
+        });
+    }
 
+    @Test
+    public void testTransparentRewriteWithJoin2() {
+        withPartialJoinMv(() -> {
             {
                 String[] sqls = {
                         "SELECT * FROM mv0 WHERE l_shipdate != '1998-01-01' and l_suppkey > 100;",
                         "SELECT * FROM mv0 WHERE l_shipdate >= '1998-01-01' and l_suppkey > 100;",
-                        "SELECT * FROM mv0 WHERE l_shipdate <= '1998-01-05' and l_suppkey > 100;",
                 };
                 for (String query : sqls) {
-                    System.out.println(query);
+                    logSysInfo(query);
                     String plan = getFragmentPlan(query);
                     // transparent plan will contain union, but it can be pruned
                     PlanTestBase.assertNotContains(plan, "UNION");

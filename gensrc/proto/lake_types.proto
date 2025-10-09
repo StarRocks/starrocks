@@ -35,6 +35,30 @@ message DelvecPagePB {
     optional uint64 size = 3;
 }
 
+message PersistentIndexSstablePB {
+    optional int64 version = 1; // Deprecated
+    optional string filename = 2;
+    optional int64 filesize = 3;
+    // used for rebuild point of persistent index
+    optional uint64 max_rss_rowid = 4;
+    optional bytes encryption_meta = 5;
+    // Whether this file shared by multiple tablets
+    optional bool shared = 6 [default=false];
+    // Filter out rows which do not satisfy the predicate
+    // when reading this specific sstable
+    optional PersistentIndexSstablePredicatePB predicate = 7;
+    // For sstable generated during data write & compaction process.
+    optional uint32 shared_rssid = 8;
+    optional int64 shared_version = 9;
+    // For sstable generated during compaction process.
+    optional DelvecPagePB delvec = 10;
+}
+
+message PersistentIndexSstableMetaPB {
+    // sstables are ordered with the smaller version on the left.
+    repeated PersistentIndexSstablePB sstables = 1;
+}
+
 message DelvecCacheKeyPB {
     optional int64 id = 1;
     optional DelvecPagePB delvec_page = 2;
@@ -45,6 +69,7 @@ message FileMetaPB {
     optional int64 size = 2;
     // Whether this file shared by multiple tablets
     optional bool shared = 3 [default=false];
+    optional bytes encryption_meta = 4;
 }
 
 message DelvecMetadataPB {
@@ -202,6 +227,7 @@ message TxnLogPB {
         // for partial update, record dest rewrite segment names to avoid gc
         repeated string rewrite_segments = 4;
         repeated bytes del_encryption_metas = 5;
+        repeated FileMetaPB ssts = 6;
     }
 
     message OpCompaction {
@@ -219,6 +245,7 @@ message TxnLogPB {
         // x and y might be new segments
         optional int32 new_segment_offset = 6;
         optional int32 new_segment_count = 7;
+        repeated FileMetaPB ssts = 8;
     }
 
     message OpSchemaChange {

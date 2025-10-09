@@ -38,6 +38,7 @@ import com.google.common.base.Strings;
 import com.starrocks.authentication.AuthenticationException;
 import com.starrocks.authentication.AuthenticationProvider;
 import com.starrocks.authentication.UserIdentityUtils;
+import com.starrocks.authentication.UserProperty;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Table;
@@ -234,7 +235,8 @@ public class ConnectProcessor {
                 .setIsForwardToLeader(isForwardToLeader)
                 .setQueryId(ctx.getQueryId() == null ? "NaN" : ctx.getQueryId().toString())
                 .setSessionId(ctx.getSessionId().toString())
-                .setCNGroup(ctx.getCurrentComputeResourceName());
+                .setCNGroup(ctx.getCurrentComputeResourceName())
+                .setQuerySource(ctx.getQuerySource().toString());
 
         if (ctx.getState().isQuery()) {
             MetricRepo.COUNTER_QUERY_ALL.increase(1L);
@@ -421,9 +423,13 @@ public class ConnectProcessor {
                         return;
                     }
 
-                    authenticationProvider.checkLoginSuccess(ctx.getConnectionId(), ctx.getAuthenticationContext());
+                    authenticationProvider.checkLoginSuccess(ctx.getConnectionId(), ctx.getAccessControlContext());
                 } catch (AuthenticationException authenticationException) {
-                    ErrorReport.report(authenticationException.getMessage());
+                    if (authenticationException.getErrorCode() != null) {
+                        ErrorReport.report(authenticationException.getErrorCode(), authenticationException.getMessage());
+                    } else {
+                        ErrorReport.report(ErrorCode.ERR_ACCESS_DENIED, authenticationException.getMessage());
+                    }
                     ctx.getState().setErrType(QueryState.ErrType.ANALYSIS_ERR);
                     return;
                 }
@@ -592,14 +598,28 @@ public class ConnectProcessor {
             ExecuteStmt executeStmt = new ExecuteStmt(String.valueOf(stmtId), exprs);
             // audit will affect performance
             boolean enableAudit = ctx.getSessionVariable().isAuditExecuteStmt();
-            String originStmt = enableAudit ? executeStmt.toSql() : "/* omit */";
+            String originStmt = executeStmt.toSql();
             executeStmt.setOrigStmt(new OriginStatement(originStmt, 0));
-
-            executor = new StmtExecutor(ctx, executeStmt);
-            ctx.setExecutor(executor);
 
             boolean isQuery = ctx.isQueryStmt(executeStmt);
             ctx.getState().setIsQuery(isQuery);
+
+            if (isQuery) {
+                // for query stmt, we should register and init tracer.
+                Tracers.register(ctx);
+                Tracers.init(ctx, executeStmt.getTraceMode(), executeStmt.getTraceModule());
+                // set original statement to original query
+                PrepareStmtContext prepareStmtContext = ctx.getPreparedStmt(executeStmt.getStmtName());
+                if (prepareStmtContext != null) {
+                    if (prepareStmtContext.getStmt().getInnerStmt() instanceof QueryStatement) {
+                        originStmt = AstToSQLBuilder.toSQL(prepareStmtContext.getStmt().getInnerStmt());
+                        executeStmt.setOrigStmt(new OriginStatement(originStmt, 0));
+                    }
+                }
+            }
+
+            executor = new StmtExecutor(ctx, executeStmt);
+            ctx.setExecutor(executor);
 
             if (enableAudit && isQuery) {
                 executor.addRunningQueryDetail(executeStmt);
@@ -780,6 +800,7 @@ public class ConnectProcessor {
         ctx.setDatabase(request.db);
         ctx.setQualifiedUser(request.user);
         ctx.setGlobalStateMgr(GlobalStateMgr.getCurrentState());
+
         ctx.getState().reset();
         if (request.isSetResourceInfo()) {
             ctx.getSessionVariable().setResourceGroup(request.getResourceInfo().getGroup());
@@ -804,11 +825,27 @@ public class ConnectProcessor {
             ctx.setCurrentUserIdentity(currentUserIdentity);
         }
 
+        if (ctx.getCurrentUserIdentity() == null) {
+            TMasterOpResult result = new TMasterOpResult();
+            ctx.getState().setError(
+                    "Missing current user identity. You need to upgrade this Frontend to the same version as Leader Frontend.");
+            result.setMaxJournalId(GlobalStateMgr.getCurrentState().getMaxJournalId());
+            result.setPacket(getResultPacket());
+            return result;
+        }
+
         if (request.isSetUser_roles()) {
             List<Long> roleIds = request.getUser_roles().getRole_id_list();
             ctx.setCurrentRoleIds(new HashSet<>(roleIds));
         } else {
             ctx.setCurrentRoleIds(new HashSet<>());
+        }
+
+        UserIdentity userIdentity = ctx.getCurrentUserIdentity();
+        if (!userIdentity.isEphemeral()) {
+            UserProperty userProperty = GlobalStateMgr.getCurrentState().getAuthenticationMgr()
+                    .getUserProperty(ctx.getCurrentUserIdentity().getUser());
+            ctx.updateByUserProperty(userProperty);
         }
 
         // after https://github.com/StarRocks/starrocks/pull/43162, we support temporary tables.
@@ -888,18 +925,6 @@ public class ConnectProcessor {
         }
 
         ctx.setThreadLocalInfo();
-
-        if (ctx.getCurrentUserIdentity() == null) {
-            // if we upgrade Master FE first, the request from old FE does not set "current_user_ident".
-            // so ctx.getCurrentUserIdentity() will get null, and causing NullPointerException after using it.
-            // return error directly.
-            TMasterOpResult result = new TMasterOpResult();
-            ctx.getState().setError(
-                    "Missing current user identity. You need to upgrade this Frontend to the same version as Leader Frontend.");
-            result.setMaxJournalId(GlobalStateMgr.getCurrentState().getMaxJournalId());
-            result.setPacket(getResultPacket());
-            return result;
-        }
 
         StmtExecutor executor = null;
         try {

@@ -16,6 +16,7 @@ package com.starrocks.warehouse.cngroup;
 
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReportException;
+import com.starrocks.qe.GlobalVariable;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.warehouse.Warehouse;
@@ -39,12 +40,18 @@ public class CRAcquireContext {
         this.prevComputeResource = prevComputeResource;
     }
 
+    public CRAcquireContext(long warehouseId, ComputeResource prevComputeResource) {
+        this.warehouseId = warehouseId;
+        this.strategy = CRAcquireStrategy.fromString(GlobalVariable.getCngroupScheduleMode());
+        this.prevComputeResource = prevComputeResource;
+    }
+
     public static CRAcquireContext of(long warehouseId, CRAcquireStrategy cnGroupStrategy, ComputeResource prevComputeResource) {
         return new CRAcquireContext(warehouseId, cnGroupStrategy, prevComputeResource);
     }
 
     public static CRAcquireContext of(long warehouseId, ComputeResource prevComputeResource) {
-        return new CRAcquireContext(warehouseId, CRAcquireStrategy.STANDARD, prevComputeResource);
+        return new CRAcquireContext(warehouseId, prevComputeResource);
     }
 
     public static CRAcquireContext of(long warehouseId, CRAcquireStrategy cnGroupStrategy) {
@@ -52,7 +59,7 @@ public class CRAcquireContext {
     }
 
     public static CRAcquireContext of(long warehouseId) {
-        return new CRAcquireContext(warehouseId, CRAcquireStrategy.STANDARD, null);
+        return new CRAcquireContext(warehouseId, null);
     }
 
     public static CRAcquireContext of(String warehouseName) {
@@ -60,7 +67,7 @@ public class CRAcquireContext {
         final Warehouse warehouse = warehouseManager.getWarehouse(warehouseName);
         if (warehouse == null) {
             throw ErrorReportException.report(ErrorCode.ERR_UNKNOWN_WAREHOUSE,
-                    String.format("name: %d", warehouseName));
+                    String.format("name: %s", warehouseName));
         }
         return new CRAcquireContext(warehouse.getId(), CRAcquireStrategy.STANDARD, null);
     }

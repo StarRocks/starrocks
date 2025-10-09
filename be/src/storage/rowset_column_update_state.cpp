@@ -17,6 +17,7 @@
 #include "common/tracer.h"
 #include "fs/fs_util.h"
 #include "gutil/strings/substitute.h"
+#include "runtime/current_thread.h"
 #include "serde/column_array_serde.h"
 #include "storage/chunk_helper.h"
 #include "storage/delta_column_group.h"
@@ -699,8 +700,8 @@ Status RowsetColumnUpdateState::finalize(Tablet* tablet, Rowset* rowset, uint32_
       * used and we need to discard the column for the keys which have already existed in the tablet.
     */
     for (ColumnId cid : txn_meta.partial_update_column_ids()) {
-        if (txn_meta.has_auto_increment_partial_update_column_id() &&
-            cid == txn_meta.auto_increment_partial_update_column_id()) {
+        DCHECK(cid < tschema->columns().size());
+        if (txn_meta.has_auto_increment_partial_update_column_id() && tschema->column(cid).is_auto_increment()) {
             // skip auto increment column if it is being used for partial update
             continue;
         }

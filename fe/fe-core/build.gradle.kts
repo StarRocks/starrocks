@@ -64,8 +64,11 @@ dependencies {
     implementation("com.aliyun.odps:odps-sdk-core") {
         exclude(group = "org.codehaus.jackson", module = "jackson-mapper-asl")
         exclude(group = "org.ini4j", module = "ini4j")
+        exclude(group = "org.antlr", module = "antlr4")
     }
-    implementation("com.aliyun.odps:odps-sdk-table-api")
+    implementation("com.aliyun.odps:odps-sdk-table-api") {
+        exclude(group = "org.antlr", module = "antlr4")
+    }
     implementation("com.azure:azure-identity")
     implementation("com.azure:azure-storage-blob")
     compileOnly("com.baidu:jprotobuf-precompile-plugin") {
@@ -409,6 +412,8 @@ tasks.register<Task>("generateByScripts") {
 // Add source generation tasks to the build process
 tasks.compileJava {
     dependsOn("generateThriftSources", "generateProtoSources", "generateByScripts")
+    // Add explicit dependency on hive-udf shadowJar task
+    dependsOn(":plugin:hive-udf:shadowJar")
 }
 
 tasks.named<PrecompileTask>("jprotobuf_precompile") {

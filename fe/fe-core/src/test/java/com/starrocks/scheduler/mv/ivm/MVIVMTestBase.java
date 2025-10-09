@@ -20,7 +20,6 @@ import com.starrocks.load.loadv2.IVMInsertLoadTxnCallback;
 import com.starrocks.scheduler.TaskRun;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MVTestBase;
 import com.starrocks.sql.plan.ExecPlan;
-import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
@@ -60,7 +59,6 @@ public abstract class MVIVMTestBase extends MVTestBase {
         MaterializedView mv = getMv("test_mv1");
         ExecPlan execPlan = getIVMRefreshedExecPlan(mv);
         Assertions.assertTrue(execPlan != null);
-        System.out.println(execPlan.getExplainString(TExplainLevel.NORMAL));
     }
 
     protected void doTestWith3RunsNoCheckRewrite(String mvQuery,
@@ -90,13 +88,11 @@ public abstract class MVIVMTestBase extends MVTestBase {
         {
             ExecPlan execPlan = getIVMRefreshedExecPlan(mv);
             Assertions.assertTrue(execPlan != null);
-            System.out.println(execPlan.getExplainString(TExplainLevel.NORMAL));
             run1.check(execPlan);
         }
         // test mv rewrite
         {
-            String plan = getFragmentPlan(mvQuery, "MV");
-            System.out.println(plan);
+            String plan = getFragmentPlan(mvQuery);
             if (isCheckRewrite) {
                 Assertions.assertTrue(plan.contains("test_mv1"));
             }
@@ -111,7 +107,6 @@ public abstract class MVIVMTestBase extends MVTestBase {
         {
             ExecPlan execPlan = getIVMRefreshedExecPlan(mv);
             Assertions.assertTrue(execPlan != null);
-            System.out.println(execPlan.getExplainString(TExplainLevel.NORMAL));
             run3.check(execPlan);
         }
     }

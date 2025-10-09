@@ -261,7 +261,7 @@ REST catalog 用の `MetastoreParams`:
 
 - `iceberg.catalog.security`
   - 必須: いいえ
-  - 説明: 使用する認証プロトコルのタイプ。デフォルト: `NONE`。有効な値: `OAUTH2`。`OAUTH2` 認証プロトコルには `token` または `credential` が必要です。
+  - 説明: 使用する認証プロトコルのタイプ。デフォルト: `NONE`。有効な値: `OAUTH2` および `JWT`。この項目が `OAUTH2` に設定されている場合、`token` または `credential` のいずれかが必要です。この項目が `JWT` に設定されている場合、ユーザーは `JWT` メソッドを使用して StarRocks クラスターにログインする必要があります。`token` または `credential` を省略することも可能です。その場合、StarRocks はログイン済みユーザーの JWT を使用して Catalog にアクセスします。
 
 - `iceberg.catalog.oauth2.token`
   - 必須: いいえ
@@ -465,32 +465,38 @@ Iceberg クラスターのストレージとして AWS S3 を選択した場合�
   "aws.s3.region" = "<aws_s3_region>"
   ```
 
+- REST カタログで Vended Credential（v4.0以降でサポート）を選択するには、`StorageCredentialParams` を次のように構成します。
+
+  ```SQL
+  "aws.s3.region" = "<aws_s3_region>"
+  ```
+
 AWS S3 用の `StorageCredentialParams`:
 
 ###### aws.s3.use_instance_profile
 
-必須: はい
-説明: インスタンスプロファイルベースの認証方法と想定ロールベースの認証方法を有効にするかどうかを指定します。 有効な値: `true` および `false`。 デフォルト値: `false`。
+- 必須: はい
+- 説明: インスタンスプロファイルベースの認証方法と想定ロールベースの認証方法を有効にするかどうかを指定します。 有効な値: `true` および `false`。 デフォルト値: `false`。
 
 ###### aws.s3.iam_role_arn
 
-必須: いいえ
-説明: AWS S3 バケットに対する権限を持つ IAM ロールの ARN です。想定ロールベースの認証方法を使用して AWS S3 にアクセスする場合、このパラメーターを指定する必要があります。
+- 必須: いいえ
+- 説明: AWS S3 バケットに対する権限を持つ IAM ロールの ARN です。想定ロールベースの認証方法を使用して AWS S3 にアクセスする場合、このパラメーターを指定する必要があります。
 
 ###### aws.s3.region
 
-必須: はい
-説明: AWS S3 バケットが存在するリージョンです。例: `us-west-1`。
+- 必須: はい
+- 説明: AWS S3 バケットが存在するリージョンです。例: `us-west-1`。
 
 ###### aws.s3.access_key
 
-必須: いいえ
-説明: IAM ユーザーのアクセスキーです。IAM ユーザーベースの認証方法を使用して AWS S3 にアクセスする場合、このパラメーターを指定する必要があります。
+- 必須: いいえ
+- 説明: IAM ユーザーのアクセスキーです。IAM ユーザーベースの認証方法を使用して AWS S3 にアクセスする場合、このパラメーターを指定する必要があります。
 
 ###### aws.s3.secret_key
 
-必須: いいえ
-説明: IAM ユーザーのシークレットキーです。IAM ユーザーベースの認証方法を使用して AWS S3 にアクセスする場合、このパラメーターを指定する必要があります。
+- 必須: いいえ
+- 説明: IAM ユーザーのシークレットキーです。IAM ユーザーベースの認証方法を使用して AWS S3 にアクセスする場合、このパラメーターを指定する必要があります。
 
 AWS S3 へのアクセス認証方法の選択方法および AWS IAM コンソールでのアクセス制御ポリシーの構成方法については、 [AWS S3 へのアクセス認証パラメーター](../../../integrations/authenticate_to_aws_resources.md#authentication-parameters-for-accessing-aws-s3) を参照してください。
 
@@ -522,28 +528,28 @@ MinIO およびその他の S3 互換システム用の `StorageCredentialParams
 
 ###### aws.s3.enable_ssl
 
-必須: はい
-説明: SSL 接続を有効にするかどうかを指定します。<br />有効な値: `true` および `false`。 デフォルト値: `true`。
+- 必須: はい
+- 説明: SSL 接続を有効にするかどうかを指定します。<br />有効な値: `true` および `false`。 デフォルト値: `true`。
 
 ###### aws.s3.enable_path_style_access
 
-必須: はい
-説明: パススタイルアクセスを有効にするかどうかを指定します。<br />有効な値: `true` および `false`。 デフォルト値: `false`。 MinIO の場合、値を `true` に設定する必要があります。<br />パススタイル URL は次の形式を使用します: `https://s3.<region_code>.amazonaws.com/<bucket_name>/<key_name>`。 例: US West (Oregon) リージョンに `DOC-EXAMPLE-BUCKET1` というバケットを作成し、そのバケット内の `alice.jpg` オブジェクトにアクセスしたい場合、次のパススタイル URL を使用できます: `https://s3.us-west-2.amazonaws.com/DOC-EXAMPLE-BUCKET1/alice.jpg`。
+- 必須: はい
+- 説明: パススタイルアクセスを有効にするかどうかを指定します。<br />有効な値: `true` および `false`。 デフォルト値: `false`。 MinIO の場合、値を `true` に設定する必要があります。<br />パススタイル URL は次の形式を使用します: `https://s3.<region_code>.amazonaws.com/<bucket_name>/<key_name>`。 例: US West (Oregon) リージョンに `DOC-EXAMPLE-BUCKET1` というバケットを作成し、そのバケット内の `alice.jpg` オブジェクトにアクセスしたい場合、次のパススタイル URL を使用できます: `https://s3.us-west-2.amazonaws.com/DOC-EXAMPLE-BUCKET1/alice.jpg`。
 
 ###### aws.s3.endpoint
 
-必須: はい
-説明: AWS S3 の代わりに S3 互換ストレージシステムに接続するために使用されるエンドポイント。
+- 必須: はい
+- 説明: AWS S3 の代わりに S3 互換ストレージシステムに接続するために使用されるエンドポイント。
 
 ###### aws.s3.access_key
 
-必須: はい
-説明: IAM ユーザーのアクセスキー。
+- 必須: はい
+- 説明: IAM ユーザーのアクセスキー。
 
 ###### aws.s3.secret_key
 
-必須: はい
-説明: IAM ユーザーのシークレットキー。
+- 必須: はい
+- 説明: IAM ユーザーのシークレットキー。
 
 </TabItem>
 
@@ -571,35 +577,36 @@ Iceberg クラスターのストレージとして Blob Storage を選択した�
   "azure.blob.container" = "<container_name>",
   "azure.blob.sas_token" = "<storage_account_SAS_token>"
   ```
+- REST カタログで Vended Credential（v4.0以降でサポート）を選択する場合、`StorageCredentialParams` を設定する必要はありません。
 
 Microsoft Azure 用の `StorageCredentialParams`:
 
 ###### azure.blob.storage_account
 
-必須: はい
-説明: Blob Storage アカウントのユーザー名。
+- 必須: はい
+- 説明: Blob Storage アカウントのユーザー名。
 
 ###### azure.blob.shared_key
 
-必須: はい
-説明: Blob Storage アカウントの共有キー。
+- 必須: はい
+- 説明: Blob Storage アカウントの共有キー。
 
 ###### azure.blob.account_name
 
-必須: はい
-説明: Blob Storage アカウントのユーザー名。
+- 必須: はい
+- 説明: Blob Storage アカウントのユーザー名。
 
 ###### azure.blob.container
 
-必須: はい
-説明: データを保存する blob コンテナの名前。
+- 必須: はい
+- 説明: データを保存する blob コンテナの名前。
 
 ###### azure.blob.sas_token
 
-必須: はい
-説明: Blob Storage アカウントにアクセスするために使用される SAS トークン。
+- 必須: はい
+- 説明: Blob Storage アカウントにアクセスするために使用される SAS トークン。
 
-###### Azure Data Lake Storage Gen1
+##### Azure Data Lake Storage Gen1
 
 Iceberg クラスターのストレージとして Data Lake Storage Gen1 を選択した場合、次のいずれかの操作を行います。
 
@@ -619,7 +626,7 @@ Iceberg クラスターのストレージとして Data Lake Storage Gen1 を選
   "azure.adls1.oauth2_endpoint" = "<OAuth_2.0_authorization_endpoint_v2>"
   ```
 
-###### Azure Data Lake Storage Gen2
+##### Azure Data Lake Storage Gen2
 
 Iceberg クラスターのストレージとして Data Lake Storage Gen2 を選択した場合、次のいずれかの操作を行います。
 
@@ -649,6 +656,8 @@ Iceberg クラスターのストレージとして Data Lake Storage Gen2 を選
   "azure.adls2.oauth2_client_secret" = "<service_principal_client_secret>",
   "azure.adls2.oauth2_client_endpoint" = "<service_principal_client_endpoint>"
   ```
+
+- REST カタログで Vended Credential（v4.0以降でサポート）を選択する場合、`StorageCredentialParams` を設定する必要はありません。
 
 </TabItem>
 
@@ -692,31 +701,33 @@ Iceberg クラスターのストレージとして Google GCS を選択した場
     "gcp.gcs.impersonation_service_account" = "<data_google_service_account_email>"
     ```
 
+- REST カタログで Vended Credential（v4.0以降でサポート）を選択する場合、`StorageCredentialParams` を設定する必要はありません。
+
 Google GCS 用の `StorageCredentialParams`:
 
 ###### gcp.gcs.service_account_email
 
-デフォルト値: ""
-例: "[user@hello.iam.gserviceaccount.com](mailto:user@hello.iam.gserviceaccount.com)"
-説明: サービスアカウントの作成時に生成された JSON ファイル内のメールアドレス。
+- デフォルト値: ""
+- 例: "[user@hello.iam.gserviceaccount.com](mailto:user@hello.iam.gserviceaccount.com)"
+- 説明: サービスアカウントの作成時に生成された JSON ファイル内のメールアドレス。
 
 ###### gcp.gcs.service_account_private_key_id
 
-デフォルト値: ""
-例: "61d257bd8479547cb3e04f0b9b6b9ca07af3b7ea"
-説明: サービスアカウントの作成時に生成された JSON ファイル内のプライベートキー ID。
+- デフォルト値: ""
+- 例: "61d257bd8479547cb3e04f0b9b6b9ca07af3b7ea"
+- 説明: サービスアカウントの作成時に生成された JSON ファイル内のプライベートキー ID。
 
 ###### gcp.gcs.service_account_private_key
 
-デフォルト値: ""
-例: "-----BEGIN PRIVATE KEY----xxxx-----END PRIVATE KEY-----\n"  
-説明: サービスアカウントの作成時に生成された JSON ファイル内のプライベートキー。
+- デフォルト値: ""
+- 例: "-----BEGIN PRIVATE KEY----xxxx-----END PRIVATE KEY-----\n"  
+- 説明: サービスアカウントの作成時に生成された JSON ファイル内のプライベートキー。
 
 ###### gcp.gcs.impersonation_service_account
 
-デフォルト値: ""  
-例: "hello"  
-説明: インパーソネートしたいサービスアカウント。
+- デフォルト値: ""  
+- 例: "hello"  
+- 説明: インパーソネートしたいサービスアカウント。
 
 </TabItem>
 
@@ -853,6 +864,27 @@ v3.4 以降、StarRocks は、以下のパラメーターを設定すること�
       "aws.s3.region" = "us-west-2"
   );
   ```
+
+##### Vended Credential を選択した場合
+
+REST カタログで Vended Credential を選択する場合、次のようなコマンドを実行します。
+
+```SQL
+CREATE EXTERNAL CATALOG polaris_s3
+PROPERTIES
+(
+    "type" = "iceberg",
+    "iceberg.catalog.uri" = "http://xxx:xxx/api/catalog",
+    "iceberg.catalog.type" = "rest",
+    "iceberg.catalog.rest.nested-namespace-enabled"="true",
+    "iceberg.catalog.security" = "oauth2",
+    "iceberg.catalog.oauth2.credential" = "xxxxx:xxxx",
+    "iceberg.catalog.oauth2.scope"='PRINCIPAL_ROLE:ALL',
+    "iceberg.catalog.warehouse" = "iceberg_catalog",
+    "aws.s3.region" = "us-west-2"
+);
+```
+
 </TabItem>
 
 <TabItem value="HDFS" label="HDFS" >
@@ -927,6 +959,22 @@ PROPERTIES
       "azure.blob.storage_account" = "<blob_storage_account_name>",
       "azure.blob.container" = "<blob_container_name>",
       "azure.blob.sas_token" = "<blob_storage_account_SAS_token>"
+  );
+  ```
+
+- REST カタログで Vended Credential を選択する場合、次のようなコマンドを実行します。
+
+  ```SQL
+  CREATE EXTERNAL CATALOG polaris_azure
+  PROPERTIES (   
+      "type"  =  "iceberg",   
+      "iceberg.catalog.uri"  = "http://xxx:xxx/api/catalog",
+      "iceberg.catalog.type"  =  "rest",
+      "iceberg.catalog.rest.nested-namespace-enabled"="true", 
+      "iceberg.catalog.security" = "oauth2",
+      "iceberg.catalog.oauth2.credential" = "xxxxx:xxxx",
+      "iceberg.catalog.oauth2.scope"='PRINCIPAL_ROLE:ALL',
+      "iceberg.catalog.warehouse" = "iceberg_catalog"
   );
   ```
 
@@ -1006,6 +1054,22 @@ PROPERTIES
   );
   ```
 
+- REST カタログで Vended Credential を選択する場合、次のようなコマンドを実行します。
+
+  ```SQL
+  CREATE EXTERNAL CATALOG polaris_azure
+  PROPERTIES (   
+      "type"  =  "iceberg",   
+      "iceberg.catalog.uri"  = "http://xxx:xxx/api/catalog",
+      "iceberg.catalog.type"  =  "rest",
+      "iceberg.catalog.rest.nested-namespace-enabled"="true", 
+      "iceberg.catalog.security" = "oauth2",
+      "iceberg.catalog.oauth2.credential" = "xxxxx:xxxx",
+      "iceberg.catalog.oauth2.scope"='PRINCIPAL_ROLE:ALL',
+      "iceberg.catalog.warehouse" = "iceberg_catalog"
+  );
+  ```
+
 </TabItem>
 
 <TabItem value="GCS" label="Google GCS" >
@@ -1071,6 +1135,23 @@ PROPERTIES
         "gcp.gcs.impersonation_service_account" = "<data_google_service_account_email>"
     );
     ```
+  
+  - REST カタログで Vended Credential を選択する場合、次のようなコマンドを実行します。
+
+  ```SQL
+  CREATE EXTERNAL CATALOG polaris_gcp
+  PROPERTIES (   
+      "type"  =  "iceberg",   
+      "iceberg.catalog.uri"  = "http://xxx:xxx/api/catalog",
+      "iceberg.catalog.type"  =  "rest",
+      "iceberg.catalog.rest.nested-namespace-enabled"="true", 
+      "iceberg.catalog.security" = "oauth2",
+      "iceberg.catalog.oauth2.credential" = "xxxxx:xxxx",
+      "iceberg.catalog.oauth2.scope"='PRINCIPAL_ROLE:ALL',
+      "iceberg.catalog.warehouse" = "iceberg_catalog"
+  );
+  ```
+
 </TabItem>
 
 </Tabs>
@@ -1244,6 +1325,7 @@ CREATE TABLE [IF NOT EXISTS] [database.]table_name
 (column_definition1[, column_definition2, ...
 partition_column_definition1,partition_column_definition2...])
 [partition_desc]
+[ORDER BY sort_desc)]
 [PROPERTIES ("key" = "value", ...)]
 [AS SELECT query]
 ```
@@ -1287,6 +1369,26 @@ column_name
 パーティション列は非パーティション列の後に定義される必要があります。パーティション列は FLOAT、DOUBLE、DECIMAL、および DATETIME を除くすべてのデータ型をサポートし、デフォルト値として `NULL` を使用することはできません。
 
 :::
+
+##### ORDER BY
+
+v4.0 以降、StarRocks は ORDER BY 句を介して Iceberg テーブルのソートキーを指定する機能をサポートしています。これにより、指定されたソートキーに基づいて同一データファイル内のデータを並べ替えることが可能です。
+
+ORDER BY 句には複数のソートキーを含めることができ、以下の形式で指定します：
+
+```SQL
+ORDER BY (column_name [sort_direction] [nulls_order], ...)
+```
+
+- `column_name`: ソートキーとして使用する列の名前。テーブルスキーマに存在する列でなければなりません。現在、Transform 式はサポートされていません。
+- `sort_direction`: ソート方向。有効な値: `ASC` (デフォルト) および `DESC`。
+- `nulls_order`: NULL 値の順序。有効な値: `NULLS FIRST` (`ASC` 指定時のデフォルト) および `NULLS LAST` (`DESC` 指定時のデフォルト)。
+
+`sort_direction` および `nulls_order` はオプションです。例えば、以下の各々は有効な `sort_desc` です：
+
+- `column_name`
+- `column_name ASC`
+- `column_name DESC NULLS FIRST`
 
 ##### PROPERTIES
 
@@ -1534,6 +1636,62 @@ ALTER VIEW iceberg.iceberg_db.iceberg_view2 ADD DIALECT SELECT k1, k2 FROM icebe
 
 ```SQL
 ALTER VIEW iceberg.iceberg_db.iceberg_view2 MODIFY DIALECT SELECT k1, k2, k3 FROM iceberg.iceberg_db.iceberg_table;
+```
+
+### 手動コンパクション
+
+v4.0 以降、StarRocks は Iceberg テーブルに対する手動コンパクションをサポートしています。
+
+Iceberg テーブルにデータがロードされるたびに、新しいデータファイルとメタデータファイルが生成されます。時間の経過とともに過剰なデータファイルが蓄積されると、クエリプランの生成が大幅に遅延し、パフォーマンスに影響を及ぼす可能性があります。
+
+この場合、テーブルまたはパーティションに対して手動コンパクションを実行し、小さなデータファイルをマージすることでパフォーマンスを改善する必要があります。
+
+#### 構文
+
+```SQL
+ALTER TABLE [catalog.][database.]table_name 
+EXECUTE rewrite_data_files
+("key"=value [,"key"=value, ...]) 
+[WHERE <predicate>]
+```
+
+#### パラメータ
+
+##### `rewrite_data_files` プロパティ
+
+手動コンパクションの動作を指定する `"key"=value` ペア。キーは二重引用符で囲む必要があることに注意してください。
+
+###### `min_file_size_bytes`
+
+- 説明: 小規模データファイルの上限値。この値より小さいサイズのデータファイルは、コンパクション時にマージされます。
+- 単位: Byte
+- タイプ: Int
+- デフォルト: 268,435,456 (256 MB)
+
+###### `batch_size`
+
+- 説明: 各バッチで処理可能なデータの最大サイズ。
+- 単位: Byte
+- タイプ: Int
+- デフォルト: 10,737,418,240 (10 GB)
+
+###### `rewrite_all`
+
+- 説明: 特定の要件を持つデータファイルをフィルタリングするパラメータを無視し、コンパクション中にすべてのデータファイルを書き換えるかどうか。
+- 単位: -
+- タイプ: Boolean
+- デフォルト: false
+
+##### `WHERE` 句
+
+- 説明: コンパクションに含めるパーティションを指定するために使用されるフィルタ述語。
+
+#### 例
+
+以下の例は、Iceberg テーブル `t1` 内の特定のパーティションに対して手動コンパクションを実行します。パーティションは `part_col = 'p1'` 句で指定されます。これらのパーティションでは、134,217,728 Byte（128 MB）未満のデータファイルがコンパクション中にマージされます。
+
+```SQL
+ALTER TABLE t1 EXECUTE rewrite_data_files("min_file_size_bytes"= 134217728) WHERE part_col = 'p1';
 ```
 
 ---

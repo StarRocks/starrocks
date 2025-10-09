@@ -198,7 +198,9 @@ v3.3.0以降、StarRocksは上記のメタデータ読み取りおよびキャ�
 
 ### Iceberg ビュー
 
-StarRocks は v3.3.2 以降、Iceberg ビューのクエリをサポートしています。現在、StarRocks を通じて作成された Iceberg ビューのみがサポートされています。
+StarRocks は、v3.3.2 以降、Iceberg ビューのクエリにサポートし、v3.5 以降、Iceberg ビューの作成にサポートしています。
+
+現在、StarRocks を通じて作成された Iceberg ビューのみがサポートされています。v3.5 から、既存の Iceberg ビューに StarRocks の構文スタイル定義を追加できるようになりました。
 
 ### クエリ統計インターフェース
 
@@ -237,6 +239,12 @@ StarRocks は v3.3.2 以降、Iceberg ビューのクエリをサポートして
 - StarRocks は、Delta Lake の Parquet 形式のデータのクエリをサポートし、Parquet ファイルのために SNAPPY、LZ4、ZSTD、GZIP、および NO_COMPRESSION 圧縮フォーマットをサポートします。
 - StarRocks は、Delta Lake の MAP 型および STRUCT 型データのクエリをサポートしていません。
 - StarRocks は v3.0.0 以降、SHOW CREATE TABLE をサポートして Delta Lake テーブルスキーマを表示します。
+- 現在、Delta Lake Catalog は次のテーブル機能をサポートしています:
+  - V2 Checkpoint (v3.3.0 以降)
+  - タイムゾーンなしのタイムスタンプ (v3.3.1 以降)
+  - カラムマッピング (v3.3.6 以降)
+  - Deletion Vector (v3.4.1 以降)
+
 
 ## JDBC Catalog
 

@@ -1565,11 +1565,9 @@ public class PCTRefreshListPartitionOlapTest extends MVTestBase {
         executeInsertSql(sql2);
 
         List<String> s1PartitionNames = extractColumnValues(sql1, 0);
-        System.out.println(s1PartitionNames);
         addListPartition("s1", s1PartitionNames);
 
         List<String> s2PartitionNames = extractColumnValues(sql2, 0);
-        System.out.println(s2PartitionNames);
         addListPartition("s2", s2PartitionNames);
         starRocksAssert.withRefreshedMaterializedView(String.format("CREATE MATERIALIZED VIEW %s\n" +
                         "PARTITION BY col1\n" +
@@ -1647,5 +1645,165 @@ public class PCTRefreshListPartitionOlapTest extends MVTestBase {
             mv.dropPartition(db.getId(), partitionName, false);
         }
         Assertions.assertEquals(0, mv.getPartitions().size());
+    }
+
+    @Test
+    public void testMVForceRefresh() throws Exception {
+        String partitionTable = "CREATE TABLE list_t1 (dt1 date, int1 int)\n" +
+                "PARTITION BY list(dt1) (\n" +
+                "     PARTITION p1 VALUES IN (\"2025-05-16\") ,\n" +
+                "     PARTITION p2 VALUES IN (\"2025-05-17\") \n" +
+                ")\n";
+        starRocksAssert.withTable(partitionTable);
+        String[] sqls = {
+                "insert into list_t1 partition(p1) values('2025-05-16', 1);",
+                "insert into list_t1 partition(p2) values('2025-05-17', 1);"
+        };
+        for (String sql : sqls) {
+            executeInsertSql(sql);
+        }
+
+        String mvQuery = "CREATE MATERIALIZED VIEW test_mv1 " +
+                "PARTITION BY (dt1) " +
+                "REFRESH DEFERRED MANUAL PROPERTIES (\"partition_refresh_number\"=\"-1\")\n" +
+                "AS SELECT dt1,sum(int1) from list_t1 group by dt1 \n";
+        starRocksAssert.withMaterializedView(mvQuery);
+        MaterializedView mv = getMv("test_mv1");
+
+        TaskRun taskRun = buildMVTaskRun(mv, "test");
+        ExecPlan execPlan;
+        // explain without force
+        {
+            execPlan = getMVRefreshExecPlan(taskRun);
+            Assertions.assertNotNull(execPlan);
+
+            refreshMV("test", mv);
+            execPlan = getMVRefreshExecPlan(taskRun);
+            Assertions.assertNull(execPlan);
+
+            String plan = explainMVRefreshExecPlan(mv, "explain refresh materialized " +
+                    "view test_mv1;");
+            Assertions.assertTrue(plan.contains("PLAN NOT AVAILABLE"));
+        }
+
+        // refresh with force
+        Map<String, String> props = taskRun.getProperties();
+        props.put(TaskRun.FORCE, "true");
+        String result = "";
+        // explain with refresh
+        {
+            ExecuteOption executeOption = new ExecuteOption(taskRun.getTask());
+            Map<String, String> explainProps = executeOption.getTaskRunProperties();
+            explainProps.put(TaskRun.FORCE, "true");
+
+            execPlan =
+                    getMVRefreshExecPlan(mv, "explain refresh materialized view test_mv1 " +
+                            "force;");
+            Assertions.assertNotNull(execPlan);
+
+            String plan = explainMVRefreshExecPlan(mv, executeOption, "explain refresh materialized view test_mv1 " +
+                    "force;");
+            Assertions.assertTrue(plan.contains("MVToRefreshedPartitions: [p1, p2]"));
+
+            // after refresh, still can refresh with force
+            execPlan = getMVRefreshExecPlan(taskRun, true);
+            result = execPlan.getExplainString(TExplainLevel.NORMAL);
+            PlanTestBase.assertContains(plan, "     TABLE: list_t1\n" +
+                    "     PREAGGREGATION: ON\n" +
+                    "     partitions=2/2");
+            Assertions.assertNotNull(execPlan);
+
+            refreshMV("test", mv);
+
+            // after refresh, still can refresh with force
+            execPlan = getMVRefreshExecPlan(taskRun, true);
+            result = execPlan.getExplainString(TExplainLevel.NORMAL);
+            PlanTestBase.assertContains(plan, "     TABLE: list_t1\n" +
+                    "     PREAGGREGATION: ON\n" +
+                    "     partitions=2/2");
+            Assertions.assertNotNull(execPlan);
+        }
+    }
+
+    @Test
+    public void testMVForcePartialRefresh() throws Exception {
+        String partitionTable = "CREATE TABLE list_t1 (dt1 date, int1 int)\n" +
+                "PARTITION BY list(dt1) (\n" +
+                "     PARTITION p1 VALUES IN (\"2025-05-16\") ,\n" +
+                "     PARTITION p2 VALUES IN (\"2025-05-17\") \n" +
+                ")\n";
+        starRocksAssert.withTable(partitionTable);
+        String[] sqls = {
+                "insert into list_t1 partition(p1) values('2025-05-16', 1);",
+                "insert into list_t1 partition(p2) values('2025-05-17', 1);"
+        };
+        for (String sql : sqls) {
+            executeInsertSql(sql);
+        }
+
+        String mvQuery = "CREATE MATERIALIZED VIEW test_mv1 " +
+                "PARTITION BY (dt1) " +
+                "REFRESH DEFERRED MANUAL PROPERTIES (\"partition_refresh_number\"=\"-1\")\n" +
+                "AS SELECT dt1,sum(int1) from list_t1 group by dt1 \n";
+        starRocksAssert.withMaterializedView(mvQuery);
+        MaterializedView mv = getMv("test_mv1");
+
+        TaskRun taskRun = buildMVTaskRun(mv, "test");
+        // partial refresh with force
+        Map<String, String> props = taskRun.getProperties();
+        props.put(TaskRun.PARTITION_VALUES,
+                PListCell.batchSerialize(ImmutableSet.of(new PListCell("2025-05-16"))));
+
+        ExecPlan execPlan;
+        // explain without force
+        {
+            execPlan = getMVRefreshExecPlan(taskRun);
+            Assertions.assertNotNull(execPlan);
+
+            refreshMV("test", mv);
+            execPlan = getMVRefreshExecPlan(taskRun);
+            Assertions.assertNull(execPlan);
+
+            String plan = explainMVRefreshExecPlan(mv, "explain refresh materialized " +
+                    "view test_mv1 partition ('2025-05-16');");
+            Assertions.assertTrue(plan.contains("PLAN NOT AVAILABLE"));
+        }
+
+        String result = "";
+        // explain with partial refresh
+        {
+            ExecuteOption executeOption = new ExecuteOption(taskRun.getTask());
+            Map<String, String> explainProps = executeOption.getTaskRunProperties();
+            explainProps.put(TaskRun.PARTITION_VALUES,
+                    PListCell.batchSerialize(ImmutableSet.of(new PListCell("2025-05-16"))));
+            explainProps.put(TaskRun.FORCE, "true");
+
+            execPlan =
+                    getMVRefreshExecPlan(mv, "explain refresh materialized view test_mv1 " +
+                            "partition ('2025-05-16') force;");
+            Assertions.assertNotNull(execPlan);
+
+            String plan = explainMVRefreshExecPlan(mv, executeOption, "explain refresh materialized view test_mv1 " +
+                    "partition ('2025-05-16') force;");
+            Assertions.assertTrue(plan.contains("MVToRefreshedPartitions: [p1]"));
+
+            // after refresh, still can refresh with force
+            execPlan = getMVRefreshExecPlan(taskRun, true);
+            result = execPlan.getExplainString(TExplainLevel.NORMAL);
+            PlanTestBase.assertContains(plan, "     TABLE: list_t1\n" +
+                    "     PREAGGREGATION: ON\n" +
+                    "     partitions=1/2");
+            Assertions.assertNotNull(execPlan);
+
+            refreshMV("test", mv);
+
+            // after refresh, still can refresh with force
+            execPlan = getMVRefreshExecPlan(taskRun, true);
+            result = execPlan.getExplainString(TExplainLevel.NORMAL);
+            PlanTestBase.assertContains(plan, "     TABLE: list_t1\n" +
+                    "     PREAGGREGATION: ON\n" +
+                    "     partitions=1/2");
+            Assertions.assertNotNull(execPlan);
+        }
     }
 }

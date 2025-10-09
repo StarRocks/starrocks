@@ -33,6 +33,7 @@ import com.starrocks.sql.ast.ShowMaterializedViewsStmt;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.utframe.StarRocksAssert;
+import com.starrocks.utframe.StarRocksTestBase;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
@@ -50,7 +51,7 @@ import java.util.Set;
 import static com.starrocks.sql.optimizer.MVTestUtils.waitingRollupJobV2Finish;
 import static com.starrocks.sql.optimizer.rule.transformation.materialization.MVTestBase.executeInsertSql;
 
-public class LakeSyncMaterializedViewTest {
+public class LakeSyncMaterializedViewTest extends StarRocksTestBase {
 
     
     public String name;
@@ -769,7 +770,8 @@ public class LakeSyncMaterializedViewTest {
     }
 
     @BeforeEach
-    public void setup(TestInfo testInfo) {
+    public void setup(TestInfo testInfo) throws Exception {
+        super.before();
         Optional<Method> testMethod = testInfo.getTestMethod();
         if (testMethod.isPresent()) {
             this.name = testMethod.get().getName();

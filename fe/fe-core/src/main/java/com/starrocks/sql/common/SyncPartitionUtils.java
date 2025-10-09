@@ -484,27 +484,30 @@ public class SyncPartitionUtils {
                 }
                 break;
             case MONTH:
-                if (upperDateTime.with(TemporalAdjusters.firstDayOfMonth()).equals(upperDateTime)) {
+                LocalDateTime monthStart = upperDateTime.with(TemporalAdjusters.firstDayOfMonth()).with(LocalTime.MIDNIGHT);
+                if (monthStart.equals(upperDateTime)) {
                     truncUpperDateTime = upperDateTime;
                 } else {
-                    truncUpperDateTime = upperDateTime.plusMonths(1).with(TemporalAdjusters.firstDayOfMonth());
+                    truncUpperDateTime = monthStart.plusMonths(1);
                 }
                 break;
             case QUARTER:
-                if (upperDateTime.with(upperDateTime.getMonth().firstMonthOfQuarter())
-                        .with(TemporalAdjusters.firstDayOfMonth()).equals(upperDateTime)) {
+                LocalDateTime quarterStart = upperDateTime
+                        .with(upperDateTime.getMonth().firstMonthOfQuarter())
+                        .with(TemporalAdjusters.firstDayOfMonth())
+                        .with(LocalTime.MIDNIGHT);
+                if (quarterStart.equals(upperDateTime)) {
                     truncUpperDateTime = upperDateTime;
                 } else {
-                    LocalDateTime nextDateTime = upperDateTime.plusMonths(3);
-                    truncUpperDateTime = nextDateTime.with(nextDateTime.getMonth().firstMonthOfQuarter())
-                            .with(TemporalAdjusters.firstDayOfMonth());
+                    truncUpperDateTime = quarterStart.plusMonths(3);
                 }
                 break;
             case YEAR:
-                if (upperDateTime.with(TemporalAdjusters.firstDayOfYear()).equals(upperDateTime)) {
+                LocalDateTime yearStart = upperDateTime.with(TemporalAdjusters.firstDayOfYear()).with(LocalTime.MIDNIGHT);
+                if (yearStart.equals(upperDateTime)) {
                     truncUpperDateTime = upperDateTime;
                 } else {
-                    truncUpperDateTime = upperDateTime.plusYears(1).with(TemporalAdjusters.firstDayOfYear());
+                    truncUpperDateTime = yearStart.plusYears(1);
                 }
                 break;
             default:
@@ -534,15 +537,17 @@ public class SyncPartitionUtils {
                 truncUpperDateTime = upperDateTime.plusWeeks(1).with(LocalTime.MIN);
                 break;
             case MONTH:
-                truncUpperDateTime = upperDateTime.plusMonths(1).with(TemporalAdjusters.firstDayOfMonth());
+                truncUpperDateTime = upperDateTime.plusMonths(1).with(TemporalAdjusters.firstDayOfMonth())
+                        .with(LocalTime.MIDNIGHT);
                 break;
             case QUARTER:
                 LocalDateTime nextDateTime = upperDateTime.plusMonths(3);
                 truncUpperDateTime = nextDateTime.with(nextDateTime.getMonth().firstMonthOfQuarter())
-                        .with(TemporalAdjusters.firstDayOfMonth());
+                        .with(TemporalAdjusters.firstDayOfMonth()).with(LocalTime.MIDNIGHT);
                 break;
             case YEAR:
-                truncUpperDateTime = upperDateTime.plusYears(1).with(TemporalAdjusters.firstDayOfYear());
+                truncUpperDateTime = upperDateTime.plusYears(1).with(TemporalAdjusters.firstDayOfYear())
+                        .with(LocalTime.MIDNIGHT);
                 break;
             default:
                 throw new SemanticException("Do not support date_trunc format string:{}", granularity);
@@ -570,14 +575,15 @@ public class SyncPartitionUtils {
                 truncLowerDateTime = lowerDateTime.with(DayOfWeek.MONDAY).truncatedTo(ChronoUnit.DAYS);
                 break;
             case MONTH:
-                truncLowerDateTime = lowerDateTime.with(TemporalAdjusters.firstDayOfMonth());
+                truncLowerDateTime = lowerDateTime.with(TemporalAdjusters.firstDayOfMonth()).with(LocalTime.MIDNIGHT);
                 break;
             case QUARTER:
                 truncLowerDateTime = lowerDateTime.with(lowerDateTime.getMonth().firstMonthOfQuarter())
-                        .with(TemporalAdjusters.firstDayOfMonth());
+                        .with(TemporalAdjusters.firstDayOfMonth())
+                        .with(LocalTime.MIDNIGHT);
                 break;
             case YEAR:
-                truncLowerDateTime = lowerDateTime.with(TemporalAdjusters.firstDayOfYear());
+                truncLowerDateTime = lowerDateTime.with(TemporalAdjusters.firstDayOfYear()).with(LocalTime.MIDNIGHT);
                 break;
             default:
                 throw new SemanticException("Do not support in date_trunc format string:" + granularity);
