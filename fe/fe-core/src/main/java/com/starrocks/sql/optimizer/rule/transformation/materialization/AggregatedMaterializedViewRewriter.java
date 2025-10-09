@@ -623,17 +623,17 @@ public class AggregatedMaterializedViewRewriter extends MaterializedViewRewriter
         // add projection to make sure that the output columns keep the same with the origin query
         if (queryAgg.getProjection() == null) {
             for (int i = 0; i < originalGroupKeys.size(); i++) {
-                newProjection.put(originalGroupKeys.get(i), newGroupByKeyColumnRefs.get(i));
+                addIntoProjection(newProjection, originalGroupKeys.get(i), newGroupByKeyColumnRefs.get(i));
             }
             for (Map.Entry<ColumnRefOperator, CallOperator> entry : queryAgg.getAggregations().entrySet()) {
-                newProjection.put(entry.getKey(), queryColumnRefToScalarMap.get(entry.getKey()));
+                addIntoProjection(newProjection, entry.getKey(), queryColumnRefToScalarMap.get(entry.getKey()));
             }
         } else {
             Map<ColumnRefOperator, ScalarOperator> originalMap = queryAgg.getProjection().getColumnRefMap();
             ReplaceColumnRefRewriter rewriter = new ReplaceColumnRefRewriter(queryColumnRefToScalarMap);
             for (Map.Entry<ColumnRefOperator, ScalarOperator> entry : originalMap.entrySet()) {
                 ScalarOperator rewritten = rewriter.rewrite(entry.getValue());
-                newProjection.put(entry.getKey(), rewritten);
+                addIntoProjection(newProjection, entry.getKey(), rewritten);
             }
         }
         Projection projection = new Projection(newProjection);
@@ -744,7 +744,7 @@ public class AggregatedMaterializedViewRewriter extends MaterializedViewRewriter
 
                 ColumnRefOperator outerProject = context.getQueryRefFactory()
                                 .create(copyProject, copyProject.getType(), copyProject.isNullable());
-                newProjection.put(outerProject, copyProject);
+                addIntoProjection(newProjection, outerProject, copyProject);
                 newAggregations.put(innerAgg, realAggregate);
 
                 // replace original projection
@@ -842,7 +842,7 @@ public class AggregatedMaterializedViewRewriter extends MaterializedViewRewriter
                     aggColRef.isNullable());
             aggregateMapping.put(aggColRef, newAggColRef);
             rewrittens.put(newAggColRef, newAggregate);
-            newProjection.put(newAggColRef, genRollupProject(aggCall, newAggColRef, hasGroupByKeys));
+            addIntoProjection(newProjection, newAggColRef, genRollupProject(aggCall, newAggColRef, hasGroupByKeys));
         }
 
         return rewrittens;
