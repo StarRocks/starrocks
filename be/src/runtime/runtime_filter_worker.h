@@ -187,7 +187,22 @@ inline std::string EventTypeToString(EventType type) {
 // - receive total RF and send it to RuntimeFilterPort
 // - send partitioned RF(for hash join node)
 // - close a query(delete runtime filter merger)
-struct RuntimeFilterWorkerEvent;
+struct RuntimeFilterWorkerEvent {
+    RuntimeFilterWorkerEvent() = default;
+    EventType type;
+    TUniqueId query_id;
+    // For OPEN_QUERY.
+    TQueryOptions query_options;
+    TRuntimeFilterParams create_rf_merger_request;
+    bool is_opened_by_pipeline;
+    // For SEND_PART_RF.
+    std::vector<TNetworkAddress> transmit_addrs;
+    std::vector<TRuntimeFilterDestination> destinations;
+    int transmit_timeout_ms;
+    int64_t transmit_via_http_min_size = 64L * 1024 * 1024;
+    // For SEND_PART_RF, RECEIVE_PART_RF, and RECEIVE_TOTAL_RF.
+    PTransmitRuntimeFilterParams transmit_rf_request;
+};
 
 struct RuntimeFilterWorkerMetrics {
     void update_event_nums(EventType event_type, int64_t delta) { event_nums[event_type] += delta; }

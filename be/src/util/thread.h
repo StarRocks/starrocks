@@ -35,7 +35,11 @@
 #pragma once
 
 #include <pthread.h>
+#ifdef __APPLE__
+#include <sys/syscall.h>
+#else
 #include <syscall.h>
+#endif
 
 #include <atomic>
 #include <thread>

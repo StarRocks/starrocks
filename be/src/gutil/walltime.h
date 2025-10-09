@@ -28,6 +28,11 @@
 #include <mach/clock.h>
 #include <mach/mach.h>
 #include <mach/mach_time.h>
+// macOS system headers may define a function-like macro named current_task(),
+// which conflicts with StarRocks member function names. Undefine it here.
+#ifdef current_task
+#undef current_task
+#endif
 
 #include "gutil/once.h"
 #endif // #if defined(__APPLE__)

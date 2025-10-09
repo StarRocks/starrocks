@@ -328,8 +328,8 @@ public:
     void set_capacity(size_t capacity) override;
     size_t get_memory_usage() const override;
     size_t get_capacity() const override;
-    uint64_t get_lookup_count() const override;
-    uint64_t get_hit_count() const override;
+    size_t get_lookup_count() const override;
+    size_t get_hit_count() const override;
     bool adjust_capacity(int64_t delta, size_t min_capacity = 0) override;
 
 private:

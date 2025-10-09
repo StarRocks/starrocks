@@ -278,6 +278,7 @@ void StarRocksMetrics::initialize(const std::vector<std::string>& paths, bool in
         _system_metrics.install(&_metrics, disk_devices, network_interfaces);
     }
 
+#ifndef MACOS_DISABLE_JAVA
     if (init_jvm_metrics) {
         auto status = _jvm_metrics.init();
         if (!status.ok()) {
@@ -286,6 +287,7 @@ void StarRocksMetrics::initialize(const std::vector<std::string>& paths, bool in
         }
         _jvm_metrics.install(&_metrics);
     }
+#endif
 }
 
 void StarRocksMetrics::_update() {
