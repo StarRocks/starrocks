@@ -21,6 +21,7 @@ import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.util.DateUtils;
 import com.starrocks.sql.ast.expression.BinaryType;
+import com.starrocks.sql.ast.expression.LargeIntLiteral;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
@@ -401,8 +402,8 @@ public class ExpressionStatisticsCalculatorTest {
         // test xx_hash3_128 function
         callOperator = new CallOperator(FunctionSet.XX_HASH3_128, Type.BIGINT, Lists.newArrayList(columnRefOperator));
         columnStatistic = ExpressionStatisticCalculator.calculate(callOperator, statistics);
-        Assertions.assertEquals(columnStatistic.getMaxValue(), 170141183460469231731687303715884105727.0, 0.001);
-        Assertions.assertEquals(columnStatistic.getMinValue(), -170141183460469231731687303715884105728.0, 0.001);
+        Assertions.assertEquals(columnStatistic.getMaxValue(), LargeIntLiteral.LARGE_INT_MAX.doubleValue(), 0.001);
+        Assertions.assertEquals(columnStatistic.getMinValue(), LargeIntLiteral.LARGE_INT_MIN.doubleValue(), 0.001);
     }
 
     @Test

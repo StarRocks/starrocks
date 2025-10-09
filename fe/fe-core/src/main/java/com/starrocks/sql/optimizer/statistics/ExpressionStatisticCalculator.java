@@ -18,6 +18,7 @@ package com.starrocks.sql.optimizer.statistics;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.FunctionSet;
+import com.starrocks.sql.ast.expression.LargeIntLiteral;
 import com.starrocks.sql.optimizer.ConstantOperatorUtils;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
@@ -477,9 +478,9 @@ public class ExpressionStatisticCalculator {
                     distinctValue = rowCount;
                     break;
                 case FunctionSet.XX_HASH3_128:
-                    // xx_hash3_128's range is int128_t
-                    minValue = -170141183460469231731687303715884105728.0;
-                    maxValue = 170141183460469231731687303715884105727.0;
+                    // xx_hash3_128's range is LARGE_INT
+                    minValue = LargeIntLiteral.LARGE_INT_MIN.doubleValue();
+                    maxValue = LargeIntLiteral.LARGE_INT_MAX.doubleValue();
                     distinctValue = rowCount;
                     break;
                 case FunctionSet.POSITIVE:
