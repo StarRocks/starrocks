@@ -362,14 +362,6 @@ public final class MVPCTRefreshRangePartitioner extends MVPCTRefreshPartitioner 
     }
 
     @Override
-    public Set<String> getMVPartitionsToRefreshWithForce() throws AnalysisException {
-        int partitionTTLNumber = mvContext.getPartitionTTLNumber();
-        Map<String, Range<PartitionKey>> inputRanges = mv.getValidRangePartitionMap(partitionTTLNumber);
-        filterPartitionsByTTL(PRangeCell.toCellMap(inputRanges), false);
-        return inputRanges.keySet();
-    }
-
-    @Override
     public Set<String> getMVPartitionNamesWithTTL(MaterializedView mv, MVRefreshParams mvRefreshParams,
                                                   boolean isAutoRefresh) throws AnalysisException {
         int autoRefreshPartitionsLimit = mv.getTableProperty().getAutoRefreshPartitionsLimit();

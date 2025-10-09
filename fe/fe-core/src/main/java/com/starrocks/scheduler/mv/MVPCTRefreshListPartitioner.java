@@ -362,13 +362,6 @@ public final class MVPCTRefreshListPartitioner extends MVPCTRefreshPartitioner {
     }
 
     @Override
-    public Set<String> getMVPartitionsToRefreshWithForce() {
-        Map<String, PCell> mvValidListPartitionMapMap = mv.getPartitionCells(Optional.empty());
-        filterPartitionsByTTL(mvValidListPartitionMapMap, false);
-        return mvValidListPartitionMapMap.keySet();
-    }
-
-    @Override
     public Set<String> getMVPartitionsToRefresh(PartitionInfo mvPartitionInfo,
                                                 Map<Long, TableSnapshotInfo> snapshotBaseTables,
                                                 MVRefreshParams mvRefreshParams,

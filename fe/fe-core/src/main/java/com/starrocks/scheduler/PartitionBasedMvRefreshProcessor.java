@@ -1101,7 +1101,7 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
             throws AnalysisException {
         if (mvRefreshParams.isForce()) {
             // Force refresh
-            return mvRefreshPartitioner.getMVPartitionsToRefreshWithForce();
+            return mvRefreshPartitioner.getMVPartitionsToRefreshWithForce(mvRefreshParams);
         } else {
             return mvRefreshPartitioner.getMVPartitionsToRefresh(mvPartitionInfo, snapshotBaseTables,
                     mvRefreshParams, mvPotentialPartitionNames);

@@ -127,7 +127,9 @@ public abstract class MVPCTRefreshPartitioner {
                                                          MVRefreshParams mvRefreshParams,
                                                          Set<String> mvPotentialPartitionNames) throws AnalysisException;
 
-    public abstract Set<String> getMVPartitionsToRefreshWithForce() throws AnalysisException;
+    public Set<String> getMVPartitionsToRefreshWithForce(MVRefreshParams mvRefreshParams) throws AnalysisException {
+        return getMVPartitionsToRefreshByParams(mvRefreshParams);
+    }
 
     /**
      * Get mv partition names with TTL based on the ref base table partitions.
