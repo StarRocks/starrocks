@@ -73,6 +73,7 @@
 #include "exec/table_function_node.h"
 #include "exec/topn_node.h"
 #include "exec/union_node.h"
+#include "exec/raw_values_node.h"
 #include "exprs/dictionary_get_expr.h"
 #include "exprs/expr_context.h"
 #include "gen_cpp/PlanNodes_types.h"
@@ -465,6 +466,9 @@ Status ExecNode::create_vectorized_node(starrocks::RuntimeState* state, starrock
         return Status::OK();
     case TPlanNodeType::UNION_NODE:
         *node = pool->add(new UnionNode(pool, tnode, descs));
+        return Status::OK();
+    case TPlanNodeType::RAW_VALUES_NODE:
+        *node = pool->add(new RawValuesNode(pool, tnode, descs));
         return Status::OK();
     case TPlanNodeType::INTERSECT_NODE:
         *node = pool->add(new IntersectNode(pool, tnode, descs));

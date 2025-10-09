@@ -47,6 +47,7 @@ import com.starrocks.sql.ast.expression.IntervalLiteral;
 import com.starrocks.sql.ast.expression.IsNullPredicate;
 import com.starrocks.sql.ast.expression.LambdaArgument;
 import com.starrocks.sql.ast.expression.LambdaFunctionExpr;
+import com.starrocks.sql.ast.expression.LargeInPredicate;
 import com.starrocks.sql.ast.expression.LargeIntLiteral;
 import com.starrocks.sql.ast.expression.LargeStringLiteral;
 import com.starrocks.sql.ast.expression.LikePredicate;
@@ -1345,6 +1346,10 @@ public interface AstVisitorExtendInterface<R, C> extends AstVisitor<R, C> {
 
     default R visitInPredicate(InPredicate node, C context) {
         return visitPredicate(node, context);
+    }
+
+    default R visitLargeInPredicate(LargeInPredicate node, C context) {
+        return visitInPredicate(node, context);
     }
 
     default R visitMultiInPredicate(MultiInPredicate node, C context) {

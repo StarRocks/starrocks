@@ -211,6 +211,7 @@ import com.starrocks.sql.ast.warehouse.SetWarehouseStmt;
 import com.starrocks.sql.common.AuditEncryptionChecker;
 import com.starrocks.sql.common.DmlException;
 import com.starrocks.sql.common.ErrorType;
+import com.starrocks.sql.common.LargeInPredicateException;
 import com.starrocks.sql.common.MetaUtils;
 import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.formatter.FormatOptions;
@@ -894,6 +895,14 @@ public class StmtExecutor {
             // the exception happens when interact with client
             // this exception shows the connection is gone
             context.getState().setError(e.getMessage());
+        } catch (LargeInPredicateException e) {
+            // Re-throw LargeInPredicateException to enable retry at ConnectProcessor level
+            // This exception indicates unsupported scenarios that can be resolved by
+            // retrying with enable_large_in_predicate=false
+            String sql = originStmt != null ? originStmt.originStmt : "";
+            LOG.info("LargeInPredicate optimization failed, sql: {}, error: {}. Will retry with optimization disabled.",
+                    SqlCredentialRedactor.redact(sql), e.getMessage());
+            throw e;
         } catch (StarRocksException e) {
             String sql = originStmt != null ? originStmt.originStmt : "";
             // analysis exception only print message, not print the stack
@@ -913,7 +922,7 @@ public class StmtExecutor {
             }
         } catch (Throwable e) {
             String sql = originStmt != null ? originStmt.originStmt : "";
-            LOG.warn("execute Exception, sql: {}, " + SqlCredentialRedactor.redact(sql), e);
+            LOG.warn("execute Exception, sql: {}, " + SqlCredentialRedactor.redact(sql).substring(0, 500), e);
             context.getState().setError(e.getMessage());
             context.getState().setErrType(QueryState.ErrType.INTERNAL_ERR);
         } finally {

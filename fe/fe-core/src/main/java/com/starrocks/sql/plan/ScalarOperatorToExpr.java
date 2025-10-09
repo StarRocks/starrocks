@@ -83,6 +83,7 @@ import com.starrocks.sql.optimizer.operator.scalar.ExistsPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.InPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.IsNullPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.LambdaFunctionOperator;
+import com.starrocks.sql.optimizer.operator.scalar.LargeInPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.LikePredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.MapOperator;
 import com.starrocks.sql.optimizer.operator.scalar.MatchExprOperator;
@@ -341,6 +342,11 @@ public class ScalarOperatorToExpr {
 
             expr.setType(Type.BOOLEAN);
             return expr;
+        }
+
+        @Override
+        public Expr visitLargeInPredicate(LargeInPredicateOperator predicate, FormatterContext context) {
+            throw new UnsupportedOperationException("not support large in predicate in the ScalarOperatorToExpr");
         }
 
         static Function isNullFN = new Function(new FunctionName("is_null_pred"),
