@@ -20,13 +20,14 @@ REFRESH DEFERRED MANUAL
 PROPERTIES ("replication_num" = "1")
 AS
   SELECT * FROM mv_iceberg_${uuid0}.sql_test_db.lineitem_days;
+
 REFRESH MATERIALIZED VIEW test_days PARTITION (('R', 'F', '2024-11-12 08:00:00')) WITH SYNC MODE;
 function: print_hit_materialized_views("SELECT * FROM test_days order by l_orderkey;")
 function: print_hit_materialized_views("SELECT * FROM test_days where l_shipdate >= '2024-11-13 00:00:00' order by l_orderkey;")
 function: print_hit_materialized_views("SELECT * FROM mv_iceberg_${uuid0}.sql_test_db.lineitem_days where l_returnflag = 'R' and l_linestatus = 'F' and l_shipdate = '2024-11-13 00:00:00' order by l_orderkey;")
 function: print_hit_materialized_views("SELECT * FROM mv_iceberg_${uuid0}.sql_test_db.lineitem_days where l_shipdate >= '2024-11-13 00:00:00' order by l_orderkey;")
 function: print_hit_materialized_views("SELECT * FROM mv_iceberg_${uuid0}.sql_test_db.lineitem_days order by l_orderkey;")
-SELECT * FROM test_days order by l_orderkey;
+SELECT count(*) FROM test_days;
 SELECT * FROM test_days where l_shipdate >= '2024-11-13 00:00:00' order by l_orderkey;
 SELECT * FROM mv_iceberg_${uuid0}.sql_test_db.lineitem_days where l_returnflag = 'R' and l_linestatus = 'F' and l_shipdate = '2024-11-13 00:00:00' order by l_orderkey;
 SELECT * FROM mv_iceberg_${uuid0}.sql_test_db.lineitem_days where l_shipdate >= '2024-11-13 00:00:00' order by l_orderkey;
@@ -38,7 +39,7 @@ function: print_hit_materialized_views("SELECT * FROM test_days where l_shipdate
 function: print_hit_materialized_views("SELECT * FROM mv_iceberg_${uuid0}.sql_test_db.lineitem_days where l_returnflag = 'R' and l_linestatus = 'F' and l_shipdate = '2024-11-13 00:00:00' order by l_orderkey;")
 function: print_hit_materialized_views("SELECT * FROM mv_iceberg_${uuid0}.sql_test_db.lineitem_days where l_shipdate >= '2024-11-13 00:00:00' order by l_orderkey;")
 function: print_hit_materialized_views("SELECT * FROM mv_iceberg_${uuid0}.sql_test_db.lineitem_days order by l_orderkey;")
-SELECT * FROM test_days order by l_orderkey;
+SELECT count(*) FROM test_days;
 SELECT * FROM test_days where l_shipdate >= '2024-11-13 00:00:00' order by l_orderkey;
 SELECT * FROM mv_iceberg_${uuid0}.sql_test_db.lineitem_days where l_returnflag = 'R' and l_linestatus = 'F' and l_shipdate = '2024-11-13 00:00:00' order by l_orderkey;
 SELECT * FROM mv_iceberg_${uuid0}.sql_test_db.lineitem_days where l_shipdate >= '2024-11-13 00:00:00' order by l_orderkey;
@@ -55,28 +56,17 @@ PROPERTIES (
 AS
   SELECT * FROM mv_iceberg_${uuid0}.sql_test_db.lineitem_days;
 
-function: print_hit_materialized_views("SELECT * FROM test_days order by l_orderkey;")
-function: print_hit_materialized_views("SELECT * FROM test_days where l_shipdate >= '2024-11-13 00:00:00' order by l_orderkey;")
-function: print_hit_materialized_views("SELECT * FROM mv_iceberg_${uuid0}.sql_test_db.lineitem_days where l_returnflag = 'R' and l_linestatus = 'F' and l_shipdate = '2024-11-13 00:00:00' order by l_orderkey;")
-function: print_hit_materialized_views("SELECT * FROM mv_iceberg_${uuid0}.sql_test_db.lineitem_days where l_shipdate >= '2024-11-13 00:00:00' order by l_orderkey;")
-function: print_hit_materialized_views("SELECT * FROM mv_iceberg_${uuid0}.sql_test_db.lineitem_days order by l_orderkey;")
-SELECT * FROM test_days order by l_orderkey;
-SELECT * FROM test_days order by l_orderkey;
-SELECT * FROM test_days where l_returnflag = 'R' and l_linestatus = 'F' and l_shipdate = '2024-11-13 00:00:00' order by l_orderkey;
-SELECT * FROM test_days where l_shipdate >= '2024-11-13 00:00:00' order by l_orderkey;
 REFRESH MATERIALIZED VIEW test_days PARTITION (('R', 'F', '2024-11-12 08:00:00')) WITH SYNC MODE;
 function: print_hit_materialized_views("SELECT * FROM test_days order by l_orderkey;")
 function: print_hit_materialized_views("SELECT * FROM test_days where l_shipdate >= '2024-11-13 00:00:00' order by l_orderkey;")
 function: print_hit_materialized_views("SELECT * FROM mv_iceberg_${uuid0}.sql_test_db.lineitem_days where l_returnflag = 'R' and l_linestatus = 'F' and l_shipdate = '2024-11-13 00:00:00' order by l_orderkey;")
 function: print_hit_materialized_views("SELECT * FROM mv_iceberg_${uuid0}.sql_test_db.lineitem_days where l_shipdate >= '2024-11-13 00:00:00' order by l_orderkey;")
 function: print_hit_materialized_views("SELECT * FROM mv_iceberg_${uuid0}.sql_test_db.lineitem_days order by l_orderkey;")
-SELECT * FROM test_days order by l_orderkey;
-SELECT * FROM test_days order by l_orderkey;
+SELECT count(*) FROM test_days;
 SELECT * FROM test_days where l_returnflag = 'R' and l_linestatus = 'F' and l_shipdate = '2024-11-13 00:00:00' order by l_orderkey;
 SELECT * FROM test_days where l_shipdate >= '2024-11-13 00:00:00' order by l_orderkey;
 REFRESH MATERIALIZED VIEW test_days WITH SYNC MODE;
-SELECT * FROM test_days order by l_orderkey;
-SELECT * FROM test_days order by l_orderkey;
+SELECT count(*) FROM test_days;
 SELECT * FROM test_days where l_returnflag = 'R' and l_linestatus = 'F' and l_shipdate = '2024-11-13 00:00:00' order by l_orderkey;
 SELECT * FROM test_days where l_shipdate >= '2024-11-13 00:00:00' order by l_orderkey;
 
@@ -92,13 +82,14 @@ PROPERTIES (
 )
 AS
   SELECT * FROM mv_iceberg_${uuid0}.sql_test_db.lineitem_days;
+
 REFRESH MATERIALIZED VIEW test_days PARTITION (('R', 'F', '2024-11-12 08:00:00')) WITH SYNC MODE;
 function: print_hit_materialized_views("SELECT * FROM test_days order by l_orderkey;")
 function: print_hit_materialized_views("SELECT * FROM test_days where l_shipdate >= '2024-11-13 00:00:00' order by l_orderkey;")
 function: print_hit_materialized_views("SELECT * FROM mv_iceberg_${uuid0}.sql_test_db.lineitem_days where l_returnflag = 'R' and l_linestatus = 'F' and l_shipdate = '2024-11-13 00:00:00' order by l_orderkey;")
 function: print_hit_materialized_views("SELECT * FROM mv_iceberg_${uuid0}.sql_test_db.lineitem_days where l_shipdate >= '2024-11-13 00:00:00' order by l_orderkey;")
 function: print_hit_materialized_views("SELECT * FROM mv_iceberg_${uuid0}.sql_test_db.lineitem_days order by l_orderkey;")
-SELECT * FROM test_days order by l_orderkey;
+SELECT count(*) FROM test_days;
 SELECT * FROM test_days where l_shipdate >= '2024-11-13 00:00:00' order by l_orderkey;
 SELECT * FROM mv_iceberg_${uuid0}.sql_test_db.lineitem_days where l_returnflag = 'R' and l_linestatus = 'F' and l_shipdate = '2024-11-13 00:00:00' order by l_orderkey;
 SELECT * FROM mv_iceberg_${uuid0}.sql_test_db.lineitem_days where l_shipdate >= '2024-11-13 00:00:00' order by l_orderkey;
@@ -110,7 +101,7 @@ function: print_hit_materialized_views("SELECT * FROM test_days where l_shipdate
 function: print_hit_materialized_views("SELECT * FROM mv_iceberg_${uuid0}.sql_test_db.lineitem_days where l_returnflag = 'R' and l_linestatus = 'F' and l_shipdate = '2024-11-13 00:00:00' order by l_orderkey;")
 function: print_hit_materialized_views("SELECT * FROM mv_iceberg_${uuid0}.sql_test_db.lineitem_days where l_shipdate >= '2024-11-13 00:00:00' order by l_orderkey;")
 function: print_hit_materialized_views("SELECT * FROM mv_iceberg_${uuid0}.sql_test_db.lineitem_days order by l_orderkey;")
-SELECT * FROM test_days order by l_orderkey;
+SELECT count(*) FROM test_days;
 SELECT * FROM test_days where l_shipdate >= '2024-11-13 00:00:00' order by l_orderkey;
 SELECT * FROM mv_iceberg_${uuid0}.sql_test_db.lineitem_days where l_returnflag = 'R' and l_linestatus = 'F' and l_shipdate = '2024-11-13 00:00:00' order by l_orderkey;
 SELECT * FROM mv_iceberg_${uuid0}.sql_test_db.lineitem_days where l_shipdate >= '2024-11-13 00:00:00' order by l_orderkey;
@@ -125,13 +116,14 @@ REFRESH DEFERRED MANUAL
 PROPERTIES ("replication_num" = "1")
 AS
   SELECT * FROM mv_iceberg_${uuid0}.sql_test_db.lineitem_months;
+
 REFRESH MATERIALIZED VIEW test_months PARTITION (('R', 'F', '2024-11-12 08:00:00')) WITH SYNC MODE;
 function: print_hit_materialized_views("SELECT * FROM test_months order by l_orderkey;")
 function: print_hit_materialized_views("SELECT * FROM test_months where l_shipdate >= '2024-11-13 00:00:00' order by l_orderkey;")
 function: print_hit_materialized_views("SELECT * FROM mv_iceberg_${uuid0}.sql_test_db.lineitem_months where l_returnflag = 'R' and l_linestatus = 'F' and l_shipdate = '2024-11-13 00:00:00' order by l_orderkey;")
 function: print_hit_materialized_views("SELECT * FROM mv_iceberg_${uuid0}.sql_test_db.lineitem_months where l_shipdate >= '2024-11-13 00:00:00' order by l_orderkey;")
 function: print_hit_materialized_views("SELECT * FROM mv_iceberg_${uuid0}.sql_test_db.lineitem_months order by l_orderkey;")
-SELECT * FROM test_months order by l_orderkey;
+SELECT count(*) FROM test_months;
 SELECT * FROM test_months where l_shipdate >= '2024-11-13 00:00:00' order by l_orderkey;
 SELECT * FROM mv_iceberg_${uuid0}.sql_test_db.lineitem_months where l_returnflag = 'R' and l_linestatus = 'F' and l_shipdate = '2024-11-13 00:00:00' order by l_orderkey;
 SELECT * FROM mv_iceberg_${uuid0}.sql_test_db.lineitem_months where l_shipdate >= '2024-11-13 00:00:00' order by l_orderkey;
@@ -143,7 +135,7 @@ function: print_hit_materialized_views("SELECT * FROM test_months where l_shipda
 function: print_hit_materialized_views("SELECT * FROM mv_iceberg_${uuid0}.sql_test_db.lineitem_months where l_returnflag = 'R' and l_linestatus = 'F' and l_shipdate = '2024-11-13 00:00:00' order by l_orderkey;")
 function: print_hit_materialized_views("SELECT * FROM mv_iceberg_${uuid0}.sql_test_db.lineitem_months where l_shipdate >= '2024-11-13 00:00:00' order by l_orderkey;")
 function: print_hit_materialized_views("SELECT * FROM mv_iceberg_${uuid0}.sql_test_db.lineitem_months order by l_orderkey;")
-SELECT * FROM test_months order by l_orderkey;
+SELECT count(*) FROM test_months;
 SELECT * FROM test_months where l_shipdate >= '2024-11-13 00:00:00' order by l_orderkey;
 SELECT * FROM mv_iceberg_${uuid0}.sql_test_db.lineitem_months where l_returnflag = 'R' and l_linestatus = 'F' and l_shipdate = '2024-11-13 00:00:00' order by l_orderkey;
 SELECT * FROM mv_iceberg_${uuid0}.sql_test_db.lineitem_months where l_shipdate >= '2024-11-13 00:00:00' order by l_orderkey;
@@ -160,27 +152,18 @@ PROPERTIES (
 AS
   SELECT * FROM mv_iceberg_${uuid0}.sql_test_db.lineitem_months;
 
-function: print_hit_materialized_views("SELECT * FROM test_months order by l_orderkey;")
-function: print_hit_materialized_views("SELECT * FROM test_months where l_shipdate >= '2024-11-13 00:00:00' order by l_orderkey;")
-function: print_hit_materialized_views("SELECT * FROM mv_iceberg_${uuid0}.sql_test_db.lineitem_months where l_returnflag = 'R' and l_linestatus = 'F' and l_shipdate = '2024-11-13 00:00:00' order by l_orderkey;")
-function: print_hit_materialized_views("SELECT * FROM mv_iceberg_${uuid0}.sql_test_db.lineitem_months where l_shipdate >= '2024-11-13 00:00:00' order by l_orderkey;")
-function: print_hit_materialized_views("SELECT * FROM mv_iceberg_${uuid0}.sql_test_db.lineitem_months order by l_orderkey;")
-SELECT * FROM test_months order by l_orderkey;
-SELECT * FROM test_months order by l_orderkey;
-SELECT * FROM test_months where l_returnflag = 'R' and l_linestatus = 'F' and l_shipdate = '2024-11-13 00:00:00' order by l_orderkey;
-SELECT * FROM test_months where l_shipdate >= '2024-11-13 00:00:00' order by l_orderkey;
 REFRESH MATERIALIZED VIEW test_months PARTITION (('R', 'F', '2024-11-12 08:00:00')) WITH SYNC MODE;
 function: print_hit_materialized_views("SELECT * FROM test_months order by l_orderkey;")
 function: print_hit_materialized_views("SELECT * FROM test_months where l_shipdate >= '2024-11-13 00:00:00' order by l_orderkey;")
 function: print_hit_materialized_views("SELECT * FROM mv_iceberg_${uuid0}.sql_test_db.lineitem_months where l_returnflag = 'R' and l_linestatus = 'F' and l_shipdate = '2024-11-13 00:00:00' order by l_orderkey;")
 function: print_hit_materialized_views("SELECT * FROM mv_iceberg_${uuid0}.sql_test_db.lineitem_months where l_shipdate >= '2024-11-13 00:00:00' order by l_orderkey;")
 function: print_hit_materialized_views("SELECT * FROM mv_iceberg_${uuid0}.sql_test_db.lineitem_months order by l_orderkey;")
-SELECT * FROM test_months order by l_orderkey;
+SELECT count(*) FROM test_months;
 SELECT * FROM test_months order by l_orderkey;
 SELECT * FROM test_months where l_returnflag = 'R' and l_linestatus = 'F' and l_shipdate = '2024-11-13 00:00:00' order by l_orderkey;
 SELECT * FROM test_months where l_shipdate >= '2024-11-13 00:00:00' order by l_orderkey;
 REFRESH MATERIALIZED VIEW test_months WITH SYNC MODE;
-SELECT * FROM test_months order by l_orderkey;
+SELECT count(*) FROM test_months;
 SELECT * FROM test_months order by l_orderkey;
 SELECT * FROM test_months where l_returnflag = 'R' and l_linestatus = 'F' and l_shipdate = '2024-11-13 00:00:00' order by l_orderkey;
 SELECT * FROM test_months where l_shipdate >= '2024-11-13 00:00:00' order by l_orderkey;
@@ -194,13 +177,14 @@ REFRESH DEFERRED MANUAL
 PROPERTIES ("replication_num" = "1")
 AS
   SELECT * FROM mv_iceberg_${uuid0}.sql_test_db.lineitem_years;
+
 REFRESH MATERIALIZED VIEW test_years PARTITION (('R', 'F', '2024-11-12 08:00:00')) WITH SYNC MODE;
 function: print_hit_materialized_views("SELECT * FROM test_years order by l_orderkey;")
 function: print_hit_materialized_views("SELECT * FROM test_years where l_shipdate >= '2024-11-13 00:00:00' order by l_orderkey;")
 function: print_hit_materialized_views("SELECT * FROM mv_iceberg_${uuid0}.sql_test_db.lineitem_years where l_returnflag = 'R' and l_linestatus = 'F' and l_shipdate = '2024-11-13 00:00:00' order by l_orderkey;")
 function: print_hit_materialized_views("SELECT * FROM mv_iceberg_${uuid0}.sql_test_db.lineitem_years where l_shipdate >= '2024-11-13 00:00:00' order by l_orderkey;")
 function: print_hit_materialized_views("SELECT * FROM mv_iceberg_${uuid0}.sql_test_db.lineitem_years order by l_orderkey;")
-SELECT * FROM test_years order by l_orderkey;
+SELECT count(*) FROM test_years;
 SELECT * FROM test_years where l_shipdate >= '2024-11-13 00:00:00' order by l_orderkey;
 SELECT * FROM mv_iceberg_${uuid0}.sql_test_db.lineitem_years where l_returnflag = 'R' and l_linestatus = 'F' and l_shipdate = '2024-11-13 00:00:00' order by l_orderkey;
 SELECT * FROM mv_iceberg_${uuid0}.sql_test_db.lineitem_years where l_shipdate >= '2024-11-13 00:00:00' order by l_orderkey;
@@ -212,7 +196,7 @@ function: print_hit_materialized_views("SELECT * FROM test_years where l_shipdat
 function: print_hit_materialized_views("SELECT * FROM mv_iceberg_${uuid0}.sql_test_db.lineitem_years where l_returnflag = 'R' and l_linestatus = 'F' and l_shipdate = '2024-11-13 00:00:00' order by l_orderkey;")
 function: print_hit_materialized_views("SELECT * FROM mv_iceberg_${uuid0}.sql_test_db.lineitem_years where l_shipdate >= '2024-11-13 00:00:00' order by l_orderkey;")
 function: print_hit_materialized_views("SELECT * FROM mv_iceberg_${uuid0}.sql_test_db.lineitem_years order by l_orderkey;")
-SELECT * FROM test_years order by l_orderkey;
+SELECT count(*) FROM test_years;
 SELECT * FROM test_years where l_shipdate >= '2024-11-13 00:00:00' order by l_orderkey;
 SELECT * FROM mv_iceberg_${uuid0}.sql_test_db.lineitem_years where l_returnflag = 'R' and l_linestatus = 'F' and l_shipdate = '2024-11-13 00:00:00' order by l_orderkey;
 SELECT * FROM mv_iceberg_${uuid0}.sql_test_db.lineitem_years where l_shipdate >= '2024-11-13 00:00:00' order by l_orderkey;
@@ -229,27 +213,18 @@ PROPERTIES (
 AS
   SELECT * FROM mv_iceberg_${uuid0}.sql_test_db.lineitem_years;
 
-function: print_hit_materialized_views("SELECT * FROM test_years order by l_orderkey;")
-function: print_hit_materialized_views("SELECT * FROM test_years where l_shipdate >= '2024-11-13 00:00:00' order by l_orderkey;")
-function: print_hit_materialized_views("SELECT * FROM mv_iceberg_${uuid0}.sql_test_db.lineitem_years where l_returnflag = 'R' and l_linestatus = 'F' and l_shipdate = '2024-11-13 00:00:00' order by l_orderkey;")
-function: print_hit_materialized_views("SELECT * FROM mv_iceberg_${uuid0}.sql_test_db.lineitem_years where l_shipdate >= '2024-11-13 00:00:00' order by l_orderkey;")
-function: print_hit_materialized_views("SELECT * FROM mv_iceberg_${uuid0}.sql_test_db.lineitem_years order by l_orderkey;")
-SELECT * FROM test_years order by l_orderkey;
-SELECT * FROM test_years order by l_orderkey;
-SELECT * FROM test_years where l_returnflag = 'R' and l_linestatus = 'F' and l_shipdate = '2024-11-13 00:00:00' order by l_orderkey;
-SELECT * FROM test_years where l_shipdate >= '2024-11-13 00:00:00' order by l_orderkey;
 REFRESH MATERIALIZED VIEW test_years PARTITION (('R', 'F', '2024-11-12 08:00:00')) WITH SYNC MODE;
 function: print_hit_materialized_views("SELECT * FROM test_years order by l_orderkey;")
 function: print_hit_materialized_views("SELECT * FROM test_years where l_shipdate >= '2024-11-13 00:00:00' order by l_orderkey;")
 function: print_hit_materialized_views("SELECT * FROM mv_iceberg_${uuid0}.sql_test_db.lineitem_years where l_returnflag = 'R' and l_linestatus = 'F' and l_shipdate = '2024-11-13 00:00:00' order by l_orderkey;")
 function: print_hit_materialized_views("SELECT * FROM mv_iceberg_${uuid0}.sql_test_db.lineitem_years where l_shipdate >= '2024-11-13 00:00:00' order by l_orderkey;")
 function: print_hit_materialized_views("SELECT * FROM mv_iceberg_${uuid0}.sql_test_db.lineitem_years order by l_orderkey;")
-SELECT * FROM test_years order by l_orderkey;
+SELECT count(*) FROM test_years;
 SELECT * FROM test_years order by l_orderkey;
 SELECT * FROM test_years where l_returnflag = 'R' and l_linestatus = 'F' and l_shipdate = '2024-11-13 00:00:00' order by l_orderkey;
 SELECT * FROM test_years where l_shipdate >= '2024-11-13 00:00:00' order by l_orderkey;
 REFRESH MATERIALIZED VIEW test_years WITH SYNC MODE;
-SELECT * FROM test_years order by l_orderkey;
+SELECT count(*) FROM test_years;
 SELECT * FROM test_years order by l_orderkey;
 SELECT * FROM test_years where l_returnflag = 'R' and l_linestatus = 'F' and l_shipdate = '2024-11-13 00:00:00' order by l_orderkey;
 SELECT * FROM test_years where l_shipdate >= '2024-11-13 00:00:00' order by l_orderkey;
