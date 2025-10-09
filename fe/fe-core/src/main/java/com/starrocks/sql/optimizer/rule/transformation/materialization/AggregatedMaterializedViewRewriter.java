@@ -35,7 +35,6 @@ import com.starrocks.sql.optimizer.operator.logical.LogicalAggregationOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalUnionOperator;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
-import com.starrocks.sql.optimizer.operator.scalar.CastOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rewrite.ReplaceColumnRefRewriter;
@@ -650,26 +649,6 @@ public final class AggregatedMaterializedViewRewriter extends MaterializedViewRe
         OptExpression rewriteOp = OptExpression.create(newAggOp, mvOptExpr);
         deriveLogicalProperty(rewriteOp);
         return rewriteOp;
-    }
-
-    /**
-     * Add columnRefOperator and scalarOperator into newProjection and ensure their type is the same.
-     */
-    private void addIntoProjection(Map<ColumnRefOperator, ScalarOperator> newProjection,
-                                   ColumnRefOperator columnRefOperator,
-                                   ScalarOperator scalarOperator) {
-        // Ensure columnRefOperator's type is exactly the same as scalarOperator's type,
-        // This can happen when mv and the query's type are different but they are the same columns, such as:
-        // query: char(4)
-        // mv   : varchar(-1)
-        if (!columnRefOperator.getType().equals(scalarOperator.getType())) {
-            // add cast if type is not the same
-            // TODO: may it's safe to remove the cast if the type is compatible
-            ScalarOperator newScalarOperator = new CastOperator(columnRefOperator.getType(), scalarOperator, true);
-            newProjection.put(columnRefOperator, newScalarOperator);
-        } else {
-            newProjection.put(columnRefOperator, scalarOperator);
-        }
     }
 
     /**
