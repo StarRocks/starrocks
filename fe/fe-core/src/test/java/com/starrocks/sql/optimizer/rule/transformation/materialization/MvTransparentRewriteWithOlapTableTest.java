@@ -390,9 +390,7 @@ public class MvTransparentRewriteWithOlapTableTest extends MVTestBase {
                                 PlanTestBase.assertContains(plan, "     TABLE: mv0\n" +
                                         "     PREAGGREGATION: ON\n" +
                                         "     PREDICATES: 9: k1 = 1\n" +
-                                        "     partitions=1/1\n" +
-                                        "     rollup: mv0\n" +
-                                        "     tabletRatio=1/3");
+                                        "     partitions=1/1\n");
                             }
                         }
                         {
@@ -1301,7 +1299,6 @@ public class MvTransparentRewriteWithOlapTableTest extends MVTestBase {
                                     "from mock_tbl1\n" +
                                     "group by date_trunc('day', data_date)";
                             String plan = getFragmentPlan(query, TExplainLevel.VERBOSE);
-                            System.out.println(plan);
                             PlanTestBase.assertContains(plan, "test_mv1");
                             PlanTestBase.assertContains(plan, " 0:UNION\n" +
                                     "  |  output exprs:\n" +

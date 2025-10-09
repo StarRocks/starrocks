@@ -1602,6 +1602,53 @@ TEST_P(LakePrimaryKeyCompactionTest, test_major_compaction_thread_safe) {
     config::l0_max_mem_usage = l0_max_mem_usage;
 }
 
+TEST_P(LakePrimaryKeyCompactionTest, test_should_enable_pk_parallel_execution) {
+    // Prepare data for writing
+    auto chunk0 = generate_data(kChunkSize, 0);
+    auto indexes = std::vector<uint32_t>(kChunkSize);
+    for (int i = 0; i < kChunkSize; i++) {
+        indexes[i] = i;
+    }
+
+    auto version = 1;
+    auto tablet_id = _tablet_metadata->id();
+    for (int i = 0; i < 3; i++) {
+        auto txn_id = next_id();
+        ASSIGN_OR_ABORT(auto delta_writer, DeltaWriterBuilder()
+                                                   .set_tablet_manager(_tablet_mgr.get())
+                                                   .set_tablet_id(tablet_id)
+                                                   .set_txn_id(txn_id)
+                                                   .set_partition_id(_partition_id)
+                                                   .set_mem_tracker(_mem_tracker.get())
+                                                   .set_schema_id(_tablet_schema->id())
+                                                   .set_profile(&_dummy_runtime_profile)
+                                                   .build());
+        ASSERT_OK(delta_writer->open());
+        ASSERT_OK(delta_writer->write(chunk0, indexes.data(), indexes.size()));
+        ASSERT_OK(delta_writer->finish_with_txnlog());
+        delta_writer->close();
+        // Publish version
+        ASSERT_OK(publish_single_version(tablet_id, version + 1, txn_id).status());
+        version++;
+    }
+
+    auto txn_id = next_id();
+    auto task_context = std::make_unique<CompactionTaskContext>(txn_id, tablet_id, version, false, false, nullptr);
+    ASSIGN_OR_ABORT(auto task, _tablet_mgr->compact(task_context.get()));
+    // check should_enable_pk_parallel_execution
+    if (!GetParam().enable_persistent_index || GetParam().persistent_index_type == PersistentIndexTypePB::LOCAL) {
+        EXPECT_FALSE(task->should_enable_pk_parallel_execution(0));
+        EXPECT_FALSE(task->should_enable_pk_parallel_execution(config::pk_parallel_execution_threshold_bytes - 1));
+        EXPECT_FALSE(task->should_enable_pk_parallel_execution(config::pk_parallel_execution_threshold_bytes));
+        EXPECT_FALSE(task->should_enable_pk_parallel_execution(config::pk_parallel_execution_threshold_bytes + 1));
+    } else {
+        EXPECT_FALSE(task->should_enable_pk_parallel_execution(0));
+        EXPECT_FALSE(task->should_enable_pk_parallel_execution(config::pk_parallel_execution_threshold_bytes - 1));
+        EXPECT_TRUE(task->should_enable_pk_parallel_execution(config::pk_parallel_execution_threshold_bytes));
+        EXPECT_TRUE(task->should_enable_pk_parallel_execution(config::pk_parallel_execution_threshold_bytes + 1));
+    }
+}
+
 INSTANTIATE_TEST_SUITE_P(
         LakePrimaryKeyCompactionTest, LakePrimaryKeyCompactionTest,
         ::testing::Values(CompactionParam{HORIZONTAL_COMPACTION, 5, false},

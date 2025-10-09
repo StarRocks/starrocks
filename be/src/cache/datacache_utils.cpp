@@ -21,26 +21,29 @@
 
 #include "absl/status/statusor.h"
 #include "absl/strings/str_split.h"
+#include "cache/mem_cache/local_mem_cache_engine.h"
 #include "fs/fs.h"
 #include "gutil/strings/split.h"
 #include "util/parse_util.h"
 
 namespace starrocks {
-void DataCacheUtils::set_metrics_from_thrift(TDataCacheMetrics& t_metrics, const DataCacheMetrics& metrics) {
+
+void DataCacheUtils::set_metrics_to_thrift(TDataCacheMetrics& t_metrics, const DataCacheDiskMetrics& metrics) {
     t_metrics.__set_status(DataCacheStatusUtils::to_thrift(metrics.status));
     t_metrics.__set_disk_quota_bytes(metrics.disk_quota_bytes);
     t_metrics.__set_disk_used_bytes(metrics.disk_used_bytes);
+}
+
+void DataCacheUtils::set_metrics_to_thrift(TDataCacheMetrics& t_metrics, const DataCacheMemMetrics& metrics) {
     t_metrics.__set_mem_quota_bytes(metrics.mem_quota_bytes);
     t_metrics.__set_mem_used_bytes(metrics.mem_used_bytes);
 }
 
 #ifdef WITH_STARCACHE
-void DataCacheUtils::set_metrics_from_thrift(TDataCacheMetrics& t_metrics, const StarCacheMetrics& metrics) {
+void DataCacheUtils::set_disk_metrics_to_thrift(TDataCacheMetrics& t_metrics, const StarCacheMetrics& metrics) {
     t_metrics.__set_status(DataCacheStatusUtils::to_thrift(static_cast<DataCacheStatus>(metrics.status)));
     t_metrics.__set_disk_quota_bytes(metrics.disk_quota_bytes);
     t_metrics.__set_disk_used_bytes(metrics.disk_used_bytes);
-    t_metrics.__set_mem_quota_bytes(metrics.mem_quota_bytes);
-    t_metrics.__set_mem_used_bytes(metrics.mem_used_bytes);
 }
 #endif
 

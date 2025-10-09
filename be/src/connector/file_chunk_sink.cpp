@@ -47,7 +47,7 @@ StatusOr<std::unique_ptr<ConnectorChunkSink>> FileChunkSinkProvider::create_chun
         std::shared_ptr<ConnectorChunkSinkContext> context, int32_t driver_id) {
     auto ctx = std::dynamic_pointer_cast<FileChunkSinkContext>(context);
     auto runtime_state = ctx->fragment_context->runtime_state();
-    auto fs = FileSystem::CreateUniqueFromString(ctx->path, FSOptions(&ctx->cloud_conf)).value();
+    std::shared_ptr<FileSystem> fs = FileSystem::CreateUniqueFromString(ctx->path, FSOptions(&ctx->cloud_conf)).value();
     auto column_evaluators = ColumnEvaluator::clone(ctx->column_evaluators);
     auto location_provider = std::make_shared<connector::LocationProvider>(
             ctx->path, print_id(ctx->fragment_context->query_id()), runtime_state->be_number(), driver_id,
@@ -56,16 +56,17 @@ StatusOr<std::unique_ptr<ConnectorChunkSink>> FileChunkSinkProvider::create_chun
     std::shared_ptr<formats::FileWriterFactory> file_writer_factory;
     if (boost::iequals(ctx->format, formats::PARQUET)) {
         file_writer_factory = std::make_shared<formats::ParquetFileWriterFactory>(
-                std::move(fs), ctx->compression_type, ctx->options, ctx->column_names, std::move(column_evaluators),
+                fs, ctx->compression_type, ctx->options, ctx->column_names,
+                std::make_shared<std::vector<std::unique_ptr<ColumnEvaluator>>>(std::move(column_evaluators)),
                 std::nullopt, ctx->executor, runtime_state);
     } else if (boost::iequals(ctx->format, formats::ORC)) {
         file_writer_factory = std::make_shared<formats::ORCFileWriterFactory>(
-                std::move(fs), ctx->compression_type, ctx->options, ctx->column_names, std::move(column_evaluators),
-                ctx->executor, runtime_state);
+                fs, ctx->compression_type, ctx->options, ctx->column_names, std::move(column_evaluators), ctx->executor,
+                runtime_state);
     } else if (boost::iequals(ctx->format, formats::CSV)) {
         file_writer_factory = std::make_shared<formats::CSVFileWriterFactory>(
-                std::move(fs), ctx->compression_type, ctx->options, ctx->column_names, std::move(column_evaluators),
-                ctx->executor, runtime_state);
+                fs, ctx->compression_type, ctx->options, ctx->column_names, std::move(column_evaluators), ctx->executor,
+                runtime_state);
     } else {
         file_writer_factory = std::make_shared<formats::UnknownFileWriterFactory>(ctx->format);
     }
@@ -83,6 +84,7 @@ StatusOr<std::unique_ptr<ConnectorChunkSink>> FileChunkSinkProvider::create_chun
         auto partition_chunk_writer_ctx =
                 std::make_shared<SpillPartitionChunkWriterContext>(SpillPartitionChunkWriterContext{
                         {file_writer_factory, location_provider, ctx->max_file_size, partition_columns.empty()},
+                        fs,
                         ctx->fragment_context,
                         nullptr,
                         nullptr});

@@ -25,7 +25,7 @@ under the License.
 
     <groupId>com.starrocks</groupId>
     <artifactId>starrocks-fe</artifactId>
-    <version>3.4.0</version>
+    <version>main</version>
     <packaging>pom</packaging>
 
     <modules>
@@ -37,6 +37,7 @@ under the License.
         <module>plugin/spark-dpp</module>
         <module>plugin/hive-udf</module>
         <module>fe-core</module>
+        <module>fe-server</module>
     </modules>
 
     <name>starrocks-fe</name>
@@ -74,8 +75,8 @@ under the License.
         <protobuf-java.version>3.25.5</protobuf-java.version>
         <paimon.version>1.0.1</paimon.version>
         <delta-kernel.version>4.0.0rc1</delta-kernel.version>
-        <iceberg.version>1.9.0</iceberg.version>
-        <staros.version>3.5-rc3</staros.version>
+        <iceberg.version>1.10.0</iceberg.version>
+        <staros.version>3.5-rc4</staros.version>
         <!-- hadoop-azure requires no more than jetty10+ -->
         <!-- https://stackoverflow.com/questions/66713254/spark-wasb-and-jetty-11 -->
         <jetty.version>9.4.57.v20241219</jetty.version>
@@ -212,6 +213,16 @@ under the License.
             <dependency>
                 <groupId>com.starrocks</groupId>
                 <artifactId>hive-udf</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.starrocks</groupId>
+                <artifactId>fe-core</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.starrocks</groupId>
+                <artifactId>fe-server</artifactId>
                 <version>${project.version}</version>
             </dependency>
 

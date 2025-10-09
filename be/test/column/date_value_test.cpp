@@ -284,4 +284,38 @@ TEST(DateValueTest, weekday) {
     ASSERT_EQ(0, dv.weekday()); // Sunday
 }
 
+TEST(DateValueTest, test_trunc_to_month) {
+    for (DateValue date = DateValue::MIN_DATE_VALUE; date <= DateValue::MAX_DATE_VALUE; date._julian++) {
+        DateValue res_date = date;
+        res_date.trunc_to_month();
+
+        int year0, month0, day0;
+        date::to_date_with_cache(date.julian(), &year0, &month0, &day0);
+        int year1, month1, day1;
+        date::to_date_with_cache(res_date.julian(), &year1, &month1, &day1);
+
+        ASSERT_EQ(year0, year1);
+        ASSERT_EQ(month0, month1);
+        ASSERT_EQ(1, day1);
+    }
+}
+
+TEST(DateValueTest, test_trunc_to_quarter) {
+    static int month_to_quarter[13] = {0, 1, 1, 1, 4, 4, 4, 7, 7, 7, 10, 10, 10};
+
+    for (DateValue date = DateValue::MIN_DATE_VALUE; date <= DateValue::MAX_DATE_VALUE; date._julian++) {
+        DateValue res_date = date;
+        res_date.trunc_to_quarter();
+
+        int year0, month0, day0;
+        date::to_date_with_cache(date.julian(), &year0, &month0, &day0);
+        int year1, month1, day1;
+        date::to_date_with_cache(res_date.julian(), &year1, &month1, &day1);
+
+        ASSERT_EQ(year0, year1);
+        ASSERT_EQ(month_to_quarter[month0], month1);
+        ASSERT_EQ(1, day1);
+    }
+}
+
 } // namespace starrocks

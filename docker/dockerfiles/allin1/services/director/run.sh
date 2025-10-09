@@ -20,6 +20,7 @@ MYCNF=$SR_HOME/director/my.cnf
 source $FE_HOME/bin/common.sh
 PREVIOUS_FQDN=
 CURRENT_FQDN=`hostname -f`
+BOOTSTRAP_DONE_FILE=$SR_HOME/bootstrap_done
 
 PASSWD_ERROR_MSG="Password error, stop retrying!
 If the root user password is changed, please re-run the container with '-e MYSQL_PWD=<root_password>'"
@@ -183,6 +184,8 @@ check_and_add_be()
     done
 }
 
+# remove the flag file
+rm -f $BOOTSTRAP_DONE_FILE
 loginfo "checking if need to perform auto registring Backend ..."
 check_fe_fqdn_mismatch
 check_fe_liveness
@@ -195,6 +198,9 @@ sleep 10
 loginfo "StarRocks Cluster information details:"
 exec_sql_with_column 'SHOW FRONTENDS\G'
 exec_sql_with_column 'SHOW BACKENDS\G'
+
+# touch the flag file
+touch $BOOTSTRAP_DONE_FILE
 
 loginfo
 loginfo

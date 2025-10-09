@@ -309,13 +309,13 @@ public class RedirectStatusTest {
 
     @Test
     public void testUseDbStmt() {
-        UseDbStmt stmt = new UseDbStmt("test_catalog", "test_db");
+        UseDbStmt stmt = new UseDbStmt("test_catalog", "test_db", NodePosition.ZERO);
         Assertions.assertEquals(RedirectStatus.NO_FORWARD, RedirectStatus.getRedirectStatus(stmt));
     }
 
     @Test
     public void testUseCatalogStmt() {
-        UseCatalogStmt stmt = new UseCatalogStmt("test_catalog");
+        UseCatalogStmt stmt = new UseCatalogStmt("test_catalog", NodePosition.ZERO);
         Assertions.assertEquals(RedirectStatus.NO_FORWARD, RedirectStatus.getRedirectStatus(stmt));
     }
 
@@ -938,7 +938,7 @@ public class RedirectStatusTest {
         QueryStatement queryStatement = new QueryStatement(selectRelation);
 
         InsertStmt insertStmt = new InsertStmt(new TableName(), queryStatement);
-        SubmitTaskStmt stmt = new SubmitTaskStmt(new TaskName("", "", NodePosition.ZERO), 0, insertStmt, NodePosition.ZERO);
+        SubmitTaskStmt stmt = new SubmitTaskStmt(new TaskName("", ""), 0, insertStmt, NodePosition.ZERO);
         Assertions.assertEquals(RedirectStatus.FORWARD_WITH_SYNC, RedirectStatus.getRedirectStatus(stmt));
     }
 

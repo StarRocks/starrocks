@@ -21,8 +21,8 @@
 
 #include "agent/heartbeat_server.h"
 #include "backend_service.h"
-#include "cache/block_cache/block_cache.h"
 #include "cache/datacache.h"
+#include "cache/disk_cache/block_cache.h"
 #include "common/config.h"
 #include "common/daemon.h"
 #include "common/process_exit.h"
@@ -49,7 +49,7 @@
 #include "util/thrift_server.h"
 
 #ifdef WITH_STARCACHE
-#include "cache/starcache_engine.h"
+#include "cache/disk_cache/starcache_engine.h"
 #endif
 
 namespace brpc {

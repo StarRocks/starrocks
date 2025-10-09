@@ -18,6 +18,14 @@
 #include <memory>
 #include <utility>
 
+// On macOS, system headers may define a macro named current_task(),
+// which conflicts with the method name below. Undefine to avoid collisions.
+#ifdef __APPLE__
+#ifdef current_task
+#undef current_task
+#endif
+#endif
+
 #include "column/vectorized_fwd.h"
 #include "common/statusor.h"
 #include "exec/spill/spiller.h"

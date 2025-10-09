@@ -713,29 +713,6 @@ void RuntimeFilterMerger::_send_total_runtime_filter(int rf_version, int32_t fil
     status->isSent = true;
 }
 
-struct RuntimeFilterWorkerEvent {
-public:
-    RuntimeFilterWorkerEvent() = default;
-
-    EventType type;
-
-    TUniqueId query_id;
-
-    /// For OPEN_QUERY.
-    TQueryOptions query_options;
-    TRuntimeFilterParams create_rf_merger_request;
-    bool is_opened_by_pipeline;
-
-    /// For SEND_PART_RF.
-    std::vector<TNetworkAddress> transmit_addrs;
-    std::vector<TRuntimeFilterDestination> destinations;
-    int transmit_timeout_ms;
-    int64_t transmit_via_http_min_size = 64L * 1024 * 1024;
-
-    /// For SEND_PART_RF, RECEIVE_PART_RF, and RECEIVE_TOTAL_RF.
-    PTransmitRuntimeFilterParams transmit_rf_request;
-};
-
 static_assert(std::is_move_assignable<RuntimeFilterWorkerEvent>::value);
 
 RuntimeFilterWorker::RuntimeFilterWorker(ExecEnv* env) : _exec_env(env), _thread([this] { execute(); }) {

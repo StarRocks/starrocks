@@ -16,14 +16,26 @@ package com.starrocks.sql.ast;
 
 import com.starrocks.sql.ast.group.CreateGroupProviderStmt;
 import com.starrocks.sql.ast.group.DropGroupProviderStmt;
+import com.starrocks.sql.ast.group.ShowCreateGroupProviderStmt;
+import com.starrocks.sql.ast.group.ShowGroupProvidersStmt;
+import com.starrocks.sql.ast.integration.AlterSecurityIntegrationStatement;
+import com.starrocks.sql.ast.integration.CreateSecurityIntegrationStatement;
+import com.starrocks.sql.ast.integration.DropSecurityIntegrationStatement;
+import com.starrocks.sql.ast.integration.ShowCreateSecurityIntegrationStatement;
+import com.starrocks.sql.ast.integration.ShowSecurityIntegrationStatement;
+import com.starrocks.sql.ast.spm.ControlBaselinePlanStmt;
 import com.starrocks.sql.ast.warehouse.AlterWarehouseStmt;
 import com.starrocks.sql.ast.warehouse.CreateWarehouseStmt;
 import com.starrocks.sql.ast.warehouse.DropWarehouseStmt;
 import com.starrocks.sql.ast.warehouse.ResumeWarehouseStmt;
 import com.starrocks.sql.ast.warehouse.SetWarehouseStmt;
+import com.starrocks.sql.ast.warehouse.ShowClustersStmt;
+import com.starrocks.sql.ast.warehouse.ShowNodesStmt;
+import com.starrocks.sql.ast.warehouse.ShowWarehousesStmt;
 import com.starrocks.sql.ast.warehouse.SuspendWarehouseStmt;
 import com.starrocks.sql.ast.warehouse.cngroup.AlterCnGroupStmt;
 import com.starrocks.sql.ast.warehouse.cngroup.CreateCnGroupStmt;
+import com.starrocks.sql.ast.warehouse.cngroup.DropCnGroupStmt;
 import com.starrocks.sql.ast.warehouse.cngroup.EnableDisableCnGroupStmt;
 
 public interface AstVisitor<R, C> {
@@ -44,6 +56,118 @@ public interface AstVisitor<R, C> {
     }
 
     default R visitDDLStatement(DdlStmt statement, C context) {
+        return visitStatement(statement, context);
+    }
+
+    default R visitShowStatement(ShowStmt statement, C context) {
+        return visitStatement(statement, context);
+    }
+
+    default R visitDeallocatePrepareStatement(DeallocateStmt statement, C context) {
+        return visitStatement(statement, context);
+    }
+
+    default R visitKillStatement(KillStmt statement, C context) {
+        return visitStatement(statement, context);
+    }
+
+    default R visitKillAnalyzeStatement(KillAnalyzeStmt statement, C context) {
+        return visitStatement(statement, context);
+    }
+
+    default R visitExecuteScriptStatement(ExecuteScriptStmt statement, C context) {
+        return visitStatement(statement, context);
+    }
+
+    default R visitSetStatement(SetStmt statement, C context) {
+        return visitStatement(statement, context);
+    }
+
+    default R visitDelBackendBlackListStatement(DelBackendBlackListStmt statement, C context) {
+        return visitStatement(statement, context);
+    }
+
+    default R visitDelComputeNodeBlackListStatement(DelComputeNodeBlackListStmt statement, C context) {
+        return visitStatement(statement, context);
+    }
+
+    default R visitDelSqlBlackListStatement(DelSqlBlackListStmt statement, C context) {
+        return visitStatement(statement, context);
+    }
+
+    default R visitClearDataCacheRulesStatement(ClearDataCacheRulesStmt statement, C context) {
+        return visitDDLStatement(statement, context);
+    }
+
+    default R visitShowBackendBlackListStatement(ShowBackendBlackListStmt statement, C context) {
+        return visitShowStatement(statement, context);
+    }
+
+    default R visitShowComputeNodeBlackListStatement(ShowComputeNodeBlackListStmt statement, C context) {
+        return visitShowStatement(statement, context);
+    }
+
+    default R visitDropStorageVolumeStatement(DropStorageVolumeStmt statement, C context) {
+        return visitDDLStatement(statement, context);
+    }
+
+    default R visitDropTaskStmt(DropTaskStmt statement, C context) {
+        return visitDDLStatement(statement, context);
+    }
+
+    default R visitAdminShowConfigStatement(AdminShowConfigStmt statement, C context) {
+        return visitShowStatement(statement, context);
+    }
+
+    default R visitShowDataStatement(ShowDataStmt statement, C context) {
+        return visitShowStatement(statement, context);
+    }
+
+    default R visitShowResourceStatement(ShowResourcesStmt statement, C context) {
+        return visitShowStatement(statement, context);
+    }
+
+    default R visitShowSqlBlackListStatement(ShowSqlBlackListStmt statement, C context) {
+        return visitShowStatement(statement, context);
+    }
+
+    default R visitShowWhiteListStatement(ShowWhiteListStmt statement, C context) {
+        return visitShowStatement(statement, context);
+    }
+
+    default R visitShowAuthorStatement(ShowAuthorStmt statement, C context) {
+        return visitShowStatement(statement, context);
+    }
+
+    default R visitShowDictionaryStatement(ShowDictionaryStmt statement, C context) {
+        return visitShowStatement(statement, context);
+    }
+
+    default R visitShowAuthenticationStatement(ShowAuthenticationStmt statement, C context) {
+        return visitShowStatement(statement, context);
+    }
+
+    default R visitShowProfilelistStatement(ShowProfilelistStmt statement, C context) {
+        return visitShowStatement(statement, context);
+    }
+
+    default R visitShowEventStatement(ShowEventsStmt statement, C context) {
+        return visitShowStatement(statement, context);
+    }
+
+    default R visitShowPluginsStatement(ShowPluginsStmt statement, C context) {
+        return visitShowStatement(statement, context);
+    }
+
+    default R visitShowProcesslistStatement(ShowProcesslistStmt statement, C context) {
+        return visitShowStatement(statement, context);
+    }
+
+    default R visitShowTriggersStatement(ShowTriggersStmt statement, C context) {
+        return visitShowStatement(statement, context);
+    }
+
+    default R visitTranslateStatement(com.starrocks.sql.ast.translate.TranslateStmt statement, C context) {
         return visitStatement(statement, context);
     }
 
@@ -146,20 +270,65 @@ public interface AstVisitor<R, C> {
     }
 
     default R visitAddFollowerClause(AddFollowerClause clause, C context) {
-        return visitNode(clause, context);
+        return visitFrontendClause(clause, context);
     }
 
     default R visitDropFollowerClause(DropFollowerClause clause, C context) {
-        return visitNode(clause, context);
+        return visitFrontendClause(clause, context);
     }
 
     default R visitAddObserverClause(AddObserverClause clause, C context) {
-        return visitNode(clause, context);
+        return visitFrontendClause(clause, context);
     }
 
     default R visitDropObserverClause(DropObserverClause clause, C context) {
+        return visitFrontendClause(clause, context);
+    }
+
+    default R visitModifyFrontendHostClause(ModifyFrontendAddressClause clause, C context) {
+        return visitFrontendClause(clause, context);
+    }
+
+    default R visitModifyBrokerClause(ModifyBrokerClause clause, C context) {
         return visitNode(clause, context);
     }
+
+    default R visitCancelAlterSystemStatement(CancelAlterSystemStmt statement, C context) {
+        return visitDDLStatement(statement, context);
+    }
+
+    default R visitBackendClause(BackendClause clause, C context) {
+        return visitNode(clause, context);
+    }
+
+    default R visitAddBackendClause(AddBackendClause clause, C context) {
+        return visitBackendClause(clause, context);
+    }
+
+    default R visitDropBackendClause(DropBackendClause clause, C context) {
+        return visitBackendClause(clause, context);
+    }
+
+    default R visitModifyBackendClause(ModifyBackendClause clause, C context) {
+        return visitBackendClause(clause, context);
+    }
+
+    default R visitDecommissionBackendClause(DecommissionBackendClause clause, C context) {
+        return visitBackendClause(clause, context);
+    }
+
+    default R visitComputeNodeClause(ComputeNodeClause clause, C context) {
+        return visitNode(clause, context);
+    }
+
+    default R visitAddComputeNodeClause(AddComputeNodeClause clause, C context) {
+        return visitComputeNodeClause(clause, context);
+    }
+
+    default R visitDropComputeNodeClause(DropComputeNodeClause clause, C context) {
+        return visitComputeNodeClause(clause, context);
+    }
+
 
     // ------------------------------------------- Basic Node Types ----------------------------------------------------
 
@@ -278,6 +447,10 @@ public interface AstVisitor<R, C> {
         return visitNode(clause, context);
     }
 
+    default R visitDropTagClause(DropTagClause clause, C context) {
+        return visitNode(clause, context);
+    }
+
     default R visitDropPersistentIndexClause(DropPersistentIndexClause clause, C context) {
         return visitNode(clause, context);
     }
@@ -314,6 +487,33 @@ public interface AstVisitor<R, C> {
         return visitDDLStatement(statement, context);
     }
 
+    // ---------------------------------------- Database Statement -----------------------------------------------------
+
+    default R visitUseDbStatement(UseDbStmt statement, C context) {
+        return visitStatement(statement, context);
+    }
+
+    default R visitUseCatalogStatement(UseCatalogStmt statement, C context) {
+        return visitStatement(statement, context);
+    }
+
+    default R visitSetCatalogStatement(SetCatalogStmt statement, C context) {
+        return visitStatement(statement, context);
+    }
+
+    default R visitDropCatalogStatement(DropCatalogStmt statement, C context) {
+        return visitDDLStatement(statement, context);
+    }
+
+    default R visitCreateDbStatement(CreateDbStmt statement, C context) {
+        return visitDDLStatement(statement, context);
+    }
+
+    default R visitDropDbStatement(DropDbStmt statement, C context) {
+        return visitDDLStatement(statement, context);
+    }
+
+
     // ------------------------------------------- User Statement ----------------------------------------------------
 
     default R visitBaseCreateAlterUserStmt(BaseCreateAlterUserStmt statement, C context) {
@@ -326,5 +526,139 @@ public interface AstVisitor<R, C> {
 
     default R visitAlterUserStatement(AlterUserStmt statement, C context) {
         return visitBaseCreateAlterUserStmt(statement, context);
+    }
+
+    // ------------------------------------------- Show Statement ----------------------------------------------------
+
+    default R visitShowGrantsStatement(ShowGrantsStmt statement, C context) {
+        return visitShowStatement(statement, context);
+    }
+
+    default R visitShowBackendsStatement(ShowBackendsStmt statement, C context) {
+        return visitShowStatement(statement, context);
+    }
+
+    default R visitShowRolesStatement(ShowRolesStmt statement, C context) {
+        return visitShowStatement(statement, context);
+    }
+
+    default R visitShowBrokerStatement(ShowBrokerStmt statement, C context) {
+        return visitShowStatement(statement, context);
+    }
+
+    default R visitShowComputeNodes(ShowComputeNodesStmt statement, C context) {
+        return visitShowStatement(statement, context);
+    }
+
+    default R visitShowFrontendsStatement(ShowFrontendsStmt statement, C context) {
+        return visitShowStatement(statement, context);
+    }
+
+    default R visitShowEnginesStatement(ShowEnginesStmt statement, C context) {
+        return visitShowStatement(statement, context);
+    }
+
+    default R visitHelpStatement(HelpStmt statement, C context) {
+        return visitShowStatement(statement, context);
+    }
+
+    default R visitShowPrivilegeStatement(ShowPrivilegesStmt statement, C context) {
+        return visitShowStatement(statement, context);
+    }
+
+    default R visitShowUserStatement(ShowUserStmt statement, C context) {
+        return visitShowStatement(statement, context);
+    }
+
+    default R visitShowCatalogsStatement(ShowCatalogsStmt statement, C context) {
+        return visitShowStatement(statement, context);
+    }
+
+    default R visitShowOpenTableStatement(ShowOpenTableStmt statement, C context) {
+        return visitShowStatement(statement, context);
+    }
+
+    default R visitShowRepositoriesStatement(ShowRepositoriesStmt statement, C context) {
+        return visitShowStatement(statement, context);
+    }
+
+    default R visitShowResourceGroupStatement(ShowResourceGroupStmt statement, C context) {
+        return visitShowStatement(statement, context);
+    }
+
+    default R visitShowDataCacheRulesStatement(ShowDataCacheRulesStmt statement, C context) {
+        return visitShowStatement(statement, context);
+    }
+
+    default R visitShowCreateGroupProviderStatement(ShowCreateGroupProviderStmt statement, C context) {
+        return visitShowStatement(statement, context);
+    }
+
+    default R visitShowGroupProvidersStatement(ShowGroupProvidersStmt statement, C context) {
+        return visitShowStatement(statement, context);
+    }
+
+    default R visitShowNodesStatement(ShowNodesStmt statement, C context) {
+        return visitShowStatement(statement, context);
+    }
+
+    default R visitShowClusterStatement(ShowClustersStmt statement, C context) {
+        return visitShowStatement(statement, context);
+    }
+
+    default R visitCleanTemporaryTableStatement(CleanTemporaryTableStmt statement, C context) {
+        return visitStatement(statement, context);
+    }
+
+    default R visitUninstallPluginStatement(UninstallPluginStmt statement, C context) {
+        return visitDDLStatement(statement, context);
+    }
+
+    default R visitDropResourceStatement(DropResourceStmt statement, C context) {
+        return visitDDLStatement(statement, context);
+    }
+
+    default R visitSyncStatement(SyncStmt statement, C context) {
+        return visitDDLStatement(statement, context);
+    }
+
+    default R visitAnalyzeProfileStatement(AnalyzeProfileStmt statement, C context) {
+        return visitStatement(statement, context);
+    }
+
+    default R visitCancelRefreshDictionaryStatement(CancelRefreshDictionaryStmt statement, C context) {
+        return visitDDLStatement(statement, context);
+    }
+
+    default R visitControlBaselinePlanStatement(ControlBaselinePlanStmt statement, C context) {
+        return visitDDLStatement(statement, context);
+    }
+
+    default R visitShowWarehousesStatement(ShowWarehousesStmt statement, C context) {
+        return visitShowStatement(statement, context);
+    }
+
+    default R visitDropCNGroupStatement(DropCnGroupStmt statement, C context) {
+        return visitDDLStatement(statement, context);
+    }
+
+    default R visitCreateSecurityIntegrationStatement(CreateSecurityIntegrationStatement statement, C context) {
+        return visitDDLStatement(statement, context);
+    }
+
+    default R visitDropSecurityIntegrationStatement(DropSecurityIntegrationStatement statement, C context) {
+        return visitDDLStatement(statement, context);
+    }
+
+    default R visitAlterSecurityIntegrationStatement(AlterSecurityIntegrationStatement statement, C context) {
+        return visitDDLStatement(statement, context);
+    }
+
+    default R visitShowCreateSecurityIntegrationStatement(ShowCreateSecurityIntegrationStatement statement, C context) {
+        return visitShowStatement(statement, context);
+    }
+
+    default R visitShowSecurityIntegrationStatement(ShowSecurityIntegrationStatement statement, C context) {
+        return visitShowStatement(statement, context);
     }
 }

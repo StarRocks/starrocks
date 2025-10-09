@@ -57,8 +57,9 @@ public:
             : PartitionChunkWriter(partition, partition_field_null_list, ctx) {}
 
     MOCK_METHOD(Status, init, (), (override));
-    MOCK_METHOD(Status, write, (Chunk * chunk), (override));
+    MOCK_METHOD(Status, write, (const starrocks::ChunkPtr&), (override));
     MOCK_METHOD(Status, finish, (), (override));
+    MOCK_METHOD(Status, wait_flush, (), (override));
     MOCK_METHOD(bool, is_finished, (), (override));
     MOCK_METHOD(int64_t, get_written_bytes, (), (override));
 
@@ -101,7 +102,7 @@ TEST_F(SinkMemoryManagerTest, kill_victim) {
 
     auto partition_chunk_writer_ctx =
             std::make_shared<SpillPartitionChunkWriterContext>(SpillPartitionChunkWriterContext{
-                    nullptr, nullptr, 1024, false, _fragment_context.get(), tuple_desc, nullptr});
+                    nullptr, nullptr, 1024, false, nullptr, _fragment_context.get(), tuple_desc, nullptr});
 
     auto sink_mem_mgr = std::make_shared<SinkOperatorMemoryManager>();
     std::map<PartitionKey, PartitionChunkWriterPtr> partition_chunk_writers;

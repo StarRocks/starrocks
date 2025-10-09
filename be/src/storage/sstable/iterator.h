@@ -5,6 +5,7 @@
 #pragma once
 
 #include "common/status.h"
+#include "storage/del_vector.h"
 #include "storage/sstable/sstable_predicate_fwd.h"
 #include "util/slice.h"
 
@@ -63,6 +64,11 @@ public:
 
     // Return the max rss_rowid the iterator contains.
     virtual uint64_t max_rss_rowid() const { return 0; };
+
+    // Return the shared rssid & version the iterator contains.
+    virtual uint32_t shared_rssid() const { return 0; };
+    virtual int64_t shared_version() const { return 0; };
+    virtual DelVectorPtr delvec() const { return nullptr; };
 
     /*
      * Return predicate the iterator contains.

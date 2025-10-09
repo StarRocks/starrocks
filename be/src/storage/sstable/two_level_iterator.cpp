@@ -124,6 +124,10 @@ public:
     uint64_t max_rss_rowid() const override { return options_.max_rss_rowid; }
     SstablePredicateSPtr predicate() const override { return options_.predicate; }
 
+    uint32_t shared_rssid() const override { return options_.shared_rssid; };
+    int64_t shared_version() const override { return options_.shared_version; };
+    DelVectorPtr delvec() const override { return options_.delvec; };
+
 private:
     void SaveError(const Status& s) {
         if (status_.ok() && !s.ok()) status_ = s;

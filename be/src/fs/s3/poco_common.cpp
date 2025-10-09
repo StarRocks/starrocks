@@ -92,7 +92,6 @@ HTTPSessionPtr makeHTTPSessionImpl(const std::string& host, Poco::UInt16 port, b
 }
 
 EndpointHTTPSessionPool::Base::ObjectPtr EndpointHTTPSessionPool::allocObject() {
-    SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(_mem_tracker);
     auto session = makeHTTPSessionImpl(_host, _port, _is_https, true);
     return session;
 }

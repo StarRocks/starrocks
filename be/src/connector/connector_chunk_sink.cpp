@@ -41,7 +41,8 @@ Status ConnectorChunkSink::init() {
 }
 
 Status ConnectorChunkSink::write_partition_chunk(const std::string& partition,
-                                                 const std::vector<int8_t>& partition_field_null_list, Chunk* chunk) {
+                                                 const std::vector<int8_t>& partition_field_null_list,
+                                                 const ChunkPtr& chunk) {
     // partition_field_null_list is used to distinguish with the secenario like NULL and string "null"
     // They are under the same dir path, but should not in the same data file.
     // We should record them in different files so that each data file could has its own meta info.
@@ -64,13 +65,13 @@ Status ConnectorChunkSink::write_partition_chunk(const std::string& partition,
     return Status::OK();
 }
 
-Status ConnectorChunkSink::add(Chunk* chunk) {
+Status ConnectorChunkSink::add(const ChunkPtr& chunk) {
     std::string partition = DEFAULT_PARTITION;
     bool partitioned = !_partition_column_names.empty();
     if (partitioned) {
         ASSIGN_OR_RETURN(partition,
-                         HiveUtils::make_partition_name(_partition_column_names, _partition_column_evaluators, chunk,
-                                                        _support_null_partition));
+                         HiveUtils::make_partition_name(_partition_column_names, _partition_column_evaluators,
+                                                        chunk.get(), _support_null_partition));
     }
 
     RETURN_IF_ERROR(
@@ -79,13 +80,27 @@ Status ConnectorChunkSink::add(Chunk* chunk) {
 }
 
 Status ConnectorChunkSink::finish() {
+    // Flushing data to disk to make more memory space for subsequent merge operations.
+    for (auto& [partition_key, writer] : _partition_chunk_writers) {
+        RETURN_IF_ERROR(writer->flush());
+    }
+    for (auto& [partition_key, writer] : _partition_chunk_writers) {
+        RETURN_IF_ERROR(writer->wait_flush());
+    }
     for (auto& [partition_key, writer] : _partition_chunk_writers) {
         RETURN_IF_ERROR(writer->finish());
     }
     return Status::OK();
 }
 
+void ConnectorChunkSink::push_rollback_action(const std::function<void()>& action) {
+    // Not a very frequent operation, so use unique_lock here is ok.
+    std::unique_lock<std::shared_mutex> wlck(_mutex);
+    _rollback_actions.push_back(std::move(action));
+}
+
 void ConnectorChunkSink::rollback() {
+    std::shared_lock<std::shared_mutex> rlck(_mutex);
     for (auto& action : _rollback_actions) {
         action();
     }

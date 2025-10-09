@@ -6,6 +6,10 @@ displayed_sidebar: docs
 
 DataGrip 支持查询 StarRocks 中的内部数据和外部数据。
 
+:::tip
+[DataGrip docs](https://www.jetbrains.com/help/datagrip/getting-started.html)
+:::
+
 在 DataGrip 中创建数据源。注意创建过程中需要选择 **MySQL** 作为数据源 (**Data** **Source**)。
 
 ![DataGrip - 1](../../_assets/BI_datagrip_1.png)

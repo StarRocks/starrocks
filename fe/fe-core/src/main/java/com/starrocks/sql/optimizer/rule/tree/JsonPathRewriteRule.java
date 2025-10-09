@@ -394,7 +394,9 @@ public class JsonPathRewriteRule extends TransformationRule {
         }
 
         private boolean isSupportedJsonFunction(CallOperator call) {
-            return SUPPORTED_JSON_FUNCTIONS.contains(call.getFnName()) && call.getArguments().size() == 2;
+            return SUPPORTED_JSON_FUNCTIONS.contains(call.getFnName())
+                    && call.getArguments().size() == 2
+                    && call.getChild(0).getType().equals(Type.JSON);
         }
 
         private ScalarOperator rewriteJsonFunction(CallOperator call, ScalarOperatorRewriteContext rewriteContext) {

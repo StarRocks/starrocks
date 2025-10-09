@@ -650,4 +650,50 @@ class SelectStmtWithCaseWhenTest {
                 "  |  5 <-> array_length[([2: col_arr, ARRAY<VARCHAR(100)>, true]); " +
                 "args: INVALID_TYPE; result: INT; args nullable: true; result nullable: true]"));
     }
+
+    @Test
+    public void testNotSimplifyCaseWhenSkipComplexFunctionsOnHashJoin() throws Exception {
+        String sql = "with cte1 AS (\n" +
+                "select id, col_arr\n" +
+                "from t1\n" +
+                "),\n" +
+                "cte2 AS (\n" +
+                "select ta.id as id, array_concat(ta.col_arr, tb.col_arr) as col_arr\n" +
+                "from cte1 ta inner join cte1 tb on ta.id = tb.id+1\n" +
+                "),\n" +
+                "cte3 AS (\n" +
+                "  SELECT\n" +
+                "    id,\n" +
+                "    (\n" +
+                "      CASE\n" +
+                "        WHEN (ARRAY_LENGTH(col_arr) < 2) THEN \"bucket1\"\n" +
+                "        WHEN ((ARRAY_LENGTH(col_arr) >= 2) AND (ARRAY_LENGTH(col_arr) < 4)) THEN \"bucket2\"\n" +
+                "        ELSE NULL\n" +
+                "        END\n" +
+                "      ) AS len_bucket\n" +
+                "  FROM\n" +
+                "    cte2\n" +
+                ")\n" +
+                "SELECT id, len_bucket\n" +
+                "FROM cte3\n" +
+                "WHERE len_bucket IS NOT NULL;";
+        String plan = UtFrameUtils.getVerboseFragmentPlan(starRocksAssert.getCtx(), sql);
+        Assert.assertTrue(plan.contains("  6:HASH JOIN\n" +
+                "  |  join op: INNER JOIN (PARTITIONED)\n" +
+                "  |  equal join conjunct: [9: cast, DOUBLE, true] = [10: add, DOUBLE, true]\n" +
+                "  |  other join predicates: CASE WHEN " +
+                "array_length[(array_concat[([4: col_arr, ARRAY<VARCHAR(100)>, true], " +
+                "[6: col_arr, ARRAY<VARCHAR(100)>, true]); args: INVALID_TYPE; result:" +
+                " ARRAY<VARCHAR>; args nullable: true; result nullable: true]); args:" +
+                " INVALID_TYPE; result: INT; args nullable: true; result nullable: true] < 2 " +
+                "THEN 'bucket1' WHEN (array_length[(array_concat[([4: col_arr, ARRAY<VARCHAR(100)>, true]," +
+                " [6: col_arr, ARRAY<VARCHAR(100)>, true]); args: INVALID_TYPE; result: ARRAY<VARCHAR>; " +
+                "args nullable: true; result nullable: true]); args: INVALID_TYPE; result: INT; " +
+                "args nullable: true; result nullable: true] >= 2) AND " +
+                "(array_length[(array_concat[([4: col_arr, ARRAY<VARCHAR(100)>, true], " +
+                "[6: col_arr, ARRAY<VARCHAR(100)>, true]); args: INVALID_TYPE; result: " +
+                "ARRAY<VARCHAR>; args nullable: true; result nullable: true]); args: INVALID_TYPE; " +
+                "result: INT; args nullable: true; result nullable: true] < 4) THEN 'bucket2' " +
+                "ELSE NULL END IS NOT NULL\n"));
+    }
 }

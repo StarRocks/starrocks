@@ -72,7 +72,6 @@ static std::vector<std::pair<MemTrackerType, std::string>> s_mem_types = {
         {MemTrackerType::UPDATE, "update"},
         {MemTrackerType::CLONE, "clone"},
         {MemTrackerType::DATACACHE, "datacache"},
-        {MemTrackerType::POCO_CONNECTION_POOL, "poco_connection_pool"},
         {MemTrackerType::REPLICATION, "replication"},
         {MemTrackerType::ROWSET_UPDATE_STATE, "rowset_update_state"},
         {MemTrackerType::INDEX_CACHE, "index_cache"},

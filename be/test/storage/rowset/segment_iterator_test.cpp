@@ -25,7 +25,10 @@
 #include "fs/fs_memory.h"
 #include "gen_cpp/tablet_schema.pb.h"
 #include "gtest/gtest.h"
+#include "runtime/global_dict/types.h"
+#include "runtime/global_dict/types_fwd_decl.h"
 #include "storage/chunk_helper.h"
+#include "storage/column_predicate_rewriter.h"
 #include "storage/olap_common.h"
 #include "storage/record_predicate/record_predicate_helper.h"
 #include "storage/rowset/column_iterator.h"
@@ -71,6 +74,10 @@ private:
             col.set_type("VARCHAR");
             col.set_length(128);
             col.set_index_length(16);
+        } else if (type == TYPE_CHAR) {
+            col.set_type("CHAR");
+            col.set_length(20);
+            col.set_index_length(20);
         }
 
         col.set_default_value("0");
@@ -85,6 +92,8 @@ public:
         if (type == TYPE_INT) {
             _column_pbs.emplace_back(_create_pb(id, std::to_string(id), nullable, type, key));
         } else if (type == TYPE_VARCHAR) {
+            _column_pbs.emplace_back(_create_pb(id, std::to_string(id), nullable, type, key));
+        } else if (type == TYPE_CHAR) {
             _column_pbs.emplace_back(_create_pb(id, std::to_string(id), nullable, type, key));
         } else {
             __builtin_unreachable();
@@ -658,6 +667,204 @@ TEST_F(SegmentIteratorTest, testBasicColumnHashIsCongruentFilter) {
         for (int i = 0; i < index_mod_1.size(); ++i) {
             ASSERT_EQ(binary_1->get_slice(i), Slice(values[index_mod_1[i]]));
         }
+    }
+}
+
+// Test CHAR column storage with VARCHAR predicate zone map filtering after fast schema evolution
+TEST_F(SegmentIteratorTest, testCharToVarcharZoneMapFilter) {
+    // Create tablet schema with CHAR column
+    std::shared_ptr<TabletSchema> tablet_schema = test::TabletSchemaBuilder()
+                                                          .create(0, false, TYPE_INT, true)  // Primary key column
+                                                          .create(1, false, TYPE_CHAR, true) // CHAR column
+                                                          .build();
+
+    // Create test data with CHAR values
+    std::vector<std::string> char_values = {"abc", "def", "ghi", "jkl"};
+
+    // Build segment using TabletDataBuilder pattern
+    std::string file_name = kSegmentDir + "/char_to_varchar_zone_map_test";
+    ASSIGN_OR_ABORT(auto wfile, _fs->new_writable_file(file_name));
+    SegmentWriterOptions opts;
+    opts.num_rows_per_block = 2; // Expect two data blocks
+    SegmentWriter writer(std::move(wfile), 0, tablet_schema, opts);
+
+    // Write all key columns together first
+    std::vector<uint32_t> key_column_indexes{0, 1};
+    ASSERT_OK(writer.init(key_column_indexes, true));
+
+    auto schema = ChunkHelper::convert_schema(tablet_schema, key_column_indexes);
+    auto chunk = ChunkHelper::new_chunk(schema, 1024);
+
+    // Add data rows - create providers for each column
+    auto int_provider = [](int32_t i) { return Datum(i); };
+    auto char_provider = [&char_values](int32_t i) { return Datum(Slice(char_values[i])); };
+
+    // Fill the chunk with data
+    chunk->reset();
+    auto& cols = chunk->columns();
+    for (int i = 0; i < 4; ++i) {
+        cols[0]->append_datum(int_provider(i));
+        cols[1]->append_datum(char_provider(i));
+    }
+    ASSERT_OK(writer.append_chunk(*chunk));
+
+    uint64_t index_size = 0;
+    ASSERT_OK(writer.finalize_columns(&index_size));
+
+    uint64_t file_size = 0;
+    ASSERT_OK(writer.finalize_footer(&file_size));
+
+    auto segment = *Segment::open(_fs, FileInfo{file_name}, 0, tablet_schema);
+    ASSERT_EQ(segment->num_rows(), 4);
+
+    // Create VARCHAR query schema
+    test::VecSchemaBuilder schema_builder;
+    schema_builder.add(0, "c0", TYPE_INT).add(1, "c1", TYPE_VARCHAR);
+    auto vec_schema = schema_builder.build();
+
+    // Create TabletSchema for query with VARCHAR column (schema evolution from CHAR to VARCHAR)
+    test::TabletSchemaBuilder query_schema_builder;
+    std::shared_ptr<TabletSchema> query_tablet_schema =
+            query_schema_builder.create(0, false, TYPE_INT, true).create(1, false, TYPE_VARCHAR, true).build();
+
+    // Test 1: VARCHAR predicate that should match CHAR data
+    {
+        SegmentReadOptions seg_opts;
+        seg_opts.fs = _fs;
+        OlapReaderStatistics stats;
+        seg_opts.stats = &stats;
+        seg_opts.tablet_schema = query_tablet_schema;
+
+        ObjectPool pool;
+        auto type_varchar = get_type_info(TYPE_VARCHAR);
+        auto predicate = pool.add(new_column_eq_predicate(type_varchar, 1, "abc"));
+        PredicateAndNode pred_root;
+        pred_root.add_child(PredicateColumnNode{predicate});
+        seg_opts.pred_tree = PredicateTree::create(std::move(pred_root));
+
+        // Set up zone map predicate tree for zone map filtering
+        ASSERT_OK(ZonemapPredicatesRewriter::rewrite_predicate_tree(&pool, seg_opts.pred_tree,
+                                                                    seg_opts.pred_tree_for_zone_map));
+
+        auto chunk_iter_res = segment->new_iterator(vec_schema, seg_opts);
+        ASSERT_OK(chunk_iter_res.status());
+        auto chunk_iter = chunk_iter_res.value();
+        ASSERT_OK(chunk_iter->init_encoded_schema(EMPTY_GLOBAL_DICTMAPS));
+
+        auto res_chunk = ChunkHelper::new_chunk(chunk_iter->schema(), 1024);
+        ASSERT_OK(chunk_iter->get_next(res_chunk.get()));
+
+        // Should return exactly one row: c0=0, c1="abc"
+        ASSERT_EQ(res_chunk->num_rows(), 1);
+        auto int_col = down_cast<Int32Column*>(res_chunk->get_column_by_index(0).get());
+        auto varchar_col = down_cast<BinaryColumn*>(res_chunk->get_column_by_index(1).get());
+        ASSERT_EQ(int_col->get_data()[0], 0);
+        ASSERT_EQ(varchar_col->get_slice(0), Slice("abc"));
+
+        // Should be no more data
+        res_chunk->reset();
+        ASSERT_TRUE(chunk_iter->get_next(res_chunk.get()).is_end_of_file());
+        ASSERT_EQ(0, stats.segment_stats_filtered);
+        ASSERT_EQ(0, stats.rows_stats_filtered);
+    }
+
+    // Test 2: VARCHAR predicate that should not match any CHAR data which is filtered by segment-level zonemap index
+    {
+        SegmentReadOptions seg_opts;
+        seg_opts.fs = _fs;
+        OlapReaderStatistics stats;
+        seg_opts.stats = &stats;
+        seg_opts.tablet_schema = query_tablet_schema;
+
+        ObjectPool pool;
+        auto type_varchar = get_type_info(TYPE_VARCHAR);
+        auto predicate = pool.add(new_column_eq_predicate(type_varchar, 1, "xyz"));
+        PredicateAndNode pred_root;
+        pred_root.add_child(PredicateColumnNode{predicate});
+        seg_opts.pred_tree = PredicateTree::create(std::move(pred_root));
+
+        // Set up zone map predicate tree for zone map filtering
+        ASSERT_OK(ZonemapPredicatesRewriter::rewrite_predicate_tree(&pool, seg_opts.pred_tree,
+                                                                    seg_opts.pred_tree_for_zone_map));
+
+        auto chunk_iter_res = segment->new_iterator(vec_schema, seg_opts);
+        ASSERT_TRUE(chunk_iter_res.status().is_end_of_file());
+        ASSERT_EQ(4, stats.segment_stats_filtered);
+        ASSERT_EQ(0, stats.rows_stats_filtered);
+    }
+
+    // Test 3: VARCHAR predicate that should not match any CHAR data which is filtered by page-level zonemap
+    {
+        SegmentReadOptions seg_opts;
+        seg_opts.fs = _fs;
+        OlapReaderStatistics stats;
+        seg_opts.stats = &stats;
+        seg_opts.tablet_schema = query_tablet_schema;
+
+        ObjectPool pool;
+        auto type_varchar = get_type_info(TYPE_VARCHAR);
+        auto predicate = pool.add(new_column_eq_predicate(type_varchar, 1, "aa"));
+        PredicateAndNode pred_root;
+        pred_root.add_child(PredicateColumnNode{predicate});
+        seg_opts.pred_tree = PredicateTree::create(std::move(pred_root));
+
+        // Set up zone map predicate tree for zone map filtering
+        ASSERT_OK(ZonemapPredicatesRewriter::rewrite_predicate_tree(&pool, seg_opts.pred_tree,
+                                                                    seg_opts.pred_tree_for_zone_map));
+
+        config::enable_index_segment_level_zonemap_filter = false;
+        DeferOp op([&]() { config::enable_index_segment_level_zonemap_filter = true; });
+        auto chunk_iter_res = segment->new_iterator(vec_schema, seg_opts);
+        ASSERT_OK(chunk_iter_res.status());
+        auto chunk_iter = chunk_iter_res.value();
+        ASSERT_OK(chunk_iter->init_encoded_schema(EMPTY_GLOBAL_DICTMAPS));
+        auto res_chunk = ChunkHelper::new_chunk(chunk_iter->schema(), 1024);
+        auto status = chunk_iter->get_next(res_chunk.get());
+        ASSERT_TRUE(status.is_end_of_file());
+        ASSERT_EQ(res_chunk->num_rows(), 0);
+        ASSERT_EQ(0, stats.segment_stats_filtered);
+        ASSERT_EQ(4, stats.rows_stats_filtered);
+    }
+
+    // Test 4: VARCHAR range predicate
+    {
+        SegmentReadOptions seg_opts;
+        seg_opts.fs = _fs;
+        OlapReaderStatistics stats;
+        seg_opts.stats = &stats;
+        seg_opts.tablet_schema = query_tablet_schema;
+
+        ObjectPool pool;
+        auto type_varchar = get_type_info(TYPE_VARCHAR);
+        auto predicate1 = pool.add(new_column_ge_predicate(type_varchar, 1, "def"));
+        auto predicate2 = pool.add(new_column_le_predicate(type_varchar, 1, "ghi"));
+        PredicateAndNode pred_root;
+        pred_root.add_child(PredicateColumnNode{predicate1});
+        pred_root.add_child(PredicateColumnNode{predicate2});
+        seg_opts.pred_tree = PredicateTree::create(std::move(pred_root));
+
+        // Set up zone map predicate tree for zone map filtering
+        ASSERT_OK(ZonemapPredicatesRewriter::rewrite_predicate_tree(&pool, seg_opts.pred_tree,
+                                                                    seg_opts.pred_tree_for_zone_map));
+
+        auto chunk_iter_res = segment->new_iterator(vec_schema, seg_opts);
+        ASSERT_OK(chunk_iter_res.status());
+        auto chunk_iter = chunk_iter_res.value();
+        ASSERT_OK(chunk_iter->init_encoded_schema(EMPTY_GLOBAL_DICTMAPS));
+
+        auto res_chunk = ChunkHelper::new_chunk(chunk_iter->schema(), 1024);
+        ASSERT_OK(chunk_iter->get_next(res_chunk.get()));
+
+        // Should return two rows: c0=1,2 with c1="def","ghi"
+        ASSERT_EQ(res_chunk->num_rows(), 2);
+        auto int_col = down_cast<Int32Column*>(res_chunk->get_column_by_index(0).get());
+        auto varchar_col = down_cast<BinaryColumn*>(res_chunk->get_column_by_index(1).get());
+        ASSERT_EQ(int_col->get_data()[0], 1);
+        ASSERT_EQ(int_col->get_data()[1], 2);
+        ASSERT_EQ(varchar_col->get_slice(0), Slice("def"));
+        ASSERT_EQ(varchar_col->get_slice(1), Slice("ghi"));
+        ASSERT_EQ(0, stats.segment_stats_filtered);
+        ASSERT_EQ(0, stats.rows_stats_filtered);
     }
 }
 

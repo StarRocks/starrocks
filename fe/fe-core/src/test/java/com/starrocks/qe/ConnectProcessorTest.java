@@ -43,6 +43,7 @@ import com.starrocks.authentication.PlainPasswordAuthenticationProvider;
 import com.starrocks.authorization.PrivilegeBuiltinConstants;
 import com.starrocks.catalog.UserIdentity;
 import com.starrocks.common.jmockit.Deencapsulation;
+import com.starrocks.common.profile.Tracers;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.mysql.MysqlCapability;
 import com.starrocks.mysql.MysqlChannel;
@@ -56,6 +57,7 @@ import com.starrocks.plugin.AuditEvent.AuditEventBuilder;
 import com.starrocks.proto.PQueryStatistics;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.DDLTestBase;
+import com.starrocks.sql.ast.PrepareStmt;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.thrift.TMasterOpRequest;
 import com.starrocks.thrift.TMasterOpResult;
@@ -74,6 +76,9 @@ import org.xnio.StreamConnection;
 
 import java.io.IOException;
 import java.nio.ByteBuffer;
+import java.nio.ByteOrder;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicReference;
 
@@ -676,5 +681,174 @@ public class ConnectProcessorTest extends DDLTestBase {
 
         TMasterOpResult result = processor.proxyExecute(request);
         Assertions.assertNotNull(result);
+    }
+
+    @Test
+    public void testProxyExecuteUserIdentityIsNull() throws Exception {
+        TMasterOpRequest request = new TMasterOpRequest();
+        request.setCatalog("default");
+        request.setDb("testDb1");
+        request.setUser("root");
+        request.setSql("select 1");
+        request.setIsInternalStmt(true);
+        request.setModified_variables_sql("set query_timeout = 10");
+        request.setQueryId(UUIDUtil.genTUniqueId());
+        request.setSession_id(UUID.randomUUID().toString());
+        request.setIsLastStmt(true);
+
+        ConnectContext context = new ConnectContext();
+        ConnectProcessor processor = new ConnectProcessor(context);
+        new mockit.MockUp<StmtExecutor>() {
+            @mockit.Mock
+            public void execute() {}
+            @mockit.Mock
+            public PQueryStatistics getQueryStatisticsForAuditLog() {
+                return null;
+            }
+        };
+
+        TMasterOpResult result = processor.proxyExecute(request);
+        Assertions.assertNotNull(result);
+        Assertions.assertTrue(context.getState().isError());
+    }
+
+    @Test
+    public void testStmtExecute() throws Exception {
+        int stmtId = 1;
+        MysqlSerializer serializer = MysqlSerializer.newInstance();
+        serializer.writeInt1(MysqlCommand.COM_STMT_EXECUTE.getCommandCode());
+        serializer.writeInt4(stmtId);
+        serializer.writeInt1(0); // flags
+        serializer.writeInt4(0); // flags
+        ByteBuffer packet = serializer.toByteBuffer();
+
+        ConnectContext ctx = initMockContext(mockChannel(packet), GlobalStateMgr.getCurrentState());
+
+        String sql = "PREPARE stmt1 FROM select * from testDb1.testTable1";
+        PrepareStmt stmt = (PrepareStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+        ctx.putPreparedStmt(String.valueOf(stmtId), new PrepareStmtContext(stmt, ctx, null));
+
+        ConnectProcessor processor = new ConnectProcessor(ctx);
+        // Mock statement executor
+        // Create mock for StmtExecutor using MockUp instead of @Mocked parameter
+        new MockUp<StmtExecutor>() {
+            @Mock
+            public PQueryStatistics getQueryStatisticsForAuditLog() {
+                return statistics;
+            }
+        };
+
+        processor.processOnce();
+
+        Assertions.assertEquals(MysqlCommand.COM_STMT_EXECUTE, myContext.getCommand());
+        Assertions.assertTrue(ctx.getState().isQuery());
+    }
+
+    /**
+     * Test handleExecute method with tracing for query statements
+     */
+    @Test
+    public void testHandleExecuteTracingForQuery() throws Exception {
+        // Create a prepared statement packet for COM_STMT_EXECUTE
+        ByteBuffer executePacket = createExecutePacket(1, new ArrayList<>());
+        ConnectContext ctx = initMockContext(mockChannel(executePacket), GlobalStateMgr.getCurrentState());
+        
+        // Create a prepared statement context with a query statement
+        PrepareStmt prepareStmt = createMockPrepareStmt("SELECT 1 + 2");
+        PrepareStmtContext prepareCtx = new PrepareStmtContext(prepareStmt, ctx, null);
+        ctx.putPreparedStmt("1", prepareCtx);
+        
+        ConnectProcessor processor = new ConnectProcessor(ctx);
+        
+        // Track method calls
+        AtomicReference<Boolean> tracersRegistered = new AtomicReference<>(false);
+        AtomicReference<Boolean> tracersInitialized = new AtomicReference<>(false);
+        
+        // Mock Tracers
+        new MockUp<Tracers>() {
+            @Mock
+            public void register(ConnectContext context) {
+                tracersRegistered.set(true);
+            }
+            
+            @Mock
+            public void init(ConnectContext context, String traceMode, String traceModule) {
+                tracersInitialized.set(true);
+            }
+        };
+        
+        // Mock StmtExecutor
+        new MockUp<StmtExecutor>() {
+            @Mock
+            public void execute() throws Exception {
+                // Do nothing for test
+            }
+            
+            @Mock
+            public PQueryStatistics getQueryStatisticsForAuditLog() {
+                return statistics;
+            }
+            
+            @Mock
+            public StatementBase getParsedStmt() {
+                return prepareStmt;
+            }
+        };
+        
+        processor.processOnce();
+        
+        // Verify that tracers are properly initialized for query statements
+        Assertions.assertTrue(tracersRegistered.get(), "Tracers should be registered for query statements");
+        Assertions.assertTrue(tracersInitialized.get(), "Tracers should be initialized for query statements");
+        Assertions.assertEquals(MysqlCommand.COM_STMT_EXECUTE, myContext.getCommand());
+        Assertions.assertEquals("SELECT 1 + 2 AS `1 + 2`", processor.executor.getOriginStmtInString());
+    }
+    
+    /**
+     * Helper method to create a COM_STMT_EXECUTE packet
+     */
+    private ByteBuffer createExecutePacket(int stmtId, List<Object> params) {
+        MysqlSerializer serializer = MysqlSerializer.newInstance();
+        
+        // Command type COM_STMT_EXECUTE (0x17 = 23)
+        serializer.writeInt1(23);
+        
+        // Statement ID
+        serializer.writeInt4(stmtId);
+        
+        // Flags (0 = CURSOR_TYPE_NO_CURSOR)
+        serializer.writeInt1(0);
+        
+        // Iteration count (always 1)
+        serializer.writeInt4(1);
+        
+        // NULL bitmap (empty for no parameters)
+        int nullBitmapLength = (params.size() + 7) / 8;
+        if (nullBitmapLength > 0) {
+            byte[] nullBitmap = new byte[nullBitmapLength];
+            serializer.writeBytes(nullBitmap);
+        }
+        
+        // new_params_bind_flag (0 = types not included)
+        if (params.size() > 0) {
+            serializer.writeInt1(0);
+        }
+        
+        return serializer.toByteBuffer().order(ByteOrder.LITTLE_ENDIAN);
+    }
+    
+    /**
+     * Helper method to create a mock PrepareStmt
+     */
+    private PrepareStmt createMockPrepareStmt(String sql) {
+        try {
+            // Create a simple statement for testing
+            StatementBase innerStmt = UtFrameUtils.parseStmtWithNewParser(sql,
+                    UtFrameUtils.initCtxForNewPrivilege(UserIdentity.ROOT));
+            return new PrepareStmt("test_stmt", innerStmt, null);
+        } catch (Exception e) {
+            // Return a simple mock for test purposes
+            return new PrepareStmt("test_stmt", null, null);
+        }
     }
 }

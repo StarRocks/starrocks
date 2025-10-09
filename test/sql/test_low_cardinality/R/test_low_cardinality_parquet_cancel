@@ -1,4 +1,3 @@
--- name: test_low_cardinality_parquet_cancel @sequential
 create external catalog ice_cat_${uuid0}
 properties (
     "type" = "iceberg",

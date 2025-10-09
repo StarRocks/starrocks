@@ -39,7 +39,7 @@ PARTITION p20231226 VALUES [("2023-12-26 00:00:00"), ("2023-12-27 00:00:00")))
 DISTRIBUTED BY RANDOM
 PROPERTIES (
 "compression" = "LZ4",
-"bucket_size" = "4294967296",
+"bucket_size" = "1073741824",
 "fast_schema_evolution" = "true",
 "replicated_storage" = "true",
 "replication_num" = "1"
@@ -87,7 +87,7 @@ PARTITION p20210109 VALUES [("2021-01-09 00:00:00"), ("2021-01-10 00:00:00")),
 PARTITION p20231226 VALUES [("2023-12-26 00:00:00"), ("2023-12-27 00:00:00")))
 DISTRIBUTED BY RANDOM
 PROPERTIES (
-"bucket_size" = "4294967296",
+"bucket_size" = "1073741824",
 "compression" = "LZ4",
 "fast_schema_evolution" = "true",
 "replicated_storage" = "true",

@@ -315,7 +315,8 @@ public class MVPartitionExprResolver {
                             if (item instanceof SlotRef) {
                                 SlotRef result = (SlotRef) item;
                                 TableName actTableName = result.getTblNameWithoutAnalyzed();
-                                if (result.getColumnName().equalsIgnoreCase(slot.getColumnName())
+                                if (result.getColumnName() != null
+                                        && result.getColumnName().equalsIgnoreCase(slot.getColumnName())
                                         && (expTableName == null || expTableName.equals(actTableName))) {
                                     return visitExpr(context.withExpr(result).withRelation(relation));
                                 }
@@ -337,7 +338,7 @@ public class MVPartitionExprResolver {
                     SlotRef slot = context.getSlotRef();
                     if (slot.getTblNameWithoutAnalyzed() != null) {
                         String tableName = slot.getTblNameWithoutAnalyzed().getTbl();
-                        if (!node.getAlias().getTbl().equalsIgnoreCase(tableName)) {
+                        if (node.getAlias() != null && !node.getAlias().getTbl().equalsIgnoreCase(tableName)) {
                             return null;
                         }
                         slot = (SlotRef) slot.clone();
@@ -518,7 +519,7 @@ public class MVPartitionExprResolver {
                     if (slot.getTblNameWithoutAnalyzed() != null) {
                         String tableName = slot.getTblNameWithoutAnalyzed().getTbl();
                         String cteName = node.getAlias() != null ? node.getAlias().getTbl() : node.getName();
-                        if (!cteName.equalsIgnoreCase(tableName)) {
+                        if (cteName != null && !cteName.equalsIgnoreCase(tableName)) {
                             return null;
                         }
                         slot = (SlotRef) slot.clone();

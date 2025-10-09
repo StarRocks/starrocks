@@ -261,7 +261,7 @@ If you use REST as metastore, you must specify the metastore type as REST (`"ice
 
 - `iceberg.catalog.security`
   - Required: No
-  - Description: The type of authorization protocol to use. Default: `NONE`. Valid value: `OAUTH2`, which requires either a `token` or `credential`.
+  - Description: The type of authorization protocol to use. Default: `NONE`. Valid values: `OAUTH2` and `JWT`. When this item is set to `OAUTH2`, either `token` or `credential` is required. When this item is set to `JWT`, the user is required to log in to the StarRocks cluster using the `JWT` method. You can omit `token` or `credential` and StarRocks will use the logged in user's JWT to access the catalog.
 
 - `iceberg.catalog.oauth2.token`
   - Required: No
@@ -1315,7 +1315,7 @@ DROP DATABASE <database_name>;
 
 ### Create an Iceberg table
 
-Similar to the internal databases of StarRocks, if you have the [CREATE TABLE](../../../administration/user_privs/authorization/privilege_item.md#database) privilege on an Iceberg database, you can use the [CREATE TABLE](../../../sql-reference/sql-statements/table_bucket_part_index/CREATE_TABLE.md) or [CREATE TABLE AS SELECT ../../sql-reference/sql-statements/table_bucket_part_index/CREATE_TABLE_AS_SELECT.mdELECT.md) statement to create a table in that Iceberg database. This feature is supported from v3.1 onwards.
+Similar to the internal databases of StarRocks, if you have the [CREATE TABLE](../../../administration/user_privs/authorization/privilege_item.md#database) privilege on an Iceberg database, you can use the [CREATE TABLE](../../../sql-reference/sql-statements/table_bucket_part_index/CREATE_TABLE.md) or [CREATE TABLE AS SELECT](../../../sql-reference/sql-statements/table_bucket_part_index/CREATE_TABLE_AS_SELECT.md) statement to create a table in that Iceberg database. This feature is supported from v3.1 onwards.
 
 [Switch to an Iceberg catalog and a database in it](#switch-to-an-iceberg-catalog-and-a-database-in-it), and then use the following syntax to create an Iceberg table in that database.
 
@@ -1326,6 +1326,7 @@ CREATE TABLE [IF NOT EXISTS] [database.]table_name
 (column_definition1[, column_definition2, ...
 partition_column_definition1,partition_column_definition2...])
 [partition_desc]
+[ORDER BY sort_desc)]
 [PROPERTIES ("key" = "value", ...)]
 [AS SELECT query]
 ```
@@ -1369,6 +1370,27 @@ Currently, StarRocks supports partition transformation expressions defined in th
 Partition columns must be defined following non-partition columns. Partition columns support all data types excluding FLOAT, DOUBLE, DECIMAL, and DATETIME and cannot use `NULL` as the default value.
 
 :::
+
+
+##### ORDER BY
+
+From v4.0 onwards, StarRocks supports specifying sort keys for an Iceberg table via the ORDER BY clause, which can be used to sort the data in the same data file according to the specified sort key.
+
+The ORDER BY clause can contain more than one sort key, in the following format:
+
+```SQL
+ORDER BY (column_name [sort_direction] [nulls_order], ...)
+```
+
+- `column_name`: The name of the column to be used as the sort key. It must be a column existed in the table schema. Currently, Transform expressions are not supported.
+- `sort_direction`: Sorting direction. Valid values: `ASC` (Default) and `DESC`.
+- `nulls_order`: The order of NULL values. Valid values: `NULLS FIRST` (Default when `ASC` is specified) and `NULLS LAST` (Default when `DESC` is specified).
+
+`sort_direction` and `nulls_order` are optional. For example, each of the following is a valid `sort_desc`:
+
+- `column_name`
+- `column_name ASC`
+- `column_name DESC NULLS FIRST`
 
 ##### PROPERTIES
 

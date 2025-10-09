@@ -80,12 +80,19 @@ Status ChunkSource::buffer_next_batch_chunks_blocking(RuntimeState* state, size_
                 if (_status.is_end_of_file()) {
                     chunk->owner_info().set_owner_id(owner_id, true);
                     _chunk_buffer.put(_scan_operator_seq, std::move(chunk), std::move(_chunk_token));
+                    break;
                 } else if (_status.is_time_out()) {
                     chunk->owner_info().set_owner_id(owner_id, false);
                     _chunk_buffer.put(_scan_operator_seq, std::move(chunk), std::move(_chunk_token));
                     _status = Status::OK();
+                    break;
+                } else if (_status.is_eagain()) {
+                    // EAGAIN is normal case, but sleep a while to avoid busy loop
+                    SleepFor(MonoDelta::FromNanoseconds(workgroup::WorkGroup::YIELD_PREEMPT_MAX_TIME_SPENT));
+                    _status = Status::OK();
+                } else {
+                    break;
                 }
-                break;
             }
 
             // schema won't be used by the computing layer, here we just reset it.

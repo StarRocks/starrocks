@@ -44,8 +44,8 @@
 #include <unordered_map>
 #include <vector>
 
-#include "cache/block_cache/block_cache.h"
 #include "cache/datacache_utils.h"
+#include "cache/disk_cache/block_cache.h"
 #include "cctz/time_zone.h"
 #include "common/global_types.h"
 #include "common/object_pool.h"
@@ -360,6 +360,11 @@ public:
     bool spill_partitionwise_agg() const { return _spill_options->spill_partitionwise_agg; }
     bool spill_partitionwise_agg_skew_elimination() const {
         return _spill_options->spill_partitionwise_agg_skew_elimination;
+    }
+
+    bool enable_full_sort_use_german_string() const {
+        return _query_options.__isset.enable_full_sort_use_german_string &&
+               _query_options.enable_full_sort_use_german_string;
     }
 
     int32_t spill_mem_table_size() const {

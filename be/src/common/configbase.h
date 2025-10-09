@@ -340,7 +340,7 @@ void TEST_clear_configs();
 
 template <>
 struct fmt::formatter<starrocks::config::MutableString> : formatter<std::string> {
-    auto format(const starrocks::config::MutableString& s, format_context& ctx) {
+    auto format(const starrocks::config::MutableString& s, format_context& ctx) const {
         return formatter<std::string>::format(s.value(), ctx);
     }
 };

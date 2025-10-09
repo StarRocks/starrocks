@@ -15,6 +15,7 @@
 package com.starrocks.sql.analyzer;
 
 import com.google.common.base.Strings;
+import com.starrocks.common.util.Util;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.AstVisitorExtendInterface;
 import com.starrocks.sql.ast.RecoverDbStmt;
@@ -41,7 +42,8 @@ public class BasicDbStmtAnalyzer {
 
         @Override
         public Void visitUseDbStatement(UseDbStmt statement, ConnectContext context) {
-            statement.setCatalogName(getCatalogNameIfNotSet(statement.getCatalogName(), context));
+            String catalogName = Util.normalizeName(getCatalogNameIfNotSet(statement.getCatalogName(), context));
+            statement.setCatalogName(catalogName);
             return null;
         }
 

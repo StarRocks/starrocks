@@ -4,6 +4,68 @@ displayed_sidebar: docs
 
 # StarRocks version 4.0
 
+## 4.0.0-RC02
+
+发布日期：2025 年 9 月 29 日
+
+### 新增功能
+
+- 创建 Iceberg 表时支持设定排序键。
+- 支持多表写写事务（Multi-Table Write-Write Transaction），允许用户控制 INSERT、UPDATE 和 DELETE 操作的原子提交。该事务支持 Stream Load 和 INSERT INTO 接口，有效保证 ETL 与实时写入场景下的跨表一致性。
+- 支持修改聚合表的聚合键。
+
+### 功能优化
+
+- 优化 Delta Lake Catalog 缓存配置：调整 Delta Lake Catalog Property `DELTA_LAKE_JSON_META_CACHE_TTL` 和 `DELTA_LAKE_CHECKPOINT_META_CACHE_TTL` 的默认值为 24 小时，并简化 Parquet handler 逻辑。 [#63441](https://github.com/StarRocks/starrocks/pull/63441)
+- 优化 Delta Lake Catalog 错误日志格式与内容，提升调试体验。 [#63389](https://github.com/StarRocks/starrocks/pull/63389)
+- 外部组（如 LDAP Group）支持角色授权、回收和展示，完善 SQL 语法和测试用例，提升权限管控能力。 [#63385](https://github.com/StarRocks/starrocks/pull/63385)
+- 加强 Stream Load 的参数一致性校验，避免参数漂移带来的风险。 [#63347](https://github.com/StarRocks/starrocks/pull/63347)
+- 优化 Stream Load 的 Label 传递机制，减少依赖。 [#63334](https://github.com/StarRocks/starrocks/pull/63334)
+- 优化 ANALYZE PROFILE 格式，ExplainAnalyzer 支持按算子分组显示指标。 [#63326](https://github.com/StarRocks/starrocks/pull/63326)
+- 优化 QueryDetailActionV2 和 QueryProfileActionV2 API，返回 JSON 格式结果。 [#63235](https://github.com/StarRocks/starrocks/pull/63235)
+- 优化大量 CompoundPredicates 场景下的谓词解析。 [#63139](https://github.com/StarRocks/starrocks/pull/63139)
+- 调整部分 FE 指标为 leader 感知。 [#63004](https://github.com/StarRocks/starrocks/pull/63004)
+- 优化 SHOW PROCESS LIST，增加 Catalog 和 Query ID 信息。 [#62552](https://github.com/StarRocks/starrocks/pull/62552)
+- 优化 BE JVM 内存监控指标。 [#62210](https://github.com/StarRocks/starrocks/pull/62210)
+- 优化物化视图改写逻辑和日志输出。 [#62985](https://github.com/StarRocks/starrocks/pull/62985)
+- 优化随机分桶策略。 [#63168](https://github.com/StarRocks/starrocks/pull/63168)
+- 支持通过 `ALTER TABLE <table_name> AUTO_INCREMENT = 10000;` 重置 AUTO_INCREMENT 值的起始点。 [#62767](https://github.com/StarRocks/starrocks/pull/62767)
+- Group Provider 支持通过 DN 匹配 Group。 [#62711](https://github.com/StarRocks/starrocks/pull/62711)
+
+### 问题修复
+
+修复了以下问题：
+
+- ARRAY 低基数优化问题导致的 Left Join 结果不全。[#63419](https://github.com/StarRocks/starrocks/pull/63419)
+- 物化视图聚合下推改写后生成了错误的执行计划。 [#63060](https://github.com/StarRocks/starrocks/pull/63060)
+- 在部分 JSON 字段裁剪场景，Schema 找不到字段时系统打印多余 Warning 日志。 [#63414](https://github.com/StarRocks/starrocks/pull/63414)
+- ARM 环境下插入 DECIMAL256 类型数据时 SIMD Batch 计算参数错误导致死循环。 [#63406](https://github.com/StarRocks/starrocks/pull/63406)
+- 三类存储相关问题。 [#63398](https://github.com/StarRocks/starrocks/pull/63398)
+  - 磁盘路径为空缓存异常。
+  - AZURE 缓存 Key 前缀错误。
+  - S3 多段上传异常。
+- 启用 Fast Schema Evolution 进行 CHAR 到 VARCHAR 的 Schema Change 后 ZoneMap 过滤失效。[#63377](https://github.com/StarRocks/starrocks/pull/63377)
+- 中间类型为 `ARRAY<NULL_TYPE>` 导致的 ARRAY 聚合类型分析错误。[#63371](https://github.com/StarRocks/starrocks/pull/63371)
+- 基于自增列进行 Partial Update 时元数据不一致问题。[#63370](https://github.com/StarRocks/starrocks/pull/63370)
+- 并发删除 Tablet 或查询时元信息不一致。 [#63291](https://github.com/StarRocks/starrocks/pull/63291)
+- Iceberg 表写入时创建 `s``pill` 目录失败。 [#63278](https://github.com/StarRocks/starrocks/pull/63278)
+- 变更 Ranger Hive Service 权限不生效。 [#63251](https://github.com/StarRocks/starrocks/pull/63251)
+- Group Provider 不支持 `IF NOT EXISTS` 与 `IF EXISTS` 子句。 [#63248](https://github.com/StarRocks/starrocks/pull/63248)
+- Iceberg 分区使用保留关键字导致的异常。 [#63243](https://github.com/StarRocks/starrocks/pull/63243)
+- Prometheus 指标格式问题。 [#62742](https://github.com/StarRocks/starrocks/pull/62742)
+- 启用 Compaction 的情况下开始复制事务，版本校验失败。 [#62663](https://github.com/StarRocks/starrocks/pull/62663)
+- 启用 File Bunding 后缺少 Compaction Profile。 [#62638](https://github.com/StarRocks/starrocks/pull/62638)
+- Clone 后冗余副本处理的问题。 [#62542](https://github.com/StarRocks/starrocks/pull/62542)
+- Delta Lake 表找不到分区列。 [#62953](https://github.com/StarRocks/starrocks/pull/62953)
+- 存算分离集群物化视图不支持 Colocation。 [#62941](https://github.com/StarRocks/starrocks/pull/62941)
+- 读取 Iceberg 表 NULL 分区的问题。 [#62934](https://github.com/StarRocks/starrocks/pull/62934)
+- Histogram 统计中 Most Common Values (MCV) 包含单引号导致 SQL 语法错误。 [#62853](https://github.com/StarRocks/starrocks/pull/62853)
+- KILL ANALYZE 命令不生效。 [#62842](https://github.com/StarRocks/starrocks/pull/62842)
+- 采集 Stream Load Profile 失败。 [#62802](https://github.com/StarRocks/starrocks/pull/62802)
+- CTE Reuse 计划提取错误。 [#62784](https://github.com/StarRocks/starrocks/pull/62784)
+- BE 选择异常导致 Rebalance 失效。 [#62776](https://github.com/StarRocks/starrocks/pull/62776)
+- User Property 优先级低于 Session Variable 的问题。 [#63173](https://github.com/StarRocks/starrocks/pull/63173)
+
 ## 4.0.0-RC
 
 发布日期：2025 年 9 月 9 日

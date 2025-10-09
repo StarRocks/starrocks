@@ -64,6 +64,7 @@ import com.starrocks.mysql.ssl.SSLChannel;
 import com.starrocks.mysql.ssl.SSLChannelImp;
 import com.starrocks.mysql.ssl.SSLContextLoader;
 import com.starrocks.plugin.AuditEvent.AuditEventBuilder;
+import com.starrocks.qe.QueryDetail.QuerySource;
 import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.MetadataMgr;
@@ -82,7 +83,6 @@ import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.SystemVariable;
 import com.starrocks.sql.ast.UserVariable;
 import com.starrocks.sql.ast.expression.StringLiteral;
-import com.starrocks.sql.ast.expression.VariableExpr;
 import com.starrocks.sql.optimizer.QueryMaterializationContext;
 import com.starrocks.sql.optimizer.dump.DumpInfo;
 import com.starrocks.sql.optimizer.dump.QueryDumpInfo;
@@ -243,6 +243,9 @@ public class ConnectContext {
     // lifecycle instead of per materialized view.
     private QueryMaterializationContext queryMVContext;
 
+    // Query source to distinguish different types of queries
+    private QuerySource querySource = QuerySource.EXTERNAL;
+
     // In order to ensure the correctness of imported data, in some cases, we don't use connector metadata cache for
     // `insert into table select external table`. Currently, this feature only supports hive table.
     private Optional<Boolean> useConnectorMetadataCache = Optional.empty();
@@ -283,6 +286,10 @@ public class ConnectContext {
 
     public static ConnectContext get() {
         return threadLocalInfo.get();
+    }
+
+    public static void set(ConnectContext ctx) {
+        threadLocalInfo.set(ctx);
     }
 
     public static SessionVariable getSessionVariableOrDefault() {
@@ -470,9 +477,26 @@ public class ConnectContext {
         return accessControlContext.getCurrentRoleIds();
     }
 
+    public void setCurrentRoleIds(Set<Long> roleIds) {
+        accessControlContext.setCurrentRoleIds(roleIds);
+    }
+
     public void setCurrentRoleIds(UserIdentity user) {
+        Set<Long> roleIds = getRoleIdsByUser(user);
+        accessControlContext.setCurrentRoleIds(roleIds);
+    }
+
+    public void setCurrentRoleIds(UserIdentity userIdentity, Set<String> groups) {
+        Set<Long> roleIds = getRoleIdsByUser(userIdentity);
+        for (String group : groups) {
+            roleIds.addAll(globalStateMgr.getAuthorizationMgr().getRoleIdListByGroup(group));
+        }
+        setCurrentRoleIds(roleIds);
+    }
+
+    private Set<Long> getRoleIdsByUser(UserIdentity user) {
         if (user.isEphemeral()) {
-            accessControlContext.setCurrentRoleIds(new HashSet<>());
+            return new HashSet<>();
         } else {
             try {
                 Set<Long> defaultRoleIds;
@@ -481,19 +505,12 @@ public class ConnectContext {
                 } else {
                     defaultRoleIds = globalStateMgr.getAuthorizationMgr().getDefaultRoleIdsByUser(user);
                 }
-                accessControlContext.setCurrentRoleIds(defaultRoleIds);
+                return defaultRoleIds;
             } catch (PrivilegeException e) {
                 LOG.warn("Set current role fail : {}", e.getMessage());
+                return new HashSet<>();
             }
         }
-    }
-
-    public void setCurrentRoleIds(UserIdentity userIdentity, Set<String> groups) {
-        setCurrentRoleIds(userIdentity);
-    }
-
-    public void setCurrentRoleIds(Set<Long> roleIds) {
-        accessControlContext.setCurrentRoleIds(roleIds);
     }
 
     public Set<String> getGroups() {
@@ -545,8 +562,8 @@ public class ConnectContext {
 
     public void modifySystemVariable(SystemVariable setVar, boolean onlySetSessionVar) throws DdlException {
         globalStateMgr.getVariableMgr().setSystemVariable(sessionVariable, setVar, onlySetSessionVar);
-        if (!SetType.GLOBAL.equals(setVar.getType()) && globalStateMgr.getVariableMgr()
-                .shouldForwardToLeader(setVar.getVariable())) {
+        if (!SetType.GLOBAL.equals(setVar.getType())
+                && globalStateMgr.getVariableMgr().shouldForwardToLeader(setVar.getVariable())) {
             modifiedSessionVariables.put(setVar.getVariable(), setVar);
         }
     }
@@ -955,23 +972,30 @@ public class ConnectContext {
 
     public void setCurrentWarehouse(String currentWarehouse) {
         this.sessionVariable.setWarehouseName(currentWarehouse);
-        this.computeResource = null;
+        this.resetComputeResource();
     }
 
     public void setCurrentWarehouseId(long warehouseId) {
         Warehouse warehouse = globalStateMgr.getWarehouseMgr().getWarehouse(warehouseId);
         this.sessionVariable.setWarehouseName(warehouse.getName());
-        this.computeResource = null;
+        this.resetComputeResource();
     }
 
     public void setCurrentComputeResource(ComputeResource computeResource) {
         this.computeResource = computeResource;
     }
 
-    public synchronized void tryAcquireResource(boolean force) {
-        if (!force && this.computeResource != null) {
-            return;
-        }
+    /**
+     * Reset the current compute resource, so that we can acquire a new one next time.
+     */
+    public void resetComputeResource() {
+        this.computeResource = null;
+    }
+
+    /**
+     * Acquire a compute resource from warehouse manager.
+     */
+    private synchronized void acquireComputeResource() {
         // once warehouse is set, needs to choose the available cngroup
         // try to acquire cn group id once the warehouse is set
         final long warehouseId = this.getCurrentWarehouseId();
@@ -990,23 +1014,50 @@ public class ConnectContext {
             return WarehouseManager.DEFAULT_RESOURCE;
         }
         if (this.computeResource == null) {
-            tryAcquireResource(false);
+            acquireComputeResource();
+        } else {
+            final WarehouseManager warehouseManager = globalStateMgr.getWarehouseMgr();
+            // throw exception if the current warehouse is not exist.
+            if (!warehouseManager.warehouseExists(this.getCurrentWarehouseName())) {
+                String errMsg = String.format("Current connection's warehouse(%s) does not exist, please " +
+                                "set to another warehouse.", this.getCurrentWarehouseName());
+                this.resetComputeResource();
+                throw new RuntimeException(errMsg);
+            }
+            if (!warehouseManager.isResourceAvailable(computeResource)) {
+                if (state != null && !state.isRunning()) {
+                    // if the query is not running, we can acquire a new compute resource.
+                    acquireComputeResource();
+                } else {
+                    // throw exception if the current compute resource is not available.
+                    // and reset compute resource, so that we can acquire a new one next time.
+                    String errMsg = String.format("Current connection's compute resource(%s) is not available:%s, please " +
+                            "try again.", this.getCurrentWarehouseName(), computeResource);
+                    this.resetComputeResource();
+                    throw new RuntimeException(errMsg);
+                }
+            }
         }
         return this.computeResource;
     }
 
     /**
      * Get the name of the current compute resource.
+     * During the execution of a statement, the compute resource should be fixed.
      * NOTE: this method will not acquire compute resource if it is not set.
-     *
      * @return: the name of the current compute resource, or empty string if not set.
      */
     public String getCurrentComputeResourceName() {
         if (!RunMode.isSharedDataMode() || this.computeResource == null) {
             return "";
         }
-        final WarehouseManager warehouseManager = globalStateMgr.getWarehouseMgr();
-        return warehouseManager.getComputeResourceName(this.computeResource);
+        try {
+            final WarehouseManager warehouseManager = globalStateMgr.getWarehouseMgr();
+            return warehouseManager.getComputeResourceName(this.computeResource);
+        } catch (Exception e) {
+            LOG.warn("get compute resource name failed, resource: {}", this.computeResource, e);
+            return "";
+        }
     }
 
     /**
@@ -1019,6 +1070,24 @@ public class ConnectContext {
             return WarehouseManager.DEFAULT_RESOURCE;
         }
         return this.computeResource;
+    }
+
+    /**
+     * This method will acquire a new compute resource if the current one is not available.
+     * To ensure the compute resource is unique during the execution of a statement, check this method
+     * before executing a statement.
+     */
+    public void ensureCurrentComputeResourceAvailable() {
+        if (!RunMode.isSharedDataMode() || this.computeResource == null) {
+            return;
+        }
+        final WarehouseManager warehouseManager = globalStateMgr.getWarehouseMgr();
+        if (!warehouseManager.isResourceAvailable(computeResource)) {
+            this.computeResource = warehouseManager.acquireComputeResource(this.getCurrentWarehouseId());
+        } else {
+            // acquire compute resource again to for better-schedule balance
+            acquireComputeResource();
+        }
     }
 
     public void setParentConnectContext(ConnectContext parent) {
@@ -1103,6 +1172,14 @@ public class ConnectContext {
 
     public void setQueryMVContext(QueryMaterializationContext queryMVContext) {
         this.queryMVContext = queryMVContext;
+    }
+
+    public QuerySource getQuerySource() {
+        return querySource;
+    }
+
+    public void setQuerySource(QuerySource querySource) {
+        this.querySource = querySource;
     }
 
     public void startAcceptQuery(ConnectProcessor connectProcessor) {
@@ -1294,7 +1371,7 @@ public class ConnectContext {
     }
 
     public boolean enableSSL() throws IOException {
-        SSLChannel sslChannel = new SSLChannelImp(SSLContextLoader.getSslContext().createSSLEngine(), mysqlChannel);
+        SSLChannel sslChannel = new SSLChannelImp(SSLContextLoader.newServerEngine(), mysqlChannel);
         if (!sslChannel.init()) {
             return false;
         } else {
@@ -1426,37 +1503,25 @@ public class ConnectContext {
             // set session variables
             Map<String, String> sessionVariables = userProperty.getSessionVariables();
             for (Map.Entry<String, String> entry : sessionVariables.entrySet()) {
-                String currentValue = globalStateMgr.getVariableMgr().getValue(
-                        sessionVariable, new VariableExpr(entry.getKey()));
-                if (!currentValue.equalsIgnoreCase(
-                        globalStateMgr.getVariableMgr().getDefaultValue(entry.getKey()))) {
-                    // If the current session variable is not default value, we should respect it.
-                    continue;
-                }
                 SystemVariable variable = new SystemVariable(entry.getKey(), new StringLiteral(entry.getValue()));
-                modifySystemVariable(variable, true);
+                globalStateMgr.getVariableMgr().setSystemVariable(sessionVariable, variable, true);
             }
 
             // set catalog and database
-            boolean dbHasBeenSetByUser = !getCurrentCatalog().equals(
-                    globalStateMgr.getVariableMgr().getDefaultValue(SessionVariable.CATALOG))
-                    || !getDatabase().isEmpty();
-            if (!dbHasBeenSetByUser) {
-                String catalog = userProperty.getCatalog();
-                String database = userProperty.getDatabase();
-                if (catalog.equals(UserProperty.CATALOG_DEFAULT_VALUE)) {
-                    if (!database.equals(UserProperty.DATABASE_DEFAULT_VALUE)) {
-                        changeCatalogDb(userProperty.getCatalogDbName());
-                    }
-                } else {
-                    if (database.equals(UserProperty.DATABASE_DEFAULT_VALUE)) {
-                        changeCatalog(catalog);
-                    } else {
-                        changeCatalogDb(userProperty.getCatalogDbName());
-                    }
-                    SystemVariable variable = new SystemVariable(SessionVariable.CATALOG, new StringLiteral(catalog));
-                    modifySystemVariable(variable, true);
+            String catalog = userProperty.getCatalog();
+            String database = userProperty.getDatabase();
+            if (catalog.equals(UserProperty.CATALOG_DEFAULT_VALUE)) {
+                if (!database.equals(UserProperty.DATABASE_DEFAULT_VALUE)) {
+                    changeCatalogDb(userProperty.getCatalogDbName());
                 }
+            } else {
+                if (database.equals(UserProperty.DATABASE_DEFAULT_VALUE)) {
+                    changeCatalog(catalog);
+                } else {
+                    changeCatalogDb(userProperty.getCatalogDbName());
+                }
+                SystemVariable variable = new SystemVariable(SessionVariable.CATALOG, new StringLiteral(catalog));
+                globalStateMgr.getVariableMgr().setSystemVariable(sessionVariable, variable, true);
             }
         } catch (Exception e) {
             LOG.warn("set session env failed: ", e);

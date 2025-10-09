@@ -1,0 +1,424 @@
+-- name: test_ivm_with_iceberg_aggregate
+create external catalog mv_iceberg_${uuid0}
+properties
+(
+    "type" = "iceberg",
+    "iceberg.catalog.type" = "hive",
+    "hive.metastore.uris" = "${iceberg_catalog_hive_metastore_uris}"
+);
+-- result:
+-- !result
+set catalog mv_iceberg_${uuid0};
+-- result:
+-- !result
+create database mv_ice_db_${uuid0};
+-- result:
+-- !result
+use mv_ice_db_${uuid0};
+-- result:
+-- !result
+create table t1 (
+  col_str string,
+  col_int int,
+  dt date
+) partition by(dt);
+-- result:
+-- !result
+create table t2 (
+  col_str string,
+  col_int int,
+  dt date
+) partition by(dt);
+-- result:
+-- !result
+insert into t1 values 
+  ('a', 1, '2023-12-01'),
+  ('a', 2, '2023-12-01'),
+  ('b', 3, '2023-12-02'),
+  ('', 4, '2023-12-02'),
+  (NULL, 5, '2023-12-03'),
+  (NULL, 6, '2023-12-03'),
+  (NULL, NULL, '2023-12-04'),
+  (NULL, NULL, NULL);
+-- result:
+-- !result
+insert into t2 values 
+  ('a', 1, '2023-12-01'),
+  ('b', 3, '2023-12-02'),
+  ('', 4, '2023-12-02'),
+  (NULL, 5, '2023-12-03'),
+  (NULL, NULL, NULL);
+-- result:
+-- !result
+set catalog default_catalog;
+-- result:
+-- !result
+create database db_${uuid0};
+-- result:
+-- !result
+use db_${uuid0};
+-- result:
+-- !result
+set enable_materialized_view_rewrite = false;
+-- result:
+-- !result
+CREATE MATERIALIZED VIEW test_mv1 PARTITION BY dt 
+REFRESH DEFERRED MANUAL 
+properties
+(
+    "refresh_mode" = "incremental"
+)
+AS 
+SELECT dt, sum(col_int) as sum_col_int, approx_count_distinct(col_str) as approx_count_distinct_col_str 
+FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 
+WHERE col_int > 5
+group by dt;
+-- result:
+-- !result
+REFRESH MATERIALIZED VIEW test_mv1 WITH SYNC MODE;
+function: print_hit_materialized_view("SELECT dt, sum(col_int) as sum_col_int, approx_count_distinct(col_str) as approx_count_distinct_col_str FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1  WHERE col_int > 5 group by dt;", "test_mv1")
+-- result:
+True
+-- !result
+SELECT dt, sum_col_int, approx_count_distinct_col_str FROM test_mv1 ORDER BY dt;
+-- result:
+2023-12-03	6	0
+-- !result
+SELECT dt, sum(col_int) as sum_col_int, approx_count_distinct(col_str) as approx_count_distinct_col_str FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1  WHERE col_int > 5 group by dt order by dt;
+-- result:
+2023-12-03	6	0
+-- !result
+insert into mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 values ('a', 10, '2023-12-01');
+-- result:
+-- !result
+function: print_hit_materialized_view("SELECT dt, sum(col_int) as sum_col_int, approx_count_distinct(col_str) as approx_count_distinct_col_str FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1  WHERE col_int > 5 group by dt;", "test_mv1")
+-- result:
+True
+-- !result
+SELECT dt, sum_col_int, approx_count_distinct_col_str FROM test_mv1 ORDER BY dt;
+-- result:
+2023-12-03	6	0
+-- !result
+SELECT dt, sum(col_int) as sum_col_int, approx_count_distinct(col_str) as approx_count_distinct_col_str FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1  WHERE col_int > 5 group by dt order by dt;
+-- result:
+2023-12-01	10	1
+2023-12-03	6	0
+-- !result
+REFRESH MATERIALIZED VIEW test_mv1 WITH SYNC MODE;
+function: print_hit_materialized_view("SELECT dt, sum(col_int) as sum_col_int, approx_count_distinct(col_str) as approx_count_distinct_col_str FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1  WHERE col_int > 5 group by dt;", "test_mv1")
+-- result:
+True
+-- !result
+SELECT dt, sum_col_int, approx_count_distinct_col_str FROM test_mv1 ORDER BY dt;
+-- result:
+2023-12-01	10	1
+2023-12-03	6	0
+-- !result
+SELECT dt, sum(col_int) as sum_col_int, approx_count_distinct(col_str) as approx_count_distinct_col_str FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1  WHERE col_int > 5 group by dt order by dt;
+-- result:
+2023-12-01	10	1
+2023-12-03	6	0
+-- !result
+insert into mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 values ('b', 20, '2023-12-02');
+-- result:
+-- !result
+insert into mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 values ('b', 20, '2023-12-02');
+-- result:
+-- !result
+REFRESH MATERIALIZED VIEW test_mv1 WITH SYNC MODE;
+function: print_hit_materialized_view("SELECT dt, sum(col_int) as sum_col_int, approx_count_distinct(col_str) as approx_count_distinct_col_str FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1  WHERE col_int > 5 group by dt;", "test_mv1")
+-- result:
+True
+-- !result
+SELECT dt, sum_col_int, approx_count_distinct_col_str FROM test_mv1 ORDER BY dt;
+-- result:
+2023-12-01	10	1
+2023-12-02	40	1
+2023-12-03	6	0
+-- !result
+SELECT dt, sum(col_int) as sum_col_int, approx_count_distinct(col_str) as approx_count_distinct_col_str FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1  WHERE col_int > 5 group by dt order by dt;
+-- result:
+2023-12-01	10	1
+2023-12-02	40	1
+2023-12-03	6	0
+-- !result
+insert into mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 values ('a', 20, '2023-12-02');
+-- result:
+-- !result
+insert into mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 values ('b', 20, '2023-12-02');
+-- result:
+-- !result
+insert into mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 values (NULL, 30, '2023-12-01');
+-- result:
+-- !result
+REFRESH MATERIALIZED VIEW test_mv1 WITH SYNC MODE;
+function: print_hit_materialized_view("SELECT dt, sum(col_int) as sum_col_int, approx_count_distinct(col_str) as approx_count_distinct_col_str FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1  WHERE col_int > 5 group by dt;", "test_mv1")
+-- result:
+True
+-- !result
+SELECT dt, sum_col_int, approx_count_distinct_col_str FROM test_mv1 ORDER BY dt;
+-- result:
+2023-12-01	40	1
+2023-12-02	80	2
+2023-12-03	6	0
+-- !result
+SELECT dt, sum(col_int) as sum_col_int, approx_count_distinct(col_str) as approx_count_distinct_col_str FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1  WHERE col_int > 5 group by dt order by dt;
+-- result:
+2023-12-01	40	1
+2023-12-02	80	2
+2023-12-03	6	0
+-- !result
+DROP MATERIALIZED VIEW test_mv1;
+-- result:
+-- !result
+CREATE MATERIALIZED VIEW test_mv1 PARTITION BY dt 
+REFRESH DEFERRED MANUAL 
+properties
+(
+    "refresh_mode" = "incremental"
+)
+AS 
+SELECT dt, col_int, sum(col_int) as sum_col_int, approx_count_distinct(col_str) as approx_count_distinct_col_str 
+FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 
+WHERE col_int > 5
+group by dt, col_int;
+-- result:
+-- !result
+REFRESH MATERIALIZED VIEW test_mv1 WITH SYNC MODE;
+function: print_hit_materialized_view("SELECT dt, col_int, sum(col_int) as sum_col_int, approx_count_distinct(col_str) as approx_count_distinct_col_str FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1  WHERE col_int > 5 group by dt, col_int;", "test_mv1")
+-- result:
+True
+-- !result
+SELECT dt, col_int, sum_col_int, approx_count_distinct_col_str FROM test_mv1 ORDER BY dt, col_int;
+-- result:
+2023-12-01	10	10	1
+2023-12-01	30	30	0
+2023-12-02	20	80	2
+2023-12-03	6	6	0
+-- !result
+SELECT dt, col_int, sum(col_int) as sum_col_int, approx_count_distinct(col_str) as approx_count_distinct_col_str FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1  WHERE col_int > 5 group by dt, col_int order by dt, col_int;
+-- result:
+2023-12-01	10	10	1
+2023-12-01	30	30	0
+2023-12-02	20	80	2
+2023-12-03	6	6	0
+-- !result
+insert into mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 values ('a', 10, '2023-12-01');
+-- result:
+-- !result
+function: print_hit_materialized_view("SELECT dt, col_int, sum(col_int) as sum_col_int, approx_count_distinct(col_str) as approx_count_distinct_col_str FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1  WHERE col_int > 5 group by dt, col_int;", "test_mv1")
+-- result:
+True
+-- !result
+SELECT dt, col_int, sum_col_int, approx_count_distinct_col_str FROM test_mv1 ORDER BY dt, col_int;
+-- result:
+2023-12-01	10	10	1
+2023-12-01	30	30	0
+2023-12-02	20	80	2
+2023-12-03	6	6	0
+-- !result
+SELECT dt, col_int, sum(col_int) as sum_col_int, approx_count_distinct(col_str) as approx_count_distinct_col_str FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1  WHERE col_int > 5 group by dt, col_int order by dt, col_int;
+-- result:
+2023-12-01	10	20	1
+2023-12-01	30	30	0
+2023-12-02	20	80	2
+2023-12-03	6	6	0
+-- !result
+REFRESH MATERIALIZED VIEW test_mv1 WITH SYNC MODE;
+function: print_hit_materialized_view("SELECT dt, col_int, sum(col_int) as sum_col_int, approx_count_distinct(col_str) as approx_count_distinct_col_str FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1  WHERE col_int > 5 group by dt, col_int;", "test_mv1")
+-- result:
+True
+-- !result
+SELECT dt, col_int, sum_col_int, approx_count_distinct_col_str FROM test_mv1 ORDER BY dt, col_int;
+-- result:
+2023-12-01	10	20	1
+2023-12-01	30	30	0
+2023-12-02	20	80	2
+2023-12-03	6	6	0
+-- !result
+SELECT dt, col_int, sum(col_int) as sum_col_int, approx_count_distinct(col_str) as approx_count_distinct_col_str FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1  WHERE col_int > 5 group by dt, col_int order by dt, col_int;
+-- result:
+2023-12-01	10	20	1
+2023-12-01	30	30	0
+2023-12-02	20	80	2
+2023-12-03	6	6	0
+-- !result
+insert into mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 values ('b', 20, '2023-12-02');
+-- result:
+-- !result
+insert into mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 values ('b', 20, '2023-12-02');
+-- result:
+-- !result
+REFRESH MATERIALIZED VIEW test_mv1 WITH SYNC MODE;
+function: print_hit_materialized_view("SELECT dt, col_int, sum(col_int) as sum_col_int, approx_count_distinct(col_str) as approx_count_distinct_col_str FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1  WHERE col_int > 5 group by dt, col_int;", "test_mv1")
+-- result:
+True
+-- !result
+SELECT dt, col_int, sum_col_int, approx_count_distinct_col_str FROM test_mv1 ORDER BY dt, col_int;
+-- result:
+2023-12-01	10	20	1
+2023-12-01	30	30	0
+2023-12-02	20	120	2
+2023-12-03	6	6	0
+-- !result
+SELECT dt, col_int, sum(col_int) as sum_col_int, approx_count_distinct(col_str) as approx_count_distinct_col_str FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1  WHERE col_int > 5 group by dt, col_int order by dt, col_int;
+-- result:
+2023-12-01	10	20	1
+2023-12-01	30	30	0
+2023-12-02	20	120	2
+2023-12-03	6	6	0
+-- !result
+insert into mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 values ('a', 20, '2023-12-02');
+-- result:
+-- !result
+insert into mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 values ('b', 20, '2023-12-02');
+-- result:
+-- !result
+insert into mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 values (NULL, 30, '2023-12-01');
+-- result:
+-- !result
+REFRESH MATERIALIZED VIEW test_mv1 WITH SYNC MODE;
+function: print_hit_materialized_view("SELECT dt, col_int, sum(col_int) as sum_col_int, approx_count_distinct(col_str) as approx_count_distinct_col_str FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1  WHERE col_int > 5 group by dt, col_int;", "test_mv1")
+-- result:
+True
+-- !result
+SELECT dt, col_int, sum_col_int, approx_count_distinct_col_str FROM test_mv1 ORDER BY dt, col_int;
+-- result:
+2023-12-01	10	20	1
+2023-12-01	30	60	0
+2023-12-02	20	160	2
+2023-12-03	6	6	0
+-- !result
+SELECT dt, col_int, sum(col_int) as sum_col_int, approx_count_distinct(col_str) as approx_count_distinct_col_str FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1  WHERE col_int > 5 group by dt, col_int order by dt, col_int;
+-- result:
+2023-12-01	10	20	1
+2023-12-01	30	60	0
+2023-12-02	20	160	2
+2023-12-03	6	6	0
+-- !result
+DROP MATERIALIZED VIEW test_mv1;
+-- result:
+-- !result
+CREATE MATERIALIZED VIEW test_mv1 PARTITION BY dt 
+REFRESH DEFERRED MANUAL 
+properties
+(
+    "refresh_mode" = "incremental"
+)
+AS SELECT t1.dt, t1.col_int as col_int1, t2.col_int as col_int2,
+  sum(t1.col_int) as sum_col_int1, 
+  sum(t2.col_int) as sum_col_int2,
+  avg(t1.col_int) as avg_col_int1,
+  avg(t2.col_int) as avg_col_int2,
+  min(t1.col_int) as min_col_int1,
+  min(t2.col_int) as min_col_int2,
+  max(t1.col_int) as max_col_int1,
+  max(t2.col_int) as max_col_int2,
+  count(t1.col_int) as count_col_int1,
+  count(t2.col_int) as count_col_int2,
+  approx_count_distinct(t1.col_str) as approx_count_distinct_col_str1,
+  approx_count_distinct(t2.col_str) as approx_count_distinct_col_str2,
+  approx_count_distinct(t2.col_str) as approx_count_distinct_col_str3
+FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 
+JOIN mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t2 ON t1.dt = t2.dt
+WHERE t1.col_int > 5 group by t1.dt, t1.col_int, t2.col_int;
+-- result:
+-- !result
+REFRESH MATERIALIZED VIEW test_mv1 WITH SYNC MODE;
+function: print_hit_materialized_view("SELECT t1.dt, t1.col_int, t2.col_int, sum(t1.col_int) as sum_col_int1, sum(t2.col_int) as sum_col_int2, avg(t1.col_int) as avg_col_int1, avg(t2.col_int) as avg_col_int2, min(t1.col_int) as min_col_int1, min(t2.col_int) as min_col_int2, max(t1.col_int) as max_col_int1, max(t2.col_int) as max_col_int2, count(t1.col_int) as count_col_int1, count(t2.col_int) as count_col_int2, approx_count_distinct(t1.col_str) as approx_count_distinct_col_str1, approx_count_distinct(t2.col_str) as approx_count_distinct_col_str2, approx_count_distinct(t2.col_str) as approx_count_distinct_col_str3 FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 JOIN mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t2 ON t1.dt = t2.dt WHERE t1.col_int > 5 group by t1.dt, t1.col_int, t2.col_int;", "test_mv1")
+-- result:
+True
+-- !result
+SELECT dt, col_int1, col_int2, sum_col_int1, sum_col_int2, avg_col_int1, avg_col_int2, min_col_int1, min_col_int2, max_col_int1, max_col_int2, count_col_int1, count_col_int2, approx_count_distinct_col_str1, approx_count_distinct_col_str2, approx_count_distinct_col_str3 FROM test_mv1 ORDER BY dt, col_int1, col_int2 limit 5;
+-- result:
+2023-12-01	10	1	20	2	10.0	1.0	10	1	10	1	2	2	1	1	1
+2023-12-01	30	1	60	2	30.0	1.0	30	1	30	1	2	2	0	1	1
+2023-12-02	20	3	160	24	20.0	3.0	20	3	20	3	8	8	2	1	1
+2023-12-02	20	4	160	32	20.0	4.0	20	4	20	4	8	8	2	1	1
+2023-12-03	6	5	6	5	6.0	5.0	6	5	6	5	1	1	0	0	0
+-- !result
+SELECT t1.dt, t1.col_int, t2.col_int, sum(t1.col_int) as sum_col_int1, sum(t2.col_int) as sum_col_int2, avg(t1.col_int) as avg_col_int1, avg(t2.col_int) as avg_col_int2, min(t1.col_int) as min_col_int1, min(t2.col_int) as min_col_int2, max(t1.col_int) as max_col_int1, max(t2.col_int) as max_col_int2, count(t1.col_int) as count_col_int1, count(t2.col_int) as count_col_int2, approx_count_distinct(t1.col_str) as approx_count_distinct_col_str1, approx_count_distinct(t2.col_str) as approx_count_distinct_col_str2, approx_count_distinct(t2.col_str) as approx_count_distinct_col_str3 FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 JOIN mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t2 ON t1.dt = t2.dt WHERE t1.col_int > 5 group by t1.dt, t1.col_int, t2.col_int order by dt, t1.col_int, t2.col_int limit 5;
+-- result:
+2023-12-01	10	1	20	2	10.0	1.0	10	1	10	1	2	2	1	1	1
+2023-12-01	30	1	60	2	30.0	1.0	30	1	30	1	2	2	0	1	1
+2023-12-02	20	3	160	24	20.0	3.0	20	3	20	3	8	8	2	1	1
+2023-12-02	20	4	160	32	20.0	4.0	20	4	20	4	8	8	2	1	1
+2023-12-03	6	5	6	5	6.0	5.0	6	5	6	5	1	1	0	0	0
+-- !result
+insert into mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 values ('a', 10, '2023-12-01');
+-- result:
+-- !result
+function: print_hit_materialized_view("SELECT t1.dt, t1.col_int, t2.col_int, sum(t1.col_int) as sum_col_int1, sum(t2.col_int) as sum_col_int2, avg(t1.col_int) as avg_col_int1, avg(t2.col_int) as avg_col_int2, min(t1.col_int) as min_col_int1, min(t2.col_int) as min_col_int2, max(t1.col_int) as max_col_int1, max(t2.col_int) as max_col_int2, count(t1.col_int) as count_col_int1, count(t2.col_int) as count_col_int2, approx_count_distinct(t1.col_str) as approx_count_distinct_col_str1, approx_count_distinct(t2.col_str) as approx_count_distinct_col_str2, approx_count_distinct(t2.col_str) as approx_count_distinct_col_str3 FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 JOIN mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t2 ON t1.dt = t2.dt WHERE t1.col_int > 5 group by t1.dt, t1.col_int, t2.col_int;", "test_mv1")
+-- result:
+False
+-- !result
+REFRESH MATERIALIZED VIEW test_mv1 WITH SYNC MODE;
+function: print_hit_materialized_view("SELECT t1.dt, t1.col_int, t2.col_int, sum(t1.col_int) as sum_col_int1, sum(t2.col_int) as sum_col_int2, avg(t1.col_int) as avg_col_int1, avg(t2.col_int) as avg_col_int2, min(t1.col_int) as min_col_int1, min(t2.col_int) as min_col_int2, max(t1.col_int) as max_col_int1, max(t2.col_int) as max_col_int2, count(t1.col_int) as count_col_int1, count(t2.col_int) as count_col_int2, approx_count_distinct(t1.col_str) as approx_count_distinct_col_str1, approx_count_distinct(t2.col_str) as approx_count_distinct_col_str2, approx_count_distinct(t2.col_str) as approx_count_distinct_col_str3 FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 JOIN mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t2 ON t1.dt = t2.dt WHERE t1.col_int > 5 group by t1.dt, t1.col_int, t2.col_int;", "test_mv1")
+-- result:
+True
+-- !result
+SELECT dt, col_int1, col_int2, sum_col_int1, sum_col_int2, avg_col_int1, avg_col_int2, min_col_int1, min_col_int2, max_col_int1, max_col_int2, count_col_int1, count_col_int2, approx_count_distinct_col_str1, approx_count_distinct_col_str2, approx_count_distinct_col_str3 FROM test_mv1 ORDER BY dt, col_int1, col_int2 limit 5;
+-- result:
+2023-12-01	10	1	30	3	10.0	1.0	10	1	10	1	3	3	1	1	1
+2023-12-01	30	1	60	2	30.0	1.0	30	1	30	1	2	2	0	1	1
+2023-12-02	20	3	160	24	20.0	3.0	20	3	20	3	8	8	2	1	1
+2023-12-02	20	4	160	32	20.0	4.0	20	4	20	4	8	8	2	1	1
+2023-12-03	6	5	6	5	6.0	5.0	6	5	6	5	1	1	0	0	0
+-- !result
+SELECT t1.dt, t1.col_int, t2.col_int, sum(t1.col_int) as sum_col_int1, sum(t2.col_int) as sum_col_int2, avg(t1.col_int) as avg_col_int1, avg(t2.col_int) as avg_col_int2, min(t1.col_int) as min_col_int1, min(t2.col_int) as min_col_int2, max(t1.col_int) as max_col_int1, max(t2.col_int) as max_col_int2, count(t1.col_int) as count_col_int1, count(t2.col_int) as count_col_int2, approx_count_distinct(t1.col_str) as approx_count_distinct_col_str1, approx_count_distinct(t2.col_str) as approx_count_distinct_col_str2, approx_count_distinct(t2.col_str) as approx_count_distinct_col_str3 FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 JOIN mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t2 ON t1.dt = t2.dt WHERE t1.col_int > 5 group by t1.dt, t1.col_int, t2.col_int order by dt, t1.col_int, t2.col_int limit 5;
+-- result:
+2023-12-01	10	1	30	3	10.0	1.0	10	1	10	1	3	3	1	1	1
+2023-12-01	30	1	60	2	30.0	1.0	30	1	30	1	2	2	0	1	1
+2023-12-02	20	3	160	24	20.0	3.0	20	3	20	3	8	8	2	1	1
+2023-12-02	20	4	160	32	20.0	4.0	20	4	20	4	8	8	2	1	1
+2023-12-03	6	5	6	5	6.0	5.0	6	5	6	5	1	1	0	0	0
+-- !result
+insert into mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 values ('a', 9, '2023-12-01');
+-- result:
+-- !result
+insert into mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 values ('a', 10, '2023-12-02');
+-- result:
+-- !result
+insert into mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t2 values ('a', 9, '2023-12-01');
+-- result:
+-- !result
+insert into mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t2 values ('a', 10, '2023-12-02');
+-- result:
+-- !result
+function: print_hit_materialized_view("SELECT t1.dt, t2.col_int, sum(t1.col_int) as sum_col_int1, sum(t2.col_int) as sum_col_int2, avg(t1.col_int) as avg_col_int1, avg(t2.col_int) as avg_col_int2, min(t1.col_int) as min_col_int1, min(t2.col_int) as min_col_int2, max(t1.col_int) as max_col_int1, max(t2.col_int) as max_col_int2, count(t1.col_int) as count_col_int1, count(t2.col_int) as count_col_int2, approx_count_distinct(t1.col_str) as approx_count_distinct_col_str1, approx_count_distinct(t2.col_str) as approx_count_distinct_col_str2, approx_count_distinct(t2.col_str) as approx_count_distinct_col_str3 FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 JOIN mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t2 ON t1.dt = t2.dt WHERE t1.col_int > 5 group by t1.dt, t2.col_int;", "test_mv1")
+-- result:
+False
+-- !result
+REFRESH MATERIALIZED VIEW test_mv1 WITH SYNC MODE;
+function: print_hit_materialized_view("SELECT t1.dt, t1.col_int, t2.col_int, sum(t1.col_int) as sum_col_int1, sum(t2.col_int) as sum_col_int2, avg(t1.col_int) as avg_col_int1, avg(t2.col_int) as avg_col_int2, min(t1.col_int) as min_col_int1, min(t2.col_int) as min_col_int2, max(t1.col_int) as max_col_int1, max(t2.col_int) as max_col_int2, count(t1.col_int) as count_col_int1, count(t2.col_int) as count_col_int2, approx_count_distinct(t1.col_str) as approx_count_distinct_col_str1, approx_count_distinct(t2.col_str) as approx_count_distinct_col_str2, approx_count_distinct(t2.col_str) as approx_count_distinct_col_str3 FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 JOIN mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t2 ON t1.dt = t2.dt WHERE t1.col_int > 5 group by t1.dt, t1.col_int, t2.col_int;", "test_mv1")
+-- result:
+True
+-- !result
+SELECT dt, col_int1, col_int2, sum_col_int1, sum_col_int2, avg_col_int1, avg_col_int2, min_col_int1, min_col_int2, max_col_int1, max_col_int2, count_col_int1, count_col_int2, approx_count_distinct_col_str1, approx_count_distinct_col_str2, approx_count_distinct_col_str3 FROM test_mv1 ORDER BY dt, col_int1, col_int2 limit 5;
+-- result:
+2023-12-01	9	1	9	1	9.0	1.0	9	1	9	1	1	1	1	1	1
+2023-12-01	9	9	9	9	9.0	9.0	9	9	9	9	1	1	1	1	1
+2023-12-01	10	1	30	3	10.0	1.0	10	1	10	1	3	3	1	1	1
+2023-12-01	10	9	30	27	10.0	9.0	10	9	10	9	3	3	1	1	1
+2023-12-01	30	1	60	2	30.0	1.0	30	1	30	1	2	2	0	1	1
+-- !result
+SELECT t1.dt, t1.col_int, t2.col_int, sum(t1.col_int) as sum_col_int1, sum(t2.col_int) as sum_col_int2, avg(t1.col_int) as avg_col_int1, avg(t2.col_int) as avg_col_int2, min(t1.col_int) as min_col_int1, min(t2.col_int) as min_col_int2, max(t1.col_int) as max_col_int1, max(t2.col_int) as max_col_int2, count(t1.col_int) as count_col_int1, count(t2.col_int) as count_col_int2, approx_count_distinct(t1.col_str) as approx_count_distinct_col_str1, approx_count_distinct(t2.col_str) as approx_count_distinct_col_str2, approx_count_distinct(t2.col_str) as approx_count_distinct_col_str3 FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 JOIN mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t2 ON t1.dt = t2.dt WHERE t1.col_int > 5 group by t1.dt, t1.col_int, t2.col_int order by dt, t1.col_int, t2.col_int limit 5;
+-- result:
+2023-12-01	9	1	9	1	9.0	1.0	9	1	9	1	1	1	1	1	1
+2023-12-01	9	9	9	9	9.0	9.0	9	9	9	9	1	1	1	1	1
+2023-12-01	10	1	30	3	10.0	1.0	10	1	10	1	3	3	1	1	1
+2023-12-01	10	9	30	27	10.0	9.0	10	9	10	9	3	3	1	1	1
+2023-12-01	30	1	60	2	30.0	1.0	30	1	30	1	2	2	0	1	1
+-- !result
+DROP MATERIALIZED VIEW test_mv1;
+-- result:
+-- !result
+drop table mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 force;
+-- result:
+-- !result
+drop table mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t2 force;
+-- result:
+-- !result
+drop database mv_iceberg_${uuid0}.mv_ice_db_${uuid0} force;
+-- result:
+-- !result

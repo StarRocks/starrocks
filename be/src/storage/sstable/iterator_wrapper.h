@@ -50,6 +50,18 @@ public:
         assert(iter_);
         return iter_->max_rss_rowid();
     }
+    uint32_t shared_rssid() const {
+        assert(iter_);
+        return iter_->shared_rssid();
+    }
+    int64_t shared_version() const {
+        assert(iter_);
+        return iter_->shared_version();
+    }
+    DelVectorPtr delvec() const {
+        assert(iter_);
+        return iter_->delvec();
+    }
     SstablePredicateSPtr predicate() const {
         assert(iter_);
         return iter_->predicate();

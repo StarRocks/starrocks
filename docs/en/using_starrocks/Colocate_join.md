@@ -25,8 +25,7 @@ Bucket Seq is obtained by `hash(key) mod buckets`. Suppose a Table has 8 buckets
 In order to have the same data distribution, tables within the same CG must comply with the following.
 
 1. Tables within the same CG must have the identical  bucketing key (type, number, order) and the same number of buckets so that the data slices of multiple tables can be distributed and controlled one by one. The bucketing key is the columns specified in the table creation statement `DISTRIBUTED BY HASH(col1, col2, ...)`. The bucketing key determines which columns of data are Hashed into different Bucket Seqs. The name of the bucketing key can vary for tables within the same CG.The bucketing columns can be different in the creation statement, but the order of the corresponding data types in `DISTRIBUTED BY HASH(col1, col2, ...)` should be exactly the same .
-2. Tables within the same CG must have the same number of partition copies. If not, it may happen that a tablet copy has no corresponding copy in the partition of  the same BE.
-3. Tables within the same CG may have different numbers of partitions and different partition keys.
+2. Tables within the same CG may have different numbers of partitions and different partition keys.
 
 When creating a table, the CG is specified by the attribute `"colocate_with" = "group_name"` in the table PROPERTIES. If the CG does not exist, it means the table is the first table of the CG and called Parent Table. The data distribution of the Parent Table (type, number and order of split bucket keys, number of copies and number of split buckets) determines the CGS. If the CG exists, check whether the data distribution of the table is consistent with the CGS.
 

@@ -26,9 +26,10 @@ public:
 
     Status init(const RemoteCacheOptions& options) override;
 
-    Status read(const std::string& key, size_t off, size_t size, IOBuffer* buffer, ReadCacheOptions* options) override;
+    Status read(const std::string& key, size_t off, size_t size, IOBuffer* buffer,
+                DiskCacheReadOptions* options) override;
 
-    Status write(const std::string& key, const IOBuffer& buffer, WriteCacheOptions* options) override {
+    Status write(const std::string& key, const IOBuffer& buffer, DiskCacheWriteOptions* options) override {
         return Status::NotSupported("write data to peer cache is unsupported");
     }
 

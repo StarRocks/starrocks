@@ -45,7 +45,7 @@ LOG_FILTERED_WARN = "You can use `--log_filtered` to show the details..."
 
 class ChooseCase(object):
     class CaseTR(object):
-        def __init__(self, ctx, name, file, sql, result, info):
+        def __init__(self, ctx, name, file, sql, result, info, cleanup=None):
             """init"""
             super().__init__()
             self.ctx = ctx
@@ -55,6 +55,8 @@ class ChooseCase(object):
             self.sql: List = sql
             self.ori_sql: List = copy.deepcopy(sql)
             self.result: List = result
+            # custom cleanup commands
+            self.cleanup: List = cleanup or []
 
             # # get db from lines
             # self.db = set()
@@ -177,6 +179,9 @@ class ChooseCase(object):
                     tools.assert_in("thread", each_stat, "CONCURRENCY THREAD FORMAT ERROR!")
                     for each_thread in each_stat["thread"]:
                         _case_sqls.extend(each_thread["cmd"])
+                elif isinstance(each_stat, dict) and each_stat.get("type", "") == CLEANUP_FLAG:
+                    tools.assert_in("cmd", each_stat, "CLEANUP STATEMENT FORMAT ERROR!")
+                    _case_sqls.extend(each_stat["cmd"])
                 else:
                     tools.ok_(False, "Init data error!")
 
@@ -255,6 +260,9 @@ class ChooseCase(object):
                     tools.assert_in("thread", each_stat, "CONCURRENCY THREAD FORMAT ERROR!")
                     for each_thread in each_stat["thread"]:
                         _case_sqls.extend(each_thread["cmd"])
+                elif isinstance(each_stat, dict) and each_stat.get("type", "") == CLEANUP_FLAG:
+                    tools.assert_in("cmd", each_stat, "CLEANUP STATEMENT FORMAT ERROR!")
+                    _case_sqls.extend(each_stat["cmd"])
                 else:
                     tools.ok_(False, "Init data error!")
 
@@ -375,6 +383,8 @@ class ChooseCase(object):
         in_loop_flag = False
 
         tmp_con_stat = []
+        # cleanup blocks for current case
+        tmp_cleanup_stat = []
 
         while line_id < len(f_lines):
             line_content = f_lines[line_id].rstrip("\n")
@@ -404,7 +414,15 @@ class ChooseCase(object):
                         pass
                     else:
                         self.case_list.append(
-                            ChooseCase.CaseTR(self, name, file, copy.deepcopy(tmp_sql), copy.deepcopy(tmp_res), info)
+                            ChooseCase.CaseTR(
+                                self,
+                                name,
+                                file,
+                                copy.deepcopy(tmp_sql),
+                                copy.deepcopy(tmp_res),
+                                info,
+                                cleanup=copy.deepcopy(tmp_cleanup_stat),
+                            )
                         )
 
                 info = line_content
@@ -415,6 +433,7 @@ class ChooseCase(object):
 
                 tmp_sql.clear()
                 tmp_res.clear()
+                tmp_cleanup_stat.clear()
 
                 line_id += 1
                 continue
@@ -496,7 +515,7 @@ class ChooseCase(object):
 
                     _t_info_line = f_lines[line_id].rstrip()
                     _t_line = _t_info_line.lstrip()
-                    tools.assert_regexp_matches(_t_line.lstrip(), t_info_regex, f"Missing thread info : {_t_line}")
+                    tools.assert_regex(_t_line.lstrip(), t_info_regex, f"Missing thread info : {_t_line}")
 
                     # get thread name & thread count
                     _t_name, _, _t_count = re.findall(r"-- ([0-9a-zA-Z_\- ]+)(\(([0-9]+)\))?:", _t_line)[0]
@@ -546,6 +565,33 @@ class ChooseCase(object):
                     "thread": concurrency_t_list
                 })
 
+            elif line_content.startswith(CLEANUP_FLAG):
+                # CLEANUP { ... } END CLEANUP
+                tools.ok_(not in_loop_flag, "CLEANUP block must not be inside LOOP!")
+                tools.assert_true(
+                    re.compile(f'{CLEANUP_FLAG}(\\s)*{{(\\s)*').fullmatch(line_content) is not None,
+                    f"Cleanup struct illegal: file: {file}, line: {line_id}"
+                )
+                l_cleanup_line = line_id
+                line_id += 1
+                # read cleanup statements (no result expected)
+                tmp_cleanup_lines = []
+                while line_id < len(f_lines) and not re.compile(f'}}(\\s)*{END_CLEANUP_FLAG}').fullmatch(f_lines[line_id].strip()):
+                    line_content = f_lines[line_id].strip()
+                    line_id = __read_single_stat_and_result(line_content, line_id, tmp_cleanup_lines, [])
+                tools.assert_less(line_id, len(f_lines), "CLEANUP FORMAT ERROR!")
+                r_cleanup_line = line_id
+                # collect for execution in tearDown
+                tmp_cleanup_stat.extend(tmp_cleanup_lines)
+                # also keep position for recording into R at the same place
+                tmp_sql.append({
+                    "type": CLEANUP_FLAG,
+                    "cmd": tmp_cleanup_lines,
+                    "ori": f_lines[l_cleanup_line: r_cleanup_line + 1]
+                })
+                tmp_res.append(None)
+                line_id += 1
+
             else:
                 # 1st line of command, SQL/SHELL/FUNCTION
                 line_id = __read_single_stat_and_result(line_content, line_id, tmp_sql, tmp_res, in_loop_flag)
@@ -564,7 +610,15 @@ class ChooseCase(object):
                 pass
             else:
                 self.case_list.append(
-                    ChooseCase.CaseTR(self, name, file, copy.deepcopy(tmp_sql), copy.deepcopy(tmp_res), info)
+                    ChooseCase.CaseTR(
+                        self,
+                        name,
+                        file,
+                        copy.deepcopy(tmp_sql),
+                        copy.deepcopy(tmp_res),
+                        info,
+                        cleanup=copy.deepcopy(tmp_cleanup_stat),
+                    )
                 )
 
 

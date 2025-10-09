@@ -1,0 +1,490 @@
+-- name: test_ivm_with_iceberg_complex
+create external catalog mv_iceberg_${uuid0}
+properties
+(
+    "type" = "iceberg",
+    "iceberg.catalog.type" = "hive",
+    "hive.metastore.uris" = "${iceberg_catalog_hive_metastore_uris}"
+);
+-- result:
+-- !result
+set catalog mv_iceberg_${uuid0};
+-- result:
+-- !result
+create database mv_ice_db_${uuid0};
+-- result:
+-- !result
+use mv_ice_db_${uuid0};
+-- result:
+-- !result
+create table t1 (
+  col1 string,
+  col2 int,
+  dt date
+) partition by(dt);
+-- result:
+-- !result
+create table t2 (
+  col1 string,
+  col2 int,
+  dt date
+) partition by(dt);
+-- result:
+-- !result
+create table t3 (
+  col1 string,
+  col2 int,
+  dt date
+) partition by(dt);
+-- result:
+-- !result
+create table t4 (
+  col1 string,
+  col2 int,
+  dt date
+) partition by(dt);
+-- result:
+-- !result
+create table t5 (
+  col1 string,
+  col2 int,
+  dt date
+) partition by(dt);
+-- result:
+-- !result
+insert into t1 values 
+  ('a', 1, '2023-12-01'),
+  ('a', 2, '2023-12-01'),
+  ('b', 3, '2023-12-02'),
+  ('', 4, '2023-12-02'),
+  (NULL, 5, '2023-12-03'),
+  (NULL, 6, '2023-12-03'),
+  (NULL, NULL, '2023-12-04'),
+  (NULL, NULL, NULL);
+-- result:
+-- !result
+insert into t2 values 
+  ('a', 1, '2023-12-01'),
+  ('b', 3, '2023-12-02'),
+  ('', 4, '2023-12-02'),
+  (NULL, 5, '2023-12-03'),
+  (NULL, NULL, NULL);
+-- result:
+-- !result
+insert into t3 values 
+  ('a', 1, '2023-12-01'),
+  ('b', 3, '2023-12-02'),
+  ('', 4, '2023-12-02'),
+  (NULL, 5, '2023-12-03'),
+  (NULL, NULL, NULL);
+-- result:
+-- !result
+insert into t4 values 
+  ('a', 1, '2023-12-01'),
+  ('b', 3, '2023-12-02'),
+  ('', 4, '2023-12-02'),
+  (NULL, 5, '2023-12-03'),
+  (NULL, NULL, NULL);
+-- result:
+-- !result
+insert into t5 values 
+  ('a', 1, '2023-12-01'),
+  ('b', 3, '2023-12-02'),
+  ('', 4, '2023-12-02'),
+  (NULL, 5, '2023-12-03'),
+  (NULL, NULL, NULL);
+-- result:
+-- !result
+set catalog default_catalog;
+-- result:
+-- !result
+create database db_${uuid0};
+-- result:
+-- !result
+use db_${uuid0};
+-- result:
+-- !result
+set enable_materialized_view_rewrite=false;
+-- result:
+-- !result
+CREATE MATERIALIZED VIEW test_mv1 PARTITION BY dt 
+REFRESH DEFERRED MANUAL 
+properties
+(
+    "refresh_mode" = "incremental"
+)
+AS SELECT 
+  t1.dt, t1.col1 as col11, t2.col1 as col21, t3.col1 as col31, t4.col1 as col41, t5.col1 as col51,
+  sum(t1.col2) as col12, sum(t2.col2) as col22, sum(t3.col2) as col32, sum(t4.col2) as col42, sum(t5.col2) as col52,
+  avg(t1.col2) as col13, avg(t2.col2) as col23, avg(t3.col2) as col33, avg(t4.col2) as col43, avg(t5.col2) as col53,
+  min(t1.col2) as col14, min(t2.col2) as col24, min(t3.col2) as col34, min(t4.col2) as col44, min(t5.col2) as col54,
+  max(t1.col2) as col15, max(t2.col2) as col25, max(t3.col2) as col35, max(t4.col2) as col45, max(t5.col2) as col55,
+  count(t1.col2) as col16, count(t2.col2) as col26, count(t3.col2) as col36, count(t4.col2) as col46, count(t5.col2) as col56,
+  approx_count_distinct(t1.col2) as col17, approx_count_distinct(t2.col2) as col27, approx_count_distinct(t3.col2) as col37, approx_count_distinct(t4.col2) as col47, approx_count_distinct(t5.col2) as col57
+FROM 
+  mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 
+  JOIN mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t2 ON t1.dt = t2.dt
+  JOIN mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t3 ON t1.dt = t3.dt
+  JOIN mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t4 ON t1.dt = t4.dt
+  JOIN mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t5 ON t1.dt = t5.dt
+ GROUP BY t1.dt, t1.col1, t2.col1, t3.col1, t4.col1, t5.col1;
+-- result:
+-- !result
+REFRESH MATERIALIZED VIEW test_mv1 WITH SYNC MODE;
+function: print_hit_materialized_view("SELECT t1.dt, t1.col1, t2.col1, t3.col1, t4.col1, t5.col1, sum(t1.col2) as col12, sum(t2.col2) as col22, sum(t3.col2) as col32, sum(t4.col2) as col42, sum(t5.col2) as col52 from mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 join mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t2 on t1.dt = t2.dt join mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t3 on t1.dt = t3.dt join mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t4 on t1.dt = t4.dt join mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t5 on t1.dt = t5.dt group by t1.dt, t1.col1, t2.col1, t3.col1, t4.col1, t5.col1;", "test_mv1")
+-- result:
+True
+-- !result
+SELECT COUNT(*) FROM test_mv1;
+-- result:
+34
+-- !result
+SELECT * FROM test_mv1 ORDER BY dt, col11, col21, col31, col41, col51 limit 5;
+-- result:
+2023-12-01	a	a	a	a	a	3	2	2	2	2	1.5	1.0	1.0	1.0	1.0	1	1	1	1	1	2	1	1	1	1	2	2	2	2	2	2	1	1	1	1
+2023-12-02						4	4	4	4	4	4.0	4.0	4.0	4.0	4.0	4	4	4	4	4	4	4	4	4	4	1	1	1	1	1	1	1	1	1	1
+2023-12-02					b	4	4	4	4	3	4.0	4.0	4.0	4.0	3.0	4	4	4	4	3	4	4	4	4	3	1	1	1	1	1	1	1	1	1	1
+2023-12-02				b		4	4	4	3	4	4.0	4.0	4.0	3.0	4.0	4	4	4	3	4	4	4	4	3	4	1	1	1	1	1	1	1	1	1	1
+2023-12-02				b	b	4	4	4	3	3	4.0	4.0	4.0	3.0	3.0	4	4	4	3	3	4	4	4	3	3	1	1	1	1	1	1	1	1	1	1
+-- !result
+SELECT t1.dt, t1.col1 as col11, t2.col1 as col21, t3.col1 as col31, t4.col1 as col41, t5.col1 as col51, sum(t1.col2) as col12, sum(t2.col2) as col22, sum(t3.col2) as col32, sum(t4.col2) as col42, sum(t5.col2) as col52, avg(t1.col2) as col13, avg(t2.col2) as col23, avg(t3.col2) as col33, avg(t4.col2) as col43, avg(t5.col2) as col53, min(t1.col2) as col14, min(t2.col2) as col24, min(t3.col2) as col34, min(t4.col2) as col44, min(t5.col2) as col54, max(t1.col2) as col15, max(t2.col2) as col25, max(t3.col2) as col35, max(t4.col2) as col45, max(t5.col2) as col55, count(t1.col2) as col16, count(t2.col2) as col26, count(t3.col2) as col36, count(t4.col2) as col46, count(t5.col2) as col56, approx_count_distinct(t1.col2) as col17, approx_count_distinct(t2.col2) as col27, approx_count_distinct(t3.col2) as col37, approx_count_distinct(t4.col2) as col47, approx_count_distinct(t5.col2) as col57 FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 JOIN mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t2 ON t1.dt = t2.dt JOIN mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t3 ON t1.dt = t3.dt JOIN mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t4 ON t1.dt = t4.dt JOIN mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t5 ON t1.dt = t5.dt GROUP BY t1.dt, t1.col1, t2.col1, t3.col1, t4.col1, t5.col1 ORDER BY dt, col11, col21, col31, col41, col51 limit 5;
+-- result:
+2023-12-01	a	a	a	a	a	3	2	2	2	2	1.5	1.0	1.0	1.0	1.0	1	1	1	1	1	2	1	1	1	1	2	2	2	2	2	2	1	1	1	1
+2023-12-02						4	4	4	4	4	4.0	4.0	4.0	4.0	4.0	4	4	4	4	4	4	4	4	4	4	1	1	1	1	1	1	1	1	1	1
+2023-12-02					b	4	4	4	4	3	4.0	4.0	4.0	4.0	3.0	4	4	4	4	3	4	4	4	4	3	1	1	1	1	1	1	1	1	1	1
+2023-12-02				b		4	4	4	3	4	4.0	4.0	4.0	3.0	4.0	4	4	4	3	4	4	4	4	3	4	1	1	1	1	1	1	1	1	1	1
+2023-12-02				b	b	4	4	4	3	3	4.0	4.0	4.0	3.0	3.0	4	4	4	3	3	4	4	4	3	3	1	1	1	1	1	1	1	1	1	1
+-- !result
+insert into mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 values 
+  ('a', 2000, '2023-12-01');
+-- result:
+-- !result
+function: print_hit_materialized_view("SELECT t1.dt, t1.col1, t2.col1, t3.col1, t4.col1, t5.col1, sum(t1.col2) as col12, sum(t2.col2) as col22, sum(t3.col2) as col32, sum(t4.col2) as col42, sum(t5.col2) as col52 from mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 join mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t2 on t1.dt = t2.dt join mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t3 on t1.dt = t3.dt join mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t4 on t1.dt = t4.dt join mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t5 on t1.dt = t5.dt group by t1.dt, t1.col1, t2.col1, t3.col1, t4.col1, t5.col1;", "test_mv1")
+-- result:
+False
+-- !result
+SELECT COUNT(*) FROM test_mv1;
+-- result:
+34
+-- !result
+SELECT * FROM test_mv1 ORDER BY dt, col11, col21, col31, col41, col51 limit 5;
+-- result:
+2023-12-01	a	a	a	a	a	3	2	2	2	2	1.5	1.0	1.0	1.0	1.0	1	1	1	1	1	2	1	1	1	1	2	2	2	2	2	2	1	1	1	1
+2023-12-02						4	4	4	4	4	4.0	4.0	4.0	4.0	4.0	4	4	4	4	4	4	4	4	4	4	1	1	1	1	1	1	1	1	1	1
+2023-12-02					b	4	4	4	4	3	4.0	4.0	4.0	4.0	3.0	4	4	4	4	3	4	4	4	4	3	1	1	1	1	1	1	1	1	1	1
+2023-12-02				b		4	4	4	3	4	4.0	4.0	4.0	3.0	4.0	4	4	4	3	4	4	4	4	3	4	1	1	1	1	1	1	1	1	1	1
+2023-12-02				b	b	4	4	4	3	3	4.0	4.0	4.0	3.0	3.0	4	4	4	3	3	4	4	4	3	3	1	1	1	1	1	1	1	1	1	1
+-- !result
+SELECT t1.dt, t1.col1 as col11, t2.col1 as col21, t3.col1 as col31, t4.col1 as col41, t5.col1 as col51, sum(t1.col2) as col12, sum(t2.col2) as col22, sum(t3.col2) as col32, sum(t4.col2) as col42, sum(t5.col2) as col52, avg(t1.col2) as col13, avg(t2.col2) as col23, avg(t3.col2) as col33, avg(t4.col2) as col43, avg(t5.col2) as col53, min(t1.col2) as col14, min(t2.col2) as col24, min(t3.col2) as col34, min(t4.col2) as col44, min(t5.col2) as col54, max(t1.col2) as col15, max(t2.col2) as col25, max(t3.col2) as col35, max(t4.col2) as col45, max(t5.col2) as col55, count(t1.col2) as col16, count(t2.col2) as col26, count(t3.col2) as col36, count(t4.col2) as col46, count(t5.col2) as col56, approx_count_distinct(t1.col2) as col17, approx_count_distinct(t2.col2) as col27, approx_count_distinct(t3.col2) as col37, approx_count_distinct(t4.col2) as col47, approx_count_distinct(t5.col2) as col57 FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 JOIN mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t2 ON t1.dt = t2.dt JOIN mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t3 ON t1.dt = t3.dt JOIN mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t4 ON t1.dt = t4.dt JOIN mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t5 ON t1.dt = t5.dt GROUP BY t1.dt, t1.col1, t2.col1, t3.col1, t4.col1, t5.col1 ORDER BY dt, col11, col21, col31, col41, col51 limit 5;
+-- result:
+2023-12-01	a	a	a	a	a	2003	3	3	3	3	667.6666666666666	1.0	1.0	1.0	1.0	1	1	1	1	1	2000	1	1	1	1	3	3	3	3	3	3	1	1	1	1
+2023-12-02						4	4	4	4	4	4.0	4.0	4.0	4.0	4.0	4	4	4	4	4	4	4	4	4	4	1	1	1	1	1	1	1	1	1	1
+2023-12-02					b	4	4	4	4	3	4.0	4.0	4.0	4.0	3.0	4	4	4	4	3	4	4	4	4	3	1	1	1	1	1	1	1	1	1	1
+2023-12-02				b		4	4	4	3	4	4.0	4.0	4.0	3.0	4.0	4	4	4	3	4	4	4	4	3	4	1	1	1	1	1	1	1	1	1	1
+2023-12-02				b	b	4	4	4	3	3	4.0	4.0	4.0	3.0	3.0	4	4	4	3	3	4	4	4	3	3	1	1	1	1	1	1	1	1	1	1
+-- !result
+insert into mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 values 
+  ('a', 2000, '2023-12-01');
+-- result:
+-- !result
+insert into mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t2 values 
+  ('a', 2000, '2023-12-01');
+-- result:
+-- !result
+REFRESH MATERIALIZED VIEW test_mv1 WITH SYNC MODE;
+function: print_hit_materialized_view("SELECT t1.dt, t1.col1, t2.col1, t3.col1, t4.col1, t5.col1, sum(t1.col2) as col12, sum(t2.col2) as col22, sum(t3.col2) as col32, sum(t4.col2) as col42, sum(t5.col2) as col52 from mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 join mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t2 on t1.dt = t2.dt join mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t3 on t1.dt = t3.dt join mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t4 on t1.dt = t4.dt join mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t5 on t1.dt = t5.dt group by t1.dt, t1.col1, t2.col1, t3.col1, t4.col1, t5.col1;", "test_mv1")
+-- result:
+True
+-- !result
+SELECT COUNT(*) FROM test_mv1;
+-- result:
+34
+-- !result
+SELECT * FROM test_mv1 ORDER BY dt, col11, col21, col31, col41, col51 limit 5;
+-- result:
+2023-12-01	a	a	a	a	a	8006	8004	8	8	8	1000.75	1000.5	1.0	1.0	1.0	1	1	1	1	1	2000	2000	1	1	1	8	8	8	8	8	3	2	1	1	1
+2023-12-02						4	4	4	4	4	4.0	4.0	4.0	4.0	4.0	4	4	4	4	4	4	4	4	4	4	1	1	1	1	1	1	1	1	1	1
+2023-12-02					b	4	4	4	4	3	4.0	4.0	4.0	4.0	3.0	4	4	4	4	3	4	4	4	4	3	1	1	1	1	1	1	1	1	1	1
+2023-12-02				b		4	4	4	3	4	4.0	4.0	4.0	3.0	4.0	4	4	4	3	4	4	4	4	3	4	1	1	1	1	1	1	1	1	1	1
+2023-12-02				b	b	4	4	4	3	3	4.0	4.0	4.0	3.0	3.0	4	4	4	3	3	4	4	4	3	3	1	1	1	1	1	1	1	1	1	1
+-- !result
+SELECT t1.dt, t1.col1 as col11, t2.col1 as col21, t3.col1 as col31, t4.col1 as col41, t5.col1 as col51, sum(t1.col2) as col12, sum(t2.col2) as col22, sum(t3.col2) as col32, sum(t4.col2) as col42, sum(t5.col2) as col52, avg(t1.col2) as col13, avg(t2.col2) as col23, avg(t3.col2) as col33, avg(t4.col2) as col43, avg(t5.col2) as col53, min(t1.col2) as col14, min(t2.col2) as col24, min(t3.col2) as col34, min(t4.col2) as col44, min(t5.col2) as col54, max(t1.col2) as col15, max(t2.col2) as col25, max(t3.col2) as col35, max(t4.col2) as col45, max(t5.col2) as col55, count(t1.col2) as col16, count(t2.col2) as col26, count(t3.col2) as col36, count(t4.col2) as col46, count(t5.col2) as col56, approx_count_distinct(t1.col2) as col17, approx_count_distinct(t2.col2) as col27, approx_count_distinct(t3.col2) as col37, approx_count_distinct(t4.col2) as col47, approx_count_distinct(t5.col2) as col57 FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 JOIN mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t2 ON t1.dt = t2.dt JOIN mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t3 ON t1.dt = t3.dt JOIN mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t4 ON t1.dt = t4.dt JOIN mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t5 ON t1.dt = t5.dt GROUP BY t1.dt, t1.col1, t2.col1, t3.col1, t4.col1, t5.col1 ORDER BY dt, col11, col21, col31, col41, col51 limit 5;
+-- result:
+2023-12-01	a	a	a	a	a	8006	8004	8	8	8	1000.75	1000.5	1.0	1.0	1.0	1	1	1	1	1	2000	2000	1	1	1	8	8	8	8	8	3	2	1	1	1
+2023-12-02						4	4	4	4	4	4.0	4.0	4.0	4.0	4.0	4	4	4	4	4	4	4	4	4	4	1	1	1	1	1	1	1	1	1	1
+2023-12-02					b	4	4	4	4	3	4.0	4.0	4.0	4.0	3.0	4	4	4	4	3	4	4	4	4	3	1	1	1	1	1	1	1	1	1	1
+2023-12-02				b		4	4	4	3	4	4.0	4.0	4.0	3.0	4.0	4	4	4	3	4	4	4	4	3	4	1	1	1	1	1	1	1	1	1	1
+2023-12-02				b	b	4	4	4	3	3	4.0	4.0	4.0	3.0	3.0	4	4	4	3	3	4	4	4	3	3	1	1	1	1	1	1	1	1	1	1
+-- !result
+insert into mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 values 
+  ('a', 2000, '2023-12-01');
+-- result:
+-- !result
+insert into mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t2 values 
+  ('b', 2000, '2023-12-01');
+-- result:
+-- !result
+insert into mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t3 values 
+  ('c', 2000, '2023-12-01');
+-- result:
+-- !result
+REFRESH MATERIALIZED VIEW test_mv1 WITH SYNC MODE;
+function: print_hit_materialized_view("SELECT t1.dt, t1.col1, t2.col1, t3.col1, t4.col1, t5.col1, sum(t1.col2) as col12, sum(t2.col2) as col22, sum(t3.col2) as col32, sum(t4.col2) as col42, sum(t5.col2) as col52 from mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 join mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t2 on t1.dt = t2.dt join mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t3 on t1.dt = t3.dt join mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t4 on t1.dt = t4.dt join mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t5 on t1.dt = t5.dt group by t1.dt, t1.col1, t2.col1, t3.col1, t4.col1, t5.col1;", "test_mv1")
+-- result:
+True
+-- !result
+SELECT COUNT(*) FROM test_mv1;
+-- result:
+37
+-- !result
+SELECT * FROM test_mv1 ORDER BY dt, col11, col21, col31, col41, col51 limit 5;
+-- result:
+2023-12-01	a	a	a	a	a	12006	10005	10	10	10	1200.6	1000.5	1.0	1.0	1.0	1	1	1	1	1	2000	2000	1	1	1	10	10	10	10	10	3	2	1	1	1
+2023-12-01	a	a	c	a	a	12006	10005	20000	10	10	1200.6	1000.5	2000.0	1.0	1.0	1	1	2000	1	1	2000	2000	2000	1	1	10	10	10	10	10	3	2	1	1	1
+2023-12-01	a	b	a	a	a	6003	10000	5	5	5	1200.6	2000.0	1.0	1.0	1.0	1	2000	1	1	1	2000	2000	1	1	1	5	5	5	5	5	3	1	1	1	1
+2023-12-01	a	b	c	a	a	6003	10000	10000	5	5	1200.6	2000.0	2000.0	1.0	1.0	1	2000	2000	1	1	2000	2000	2000	1	1	5	5	5	5	5	3	1	1	1	1
+2023-12-02						4	4	4	4	4	4.0	4.0	4.0	4.0	4.0	4	4	4	4	4	4	4	4	4	4	1	1	1	1	1	1	1	1	1	1
+-- !result
+SELECT t1.dt, t1.col1 as col11, t2.col1 as col21, t3.col1 as col31, t4.col1 as col41, t5.col1 as col51, sum(t1.col2) as col12, sum(t2.col2) as col22, sum(t3.col2) as col32, sum(t4.col2) as col42, sum(t5.col2) as col52, avg(t1.col2) as col13, avg(t2.col2) as col23, avg(t3.col2) as col33, avg(t4.col2) as col43, avg(t5.col2) as col53, min(t1.col2) as col14, min(t2.col2) as col24, min(t3.col2) as col34, min(t4.col2) as col44, min(t5.col2) as col54, max(t1.col2) as col15, max(t2.col2) as col25, max(t3.col2) as col35, max(t4.col2) as col45, max(t5.col2) as col55, count(t1.col2) as col16, count(t2.col2) as col26, count(t3.col2) as col36, count(t4.col2) as col46, count(t5.col2) as col56, approx_count_distinct(t1.col2) as col17, approx_count_distinct(t2.col2) as col27, approx_count_distinct(t3.col2) as col37, approx_count_distinct(t4.col2) as col47, approx_count_distinct(t5.col2) as col57 FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 JOIN mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t2 ON t1.dt = t2.dt JOIN mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t3 ON t1.dt = t3.dt JOIN mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t4 ON t1.dt = t4.dt JOIN mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t5 ON t1.dt = t5.dt GROUP BY t1.dt, t1.col1, t2.col1, t3.col1, t4.col1, t5.col1 ORDER BY dt, col11, col21, col31, col41, col51 limit 5;
+-- result:
+2023-12-01	a	a	a	a	a	12006	10005	10	10	10	1200.6	1000.5	1.0	1.0	1.0	1	1	1	1	1	2000	2000	1	1	1	10	10	10	10	10	3	2	1	1	1
+2023-12-01	a	a	c	a	a	12006	10005	20000	10	10	1200.6	1000.5	2000.0	1.0	1.0	1	1	2000	1	1	2000	2000	2000	1	1	10	10	10	10	10	3	2	1	1	1
+2023-12-01	a	b	a	a	a	6003	10000	5	5	5	1200.6	2000.0	1.0	1.0	1.0	1	2000	1	1	1	2000	2000	1	1	1	5	5	5	5	5	3	1	1	1	1
+2023-12-01	a	b	c	a	a	6003	10000	10000	5	5	1200.6	2000.0	2000.0	1.0	1.0	1	2000	2000	1	1	2000	2000	2000	1	1	5	5	5	5	5	3	1	1	1	1
+2023-12-02						4	4	4	4	4	4.0	4.0	4.0	4.0	4.0	4	4	4	4	4	4	4	4	4	4	1	1	1	1	1	1	1	1	1	1
+-- !result
+insert into mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 values 
+  ('a', 2000, '2023-12-01');
+-- result:
+-- !result
+insert into mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t2 values 
+  ('b', 2000, '2023-12-01');
+-- result:
+-- !result
+insert into mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t3 values 
+  ('c', 2000, '2023-12-01');
+-- result:
+-- !result
+insert into mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t4 values 
+  ('a', 2000, '2023-12-01');
+-- result:
+-- !result
+insert into mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t5 values 
+  ('a', 2000, '2023-12-01');
+-- result:
+-- !result
+REFRESH MATERIALIZED VIEW test_mv1 WITH SYNC MODE;
+function: print_hit_materialized_view("SELECT t1.dt, t1.col1, t2.col1, t3.col1, t4.col1, t5.col1, sum(t1.col2) as col12, sum(t2.col2) as col22, sum(t3.col2) as col32, sum(t4.col2) as col42, sum(t5.col2) as col52 from mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 join mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t2 on t1.dt = t2.dt join mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t3 on t1.dt = t3.dt join mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t4 on t1.dt = t4.dt join mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t5 on t1.dt = t5.dt group by t1.dt, t1.col1, t2.col1, t3.col1, t4.col1, t5.col1;", "test_mv1")
+-- result:
+True
+-- !result
+SELECT COUNT(*) FROM test_mv1;
+-- result:
+37
+-- !result
+SELECT * FROM test_mv1 ORDER BY dt, col11, col21, col31, col41, col51 limit 5;
+-- result:
+2023-12-01	a	a	a	a	a	64024	48024	48	48024	48024	1333.8333333333333	1000.5	1.0	1000.5	1000.5	1	1	1	1	1	2000	2000	1	2000	2000	48	48	48	48	48	3	2	1	2	2
+2023-12-01	a	a	c	a	a	128048	96048	192000	96048	96048	1333.8333333333333	1000.5	2000.0	1000.5	1000.5	1	1	2000	1	1	2000	2000	2000	2000	2000	96	96	96	96	96	3	2	1	2	2
+2023-12-01	a	b	a	a	a	64024	96000	48	48024	48024	1333.8333333333333	2000.0	1.0	1000.5	1000.5	1	2000	1	1	1	2000	2000	1	2000	2000	48	48	48	48	48	3	1	1	2	2
+2023-12-01	a	b	c	a	a	128048	192000	192000	96048	96048	1333.8333333333333	2000.0	2000.0	1000.5	1000.5	1	2000	2000	1	1	2000	2000	2000	2000	2000	96	96	96	96	96	3	1	1	2	2
+2023-12-02						4	4	4	4	4	4.0	4.0	4.0	4.0	4.0	4	4	4	4	4	4	4	4	4	4	1	1	1	1	1	1	1	1	1	1
+-- !result
+SELECT t1.dt, t1.col1 as col11, t2.col1 as col21, t3.col1 as col31, t4.col1 as col41, t5.col1 as col51, sum(t1.col2) as col12, sum(t2.col2) as col22, sum(t3.col2) as col32, sum(t4.col2) as col42, sum(t5.col2) as col52, avg(t1.col2) as col13, avg(t2.col2) as col23, avg(t3.col2) as col33, avg(t4.col2) as col43, avg(t5.col2) as col53, min(t1.col2) as col14, min(t2.col2) as col24, min(t3.col2) as col34, min(t4.col2) as col44, min(t5.col2) as col54, max(t1.col2) as col15, max(t2.col2) as col25, max(t3.col2) as col35, max(t4.col2) as col45, max(t5.col2) as col55, count(t1.col2) as col16, count(t2.col2) as col26, count(t3.col2) as col36, count(t4.col2) as col46, count(t5.col2) as col56, approx_count_distinct(t1.col2) as col17, approx_count_distinct(t2.col2) as col27, approx_count_distinct(t3.col2) as col37, approx_count_distinct(t4.col2) as col47, approx_count_distinct(t5.col2) as col57 FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 JOIN mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t2 ON t1.dt = t2.dt JOIN mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t3 ON t1.dt = t3.dt JOIN mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t4 ON t1.dt = t4.dt JOIN mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t5 ON t1.dt = t5.dt GROUP BY t1.dt, t1.col1, t2.col1, t3.col1, t4.col1, t5.col1 ORDER BY dt, col11, col21, col31, col41, col51 limit 5;
+-- result:
+2023-12-01	a	a	a	a	a	64024	48024	48	48024	48024	1333.8333333333333	1000.5	1.0	1000.5	1000.5	1	1	1	1	1	2000	2000	1	2000	2000	48	48	48	48	48	3	2	1	2	2
+2023-12-01	a	a	c	a	a	128048	96048	192000	96048	96048	1333.8333333333333	1000.5	2000.0	1000.5	1000.5	1	1	2000	1	1	2000	2000	2000	2000	2000	96	96	96	96	96	3	2	1	2	2
+2023-12-01	a	b	a	a	a	64024	96000	48	48024	48024	1333.8333333333333	2000.0	1.0	1000.5	1000.5	1	2000	1	1	1	2000	2000	1	2000	2000	48	48	48	48	48	3	1	1	2	2
+2023-12-01	a	b	c	a	a	128048	192000	192000	96048	96048	1333.8333333333333	2000.0	2000.0	1000.5	1000.5	1	2000	2000	1	1	2000	2000	2000	2000	2000	96	96	96	96	96	3	1	1	2	2
+2023-12-02						4	4	4	4	4	4.0	4.0	4.0	4.0	4.0	4	4	4	4	4	4	4	4	4	4	1	1	1	1	1	1	1	1	1	1
+-- !result
+DROP MATERIALIZED VIEW test_mv1;
+-- result:
+-- !result
+CREATE MATERIALIZED VIEW test_mv1 PARTITION BY dt 
+REFRESH DEFERRED MANUAL 
+properties
+(
+    "refresh_mode" = "incremental"
+)
+AS 
+SELECT 
+  t.dt, t.col1 as col11,
+  sum(t.col2) as col13, avg(t.col2) as col14, min(t.col2) as col15, max(t.col2) as col16, count(t.col2) as col17, approx_count_distinct(t.col2) as col18
+FROM (
+  SELECT * FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1
+  UNION ALL
+  SELECT * FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t2
+  UNION ALL
+  SELECT * FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t3
+  UNION ALL
+  SELECT * FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t4
+  UNION ALL
+  SELECT * FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t5) t
+GROUP BY t.dt, t.col1;
+-- result:
+-- !result
+REFRESH MATERIALIZED VIEW test_mv1 WITH SYNC MODE;
+SELECT COUNT(*) FROM test_mv1;
+-- result:
+8
+-- !result
+SELECT * FROM test_mv1 ORDER BY dt, col11, col17, col18 limit 5;
+-- result:
+None	None	None	None	None	None	5	0
+2023-12-01	a	14007	1077.4615384615386	1	2000	13	3
+2023-12-01	b	4000	2000.0	2000	2000	2	1
+2023-12-01	c	4000	2000.0	2000	2000	2	1
+2023-12-02		20	4.0	4	4	5	1
+-- !result
+insert into mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 values 
+  ('a', 2000, '2023-12-01');
+-- result:
+-- !result
+REFRESH MATERIALIZED VIEW test_mv1 WITH SYNC MODE;
+SELECT COUNT(*) FROM test_mv1;
+-- result:
+8
+-- !result
+SELECT * FROM test_mv1 ORDER BY dt, col11, col17, col18 limit 5;
+-- result:
+None	None	None	None	None	None	5	0
+2023-12-01	a	16007	1143.357142857143	1	2000	14	3
+2023-12-01	b	4000	2000.0	2000	2000	2	1
+2023-12-01	c	4000	2000.0	2000	2000	2	1
+2023-12-02		20	4.0	4	4	5	1
+-- !result
+SELECT t.dt, t.col1 as col11, sum(t.col2) as col13, avg(t.col2) as col14, min(t.col2) as col15, max(t.col2) as col16, count(t.col2) as col17, approx_count_distinct(t.col2) as col18 FROM (SELECT * FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 UNION ALL SELECT * FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t2 UNION ALL SELECT * FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t3 UNION ALL SELECT * FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t4 UNION ALL SELECT * FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t5) t GROUP BY t.dt, t.col1 ORDER BY t.dt, t.col1, col17, col18 limit 5;
+-- result:
+None	None	None	None	None	None	0	0
+2023-12-01	a	16007	1143.357142857143	1	2000	14	3
+2023-12-01	b	4000	2000.0	2000	2000	2	1
+2023-12-01	c	4000	2000.0	2000	2000	2	1
+2023-12-02		20	4.0	4	4	5	1
+-- !result
+insert into mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 values 
+  ('a', 2000, '2023-12-11');
+-- result:
+-- !result
+insert into mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t2 values 
+  ('a', 2000, '2023-12-11');
+-- result:
+-- !result
+SELECT COUNT(*) FROM test_mv1;
+-- result:
+8
+-- !result
+SELECT * FROM test_mv1 ORDER BY dt, col11, col17, col18 limit 5;
+-- result:
+None	None	None	None	None	None	5	0
+2023-12-01	a	16007	1143.357142857143	1	2000	14	3
+2023-12-01	b	4000	2000.0	2000	2000	2	1
+2023-12-01	c	4000	2000.0	2000	2000	2	1
+2023-12-02		20	4.0	4	4	5	1
+-- !result
+SELECT t.dt, t.col1 as col11, sum(t.col2) as col13, avg(t.col2) as col14, min(t.col2) as col15, max(t.col2) as col16, count(t.col2) as col17, approx_count_distinct(t.col2) as col18 FROM (SELECT * FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 UNION ALL SELECT * FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t2 UNION ALL SELECT * FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t3 UNION ALL SELECT * FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t4 UNION ALL SELECT * FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t5) t GROUP BY t.dt, t.col1 ORDER BY t.dt, t.col1, col17, col18 limit 5;
+-- result:
+None	None	None	None	None	None	0	0
+2023-12-01	a	16007	1143.357142857143	1	2000	14	3
+2023-12-01	b	4000	2000.0	2000	2000	2	1
+2023-12-01	c	4000	2000.0	2000	2000	2	1
+2023-12-02		20	4.0	4	4	5	1
+-- !result
+insert into mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 values 
+  ('a', 2000, '2023-12-11');
+-- result:
+-- !result
+insert into mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t2 values 
+  ('b', 2000, '2023-12-11');
+-- result:
+-- !result
+insert into mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t3 values 
+  ('c', 2000, '2023-12-12');
+-- result:
+-- !result
+REFRESH MATERIALIZED VIEW test_mv1 WITH SYNC MODE;
+SELECT COUNT(*) FROM test_mv1;
+-- result:
+11
+-- !result
+SELECT * FROM test_mv1 ORDER BY dt, col11, col17, col18 limit 5;
+-- result:
+None	None	None	None	None	None	5	0
+2023-12-01	a	16007	1143.357142857143	1	2000	14	3
+2023-12-01	b	4000	2000.0	2000	2000	2	1
+2023-12-01	c	4000	2000.0	2000	2000	2	1
+2023-12-02		20	4.0	4	4	5	1
+-- !result
+SELECT t.dt, t.col1 as col11, sum(t.col2) as col13, avg(t.col2) as col14, min(t.col2) as col15, max(t.col2) as col16, count(t.col2) as col17, approx_count_distinct(t.col2) as col18 FROM (SELECT * FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 UNION ALL SELECT * FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t2 UNION ALL SELECT * FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t3 UNION ALL SELECT * FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t4 UNION ALL SELECT * FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t5) t GROUP BY t.dt, t.col1 ORDER BY t.dt, t.col1, col17, col18 limit 5;
+-- result:
+None	None	None	None	None	None	0	0
+2023-12-01	a	16007	1143.357142857143	1	2000	14	3
+2023-12-01	b	4000	2000.0	2000	2000	2	1
+2023-12-01	c	4000	2000.0	2000	2000	2	1
+2023-12-02		20	4.0	4	4	5	1
+-- !result
+insert into mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 values 
+  ('a', 2000, '2023-12-21');
+-- result:
+-- !result
+insert into mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t2 values 
+  ('b', 2000, '2023-12-21');
+-- result:
+-- !result
+insert into mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t3 values 
+  ('c', 2000, '2023-12-21');
+-- result:
+-- !result
+insert into mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t4 values 
+  ('d', 2000, '2023-12-21');
+-- result:
+-- !result
+insert into mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t5 values 
+  ('a', 2000, NULL);
+-- result:
+-- !result
+REFRESH MATERIALIZED VIEW test_mv1 WITH SYNC MODE;
+SELECT COUNT(*) FROM test_mv1;
+-- result:
+16
+-- !result
+SELECT * FROM test_mv1 ORDER BY dt, col11, col17, col18 limit 5;
+-- result:
+None	None	None	None	None	None	5	0
+None	a	2000	2000.0	2000	2000	1	1
+2023-12-01	a	16007	1143.357142857143	1	2000	14	3
+2023-12-01	b	4000	2000.0	2000	2000	2	1
+2023-12-01	c	4000	2000.0	2000	2000	2	1
+-- !result
+SELECT t.dt, t.col1 as col11, sum(t.col2) as col13, avg(t.col2) as col14, min(t.col2) as col15, max(t.col2) as col16, count(t.col2) as col17, approx_count_distinct(t.col2) as col18 FROM (SELECT * FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 UNION ALL SELECT * FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t2 UNION ALL SELECT * FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t3 UNION ALL SELECT * FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t4 UNION ALL SELECT * FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t5) t GROUP BY t.dt, t.col1 ORDER BY t.dt, t.col1, col17, col18 limit 5;
+-- result:
+None	None	None	None	None	None	0	0
+None	a	2000	2000.0	2000	2000	1	1
+2023-12-01	a	16007	1143.357142857143	1	2000	14	3
+2023-12-01	b	4000	2000.0	2000	2000	2	1
+2023-12-01	c	4000	2000.0	2000	2000	2	1
+-- !result
+DROP MATERIALIZED VIEW test_mv1;
+-- result:
+-- !result
+drop table mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 force;
+-- result:
+-- !result
+drop table mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t2 force;
+-- result:
+-- !result
+drop table mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t3 force;
+-- result:
+-- !result
+drop table mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t4 force;
+-- result:
+-- !result
+drop table mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t5 force;
+-- result:
+-- !result
+drop database mv_iceberg_${uuid0}.mv_ice_db_${uuid0} force;
+-- result:
+-- !result
+drop database db_${uuid0};
+-- result:
+-- !result

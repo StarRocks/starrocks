@@ -29,7 +29,7 @@ Status PeerCacheEngine::init(const RemoteCacheOptions& options) {
 }
 
 Status PeerCacheEngine::read(const std::string& key, size_t off, size_t size, IOBuffer* buffer,
-                             ReadCacheOptions* options) {
+                             DiskCacheReadOptions* options) {
     if (options->use_adaptor && !_cache_adaptor->check_read_cache()) {
         return Status::ResourceBusy("resource is busy");
     }

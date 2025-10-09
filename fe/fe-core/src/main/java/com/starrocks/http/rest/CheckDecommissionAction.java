@@ -49,6 +49,7 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.Authorizer;
 import com.starrocks.sql.ast.DecommissionBackendClause;
+import com.starrocks.sql.ast.HostPort;
 import com.starrocks.system.SystemInfoService;
 import io.netty.handler.codec.http.HttpMethod;
 
@@ -91,8 +92,11 @@ public class CheckDecommissionAction extends RestBaseAction {
 
         try {
             DecommissionBackendClause decommissionBackendClause = new DecommissionBackendClause(Lists.newArrayList(hostPortArr));
-            List<Pair<String, Integer>> hostPortPairs = Arrays.stream(hostPortArr)
-                    .map(hostPort -> SystemInfoService.validateHostAndPort(hostPort, false)).collect(Collectors.toList());
+            List<HostPort> hostPortPairs = Arrays.stream(hostPortArr)
+                    .map(hostPort -> {
+                        Pair<String, Integer> pair = SystemInfoService.validateHostAndPort(hostPort, false);
+                        return new HostPort(pair.first, pair.second);
+                    }).collect(Collectors.toList());
             decommissionBackendClause.setHostPortPairs(hostPortPairs);
 
             GlobalStateMgr.getCurrentState().getAlterJobMgr().getClusterHandler().process(

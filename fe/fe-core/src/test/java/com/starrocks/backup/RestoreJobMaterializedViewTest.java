@@ -64,6 +64,7 @@ import com.starrocks.thrift.THdfsProperties;
 import com.starrocks.thrift.TStatus;
 import com.starrocks.thrift.TStatusCode;
 import com.starrocks.thrift.TTaskType;
+import com.starrocks.utframe.StarRocksTestBase;
 import mockit.Delegate;
 import mockit.Expectations;
 import mockit.Injectable;
@@ -96,7 +97,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
 
 @TestMethodOrder(MethodOrderer.OrderAnnotation.class)
-public class RestoreJobMaterializedViewTest {
+public class RestoreJobMaterializedViewTest extends StarRocksTestBase {
 
     private Database db;
 
@@ -230,7 +231,7 @@ public class RestoreJobMaterializedViewTest {
                 minTimes = 0;
                 result = new Delegate() {
                     public void logBackupJob(BackupJob job) {
-                        System.out.println("log backup job: " + job);
+                        logSysInfo("log backup job: " + job);
                     }
                 };
             }

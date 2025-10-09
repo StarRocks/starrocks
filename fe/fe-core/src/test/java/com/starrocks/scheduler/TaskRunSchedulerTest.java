@@ -197,7 +197,6 @@ public class TaskRunSchedulerTest {
         Assertions.assertTrue(scheduler.getRunningTaskCount() == 1);
         Assertions.assertTrue(scheduler.getPendingQueueCount() == 9);
 
-        System.out.println(scheduler);
         for (int i = 0; i < 1; i++) {
             Assertions.assertTrue(scheduler.getRunnableTaskRun(1).equals(taskRuns.get(i)));
         }
@@ -294,7 +293,6 @@ public class TaskRunSchedulerTest {
         }
         long pendingTaskRunsCount = taskRunScheduler.getPendingQueueCount();
         long runningTaskRunsCount = taskRunScheduler.getRunningTaskCount();
-        System.out.println(taskRunScheduler);
         Assertions.assertEquals(N, pendingTaskRunsCount + runningTaskRunsCount);
     }
 

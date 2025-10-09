@@ -61,6 +61,7 @@ import com.starrocks.catalog.OlapTable.OlapTableState;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.Replica;
+import com.starrocks.catalog.SchemaChangeTypeCompatibility;
 import com.starrocks.catalog.SchemaInfo;
 import com.starrocks.catalog.StructField;
 import com.starrocks.catalog.StructType;
@@ -909,6 +910,26 @@ public class SchemaChangeHandler extends AlterHandler {
         for (Column column : otherIndexModifiedColumn) {
             if (column.isKey()) {
                 return false;
+            }
+        }
+
+        if (!SchemaChangeTypeCompatibility.canReuseZonemapIndex(oriColumn.getType(), modColumn.getType())) {
+            return false;
+        }
+
+        // Check whether manually created indexes support fast schema evolution. The rules are as follows:
+        // 1. The index can be reused after type conversion, and BE has made necessary changes,
+        //    such as casting new type values to old type values before querying the index.
+        // 2. The index cannot be reused, and BE has made changes to skip it during queries.
+        // Currently, BLOOMFILTER and NGRAMBF indexes use rule 2 to support fast schema evolution. BE-side changes
+        // for other indexes are not yet ready, so fast schema change is temporarily disabled for them. This feature
+        // will be gradually enabled for these indexes once BE support is in place.
+        List<Index> existedIndexes = olapTable.getIndexes();
+        for (Index index : existedIndexes) {
+            if (index.getColumns().contains(oriColumn.getColumnId())) {
+                if (index.getIndexType() != IndexDef.IndexType.NGRAMBF) {
+                    return false;
+                }
             }
         }
 
@@ -2720,22 +2741,15 @@ public class SchemaChangeHandler extends AlterHandler {
 
     public void updateTableConstraint(Database db, String tableName, Map<String, String> properties)
             throws DdlException {
-        Locker locker = new Locker();
-        if (!locker.lockDatabaseAndCheckExist(db, LockType.READ)) {
+        if (db == null || !db.isExist()) {
             throw new DdlException(String.format("db:%s does not exists.", db.getFullName()));
         }
-        TableProperty tableProperty;
-        OlapTable olapTable;
-        try {
-            Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), tableName);
-            if (table == null) {
-                throw new DdlException(String.format("table:%s does not exist", tableName));
-            }
-            olapTable = (OlapTable) table;
-            tableProperty = olapTable.getTableProperty();
-        } finally {
-            locker.unLockDatabase(db.getId(), LockType.READ);
+        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), tableName);
+        if (table == null) {
+            throw new DdlException(String.format("table:%s does not exist", tableName));
         }
+        OlapTable olapTable = (OlapTable) table;
+        TableProperty tableProperty = olapTable.getTableProperty();
 
         boolean hasChanged = false;
         if (tableProperty != null) {
@@ -2784,6 +2798,8 @@ public class SchemaChangeHandler extends AlterHandler {
         if (!hasChanged) {
             return;
         }
+
+        Locker locker = new Locker();
         locker.lockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(olapTable.getId()), LockType.WRITE);
         try {
             GlobalStateMgr.getCurrentState().getLocalMetastore().modifyTableConstraint(db, tableName, properties);

@@ -1134,7 +1134,6 @@ public class MaterializedViewAggPushDownRewriteTest extends MaterializedViewTest
         String query = "SELECT SUM((gmv+gmv2)*0.01)\n" +
                 "FROM test_pt8 WHERE pt = '20241126' AND id IN ( SELECT id FROM test_pt9 WHERE id = '1' )";
         String plan = getQueryPlan(query, TExplainLevel.VERBOSE);
-        System.out.println(plan);
         starRocksAssert.dropTable("test_pt8");
         starRocksAssert.dropTable("test_pt9");
         starRocksAssert.dropMaterializedView("test_pt8_mv");

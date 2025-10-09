@@ -169,8 +169,7 @@ StarRocks 提供内置索引，包括前缀索引、Ordinal 索引和 ZoneMap �
 - 不支持 ALTER TABLE 语句。
 - 不支持基于临时表创建视图和物化视图。
 - 不支持 EXPORT 语句导出。
-- 不支持 SELECT INTO OUTFILE 语句导出。
-- 不支持基于临时表通过 SUBMIT TASK 语句提交异步任务。
+- 不支持通过异步任务创建临时表或向其中导入/导出数据（通过 SUBMIT TASK 语句）。
 
 ###  更多特性
 

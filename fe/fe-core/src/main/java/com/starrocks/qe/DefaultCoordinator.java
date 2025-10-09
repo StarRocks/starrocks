@@ -1060,6 +1060,10 @@ public class DefaultCoordinator extends Coordinator {
             // count down to zero to notify all objects waiting for this
             if (!connectContext.isProfileEnabled()) {
                 queryProfile.finishAllInstances(Status.OK);
+                List<String> unFinishedInstanceIds = queryProfile.getUnfinishedInstanceIds();
+                if (!unFinishedInstanceIds.isEmpty()) {
+                    LOG.info("query: {} has unfinished instances: {}", connectContext.queryId, unFinishedInstanceIds);
+                }
             }
         }
     }

@@ -1634,6 +1634,54 @@ StarRocks クラスタのモニタリングサービスの構築方法につい�
 - 単位: Count
 - 説明: パイプライン PREPARE スレッドプールにおけるキュータスクの数。これは瞬時値です。
 
+### starrocks_be_exec_state_report_active_threads
+
+- 単位: Count
+- タイプ: Instantaneous
+- 説明: Fragment インスタンスの実行状態を報告するスレッドプール内で実行中のタスクの数。
+
+### starrocks_be_exec_state_report_running_threads
+
+- 単位: Count
+- タイプ: Instantaneous
+- 説明: Fragment インスタンスの実行状態を報告するスレッドプールのスレッド数。最小値は 1、最大値は 2。
+
+### starrocks_be_exec_state_report_threadpool_size
+
+- 単位: Count
+- タイプ: Instantaneous
+- 説明: Fragment インスタンスの実行状態を報告するスレッドプールの最大スレッド数。デフォルトは 2 です。
+
+### starrocks_be_exec_state_report_queue_count
+
+- 単位: Count
+- タイプ: Instantaneous
+- 説明: Fragment インスタンスの実行状態を報告するスレッドプールにキューイングされるタスクの数。最大値は 1000 です。
+
+### starrocks_be_priority_exec_state_report_active_threads
+
+- 単位: Count
+- タイプ: Instantaneous
+- 説明: Fragment インスタンスの最終的な実行状態を報告するスレッドプール内で実行中のタスクの数。
+
+### starrocks_be_priority_exec_state_report_running_threads
+
+- 単位: Count
+- タイプ: Instantaneous
+- 説明: Fragment インスタンスの最終的な実行状態を報告するスレッドプールのスレッド数。最小値は 1、最大値は 2。
+
+### starrocks_be_priority_exec_state_report_threadpool_size
+
+- 単位: Count
+- タイプ: Instantaneous
+- 説明: Fragment インスタンスの最終的な実行状態を報告するスレッドプールの最大スレッド数。デフォルトは 2 です。
+
+### starrocks_be_priority_exec_state_report_queue_count
+
+- 単位: Count
+- タイプ: Instantaneous
+- 説明: Fragment インスタンスの最終的な実行状態を報告するスレッドプールにキューイングされるタスクの数。最大値は 2147483647 です。
+
 ### starrocks_fe_routine_load_jobs
 
 - 単位: Count
@@ -1677,3 +1725,51 @@ StarRocks クラスタのモニタリングサービスの構築方法につい�
 
 - 単位: Count
 - 説明: ブラックリストに登録された SQL がインターセプトされた回数。
+
+### starrocks_fe_scheduled_pending_tablet_num
+
+- 単位: Count
+- タイプ: Instantaneous
+- 説明: Pending 状態の FE でスケジュールされたクローンタスクの数（BALANCE タイプと REPAIR タイプの両方を含む）。
+
+### starrocks_fe_scheduled_running_tablet_num
+
+- 単位: Count
+- タイプ: Instantaneous
+- 説明: Running 状態の FE でスケジュールされたクローンタスクの数（BALANCE タイプと REPAIR タイプの両方を含む）。
+
+### starrocks_fe_clone_task_total
+
+- 単位: Count
+- タイプ: Cumulative
+- 説明: クラスタ内のクローンタスクの総数。
+
+### starrocks_fe_clone_task_success
+
+- 単位: Count
+- タイプ: Cumulative
+- 説明: クラスタ内で正常に実行されたクローンタスクの数。
+
+### starrocks_fe_clone_task_copy_bytes
+
+- 単位: Bytes
+- タイプ: Cumulative
+- 説明: クラスタ内のクローンタスクによってコピーされたファイルの合計サイズ（INTER_NODE タイプと INTRA_NODE タイプの両方を含む）。
+
+### starrocks_fe_clone_task_copy_duration_ms
+
+- 単位: ms
+- タイプ: Cumulative
+- 説明: クラスタ内のクローンタスクがコピーに消費した合計時間（INTER_NODE タイプと INTRA_NODE タイプの両方を含む）。
+
+### starrocks_be_clone_task_copy_bytes
+
+- 単位: Bytes
+- タイプ: Cumulative
+- 説明: BE ノード内のクローンタスクによってコピーされたファイルの合計サイズ（INTER_NODE タイプと INTRA_NODE タイプの両方を含む）。
+
+### starrocks_be_clone_task_copy_duration_ms
+
+- 単位: ms
+- タイプ: Cumulative
+- 説明: BE ノード内のクローンタスクがコピーに消費した合計時間（INTER_NODE タイプと INTRA_NODE タイプの両方を含む）。

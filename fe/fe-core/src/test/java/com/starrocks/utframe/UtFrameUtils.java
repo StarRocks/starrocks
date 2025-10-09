@@ -588,7 +588,7 @@ public class UtFrameUtils {
             } finally {
                 String pr = Tracers.printLogs();
                 if (!Strings.isNullOrEmpty(pr)) {
-                    System.out.println(pr);
+                    StarRocksTestBase.logSysInfo(pr);
                 }
                 Tracers.close();
             }
@@ -1211,6 +1211,8 @@ public class UtFrameUtils {
                 }
                 fakeJournalWriter = null;
             }
+            masterJournalQueue.clear();
+            followerJournalQueue.clear();
         }
     }
 

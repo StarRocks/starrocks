@@ -20,6 +20,7 @@ import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 
 public class GetRemoteFilesParams {
     private List<PartitionKey> partitionKeys;
@@ -32,6 +33,7 @@ public class GetRemoteFilesParams {
     private boolean useCache = true;
     private boolean checkPartitionExistence = true;
     private boolean enableColumnStats = false;
+    private Optional<Boolean> isRecursive = Optional.empty();
 
     protected GetRemoteFilesParams(Builder builder) {
         this.partitionKeys = builder.partitionKeys;
@@ -44,6 +46,7 @@ public class GetRemoteFilesParams {
         this.useCache = builder.useCache;
         this.checkPartitionExistence = builder.checkPartitionExistence;
         this.enableColumnStats = builder.enableColumnStats;
+        this.isRecursive = builder.isRecursive;
     }
 
     public int getPartitionSize() {
@@ -57,7 +60,7 @@ public class GetRemoteFilesParams {
     }
 
     public GetRemoteFilesParams copy() {
-        return GetRemoteFilesParams.newBuilder()
+        Builder paramsBuilder = GetRemoteFilesParams.newBuilder()
                 .setPartitionKeys(partitionKeys)
                 .setPartitionNames(partitionNames)
                 .setPartitionAttachments(partitionAttachments)
@@ -67,8 +70,11 @@ public class GetRemoteFilesParams {
                 .setLimit(limit)
                 .setUseCache(useCache)
                 .setCheckPartitionExistence(checkPartitionExistence)
-                .setEnableColumnStats(enableColumnStats)
-                .build();
+                .setEnableColumnStats(enableColumnStats);
+        if (isRecursive.isPresent()) {
+            paramsBuilder.setIsRecursive(isRecursive.get());
+        }
+        return paramsBuilder.build();
     }
 
     public GetRemoteFilesParams sub(int start, int end) {
@@ -135,6 +141,10 @@ public class GetRemoteFilesParams {
         return enableColumnStats;
     }
 
+    public Optional<Boolean> getIsRecursive() {
+        return isRecursive;
+    }
+
     public static class Builder {
         private List<PartitionKey> partitionKeys;
         private List<String> partitionNames;
@@ -146,6 +156,7 @@ public class GetRemoteFilesParams {
         private boolean useCache = true;
         private boolean checkPartitionExistence = true;
         private boolean enableColumnStats = false;
+        private Optional<Boolean> isRecursive = Optional.empty();
 
         public Builder setPartitionKeys(List<PartitionKey> partitionKeys) {
             this.partitionKeys = partitionKeys;
@@ -194,6 +205,11 @@ public class GetRemoteFilesParams {
 
         public Builder setEnableColumnStats(boolean enableColumnStats) {
             this.enableColumnStats = enableColumnStats;
+            return this;
+        }
+
+        public Builder setIsRecursive(boolean isRecursive) {
+            this.isRecursive = Optional.of(isRecursive);
             return this;
         }
 
