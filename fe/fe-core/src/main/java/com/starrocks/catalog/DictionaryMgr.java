@@ -441,12 +441,11 @@ public class DictionaryMgr implements Writable, GsonPostProcessable {
                 Pair<Map<TNetworkAddress, PProcessDictionaryCacheResult>, String> ret = getDictionaryStatistic(dictionary);
                 Map<TNetworkAddress, PProcessDictionaryCacheResult> resultMap = ret.first;
                 String errMsg = ret.second;
-                if (!errMsg.isEmpty()) {
+                if (resultMap == null) {
                     allInfo.get(allInfo.size() - 1).add("Can not get Memory info, errMsg: " + errMsg);
                     continue;
                 }
 
-                Preconditions.checkState(resultMap != null);
                 String memoryUsage = "";
                 for (Map.Entry<TNetworkAddress, PProcessDictionaryCacheResult> result : resultMap.entrySet()) {
                     TNetworkAddress address = result.getKey();
