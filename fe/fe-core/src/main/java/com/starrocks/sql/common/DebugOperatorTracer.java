@@ -42,6 +42,7 @@ import com.starrocks.sql.optimizer.operator.logical.LogicalTableFunctionOperator
 import com.starrocks.sql.optimizer.operator.logical.LogicalTopNOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalUnionOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalValuesOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalCompressedValuesOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalViewScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalWindowOperator;
 import com.starrocks.sql.optimizer.operator.logical.MockOperator;
@@ -250,6 +251,13 @@ public class DebugOperatorTracer extends OperatorVisitor<String, Void> {
     @Override
     public String visitLogicalValues(LogicalValuesOperator node, Void context) {
         return super.visitLogicalValues(node, context);
+    }
+
+    @Override
+    public String visitLogicalCompressedValues(LogicalCompressedValuesOperator node, Void context) {
+        return "LogicalCompressedValuesOperator {" + 
+               "count=" + node.getConstantCount() + 
+               ", type=" + node.getValueType() + "}";
     }
 
     @Override

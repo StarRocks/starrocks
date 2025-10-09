@@ -884,6 +884,10 @@ public abstract class Expr extends TreeNode<Expr> implements ParseNode, Cloneabl
         return this instanceof Parameter;
     }
 
+    public final boolean isLargeInPredicate() {
+        return this instanceof LargeInPredicate;
+    }
+
     /**
      * Implements isConstant() - computes the value without using 'isConstant_'.
      */

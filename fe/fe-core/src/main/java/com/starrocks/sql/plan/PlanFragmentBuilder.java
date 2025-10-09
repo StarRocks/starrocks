@@ -110,6 +110,7 @@ import com.starrocks.planner.TableFunctionNode;
 import com.starrocks.planner.TupleDescriptor;
 import com.starrocks.planner.TupleId;
 import com.starrocks.planner.UnionNode;
+import com.starrocks.planner.CompressedValuesNode;
 import com.starrocks.planner.stream.StreamAggNode;
 import com.starrocks.planner.stream.StreamJoinNode;
 import com.starrocks.qe.ConnectContext;
@@ -195,6 +196,7 @@ import com.starrocks.sql.optimizer.operator.physical.PhysicalTableFunctionOperat
 import com.starrocks.sql.optimizer.operator.physical.PhysicalTableFunctionTableScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalTopNOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalValuesOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalCompressedValuesOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalWindowOperator;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
@@ -2018,6 +2020,41 @@ public class PlanFragmentBuilder {
                 context.getFragments().add(fragment);
                 return fragment;
             }
+        }
+
+        @Override
+        public PlanFragment visitPhysicalCompressedValues(OptExpression optExpr, ExecPlan context) {
+            PhysicalCompressedValuesOperator compressedValuesOperator = 
+                (PhysicalCompressedValuesOperator) optExpr.getOp();
+
+            TupleDescriptor tupleDescriptor = context.getDescTbl().createTupleDescriptor();
+            for (ColumnRefOperator columnRefOperator : compressedValuesOperator.getColumnRefSet()) {
+                SlotDescriptor slotDescriptor =
+                        context.getDescTbl().addSlotDescriptor(tupleDescriptor, new SlotId(columnRefOperator.getId()));
+                slotDescriptor.setIsNullable(columnRefOperator.isNullable());
+                slotDescriptor.setIsMaterialized(true);
+                slotDescriptor.setType(columnRefOperator.getType());
+                context.getColRefToExpr()
+                        .put(columnRefOperator, new SlotRef(columnRefOperator.toString(), slotDescriptor));
+            }
+            tupleDescriptor.computeMemLayout();
+
+            // Create CompressedValuesNode instead of UnionNode
+            CompressedValuesNode compressedNode = new CompressedValuesNode(
+                    context.getNextNodeId(), 
+                    tupleDescriptor.getId(), 
+                    compressedValuesOperator.getValueType(),
+                    compressedValuesOperator.getRawConstantList(),
+                    compressedValuesOperator.getConstantCount());
+                    
+            compressedNode.setLimit(compressedValuesOperator.getLimit());
+            compressedNode.computeStatistics(optExpr.getStatistics());
+            currentExecGroup.add(compressedNode, true);
+
+            PlanFragment fragment = new PlanFragment(context.getNextFragmentId(), compressedNode,
+                    DataPartition.UNPARTITIONED);
+            context.getFragments().add(fragment);
+            return fragment;
         }
 
         // return true if all leaf offspring are not ExchangeNode
