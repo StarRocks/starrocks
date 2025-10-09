@@ -87,9 +87,10 @@ public final class MVPCTRefreshListPartitioner extends MVPCTRefreshPartitioner {
         this.logger = MVTraceUtils.getLogger(mv, MVPCTRefreshListPartitioner.class);
     }
 
-    public PCellSortedSet getMVPartitionsToRefreshByParams() {
+    @Override
+    public Set<String> getMVPartitionsToRefreshByParams(MVRefreshParams mvRefreshParams) {
         if (mvRefreshParams.isCompleteRefresh()) {
-            return PCellSortedSet.of(mv.getListPartitionItems());
+            return mv.getListPartitionItems().keySet();
         } else {
             Set<PListCell> pListCells = mvRefreshParams.getListValues();
             Map<String, PListCell> mvPartitions = mv.getListPartitionItems();
@@ -106,7 +107,7 @@ public final class MVPCTRefreshListPartitioner extends MVPCTRefreshPartitioner {
                     })
                     .map(Map.Entry::getKey)
                     .collect(Collectors.toMap(k -> k, mvPartitions::get));
-            return PCellSortedSet.of(mvFilteredPartitions);
+            return mvFilteredPartitions.keySet();
         }
     }
 
@@ -361,7 +362,6 @@ public final class MVPCTRefreshListPartitioner extends MVPCTRefreshPartitioner {
     }
 
     @Override
-<<<<<<< HEAD
     public Set<String> getMVPartitionsToRefreshWithForce() {
         Map<String, PCell> mvValidListPartitionMapMap = mv.getPartitionCells(Optional.empty());
         filterPartitionsByTTL(mvValidListPartitionMapMap, false);
@@ -373,9 +373,6 @@ public final class MVPCTRefreshListPartitioner extends MVPCTRefreshPartitioner {
                                                 Map<Long, TableSnapshotInfo> snapshotBaseTables,
                                                 MVRefreshParams mvRefreshParams,
                                                 Set<String> mvPotentialPartitionNames) {
-=======
-    public PCellSortedSet getMVPartitionsToRefreshWithCheck(Map<Long, BaseTableSnapshotInfo> snapshotBaseTables) {
->>>>>>> cccd31c903 ([Enhancement] Ensure mv force refresh will refresh target partitions (#62627))
         // list partitioned materialized view
         boolean isAutoRefresh = mvContext.getTaskType().isAutoRefresh();
         Set<String> mvListPartitionNames = getMVPartitionNamesWithTTL(mv, mvRefreshParams, isAutoRefresh);

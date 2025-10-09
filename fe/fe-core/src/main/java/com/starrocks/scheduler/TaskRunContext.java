@@ -32,9 +32,6 @@ public class TaskRunContext {
     String taskRunId;
     TaskRun taskRun;
 
-    // whether the task run is used to explain the execution plan without actual execution.
-    private boolean isExplain = false;
-
     public TaskRunContext() {
     }
 
@@ -138,13 +135,5 @@ public class TaskRunContext {
 
     public void setTaskRun(TaskRun taskRun) {
         this.taskRun = taskRun;
-    }
-
-    public boolean isExplain() {
-        return isExplain;
-    }
-
-    public void setIsExplain(boolean explain) {
-        this.isExplain = explain;
     }
 }

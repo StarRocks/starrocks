@@ -67,34 +67,26 @@ public class PCTRefreshNonPartitionOlapTest extends MVTestBase {
             refreshMV("test", mv);
             execPlan = getMVRefreshExecPlan(taskRun);
             Assertions.assertNull(execPlan);
-
-            String plan = explainMVRefreshExecPlan(mv, "explain refresh materialized " +
-                    "view test_mv1;");
-            Assertions.assertTrue(plan.contains("PLAN NOT AVAILABLE"));
         }
 
         // refresh with force
         Map<String, String> props = taskRun.getProperties();
         props.put(TaskRun.FORCE, "true");
-        String result = "";
         // explain with refresh
         {
             ExecuteOption executeOption = new ExecuteOption(taskRun.getTask());
             Map<String, String> explainProps = executeOption.getTaskRunProperties();
             explainProps.put(TaskRun.FORCE, "true");
 
-            execPlan =
-                    getMVRefreshExecPlan(mv, "explain refresh materialized view test_mv1 " +
-                            "force;");
+            execPlan = getMVRefreshExecPlan(taskRun, true);
             Assertions.assertNotNull(execPlan);
 
-            String plan = explainMVRefreshExecPlan(mv, executeOption, "explain refresh materialized view test_mv1 " +
-                    "force;");
-            Assertions.assertTrue(plan.contains("MVToRefreshedPartitions: [test_mv1]"));
+            execPlan = getMVRefreshExecPlan(taskRun, true);
+            Assertions.assertNotNull(execPlan);
 
             // after refresh, still can refresh with force
             execPlan = getMVRefreshExecPlan(taskRun, true);
-            result = execPlan.getExplainString(TExplainLevel.NORMAL);
+            String plan = execPlan.getExplainString(TExplainLevel.NORMAL);
             PlanTestBase.assertContains(plan, "     TABLE: range_t1\n" +
                     "     PREAGGREGATION: ON\n" +
                     "     partitions=2/2");
@@ -104,7 +96,7 @@ public class PCTRefreshNonPartitionOlapTest extends MVTestBase {
 
             // after refresh, still can refresh with force
             execPlan = getMVRefreshExecPlan(taskRun, true);
-            result = execPlan.getExplainString(TExplainLevel.NORMAL);
+            plan = execPlan.getExplainString(TExplainLevel.NORMAL);
             PlanTestBase.assertContains(plan, "     TABLE: range_t1\n" +
                     "     PREAGGREGATION: ON\n" +
                     "     partitions=2/2");

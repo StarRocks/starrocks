@@ -54,7 +54,6 @@ import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.ast.CreateMaterializedViewStatement;
 import com.starrocks.sql.ast.QueryRelation;
 import com.starrocks.sql.ast.QueryStatement;
-import com.starrocks.sql.ast.RefreshMaterializedViewStatement;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.SystemVariable;
 import com.starrocks.sql.common.PCell;
@@ -420,19 +419,10 @@ public class MVTestBase extends StarRocksTestBase {
             taskRun.getProperties().put(TaskRun.FORCE, "true");
         }
         initAndExecuteTaskRun(taskRun);
-<<<<<<< HEAD
         PartitionBasedMvRefreshProcessor processor = (PartitionBasedMvRefreshProcessor)
                 taskRun.getProcessor();
         MvTaskRunContext mvTaskRunContext = processor.getMvContext();
         return mvTaskRunContext.getExecPlan();
-=======
-        TaskRunProcessor processor = taskRun.getProcessor();
-        Assertions.assertTrue(processor instanceof MVTaskRunProcessor);
-        MVTaskRunProcessor mvTaskRunProcessor = (MVTaskRunProcessor) processor;
-        MvTaskRunContext mvTaskRunContext = mvTaskRunProcessor.getMvTaskRunContext();
-        ExecPlan result = mvTaskRunContext.getExecPlan();
-        return result;
->>>>>>> cccd31c903 ([Enhancement] Ensure mv force refresh will refresh target partitions (#62627))
     }
 
     protected static void initAndExecuteTaskRun(TaskRun taskRun) throws Exception {
@@ -579,13 +569,10 @@ public class MVTestBase extends StarRocksTestBase {
         }
     }
 
-<<<<<<< HEAD
     public interface ExceptionRunnable {
         public abstract void run() throws Exception;
     }
 
-=======
->>>>>>> cccd31c903 ([Enhancement] Ensure mv force refresh will refresh target partitions (#62627))
     protected void doTest(List<TestListener> listeners, ExceptionRunnable testCase) {
         for (TestListener listener : listeners) {
             listener.onBeforeCase(connectContext);
@@ -630,86 +617,7 @@ public class MVTestBase extends StarRocksTestBase {
             }
         });
     }
-<<<<<<< HEAD
-    
-=======
 
-    public static MVTaskRunProcessor getMVTaskRunProcessor(TaskRun taskRun) {
-        Assertions.assertTrue(taskRun.getProcessor() instanceof MVTaskRunProcessor);
-        return (MVTaskRunProcessor) taskRun.getProcessor();
-    }
-
-    public static MVPCTBasedRefreshProcessor getPartitionBasedRefreshProcessor(TaskRun taskRun) {
-        Assertions.assertTrue(taskRun.getProcessor() instanceof MVTaskRunProcessor);
-        MVTaskRunProcessor mvTaskRunProcessor = (MVTaskRunProcessor) taskRun.getProcessor();
-        return (MVPCTBasedRefreshProcessor) mvTaskRunProcessor.getMVRefreshProcessor();
-    }
-
-    protected void withMVQuery(String mvQuery,
-                               MVActionRunner runner) throws Exception {
-        String ddl = String.format("CREATE MATERIALIZED VIEW `test`.`test_mv1` " +
-                "REFRESH DEFERRED MANUAL\n" +
-                "PROPERTIES (\n" +
-                "\"refresh_mode\" = \"incremental\"" +
-                ")\n" +
-                "AS %s;", mvQuery);
-        starRocksAssert.withMaterializedView(ddl);
-        MaterializedView mv = getMv("test_mv1");
-        runner.run(mv);
-    }
-
-    /**
-     * Get the explain plan for the MV refresh task.
-     */
-    protected String explainMVRefreshExecPlan(MaterializedView mv, String explainQuery) {
-        TaskManager taskManager = GlobalStateMgr.getCurrentState().getTaskManager();
-        Task task = taskManager.getTask(TaskBuilder.getMvTaskName(mv.getId()));
-        Assertions.assertTrue(task != null, "Task for MV " + mv.getName() + " not found:" + explainQuery);
-        StatementBase stmt = getAnalyzedPlan(explainQuery, connectContext);
-        Assertions.assertTrue(stmt != null, "Expected a valid StatementBase but got null:" + explainQuery);
-        ExecuteOption executeOption = buildExecuteOption(stmt);
-        return taskManager.getMVRefreshExplain(task, executeOption, stmt);
-    }
-
-    protected String explainMVRefreshExecPlan(MaterializedView mv, ExecuteOption executeOption, String explainQuery) {
-        TaskManager taskManager = GlobalStateMgr.getCurrentState().getTaskManager();
-        Task task = taskManager.getTask(TaskBuilder.getMvTaskName(mv.getId()));
-        Assertions.assertTrue(task != null, "Task for MV " + mv.getName() + " not found:" + explainQuery);
-        StatementBase stmt = getAnalyzedPlan(explainQuery, connectContext);
-        Assertions.assertTrue(stmt != null, "Expected a valid StatementBase but got null:" + explainQuery);
-        return taskManager.getMVRefreshExplain(task, executeOption, stmt);
-    }
-
-    protected ExecuteOption buildExecuteOption(StatementBase stmt) {
-        Map<String, String> props = new HashMap<>();
-        boolean force = false;
-        if (stmt instanceof RefreshMaterializedViewStatement) {
-            RefreshMaterializedViewStatement refreshMaterializedViewStatement = (RefreshMaterializedViewStatement) stmt;
-            if (refreshMaterializedViewStatement.isForceRefresh()) {
-                force = true;
-            }
-        }
-        if (force) {
-            props.put(TaskRun.FORCE, "true");
-        }
-        return new ExecuteOption(70, false, props);
-    }
-
-    /**
-     * Get the execution plan for the MV refresh task.
-     */
-    protected ExecPlan getMVRefreshExecPlan(MaterializedView mv, String explainQuery) {
-        TaskManager taskManager = GlobalStateMgr.getCurrentState().getTaskManager();
-        Task task = taskManager.getTask(TaskBuilder.getMvTaskName(mv.getId()));
-        Assertions.assertTrue(task != null, "Task for MV " + mv.getName() + " not found:" + explainQuery);
-        StatementBase stmt = getAnalyzedPlan(explainQuery, connectContext);
-        Assertions.assertTrue(stmt != null, "Expected a valid StatementBase but got null:" + explainQuery);
-        ExecuteOption executeOption = buildExecuteOption(stmt);
-        TaskRun taskRun = taskManager.buildTaskRun(task, executeOption);
-        return taskManager.getMVRefreshExecPlan(taskRun, task, executeOption, stmt);
-    }
-
->>>>>>> cccd31c903 ([Enhancement] Ensure mv force refresh will refresh target partitions (#62627))
     public static List<String> extractColumnValues(String sql, int columnIndex) {
         List<String> result = new ArrayList<>();
 
