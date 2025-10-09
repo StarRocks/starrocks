@@ -148,6 +148,13 @@ struct TNormalSelectNode {
   2: optional list<binary> cse_exprs;
 }
 
+struct TNormalRawValuesNode {
+  1: optional Types.TTupleId tuple_id
+  2: optional string constant_type_desc
+  3: optional string raw_constant_list
+  4: optional i32 constant_count
+}
+
 struct TNormalPlanNode {
   1: optional Types.TPlanNodeId node_id
   2: optional PlanNodes.TPlanNodeType node_type
@@ -172,4 +179,5 @@ struct TNormalPlanNode {
   20: optional TNormalSortAggregationNode sort_aggregation_node
   22: optional TNormalSetOperationNode set_operation_node
   23: optional TNormalSelectNode select_node
+  24: optional TNormalRawValuesNode raw_values_node
 }
