@@ -272,12 +272,22 @@ public:
         materialized_nullable();
         RETURN_IF_ERROR(_null_column->capacity_limit_reached());
 
-        return upgrade_helper_func(&_data_column);
+        ColumnPtr data_col = _data_column;
+        auto ret = upgrade_helper_func(&data_col);
+        if (ret.ok() && ret.value() == nullptr) {
+            _data_column = std::move(data_col);
+        }
+        return ret;
     }
 
     StatusOr<ColumnPtr> downgrade() override {
         materialized_nullable();
-        return downgrade_helper_func(&_data_column);
+        ColumnPtr data_col = _data_column;
+        auto ret = downgrade_helper_func(&data_col);
+        if (ret.ok() && ret.value() == nullptr) {
+            _data_column = std::move(data_col);
+        }
+        return ret;
     }
 
     bool has_large_column() const override {
@@ -369,7 +379,7 @@ public:
 
     void put_mysql_row_buffer(MysqlRowBuffer* buf, size_t idx, bool is_binary_protocol = false) const override;
 
-    ColumnPtr& begin_append_not_default_value() {
+    MutableColumnPtr begin_append_not_default_value() {
         switch (_state) {
         case State::kUninitialized: {
             _state = State::kNotConstant;
@@ -384,10 +394,10 @@ public:
             break;
         }
         }
-        return _data_column;
+        return _data_column->as_mutable_ptr();
     }
 
-    const ColumnPtr& begin_append_not_default_value() const {
+    ColumnPtr begin_append_not_default_value() const {
         switch (_state) {
         case State::kUninitialized: {
             _state = State::kNotConstant;
@@ -420,7 +430,7 @@ public:
             break;
         }
         }
-        return _data_column.get();
+        return _data_column->as_mutable_raw_ptr();
     }
 
     void finish_append_one_not_default_value() const {
@@ -441,12 +451,12 @@ public:
         }
     }
 
-    ColumnPtr& materialized_raw_data_column() {
+    MutableColumnPtr materialized_raw_data_column() {
         materialized_nullable();
-        return _data_column;
+        return _data_column->as_mutable_ptr();
     }
 
-    const NullColumnPtr& materialized_raw_null_column() const {
+    NullColumnPtr materialized_raw_null_column() const {
         materialized_nullable();
         return _null_column;
     }
@@ -467,13 +477,13 @@ public:
     Column* mutable_data_column() {
         DCHECK(false);
         materialized_nullable();
-        return _data_column.get();
+        return _data_column->as_mutable_raw_ptr();
     }
 
     NullColumn* mutable_null_column() {
         DCHECK(false);
         materialized_nullable();
-        return _null_column.get();
+        return down_cast<NullColumn*>(_null_column->as_mutable_raw_ptr());
     }
 
     const Column& data_column_ref() const {
@@ -482,13 +492,7 @@ public:
         return *_data_column;
     }
 
-    const ColumnPtr& data_column() const {
-        DCHECK(false);
-        materialized_nullable();
-        return _data_column;
-    }
-
-    ColumnPtr& data_column() {
+    ColumnPtr data_column() const {
         DCHECK(false);
         materialized_nullable();
         return _data_column;
@@ -500,7 +504,7 @@ public:
         return *_null_column;
     }
 
-    const NullColumnPtr& null_column() const {
+    NullColumnPtr null_column() const {
         DCHECK(false);
         materialized_nullable();
         return _null_column;
@@ -609,8 +613,7 @@ public:
 
 private:
     NullData& null_column_data() const {
-        // TODO(COW): remove const_cast
-        auto* mutable_data_col = const_cast<NullColumn*>(_null_column.get());
+        auto* mutable_data_col = down_cast<NullColumn*>(_null_column->as_mutable_raw_ptr());
         return mutable_data_col->get_data();
     }
 
