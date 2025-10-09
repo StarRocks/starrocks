@@ -45,6 +45,7 @@ import com.starrocks.sql.optimizer.operator.logical.LogicalScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalScanOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.plan.PlanTestBase;
+import com.starrocks.thrift.TExplainLevel;
 import mockit.Mock;
 import mockit.MockUp;
 import org.junit.Assert;
@@ -981,6 +982,36 @@ public class MvRewriteTest extends MVTestBase {
             dropMv("test", "emp_lowcard_sum");
             FeConstants.USE_MOCK_DICT_MANAGER = false;
         }
+    }
+
+    @Test
+    public void testDictWithMVRewrite() throws Exception {
+        FeConstants.USE_MOCK_DICT_MANAGER = true;
+        starRocksAssert.withTable("CREATE TABLE supplier_char(" +
+                " s_suppkey     INTEGER NOT NULL,\n" +
+                " s_name        CHAR(25) NOT NULL,\n" +
+                " s_address     CHAR(40), \n" +
+                " s_nationkey   INTEGER NOT NULL,\n" +
+                " s_phone       CHAR(15) NOT NULL,\n" +
+                " s_acctbal     double NOT NULL,\n" +
+                " s_comment     CHAR(101) NOT NULL,\n" +
+                " pad char(1) NOT NULL)\n" +
+                "DUPLICATE KEY(`s_suppkey`)\n" +
+                "DISTRIBUTED BY HASH(`s_suppkey`) BUCKETS 1\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\"" +
+                ");");
+        starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW test_mv1\n" +
+                "DISTRIBUTED BY RANDOM\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\"\n" +
+                ")\n" +
+                "AS select s_nationkey, s_name, bitmap_agg(s_suppkey), sum(s_nationkey) from supplier_char group by " +
+                "s_nationkey, s_name;");
+        String query = "select s_name, count(distinct s_suppkey), sum(s_nationkey) from supplier_char group by s_name;";
+        String plan = getFragmentPlan(query, TExplainLevel.COSTS);
+        PlanTestBase.assertContains(plan, "dict_col=s_name");
+        FeConstants.USE_MOCK_DICT_MANAGER = false;
     }
 
     @Test
