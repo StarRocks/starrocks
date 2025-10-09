@@ -278,6 +278,7 @@ Status FileReader::_init_group_readers() {
     for (size_t i = 0; i < _file_metadata->t_metadata().row_groups.size(); i++) {
         if (i > 0) {
             row_group_first_row += _file_metadata->t_metadata().row_groups[i - 1].num_rows;
+            row_group_first_row_id += _file_metadata->t_metadata().row_groups[i - 1].num_rows;
         }
 
         if (!_select_row_group(_file_metadata->t_metadata().row_groups[i])) {

@@ -80,7 +80,6 @@ StatusOr<bool> IcebergRowIdReader::row_group_zone_map_filter(const std::vector<c
                    << (_first_row_id + rg_first_row + rg_num_rows - 1) << ")";
     }
     return ret;
-    // return Status::NotSupported("IcebergRowIdReader does not support row group zone map filter");
 }
 
 StatusOr<bool> IcebergRowIdReader::page_index_zone_map_filter(const std::vector<const ColumnPredicate*>& predicates,

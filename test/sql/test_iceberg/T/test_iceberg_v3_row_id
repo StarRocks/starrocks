@@ -1,0 +1,17 @@
+-- name: test_iceberg_v3_row_id
+
+create external catalog iceberg_sql_test_${uuid0} PROPERTIES ("type"="iceberg", "iceberg.catalog.type"="hive", "iceberg.catalog.hive.metastore.uris"="${iceberg_catalog_hive_metastore_uris}","enable_iceberg_metadata_cache"="true","aws.s3.access_key" = "${oss_ak}","aws.s3.secret_key" = "${oss_sk}","aws.s3.endpoint" = "${oss_endpoint}");
+
+select min(_row_id),max(_row_id) from iceberg_sql_test_${uuid0}.iceberg_oss_db.test_v3;
+select count(_row_id) from iceberg_sql_test_${uuid0}.iceberg_oss_db.test_v3;
+select _row_id,* from iceberg_sql_test_${uuid0}.iceberg_oss_db.test_v3 order by _row_id limit 10;
+select _row_id,* from iceberg_sql_test_${uuid0}.iceberg_oss_db.test_v3 where c0=20 order by _row_id limit 10;
+select _row_id,* from iceberg_sql_test_${uuid0}.iceberg_oss_db.test_v3 where c0>100 order by _row_id limit 10;
+select _row_id,* from iceberg_sql_test_${uuid0}.iceberg_oss_db.test_v3 where _row_id=9 order by _row_id limit 10;
+select _row_id,* from iceberg_sql_test_${uuid0}.iceberg_oss_db.test_v3 where _row_id >=10 and _row_id <= 20 order by _row_id limit 10;
+select _row_id,* from iceberg_sql_test_${uuid0}.iceberg_oss_db.test_v3 where _row_id in (10,11,12) order by _row_id limit 10;
+
+
+
+
+drop catalog iceberg_sql_test_${uuid0};
