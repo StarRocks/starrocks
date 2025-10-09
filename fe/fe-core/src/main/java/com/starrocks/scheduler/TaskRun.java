@@ -218,7 +218,8 @@ public class TaskRun implements Comparable<TaskRun> {
                 }
             }
         }
-        return defaultTimeoutS;
+        // The timeout of task run should not be longer than the ttl of task runs and task
+        return Math.min(Math.min(defaultTimeoutS, Config.task_runs_ttl_second), Config.task_ttl_second);
     }
 
     public Map<String, String> refreshTaskProperties(ConnectContext ctx) {
