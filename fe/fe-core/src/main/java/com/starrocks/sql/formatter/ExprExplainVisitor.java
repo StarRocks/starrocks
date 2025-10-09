@@ -47,6 +47,7 @@ import com.starrocks.sql.ast.expression.IntervalLiteral;
 import com.starrocks.sql.ast.expression.IsNullPredicate;
 import com.starrocks.sql.ast.expression.LambdaArgument;
 import com.starrocks.sql.ast.expression.LambdaFunctionExpr;
+import com.starrocks.sql.ast.expression.LargeInPredicate;
 import com.starrocks.sql.ast.expression.LargeStringLiteral;
 import com.starrocks.sql.ast.expression.LikePredicate;
 import com.starrocks.sql.ast.expression.LiteralExpr;
@@ -254,6 +255,20 @@ public class ExprExplainVisitor implements AstVisitorExtendInterface<String, Voi
         sb.append(node.getChildren().stream()
                 .skip(1).map(c -> c.accept(this, context))
                 .collect(Collectors.joining(", ")));
+        sb.append(")");
+        return sb.toString();
+    }
+
+    @Override
+    public String visitLargeInPredicate(LargeInPredicate node, Void context) {
+        StringBuilder sb = new StringBuilder();
+        sb.append(node.getCompareExpr().accept(this, context));
+
+        if (node.isNotIn()) {
+            sb.append(" NOT");
+        }
+        sb.append(" IN (");
+        sb.append(node.getRawConstantList());
         sb.append(")");
         return sb.toString();
     }

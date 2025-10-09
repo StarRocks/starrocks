@@ -57,6 +57,7 @@ import com.starrocks.sql.optimizer.rule.transformation.IcebergEqualityDeleteRewr
 import com.starrocks.sql.optimizer.rule.transformation.IcebergPartitionsTableRewriteRule;
 import com.starrocks.sql.optimizer.rule.transformation.InnerToSemiRule;
 import com.starrocks.sql.optimizer.rule.transformation.JoinLeftAsscomRule;
+import com.starrocks.sql.optimizer.rule.transformation.LargeInPredicateToJoinRule;
 import com.starrocks.sql.optimizer.rule.transformation.MaterializedViewTransparentRewriteRule;
 import com.starrocks.sql.optimizer.rule.transformation.MergeProjectWithChildRule;
 import com.starrocks.sql.optimizer.rule.transformation.MergeTwoAggRule;
@@ -559,6 +560,9 @@ public class QueryOptimizer extends Optimizer {
 
         // rewrite transparent materialized view
         tree = transparentMVRewrite(tree, rootTaskContext);
+
+        // This rule needs to be executed before PUSH_DOWN_PREDICATE_RULES
+        scheduler.rewriteOnce(tree, rootTaskContext, new LargeInPredicateToJoinRule());
 
         // Note: PUSH_DOWN_PREDICATE tasks should be executed before MERGE_LIMIT tasks
         // because of the Filter node needs to be merged first to avoid the Limit node

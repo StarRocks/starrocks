@@ -37,6 +37,7 @@ import java.util.List;
 import static com.starrocks.sql.analyzer.AnalyzeTestUtil.analyzeFail;
 import static com.starrocks.sql.analyzer.AnalyzeTestUtil.analyzeSuccess;
 import static com.starrocks.sql.analyzer.AnalyzeTestUtil.analyzeWithoutTestView;
+import static com.starrocks.sql.analyzer.AnalyzeTestUtil.connectContext;
 import static com.starrocks.sql.analyzer.AnalyzeTestUtil.getConnectContext;
 
 public class AnalyzeSingleTest {
@@ -632,8 +633,8 @@ public class AnalyzeSingleTest {
         analyzeSuccess("select * from test.t0 where v1 in (1,2,3,4)");
 
         analyzeFail("select * from test.t0 where v1 in (1,2,3,4,5,6)",
-                "Getting syntax error from line 1, column 35 to line 1, column 45. " +
-                        "Detail message: The number of exprs are 6 exceeded the maximum limit 5");
+                "Getting syntax error from line 1, column 34 to line 1, column 46. " +
+                        "Detail message: The number of children in expr are 6 exceeded the maximum limit 5");
 
         analyzeFail("select [1,2,3,4,5,6]",
                 "Getting syntax error from line 1, column 8 to line 1, column 18. " +

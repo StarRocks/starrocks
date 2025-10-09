@@ -30,6 +30,7 @@ import com.starrocks.sql.optimizer.operator.scalar.DictMappingOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ExistsPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.InPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.IsNullPredicateOperator;
+import com.starrocks.sql.optimizer.operator.scalar.LargeInPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.LikePredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.MatchExprOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
@@ -193,6 +194,21 @@ public class ExpressionPrinter<C> extends ScalarOperatorVisitor<String, C> {
         sb.append("IN (");
         sb.append(
                 predicate.getChildren().stream().skip(1).map(p -> print(p, context)).collect(Collectors.joining(", ")));
+        sb.append(")");
+        return sb.toString();
+    }
+
+    @Override
+    public String visitLargeInPredicate(LargeInPredicateOperator predicate, C context) {
+        StringBuilder sb = new StringBuilder();
+        sb.append(print(predicate.getCompareExpr(), context)).append(" ");
+        
+        if (predicate.isNotIn()) {
+            sb.append("NOT ");
+        }
+        
+        sb.append("IN (");
+        sb.append(predicate.getRawConstantList());
         sb.append(")");
         return sb.toString();
     }
