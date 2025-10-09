@@ -200,16 +200,19 @@ protected:
 
         // Only provide const access methods
         const T* get() const { return this->_t; }
-        
-        const T* operator->() const { return this->_t; }
+        // T* get() { return const_cast<T*>(this->_t); }
 
-        const T& operator*() const& { return *get(); }
+        const T* operator->() const { return this->_t; }
+        // T* operator->() { return const_cast<T*>(this->_t); }
+
+        const T& operator*() const { return *get(); }
+        // T& operator*() { return *get(); }
         
         // Delete rvalue reference operator that could bypass const-correctness
-        const T&& operator*() const&& = delete;
+        // const T&& operator*() const&& = delete;
         
         // Override conversion operator to ensure const-only access
-        operator const T*() const { return this->_t; }
+        // operator const T*() const { return this->_t; }
 
     private:
         using Base = RCPtr<const T>;
