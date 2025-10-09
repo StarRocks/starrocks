@@ -204,6 +204,11 @@ BITSHUFFLE_VERSION="0.5.1"
 VECTORSCAN_VERSION="5.4.12"
 VELOCYPACK_VERSION="XYZ1.0"
 
+# RYU (build from source; pinned commit snapshot)
+RYU_DOWNLOAD="https://github.com/ulfjack/ryu/archive/aa31ca9361d21b1a00ee054aac49c87d07e74abc.zip"
+RYU_NAME="ryu-aa31ca9361d21b1a00ee054aac49c87d07e74abc.zip"
+RYU_SOURCE="ryu-aa31ca9361d21b1a00ee054aac49c87d07e74abc"
+
 download_source() {
     local name="$1"
     local version="$2"
@@ -698,6 +703,59 @@ build_bitshuffle() {
     log_success "bitshuffle built successfully"
 }
 
+# Build ryu from source and install into $INSTALL_DIR
+build_ryu() {
+    # Check if already built
+    if [[ -f "$INSTALL_DIR/lib/libryu.a" && -f "$INSTALL_DIR/include/ryu/ryu.h" ]]; then
+        log_success "ryu already built, skipping"
+        return 0
+    fi
+
+    log_info "Building ryu from source..."
+
+    local src_dir="$THIRDPARTY_DIR/src"
+    local build_dir="$THIRDPARTY_DIR/build/ryu"
+
+    download_source "ryu" "$RYU_SOURCE" "$RYU_DOWNLOAD" "$RYU_NAME"
+
+    mkdir -p "$build_dir"
+    cd "$build_dir"
+
+    if [[ ! -d "$RYU_SOURCE" ]]; then
+        unzip -q "$src_dir/$RYU_NAME"
+    fi
+
+    cd "$RYU_SOURCE"
+
+    # Apply patch if exists (use shared thirdparty patch when available)
+    local patch_file="$THIRDPARTY_DIR/patches/ryu.patch"
+    if [[ -f "$patch_file" ]]; then
+        log_info "Applying ryu patch..."
+        patch -p1 < "$patch_file"
+    fi
+
+    # Build and install
+    cd ryu
+    make -j"$PARALLEL_JOBS"
+    make install DESTDIR="$INSTALL_DIR"
+
+    # Ensure headers path matches <ryu/ryu.h>
+    mkdir -p "$INSTALL_DIR/include/ryu"
+    if [[ -f "$INSTALL_DIR/include/ryu.h" ]]; then
+        mv -f "$INSTALL_DIR/include/ryu.h" "$INSTALL_DIR/include/ryu/ryu.h"
+    elif [[ -f "ryu.h" ]]; then
+        cp -f "ryu.h" "$INSTALL_DIR/include/ryu/ryu.h"
+    fi
+
+    # Ensure lib64 compatibility copy
+    if [[ -f "$INSTALL_DIR/lib/libryu.a" ]]; then
+        mkdir -p "$INSTALL_DIR/lib64"
+        cp -f "$INSTALL_DIR/lib/libryu.a" "$INSTALL_DIR/lib64/libryu.a"
+    fi
+
+    log_success "ryu built successfully"
+}
+
 
 detect_boost_version() {
     # Detect Boost version from Homebrew installation
@@ -820,6 +878,7 @@ build_source_deps() {
     build_glog
     build_protobuf
     build_leveldb
+    build_ryu
 
     # Layer 2: Libraries that depend on Layer 1
     build_brpc
@@ -838,6 +897,7 @@ build_source_deps() {
     ln -sf ../lib/libbrpc.a "$INSTALL_DIR/lib64/libbrpc.a" 2>/dev/null || true
     ln -sf ../lib/librocksdb.a "$INSTALL_DIR/lib64/librocksdb.a" 2>/dev/null || true
     ln -sf ../lib/libhs.a "$INSTALL_DIR/lib64/libhs.a" 2>/dev/null || true
+    ln -sf ../lib/libryu.a "$INSTALL_DIR/lib64/libryu.a" 2>/dev/null || true
 
     log_success "All source dependencies built successfully"
 }
@@ -867,6 +927,8 @@ main() {
         "libvelocypack.a"
         "libbitshuffle.a"
         "libhs.a"
+        "libhs_runtime.a"
+        "libryu.a"
     )
 
     local missing_libs=()

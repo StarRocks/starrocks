@@ -204,6 +204,11 @@ add_definitions(-DMACOS_DISABLE_GEO)
 add_definitions(-DMACOS_DISABLE_S3)
 add_definitions(-DMACOS_DISABLE_MYSQL)
 add_definitions(-DMACOS_DISABLE_CLUCENE)
+add_definitions(-DMACOS_DISABLE_STARCACHE)
+# Disable spill feature on macOS
+add_definitions(-DMACOS_DISABLE_SPILL)
+# Ensure starcache/staros code paths are disabled by making the macros undefined
+add_compile_options(-UWITH_STARCACHE -UUSE_STAROS)
 
 message(STATUS "macOS: Disabled problematic components for ARM64 compatibility")
 
@@ -413,10 +418,17 @@ set_target_properties(zlib PROPERTIES
     IMPORTED_LOCATION ${ZLIB_LIB}
     INTERFACE_INCLUDE_DIRECTORIES /opt/homebrew/include)
 
-# vectorscan (hyperscan replacement) from thirdparty
+# vectorscan (hyperscan-compatible) from thirdparty
+# Vectorscan installs libhs.a and libhs_runtime.a (hyperscan ABI)
 add_library(vectorscan STATIC IMPORTED GLOBAL)
 set_target_properties(vectorscan PROPERTIES
-    IMPORTED_LOCATION ${THIRDPARTY_DIR}/installed/lib/libvectorscan.a
+    IMPORTED_LOCATION ${THIRDPARTY_DIR}/installed/lib/libhs.a
+    INTERFACE_INCLUDE_DIRECTORIES ${THIRDPARTY_DIR}/installed/include)
+
+# hs_runtime from vectorscan
+add_library(hs_runtime STATIC IMPORTED GLOBAL)
+set_target_properties(hs_runtime PROPERTIES
+    IMPORTED_LOCATION ${THIRDPARTY_DIR}/installed/lib/libhs_runtime.a
     INTERFACE_INCLUDE_DIRECTORIES ${THIRDPARTY_DIR}/installed/include)
 
 # roaring bitmap from homebrew (dynamic library)
@@ -516,7 +528,8 @@ set(CMAKE_SKIP_RPATH TRUE)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 # Base compiler flags for ARM64
-set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} -march=armv8-a")
+# Enable CRC32 intrinsics on ARM64
+set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} -march=armv8-a+crc")
 set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} -std=gnu++20")
 set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} -stdlib=libc++")
 set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} -fPIC")
@@ -537,6 +550,12 @@ set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} -Wno-vla-cxx-extension")
 set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} -Wno-#warnings")
 # Disable deprecated declarations warning (e.g., std::iterator deprecated in C++17)
 set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} -Wno-deprecated-declarations")
+set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} -Wno-macro-redefined")
+# Enable removed std::unary_function/binary_function in libc++ for legacy code
+set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} -D_LIBCPP_ENABLE_CXX17_REMOVED_UNARY_BINARY_FUNCTION")
+
+# Suppress all warnings on macOS build as requested
+set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} -Wno-everything")
 
 # macOS SDK and deployment target
 set(CMAKE_OSX_DEPLOYMENT_TARGET "15.0")
@@ -559,7 +578,7 @@ endif()
 
 # Apply common flags
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${CXX_COMMON_FLAGS}")
-set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${CXX_COMMON_FLAGS}")
+set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${CXX_COMMON_FLAGS} -Wno-everything")
 
 # ==============================================================================
 # LINK LIBRARIES CONFIGURATION
@@ -586,6 +605,7 @@ list(APPEND STARROCKS_LINK_LIBS
     snappy
     zlib
     vectorscan
+    hs_runtime
     roaring
     arrow
     parquet
@@ -637,6 +657,7 @@ message(STATUS "Apple frameworks configured for brpc support")
 # SOURCE FILES CONFIGURATION
 # ==============================================================================
 # Include all source directories
+include_directories(BEFORE ${CMAKE_CURRENT_LIST_DIR}/shims/include)
 include_directories(${SRC_DIR})
 include_directories(${GENSRC_DIR})
 include_directories(${BASE_DIR}/build)
@@ -702,6 +723,11 @@ list(FILTER STARROCKS_SOURCES EXCLUDE REGEX ".*python_.*\\.cpp$")
 list(FILTER STARROCKS_SOURCES EXCLUDE REGEX ".*/fs/hdfs/.*\\.cpp$")
 list(FILTER STARROCKS_SOURCES EXCLUDE REGEX ".*hdfs.*\\.cpp$")
 
+# Exclude StarCache-related sources (unsupported on macOS build)
+list(FILTER STARROCKS_SOURCES EXCLUDE REGEX ".*/cache/disk_cache/starcache_engine\\.cpp$")
+list(FILTER STARROCKS_SOURCES EXCLUDE REGEX ".*/http/action/datacache_action\\.cpp$")
+list(FILTER STARROCKS_SOURCES EXCLUDE REGEX ".*/exec/schema_scanner/schema_be_datacache_metrics_scanner\\.cpp$")
+
 # Completely exclude S3 related files
 list(FILTER STARROCKS_SOURCES EXCLUDE REGEX ".*/fs/s3/.*\\.cpp$")
 list(FILTER STARROCKS_SOURCES EXCLUDE REGEX ".*s3.*\\.cpp$")
@@ -744,6 +770,7 @@ list(FILTER STARROCKS_SOURCES EXCLUDE REGEX ".*spillable.*\\.cpp$")
 list(FILTER STARROCKS_SOURCES EXCLUDE REGEX ".*spill.*operator.*\\.cpp$")
 list(FILTER STARROCKS_SOURCES EXCLUDE REGEX ".*spill.*factory.*\\.cpp$")
 list(FILTER STARROCKS_SOURCES EXCLUDE REGEX ".*spill_process.*\\.cpp$")
+list(FILTER STARROCKS_SOURCES EXCLUDE REGEX ".*/exec/pipeline/spill_process_channel\\.cpp$")
 list(FILTER STARROCKS_SOURCES EXCLUDE REGEX ".*/spill/.*\\.cpp$")
 list(FILTER STARROCKS_SOURCES EXCLUDE REGEX ".*SpillableHashJoin.*\\.cpp$")
 list(FILTER STARROCKS_SOURCES EXCLUDE REGEX ".*SpillableNLJoin.*\\.cpp$")
@@ -778,6 +805,9 @@ list(FILTER STARROCKS_SOURCES EXCLUDE REGEX ".*connector.*orc.*\\.cpp$")
 # Exclude HTTP actions that depend on disabled components
 list(FILTER STARROCKS_SOURCES EXCLUDE REGEX ".*/http/action/jit_.*\\.cpp$")
 list(FILTER STARROCKS_SOURCES EXCLUDE REGEX ".*/http/action/.*jit.*\\.cpp$")
+
+# Exclude JVM/JNI dependent metrics on macOS
+list(FILTER STARROCKS_SOURCES EXCLUDE REGEX ".*/util/jvm_metrics\\.cpp$")
 
 # Exclude Arrow Flight components
 list(FILTER STARROCKS_SOURCES EXCLUDE REGEX ".*arrow_flight.*\\.cpp$")
