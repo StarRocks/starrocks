@@ -42,14 +42,17 @@ import com.starrocks.sql.ast.DropPartitionClause;
 import com.starrocks.sql.common.DmlException;
 import com.starrocks.sql.common.PCell;
 import org.apache.commons.collections4.CollectionUtils;
+import org.apache.hadoop.shaded.org.apache.commons.math3.util.Pair;
 import org.apache.logging.log4j.Logger;
 
 import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.TimeUnit;
+import java.util.stream.Collectors;
 
 import static com.starrocks.catalog.MvRefreshArbiter.getMvBaseTableUpdateInfo;
 import static com.starrocks.catalog.MvRefreshArbiter.needsToRefreshTable;
@@ -128,7 +131,14 @@ public abstract class MVPCTRefreshPartitioner {
                                                          Set<String> mvPotentialPartitionNames) throws AnalysisException;
 
     public Set<String> getMVPartitionsToRefreshWithForce(MVRefreshParams mvRefreshParams) throws AnalysisException {
-        return getMVPartitionsToRefreshByParams(mvRefreshParams);
+        Set<String> toRefreshPartitions = getMVPartitionsToRefreshByParams(mvRefreshParams);
+        Map<String, PCell> mvListPartitionMap = mv.getPartitionCells(Optional.empty());
+        Map<String, PCell> validToRefreshPartitions = toRefreshPartitions.stream()
+                .filter(mvListPartitionMap::containsKey)
+                .map(name -> Pair.create(name, mvListPartitionMap.get(name)))
+                .collect(Collectors.toMap(Pair::getKey, Pair::getValue));
+        filterPartitionsByTTL(validToRefreshPartitions, true);
+        return validToRefreshPartitions.keySet();
     }
 
     /**
