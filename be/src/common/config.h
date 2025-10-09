@@ -412,7 +412,7 @@ CONF_Bool(enable_event_based_compaction_framework, "true");
 CONF_Bool(enable_size_tiered_compaction_strategy, "true");
 CONF_mBool(enable_pk_size_tiered_compaction_strategy, "true");
 // Enable parallel execution within tablet for primary key tables.
-CONF_mBool(enable_pk_parallel_execution, "false");
+CONF_mBool(enable_pk_parallel_execution, "true");
 // The minimum threshold of data size for enabling pk parallel execution.
 // Default is 300MB.
 CONF_mInt64(pk_parallel_execution_threshold_bytes, "314572800");
