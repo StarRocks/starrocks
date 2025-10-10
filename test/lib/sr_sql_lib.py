@@ -3376,7 +3376,7 @@ out.append("${{dictMgr.NO_DICT_STRING_COLUMNS.contains(cid)}}")
 
         return True
 
-    def query_detail_check(self, sql=None, expected_scan_rows=None, expected_return_rows=None):
+    def query_detail_check(self, sql=None, expected_scan_rows=None, expected_return_rows=None, expected_cpu_cost_ns=None):
         """
         Comprehensive function to test query detail API using assertions to validate results
         
@@ -3462,7 +3462,16 @@ out.append("${{dictMgr.NO_DICT_STRING_COLUMNS.contains(cid)}}")
             actual_cpu_cost_ns > 0,
             f"cpuCostNs is negative: {actual_cpu_cost_ns}"
         )
-        # print(f"✓ cpuCostNs validation passed: {actual_cpu_cost_ns}")
+
+        if expected_cpu_cost_ns is not None:
+            tools.assert_true(
+                actual_cpu_cost_ns >= expected_cpu_cost_ns,
+                f"cpuCostNs mismatch: expected {expected_cpu_cost_ns}, got {actual_cpu_cost_ns}"
+            )
+            # print(f"✓ cpuCostNs validation passed: {actual_cpu_cost_ns}")
+        else:
+            # print(f"cpuCostNs: {query_detail.get('cpuCostNs')}")
+            pass
 
         # Validate scanBytes
         actual_scan_bytes = query_detail.get("scanBytes")

@@ -20,6 +20,11 @@ function: query_detail_check("select * from test_table", 3, 3)
 
 function: query_detail_check("insert into test_table select * from test_table", 3, 0)
 
+set pipeline_dop=1;
+set io_tasks_per_scan_operator=1;
+function: query_detail_check("select * from test_table where sleep(1)", 6, 6, 2)
+
+
 -- admin set frontend config ("enable_collect_query_detail_info" = "false");
 
 
