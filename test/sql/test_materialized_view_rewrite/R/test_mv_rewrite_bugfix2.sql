@@ -206,7 +206,7 @@ North Subregion	2.8018867924528297
 -- !result
 function: print_hit_materialized_views("SELECT subregion_name, CAST(SUM(total_amount) AS DOUBLE) / CAST(SUM(distance_km) AS DOUBLE) AS avg_fare_per_km FROM fact_orders AS f LEFT JOIN mv_region_geohash AS r ON CAST(r.geohash AS varchar)= CAST(f.geohash AS varchar) WHERE DATE_TRUNC('day', local_time) >= DATE_TRUNC('hour', STR_TO_DATE('2025-08-25 00:00:00', '%Y-%m-%d %H:%i:%S')) AND DATE_TRUNC('day', local_time) < DATE_TRUNC('hour', STR_TO_DATE('2025-09-01 00:00:00', '%Y-%m-%d %H:%i:%S')) AND date_id >= 20230623 AND date_id < 20250903 AND (country_id = 4 and city_id in (6) and vehicle_id in (16866, 16860, 16859, 16810, 15829, 15828, 15827, 15826, 15825, 15824, 15817, 15816, 15568, 15272, 15271, 15270, 15269, 15268, 15267, 15266, 15265, 13912, 13904, 13806, 13805, 13804, 13803, 13802, 13801, 13800, 13799, 13456, 13341, 12138, 11770, 11655, 11631, 10742, 10540, 10500, 10499, 10498, 10496, 10495, 10494, 10493, 10492, 10491, 10490, 10489, 10488, 10487, 10486, 10485, 10484, 10479, 9979, 9450, 9338, 8920, 8522, 8183, 7387, 6709, 6705, 4894, 4152, 4131, 3455, 2792, 2742, 2275, 462, 302, 187, 156, 69, 21, 20, 19, 11) and (order_code != '' and order_status = 'booked')) GROUP BY 1 LIMIT 10001;")
 -- result:
-mv_region_geohash,mv_fact_orders_1
+mv_fact_orders_1,mv_region_geohash
 -- !result
 INSERT INTO dim_region VALUES 
 (4, 'Mountain View', 'Region', 4, 1, 103, 'Hill Town', 'Rural', 'REG004', 'Residential', 'CountryA', 'TerritoryY', 'RegionW', 'Hill Town', 'North', 'Highland', 'Scenic Area', ['geohash7', 'geohash8'], [4001, 4002]);
@@ -224,7 +224,7 @@ North Subregion	2.8018867924528297
 -- !result
 function: print_hit_materialized_views("SELECT subregion_name, CAST(SUM(total_amount) AS DOUBLE) / CAST(SUM(distance_km) AS DOUBLE) AS avg_fare_per_km FROM fact_orders AS f LEFT JOIN mv_region_geohash AS r ON CAST(r.geohash AS varchar)= CAST(f.geohash AS varchar) WHERE DATE_TRUNC('day', local_time) >= DATE_TRUNC('hour', STR_TO_DATE('2025-08-25 00:00:00', '%Y-%m-%d %H:%i:%S')) AND DATE_TRUNC('day', local_time) < DATE_TRUNC('hour', STR_TO_DATE('2025-09-01 00:00:00', '%Y-%m-%d %H:%i:%S')) AND date_id >= 20230623 AND date_id < 20250903 AND (country_id = 4 and city_id in (6) and vehicle_id in (16866, 16860, 16859, 16810, 15829, 15828, 15827, 15826, 15825, 15824, 15817, 15816, 15568, 15272, 15271, 15270, 15269, 15268, 15267, 15266, 15265, 13912, 13904, 13806, 13805, 13804, 13803, 13802, 13801, 13800, 13799, 13456, 13341, 12138, 11770, 11655, 11631, 10742, 10540, 10500, 10499, 10498, 10496, 10495, 10494, 10493, 10492, 10491, 10490, 10489, 10488, 10487, 10486, 10485, 10484, 10479, 9979, 9450, 9338, 8920, 8522, 8183, 7387, 6709, 6705, 4894, 4152, 4131, 3455, 2792, 2742, 2275, 462, 302, 187, 156, 69, 21, 20, 19, 11) and (order_code != '' and order_status = 'booked')) GROUP BY 1 LIMIT 10001;")
 -- result:
-mv_region_geohash,mv_fact_orders_1
+mv_fact_orders_1,mv_region_geohash
 -- !result
 REFRESH MATERIALIZED VIEW mv_fact_orders_1 WITH SYNC MODE;
 REFRESH MATERIALIZED VIEW mv_fact_orders_2 WITH SYNC MODE;
