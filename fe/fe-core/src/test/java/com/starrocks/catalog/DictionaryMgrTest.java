@@ -186,4 +186,126 @@ public class DictionaryMgrTest {
         Assertions.assertTrue(
                 allInfo.get(0).get(allInfo.get(0).size() - 1).contains("Can not get Memory info, errMsg: test error"));
     }
+
+    @Test
+    public void testClearDictionaryCache() throws Exception {
+        List<String> dictionaryKeys = Lists.newArrayList();
+        List<String> dictionaryValues = Lists.newArrayList();
+        dictionaryKeys.add("key1");
+        dictionaryValues.add("value1");
+        Dictionary dictionary =
+                new Dictionary(1, "test_dict", "t", "default_catalog", "testDb", dictionaryKeys, dictionaryValues, null);
+        
+        new MockUp<DictionaryMgr>() {
+            @Mock
+            public static Pair<Boolean, String> processDictionaryCacheInteranl(PProcessDictionaryCacheRequest request,
+                                                                               List<TNetworkAddress> beNodes,
+                                                                               List<PProcessDictionaryCacheResult> results) {
+                return new Pair<>(false, "");
+            }
+        };
+        
+        DictionaryMgr localDictionaryMgr = new DictionaryMgr();
+        localDictionaryMgr.clearDictionaryCache(dictionary, true);
+    }
+
+    @Test
+    public void testGetDictionaryStatisticSuccess() throws Exception {
+        DictionaryMgr localDictionaryMgr = new DictionaryMgr();
+        List<String> dictionaryKeys = Lists.newArrayList();
+        List<String> dictionaryValues = Lists.newArrayList();
+        dictionaryKeys.add("key1");
+        dictionaryValues.add("value1");
+        Dictionary dictionary =
+                new Dictionary(1, "test_dict", "t", "default_catalog", "testDb", dictionaryKeys, dictionaryValues, null);
+
+        new MockUp<DictionaryMgr>() {
+            @Mock
+            public void fillBackendsOrComputeNodes(List<TNetworkAddress> nodes) {
+                nodes.add(new TNetworkAddress("127.0.0.1", 1234));
+            }
+
+            @Mock
+            public static Pair<Boolean, String> processDictionaryCacheInteranl(PProcessDictionaryCacheRequest request,
+                                                                               List<TNetworkAddress> beNodes,
+                                                                               List<PProcessDictionaryCacheResult> results) {
+                if (results != null) {
+                    results.add(new PProcessDictionaryCacheResult());
+                }
+                return new Pair<>(false, "");
+            }
+        };
+
+        Pair<Map<TNetworkAddress, PProcessDictionaryCacheResult>, String> result =
+                localDictionaryMgr.getDictionaryStatistic(dictionary);
+        Assertions.assertNotNull(result.first);
+        Assertions.assertEquals("", result.second);
+    }
+
+    @Test
+    public void testProcessDictionaryCacheException() throws Exception {
+        DictionaryMgr localDictionaryMgr = new DictionaryMgr();
+        List<String> dictionaryKeys = Lists.newArrayList();
+        List<String> dictionaryValues = Lists.newArrayList();
+        dictionaryKeys.add("key1");
+        dictionaryValues.add("value1");
+        Dictionary dictionary =
+                new Dictionary(1, "test_dict", "t", "default_catalog", "testDb", dictionaryKeys, dictionaryValues, null);
+
+        new MockUp<DictionaryMgr>() {
+            @Mock
+            public void fillBackendsOrComputeNodes(List<TNetworkAddress> nodes) {
+                nodes.add(new TNetworkAddress("127.0.0.1", 1234));
+            }
+        };
+
+        localDictionaryMgr.clearDictionaryCache(dictionary, false);
+    }
+
+    @Test
+    public void testRefreshDictionaryCacheWorker() throws Exception {
+        List<String> dictionaryKeys = Lists.newArrayList();
+        List<String> dictionaryValues = Lists.newArrayList();
+        dictionaryKeys.add("key1");
+        dictionaryValues.add("value1");
+        Dictionary dictionary =
+                new Dictionary(1, "test_dict", "t", "default_catalog", "testDb", dictionaryKeys, dictionaryValues, null);
+
+        new MockUp<DictionaryMgr>() {
+            @Mock
+            public void fillBackendsOrComputeNodes(List<TNetworkAddress> nodes) {
+                nodes.add(new TNetworkAddress("127.0.0.1", 1234));
+            }
+
+            @Mock
+            public static Pair<Boolean, String> processDictionaryCacheInteranl(PProcessDictionaryCacheRequest request,
+                                                                               List<TNetworkAddress> beNodes,
+                                                                               List<PProcessDictionaryCacheResult> results) {
+                // Simulate successful begin and commit
+                return new Pair<>(false, "");
+            }
+
+            @Mock
+            public void syncDictionaryMeta(List<Dictionary> dictionaries) {
+                // Mock sync operation
+            }
+
+            @Mock
+            public void unresigerRunningAndUnfinised(long dictionaryId) {
+                // Mock unregister operation
+            }
+
+            @Mock
+            public void updateLastSuccessTxnId(long dictionaryId, long txnId) {
+                // Mock update operation
+            }
+        };
+
+        DictionaryMgr localDictionaryMgr = new DictionaryMgr();
+        DictionaryMgr.RefreshDictionaryCacheWorker worker =
+                localDictionaryMgr.new RefreshDictionaryCacheWorker(dictionary, 1L);
+        
+        // Test that worker can be instantiated and has proper initialization
+        Assertions.assertNotNull(worker);
+    }
 }
