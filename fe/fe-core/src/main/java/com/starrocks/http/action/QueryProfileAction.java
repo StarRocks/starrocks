@@ -43,10 +43,7 @@ import com.starrocks.http.ActionController;
 import com.starrocks.http.BaseRequest;
 import com.starrocks.http.BaseResponse;
 import com.starrocks.http.IllegalArgException;
-import com.starrocks.qe.SessionVariable;
 import com.starrocks.sql.ExplainAnalyzer;
-import com.starrocks.sql.ast.AnalyzeProfileStmt;
-import com.starrocks.sql.parser.SqlParser;
 import io.netty.handler.codec.http.HttpMethod;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -55,7 +52,7 @@ import org.owasp.encoder.Encode;
 import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.StringReader;
-import java.util.List;
+import java.util.Collections;
 
 import static com.github.vertical_blank.sqlformatter.languages.Dialect.MySql;
 
@@ -110,16 +107,12 @@ public class QueryProfileAction extends WebBaseAction {
     private String analyzeProfile(ProfileManager.ProfileElement queryProfile, String queryId) {
         String analysis;
         try {
-            String analyzeProfileStmtStr = "ANALYZE PROFILE FROM '" + queryId + "'";
-            AnalyzeProfileStmt analyzeProfileStmt = (AnalyzeProfileStmt) SqlParser.parseOneWithStarRocksDialect(
-                    analyzeProfileStmtStr, new SessionVariable());
-            List<Integer> planNodeIds = analyzeProfileStmt.getPlanNodeIds();
             analysis = ExplainAnalyzer.analyze(queryProfile.plan, RuntimeProfileParser.parseFrom(
-                    CompressionUtils.gzipDecompressString(queryProfile.profileContent)), planNodeIds, false);
+                    CompressionUtils.gzipDecompressString(queryProfile.profileContent)), Collections.emptyList(), false);
             analysis = analysis.replaceAll(ANSI_REGEX, "");
         } catch (Exception e) {
             LOG.warn("Failed to analyze profile of {}", queryId, e);
-            analysis = String.format("Failed to analyze profile of %s\n.%s\n", queryId, e);
+            analysis = String.format("Failed to analyze profile of %s\n%s\n", queryId, e);
         }
         return analysis;
     }
@@ -131,7 +124,7 @@ public class QueryProfileAction extends WebBaseAction {
             formattedSql = FORMATTER.format(sqlStatement);
         } catch (Exception e) {
             LOG.warn("Failed to get formatted SQL of {}", queryId, e);
-            formattedSql = String.format("Failed to get formatted SQL of %s\n.%s\n", queryId, e);
+            formattedSql = String.format("Failed to get formatted SQL of %s\n%s\n", queryId, e);
         }
         return formattedSql;
     }
@@ -142,7 +135,7 @@ public class QueryProfileAction extends WebBaseAction {
             profileStr = CompressionUtils.gzipDecompressString(queryProfile.profileContent);
         } catch (Exception e) {
             LOG.warn("Failed to get profile of {}", queryId, e);
-            profileStr = String.format("Failed to get profile of %s\n.%s\n", queryId, e);
+            profileStr = String.format("Failed to get profile of %s\n%s\n", queryId, e);
         }
         return profileStr;
     }
