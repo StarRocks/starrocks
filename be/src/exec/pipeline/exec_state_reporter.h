@@ -27,9 +27,10 @@
 #include "util/threadpool.h"
 
 namespace starrocks::pipeline {
+class ExecStateReporterMetrics;
 class ExecStateReporter {
 public:
-    explicit ExecStateReporter(const CpuUtil::CpuIds& cpuids);
+    explicit ExecStateReporter(const CpuUtil::CpuIds& cpuids, ExecStateReporterMetrics* metrics);
 
     static std::unique_ptr<TReportExecStatusParams> create_report_exec_status_params(
             QueryContext* query_ctx, FragmentContext* fragment_ctx, RuntimeProfile* profile,

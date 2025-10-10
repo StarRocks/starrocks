@@ -14,7 +14,11 @@
 
 #include "exec/pipeline/pipeline_metrics.h"
 
+#include <numeric>
+
 #include "util/metrics.h"
+#include "util/starrocks_metrics.h"
+#include "util/threadpool.h"
 
 namespace starrocks::pipeline {
 
@@ -25,6 +29,26 @@ void ScanExecutorMetrics::register_all_metrics(MetricRegistry* registry, const s
     REGISTER_SCAN_EXECUTOR_METRIC(finished_tasks);
     REGISTER_SCAN_EXECUTOR_METRIC(running_tasks);
     REGISTER_SCAN_EXECUTOR_METRIC(pending_tasks);
+}
+
+#define ACCUMULATED(array, field)                                                                                     \
+    [this]() {                                                                                                        \
+        std::lock_guard guard(_mutex);                                                                                \
+        return std::accumulate(array.begin(), array.end(), 0, [](int64_t a, const auto& b) { return a + b->field; }); \
+    }
+
+#define REGISTER_POOLS_METRICS(name, threadpool)                                                                     \
+    REGISTER_GAUGE_STARROCKS_METRIC(name##_threadpool_size, ACCUMULATED(threadpool, max_threads()))                  \
+    REGISTER_GAUGE_STARROCKS_METRIC(name##_executed_tasks_total, ACCUMULATED(threadpool, total_executed_tasks()));   \
+    REGISTER_GAUGE_STARROCKS_METRIC(name##_pending_time_ns_total, ACCUMULATED(threadpool, total_pending_time_ns())); \
+    REGISTER_GAUGE_STARROCKS_METRIC(name##_execute_time_ns_total, ACCUMULATED(threadpool, total_execute_time_ns())); \
+    REGISTER_GAUGE_STARROCKS_METRIC(name##_queue_count, ACCUMULATED(threadpool, num_queued_tasks()));                \
+    REGISTER_GAUGE_STARROCKS_METRIC(name##_running_threads, ACCUMULATED(threadpool, num_threads()));                 \
+    REGISTER_GAUGE_STARROCKS_METRIC(name##_active_threads, ACCUMULATED(threadpool, active_threads()));
+
+void ExecStateReporterMetrics::register_all_metrics() {
+    REGISTER_POOLS_METRICS(exec_state_report, _reporter_thr_pools);
+    REGISTER_POOLS_METRICS(priority_exec_state_report, _priority_reporter_thr_pools);
 }
 
 void DriverQueueMetrics::register_all_metrics(MetricRegistry* registry) {
@@ -52,5 +76,6 @@ void PipelineExecutorMetrics::register_all_metrics(MetricRegistry* registry) {
     driver_executor_metrics.register_all_metrics(registry);
     scan_executor_metrics.register_all_metrics(registry, "scan");
     connector_scan_executor_metrics.register_all_metrics(registry, "connector_scan");
+    exec_state_reporter_metrics.register_all_metrics();
 }
 } // namespace starrocks::pipeline
