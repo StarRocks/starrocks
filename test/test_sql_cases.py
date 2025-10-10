@@ -89,12 +89,8 @@ class TestSQLCases(sr_sql_lib.StarrocksSQLApiLib):
         self.connect_starrocks()
         self.create_starrocks_conn_pool()
         self.check_cluster_status()
-
-        try:
-            self._init_global_configs()
-            self._init_global_session_variables()
-        except Exception as e:
-            log.warning(f"init global configs or session variables error: {e}")
+        self._init_global_configs()
+        self._init_global_session_variables()
 
     def _init_global_configs(self):
         """
@@ -116,10 +112,10 @@ class TestSQLCases(sr_sql_lib.StarrocksSQLApiLib):
         Session variables that are not ready for production but it can be used for testing.
         """
         session_variables = [
-            "'new_planner_optimize_timeout' = '10000'",
+            "new_planner_optimize_timeout = 10000",
         ]
         for session_variable in session_variables:
-            sql = "SET  %s" % session_variable
+            sql = "SET %s;" % session_variable
             self.execute_sql(sql)
 
 
