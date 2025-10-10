@@ -1023,11 +1023,14 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
         }
     }
 
+<<<<<<< HEAD
     public static MaterializedView read(DataInput in) throws IOException {
         String json = Text.readString(in);
         return GsonUtils.GSON.fromJson(json, MaterializedView.class);
     }
 
+=======
+>>>>>>> 0c2e5c39f9 ([Enhancement] Ensure mv force refresh will refresh target partitions (backport #62627) (#63844))
     @Override
     public void dropPartition(long dbId, String partitionName, boolean isForceDrop) {
         super.dropPartition(dbId, partitionName, isForceDrop);

@@ -46,10 +46,6 @@ public class MVRefreshParams {
         this.mvPartitionInfo = partitionInfo;
     }
 
-    public boolean isForceCompleteRefresh() {
-        return isForce && isCompleteRefresh();
-    }
-
     public boolean isForce() {
         return isForce;
     }
