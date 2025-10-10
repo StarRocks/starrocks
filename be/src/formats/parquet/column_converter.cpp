@@ -140,12 +140,12 @@ public:
 
         auto* src_column =
                 ColumnHelper::as_raw_column<FixedLengthColumn<SourceType>>(src_nullable_column->data_column());
-        auto* dst_column = ColumnHelper::as_raw_column<FixedLengthColumn<DestType>>(dst_nullable_column->data_column());
+        auto* dst_column = ColumnHelper::as_raw_column<FixedLengthColumn<DestType>>(dst_nullable_column->mutable_data_column());
 
         auto& src_data = src_column->get_data();
         auto& dst_data = dst_column->get_data();
-        auto& src_null_data = src_nullable_column->null_column()->get_data();
-        auto& dst_null_data = dst_nullable_column->null_column()->get_data();
+        const auto& src_null_data = src_nullable_column->immutable_null_column_data();
+        auto& dst_null_data = dst_nullable_column->null_column_data();
 
         size_t size = src_column->size();
         memcpy(dst_null_data.data(), src_null_data.data(), size);
@@ -181,12 +181,12 @@ public:
 
         auto* src_column =
                 ColumnHelper::as_raw_column<FixedLengthColumn<SourceType>>(src_nullable_column->data_column());
-        auto* dst_column = ColumnHelper::as_raw_column<DestColumnType>(dst_nullable_column->data_column());
+        auto* dst_column = ColumnHelper::as_raw_column<DestColumnType>(dst_nullable_column->mutable_data_column());
 
         auto& src_data = src_column->get_data();
         auto& dst_data = dst_column->get_data();
-        auto& src_null_data = src_nullable_column->null_column()->get_data();
-        auto& dst_null_data = dst_nullable_column->null_column()->get_data();
+        const auto& src_null_data = src_nullable_column->immutable_null_column_data();
+        auto& dst_null_data = dst_nullable_column->null_column_data();
 
         bool has_null = false;
         size_t size = src_column->size();
@@ -284,12 +284,12 @@ public:
         dst_nullable_column->resize_uninitialized(src_nullable_column->size());
 
         auto* src_column = ColumnHelper::as_raw_column<BinaryColumn>(src_nullable_column->data_column());
-        auto* dst_column = ColumnHelper::as_raw_column<ColumnType>(dst_nullable_column->data_column());
+        auto* dst_column = ColumnHelper::as_raw_column<ColumnType>(dst_nullable_column->mutable_data_column());
 
         const BinaryColumn::Bytes& src_data = src_column->get_bytes();
         auto& dst_data = dst_column->get_data();
-        auto& src_null_data = src_nullable_column->null_column()->get_data();
-        auto& dst_null_data = dst_nullable_column->null_column()->get_data();
+        const auto& src_null_data = src_nullable_column->immutable_null_column_data();
+        auto& dst_null_data = dst_nullable_column->null_column_data();
 
         size_t size = src_column->size();
         if (_type_length > sizeof(DestPrimitiveType)) {
@@ -590,12 +590,12 @@ Status parquet::Int32ToDateConverter::convert(const ColumnPtr& src, Column* dst)
     dst_nullable_column->resize_uninitialized(src_nullable_column->size());
 
     auto* src_column = ColumnHelper::as_raw_column<FixedLengthColumn<int32_t>>(src_nullable_column->data_column());
-    auto* dst_column = ColumnHelper::as_raw_column<DateColumn>(dst_nullable_column->data_column());
+    auto* dst_column = ColumnHelper::as_raw_column<DateColumn>(dst_nullable_column->mutable_data_column());
 
     auto& src_data = src_column->get_data();
     auto& dst_data = dst_column->get_data();
-    auto& src_null_data = src_nullable_column->null_column()->get_data();
-    auto& dst_null_data = dst_nullable_column->null_column()->get_data();
+    const auto& src_null_data = src_nullable_column->immutable_null_column_data();
+    auto& dst_null_data = dst_nullable_column->null_column_data();
 
     size_t size = src_column->size();
     memcpy(dst_null_data.data(), src_null_data.data(), size);
@@ -614,12 +614,12 @@ Status Int32ToTimeConverter::convert(const ColumnPtr& src, Column* dst) {
     dst_nullable_column->resize_uninitialized(src_nullable_column->size());
 
     auto* src_column = ColumnHelper::as_raw_column<FixedLengthColumn<int32_t>>(src_nullable_column->data_column());
-    auto* dst_column = ColumnHelper::as_raw_column<DoubleColumn>(dst_nullable_column->data_column());
+    auto* dst_column = ColumnHelper::as_raw_column<DoubleColumn>(dst_nullable_column->mutable_data_column());
 
     auto& src_data = src_column->get_data();
     auto& dst_data = dst_column->get_data();
-    auto& src_null_data = src_nullable_column->null_column()->get_data();
-    auto& dst_null_data = dst_nullable_column->null_column()->get_data();
+    const auto& src_null_data = src_nullable_column->immutable_null_column_data();
+    auto& dst_null_data = dst_nullable_column->null_column_data();
 
     size_t size = src_column->size();
 
@@ -641,12 +641,12 @@ Status parquet::Int32ToDateTimeConverter::convert(const ColumnPtr& src, Column* 
     dst_nullable_column->resize_uninitialized(src_nullable_column->size());
 
     auto* src_column = ColumnHelper::as_raw_column<FixedLengthColumn<int32_t>>(src_nullable_column->data_column());
-    auto* dst_column = ColumnHelper::as_raw_column<TimestampColumn>(dst_nullable_column->data_column());
+    auto* dst_column = ColumnHelper::as_raw_column<TimestampColumn>(dst_nullable_column->mutable_data_column());
 
     auto& src_data = src_column->get_data();
     auto& dst_data = dst_column->get_data();
-    auto& src_null_data = src_nullable_column->null_column()->get_data();
-    auto& dst_null_data = dst_nullable_column->null_column()->get_data();
+    const auto& src_null_data = src_nullable_column->immutable_null_column_data();
+    auto& dst_null_data = dst_nullable_column->null_column_data();
 
     size_t size = src_column->size();
     for (size_t i = 0; i < size; i++) {
@@ -680,12 +680,12 @@ Status Int96ToDateTimeConverter::convert(const ColumnPtr& src, Column* dst) {
     dst_nullable_column->resize_uninitialized(src_nullable_column->size());
 
     auto* src_column = ColumnHelper::as_raw_column<FixedLengthColumn<int96_t>>(src_nullable_column->data_column());
-    auto* dst_column = ColumnHelper::as_raw_column<TimestampColumn>(dst_nullable_column->data_column());
+    auto* dst_column = down_cast<TimestampColumn*>(dst_nullable_column->mutable_data_column());
 
     auto& src_data = src_column->get_data();
     auto& dst_data = dst_column->get_data();
-    auto& src_null_data = src_nullable_column->null_column()->get_data();
-    auto& dst_null_data = dst_nullable_column->null_column()->get_data();
+    const auto& src_null_data = src_nullable_column->immutable_null_column_data();
+    auto& dst_null_data = dst_nullable_column->null_column_data();
 
     size_t size = src_column->size();
 
@@ -781,12 +781,12 @@ Status Int64ToDateTimeConverter::convert(const ColumnPtr& src, Column* dst) {
     dst_nullable_column->resize_uninitialized(src_nullable_column->size());
 
     auto* src_column = ColumnHelper::as_raw_column<FixedLengthColumn<int64_t>>(src_nullable_column->data_column());
-    auto* dst_column = ColumnHelper::as_raw_column<TimestampColumn>(dst_nullable_column->data_column());
+    auto* dst_column = ColumnHelper::as_raw_column<TimestampColumn>(dst_nullable_column->mutable_data_column());
 
     auto& src_data = src_column->get_data();
     auto& dst_data = dst_column->get_data();
-    auto& src_null_data = src_nullable_column->null_column()->get_data();
-    auto& dst_null_data = dst_nullable_column->null_column()->get_data();
+    const auto& src_null_data = src_nullable_column->immutable_null_column_data();
+    auto& dst_null_data = dst_nullable_column->null_column_data();
 
     size_t size = src_column->size();
     auto fill_dst_fn = [&]<bool UTC_TO_TZ, bool FAST_TZ>() {
@@ -833,12 +833,12 @@ Status Int64ToTimeConverter::convert(const ColumnPtr& src, Column* dst) {
     dst_nullable_column->resize_uninitialized(src_nullable_column->size());
 
     auto* src_column = ColumnHelper::as_raw_column<FixedLengthColumn<int64_t>>(src_nullable_column->data_column());
-    auto* dst_column = ColumnHelper::as_raw_column<DoubleColumn>(dst_nullable_column->data_column());
+    auto* dst_column = ColumnHelper::as_raw_column<DoubleColumn>(dst_nullable_column->mutable_data_column());
 
     auto& src_data = src_column->get_data();
     auto& dst_data = dst_column->get_data();
-    auto& src_null_data = src_nullable_column->null_column()->get_data();
-    auto& dst_null_data = dst_nullable_column->null_column()->get_data();
+    const auto& src_null_data = src_nullable_column->immutable_null_column_data();
+    auto& dst_null_data = dst_nullable_column->null_column_data();
 
     size_t size = src_column->size();
 

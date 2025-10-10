@@ -424,6 +424,18 @@ public:
         return result;
 #endif
     }
+
+    template <typename Type>
+    static inline Type* as_raw_column(Column* value) {
+#ifdef NDEBUG
+        return down_cast<Type*>(value);
+#else
+        auto* result = dynamic_cast<Type*>(value);
+        DCHECK(result) << "Cast failed for column: "
+                       << " (expected type: " << typeid(Type).name() << ", actual type: " << value->get_name() << ")";
+        return result;
+#endif
+    }
     /**
      * Cast columnPtr to special type Column*
      * Plz sure actual column type by yourself
