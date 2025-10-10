@@ -37,6 +37,7 @@ import com.starrocks.common.util.concurrent.lock.LockTimeoutException;
 import com.starrocks.metric.IMaterializedViewMetricsEntity;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.QueryDetail;
 import com.starrocks.scheduler.Constants;
 import com.starrocks.scheduler.ExecuteOption;
 import com.starrocks.scheduler.MvTaskRunContext;
@@ -390,6 +391,7 @@ public class MVIVMBasedMVRefreshProcessor extends BaseMVRefreshProcessor {
                 .setUser(ctx.getQualifiedUser())
                 .setDb(ctx.getDatabase())
                 .setWarehouse(ctx.getCurrentWarehouseName())
+                .setQuerySource(QueryDetail.QuerySource.MV.name())
                 .setCNGroup(ctx.getCurrentComputeResourceName());
 
         // set tvr target mvid

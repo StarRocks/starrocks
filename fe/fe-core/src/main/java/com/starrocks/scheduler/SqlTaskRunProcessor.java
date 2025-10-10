@@ -45,6 +45,8 @@ public class SqlTaskRunProcessor extends BaseTaskRunProcessor {
                 throw ErrorReportException.report(ErrorCode.ERR_AUTHENTICATION_LOCK, ctx.getCurrentUserIdentity());
             }
 
+            // Set query source to TASK for task-submitted queries
+            ctx.setQuerySource(com.starrocks.qe.QueryDetail.QuerySource.TASK);
             ctx.getAuditEventBuilder().reset();
             ctx.getAuditEventBuilder()
                     .setTimestamp(System.currentTimeMillis())

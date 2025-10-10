@@ -31,6 +31,7 @@ import com.starrocks.common.util.concurrent.lock.LockTimeoutException;
 import com.starrocks.metric.IMaterializedViewMetricsEntity;
 import com.starrocks.metric.MaterializedViewMetricsRegistry;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.QueryDetail;
 import com.starrocks.qe.StmtExecutor;
 import com.starrocks.scheduler.mv.BaseMVRefreshProcessor;
 import com.starrocks.scheduler.mv.MVRefreshExecutor;
@@ -175,6 +176,8 @@ public class MVTaskRunProcessor extends BaseTaskRunProcessor implements MVRefres
         Tracers.init(mvRefreshTraceMode, mvRefreshTraceModule, true, false);
 
         final ConnectContext connectContext = context.getCtx();
+        // Set query source to MV for materialized view refresh
+        connectContext.setQuerySource(com.starrocks.qe.QueryDetail.QuerySource.MV);
         final QueryMaterializationContext queryMVContext = new QueryMaterializationContext();
         connectContext.setQueryMVContext(queryMVContext);
         try {
@@ -285,6 +288,9 @@ public class MVTaskRunProcessor extends BaseTaskRunProcessor implements MVRefres
             parentStmtExecutor.registerSubStmtExecutor(executor);
         }
         ctx.setStmtId(STMT_ID_GENERATOR.incrementAndGet());
+        // Add running query detail for MV refresh
+        ctx.setQuerySource(QueryDetail.QuerySource.MV);
+        executor.addRunningQueryDetail(insertStmt);
 
         logger.info("[QueryId:{}] start to refresh mv in DML", ctx.getQueryId());
         try {
