@@ -77,8 +77,9 @@ static StatusOr<ColumnPtr> do_array_append(const Column& elements, const UInt32C
     }
 
     auto result_array = ArrayColumn::create(elements.clone_empty(), UInt32Column::create());
-    UInt32Column::Container& result_offsets = result_array->offsets_column()->get_data();
-    ColumnPtr& result_elements = result_array->elements_column();
+    auto result_offsets_col = result_array->offsets_column_mutable_ptr();
+    UInt32Column::Container& result_offsets = result_offsets_col->get_data();
+    auto result_elements = result_array->elements_column_mutable_ptr();
     result_elements->reserve(elements.size() + data.size());
     result_offsets.reserve(num_array + 1);
 
@@ -155,8 +156,9 @@ private:
 
         auto result_array = ArrayColumn::create(NullableColumn::create(elements.clone_empty(), NullColumn::create()),
                                                 UInt32Column::create());
-        UInt32Column::Container& result_offsets = result_array->offsets_column()->get_data();
-        ColumnPtr& result_elements = result_array->elements_column();
+        auto result_offsets_col = result_array->offsets_column_mutable_ptr();
+        UInt32Column::Container& result_offsets = result_offsets_col->get_data();
+        auto result_elements = result_array->elements_column_mutable_ptr();
 
         result_offsets.reserve(num_array);
 
@@ -314,7 +316,7 @@ private:
         bool nullable_element = false;
         bool nullable_target = false;
         bool const_target = false;
-        ColumnPtr targets_holder;
+        MutableColumnPtr targets_holder;
 
         const UInt32Column& offsets = array.offsets();
         const Column* elements = &array.elements();
@@ -631,7 +633,7 @@ private:
         bool nullable_element = false;
         bool nullable_target = false;
         bool const_target = false;
-        ColumnPtr targets_holder;
+        MutableColumnPtr targets_holder;
 
         const UInt32Column& offsets = array.offsets();
         const Column* elements = &array.elements();
@@ -947,7 +949,7 @@ private:
         bool nullable_element = false;
         bool nullable_target = false;
         bool const_target = false;
-        ColumnPtr targets_holder;
+        MutableColumnPtr targets_holder;
 
         const UInt32Column& array_offsets = array.offsets();
         const UInt32Column& target_offsets = arg.offsets();
@@ -1110,7 +1112,7 @@ StatusOr<ColumnPtr> ArrayFunctions::concat(FunctionContext* ctx, const Columns& 
 
     auto num_rows = columns[0]->size();
     // compute nulls
-    NullColumnPtr nulls;
+    NullColumn::MutablePtr nulls;
     for (auto& column : columns) {
         if (column->has_null()) {
             auto nullable_column = down_cast<const NullableColumn*>(column.get());
@@ -1139,6 +1141,8 @@ StatusOr<ColumnPtr> ArrayFunctions::concat(FunctionContext* ctx, const Columns& 
     }
     auto dst = array_columns[0]->clone_empty();
     auto dst_array = down_cast<ArrayColumn*>(dst.get());
+    auto dst_elements = dst_array->elements_column_mutable_ptr();
+    auto dst_offsets = dst_array->offsets_column_mutable_ptr();
     uint32_t dst_offset = 0;
     if (nulls != nullptr) {
         auto& null_vec = nulls->get_data();
@@ -1146,20 +1150,20 @@ StatusOr<ColumnPtr> ArrayFunctions::concat(FunctionContext* ctx, const Columns& 
             if (!null_vec[row]) {
                 for (auto& column : array_columns) {
                     auto off_size = column->get_element_offset_size(row);
-                    dst_array->elements_column()->append(column->elements(), off_size.first, off_size.second);
+                    dst_elements->append(column->elements(), off_size.first, off_size.second);
                     dst_offset += off_size.second;
                 }
             }
-            dst_array->offsets_column()->append(dst_offset);
+            dst_offsets->append(dst_offset);
         }
     } else {
         for (int row = 0; row < num_rows; ++row) {
             for (auto& column : array_columns) {
                 auto off_size = column->get_element_offset_size(row);
-                dst_array->elements_column()->append(column->elements(), off_size.first, off_size.second);
+                dst_elements->append(column->elements(), off_size.first, off_size.second);
                 dst_offset += off_size.second;
             }
-            dst_array->offsets_column()->append(dst_offset);
+            dst_offsets->append(dst_offset);
         }
     }
     if (nulls == nullptr) {
@@ -1172,7 +1176,8 @@ StatusOr<ColumnPtr> ArrayFunctions::concat(FunctionContext* ctx, const Columns& 
 template <bool with_length>
 void _array_slice_item(const ArrayColumn* column, size_t index, ArrayColumn* dest_column, int64_t offset,
                        int64_t length) {
-    auto& dest_offsets = dest_column->offsets_column()->get_data();
+    auto dest_offsets_col = dest_column->offsets_column_mutable_ptr();
+    auto& dest_offsets = dest_offsets_col->get_data();
     if (!offset) {
         dest_offsets.emplace_back(dest_offsets.back());
         return;
@@ -1188,7 +1193,7 @@ void _array_slice_item(const ArrayColumn* column, size_t index, ArrayColumn* des
         offset += items.size();
     }
 
-    auto& dest_data_column = dest_column->elements_column();
+    auto dest_data_column = dest_column->elements_column_mutable_ptr();
     int64_t end;
     if constexpr (with_length) {
         end = std::max((int64_t)0, std::min((int64_t)items.size(), (offset + length)));
@@ -1218,7 +1223,7 @@ StatusOr<ColumnPtr> ArrayFunctions::array_slice(FunctionContext* ctx, const Colu
 
     bool is_nullable = false;
     bool has_null = false;
-    NullColumnPtr null_result = nullptr;
+    NullColumn::MutablePtr null_result = nullptr;
 
     const ArrayColumn* array_column = nullptr;
     if (columns[0]->is_nullable()) {
@@ -1304,24 +1309,24 @@ StatusOr<ColumnPtr> ArrayFunctions::array_slice(FunctionContext* ctx, const Colu
 }
 
 // unpack array column, return: null_column, element_column, offset_column
-static inline std::tuple<NullColumnPtr, Column*, const UInt32Column*> unpack_array_column(const ColumnPtr& input) {
-    NullColumnPtr array_null = nullptr;
+static inline std::tuple<NullColumn::MutablePtr, Column*, const UInt32Column*> unpack_array_column(const ColumnPtr& input) {
+    NullColumn::MutablePtr array_null = nullptr;
     ArrayColumn* array_col = nullptr;
 
     auto array = ColumnHelper::unpack_and_duplicate_const_column(input->size(), input);
     if (array->is_nullable()) {
         auto nullable = down_cast<NullableColumn*>(array.get());
-        array_col = down_cast<ArrayColumn*>(nullable->data_column().get());
-        array_null = NullColumn::create(*nullable->null_column());
+        array_col = down_cast<ArrayColumn*>(nullable->mutable_data_column());
+        array_null = nullable->null_column_mutable_ptr();
     } else {
         array_null = NullColumn::create(input->size(), 0);
         array_col = down_cast<ArrayColumn*>(array.get());
     }
 
     const UInt32Column* offsets = &array_col->offsets();
-    Column* elements = array_col->elements_column().get();
+    Column* elements = array_col->elements_column_mutable_ptr().get();
 
-    return {array_null, elements, offsets};
+    return {std::move(array_null), elements, offsets};
 }
 
 StatusOr<ColumnPtr> ArrayFunctions::array_distinct_any_type(FunctionContext* ctx, const Columns& columns) {
@@ -1452,7 +1457,7 @@ StatusOr<ColumnPtr> ArrayFunctions::array_intersect_any_type(FunctionContext* ct
     ColumnPtr base_col = columns[0];
     int base_idx = 0;
 
-    NullColumnPtr nulls = NullColumn::create(rows, 0);
+    NullColumn::MutablePtr nulls = NullColumn::create(rows, 0);
     // find minimum column
     for (size_t i = 0; i < columns.size(); i++) {
         if (columns[i]->memory_usage() < usage) {
@@ -1461,7 +1466,14 @@ StatusOr<ColumnPtr> ArrayFunctions::array_intersect_any_type(FunctionContext* ct
             usage = columns[i]->memory_usage();
         }
 
-        FunctionHelper::union_produce_nullable_column(columns[i], &nulls);
+        // Inline union_produce_nullable_column logic for MutablePtr
+        if (columns[i]->has_null()) {
+            const auto* null_col = down_cast<const NullableColumn*>(columns[i].get())->null_column()->immutable_data().data();
+            auto* result = nulls->get_data().data();
+            for (size_t j = 0; j < rows; ++j) {
+                result[j] = result[j] | null_col[j];
+            }
+        }
     }
 
     // do distinct first
@@ -1470,9 +1482,9 @@ StatusOr<ColumnPtr> ArrayFunctions::array_intersect_any_type(FunctionContext* ct
 
     auto* dis_array_col = down_cast<ArrayColumn*>(ColumnHelper::get_data_column(distinct_col.value().get()));
 
-    auto& base_elements = dis_array_col->elements_column();
-    auto* base_offsets = &dis_array_col->offsets();
-    auto* base_offsets_ptr = base_offsets->get_data().data();
+    auto base_elements = dis_array_col->elements_column_mutable_ptr();
+    auto base_offsets_col = dis_array_col->offsets_column_mutable_ptr();
+    auto* base_offsets_ptr = base_offsets_col->get_data().data();
     auto* nulls_ptr = nulls->get_data().data();
 
     Filter filter;
@@ -1527,8 +1539,8 @@ static Status sort_multi_array_column(FunctionContext* ctx, const Column* src_co
     const auto* src_offsets_column = &down_cast<const ArrayColumn*>(src_column)->offsets();
     const auto src_offsets = src_offsets_column->immutable_data();
 
-    auto* dest_elements_column = down_cast<ArrayColumn*>(dest_column)->elements_column().get();
-    auto* dest_offsets_column = down_cast<ArrayColumn*>(dest_column)->offsets_column().get();
+    auto* dest_elements_column = down_cast<ArrayColumn*>(dest_column)->elements_column_mutable_ptr().get();
+    auto* dest_offsets_column = down_cast<ArrayColumn*>(dest_column)->offsets_column_mutable_ptr().get();
 
     const auto num_src_element_rows = src_elements_column->size();
     const size_t num_rows = src_column->size();
@@ -1600,7 +1612,7 @@ StatusOr<ColumnPtr> ArrayFunctions::array_sortby_multi(FunctionContext* ctx, con
 
     const size_t chunk_size = columns[0]->size();
     auto* src_column = ColumnHelper::unpack_and_duplicate_const_column(chunk_size, columns[0]).get();
-    ColumnPtr dest_column = src_column->clone_empty();
+    auto dest_column = src_column->clone_empty();
 
     std::vector<const Column*> key_columns;
     key_columns.reserve(columns.size() - 1);
@@ -1647,7 +1659,7 @@ StatusOr<ColumnPtr> ArrayFunctions::repeat(FunctionContext* ctx, const Columns& 
     const ColumnPtr& repeat_count_column = columns[1];
     ColumnViewer<TYPE_INT> repeat_count_viewer(repeat_count_column);
 
-    ColumnPtr dest_column_elements = nullptr;
+    MutableColumnPtr dest_column_elements = nullptr;
     // Because the _elements of ArrayColumn must be nullable, but a non-null ConstColumn cannot be converted to nullable;
     // therefore, the _data of ConstColumn is extracted as dest_column_elements.
     if (src_column->is_constant() && !src_column->is_nullable()) {
@@ -1706,7 +1718,7 @@ StatusOr<ColumnPtr> ArrayFunctions::array_flatten(FunctionContext* ctx, const Co
 
     // Helper function to init result array elements and offsets
     auto build_result_array_elements_and_offsets = [](const ColumnPtr& elements_column,
-                                                      size_t offsets_size) -> std::pair<ColumnPtr, UInt32Column::Ptr> {
+                                                      size_t offsets_size) -> std::pair<MutableColumnPtr, UInt32Column::MutablePtr> {
         DCHECK(elements_column->is_array());
         auto [array_null, elements, offsets] = unpack_array_column(elements_column);
         auto result_elements = elements->clone_empty();
@@ -1717,7 +1729,7 @@ StatusOr<ColumnPtr> ArrayFunctions::array_flatten(FunctionContext* ctx, const Co
     };
 
     // Helper function to flatten a single array item
-    auto flatten_array_item = [](const Datum& v, ColumnPtr& result_elements, auto& result_offsets) {
+    auto flatten_array_item = [](const Datum& v, MutableColumnPtr& result_elements, auto& result_offsets) {
         if (!v.is_null()) {
             const auto& items = v.get<DatumArray>();
             for (const auto& item : items) {
