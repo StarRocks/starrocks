@@ -2750,7 +2750,7 @@ Status ImmutableIndex::_get_in_shard_by_page(size_t shard_idx, size_t n, const S
                                              IOStat* stat) const {
     const auto& shard_info = _shards[shard_idx];
     std::map<size_t, LargeIndexPage> pages;
-    for (auto [pageid, keys_info] : keys_info_by_page) {
+    for (const auto& [pageid, keys_info] : keys_info_by_page) {
         LargeIndexPage page(shard_info.page_size / kPageSize);
         RETURN_IF_ERROR(_read_page(shard_idx, pageid, &page, stat));
         pages[pageid] = std::move(page);
@@ -3496,7 +3496,7 @@ Status PersistentIndex::_insert_rowsets(TabletLoader* loader, const Schema& pkey
                 } else if (!st.ok()) {
                     return st;
                 } else {
-                    Column* pkc = nullptr;
+                    const Column* pkc = nullptr;
                     if (pk_column != nullptr) {
                         pk_column->reset_column();
                         TRY_CATCH_BAD_ALLOC(

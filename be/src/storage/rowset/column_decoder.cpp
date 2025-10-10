@@ -26,10 +26,10 @@
 
 namespace starrocks {
 Status ColumnDecoder::encode_to_global_id(Column* datas, Column* codes) {
-    auto* data = datas;
+    const Column* data = datas;
     if (datas->is_nullable()) {
         auto* nullable_column = down_cast<NullableColumn*>(datas);
-        data = nullable_column->data_column().get();
+        data = nullable_column->immutable_data_column();
     }
     if (data->is_binary()) {
         return _encode_string_to_global_id(datas, codes);
@@ -45,11 +45,11 @@ Status ColumnDecoder::_encode_string_to_global_id(Column* datas, Column* codes) 
     codes->resize(num_rows);
     if (datas->is_nullable()) {
         auto* nullable_column = down_cast<NullableColumn*>(datas);
-        auto* binary_column = down_cast<BinaryColumn*>(nullable_column->data_column().get());
+        const auto* binary_column = down_cast<const BinaryColumn*>(nullable_column->immutable_data_column());
         auto* lowcard_nullcolumn = down_cast<NullableColumn*>(codes);
-        auto* lowcard_datacolumn = down_cast<LowCardDictColumn*>(lowcard_nullcolumn->data_column().get());
+        auto* lowcard_datacolumn = down_cast<LowCardDictColumn*>(lowcard_nullcolumn->mutable_data_column());
         auto& lowcard_data = lowcard_datacolumn->get_data();
-        const auto& null_data = nullable_column->null_column_data();
+        const auto& null_data = nullable_column->immutable_null_column_data();
         for (int i = 0; i < num_rows; ++i) {
             if (null_data[i] == 0) {
                 auto iter = _global_dict->find(binary_column->get_slice(i));
@@ -65,7 +65,8 @@ Status ColumnDecoder::_encode_string_to_global_id(Column* datas, Column* codes) 
         }
         // set null info to the the lowcardinality column
         lowcard_nullcolumn->set_has_null(nullable_column->has_null());
-        lowcard_nullcolumn->null_column()->swap_column(*nullable_column->null_column());
+        const auto& null_col_data = nullable_column->immutable_null_column_data();
+        lowcard_nullcolumn->null_column_data().assign(null_col_data.begin(), null_col_data.end());
     } else {
         auto* binary_column = down_cast<BinaryColumn*>(datas);
         auto* lowcard_column = down_cast<LowCardDictColumn*>(codes);
@@ -87,20 +88,23 @@ Status ColumnDecoder::_encode_array_to_global_id(Column* datas, Column* codes) {
     if (datas->is_nullable()) {
         auto* nullable_column = down_cast<NullableColumn*>(datas);
         auto* lowcard_nullcolumn = down_cast<NullableColumn*>(codes);
-        auto* array_column = down_cast<ArrayColumn*>(nullable_column->data_column().get());
-        auto* lowcard_array_column = down_cast<ArrayColumn*>(lowcard_nullcolumn->data_column().get());
+        auto* array_column = down_cast<ArrayColumn*>(nullable_column->mutable_data_column());
+        auto* lowcard_array_column = down_cast<ArrayColumn*>(lowcard_nullcolumn->mutable_data_column());
 
         lowcard_nullcolumn->set_has_null(nullable_column->has_null());
-        lowcard_nullcolumn->null_column()->swap_column(*nullable_column->null_column());
-        lowcard_array_column->offsets_column()->swap_column(*array_column->offsets_column());
-        return _encode_string_to_global_id(array_column->elements_column().get(),
-                                           lowcard_array_column->elements_column().get());
+        const auto& null_col_data = nullable_column->immutable_null_column_data();
+        lowcard_nullcolumn->null_column_data().assign(null_col_data.begin(), null_col_data.end());
+        const auto& offsets_data = array_column->offsets().immutable_data();
+        lowcard_array_column->offsets_column_mutable_ptr()->get_data().assign(offsets_data.begin(), offsets_data.end());
+        return _encode_string_to_global_id(array_column->elements_column_mutable_ptr().get(),
+                                           lowcard_array_column->elements_column_mutable_ptr().get());
     } else {
         auto* array_column = down_cast<ArrayColumn*>(datas);
         auto* lowcard_array_column = down_cast<ArrayColumn*>(codes);
-        lowcard_array_column->offsets_column()->swap_column(*array_column->offsets_column());
-        return _encode_string_to_global_id(array_column->elements_column().get(),
-                                           lowcard_array_column->elements_column().get());
+        const auto& offsets_data = array_column->offsets().immutable_data();
+        lowcard_array_column->offsets_column_mutable_ptr()->get_data().assign(offsets_data.begin(), offsets_data.end());
+        return _encode_string_to_global_id(array_column->elements_column_mutable_ptr().get(),
+                                           lowcard_array_column->elements_column_mutable_ptr().get());
     }
 }
 
