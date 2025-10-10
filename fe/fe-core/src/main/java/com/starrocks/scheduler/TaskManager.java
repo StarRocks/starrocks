@@ -965,7 +965,30 @@ public class TaskManager implements MemoryTrackable {
     }
 
     public void removeExpiredTaskRuns(boolean archiveHistory) {
+        // remove expired task run records
         taskRunManager.getTaskRunHistory().vacuum(archiveHistory);
+
+        // cancel long-running task runs to avoid resource waste
+        long currentTimeMs = System.currentTimeMillis();
+        Set<TaskRun> runningTaskRuns = taskRunManager.getTaskRunScheduler().getCopiedRunningTaskRuns();
+        for (TaskRun taskRun : runningTaskRuns) {
+            int taskRunTimeout = taskRun.getExecuteTimeoutS();
+            if (taskRunTimeout <= 0) {
+                continue;
+            }
+            if (taskRun.getStatus() == null) {
+                continue;
+            }
+            TaskRunStatus taskRunStatus = taskRun.getStatus();
+            long taskRunCreatedTime = taskRunStatus.getCreateTime();
+            if (currentTimeMs - taskRunCreatedTime < taskRunTimeout * 1000L) {
+                continue;
+            }
+            // if the task run has been running for a long time, cancel it directly
+            LOG.warn("task run [{}] has been running for a long time, cancel it," +
+                    " created(ms):{}, timeout(s):{}", taskRun, taskRunCreatedTime, taskRunTimeout);
+            taskRunManager.killRunningTaskRun(taskRun, true);
+        }
     }
 
     @Override
