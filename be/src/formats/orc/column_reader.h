@@ -70,7 +70,7 @@ public:
     ORCColumnReader(const TypeDescriptor& type, const orc::Type* orc_type, bool nullable, OrcChunkReader* reader)
             : _type(type), _orc_type(orc_type), _nullable(nullable), _reader(reader) {}
     virtual ~ORCColumnReader() = default;
-    virtual Status get_next(orc::ColumnVectorBatch* cvb, ColumnPtr& col, size_t from, size_t size) = 0;
+    virtual Status get_next(orc::ColumnVectorBatch* cvb, MutableColumnPtr& col, size_t from, size_t size) = 0;
 
     static StatusOr<std::unique_ptr<ORCColumnReader>> create(const TypeDescriptor& type, const orc::Type* orc_type,
                                                              bool nullable, const OrcMappingPtr& orc_mapping,
@@ -85,7 +85,7 @@ protected:
                             size_t size, bool need_update_has_null = true) {
         DCHECK(_nullable);
         DCHECK(col->is_nullable());
-        uint8_t* column_nulls = col->null_column()->get_data().data();
+        uint8_t* column_nulls = col->null_column_data().data();
         if (!cvb->hasNulls) {
             memset(column_nulls + column_from, 0, size);
             return;
@@ -112,7 +112,7 @@ public:
     DefaultColumnReader(const TypeDescriptor& type, bool nullable, OrcChunkReader* reader)
             : ORCColumnReader(type, nullptr, nullable, reader) {}
     ~DefaultColumnReader() override = default;
-    Status get_next(orc::ColumnVectorBatch* cvb, ColumnPtr& col, size_t from, size_t size) override;
+    Status get_next(orc::ColumnVectorBatch* cvb, MutableColumnPtr& col, size_t from, size_t size) override;
 };
 
 class PrimitiveColumnReader : public ORCColumnReader {
@@ -127,7 +127,7 @@ public:
     BooleanColumnReader(const TypeDescriptor& type, const orc::Type* orc_type, bool nullable, OrcChunkReader* reader)
             : PrimitiveColumnReader(type, orc_type, nullable, reader) {}
     ~BooleanColumnReader() override = default;
-    Status get_next(orc::ColumnVectorBatch* cvb, ColumnPtr& col, size_t from, size_t size) override;
+    Status get_next(orc::ColumnVectorBatch* cvb, MutableColumnPtr& col, size_t from, size_t size) override;
 };
 
 template <LogicalType Type>
@@ -136,14 +136,14 @@ public:
     IntColumnReader(const TypeDescriptor& type, const orc::Type* orc_type, bool nullable, OrcChunkReader* reader)
             : PrimitiveColumnReader(type, orc_type, nullable, reader) {}
     ~IntColumnReader() override = default;
-    Status get_next(orc::ColumnVectorBatch* cvb, ColumnPtr& col, size_t from, size_t size) override;
+    Status get_next(orc::ColumnVectorBatch* cvb, MutableColumnPtr& col, size_t from, size_t size) override;
 
 private:
     template <typename OrcColumnVectorBatch>
-    Status _fill_int_column_with_null_from_cvb(OrcColumnVectorBatch* data, ColumnPtr& col, size_t from, size_t size);
+    Status _fill_int_column_with_null_from_cvb(OrcColumnVectorBatch* data, MutableColumnPtr& col, size_t from, size_t size);
 
     template <typename OrcColumnVectorBatch>
-    Status _fill_int_column_from_cvb(OrcColumnVectorBatch* data, ColumnPtr& col, size_t from, size_t size);
+    Status _fill_int_column_from_cvb(OrcColumnVectorBatch* data, MutableColumnPtr& col, size_t from, size_t size);
 };
 
 template <LogicalType Type>
@@ -153,11 +153,11 @@ public:
             : PrimitiveColumnReader(type, orc_type, nullable, reader) {}
     ~DoubleColumnReader() override = default;
 
-    Status get_next(orc::ColumnVectorBatch* cvb, ColumnPtr& col, size_t from, size_t size) override;
+    Status get_next(orc::ColumnVectorBatch* cvb, MutableColumnPtr& col, size_t from, size_t size) override;
 
 private:
     template <typename OrcColumnVectorBatch>
-    Status _fill_double_column_from_cvb(OrcColumnVectorBatch* data, ColumnPtr& col, const size_t vb_pos_from,
+    Status _fill_double_column_from_cvb(OrcColumnVectorBatch* data, MutableColumnPtr& col, const size_t vb_pos_from,
                                         const size_t column_start, const size_t size);
 };
 
@@ -167,7 +167,7 @@ public:
             : PrimitiveColumnReader(type, orc_type, nullable, reader) {}
     ~TimeColumnReader() override = default;
 
-    Status get_next(orc::ColumnVectorBatch* cvb, ColumnPtr& col, size_t from, size_t size) override;
+    Status get_next(orc::ColumnVectorBatch* cvb, MutableColumnPtr& col, size_t from, size_t size) override;
 };
 
 class DecimalColumnReader : public PrimitiveColumnReader {
@@ -176,7 +176,7 @@ public:
             : PrimitiveColumnReader(type, orc_type, nullable, reader) {}
     ~DecimalColumnReader() override = default;
 
-    Status get_next(orc::ColumnVectorBatch* cvb, ColumnPtr& col, size_t from, size_t size) override;
+    Status get_next(orc::ColumnVectorBatch* cvb, MutableColumnPtr& col, size_t from, size_t size) override;
 
 private:
     void _fill_decimal_column_from_orc_decimal64(orc::Decimal64VectorBatch* cvb, Column* col, size_t col_start,
@@ -194,11 +194,11 @@ public:
             : PrimitiveColumnReader(type, orc_type, nullable, reader) {}
     ~Decimal32Or64Or128ColumnReader() override = default;
 
-    Status get_next(orc::ColumnVectorBatch* cvb, ColumnPtr& col, size_t from, size_t size) override;
+    Status get_next(orc::ColumnVectorBatch* cvb, MutableColumnPtr& col, size_t from, size_t size) override;
 
 private:
     template <typename T>
-    inline void _fill_decimal_column_generic(orc::ColumnVectorBatch* cvb, ColumnPtr& col, size_t from, size_t size);
+    inline void _fill_decimal_column_generic(orc::ColumnVectorBatch* cvb, MutableColumnPtr& col, size_t from, size_t size);
 };
 
 class StringColumnReader : public PrimitiveColumnReader {
@@ -207,7 +207,7 @@ public:
             : PrimitiveColumnReader(type, orc_type, nullable, reader) {}
     ~StringColumnReader() override = default;
 
-    Status get_next(orc::ColumnVectorBatch* cvb, ColumnPtr& col, size_t from, size_t size) override;
+    Status get_next(orc::ColumnVectorBatch* cvb, MutableColumnPtr& col, size_t from, size_t size) override;
 };
 
 class VarbinaryColumnReader : public PrimitiveColumnReader {
@@ -216,7 +216,7 @@ public:
             : PrimitiveColumnReader(type, orc_type, nullable, reader) {}
     ~VarbinaryColumnReader() override = default;
 
-    Status get_next(orc::ColumnVectorBatch* cvb, ColumnPtr& col, size_t from, size_t size) override;
+    Status get_next(orc::ColumnVectorBatch* cvb, MutableColumnPtr& col, size_t from, size_t size) override;
 };
 
 class DateColumnReader : public PrimitiveColumnReader {
@@ -226,7 +226,7 @@ public:
 
     ~DateColumnReader() override = default;
 
-    Status get_next(orc::ColumnVectorBatch* cvb, ColumnPtr& col, size_t from, size_t size) override;
+    Status get_next(orc::ColumnVectorBatch* cvb, MutableColumnPtr& col, size_t from, size_t size) override;
 };
 
 template <bool IsInstant>
@@ -236,7 +236,7 @@ public:
             : PrimitiveColumnReader(type, orc_type, nullable, reader) {}
     ~TimestampColumnReader() override = default;
 
-    Status get_next(orc::ColumnVectorBatch* cvb, ColumnPtr& col, size_t from, size_t size) override;
+    Status get_next(orc::ColumnVectorBatch* cvb, MutableColumnPtr& col, size_t from, size_t size) override;
 };
 
 class ComplexColumnReader : public ORCColumnReader {
@@ -295,10 +295,10 @@ public:
             : ComplexColumnReader(type, orc_type, nullable, reader, std::move(child_readers)) {}
     ~ArrayColumnReader() override = default;
 
-    Status get_next(orc::ColumnVectorBatch* cvb, ColumnPtr& col, size_t from, size_t size) override;
+    Status get_next(orc::ColumnVectorBatch* cvb, MutableColumnPtr& col, size_t from, size_t size) override;
 
 private:
-    Status _fill_array_column(orc::ColumnVectorBatch* cvb, ColumnPtr& col, size_t from, size_t size);
+    Status _fill_array_column(orc::ColumnVectorBatch* cvb, MutableColumnPtr& col, size_t from, size_t size);
 };
 
 class MapColumnReader : public ComplexColumnReader {
@@ -308,10 +308,10 @@ public:
             : ComplexColumnReader(type, orc_type, nullable, reader, std::move(child_readers)) {}
     ~MapColumnReader() override = default;
 
-    Status get_next(orc::ColumnVectorBatch* cvb, ColumnPtr& col, size_t from, size_t size) override;
+    Status get_next(orc::ColumnVectorBatch* cvb, MutableColumnPtr& col, size_t from, size_t size) override;
 
 private:
-    Status _fill_map_column(orc::ColumnVectorBatch* cvb, ColumnPtr& col, size_t from, size_t size);
+    Status _fill_map_column(orc::ColumnVectorBatch* cvb, MutableColumnPtr& col, size_t from, size_t size);
 };
 
 class StructColumnReader : public ComplexColumnReader {
@@ -321,10 +321,10 @@ public:
             : ComplexColumnReader(type, orc_type, nullable, reader, std::move(child_readers)) {}
     ~StructColumnReader() override = default;
 
-    Status get_next(orc::ColumnVectorBatch* cvb, ColumnPtr& col, size_t from, size_t size) override;
+    Status get_next(orc::ColumnVectorBatch* cvb, MutableColumnPtr& col, size_t from, size_t size) override;
 
 private:
-    Status _fill_struct_column(orc::ColumnVectorBatch* cvb, ColumnPtr& col, size_t from, size_t size);
+    Status _fill_struct_column(orc::ColumnVectorBatch* cvb, MutableColumnPtr& col, size_t from, size_t size);
 };
 
 } // namespace starrocks
