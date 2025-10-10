@@ -1011,4 +1011,3 @@ select sec_to_time(-3024000);
 -- result:
 -839:59:59
 -- !result
-
