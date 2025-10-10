@@ -94,6 +94,7 @@ import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.io.TempDir;
 
 import java.io.File;
+import java.io.IOException;
 import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -798,5 +799,14 @@ public abstract class MVTestBase extends StarRocksTestBase {
 
     public static void enableMVRewriteConsiderDataLayout() {
         Config.mv_rewrite_consider_data_layout_mode = "enable";
+    }
+
+    public static File newFolder(File root, String... subDirs) throws IOException {
+        String subFolder = String.join("/", subDirs);
+        File result = new File(root, subFolder);
+        if (!result.mkdirs()) {
+            throw new IOException("Couldn't create folders " + root);
+        }
+        return result;
     }
 }

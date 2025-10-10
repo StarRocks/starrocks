@@ -91,7 +91,6 @@ import mockit.MockUp;
 import mockit.Mocked;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
-import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
@@ -100,7 +99,6 @@ import org.junit.jupiter.api.TestInfo;
 import org.junit.jupiter.api.io.TempDir;
 
 import java.io.File;
-import java.io.IOException;
 import java.lang.reflect.Method;
 import java.time.LocalDateTime;
 import java.util.Arrays;
@@ -119,20 +117,13 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 public class CreateMaterializedViewTest extends MVTestBase {
     private static final Logger LOG = LogManager.getLogger(CreateMaterializedViewTest.class);
 
-
     public String name;
-
-    @TempDir
-    public static File temp;
-
     private static ConnectContext connectContext;
     private static Database testDb;
     private static GlobalStateMgr currentState;
 
     @BeforeAll
     public static void beforeClass() throws Exception {
-        ConnectorPlanTestBase.doInit(newFolder(temp, "junit").toURI().toString());
-
         // set default config for async mvs
         UtFrameUtils.setDefaultConfigForAsyncMVTest(connectContext);
         Config.default_mv_refresh_immediate = true;
@@ -333,10 +324,20 @@ public class CreateMaterializedViewTest extends MVTestBase {
         testDb = currentState.getLocalMetastore().getDb("test");
 
         UtFrameUtils.setUpForPersistTest();
+        try {
+            ConnectorPlanTestBase.mockAllCatalogs(connectContext, newFolder(temp, "junit").toURI().toString());
+        } catch (Exception e) {
+            //
+        }
     }
 
-    @AfterAll
-    public static void afterClass() throws Exception {
+    @BeforeEach
+    public void setup(TestInfo testInfo) throws Exception {
+        Optional<Method> testMethod = testInfo.getTestMethod();
+        if (testMethod.isPresent()) {
+            this.name = testMethod.get().getName();
+        }
+        super.before();
     }
 
     private static void dropMv(String mvName) throws Exception {
@@ -5797,23 +5798,6 @@ public class CreateMaterializedViewTest extends MVTestBase {
         starRocksAssert.refreshMV(connectContext, "mv_table_with_external_table");
     }
 
-    private static File newFolder(File root, String... subDirs) throws IOException {
-        String subFolder = String.join("/", subDirs);
-        File result = new File(root, subFolder);
-        if (!result.mkdirs()) {
-            throw new IOException("Couldn't create folders " + root);
-        }
-        return result;
-    }
-
-    @BeforeEach
-    public void setup(TestInfo testInfo) {
-        Optional<Method> testMethod = testInfo.getTestMethod();
-        if (testMethod.isPresent()) {
-            this.name = testMethod.get().getName();
-        }
-    }
-
     @Test
     public void testCreateMVWithFixedLengthChar1() throws Exception {
         starRocksAssert.withTable("CREATE TABLE tt1(dt date, val int, col1 char(8), col2 varchar(8));");
@@ -5860,5 +5844,69 @@ public class CreateMaterializedViewTest extends MVTestBase {
         ScalarType scalarType0 = (ScalarType) type0;
         Assertions.assertEquals(1048576, scalarType0.getLength());
         Config.transform_type_prefer_string_for_varchar = false;
+    }
+
+    @Test
+    public void testPartitionByDateTruncWithNestedMV1() throws Exception {
+        {
+            String sql = "create materialized view mv1 " +
+                    "partition by date_trunc('month', k1) " +
+                    "distributed by hash(k2) buckets 10 " +
+                    "refresh async START('2122-12-31') EVERY(INTERVAL 1 HOUR) " +
+                    "PROPERTIES (\n" +
+                    "\"replication_num\" = \"1\"\n" +
+                    ") " +
+                    "as select k1, k2 from tbl1;";
+            starRocksAssert.withMaterializedView(sql);
+        }
+        {
+            String sql = "create materialized view mv2 " +
+                    "partition by date_trunc('month', k1) " +
+                    "distributed by hash(k2) buckets 10 " +
+                    "refresh async START('2122-12-31') EVERY(INTERVAL 1 HOUR) " +
+                    "PROPERTIES (\n" +
+                    "\"replication_num\" = \"1\"\n" +
+                    ") " +
+                    "as select k1, k2 from mv1;";
+            starRocksAssert.withMaterializedView(sql);
+        }
+    }
+
+    @Test
+    public void testPartitionByDateTruncWithNestedMV2() throws Exception {
+        {
+            String sql = "create materialized view mv1 " +
+                    "partition by date_trunc('month', date) " +
+                    "distributed by random " +
+                    "REFRESH DEFERRED MANUAL " +
+                    "PROPERTIES (\n" +
+                    "'replication_num' = '1'\n" +
+                    ") \n" +
+                    "as select v1.date, v1.id from iceberg0.partitioned_db.t2 as v1; ";
+            starRocksAssert.withMaterializedView(sql);
+        }
+        {
+            String sql = "create materialized view mv2 " +
+                    "partition by date_trunc('month', date) " +
+                    "distributed by random " +
+                    "REFRESH DEFERRED MANUAL " +
+                    "PROPERTIES (\n" +
+                    "'replication_num' = '1'\n" +
+                    ") \n" +
+                    "as select v1.date, v1.id from mv1 as v1; ";
+            starRocksAssert.withMaterializedView(sql);
+        }
+    }
+    @Test
+    public void testPartitionByDateTruncWithNestedMV3() throws Exception {
+        String sql = "create materialized view mv1 " +
+                "partition by date_trunc('month', date) " +
+                "distributed by random " +
+                "REFRESH DEFERRED MANUAL " +
+                "PROPERTIES (\n" +
+                "'replication_num' = '1'\n" +
+                ") \n" +
+                "as select 'This is a test',123,v1.date, v1.id from iceberg0.partitioned_db.t2 as v1; ";
+        starRocksAssert.withMaterializedView(sql);
     }
 }
