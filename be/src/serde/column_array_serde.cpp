@@ -444,8 +444,10 @@ public:
     }
 
     static const uint8_t* deserialize(const uint8_t* buff, NullableColumn* column, const int encode_level) {
-        buff = serde::ColumnArraySerde::deserialize(buff, column->null_column().get(), false, encode_level);
-        buff = serde::ColumnArraySerde::deserialize(buff, column->data_column().get(), false, encode_level);
+        auto null_col = column->null_column_mutable_ptr();
+        auto data_col = column->data_column_mutable_ptr();
+        buff = serde::ColumnArraySerde::deserialize(buff, null_col.get(), false, encode_level);
+        buff = serde::ColumnArraySerde::deserialize(buff, data_col.get(), false, encode_level);
         column->update_has_null();
         return buff;
     }
@@ -465,8 +467,10 @@ public:
     }
 
     static const uint8_t* deserialize(const uint8_t* buff, ArrayColumn* column, const int encode_level) {
-        buff = serde::ColumnArraySerde::deserialize(buff, column->offsets_column().get(), true, encode_level);
-        buff = serde::ColumnArraySerde::deserialize(buff, column->elements_column().get(), false, encode_level);
+        auto offsets_col = column->offsets_column_mutable_ptr();
+        auto elements_col = column->elements_column_mutable_ptr();
+        buff = serde::ColumnArraySerde::deserialize(buff, offsets_col.get(), true, encode_level);
+        buff = serde::ColumnArraySerde::deserialize(buff, elements_col.get(), false, encode_level);
         return buff;
     }
 };
@@ -487,9 +491,12 @@ public:
     }
 
     static const uint8_t* deserialize(const uint8_t* buff, MapColumn* column, const int encode_level) {
-        buff = serde::ColumnArraySerde::deserialize(buff, column->offsets_column().get(), true, encode_level);
-        buff = serde::ColumnArraySerde::deserialize(buff, column->keys_column().get(), false, encode_level);
-        buff = serde::ColumnArraySerde::deserialize(buff, column->values_column().get(), false, encode_level);
+        auto offsets_col = column->offsets_column_mutable_ptr();
+        auto keys_col = column->keys_column_mutable_ptr();
+        auto values_col = column->values_column_mutable_ptr();
+        buff = serde::ColumnArraySerde::deserialize(buff, offsets_col.get(), true, encode_level);
+        buff = serde::ColumnArraySerde::deserialize(buff, keys_col.get(), false, encode_level);
+        buff = serde::ColumnArraySerde::deserialize(buff, values_col.get(), false, encode_level);
         return buff;
     }
 };
@@ -512,7 +519,8 @@ public:
     }
 
     static const uint8_t* deserialize(const uint8_t* buff, StructColumn* column, const int encode_level) {
-        for (auto& field : column->fields_column()) {
+        auto fields = column->fields_column_mutable();
+        for (auto& field : fields) {
             buff = serde::ColumnArraySerde::deserialize(buff, field.get(), false, encode_level);
         }
         return buff;
@@ -535,7 +543,8 @@ public:
     static const uint8_t* deserialize(const uint8_t* buff, ConstColumn* column, const int encode_level) {
         uint64_t size = 0;
         buff = read_little_endian_64(buff, &size);
-        buff = serde::ColumnArraySerde::deserialize(buff, column->data_column().get(), false, encode_level);
+        auto data_col = column->data_column_ptr();
+        buff = serde::ColumnArraySerde::deserialize(buff, data_col.get(), false, encode_level);
         column->resize(size);
         return buff;
     }

@@ -284,7 +284,7 @@ Status MySQLDataSource::fill_chunk(ChunkPtr* chunk, char** data, size_t* length)
     int materialized_col_idx = -1;
     for (size_t col_idx = 0; col_idx < _slot_num; ++col_idx) {
         SlotDescriptor* slot_desc = _tuple_desc->slots()[col_idx];
-        ColumnPtr column = (*chunk)->get_column_by_slot_id(slot_desc->id());
+        auto column = (*chunk)->get_mutable_column_by_slot_id(slot_desc->id());
 
         // because the fe planner filter the non_materialize column
         if (!slot_desc->is_materialized()) {
@@ -322,7 +322,7 @@ Status MySQLDataSource::append_text_to_column(const char* data, const int& len, 
     Column* data_column = column;
     if (data_column->is_nullable()) {
         auto* nullable_column = down_cast<NullableColumn*>(data_column);
-        data_column = nullable_column->data_column().get();
+        data_column = nullable_column->mutable_data_column();
     }
 
     bool parse_success = true;
