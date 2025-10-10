@@ -97,8 +97,8 @@ public:
             FixedLengthColumn<int32_t>* data_column;
             if (dst->is_nullable()) {
                 auto nullable_column = down_cast<NullableColumn*>(dst);
-                nullable_column->null_column()->append_default(count);
-                data_column = down_cast<FixedLengthColumn<int32_t>*>(nullable_column->data_column().get());
+                nullable_column->null_column_mutable_ptr()->append_default(count);
+                data_column = down_cast<FixedLengthColumn<int32_t>*>(nullable_column->mutable_data_column());
             } else {
                 data_column = down_cast<FixedLengthColumn<int32_t>*>(dst);
             }
@@ -324,8 +324,8 @@ private:
         FixedLengthColumn<T>* data_column /* = nullptr */;
         if (dst->is_nullable()) {
             auto nullable_column = down_cast<NullableColumn*>(dst);
-            nullable_column->null_column()->append_default(count);
-            data_column = down_cast<FixedLengthColumn<T>*>(nullable_column->data_column().get());
+            nullable_column->null_column_mutable_ptr()->append_default(count);
+            data_column = down_cast<FixedLengthColumn<T>*>(nullable_column->mutable_data_column());
         } else {
             data_column = down_cast<FixedLengthColumn<T>*>(dst);
         }
