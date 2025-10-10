@@ -72,6 +72,9 @@ public:
     void set_recover_flag(RecoverFlag flag) { _recover_flag = flag; }
     RecoverFlag recover_flag() const { return _recover_flag; }
 
+    // Number of segments already assigned (accumulated) in current pending batch rowset build.
+    uint32_t assigned_segment_id() const { return _pending_rowset_data.assigned_segment_id; }
+
     void finalize_sstable_meta(const PersistentIndexSstableMetaPB& sstable_meta);
 
     void remove_compacted_sst(const TxnLogPB_OpCompaction& op_compaction);
@@ -105,6 +108,7 @@ private:
         std::vector<FileMetaPB> orphan_files;
         std::vector<std::string> dels;
         std::vector<std::string> del_encryption_metas;
+        uint32_t assigned_segment_id = 0;
     };
 
     Tablet _tablet;
