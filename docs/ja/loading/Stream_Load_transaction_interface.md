@@ -96,7 +96,7 @@ Stream Load トランザクションインターフェースには、次の制�
 - 呼び出した `/api/transaction/begin`、`/api/transaction/load`、または `/api/transaction/prepare` 操作がエラーを返した場合、トランザクションは失敗し、自動的にロールバックされます。
 - 新しいトランザクションを開始するために `/api/transaction/begin` 操作を呼び出す際、ラベルを指定する必要があります。なお、後続の `/api/transaction/load`、`/api/transaction/prepare`、および `/api/transaction/commit` 操作は、`/api/transaction/begin` 操作と同じラベルを使用する必要があります。
 - 進行中のトランザクションのラベルを使用して `/api/transaction/begin` 操作を呼び出し新しいトランザクションを開始すると、以前のトランザクションは失敗しロールバックされます。
-- 複数テーブルを対象にトランザクションを開始するために `/api/transaction/begin` 操作を呼び出す場合、パラメータ `-H "transaction_type:multi"` を指定する必要があります。なお、その後実行する `/api/transaction/commit` または `/api/transaction/rollback` 操作では、同じパラメータを指定する必要があります。
+- 複数のテーブルにデータをロードするためにマルチテーブルトランザクションを使用する場合、トランザクションに関連するすべての操作に対してパラメータ `-H "transaction_type:multi"` を指定する必要があります。
 - StarRocks が CSV 形式のデータに対してサポートするデフォルトのカラムセパレータと行区切り文字は `\t` と `\n` です。データファイルがデフォルトのカラムセパレータまたは行区切り文字を使用していない場合、`/api/transaction/load` 操作を呼び出す際に、データファイルで実際に使用されているカラムセパレータまたは行区切り文字を `"column_separator: <column_separator>"` または `"row_delimiter: <row_delimiter>"` を使用して指定する必要があります。
 
 ## 始める前に
@@ -207,6 +207,7 @@ curl --location-trusted -u <jack>:<123456> -H "label:streamload_txn_example1_tab
 ```Bash
 curl --location-trusted -u <username>:<password> -H "label:<label_name>" \
     -H "Expect:100-continue" \
+    [-H "transaction_type:multi"]\  # オプション。マルチテーブルトランザクションを介してデータをロードします。
     -H "db:<database_name>" -H "table:<table_name>" \
     -T <file_path> \
     -XPUT http://<fe_host>:<fe_http_port>/api/transaction/load
@@ -215,7 +216,7 @@ curl --location-trusted -u <username>:<password> -H "label:<label_name>" \
 > **NOTE**
 >
 > - `/api/transaction/load` 操作を呼び出す際、`<file_path>` を使用してロードしたいデータファイルの保存パスを指定する必要があります。
-> - `/api/transaction/load` 操作を異なる `table` パラメータ値で呼び出すことで、同じデータベース内の異なるテーブルにデータをロードできます。
+> - `/api/transaction/load` 操作を異なる `table` パラメータ値で呼び出すことで、同じデータベース内の異なるテーブルにデータをロードできます。この場合、コマンドで `-H "transaction_type:multi"` を指定する必要があります。
 
 #### 例
 
@@ -294,10 +295,15 @@ curl --location-trusted -u <jack>:<123456> -H "label:streamload_txn_example1_tab
 ```Bash
 curl --location-trusted -u <username>:<password> -H "label:<label_name>" \
     -H "Expect:100-continue" \
+    [-H "transaction_type:multi"]\  # オプション。複数テーブルトランザクションを事前コミットします。
     -H "db:<database_name>" \
     [-H "prepared_timeout:<timeout_seconds>"] \
     -XPOST http://<fe_host>:<fe_http_port>/api/transaction/prepare
 ```
+
+> **NOTE**
+>
+> 事前コミットしたいトランザクションがマルチテーブルトランザクションの場合は、コマンドで `-H "transaction_type:multi"` を指定してください。
 
 #### 例
 

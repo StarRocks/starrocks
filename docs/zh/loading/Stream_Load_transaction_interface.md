@@ -96,7 +96,7 @@ Stream Load 事务接口具有如下优势：
 - 使用 Stream Load 事务接口导入数据的过程中，注意 `/api/transaction/begin`、`/api/transaction/load`、`/api/transaction/prepare` 接口报错后，事务将失败并自动回滚。
 - 在调用 `/api/transaction/begin` 接口开启事务时，您必须指定标签 (Label)，其后的 `/api/transaction/load`、`/api/transaction/prepare`、`/api/transaction/commit` 三个接口中，必须使用与 `/api/transaction/begin` 接口中相同的标签。
 - 重复调用标签相同的 `/api/transaction/begin` 接口，会导致前面使用相同标签正在进行中的事务失败并回滚。
-- 调用 `/api/transaction/begin` 操作启动多表事务时，必须指定参数 `-H "transaction_type:multi"`。请注意后续的 `/api/transaction/commit` 或 `/api/transaction/rollback` 操作必须同样使用该参数。
+- 若使用多表事务将数据导入到不同表中，则必须为事务涉及的所有操作指定参数 `-H "transaction_type:multi"`。
 - StarRocks支持导入的 CSV 格式数据默认的列分隔符是 `\t`，默认的行分隔符是 `\n`。如果源数据文件中的列分隔符和行分隔符不是 `\t` 和 `\n`，则在调用 `/api/transaction/load` 接口时必须通过 `"column_separator: <column_separator>"` 和 `"row_delimiter: <row_delimiter>"` 指定行分隔符和列分隔符。
 
 ## 准备工作
@@ -207,6 +207,7 @@ curl --location-trusted -u <jack>:<123456> -H "label:streamload_txn_example1_tab
 ```Bash
 curl --location-trusted -u <username>:<password> -H "label:<label_name>" \
     -H "Expect:100-continue" \
+    [-H "transaction_type:multi"]\  # 可选。通过多表事务导入数据。
     -H "db:<database_name>" -H "table:<table_name>" \
     -T <file_path> \
     -XPUT http://<fe_host>:<fe_http_port>/api/transaction/load
@@ -214,7 +215,8 @@ curl --location-trusted -u <username>:<password> -H "label:<label_name>" \
 
 > **说明**
 >
-> 调用 `/api/transaction/load` 接口时，必须通过 `-T <file_path>` 指定数据文件所在的路径。
+> - 调用 `/api/transaction/load` 接口时，必须通过 `-T <file_path>` 指定数据文件所在的路径。
+> - 您可以通过调用 `/api/transaction/load` 操作并传入不同的 `table` 参数值，将数据导入到同一数据库中的不同表中。此时，您必须在命令中指定 `-H "transaction_type:multi"`。
 
 #### 示例
 
@@ -229,8 +231,7 @@ curl --location-trusted -u <jack>:<123456> -H "label:streamload_txn_example1_tab
 
 > **说明**
 >
-> - 上述示例中，由于数据文件 `example1.csv` 中使用的列分隔符为逗号 (`,`)，而不是 StarRocks 默认的列分隔符 (`\t`)，因此在调用 `/api/transaction/load` 接口时必须通过 `"column_separator: <column_separator>"`  指定列分隔符为逗号 (`,`)。
-> - 您可以通过调用多个 `/api/transaction/load` 操作并传入不同的 `table` 参数值，将数据导入到同一数据库中的不同表中。
+> 上述示例中，由于数据文件 `example1.csv` 中使用的列分隔符为逗号 (`,`)，而不是 StarRocks 默认的列分隔符 (`\t`)，因此在调用 `/api/transaction/load` 接口时必须通过 `"column_separator: <column_separator>"`  指定列分隔符为逗号 (`,`)。
 
 #### 返回结果
 
@@ -294,10 +295,15 @@ curl --location-trusted -u <jack>:<123456> -H "label:streamload_txn_example1_tab
 ```Bash
 curl --location-trusted -u <username>:<password> -H "label:<label_name>" \
     -H "Expect:100-continue" \
+    [-H "transaction_type:multi"]\ # 可选。预提交多表事务。
     -H "db:<database_name>" \
     [-H "prepared_timeout:<timeout_seconds>"] \
     -XPOST http://<fe_host>:<fe_http_port>/api/transaction/prepare
 ```
+
+> **说明**
+>
+> 若要预提交的事务为多表事务，请在命令中指定 `-H "transaction_type:multi"`。
 
 #### 示例
 

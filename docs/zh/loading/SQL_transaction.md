@@ -17,9 +17,17 @@ import Beta from '../_assets/commonMarkdown/_beta.mdx'
 一个事务由多个 SQL 语句组成，这些语句在同一个原子单元中处理。事务中的所有语句只能同时生效或撤销，从而保证事务的 ACID（原子性、一致性、隔离性、持久性）特性。
 
 目前，StarRocks 的 SQL 事务支持以下操作：
-- INSERT INTO（当前不支持 OVERWRITE）
-- UPDATE（v4.0 及以上版本支持）
-- DELETE（v4.0 及以上版本支持）
+- INSERT INTO
+- UPDATE
+- DELETE
+
+:::note
+
+- 当前不支持 INSERT OVERWRITE。
+- 在同一事务内对同一表执行多个 INSERT 语句的操作仅在 v4.0 及更高版本的存算分离集群中支持。
+- UPDATE 和 DELETE 操作仅在 v4.0 及更高版本的存算分离集群中支持。
+
+:::
 
 从 v4.0 起，在单个 SQL 事务内：
 - 支持对单张表执行**多个 INSERT 语句**。
@@ -59,7 +67,11 @@ import Beta from '../_assets/commonMarkdown/_beta.mdx'
 
 ## 示例
 
-1. 创建演示表 `desT`，并将数据导入到其中。
+1. 在存算分离集群中创建演示表 `desT`，并将数据导入到其中。
+
+    :::note
+    若要在存算一体集群中尝试此示例，必须跳过步骤 3，并在步骤 4 中仅定义一条 INSERT 语句。
+    :::
 
     ```SQL
     CREATE TABLE desT (
@@ -131,8 +143,8 @@ import Beta from '../_assets/commonMarkdown/_beta.mdx'
 
 ## 使用说明
 
-- 目前，StarRocks 支持在 SQL 事务中执行 INSERT、UPDATE 和 DELETE 语句。
-- 从 v4.0 起，支持在单个事务内对同一张表执行多个 INSERT 语句。
+- 目前，StarRocks 支持在 SQL 事务中执行 INSERT、UPDATE 和 DELETE 语句。UPDATE 和 DELETE 操作仅在 v4.0 及更高版本的存算分离集群中支持。
+- 在同一事务内对同一表执行多个 INSERT 语句的操作仅在 v4.0 及更高版本的存算分离集群中支持。
 - 在单个事务内，每张表仅可定义一条 UPDATE 或 DELETE 语句，且必须位于 INSERT 语句之前。
 - 后续的 DML 语句无法读取同一事务中先前语句带来的未提交变更。例如，先前 INSERT 语句的目标表不能作为后续语句的源表，否则系统将返回错误。
 - 事务中所有 DML 语句的目标表必须位于同一数据库内，不支持跨数据库操作。

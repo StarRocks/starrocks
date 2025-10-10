@@ -97,7 +97,7 @@ The Stream Load transaction interface has the following limits:
 - If the `/api/transaction/begin`, `/api/transaction/load`, or `/api/transaction/prepare` operation that you have called returns errors, the transaction fails and is automatically rolled back.
 - When calling the `/api/transaction/begin` operation to start a new transaction, you must specify a label. Note that the subsequent `/api/transaction/load`, `/api/transaction/prepare`, and `/api/transaction/commit` operations must use the same label as the `/api/transaction/begin` operation.
 - If you use the label of an ongoing transaction to call the `/api/transaction/begin` operation to start a new transaction, the previous transaction will fail and be rolled back.
-- When calling the `/api/transaction/begin` operation to start a transaction for multiple tables, you must specify the parameter `-H "transaction_type:multi"`. Note that the subsequent `/api/transaction/commit` or `/api/transaction/rollback` operation must have the same parameter.
+- If you use a multi-table transaction to load data into different tables, you must specify the parameter `-H "transaction_type:multi"` for all operations involved in the transaction.
 - The default column separator and row delimiter that StarRocks supports for CSV-formatted data are `\t` and `\n`. If your data file does not use the default column separator or row delimiter, you must use `"column_separator: <column_separator>"` or `"row_delimiter: <row_delimiter>"` to specify the column separator or row delimiter that is actually used in your data file when calling the `/api/transaction/load` operation.
 
 ## Before you begin
@@ -208,6 +208,7 @@ curl --location-trusted -u <jack>:<123456> -H "label:streamload_txn_example1_tab
 ```Bash
 curl --location-trusted -u <username>:<password> -H "label:<label_name>" \
     -H "Expect:100-continue" \
+    [-H "transaction_type:multi"]\  # Optional. Loads data via a multi-table transaction.
     -H "db:<database_name>" -H "table:<table_name>" \
     -T <file_path> \
     -XPUT http://<fe_host>:<fe_http_port>/api/transaction/load
@@ -216,7 +217,7 @@ curl --location-trusted -u <username>:<password> -H "label:<label_name>" \
 > **NOTE**
 >
 > - When calling the `/api/transaction/load` operation, you must use `<file_path>` to specify the save path of the data file you want to load.
-> - You can call `/api/transaction/load` operations with different `table` parameter values to load data into different tables within the same database.
+> - You can call `/api/transaction/load` operations with different `table` parameter values to load data into different tables within the same database. In this case, you must specify `-H "transaction_type:multi"` in the command.
 
 #### Example
 
@@ -295,10 +296,15 @@ curl --location-trusted -u <jack>:<123456> -H "label:streamload_txn_example1_tab
 ```Bash
 curl --location-trusted -u <username>:<password> -H "label:<label_name>" \
     -H "Expect:100-continue" \
+    [-H "transaction_type:multi"]\  # Optional. Pre-commits a multi-table transaction.
     -H "db:<database_name>" \
     [-H "prepared_timeout:<timeout_seconds>"] \
     -XPOST http://<fe_host>:<fe_http_port>/api/transaction/prepare
 ```
+
+> **NOTE**
+>
+> Specify `-H "transaction_type:multi"` in the command if the transaction you want to pre-commit is a multi-table transaction.
 
 #### Example
 

@@ -17,9 +17,17 @@ From v3.5.0, StarRocks supports SQL transactions to assure the atomicity of the 
 A transaction consists of multiple SQL statements that are processed within the same atomic unit. The statements in the transaction are either applied or undone together, thus guaranteeing the ACID (atomicity, consistency, isolation, and durability) properties of the transaction.
 
 Currently, the SQL transaction in StarRocks supports the following operations:
-- INSERT INTO (OVERWRITE is not supported currently)
-- UPDATE (Supported from v4.0 onwards)
-- DELETE (Supported from v4.0 onwards)
+- INSERT INTO
+- UPDATE
+- DELETE
+
+:::note
+
+- INSERT OVERWRITE is not supported currently.
+- Multiple INSERT statements against the same table within a transaction are supported only in shared-data clusters from v4.0 onwards.
+- UPDATE and DELETE are supported only in shared-data clusters from v4.0 onwards.
+
+:::
 
 From v4.0 onwards, within one SQL transaction:
 - **Multiple INSERT statements** against the one table are supported.
@@ -59,7 +67,11 @@ A transaction is associated with a single session. Multiple sessions cannot shar
 
 ## Example
 
-1. Create the demo table `desT`, and load data into it.
+1. Create the demo table `desT` in a shared-data cluster, and load data into it.
+
+    :::note
+    If you want to try this example in a shared-nothing cluster, you must skip Step 3 and define only one INSERT statement in Step 4.
+    :::
 
     ```SQL
     CREATE TABLE desT (
@@ -131,8 +143,8 @@ A transaction is associated with a single session. Multiple sessions cannot shar
 
 ## Usage notes
 
-- Currently, StarRocks supports INSERT, UPDATE, and DELETE statements in SQL transactions.
-- From v4.0 onwards, multiple INSERT statements against the same table within a transaction are supported.
+- Currently, StarRocks supports INSERT, UPDATE, and DELETE statements in SQL transactions. UPDATE and DELETE are supported only in shared-data clusters from v4.0 onwards.
+- Multiple INSERT statements against the same table within a transaction are supported only in shared-data clusters from v4.0 onwards.
 - Within a transaction, you can only define one UPDATE or DELETE statement against each table, and it must precede the INSERT statements.
 - Subsequent DML statements cannot read the uncommitted changes brought by preceding statements within the same transaction. For example, the target table of the preceding INSERT statement cannot be the source table of subsequent statements. Otherwise, the system returns an error.
 - All target tables of the DML statements in a transaction must be within the same database. Cross-database operations are not allowed.
