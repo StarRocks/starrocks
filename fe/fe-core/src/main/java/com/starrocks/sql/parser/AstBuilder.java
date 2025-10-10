@@ -4593,7 +4593,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
 
     @Override
     public ParseNode visitDropBackendClause(StarRocksParser.DropBackendClauseContext context) {
-        String whName = WarehouseManager.DEFAULT_WAREHOUSE_NAME;
+        String whName = "";
         String cngroupName = "";
         if (context.warehouseName != null) {
             Identifier identifier = (Identifier) visit(context.identifierOrString().get(0));
@@ -4654,7 +4654,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
 
     @Override
     public ParseNode visitDropComputeNodeClause(StarRocksParser.DropComputeNodeClauseContext context) {
-        String whName = WarehouseManager.DEFAULT_WAREHOUSE_NAME;
+        String whName = "";
         String cngroupName = "";
         if (context.warehouseName != null) {
             Identifier identifier = (Identifier) visit(context.identifierOrString().get(0));

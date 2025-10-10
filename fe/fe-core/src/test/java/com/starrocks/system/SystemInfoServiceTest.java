@@ -17,8 +17,10 @@ package com.starrocks.system;
 import com.google.api.client.util.Maps;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
+import com.starrocks.common.ErrorCode;
 import com.starrocks.common.Pair;
 import com.starrocks.lake.StarOSAgent;
+import com.starrocks.persist.DropComputeNodeLog;
 import com.starrocks.persist.EditLog;
 import com.starrocks.persist.UpdateHistoricalNodeLog;
 import com.starrocks.server.GlobalStateMgr;
@@ -278,6 +280,51 @@ public class SystemInfoServiceTest {
 
         Config.enable_trace_historical_node = savedConfig;
     }
+    @Test
+    public void testDropComputeNode2() throws Exception {
+        new MockUp<RunMode>() {
+            @Mock
+            public RunMode getCurrentRunMode() {
+                return RunMode.SHARED_DATA;
+            }
+        };
+
+        Boolean savedConfig = Config.enable_trace_historical_node;
+        Config.enable_trace_historical_node = true;
+
+        ComputeNode cn = new ComputeNode(10001, "newHost", 1000);
+        service.addComputeNode(cn);
+
+        WarehouseManager warehouseManager = new WarehouseManager();
+        warehouseManager.initDefaultWarehouse();
+
+        new MockUp<WarehouseManager>() {
+            @Mock
+            public ComputeResource acquireComputeResource(CRAcquireContext acquireContext) {
+                return WarehouseManager.DEFAULT_RESOURCE;
+            }
+        };
+
+        new MockUp<EditLog>() {
+            @Mock
+            public void logDropComputeNode(DropComputeNodeLog log) {
+            }
+        };
+        cn.setStarletPort(1001);
+
+        {
+            Assertions.assertThrows(DdlException.class, () ->
+                    service.dropComputeNode("newHost", 1000, "warehousename-cn-not-exists", ""),
+                    ErrorCode.ERR_UNKNOWN_WAREHOUSE.formatErrorMsg("name: warehousename-cn-not-exists"));
+        }
+
+        service.dropComputeNode("newHost", 1000, "", "");
+        ComputeNode cnIP = service.getComputeNodeWithHeartbeatPort("newHost", 1000);
+        Assertions.assertNull(cnIP);
+
+
+        Config.enable_trace_historical_node = savedConfig;
+    }
 
     @Test
     public void testDropBackendWithoutWarehouse() throws Exception {
@@ -319,6 +366,14 @@ public class SystemInfoServiceTest {
         };
         service.addBackend(be);
         be.setStarletPort(1001);
+
+        {
+            Assertions.assertThrows(DdlException.class, () ->
+                            service.dropBackend("newHost", 1000, "warehousename-cn-not-exists",
+                                    "", false),
+                    ErrorCode.ERR_UNKNOWN_WAREHOUSE.formatErrorMsg("name: warehousename-cn-not-exists"));
+        }
+
         service.dropBackend("newHost", 1000, null, null, false);
         Backend beIP = service.getBackendWithHeartbeatPort("newHost", 1000);
         Assertions.assertNull(beIP);
