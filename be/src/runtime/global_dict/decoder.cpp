@@ -59,38 +59,42 @@ Status GlobalDictDecoderBase<Dict>::decode_array(const Column* in, Column* out) 
         const auto* const_column = down_cast<const ConstColumn*>(in);
         const auto* in_array = down_cast<const ArrayColumn*>(const_column->data_column().get());
         auto in_element = in_array->elements_column();
-        auto in_offsets = in_array->offsets_column();
+        const auto& in_offsets_ref = in_array->offsets();
 
         auto* out_array = down_cast<ArrayColumn*>(out);
-        auto out_element = out_array->elements_column();
-        auto out_offsets = out_array->offsets_column();
-        out_offsets->swap_column(*in_offsets);
+        auto out_element = out_array->elements_column_mutable_ptr();
+        auto out_offsets = out_array->offsets_column_mutable_ptr();
+        const auto& in_offsets_data = in_offsets_ref.immutable_data();
+        out_offsets->get_data().assign(in_offsets_data.begin(), in_offsets_data.end());
         return decode_string(in_element.get(), out_element.get());
     } else if (in->is_nullable()) {
         const auto* in_nullable = down_cast<const NullableColumn*>(in);
         const auto* in_array = down_cast<const ArrayColumn*>(in_nullable->data_column().get());
-        auto in_null = in_nullable->null_column();
+        const auto& in_null_ref = *in_nullable->immutable_null_column();
         auto in_element = in_array->elements_column();
-        auto in_offsets = in_array->offsets_column();
+        const auto& in_offsets_ref = in_array->offsets();
 
         auto* out_nullable = down_cast<NullableColumn*>(out);
-        auto* out_array = down_cast<ArrayColumn*>(out_nullable->data_column().get());
-        auto out_null = out_nullable->null_column();
-        auto out_element = out_array->elements_column();
-        auto out_offsets = out_array->offsets_column();
-        out_offsets->swap_column(*in_offsets);
-        out_null->swap_column(*in_null);
+        auto* out_array = down_cast<ArrayColumn*>(out_nullable->mutable_data_column());
+        auto out_null = out_nullable->null_column_mutable_ptr();
+        auto out_element = out_array->elements_column_mutable_ptr();
+        auto out_offsets = out_array->offsets_column_mutable_ptr();
+        const auto& in_offsets_data = in_offsets_ref.immutable_data();
+        const auto& in_null_data = in_null_ref.immutable_data();
+        out_offsets->get_data().assign(in_offsets_data.begin(), in_offsets_data.end());
+        out_null->get_data().assign(in_null_data.begin(), in_null_data.end());
         out_nullable->set_has_null(in_nullable->has_null());
         return decode_string(in_element.get(), out_element.get());
     } else {
         const auto* in_array = down_cast<const ArrayColumn*>(in);
         auto in_element = in_array->elements_column();
-        auto in_offsets = in_array->offsets_column();
+        const auto& in_offsets_ref = in_array->offsets();
 
         auto* out_array = down_cast<ArrayColumn*>(out);
-        auto out_element = out_array->elements_column();
-        auto out_offsets = out_array->offsets_column();
-        out_offsets->swap_column(*in_offsets);
+        auto out_element = out_array->elements_column_mutable_ptr();
+        auto out_offsets = out_array->offsets_column_mutable_ptr();
+        const auto& in_offsets_data = in_offsets_ref.immutable_data();
+        out_offsets->get_data().assign(in_offsets_data.begin(), in_offsets_data.end());
         return decode_string(in_element.get(), out_element.get());
     }
 
@@ -117,7 +121,7 @@ Status GlobalDictDecoderBase<Dict>::decode_string(const Column* in, Column* out)
     if (!in->is_nullable()) {
         auto* res_column = down_cast<StringColumnType*>(out);
         const auto* column = down_cast<const DictColumnType*>(in);
-        const auto dict_data = column->immutable_data();
+        const auto& dict_data = column->immutable_data();
 
         const size_t num_rows = in->size();
         std::vector<StringCppType> res_slices(num_rows);
@@ -138,9 +142,9 @@ Status GlobalDictDecoderBase<Dict>::decode_string(const Column* in, Column* out)
     auto* res_column = down_cast<NullableColumn*>(out);
     res_column->null_column_data().resize(in->size());
 
-    auto* res_data_column = down_cast<StringColumnType*>(res_column->data_column().get());
+    auto* res_data_column = down_cast<StringColumnType*>(res_column->mutable_data_column());
     const auto* data_column = down_cast<const DictColumnType*>(column->data_column().get());
-    const auto dict_data = data_column->immutable_data();
+    const auto& dict_data = data_column->immutable_data();
 
     const size_t num_rows = in->size();
     std::vector<StringCppType> res_slices(num_rows);

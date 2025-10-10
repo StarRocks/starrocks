@@ -38,7 +38,7 @@ StatusOr<ColumnPtr> ArrayFunctions::array_length([[maybe_unused]] FunctionContex
     RETURN_IF_COLUMNS_ONLY_NULL(columns);
     const size_t num_rows = columns[0]->size();
     const auto* col_array = down_cast<const ArrayColumn*>(ColumnHelper::get_data_column(columns[0].get()));
-    const auto arr_offsets = col_array->offsets().immutable_data();
+    const auto& arr_offsets = col_array->offsets().immutable_data();
     if (columns[0]->is_constant()) {
         auto col_result = Int32Column::create();
         col_result->append(arr_offsets.data()[1]);
@@ -67,7 +67,7 @@ StatusOr<ColumnPtr> ArrayFunctions::array_length([[maybe_unused]] FunctionContex
 
 template <bool OnlyNullData, bool ConstData>
 static StatusOr<ColumnPtr> do_array_append(const Column& elements, const UInt32Column& offsets, const Column& data) {
-    const auto offsets_data = offsets.immutable_data();
+    const auto& offsets_data = offsets.immutable_data();
     size_t num_array = offsets.size() - 1;
     uint32_t curr_offset = 0;
 
@@ -151,7 +151,7 @@ private:
     static StatusOr<ColumnPtr> _process(const ElementColumn& elements, const UInt32Column& offsets,
                                         const TargetColumn& targets, const NullColumn::ImmContainer& null_map_elements,
                                         const NullColumn::ImmContainer& null_map_targets) {
-        const auto offsets_data = offsets.immutable_data();
+        const auto& offsets_data = offsets.immutable_data();
         const size_t num_array = offsets.size() - 1;
 
         auto result_array = ArrayColumn::create(NullableColumn::create(elements.clone_empty(), NullColumn::create()),
@@ -1537,7 +1537,7 @@ static Status sort_multi_array_column(FunctionContext* ctx, const Column* src_co
                                       const std::vector<const Column*>& key_columns, Column* dest_column) {
     const auto* src_elements_column = down_cast<const ArrayColumn*>(src_column)->elements_column().get();
     const auto* src_offsets_column = &down_cast<const ArrayColumn*>(src_column)->offsets();
-    const auto src_offsets = src_offsets_column->immutable_data();
+    const auto& src_offsets = src_offsets_column->immutable_data();
 
     auto* dest_elements_column = down_cast<ArrayColumn*>(dest_column)->elements_column_mutable_ptr().get();
     auto* dest_offsets_column = down_cast<ArrayColumn*>(dest_column)->offsets_column_mutable_ptr().get();
@@ -1561,7 +1561,7 @@ static Status sort_multi_array_column(FunctionContext* ctx, const Column* src_co
         }
 
         const auto* key_array_column = down_cast<const ArrayColumn*>(key_column);
-        const auto key_array_offsets = key_array_column->offsets().immutable_data();
+        const auto& key_array_offsets = key_array_column->offsets().immutable_data();
         // elements_per_key_col[i] = const_cast<Column*>(key_array_column->elements_column().get());
         elements_per_key_col[i] = key_array_column->elements_column().get();
         offsets_per_key_col[i] = key_array_offsets;
@@ -1629,7 +1629,7 @@ StatusOr<ColumnPtr> ArrayFunctions::array_sortby_multi(FunctionContext* ctx, con
         const auto* src_nullable_column = down_cast<const NullableColumn*>(src_column);
         const auto* src_data_column = src_nullable_column->data_column().get();
         const auto* src_null_column = src_nullable_column->null_column().get();
-        const auto src_nulls = src_nullable_column->immutable_null_column_data();
+        const auto& src_nulls = src_nullable_column->immutable_null_column_data();
 
         auto* dest_nullable_column = down_cast<NullableColumn*>(dest_column.get());
         auto* dest_data_column = dest_nullable_column->mutable_data_column();

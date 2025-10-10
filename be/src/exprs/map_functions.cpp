@@ -203,7 +203,7 @@ StatusOr<ColumnPtr> MapFunctions::map_filter(FunctionContext* context, const Col
             // set null from src
             auto* dest_nullable_column = down_cast<NullableColumn*>(dest_column.get());
             const auto* src_nullable_column = down_cast<const NullableColumn*>(src_column.get());
-            const auto src_nulldata = src_nullable_column->immutable_null_column_data();
+            const auto& src_nulldata = src_nullable_column->immutable_null_column_data();
             dest_nullable_column->mutable_null_column()->get_data().assign(src_nulldata.begin(), src_nulldata.end());
             dest_nullable_column->set_has_null(src_nullable_column->has_null());
 
@@ -225,7 +225,7 @@ StatusOr<ColumnPtr> MapFunctions::map_filter(FunctionContext* context, const Col
         auto* dest_data_column = dest_nullable_column->mutable_data_column();
 
         if (src_column->has_null()) {
-            const auto src_null_data = src_null_column->immutable_data();
+            const auto& src_null_data = src_null_column->immutable_data();
             dest_null_column->get_data().assign(src_null_data.begin(), src_null_data.end());
         } else {
             dest_null_column->get_data().resize(chunk_size, 0);
@@ -314,7 +314,7 @@ StatusOr<ColumnPtr> MapFunctions::distinct_map_keys(FunctionContext* context, co
     auto& offsets_vec = new_offsets->get_data();
     offsets_vec.push_back(0);
 
-    const auto offsets_data = offsets->immutable_data();
+    const auto& offsets_data = offsets->immutable_data();
 
     uint32_t new_offset = 0;
     for (auto i = 0; i < size; ++i) {
