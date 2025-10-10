@@ -74,6 +74,8 @@ public class MockIcebergMetadata implements ConnectorMetadata {
 
     public static final String MOCKED_UNPARTITIONED_TABLE_NAME0 = "t0";
     public static final String MOCKED_PARTITIONED_TABLE_NAME1 = "t1";
+    // date partition table
+    public static final String MOCKED_PARTITIONED_TABLE_NAME2 = "t2";
 
     // string partition table
     public static final String MOCKED_STRING_PARTITIONED_TABLE_NAME1 = "part_tbl1";
@@ -95,7 +97,9 @@ public class MockIcebergMetadata implements ConnectorMetadata {
     public static final String MOCKED_PARTITIONED_EVOLUTION_DATE_MONTH_IDENTITY_TABLE_NAME = "t0_date_month_identity_evolution";
 
     private static final List<String> PARTITION_TABLE_NAMES = ImmutableList.of(MOCKED_PARTITIONED_TABLE_NAME1,
-            MOCKED_STRING_PARTITIONED_TABLE_NAME1, MOCKED_STRING_PARTITIONED_TABLE_NAME2,
+            MOCKED_PARTITIONED_TABLE_NAME2,
+            MOCKED_STRING_PARTITIONED_TABLE_NAME1,
+            MOCKED_STRING_PARTITIONED_TABLE_NAME2,
             MOCKED_STRING_PARTITIONED_TABLE_NAME3);
 
     private static final List<String> PARTITION_TRANSFORM_TABLE_NAMES =
@@ -183,6 +187,9 @@ public class MockIcebergMetadata implements ConnectorMetadata {
             if (tblName.equals(MOCKED_PARTITIONED_TABLE_NAME1)) {
                 icebergTableInfoMap.put(tblName, new IcebergTableInfo(icebergTable, PARTITION_NAMES_0,
                         100, columnStatisticMap));
+            } else if (tblName.equals(MOCKED_PARTITIONED_TABLE_NAME2)) {
+                icebergTableInfoMap.put(tblName, new IcebergTableInfo(icebergTable, PARTITION_NAMES_0,
+                        100, columnStatisticMap));
             } else {
                 icebergTableInfoMap.put(tblName, new IcebergTableInfo(icebergTable, PARTITION_NAMES_1,
                         100, columnStatisticMap));
@@ -214,6 +221,10 @@ public class MockIcebergMetadata implements ConnectorMetadata {
             return ImmutableList.of(new Column("id", Type.INT, true),
                     new Column("data", Type.STRING, true),
                     new Column("date", Type.STRING, true));
+        } else if (tblName.equals(MOCKED_PARTITIONED_TABLE_NAME2)) {
+            return ImmutableList.of(new Column("id", Type.INT, true),
+                    new Column("data", Type.STRING, true),
+                    new Column("date", Type.DATE, true));
         } else {
             return Arrays.asList(new Column("a", Type.VARCHAR), new Column("b", Type.VARCHAR),
                     new Column("c", Type.INT), new Column("d", Type.VARCHAR));
@@ -231,6 +242,10 @@ public class MockIcebergMetadata implements ConnectorMetadata {
             return new Schema(required(3, "id", Types.IntegerType.get()),
                     required(4, "data", Types.StringType.get()),
                     required(5, "date", Types.StringType.get()));
+        } else if (tblName.equals(MOCKED_PARTITIONED_TABLE_NAME2)) {
+            return new Schema(required(3, "id", Types.IntegerType.get()),
+                    required(4, "data", Types.StringType.get()),
+                    required(5, "date", Types.DateType.get()));
         } else {
             return new Schema(required(3, "a", Types.StringType.get()),
                     required(4, "b", Types.StringType.get()),
@@ -259,7 +274,13 @@ public class MockIcebergMetadata implements ConnectorMetadata {
                     new File(getStarRocksHome() + "/" + MOCKED_PARTITIONED_DB_NAME + "/"
                             + MOCKED_PARTITIONED_TABLE_NAME1), MOCKED_PARTITIONED_TABLE_NAME1,
                     schema, spec, 1);
-
+        } else if (tblName.equals(MOCKED_PARTITIONED_TABLE_NAME2)) {
+            PartitionSpec spec =
+                    PartitionSpec.builderFor(schema).identity("date").build();
+            return TestTables.create(
+                    new File(getStarRocksHome() + "/" + MOCKED_PARTITIONED_DB_NAME + "/"
+                            + MOCKED_PARTITIONED_TABLE_NAME2), MOCKED_PARTITIONED_TABLE_NAME2,
+                    schema, spec, 1);
         } else {
             PartitionSpec spec =
                     PartitionSpec.builderFor(schema).identity("d").build();
