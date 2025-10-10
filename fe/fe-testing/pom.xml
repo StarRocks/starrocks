@@ -76,6 +76,8 @@ under the License.
                 <artifactId>maven-surefire-plugin</artifactId>
                 <configuration>
                     <failIfNoSpecifiedTests>${failIfNoSpecifiedTests}</failIfNoSpecifiedTests>
+                    <parallelTestsTimeoutInSeconds>180</parallelTestsTimeoutInSeconds>
+                    <parallelTestsTimeoutForcedInSeconds>300</parallelTestsTimeoutForcedInSeconds>
                 </configuration>
             </plugin>
             <plugin>

@@ -47,6 +47,9 @@
                     <forkCount>${fe_ut_parallel}</forkCount>
                     <!-->not reuse forked jvm, so that each unit test will run in separate jvm. to avoid singleton confict<-->
                     <reuseForks>false</reuseForks>
+                    <!-->limit each unit test to 5 minutes (300 seconds)<-->
+                    <parallelTestsTimeoutInSeconds>180</parallelTestsTimeoutInSeconds>
+                    <parallelTestsTimeoutForcedInSeconds>300</parallelTestsTimeoutForcedInSeconds>
                     <argLine>
                         -javaagent:${settings.localRepository}/com/github/hazendaz/jmockit/jmockit/1.49.4/jmockit-1.49.4.jar
                     </argLine>
