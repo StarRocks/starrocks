@@ -193,24 +193,25 @@ public:
     }
 
     void convert_to_serialize_format(FunctionContext* ctx, const Columns& src, size_t chunk_size,
-                                     ColumnPtr* dst) const override {
+                                     MutableColumnPtr& dst) const override {
         if constexpr (is_result_always_nullable) {
             // For the case that input is non-nullable but output is nullable, the serialized output type
             // is non-nullable, because only the state of input needs to be serialized.
-            if (!(*dst)->is_nullable()) {
+            if (!dst->is_nullable()) {
                 DCHECK(!src[0]->is_nullable());
                 nested_function->convert_to_serialize_format(ctx, src, chunk_size, dst);
                 return;
             }
         }
 
-        DCHECK((*dst)->is_nullable());
-        auto* dst_nullable_column = down_cast<NullableColumn*>((*dst).get());
+        DCHECK(dst->is_nullable());
+        auto* dst_nullable_column = down_cast<NullableColumn*>(dst.get());
         if (src[0]->is_nullable()) {
             const auto* nullable_column = down_cast<const NullableColumn*>(src[0].get());
             if constexpr (IsNeverNullFunctionState<State>) {
                 dst_nullable_column->null_column_data().resize(chunk_size);
-                nested_function->convert_to_serialize_format(ctx, src, chunk_size, &dst_nullable_column->data_column());
+                auto data_col = dst_nullable_column->data_column_mutable_ptr();
+                nested_function->convert_to_serialize_format(ctx, src, chunk_size, data_col);
             } else if (nullable_column->has_null()) {
                 dst_nullable_column->set_has_null(true);
                 const auto src_null_data = nullable_column->immutable_null_column_data();
@@ -220,14 +221,13 @@ public:
                 } else {
                     NullData& dst_null_data = dst_nullable_column->null_column_data();
                     dst_null_data.assign(src_null_data.begin(), src_null_data.end());
+                    auto data_col = dst_nullable_column->data_column_mutable_ptr();
                     if constexpr (IgnoreNull) {
                         Columns src_data_columns(1);
                         src_data_columns[0] = nullable_column->data_column();
-                        nested_function->convert_to_serialize_format(ctx, src_data_columns, chunk_size,
-                                                                     &dst_nullable_column->data_column());
+                        nested_function->convert_to_serialize_format(ctx, src_data_columns, chunk_size, data_col);
                     } else {
-                        nested_function->convert_to_serialize_format(ctx, src, chunk_size,
-                                                                     &dst_nullable_column->data_column());
+                        nested_function->convert_to_serialize_format(ctx, src, chunk_size, data_col);
                     }
                 }
             } else {
@@ -235,12 +235,13 @@ public:
 
                 Columns src_data_columns(1);
                 src_data_columns[0] = nullable_column->data_column();
-                nested_function->convert_to_serialize_format(ctx, src_data_columns, chunk_size,
-                                                             &dst_nullable_column->data_column());
+                auto data_col = dst_nullable_column->data_column_mutable_ptr();
+                nested_function->convert_to_serialize_format(ctx, src_data_columns, chunk_size, data_col);
             }
         } else {
             dst_nullable_column->null_column_data().resize(chunk_size);
-            nested_function->convert_to_serialize_format(ctx, src, chunk_size, &dst_nullable_column->data_column());
+            auto data_col = dst_nullable_column->data_column_mutable_ptr();
+            nested_function->convert_to_serialize_format(ctx, src, chunk_size, data_col);
         }
     }
 
@@ -1065,8 +1066,8 @@ public:
     }
 
     void convert_to_serialize_format(FunctionContext* ctx, const Columns& src, size_t chunk_size,
-                                     ColumnPtr* dst) const override {
-        auto* dst_nullable_column = down_cast<NullableColumn*>((*dst).get());
+                                     MutableColumnPtr& dst) const override {
+        auto* dst_nullable_column = down_cast<NullableColumn*>(dst.get());
 
         // dst's null_column, initial with false.
         dst_nullable_column->null_column_data().resize(chunk_size);
@@ -1092,7 +1093,7 @@ public:
                     size_t null_size = SIMD::count_nonzero(src_null_data);
                     // if one column only has null element, set dst_column all null
                     if (null_size == chunk_size) {
-                        dst_nullable_column->data_column()->resize(chunk_size);
+                        dst_nullable_column->data_column_mutable_ptr()->resize(chunk_size);
                         for (int j = 0; j < chunk_size; ++j) {
                             dst_null_data[j] |= 1;
                         }
@@ -1109,12 +1110,11 @@ public:
             }
         }
 
+        auto data_col = dst_nullable_column->data_column_mutable_ptr();
         if (!has_nullable_column) {
-            this->nested_function->convert_to_serialize_format(ctx, src, chunk_size,
-                                                               &dst_nullable_column->data_column());
+            this->nested_function->convert_to_serialize_format(ctx, src, chunk_size, data_col);
         } else {
-            this->nested_function->convert_to_serialize_format(ctx, data_columns, chunk_size,
-                                                               &dst_nullable_column->data_column());
+            this->nested_function->convert_to_serialize_format(ctx, data_columns, chunk_size, data_col);
         }
     }
 

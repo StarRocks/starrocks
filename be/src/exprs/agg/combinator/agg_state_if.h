@@ -52,7 +52,7 @@ public:
     }
 
     void convert_to_serialize_format([[maybe_unused]] FunctionContext* ctx, const Columns& srcs, size_t chunk_size,
-                                     ColumnPtr* dst) const override {
+                                     MutableColumnPtr& dst) const override {
         auto column_size = ctx->get_num_args() + 1;
         const Column* data_columns[column_size - 1];
         ColumnPtr new_nullable_column;

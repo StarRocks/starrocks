@@ -131,7 +131,7 @@ private:
 
     Status _evaluate_agg_input_columns(Chunk* chunk);
 
-    Columns _create_agg_result_columns(size_t num_rows);
+    MutableColumns _create_agg_result_columns(size_t num_rows);
     const std::vector<TExpr>& _t_partition_exprs;
     std::vector<ExprContext*> _partition_exprs;
     std::vector<PartitionColumnType> _partition_types;
