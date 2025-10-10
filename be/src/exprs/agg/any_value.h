@@ -85,8 +85,9 @@ public:
     }
 
     void convert_to_serialize_format(FunctionContext* ctx, const Columns& src, size_t chunk_size,
-                                     ColumnPtr* dst) const override {
-        *dst = src[0];
+                                     MutableColumnPtr& dst) const override {
+        // For any_value, serialize format is the same as input
+        dst = src[0]->as_mutable_ptr();
     }
 
     void finalize_to_column(FunctionContext* ctx, ConstAggDataPtr __restrict state, Column* to) const override {
@@ -109,13 +110,13 @@ public:
 struct AnyValueSemiState {
     void update(FunctionContext* ctx, const Column& column, size_t offset) {
         if (!has_fill) {
-            data_column = ctx->create_column(*ctx->get_arg_type(0), false);
+            data_column = ctx->create_column(*ctx->get_arg_type(0), false)->as_mutable_ptr();
             data_column->append(column, offset, 1);
             has_fill = true;
         }
     }
 
-    ColumnPtr data_column = nullptr;
+    MutableColumnPtr data_column = nullptr;
     bool has_fill = false;
 };
 
@@ -143,8 +144,9 @@ public:
     }
 
     void convert_to_serialize_format(FunctionContext* ctx, const Columns& src, size_t chunk_size,
-                                     ColumnPtr* dst) const override {
-        *dst = src[0];
+                                     MutableColumnPtr& dst) const override {
+        // For any_value, serialize format is the same as input
+        dst = src[0]->as_mutable_ptr();
     }
 
     void finalize_to_column(FunctionContext* ctx, ConstAggDataPtr __restrict state, Column* to) const override {
