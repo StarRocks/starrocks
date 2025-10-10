@@ -133,10 +133,6 @@ public class IcebergCatalogProperties {
         return catalogType;
     }
 
-    public boolean enableIcebergMetadataCache() {
-        return enableIcebergMetadataCache;
-    }
-
     public long getIcebergMetaCacheTtlSec() {
         return icebergMetaCacheTtlSec;
     }
@@ -144,7 +140,6 @@ public class IcebergCatalogProperties {
     public long getIcebergTableCacheRefreshIntervalSec() {
         return icebergTableCacheRefreshIntervalSec;
     }
-
 
     public int getIcebergJobPlanningThreadNum() {
         return icebergJobPlanningThreadNum;
