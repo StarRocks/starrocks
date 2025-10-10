@@ -19,6 +19,7 @@ import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Range;
+import com.google.common.collect.Sets;
 import com.google.common.util.concurrent.Uninterruptibles;
 import com.starrocks.analysis.BoolLiteral;
 import com.starrocks.analysis.Expr;
@@ -62,6 +63,7 @@ import com.starrocks.sql.common.RangePartitionDiffer;
 import com.starrocks.sql.common.SyncPartitionUtils;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;
 import org.apache.commons.collections4.ListUtils;
+import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.Logger;
 
 import java.util.Collections;
@@ -88,6 +90,38 @@ public final class MVPCTRefreshRangePartitioner extends MVPCTRefreshPartitioner 
         super(mvContext, context, db, mv);
         this.differ = new RangePartitionDiffer(mv, false, null);
         this.logger = MVTraceUtils.getLogger(mv, MVPCTRefreshRangePartitioner.class);
+    }
+
+    @Override
+    public Set<String> getMVPartitionsToRefreshByParams(MVRefreshParams mvRefreshParams) throws AnalysisException {
+        if (mvRefreshParams.isCompleteRefresh()) {
+            Map<String, Range<PartitionKey>> rangePartitionMap = mv.getRangePartitionMap();
+            if (rangePartitionMap.isEmpty()) {
+                return Sets.newHashSet();
+            }
+            return rangePartitionMap.keySet();
+        } else {
+            String start = mvRefreshParams.getRangeStart();
+            String end = mvRefreshParams.getRangeEnd();
+            if (StringUtils.isEmpty(start) && StringUtils.isEmpty(end)) {
+                return Sets.newHashSet();
+            }
+            // range partition must have partition column, and its column size must be 1
+            Column partitionColumn = mv.getRangePartitionFirstColumn().get();
+            Range<PartitionKey> rangeToInclude = createRange(start, end, partitionColumn);
+            Map<String, Range<PartitionKey>> rangePartitionMap = mv.getRangePartitionMap();
+            if (rangePartitionMap.isEmpty()) {
+                return Sets.newHashSet();
+            }
+            Set<String> result = Sets.newHashSet();
+            for (Map.Entry<String, Range<PartitionKey>> entry : rangePartitionMap.entrySet()) {
+                Range<PartitionKey> rangeToCheck = entry.getValue();
+                if (RangePartitionDiffer.isRangeIncluded(rangeToInclude, rangeToCheck)) {
+                    result.add(entry.getKey());
+                }
+            }
+            return result;
+        }
     }
 
     @Override
@@ -325,14 +359,6 @@ public final class MVPCTRefreshRangePartitioner extends MVPCTRefreshPartitioner 
                     " baseChangedPartitionNames: {}", mvToRefreshPartitionNames, baseChangedPartitionNames);
         }
         return mvToRefreshPartitionNames;
-    }
-
-    @Override
-    public Set<String> getMVPartitionsToRefreshWithForce() throws AnalysisException {
-        int partitionTTLNumber = mvContext.getPartitionTTLNumber();
-        Map<String, Range<PartitionKey>> inputRanges = mv.getValidRangePartitionMap(partitionTTLNumber);
-        filterPartitionsByTTL(PRangeCell.toCellMap(inputRanges), false);
-        return inputRanges.keySet();
     }
 
     @Override

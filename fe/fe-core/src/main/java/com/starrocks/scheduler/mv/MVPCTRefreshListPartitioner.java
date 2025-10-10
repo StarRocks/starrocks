@@ -88,6 +88,30 @@ public final class MVPCTRefreshListPartitioner extends MVPCTRefreshPartitioner {
     }
 
     @Override
+    public Set<String> getMVPartitionsToRefreshByParams(MVRefreshParams mvRefreshParams) {
+        if (mvRefreshParams.isCompleteRefresh()) {
+            return mv.getListPartitionItems().keySet();
+        } else {
+            Set<PListCell> pListCells = mvRefreshParams.getListValues();
+            Map<String, PListCell> mvPartitions = mv.getListPartitionItems();
+            Map<String, PListCell> mvFilteredPartitions = mvPartitions.entrySet().stream()
+                    .filter(e -> {
+                        PListCell mvListCell = e.getValue();
+                        if (mvListCell.getItemSize() == 1) {
+                            // if list value is a single value, check it directly
+                            return pListCells.contains(e.getValue());
+                        } else {
+                            // if list values is multi values, split it into single values and check it then.
+                            return mvListCell.toSingleValueCells().stream().anyMatch(i -> pListCells.contains(i));
+                        }
+                    })
+                    .map(Map.Entry::getKey)
+                    .collect(Collectors.toMap(k -> k, mvPartitions::get));
+            return mvFilteredPartitions.keySet();
+        }
+    }
+
+    @Override
     public boolean syncAddOrDropPartitions() throws LockTimeoutException {
         // collect mv partition items with lock
         Locker locker = new Locker();
@@ -335,13 +359,6 @@ public final class MVPCTRefreshListPartitioner extends MVPCTRefreshPartitioner {
             }
             return Expr.compoundOr(partitionPredicates);
         }
-    }
-
-    @Override
-    public Set<String> getMVPartitionsToRefreshWithForce() {
-        Map<String, PCell> mvValidListPartitionMapMap = mv.getPartitionCells(Optional.empty());
-        filterPartitionsByTTL(mvValidListPartitionMapMap, false);
-        return mvValidListPartitionMapMap.keySet();
     }
 
     @Override

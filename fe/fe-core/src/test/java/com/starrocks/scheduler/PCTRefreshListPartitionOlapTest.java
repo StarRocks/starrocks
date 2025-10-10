@@ -1650,4 +1650,149 @@ public class PCTRefreshListPartitionOlapTest extends MVTestBase {
         }
         Assertions.assertEquals(0, mv.getPartitions().size());
     }
+
+    @Test
+    public void testMVForceRefresh() throws Exception {
+        String partitionTable = "CREATE TABLE list_t1 (dt1 date, int1 int)\n" +
+                "PARTITION BY list(dt1) (\n" +
+                "     PARTITION p1 VALUES IN (\"2025-05-16\") ,\n" +
+                "     PARTITION p2 VALUES IN (\"2025-05-17\") \n" +
+                ")\n";
+        starRocksAssert.withTable(partitionTable);
+        String[] sqls = {
+                "insert into list_t1 partition(p1) values('2025-05-16', 1);",
+                "insert into list_t1 partition(p2) values('2025-05-17', 1);"
+        };
+        for (String sql : sqls) {
+            executeInsertSql(sql);
+        }
+
+        String mvQuery = "CREATE MATERIALIZED VIEW test_mv1 " +
+                "PARTITION BY (dt1) " +
+                "REFRESH DEFERRED MANUAL PROPERTIES (\"partition_refresh_number\"=\"-1\")\n" +
+                "AS SELECT dt1,sum(int1) from list_t1 group by dt1 \n";
+        starRocksAssert.withMaterializedView(mvQuery);
+        MaterializedView mv = getMv("test_mv1");
+
+        TaskRun taskRun = buildMVTaskRun(mv, "test");
+        ExecPlan execPlan;
+        // explain without force
+        {
+            execPlan = getMVRefreshExecPlan(taskRun);
+            Assertions.assertNotNull(execPlan);
+
+            refreshMV("test", mv);
+            execPlan = getMVRefreshExecPlan(taskRun);
+            Assertions.assertNull(execPlan);
+        }
+
+        // refresh with force
+        Map<String, String> props = taskRun.getProperties();
+        props.put(TaskRun.FORCE, "true");
+        // explain with refresh
+        {
+            ExecuteOption executeOption = new ExecuteOption(taskRun.getTask());
+            Map<String, String> explainProps = executeOption.getTaskRunProperties();
+            explainProps.put(TaskRun.FORCE, "true");
+
+            execPlan = getMVRefreshExecPlan(taskRun, true);
+            Assertions.assertNotNull(execPlan);
+
+
+            execPlan = getMVRefreshExecPlan(taskRun, true);
+            Assertions.assertNotNull(execPlan);
+
+            // after refresh, still can refresh with force
+            execPlan = getMVRefreshExecPlan(taskRun, true);
+            String plan = execPlan.getExplainString(TExplainLevel.NORMAL);
+            PlanTestBase.assertContains(plan, "     TABLE: list_t1\n" +
+                    "     PREAGGREGATION: ON\n" +
+                    "     partitions=2/2");
+            Assertions.assertNotNull(execPlan);
+
+            refreshMV("test", mv);
+
+            // after refresh, still can refresh with force
+            execPlan = getMVRefreshExecPlan(taskRun, true);
+            plan = execPlan.getExplainString(TExplainLevel.NORMAL);
+            PlanTestBase.assertContains(plan, "     TABLE: list_t1\n" +
+                    "     PREAGGREGATION: ON\n" +
+                    "     partitions=2/2");
+            Assertions.assertNotNull(execPlan);
+        }
+    }
+
+    @Test
+    public void testMVForcePartialRefresh() throws Exception {
+        String partitionTable = "CREATE TABLE list_t1 (dt1 date, int1 int)\n" +
+                "PARTITION BY list(dt1) (\n" +
+                "     PARTITION p1 VALUES IN (\"2025-05-16\") ,\n" +
+                "     PARTITION p2 VALUES IN (\"2025-05-17\") \n" +
+                ")\n";
+        starRocksAssert.withTable(partitionTable);
+        String[] sqls = {
+                "insert into list_t1 partition(p1) values('2025-05-16', 1);",
+                "insert into list_t1 partition(p2) values('2025-05-17', 1);"
+        };
+        for (String sql : sqls) {
+            executeInsertSql(sql);
+        }
+
+        String mvQuery = "CREATE MATERIALIZED VIEW test_mv1 " +
+                "PARTITION BY (dt1) " +
+                "REFRESH DEFERRED MANUAL PROPERTIES (\"partition_refresh_number\"=\"-1\")\n" +
+                "AS SELECT dt1,sum(int1) from list_t1 group by dt1 \n";
+        starRocksAssert.withMaterializedView(mvQuery);
+        MaterializedView mv = getMv("test_mv1");
+
+        TaskRun taskRun = buildMVTaskRun(mv, "test");
+        // partial refresh with force
+        Map<String, String> props = taskRun.getProperties();
+        props.put(TaskRun.PARTITION_VALUES,
+                PListCell.batchSerialize(ImmutableSet.of(new PListCell("2025-05-16"))));
+
+        ExecPlan execPlan;
+        // explain without force
+        {
+            execPlan = getMVRefreshExecPlan(taskRun);
+            Assertions.assertNotNull(execPlan);
+
+            refreshMV("test", mv);
+            execPlan = getMVRefreshExecPlan(taskRun);
+            Assertions.assertNull(execPlan);
+        }
+
+        // explain with partial refresh
+        {
+            ExecuteOption executeOption = new ExecuteOption(taskRun.getTask());
+            Map<String, String> explainProps = executeOption.getTaskRunProperties();
+            explainProps.put(TaskRun.PARTITION_VALUES,
+                    PListCell.batchSerialize(ImmutableSet.of(new PListCell("2025-05-16"))));
+            explainProps.put(TaskRun.FORCE, "true");
+
+            execPlan = getMVRefreshExecPlan(taskRun, true);
+            Assertions.assertNotNull(execPlan);
+
+            execPlan = getMVRefreshExecPlan(taskRun, true);
+            Assertions.assertNotNull(execPlan);
+
+            // after refresh, still can refresh with force
+            execPlan = getMVRefreshExecPlan(taskRun, true);
+            String plan = execPlan.getExplainString(TExplainLevel.NORMAL);
+            PlanTestBase.assertContains(plan, "     TABLE: list_t1\n" +
+                    "     PREAGGREGATION: ON\n" +
+                    "     partitions=1/2");
+            Assertions.assertNotNull(execPlan);
+
+            refreshMV("test", mv);
+
+            // after refresh, still can refresh with force
+            execPlan = getMVRefreshExecPlan(taskRun, true);
+            plan = execPlan.getExplainString(TExplainLevel.NORMAL);
+            PlanTestBase.assertContains(plan, "     TABLE: list_t1\n" +
+                    "     PREAGGREGATION: ON\n" +
+                    "     partitions=1/2");
+            Assertions.assertNotNull(execPlan);
+        }
+    }
 }

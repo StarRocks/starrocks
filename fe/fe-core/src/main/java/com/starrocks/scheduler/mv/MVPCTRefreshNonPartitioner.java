@@ -41,6 +41,11 @@ public final class MVPCTRefreshNonPartitioner extends MVPCTRefreshPartitioner {
     }
 
     @Override
+    public Set<String> getMVPartitionsToRefreshByParams(MVRefreshParams mvRefreshParams) {
+        return mv.getVisiblePartitionNames();
+    }
+
+    @Override
     public boolean syncAddOrDropPartitions() {
         // do nothing
         return true;
@@ -58,11 +63,6 @@ public final class MVPCTRefreshNonPartitioner extends MVPCTRefreshPartitioner {
     public Expr generateMVPartitionPredicate(TableName tableName,
                                              Set<String> mvPartitionNames) throws AnalysisException {
         return null;
-    }
-
-    @Override
-    public Set<String> getMVPartitionsToRefreshWithForce() {
-        return mv.getVisiblePartitionNames();
     }
 
     @Override
