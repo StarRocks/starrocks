@@ -346,7 +346,7 @@ Status CSVScanner::_parse_csv_v2(Chunk* chunk) {
     int num_columns = chunk->num_columns();
     _column_raw_ptrs.resize(num_columns);
     for (int i = 0; i < num_columns; i++) {
-        _column_raw_ptrs[i] = chunk->get_column_by_index(i).get();
+        _column_raw_ptrs[i] = chunk->get_mutable_column_by_index(i).get();
     }
 
     csv::Converter::Options options{.invalid_field_as_null = !_strict_mode};
@@ -467,7 +467,7 @@ Status CSVScanner::_parse_csv(Chunk* chunk) {
     int num_columns = chunk->num_columns();
     _column_raw_ptrs.resize(num_columns);
     for (int i = 0; i < num_columns; i++) {
-        _column_raw_ptrs[i] = chunk->get_column_by_index(i).get();
+        _column_raw_ptrs[i] = chunk->get_mutable_column_by_index(i).get();
     }
 
     csv::Converter::Options options{.invalid_field_as_null = !_strict_mode};

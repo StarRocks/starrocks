@@ -186,12 +186,12 @@ Status JniScanner::_append_array_data(const FillColumnArgs& args) {
     auto* array_column = down_cast<ArrayColumn*>(args.column);
     int* offset_ptr = static_cast<int*>(next_chunk_meta_as_ptr());
 
-    auto* offsets = array_column->offsets_column().get();
+    auto* offsets = array_column->offsets_column_mutable_ptr().get();
     offsets->resize_uninitialized(args.num_rows + 1);
     memcpy(offsets->get_data().data(), offset_ptr, (args.num_rows + 1) * sizeof(uint32_t));
 
     int total_length = offset_ptr[args.num_rows];
-    Column* elements = array_column->elements_column().get();
+    Column* elements = array_column->elements_column_mutable_ptr().get();
     std::string name = args.slot_name + ".$0";
     FillColumnArgs sub_args = {.num_rows = total_length,
                                .slot_name = name,
@@ -209,13 +209,13 @@ Status JniScanner::_append_map_data(const FillColumnArgs& args) {
     auto* map_column = down_cast<MapColumn*>(args.column);
     int* offset_ptr = static_cast<int*>(next_chunk_meta_as_ptr());
 
-    auto* offsets = map_column->offsets_column().get();
+    auto* offsets = map_column->offsets_column_mutable_ptr().get();
     offsets->resize_uninitialized(args.num_rows + 1);
     memcpy(offsets->get_data().data(), offset_ptr, (args.num_rows + 1) * sizeof(uint32_t));
 
     int total_length = offset_ptr[args.num_rows];
     {
-        Column* keys = map_column->keys_column().get();
+        Column* keys = map_column->keys_column_mutable_ptr().get();
         if (!args.slot_type.children[0].is_unknown_type()) {
             std::string name = args.slot_name + ".$0";
             FillColumnArgs sub_args = {.num_rows = total_length,
@@ -231,7 +231,7 @@ Status JniScanner::_append_map_data(const FillColumnArgs& args) {
     }
 
     {
-        Column* values = map_column->values_column().get();
+        Column* values = map_column->values_column_mutable_ptr().get();
         if (!args.slot_type.children[1].is_unknown_type()) {
             std::string name = args.slot_name + ".$1";
             FillColumnArgs sub_args = {.num_rows = total_length,
@@ -254,7 +254,7 @@ Status JniScanner::_append_struct_data(const FillColumnArgs& args) {
     auto* struct_column = down_cast<StructColumn*>(args.column);
     const TypeDescriptor& type = args.slot_type;
     for (int i = 0; i < type.children.size(); i++) {
-        Column* column = struct_column->fields_column()[i].get();
+        Column* column = struct_column->fields_column_mutable()[i].get();
         std::string name = args.slot_name + "." + type.field_names[i];
         FillColumnArgs sub_args = {.num_rows = args.num_rows,
                                    .slot_name = name,
@@ -291,7 +291,7 @@ Status JniScanner::_fill_column(FillColumnArgs* pargs) {
         memcpy(null_data.data(), null_column_ptr, args.num_rows);
         nullable_column->update_has_null();
 
-        auto* data_column = nullable_column->data_column().get();
+        auto* data_column = nullable_column->mutable_data_column();
         pargs->column = data_column;
         pargs->nulls = null_data.data();
     } else {
@@ -357,7 +357,7 @@ StatusOr<size_t> JniScanner::_fill_chunk(JNIEnv* env, ChunkPtr* chunk) {
         SlotDescriptor* slot_desc = _scanner_ctx.materialized_columns[col_idx].slot_desc;
         const std::string& slot_name = slot_desc->col_name();
         const TypeDescriptor& slot_type = slot_desc->type();
-        ColumnPtr& column = (*chunk)->get_column_by_slot_id(slot_desc->id());
+        auto column = (*chunk)->get_mutable_column_by_slot_id(slot_desc->id());
         FillColumnArgs args{.num_rows = num_rows,
                             .slot_name = slot_name,
                             .slot_type = slot_type,
