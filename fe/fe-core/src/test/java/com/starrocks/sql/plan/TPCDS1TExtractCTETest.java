@@ -343,4 +343,38 @@ public class TPCDS1TExtractCTETest extends TPCDS1TTestBase {
                 + "  |  <slot 60> : 45: c_current_addr_sk > 100\n"
                 + "  |  <slot 61> : clone(42: c_birth_day)");
     }
+
+    @Test
+    public void testUnionPredicate() throws Exception {
+        String sql  = "SELECT\n"
+                + "      CURRENT_TIMESTAMP() AS MessageDateAndTime,\n"
+                + "      3 AS BatchID,\n"
+                + "      MessageSource,\n"
+                + "      MessageText,\n"
+                + "      'Validation' AS MessageType,\n"
+                + "      MessageData\n"
+                + "    FROM (\n"
+                + "      SELECT\n"
+                + "        'DimCustomer' AS MessageSource,\n"
+                + "        'Row count' AS MessageText,\n"
+                + "        COUNT(1) AS MessageData\n"
+                + "      FROM customer\n"
+                + "      UNION ALL\n"
+                + "      SELECT\n"
+                + "        'DimCustomer' AS MessageSource,\n"
+                + "        'Inactive customers' AS MessageText,\n"
+                + "        COUNT(1)\n"
+                + "      FROM customer\n"
+                + "      where\n"
+                + "        c_current_hdemo_sk\n"
+                + "        and c_salutation = 'Inactive'\n"
+                + "    ) t;\n";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "OlapScanNode\n"
+                + "     TABLE: customer\n"
+                + "     PREAGGREGATION: ON\n"
+                + "     partitions=1/1\n"
+                + "     rollup: customer\n"
+                + "     tabletRatio=5/5\n");
+    }
 }

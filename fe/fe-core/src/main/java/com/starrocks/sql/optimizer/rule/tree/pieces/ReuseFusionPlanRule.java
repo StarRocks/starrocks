@@ -66,6 +66,7 @@ import java.util.Collections;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
@@ -257,8 +258,7 @@ public class ReuseFusionPlanRule implements TreeRewriteRule {
             }
 
             List<ScalarOperator> pieceFilters = fusionScanFilters.stream()
-                    .map(Utils::compoundAnd)
-                    .collect(Collectors.toList());
+                    .map(Utils::compoundAnd).toList();
 
             long filterDistinct = pieceFilters.stream().distinct().count();
             if (filterDistinct != 1 && !allJoinTypes.isEmpty() &&
@@ -480,6 +480,7 @@ public class ReuseFusionPlanRule implements TreeRewriteRule {
             builder.setColRefToColumnMetaMap(colRefToColumnMetaMap);
             builder.setColumnMetaToColRefMap(columnMetaToColRefMap);
             builder.setTable(node.getTable());
+            builder.setPredicate(null);
 
             List<ScalarOperator> fusionPredicates = Lists.newArrayList();
             Set<ScalarOperator> fusionPredicateSet = Sets.newHashSet();
@@ -506,10 +507,12 @@ public class ReuseFusionPlanRule implements TreeRewriteRule {
                     }
                 }
             }
-            ScalarOperator predicate = Utils.compoundOr(fusionPredicateSet);
-            ScalarRangePredicateExtractor extractor = new ScalarRangePredicateExtractor();
-            predicate = extractor.rewriteOnlyColumn(predicate);
-            builder.setPredicate(predicate);
+            if (fusionPredicateSet.stream().allMatch(Objects::nonNull)) {
+                ScalarOperator predicate = Utils.compoundOr(fusionPredicateSet);
+                ScalarRangePredicateExtractor extractor = new ScalarRangePredicateExtractor();
+                predicate = extractor.rewriteOnlyColumn(predicate);
+                builder.setPredicate(predicate);
+            }
 
             // rewrite hash distribution info for olap table scan operator
             if (node instanceof LogicalOlapScanOperator) {
