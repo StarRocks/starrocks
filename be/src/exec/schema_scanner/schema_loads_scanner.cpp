@@ -82,7 +82,7 @@ Status SchemaLoadsScanner::fill_chunk(ChunkPtr* chunk) {
             if (slot_id < 1 || slot_id > 26) {
                 return Status::InternalError(fmt::format("invalid slot id:{}", slot_id));
             }
-            ColumnPtr column = (*chunk)->get_column_by_slot_id(slot_id);
+            auto column = (*chunk)->get_mutable_column_by_slot_id(slot_id);
             switch (slot_id) {
             case 1: {
                 // id

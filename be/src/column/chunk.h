@@ -150,6 +150,12 @@ public:
     const ColumnPtr& get_column_by_slot_id(SlotId slot_id) const;
     ColumnPtr& get_column_by_slot_id(SlotId slot_id);
 
+    // Get mutable column for write operations
+    MutableColumnPtr get_mutable_column_by_name(const std::string& column_name);
+    MutableColumnPtr get_mutable_column_by_index(size_t idx);
+    MutableColumnPtr get_mutable_column_by_id(ColumnId cid);
+    MutableColumnPtr get_mutable_column_by_slot_id(SlotId slot_id);
+
     bool is_column_nullable(SlotId slot_id) const;
 
     void set_slot_id_to_index(SlotId slot_id, size_t idx) { _slot_id_to_index[slot_id] = idx; }
@@ -369,6 +375,31 @@ inline ColumnPtr& Chunk::get_column_by_id(ColumnId cid) {
     DCHECK(!_cid_to_index.empty());
     DCHECK(_cid_to_index.contains(cid));
     return _columns[_cid_to_index[cid]];
+}
+
+inline MutableColumnPtr Chunk::get_mutable_column_by_name(const std::string& column_name) {
+    size_t idx = _schema->get_field_index_by_name(column_name);
+    return _columns[idx]->as_mutable_ptr();
+}
+
+inline MutableColumnPtr Chunk::get_mutable_column_by_index(size_t idx) {
+    DCHECK_LT(idx, _columns.size());
+    return _columns[idx]->as_mutable_ptr();
+}
+
+inline MutableColumnPtr Chunk::get_mutable_column_by_id(ColumnId cid) {
+    DCHECK(!_cid_to_index.empty());
+    DCHECK(_cid_to_index.contains(cid));
+    return _columns[_cid_to_index[cid]]->as_mutable_ptr();
+}
+
+inline MutableColumnPtr Chunk::get_mutable_column_by_slot_id(SlotId slot_id) {
+    DCHECK(is_slot_exist(slot_id)) << slot_id;
+    if (UNLIKELY(!_slot_id_to_index.contains(slot_id))) {
+        throw std::runtime_error(fmt::format("slot_id {} not found", slot_id));
+    }
+    size_t idx = _slot_id_to_index.at(slot_id);
+    return _columns[idx]->as_mutable_ptr();
 }
 
 } // namespace starrocks
