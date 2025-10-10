@@ -4234,7 +4234,7 @@ When this value is set to less than `0`, the system uses the product of its abso
 
 - Default: false
 - Type: Boolean
-- Unit: -[BE_configuration.md](..%2F..%2F..%2Fja%2Fadministration%2Fmanagement%2FBE_configuration.md)
+- Unit: -
 - Is mutable: No
 - Description:
 - Introduced in: -
