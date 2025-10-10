@@ -175,10 +175,14 @@ public final class QeProcessorImpl implements QeProcessor, MemoryTrackable {
                         DebugUtil.printId(entry.getKey()), context.getEndTime());
                 continue;
             }
-            if (!context.getState().isRunning() || info.coord.isDone()) {
-                LOG.warn("query {} is not running, context state: {}, coord state {}, "
-                                + "but doesn't clean from coordinator",
-                        DebugUtil.printId(entry.getKey()), context.getState(), info.coord.isDone());
+            if (!context.getState().isRunning()) {
+                LOG.warn("query {} is not running, context state: {}, but doesn't clean from coordinator",
+                        DebugUtil.printId(entry.getKey()), context.getState());
+                continue;
+            }
+            if (info.coord != null && info.coord.isDone()) {
+                LOG.warn("query {} is done, but doesn't clean from coordinator",
+                        DebugUtil.printId(entry.getKey()));
                 continue;
             }
 
