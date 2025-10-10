@@ -87,8 +87,11 @@ public class TaskRunManager implements MemoryTrackable {
         return new SubmitResult(queryId, SubmitResult.SubmitStatus.SUBMITTED, taskRun.getFuture());
     }
 
-    public boolean killTaskRun(Long taskId, boolean force) {
-        TaskRun taskRun = taskRunScheduler.getRunningTaskRun(taskId);
+    /**
+     * Kill the running task run. If force is true, it will always clear the task run from task run scheduler whether it's
+     * canceled or not so can trigger the pending task runs as soon as possible.
+     */
+    public boolean killRunningTaskRun(TaskRun taskRun, boolean force) {
         if (taskRun == null) {
             return false;
         }
@@ -101,15 +104,6 @@ public class TaskRunManager implements MemoryTrackable {
             if (future != null && !future.completeExceptionally(new RuntimeException("TaskRun killed"))) {
                 LOG.warn("failed to complete future for task run: {}", taskRun);
             }
-
-            // mark pending tasks as failed
-            Set<TaskRun> pendingTaskRuns = taskRunScheduler.getPendingTaskRunsByTaskId(taskId);
-            if (CollectionUtils.isNotEmpty(pendingTaskRuns)) {
-                for (TaskRun pendingTaskRun : pendingTaskRuns) {
-                    taskRunScheduler.removePendingTaskRun(pendingTaskRun, Constants.TaskRunState.FAILED);
-                }
-            }
-
             // kill the task run
             ConnectContext runCtx = taskRun.getRunCtx();
             if (runCtx != null) {
@@ -124,6 +118,30 @@ public class TaskRunManager implements MemoryTrackable {
                 taskRunScheduler.removeRunningTask(taskRun.getTaskId());
             }
         }
+    }
+
+    /**
+     * Kill all pending task runs of the input task id.
+     */
+    public void killPendingTaskRuns(Long taskId) {
+        // mark pending tasks as failed
+        Set<TaskRun> pendingTaskRuns = taskRunScheduler.getPendingTaskRunsByTaskId(taskId);
+        if (CollectionUtils.isNotEmpty(pendingTaskRuns)) {
+            for (TaskRun pendingTaskRun : pendingTaskRuns) {
+                taskRunScheduler.removePendingTaskRun(pendingTaskRun, Constants.TaskRunState.FAILED);
+            }
+        }
+    }
+
+    public boolean killTaskRun(Long taskId, boolean force) {
+        // kill all pending task runs of the task id
+        killPendingTaskRuns(taskId);
+        // kill the running task run
+        TaskRun taskRun = taskRunScheduler.getRunningTaskRun(taskId);
+        if (taskRun == null) {
+            return false;
+        }
+        return killRunningTaskRun(taskRun, force);
     }
 
     // At present, only the manual and automatic tasks of the materialized view have different priorities.
