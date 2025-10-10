@@ -2,12 +2,6 @@
 set new_planner_optimize_timeout=10000;
 -- result:
 -- !result
-create database db_${uuid0};
--- result:
--- !result
-use db_${uuid0};
--- result:
--- !result
 create external catalog mv_iceberg_${uuid0}
 properties
 (
@@ -15,6 +9,99 @@ properties
     "iceberg.catalog.type" = "hive",
     "hive.metastore.uris" = "${iceberg_catalog_hive_metastore_uris}"
 );
+-- result:
+-- !result
+set catalog mv_iceberg_${uuid0};
+-- result:
+-- !result
+create database sql_test_db_${uuid0};
+-- result:
+-- !result
+use sql_test_db_${uuid0};
+-- result:
+-- !result
+CREATE TABLE t1 (
+                  l_orderkey    BIGINT,
+                  l_partkey     INT,
+                  l_suppkey     INT,
+                  l_linenumber  INT,
+                  l_quantity    DECIMAL(15, 2),
+                  l_extendedprice  DECIMAL(15, 2),
+                  l_discount    DECIMAL(15, 2),
+                  l_tax         DECIMAL(15, 2),
+                  l_returnflag  VARCHAR(1),
+                  l_linestatus  VARCHAR(1),
+                  l_shipdate    STRING,
+                  l_commitdate  STRING,
+                  l_receiptdate STRING,
+                  l_shipinstruct VARCHAR(25),
+                  l_shipmode     VARCHAR(10),
+                  l_comment      VARCHAR(44)
+);
+-- result:
+-- !result
+INSERT INTO t1  VALUES( 1, 1001, 5001, 1, 10.00, 1000.00, 0.05, 0.08, 'N', 'O', '2024-11-12', '2024-11-15', '2024-11-20', 'DELIVER IN PERSON', 'AIR', 'Quick delivery required');
+-- result:
+-- !result
+INSERT INTO t1  VALUES (2, 1002, 5002, 2, 20.00, 2000.00, 0.10, 0.15, 'R', 'F', '2024-11-13', '2024-11-16', '2024-11-21', 'TAKE BACK RETURN', 'RAIL', 'Handle with care');
+-- result:
+-- !result
+INSERT INTO t1  VALUES (3, 1003, 5003, 3, 30.00, 3000.00, 0.15, 0.20, 'A', 'P', '2024-11-14', '2024-11-17', '2024-11-22', 'NONE', 'SHIP', 'Fragile item');
+-- result:
+-- !result
+CREATE TABLE lineitem_date (
+                          l_orderkey    BIGINT,
+                          l_partkey     INT,
+                          l_suppkey     INT,
+                          l_linenumber  INT,
+                          l_quantity    DECIMAL(15, 2),
+                          l_extendedprice  DECIMAL(15, 2),
+                          l_discount    DECIMAL(15, 2),
+                          l_tax         DECIMAL(15, 2),
+                          l_commitdate  DATE,
+                          l_receiptdate DATE,
+                          l_shipinstruct VARCHAR(25),
+                          l_shipmode     VARCHAR(10),
+                          l_comment      VARCHAR(44),
+                          l_returnflag  VARCHAR(1),
+                          l_linestatus  VARCHAR(1),
+                          l_shipdate    DATE
+) PARTITION BY (l_returnflag, l_linestatus, l_shipdate);
+-- result:
+-- !result
+INSERT INTO lineitem_date SELECT l_orderkey, l_partkey, l_suppkey, l_linenumber, l_quantity, l_extendedprice, l_discount, l_tax, to_date(l_commitdate), to_date(l_receiptdate), l_shipinstruct, l_shipmode, l_comment, l_returnflag, l_linestatus, to_date(l_shipdate) FROM t1;
+-- result:
+-- !result
+CREATE TABLE lineitem_hours (
+                          l_orderkey    BIGINT,
+                          l_partkey     INT,
+                          l_suppkey     INT,
+                          l_linenumber  INT,
+                          l_quantity    DECIMAL(15, 2),
+                          l_extendedprice  DECIMAL(15, 2),
+                          l_discount    DECIMAL(15, 2),
+                          l_tax         DECIMAL(15, 2),
+                          l_commitdate  DATETIME,
+                          l_receiptdate DATETIME,
+                          l_shipinstruct VARCHAR(25),
+                          l_shipmode     VARCHAR(10),
+                          l_comment      VARCHAR(44),
+                          l_shipdate    DATETIME,
+                          l_returnflag  VARCHAR(1),
+                          l_linestatus  VARCHAR(1)
+) PARTITION BY  hour(l_shipdate), l_returnflag, l_linestatus;
+-- result:
+-- !result
+INSERT INTO lineitem_hours SELECT l_orderkey, l_partkey, l_suppkey, l_linenumber, l_quantity, l_extendedprice, l_discount, l_tax, to_date(l_commitdate), to_date(l_receiptdate), l_shipinstruct, l_shipmode, l_comment, l_shipdate, l_returnflag, l_linestatus FROM t1;
+-- result:
+-- !result
+set catalog default_catalog;
+-- result:
+-- !result
+create database db_${uuid0};
+-- result:
+-- !result
+use db_${uuid0};
 -- result:
 -- !result
 set materialized_view_rewrite_mode='force';
@@ -25,19 +112,19 @@ PARTITION BY (l_returnflag, l_linestatus, l_shipdate)
 REFRESH DEFERRED MANUAL
 PROPERTIES ("replication_num" = "1")
 AS
-  SELECT * FROM mv_iceberg_${uuid0}.sql_test_db.lineitem_date;
+  SELECT * FROM mv_iceberg_${uuid0}.sql_test_db_${uuid0}.lineitem_date;
 -- result:
 -- !result
 REFRESH MATERIALIZED VIEW test_date PARTITION (('R', 'F', '2024-11-13 00:00:00')) WITH SYNC MODE;
-function: print_hit_materialized_views("SELECT * FROM mv_iceberg_${uuid0}.sql_test_db.lineitem_date where l_returnflag = 'R' and l_linestatus = 'F' and l_shipdate = '2024-11-13 00:00:00' order by l_orderkey;")
+function: print_hit_materialized_views("SELECT * FROM mv_iceberg_${uuid0}.sql_test_db_${uuid0}.lineitem_date where l_returnflag = 'R' and l_linestatus = 'F' and l_shipdate = '2024-11-13 00:00:00' order by l_orderkey;")
 -- result:
 
 -- !result
-function: print_hit_materialized_views("SELECT * FROM mv_iceberg_${uuid0}.sql_test_db.lineitem_date where l_shipdate >= '2024-11-13 00:00:00' order by l_orderkey;")
+function: print_hit_materialized_views("SELECT * FROM mv_iceberg_${uuid0}.sql_test_db_${uuid0}.lineitem_date where l_shipdate >= '2024-11-13 00:00:00' order by l_orderkey;")
 -- result:
 
 -- !result
-function: print_hit_materialized_views("SELECT * FROM mv_iceberg_${uuid0}.sql_test_db.lineitem_date order by l_orderkey;")
+function: print_hit_materialized_views("SELECT * FROM mv_iceberg_${uuid0}.sql_test_db_${uuid0}.lineitem_date order by l_orderkey;")
 -- result:
 
 -- !result
@@ -48,111 +135,57 @@ SELECT count(*) FROM test_date;
 SELECT * FROM test_date where l_shipdate >= '2024-11-13 00:00:00' order by l_orderkey;
 -- result:
 -- !result
-SELECT * FROM mv_iceberg_${uuid0}.sql_test_db.lineitem_date where l_returnflag = 'R' and l_linestatus = 'F' and l_shipdate = '2024-11-13 00:00:00' order by l_orderkey;
+SELECT * FROM mv_iceberg_${uuid0}.sql_test_db_${uuid0}.lineitem_date where l_returnflag = 'R' and l_linestatus = 'F' and l_shipdate = '2024-11-13 00:00:00' order by l_orderkey;
 -- result:
-2	1002	5002	2	20.00	2000.00	0.10	0.15	R	F	2024-11-13	2024-11-16	2024-11-21	TAKE BACK RETURN	RAIL	Handle with care
+2	1002	5002	2	20.00	2000.00	0.10	0.15	2024-11-16	2024-11-21	TAKE BACK RETURN	RAIL	Handle with care	R	F	2024-11-13
 -- !result
-SELECT * FROM mv_iceberg_${uuid0}.sql_test_db.lineitem_date where l_shipdate >= '2024-11-13 00:00:00' order by l_orderkey;
+SELECT * FROM mv_iceberg_${uuid0}.sql_test_db_${uuid0}.lineitem_date where l_shipdate >= '2024-11-13 00:00:00' order by l_orderkey;
 -- result:
-2	1002	5002	2	20.00	2000.00	0.10	0.15	R	F	2024-11-13	2024-11-16	2024-11-21	TAKE BACK RETURN	RAIL	Handle with care
-3	1003	5003	3	30.00	3000.00	0.15	0.20	A	P	2024-11-14	2024-11-17	2024-11-22	NONE	SHIP	Fragile item
+2	1002	5002	2	20.00	2000.00	0.10	0.15	2024-11-16	2024-11-21	TAKE BACK RETURN	RAIL	Handle with care	R	F	2024-11-13
+3	1003	5003	3	30.00	3000.00	0.15	0.20	2024-11-17	2024-11-22	NONE	SHIP	Fragile item	A	P	2024-11-14
 -- !result
-SELECT * FROM mv_iceberg_${uuid0}.sql_test_db.lineitem_date order by l_orderkey;
+SELECT * FROM mv_iceberg_${uuid0}.sql_test_db_${uuid0}.lineitem_date order by l_orderkey;
 -- result:
-1	1001	5001	1	10.00	1000.00	0.05	0.08	N	O	2024-11-12	2024-11-15	2024-11-20	DELIVER IN PERSON	AIR	Quick delivery required
-2	1002	5002	2	20.00	2000.00	0.10	0.15	R	F	2024-11-13	2024-11-16	2024-11-21	TAKE BACK RETURN	RAIL	Handle with care
-3	1003	5003	3	30.00	3000.00	0.15	0.20	A	P	2024-11-14	2024-11-17	2024-11-22	NONE	SHIP	Fragile item
--- !result
-REFRESH MATERIALIZED VIEW test_date WITH SYNC MODE;
-function: print_hit_materialized_views("SELECT * FROM mv_iceberg_${uuid0}.sql_test_db.lineitem_date where l_returnflag = 'R' and l_linestatus = 'F' and l_shipdate = '2024-11-13 00:00:00' order by l_orderkey;")
--- result:
-test_date
--- !result
-function: print_hit_materialized_views("SELECT * FROM mv_iceberg_${uuid0}.sql_test_db.lineitem_date where l_shipdate >= '2024-11-13 00:00:00' order by l_orderkey;")
--- result:
-test_date
--- !result
-function: print_hit_materialized_views("SELECT * FROM mv_iceberg_${uuid0}.sql_test_db.lineitem_date order by l_orderkey;")
--- result:
-test_date
--- !result
-SELECT count(*) FROM test_date;
--- result:
-3
--- !result
-SELECT * FROM test_date where l_shipdate >= '2024-11-13 00:00:00' order by l_orderkey;
--- result:
-2	1002	5002	2	20.00	2000.00	0.10	0.15	R	F	2024-11-13	2024-11-16	2024-11-21	TAKE BACK RETURN	RAIL	Handle with care
-3	1003	5003	3	30.00	3000.00	0.15	0.20	A	P	2024-11-14	2024-11-17	2024-11-22	NONE	SHIP	Fragile item
--- !result
-SELECT * FROM mv_iceberg_${uuid0}.sql_test_db.lineitem_date where l_returnflag = 'R' and l_linestatus = 'F' and l_shipdate = '2024-11-13 00:00:00' order by l_orderkey;
--- result:
-2	1002	5002	2	20.00	2000.00	0.10	0.15	R	F	2024-11-13	2024-11-16	2024-11-21	TAKE BACK RETURN	RAIL	Handle with care
--- !result
-SELECT * FROM mv_iceberg_${uuid0}.sql_test_db.lineitem_date where l_shipdate >= '2024-11-13 00:00:00' order by l_orderkey;
--- result:
-2	1002	5002	2	20.00	2000.00	0.10	0.15	R	F	2024-11-13	2024-11-16	2024-11-21	TAKE BACK RETURN	RAIL	Handle with care
-3	1003	5003	3	30.00	3000.00	0.15	0.20	A	P	2024-11-14	2024-11-17	2024-11-22	NONE	SHIP	Fragile item
--- !result
-SELECT * FROM mv_iceberg_${uuid0}.sql_test_db.lineitem_date order by l_orderkey;
--- result:
-1	1001	5001	1	10.00	1000.00	0.05	0.08	N	O	2024-11-12	2024-11-15	2024-11-20	DELIVER IN PERSON	AIR	Quick delivery required
-2	1002	5002	2	20.00	2000.00	0.10	0.15	R	F	2024-11-13	2024-11-16	2024-11-21	TAKE BACK RETURN	RAIL	Handle with care
-3	1003	5003	3	30.00	3000.00	0.15	0.20	A	P	2024-11-14	2024-11-17	2024-11-22	NONE	SHIP	Fragile item
--- !result
-DROP MATERIALIZED VIEW test_date;
--- result:
--- !result
-CREATE MATERIALIZED VIEW test_date
-PARTITION BY (l_returnflag, l_linestatus, l_shipdate)
-REFRESH DEFERRED MANUAL
-PROPERTIES (
-	"replication_num" = "1",
-	"transparent_mv_rewrite_mode" = "true"
-)
-AS
-  SELECT * FROM mv_iceberg_${uuid0}.sql_test_db.lineitem_date;
--- result:
--- !result
-REFRESH MATERIALIZED VIEW test_date PARTITION (('R', 'F', '2024-11-13 00:00:00')) WITH SYNC MODE;
-function: print_hit_materialized_views("SELECT * FROM mv_iceberg_${uuid0}.sql_test_db.lineitem_date where l_returnflag = 'R' and l_linestatus = 'F' and l_shipdate = '2024-11-13 00:00:00' order by l_orderkey;")
--- result:
-
--- !result
-function: print_hit_materialized_views("SELECT * FROM mv_iceberg_${uuid0}.sql_test_db.lineitem_date where l_shipdate >= '2024-11-13 00:00:00' order by l_orderkey;")
--- result:
-
--- !result
-function: print_hit_materialized_views("SELECT * FROM mv_iceberg_${uuid0}.sql_test_db.lineitem_date order by l_orderkey;")
--- result:
-
--- !result
-SELECT count(*) FROM test_date;
--- result:
-3
--- !result
-SELECT * FROM test_date where l_returnflag = 'R' and l_linestatus = 'F' and l_shipdate = '2024-11-13 00:00:00' order by l_orderkey;
--- result:
-2	1002	5002	2	20.00	2000.00	0.10	0.15	R	F	2024-11-13	2024-11-16	2024-11-21	TAKE BACK RETURN	RAIL	Handle with care
--- !result
-SELECT * FROM test_date where l_shipdate >= '2024-11-13 00:00:00' order by l_orderkey;
--- result:
-2	1002	5002	2	20.00	2000.00	0.10	0.15	R	F	2024-11-13	2024-11-16	2024-11-21	TAKE BACK RETURN	RAIL	Handle with care
-3	1003	5003	3	30.00	3000.00	0.15	0.20	A	P	2024-11-14	2024-11-17	2024-11-22	NONE	SHIP	Fragile item
+1	1001	5001	1	10.00	1000.00	0.05	0.08	2024-11-15	2024-11-20	DELIVER IN PERSON	AIR	Quick delivery required	N	O	2024-11-12
+2	1002	5002	2	20.00	2000.00	0.10	0.15	2024-11-16	2024-11-21	TAKE BACK RETURN	RAIL	Handle with care	R	F	2024-11-13
+3	1003	5003	3	30.00	3000.00	0.15	0.20	2024-11-17	2024-11-22	NONE	SHIP	Fragile item	A	P	2024-11-14
 -- !result
 REFRESH MATERIALIZED VIEW test_date WITH SYNC MODE;
+function: print_hit_materialized_views("SELECT * FROM mv_iceberg_${uuid0}.sql_test_db_${uuid0}.lineitem_date where l_returnflag = 'R' and l_linestatus = 'F' and l_shipdate = '2024-11-13 00:00:00' order by l_orderkey;")
+-- result:
+test_date
+-- !result
+function: print_hit_materialized_views("SELECT * FROM mv_iceberg_${uuid0}.sql_test_db_${uuid0}.lineitem_date where l_shipdate >= '2024-11-13 00:00:00' order by l_orderkey;")
+-- result:
+test_date
+-- !result
+function: print_hit_materialized_views("SELECT * FROM mv_iceberg_${uuid0}.sql_test_db_${uuid0}.lineitem_date order by l_orderkey;")
+-- result:
+test_date
+-- !result
 SELECT count(*) FROM test_date;
 -- result:
 3
 -- !result
-SELECT * FROM test_date where l_returnflag = 'R' and l_linestatus = 'F' and l_shipdate = '2024-11-13 00:00:00' order by l_orderkey;
--- result:
-2	1002	5002	2	20.00	2000.00	0.10	0.15	R	F	2024-11-13	2024-11-16	2024-11-21	TAKE BACK RETURN	RAIL	Handle with care
--- !result
 SELECT * FROM test_date where l_shipdate >= '2024-11-13 00:00:00' order by l_orderkey;
 -- result:
-2	1002	5002	2	20.00	2000.00	0.10	0.15	R	F	2024-11-13	2024-11-16	2024-11-21	TAKE BACK RETURN	RAIL	Handle with care
-3	1003	5003	3	30.00	3000.00	0.15	0.20	A	P	2024-11-14	2024-11-17	2024-11-22	NONE	SHIP	Fragile item
+2	1002	5002	2	20.00	2000.00	0.10	0.15	2024-11-16	2024-11-21	TAKE BACK RETURN	RAIL	Handle with care	R	F	2024-11-13
+3	1003	5003	3	30.00	3000.00	0.15	0.20	2024-11-17	2024-11-22	NONE	SHIP	Fragile item	A	P	2024-11-14
+-- !result
+SELECT * FROM mv_iceberg_${uuid0}.sql_test_db_${uuid0}.lineitem_date where l_returnflag = 'R' and l_linestatus = 'F' and l_shipdate = '2024-11-13 00:00:00' order by l_orderkey;
+-- result:
+2	1002	5002	2	20.00	2000.00	0.10	0.15	2024-11-16	2024-11-21	TAKE BACK RETURN	RAIL	Handle with care	R	F	2024-11-13
+-- !result
+SELECT * FROM mv_iceberg_${uuid0}.sql_test_db_${uuid0}.lineitem_date where l_shipdate >= '2024-11-13 00:00:00' order by l_orderkey;
+-- result:
+2	1002	5002	2	20.00	2000.00	0.10	0.15	2024-11-16	2024-11-21	TAKE BACK RETURN	RAIL	Handle with care	R	F	2024-11-13
+3	1003	5003	3	30.00	3000.00	0.15	0.20	2024-11-17	2024-11-22	NONE	SHIP	Fragile item	A	P	2024-11-14
+-- !result
+SELECT * FROM mv_iceberg_${uuid0}.sql_test_db_${uuid0}.lineitem_date order by l_orderkey;
+-- result:
+1	1001	5001	1	10.00	1000.00	0.05	0.08	2024-11-15	2024-11-20	DELIVER IN PERSON	AIR	Quick delivery required	N	O	2024-11-12
+2	1002	5002	2	20.00	2000.00	0.10	0.15	2024-11-16	2024-11-21	TAKE BACK RETURN	RAIL	Handle with care	R	F	2024-11-13
+3	1003	5003	3	30.00	3000.00	0.15	0.20	2024-11-17	2024-11-22	NONE	SHIP	Fragile item	A	P	2024-11-14
 -- !result
 DROP MATERIALIZED VIEW test_date;
 -- result:
@@ -162,19 +195,19 @@ PARTITION BY (l_returnflag, l_linestatus, date_trunc('hour', l_shipdate))
 REFRESH DEFERRED MANUAL
 PROPERTIES ("replication_num" = "1")
 AS
-  SELECT * FROM mv_iceberg_${uuid0}.sql_test_db.lineitem_hours;
+  SELECT * FROM mv_iceberg_${uuid0}.sql_test_db_${uuid0}.lineitem_hours;
 -- result:
 -- !result
 REFRESH MATERIALIZED VIEW test_hours PARTITION (('R', 'F', '2024-11-13 00:00:00')) WITH SYNC MODE;
-function: print_hit_materialized_views("SELECT * FROM mv_iceberg_${uuid0}.sql_test_db.lineitem_hours where l_returnflag = 'R' and l_linestatus = 'F' and l_shipdate = '2024-11-13 00:00:00' order by l_orderkey;")
+function: print_hit_materialized_views("SELECT * FROM mv_iceberg_${uuid0}.sql_test_db_${uuid0}.lineitem_hours where l_returnflag = 'R' and l_linestatus = 'F' and l_shipdate = '2024-11-13 00:00:00' order by l_orderkey;")
 -- result:
 test_hours
 -- !result
-function: print_hit_materialized_views("SELECT * FROM mv_iceberg_${uuid0}.sql_test_db.lineitem_hours where l_shipdate >= '2024-11-13 00:00:00' order by l_orderkey;")
+function: print_hit_materialized_views("SELECT * FROM mv_iceberg_${uuid0}.sql_test_db_${uuid0}.lineitem_hours where l_shipdate >= '2024-11-13 00:00:00' order by l_orderkey;")
 -- result:
 test_hours
 -- !result
-function: print_hit_materialized_views("SELECT * FROM mv_iceberg_${uuid0}.sql_test_db.lineitem_hours order by l_orderkey;")
+function: print_hit_materialized_views("SELECT * FROM mv_iceberg_${uuid0}.sql_test_db_${uuid0}.lineitem_hours order by l_orderkey;")
 -- result:
 test_hours
 -- !result
@@ -184,33 +217,33 @@ SELECT count(*) FROM test_hours;
 -- !result
 SELECT * FROM test_hours where l_shipdate >= '2024-11-13 00:00:00' order by l_orderkey;
 -- result:
-2	1002	5002	2	20.00	2000.00	0.10	0.15	R	F	2024-11-13 00:00:00	2024-11-16 00:00:00	2024-11-21 00:00:00	TAKE BACK RETURN	RAIL	Handle with care
+2	1002	5002	2	20.00	2000.00	0.10	0.15	2024-11-16 00:00:00	2024-11-21 00:00:00	TAKE BACK RETURN	RAIL	Handle with care	2024-11-13 00:00:00	R	F
 -- !result
-SELECT * FROM mv_iceberg_${uuid0}.sql_test_db.lineitem_hours where l_returnflag = 'R' and l_linestatus = 'F' and l_shipdate = '2024-11-13 00:00:00' order by l_orderkey;
+SELECT * FROM mv_iceberg_${uuid0}.sql_test_db_${uuid0}.lineitem_hours where l_returnflag = 'R' and l_linestatus = 'F' and l_shipdate = '2024-11-13 00:00:00' order by l_orderkey;
 -- result:
-2	1002	5002	2	20.00	2000.00	0.10	0.15	R	F	2024-11-13 00:00:00	2024-11-16 00:00:00	2024-11-21 00:00:00	TAKE BACK RETURN	RAIL	Handle with care
+2	1002	5002	2	20.00	2000.00	0.10	0.15	2024-11-16 00:00:00	2024-11-21 00:00:00	TAKE BACK RETURN	RAIL	Handle with care	2024-11-13 00:00:00	R	F
 -- !result
-SELECT * FROM mv_iceberg_${uuid0}.sql_test_db.lineitem_hours where l_shipdate >= '2024-11-13 00:00:00' order by l_orderkey;
+SELECT * FROM mv_iceberg_${uuid0}.sql_test_db_${uuid0}.lineitem_hours where l_shipdate >= '2024-11-13 00:00:00' order by l_orderkey;
 -- result:
-2	1002	5002	2	20.00	2000.00	0.10	0.15	R	F	2024-11-13 00:00:00	2024-11-16 00:00:00	2024-11-21 00:00:00	TAKE BACK RETURN	RAIL	Handle with care
-3	1003	5003	3	30.00	3000.00	0.15	0.20	A	P	2024-11-14 00:00:00	2024-11-17 00:00:00	2024-11-22 00:00:00	NONE	SHIP	Fragile item
+2	1002	5002	2	20.00	2000.00	0.10	0.15	2024-11-16 00:00:00	2024-11-21 00:00:00	TAKE BACK RETURN	RAIL	Handle with care	2024-11-13 00:00:00	R	F
+3	1003	5003	3	30.00	3000.00	0.15	0.20	2024-11-17 00:00:00	2024-11-22 00:00:00	NONE	SHIP	Fragile item	2024-11-14 00:00:00	A	P
 -- !result
-SELECT * FROM mv_iceberg_${uuid0}.sql_test_db.lineitem_hours order by l_orderkey;
+SELECT * FROM mv_iceberg_${uuid0}.sql_test_db_${uuid0}.lineitem_hours order by l_orderkey;
 -- result:
-1	1001	5001	1	10.00	1000.00	0.05	0.08	N	O	2024-11-12 00:00:00	2024-11-15 00:00:00	2024-11-20 00:00:00	DELIVER IN PERSON	AIR	Quick delivery required
-2	1002	5002	2	20.00	2000.00	0.10	0.15	R	F	2024-11-13 00:00:00	2024-11-16 00:00:00	2024-11-21 00:00:00	TAKE BACK RETURN	RAIL	Handle with care
-3	1003	5003	3	30.00	3000.00	0.15	0.20	A	P	2024-11-14 00:00:00	2024-11-17 00:00:00	2024-11-22 00:00:00	NONE	SHIP	Fragile item
+1	1001	5001	1	10.00	1000.00	0.05	0.08	2024-11-15 00:00:00	2024-11-20 00:00:00	DELIVER IN PERSON	AIR	Quick delivery required	2024-11-12 00:00:00	N	O
+2	1002	5002	2	20.00	2000.00	0.10	0.15	2024-11-16 00:00:00	2024-11-21 00:00:00	TAKE BACK RETURN	RAIL	Handle with care	2024-11-13 00:00:00	R	F
+3	1003	5003	3	30.00	3000.00	0.15	0.20	2024-11-17 00:00:00	2024-11-22 00:00:00	NONE	SHIP	Fragile item	2024-11-14 00:00:00	A	P
 -- !result
 REFRESH MATERIALIZED VIEW test_hours WITH SYNC MODE;
-function: print_hit_materialized_views("SELECT * FROM mv_iceberg_${uuid0}.sql_test_db.lineitem_hours where l_returnflag = 'R' and l_linestatus = 'F' and l_shipdate = '2024-11-13 00:00:00' order by l_orderkey;")
+function: print_hit_materialized_views("SELECT * FROM mv_iceberg_${uuid0}.sql_test_db_${uuid0}.lineitem_hours where l_returnflag = 'R' and l_linestatus = 'F' and l_shipdate = '2024-11-13 00:00:00' order by l_orderkey;")
 -- result:
 test_hours
 -- !result
-function: print_hit_materialized_views("SELECT * FROM mv_iceberg_${uuid0}.sql_test_db.lineitem_hours where l_shipdate >= '2024-11-13 00:00:00' order by l_orderkey;")
+function: print_hit_materialized_views("SELECT * FROM mv_iceberg_${uuid0}.sql_test_db_${uuid0}.lineitem_hours where l_shipdate >= '2024-11-13 00:00:00' order by l_orderkey;")
 -- result:
 test_hours
 -- !result
-function: print_hit_materialized_views("SELECT * FROM mv_iceberg_${uuid0}.sql_test_db.lineitem_hours order by l_orderkey;")
+function: print_hit_materialized_views("SELECT * FROM mv_iceberg_${uuid0}.sql_test_db_${uuid0}.lineitem_hours order by l_orderkey;")
 -- result:
 test_hours
 -- !result
@@ -220,23 +253,23 @@ SELECT count(*) FROM test_hours;
 -- !result
 SELECT * FROM test_hours where l_shipdate >= '2024-11-13 00:00:00' order by l_orderkey;
 -- result:
-2	1002	5002	2	20.00	2000.00	0.10	0.15	R	F	2024-11-13 00:00:00	2024-11-16 00:00:00	2024-11-21 00:00:00	TAKE BACK RETURN	RAIL	Handle with care
-3	1003	5003	3	30.00	3000.00	0.15	0.20	A	P	2024-11-14 00:00:00	2024-11-17 00:00:00	2024-11-22 00:00:00	NONE	SHIP	Fragile item
+2	1002	5002	2	20.00	2000.00	0.10	0.15	2024-11-16 00:00:00	2024-11-21 00:00:00	TAKE BACK RETURN	RAIL	Handle with care	2024-11-13 00:00:00	R	F
+3	1003	5003	3	30.00	3000.00	0.15	0.20	2024-11-17 00:00:00	2024-11-22 00:00:00	NONE	SHIP	Fragile item	2024-11-14 00:00:00	A	P
 -- !result
-SELECT * FROM mv_iceberg_${uuid0}.sql_test_db.lineitem_hours where l_returnflag = 'R' and l_linestatus = 'F' and l_shipdate = '2024-11-13 00:00:00' order by l_orderkey;
+SELECT * FROM mv_iceberg_${uuid0}.sql_test_db_${uuid0}.lineitem_hours where l_returnflag = 'R' and l_linestatus = 'F' and l_shipdate = '2024-11-13 00:00:00' order by l_orderkey;
 -- result:
-2	1002	5002	2	20.00	2000.00	0.10	0.15	R	F	2024-11-13 00:00:00	2024-11-16 00:00:00	2024-11-21 00:00:00	TAKE BACK RETURN	RAIL	Handle with care
+2	1002	5002	2	20.00	2000.00	0.10	0.15	2024-11-16 00:00:00	2024-11-21 00:00:00	TAKE BACK RETURN	RAIL	Handle with care	2024-11-13 00:00:00	R	F
 -- !result
-SELECT * FROM mv_iceberg_${uuid0}.sql_test_db.lineitem_hours where l_shipdate >= '2024-11-13 00:00:00' order by l_orderkey;
+SELECT * FROM mv_iceberg_${uuid0}.sql_test_db_${uuid0}.lineitem_hours where l_shipdate >= '2024-11-13 00:00:00' order by l_orderkey;
 -- result:
-2	1002	5002	2	20.00	2000.00	0.10	0.15	R	F	2024-11-13 00:00:00	2024-11-16 00:00:00	2024-11-21 00:00:00	TAKE BACK RETURN	RAIL	Handle with care
-3	1003	5003	3	30.00	3000.00	0.15	0.20	A	P	2024-11-14 00:00:00	2024-11-17 00:00:00	2024-11-22 00:00:00	NONE	SHIP	Fragile item
+2	1002	5002	2	20.00	2000.00	0.10	0.15	2024-11-16 00:00:00	2024-11-21 00:00:00	TAKE BACK RETURN	RAIL	Handle with care	2024-11-13 00:00:00	R	F
+3	1003	5003	3	30.00	3000.00	0.15	0.20	2024-11-17 00:00:00	2024-11-22 00:00:00	NONE	SHIP	Fragile item	2024-11-14 00:00:00	A	P
 -- !result
-SELECT * FROM mv_iceberg_${uuid0}.sql_test_db.lineitem_hours order by l_orderkey;
+SELECT * FROM mv_iceberg_${uuid0}.sql_test_db_${uuid0}.lineitem_hours order by l_orderkey;
 -- result:
-1	1001	5001	1	10.00	1000.00	0.05	0.08	N	O	2024-11-12 00:00:00	2024-11-15 00:00:00	2024-11-20 00:00:00	DELIVER IN PERSON	AIR	Quick delivery required
-2	1002	5002	2	20.00	2000.00	0.10	0.15	R	F	2024-11-13 00:00:00	2024-11-16 00:00:00	2024-11-21 00:00:00	TAKE BACK RETURN	RAIL	Handle with care
-3	1003	5003	3	30.00	3000.00	0.15	0.20	A	P	2024-11-14 00:00:00	2024-11-17 00:00:00	2024-11-22 00:00:00	NONE	SHIP	Fragile item
+1	1001	5001	1	10.00	1000.00	0.05	0.08	2024-11-15 00:00:00	2024-11-20 00:00:00	DELIVER IN PERSON	AIR	Quick delivery required	2024-11-12 00:00:00	N	O
+2	1002	5002	2	20.00	2000.00	0.10	0.15	2024-11-16 00:00:00	2024-11-21 00:00:00	TAKE BACK RETURN	RAIL	Handle with care	2024-11-13 00:00:00	R	F
+3	1003	5003	3	30.00	3000.00	0.15	0.20	2024-11-17 00:00:00	2024-11-22 00:00:00	NONE	SHIP	Fragile item	2024-11-14 00:00:00	A	P
 -- !result
 DROP MATERIALIZED VIEW test_hours;
 -- result:
@@ -249,19 +282,23 @@ PROPERTIES (
 	"transparent_mv_rewrite_mode" = "true"
 )
 AS
-  SELECT * FROM mv_iceberg_${uuid0}.sql_test_db.lineitem_hours;
+  SELECT * FROM mv_iceberg_${uuid0}.sql_test_db_${uuid0}.lineitem_hours;
 -- result:
 -- !result
 REFRESH MATERIALIZED VIEW test_hours PARTITION (('R', 'F', '2024-11-13 00:00:00')) WITH SYNC MODE;
-function: print_hit_materialized_views("SELECT * FROM mv_iceberg_${uuid0}.sql_test_db.lineitem_hours where l_returnflag = 'R' and l_linestatus = 'F' and l_shipdate = '2024-11-13 00:00:00' order by l_orderkey;")
+select sleep(3);
+-- result:
+1
+-- !result
+function: print_hit_materialized_views("SELECT * FROM mv_iceberg_${uuid0}.sql_test_db_${uuid0}.lineitem_hours where l_returnflag = 'R' and l_linestatus = 'F' and l_shipdate = '2024-11-13 00:00:00' order by l_orderkey;")
 -- result:
 test_hours
 -- !result
-function: print_hit_materialized_views("SELECT * FROM mv_iceberg_${uuid0}.sql_test_db.lineitem_hours where l_shipdate >= '2024-11-13 00:00:00' order by l_orderkey;")
+function: print_hit_materialized_views("SELECT * FROM mv_iceberg_${uuid0}.sql_test_db_${uuid0}.lineitem_hours where l_shipdate >= '2024-11-13 00:00:00' order by l_orderkey;")
 -- result:
 test_hours
 -- !result
-function: print_hit_materialized_views("SELECT * FROM mv_iceberg_${uuid0}.sql_test_db.lineitem_hours order by l_orderkey;")
+function: print_hit_materialized_views("SELECT * FROM mv_iceberg_${uuid0}.sql_test_db_${uuid0}.lineitem_hours order by l_orderkey;")
 -- result:
 test_hours
 -- !result
@@ -271,12 +308,12 @@ SELECT count(*) FROM test_hours;
 -- !result
 SELECT * FROM test_hours where l_returnflag = 'R' and l_linestatus = 'F' and l_shipdate = '2024-11-13 00:00:00' order by l_orderkey;
 -- result:
-2	1002	5002	2	20.00	2000.00	0.10	0.15	R	F	2024-11-13 00:00:00	2024-11-16 00:00:00	2024-11-21 00:00:00	TAKE BACK RETURN	RAIL	Handle with care
+2	1002	5002	2	20.00	2000.00	0.10	0.15	2024-11-16 00:00:00	2024-11-21 00:00:00	TAKE BACK RETURN	RAIL	Handle with care	2024-11-13 00:00:00	R	F
 -- !result
 SELECT * FROM test_hours where l_shipdate >= '2024-11-13 00:00:00' order by l_orderkey;
 -- result:
-2	1002	5002	2	20.00	2000.00	0.10	0.15	R	F	2024-11-13 00:00:00	2024-11-16 00:00:00	2024-11-21 00:00:00	TAKE BACK RETURN	RAIL	Handle with care
-3	1003	5003	3	30.00	3000.00	0.15	0.20	A	P	2024-11-14 00:00:00	2024-11-17 00:00:00	2024-11-22 00:00:00	NONE	SHIP	Fragile item
+2	1002	5002	2	20.00	2000.00	0.10	0.15	2024-11-16 00:00:00	2024-11-21 00:00:00	TAKE BACK RETURN	RAIL	Handle with care	2024-11-13 00:00:00	R	F
+3	1003	5003	3	30.00	3000.00	0.15	0.20	2024-11-17 00:00:00	2024-11-22 00:00:00	NONE	SHIP	Fragile item	2024-11-14 00:00:00	A	P
 -- !result
 REFRESH MATERIALIZED VIEW test_hours WITH SYNC MODE;
 SELECT count(*) FROM test_hours;
@@ -285,19 +322,28 @@ SELECT count(*) FROM test_hours;
 -- !result
 SELECT * FROM test_hours where l_returnflag = 'R' and l_linestatus = 'F' and l_shipdate = '2024-11-13 00:00:00' order by l_orderkey;
 -- result:
-2	1002	5002	2	20.00	2000.00	0.10	0.15	R	F	2024-11-13 00:00:00	2024-11-16 00:00:00	2024-11-21 00:00:00	TAKE BACK RETURN	RAIL	Handle with care
+2	1002	5002	2	20.00	2000.00	0.10	0.15	2024-11-16 00:00:00	2024-11-21 00:00:00	TAKE BACK RETURN	RAIL	Handle with care	2024-11-13 00:00:00	R	F
 -- !result
 SELECT * FROM test_hours where l_shipdate >= '2024-11-13 00:00:00' order by l_orderkey;
 -- result:
-2	1002	5002	2	20.00	2000.00	0.10	0.15	R	F	2024-11-13 00:00:00	2024-11-16 00:00:00	2024-11-21 00:00:00	TAKE BACK RETURN	RAIL	Handle with care
-3	1003	5003	3	30.00	3000.00	0.15	0.20	A	P	2024-11-14 00:00:00	2024-11-17 00:00:00	2024-11-22 00:00:00	NONE	SHIP	Fragile item
+2	1002	5002	2	20.00	2000.00	0.10	0.15	2024-11-16 00:00:00	2024-11-21 00:00:00	TAKE BACK RETURN	RAIL	Handle with care	2024-11-13 00:00:00	R	F
+3	1003	5003	3	30.00	3000.00	0.15	0.20	2024-11-17 00:00:00	2024-11-22 00:00:00	NONE	SHIP	Fragile item	2024-11-14 00:00:00	A	P
 -- !result
 DROP MATERIALIZED VIEW test_hours;
 -- result:
 -- !result
-drop database db_${uuid0} force;
+drop table mv_iceberg_${uuid0}.sql_test_db_${uuid0}.lineitem_hours;
 -- result:
 -- !result
-drop catalog mv_iceberg_${uuid0};
+drop table mv_iceberg_${uuid0}.sql_test_db_${uuid0}.lineitem_date;
+-- result:
+-- !result
+drop table mv_iceberg_${uuid0}.sql_test_db_${uuid0}.t1;
+-- result:
+-- !result
+drop database mv_iceberg_${uuid0}.sql_test_db_${uuid0} force;
+-- result:
+-- !result
+drop database db_${uuid0} force;
 -- result:
 -- !result

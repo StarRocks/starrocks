@@ -2174,6 +2174,8 @@ class StarrocksSQLApiLib(object):
                 mv_name = None
             if content.find("TABLE:") > 0:
                 mv_name = content.split("TABLE:")[1].strip()
+        # sort the mv_names to make the result deterministic
+        ans.sort()
         return ",".join(ans)
 
     def assert_equal_result(self, *sqls):

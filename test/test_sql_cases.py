@@ -90,6 +90,7 @@ class TestSQLCases(sr_sql_lib.StarrocksSQLApiLib):
         self.create_starrocks_conn_pool()
         self.check_cluster_status()
         self._init_global_configs()
+        self._init_global_session_variables()
 
     def _init_global_configs(self):
         """
@@ -105,6 +106,21 @@ class TestSQLCases(sr_sql_lib.StarrocksSQLApiLib):
         for config in default_configs:
             sql = "ADMIN SET FRONTEND CONFIG (%s)" % config
             self.execute_sql(sql)
+<<<<<<< HEAD
+=======
+
+    def _init_global_session_variables(self):
+        """
+        Session variables that are not ready for production but it can be used for testing.
+        """
+        session_variables = [
+            "new_planner_optimize_timeout = 10000",
+        ]
+        for session_variable in session_variables:
+            sql = "SET %s;" % session_variable
+            self.execute_sql(sql)
+
+>>>>>>> 1785077e7b ([UT] Fix print_hit_materialized_views to ensure the result deterministic (#63862))
 
     @sql_annotation.ignore_timeout()
     def tearDown(self):
