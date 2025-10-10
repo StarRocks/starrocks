@@ -52,7 +52,6 @@ public class DictionaryMgrTest {
     private List<Backend> backends = Arrays.asList(new Backend(1, "127.0.0.1", 1234));
     private List<ComputeNode> computeNodes = Arrays.asList(new ComputeNode(2, "127.0.0.2", 1235));
 
-    @Mocked
     private DictionaryMgr dictionaryMgr = new DictionaryMgr();
 
     @BeforeEach
