@@ -798,6 +798,113 @@ public class ScalarOperatorFunctions {
         return ConstantOperator.createDatetimeOrNull(utcStartTime);
     }
 
+    @ConstantFunction(name = "last_day", argTypes = {VARCHAR, INT, INT}, returnType = VARCHAR)
+    public static ConstantOperator lastDay(ConstantOperator dateOp, ConstantOperator dateFieldOp,
+                                           ConstantOperator firstDayOfWeekOp) {
+        String date = dateOp.getVarchar();
+        LocalDate resultDate = null;
+        if (!org.apache.commons.lang3.StringUtils.isEmpty(date)) {
+            int dateField = dateFieldOp.getInt();
+            date = date.substring(0, 10);
+
+            int firstDayOfWeek = firstDayOfWeekOp.getInt();
+            LocalDate currDate = LocalDate.parse(date, DateTimeFormatter.ISO_LOCAL_DATE);
+            switch (dateField) {
+                case 0:
+                case 1:
+                case 6:   // minute
+                case 7:   // hour
+                case 8:   // total
+                    resultDate = currDate;
+                    break;
+                case 2:
+                    int dayOfWeek = currDate.getDayOfWeek().getValue();
+
+                    if (firstDayOfWeek <= dayOfWeek) {
+                        resultDate = currDate.plusDays(firstDayOfWeek - dayOfWeek + 6);
+                    } else {
+                        resultDate = currDate.plusDays(firstDayOfWeek - dayOfWeek - 1);
+                    }
+
+                    break;
+                case 3:
+                    resultDate = currDate.withDayOfMonth(1).plusMonths(1).plusDays(-1);
+                    break;
+                case 5:   //  quarter
+                    int month = currDate.getMonthValue();
+                    int year = currDate.getYear();
+
+                    month = (month - 1) / 3 * 3 + 4;
+                    resultDate = LocalDate.of(year, month, 1).plusDays(-1);
+                    break;
+                case 4:  //  year
+                    resultDate = LocalDate.of(currDate.getYear(), 12, 31);
+                default:
+                    break;
+            }
+        }
+
+        if (resultDate == null) {
+            return ConstantOperator.createNull(Type.VARCHAR);
+        }
+
+        return ConstantOperator.createVarchar(DateTimeFormatter.ISO_LOCAL_DATE.format(resultDate));
+    }
+
+    @ConstantFunction(name = "first_day", argTypes = {VARCHAR, INT, INT}, returnType = VARCHAR)
+    public static ConstantOperator firstDay(ConstantOperator dateOp, ConstantOperator dateFieldOp,
+                                            ConstantOperator firstDayOfWeekOp) {
+        String date = dateOp.getVarchar();
+        LocalDate resultDate = null;
+        if (!org.apache.commons.lang3.StringUtils.isEmpty(date)) {
+            int dateField = dateFieldOp.getInt();
+            date = date.substring(0, 10);
+
+            int firstDayOfWeek = firstDayOfWeekOp.getInt();
+            LocalDate currDate = LocalDate.parse(date, DateTimeFormatter.ISO_LOCAL_DATE);
+            switch (dateField) {
+                case 0:
+                case 1:
+                case 6:   // minute
+                case 7:   // hour
+                case 8:   // total
+                    resultDate = currDate;
+                    break;
+                case 2:
+                    int dayOfWeek = currDate.getDayOfWeek().getValue();
+
+                    if (firstDayOfWeek <= dayOfWeek) {
+                        resultDate = currDate.plusDays(firstDayOfWeek - dayOfWeek);
+                    } else {
+                        resultDate = currDate.plusDays(firstDayOfWeek - dayOfWeek - 7);
+                    }
+
+                    break;
+                case 3:
+                    resultDate = currDate.withDayOfMonth(1);
+                    break;
+                case 5:   //  quarter
+                    int month = currDate.getMonthValue();
+                    int year = currDate.getYear();
+
+                    month = (month - 1) / 3 * 3 + 1;
+                    resultDate = LocalDate.of(year, month, 1);
+                    break;
+                case 4:  //  year
+                    resultDate = LocalDate.of(currDate.getYear(), 1, 1);
+                    break;
+                default:
+                    break;
+            }
+        }
+
+        if (resultDate == null) {
+            return ConstantOperator.createNull(Type.VARCHAR);
+        }
+
+        return ConstantOperator.createVarchar(DateTimeFormatter.ISO_LOCAL_DATE.format(resultDate));
+    }
+
     @ConstantFunction(name = "next_day", argTypes = {DATETIME, VARCHAR}, returnType = DATE, isMonotonic = true)
     public static ConstantOperator nextDay(ConstantOperator date, ConstantOperator dow) {
         int dateDowValue = date.getDate().getDayOfWeek().getValue();

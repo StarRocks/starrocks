@@ -112,6 +112,38 @@ public class ScalarOperatorFunctionsTest {
     }
 
     @Test
+    public void firstDay() {
+        assertEquals("2022-05-16",
+                ScalarOperatorFunctions.firstDay(ConstantOperator.createVarchar("2022-05-17"),
+                        ConstantOperator.createInt(2), ConstantOperator.createInt(1)));
+        assertEquals("2022-05-11",
+                ScalarOperatorFunctions.firstDay(ConstantOperator.createVarchar("2022-05-17"),
+                        ConstantOperator.createInt(2), ConstantOperator.createInt(3)));
+        assertEquals("2022-05-17",
+                ScalarOperatorFunctions.firstDay(ConstantOperator.createVarchar("2022-05-17"),
+                        ConstantOperator.createInt(2), ConstantOperator.createInt(2)));
+        assertEquals("2022-05-17",
+                ScalarOperatorFunctions.firstDay(ConstantOperator.createVarchar("2022-05-17"),
+                        ConstantOperator.createInt(1), ConstantOperator.createInt(2)));
+        assertEquals("2022-05-01",
+                ScalarOperatorFunctions.firstDay(ConstantOperator.createVarchar("2022-05-17"),
+                        ConstantOperator.createInt(3), ConstantOperator.createInt(2)));
+    }
+    
+    @Test
+    public void lastDay() {
+        assertEquals("2022-04-08",
+                ScalarOperatorFunctions.lastDay(ConstantOperator.createVarchar("2022-04-08"),
+                        ConstantOperator.createInt(1), ConstantOperator.createInt(1)));
+        assertEquals("2022-04-10",
+                ScalarOperatorFunctions.lastDay(ConstantOperator.createVarchar("2022-04-08"),
+                        ConstantOperator.createInt(2), ConstantOperator.createInt(1)));
+        assertEquals("2022-04-30",
+                ScalarOperatorFunctions.lastDay(ConstantOperator.createVarchar("2022-04-08"),
+                        ConstantOperator.createInt(3), ConstantOperator.createInt(7)));
+    }
+
+    @Test
     public void timeDiff() {
         assertEquals(-2534400.0, ScalarOperatorFunctions.timeDiff(O_DT_20101102_183010, O_DT_20101202_023010).getTime(),
                 1);
