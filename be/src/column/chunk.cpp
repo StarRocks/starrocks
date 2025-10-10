@@ -16,6 +16,7 @@
 
 #include <utility>
 
+#include "column/column.h"
 #include "column/column_helper.h"
 #include "column/datum_tuple.h"
 #include "column/fixed_length_column.h"
@@ -304,14 +305,18 @@ size_t Chunk::filter(const Buffer<uint8_t>& selection, bool force) {
         return num_rows();
     }
     for (auto& column : _columns) {
-        column->filter(selection);
+        MutableColumnPtr mutable_column = std::move(*column).mutate();
+        mutable_column->filter(selection);
+        column = std::move(mutable_column);
     }
     return num_rows();
 }
 
 size_t Chunk::filter_range(const Buffer<uint8_t>& selection, size_t from, size_t to) {
     for (auto& column : _columns) {
-        column->filter_range(selection, from, to);
+        MutableColumnPtr mutable_column = std::move(*column).mutate();
+        mutable_column->filter_range(selection, from, to);
+        column = std::move(mutable_column);
     }
     return num_rows();
 }
