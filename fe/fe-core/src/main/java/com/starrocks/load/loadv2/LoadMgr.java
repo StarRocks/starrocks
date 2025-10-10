@@ -390,11 +390,13 @@ public class LoadMgr implements Writable, MemoryTrackable {
 
         // 2. remove from dbIdToLabelToLoadJobs
         Map<String, List<LoadJob>> labelToLoadJobs = dbIdToLabelToLoadJobs.get(dbId);
-        List<LoadJob> sameLabelJobs = labelToLoadJobs.get(label);
-        if (sameLabelJobs != null) {
-            sameLabelJobs.remove(job);
-            if (sameLabelJobs.isEmpty()) {
-                labelToLoadJobs.remove(label);
+        if (labelToLoadJobs != null) {
+            List<LoadJob> sameLabelJobs = labelToLoadJobs.get(label);
+            if (sameLabelJobs != null) {
+                sameLabelJobs.remove(job);
+                if (sameLabelJobs.isEmpty()) {
+                    labelToLoadJobs.remove(label);
+                }
             }
             if (labelToLoadJobs.isEmpty()) {
                 dbIdToLabelToLoadJobs.remove(dbId);
