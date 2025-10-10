@@ -269,7 +269,7 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 默认值：true
 - 类型：Boolean
 - 单位：-
-- 是否动态：是[BE_configuration.md](..%2F..%2F..%2Fen%2Fadministration%2Fmanagement%2FBE_configuration.md)
+- 是否动态：是
 - 描述：
 - 引入版本：-
 -->
