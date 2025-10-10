@@ -66,7 +66,7 @@ static void def_rep_to_offset(const LevelInfo& level_info, const level_t* def_le
     *num_offsets = offset_pos;
 }
 
-Status ListColumnReader::read_range(const Range<uint64_t>& range, const Filter* filter, ColumnPtr& dst) {
+Status ListColumnReader::read_range(const Range<uint64_t>& range, const Filter* filter, MutableColumnPtr& dst) {
     NullableColumn* nullable_column = nullptr;
     ArrayColumn* array_column = nullptr;
     if (dst->is_nullable()) {
@@ -78,7 +78,7 @@ Status ListColumnReader::read_range(const Range<uint64_t>& range, const Filter* 
         DCHECK(!get_column_parquet_field()->is_nullable);
         array_column = down_cast<ArrayColumn*>(dst.get());
     }
-    auto& child_column = array_column->elements_column();
+    auto child_column = array_column->elements_column_mutable_ptr();
     RETURN_IF_ERROR(_element_reader->read_range(range, filter, child_column));
 
     level_t* def_levels = nullptr;
@@ -86,7 +86,7 @@ Status ListColumnReader::read_range(const Range<uint64_t>& range, const Filter* 
     size_t num_levels = 0;
     _element_reader->get_levels(&def_levels, &rep_levels, &num_levels);
 
-    auto& offsets = array_column->offsets_column()->get_data();
+    auto& offsets = array_column->offsets_column_mutable_ptr()->get_data();
     offsets.resize(num_levels + 1);
     NullColumn null_column(num_levels);
     auto& is_nulls = null_column.get_data();
@@ -106,7 +106,8 @@ Status ListColumnReader::read_range(const Range<uint64_t>& range, const Filter* 
     return Status::OK();
 }
 
-Status ListColumnReader::fill_dst_column(ColumnPtr& dst, ColumnPtr& src) {
+Status ListColumnReader::fill_dst_column(MutableColumnPtr& dst, ColumnPtr& src_in) {
+    auto src = src_in->as_mutable_ptr();
     ArrayColumn* array_column_src = nullptr;
     ArrayColumn* array_column_dst = nullptr;
     if (src->is_nullable()) {
@@ -124,13 +125,16 @@ Status ListColumnReader::fill_dst_column(ColumnPtr& dst, ColumnPtr& src) {
         array_column_src = down_cast<ArrayColumn*>(src.get());
         array_column_dst = down_cast<ArrayColumn*>(dst.get());
     }
-    array_column_dst->offsets_column()->swap_column(*(array_column_src->offsets_column()));
-    RETURN_IF_ERROR(
-            _element_reader->fill_dst_column(array_column_dst->elements_column(), array_column_src->elements_column()));
+    auto dst_offsets = array_column_dst->offsets_column_mutable_ptr();
+    auto src_offsets = array_column_src->offsets_column_mutable_ptr();
+    dst_offsets->swap_column(*src_offsets);
+    auto dst_elements = array_column_dst->elements_column_mutable_ptr();
+    auto src_elements = array_column_src->elements_column_mutable_ptr();
+    RETURN_IF_ERROR(_element_reader->fill_dst_column(dst_elements, src_elements));
     return Status::OK();
 }
 
-Status MapColumnReader::read_range(const Range<uint64_t>& range, const Filter* filter, ColumnPtr& dst) {
+Status MapColumnReader::read_range(const Range<uint64_t>& range, const Filter* filter, MutableColumnPtr& dst) {
     NullableColumn* nullable_column = nullptr;
     MapColumn* map_column = nullptr;
     if (dst->is_nullable()) {
@@ -142,8 +146,8 @@ Status MapColumnReader::read_range(const Range<uint64_t>& range, const Filter* f
         DCHECK(!get_column_parquet_field()->is_nullable);
         map_column = down_cast<MapColumn*>(dst.get());
     }
-    auto& key_column = map_column->keys_column();
-    auto& value_column = map_column->values_column();
+    auto key_column = map_column->keys_column_mutable_ptr();
+    auto value_column = map_column->values_column_mutable_ptr();
     if (_key_reader != nullptr) {
         RETURN_IF_ERROR(_key_reader->read_range(range, filter, key_column));
     }
@@ -167,7 +171,7 @@ Status MapColumnReader::read_range(const Range<uint64_t>& range, const Filter* f
         DCHECK(false) << "Unreachable!";
     }
 
-    auto& offsets = map_column->offsets_column()->get_data();
+    auto& offsets = map_column->offsets_column_mutable_ptr()->get_data();
     offsets.resize(num_levels + 1);
     NullColumn null_column(num_levels);
     auto& is_nulls = null_column.get_data();
@@ -197,7 +201,7 @@ Status MapColumnReader::read_range(const Range<uint64_t>& range, const Filter* f
     return Status::OK();
 }
 
-Status StructColumnReader::read_range(const Range<uint64_t>& range, const Filter* filter, ColumnPtr& dst) {
+Status StructColumnReader::read_range(const Range<uint64_t>& range, const Filter* filter, MutableColumnPtr& dst) {
     NullableColumn* nullable_column = nullptr;
     StructColumn* struct_column = nullptr;
     if (dst->is_nullable()) {
@@ -221,7 +225,7 @@ Status StructColumnReader::read_range(const Range<uint64_t>& range, const Filter
         const auto& field_name = field_names[i];
         if (LIKELY(_child_readers.find(field_name) != _child_readers.end())) {
             if (_child_readers[field_name] != nullptr) {
-                auto& child_column = struct_column->field_column(field_name);
+                auto child_column = struct_column->field_column_mutable(field_name);
                 RETURN_IF_ERROR(_child_readers[field_name]->read_range(range, filter, child_column));
                 real_read = child_column->size();
                 first_read = false;
@@ -239,7 +243,7 @@ Status StructColumnReader::read_range(const Range<uint64_t>& range, const Filter
     for (size_t i = 0; i < field_names.size(); i++) {
         const auto& field_name = field_names[i];
         if (_child_readers[field_name] == nullptr) {
-            Column* child_column = struct_column->field_column(field_name).get();
+            Column* child_column = struct_column->field_column_mutable(field_name).get();
             child_column->append_default(real_read);
         }
     }
@@ -274,7 +278,7 @@ bool StructColumnReader::try_to_use_dict_filter(ExprContext* ctx, bool is_decode
     return _child_readers[sub_field]->try_to_use_dict_filter(ctx, is_decode_needed, slotId, sub_field_path, layer + 1);
 }
 
-Status StructColumnReader::filter_dict_column(ColumnPtr& column, Filter* filter,
+Status StructColumnReader::filter_dict_column(MutableColumnPtr& column, Filter* filter,
                                               const std::vector<std::string>& sub_field_path, const size_t& layer) {
     const std::string& sub_field = sub_field_path[layer];
     StructColumn* struct_column = nullptr;
@@ -287,11 +291,12 @@ Status StructColumnReader::filter_dict_column(ColumnPtr& column, Filter* filter,
         DCHECK(!get_column_parquet_field()->is_nullable);
         struct_column = down_cast<StructColumn*>(column.get());
     }
-    return _child_readers[sub_field]->filter_dict_column(struct_column->field_column(sub_field), filter, sub_field_path,
-                                                         layer + 1);
+    auto field_col = struct_column->field_column_mutable(sub_field);
+    return _child_readers[sub_field]->filter_dict_column(field_col, filter, sub_field_path, layer + 1);
 }
 
-Status StructColumnReader::fill_dst_column(ColumnPtr& dst, ColumnPtr& src) {
+Status StructColumnReader::fill_dst_column(MutableColumnPtr& dst, ColumnPtr& src_in) {
+    auto src = src_in->as_mutable_ptr();
     StructColumn* struct_column_src = nullptr;
     StructColumn* struct_column_dst = nullptr;
     if (src->is_nullable()) {
@@ -314,11 +319,13 @@ Status StructColumnReader::fill_dst_column(ColumnPtr& dst, ColumnPtr& src) {
         const auto& field_name = field_names[i];
         if (LIKELY(_child_readers.find(field_name) != _child_readers.end())) {
             if (_child_readers[field_name] == nullptr) {
-                struct_column_dst->field_column(field_name)
-                        ->swap_column(*(struct_column_src->field_column(field_name)));
+                auto dst_field = struct_column_dst->field_column_mutable(field_name);
+                auto src_field = struct_column_src->field_column_mutable(field_name);
+                dst_field->swap_column(*src_field);
             } else {
-                RETURN_IF_ERROR(_child_readers[field_name]->fill_dst_column(
-                        struct_column_dst->field_column(field_name), struct_column_src->field_column(field_name)));
+                auto dst_field = struct_column_dst->field_column_mutable(field_name);
+                auto src_field = struct_column_src->field_column_mutable(field_name);
+                RETURN_IF_ERROR(_child_readers[field_name]->fill_dst_column(dst_field, src_field));
             }
         } else {
             return Status::InternalError(strings::Substitute("there is no match subfield reader for $1", field_name));

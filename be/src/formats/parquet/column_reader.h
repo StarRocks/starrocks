@@ -113,7 +113,7 @@ public:
     virtual ~ColumnReader() = default;
     virtual Status prepare() = 0;
 
-    virtual Status read_range(const Range<uint64_t>& range, const Filter* filter, ColumnPtr& dst) = 0;
+    virtual Status read_range(const Range<uint64_t>& range, const Filter* filter, MutableColumnPtr& dst) = 0;
 
     virtual void get_levels(level_t** def_levels, level_t** rep_levels, size_t* num_levels) = 0;
 
@@ -132,13 +132,14 @@ public:
 
     virtual void set_can_lazy_decode(bool can_lazy_decode) {}
 
-    virtual Status filter_dict_column(ColumnPtr& column, Filter* filter, const std::vector<std::string>& sub_field_path,
+    virtual Status filter_dict_column(MutableColumnPtr& column, Filter* filter, const std::vector<std::string>& sub_field_path,
                                       const size_t& layer) {
         return Status::OK();
     }
 
-    virtual Status fill_dst_column(ColumnPtr& dst, ColumnPtr& src) {
-        dst->swap_column(*src);
+    virtual Status fill_dst_column(MutableColumnPtr& dst, ColumnPtr& src) {
+        auto src_mut = src->as_mutable_ptr();
+        dst->swap_column(*src_mut);
         return Status::OK();
     }
 

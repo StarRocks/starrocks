@@ -266,8 +266,8 @@ StatusOr<size_t> GroupReader::_read_range_round_by_round(const Range<uint64_t>& 
             SCOPED_RAW_TIMER(&_param.stats->expr_filter_ns);
             SCOPED_RAW_TIMER(&_param.stats->group_dict_filter_ns);
             for (const auto& sub_field_path : _dict_column_sub_field_paths[col_idx]) {
-                RETURN_IF_ERROR(_column_readers[slot_id]->filter_dict_column((*chunk)->get_column_by_slot_id(slot_id),
-                                                                             filter, sub_field_path, 0));
+                auto column = (*chunk)->get_mutable_column_by_slot_id(slot_id);
+                RETURN_IF_ERROR(_column_readers[slot_id]->filter_dict_column(column, filter, sub_field_path, 0));
                 hit_count = SIMD::count_nonzero(*filter);
                 if (hit_count == 0) {
                     return hit_count;
@@ -520,8 +520,8 @@ StatusOr<bool> GroupReader::_filter_chunk_with_dict_filter(ChunkPtr* chunk, Filt
         const auto& column = _param.read_cols[col_idx];
         SlotId slot_id = column.slot_id();
         for (const auto& sub_field_path : _dict_column_sub_field_paths[col_idx]) {
-            RETURN_IF_ERROR(_column_readers[slot_id]->filter_dict_column((*chunk)->get_column_by_slot_id(slot_id),
-                                                                         filter, sub_field_path, 0));
+            auto column = (*chunk)->get_mutable_column_by_slot_id(slot_id);
+            RETURN_IF_ERROR(_column_readers[slot_id]->filter_dict_column(column, filter, sub_field_path, 0));
         }
     }
     return true;
@@ -531,8 +531,8 @@ Status GroupReader::_fill_dst_chunk(ChunkPtr& read_chunk, ChunkPtr* chunk) {
     read_chunk->check_or_die();
     for (const auto& column : _param.read_cols) {
         SlotId slot_id = column.slot_id();
-        RETURN_IF_ERROR(_column_readers[slot_id]->fill_dst_column((*chunk)->get_column_by_slot_id(slot_id),
-                                                                  read_chunk->get_column_by_slot_id(slot_id)));
+        auto dst_column = (*chunk)->get_mutable_column_by_slot_id(slot_id);
+        RETURN_IF_ERROR(_column_readers[slot_id]->fill_dst_column(dst_column, read_chunk->get_column_by_slot_id(slot_id)));
     }
     read_chunk->check_or_die();
     return Status::OK();

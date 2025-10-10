@@ -26,9 +26,9 @@ public:
 
     Status prepare() override { return _element_reader->prepare(); }
 
-    Status read_range(const Range<uint64_t>& range, const Filter* filter, ColumnPtr& dst) override;
+    Status read_range(const Range<uint64_t>& range, const Filter* filter, MutableColumnPtr& dst) override;
 
-    Status fill_dst_column(ColumnPtr& dst, ColumnPtr& src) override;
+    Status fill_dst_column(MutableColumnPtr& dst, ColumnPtr& src) override;
 
     void get_levels(level_t** def_levels, level_t** rep_levels, size_t* num_levels) override {
         _element_reader->get_levels(def_levels, rep_levels, num_levels);
@@ -76,7 +76,7 @@ public:
         return Status::OK();
     }
 
-    Status read_range(const Range<uint64_t>& range, const Filter* filter, ColumnPtr& dst) override;
+    Status read_range(const Range<uint64_t>& range, const Filter* filter, MutableColumnPtr& dst) override;
 
     void get_levels(level_t** def_levels, level_t** rep_levels, size_t* num_levels) override {
         // check _value_reader
@@ -151,7 +151,7 @@ public:
         return Status::InternalError("No existed parquet subfield column reader in StructColumn");
     }
 
-    Status read_range(const Range<uint64_t>& range, const Filter* filter, ColumnPtr& dst) override;
+    Status read_range(const Range<uint64_t>& range, const Filter* filter, MutableColumnPtr& dst) override;
 
     void set_can_lazy_decode(bool can_lazy_decode) override {
         for (const auto& kv : _child_readers) {
@@ -192,10 +192,10 @@ public:
                                                                              layer + 1);
     }
 
-    Status filter_dict_column(ColumnPtr& column, Filter* filter, const std::vector<std::string>& sub_field_path,
+    Status filter_dict_column(MutableColumnPtr& column, Filter* filter, const std::vector<std::string>& sub_field_path,
                               const size_t& layer) override;
 
-    Status fill_dst_column(ColumnPtr& dst, ColumnPtr& src) override;
+    Status fill_dst_column(MutableColumnPtr& dst, ColumnPtr& src) override;
 
     void collect_column_io_range(std::vector<io::SharedBufferedInputStream::IORange>* ranges, int64_t* end_offset,
                                  ColumnIOTypeFlags types, bool active) override {

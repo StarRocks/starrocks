@@ -39,7 +39,7 @@ public:
 
     void select_offset_index(const SparseRange<uint64_t>& range, const uint64_t rg_first_row) override {}
 
-    Status read_range(const Range<uint64_t>& range, const Filter* filter, ColumnPtr& dst) override {
+    Status read_range(const Range<uint64_t>& range, const Filter* filter, MutableColumnPtr& dst) override {
         return Status::NotSupported("Not implemented");
     }
 
@@ -149,7 +149,7 @@ public:
         return RawColumnReader::prepare();
     }
 
-    Status read_range(const Range<uint64_t>& range, const Filter* filter, ColumnPtr& dst) override;
+    Status read_range(const Range<uint64_t>& range, const Filter* filter, MutableColumnPtr& dst) override;
 
     bool try_to_use_dict_filter(ExprContext* ctx, bool is_decode_needed, const SlotId slotId,
                                 const std::vector<std::string>& sub_field_path, const size_t& layer) override;
@@ -165,13 +165,13 @@ public:
         _can_lazy_dict_decode = can_lazy_decode && _col_type->is_string_type() && column_all_pages_dict_encoded();
     }
 
-    Status filter_dict_column(ColumnPtr& column, Filter* filter, const std::vector<std::string>& sub_field_path,
+    Status filter_dict_column(MutableColumnPtr& column, Filter* filter, const std::vector<std::string>& sub_field_path,
                               const size_t& layer) override {
         DCHECK_EQ(sub_field_path.size(), layer);
         return _dict_filter_ctx->predicate->evaluate_and(column.get(), filter->data());
     }
 
-    Status fill_dst_column(ColumnPtr& dst, ColumnPtr& src) override;
+    Status fill_dst_column(MutableColumnPtr& dst, ColumnPtr& src) override;
 
     StatusOr<bool> row_group_zone_map_filter(const std::vector<const ColumnPredicate*>& predicates,
                                              CompoundNodeType pred_relation, const uint64_t rg_first_row,
@@ -198,12 +198,12 @@ public:
 private:
     template <bool LAZY_DICT_DECODE, bool LAZY_CONVERT>
     Status _read_range_impl(const Range<uint64_t>& range, const Filter* filter, ColumnContentType content_type,
-                            ColumnPtr& dst);
+                            MutableColumnPtr& dst);
 
     template <bool LAZY_DICT_DECODE, bool LAZY_CONVERT>
-    Status _fill_dst_column_impl(ColumnPtr& dst, ColumnPtr& src);
+    Status _fill_dst_column_impl(MutableColumnPtr& dst, MutableColumnPtr& src);
 
-    Status _dict_decode(ColumnPtr& dst, ColumnPtr& src);
+    Status _dict_decode(MutableColumnPtr& dst, MutableColumnPtr& src);
 
     std::unique_ptr<ColumnConverter> _converter;
 
@@ -217,8 +217,8 @@ private:
     static constexpr double FILTER_RATIO = 0.2;
     bool _need_lazy_decode = false;
     // dict code
-    ColumnPtr _tmp_code_column = nullptr;
-    ColumnPtr _tmp_intermediate_column = nullptr;
+    MutableColumnPtr _tmp_code_column = nullptr;
+    MutableColumnPtr _tmp_intermediate_column = nullptr;
     ColumnPtr _ori_column = nullptr;
 };
 
@@ -227,7 +227,7 @@ public:
     explicit LowCardColumnReader(const RawColumnReader& reader, const GlobalDictMap* dict, SlotId slot_id)
             : RawColumnReader(reader), _dict(dict), _slot_id(slot_id) {}
 
-    Status read_range(const Range<uint64_t>& range, const Filter* filter, ColumnPtr& dst) override;
+    Status read_range(const Range<uint64_t>& range, const Filter* filter, MutableColumnPtr& dst) override;
 
     bool try_to_use_dict_filter(ExprContext* ctx, bool is_decode_needed, const SlotId slotId,
                                 const std::vector<std::string>& sub_field_path, const size_t& layer) override;
@@ -238,13 +238,13 @@ public:
         return _dict_filter_ctx->rewrite_conjunct_ctxs_to_predicate(_reader.get(), is_group_filtered);
     }
 
-    Status filter_dict_column(ColumnPtr& column, Filter* filter, const std::vector<std::string>& sub_field_path,
+    Status filter_dict_column(MutableColumnPtr& column, Filter* filter, const std::vector<std::string>& sub_field_path,
                               const size_t& layer) override {
         DCHECK_EQ(sub_field_path.size(), layer);
         return _dict_filter_ctx->predicate->evaluate_and(column.get(), filter->data());
     }
 
-    Status fill_dst_column(ColumnPtr& dst, ColumnPtr& src) override;
+    Status fill_dst_column(MutableColumnPtr& dst, ColumnPtr& src) override;
 
     StatusOr<bool> row_group_zone_map_filter(const std::vector<const ColumnPredicate*>& predicates,
                                              CompoundNodeType pred_relation, const uint64_t rg_first_row,
@@ -280,7 +280,7 @@ private:
 
     std::optional<std::vector<int16_t>> _code_convert_map;
 
-    ColumnPtr _dict_code = nullptr;
+    MutableColumnPtr _dict_code = nullptr;
     ColumnPtr _ori_column = nullptr;
 };
 
@@ -289,9 +289,9 @@ public:
     explicit LowRowsColumnReader(const RawColumnReader& reader, const GlobalDictMap* dict, SlotId slot_id)
             : RawColumnReader(reader), _dict(dict), _slot_id(slot_id) {}
 
-    Status read_range(const Range<uint64_t>& range, const Filter* filter, ColumnPtr& dst) override;
+    Status read_range(const Range<uint64_t>& range, const Filter* filter, MutableColumnPtr& dst) override;
 
-    Status fill_dst_column(ColumnPtr& dst, ColumnPtr& src) override;
+    Status fill_dst_column(MutableColumnPtr& dst, ColumnPtr& src) override;
 
     StatusOr<bool> row_group_zone_map_filter(const std::vector<const ColumnPredicate*>& predicates,
                                              CompoundNodeType pred_relation, const uint64_t rg_first_row,
@@ -314,7 +314,7 @@ private:
     const GlobalDictMap* _dict = nullptr;
     const SlotId _slot_id;
 
-    ColumnPtr _tmp_column = nullptr;
+    MutableColumnPtr _tmp_column = nullptr;
     ColumnPtr _ori_column = nullptr;
 };
 
