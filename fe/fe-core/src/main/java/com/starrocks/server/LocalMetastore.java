@@ -3064,31 +3064,7 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
         try {
             // process single partition info
             if (isNonPartitioned) {
-<<<<<<< HEAD
-                long partitionId = GlobalStateMgr.getCurrentState().getNextId();
-                Preconditions.checkNotNull(dataProperty);
-                partitionInfo.setDataProperty(partitionId, dataProperty);
-                partitionInfo.setReplicationNum(partitionId, materializedView.getDefaultReplicationNum());
-                partitionInfo.setIsInMemory(partitionId, false);
-                partitionInfo.setTabletType(partitionId, TTabletType.TABLET_TYPE_DISK);
-                StorageInfo storageInfo = materializedView.getTableProperty().getStorageInfo();
-                partitionInfo.setDataCacheInfo(partitionId,
-                        storageInfo == null ? null : storageInfo.getDataCacheInfo());
-                Long version = Partition.PARTITION_INIT_VERSION;
-                Partition partition = createPartition(db, materializedView, partitionId, mvName, version, tabletIdSet,
-                        materializedView.getWarehouseId());
-                buildPartitions(db, materializedView, new ArrayList<>(partition.getSubPartitions()),
-                        materializedView.getWarehouseId());
-                materializedView.addPartition(partition);
-=======
-                final WarehouseManager warehouseManager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
-                final CRAcquireContext acquireContext = CRAcquireContext.of(warehouseId);
-                final ComputeResource computeResource = warehouseManager.acquireComputeResource(acquireContext);
-                if (!warehouseManager.isResourceAvailable(computeResource)) {
-                    throw new DdlException("No available resource for warehouse " + warehouseId);
-                }
-                buildNonPartitionOlapTable(db, materializedView, partitionInfo, dataProperty, computeResource);
->>>>>>> 0c2e5c39f9 ([Enhancement] Ensure mv force refresh will refresh target partitions (backport #62627) (#63844))
+                buildNonPartitionOlapTable(db, materializedView, partitionInfo, dataProperty, materializedView.getWarehouseId());
             } else {
                 List<Expr> mvPartitionExprs = stmt.getPartitionByExprs();
                 LinkedHashMap<Expr, SlotRef> partitionExprMaps = MVPartitionExprResolver.getMVPartitionExprsChecked(
@@ -3130,7 +3106,7 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
                                            OlapTable olapTable,
                                            PartitionInfo partitionInfo,
                                            DataProperty dataProperty,
-                                           ComputeResource computeResource) throws DdlException {
+                                           Long warehouseId) throws DdlException {
         if (olapTable.isPartitionedTable()) {
             throw new DdlException("Table " + olapTable.getName() + " is a partitioned table, not a non-partitioned table");
         }
@@ -3147,8 +3123,8 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
         Set<Long> tabletIdSet = new HashSet<>();
         Long version = Partition.PARTITION_INIT_VERSION;
         Partition partition = createPartition(db, olapTable, partitionId, olapTable.getName(), version, tabletIdSet,
-                computeResource);
-        buildPartitions(db, olapTable, new ArrayList<>(partition.getSubPartitions()), computeResource);
+                warehouseId);
+        buildPartitions(db, olapTable, new ArrayList<>(partition.getSubPartitions()), warehouseId);
         olapTable.addPartition(partition);
     }
 

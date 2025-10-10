@@ -994,7 +994,7 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
                         LocalMetastore localMetastore = GlobalStateMgr.getCurrentState().getLocalMetastore();
                         ConnectContext connectContext = mvContext.getCtx();
                         localMetastore.buildNonPartitionOlapTable(db, mv, partitionInfo, dataProperty,
-                                connectContext.getCurrentComputeResource());
+                                connectContext.getCurrentWarehouseId());
                     }
                 } catch (Exception e) {
                     logger.warn("failed to drop partitions {} for force refresh",
