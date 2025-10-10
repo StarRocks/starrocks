@@ -60,7 +60,7 @@ public:
     Int32ToDateConverter() = default;
     ~Int32ToDateConverter() override = default;
 
-    Status convert(const ColumnPtr& src, Column* dst) override;
+    Status convert(const Column* src, Column* dst) override;
 };
 
 class Int32ToTimeConverter final : public ColumnConverter {
@@ -68,7 +68,7 @@ public:
     Int32ToTimeConverter() = default;
     ~Int32ToTimeConverter() override = default;
 
-    Status convert(const ColumnPtr& src, Column* dst) override;
+    Status convert(const Column* src, Column* dst) override;
 };
 
 class Int32ToDateTimeConverter final : public ColumnConverter {
@@ -76,7 +76,7 @@ public:
     Int32ToDateTimeConverter() = default;
     ~Int32ToDateTimeConverter() override = default;
 
-    Status convert(const ColumnPtr& src, Column* dst) override;
+    Status convert(const Column* src, Column* dst) override;
 };
 
 class Int64ToTimeConverter final : public ColumnConverter {
@@ -84,7 +84,7 @@ public:
     Int64ToTimeConverter() = default;
     ~Int64ToTimeConverter() override = default;
 
-    Status convert(const ColumnPtr& src, Column* dst) override;
+    Status convert(const Column* src, Column* dst) override;
 };
 
 class Int96ToDateTimeConverter final : public ColumnConverter {
@@ -94,7 +94,7 @@ public:
 
     Status init(const std::string& timezone);
     // convert column from int96 to timestamp
-    Status convert(const ColumnPtr& src, Column* dst) override;
+    Status convert(const Column* src, Column* dst) override;
 
 private:
     int _offset = 0;
@@ -107,7 +107,7 @@ public:
     ~Int64ToDateTimeConverter() override = default;
 
     Status init(const std::string& timezone, const tparquet::SchemaElement& schema_element);
-    Status convert(const ColumnPtr& src, Column* dst) override;
+    Status convert(const Column* src, Column* dst) override;
 
 private:
     bool _is_adjusted_to_utc = false;
@@ -131,7 +131,7 @@ public:
     NumericToNumericConverter() = default;
     ~NumericToNumericConverter() override = default;
 
-    Status convert(const ColumnPtr& src, Column* dst) override {
+    Status convert(const Column* src, Column* dst) override {
         auto* src_nullable_column = ColumnHelper::as_raw_column<NullableColumn>(src);
         // hive only support null column
         // TODO: support not null
@@ -172,7 +172,7 @@ public:
         }
     }
 
-    Status convert(const ColumnPtr& src, Column* dst) override {
+    Status convert(const Column* src, Column* dst) override {
         auto* src_nullable_column = ColumnHelper::as_raw_column<NullableColumn>(src);
         // hive only support null column
         // TODO: support not null
@@ -276,7 +276,7 @@ public:
         }
     }
 
-    Status convert(const ColumnPtr& src, Column* dst) override {
+    Status convert(const Column* src, Column* dst) override {
         auto* src_nullable_column = ColumnHelper::as_raw_column<NullableColumn>(src);
         // hive only support null column
         // TODO: support not null
@@ -288,7 +288,7 @@ public:
 
         const BinaryColumn::Bytes& src_data = src_column->get_bytes();
         auto& dst_data = dst_column->get_data();
-        const auto& src_null_data = src_nullable_column->immutable_null_column_data();
+        const auto& src_null_data_const = src_nullable_column->immutable_null_column_data();
         auto& dst_null_data = dst_nullable_column->null_column_data();
 
         size_t size = src_column->size();
@@ -305,10 +305,10 @@ public:
 #define M(SZ, K, T)                                                                                       \
     case SZ:                                                                                              \
         if (has_null) {                                                                                   \
-            t_convert<SZ, K, T, true>(size, dst_null_data.data(), src_null_data.data(), dst_data.data(),  \
+            t_convert<SZ, K, T, true>(size, dst_null_data.data(), const_cast<uint8_t*>(src_null_data_const.data()), dst_data.data(),  \
                                       src_data.data());                                                   \
         } else {                                                                                          \
-            t_convert<SZ, K, T, false>(size, dst_null_data.data(), src_null_data.data(), dst_data.data(), \
+            t_convert<SZ, K, T, false>(size, dst_null_data.data(), const_cast<uint8_t*>(src_null_data_const.data()), dst_data.data(), \
                                        src_data.data());                                                  \
         }                                                                                                 \
         break;
@@ -553,8 +553,8 @@ Status ColumnConverterFactory::create_converter(const ParquetField& field, const
     return Status::OK();
 }
 
-ColumnPtr ColumnConverter::create_src_column() {
-    ColumnPtr data_column = nullptr;
+MutableColumnPtr ColumnConverter::create_src_column() {
+    MutableColumnPtr data_column = nullptr;
     switch (parquet_type) {
     case tparquet::Type::type::BOOLEAN:
         data_column = FixedLengthColumn<uint8_t>::create();
@@ -579,10 +579,10 @@ ColumnPtr ColumnConverter::create_src_column() {
         data_column = BinaryColumn::create();
         break;
     }
-    return NullableColumn::create(data_column, NullColumn::create());
+    return NullableColumn::create(std::move(data_column), NullColumn::create());
 }
 
-Status parquet::Int32ToDateConverter::convert(const ColumnPtr& src, Column* dst) {
+Status parquet::Int32ToDateConverter::convert(const Column* src, Column* dst) {
     auto* src_nullable_column = ColumnHelper::as_raw_column<NullableColumn>(src);
     // hive only support null column
     // TODO: support not null
@@ -606,7 +606,7 @@ Status parquet::Int32ToDateConverter::convert(const ColumnPtr& src, Column* dst)
     return Status::OK();
 }
 
-Status Int32ToTimeConverter::convert(const ColumnPtr& src, Column* dst) {
+Status Int32ToTimeConverter::convert(const Column* src, Column* dst) {
     auto* src_nullable_column = ColumnHelper::as_raw_column<NullableColumn>(src);
     // hive only support null column
     // TODO: support not null
@@ -633,7 +633,7 @@ Status Int32ToTimeConverter::convert(const ColumnPtr& src, Column* dst) {
     return Status::OK();
 }
 
-Status parquet::Int32ToDateTimeConverter::convert(const ColumnPtr& src, Column* dst) {
+Status parquet::Int32ToDateTimeConverter::convert(const Column* src, Column* dst) {
     auto* src_nullable_column = ColumnHelper::as_raw_column<NullableColumn>(src);
     // hive only support null column
     // TODO: support not null
@@ -672,7 +672,7 @@ Status Int96ToDateTimeConverter::init(const std::string& timezone) {
     return Status::OK();
 }
 
-Status Int96ToDateTimeConverter::convert(const ColumnPtr& src, Column* dst) {
+Status Int96ToDateTimeConverter::convert(const Column* src, Column* dst) {
     auto* src_nullable_column = ColumnHelper::as_raw_column<NullableColumn>(src);
     // hive only support null column
     // TODO: support not null
@@ -773,7 +773,7 @@ Status Int64ToDateTimeConverter::init(const std::string& timezone, const tparque
     return Status::OK();
 }
 
-Status Int64ToDateTimeConverter::convert(const ColumnPtr& src, Column* dst) {
+Status Int64ToDateTimeConverter::convert(const Column* src, Column* dst) {
     auto* src_nullable_column = ColumnHelper::as_raw_column<NullableColumn>(src);
     // hive only support null column
     // TODO: support not null
@@ -825,7 +825,7 @@ Status Int64ToDateTimeConverter::convert(const ColumnPtr& src, Column* dst) {
     return Status::OK();
 }
 
-Status Int64ToTimeConverter::convert(const ColumnPtr& src, Column* dst) {
+Status Int64ToTimeConverter::convert(const Column* src, Column* dst) {
     auto* src_nullable_column = ColumnHelper::as_raw_column<NullableColumn>(src);
     // hive only support null column
     // TODO: support not null

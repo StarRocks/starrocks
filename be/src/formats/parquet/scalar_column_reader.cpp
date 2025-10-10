@@ -524,7 +524,7 @@ Status ScalarColumnReader::_read_range_impl(const Range<uint64_t>& range, const 
             if constexpr (!LAZY_CONVERT) {
                 {
                     SCOPED_RAW_TIMER(&_opts.stats->column_convert_ns);
-                    RETURN_IF_ERROR(_converter->convert(_tmp_intermediate_column, dst.get()));
+                    RETURN_IF_ERROR(_converter->convert(_tmp_intermediate_column.get(), dst.get()));
                 }
                 _tmp_intermediate_column->reset_column();
                 return Status::OK();
@@ -570,7 +570,7 @@ Status ScalarColumnReader::_fill_dst_column_impl(MutableColumnPtr& dst, MutableC
         if constexpr (LAZY_CONVERT) {
             {
                 SCOPED_RAW_TIMER(&_opts.stats->column_convert_ns);
-                RETURN_IF_ERROR(_converter->convert(src, dst.get()));
+                RETURN_IF_ERROR(_converter->convert(src.get(), dst.get()));
             }
             src->reset_column();
             src = _ori_column->as_mutable_ptr();
@@ -680,7 +680,7 @@ Status LowCardColumnReader::_check_current_dict() {
     std::vector<int16_t> code_convert_map;
 
     // create dict value chunk for evaluation.
-    ColumnPtr dict_value_column = ColumnHelper::create_column(TypeDescriptor(TYPE_VARCHAR), true);
+    MutableColumnPtr dict_value_column = ColumnHelper::create_column(TypeDescriptor(TYPE_VARCHAR), true);
     RETURN_IF_ERROR(_reader->get_dict_values(dict_value_column.get()));
 
     size_t dict_size = dict_value_column->size();
