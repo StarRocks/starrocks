@@ -14,6 +14,7 @@
 
 package com.starrocks.connector.iceberg.rest;
 
+import com.starrocks.connector.exception.StarRocksConnectorException;
 import org.apache.iceberg.rest.auth.OAuth2Properties;
 
 import java.net.URI;
@@ -138,6 +139,8 @@ class OAuth2SecurityConfigBuilder {
             config.setSecurity(JWT);
         } else if (strSecurity.equalsIgnoreCase(OAUTH2.name())) {
             config = config.setSecurity(OAUTH2);
+        } else {
+            throw new StarRocksConnectorException("Invalid security: %s", strSecurity);
         }
 
         config.setCredential(properties.get(OAuth2SecurityConfig.OAUTH2_CREDENTIAL))
