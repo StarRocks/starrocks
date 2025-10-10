@@ -132,6 +132,9 @@ public abstract class MVPCTRefreshPartitioner {
 
     public Set<String> getMVPartitionsToRefreshWithForce(MVRefreshParams mvRefreshParams) throws AnalysisException {
         Set<String> toRefreshPartitions = getMVPartitionsToRefreshByParams(mvRefreshParams);
+        if (CollectionUtils.isEmpty(toRefreshPartitions) || !mv.isPartitionedTable()) {
+            return toRefreshPartitions;
+        }
         Map<String, PCell> mvListPartitionMap = mv.getPartitionCells(Optional.empty());
         Map<String, PCell> validToRefreshPartitions = toRefreshPartitions.stream()
                 .filter(mvListPartitionMap::containsKey)
