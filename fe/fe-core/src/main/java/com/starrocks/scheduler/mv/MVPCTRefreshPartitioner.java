@@ -27,6 +27,7 @@ import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
+import com.starrocks.common.Pair;
 import com.starrocks.common.util.concurrent.lock.LockTimeoutException;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
@@ -42,7 +43,6 @@ import com.starrocks.sql.ast.DropPartitionClause;
 import com.starrocks.sql.common.DmlException;
 import com.starrocks.sql.common.PCell;
 import org.apache.commons.collections4.CollectionUtils;
-import org.apache.hadoop.shaded.org.apache.commons.math3.util.Pair;
 import org.apache.logging.log4j.Logger;
 
 import java.util.HashMap;
@@ -136,7 +136,7 @@ public abstract class MVPCTRefreshPartitioner {
         Map<String, PCell> validToRefreshPartitions = toRefreshPartitions.stream()
                 .filter(mvListPartitionMap::containsKey)
                 .map(name -> Pair.create(name, mvListPartitionMap.get(name)))
-                .collect(Collectors.toMap(Pair::getKey, Pair::getValue));
+                .collect(Collectors.toMap(x -> x.first, x -> x.second));
         filterPartitionsByTTL(validToRefreshPartitions, true);
         return validToRefreshPartitions.keySet();
     }
