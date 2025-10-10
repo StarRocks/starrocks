@@ -325,8 +325,6 @@ void PartitionedSpillerWriter::_add_partition(SpilledPartitionPtr&& partition_pt
 }
 
 void PartitionedSpillerWriter::_remove_partition(const SpilledPartition* partition) {
-    auto affinity_group = partition->block_group->get_affinity_group();
-    DCHECK(affinity_group != kDefaultBlockAffinityGroup);
     _id_to_partitions.erase(partition->partition_id);
     size_t level = partition->level;
     auto& partitions = _level_to_partitions[level];
@@ -341,8 +339,12 @@ void PartitionedSpillerWriter::_remove_partition(const SpilledPartition* partiti
             _min_level = level + 1;
         }
     }
-    WARN_IF_ERROR(_spiller->block_manager()->release_affinity_group(affinity_group),
-                  fmt::format("release affinity group {} error", affinity_group));
+    if (partition->block_group != nullptr) {
+        auto affinity_group = partition->block_group->get_affinity_group();
+        DCHECK(affinity_group != kDefaultBlockAffinityGroup);
+        WARN_IF_ERROR(_spiller->block_manager()->release_affinity_group(affinity_group),
+                      fmt::format("release affinity group {} error", affinity_group));
+    }
 }
 
 Status PartitionedSpillerWriter::_choose_partitions_to_flush(bool is_final_flush,
