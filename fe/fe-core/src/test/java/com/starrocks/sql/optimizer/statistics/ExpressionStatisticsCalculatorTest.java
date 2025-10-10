@@ -400,7 +400,7 @@ public class ExpressionStatisticsCalculatorTest {
         Assertions.assertEquals(columnStatistic.getMaxValue(), Long.MAX_VALUE, 0.001);
         Assertions.assertEquals(columnStatistic.getMinValue(), Long.MIN_VALUE, 0.001);
         // test xx_hash3_128 function
-        callOperator = new CallOperator(FunctionSet.XX_HASH3_128, Type.BIGINT, Lists.newArrayList(columnRefOperator));
+        callOperator = new CallOperator(FunctionSet.XX_HASH3_128, Type.LARGEINT, Lists.newArrayList(columnRefOperator));
         columnStatistic = ExpressionStatisticCalculator.calculate(callOperator, statistics);
         Assertions.assertEquals(columnStatistic.getMaxValue(), LargeIntLiteral.LARGE_INT_MAX.doubleValue(), 0.001);
         Assertions.assertEquals(columnStatistic.getMinValue(), LargeIntLiteral.LARGE_INT_MIN.doubleValue(), 0.001);
