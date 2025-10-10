@@ -283,14 +283,7 @@ Status UpdateManager::publish_primary_key_tablet(const TxnLogPB_OpWrite& op_writ
         TRACE_COUNTER_SCOPE_LATENCY_US("update_index_latency_us");
         DCHECK(state.upserts(local_id) != nullptr);
         if (condition_column < 0) {
-<<<<<<< HEAD
-            RETURN_IF_ERROR(_do_update(rowset_id, segment_id, state.upserts(segment_id), index, &new_deletes));
-=======
-            RETURN_IF_ERROR(
-                    _do_update(rowset_id, global_segment_id, state.upserts(local_id), index, &new_deletes,
-                               op_write.ssts_size() > 0 &&
-                                       use_cloud_native_pk_index(*metadata) /* read pk index only when ingest sst */));
->>>>>>> 4a3092a306 ([BugFix] Fix multi statements transaction fail due to mix file bundle write (#63823))
+            RETURN_IF_ERROR(_do_update(rowset_id, global_segment_id, state.upserts(local_id), index, &new_deletes));
         } else {
             RETURN_IF_ERROR(_do_update_with_condition(params, rowset_id, global_segment_id, condition_column,
                                                       state.upserts(local_id)->pk_column, index, &new_deletes));
@@ -304,15 +297,6 @@ Status UpdateManager::publish_primary_key_tablet(const TxnLogPB_OpWrite& op_writ
         _index_cache.update_object_size(index_entry, index.memory_usage());
         state.release_segment(local_id);
         _update_state_cache.update_object_size(state_entry, state.memory_usage());
-<<<<<<< HEAD
-=======
-        if (op_write.ssts_size() > 0 && condition_column < 0 && use_cloud_native_pk_index(*metadata)) {
-            // TODO support condition column with sst ingestion.
-            // rowset_id + segment_id is the rssid of this segment
-            RETURN_IF_ERROR(index.ingest_sst(op_write.ssts(local_id), rowset_id + global_segment_id,
-                                             metadata->version(), DelvecPagePB() /* empty */, nullptr));
-        }
->>>>>>> 4a3092a306 ([BugFix] Fix multi statements transaction fail due to mix file bundle write (#63823))
     }
 
     // 3. Handle del files one by one.
