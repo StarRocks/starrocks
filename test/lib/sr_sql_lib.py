@@ -2155,6 +2155,7 @@ class StarrocksSQLApiLib(object):
         print all mv_names hit in query
         """
         time.sleep(1)
+<<<<<<< HEAD
         sql = "explain %s" % (query)
         res = self.retry_execute_sql(sql, True)
         if not res["status"]:
@@ -2176,6 +2177,33 @@ class StarrocksSQLApiLib(object):
             if content.find("TABLE:") > 0:
                 mv_name = content.split("TABLE:")[1].strip()
         return ",".join(ans)
+=======
+        def extract_mvs():
+            sql = "explain %s" % (query)
+            res = self.retry_execute_sql(sql, True)
+            if not res["status"]:
+                print(res)
+                return ""
+            plan = res["result"]
+            if not plan:
+                return ""
+            mv_name = None
+            ans = []
+            for line in plan:
+                if len(line) != 1:
+                    continue
+                content = line[0]
+                if content.find("MaterializedView: true") > 0:
+                    if mv_name:
+                        ans.append(mv_name)
+                    mv_name = None
+                if content.find("TABLE:") > 0:
+                    mv_name = content.split("TABLE:")[1].strip()
+            # sort the mv_names to make the result deterministic
+            ans.sort()
+            return ",".join(ans)
+        return self._with_materialized_view_rewrite(extract_mvs)
+>>>>>>> 1785077e7b ([UT] Fix print_hit_materialized_views to ensure the result deterministic (#63862))
 
     def assert_equal_result(self, *sqls):
         if len(sqls) < 2:
