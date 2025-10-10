@@ -4592,8 +4592,13 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     }
 
     @Override
+<<<<<<< HEAD
     public ParseNode visitDropBackendClause(StarRocksParser.DropBackendClauseContext context) {
         String whName = WarehouseManager.DEFAULT_WAREHOUSE_NAME;
+=======
+    public ParseNode visitDropBackendClause(com.starrocks.sql.parser.StarRocksParser.DropBackendClauseContext context) {
+        String whName = "";
+>>>>>>> b93ef4ecde ([Enhancement] Allow dropping cn/be without specifying a warehouse name (#62940))
         String cngroupName = "";
         if (context.warehouseName != null) {
             Identifier identifier = (Identifier) visit(context.identifierOrString().get(0));
@@ -4653,8 +4658,13 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     }
 
     @Override
+<<<<<<< HEAD
     public ParseNode visitDropComputeNodeClause(StarRocksParser.DropComputeNodeClauseContext context) {
         String whName = WarehouseManager.DEFAULT_WAREHOUSE_NAME;
+=======
+    public ParseNode visitDropComputeNodeClause(com.starrocks.sql.parser.StarRocksParser.DropComputeNodeClauseContext context) {
+        String whName = "";
+>>>>>>> b93ef4ecde ([Enhancement] Allow dropping cn/be without specifying a warehouse name (#62940))
         String cngroupName = "";
         if (context.warehouseName != null) {
             Identifier identifier = (Identifier) visit(context.identifierOrString().get(0));

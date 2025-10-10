@@ -453,6 +453,7 @@ public class SystemInfoService implements GsonPostProcessable {
     }
 
     public void dropComputeNodes(DropComputeNodeClause dropComputeNodeClause) throws DdlException {
+<<<<<<< HEAD
         String warehouse = dropComputeNodeClause.getWarehouse();
         // check if the warehouse exist
         if (GlobalStateMgr.getCurrentState().getWarehouseMgr().getWarehouseAllowNull(warehouse) == null) {
@@ -461,6 +462,11 @@ public class SystemInfoService implements GsonPostProcessable {
 
         for (Pair<String, Integer> pair : dropComputeNodeClause.getHostPortPairs()) {
             dropComputeNode(pair.first, pair.second, warehouse, dropComputeNodeClause.getCNGroupName());
+=======
+        for (HostPort hostPort : dropComputeNodeClause.getHostPortPairs()) {
+            dropComputeNode(hostPort.getHost(), hostPort.getPort(), dropComputeNodeClause.getWarehouse(),
+                    dropComputeNodeClause.getCNGroupName());
+>>>>>>> b93ef4ecde ([Enhancement] Allow dropping cn/be without specifying a warehouse name (#62940))
         }
     }
 
@@ -479,6 +485,11 @@ public class SystemInfoService implements GsonPostProcessable {
         }
 
         if (!Strings.isNullOrEmpty(warehouse)) {
+            // check if the warehouse exist
+            if (GlobalStateMgr.getCurrentState().getWarehouseMgr().getWarehouseAllowNull(warehouse) == null) {
+                ErrorReport.reportDdlException(ErrorCode.ERR_UNKNOWN_WAREHOUSE, String.format("name: %s", warehouse));
+            }
+
             // check if warehouseName is right
             Warehouse wh = GlobalStateMgr.getCurrentState().getWarehouseMgr()
                     .getWarehouseAllowNull(dropComputeNode.getWarehouseId());
@@ -524,6 +535,7 @@ public class SystemInfoService implements GsonPostProcessable {
         List<Pair<String, Integer>> hostPortPairs = dropBackendClause.getHostPortPairs();
         boolean needCheckWithoutForce = !dropBackendClause.isForce();
 
+<<<<<<< HEAD
         String warehouse = dropBackendClause.getWarehouse();
         // check if the warehouse exist
         if (GlobalStateMgr.getCurrentState().getWarehouseMgr().getWarehouseAllowNull(warehouse) == null) {
@@ -532,6 +544,11 @@ public class SystemInfoService implements GsonPostProcessable {
 
         for (Pair<String, Integer> pair : hostPortPairs) {
             dropBackend(pair.first, pair.second, warehouse, dropBackendClause.cngroupName, needCheckWithoutForce);
+=======
+        for (HostPort hostPort : hostPortPairs) {
+            dropBackend(hostPort.getHost(), hostPort.getPort(), dropBackendClause.getWarehouse(), dropBackendClause.cngroupName,
+                    needCheckWithoutForce);
+>>>>>>> b93ef4ecde ([Enhancement] Allow dropping cn/be without specifying a warehouse name (#62940))
         }
     }
 
@@ -601,6 +618,11 @@ public class SystemInfoService implements GsonPostProcessable {
         }
 
         if (!Strings.isNullOrEmpty(warehouse)) {
+            // check if the warehouse exist
+            if (GlobalStateMgr.getCurrentState().getWarehouseMgr().getWarehouseAllowNull(warehouse) == null) {
+                ErrorReport.reportDdlException(ErrorCode.ERR_UNKNOWN_WAREHOUSE, String.format("name: %s", warehouse));
+            }
+
             // check if warehouseName is right
             Warehouse wh = GlobalStateMgr.getCurrentState().getWarehouseMgr()
                     .getWarehouseAllowNull(droppedBackend.getWarehouseId());
