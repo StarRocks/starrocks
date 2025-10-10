@@ -696,6 +696,9 @@ void MetaFileBuilder::add_rowset(const RowsetMetadataPB& rowset_pb, const std::m
     _pending_rowset_data.dels.insert(_pending_rowset_data.dels.end(), dels.begin(), dels.end());
     _pending_rowset_data.del_encryption_metas.insert(_pending_rowset_data.del_encryption_metas.end(),
                                                      del_encryption_metas.begin(), del_encryption_metas.end());
+
+    // Track cumulative number of segments already added when batch applying multiple opwrites.
+    _pending_rowset_data.assigned_segment_id += rowset_pb.segments_size();
 }
 
 void MetaFileBuilder::set_final_rowset() {
