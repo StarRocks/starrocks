@@ -247,41 +247,55 @@ Status UpdateManager::publish_primary_key_tablet(const TxnLogPB_OpWrite& op_writ
     };
     state.init(params);
     // Init delvec state.
+    // Map from rssid (rowset id + segment offset) to the list of deleted rowids collected during this publish.
     PrimaryIndex::DeletesMap new_deletes;
-    for (uint32_t segment_id = 0; segment_id < op_write.rowset().segments_size(); segment_id++) {
-        new_deletes[rowset_id + segment_id] = {};
+    // Global segment id offset assigned by builder when batch applying multiple op_write in a single publish.
+    uint32_t assigned_global_segments = batch_apply ? builder->assigned_segment_id() : 0;
+    // Number of segments in the incoming rowset of this op_write.
+    uint32_t local_segments = op_write.rowset().segments_size();
+    for (uint32_t local_id = 0; local_id < local_segments; ++local_id) {
+        uint32_t global_segment_id = assigned_global_segments + local_id;
+        new_deletes[rowset_id + global_segment_id] = {};
     }
-    // Rssid of delete files is equal to `rowset_id + op_offset`, and delete is always after upsert now,
-    // so we use max segment id as `op_offset`.
-    // TODO : support real order of mix upsert and delete in one transaction.
+    // The rssid for delete files equals `rowset_id + op_offset`. Since delete currently happens after upsert,
+    // we use the max segment id as the `op_offset` for rebuild. This is a simplification until mixed
+    // upsert+delete order in a single transaction is supported.
+    // TODO: Support the actual interleaving order of upsert and delete within one transaction.
     const uint32_t del_rebuild_rssid = rowset_id + std::max(op_write.rowset().segments_size(), 1) - 1;
     // 2. Handle segment one by one to save memory usage.
-    for (uint32_t segment_id = 0; segment_id < op_write.rowset().segments_size(); segment_id++) {
-        RETURN_IF_ERROR(state.load_segment(segment_id, params, base_version, true /*reslove conflict*/,
-                                           false /*no need lock*/));
+    for (uint32_t local_id = 0; local_id < local_segments; ++local_id) {
+        uint32_t global_segment_id = assigned_global_segments + local_id;
+        // Load update state of the current segment, resolving conflicts but without taking index lock.
+        RETURN_IF_ERROR(
+                state.load_segment(local_id, params, base_version, true /*reslove conflict*/, false /*no need lock*/));
         _update_state_cache.update_object_size(state_entry, state.memory_usage());
-        // 2.1 rewrite segment file if it is partial update
-        RETURN_IF_ERROR(state.rewrite_segment(segment_id, txn_id, params, &replace_segments, &orphan_files));
-        rssid_fileinfo_container.add_rssid_to_file(op_write.rowset(), metadata->next_rowset_id(), segment_id,
+        // 2.1 For partial update, rewrite the segment file to generate replace segments and orphan files.
+        RETURN_IF_ERROR(state.rewrite_segment(local_id, txn_id, params, &replace_segments, &orphan_files));
+        rssid_fileinfo_container.add_rssid_to_file(op_write.rowset(), metadata->next_rowset_id(), local_id,
                                                    replace_segments);
-        // handle merge condition, skip update row which's merge condition column value is smaller than current row
+        VLOG(2) << strings::Substitute(
+                "[publish_pk_tablet][segment_loop] tablet:$0 txn:$1 assigned:$2 local_id:$3 global_id:$4 "
+                "segments_local:$5",
+                tablet->id(), txn_id, assigned_global_segments, local_id, global_segment_id, local_segments);
+        // If a merge condition is configured, only update rows that satisfy the condition.
         int32_t condition_column = _get_condition_column(op_write, *tablet_schema);
-        // 2.2 update primary index, and generate delete info.
+        // 2.2 Update primary index and collect delete information caused by key replacement.
         TRACE_COUNTER_SCOPE_LATENCY_US("update_index_latency_us");
-        DCHECK(state.upserts(segment_id) != nullptr);
+        DCHECK(state.upserts(local_id) != nullptr);
         if (condition_column < 0) {
-            RETURN_IF_ERROR(_do_update(rowset_id, segment_id, state.upserts(segment_id), index, &new_deletes));
+            RETURN_IF_ERROR(_do_update(rowset_id, global_segment_id, state.upserts(local_id), index, &new_deletes));
         } else {
-            RETURN_IF_ERROR(_do_update_with_condition(params, rowset_id, segment_id, condition_column,
-                                                      state.upserts(segment_id)->pk_column, index, &new_deletes));
+            RETURN_IF_ERROR(_do_update_with_condition(params, rowset_id, global_segment_id, condition_column,
+                                                      state.upserts(local_id)->pk_column, index, &new_deletes));
         }
-        // 2.3 handle auto increment deletes
-        if (state.auto_increment_deletes(segment_id) != nullptr) {
+        // 2.3 Apply deletes generated by auto-increment conflict handling (if any).
+        if (state.auto_increment_deletes(local_id) != nullptr) {
             RETURN_IF_ERROR(
-                    index.erase(metadata, *state.auto_increment_deletes(segment_id), &new_deletes, del_rebuild_rssid));
+                    index.erase(metadata, *state.auto_increment_deletes(local_id), &new_deletes, del_rebuild_rssid));
         }
+        // Refresh memory accounting after index/state changes.
         _index_cache.update_object_size(index_entry, index.memory_usage());
-        state.release_segment(segment_id);
+        state.release_segment(local_id);
         _update_state_cache.update_object_size(state_entry, state.memory_usage());
     }
 
@@ -304,7 +318,9 @@ Status UpdateManager::publish_primary_key_tablet(const TxnLogPB_OpWrite& op_writ
     std::map<uint32_t, size_t> segment_id_to_add_dels;
     for (auto& new_delete : new_deletes) {
         uint32_t rssid = new_delete.first;
-        if (rssid >= rowset_id && rssid < rowset_id + op_write.rowset().segments_size()) {
+        uint32_t assigned_segment_id = batch_apply ? builder->assigned_segment_id() : 0;
+        if (rssid >= rowset_id + assigned_segment_id &&
+            rssid < rowset_id + assigned_segment_id + op_write.rowset().segments_size()) {
             // it's newly added rowset's segment, do not have latest delvec yet
             new_del_vecs[idx].first = rssid;
             new_del_vecs[idx].second = std::make_shared<DelVector>();
