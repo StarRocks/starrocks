@@ -111,7 +111,7 @@ public class IcebergConnector implements Connector {
         if (icebergNativeCatalog == null) {
             IcebergCatalog nativeCatalog = buildIcebergNativeCatalog();
 
-            if (icebergCatalogProperties.enableIcebergMetadataCache() && !isResourceMappingCatalog(catalogName)) {
+            if (icebergCatalogProperties.isEnableIcebergMetadataCache() && !isResourceMappingCatalog(catalogName)) {
                 nativeCatalog = new CachingIcebergCatalog(catalogName, nativeCatalog,
                         icebergCatalogProperties, buildBackgroundJobPlanningExecutor());
                 GlobalStateMgr.getCurrentState().getConnectorTableMetadataProcessor()
@@ -161,7 +161,7 @@ public class IcebergConnector implements Connector {
 
     @Override
     public boolean supportMemoryTrack() {
-        return icebergCatalogProperties.enableIcebergMetadataCache() && icebergNativeCatalog != null;
+        return icebergCatalogProperties.isEnableIcebergMetadataCache() && icebergNativeCatalog != null;
     }
 
     @Override
