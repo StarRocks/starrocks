@@ -19,6 +19,7 @@ import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReportException;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.RunMode;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.warehouse.Warehouse;
@@ -75,6 +76,9 @@ public final class WarehouseComputeResourceProvider implements ComputeResourcePr
      */
     @Override
     public boolean isResourceAvailable(ComputeResource computeResource) {
+        if (!RunMode.isSharedDataMode()) {
+            return true;
+        }
         try {
             final long availableWorkerGroupIdSize =
                     Optional.ofNullable(getAliveComputeNodes(computeResource)).map(List::size).orElse(0);
