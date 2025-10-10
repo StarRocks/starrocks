@@ -20,6 +20,7 @@ import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.Pair;
 import com.starrocks.lake.StarOSAgent;
+import com.starrocks.persist.DropComputeNodeLog;
 import com.starrocks.persist.EditLog;
 import com.starrocks.persist.UpdateHistoricalNodeLog;
 import com.starrocks.server.GlobalStateMgr;
@@ -306,8 +307,7 @@ public class SystemInfoServiceTest {
 
         new MockUp<EditLog>() {
             @Mock
-            public void logDropComputeNode(DropComputeNodeLog log, WALApplier applier) {
-                applier.apply(log);
+            public void logDropComputeNode(DropComputeNodeLog log) {
             }
         };
         cn.setStarletPort(1001);
