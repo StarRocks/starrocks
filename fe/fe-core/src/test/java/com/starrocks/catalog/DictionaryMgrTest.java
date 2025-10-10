@@ -301,11 +301,18 @@ public class DictionaryMgrTest {
             }
         };
 
-        DictionaryMgr localDictionaryMgr = new DictionaryMgr();
+        final DictionaryMgr localDictionaryMgr = new DictionaryMgr();
         DictionaryMgr.RefreshDictionaryCacheWorker worker =
                 localDictionaryMgr.new RefreshDictionaryCacheWorker(dictionary, 1L);
+        new MockUp<GlobalStateMgr>() {
+            @Mock
+            public DictionaryMgr getDictionaryMgr() {
+                return localDictionaryMgr;
+            }
+        };
         
         // Test that worker can be instantiated and has proper initialization
         Assertions.assertNotNull(worker);
+        worker.run();
     }
 }
