@@ -4017,7 +4017,7 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 类型：Boolean
 - 单位：-
 - 是否动态：是
-- 描述：Data Cache 磁盘容量自动调整开关，启用后会根据当前磁盘使用率动态调整缓存容量。
+- 描述：Data Cache 磁盘容量自动调整开关，启用后会根据当前磁盘使用率动态调整缓存容量。该参数自 v4.0 起由 datacache_auto_adjust_enable 更名为 enable_datacache_disk_auto_adjust。
 - 引入版本：v3.3.0
 
 ##### disk_high_level
@@ -4026,7 +4026,7 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 类型：Int
 - 单位：-
 - 是否动态：是
-- 描述：磁盘高水位（百分比）。当磁盘使用率高于该值时，系统自动淘汰 Data Cache 中的缓存数据。自 v3.4.0 起，该参数默认值由 `80` 变更为 `90`。
+- 描述：磁盘高水位（百分比）。当磁盘使用率高于该值时，系统自动淘汰 Data Cache 中的缓存数据。自 v3.4.0 起，该参数默认值由 `80` 变更为 `90`。该参数自 v4.0 起由 datacache_disk_high_level 更名为 disk_high_level。
 - 引入版本：v3.3.0
 
 ##### disk_safe_level
@@ -4035,7 +4035,7 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 类型：Int
 - 单位：-
 - 是否动态：是
-- 描述：磁盘安全水位（百分比）。当 Data Cache 进行缓存自动扩缩容时，系统将尽可能以该阈值为磁盘使用率目标调整缓存容量。自 v3.4.0 起，该参数默认值由 `70` 变更为 `80`。
+- 描述：磁盘安全水位（百分比）。当 Data Cache 进行缓存自动扩缩容时，系统将尽可能以该阈值为磁盘使用率目标调整缓存容量。自 v3.4.0 起，该参数默认值由 `70` 变更为 `80`。该参数自 v4.0 起由 datacache_disk_safe_level 更名为 disk_safe_level。
 - 引入版本：v3.3.0
 
 ##### disk_low_level
@@ -4044,7 +4044,7 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 类型：Int
 - 单位：-
 - 是否动态：是
-- 描述：磁盘低水位（百分比）。当磁盘使用率在 `datacache_disk_idle_seconds_for_expansion` 指定的时间内持续低于该值，且用于缓存数据的空间已经写满时，系统将自动进行缓存扩容，增加缓存上限。
+- 描述：磁盘低水位（百分比）。当磁盘使用率在 `datacache_disk_idle_seconds_for_expansion` 指定的时间内持续低于该值，且用于缓存数据的空间已经写满时，系统将自动进行缓存扩容，增加缓存上限。该参数自 v4.0 起由 datacache_disk_low_level 更名为 disk_low_level。
 - 引入版本：v3.3.0
 
 ##### datacache_disk_adjust_interval_seconds
