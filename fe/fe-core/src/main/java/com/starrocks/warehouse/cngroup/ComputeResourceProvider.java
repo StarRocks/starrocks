@@ -34,6 +34,13 @@ public interface ComputeResourceProvider {
     ComputeResource ofComputeResource(long warehouseId, long workGroupId);
 
     /**
+     * Get all ComputeResources by warehouse.
+     * @param warehouse the warehouse to get the ComputeResources from
+     * @return a list of ComputeResources that can be used for compute
+     */
+    List<ComputeResource> getComputeResources(Warehouse warehouse);
+
+    /**
      * NOTE: prefer to call this infrequently, as it can come to dominate the execution time of a query in the
      *  frontend if there are many calls per request (e.g. one per partition when there are many partitions).
      *
