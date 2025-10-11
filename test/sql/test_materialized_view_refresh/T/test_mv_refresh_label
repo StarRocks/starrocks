@@ -1,0 +1,20 @@
+-- name: test_mv_refresh_label
+create database db_${uuid0};
+use db_${uuid0};
+
+CREATE TABLE t_base (k1 int) DUPLICATE KEY(k1) DISTRIBUTED BY HASH(k1) BUCKETS 1 PROPERTIES("replication_num" = "1");
+insert into t_base values (1), (2);
+
+CREATE MATERIALIZED VIEW mv_label
+REFRESH MANUAL
+AS SELECT k1 FROM t_base;
+
+refresh materialized view mv_label with sync mode;
+
+-- capture a label from information_schema.loads for this db
+[UC]label=select label from information_schema.loads where db_name='db_${uuid0}';
+select case when substr('${label}', 1, 3) = 'mv_' then 1 else 0 end;
+
+drop materialized view mv_label;
+drop table t_base;
+drop database db_${uuid0};
