@@ -199,6 +199,7 @@ void OlapChunkSource::_init_counter(RuntimeState* state) {
     _del_vec_filter_counter = ADD_CHILD_COUNTER(_runtime_profile, "DelVecFilterRows", TUnit::UNIT, segment_read_name);
     _chunk_copy_timer = ADD_CHILD_TIMER(_runtime_profile, "ChunkCopy", segment_read_name);
     _decompress_timer = ADD_CHILD_TIMER(_runtime_profile, "DecompressT", segment_read_name);
+    _decode_page_timer = ADD_CHILD_TIMER(_runtime_profile, "DecodePageT", segment_read_name);
     _rowsets_read_count = ADD_CHILD_COUNTER(_runtime_profile, "RowsetsReadCount", TUnit::UNIT, segment_read_name);
     _segments_read_count = ADD_CHILD_COUNTER(_runtime_profile, "SegmentsReadCount", TUnit::UNIT, segment_read_name);
     _total_columns_data_page_count =
@@ -722,6 +723,7 @@ void OlapChunkSource::_update_counter() {
     COUNTER_UPDATE(_io_timer, _reader->stats().io_ns);
     COUNTER_UPDATE(_read_compressed_counter, _reader->stats().compressed_bytes_read_request);
     COUNTER_UPDATE(_decompress_timer, _reader->stats().decompress_ns);
+    COUNTER_UPDATE(_decode_page_timer, _reader->stats().decode_page_ns);
     COUNTER_UPDATE(_read_uncompressed_counter, _reader->stats().uncompressed_bytes_read);
     COUNTER_UPDATE(_bytes_read_counter, _reader->stats().bytes_read);
 

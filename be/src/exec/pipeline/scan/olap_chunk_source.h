@@ -165,6 +165,7 @@ private:
     RuntimeProfile::Counter* _io_timer = nullptr;
     RuntimeProfile::Counter* _read_compressed_counter = nullptr;
     RuntimeProfile::Counter* _decompress_timer = nullptr;
+    RuntimeProfile::Counter* _decode_page_timer = nullptr;
     RuntimeProfile::Counter* _read_uncompressed_counter = nullptr;
     RuntimeProfile::Counter* _raw_rows_counter = nullptr;
     RuntimeProfile::Counter* _del_vec_filter_counter = nullptr;

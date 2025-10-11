@@ -44,31 +44,46 @@
 // AVX2-compiled symbols by defining some macros.
 // See `build_bitshuffle` in `build-thirdparty.sh` for detail.
 #undef BITSHUFFLE_H
+#undef BITSHUFFLE_CORE_H
 #define bshuf_compress_lz4_bound bshuf_compress_lz4_bound_avx512
 #define bshuf_compress_lz4 bshuf_compress_lz4_avx512
 #define bshuf_decompress_lz4 bshuf_decompress_lz4_avx512
+#define bshuf_bitshuffle bshuf_bitshuffle_avx512
+#define bshuf_bitunshuffle bshuf_bitunshuffle_avx512
 #include <bitshuffle/bitshuffle.h> // NOLINT(*)
 #undef bshuf_compress_lz4_bound
 #undef bshuf_compress_lz4
 #undef bshuf_decompress_lz4
+#undef bshuf_bitshuffle
+#undef bshuf_bitunshuffle
 
 #undef BITSHUFFLE_H
+#undef BITSHUFFLE_CORE_H
 #define bshuf_compress_lz4_bound bshuf_compress_lz4_bound_avx2
 #define bshuf_compress_lz4 bshuf_compress_lz4_avx2
 #define bshuf_decompress_lz4 bshuf_decompress_lz4_avx2
+#define bshuf_bitshuffle bshuf_bitshuffle_avx2
+#define bshuf_bitunshuffle bshuf_bitunshuffle_avx2
 #include <bitshuffle/bitshuffle.h> // NOLINT(*)
 #undef bshuf_compress_lz4_bound
 #undef bshuf_compress_lz4
 #undef bshuf_decompress_lz4
+#undef bshuf_bitshuffle
+#undef bshuf_bitunshuffle
 
 #undef BITSHUFFLE_H
+#undef BITSHUFFLE_CORE_H
 #define bshuf_compress_lz4_bound bshuf_compress_lz4_bound_neon
 #define bshuf_compress_lz4 bshuf_compress_lz4_neon
 #define bshuf_decompress_lz4 bshuf_decompress_lz4_neon
+#define bshuf_bitshuffle bshuf_bitshuffle_neon
+#define bshuf_bitunshuffle bshuf_bitunshuffle_neon
 #include <bitshuffle/bitshuffle.h> // NOLINT(*)
 #undef bshuf_compress_lz4_bound
 #undef bshuf_compress_lz4
 #undef bshuf_decompress_lz4
+#undef bshuf_bitshuffle
+#undef bshuf_bitunshuffle
 
 using base::CPU;
 
@@ -80,6 +95,9 @@ namespace {
 decltype(&bshuf_compress_lz4_bound) g_bshuf_compress_lz4_bound;
 decltype(&bshuf_compress_lz4) g_bshuf_compress_lz4;
 decltype(&bshuf_decompress_lz4) g_bshuf_decompress_lz4;
+decltype(&bshuf_bitshuffle) g_bshuf_bitshuffle;
+decltype(&bshuf_bitunshuffle) g_bshuf_bitunshuffle;
+
 } // anonymous namespace
 
 // When this translation unit is initialized, figure out the current CPU and
@@ -93,34 +111,52 @@ __attribute__((constructor)) void SelectBitshuffleFunctions() {
         g_bshuf_compress_lz4_bound = bshuf_compress_lz4_bound_avx512;
         g_bshuf_compress_lz4 = bshuf_compress_lz4_avx512;
         g_bshuf_decompress_lz4 = bshuf_decompress_lz4_avx512;
+        g_bshuf_bitshuffle = bshuf_bitshuffle_avx512;
+        g_bshuf_bitunshuffle = bshuf_bitunshuffle_avx512;
     } else if (CPU().has_avx2()) {
         g_bshuf_compress_lz4_bound = bshuf_compress_lz4_bound_avx2;
         g_bshuf_compress_lz4 = bshuf_compress_lz4_avx2;
         g_bshuf_decompress_lz4 = bshuf_decompress_lz4_avx2;
+        g_bshuf_bitshuffle = bshuf_bitshuffle_avx2;
+        g_bshuf_bitunshuffle = bshuf_bitunshuffle_avx2;
     } else {
         g_bshuf_compress_lz4_bound = bshuf_compress_lz4_bound;
         g_bshuf_compress_lz4 = bshuf_compress_lz4;
         g_bshuf_decompress_lz4 = bshuf_decompress_lz4;
+        g_bshuf_bitshuffle = bshuf_bitshuffle;
+        g_bshuf_bitunshuffle = bshuf_bitunshuffle;
     }
 #elif defined(__ARM_NEON) && defined(__aarch64__)
     g_bshuf_compress_lz4_bound = bshuf_compress_lz4_bound_neon;
     g_bshuf_compress_lz4 = bshuf_compress_lz4_neon;
     g_bshuf_decompress_lz4 = bshuf_decompress_lz4_neon;
+    g_bshuf_bitshuffle = bshuf_bitshuffle_neon;
+    g_bshuf_bitunshuffle = bshuf_bitunshuffle_neon;
 #else
     g_bshuf_compress_lz4_bound = bshuf_compress_lz4_bound;
     g_bshuf_compress_lz4 = bshuf_compress_lz4;
     g_bshuf_decompress_lz4 = bshuf_decompress_lz4;
+    g_bshuf_bitshuffle = bshuf_bitshuffle;
+    g_bshuf_bitunshuffle = bshuf_bitunshuffle;
 #endif
 }
 
-int64_t compress_lz4(void* in, void* out, size_t size, size_t elem_size, size_t block_size) {
+int64_t compress_lz4(const void* in, void* out, size_t size, size_t elem_size, size_t block_size) {
     return g_bshuf_compress_lz4(in, out, size, elem_size, block_size);
 }
-int64_t decompress_lz4(void* in, void* out, size_t size, size_t elem_size, size_t block_size) {
+int64_t decompress_lz4(const void* in, void* out, size_t size, size_t elem_size, size_t block_size) {
     return g_bshuf_decompress_lz4(in, out, size, elem_size, block_size);
 }
 size_t compress_lz4_bound(size_t size, size_t elem_size, size_t block_size) {
     return g_bshuf_compress_lz4_bound(size, elem_size, block_size);
+}
+
+int64_t encode(const void* in, void* out, const size_t size, const size_t elem_size, size_t block_size) {
+    return g_bshuf_bitshuffle(in, out, size, elem_size, block_size);
+}
+
+int64_t decode(const void* in, void* out, const size_t size, const size_t elem_size, size_t block_size) {
+    return g_bshuf_bitunshuffle(in, out, size, elem_size, block_size);
 }
 
 } // namespace starrocks::bitshuffle

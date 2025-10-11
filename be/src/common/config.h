@@ -836,12 +836,14 @@ CONF_Bool(bitmap_filter_enable_not_equal, "false");
 // storage format.
 CONF_mInt16(storage_format_version, "2");
 
-// IMPORTANT NOTE: changing this config to 1 must require all BEs to be upgraded to new version,
+// IMPORTANT NOTE: changing this config to other value must require all BEs to be upgraded to new version,
 // which support this config.
 // DO NOT change this config unless you known how.
 // 0 for BITSHUFFLE_NULL
 // 1 for LZ4_NULL
+// 3 for BITSHUFFLE_PLAIN_NULL
 CONF_mInt16(null_encoding, "0");
+CONF_mBool(enable_bitshuffle_plain_encoding, "false");
 
 // Do pre-aggregate if effect greater than the factor, factor range:[1-100].
 CONF_Int16(pre_aggregate_factor, "80");
@@ -871,9 +873,6 @@ CONF_mInt16(tablet_max_versions, "1000");
 
 // The maximum number of pending versions allowed for a primary key tablet
 CONF_mInt32(tablet_max_pending_versions, "1000");
-
-// NOTE: it will be deleted.
-CONF_mBool(enable_bitmap_union_disk_format_with_set, "false");
 
 // pipeline poller timeout guard
 CONF_mInt64(pipeline_poller_timeout_guard_ms, "-1");

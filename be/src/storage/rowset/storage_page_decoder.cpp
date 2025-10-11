@@ -21,11 +21,11 @@
 #include "util/raw_container.h"
 
 namespace starrocks {
-
-class BitShuffleDataDecoder : public DataDecoder {
+template <typename Encoding>
+class BitShuffleDataDecoderTraits : public DataDecoder {
 public:
-    BitShuffleDataDecoder() = default;
-    ~BitShuffleDataDecoder() override = default;
+    BitShuffleDataDecoderTraits() = default;
+    ~BitShuffleDataDecoderTraits() override = default;
 
     void reserve_head(uint8_t head_size) override {
         DCHECK(_reserve_head_size == 0);
@@ -52,8 +52,8 @@ public:
 
         Slice compressed_body(page_slice->data + header_size, compressed_size - BITSHUFFLE_PAGE_HEADER_SIZE);
         Slice decompressed_body(decompressed_page->data() + header_size, data_size);
-        int64_t bytes = bitshuffle::decompress_lz4(compressed_body.data, decompressed_body.data,
-                                                   num_element_after_padding, size_of_element, 0);
+        int64_t bytes = Encoding::decode(compressed_body.data, decompressed_body.data, num_element_after_padding,
+                                         size_of_element, 0);
         if (bytes != compressed_body.size) {
             return Status::Corruption(
                     strings::Substitute("decompress failed: expected number of bytes consumed=$0 vs real consumed=$1",
@@ -78,6 +78,8 @@ public:
 private:
     uint8_t _reserve_head_size = 0;
 };
+using BitShuffleDataDecoder = BitShuffleDataDecoderTraits<BitShuffleEncodingLz4>;
+using BitShuffleDataDecoderPlain = BitShuffleDataDecoderTraits<BitShuffleEncodingPlain>;
 
 class DictDictDecoder : public DataDecoder {
 public:
@@ -124,6 +126,7 @@ private:
 
 static DataDecoder g_base_decoder;
 static BitShuffleDataDecoder g_bit_shuffle_decoder;
+static BitShuffleDataDecoderPlain g_bit_shuffle_plain_decoder;
 static BinaryDictDataDecoder g_binary_dict_decoder;
 static DictDictDecoder g_dict_dict_decoder;
 
@@ -131,6 +134,9 @@ DataDecoder* DataDecoder::get_data_decoder(EncodingTypePB encoding) {
     switch (encoding) {
     case BIT_SHUFFLE: {
         return &g_bit_shuffle_decoder;
+    }
+    case BIT_SHUFFLE_PLAIN: {
+        return &g_bit_shuffle_plain_decoder;
     }
     case DICT_ENCODING: {
         return &g_binary_dict_decoder;

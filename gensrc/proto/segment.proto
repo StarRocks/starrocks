@@ -54,7 +54,10 @@ enum EncodingTypePB {
     RLE = 4;
     DICT_ENCODING = 5;
     BIT_SHUFFLE = 6;
-    FOR_ENCODING = 7; // Frame-Of-Reference
+    // Frame-Of-Reference
+    FOR_ENCODING = 7;
+    // Only encoding by bit shuffle, do not compress
+    BIT_SHUFFLE_PLAIN = 8;
 }
 
 enum PageTypePB {
@@ -69,6 +72,7 @@ enum NullEncodingPB {
     BITSHUFFLE_NULL = 0;
     LZ4_NULL = 1;
     RLE_NULL = 2;
+    BITSHUFFLE_PLAIN_NULL = 3;
 }
 
 message DataPageFooterPB {

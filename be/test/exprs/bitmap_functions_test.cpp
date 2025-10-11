@@ -531,7 +531,6 @@ TEST_F(VecBitmapFunctionsTest, bitmapToStringTest) {
     BitmapValue b4;
 
     // enable bitmap with SET.
-    config::enable_bitmap_union_disk_format_with_set = true;
     b3.add(1);
     b3.add(2);
     b3.add(3);
@@ -561,7 +560,6 @@ TEST_F(VecBitmapFunctionsTest, bitmapToStringTest) {
         ASSERT_EQ("1,2,3,4", p->get_slice(0).to_string());
         ASSERT_EQ("4,5,6,7", p->get_slice(1).to_string());
     }
-    config::enable_bitmap_union_disk_format_with_set = false;
 }
 
 TEST_F(VecBitmapFunctionsTest, bitmapFromStringTest) {

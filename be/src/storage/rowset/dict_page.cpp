@@ -24,7 +24,6 @@
 #include "storage/range.h"
 #include "storage/rowset/bitshuffle_page.h"
 #include "util/slice.h" // for Slice
-#include "util/unaligned_access.h"
 
 namespace starrocks {
 

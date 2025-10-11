@@ -36,8 +36,8 @@
 
 #include <type_traits>
 
+#include "common/config.h"
 #include "gutil/strings/substitute.h"
-#include "storage/olap_common.h"
 #include "storage/rowset/binary_dict_page.h"
 #include "storage/rowset/binary_plain_page.h"
 #include "storage/rowset/binary_prefix_page.h"
@@ -87,6 +87,19 @@ struct TypeEncodingTraits<type, BIT_SHUFFLE, CppType,
                           typename std::enable_if<!std::is_same<CppType, Slice>::value>::type> {
     static Status create_page_builder(const PageBuilderOptions& opts, PageBuilder** builder) {
         *builder = new BitshufflePageBuilder<type>(opts);
+        return Status::OK();
+    }
+    static Status create_page_decoder(const Slice& data, PageDecoder** decoder) {
+        *decoder = new BitShufflePageDecoder<type>(data);
+        return Status::OK();
+    }
+};
+
+template <LogicalType type, typename CppType>
+struct TypeEncodingTraits<type, BIT_SHUFFLE_PLAIN, CppType,
+                          typename std::enable_if<!std::is_same<CppType, Slice>::value>::type> {
+    static Status create_page_builder(const PageBuilderOptions& opts, PageBuilder** builder) {
+        *builder = new BitshufflePagePlainBuilder<type>(opts);
         return Status::OK();
     }
     static Status create_page_decoder(const Slice& data, PageDecoder** decoder) {
@@ -230,32 +243,40 @@ private:
 // As TYPE_DATE_V1/TYPE_DATETIME_V1 are legacy types, no changes are made here.
 EncodingInfoResolver::EncodingInfoResolver() {
     _add_map<TYPE_TINYINT, BIT_SHUFFLE>();
+    _add_map<TYPE_TINYINT, BIT_SHUFFLE_PLAIN>();
     _add_map<TYPE_TINYINT, FOR_ENCODING, true>();
     _add_map<TYPE_TINYINT, PLAIN_ENCODING>();
 
     _add_map<TYPE_SMALLINT, BIT_SHUFFLE>();
+    _add_map<TYPE_SMALLINT, BIT_SHUFFLE_PLAIN>();
     _add_map<TYPE_SMALLINT, FOR_ENCODING, true>();
     _add_map<TYPE_SMALLINT, PLAIN_ENCODING>();
 
     _add_map<TYPE_INT, BIT_SHUFFLE>();
+    _add_map<TYPE_INT, BIT_SHUFFLE_PLAIN>();
     _add_map<TYPE_INT, FOR_ENCODING, true>();
     _add_map<TYPE_INT, PLAIN_ENCODING>();
 
     _add_map<TYPE_BIGINT, BIT_SHUFFLE>();
+    _add_map<TYPE_BIGINT, BIT_SHUFFLE_PLAIN>();
     _add_map<TYPE_BIGINT, FOR_ENCODING, true>();
     _add_map<TYPE_BIGINT, PLAIN_ENCODING>();
 
     _add_map<TYPE_LARGEINT, BIT_SHUFFLE>();
+    _add_map<TYPE_LARGEINT, BIT_SHUFFLE_PLAIN>();
     _add_map<TYPE_LARGEINT, PLAIN_ENCODING>();
     _add_map<TYPE_LARGEINT, FOR_ENCODING, true>();
 
     _add_map<TYPE_INT256, BIT_SHUFFLE>();
+    _add_map<TYPE_INT256, BIT_SHUFFLE_PLAIN>();
     _add_map<TYPE_INT256, PLAIN_ENCODING>();
 
     _add_map<TYPE_FLOAT, BIT_SHUFFLE>();
+    _add_map<TYPE_FLOAT, BIT_SHUFFLE_PLAIN>();
     _add_map<TYPE_FLOAT, PLAIN_ENCODING>();
 
     _add_map<TYPE_DOUBLE, BIT_SHUFFLE>();
+    _add_map<TYPE_DOUBLE, BIT_SHUFFLE_PLAIN>();
     _add_map<TYPE_DOUBLE, PLAIN_ENCODING>();
 
     _add_map<TYPE_CHAR, DICT_ENCODING>();
@@ -268,28 +289,35 @@ EncodingInfoResolver::EncodingInfoResolver() {
 
     _add_map<TYPE_BOOLEAN, RLE>();
     _add_map<TYPE_BOOLEAN, BIT_SHUFFLE>();
+    _add_map<TYPE_BOOLEAN, BIT_SHUFFLE_PLAIN>();
     _add_map<TYPE_BOOLEAN, PLAIN_ENCODING, true>();
 
     _add_map<TYPE_DATE_V1, BIT_SHUFFLE>();
+    _add_map<TYPE_DATE_V1, BIT_SHUFFLE_PLAIN>();
     _add_map<TYPE_DATE_V1, PLAIN_ENCODING>();
     _add_map<TYPE_DATE_V1, FOR_ENCODING, true>();
 
     _add_map<TYPE_DATE, BIT_SHUFFLE>();
+    _add_map<TYPE_DATE, BIT_SHUFFLE_PLAIN>();
     _add_map<TYPE_DATE, PLAIN_ENCODING>();
     _add_map<TYPE_DATE, FOR_ENCODING, true>();
 
     _add_map<TYPE_DATETIME_V1, BIT_SHUFFLE>();
+    _add_map<TYPE_DATETIME_V1, BIT_SHUFFLE_PLAIN>();
     _add_map<TYPE_DATETIME_V1, PLAIN_ENCODING>();
     _add_map<TYPE_DATETIME_V1, FOR_ENCODING, true>();
 
     _add_map<TYPE_DATETIME, BIT_SHUFFLE>();
+    _add_map<TYPE_DATETIME, BIT_SHUFFLE_PLAIN>();
     _add_map<TYPE_DATETIME, PLAIN_ENCODING>();
     _add_map<TYPE_DATETIME, FOR_ENCODING, true>();
 
     _add_map<TYPE_DECIMAL, BIT_SHUFFLE, true>();
+    _add_map<TYPE_DECIMAL, BIT_SHUFFLE_PLAIN, true>();
     _add_map<TYPE_DECIMAL, PLAIN_ENCODING>();
 
     _add_map<TYPE_DECIMALV2, BIT_SHUFFLE, true>();
+    _add_map<TYPE_DECIMALV2, BIT_SHUFFLE_PLAIN, true>();
     _add_map<TYPE_DECIMALV2, PLAIN_ENCODING>();
 
     _add_map<TYPE_HLL, PLAIN_ENCODING>();
@@ -325,6 +353,7 @@ EncodingInfoResolver::~EncodingInfoResolver() {
 Status EncodingInfoResolver::get(LogicalType data_type, EncodingTypePB encoding_type, const EncodingInfo** out) {
     if (encoding_type == DEFAULT_ENCODING) {
         encoding_type = get_default_encoding(data_type, false);
+        if (encoding_type == BIT_SHUFFLE && config::enable_bitshuffle_plain_encoding) encoding_type = BIT_SHUFFLE_PLAIN;
     }
     auto key = std::make_pair(delegate_type(data_type), encoding_type);
     auto it = _encoding_map.find(key);
