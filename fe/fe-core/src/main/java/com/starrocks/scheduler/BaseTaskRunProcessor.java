@@ -24,8 +24,9 @@ import org.apache.commons.lang3.StringUtils;
 
 public abstract class BaseTaskRunProcessor implements TaskRunProcessor {
     @Override
-    public void prepare(TaskRunContext context) throws Exception {
+    public TaskRunContext prepare(TaskRunContext context) throws Exception {
         // do nothing
+        return context;
     }
 
     @Override

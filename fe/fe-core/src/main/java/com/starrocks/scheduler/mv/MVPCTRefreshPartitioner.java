@@ -27,6 +27,7 @@ import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
+import com.starrocks.common.Pair;
 import com.starrocks.common.util.concurrent.lock.LockTimeoutException;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
@@ -47,8 +48,10 @@ import org.apache.logging.log4j.Logger;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.TimeUnit;
+import java.util.stream.Collectors;
 
 import static com.starrocks.catalog.MvRefreshArbiter.getMvBaseTableUpdateInfo;
 import static com.starrocks.catalog.MvRefreshArbiter.needsToRefreshTable;
@@ -108,6 +111,11 @@ public abstract class MVPCTRefreshPartitioner {
                                                       Set<String> mvPartitionNames) throws AnalysisException;
 
     /**
+     * Get mv partition names to refresh based on the mv refresh params.
+     */
+    public abstract Set<String> getMVPartitionsToRefreshByParams(MVRefreshParams mvRefreshParams) throws AnalysisException;
+
+    /**
      * Get mv partitions to refresh based on the ref base table partitions.
      *
      * @param mvPartitionInfo:           mv partition info to check.
@@ -121,7 +129,19 @@ public abstract class MVPCTRefreshPartitioner {
                                                          MVRefreshParams mvRefreshParams,
                                                          Set<String> mvPotentialPartitionNames) throws AnalysisException;
 
-    public abstract Set<String> getMVPartitionsToRefreshWithForce() throws AnalysisException;
+    public Set<String> getMVPartitionsToRefreshWithForce(MVRefreshParams mvRefreshParams) throws AnalysisException {
+        Set<String> toRefreshPartitions = getMVPartitionsToRefreshByParams(mvRefreshParams);
+        if (CollectionUtils.isEmpty(toRefreshPartitions) || !mv.isPartitionedTable()) {
+            return toRefreshPartitions;
+        }
+        Map<String, PCell> mvListPartitionMap = mv.getPartitionCells(Optional.empty());
+        Map<String, PCell> validToRefreshPartitions = toRefreshPartitions.stream()
+                .filter(mvListPartitionMap::containsKey)
+                .map(name -> Pair.create(name, mvListPartitionMap.get(name)))
+                .collect(Collectors.toMap(x -> x.first, x -> x.second));
+        filterPartitionsByTTL(validToRefreshPartitions, true);
+        return validToRefreshPartitions.keySet();
+    }
 
     /**
      * Get mv partition names with TTL based on the ref base table partitions.

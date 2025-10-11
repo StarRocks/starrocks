@@ -3062,24 +3062,9 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
         PropertyAnalyzer.analyzeMVProperties(db, materializedView, properties, isNonPartitioned,
                 stmt.getPartitionByExprToAdjustExprMap());
         try {
-            Set<Long> tabletIdSet = new HashSet<>();
             // process single partition info
             if (isNonPartitioned) {
-                long partitionId = GlobalStateMgr.getCurrentState().getNextId();
-                Preconditions.checkNotNull(dataProperty);
-                partitionInfo.setDataProperty(partitionId, dataProperty);
-                partitionInfo.setReplicationNum(partitionId, materializedView.getDefaultReplicationNum());
-                partitionInfo.setIsInMemory(partitionId, false);
-                partitionInfo.setTabletType(partitionId, TTabletType.TABLET_TYPE_DISK);
-                StorageInfo storageInfo = materializedView.getTableProperty().getStorageInfo();
-                partitionInfo.setDataCacheInfo(partitionId,
-                        storageInfo == null ? null : storageInfo.getDataCacheInfo());
-                Long version = Partition.PARTITION_INIT_VERSION;
-                Partition partition = createPartition(db, materializedView, partitionId, mvName, version, tabletIdSet,
-                        materializedView.getWarehouseId());
-                buildPartitions(db, materializedView, new ArrayList<>(partition.getSubPartitions()),
-                        materializedView.getWarehouseId());
-                materializedView.addPartition(partition);
+                buildNonPartitionOlapTable(db, materializedView, partitionInfo, dataProperty, materializedView.getWarehouseId());
             } else {
                 List<Expr> mvPartitionExprs = stmt.getPartitionByExprs();
                 LinkedHashMap<Expr, SlotRef> partitionExprMaps = MVPartitionExprResolver.getMVPartitionExprsChecked(
@@ -3112,6 +3097,35 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
         // NOTE: The materialized view has been added to the database, and the following procedure cannot throw exception.
         createTaskForMaterializedView(dbName, materializedView, optHints);
         DynamicPartitionUtil.registerOrRemovePartitionTTLTable(db.getId(), materializedView);
+    }
+
+    /**
+     * Initialize a non-partitioned table with one partition.
+     */
+    public void buildNonPartitionOlapTable(Database db,
+                                           OlapTable olapTable,
+                                           PartitionInfo partitionInfo,
+                                           DataProperty dataProperty,
+                                           Long warehouseId) throws DdlException {
+        if (olapTable.isPartitionedTable()) {
+            throw new DdlException("Table " + olapTable.getName() + " is a partitioned table, not a non-partitioned table");
+        }
+
+        long partitionId = GlobalStateMgr.getCurrentState().getNextId();
+        Preconditions.checkNotNull(dataProperty);
+        partitionInfo.setDataProperty(partitionId, dataProperty);
+        partitionInfo.setReplicationNum(partitionId, olapTable.getDefaultReplicationNum());
+        partitionInfo.setIsInMemory(partitionId, false);
+        partitionInfo.setTabletType(partitionId, TTabletType.TABLET_TYPE_DISK);
+        StorageInfo storageInfo = olapTable.getTableProperty().getStorageInfo();
+        partitionInfo.setDataCacheInfo(partitionId,
+                storageInfo == null ? null : storageInfo.getDataCacheInfo());
+        Set<Long> tabletIdSet = new HashSet<>();
+        Long version = Partition.PARTITION_INIT_VERSION;
+        Partition partition = createPartition(db, olapTable, partitionId, olapTable.getName(), version, tabletIdSet,
+                warehouseId);
+        buildPartitions(db, olapTable, new ArrayList<>(partition.getSubPartitions()), warehouseId);
+        olapTable.addPartition(partition);
     }
 
     private long getRandomStart(IntervalLiteral interval, long randomizeStart) throws DdlException {
