@@ -20,6 +20,7 @@
 #include "column/datum_convert.h"
 #include "common/status.h"
 #include "gutil/stl_util.h"
+#include "runtime/runtime_state.h"
 #include "storage/aggregate_iterator.h"
 #include "storage/chunk_helper.h"
 #include "storage/column_predicate_rewriter.h"
