@@ -363,7 +363,7 @@ public final class MVPCTRefreshListPartitioner extends MVPCTRefreshPartitioner {
     @Override
     public PCellSortedSet getMVPartitionsToRefreshWithCheck(Map<Long, BaseTableSnapshotInfo> snapshotBaseTables) {
         // list partitioned materialized view
-        boolean isAutoRefresh = mvContext.getTaskType().isAutoRefresh();
+        boolean isAutoRefresh = isAutomaticRefresh();
         PCellSortedSet mvListPartitionNames = getMVPartitionNamesWithTTL(isAutoRefresh);
 
         // check non-ref base tables
@@ -441,7 +441,8 @@ public final class MVPCTRefreshListPartitioner extends MVPCTRefreshPartitioner {
         }
         int i = 0;
         // refresh the recent partitions first
-        Iterator<PCellWithName> iterator = getToRefreshPartitionsIterator(toRefreshPartitions, false);
+        Iterator<PCellWithName> iterator = getToRefreshPartitionsIterator(toRefreshPartitions, 
+                Config.materialized_view_refresh_ascending);
         while (i++ < partitionRefreshNumber && iterator.hasNext()) {
             PCellWithName pCell = iterator.next();
             logger.debug("Materialized view [{}] to refresh partition name {}, value {}",
