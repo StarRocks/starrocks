@@ -2306,7 +2306,7 @@ public class LowCardinalityTest2 extends PlanTestBase {
                 "args nullable: true; result nullable: false]\n" +
                 "  |  cardinality: 1");
     }
-    
+
     @Test
     public void testWindowFunction() throws Exception {
         String sql = "SELECT\n" +
@@ -2341,5 +2341,111 @@ public class LowCardinalityTest2 extends PlanTestBase {
                 "  |  order by: [12: S_ADDRESS, INT, false] ASC\n" +
                 "  |  window: ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW\n" +
                 "  |  cardinality: 1");
+    }
+
+    @Test
+    public void testEnableLowCardinalityOptimizeForJoin() throws Exception {
+        FeConstants.runningUnitTest = true;
+
+        String sql;
+        String plan;
+
+        try {
+            sql = "SELECT COUNT(distinct t1.c_user) FROM low_card_t1 t1 " +
+                    "JOIN [broadcast] low_card_t1 t2 ON t1.c_user = t2.c_user " +
+                    "JOIN [broadcast] low_card_t1 t3 ON t1.c_dept = t3.c_dept";
+            plan = getVerboseExplain(sql);
+            assertContains(plan, "  11:AGGREGATE (merge serialize)\n" +
+                            "  |  group by: [35: c_user, INT, true]",
+                    "  7:HASH JOIN\n" +
+                            "  |  join op: INNER JOIN (BROADCAST)\n" +
+                            "  |  equal join conjunct: [36: c_dept, INT, true] = [38: c_dept, INT, true]",
+                    "  3:HASH JOIN\n" +
+                            "  |  join op: INNER JOIN (BROADCAST)\n" +
+                            "  |  equal join conjunct: [35: c_user, INT, true] = [37: c_user, INT, true]");
+
+            // Do not support shuffle.
+
+            sql = "SELECT COUNT(1) FROM low_card_t1 t1 " +
+                    "JOIN [broadcast] low_card_t1 t2 ON t1.c_user = t2.c_user " +
+                    "JOIN [shuffle] low_card_t1 t3 ON t1.c_dept = t3.c_dept";
+            plan = getVerboseExplain(sql);
+            assertContains(plan, "  8:HASH JOIN\n" +
+                            "  |  join op: INNER JOIN (PARTITIONED)\n" +
+                            "  |  equal join conjunct: [3: c_dept, VARCHAR, true] = [25: c_dept, VARCHAR, true]",
+                    "  3:HASH JOIN\n" +
+                            "  |  join op: INNER JOIN (BROADCAST)\n" +
+                            "  |  equal join conjunct: [37: c_user, INT, true] = [38: c_user, INT, true]");
+
+            sql = "SELECT COUNT(distinct t1.c_user) FROM low_card_t1 t1 " +
+                    "JOIN [broadcast] low_card_t1 t2 ON t1.c_user = t2.c_user " +
+                    "JOIN [shuffle] low_card_t1 t3 ON t1.c_user = t3.c_dept";
+            plan = getVerboseExplain(sql);
+            assertContains(plan, "  13:AGGREGATE (update serialize)\n" +
+                            "  |  aggregate: count[([2: c_user, VARCHAR, true]); args: VARCHAR; " +
+                            "result: BIGINT; args nullable: true; result nullable: false]",
+                    "  8:HASH JOIN\n" +
+                            "  |  join op: INNER JOIN (PARTITIONED)\n" +
+                            "  |  equal join conjunct: [2: c_user, VARCHAR, true] = [25: c_dept, VARCHAR, true]",
+                    "  3:HASH JOIN\n" +
+                            "  |  join op: INNER JOIN (BROADCAST)\n" +
+                            "  |  equal join conjunct: [2: c_user, VARCHAR, true] = [13: c_user, VARCHAR, true]");
+
+            sql = "SELECT COUNT(1) FROM low_card_t2 t1 " +
+                    "JOIN [colocate] low_card_t2 t2 ON t1.d_date = t2.d_date and t1.c_mr = t2.c_mr";
+            plan = getVerboseExplain(sql);
+            assertContains(plan, "  2:HASH JOIN\n" +
+                    "  |  join op: INNER JOIN (COLOCATE)\n" +
+                    "  |  colocate: true\n" +
+                    "  |  equal join conjunct: [1: d_date, DATE, false] = [6: d_date, DATE, false]\n" +
+                    "  |  equal join conjunct: [2: c_mr, VARCHAR, false] = [7: c_mr, VARCHAR, false]");
+
+            sql = "SELECT COUNT(1) FROM low_card_t2 t1 " +
+                    "JOIN [bucket] low_card_t2 t2 ON t1.d_date = t2.d_date and t1.c_mr = t2.c_mr";
+            plan = getVerboseExplain(sql);
+            assertContains(plan, "  3:HASH JOIN\n" +
+                    "  |  join op: INNER JOIN (BUCKET_SHUFFLE)\n" +
+                    "  |  equal join conjunct: [1: d_date, DATE, false] = [6: d_date, DATE, false]\n" +
+                    "  |  equal join conjunct: [2: c_mr, VARCHAR, false] = [7: c_mr, VARCHAR, false]");
+
+            // Both left and right keys in the ON equality condition must be low-cardinality column refs.
+            sql = "SELECT COUNT(1) FROM low_card_t1 t1 " +
+                    "JOIN [broadcast] low_card_t1 t2 ON t1.c_user = CAST(t2.d_date as string)";
+            plan = getVerboseExplain(sql);
+            assertContains(plan, "  4:HASH JOIN\n" +
+                    "  |  join op: INNER JOIN (BROADCAST)\n" +
+                    "  |  equal join conjunct: [2: c_user, VARCHAR, true] = [25: cast, VARCHAR(65533), true]");
+
+            // Low-cardinality columns cannot be DefineExpr.
+            sql = "SELECT COUNT(1) FROM low_card_t1 t1 " +
+                    "JOIN [broadcast] low_card_t1 t2 ON t1.c_user = lower(t2.c_user) ";
+            plan = getVerboseExplain(sql);
+            assertContains(plan, "  4:HASH JOIN\n" +
+                    "  |  join op: INNER JOIN (BROADCAST)\n" +
+                    "  |  equal join conjunct: [2: c_user, VARCHAR, true] = [25: lower, VARCHAR, true]");
+
+            // Each low-cardinality column can participate in only one equality condition.
+            sql = "SELECT COUNT(1) FROM low_card_t1 t1 " +
+                    "JOIN [broadcast] low_card_t1 t2 ON t1.c_user = t2.c_user " +
+                    "JOIN [broadcast] low_card_t1 t3 ON t1.c_user = t3.c_dept";
+            plan = getVerboseExplain(sql);
+            assertContains(plan, "  7:HASH JOIN\n" +
+                            "  |  join op: INNER JOIN (BROADCAST)\n" +
+                            "  |  equal join conjunct: [2: c_user, VARCHAR, true] = [25: c_dept, VARCHAR, true]",
+                    "  3:HASH JOIN\n" +
+                            "  |  join op: INNER JOIN (BROADCAST)\n" +
+                            "  |  equal join conjunct: [2: c_user, VARCHAR, true] = [13: c_user, VARCHAR, true]");
+
+            // Contains non-low-cardinality string columns.
+            sql = "SELECT COUNT(1) FROM low_card_t1 t1 " +
+                    "JOIN [broadcast] low_card_t1 t2 ON t1.c_user = t2.c_user and t1.c_user = cast(t2.cpc as string)";
+            plan = getVerboseExplain(sql);
+            assertContains(plan, "  4:HASH JOIN\n" +
+                    "  |  join op: INNER JOIN (BROADCAST)\n" +
+                    "  |  equal join conjunct: [2: c_user, VARCHAR, true] = [13: c_user, VARCHAR, true]\n" +
+                    "  |  equal join conjunct: [2: c_user, VARCHAR, true] = [25: cast, VARCHAR(65533), true]");
+        } finally {
+            FeConstants.runningUnitTest = false;
+        }
     }
 }

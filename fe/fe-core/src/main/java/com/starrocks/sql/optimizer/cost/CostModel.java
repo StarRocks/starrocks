@@ -409,7 +409,6 @@ public class CostModel {
                     EXECUTE_COST_PENALTY);
             double memCost = StatisticUtils.multiplyOutputSize(rightSize, EXECUTE_COST_PENALTY * 100D);
 
-
             if (join.getJoinType().isCrossJoin()) {
                 cpuCost = StatisticUtils.multiplyOutputSize(cpuCost, crossJoinCostPenalty);
             }
