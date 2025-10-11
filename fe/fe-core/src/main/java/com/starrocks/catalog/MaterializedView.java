@@ -159,7 +159,16 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
         ADAPTIVE;
 
         public static PartitionRefreshStrategy defaultValue() {
-            return STRICT;
+            return ADAPTIVE;
+        }
+
+        public static PartitionRefreshStrategy of(String val) {
+            try {
+                return PartitionRefreshStrategy.valueOf(val.trim().toUpperCase());
+            } catch (Exception e) {
+                LOG.warn("Failed to get partition refresh strategy, use default value", e);
+                return PartitionRefreshStrategy.defaultValue();
+            }
         }
     }
 
@@ -1396,15 +1405,25 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
      * Return the partition refresh strategy of the materialized view.
      */
     public PartitionRefreshStrategy getPartitionRefreshStrategy() {
-        if (tableProperty == null || tableProperty.getPartitionRefreshStrategy() == null) {
+        TableProperty tableProperty = getTableProperty();
+        if (tableProperty == null) {
             return PartitionRefreshStrategy.defaultValue();
         }
-        try {
-            return PartitionRefreshStrategy.valueOf(tableProperty.getPartitionRefreshStrategy().trim().toUpperCase());
-        } catch (Exception e) {
-            LOG.warn("Failed to get partition refresh strategy for materialized view: {}, use default value",
-                    this.getName(), e);
-            return PartitionRefreshStrategy.defaultValue();
+
+        // otherwise, use `partition_refresh_strategy` property.
+        PartitionRefreshStrategy partitionRefreshStrategy =
+                PartitionRefreshStrategy.of(tableProperty.getPartitionRefreshStrategy());
+        if (tableProperty.isSetPartitionRefreshStrategy()
+                && !PartitionRefreshStrategy.STRICT.equals(partitionRefreshStrategy)) {
+            return partitionRefreshStrategy;
+        } else {
+            // if mv has `partition_refresh_number` property, use it first.
+            // for compatibility, if `partition_refresh_number` is set and not equal to 1,
+            if (tableProperty.isSetPartitionRefreshNumber()) {
+                return PartitionRefreshStrategy.STRICT;
+            } else {
+                return PartitionRefreshStrategy.defaultValue();
+            }
         }
     }
 

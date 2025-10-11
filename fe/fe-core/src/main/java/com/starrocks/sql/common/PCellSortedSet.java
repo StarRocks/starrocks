@@ -19,6 +19,7 @@ import com.starrocks.common.Config;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
+import java.util.NavigableSet;
 import java.util.Objects;
 import java.util.Set;
 import java.util.SortedSet;
@@ -90,6 +91,10 @@ public record PCellSortedSet(SortedSet<PCellWithName> partitions) {
 
     public void forEach(Consumer<? super PCellWithName> action) {
         partitions.forEach(action);
+    }
+
+    public Iterator<PCellWithName> descendingIterator() {
+        return ((NavigableSet<PCellWithName>) partitions).descendingIterator();
     }
 
     public Iterator<PCellWithName> iterator() {
