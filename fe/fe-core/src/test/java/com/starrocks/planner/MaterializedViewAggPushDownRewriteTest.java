@@ -24,7 +24,9 @@ import com.starrocks.common.FeConstants;
 import com.starrocks.common.Pair;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.AggregatedMaterializedViewPushDownRewriter;
+import com.starrocks.sql.plan.PlanTestBase;
 import com.starrocks.thrift.TExplainLevel;
+import com.starrocks.utframe.StarRocksTestBase;
 import mockit.Mock;
 import mockit.MockUp;
 import org.apache.commons.lang3.StringUtils;
@@ -1197,5 +1199,39 @@ public class MaterializedViewAggPushDownRewriteTest extends MaterializedViewTest
         starRocksAssert.dropTable("test_pt9");
         starRocksAssert.dropMaterializedView("test_pt8_mv");
         starRocksAssert.dropMaterializedView("test_pt9_mv");
+    }
+
+    @Test
+    public void testAggPushDownTypeCastBug() throws Exception {
+        starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW `mv1` \n" +
+                "DISTRIBUTED BY RANDOM\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\"" +
+                ")\n" +
+                "AS SELECT `l`.`LO_ORDERDATE`, " +
+                "sum(`l`.`LO_REVENUE` + 1), " +
+                "max(`l`.`LO_REVENUE` + 1), " +
+                "min(`l`.`LO_REVENUE` + 1), " +
+                "bitmap_agg(`l`.`LO_REVENUE` + 1), " +
+                "hll_union(hll_hash(`l`.`LO_REVENUE` + 1)), " +
+                "percentile_union(percentile_hash(`l`.`LO_REVENUE` + 1)), " +
+                "any_value(`l`.`LO_REVENUE` + 1) , " +
+                "array_agg(DISTINCT `l`.`LO_REVENUE` + 1)\n" +
+                "FROM `lineorder` AS `l`\n" +
+                "GROUP BY `l`.`LO_ORDERDATE`;");
+        String query = " select LO_ORDERDATE, sum(LO_REVENUE + 1), max(LO_REVENUE + 1), sum(LO_REVENUE + 1), max(LO_REVENUE + " +
+                "1) , sum(LO_REVENUE + 1), max(LO_REVENUE + 1), count(distinct LO_REVENUE + 1), count(distinct LO_REVENUE + 1) " +
+                "from lineorder l join dates d " +
+                "on l.LO_ORDERDATE = d.d_date group by LO_ORDERDATE order by LO_ORDERDATE;";
+        String plan = getQueryPlan(query, TExplainLevel.NORMAL);
+        System.out.println(plan);
+        PlanTestBase.assertNotContains(plan, ": count AS BIGINT)");
+        PlanTestBase.assertContains(plan, "mv1",
+                "  2:AGGREGATE (update serialize)\n" +
+                        "  |  STREAMING\n" +
+                        "  |  output: sum(40: sum(l.LO_REVENUE + 1)), max(41: max(l.LO_REVENUE + 1)), " +
+                        "bitmap_union(43: bitmap_agg(l.LO_REVENUE + 1))\n" +
+                        "  |  group by: 57: cast, 39: LO_ORDERDATE");
+        starRocksAssert.dropMaterializedView("mv1");
     }
 }
