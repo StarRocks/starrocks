@@ -809,7 +809,7 @@ public class IcebergScanNodeTest {
         };
 
         IcebergRewriteDataJob job = new IcebergRewriteDataJob(
-                "insert into t select * from t", false, 0L, 10L, context, alter);
+                "insert into t select * from t", false, 0L, 10L, 1L, context, alter);
 
         job.prepare();
         Deencapsulation.setField(job, "execPlan", execPlan);
@@ -856,7 +856,7 @@ public class IcebergScanNodeTest {
         };
 
         IcebergRewriteDataJob job = new IcebergRewriteDataJob(
-                "insert into t select 1", false, 0L, 10L, context, alter);
+                "insert into t select 1", false, 0L, 10L, 1L, context, alter);
 
         Deencapsulation.setField(job, "rewriteStmt", rewriteStmt);
         Deencapsulation.setField(job, "execPlan", execPlan);
