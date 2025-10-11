@@ -43,6 +43,8 @@ fixed_jars = [
     "hbase-shaded-netty-4.1.1.jar",
     "hbase-shaded-jetty-4.1.1.jar",
     "hbase-shaded-miscellaneous-4.1.1.jar",
+    "grpc-netty-shaded-1.63.0.jar",
+    "grpc-netty-shaded-1.67.1.jar",
     # extra scan from docker scout
     "spark-network-common_2.12-3.5.5.jar",
     "spark-core_2.12-3.5.5.jar",
