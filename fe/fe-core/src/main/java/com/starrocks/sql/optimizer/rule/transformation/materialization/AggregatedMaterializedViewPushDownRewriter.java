@@ -468,8 +468,9 @@ public final class AggregatedMaterializedViewPushDownRewriter extends Materializ
                 remapping.put(aggColRef, newColRef);
                 ctx.aggColRefToPushDownAggMap.put(aggColRef, aggCall);
             }
-            Map<ColumnRefOperator, CallOperator> newAggregations = Maps.newHashMap();
-            uniqueAggregations.forEach((k, v) -> newAggregations.put(v, k));
+            Map<ColumnRefOperator, CallOperator> newAggregations = uniqueAggregations.entrySet().stream()
+                            .map(e -> Maps.immutableEntry(e.getValue(), e.getKey()))
+                            .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
             LogicalAggregationOperator newAggOp = LogicalAggregationOperator.builder()
                     .setAggregations(newAggregations)
                     .setType(AggType.GLOBAL)
