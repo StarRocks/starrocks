@@ -674,30 +674,28 @@ public class PruneComplexSubfieldTest extends PlanTestNoneDBBase {
         {
             String sql = "select pc0.a1 from pc0 where (([]) is not NULL)";
             String plan = getVerboseExplain(sql);
-            assertContains(plan, "  0:OlapScanNode\n" +
-                    "     table: pc0, rollup: pc0\n" +
-                    "     preAggregation: on\n" +
-                    "     Predicates: array_length(CAST([] AS ARRAY<BOOLEAN>)) IS NOT NULL\n" +
-                    "     partitionsRatio=0/1, tabletsRatio=0/0\n" +
-                    "     tabletList=\n" +
-                    "     actualRows=0, avgRowSize=1.0\n" +
-                    "     Pruned type: 7 <-> [ARRAY<INT>]\n" +
-                    "     cardinality: 1");
+            assertContains(plan, "  0:OlapScanNode\n"
+                    + "     table: pc0, rollup: pc0\n"
+                    + "     preAggregation: on\n"
+                    + "     partitionsRatio=0/1, tabletsRatio=0/0\n"
+                    + "     tabletList=\n"
+                    + "     actualRows=0, avgRowSize=1.0\n"
+                    + "     Pruned type: 7 <-> [ARRAY<INT>]\n"
+                    + "     cardinality: 1");
 
         }
         {
             String sql = "select st3.sa3, array_length(st3.sa3) from sc0 where (([1,2,3]) is NOT NULL)";
             String plan = getVerboseExplain(sql);
-            assertContains(plan, "  0:OlapScanNode\n" +
-                    "     table: sc0, rollup: sc0\n" +
-                    "     preAggregation: on\n" +
-                    "     Predicates: array_length([1,2,3]) IS NOT NULL\n" +
-                    "     partitionsRatio=0/1, tabletsRatio=0/0\n" +
-                    "     tabletList=\n" +
-                    "     actualRows=0, avgRowSize=3.0\n" +
-                    "     Pruned type: 4 <-> [struct<s1 int(11), s2 int(11), sa3 array<int(11)>>]\n" +
-                    "     ColumnAccessPath: [/st3/sa3]\n" +
-                    "     cardinality: 1\n");
+            assertContains(plan, "  0:OlapScanNode\n"
+                    + "     table: sc0, rollup: sc0\n"
+                    + "     preAggregation: on\n"
+                    + "     partitionsRatio=0/1, tabletsRatio=0/0\n"
+                    + "     tabletList=\n"
+                    + "     actualRows=0, avgRowSize=3.0\n"
+                    + "     Pruned type: 4 <-> [struct<s1 int(11), s2 int(11), sa3 array<int(11)>>]\n"
+                    + "     ColumnAccessPath: [/st3/sa3]\n"
+                    + "     cardinality: 1");
         }
     }
 
@@ -709,7 +707,6 @@ public class PruneComplexSubfieldTest extends PlanTestNoneDBBase {
             assertContains(plan, "  0:OlapScanNode\n" +
                     "     table: pc0, rollup: pc0\n" +
                     "     preAggregation: on\n" +
-                    "     Predicates: array_length(CAST([] AS ARRAY<BOOLEAN>)) IS NOT NULL\n" +
                     "     partitionsRatio=0/1, tabletsRatio=0/0\n" +
                     "     tabletList=\n" +
                     "     actualRows=0, avgRowSize=3.0\n" +
@@ -738,7 +735,7 @@ public class PruneComplexSubfieldTest extends PlanTestNoneDBBase {
         String sql = "select [1, 2, 3] is null from pc0 t1 right join sc0 t2 on t1.v1 = t2.v1;";
         String plan = getFragmentPlan(sql);
         assertContains(plan, "5:Project\n" +
-                "  |  <slot 15> : array_length([1,2,3]) IS NULL");
+                "  |  <slot 15> : FALSE");
 
         sql = "select [1, 2, 3][1] is null from pc0 t1 right join sc0 t2 on t1.v1 = t2.v1;";
         plan = getFragmentPlan(sql);
