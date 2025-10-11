@@ -146,10 +146,9 @@ public class Column implements Writable, GsonPreProcessable, GsonPostProcessable
     @SerializedName(value = "materializedColumnExpr")
     private ExpressionSerializedObject generatedColumnExprSerialized;
     private ColumnIdExpr generatedColumnExpr;
-
     // Whether this column is a hidden column, hidden columns are used to store some internal data(eg: _ROW_ID).
     @SerializedName(value = "isHidden")
-    private boolean isHidden;
+    private boolean isHidden = false;
 
     // Only for persist
     public Column() {
@@ -264,6 +263,7 @@ public class Column implements Writable, GsonPreProcessable, GsonPostProcessable
                 this.type.getPrimitiveType() != PrimitiveType.INVALID_TYPE);
         this.uniqueId = column.getUniqueId();
         this.generatedColumnExpr = column.generatedColumnExpr;
+        this.isHidden = column.isHidden;
     }
 
     public Column deepCopy() {
@@ -874,6 +874,9 @@ public class Column implements Writable, GsonPreProcessable, GsonPostProcessable
         }
         if (this.isGeneratedColumn() &&
                 !this.generatedColumnExpr.equals(other.generatedColumnExpr)) {
+            return false;
+        }
+        if (this.isHidden != other.isHidden()) {
             return false;
         }
 
