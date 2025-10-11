@@ -1876,6 +1876,12 @@ public class Config extends ConfigBase {
     public static long routine_load_task_timeout_second = 60;
 
     /**
+     * when creating routine load task, ignore alive node num.
+     */
+    @ConfField(mutable = true)
+    public static boolean routine_load_task_ignore_node_num = false;
+
+    /**
      * kafka util request timeout
      */
     @ConfField(mutable = true)

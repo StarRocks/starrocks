@@ -55,6 +55,9 @@ void FileScanner::close() {
     if (!_schema_only) {
         Expr::close(_dest_expr_ctx, _state);
     }
+    if (_preceding_filter_ctxs.size() > 0) {
+        Expr::close(_preceding_filter_ctxs, _state);
+    }
 }
 
 Status FileScanner::init_expr_ctx() {
@@ -88,6 +91,11 @@ Status FileScanner::init_expr_ctx() {
     if (_dest_tuple_desc == nullptr) {
         return Status::InternalError(
                 strings::Substitute("Unknown dest tuple descriptor, tuple_id=$0", _params.dest_tuple_id));
+    }
+
+    if (_params.__isset.preceding_filter_exprs) {
+        RETURN_IF_ERROR(Expr::create_expr_trees(_state->obj_pool(), _params.preceding_filter_exprs,
+                                                &_preceding_filter_ctxs, _state));
     }
 
     bool has_slot_id_map = _params.__isset.dest_sid_to_src_sid_without_trans;
@@ -132,6 +140,11 @@ Status FileScanner::open() {
         RETURN_IF_ERROR(init_expr_ctx());
     }
 
+    if (_preceding_filter_ctxs.size() > 0) {
+        RETURN_IF_ERROR(Expr::prepare(_preceding_filter_ctxs, _state));
+        RETURN_IF_ERROR(Expr::open(_preceding_filter_ctxs, _state));
+    }
+
     if (_params.__isset.strict_mode) {
         _strict_mode = _params.strict_mode;
     }
@@ -170,7 +183,10 @@ void FileScanner::fill_columns_from_path(starrocks::ChunkPtr& chunk, int slot_st
 
 StatusOr<ChunkPtr> FileScanner::materialize(const starrocks::ChunkPtr& src, starrocks::ChunkPtr& cast) {
     SCOPED_RAW_TIMER(&_counter->materialize_ns);
-
+    size_t before = cast->num_rows();
+    RETURN_IF_ERROR(ExecNode::eval_conjuncts(_preceding_filter_ctxs, cast.get()));
+    size_t after = cast->num_rows();
+    _counter->num_rows_unselected += (before - after);
     if (cast->num_rows() == 0) {
         return cast;
     }

@@ -1303,6 +1303,7 @@ loadProperties
     : colSeparatorProperty
     | rowDelimiterProperty
     | importColumns
+    | PRECEDING_FILTER expression
     | WHERE expression
     | partitionNames
     ;
