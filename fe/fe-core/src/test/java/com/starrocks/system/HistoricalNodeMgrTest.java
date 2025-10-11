@@ -20,6 +20,7 @@ import com.starrocks.persist.ImageWriter;
 import com.starrocks.persist.metablock.SRMetaBlockReader;
 import com.starrocks.persist.metablock.SRMetaBlockReaderV2;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.RunMode;
 import com.starrocks.server.WarehouseManager;
 import mockit.Mock;
 import mockit.MockUp;
@@ -43,6 +44,12 @@ public class HistoricalNodeMgrTest {
 
     @BeforeEach
     public void setUp() throws IOException {
+        new MockUp<RunMode>() {
+            @Mock
+            boolean isSharedDataMode() {
+                return true;
+            }
+        };
         WarehouseManager warehouseManager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
         warehouseManager.initDefaultWarehouse();
     }
