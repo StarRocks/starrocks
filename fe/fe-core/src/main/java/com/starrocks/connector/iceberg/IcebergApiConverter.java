@@ -265,6 +265,8 @@ public class IcebergApiConverter {
                     return Types.DecimalType.of(scalarType.getScalarPrecision(), scalarType.getScalarScale());
                 case TIME:
                     return Types.TimeType.get();
+                case VARIANT:
+                    return Types.VariantType.get();
                 default:
                     throw new StarRocksConnectorException("Unsupported primitive column type %s", primitiveType);
             }
