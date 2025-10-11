@@ -14,8 +14,8 @@
 
 package com.starrocks.epack.warehouse.cngroup;
 
-import com.google.api.client.util.Lists;
-import com.google.api.client.util.Sets;
+import com.google.common.collect.Lists;
+import com.google.common.collect.Sets;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReportException;
 import com.starrocks.common.StarRocksException;
@@ -57,6 +57,17 @@ public class CNGroupResourceProvider implements ComputeResourceProvider  {
     @Override
     public ComputeResource ofComputeResource(long warehouseId, long workGroupId) {
         return CNGroupResource.of(warehouseId, workGroupId);
+    }
+
+    @Override
+    public List<ComputeResource> getComputeResources(Warehouse warehouse) {
+        if (warehouse == null) {
+            throw ErrorReportException.report(ErrorCode.ERR_UNKNOWN_WAREHOUSE, "warehouse is null");
+        }
+        return warehouse.getWorkerGroupIds().stream()
+                .map(workerGroupId -> CNGroupResource.of(warehouse.getId(), workerGroupId))
+                .filter(this::isResourceAvailable)
+                .collect(Collectors.toList());
     }
 
     @Override
