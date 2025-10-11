@@ -64,9 +64,7 @@ public class PaimonTableSink extends DataSink {
     private final String databaseName;
     private final String tableName;
     private final Table paimonNativeTable;
-    //private final String fileFormat;
     private final String location;
-    //private final String compressionType;
     private List<String> columnNames = new ArrayList<>();
     private final List<String> columnTypes = new ArrayList<>();
     private final boolean isStaticPartitionSink;
