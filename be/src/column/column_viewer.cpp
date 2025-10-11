@@ -51,8 +51,10 @@ ColumnViewer<Type>::ColumnViewer(const ColumnPtr& column)
         _null_column = GlobalVariables::GetInstance()->one_size_not_null_column();
     }
 
-    _data = _column->get_data().data();
-    _null_data = _null_column->get_data().data();
+    // ColumnViewer is read-only, but get_data() is not const. Safe to const_cast since we only read.
+    using ColumnType = typename std::remove_const<typename std::remove_pointer<decltype(_column.get())>::type>::type;
+    _data = const_cast<ColumnType*>(_column.get())->get_data().data();
+    _null_data = const_cast<NullColumn*>(_null_column.get())->get_data().data();
 }
 
 #define M(TYPE) template class ColumnViewer<TYPE>;
