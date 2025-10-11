@@ -107,6 +107,15 @@ public:
     // Get the cache hit count.
     virtual size_t hit_count() const = 0;
 
+    // Get the insert count.
+    virtual size_t insert_count() const = 0;
+
+    // Get the insert evict count.
+    virtual size_t insert_evict_count() const = 0;
+
+    // Get the release evict count.
+    virtual size_t release_evict_count() const = 0;
+
     // Remove all cache entries that are not actively in use.
     virtual Status prune() = 0;
 };

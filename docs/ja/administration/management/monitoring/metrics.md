@@ -1076,6 +1076,21 @@ StarRocks クラスタのモニタリングサービスの構築方法につい�
 - 単位: Count
 - 説明: ストレージページキャッシュのヒット総数。
 
+### page_cache_insert_count
+
+- 単位: Count
+- 説明: ストレージページキャッシュの挿入操作総数。
+
+### page_cache_insert_evict_count
+
+- 単位: Count
+- 説明: 容量制限により、挿入操作中にエビクトされたキャッシュエントリの総数。
+
+### page_cache_release_evict_count
+
+- 単位: Count
+- 説明: キャッシュ使用量が容量を超えた場合、リリース操作中にエビクトされたキャッシュエントリの総数。
+
 ### bytes_read_total (Deprecated)
 
 ### update_rowset_commit_request_total
