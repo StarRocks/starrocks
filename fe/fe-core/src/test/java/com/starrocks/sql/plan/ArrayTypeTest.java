@@ -99,7 +99,7 @@ public class ArrayTypeTest extends PlanTestBase {
         sql = "select concat(v1, [1,2,3], s_1) from adec";
         plan = getFragmentPlan(sql);
         assertContains(plan, "array_concat(CAST([1: v1] AS ARRAY<VARCHAR>), " +
-                "CAST([1,2,3] AS ARRAY<VARCHAR>), 3: s_1)");
+                "['1','2','3'], 3: s_1)");
 
         sql = "select concat(1,2, [1,2])";
         plan = getFragmentPlan(sql);
@@ -107,13 +107,11 @@ public class ArrayTypeTest extends PlanTestBase {
 
         sql = "select concat(1,2, [1,2], 'a', 'b')";
         plan = getFragmentPlan(sql);
-        assertContains(plan, "array_concat(CAST([1] AS ARRAY<VARCHAR>), CAST([2] AS ARRAY<VARCHAR>), " +
-                "CAST([1,2] AS ARRAY<VARCHAR>), ['a'], ['b'])");
+        assertContains(plan, "array_concat(['1'], ['2'], ['1','2'], ['a'], ['b'])");
 
         sql = "select concat(1,2, [1,2], 'a', 'b', 1.1)";
         plan = getFragmentPlan(sql);
-        assertContains(plan, "array_concat(CAST([1] AS ARRAY<VARCHAR>), CAST([2] AS ARRAY<VARCHAR>), " +
-                "CAST([1,2] AS ARRAY<VARCHAR>), ['a'], ['b'], CAST([1.1] AS ARRAY<VARCHAR>)");
+        assertContains(plan, " array_concat(['1'], ['2'], ['1','2'], ['a'], ['b'], ['1.1'])");
 
         sql = "with t0 as (\n" +
                 "    select c1 from (values([])) as t(c1)\n" +
@@ -345,7 +343,7 @@ public class ArrayTypeTest extends PlanTestBase {
             String sql = "select array_append([[1,2,3]], [null])";
             String plan = getFragmentPlan(sql);
             assertContains(plan,
-                    "<slot 2> : array_append([[1,2,3]], CAST([NULL] AS ARRAY<TINYINT>))");
+                    "<slot 2> : array_append([[1,2,3]], [NULL])");
         }
         {
             starRocksAssert.withTable("create table test_literal_array_insert_t0(" +
@@ -715,11 +713,10 @@ public class ArrayTypeTest extends PlanTestBase {
 
         sql = "select array_contains([null], null), array_position([null], null)";
         plan = getVerboseExplain(sql);
-        assertContains(plan, "  |  output columns:\n" +
-                "  |  2 <-> array_contains[([NULL], NULL); " +
-                "args: INVALID_TYPE,BOOLEAN; result: BOOLEAN; args nullable: true; result nullable: true]\n" +
-                "  |  3 <-> array_position[([NULL], NULL); " +
-                "args: INVALID_TYPE,BOOLEAN; result: INT; args nullable: true; result nullable: true]");
+        assertContains(plan, "  1:Project\n" +
+                "  |  output columns:\n" +
+                "  |  2 <-> TRUE\n" +
+                "  |  3 <-> 1");
     }
 
     @Test

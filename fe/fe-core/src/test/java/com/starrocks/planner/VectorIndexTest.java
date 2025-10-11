@@ -520,7 +520,8 @@ public class VectorIndexTest extends PlanTestBase {
                 "  1:Project\n" +
                 "  |  output columns:\n" +
                 "  |  2 <-> [2: c1, ARRAY<FLOAT>, false]\n" +
-                "  |  4 <-> approx_l2_distance[(cast([1.1,2.2,3.3,4.4] as ARRAY<FLOAT>), [2: c1, ARRAY<FLOAT>, false]); args: INVALID_TYPE,INVALID_TYPE; result: FLOAT; args nullable: true; result nullable: true]\n" +
+                "  |  4 <-> approx_l2_distance[([1.1,2.2,3.3,4.4], [2: c1, ARRAY<FLOAT>, false]); " +
+                "args: INVALID_TYPE,INVALID_TYPE; result: FLOAT; args nullable: true; result nullable: true]\n" +
                 "  |  cardinality: 1\n" +
                 "  |  \n" +
                 "  0:OlapScanNode\n" +
