@@ -37,6 +37,8 @@ import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.FeConstants;
+import com.starrocks.common.util.concurrent.lock.LockType;
+import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.connector.hive.HiveWriteUtils;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.CatalogMgr;
@@ -91,31 +93,18 @@ public class InsertAnalyzer {
      * So we can analyze the SELECT without lock, only take the lock when analyzing INSERT TARGET
      */
     public static void analyzeWithDeferredLock(InsertStmt insertStmt, ConnectContext session, Runnable takeLock) {
-        boolean isLockTaken = false;
-        try {
-            // insert properties
-            analyzeProperties(insertStmt, session);
+        // insert properties
+        analyzeProperties(insertStmt, session);
 
-            // push down schema to files
-            // should lock because this needs target table schema, only affacts insert from files()
-            if (pushDownTargetTableSchemaToFiles(insertStmt, session)) {
-                // Take the PlannerMetaLock
-                takeLock.run();
-                isLockTaken = true;
-            }
+        // push down schema to files
+        pushDownTargetTableSchemaToFiles(insertStmt, session);
 
-            new QueryAnalyzer(session).analyze(insertStmt.getQueryStatement());
+        new QueryAnalyzer(session).analyze(insertStmt.getQueryStatement());
 
-            List<Table> tables = new ArrayList<>();
-            AnalyzerUtils.collectSpecifyExternalTables(insertStmt.getQueryStatement(), tables, Table::isHiveTable);
-            if (tables.stream().anyMatch(Table::isHiveTable) && session.getUseConnectorMetadataCache().isEmpty()) {
-                session.setUseConnectorMetadataCache(Optional.of(false));
-            }
-        } finally {
-            if (!isLockTaken) {
-                // Take the PlannerMetaLock
-                takeLock.run();
-            }
+        List<Table> tables = new ArrayList<>();
+        AnalyzerUtils.collectSpecifyExternalTables(insertStmt.getQueryStatement(), tables, Table::isHiveTable);
+        if (tables.stream().anyMatch(Table::isHiveTable) && session.getUseConnectorMetadataCache().isEmpty()) {
+            session.setUseConnectorMetadataCache(Optional.of(false));
         }
 
         /*
@@ -437,6 +426,16 @@ public class InsertAnalyzer {
             return false;
         }
 
+        String catalogName = insertStmt.getTableName().getCatalog();
+        String dbName = insertStmt.getTableName().getDb();
+        Database database = GlobalStateMgr.getCurrentState().getMetadataMgr()
+                .getDb(session, catalogName, dbName);
+        if (database == null) {
+            return false;
+        }
+        final Database targetDatabase = database;
+        final long targetTableId = targetTable.getId();
+
         QueryRelation queryRelation = insertStmt.getQueryStatement().getQueryRelation();
         if (!(queryRelation instanceof SelectRelation)) {
             return false;
@@ -448,70 +447,89 @@ public class InsertAnalyzer {
         }
 
         Consumer<TableFunctionTable> pushDownSchemaFunc = (fileTable) -> {
-            // get target column names
-            List<String> targetColumnNames = insertStmt.getTargetColumnNames();
-            if (targetColumnNames == null) {
-                targetColumnNames = ((OlapTable) targetTable).getBaseSchemaWithoutGeneratedColumn().stream()
-                        .map(Column::getName).collect(Collectors.toList());
+            Locker locker = new Locker(session.getQueryId());
+            boolean locked = false;
+            Table lockedTargetTable = targetTable;
+            try {
+                locker.lockTableWithIntensiveDbLock(targetDatabase.getId(), targetTableId, LockType.READ);
+                locked = true;
+                lockedTargetTable = MetaUtils.getSessionAwareTable(
+                        session, targetDatabase, insertStmt.getTableName());
+                if (!(lockedTargetTable instanceof OlapTable)) {
+                    return;
+                }
+
+                // get target column names
+                List<String> targetColumnNames = insertStmt.getTargetColumnNames();
+                if (targetColumnNames == null) {
+                    targetColumnNames = ((OlapTable) lockedTargetTable)
+                            .getBaseSchemaWithoutGeneratedColumn().stream()
+                            .map(Column::getName)
+                            .collect(Collectors.toList());
+                }
+
+                // get select column names, null if it is not slot ref column
+                List<String> selectColumnNames = Lists.newArrayList();
+                List<SelectListItem> listItems = selectRelation.getSelectList().getItems();
+                for (SelectListItem item : listItems) {
+                    if (item.isStar()) {
+                        selectColumnNames.addAll(fileTable.getFullSchema().stream().map(Column::getName)
+                                .collect(Collectors.toList()));
+                        continue;
+                    }
+
+                    Expr expr = item.getExpr();
+                    if (expr instanceof SlotRef) {
+                        selectColumnNames.add(((SlotRef) expr).getColumnName());
+                        continue;
+                    }
+
+                    selectColumnNames.add(null);
+                }
+
+                if (targetColumnNames.size() != selectColumnNames.size()) {
+                    return;
+                }
+
+                // update files table schema according to target table schema
+                Map<String, Column> targetTableColumns = lockedTargetTable.getNameToColumn();
+                Map<String, Column> newFileTableColumns = Maps.newTreeMap(String.CASE_INSENSITIVE_ORDER);
+                newFileTableColumns.putAll(fileTable.getNameToColumn());
+                for (int i = 0; i < selectColumnNames.size(); ++i) {
+                    String selectColumnName = selectColumnNames.get(i);
+                    // if select column is a field of struct and the name is 'struct_name.field_name',
+                    // it will be not in newFileTableColumns.
+                    if (selectColumnName == null || !newFileTableColumns.containsKey(selectColumnName)) {
+                        continue;
+                    }
+
+                    String targetColumnName = targetColumnNames.get(i);
+                    if (!targetTableColumns.containsKey(targetColumnName)) {
+                        continue;
+                    }
+
+                    Column oldCol = newFileTableColumns.get(selectColumnName);
+                    Column newCol = targetTableColumns.get(targetColumnName).deepCopy();
+                    // bad case: complex types may fail to convert in scanner.
+                    // such as parquet json -> array<varchar>
+                    if (oldCol.getType().isComplexType() || newCol.getType().isComplexType()) {
+                        continue;
+                    }
+
+                    // file table function table should use original column name because BE is case-sensitive when reading columns.
+                    String origColumnName = oldCol.getName();
+                    newCol.setName(origColumnName);
+                    newFileTableColumns.put(origColumnName, newCol);
+                }
+
+                List<Column> newFileTableSchema = fileTable.getFullSchema().stream()
+                        .map(col -> newFileTableColumns.get(col.getName())).collect(Collectors.toList());
+                fileTable.setNewFullSchema(newFileTableSchema);
+            } finally {
+                if (locked) {
+                    locker.unLockTableWithIntensiveDbLock(targetDatabase.getId(), targetTableId, LockType.READ);
+                }
             }
-
-            // get select column names, null if it is not slot ref column
-            List<String> selectColumnNames = Lists.newArrayList();
-            List<SelectListItem> listItems = selectRelation.getSelectList().getItems();
-            for (SelectListItem item : listItems) {
-                if (item.isStar()) {
-                    selectColumnNames.addAll(fileTable.getFullSchema().stream().map(Column::getName)
-                            .collect(Collectors.toList()));
-                    continue;
-                }
-
-                Expr expr = item.getExpr();
-                if (expr instanceof SlotRef) {
-                    selectColumnNames.add(((SlotRef) expr).getColumnName());
-                    continue;
-                }
-
-                selectColumnNames.add(null);
-            }
-
-            if (targetColumnNames.size() != selectColumnNames.size()) {
-                return;
-            }
-
-            // update files table schema according to target table schema
-            Map<String, Column> targetTableColumns = targetTable.getNameToColumn();
-            Map<String, Column> newFileTableColumns = Maps.newTreeMap(String.CASE_INSENSITIVE_ORDER);
-            newFileTableColumns.putAll(fileTable.getNameToColumn());
-            for (int i = 0; i < selectColumnNames.size(); ++i) {
-                String selectColumnName = selectColumnNames.get(i);
-                // if select column is a field of struct and the name is 'struct_name.field_name',
-                // it will be not in newFileTableColumns.
-                if (selectColumnName == null || !newFileTableColumns.containsKey(selectColumnName)) {
-                    continue;
-                }
-
-                String targetColumnName = targetColumnNames.get(i);
-                if (!targetTableColumns.containsKey(targetColumnName)) {
-                    continue;
-                }
-
-                Column oldCol = newFileTableColumns.get(selectColumnName);
-                Column newCol = targetTableColumns.get(targetColumnName).deepCopy();
-                // bad case: complex types may fail to convert in scanner.
-                // such as parquet json -> array<varchar>
-                if (oldCol.getType().isComplexType() || newCol.getType().isComplexType()) {
-                    continue;
-                }
-
-                // file table function table should use original column name because BE is case-sensitive when reading columns.
-                String origColumnName = oldCol.getName();
-                newCol.setName(origColumnName);
-                newFileTableColumns.put(origColumnName, newCol);
-            }
-
-            List<Column> newFileTableSchema = fileTable.getFullSchema().stream()
-                    .map(col -> newFileTableColumns.get(col.getName())).collect(Collectors.toList());
-            fileTable.setNewFullSchema(newFileTableSchema);
         };
 
         ((FileTableFunctionRelation) fromRelation).setPushDownSchemaFunc(pushDownSchemaFunc);
