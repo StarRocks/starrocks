@@ -394,6 +394,35 @@ TEST_F(TabletUpdatesTest, writeread_with_persistent_index) {
     test_writeread(true);
 }
 
+TEST_F(TabletUpdatesTest, submit_apply_task_fail) {
+    srand(GetCurrentTimeMicros());
+    _tablet = create_tablet(rand(), rand());
+    _tablet->set_enable_persistent_index(true);
+    // init fail point
+    DeferOp defer([]() {
+        SyncPoint::GetInstance()->ClearCallBack("ThreadPool::do_submit:1");
+        SyncPoint::GetInstance()->DisableProcessing();
+    });
+    SyncPoint::GetInstance()->EnableProcessing();
+    SyncPoint::GetInstance()->SetCallBack("ThreadPool::do_submit:1", [](void* arg) { *(int64_t*)arg = 0; });
+    // write
+    const int N = 8000;
+    std::vector<int64_t> keys;
+    for (int i = 0; i < N; i++) {
+        keys.push_back(i);
+    }
+    auto rs0 = create_rowset(_tablet, keys);
+    ASSERT_TRUE(_tablet->rowset_commit(2, rs0).ok());
+    ASSERT_EQ(2, _tablet->updates()->max_version());
+
+    auto rs1 = create_rowset(_tablet, keys);
+    ASSERT_TRUE(_tablet->rowset_commit(3, rs1).ok());
+    ASSERT_EQ(3, _tablet->updates()->max_version());
+    auto rs2 = create_rowset(_tablet, keys, nullptr, true);
+    ASSERT_TRUE(_tablet->rowset_commit(4, rs2).ok());
+    ASSERT_EQ(4, _tablet->updates()->max_version());
+}
+
 TEST_F(TabletUpdatesTest, test_pk_index_write_amp_score) {
     srand(GetCurrentTimeMicros());
     _tablet = create_tablet(rand(), rand());
