@@ -121,10 +121,11 @@ StatusOr<bool> IcebergRowIdReader::page_index_zone_map_filter(const std::vector<
             if (!result.ok()) {
                 return result.status();
             }
-            if (result.value()) {
-                has_valid_predicate = true;
-                union_range |= pred_range;
+            if (!result.value()) {
+                return false;
             }
+            has_valid_predicate = true;
+            union_range |= pred_range;
         }
 
         if (!has_valid_predicate) {
@@ -135,7 +136,6 @@ StatusOr<bool> IcebergRowIdReader::page_index_zone_map_filter(const std::vector<
         row_id_range &= union_range;
         DLOG(INFO) << "after applying OR predicates, ret: " << row_id_range.to_string();
     } else {
-        DLOG(WARNING) << "Unsupported predicate relation type: " << static_cast<int>(pred_relation);
         return false;
     }
 

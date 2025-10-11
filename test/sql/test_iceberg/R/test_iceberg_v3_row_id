@@ -63,6 +63,70 @@ select _row_id,* from iceberg_sql_test_${uuid0}.iceberg_oss_db.test_v3 where _ro
 11	12	22	112	12
 12	13	23	113	13
 -- !result
+select _row_id,* from iceberg_sql_test_${uuid0}.iceberg_oss_db.test_v3 where _row_id = 10 or _row_id < 5 order by _row_id limit 10;
+-- result:
+0	1	11	101	1
+1	2	12	102	2
+2	3	13	103	3
+3	4	14	104	4
+4	5	15	105	5
+10	11	21	111	11
+-- !result
+select _row_id,* from iceberg_sql_test_${uuid0}.iceberg_oss_db.test_v3 where _row_id != 2 order by _row_id limit 10;
+-- result:
+0	1	11	101	1
+1	2	12	102	2
+3	4	14	104	4
+4	5	15	105	5
+5	6	16	106	6
+6	7	17	107	7
+7	8	18	108	8
+8	9	19	109	9
+9	10	20	110	10
+10	11	21	111	11
+-- !result
+select _row_id,* from iceberg_sql_test_${uuid0}.iceberg_oss_db.test_v3 where _row_id != 11 and _row_id >= 10 and _row_id <= 30 order by _row_id limit 10;
+-- result:
+10	11	21	111	11
+12	13	23	113	13
+13	14	24	114	14
+14	15	25	115	15
+15	16	26	116	16
+16	17	27	117	17
+17	18	28	118	18
+18	19	29	119	19
+19	20	30	120	20
+20	21	31	121	21
+-- !result
+select _row_id,* from iceberg_sql_test_${uuid0}.iceberg_oss_db.test_v3 where _row_id not in (1, 11, 21) order by _row_id limit 10;
+-- result:
+0	1	11	101	1
+2	3	13	103	3
+3	4	14	104	4
+4	5	15	105	5
+5	6	16	106	6
+6	7	17	107	7
+7	8	18	108	8
+8	9	19	109	9
+9	10	20	110	10
+10	11	21	111	11
+-- !result
+select _row_id,* from iceberg_sql_test_${uuid0}.iceberg_oss_db.test_v3 where _row_id is null order by _row_id limit 10;
+-- result:
+-- !result
+select _row_id,* from iceberg_sql_test_${uuid0}.iceberg_oss_db.test_v3 where _row_id is not null order by _row_id limit 10;
+-- result:
+0	1	11	101	1
+1	2	12	102	2
+2	3	13	103	3
+3	4	14	104	4
+4	5	15	105	5
+5	6	16	106	6
+6	7	17	107	7
+7	8	18	108	8
+8	9	19	109	9
+9	10	20	110	10
+-- !result
 drop catalog iceberg_sql_test_${uuid0};
 -- result:
 -- !result

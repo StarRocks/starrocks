@@ -10,7 +10,12 @@ select _row_id,* from iceberg_sql_test_${uuid0}.iceberg_oss_db.test_v3 where c0>
 select _row_id,* from iceberg_sql_test_${uuid0}.iceberg_oss_db.test_v3 where _row_id=9 order by _row_id limit 10;
 select _row_id,* from iceberg_sql_test_${uuid0}.iceberg_oss_db.test_v3 where _row_id >=10 and _row_id <= 20 order by _row_id limit 10;
 select _row_id,* from iceberg_sql_test_${uuid0}.iceberg_oss_db.test_v3 where _row_id in (10,11,12) order by _row_id limit 10;
-
+select _row_id,* from iceberg_sql_test_${uuid0}.iceberg_oss_db.test_v3 where _row_id = 10 or _row_id < 5 order by _row_id limit 10;
+select _row_id,* from iceberg_sql_test_${uuid0}.iceberg_oss_db.test_v3 where _row_id != 2 order by _row_id limit 10;
+select _row_id,* from iceberg_sql_test_${uuid0}.iceberg_oss_db.test_v3 where _row_id != 11 and _row_id >= 10 and _row_id <= 30 order by _row_id limit 10;
+select _row_id,* from iceberg_sql_test_${uuid0}.iceberg_oss_db.test_v3 where _row_id not in (1, 11, 21) order by _row_id limit 10;
+select _row_id,* from iceberg_sql_test_${uuid0}.iceberg_oss_db.test_v3 where _row_id is null order by _row_id limit 10;
+select _row_id,* from iceberg_sql_test_${uuid0}.iceberg_oss_db.test_v3 where _row_id is not null order by _row_id limit 10;
 
 
 
