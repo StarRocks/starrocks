@@ -37,6 +37,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
 
 public class BinlogManager {
@@ -64,11 +65,11 @@ public class BinlogManager {
     QueryableReentrantReadWriteLock lock = new QueryableReentrantReadWriteLock(true);
 
     public BinlogManager() {
-        tableIdToReportedNum = new HashMap<>();
-        tableIdToBinlogVersion = new HashMap<>();
-        tableIdToReplicaCount = new HashMap<>();
-        tabletStatistics = new HashMap<>();
-        tableIdToPartitions = new HashMap<>();
+        tableIdToReportedNum = new ConcurrentHashMap<>();
+        tableIdToBinlogVersion = new ConcurrentHashMap<>();
+        tableIdToReplicaCount = new ConcurrentHashMap<>();
+        tabletStatistics = new ConcurrentHashMap<>();
+        tableIdToPartitions = new ConcurrentHashMap<>();
     }
 
     private boolean checkIsPartitionChanged(Set<Long> prePartitions, Collection<PhysicalPartition> curPartitions) {
@@ -90,7 +91,7 @@ public class BinlogManager {
             Locker locker = new Locker();
             try {
                 // check if partitions has changed
-                locker.lockDatabase(db.getId(), LockType.READ);
+                locker.lockTableWithIntensiveDbLock(db.getId(), table.getId(), LockType.READ);
                 Set<Long> partitions = tableIdToPartitions.computeIfAbsent(table.getId(), key -> new HashSet<>());
                 boolean isPartitionChanged = false;
                 // if partitions is empty indicates that the tablet is
@@ -138,11 +139,11 @@ public class BinlogManager {
                     allBeIds.add(beId);
                 }
             } finally {
-                locker.unLockDatabase(db.getId(), LockType.READ);
+                locker.unLockTableWithIntensiveDbLock(db.getId(), table.getId(), LockType.READ);
             }
 
             if (tableIdToReportedNum.get(table.getId()).equals(tableIdToReplicaCount.get(table.getId()))) {
-                locker.lockDatabase(db.getId(), LockType.WRITE);
+                locker.lockTableWithIntensiveDbLock(db.getId(), table.getId(), LockType.WRITE);
                 try {
                     // check again if all replicas have been reported
                     long totalReplicaCount = table.getAllPhysicalPartitions().stream().
@@ -185,7 +186,7 @@ public class BinlogManager {
                 } catch (AnalysisException e) {
                     LOG.warn("Failed to execute", e);
                 } finally {
-                    locker.unLockDatabase(db.getId(), LockType.WRITE);
+                    locker.unLockTableWithIntensiveDbLock(db.getId(), table.getId(), LockType.WRITE);
                 }
             }
         } finally {
@@ -229,7 +230,7 @@ public class BinlogManager {
         Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
         if (db != null) {
             Locker locker = new Locker();
-            locker.lockDatabase(db.getId(), LockType.READ);
+            locker.lockTableWithIntensiveDbLock(db.getId(), tableId, LockType.READ);
             try {
                 OlapTable olapTable = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
                             .getTable(db.getId(), tableId);
@@ -237,7 +238,7 @@ public class BinlogManager {
                     return olapTable.getBinlogAvailableVersion().size() != 0;
                 }
             } finally {
-                locker.unLockDatabase(db.getId(), LockType.READ);
+                locker.unLockTableWithIntensiveDbLock(db.getId(), tableId, LockType.READ);
             }
         }
         return false;
@@ -250,7 +251,7 @@ public class BinlogManager {
         Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
         if (db != null) {
             Locker locker = new Locker();
-            locker.lockDatabase(db.getId(), LockType.READ);
+            locker.lockTableWithIntensiveDbLock(db.getId(), tableId, LockType.READ);
             try {
                 OlapTable olapTable = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
                             .getTable(db.getId(), tableId);
@@ -258,7 +259,7 @@ public class BinlogManager {
                     return olapTable.getBinlogAvailableVersion();
                 }
             } finally {
-                locker.unLockDatabase(db.getId(), LockType.READ);
+                locker.unLockTableWithIntensiveDbLock(db.getId(), tableId, LockType.READ);
             }
         }
         return null;
