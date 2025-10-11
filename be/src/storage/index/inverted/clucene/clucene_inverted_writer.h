@@ -40,11 +40,9 @@ const std::wstring empty_value;
 class CLuceneInvertedWriter : public InvertedWriter {
 public:
     CLuceneInvertedWriter(const CLuceneInvertedWriter&) = delete;
-
     const CLuceneInvertedWriter& operator=(const CLuceneInvertedWriter&) = delete;
 
     CLuceneInvertedWriter() = default;
-
     ~CLuceneInvertedWriter() override = default;
 
     static Status create(const TypeInfoPtr& typeinfo, const std::string& field_name, const std::string& directory,

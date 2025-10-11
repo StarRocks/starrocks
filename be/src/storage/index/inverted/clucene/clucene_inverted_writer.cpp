@@ -20,8 +20,14 @@
 
 #include <boost/locale/encoding_utf.hpp>
 
+#include "CLucene.h"
 #include "common/status.h"
+#include "fs/fs.h"
 #include "storage/index/index_descriptor.h"
+#include "storage/index/inverted/clucene/clucene_file_manager.h"
+#include "storage/index/inverted/clucene/clucene_file_writer.h"
+#include "storage/index/inverted/clucene/clucene_fs_directory.h"
+#include "storage/index/inverted/inverted_index_option.h"
 #include "types/logical_type.h"
 #include "util/faststring.h"
 
@@ -43,12 +49,19 @@ class CLuceneInvertedWriterImpl : public CLuceneInvertedWriter {
 public:
     using CppType = typename CppTypeTraits<field_type>::CppType;
 
-    explicit CLuceneInvertedWriterImpl(const std::string& field_name, const std::string& directory,
+    explicit CLuceneInvertedWriterImpl(const std::string& field_name,
+                                       std::shared_ptr<CLuceneFileWriter> index_file_writer,
                                        const TabletIndex* inverted_index)
-            : _directory(std::move(directory)), _inverted_index(inverted_index) {
+            : _index_file_writer(std::move(index_file_writer)), _inverted_index(inverted_index) {
         _parser_type = get_inverted_index_parser_type_from_string(
                 get_parser_string_from_properties(_inverted_index->index_properties()));
         _field_name = std::wstring(field_name.begin(), field_name.end());
+    }
+
+    ~CLuceneInvertedWriterImpl() override {
+        if (_index_writer != nullptr) {
+            close();
+        }
     }
 
     uint64_t size() const override { return _index_writer->numRamDocs(); }
@@ -98,7 +111,9 @@ public:
             // ANALYSER_NOT_SET, ANALYSER_NONE use default SimpleAnalyzer
             _analyzer = std::make_unique<lucene::analysis::SimpleAnalyzer>();
         }
-        _index_writer = std::make_unique<lucene::index::IndexWriter>(_directory.c_str(), _analyzer.get(), create);
+
+        ASSIGN_OR_RETURN(_dir, _index_file_writer->open(_inverted_index));
+        _index_writer = std::make_unique<lucene::index::IndexWriter>(_dir.get(), _analyzer.get(), create);
         _index_writer->setMaxBufferedDocs(-1);
         _index_writer->setRAMBufferSizeMB(RAMBufferSizeMB);
         _index_writer->setMaxFieldLength(MAX_FIELD_LEN);
@@ -199,8 +214,10 @@ public:
         try {
             // write string type values
             if constexpr (is_string_type(field_type)) {
-                dir = _index_writer->getDirectory();
-                write_null_bitmap(null_bitmap_out, dir);
+                if (_dir == nullptr) {
+                    return Status::InternalError("Inverted index writer finish error occurred: dir is nullptr");
+                }
+                write_null_bitmap(null_bitmap_out, _dir.get());
                 close();
             }
         } catch (CLuceneError& e) {
@@ -230,6 +247,9 @@ private:
     InvertedIndexParserType _parser_type;
     std::wstring _field_name;
     const TabletIndex* _inverted_index;
+
+    std::shared_ptr<CLuceneFileWriter> _index_file_writer;
+    std::shared_ptr<StarRocksMergingDirectory> _dir = nullptr;
 };
 
 Status CLuceneInvertedWriter::create(const TypeInfoPtr& typeinfo, const std::string& field_name,
@@ -240,13 +260,17 @@ Status CLuceneInvertedWriter::create(const TypeInfoPtr& typeinfo, const std::str
         type = typeinfo->type();
     }
 
+    ASSIGN_OR_RETURN(auto index_file_writer,
+                     CLuceneFileManager::getInstance().get_or_create_clucene_file_writer(directory));
+
     switch (type) {
     case LogicalType::TYPE_CHAR: {
-        *res = std::make_unique<CLuceneInvertedWriterImpl<LogicalType::TYPE_CHAR>>(field_name, directory, tablet_index);
+        *res = std::make_unique<CLuceneInvertedWriterImpl<LogicalType::TYPE_CHAR>>(field_name, index_file_writer,
+                                                                                   tablet_index);
         break;
     }
     case LogicalType::TYPE_VARCHAR: {
-        *res = std::make_unique<CLuceneInvertedWriterImpl<LogicalType::TYPE_VARCHAR>>(field_name, directory,
+        *res = std::make_unique<CLuceneInvertedWriterImpl<LogicalType::TYPE_VARCHAR>>(field_name, index_file_writer,
                                                                                       tablet_index);
         break;
     }
