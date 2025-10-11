@@ -761,8 +761,20 @@ public class AggregatedMaterializedViewRewriter extends MaterializedViewRewriter
                 // aggColRefToAggMap:  oldCol1 -> coalesce(newCol1, 0)
                 // It will generate new projections as below:
                 // newProjections: oldCol1 -> coalesce(newCol1, 0)
+<<<<<<< HEAD
                 ScalarOperator newProjectOp = genRollupProject(aggCall, newAggColRef, hasGroupByKeys);
                 aggColRefToAggMap.put(origColRef, newProjectOp);
+=======
+                if (mvRewriteContext.isInAggregatePushDown()) {
+                    // it's safe to change origColRef's type here because it's copied in agg push down rule
+                    // and origColRef will be removed after rewrite.
+                    origColRef.setType(newAggColRef.getType());
+                    aggColRefToAggMap.put(origColRef, newAggColRef);
+                } else {
+                    ScalarOperator newProjectOp = genRollupProject(aggCall, newAggColRef, hasGroupByKeys);
+                    aggColRefToAggMap.put(origColRef, newProjectOp);
+                }
+>>>>>>> d0b7c2226f ([BugFix] Fix agg push down type cast bug (#63875))
             }
         }
 
