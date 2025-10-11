@@ -380,6 +380,13 @@ Status ChunkPredicateBuilder<E, Type>::_build_bitset_in_predicates(PredicateComp
             continue;
         }
 
+        // Low-cardinality dictionary columns can only use VARCHAR-type predicates during the index application phase.
+        // Therefore, if the runtime bitset filter corresponds to a global low-cardinality dictionary column,
+        // it cannot be pushed down to the storage layer for index application.
+        if (const auto& dict_map = _opts.runtime_state->get_query_global_dict_map(); dict_map.contains(slot_id)) {
+            continue;
+        }
+
         auto column_id = parser->column_id(*slot_desc);
 
         const auto error_status = Status::NotSupported("runtime bitset filter do not support the logical type: " +
@@ -433,25 +440,36 @@ requires(!lt_is_date<SlotType>) Status ChunkPredicateBuilder<E, Type>::normalize
         const SlotDescriptor& slot, ColumnValueRange<RangeValueType>* range) {
     // clang-format on
 
-    Status status;
+    const auto& global_dicts = _opts.runtime_state->get_query_global_dict_map();
+    const auto global_dict_iter = SlotType == TYPE_VARCHAR ? global_dicts.find(slot.id()) : global_dicts.end();
 
-    for (size_t i = 0; i < _exprs.size(); i++) {
-        if (_normalized_exprs[i]) {
-            continue;
-        }
+    auto process = [&]<LogicalType MappingType, template <typename> typename Decoder, typename... Args>(Args &&
+                                                                                                        ... args)
+                           ->Status {
+        Status status;
 
-        const Expr* root_expr = _exprs[i].root();
-
-        // 1. Normalize in conjuncts like 'where col in (v1, v2, v3)'
-        if (TExprOpcode::FILTER_IN == maybe_invert_in_and_equal_op<Negative>(root_expr->op())) {
-            const Expr* l = root_expr->get_child(0);
-
-            if (!l->is_slotref() || (l->type().type != slot.type().type && !ignore_cast(slot, *l))) {
+        for (size_t i = 0; i < _exprs.size(); i++) {
+            if (_normalized_exprs[i]) {
                 continue;
             }
-            std::vector<SlotId> slot_ids;
-            if (1 == l->get_slot_ids(&slot_ids) && slot_ids[0] == slot.id()) {
-                const auto* pred = down_cast<const VectorizedInConstPredicate<SlotType>*>(root_expr);
+
+            const Expr* root_expr = _exprs[i].root();
+
+            // 1. Normalize in conjuncts like 'where col in (v1, v2, v3)'
+            if (TExprOpcode::FILTER_IN == maybe_invert_in_and_equal_op<Negative>(root_expr->op())) {
+                const Expr* l = root_expr->get_child(0);
+
+                if (!l->is_slotref() ||
+                    (l->type().type != slot.type().type && l->type().type != MappingType && !ignore_cast(slot, *l))) {
+                    continue;
+                }
+
+                std::vector<SlotId> slot_ids;
+                if (1 != l->get_slot_ids(&slot_ids) || slot_ids[0] != slot.id()) {
+                    continue;
+                }
+
+                const auto* pred = down_cast<const VectorizedInConstPredicate<MappingType>*>(root_expr);
                 // join in runtime filter  will handle by `_normalize_join_runtime_filter`
                 if (pred->is_join_runtime_filter()) {
                     continue;
@@ -475,34 +493,47 @@ requires(!lt_is_date<SlotType>) Status ChunkPredicateBuilder<E, Type>::normalize
                     }
                 }
 
+                using DecoderType = Decoder<typename RunTimeTypeTraits<MappingType>::CppType>;
+                DecoderType decoder(std::forward<Args>(args)...);
+
                 boost::container::flat_set<RangeValueType> values;
                 values.reserve(pred->hash_set().size());
                 for (const auto& value : pred->hash_set()) {
-                    values.insert(value);
+                    values.insert(decoder.decode(value));
                 }
 
                 if (range->add_fixed_values(FILTER_IN, values).ok()) {
                     _normalized_exprs[i] = true;
                 }
             }
+
+            // 2. Normalize eq conjuncts like 'where col = value'
+            if (TExprNodeType::BINARY_PRED == root_expr->node_type() &&
+                FILTER_IN == to_olap_filter_type<Negative>(root_expr->op(), false)) {
+                using ValueType = typename RunTimeTypeTraits<SlotType>::CppType;
+                SQLFilterOp op;
+                ValueType value;
+                ASSIGN_OR_RETURN(auto* expr_context, _exprs[i].expr_context(_opts.obj_pool, _opts.runtime_state));
+                bool ok = get_predicate_value<Negative>(_opts.obj_pool, slot, get_root_expr(expr_context), expr_context,
+                                                        &value, &op, &status);
+                if (ok && range->add_fixed_values(FILTER_IN, boost::container::flat_set<RangeValueType>{value}).ok()) {
+                    _normalized_exprs[i] = true;
+                }
+            }
         }
 
-        // 2. Normalize eq conjuncts like 'where col = value'
-        if (TExprNodeType::BINARY_PRED == root_expr->node_type() &&
-            FILTER_IN == to_olap_filter_type<Negative>(root_expr->op(), false)) {
-            using ValueType = typename RunTimeTypeTraits<SlotType>::CppType;
-            SQLFilterOp op;
-            ValueType value;
-            ASSIGN_OR_RETURN(auto* expr_context, _exprs[i].expr_context(_opts.obj_pool, _opts.runtime_state));
-            bool ok = get_predicate_value<Negative>(_opts.obj_pool, slot, get_root_expr(expr_context), expr_context,
-                                                    &value, &op, &status);
-            if (ok && range->add_fixed_values(FILTER_IN, boost::container::flat_set<RangeValueType>{value}).ok()) {
-                _normalized_exprs[i] = true;
-            }
+        return Status::OK();
+    };
+
+    if constexpr (SlotType == TYPE_VARCHAR) {
+        if (global_dict_iter != global_dicts.end()) {
+            return process
+                    .template operator()<LowCardDictType, detail::RuntimeColumnPredicateBuilder::GlobalDictCodeDecoder>(
+                            &global_dict_iter->second.first);
         }
     }
 
-    return Status::OK();
+    return process.template operator()<SlotType, detail::RuntimeColumnPredicateBuilder::DummyDecoder>(nullptr);
 }
 
 // clang-format off
@@ -699,22 +730,32 @@ Status ChunkPredicateBuilder<E, Type>::normalize_join_runtime_filter(const SlotD
     }
     DCHECK(!Negative);
 
-    // in runtime filter
-    for (size_t i = 0; i < _exprs.size(); i++) {
-        if (_normalized_exprs[i]) {
-            continue;
-        }
+    const auto& global_dicts = _opts.runtime_state->get_query_global_dict_map();
+    const auto global_dict_iter = SlotType == TYPE_VARCHAR ? global_dicts.find(slot.id()) : global_dicts.end();
 
-        const Expr* root_expr = _exprs[i].root();
-        if (TExprOpcode::FILTER_IN == root_expr->op()) {
-            const Expr* l = root_expr->get_child(0);
-            if (!l->is_slotref() || (l->type().type != slot.type().type && !ignore_cast(slot, *l))) {
+    auto process = [&]<LogicalType MappingType, template <typename> typename Decoder, typename... Args>(Args &&
+                                                                                                        ... args)
+                           ->Status {
+        // in runtime filter
+        for (size_t i = 0; i < _exprs.size(); i++) {
+            if (_normalized_exprs[i]) {
                 continue;
             }
-            std::vector<SlotId> slot_ids;
-            if (1 == l->get_slot_ids(&slot_ids) && slot_ids[0] == slot.id()) {
-                const auto* pred = down_cast<const VectorizedInConstPredicate<SlotType>*>(root_expr);
 
+            const Expr* root_expr = _exprs[i].root();
+            if (TExprOpcode::FILTER_IN == root_expr->op()) {
+                const Expr* l = root_expr->get_child(0);
+                if (!l->is_slotref() ||
+                    (l->type().type != slot.type().type && l->type().type != MappingType && !ignore_cast(slot, *l))) {
+                    continue;
+                }
+
+                std::vector<SlotId> slot_ids;
+                if (1 != l->get_slot_ids(&slot_ids) || slot_ids[0] != slot.id()) {
+                    continue;
+                }
+
+                const auto* pred = down_cast<const VectorizedInConstPredicate<MappingType>*>(root_expr);
                 if (!pred->is_join_runtime_filter()) {
                     continue;
                 }
@@ -729,7 +770,7 @@ Status ChunkPredicateBuilder<E, Type>::normalize_join_runtime_filter(const SlotD
                 if (pred->null_in_set()) {
                     std::vector<BoxedExpr> containers;
                     auto* new_in_pred =
-                            down_cast<VectorizedInConstPredicate<SlotType>*>(root_expr->clone(_opts.obj_pool));
+                            down_cast<VectorizedInConstPredicate<MappingType>*>(root_expr->clone(_opts.obj_pool));
                     const auto& childs = root_expr->children();
                     for (const auto& child : childs) {
                         new_in_pred->add_child(child);
@@ -750,7 +791,14 @@ Status ChunkPredicateBuilder<E, Type>::normalize_join_runtime_filter(const SlotD
                         _child_builders.emplace_back(child_builder);
                     }
                 } else {
-                    std::vector<RangeValueType> values(pred->hash_set().begin(), pred->hash_set().end());
+                    using DecoderType = Decoder<typename RunTimeTypeTraits<MappingType>::CppType>;
+                    DecoderType decoder(std::forward<Args>(args)...);
+
+                    std::vector<RangeValueType> values;
+                    values.reserve(slot_ids.size());
+                    for (const auto& value : pred->hash_set()) {
+                        values.push_back(decoder.decode(value));
+                    }
                     ::pdqsort(values.begin(), values.end());
 
                     boost::container::flat_set<RangeValueType> value_set(values.begin(), values.end());
@@ -758,71 +806,54 @@ Status ChunkPredicateBuilder<E, Type>::normalize_join_runtime_filter(const SlotD
                 }
             }
         }
-    }
 
-    // bloom runtime filter
-    for (const auto& it : _opts.runtime_filters->descriptors()) {
-        RuntimeFilterProbeDescriptor* desc = it.second;
-        const RuntimeFilter* rf = desc->runtime_filter(_opts.driver_sequence);
-        using RangeType = ColumnValueRange<RangeValueType>;
-        using ValueType = typename RunTimeTypeTraits<SlotType>::CppType;
-        SlotId slot_id;
+        // bloom runtime filter
+        for (const auto& it : _opts.runtime_filters->descriptors()) {
+            RuntimeFilterProbeDescriptor* desc = it.second;
+            const RuntimeFilter* rf = desc->runtime_filter(_opts.driver_sequence);
+            using RangeType = ColumnValueRange<RangeValueType>;
+            using ValueType = typename RunTimeTypeTraits<SlotType>::CppType;
+            SlotId slot_id;
 
-        // probe expr is slot ref and slot id matches.
-        if (!desc->is_probe_slot_ref(&slot_id) || slot_id != slot.id()) continue;
+            // probe expr is slot ref and slot id matches.
+            if (!desc->is_probe_slot_ref(&slot_id) || slot_id != slot.id()) continue;
 
-        // runtime filter existed and does not have null.
-        if (rf == nullptr || rf->get_in_filter() != nullptr) {
-            rt_ranger_params.add_unarrived_rf(desc, &slot, _opts.driver_sequence);
-            continue;
-        }
-
-        // If this column doesn't have other filter, we use join runtime filter
-        // to fast comput row range in storage engine
-        if (range->is_init_state()) {
-            range->set_index_filter_only(true);
-        }
-
-        // if we have multi-scanners
-        // If a scanner has finished building a runtime filter,
-        // the rest of the runtime filters will be normalized here
-
-        auto& global_dicts = _opts.runtime_state->get_query_global_dict_map();
-        if constexpr (SlotType == TYPE_VARCHAR) {
-            if (auto iter = global_dicts.find(slot_id); iter != global_dicts.end()) {
-                if (rf->has_null()) {
-                    normalized_rf_with_null<SlotType, LowCardDictType,
-                                            detail::RuntimeColumnPredicateBuilder::GlobalDictCodeDecoder>(
-                            rf, &slot, &iter->second.first);
-                } else {
-                    detail::RuntimeColumnPredicateBuilder::build_minmax_range<
-                            RangeType, SlotType, LowCardDictType,
-                            detail::RuntimeColumnPredicateBuilder::GlobalDictCodeDecoder>(*range, rf, _opts.obj_pool,
-                                                                                          &iter->second.first);
-                }
-            } else {
-                if (rf->has_null()) {
-                    normalized_rf_with_null<SlotType, SlotType, detail::RuntimeColumnPredicateBuilder::DummyDecoder>(
-                            rf, &slot, nullptr);
-                } else {
-                    detail::RuntimeColumnPredicateBuilder::build_minmax_range<
-                            RangeType, SlotType, SlotType, detail::RuntimeColumnPredicateBuilder::DummyDecoder>(
-                            *range, rf, _opts.obj_pool, nullptr);
-                }
+            // runtime filter existed and does not have null.
+            if (rf == nullptr || rf->get_in_filter() != nullptr) {
+                rt_ranger_params.add_unarrived_rf(desc, &slot, _opts.driver_sequence);
+                continue;
             }
-        } else {
+
+            // If this column doesn't have other filter, we use join runtime filter
+            // to fast comput row range in storage engine
+            if (range->is_init_state()) {
+                range->set_index_filter_only(true);
+            }
+
+            // if we have multi-scanners
+            // If a scanner has finished building a runtime filter,
+            // the rest of the runtime filters will be normalized here
+
             if (rf->has_null()) {
-                normalized_rf_with_null<SlotType, SlotType, detail::RuntimeColumnPredicateBuilder::DummyDecoder>(
-                        rf, &slot, nullptr);
+                normalized_rf_with_null<SlotType, MappingType, Decoder>(rf, &slot, std::forward<Args>(args)...);
             } else {
-                detail::RuntimeColumnPredicateBuilder::build_minmax_range<
-                        RangeType, SlotType, SlotType, detail::RuntimeColumnPredicateBuilder::DummyDecoder>(
-                        *range, rf, _opts.obj_pool, nullptr);
+                detail::RuntimeColumnPredicateBuilder::build_minmax_range<RangeType, SlotType, MappingType, Decoder>(
+                        *range, rf, _opts.obj_pool, std::forward<Args>(args)...);
             }
+        }
+
+        return Status::OK();
+    };
+
+    if constexpr (SlotType == TYPE_VARCHAR) {
+        if (global_dict_iter != global_dicts.end()) {
+            return process
+                    .template operator()<LowCardDictType, detail::RuntimeColumnPredicateBuilder::GlobalDictCodeDecoder>(
+                            &global_dict_iter->second.first);
         }
     }
 
-    return Status::OK();
+    return process.template operator()<SlotType, detail::RuntimeColumnPredicateBuilder::DummyDecoder>(nullptr);
 }
 
 template <BoxedExprType E, CompoundNodeType Type>
@@ -1167,6 +1198,12 @@ Status ChunkPredicateBuilder<E, Type>::_get_column_predicates(PredicateParser* p
                 continue;
             }
 
+            // When a pushed-down runtime filter is applied, VARCHAR columns use local dict IDs instead of global dict IDs.
+            // Therefore, global low-cardinality dict columns cannot be pushed down.
+            if (const auto& dict_map = _opts.runtime_state->get_query_global_dict_map(); dict_map.contains(slot_id)) {
+                continue;
+            }
+
             auto column_id = parser->column_id(*slot_desc);
             // Connector scan only use parsed predicate_tree to filter with statistics but not with data rows,
             // so runtime filters still needs to be used.
@@ -1377,6 +1414,11 @@ StatusOr<RuntimeFilterPredicates> ScanConjunctsManager::get_runtime_filter_predi
             continue;
         }
         if (!parser->can_pushdown(slot_desc)) {
+            continue;
+        }
+        // When a pushed-down runtime filter is applied, VARCHAR columns use local dict IDs instead of global dict IDs.
+        // Therefore, global low-cardinality dict columns cannot be pushed down.
+        if (const auto& dict_map = _opts.runtime_state->get_query_global_dict_map(); dict_map.contains(slot_id)) {
             continue;
         }
         auto column_id = parser->column_id(*slot_desc);
