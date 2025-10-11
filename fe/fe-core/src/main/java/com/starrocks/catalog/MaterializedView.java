@@ -82,6 +82,8 @@ import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rule.mv.MVUtils;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;
+import com.starrocks.sql.parser.SqlDialect;
+import com.starrocks.sql.parser.SqlMode;
 import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.statistic.StatsConstants;
@@ -2410,7 +2412,7 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
                 try {
                     String currentDBName = Strings.isNullOrEmpty(originalDBName) ? db.getOriginName() : originalDBName;
                     connectContext.setDatabase(currentDBName);
-                    this.defineQueryParseNode = MvUtils.getQueryAst(originalViewDefineSql, connectContext);
+                    this.defineQueryParseNode = MvUtils.getQueryAst(this, originalViewDefineSql, connectContext);
                 } catch (Exception e) {
                     // ignore
                     LOG.warn("parse original view define sql failed:", e);
@@ -2419,7 +2421,7 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
             if (this.defineQueryParseNode == null) {
                 try {
                     connectContext.setDatabase(db.getOriginName());
-                    this.defineQueryParseNode = MvUtils.getQueryAst(viewDefineSql, connectContext);
+                    this.defineQueryParseNode = MvUtils.getQueryAst(this, viewDefineSql, connectContext);
                 } catch (Exception e) {
                     // ignore
                     LOG.warn("parse view define sql failed:", e);
@@ -2445,5 +2447,25 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
             }
             return outputColumns;
         }
+    }
+
+    /**
+     * Get the sql mode for mv's defined query.
+     */
+    public long getQuerySqlMode() {
+        if (tableProperty == null || tableProperty.getProperties() == null) {
+            return SqlMode.DEFAULT;
+        }
+        return SqlMode.getSqlMode(tableProperty.getProperties());
+    }
+
+    /**
+     * Get the sql dialect for mv's defined query.
+     */
+    public String getQuerySqlDialect() {
+        if (tableProperty == null || tableProperty.getProperties() == null) {
+            return "";
+        }
+        return SqlDialect.getSqlDialect(tableProperty.getProperties());
     }
 }

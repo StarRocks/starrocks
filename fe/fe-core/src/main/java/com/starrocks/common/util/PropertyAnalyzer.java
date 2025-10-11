@@ -70,6 +70,7 @@ import com.starrocks.common.Pair;
 import com.starrocks.connector.ConnectorPartitionTraits;
 import com.starrocks.lake.DataCacheInfo;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.SessionVariable;
 import com.starrocks.qe.SqlModeHelper;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
@@ -216,6 +217,12 @@ public class PropertyAnalyzer {
     public static final String PROPERTIES_EXCLUDED_TRIGGER_TABLES = "excluded_trigger_tables";
     public static final String PROPERTIES_EXCLUDED_REFRESH_TABLES = "excluded_refresh_tables";
     public static final String PROPERTIES_MV_REFRESH_MODE = "refresh_mode";
+    // mv sql_dialect
+    public static final String PROPERTIES_MV_SESSION_SQL_DIALECT =
+            PropertyAnalyzer.PROPERTIES_MATERIALIZED_VIEW_SESSION_PREFIX + SessionVariable.SQL_DIALECT;
+    // mv sql_mode
+    public static final String PROPERTIES_MV_SESSION_SQL_MODE =
+            PropertyAnalyzer.PROPERTIES_MATERIALIZED_VIEW_SESSION_PREFIX + SessionVariable.SQL_MODE;
 
     // 1. `force_external_table_query_rewrite` is used to control whether external table can be rewritten or not
     // 2. external table can be rewritten by default if not specific.
@@ -1930,6 +1937,10 @@ public class PropertyAnalyzer {
                 // analyze properties
                 List<SetListItem> setListItems = Lists.newArrayList();
                 for (Map.Entry<String, String> entry : properties.entrySet()) {
+                    if (PropertyAnalyzer.PROPERTIES_MV_SESSION_SQL_DIALECT.equalsIgnoreCase(entry.getKey()) ||
+                            PropertyAnalyzer.PROPERTIES_MV_SESSION_SQL_MODE.equalsIgnoreCase(entry.getKey())) {
+                        continue;
+                    }
                     SystemVariable variable = getMVSystemVariable(properties, entry);
                     GlobalStateMgr.getCurrentState().getVariableMgr().checkSystemVariableExist(variable);
                     setListItems.add(variable);

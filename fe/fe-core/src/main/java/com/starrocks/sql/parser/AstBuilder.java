@@ -2115,10 +2115,6 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
 
         String comment =
                 context.comment() == null ? null : ((StringLiteral) visit(context.comment().string())).getStringValue();
-        QueryStatement queryStatement = (QueryStatement) visit(context.queryStatement());
-        int queryStartIndex = context.queryStatement().start.getStartIndex();
-        int queryStopIndex = context.queryStatement().stop.getStopIndex() + 1;
-
         RefreshSchemeClause refreshSchemeDesc = null;
         Map<String, String> properties = new HashMap<>();
         List<Expr> partitionByExprs = null;
@@ -2197,6 +2193,23 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
                 refreshSchemeDesc = new ManualRefreshSchemeDesc(RefreshSchemeClause.RefreshMoment.IMMEDIATE, NodePosition.ZERO);
             }
         }
+
+        int queryStartIndex = context.queryStatement().start.getStartIndex();
+        int queryStopIndex = context.queryStatement().stop.getStopIndex() + 1;
+        // check defined query's sql dialect
+        String sqlDialect = SqlDialect.getSqlDialect(properties);
+        ConnectContext connectContext = ConnectContext.get() == null ? ConnectContext.build() :
+                ConnectContext.get();
+        QueryStatement queryStatement;
+        if (SqlDialect.TRINO_DIALECT.equalsIgnoreCase(sqlDialect)) {
+            // Use Trino dialect to generate query statement
+            String queryText = context.start.getInputStream().getText(new Interval(queryStartIndex, queryStopIndex));
+            List<StatementBase> stmts = SqlParser.parseWithTrinoDialect(queryText, connectContext.getSessionVariable());
+            queryStatement = (QueryStatement) stmts.get(0);
+        } else {
+            queryStatement = (QueryStatement) visit(context.queryStatement());
+        }
+
         if (refreshSchemeDesc instanceof SyncRefreshSchemeDesc) {
             if (CollectionUtils.isNotEmpty(partitionByExprs)) {
                 throw new ParsingException(PARSER_ERROR_MSG.forbidClauseInMV("SYNC refresh type", "PARTITION BY"),

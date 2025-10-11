@@ -304,6 +304,13 @@ public class AlterMVJobExecutor extends AlterJobExecutor {
                             ", please add `session.` prefix if you want add session variables for mv(" +
                             "eg, \"session.insert_timeout\"=\"30000000\").");
                 }
+                if (PropertyAnalyzer.PROPERTIES_MV_SESSION_SQL_DIALECT.equalsIgnoreCase(entry.getKey()) ||
+                        PropertyAnalyzer.PROPERTIES_MV_SESSION_SQL_MODE.equalsIgnoreCase(entry.getKey())) {
+                    // refresh mv's cache again
+                    CachingMvPlanContextBuilder.getInstance().cacheMaterializedView(materializedView);
+                    continue;
+                }
+
                 String varKey = entry.getKey().substring(PropertyAnalyzer.PROPERTIES_MATERIALIZED_VIEW_SESSION_PREFIX.length());
                 SystemVariable variable = new SystemVariable(varKey, new StringLiteral(entry.getValue()));
                 try {

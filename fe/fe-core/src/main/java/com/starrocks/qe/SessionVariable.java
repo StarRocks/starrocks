@@ -61,6 +61,8 @@ import com.starrocks.server.StorageVolumeMgr;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.common.QueryDebugOptions;
+import com.starrocks.sql.parser.SqlDialect;
+import com.starrocks.sql.parser.SqlMode;
 import com.starrocks.storagevolume.StorageVolume;
 import com.starrocks.system.BackendResourceStat;
 import com.starrocks.thrift.TCloudConfiguration;
@@ -1113,7 +1115,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     // Default sqlMode is ONLY_FULL_GROUP_BY
     @VariableMgr.VarAttr(name = SQL_MODE_STORAGE_NAME, alias = SQL_MODE, show = SQL_MODE)
-    private long sqlMode = 32L;
+    private long sqlMode = SqlMode.DEFAULT;
 
     // The specified resource group of this session
     @VariableMgr.VarAttr(name = RESOURCE_GROUP, flag = VariableMgr.SESSION_ONLY)
@@ -2407,7 +2409,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     private long bigQueryLogScanRowsThreshold = 1000000000L;
 
     @VarAttr(name = SQL_DIALECT)
-    private String sqlDialect = "StarRocks";
+    private String sqlDialect = SqlDialect.STARROCKS_DIALECT;
 
     @VarAttr(name = ENABLE_DIALECT_DOWNGRADE)
     private boolean enableDialectDowngrade = true;
