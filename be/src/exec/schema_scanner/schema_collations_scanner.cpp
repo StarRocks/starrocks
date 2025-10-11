@@ -46,7 +46,7 @@ Status SchemaCollationsScanner::fill_chunk(ChunkPtr* chunk) {
         case 1: {
             // COLLATION_NAME
             {
-                ColumnPtr column = (*chunk)->get_column_by_slot_id(1);
+                auto column = (*chunk)->get_mutable_column_by_slot_id(1);
                 Slice value(_s_collations[_index].name, strlen(_s_collations[_index].name));
                 fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&value);
             }
@@ -55,7 +55,7 @@ Status SchemaCollationsScanner::fill_chunk(ChunkPtr* chunk) {
         case 2: {
             // charset
             {
-                ColumnPtr column = (*chunk)->get_column_by_slot_id(2);
+                auto column = (*chunk)->get_mutable_column_by_slot_id(2);
                 Slice value(_s_collations[_index].charset, strlen(_s_collations[_index].charset));
                 fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&value);
             }
@@ -64,7 +64,7 @@ Status SchemaCollationsScanner::fill_chunk(ChunkPtr* chunk) {
         case 3: {
             // id
             {
-                ColumnPtr column = (*chunk)->get_column_by_slot_id(3);
+                auto column = (*chunk)->get_mutable_column_by_slot_id(3);
                 fill_column_with_slot<TYPE_BIGINT>(column.get(), (void*)&_s_collations[_index].id);
             }
             break;
@@ -72,7 +72,7 @@ Status SchemaCollationsScanner::fill_chunk(ChunkPtr* chunk) {
         case 4: {
             // is_default
             {
-                ColumnPtr column = (*chunk)->get_column_by_slot_id(4);
+                auto column = (*chunk)->get_mutable_column_by_slot_id(4);
                 Slice value(_s_collations[_index].is_default, strlen(_s_collations[_index].is_default));
                 fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&value);
             }
@@ -81,7 +81,7 @@ Status SchemaCollationsScanner::fill_chunk(ChunkPtr* chunk) {
         case 5: {
             // IS_COMPILED
             {
-                ColumnPtr column = (*chunk)->get_column_by_slot_id(5);
+                auto column = (*chunk)->get_mutable_column_by_slot_id(5);
                 Slice value(_s_collations[_index].is_compile, strlen(_s_collations[_index].is_compile));
                 fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&value);
             }
@@ -90,7 +90,7 @@ Status SchemaCollationsScanner::fill_chunk(ChunkPtr* chunk) {
         case 6: {
             // sortlen
             {
-                ColumnPtr column = (*chunk)->get_column_by_slot_id(6);
+                auto column = (*chunk)->get_mutable_column_by_slot_id(6);
                 fill_column_with_slot<TYPE_BIGINT>(column.get(), (void*)&_s_collations[_index].sortlen);
             }
             break;

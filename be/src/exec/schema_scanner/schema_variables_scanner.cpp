@@ -83,7 +83,7 @@ Status SchemaVariablesScanner::fill_chunk(ChunkPtr* chunk) {
         case 1: {
             // variables names
             {
-                ColumnPtr column = (*chunk)->get_column_by_slot_id(1);
+                auto column = (*chunk)->get_mutable_column_by_slot_id(1);
                 Slice value(_begin->first.c_str(), _begin->first.length());
                 fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&value);
             }
@@ -92,7 +92,7 @@ Status SchemaVariablesScanner::fill_chunk(ChunkPtr* chunk) {
         case 2: {
             // value
             {
-                ColumnPtr column = (*chunk)->get_column_by_slot_id(2);
+                auto column = (*chunk)->get_mutable_column_by_slot_id(2);
                 Slice value(_begin->second.c_str(), _begin->second.length());
                 fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&value);
             }
@@ -113,7 +113,7 @@ Status SchemaVariablesScanner::_fill_chunk_for_verbose(ChunkPtr* chunk) {
         case 1: {
             // variables names
             {
-                ColumnPtr column = (*chunk)->get_column_by_slot_id(1);
+                auto column = (*chunk)->get_mutable_column_by_slot_id(1);
                 Slice value(_verbose_iter->variable_name.c_str(), _verbose_iter->variable_name.length());
                 fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&value);
             }
@@ -122,7 +122,7 @@ Status SchemaVariablesScanner::_fill_chunk_for_verbose(ChunkPtr* chunk) {
         case 2: {
             // value
             {
-                ColumnPtr column = (*chunk)->get_column_by_slot_id(2);
+                auto column = (*chunk)->get_mutable_column_by_slot_id(2);
                 Slice value(_verbose_iter->value.c_str(), _verbose_iter->value.length());
                 fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&value);
             }
@@ -131,7 +131,7 @@ Status SchemaVariablesScanner::_fill_chunk_for_verbose(ChunkPtr* chunk) {
         case 3: {
             // default_value
             {
-                ColumnPtr column = (*chunk)->get_column_by_slot_id(3);
+                auto column = (*chunk)->get_mutable_column_by_slot_id(3);
                 Slice value(_verbose_iter->default_value.c_str(), _verbose_iter->default_value.length());
                 fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&value);
             }
@@ -140,7 +140,7 @@ Status SchemaVariablesScanner::_fill_chunk_for_verbose(ChunkPtr* chunk) {
         case 4: {
             // is_changed
             {
-                ColumnPtr column = (*chunk)->get_column_by_slot_id(4);
+                auto column = (*chunk)->get_mutable_column_by_slot_id(4);
                 bool is_changed = _verbose_iter->is_changed;
                 fill_column_with_slot<TYPE_BOOLEAN>(column.get(), (void*)&is_changed);
             }

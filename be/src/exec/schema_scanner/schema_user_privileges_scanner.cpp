@@ -54,7 +54,7 @@ Status SchemaUserPrivilegesScanner::fill_chunk(ChunkPtr* chunk) {
         case 1: {
             // GRANTEE
             {
-                ColumnPtr column = (*chunk)->get_column_by_slot_id(1);
+                auto column = (*chunk)->get_mutable_column_by_slot_id(1);
                 const std::string* str = &user_priv_desc.user_ident_str;
                 Slice value(str->c_str(), str->length());
                 fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&value);
@@ -64,7 +64,7 @@ Status SchemaUserPrivilegesScanner::fill_chunk(ChunkPtr* chunk) {
         case 2: {
             // TABLE_CATALOG
             {
-                ColumnPtr column = (*chunk)->get_column_by_slot_id(2);
+                auto column = (*chunk)->get_mutable_column_by_slot_id(2);
                 fill_data_column_with_null(column.get());
             }
             break;
@@ -72,7 +72,7 @@ Status SchemaUserPrivilegesScanner::fill_chunk(ChunkPtr* chunk) {
         case 3: {
             // PRIVILEGE_TYPE
             {
-                ColumnPtr column = (*chunk)->get_column_by_slot_id(3);
+                auto column = (*chunk)->get_mutable_column_by_slot_id(3);
                 const std::string* str = &user_priv_desc.priv;
                 Slice value(str->c_str(), str->length());
                 fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&value);
@@ -82,7 +82,7 @@ Status SchemaUserPrivilegesScanner::fill_chunk(ChunkPtr* chunk) {
         case 4: {
             // IS_GRANTABLE
             {
-                ColumnPtr column = (*chunk)->get_column_by_slot_id(4);
+                auto column = (*chunk)->get_mutable_column_by_slot_id(4);
                 const char* str = user_priv_desc.is_grantable ? "YES" : "NO";
                 Slice value(str, strlen(str));
                 fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&value);

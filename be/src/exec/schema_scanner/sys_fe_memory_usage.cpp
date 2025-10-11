@@ -53,7 +53,7 @@ Status SysFeMemoryUsage::_fill_chunk(ChunkPtr* chunk) {
     DatumArray datum_array{Slice(info.module_name), Slice(info.class_name), info.current_consumption,
                            info.peak_consumption, Slice(info.counter_info)};
     for (const auto& [slot_id, index] : slot_id_map) {
-        Column* column = (*chunk)->get_column_by_slot_id(slot_id).get();
+        auto column = (*chunk)->get_mutable_column_by_slot_id(slot_id).get();
         column->append_datum(datum_array[slot_id - 1]);
     }
     _index++;

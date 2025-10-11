@@ -51,7 +51,7 @@ Status SchemaBeConfigsScanner::fill_chunk(ChunkPtr* chunk) {
     for (; _cur_idx < end; _cur_idx++) {
         auto& info = _infos[_cur_idx];
         for (const auto& [slot_id, index] : slot_id_to_index_map) {
-            ColumnPtr column = (*chunk)->get_column_by_slot_id(slot_id);
+            auto column = (*chunk)->get_mutable_column_by_slot_id(slot_id);
             switch (slot_id) {
             case 1: {
                 // be id

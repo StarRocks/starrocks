@@ -92,7 +92,7 @@ Status SchemaTablesConfigScanner::fill_chunk(ChunkPtr* chunk) {
         case 1: {
             // table_schema
             {
-                ColumnPtr column = (*chunk)->get_column_by_slot_id(1);
+                auto column = (*chunk)->get_mutable_column_by_slot_id(1);
                 const std::string* str = &info.table_schema;
                 Slice value(str->c_str(), str->length());
                 fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&value);
@@ -102,7 +102,7 @@ Status SchemaTablesConfigScanner::fill_chunk(ChunkPtr* chunk) {
         case 2: {
             // table_name
             {
-                ColumnPtr column = (*chunk)->get_column_by_slot_id(2);
+                auto column = (*chunk)->get_mutable_column_by_slot_id(2);
                 const std::string* str = &info.table_name;
                 Slice value(str->c_str(), str->length());
                 fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&value);
@@ -112,7 +112,7 @@ Status SchemaTablesConfigScanner::fill_chunk(ChunkPtr* chunk) {
         case 3: {
             // table_engine
             {
-                ColumnPtr column = (*chunk)->get_column_by_slot_id(3);
+                auto column = (*chunk)->get_mutable_column_by_slot_id(3);
                 const std::string* str = &info.table_engine;
                 Slice value(str->c_str(), str->length());
                 fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&value);
@@ -122,7 +122,7 @@ Status SchemaTablesConfigScanner::fill_chunk(ChunkPtr* chunk) {
         case 4: {
             // table_model
             {
-                ColumnPtr column = (*chunk)->get_column_by_slot_id(4);
+                auto column = (*chunk)->get_mutable_column_by_slot_id(4);
                 const std::string* str = &info.table_model;
                 Slice value(str->c_str(), str->length());
                 fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&value);
@@ -132,7 +132,7 @@ Status SchemaTablesConfigScanner::fill_chunk(ChunkPtr* chunk) {
         case 5: {
             // primary_key
             {
-                ColumnPtr column = (*chunk)->get_column_by_slot_id(5);
+                auto column = (*chunk)->get_mutable_column_by_slot_id(5);
                 const std::string* str = &info.primary_key;
                 Slice value(str->c_str(), str->length());
                 fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&value);
@@ -142,7 +142,7 @@ Status SchemaTablesConfigScanner::fill_chunk(ChunkPtr* chunk) {
         case 6: {
             // partition_key
             {
-                ColumnPtr column = (*chunk)->get_column_by_slot_id(6);
+                auto column = (*chunk)->get_mutable_column_by_slot_id(6);
                 const std::string* str = &info.partition_key;
                 Slice value(str->c_str(), str->length());
                 fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&value);
@@ -152,7 +152,7 @@ Status SchemaTablesConfigScanner::fill_chunk(ChunkPtr* chunk) {
         case 7: {
             // distribute_key
             {
-                ColumnPtr column = (*chunk)->get_column_by_slot_id(7);
+                auto column = (*chunk)->get_mutable_column_by_slot_id(7);
                 const std::string* str = &info.distribute_key;
                 Slice value(str->c_str(), str->length());
                 fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&value);
@@ -162,7 +162,7 @@ Status SchemaTablesConfigScanner::fill_chunk(ChunkPtr* chunk) {
         case 8: {
             // distribute_type
             {
-                ColumnPtr column = (*chunk)->get_column_by_slot_id(8);
+                auto column = (*chunk)->get_mutable_column_by_slot_id(8);
                 const std::string* str = &info.distribute_type;
                 Slice value(str->c_str(), str->length());
                 fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&value);
@@ -172,7 +172,7 @@ Status SchemaTablesConfigScanner::fill_chunk(ChunkPtr* chunk) {
         case 9: {
             // distribute_bucket
             {
-                ColumnPtr column = (*chunk)->get_column_by_slot_id(9);
+                auto column = (*chunk)->get_mutable_column_by_slot_id(9);
                 fill_column_with_slot<TYPE_INT>(column.get(), (void*)&info.distribute_bucket);
             }
             break;
@@ -180,7 +180,7 @@ Status SchemaTablesConfigScanner::fill_chunk(ChunkPtr* chunk) {
         case 10: {
             // sort_key
             {
-                ColumnPtr column = (*chunk)->get_column_by_slot_id(10);
+                auto column = (*chunk)->get_mutable_column_by_slot_id(10);
                 const std::string* str = &info.sort_key;
                 Slice value(str->c_str(), str->length());
                 fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&value);
@@ -190,7 +190,7 @@ Status SchemaTablesConfigScanner::fill_chunk(ChunkPtr* chunk) {
         case 11: {
             // properties
             {
-                ColumnPtr column = (*chunk)->get_column_by_slot_id(11);
+                auto column = (*chunk)->get_mutable_column_by_slot_id(11);
                 const std::string* str = &info.properties;
                 Slice value(str->c_str(), str->length());
                 fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&value);
@@ -200,7 +200,7 @@ Status SchemaTablesConfigScanner::fill_chunk(ChunkPtr* chunk) {
         case 12: {
             // table id
             {
-                ColumnPtr column = (*chunk)->get_column_by_slot_id(12);
+                auto column = (*chunk)->get_mutable_column_by_slot_id(12);
                 fill_column_with_slot<TYPE_BIGINT>(column.get(), (void*)&info.table_id);
             }
             break;

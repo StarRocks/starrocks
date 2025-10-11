@@ -223,7 +223,7 @@ Status SchemaColumnsScanner::fill_chunk(ChunkPtr* chunk) {
         case 1: {
             // TABLE_CATALOG
             {
-                ColumnPtr column = (*chunk)->get_column_by_slot_id(1);
+                auto column = (*chunk)->get_mutable_column_by_slot_id(1);
                 fill_data_column_with_null(column.get());
             }
             break;
@@ -231,7 +231,7 @@ Status SchemaColumnsScanner::fill_chunk(ChunkPtr* chunk) {
         case 2: {
             // TABLE_SCHEMA
             {
-                ColumnPtr column = (*chunk)->get_column_by_slot_id(2);
+                auto column = (*chunk)->get_mutable_column_by_slot_id(2);
                 std::string db_name;
                 if (_param->without_db_table) {
                     db_name = SchemaHelper::extract_db_name(_desc_result.columns[_column_index].columnDesc.dbName);
@@ -246,7 +246,7 @@ Status SchemaColumnsScanner::fill_chunk(ChunkPtr* chunk) {
         case 3: {
             // TABLE_NAME
             {
-                ColumnPtr column = (*chunk)->get_column_by_slot_id(3);
+                auto column = (*chunk)->get_mutable_column_by_slot_id(3);
                 std::string* table_name;
                 if (_param->without_db_table) {
                     table_name = &_desc_result.columns[_column_index].columnDesc.tableName;
@@ -261,7 +261,7 @@ Status SchemaColumnsScanner::fill_chunk(ChunkPtr* chunk) {
         case 4: {
             // COLUMN_NAME
             {
-                ColumnPtr column = (*chunk)->get_column_by_slot_id(4);
+                auto column = (*chunk)->get_mutable_column_by_slot_id(4);
                 std::string* str = &_desc_result.columns[_column_index].columnDesc.columnName;
                 Slice value(str->c_str(), str->length());
                 fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&value);
@@ -271,7 +271,7 @@ Status SchemaColumnsScanner::fill_chunk(ChunkPtr* chunk) {
         case 5: {
             // ORDINAL_POSITION
             {
-                ColumnPtr column = (*chunk)->get_column_by_slot_id(5);
+                auto column = (*chunk)->get_mutable_column_by_slot_id(5);
                 int64_t value = _column_index + 1;
                 fill_column_with_slot<TYPE_BIGINT>(column.get(), (void*)&value);
             }
@@ -280,7 +280,7 @@ Status SchemaColumnsScanner::fill_chunk(ChunkPtr* chunk) {
         case 6: {
             // COLUMN_DEFAULT
             {
-                ColumnPtr column = (*chunk)->get_column_by_slot_id(6);
+                auto column = (*chunk)->get_mutable_column_by_slot_id(6);
                 if (_desc_result.columns[_column_index].columnDesc.__isset.columnDefault) {
                     std::string* str = &_desc_result.columns[_column_index].columnDesc.columnDefault;
                     Slice value(str->c_str(), str->length());
@@ -294,7 +294,7 @@ Status SchemaColumnsScanner::fill_chunk(ChunkPtr* chunk) {
         case 7: {
             // IS_NULLABLE
             {
-                ColumnPtr column = (*chunk)->get_column_by_slot_id(7);
+                auto column = (*chunk)->get_mutable_column_by_slot_id(7);
                 bool allowNull = _desc_result.columns[_column_index].columnDesc.allowNull;
                 string str;
                 if (allowNull) {
@@ -310,7 +310,7 @@ Status SchemaColumnsScanner::fill_chunk(ChunkPtr* chunk) {
         case 8: {
             // DATA_TYPE
             {
-                ColumnPtr column = (*chunk)->get_column_by_slot_id(8);
+                auto column = (*chunk)->get_mutable_column_by_slot_id(8);
                 std::string value;
                 if (_desc_result.columns[_column_index].columnDesc.__isset.dataType) {
                     value = _desc_result.columns[_column_index].columnDesc.dataType;
@@ -324,7 +324,7 @@ Status SchemaColumnsScanner::fill_chunk(ChunkPtr* chunk) {
         case 9: {
             // CHARACTER_MAXIMUM_LENGTH
             {
-                ColumnPtr column = (*chunk)->get_column_by_slot_id(9);
+                auto column = (*chunk)->get_mutable_column_by_slot_id(9);
                 int data_type = _desc_result.columns[_column_index].columnDesc.columnType;
                 if (data_type == TPrimitiveType::VARCHAR || data_type == TPrimitiveType::CHAR) {
                     if (_desc_result.columns[_column_index].columnDesc.__isset.columnLength) {
@@ -343,7 +343,7 @@ Status SchemaColumnsScanner::fill_chunk(ChunkPtr* chunk) {
             // CHARACTER_OCTET_LENGTH
             // For string columns, the maximum length in bytes.
             {
-                ColumnPtr column = (*chunk)->get_column_by_slot_id(10);
+                auto column = (*chunk)->get_mutable_column_by_slot_id(10);
                 int data_type = _desc_result.columns[_column_index].columnDesc.columnType;
                 if (data_type == TPrimitiveType::VARCHAR || data_type == TPrimitiveType::CHAR) {
                     if (_desc_result.columns[_column_index].columnDesc.__isset.columnLength) {
@@ -362,7 +362,7 @@ Status SchemaColumnsScanner::fill_chunk(ChunkPtr* chunk) {
         case 11: {
             // NUMERIC_PRECISION
             {
-                ColumnPtr column = (*chunk)->get_column_by_slot_id(11);
+                auto column = (*chunk)->get_mutable_column_by_slot_id(11);
                 if (_desc_result.columns[_column_index].columnDesc.__isset.columnPrecision) {
                     int64_t value = _desc_result.columns[_column_index].columnDesc.columnPrecision;
                     fill_column_with_slot<TYPE_BIGINT>(column.get(), (void*)&value);
@@ -375,7 +375,7 @@ Status SchemaColumnsScanner::fill_chunk(ChunkPtr* chunk) {
         case 12: {
             // NUMERIC_SCALE
             {
-                ColumnPtr column = (*chunk)->get_column_by_slot_id(12);
+                auto column = (*chunk)->get_mutable_column_by_slot_id(12);
                 if (_desc_result.columns[_column_index].columnDesc.__isset.columnScale) {
                     int64_t value = _desc_result.columns[_column_index].columnDesc.columnScale;
                     fill_column_with_slot<TYPE_BIGINT>(column.get(), (void*)&value);
@@ -388,7 +388,7 @@ Status SchemaColumnsScanner::fill_chunk(ChunkPtr* chunk) {
         case 13: {
             // DATETIME_PRECISION
             {
-                ColumnPtr column = (*chunk)->get_column_by_slot_id(13);
+                auto column = (*chunk)->get_mutable_column_by_slot_id(13);
                 fill_data_column_with_null(column.get());
             }
             break;
@@ -396,7 +396,7 @@ Status SchemaColumnsScanner::fill_chunk(ChunkPtr* chunk) {
         case 14: {
             // CHARACTER_SET_NAME
             {
-                ColumnPtr column = (*chunk)->get_column_by_slot_id(14);
+                auto column = (*chunk)->get_mutable_column_by_slot_id(14);
                 fill_data_column_with_null(column.get());
             }
             break;
@@ -404,7 +404,7 @@ Status SchemaColumnsScanner::fill_chunk(ChunkPtr* chunk) {
         case 15: {
             // COLLATION_NAME
             {
-                ColumnPtr column = (*chunk)->get_column_by_slot_id(15);
+                auto column = (*chunk)->get_mutable_column_by_slot_id(15);
                 fill_data_column_with_null(column.get());
             }
             break;
@@ -412,7 +412,7 @@ Status SchemaColumnsScanner::fill_chunk(ChunkPtr* chunk) {
         case 16: {
             // COLUMN_TYPE
             {
-                ColumnPtr column = (*chunk)->get_column_by_slot_id(16);
+                auto column = (*chunk)->get_mutable_column_by_slot_id(16);
                 std::string value;
                 if (_desc_result.columns[_column_index].columnDesc.__isset.columnTypeStr) {
                     value = _desc_result.columns[_column_index].columnDesc.columnTypeStr;
@@ -426,7 +426,7 @@ Status SchemaColumnsScanner::fill_chunk(ChunkPtr* chunk) {
         case 17: {
             // COLUMN_KEY (UNI, AGG, DUP, PRI)
             {
-                ColumnPtr column = (*chunk)->get_column_by_slot_id(17);
+                auto column = (*chunk)->get_mutable_column_by_slot_id(17);
                 std::string* str = &_desc_result.columns[_column_index].columnDesc.columnKey;
                 Slice value(str->c_str(), str->length());
                 fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&value);
@@ -436,7 +436,7 @@ Status SchemaColumnsScanner::fill_chunk(ChunkPtr* chunk) {
         case 18: {
             // EXTRA
             {
-                ColumnPtr column = (*chunk)->get_column_by_slot_id(18);
+                auto column = (*chunk)->get_mutable_column_by_slot_id(18);
                 Slice value;
                 fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&value);
             }
@@ -445,7 +445,7 @@ Status SchemaColumnsScanner::fill_chunk(ChunkPtr* chunk) {
         case 19: {
             // PRIVILEGES
             {
-                ColumnPtr column = (*chunk)->get_column_by_slot_id(19);
+                auto column = (*chunk)->get_mutable_column_by_slot_id(19);
                 Slice value;
                 fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&value);
             }
@@ -454,7 +454,7 @@ Status SchemaColumnsScanner::fill_chunk(ChunkPtr* chunk) {
         case 20: {
             // COLUMN_COMMENT
             {
-                ColumnPtr column = (*chunk)->get_column_by_slot_id(20);
+                auto column = (*chunk)->get_mutable_column_by_slot_id(20);
                 std::string* str = &_desc_result.columns[_column_index].comment;
                 Slice value(str->c_str(), str->length());
                 fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&value);
@@ -464,7 +464,7 @@ Status SchemaColumnsScanner::fill_chunk(ChunkPtr* chunk) {
         case 21: {
             // COLUMN_SIZE
             {
-                ColumnPtr column = (*chunk)->get_column_by_slot_id(21);
+                auto column = (*chunk)->get_mutable_column_by_slot_id(21);
                 if (_desc_result.columns[_column_index].columnDesc.__isset.columnLength) {
                     int64_t value = _desc_result.columns[_column_index].columnDesc.columnLength;
                     fill_column_with_slot<TYPE_BIGINT>(column.get(), (void*)&value);
@@ -477,7 +477,7 @@ Status SchemaColumnsScanner::fill_chunk(ChunkPtr* chunk) {
         case 22: {
             // DECIMAL_DIGITS
             {
-                ColumnPtr column = (*chunk)->get_column_by_slot_id(22);
+                auto column = (*chunk)->get_mutable_column_by_slot_id(22);
                 if (_desc_result.columns[_column_index].columnDesc.__isset.columnScale) {
                     int64_t value = _desc_result.columns[_column_index].columnDesc.columnScale;
                     fill_column_with_slot<TYPE_BIGINT>(column.get(), (void*)&value);
@@ -490,7 +490,7 @@ Status SchemaColumnsScanner::fill_chunk(ChunkPtr* chunk) {
         case 23: {
             // GENERATION_EXPRESSION
             {
-                ColumnPtr column = (*chunk)->get_column_by_slot_id(23);
+                auto column = (*chunk)->get_mutable_column_by_slot_id(23);
                 if (_desc_result.columns[_column_index].columnDesc.__isset.generatedColumnExprStr &&
                     _desc_result.columns[_column_index].columnDesc.generatedColumnExprStr.size() != 0) {
                     std::string* str = &_desc_result.columns[_column_index].columnDesc.generatedColumnExprStr;
@@ -505,7 +505,7 @@ Status SchemaColumnsScanner::fill_chunk(ChunkPtr* chunk) {
         case 24: {
             // SRS_ID
             {
-                ColumnPtr column = (*chunk)->get_column_by_slot_id(24);
+                auto column = (*chunk)->get_mutable_column_by_slot_id(24);
                 fill_data_column_with_null(column.get());
             }
             break;

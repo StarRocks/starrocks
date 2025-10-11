@@ -99,7 +99,7 @@ Status WarehouseQueriesScanner::fill_chunk(ChunkPtr* chunk) {
                            Slice(item.query_duration),
                            Slice(item.extra_message)};
     for (const auto& [slot_id, index] : slot_id_map) {
-        Column* column = (*chunk)->get_column_by_slot_id(slot_id).get();
+        auto column = (*chunk)->get_mutable_column_by_slot_id(slot_id).get();
         column->append_datum(datum_array[slot_id - 1]);
     }
     return {};

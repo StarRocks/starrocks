@@ -108,7 +108,7 @@ Status SchemaTablesScanner::fill_chunk(ChunkPtr* chunk) {
         case 1: {
             // table_catalog
             {
-                ColumnPtr column = (*chunk)->get_column_by_slot_id(1);
+                auto column = (*chunk)->get_mutable_column_by_slot_id(1);
                 const std::string* str = &table_info.table_catalog;
                 Slice value(str->c_str(), str->length());
                 fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&value);
@@ -118,7 +118,7 @@ Status SchemaTablesScanner::fill_chunk(ChunkPtr* chunk) {
         case 2: {
             // table_schema
             {
-                ColumnPtr column = (*chunk)->get_column_by_slot_id(2);
+                auto column = (*chunk)->get_mutable_column_by_slot_id(2);
                 const std::string* str = &table_info.table_schema;
                 Slice value(str->c_str(), str->length());
                 fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&value);
@@ -128,7 +128,7 @@ Status SchemaTablesScanner::fill_chunk(ChunkPtr* chunk) {
         case 3: {
             // table_name
             {
-                ColumnPtr column = (*chunk)->get_column_by_slot_id(3);
+                auto column = (*chunk)->get_mutable_column_by_slot_id(3);
                 const std::string* str = &table_info.table_name;
                 Slice value(str->c_str(), str->length());
                 fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&value);
@@ -138,7 +138,7 @@ Status SchemaTablesScanner::fill_chunk(ChunkPtr* chunk) {
         case 4: {
             // table_type
             {
-                ColumnPtr column = (*chunk)->get_column_by_slot_id(4);
+                auto column = (*chunk)->get_mutable_column_by_slot_id(4);
                 const std::string* str = &table_info.table_type;
                 Slice value(str->c_str(), str->length());
                 fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&value);
@@ -148,7 +148,7 @@ Status SchemaTablesScanner::fill_chunk(ChunkPtr* chunk) {
         case 5: {
             // engine
             {
-                ColumnPtr column = (*chunk)->get_column_by_slot_id(5);
+                auto column = (*chunk)->get_mutable_column_by_slot_id(5);
                 const std::string* str = &table_info.engine;
                 Slice value(str->c_str(), str->length());
                 fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&value);
@@ -158,7 +158,7 @@ Status SchemaTablesScanner::fill_chunk(ChunkPtr* chunk) {
         case 6: {
             // version
             {
-                ColumnPtr column = (*chunk)->get_column_by_slot_id(6);
+                auto column = (*chunk)->get_mutable_column_by_slot_id(6);
                 if (table_info.version == DEF_NULL_NUM) {
                     fill_data_column_with_null(column.get());
                 } else {
@@ -170,7 +170,7 @@ Status SchemaTablesScanner::fill_chunk(ChunkPtr* chunk) {
         case 7: {
             // row_format
             {
-                ColumnPtr column = (*chunk)->get_column_by_slot_id(7);
+                auto column = (*chunk)->get_mutable_column_by_slot_id(7);
                 const std::string* str = &table_info.row_format;
                 Slice value(str->c_str(), str->length());
                 fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&value);
@@ -180,7 +180,7 @@ Status SchemaTablesScanner::fill_chunk(ChunkPtr* chunk) {
         case 8: {
             // table_rows
             {
-                ColumnPtr column = (*chunk)->get_column_by_slot_id(8);
+                auto column = (*chunk)->get_mutable_column_by_slot_id(8);
                 if (table_info.table_rows == DEF_NULL_NUM) {
                     fill_data_column_with_null(column.get());
                 } else {
@@ -192,7 +192,7 @@ Status SchemaTablesScanner::fill_chunk(ChunkPtr* chunk) {
         case 9: {
             // avg_row_length
             {
-                ColumnPtr column = (*chunk)->get_column_by_slot_id(9);
+                auto column = (*chunk)->get_mutable_column_by_slot_id(9);
                 if (table_info.avg_row_length == DEF_NULL_NUM) {
                     fill_data_column_with_null(column.get());
                 } else {
@@ -204,7 +204,7 @@ Status SchemaTablesScanner::fill_chunk(ChunkPtr* chunk) {
         case 10: {
             // data_length
             {
-                ColumnPtr column = (*chunk)->get_column_by_slot_id(10);
+                auto column = (*chunk)->get_mutable_column_by_slot_id(10);
                 if (table_info.data_length == DEF_NULL_NUM) {
                     fill_data_column_with_null(column.get());
                 } else {
@@ -216,7 +216,7 @@ Status SchemaTablesScanner::fill_chunk(ChunkPtr* chunk) {
         case 11: {
             // max_data_length
             {
-                ColumnPtr column = (*chunk)->get_column_by_slot_id(11);
+                auto column = (*chunk)->get_mutable_column_by_slot_id(11);
                 if (table_info.max_data_length == DEF_NULL_NUM) {
                     fill_data_column_with_null(column.get());
                 } else {
@@ -228,7 +228,7 @@ Status SchemaTablesScanner::fill_chunk(ChunkPtr* chunk) {
         case 12: {
             // index_length
             {
-                ColumnPtr column = (*chunk)->get_column_by_slot_id(12);
+                auto column = (*chunk)->get_mutable_column_by_slot_id(12);
                 if (table_info.index_length == DEF_NULL_NUM) {
                     fill_data_column_with_null(column.get());
                 } else {
@@ -240,7 +240,7 @@ Status SchemaTablesScanner::fill_chunk(ChunkPtr* chunk) {
         case 13: {
             // data_free
             {
-                ColumnPtr column = (*chunk)->get_column_by_slot_id(13);
+                auto column = (*chunk)->get_mutable_column_by_slot_id(13);
                 if (table_info.data_free == DEF_NULL_NUM) {
                     fill_data_column_with_null(column.get());
                 } else {
@@ -252,7 +252,7 @@ Status SchemaTablesScanner::fill_chunk(ChunkPtr* chunk) {
         case 14: {
             // auto_increment
             {
-                ColumnPtr column = (*chunk)->get_column_by_slot_id(14);
+                auto column = (*chunk)->get_mutable_column_by_slot_id(14);
                 if (table_info.auto_increment == DEF_NULL_NUM) {
                     fill_data_column_with_null(column.get());
                 } else {
@@ -264,7 +264,7 @@ Status SchemaTablesScanner::fill_chunk(ChunkPtr* chunk) {
         case 15: {
             // create_time
             {
-                ColumnPtr column = (*chunk)->get_column_by_slot_id(15);
+                auto column = (*chunk)->get_mutable_column_by_slot_id(15);
                 auto* nullable_column = down_cast<NullableColumn*>(column.get());
                 if (table_info.__isset.create_time) {
                     int64_t create_time = table_info.create_time;
@@ -284,7 +284,7 @@ Status SchemaTablesScanner::fill_chunk(ChunkPtr* chunk) {
         case 16: {
             // update_time
             {
-                ColumnPtr column = (*chunk)->get_column_by_slot_id(16);
+                auto column = (*chunk)->get_mutable_column_by_slot_id(16);
                 auto* nullable_column = down_cast<NullableColumn*>(column.get());
                 if (table_info.__isset.update_time) {
                     int64_t create_time = table_info.update_time;
@@ -304,7 +304,7 @@ Status SchemaTablesScanner::fill_chunk(ChunkPtr* chunk) {
         case 17: {
             // check_time
             {
-                ColumnPtr column = (*chunk)->get_column_by_slot_id(17);
+                auto column = (*chunk)->get_mutable_column_by_slot_id(17);
                 auto* nullable_column = down_cast<NullableColumn*>(column.get());
                 if (table_info.__isset.check_time) {
                     int64_t check_time = table_info.check_time;
@@ -324,7 +324,7 @@ Status SchemaTablesScanner::fill_chunk(ChunkPtr* chunk) {
         case 18: {
             // table_collation
             {
-                ColumnPtr column = (*chunk)->get_column_by_slot_id(18);
+                auto column = (*chunk)->get_mutable_column_by_slot_id(18);
                 const std::string* str = &table_info.table_collation;
                 Slice value(str->c_str(), str->length());
                 fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&value);
@@ -334,7 +334,7 @@ Status SchemaTablesScanner::fill_chunk(ChunkPtr* chunk) {
         case 19: {
             // checksum
             {
-                ColumnPtr column = (*chunk)->get_column_by_slot_id(19);
+                auto column = (*chunk)->get_mutable_column_by_slot_id(19);
                 if (table_info.checksum == DEF_NULL_NUM) {
                     fill_data_column_with_null(column.get());
                 } else {
@@ -346,7 +346,7 @@ Status SchemaTablesScanner::fill_chunk(ChunkPtr* chunk) {
         case 20: {
             // create_options
             {
-                ColumnPtr column = (*chunk)->get_column_by_slot_id(20);
+                auto column = (*chunk)->get_mutable_column_by_slot_id(20);
                 const std::string* str = &table_info.create_options;
                 Slice value(str->c_str(), str->length());
                 fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&value);
@@ -356,7 +356,7 @@ Status SchemaTablesScanner::fill_chunk(ChunkPtr* chunk) {
         case 21: {
             // table_comment
             {
-                ColumnPtr column = (*chunk)->get_column_by_slot_id(21);
+                auto column = (*chunk)->get_mutable_column_by_slot_id(21);
                 const std::string* str = &table_info.table_comment;
                 Slice value(str->c_str(), str->length());
                 fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&value);

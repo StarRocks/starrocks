@@ -71,7 +71,7 @@ Status SchemaViewsScanner::fill_chunk(ChunkPtr* chunk) {
         case 1: {
             // TABLE_CATALOG
             {
-                ColumnPtr column = (*chunk)->get_column_by_slot_id(1);
+                auto column = (*chunk)->get_mutable_column_by_slot_id(1);
                 const char* str = "def";
                 Slice value(str, strlen(str));
                 fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&value);
@@ -81,7 +81,7 @@ Status SchemaViewsScanner::fill_chunk(ChunkPtr* chunk) {
         case 2: {
             // TABLE_SCHEMA
             {
-                ColumnPtr column = (*chunk)->get_column_by_slot_id(2);
+                auto column = (*chunk)->get_mutable_column_by_slot_id(2);
                 std::string db_name = SchemaHelper::extract_db_name(_db_result.dbs[_db_index - 1]);
                 Slice value(db_name.c_str(), db_name.length());
                 fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&value);
@@ -91,7 +91,7 @@ Status SchemaViewsScanner::fill_chunk(ChunkPtr* chunk) {
         case 3: {
             // TABLE_NAME
             {
-                ColumnPtr column = (*chunk)->get_column_by_slot_id(3);
+                auto column = (*chunk)->get_mutable_column_by_slot_id(3);
                 const std::string* str = &tbl_status.name;
                 Slice value(str->c_str(), str->length());
                 fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&value);
@@ -101,7 +101,7 @@ Status SchemaViewsScanner::fill_chunk(ChunkPtr* chunk) {
         case 4: {
             // VIEW_DEFINITION
             {
-                ColumnPtr column = (*chunk)->get_column_by_slot_id(4);
+                auto column = (*chunk)->get_mutable_column_by_slot_id(4);
                 const std::string* str = &tbl_status.ddl_sql;
                 Slice value(str->c_str(), str->length());
                 fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&value);
@@ -111,7 +111,7 @@ Status SchemaViewsScanner::fill_chunk(ChunkPtr* chunk) {
         case 5: {
             // CHECK_OPTION
             {
-                ColumnPtr column = (*chunk)->get_column_by_slot_id(5);
+                auto column = (*chunk)->get_mutable_column_by_slot_id(5);
                 const char* str = "NONE";
                 Slice value(str, strlen(str));
                 fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&value);
@@ -121,7 +121,7 @@ Status SchemaViewsScanner::fill_chunk(ChunkPtr* chunk) {
         case 6: {
             // IS_UPDATABLE
             {
-                ColumnPtr column = (*chunk)->get_column_by_slot_id(6);
+                auto column = (*chunk)->get_mutable_column_by_slot_id(6);
                 const char* str = "NO";
                 Slice value(str, strlen(str));
                 fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&value);
@@ -131,7 +131,7 @@ Status SchemaViewsScanner::fill_chunk(ChunkPtr* chunk) {
         case 7: {
             // DEFINER
             {
-                ColumnPtr column = (*chunk)->get_column_by_slot_id(7);
+                auto column = (*chunk)->get_mutable_column_by_slot_id(7);
                 // since we did not record the creater of a certain `view` or `table` , just leave this column empty at this stage.
                 const char* str = "";
                 Slice value(str, strlen(str));
@@ -142,7 +142,7 @@ Status SchemaViewsScanner::fill_chunk(ChunkPtr* chunk) {
         case 8: {
             // SECURITY_TYPE
             {
-                ColumnPtr column = (*chunk)->get_column_by_slot_id(8);
+                auto column = (*chunk)->get_mutable_column_by_slot_id(8);
                 // since we did not record the creater of a certain `view` or `table` , just leave this column empty at this stage.
                 const char* str = "";
                 Slice value(str, strlen(str));
@@ -153,7 +153,7 @@ Status SchemaViewsScanner::fill_chunk(ChunkPtr* chunk) {
         case 9: {
             // CHARACTER_SET_CLIENT
             {
-                ColumnPtr column = (*chunk)->get_column_by_slot_id(9);
+                auto column = (*chunk)->get_mutable_column_by_slot_id(9);
                 const char* str = "utf8";
                 Slice value(str, strlen(str));
                 fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&value);
@@ -163,7 +163,7 @@ Status SchemaViewsScanner::fill_chunk(ChunkPtr* chunk) {
         case 10: {
             // COLLATION_CONNECTION
             {
-                ColumnPtr column = (*chunk)->get_column_by_slot_id(10);
+                auto column = (*chunk)->get_mutable_column_by_slot_id(10);
                 const char* str = "utf8_general_ci";
                 Slice value(str, strlen(str));
                 fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&value);

@@ -56,7 +56,7 @@ Status SchemaBeThreadsScanner::fill_chunk(ChunkPtr* chunk) {
             if (slot_id < 1 || slot_id > 8) {
                 return Status::InternalError(strings::Substitute("invalid slot id:$0", slot_id));
             }
-            ColumnPtr column = (*chunk)->get_column_by_slot_id(slot_id);
+            auto column = (*chunk)->get_mutable_column_by_slot_id(slot_id);
             switch (slot_id) {
             case 1: {
                 // be id

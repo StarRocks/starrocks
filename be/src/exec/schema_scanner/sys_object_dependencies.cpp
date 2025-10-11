@@ -65,7 +65,7 @@ Status SysObjectDependencies::_fill_chunk(ChunkPtr* chunk) {
             Slice(info.ref_catalog), Slice(info.ref_object_type),
     };
     for (const auto& [slot_id, index] : slot_id_map) {
-        Column* column = (*chunk)->get_column_by_slot_id(slot_id).get();
+        auto column = (*chunk)->get_mutable_column_by_slot_id(slot_id).get();
         column->append_datum(datum_array[slot_id - 1]);
     }
     _index++;
