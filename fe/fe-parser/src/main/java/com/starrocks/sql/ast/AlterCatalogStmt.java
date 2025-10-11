@@ -11,11 +11,10 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
+
 package com.starrocks.sql.ast;
 
 import com.starrocks.sql.parser.NodePosition;
-
-import static com.starrocks.common.util.Util.normalizeName;
 
 public class AlterCatalogStmt extends DdlStmt {
     private final String catalogName;
@@ -23,7 +22,7 @@ public class AlterCatalogStmt extends DdlStmt {
 
     public AlterCatalogStmt(String catalogName, AlterClause alterClause, NodePosition pos) {
         super(pos);
-        this.catalogName = normalizeName(catalogName);
+        this.catalogName = catalogName;
         this.alterClause = alterClause;
     }
 
@@ -37,6 +36,6 @@ public class AlterCatalogStmt extends DdlStmt {
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return ((AstVisitorExtendInterface<R, C>) visitor).visitAlterCatalogStatement(this, context);
+        return visitor.visitAlterCatalogStatement(this, context);
     }
 }

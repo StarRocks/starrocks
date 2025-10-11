@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.analysis;
 
 import com.starrocks.common.DdlException;
@@ -35,6 +34,7 @@ import org.junit.jupiter.api.Test;
 
 public class CatalogStmtTest {
     private static StarRocksAssert starRocksAssert;
+
     @BeforeAll
     public static void beforeClass() throws Exception {
         UtFrameUtils.createMinStarRocksCluster();
@@ -48,7 +48,8 @@ public class CatalogStmtTest {
 
     @Test
     public void testCreateCatalogParserAndAnalyzer() {
-        String sql_1 = "CREATE EXTERNAL CATALOG catalog_1 PROPERTIES(\"type\"=\"hive\", \"hive.metastore.uris\"=\"thrift://127.0.0.1:9083\")";
+        String sql_1 =
+                "CREATE EXTERNAL CATALOG catalog_1 PROPERTIES(\"type\"=\"hive\", \"hive.metastore.uris\"=\"thrift://127.0.0.1:9083\")";
         StatementBase stmt = AnalyzeTestUtil.analyzeSuccess(sql_1);
         Assertions.assertTrue(stmt instanceof CreateCatalogStmt);
         String sql_2 = "CREATE EXTERNAL CATALOG catalog_2";
@@ -57,14 +58,19 @@ public class CatalogStmtTest {
         AnalyzeTestUtil.analyzeFail(sql_3);
         String sql_4 = "CREATE EXTERNAL CATALOG catalog_4 properties(\"aaa\"=\"bbb\")";
         AnalyzeTestUtil.analyzeFail(sql_4);
-        String sql_5 = "CREATE EXTERNAL CATALOG default PROPERTIES(\"type\"=\"hive\", \"hive.metastore.uris\"=\"thrift://127.0.0.1:9083\")";
+        String sql_5 =
+                "CREATE EXTERNAL CATALOG default PROPERTIES(\"type\"=\"hive\", \"hive.metastore.uris\"=\"thrift://127.0.0.1:9083\")";
         AnalyzeTestUtil.analyzeFail(sql_5);
         String sql_6 = "CREATE EXTERNAL CATALOG catalog_5 properties(\"type\"=\"hive\")";
         StatementBase stmt2 = AnalyzeTestUtil.analyzeSuccess(sql_6);
-        Assertions.assertEquals("CREATE EXTERNAL CATALOG 'catalog_5' PROPERTIES(\"type\"  =  \"hive\")", stmt2.toSql());
-        String sql_7 = "CREATE EXTERNAL CATALOG IF NOT EXISTS catalog_6 PROPERTIES(\"type\"=\"hive\", \"hive.metastore.uris\"=\"thrift://127.0.0.1:9083\")";
+        Assertions.assertEquals("CREATE EXTERNAL CATALOG 'catalog_5' PROPERTIES(\"type\"  =  \"hive\")",
+                AstToStringBuilder.toString(stmt2));
+        String sql_7 =
+                "CREATE EXTERNAL CATALOG IF NOT EXISTS catalog_6 PROPERTIES(\"type\"=\"hive\", \"hive.metastore.uris\"=\"thrift://127.0.0.1:9083\")";
         StatementBase stmt3 = AnalyzeTestUtil.analyzeSuccess(sql_7);
-        Assertions.assertEquals("CREATE EXTERNAL CATALOG IF NOT EXISTS 'catalog_6' PROPERTIES(\"hive.metastore.uris\"  =  \"thrift://127.0.0.1:9083\", \"type\"  =  \"hive\")", stmt3.toSql());
+        Assertions.assertEquals(
+                "CREATE EXTERNAL CATALOG 'catalog_6' PROPERTIES(\"hive.metastore.uris\"  =  \"thrift://127.0.0.1:9083\", \"type\"  =  \"hive\")",
+                AstToStringBuilder.toString(stmt3));
         Assertions.assertTrue(stmt3 instanceof CreateCatalogStmt);
     }
 
@@ -96,7 +102,8 @@ public class CatalogStmtTest {
 
     @Test
     public void testCreateCatalog() throws Exception {
-        String sql = "CREATE EXTERNAL CATALOG hive_catalog PROPERTIES(\"type\"=\"hive\", \"hive.metastore.uris\"=\"thrift://127.0.0.1:9083\")";
+        String sql =
+                "CREATE EXTERNAL CATALOG hive_catalog PROPERTIES(\"type\"=\"hive\", \"hive.metastore.uris\"=\"thrift://127.0.0.1:9083\")";
         StatementBase stmt = AnalyzeTestUtil.analyzeSuccess(sql);
         Assertions.assertTrue(stmt instanceof CreateCatalogStmt);
         ConnectContext connectCtx = new ConnectContext();
@@ -122,7 +129,8 @@ public class CatalogStmtTest {
 
     @Test
     public void testCreateCatalogWithAccessControl() throws Exception {
-        String sql = "CREATE EXTERNAL CATALOG hive_catalog PROPERTIES(\"type\"=\"hive\", \"hive.metastore.uris\"=\"thrift://127.0.0.1:9083\", \"catalog.access.control\"=\"allowall\")";
+        String sql =
+                "CREATE EXTERNAL CATALOG hive_catalog PROPERTIES(\"type\"=\"hive\", \"hive.metastore.uris\"=\"thrift://127.0.0.1:9083\", \"catalog.access.control\"=\"allowall\")";
         StatementBase stmt = AnalyzeTestUtil.analyzeSuccess(sql);
         Assertions.assertTrue(stmt instanceof CreateCatalogStmt);
         ConnectContext connectCtx = new ConnectContext();
@@ -140,8 +148,10 @@ public class CatalogStmtTest {
 
     @Test
     public void testCreateExistedCatalog() throws Exception {
-        String sql = "CREATE EXTERNAL CATALOG hive_catalog PROPERTIES(\"type\"=\"hive\", \"hive.metastore.uris\"=\"thrift://127.0.0.1:9083\")";
-        String sql_2 = "CREATE EXTERNAL CATALOG IF NOT EXISTS hive_catalog PROPERTIES(\"type\"=\"hive\", \"hive.metastore.uris\"=\"thrift://127.0.0.1:9083\")";
+        String sql =
+                "CREATE EXTERNAL CATALOG hive_catalog PROPERTIES(\"type\"=\"hive\", \"hive.metastore.uris\"=\"thrift://127.0.0.1:9083\")";
+        String sql_2 =
+                "CREATE EXTERNAL CATALOG IF NOT EXISTS hive_catalog PROPERTIES(\"type\"=\"hive\", \"hive.metastore.uris\"=\"thrift://127.0.0.1:9083\")";
         StatementBase stmt = AnalyzeTestUtil.analyzeSuccess(sql);
         Assertions.assertTrue(stmt instanceof CreateCatalogStmt);
         ConnectContext connectCtx = new ConnectContext();
@@ -168,9 +178,9 @@ public class CatalogStmtTest {
     @Test
     public void testDropCatalog() throws Exception {
         // test drop ddl DROP CATALOG catalog_name
-        String createSql = "CREATE EXTERNAL CATALOG hive_catalog PROPERTIES(\"type\"=\"hive\", \"hive.metastore.uris\"=\"thrift://127.0.0.1:9083\")";
+        String createSql =
+                "CREATE EXTERNAL CATALOG hive_catalog PROPERTIES(\"type\"=\"hive\", \"hive.metastore.uris\"=\"thrift://127.0.0.1:9083\")";
         String dropSql = "DROP CATALOG hive_catalog";
-
 
         CatalogMgr catalogMgr = GlobalStateMgr.getCurrentState().getCatalogMgr();
         ConnectorMgr connectorMgr = GlobalStateMgr.getCurrentState().getConnectorMgr();
