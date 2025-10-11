@@ -203,6 +203,21 @@ uint64_t LRUCache::get_hit_count() const {
     return _hit_count;
 }
 
+uint64_t LRUCache::get_insert_count() const {
+    std::lock_guard l(_mutex);
+    return _insert_count;
+}
+
+uint64_t LRUCache::get_insert_evict_count() const {
+    std::lock_guard l(_mutex);
+    return _insert_evict_count;
+}
+
+uint64_t LRUCache::get_release_evict_count() const {
+    std::lock_guard l(_mutex);
+    return _release_evict_count;
+}
+
 size_t LRUCache::get_usage() const {
     std::lock_guard l(_mutex);
     return _usage;
@@ -250,6 +265,8 @@ void LRUCache::release(Cache::Handle* handle) {
                 _unref(e);
                 _usage -= e->charge;
                 last_ref = true;
+                // Track evictions caused by release
+                ++_release_evict_count;
             } else {
                 // put it to LRU free list
                 _lru_append(&_lru, e);
@@ -314,9 +331,19 @@ Cache::Handle* LRUCache::insert(const CacheKey& key, uint32_t hash, void* value,
     {
         std::lock_guard l(_mutex);
 
+        // Track insert count
+        ++_insert_count;
+
         // Free the space following strict LRU policy until enough space
         // is freed or the lru list is empty
+        size_t evicted_count_before = last_ref_list.size();
         _evict_from_lru(kv_mem_size, &last_ref_list);
+        size_t evicted_count_after = last_ref_list.size();
+
+        // Track evictions caused by insert
+        if (evicted_count_after > evicted_count_before) {
+            _insert_evict_count += (evicted_count_after - evicted_count_before);
+        }
 
         // insert into the cache
         // note that the cache might get larger than its capacity if not enough
@@ -494,6 +521,18 @@ size_t ShardedLRUCache::get_lookup_count() const {
 
 size_t ShardedLRUCache::get_hit_count() const {
     return _get_stat(&LRUCache::get_hit_count);
+}
+
+size_t ShardedLRUCache::get_insert_count() const {
+    return _get_stat(&LRUCache::get_insert_count);
+}
+
+size_t ShardedLRUCache::get_insert_evict_count() const {
+    return _get_stat(&LRUCache::get_insert_evict_count);
+}
+
+size_t ShardedLRUCache::get_release_evict_count() const {
+    return _get_stat(&LRUCache::get_release_evict_count);
 }
 
 void ShardedLRUCache::get_cache_status(rapidjson::Document* document) {

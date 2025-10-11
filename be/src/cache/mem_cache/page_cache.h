@@ -103,6 +103,12 @@ public:
 
     uint64_t get_hit_count() const;
 
+    uint64_t get_insert_count() const;
+
+    uint64_t get_insert_evict_count() const;
+
+    uint64_t get_release_evict_count() const;
+
     bool adjust_capacity(int64_t delta, size_t min_capacity = 0);
 
     void prune();

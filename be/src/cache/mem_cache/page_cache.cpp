@@ -49,6 +49,9 @@ std::atomic<size_t> StoragePageCacheMetrics::released_page_handle_count{};
 
 METRIC_DEFINE_UINT_GAUGE(page_cache_lookup_count, MetricUnit::OPERATIONS);
 METRIC_DEFINE_UINT_GAUGE(page_cache_hit_count, MetricUnit::OPERATIONS);
+METRIC_DEFINE_UINT_GAUGE(page_cache_insert_count, MetricUnit::OPERATIONS);
+METRIC_DEFINE_UINT_GAUGE(page_cache_insert_evict_count, MetricUnit::OPERATIONS);
+METRIC_DEFINE_UINT_GAUGE(page_cache_release_evict_count, MetricUnit::OPERATIONS);
 METRIC_DEFINE_UINT_GAUGE(page_cache_capacity, MetricUnit::BYTES);
 METRIC_DEFINE_UINT_GAUGE(page_cache_pinned_count, MetricUnit::BYTES);
 
@@ -60,6 +63,22 @@ void StoragePageCache::init_metrics() {
     StarRocksMetrics::instance()->metrics()->register_metric("page_cache_hit_count", &page_cache_hit_count);
     StarRocksMetrics::instance()->metrics()->register_hook(
             "page_cache_hit_count", [this]() { page_cache_hit_count.set_value(get_hit_count()); });
+
+    StarRocksMetrics::instance()->metrics()->register_metric("page_cache_insert_count", &page_cache_insert_count);
+    StarRocksMetrics::instance()->metrics()->register_hook(
+            "page_cache_insert_count", [this]() { page_cache_insert_count.set_value(get_insert_count()); });
+
+    StarRocksMetrics::instance()->metrics()->register_metric("page_cache_insert_evict_count",
+                                                             &page_cache_insert_evict_count);
+    StarRocksMetrics::instance()->metrics()->register_hook("page_cache_insert_evict_count", [this]() {
+        page_cache_insert_evict_count.set_value(get_insert_evict_count());
+    });
+
+    StarRocksMetrics::instance()->metrics()->register_metric("page_cache_release_evict_count",
+                                                             &page_cache_release_evict_count);
+    StarRocksMetrics::instance()->metrics()->register_hook("page_cache_release_evict_count", [this]() {
+        page_cache_release_evict_count.set_value(get_release_evict_count());
+    });
 
     StarRocksMetrics::instance()->metrics()->register_metric("page_cache_capacity", &page_cache_capacity);
     StarRocksMetrics::instance()->metrics()->register_hook("page_cache_capacity",
@@ -89,6 +108,18 @@ uint64_t StoragePageCache::get_lookup_count() const {
 
 uint64_t StoragePageCache::get_hit_count() const {
     return _cache->hit_count();
+}
+
+uint64_t StoragePageCache::get_insert_count() const {
+    return _cache->insert_count();
+}
+
+uint64_t StoragePageCache::get_insert_evict_count() const {
+    return _cache->insert_evict_count();
+}
+
+uint64_t StoragePageCache::get_release_evict_count() const {
+    return _cache->release_evict_count();
 }
 
 bool StoragePageCache::adjust_capacity(int64_t delta, size_t min_capacity) {
