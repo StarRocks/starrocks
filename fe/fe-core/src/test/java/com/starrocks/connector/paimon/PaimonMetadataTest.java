@@ -220,7 +220,7 @@ public class PaimonMetadataTest {
         assertEquals(ScalarType.DOUBLE, paimonTable.getBaseSchema().get(1).getType());
         org.junit.jupiter.api.Assertions.assertTrue(paimonTable.getBaseSchema().get(1).isAllowNull());
         assertEquals("paimon_catalog", paimonTable.getCatalogName());
-        assertEquals("paimon_catalog.db1.tbl1.null", paimonTable.getUUID());
+        assertEquals("paimon_catalog.null", paimonTable.getUUID());
     }
 
     @Test
