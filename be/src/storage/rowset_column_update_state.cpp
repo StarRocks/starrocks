@@ -567,7 +567,8 @@ Status RowsetColumnUpdateState::_update_primary_index(const TabletSchemaCSPtr& t
         new_deletes[rowset_id + each_chunk.first] = {};
         MutableColumnPtr pk_column;
         RETURN_IF_ERROR(PrimaryKeyEncoder::create_column(pkey_schema, &pk_column, enable_null_pk));
-        PrimaryKeyEncoder::encode(pkey_schema, *each_chunk.second, 0, each_chunk.second->num_rows(), pk_column.get(), enable_null_pk);
+        PrimaryKeyEncoder::encode(pkey_schema, *each_chunk.second, 0, each_chunk.second->num_rows(), pk_column.get(),
+                                  enable_null_pk);
         RETURN_IF_ERROR(index.upsert(rowset_id + each_chunk.first, 0, *pk_column, &new_deletes));
     }
     RETURN_IF_ERROR(index.commit(&index_meta));

@@ -84,7 +84,7 @@ struct RowsetUpdateStateParams {
 
 class SegmentPKEncodeResult {
 public:
-    SegmentPKEncodeResult(bool enable_null_primary_key): _enable_null_primary_key(enable_null_primary_key) {}
+    SegmentPKEncodeResult(bool enable_null_primary_key) : _enable_null_primary_key(enable_null_primary_key) {}
     ~SegmentPKEncodeResult() { close(); }
     Status init(const ChunkIteratorPtr& iter, const Schema& pkey_schema, bool load_whole);
     void next();

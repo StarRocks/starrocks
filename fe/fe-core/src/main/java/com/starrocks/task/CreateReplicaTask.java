@@ -331,21 +331,21 @@ public class CreateReplicaTask extends AgentTask {
             return this;
         }
 
-        public boolean isEnablePersistentIndex() {
-            return enablePersistentIndex;
-        }
-
-        public Builder setEnablePersistentIndex(boolean enablePersistentIndex) {
-            this.enablePersistentIndex = enablePersistentIndex;
-            return this;
-        }
-
         public boolean isEnableNullPrimaryKey() {
             return enableNullPrimaryKey;
         }
 
         public Builder setEnableNullPrimaryKey(boolean enableNullPrimaryKey) {
             this.enableNullPrimaryKey = enableNullPrimaryKey;
+            return this;
+        }
+
+        public boolean isEnablePersistentIndex() {
+            return enablePersistentIndex;
+        }
+
+        public Builder setEnablePersistentIndex(boolean enablePersistentIndex) {
+            this.enablePersistentIndex = enablePersistentIndex;
             return this;
         }
 

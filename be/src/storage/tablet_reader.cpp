@@ -247,7 +247,8 @@ Status TabletReader::_init_collector_for_pk_index_read() {
     MutableColumnPtr pk_column;
     bool enable_null_primary_key = _tablet->get_enable_null_primary_key();
     RETURN_IF_ERROR(PrimaryKeyEncoder::create_column(*tablet_schema->schema(), &pk_column, enable_null_primary_key));
-    PrimaryKeyEncoder::encode(*tablet_schema->schema(), *keys, 0, keys->num_rows(), pk_column.get(), enable_null_primary_key);
+    PrimaryKeyEncoder::encode(*tablet_schema->schema(), *keys, 0, keys->num_rows(), pk_column.get(),
+                              enable_null_primary_key);
 
     // get rowid using pk index
     std::vector<uint64_t> rowids(1);

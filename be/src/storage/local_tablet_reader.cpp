@@ -118,7 +118,8 @@ Status LocalTabletReader::multi_get(const Chunk& keys, const std::vector<uint32_
     bool enable_null_primary_key = _tablet->get_enable_null_primary_key();
     MutableColumnPtr pk_column;
     RETURN_IF_ERROR(PrimaryKeyEncoder::create_column(*tablet_schema->schema(), &pk_column, enable_null_primary_key));
-    PrimaryKeyEncoder::encode(*tablet_schema->schema(), keys, 0, keys.num_rows(), pk_column.get(), enable_null_primary_key);
+    PrimaryKeyEncoder::encode(*tablet_schema->schema(), keys, 0, keys.num_rows(), pk_column.get(),
+                              enable_null_primary_key);
 
     // search pks in pk index to get rowids
     EditVersion edit_version;

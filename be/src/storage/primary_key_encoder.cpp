@@ -265,7 +265,8 @@ size_t PrimaryKeyEncoder::get_encoded_fixed_size(const Schema& schema, bool enab
     return ret;
 }
 
-Status PrimaryKeyEncoder::create_column(const Schema& schema, MutableColumnPtr* pcolumn, bool enable_null_primary_key, bool large_column) {
+Status PrimaryKeyEncoder::create_column(const Schema& schema, MutableColumnPtr* pcolumn, bool enable_null_primary_key,
+                                        bool large_column) {
     std::vector<ColumnId> key_idxes(schema.num_key_fields());
     for (ColumnId i = 0; i < schema.num_key_fields(); ++i) {
         key_idxes[i] = i;
@@ -274,7 +275,8 @@ Status PrimaryKeyEncoder::create_column(const Schema& schema, MutableColumnPtr* 
 }
 
 Status PrimaryKeyEncoder::create_column(const Schema& schema, MutableColumnPtr* pcolumn,
-                                        const std::vector<ColumnId>& key_idxes, bool enable_null_primary_key, bool large_column) {
+                                        const std::vector<ColumnId>& key_idxes, bool enable_null_primary_key,
+                                        bool large_column) {
     if (!is_supported(schema, key_idxes)) {
         return Status::NotSupported("type not supported for primary key encoding");
     }

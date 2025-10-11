@@ -52,8 +52,8 @@ Status SegmentPKEncodeResult::_load() {
             } else if (!st.ok()) {
                 return st;
             } else {
-                TRY_CATCH_BAD_ALLOC(
-                        PrimaryKeyEncoder::encode(_pkey_schema, *chunk, 0, chunk->num_rows(), pk_column.get(), _enable_null_primary_key));
+                TRY_CATCH_BAD_ALLOC(PrimaryKeyEncoder::encode(_pkey_schema, *chunk, 0, chunk->num_rows(),
+                                                              pk_column.get(), _enable_null_primary_key));
                 if (_lazy_load && pk_column->memory_usage() >= config::pk_column_lazy_load_threshold_bytes) {
                     break;
                 }
