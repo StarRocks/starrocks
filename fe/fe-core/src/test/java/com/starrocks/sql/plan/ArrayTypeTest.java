@@ -301,13 +301,10 @@ public class ArrayTypeTest extends PlanTestBase {
     }
 
     @Test
-    public void testArrayWindowFunction() {
+    public void testArrayWindowFunction() throws Exception {
         for (String fnName : Sets.newHashSet(AnalyticExpr.LASTVALUE, AnalyticExpr.FIRSTVALUE)) {
             String sql = String.format("select %s(v3) over() from tarray", fnName.toLowerCase());
-            Throwable exception = assertThrows(SemanticException.class, () ->
-                    getFragmentPlan(sql));
-            assertThat(exception.getMessage(), containsString(
-                    String.format("No matching function with signature: %s(array<bigint(20)>)", fnName.toLowerCase())));
+            getFragmentPlan(sql);
         }
     }
 
