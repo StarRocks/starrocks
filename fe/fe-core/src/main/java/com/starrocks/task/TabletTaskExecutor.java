@@ -370,7 +370,7 @@ public class TabletTaskExecutor {
     }
 
     // REQUIRE: must set countDownLatch to error stat before throw an exception.
-    private static void waitForFinished(MarkedCountDownLatch<Long, Long> countDownLatch, long timeout) throws DdlException {
+    public static <V> void waitForFinished(MarkedCountDownLatch<Long, V> countDownLatch, long timeout) throws DdlException {
         try {
             long timeLeft = timeout;
             final long waitInterval = 1;
@@ -398,14 +398,14 @@ public class TabletTaskExecutor {
             }
             // timed out
             if (timeLeft <= 0) {
-                List<Map.Entry<Long, Long>> unfinishedMarks = countDownLatch.getLeftMarks();
-                List<Map.Entry<Long, Long>> firstThree =
+                List<Map.Entry<Long, V>> unfinishedMarks = countDownLatch.getLeftMarks();
+                List<Map.Entry<Long, V>> firstThree =
                         unfinishedMarks.subList(0, Math.min(unfinishedMarks.size(), 3));
                 StringBuilder sb = new StringBuilder("Table creation timed out. unfinished replicas");
                 sb.append("(").append(firstThree.size()).append("/").append(unfinishedMarks.size()).append("): ");
                 // Show details of the first 3 unfinished tablets.
-                for (Map.Entry<Long, Long> mark : firstThree) {
-                    sb.append(mark.getValue()); // TabletId
+                for (Map.Entry<Long, V> mark : firstThree) {
+                    sb.append(mark.getValue()); // TabletId or Set<TabletId>
                     sb.append('(');
                     Backend backend = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackend(mark.getKey());
                     sb.append(backend != null ? backend.getHost() : "N/A");
