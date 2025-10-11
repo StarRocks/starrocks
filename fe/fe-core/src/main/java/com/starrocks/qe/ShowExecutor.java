@@ -1452,9 +1452,17 @@ public class ShowExecutor {
 
         @Override
         public ShowResultSet visitShowDataDistributionStatement(ShowDataDistributionStmt statement, ConnectContext context) {
+            String dbName = statement.getDbName();
+            if (dbName == null) {
+                dbName = context.getDatabase();
+                if (Strings.isNullOrEmpty(dbName)) {
+                    ErrorReport.reportSemanticException(ErrorCode.ERR_NO_DB_ERROR);
+                }
+            }
+
             //check privilege
             try {
-                Authorizer.checkAnyActionOnTable(context, new TableName(statement.getDbName(), statement.getTblName()));
+                Authorizer.checkAnyActionOnTable(context, new TableName(dbName, statement.getTblName()));
             } catch (AccessDeniedException e) {
                 AccessDeniedException.reportAccessDenied(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
                         context.getCurrentUserIdentity(),
@@ -1464,7 +1472,7 @@ public class ShowExecutor {
 
             List<List<String>> results;
             try {
-                results = MetadataViewer.getDataDistribution(statement);
+                results = MetadataViewer.getDataDistribution(dbName, statement.getTblName(), statement.getPartitionDef());
             } catch (DdlException e) {
                 throw new SemanticException(e.getMessage());
             }
