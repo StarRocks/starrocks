@@ -605,7 +605,7 @@ void CSVReader::split_record(const Record& record, Fields* columns) const {
         } while (ptr != nullptr);
 
         ptr = record.data + size;
-        
+
         // Add the last field for multi-character delimiter case
         if (_parse_options.trim_space) {
             std::pair<const char*, size_t> newPos = trim(value, ptr - value);
