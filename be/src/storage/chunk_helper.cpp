@@ -293,7 +293,7 @@ struct ColumnPtrBuilder {
     }
 };
 
-ColumnPtr column_from_pool(const Field& field) {
+MutableColumnPtr column_from_pool(const Field& field) {
     auto precision = field.type()->precision();
     auto scale = field.type()->scale();
     return field_type_dispatch_column(field.type()->type(), ColumnPtrBuilder(), field, precision, scale);
@@ -357,16 +357,18 @@ void ChunkHelper::padding_char_column(const starrocks::TabletSchemaCSPtr& tschem
     if (field.is_nullable()) {
         auto* nullable_column = down_cast<NullableColumn*>(column);
         auto new_column = NullableColumn::create(std::move(new_binary), nullable_column->null_column());
-        new_column->swap_column(*column);
+        auto mut_new = new_column->as_mutable_ptr();
+        mut_new->swap_column(*column);
     } else {
-        new_binary->swap_column(*column);
+        auto mut_new = new_binary->as_mutable_ptr();
+        mut_new->swap_column(*column);
     }
 }
 
 void ChunkHelper::padding_char_columns(const std::vector<size_t>& char_column_indexes, const Schema& schema,
                                        const starrocks::TabletSchemaCSPtr& tschema, Chunk* chunk) {
     for (auto field_index : char_column_indexes) {
-        Column* column = chunk->get_column_by_index(field_index).get();
+        Column* column = chunk->get_mutable_column_by_index(field_index).get();
         padding_char_column(tschema, *schema.field(field_index), column);
     }
 }
@@ -437,8 +439,9 @@ ChunkUniquePtr ChunkHelper::new_chunk(const Schema& schema, size_t n) {
     columns.reserve(fields);
     for (size_t i = 0; i < fields; i++) {
         const FieldPtr& f = schema.field(i);
-        columns.emplace_back(column_from_field(*f));
-        columns.back()->reserve(n);
+        auto col = column_from_field(*f);
+        col->reserve(n);
+        columns.emplace_back(std::move(col));
     }
     return std::make_unique<Chunk>(std::move(columns), std::make_shared<Schema>(schema));
 }
@@ -818,7 +821,7 @@ ColumnPtr SegmentedColumn::materialize() const {
     if (actual_columns.empty()) {
         return {};
     }
-    ColumnPtr result = actual_columns[0]->clone_empty();
+    MutableColumnPtr result = actual_columns[0]->clone_empty();
     for (size_t i = 0; i < actual_columns.size(); i++) {
         result->append(*actual_columns[i]);
     }
@@ -899,7 +902,10 @@ void SegmentedChunk::append_chunk(const ChunkPtr& chunk, const std::vector<SlotI
         for (int i = 0; i < slots.size(); i++) {
             SlotId slot = slots[i];
             ColumnPtr column = chunk->get_column_by_slot_id(slot);
-            open_segment->columns()[i]->append(*column, append_index, open_segment_append_rows);
+            auto& dest_col = open_segment->columns()[i];
+            auto mut_dest = Column::mutate(dest_col);
+            mut_dest->append(*column, append_index, open_segment_append_rows);
+            dest_col = std::move(mut_dest);
         }
         append_index += open_segment_append_rows;
         append_rows -= open_segment_append_rows;

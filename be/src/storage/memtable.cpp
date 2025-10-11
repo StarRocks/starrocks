@@ -203,17 +203,17 @@ StatusOr<bool> MemTable::insert(const Chunk& chunk, const uint32_t* indexes, uin
         // instead of the column name.
         for (int i = 0; i < _slot_descs->size(); ++i) {
             const ColumnPtr& src = chunk.get_column_by_slot_id((*_slot_descs)[i]->id());
-            ColumnPtr& dest = _chunk->get_column_by_index(i);
+            auto dest = _chunk->get_mutable_column_by_index(i);
             dest->append_selective(*src, indexes, from, size);
         }
         if (is_column_with_row) {
-            ColumnPtr& dest = _chunk->get_column_by_name(Schema::FULL_ROW_COLUMN);
+            auto dest = _chunk->get_mutable_column_by_name(Schema::FULL_ROW_COLUMN);
             dest->append(*full_row_col.get());
         }
     } else {
         for (int i = 0; i < _vectorized_schema->num_fields(); i++) {
             const ColumnPtr& src = chunk.get_column_by_index(i);
-            ColumnPtr& dest = _chunk->get_column_by_index(i);
+            auto dest = _chunk->get_mutable_column_by_index(i);
             dest->append_selective(*src, indexes, from, size);
             if (is_column_with_row && i == _vectorized_schema->num_fields() - 1) {
                 dest->append(*full_row_col.get());

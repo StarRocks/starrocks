@@ -44,10 +44,12 @@ void Column::serialize_batch_with_null_masks(uint8_t* dst, Buffer<uint32_t>& sli
 }
 
 StatusOr<ColumnPtr> Column::downgrade_helper_func(Ptr* col) {
-    auto ret = (*col)->downgrade();
+    auto mutable_col = Column::mutate(*col);
+    auto ret = mutable_col->downgrade();
     if (!ret.ok()) {
         return ret;
     } else if (ret.value() == nullptr) {
+        (*col) = std::move(mutable_col);
         return nullptr;
     } else {
         (*col) = ret.value();
@@ -56,10 +58,12 @@ StatusOr<ColumnPtr> Column::downgrade_helper_func(Ptr* col) {
 }
 
 StatusOr<ColumnPtr> Column::upgrade_helper_func(Ptr* col) {
-    auto ret = (*col)->upgrade_if_overflow();
+    auto mutable_col = Column::mutate(*col);
+    auto ret = mutable_col->upgrade_if_overflow();
     if (!ret.ok()) {
         return ret;
     } else if (ret.value() == nullptr) {
+        (*col) = std::move(mutable_col);
         return nullptr;
     } else {
         (*col) = ret.value();

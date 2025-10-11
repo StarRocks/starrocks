@@ -275,7 +275,7 @@ Status BinlogDataSource::_mock_chunk(Chunk* chunk) {
             default:
                 return Status::InternalError(fmt::format("Not support to mock type {}", type));
             }
-            chunk->get_column_by_index(col)->append_datum(datum);
+            chunk->get_mutable_column_by_index(col)->append_datum(datum);
         }
     }
     return Status::OK();

@@ -328,7 +328,7 @@ template <LogicalType Type>
 StatusOr<ColumnPtr> MathFunctions::iceberg_truncate_decimal(FunctionContext* context, const Columns& columns) {
     ColumnPtr c0 = columns[0];
     ColumnPtr c1 = columns[1];
-    NullColumnPtr null_flags;
+    NullColumn::MutablePtr null_flags;
     bool has_null = false;
     bool c0_is_const = false;
     PREPARE_COLUMN_WITH_CONST_AND_NULL_FOR_ICEBERG_FUNC(c0, c1);
@@ -346,10 +346,10 @@ StatusOr<ColumnPtr> MathFunctions::iceberg_truncate_decimal(FunctionContext* con
     }
 
     RunTimeCppType<Type>* raw_c0 = decimalv3_col->get_data().data();
-    ColumnPtr res = RunTimeColumnType<Type>::create(original_precision, original_scale);
+    MutableColumnPtr res = RunTimeColumnType<Type>::create(original_precision, original_scale);
     res->resize_uninitialized(size);
 
-    RunTimeCppType<Type>* raw_res = ColumnHelper::cast_to_raw<Type>(res)->get_data().data();
+    RunTimeCppType<Type>* raw_res = ColumnHelper::cast_to_raw<Type>(res.get())->get_data().data();
     // If c2 is not const, than we need to keep the originl scale
     if (c0_is_const) {
         raw_res[0] = raw_c0[0] - ((raw_c0[0] % width) + width) % width;
@@ -385,7 +385,7 @@ template <LogicalType Type>
 StatusOr<ColumnPtr> MathFunctions::iceberg_truncate_int(FunctionContext* context, const Columns& columns) {
     ColumnPtr c0 = columns[0];
     ColumnPtr c1 = columns[1];
-    NullColumnPtr null_flags;
+    NullColumn::MutablePtr null_flags;
     bool has_null = false;
     bool c0_is_const = false;
     PREPARE_COLUMN_WITH_CONST_AND_NULL_FOR_ICEBERG_FUNC(c0, c1);
@@ -395,10 +395,10 @@ StatusOr<ColumnPtr> MathFunctions::iceberg_truncate_int(FunctionContext* context
     uint8_t* raw_null_flags = null_flags->get_data().data();
     auto int_col = ColumnHelper::cast_to_raw<Type>(c0);
     RunTimeCppType<Type>* raw_c0 = int_col->get_data().data();
-    ColumnPtr res = RunTimeColumnType<Type>::create();
+    MutableColumnPtr res = RunTimeColumnType<Type>::create();
     res->resize_uninitialized(size);
 
-    RunTimeCppType<Type>* raw_res = ColumnHelper::cast_to_raw<Type>(res)->get_data().data();
+    RunTimeCppType<Type>* raw_res = ColumnHelper::cast_to_raw<Type>(res.get())->get_data().data();
     // If c2 is not const, than we need to keep the originl scale
     if (c0_is_const) {
         raw_res[0] = raw_c0[0] - ((raw_c0[0] % width) + width) % width;
@@ -431,7 +431,7 @@ template <LogicalType Type>
 StatusOr<ColumnPtr> MathFunctions::iceberg_bucket_int(FunctionContext* context, const Columns& columns) {
     ColumnPtr c0 = columns[0];
     ColumnPtr c1 = columns[1];
-    NullColumnPtr null_flags;
+    NullColumn::MutablePtr null_flags;
     bool has_null = false;
     bool c0_is_const = false;
     PREPARE_COLUMN_WITH_CONST_AND_NULL_FOR_ICEBERG_FUNC(c0, c1);
@@ -439,10 +439,10 @@ StatusOr<ColumnPtr> MathFunctions::iceberg_bucket_int(FunctionContext* context, 
     int64_t width = c1->get(0).get_int32();
 
     auto col = ColumnHelper::cast_to_raw<Type>(c0);
-    ColumnPtr res = RunTimeColumnType<TYPE_UNSIGNED_INT>::create();
+    MutableColumnPtr res = RunTimeColumnType<TYPE_UNSIGNED_INT>::create();
     res->resize_uninitialized(size);
     RunTimeCppType<Type>* raw_c0 = col->get_data().data();
-    RunTimeCppType<TYPE_UNSIGNED_INT>* raw_res = ColumnHelper::cast_to_raw<TYPE_UNSIGNED_INT>(res)->get_data().data();
+    RunTimeCppType<TYPE_UNSIGNED_INT>* raw_res = ColumnHelper::cast_to_raw<TYPE_UNSIGNED_INT>(res.get())->get_data().data();
     // If c2 is not const, than we need to keep the originl scale
 
     if (c0_is_const) {
@@ -471,7 +471,7 @@ template StatusOr<ColumnPtr> MathFunctions::iceberg_bucket_int<TYPE_BIGINT>(Func
 StatusOr<ColumnPtr> MathFunctions::iceberg_bucket_string(FunctionContext* context, const Columns& columns) {
     ColumnPtr c0 = columns[0];
     ColumnPtr c1 = columns[1];
-    NullColumnPtr null_flags;
+    NullColumn::MutablePtr null_flags;
     bool has_null = false;
     bool c0_is_const = false;
     PREPARE_COLUMN_WITH_CONST_AND_NULL_FOR_ICEBERG_FUNC(c0, c1);
@@ -479,10 +479,10 @@ StatusOr<ColumnPtr> MathFunctions::iceberg_bucket_string(FunctionContext* contex
     int64_t width = c1->get(0).get_int32();
 
     auto col = ColumnHelper::cast_to_raw<TYPE_VARCHAR>(c0);
-    ColumnPtr res = RunTimeColumnType<TYPE_UNSIGNED_INT>::create();
+    MutableColumnPtr res = RunTimeColumnType<TYPE_UNSIGNED_INT>::create();
     res->resize_uninitialized(size);
     auto raw_c0 = col->get_proxy_data();
-    RunTimeCppType<TYPE_UNSIGNED_INT>* raw_res = ColumnHelper::cast_to_raw<TYPE_UNSIGNED_INT>(res)->get_data().data();
+    RunTimeCppType<TYPE_UNSIGNED_INT>* raw_res = ColumnHelper::cast_to_raw<TYPE_UNSIGNED_INT>(res.get())->get_data().data();
     // If c2 is not const, than we need to keep the originl scale
 
     if (c0_is_const) {
@@ -506,7 +506,7 @@ StatusOr<ColumnPtr> MathFunctions::iceberg_bucket_string(FunctionContext* contex
 StatusOr<ColumnPtr> MathFunctions::iceberg_bucket_date(FunctionContext* context, const Columns& columns) {
     ColumnPtr c0 = columns[0];
     ColumnPtr c1 = columns[1];
-    NullColumnPtr null_flags;
+    NullColumn::MutablePtr null_flags;
     bool has_null = false;
     bool c0_is_const = false;
     PREPARE_COLUMN_WITH_CONST_AND_NULL_FOR_ICEBERG_FUNC(c0, c1);
@@ -514,10 +514,10 @@ StatusOr<ColumnPtr> MathFunctions::iceberg_bucket_date(FunctionContext* context,
     int64_t width = c1->get(0).get_int32();
 
     auto col = ColumnHelper::cast_to_raw<TYPE_DATE>(c0);
-    ColumnPtr res = RunTimeColumnType<TYPE_UNSIGNED_INT>::create();
+    MutableColumnPtr res = RunTimeColumnType<TYPE_UNSIGNED_INT>::create();
     res->resize_uninitialized(size);
     RunTimeCppType<TYPE_DATE>* raw_c0 = col->get_data().data();
-    RunTimeCppType<TYPE_UNSIGNED_INT>* raw_res = ColumnHelper::cast_to_raw<TYPE_UNSIGNED_INT>(res)->get_data().data();
+    RunTimeCppType<TYPE_UNSIGNED_INT>* raw_res = ColumnHelper::cast_to_raw<TYPE_UNSIGNED_INT>(res.get())->get_data().data();
     // If c2 is not const, than we need to keep the originl scale
 
     if (c0_is_const) {
@@ -543,7 +543,7 @@ StatusOr<ColumnPtr> MathFunctions::iceberg_bucket_date(FunctionContext* context,
 StatusOr<ColumnPtr> MathFunctions::iceberg_bucket_datetime(FunctionContext* context, const Columns& columns) {
     ColumnPtr c0 = columns[0];
     ColumnPtr c1 = columns[1];
-    NullColumnPtr null_flags;
+    NullColumn::MutablePtr null_flags;
     bool has_null = false;
     bool c0_is_const = false;
     PREPARE_COLUMN_WITH_CONST_AND_NULL_FOR_ICEBERG_FUNC(c0, c1);
@@ -551,10 +551,10 @@ StatusOr<ColumnPtr> MathFunctions::iceberg_bucket_datetime(FunctionContext* cont
     int64_t width = c1->get(0).get_int32();
 
     auto col = ColumnHelper::cast_to_raw<TYPE_DATETIME>(c0);
-    ColumnPtr res = RunTimeColumnType<TYPE_UNSIGNED_INT>::create();
+    MutableColumnPtr res = RunTimeColumnType<TYPE_UNSIGNED_INT>::create();
     res->resize_uninitialized(size);
     RunTimeCppType<TYPE_DATETIME>* raw_c0 = col->get_data().data();
-    RunTimeCppType<TYPE_UNSIGNED_INT>* raw_res = ColumnHelper::cast_to_raw<TYPE_UNSIGNED_INT>(res)->get_data().data();
+    RunTimeCppType<TYPE_UNSIGNED_INT>* raw_res = ColumnHelper::cast_to_raw<TYPE_UNSIGNED_INT>(res.get())->get_data().data();
     // If c2 is not const, than we need to keep the originl scale
 
     if (c0_is_const) {
@@ -611,7 +611,7 @@ template <LogicalType Type>
 StatusOr<ColumnPtr> MathFunctions::iceberg_bucket_decimal(FunctionContext* context, const Columns& columns) {
     ColumnPtr c0 = columns[0];
     ColumnPtr c1 = columns[1];
-    NullColumnPtr null_flags;
+    NullColumn::MutablePtr null_flags;
     bool has_null = false;
     bool c0_is_const = false;
     PREPARE_COLUMN_WITH_CONST_AND_NULL_FOR_ICEBERG_FUNC(c0, c1);
@@ -619,10 +619,10 @@ StatusOr<ColumnPtr> MathFunctions::iceberg_bucket_decimal(FunctionContext* conte
     int64_t width = c1->get(0).get_int32();
     auto decimalv3_col = ColumnHelper::cast_to_raw<Type>(c0);
 
-    ColumnPtr res = RunTimeColumnType<TYPE_UNSIGNED_INT>::create();
+    MutableColumnPtr res = RunTimeColumnType<TYPE_UNSIGNED_INT>::create();
     res->resize_uninitialized(size);
     RunTimeCppType<Type>* raw_c0 = decimalv3_col->get_data().data();
-    RunTimeCppType<TYPE_UNSIGNED_INT>* raw_res = ColumnHelper::cast_to_raw<TYPE_UNSIGNED_INT>(res)->get_data().data();
+    RunTimeCppType<TYPE_UNSIGNED_INT>* raw_res = ColumnHelper::cast_to_raw<TYPE_UNSIGNED_INT>(res.get())->get_data().data();
     // If c2 is not const, than we need to keep the originl scale
     if (c0_is_const) {
         auto result = raw_c0[0];
@@ -842,11 +842,11 @@ StatusOr<ColumnPtr> MathFunctions::decimal_round(FunctionContext* context, const
         return ColumnHelper::create_const_null_column(c0->size());
     }
 
-    NullColumnPtr null_flags;
+    NullColumn::MutablePtr null_flags;
     bool has_null = false;
     if (c0->has_null() || c1->has_null()) {
         has_null = true;
-        null_flags = FunctionHelper::union_nullable_column(c0, c1);
+        null_flags = FunctionHelper::union_nullable_column(c0, c1)->as_mutable_ptr();
     } else {
         null_flags = NullColumn::create();
         null_flags->reserve(c0->size());
@@ -865,14 +865,14 @@ StatusOr<ColumnPtr> MathFunctions::decimal_round(FunctionContext* context, const
     c0 = FunctionHelper::get_data_column_of_nullable(c0);
     c1 = FunctionHelper::get_data_column_of_nullable(c1);
 
-    ColumnPtr res = RunTimeColumnType<TYPE_DECIMAL128>::create(type.precision, type.scale);
+    MutableColumnPtr res = RunTimeColumnType<TYPE_DECIMAL128>::create(type.precision, type.scale);
     res->resize_uninitialized(size);
 
     const int32_t original_scale = ColumnHelper::cast_to_raw<TYPE_DECIMAL128>(c0)->scale();
 
     int128_t* raw_c0 = ColumnHelper::cast_to_raw<TYPE_DECIMAL128>(c0)->get_data().data();
     int32_t* raw_c1 = ColumnHelper::cast_to_raw<TYPE_INT>(c1)->get_data().data();
-    int128_t* raw_res = ColumnHelper::cast_to_raw<TYPE_DECIMAL128>(res)->get_data().data();
+    int128_t* raw_res = ColumnHelper::cast_to_raw<TYPE_DECIMAL128>(res.get())->get_data().data();
     uint8_t* raw_null_flags = null_flags->get_data().data();
 
     // If c2 is not const, than we need to keep the originl scale

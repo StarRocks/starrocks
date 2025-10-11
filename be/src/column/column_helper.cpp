@@ -231,19 +231,23 @@ public:
     }
 
     Status do_visit(NullableColumn* column) {
-        RETURN_IF_ERROR(column->data_column()->accept_mutable(this));
+        auto data_col = column->data_column_mutable_ptr();
+        RETURN_IF_ERROR(data_col->accept_mutable(this));
         column->update_has_null();
         return Status::OK();
     }
 
     Status do_visit(ArrayColumn* column) {
-        RETURN_IF_ERROR(column->elements_column()->accept_mutable(this));
+        auto elements_col = column->elements_column_mutable_ptr();
+        RETURN_IF_ERROR(elements_col->accept_mutable(this));
         return Status::OK();
     }
 
     Status do_visit(MapColumn* column) {
-        RETURN_IF_ERROR(column->keys_column()->accept_mutable(this));
-        RETURN_IF_ERROR(column->values_column()->accept_mutable(this));
+        auto keys_col = column->keys_column_mutable_ptr();
+        auto values_col = column->values_column_mutable_ptr();
+        RETURN_IF_ERROR(keys_col->accept_mutable(this));
+        RETURN_IF_ERROR(values_col->accept_mutable(this));
         return Status::OK();
     }
 

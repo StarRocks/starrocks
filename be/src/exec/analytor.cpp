@@ -647,8 +647,9 @@ void Analytor::_append_column(size_t chunk_size, Column* dst_column, ColumnPtr& 
     } else if (src_column->is_constant() && !dst_column->is_constant()) {
         // Unpack const column, then append it to dst.
         auto* const_column = down_cast<ConstColumn*>(src_column.get());
-        const_column->data_column()->assign(chunk_size, 0);
-        dst_column->append(*const_column->data_column(), 0, chunk_size);
+        auto data_col = const_column->data_column_ptr();
+        data_col->assign(chunk_size, 0);
+        dst_column->append(*data_col, 0, chunk_size);
     } else {
         // Most cases.
         dst_column->append(*src_column, 0, chunk_size);
@@ -1027,7 +1028,8 @@ void Analytor::_reset_window_state() {
     // DO NOT put timer here because this function will be used frequently,
     // timer will cause a sharp drop in performance.
     for (size_t i = 0; i < _agg_fn_ctxs.size(); i++) {
-        _agg_functions[i]->reset(_agg_fn_ctxs[i], _agg_intput_columns[i],
+        Columns args(_agg_intput_columns[i].begin(), _agg_intput_columns[i].end());
+        _agg_functions[i]->reset(_agg_fn_ctxs[i], args,
                                  _managed_fn_states[0]->mutable_data() + _agg_states_offsets[i]);
     }
 }

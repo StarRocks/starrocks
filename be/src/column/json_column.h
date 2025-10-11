@@ -158,7 +158,7 @@ public:
 
 private:
     // flat-columns[sub_columns, remain_column]
-    Columns _flat_columns;
+    std::vector<Column::WrappedPtr> _flat_columns;
 
     // flat-column paths, doesn't contains remain column
     std::vector<std::string> _flat_column_paths;
