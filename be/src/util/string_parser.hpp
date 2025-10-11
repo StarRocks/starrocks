@@ -229,6 +229,18 @@ public:
 
 }; // end of class StringParser
 
+// Template specialization to handle int256_t case
+template <typename T>
+struct string_to_int_unsigned_type {
+    using type = typename std::make_unsigned<T>::type;
+};
+
+// Specialization for int256_t to avoid make_unsigned issues on macOS
+template <>
+struct string_to_int_unsigned_type<starrocks::int256_t> {
+    using type = starrocks::int256_t;
+};
+
 template <typename T>
 inline T StringParser::string_to_int_internal(const char* s, int len, ParseResult* result) {
     if (UNLIKELY(len <= 0)) {
@@ -236,7 +248,7 @@ inline T StringParser::string_to_int_internal(const char* s, int len, ParseResul
         return 0;
     }
 
-    typedef typename std::make_unsigned<T>::type UnsignedT;
+    using UnsignedT = typename string_to_int_unsigned_type<T>::type;
     UnsignedT val = 0;
     UnsignedT max_val = StringParser::numeric_limits<T>(false);
     bool negative = false;
@@ -333,7 +345,7 @@ inline T StringParser::string_to_unsigned_int_internal(const char* s, int len, P
 
 template <typename T>
 inline T StringParser::string_to_int_internal(const char* s, int len, int base, ParseResult* result) {
-    typedef typename std::make_unsigned<T>::type UnsignedT;
+    using UnsignedT = typename string_to_int_unsigned_type<T>::type;
     UnsignedT val = 0;
     UnsignedT max_val = StringParser::numeric_limits<T>(false);
     bool negative = false;

@@ -41,11 +41,24 @@
 #define CGROUP2_SUPER_MAGIC 0x63677270
 #endif
 
+#ifdef __linux__
 #include <linux/magic.h>
+#endif
 #include <sched.h>
+#ifdef __linux__
 #include <sys/sysinfo.h>
 #include <sys/vfs.h>
+#endif
 #include <unistd.h>
+#ifdef __APPLE__
+#include <sys/mount.h>
+#include <sys/param.h>
+#include <sys/sysctl.h>
+#include <sys/types.h>
+#ifndef TMPFS_MAGIC
+#define TMPFS_MAGIC 0x01021994
+#endif
+#endif
 
 #include <algorithm>
 #include <boost/algorithm/string.hpp>
@@ -171,7 +184,16 @@ void CpuInfo::init() {
         num_cores_ = 1;
     }
     if (config::num_cores > 0) num_cores_ = config::num_cores;
+#ifdef __linux__
     max_num_cores_ = get_nprocs_conf();
+#else
+    // On macOS, use sysctl to get number of configured cores
+    int mib[2];
+    size_t len = sizeof(max_num_cores_);
+    mib[0] = CTL_HW;
+    mib[1] = HW_NCPU;
+    sysctl(mib, 2, &max_num_cores_, &len, NULL, 0);
+#endif
 
     // Print a warning if something is wrong with sched_getcpu().
 #ifdef HAVE_SCHED_GETCPU

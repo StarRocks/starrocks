@@ -331,27 +331,27 @@ void SystemMetrics::_update_memory_metrics() {
     // Update the statistics cached by mallctl.
     uint64_t epoch = 1;
     size_t sz = sizeof(epoch);
-    je_mallctl("epoch", &epoch, &sz, &epoch, sz);
+    mallctl("epoch", &epoch, &sz, &epoch, sz);
     sz = sizeof(size_t);
-    if (je_mallctl("stats.allocated", &value, &sz, nullptr, 0) == 0) {
+    if (mallctl("stats.allocated", &value, &sz, nullptr, 0) == 0) {
         _memory_metrics->jemalloc_allocated_bytes.set_value(value);
     }
-    if (je_mallctl("stats.active", &value, &sz, nullptr, 0) == 0) {
+    if (mallctl("stats.active", &value, &sz, nullptr, 0) == 0) {
         _memory_metrics->jemalloc_active_bytes.set_value(value);
     }
-    if (je_mallctl("stats.metadata", &value, &sz, nullptr, 0) == 0) {
+    if (mallctl("stats.metadata", &value, &sz, nullptr, 0) == 0) {
         _memory_metrics->jemalloc_metadata_bytes.set_value(value);
     }
-    if (je_mallctl("stats.metadata_thp", &value, &sz, nullptr, 0) == 0) {
+    if (mallctl("stats.metadata_thp", &value, &sz, nullptr, 0) == 0) {
         _memory_metrics->jemalloc_metadata_thp.set_value(value);
     }
-    if (je_mallctl("stats.resident", &value, &sz, nullptr, 0) == 0) {
+    if (mallctl("stats.resident", &value, &sz, nullptr, 0) == 0) {
         _memory_metrics->jemalloc_resident_bytes.set_value(value);
     }
-    if (je_mallctl("stats.mapped", &value, &sz, nullptr, 0) == 0) {
+    if (mallctl("stats.mapped", &value, &sz, nullptr, 0) == 0) {
         _memory_metrics->jemalloc_mapped_bytes.set_value(value);
     }
-    if (je_mallctl("stats.retained", &value, &sz, nullptr, 0) == 0) {
+    if (mallctl("stats.retained", &value, &sz, nullptr, 0) == 0) {
         _memory_metrics->jemalloc_retained_bytes.set_value(value);
     }
 #endif

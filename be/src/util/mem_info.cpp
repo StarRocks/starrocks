@@ -34,8 +34,17 @@
 
 #include "util/mem_info.h"
 
+#ifdef __linux__
 #include <linux/magic.h>
 #include <sys/vfs.h>
+#endif
+#ifdef __APPLE__
+#include <sys/mount.h>
+#include <sys/param.h>
+#ifndef TMPFS_MAGIC
+#define TMPFS_MAGIC 0x01021994
+#endif
+#endif
 
 #include <cstdlib>
 #include <fstream>
