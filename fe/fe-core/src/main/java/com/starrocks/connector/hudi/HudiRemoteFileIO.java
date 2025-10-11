@@ -37,6 +37,7 @@ import org.apache.hudi.common.table.HoodieTableMetaClient;
 import org.apache.hudi.common.table.timeline.HoodieInstant;
 import org.apache.hudi.common.table.timeline.HoodieTimeline;
 import org.apache.hudi.common.util.Option;
+import org.apache.hudi.exception.HoodieIOException;
 import org.apache.hudi.storage.StoragePath;
 import org.apache.hudi.storage.hadoop.HadoopStorageConfiguration;
 import org.apache.logging.log4j.LogManager;
@@ -136,6 +137,10 @@ public class HudiRemoteFileIO implements RemoteFileIO {
                 fileDescs.add(res);
             }
             return resultPartitions.put(pathKey, fileDescs).build();
+        } catch (HoodieIOException e) {
+            LOG.warn("Partition '{}' encountered I/O error during file listing, likely an empty partition registered " +
+                    "in Hive metastore before data ingestion. Returning empty file list.", partitionPath, e);
+            return resultPartitions.put(pathKey, Lists.newArrayList()).build();
         } catch (Exception e) {
             LOG.error("Failed to get hudi remote file's metadata on path: {}", partitionPath, e);
             throw new StarRocksConnectorException("Failed to get hudi remote file's metadata on path: %s. msg: %s",
