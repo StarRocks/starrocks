@@ -62,6 +62,16 @@ CONF_Int32(brpc_max_connections_per_server, "1");
 // The expire time of BRPC stub cache, default 60 minutes.
 CONF_mInt32(brpc_stub_expire_s, "3600"); // 60 minutes
 
+// Whether to resolve backend hostnames to IP addresses in generated error URLs.
+// - true  (default): StarRocks will attempt to resolve hostnames to IPs.
+//  Useful in debugging scenarios where internal hostnames (e.g., K8s pod names)
+//  are not resolvable from the client’s network, so you can curl or open the
+//   error URL directly.
+// - false: Keep the original hostname in the error URL.
+//  Recommended if your DNS setup already allows resolving backend hostnames
+//  across your network, or if IP-based access is unstable (e.g., NAT environments).
+CONF_Bool(enable_resolve_hostname, "false");
+
 // Declare a selection strategy for those servers have many ips.
 // Note that there should at most one ip match this list.
 // this is a list in semicolon-delimited format, in CIDR notation, e.g. 10.10.10.0/24

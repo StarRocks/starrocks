@@ -20,6 +20,7 @@
 #include <memory>
 
 #include "agent/master_info.h"
+#include "common/status.h"
 #include "runtime/client_cache.h"
 #include "runtime/exec_env.h"
 #include "service/backend_options.h"
@@ -32,8 +33,25 @@ std::string to_load_error_http_path(const std::string& file_name) {
     if (file_name.empty()) {
         return "";
     }
+
+    std::string host = BackendOptions::get_localhost();
+    std::string resolved_ip = host;
+
+    if (config::enable_resolve_hostname) {
+        // if host is not ip, then parse to ip
+        if (host.find('.') != std::string::npos &&
+            (host.find(':') == std::string::npos || host.find(':') > host.find('.'))) {
+            std::string ip;
+            Status status = hostname_to_ip(host, ip);
+            if (status.ok()) {
+                resolved_ip = ip;
+            }
+            // if failed to parse, keep org value
+        }
+    }
+
     std::stringstream url;
-    url << "http://" << get_host_port(BackendOptions::get_localhost(), config::be_http_port) << "/api/_load_error_log?"
+    url << "http://" << get_host_port(resolved_ip, config::be_http_port) << "/api/_load_error_log?"
         << "file=" << file_name;
     return url.str();
 }
