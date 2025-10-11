@@ -61,6 +61,7 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.function.Consumer;
 import java.util.stream.Collectors;
 
 public class FunctionSet {
@@ -1387,12 +1388,7 @@ public class FunctionSet {
         addBuiltin(AggregateFunction.createBuiltin(COLUMN_COMPRESSED_SIZE, Lists.newArrayList(Type.ANY_ELEMENT),
                 Type.BIGINT, Type.BIGINT, false, false, false));
 
-        for (Type t : Type.getSupportedTypes()) {
-            // null/char/time is handled through type promotion
-            // TODO: array/json/pseudo is not supported yet
-            if (!t.canBeWindowFunctionArgumentTypes()) {
-                continue;
-            }
+        Consumer<Type> registerLeadLagFunctions = t -> {
             addBuiltin(AggregateFunction.createAnalyticBuiltin(
                     FIRST_VALUE, Lists.newArrayList(t), t, t));
             // Implements FIRST_VALUE for some windows that require rewrites during planning.
@@ -1417,6 +1413,17 @@ public class FunctionSet {
                     LEAD, Lists.newArrayList(t), t, t));
             addBuiltin(AggregateFunction.createAnalyticBuiltin(
                     LEAD, Lists.newArrayList(t, Type.BIGINT), t, t));
+        };
+        for (Type t : Type.getSupportedTypes()) {
+            // null/char/time is handled through type promotion
+            // TODO: array/json/pseudo is not supported yet
+            if (!t.canBeWindowFunctionArgumentTypes()) {
+                continue;
+            }
+
+            Type arrayType = new ArrayType(t);
+            registerLeadLagFunctions.accept(t);
+            registerLeadLagFunctions.accept(arrayType);
         }
 
         for (Type t : HISTOGRAM_TYPE) {
