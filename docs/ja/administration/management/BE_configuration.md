@@ -1958,7 +1958,7 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - タイプ: Boolean
 - 単位: -
 - 可変: はい
-- 説明: Data Cache ディスク容量の自動スケーリングを有効にするかどうか。これを有効にすると、システムは現在のディスク使用率に基づいてキャッシュ容量を動的に調整します。この項目はバージョン4.0以降、datacache_auto_adjust_enable から enable_datacache_disk_auto_adjust に名称変更されました。
+- 説明: Data Cache ディスク容量の自動スケーリングを有効にするかどうか。これを有効にすると、システムは現在のディスク使用率に基づいてキャッシュ容量を動的に調整します。この項目はバージョン4.0以降、`datacache_auto_adjust_enable` から `enable_datacache_disk_auto_adjust` に名称変更されました。
 - 導入バージョン: v3.3.0
 
 ##### disk_high_level
@@ -1967,7 +1967,7 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - タイプ: Int
 - 単位: -
 - 可変: はい
-- 説明: キャッシュ容量の自動スケーリングをトリガーするディスク使用率 (パーセンテージ) の上限。この値を超えると、システムは Data Cache からキャッシュデータを自動的に削除します。v3.4.0 以降、デフォルト値は `80` から `90` に変更されました。この項目はバージョン4.0以降、datacache_disk_high_level から disk_high_level に名称変更されました。
+- 説明: キャッシュ容量の自動スケーリングをトリガーするディスク使用率 (パーセンテージ) の上限。この値を超えると、システムは Data Cache からキャッシュデータを自動的に削除します。v3.4.0 以降、デフォルト値は `80` から `90` に変更されました。この項目はバージョン4.0以降、`datacache_disk_high_level` から `disk_high_level` に名称変更されました。
 - 導入バージョン: v3.3.0
 
 ##### disk_safe_level
@@ -1976,7 +1976,7 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - タイプ: Int
 - 単位: -
 - 可変: はい
-- 説明: Data Cache のディスク使用率 (パーセンテージ) の安全レベル。Data Cache が自動スケーリングを実行する際、システムはディスク使用率をこの値にできるだけ近づけることを目標にキャッシュ容量を調整します。v3.4.0 以降、デフォルト値は `70` から `80` に変更されました。この項目はバージョン4.0以降、datacache_disk_safe_level から disk_safe_level に名称変更されました。
+- 説明: Data Cache のディスク使用率 (パーセンテージ) の安全レベル。Data Cache が自動スケーリングを実行する際、システムはディスク使用率をこの値にできるだけ近づけることを目標にキャッシュ容量を調整します。v3.4.0 以降、デフォルト値は `70` から `80` に変更されました。この項目はバージョン4.0以降、`datacache_disk_safe_level` から `disk_safe_level` に名称変更されました。
 - 導入バージョン: v3.3.0
 
 ##### disk_low_level
@@ -1985,7 +1985,7 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - タイプ: Int
 - 単位: -
 - 可変: はい
-- 説明: キャッシュ容量の自動スケーリングをトリガーするディスク使用率 (パーセンテージ) の下限。ディスク使用率が `datacache_disk_idle_seconds_for_expansion` で指定された期間を超えてこの値を下回り、Data Cache に割り当てられたスペースが完全に利用される場合、システムは上限を増やしてキャッシュ容量を自動的に拡張します。この項目はバージョン4.0以降、datacache_disk_low_level から disk_low_level に名称変更されました。
+- 説明: キャッシュ容量の自動スケーリングをトリガーするディスク使用率 (パーセンテージ) の下限。ディスク使用率が `datacache_disk_idle_seconds_for_expansion` で指定された期間を超えてこの値を下回り、Data Cache に割り当てられたスペースが完全に利用される場合、システムは上限を増やしてキャッシュ容量を自動的に拡張します。この項目はバージョン4.0以降、`datacache_disk_low_level` から `disk_low_level` に名称変更されました。
 - 導入バージョン: v3.3.0
 
 ##### datacache_disk_adjust_interval_seconds
