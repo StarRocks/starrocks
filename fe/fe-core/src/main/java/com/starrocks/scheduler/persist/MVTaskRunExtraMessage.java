@@ -70,6 +70,9 @@ public class MVTaskRunExtraMessage implements Writable {
     @SerializedName("planBuilderMessage")
     public Map<String, String> planBuilderMessage = Maps.newHashMap();
 
+    @SerializedName("adaptivePartitionRefreshNumber")
+    private int adaptivePartitionRefreshNumber = -1;
+
     // the refresh mode of this task run
     @SerializedName("refreshMode")
     public String refreshMode = "";
@@ -195,6 +198,14 @@ public class MVTaskRunExtraMessage implements Writable {
 
     public String getRefreshMode() {
         return refreshMode;
+    }
+
+    public int getAdaptivePartitionRefreshNumber() {
+        return adaptivePartitionRefreshNumber;
+    }
+
+    public void setAdaptivePartitionRefreshNumber(int adaptivePartitionRefreshNumber) {
+        this.adaptivePartitionRefreshNumber = adaptivePartitionRefreshNumber;
     }
 
     @Override

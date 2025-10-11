@@ -375,6 +375,17 @@ public abstract class MVPCTRefreshPartitioner {
      */
     public int getPartitionRefreshNumberAdaptive(PCellSortedSet toRefreshPartitions,
                                                  MaterializedView.PartitionRefreshStrategy refreshStrategy) {
+        int partitionRefreshNumber = getPartitionRefreshNumberAdaptiveImpl(toRefreshPartitions, refreshStrategy);
+        logger.info("Determined partition refresh number: {} using strategy: {} for MV: {}",
+                partitionRefreshNumber, refreshStrategy, mv.getName());
+        if (this.mvContext.getStatus() != null && this.mvContext.getStatus().getMvTaskRunExtraMessage() != null) {
+            this.mvContext.getStatus().getMvTaskRunExtraMessage().setAdaptivePartitionRefreshNumber(partitionRefreshNumber);
+        }
+        return partitionRefreshNumber;
+    }
+
+    private int getPartitionRefreshNumberAdaptiveImpl(PCellSortedSet toRefreshPartitions,
+                                                      MaterializedView.PartitionRefreshStrategy refreshStrategy) {
         try {
             switch (refreshStrategy) {
                 case ADAPTIVE:
