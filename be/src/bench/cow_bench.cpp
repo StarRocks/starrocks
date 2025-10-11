@@ -224,9 +224,9 @@ ColumnPtr COWBench::_gen_json_column() {
 }
 
 ColumnPtr COWBench::_gen_map_column() {
-    MapColumn::Ptr column = MapColumn::create(NullableColumn::create(Int32Column::create(), NullColumn::create()),
-                                              NullableColumn::create(Int32Column::create(), NullColumn::create()),
-                                              UInt32Column::create());
+    auto column = MapColumn::create(NullableColumn::create(Int32Column::create(), NullColumn::create()),
+                                    NullableColumn::create(Int32Column::create(), NullColumn::create()),
+                                    UInt32Column::create());
     for (int32_t i = 0; i < 10; i++) {
         column->append_datum(DatumMap{{i, i + 1}});
     }

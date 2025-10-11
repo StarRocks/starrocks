@@ -109,7 +109,7 @@ public:
 
     static ColumnPtr create_series_int_column(int num_rows) {
         TypeDescriptor type_desc = TypeDescriptor(TYPE_INT);
-        ColumnPtr column = ColumnHelper::create_column(type_desc, false);
+        auto column = ColumnHelper::create_column(type_desc, false)->as_mutable_ptr();
         std::vector<int32_t> elements = create_series_values<int32_t>(num_rows, 0, 1);
         for (auto& x : elements) {
             column->append_datum(Datum(x));
@@ -120,7 +120,7 @@ public:
     static ColumnPtr create_random_string_column(int num_rows, int min_length) {
         std::vector<string> elements = create_random_string(num_rows, min_length, 60);
         TypeDescriptor type_desc = TypeDescriptor(TYPE_VARCHAR);
-        ColumnPtr column = ColumnHelper::create_column(type_desc, false);
+        auto column = ColumnHelper::create_column(type_desc, false)->as_mutable_ptr();
         for (auto& x : elements) {
             column->append_datum(Datum(Slice(x)));
         }
