@@ -555,16 +555,37 @@ void CSVReader::split_record(const Record& record, Fields* columns) const {
     const size_t size = record.size;
 
     if (_column_delimiter_length == 1) {
-        for (size_t i = 0; i < size; ++i, ++ptr) {
-            if (*ptr == _parse_options.column_delimiter[0]) {
+        // Optimized: use memchr for SIMD-optimized character search
+        const char delimiter = _parse_options.column_delimiter[0];
+        const char* end = record.data + size;
+        
+        while (ptr < end) {
+            const char* next_delimiter = static_cast<const char*>(memchr(ptr, delimiter, end - ptr));
+            if (next_delimiter == nullptr) {
+                // No more delimiters found, add the remaining part
                 if (_parse_options.trim_space) {
-                    std::pair<const char*, size_t> newPos = trim(value, ptr - value);
+                    std::pair<const char*, size_t> newPos = trim(value, end - value);
                     columns->emplace_back(newPos.first, newPos.second);
                 } else {
-                    columns->emplace_back(value, ptr - value);
+                    columns->emplace_back(value, end - value);
                 }
-                value = ptr + 1;
+                break;
+            } else {
+                // Found delimiter, add the field
+                if (_parse_options.trim_space) {
+                    std::pair<const char*, size_t> newPos = trim(value, next_delimiter - value);
+                    columns->emplace_back(newPos.first, newPos.second);
+                } else {
+                    columns->emplace_back(value, next_delimiter - value);
+                }
+                value = next_delimiter + 1;
+                ptr = next_delimiter + 1;
             }
+        }
+        
+        // Handle case where string ends with delimiter
+        if (size > 0 && record.data[size - 1] == delimiter) {
+            columns->emplace_back("", 0);
         }
     } else {
         const auto* const base = ptr;
@@ -584,12 +605,14 @@ void CSVReader::split_record(const Record& record, Fields* columns) const {
         } while (ptr != nullptr);
 
         ptr = record.data + size;
-    }
-    if (_parse_options.trim_space) {
-        std::pair<const char*, size_t> newPos = trim(value, ptr - value);
-        columns->emplace_back(newPos.first, newPos.second);
-    } else {
-        columns->emplace_back(value, ptr - value);
+
+        // Add the last field for multi-character delimiter case
+        if (_parse_options.trim_space) {
+            std::pair<const char*, size_t> newPos = trim(value, ptr - value);
+            columns->emplace_back(newPos.first, newPos.second);
+        } else {
+            columns->emplace_back(value, ptr - value);
+        }
     }
 }
 
