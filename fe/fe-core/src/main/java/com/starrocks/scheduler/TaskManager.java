@@ -23,6 +23,7 @@ import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.catalog.Column;
+import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.ResourceGroupClassifier;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.common.Config;
@@ -425,6 +426,50 @@ public class TaskManager implements MemoryTrackable {
                 .setExecuteOption(option)
                 .build();
         return taskRunManager.submitTaskRun(taskRun, option);
+    }
+
+    /**
+     * Suspend a task, which will stop the task scheduler and kill the running task run.
+     */
+    public void suspendTask(Task task) {
+        if (task == null) {
+            return;
+        }
+
+        task.setState(Constants.TaskState.PAUSE);
+        // stop task scheduler
+        if (task.getType() == Constants.TaskType.PERIODICAL) {
+            boolean isCancel = stopScheduler(task.getName());
+            if (!isCancel) {
+                LOG.warn("stop scheduler failed for task [{}]", task.getName());
+            }
+        }
+
+        // kill running task run
+        if (!killTask(task.getName(), true)) {
+            LOG.warn("kill task failed: {}", task.getName());
+        }
+
+        // remove task from scheduler
+        periodFutureMap.remove(task.getId());
+    }
+
+    /**
+     * Resume a task, which will restart the task scheduler if the task is periodical.
+     */
+    public void resumeTask(Task task) {
+        if (task == null) {
+            return;
+        }
+        task.setState(Constants.TaskState.ACTIVE);
+        if (task.getType() == Constants.TaskType.PERIODICAL) {
+            TaskSchedule schedule = task.getSchedule();
+            if (schedule != null) {
+                registerScheduler(task);
+            }
+        }
+        // reset consecutive failure number
+        task.resetConsecutiveFailCount();
     }
 
     public void dropTasks(List<Long> taskIdList, boolean isReplay) {
@@ -1098,5 +1143,13 @@ public class TaskManager implements MemoryTrackable {
     @VisibleForTesting
     public Map<Long, ScheduledFuture<?>> getPeriodFutureMap() {
         return periodFutureMap;
+    }
+
+    public Task getTask(MaterializedView mv) {
+        if (mv == null) {
+            return null;
+        }
+        String taskName = TaskBuilder.getMvTaskName(mv.getId());
+        return getTask(taskName);
     }
 }
