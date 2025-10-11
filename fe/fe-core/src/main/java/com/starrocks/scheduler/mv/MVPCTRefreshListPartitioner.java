@@ -441,7 +441,8 @@ public final class MVPCTRefreshListPartitioner extends MVPCTRefreshPartitioner {
         }
         int i = 0;
         // refresh the recent partitions first
-        Iterator<PCellWithName> iterator = getToRefreshPartitionsIterator(toRefreshPartitions, false);
+        Iterator<PCellWithName> iterator = getToRefreshPartitionsIterator(toRefreshPartitions, 
+            Config.materialized_view_refresh_ascending);
         while (i++ < partitionRefreshNumber && iterator.hasNext()) {
             PCellWithName pCell = iterator.next();
             logger.debug("Materialized view [{}] to refresh partition name {}, value {}",

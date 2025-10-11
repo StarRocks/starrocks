@@ -1368,8 +1368,9 @@ public class Config extends ConfigBase {
     /**
      * control materialized view refresh order
      */
-    @ConfField(mutable = true)
-    public static boolean materialized_view_refresh_ascending = true;
+    @ConfField(mutable = true, comment = "Whether enable to refresh materialized view in ascending order or not, " +
+            "false by default")
+    public static boolean materialized_view_refresh_ascending = false;
 
     @ConfField(mutable = true, comment = "An internal optimization for external table refresh, " +
             "only refresh affected partitions of external table, instead of all of them ")
