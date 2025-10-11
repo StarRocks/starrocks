@@ -13,7 +13,7 @@
 // limitations under the License.
 
 
-package com.starrocks.scheduler.mv;
+package com.starrocks.scheduler.mv.pct;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
@@ -35,6 +35,9 @@ import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.scheduler.MvTaskRunContext;
 import com.starrocks.scheduler.TaskRunContext;
+import com.starrocks.scheduler.mv.BaseTableSnapshotInfo;
+import com.starrocks.scheduler.mv.MVRefreshParams;
+import com.starrocks.scheduler.mv.MVTraceUtils;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.AlterTableClauseAnalyzer;
 import com.starrocks.sql.ast.AddPartitionClause;

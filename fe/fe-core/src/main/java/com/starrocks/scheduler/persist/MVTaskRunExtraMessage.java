@@ -70,6 +70,10 @@ public class MVTaskRunExtraMessage implements Writable {
     @SerializedName("planBuilderMessage")
     public Map<String, String> planBuilderMessage = Maps.newHashMap();
 
+    // the refresh mode of this task run
+    @SerializedName("refreshMode")
+    public String refreshMode = "";
+
     public MVTaskRunExtraMessage() {
     }
 
@@ -183,6 +187,14 @@ public class MVTaskRunExtraMessage implements Writable {
 
     public Map<String, String> getPlanBuilderMessage() {
         return planBuilderMessage;
+    }
+
+    public void setRefreshMode(String refreshMode) {
+        this.refreshMode = refreshMode;
+    }
+
+    public String getRefreshMode() {
+        return refreshMode;
     }
 
     @Override

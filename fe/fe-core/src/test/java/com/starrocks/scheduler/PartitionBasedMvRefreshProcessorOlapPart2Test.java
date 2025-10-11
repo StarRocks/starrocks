@@ -26,7 +26,7 @@ import com.starrocks.common.util.RuntimeProfile;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
-import com.starrocks.scheduler.mv.MVPCTBasedRefreshProcessor;
+import com.starrocks.scheduler.mv.pct.MVPCTBasedRefreshProcessor;
 import com.starrocks.scheduler.persist.TaskRunStatus;
 import com.starrocks.schema.MTable;
 import com.starrocks.server.GlobalStateMgr;

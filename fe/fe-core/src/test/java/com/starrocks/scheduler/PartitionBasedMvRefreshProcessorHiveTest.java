@@ -25,7 +25,7 @@ import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
 import com.starrocks.connector.hive.MockedHiveMetadata;
-import com.starrocks.scheduler.mv.MVPCTBasedRefreshProcessor;
+import com.starrocks.scheduler.mv.pct.MVPCTBasedRefreshProcessor;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.MetadataMgr;
 import com.starrocks.sql.common.SyncPartitionUtils;
