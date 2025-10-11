@@ -70,7 +70,8 @@ public class LogicalValuesOperator extends LogicalOperator {
 
     @Override
     public RowOutputInfo deriveRowOutputInfo(List<OptExpression> inputs) {
-        return new RowOutputInfo(columnRefSet.stream().collect(Collectors.toMap(Function.identity(), Function.identity())));
+        return new RowOutputInfo(columnRefSet.stream().distinct()
+                .collect(Collectors.toMap(Function.identity(), Function.identity())));
     }
 
     @Override
