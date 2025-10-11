@@ -55,7 +55,6 @@ StarRocksMetrics::StarRocksMetrics() : _metrics(_s_registry_name) {
     REGISTER_STARROCKS_METRIC(query_scan_bytes);
     REGISTER_STARROCKS_METRIC(query_scan_rows);
 
-    pipeline_executor_metrics.register_all_metrics(&_metrics);
     REGISTER_STARROCKS_METRIC(pipe_scan_executor_queuing);
     REGISTER_STARROCKS_METRIC(pipe_driver_schedule_count);
     REGISTER_STARROCKS_METRIC(pipe_driver_execution_time);
@@ -262,6 +261,8 @@ StarRocksMetrics::StarRocksMetrics() : _metrics(_s_registry_name) {
 void StarRocksMetrics::initialize(const std::vector<std::string>& paths, bool init_system_metrics,
                                   bool init_jvm_metrics, const std::set<std::string>& disk_devices,
                                   const std::vector<std::string>& network_interfaces) {
+    pipeline_executor_metrics.register_all_metrics(&_metrics);
+
     // disk usage
     for (auto& path : paths) {
         IntGauge* gauge = disks_total_capacity.add_metric(path, MetricUnit::BYTES);

@@ -247,7 +247,7 @@ Status ExecStateReporter::report_epoch(const TMVMaintenanceTasks& params, ExecEn
     return rpc_status;
 }
 
-ExecStateReporter::ExecStateReporter(const CpuUtil::CpuIds& cpuids) {
+ExecStateReporter::ExecStateReporter(const CpuUtil::CpuIds& cpuids, ExecStateReporterMetrics* metrics) {
     auto status = ThreadPoolBuilder("exec_state_report") // exec state reporter
                           .set_min_threads(1)
                           .set_max_threads(2)
@@ -258,7 +258,6 @@ ExecStateReporter::ExecStateReporter(const CpuUtil::CpuIds& cpuids) {
     if (!status.ok()) {
         LOG(FATAL) << "Cannot create thread pool for ExecStateReport: error=" << status.to_string();
     }
-    REGISTER_THREAD_POOL_METRICS(exec_state_report, _thread_pool);
 
     status = ThreadPoolBuilder("priority_exec_state_report") // priority exec state reporter with infinite queue
                      .set_min_threads(1)
@@ -269,7 +268,9 @@ ExecStateReporter::ExecStateReporter(const CpuUtil::CpuIds& cpuids) {
     if (!status.ok()) {
         LOG(FATAL) << "Cannot create thread pool for priority ExecStateReport: error=" << status.to_string();
     }
-    REGISTER_THREAD_POOL_METRICS(priority_exec_state_report, _priority_thread_pool);
+
+    metrics->monitor_reporter(_thread_pool.get());
+    metrics->monitor_priority_reporter(_priority_thread_pool.get());
 }
 
 void ExecStateReporter::submit(std::function<void()>&& report_task, bool priority) {
