@@ -127,7 +127,12 @@ if [[ "x$LOG_CONSOLE" == "x1" ]] ; then
 fi
 
 while true; do
-  $STARROCKS_HOME/bin/start_be.sh $addition_args
+  $STARROCKS_HOME/bin/start_be.sh $addition_args &
+  be_process_pid=$!
+  # forward SIGTERM to be process_pid explicitly 
+  trap "kill -TERM $be_process_pid 2>/dev/null" TERM
+  wait $be_process_pid
+  
   ret=$?
   if [[ $ret -ne 0 && "x$LOG_CONSOLE" != "x1" ]] ; then
       nol=50
