@@ -767,6 +767,14 @@ public:
     DEFINE_VECTORIZED_FN(time_to_sec);
 
     /**
+     * return time
+     * @param: [int]
+     * @paramType columns: [BinaryColumn]
+     * @return Int64Column
+     */
+    DEFINE_VECTORIZED_FN(sec_to_time);
+
+    /**
      * Returns the date of the first specified DOW (day of week) that occurs after the input date.
      * @param: [timestamp, dow]
      * @paramType columns: [TimestampColumn, BinaryColumn of TYPE_VARCHAR]
