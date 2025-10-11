@@ -385,7 +385,15 @@ public abstract class MVTestBase extends StarRocksTestBase {
     }
 
     protected TaskRun withMVRefreshTaskRun(String dbName, MaterializedView mv) throws Exception {
-        Task task = TaskBuilder.buildMvTask(mv, dbName);
+        TaskManager taskManager = GlobalStateMgr.getCurrentState().getTaskManager();
+
+        // create a task if not exist
+        Task task = taskManager.getTask(mv);
+        if (task == null) {
+            task = TaskBuilder.buildMvTask(mv, dbName);
+            taskManager.createTask(task, false);
+        }
+
         Map<String, String> testProperties = task.getProperties();
         testProperties.put(TaskRun.IS_TEST, "true");
         TaskRun taskRun = TaskRunBuilder.newBuilder(task).build();
