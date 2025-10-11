@@ -221,10 +221,11 @@ public:
 
     std::string get_name() const override { return "const-" + _data->get_name(); }
 
-    Column* mutable_data_column() { return _data.get(); }
-
-    ColumnPtr& data_column() { return _data; }
-    const ColumnPtr& data_column() const { return _data; }
+    // Internal mutable access (use with caution)
+    Column* mutable_data_column() { return _data->as_mutable_raw_ptr(); }
+    
+    // External accessors
+    ColumnPtr data_column() const { return _data; }
     MutableColumnPtr data_column_ptr() { return _data->as_mutable_ptr(); }
 
     Datum get(size_t n __attribute__((unused))) const override { return _data->get(0); }
@@ -285,7 +286,7 @@ public:
     void mutate_each_subcolumn() override { _data = (std::move(*_data)).mutate(); }
 
 private:
-    ColumnPtr _data;
+    Column::WrappedPtr _data;
     uint64_t _size;
 };
 

@@ -109,11 +109,21 @@ StatusOr<ColumnPtr> ConstColumn::upgrade_if_overflow() {
         return Status::InternalError("Size of ConstColumn exceed the limit");
     }
 
-    return upgrade_helper_func(&_data);
+    ColumnPtr data_col = _data;
+    auto ret = upgrade_helper_func(&data_col);
+    if (ret.ok() && ret.value() == nullptr) {
+        _data = std::move(data_col);
+    }
+    return ret;
 }
 
 StatusOr<ColumnPtr> ConstColumn::downgrade() {
-    return downgrade_helper_func(&_data);
+    ColumnPtr data_col = _data;
+    auto ret = downgrade_helper_func(&data_col);
+    if (ret.ok() && ret.value() == nullptr) {
+        _data = std::move(data_col);
+    }
+    return ret;
 }
 
 } // namespace starrocks
