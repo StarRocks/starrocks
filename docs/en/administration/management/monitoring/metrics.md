@@ -1077,6 +1077,21 @@ For more information on how to build a monitoring service for your StarRocks clu
 - Unit: Count
 - Description: Total number of hits in the storage page cache.
 
+### page_cache_insert_count
+
+- Unit: Count
+- Description: Total number of insert operations in the storage page cache.
+
+### page_cache_insert_evict_count
+
+- Unit: Count
+- Description: Total number of cache entries evicted during insert operations due to capacity constraints.
+
+### page_cache_release_evict_count
+
+- Unit: Count
+- Description: Total number of cache entries evicted during release operations when cache usage exceeds capacity.
+
 ### bytes_read_total (Deprecated)
 
 ### update_rowset_commit_request_total
