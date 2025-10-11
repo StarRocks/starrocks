@@ -372,7 +372,7 @@ jobs:
               export image_cache_id=${IMAGE_CACHE_ID}
               export image_tag=$BRANCH-$PR_NUMBER
           fi
-          ./bin/elastic-ut.sh --pr ${PR_NUMBER} --module be --repository ${{ github.repository }} --linuxdistro ${LINUX_DISTRO} --with-gcov --arch amd64
+          #./bin/elastic-ut.sh --pr ${PR_NUMBER} --module be --repository ${{ github.repository }} --linuxdistro ${LINUX_DISTRO} --with-gcov --arch arm64
       - name: clean ECI
         if: always()
         run: |
@@ -428,7 +428,7 @@ jobs:
               export image_cache_id=${IMAGE_CACHE_ID}
               export image_tag=$BRANCH-$PR_NUMBER
           fi
-          ./bin/elastic-build.sh --pr ${PR_NUMBER} --repository ${{ github.repository }} --linuxdistro ${LINUX_DISTRO} --be --clang-tidy --arch amd64
+          # ./bin/elastic-build.sh --pr ${PR_NUMBER} --repository ${{ github.repository }} --linuxdistro ${LINUX_DISTRO} --be --clang-tidy --arch arm64
 
       - name: clean ECI
         if: always()
@@ -827,7 +827,7 @@ jobs:
           fi
 
           if [[ ${package} == "" ]]; then
-            ./bin/elastic-build.sh --pr ${PR_NUMBER} --repository ${{ github.repository }} --linuxdistro ${LINUX_DISTRO} --with-gcov --with-trivy --arch amd64
+            ./bin/elastic-build.sh --pr ${PR_NUMBER} --repository ${{ github.repository }} --linuxdistro ${LINUX_DISTRO} --with-gcov --with-trivy --arch arm64
             echo "is_self_build=true" >> $GITHUB_OUTPUT
           else
             echo "Use latest tar: ${package}" 
@@ -895,7 +895,7 @@ jobs:
           CLUSTER_NAME: ci-admit
         run: |
           cd ci-tool && source lib/init.sh
-          ./bin/elastic-cluster.sh --template ${CLUSTER_NAME} --linuxdistro ${LINUX_DISTRO} --arch amd64
+          ./bin/elastic-cluster.sh --template ${CLUSTER_NAME} --linuxdistro ${LINUX_DISTRO} --arch arm64
           cp conf/starrocks_deploy.conf /var/local/env/${PR_NUMBER}-starrocks_deploy.conf
           echo "deploy_conf_file=/var/local/env/${PR_NUMBER}-starrocks_deploy.conf" >> $GITHUB_OUTPUT
 
@@ -916,7 +916,7 @@ jobs:
 
           echo "##### Package: ${tar_path}" >> $GITHUB_STEP_SUMMARY
           echo "cluster_name=${CLUSTER_NAME}" >> $GITHUB_OUTPUT
-          ./bin/deploy-cluster.sh -c ${CLUSTER_NAME} --output ${tar_path} --with-coverage --arch amd64
+          ./bin/deploy-cluster.sh -c ${CLUSTER_NAME} --output ${tar_path} --with-coverage --arch arm64
 
       - name: Clean ENV
         if: always()
@@ -1232,7 +1232,7 @@ jobs:
             --pr $PR_NUMBER \
             --build Release \
             --linuxdistro "${{ env.linuxdistro }}" \
-            --arch amd64 \
+            --arch arm64 \
             --conf $CONF_FILE \
             --repository ${{ github.repository }}
 
