@@ -959,6 +959,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public static final String ENABLE_FULL_SORT_USE_GERMAN_STRING = "enable_full_sort_use_german_string";
 
+    public static final String USE_CRC32_HASH_FOR_EXCHANGE = "use_crc32_hash_for_exchange";
+
     public static final List<String> DEPRECATED_VARIABLES = ImmutableList.<String>builder()
             .add(CODEGEN_LEVEL)
             .add(MAX_EXECUTION_TIME)
@@ -1964,6 +1966,11 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VarAttr(name = ENABLE_FULL_SORT_USE_GERMAN_STRING)
     private boolean enableFullSortUseGermanString = true;
+
+    // Control the hash function used in exchange sink operator for hash partitioning
+    // When true, use crc32_hash instead of fnv_hash
+    @VarAttr(name = USE_CRC32_HASH_FOR_EXCHANGE)
+    private boolean useCrc32HashForExchange = true;
 
     public int getCboPruneJsonSubfieldDepth() {
         return cboPruneJsonSubfieldDepth;
@@ -5335,6 +5342,15 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public boolean isEnableFullSortUseGermanString() {
         return this.enableFullSortUseGermanString;
     }
+
+    public boolean isUseCrc32HashForExchange() {
+        return useCrc32HashForExchange;
+    }
+
+    public void setUseCrc32HashForExchange(boolean useCrc32HashForExchange) {
+        this.useCrc32HashForExchange = useCrc32HashForExchange;
+    }
+
     // Serialize to thrift object
     // used for rest api
     public TQueryOptions toThrift() {
@@ -5419,6 +5435,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         tResult.setGroup_concat_max_len(groupConcatMaxLen);
         tResult.setRpc_http_min_size(rpcHttpMinSize);
         tResult.setInterleaving_group_size(interleavingGroupSize);
+        tResult.setUse_crc32_hash_for_exchange(useCrc32HashForExchange);
 
         TCompressionType loadCompressionType =
                 CompressionUtils.findTCompressionByName(loadTransmissionCompressionType);
