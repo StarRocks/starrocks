@@ -4727,4 +4727,79 @@ TEST_F(TimeFunctionsTest, hourFromUnixTime) {
     }
 }
 
+// Tests for sec_to_time function
+TEST_F(TimeFunctionsTest, secToTimeTest) {
+    {
+        auto int_value = ColumnHelper::create_column(TypeDescriptor(TYPE_BIGINT), false);
+
+        int_value->append_datum(0L);
+        int_value->append_datum(1L);
+        int_value->append_datum(60L);
+        int_value->append_datum(3600L);
+        int_value->append_datum(36000L);
+        int_value->append_datum(86399L);
+        int_value->append_datum(3024000L);
+        int_value->append_datum(4000000L);
+
+        Columns columns;
+        columns.emplace_back(int_value);
+
+        ColumnPtr result = TimeFunctions::sec_to_time(_utils->get_fn_ctx(), columns).value();
+        auto v = ColumnHelper::cast_to<TYPE_TIME>(result);
+
+        EXPECT_EQ(8, result->size());
+        EXPECT_EQ(0, v->get_data()[0]);
+        EXPECT_EQ(1, v->get_data()[1]);
+        EXPECT_EQ(60, v->get_data()[2]);
+        EXPECT_EQ(3600, v->get_data()[3]);
+        EXPECT_EQ(36000, v->get_data()[4]);
+        EXPECT_EQ(86399, v->get_data()[5]);
+        EXPECT_EQ(3023999, v->get_data()[6]);
+        EXPECT_EQ(3023999, v->get_data()[7]);
+    }
+    {
+        auto int_value = ColumnHelper::create_column(TypeDescriptor(TYPE_BIGINT), false);
+
+        int_value->append_datum(-0L);
+        int_value->append_datum(-1L);
+        int_value->append_datum(-60L);
+        int_value->append_datum(-3600L);
+        int_value->append_datum(-36000L);
+        int_value->append_datum(-86399L);
+        int_value->append_datum(-3024000L);
+        int_value->append_datum(-4000000L);
+
+        Columns columns;
+        columns.emplace_back(int_value);
+
+        ColumnPtr result = TimeFunctions::sec_to_time(_utils->get_fn_ctx(), columns).value();
+        auto v = ColumnHelper::cast_to<TYPE_TIME>(result);
+
+        EXPECT_EQ(8, result->size());
+        EXPECT_EQ(0, v->get_data()[0]);
+        EXPECT_EQ(-1, v->get_data()[1]);
+        EXPECT_EQ(-60, v->get_data()[2]);
+        EXPECT_EQ(-3600, v->get_data()[3]);
+        EXPECT_EQ(-36000, v->get_data()[4]);
+        EXPECT_EQ(-86399, v->get_data()[5]);
+        EXPECT_EQ(-3023999, v->get_data()[6]);
+        EXPECT_EQ(-3023999, v->get_data()[7]);
+    }
+
+    {
+        // Create null column
+        auto null_value = ColumnHelper::create_column(TypeDescriptor(TYPE_BIGINT), true);
+
+        (void)null_value->append_nulls(1);
+
+        Columns columns;
+        columns.emplace_back(null_value);
+
+        ColumnPtr result = TimeFunctions::sec_to_time(_utils->get_fn_ctx(), columns).value();
+
+        EXPECT_EQ(1, result->size());
+        ASSERT_TRUE(result->is_nullable());
+    }
+}
+
 } // namespace starrocks

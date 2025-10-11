@@ -565,6 +565,7 @@ vectorized_functions = [
     [50262, 'to_iso8601', True, False, 'VARCHAR', ['DATETIME'], 'TimeFunctions::datetime_to_iso8601'],
     [50263, 'to_iso8601', True, False, 'VARCHAR', ['DATE'], 'TimeFunctions::date_to_iso8601'],
     [50250, 'time_to_sec', True, False, 'BIGINT', ['TIME'], 'TimeFunctions::time_to_sec'],
+    [50251, 'sec_to_time', True, False, 'TIME', ['BIGINT'], 'TimeFunctions::sec_to_time'],
 
     # unix timestamp extended version to int64
     # be sure to put before int32 version, so fe will find signature in order.
