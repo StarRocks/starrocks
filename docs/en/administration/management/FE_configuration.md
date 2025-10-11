@@ -3330,7 +3330,6 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 - Description: Whether to use the Service Account that is bound to your Compute Engine.
 - Introduced in: v3.5.1
 
-<!--
 ##### starmgr_grpc_timeout_seconds
 
 - Default: 5
@@ -3339,7 +3338,15 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 - Is mutable: Yes
 - Description:
 - Introduced in: -
--->
+
+##### starmgr_grpc_server_max_worker_threads
+
+- Default: 1024
+- Type: Int
+- Unit: -
+- Is mutable: Yes
+- Description: The maximum number of worker threads that are used by the grpc server in the FE starmgr module.
+- Introduced in: v4.0.0, v3.5.8
 
 ##### lake_compaction_score_selector_min_score
 
