@@ -337,16 +337,11 @@ public:
     void set_capacity(size_t capacity) override;
     size_t get_memory_usage() const override;
     size_t get_capacity() const override;
-<<<<<<< HEAD
-    uint64_t get_lookup_count() const override;
-    uint64_t get_hit_count() const override;
-=======
     size_t get_lookup_count() const override;
     size_t get_hit_count() const override;
     size_t get_insert_count() const override;
     size_t get_insert_evict_count() const override;
     size_t get_release_evict_count() const override;
->>>>>>> 731ff88162 ([Enhancement] add metric for page_cache (#63905))
     bool adjust_capacity(int64_t delta, size_t min_capacity = 0) override;
 
 private:
