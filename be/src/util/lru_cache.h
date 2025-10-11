@@ -183,6 +183,9 @@ public:
     virtual size_t get_memory_usage() const = 0;
     virtual size_t get_lookup_count() const = 0;
     virtual size_t get_hit_count() const = 0;
+    virtual size_t get_insert_count() const = 0;
+    virtual size_t get_insert_evict_count() const = 0;
+    virtual size_t get_release_evict_count() const = 0;
 
     //  Decrease or increase cache capacity.
     virtual bool adjust_capacity(int64_t delta, size_t min_capacity = 0) = 0;
@@ -278,6 +281,9 @@ public:
 
     uint64_t get_lookup_count() const;
     uint64_t get_hit_count() const;
+    uint64_t get_insert_count() const;
+    uint64_t get_insert_evict_count() const;
+    uint64_t get_release_evict_count() const;
     size_t get_usage() const;
     size_t get_capacity() const;
     static size_t key_handle_size(const CacheKey& key) { return sizeof(LRUHandle) - 1 + key.size(); }
@@ -305,6 +311,9 @@ private:
 
     uint64_t _lookup_count{0};
     uint64_t _hit_count{0};
+    uint64_t _insert_count{0};
+    uint64_t _insert_evict_count{0};
+    uint64_t _release_evict_count{0};
 };
 
 static const int kNumShardBits = 5;
@@ -328,8 +337,11 @@ public:
     void set_capacity(size_t capacity) override;
     size_t get_memory_usage() const override;
     size_t get_capacity() const override;
-    uint64_t get_lookup_count() const override;
-    uint64_t get_hit_count() const override;
+    size_t get_lookup_count() const override;
+    size_t get_hit_count() const override;
+    size_t get_insert_count() const override;
+    size_t get_insert_evict_count() const override;
+    size_t get_release_evict_count() const override;
     bool adjust_capacity(int64_t delta, size_t min_capacity = 0) override;
 
 private:

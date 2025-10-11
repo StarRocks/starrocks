@@ -111,6 +111,18 @@ size_t LRUCacheEngine::hit_count() const {
     return _cache->get_hit_count();
 }
 
+size_t LRUCacheEngine::insert_count() const {
+    return _cache->get_insert_count();
+}
+
+size_t LRUCacheEngine::insert_evict_count() const {
+    return _cache->get_insert_evict_count();
+}
+
+size_t LRUCacheEngine::release_evict_count() const {
+    return _cache->get_release_evict_count();
+}
+
 bool LRUCacheEngine::_check_write(size_t charge, const MemCacheWriteOptions& options) const {
     if (options.evict_probability >= 100) {
         return true;
