@@ -53,6 +53,8 @@ import java.util.stream.Collectors;
 import static com.google.common.base.Verify.verify;
 import static com.starrocks.common.profile.Tracers.Module.EXTERNAL;
 import static com.starrocks.connector.PartitionUtil.toPartitionValues;
+import static com.starrocks.connector.hive.HiveMetadata.FIELD_DELIMITOR;
+import static com.starrocks.connector.hive.HiveMetadata.SERIALIZATION_FORMAT;
 import static com.starrocks.connector.hive.HiveMetadata.STARROCKS_QUERY_ID;
 import static com.starrocks.connector.hive.HivePartitionStats.ReduceOperator.SUBTRACT;
 import static com.starrocks.connector.hive.HivePartitionStats.fromCommonStats;
@@ -456,6 +458,8 @@ public class HiveCommitter {
                 .setParameters(ImmutableMap.<String, String>builder()
                         .put("starrocks_version", Version.STARROCKS_VERSION + "-" + Version.STARROCKS_COMMIT_HASH)
                         .put(STARROCKS_QUERY_ID, ConnectContext.get().getQueryId().toString())
+                        .put(FIELD_DELIMITOR, partitionUpdate.getFieldDelimiter())
+                        .put(SERIALIZATION_FORMAT, partitionUpdate.getSerializationFormat())
                         .buildOrThrow())
                 .setStorageFormat(table.getStorageFormat())
                 .setLocation(partitionUpdate.getTargetPath().toString())

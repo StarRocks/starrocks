@@ -36,6 +36,21 @@ public class PartitionUpdate {
     private final List<String> fileNames;
     private final long rowCount;
     private final long totalSizeInBytes;
+    private String fieldDelimiter;
+    private String serializationFormat;
+
+    public PartitionUpdate(String name, Path writePath, Path targetPath,
+                           List<String> fileNames, long rowCount, long totalSizeInBytes,
+                           String fieldDelimiter, String serializationFormat) {
+        this.name = name;
+        this.writePath = writePath;
+        this.targetPath = targetPath;
+        this.fileNames = fileNames;
+        this.rowCount = rowCount;
+        this.totalSizeInBytes = totalSizeInBytes;
+        this.fieldDelimiter = fieldDelimiter;
+        this.serializationFormat = serializationFormat;
+    }
 
     public PartitionUpdate(String name, Path writePath, Path targetPath,
                            List<String> fileNames, long rowCount, long totalSizeInBytes) {
@@ -86,6 +101,14 @@ public class PartitionUpdate {
         return HiveWriteUtils.isS3Url(targetPath.toString());
     }
 
+    public String getFieldDelimiter() {
+        return fieldDelimiter;
+    }
+
+    public String getSerializationFormat() {
+        return serializationFormat;
+    }
+
     public PartitionUpdate setUpdateMode(UpdateMode updateMode) {
         this.updateMode = updateMode;
         return this;
@@ -97,7 +120,8 @@ public class PartitionUpdate {
         OVERWRITE,
     }
 
-    public static PartitionUpdate get(THiveFileInfo fileInfo, String stagingDir, String tableLocation) {
+    public static PartitionUpdate get(THiveFileInfo fileInfo, String stagingDir, String tableLocation,
+                                      String fieldDelimiter, String serializationFormat) {
         Preconditions.checkState(fileInfo.isSetPartition_path() && !Strings.isNullOrEmpty(fileInfo.getPartition_path()),
                 "Missing partition path");
 
@@ -110,7 +134,8 @@ public class PartitionUpdate {
         String targetPath = tableLocationWithSlash + partitionName + "/";
 
         return new PartitionUpdate(partitionName, new Path(writePath), new Path(targetPath),
-                Lists.newArrayList(fileInfo.getFile_name()), fileInfo.getRecord_count(), fileInfo.getFile_size_in_bytes());
+                Lists.newArrayList(fileInfo.getFile_name()), fileInfo.getRecord_count(),
+                fileInfo.getFile_size_in_bytes(), fieldDelimiter, serializationFormat);
     }
 
     public static List<PartitionUpdate> merge(List<PartitionUpdate> unMergedUpdates) {
@@ -128,12 +153,16 @@ public class PartitionUpdate {
                 fileSizeInBytes += partition.getTotalSizeInBytes();
             }
 
-            partitionUpdates.add(new PartitionUpdate(firstPartition.getName(),
+            partitionUpdates.add(new PartitionUpdate(
+                    firstPartition.getName(),
                     firstPartition.getWritePath(),
                     firstPartition.getTargetPath(),
                     allFileNames.build(),
                     totalRowCount,
-                    fileSizeInBytes));
+                    fileSizeInBytes,
+                    firstPartition.getFieldDelimiter(),
+                    firstPartition.getSerializationFormat()
+            ));
         }
         return partitionUpdates.build();
     }
