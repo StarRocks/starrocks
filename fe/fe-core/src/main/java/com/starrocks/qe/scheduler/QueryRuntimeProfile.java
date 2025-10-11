@@ -258,7 +258,7 @@ public class QueryRuntimeProfile {
     }
 
     public boolean isFinished() {
-        return profileDoneSignal.getCount() == 0;
+        return profileDoneSignal != null && profileDoneSignal.getCount() == 0;
     }
 
     public boolean addListener(Consumer<Boolean> task) {
