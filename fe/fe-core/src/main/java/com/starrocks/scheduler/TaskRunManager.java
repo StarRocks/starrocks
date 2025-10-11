@@ -28,6 +28,7 @@ import com.starrocks.scheduler.history.TaskRunHistory;
 import com.starrocks.scheduler.persist.TaskRunStatus;
 import com.starrocks.scheduler.persist.TaskRunStatusChange;
 import com.starrocks.server.GlobalStateMgr;
+import org.apache.arrow.util.VisibleForTesting;
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -58,6 +59,11 @@ public class TaskRunManager implements MemoryTrackable {
         this.taskRunScheduler = taskRunScheduler;
     }
 
+    public SubmitResult submitTaskRun(TaskRun taskRun) {
+        return submitTaskRun(taskRun, taskRun.getExecuteOption());
+    }
+
+    @VisibleForTesting
     public SubmitResult submitTaskRun(TaskRun taskRun, ExecuteOption option) {
         LOG.info("submit task run:{}", taskRun);
 

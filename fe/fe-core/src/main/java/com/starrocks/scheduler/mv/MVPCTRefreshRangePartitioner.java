@@ -68,7 +68,6 @@ import org.apache.logging.log4j.Logger;
 
 import java.util.Collections;
 import java.util.Iterator;
-import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -419,6 +418,7 @@ public final class MVPCTRefreshRangePartitioner extends MVPCTRefreshPartitioner 
     }
 
     @Override
+<<<<<<< HEAD
     public void filterPartitionByRefreshNumber(Set<String> mvPartitionsToRefresh,
                                                Set<String> mvPotentialPartitionNames,
                                                boolean tentative) {
@@ -438,11 +438,16 @@ public final class MVPCTRefreshRangePartitioner extends MVPCTRefreshPartitioner 
                                                        Set<String> mvPotentialPartitionNames,
                                                        boolean tentative,
                                                        MaterializedView.PartitionRefreshStrategy refreshStrategy) {
+=======
+    public void filterPartitionByRefreshNumber(PCellSortedSet mvPartitionsToRefresh,
+                                               MaterializedView.PartitionRefreshStrategy refreshStrategy) {
+>>>>>>> ee66eb3b3f ([Enhancement] Change default_mv_partition_refresh_strategy to adaptive by default (#63594))
         int partitionRefreshNumber = mv.getTableProperty().getPartitionRefreshNumber();
         Map<String, Range<PartitionKey>> mvRangePartitionMap = mv.getRangePartitionMap();
         if (partitionRefreshNumber <= 0 || partitionRefreshNumber >= mvRangePartitionMap.size()) {
             return;
         }
+<<<<<<< HEAD
         Map<String, Range<PartitionKey>> mappedPartitionsToRefresh = Maps.newHashMap();
         Iterator<String> mvToRefreshPartitionsIter = mvPartitionsToRefresh.iterator();
         while (mvToRefreshPartitionsIter.hasNext()) {
@@ -474,6 +479,28 @@ public final class MVPCTRefreshRangePartitioner extends MVPCTRefreshPartitioner 
                 partitionNameIter.remove();
             }
 
+=======
+
+        // remove invalid cells from the input to-refresh partitions
+        mvPartitionsToRefresh
+                .stream()
+                .filter(pCell -> !mvRangePartitionMap.containsKey(pCell.name()))
+                .forEach(mvPartitionsToRefresh::remove);
+
+        Iterator<PCellWithName> iterator = getToRefreshPartitionsIterator(mvPartitionsToRefresh,
+                Config.materialized_view_refresh_ascending);
+        // dynamically get the number of partitions to be refreshed this time
+        partitionRefreshNumber = getPartitionRefreshNumberAdaptive(mvPartitionsToRefresh, refreshStrategy);
+        if (partitionRefreshNumber <= 0 || mvPartitionsToRefresh.size() <= partitionRefreshNumber) {
+            return;
+        }
+
+        int i = 0;
+        while (i++ < partitionRefreshNumber && iterator.hasNext()) {
+            PCellWithName pCell = iterator.next();
+            logger.debug("Materialized view [{}] to refresh partition name {}, value {}",
+                    mv.getName(), pCell.name(), pCell.cell());
+>>>>>>> ee66eb3b3f ([Enhancement] Change default_mv_partition_refresh_strategy to adaptive by default (#63594))
             // NOTE: if mv's need to refresh partitions in the many-to-many mappings, no need to filter to
             // avoid data lose.
             // eg:
@@ -493,6 +520,7 @@ public final class MVPCTRefreshRangePartitioner extends MVPCTRefreshPartitioner 
             // BTW, since the refresh has already scanned the needed base tables' data, it's better to update
             // more mv's partitions as more as possible.
             // TODO: But it may cause much memory to refresh many partitions, support fine-grained partition refresh later.
+<<<<<<< HEAD
             if (!mvPotentialPartitionNames.isEmpty() && mvPotentialPartitionNames.contains(mvRefreshPartition)) {
                 return;
             }
@@ -529,18 +557,34 @@ public final class MVPCTRefreshRangePartitioner extends MVPCTRefreshPartitioner 
                                              Map<String, Range<PartitionKey>> mappedPartitionsToRefresh,
                                              Iterator<String> partitionNameIter,
                                              boolean tentative) {
+=======
+            if (!mvToRefreshPotentialPartitions.isEmpty() && mvToRefreshPotentialPartitions.contains(pCell.name())) {
+                return;
+            }
+        }
+
+>>>>>>> ee66eb3b3f ([Enhancement] Change default_mv_partition_refresh_strategy to adaptive by default (#63594))
         String nextPartitionStart = null;
         String endPartitionName = null;
         if (partitionNameIter.hasNext()) {
             String startPartitionName = partitionNameIter.next();
             Range<PartitionKey> partitionKeyRange = mappedPartitionsToRefresh.get(startPartitionName);
             nextPartitionStart = AnalyzerUtils.parseLiteralExprToDateString(partitionKeyRange.lowerEndpoint(), 0);
+<<<<<<< HEAD
             endPartitionName = startPartitionName;
             partitionsToRefresh.remove(endPartitionName);
         }
         while (partitionNameIter.hasNext()) {
             endPartitionName = partitionNameIter.next();
             partitionsToRefresh.remove(endPartitionName);
+=======
+            end = start;
+            iterator.remove();
+        }
+        while (iterator.hasNext()) {
+            end = iterator.next();
+            iterator.remove();
+>>>>>>> ee66eb3b3f ([Enhancement] Change default_mv_partition_refresh_strategy to adaptive by default (#63594))
         }
 
         if (!tentative) {

@@ -166,7 +166,63 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
          * Selects candidate partitions based on thresholds mv_max_rows_per_refresh and mv_max_bytes_per_refresh.
          * Stops selecting more partitions once either threshold is reached.
          */
+<<<<<<< HEAD
         ADAPTIVE
+=======
+        ADAPTIVE;
+
+        public static PartitionRefreshStrategy defaultValue() {
+            return ADAPTIVE;
+        }
+
+        public static PartitionRefreshStrategy of(String val) {
+            try {
+                return PartitionRefreshStrategy.valueOf(val.trim().toUpperCase());
+            } catch (Exception e) {
+                LOG.warn("Failed to get partition refresh strategy, use default value", e);
+                return PartitionRefreshStrategy.defaultValue();
+            }
+        }
+    }
+
+    /**
+     * Refresh mode for materialized view.
+     */
+    public enum RefreshMode {
+        /**
+         * AUTO: Automatically determine the refresh mode based on the materialized view's properties.
+         */
+        AUTO,
+        /**
+         * PCT: Partition-based refresh mode(partition-change-tracking), only refresh the partitions that have changed since
+         * the last refresh.
+         */
+        PCT,
+        /**
+         * FULL: Full refresh mode, refresh all partitions of the materialized view.
+         */
+        FULL,
+        /**
+         * INCREMENTAL: Incremental refresh mode, only refresh the incremental changed rows since the last refresh.
+         */
+        INCREMENTAL;
+
+        public static RefreshMode defaultValue() {
+            return PCT;
+        }
+
+        public boolean isAuto() {
+            return this == AUTO;
+        }
+
+        public boolean isIncremental() {
+            return this == INCREMENTAL;
+        }
+
+        public boolean isFull() {
+            return this == FULL;
+        }
+>>>>>>> ee66eb3b3f ([Enhancement] Change default_mv_partition_refresh_strategy to adaptive by default (#63594))
     }
 
     @Override
@@ -1313,6 +1369,35 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
     }
 
     /**
+<<<<<<< HEAD
+=======
+     * Return the partition refresh strategy of the materialized view.
+     */
+    public PartitionRefreshStrategy getPartitionRefreshStrategy() {
+        TableProperty tableProperty = getTableProperty();
+        if (tableProperty == null) {
+            return PartitionRefreshStrategy.defaultValue();
+        }
+
+        // otherwise, use `partition_refresh_strategy` property.
+        PartitionRefreshStrategy partitionRefreshStrategy =
+                PartitionRefreshStrategy.of(tableProperty.getPartitionRefreshStrategy());
+        if (tableProperty.isSetPartitionRefreshStrategy()
+                && !PartitionRefreshStrategy.STRICT.equals(partitionRefreshStrategy)) {
+            return partitionRefreshStrategy;
+        } else {
+            // if mv has `partition_refresh_number` property, use it first.
+            // for compatibility, if `partition_refresh_number` is set and not equal to 1,
+            if (tableProperty.isSetPartitionRefreshNumber()) {
+                return PartitionRefreshStrategy.STRICT;
+            } else {
+                return PartitionRefreshStrategy.defaultValue();
+            }
+        }
+    }
+
+    /**
+>>>>>>> ee66eb3b3f ([Enhancement] Change default_mv_partition_refresh_strategy to adaptive by default (#63594))
      * Whether this mv can be used for mv rewrite configured by {@code enable_query_rewrite} table property.
      * @return: true if it is configured to enable mv rewrite, otherwise false.
      */

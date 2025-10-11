@@ -448,6 +448,7 @@ public final class MVPCTRefreshListPartitioner extends MVPCTRefreshPartitioner {
     }
 
     @Override
+<<<<<<< HEAD
     public void filterPartitionByRefreshNumber(Set<String> mvPartitionsToRefresh, Set<String> mvPotentialPartitionNames,
                                                boolean tentative) {
         filterPartitionByRefreshNumberInternal(mvPartitionsToRefresh, mvPotentialPartitionNames, tentative,
@@ -476,11 +477,16 @@ public final class MVPCTRefreshListPartitioner extends MVPCTRefreshPartitioner {
             partitionToCells.put(partitionName, listCell);
         }
 
+=======
+    public void filterPartitionByRefreshNumber(PCellSortedSet toRefreshPartitions,
+                                               MaterializedView.PartitionRefreshStrategy refreshStrategy) {
+>>>>>>> ee66eb3b3f ([Enhancement] Change default_mv_partition_refresh_strategy to adaptive by default (#63594))
         // filter by partition ttl
         filterPartitionsByTTL(partitionToCells, false);
         if (CollectionUtils.sizeIsEmpty(partitionToCells)) {
             return;
         }
+<<<<<<< HEAD
         Map<String, PListCell> toRefreshPartitions = partitionToCells.entrySet().stream()
                 .collect(Collectors.toMap(Map.Entry::getKey, e -> (PListCell) e.getValue()));
 
@@ -513,6 +519,35 @@ public final class MVPCTRefreshListPartitioner extends MVPCTRefreshPartitioner {
                 refreshNumber, toRefreshPartitions, nextPartitionValues);
         // do filter input mvPartitionsToRefresh since it's a reference
         mvPartitionsToRefresh.retainAll(toRefreshPartitions.keySet());
+=======
+        // filter invalid cells from input
+        toRefreshPartitions.stream()
+                .filter(cell -> !mv.getListPartitionItems().containsKey(cell.name()))
+                .forEach(toRefreshPartitions::remove);
+        // dynamically get the number of partitions to be refreshed this time
+        int partitionRefreshNumber = getPartitionRefreshNumberAdaptive(toRefreshPartitions, refreshStrategy);
+        if (partitionRefreshNumber <= 0 || partitionRefreshNumber >= toRefreshPartitions.size()) {
+            return;
+        }
+        int i = 0;
+        // refresh the recent partitions first
+        Iterator<PCellWithName> iterator = getToRefreshPartitionsIterator(toRefreshPartitions, false);
+        while (i++ < partitionRefreshNumber && iterator.hasNext()) {
+            PCellWithName pCell = iterator.next();
+            logger.debug("Materialized view [{}] to refresh partition name {}, value {}",
+                    mv.getName(), pCell.name(), pCell.cell());
+        }
+
+        // get next partition values for next refresh
+        Set<PListCell> nextPartitionValues = Sets.newHashSet();
+        while (iterator.hasNext()) {
+            PCellWithName pCell = iterator.next();
+            nextPartitionValues.add((PListCell) pCell.cell());
+            iterator.remove();
+        }
+        logger.info("Filter partitions by refresh number, ttl_number:{}, result:{}, remains:{}",
+                partitionRefreshNumber, toRefreshPartitions, nextPartitionValues);
+>>>>>>> ee66eb3b3f ([Enhancement] Change default_mv_partition_refresh_strategy to adaptive by default (#63594))
         if (CollectionUtils.isEmpty(nextPartitionValues)) {
             return;
         }
@@ -523,6 +558,7 @@ public final class MVPCTRefreshListPartitioner extends MVPCTRefreshPartitioner {
         }
     }
 
+<<<<<<< HEAD
     public int getAdaptivePartitionRefreshNumber(Iterator<String> partitionNameIter) throws MVAdaptiveRefreshException {
         Map<String, Map<Table, Set<String>>> mvToBaseNameRefs = mvContext.getMvRefBaseTableIntersectedPartitions();
         MVRefreshPartitionSelector mvRefreshPartitionSelector =
@@ -542,6 +578,8 @@ public final class MVPCTRefreshListPartitioner extends MVPCTRefreshPartitioner {
         return adaptiveRefreshNumber;
     }
 
+=======
+>>>>>>> ee66eb3b3f ([Enhancement] Change default_mv_partition_refresh_strategy to adaptive by default (#63594))
     private void addListPartitions(Database database, MaterializedView materializedView,
                                    Map<String, PCell> adds, Map<String, String> partitionProperties,
                                    DistributionDesc distributionDesc) {

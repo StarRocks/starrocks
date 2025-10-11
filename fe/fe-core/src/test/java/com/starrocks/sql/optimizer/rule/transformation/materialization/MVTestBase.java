@@ -40,14 +40,26 @@ import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.pseudocluster.PseudoCluster;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.StmtExecutor;
+import com.starrocks.scheduler.Constants;
 import com.starrocks.scheduler.ExecuteOption;
 import com.starrocks.scheduler.MvTaskRunContext;
+<<<<<<< HEAD
 import com.starrocks.scheduler.PartitionBasedMvRefreshProcessor;
 import com.starrocks.scheduler.TableSnapshotInfo;
+=======
+import com.starrocks.scheduler.SubmitResult;
+>>>>>>> ee66eb3b3f ([Enhancement] Change default_mv_partition_refresh_strategy to adaptive by default (#63594))
 import com.starrocks.scheduler.Task;
 import com.starrocks.scheduler.TaskBuilder;
 import com.starrocks.scheduler.TaskRun;
 import com.starrocks.scheduler.TaskRunBuilder;
+<<<<<<< HEAD
+=======
+import com.starrocks.scheduler.TaskRunManager;
+import com.starrocks.scheduler.TaskRunProcessor;
+import com.starrocks.scheduler.mv.BaseTableSnapshotInfo;
+import com.starrocks.scheduler.mv.MVPCTBasedRefreshProcessor;
+>>>>>>> ee66eb3b3f ([Enhancement] Change default_mv_partition_refresh_strategy to adaptive by default (#63594))
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.Analyzer;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
@@ -96,6 +108,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.TimeUnit;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
@@ -423,6 +436,17 @@ public class MVTestBase extends StarRocksTestBase {
                 taskRun.getProcessor();
         MvTaskRunContext mvTaskRunContext = processor.getMvContext();
         return mvTaskRunContext.getExecPlan();
+    }
+
+    protected static void executeTaskRun(TaskRun taskRun) throws Exception {
+        // ensure taskRun is initialized
+        taskRun.setStatus(null);
+        TaskManager taskManager = GlobalStateMgr.getCurrentState().getTaskManager();
+        TaskRunManager taskRunManager = taskManager.getTaskRunManager();
+        SubmitResult result = taskRunManager.submitTaskRun(taskRun);
+        Assertions.assertTrue(result.getStatus().equals(SubmitResult.SubmitStatus.SUBMITTED));
+        Constants.TaskRunState state = result.getFuture().get(300000, TimeUnit.MILLISECONDS);
+        Assertions.assertTrue(state.isFinishState());
     }
 
     protected static void initAndExecuteTaskRun(TaskRun taskRun) throws Exception {
