@@ -53,6 +53,7 @@
 #include "storage/projection_iterator.h"
 #include "storage/rowset/metadata_cache.h"
 #include "storage/rowset/rowid_range_option.h"
+#include "storage/rowset/segment.h"
 #include "storage/rowset/short_key_range_option.h"
 #include "storage/storage_engine.h"
 #include "storage/tablet_index.h"
@@ -738,7 +739,8 @@ private:
 
 StatusOr<ChunkIteratorPtr> Rowset::new_iterator(const Schema& schema, const RowsetReadOptions& options) {
     std::vector<ChunkIteratorPtr> seg_iters;
-    RETURN_IF_ERROR(get_segment_iterators(schema, options, &seg_iters));
+    SegmentReadOptions seg_options;
+    RETURN_IF_ERROR(get_segment_iterators(schema, options, seg_options, &seg_iters));
     if (seg_iters.empty()) {
         return new_empty_iterator(schema, options.chunk_size);
     } else if (options.sorted) {
@@ -749,11 +751,12 @@ StatusOr<ChunkIteratorPtr> Rowset::new_iterator(const Schema& schema, const Rows
 }
 
 Status Rowset::get_segment_iterators(const Schema& schema, const RowsetReadOptions& options,
+                                     SegmentReadOptions& seg_options,
                                      std::vector<ChunkIteratorPtr>* segment_iterators) {
     RowsetReleaseGuard guard(shared_from_this());
     RETURN_IF_ERROR(load());
 
-    SegmentReadOptions seg_options;
+    // SegmentReadOptions seg_options;
     ASSIGN_OR_RETURN(seg_options.fs, FileSystem::CreateSharedFromString(_rowset_path));
     seg_options.stats = options.stats;
     seg_options.ranges = options.ranges;
@@ -1066,7 +1069,8 @@ Status Rowset::verify() {
     rs_opts.tablet_schema = _schema;
 
     std::vector<ChunkIteratorPtr> iters;
-    RETURN_IF_ERROR(get_segment_iterators(order_schema, rs_opts, &iters));
+    SegmentReadOptions seg_options;
+    RETURN_IF_ERROR(get_segment_iterators(order_schema, rs_opts, seg_options, &iters));
 
     // overlapping segments will return multiple iterators, so segment idx is known
     Status st;
