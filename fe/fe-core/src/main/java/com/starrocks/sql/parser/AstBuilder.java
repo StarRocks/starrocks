@@ -84,7 +84,6 @@ import com.starrocks.sql.ast.AlterCatalogStmt;
 import com.starrocks.sql.ast.AlterClause;
 import com.starrocks.sql.ast.AlterDatabaseQuotaStmt;
 import com.starrocks.sql.ast.AlterDatabaseRenameStatement;
-import com.starrocks.sql.ast.AlterLoadErrorUrlClause;
 import com.starrocks.sql.ast.AlterLoadStmt;
 import com.starrocks.sql.ast.AlterMaterializedViewStatusClause;
 import com.starrocks.sql.ast.AlterMaterializedViewStmt;
@@ -524,6 +523,7 @@ import com.starrocks.sql.ast.warehouse.cngroup.CreateCnGroupStmt;
 import com.starrocks.sql.ast.warehouse.cngroup.DropCnGroupStmt;
 import com.starrocks.sql.ast.warehouse.cngroup.EnableDisableCnGroupStmt;
 import com.starrocks.sql.common.PListCell;
+import com.starrocks.sql.parser.rewriter.CompoundPredicateExprRewriter;
 import com.starrocks.sql.util.EitherOr;
 import com.starrocks.statistic.StatsConstants;
 import com.starrocks.transaction.GtidGenerator;
@@ -548,6 +548,7 @@ import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
+import java.util.Deque;
 import java.util.HashMap;
 import java.util.IdentityHashMap;
 import java.util.Iterator;
@@ -569,6 +570,8 @@ import static java.util.stream.Collectors.toList;
 
 public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<ParseNode> {
     private final long sqlMode;
+
+    private boolean caseInsensitive;
 
     private final IdentityHashMap<ParserRuleContext, List<HintNode>> hintMap;
 
@@ -596,12 +599,10 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
             Lists.newArrayList(FunctionSet.SUBSTR, FunctionSet.SUBSTRING,
                     FunctionSet.FROM_UNIXTIME, FunctionSet.FROM_UNIXTIME_MS,
                     FunctionSet.STR2DATE);
+    // rewriter
+    private static final CompoundPredicateExprRewriter COMPOUND_PREDICATE_EXPR_REWRITER = new CompoundPredicateExprRewriter();
 
-    protected AstBuilder(long sqlMode) {
-        this(sqlMode, new IdentityHashMap<>());
-    }
-
-    protected AstBuilder(long sqlMode, IdentityHashMap<ParserRuleContext, List<HintNode>> hintMap) {
+    protected AstBuilder(long sqlMode, boolean caseInsensitive, IdentityHashMap<ParserRuleContext, List<HintNode>> hintMap) {
         this.hintMap = hintMap;
         long hintSqlMode = 0L;
         for (Map.Entry<ParserRuleContext, List<HintNode>> entry : hintMap.entrySet()) {
@@ -613,6 +614,7 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
             }
         }
         this.sqlMode = sqlMode | hintSqlMode;
+        this.caseInsensitive = caseInsensitive;
     }
 
     private static final AstBuilder.AstBuilderFactory INSTANCE = new AstBuilder.AstBuilderFactory();
@@ -625,12 +627,9 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
         protected AstBuilderFactory() {
         }
 
-        public AstBuilder create(long sqlMode) {
-            return new AstBuilder(sqlMode, new IdentityHashMap<>());
-        }
-
-        public AstBuilder create(long sqlMode, IdentityHashMap<ParserRuleContext, List<HintNode>> hintMap) {
-            return new AstBuilder(sqlMode, hintMap);
+        public AstBuilder create(long sqlMode, boolean caseInsensitive,
+                                 IdentityHashMap<ParserRuleContext, List<HintNode>> hintMap) {
+            return new AstBuilder(sqlMode, caseInsensitive, hintMap);
         }
     }
 
@@ -665,9 +664,9 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
         QualifiedName qualifiedName = getQualifiedName(context.qualifiedName());
         List<String> parts = qualifiedName.getParts();
         if (parts.size() == 1) {
-            return new UseDbStmt(null, parts.get(0), pos);
+            return new UseDbStmt(null, normalizeName(parts.get(0)), pos);
         } else if (parts.size() == 2) {
-            return new UseDbStmt(parts.get(0), parts.get(1), pos);
+            return new UseDbStmt(normalizeName(parts.get(0)), normalizeName(parts.get(1)), pos);
         } else {
             throw new ParsingException(PARSER_ERROR_MSG.invalidDbFormat(qualifiedName.toString()),
                     qualifiedName.getPos());
@@ -677,14 +676,29 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
     @Override
     public ParseNode visitUseCatalogStatement(com.starrocks.sql.parser.StarRocksParser.UseCatalogStatementContext context) {
         StringLiteral literal = (StringLiteral) visit(context.string());
-        return new UseCatalogStmt(literal.getValue(), createPos(context));
+        String catalogParts = literal.getValue();
+        
+        // Parse and validate catalog name from the string literal
+        if (catalogParts == null || catalogParts.trim().isEmpty()) {
+            throw new ParsingException("You have an error in your SQL. The correct syntax is: USE 'CATALOG catalog_name'.",
+                    createPos(context));
+        }
+        
+        String[] splitParts = catalogParts.split("\\s+");
+        if (splitParts.length != 2 || !splitParts[0].equalsIgnoreCase("CATALOG")) {
+            throw new ParsingException("You have an error in your SQL. The correct syntax is: USE 'CATALOG catalog_name'.",
+                    createPos(context));
+        }
+        
+        String catalogName = normalizeName(splitParts[1]);
+        return new UseCatalogStmt(catalogName, createPos(context));
     }
 
     @Override
     public ParseNode visitSetCatalogStatement(com.starrocks.sql.parser.StarRocksParser.SetCatalogStatementContext context) {
         Identifier identifier = (Identifier) visit(context.identifierOrString());
         String catalogName = identifier.getValue();
-        return new SetCatalogStmt(catalogName, createPos(context));
+        return new SetCatalogStmt(normalizeName(catalogName), createPos(context));
     }
 
     @Override
@@ -739,7 +753,8 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
                 properties.put(property.getKey(), property.getValue());
             }
         }
-        return new CreateDbStmt(context.IF() != null, catalogName, dbName.toString(), properties, createPos(context));
+        return new CreateDbStmt(context.IF() != null, normalizeName(catalogName), normalizeName(dbName.toString()), properties,
+                createPos(context));
     }
 
     @Override
@@ -750,7 +765,8 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
         }
 
         QualifiedName dbName = getQualifiedName(context.database);
-        return new DropDbStmt(context.IF() != null, catalogName, dbName.toString(), context.FORCE() != null,
+        return new DropDbStmt(context.IF() != null, normalizeName(catalogName), normalizeName(dbName.toString()),
+                context.FORCE() != null,
                 createPos(context));
     }
 
@@ -2036,7 +2052,7 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
         NodePosition pos = createPos(context);
         TaskName taskName;
         if (qualifiedName == null) {
-            taskName = new TaskName(null, null, pos);
+            taskName = new TaskName(null, null);
         } else {
             taskName = qualifiedNameToTaskName(qualifiedName);
         }
@@ -2367,7 +2383,7 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
         Identifier identifier = (Identifier) visit(context.catalogName);
         boolean ifExists = context.IF() != null;
         String catalogName = identifier.getValue();
-        return new DropCatalogStmt(catalogName, ifExists, createPos(context));
+        return new DropCatalogStmt(normalizeName(catalogName), ifExists, createPos(context));
     }
 
     @Override
@@ -4754,7 +4770,7 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
 
     @Override
     public ParseNode visitDropBackendClause(com.starrocks.sql.parser.StarRocksParser.DropBackendClauseContext context) {
-        String whName = WarehouseManager.DEFAULT_WAREHOUSE_NAME;
+        String whName = "";
         String cngroupName = "";
         if (context.warehouseName != null) {
             Identifier identifier = (Identifier) visit(context.identifierOrString().get(0));
@@ -4816,7 +4832,7 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
 
     @Override
     public ParseNode visitDropComputeNodeClause(com.starrocks.sql.parser.StarRocksParser.DropComputeNodeClauseContext context) {
-        String whName = WarehouseManager.DEFAULT_WAREHOUSE_NAME;
+        String whName = "";
         String cngroupName = "";
         if (context.warehouseName != null) {
             Identifier identifier = (Identifier) visit(context.identifierOrString().get(0));
@@ -4845,12 +4861,6 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
             return ModifyBrokerClause.createAddBrokerClause(brokerName, hostPorts, pos);
         }
         return ModifyBrokerClause.createDropBrokerClause(brokerName, hostPorts, pos);
-    }
-
-    @Override
-    public ParseNode visitAlterLoadErrorUrlClause(
-            com.starrocks.sql.parser.StarRocksParser.AlterLoadErrorUrlClauseContext context) {
-        return new AlterLoadErrorUrlClause(getProperties(context.properties()), createPos(context));
     }
 
     @Override
@@ -6256,7 +6266,13 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
         Relation right = (Relation) visit(context.rightRelation);
 
         JoinOperator joinType = JoinOperator.INNER_JOIN;
-        if (context.crossOrInnerJoinType() != null) {
+        if (context.asofJoinType() != null) {
+            if (context.asofJoinType().LEFT() != null) {
+                joinType = JoinOperator.ASOF_LEFT_OUTER_JOIN;
+            } else {
+                joinType = JoinOperator.ASOF_INNER_JOIN;
+            }
+        } else if (context.crossOrInnerJoinType() != null) {
             if (context.crossOrInnerJoinType().CROSS() != null) {
                 joinType = JoinOperator.CROSS_JOIN;
             } else {
@@ -6754,6 +6770,18 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
     }
 
     @Override
+    public ParseNode visitGrantRoleToGroup(com.starrocks.sql.parser.StarRocksParser.GrantRoleToGroupContext context) {
+        List<String> roleNameList = new ArrayList<>();
+        for (com.starrocks.sql.parser.StarRocksParser.IdentifierOrStringContext oneContext : context.identifierOrStringList()
+                .identifierOrString()) {
+            roleNameList.add(((Identifier) visit(oneContext)).getValue());
+        }
+
+        return new GrantRoleStmt(roleNameList, ((Identifier) visit(context.identifierOrString())).getValue(),
+                GrantType.GROUP, createPos(context));
+    }
+
+    @Override
     public ParseNode visitGrantRoleToRole(com.starrocks.sql.parser.StarRocksParser.GrantRoleToRoleContext context) {
         List<String> roleNameList = new ArrayList<>();
         for (com.starrocks.sql.parser.StarRocksParser.IdentifierOrStringContext oneContext : context.identifierOrStringList()
@@ -6774,6 +6802,18 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
         }
 
         return new RevokeRoleStmt(roleNameList, (UserRef) visit(context.user()), createPos(context));
+    }
+
+    @Override
+    public ParseNode visitRevokeRoleFromGroup(com.starrocks.sql.parser.StarRocksParser.RevokeRoleFromGroupContext context) {
+        List<String> roleNameList = new ArrayList<>();
+        for (com.starrocks.sql.parser.StarRocksParser.IdentifierOrStringContext oneContext : context.identifierOrStringList()
+                .identifierOrString()) {
+            roleNameList.add(((Identifier) visit(oneContext)).getValue());
+        }
+
+        return new RevokeRoleStmt(roleNameList, ((Identifier) visit(context.identifierOrString())).getValue(),
+                GrantType.GROUP, createPos(context));
     }
 
     @Override
@@ -6839,6 +6879,9 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
         if (context.ROLE() != null) {
             Identifier role = (Identifier) visit(context.identifierOrString());
             return new ShowGrantsStmt(role.getValue(), GrantType.ROLE, pos);
+        } else if (context.GROUP() != null) {
+            Identifier group = (Identifier) visit(context.identifierOrString());
+            return new ShowGrantsStmt(group.getValue(), GrantType.GROUP, pos);
         } else {
             UserRef userId = context.user() == null ? null : (UserRef) visit(context.user());
             return new ShowGrantsStmt(userId, pos);
@@ -7183,14 +7226,14 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
                 propertyMap.put(property.getKey(), property.getValue());
             }
         }
-        return new CreateGroupProviderStmt(name, propertyMap, createPos(context));
+        return new CreateGroupProviderStmt(name, propertyMap, context.IF() != null, createPos(context));
     }
 
     @Override
     public ParseNode visitDropGroupProviderStatement(
             com.starrocks.sql.parser.StarRocksParser.DropGroupProviderStatementContext context) {
         String name = ((Identifier) visit(context.identifier())).getValue();
-        return new DropGroupProviderStmt(name, createPos(context));
+        return new DropGroupProviderStmt(name, context.IF() != null, createPos(context));
     }
 
     @Override
@@ -7237,11 +7280,51 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
                 null, createPos(context));
     }
 
+    private record LogicalBinaryNode(com.starrocks.sql.parser.StarRocksParser.LogicalBinaryContext context,
+                                     CompoundPredicate.Operator operator) {
+    }
+
+    // Iteratively build a left-deep CompoundPredicate tree for LogicalBinaryContext,
+    // allowing each node to have its own operator, using LogicalBinaryNode for clarity.
+    // Corrected: Properly builds left-deep tree by pushing all contexts and operators, 
+    // and reconstructing from the bottom up, preserving associativity.
+    private CompoundPredicate buildCompoundPredicateIterative(
+            com.starrocks.sql.parser.StarRocksParser.LogicalBinaryContext context) {
+        // Stack to store all contexts and their operators from leftmost to root
+        Deque<LogicalBinaryNode> nodeStack = new java.util.ArrayDeque<>();
+        com.starrocks.sql.parser.StarRocksParser.LogicalBinaryContext current = context;
+
+        // Traverse all the way down the left chain, pushing each context and operator
+        while (true) {
+            nodeStack.push(new LogicalBinaryNode(current, getLogicalBinaryOperator(current.operator)));
+            if (current.left instanceof com.starrocks.sql.parser.StarRocksParser.LogicalBinaryContext) {
+                current = (com.starrocks.sql.parser.StarRocksParser.LogicalBinaryContext) current.left;
+            } else {
+                break;
+            }
+        }
+
+        // The leftmost leaf expression
+        Expr result = (Expr) visit(current.left);
+        // Rebuild the tree from the bottom up (leftmost to root)
+        while (!nodeStack.isEmpty()) {
+            LogicalBinaryNode node = nodeStack.pop();
+            Expr right = (Expr) visit(node.context.right);
+            result = new CompoundPredicate(node.operator(), result, right, createPos(node.context()));
+        }
+        return (CompoundPredicate) result;
+    }
+
     @Override
     public ParseNode visitLogicalBinary(com.starrocks.sql.parser.StarRocksParser.LogicalBinaryContext context) {
-        Expr left = (Expr) visit(context.left);
-        Expr right = (Expr) visit(context.right);
-        return new CompoundPredicate(getLogicalBinaryOperator(context.operator), left, right, createPos(context));
+        if (Config.compound_predicate_flatten_threshold > 0) {
+            CompoundPredicate result = buildCompoundPredicateIterative(context);
+            return COMPOUND_PREDICATE_EXPR_REWRITER.rewrite(result);
+        } else {
+            Expr left = (Expr) visit(context.left);
+            Expr right = (Expr) visit(context.right);
+            return new CompoundPredicate(getLogicalBinaryOperator(context.operator), left, right, createPos(context));
+        }
     }
 
     private static CompoundPredicate.Operator getLogicalBinaryOperator(Token token) {
@@ -9058,9 +9141,9 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
         // Hierarchy: database.table
         List<String> parts = qualifiedName.getParts();
         if (parts.size() == 2) {
-            return new TaskName(parts.get(0), parts.get(1), qualifiedName.getPos());
+            return new TaskName(normalizeName(parts.get(0)), normalizeName(parts.get(1)));
         } else if (parts.size() == 1) {
-            return new TaskName(null, parts.get(0), qualifiedName.getPos());
+            return new TaskName(null, normalizeName(parts.get(0)));
         } else {
             throw new ParsingException(PARSER_ERROR_MSG.invalidTaskFormat(qualifiedName.toString()),
                     qualifiedName.getPos());
@@ -9452,6 +9535,10 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
         }
         Collections.sort(res);
         return res;
+    }
+
+    private String normalizeName(String name) {
+        return caseInsensitive && name != null ? name.toLowerCase() : name;
     }
 
     public static IndexDef.IndexType getIndexType(com.starrocks.sql.parser.StarRocksParser.IndexTypeContext indexTypeContext) {

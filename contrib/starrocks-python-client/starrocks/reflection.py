@@ -16,7 +16,7 @@
 import dataclasses
 import json
 import re
-from typing import Any
+from typing import Any, Union
 
 from sqlalchemy.dialects.mysql.types import DATETIME
 from sqlalchemy.dialects.mysql.types import TIME
@@ -27,12 +27,13 @@ from sqlalchemy import log
 from sqlalchemy import types as sqltypes
 from sqlalchemy import util
 
-
-@dataclasses.dataclass(kw_only=True)
+# kw_only is added in python 3.10
+# https://docs.python.org/3/library/dataclasses.html#dataclasses.dataclass
+@dataclasses.dataclass(**dict(kw_only=True) if 'KW_ONLY' in dataclasses.__all__ else {})
 class ReflectedState(object):
     """Stores informations about table or view."""
 
-    table_name: str | None = None
+    table_name: Union[str, None] = None
     columns: list[dict] = dataclasses.field(default_factory=list)
     table_options: dict[str, str] = dataclasses.field(default_factory=dict)
     keys: list[dict] = dataclasses.field(default_factory=list)

@@ -51,7 +51,7 @@ template <typename T>
 void BinaryColumnBase<T>::append(const Slice& str) {
     _bytes.insert(_bytes.end(), str.data, str.data + str.size);
     _offsets.emplace_back(_bytes.size());
-    _slices_cache = false;
+    invalidate_slice_cache();
 }
 
 template <typename T>
@@ -79,7 +79,7 @@ void BinaryColumnBase<T>::append(const Column& src, size_t offset, size_t count)
         new_offsets[i] += delta;
     }
 
-    _slices_cache = false;
+    invalidate_slice_cache();
 }
 
 template <typename T>
@@ -146,7 +146,7 @@ void BinaryColumnBase<T>::append_selective(const Column& src, const uint32_t* in
     }
     _offsets.resize(prev_num_offsets + size);
 
-    _slices_cache = false;
+    invalidate_slice_cache();
 }
 
 template <typename T>
@@ -175,7 +175,7 @@ void BinaryColumnBase<T>::append_value_multiple_times(const Column& src, uint32_
                                 str_size);
     }
 
-    _slices_cache = false;
+    invalidate_slice_cache();
 }
 
 //TODO(fzh): optimize copy using SIMD
@@ -229,7 +229,7 @@ bool BinaryColumnBase<T>::append_strings(const Slice* data, size_t size) {
         strings::memcpy_inlined(bytes + offsets[i], p, data[i].size);
     }
 
-    _slices_cache = false;
+    invalidate_slice_cache();
     return true;
 }
 
@@ -284,7 +284,7 @@ bool BinaryColumnBase<T>::append_strings_overflow(const Slice* data, size_t size
             _offsets.emplace_back(_bytes.size());
         }
     }
-    _slices_cache = false;
+    invalidate_slice_cache();
     return true;
 }
 
@@ -305,7 +305,7 @@ bool BinaryColumnBase<T>::append_continuous_strings(const Slice* data, size_t si
         _offsets.emplace_back(new_size);
     }
     DCHECK_EQ(_bytes.size(), new_size);
-    _slices_cache = false;
+    invalidate_slice_cache();
     return true;
 }
 
@@ -359,7 +359,7 @@ void BinaryColumnBase<T>::append_bytes(char* const* data, uint32_t* length, size
     for (size_t i = 0; i < size; i++) {
         _bytes.insert(_bytes.end(), data[i], data[i] + length[i]);
     }
-    _slices_cache = false;
+    invalidate_slice_cache();
 }
 
 template <typename T, size_t copy_length>
@@ -399,7 +399,7 @@ void BinaryColumnBase<T>::append_bytes_overflow(char* const* data, uint32_t* len
     } else {
         append_bytes(data, lengths, size);
     }
-    _slices_cache = false;
+    invalidate_slice_cache();
 }
 
 template <typename T>
@@ -414,7 +414,7 @@ void BinaryColumnBase<T>::append_value_multiple_times(const void* value, size_t 
         _bytes.insert(_bytes.end(), p, pend);
         _offsets.emplace_back(_bytes.size());
     }
-    _slices_cache = false;
+    invalidate_slice_cache();
 }
 
 template <typename T>
@@ -434,6 +434,22 @@ void BinaryColumnBase<T>::_build_slices() const {
     }
 
     _slices_cache = true;
+}
+
+template <typename T>
+void BinaryColumnBase<T>::_build_german_strings() const {
+    DCHECK(_offsets.size() > 0);
+    _german_strings_cache = false;
+    _german_strings.clear();
+
+    const auto num_rows = _offsets.size() - 1;
+    _german_strings.resize(num_rows);
+
+    const auto* base = _bytes.data();
+    for (auto i = 0; i < num_rows; ++i) {
+        _german_strings[i] = GermanString(base + _offsets[i], _offsets[i + 1] - _offsets[i]);
+    }
+    _german_strings_cache = true;
 }
 
 template <typename T>
@@ -506,7 +522,7 @@ void BinaryColumnBase<T>::assign(size_t n, size_t idx) {
         _bytes.insert(_bytes.end(), start, end);
         _offsets.emplace_back(_bytes.size());
     }
-    _slices_cache = false;
+    invalidate_slice_cache();
 }
 
 //TODO(kks): improve this
@@ -519,7 +535,7 @@ void BinaryColumnBase<T>::remove_first_n_values(size_t count) {
     auto* binary_column = down_cast<const BinaryColumnBase<T>*>(column.get());
     _offsets = std::move(binary_column->_offsets);
     _bytes = std::move(binary_column->_bytes);
-    _slices_cache = false;
+    invalidate_slice_cache();
 }
 
 template <typename T>

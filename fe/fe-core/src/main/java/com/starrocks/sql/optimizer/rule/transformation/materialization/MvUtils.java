@@ -1164,16 +1164,27 @@ public class MvUtils {
     }
 
     /**
-     * Return the max refresh timestamp of all partition infos.
+     * Returns the maximum refresh timestamp among all partition infos.
+     * If no valid refresh time is found, returns the current system time.
      */
     public static long getMaxTablePartitionInfoRefreshTime(
             Collection<Map<String, MaterializedView.BasePartitionInfo>> partitionInfos) {
         return partitionInfos.stream()
-                .flatMap(x -> x.values().stream())
-                .map(x -> x.getLastRefreshTime())
+                .map(MvUtils::getMaxTablePartitionInfoRefreshTime)
                 .max(Long::compareTo)
+                .orElseGet(System::currentTimeMillis);
+    }
+
+    /**
+     * Returns the maximum refresh timestamp from a single partition info map.
+     * If no valid refresh time is found, returns the current system time.
+     */
+    public static long getMaxTablePartitionInfoRefreshTime(Map<String, MaterializedView.BasePartitionInfo> partitionInfos) {
+        return partitionInfos.values().stream()
+                .map(MaterializedView.BasePartitionInfo::getLastRefreshTime)
                 .filter(Objects::nonNull)
-                .orElse(System.currentTimeMillis());
+                .max(Long::compareTo)
+                .orElseGet(System::currentTimeMillis);
     }
 
     public static List<ScalarOperator> collectOnPredicate(OptExpression optExpression) {
@@ -1710,5 +1721,16 @@ public class MvUtils {
             return "";
         }
         return input.length() > maxLength ? input.substring(0, maxLength) : input;
+    }
+
+    /**
+     * Ensure the logical property of the given opt expression is derived, and return its output columns.
+     * Ensure optExpression has derived logical property, otherwise OptExpression.getOutputColumns will fail.
+     */
+    public static ColumnRefSet getOutputColumns(OptExpression optExpression) {
+        if (optExpression.getLogicalProperty() == null) {
+            deriveLogicalProperty(optExpression);
+        }
+        return optExpression.getOutputColumns();
     }
 }

@@ -34,7 +34,7 @@
 
 package com.starrocks.common;
 
-import com.starrocks.StarRocksFE;
+import com.starrocks.authentication.SecurityIntegration;
 import com.starrocks.catalog.LocalTablet;
 import com.starrocks.catalog.Replica;
 import com.starrocks.qe.scheduler.slot.QueryQueueOptions;
@@ -45,6 +45,11 @@ import static java.lang.Math.max;
 import static java.lang.Runtime.getRuntime;
 
 public class Config extends ConfigBase {
+
+    /**
+     *  STARROCKS_HOME is the root dir of starrocks installation.
+     */
+    public static final String STARROCKS_HOME_DIR = System.getenv("STARROCKS_HOME");
 
     /**
      * The max size of one sys log and audit log
@@ -87,7 +92,7 @@ public class Config extends ConfigBase {
      *      default is false. if true, then compress fe.log & fe.warn.log by gzip
      */
     @ConfField
-    public static String sys_log_dir = StarRocksFE.STARROCKS_HOME_DIR + "/log";
+    public static String sys_log_dir = Config.STARROCKS_HOME_DIR + "/log";
     @ConfField
     public static String sys_log_level = "INFO";
     @ConfField
@@ -159,7 +164,7 @@ public class Config extends ConfigBase {
     @ConfField
     public static boolean enable_sql_desensitize_in_log = false;
     @ConfField
-    public static String audit_log_dir = StarRocksFE.STARROCKS_HOME_DIR + "/log";
+    public static String audit_log_dir = Config.STARROCKS_HOME_DIR + "/log";
     @ConfField
     public static int audit_log_roll_num = 90;
     @ConfField
@@ -197,7 +202,7 @@ public class Config extends ConfigBase {
      * This specifies FE MV/Statistics log dir.
      */
     @ConfField
-    public static String internal_log_dir = StarRocksFE.STARROCKS_HOME_DIR + "/log";
+    public static String internal_log_dir = Config.STARROCKS_HOME_DIR + "/log";
     @ConfField
     public static int internal_log_roll_num = 90;
     @ConfField
@@ -231,7 +236,7 @@ public class Config extends ConfigBase {
      * 120s    120 seconds
      */
     @ConfField
-    public static String dump_log_dir = StarRocksFE.STARROCKS_HOME_DIR + "/log";
+    public static String dump_log_dir = Config.STARROCKS_HOME_DIR + "/log";
     @ConfField
     public static int dump_log_roll_num = 10;
     @ConfField
@@ -271,7 +276,7 @@ public class Config extends ConfigBase {
      * 120s    120 seconds
      */
     @ConfField
-    public static String big_query_log_dir = StarRocksFE.STARROCKS_HOME_DIR + "/log";
+    public static String big_query_log_dir = Config.STARROCKS_HOME_DIR + "/log";
     @ConfField
     public static int big_query_log_roll_num = 10;
     @ConfField
@@ -303,7 +308,7 @@ public class Config extends ConfigBase {
     @ConfField
     public static boolean enable_profile_log = true;
     @ConfField
-    public static String profile_log_dir = StarRocksFE.STARROCKS_HOME_DIR + "/log";
+    public static String profile_log_dir = Config.STARROCKS_HOME_DIR + "/log";
     @ConfField
     public static int profile_log_roll_num = 5;
     @ConfField
@@ -409,6 +414,9 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true, comment = "task run ttl")
     public static int task_runs_ttl_second = 7 * 24 * 3600;     // 7 day
 
+    @ConfField(mutable = true, comment = "task run execute timeout, default 4 hours")
+    public static int task_runs_timeout_second = 4 * 3600;     // 4 hour
+
     @ConfField(mutable = true, comment = "max number of task run history. ")
     public static int task_runs_max_history_number = 10000;
 
@@ -451,14 +459,14 @@ public class Config extends ConfigBase {
      * 2. Safe (RAID)
      */
     @ConfField
-    public static String meta_dir = StarRocksFE.STARROCKS_HOME_DIR + "/meta";
+    public static String meta_dir = Config.STARROCKS_HOME_DIR + "/meta";
 
     /**
      * temp dir is used to save intermediate results of some process, such as backup and restore process.
      * file in this dir will be cleaned after these process is finished.
      */
     @ConfField
-    public static String tmp_dir = StarRocksFE.STARROCKS_HOME_DIR + "/temp_dir";
+    public static String tmp_dir = Config.STARROCKS_HOME_DIR + "/temp_dir";
 
     /**
      * Edit log type.
@@ -733,6 +741,20 @@ public class Config extends ConfigBase {
     @ConfField(comment = "enable https flag. false by default. If true then http " +
             "and https are both enabled on different ports. Otherwise, only http is enabled.")
     public static boolean enable_https = false;
+
+    /**
+     *  Property to whitelist ssl cipher suites, comma separated list, with regex support.
+     *  If both whitelist and blacklist are set, blacklist takes precedence.
+     */
+    @ConfField
+    public static String ssl_cipher_whitelist = "";
+
+    /**
+     *  Property to blacklist ssl cipher suites, comma separated list, with regex support.
+     *  If both whitelist and blacklist are set, blacklist takes precedence.
+     */
+    @ConfField
+    public static String ssl_cipher_blacklist = "";
 
     /**
      * Configs for query queue v2.
@@ -1126,7 +1148,7 @@ public class Config extends ConfigBase {
      * Default spark dpp version
      */
     @ConfField
-    public static String spark_dpp_version = "3.4.0";
+    public static String spark_dpp_version = "main";
     /**
      * Default spark load timeout
      */
@@ -1137,7 +1159,7 @@ public class Config extends ConfigBase {
      * Default spark home dir
      */
     @ConfField
-    public static String spark_home_default_dir = StarRocksFE.STARROCKS_HOME_DIR + "/lib/spark2x";
+    public static String spark_home_default_dir = Config.STARROCKS_HOME_DIR + "/lib/spark2x";
 
     /**
      * Default spark dependencies path
@@ -1155,7 +1177,7 @@ public class Config extends ConfigBase {
      * Default yarn client path
      */
     @ConfField
-    public static String yarn_client_path = StarRocksFE.STARROCKS_HOME_DIR + "/lib/yarn-client/hadoop/bin/yarn";
+    public static String yarn_client_path = Config.STARROCKS_HOME_DIR + "/lib/yarn-client/hadoop/bin/yarn";
 
     /**
      * Default yarn config file directory
@@ -1163,7 +1185,7 @@ public class Config extends ConfigBase {
      * config file exists under this path, and if not, create them.
      */
     @ConfField
-    public static String yarn_config_dir = StarRocksFE.STARROCKS_HOME_DIR + "/lib/yarn-config";
+    public static String yarn_config_dir = Config.STARROCKS_HOME_DIR + "/lib/yarn-config";
 
     /**
      * Default number of waiting jobs for routine load and version 2 of load
@@ -1900,7 +1922,7 @@ public class Config extends ConfigBase {
      * Save small files
      */
     @ConfField
-    public static String small_file_dir = StarRocksFE.STARROCKS_HOME_DIR + "/small_files";
+    public static String small_file_dir = Config.STARROCKS_HOME_DIR + "/small_files";
 
     /**
      * control rollup job concurrent limit
@@ -1937,7 +1959,7 @@ public class Config extends ConfigBase {
      * {@link com.starrocks.authentication.SecurityIntegration}
      */
     @ConfField(mutable = true)
-    public static String[] authentication_chain = {AUTHENTICATION_CHAIN_MECHANISM_NATIVE};
+    public static String[] authentication_chain = {SecurityIntegration.AUTHENTICATION_CHAIN_MECHANISM_NATIVE};
 
     /**
      * If set to true, the granularity of auth check extends to the column level
@@ -2370,7 +2392,7 @@ public class Config extends ConfigBase {
      * default bucket size of automatic bucket table
      */
     @ConfField(mutable = true)
-    public static long default_automatic_bucket_size = 4 * 1024 * 1024 * 1024L;
+    public static long default_automatic_bucket_size = 1024 * 1024 * 1024L;
 
     /**
      * Used to limit num of agent task for one be. currently only for drop task.
@@ -2397,16 +2419,18 @@ public class Config extends ConfigBase {
     public static long hive_meta_cache_refresh_interval_s = 60;
 
     /**
+     * Implicit for users
      * Hive metastore cache ttl
      */
     @ConfField
     public static long hive_meta_cache_ttl_s = 3600L * 24L;
 
     /**
+     * Implicit for users
      * Remote file's metadata from hdfs or s3 cache ttl
      */
     @ConfField
-    public static long remote_file_cache_ttl_s = 3600 * 36L;
+    public static long remote_file_cache_ttl_s = 3600 * 24L;
 
     /**
      * The maximum number of partitions to fetch from the metastore in one RPC.
@@ -2533,7 +2557,7 @@ public class Config extends ConfigBase {
      * iceberg metadata cache dir
      */
     @ConfField(mutable = true)
-    public static String iceberg_metadata_cache_disk_path = StarRocksFE.STARROCKS_HOME_DIR + "/caches/iceberg";
+    public static String iceberg_metadata_cache_disk_path = Config.STARROCKS_HOME_DIR + "/caches/iceberg";
 
     /**
      * iceberg metadata memory cache total size, default 0MB (turn off)
@@ -2629,6 +2653,12 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true)
     public static boolean enable_routine_load_lag_metrics = false;
 
+    /**
+     * Whether to collect routine load latency metrics.
+     */
+    @ConfField(mutable = true)
+    public static boolean enable_routine_load_lag_time_metrics = false;
+
     @ConfField(mutable = true)
     public static boolean enable_collect_query_detail_info = false;
 
@@ -2643,7 +2673,7 @@ public class Config extends ConfigBase {
     public static int query_cost_predictor_healthchk_interval = 30;
 
     @ConfField
-    public static String feature_log_dir = StarRocksFE.STARROCKS_HOME_DIR + "/log";
+    public static String feature_log_dir = Config.STARROCKS_HOME_DIR + "/log";
     @ConfField
     public static String feature_log_roll_interval = "DAY";
     @ConfField
@@ -3373,8 +3403,8 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true, comment = "The default try lock timeout for mv refresh to try base table/mv dbs' lock")
     public static int mv_refresh_try_lock_timeout_ms = 30 * 1000;
 
-    @ConfField(mutable = true, comment = "materialized view can refresh at most 10 partition at a time")
-    public static int mv_max_partitions_num_per_refresh = 10;
+    @ConfField(mutable = true, comment = "materialized view can refresh at most 64 partition at a time")
+    public static int mv_max_partitions_num_per_refresh = 64;
 
     @ConfField(mutable = true, comment = "materialized view can refresh at most 100_000_000 rows of data at a time")
     public static long mv_max_rows_per_refresh = 100_000_000L;
@@ -3405,14 +3435,15 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true)
     public static int default_mv_partition_refresh_number = 1;
 
-    @ConfField(mutable = true)
-    public static String default_mv_partition_refresh_strategy = "strict";
+    @ConfField(mutable = true, comment = "The default refresh strategy for materialized view partition refresh, " +
+            "adaptive by default")
+    public static String default_mv_partition_refresh_strategy = "adaptive";
 
     @ConfField(mutable = true)
     public static String default_mv_refresh_mode = "pct";
 
     @ConfField(mutable = true, comment = "Check the schema of materialized view's base table strictly or not")
-    public static boolean enable_active_materialized_view_schema_strict_check = true;
+    public static boolean enable_active_materialized_view_schema_strict_check = false;
 
     @ConfField(mutable = true,
             comment = "The default behavior of whether REFRESH IMMEDIATE or not, " +
@@ -3898,4 +3929,8 @@ public class Config extends ConfigBase {
 
     @ConfField(mutable = true, comment = "Enable desensitize sql in query dump")
     public static boolean enable_desensitize_query_dump = false;
+
+    @ConfField(mutable = true, comment = "The threshold to flatten compound predicate from deep tree to a balanced tree to " +
+            "avoid stack over flow")
+    public static int compound_predicate_flatten_threshold = 512;
 }

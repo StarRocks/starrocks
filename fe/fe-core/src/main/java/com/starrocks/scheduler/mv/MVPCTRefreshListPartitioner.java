@@ -114,7 +114,8 @@ public final class MVPCTRefreshListPartitioner extends MVPCTRefreshPartitioner {
     public boolean syncAddOrDropPartitions() throws LockTimeoutException {
         // collect mv partition items with lock
         Locker locker = new Locker();
-        if (!locker.tryLockDatabase(db.getId(), LockType.READ, Config.mv_refresh_try_lock_timeout_ms, TimeUnit.MILLISECONDS)) {
+        if (!locker.tryLockTableWithIntensiveDbLock(db.getId(), mv.getId(),
+                LockType.READ, Config.mv_refresh_try_lock_timeout_ms, TimeUnit.MILLISECONDS)) {
             throw new LockTimeoutException("Failed to lock database: " + db.getFullName() + " in syncPartitionsForList");
         }
 
@@ -126,7 +127,7 @@ public final class MVPCTRefreshListPartitioner extends MVPCTRefreshPartitioner {
                 return false;
             }
         } finally {
-            locker.unLockDatabase(db.getId(), LockType.READ);
+            locker.unLockTableWithIntensiveDbLock(db.getId(), mv.getId(), LockType.READ);
         }
 
         // drop old partitions and add new partitions
@@ -422,40 +423,40 @@ public final class MVPCTRefreshListPartitioner extends MVPCTRefreshPartitioner {
     }
 
     @Override
-    public void filterPartitionByRefreshNumber(PCellSortedSet mvPartitionsToRefresh) {
-        filterPartitionByRefreshNumberInternal(mvPartitionsToRefresh, MaterializedView.PartitionRefreshStrategy.STRICT);
-    }
-
-    @Override
-    public void filterPartitionByAdaptiveRefreshNumber(PCellSortedSet mvPartitionsToRefresh) {
-        filterPartitionByRefreshNumberInternal(mvPartitionsToRefresh, MaterializedView.PartitionRefreshStrategy.ADAPTIVE);
-    }
-
-    public void filterPartitionByRefreshNumberInternal(PCellSortedSet toRefreshPartitions,
-                                                       MaterializedView.PartitionRefreshStrategy refreshStrategy) {
-
+    public void filterPartitionByRefreshNumber(PCellSortedSet toRefreshPartitions,
+                                               MaterializedView.PartitionRefreshStrategy refreshStrategy) {
         // filter by partition ttl
         filterPartitionsByTTL(toRefreshPartitions, false);
         if (toRefreshPartitions == null || toRefreshPartitions.isEmpty()) {
             return;
         }
-
-        Iterator<PCellWithName> iterator = toRefreshPartitions.iterator();
+        // filter invalid cells from input
+        toRefreshPartitions.stream()
+                .filter(cell -> !mv.getListPartitionItems().containsKey(cell.name()))
+                .forEach(toRefreshPartitions::remove);
         // dynamically get the number of partitions to be refreshed this time
-        int refreshNumber = getRefreshNumberByMode(iterator, refreshStrategy);
-        if (toRefreshPartitions.size() <= refreshNumber) {
+        int partitionRefreshNumber = getPartitionRefreshNumberAdaptive(toRefreshPartitions, refreshStrategy);
+        if (partitionRefreshNumber <= 0 || partitionRefreshNumber >= toRefreshPartitions.size()) {
             return;
         }
-        // iterate refreshNumber times
-        Set<PListCell> nextPartitionValues = Sets.newHashSet();
         int i = 0;
-        while (iterator.hasNext() && i++ < refreshNumber) {
+        // refresh the recent partitions first
+        Iterator<PCellWithName> iterator = getToRefreshPartitionsIterator(toRefreshPartitions, false);
+        while (i++ < partitionRefreshNumber && iterator.hasNext()) {
+            PCellWithName pCell = iterator.next();
+            logger.debug("Materialized view [{}] to refresh partition name {}, value {}",
+                    mv.getName(), pCell.name(), pCell.cell());
+        }
+
+        // get next partition values for next refresh
+        Set<PListCell> nextPartitionValues = Sets.newHashSet();
+        while (iterator.hasNext()) {
             PCellWithName pCell = iterator.next();
             nextPartitionValues.add((PListCell) pCell.cell());
-            toRefreshPartitions.remove(pCell);
+            iterator.remove();
         }
         logger.info("Filter partitions by refresh number, ttl_number:{}, result:{}, remains:{}",
-                refreshNumber, toRefreshPartitions, nextPartitionValues);
+                partitionRefreshNumber, toRefreshPartitions, nextPartitionValues);
         if (CollectionUtils.isEmpty(nextPartitionValues)) {
             return;
         }
@@ -464,26 +465,6 @@ public final class MVPCTRefreshListPartitioner extends MVPCTRefreshPartitioner {
             // will cause endPartitionName == null
             mvContext.setNextPartitionValues(PListCell.batchSerialize(nextPartitionValues));
         }
-    }
-
-    public int getAdaptivePartitionRefreshNumber(Iterator<PCellWithName> iterator) throws MVAdaptiveRefreshException {
-        Map<String, Map<Table, Set<String>>> mvToBaseNameRefs = mvContext.getMvRefBaseTableIntersectedPartitions();
-        MVRefreshPartitionSelector mvRefreshPartitionSelector =
-                new MVRefreshPartitionSelector(Config.mv_max_rows_per_refresh, Config.mv_max_bytes_per_refresh,
-                        Config.mv_max_partitions_num_per_refresh, mvContext.getExternalRefBaseTableMVPartitionMap());
-        int adaptiveRefreshNumber = 0;
-        while (iterator.hasNext()) {
-            PCellWithName cellWithName = iterator.next();
-            String partitionName = cellWithName.name();
-            Map<Table, Set<String>> refPartitionInfos = mvToBaseNameRefs.get(partitionName);
-            if (mvRefreshPartitionSelector.canAddPartition(refPartitionInfos)) {
-                mvRefreshPartitionSelector.addPartition(refPartitionInfos);
-                adaptiveRefreshNumber++;
-            } else {
-                break;
-            }
-        }
-        return adaptiveRefreshNumber;
     }
 
     private void addListPartitions(Database database, MaterializedView materializedView,

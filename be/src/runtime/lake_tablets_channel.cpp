@@ -396,6 +396,17 @@ void LakeTabletsChannel::add_chunk(Chunk* chunk, const PTabletWriterAddChunkRequ
         response->mutable_status()->add_error_msgs("no packet_seq in PTabletWriterAddChunkRequest");
         return;
     }
+    if (UNLIKELY(!request.has_timeout_ms())) {
+        response->mutable_status()->set_status_code(TStatusCode::INVALID_ARGUMENT);
+        response->mutable_status()->add_error_msgs("missing timeout_ms in PTabletWriterAddChunkRequest");
+        return;
+    }
+    if (UNLIKELY(request.timeout_ms() < 0)) {
+        response->mutable_status()->set_status_code(TStatusCode::INVALID_ARGUMENT);
+        response->mutable_status()->add_error_msgs(
+                fmt::format("negtive timeout_ms {} in PTabletWriterAddChunkRequest", request.timeout_ms()));
+        return;
+    }
 
     auto& sender = _senders[request.sender_id()];
 
@@ -737,13 +748,30 @@ Status LakeTabletsChannel::_create_delta_writers(const PTabletWriterOpenRequest&
 
     std::vector<int64_t> tablet_ids;
     tablet_ids.reserve(params.tablets_size());
+    bool multi_stmt = _is_multi_statements_txn(params);
     for (const PTabletWithPartition& tablet : params.tablets()) {
         BundleWritableFileContext* bundle_writable_file_context = nullptr;
-        if (_is_data_file_bundle_enabled(params)) {
+        // Do NOT enable bundle write for a multi-statements transaction.
+        // Rationale:
+        //   A multi-statements txn may invoke multiple open/add_chunk cycles and flush segments in batches.
+        //   If some early segments are appended into a bundle file while later segments are flushed as
+        //   standalone segment files (because a subsequent writer/open does not attach to the previous
+        //   bundle context), the final Rowset metadata will contain a mixed set: a subset of segments with
+        //   bundle offsets recorded and the remaining without any offsets. Downstream rowset load logic
+        //   assumes a 1:1 correspondence between the 'segments' list and 'bundle_file_offsets' when the
+        //   latter is present. A partial list therefore triggers size mismatch errors when loading.
+        // Mitigation Strategy:
+        //   Disable bundling entirely for multi-statements txns so every segment is materialized as an
+        //   independent file, guaranteeing consistent metadata and eliminating offset mismatch risk.
+        // NOTE: If future optimization desires bundling + multi-stmt, it must introduce an atomic merge
+        //   mechanism ensuring offsets array completeness before publish.
+        if (!multi_stmt && _is_data_file_bundle_enabled(params)) {
             if (_bundle_wfile_ctx_by_partition.count(tablet.partition_id()) == 0) {
                 _bundle_wfile_ctx_by_partition[tablet.partition_id()] = std::make_unique<BundleWritableFileContext>();
             }
             bundle_writable_file_context = _bundle_wfile_ctx_by_partition[tablet.partition_id()].get();
+        } else if (multi_stmt && _is_data_file_bundle_enabled(params)) {
+            VLOG(1) << "disable bundle write for multi statements txn partition=" << tablet.partition_id();
         }
         if (_delta_writers.count(tablet.tablet_id()) != 0) {
             // already created for the tablet, usually in incremental open case
@@ -767,7 +795,7 @@ Status LakeTabletsChannel::_create_delta_writers(const PTabletWriterOpenRequest&
                                               .set_profile(_profile)
                                               .set_bundle_writable_file_context(bundle_writable_file_context)
                                               .set_global_dicts(&_global_dicts)
-                                              .set_is_multi_statements_txn(_is_multi_statements_txn(params))
+                                              .set_is_multi_statements_txn(multi_stmt)
                                               .build());
         _delta_writers.emplace(tablet.tablet_id(), std::move(writer));
         tablet_ids.emplace_back(tablet.tablet_id());

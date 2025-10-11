@@ -20,6 +20,7 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.IcebergTable;
 import com.starrocks.connector.BucketProperty;
 import com.starrocks.connector.RemoteFileInfoDefaultSource;
+import com.starrocks.planner.PartitionIdGenerator;
 import com.starrocks.planner.SlotDescriptor;
 import com.starrocks.planner.SlotId;
 import com.starrocks.planner.TupleDescriptor;
@@ -73,7 +74,8 @@ public class IcebergConnectorScanRangeSourceTest extends TableTestBase {
         List<BucketProperty> bucketProperties = icebergTable.getBucketProperties();
 
         IcebergConnectorScanRangeSource scanRangeSource = new IcebergConnectorScanRangeSource(icebergTable,
-                RemoteFileInfoDefaultSource.EMPTY, IcebergMORParams.EMPTY, tupleDescriptor, Optional.of(bucketProperties));
+                RemoteFileInfoDefaultSource.EMPTY, IcebergMORParams.EMPTY, tupleDescriptor, Optional.of(bucketProperties),
+                PartitionIdGenerator.of());
 
         List<FileScanTask> fileScanTasks = Lists.newArrayList(mockedNativeTable2Bucket.newScan().planFiles());
         Assertions.assertEquals(2, fileScanTasks.size());
@@ -103,7 +105,8 @@ public class IcebergConnectorScanRangeSourceTest extends TableTestBase {
         List<BucketProperty> oneBucketProperties = List.of(bucketProperties.get(0));
 
         IcebergConnectorScanRangeSource scanRangeSource = new IcebergConnectorScanRangeSource(icebergTable,
-                RemoteFileInfoDefaultSource.EMPTY, IcebergMORParams.EMPTY, tupleDescriptor, Optional.of(oneBucketProperties));
+                RemoteFileInfoDefaultSource.EMPTY, IcebergMORParams.EMPTY, tupleDescriptor, Optional.of(oneBucketProperties),
+                PartitionIdGenerator.of());
 
         List<FileScanTask> fileScanTasks = Lists.newArrayList(mockedNativeTable2Bucket.newScan().planFiles());
         Assertions.assertEquals(2, fileScanTasks.size());
@@ -117,6 +120,38 @@ public class IcebergConnectorScanRangeSourceTest extends TableTestBase {
                 // 2 data-j2
                 Assertions.assertEquals(2, mappingId);
             }
+        }
+    }
+
+    @Test
+    public void testSamePartitionIdForSamePartitionKeysAcrossDifferentSources() throws Exception {
+        List<Column> schema = new ArrayList<>();
+        schema.add(new Column("id", INT));
+        schema.add(new Column("k1", INT));
+        schema.add(new Column("k2", VARCHAR));
+        mockedNativeTable2Bucket.newFastAppend().appendFile(FILE_J_1).appendFile(FILE_J_2).commit();
+        IcebergTable icebergTable = new IcebergTable(1, "iceberg_table", "iceberg_catalog",
+                "resource", "db", "table", "", schema,
+                mockedNativeTable2Bucket, Maps.newHashMap());
+        Assertions.assertTrue(icebergTable.hasBucketProperties());
+        List<BucketProperty> bucketProperties = icebergTable.getBucketProperties();
+        List<BucketProperty> oneBucketProperties = List.of(bucketProperties.get(0));
+        // Use the same partition key values for both
+        PartitionIdGenerator partitionIdGenerator = PartitionIdGenerator.of();
+        IcebergConnectorScanRangeSource scanRangeSource1 = new IcebergConnectorScanRangeSource(
+                icebergTable, RemoteFileInfoDefaultSource.EMPTY, IcebergMORParams.EMPTY, tupleDescriptor,
+                Optional.of(oneBucketProperties), partitionIdGenerator);
+        IcebergConnectorScanRangeSource scanRangeSource2 = new IcebergConnectorScanRangeSource(
+                icebergTable, RemoteFileInfoDefaultSource.EMPTY, IcebergMORParams.EMPTY, tupleDescriptor,
+                Optional.of(oneBucketProperties), partitionIdGenerator);
+        List<FileScanTask> fileScanTasks = Lists.newArrayList(mockedNativeTable2Bucket.newScan().planFiles());
+        Assertions.assertFalse(fileScanTasks.isEmpty());
+        for (FileScanTask fileScanTask : fileScanTasks) {
+            // Simulate partition id generation for the same partition key values
+            long partitionId1 = scanRangeSource1.addPartition(fileScanTask);
+            long partitionId2 = scanRangeSource2.addPartition(fileScanTask);
+            Assertions.assertEquals(partitionId1, partitionId2, "Partition IDs should " +
+                    "be the same for the same partition keys and values");
         }
     }
 }

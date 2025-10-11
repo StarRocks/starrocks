@@ -72,11 +72,23 @@ public:
     void set_recover_flag(RecoverFlag flag) { _recover_flag = flag; }
     RecoverFlag recover_flag() const { return _recover_flag; }
 
+    // Number of segments already assigned (accumulated) in current pending batch rowset build.
+    uint32_t assigned_segment_id() const { return _pending_rowset_data.assigned_segment_id; }
+
     void finalize_sstable_meta(const PersistentIndexSstableMetaPB& sstable_meta);
 
     void remove_compacted_sst(const TxnLogPB_OpCompaction& op_compaction);
 
     const TabletMetadata* tablet_meta() const { return _tablet_meta.get(); }
+
+    const DelvecPagePB& delvec_page(uint32_t segment_id) const {
+        static DelvecPagePB empty;
+        auto it = _delvecs.find(segment_id);
+        if (it != _delvecs.end()) {
+            return it->second;
+        }
+        return empty;
+    }
 
 private:
     // update delvec in tablet meta
@@ -96,6 +108,7 @@ private:
         std::vector<FileMetaPB> orphan_files;
         std::vector<std::string> dels;
         std::vector<std::string> del_encryption_metas;
+        uint32_t assigned_segment_id = 0;
     };
 
     Tablet _tablet;
@@ -113,6 +126,8 @@ private:
     PendingRowsetData _pending_rowset_data;
 };
 
+Status get_del_vec(TabletManager* tablet_mgr, const TabletMetadata& metadata, const DelvecPagePB& delvec_page,
+                   bool fill_cache, const LakeIOOptions& lake_io_opts, DelVector* delvec);
 Status get_del_vec(TabletManager* tablet_mgr, const TabletMetadata& metadata, uint32_t segment_id, bool fill_cache,
                    const LakeIOOptions& lake_io_opts, DelVector* delvec);
 bool is_primary_key(TabletMetadata* metadata);

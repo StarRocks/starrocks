@@ -117,9 +117,14 @@ public final class PRangeCell extends PCell {
 
     @Override
     public String toString() {
-        return "PRangeCell{" +
-                "range=" + range +
-                '}';
+        return "[%s-%s]".formatted(toString(range.lowerEndpoint()), toString(range.upperEndpoint()));
+    }
+
+    private String toString(PartitionKey partitionKey) {
+        if (partitionKey == null) {
+            return "null";
+        }
+        return partitionKey.toSql();
     }
 
     public static Map<String, Range<PartitionKey>> toRangeMap(Map<String, PCell> input) {

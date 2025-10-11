@@ -33,6 +33,7 @@ fe_plugins/output
 fe/mocked
 fe/ut_ports
 fe/*/target
+fe/*/bin
 fe/plugin/*/target/
 fe/fe-core/gen
 fe/fe-grammar/gen
@@ -60,6 +61,8 @@ compile_commands.json
 .classpath
 .vimspector.json
 .gdb_history
+fe/plugin/hive-udf/target
+fe/plugin/spark-dpp/target
 
 # ignore generated files
 StarRocksLex.tokens
@@ -92,6 +95,18 @@ be/tags
 build/
 cmake-build-debug/
 CMakeLists.txt
-
 .claude
 CLAUDE.md
+.clangd
+
+
+!build-mac/CMakeLists.txt
+# build-mac generated files
+build-mac/.ninja_deps
+build-mac/.ninja_lock
+build-mac/.ninja_log
+build-mac/CMakeCache.txt
+build-mac/CMakeFiles/
+build-mac/build.ninja
+build-mac/build_version.cc
+build-mac/cmake_install.cmake

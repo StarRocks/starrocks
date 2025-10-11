@@ -69,6 +69,7 @@ import com.starrocks.clone.TabletScheduler;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
+import com.starrocks.common.FeConstants;
 import com.starrocks.common.InvalidOlapTableStateException;
 import com.starrocks.common.Pair;
 import com.starrocks.common.io.DeepCopy;
@@ -1271,6 +1272,10 @@ public class OlapTable extends Table {
             if (partitionName.startsWith(ExpressionRangePartitionInfo.SHADOW_PARTITION_PREFIX)) {
                 continue;
             }
+            // ensure partitionName is in nameToPartition
+            if (!nameToPartition.containsKey(partitionName)) {
+                continue;
+            }
             rangePartitionMap.put(partitionName, rangePartitionInfo.getRange(partitionId));
         }
         return rangePartitionMap;
@@ -1314,6 +1319,9 @@ public class OlapTable extends Table {
             String partitionName = partitionEntry.getValue().getName();
             // FE and BE at the same time ignore the hidden partition at the same time
             if (partitionName.startsWith(ExpressionRangePartitionInfo.SHADOW_PARTITION_PREFIX)) {
+                continue;
+            }
+            if (!nameToPartition.containsKey(partitionName)) {
                 continue;
             }
             // one item
@@ -1390,15 +1398,19 @@ public class OlapTable extends Table {
         return defaultDistributionInfo;
     }
 
-    /*
-     * Infer the distribution info based on partitions and cluster status
+    /**
+     * Infer the distribution info based on partitions and cluster status:
+     * - For hash distribution, if bucket num is not set, we will set it to
+     *  average bucket num of recent partitions.
+     * - For random distribution, if mutable bucket num is not set, we will set it with a deduced value.
      */
     public void inferDistribution(DistributionInfo info) throws DdlException {
         if (info.getType() == DistributionInfo.DistributionInfoType.HASH) {
             // infer bucket num
             if (info.getBucketNum() == 0) {
                 int numBucket = CatalogUtils.calAvgBucketNumOfRecentPartitions(this,
-                        5, Config.enable_auto_tablet_distribution);
+                        FeConstants.DEFAULT_INFER_BUCKET_NUM_RECENT_PARTITION_NUM,
+                        Config.enable_auto_tablet_distribution);
                 info.setBucketNum(numBucket);
             }
         } else if (info.getType() == DistributionInfo.DistributionInfoType.RANDOM) {
@@ -2353,6 +2365,19 @@ public class OlapTable extends Table {
         this.idToColumn = newIdToColumn;
     }
 
+    /**
+     * Get visible columns without generated column.
+     */
+    public List<Column> getVisibleColumnsWithoutGeneratedColumn() {
+        List<Column> schema = Lists.newArrayList(getBaseSchemaWithoutGeneratedColumn());
+        // remove hidden columns
+        schema.removeIf(Column::isHidden);
+        return schema;
+    }
+
+    /**
+     * Get base schema without generated column which may contain hidden columns.
+     */
     public List<Column> getBaseSchemaWithoutGeneratedColumn() {
         if (!hasGeneratedColumn()) {
             return getSchemaByIndexId(baseIndexId);

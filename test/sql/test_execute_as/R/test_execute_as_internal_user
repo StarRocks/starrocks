@@ -1,0 +1,148 @@
+-- name: test_execute_as_internal_user
+CREATE GROUP PROVIDER IF NOT EXISTS `test_execute_as_file_group_provider` PROPERTIES ("group_file_url" = "group_mapping", "type" = "file");
+-- result:
+-- !result
+admin set frontend config ("group_provider"="test_execute_as_file_group_provider");
+-- result:
+-- !result
+drop user if exists test_impersonate;
+-- result:
+-- !result
+create user test_impersonate;
+-- result:
+-- !result
+grant impersonate on user root to test_impersonate;
+-- result:
+-- !result
+drop user if exists u1;
+-- result:
+-- !result
+create user u1;
+-- result:
+-- !result
+grant impersonate on user root to u1;
+-- result:
+-- !result
+drop user if exists u2;
+-- result:
+-- !result
+create user u2;
+-- result:
+-- !result
+grant impersonate on user root to u2;
+-- result:
+-- !result
+drop role if exists g1_role;
+-- result:
+-- !result
+create role g1_role;
+-- result:
+-- !result
+grant g1_role to external group r1_group;
+-- result:
+-- !result
+drop role if exists g2_role;
+-- result:
+-- !result
+create role g2_role;
+-- result:
+-- !result
+grant g2_role to external group r2_group;
+-- result:
+-- !result
+grant impersonate on user u1 to test_impersonate;
+-- result:
+-- !result
+grant impersonate on user u2 to test_impersonate;
+-- result:
+-- !result
+grant impersonate on user test_impersonate to u1;
+-- result:
+-- !result
+grant impersonate on user test_impersonate to u2;
+-- result:
+-- !result
+execute as test_impersonate with no revert;
+-- result:
+-- !result
+select current_group();
+-- result:
+NONE
+-- !result
+select current_role();
+-- result:
+NONE
+-- !result
+execute as u1 with no revert;
+-- result:
+-- !result
+show databases;
+-- result:
+information_schema
+-- !result
+select current_group();
+-- result:
+r1_group
+-- !result
+select current_role();
+-- result:
+g1_role
+-- !result
+execute as test_impersonate with no revert;
+-- result:
+-- !result
+select current_group();
+-- result:
+NONE
+-- !result
+select current_role();
+-- result:
+NONE
+-- !result
+execute as u2 with no revert;
+-- result:
+-- !result
+show databases;
+-- result:
+information_schema
+-- !result
+select current_group();
+-- result:
+r2_group
+-- !result
+select current_role();
+-- result:
+g2_role
+-- !result
+execute as test_impersonate with no revert;
+-- result:
+-- !result
+select current_group();
+-- result:
+NONE
+-- !result
+select current_role();
+-- result:
+NONE
+-- !result
+execute as root with no revert;
+-- result:
+-- !result
+drop user if exists test_impersonate;
+-- result:
+-- !result
+drop role if exists g1_role;
+-- result:
+-- !result
+drop role if exists g2_role;
+-- result:
+-- !result
+drop user if exists u1;
+-- result:
+-- !result
+drop user if exists u2;
+-- result:
+-- !result
+drop group provider IF EXISTS test_execute_as_file_group_provider;
+-- result:
+-- !result

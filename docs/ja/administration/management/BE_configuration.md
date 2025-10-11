@@ -984,6 +984,24 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 説明: サイズ階層型コンパクションポリシーのレベル数。各レベルには最大で 1 つの rowset が保持されます。したがって、安定した状態では、この設定項目で指定されたレベル数と同じ数の rowset が最大で存在します。
 - 導入バージョン: -
 
+##### enable_pk_parallel_execution
+
+- デフォルト: true
+- タイプ: Boolean
+- 単位: -
+- 可変: はい
+- 説明: Primary Key テーブルの並列実行戦略を有効にするかどうかを決定します。有効化されると、インポートおよびコンパクションの段階で PK インデックスファイルが生成されます。
+- 導入バージョン: -
+
+##### pk_parallel_execution_threshold_bytes
+
+- デフォルト: 314572800
+- タイプ: Int
+- 単位: -
+- 可変: はい
+- 説明: enable_pk_parallel_execution が true に設定されている場合、インポートまたはコンパクションで生成されるデータがこの閾値を超えると、Primary Key テーブルの並列実行戦略が有効になります。
+- 導入バージョン: -
+
 ##### enable_check_string_lengths
 
 - デフォルト: true
@@ -1453,23 +1471,6 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 説明: `enable_string_prefix_zonemap` が有効な場合に、文字列ゾーンマップの最小値/最大値に使用する前置長。
 - 導入バージョン: -
 
-##### string_zonemap_overlap_threshold
-
-- デフォルト: 0.8
-- タイプ: Double
-- 単位: -
-- 可変: はい
-- 説明: 文字列ページレベルのゾーンマップを自動作成するためのしきい値。連続するページ間の推定オーバーラップ率がこの値を超える場合、ページレベルのゾーンマップの書き込みをスキップします。範囲: [0.0, 1.0]。
-- 導入バージョン: -
-
-##### string_zonemap_min_pages_for_adaptive_check
-
-- デフォルト: 16
-- タイプ: Int
-- 単位: -
-- 可変: はい
-- 説明: 自適応チェックを適用する前に必要な非空ページの最小数。
-- 導入バージョン: -
 
 ##### enable_ordinal_index_memory_page_cache
 
@@ -2049,6 +2050,15 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 可変: いいえ
 - 説明: Data Cache のインラインキャッシュアイテムの最大数。特に小さいキャッシュブロックの場合、Data Cache はそれらを `inline` モードで保存し、ブロックデータとメタデータをメモリに一緒にキャッシュします。
 - 導入バージョン: v3.4.0
+
+##### enable_connector_sink_spill
+
+- デフォルト: true
+- タイプ: Boolean
+- 単位: -
+- 可変: はい
+- 説明: 外部テーブルへの書き込み時にスピリングを有効化するかどうか。この機能を有効にすると、メモリ不足時に外部テーブルへの書き込みによって大量の小さなファイルが生成されるのを防ぎます。現在、この機能は Iceberg テーブルへの書き込みのみをサポートしています。
+- 導入バージョン: v4.0.0
 
 ##### query_max_memory_limit_percent
 

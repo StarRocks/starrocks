@@ -957,6 +957,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public static final String ENABLE_DESENSITIZE_EXPLAIN = "enable_desensitize_explain";
 
+    public static final String ENABLE_FULL_SORT_USE_GERMAN_STRING = "enable_full_sort_use_german_string";
+
     public static final List<String> DEPRECATED_VARIABLES = ImmutableList.<String>builder()
             .add(CODEGEN_LEVEL)
             .add(MAX_EXECUTION_TIME)
@@ -1959,6 +1961,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public void setEnableDesensitizeExplain(boolean enableDesensitizeExplain) {
         this.enableDesensitizeExplain = enableDesensitizeExplain;
     }
+
+    @VarAttr(name = ENABLE_FULL_SORT_USE_GERMAN_STRING)
+    private boolean enableFullSortUseGermanString = true;
 
     public int getCboPruneJsonSubfieldDepth() {
         return cboPruneJsonSubfieldDepth;
@@ -3914,8 +3919,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         return this.maxPipelineDop;
     }
 
+    // TODO(murphy) support this variable
+    // It's always false since version 3.5, due to incompatibility with event-based scheduling
     public boolean isEnableSharedScan() {
-        return enableSharedScan;
+        return false;
     }
 
     public int getResourceGroupId() {
@@ -4925,6 +4932,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         return enableIcebergIdentityColumnOptimize;
     }
 
+    public void setEnableIcebergIdentityColumnOptimize(boolean enableIcebergIdentityColumnOptimize) {
+        this.enableIcebergIdentityColumnOptimize = enableIcebergIdentityColumnOptimize;
+    }
+
     public boolean getEnablePlanSerializeConcurrently() {
         return enablePlanSerializeConcurrently;
     }
@@ -5317,6 +5328,13 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         this.cboJSONV2DictOpt = value;
     }
 
+    public void setEnableFullSortUseGermanString(boolean value) {
+        this.enableFullSortUseGermanString  = value;
+    }
+
+    public boolean isEnableFullSortUseGermanString() {
+        return this.enableFullSortUseGermanString;
+    }
     // Serialize to thrift object
     // used for rest api
     public TQueryOptions toThrift() {
@@ -5339,7 +5357,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         tResult.setRuntime_profile_report_interval(runtimeProfileReportInterval);
         tResult.setBatch_size(chunkSize);
         tResult.setLoad_mem_limit(loadMemLimit);
-
+        tResult.setEnable_full_sort_use_german_string(enableFullSortUseGermanString);
         if (maxScanKeyNum > -1) {
             tResult.setMax_scan_key_num(maxScanKeyNum);
         }

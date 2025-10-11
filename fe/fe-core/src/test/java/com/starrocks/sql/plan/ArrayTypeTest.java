@@ -316,13 +316,10 @@ public class ArrayTypeTest extends PlanTestBase {
     }
 
     @Test
-    public void testArrayWindowFunction() {
+    public void testArrayWindowFunction() throws Exception {
         for (String fnName : Sets.newHashSet(AnalyticExpr.LASTVALUE, AnalyticExpr.FIRSTVALUE)) {
             String sql = String.format("select %s(v3) over() from tarray", fnName.toLowerCase());
-            Throwable exception = assertThrows(SemanticException.class, () ->
-                    getFragmentPlan(sql));
-            assertThat(exception.getMessage(), containsString(
-                    String.format("No matching function with signature: %s(array<bigint(20)>)", fnName.toLowerCase())));
+            getFragmentPlan(sql);
         }
     }
 
@@ -849,5 +846,16 @@ public class ArrayTypeTest extends PlanTestBase {
                 getFragmentPlan("select reverse(d_3) from adec256"));
         assertThat(exception.getMessage(), containsString("Array function 'reverse' is not supported for" +
                 " DECIMAL256 type"));
+    }
+
+    @Test
+    public void testArrayNull() throws Exception {
+        String sql = "with test_cte as (\n"
+                + "    select array<varchar>[] as some_array\n"
+                + ")\n"
+                + "select array_agg(some_array)\n"
+                + "from test_cte;";
+        String plan = getThriftPlan(sql);
+        assertContains(plan, "function_name:array_agg");
     }
 }

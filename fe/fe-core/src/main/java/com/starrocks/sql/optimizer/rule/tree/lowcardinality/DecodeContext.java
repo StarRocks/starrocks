@@ -42,6 +42,7 @@ import java.util.Optional;
 import java.util.Set;
 
 import static com.starrocks.sql.optimizer.rule.tree.lowcardinality.DecodeCollector.LOW_CARD_ARRAY_FUNCTIONS;
+import static com.starrocks.sql.optimizer.rule.tree.lowcardinality.DecodeCollector.LOW_CARD_WINDOW_FUNCTIONS;
 
 /*
  * DecodeContext is used to store the information needed for decoding
@@ -325,7 +326,8 @@ class DecodeContext {
             List<ScalarOperator> newChildren = visitList(call.getChildren(), hasChange);
 
             if (call.getFunction() instanceof AggregateFunction) {
-                Type[] argTypes = new Type[] {Type.INT};
+                Type argType = newChildren.get(0).getType().isArrayType() ? new ArrayType(Type.INT) : Type.INT;
+                Type[] argTypes = new Type[] {argType};
                 Function fn = Expr.getBuiltinFunction(call.getFnName(), argTypes, Function.CompareMode.IS_SUPERTYPE_OF);
                 // min/max function: will rewrite all stage, return type is dict type
                 if (FunctionSet.MAX.equals(call.getFnName()) || FunctionSet.MIN.equals(call.getFnName())) {
@@ -338,6 +340,12 @@ class DecodeContext {
                     // return type don't update
                     return new CallOperator(call.getFnName(), call.getType(), newChildren, fn,
                             call.isDistinct(), call.isRemovedDistinct());
+                } else if (LOW_CARD_WINDOW_FUNCTIONS.contains(call.getFnName())) {
+                    CallOperator newCall = new CallOperator(call.getFnName(), fn.getReturnType(), newChildren, fn,
+                            call.isDistinct(), call.isRemovedDistinct());
+                    //encoded window functions should set ignore null flag
+                    newCall.setIgnoreNulls(call.getIgnoreNulls());
+                    return newCall;
                 }
             }
 

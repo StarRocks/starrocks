@@ -61,6 +61,7 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.function.Consumer;
 import java.util.stream.Collectors;
 
 public class FunctionSet {
@@ -161,6 +162,8 @@ public class FunctionSet {
     public static final String SHA2 = "sha2";
     public static final String SM3 = "sm3";
     public static final String ROW_FINGERPRINT= "row_fingerprint";
+    public static final String FROM_BINARY = "from_binary";
+    public static final String TO_BINARY = "to_binary";
 
     // Vector Index functions:
     public static final String APPROX_COSINE_SIMILARITY = "approx_cosine_similarity";
@@ -391,6 +394,8 @@ public class FunctionSet {
     // Hash functions:
     public static final String MURMUR_HASH3_32 = "murmur_hash3_32";
     public static final String CRC32_HASH = "crc32_hash";
+    public static final String XX_HASH3_64 = "xx_hash3_64";
+    public static final String XX_HASH3_128 = "xx_hash3_128";
 
     // Percentile functions:
     public static final String PERCENTILE_APPROX_RAW = "percentile_approx_raw";
@@ -1383,12 +1388,7 @@ public class FunctionSet {
         addBuiltin(AggregateFunction.createBuiltin(COLUMN_COMPRESSED_SIZE, Lists.newArrayList(Type.ANY_ELEMENT),
                 Type.BIGINT, Type.BIGINT, false, false, false));
 
-        for (Type t : Type.getSupportedTypes()) {
-            // null/char/time is handled through type promotion
-            // TODO: array/json/pseudo is not supported yet
-            if (!t.canBeWindowFunctionArgumentTypes()) {
-                continue;
-            }
+        Consumer<Type> registerLeadLagFunctions = t -> {
             addBuiltin(AggregateFunction.createAnalyticBuiltin(
                     FIRST_VALUE, Lists.newArrayList(t), t, t));
             // Implements FIRST_VALUE for some windows that require rewrites during planning.
@@ -1413,6 +1413,17 @@ public class FunctionSet {
                     LEAD, Lists.newArrayList(t), t, t));
             addBuiltin(AggregateFunction.createAnalyticBuiltin(
                     LEAD, Lists.newArrayList(t, Type.BIGINT), t, t));
+        };
+        for (Type t : Type.getSupportedTypes()) {
+            // null/char/time is handled through type promotion
+            // TODO: array/json/pseudo is not supported yet
+            if (!t.canBeWindowFunctionArgumentTypes()) {
+                continue;
+            }
+
+            Type arrayType = new ArrayType(t);
+            registerLeadLagFunctions.accept(t);
+            registerLeadLagFunctions.accept(arrayType);
         }
 
         for (Type t : HISTOGRAM_TYPE) {

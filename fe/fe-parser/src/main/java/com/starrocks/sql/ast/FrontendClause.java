@@ -12,15 +12,13 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.sql.ast;
 
 import com.starrocks.sql.parser.NodePosition;
 
 public class FrontendClause extends AlterClause {
     protected String hostPort;
-    protected String host;
-    protected int port;
+    protected HostPort hostPortObj;
 
     protected FrontendClause(String hostPort, NodePosition pos) {
         super(pos);
@@ -28,23 +26,19 @@ public class FrontendClause extends AlterClause {
     }
 
     public String getHost() {
-        return host;
+        return hostPortObj != null ? hostPortObj.getHost() : null;
     }
 
     public int getPort() {
-        return port;
+        return hostPortObj != null ? hostPortObj.getPort() : 0;
     }
 
     public String getHostPort() {
         return hostPort;
     }
 
-    public void setHost(String host) {
-        this.host = host;
-    }
-
-    public void setPort(int port) {
-        this.port = port;
+    public void setHostPortObj(HostPort hostPortObj) {
+        this.hostPortObj = hostPortObj;
     }
 
     @Override

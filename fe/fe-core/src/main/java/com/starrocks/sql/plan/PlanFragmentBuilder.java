@@ -51,7 +51,6 @@ import com.starrocks.common.IdGenerator;
 import com.starrocks.common.LocalExchangerType;
 import com.starrocks.common.Pair;
 import com.starrocks.common.StarRocksException;
-import com.starrocks.common.tvr.TvrVersionRange;
 import com.starrocks.connector.BucketProperty;
 import com.starrocks.connector.metadata.MetadataTable;
 import com.starrocks.load.BrokerFileGroup;
@@ -92,6 +91,7 @@ import com.starrocks.planner.OdpsScanNode;
 import com.starrocks.planner.OlapScanNode;
 import com.starrocks.planner.OlapTableSink;
 import com.starrocks.planner.PaimonScanNode;
+import com.starrocks.planner.PartitionIdGenerator;
 import com.starrocks.planner.PlanFragment;
 import com.starrocks.planner.PlanNode;
 import com.starrocks.planner.ProjectNode;
@@ -119,6 +119,7 @@ import com.starrocks.server.LocalMetastore;
 import com.starrocks.server.RunMode;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.service.FrontendOptions;
+import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.analyzer.DecimalV3FunctionAnalyzer;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AssertNumRowsElement;
@@ -1275,6 +1276,7 @@ public class PlanFragmentBuilder {
 
             prepareContextSlots(node, context, tupleDescriptor);
 
+            PartitionIdGenerator partitionIdGenerator = context.getDescTbl().getTablePartitionIdGenerator(referenceTable);
             DeltaLakeScanNode deltaLakeScanNode =
                     new DeltaLakeScanNode(context.getNextNodeId(), tupleDescriptor, "DeltaLakeScanNode");
             deltaLakeScanNode.computeStatistics(optExpression.getStatistics());
@@ -1293,7 +1295,7 @@ public class PlanFragmentBuilder {
                 List<String> fieldNames = node.getColRefToColumnMetaMap().keySet().stream()
                         .map(ColumnRefOperator::getName)
                         .collect(Collectors.toList());
-                deltaLakeScanNode.setupScanRangeSource(node.getPredicate(), fieldNames,
+                deltaLakeScanNode.setupScanRangeSource(node.getPredicate(), fieldNames, partitionIdGenerator,
                         context.getConnectContext().getSessionVariable().isEnableConnectorIncrementalScanRanges());
 
                 HDFSScanNodePredicates scanNodePredicates = deltaLakeScanNode.getScanNodePredicates();
@@ -1479,26 +1481,28 @@ public class PlanFragmentBuilder {
             // set slot
             prepareContextSlots(node, context, tupleDescriptor);
 
+            // partition id generator
+            PartitionIdGenerator partitionIdGenerator = context.getDescTbl().getTablePartitionIdGenerator(referenceTable);
+
             boolean isEqDeleteScan = node.getOpType() != OperatorType.PHYSICAL_ICEBERG_SCAN;
             IcebergScanNode icebergScanNode;
             String planNodeName = isEqDeleteScan ? "IcebergEqualityDeleteScanNode" : "IcebergScanNode";
             if (!isEqDeleteScan) {
                 PhysicalIcebergScanOperator op = node.cast();
                 icebergScanNode = new IcebergScanNode(context.getNextNodeId(), tupleDescriptor, planNodeName,
-                        op.getTableFullMORParams(), op.getMORParams());
+                        op.getTableFullMORParams(), op.getMORParams(), partitionIdGenerator);
                 icebergScanNode.updateAppliedDictStringColumns(
                         ((PhysicalIcebergScanOperator) node).getGlobalDicts().stream()
                                 .map(entry -> entry.first).collect(Collectors.toSet()));
             } else {
                 PhysicalIcebergEqualityDeleteScanOperator op = node.cast();
                 icebergScanNode = new IcebergScanNode(context.getNextNodeId(), tupleDescriptor, planNodeName,
-                        op.getTableFullMORParams(), op.getMORParams());
+                        op.getTableFullMORParams(), op.getMORParams(), partitionIdGenerator);
             }
 
             icebergScanNode.setScanOptimizeOption(node.getScanOptimizeOption());
             icebergScanNode.computeStatistics(expression.getStatistics());
             currentExecGroup.add(icebergScanNode, true);
-            TvrVersionRange tvrVersionRange = node.getTvrVersionRange();
             try {
                 // set predicate
                 ScalarOperatorToExpr.FormatterContext formatterContext =
@@ -2192,6 +2196,7 @@ public class PlanFragmentBuilder {
                 AggregateFunction aggrFn = (AggregateFunction) aggExpr.getFn();
                 Type intermediateType = aggrFn.getIntermediateType() != null ?
                         aggrFn.getIntermediateType() : aggrFn.getReturnType();
+                intermediateType = AnalyzerUtils.replaceNullType2Boolean(intermediateType);
                 intermediateSlotDesc.setType(intermediateType);
                 intermediateSlotDesc.setIsNullable(aggrFn.isNullable());
                 intermediateSlotDesc.setIsMaterialized(true);
@@ -2669,7 +2674,7 @@ public class PlanFragmentBuilder {
             // Push down the predicates constructed by the right child when the
             // join op is inner join or left semi join or right join(semi, outer, anti)
             node.setIsPushDown(ConnectContext.get().getSessionVariable().isHashJoinPushDownRightTable()
-                    && (node.getJoinOp().isInnerJoin() || node.getJoinOp().isLeftSemiJoin() ||
+                    && (node.getJoinOp().isAnyInnerJoin() || node.getJoinOp().isLeftSemiJoin() ||
                     node.getJoinOp().isRightJoin()));
         }
 
@@ -2708,7 +2713,7 @@ public class PlanFragmentBuilder {
             Set<TupleId> nullableTupleIds = new HashSet<>();
             nullableTupleIds.addAll(leftFragment.getPlanRoot().getNullableTupleIds());
             nullableTupleIds.addAll(rightFragment.getPlanRoot().getNullableTupleIds());
-            if (joinOperator.isLeftOuterJoin()) {
+            if (joinOperator.isAnyLeftOuterJoin()) {
                 nullableTupleIds.addAll(rightFragment.getPlanRoot().getTupleIds());
             } else if (joinOperator.isRightOuterJoin()) {
                 nullableTupleIds.addAll(leftFragment.getPlanRoot().getTupleIds());
@@ -2877,6 +2882,12 @@ public class PlanFragmentBuilder {
                         context.getNextNodeId(),
                         leftFragment.getPlanRoot(), rightFragment.getPlanRoot(),
                         joinOperator, eqJoinConjuncts, otherJoinConjuncts);
+
+                // Set ASOF join conjunct if present
+                if (joinExpr.asofJoinConjunct != null) {
+                    joinNode.setAsofJoinConjunct(joinExpr.asofJoinConjunct);
+                }
+
                 UKFKConstraints constraints = optExpr.getConstraints();
                 if (constraints != null) {
                     UKFKConstraints.JoinProperty joinProperty = constraints.getJoinProperty();
@@ -3639,13 +3650,15 @@ public class PlanFragmentBuilder {
             public final List<Expr> eqJoinConjuncts;
             public final List<Expr> otherJoin;
             public final List<Expr> conjuncts;
+            public final Expr asofJoinConjunct;
             public final Map<SlotId, Expr> commonSubOperatorMap;
 
             public JoinExprInfo(List<Expr> eqJoinConjuncts, List<Expr> otherJoin, List<Expr> conjuncts,
-                                Map<SlotId, Expr> commonSubOperatorMap) {
+                                Expr asofJoinConjunct, Map<SlotId, Expr> commonSubOperatorMap) {
                 this.eqJoinConjuncts = eqJoinConjuncts;
                 this.otherJoin = otherJoin;
                 this.conjuncts = conjuncts;
+                this.asofJoinConjunct = asofJoinConjunct;
                 this.commonSubOperatorMap = commonSubOperatorMap;
             }
 
@@ -3676,10 +3689,13 @@ public class PlanFragmentBuilder {
         private JoinExprInfo buildJoinExpr(OptExpression optExpr, ExecPlan context) {
             ScalarOperator predicate = optExpr.getOp().getPredicate();
             ScalarOperator onPredicate;
-            if (optExpr.getOp() instanceof PhysicalJoinOperator) {
-                onPredicate = ((PhysicalJoinOperator) optExpr.getOp()).getOnPredicate();
-            } else if (optExpr.getOp() instanceof PhysicalStreamJoinOperator) {
+            JoinOperator joinType;
+            if (optExpr.getOp() instanceof PhysicalJoinOperator op) {
+                onPredicate = op.getOnPredicate();
+                joinType = op.getJoinType();
+            } else if (optExpr.getOp() instanceof PhysicalStreamJoinOperator op) {
                 onPredicate = ((PhysicalStreamJoinOperator) optExpr.getOp()).getOnPredicate();
+                joinType = op.getJoinType();
             } else {
                 throw new IllegalStateException("not supported join " + optExpr.getOp());
             }
@@ -3713,6 +3729,24 @@ public class PlanFragmentBuilder {
 
             List<ScalarOperator> otherJoin = Utils.extractConjuncts(onPredicate);
             otherJoin.removeAll(eqOnPredicates);
+
+            Expr asofJoinConjunct = null;
+            if (joinType.isAsofJoin()) {
+                if (eqJoinConjuncts.isEmpty()) {
+                    throw new IllegalStateException("ASOF JOIN requires at least one equality condition");
+                }
+
+                ColumnRefSet leftColumns = optExpr.inputAt(0).getLogicalProperty().getOutputColumns();
+                ColumnRefSet rightColumns = optExpr.inputAt(1).getLogicalProperty().getOutputColumns();
+
+                ScalarOperator asofJoinPredicate = extractAndValidateAsofTemporalPredicate(otherJoin, leftColumns, rightColumns);
+                ScalarOperator transformedAsofPredicate = JoinHelper.applyCommutativeToPredicates(
+                        asofJoinPredicate, leftColumns, rightColumns);
+                asofJoinConjunct = ScalarOperatorToExpr.buildExecExpression(transformedAsofPredicate,
+                        new ScalarOperatorToExpr.FormatterContext(context.getColRefToExpr()));
+                otherJoin.remove(asofJoinPredicate);
+            }
+
             List<Expr> otherJoinConjuncts = otherJoin.stream().map(e -> ScalarOperatorToExpr.buildExecExpression(e,
                             new ScalarOperatorToExpr.FormatterContext(context.getColRefToExpr())))
                     .collect(Collectors.toList());
@@ -3727,7 +3761,7 @@ public class PlanFragmentBuilder {
                             new ScalarOperatorToExpr.FormatterContext(context.getColRefToExpr())))
                     .collect(Collectors.toList());
 
-            return new JoinExprInfo(eqJoinConjuncts, otherJoinConjuncts, conjuncts, commonSubExprMap);
+            return new JoinExprInfo(eqJoinConjuncts, otherJoinConjuncts, conjuncts, asofJoinConjunct, commonSubExprMap);
         }
 
         // TODO(murphy) consider state distribution
@@ -4229,5 +4263,70 @@ public class PlanFragmentBuilder {
                 parentFragment.mergeQueryDictExprs(fragment.getQueryGlobalDictExprs());
             }
         }
+
+        private ScalarOperator extractAndValidateAsofTemporalPredicate(List<ScalarOperator> otherJoin,
+                                                            ColumnRefSet leftColumns,
+                                                            ColumnRefSet rightColumns) {
+            List<ScalarOperator> candidates = new ArrayList<>();
+
+            for (ScalarOperator predicate : otherJoin) {
+                if (isValidAsofTemporalPredicate(predicate, leftColumns, rightColumns)) {
+                    candidates.add(predicate);
+                }
+            }
+
+            if (candidates.isEmpty()) {
+                throw new IllegalStateException("ASOF JOIN requires exactly one temporal inequality condition. found: 0");
+            }
+
+            if (candidates.size() > 1) {
+                throw new IllegalStateException(String.format(
+                        "ASOF JOIN requires exactly one temporal inequality condition, found %d: %s",
+                        candidates.size(), candidates));
+            }
+
+            ScalarOperator temporalPredicate = candidates.get(0);
+            for (ScalarOperator child : temporalPredicate.getChildren()) {
+                if (!child.isColumnRef()) {
+                    throw new IllegalStateException(String.format(
+                            "ASOF JOIN temporal condition operands must be column references, found: %s", child));
+                }
+
+                Type operandType = child.getType();
+                if (!operandType.isBigint() && !operandType.isDate() && !operandType.isDatetime()) {
+                    throw new IllegalStateException(String.format(
+                            "ASOF JOIN temporal condition operand must be BIGINT, DATE, or DATETIME in join ON clause, " +
+                                    "found: %s. Predicate: %s", operandType, temporalPredicate));
+                }
+            }
+
+            return candidates.get(0);
+        }
+
+        private boolean isValidAsofTemporalPredicate(ScalarOperator predicate,
+                                                     ColumnRefSet leftColumns,
+                                                     ColumnRefSet rightColumns) {
+            if (!(predicate instanceof BinaryPredicateOperator binaryPredicate)) {
+                return false;
+            }
+
+            if (!binaryPredicate.getBinaryType().isRange()) {
+                return false;
+            }
+
+            ColumnRefSet leftOperandColumns = binaryPredicate.getChild(0).getUsedColumns();
+            ColumnRefSet rightOperandColumns = binaryPredicate.getChild(1).getUsedColumns();
+
+            if (leftOperandColumns.isIntersect(leftColumns) && leftOperandColumns.isIntersect(rightColumns)) {
+                return false;
+            }
+
+            if (rightOperandColumns.isIntersect(leftColumns) && rightOperandColumns.isIntersect(rightColumns)) {
+                return false;
+            }
+
+            return true;
+        }
+
     }
 }

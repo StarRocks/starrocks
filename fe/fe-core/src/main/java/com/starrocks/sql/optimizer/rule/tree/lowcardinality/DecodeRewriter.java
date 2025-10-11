@@ -14,6 +14,7 @@
 
 package com.starrocks.sql.optimizer.rule.tree.lowcardinality;
 
+import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
@@ -47,6 +48,7 @@ import com.starrocks.sql.optimizer.operator.physical.PhysicalOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalTableFunctionOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalTopNOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalWindowOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
@@ -206,6 +208,67 @@ public class DecodeRewriter extends OptExpressionVisitor<OptExpression, ColumnRe
     }
 
     @Override
+    public OptExpression visitPhysicalAnalytic(OptExpression optExpression, ColumnRefSet fragmentUseDictExprs) {
+        PhysicalWindowOperator windowOp = optExpression.getOp().cast();
+        DecodeInfo info = context.operatorDecodeInfo.getOrDefault(windowOp, DecodeInfo.EMPTY);
+        ColumnRefSet inputStringRefs = new ColumnRefSet();
+        inputStringRefs.union(info.inputStringColumns);
+
+        List<Ordering> orderByList = windowOp.getOrderByElements().stream()
+                .map(ord -> {
+                    ColumnRefOperator c = ord.getColumnRef();
+                    ColumnRefOperator newColRef =
+                            inputStringRefs.contains(c) ? context.stringRefToDictRefMap.getOrDefault(c, c) : c;
+                    return new Ordering(newColRef, ord.isAscending(), ord.isNullsFirst());
+                })
+                .collect(Collectors.toList());
+
+        List<ScalarOperator> partitions = windowOp.getPartitionExpressions().stream()
+                .map(p -> {
+                    Preconditions.checkArgument(p.isColumnRef());
+                    ColumnRefOperator c = p.cast();
+                    return inputStringRefs.contains(c) ? context.stringRefToDictRefMap.getOrDefault(c, c) : c;
+                })
+                .collect(Collectors.toList());
+
+        Map<ColumnRefOperator, CallOperator> analyticFunctions = Maps.newLinkedHashMap();
+        for (ColumnRefOperator analyticRef : windowOp.getAnalyticCall().keySet()) {
+            CallOperator analyticFn = windowOp.getAnalyticCall().get(analyticRef);
+            if (!context.stringExprToDictExprMap.containsKey(analyticFn)) {
+                analyticFunctions.put(analyticRef, analyticFn);
+                continue;
+            }
+
+            // propagate low-cardinality encoded columns
+            if (analyticFn.getType().isStringType() || analyticFn.getType().isStringArrayType()) {
+                ColumnRefOperator newAnalyticRef = context.stringRefToDictRefMap.getOrDefault(analyticRef, analyticRef);
+                analyticFunctions.put(newAnalyticRef, context.stringExprToDictExprMap.get(analyticFn).cast());
+                inputStringRefs.union(analyticRef.getId());
+            } else {
+                // for count and count(distinct), which return neither non-string types nor non-string-array types/
+                // not propagate low-cardinality encoded columns, however function evaluation adopt encoded columns.
+                analyticFunctions.put(analyticRef, context.stringExprToDictExprMap.get(analyticFn).cast());
+            }
+        }
+
+        ScalarOperator predicate = rewritePredicate(windowOp.getPredicate(), inputStringRefs);
+        Projection projection = rewriteProjection(windowOp.getProjection(), inputStringRefs);
+        PhysicalWindowOperator op = new PhysicalWindowOperator(
+                analyticFunctions,
+                partitions,
+                orderByList,
+                windowOp.getAnalyticWindow(),
+                windowOp.getEnforceOrderBy(),
+                windowOp.isUseHashBasedPartition(),
+                windowOp.isSkewed(),
+                windowOp.isInputIsBinary(),
+                windowOp.getLimit(),
+                predicate,
+                projection);
+        return rewriteOptExpression(optExpression, op, info.outputStringColumns);
+    }
+
+    @Override
     public OptExpression visitPhysicalDistribution(OptExpression optExpression, ColumnRefSet fragmentUseDictExprs) {
         PhysicalDistributionOperator exchange = optExpression.getOp().cast();
         if (!context.operatorDecodeInfo.containsKey(exchange)) {
@@ -343,6 +406,7 @@ public class DecodeRewriter extends OptExpressionVisitor<OptExpression, ColumnRe
             function = (TableFunction) Expr.getBuiltinFunction(FunctionSet.UNNEST,
                     fnInputs.stream().map(ScalarOperator::getType).toArray(Type[]::new), function.getArgNames(),
                     Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
+            function.setIsLeftJoin(tableFunc.getFn().isLeftJoin());
         }
 
         ScalarOperator predicate = rewritePredicate(tableFunc.getPredicate(), inputStringRefs);

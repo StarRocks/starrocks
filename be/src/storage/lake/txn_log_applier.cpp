@@ -219,14 +219,12 @@ public:
                 const auto& op_write = log->op_write();
                 if (is_column_mode_partial_update(op_write)) {
                     RETURN_IF_ERROR(_tablet.update_mgr()->publish_column_mode_partial_update(
-                            op_write, log->txn_id(), _metadata, &_tablet, &_builder, _base_version));
+                            op_write, log->txn_id(), _metadata, &_tablet, _index_entry, &_builder, _base_version));
                 } else {
                     RETURN_IF_ERROR(_tablet.update_mgr()->publish_primary_key_tablet(op_write, log->txn_id(), _metadata,
                                                                                      &_tablet, _index_entry, &_builder,
                                                                                      _base_version, true));
                 }
-                _metadata->set_next_rowset_id(_metadata->next_rowset_id() +
-                                              std::max(1, op_write.rowset().segments_size()));
             }
         }
         _builder.set_final_rowset();
@@ -266,8 +264,8 @@ private:
     bool need_recover(const Status& st) { return _builder.recover_flag() != RecoverFlag::OK; }
     bool need_re_publish(const Status& st) { return _builder.recover_flag() == RecoverFlag::RECOVER_WITH_PUBLISH; }
     bool is_column_mode_partial_update(const TxnLogPB_OpWrite& op_write) const {
-        // TODO support COLUMN_UPSERT_MODE
-        return op_write.txn_meta().partial_update_mode() == PartialUpdateMode::COLUMN_UPDATE_MODE;
+        auto mode = op_write.txn_meta().partial_update_mode();
+        return mode == PartialUpdateMode::COLUMN_UPDATE_MODE || mode == PartialUpdateMode::COLUMN_UPSERT_MODE;
     }
 
     Status check_and_recover(const std::function<Status()>& publish_func) {
@@ -321,7 +319,7 @@ private:
         RETURN_IF_ERROR(prepare_primary_index());
         if (is_column_mode_partial_update(op_write)) {
             return _tablet.update_mgr()->publish_column_mode_partial_update(op_write, txn_id, _metadata, &_tablet,
-                                                                            &_builder, _base_version);
+                                                                            _index_entry, &_builder, _base_version);
         } else {
             return _tablet.update_mgr()->publish_primary_key_tablet(op_write, txn_id, _metadata, &_tablet, _index_entry,
                                                                     &_builder, _base_version);
@@ -392,10 +390,10 @@ private:
                              << ", base version: " << txn_meta.visible_version() << ", new version: " << _new_version;
                 return Status::Corruption("mismatched snapshot version and new version");
             }
-        } else if (txn_meta.snapshot_version() - txn_meta.data_version() + txn_meta.visible_version() != _new_version) {
+        } else if (txn_meta.snapshot_version() - txn_meta.data_version() + _base_version != _new_version) {
             LOG(WARNING) << "Fail to apply replication log, mismatched version, snapshot version: "
                          << txn_meta.snapshot_version() << ", data version: " << txn_meta.data_version()
-                         << ", old version: " << txn_meta.visible_version() << ", new version: " << _new_version;
+                         << ", base version: " << _base_version << ", new version: " << _new_version;
             return Status::Corruption("mismatched version");
         }
 
@@ -787,10 +785,10 @@ private:
                              << ", base version: " << txn_meta.visible_version() << ", new version: " << _new_version;
                 return Status::Corruption("mismatched snapshot version and new version");
             }
-        } else if (txn_meta.snapshot_version() - txn_meta.data_version() + txn_meta.visible_version() != _new_version) {
+        } else if (txn_meta.snapshot_version() - txn_meta.data_version() + _metadata->version() != _new_version) {
             LOG(WARNING) << "Fail to apply replication log, mismatched version, snapshot version: "
                          << txn_meta.snapshot_version() << ", data version: " << txn_meta.data_version()
-                         << ", old version: " << txn_meta.visible_version() << ", new version: " << _new_version;
+                         << ", base version: " << _metadata->version() << ", new version: " << _new_version;
             return Status::Corruption("mismatched version");
         }
 

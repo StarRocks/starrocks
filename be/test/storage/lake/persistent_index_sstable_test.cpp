@@ -31,6 +31,7 @@
 #include "storage/sstable/table.h"
 #include "storage/sstable/table_builder.h"
 #include "testutil/assert.h"
+#include "util/lru_cache.h"
 #include "util/phmap/btree.h"
 
 namespace starrocks::lake {
@@ -480,7 +481,6 @@ TEST_F(PersistentIndexSstableTest, test_persistent_index_sstable_stream_builder)
 
     // Test initial state
     ASSERT_EQ(0, builder->num_entries());
-    ASSERT_OK(builder->status());
     ASSERT_FALSE(builder->file_path().empty());
 
     // Add keys in order
@@ -493,7 +493,6 @@ TEST_F(PersistentIndexSstableTest, test_persistent_index_sstable_stream_builder)
 
     // Check state after adding keys
     ASSERT_EQ(N, builder->num_entries());
-    ASSERT_OK(builder->status());
 
     // 2. Finish building
     uint64_t file_size = 0;
@@ -580,6 +579,40 @@ TEST_F(PersistentIndexSstableTest, test_stream_builder_error_handling) {
 
     // Adding after finish should fail
     ASSERT_ERROR(builder->add(Slice("key3")));
+}
+
+TEST_F(PersistentIndexSstableTest, test_table_builder_out_of_order_keys) {
+    sstable::Options options;
+    const std::string filename = "test_out_of_order.sst";
+    ASSIGN_OR_ABORT(auto file, fs::new_writable_file(lake::join_path(kTestDir, filename)));
+    sstable::TableBuilder builder(options, file.get());
+
+    // Add first key
+    std::string key1 = "test_key_0000000000000002";
+    IndexValue val1(2);
+    ASSERT_OK(builder.Add(Slice(key1), Slice(val1.v, 8)));
+
+    // Try to add a key that is lexicographically smaller than the previous key
+    // This should fail due to out-of-order constraint
+    std::string key2 = "test_key_0000000000000001";
+    IndexValue val2(1);
+    ASSERT_ERROR(builder.Add(Slice(key2), Slice(val2.v, 8)));
+
+    // Add another key in correct order should work
+    std::string key3 = "test_key_0000000000000003";
+    IndexValue val3(3);
+    ASSERT_OK(builder.Add(Slice(key3), Slice(val3.v, 8)));
+
+    // Try to add same key again - should fail
+    ASSERT_ERROR(builder.Add(Slice(key3), Slice(val3.v, 8)));
+
+    // Add key with same prefix but lexicographically smaller - should fail
+    std::string key4 = "test_key_0000000000000002A";
+    IndexValue val4(4);
+    ASSERT_ERROR(builder.Add(Slice(key4), Slice(val4.v, 8)));
+
+    // Builder should still be able to finish properly after error
+    builder.Abandon();
 }
 
 } // namespace starrocks::lake

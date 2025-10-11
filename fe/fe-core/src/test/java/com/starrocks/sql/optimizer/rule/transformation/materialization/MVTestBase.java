@@ -38,14 +38,17 @@ import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.pseudocluster.PseudoCluster;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.StmtExecutor;
+import com.starrocks.scheduler.Constants;
 import com.starrocks.scheduler.ExecuteOption;
 import com.starrocks.scheduler.MVTaskRunProcessor;
 import com.starrocks.scheduler.MvTaskRunContext;
+import com.starrocks.scheduler.SubmitResult;
 import com.starrocks.scheduler.Task;
 import com.starrocks.scheduler.TaskBuilder;
 import com.starrocks.scheduler.TaskManager;
 import com.starrocks.scheduler.TaskRun;
 import com.starrocks.scheduler.TaskRunBuilder;
+import com.starrocks.scheduler.TaskRunManager;
 import com.starrocks.scheduler.TaskRunProcessor;
 import com.starrocks.scheduler.mv.BaseTableSnapshotInfo;
 import com.starrocks.scheduler.mv.MVPCTBasedRefreshProcessor;
@@ -94,12 +97,14 @@ import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.io.TempDir;
 
 import java.io.File;
+import java.io.IOException;
 import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.TimeUnit;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
@@ -454,6 +459,17 @@ public abstract class MVTestBase extends StarRocksTestBase {
         return result;
     }
 
+    protected static void executeTaskRun(TaskRun taskRun) throws Exception {
+        // ensure taskRun is initialized
+        taskRun.setStatus(null);
+        TaskManager taskManager = GlobalStateMgr.getCurrentState().getTaskManager();
+        TaskRunManager taskRunManager = taskManager.getTaskRunManager();
+        SubmitResult result = taskRunManager.submitTaskRun(taskRun);
+        Assertions.assertTrue(result.getStatus().equals(SubmitResult.SubmitStatus.SUBMITTED));
+        Constants.TaskRunState state = result.getFuture().get(300000, TimeUnit.MILLISECONDS);
+        Assertions.assertTrue(state.isFinishState());
+    }
+
     protected static void initAndExecuteTaskRun(TaskRun taskRun) throws Exception {
         taskRun.initStatus(UUIDUtil.genUUID().toString(), System.currentTimeMillis());
         taskRun.executeTaskRun();
@@ -798,5 +814,14 @@ public abstract class MVTestBase extends StarRocksTestBase {
 
     public static void enableMVRewriteConsiderDataLayout() {
         Config.mv_rewrite_consider_data_layout_mode = "enable";
+    }
+
+    public static File newFolder(File root, String... subDirs) throws IOException {
+        String subFolder = String.join("/", subDirs);
+        File result = new File(root, subFolder);
+        if (!result.mkdirs()) {
+            throw new IOException("Couldn't create folders " + root);
+        }
+        return result;
     }
 }

@@ -45,16 +45,10 @@ import com.starrocks.authentication.SecurityIntegration;
 import com.starrocks.authentication.UserAuthenticationInfo;
 import com.starrocks.authentication.UserIdentityUtils;
 import com.starrocks.authorization.AccessDeniedException;
-import com.starrocks.authorization.ActionSet;
 import com.starrocks.authorization.AuthorizationMgr;
-import com.starrocks.authorization.CatalogPEntryObject;
-import com.starrocks.authorization.DbPEntryObject;
 import com.starrocks.authorization.ObjectType;
-import com.starrocks.authorization.PrivilegeBuiltinConstants;
-import com.starrocks.authorization.PrivilegeEntry;
-import com.starrocks.authorization.PrivilegeException;
 import com.starrocks.authorization.PrivilegeType;
-import com.starrocks.authorization.TablePEntryObject;
+import com.starrocks.authorization.ShowGrantsExecutor;
 import com.starrocks.backup.AbstractJob;
 import com.starrocks.backup.BackupJob;
 import com.starrocks.backup.Repository;
@@ -149,7 +143,6 @@ import com.starrocks.server.WarehouseManager;
 import com.starrocks.service.ExecuteEnv;
 import com.starrocks.service.InformationSchemaDataSource;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
-import com.starrocks.sql.analyzer.AstToSQLBuilder;
 import com.starrocks.sql.analyzer.AstToStringBuilder;
 import com.starrocks.sql.analyzer.Authorizer;
 import com.starrocks.sql.analyzer.SemanticException;
@@ -159,9 +152,7 @@ import com.starrocks.sql.ast.AdminShowReplicaStatusStmt;
 import com.starrocks.sql.ast.AstVisitorExtendInterface;
 import com.starrocks.sql.ast.DescStorageVolumeStmt;
 import com.starrocks.sql.ast.DescribeStmt;
-import com.starrocks.sql.ast.GrantPrivilegeStmt;
-import com.starrocks.sql.ast.GrantRevokeClause;
-import com.starrocks.sql.ast.GrantType;
+import com.starrocks.sql.ast.EnhancedShowStmt;
 import com.starrocks.sql.ast.HelpStmt;
 import com.starrocks.sql.ast.ImportColumnDesc;
 import com.starrocks.sql.ast.PartitionNames;
@@ -2059,120 +2050,8 @@ public class ShowExecutor {
 
         @Override
         public ShowResultSet visitShowGrantsStatement(ShowGrantsStmt statement, ConnectContext context) {
-            AuthorizationMgr authorizationManager = GlobalStateMgr.getCurrentState().getAuthorizationMgr();
-            try {
-                List<List<String>> infos = new ArrayList<>();
-                if (statement.getGrantType().equals(GrantType.ROLE)) {
-                    List<String> granteeRole = authorizationManager.getGranteeRoleDetailsForRole(statement.getGroupOrRole());
-                    if (granteeRole != null) {
-                        infos.add(granteeRole);
-                    }
-
-                    Map<ObjectType, List<PrivilegeEntry>> typeToPrivilegeEntryList =
-                            authorizationManager.getTypeToPrivilegeEntryListByRole(statement.getGroupOrRole());
-                    infos.addAll(privilegeToRowString(authorizationManager,
-                            new GrantRevokeClause(null, statement.getGroupOrRole()), typeToPrivilegeEntryList));
-                } else {
-                    UserRef user = statement.getUser();
-                    UserIdentity userIdentity = new UserIdentity(user.getUser(), user.getHost(), user.isDomain());
-                    List<String> granteeRole = authorizationManager.getGranteeRoleDetailsForUser(userIdentity);
-                    if (granteeRole != null) {
-                        infos.add(granteeRole);
-                    }
-
-                    if (!userIdentity.isEphemeral()) {
-                        Map<ObjectType, List<PrivilegeEntry>> typeToPrivilegeEntryList =
-                                authorizationManager.getTypeToPrivilegeEntryListByUser(userIdentity);
-                        infos.addAll(privilegeToRowString(authorizationManager,
-                                new GrantRevokeClause(statement.getUser(), null), typeToPrivilegeEntryList));
-                    }
-                }
-                return new ShowResultSet(showResultMetaFactory.getMetadata(statement), infos);
-            } catch (PrivilegeException e) {
-                throw new SemanticException(e.getMessage());
-            }
-        }
-
-        private List<List<String>> privilegeToRowString(AuthorizationMgr authorizationManager, GrantRevokeClause userOrRoleName,
-                                                        Map<ObjectType, List<PrivilegeEntry>> typeToPrivilegeEntryList)
-                throws PrivilegeException {
-            List<List<String>> infos = new ArrayList<>();
-            for (Map.Entry<ObjectType, List<PrivilegeEntry>> typeToPrivilegeEntry
-                    : typeToPrivilegeEntryList.entrySet()) {
-                for (PrivilegeEntry privilegeEntry : typeToPrivilegeEntry.getValue()) {
-                    ObjectType objectType = typeToPrivilegeEntry.getKey();
-                    String catalogName;
-                    try {
-                        catalogName = getCatalogNameFromPEntry(objectType, privilegeEntry);
-                    } catch (MetaNotFoundException e) {
-                        // ignore this entry
-                        continue;
-                    }
-                    List<String> info = new ArrayList<>();
-                    info.add(userOrRoleName.getRoleName() != null ?
-                            userOrRoleName.getRoleName() : userOrRoleName.getUser().toString());
-                    info.add(catalogName);
-
-                    GrantPrivilegeStmt grantPrivilegeStmt = new GrantPrivilegeStmt(new ArrayList<>(), objectType.name(),
-                            userOrRoleName, null, privilegeEntry.isWithGrantOption());
-
-                    grantPrivilegeStmt.setObjectType(objectType);
-                    ActionSet actionSet = privilegeEntry.getActionSet();
-                    List<PrivilegeType> privList = authorizationManager.analyzeActionSet(objectType, actionSet);
-                    grantPrivilegeStmt.setPrivilegeTypes(privList);
-                    grantPrivilegeStmt.setObjectList(Lists.newArrayList(privilegeEntry.getObject()));
-
-                    try {
-                        info.add(AstToSQLBuilder.toSQL(grantPrivilegeStmt));
-                        infos.add(info);
-                    } catch (com.starrocks.sql.common.MetaNotFoundException e) {
-                        //Ignore the case of MetaNotFound in the show statement, such as metadata being deleted
-                    }
-                }
-            }
-
-            return infos;
-        }
-
-        private String getCatalogNameFromPEntry(ObjectType objectType, PrivilegeEntry privilegeEntry)
-                throws MetaNotFoundException {
-            if (objectType.equals(ObjectType.CATALOG)) {
-                CatalogPEntryObject catalogPEntryObject =
-                        (CatalogPEntryObject) privilegeEntry.getObject();
-                if (catalogPEntryObject.getId() == PrivilegeBuiltinConstants.ALL_CATALOGS_ID) {
-                    return null;
-                } else {
-                    return getCatalogNameById(catalogPEntryObject.getId());
-                }
-            } else if (objectType.equals(ObjectType.DATABASE)) {
-                DbPEntryObject dbPEntryObject = (DbPEntryObject) privilegeEntry.getObject();
-                if (dbPEntryObject.getCatalogId() == PrivilegeBuiltinConstants.ALL_CATALOGS_ID) {
-                    return null;
-                }
-                return getCatalogNameById(dbPEntryObject.getCatalogId());
-            } else if (objectType.equals(ObjectType.TABLE)) {
-                TablePEntryObject tablePEntryObject = (TablePEntryObject) privilegeEntry.getObject();
-                if (tablePEntryObject.getCatalogId() == PrivilegeBuiltinConstants.ALL_CATALOGS_ID) {
-                    return null;
-                }
-                return getCatalogNameById(tablePEntryObject.getCatalogId());
-            } else {
-                return InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME;
-            }
-        }
-
-        private String getCatalogNameById(long catalogId) throws MetaNotFoundException {
-            if (CatalogMgr.isInternalCatalog(catalogId)) {
-                return InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME;
-            }
-
-            CatalogMgr catalogMgr = GlobalStateMgr.getCurrentState().getCatalogMgr();
-            Optional<Catalog> catalogOptional = catalogMgr.getCatalogById(catalogId);
-            if (!catalogOptional.isPresent()) {
-                throw new MetaNotFoundException("cannot find catalog");
-            }
-
-            return catalogOptional.get().getName();
+            ShowGrantsExecutor executor = new ShowGrantsExecutor();
+            return executor.execute(statement, context, showResultMetaFactory.getMetadata(statement));
         }
 
         @Override
@@ -3058,7 +2937,11 @@ public class ShowExecutor {
         private List<List<String>> doPredicate(ShowStmt showStmt,
                                                ShowResultSetMetaData showResultSetMetaData,
                                                List<List<String>> rows) {
-            Predicate predicate = showStmt.getPredicate();
+            if (!(showStmt instanceof EnhancedShowStmt sortedShowStmt)) {
+                return rows;
+            }
+
+            Predicate predicate = sortedShowStmt.getPredicate();
             if (predicate == null) {
                 return rows;
             }
