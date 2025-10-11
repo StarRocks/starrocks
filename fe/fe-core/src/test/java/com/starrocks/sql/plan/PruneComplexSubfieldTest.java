@@ -677,8 +677,6 @@ public class PruneComplexSubfieldTest extends PlanTestNoneDBBase {
             assertContains(plan, "  0:OlapScanNode\n"
                     + "     table: pc0, rollup: pc0\n"
                     + "     preAggregation: on\n"
-                    + "     Predicates: array_length[([]); args: INVALID_TYPE; result: INT; args nullable: true; result "
-                    + "nullable: true] IS NOT NULL\n"
                     + "     partitionsRatio=0/1, tabletsRatio=0/0\n"
                     + "     tabletList=\n"
                     + "     actualRows=0, avgRowSize=1.0\n"
@@ -692,8 +690,6 @@ public class PruneComplexSubfieldTest extends PlanTestNoneDBBase {
             assertContains(plan, "  0:OlapScanNode\n"
                     + "     table: sc0, rollup: sc0\n"
                     + "     preAggregation: on\n"
-                    + "     Predicates: array_length[([1,2,3]); args: INVALID_TYPE; result: INT; args nullable: true; result "
-                    + "nullable: true] IS NOT NULL\n"
                     + "     partitionsRatio=0/1, tabletsRatio=0/0\n"
                     + "     tabletList=\n"
                     + "     actualRows=0, avgRowSize=3.0\n"
@@ -711,8 +707,6 @@ public class PruneComplexSubfieldTest extends PlanTestNoneDBBase {
             assertContains(plan, "  0:OlapScanNode\n" +
                     "     table: pc0, rollup: pc0\n" +
                     "     preAggregation: on\n" +
-                    "     Predicates: array_length[([]); args: INVALID_TYPE; result: INT; args nullable: true; result nullable:"
-                    + " true] IS NOT NULL\n" +
                     "     partitionsRatio=0/1, tabletsRatio=0/0\n" +
                     "     tabletList=\n" +
                     "     actualRows=0, avgRowSize=3.0\n" +
@@ -734,7 +728,7 @@ public class PruneComplexSubfieldTest extends PlanTestNoneDBBase {
         String sql = "select [1, 2, 3] is null from pc0 t1 right join sc0 t2 on t1.v1 = t2.v1;";
         String plan = getFragmentPlan(sql);
         assertContains(plan, "5:Project\n" +
-                "  |  <slot 15> : array_length([1,2,3]) IS NULL");
+                "  |  <slot 15> : FALSE");
 
         sql = "select [1, 2, 3][1] is null from pc0 t1 right join sc0 t2 on t1.v1 = t2.v1;";
         plan = getFragmentPlan(sql);

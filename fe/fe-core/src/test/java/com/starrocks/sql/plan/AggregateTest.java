@@ -1680,7 +1680,7 @@ public class AggregateTest extends PlanTestBase {
                 "  |  group by: \n" +
                 "  |  \n" +
                 "  1:Project\n" +
-                "  |  <slot 4> : arrays_overlap(3: v3, CAST([1] AS ARRAY<BIGINT>))\n" +
+                "  |  <slot 4> : arrays_overlap(3: v3, [1])\n" +
                 "  |  \n" +
                 "  0:OlapScanNode");
     }

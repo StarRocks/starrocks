@@ -385,9 +385,11 @@ public class VectorIndexTest extends PlanTestBase {
                 "  |  5 <-> [12: cast, DOUBLE, true] + 1.0\n" +
                 "  |  6 <-> [12: cast, DOUBLE, true] + 2.0\n" +
                 "  |  7 <-> cast([11: approx_cosine_similarity, FLOAT, true] as VARCHAR(65533))\n" +
-                "  |  8 <-> cast(approx_cosine_similarity[(cast([1.1,2.2,3.3,4.4,5.5] as ARRAY<FLOAT>), [3: c2, ARRAY<FLOAT>, true]); args: INVALID_TYPE,INVALID_TYPE; result: FLOAT; args nullable: true; result nullable: true] as DOUBLE) + 2.0\n" +
+                "  |  8 <-> cast(approx_cosine_similarity[([1.1,2.2,3.3,4.4,5.5], [3: c2, ARRAY<FLOAT>, true]); " +
+                "args: INVALID_TYPE,INVALID_TYPE; result: FLOAT; args nullable: true; result nullable: true] as DOUBLE) + 2.0\n" +
                 "  |  common expressions:\n" +
-                "  |  11 <-> approx_cosine_similarity[(cast([1.1,2.2,3.3,4.4,5.5] as ARRAY<FLOAT>), [2: c1, ARRAY<FLOAT>, false]); args: INVALID_TYPE,INVALID_TYPE; result: FLOAT; args nullable: true; result nullable: true]\n" +
+                "  |  11 <-> approx_cosine_similarity[([1.1,2.2,3.3,4.4,5.5], [2: c1, ARRAY<FLOAT>, false]); " +
+                "args: INVALID_TYPE,INVALID_TYPE; result: FLOAT; args nullable: true; result nullable: true]\n" +
                 "  |  12 <-> cast([11: approx_cosine_similarity, FLOAT, true] as DOUBLE)\n" +
                 "  |  limit: 10\n" +
                 "  |  cardinality: 1\n" +
@@ -529,7 +531,8 @@ public class VectorIndexTest extends PlanTestBase {
                 "  1:Project\n" +
                 "  |  output columns:\n" +
                 "  |  2 <-> [2: c1, ARRAY<FLOAT>, false]\n" +
-                "  |  4 <-> approx_l2_distance[(cast([1.1,2.2,3.3,4.4] as ARRAY<FLOAT>), [2: c1, ARRAY<FLOAT>, false]); args: INVALID_TYPE,INVALID_TYPE; result: FLOAT; args nullable: true; result nullable: true]\n" +
+                "  |  4 <-> approx_l2_distance[([1.1,2.2,3.3,4.4], [2: c1, ARRAY<FLOAT>, false]); " +
+                "args: INVALID_TYPE,INVALID_TYPE; result: FLOAT; args nullable: true; result nullable: true]\n" +
                 "  |  cardinality: 1\n" +
                 "  |  \n" +
                 "  0:OlapScanNode\n" +
