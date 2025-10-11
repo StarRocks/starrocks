@@ -959,6 +959,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public static final String ENABLE_FULL_SORT_USE_GERMAN_STRING = "enable_full_sort_use_german_string";
 
+    public static final String ENABLE_PRE_AGG_TOP_N_PUSH_DOWN = "enable_pre_agg_top_n_push_down";
+
     public static final List<String> DEPRECATED_VARIABLES = ImmutableList.<String>builder()
             .add(CODEGEN_LEVEL)
             .add(MAX_EXECUTION_TIME)
@@ -1964,6 +1966,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VarAttr(name = ENABLE_FULL_SORT_USE_GERMAN_STRING)
     private boolean enableFullSortUseGermanString = true;
+
+    @VarAttr(name = ENABLE_PRE_AGG_TOP_N_PUSH_DOWN, flag = VariableMgr.INVISIBLE)
+    private boolean enablePreAggTopNPushDown = true;
 
     public int getCboPruneJsonSubfieldDepth() {
         return cboPruneJsonSubfieldDepth;
@@ -5335,6 +5340,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public boolean isEnableFullSortUseGermanString() {
         return this.enableFullSortUseGermanString;
     }
+    public void setEnablePreAggTopNPushDown(boolean enablePreAggTopNPushDown) {
+        this.enablePreAggTopNPushDown = enablePreAggTopNPushDown;
+    }
+
+    public boolean isEnablePreAggTopNPushDown() {
+        return enablePreAggTopNPushDown;
+    }
+
     // Serialize to thrift object
     // used for rest api
     public TQueryOptions toThrift() {

@@ -63,6 +63,10 @@ public class PhysicalHashAggregateOperator extends PhysicalOperator {
     // flag for this aggregate operator's parent had been pruned
     private boolean mergedLocalAgg;
 
+    // Only set when partial topN is pushed above local aggregation. In this case streaming aggregation has to be
+    // forced to pre-aggregate because the data has to be fully reduced before evaluating the topN.
+    private boolean topNLocalAgg;
+
     private boolean useSortAgg = false;
 
     private boolean usePerBucketOptmize = false;
@@ -104,6 +108,7 @@ public class PhysicalHashAggregateOperator extends PhysicalOperator {
                 aggregateOperator.getPredicate(),
                 aggregateOperator.getProjection());
         this.mergedLocalAgg = aggregateOperator.mergedLocalAgg;
+        this.topNLocalAgg = aggregateOperator.topNLocalAgg;
         this.useSortAgg = aggregateOperator.useSortAgg;
         this.usePerBucketOptmize = aggregateOperator.usePerBucketOptmize;
         this.withoutColocateRequirement = aggregateOperator.withoutColocateRequirement;
@@ -141,6 +146,14 @@ public class PhysicalHashAggregateOperator extends PhysicalOperator {
         this.mergedLocalAgg = mergedLocalAgg;
     }
 
+    public boolean isTopNLocalAgg() {
+        return topNLocalAgg;
+    }
+
+    public void setTopNLocalAgg(boolean topNLocalAgg) {
+        this.topNLocalAgg = topNLocalAgg;
+    }
+
     public List<ColumnRefOperator> getPartitionByColumns() {
         return partitionByColumns;
     }
@@ -166,7 +179,8 @@ public class PhysicalHashAggregateOperator extends PhysicalOperator {
 
     public String getNeededPreaggregationMode() {
         String mode = ConnectContext.get().getSessionVariable().getStreamingPreaggregationMode();
-        if (canUseStreamingPreAgg() && (type.isDistinctLocal() || hasRemovedDistinctFunc() || forcePreAggregation)) {
+        if (canUseStreamingPreAgg() && (type.isDistinctLocal() || hasRemovedDistinctFunc() || isTopNLocalAgg() ||
+                forcePreAggregation)) {
             mode = SessionVariableConstants.FORCE_PREAGGREGATION;
         }
         return mode;
@@ -226,7 +240,7 @@ public class PhysicalHashAggregateOperator extends PhysicalOperator {
 
     @Override
     public int hashCode() {
-        return Objects.hash(super.hashCode(), type, groupBys, aggregations.keySet());
+        return Objects.hash(super.hashCode(), type, groupBys, aggregations.keySet(), topNLocalAgg);
     }
 
     @Override
@@ -241,7 +255,7 @@ public class PhysicalHashAggregateOperator extends PhysicalOperator {
 
         PhysicalHashAggregateOperator that = (PhysicalHashAggregateOperator) o;
         return type == that.type && Objects.equals(aggregations, that.aggregations) &&
-                Objects.equals(groupBys, that.groupBys);
+                Objects.equals(groupBys, that.groupBys) && topNLocalAgg == that.topNLocalAgg;
     }
 
     @Override
