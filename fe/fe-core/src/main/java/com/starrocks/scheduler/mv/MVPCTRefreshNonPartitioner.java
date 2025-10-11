@@ -27,7 +27,6 @@ import com.starrocks.sql.common.PCellNone;
 import com.starrocks.sql.common.PCellSortedSet;
 import com.starrocks.sql.common.PCellWithName;
 
-import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -94,18 +93,9 @@ public final class MVPCTRefreshNonPartitioner extends MVPCTRefreshPartitioner {
     }
 
     @Override
-    public void filterPartitionByRefreshNumber(PCellSortedSet mvPartitionsToRefresh) {
+    public void filterPartitionByRefreshNumber(PCellSortedSet mvPartitionsToRefresh,
+                                               MaterializedView.PartitionRefreshStrategy partitionRefreshStrategy) {
         // do nothing
-    }
-
-    @Override
-    public void filterPartitionByAdaptiveRefreshNumber(PCellSortedSet mvPartitionsToRefresh) {
-        // do nothing
-    }
-
-    @Override
-    protected int getAdaptivePartitionRefreshNumber(Iterator<PCellWithName> partitionNameIter) throws MVAdaptiveRefreshException {
-        return 0;
     }
 
     @Override

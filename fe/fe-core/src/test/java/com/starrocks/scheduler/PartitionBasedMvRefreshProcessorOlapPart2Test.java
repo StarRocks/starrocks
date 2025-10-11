@@ -418,8 +418,6 @@ public class PartitionBasedMvRefreshProcessorOlapPart2Test extends MVTestBase {
                     Database testDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
                     MaterializedView mv = ((MaterializedView) testDb.getTable(mvName));
                     TaskManager tm = GlobalStateMgr.getCurrentState().getTaskManager();
-                    long taskId = tm.getTask(TaskBuilder.getMvTaskName(mv.getId())).getId();
-                    TaskRunScheduler taskRunScheduler = tm.getTaskRunScheduler();
 
                     executeInsertSql(connectContext, "insert into tbl6 partition(p1) values('2022-01-02',2,10);");
                     executeInsertSql(connectContext, "insert into tbl6 partition(p2) values('2022-02-02',2,10);");
@@ -428,15 +426,12 @@ public class PartitionBasedMvRefreshProcessorOlapPart2Test extends MVTestBase {
                     taskRunProperties.put(TaskRun.FORCE, Boolean.toString(true));
                     Task task = TaskBuilder.buildMvTask(mv, testDb.getFullName());
                     TaskRun taskRun = TaskRunBuilder.newBuilder(task).build();
-                    initAndExecuteTaskRun(taskRun);
+                    executeTaskRun(taskRun);
+
                     TGetTasksParams params = new TGetTasksParams();
                     params.setTask_name(task.getName());
                     List<TaskRunStatus> statuses = tm.getMatchedTaskRunStatus(params);
-                    while (statuses.size() != 1) {
-                        statuses = tm.getMatchedTaskRunStatus(params);
-                        Thread.sleep(100);
-                    }
-                    Assertions.assertEquals(1, statuses.size());
+                    Assertions.assertEquals(2, statuses.size());
                     TaskRunStatus status = statuses.get(0);
                     // default priority for next refresh batch is Constants.TaskRunPriority.HIGHER.value()
                     Assertions.assertEquals(Constants.TaskRunPriority.HIGHER.value(), status.getPriority());
@@ -487,16 +482,13 @@ public class PartitionBasedMvRefreshProcessorOlapPart2Test extends MVTestBase {
                                 Task task = TaskBuilder.buildMvTask(mv, testDb.getFullName());
                                 ExecuteOption executeOption = new ExecuteOption(70, false, new HashMap<>());
                                 TaskRun taskRun = TaskRunBuilder.newBuilder(task).setExecuteOption(executeOption).build();
-                                initAndExecuteTaskRun(taskRun);
+                                executeTaskRun(taskRun);
+
                                 TGetTasksParams params = new TGetTasksParams();
                                 params.setTask_name(task.getName());
                                 TaskManager tm = GlobalStateMgr.getCurrentState().getTaskManager();
                                 List<TaskRunStatus> statuses = tm.getMatchedTaskRunStatus(params);
-                                while (statuses.size() != 1) {
-                                    statuses = tm.getMatchedTaskRunStatus(params);
-                                    Thread.sleep(100);
-                                }
-                                Assertions.assertEquals(1, statuses.size());
+                                Assertions.assertEquals(2, statuses.size());
                                 TaskRunStatus status = statuses.get(0);
                                 // the priority for next refresh batch is 70 which is specified in executeOption
                                 Assertions.assertEquals(70, status.getPriority());

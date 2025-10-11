@@ -1221,8 +1221,6 @@ public class MaterializedViewTest extends StarRocksTestBase {
 
     @Test
     public void testPartitionRefreshStrategy() {
-        Assertions.assertEquals(MaterializedView.PartitionRefreshStrategy.defaultValue(),
-                MaterializedView.PartitionRefreshStrategy.valueOf("STRICT"));
         String sql = "create materialized view test_mv1 " +
                 "DISTRIBUTED BY HASH(`k2`) BUCKETS 3 \n" +
                 "REFRESH MANUAL\n" +
@@ -1236,7 +1234,7 @@ public class MaterializedViewTest extends StarRocksTestBase {
             Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
             MaterializedView mv = ((MaterializedView) GlobalStateMgr.getCurrentState().getLocalMetastore()
                     .getTable(db.getFullName(), "test_mv1"));
-            Assertions.assertEquals(mv.getPartitionRefreshStrategy(), MaterializedView.PartitionRefreshStrategy.STRICT);
+            Assertions.assertEquals(mv.getPartitionRefreshStrategy(), MaterializedView.PartitionRefreshStrategy.ADAPTIVE);
         });
     }
 }
