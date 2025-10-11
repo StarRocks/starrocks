@@ -81,7 +81,66 @@ Avro、RCFile 和 SequenceFile 文件格式是通过 Java Native Interface（JNI
 
 ### 元数据
 
-Hive Catalog 对 Hive Metastore（HMS）和 AWS Glue 的支持基本重合，仅有 HMS 的自动增量更新功能不推荐使用。大多数情况下推荐使用默认配置。
+通过 Hive catalogs 执行对 Hive 数据的查询时，StarRocks 会缓存表的元数据，以减少频繁访问远端存储的成本。此机制在确保数据新鲜度的同时，通过异步刷新和过期策略来保证查询性能。
+
+### 缓存的元数据
+
+StarRocks 在查询期间将缓存以下元数据：
+
+- **表或分区级元数据**
+  - 内容：
+    - 表信息：数据库、表结构、列名和分区键
+    - 分区信息：分区列表和分区位置
+  - 影响：检测表是否存在（表是否被删除和/或重新创建）
+  - Catalog 属性：
+    - `enable_metastore_cache`：控制是否启用 metastore 缓存。默认值：`true`。
+    - `metastore_cache_refresh_interval_sec`：控制缓存元数据被视为新鲜的时间间隔。默认值：`60`。单位：秒。
+  - 位置：Metastore (HMS 或 Glue)
+
+- **分区名称列表**
+  - 内容：用于查找和修剪分区的分区名称列表。虽然分区名称列表已作为上述部分的分区信息收集，但在某些情况下有单独的配置来启用或禁用此功能。
+  - 影响：检测分区是否存在（是否有新分区或分区被删除和/或重新创建）
+  - Catalog 属性：
+    - `enable_cache_list_names`：控制是否启用分区名称列表缓存。默认值：`true`。
+    - `metastore_cache_refresh_interval_sec`：控制缓存元数据被视为新鲜的时间间隔。默认值：`60`。单位：秒。
+  - 位置：Metastore (HMS 或 Glue)
+
+- **文件级元数据**
+  - 内容：分区文件夹下的文件路径。
+  - 影响：将数据加载到现有分区。
+  - Catalog 属性：
+    - `enable_remote_file_cache`：控制是否启用远端存储中文件的元数据缓存。默认值：`true`。
+    - `remote_file_cache_refresh_interval_sec`：控制文件元数据被视为新鲜的时间间隔。默认值：`60`。单位：秒。
+    - `remote_file_cache_memory_ratio`：控制可用于文件元数据缓存的内存比例。默认值：`0.1`（10%）。
+  - 位置：远端存储 (HDFS 或 S3)
+
+### 异步更新策略
+
+以下 FE 配置项控制异步元数据更新策略：
+
+| 配置项                                                     | 默认值                              | 描述                                                         |
+| ---------------------------------------------------------- | ----------------------------------- | ------------------------------------------------------------ |
+| enable_background_refresh_connector_metadata               | v3.0 中为 `true`<br />v2.5 中为 `false` | 是否启用定期的元数据缓存刷新。启用后，StarRocks 会轮询 metastore，并刷新频繁访问的 external catalog 的缓存元数据，以感知数据变化。`true` 表示启用 Hive 元数据缓存刷新，`false` 表示禁用。此项是一个 [FE 动态参数](../administration/management/FE_configuration.md#configure-fe-dynamic-parameters)。可以使用 [ADMIN SET FRONTEND CONFIG](../sql-reference/sql-statements/cluster-management/config_vars/ADMIN_SET_CONFIG.md) 命令进行修改。 |
+| background_refresh_metadata_interval_millis                | `600000`（10 分钟）                 | 两次连续元数据缓存刷新的间隔。单位：毫秒。此项是一个 [FE 动态参数](../administration/management/FE_configuration.md#configure-fe-dynamic-parameters)。可以使用 [ADMIN SET FRONTEND CONFIG](../sql-reference/sql-statements/cluster-management/config_vars/ADMIN_SET_CONFIG.md) 命令进行修改。 |
+| background_refresh_metadata_time_secs_since_last_access_secs | `86400`（24 小时）                  | 元数据缓存刷新任务的过期时间。对于已访问的 external catalog，如果超过指定时间未被访问，StarRocks 将停止刷新其缓存元数据。对于未被访问的 external catalog，StarRocks 不会刷新其缓存元数据。单位：秒。此项是一个 [FE 动态参数](../administration/management/FE_configuration.md#configure-fe-dynamic-parameters)。可以使用 [ADMIN SET FRONTEND CONFIG](../sql-reference/sql-statements/cluster-management/config_vars/ADMIN_SET_CONFIG.md) 命令进行修改。 |
+
+### 元数据缓存行为
+
+本节使用默认行为来解释元数据在元数据更新和查询期间的行为。
+
+默认情况下，当查询一个表时，StarRocks 会缓存该表、分区和文件的元数据，并在接下来的 24 小时内保持活跃。在这 24 小时内，系统将确保缓存至少每 10 分钟刷新一次（注意，10 分钟是元数据刷新轮次的估计时间。如果有过多的 external table 待刷新元数据，整体元数据刷新间隔可能超过 10 分钟）。如果一个表超过 24 小时未被访问，StarRocks 将丢弃相关的元数据。换句话说，您在 24 小时内进行的任何查询，最坏情况下将使用 10 分钟前的元数据。
+
+![Metadata Behavior](../_assets/hive_metadata_behavior.png)
+
+具体来说：
+
+1. 假设第一个查询涉及表 `A` 的分区 `P1`。StarRocks 缓存表级元数据、分区名称列表和 `P1` 下的文件路径信息。缓存在查询执行时同步填充。
+2. 如果在缓存填充后 60 秒内提交第二个查询，并命中表 `A` 的分区 `P1`，StarRocks 将直接使用元数据缓存，此时 StarRocks 认为所有缓存的元数据都是新鲜的（`metastore_cache_refresh_interval_sec` 和 `remote_file_cache_refresh_interval_sec` 控制 StarRocks 认为元数据新鲜的时间窗口）。
+3. 如果在 90 秒后提交第三个查询，并命中表 `A` 的分区 `P1`，StarRocks 仍将直接使用元数据缓存来完成查询。然而，由于自上次元数据刷新以来已超过 60 秒，StarRocks 将认为元数据已过期。因此，StarRocks 将启动对过期元数据的异步刷新。异步刷新不会影响当前查询的结果，因为查询仍将使用过时的元数据。
+4. 由于表 `A` 的分区 `P1` 已被查询，预计在接下来的 24 小时内（由 `background_refresh_metadata_time_secs_since_last_access_secs` 控制），元数据将每 10 分钟（由 `background_refresh_metadata_interval_millis` 控制）刷新一次。元数据刷新轮次之间的实际间隔还取决于系统内的整体待刷新任务。
+5. 如果表 `A` 在 24 小时内未参与任何查询，StarRocks 将在 24 小时后删除其元数据缓存。
+
+### 最佳实践
 
 元数据获取的性能很大程度取决于用户的 HMS 或 HDFS NameNode 的性能。请综合考虑所有因素并根据测试结果做出判断。
 
@@ -158,6 +217,64 @@ StarRocks 从 v3.1.0 版本开始支持查询 Hive 视图。
 ## Iceberg Catalog
 
 ### 元数据
+
+通过 Iceberg catalogs 执行对 Iceberg 数据的查询时，StarRocks 会缓存表的元数据，以减少频繁访问远端存储的成本。此机制在确保数据新鲜度的同时，通过异步刷新和过期策略来保证查询性能。
+
+### 缓存的元数据
+
+StarRocks 在查询期间将缓存以下元数据：
+
+- **元数据指针缓存**
+  - 内容：元数据指针的 JSON 文件
+    - 快照 ID
+    - 清单列表的位置
+  - 影响：检测数据变化（如果发生数据变化，快照 ID 将更改。）
+  - Catalog 属性：
+    - `enable_iceberg_metadata_cache`：控制是否启用 Iceberg 元数据缓存。默认值：`true`。
+    - `iceberg_table_cache_refresh_interval_sec`：控制缓存元数据被视为新鲜的时间间隔。默认值：`60`。单位：秒。
+
+- **元数据缓存**
+  - 内容：
+    - 数据文件路径的清单
+    - 删除文件路径的清单
+    - 数据库
+    - 分区（用于物化视图重写）
+  - 影响：
+    - 不会影响查询的数据新鲜度，因为数据或删除文件的清单不能更改。
+    - 可能影响物化视图重写，导致查询错过物化视图。当快照 ID 刷新时，分区元数据将被删除。因此，新快照 ID 缺少分区元数据，导致错过物化视图重写。
+  - Catalog 属性：
+    - `enable_cache_list_names`：控制是否启用分区名称列表缓存。默认值：`true`。
+    - `metastore_cache_refresh_interval_sec`：控制缓存元数据被视为新鲜的时间间隔。默认值：`60`。单位：秒。
+    - `iceberg_data_file_cache_memory_usage_ratio`：控制可用于数据文件元数据缓存的内存比例。默认值：`0.1`（10%）。
+    - `iceberg_delete_file_cache_memory_usage_ratio`：控制可用于删除文件元数据缓存的内存比例。默认值：`0.1`（10%）。
+
+### 异步更新策略
+
+以下 FE 配置项控制异步元数据更新策略：
+
+| 配置项                                                     | 默认值                              | 描述                                                         |
+| ---------------------------------------------------------- | ----------------------------------- | ------------------------------------------------------------ |
+| enable_background_refresh_connector_metadata               | v3.0 中为 `true`<br />v2.5 中为 `false` | 是否启用定期的元数据缓存刷新。启用后，StarRocks 会轮询 metastore，并刷新频繁访问的 external catalog 的缓存元数据，以感知数据变化。`true` 表示启用 Hive 元数据缓存刷新，`false` 表示禁用。此项是一个 [FE 动态参数](../administration/management/FE_configuration.md#configure-fe-dynamic-parameters)。可以使用 [ADMIN SET FRONTEND CONFIG](../sql-reference/sql-statements/cluster-management/config_vars/ADMIN_SET_CONFIG.md) 命令进行修改。 |
+| background_refresh_metadata_interval_millis                | `600000`（10 分钟）                 | 两次连续元数据缓存刷新的间隔。单位：毫秒。此项是一个 [FE 动态参数](../administration/management/FE_configuration.md#configure-fe-dynamic-parameters)。可以使用 [ADMIN SET FRONTEND CONFIG](../sql-reference/sql-statements/cluster-management/config_vars/ADMIN_SET_CONFIG.md) 命令进行修改。 |
+| background_refresh_metadata_time_secs_since_last_access_secs | `86400`（24 小时）                  | 元数据缓存刷新任务的过期时间。对于已访问的 external catalog，如果超过指定时间未被访问，StarRocks 将停止刷新其缓存元数据。对于未被访问的 external catalog，StarRocks 不会刷新其缓存元数据。单位：秒。此项是一个 [FE 动态参数](../administration/management/FE_configuration.md#configure-fe-dynamic-parameters)。可以使用 [ADMIN SET FRONTEND CONFIG](../sql-reference/sql-statements/cluster-management/config_vars/ADMIN_SET_CONFIG.md) 命令进行修改。 |
+
+### 元数据缓存行为
+
+本节使用默认行为来解释元数据在元数据更新和查询期间的行为。
+
+默认情况下，当查询一个表时，StarRocks 会缓存该表的元数据，并在接下来的 24 小时内保持活跃。在这 24 小时内，系统将确保缓存至少每 10 分钟刷新一次（注意，10 分钟是元数据刷新轮次的估计时间。如果有过多的 external table 待刷新元数据，整体元数据刷新间隔可能超过 10 分钟）。如果一个表超过 24 小时未被访问，StarRocks 将丢弃相关的元数据。换句话说，您在 24 小时内进行的任何查询，最坏情况下将使用 10 分钟前的元数据。
+
+![Metadata Behavior](../_assets/iceberg_metadata_behavior.png)
+
+具体来说：
+
+1. 假设第一个查询涉及表 `A`。StarRocks 缓存其最新的快照和元数据。缓存在查询执行时同步填充。
+2. 如果在缓存填充后 60 秒内提交第二个查询，并命中表 `A`，StarRocks 将直接使用元数据缓存，此时 StarRocks 认为所有缓存的元数据都是新鲜的（`iceberg_table_cache_refresh_interval_sec` 控制 StarRocks 认为元数据新鲜的时间窗口）。
+3. 如果在 90 秒后提交第三个查询，并命中表 `A`，StarRocks 仍将直接使用元数据缓存来完成查询。然而，由于自上次元数据刷新以来已超过 60 秒，StarRocks 将认为元数据已过期。因此，StarRocks 将启动对过期元数据的异步刷新。异步刷新不会影响当前查询的结果，因为查询仍将使用过时的元数据。
+4. 由于表 `A` 已被查询，预计在接下来的 24 小时内（由 `background_refresh_metadata_time_secs_since_last_access_secs` 控制），元数据将每 10 分钟（由 `background_refresh_metadata_interval_millis` 控制）刷新一次。元数据刷新轮次之间的实际间隔还取决于系统内的整体待刷新任务。
+5. 如果表 `A` 在 24 小时内未参与任何查询，StarRocks 将在 24 小时后删除其元数据缓存。
+
+### 最佳实践
 
 Iceberg Catalog 支持 HMS、Glue 和 Tabular 作为其元数据服务。大多数情况下推荐使用默认配置。
 
