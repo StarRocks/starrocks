@@ -171,7 +171,18 @@ Status TabletReader::open(const TabletReaderParams& read_params) {
         split_morsel_queue->set_tablet_schema(_tablet_schema);
 
         while (true) {
-            auto split = split_morsel_queue->try_get().value();
+            auto split_status_or = split_morsel_queue->try_get();
+            if (UNLIKELY(!split_status_or.ok())) {
+                LOG(WARNING) << "failed to get split morsel: " << split_status_or.status()
+                             << ", query_id: " << print_id(read_params.runtime_state->query_id())
+                             << ", tablet_id: " << tablet_shared_ptr->tablet_id();
+                // clear split tasks, and fallback to non-split mode
+                _split_tasks.clear();
+                _need_split = false;
+                return init_collector(read_params);
+            }
+
+            auto split = std::move(split_status_or.value());
             if (split != nullptr) {
                 auto ctx = std::make_unique<pipeline::LakeSplitContext>();
 
