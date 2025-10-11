@@ -367,8 +367,9 @@ private:
                 key_columns.emplace_back(std::move(column));
             } else if (column_ptr->is_constant()) {
                 auto* const_column = ColumnHelper::as_raw_column<ConstColumn>(column_ptr);
-                const_column->data_column()->assign(chunk->num_rows(), 0);
-                key_columns.emplace_back(const_column->data_column());
+                auto mutable_data = const_column->mutable_data_column();
+                mutable_data->assign(chunk->num_rows(), 0);
+                key_columns.emplace_back(mutable_data);
             } else {
                 key_columns.emplace_back(std::move(column_ptr));
             }

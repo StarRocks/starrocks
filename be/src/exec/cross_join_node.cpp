@@ -160,14 +160,14 @@ void CrossJoinNode::_copy_joined_rows_with_index_base_probe(ChunkPtr& chunk, siz
                                                             size_t build_index) {
     for (size_t i = 0; i < _probe_column_count; i++) {
         SlotDescriptor* slot = _col_types[i];
-        ColumnPtr& dest_col = chunk->get_column_by_slot_id(slot->id());
+        auto dest_col = chunk->get_mutable_column_by_slot_id(slot->id());
         ColumnPtr& src_col = _probe_chunk->get_column_by_slot_id(slot->id());
         _copy_probe_rows_with_index_base_probe(dest_col, src_col, probe_index, row_count);
     }
 
     for (size_t i = 0; i < _build_column_count; i++) {
         SlotDescriptor* slot = _col_types[i + _probe_column_count];
-        ColumnPtr& dest_col = chunk->get_column_by_slot_id(slot->id());
+        auto dest_col = chunk->get_mutable_column_by_slot_id(slot->id());
         ColumnPtr& src_col = _build_chunk->get_column_by_slot_id(slot->id());
         _copy_build_rows_with_index_base_probe(dest_col, src_col, build_index, row_count);
     }
@@ -177,20 +177,20 @@ void CrossJoinNode::_copy_joined_rows_with_index_base_build(ChunkPtr& chunk, siz
                                                             size_t build_index) {
     for (size_t i = 0; i < _probe_column_count; i++) {
         SlotDescriptor* slot = _col_types[i];
-        ColumnPtr& dest_col = chunk->get_column_by_slot_id(slot->id());
+        auto dest_col = chunk->get_mutable_column_by_slot_id(slot->id());
         ColumnPtr& src_col = _probe_chunk->get_column_by_slot_id(slot->id());
         _copy_probe_rows_with_index_base_build(dest_col, src_col, probe_index, row_count);
     }
 
     for (size_t i = 0; i < _build_column_count; i++) {
         SlotDescriptor* slot = _col_types[i + _probe_column_count];
-        ColumnPtr& dest_col = chunk->get_column_by_slot_id(slot->id());
+        auto dest_col = chunk->get_mutable_column_by_slot_id(slot->id());
         ColumnPtr& src_col = _build_chunk->get_column_by_slot_id(slot->id());
         _copy_build_rows_with_index_base_build(dest_col, src_col, build_index, row_count);
     }
 }
 
-void CrossJoinNode::_copy_probe_rows_with_index_base_probe(ColumnPtr& dest_col, ColumnPtr& src_col, size_t start_row,
+void CrossJoinNode::_copy_probe_rows_with_index_base_probe(MutableColumnPtr& dest_col, ColumnPtr& src_col, size_t start_row,
                                                            size_t copy_number) {
     if (src_col->is_nullable()) {
         if (src_col->is_constant()) {
@@ -214,7 +214,7 @@ void CrossJoinNode::_copy_probe_rows_with_index_base_probe(ColumnPtr& dest_col, 
     }
 }
 
-void CrossJoinNode::_copy_probe_rows_with_index_base_build(ColumnPtr& dest_col, ColumnPtr& src_col, size_t start_row,
+void CrossJoinNode::_copy_probe_rows_with_index_base_build(MutableColumnPtr& dest_col, ColumnPtr& src_col, size_t start_row,
                                                            size_t copy_number) {
     if (src_col->is_nullable()) {
         if (src_col->is_constant()) {
@@ -238,7 +238,7 @@ void CrossJoinNode::_copy_probe_rows_with_index_base_build(ColumnPtr& dest_col, 
     }
 }
 
-void CrossJoinNode::_copy_build_rows_with_index_base_probe(ColumnPtr& dest_col, ColumnPtr& src_col, size_t start_row,
+void CrossJoinNode::_copy_build_rows_with_index_base_probe(MutableColumnPtr& dest_col, ColumnPtr& src_col, size_t start_row,
                                                            size_t row_count) {
     if (!src_col->is_nullable()) {
         if (src_col->is_constant()) {
@@ -260,7 +260,7 @@ void CrossJoinNode::_copy_build_rows_with_index_base_probe(ColumnPtr& dest_col, 
     }
 }
 
-void CrossJoinNode::_copy_build_rows_with_index_base_build(ColumnPtr& dest_col, ColumnPtr& src_col, size_t start_row,
+void CrossJoinNode::_copy_build_rows_with_index_base_build(MutableColumnPtr& dest_col, ColumnPtr& src_col, size_t start_row,
                                                            size_t row_count) {
     if (!src_col->is_nullable()) {
         if (src_col->is_constant()) {

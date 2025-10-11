@@ -355,7 +355,7 @@ Status AvroScanner::_construct_row_without_jsonpath(const avro_value_t& avro_val
             _found_columns[column_index] = true;
         }
 
-        auto& column = chunk->get_column_by_slot_id(slot_info.id);
+        auto column = chunk->get_mutable_column_by_slot_id(slot_info.id);
         // We should expand the union type.
         avro_value_t* cur_value = &element_value;
         if (UNLIKELY(avro_value_get_type(cur_value) == AVRO_UNION)) {
@@ -369,7 +369,7 @@ Status AvroScanner::_construct_row_without_jsonpath(const avro_value_t& avro_val
 
     for (int i = 0; i < _found_columns.size(); i++) {
         if (UNLIKELY(!_found_columns[i])) {
-            auto& column = chunk->get_column_by_index(i);
+            auto column = chunk->get_mutable_column_by_index(i);
             column->append_nulls(1);
         }
     }

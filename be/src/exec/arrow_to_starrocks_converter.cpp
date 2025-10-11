@@ -817,7 +817,7 @@ struct ArrowConverter<AT, LT, is_nullable, is_strict, ArrayGuard<LT>> {
                         size_t chunk_start_idx, [[maybe_unused]] uint8_t* null_data, Filter* chunk_filter,
                         ArrowConvertContext* ctx, ConvertFuncTree* conv_func) {
         auto* col_array = down_cast<ArrayColumn*>(column);
-        UInt32Column* col_offsets = col_array->offsets_column().get();
+        UInt32Column* col_offsets = col_array->offsets_column_mutable_ptr().get();
 
         auto type_id = array->type_id();
         if (is_list(type_id)) {
@@ -839,10 +839,11 @@ struct ArrowConverter<AT, LT, is_nullable, is_strict, ArrayGuard<LT>> {
         }
 
         Filter child_chunk_filter;
-        child_chunk_filter.resize(col_array->elements_column()->size() + child_array_num_elements, 1);
+        auto elements_col = col_array->elements_column_mutable_ptr();
+        child_chunk_filter.resize(elements_col->size() + child_array_num_elements, 1);
         return ParquetScanner::convert_array_to_column(conv_func->children[0].get(), child_array_num_elements,
-                                                       child_array, col_array->elements_column(), child_array_start_idx,
-                                                       col_array->elements_column()->size(), &child_chunk_filter, ctx);
+                                                       child_array, elements_col, child_array_start_idx,
+                                                       elements_col->size(), &child_chunk_filter, ctx);
     }
 };
 
@@ -853,11 +854,11 @@ struct ArrowConverter<AT, LT, is_nullable, is_strict, MapGuard<LT>> {
                         ArrowConvertContext* ctx, ConvertFuncTree* conv_func) {
         // offset
         auto* col_map = down_cast<MapColumn*>(column);
-        UInt32Column* col_offsets = col_map->offsets_column().get();
+        UInt32Column* col_offsets = col_map->offsets_column_mutable_ptr().get();
         list_map_offsets_copy<arrow::MapType>(array, array_start_idx, num_elements, col_offsets);
         // keys, values
-        size_t kv_size[] = {col_map->keys().size(), col_map->values().size()};
-        ColumnPtr kv_columns[] = {col_map->keys_column(), col_map->values_column()};
+        MutableColumnPtr kv_columns[] = {col_map->keys_column_mutable_ptr(), col_map->values_column_mutable_ptr()};
+        size_t kv_size[] = {kv_columns[0]->size(), kv_columns[1]->size()};
         for (auto i = 0; i < 2; ++i) {
             size_t child_array_start_idx;
             size_t child_array_num_elements;
@@ -889,7 +890,7 @@ struct ArrowConverter<AT, LT, is_nullable, is_strict, StructGurad<LT>> {
         for (size_t i = 0; i < conv_func->field_names.size(); i++) {
             const auto& child_name = conv_func->field_names[i];
 
-            auto child_col = struct_col->field_column(child_name);
+            auto child_col = struct_col->field_column_mutable(child_name);
             auto child_array = struct_array->GetFieldByName(child_name);
 
             if (child_array == nullptr) {

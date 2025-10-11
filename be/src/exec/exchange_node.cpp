@@ -196,7 +196,7 @@ Status ExchangeNode::get_next_merging(RuntimeState* state, ChunkPtr* chunk, bool
             *chunk = tmp_chunk->clone_empty_with_slot(size);
             for (size_t c = 0; c < tmp_chunk->num_columns(); ++c) {
                 const ColumnPtr& src = tmp_chunk->get_column_by_index(c);
-                ColumnPtr& dest = (*chunk)->get_column_by_index(c);
+                auto dest = (*chunk)->get_mutable_column_by_index(c);
                 dest->append(*src, offset_in_chunk, size);
                 // resize constant column as same as other non-constant columns, so Chunk::num_rows()
                 // can return a right number if this ConstColumn is the first column of the chunk.

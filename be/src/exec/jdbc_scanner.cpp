@@ -322,7 +322,7 @@ Status JDBCScanner::_fill_chunk(jobject jchunk, size_t num_rows, ChunkPtr* chunk
         for (size_t i = 0; i < _slot_descs.size(); i++) {
             ASSIGN_OR_RETURN(jobject jcolumn, list_stub.get(i));
             LOCAL_REF_GUARD_ENV(env, jcolumn);
-            auto& result_column = _result_chunk->columns()[i];
+            auto result_column = _result_chunk->get_mutable_column_by_index(i);
             auto st =
                     helper.get_result_from_boxed_array(_result_column_types[i], result_column.get(), jcolumn, num_rows);
             RETURN_IF_ERROR(st);

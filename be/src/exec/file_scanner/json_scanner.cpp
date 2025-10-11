@@ -585,7 +585,7 @@ Status JsonReader::_construct_row_without_jsonpath(simdjson::ondemand::object* r
             } else {
                 _parsed_columns[column_index] = true;
             }
-            auto& column = chunk->get_column_by_index(column_index);
+            auto column = chunk->get_mutable_column_by_index(column_index);
             simdjson::ondemand::value val = field.value();
 
             // construct column with value.
@@ -603,7 +603,7 @@ Status JsonReader::_construct_row_without_jsonpath(simdjson::ondemand::object* r
     // append null to the column without data.
     for (int i = 0; i < chunk->num_columns(); i++) {
         if (!_parsed_columns[i]) {
-            auto& column = chunk->get_column_by_index(i);
+            auto column = chunk->get_mutable_column_by_index(i);
             if (UNLIKELY(i == _op_col_index)) {
                 // special treatment for __op column, fill default value '0' rather than null
                 if (column->is_binary()) {

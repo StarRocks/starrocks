@@ -71,14 +71,14 @@ private:
     void _copy_joined_rows_with_index_base_probe(ChunkPtr& chunk, size_t row_count, size_t probe_index,
                                                  size_t build_index);
 
-    void _copy_probe_rows_with_index_base_build(ColumnPtr& dest_col, ColumnPtr& src_col, size_t start_row,
+    void _copy_probe_rows_with_index_base_build(MutableColumnPtr& dest_col, ColumnPtr& src_col, size_t start_row,
                                                 size_t copy_number);
-    void _copy_probe_rows_with_index_base_probe(ColumnPtr& dest_col, ColumnPtr& src_col, size_t start_row,
+    void _copy_probe_rows_with_index_base_probe(MutableColumnPtr& dest_col, ColumnPtr& src_col, size_t start_row,
                                                 size_t copy_number);
 
-    void _copy_build_rows_with_index_base_build(ColumnPtr& dest_col, ColumnPtr& src_col, size_t start_row,
+    void _copy_build_rows_with_index_base_build(MutableColumnPtr& dest_col, ColumnPtr& src_col, size_t start_row,
                                                 size_t row_count);
-    void _copy_build_rows_with_index_base_probe(ColumnPtr& dest_col, ColumnPtr& src_col, size_t start_row,
+    void _copy_build_rows_with_index_base_probe(MutableColumnPtr& dest_col, ColumnPtr& src_col, size_t start_row,
                                                 size_t row_count);
 
     void _init_row_desc();
