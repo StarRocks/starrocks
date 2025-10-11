@@ -210,4 +210,14 @@ public class NonDeterministicVisitor extends OptExpressionVisitor<Boolean, Void>
         }
         return false;
     }
+
+    @Override
+    public Boolean visitLogicalCompressedValues(OptExpression optExpression, Void context) {
+        if (checkCommon(optExpression)) {
+            return true;
+        }
+        // LogicalCompressedValuesOperator stores raw constants, no ScalarOperators
+        // so it cannot contain non-deterministic functions
+        return false;
+    }
 }

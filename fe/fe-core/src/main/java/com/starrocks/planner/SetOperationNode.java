@@ -217,45 +217,45 @@ public abstract class SetOperationNode extends PlanNode {
         if (CollectionUtils.isNotEmpty(conjuncts)) {
             output.append(prefix).append("predicates: ").append(explainExpr(conjuncts)).append("\n");
         }
-        if (CollectionUtils.isNotEmpty(constExprLists_)) {
-            output.append(prefix).append("constant exprs: ").append("\n");
-            for (List<Expr> exprs : constExprLists_) {
-                output.append(prefix).append("    ").append(exprs.stream().map(this::explainExpr)
-                        .collect(Collectors.joining(" | "))).append("\n");
-            }
-        }
+//        if (CollectionUtils.isNotEmpty(constExprLists_)) {
+//            output.append(prefix).append("constant exprs: ").append("\n");
+//            for (List<Expr> exprs : constExprLists_) {
+//                output.append(prefix).append("    ").append(exprs.stream().map(this::explainExpr)
+//                        .collect(Collectors.joining(" | "))).append("\n");
+//            }
+//        }
         if (detailLevel == TExplainLevel.VERBOSE) {
-            if (CollectionUtils.isNotEmpty(setOperationOutputList)) {
-                output.append(prefix).append("output exprs:").append("\n");
-                output.append(prefix).append("    ")
-                        .append(setOperationOutputList.stream()
-                                .map(c -> explainExpr(detailLevel, List.of(c)))
-                                .collect(Collectors.joining(" | ")))
-                        .append("\n");
-            }
+//            if (CollectionUtils.isNotEmpty(setOperationOutputList)) {
+//                output.append(prefix).append("output exprs:").append("\n");
+//                output.append(prefix).append("    ")
+//                        .append(setOperationOutputList.stream()
+//                                .map(c -> explainExpr(detailLevel, List.of(c)))
+//                                .collect(Collectors.joining(" | ")))
+//                        .append("\n");
+//            }
 
-            if (CollectionUtils.isNotEmpty(materializedResultExprLists_)) {
-                output.append(prefix).append("child exprs:").append("\n");
-                for (List<Expr> exprs : materializedResultExprLists_) {
-                    output.append(prefix).append("    ")
-                            .append(exprs.stream()
-                                    .map(c -> explainExpr(detailLevel, List.of(c)))
-                                    .collect(Collectors.joining(" | ")))
-                            .append("\n");
-                }
-            }
-            List<String> passThroughNodeIds = Lists.newArrayList();
-            for (int i = 0; i < firstMaterializedChildIdx_; ++i) {
-                passThroughNodeIds.add(children.get(i).getId().toString());
-            }
-            if (!passThroughNodeIds.isEmpty()) {
-                String result = prefix + "pass-through-operands: ";
-                if (passThroughNodeIds.size() == children.size()) {
-                    output.append(result).append("all\n");
-                } else {
-                    output.append(result).append(Joiner.on(",").join(passThroughNodeIds)).append("\n");
-                }
-            }
+//            if (CollectionUtils.isNotEmpty(materializedResultExprLists_)) {
+//                output.append(prefix).append("child exprs:").append("\n");
+//                for (List<Expr> exprs : materializedResultExprLists_) {
+//                    output.append(prefix).append("    ")
+//                            .append(exprs.stream()
+//                                    .map(c -> explainExpr(detailLevel, List.of(c)))
+//                                    .collect(Collectors.joining(" | ")))
+//                            .append("\n");
+//                }
+//            }
+//            List<String> passThroughNodeIds = Lists.newArrayList();
+//            for (int i = 0; i < firstMaterializedChildIdx_; ++i) {
+//                passThroughNodeIds.add(children.get(i).getId().toString());
+//            }
+//            if (!passThroughNodeIds.isEmpty()) {
+//                String result = prefix + "pass-through-operands: ";
+//                if (passThroughNodeIds.size() == children.size()) {
+//                    output.append(result).append("all\n");
+//                } else {
+//                    output.append(result).append(Joiner.on(",").join(passThroughNodeIds)).append("\n");
+//                }
+//            }
         }
         return output.toString();
     }

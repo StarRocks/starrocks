@@ -53,6 +53,7 @@ import com.starrocks.sql.optimizer.rule.implementation.TableFunctionTableScanImp
 import com.starrocks.sql.optimizer.rule.implementation.TopNImplementationRule;
 import com.starrocks.sql.optimizer.rule.implementation.UnionImplementationRule;
 import com.starrocks.sql.optimizer.rule.implementation.ValuesImplementationRule;
+import com.starrocks.sql.optimizer.rule.implementation.CompressedValuesImplementationRule;
 import com.starrocks.sql.optimizer.rule.implementation.WindowImplementationRule;
 import com.starrocks.sql.optimizer.rule.implementation.stream.StreamAggregateImplementationRule;
 import com.starrocks.sql.optimizer.rule.implementation.stream.StreamJoinImplementationRule;
@@ -207,6 +208,7 @@ public class RuleSet {
             new ExceptImplementationRule(),
             new IntersectImplementationRule(),
             new ValuesImplementationRule(),
+            new CompressedValuesImplementationRule(),
             new RepeatImplementationRule(),
             new FilterImplementationRule(),
             new TableFunctionImplementationRule(),

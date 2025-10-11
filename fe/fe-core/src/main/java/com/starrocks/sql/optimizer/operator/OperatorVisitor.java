@@ -19,6 +19,7 @@ import com.starrocks.sql.optimizer.operator.logical.LogicalAssertOneRowOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalCTEAnchorOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalCTEConsumeOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalCTEProduceOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalCompressedValuesOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalDeltaLakeScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalEsScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalExceptOperator;
@@ -89,6 +90,7 @@ import com.starrocks.sql.optimizer.operator.physical.PhysicalTableFunctionTableS
 import com.starrocks.sql.optimizer.operator.physical.PhysicalTopNOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalUnionOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalValuesOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalCompressedValuesOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalWindowOperator;
 import com.starrocks.sql.optimizer.operator.stream.LogicalBinlogScanOperator;
 import com.starrocks.sql.optimizer.operator.stream.PhysicalStreamAggOperator;
@@ -225,6 +227,10 @@ public abstract class OperatorVisitor<R, C> {
     }
 
     public R visitLogicalValues(LogicalValuesOperator node, C context) {
+        return visitOperator(node, context);
+    }
+
+    public R visitLogicalCompressedValues(LogicalCompressedValuesOperator node, C context) {
         return visitOperator(node, context);
     }
 
@@ -380,6 +386,10 @@ public abstract class OperatorVisitor<R, C> {
     }
 
     public R visitPhysicalValues(PhysicalValuesOperator node, C context) {
+        return visitOperator(node, context);
+    }
+
+    public R visitPhysicalCompressedValues(PhysicalCompressedValuesOperator node, C context) {
         return visitOperator(node, context);
     }
 

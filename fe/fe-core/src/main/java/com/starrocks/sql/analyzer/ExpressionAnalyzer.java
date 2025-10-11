@@ -45,6 +45,8 @@ import com.starrocks.catalog.UserIdentity;
 import com.starrocks.cluster.ClusterNamespace;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
+import com.starrocks.common.profile.Timer;
+import com.starrocks.common.profile.Tracers;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.qe.SqlModeHelper;
@@ -82,6 +84,7 @@ import com.starrocks.sql.ast.expression.IntLiteral;
 import com.starrocks.sql.ast.expression.IsNullPredicate;
 import com.starrocks.sql.ast.expression.LambdaArgument;
 import com.starrocks.sql.ast.expression.LambdaFunctionExpr;
+import com.starrocks.sql.ast.expression.LargeInPredicate;
 import com.starrocks.sql.ast.expression.LargeIntLiteral;
 import com.starrocks.sql.ast.expression.LikePredicate;
 import com.starrocks.sql.ast.expression.LiteralExpr;
@@ -865,6 +868,10 @@ public class ExpressionAnalyzer {
                             "in predicate type " + type.toSql() + " with type " + compatibleType.toSql()
                                     + " is invalid", child.getPos());
                 }
+            }
+
+            if (node instanceof LargeInPredicate largeInPredicate) {
+                largeInPredicate.setCompatibleType(compatibleType);
             }
 
             return null;

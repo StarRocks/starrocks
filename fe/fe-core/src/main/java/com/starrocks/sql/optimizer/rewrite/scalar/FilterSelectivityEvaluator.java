@@ -32,6 +32,8 @@ import com.starrocks.sql.optimizer.statistics.BinaryPredicateStatisticCalculator
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
 import com.starrocks.sql.optimizer.statistics.Statistics;
 import com.starrocks.sql.optimizer.statistics.StatisticsEstimateCoefficient;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 import org.jetbrains.annotations.NotNull;
 
 import java.util.List;
@@ -106,6 +108,7 @@ public class FilterSelectivityEvaluator {
     }
 
     public class ColumnFilterEvaluator extends ScalarOperatorVisitor<ColumnFilter, Void> {
+        private static final Logger LOG = LogManager.getLogger(ColumnFilterEvaluator.class);
 
         public ColumnFilter evaluate(ScalarOperator scalarOperator) {
             return scalarOperator.accept(this, null);
@@ -146,6 +149,29 @@ public class FilterSelectivityEvaluator {
             if (predicate.isNotIn()) {
                 return new ColumnFilter(NON_SELECTIVITY, predicate);
             } else {
+                // Handle compressed IN predicates specially
+                if (predicate instanceof com.starrocks.sql.optimizer.operator.scalar.CompressedInPredicateOperator) {
+                    com.starrocks.sql.optimizer.operator.scalar.CompressedInPredicateOperator compressedIn = 
+                            (com.starrocks.sql.optimizer.operator.scalar.CompressedInPredicateOperator) predicate;
+                    
+                    List<ColumnRefOperator> usedCols = predicate.getChild(0).getColumnRefs();
+                    if (isOnlyRefOneCol(usedCols)) {
+                        ColumnRefOperator column = usedCols.get(0);
+                        ColumnStatistic columnStatistic = statistics.getColumnStatistic(column);
+                        
+                        // For very large compressed IN predicates, use sampling estimation
+                        com.starrocks.qe.ConnectContext connectContext = com.starrocks.qe.ConnectContext.get();
+                        int warningThreshold = connectContext != null ? 
+                                connectContext.getSessionVariable().getMaxInPredicateElementsWarningThreshold() : 10000;
+                        if (compressedIn.getTotalElementCount() > warningThreshold) {
+                            double selectRatio = Math.min(1.0, compressedIn.getTotalElementCount() / 
+                                    adjustNDV(columnStatistic.getDistinctValuesCount()));
+                            LOG.info("Large compressed IN predicate selectivity estimated: {}", selectRatio);
+                            return new ColumnFilter(selectRatio, column, predicate);
+                        }
+                    }
+                }
+                
                 Set<ScalarOperator> inSet = predicate.getChildren().stream().skip(1).collect(Collectors.toSet());
                 List<ColumnRefOperator> usedCols = predicate.getChild(0).getColumnRefs();
                 if (isOnlyRefOneCol(usedCols) && inSet.stream().allMatch(e -> e.isConstantRef() && !e.isNullable())) {

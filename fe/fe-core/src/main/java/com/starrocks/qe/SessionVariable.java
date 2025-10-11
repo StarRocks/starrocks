@@ -244,6 +244,13 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String MAX_PUSHDOWN_CONDITIONS_PER_COLUMN = "max_pushdown_conditions_per_column";
 
     public static final String ENABLE_LAMBDA_PUSHDOWN = "enable_lambda_pushdown";
+    
+    // IN predicate optimization configurations
+    public static final String ENABLE_IN_PREDICATE_COMPRESSION = "enable_in_predicate_compression";
+    public static final String IN_PREDICATE_COMPRESSION_THRESHOLD = "in_predicate_compression_threshold";
+    public static final String ENABLE_IN_PREDICATE_TO_SEMI_JOIN = "enable_in_predicate_to_semi_join";
+    public static final String IN_PREDICATE_SEMI_JOIN_THRESHOLD = "in_predicate_semi_join_threshold";
+    public static final String MAX_IN_PREDICATE_ELEMENTS_WARNING_THRESHOLD = "max_in_predicate_elements_warning_threshold";
     // use new execution engine instead of the old one if enable_pipeline_engine is true,
     // the new execution engine split a fragment into pipelines, then create several drivers
     // from the pipeline for parallel executing, threads from global pool pick out the
@@ -1014,6 +1021,22 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VariableMgr.VarAttr(name = ENABLE_LOCAL_SHUFFLE_AGG)
     private boolean enableLocalShuffleAgg = true;
+
+    // IN predicate optimization session variables
+    @VariableMgr.VarAttr(name = ENABLE_IN_PREDICATE_COMPRESSION)
+    private boolean enableInPredicateCompression = true;
+
+    @VariableMgr.VarAttr(name = IN_PREDICATE_COMPRESSION_THRESHOLD)
+    private int inPredicateCompressionThreshold = 1000;
+
+    @VariableMgr.VarAttr(name = ENABLE_IN_PREDICATE_TO_SEMI_JOIN)
+    private boolean enableInPredicateToSemiJoin = true;
+
+    @VariableMgr.VarAttr(name = IN_PREDICATE_SEMI_JOIN_THRESHOLD)
+    private int inPredicateSemiJoinThreshold = 100000;
+
+    @VariableMgr.VarAttr(name = MAX_IN_PREDICATE_ELEMENTS_WARNING_THRESHOLD)
+    private int maxInPredicateElementsWarningThreshold = 10000;
 
     @VariableMgr.VarAttr(name = USE_COMPUTE_NODES)
     private int useComputeNodes = -1;
@@ -3865,6 +3888,27 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public boolean isEnableLocalShuffleAgg() {
         return enableLocalShuffleAgg;
+    }
+
+    // IN predicate optimization getters
+    public boolean isEnableInPredicateCompression() {
+        return enableInPredicateCompression;
+    }
+
+    public int getInPredicateCompressionThreshold() {
+        return inPredicateCompressionThreshold;
+    }
+
+    public boolean isEnableInPredicateToSemiJoin() {
+        return enableInPredicateToSemiJoin;
+    }
+
+    public int getInPredicateSemiJoinThreshold() {
+        return inPredicateSemiJoinThreshold;
+    }
+
+    public int getMaxInPredicateElementsWarningThreshold() {
+        return maxInPredicateElementsWarningThreshold;
     }
 
     public boolean isEnableTabletInternalParallel() {

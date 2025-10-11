@@ -87,6 +87,10 @@ public abstract class OptExpressionVisitor<R, C> {
         return visit(optExpression, context);
     }
 
+    public R visitLogicalCompressedValues(OptExpression optExpression, C context) {
+        return visit(optExpression, context);
+    }
+
     public R visitLogicalRepeat(OptExpression optExpression, C context) {
         return visit(optExpression, context);
     }
@@ -235,6 +239,10 @@ public abstract class OptExpressionVisitor<R, C> {
     }
 
     public R visitPhysicalValues(OptExpression optExpression, C context) {
+        return visit(optExpression, context);
+    }
+
+    public R visitPhysicalCompressedValues(OptExpression optExpression, C context) {
         return visit(optExpression, context);
     }
 

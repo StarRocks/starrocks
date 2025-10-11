@@ -26,6 +26,8 @@ import com.starrocks.sql.optimizer.operator.scalar.CompoundPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.InPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rewrite.ScalarOperatorRewriteContext;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -34,6 +36,7 @@ import java.util.Map;
 import java.util.stream.Collectors;
 
 public class MvNormalizePredicateRule extends NormalizePredicateRule {
+    private static final Logger LOG = LogManager.getLogger(MvNormalizePredicateRule.class);
 
     // Comparator to normalize predicates, only use scalar operators' string to compare.
     private static final Comparator<ScalarOperator> SCALAR_OPERATOR_COMPARATOR_IGNORE_COLUMN_ID =
@@ -116,6 +119,22 @@ public class MvNormalizePredicateRule extends NormalizePredicateRule {
 
     @Override
     public ScalarOperator visitInPredicate(InPredicateOperator predicate, ScalarOperatorRewriteContext context) {
+        // Handle compressed IN predicates specially
+        if (predicate instanceof com.starrocks.sql.optimizer.operator.scalar.CompressedInPredicateOperator) {
+            com.starrocks.sql.optimizer.operator.scalar.CompressedInPredicateOperator compressedIn = 
+                    (com.starrocks.sql.optimizer.operator.scalar.CompressedInPredicateOperator) predicate;
+            
+            // For compressed IN predicates with large number of constants, keep as-is to avoid expansion
+            com.starrocks.qe.ConnectContext connectContext = com.starrocks.qe.ConnectContext.get();
+            int threshold = connectContext != null ? 
+                    connectContext.getSessionVariable().getInPredicateSemiJoinThreshold() : 5000;
+            if (compressedIn.getTotalElementCount() > threshold) {
+                LOG.info("Large compressed IN predicate with {} elements kept as-is for performance", 
+                        compressedIn.getTotalElementCount());
+                return predicate;
+            }
+        }
+        
         List<ScalarOperator> rhs = predicate.getChildren().subList(1, predicate.getChildren().size());
         if (predicate.isSubquery()) {
             return predicate;
@@ -134,8 +153,9 @@ public class MvNormalizePredicateRule extends NormalizePredicateRule {
             BinaryType op =
                     isIn ? BinaryType.EQ : BinaryType.NE;
             result.add(new BinaryPredicateOperator(op, lhs, constants.get(0)));
-        } else if (constants.size() > 1024) {
+        } else if (constants.size() > 50000) { // Increased threshold from 1024 to 50000
             // add a size limit to protect in with large number of children
+            LOG.info("Large IN predicate with {} elements kept as-is for performance", constants.size());
             return predicate;
         } else if (!constants.isEmpty()) {
             for (ScalarOperator constant : constants) {
