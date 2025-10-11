@@ -342,7 +342,12 @@ public class PaimonScanNode extends ScanNode {
     protected String getNodeExplainString(String prefix, TExplainLevel detailLevel) {
         StringBuilder output = new StringBuilder();
 
-        output.append(prefix).append("TABLE: ").append(paimonTable.getName()).append("\n");
+        output.append(prefix)
+            .append("TABLE: ")
+            .append(paimonTable.getCatalogDBName())
+            .append(".")
+            .append(paimonTable.getName())
+            .append("\n");
 
         if (null != sortColumn) {
             output.append(prefix).append("SORT COLUMN: ").append(sortColumn).append("\n");
