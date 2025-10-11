@@ -60,6 +60,8 @@ public:
 
     virtual int64_t tablet_id() = 0;
 
+    virtual bool enable_null_primary_key() = 0;
+
     // delete pk index and delvec, then rebuild them
     Status recover();
 };

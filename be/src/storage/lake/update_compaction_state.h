@@ -46,6 +46,10 @@ public:
 
     std::vector<MutableColumnPtr> pk_cols;
 
+    void set_enable_null_primary_key(bool enable_null_primary_key) {
+        _enable_null_primary_key = enable_null_primary_key;
+    }
+
 private:
     Status _load_segments(Rowset* rowset, const TabletSchemaCSPtr& tablet_schema, uint32_t segment_id);
 
@@ -56,6 +60,7 @@ private:
     std::vector<ChunkIteratorPtr> _segment_iters;
     int64_t _tablet_id = 0;
     std::mutex _state_lock;
+    bool _enable_null_primary_key = false;
 };
 
 inline std::ostream& operator<<(std::ostream& os, const CompactionState& o) {
