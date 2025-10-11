@@ -33,13 +33,14 @@ Chunk::Chunk() {
 
 Status Chunk::upgrade_if_overflow() {
     for (auto& column : _columns) {
-        auto ret = column->upgrade_if_overflow();
+        auto mutable_col = Column::mutate(column);
+        auto ret = mutable_col->upgrade_if_overflow();
         if (!ret.ok()) {
             return ret.status();
         } else if (ret.value() != nullptr) {
             column = std::move(ret.value());
         } else {
-            continue;
+            column = std::move(mutable_col);
         }
     }
     return Status::OK();
@@ -47,13 +48,14 @@ Status Chunk::upgrade_if_overflow() {
 
 Status Chunk::downgrade() {
     for (auto& column : _columns) {
-        auto ret = column->downgrade();
+        auto mutable_col = Column::mutate(column);
+        auto ret = mutable_col->downgrade();
         if (!ret.ok()) {
             return ret.status();
         } else if (ret.value() != nullptr) {
             column = ret.value();
         } else {
-            continue;
+            column = std::move(mutable_col);
         }
     }
     return Status::OK();
@@ -90,7 +92,9 @@ Chunk::Chunk(Columns columns, SlotHashMap slot_map, ChunkExtraDataPtr extra_data
 
 void Chunk::reset() {
     for (ColumnPtr& c : _columns) {
-        c->reset_column();
+        auto mutable_col = Column::mutate(c);
+        mutable_col->reset_column();
+        c = std::move(mutable_col);
     }
     _delete_state = DEL_NOT_SATISFIED;
     _extra_data.reset();
@@ -107,14 +111,18 @@ void Chunk::swap_chunk(Chunk& other) {
 
 void Chunk::set_num_rows(size_t count) {
     for (ColumnPtr& c : _columns) {
-        c->resize(count);
+        auto mutable_col = Column::mutate(c);
+        mutable_col->resize(count);
+        c = std::move(mutable_col);
     }
 }
 
 void Chunk::update_rows(const Chunk& src, const uint32_t* indexes) {
     DCHECK(_columns.size() == src.num_columns());
     for (int i = 0; i < _columns.size(); i++) {
-        _columns[i]->update_rows(*src.columns()[i], indexes);
+        auto mutable_col = Column::mutate(_columns[i]);
+        mutable_col->update_rows(*src.columns()[i], indexes);
+        _columns[i] = std::move(mutable_col);
     }
 }
 
@@ -181,7 +189,9 @@ void Chunk::insert_column(size_t idx, ColumnPtr column, const FieldPtr& field) {
 
 void Chunk::append_default() {
     for (auto& column : _columns) {
-        column->append_default();
+        auto mutable_col = Column::mutate(column);
+        mutable_col->append_default();
+        column = std::move(mutable_col);
     }
 }
 
@@ -252,8 +262,9 @@ std::unique_ptr<Chunk> Chunk::clone_empty_with_slot(size_t size) const {
     DCHECK_EQ(_columns.size(), _slot_id_to_index.size());
     Columns columns(_slot_id_to_index.size());
     for (size_t i = 0; i < _slot_id_to_index.size(); i++) {
-        columns[i] = _columns[i]->clone_empty();
-        columns[i]->reserve(size);
+        auto mutable_col = columns[i]->clone_empty();
+        mutable_col->reserve(size);
+        columns[i] = std::move(mutable_col);
     }
     return std::make_unique<Chunk>(std::move(columns), _slot_id_to_index);
 }
@@ -265,8 +276,9 @@ std::unique_ptr<Chunk> Chunk::clone_empty_with_schema() const {
 std::unique_ptr<Chunk> Chunk::clone_empty_with_schema(size_t size) const {
     Columns columns(_columns.size());
     for (size_t i = 0; i < _columns.size(); ++i) {
-        columns[i] = _columns[i]->clone_empty();
-        columns[i]->reserve(size);
+        auto mutable_col = _columns[i]->clone_empty();
+        mutable_col->reserve(size);
+        columns[i] = std::move(mutable_col);
     }
     return std::make_unique<Chunk>(columns, _schema);
 }
@@ -285,7 +297,9 @@ std::unique_ptr<Chunk> Chunk::clone_unique() const {
 void Chunk::append_selective(const Chunk& src, const uint32_t* indexes, uint32_t from, uint32_t size) {
     DCHECK_EQ(_columns.size(), src.columns().size());
     for (size_t i = 0; i < _columns.size(); ++i) {
-        _columns[i]->append_selective(*src.columns()[i].get(), indexes, from, size);
+        auto mutable_col = Column::mutate(_columns[i]);
+        mutable_col->append_selective(*src.columns()[i].get(), indexes, from, size);
+        _columns[i] = std::move(mutable_col);
     }
 }
 
@@ -294,7 +308,9 @@ void Chunk::rolling_append_selective(Chunk& src, const uint32_t* indexes, uint32
     DCHECK_EQ(num_columns, src.columns().size());
 
     for (size_t i = 0; i < num_columns; ++i) {
-        _columns[i]->append_selective(*src.columns()[i].get(), indexes, from, size);
+        auto mutable_col = Column::mutate(_columns[i]);
+        mutable_col->append_selective(*src.columns()[i].get(), indexes, from, size);
+        _columns[i] = std::move(mutable_col);
         src.columns()[i].reset();
     }
 }
@@ -304,14 +320,18 @@ size_t Chunk::filter(const Buffer<uint8_t>& selection, bool force) {
         return num_rows();
     }
     for (auto& column : _columns) {
-        column->filter(selection);
+        auto mutable_col = Column::mutate(column);
+        mutable_col->filter(selection);
+        column = std::move(mutable_col);
     }
     return num_rows();
 }
 
 size_t Chunk::filter_range(const Buffer<uint8_t>& selection, size_t from, size_t to) {
     for (auto& column : _columns) {
-        column->filter_range(selection, from, to);
+        auto mutable_col = Column::mutate(column);
+        mutable_col->filter_range(selection, from, to);
+        column = std::move(mutable_col);
     }
     return num_rows();
 }
@@ -445,7 +465,9 @@ void Chunk::append(const Chunk& src, size_t offset, size_t count) {
     const size_t n = src.num_columns();
     for (size_t i = 0; i < n; i++) {
         ColumnPtr& c = get_column_by_index(i);
-        c->append(*src.get_column_by_index(i), offset, count);
+        auto mutable_col = Column::mutate(c);
+        mutable_col->append(*src.get_column_by_index(i), offset, count);
+        c = std::move(mutable_col);
     }
 }
 
@@ -457,14 +479,18 @@ void Chunk::append_safe(const Chunk& src, size_t offset, size_t count) {
     for (size_t i = 0; i < n; i++) {
         ColumnPtr& c = get_column_by_index(i);
         if (c->size() == cur_rows) {
-            c->append(*src.get_column_by_index(i), offset, count);
+            auto mutable_col = Column::mutate(c);
+            mutable_col->append(*src.get_column_by_index(i), offset, count);
+            c = std::move(mutable_col);
         }
     }
 }
 
 void Chunk::reserve(size_t cap) {
     for (auto& c : _columns) {
-        c->reserve(cap);
+        auto mutable_col = Column::mutate(c);
+        mutable_col->reserve(cap);
+        c = std::move(mutable_col);
     }
 }
 
