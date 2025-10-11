@@ -291,6 +291,31 @@ Status TabletScanner::get_chunk(RuntimeState* state, Chunk* chunk) {
             RETURN_IF_ERROR(ExecNode::eval_conjuncts(_conjunct_ctxs, chunk));
             DCHECK_CHUNK(chunk);
         }
+        // Attach virtual storage meta columns if requested by output schema.
+        {
+            const Schema& out_schema = _prj_iter->output_schema();
+            // _tablet_id_
+            size_t idx;
+            try {
+                idx = out_schema.get_field_index_by_name("_tablet_id_");
+            } catch (...) {
+                idx = static_cast<size_t>(-1);
+            }
+            if (idx != static_cast<size_t>(-1)) {
+                auto col = ColumnHelper::create_const_column<TYPE_BIGINT>(_tablet->tablet_id(), chunk->num_rows());
+                chunk->update_column_by_index(std::move(col), idx);
+            }
+            // _segment_id_ not available in this path, fill -1 placeholder
+            try {
+                idx = out_schema.get_field_index_by_name("_segment_id_");
+            } catch (...) {
+                idx = static_cast<size_t>(-1);
+            }
+            if (idx != static_cast<size_t>(-1)) {
+                auto col = ColumnHelper::create_const_column<TYPE_INT>(-1, chunk->num_rows());
+                chunk->update_column_by_index(std::move(col), idx);
+            }
+        }
         TRY_CATCH_ALLOC_SCOPE_END()
     } while (chunk->num_rows() == 0);
 

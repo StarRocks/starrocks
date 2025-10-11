@@ -669,6 +669,34 @@ Status OlapChunkSource::_read_chunk_from_storage(RuntimeState* state, Chunk* chu
             chunk->set_slot_id_to_index(slot->id(), column_index);
         }
 
+        // Attach virtual storage meta columns if requested by output schema.
+        // They are not part of storage schema and must be materialized here.
+        {
+            const Schema& out_schema = _prj_iter->output_schema();
+            // _tablet_id_
+            size_t idx;
+            try {
+                idx = out_schema.get_field_index_by_name("_tablet_id_");
+            } catch (...) {
+                idx = static_cast<size_t>(-1);
+            }
+            if (idx != static_cast<size_t>(-1)) {
+                auto col = ColumnHelper::create_const_column<TYPE_BIGINT>(_tablet->tablet_id(), chunk->num_rows());
+                chunk->update_column_by_index(std::move(col), idx);
+            }
+            // _segment_id_
+            try {
+                idx = out_schema.get_field_index_by_name("_segment_id_");
+            } catch (...) {
+                idx = static_cast<size_t>(-1);
+            }
+            if (idx != static_cast<size_t>(-1)) {
+                // Not available in normal scan path; fill with -1 as placeholder.
+                auto col = ColumnHelper::create_const_column<TYPE_INT>(-1, chunk->num_rows());
+                chunk->update_column_by_index(std::move(col), idx);
+            }
+        }
+
         if (!_non_pushdown_pred_tree.empty()) {
             SCOPED_TIMER(_expr_filter_timer);
             size_t nrows = chunk->num_rows();

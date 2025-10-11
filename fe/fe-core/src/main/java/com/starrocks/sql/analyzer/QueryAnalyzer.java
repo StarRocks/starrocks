@@ -714,6 +714,20 @@ public class QueryAnalyzer {
                         fields.add(field);
                     }
                 }
+
+                // Add virtual storage meta columns for native tables.
+                // These columns are virtual (not persisted) and should not appear in SELECT *
+                // but can be referenced explicitly by name.
+                if (table.isNativeTable()) {
+                    for (Column column : getStorageVirtualMetaColumns()) {
+                        SlotRef slot = new SlotRef(tableName, column.getName(), column.getName());
+                        // visible=false to exclude from SELECT *
+                        Field field = new Field(column.getName(), column.getType(), tableName, slot, false,
+                                column.isAllowNull());
+                        columns.put(field, column);
+                        fields.add(field);
+                    }
+                }
             }
 
             node.setColumns(columns.build());
@@ -752,6 +766,13 @@ public class QueryAnalyzer {
             columns.add(new Column(BINLOG_VERSION_COLUMN_NAME, Type.BIGINT));
             columns.add(new Column(BINLOG_SEQ_ID_COLUMN_NAME, Type.BIGINT));
             columns.add(new Column(BINLOG_TIMESTAMP_COLUMN_NAME, Type.BIGINT));
+            return columns;
+        }
+
+        private List<Column> getStorageVirtualMetaColumns() {
+            List<Column> columns = new ArrayList<>();
+            columns.add(new Column("_tablet_id_", Type.BIGINT));
+            columns.add(new Column("_segment_id_", Type.INT));
             return columns;
         }
 
