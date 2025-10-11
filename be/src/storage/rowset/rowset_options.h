@@ -81,6 +81,7 @@ public:
     const std::unordered_set<uint32_t>* unused_output_column_ids = nullptr;
 
     RowidRangeOptionPtr rowid_range_option = nullptr;
+    RowidRangeOptionPtr filtered_scan_range = nullptr;
     ShortKeyRangesOptionPtr short_key_ranges_option = nullptr;
 
     RuntimeScanRangePruner runtime_range_pruner;
