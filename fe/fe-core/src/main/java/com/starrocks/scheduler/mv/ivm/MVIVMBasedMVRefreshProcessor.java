@@ -425,6 +425,7 @@ public class MVIVMBasedMVRefreshProcessor extends BaseMVRefreshProcessor {
         }
 
         try (Timer ignored = Tracers.watchScope("MVRefreshPlanner")) {
+            ctx.getSessionVariable().setEnableInsertSelectExternalAutoRefresh(false); //already refreshed before
             ExecPlan execPlan = StatementPlanner.plan(insertStmt, ctx);
             mvContext.setExecPlan(execPlan);
         }
