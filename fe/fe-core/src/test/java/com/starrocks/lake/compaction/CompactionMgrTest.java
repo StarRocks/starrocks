@@ -319,4 +319,92 @@ public class CompactionMgrTest {
         compactionMgr.removeFromStartupActiveCompactionTransactionMap(txnId);
         Assertions.assertEquals(0, activeCompactionTransactionMap.size());
     }
+
+    @Test
+    public void testAbortStaleCompactionRemovesActiveTxn() {
+        // When a compaction job is aborted due to partition deletion after FE restart,
+        // the corresponding txn should be removed from remainedActiveCompactionTxnWhenStart map,
+        // so that the table can be scheduled for compaction again.
+        
+        long dbId = 10001L;
+        long tableId = 10002L;
+        long partitionId = 20001L;
+        long txnId = 30001L;
+        
+        PartitionIdentifier partition = new PartitionIdentifier(dbId, tableId, partitionId);
+        
+        // Step 1: Setup active compaction transaction map (simulating FE restart with active compaction)
+        Map<Long, Long> txnIdToTableIdMap = new HashMap<>();
+        txnIdToTableIdMap.put(txnId, tableId);
+        
+        new Expectations() {
+            {
+                GlobalStateMgr.getCurrentState();
+                result = globalStateMgr;
+
+                globalStateMgr.getGlobalTransactionMgr();
+                result = globalTransactionMgr;
+
+                globalTransactionMgr.getLakeCompactionActiveTxnStats();
+                result = txnIdToTableIdMap;
+            }
+        };
+        
+        // Step 2: Create CompactionMgr and build active transaction map
+        CompactionMgr compactionMgr = new CompactionMgr();
+        compactionMgr.buildActiveCompactionTransactionMap();
+        
+        // Step 3: Verify txn is in the active map (before abort)
+        ConcurrentHashMap<Long, Long> activeCompactionTransactionMap =
+                compactionMgr.getRemainedActiveCompactionTxnWhenStart();
+        Assertions.assertEquals(1, activeCompactionTransactionMap.size());
+        Assertions.assertTrue(activeCompactionTransactionMap.containsKey(txnId));
+        Assertions.assertEquals(tableId, activeCompactionTransactionMap.get(txnId));
+        
+        // Step 4: Create CompactionScheduler
+        CompactionScheduler compactionScheduler = new CompactionScheduler(
+                compactionMgr,
+                GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo(),
+                GlobalStateMgr.getCurrentState().getGlobalTransactionMgr(),
+                GlobalStateMgr.getCurrentState(),
+                "");
+        compactionMgr.setCompactionScheduler(compactionScheduler);
+        
+        // Step 5: Add a running compaction job to the scheduler
+        Database mockDb = new Database();
+        Table mockTable = new LakeTable();
+        PhysicalPartition mockPartition = new PhysicalPartition(partitionId, "test_partition", 
+                partitionId, null);
+        CompactionJob job = new CompactionJob(mockDb, mockTable, mockPartition, txnId, false, null, "");
+        compactionScheduler.getRunningCompactions().put(partition, job);
+        
+        // Step 6: Simulate partition deletion by calling abortStaleCompaction
+        List<PartitionIdentifier> deletedPartitions = Lists.newArrayList(partition);
+        
+        // Use reflection to call the private method abortStaleCompaction
+        try {
+            java.lang.reflect.Method method = CompactionScheduler.class.getDeclaredMethod(
+                    "abortStaleCompaction", List.class);
+            method.setAccessible(true);
+            method.invoke(compactionScheduler, deletedPartitions);
+        } catch (Exception e) {
+            Assertions.fail("Failed to invoke abortStaleCompaction: " + e.getMessage());
+        }
+        
+        // Step 7: Verify txn has been removed from the active map after abort (the bug fix)
+        activeCompactionTransactionMap = compactionMgr.getRemainedActiveCompactionTxnWhenStart();
+        Assertions.assertEquals(0, activeCompactionTransactionMap.size());
+        Assertions.assertFalse(activeCompactionTransactionMap.containsKey(txnId));
+        
+        // Step 8: Verify that the table can now be scheduled for compaction
+        // Before the fix, the table would be permanently excluded from compaction scheduling
+        // after FE restart because the txn remained in the active map
+        compactionMgr.handleLoadingFinished(partition, 1, System.currentTimeMillis(),
+                Quantiles.compute(Lists.newArrayList(100d)));
+        List<PartitionStatisticsSnapshot> compactionList = 
+                compactionMgr.choosePartitionsToCompact(new HashSet<>(), new HashSet<>());
+        // After the fix, the partition should be able to be selected for compaction
+        Assertions.assertEquals(1, compactionList.size());
+        Assertions.assertEquals(partition, compactionList.get(0).getPartition());
+    }
 }

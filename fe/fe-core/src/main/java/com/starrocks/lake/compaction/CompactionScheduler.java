@@ -249,6 +249,7 @@ public class CompactionScheduler extends Daemon {
             CompactionJob job = runningCompactions.get(partitionIdentifier);
             if (job != null) {
                 job.abort();
+                compactionManager.removeFromStartupActiveCompactionTransactionMap(job.getTxnId());
             }
         }
     }
