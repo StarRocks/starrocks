@@ -3047,15 +3047,25 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
 
     @Override
     public ParseNode visitAnalyzeProfileStatement(StarRocksParser.AnalyzeProfileStatementContext context) {
-        StringLiteral stringLiteral = (StringLiteral) visit(context.string());
+        String queryId;
         List<Integer> planNodeIds = Lists.newArrayList();
+
+        if (context.string() != null) {
+            // Traditional string literal query_id
+            StringLiteral stringLiteral = (StringLiteral) visit(context.string());
+            queryId = stringLiteral.getStringValue();
+        } else {
+            // last_query_id() function
+            queryId = "last_query_id()";
+        }
+
         if (context.INTEGER_VALUE() != null) {
             planNodeIds = context.INTEGER_VALUE().stream()
                     .map(ParseTree::getText)
                     .map(Integer::parseInt)
                     .collect(toList());
         }
-        return new AnalyzeProfileStmt(stringLiteral.getStringValue(), planNodeIds, createPos(context));
+        return new AnalyzeProfileStmt(queryId, planNodeIds, createPos(context));
     }
 
     // ------------------------------------------- Resource Group Statement --------------------------------------------
