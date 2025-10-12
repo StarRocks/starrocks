@@ -1,0 +1,100 @@
+
+# Copyright 2021-present StarRocks, Inc. All rights reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     https:#www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+[build-system]
+requires = ["setuptools>=42", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "starrocks"
+authors = [
+    {name = "StarRocks Team", email = "no-reply@starrocks.com"},
+]
+maintainers = [
+    {name = "StarRocks Team", email = "no-reply@starrocks.com"},
+]
+description = "Python SQLAlchemy Dialect for StarRocks"
+requires-python = ">=3.8"
+keywords = ["starrocks", "sqlalchemy", "dialect"]
+license = "Apache-2.0"
+license-files = ["LICENSE"]
+classifiers = [
+    "Development Status :: 5 - Production/Stable",
+    "Environment :: Console",
+    "Intended Audience :: Developers",
+    "Programming Language :: Python",
+    "Programming Language :: Python :: 3 :: Only",
+    "Programming Language :: Python :: 3.8",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: Implementation :: CPython",
+    "Programming Language :: Python :: Implementation :: PyPy",
+    "Topic :: Database :: Front-Ends",
+]
+dependencies = [
+    "sqlalchemy>=1.4",
+    "sqlalchemy-utils>=0.41.2",
+    "pymysql>=1.1.0",
+    "alembic>=1.4.0"
+]
+dynamic = ["readme", "version"]
+
+[tool.setuptools.dynamic]
+readme = {file = ["README.md"], content-type = "text/markdown"}
+version = {attr = "starrocks.__version__"}
+
+[project.optional-dependencies]
+test = [
+    "pytest",
+    "pytest-xdist",
+    "mock",
+]
+
+[project.urls]
+Homepage = "https://starrocks.io"
+Documentation = "https://docs.starrocks.io"
+Repository = "https://github.com/starrocks/starrocks.git"
+Issues = "https://github.com/starrocks/starrocks/issues"
+
+[project.entry-points."sqlalchemy.dialects"]
+starrocks = "starrocks.dialect:StarRocksDialect"
+"starrocks.pymysql" = "starrocks.dialect:StarRocksDialect"
+
+# configure isort to be compatible with black
+# source: https://black.readthedocs.io/en/stable/compatible_configs.html#configuration
+[tool.isort]
+multi_line_output = 3
+include_trailing_comma = true
+force_grid_wrap = 0
+use_parentheses = true
+ensure_newline_before_comments = true
+
+[tool.black]
+line-length = 125
+target-version = ['py312']
+skip-string-normalization = true
+exclude = '''
+/(
+    \.git
+  | \.venv
+  | dist
+)/
+'''
+
+[tool.pytest.ini_options]
+addopts = "--tb native -n4 -v -r fxX --maxfail=25 -p no:warnings"
+python_files = "test/*test_*.py"
+#python_functions = "test_insert_from_files_parquet"

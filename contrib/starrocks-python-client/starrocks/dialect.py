@@ -1,4 +1,3 @@
-#! /usr/bin/python3
 # Copyright 2021-present StarRocks, Inc. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -14,23 +13,37 @@
 # limitations under the License.
 import re
 from textwrap import dedent
-import time
-from typing import Union
+from typing import Union, Any
 
-from sqlalchemy import Connection, exc, schema as sa_schema
+from sqlalchemy import exc, schema as sa_schema
+from sqlalchemy.engine import Connection
 from sqlalchemy.dialects.mysql.pymysql import MySQLDialect_pymysql
-from sqlalchemy.dialects.mysql.base import MySQLDDLCompiler, MySQLTypeCompiler, MySQLCompiler, MySQLIdentifierPreparer, _DecodingRow
-from sqlalchemy.sql import sqltypes
-from sqlalchemy.util import topological
-from sqlalchemy import util
-from sqlalchemy import log
-from sqlalchemy.engine import reflection
-from sqlalchemy.dialects.mysql.types import TINYINT, SMALLINT, INTEGER, BIGINT, DECIMAL, DOUBLE, FLOAT, CHAR, VARCHAR, DATETIME
-from sqlalchemy.dialects.mysql.json import JSON
-from .datatype import (
-    LARGEINT, HLL, BITMAP, PERCENTILE, ARRAY, MAP, STRUCT,
-    DATE
+from sqlalchemy.dialects.mysql.base import (
+    MySQLDDLCompiler,
+    MySQLTypeCompiler,
+    MySQLCompiler,
+    MySQLIdentifierPreparer,
+    _DecodingRow,
+    colspecs as base_colspecs
 )
+from sqlalchemy.sql import (sqltypes, bindparam, elements, type_api)
+from sqlalchemy.sql.schema import Table, TableClause
+from sqlalchemy import (util, log, text)
+from sqlalchemy.engine import reflection
+from sqlalchemy.dialects.mysql.types import (
+    TINYINT,
+    SMALLINT,
+    INTEGER,
+    BIGINT,
+    DECIMAL,
+    DOUBLE,
+    FLOAT,
+    CHAR,
+    VARCHAR,
+    DATETIME,
+)
+from sqlalchemy.dialects.mysql.json import JSON
+from .datatype import LARGEINT, HLL, BITMAP, PERCENTILE, ARRAY, MAP, STRUCT, StarrocksDate, StarrocksDateTime
 
 from . import reflection as _reflection
 
@@ -71,8 +84,8 @@ ischema_names = {
     "char": CHAR,
     "json": JSON,
     # === Date and time ===
-    "date": DATE,
-    "datetime": DATETIME,
+    "date": StarrocksDate,
+    "datetime": StarrocksDateTime,
     "timestamp": sqltypes.DATETIME,
     # == binary ==
     "binary": sqltypes.BINARY,
@@ -86,8 +99,16 @@ ischema_names = {
     "bitmap": BITMAP,
 }
 
+colspecs = base_colspecs | {
+    sqltypes.Date: StarrocksDate,
+    sqltypes.DateTime: StarrocksDateTime,
+    sqltypes.DECIMAL: DECIMAL,
+}
 
 class StarRocksTypeCompiler(MySQLTypeCompiler):
+
+    def visit_NVARCHAR(self, type_, **kw):
+        return self.visit_VARCHAR(type_, **kw)
 
     def visit_BOOLEAN(self, type_, **kw):
         return "BOOLEAN"
@@ -127,17 +148,16 @@ class StarRocksTypeCompiler(MySQLTypeCompiler):
     def visit_BITMAP(self, type_, **kw):
         return "BITMAP"
 
+    def visit_BLOB(self, type_, **kw):
+        return "BINARY"
+
 
 class StarRocksSQLCompiler(MySQLCompiler):
     def visit_delete(self, delete_stmt, **kw):
         result = super().visit_delete(delete_stmt, **kw)
-        compile_state = delete_stmt._compile_state_factory(
-            delete_stmt, self, **kw
-        )
+        compile_state = delete_stmt._compile_state_factory(delete_stmt, self, **kw)
         delete_stmt = compile_state.statement
-        table = self.delete_table_clause(
-            delete_stmt, delete_stmt.table, False
-        )
+        table = self.delete_table_clause(delete_stmt, delete_stmt.table, False)
         if not delete_stmt._where_criteria:
             return "TRUNCATE TABLE " + table
         return result
@@ -155,6 +175,82 @@ class StarRocksSQLCompiler(MySQLCompiler):
             text += " OFFSET " + self.process(select._offset_clause, **kw)
         return text
 
+    def visit_typeclause(
+        self,
+        typeclause,
+        type_=None,
+        **kw: Any,
+    ):
+        if type_ is None:
+            type_ = typeclause.type.dialect_impl(self.dialect)
+        if isinstance(type_, sqltypes.Boolean):
+            return self.dialect.type_compiler_instance.process(type_)
+        return super().visit_typeclause(typeclause, type_, **kw)
+
+    def visit_insert_into_files(self, insert_into, **kw):
+        return (
+            f"INSERT INTO {self.process(insert_into.target, **kw)}\n"
+            f" {self.process(insert_into.from_, **kw)}"
+        )
+
+    def visit_files_target(self, files, **kw):
+        target_items = []
+        target_items.append(self.process(files.storage, **kw))
+        target_items.append(self.process(files.format, **kw))
+        if files.options is not None:
+            target_items.append(self.process(files.options, **kw))
+        files_str = ",\n".join(target_items)
+        return f"FILES(\n{files_str}\n)"
+
+    def visit_cloud_storage(self, storage, **kw):
+        return ',\n'.join([
+            f'{repr(k)} = {repr(v)}'
+            for k, v in storage.options.items()
+        ])
+
+    def visit_files_format(self, files_format, **kw):
+        return ',\n'.join([
+            f'{repr(k)} = {repr(v)}'
+            for k, v in files_format.options.items()
+        ])
+
+    def visit_files_options(self, files_options, **kw):
+        return ',\n'.join([
+            f'{repr(k)} = {repr(v)}'
+            for k, v in files_options.options.items()
+        ])
+
+    def visit_insert_from_files(self, insert_from, **kw):
+        target = (
+            self.preparer.format_table(insert_from.target)
+            if isinstance(insert_from.target, (TableClause,))
+            else self.process(insert_from.target, **kw)
+        )
+
+        if isinstance(insert_from.columns, str):
+            select_str = insert_from.columns
+        else:
+            select_str = ",".join(
+                [
+                    self.process(col, **kw)
+                    for col in insert_from.columns
+                ]
+            )
+
+        return (
+            f"INSERT INTO {target}\n"
+            f" SELECT {select_str}\n"
+            f" FROM {self.process(insert_from.from_, **kw)}"
+        )
+
+    def visit_files_source(self, files, **kw):
+        source_items = []
+        source_items.append(self.process(files.storage, **kw))
+        source_items.append(self.process(files.format, **kw))
+        if files.options is not None:
+            source_items.append(self.process(files.options, **kw))
+        files_str = ",\n".join(source_items)
+        return f"FILES(\n{files_str}\n)"
 
 class StarRocksDDLCompiler(MySQLDDLCompiler):
 
@@ -180,20 +276,14 @@ class StarRocksDDLCompiler(MySQLDDLCompiler):
 
         separator = "\n"
 
-        # if only one primary key, specify it along with the column
-        first_pk = False
         for create_column in create.columns:
             column = create_column.element
             try:
-                processed = self.process(
-                    create_column, first_pk=column.primary_key and not first_pk
-                )
+                processed = self.process(create_column)
                 if processed is not None:
                     text += separator
                     separator = ", \n"
                     text += "\t" + processed
-                if column.primary_key:
-                    first_pk = True
             except exc.CompileError as ce:
                 raise exc.CompileError(
                     "(in table '%s', column '%s'): %s"
@@ -223,17 +313,18 @@ class StarRocksDDLCompiler(MySQLDDLCompiler):
             if k.startswith("%s_" % self.dialect.name)
         )
 
-        if table.comment is not None:
-            opts["COMMENT"] = table.comment
+        # if table.comment is not None:
+        opts["COMMENT"] = table.comment or ''
 
-
-        if 'ENGINE' in opts:
+        if "ENGINE" in opts:
             table_opts.append(f'ENGINE={opts["ENGINE"]}')
 
-        if 'PRIMARY_KEY' in opts:
+        if table.primary_key:
+            table_opts.append(self.process(table.primary_key))
+        elif "PRIMARY_KEY" in opts:
             table_opts.append(f'PRIMARY KEY({opts["PRIMARY_KEY"]})')
 
-        if 'DISTRIBUTED_BY' in opts:
+        if "DISTRIBUTED_BY" in opts:
             table_opts.append(f'DISTRIBUTED BY HASH({opts["DISTRIBUTED_BY"]})')
 
         if "COMMENT" in opts:
@@ -259,9 +350,7 @@ class StarRocksDDLCompiler(MySQLDDLCompiler):
 
         colspec = [
             self.preparer.format_column(column),
-            self.dialect.type_compiler.process(
-                column.type, type_expression=column
-            ),
+            self.dialect.type_compiler.process(column.type, type_expression=column),
         ]
 
         # ToDo: Support aggregation type
@@ -309,7 +398,7 @@ class StarRocksDDLCompiler(MySQLDDLCompiler):
                 and not column.default.optional
             )
         ):
-            colspec[1] = "BIGINT" # ToDo - remove this, find way to fix the test
+            colspec[1] = "BIGINT"  # ToDo - remove this, find way to fix the test
             colspec.append("AUTO_INCREMENT")
         else:
             default = self.get_column_default_string(column)
@@ -322,7 +411,7 @@ class StarRocksDDLCompiler(MySQLDDLCompiler):
         return " ".join(colspec)
 
     def visit_computed_column(self, generated, **kw):
-        #ToDo >= version 3.1
+        # ToDo >= version 3.1
         text = "AS (%s)" % self.sql_compiler.process(
             generated.sqltext, include_table=False, literal_binds=True
         )
@@ -363,7 +452,6 @@ class StarRocksDDLCompiler(MySQLDDLCompiler):
 
 
 class StarRocksIdentifierPreparer(MySQLIdentifierPreparer):
-    # reserved_words = RESERVED_WORDS
     pass
 
 
@@ -374,11 +462,10 @@ class StarRocksDialect(MySQLDialect_pymysql):
     # Warnings are generated by SQLAlchemy if this flag is not explicitly set
     # and tests are needed before being enabled
     supports_statement_cache = True
-    supports_server_side_cursors = False
     supports_empty_insert = False
 
     ischema_names = ischema_names
-
+    colspecs = colspecs
 
     statement_compiler = StarRocksSQLCompiler
     ddl_compiler = StarRocksDDLCompiler
@@ -404,13 +491,39 @@ class StarRocksDialect(MySQLDialect_pymysql):
 
     def _parse_server_version(self, val):
         server_version_info = tuple()
-        m = re.match(r"(\d+)\.?(\d+)?(?:\.(\d+))?(?:\.\d+)?(?:[-\s])?(?P<commit>.*)?", val)
+        m = re.match(
+            r"(\d+)\.?(\d+)?(?:\.(\d+))?(?:\.\d+)?(?:[-\s])?(?P<commit>.*)?", val
+        )
         if m is not None:
-            server_version_info = tuple([int(x) for x in m.group(1, 2, 3) if x is not None])
+            server_version_info = tuple(
+                [int(x) for x in m.group(1, 2, 3) if x is not None]
+            )
 
         # setting it here to help w the test suite
         self.server_version_info = server_version_info
         return server_version_info
+
+
+    def _show_create_table(
+        self,
+        connection: Connection,
+        table,
+        charset=None,
+        full_name=None,
+    ) -> str:
+        """Run SHOW CREATE TABLE for a ``Table``."""
+        try:
+            return super()._show_create_table(
+                connection,
+                table,
+                charset,
+                full_name,
+            )
+        except exc.DBAPIError as e:
+            if self._extract_error_code(e.orig) == 1064:  # type: ignore[arg-type] # noqa: E501
+                raise exc.NoSuchTableError(full_name) from e
+            else:
+                raise
 
     @util.memoized_property
     def _tabledef_parser(self) -> _reflection.StarRocksTableDefinitionParser:
@@ -424,33 +537,64 @@ class StarRocksDialect(MySQLDialect_pymysql):
         return _reflection.StarRocksTableDefinitionParser(self, preparer)
 
     def _read_from_information_schema(
-        self, connection: Connection, inf_sch_table: str, charset: Union[str, None] = None, **kwargs
+        self,
+        connection: Connection,
+        inf_sch_table: str,
+        charset: Union[str, None] = None,
+        **kwargs,
     ):
-        def escape_single_quote(s):
-            return s.replace("'", "\\'")
-        
-        st = dedent(f"""
+        st = text(dedent(
+            f"""
             SELECT * 
             FROM information_schema.{inf_sch_table} 
-            WHERE {" AND ".join([f"{k} = '{escape_single_quote(v)}'" for k, v in kwargs.items()])}
-        """)
-        rp = None
+            WHERE {" AND ".join([f"{k} = :{k}" for k in kwargs.keys()])}
+        """
+        )).bindparams(
+            *[
+                bindparam(k, type_=sqltypes.Unicode)
+                for k in kwargs.keys()
+            ]
+        )
         try:
             rp = connection.execution_options(
                 skip_user_error_events=False
-            ).exec_driver_sql(st)
+            ).execute(st, kwargs)
+            rows = [_DecodingRow(row, charset) for row in rp.mappings().fetchall()]
+            if not rows:
+                raise exc.NoSuchTableError(f"Empty response for query: '{st}'")
+            return rows
         except exc.DBAPIError as e:
             if self._extract_error_code(e.orig) == 1146:
                 raise exc.NoSuchTableError(f"information_schema.{inf_sch_table}") from e
             else:
                 raise
-        rows = [_DecodingRow(row, charset) for row in rp.mappings().fetchall()]
-        if not rows:
-            raise exc.NoSuchTableError(f"Empty response for query: '{st}'")
-        return rows
-    
+
+    def _read_from_show_create(self, connection: Connection, schema: str, table_name: str, charset: Union[str, None] = None):
+        full_name = ".".join(
+            self.identifier_preparer._quote_free_identifiers(
+                schema, table_name
+            )
+        )
+        create_sql = self._show_create_table(connection, None, charset, full_name)
+        if create_sql.lstrip().startswith("CREATE VIEW"):
+            return dict()
+        only_create = create_sql.split('ENGINE=')[0]
+        only_columns = only_create.split("\n")[1:-1]
+        only_columns = [c.strip() for c in only_columns]
+        col_autoinc = {
+            c.split(' ')[0].strip('`'): 'AUTO_INCREMENT' in c
+            for c in only_columns
+        }
+        return col_autoinc
+
     @reflection.cache
-    def _setup_parser(self, connection: Connection, table_name: str, schema: Union[str, None] = None, **kw):
+    def _setup_parser(
+        self,
+        connection,
+        table_name,
+        schema=None,
+        **kw,
+    ):
         charset = self._connection_charset
         parser = self._tabledef_parser
 
@@ -489,11 +633,22 @@ class StarRocksDialect(MySQLDialect_pymysql):
             table_name=table_name,
         )
 
-        return parser.parse(table=table_rows[0], table_config=table_config_rows[0], columns=column_rows, charset=charset)
+        column_autoinc = self._read_from_show_create(
+            connection=connection,
+            schema=schema,
+            table_name=table_name,
+            charset=charset,
+        )
 
-    def _show_table_indexes(
-        self, connection, table, charset=None, full_name=None
-    ):
+        return parser.parse(
+            table=table_rows[0],
+            table_config=table_config_rows[0],
+            columns=column_rows,
+            column_autoinc=column_autoinc,
+            charset=charset,
+        )
+
+    def _show_table_indexes(self, connection, table, charset=None, full_name=None):
         """Run SHOW INDEX FROM for a ``Table``."""
 
         if full_name is None:
@@ -537,23 +692,19 @@ class StarRocksDialect(MySQLDialect_pymysql):
             elif flavor is None:
                 pass
             else:
-                self.logger.info(
+                self.logger.info( # pylint: disable=no-member
                     "Converting unknown KEY type %s to a plain KEY", flavor
                 )
                 pass
 
             if spec["parser"]:
-                dialect_options["%s_with_parser" % (self.name)] = spec[
-                    "parser"
-                ]
+                dialect_options["%s_with_parser" % (self.name)] = spec["parser"]
 
             index_d = {}
 
             index_d["name"] = spec["name"]
             index_d["column_names"] = [s[0] for s in spec["columns"]]
-            mysql_length = {
-                s[0]: s[1] for s in spec["columns"] if s[1] is not None
-            }
+            mysql_length = {s[0]: s[1] for s in spec["columns"] if s[1] is not None}
             if mysql_length:
                 dialect_options["%s_length" % self.name] = mysql_length
 
@@ -567,6 +718,7 @@ class StarRocksDialect(MySQLDialect_pymysql):
             indexes.append(index_d)
         return indexes
 
+    @reflection.cache
     def has_table(self, connection, table_name, schema=None, **kw):
         try:
             return super().has_table(connection, table_name, schema, **kw)
@@ -574,3 +726,20 @@ class StarRocksDialect(MySQLDialect_pymysql):
             if self._extract_error_code(e.orig) in (5501, 5502):
                 return False
             raise
+    #
+    # @reflection.cache
+    # def get_table_comment(
+    #     self,
+    #     connection: Connection,
+    #     table_name: str,
+    #     schema: Optional[str] = None,
+    #     **kw: Any,
+    # ) -> ReflectedTableComment:
+    #     parsed_state = self._parsed_state_or_create(
+    #         connection, table_name, schema, **kw
+    #     )
+    #     comment = parsed_state.table_options.get(f"{self.name}_comment", None)
+    #     if comment is not None:
+    #         return {"text": comment}
+    #     else:
+    #         return ReflectionDefaults.table_comment()

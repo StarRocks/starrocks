@@ -1,4 +1,3 @@
-#! /usr/bin/python3
 # Copyright 2021-present StarRocks, Inc. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -13,15 +12,14 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import datetime
 import logging
-from typing import Optional, List, Any, Type, Dict, Callable, Literal
-from datetime import date
+import re
+from typing import Optional, List, Any, Type, Dict, Callable
 
 from sqlalchemy.engine import Dialect
 from sqlalchemy.sql import sqltypes
 from sqlalchemy.sql.type_api import TypeEngine
-from sqlalchemy.dialects.mysql.types import TINYINT, SMALLINT, INTEGER, BIGINT, DECIMAL, DOUBLE, FLOAT, CHAR, VARCHAR, DATETIME
-from sqlalchemy.dialects.mysql.json import JSON
 
 logger = logging.getLogger(__name__)
 
@@ -32,9 +30,55 @@ class LARGEINT(sqltypes.Integer):
 
 class DATE(sqltypes.DATE):
     __visit_name__ = "DATE"
-    def literal_processor(self, dialect: Dialect) -> Callable[[date], str]:
-        def process(value: date) -> str:
+    def literal_processor(self, dialect: Dialect) -> Callable[[datetime.date], str]:
+        def process(value: datetime.date) -> str:
             return f"TO_DATE('{value}')"
+
+        return process
+
+
+class StarrocksDate(sqltypes.DATE):
+    __visit_name__ = "DATE"
+
+    _reg = re.compile(r"(\d+)-(\d+)-(\d+)")
+
+    def result_processor(self, dialect, coltype):
+        def process(value):
+            if isinstance(value, str):
+                m = self._reg.match(value)
+                if not m:
+                    raise ValueError("could not parse %r as a date value" % (value,))
+                return datetime.date(*[int(x or 0) for x in m.groups()])
+            else:
+                return value
+
+        return process
+
+
+class StarrocksDateTime(sqltypes.DATETIME):
+    __visit_name__ = "DATETIME"
+
+    _reg = re.compile(r"(\d+)-(\d+)-(\d+) (\d+):(\d+):(\d+)\.(\d+)")
+
+    def result_processor(self, dialect, coltype):
+        def process(value):
+            if isinstance(value, str):
+                m = self._reg.match(value)
+                if not m:
+                    raise ValueError(
+                        "could not parse %r as a datetime value" % (value,)
+                    )
+                return datetime.datetime(*[int(x or 0) for x in m.groups()])
+            else:
+                return value
+
+        return process
+
+    def literal_processor(self, dialect):
+        def process(value):
+            if value is not None:
+                datetime_str = value.isoformat(" ", timespec="microseconds")
+                return f"'{datetime_str}'"
 
         return process
 

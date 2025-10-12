@@ -1,4 +1,3 @@
-#! /usr/bin/python3
 # Copyright 2021-present StarRocks, Inc. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -27,9 +26,10 @@ from sqlalchemy import log
 from sqlalchemy import types as sqltypes
 from sqlalchemy import util
 
+
 # kw_only is added in python 3.10
 # https://docs.python.org/3/library/dataclasses.html#dataclasses.dataclass
-@dataclasses.dataclass(**dict(kw_only=True) if 'KW_ONLY' in dataclasses.__all__ else {})
+@dataclasses.dataclass(**dict(kw_only=True) if "KW_ONLY" in dataclasses.__all__ else {})
 class ReflectedState(object):
     """Stores informations about table or view."""
 
@@ -51,17 +51,30 @@ class StarRocksTableDefinitionParser(object):
         self._re_csv_int = _re_compile(r"\d+")
         self._re_csv_str = _re_compile(r"\x27(?:\x27\x27|[^\x27])*\x27")
 
-    def parse(self, table: _DecodingRow, table_config: _DecodingRow, columns: list[_DecodingRow], charset: str) -> ReflectedState:
+    def parse(
+        self,
+        table: _DecodingRow,
+        table_config: _DecodingRow,
+        columns: list[_DecodingRow],
+        column_autoinc: dict[str, bool],
+        charset: str,
+    ) -> ReflectedState:
         return ReflectedState(
             table_name=table["TABLE_NAME"],
-            columns=[self._parse_column(column=column) for column in columns],
-            table_options=self._parse_table_options(table=table, table_config=table_config, columns=columns),
-            keys=[{
-                "type": self._get_key_type(columns=columns),
-                "columns": [(c, None, None) for c in self._get_key_columns(columns=columns)],
-                "parser": None,
-                "name": None,
-            }]
+            columns=[self._parse_column(column=column, col_autoinc=column_autoinc) for column in columns],
+            table_options=self._parse_table_options(
+                table=table, table_config=table_config, columns=columns
+            ),
+            keys=[
+                {
+                    "type": self._get_key_type(columns=columns),
+                    "columns": [
+                        (c, None, None) for c in self._get_key_columns(columns=columns)
+                    ],
+                    "parser": None,
+                    "name": None,
+                }
+            ],
         )
 
     def _parse_column_type(self, column: _DecodingRow) -> Any:
@@ -78,7 +91,8 @@ class StarRocksTableDefinitionParser(object):
             col_type = self.dialect.ischema_names[type_]
         except KeyError:
             util.warn(
-                "Did not recognize type '%s' of column '%s'" % (type_, column["COLUMN_NAME"])
+                "Did not recognize type '%s' of column '%s'"
+                % (type_, column["COLUMN_NAME"])
             )
             col_type = sqltypes.NullType
 
@@ -103,22 +117,22 @@ class StarRocksTableDefinitionParser(object):
             type_instance = col_type(*type_args, **type_kw)
         return type_instance
 
-    def _parse_column(self, column: _DecodingRow) -> dict:
+    def _parse_column(self, column: _DecodingRow, col_autoinc: dict) -> dict:
         """
         Parse column from information_schema.columns table.
-        It returns dictionary with column informations expected by sqlalchemy.
+        It returns dictionary with column information expected by sqlalchemy.
         """
-        return {
+        col = {
             "name": column["COLUMN_NAME"],
             "type": self._parse_column_type(column=column),
             "nullable": column["IS_NULLABLE"] == "YES",
             "default": column["COLUMN_DEFAULT"],
-            "autoincrement": None,  # TODO: This is not specified
-            "computed": {
-                "sqltext": column["GENERATION_EXPRESSION"]
-            },
+            "autoincrement": col_autoinc.get(column["COLUMN_NAME"], False),
             "comment": column["COLUMN_COMMENT"],
         }
+        if column['GENERATION_EXPRESSION'] is not None:
+            col["computed"] = {"sqltext": column["GENERATION_EXPRESSION"]}
+        return col
 
     def _get_key_columns(self, columns: list[_DecodingRow]) -> list[str]:
         """
@@ -127,7 +141,7 @@ class StarRocksTableDefinitionParser(object):
         """
         sorted_columns = sorted(columns, key=lambda col: col["ORDINAL_POSITION"])
         return [c["COLUMN_NAME"] for c in sorted_columns if c["COLUMN_KEY"]]
-    
+
     def _get_key_type(self, columns: list[_DecodingRow]) -> str:
         """
         Get key type from information_schema.columns table.
@@ -146,25 +160,33 @@ class StarRocksTableDefinitionParser(object):
         if not key_types:
             return ""
         return key_map[key_types[0]]
-    
+
     def _get_key_desc(self, columns: list[_DecodingRow]) -> str:
         """
         Get key description from information_schema.columns table.
         It returns string representation of key description.
         """
-        quoted_cols = [self.preparer.quote_identifier(col) for col in self._get_key_columns(columns=columns)]
+        quoted_cols = [
+            self.preparer.quote_identifier(col)
+            for col in self._get_key_columns(columns=columns)
+        ]
         return f"{self._get_key_type(columns=columns)} KEY({', '.join(quoted_cols)})"
-    
+
     def _get_distribution(self, table_config: _DecodingRow) -> str:
         """
         Get distribution from information_schema.tables table.
         It returns string representation of distribution option.
         """
         distribution_cols = table_config["DISTRIBUTE_KEY"]
-        distribution_str = f'({distribution_cols})' if distribution_cols else ""
+        distribution_str = f"({distribution_cols})" if distribution_cols else ""
         return f'{table_config["DISTRIBUTE_TYPE"]}{distribution_str}'
-    
-    def _parse_table_options(self, table: _DecodingRow, table_config: _DecodingRow, columns: list[_DecodingRow]) -> dict:
+
+    def _parse_table_options(
+        self,
+        table: _DecodingRow,
+        table_config: _DecodingRow,
+        columns: list[_DecodingRow],
+    ) -> dict:
         """
         Parse table options from information_schema.tables table.
         It returns dictionary with table options expected by sqlalchemy.
@@ -172,9 +194,11 @@ class StarRocksTableDefinitionParser(object):
         return {
             f"{self.dialect.name}_engine": table_config["TABLE_ENGINE"],
             f"{self.dialect.name}_key_desc": self._get_key_desc(columns),
-            f"{self.dialect.name}_comment": table["TABLE_COMMENT"],
+            f"{self.dialect.name}_comment": table["TABLE_COMMENT"] if table["TABLE_COMMENT"] != 'OLAP' else None,
             f"{self.dialect.name}_partition_by": table_config["PARTITION_KEY"],
             f"{self.dialect.name}_distribution": self._get_distribution(table_config),
             f"{self.dialect.name}_order_by": table_config["SORT_KEY"],
-            f"{self.dialect.name}_properties": tuple(json.loads(table_config["PROPERTIES"] or "{}").items()),
+            f"{self.dialect.name}_properties": tuple(
+                json.loads(table_config["PROPERTIES"] or "{}").items()
+            ),
         }

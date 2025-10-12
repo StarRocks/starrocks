@@ -1,0 +1,53 @@
+name: Test Python Client
+on:
+  pull_request_target:
+    branches:
+      - main
+    paths:
+      - contrib/starrocks-python-client/**
+jobs:
+  lint-and-test:
+    name: Lint & Test Python SQLAlchemy Dialect
+    runs-on: ubuntu-latest
+    services:
+      starrocks:
+        image: starrocks/allin1-ubuntu:latest
+        ports:
+          - 8030:8030
+          - 8040:8040
+          - 9030:9030
+    timeout-minutes: 15
+    steps:
+      - name: Ensure python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Checkout code
+        uses: actions/checkout@v4
+      - name: Acquire list of changed python files
+        id: all-python-files
+        continue-on-error: true
+        uses: tj-actions/changed-files@v46
+        with:
+          files: |
+            **/*.py
+      - name: Install dependencies
+        run: |
+          pip install -e .[test]
+          pip install -q pylint
+      - name: Install ReviewDog
+        uses: reviewdog/action-setup@v1
+      - name: Check Lint Warnings
+        if: ${{ steps.all-python-files.outputs.any_changed == 'true' }}
+        env:
+          REVIEWDOG_GITHUB_API_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          pylint -s n -f text -d E,R,C ${{ steps.all-python-files.outputs.all_changed_files }} 2>&1 | reviewdog -efm="%f:%l:%c: %m" -name="PyLint Warnings" -reporter=github-check -level=warning
+      - name: Check Lint Errors
+        env:
+          REVIEWDOG_GITHUB_API_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          pylint -s n -f text -E starrocks 2>&1 | reviewdog -efm="%f:%l:%c: %m" -name="PyLint Errors" -reporter=github-check -filter-mode=nofilter -fail-level=error
+      - name: Run Test Suite
+        run: |
+          pytest
