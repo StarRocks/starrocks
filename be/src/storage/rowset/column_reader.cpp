@@ -399,7 +399,7 @@ Status ColumnReader::_parse_zone_map(LogicalType type, const ZoneMapPB& zm, Zone
         RETURN_IF_ERROR(datum_from_string(type_info.get(), &(detail->min_value()), zm.min(), nullptr));
         RETURN_IF_ERROR(datum_from_string(type_info.get(), &(detail->max_value()), zm.max(), nullptr));
     }
-    detail->set_num_rows(static_cast<size_t>(num_rows()));
+    detail->set_num_rows(static_cast<size_t>(zm.num_rows()));
     return Status::OK();
 }
 
