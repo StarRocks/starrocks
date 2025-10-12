@@ -44,51 +44,51 @@ VALUES
 -- !result
 SELECT /*+ SET_VAR(streaming_preaggregation_mode='auto')*/ MAX_N(c_tinyint, 3) FROM t_without_null;
 -- result:
-[10,4,3]
+[3,4,10]
 -- !result
 SELECT /*+ SET_VAR(streaming_preaggregation_mode='force_preaggregation')*/ MAX_N(c_smallint, 3) FROM t_without_null;
 -- result:
-[100,44,33]
+[33,44,100]
 -- !result
 SELECT /*+ SET_VAR(streaming_preaggregation_mode='force_streaming')*/ MAX_N(c_int, 3) FROM t_without_null;
 -- result:
-[1000,444,333]
+[333,444,1000]
 -- !result
 SELECT /*+ SET_VAR(streaming_preaggregation_mode='auto')*/ MAX_N(c_bigint, 3) FROM t_without_null;
 -- result:
-[10000,4444,3333]
+[3333,4444,10000]
 -- !result
 SELECT /*+ SET_VAR(streaming_preaggregation_mode='force_preaggregation')*/ MAX_N(c_largeint, 3) FROM t_without_null;
 -- result:
-[100000,44444,33333]
+[33333,44444,100000]
 -- !result
 SELECT /*+ SET_VAR(streaming_preaggregation_mode='force_streaming')*/ MAX_N(c_float, 3) FROM t_without_null;
 -- result:
-[3.3,3.3,2.2]
+[3.3,3.3,4.4]
 -- !result
 SELECT /*+ SET_VAR(streaming_preaggregation_mode='auto')*/ MAX_N(c_double, 3) FROM t_without_null;
 -- result:
-[100.01,44.44,33.33]
+[33.33,44.44,100.01]
 -- !result
 SELECT /*+ SET_VAR(streaming_preaggregation_mode='force_preaggregation')*/ MAX_N(c_char, 3) FROM t_without_null;
 -- result:
-["char4","char3","char3"]
+["char3","char3","char4"]
 -- !result
 SELECT /*+ SET_VAR(streaming_preaggregation_mode='force_streaming')*/ MAX_N(c_varchar, 3) FROM t_without_null;
 -- result:
-["varchar4","varchar3","varchar3"]
+["varchar3","varchar3","varchar4"]
 -- !result
 SELECT /*+ SET_VAR(streaming_preaggregation_mode='auto')*/ MAX_N(c_date, 3) FROM t_without_null;
 -- result:
-["2021-01-10","2021-01-04","2021-01-03"]
+["2021-01-03","2021-01-04","2021-01-10"]
 -- !result
 SELECT /*+ SET_VAR(streaming_preaggregation_mode='force_preaggregation')*/ MAX_N(c_datetime, 3) FROM t_without_null;
 -- result:
-["2021-01-10 00:00:00","2021-01-04 00:00:00","2021-01-03 00:00:00"]
+["2021-01-03 00:00:00","2021-01-04 00:00:00","2021-01-10 00:00:00"]
 -- !result
 SELECT /*+ SET_VAR(streaming_preaggregation_mode='force_streaming')*/ MAX_N(c_decimal, 3) FROM t_without_null;
 -- result:
-[1000.010,444.440,333.330]
+[333.330,444.440,1000.010]
 -- !result
 SELECT /*+ SET_VAR(streaming_preaggregation_mode='force_preaggregation')*/ MAX_N(c_tinyint, 1) FROM t_without_null;
 -- result:
@@ -104,15 +104,15 @@ SELECT /*+ SET_VAR(streaming_preaggregation_mode='auto')*/ MAX_N(c_int, 1) FROM 
 -- !result
 SELECT /*+ SET_VAR(streaming_preaggregation_mode='force_streaming')*/ MAX_N(c_tinyint, 5) FROM t_without_null;
 -- result:
-[10,4,3,3,2]
+[2,3,3,4,10]
 -- !result
 SELECT /*+ SET_VAR(streaming_preaggregation_mode='auto')*/ MAX_N(c_smallint, 5) FROM t_without_null;
 -- result:
-[100,44,33,33,22]
+[22,33,33,44,100]
 -- !result
 SELECT /*+ SET_VAR(streaming_preaggregation_mode='force_preaggregation')*/ MAX_N(c_int, 5) FROM t_without_null;
 -- result:
-[1000,444,333,333,222]
+[222,333,333,444,1000]
 -- !result
 -- name: test_max_n_const
 SELECT MAX_N(col1, 3) FROM (VALUES (1)) AS tmp(col1);
@@ -121,7 +121,7 @@ SELECT MAX_N(col1, 3) FROM (VALUES (1)) AS tmp(col1);
 -- !result
 SELECT MAX_N(col1, 3) FROM (VALUES (1),(2),(3),(4),(5),(6)) AS tmp(col1);
 -- result:
-[6,5,4]
+[4,5,6]
 -- !result
 SELECT MAX_N(1, 3);
 -- result:

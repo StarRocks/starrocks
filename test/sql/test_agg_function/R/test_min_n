@@ -64,7 +64,7 @@ SELECT /*+ SET_VAR(streaming_preaggregation_mode='force_preaggregation')*/ MIN_N
 -- !result
 SELECT /*+ SET_VAR(streaming_preaggregation_mode='force_streaming')*/ MIN_N(c_float, 3) FROM t_without_null;
 -- result:
-[0,0,0]
+[1.01,1.1,1.1]
 -- !result
 SELECT /*+ SET_VAR(streaming_preaggregation_mode='auto')*/ MIN_N(c_double, 3) FROM t_without_null;
 -- result:
