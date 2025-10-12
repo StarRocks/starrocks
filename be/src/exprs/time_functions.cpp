@@ -19,6 +19,8 @@
 #include <libdivide.h>
 
 #include <algorithm>
+#include <iomanip>
+#include <sstream>
 #include <string_view>
 #include <unordered_map>
 
@@ -3916,15 +3918,37 @@ StatusOr<ColumnPtr> TimeFunctions::sec_to_time(FunctionContext* context, const s
 
     auto bigint_viewer = ColumnViewer<TYPE_BIGINT>(bigint_column);
     const size_t size = bigint_column->size();
-    auto builder = ColumnBuilder<TYPE_TIME>(size);
+    auto builder = ColumnBuilder<TYPE_VARCHAR>(size);
 
     for (size_t i = 0; i < size; ++i) {
         if (bigint_viewer.is_null(i)) {
             builder.append_null();
             continue;
         }
-        auto time = static_cast<double>(from_seconds_with_limit(bigint_viewer.value(i)));
-        builder.append(time);
+        
+        int64_t seconds = from_seconds_with_limit(bigint_viewer.value(i));
+        
+        // Handle negative time
+        bool is_negative = seconds < 0;
+        if (is_negative) {
+            seconds = -seconds;
+        }
+        
+        // Convert seconds to hours, minutes, seconds
+        int64_t hours = seconds / 3600;
+        int64_t minutes = (seconds % 3600) / 60;
+        int64_t secs = seconds % 60;
+        
+        // Format as HH:MM:SS
+        std::stringstream ss;
+        if (is_negative) {
+            ss << "-";
+        }
+        ss << std::setfill('0') << std::setw(2) << hours << ":"
+           << std::setfill('0') << std::setw(2) << minutes << ":"
+           << std::setfill('0') << std::setw(2) << secs;
+        
+        builder.append(ss.str());
     }
 
     return builder.build(ColumnHelper::is_all_const(columns));

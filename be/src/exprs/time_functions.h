@@ -770,7 +770,7 @@ public:
      * return time
      * @param: [int]
      * @paramType columns: [BinaryColumn]
-     * @return Int64Column
+     * @return BinaryColumn of TYPE_VARCHAR
      */
     DEFINE_VECTORIZED_FN(sec_to_time);
 
