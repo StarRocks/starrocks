@@ -66,11 +66,13 @@ struct MinMaxNAggregateState {
     void process(MemPool* mem_pool, const CppType& value) {
         if (heap.size() < static_cast<size_t>(n)) {
             // Heap not full, add directly
-            heap.push(_copy<IsDeepCopy>(mem_pool, value));
+            auto copied_value = _copy<IsDeepCopy>(mem_pool, value);
+            heap.push(copied_value);
         } else if (_should_replace(value, heap.top())) {
             // Heap full, replace if new value is better
             heap.pop();
-            heap.push(_copy<IsDeepCopy>(mem_pool, value));
+            auto copied_value = _copy<IsDeepCopy>(mem_pool, value);
+            heap.push(copied_value);
         }
     }
 
@@ -119,7 +121,9 @@ struct MinMaxNAggregateState {
 private:
     template <bool IsDeepCopy>
     CppType _copy(MemPool* mem_pool, const CppType& value) {
-        if constexpr (IsDeepCopy && IsSlice<CppType>) {
+        // Always deep copy Slice types to avoid dangling pointers,
+        // regardless of IsDeepCopy flag
+        if constexpr (IsSlice<CppType>) {
             uint8_t* pos = mem_pool->allocate(value.size);
             std::memcpy(pos, value.data, value.size);
             return Slice{pos, value.size};
@@ -406,28 +410,18 @@ public:
             return;
         }
         
-        // Directly manipulate ArrayColumn's internal structure
-        auto& elements_column = array_column->elements_column();
-        auto* data_column = down_cast<NullableColumn*>(elements_column.get())->mutable_data_column();
-        auto* typed_column = down_cast<InputColumnType*>(data_column);
-        auto& null_data = down_cast<NullableColumn*>(elements_column.get())->null_column_data();
-        
-        // Append all values to elements_column
+        // Create a temporary column to hold the array elements
+        auto temp_column = InputColumnType::create();
         for (const auto& value : values) {
-            // For string types, value is Slice; for others, it's the actual type
             if constexpr (IsSlice<CppType>) {
-                // String types: directly append Slice
-                typed_column->append(value);
+                temp_column->append(value);
             } else {
-                // Other types: use AggDataTypeTraits
-                AggDataTypeTraits<LT>::append_value(typed_column, value);
+                AggDataTypeTraits<LT>::append_value(temp_column.get(), value);
             }
-            null_data.emplace_back(0);  // Mark as non-null
         }
         
-        // Update the offset to indicate the end of this array
-        auto& offsets = array_column->offsets_column()->get_data();
-        offsets.emplace_back(offsets.back() + static_cast<uint32_t>(values.size()));
+        // Use the safe append_array_element method
+        array_column->append_array_element(*temp_column, 0);
 
         if (UNLIKELY(state_impl.check_overflow(*to, ctx, FUNC_NAME))) {
             return;
@@ -443,7 +437,7 @@ public:
         DCHECK(dst->is_array());
         auto* array_column = down_cast<ArrayColumn*>(dst);
         
-        // Get sorted values
+        // Get sorted values (only once for all rows)
         std::vector<CppType> values;
         state_impl.get_sorted_values(values);
         
@@ -456,28 +450,18 @@ public:
             if (values.empty()) {
                 array_column->append_default();
             } else {
-                // Directly manipulate ArrayColumn's internal structure (like array_agg)
-                auto& elements_column = array_column->elements_column();
-                auto* data_column = down_cast<NullableColumn*>(elements_column.get())->mutable_data_column();
-                auto* typed_column = down_cast<InputColumnType*>(data_column);
-                auto& null_data = down_cast<NullableColumn*>(elements_column.get())->null_column_data();
-                
-                // Append all values
+                // Create a temporary column to hold the array elements
+                auto temp_column = InputColumnType::create();
                 for (const auto& value : values) {
-                    // For string types, value is Slice; for others, it's the actual type
                     if constexpr (IsSlice<CppType>) {
-                        // String types: directly append Slice
-                        typed_column->append(value);
+                        temp_column->append(value);
                     } else {
-                        // Other types: use AggDataTypeTraits
-                        AggDataTypeTraits<LT>::append_value(typed_column, value);
+                        AggDataTypeTraits<LT>::append_value(temp_column.get(), value);
                     }
-                    null_data.emplace_back(0);  // Mark as non-null
                 }
                 
-                // Update the offset
-                auto& offsets = array_column->offsets_column()->get_data();
-                offsets.emplace_back(offsets.back() + static_cast<uint32_t>(values.size()));
+                // Use the safe append_array_element method
+                array_column->append_array_element(*temp_column, 0);
             }
 
             if (UNLIKELY(state_impl.check_overflow(*dst, ctx, FUNC_NAME))) {
