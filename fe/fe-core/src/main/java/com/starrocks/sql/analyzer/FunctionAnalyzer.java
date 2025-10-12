@@ -1290,11 +1290,15 @@ public class FunctionAnalyzer {
             }
             // need to distinct output columns in finalize phase
             ((AggregateFunction) fn).setIsDistinct(isDistinct && (!isAscOrder.isEmpty() || outputConst));
-        } else if (FunctionSet.MIN_N.equals(fnName) || FunctionSet.MAX_N.equals(fnName)) {
+        } else if (FunctionSet.MIN_N.equalsIgnoreCase(fnName) || FunctionSet.MAX_N.equalsIgnoreCase(fnName)) {
             // min_n/max_n(value, n) returns array<value_type>
-            // Use IS_SUPERTYPE_OF to avoid implicit cast from DATE to INT (which is allowed in IS_NONSTRICT_SUPERTYPE_OF)
-            // IS_SUPERTYPE_OF only allows strict implicit casts (e.g. INT→BIGINT), not precision-loss casts (DATE→INT)
-            fn = Expr.getBuiltinFunction(fnName, argumentTypes, Function.CompareMode.IS_SUPERTYPE_OF);
+            // Normalize second argument to INT (handles TINYINT/SMALLINT from literals like '3')
+            if (argumentTypes.length > 1) {
+                argumentTypes[1] = Type.INT;
+            }
+
+            // use IS_IDENTICAL to preserve exact value type (especially FLOAT to avoid promotion to DOUBLE)
+            fn = Expr.getBuiltinFunction(fnName, argumentTypes, Function.CompareMode.IS_IDENTICAL);
             if (fn != null) {
                 fn = fn.copy();
                 // Explicitly set return type to preserve element type (e.g. array<date> not array<int>)
