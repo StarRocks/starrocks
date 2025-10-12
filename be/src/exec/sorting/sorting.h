@@ -34,7 +34,7 @@ struct SortDescs;
 // @param permutation input and output permutation
 // @param tie input and output tie
 // @param range sort range, {0, 0} means not build tie but sort data
-Status sort_and_tie_column(const std::atomic<bool>& cancel, ColumnPtr& column, const SortDesc& sort_desc,
+Status sort_and_tie_column(const std::atomic<bool>& cancel, MutableColumnPtr& column, const SortDesc& sort_desc,
                            SmallPermutation& permutation, Tie& tie, std::pair<int, int> range, const bool build_tie,
                            const SortDescs* sort_descs = nullptr);
 Status sort_and_tie_column(const std::atomic<bool>& cancel, const ColumnPtr& column, const SortDesc& sort_desc,

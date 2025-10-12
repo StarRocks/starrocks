@@ -60,8 +60,9 @@ Status ProjectOperator::push_chunk(RuntimeState* state, const ChunkPtr& chunk) {
             ASSIGN_OR_RETURN(result_columns[i], _expr_ctxs[i]->evaluate(chunk.get()));
 
             if (result_columns[i]->only_null()) {
-                result_columns[i] = ColumnHelper::create_column(_expr_ctxs[i]->root()->type(), true);
-                result_columns[i]->append_nulls(chunk->num_rows());
+                auto mutable_col = ColumnHelper::create_column(_expr_ctxs[i]->root()->type(), true);
+                mutable_col->append_nulls(chunk->num_rows());
+                result_columns[i] = std::move(mutable_col);
             } else if (result_columns[i]->is_constant()) {
                 // Note: we must create a new column every time here,
                 // because result_columns[i] is shared_ptr

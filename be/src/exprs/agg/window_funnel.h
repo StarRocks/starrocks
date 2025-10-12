@@ -177,8 +177,10 @@ struct WindowFunnelState {
     }
 
     static void serialize(int64_t* buffer, size_t length, ArrayColumn* array_column) {
-        CHECK(array_column->elements_column()->append_numbers(buffer, sizeof(int64_t) * length) > 0);
-        array_column->offsets_column()->append(array_column->offsets_column()->get_data().back() + length);
+        auto elements_col = array_column->elements_column_mutable_ptr();
+        auto offsets_col = array_column->offsets_column_mutable_ptr();
+        CHECK(elements_col->append_numbers(buffer, sizeof(int64_t) * length) > 0);
+        offsets_col->append(offsets_col->immutable_data().back() + length);
     }
 
     void serialize_to_array_column(ArrayColumn* array_column) const {

@@ -168,14 +168,14 @@ public:
     }
 
     void convert_to_serialize_format(FunctionContext* ctx, const Columns& src, size_t chunk_size,
-                                     ColumnPtr* dst) const override {
-        auto* column = down_cast<ArrayColumn*>(dst->get());
-        auto& offsets = column->offsets_column()->get_data();
-        auto& elements_column = column->elements_column();
+                                     MutableColumnPtr& dst) const override {
+        auto* column = down_cast<ArrayColumn*>(dst.get());
+        auto offsets_col = column->offsets_column_mutable_ptr();
+        auto elements_column = column->elements_column_mutable_ptr();
 
         for (size_t i = 0; i < chunk_size; i++) {
             elements_column->append_datum(src[0]->get(i));
-            offsets.emplace_back(offsets.back() + 1);
+            offsets_col->append(offsets_col->immutable_data().back() + 1);
         }
     }
 
@@ -224,7 +224,7 @@ struct ArrayAggAggregateStateV2 {
 
     // using pointer rather than vector to avoid variadic size
     // array_agg(a order by b, c, d), the a,b,c,d are put into data_columns in order.
-    Columns data_columns;
+    MutableColumns data_columns;
 };
 
 class ArrayAggAggregateFunctionV2 final
@@ -273,7 +273,7 @@ public:
 
     // struct and array elements aren't be null, as they consist from several columns
     void merge(FunctionContext* ctx, const Column* column, AggDataPtr __restrict state, size_t row_num) const override {
-        auto& input_columns = down_cast<const StructColumn*>(ColumnHelper::get_data_column(column))->fields();
+        const auto input_columns = down_cast<const StructColumn*>(ColumnHelper::get_data_column(column))->fields();
         for (auto i = 0; i < input_columns.size(); ++i) {
             auto array_column = down_cast<const ArrayColumn*>(ColumnHelper::get_data_column(input_columns[i].get()));
             const auto offsets = array_column->offsets().immutable_data();
@@ -290,7 +290,7 @@ public:
             return;
         }
 
-        auto& columns = down_cast<StructColumn*>(ColumnHelper::get_data_column(to))->fields_column();
+        auto columns = down_cast<StructColumn*>(ColumnHelper::get_data_column(to))->fields_column_mutable();
         if (to->is_nullable()) {
             down_cast<NullableColumn*>(to)->null_column_data().emplace_back(0);
         }
@@ -300,15 +300,16 @@ public:
             if (columns[i]->is_nullable()) {
                 down_cast<NullableColumn*>(columns[i].get())->null_column_data().emplace_back(0);
             }
+            auto elements_col = array_col->elements_column_mutable_ptr();
+            auto offsets_col = array_col->offsets_column_mutable_ptr();
             if (state_impl.data_columns[i]->only_null()) {
-                array_col->elements_column()->append_nulls(elem_size);
+                elements_col->append_nulls(elem_size);
             } else {
-                array_col->elements_column()->append(
+                elements_col->append(
                         *ColumnHelper::unpack_and_duplicate_const_column(elem_size, state_impl.data_columns[i]), 0,
                         elem_size);
             }
-            auto& offsets = array_col->offsets_column()->get_data();
-            offsets.push_back(offsets.back() + elem_size);
+            offsets_col->append(offsets_col->immutable_data().back() + elem_size);
             state_impl.data_columns[i].reset();
         }
         state_impl.data_columns.clear();
@@ -409,14 +410,15 @@ public:
             index.resize(res_num);
             elem_size = res_num;
         }
+        auto elements_col = array_col->elements_column_mutable_ptr();
+        auto offsets_col = array_col->offsets_column_mutable_ptr();
         if (index.empty()) {
-            array_col->elements_column()->append(*res, 0, elem_size);
+            elements_col->append(*res, 0, elem_size);
         } else {
-            array_col->elements_column()->append_selective(*res, index);
+            elements_col->append_selective(*res, index);
         }
         state_impl.data_columns.clear(); // early release memory
-        auto& offsets = array_col->offsets_column()->get_data();
-        offsets.push_back(offsets.back() + elem_size);
+        offsets_col->append(offsets_col->immutable_data().back() + elem_size);
         // should check overflow after append, otherwise the result column with multi row will be overflow.
         if (UNLIKELY(state_impl.check_overflow(*to, ctx))) {
             return;
@@ -425,11 +427,11 @@ public:
 
     // convert each cell of a row to a [nullable] array in a struct
     void convert_to_serialize_format(FunctionContext* ctx, const Columns& src, size_t chunk_size,
-                                     ColumnPtr* dst) const override {
-        auto columns = down_cast<StructColumn*>(ColumnHelper::get_data_column(dst->get()))->fields_column();
-        if (dst->get()->is_nullable()) {
+                                     MutableColumnPtr& dst) const override {
+        auto columns = down_cast<StructColumn*>(ColumnHelper::get_data_column(dst.get()))->fields_column_mutable();
+        if (dst->is_nullable()) {
             for (size_t i = 0; i < chunk_size; i++) {
-                down_cast<NullableColumn*>(dst->get())->null_column_data().emplace_back(0);
+                down_cast<NullableColumn*>(dst.get())->null_column_data().emplace_back(0);
             }
         }
         for (auto j = 0; j < columns.size(); ++j) {
@@ -439,11 +441,11 @@ public:
                     down_cast<NullableColumn*>(columns[j].get())->null_column_data().emplace_back(0);
                 }
             }
-            auto& element_column = array_col->elements_column();
-            auto& offsets = array_col->offsets_column()->get_data();
+            auto element_column = array_col->elements_column_mutable_ptr();
+            auto offsets_col = array_col->offsets_column_mutable_ptr();
             for (size_t i = 0; i < chunk_size; i++) {
                 element_column->append_datum(src[j]->get(i));
-                offsets.emplace_back(offsets.back() + 1);
+                offsets_col->append(offsets_col->immutable_data().back() + 1);
             }
         }
     }

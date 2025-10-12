@@ -228,27 +228,27 @@ struct ColumnBuilder {
     }
 };
 
-ColumnPtr FunctionContext::create_column(const FunctionContext::TypeDesc& type_desc, bool nullable) {
+MutableColumnPtr FunctionContext::create_column(const FunctionContext::TypeDesc& type_desc, bool nullable) {
     const auto type = type_desc.type;
-    ColumnPtr p = nullptr;
+    MutableColumnPtr p = nullptr;
 
     if (type == TYPE_STRUCT) {
         size_t field_size = type_desc.children.size();
         DCHECK_EQ(field_size, type_desc.field_names.size());
-        Columns columns;
+        MutableColumns columns;
         for (size_t i = 0; i < field_size; i++) {
-            ColumnPtr field_column = create_column(type_desc.children[i], true);
-            columns.emplace_back(field_column);
+            auto field_column = create_column(type_desc.children[i], true);
+            columns.emplace_back(std::move(field_column));
         }
-        p = StructColumn::create(columns, type_desc.field_names);
+        p = StructColumn::create(std::move(columns), type_desc.field_names);
     } else if (type == TYPE_ARRAY) {
         auto offsets = UInt32Column::create();
         auto data = create_column(type_desc.children[0], true);
         p = ArrayColumn::create(std::move(data), std::move(offsets));
     } else if (type == TYPE_MAP) {
         auto offsets = UInt32Column ::create();
-        ColumnPtr keys = nullptr;
-        ColumnPtr values = nullptr;
+        MutableColumnPtr keys = nullptr;
+        MutableColumnPtr values = nullptr;
         if (type_desc.children[0].type == TYPE_UNKNOWN) {
             FunctionContext::TypeDesc desc;
             desc.type = TYPE_NULL;
@@ -265,11 +265,12 @@ ColumnPtr FunctionContext::create_column(const FunctionContext::TypeDesc& type_d
         }
         p = MapColumn::create(std::move(keys), std::move(values), std::move(offsets));
     } else {
-        p = type_dispatch_column(type, ColumnBuilder(), type_desc);
+        auto col = type_dispatch_column(type, ColumnBuilder(), type_desc);
+        p = col ? col->as_mutable_ptr() : nullptr;
     }
 
     if (nullable && p != nullptr) {
-        return NullableColumn::create(p, NullColumn::create());
+        return NullableColumn::create(std::move(p), NullColumn::create());
     }
     return p;
 }

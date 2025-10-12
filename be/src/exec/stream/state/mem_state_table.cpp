@@ -26,7 +26,7 @@ void convert_datum_rows_to_chunk(const std::vector<DatumRow>& rows, Chunk* chunk
             VLOG_ROW << "[convert_datum_rows_to_chunk] row_num:" << row_num << ", column_size:" << row.size()
                      << ", i:" << i;
             DCHECK_LT(i, chunk->num_columns());
-            auto& col = chunk->get_column_by_index(i);
+            auto col = chunk->get_mutable_column_by_index(i);
             col->append_datum(row[i]);
         }
     }
@@ -82,7 +82,8 @@ Status MemStateTable::seek(const Columns& keys, StateTableResult& values) const 
 }
 
 Status MemStateTable::_append_null_to_chunk(ChunkPtr& result_chunk) const {
-    for (auto& column : result_chunk->columns()) {
+    for (size_t i = 0; i < result_chunk->num_columns(); i++) {
+        auto column = result_chunk->get_mutable_column_by_index(i);
         column->append_nulls(1);
     }
     return Status::OK();
@@ -90,9 +91,9 @@ Status MemStateTable::_append_null_to_chunk(ChunkPtr& result_chunk) const {
 
 Status MemStateTable::_append_datum_row_to_chunk(const DatumRow& v_row, ChunkPtr& result_chunk) const {
     DCHECK_EQ(v_row.size(), result_chunk->num_columns());
-    auto& columns = result_chunk->columns();
     for (size_t i = 0; i < result_chunk->num_columns(); i++) {
-        columns[i]->append_datum(v_row[i]);
+        auto column = result_chunk->get_mutable_column_by_index(i);
+        column->append_datum(v_row[i]);
     }
     return Status::OK();
 }

@@ -73,7 +73,7 @@ Status MetaReader::_read(Chunk* chunk, size_t n) {
 
     std::vector<Column*> columns;
     for (size_t i = 0; i < _collect_context.seg_collecter_params.fields.size(); ++i) {
-        ColumnPtr& col = chunk->get_column_by_index(i);
+        auto col = chunk->get_mutable_column_by_index(i);
         columns.emplace_back(col.get());
     }
 
@@ -99,7 +99,7 @@ void MetaReader::_fill_empty_result(Chunk* chunk) {
         auto s_id = _collect_context.result_slot_ids[i];
         auto slot = _params.desc_tbl->get_slot_descriptor(s_id);
         const auto& field = _collect_context.seg_collecter_params.fields[i];
-        ColumnPtr column = chunk->get_column_by_slot_id(slot->id());
+        auto column = chunk->get_mutable_column_by_slot_id(slot->id());
         if (field == "count") {
             column->append_datum(int64_t(0));
         } else {
@@ -298,11 +298,13 @@ Status SegmentMetaCollecter::_collect_flat_json(ColumnId cid, Column* column) {
     }
 
     ArrayColumn* array_column = down_cast<ArrayColumn*>(column);
-    size_t size = array_column->offsets_column()->get_data().back();
+    auto offsets_col = array_column->offsets_column_mutable_ptr();
+    auto elements_col = array_column->elements_column_mutable_ptr();
+    size_t size = offsets_col->immutable_data().back();
     auto res = append_read_name(col_reader);
     if (!res.empty()) {
-        array_column->elements_column()->append_datum(Slice(res));
-        array_column->offsets_column()->append(size + 1);
+        elements_col->append_datum(Slice(res));
+        offsets_col->append(size + 1);
     }
     return Status::OK();
 }
@@ -360,14 +362,14 @@ Status SegmentMetaCollecter::_collect_dict_for_column(ColumnIterator* column_ite
         array_column = down_cast<ArrayColumn*>(column);
     }
 
-    auto* offsets = array_column->offsets_column().get();
-    auto& data = offsets->get_data();
+    auto offsets = array_column->offsets_column_mutable_ptr();
+    auto& data = offsets->immutable_data();
     size_t end_offset = data.back();
     end_offset += words.size();
     offsets->append(end_offset);
 
     // add elements
-    auto dst = array_column->elements_column().get();
+    auto dst = array_column->elements_column_mutable_ptr();
     CHECK(dst->append_strings(words));
 
     if (column->is_nullable()) {

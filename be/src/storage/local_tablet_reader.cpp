@@ -158,8 +158,8 @@ Status LocalTabletReader::multi_get(const Chunk& keys, const std::vector<uint32_
     // reorder read values to input keys' order and put into values output parameter
     values.reset();
     for (size_t col_idx = 0; col_idx < value_column_ids_by_order.size(); col_idx++) {
-        values.get_column_by_index(value_column_ids_by_order_with_orig_idx[col_idx].second)
-                ->append_selective(*read_columns[col_idx], idxes.data(), 0, idxes.size());
+        auto dest_col = values.get_mutable_column_by_index(value_column_ids_by_order_with_orig_idx[col_idx].second);
+        dest_col->append_selective(*read_columns[col_idx], idxes.data(), 0, idxes.size());
     }
     int64_t t_end = MonotonicMillis();
     LOG(INFO) << strings::Substitute("multi_get tablet:$0 version:$1 #columns:$2 #rows:$3 found:$4 time:$5ms",

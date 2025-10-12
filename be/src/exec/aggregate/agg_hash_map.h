@@ -638,7 +638,7 @@ struct AggHashMapWithOneStringKeyWithNullable
         }
     }
 
-    void insert_keys_to_columns(ResultVector& keys, Columns& key_columns, size_t chunk_size) {
+    void insert_keys_to_columns(ResultVector& keys, MutableColumns& key_columns, size_t chunk_size) {
         if constexpr (is_nullable) {
             DCHECK(key_columns[0]->is_nullable());
             auto* nullable_column = down_cast<NullableColumn*>(key_columns[0].get());
@@ -880,7 +880,7 @@ struct AggHashMapWithSerializedKey : public AggHashMapWithKey<HashMap, AggHashMa
         return max_size;
     }
 
-    void insert_keys_to_columns(ResultVector& keys, Columns& key_columns, int32_t chunk_size) {
+    void insert_keys_to_columns(ResultVector& keys, MutableColumns& key_columns, int32_t chunk_size) {
         // When GroupBy has multiple columns, the memory is serialized by row.
         // If the length of a row is relatively long and there are multiple columns,
         // deserialization by column will cause the memory locality to deteriorate,
@@ -1074,7 +1074,7 @@ struct AggHashMapWithSerializedKeyFixedSize
         }
     }
 
-    void insert_keys_to_columns(ResultVector& keys, Columns& key_columns, int32_t chunk_size) {
+    void insert_keys_to_columns(ResultVector& keys, MutableColumns& key_columns, int32_t chunk_size) {
         DCHECK(fixed_byte_size != -1);
         tmp_slices.reserve(chunk_size);
 
@@ -1237,7 +1237,7 @@ struct AggHashMapWithCompressedKeyFixedSize
         }
     }
 
-    void insert_keys_to_columns(ResultVector& keys, Columns& key_columns, int32_t chunk_size) {
+    void insert_keys_to_columns(ResultVector& keys, MutableColumns& key_columns, int32_t chunk_size) {
         bitcompress_deserialize(key_columns, bases, offsets, used_bits, chunk_size, sizeof(FixedSizeSliceKey),
                                 keys.data());
     }

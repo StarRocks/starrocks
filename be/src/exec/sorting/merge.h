@@ -31,23 +31,17 @@ namespace starrocks {
 // The chunk is sorted based on `orderby` columns
 struct SortedRun {
     ChunkPtr chunk;
-    Columns orderby;
+    MutableColumns orderby;
     std::pair<uint32_t, uint32_t> range;
 
     SortedRun() = default;
     ~SortedRun() = default;
-    SortedRun(const SortedRun& rhs) = default;
+    SortedRun(const SortedRun& rhs) = delete;
     SortedRun(SortedRun&& rhs) = default;
-    SortedRun& operator=(const SortedRun& rhs) = default;
+    SortedRun& operator=(const SortedRun& rhs) = delete;
 
-    SortedRun(const ChunkPtr& ichunk, Columns columns)
+    SortedRun(const ChunkPtr& ichunk, MutableColumns columns)
             : chunk(ichunk), orderby(std::move(columns)), range(0, ichunk->num_rows()) {}
-
-    SortedRun(const SortedRun& rhs, size_t start, size_t end)
-            : chunk(rhs.chunk), orderby(rhs.orderby), range(start, end) {
-        DCHECK_LE(start, end);
-        DCHECK_LT(end, Column::MAX_CAPACITY_LIMIT);
-    }
 
     SortedRun(const ChunkPtr& ichunk, const std::vector<ExprContext*>* exprs);
 
@@ -100,10 +94,10 @@ struct SortedRuns {
 
     SortedRuns() = default;
     ~SortedRuns() = default;
-    SortedRuns(const SortedRuns& run) = default;
-    SortedRuns(SortedRuns&& run) = default;
-    SortedRuns(const SortedRun& run) : chunks{run} {}
-    SortedRuns& operator=(SortedRuns&& run) = default;
+    SortedRuns(const SortedRuns& run) = delete;
+    SortedRuns(SortedRuns&& run) noexcept = default;
+    SortedRuns& operator=(const SortedRuns& run) = delete;
+    SortedRuns& operator=(SortedRuns&& run) noexcept = default;
 
     void merge_runs(SortedRuns& runs) {
         for (auto& run : runs.chunks) {

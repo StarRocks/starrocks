@@ -106,14 +106,14 @@ public:
             data_columns.push_back(src_column->data_column());
         }
         if (_columns[0]->is_nullable()) {
-            materialize_column_by_permutation_impl(dst->null_column().get(), null_columns, _perm);
-            materialize_column_by_permutation_impl(dst->data_column().get(), data_columns, _perm);
+            materialize_column_by_permutation_impl(dst->mutable_null_column(), null_columns, _perm);
+            materialize_column_by_permutation_impl(dst->mutable_data_column(), data_columns, _perm);
             if (!dst->has_null()) {
-                dst->set_has_null(SIMD::count_nonzero(&dst->null_column()->get_data()[orig_size], _perm.size()));
+                dst->set_has_null(SIMD::count_nonzero(&dst->mutable_null_column()->immutable_data()[orig_size], _perm.size()));
             }
         } else {
-            dst->null_column()->resize(orig_size + _perm.size());
-            materialize_column_by_permutation_impl(dst->data_column().get(), data_columns, _perm);
+            dst->mutable_null_column()->resize(orig_size + _perm.size());
+            materialize_column_by_permutation_impl(dst->mutable_data_column(), data_columns, _perm);
         }
         DCHECK_EQ(dst->null_column()->size(), dst->data_column()->size());
 
@@ -261,7 +261,7 @@ void materialize_by_permutation(Chunk* dst, const std::vector<ChunkPtr>& chunks,
         for (const auto& chunk : chunks) {
             tmp_columns.push_back(chunk->get_column_by_index(col_index));
         }
-        materialize_column_by_permutation(dst->get_column_by_index(col_index).get(), tmp_columns, perm);
+        materialize_column_by_permutation(dst->get_mutable_column_by_index(col_index).get(), tmp_columns, perm);
     }
 }
 
@@ -273,7 +273,7 @@ void materialize_by_permutation_single(Chunk* dst, const ChunkPtr& chunk, SmallP
     DCHECK_EQ(dst->num_columns(), chunk->columns().size());
 
     for (size_t col_index = 0; col_index < dst->num_columns(); col_index++) {
-        materialize_column_by_permutation_single(dst->get_column_by_index(col_index).get(),
+        materialize_column_by_permutation_single(dst->get_mutable_column_by_index(col_index).get(),
                                                  chunk->get_column_by_index(col_index).get(), perm);
     }
 }

@@ -29,13 +29,14 @@ namespace {
 void append_prev_result(const ChunkPtr& result_chunk, const Columns& group_by_columns, size_t row_idx,
                         const ChunkPtr& prev_result, size_t prev_result_idx) {
     DCHECK_EQ(result_chunk->num_columns(), group_by_columns.size() + prev_result->num_columns());
-    auto columns = result_chunk->columns();
     for (size_t i = 0; i < group_by_columns.size(); i++) {
-        columns[i]->append(*group_by_columns[i], row_idx, 1);
+        auto column = result_chunk->get_mutable_column_by_index(i);
+        column->append(*group_by_columns[i], row_idx, 1);
     }
     auto agg_columns = prev_result->columns();
     for (size_t i = group_by_columns.size(); i < result_chunk->num_columns(); i++) {
-        columns[i]->append(*agg_columns[i - group_by_columns.size()], prev_result_idx, 1);
+        auto column = result_chunk->get_mutable_column_by_index(i);
+        column->append(*agg_columns[i - group_by_columns.size()], prev_result_idx, 1);
     }
 }
 
@@ -155,7 +156,7 @@ Status StreamAggregator::output_changes_internal(int32_t chunk_size, StreamChunk
 
         const auto hash_map_size = _hash_map_variant.size();
         auto num_rows = std::min<size_t>(hash_map_size - _num_rows_processed, chunk_size);
-        Columns group_by_columns = _create_group_by_columns(num_rows);
+        MutableColumns group_by_columns = _create_group_by_columns(num_rows);
         int32_t read_index = 0;
         {
             SCOPED_TIMER(_agg_stat->iter_timer);
@@ -174,11 +175,13 @@ Status StreamAggregator::output_changes_internal(int32_t chunk_size, StreamChunk
         { hash_map_with_key.insert_keys_to_columns(hash_map_with_key.results, group_by_columns, read_index); }
 
         {
+            // Create a view of MutableColumns as Columns for const Columns& parameters
+            Columns group_by_cols_view(group_by_columns.begin(), group_by_columns.end());
             // output intermediate and detail tables' change.
-            RETURN_IF_ERROR(_agg_group_state->output_changes(read_index, group_by_columns, _tmp_agg_states,
+            RETURN_IF_ERROR(_agg_group_state->output_changes(read_index, group_by_cols_view, _tmp_agg_states,
                                                              intermediate_chunk, &detail_chunks));
             // output result state table changes
-            RETURN_IF_ERROR(_output_result_changes(read_index, group_by_columns, result_chunk));
+            RETURN_IF_ERROR(_output_result_changes(read_index, group_by_cols_view, result_chunk));
         }
 
         // NOTE: StreamAggregate do not support output NULL keys which is different from OLAP Engine.
@@ -217,10 +220,11 @@ Status StreamAggregator::_output_result_changes(int32_t chunk_size, const Column
 
 Status StreamAggregator::_output_final_result_with_retract(size_t chunk_size, const Columns& group_by_columns,
                                                            ChunkPtr* post_chunk_result) {
-    Columns post_agg_result_columns = _create_agg_result_columns(chunk_size, false);
+    MutableColumns post_agg_result_columns = _create_agg_result_columns(chunk_size, false);
+    Columns post_agg_view(post_agg_result_columns.begin(), post_agg_result_columns.end());
     RETURN_IF_ERROR(
-            _agg_group_state->output_results(chunk_size, group_by_columns, _tmp_agg_states, post_agg_result_columns));
-    *post_chunk_result = _build_output_chunk(group_by_columns, post_agg_result_columns, false);
+            _agg_group_state->output_results(chunk_size, group_by_columns, _tmp_agg_states, post_agg_view));
+    *post_chunk_result = _build_output_chunk(group_by_columns, post_agg_view, false);
     return Status::OK();
 }
 
@@ -278,15 +282,16 @@ Status StreamAggregator::_output_result_changes_with_retract(size_t chunk_size, 
 Status StreamAggregator::_output_result_changes_without_retract(size_t chunk_size, const Columns& group_by_columns,
                                                                 StreamChunkPtr* result_chunk) {
     // agg result
-    Columns agg_result_columns = _create_agg_result_columns(chunk_size, false);
+    MutableColumns agg_result_columns = _create_agg_result_columns(chunk_size, false);
+    Columns agg_result_view(agg_result_columns.begin(), agg_result_columns.end());
     RETURN_IF_ERROR(
-            _agg_group_state->output_results(chunk_size, group_by_columns, _tmp_agg_states, agg_result_columns));
+            _agg_group_state->output_results(chunk_size, group_by_columns, _tmp_agg_states, agg_result_view));
 
     // op col
     Int8Column::MutablePtr ops = Int8Column::create();
     ops->append_value_multiple_times(&INSERT_OP, chunk_size);
 
-    auto final_result_chunk = _build_output_chunk(group_by_columns, agg_result_columns, false);
+    auto final_result_chunk = _build_output_chunk(group_by_columns, agg_result_view, false);
     *result_chunk = StreamChunkConverter::make_stream_chunk(std::move(final_result_chunk), std::move(ops));
 
     return Status::OK();

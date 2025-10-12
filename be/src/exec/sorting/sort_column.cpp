@@ -495,13 +495,13 @@ Status sort_and_tie_column(const std::atomic<bool>& cancel, const ColumnPtr& col
     return column->accept(&column_sorter);
 }
 
-Status sort_and_tie_column(const std::atomic<bool>& cancel, ColumnPtr& column, const SortDesc& sort_desc,
+Status sort_and_tie_column(const std::atomic<bool>& cancel, MutableColumnPtr& column, const SortDesc& sort_desc,
                            SmallPermutation& permutation, Tie& tie, std::pair<int, int> range, bool build_tie,
                            const SortDescs* sort_descs) {
     // Nullable column need set all the null rows to default values,
     // see the comment of the declaration of `partition_null_and_nonnull_helper` for details.
     if (column->is_nullable() && !column->is_constant()) {
-        ColumnHelper::as_column<NullableColumn>(column)->fill_null_with_default();
+        ColumnHelper::as_raw_column<NullableColumn>(column)->fill_null_with_default();
     }
     ColumnSorter column_sorter(cancel, sort_desc, permutation, tie, range, build_tie);
     if (sort_descs != nullptr) {
@@ -651,7 +651,7 @@ Status stable_sort_and_tie_columns(const std::atomic<bool>& cancel, const Column
     return Status::OK();
 }
 
-Status sort_vertical_columns(const std::atomic<bool>& cancel, const Columns& columns, const SortDesc& sort_desc,
+Status sort_vertical_columns(const std::atomic<bool>& cancel, Columns& columns, const SortDesc& sort_desc,
                              Permutation& permutation, Tie& tie, std::pair<int, int> range, const bool build_tie,
                              const size_t limit, size_t* limited) {
     DCHECK_GT(columns.size(), 0);
@@ -659,7 +659,9 @@ Status sort_vertical_columns(const std::atomic<bool>& cancel, const Columns& col
 
     for (auto& col : columns) {
         if (col->is_nullable() && !col->is_constant()) {
-            ColumnHelper::as_column<NullableColumn>(col)->fill_null_with_default();
+            auto mutable_col = Column::mutate(col);
+            ColumnHelper::as_raw_column<NullableColumn>(mutable_col)->fill_null_with_default();
+            col = std::move(mutable_col);
         }
     }
 
@@ -669,6 +671,14 @@ Status sort_vertical_columns(const std::atomic<bool>& cancel, const Columns& col
         *limited = std::min(*limited, sorter.get_limited());
     }
     return Status::OK();
+}
+
+Status sort_vertical_columns(const std::atomic<bool>& cancel, const Columns& columns, const SortDesc& sort_desc,
+                             Permutation& permutation, Tie& tie, std::pair<int, int> range, const bool build_tie,
+                             const size_t limit, size_t* limited) {
+    // For const Columns&, create a mutable copy to handle fill_null_with_default
+    Columns mutable_columns = columns;
+    return sort_vertical_columns(cancel, mutable_columns, sort_desc, permutation, tie, range, build_tie, limit, limited);
 }
 
 Status sort_vertical_chunks(const std::atomic<bool>& cancel, const std::vector<Columns>& vertical_chunks,

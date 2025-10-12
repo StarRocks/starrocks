@@ -150,17 +150,17 @@ bool OrcRowReaderFilter::filterMinMax(size_t rowGroupIdx,
             }
             // not found in partition columns.
             if (part_idx == part_size) {
-                min_chunk->columns()[i]->append_nulls(1);
-                max_chunk->columns()[i]->append_nulls(1);
+                min_chunk->get_mutable_column_by_index(i)->append_nulls(1);
+                max_chunk->get_mutable_column_by_index(i)->append_nulls(1);
             } else {
                 auto* const_column = ColumnHelper::as_raw_column<ConstColumn>(_scanner_ctx.partition_values[part_idx]);
                 ColumnPtr data_column = const_column->data_column();
                 if (data_column->is_nullable()) {
-                    min_chunk->columns()[i]->append_nulls(1);
-                    max_chunk->columns()[i]->append_nulls(1);
+                    min_chunk->get_mutable_column_by_index(i)->append_nulls(1);
+                    max_chunk->get_mutable_column_by_index(i)->append_nulls(1);
                 } else {
-                    min_chunk->columns()[i]->append(*data_column, 0, 1);
-                    max_chunk->columns()[i]->append(*data_column, 0, 1);
+                    min_chunk->get_mutable_column_by_index(i)->append(*data_column, 0, 1);
+                    max_chunk->get_mutable_column_by_index(i)->append(*data_column, 0, 1);
                 }
             }
         }
@@ -280,7 +280,7 @@ bool OrcRowReaderFilter::filterOnPickStringDictionary(
         }
 
         // first (dict_size) th items are all not-null
-        nullable_column->null_column()->append_default(dict_size);
+        nullable_column->mutable_null_column()->append_default(dict_size);
         // and last one is null.
         nullable_column->append_default();
         DCHECK(nullable_column->size() == (dict_size + 1));

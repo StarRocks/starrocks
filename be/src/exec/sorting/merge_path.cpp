@@ -230,21 +230,18 @@ void detail::_do_merge_along_merge_path(const SortDescs& descs, const InputSegme
     }
 
     auto append = [&skip_col_ids](const MergeIterator& src_it, OutputSegment& dest) {
-        auto column_append = [](auto& src_column, auto& dest_column, const MergeIterator& it) {
-            dest_column->append(*src_column, it.range.first, it.range.second);
-        };
         for (size_t col = 0; col < src_it.run->orderby.size(); col++) {
-            auto& src_column = src_it.run->orderby[col];
+            const Column* src_column = src_it.run->orderby[col].get();
             auto& dest_column = dest.run.orderby[col];
-            column_append(src_column, dest_column, src_it);
+            dest_column->append(*src_column, src_it.range.first, src_it.range.second);
         }
         for (size_t col = 0; col < src_it.run->chunk->num_columns(); col++) {
             if (skip_col_ids[col]) {
                 continue;
             }
             auto& src_column = src_it.run->chunk->get_column_by_index(col);
-            auto& dest_column = dest.run.chunk->get_column_by_index(col);
-            column_append(src_column, dest_column, src_it);
+            auto dest_column = dest.run.chunk->get_mutable_column_by_index(col);
+            dest_column->append(*src_column, src_it.range.first, src_it.range.second);
         }
     };
 
@@ -386,7 +383,7 @@ void detail::MergeNode::process_input(const int32_t parallel_idx) {
         return;
     }
     ChunkPtr dest_chunk = primitive->runs.chunks[0].chunk->clone_empty();
-    Columns dest_orderby;
+    MutableColumns dest_orderby;
     for (auto& column : primitive->runs.chunks[0].orderby) {
         dest_orderby.push_back(column->clone_empty());
     }
@@ -565,13 +562,13 @@ void detail::LeafNode::process_input(const int32_t parallel_idx) {
             continue;
         }
 
-        Columns orderby;
+        MutableColumns orderby;
         for (auto* expr : _merger->sort_exprs()) {
             auto column = EVALUATE_NULL_IF_ERROR(expr, expr->root(), chunk.get());
-            orderby.push_back(column);
+            orderby.push_back(Column::mutate(column));
         }
 
-        auto add_to_output_segments = [this, &output_size](ChunkPtr& standard_chunk, Columns& standard_orderby) {
+        auto add_to_output_segments = [this, &output_size](ChunkPtr& standard_chunk, MutableColumns& standard_orderby) {
             const size_t num_rows = standard_chunk->num_rows();
             SortedRun run(std::move(standard_chunk), std::move(standard_orderby));
             std::vector<int32_t> orderby_indexes;
@@ -599,9 +596,9 @@ void detail::LeafNode::process_input(const int32_t parallel_idx) {
                     const size_t chunk_id = _merger->add_original_chunk(std::move(standard_chunk));
                     standard_chunk = _generate_ordinal(chunk_id, num_rows);
 
-                    Columns standard_orderby;
+                    MutableColumns standard_orderby;
                     for (const auto& column : orderby) {
-                        ColumnPtr standard_column = column->clone_empty();
+                        auto standard_column = column->clone_empty();
                         standard_column->reserve(num_rows);
                         standard_column->append(*column, offset, num_rows);
                         standard_orderby.push_back(std::move(standard_column));
@@ -1240,7 +1237,7 @@ ChunkPtr MergePathCascadeMerger::_restore_according_to_ordinal(const int32_t par
             if (skip_col_ids[col]) {
                 continue;
             }
-            ColumnPtr& dest_column = output->get_column_by_index(col);
+            auto dest_column = output->get_mutable_column_by_index(col);
             dest_column->append(*pair.first->get_column_by_index(col), offset, count);
         }
 
@@ -1315,7 +1312,8 @@ void MergePathCascadeMerger::_process_limit(ChunkPtr& chunk) {
         }
         if (front_drop_size > 0) {
             DCHECK_GE(chunk->num_rows(), front_drop_size);
-            for (auto& column : chunk->columns()) {
+            for (size_t i = 0; i < chunk->num_columns(); i++) {
+                auto column = chunk->get_mutable_column_by_index(i);
                 column->remove_first_n_values(front_drop_size);
             }
         }
@@ -1324,7 +1322,8 @@ void MergePathCascadeMerger::_process_limit(ChunkPtr& chunk) {
             const size_t back_drop_size = _output_row_num + current_num_rows - (_offset + _limit);
             if (back_drop_size > 0) {
                 DCHECK_GE(chunk->num_rows(), back_drop_size);
-                for (auto& column : chunk->columns()) {
+                for (size_t i = 0; i < chunk->num_columns(); i++) {
+                    auto column = chunk->get_mutable_column_by_index(i);
                     column->resize(column->size() - back_drop_size);
                 }
             }

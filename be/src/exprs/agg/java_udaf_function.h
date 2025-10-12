@@ -75,8 +75,8 @@ public:
         // TODO serialize
         if (to->is_nullable()) {
             auto* null_column = down_cast<NullableColumn*>(to);
-            null_column->null_column()->append(DATUM_NOT_NULL);
-            column = down_cast<BinaryColumn*>(null_column->data_column().get());
+            null_column->mutable_null_column()->append(DATUM_NOT_NULL);
+            column = down_cast<BinaryColumn*>(null_column->mutable_data_column());
         } else {
             DCHECK(to->is_binary());
             column = down_cast<BinaryColumn*>(to);

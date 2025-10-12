@@ -219,7 +219,7 @@ Status TabletReader::_init_collector_for_pk_index_read() {
                 const auto* col_pred = child_node.col_pred();
                 const auto cid = col_pred->column_id();
                 if (cid < tablet_schema->num_key_columns() && col_pred->type() == PredicateType::kEQ) {
-                    auto& column = keys->get_column_by_id(cid);
+                    auto column = keys->get_mutable_column_by_id(cid);
                     if (column->size() != 0) {
                         return Status::NotSupported(
                                 strings::Substitute("multiple eq predicates on same pk column columnId=$0", cid));

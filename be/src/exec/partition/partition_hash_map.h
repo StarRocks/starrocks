@@ -229,8 +229,9 @@ protected:
 
         // The first i rows has been pushed into hash_map
         if (is_passthrough && i > 0) {
-            for (auto& column : chunk->columns()) {
-                column->remove_first_n_values(i);
+            for (size_t col_idx = 0; col_idx < chunk->num_columns(); col_idx++) {
+                auto mutable_col = chunk->get_mutable_column_by_index(col_idx);
+                mutable_col->remove_first_n_values(i);
             }
             chunk->check_or_die();
         }
@@ -354,8 +355,9 @@ protected:
 
             // The first i rows has been pushed into hash_map
             if (is_passthrough && i > 0) {
-                for (auto& column : chunk->columns()) {
-                    column->remove_first_n_values(i);
+                for (size_t col_idx = 0; col_idx < chunk->num_columns(); col_idx++) {
+                    auto mutable_col = chunk->get_mutable_column_by_index(col_idx);
+                    mutable_col->remove_first_n_values(i);
                 }
                 chunk->check_or_die();
             }

@@ -54,8 +54,8 @@ bool ArrayConverter::read_string(Column* column, const Slice& s, const Options& 
     }
 
     auto* array = down_cast<ArrayColumn*>(column);
-    auto* offsets = array->offsets_column().get();
-    auto* elements = array->elements_column().get();
+    auto offsets = array->offsets_column_mutable_ptr();
+    auto elements = array->elements_column_mutable_ptr();
 
     std::vector<Slice> fields;
     if (!s.empty() && !_array_reader->split_array_elements(s, fields)) {
@@ -68,9 +68,9 @@ bool ArrayConverter::read_string(Column* column, const Slice& s, const Options& 
         sub_options.invalid_field_as_null = false;
     }
     sub_options.array_hive_nested_level++;
-    DCHECK_EQ(old_size, offsets->get_data().back());
+    DCHECK_EQ(old_size, offsets->immutable_data().back());
     for (const auto& f : fields) {
-        if (!_array_reader->read_quoted_string(_element_converter, elements, f, sub_options)) {
+        if (!_array_reader->read_quoted_string(_element_converter, elements.get(), f, sub_options)) {
             elements->resize(old_size);
             return false;
         }

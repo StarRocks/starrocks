@@ -37,7 +37,7 @@ struct MapAggAggregateFunctionState : public AggregateFunctionEmptyState {
 
     MyHashMap hash_map;
     // Use column to store the values in case that the reference of the Slices disappears.
-    ColumnPtr value_column;
+    MutableColumnPtr value_column;
 
     void update(MemPool* mem_pool, const KeyColumnType& arg_key_column, const Column& arg_value_column, size_t offset,
                 size_t count) {
@@ -122,12 +122,12 @@ public:
         }
         if (map_column->keys_column()->is_nullable()) {
             // Key could not be NULL.
-            auto* nullable_column = down_cast<NullableColumn*>(map_column->keys_column().get());
-            nullable_column->null_column_data().resize(nullable_column->null_column_data().size() + elem_size);
+            auto nullable_column = map_column->keys_column_mutable_ptr();
+            down_cast<NullableColumn*>(nullable_column.get())->null_column_data().resize(down_cast<NullableColumn*>(nullable_column.get())->null_column_data().size() + elem_size);
         }
 
-        auto& offsets = map_column->offsets_column()->get_data();
-        offsets.push_back(offsets.back() + elem_size);
+        auto offsets_col = map_column->offsets_column_mutable_ptr();
+        offsets_col->append(offsets_col->immutable_data().back() + elem_size);
     }
 
     void finalize_to_column(FunctionContext* ctx, ConstAggDataPtr __restrict state, Column* to) const override {
@@ -135,22 +135,22 @@ public:
     }
 
     void convert_to_serialize_format(FunctionContext* ctx, const Columns& src, size_t chunk_size,
-                                     ColumnPtr* dst) const override {
-        auto* column = down_cast<MapColumn*>(ColumnHelper::get_data_column(dst->get()));
-        auto key_column = column->keys_column();
-        auto value_column = column->values_column();
-        auto& offsets = column->offsets_column()->get_data();
+                                     MutableColumnPtr& dst) const override {
+        auto* column = down_cast<MapColumn*>(ColumnHelper::get_data_column(dst.get()));
+        auto key_column = column->keys_column_mutable_ptr();
+        auto value_column = column->values_column_mutable_ptr();
+        auto offsets_col = column->offsets_column_mutable_ptr();
         for (size_t i = 0; i < chunk_size; i++) {
             if ((src[0]->is_nullable() && src[0]->is_null(i)) || src[0]->only_null()) {
-                offsets.push_back(offsets.back());
+                offsets_col->append(offsets_col->immutable_data().back());
                 continue;
             }
             key_column->append(*src[0], i, 1);
             value_column->append(*src[1], i, 1);
-            offsets.push_back(offsets.back() + 1);
+            offsets_col->append(offsets_col->immutable_data().back() + 1);
         }
-        if (dst->get()->is_nullable()) {
-            down_cast<NullableColumn*>(dst->get())->null_column_data().resize(column->size());
+        if (dst->is_nullable()) {
+            down_cast<NullableColumn*>(dst.get())->null_column_data().resize(column->size());
         }
     }
 
