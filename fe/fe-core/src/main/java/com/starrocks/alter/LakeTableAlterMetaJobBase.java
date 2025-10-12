@@ -31,6 +31,7 @@ import com.starrocks.catalog.Tablet;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.Status;
+import com.starrocks.common.util.ThreadUtil;
 import com.starrocks.common.util.concurrent.MarkedCountDownLatch;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
@@ -41,6 +42,7 @@ import com.starrocks.proto.TxnInfoPB;
 import com.starrocks.proto.TxnTypePB;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.WarehouseManager;
+import com.starrocks.system.ComputeNode;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.task.AgentBatchTask;
 import com.starrocks.task.AgentTaskExecutor;
@@ -50,7 +52,6 @@ import com.starrocks.task.TabletTaskExecutor;
 import com.starrocks.thrift.TStatusCode;
 import com.starrocks.thrift.TTaskType;
 import io.opentelemetry.api.trace.StatusCode;
-import org.apache.hadoop.util.ThreadUtil;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -128,7 +129,8 @@ public abstract class LakeTableAlterMetaJobBase extends AlterJobV2 {
         final List<Long> computeNodeIds = GlobalStateMgr.
                 getCurrentState().getWarehouseMgr().getAllComputeNodeIds(computeResource);
         for (long nodeId : computeNodeIds) {
-            if (systemInfoService.getBackendOrComputeNode(nodeId).isAlive()) {
+            ComputeNode node = systemInfoService.getBackendOrComputeNode(nodeId);
+            if (node != null && node.isAlive()) {
                 ++numAliveNodes;
             }
         }
