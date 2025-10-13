@@ -481,9 +481,6 @@ Status FragmentContext::prepare_active_drivers() {
             ADD_CHILD_TIMER_THESHOLD(profile, "prepare-pipeline-driver-local", "prepare-pipeline-driver", 0_ms);
     SCOPED_TIMER(prepare_driver_local_timer);
 
-    std::vector<std::future<Status>> futures;
-    futures.reserve(100);
-
     std::vector<std::pair<ExecutionGroup*, DriverPtr>> all_drivers;
     all_drivers.reserve(100);
     for (auto& group : _execution_groups) {
@@ -503,30 +500,57 @@ Status FragmentContext::prepare_active_drivers() {
         return Status::OK();
     }
 
+    // prepare pipeline-driver parallelly
+    // only do prepare operation that is thread safe in prepare_operators_local_state
+    std::atomic<int> pending_tasks(all_drivers.size());
+    std::mutex completion_mutex;
+    std::condition_variable completion_cv;
+    std::atomic<Status*> first_error(nullptr);
+
+    auto pipeline_prepare_pool = _runtime_state->exec_env()->pipeline_prepare_pool();
+
     for (auto& [group, driver] : all_drivers) {
-        auto task = std::make_shared<std::packaged_task<Status()>>(
-                [driver_ptr = driver, group_ptr = group, runtime_state = _runtime_state.get()]() {
-                    return driver_ptr->prepare_operators_local_state(runtime_state);
+        bool submitted =
+                pipeline_prepare_pool->try_offer([&pending_tasks, &completion_mutex, &completion_cv, &first_error,
+                                                  driver_ptr = driver, runtime_state = _runtime_state.get()]() {
+                    Status status = driver_ptr->prepare_operators_local_state(runtime_state);
+
+                    if (!status.ok()) {
+                        Status* expected = nullptr;
+                        if (first_error.compare_exchange_strong(expected, new Status(status))) {
+                        }
+                    }
+
+                    if (pending_tasks.fetch_sub(1) == 1) {
+                        std::lock_guard<std::mutex> lock(completion_mutex);
+                        completion_cv.notify_one();
+                    }
                 });
 
-        auto submit_status = prepare_thread_pool->submit_func([task]() { (*task)(); });
+        if (!submitted) {
+            Status status = driver->prepare_operators_local_state(_runtime_state.get());
+            if (!status.ok()) {
+                Status* expected = nullptr;
+                first_error.compare_exchange_strong(expected, new Status(status));
+            }
 
-        if (!submit_status.ok()) {
-            (*task)();
+            if (pending_tasks.fetch_sub(1) == 1) {
+                std::lock_guard<std::mutex> lock(completion_mutex);
+                completion_cv.notify_one();
+            }
         }
-
-        futures.push_back(task->get_future());
     }
 
-    for (auto& future : futures) {
-        try {
-            auto status = future.get();
-            if (!status.ok()) {
-                return status;
-            }
-        } catch (const std::exception& e) {
-            return Status::InternalError("Exception in prepare task: " + std::string(e.what()));
-        }
+    {
+        std::unique_lock<std::mutex> lock(completion_mutex);
+        completion_cv.wait(lock, [&pending_tasks] { return pending_tasks.load() == 0; });
+    }
+
+    Status* error = first_error.load();
+    if (error != nullptr) {
+        Status result = *error;
+        delete error;
+        return result;
     }
 
     RETURN_IF_ERROR(submit_all_timer());
