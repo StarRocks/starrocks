@@ -32,7 +32,7 @@ import java.util.List;
 
 public class ProcProfileAction extends WebBaseAction {
     private static final Logger LOG = LogManager.getLogger(ProcProfileAction.class);
-    
+
     private static final String CPU_FILE_NAME_PREFIX = "cpu-profile-";
     private static final String MEM_FILE_NAME_PREFIX = "mem-profile-";
     private static final SimpleDateFormat profileTimeFormat = new SimpleDateFormat("yyyyMMdd-HHmmss");
@@ -48,11 +48,11 @@ public class ProcProfileAction extends WebBaseAction {
     @Override
     public void executeGet(BaseRequest request, BaseResponse response) {
         getPageHeader(request, response.getContent());
-        
+
         addProfileListInfo(response.getContent());
-        
+
         getPageFooter(response.getContent());
-        
+
         writeResponse(request, response);
     }
 
@@ -61,9 +61,10 @@ public class ProcProfileAction extends WebBaseAction {
         buffer.append("<p>This table lists all available CPU and memory profile files</p>");
 
         List<ProfileFileInfo> profileFiles = getProfileFiles();
-        
+
         if (profileFiles.isEmpty()) {
-            buffer.append("<p>No profile files found in directory: ").append(Config.sys_log_dir).append("/proc_profile</p>");
+            buffer.append("<p>No profile files found in directory: ").append(Config.sys_log_dir)
+                    .append("/proc_profile</p>");
             return;
         }
 
@@ -76,7 +77,7 @@ public class ProcProfileAction extends WebBaseAction {
         List<ProfileFileInfo> profileFiles = new ArrayList<>();
         String profileLogDir = Config.sys_log_dir + "/proc_profile";
         File dir = new File(profileLogDir);
-        
+
         if (!dir.exists() || !dir.isDirectory()) {
             LOG.warn("Profile directory does not exist: {}", profileLogDir);
             return profileFiles;
@@ -97,10 +98,10 @@ public class ProcProfileAction extends WebBaseAction {
                         try {
                             Date timestamp = profileTimeFormat.parse(timePart);
                             profileFiles.add(new ProfileFileInfo(
-                                profileType,
-                                timestamp,
-                                file.length(),
-                                fileName
+                                    profileType,
+                                    timestamp,
+                                    file.length(),
+                                    fileName
                             ));
                         } catch (Exception e) {
                             LOG.warn("Failed to parse timestamp from filename: {}", fileName, e);
@@ -112,7 +113,7 @@ public class ProcProfileAction extends WebBaseAction {
 
         // Sort by timestamp descending (newest first)
         profileFiles.sort((f1, f2) -> f2.timestamp.compareTo(f1.timestamp));
-        
+
         return profileFiles;
     }
 
@@ -136,7 +137,8 @@ public class ProcProfileAction extends WebBaseAction {
     }
 
     private void appendProfileTableHeader(StringBuilder buffer) {
-        buffer.append("<table id=\"table_id\" class=\"table table-hover table-bordered table-striped table-condensed\">");
+        buffer.append(
+                "<table id=\"table_id\" class=\"table table-hover table-bordered table-striped table-condensed\">");
         buffer.append("<thead><tr>");
         buffer.append("<th>Type</th>");
         buffer.append("<th>Timestamp</th>");
@@ -148,7 +150,7 @@ public class ProcProfileAction extends WebBaseAction {
     private void appendProfileTableBody(StringBuilder buffer, List<ProfileFileInfo> profileFiles) {
         buffer.append("<tbody>");
         SimpleDateFormat displayFormat = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss");
-        
+
         for (ProfileFileInfo profile : profileFiles) {
             buffer.append("<tr>");
             buffer.append("<td>").append(profile.type).append("</td>");
@@ -156,8 +158,8 @@ public class ProcProfileAction extends WebBaseAction {
             buffer.append("<td>").append(DebugUtil.getPrettyStringBytes(profile.fileSize)).append("</td>");
             buffer.append("<td>");
             buffer.append("<a href=\"/proc_profile/file?filename=")
-                  .append(profile.fileName)
-                  .append("\" target=\"_blank\">View</a>");
+                    .append(profile.fileName)
+                    .append("\" target=\"_blank\">View</a>");
             buffer.append("</td>");
             buffer.append("</tr>");
         }

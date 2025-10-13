@@ -117,7 +117,8 @@ public class WebBaseAction extends BaseAction {
                     + "    <div class=\"navbar-header\">"
                     + "      <a class=\"navbar-brand\" href=\"/\" style=\"padding: unset;\">"
                     +
-                    "        <img alt=\"StarRocks\" style=\"height: inherit;\" src=\"/static/images?res=starrocks-logo.png\">"
+                    "        <img alt=\"StarRocks\" style=\"height: inherit;\" " +
+                    "src=\"/static/images?res=starrocks-logo.png\">"
                     + "      </a>"
                     + "    </div>"
                     + "    <div>"
