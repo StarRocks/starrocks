@@ -245,8 +245,9 @@ public class HttpServer {
         ComputeNodeActionV2.registerAction(controller);
 
         // proc profile actions
-        ProcProfileAction.registerAction(controller);
-        ProcProfileFileAction.registerAction(controller);
+        com.starrocks.http.action.ProcProfileAction.registerAction(controller);
+        com.starrocks.http.action.ProcProfileFileAction.registerAction(controller);
+        com.starrocks.http.rest.ProcProfileCreateAction.registerAction(controller);
 
         // meta service action
         ImageAction.registerAction(controller);

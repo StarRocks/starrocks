@@ -1,0 +1,34 @@
+-- name: test_proc_profile_create_cpu
+-- Test creating a CPU profile via REST API
+shell: curl -X POST '${url}/api/v1/proc_profile/create?type=cpu' -u 'root:' --header "Content-Type: application/json"
+sync;
+
+-- name: test_proc_profile_create_memory
+-- Test creating a memory profile via REST API
+shell: curl -X POST '${url}/api/v1/proc_profile/create?type=memory' -u 'root:' --header "Content-Type: application/json"
+sync;
+
+-- name: test_proc_profile_create_invalid_type
+-- Test creating a profile with invalid type
+shell: curl -X POST '${url}/api/v1/proc_profile/create?type=invalid' -u 'root:' --header "Content-Type: application/json"
+sync;
+
+-- name: test_proc_profile_create_missing_type
+-- Test creating a profile without type parameter
+shell: curl -X POST '${url}/api/v1/proc_profile/create' -u 'root:' --header "Content-Type: application/json"
+sync;
+
+-- name: test_proc_profile_list
+-- Test retrieving the profile list page
+shell: curl -X GET '${url}/proc_profile' -u 'root:' --header "Content-Type: text/html"
+sync;
+
+-- name: test_proc_profile_create_and_retrieve
+-- Test creating a CPU profile and then retrieving it
+shell: curl -X POST '${url}/api/v1/proc_profile/create?type=cpu' -u 'root:' --header "Content-Type: application/json"
+sync;
+
+-- name: test_proc_profile_file_access
+-- Test accessing a specific profile file (this will fail if no files exist, which is expected)
+shell: curl -X GET '${url}/proc_profile/file?filename=cpu-profile-20240101-120000.html.tar.gz' -u 'root:' --header "Content-Type: text/html"
+sync;

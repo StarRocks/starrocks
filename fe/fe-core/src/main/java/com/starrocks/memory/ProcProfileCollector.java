@@ -65,7 +65,7 @@ public class ProcProfileCollector extends FrontendDaemon {
         deleteExpiredFiles();
     }
 
-    private void collectMemProfile() {
+    public String collectMemProfile() {
         String fileName = MEM_FILE_NAME_PREFIX + currentTimeString() + ".html";
         AsyncProfiler profiler = AsyncProfiler.getInstance();
         try {
@@ -75,16 +75,19 @@ public class ProcProfileCollector extends FrontendDaemon {
             profiler.execute(String.format("stop,file=%s", profileLogDir + "/" + fileName));
         } catch (Exception e) {
             checkAndLog(() -> LOG.warn("collect memory profile failed, reason: {}", e.getMessage()));
+            throw new RuntimeException("Failed to collect memory profile", e);
         }
 
         try {
             compressFile(fileName);
+            return fileName + ".tar.gz";
         } catch (IOException e) {
             checkAndLog(() -> LOG.warn("compress memory file {} failed, reason: {}", fileName, e.getMessage()));
+            throw new RuntimeException("Failed to compress memory profile", e);
         }
     }
 
-    private void collectCPUProfile() {
+    public String collectCPUProfile() {
         String fileName = CPU_FILE_NAME_PREFIX + currentTimeString() + ".html";
         AsyncProfiler profiler = AsyncProfiler.getInstance();
         try {
@@ -93,12 +96,15 @@ public class ProcProfileCollector extends FrontendDaemon {
             profiler.execute(String.format("stop,file=%s", profileLogDir + "/" + fileName));
         } catch (Exception e) {
             checkAndLog(() -> LOG.warn("collect cpu profile failed, reason: {}", e.getMessage()));
+            throw new RuntimeException("Failed to collect CPU profile", e);
         }
 
         try {
             compressFile(fileName);
+            return fileName + ".tar.gz";
         } catch (IOException e) {
             checkAndLog(() -> LOG.warn("compress file {} failed, reason: {}", fileName, e.getMessage()));
+            throw new RuntimeException("Failed to compress CPU profile", e);
         }
     }
 
