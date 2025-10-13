@@ -4179,6 +4179,7 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 - Description: The time interval at which the cached metadata of Hive external tables is updated.
 - Introduced in: -
 
+<!--
 ##### hive_meta_cache_ttl_s
 
 - Default: 3600 * 24
@@ -4187,11 +4188,12 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 - Is mutable: No
 - Description: The amount of time after which the cached metadata of Hive external tables expires.
 - Introduced in: -
+-->
 
 <!--
 ##### remote_file_cache_ttl_s
 
-- Default: 3600 * 36
+- Default: 3600 * 24
 - Type: Long
 - Unit: Seconds
 - Is mutable: No

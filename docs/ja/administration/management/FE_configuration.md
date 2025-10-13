@@ -2901,6 +2901,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 説明: Hive 外部テーブルのキャッシュされたメタデータが更新される時間間隔。
 - 導入バージョン: -
 
+<!--
 ##### hive_meta_cache_ttl_s
 
 - デフォルト: 3600 * 24
@@ -2909,6 +2910,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 変更可能: いいえ
 - 説明: Hive 外部テーブルのキャッシュされたメタデータが期限切れになるまでの時間。
 - 導入バージョン: -
+-->
 
 ##### hive_meta_store_timeout_s
 

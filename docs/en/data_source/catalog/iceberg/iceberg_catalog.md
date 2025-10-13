@@ -734,8 +734,10 @@ From v3.3.3 onwards, StarRocks supports the [periodic metadata refresh strategy]
 | :-------------------------------------------- | :-------------------- | :----------------------------------------------------------- |
 | enable_iceberg_metadata_cache                 | true                  | Whether to cache Iceberg-related metadata, including Table Cache, Partition Name Cache, and the Data File Cache and Delete Data File Cache in Manifest. |
 | iceberg_manifest_cache_with_column_statistics | false                 | Whether to cache the statistics of columns.                  |
-| iceberg_manifest_cache_max_num                | 100000                | The maximum number of Manifest files that can be cached.     |
 | refresh_iceberg_manifest_min_length           | 2 * 1024 * 1024       | The minimum Manifest file length that triggers a Data File Cache refresh. |
+| iceberg_data_file_cache_memory_usage_ratio    | 0.1                   | The maximum memory usage ratio for the data file Manifest cache. Supported from v3.5.6 onwards. |
+| iceberg_delete_file_cache_memory_usage_ratio  | 0.1                   | The maximum memory usage ratio for the delete file Manifest cache. Supported from v3.5.6 onwards. |
+| iceberg_table_cache_refresh_interval_sec      | 60                    | The interval (in seconds) at which the asynchronous refresh of the Iceberg table cache is triggered. Supported from v3.5.7 onwards. |
 
 Starting from v3.4, StarRocks can obtain statistics of Iceberg tables by reading Iceberg metadata through setting the following parameters, without actively triggering the collection of Iceberg table statistics.
 
