@@ -876,19 +876,19 @@ Status FragmentExecutor::prepare(ExecEnv* exec_env, const TExecPlanFragmentParam
             COUNTER_SET(prepare_timer, profiler.prepare_time);
 
             auto* prepare_query_ctx_timer =
-                    ADD_CHILD_TIMER_THESHOLD(profile, "prepare-query-ctx", "FragmentInstancePrepareTime", 0_ms);
+                    ADD_CHILD_TIMER_THESHOLD(profile, "prepare-query-ctx", "FragmentInstancePrepareTime", 10_ms);
             COUNTER_SET(prepare_query_ctx_timer, profiler.prepare_query_ctx_time);
 
             auto* prepare_fragment_ctx_timer =
-                    ADD_CHILD_TIMER_THESHOLD(profile, "prepare-fragment-ctx", "FragmentInstancePrepareTime", 0_ms);
+                    ADD_CHILD_TIMER_THESHOLD(profile, "prepare-fragment-ctx", "FragmentInstancePrepareTime", 10_ms);
             COUNTER_SET(prepare_fragment_ctx_timer, profiler.prepare_fragment_ctx_time);
 
             auto* prepare_runtime_state_timer =
-                    ADD_CHILD_TIMER_THESHOLD(profile, "prepare-runtime-state", "FragmentInstancePrepareTime", 0_ms);
+                    ADD_CHILD_TIMER_THESHOLD(profile, "prepare-runtime-state", "FragmentInstancePrepareTime", 10_ms);
             COUNTER_SET(prepare_runtime_state_timer, profiler.prepare_runtime_state_time);
 
             auto* prepare_pipeline_driver_timer = ADD_CHILD_TIMER_THESHOLD(profile, "prepare-pipeline-driver-factory",
-                                                                           "FragmentInstancePrepareTime", 0_ms);
+                                                                           "FragmentInstancePrepareTime", 10_ms);
             COUNTER_SET(prepare_pipeline_driver_timer, profiler.prepare_pipeline_driver_time);
 
             auto* process_mem_counter = ADD_COUNTER(profile, "InitialProcessMem", TUnit::BYTES);
@@ -948,10 +948,22 @@ Status FragmentExecutor::prepare(ExecEnv* exec_env, const TExecPlanFragmentParam
     RETURN_IF_ERROR(_query_ctx->fragment_mgr()->register_ctx(request.fragment_instance_id(), _fragment_ctx));
     _query_ctx->mark_prepared();
 
+    prepare_success = true;
+
+    return Status::OK();
+}
+
+Status FragmentExecutor::execute(ExecEnv* exec_env) {
+    bool prepare_success = false;
+    DeferOp defer([this, &prepare_success]() {
+        if (!prepare_success) {
+            _fail_cleanup(true);
+        }
+    });
     auto* profile = _fragment_ctx->runtime_state()->runtime_profile();
     auto* prepare_instance_timer = ADD_TIMER(profile, "FragmentInstancePrepareTime");
     auto* prepare_driver_timer =
-            ADD_CHILD_TIMER_THESHOLD(profile, "prepare-pipeline-driver", "FragmentInstancePrepareTime", 0_ms);
+            ADD_CHILD_TIMER_THESHOLD(profile, "prepare-pipeline-driver", "FragmentInstancePrepareTime", 10_ms);
 
     {
         SCOPED_TIMER(prepare_instance_timer);
@@ -959,13 +971,8 @@ Status FragmentExecutor::prepare(ExecEnv* exec_env, const TExecPlanFragmentParam
         _fragment_ctx->acquire_runtime_filters();
         RETURN_IF_ERROR(_fragment_ctx->prepare_active_drivers());
     }
-
     prepare_success = true;
 
-    return Status::OK();
-}
-
-Status FragmentExecutor::execute(ExecEnv* exec_env) {
     DCHECK(_fragment_ctx->enable_resource_group());
     auto* executor = _wg->executors()->driver_executor();
     RETURN_IF_ERROR(_fragment_ctx->submit_active_drivers(executor));

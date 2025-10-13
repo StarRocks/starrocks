@@ -161,6 +161,8 @@ public:
         return false;
     }
 
+    bool is_full() const { return _heap.size() == _max_element || _shutdown; }
+
     // Shut down the queue. Wakes up all threads waiting on blocking_get or blocking_put.
     void shutdown() {
         {

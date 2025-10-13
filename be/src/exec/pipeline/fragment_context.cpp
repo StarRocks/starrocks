@@ -175,6 +175,7 @@ void FragmentContext::report_exec_state_if_necessary() {
         normalized_report_ns = last_report_ns + interval_ns;
     }
 
+    // only report after prepare successfully
     bool allPrepared = true;
     iterate_pipeline([&allPrepared](const Pipeline* pipeline) {
         if (!allPrepared) return;
@@ -445,112 +446,49 @@ Status FragmentContext::iterate_pipeline(const std::function<Status(Pipeline*)>&
 }
 
 Status FragmentContext::prepare_active_drivers() {
-    auto* executor_set = workgroup()->executors();
-    auto* prepare_thread_pool = executor_set->prepare_thread_pool();
-
     auto* profile = runtime_state()->runtime_profile();
     auto* prepare_driver_timer =
             ADD_CHILD_TIMER_THESHOLD(profile, "prepare-pipeline-driver-global", "prepare-pipeline-driver", 0_ms);
 
     {
+        // prepare all driver's state in one thread, this phase's prepare don't need to be thread-safe
+        // But this is done in single thread so we can't put heavy task in this phase
         SCOPED_TIMER(prepare_driver_timer);
         for (auto& group : _execution_groups) {
             RETURN_IF_ERROR(group->prepare_drivers(_runtime_state.get()));
         }
     }
 
-    if (prepare_thread_pool->num_queued_tasks() > 100000000) {
-        SCOPED_TIMER(prepare_driver_timer);
-        for (auto& group : _execution_groups) {
-            RETURN_IF_ERROR(group->for_each_pipeline([this](Pipeline* pipeline) -> Status {
-                auto* source_op = pipeline->source_operator_factory();
-                if (!source_op->is_adaptive_group_initial_active()) {
-                    return Status::OK();
-                }
-                for (auto& driver : pipeline->drivers()) {
-                    RETURN_IF_ERROR(driver->prepare_operators_local_state(_runtime_state.get()));
-                }
-                return Status::OK();
-            }));
-        }
-        RETURN_IF_ERROR(submit_all_timer());
-        return Status::OK();
-    }
-
     auto* prepare_driver_local_timer =
             ADD_CHILD_TIMER_THESHOLD(profile, "prepare-pipeline-driver-local", "prepare-pipeline-driver", 0_ms);
     SCOPED_TIMER(prepare_driver_local_timer);
 
-    std::vector<std::pair<ExecutionGroup*, DriverPtr>> all_drivers;
-    all_drivers.reserve(100);
+    size_t total_active_driver_size = 0;
     for (auto& group : _execution_groups) {
-        group->for_each_pipeline([&](Pipeline* pipeline) {
-            auto* source_op = pipeline->source_operator_factory();
-            if (!source_op->is_adaptive_group_initial_active()) {
-                return;
-            }
-            for (auto& driver : pipeline->drivers()) {
-                all_drivers.emplace_back(group.get(), driver);
-            }
-        });
-    }
-
-    if (all_drivers.empty()) {
-        RETURN_IF_ERROR(submit_all_timer());
-        return Status::OK();
+        total_active_driver_size += group->total_active_driver_size();
     }
 
     // prepare pipeline-driver parallelly
     // only do prepare operation that is thread safe in prepare_operators_local_state
-    std::atomic<int> pending_tasks(all_drivers.size());
     std::mutex completion_mutex;
     std::condition_variable completion_cv;
-    std::atomic<Status*> first_error(nullptr);
+    std::atomic<std::shared_ptr<Status>> first_error(nullptr);
 
-    auto pipeline_prepare_pool = _runtime_state->exec_env()->pipeline_prepare_pool();
-
-    for (auto& [group, driver] : all_drivers) {
-        bool submitted =
-                pipeline_prepare_pool->try_offer([&pending_tasks, &completion_mutex, &completion_cv, &first_error,
-                                                  driver_ptr = driver, runtime_state = _runtime_state.get()]() {
-                    Status status = driver_ptr->prepare_operators_local_state(runtime_state);
-
-                    if (!status.ok()) {
-                        Status* expected = nullptr;
-                        if (first_error.compare_exchange_strong(expected, new Status(status))) {
-                        }
-                    }
-
-                    if (pending_tasks.fetch_sub(1) == 1) {
-                        std::lock_guard<std::mutex> lock(completion_mutex);
-                        completion_cv.notify_one();
-                    }
-                });
-
-        if (!submitted) {
-            Status status = driver->prepare_operators_local_state(_runtime_state.get());
-            if (!status.ok()) {
-                Status* expected = nullptr;
-                first_error.compare_exchange_strong(expected, new Status(status));
-            }
-
-            if (pending_tasks.fetch_sub(1) == 1) {
-                std::lock_guard<std::mutex> lock(completion_mutex);
-                completion_cv.notify_one();
-            }
-        }
+    std::atomic<int> pending_tasks(total_active_driver_size);
+    for (auto& group : _execution_groups) {
+        group->prepare_active_drivers_parallel(runtime_state(), pending_tasks, completion_mutex, completion_cv,
+                                               first_error);
     }
 
+    // wait for all the tasks finished
     {
         std::unique_lock<std::mutex> lock(completion_mutex);
         completion_cv.wait(lock, [&pending_tasks] { return pending_tasks.load() == 0; });
     }
 
-    Status* error = first_error.load();
+    Status* error = first_error.load().get();
     if (error != nullptr) {
-        Status result = *error;
-        delete error;
-        return result;
+        return *error;
     }
 
     RETURN_IF_ERROR(submit_all_timer());
