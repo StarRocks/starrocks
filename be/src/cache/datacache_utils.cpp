@@ -82,6 +82,8 @@ StatusOr<int64_t> DataCacheUtils::parse_conf_datacache_disk_size(const std::stri
                      << ", path: " << disk_path << ", disk_size: " << disk_size << ", disk_limit: " << disk_limit;
         disk_size = disk_limit;
     }
+    LOG(INFO) << "parse_conf_datacache_disk_size, disk_path: " << disk_path << ", disk_size: " << disk_size << ", disk_limit: " << disk_limit
+        << ", disk_size_str: " << disk_size_str;
     return disk_size;
 }
 

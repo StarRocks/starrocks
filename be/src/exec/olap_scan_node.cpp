@@ -118,7 +118,11 @@ Status OlapScanNode::init(const TPlanNode& tnode, RuntimeState* state) {
         _back_pressure_throttle_time_upper_bound = tnode.olap_scan_node.back_pressure_throttle_time_upper_bound;
     }
 
-    _estimate_scan_and_output_row_bytes();
+    const TOlapScanNode& thrift_scan_node = thrift_olap_scan_node();
+    const TupleDescriptor* tuple_desc = runtime_state()->desc_tbl().get_tuple_descriptor(thrift_scan_node.tuple_id);
+    const auto& slots = tuple_desc->slots();
+
+    _estimate_scan_and_output_row_bytes(slots);
 
     return Status::OK();
 }
@@ -811,11 +815,7 @@ Status OlapScanNode::_capture_tablet_rowsets() {
     return Status::OK();
 }
 
-void OlapScanNode::_estimate_scan_and_output_row_bytes() {
-    const TOlapScanNode& thrift_scan_node = thrift_olap_scan_node();
-    const TupleDescriptor* tuple_desc = runtime_state()->desc_tbl().get_tuple_descriptor(thrift_scan_node.tuple_id);
-    const auto& slots = tuple_desc->slots();
-
+void OlapScanNode::_estimate_scan_and_output_row_bytes(const std::vector<SlotDescriptor*>& slots) {
     std::unordered_set<std::string> unused_output_column_set;
     for (const auto& column : _unused_output_columns) {
         unused_output_column_set.emplace(column);

@@ -309,4 +309,12 @@ public abstract class OptExpressionVisitor<R, C> {
     public R visitPhysicalConcatenater(OptExpression optExpression, C context) {
         return visit(optExpression, context);
     }
+
+    public R visitPhysicalFetch(OptExpression optExpression, C context) {
+        return visit(optExpression, context);
+    }
+
+    public R visitPhysicalLookUp(OptExpression optExpression, C context) {
+        return visit(optExpression, context);
+    }
 }

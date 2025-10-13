@@ -30,6 +30,13 @@
 namespace starrocks::parquet {
 
 // FixedValueColumnReader
+Status FixedValueColumnReader::read_range(const Range<uint64_t>& range, const Filter* filter, ColumnPtr& dst) {
+    // LOG(INFO) << "FixedValueColumnReader::read_range";
+    for (uint64_t i = range.begin(); i < range.end(); ++i) {
+        dst->append_datum(_fixed_value);
+    }
+    return Status::OK();
+}
 
 StatusOr<bool> FixedValueColumnReader::row_group_zone_map_filter(const std::vector<const ColumnPredicate*>& predicates,
                                                                  CompoundNodeType pred_relation,

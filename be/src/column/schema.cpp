@@ -18,6 +18,8 @@
 #include <utility>
 
 #include "exec/sorting/sorting.h"
+#include "column/field.h"
+#include "types/logical_type.h"
 
 namespace starrocks {
 
@@ -164,6 +166,7 @@ Schema& Schema::operator=(const Schema& other) {
 void Schema::append(const FieldPtr& field) {
     _fields.emplace_back(field);
     _num_keys += field->is_key();
+
     if (!_share_name_to_index) {
         if (_name_to_index == nullptr) {
             _name_to_index.reset(new std::unordered_map<std::string_view, size_t>());

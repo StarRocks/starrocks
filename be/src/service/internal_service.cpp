@@ -49,12 +49,14 @@
 #include "cache/datacache.h"
 #include "column/stream_chunk.h"
 #include "common/closure_guard.h"
+#include "common/compiler_util.h"
 #include "common/config.h"
 #include "common/process_exit.h"
 #include "common/status.h"
 #include "exec/file_scanner/file_scanner.h"
 #include "exec/pipeline/fragment_context.h"
 #include "exec/pipeline/fragment_executor.h"
+#include "exec/pipeline/lookup_request.h"
 #include "exec/pipeline/pipeline_driver_executor.h"
 #include "exec/pipeline/query_context.h"
 #include "exec/pipeline/stream_epoch_manager.h"
@@ -553,9 +555,9 @@ void PInternalServiceImplBase<T>::_cancel_plan_fragment(google::protobuf::RpcCon
     bool cancel_query_ctx = tid.hi == 0 && tid.lo == 0;
     if (cancel_query_ctx) {
         DCHECK(request->has_query_id());
-        LOG(INFO) << "cancel query ctx, query_id=" << print_id(request->query_id()) << ", reason: " << reason_string;
+        // LOG(INFO) << "cancel query ctx, query_id=" << print_id(request->query_id()) << ", reason: " << reason_string;
     } else {
-        LOG(INFO) << "cancel fragment, fragment_instance_id=" << print_id(tid) << ", reason: " << reason_string;
+        // LOG(INFO) << "cancel fragment, fragment_instance_id=" << print_id(tid) << ", reason: " << reason_string;
     }
 
     if (request->has_is_pipeline() && request->is_pipeline()) {
@@ -1375,6 +1377,48 @@ void PInternalServiceImplBase<T>::update_transaction_state(google::protobuf::Rpc
                                                            google::protobuf::Closure* done) {
     ClosureGuard closure_guard(done);
     _exec_env->batch_write_mgr()->update_transaction_state(request, response);
+}
+
+template <typename T>
+void PInternalServiceImplBase<T>::lookup(google::protobuf::RpcController* cntl_base, const PLookUpRequest* request,
+                                         PLookUpResponse* response, google::protobuf::Closure* done) {
+    auto* cntl = static_cast<brpc::Controller*>(cntl_base);
+    auto* req = const_cast<PLookUpRequest*>(request);
+
+    Status st;
+    DeferOp defer([&]() {
+        if (!st.ok()) {
+            st.to_protobuf(response->mutable_status());
+            done->Run();
+        }
+    });
+
+    if (cntl->request_attachment().size() > 0) {
+        // parse chunk
+        butil::IOBuf& io_buf = cntl->request_attachment();
+        for (size_t i = 0; i < request->request_columns_size();i ++) {
+            auto pcolumn = req->mutable_request_columns(i);
+            if (UNLIKELY(io_buf.size() < pcolumn->data_size())) {
+                auto msg = fmt::format("io_buf size {} is less than column data size {}", io_buf.size(),
+                                       pcolumn->data_size());
+                LOG(WARNING) << msg;
+                st = Status::InternalError(msg);
+                return;
+            }
+            size_t size = io_buf.cutn(pcolumn->mutable_data(), pcolumn->data_size());
+            if (UNLIKELY(size != pcolumn->data_size())) {
+                auto msg = fmt::format("iobuf read {} != expected {}", size, pcolumn->data_size());
+                LOG(WARNING) << msg;
+                st = Status::InternalError(msg);
+                return;
+            }
+        }
+    } else {
+        st = Status::InternalError("no attachment in lookup request");
+        return;
+    }
+    auto request_ctx = std::make_shared<pipeline::RemoteLookUpRequestContext>(cntl, req, response, done);
+    st = _exec_env->lookup_dispatcher_mgr()->lookup(std::move(request_ctx));
 }
 
 template class PInternalServiceImplBase<PInternalService>;

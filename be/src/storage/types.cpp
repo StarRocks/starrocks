@@ -51,6 +51,7 @@
 #include "types/date_value.hpp"
 #include "types/large_int_value.h"
 #include "types/map_type_info.h"
+#include "types/row_id_type_info.h"
 #include "types/struct_type_info.h"
 #include "util/hash_util.hpp"
 #include "util/mem_util.hpp"

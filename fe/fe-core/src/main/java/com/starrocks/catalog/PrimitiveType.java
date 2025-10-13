@@ -83,6 +83,7 @@ public enum PrimitiveType {
 
     BINARY("BINARY", -1, TPrimitiveType.BINARY),
     VARBINARY("VARBINARY", 16, TPrimitiveType.VARBINARY),
+    ROW_ID("ROW_ID", 12, TPrimitiveType.ROW_ID),
 
     // If external table column type is unsupported, it will be converted to UNKNOWN_TYPE
     UNKNOWN_TYPE("UNKNOWN_TYPE", -1, TPrimitiveType.INVALID_TYPE);
