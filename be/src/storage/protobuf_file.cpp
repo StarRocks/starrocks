@@ -176,7 +176,8 @@ Status ProtobufFile::load(::google::protobuf::Message* message, bool fill_cache)
     if (bool parsed = message->ParseFromString(serialized_string); !parsed) {
         return Status::Corruption(fmt::format("failed to parse protobuf file {}", _path));
     }
-    TEST_ERROR_POINT("ProtobufFile::load::corruption");
-    return Status::OK();
+    Status st = Status::OK();
+    TEST_SYNC_POINT_CALLBACK("ProtobufFile::load::corruption", &st);
+    return st;
 }
 } // namespace starrocks

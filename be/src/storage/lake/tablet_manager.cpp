@@ -381,6 +381,7 @@ Status TabletManager::put_bundle_tablet_metadata(std::map<int64_t, TabletMetadat
 Status TabletManager::corrupted_tablet_meta_handler(const Status& s, const std::string& metadata_location) {
     if (s.is_corruption() && config::lake_clear_corrupted_cache) {
         auto drop_status = drop_local_cache(metadata_location);
+        TEST_SYNC_POINT_CALLBACK("TabletManager::corrupted_tablet_meta_handler", &drop_status);
         if (!drop_status.ok()) {
             LOG(WARNING) << "clear corrupted cache for " << metadata_location << " failed, "
                          << "error: " << drop_status;
@@ -508,7 +509,11 @@ StatusOr<BundleTabletMetadataPtr> TabletManager::parse_bundle_tablet_metadata(co
     RETURN_IF(!bundle_metadata->ParseFromArray(bundle_metadata_str.data(), bundle_metadata_size),
               Status::Corruption(strings::Substitute("deserialized shared metadata failed")));
 
-    TEST_ERROR_POINT("TabletManager::parse_bundle_tablet_metadata::corruption");
+    bool inject_error = false;
+    TEST_SYNC_POINT_CALLBACK("TabletManager::parse_bundle_tablet_metadata::corruption", &inject_error);
+    if (inject_error) {
+        return Status::Corruption("injected error");
+    }
     return bundle_metadata;
 }
 
