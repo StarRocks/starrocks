@@ -516,11 +516,19 @@ size_t ShardedLRUCache::get_memory_usage() const {
 }
 
 size_t ShardedLRUCache::get_lookup_count() const {
-    return _get_stat(&LRUCache::get_lookup_count);
+    uint64_t total = 0;
+    for (auto& shard : _shards) {
+        total += shard.get_lookup_count();
+    }
+    return static_cast<size_t>(total);
 }
 
 size_t ShardedLRUCache::get_hit_count() const {
-    return _get_stat(&LRUCache::get_hit_count);
+    uint64_t total = 0;
+    for (auto& shard : _shards) {
+        total += shard.get_hit_count();
+    }
+    return static_cast<size_t>(total);
 }
 
 size_t ShardedLRUCache::get_insert_count() const {

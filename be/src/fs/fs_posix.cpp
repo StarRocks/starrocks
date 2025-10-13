@@ -15,6 +15,10 @@
 #include <sys/uio.h>
 #include <unistd.h>
 
+#ifdef __APPLE__
+#include "starrocks_macos_posix_shims.h"
+#endif
+
 #include <cerrno>
 #include <climits>
 #include <cstdio>

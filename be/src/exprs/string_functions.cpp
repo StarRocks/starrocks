@@ -3766,7 +3766,14 @@ static ColumnPtr regexp_replace_const(re2::RE2* const_re, const Columns& columns
         auto str_value = str_viewer.value(row);
         re2::StringPiece str_str = re2::StringPiece(str_value.get_data(), str_value.get_size());
         result_str.clear();
+#ifdef __APPLE__
+        // macOS RE2 API only supports 3-parameter GlobalReplace
+        result_str = std::string(str_str.data(), str_str.size());
+        re2::RE2::GlobalReplace(&result_str, *const_re, rpl_str);
+#else
+        // Linux RE2 API supports 4-parameter GlobalReplace
         re2::RE2::GlobalReplace(str_str, *const_re, rpl_str, result_str);
+#endif
         result.append(Slice(result_str.data(), result_str.size()));
     }
 
@@ -4757,7 +4764,15 @@ static StatusOr<ColumnPtr> url_extract_parameter_general(const starrocks::Column
         }
         auto url = url_viewer.value(i);
         auto param_key = param_key_viewer.value(i);
-        bool ill_formed = param_key.size == 0 || std::any_of(param_key.data, param_key.data + param_key.size, isspace);
+        bool ill_formed = param_key.size == 0 || std::any_of(param_key.data, param_key.data + param_key.size,
+#ifdef __APPLE__
+                                                             [](int c) {
+                                                                 return std::isspace(c);
+                                                             } // macOS: use lambda to avoid template deduction issues
+#else
+            isspace  // Linux: use original isspace
+#endif
+                                                 );
         if (ill_formed) {
             result.append_null();
             continue;
@@ -4785,7 +4800,15 @@ static StatusOr<ColumnPtr> url_extract_parameter_const_query_params(const starro
             continue;
         }
         auto param_key = param_key_viewer.value(i);
-        bool ill_formed = param_key.size == 0 || std::any_of(param_key.data, param_key.data + param_key.size, isspace);
+        bool ill_formed = param_key.size == 0 || std::any_of(param_key.data, param_key.data + param_key.size,
+#ifdef __APPLE__
+                                                             [](int c) {
+                                                                 return std::isspace(c);
+                                                             } // macOS: use lambda to avoid template deduction issues
+#else
+            isspace  // Linux: use original isspace
+#endif
+                                                 );
         if (ill_formed) {
             result.append_null();
             continue;
@@ -4828,7 +4851,15 @@ Status StringFunctions::url_extract_parameter_prepare(starrocks::FunctionContext
         auto param_key_column = context->get_constant_column(1);
         auto param_key = ColumnHelper::get_const_value<TYPE_VARCHAR>(param_key_column);
         state->opt_const_param_key = param_key.to_string();
-        ill_formed |= param_key.empty() || std::any_of(param_key.data, param_key.data + param_key.size, isspace);
+        ill_formed |= param_key.empty() || std::any_of(param_key.data, param_key.data + param_key.size,
+#ifdef __APPLE__
+                                                       [](int c) {
+                                                           return std::isspace(c);
+                                                       } // macOS: use lambda to avoid template deduction issues
+#else
+            isspace  // Linux: use original isspace
+#endif
+                                           );
     }
 
     if (url_is_const) {

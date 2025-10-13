@@ -24,6 +24,16 @@
 #include <fmt/ostream.h>
 #include <sys/syscall.h>
 
+#ifdef __APPLE__
+#include <signal.h>
+#ifndef SIGRTMIN
+#define SIGRTMIN (SIGUSR1)
+#endif
+#ifndef SYS_rt_tgsigqueueinfo
+#define SYS_rt_tgsigqueueinfo 0
+#endif
+#endif
+
 #include <thread>
 #include <tuple>
 
