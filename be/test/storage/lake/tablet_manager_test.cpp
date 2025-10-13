@@ -117,10 +117,15 @@ TEST_F(LakeTabletManagerTest, tablet_meta_read_corrupted_and_recover) {
     EXPECT_OK(_tablet_manager->put_tablet_metadata(metadata));
     auto res = _tablet_manager->get_tablet_metadata(tablet_id, 2);
     EXPECT_TRUE(res.ok());
+    _tablet_manager->metacache()->prune();
+    SyncPoint::GetInstance()->EnableProcessing();
+    DeferOp defer([]() {
+        TEST_DISABLE_ERROR_POINT("ProtobufFile::load::corruption");
+        SyncPoint::GetInstance()->DisableProcessing();
+    });
     TEST_ENABLE_ERROR_POINT("ProtobufFile::load::corruption", Status::Corruption("injected error"));
-    auto res = _tablet_manager->get_tablet_metadata(tablet_id, 2);
+    res = _tablet_manager->get_tablet_metadata(tablet_id, 2);
     EXPECT_FALSE(res.ok());
-    TEST_DISABLE_ERROR_POINT("ProtobufFile::load::corruption");
 }
 
 // NOLINTNEXTLINE
@@ -711,12 +716,17 @@ TEST_F(LakeTabletManagerTest, put_bundle_tablet_metadata) {
     }
 
     {
+        _tablet_manager->metacache()->prune();
         // inject corruption error
+        SyncPoint::GetInstance()->EnableProcessing();
+        DeferOp defer([]() {
+            TEST_DISABLE_ERROR_POINT("TabletManager::parse_bundle_tablet_metadata::corruption");
+            SyncPoint::GetInstance()->DisableProcessing();
+        });
         TEST_ENABLE_ERROR_POINT("TabletManager::parse_bundle_tablet_metadata::corruption",
                                 Status::Corruption("injected error"));
         auto res = _tablet_manager->get_tablet_metadata(1, 2);
         EXPECT_FALSE(res.ok());
-        TEST_DISABLE_ERROR_POINT("TabletManager::parse_bundle_tablet_metadata::corruption");
     }
 
     // multi thread read

@@ -378,7 +378,7 @@ Status TabletManager::put_bundle_tablet_metadata(std::map<int64_t, TabletMetadat
     return Status::OK();
 }
 
-static Status corrupted_tablet_meta_handler(const Status& s, const std::string& metadata_location) {
+Status TabletManager::corrupted_tablet_meta_handler(const Status& s, const std::string& metadata_location) {
     if (s.is_corruption() && config::lake_clear_corrupted_cache) {
         auto drop_status = drop_local_cache(metadata_location);
         if (!drop_status.ok()) {
