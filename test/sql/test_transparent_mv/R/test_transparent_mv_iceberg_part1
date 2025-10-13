@@ -1,4 +1,8 @@
+<<<<<<< HEAD
 -- name: test_transparent_mv_iceberg_part1
+=======
+-- name: test_transparent_mv_iceberg_part1 @slow
+>>>>>>> d6a9f8d508 ([UT] [BugFix] Fix mv transparent mv related bugs (#63962))
 create external catalog mv_iceberg_${uuid0}
 properties
 (
@@ -62,7 +66,7 @@ set new_planner_optimize_timeout=10000;
 CREATE MATERIALIZED VIEW test_mv1 
 PARTITION BY dt
 REFRESH DEFERRED MANUAL 
-PROPERTIES ("transparent_mv_rewrite_mode" = "true")
+PROPERTIES ("transparent_mv_rewrite_mode" = "transparent_or_error")
 AS 
   SELECT dt, sum(num) as num FROM mv_iceberg_${uuid0}.mv_iceberg_db_${uuid0}.t1 GROUP BY dt;
 -- result:
@@ -409,13 +413,28 @@ SELECT dt,sum(num) FROM test_mv1 GROUP BY dt order by 1, 2 limit 3;
 2020-06-18	5
 2020-06-21	7
 -- !result
+SELECT dt, count(1) FROM mv_iceberg_${uuid0}.mv_iceberg_db_${uuid0}.t1 GROUP BY dt ORDER BY dt;
+-- result:
+2020-06-15	3
+2020-06-18	2
+2020-06-21	2
+2020-06-24	2
+2020-07-02	2
+2020-07-05	2
+2020-07-08	2
+2020-07-11	2
+2020-07-16	1
+2020-07-19	1
+2020-07-22	1
+2020-07-25	1
+-- !result
 drop materialized view default_catalog.db_${uuid0}.test_mv1;
 -- result:
 -- !result
 CREATE MATERIALIZED VIEW test_mv1 
 PARTITION BY date_trunc('day', dt)
 REFRESH DEFERRED MANUAL 
-PROPERTIES ("transparent_mv_rewrite_mode" = "true")
+properties ("transparent_mv_rewrite_mode" = "transparent_or_error")
 AS 
   SELECT dt,sum(num) as num FROM mv_iceberg_${uuid0}.mv_iceberg_db_${uuid0}.t1 GROUP BY dt;
 -- result:
@@ -592,6 +611,21 @@ SELECT dt,sum(num) FROM test_mv1 GROUP BY dt order by 1, 2 limit 3;
 2020-06-15	9
 2020-06-18	5
 2020-06-21	7
+-- !result
+SELECT dt, count(1) FROM mv_iceberg_${uuid0}.mv_iceberg_db_${uuid0}.t1 GROUP BY dt ORDER BY dt;
+-- result:
+2020-06-15	4
+2020-06-18	2
+2020-06-21	2
+2020-06-24	2
+2020-07-02	2
+2020-07-05	2
+2020-07-08	2
+2020-07-11	2
+2020-07-16	1
+2020-07-19	1
+2020-07-22	1
+2020-07-25	1
 -- !result
 drop materialized view default_catalog.db_${uuid0}.test_mv1;
 -- result:

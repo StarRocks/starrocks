@@ -1,4 +1,8 @@
+<<<<<<< HEAD
 -- name: test_transparent_mv_iceberg_part1
+=======
+-- name: test_transparent_mv_iceberg_part1 @slow
+>>>>>>> d6a9f8d508 ([UT] [BugFix] Fix mv transparent mv related bugs (#63962))
 create external catalog mv_iceberg_${uuid0}
 properties
 (
@@ -46,7 +50,7 @@ set new_planner_optimize_timeout=10000;
 CREATE MATERIALIZED VIEW test_mv1 
 PARTITION BY dt
 REFRESH DEFERRED MANUAL 
-PROPERTIES ("transparent_mv_rewrite_mode" = "true")
+PROPERTIES ("transparent_mv_rewrite_mode" = "transparent_or_error")
 AS 
   SELECT dt, sum(num) as num FROM mv_iceberg_${uuid0}.mv_iceberg_db_${uuid0}.t1 GROUP BY dt;
 
@@ -129,6 +133,7 @@ SELECT dt,sum(num) FROM test_mv1 where date_trunc('day', dt) ='2020-06-15' GROUP
 SELECT dt,sum(num) FROM test_mv1 where date_trunc('month', dt) ='2020-06-01' GROUP BY dt order by 1, 2 limit 3;
 SELECT dt,sum(num) FROM test_mv1 where date_trunc('month', dt) ='2020-07-01' GROUP BY dt order by 1, 2 limit 3;
 SELECT dt,sum(num) FROM test_mv1 GROUP BY dt order by 1, 2 limit 3;
+SELECT dt, count(1) FROM mv_iceberg_${uuid0}.mv_iceberg_db_${uuid0}.t1 GROUP BY dt ORDER BY dt;
 
 
 drop materialized view default_catalog.db_${uuid0}.test_mv1;
@@ -137,7 +142,7 @@ drop materialized view default_catalog.db_${uuid0}.test_mv1;
 CREATE MATERIALIZED VIEW test_mv1 
 PARTITION BY date_trunc('day', dt)
 REFRESH DEFERRED MANUAL 
-PROPERTIES ("transparent_mv_rewrite_mode" = "true")
+properties ("transparent_mv_rewrite_mode" = "transparent_or_error")
 AS 
   SELECT dt,sum(num) as num FROM mv_iceberg_${uuid0}.mv_iceberg_db_${uuid0}.t1 GROUP BY dt;
 REFRESH MATERIALIZED VIEW test_mv1 WITH SYNC MODE;
@@ -180,6 +185,7 @@ SELECT dt,sum(num) FROM test_mv1 where date_trunc('day', dt) ='2020-06-15' GROUP
 SELECT dt,sum(num) FROM test_mv1 where date_trunc('month', dt) ='2020-06-01' GROUP BY dt order by 1, 2 limit 3;
 SELECT dt,sum(num) FROM test_mv1 where date_trunc('month', dt) ='2020-07-01' GROUP BY dt order by 1, 2 limit 3;
 SELECT dt,sum(num) FROM test_mv1 GROUP BY dt order by 1, 2 limit 3;
+SELECT dt, count(1) FROM mv_iceberg_${uuid0}.mv_iceberg_db_${uuid0}.t1 GROUP BY dt ORDER BY dt;
 
 drop materialized view default_catalog.db_${uuid0}.test_mv1;
 
