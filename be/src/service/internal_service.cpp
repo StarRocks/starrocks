@@ -385,12 +385,6 @@ void PInternalServiceImplBase<T>::_exec_batch_plan_fragments(google::protobuf::R
     std::vector<PromiseStatusSharedPtr> promise_statuses;
     std::vector<pipeline::FragmentExecutor> fragment_executors(unique_requests.size());
     for (int i = 0; i < unique_requests.size(); ++i) {
-        // auto& unique_request = unique_requests[i];
-        // LOG(INFO) << "exec plan fragment, fragment_instance_id=" << print_id(unique_request.params.fragment_instance_id)
-        //           << ", coord=" << common_request.coord << ", backend=" << unique_request.backend_num
-        //           << ", is_pipeline=1"
-        //           << ", chunk_size=" << common_request.query_options.batch_size;
-
         PromiseStatusSharedPtr ms = std::make_shared<PromiseStatus>();
         _exec_env->pipeline_prepare_pool()->offer([ms, i, &fragment_executors, &unique_requests, this] {
             auto& req = unique_requests[i];
