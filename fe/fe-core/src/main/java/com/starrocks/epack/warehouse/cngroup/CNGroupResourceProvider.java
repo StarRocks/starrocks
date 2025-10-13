@@ -20,6 +20,7 @@ import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReportException;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.RunMode;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.system.SystemInfoService;
@@ -228,6 +229,9 @@ public class CNGroupResourceProvider implements ComputeResourceProvider  {
 
     @Override
     public boolean isResourceAvailable(ComputeResource cnResource) {
+        if (!RunMode.isSharedDataMode()) {
+            return true;
+        }
         try {
             final List<ComputeNode> computeNodes = getAliveComputeNodes(cnResource);
             final long availableWorkerGroupIdSize =

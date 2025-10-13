@@ -359,10 +359,11 @@ public class WarehouseManagerEPack extends WarehouseManager {
             warehouseEventListeners.stream()
                     .forEach(listener -> listener.onDropWarehouse(warehouse));
 
+            warehouse.delete();
+
             nameToWh.remove(warehouseName);
             idToWh.remove(warehouse.getId());
 
-            warehouse.delete();
             EditLog editLog = GlobalStateMgr.getCurrentState().getEditLog();
             editLog.logJsonObject(OperationType.OP_DROP_WAREHOUSE, new DropWarehouseLog(warehouseName));
         }

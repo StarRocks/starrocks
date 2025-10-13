@@ -157,6 +157,10 @@ public class CNGroupAddDropNodeTest extends LocalWarehouseTestBase {
             String nodeAddress = randomNodeAddress();
             String warehouseName = randomWarehouseName();
             String cngroupName = randomCNGroupName();
+            // make sure the node exists in the system
+            String addSql = addNodeSql(nodeAddress, "default_warehouse", null, isCnNode);
+            ExceptionChecker.expectThrowsNoException(() -> starRocksAssert.ddl(addSql));
+
             String sql = dropNodeSql(nodeAddress, warehouseName, cngroupName, isCnNode);
             Assert.assertThrows(sql, DdlException.class, () -> starRocksAssert.ddl(sql));
             Assertions.assertEquals(ErrorCode.ERR_UNKNOWN_WAREHOUSE, connectContext.getState().getErrorCode(), sql);
