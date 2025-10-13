@@ -593,7 +593,7 @@ PARTITION BY (l_returnflag, l_linestatus, date_trunc('year', l_shipdate))
 REFRESH DEFERRED MANUAL
 PROPERTIES (
 	"replication_num" = "1",
-	"transparent_mv_rewrite_mode" = "true"
+	"transparent_mv_rewrite_mode" = "transparent_or_error"
 )
 AS
   SELECT * FROM mv_iceberg_${uuid0}.sql_test_db_${uuid0}.lineitem_years;
