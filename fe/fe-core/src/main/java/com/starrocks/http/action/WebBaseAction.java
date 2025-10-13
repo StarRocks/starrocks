@@ -315,6 +315,9 @@ public class WebBaseAction extends BaseAction {
             sb.append("<li id=\"nav_ha\"><a href=\"/ha\">")
                     .append("ha")
                     .append("</a></li>");
+            sb.append("<li id=\"nav_proc_profile\"><a href=\"/proc_profile\">")
+                    .append("proc profiles")
+                    .append("</a></li>");
         }
 
         sb.append(NAVIGATION_BAR_SUFFIX);
