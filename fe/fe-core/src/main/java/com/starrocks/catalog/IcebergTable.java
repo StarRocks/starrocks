@@ -96,6 +96,7 @@ public class IcebergTable extends Table {
     public static final String DATA_SEQUENCE_NUMBER = "$data_sequence_number";
     public static final String SPEC_ID = "$spec_id";
     public static final String EQUALITY_DELETE_TABLE_COMMENT = "equality_delete_table_comment";
+    public static final String ROW_ID = "_row_id";
 
     private String catalogName;
     @SerializedName(value = "dn")
@@ -245,6 +246,9 @@ public class IcebergTable extends Table {
         return ((BaseTable) getNativeTable()).operations().current().formatVersion() > 1;
     }
 
+    public int getFormatVersion() {
+        return ((BaseTable) getNativeTable()).operations().current().formatVersion();
+    }
     /**
      * <p>
      * In the Iceberg Partition Evolution scenario, 'org.apache.iceberg.PartitionField#name' only represents the
