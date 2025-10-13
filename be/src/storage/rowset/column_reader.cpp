@@ -535,25 +535,36 @@ Status ColumnReader::_load_inverted_index(const std::shared_ptr<TabletIndex>& in
     }
 
     SCOPED_THREAD_LOCAL_CHECK_MEM_LIMIT_SETTER(false);
-    return success_once(_inverted_index_load_once,
-                        [&]() {
-                            LogicalType type;
-                            if (_column_type == LogicalType::TYPE_ARRAY) {
-                                type = _column_child_type;
-                            } else {
-                                type = _column_type;
-                            }
+    return success_once(
+                   _inverted_index_load_once,
+                   [&]() {
+                       LogicalType type;
+                       if (_column_type == LogicalType::TYPE_ARRAY) {
+                           type = _column_child_type;
+                       } else {
+                           type = _column_type;
+                       }
 
-                            ASSIGN_OR_RETURN(auto imp_type, get_inverted_imp_type(*index_meta))
-                            std::string index_path = IndexDescriptor::inverted_index_file_path(
-                                    opts.rowset_path, opts.rowsetid.to_string(), _segment->id(),
-                                    index_meta->index_id());
-                            ASSIGN_OR_RETURN(auto inverted_plugin, InvertedPluginFactory::get_plugin(imp_type));
-                            RETURN_IF_ERROR(inverted_plugin->create_inverted_index_reader(index_path, index_meta, type,
-                                                                                          &_inverted_index));
+                       ASSIGN_OR_RETURN(auto imp_type, get_inverted_imp_type(*index_meta))
 
-                            return Status::OK();
-                        })
+                       std::string index_path;
+                       if (!opts.rowset_path.empty()) {
+                           index_path = IndexDescriptor::inverted_index_file_path(
+                                   opts.rowset_path, opts.rowsetid.to_string(), _segment->id(), index_meta->index_id());
+                       } else if (_segment != nullptr && !_segment->file_info().path.empty()) {
+                           index_path = IndexDescriptor::inverted_index_file_path(_segment->file_info().path,
+                                                                                  index_meta->index_id());
+                       } else {
+                           return Status::InvalidArgument(
+                                   "Need to apply inverted index, but no any inverted index file info has been given.");
+                       }
+
+                       ASSIGN_OR_RETURN(auto inverted_plugin, InvertedPluginFactory::get_plugin(imp_type));
+                       RETURN_IF_ERROR(inverted_plugin->create_inverted_index_reader(index_path, index_meta, type,
+                                                                                     &_inverted_index));
+
+                       return Status::OK();
+                   })
             .status();
 }
 
