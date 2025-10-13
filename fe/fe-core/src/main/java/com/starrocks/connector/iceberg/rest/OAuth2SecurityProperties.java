@@ -28,19 +28,19 @@ public class OAuth2SecurityProperties {
         requireNonNull(securityConfig, "securityConfig is null");
 
         ImmutableMap.Builder<String, String> propertiesBuilder = ImmutableMap.builder();
+        securityConfig.getCredential().ifPresent(
+                credential -> {
+                    propertiesBuilder.put(OAuth2Properties.CREDENTIAL, credential);
+                    securityConfig.getScope()
+                            .ifPresent(scope -> propertiesBuilder.put(OAuth2Properties.SCOPE, scope));
+                });
+        securityConfig.getToken().ifPresent(
+                value -> propertiesBuilder.put(OAuth2Properties.TOKEN, value));
+        securityConfig.getServerUri().ifPresent(
+                value -> propertiesBuilder.put(OAuth2Properties.OAUTH2_SERVER_URI, value.toString()));
+        securityConfig.getAudience().ifPresent(
+                value -> propertiesBuilder.put(OAuth2Properties.AUDIENCE, value));
         if (securityConfig.getSecurity() == IcebergRESTCatalog.Security.OAUTH2) {
-            securityConfig.getCredential().ifPresent(
-                    credential -> {
-                        propertiesBuilder.put(OAuth2Properties.CREDENTIAL, credential);
-                        securityConfig.getScope()
-                                .ifPresent(scope -> propertiesBuilder.put(OAuth2Properties.SCOPE, scope));
-                    });
-            securityConfig.getToken().ifPresent(
-                    value -> propertiesBuilder.put(OAuth2Properties.TOKEN, value));
-            securityConfig.getServerUri().ifPresent(
-                    value -> propertiesBuilder.put(OAuth2Properties.OAUTH2_SERVER_URI, value.toString()));
-            securityConfig.getAudience().ifPresent(
-                    value -> propertiesBuilder.put(OAuth2Properties.AUDIENCE, value));
             securityConfig.isTokenRefreshEnabled().ifPresent(
                     value -> propertiesBuilder.put(OAuth2Properties.TOKEN_REFRESH_ENABLED, Boolean.toString(value)));
         } else if (securityConfig.getSecurity() == IcebergRESTCatalog.Security.JWT) {
