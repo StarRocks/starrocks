@@ -374,6 +374,14 @@ public class Column implements Writable, GsonPreProcessable, GsonPostProcessable
         this.isAggregationTypeImplicit = isAggregationTypeImplicit;
     }
 
+    public void setIsHidden(boolean isHidden) {
+        this.isHidden = isHidden;
+    }
+
+    public boolean isHidden() {
+        return isHidden;
+    }
+
     public boolean isAllowNull() {
         return isAllowNull;
     }

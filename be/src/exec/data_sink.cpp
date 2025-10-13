@@ -56,6 +56,9 @@
 #include "exec/pipeline/exchange/sink_buffer.h"
 #include "exec/pipeline/fragment_executor.h"
 #include "exec/pipeline/limit_operator.h"
+#include "exec/pipeline/sink/noop_sink_operator.h"
+#include "exec/pipeline/sink/olap_table_sink_operator.h"
+#include "exec/pipeline/sink/result_sink_operator.h"
 #include "exec/pipeline/sink/blackhole_table_sink_operator.h"
 #include "exec/pipeline/sink/connector_sink_operator.h"
 #include "exec/pipeline/sink/dictionary_cache_sink_operator.h"
@@ -83,6 +86,7 @@
 #include "runtime/memory_scratch_sink.h"
 #include "runtime/multi_cast_data_stream_sink.h"
 #include "runtime/mysql_table_sink.h"
+#include "runtime/noop_sink.h"
 #include "runtime/result_sink.h"
 #include "runtime/runtime_state.h"
 #include "runtime/schema_table_sink.h"
@@ -241,7 +245,10 @@ Status DataSink::create_data_sink(RuntimeState* state, const TDataSink& thrift_s
         *sink = std::make_unique<DictionaryCacheSink>();
         break;
     }
-
+    case TDataSinkType::NOOP_SINK: {
+        *sink = std::make_unique<NoopSink>(state->obj_pool());
+        break;
+    }
     default:
         std::stringstream error_msg;
         auto i = _TDataSinkType_VALUES_TO_NAMES.find(thrift_sink.type);
@@ -250,7 +257,6 @@ Status DataSink::create_data_sink(RuntimeState* state, const TDataSink& thrift_s
         if (i != _TDataSinkType_VALUES_TO_NAMES.end()) {
             str = i->second;
         }
-
         error_msg << str << " not implemented.";
         return Status::InternalError(error_msg.str());
     }
@@ -286,6 +292,7 @@ Status DataSink::decompose_data_sink_to_pipeline(pipeline::PipelineBuilderContex
     using namespace pipeline;
     auto fragment_ctx = context->fragment_context();
     size_t dop = context->source_operator(prev_operators)->degree_of_parallelism();
+
     // TODO: port the following code to detail DataSink subclasses
     if (typeid(*this) == typeid(ResultSink)) {
         auto* result_sink = down_cast<ResultSink*>(this);
@@ -503,6 +510,11 @@ Status DataSink::decompose_data_sink_to_pipeline(pipeline::PipelineBuilderContex
 
         prev_operators.emplace_back(op);
         context->add_pipeline(std::move(prev_operators));
+    } else if (typeid(*this) == typeid(starrocks::NoopSink)) {
+        OpFactoryPtr op = std::make_shared<NoopSinkOperatorFactory>(context->next_operator_id(),
+                                                                    prev_operators.back()->plan_node_id());
+        prev_operators.emplace_back(op);
+        context->add_pipeline(prev_operators);
     } else {
         return Status::InternalError(fmt::format("Unknown data sink type: {}", typeid(*this).name()));
     }

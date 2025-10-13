@@ -304,7 +304,7 @@ StatusOr<ProtobufChunkMeta> build_protobuf_chunk_meta(const RowDescriptor& row_d
     }
 
     if (UNLIKELY(column_index != chunk_meta.is_nulls.size())) {
-        return Status::InternalError("build chunk _meta error");
+        return Status::InternalError("build chunk_meta error");
     }
     return std::move(chunk_meta);
 }

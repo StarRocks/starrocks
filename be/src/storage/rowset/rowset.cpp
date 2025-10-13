@@ -37,7 +37,10 @@
 #include <memory>
 #include <set>
 
+#include "exec/pipeline/query_context.h"
+#include "exec/pipeline/scan/olap_scan_context.h"
 #include "fmt/format.h"
+#include "fs/fs.h"
 #include "fs/fs_util.h"
 #include "gutil/strings/substitute.h"
 #include "rowset_options.h"
@@ -53,6 +56,7 @@
 #include "storage/projection_iterator.h"
 #include "storage/rowset/metadata_cache.h"
 #include "storage/rowset/rowid_range_option.h"
+#include "storage/rowset/segment.h"
 #include "storage/rowset/short_key_range_option.h"
 #include "storage/storage_engine.h"
 #include "storage/tablet_index.h"
@@ -832,6 +836,18 @@ Status Rowset::get_segment_iterators(const Schema& schema, const RowsetReadOptio
             seg_options.is_first_split_of_segment = options.short_key_ranges_option->is_first_split_of_tablet;
         } else {
             seg_options.is_first_split_of_segment = true;
+        }
+
+        seg_options.v_id = -1;
+        if (options.need_generate_global_rowid) {
+            pipeline::GlobalLateMaterilizationCtx::SegmentInfo seg_info;
+            seg_info.segment = seg_ptr;
+            ASSIGN_OR_RETURN(seg_info.fs, FileSystem::CreateSharedFromString(_rowset_path));
+
+            seg_options.v_id =
+                    options.runtime_state->query_ctx()->global_late_materialization_ctx()->register_segment(seg_info);
+            seg_options.row_id_column_id = options.row_id_column_id;
+            seg_options.row_id_column_slot = options.row_id_column_slot;
         }
 
         auto res = seg_ptr->new_iterator(segment_schema, seg_options);

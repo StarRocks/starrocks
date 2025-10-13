@@ -1792,4 +1792,10 @@ CONF_Int32(llm_max_queue_size, "4096");
 CONF_Int32(llm_max_concurrent_queries, "8");
 
 CONF_Int32(llm_cache_size, "131072");
+// @TODO use session var
+CONF_mInt64(fetch_max_buffer_chunk_num, "8");
+CONF_mInt64(max_batch_num_per_fetch_operator, "8");
+CONF_mInt64(max_chunk_num_per_fetch_batch, "8");
+CONF_mBool(enable_fetch_local_pass_through, "true");
+CONF_mInt64(max_lookup_batch_request, "8");
 } // namespace starrocks::config

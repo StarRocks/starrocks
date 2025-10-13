@@ -161,7 +161,7 @@ public class MockIcebergMetadata implements ConnectorMetadata {
         TestTables.TestTable baseTable = TestTables.create(
                 new File(getStarRocksHome() + "/" + MOCKED_UNPARTITIONED_DB_NAME + "/" +
                         MOCKED_UNPARTITIONED_TABLE_NAME0), MOCKED_UNPARTITIONED_TABLE_NAME0,
-                schema, spec, 1);
+                schema, spec, 3);
 
         String tableIdentifier = Joiner.on(":").join(MOCKED_UNPARTITIONED_TABLE_NAME0, UUID.randomUUID());
         MockIcebergTable mockIcebergTable = new MockIcebergTable(1, MOCKED_UNPARTITIONED_TABLE_NAME0,
@@ -285,7 +285,7 @@ public class MockIcebergMetadata implements ConnectorMetadata {
             return TestTables.create(
                     new File(getStarRocksHome() + "/" + MOCKED_PARTITIONED_DB_NAME + "/"
                             + MOCKED_PARTITIONED_TABLE_NAME2), MOCKED_PARTITIONED_TABLE_NAME2,
-                    schema, spec, 1);
+                    schema, spec, 3);
         } else {
             PartitionSpec spec =
                     PartitionSpec.builderFor(schema).identity("d").build();

@@ -73,5 +73,6 @@ VISIT_IMPL(FixedLengthColumnBase<TimestampValue>)
 VISIT_IMPL(FixedLengthColumnBase<uint24_t>)
 VISIT_IMPL(FixedLengthColumnBase<int96_t>)
 VISIT_IMPL(FixedLengthColumnBase<decimal12_t>)
+VISIT_IMPL(RowIdColumn)
 
 } // namespace starrocks

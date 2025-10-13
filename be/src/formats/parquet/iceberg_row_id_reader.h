@@ -31,16 +31,16 @@ public:
     void get_levels(level_t** def_levels, level_t** rep_levels, size_t* num_levels) override {}
     void set_need_parse_levels(bool need_parse_levels) override {}
 
-    Status fill_dst_column(ColumnPtr& dst, ColumnPtr& src) override;
+    Status fill_dst_column(ColumnPtr& dst, ColumnPtr &src) override;
 
     void collect_column_io_range(std::vector<io::SharedBufferedInputStream::IORange>* ranges, int64_t* end_offset,
                                  ColumnIOTypeFlags types, bool active) override;
-
+                                 
     void select_offset_index(const SparseRange<uint64_t>& range, const uint64_t rg_first_row) override;
 
     StatusOr<bool> row_group_zone_map_filter(const std::vector<const ColumnPredicate*>& predicates,
-                                             CompoundNodeType pred_relation, const uint64_t rg_first_row,
-                                             const uint64_t rg_num_rows) const override;
+                                              CompoundNodeType pred_relation,
+                                              const uint64_t rg_first_row, const uint64_t rg_num_rows) const override;
 
     StatusOr<bool> page_index_zone_map_filter(const std::vector<const ColumnPredicate*>& predicates,
                                               SparseRange<uint64_t>* row_ranges, CompoundNodeType pred_relation,

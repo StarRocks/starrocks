@@ -111,6 +111,8 @@ struct GroupReaderParam {
     const std::vector<SlotDescriptor*>* reserved_field_slots = nullptr;
     // used for global low cardinality optimization
     ColumnIdToGlobalDictMap* global_dictmaps = &EMPTY_GLOBAL_DICTMAPS;
+
+    int32_t scan_range_id = -1;
 };
 
 class GroupReader {
@@ -120,6 +122,7 @@ public:
     GroupReader(GroupReaderParam& param, int row_group_number, SkipRowsContextPtr skip_rows_ctx,
                 int64_t row_group_first_row, int64_t row_group_first_row_id);
     ~GroupReader();
+
 
     // init used to init column reader, and devide active/lazy
     // then we can use inited column collect io range.
