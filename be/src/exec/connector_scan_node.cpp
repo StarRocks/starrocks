@@ -693,6 +693,13 @@ void ConnectorScanNode::_init_counter() {
     _profile.scanner_queue_counter = ADD_COUNTER(_runtime_profile, "ScannerQueueCounter", TUnit::UNIT);
 }
 
+int ConnectorScanNode::io_tasks_per_scan_operator() const {
+    if (_data_source_provider->sorted_by_keys_per_tablet()) {
+        return 1;
+    }
+    return starrocks::ScanNode::io_tasks_per_scan_operator();
+}
+
 bool ConnectorScanNode::always_shared_scan() const {
     return _data_source_provider->always_shared_scan();
 }
