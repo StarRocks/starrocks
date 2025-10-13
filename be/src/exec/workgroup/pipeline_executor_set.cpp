@@ -133,18 +133,6 @@ Status PipelineExecutorSet::start() {
                                            _conf.metrics->get_connector_scan_executor_metrics());
     _connector_scan_executor->initialize(num_connector_scan_threads());
 
-    std::unique_ptr<ThreadPool> prepare_thread_pool;
-    RETURN_IF_ERROR(ThreadPoolBuilder("pip_prepare")
-                            .set_min_threads(0)
-                            .set_max_threads(num_driver_threads())
-                            .set_max_queue_size(1000)
-                            .set_idle_timeout(MonoDelta::FromMilliseconds(2000))
-                            .set_cpuids(_cpuids)
-                            .set_borrowed_cpuids(_borrowed_cpu_ids)
-                            .build(&prepare_thread_pool));
-    _prepare_thread_pool = std::move(prepare_thread_pool);
-    REGISTER_THREAD_POOL_METRICS(pip_prepare, _prepare_thread_pool);
-
     LOG(INFO) << "[WORKGROUP] start executors " << to_string();
 
     return Status::OK();
@@ -166,10 +154,6 @@ void PipelineExecutorSet::close() {
 
     if (_connector_scan_executor) {
         _connector_scan_executor->close();
-    }
-
-    if (_prepare_thread_pool) {
-        _prepare_thread_pool->shutdown();
     }
 
     LOG(INFO) << "[WORKGROUP] close executors " << to_string();
