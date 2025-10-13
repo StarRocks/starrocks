@@ -103,7 +103,6 @@ TEST_F(LakeTabletManagerTest, tablet_meta_write_and_read) {
     EXPECT_TRUE(res.status().is_not_found());
 }
 
-// NOLINTNEXTLINE
 TEST_F(LakeTabletManagerTest, tablet_meta_read_corrupted_and_recover) {
     starrocks::TabletMetadata metadata;
     auto tablet_id = next_id();

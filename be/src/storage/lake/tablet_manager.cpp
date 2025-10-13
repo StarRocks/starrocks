@@ -508,12 +508,13 @@ StatusOr<BundleTabletMetadataPtr> TabletManager::parse_bundle_tablet_metadata(co
             std::string_view(serialized_string.data() + file_size - footer_size - bundle_metadata_size);
     RETURN_IF(!bundle_metadata->ParseFromArray(bundle_metadata_str.data(), bundle_metadata_size),
               Status::Corruption(strings::Substitute("deserialized shared metadata failed")));
-
+#ifdef BE_TEST
     bool inject_error = false;
     TEST_SYNC_POINT_CALLBACK("TabletManager::parse_bundle_tablet_metadata::corruption", &inject_error);
     if (inject_error) {
         return Status::Corruption("injected error");
     }
+#endif
     return bundle_metadata;
 }
 
