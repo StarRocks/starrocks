@@ -988,7 +988,8 @@ public class PartitionBasedMvRefreshProcessorOlapTest extends MVTestBase {
         MVPCTBasedRefreshProcessor processor = getPartitionBasedRefreshProcessor(taskRun);
         MVPCTRefreshPartitioner partitioner = processor.getMvRefreshPartitioner();
         PCellSortedSet mvToRefreshPartitionNames = getMVPCellWithNames(mv, mv.getPartitionNames());
-        partitioner.filterPartitionByAdaptiveRefreshNumber(mvToRefreshPartitionNames);
+        partitioner.filterPartitionByRefreshNumber(mvToRefreshPartitionNames,
+                MaterializedView.PartitionRefreshStrategy.ADAPTIVE);
         MvTaskRunContext mvContext = processor.getMvContext();
         Assertions.assertNull(mvContext.getNextPartitionStart());
         Assertions.assertNull(mvContext.getNextPartitionEnd());
@@ -1018,7 +1019,8 @@ public class PartitionBasedMvRefreshProcessorOlapTest extends MVTestBase {
 
         MVPCTBasedRefreshProcessor processor = getPartitionBasedRefreshProcessor(taskRun);
         MVPCTRefreshPartitioner partitioner = processor.getMvRefreshPartitioner();
-        partitioner.filterPartitionByAdaptiveRefreshNumber(getMVPCellWithNames(mv, mv.getPartitionNames()));
+        partitioner.filterPartitionByRefreshNumber(getMVPCellWithNames(mv, mv.getPartitionNames()),
+                MaterializedView.PartitionRefreshStrategy.ADAPTIVE);
         MvTaskRunContext mvContext = processor.getMvContext();
         Assertions.assertNull(mvContext.getNextPartitionStart());
         Assertions.assertNull(mvContext.getNextPartitionEnd());
@@ -1061,7 +1063,8 @@ public class PartitionBasedMvRefreshProcessorOlapTest extends MVTestBase {
 
         MVPCTBasedRefreshProcessor processor = getPartitionBasedRefreshProcessor(taskRun);
         MVPCTRefreshPartitioner partitioner = processor.getMvRefreshPartitioner();
-        partitioner.filterPartitionByAdaptiveRefreshNumber(getMVPCellWithNames(mv, mv.getPartitionNames()));
+        partitioner.filterPartitionByRefreshNumber(getMVPCellWithNames(mv, mv.getPartitionNames()),
+                MaterializedView.PartitionRefreshStrategy.ADAPTIVE);
         MvTaskRunContext mvContext = processor.getMvContext();
         Assertions.assertNull(mvContext.getNextPartitionStart());
         Assertions.assertNull(mvContext.getNextPartitionEnd());
@@ -1120,19 +1123,22 @@ public class PartitionBasedMvRefreshProcessorOlapTest extends MVTestBase {
 
             // round 1
             PCellSortedSet toRefresh = getMVPCellWithNames(mv, allPartitions);
-            partitioner.filterPartitionByRefreshNumber(toRefresh);
+            partitioner.filterPartitionByRefreshNumber(toRefresh,
+                    MaterializedView.PartitionRefreshStrategy.STRICT);
             assertPCellNameEquals("p0", toRefresh);
             refreshedPartitions.addAll(getPartitionNames(toRefresh));
 
             // round 2
             toRefresh = getMVPCellWithNames(mv, SetUtils.disjunction(allPartitions, refreshedPartitions));
-            partitioner.filterPartitionByRefreshNumber(toRefresh);
+            partitioner.filterPartitionByRefreshNumber(toRefresh,
+                    MaterializedView.PartitionRefreshStrategy.STRICT);
             assertPCellNameEquals("p1", toRefresh);
             refreshedPartitions.addAll(getPartitionNames(toRefresh));
 
             // round 3
             toRefresh = getMVPCellWithNames(mv, SetUtils.disjunction(allPartitions, refreshedPartitions));
-            partitioner.filterPartitionByRefreshNumber(toRefresh);
+            partitioner.filterPartitionByRefreshNumber(toRefresh,
+                    MaterializedView.PartitionRefreshStrategy.STRICT);
             assertPCellNameEquals("p2", toRefresh);
             refreshedPartitions.addAll(getPartitionNames(toRefresh));
         }
@@ -1144,31 +1150,36 @@ public class PartitionBasedMvRefreshProcessorOlapTest extends MVTestBase {
 
             // round 1
             PCellSortedSet toRefresh = getMVPCellWithNames(mv, allPartitions);
-            partitioner.filterPartitionByRefreshNumber(toRefresh);
+            partitioner.filterPartitionByRefreshNumber(toRefresh,
+                    MaterializedView.PartitionRefreshStrategy.STRICT);
             assertPCellNameEquals("p4", toRefresh);
             refreshedPartitions.addAll(getPartitionNames(toRefresh));
 
             // round 2
             toRefresh = getMVPCellWithNames(mv, SetUtils.disjunction(allPartitions, refreshedPartitions));
-            partitioner.filterPartitionByRefreshNumber(toRefresh);
+            partitioner.filterPartitionByRefreshNumber(toRefresh,
+                    MaterializedView.PartitionRefreshStrategy.STRICT);
             assertPCellNameEquals("p3", toRefresh);
             refreshedPartitions.addAll(getPartitionNames(toRefresh));
 
             // round 3
             toRefresh = getMVPCellWithNames(mv, SetUtils.disjunction(allPartitions, refreshedPartitions));
-            partitioner.filterPartitionByRefreshNumber(toRefresh);
+            partitioner.filterPartitionByRefreshNumber(toRefresh,
+                    MaterializedView.PartitionRefreshStrategy.STRICT);
             assertPCellNameEquals("p2", toRefresh);
             refreshedPartitions.addAll(getPartitionNames(toRefresh));
 
             // round 4
             toRefresh = getMVPCellWithNames(mv, SetUtils.disjunction(allPartitions, refreshedPartitions));
-            partitioner.filterPartitionByRefreshNumber(toRefresh);
+            partitioner.filterPartitionByRefreshNumber(toRefresh,
+                    MaterializedView.PartitionRefreshStrategy.STRICT);
             assertPCellNameEquals("p1", toRefresh);
             refreshedPartitions.addAll(getPartitionNames(toRefresh));
 
             // round 5
             toRefresh = getMVPCellWithNames(mv, SetUtils.disjunction(allPartitions, refreshedPartitions));
-            partitioner.filterPartitionByRefreshNumber(toRefresh);
+            partitioner.filterPartitionByRefreshNumber(toRefresh,
+                    MaterializedView.PartitionRefreshStrategy.STRICT);
             assertPCellNameEquals("p0", toRefresh);
             refreshedPartitions.addAll(getPartitionNames(toRefresh));
             Config.materialized_view_refresh_ascending = true;

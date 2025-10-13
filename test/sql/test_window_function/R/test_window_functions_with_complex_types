@@ -301,51 +301,87 @@ SELECT FIRST_VALUE(c11) OVER(ORDER BY k1 ROWS BETWEEN UNBOUNDED PRECEDING AND CU
 -- !result
 SELECT FIRST_VALUE(c12) OVER(ORDER BY k1 ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) wv FROM t1;
 -- result:
-E: (1064, 'Getting analyzing error from line 1, column 7 to line 1, column 22. Detail message: No matching function with signature: first_value(array<boolean>).')
+[1,0,1]
+[1,0,1]
+[1,0,1]
+[1,0,1]
+[1,0,1]
 -- !result
 SELECT FIRST_VALUE(c13) OVER(ORDER BY k1 ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) wv FROM t1;
 -- result:
-E: (1064, 'Getting analyzing error from line 1, column 7 to line 1, column 22. Detail message: No matching function with signature: first_value(array<tinyint(4)>).')
+[1,-1,127]
+[1,-1,127]
+[1,-1,127]
+[1,-1,127]
+[1,-1,127]
 -- !result
 SELECT FIRST_VALUE(c14) OVER(ORDER BY k1 ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) wv FROM t1;
 -- result:
-E: (1064, 'Getting analyzing error from line 1, column 7 to line 1, column 22. Detail message: No matching function with signature: first_value(array<smallint(6)>).')
+[100,-100,32767]
+[100,-100,32767]
+[100,-100,32767]
+[100,-100,32767]
+[100,-100,32767]
 -- !result
 SELECT FIRST_VALUE(c15) OVER(ORDER BY k1 ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) wv FROM t1;
 -- result:
-E: (1064, 'Getting analyzing error from line 1, column 7 to line 1, column 22. Detail message: No matching function with signature: first_value(array<int(11)>).')
+[100000,-100000,2147483647]
+[100000,-100000,2147483647]
+[100000,-100000,2147483647]
+[100000,-100000,2147483647]
+[100000,-100000,2147483647]
 -- !result
 SELECT FIRST_VALUE(c16) OVER(ORDER BY k1 ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) wv FROM t1;
 -- result:
-E: (1064, 'Getting analyzing error from line 1, column 7 to line 1, column 22. Detail message: No matching function with signature: first_value(array<bigint(20)>).')
+[10000000000,-10000000000,9223372036854775807]
+[10000000000,-10000000000,9223372036854775807]
+[10000000000,-10000000000,9223372036854775807]
+[10000000000,-10000000000,9223372036854775807]
+[10000000000,-10000000000,9223372036854775807]
 -- !result
 SELECT FIRST_VALUE(c17) OVER(ORDER BY k1 ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) wv FROM t1;
 -- result:
-E: (1064, 'Getting analyzing error from line 1, column 7 to line 1, column 22. Detail message: No matching function with signature: first_value(array<largeint(40)>).')
+[12345678901234567890,-12345678901234567890,170141183460469231731687303715884105727]
+[12345678901234567890,-12345678901234567890,170141183460469231731687303715884105727]
+[12345678901234567890,-12345678901234567890,170141183460469231731687303715884105727]
+[12345678901234567890,-12345678901234567890,170141183460469231731687303715884105727]
+[12345678901234567890,-12345678901234567890,170141183460469231731687303715884105727]
 -- !result
 SELECT FIRST_VALUE(c18) OVER(ORDER BY k1 ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) wv FROM t1;
 -- result:
-E: (1064, 'Getting analyzing error from line 1, column 7 to line 1, column 22. Detail message: No matching function with signature: first_value(array<double>).')
+[1.23,4.56,7.89]
+[1.23,4.56,7.89]
+[1.23,4.56,7.89]
+[1.23,4.56,7.89]
+[1.23,4.56,7.89]
 -- !result
 SELECT FIRST_VALUE(c19) OVER(ORDER BY k1 ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) wv FROM t1;
 -- result:
-E: (1064, 'Getting analyzing error from line 1, column 7 to line 1, column 22. Detail message: No matching function with signature: first_value(array<float>).')
+[1.23,4.56,7.89]
+[1.23,4.56,7.89]
+[1.23,4.56,7.89]
+[1.23,4.56,7.89]
+[1.23,4.56,7.89]
 -- !result
 SELECT FIRST_VALUE(c20) OVER(ORDER BY k1 ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) wv FROM t1;
 -- result:
-E: (1064, 'Getting analyzing error from line 1, column 7 to line 1, column 22. Detail message: No matching function with signature: first_value(array<DECIMAL64(10,2)>)..')
+[1.23,2.35,3.46]
+[1.23,2.35,3.46]
+[1.23,2.35,3.46]
+[1.23,2.35,3.46]
+[1.23,2.35,3.46]
 -- !result
-SELECT FIRST_VALUE(c21) OVER(ORDER BY k1 ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) wv FROM t1;
+with cte as( SELECT FIRST_VALUE(c21) OVER(ORDER BY k1 ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) wv FROM t1) select sum(murmur_hash3_32(array_join(array_map(x->murmur_hash3_32(x),wv),","))) from cte;
 -- result:
-E: (1064, 'Getting analyzing error from line 1, column 7 to line 1, column 22. Detail message: No matching function with signature: first_value(array<char(100)>).')
+7698522700
 -- !result
-SELECT FIRST_VALUE(c22) OVER(ORDER BY k1 ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) wv FROM t1;
+with cte as( SELECT FIRST_VALUE(c22) OVER(ORDER BY k1 ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) wv FROM t1) select sum(murmur_hash3_32(array_join(array_map(x->murmur_hash3_32(x),wv),","))) from cte;
 -- result:
-E: (1064, 'Getting analyzing error from line 1, column 7 to line 1, column 22. Detail message: No matching function with signature: first_value(array<date>).')
+9489753355
 -- !result
-SELECT FIRST_VALUE(c23) OVER(ORDER BY k1 ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) wv FROM t1;
+with cte as( SELECT FIRST_VALUE(c23) OVER(ORDER BY k1 ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) wv FROM t1) select sum(murmur_hash3_32(array_join(array_map(x->murmur_hash3_32(x),wv),","))) from cte;
 -- result:
-E: (1064, 'Getting analyzing error from line 1, column 7 to line 1, column 22. Detail message: No matching function with signature: first_value(array<datetime>).')
+-2908793330
 -- !result
 SELECT FIRST_VALUE(c24) OVER(ORDER BY k1 ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) wv FROM t1;
 -- result:
@@ -534,10 +570,10 @@ None
 SELECT FIRST_VALUE(c25) OVER(PARTITION BY k1 ORDER BY c3 ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) wv FROM t1;
 -- result:
 {"key": "value"}
-{"key": "value"}
-{"key": "value"}
-{"key": "value"}
 None
+{"key": "value"}
+{"key": "value"}
+{"key": "value"}
 -- !result
 SELECT FIRST_VALUE(c25) OVER(PARTITION BY k1 ORDER BY c3 ROWS BETWEEN UNBOUNDED PRECEDING AND 10 PRECEDING) wv FROM t1;
 -- result:
@@ -549,8 +585,8 @@ None
 -- !result
 SELECT FIRST_VALUE(c25) OVER(PARTITION BY k1 ORDER BY c3 ROWS BETWEEN UNBOUNDED PRECEDING AND 10 FOLLOWING) wv FROM t1;
 -- result:
-None
 {"key": "value"}
+None
 {"key": "value"}
 {"key": "value"}
 {"key": "value"}
@@ -567,9 +603,9 @@ SELECT FIRST_VALUE(c25) OVER(PARTITION BY k1 ORDER BY c3 ROWS BETWEEN 5 PRECEDIN
 -- result:
 {"key": "value"}
 {"key": "value"}
+{"key": "value"}
+{"key": "value"}
 None
-{"key": "value"}
-{"key": "value"}
 -- !result
 SELECT FIRST_VALUE(c25) OVER(PARTITION BY k1 ORDER BY c3 ROWS BETWEEN 5 FOLLOWING AND 10 FOLLOWING) wv FROM t1;
 -- result:
@@ -597,19 +633,19 @@ None
 -- !result
 SELECT FIRST_VALUE(c25 IGNORE NULLS) OVER(PARTITION BY k1 ORDER BY c3 ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING) wv FROM t1;
 -- result:
-{"key": "value"}
-{"key": "value"}
-{"key": "value"}
-{"key": "value"}
 None
+{"key": "value"}
+{"key": "value"}
+{"key": "value"}
+{"key": "value"}
 -- !result
 SELECT FIRST_VALUE(c25 IGNORE NULLS) OVER(PARTITION BY k1 ORDER BY c3 ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) wv FROM t1;
 -- result:
 {"key": "value"}
 {"key": "value"}
-{"key": "value"}
-{"key": "value"}
 None
+{"key": "value"}
+{"key": "value"}
 -- !result
 SELECT FIRST_VALUE(c25 IGNORE NULLS) OVER(PARTITION BY k1 ORDER BY c3 ROWS BETWEEN UNBOUNDED PRECEDING AND 10 PRECEDING) wv FROM t1;
 -- result:
@@ -623,8 +659,8 @@ SELECT FIRST_VALUE(c25 IGNORE NULLS) OVER(PARTITION BY k1 ORDER BY c3 ROWS BETWE
 -- result:
 {"key": "value"}
 {"key": "value"}
-None
 {"key": "value"}
+None
 {"key": "value"}
 -- !result
 SELECT FIRST_VALUE(c25 IGNORE NULLS) OVER(PARTITION BY k1 ORDER BY c3 ROWS BETWEEN 10 PRECEDING AND 5 PRECEDING) wv FROM t1;
@@ -637,10 +673,10 @@ None
 -- !result
 SELECT FIRST_VALUE(c25 IGNORE NULLS) OVER(PARTITION BY k1 ORDER BY c3 ROWS BETWEEN 5 PRECEDING AND 5 FOLLOWING) wv FROM t1;
 -- result:
-{"key": "value"}
-{"key": "value"}
-{"key": "value"}
 None
+{"key": "value"}
+{"key": "value"}
+{"key": "value"}
 {"key": "value"}
 -- !result
 SELECT FIRST_VALUE(c25 IGNORE NULLS) OVER(PARTITION BY k1 ORDER BY c3 ROWS BETWEEN 5 FOLLOWING AND 10 FOLLOWING) wv FROM t1;
@@ -655,15 +691,15 @@ SELECT FIRST_VALUE(c25 IGNORE NULLS) OVER(PARTITION BY k1 ORDER BY c3 ROWS BETWE
 -- result:
 {"key": "value"}
 {"key": "value"}
-None
 {"key": "value"}
+None
 {"key": "value"}
 -- !result
 SELECT FIRST_VALUE(c25 IGNORE NULLS) OVER(PARTITION BY k1 ORDER BY c3 ROWS BETWEEN CURRENT ROW AND 5 FOLLOWING) wv FROM t1;
 -- result:
-{"key": "value"}
-{"key": "value"}
 None
+{"key": "value"}
+{"key": "value"}
 {"key": "value"}
 {"key": "value"}
 -- !result
@@ -765,51 +801,87 @@ None
 -- !result
 SELECT LAST_VALUE(c12) OVER(ORDER BY k1 ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) wv FROM t1;
 -- result:
-E: (1064, 'Getting analyzing error from line 1, column 7 to line 1, column 21. Detail message: No matching function with signature: last_value(array<boolean>).')
+[1,0,1]
+[0,0,0]
+[0,0,0]
+[0,0,0]
+None
 -- !result
 SELECT LAST_VALUE(c13) OVER(ORDER BY k1 ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) wv FROM t1;
 -- result:
-E: (1064, 'Getting analyzing error from line 1, column 7 to line 1, column 21. Detail message: No matching function with signature: last_value(array<tinyint(4)>).')
+[1,-1,127]
+[1,1,127]
+[1,1,127]
+[1,1,127]
+None
 -- !result
 SELECT LAST_VALUE(c14) OVER(ORDER BY k1 ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) wv FROM t1;
 -- result:
-E: (1064, 'Getting analyzing error from line 1, column 7 to line 1, column 21. Detail message: No matching function with signature: last_value(array<smallint(6)>).')
+[100,-100,32767]
+[100,100,32767]
+[100,100,32767]
+[100,100,32767]
+None
 -- !result
 SELECT LAST_VALUE(c15) OVER(ORDER BY k1 ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) wv FROM t1;
 -- result:
-E: (1064, 'Getting analyzing error from line 1, column 7 to line 1, column 21. Detail message: No matching function with signature: last_value(array<int(11)>).')
+[100000,-100000,2147483647]
+[100000,100000,2147483647]
+[100000,100000,2147483647]
+[100000,100000,2147483647]
+None
 -- !result
 SELECT LAST_VALUE(c16) OVER(ORDER BY k1 ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) wv FROM t1;
 -- result:
-E: (1064, 'Getting analyzing error from line 1, column 7 to line 1, column 21. Detail message: No matching function with signature: last_value(array<bigint(20)>).')
+[10000000000,-10000000000,9223372036854775807]
+[10000000000,10000000000,9223372036854775807]
+[10000000000,10000000000,9223372036854775807]
+[10000000000,10000000000,9223372036854775807]
+None
 -- !result
 SELECT LAST_VALUE(c17) OVER(ORDER BY k1 ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) wv FROM t1;
 -- result:
-E: (1064, 'Getting analyzing error from line 1, column 7 to line 1, column 21. Detail message: No matching function with signature: last_value(array<largeint(40)>).')
+[12345678901234567890,-12345678901234567890,170141183460469231731687303715884105727]
+[12345678901234567890,12345678901234567890,170141183460469231731687303715884105727]
+[12345678901234567890,12345678901234567890,170141183460469231731687303715884105727]
+[12345678901234567890,12345678901234567890,170141183460469231731687303715884105727]
+None
 -- !result
 SELECT LAST_VALUE(c18) OVER(ORDER BY k1 ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) wv FROM t1;
 -- result:
-E: (1064, 'Getting analyzing error from line 1, column 7 to line 1, column 21. Detail message: No matching function with signature: last_value(array<double>).')
+[1.23,4.56,7.89]
+[1.23,4.56,7.89]
+[1.23,4.56,7.89]
+[1.23,4.56,7.89]
+None
 -- !result
 SELECT LAST_VALUE(c19) OVER(ORDER BY k1 ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) wv FROM t1;
 -- result:
-E: (1064, 'Getting analyzing error from line 1, column 7 to line 1, column 21. Detail message: No matching function with signature: last_value(array<float>).')
+[1.23,4.56,7.89]
+[1.23,4.56,7.89]
+[1.23,4.56,7.89]
+[1.23,4.56,7.89]
+None
 -- !result
 SELECT LAST_VALUE(c20) OVER(ORDER BY k1 ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) wv FROM t1;
 -- result:
-E: (1064, 'Getting analyzing error from line 1, column 7 to line 1, column 21. Detail message: No matching function with signature: last_value(array<DECIMAL64(10,2)>)..')
+[1.23,2.35,3.46]
+[1.23,2.35,3.46]
+[1.23,2.35,3.46]
+[1.23,2.35,3.46]
+None
 -- !result
-SELECT LAST_VALUE(c21) OVER(ORDER BY k1 ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) wv FROM t1;
+with cte as( SELECT LAST_VALUE(c21) OVER(ORDER BY k1 ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) wv FROM t1) select sum(murmur_hash3_32(array_join(array_map(x->murmur_hash3_32(x),wv),","))) from cte;
 -- result:
-E: (1064, 'Getting analyzing error from line 1, column 7 to line 1, column 21. Detail message: No matching function with signature: last_value(array<char(100)>).')
+6158818160
 -- !result
-SELECT LAST_VALUE(c22) OVER(ORDER BY k1 ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) wv FROM t1;
+with cte as( SELECT LAST_VALUE(c22) OVER(ORDER BY k1 ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) wv FROM t1) select sum(murmur_hash3_32(array_join(array_map(x->murmur_hash3_32(x),wv),","))) from cte;
 -- result:
-E: (1064, 'Getting analyzing error from line 1, column 7 to line 1, column 21. Detail message: No matching function with signature: last_value(array<date>).')
+7591802684
 -- !result
-SELECT LAST_VALUE(c23) OVER(ORDER BY k1 ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) wv FROM t1;
+with cte as( SELECT LAST_VALUE(c23) OVER(ORDER BY k1 ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) wv FROM t1) select sum(murmur_hash3_32(array_join(array_map(x->murmur_hash3_32(x),wv),","))) from cte;
 -- result:
-E: (1064, 'Getting analyzing error from line 1, column 7 to line 1, column 21. Detail message: No matching function with signature: last_value(array<datetime>).')
+-2327034664
 -- !result
 SELECT LAST_VALUE(c24) OVER(ORDER BY k1 ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) wv FROM t1;
 -- result:
@@ -990,16 +1062,16 @@ SELECT LAST_VALUE(c25 IGNORE NULLS) OVER(ORDER BY c3 ROWS BETWEEN CURRENT ROW AN
 SELECT LAST_VALUE(c25) OVER(PARTITION BY k1 ORDER BY c3 ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING) wv FROM t1;
 -- result:
 {"key": "value"}
-{"key": "value"}
-{"key": "value"}
 None
+{"key": "value"}
+{"key": "value"}
 {"key": "value"}
 -- !result
 SELECT LAST_VALUE(c25) OVER(PARTITION BY k1 ORDER BY c3 ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) wv FROM t1;
 -- result:
 {"key": "value"}
-None
 {"key": "value"}
+None
 {"key": "value"}
 {"key": "value"}
 -- !result
@@ -1014,8 +1086,8 @@ None
 SELECT LAST_VALUE(c25) OVER(PARTITION BY k1 ORDER BY c3 ROWS BETWEEN UNBOUNDED PRECEDING AND 10 FOLLOWING) wv FROM t1;
 -- result:
 {"key": "value"}
-None
 {"key": "value"}
+None
 {"key": "value"}
 {"key": "value"}
 -- !result
@@ -1029,9 +1101,9 @@ None
 -- !result
 SELECT LAST_VALUE(c25) OVER(PARTITION BY k1 ORDER BY c3 ROWS BETWEEN 5 PRECEDING AND 5 FOLLOWING) wv FROM t1;
 -- result:
-{"key": "value"}
-{"key": "value"}
 None
+{"key": "value"}
+{"key": "value"}
 {"key": "value"}
 {"key": "value"}
 -- !result
@@ -1053,9 +1125,9 @@ None
 -- !result
 SELECT LAST_VALUE(c25) OVER(PARTITION BY k1 ORDER BY c3 ROWS BETWEEN CURRENT ROW AND 5 FOLLOWING) wv FROM t1;
 -- result:
-{"key": "value"}
-{"key": "value"}
 None
+{"key": "value"}
+{"key": "value"}
 {"key": "value"}
 {"key": "value"}
 -- !result
@@ -1063,17 +1135,17 @@ SELECT LAST_VALUE(c25 IGNORE NULLS) OVER(PARTITION BY k1 ORDER BY c3 ROWS BETWEE
 -- result:
 {"key": "value"}
 {"key": "value"}
+{"key": "value"}
+{"key": "value"}
 None
-{"key": "value"}
-{"key": "value"}
 -- !result
 SELECT LAST_VALUE(c25 IGNORE NULLS) OVER(PARTITION BY k1 ORDER BY c3 ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) wv FROM t1;
 -- result:
 {"key": "value"}
 {"key": "value"}
 {"key": "value"}
-None
 {"key": "value"}
+None
 -- !result
 SELECT LAST_VALUE(c25 IGNORE NULLS) OVER(PARTITION BY k1 ORDER BY c3 ROWS BETWEEN UNBOUNDED PRECEDING AND 10 PRECEDING) wv FROM t1;
 -- result:
@@ -1086,10 +1158,10 @@ None
 SELECT LAST_VALUE(c25 IGNORE NULLS) OVER(PARTITION BY k1 ORDER BY c3 ROWS BETWEEN UNBOUNDED PRECEDING AND 10 FOLLOWING) wv FROM t1;
 -- result:
 {"key": "value"}
-{"key": "value"}
-{"key": "value"}
-{"key": "value"}
 None
+{"key": "value"}
+{"key": "value"}
+{"key": "value"}
 -- !result
 SELECT LAST_VALUE(c25 IGNORE NULLS) OVER(PARTITION BY k1 ORDER BY c3 ROWS BETWEEN 10 PRECEDING AND 5 PRECEDING) wv FROM t1;
 -- result:
@@ -1103,9 +1175,9 @@ SELECT LAST_VALUE(c25 IGNORE NULLS) OVER(PARTITION BY k1 ORDER BY c3 ROWS BETWEE
 -- result:
 {"key": "value"}
 {"key": "value"}
-{"key": "value"}
-{"key": "value"}
 None
+{"key": "value"}
+{"key": "value"}
 -- !result
 SELECT LAST_VALUE(c25 IGNORE NULLS) OVER(PARTITION BY k1 ORDER BY c3 ROWS BETWEEN 5 FOLLOWING AND 10 FOLLOWING) wv FROM t1;
 -- result:
@@ -1117,8 +1189,8 @@ None
 -- !result
 SELECT LAST_VALUE(c25 IGNORE NULLS) OVER(PARTITION BY k1 ORDER BY c3 ROWS BETWEEN 5 PRECEDING AND CURRENT ROW) wv FROM t1;
 -- result:
-None
 {"key": "value"}
+None
 {"key": "value"}
 {"key": "value"}
 {"key": "value"}
@@ -1229,51 +1301,87 @@ None
 -- !result
 SELECT LEAD(c12) OVER(ORDER BY k1) wv FROM t1;
 -- result:
-E: (1064, 'Getting analyzing error from line 1, column 7 to line 1, column 15. Detail message: No matching function with signature: lead(array<boolean>).')
+[0,0,0]
+[0,0,0]
+[0,0,0]
+None
+None
 -- !result
 SELECT LEAD(c13) OVER(ORDER BY k1) wv FROM t1;
 -- result:
-E: (1064, 'Getting analyzing error from line 1, column 7 to line 1, column 15. Detail message: No matching function with signature: lead(array<tinyint(4)>).')
+[1,1,127]
+[1,1,127]
+[1,1,127]
+None
+None
 -- !result
 SELECT LEAD(c14) OVER(ORDER BY k1) wv FROM t1;
 -- result:
-E: (1064, 'Getting analyzing error from line 1, column 7 to line 1, column 15. Detail message: No matching function with signature: lead(array<smallint(6)>).')
+[100,100,32767]
+[100,100,32767]
+[100,100,32767]
+None
+None
 -- !result
 SELECT LEAD(c15) OVER(ORDER BY k1) wv FROM t1;
 -- result:
-E: (1064, 'Getting analyzing error from line 1, column 7 to line 1, column 15. Detail message: No matching function with signature: lead(array<int(11)>).')
+[100000,100000,2147483647]
+[100000,100000,2147483647]
+[100000,100000,2147483647]
+None
+None
 -- !result
 SELECT LEAD(c16) OVER(ORDER BY k1) wv FROM t1;
 -- result:
-E: (1064, 'Getting analyzing error from line 1, column 7 to line 1, column 15. Detail message: No matching function with signature: lead(array<bigint(20)>).')
+[10000000000,10000000000,9223372036854775807]
+[10000000000,10000000000,9223372036854775807]
+[10000000000,10000000000,9223372036854775807]
+None
+None
 -- !result
 SELECT LEAD(c17) OVER(ORDER BY k1) wv FROM t1;
 -- result:
-E: (1064, 'Getting analyzing error from line 1, column 7 to line 1, column 15. Detail message: No matching function with signature: lead(array<largeint(40)>).')
+[12345678901234567890,12345678901234567890,170141183460469231731687303715884105727]
+[12345678901234567890,12345678901234567890,170141183460469231731687303715884105727]
+[12345678901234567890,12345678901234567890,170141183460469231731687303715884105727]
+None
+None
 -- !result
 SELECT LEAD(c18) OVER(ORDER BY k1) wv FROM t1;
 -- result:
-E: (1064, 'Getting analyzing error from line 1, column 7 to line 1, column 15. Detail message: No matching function with signature: lead(array<double>).')
+[1.23,4.56,7.89]
+[1.23,4.56,7.89]
+[1.23,4.56,7.89]
+None
+None
 -- !result
 SELECT LEAD(c19) OVER(ORDER BY k1) wv FROM t1;
 -- result:
-E: (1064, 'Getting analyzing error from line 1, column 7 to line 1, column 15. Detail message: No matching function with signature: lead(array<float>).')
+[1.23,4.56,7.89]
+[1.23,4.56,7.89]
+[1.23,4.56,7.89]
+None
+None
 -- !result
 SELECT LEAD(c20) OVER(ORDER BY k1) wv FROM t1;
 -- result:
-E: (1064, 'Getting analyzing error from line 1, column 7 to line 1, column 15. Detail message: No matching function with signature: lead(array<DECIMAL64(10,2)>)..')
+[1.23,2.35,3.46]
+[1.23,2.35,3.46]
+[1.23,2.35,3.46]
+None
+None
 -- !result
-SELECT LEAD(c21) OVER(ORDER BY k1) wv FROM t1;
+with cte as( SELECT LEAD(c21) OVER(ORDER BY k1) wv FROM t1) select sum(murmur_hash3_32(array_join(array_map(x->murmur_hash3_32(x),wv),","))) from cte;
 -- result:
-E: (1064, 'Getting analyzing error from line 1, column 7 to line 1, column 15. Detail message: No matching function with signature: lead(array<char(100)>).')
+4619113620
 -- !result
-SELECT LEAD(c22) OVER(ORDER BY k1) wv FROM t1;
+with cte as( SELECT LEAD(c22) OVER(ORDER BY k1) wv FROM t1) select sum(murmur_hash3_32(array_join(array_map(x->murmur_hash3_32(x),wv),","))) from cte;
 -- result:
-E: (1064, 'Getting analyzing error from line 1, column 7 to line 1, column 15. Detail message: No matching function with signature: lead(array<date>).')
+5693852013
 -- !result
-SELECT LEAD(c23) OVER(ORDER BY k1) wv FROM t1;
+with cte as( SELECT LEAD(c23) OVER(ORDER BY k1) wv FROM t1) select sum(murmur_hash3_32(array_join(array_map(x->murmur_hash3_32(x),wv),","))) from cte;
 -- result:
-E: (1064, 'Getting analyzing error from line 1, column 7 to line 1, column 15. Detail message: No matching function with signature: lead(array<datetime>).')
+-1745275998
 -- !result
 SELECT LEAD(c24) OVER(ORDER BY k1) wv FROM t1;
 -- result:
@@ -1481,51 +1589,87 @@ None
 -- !result
 SELECT LAG(c12) OVER(ORDER BY k1) wv FROM t1;
 -- result:
-E: (1064, 'Getting analyzing error from line 1, column 7 to line 1, column 14. Detail message: No matching function with signature: lag(array<boolean>).')
+None
+[1,0,1]
+[0,0,0]
+[0,0,0]
+[0,0,0]
 -- !result
 SELECT LAG(c13) OVER(ORDER BY k1) wv FROM t1;
 -- result:
-E: (1064, 'Getting analyzing error from line 1, column 7 to line 1, column 14. Detail message: No matching function with signature: lag(array<tinyint(4)>).')
+None
+[1,-1,127]
+[1,1,127]
+[1,1,127]
+[1,1,127]
 -- !result
 SELECT LAG(c14) OVER(ORDER BY k1) wv FROM t1;
 -- result:
-E: (1064, 'Getting analyzing error from line 1, column 7 to line 1, column 14. Detail message: No matching function with signature: lag(array<smallint(6)>).')
+None
+[100,-100,32767]
+[100,100,32767]
+[100,100,32767]
+[100,100,32767]
 -- !result
 SELECT LAG(c15) OVER(ORDER BY k1) wv FROM t1;
 -- result:
-E: (1064, 'Getting analyzing error from line 1, column 7 to line 1, column 14. Detail message: No matching function with signature: lag(array<int(11)>).')
+None
+[100000,-100000,2147483647]
+[100000,100000,2147483647]
+[100000,100000,2147483647]
+[100000,100000,2147483647]
 -- !result
 SELECT LAG(c16) OVER(ORDER BY k1) wv FROM t1;
 -- result:
-E: (1064, 'Getting analyzing error from line 1, column 7 to line 1, column 14. Detail message: No matching function with signature: lag(array<bigint(20)>).')
+None
+[10000000000,-10000000000,9223372036854775807]
+[10000000000,10000000000,9223372036854775807]
+[10000000000,10000000000,9223372036854775807]
+[10000000000,10000000000,9223372036854775807]
 -- !result
 SELECT LAG(c17) OVER(ORDER BY k1) wv FROM t1;
 -- result:
-E: (1064, 'Getting analyzing error from line 1, column 7 to line 1, column 14. Detail message: No matching function with signature: lag(array<largeint(40)>).')
+None
+[12345678901234567890,-12345678901234567890,170141183460469231731687303715884105727]
+[12345678901234567890,12345678901234567890,170141183460469231731687303715884105727]
+[12345678901234567890,12345678901234567890,170141183460469231731687303715884105727]
+[12345678901234567890,12345678901234567890,170141183460469231731687303715884105727]
 -- !result
 SELECT LAG(c18) OVER(ORDER BY k1) wv FROM t1;
 -- result:
-E: (1064, 'Getting analyzing error from line 1, column 7 to line 1, column 14. Detail message: No matching function with signature: lag(array<double>).')
+None
+[1.23,4.56,7.89]
+[1.23,4.56,7.89]
+[1.23,4.56,7.89]
+[1.23,4.56,7.89]
 -- !result
 SELECT LAG(c19) OVER(ORDER BY k1) wv FROM t1;
 -- result:
-E: (1064, 'Getting analyzing error from line 1, column 7 to line 1, column 14. Detail message: No matching function with signature: lag(array<float>).')
+None
+[1.23,4.56,7.89]
+[1.23,4.56,7.89]
+[1.23,4.56,7.89]
+[1.23,4.56,7.89]
 -- !result
 SELECT LAG(c20) OVER(ORDER BY k1) wv FROM t1;
 -- result:
-E: (1064, 'Getting analyzing error from line 1, column 7 to line 1, column 14. Detail message: No matching function with signature: lag(array<DECIMAL64(10,2)>)..')
+None
+[1.23,2.35,3.46]
+[1.23,2.35,3.46]
+[1.23,2.35,3.46]
+[1.23,2.35,3.46]
 -- !result
-SELECT LAG(c21) OVER(ORDER BY k1) wv FROM t1;
+with cte as( SELECT LAG(c21) OVER(ORDER BY k1) wv FROM t1) select sum(murmur_hash3_32(array_join(array_map(x->murmur_hash3_32(x),wv),","))) from cte;
 -- result:
-E: (1064, 'Getting analyzing error from line 1, column 7 to line 1, column 14. Detail message: No matching function with signature: lag(array<char(100)>).')
+6158818160
 -- !result
-SELECT LAG(c22) OVER(ORDER BY k1) wv FROM t1;
+with cte as( SELECT LAG(c22) OVER(ORDER BY k1) wv FROM t1) select sum(murmur_hash3_32(array_join(array_map(x->murmur_hash3_32(x),wv),","))) from cte;
 -- result:
-E: (1064, 'Getting analyzing error from line 1, column 7 to line 1, column 14. Detail message: No matching function with signature: lag(array<date>).')
+7591802684
 -- !result
-SELECT LAG(c23) OVER(ORDER BY k1) wv FROM t1;
+with cte as( SELECT LAG(c23) OVER(ORDER BY k1) wv FROM t1) select sum(murmur_hash3_32(array_join(array_map(x->murmur_hash3_32(x),wv),","))) from cte;
 -- result:
-E: (1064, 'Getting analyzing error from line 1, column 7 to line 1, column 14. Detail message: No matching function with signature: lag(array<datetime>).')
+-2327034664
 -- !result
 SELECT LAG(c24) OVER(ORDER BY k1) wv FROM t1;
 -- result:

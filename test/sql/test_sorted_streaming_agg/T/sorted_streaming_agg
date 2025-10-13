@@ -235,3 +235,20 @@ insert into t11 values(3, 'single3', 300);
 select c0, c1, c2, count(*) from t11 group by c0, c1, c2 order by c0, c1, c2;
 select c0, sum(c2), count(*) from t11 group by c0 order by c0;
 select c0, c1, sum(c2), count(*) from t11 group by c0, c1 order by c0, c1;
+
+
+CREATE TABLE `large_table` (
+  `c0` bigint DEFAULT NULL,
+  `c1` bigint DEFAULT NULL,
+  `c2` bigint DEFAULT NULL
+) ENGINE=OLAP
+DUPLICATE KEY(`c0`)
+COMMENT "OLAP"
+DISTRIBUTED BY HASH(`c0`) BUCKETS 48
+PROPERTIES (
+"replication_num" = "1"
+);
+insert into large_table SELECT generate_series, 4096 - generate_series, generate_series FROM TABLE(generate_series(1,  40960));
+insert into large_table SELECT c0,c1,c2 from large_table, UNNEST([1,2]);
+create table dummy as select max(c1)from large_table group by c0;
+select count(*) from dummy;

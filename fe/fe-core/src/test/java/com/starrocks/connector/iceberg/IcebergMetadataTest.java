@@ -319,6 +319,11 @@ public class IcebergMetadataTest extends TableTestBase {
             }
 
             @Mock
+            public List<Column> getFullVisibleSchema() {
+                return ImmutableList.of(new Column("c1", Type.INT), new Column("c2", STRING));
+            }
+
+            @Mock
             public Table.TableType getType() {
                 return ICEBERG;
             }

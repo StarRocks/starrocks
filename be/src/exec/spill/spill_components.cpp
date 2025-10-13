@@ -332,18 +332,18 @@ void PartitionedSpillerWriter::_remove_partition(const SpilledPartition* partiti
     auto iter = std::find_if(partitions.begin(), partitions.end(),
                              [partition](auto& val) { return val->partition_id == partition->partition_id; });
     _total_partition_num -= (iter != partitions.end());
+    if (partition->block_group != nullptr) {
+        auto affinity_group = partition->block_group->get_affinity_group();
+        DCHECK(affinity_group != kDefaultBlockAffinityGroup);
+        WARN_IF_ERROR(_spiller->block_manager()->release_affinity_group(affinity_group),
+                      fmt::format("release affinity group {} error", affinity_group));
+    }
     partitions.erase(iter);
     if (partitions.empty()) {
         _level_to_partitions.erase(level);
         if (_min_level == level) {
             _min_level = level + 1;
         }
-    }
-    if (partition->block_group != nullptr) {
-        auto affinity_group = partition->block_group->get_affinity_group();
-        DCHECK(affinity_group != kDefaultBlockAffinityGroup);
-        WARN_IF_ERROR(_spiller->block_manager()->release_affinity_group(affinity_group),
-                      fmt::format("release affinity group {} error", affinity_group));
     }
 }
 

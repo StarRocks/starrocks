@@ -13,6 +13,7 @@
 // limitations under the License.
 
 #pragma once
+#include "column/array_column.h"
 #include "column/column_helper.h"
 #include "column/nullable_column.h"
 #include "column/vectorized_fwd.h"
@@ -101,6 +102,10 @@ struct ValueWindowStrategy<LT, JsonGuard<LT>> {
     /// The dst Object column hasn't been resized.
     static constexpr bool use_append = true;
 };
+template <LogicalType LT>
+struct ValueWindowStrategy<LT, ArrayGuard<LT>> {
+    static constexpr bool use_append = true;
+};
 
 template <LogicalType LT, typename State, typename T = RunTimeCppType<LT>>
 class ValueWindowFunction : public WindowFunction<State> {
@@ -124,7 +129,7 @@ public:
 
             Column* data_column = nullable_column->mutable_data_column();
             auto* column = down_cast<InputColumnType*>(data_column);
-            auto value = AggregateFunctionStateHelper<State>::data(state).value;
+            auto& value = AggregateFunctionStateHelper<State>::data(state).value;
             for (size_t i = start; i < end; ++i) {
                 AggDataTypeTraits<LT>::append_value(column, value);
             }
@@ -566,6 +571,10 @@ class LeadLagWindowFunction final : public ValueWindowFunction<LT, LeadLagState<
             const auto* default_column = down_cast<const ConstColumn*>(arg2);
             if (default_column->is_nullable()) {
                 this->data(state).default_is_null = true;
+            } else if constexpr (lt_is_array<LT>) {
+                const auto* column = down_cast<const ArrayColumn*>(ColumnHelper::get_data_column(arg2));
+                AggDataTypeTraits<LT>::assign_value(this->data(state).default_value,
+                                                    AggDataTypeTraits<LT>::get_row_ref(*column, 0));
             } else {
                 auto value = ColumnHelper::get_const_value<LT>(arg2);
                 AggDataTypeTraits<LT>::assign_value(this->data(state).default_value, value);
@@ -679,7 +688,13 @@ class LeadLagWindowFunction final : public ValueWindowFunction<LT, LeadLagState<
                         this->data(state).is_null = true;
                     } else {
                         this->data(state).is_null = false;
-                        this->data(state).value = this->data(state).default_value;
+                        if constexpr (lt_is_array<LT>) {
+                            AggDataTypeTraits<LT>::assign_value(
+                                    this->data(state).value,
+                                    AggDataTypeTraits<LT>::get_row_ref(*this->data(state).default_value, 0));
+                        } else {
+                            this->data(state).value = this->data(state).default_value;
+                        }
                     }
                 } else {
                     // non-const default: safe-guard columns[2]
@@ -712,7 +727,13 @@ class LeadLagWindowFunction final : public ValueWindowFunction<LT, LeadLagState<
                 } else {
                     if (this->data(state).default_value_is_constant) {
                         this->data(state).is_null = false;
-                        this->data(state).value = this->data(state).default_value;
+                        if constexpr (lt_is_array<LT>) {
+                            AggDataTypeTraits<LT>::assign_value(
+                                    this->data(state).value,
+                                    AggDataTypeTraits<LT>::get_row_ref(*this->data(state).default_value, 0));
+                        } else {
+                            this->data(state).value = this->data(state).default_value;
+                        }
                     } else {
                         int64_t target_index = isLag ? (frame_start + this->data(state).offset)
                                                      : (frame_end - 1 - this->data(state).offset);

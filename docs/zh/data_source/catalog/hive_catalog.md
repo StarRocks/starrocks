@@ -486,6 +486,7 @@ StarRocks 默认采用[自动异步更新策略](#附录理解元数据自动异
 | metastore_cache_ttl_sec                | 否       | StarRocks 自动淘汰缓存的 Hive 表或分区的元数据的时间间隔。单位：秒。默认值：`86400`，即 24 小时。 |
 | remote_file_cache_ttl_sec              | 否       | StarRocks 自动淘汰缓存的 Hive 表或分区的数据文件的元数据的时间间隔。单位：秒。默认值：`129600`，即 36 小时。 |
 | enable_cache_list_names                | 否       | 指定 StarRocks 是否缓存 Hive Partition Names。取值范围：`true` 和 `false`。默认值：`true`。取值为 `true` 表示开启缓存，取值为 `false` 表示关闭缓存。 |
+| remote_file_cache_memory_ratio         | 否       | 远程文件缓存的最大内存使用率。默认值：`0.1`，即 10%。自 v3.5.6 起支持。 |
 
 ### 示例
 

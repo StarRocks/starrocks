@@ -323,7 +323,17 @@ public class AnalyzeFunctionTest {
         analyzeFail("select array_generate(1, 5, 'a')");
         analyzeFail("select array_generate(1, 2, 3, 4)");
     }
-  
+
+    @Test
+    public void testSecToTime() throws Exception {
+        analyzeFail("select sec_to_time()");
+        analyzeSuccess("select sec_to_time(0)");
+        analyzeSuccess("select sec_to_time(1)");
+        analyzeSuccess("select sec_to_time(-1)");
+        analyzeSuccess("select sec_to_time(3024000)");
+        analyzeSuccess("select sec_to_time(-3024000)");
+    }
+
     @Test
     public void testLagLeadFunction() throws Exception {
         analyzeSuccess("select lag(ta, 2, tc) over() from test_laglead");

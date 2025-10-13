@@ -18,6 +18,7 @@ package com.starrocks.connector.iceberg;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
+import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.common.util.TimeUtils;
@@ -145,6 +146,9 @@ public class ScalarOperatorToIcebergExpr {
                 for (String path : paths) {
                     type = type.asStructType().fieldType(path);
                 }
+            }
+            if (qualifiedName.equals(IcebergTable.ROW_ID)) {
+                type = new Types.LongType();
             }
             return type;
         }

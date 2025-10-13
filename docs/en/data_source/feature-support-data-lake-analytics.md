@@ -81,6 +81,67 @@ The Avro, RCFile, and SequenceFile file formats are read by Java Native Interfac
 
 ### Metadata
 
+While executing queries against Hive data through Hive catalogs, StarRocks will cache the table metadata, to reduce the costs from frequent access to the remote storage. This mechanism ensures query performance while maintaining data freshness through the asynchronous refresh and expiration policy.
+
+### Cached metadata
+
+StarRocks will cache the following metadata during queries:
+
+- **Table- or partition-level metadata**
+  - Content: 
+    - Table information: database, table schema, column names, and partition keys 
+    - Partition information: partition list, and partition location
+  - Influence: detecting the table existence (whether a table is deleted and/or recreated)
+  - Catalog properties: 
+    - `enable_metastore_cache`: Controls whether to enable the metastore cache. Default value: `true`.
+    - `metastore_cache_refresh_interval_sec`: Controls the time interval at which the cached metadata is considered fresh. Default value: `60`. Unit: Seconds.
+  - Location: Metastore (HMS or Glue)
+
+- **Partition name list**
+  - Content: List of partition names used to find and prune partitions. Although the partition name list has been collected as the partition information in the above section, there is a separate configuration to enable or disable this feature under certain circumstances. 
+  - Influence: detecting the partition existence (whether there is a new partition or a partition is deleted and/or recreated)
+  - Catalog properties: 
+    - `enable_cache_list_names`: Controls whether to enable the partition name list cache. Default value: `true`.
+    - `metastore_cache_refresh_interval_sec`: Controls the time interval at which the cached metadata is considered fresh. Default value: `60`. Unit: Seconds.
+  - Location: Metastore (HMS or Glue)
+
+- **File-level metadata**
+  - Content: Paths to files under the partition folder.
+  - Influence: Load data into an existing partition.
+  - Catalog properties: 
+    - `enable_remote_file_cache`: Controls whether to enable the metadata cache for files in the remote storage. Default value: `true`.
+    - `remote_file_cache_refresh_interval_sec`: Controls the time interval at which the file metadata is considered fresh. Default value: `60`. Unit: Seconds.
+    - `remote_file_cache_memory_ratio`: Controls the ratio of memory that can be used for the file metadata cache. Default value: `0.1` (10%).
+  - Location: Remote storage (HDFS or S3)
+
+### Asynchronous update policy
+
+The following FE configuration item controls the asynchronous metadata update policy:
+
+| Configuration item                                           | Default                              | Description                          |
+| ------------------------------------------------------------ | ------------------------------------ | ------------------------------------ |
+| enable_background_refresh_connector_metadata                 | `true` in v3.0<br />`false` in v2.5  | Whether to enable the periodic metadata cache refresh. After it is enabled, StarRocks polls the metastore, and refreshes the cached metadata of the frequently accessed external catalogs to perceive data changes. `true` indicates to enable the Hive metadata cache refresh, and `false` indicates to disable it. This item is an [FE dynamic parameter](../administration/management/FE_configuration.md#configure-fe-dynamic-parameters). You can modify it using the [ADMIN SET FRONTEND CONFIG](../sql-reference/sql-statements/cluster-management/config_vars/ADMIN_SET_CONFIG.md) command. |
+| background_refresh_metadata_interval_millis                  | `600000` (10 minutes)                | The interval between two consecutive metadata cache refreshes. Unit: millisecond. This item is an [FE dynamic parameter](../administration/management/FE_configuration.md#configure-fe-dynamic-parameters). You can modify it using the [ADMIN SET FRONTEND CONFIG](../sql-reference/sql-statements/cluster-management/config_vars/ADMIN_SET_CONFIG.md) command. |
+| background_refresh_metadata_time_secs_since_last_access_secs | `86400` (24 hours)                   | The expiration time of a metadata cache refresh task. For the external catalog that has been accessed, if it has not been accessed for more than the specified time, StarRocks stops refreshing its cached metadata. For the external catalog that has not been accessed, StarRocks will not refresh its cached metadata. Unit: second. This item is an [FE dynamic parameter](../administration/management/FE_configuration.md#configure-fe-dynamic-parameters). You can modify it using the [ADMIN SET FRONTEND CONFIG](../sql-reference/sql-statements/cluster-management/config_vars/ADMIN_SET_CONFIG.md) command. |
+
+### Metadata cache behavior
+
+This section uses the default behavior to explain the metadata behavior during metadata updates and queries.
+
+By default, when a table is queried, StarRocks caches the metadata of the table, partitions, and files, and keeps it active for the next 24 hours. During the 24 hours, the system will ensure that the cache is refreshed at least every 10 minutes (note that 10 minutes is the estimated time for a metadata refresh round. If there are excessive external tables that are pending metadata refresh, the overall metadata refresh interval may be longer than 10 minutes). If a table has not been accessed for more than 24 hours, StarRocks discards the associated metadata. In other words, any query you make within 24 hours will, at worst, use metadata from 10 minutes ago.
+
+![Metadata Behavior](../_assets/hive_metadata_behavior.png)
+
+In details:
+
+1. Suppose the first query involves the partition `P1` of table `A`. StarRocks caches table-level metadata, partition name lists, and file path information under `P1`. The cache is synchronously populated while the query is executed.
+2. If a second query is submitted within 60 seconds after the cache is populated, and hits the partition `P1` of table `A`, StarRocks uses the metadata cache directly, and at this point StarRocks considers all cached metadata to be fresh (`metastore_cache_refresh_interval_sec` and `remote_file_cache_refresh_interval_sec` control the time window in which StarRocks considers metadata to be fresh).
+3. If a third query is submitted after 90 seconds, and hits the partition `P1` of table `A`, StarRocks will still use the metadata cache directly to complete the query. However, since it has been more than 60 seconds since the last metadata refresh, StarRocks will consider the metadata to be expired. So StarRocks will start an asynchronous refresh for the expired metadata. The asynchronous refresh will not affect the result of the current query because the query will still use the outdated metadata.
+4. Because the partition `P1` of table `A` has been queried, it is estimated that the metadata will be refreshed every 10 minutes (controlled by `background_refresh_metadata_interval_millis`) for the next 24 hours (controlled by `background_refresh_metadata_time_secs_since_last_access_secs`). The actual interval between rounds of the metadata refresh also depends on the overall pending refresh tasks within the system.
+5. If table `A` is not involved in any query within 24 hours, StarRocks will remove its metadata cache after 24 hours.
+
+### Best practices
+
 Hive Catalog's support for Hive Metastore (HMS) and AWS Glue mostly overlaps except that the automatic incremental update feature for HMS is not recommended. The default configuration is recommended in most cases.
 
 The performance of metadata retrieval largely depends on the performance of the user's HMS or HDFS NameNode. Please consider all factors and base your judgment on test results.
@@ -158,6 +219,64 @@ StarRocks supports querying Hive views from v3.1.0 onwards.
 ## Iceberg Catalog
 
 ### Metadata
+
+While executing queries against Iceberg data through Iceberg catalogs, StarRocks will cache the table metadata, to reduce the costs from frequent access to the remote storage. This mechanism ensures query performance while maintaining data freshness through the asynchronous refresh and expiration policy.
+
+### Cached metadata
+
+StarRocks will cache the following metadata during queries:
+
+- **Metadata pointer cache**
+  - Content: JSON file of the metadata pointer
+    - Snapshot ID
+    - Location of the manifest lists
+  - Influence: detecting data changes (If a data changes occurs, the snapshot ID will change.)
+  - Catalog properties: 
+    - `enable_iceberg_metadata_cache`: Controls whether to enable the Iceberg metadata cache. Default value: `true`.
+    - `iceberg_table_cache_refresh_interval_sec`: Controls the time interval at which the cached metadata is considered fresh. Default value: `60`. Unit: Seconds.
+
+- **Metadata cache**
+  - Content:
+    - Manifest for data file path
+    - Manifest for delete file path
+    - Database
+    - Partition (for materialized view rewrite)
+  - Influence: 
+    - Will not affect the data freshness for queries because the manifests for data or delete files cannot be changed.
+    - May affect materialized view rewrite, causing queries to miss the materialized view. The partition metadata will be deleted when the snapshot ID is refreshed. Therefore, the new snapshot ID lacks partition metadata, causing misses of the materialized view rewrite.
+  - Catalog properties: 
+    - `enable_cache_list_names`: Controls whether to enable the partition name list cache. Default value: `true`.
+    - `metastore_cache_refresh_interval_sec`: Controls the time interval at which the cached metadata is considered fresh. Default value: `60`. Unit: Seconds.
+    - `iceberg_data_file_cache_memory_usage_ratio`: Controls the ratio of memory that can be used for the data file metadata cache. Default value: `0.1` (10%).
+    - `iceberg_delete_file_cache_memory_usage_ratio`: Controls the ratio of memory that can be used for the delete file metadata cache. Default value: `0.1` (10%).
+
+### Asynchronous update policy
+
+The following FE configuration item controls the asynchronous metadata update policy:
+
+| Configuration item                                           | Default                              | Description                          |
+| ------------------------------------------------------------ | ------------------------------------ | ------------------------------------ |
+| enable_background_refresh_connector_metadata                 | `true` in v3.0<br />`false` in v2.5  | Whether to enable the periodic metadata cache refresh. After it is enabled, StarRocks polls the metastore, and refreshes the cached metadata of the frequently accessed external catalogs to perceive data changes. `true` indicates to enable the Hive metadata cache refresh, and `false` indicates to disable it. This item is an [FE dynamic parameter](../administration/management/FE_configuration.md#configure-fe-dynamic-parameters). You can modify it using the [ADMIN SET FRONTEND CONFIG](../sql-reference/sql-statements/cluster-management/config_vars/ADMIN_SET_CONFIG.md) command. |
+| background_refresh_metadata_interval_millis                  | `600000` (10 minutes)                | The interval between two consecutive metadata cache refreshes. Unit: millisecond. This item is an [FE dynamic parameter](../administration/management/FE_configuration.md#configure-fe-dynamic-parameters). You can modify it using the [ADMIN SET FRONTEND CONFIG](../sql-reference/sql-statements/cluster-management/config_vars/ADMIN_SET_CONFIG.md) command. |
+| background_refresh_metadata_time_secs_since_last_access_secs | `86400` (24 hours)                   | The expiration time of a metadata cache refresh task. For the external catalog that has been accessed, if it has not been accessed for more than the specified time, StarRocks stops refreshing its cached metadata. For the external catalog that has not been accessed, StarRocks will not refresh its cached metadata. Unit: second. This item is an [FE dynamic parameter](../administration/management/FE_configuration.md#configure-fe-dynamic-parameters). You can modify it using the [ADMIN SET FRONTEND CONFIG](../sql-reference/sql-statements/cluster-management/config_vars/ADMIN_SET_CONFIG.md) command. |
+
+### Metadata cache behavior
+
+This section uses the default behavior to explain the metadata behavior during metadata updates and queries.
+
+By default, when a table is queried, StarRocks caches the metadata of the table, and keeps it active for the next 24 hours. During the 24 hours, the system will ensure that the cache is refreshed at least every 10 minutes (note that 10 minutes is the estimated time for a metadata refresh round. If there are excessive external tables that are pending metadata refresh, the overall metadata refresh interval may be longer than 10 minutes). If a table has not been accessed for more than 24 hours, StarRocks discards the associated metadata. In other words, any query you make within 24 hours will, at worst, use metadata from 10 minutes ago.
+
+![Metadata Behavior](../_assets/iceberg_metadata_behavior.png)
+
+In details:
+
+1. Suppose the first query involves the table `A`. StarRocks caches its latest snapshot and metadata. The cache is synchronously populated while the query is executed.
+2. If a second query is submitted within 60 seconds after the cache is populated, and hits the table `A`, StarRocks uses the metadata cache directly, and at this point StarRocks considers all cached metadata to be fresh (`iceberg_table_cache_refresh_interval_sec` controls the time window in which StarRocks considers metadata to be fresh).
+3. If a third query is submitted after 90 seconds, and hits the table `A`, StarRocks will still use the metadata cache directly to complete the query. However, since it has been more than 60 seconds since the last metadata refresh, StarRocks will consider the metadata to be expired. So StarRocks will start an asynchronous refresh for the expired metadata. The asynchronous refresh will not affect the result of the current query because the query will still use the outdated metadata.
+4. Because the table `A` has been queried, it is estimated that the metadata will be refreshed every 10 minutes (controlled by `background_refresh_metadata_interval_millis`) for the next 24 hours (controlled by `background_refresh_metadata_time_secs_since_last_access_secs`). The actual interval between rounds of the metadata refresh also depends on the overall pending refresh tasks within the system.
+5. If table `A` is not involved in any query within 24 hours, StarRocks will remove its metadata cache after 24 hours.
+
+### Best practices
 
 Iceberg Catalog supports HMS, Glue, and Tabular as its metastore. The default configuration is recommended in most cases.
 

@@ -69,7 +69,7 @@ size_t DataSketchesHll::max_serialized_size() const {
     return get_hll_sketch()->get_max_updatable_serialization_bytes(log_k, tgt_type);
 }
 
-size_t DataSketchesHll::serialize_size() const {
+uint64_t DataSketchesHll::serialize_size() const {
     if (_sketch_union == nullptr) {
         return 0;
     }

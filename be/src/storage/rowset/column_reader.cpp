@@ -55,7 +55,9 @@
 #include "runtime/types.h"
 #include "storage/column_predicate.h"
 #include "storage/index/index_descriptor.h"
+#ifndef MACOS_DISABLE_CLUCENE
 #include "storage/index/inverted/inverted_plugin_factory.h"
+#endif
 #include "storage/rowset/array_column_iterator.h"
 #include "storage/rowset/binary_dict_page.h"
 #include "storage/rowset/bitmap_index_reader.h"
@@ -534,6 +536,7 @@ Status ColumnReader::_load_inverted_index(const std::shared_ptr<TabletIndex>& in
         return Status::OK();
     }
 
+#ifndef MACOS_DISABLE_CLUCENE
     SCOPED_THREAD_LOCAL_CHECK_MEM_LIMIT_SETTER(false);
     return success_once(_inverted_index_load_once,
                         [&]() {
@@ -544,7 +547,7 @@ Status ColumnReader::_load_inverted_index(const std::shared_ptr<TabletIndex>& in
                                 type = _column_type;
                             }
 
-                            ASSIGN_OR_RETURN(auto imp_type, get_inverted_imp_type(*index_meta))
+                            ASSIGN_OR_RETURN(auto imp_type, get_inverted_imp_type(*index_meta));
                             std::string index_path = IndexDescriptor::inverted_index_file_path(
                                     opts.rowset_path, opts.rowsetid.to_string(), _segment->id(),
                                     index_meta->index_id());
@@ -555,6 +558,8 @@ Status ColumnReader::_load_inverted_index(const std::shared_ptr<TabletIndex>& in
                             return Status::OK();
                         })
             .status();
+#endif
+    return Status::OK();
 }
 
 Status ColumnReader::seek_to_first(OrdinalPageIndexIterator* iter) {

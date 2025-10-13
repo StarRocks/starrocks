@@ -3330,7 +3330,6 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 - Description: Whether to use the Service Account that is bound to your Compute Engine.
 - Introduced in: v3.5.1
 
-<!--
 ##### starmgr_grpc_timeout_seconds
 
 - Default: 5
@@ -3339,7 +3338,15 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 - Is mutable: Yes
 - Description:
 - Introduced in: -
--->
+
+##### starmgr_grpc_server_max_worker_threads
+
+- Default: 1024
+- Type: Int
+- Unit: -
+- Is mutable: Yes
+- Description: The maximum number of worker threads that are used by the grpc server in the FE starmgr module.
+- Introduced in: v4.0.0, v3.5.8
 
 ##### lake_compaction_score_selector_min_score
 
@@ -4247,6 +4254,7 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 - Description: The time interval at which the cached metadata of Hive external tables is updated.
 - Introduced in: -
 
+<!--
 ##### hive_meta_cache_ttl_s
 
 - Default: 3600 * 24
@@ -4255,11 +4263,12 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 - Is mutable: No
 - Description: The amount of time after which the cached metadata of Hive external tables expires.
 - Introduced in: -
+-->
 
 <!--
 ##### remote_file_cache_ttl_s
 
-- Default: 3600 * 36
+- Default: 3600 * 24
 - Type: Long
 - Unit: Seconds
 - Is mutable: No

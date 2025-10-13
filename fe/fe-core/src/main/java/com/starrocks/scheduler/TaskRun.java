@@ -222,6 +222,11 @@ public class TaskRun implements Comparable<TaskRun> {
         return Math.min(Math.min(defaultTimeoutS, Config.task_runs_ttl_second), Config.task_ttl_second);
     }
 
+    @VisibleForTesting
+    public void setStatus(TaskRunStatus status) {
+        this.status = status;
+    }
+
     public Map<String, String> refreshTaskProperties(ConnectContext ctx) {
         Map<String, String> newProperties = Maps.newHashMap();
         if (task.getSource() != Constants.TaskSource.MV) {

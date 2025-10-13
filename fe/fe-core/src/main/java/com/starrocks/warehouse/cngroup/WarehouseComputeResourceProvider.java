@@ -14,11 +14,12 @@
 
 package com.starrocks.warehouse.cngroup;
 
-import com.google.api.client.util.Lists;
+import com.google.common.collect.Lists;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReportException;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.RunMode;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.warehouse.Warehouse;
@@ -48,6 +49,14 @@ public final class WarehouseComputeResourceProvider implements ComputeResourcePr
     }
 
     @Override
+    public List<ComputeResource> getComputeResources(Warehouse warehouse) {
+        if (warehouse == null) {
+            throw ErrorReportException.report(ErrorCode.ERR_UNKNOWN_WAREHOUSE, "warehouse is null");
+        }
+        return Lists.newArrayList(WarehouseComputeResource.of(warehouse.getId()));
+    }
+
+    @Override
     public Optional<ComputeResource> acquireComputeResource(Warehouse warehouse, CRAcquireContext acquireContext) {
         final long warehouseId = acquireContext.getWarehouseId();
         if (warehouse == null) {
@@ -67,6 +76,9 @@ public final class WarehouseComputeResourceProvider implements ComputeResourcePr
      */
     @Override
     public boolean isResourceAvailable(ComputeResource computeResource) {
+        if (!RunMode.isSharedDataMode()) {
+            return true;
+        }
         try {
             final long availableWorkerGroupIdSize =
                     Optional.ofNullable(getAliveComputeNodes(computeResource)).map(List::size).orElse(0);

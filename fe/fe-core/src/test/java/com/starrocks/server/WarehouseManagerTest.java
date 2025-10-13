@@ -43,6 +43,7 @@ import mockit.Mock;
 import mockit.MockUp;
 import mockit.Mocked;
 import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
@@ -64,6 +65,16 @@ public class WarehouseManagerTest {
 
     @Mocked
     StarOSAgent starOSAgent;
+
+    @BeforeAll
+    public static void setUp() {
+        new MockUp<RunMode>() {
+            @Mock
+            boolean isSharedDataMode() {
+                return true;
+            }
+        };
+    }
 
     @Test
     public void testWarehouseNotExist() {
@@ -399,6 +410,12 @@ public class WarehouseManagerTest {
 
     @Test
     public void testBackgroundWarehouse() {
+        new MockUp<WarehouseComputeResourceProvider>() {
+            @Mock
+            public boolean isResourceAvailable(ComputeResource computeResource) {
+                return true;
+            }
+        };
         WarehouseManager mgr = new WarehouseManager();
         mgr.initDefaultWarehouse();
         Assertions.assertEquals(WarehouseManager.DEFAULT_WAREHOUSE_ID, mgr.getBackgroundWarehouse(123).getId());

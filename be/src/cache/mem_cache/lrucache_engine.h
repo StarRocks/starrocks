@@ -57,6 +57,12 @@ public:
 
     size_t hit_count() const override;
 
+    size_t insert_count() const override;
+
+    size_t insert_evict_count() const override;
+
+    size_t release_evict_count() const override;
+
     Status prune() override;
 
 private:
