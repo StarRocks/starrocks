@@ -299,7 +299,7 @@ void PInternalServiceImplBase<T>::exec_single_node_plan_fragments(google::protob
                                                                   PExecBatchPlanFragmentsResult* result,
                                                                   google::protobuf::Closure* done) {
     auto task = [=]() { this->_exec_batch_plan_fragments(controller, request, result, done); };
-    if (!_exec_env->pipeline_prepare_pool()->try_offer(std::move(task))) {
+    if (!_exec_env->query_rpc_pool()->try_offer(std::move(task))) {
         ClosureGuard closure_guard(done);
         Status::ServiceUnavailable("submit exec_batch_plan_fragments failed").to_protobuf(result->mutable_status());
     }
