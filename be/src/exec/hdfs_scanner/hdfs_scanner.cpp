@@ -125,13 +125,17 @@ Status HdfsScanner::_build_scanner_context() {
     // build columns of materialized and partition.
     for (size_t i = 0; i < _scanner_params.materialize_slots.size(); i++) {
         auto* slot = _scanner_params.materialize_slots[i];
-        HdfsScannerContext::ColumnInfo column;
-        column.slot_desc = slot;
-        column.idx_in_chunk = _scanner_params.materialize_index_in_chunk[i];
-        column.decode_needed =
-                slot->is_output_column() || _scanner_params.slots_of_multi_field_conjunct.find(slot->id()) !=
-                                                    _scanner_params.slots_of_multi_field_conjunct.end();
-        ctx.materialized_columns.emplace_back(std::move(column));
+        if (slot->col_name() == ICEBERG_ROW_ID) {
+            ctx.reserved_field_slots.emplace_back(slot);
+        } else {
+            HdfsScannerContext::ColumnInfo column;
+            column.slot_desc = slot;
+            column.idx_in_chunk = _scanner_params.materialize_index_in_chunk[i];
+            column.decode_needed =
+                    slot->is_output_column() || _scanner_params.slots_of_multi_field_conjunct.find(slot->id()) !=
+                                                        _scanner_params.slots_of_multi_field_conjunct.end();
+            ctx.materialized_columns.emplace_back(std::move(column));
+        }
     }
 
     for (size_t i = 0; i < _scanner_params.partition_slots.size(); i++) {
@@ -208,7 +212,8 @@ bool HdfsScannerContext::can_use_count_optimization() const {
 }
 
 bool HdfsScannerContext::can_use_min_max_optimization() const {
-    return use_min_max_opt && materialized_columns.empty();
+    // @TODO for iceberg _row_id column, we can support min/max optimization in the future
+    return use_min_max_opt && materialized_columns.empty() && reserved_field_slots.empty();
 }
 
 Status HdfsScanner::get_next(RuntimeState* runtime_state, ChunkPtr* chunk) {

@@ -89,6 +89,7 @@ add_library(Formats STATIC
         parquet/parquet_block_split_bloom_filter.cpp
         parquet/variant.h
         parquet/variant.cpp
+        parquet/iceberg_row_id_reader.cpp
         disk_range.hpp
         )
 
