@@ -3464,7 +3464,7 @@ public class Config extends ConfigBase {
      * Number of Hash of Lock Table
      */
     @ConfField
-    public static int lock_manager_lock_table_num = 32;
+    public static int lock_manager_lock_table_num = 256;
 
     /**
      * Whether to enable deadlock unlocking operation.
