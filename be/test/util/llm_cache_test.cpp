@@ -91,11 +91,10 @@ TEST_F(LLMCacheTest, CacheInitialization) {
 
     llm_cache->insert(cache_key, response);
 
-    LLMCacheValue* result = llm_cache->lookup(CacheKey(cache_key));
-    EXPECT_NE(result, nullptr);
-    if (result) {
-        EXPECT_EQ(result->response, response);
-        EXPECT_EQ(result->cache_key_str, cache_key);
+    auto result = llm_cache->lookup(CacheKey(cache_key));
+    EXPECT_TRUE(result.has_value());
+    if (result.has_value()) {
+        EXPECT_EQ(result.value(), response);
     }
 }
 
@@ -112,8 +111,8 @@ TEST_F(LLMCacheTest, MultipleInitialization) {
     llm_cache->init(20000);
 
     // Can not find the original data
-    LLMCacheValue* result = llm_cache->lookup(CacheKey(cache_key));
-    EXPECT_EQ(result, nullptr);
+    auto result = llm_cache->lookup(CacheKey(cache_key));
+    EXPECT_FALSE(result.has_value());
 }
 
 // Test setting capacity before initialization
@@ -126,8 +125,8 @@ TEST_F(LLMCacheTest, SetCapacityBeforeInit) {
 
     // Should work normally
     llm_cache->insert("test_key", "test_response");
-    LLMCacheValue* result = llm_cache->lookup(CacheKey("test_key"));
-    EXPECT_NE(result, nullptr);
+    auto result = llm_cache->lookup(CacheKey("test_key"));
+    EXPECT_TRUE(result.has_value());
 }
 
 // Test basic insert and lookup operations
@@ -141,14 +140,13 @@ TEST_F(LLMCacheTest, BasicInsertAndLookup) {
     llm_cache->insert(cache_key, response);
 
     // Lookup
-    LLMCacheValue* result = llm_cache->lookup(CacheKey(cache_key));
-    EXPECT_NE(result, nullptr);
-    EXPECT_EQ(result->response, response);
-    EXPECT_EQ(result->cache_key_str, cache_key);
+    auto result = llm_cache->lookup(CacheKey(cache_key));
+    EXPECT_TRUE(result.has_value());
+    EXPECT_EQ(result.value(), response);
 
     // Lookup for non-existent key
-    result = llm_cache->lookup(CacheKey("non_existent_key"));
-    EXPECT_EQ(result, nullptr);
+    auto non_exist_result = llm_cache->lookup(CacheKey("non_existent_key"));
+    EXPECT_FALSE(non_exist_result.has_value());
 }
 
 // Test cache operations with different data types
@@ -157,25 +155,25 @@ TEST_F(LLMCacheTest, DifferentDataTypes) {
 
     // Test with empty strings
     llm_cache->insert("", "");
-    LLMCacheValue* result1 = llm_cache->lookup(CacheKey(""));
-    EXPECT_NE(result1, nullptr);
-    EXPECT_EQ(result1->response, "");
+    auto result1 = llm_cache->lookup(CacheKey(""));
+    EXPECT_TRUE(result1.has_value());
+    EXPECT_EQ(result1.value(), "");
 
     // Test with special characters
     std::string special_key = "key_with_特殊字符_!@#$%";
     std::string special_response = "Response with 特殊字符 and symbols: !@#$%^&*()";
     llm_cache->insert(special_key, special_response);
-    LLMCacheValue* result2 = llm_cache->lookup(CacheKey(special_key));
-    EXPECT_NE(result2, nullptr);
-    EXPECT_EQ(result2->response, special_response);
+    auto result2 = llm_cache->lookup(CacheKey(special_key));
+    EXPECT_TRUE(result2.has_value());
+    EXPECT_EQ(result2.value(), special_response);
 
     // Test with very long strings
     std::string long_key(1000, 'k');
     std::string long_response(5000, 'r');
     llm_cache->insert(long_key, long_response);
-    LLMCacheValue* result3 = llm_cache->lookup(CacheKey(long_key));
-    EXPECT_NE(result3, nullptr);
-    EXPECT_EQ(result3->response, long_response);
+    auto result3 = llm_cache->lookup(CacheKey(long_key));
+    EXPECT_TRUE(result3.has_value());
+    EXPECT_EQ(result3.value(), long_response);
 }
 
 // Test thread safety
@@ -197,8 +195,8 @@ TEST_F(LLMCacheTest, ThreadSafety) {
 
                 llm_cache->insert(key, response);
 
-                LLMCacheValue* result = llm_cache->lookup(CacheKey(key));
-                if (result && result->response == response) {
+                auto result = llm_cache->lookup(CacheKey(key));
+                if (result.has_value() && result.value() == response) {
                     success_count++;
                 }
             }
@@ -220,8 +218,8 @@ TEST_F(LLMCacheTest, ReleaseCacheFunction) {
 
     // Insert some data
     llm_cache->insert("test_key", "test_response");
-    LLMCacheValue* result1 = llm_cache->lookup(CacheKey("test_key"));
-    EXPECT_NE(result1, nullptr);
+    auto result1 = llm_cache->lookup(CacheKey("test_key"));
+    EXPECT_TRUE(result1.has_value());
 
     // Release cache
     llm_cache->release_cache();
@@ -230,8 +228,8 @@ TEST_F(LLMCacheTest, ReleaseCacheFunction) {
     llm_cache->init(10000);
 
     // Previous data should be gone
-    LLMCacheValue* result2 = llm_cache->lookup(CacheKey("test_key"));
-    EXPECT_EQ(result2, nullptr);
+    auto result2 = llm_cache->lookup(CacheKey("test_key"));
+    EXPECT_FALSE(result2.has_value());
 }
 
 // Test cache with model config integration
@@ -252,10 +250,9 @@ TEST_F(LLMCacheTest, ModelConfigIntegration) {
     llm_cache->insert(cache_key, response);
 
     // Lookup using the same cache key
-    LLMCacheValue* result = llm_cache->lookup(CacheKey(cache_key));
-    EXPECT_NE(result, nullptr);
-    EXPECT_EQ(result->response, response);
-    EXPECT_EQ(result->cache_key_str, cache_key);
+    auto result = llm_cache->lookup(CacheKey(cache_key));
+    EXPECT_TRUE(result.has_value());
+    EXPECT_EQ(result.value(), response);
 
     // Verify that different config generates different key
     ModelConfig config2 = config;
@@ -263,8 +260,8 @@ TEST_F(LLMCacheTest, ModelConfigIntegration) {
     std::string cache_key2 = generate_cache_key(prompt, config2);
     EXPECT_NE(cache_key, cache_key2);
 
-    LLMCacheValue* result2 = llm_cache->lookup(CacheKey(cache_key2));
-    EXPECT_EQ(result2, nullptr); // Should not find entry with different key
+    auto result2 = llm_cache->lookup(CacheKey(cache_key2));
+    EXPECT_FALSE(result2.has_value()); // Should not find entry with different key
 }
 
 // Test memory management and deleter function
@@ -306,8 +303,8 @@ TEST_F(LLMCacheTest, ConcurrentInitialization) {
 
     // Cache should be properly initialized and working
     llm_cache->insert("final_test", "final_response");
-    LLMCacheValue* result = llm_cache->lookup(CacheKey("final_test"));
-    EXPECT_NE(result, nullptr);
+    auto result = llm_cache->lookup(CacheKey("final_test"));
+    EXPECT_TRUE(result.has_value());
 }
 
 // Test cache metrics functionality
@@ -330,15 +327,15 @@ TEST_F(LLMCacheTest, CacheMetricsTest) {
     llm_cache->insert("key3", "response3");
 
     // Test cache hits
-    LLMCacheValue* result1 = llm_cache->lookup(CacheKey("key1")); // Hit
-    LLMCacheValue* result2 = llm_cache->lookup(CacheKey("key2")); // Hit
+    auto result1 = llm_cache->lookup(CacheKey("key1")); // Hit
+    auto result2 = llm_cache->lookup(CacheKey("key2")); // Hit
 
-    EXPECT_NE(result1, nullptr);
-    EXPECT_NE(result2, nullptr);
+    EXPECT_TRUE(result1.has_value());
+    EXPECT_TRUE(result2.has_value());
 
     // Test cache miss
-    LLMCacheValue* result3 = llm_cache->lookup(CacheKey("non_existent_key")); // Miss
-    EXPECT_EQ(result3, nullptr);
+    auto result3 = llm_cache->lookup(CacheKey("non_existent_key")); // Miss
+    EXPECT_FALSE(result3.has_value());
 
     // Get metrics after operations
     CacheMetrics metrics = llm_cache->get_metrics();

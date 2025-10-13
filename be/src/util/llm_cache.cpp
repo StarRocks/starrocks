@@ -57,22 +57,23 @@ void LLMCache::set_capacity(size_t capacity) {
     }
 }
 
-LLMCacheValue* LLMCache::lookup(const CacheKey& key) {
+std::optional<std::string> LLMCache::lookup(const CacheKey& key) {
     std::lock_guard<std::mutex> lock(_mutex);
     if (!_cache) {
-        return nullptr;
+        return std::nullopt;
     }
     _total_requests++;
 
     auto* handle = _cache->lookup(key);
     if (handle) {
         LLMCacheValue* cache_value = static_cast<LLMCacheValue*>(_cache->value(handle));
+        std::string res = cache_value->response;
         _cache_hits++;
         _cache->release(handle);
-        return cache_value;
+        return res;
     }
     _cache_misses++;
-    return nullptr;
+    return std::nullopt;
 }
 
 void LLMCache::insert(const std::string& cache_key, std::string response) {

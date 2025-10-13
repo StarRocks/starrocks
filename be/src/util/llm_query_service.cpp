@@ -76,10 +76,10 @@ std::shared_future<StatusOr<std::string>> LLMQueryService::async_query(const std
     std::string cache_key = generate_cache_key(prompt, config);
 
     // First check cache
-    auto* cache_value = _llm_cache.lookup(CacheKey(cache_key));
+    auto cache_value = _llm_cache.lookup(CacheKey(cache_key));
     if (cache_value) {
         std::promise<StatusOr<std::string>> promise;
-        promise.set_value(cache_value->response);
+        promise.set_value(cache_value.value());
         return promise.get_future();
     }
 

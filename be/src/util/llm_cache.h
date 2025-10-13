@@ -47,7 +47,7 @@ public:
     Cache* get_cache() const { return _cache.get(); }
     void init(size_t capacity);
     void set_capacity(size_t capacity);
-    LLMCacheValue* lookup(const CacheKey& key);
+    std::optional<std::string> lookup(const CacheKey& key);
     void insert(const std::string& key, std::string response);
     void release_cache();
     CacheMetrics get_metrics() const;
