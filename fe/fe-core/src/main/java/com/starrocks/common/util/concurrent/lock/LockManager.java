@@ -382,6 +382,7 @@ public class LockManager {
         }
 
         JsonObject ownerInfo = new JsonObject();
+        ownerInfo.addProperty("rid", rid);
 
         //owner
         JsonArray ownerArray = new JsonArray();
