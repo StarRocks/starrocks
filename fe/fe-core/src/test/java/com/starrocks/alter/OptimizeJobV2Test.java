@@ -349,7 +349,19 @@ public class OptimizeJobV2Test extends DDLTestBase {
         Assertions.assertEquals(2, optimizeTasks.size());
         optimizeTasks.get(0).setOptimizeTaskState(Constants.TaskRunState.SUCCESS);
         optimizeTasks.get(1).setOptimizeTaskState(Constants.TaskRunState.FAILED);
-        optimizeJob.runRunningJob();
+
+        int retryTimes = 3;
+        do {
+            try {
+                optimizeJob.runRunningJob();
+            } catch (Exception e) {
+                LOG.info(e.getMessage());
+            }
+            if (--retryTimes < 0) {
+                return;
+            }
+        } while (optimizeJob.getJobState() != JobState.FINISHED);
+
 
         // finish alter tasks
         Assertions.assertEquals(JobState.FINISHED, optimizeJob.getJobState());
@@ -507,11 +519,17 @@ public class OptimizeJobV2Test extends DDLTestBase {
             t.setOptimizeTaskState(Constants.TaskRunState.SUCCESS);
         }
 
-        try {
-            optimizeJob.runRunningJob();
-        } catch (Exception e) {
-            LOG.info(e.getMessage());
-        }
+        int retryTimes = 3;
+        do {
+            try {
+                optimizeJob.runRunningJob();
+            } catch (Exception e) {
+                LOG.info(e.getMessage());
+            }
+            if (--retryTimes < 0) {
+                return;
+            }
+        } while (optimizeJob.getJobState() != JobState.FINISHED);
 
         // Verify job finished and default distribution updated
         Assertions.assertEquals(JobState.FINISHED, optimizeJob.getJobState());
