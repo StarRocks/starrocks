@@ -480,6 +480,7 @@ StarRocks はデフォルトで [自動非同期更新ポリシー](#appendix-un
 | metastore_cache_ttl_sec                | No       | StarRocks が自身にキャッシュされた Hive テーブルまたはパーティションのメタデータを自動的に破棄する時間間隔です。 単位：秒。 デフォルト値：`86400`（24 時間）。 |
 | remote_file_cache_ttl_sec              | No       | StarRocks が自身にキャッシュされた Hive テーブルまたはパーティションの基礎データファイルのメタデータを自動的に破棄する時間間隔です。 単位：秒。 デフォルト値：`129600`（36 時間）。 |
 | enable_cache_list_names                | No       | StarRocks が Hive パーティション名をキャッシュするかどうかを指定します。 有効な値：`true` および `false`。 デフォルト値：`true`。 値 `true` はキャッシュを有効にし、値 `false` はキャッシュを無効にします。 |
+| remote_file_cache_memory_ratio         | No       | Remote File Cache の最大メモリ使用率。デフォルト値: `0.1`（10%）。v3.5.6 以降でサポート。 |
 
 ### 例
 
