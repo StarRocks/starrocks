@@ -328,30 +328,30 @@ void SystemMetrics::_update_memory_metrics() {
     LOG(INFO) << "Memory tracking is not available with address sanitizer builds.";
 #else
     size_t value = 0;
-    // Update the statistics cached by mallctl.
+    // Update the statistics cached by jemallctl.
     uint64_t epoch = 1;
     size_t sz = sizeof(epoch);
-    je_mallctl("epoch", &epoch, &sz, &epoch, sz);
+    jemallctl("epoch", &epoch, &sz, &epoch, sz);
     sz = sizeof(size_t);
-    if (je_mallctl("stats.allocated", &value, &sz, nullptr, 0) == 0) {
+    if (jemallctl("stats.allocated", &value, &sz, nullptr, 0) == 0) {
         _memory_metrics->jemalloc_allocated_bytes.set_value(value);
     }
-    if (je_mallctl("stats.active", &value, &sz, nullptr, 0) == 0) {
+    if (jemallctl("stats.active", &value, &sz, nullptr, 0) == 0) {
         _memory_metrics->jemalloc_active_bytes.set_value(value);
     }
-    if (je_mallctl("stats.metadata", &value, &sz, nullptr, 0) == 0) {
+    if (jemallctl("stats.metadata", &value, &sz, nullptr, 0) == 0) {
         _memory_metrics->jemalloc_metadata_bytes.set_value(value);
     }
-    if (je_mallctl("stats.metadata_thp", &value, &sz, nullptr, 0) == 0) {
+    if (jemallctl("stats.metadata_thp", &value, &sz, nullptr, 0) == 0) {
         _memory_metrics->jemalloc_metadata_thp.set_value(value);
     }
-    if (je_mallctl("stats.resident", &value, &sz, nullptr, 0) == 0) {
+    if (jemallctl("stats.resident", &value, &sz, nullptr, 0) == 0) {
         _memory_metrics->jemalloc_resident_bytes.set_value(value);
     }
-    if (je_mallctl("stats.mapped", &value, &sz, nullptr, 0) == 0) {
+    if (jemallctl("stats.mapped", &value, &sz, nullptr, 0) == 0) {
         _memory_metrics->jemalloc_mapped_bytes.set_value(value);
     }
-    if (je_mallctl("stats.retained", &value, &sz, nullptr, 0) == 0) {
+    if (jemallctl("stats.retained", &value, &sz, nullptr, 0) == 0) {
         _memory_metrics->jemalloc_retained_bytes.set_value(value);
     }
 #endif

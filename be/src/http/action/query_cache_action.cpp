@@ -79,11 +79,11 @@ void QueryCacheAction::_handle_stat(HttpRequest* req) {
         auto hit_count = cache_mgr->hit_count();
         auto hit_ratio = lookup_count == 0 ? 0.0 : double(hit_count) / double(lookup_count);
 
-        root.AddMember("capacity", rapidjson::Value(capacity), allocator);
-        root.AddMember("usage", rapidjson::Value(usage), allocator);
+        root.AddMember("capacity", rapidjson::Value(static_cast<uint64_t>(capacity)), allocator);
+        root.AddMember("usage", rapidjson::Value(static_cast<uint64_t>(usage)), allocator);
         root.AddMember("usage_ratio", rapidjson::Value(usage_ratio), allocator);
-        root.AddMember("lookup_count", rapidjson::Value(lookup_count), allocator);
-        root.AddMember("hit_count", rapidjson::Value(hit_count), allocator);
+        root.AddMember("lookup_count", rapidjson::Value(static_cast<uint64_t>(lookup_count)), allocator);
+        root.AddMember("hit_count", rapidjson::Value(static_cast<uint64_t>(hit_count)), allocator);
         root.AddMember("hit_ratio", rapidjson::Value(hit_ratio), allocator);
     });
 }

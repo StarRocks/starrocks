@@ -44,7 +44,9 @@
 #include "gutil/strings/substitute.h"
 #include "runtime/global_dict/types.h"
 #include "runtime/global_dict/types_fwd_decl.h"
+#ifndef MACOS_DISABLE_CLUCENE
 #include "storage/index/inverted/inverted_writer.h"
+#endif
 #include "storage/rowset/binary_dict_page.h"
 #include "storage/rowset/common.h"
 #include "storage/rowset/page_pointer.h" // for PagePointer
@@ -301,7 +303,9 @@ private:
     std::unique_ptr<ZoneMapIndexWriter> _zone_map_index_builder;
     std::unique_ptr<BitmapIndexWriter> _bitmap_index_builder;
     std::unique_ptr<BloomFilterIndexWriter> _bloom_filter_index_builder;
+#ifndef MACOS_DISABLE_CLUCENE
     std::unique_ptr<InvertedWriter> _inverted_index_builder;
+#endif
 
     // _zone_map_index_builder != NULL || _bitmap_index_builder != NULL || _bloom_filter_index_builder != NULL
     bool _has_index_builder = false;

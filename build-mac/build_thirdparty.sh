@@ -175,6 +175,7 @@ install_homebrew_deps() {
         # Other libraries
         "icu4c"
         "curl"
+        "xsimd"
     )
 
     for dep in "${homebrew_deps[@]}"; do
@@ -599,8 +600,23 @@ build_rocksdb() {
 
     cd "rocksdb-$ROCKSDB_VERSION"
 
-    # No source patch required on macOS now that warnings-as-errors is disabled
-    # and shared libraries/tests are turned off for RocksDB.
+    # Apply RocksDB metadata header patch for macOS libc++ compatibility
+    local patch_file="$THIRDPARTY_DIR/patches/rocksdb-6.22.1-metadata-header.patch"
+    if [[ -f "$patch_file" ]]; then
+        # Check if patch is already applied by looking for our marker comment
+        if ! grep -q "The metadata that describes a SST file" include/rocksdb/metadata.h 2>/dev/null; then
+            log_info "Applying RocksDB metadata header patch..."
+            if patch -p1 --forward --batch < "$patch_file" >/dev/null; then
+                log_success "RocksDB metadata patch applied successfully"
+            else
+                log_warn "RocksDB metadata patch could not be applied (maybe already applied). Proceeding."
+            fi
+        else
+            log_success "RocksDB metadata patch already applied, skipping"
+        fi
+    else
+        log_warn "RocksDB metadata patch not found at $patch_file"
+    fi
 
     mkdir -p build && cd build
 
