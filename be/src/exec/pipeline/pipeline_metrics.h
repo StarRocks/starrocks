@@ -45,7 +45,23 @@ struct ExecStateReporterMetrics {
         _priority_reporter_thr_pools.push_back(thread_pool);
     }
 
+    void unmonitor_reporter(ThreadPool* thread_pool) {
+        std::lock_guard guard(_mutex);
+        _remove_thread_pool_unlocked(thread_pool, &_reporter_thr_pools);
+    }
+    void unmonitor_priority_reporter(ThreadPool* thread_pool) {
+        std::lock_guard guard(_mutex);
+        _remove_thread_pool_unlocked(thread_pool, &_priority_reporter_thr_pools);
+    }
+
 private:
+    void _remove_thread_pool_unlocked(ThreadPool* thread_pool, std::vector<ThreadPool*>* pools) {
+        auto it = std::find(pools->begin(), pools->end(), thread_pool);
+        if (it != pools->end()) {
+            pools->erase(it);
+        }
+    }
+
     std::mutex _mutex;
     std::vector<ThreadPool*> _reporter_thr_pools;
     std::vector<ThreadPool*> _priority_reporter_thr_pools;

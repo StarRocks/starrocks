@@ -269,8 +269,15 @@ ExecStateReporter::ExecStateReporter(const CpuUtil::CpuIds& cpuids, ExecStateRep
         LOG(FATAL) << "Cannot create thread pool for priority ExecStateReport: error=" << status.to_string();
     }
 
-    metrics->monitor_reporter(_thread_pool.get());
-    metrics->monitor_priority_reporter(_priority_thread_pool.get());
+    _metrics = metrics;
+    _metrics->monitor_reporter(_thread_pool.get());
+    _metrics->monitor_priority_reporter(_priority_thread_pool.get());
+}
+
+ExecStateReporter::~ExecStateReporter() {
+    // remove thread pool metrics from parent metrics
+    _metrics->unmonitor_reporter(_thread_pool.get());
+    _metrics->unmonitor_priority_reporter(_priority_thread_pool.get());
 }
 
 void ExecStateReporter::submit(std::function<void()>&& report_task, bool priority) {
