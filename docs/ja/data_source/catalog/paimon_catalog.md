@@ -24,6 +24,30 @@ Paimon クラスターで SQL ワークロードを成功させるには、StarR
 
 Paimon catalog はデータのクエリにのみ使用できます。Paimon catalog を使用して、Paimon クラスターにデータを削除、削除、または挿入することはできません。
 
+## Paimon to StarRocks data types
+
+| Paimon Type         | StarRocks Type            |
+|---------------------|---------------------------|
+| BINARY	            | VARBINARY                 |
+| VARBINARY	          | VARBINARY                 |
+| CHAR	              | CHAR(length)              |
+| VARCHAR	            | VARCHAR                   |
+| BOOLEAN	            | BOOLEAN                   |
+| DECIMAL	            | DECIMAL(precision, scale) |
+| TINYINT	            | TINYINT                   |
+| SMALLINT	          | SMALLINT                  |
+| INT	                | INT                       |
+| BIGINT	            | BIGINT                    |
+| FLOAT	              | FLOAT                     |
+| DOUBLE	            | DOUBLE                    |
+| DATE	              | DATE                      |
+| TIME	              | TIME                      |
+| TIMESTAMP	          | DATETIME                  |
+| LocalZonedTimestamp	| DATETIME                  |
+| ARRAY	              | ARRAY<element_type>       |
+| MAP	                | MAP<key_type, value_type> |
+| ROW/STRUCT	        | STRUCT<field1:type1, ...> |
+
 ## 統合準備
 
 Paimon catalog を作成する前に、StarRocks クラスターが Paimon クラスターのストレージシステムとメタストアと統合できることを確認してください。

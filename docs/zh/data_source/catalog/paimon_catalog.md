@@ -24,6 +24,30 @@ Paimon catalog 是一种 external catalog，可以让您在不进行数据导入
 
 您只能使用 Paimon catalog 查询数据。您不能使用 Paimon catalog 删除、删除或插入数据到您的 Paimon 集群中。
 
+## Paimon to StarRocks data types
+
+| Paimon Type         | StarRocks Type            |
+|---------------------|---------------------------|
+| BINARY	            | VARBINARY                 |
+| VARBINARY	          | VARBINARY                 |
+| CHAR	              | CHAR(length)              |
+| VARCHAR	            | VARCHAR                   |
+| BOOLEAN	            | BOOLEAN                   |
+| DECIMAL	            | DECIMAL(precision, scale) |
+| TINYINT	            | TINYINT                   |
+| SMALLINT	          | SMALLINT                  |
+| INT	                | INT                       |
+| BIGINT	            | BIGINT                    |
+| FLOAT	              | FLOAT                     |
+| DOUBLE	            | DOUBLE                    |
+| DATE	              | DATE                      |
+| TIME	              | TIME                      |
+| TIMESTAMP	          | DATETIME                  |
+| LocalZonedTimestamp	| DATETIME                  |
+| ARRAY	              | ARRAY<element_type>       |
+| MAP	                | MAP<key_type, value_type> |
+| ROW/STRUCT	        | STRUCT<field1:type1, ...> |
+
 ## 集成准备
 
 在创建 Paimon catalog 之前，请确保您的 StarRocks 集群可以与 Paimon 集群的存储系统和元存储集成。
