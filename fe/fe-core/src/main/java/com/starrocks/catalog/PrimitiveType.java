@@ -203,6 +203,9 @@ public enum PrimitiveType {
         // VARIANT
         builder.putAll(VARIANT, VARIANT);
         builder.putAll(VARIANT, NULL_TYPE);
+        for (PrimitiveType type : VARIANT_COMPATIBLE_TYPE) {
+            builder.put(type, VARIANT);
+        }
 
         IMPLICIT_CAST_MAP = builder.build();
     }
@@ -279,6 +282,8 @@ public enum PrimitiveType {
                 return JSON;
             case FUNCTION:
                 return FUNCTION;
+            case VARIANT:
+                return VARIANT;
             default:
                 return INVALID_TYPE;
         }
