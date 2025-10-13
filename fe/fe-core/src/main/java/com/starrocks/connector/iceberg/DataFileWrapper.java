@@ -160,4 +160,9 @@ public class DataFileWrapper implements DataFile {
     public DataFile copyWithStats(Set<Integer> requestedColumnIds) {
         return dataFile.copyWithStats(requestedColumnIds);
     }
+
+    @Override
+    public Long firstRowId() {
+        return dataFile.firstRowId();
+    }
 }

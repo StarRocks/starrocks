@@ -412,6 +412,8 @@ struct HdfsScannerContext {
     std::vector<SlotDescriptor*> not_existed_slots;
     std::vector<ExprContext*> conjunct_ctxs_of_non_existed_slots;
 
+    std::vector<SlotDescriptor*> reserved_field_slots;
+
     // other helper functions.
     bool can_use_dict_filter_on_slot(SlotDescriptor* slot) const;
     Status evaluate_on_conjunct_ctxs_by_slot(ChunkPtr* chunk, Filter* filter);
@@ -499,6 +501,9 @@ protected:
     std::shared_ptr<io::CacheInputStream> _cache_input_stream = nullptr;
     std::shared_ptr<io::SharedBufferedInputStream> _shared_buffered_input_stream = nullptr;
     int64_t _total_running_time = 0;
+
+public:
+    static constexpr const std::string ICEBERG_ROW_ID = "_row_id";
 };
 
 } // namespace starrocks
