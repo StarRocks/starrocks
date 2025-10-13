@@ -163,6 +163,12 @@ public class FoldConstantsRule extends BottomUpScalarOperatorRewriteRule {
             com.starrocks.catalog.Function fn =
                     Expr.getBuiltinFunction(opName, new Type[] {lhs.getType(), rhs.getType()},
                             com.starrocks.catalog.Function.CompareMode.IS_SUPERTYPE_OF);
+            // for decimal types, add function should be rectified.
+            if (call.getType().isDecimalV3()) {
+                Type type = call.getType();
+                fn = new ScalarFunction(fn.getFunctionName(), new Type[] {type, type}, type, fn.hasVarArgs());
+            }
+
             CallOperator addition =
                     new CallOperator(ArithmeticExpr.Operator.ADD.getName(), lhs.getType(), List.of(lhs, rhs), fn);
             ScalarOperator result = addition.accept(this, new ScalarOperatorRewriteContext());
@@ -181,7 +187,7 @@ public class FoldConstantsRule extends BottomUpScalarOperatorRewriteRule {
             BinaryPredicateOperator cmp =
                     lessThan ? BinaryPredicateOperator.lt(lhs, rhs) : BinaryPredicateOperator.gt(lhs, rhs);
             ScalarOperator result = cmp.accept(this, new ScalarOperatorRewriteContext());
-            if (result.isConstant() && result.getType().isBoolean()) {
+            if (result.isConstantRef() && result.getType().isBoolean()) {
                 return ((ConstantOperator) result).getBoolean() ? -1 : 1;
             } else {
                 throw new IllegalArgumentException();
@@ -233,7 +239,7 @@ public class FoldConstantsRule extends BottomUpScalarOperatorRewriteRule {
                 new CallOperator(opName, call.getType(), List.of(sum, length), fn);
         ScalarOperatorRewriter rewriter = new ScalarOperatorRewriter();
         ScalarOperator result = rewriter.rewrite(avg, ScalarOperatorRewriter.DEFAULT_REWRITE_RULES);
-        if (result.isConstant()) {
+        if (result.isConstantRef()) {
             return Optional.of(result);
         } else {
             return Optional.empty();
