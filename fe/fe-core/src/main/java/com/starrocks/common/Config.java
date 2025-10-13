@@ -2859,6 +2859,9 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true)
     public static int starmgr_grpc_timeout_seconds = 5;
 
+    @ConfField(mutable = true, comment = "Number of threads for handling gRPC server I/O")
+    public static int starmgr_grpc_server_max_worker_threads = 1024;
+
     @ConfField(mutable = true)
     public static int star_client_read_timeout_seconds = 15;
 

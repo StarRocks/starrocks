@@ -20,6 +20,7 @@ import com.staros.manager.StarManager;
 import com.staros.manager.StarManagerServer;
 import com.staros.metrics.MetricsSystem;
 import com.starrocks.common.Config;
+import com.starrocks.common.ThreadPoolManager;
 import com.starrocks.ha.FrontendNodeType;
 import com.starrocks.ha.StateChangeExecution;
 import com.starrocks.journal.CheckpointWorker;
@@ -43,6 +44,7 @@ import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.IOException;
+import java.util.concurrent.ThreadPoolExecutor;
 
 public class StarMgrServer {
     public static final String IMAGE_SUBDIR = "/starmgr"; // do not change this string!
@@ -90,6 +92,7 @@ public class StarMgrServer {
 
     private StarManagerServer starMgrServer;
     private StarOSBDBJEJournalSystem journalSystem;
+    private ThreadPoolExecutor grpcExecutor;
 
     public StarMgrServer() {
         execution = new StateChangeExecution() {
@@ -151,6 +154,10 @@ public class StarMgrServer {
         com.staros.util.Config.BALANCE_WORKER_SHARDS_THRESHOLD_IN_PERCENT = Config.lake_balance_tablets_threshold;
         com.staros.util.Config.SHARD_DEAD_REPLICA_EXPIRE_SECS = (int) Config.tablet_sched_be_down_tolerate_time_s;
 
+        grpcExecutor = ThreadPoolManager.newDaemonFixedThreadPool(Config.starmgr_grpc_server_max_worker_threads,
+                        Integer.MAX_VALUE, "starmgr-grpc-default-executor", true);
+        grpcExecutor.allowCoreThreadTimeOut(true);
+
         // sync the mutable configVar to StarMgr in case any changes
         GlobalStateMgr.getCurrentState().getConfigRefreshDaemon().registerListener(() -> {
             com.staros.util.Config.DISABLE_BACKGROUND_SHARD_SCHEDULE_CHECK = Config.tablet_sched_disable_balance;
@@ -160,6 +167,7 @@ public class StarMgrServer {
             com.staros.util.Config.ENABLE_BALANCE_SHARD_NUM_BETWEEN_WORKERS = Config.lake_enable_balance_tablets_between_workers;
             com.staros.util.Config.BALANCE_WORKER_SHARDS_THRESHOLD_IN_PERCENT = Config.lake_balance_tablets_threshold;
             com.staros.util.Config.SHARD_DEAD_REPLICA_EXPIRE_SECS = (int) Config.tablet_sched_be_down_tolerate_time_s;
+            ThreadPoolManager.setFixedThreadPoolSize(grpcExecutor, Config.starmgr_grpc_server_max_worker_threads);
         });
         // set the following config, in order to provide a customized worker group definition
         // com.staros.util.Config.RESOURCE_MANAGER_WORKER_GROUP_SPEC_RESOURCE_FILE = "";
@@ -176,7 +184,7 @@ public class StarMgrServer {
 
         // start rpc server
         starMgrServer = new StarManagerServer(journalSystem);
-        starMgrServer.start(FrontendOptions.getLocalHostAddress(), com.staros.util.Config.STARMGR_RPC_PORT, null);
+        starMgrServer.start(FrontendOptions.getLocalHostAddress(), com.staros.util.Config.STARMGR_RPC_PORT, grpcExecutor);
 
         StarOSAgent starOsAgent = GlobalStateMgr.getCurrentState().getStarOSAgent();
         if (starOsAgent != null && !starOsAgent.init(starMgrServer)) {
