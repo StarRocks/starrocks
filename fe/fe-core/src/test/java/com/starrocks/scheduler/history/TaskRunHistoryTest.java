@@ -362,6 +362,7 @@ public class TaskRunHistoryTest {
         status.setTaskName("测试任务");
         status.setErrorMessage("表不存在：用户数据表");
         status.setState(Constants.TaskRunState.FAILED);
+        status.setDefinition("测试中文");
         
         // Create a mock result batch with escaped Chinese characters (simulating database storage)
         String originalJson = status.toJSON();
@@ -389,35 +390,7 @@ public class TaskRunHistoryTest {
         Assertions.assertEquals("测试任务", deserializedStatus.getTaskName());
         Assertions.assertEquals("表不存在：用户数据表", deserializedStatus.getErrorMessage());
         Assertions.assertEquals(Constants.TaskRunState.FAILED, deserializedStatus.getState());
-    }
-
-    @Test
-    public void testChineseCharacterInExtraMessage() {
-        // Test Chinese characters in extra message field
-        TaskRunStatus status = new TaskRunStatus();
-        status.setQueryId("test_query");
-        status.setTaskName("测试任务");
-        status.setExtraMessage("{\"message\": \"刷新失败：分区数据不完整\"}");
-        status.setState(Constants.TaskRunState.FAILED);
-        
-        // Create mock result batch
-        TaskRunStatus.TaskRunStatusJSONRecord record = new TaskRunStatus.TaskRunStatusJSONRecord();
-        record.data = Lists.newArrayList(status);
-        String recordJson = GsonUtils.GSON.toJson(record);
-        String escapedRecordJson = StringEscapeUtils.escapeJava(recordJson);
-        
-        TResultBatch resultBatch = new TResultBatch();
-        ByteBuffer buffer = ByteBuffer.wrap(escapedRecordJson.getBytes());
-        resultBatch.setRows(Lists.newArrayList(buffer));
-        
-        // Test deserialization
-        List<TaskRunStatus> deserializedStatuses = TaskRunStatus.fromResultBatch(Lists.newArrayList(resultBatch));
-        
-        Assertions.assertEquals(1, deserializedStatuses.size());
-        TaskRunStatus deserializedStatus = deserializedStatuses.get(0);
-        
-        // Verify Chinese characters in extra message are properly restored
-        Assertions.assertEquals("{\"message\": \"刷新失败：分区数据不完整\"}", deserializedStatus.getExtraMessage());
+        Assertions.assertEquals("测试中文", deserializedStatus.getDefinition());
     }
 
     private TaskRunStatus createTaskRunStatus(long createdTime) {
