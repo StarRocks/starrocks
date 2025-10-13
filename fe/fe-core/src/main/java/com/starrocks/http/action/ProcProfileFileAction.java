@@ -38,7 +38,7 @@ import java.nio.charset.StandardCharsets;
 
 public class ProcProfileFileAction extends WebBaseAction {
     private static final Logger LOG = LogManager.getLogger(ProcProfileFileAction.class);
-    
+
     private static final String CPU_FILE_NAME_PREFIX = "cpu-profile-";
     private static final String MEM_FILE_NAME_PREFIX = "mem-profile-";
     private static final Pattern INSECURE_FILENAME = Pattern.compile(".*[<>&\"].*");
@@ -54,7 +54,7 @@ public class ProcProfileFileAction extends WebBaseAction {
     @Override
     public void executeGet(BaseRequest request, BaseResponse response) {
         String filename = request.getSingleParameter("filename");
-        
+
         if (Strings.isNullOrEmpty(filename)) {
             LOG.error("Missing filename parameter");
             writeResponse(request, response, HttpResponseStatus.BAD_REQUEST);
@@ -70,7 +70,7 @@ public class ProcProfileFileAction extends WebBaseAction {
 
         String profileLogDir = Config.sys_log_dir + "/proc_profile";
         File profileFile = new File(profileLogDir, filename);
-        
+
         if (!profileFile.exists() || !profileFile.isFile()) {
             LOG.error("Profile file not found: {}", profileFile.getAbsolutePath());
             writeResponse(request, response, HttpResponseStatus.NOT_FOUND);
@@ -88,7 +88,7 @@ public class ProcProfileFileAction extends WebBaseAction {
             response.updateHeader(HttpHeaderNames.CONTENT_TYPE.toString(), "text/html; charset=utf-8");
             response.appendContent(htmlContent);
             writeResponse(request, response);
-            
+
         } catch (Exception e) {
             LOG.error("Error serving profile file: {}", filename, e);
             writeResponse(request, response, HttpResponseStatus.INTERNAL_SERVER_ERROR);
@@ -125,8 +125,8 @@ public class ProcProfileFileAction extends WebBaseAction {
 
     private String extractHtmlFromTarGz(File tarGzFile) throws IOException {
         try (FileInputStream fis = new FileInputStream(tarGzFile);
-             GzipCompressorInputStream gzis = new GzipCompressorInputStream(fis);
-             TarArchiveInputStream tis = new TarArchiveInputStream(gzis)) {
+                GzipCompressorInputStream gzis = new GzipCompressorInputStream(fis);
+                TarArchiveInputStream tis = new TarArchiveInputStream(gzis)) {
 
             TarArchiveEntry entry;
             while ((entry = tis.getNextTarEntry()) != null) {
@@ -142,7 +142,7 @@ public class ProcProfileFileAction extends WebBaseAction {
                 }
             }
         }
-        
+
         return null;
     }
 }
