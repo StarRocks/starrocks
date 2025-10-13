@@ -53,3 +53,201 @@ select c0, sum(c1), max(c2), count(1) from t0 group by c0 order by c0;
 select c0, c1, sum(c1) from t0 group by c0, c1 order by c0, c1;
 select c0 from t1 group by c0 order by c0;
 select c0, c1 from t1 group by c0, c1 order by c0, c1;
+-- Enhanced tests with more data types and multi-column scenarios
+
+-- Test with DECIMAL data type
+create table t3(
+    c0 INT,
+    c1 DECIMAL(10,2),
+    c2 DECIMAL(15,3),
+    c3 STRING
+) DUPLICATE KEY(c0, c1) DISTRIBUTED BY HASH(c0) BUCKETS 3 PROPERTIES('replication_num' = '1');
+
+insert into t3 values(1, 100.50, 1000.123, 'type1');
+insert into t3 values(1, 200.75, 2000.456, 'type2');
+insert into t3 values(1, 100.50, 1000.123, 'type1');
+insert into t3 values(2, 300.25, 3000.789, 'type3');
+insert into t3 values(2, 400.00, 4000.000, 'type4');
+insert into t3 values(3, 500.99, 5000.999, 'type5');
+insert into t3 values(3, 500.99, 5000.999, 'type5');
+
+-- Test DECIMAL aggregation with multi-column grouping
+select c0, c1, sum(c2), count(*) from t3 group by c0, c1 order by c0, c1;
+select c0, sum(c1), avg(c2), max(c3), count(*) from t3 group by c0 order by c0;
+select c0, c1, c2, count(*) from t3 group by c0, c1, c2 order by c0, c1, c2;
+
+-- Test with DATETIME data type
+create table t4(
+    c0 INT,
+    c1 DATETIME,
+    c2 DATE,
+    c3 STRING
+) DUPLICATE KEY(c0) DISTRIBUTED BY HASH(c0) BUCKETS 2 PROPERTIES('replication_num' = '1');
+
+insert into t4 values(1, '2023-01-01 10:00:00', '2023-01-01', 'batch1');
+insert into t4 values(1, '2023-01-01 10:00:00', '2023-01-01', 'batch1');
+insert into t4 values(1, '2023-01-02 11:00:00', '2023-01-02', 'batch2');
+insert into t4 values(2, '2023-01-03 12:00:00', '2023-01-03', 'batch3');
+insert into t4 values(2, '2023-01-03 12:00:00', '2023-01-03', 'batch3');
+insert into t4 values(3, '2023-01-04 13:00:00', '2023-01-04', 'batch4');
+
+-- Test DATETIME aggregation
+select c0, c1, count(*) from t4 group by c0, c1 order by c0, c1;
+select c0, c2, count(*), max(c3) from t4 group by c0, c2 order by c0, c2;
+select c0, min(c1), max(c1), count(*) from t4 group by c0 order by c0;
+
+-- Test with BOOLEAN data type
+create table t5(
+    c0 INT,
+    c1 BOOLEAN,
+    c2 BOOLEAN,
+    c3 STRING
+) DUPLICATE KEY(c0) DISTRIBUTED BY HASH(c0) BUCKETS 2 PROPERTIES('replication_num' = '1');
+
+insert into t5 values(1, true, false, 'status1');
+insert into t5 values(1, true, true, 'status2');
+insert into t5 values(1, false, false, 'status3');
+insert into t5 values(2, true, false, 'status4');
+insert into t5 values(2, false, true, 'status5');
+insert into t5 values(3, true, true, 'status6');
+
+-- Test BOOLEAN aggregation
+select c0, c1, count(*) from t5 group by c0, c1 order by c0, c1;
+select c0, c1, c2, count(*) from t5 group by c0, c1, c2 order by c0, c1, c2;
+select c0, sum(case when c1 then 1 else 0 end) as true_count, count(*) from t5 group by c0 order by c0;
+
+-- Test with FLOAT and DOUBLE data types
+create table t6(
+    c0 INT,
+    c1 FLOAT,
+    c2 DOUBLE,
+    c3 STRING
+) DUPLICATE KEY(c0) DISTRIBUTED BY HASH(c0) BUCKETS 3 PROPERTIES('replication_num' = '1');
+
+insert into t6 values(1, 1.5, 1.123456789, 'float1');
+insert into t6 values(1, 2.5, 2.234567890, 'float2');
+insert into t6 values(1, 1.5, 1.123456789, 'float1');
+insert into t6 values(2, 3.5, 3.345678901, 'float3');
+insert into t6 values(2, 4.5, 4.456789012, 'float4');
+insert into t6 values(3, 5.5, 5.567890123, 'float5');
+
+-- Test FLOAT/DOUBLE aggregation
+select c0, c1, sum(c2), count(*) from t6 group by c0, c1 order by c0, c1;
+select c0, avg(c1), avg(c2), count(*) from t6 group by c0 order by c0;
+select c0, c1, c2, count(*) from t6 group by c0, c1, c2 order by c0, c1, c2;
+
+-- Test with LARGEINT data type
+create table t7(
+    c0 INT,
+    c1 LARGEINT,
+    c2 STRING
+) DUPLICATE KEY(c0, c1) DISTRIBUTED BY HASH(c0) BUCKETS 2 PROPERTIES('replication_num' = '1');
+
+insert into t7 values(1, 9223372036854775807, 'large1');
+insert into t7 values(1, 9223372036854775806, 'large2');
+insert into t7 values(1, 9223372036854775807, 'large1');
+insert into t7 values(2, 9223372036854775805, 'large3');
+insert into t7 values(2, 9223372036854775804, 'large4');
+insert into t7 values(3, 9223372036854775803, 'large5');
+
+-- Test LARGEINT aggregation
+select c0, c1, count(*) from t7 group by c0, c1 order by c0, c1;
+select c0, sum(c1), count(*) from t7 group by c0 order by c0;
+select c0, c1, max(c2), count(*) from t7 group by c0, c1 order by c0, c1;
+
+-- Test with VARCHAR data type
+create table t8(
+    c0 INT,
+    c1 VARCHAR(50),
+    c2 VARCHAR(100),
+    c3 STRING
+) DUPLICATE KEY(c0, c1) DISTRIBUTED BY HASH(c0) BUCKETS 3 PROPERTIES('replication_num' = '1');
+
+insert into t8 values(1, 'varchar1', 'longer_varchar1', 'string1');
+insert into t8 values(1, 'varchar2', 'longer_varchar2', 'string2');
+insert into t8 values(1, 'varchar1', 'longer_varchar1', 'string1');
+insert into t8 values(2, 'varchar3', 'longer_varchar3', 'string3');
+insert into t8 values(2, 'varchar4', 'longer_varchar4', 'string4');
+insert into t8 values(3, 'varchar5', 'longer_varchar5', 'string5');
+
+-- Test VARCHAR aggregation
+select c0, c1, count(*) from t8 group by c0, c1 order by c0, c1;
+select c0, c1, c2, count(*) from t8 group by c0, c1, c2 order by c0, c1, c2;
+select c0, max(c1), max(c2), count(*) from t8 group by c0 order by c0;
+
+-- Test complex multi-column grouping scenarios
+create table t9(
+    c1 STRING,
+    c0 INT,
+    c2 DECIMAL(10,2),
+    c3 DATETIME,
+    c4 BOOLEAN
+) DUPLICATE KEY(c1, c0) DISTRIBUTED BY HASH(c1) BUCKETS 3 PROPERTIES('replication_num' = '1');
+
+insert into t9 values('group1', 1, 100.50, '2023-01-01 10:00:00', true);
+insert into t9 values('group1', 1, 100.50, '2023-01-01 10:00:00', true);
+insert into t9 values('group1', 1, 200.75, '2023-01-01 11:00:00', false);
+insert into t9 values('group2', 1, 300.25, '2023-01-02 10:00:00', true);
+insert into t9 values('group3', 2, 400.00, '2023-01-03 10:00:00', false);
+insert into t9 values('group3', 2, 500.99, '2023-01-03 11:00:00', true);
+insert into t9 values('group4', 3, 600.50, '2023-01-04 10:00:00', true);
+
+-- Test complex multi-column grouping
+select c1, c0, c2, count(*) from t9 group by c1, c0, c2 order by c1, c0, c2;
+select c1, c0, sum(c2), count(*) from t9 group by c1, c0 order by c1, c0;
+select c1, c0, c2, c3, count(*) from t9 group by c1, c0, c2, c3 order by c1, c0, c2, c3;
+select c1, c0, c2, c4, count(*) from t9 group by c1, c0, c2, c4 order by c1, c0, c2, c4;
+
+-- Test with NULL values in multiple columns
+create table t10(
+    c1 STRING NULL,
+    c0 INT NULL,
+    c2 DECIMAL(10,2) NULL,
+    c3 DATETIME NULL
+) DUPLICATE KEY(c1, c0) DISTRIBUTED BY HASH(c1) BUCKETS 2 PROPERTIES('replication_num' = '1');
+
+insert into t10 values('valid1', 1, 100.50, '2023-01-01 10:00:00');
+insert into t10 values(null, 1, 200.75, '2023-01-01 11:00:00');
+insert into t10 values('valid1', 1, null, '2023-01-01 12:00:00');
+insert into t10 values('valid1', 1, 100.50, null);
+insert into t10 values('valid2', null, 300.25, '2023-01-02 10:00:00');
+insert into t10 values('valid3', 2, null, null);
+insert into t10 values(null, null, null, null);
+
+-- Test NULL handling in multi-column grouping
+select c1, c0, count(*) from t10 group by c1, c0 order by c1, c0;
+select c1, c0, c2, count(*) from t10 group by c1, c0, c2 order by c1, c0, c2;
+select c1, c0, c2, c3, count(*) from t10 group by c1, c0, c2, c3 order by c1, c0, c2, c3;
+
+-- Test edge cases with empty groups and single values
+create table t11(
+    c0 INT,
+    c1 STRING,
+    c2 INT
+) DUPLICATE KEY(c0) DISTRIBUTED BY HASH(c0) BUCKETS 2 PROPERTIES('replication_num' = '1');
+
+insert into t11 values(1, 'single1', 100);
+insert into t11 values(2, 'single2', 200);
+insert into t11 values(3, 'single3', 300);
+
+-- Test single value groups
+select c0, c1, c2, count(*) from t11 group by c0, c1, c2 order by c0, c1, c2;
+select c0, sum(c2), count(*) from t11 group by c0 order by c0;
+select c0, c1, sum(c2), count(*) from t11 group by c0, c1 order by c0, c1;
+
+
+CREATE TABLE `large_table` (
+  `c0` bigint DEFAULT NULL,
+  `c1` bigint DEFAULT NULL,
+  `c2` bigint DEFAULT NULL
+) ENGINE=OLAP
+DUPLICATE KEY(`c0`)
+COMMENT "OLAP"
+DISTRIBUTED BY HASH(`c0`) BUCKETS 48
+PROPERTIES (
+"replication_num" = "1"
+);
+insert into large_table SELECT generate_series, 4096 - generate_series, generate_series FROM TABLE(generate_series(1,  40960));
+insert into large_table SELECT c0,c1,c2 from large_table, UNNEST([1,2]);
+create table dummy as select max(c1)from large_table group by c0;
+select count(*) from dummy;
