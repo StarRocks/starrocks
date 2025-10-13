@@ -86,6 +86,33 @@ find "${UDF_RUNTIME_DIR}" -maxdepth 1 -name 'pyworker*' -print0 | while IFS= rea
 done
 
 
+# Stop profile collection daemon first
+profile_pidfile=$STARROCKS_HOME/bin/collect_be_profile.pid
+if [ -f $profile_pidfile ]; then
+    profile_pid=`cat $profile_pidfile`
+    if kill -0 $profile_pid > /dev/null 2>&1; then
+        echo "Stopping profile collection daemon (PID: $profile_pid)..."
+        kill -TERM $profile_pid > /dev/null 2>&1
+        
+        # Wait up to 10 seconds for graceful shutdown
+        start_ts=$(date +%s)
+        while kill -0 $profile_pid > /dev/null 2>&1; do
+            if [ $(($(date +%s) - $start_ts)) -gt 10 ]; then
+                echo "Profile daemon graceful shutdown timeout, forcing termination..."
+                kill -9 $profile_pid > /dev/null 2>&1
+                break
+            else
+                sleep 1
+            fi
+        done
+        
+        rm -f $profile_pidfile
+        echo "Profile collection daemon stopped"
+    else
+        rm -f $profile_pidfile
+    fi
+fi
+
 if [ -f $pidfile ]; then
     pid=`cat $pidfile`
     pidcomm=`ps -p $pid -o comm=`

@@ -211,6 +211,14 @@ void mem_usage_handler(MemTracker* mem_tracker, const WebPageHandler::ArgumentMa
     (*output) << stats << "</pre>";
 }
 
+void proc_profile_handler(const WebPageHandler::ArgumentMap& args, std::stringstream* output) {
+    (*output) << "<h2>Process Profiles</h2>";
+    (*output) << "<p>This page displays collected CPU and contention profiles from BRPC.</p>";
+    (*output) << "<p>To collect profiles, use the <code>collect_be_profile.sh</code> script.</p>";
+    (*output) << "<p>Profiles are stored in: <code>" << config::sys_log_dir << "/proc_profile</code></p>";
+    (*output) << "<p><a href=\"/proc_profile\" class=\"btn btn-primary\">View Profile Files</a></p>";
+}
+
 void add_default_path_handlers(WebPageHandler* web_page_handler, MemTracker* process_mem_tracker) {
     // TODO(yingchun): logs_handler is not implemented yet, so not show it on navigate bar
     web_page_handler->register_page("/logs", "Logs", logs_handler, false /* is_on_nav_bar */);
@@ -229,6 +237,7 @@ void add_default_path_handlers(WebPageHandler* web_page_handler, MemTracker* pro
                                                         std::forward<decltype(PH2)>(PH2));
             },
             true);
+    web_page_handler->register_page("/proc_profile", "Proc Profiles", proc_profile_handler, true /* is_on_nav_bar */);
 }
 
 } // namespace starrocks

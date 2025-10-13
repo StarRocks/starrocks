@@ -227,6 +227,15 @@ echo "Run with JEMALLOC_CONF: '$JEMALLOC_CONF'"
 
 if [ ${RUN_DAEMON} -eq 1 ]; then
     nohup ${START_BE_CMD} "$@" </dev/null &
+    BE_PID=$!
+    echo $BE_PID > $pidfile
+    
+    # Start profile collection daemon for BE
+    if [ ${RUN_BE} -eq 1 ]; then
+        echo "Starting profile collection daemon..."
+        nohup ${STARROCKS_HOME}/bin/collect_be_profile.sh --daemon --both --duration 120 --interval 3600 >> ${LOG_DIR}/collect_be_profile.log 2>&1 &
+        echo "Profile collection daemon started"
+    fi
 else
     exec ${START_BE_CMD} "$@" </dev/null
 fi
