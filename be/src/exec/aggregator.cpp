@@ -106,7 +106,7 @@ bool AggFunctionTypes::is_result_nullable() const {
     if constexpr (UseIntermediateAsOutput) {
         // If using intermediate results as output, no output will be generated and only the input will be serialized.
         // Therefore, only judge whether the input is nullable to decide whether to serialize null data.
-        return has_nullable_child;
+        return has_nullable_child || serialize_always_nullable;
     } else {
         // `is_nullable` means whether the output MAY be nullable. It will be false only when the output is always non-nullable.
         // Therefore, we need to decide whether the output is really nullable case by case:
@@ -232,6 +232,7 @@ void AggregatorParams::init() {
                     ALWAYS_NULLABLE_RESULT_AGG_FUNCS.contains(fn.name.function_name);
             if (fn.__isset.agg_state_desc && AggStateUtils::is_agg_state_if(fn.name.function_name)) {
                 agg_fn_types[i].is_always_nullable_result = true;
+                agg_fn_types[i].serialize_always_nullable = true;
             }
             if (fn.name.function_name == "array_agg" || fn.name.function_name == "group_concat") {
                 // set order by info
