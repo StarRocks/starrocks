@@ -35,7 +35,7 @@ public class ProcProfileAction extends WebBaseAction {
 
     private static final String CPU_FILE_NAME_PREFIX = "cpu-profile-";
     private static final String MEM_FILE_NAME_PREFIX = "mem-profile-";
-    private static final SimpleDateFormat profileTimeFormat = new SimpleDateFormat("yyyyMMdd-HHmmss");
+    private static final SimpleDateFormat PROFILE_TIME_FORMAT = new SimpleDateFormat("yyyyMMdd-HHmmss");
 
     public ProcProfileAction(ActionController controller) {
         super(controller);
@@ -96,7 +96,7 @@ public class ProcProfileAction extends WebBaseAction {
                     String timePart = getTimePart(fileName);
                     if (timePart != null) {
                         try {
-                            Date timestamp = profileTimeFormat.parse(timePart);
+                            Date timestamp = PROFILE_TIME_FORMAT.parse(timePart);
                             profileFiles.add(new ProfileFileInfo(
                                     profileType,
                                     timestamp,
