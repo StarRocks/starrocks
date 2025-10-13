@@ -142,6 +142,7 @@ struct AggFunctionTypes {
 
     bool is_distinct = false;
     bool is_always_nullable_result = false;
+    bool serialize_always_nullable = false;
 
     template <bool UseIntermediateAsOutput>
     bool is_result_nullable() const;

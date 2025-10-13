@@ -1,0 +1,293 @@
+-- name: test_agg_state_if_all_functions
+CREATE TABLE t1 ( 
+k1  date, 
+c0 boolean,
+c1 tinyint(4),
+c2 smallint(6),
+c3 int(11),
+c4 bigint(20),
+c5 largeint(40),
+c6 double,
+c7 float,
+c8 decimal(10, 2),
+c9 char(100),
+c10 date,
+c11 datetime,
+c12 array<boolean>,
+c13 array<tinyint(4)>,
+c14 array<smallint(6)>,
+c15 array<int(11)>,
+c16 array<bigint(20)>,
+c17 array<largeint(40)>,
+c18 array<double>,
+c19 array<float>,
+c20 array<DECIMAL64(10,2)>,
+c21 array<char(100)>,
+c22 array<date>,
+c23 array<datetime>,
+c24 varchar(100),
+c25 json,
+c26 varbinary,
+c27 map<varchar(1048576),varchar(1048576)>,
+c28 struct<col1 array<varchar(1048576)>>,
+c29 array<varchar(100)>) DUPLICATE KEY(k1) 
+DISTRIBUTED BY HASH(k1) 
+PROPERTIES (  "replication_num" = "1");
+-- result:
+-- !result
+INSERT INTO t1 VALUES 
+(
+  '2024-01-01',                    -- k1
+  TRUE,                            -- c0
+  127,                             -- c1
+  32000,                           -- c2
+  2147483647,                      -- c3
+  9223372036854775807,             -- c4
+  170141183460469231731687303715884105727,  -- c5 (example large integer)
+  12345.6789,                      -- c6
+  12345.67,                        -- c7
+  123.45678901,                    -- c8
+  'ExampleCharData',               -- c9
+  '2024-01-02',                    -- c10
+  '2024-01-01 12:34:56',           -- c11
+  [TRUE, FALSE, TRUE],        -- c15 (<boolean>)
+  [1, -1, 127],               -- c16 (<tinyint>)
+  [100, -100, 32767],         -- c17 (<smallint>)
+  [100000, -100000, 2147483647], -- c18 (<int>)
+  [10000000000, -10000000000, 9223372036854775807], -- c19 (<bigint>)
+  [12345678901234567890, -12345678901234567890, 170141183460469231731687303715884105727], -- c20 (<largeint>)
+  [1.23, 4.56, 7.89],         -- c21 (<double>)
+  [1.23, 4.56, 7.89],         -- c22 (<float>)
+  [1.23456789, 2.34567890, 3.45678901], -- c23 (<decimal(10,8)>)
+  ['abc', 'def', 'ghi'],      -- c24 (<char(100)>)
+  ['2024-01-01', '2024-01-02'], -- c25 (<date>)
+  ['2024-01-01 12:34:56', '2024-01-02 12:34:56'], -- c26 (<datetime>)
+  'ExampleVarcharData',            -- c12
+  '{"key": "value"}',              -- c13 (JSON data)
+  x'4D7956617262696E61727944617461', -- c14 (VARBINARY data in hexadecimal format)
+  MAP{'key1':'value1', 'key2':'value2'}, -- c27 (map<varchar, varchar>)
+  row('val1'),    -- c28 (struct<col1 <varchar(1048576)>>)
+  ['str1', 'str2', 'str3']    -- c29 (<varchar(100)>)
+);
+-- result:
+-- !result
+select min_by_if(c6, c1, c0), max_by_if(c8, c10, c0), min_by_if(c25, c4, c0), min_by_if(c7, c24, c0), multi_distinct_count_if(c6, c0), max_by_if(c11, c3, c0), ndv_if(c24, c0), covar_pop_if(c2, c2, c0), min_if(c2, c0), min_by_if(c24, c7, c0), max_by_if(c6, c0, c0), variance_pop_if(c6, c0), corr_if(c3, c3, c0), min_by_if(c5, c4, c0), bitmap_union_int_if(c1, c0), max_by_if(c24, c7, c0), max_by_if(c2, c8, c0), min_by_if(c8, c10, c0), array_unique_agg_if(c17, c0), max_by_if(c4, c6, c0), ndv_if(c7, c0), percentile_disc_if(c2, 0.5, c0), max_by_if(c25, c4, c0), array_unique_agg_if(c22, c0), ds_theta_count_distinct_if(c1, c0), min_by_if(c1, c1, c0), min_by_if(c3, c6, c0), max_by_if(c0, c11, c0), approx_count_distinct_if(c2, c0), max_by_if(c5, c3, c0), stddev_pop_if(c3, c0), max_by_if(c10, c6, c0), min_by_if(c10, c2, c0), array_agg_distinct_if(c2, c0), min_by_if(c8, c6, c0), var_pop_if(c2, c0), stddev_samp_if(c1, c0), max_by_if(c2, c11, c0), max_by_if(c8, c5, c0), max_by_if(c24, c11, c0), max_by_if(c0, c3, c0), min_by_if(c1, c8, c0), min_by_if(c5, c0, c0), max_by_if(c6, c4, c0), min_by_if(c4, c7, c0), variance_if(c6, c0), covar_pop_if(c1, c1, c0), min_by_if(c5, c24, c0), min_by_if(c11, c11, c0), count_if(c0, c0), approx_count_distinct_if(c11, c0), any_value_if(c7, c0), count_if(c4, c0), max_by_if(c1, c7, c0), corr_if(c2, c2, c0), multi_distinct_count_if(c2, c0), any_value_if(c0, c0), ds_hll_count_distinct_if(c10, 18, 'hll_6', c0), ds_hll_count_distinct_if(c0, 18, 'hll_6', c0), percentile_disc_if(c4, 0.5, c0), min_by_if(c6, c5, c0), min_by_if(c3, c2, c0), min_by_if(c6, c8, c0), ds_hll_count_distinct_if(c24, 18, c0), count_if(c0), min_by_if(c25, c24, c0), max_by_if(c3, c5, c0), min_by_if(c6, c10, c0), std_if(c0, c0), min_by_if(c0, c0, c0), max_by_if(c10, c10, c0), min_by_if(c10, c6, c0), max_by_if(c10, c2, c0), ds_hll_count_distinct_if(c8, 18, c0), avg_if(c5, c0), max_by_if(c11, c11, c0), ds_theta_count_distinct_if(c5, c0), ds_theta_count_distinct_if(c8, c0), max_by_if(c11, c7, c0), multi_distinct_count_if(c11, c0), max_if(c3, c0), ds_hll_count_distinct_if(c3, 18, c0), variance_samp_if(c4, c0), bitmap_agg_if(c2, c0), max_by_if(c4, c11, c0), any_value_if(c3, c0), min_by_if(c24, c10, c0), min_by_if(c1, c5, c0), multi_distinct_sum_if(c5, c0), array_agg_distinct_if(c6, c0), max_by_if(c7, c5, c0), min_by_if(c5, c8, c0), count_if(c11, c0), max_by_if(c11, c24, c0), percentile_disc_if(c6, 0.5, c0), max_by_if(c7, c4, c0), array_unique_agg_if(c13, c0), ds_hll_count_distinct_if(c2, 18, 'hll_6', c0), ds_hll_count_distinct_if(c7, 18, c0), min_if(c11, c0), max_by_if(c8, c1, c0), count_if(c26, c0), max_by_if(c2, c1, c0), min_by_if(c25, c0, c0), ds_hll_count_distinct_if(c3, 18, 'hll_6', c0), min_by_if(c7, c6, c0), array_agg_distinct_if(c5, c0), min_by_if(c2, c1, c0), min_by_if(c5, c7, c0), corr_if(c5, c5, c0), min_by_if(c4, c0, c0), stddev_samp_if(c5, c0), sum_if(c7, c0), multi_distinct_count_if(c10, c0), max_by_if(c25, c1, c0), ds_theta_count_distinct_if(c4, c0), array_unique_agg_if(c14, c0), std_if(c7, c0), multi_distinct_sum_if(c6, c0), min_by_if(c3, c3, c0), min_by_if(c4, c10, c0), max_by_if(c11, c0, c0), percentile_cont_if(c6, 0.5, c0), var_pop_if(c6, c0), stddev_pop_if(c0, c0), count_if(c10, c0), max_by_if(c6, c8, c0), approx_count_distinct_if(c5, c0), stddev_pop_if(c7, c0), min_by_if(c24, c3, c0), avg_if(c1, c0), count_if(c27, c0), min_by_if(c11, c24, c0), max_by_if(c10, c3, c0), min_if(c6, c0), min_by_if(c0, c4, c0), max_by_if(c11, c6, c0), any_value_if(c25, c0), max_by_if(c8, c6, c0), max_by_if(c25, c8, c0), min_by_if(c24, c4, c0), max_by_if(c24, c0, c0), max_by_if(c7, c24, c0), var_pop_if(c1, c0), ndv_if(c3, c0), ds_theta_count_distinct_if(c24, c0), max_by_if(c6, c3, c0), min_by_if(c5, c1, c0), any_value_if(c26, c0), bitmap_union_int_if(c4, c0), any_value_if(c10, c0), approx_count_distinct_if(c6, c0), max_by_if(c5, c7, c0), corr_if(c4, c4, c0), percentile_approx_weighted_if(c6, 1, 0.5, c0), var_samp_if(c4, c0), max_by_if(c1, c0, c0), min_by_if(c3, c24, c0), min_by_if(c1, c0, c0), min_by_if(c8, c7, c0), ds_hll_count_distinct_if(c6, 18, 'hll_6', c0), stddev_samp_if(c0, c0), min_by_if(c2, c2, c0), percentile_disc_if(c0, 0.5, c0), max_by_if(c4, c5, c0), covar_pop_if(c0, c0, c0), ds_hll_count_distinct_if(c11, 18, 'hll_6', c0), min_by_if(c11, c3, c0), stddev_if(c6, c0), min_by_if(c7, c5, c0), min_by_if(c0, c11, c0), any_value_if(c8, c0), sum_if(c6, c0), max_by_if(c1, c10, c0), min_by_if(c0, c10, c0), min_by_if(c11, c2, c0), variance_pop_if(c5, c0), stddev_pop_if(c4, c0), variance_samp_if(c5, c0), min_if(c3, c0), ds_hll_count_distinct_if(c7, 18, 'hll_6', c0), min_by_if(c3, c7, c0), approx_count_distinct_if(c1, c0), max_by_if(c8, c8, c0), bitmap_union_int_if(c2, c0), ndv_if(c11, c0), max_by_if(c8, c11, c0), min_by_if(c25, c5, c0), ds_hll_count_distinct_if(c4, 18, c0), ds_hll_count_distinct_if(c8, 18, 'hll_6', c0), min_by_if(c6, c11, c0), stddev_if(c7, c0), mann_whitney_u_test_if(c6, c0, 'two-sided', 0, c0), count_if(c1, c0), max_by_if(c25, c5, c0), covar_pop_if(c6, c6, c0), min_by_if(c4, c6, c0), min_by_if(c6, c2, c0), max_by_if(c3, c6, c0), max_by_if(c2, c24, c0), min_by_if(c1, c10, c0), corr_if(c0, c0, c0), min_if(c1, c0), max_by_if(c25, c7, c0), stddev_pop_if(c6, c0), max_if(c2, c0), max_by_if(c2, c7, c0), count_if(c3, c0), max_by_if(c2, c10, c0), covar_samp_if(c5, c5, c0), percentile_disc_if(c9, 0.5, c0), max_by_if(c24, c10, c0), std_if(c1, c0), min_by_if(c7, c1, c0), approx_count_distinct_if(c24, c0), max_by_if(c5, c0, c0), max_by_if(c3, c4, c0), max_by_if(c7, c11, c0), min_by_if(c25, c3, c0), multi_distinct_count_if(c3, c0), max_by_if(c25, c3, c0), any_value_if(c6, c0), min_by_if(c11, c10, c0), ds_hll_count_distinct_if(c6, 18, c0), any_value_if(c11, c0), ndv_if(c2, c0), min_by_if(c2, c6, c0), max_by_if(c3, c24, c0), var_samp_if(c3, c0), min_if(c5, c0), stddev_pop_if(c2, c0), max_by_if(c24, c24, c0), max_by_if(c24, c4, c0), min_by_if(c25, c1, c0), max_by_if(c4, c7, c0), min_by_if(c7, c3, c0), min_by_if(c3, c5, c0), covar_pop_if(c5, c5, c0), max_by_if(c7, c0, c0), min_by_if(c24, c2, c0), std_if(c6, c0), max_by_if(c3, c8, c0), max_by_if(c5, c11, c0), covar_samp_if(c6, c6, c0), min_by_if(c8, c2, c0), min_by_if(c7, c11, c0), max_if(c0, c0), max_by_if(c2, c3, c0), percentile_disc_if(c7, 0.5, c0), max_by_if(c6, c1, c0), count_if(c25, c0), avg_if(c8, c0), max_by_if(c11, c4, c0), variance_pop_if(c1, c0), variance_samp_if(c7, c0), max_by_if(c2, c0, c0), stddev_if(c2, c0), max_by_if(c24, c2, c0), max_by_if(c25, c0, c0), count_if(c8, c0), min_if(c24, c0), ds_theta_count_distinct_if(c6, c0), max_by_if(c0, c6, c0), ds_hll_count_distinct_if(c11, 18, c0), max_by_if(c1, c4, c0), any_value_if(c28, c0), max_by_if(c8, c3, c0), variance_if(c3, c0), max_if(c7, c0), min_by_if(c0, c7, c0), min_if(c8, c0), ndv_if(c0, c0), covar_samp_if(c7, c7, c0), max_by_if(c5, c24, c0), covar_pop_if(c4, c4, c0), percentile_disc_if(c10, 0.5, c0), min_by_if(c24, c0, c0), max_by_if(c6, c6, c0), max_by_if(c10, c1, c0), min_by_if(c3, c10, c0), min_by_if(c2, c4, c0), max_by_if(c25, c24, c0), any_value_if(c4, c0), max_by_if(c0, c8, c0), min_by_if(c10, c10, c0), approx_count_distinct_if(c8, c0), variance_samp_if(c0, c0), variance_if(c1, c0), min_by_if(c3, c0, c0), min_by_if(c11, c7, c0), min_by_if(c4, c8, c0), min_by_if(c6, c7, c0), max_by_if(c3, c1, c0), std_if(c4, c0), max_by_if(c1, c2, c0), array_agg_distinct_if(c9, c0), sum_if(c3, c0), multi_distinct_sum_if(c2, c0), max_by_if(c7, c7, c0), max_by_if(c7, c2, c0), min_by_if(c8, c11, c0), percentile_disc_if(c8, 0.5, c0), min_by_if(c25, c8, c0), variance_pop_if(c3, c0), covar_pop_if(c3, c3, c0), max_by_if(c6, c11, c0), max_by_if(c2, c5, c0), bitmap_agg_if(c4, c0), max_by_if(c11, c2, c0), min_by_if(c4, c3, c0), var_samp_if(c1, c0), ds_theta_count_distinct_if(c11, c0), corr_if(c1, c1, c0), min_by_if(c1, c3, c0), approx_count_distinct_if(c3, c0), max_by_if(c0, c10, c0), min_by_if(c8, c4, c0), max_by_if(c4, c24, c0), var_pop_if(c4, c0), multi_distinct_count_if(c1, c0), percentile_disc_if(c11, 0.5, c0), stddev_samp_if(c3, c0), max_by_if(c0, c1, c0), max_by_if(c4, c2, c0), ds_hll_count_distinct_if(c1, 18, 'hll_6', c0), array_unique_agg_if(c20, c0), min_by_if(c6, c0, c0), min_by_if(c6, c24, c0), min_by_if(c7, c8, c0), min_by_if(c2, c10, c0), min_by_if(c11, c0, c0), max_by_if(c25, c6, c0), min_by_if(c10, c4, c0), count_if(c2, c0), count_if(c16, c0), min_by_if(c7, c10, c0), max_if(c1, c0), array_agg_distinct_if(c0, c0), min_by_if(c4, c5, c0), max_by_if(c8, c24, c0), percentile_disc_if(c3, 0.5, c0), var_samp_if(c6, c0), ndv_if(c5, c0), multi_distinct_sum_if(c0, c0), array_agg_distinct_if(c10, c0), array_unique_agg_if(c19, c0), ndv_if(c10, c0), min_by_if(c8, c8, c0), variance_samp_if(c6, c0), max_by_if(c4, c4, c0), sum_if(c1, c0), stddev_pop_if(c5, c0), max_by_if(c1, c11, c0), min_by_if(c7, c0, c0), avg_if(c3, c0), max_by_if(c6, c2, c0), max_by_if(c11, c5, c0), mann_whitney_u_test_if(c6, c0, 'less', c0), min_by_if(c3, c8, c0), min_if(c4, c0), min_by_if(c8, c24, c0), min_by_if(c0, c2, c0), min_by_if(c11, c1, c0), ds_hll_count_distinct_if(c5, 18, c0), min_by_if(c5, c2, c0), max_by_if(c3, c7, c0), min_by_if(c25, c6, c0), max_by_if(c8, c7, c0), var_pop_if(c0, c0), covar_samp_if(c1, c1, c0), ds_hll_count_distinct_if(c0, 18, c0), min_by_if(c2, c0, c0), max_by_if(c24, c5, c0), min_by_if(c1, c11, c0), approx_count_distinct_if(c4, c0), max_by_if(c11, c1, c0), max_by_if(c10, c8, c0), sum_if(c8, c0), array_agg_distinct_if(c4, c0), min_by_if(c7, c7, c0), multi_distinct_count_if(c8, c0), max_by_if(c5, c5, c0), percentile_disc_if(c1, 0.5, c0), multi_distinct_sum_if(c7, c0), stddev_if(c4, c0), min_by_if(c11, c5, c0), min_by_if(c2, c7, c0), any_value_if(c24, c0), max_by_if(c7, c3, c0), min_by_if(c10, c0, c0), max_if(c10, c0), max_by_if(c7, c10, c0), min_by_if(c4, c1, c0), bitmap_union_int_if(c3, c0), count_if(c28, c0), covar_samp_if(c2, c2, c0), min_by_if(c0, c6, c0), array_unique_agg_if(c12, c0), max_by_if(c2, c6, c0), variance_pop_if(c4, c0), min_by_if(c5, c6, c0), array_unique_agg_if(c15, c0), max_by_if(c7, c6, c0), min_by_if(c24, c5, c0), approx_count_distinct_if(c7, c0), max_by_if(c5, c8, c0), max_by_if(c2, c2, c0), max_by_if(c11, c10, c0), min_by_if(c24, c24, c0), min_by_if(c2, c3, c0), min_by_if(c7, c4, c0), array_agg_distinct_if(c7, c0), variance_pop_if(c0, c0), sum_if(c5, c0), bitmap_agg_if(c1, c0), min_by_if(c10, c24, c0), max_by_if(c24, c1, c0), stddev_if(c1, c0), min_by_if(c11, c8, c0), multi_distinct_sum_if(c4, c0), max_by_if(c4, c0, c0), max_by_if(c3, c11, c0), min_if(c7, c0), max_if(c5, c0), min_by_if(c0, c5, c0), count_if(c6, c0), min_by_if(c10, c8, c0), max_by_if(c0, c5, c0), max_by_if(c25, c11, c0), ds_hll_count_distinct_if(c1, 18, c0), any_value_if(c1, c0), max_by_if(c1, c5, c0), covar_samp_if(c3, c3, c0), variance_if(c4, c0), min_by_if(c1, c7, c0), min_by_if(c4, c24, c0), max_by_if(c6, c24, c0), count_if(c5, c0), min_by_if(c10, c1, c0), ds_theta_count_distinct_if(c3, c0), percentile_disc_if(c5, 0.5, c0), std_if(c2, c0), min_by_if(c8, c0, c0), variance_samp_if(c2, c0), min_by_if(c3, c4, c0), array_agg_if(c24, c0), max_by_if(c8, c0, c0), max_if(c4, c0), stddev_pop_if(c1, c0), avg_if(c7, c0), min_by_if(c5, c10, c0), variance_samp_if(c3, c0), avg_if(c6, c0), covar_pop_if(c7, c7, c0), max_by_if(c25, c2, c0), max_by_if(c3, c3, c0), max_by_if(c3, c10, c0), variance_if(c5, c0), max_by_if(c25, c10, c0), max_if(c11, c0), min_by_if(c8, c1, c0), min_by_if(c10, c7, c0), approx_count_distinct_if(c0, c0), max_by_if(c5, c1, c0), max_by_if(c10, c4, c0), min_by_if(c1, c6, c0), percentile_cont_if(c10, 0.5, c0), max_by_if(c24, c6, c0), multi_distinct_count_if(c4, c0), stddev_if(c0, c0), percentile_approx_weighted_if(c6, 1, 0.5, 1000, c0), max_by_if(c1, c6, c0), stddev_samp_if(c6, c0), min_by_if(c6, c3, c0), max_by_if(c10, c24, c0), var_pop_if(c7, c0), array_unique_agg_if(c23, c0), min_by_if(c2, c8, c0), covar_samp_if(c4, c4, c0), any_value_if(c2, c0), any_value_if(c16, c0), min_by_if(c25, c10, c0), min_if(c0, c0), max_by_if(c0, c4, c0), avg_if(c4, c0), max_by_if(c24, c8, c0), max_by_if(c1, c24, c0), min_by_if(c0, c24, c0), array_agg_distinct_if(c11, c0), min_by_if(c0, c1, c0), min_by_if(c5, c3, c0), min_by_if(c24, c6, c0), max_by_if(c10, c5, c0), max_by_if(c0, c0, c0), ndv_if(c6, c0), array_agg_distinct_if(c1, c0), max_by_if(c5, c2, c0), array_unique_agg_if(c21, c0), multi_distinct_count_if(c5, c0), ds_theta_count_distinct_if(c0, c0), min_by_if(c1, c24, c0), max_by_if(c4, c3, c0), multi_distinct_sum_if(c1, c0), ndv_if(c4, c0), max_by_if(c0, c2, c0), min_by_if(c11, c4, c0), sum_if(c2, c0), corr_if(c7, c7, c0), max_by_if(c1, c8, c0), min_by_if(c5, c5, c0), min_by_if(c10, c5, c0), min_by_if(c5, c11, c0), var_samp_if(c5, c0), variance_if(c7, c0), approx_count_distinct_if(c10, c0), stddev_if(c5, c0), ndv_if(c8, c0), min_by_if(c6, c4, c0), variance_if(c0, c0), min_by_if(c1, c2, c0), max_by_if(c1, c1, c0), multi_distinct_count_if(c9, c0), min_by_if(c2, c24, c0), percentile_cont_if(c11, 0.5, c0), ds_hll_count_distinct_if(c24, 18, 'hll_6', c0), max_by_if(c5, c6, c0), min_by_if(c25, c11, c0), min_by_if(c25, c7, c0), ds_hll_count_distinct_if(c5, 18, 'hll_6', c0), min_by_if(c8, c5, c0), ds_theta_count_distinct_if(c10, c0), sum_if(c4, c0), max_by_if(c4, c1, c0), max_by_if(c0, c24, c0), stddev_samp_if(c7, c0), any_value_if(c27, c0), min_by_if(c4, c11, c0), ds_theta_count_distinct_if(c2, c0), bitmap_agg_if(c3, c0), bitmap_agg_if(c0, c0), variance_pop_if(c7, c0), std_if(c3, c0), avg_if(c2, c0), min_by_if(c10, c3, c0), corr_if(c6, c6, c0), max_by_if(c3, c2, c0), max_if(c6, c0), min_by_if(c4, c4, c0), percentile_approx_if(c6, 0.5, c0), min_by_if(c24, c8, c0), variance_samp_if(c1, c0), max_by_if(c4, c10, c0), array_unique_agg_if(c18, c0), min_by_if(c0, c3, c0), multi_distinct_count_if(c0, c0), var_pop_if(c5, c0), min_by_if(c3, c11, c0), retention_if(c12, c0), max_by_if(c10, c0, c0), count_if(c24, c0), std_if(c5, c0), min_if(c10, c0), min_by_if(c3, c1, c0), min_by_if(c24, c1, c0), min_by_if(c6, c6, c0), max_by_if(c6, c7, c0), max_by_if(c5, c10, c0), min_by_if(c24, c11, c0), ds_theta_count_distinct_if(c7, c0), max_by_if(c3, c0, c0), var_samp_if(c0, c0), max_by_if(c10, c11, c0), max_by_if(c8, c2, c0), count_if(c7, c0), max_if(c8, c0), variance_if(c2, c0), stddev_samp_if(c4, c0), max_by_if(c11, c8, c0), max_by_if(c8, c4, c0), min_by_if(c0, c8, c0), max_by_if(c6, c5, c0), stddev_samp_if(c2, c0), array_agg_distinct_if(c8, c0), min_by_if(c2, c11, c0), ds_hll_count_distinct_if(c10, 18, c0), max_by_if(c2, c4, c0), min_by_if(c1, c4, c0), multi_distinct_sum_if(c3, c0), max_by_if(c6, c10, c0), var_pop_if(c3, c0), min_by_if(c8, c3, c0), ndv_if(c1, c0), var_samp_if(c2, c0), bitmap_agg_if(c5, c0), ds_hll_count_distinct_if(c4, 18, 'hll_6', c0), min_by_if(c7, c2, c0), array_agg_distinct_if(c3, c0), multi_distinct_sum_if(c8, c0), min_by_if(c4, c2, c0), variance_pop_if(c2, c0), max_by_if(c7, c8, c0), min_by_if(c25, c2, c0), array_unique_agg_if(c16, c0), var_samp_if(c7, c0), max_by_if(c7, c1, c0), max_by_if(c10, c7, c0), max_if(c24, c0), max_by_if(c1, c3, c0), max_by_if(c5, c4, c0), ds_hll_count_distinct_if(c2, 18, c0), min_by_if(c11, c6, c0), stddev_if(c3, c0), max_by_if(c24, c3, c0), max_by_if(c0, c7, c0), max_by_if(c4, c8, c0), covar_samp_if(c0, c0, c0), min_by_if(c10, c11, c0), min_by_if(c2, c5, c0), multi_distinct_count_if(c7, c0), any_value_if(c5, c0) from t1;
+-- result:
+12345.6789	123.46	{"key": "value"}	12345.67	1	2024-01-01 12:34:56	1	0.0	32000	ExampleVarcharData	12345.6789	0.0	None	170141183460469231731687303715884105727	1	ExampleVarcharData	32000	123.46	[12345678901234567890,-12345678901234567890,170141183460469231731687303715884105727]	9223372036854775807	1	32000	{"key": "value"}	["2024-01-01","2024-01-02"]	1	127	2147483647	1	1	170141183460469231731687303715884105727	0.0	2024-01-02	2024-01-02	[32000]	123.46	0.0	None	32000	123.46	ExampleVarcharData	1	127	170141183460469231731687303715884105727	12345.6789	9223372036854775807	0.0	0.0	170141183460469231731687303715884105727	2024-01-01 12:34:56	1	1	12345.67	1	127	None	1	1	1	1	9223372036854775807	12345.6789	2147483647	12345.6789	1	1	{"key": "value"}	2147483647	12345.6789	0.0	1	2024-01-02	2024-01-02	2024-01-02	1	1.7014118346046923e+38	2024-01-01 12:34:56	1	1	2024-01-01 12:34:56	1	2147483647	1	None	None	9223372036854775807	2147483647	ExampleVarcharData	127	170141183460469231731687303715884105727	[12345.6789]	12345.67	170141183460469231731687303715884105727	1	2024-01-01 12:34:56	12345.6789	12345.67	[-1,1,127]	1	1	2024-01-01 12:34:56	123.46	1	32000	{"key": "value"}	1	12345.67	[170141183460469231731687303715884105727]	32000	170141183460469231731687303715884105727	None	9223372036854775807	None	12345.669921875	1	{"key": "value"}	1	[-100,32767,100]	0.0	12345.6789	2147483647	9223372036854775807	2024-01-01 12:34:56	12345.6789	0.0	0.0	1	12345.6789	1	0.0	ExampleVarcharData	127.0	1	2024-01-01 12:34:56	2024-01-02	12345.6789	1	2024-01-01 12:34:56	{"key": "value"}	123.46	{"key": "value"}	ExampleVarcharData	ExampleVarcharData	12345.67	0.0	1	1	12345.6789	170141183460469231731687303715884105727	MyVarbinaryData	1	2024-01-02	1	170141183460469231731687303715884105727	None	12345.6787109375	None	127	2147483647	127	123.46	1	None	32000	1	9223372036854775807	0.0	1	2024-01-01 12:34:56	0.0	12345.67	1	123.46	12345.6789	127	1	2024-01-01 12:34:56	0.0	0.0	None	2147483647	1	2147483647	1	123.46	1	1	123.46	{"key": "value"}	1	1	12345.6789	0.0	{"Error": "All numbers in both samples are identical."}	1	{"key": "value"}	0.0	9223372036854775807	12345.6789	2147483647	32000	127	None	127	{"key": "value"}	0.0	32000	32000	1	32000	None	ExampleCharData	ExampleVarcharData	0.0	12345.67	1	170141183460469231731687303715884105727	2147483647	12345.67	{"key": "value"}	1	{"key": "value"}	12345.6789	2024-01-01 12:34:56	1	2024-01-01 12:34:56	1	32000	2147483647	None	170141183460469231731687303715884105727	0.0	ExampleVarcharData	ExampleVarcharData	{"key": "value"}	9223372036854775807	12345.67	2147483647	0.0	12345.67	ExampleVarcharData	0.0	2147483647	170141183460469231731687303715884105727	None	123.46	12345.67	1	32000	12345.67	12345.6789	1	123.46000000	2024-01-01 12:34:56	0.0	None	32000	0.0	ExampleVarcharData	{"key": "value"}	1	ExampleVarcharData	1	1	1	127	{"col1":null}	123.46	0.0	12345.67	1	123.46	1	None	170141183460469231731687303715884105727	0.0	2024-01-02	ExampleVarcharData	12345.6789	2024-01-02	2147483647	32000	{"key": "value"}	9223372036854775807	1	2024-01-02	1	None	0.0	2147483647	2024-01-01 12:34:56	9223372036854775807	12345.6789	2147483647	0.0	127	["ExampleCharData"]	2147483647	32000	12345.67	12345.67	123.46	123.46	{"key": "value"}	0.0	0.0	12345.6789	32000	None	2024-01-01 12:34:56	9223372036854775807	None	1	None	127	1	1	123.46	9223372036854775807	0.0	1	2024-01-01 12:34:56	None	1	9223372036854775807	1	[1.23,2.35,3.46]	12345.6789	12345.6789	12345.67	32000	2024-01-01 12:34:56	{"key": "value"}	2024-01-02	1	1	12345.67	127	[1]	9223372036854775807	123.46	2147483647	None	1	1	["2024-01-02"]	[7.89,1.23,4.56]	1	123.46	None	9223372036854775807	127	0.0	127	12345.67	2147483647.0	12345.6789	2024-01-01 12:34:56	{"Error": "All numbers in both samples are identical."}	2147483647	9223372036854775807	123.46	1	2024-01-01 12:34:56	1	170141183460469231731687303715884105727	2147483647	{"key": "value"}	123.46	0.0	None	1	32000	ExampleVarcharData	127	1	2024-01-01 12:34:56	2024-01-02	123.46	[9223372036854775807]	12345.67	1	170141183460469231731687303715884105727	127	12345.669921875	0.0	2024-01-01 12:34:56	32000	ExampleVarcharData	12345.67	2024-01-02	2024-01-02	12345.67	9223372036854775807	1	1	None	1	[0,1]	32000	0.0	170141183460469231731687303715884105727	[-100000,100000,2147483647]	12345.67	ExampleVarcharData	1	170141183460469231731687303715884105727	32000	2024-01-01 12:34:56	ExampleVarcharData	32000	12345.67	[12345.67]	0.0	170141183460469231731687303715884105727	None	2024-01-02	ExampleVarcharData	0.0	2024-01-01 12:34:56	9223372036854775807	9223372036854775807	2147483647	12345.67	170141183460469231731687303715884105727	1	1	2024-01-02	1	{"key": "value"}	1	127	127	None	0.0	127	9223372036854775807	12345.6789	1	2024-01-02	1	170141183460469231731687303715884105727	0.0	123.46	None	2147483647	["ExampleVarcharData"]	123.46	9223372036854775807	0.0	12345.669921875	170141183460469231731687303715884105727	None	12345.6789	0.0	{"key": "value"}	2147483647	2147483647	0.0	{"key": "value"}	2024-01-01 12:34:56	123.46	2024-01-02	1	170141183460469231731687303715884105727	2024-01-02	127	2024-01-02	ExampleVarcharData	1	0.0	12345.6787109375	127	None	12345.6789	2024-01-02	0.0	["2024-01-01 12:34:56","2024-01-02 12:34:56"]	32000	None	32000	[10000000000,-10000000000,9223372036854775807]	{"key": "value"}	1	1	9.223372036854776e+18	ExampleVarcharData	127	1	["2024-01-01 12:34:56"]	1	170141183460469231731687303715884105727	ExampleVarcharData	2024-01-02	1	1	[127]	170141183460469231731687303715884105727	["abc","def","ghi"]	1	1	127	9223372036854775807	127	1	1	2024-01-01 12:34:56	32000	None	127	170141183460469231731687303715884105727	2024-01-02	170141183460469231731687303715884105727	None	0.0	1	0.0	1	12345.6789	0.0	127	127	1	32000	2024-01-01 12:34:56	1	170141183460469231731687303715884105727	{"key": "value"}	{"key": "value"}	1	123.46	1	9223372036854775807	9223372036854775807	1	None	{"key1":"value1","key2":"value2"}	9223372036854775807	1	None	None	0.0	0.0	32000.0	2024-01-02	None	2147483647	12345.6789	9223372036854775807	12345.6787109375	ExampleVarcharData	None	9223372036854775807	[1.23,4.56,7.89]	1	1	0.0	2147483647	[1,0,1]	2024-01-02	1	0.0	2024-01-02	2147483647	ExampleVarcharData	12345.6789	12345.6789	170141183460469231731687303715884105727	ExampleVarcharData	1	2147483647	None	2024-01-02	123.46	1	123.46	0.0	None	2024-01-01 12:34:56	123.46	1	12345.6789	None	[123.46]	32000	1	32000	127	2147483647	12345.6789	0.0	123.46	1	None	None	1	12345.67	[2147483647]	123.46	9223372036854775807	0.0	12345.67	{"key": "value"}	[-10000000000,10000000000,9223372036854775807]	None	12345.67	2024-01-02	ExampleVarcharData	127	170141183460469231731687303715884105727	1	2024-01-01 12:34:56	0.0	ExampleVarcharData	1	9223372036854775807	None	2024-01-02	32000	1	170141183460469231731687303715884105727
+-- !result
+select min_by_if(c6, c1, c0), max_by_if(c8, c10, c0), min_by_if(c25, c4, c0), min_by_if(c7, c24, c0), multi_distinct_count_if(c6, c0), max_by_if(c11, c3, c0), ndv_if(c24, c0), covar_pop_if(c2, c2, c0), min_if(c2, c0), min_by_if(c24, c7, c0), max_by_if(c6, c0, c0), variance_pop_if(c6, c0), corr_if(c3, c3, c0), min_by_if(c5, c4, c0), bitmap_union_int_if(c1, c0), max_by_if(c24, c7, c0), max_by_if(c2, c8, c0), min_by_if(c8, c10, c0), array_unique_agg_if(c17, c0), max_by_if(c4, c6, c0), ndv_if(c7, c0), percentile_disc_if(c2, 0.5, c0), max_by_if(c25, c4, c0), array_unique_agg_if(c22, c0), ds_theta_count_distinct_if(c1, c0), min_by_if(c1, c1, c0), min_by_if(c3, c6, c0), max_by_if(c0, c11, c0), approx_count_distinct_if(c2, c0), max_by_if(c5, c3, c0), stddev_pop_if(c3, c0), max_by_if(c10, c6, c0), min_by_if(c10, c2, c0), array_agg_distinct_if(c2, c0), min_by_if(c8, c6, c0), var_pop_if(c2, c0), stddev_samp_if(c1, c0), max_by_if(c2, c11, c0), max_by_if(c8, c5, c0), max_by_if(c24, c11, c0), max_by_if(c0, c3, c0), min_by_if(c1, c8, c0), min_by_if(c5, c0, c0), max_by_if(c6, c4, c0), min_by_if(c4, c7, c0), variance_if(c6, c0), covar_pop_if(c1, c1, c0), min_by_if(c5, c24, c0), min_by_if(c11, c11, c0), count_if(c0, c0), approx_count_distinct_if(c11, c0), any_value_if(c7, c0), count_if(c4, c0), max_by_if(c1, c7, c0), corr_if(c2, c2, c0), multi_distinct_count_if(c2, c0), any_value_if(c0, c0), ds_hll_count_distinct_if(c10, 18, 'hll_6', c0), ds_hll_count_distinct_if(c0, 18, 'hll_6', c0), percentile_disc_if(c4, 0.5, c0), min_by_if(c6, c5, c0), min_by_if(c3, c2, c0), min_by_if(c6, c8, c0), ds_hll_count_distinct_if(c24, 18, c0), count_if(c0), min_by_if(c25, c24, c0), max_by_if(c3, c5, c0), min_by_if(c6, c10, c0), std_if(c0, c0), min_by_if(c0, c0, c0), max_by_if(c10, c10, c0), min_by_if(c10, c6, c0), max_by_if(c10, c2, c0), ds_hll_count_distinct_if(c8, 18, c0), avg_if(c5, c0), max_by_if(c11, c11, c0), ds_theta_count_distinct_if(c5, c0), ds_theta_count_distinct_if(c8, c0), max_by_if(c11, c7, c0), multi_distinct_count_if(c11, c0), max_if(c3, c0), ds_hll_count_distinct_if(c3, 18, c0), variance_samp_if(c4, c0), bitmap_agg_if(c2, c0), max_by_if(c4, c11, c0), any_value_if(c3, c0), min_by_if(c24, c10, c0), min_by_if(c1, c5, c0), multi_distinct_sum_if(c5, c0), array_agg_distinct_if(c6, c0), max_by_if(c7, c5, c0), min_by_if(c5, c8, c0), count_if(c11, c0), max_by_if(c11, c24, c0), percentile_disc_if(c6, 0.5, c0), max_by_if(c7, c4, c0), array_unique_agg_if(c13, c0), ds_hll_count_distinct_if(c2, 18, 'hll_6', c0), ds_hll_count_distinct_if(c7, 18, c0), min_if(c11, c0), max_by_if(c8, c1, c0), count_if(c26, c0), max_by_if(c2, c1, c0), min_by_if(c25, c0, c0), ds_hll_count_distinct_if(c3, 18, 'hll_6', c0), min_by_if(c7, c6, c0), array_agg_distinct_if(c5, c0), min_by_if(c2, c1, c0), min_by_if(c5, c7, c0), corr_if(c5, c5, c0), min_by_if(c4, c0, c0), stddev_samp_if(c5, c0), sum_if(c7, c0), multi_distinct_count_if(c10, c0), max_by_if(c25, c1, c0), ds_theta_count_distinct_if(c4, c0), array_unique_agg_if(c14, c0), std_if(c7, c0), multi_distinct_sum_if(c6, c0), min_by_if(c3, c3, c0), min_by_if(c4, c10, c0), max_by_if(c11, c0, c0), percentile_cont_if(c6, 0.5, c0), var_pop_if(c6, c0), stddev_pop_if(c0, c0), count_if(c10, c0), max_by_if(c6, c8, c0), approx_count_distinct_if(c5, c0), stddev_pop_if(c7, c0), min_by_if(c24, c3, c0), avg_if(c1, c0), count_if(c27, c0), min_by_if(c11, c24, c0), max_by_if(c10, c3, c0), min_if(c6, c0), min_by_if(c0, c4, c0), max_by_if(c11, c6, c0), any_value_if(c25, c0), max_by_if(c8, c6, c0), max_by_if(c25, c8, c0), min_by_if(c24, c4, c0), max_by_if(c24, c0, c0), max_by_if(c7, c24, c0), var_pop_if(c1, c0), ndv_if(c3, c0), ds_theta_count_distinct_if(c24, c0), max_by_if(c6, c3, c0), min_by_if(c5, c1, c0), any_value_if(c26, c0), bitmap_union_int_if(c4, c0), any_value_if(c10, c0), approx_count_distinct_if(c6, c0), max_by_if(c5, c7, c0), corr_if(c4, c4, c0), percentile_approx_weighted_if(c6, 1, 0.5, c0), var_samp_if(c4, c0), max_by_if(c1, c0, c0), min_by_if(c3, c24, c0), min_by_if(c1, c0, c0), min_by_if(c8, c7, c0), ds_hll_count_distinct_if(c6, 18, 'hll_6', c0), stddev_samp_if(c0, c0), min_by_if(c2, c2, c0), percentile_disc_if(c0, 0.5, c0), max_by_if(c4, c5, c0), covar_pop_if(c0, c0, c0), ds_hll_count_distinct_if(c11, 18, 'hll_6', c0), min_by_if(c11, c3, c0), stddev_if(c6, c0), min_by_if(c7, c5, c0), min_by_if(c0, c11, c0), any_value_if(c8, c0), sum_if(c6, c0), max_by_if(c1, c10, c0), min_by_if(c0, c10, c0), min_by_if(c11, c2, c0), variance_pop_if(c5, c0), stddev_pop_if(c4, c0), variance_samp_if(c5, c0), min_if(c3, c0), ds_hll_count_distinct_if(c7, 18, 'hll_6', c0), min_by_if(c3, c7, c0), approx_count_distinct_if(c1, c0), max_by_if(c8, c8, c0), bitmap_union_int_if(c2, c0), ndv_if(c11, c0), max_by_if(c8, c11, c0), min_by_if(c25, c5, c0), ds_hll_count_distinct_if(c4, 18, c0), ds_hll_count_distinct_if(c8, 18, 'hll_6', c0), min_by_if(c6, c11, c0), stddev_if(c7, c0), mann_whitney_u_test_if(c6, c0, 'two-sided', 0, c0), count_if(c1, c0), max_by_if(c25, c5, c0), covar_pop_if(c6, c6, c0), min_by_if(c4, c6, c0), min_by_if(c6, c2, c0), max_by_if(c3, c6, c0), max_by_if(c2, c24, c0), min_by_if(c1, c10, c0), corr_if(c0, c0, c0), min_if(c1, c0), max_by_if(c25, c7, c0), stddev_pop_if(c6, c0), max_if(c2, c0), max_by_if(c2, c7, c0), count_if(c3, c0), max_by_if(c2, c10, c0), covar_samp_if(c5, c5, c0), percentile_disc_if(c9, 0.5, c0), max_by_if(c24, c10, c0), std_if(c1, c0), min_by_if(c7, c1, c0), approx_count_distinct_if(c24, c0), max_by_if(c5, c0, c0), max_by_if(c3, c4, c0), max_by_if(c7, c11, c0), min_by_if(c25, c3, c0), multi_distinct_count_if(c3, c0), max_by_if(c25, c3, c0), any_value_if(c6, c0), min_by_if(c11, c10, c0), ds_hll_count_distinct_if(c6, 18, c0), any_value_if(c11, c0), ndv_if(c2, c0), min_by_if(c2, c6, c0), max_by_if(c3, c24, c0), var_samp_if(c3, c0), min_if(c5, c0), stddev_pop_if(c2, c0), max_by_if(c24, c24, c0), max_by_if(c24, c4, c0), min_by_if(c25, c1, c0), max_by_if(c4, c7, c0), min_by_if(c7, c3, c0), min_by_if(c3, c5, c0), covar_pop_if(c5, c5, c0), max_by_if(c7, c0, c0), min_by_if(c24, c2, c0), std_if(c6, c0), max_by_if(c3, c8, c0), max_by_if(c5, c11, c0), covar_samp_if(c6, c6, c0), min_by_if(c8, c2, c0), min_by_if(c7, c11, c0), max_if(c0, c0), max_by_if(c2, c3, c0), percentile_disc_if(c7, 0.5, c0), max_by_if(c6, c1, c0), count_if(c25, c0), avg_if(c8, c0), max_by_if(c11, c4, c0), variance_pop_if(c1, c0), variance_samp_if(c7, c0), max_by_if(c2, c0, c0), stddev_if(c2, c0), max_by_if(c24, c2, c0), max_by_if(c25, c0, c0), count_if(c8, c0), min_if(c24, c0), ds_theta_count_distinct_if(c6, c0), max_by_if(c0, c6, c0), ds_hll_count_distinct_if(c11, 18, c0), max_by_if(c1, c4, c0), any_value_if(c28, c0), max_by_if(c8, c3, c0), variance_if(c3, c0), max_if(c7, c0), min_by_if(c0, c7, c0), min_if(c8, c0), ndv_if(c0, c0), covar_samp_if(c7, c7, c0), max_by_if(c5, c24, c0), covar_pop_if(c4, c4, c0), percentile_disc_if(c10, 0.5, c0), min_by_if(c24, c0, c0), max_by_if(c6, c6, c0), max_by_if(c10, c1, c0), min_by_if(c3, c10, c0), min_by_if(c2, c4, c0), max_by_if(c25, c24, c0), any_value_if(c4, c0), max_by_if(c0, c8, c0), min_by_if(c10, c10, c0), approx_count_distinct_if(c8, c0), variance_samp_if(c0, c0), variance_if(c1, c0), min_by_if(c3, c0, c0), min_by_if(c11, c7, c0), min_by_if(c4, c8, c0), min_by_if(c6, c7, c0), max_by_if(c3, c1, c0), std_if(c4, c0), max_by_if(c1, c2, c0), array_agg_distinct_if(c9, c0), sum_if(c3, c0), multi_distinct_sum_if(c2, c0), max_by_if(c7, c7, c0), max_by_if(c7, c2, c0), min_by_if(c8, c11, c0), percentile_disc_if(c8, 0.5, c0), min_by_if(c25, c8, c0), variance_pop_if(c3, c0), covar_pop_if(c3, c3, c0), max_by_if(c6, c11, c0), max_by_if(c2, c5, c0), bitmap_agg_if(c4, c0), max_by_if(c11, c2, c0), min_by_if(c4, c3, c0), var_samp_if(c1, c0), ds_theta_count_distinct_if(c11, c0), corr_if(c1, c1, c0), min_by_if(c1, c3, c0), approx_count_distinct_if(c3, c0), max_by_if(c0, c10, c0), min_by_if(c8, c4, c0), max_by_if(c4, c24, c0), var_pop_if(c4, c0), multi_distinct_count_if(c1, c0), percentile_disc_if(c11, 0.5, c0), stddev_samp_if(c3, c0), max_by_if(c0, c1, c0), max_by_if(c4, c2, c0), ds_hll_count_distinct_if(c1, 18, 'hll_6', c0), array_unique_agg_if(c20, c0), min_by_if(c6, c0, c0), min_by_if(c6, c24, c0), min_by_if(c7, c8, c0), min_by_if(c2, c10, c0), min_by_if(c11, c0, c0), max_by_if(c25, c6, c0), min_by_if(c10, c4, c0), count_if(c2, c0), count_if(c16, c0), min_by_if(c7, c10, c0), max_if(c1, c0), array_agg_distinct_if(c0, c0), min_by_if(c4, c5, c0), max_by_if(c8, c24, c0), percentile_disc_if(c3, 0.5, c0), var_samp_if(c6, c0), ndv_if(c5, c0), multi_distinct_sum_if(c0, c0), array_agg_distinct_if(c10, c0), array_unique_agg_if(c19, c0), ndv_if(c10, c0), min_by_if(c8, c8, c0), variance_samp_if(c6, c0), max_by_if(c4, c4, c0), sum_if(c1, c0), stddev_pop_if(c5, c0), max_by_if(c1, c11, c0), min_by_if(c7, c0, c0), avg_if(c3, c0), max_by_if(c6, c2, c0), max_by_if(c11, c5, c0), mann_whitney_u_test_if(c6, c0, 'less', c0), min_by_if(c3, c8, c0), min_if(c4, c0), min_by_if(c8, c24, c0), min_by_if(c0, c2, c0), min_by_if(c11, c1, c0), ds_hll_count_distinct_if(c5, 18, c0), min_by_if(c5, c2, c0), max_by_if(c3, c7, c0), min_by_if(c25, c6, c0), max_by_if(c8, c7, c0), var_pop_if(c0, c0), covar_samp_if(c1, c1, c0), ds_hll_count_distinct_if(c0, 18, c0), min_by_if(c2, c0, c0), max_by_if(c24, c5, c0), min_by_if(c1, c11, c0), approx_count_distinct_if(c4, c0), max_by_if(c11, c1, c0), max_by_if(c10, c8, c0), sum_if(c8, c0), array_agg_distinct_if(c4, c0), min_by_if(c7, c7, c0), multi_distinct_count_if(c8, c0), max_by_if(c5, c5, c0), percentile_disc_if(c1, 0.5, c0), multi_distinct_sum_if(c7, c0), stddev_if(c4, c0), min_by_if(c11, c5, c0), min_by_if(c2, c7, c0), any_value_if(c24, c0), max_by_if(c7, c3, c0), min_by_if(c10, c0, c0), max_if(c10, c0), max_by_if(c7, c10, c0), min_by_if(c4, c1, c0), bitmap_union_int_if(c3, c0), count_if(c28, c0), covar_samp_if(c2, c2, c0), min_by_if(c0, c6, c0), array_unique_agg_if(c12, c0), max_by_if(c2, c6, c0), variance_pop_if(c4, c0), min_by_if(c5, c6, c0), array_unique_agg_if(c15, c0), max_by_if(c7, c6, c0), min_by_if(c24, c5, c0), approx_count_distinct_if(c7, c0), max_by_if(c5, c8, c0), max_by_if(c2, c2, c0), max_by_if(c11, c10, c0), min_by_if(c24, c24, c0), min_by_if(c2, c3, c0), min_by_if(c7, c4, c0), array_agg_distinct_if(c7, c0), variance_pop_if(c0, c0), sum_if(c5, c0), bitmap_agg_if(c1, c0), min_by_if(c10, c24, c0), max_by_if(c24, c1, c0), stddev_if(c1, c0), min_by_if(c11, c8, c0), multi_distinct_sum_if(c4, c0), max_by_if(c4, c0, c0), max_by_if(c3, c11, c0), min_if(c7, c0), max_if(c5, c0), min_by_if(c0, c5, c0), count_if(c6, c0), min_by_if(c10, c8, c0), max_by_if(c0, c5, c0), max_by_if(c25, c11, c0), ds_hll_count_distinct_if(c1, 18, c0), any_value_if(c1, c0), max_by_if(c1, c5, c0), covar_samp_if(c3, c3, c0), variance_if(c4, c0), min_by_if(c1, c7, c0), min_by_if(c4, c24, c0), max_by_if(c6, c24, c0), count_if(c5, c0), min_by_if(c10, c1, c0), ds_theta_count_distinct_if(c3, c0), percentile_disc_if(c5, 0.5, c0), std_if(c2, c0), min_by_if(c8, c0, c0), variance_samp_if(c2, c0), min_by_if(c3, c4, c0), array_agg_if(c24, c0), max_by_if(c8, c0, c0), max_if(c4, c0), stddev_pop_if(c1, c0), avg_if(c7, c0), min_by_if(c5, c10, c0), variance_samp_if(c3, c0), avg_if(c6, c0), covar_pop_if(c7, c7, c0), max_by_if(c25, c2, c0), max_by_if(c3, c3, c0), max_by_if(c3, c10, c0), variance_if(c5, c0), max_by_if(c25, c10, c0), max_if(c11, c0), min_by_if(c8, c1, c0), min_by_if(c10, c7, c0), approx_count_distinct_if(c0, c0), max_by_if(c5, c1, c0), max_by_if(c10, c4, c0), min_by_if(c1, c6, c0), percentile_cont_if(c10, 0.5, c0), max_by_if(c24, c6, c0), multi_distinct_count_if(c4, c0), stddev_if(c0, c0), percentile_approx_weighted_if(c6, 1, 0.5, 1000, c0), max_by_if(c1, c6, c0), stddev_samp_if(c6, c0), min_by_if(c6, c3, c0), max_by_if(c10, c24, c0), var_pop_if(c7, c0), array_unique_agg_if(c23, c0), min_by_if(c2, c8, c0), covar_samp_if(c4, c4, c0), any_value_if(c2, c0), any_value_if(c16, c0), min_by_if(c25, c10, c0), min_if(c0, c0), max_by_if(c0, c4, c0), avg_if(c4, c0), max_by_if(c24, c8, c0), max_by_if(c1, c24, c0), min_by_if(c0, c24, c0), array_agg_distinct_if(c11, c0), min_by_if(c0, c1, c0), min_by_if(c5, c3, c0), min_by_if(c24, c6, c0), max_by_if(c10, c5, c0), max_by_if(c0, c0, c0), ndv_if(c6, c0), array_agg_distinct_if(c1, c0), max_by_if(c5, c2, c0), array_unique_agg_if(c21, c0), multi_distinct_count_if(c5, c0), ds_theta_count_distinct_if(c0, c0), min_by_if(c1, c24, c0), max_by_if(c4, c3, c0), multi_distinct_sum_if(c1, c0), ndv_if(c4, c0), max_by_if(c0, c2, c0), min_by_if(c11, c4, c0), sum_if(c2, c0), corr_if(c7, c7, c0), max_by_if(c1, c8, c0), min_by_if(c5, c5, c0), min_by_if(c10, c5, c0), min_by_if(c5, c11, c0), var_samp_if(c5, c0), variance_if(c7, c0), approx_count_distinct_if(c10, c0), stddev_if(c5, c0), ndv_if(c8, c0), min_by_if(c6, c4, c0), variance_if(c0, c0), min_by_if(c1, c2, c0), max_by_if(c1, c1, c0), multi_distinct_count_if(c9, c0), min_by_if(c2, c24, c0), percentile_cont_if(c11, 0.5, c0), ds_hll_count_distinct_if(c24, 18, 'hll_6', c0), max_by_if(c5, c6, c0), min_by_if(c25, c11, c0), min_by_if(c25, c7, c0), ds_hll_count_distinct_if(c5, 18, 'hll_6', c0), min_by_if(c8, c5, c0), ds_theta_count_distinct_if(c10, c0), sum_if(c4, c0), max_by_if(c4, c1, c0), max_by_if(c0, c24, c0), stddev_samp_if(c7, c0), any_value_if(c27, c0), min_by_if(c4, c11, c0), ds_theta_count_distinct_if(c2, c0), bitmap_agg_if(c3, c0), bitmap_agg_if(c0, c0), variance_pop_if(c7, c0), std_if(c3, c0), avg_if(c2, c0), min_by_if(c10, c3, c0), corr_if(c6, c6, c0), max_by_if(c3, c2, c0), max_if(c6, c0), min_by_if(c4, c4, c0), percentile_approx_if(c6, 0.5, c0), min_by_if(c24, c8, c0), variance_samp_if(c1, c0), max_by_if(c4, c10, c0), array_unique_agg_if(c18, c0), min_by_if(c0, c3, c0), multi_distinct_count_if(c0, c0), var_pop_if(c5, c0), min_by_if(c3, c11, c0), retention_if(c12, c0), max_by_if(c10, c0, c0), count_if(c24, c0), std_if(c5, c0), min_if(c10, c0), min_by_if(c3, c1, c0), min_by_if(c24, c1, c0), min_by_if(c6, c6, c0), max_by_if(c6, c7, c0), max_by_if(c5, c10, c0), min_by_if(c24, c11, c0), ds_theta_count_distinct_if(c7, c0), max_by_if(c3, c0, c0), var_samp_if(c0, c0), max_by_if(c10, c11, c0), max_by_if(c8, c2, c0), count_if(c7, c0), max_if(c8, c0), variance_if(c2, c0), stddev_samp_if(c4, c0), max_by_if(c11, c8, c0), max_by_if(c8, c4, c0), min_by_if(c0, c8, c0), max_by_if(c6, c5, c0), stddev_samp_if(c2, c0), array_agg_distinct_if(c8, c0), min_by_if(c2, c11, c0), ds_hll_count_distinct_if(c10, 18, c0), max_by_if(c2, c4, c0), min_by_if(c1, c4, c0), multi_distinct_sum_if(c3, c0), max_by_if(c6, c10, c0), var_pop_if(c3, c0), min_by_if(c8, c3, c0), ndv_if(c1, c0), var_samp_if(c2, c0), bitmap_agg_if(c5, c0), ds_hll_count_distinct_if(c4, 18, 'hll_6', c0), min_by_if(c7, c2, c0), array_agg_distinct_if(c3, c0), multi_distinct_sum_if(c8, c0), min_by_if(c4, c2, c0), variance_pop_if(c2, c0), max_by_if(c7, c8, c0), min_by_if(c25, c2, c0), array_unique_agg_if(c16, c0), var_samp_if(c7, c0), max_by_if(c7, c1, c0), max_by_if(c10, c7, c0), max_if(c24, c0), max_by_if(c1, c3, c0), max_by_if(c5, c4, c0), ds_hll_count_distinct_if(c2, 18, c0), min_by_if(c11, c6, c0), stddev_if(c3, c0), max_by_if(c24, c3, c0), max_by_if(c0, c7, c0), max_by_if(c4, c8, c0), covar_samp_if(c0, c0, c0), min_by_if(c10, c11, c0), min_by_if(c2, c5, c0), multi_distinct_count_if(c7, c0), any_value_if(c5, c0) from t1 group by k1;
+-- result:
+12345.6789	123.46	{"key": "value"}	12345.67	1	2024-01-01 12:34:56	1	0.0	32000	ExampleVarcharData	12345.6789	0.0	None	170141183460469231731687303715884105727	1	ExampleVarcharData	32000	123.46	[12345678901234567890,-12345678901234567890,170141183460469231731687303715884105727]	9223372036854775807	1	32000	{"key": "value"}	["2024-01-01","2024-01-02"]	1	127	2147483647	1	1	170141183460469231731687303715884105727	0.0	2024-01-02	2024-01-02	[32000]	123.46	0.0	None	32000	123.46	ExampleVarcharData	1	127	170141183460469231731687303715884105727	12345.6789	9223372036854775807	0.0	0.0	170141183460469231731687303715884105727	2024-01-01 12:34:56	1	1	12345.67	1	127	None	1	1	1	1	9223372036854775807	12345.6789	2147483647	12345.6789	1	1	{"key": "value"}	2147483647	12345.6789	0.0	1	2024-01-02	2024-01-02	2024-01-02	1	1.7014118346046923e+38	2024-01-01 12:34:56	1	1	2024-01-01 12:34:56	1	2147483647	1	None	None	9223372036854775807	2147483647	ExampleVarcharData	127	170141183460469231731687303715884105727	[12345.6789]	12345.67	170141183460469231731687303715884105727	1	2024-01-01 12:34:56	12345.6789	12345.67	[-1,1,127]	1	1	2024-01-01 12:34:56	123.46	1	32000	{"key": "value"}	1	12345.67	[170141183460469231731687303715884105727]	32000	170141183460469231731687303715884105727	None	9223372036854775807	None	12345.669921875	1	{"key": "value"}	1	[-100,32767,100]	0.0	12345.6789	2147483647	9223372036854775807	2024-01-01 12:34:56	12345.6789	0.0	0.0	1	12345.6789	1	0.0	ExampleVarcharData	127.0	1	2024-01-01 12:34:56	2024-01-02	12345.6789	1	2024-01-01 12:34:56	{"key": "value"}	123.46	{"key": "value"}	ExampleVarcharData	ExampleVarcharData	12345.67	0.0	1	1	12345.6789	170141183460469231731687303715884105727	MyVarbinaryData	1	2024-01-02	1	170141183460469231731687303715884105727	None	12345.6787109375	None	127	2147483647	127	123.46	1	None	32000	1	9223372036854775807	0.0	1	2024-01-01 12:34:56	0.0	12345.67	1	123.46	12345.6789	127	1	2024-01-01 12:34:56	0.0	0.0	None	2147483647	1	2147483647	1	123.46	1	1	123.46	{"key": "value"}	1	1	12345.6789	0.0	{"Error": "All numbers in both samples are identical."}	1	{"key": "value"}	0.0	9223372036854775807	12345.6789	2147483647	32000	127	None	127	{"key": "value"}	0.0	32000	32000	1	32000	None	ExampleCharData	ExampleVarcharData	0.0	12345.67	1	170141183460469231731687303715884105727	2147483647	12345.67	{"key": "value"}	1	{"key": "value"}	12345.6789	2024-01-01 12:34:56	1	2024-01-01 12:34:56	1	32000	2147483647	None	170141183460469231731687303715884105727	0.0	ExampleVarcharData	ExampleVarcharData	{"key": "value"}	9223372036854775807	12345.67	2147483647	0.0	12345.67	ExampleVarcharData	0.0	2147483647	170141183460469231731687303715884105727	None	123.46	12345.67	1	32000	12345.67	12345.6789	1	123.46000000	2024-01-01 12:34:56	0.0	None	32000	0.0	ExampleVarcharData	{"key": "value"}	1	ExampleVarcharData	1	1	1	127	{"col1":null}	123.46	0.0	12345.67	1	123.46	1	None	170141183460469231731687303715884105727	0.0	2024-01-02	ExampleVarcharData	12345.6789	2024-01-02	2147483647	32000	{"key": "value"}	9223372036854775807	1	2024-01-02	1	None	0.0	2147483647	2024-01-01 12:34:56	9223372036854775807	12345.6789	2147483647	0.0	127	["ExampleCharData"]	2147483647	32000	12345.67	12345.67	123.46	123.46	{"key": "value"}	0.0	0.0	12345.6789	32000	None	2024-01-01 12:34:56	9223372036854775807	None	1	None	127	1	1	123.46	9223372036854775807	0.0	1	2024-01-01 12:34:56	None	1	9223372036854775807	1	[1.23,2.35,3.46]	12345.6789	12345.6789	12345.67	32000	2024-01-01 12:34:56	{"key": "value"}	2024-01-02	1	1	12345.67	127	[1]	9223372036854775807	123.46	2147483647	None	1	1	["2024-01-02"]	[7.89,1.23,4.56]	1	123.46	None	9223372036854775807	127	0.0	127	12345.67	2147483647.0	12345.6789	2024-01-01 12:34:56	{"Error": "All numbers in both samples are identical."}	2147483647	9223372036854775807	123.46	1	2024-01-01 12:34:56	1	170141183460469231731687303715884105727	2147483647	{"key": "value"}	123.46	0.0	None	1	32000	ExampleVarcharData	127	1	2024-01-01 12:34:56	2024-01-02	123.46	[9223372036854775807]	12345.67	1	170141183460469231731687303715884105727	127	12345.669921875	0.0	2024-01-01 12:34:56	32000	ExampleVarcharData	12345.67	2024-01-02	2024-01-02	12345.67	9223372036854775807	1	1	None	1	[0,1]	32000	0.0	170141183460469231731687303715884105727	[-100000,100000,2147483647]	12345.67	ExampleVarcharData	1	170141183460469231731687303715884105727	32000	2024-01-01 12:34:56	ExampleVarcharData	32000	12345.67	[12345.67]	0.0	170141183460469231731687303715884105727	None	2024-01-02	ExampleVarcharData	0.0	2024-01-01 12:34:56	9223372036854775807	9223372036854775807	2147483647	12345.67	170141183460469231731687303715884105727	1	1	2024-01-02	1	{"key": "value"}	1	127	127	None	0.0	127	9223372036854775807	12345.6789	1	2024-01-02	1	170141183460469231731687303715884105727	0.0	123.46	None	2147483647	["ExampleVarcharData"]	123.46	9223372036854775807	0.0	12345.669921875	170141183460469231731687303715884105727	None	12345.6789	0.0	{"key": "value"}	2147483647	2147483647	0.0	{"key": "value"}	2024-01-01 12:34:56	123.46	2024-01-02	1	170141183460469231731687303715884105727	2024-01-02	127	2024-01-02	ExampleVarcharData	1	0.0	12345.6787109375	127	None	12345.6789	2024-01-02	0.0	["2024-01-01 12:34:56","2024-01-02 12:34:56"]	32000	None	32000	[10000000000,-10000000000,9223372036854775807]	{"key": "value"}	1	1	9.223372036854776e+18	ExampleVarcharData	127	1	["2024-01-01 12:34:56"]	1	170141183460469231731687303715884105727	ExampleVarcharData	2024-01-02	1	1	[127]	170141183460469231731687303715884105727	["abc","def","ghi"]	1	1	127	9223372036854775807	127	1	1	2024-01-01 12:34:56	32000	None	127	170141183460469231731687303715884105727	2024-01-02	170141183460469231731687303715884105727	None	0.0	1	0.0	1	12345.6789	0.0	127	127	1	32000	2024-01-01 12:34:56	1	170141183460469231731687303715884105727	{"key": "value"}	{"key": "value"}	1	123.46	1	9223372036854775807	9223372036854775807	1	None	{"key1":"value1","key2":"value2"}	9223372036854775807	1	None	None	0.0	0.0	32000.0	2024-01-02	None	2147483647	12345.6789	9223372036854775807	12345.6787109375	ExampleVarcharData	None	9223372036854775807	[1.23,4.56,7.89]	1	1	0.0	2147483647	[1,0,1]	2024-01-02	1	0.0	2024-01-02	2147483647	ExampleVarcharData	12345.6789	12345.6789	170141183460469231731687303715884105727	ExampleVarcharData	1	2147483647	None	2024-01-02	123.46	1	123.46	0.0	None	2024-01-01 12:34:56	123.46	1	12345.6789	None	[123.46]	32000	1	32000	127	2147483647	12345.6789	0.0	123.46	1	None	None	1	12345.67	[2147483647]	123.46	9223372036854775807	0.0	12345.67	{"key": "value"}	[-10000000000,10000000000,9223372036854775807]	None	12345.67	2024-01-02	ExampleVarcharData	127	170141183460469231731687303715884105727	1	2024-01-01 12:34:56	0.0	ExampleVarcharData	1	9223372036854775807	None	2024-01-02	32000	1	170141183460469231731687303715884105727
+-- !result
+CREATE TABLE t0 (
+    k1 INT,
+    v1 INT,
+    v2 INT)
+DUPLICATE KEY(k1)
+DISTRIBUTED BY HASH(k1)
+PROPERTIES(
+    "replication_num" = "1"
+);
+-- result:
+-- !result
+insert into t0 SELECT generate_series % 50, if(generate_series % 2, generate_series, NULL), if(generate_series % 2, 0,1)  FROM TABLE(generate_series(1,  40960));
+-- result:
+-- !result
+select sum_if(v1, v2) from t0 group by k1;
+-- result:
+None
+None
+None
+None
+None
+None
+None
+None
+None
+None
+None
+None
+None
+None
+None
+None
+None
+None
+None
+None
+None
+None
+None
+None
+None
+None
+None
+None
+None
+None
+None
+None
+None
+None
+None
+None
+None
+None
+None
+None
+None
+None
+None
+None
+None
+None
+None
+None
+None
+None
+-- !result
+select sum_if(v1, v2) from t0 group by k1 limit 2;
+-- result:
+None
+None
+-- !result
+set STREAMING_PREAGGREGATION_MODE=force_streaming;
+-- result:
+-- !result
+select sum_if(v1, v2) from t0 group by k1;
+-- result:
+None
+None
+None
+None
+None
+None
+None
+None
+None
+None
+None
+None
+None
+None
+None
+None
+None
+None
+None
+None
+None
+None
+None
+None
+None
+None
+None
+None
+None
+None
+None
+None
+None
+None
+None
+None
+None
+None
+None
+None
+None
+None
+None
+None
+None
+None
+None
+None
+None
+None
+-- !result
+select sum_if(v1, v2) from t0 group by k1 limit 2;
+-- result:
+None
+None
+-- !result
+set STREAMING_PREAGGREGATION_MODE=auto;
+-- result:
+-- !result
+CREATE TABLE `t2` (
+  `k1` varchar(255) NOT NULL COMMENT "",
+  `k2` varchar(255) NOT NULL COMMENT "",
+  `k3` int NOT NULL COMMENT ""
+) ENGINE=OLAP 
+PRIMARY KEY(`k1`)
+PROPERTIES ( "replication_num" = "1");
+-- result:
+-- !result
+insert into t2 values(1,2,3);
+-- result:
+-- !result
+select max(k1) FILTER (where FALSE) from t2;
+-- result:
+None
+-- !result
+select max(k2) FILTER (where FALSE) from t2;
+-- result:
+None
+-- !result
+select max(k3) FILTER (where FALSE) from t2;
+-- result:
+None
+-- !result
+select max(k3) FILTER (where TRUE) from t2;
+-- result:
+3
+-- !result
+select max(k3) FILTER (where k3 is not null) from t2;
+-- result:
+3
+-- !result
+select max(k3) FILTER (where k3 > 0) from t2;
+-- result:
+3
+-- !result
+select max(k3) FILTER (where k3 < 0) from t2;
+-- result:
+None
+-- !result
+select sum(k3) FILTER (where k3 > 0) from t2;
+-- result:
+3
+-- !result
+select sum(k3) FILTER (where k3 < 0) from t2;
+-- result:
+None
+-- !result
+select avg(k3) FILTER (where k3 > 0) from t2;
+-- result:
+3.0
+-- !result
+select avg(k3) FILTER (where k3 < 0) from t2;
+-- result:
+None
+-- !result
+select count(k3) FILTER (where k3 > 0) from t2;
+-- result:
+1
+-- !result
+select max_by(k3,k3) from t2;
+-- result:
+3
+-- !result
+select count(k3) FILTER (where k3 > 0) from t2;
+-- result:
+1
+-- !result
+select var_samp(k3) from t2;
+-- result:
+None
+-- !result
+select count(k3) FILTER (where k3 > 0) from t2;
+-- result:
+1
+-- !result
