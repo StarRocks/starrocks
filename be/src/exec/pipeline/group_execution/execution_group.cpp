@@ -19,6 +19,7 @@
 #include "common/logging.h"
 #include "exec/pipeline/pipeline_driver_executor.h"
 #include "exec/pipeline/pipeline_fwd.h"
+#include "util/priority_thread_pool.hpp"
 
 namespace starrocks::pipeline {
 // clang-format off
@@ -61,6 +62,49 @@ auto for_each_active_driver(PipelineRawPtrs& pipelines, Callable call) {
     if constexpr (std::is_same_v<ReturnType, Status>) {
         return Status::OK();
     }
+}
+
+size_t ExecutionGroup::total_active_driver_size() {
+    size_t total = 0;
+    for_each_active_driver(_pipelines, [&total](const DriverPtr& driver) { total += 1; });
+    return total;
+}
+
+void ExecutionGroup::prepare_active_drivers_parallel(RuntimeState* state, std::atomic<int>& pending_tasks,
+                                                     std::mutex& completion_mutex,
+                                                     std::condition_variable& completion_cv,
+                                                     std::atomic<std::shared_ptr<Status>>& first_error) {
+    auto pipeline_prepare_pool = state->exec_env()->pipeline_prepare_pool();
+
+    for_each_active_driver(_pipelines, [&](const DriverPtr& driver) {
+        bool submitted = pipeline_prepare_pool->try_offer([&pending_tasks, &completion_mutex, &completion_cv,
+                                                           &first_error, driver_ptr = driver, runtime_state = state]() {
+            Status status = driver_ptr->prepare_operators_local_state(runtime_state);
+
+            if (!status.ok()) {
+                std::shared_ptr<Status> expected = nullptr;
+                first_error.compare_exchange_strong(expected, std::make_shared<Status>(status));
+            }
+
+            if (pending_tasks.fetch_sub(1) == 1) {
+                std::lock_guard<std::mutex> lock(completion_mutex);
+                completion_cv.notify_one();
+            }
+        });
+
+        if (!submitted) {
+            Status status = driver->prepare_operators_local_state(state);
+            if (!status.ok()) {
+                std::shared_ptr<Status> expected = nullptr;
+                first_error.compare_exchange_strong(expected, std::make_shared<Status>(status));
+            }
+
+            if (pending_tasks.fetch_sub(1) == 1) {
+                std::lock_guard<std::mutex> lock(completion_mutex);
+                completion_cv.notify_one();
+            }
+        }
+    });
 }
 
 Status NormalExecutionGroup::prepare_drivers(RuntimeState* state) {

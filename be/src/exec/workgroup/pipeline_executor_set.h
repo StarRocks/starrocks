@@ -18,7 +18,6 @@
 #include "exec/pipeline/pipeline_fwd.h"
 #include "exec/workgroup/work_group_fwd.h"
 #include "util/cpu_util.h"
-#include "util/threadpool.h"
 
 namespace starrocks::pipeline {
 class PipelineExecutorMetrics;
