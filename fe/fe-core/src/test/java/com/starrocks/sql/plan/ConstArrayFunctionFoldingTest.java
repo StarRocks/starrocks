@@ -17,8 +17,16 @@
 
 package com.starrocks.sql.plan;
 
+import com.starrocks.utframe.UtFrameUtils;
+import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
+
+import java.util.List;
+import java.util.regex.MatchResult;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
+import java.util.stream.Collectors;
 
 public class ConstArrayFunctionFoldingTest extends PlanTestBase {
 
@@ -162,5 +170,29 @@ public class ConstArrayFunctionFoldingTest extends PlanTestBase {
                         "  |  equal join conjunct: 5: v2 = 1: v1");
         assertCContains(plan, "  0:OlapScanNode\n" + "     TABLE: t0\n" + "     PREAGGREGATION: ON\n" +
                 "     PREDICATES: array_contains([1,2,3], 6: v3)");
+    }
+
+    @Test
+    public void test() throws Exception {
+        String sql = "select\n" +
+                "array_sum([]),\n" +
+                "array_sum([null]),\n" +
+                "array_sum([-170141183460469231731687303715884105728]),\n" +
+                "array_sum([170141183460469231731687303715884105727]),\n" +
+                "array_sum([-170141183460469231731687303715884105728,170141183460469231731687303715884105727]),\n" +
+                "array_sum([-398391541.5063392]),\n" +
+                "array_sum([398391541.5063392]),\n" +
+                "array_sum([-398391541.5063392,398391541.5063392]),\n" +
+                "array_sum([398391541.5063392,398391541.5063392]),\n" +
+                "array_sum([-398391541.5063392,-398391541.5063392]),\n" +
+                "array_sum([true,false]),\n" +
+                "array_sum([1,false]);";
+        String s = UtFrameUtils.getPlanThriftString(starRocksAssert.getCtx(), sql);
+        Pattern decimalTypePattern = Pattern.compile("type:DECIMAL\\w+, precision:(-)?\\d+, scale:(-)?\\d+");
+        Matcher m = decimalTypePattern.matcher(s);
+        Assertions.assertTrue(m.find());
+        List<String> types = m.results().map(MatchResult::group).collect(Collectors.toList());
+        Assertions.assertFalse(types.isEmpty());
+        Assertions.assertTrue(types.stream().noneMatch(t -> t.contains("-1")));
     }
 }
