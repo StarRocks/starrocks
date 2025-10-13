@@ -366,13 +366,13 @@ public class TaskRunHistoryTest {
         
         // Create a mock result batch with escaped Chinese characters (simulating database storage)
         String originalJson = status.toJSON();
-        String escapedJson = StringEscapeUtils.escapeJava(originalJson);
+        String escapedJson = StringEscapeUtils.escapeJson(originalJson);
         
         // Create TaskRunStatusJSONRecord with escaped JSON
         TaskRunStatus.TaskRunStatusJSONRecord record = new TaskRunStatus.TaskRunStatusJSONRecord();
         record.data = Lists.newArrayList(status);
         String recordJson = GsonUtils.GSON.toJson(record);
-        String escapedRecordJson = StringEscapeUtils.escapeJava(recordJson);
+        String escapedRecordJson = StringEscapeUtils.escapeJson(recordJson);
         
         // Simulate the database storage and retrieval process
         TResultBatch resultBatch = new TResultBatch();
