@@ -75,6 +75,14 @@ public class Task implements Writable {
     @SerializedName("createUserIdentity")
     private UserIdentity userIdentity;
 
+    // the last time this task is scheduled
+    @SerializedName("lastScheduleTime")
+    private long lastScheduleTime = -1;
+
+    // the next time this task is to be scheduled
+    @SerializedName("nextScheduleTime")
+    private long nextScheduleTime = -1;
+
     public Task() {}
 
     public Task(String name) {
@@ -211,6 +219,22 @@ public class Task implements Writable {
         this.postRun = postRun;
     }
 
+    public long getLastScheduleTime() {
+        return lastScheduleTime;
+    }
+
+    public void setLastScheduleTime(long lastScheduleTime) {
+        this.lastScheduleTime = lastScheduleTime;
+    }
+
+    public long getNextScheduleTime() {
+        return nextScheduleTime;
+    }
+
+    public void setNextScheduleTime(long nextScheduleTime) {
+        this.nextScheduleTime = nextScheduleTime;
+    }
+
     @Override
     public String toString() {
         return "Task{" +
@@ -227,6 +251,8 @@ public class Task implements Writable {
                 ", expireTime=" + expireTime +
                 ", source=" + source +
                 ", createUser='" + createUser + '\'' +
+                ", lastScheduleTime=" + lastScheduleTime +
+                ", nextScheduleTime=" + nextScheduleTime +
                 '}';
     }
 }

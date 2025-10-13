@@ -33,6 +33,7 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.scheduler.history.TaskRunHistory;
 import com.starrocks.scheduler.persist.TaskRunStatus;
 import com.starrocks.scheduler.persist.TaskRunStatusChange;
+import com.starrocks.scheduler.persist.TaskSchedule;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.SubmitTaskStmt;
 import com.starrocks.thrift.TGetTasksParams;
@@ -59,6 +60,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Queue;
 import java.util.Set;
+import java.util.concurrent.TimeUnit;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
@@ -518,21 +520,21 @@ public class TaskManagerTest {
     @Test
     public void testGetInitialDelayTime1() throws Exception {
         assertEquals(50, TaskManager.getInitialDelayTime(60, parseLocalDateTime("2023-04-18 19:08:50"),
-                parseLocalDateTime("2023-04-18 20:00:00")));
+                parseLocalDateTime("2023-04-18 20:00:00"), null));
         assertEquals(30, TaskManager.getInitialDelayTime(60, parseLocalDateTime("2023-04-18 19:08:30"),
-                parseLocalDateTime("2023-04-18 20:00:00")));
+                parseLocalDateTime("2023-04-18 20:00:00"), null));
         assertEquals(20, TaskManager.getInitialDelayTime(60, parseLocalDateTime("2023-04-18 19:08:30"),
-                parseLocalDateTime("2023-04-18 20:00:10")));
+                parseLocalDateTime("2023-04-18 20:00:10"), null));
         assertEquals(0, TaskManager.getInitialDelayTime(20, parseLocalDateTime("2023-04-18 19:08:30"),
-                parseLocalDateTime("2023-04-18 21:00:10")));
+                parseLocalDateTime("2023-04-18 21:00:10"), null));
     }
 
     @Test
     public void testGetInitialDelayTime2() throws Exception {
         assertEquals(23, TaskManager.getInitialDelayTime(60, parseLocalDateTime("2023-12-29 19:50:00"),
-                LocalDateTime.parse("2024-01-30T15:27:37.342356010")));
+                LocalDateTime.parse("2024-01-30T15:27:37.342356010"), null));
         assertEquals(50, TaskManager.getInitialDelayTime(60, parseLocalDateTime("2023-12-29 19:50:00"),
-                LocalDateTime.parse("2024-01-30T15:27:10.342356010")));
+                LocalDateTime.parse("2024-01-30T15:27:10.342356010"), null));
     }
 
     private static ExecuteOption makeExecuteOption(boolean isMergeRedundant, boolean isSync) {
@@ -1063,5 +1065,97 @@ public class TaskManagerTest {
 
         TaskManager taskManager = new TaskManager();
         taskManager.removeExpiredTaskRuns(false);
+    }
+
+
+    @Test
+    void testTriggerImmediatelyWhenLastScheduleExpired() {
+        long periodSeconds = 60;
+        LocalDateTime taskStartTime = LocalDateTime.of(2023, 4, 18, 19, 0, 0);
+        LocalDateTime currentDateTime = LocalDateTime.of(2023, 4, 18, 20, 0, 0);
+        LocalDateTime lastScheduleTime = LocalDateTime.of(2023, 4, 18, 19, 8, 30);
+        // lastScheduleTime + period < currentDateTime 且 lastScheduleTime > taskStartTime
+        long delay = TaskManager.getInitialDelayTime(periodSeconds, taskStartTime, currentDateTime, lastScheduleTime);
+        assertEquals(0, delay);
+    }
+
+    @Test
+    void testInitialDelayPositive() {
+        long periodSeconds = 60;
+        LocalDateTime taskStartTime = LocalDateTime.of(2023, 4, 18, 20, 0, 0);
+        LocalDateTime currentDateTime = LocalDateTime.of(2023, 4, 18, 19, 8, 50);
+        long delay = TaskManager.getInitialDelayTime(periodSeconds, taskStartTime, currentDateTime, null);
+        assertEquals(3070, delay);
+    }
+
+    @Test
+    void testInitialDelayNegativeWithNano() {
+        long periodSeconds = 60;
+        LocalDateTime taskStartTime = LocalDateTime.of(2023, 4, 18, 19, 0, 0);
+        LocalDateTime currentDateTime = LocalDateTime.of(2023, 4, 18, 20, 0, 1, 1); // 有nano
+        long delay = TaskManager.getInitialDelayTime(periodSeconds, taskStartTime, currentDateTime, null);
+        assertEquals(2, delay);
+    }
+
+    @Test
+    void testInitialDelayNegativeWithoutNano() {
+        long periodSeconds = 60;
+        LocalDateTime taskStartTime = LocalDateTime.of(2023, 4, 18, 19, 0, 0);
+        LocalDateTime currentDateTime = LocalDateTime.of(2023, 4, 18, 20, 0, 1, 0); // nano = 0
+        long delay = TaskManager.getInitialDelayTime(periodSeconds, taskStartTime, currentDateTime, null);
+        // initialDelay = -3601, extra = 0
+        // ((-3601 % 60) + 60) % 60 = (-1 + 60) % 60 = 59 % 60 = 59
+        assertEquals(59, delay);
+    }
+
+    @Test
+    void testInitialDelayWithNullLastScheduleTime() {
+        long periodSeconds = 20;
+        LocalDateTime taskStartTime = LocalDateTime.of(2023, 4, 18, 21, 0, 10);
+        LocalDateTime currentDateTime = LocalDateTime.of(2023, 4, 18, 19, 8, 30);
+        long delay = TaskManager.getInitialDelayTime(periodSeconds, taskStartTime, currentDateTime, null);
+        assertEquals(1 * 3600 + 51 * 60 + 40, delay); // 1小时51分40秒
+    }
+
+    // Java
+    @Test
+    public void testRegisterSchedulerSetsNextScheduleTimeAndSchedulesTask() {
+        TaskManager taskManager = new TaskManager();
+        Task task = new Task("test");
+        TaskSchedule schedule = new TaskSchedule();
+        long now = System.currentTimeMillis() / 1000 * 1000;
+        schedule.setStartTime(now);
+        schedule.setPeriod(60);
+        schedule.setTimeUnit(TimeUnit.SECONDS);
+        task.setSchedule(schedule);
+        task.setType(Constants.TaskType.PERIODICAL);
+        task.setState(Constants.TaskState.ACTIVE);
+        task.setLastScheduleTime(-1);
+        taskManager.registerScheduler(task);
+        long nextScheduleTime = task.getNextScheduleTime();
+        Assertions.assertTrue(nextScheduleTime > 0);
+        Assertions.assertNotNull(taskManager.getPeriodFutureMap().get(task.getId())
+        );
+    }
+
+    @Test
+    public void testRegisterSchedulerWithLastScheduleTime() {
+        TaskManager taskManager = new TaskManager();
+        Task task = new Task("test");
+        TaskSchedule schedule = new TaskSchedule();
+        long now = System.currentTimeMillis() / 1000 * 1000;
+        schedule.setStartTime(now - 3600); // 1小时前
+        schedule.setPeriod(60);
+        schedule.setTimeUnit(TimeUnit.SECONDS);
+        task.setSchedule(schedule);
+        task.setType(Constants.TaskType.PERIODICAL);
+        task.setState(Constants.TaskState.ACTIVE);
+        task.setLastScheduleTime(now - 60);
+        taskManager.registerScheduler(task);
+        long nextScheduleTime = task.getNextScheduleTime();
+        Assertions.assertTrue(nextScheduleTime > 0);
+        Assertions.assertNotNull(
+                taskManager.getPeriodFutureMap().get(task.getId())
+        );
     }
 }
