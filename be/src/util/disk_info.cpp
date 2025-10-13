@@ -18,9 +18,17 @@
 #include "util/disk_info.h"
 
 #include <sys/stat.h>
-#include <sys/sysmacros.h>
 #include <sys/types.h>
 #include <unistd.h>
+
+#ifdef __linux__
+#include <sys/sysmacros.h>
+#else
+// On macOS, define makedev if not available
+#ifndef makedev
+#define makedev(maj, min) ((dev_t)(((maj) << 20) | (min)))
+#endif
+#endif
 
 #include <boost/algorithm/string.hpp>
 #include <fstream>

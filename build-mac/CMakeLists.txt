@@ -168,6 +168,7 @@ option(STARROCKS_JIT_ENABLE "Enable JIT compilation support" OFF)
 # Set all disabled options as FORCE to prevent override
 set(WITH_AVRO OFF CACHE BOOL "Disable Avro on macOS" FORCE)
 set(WITH_ORC OFF CACHE BOOL "Disable ORC on macOS" FORCE)
+set(WITH_PARQUET OFF CACHE BOOL "Disable Parquet on macOS" FORCE)
 set(WITH_HDFS OFF CACHE BOOL "Disable HDFS on macOS" FORCE)
 set(WITH_JDBC OFF CACHE BOOL "Disable JDBC on macOS" FORCE)
 set(WITH_PYTHON OFF CACHE BOOL "Disable Python runtime on macOS" FORCE)
@@ -189,6 +190,7 @@ set(WITH_CLUCENE OFF CACHE BOOL "Disable CLucene inverted index on macOS" FORCE)
 # Add compile definitions for disabled features
 add_definitions(-DMACOS_DISABLE_AVRO)
 add_definitions(-DMACOS_DISABLE_ORC)
+add_definitions(-DMACOS_DISABLE_PARQUET)
 add_definitions(-DMACOS_DISABLE_HDFS)
 add_definitions(-DMACOS_DISABLE_JDBC)
 add_definitions(-DMACOS_DISABLE_PYTHON)
@@ -215,6 +217,8 @@ add_definitions(-DMACOS_DISABLE_ES)
 add_compile_options(-include ${CMAKE_CURRENT_LIST_DIR}/shims/include/starrocks_macos_fmt_shims.h)
 # Ensure starcache/staros code paths are disabled by making the macros undefined
 add_compile_options(-UWITH_STARCACHE -UUSE_STAROS)
+# Add glog export definition to fix compilation issues
+add_compile_definitions(GLOG_USE_GLOG_EXPORT)
 
 message(STATUS "macOS: Disabled problematic components for ARM64 compatibility")
 
@@ -414,6 +418,62 @@ set_target_properties(snappy PROPERTIES
     IMPORTED_LOCATION ${SNAPPY_LIB}
     INTERFACE_INCLUDE_DIRECTORIES /opt/homebrew/include)
 
+# Homebrew libraries - lz4
+find_library(LZ4_LIB NAMES lz4 PATHS /opt/homebrew/lib REQUIRED)
+add_library(lz4 STATIC IMPORTED GLOBAL)
+set_target_properties(lz4 PROPERTIES
+    IMPORTED_LOCATION ${LZ4_LIB}
+    INTERFACE_INCLUDE_DIRECTORIES /opt/homebrew/opt/lz4/include)
+
+# Create a symlink in build directory to satisfy lz4/lz4.h include pattern
+execute_process(COMMAND ${CMAKE_COMMAND} -E make_directory
+    ${CMAKE_BINARY_DIR}/lz4_symlinks/lz4
+    WORKING_DIRECTORY ${CMAKE_BINARY_DIR})
+
+# Create symlinks for LZ4 headers to satisfy lz4/lz4.h include pattern
+execute_process(COMMAND ${CMAKE_COMMAND} -E create_symlink
+    /opt/homebrew/opt/lz4/include/lz4.h
+    ${CMAKE_BINARY_DIR}/lz4_symlinks/lz4/lz4.h
+    WORKING_DIRECTORY ${CMAKE_BINARY_DIR})
+
+execute_process(COMMAND ${CMAKE_COMMAND} -E create_symlink
+    /opt/homebrew/opt/lz4/include/lz4hc.h
+    ${CMAKE_BINARY_DIR}/lz4_symlinks/lz4/lz4hc.h
+    WORKING_DIRECTORY ${CMAKE_BINARY_DIR})
+
+execute_process(COMMAND ${CMAKE_COMMAND} -E create_symlink
+    /opt/homebrew/opt/lz4/include/lz4frame.h
+    ${CMAKE_BINARY_DIR}/lz4_symlinks/lz4/lz4frame.h
+    WORKING_DIRECTORY ${CMAKE_BINARY_DIR})
+
+execute_process(COMMAND ${CMAKE_COMMAND} -E create_symlink
+    /opt/homebrew/opt/lz4/include/lz4file.h
+    ${CMAKE_BINARY_DIR}/lz4_symlinks/lz4/lz4file.h
+    WORKING_DIRECTORY ${CMAKE_BINARY_DIR})
+
+# Add the symlink directory to include paths
+include_directories(${CMAKE_BINARY_DIR}/lz4_symlinks)
+
+# Homebrew libraries - zstd
+find_library(ZSTD_LIB NAMES zstd PATHS /opt/homebrew/lib REQUIRED)
+add_library(zstd STATIC IMPORTED GLOBAL)
+set_target_properties(zstd PROPERTIES
+    IMPORTED_LOCATION ${ZSTD_LIB}
+    INTERFACE_INCLUDE_DIRECTORIES /opt/homebrew/opt/zstd/include)
+
+# Create symlinks for zstd headers to satisfy zstd/zstd.h include pattern
+execute_process(COMMAND ${CMAKE_COMMAND} -E make_directory
+    ${CMAKE_BINARY_DIR}/zstd_symlinks/zstd
+    WORKING_DIRECTORY ${CMAKE_BINARY_DIR})
+
+execute_process(COMMAND ${CMAKE_COMMAND} -E create_symlink
+    /opt/homebrew/opt/zstd/include/zstd.h
+    ${CMAKE_BINARY_DIR}/zstd_symlinks/zstd/zstd.h
+    WORKING_DIRECTORY ${CMAKE_BINARY_DIR})
+
+# Add the symlink directory to include paths
+include_directories(${CMAKE_BINARY_DIR}/zstd_symlinks)
+
 # zlib (from homebrew) - use direct path
 set(ZLIB_LIB "/opt/homebrew/Cellar/zlib/1.3.1/lib/libz.a")
 if(NOT EXISTS ${ZLIB_LIB})
@@ -609,6 +669,8 @@ list(APPEND STARROCKS_LINK_LIBS
     bitshuffle
     jemalloc
     snappy
+    lz4
+    zstd
     zlib
     vectorscan
     hs_runtime
@@ -755,6 +817,8 @@ list(FILTER STARROCKS_SOURCES EXCLUDE REGEX ".*jit_.*\\.cpp$")
 list(FILTER STARROCKS_SOURCES EXCLUDE REGEX ".*avro.*\\.cpp$")
 list(FILTER STARROCKS_SOURCES EXCLUDE REGEX ".*formats/orc/.*\\.cpp$")
 list(FILTER STARROCKS_SOURCES EXCLUDE REGEX ".*orc.*\\.cpp$")
+# Exclude Parquet format
+list(FILTER STARROCKS_SOURCES EXCLUDE REGEX ".*parquet.*\\.cpp$")
 
 # Exclude other disabled components
 list(FILTER STARROCKS_SOURCES EXCLUDE REGEX ".*iceberg.*\\.cpp$")
@@ -774,7 +838,13 @@ list(FILTER STARROCKS_SOURCES EXCLUDE REGEX ".*/data_consumer\\.cpp$")
 # Exclude problematic components
 list(FILTER STARROCKS_SOURCES EXCLUDE REGEX ".*/inverted_plugin_factory\\.cpp$")
 list(FILTER STARROCKS_SOURCES EXCLUDE REGEX ".*clucene.*\\.cpp$")
+list(FILTER STARROCKS_SOURCES EXCLUDE REGEX ".*clucene.*\\.h$")
+list(FILTER STARROCKS_SOURCES EXCLUDE REGEX ".*/storage/index/inverted/.*\\.cpp$")
 list(FILTER STARROCKS_SOURCES EXCLUDE REGEX ".*/exprs/gin_functions\\.cpp$")
+
+# Exclude files that depend on inverted plugin factory (CLucene)
+list(FILTER STARROCKS_SOURCES EXCLUDE REGEX ".*/runtime/snapshot_loader\\.cpp$")
+list(FILTER STARROCKS_SOURCES EXCLUDE REGEX ".*/storage/snapshot_manager\\.cpp$")
 
 # Exclude geo components that need special parsing files
 list(FILTER STARROCKS_SOURCES EXCLUDE REGEX ".*/geo/.*\\.cpp$")
@@ -838,9 +908,30 @@ list(FILTER STARROCKS_SOURCES EXCLUDE REGEX ".*data_consumer_group.*\\.cpp$")
 list(FILTER STARROCKS_SOURCES EXCLUDE REGEX ".*iceberg.*sink.*\\.cpp$")
 list(FILTER STARROCKS_SOURCES EXCLUDE REGEX ".*iceberg_table_sink.*\\.cpp$")
 
-# Create StarRocks core library
+# Exclude Linux-only memory hook implementation on macOS
+list(FILTER STARROCKS_SOURCES EXCLUDE REGEX ".*/service/mem_hook\\.cpp$")
+
+# Exclude Linux-specific utilities that don't have macOS equivalents
+list(FILTER STARROCKS_SOURCES EXCLUDE REGEX ".*/util/bfd_parser\\.cpp$")
+list(FILTER STARROCKS_SOURCES EXCLUDE REGEX ".*/util/buffered_stream\\.cpp$")
+
+# Exclude all Lake storage sources on macOS to avoid conflicts and unsupported dependencies
+list(FILTER STARROCKS_SOURCES EXCLUDE REGEX ".*/storage/lake/.*\\.cpp$")
+
+# Create StarRocks core library with special handling for kv_store.cpp
+# Separate kv_store.cpp to apply different compile flags
+list(REMOVE_ITEM STARROCKS_SOURCES "${SRC_DIR}/storage/kv_store.cpp")
 add_library(starrocks_core STATIC ${STARROCKS_SOURCES})
-target_link_libraries(starrocks_core ${STARROCKS_LINK_LIBS})
+
+# Add kv_store.cpp with special compile flags (without shim header)
+add_library(kv_store_obj OBJECT "${SRC_DIR}/storage/kv_store.cpp")
+# Disable fmt shims for kv_store.cpp to avoid RocksDB/fmt conflicts
+set_source_files_properties("${SRC_DIR}/storage/kv_store.cpp" PROPERTIES
+    COMPILE_FLAGS "-DSTARROCKS_DISABLE_FMT_SHIMS=1")
+
+# macOS-specific replacement sources
+
+target_link_libraries(starrocks_core PRIVATE ${STARROCKS_LINK_LIBS} kv_store_obj)
 
 # ==============================================================================
 # MAIN EXECUTABLE TARGET
