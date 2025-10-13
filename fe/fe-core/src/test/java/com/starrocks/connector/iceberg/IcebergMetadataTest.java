@@ -1907,13 +1907,6 @@ public class IcebergMetadataTest extends TableTestBase {
         ExceptionChecker.expectThrowsWithMsg(StarRocksConnectorException.class,
                 "Cannot find snapshot with reference name",
                 () -> IcebergMetadata.getSnapshotIdFromVersion(mockedNativeTableB, finalTableVersion3));
-
-        constantOperator = new ConstantOperator(123, INT);
-        tableVersion = new ConnectorTableVersion(PointerType.VERSION, constantOperator);
-        ConnectorTableVersion finalTableVersion4 = tableVersion;
-        ExceptionChecker.expectThrowsWithMsg(StarRocksConnectorException.class,
-                "Unsupported type for table version",
-                () -> IcebergMetadata.getSnapshotIdFromVersion(mockedNativeTableB, finalTableVersion4));
     }
 
     public void testNullTableUUID() {

@@ -449,8 +449,11 @@ public class IcebergMetadata implements ConnectorMetadata {
 
     private static long getTargetSnapshotIdFromVersion(org.apache.iceberg.Table table, ConstantOperator version) {
         long snapshotId;
-        if (version.getType() == com.starrocks.catalog.Type.BIGINT) {
-            snapshotId = version.getBigint();
+        if (version.getType() == com.starrocks.catalog.Type.TINYINT ||
+                version.getType() == com.starrocks.catalog.Type.SMALLINT ||
+                version.getType() == com.starrocks.catalog.Type.INT ||
+                version.getType() == com.starrocks.catalog.Type.BIGINT) {
+            snapshotId = version.castTo(com.starrocks.catalog.Type.BIGINT).get().getBigint();
         } else if (version.getType() == com.starrocks.catalog.Type.VARCHAR) {
             String refName = version.getVarchar();
             SnapshotRef ref = table.refs().get(refName);
