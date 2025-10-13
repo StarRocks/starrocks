@@ -184,7 +184,7 @@ public class DictionaryMgrTest {
 
         List<List<String>> allInfo = localDictionaryMgr.getAllInfo("dict");
         Assertions.assertTrue(
-                allInfo.get(0).get(allInfo.get(0).size() - 1).contains("Can not get Memory info, errMsg: test error"));
+                allInfo.get(0).get(allInfo.get(0).size() - 1).contains("Can not get memory info, errMsg: test error"));
     }
 
     @Test
