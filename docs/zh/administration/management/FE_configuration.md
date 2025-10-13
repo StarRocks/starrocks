@@ -4171,6 +4171,7 @@ Compaction Score 代表了一个表分区是否值得进行 Compaction 的评分
 - 描述：刷新 Hive 外表元数据缓存的时间间隔。
 - 引入版本：-
 
+<!--
 ##### hive_meta_cache_ttl_s
 
 - 默认值：3600 * 24
@@ -4179,6 +4180,7 @@ Compaction Score 代表了一个表分区是否值得进行 Compaction 的评分
 - 是否动态：否
 - 描述：Hive 外表元数据缓存的失效时间。
 - 引入版本：-
+-->
 
 <!--
 ##### remote_file_cache_ttl_s
