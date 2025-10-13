@@ -148,7 +148,7 @@ public class TaskRunHistoryTable {
                         createTime,
                         finishTime,
                         expireTime,
-                        Strings.quote(StringEscapeUtils.escapeJava(status.toJSON())));
+                        Strings.quote(StringEscapeUtils.escapeJson(status.toJSON())));
             }).collect(Collectors.joining(", "));
 
             String sql = insert + values;
