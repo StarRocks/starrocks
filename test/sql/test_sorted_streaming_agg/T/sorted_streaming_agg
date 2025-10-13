@@ -53,8 +53,6 @@ select c0, sum(c1), max(c2), count(1) from t0 group by c0 order by c0;
 select c0, c1, sum(c1) from t0 group by c0, c1 order by c0, c1;
 select c0 from t1 group by c0 order by c0;
 select c0, c1 from t1 group by c0, c1 order by c0, c1;
-<<<<<<< HEAD
-=======
 
 -- Enhanced tests with more data types and multi-column scenarios
 
@@ -254,4 +252,3 @@ insert into large_table SELECT generate_series, 4096 - generate_series, generate
 insert into large_table SELECT c0,c1,c2 from large_table, UNNEST([1,2]);
 create table dummy as select max(c1)from large_table group by c0;
 select count(*) from dummy;
->>>>>>> 7208fb3203 ([BugFix] Fix sort agg got wrong result in shared-data mode (#63849))
