@@ -81,7 +81,7 @@ std::string to_load_error_http_path(const std::string& file_name) {
     std::string host = BackendOptions::get_localhost();
     std::string resolved_ip = host;
 
-    if (config::enable_resolve_hostname) {
+    if (config::enable_resolve_hostname_to_ip_in_load_error_url) {
         // if host is not ip, then DNS parse
         if (host.find('.') != std::string::npos &&
             (host.find(':') == std::string::npos || host.find(':') > host.find('.'))) {

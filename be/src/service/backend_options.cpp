@@ -33,6 +33,7 @@ static const std::string PRIORITY_CIDR_SEPARATOR = ";";
 
 std::string BackendOptions::_s_localhost;
 std::string BackendOptions::_s_local_ip;
+std::string BackendOptions::_s_resolved_ip;
 std::vector<CIDR> BackendOptions::_s_priority_cidrs;
 TBackend BackendOptions::_backend;
 bool BackendOptions::_bind_ipv6 = false;
@@ -116,8 +117,24 @@ bool BackendOptions::init(bool is_cn) {
         LOG(WARNING) << "failed to find one valid non-loopback address, use loopback address.";
         set_localhost(loopback);
     }
+
+    _s_resolved_ip = _s_localhost;
+    if (config::enable_resolve_hostname_to_ip_in_load_error_url) {
+        // if host is not ip, then parse to ip
+        if (_s_localhost.find('.') != std::string::npos &&
+            (_s_localhost.find(':') == std::string::npos || _s_localhost.find(':') > _s_localhost.find('.'))) {
+            std::string ip;
+            Status status = hostname_to_ip(_s_localhost, ip);
+            if (status.ok()) {
+                _s_resolved_ip = ip;
+            }
+            // if failed to parse, keep org value
+        }
+    }
+
     LOG(INFO) << "localhost " << _s_localhost;
     LOG(INFO) << "local_ip " << _s_local_ip;
+    LOG(INFO) << "resolved_ip " << _s_resolved_ip;
     return true;
 }
 
@@ -127,6 +144,10 @@ std::string BackendOptions::get_localhost() {
 
 std::string BackendOptions::get_local_ip() {
     return _s_local_ip;
+}
+
+std::string BackendOptions::get_resolved_ip() {
+    return _s_resolved_ip;
 }
 
 bool BackendOptions::is_bind_ipv6() {

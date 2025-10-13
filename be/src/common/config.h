@@ -70,7 +70,7 @@ CONF_mInt32(brpc_stub_expire_s, "3600"); // 60 minutes
 // - false: Keep the original hostname in the error URL.
 //  Recommended if your DNS setup already allows resolving backend hostnames
 //  across your network, or if IP-based access is unstable (e.g., NAT environments).
-CONF_Bool(enable_resolve_hostname, "false");
+CONF_mBool(enable_resolve_hostname_to_ip_in_load_error_url, "false");
 
 // Declare a selection strategy for those servers have many ips.
 // Note that there should at most one ip match this list.

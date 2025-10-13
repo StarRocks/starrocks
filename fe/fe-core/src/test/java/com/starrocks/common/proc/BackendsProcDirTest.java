@@ -256,7 +256,7 @@ public class BackendsProcDirTest {
 
     @Test
     public void testIPTitle() {
-        Assertions.assertEquals("IP", BackendsProcDir.TITLE_NAMES.get(2));
+        Assertions.assertEquals("IP", BackendsProcDir.TITLE_NAMES.get(1));
     }
 
     @Test

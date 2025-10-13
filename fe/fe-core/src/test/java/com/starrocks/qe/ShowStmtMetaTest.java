@@ -248,25 +248,24 @@ public class ShowStmtMetaTest {
     public void testShowFrontendsStmt() {
         ShowFrontendsStmt stmt = new ShowFrontendsStmt();
         ShowResultSetMetaData metaData = new ShowResultMetaFactory().getMetadata(stmt);
-        Assertions.assertEquals(18, metaData.getColumnCount());
+        Assertions.assertEquals(17, metaData.getColumnCount());
         Assertions.assertEquals("Id", metaData.getColumn(0).getName());
         Assertions.assertEquals("Name", metaData.getColumn(1).getName());
-        Assertions.assertEquals("HostAddress", metaData.getColumn(2).getName());
-        Assertions.assertEquals("IP", metaData.getColumn(3).getName());
-        Assertions.assertEquals("EditLogPort", metaData.getColumn(4).getName());
-        Assertions.assertEquals("HttpPort", metaData.getColumn(5).getName());
-        Assertions.assertEquals("QueryPort", metaData.getColumn(6).getName());
-        Assertions.assertEquals("RpcPort", metaData.getColumn(7).getName());
-        Assertions.assertEquals("Role", metaData.getColumn(8).getName());
-        Assertions.assertEquals("ClusterId", metaData.getColumn(9).getName());
-        Assertions.assertEquals("Join", metaData.getColumn(10).getName());
-        Assertions.assertEquals("Alive", metaData.getColumn(11).getName());
-        Assertions.assertEquals("ReplayedJournalId", metaData.getColumn(12).getName());
-        Assertions.assertEquals("LastHeartbeat", metaData.getColumn(13).getName());
-        Assertions.assertEquals("IsHelper", metaData.getColumn(14).getName());
-        Assertions.assertEquals("ErrMsg", metaData.getColumn(15).getName());
-        Assertions.assertEquals("StartTime", metaData.getColumn(16).getName());
-        Assertions.assertEquals("Version", metaData.getColumn(17).getName());
+        Assertions.assertEquals("IP", metaData.getColumn(2).getName());
+        Assertions.assertEquals("EditLogPort", metaData.getColumn(3).getName());
+        Assertions.assertEquals("HttpPort", metaData.getColumn(4).getName());
+        Assertions.assertEquals("QueryPort", metaData.getColumn(5).getName());
+        Assertions.assertEquals("RpcPort", metaData.getColumn(6).getName());
+        Assertions.assertEquals("Role", metaData.getColumn(7).getName());
+        Assertions.assertEquals("ClusterId", metaData.getColumn(8).getName());
+        Assertions.assertEquals("Join", metaData.getColumn(9).getName());
+        Assertions.assertEquals("Alive", metaData.getColumn(10).getName());
+        Assertions.assertEquals("ReplayedJournalId", metaData.getColumn(11).getName());
+        Assertions.assertEquals("LastHeartbeat", metaData.getColumn(12).getName());
+        Assertions.assertEquals("IsHelper", metaData.getColumn(13).getName());
+        Assertions.assertEquals("ErrMsg", metaData.getColumn(14).getName());
+        Assertions.assertEquals("StartTime", metaData.getColumn(15).getName());
+        Assertions.assertEquals("Version", metaData.getColumn(16).getName());
     }
 
     @Test

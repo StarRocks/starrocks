@@ -36,8 +36,6 @@ package com.starrocks.common.proc;
 
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
-import com.google.common.collect.Sets;
-import com.starrocks.catalog.DomainResolver;
 import com.starrocks.common.Config;
 import com.starrocks.common.Pair;
 import com.starrocks.common.util.NetUtils;
@@ -53,7 +51,6 @@ import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Set;
 
 /*
  * Show current added frontends
@@ -63,7 +60,7 @@ public class FrontendsProcNode implements ProcNodeInterface {
     private static final Logger LOG = LogManager.getLogger(FrontendsProcNode.class);
 
     public static final ImmutableList<String> TITLE_NAMES = new ImmutableList.Builder<String>()
-            .add("Id").add("Name").add("HostAddress").add("IP").add("EditLogPort").add("HttpPort").add("QueryPort").add("RpcPort")
+            .add("Id").add("Name").add("IP").add("EditLogPort").add("HttpPort").add("QueryPort").add("RpcPort")
             .add("Role").add("ClusterId").add("Join").add("Alive").add("ReplayedJournalId")
             .add("LastHeartbeat").add("IsHelper").add("ErrMsg").add("StartTime").add("Version")
             .build();
@@ -103,19 +100,12 @@ public class FrontendsProcNode implements ProcNodeInterface {
         List<InetSocketAddress> allFe = globalStateMgr.getHaProtocol().getElectableNodes(true /* include leader */);
         allFe.addAll(globalStateMgr.getHaProtocol().getObserverNodes());
         List<Pair<String, Integer>> helperNodes = globalStateMgr.getNodeMgr().getHelperNodes();
-        DomainResolver domainResolver = new DomainResolver();
 
         for (Frontend fe : globalStateMgr.getNodeMgr().getFrontends(null /* all */)) {
             List<String> info = new ArrayList<String>();
             info.add(Integer.toString(fe.getFid()));
-            Set<String> resolvedIPs = Sets.newHashSet();
-            String resolvedip = null;
             info.add(fe.getNodeName());
             info.add(fe.getHost());
-            if (domainResolver.resolveWithDNS(fe.getHost(), resolvedIPs) && !resolvedIPs.isEmpty()) {
-                resolvedip = (String) resolvedIPs.toArray()[0];
-            }
-            info.add(resolvedip);
             info.add(Integer.toString(fe.getEditLogPort()));
             info.add(Integer.toString(Config.http_port));
 
