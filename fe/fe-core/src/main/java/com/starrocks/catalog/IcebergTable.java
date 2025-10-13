@@ -98,6 +98,8 @@ public class IcebergTable extends Table {
     public static final String EQUALITY_DELETE_TABLE_COMMENT = "equality_delete_table_comment";
     public static final String ROW_ID = "_row_id";
 
+    public static final String ROW_ID = "_row_id";
+
     private String catalogName;
     @SerializedName(value = "dn")
     protected String catalogDBName;
@@ -112,6 +114,7 @@ public class IcebergTable extends Table {
     private List<Column> partitionColumns;
     private Optional<Boolean> hasBucketProperties = Optional.empty();
     private final AtomicLong partitionIdGen = new AtomicLong(0L);
+    // @TODO reserved field
 
     public IcebergTable() {
         super(TableType.ICEBERG);

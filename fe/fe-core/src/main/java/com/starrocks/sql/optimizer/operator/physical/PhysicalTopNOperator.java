@@ -207,6 +207,7 @@ public class PhysicalTopNOperator extends PhysicalOperator {
             builder.topNType = operator.topNType;
             builder.isSplit = operator.isSplit;
             builder.isEnforced = operator.isEnforced;
+            builder.preAggCall = operator.preAggCall;
             return this;
         }
 

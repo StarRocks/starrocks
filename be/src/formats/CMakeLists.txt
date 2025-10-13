@@ -90,6 +90,7 @@ add_library(Formats STATIC
         parquet/variant.h
         parquet/variant.cpp
         parquet/iceberg_row_id_reader.cpp
+        parquet/row_source_reader.cpp
         disk_range.hpp
         )
 

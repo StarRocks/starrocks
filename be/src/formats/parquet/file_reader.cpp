@@ -53,6 +53,7 @@ FileReader::FileReader(int chunk_size, RandomAccessFile* file, size_t file_size,
 FileReader::~FileReader() = default;
 
 Status FileReader::init(HdfsScannerContext* ctx) {
+    // @TODO we don't pass first row id 
     _scanner_ctx = ctx;
     if (ctx->use_file_metacache) {
         _cache = DataCache::GetInstance()->page_cache();
@@ -62,6 +63,8 @@ Status FileReader::init(HdfsScannerContext* ctx) {
     FileMetaDataParser file_metadata_parser{_file, ctx, _cache, &_datacache_options, _file_size};
     ASSIGN_OR_RETURN(_file_metadata, file_metadata_parser.get_file_metadata());
 
+    // @TODO handle reserved_field_slots
+
     // set existed SlotDescriptor in this parquet file
     std::unordered_set<std::string> existed_column_names;
     _meta_helper = _build_meta_helper();
@@ -69,6 +72,7 @@ Status FileReader::init(HdfsScannerContext* ctx) {
     RETURN_IF_ERROR(_scanner_ctx->update_materialized_columns(existed_column_names));
     ASSIGN_OR_RETURN(_is_file_filtered, _scanner_ctx->should_skip_by_evaluating_not_existed_slots());
     if (_is_file_filtered) {
+        LOG(INFO) << "is_file_filtered";
         return Status::OK();
     }
     RETURN_IF_ERROR(_build_split_tasks());
@@ -167,6 +171,8 @@ Status FileReader::_build_split_tasks() {
 bool FileReader::_filter_group(const GroupReaderPtr& group_reader) {
     bool& filtered = group_reader->get_is_group_filtered();
     filtered = false;
+    // LOG(INFO) << "FileReader::_filter_group, predicate_tree: " << _scanner_ctx->predicate_tree.root().debug_string();
+
     auto visitor = PredicateFilterEvaluator{_scanner_ctx->predicate_tree, group_reader.get(),
                                             _scanner_ctx->parquet_page_index_enable,
                                             _scanner_ctx->parquet_bloom_filter_enable};
@@ -247,6 +253,7 @@ Status FileReader::_collect_row_group_io(std::shared_ptr<GroupReader>& group_rea
 }
 
 Status FileReader::_init_group_readers() {
+    // LOG(INFO) << "FileReader::_init_group_readers";
     const HdfsScannerContext& fd_scanner_ctx = *_scanner_ctx;
 
     // _group_reader_param is used by all group readers
@@ -271,6 +278,7 @@ Status FileReader::_init_group_readers() {
     _group_reader_param.modification_time = _datacache_options.modification_time;
     _group_reader_param.file_size = _file_size;
     _group_reader_param.datacache_options = &_datacache_options;
+    _group_reader_param.scan_range_id = fd_scanner_ctx.scan_range_id;
 
     int64_t row_group_first_row_id = _scanner_ctx->scan_range->first_row_id;
     int64_t row_group_first_row = 0;
@@ -388,6 +396,11 @@ Status FileReader::get_next(ChunkPtr* chunk) {
 }
 
 Status FileReader::_exec_no_materialized_column_scan(ChunkPtr* chunk) {
+    // LOG(INFO) << "FileReader::_exec_no_materialized_column_scan";
+    // @TODO handle row_id
+
+
+    // @TODO we don't know which groups are filterd, so we can't fill row_id here?
     if (_scan_row_count < _total_row_count) {
         size_t read_size = 0;
         if (_scanner_ctx->use_count_opt) {

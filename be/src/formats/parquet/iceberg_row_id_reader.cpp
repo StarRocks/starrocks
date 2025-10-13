@@ -51,7 +51,7 @@ Status IcebergRowIdReader::fill_dst_column(ColumnPtr& dst, ColumnPtr& src) {
 }
 
 void IcebergRowIdReader::collect_column_io_range(std::vector<io::SharedBufferedInputStream::IORange>* ranges,
-                                                 int64_t* end_offset, ColumnIOTypeFlags types, bool active) {
+                                                  int64_t* end_offset, ColumnIOTypeFlags types, bool active) {
     // No IO ranges to collect for row id reader.
 }
 
