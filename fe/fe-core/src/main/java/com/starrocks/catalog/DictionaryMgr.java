@@ -442,7 +442,7 @@ public class DictionaryMgr implements Writable, GsonPostProcessable {
                 Map<TNetworkAddress, PProcessDictionaryCacheResult> resultMap = ret.first;
                 String errMsg = ret.second;
                 if (resultMap == null) {
-                    allInfo.get(allInfo.size() - 1).add("Can not get Memory info, errMsg: " + errMsg);
+                    allInfo.get(allInfo.size() - 1).add("Can not get memory info, errMsg: " + errMsg);
                     continue;
                 }
 
