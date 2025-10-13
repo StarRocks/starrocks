@@ -1,4 +1,4 @@
--- name: test_transparent_mv_iceberg_part2 @sequential @slow
+-- name: test_transparent_mv_iceberg_part2 @slow
 create external catalog mv_iceberg_${uuid0}
 properties
 (
@@ -62,7 +62,7 @@ set new_planner_optimize_timeout=10000;
 CREATE MATERIALIZED VIEW test_mv1 
 PARTITION BY str2date(dt, '%Y-%m-%d')
 REFRESH DEFERRED MANUAL 
-PROPERTIES ("transparent_mv_rewrite_mode" = "true")
+PROPERTIES ("transparent_mv_rewrite_mode" = "transparent_or_error")
 AS 
   SELECT dt,sum(num) as num FROM mv_iceberg_${uuid0}.mv_iceberg_db_${uuid0}.t2 GROUP BY dt;
 -- result:
@@ -246,7 +246,7 @@ drop materialized view default_catalog.db_${uuid0}.test_mv1;
 CREATE MATERIALIZED VIEW test_mv1 
 PARTITION BY date_trunc('day', dt)
 REFRESH DEFERRED MANUAL 
-PROPERTIES ("transparent_mv_rewrite_mode" = "true")
+PROPERTIES ("transparent_mv_rewrite_mode" = "transparent_or_error")
 AS  select * from (
 SELECT dt, sum(num) as num FROM mv_iceberg_${uuid0}.mv_iceberg_db_${uuid0}.t1 GROUP BY dt 
 UNION ALL
