@@ -1073,7 +1073,7 @@ public:
         }
         const TypeDescriptor& to_type = this->type();
 
-        ColumnPtr result_column;
+        MutableColumnPtr result_column;
         // NOTE
         // For json type, it could not be converted from decimal directly, as a workaround we convert decimal
         // to double at first, then convert double to JSON
@@ -1087,9 +1087,9 @@ public:
                     double_column = VectorizedUnaryFunction<DecimalTo<OverflowMode::OUTPUT_NULL>>::evaluate<
                             FromType, TYPE_DOUBLE>(column);
                 }
-                result_column = CastFn<TYPE_DOUBLE, TYPE_JSON, AllowThrowException>::cast_fn(std::move(double_column));
+                result_column = Column::mutate(CastFn<TYPE_DOUBLE, TYPE_JSON, AllowThrowException>::cast_fn(std::move(double_column)));
             } else {
-                result_column = CastFn<FromType, ToType, AllowThrowException>::cast_fn(std::move(column));
+                result_column = Column::mutate(CastFn<FromType, ToType, AllowThrowException>::cast_fn(std::move(column)));
             }
         } else if constexpr (lt_is_decimal<FromType> && lt_is_decimal<ToType>) {
             if (context != nullptr && context->error_if_overflow()) {
@@ -1119,7 +1119,7 @@ public:
         } else if constexpr (lt_is_string<FromType> && lt_is_binary<ToType>) {
             result_column = Column::mutate(std::move(column));
         } else {
-            result_column = CastFn<FromType, ToType, AllowThrowException>::cast_fn(std::move(column));
+            result_column = Column::mutate(CastFn<FromType, ToType, AllowThrowException>::cast_fn(std::move(column)));
         }
         DCHECK(result_column.get() != nullptr);
         if (result_column->is_constant()) {

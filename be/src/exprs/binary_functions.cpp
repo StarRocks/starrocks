@@ -119,7 +119,7 @@ Status BinaryFunctions::from_binary_close(FunctionContext* context, FunctionCont
 StatusOr<ColumnPtr> BinaryFunctions::iceberg_truncate_binary(FunctionContext* context, const Columns& columns) {
     ColumnPtr c0 = columns[0];
     ColumnPtr c1 = columns[1];
-    NullColumnPtr null_flags;
+    NullColumn::MutablePtr null_flags;
     bool has_null = false;
     PREPARE_COLUMN_WITH_CONST_AND_NULL_FOR_ICEBERG_FUNC(c0, c1);
     (void)has_null;

@@ -836,7 +836,7 @@ Status Aggregator::evaluate_agg_input_column(Chunk* chunk, std::vector<ExprConte
             // for function like corr, FE forbid second args to be const, we will always unpack const column for it
             // for function like percentile_disc, the second args is const, do not unpack it
             if (agg_expr_ctxs[j]->root()->is_constant()) {
-                _agg_input_columns[i][j] = std::move(col);
+                _agg_input_columns[i][j] = col->as_mutable_ptr();
             } else {
                 _agg_input_columns[i][j] = ColumnHelper::unpack_and_duplicate_const_column(chunk->num_rows(), col);
             }
@@ -1059,7 +1059,12 @@ Status Aggregator::output_chunk_by_streaming(Chunk* input_chunk, ChunkPtr* chunk
             } else {
                 {
                     SCOPED_THREAD_LOCAL_STATE_ALLOCATOR_SETTER(_allocator.get());
-                    _agg_functions[i]->convert_to_serialize_format(_agg_fn_ctxs[i], _agg_input_columns[i],
+                    // convert_to_serialize_format expects const Columns&, create a view
+                    Columns agg_input_view(_agg_input_columns[i].size());
+                    for (size_t j = 0; j < _agg_input_columns[i].size(); j++) {
+                        agg_input_view[j] = _agg_input_columns[i][j];
+                    }
+                    _agg_functions[i]->convert_to_serialize_format(_agg_fn_ctxs[i], agg_input_view,
                                                                    result_chunk->num_rows(), agg_result_column[i]);
                 }
                 result_chunk->append_column(std::move(agg_result_column[i]), slot_id);
@@ -1110,7 +1115,12 @@ Status Aggregator::convert_to_spill_format(Chunk* input_chunk, ChunkPtr* chunk) 
                 DCHECK(i < _agg_input_columns.size() && _agg_input_columns[i].size() >= 1);
                 result_chunk->append_column(std::move(_agg_input_columns[i][0]), slot_id);
             } else {
-                _agg_functions[i]->convert_to_serialize_format(_agg_fn_ctxs[i], _agg_input_columns[i],
+                // convert_to_serialize_format expects const Columns&, create a view
+                Columns agg_input_view(_agg_input_columns[i].size());
+                for (size_t j = 0; j < _agg_input_columns[i].size(); j++) {
+                    agg_input_view[j] = _agg_input_columns[i][j];
+                }
+                _agg_functions[i]->convert_to_serialize_format(_agg_fn_ctxs[i], agg_input_view,
                                                                result_chunk->num_rows(), agg_result_column[i]);
                 result_chunk->append_column(std::move(agg_result_column[i]), slot_id);
             }
@@ -1136,7 +1146,9 @@ Status Aggregator::output_chunk_by_streaming_with_selection(Chunk* input_chunk, 
         // At present, the type of problem cannot be completely solved,
         // and a new solution needs to be designed to solve it completely
         if (_group_by_column->size() == num_input_rows) {
-            _group_by_column->filter(_streaming_selection);
+            auto mut_col = _group_by_column->as_mutable_ptr();
+            mut_col->filter(_streaming_selection);
+            _group_by_column = std::move(mut_col);
         }
     }
 
@@ -1294,9 +1306,10 @@ Status Aggregator::_evaluate_group_by_exprs(Chunk* chunk) {
             // All hash table could handle only null, and we don't know the real data
             // type for only null column, so we don't unpack it.
             if (!_group_by_columns[i]->only_null()) {
-                auto* const_column = static_cast<ConstColumn*>(_group_by_columns[i].get());
-                const_column->data_column()->assign(chunk->num_rows(), 0);
-                _group_by_columns[i] = const_column->data_column();
+                auto mut_col = _group_by_columns[i]->as_mutable_ptr();
+                auto* const_column = static_cast<ConstColumn*>(mut_col.get());
+                const_column->mutable_data_column()->assign(chunk->num_rows(), 0);
+                _group_by_columns[i] = const_column->data_column_ptr();
             }
         }
         // Scalar function compute will return non-nullable column
@@ -1622,7 +1635,7 @@ Status Aggregator::convert_hash_map_to_chunk(int32_t chunk_size, ChunkPtr* chunk
                                              bool force_use_intermediate_as_output) {
     SCOPED_TIMER(_agg_stat->get_results_timer);
 
-    RETURN_IF_ERROR(_hash_map_variant.visit([&](auto& variant_value) {
+    RETURN_IF_ERROR(_hash_map_variant.visit([&, this](auto& variant_value) {
         auto& hash_map_with_key = *variant_value;
         using HashMapWithKey = std::remove_reference_t<decltype(hash_map_with_key)>;
 
@@ -1652,12 +1665,13 @@ Status Aggregator::convert_hash_map_to_chunk(int32_t chunk_size, ChunkPtr* chunk
         if (read_index > 0) {
             {
                 SCOPED_TIMER(_agg_stat->group_by_append_timer);
-                // Convert MutableColumns to Columns for hashtable interface
-                Columns group_by_cols_view(_group_by_types.size());
+                // Convert MutableColumns to Columns for hashtable interface and explicitly call const overload
+                Columns group_by_cols_view(group_by_columns.size());
                 for (size_t i = 0; i < group_by_columns.size(); i++) {
                     group_by_cols_view[i] = group_by_columns[i];
                 }
-                hash_map_with_key.insert_keys_to_columns(hash_map_with_key.results, group_by_cols_view, read_index);
+                const typename HashMapWithKey::ResultVector& const_results = hash_map_with_key.results;
+                hash_map_with_key.insert_keys_to_columns(const_results, group_by_cols_view, read_index);
             }
 
             {
@@ -1732,7 +1746,7 @@ void Aggregator::build_hash_set_with_selection(size_t chunk_size) {
 void Aggregator::convert_hash_set_to_chunk(int32_t chunk_size, ChunkPtr* chunk) {
     SCOPED_TIMER(_agg_stat->get_results_timer);
 
-    _hash_set_variant.visit([&](auto& variant_value) {
+    _hash_set_variant.visit([&, this](auto& variant_value) {
         auto& hash_set = *variant_value;
         using HashSetWithKey = std::remove_reference_t<decltype(hash_set)>;
         using Iterator = typename HashSetWithKey::Iterator;

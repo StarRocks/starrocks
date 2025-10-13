@@ -273,9 +273,9 @@ public:
                 data = data_result;
             }
 
-            NullColumnPtr null_flags;
+            NullColumn::MutablePtr null_flags;
             if (data->is_nullable()) {
-                null_flags = ColumnHelper::as_raw_column<NullableColumn>(data)->null_column();
+                null_flags = ColumnHelper::as_raw_column<NullableColumn>(data)->null_column_mutable_ptr();
             } else {
                 null_flags = RunTimeColumnType<TYPE_NULL>::create();
                 null_flags->resize(data->size());
@@ -538,8 +538,9 @@ public:
         if (v1->only_null()) {
             auto p = ColumnHelper::as_raw_column<NullableColumn>(
                     ColumnHelper::as_raw_column<ConstColumn>(v1)->data_column());
-            ld = RunTimeColumnType<LType>::create();
-            ld->append_default();
+            auto ld_mut = RunTimeColumnType<LType>::create();
+            ld_mut->append_default();
+            ld = std::move(ld_mut);
             ln = p->null_column();
         } else if (v1->is_constant()) {
             ld = ColumnHelper::as_raw_column<ConstColumn>(v1)->data_column();
@@ -556,8 +557,9 @@ public:
         if (v2->only_null()) {
             auto p = ColumnHelper::as_raw_column<NullableColumn>(
                     ColumnHelper::as_raw_column<ConstColumn>(v2)->data_column());
-            rd = RunTimeColumnType<LType>::create();
-            rd->append_default();
+            auto rd_mut = RunTimeColumnType<LType>::create();
+            rd_mut->append_default();
+            rd = std::move(rd_mut);
             rn = p->null_column();
         } else if (v2->is_constant()) {
             rd = ColumnHelper::as_raw_column<ConstColumn>(v2)->data_column();

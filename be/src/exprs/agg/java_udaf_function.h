@@ -110,7 +110,7 @@ public:
     }
 
     void convert_to_serialize_format(FunctionContext* ctx, const Columns& src, size_t batch_size,
-                                     ColumnPtr* dst) const final {
+                                     MutableColumnPtr& dst) const final {
         auto& helper = JVMFunctionHelper::getInstance();
         auto* env = helper.getEnv();
         auto* udf_ctxs = ctx->udaf_ctxs();
@@ -172,7 +172,7 @@ public:
             offsets += slice_sz[i];
         }
         // append result to dst column
-        CHECK((*dst)->append_strings(slices));
+        CHECK(dst->append_strings(slices));
     }
 
     // State Data

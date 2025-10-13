@@ -108,7 +108,7 @@ Status TableFunctionNode::get_next(RuntimeState* state, ChunkPtr* chunk, bool* e
     SCOPED_TIMER(_runtime_profile->total_time_counter());
     int chunk_size = runtime_state()->chunk_size();
     int reserve_chunk_size = chunk_size;
-    Columns output_columns;
+    MutableColumns output_columns;
 
     if (reached_limit()) {
         *eos = true;

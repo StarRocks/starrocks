@@ -115,7 +115,7 @@ public:
     }
 
     // If column is const column, duplicate the data column to chunk_size
-    static ColumnPtr unpack_and_duplicate_const_column(size_t chunk_size, const ColumnPtr& column) {
+    static MutableColumnPtr unpack_and_duplicate_const_column(size_t chunk_size, const ColumnPtr& column) {
         return unpack_and_duplicate_const_column(chunk_size, column->as_mutable_ptr());
     }
 
@@ -137,32 +137,34 @@ public:
         return std::equal(data1.begin(), data1.end(), data2.begin());
     }
 
-    static ColumnPtr unfold_const_column(const TypeDescriptor& type_desc, size_t size, const ColumnPtr& column) {
+    static MutableColumnPtr unfold_const_column(const TypeDescriptor& type_desc, size_t size, const ColumnPtr& column) {
         if (column->only_null()) {
             auto col = ColumnHelper::create_column(type_desc, true);
             [[maybe_unused]] bool ok = col->append_nulls(size);
             DCHECK(ok);
             return col;
         } else if (column->is_constant()) {
-            auto* const_column = down_cast<ConstColumn*>(column->as_mutable_ptr().get());
-            const_column->data_column()->assign(size, 0);
-            return const_column->data_column();
+            auto mut_column = column->as_mutable_ptr();
+            auto* const_column = down_cast<ConstColumn*>(mut_column.get());
+            const_column->mutable_data_column()->assign(size, 0);
+            return const_column->data_column_ptr();
         }
-        return column;
+        return column->as_mutable_ptr();
     }
 
-    static ColumnPtr unfold_const_column(const TypeDescriptor& type_desc, size_t size, ColumnPtr&& column) {
+    static MutableColumnPtr unfold_const_column(const TypeDescriptor& type_desc, size_t size, ColumnPtr&& column) {
         if (column->only_null()) {
             auto col = ColumnHelper::create_column(type_desc, true);
             [[maybe_unused]] bool ok = col->append_nulls(size);
             DCHECK(ok);
             return col;
         } else if (column->is_constant()) {
-            auto* const_column = down_cast<ConstColumn*>(column.get());
-            const_column->data_column()->assign(size, 0);
-            return const_column->data_column();
+            auto mut_column = column->as_mutable_ptr();
+            auto* const_column = down_cast<ConstColumn*>(mut_column.get());
+            const_column->mutable_data_column()->assign(size, 0);
+            return const_column->data_column_ptr();
         }
-        return column;
+        return column->as_mutable_ptr();
     }
 
     static ColumnPtr copy_and_unfold_const_column(const TypeDescriptor& dst_type_desc, bool dst_nullable,
@@ -190,8 +192,8 @@ public:
     static std::tuple<Column*, NullColumn*> unpack_nullable_column(const MutableColumnPtr& col) {
         if (col->is_nullable()) {
             auto nullable = down_cast<NullableColumn*>(col.get());
-            auto* data = nullable->data_column().get();
-            auto* nulls = nullable->null_column().get();
+            auto* data = nullable->mutable_data_column();
+            auto* nulls = nullable->mutable_null_column();
             return {data, nulls};
         } else {
             return {col.get(), nullptr};
@@ -235,7 +237,7 @@ public:
     }
 
     // Cast to Nullable
-    static MutableColumnPtr cast_to_nullable_column(ColumnPtr src_column) {
+    static MutableColumnPtr cast_to_nullable_column(const ColumnPtr& src_column) {
         if (src_column->is_nullable()) {
             return src_column->as_mutable_ptr();
         }

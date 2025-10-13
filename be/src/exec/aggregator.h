@@ -462,7 +462,7 @@ protected:
     // The expr used to evaluate agg input columns
     // one agg function could have multi input exprs
     std::vector<std::vector<ExprContext*>> _agg_expr_ctxs;
-    std::vector<Columns> _agg_input_columns;
+    std::vector<MutableColumns> _agg_input_columns;
     //raw pointers in order to get multi-column values
     std::vector<std::vector<const Column*>> _agg_input_raw_columns;
     // The expr used to evaluate agg intermediate columns.

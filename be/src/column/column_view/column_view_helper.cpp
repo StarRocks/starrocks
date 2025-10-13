@@ -38,11 +38,11 @@ static bool should_use_view(LogicalType ltype) {
     return false;
 }
 std::optional<MutableColumnPtr> ColumnViewHelper::create_column_view(const TypeDescriptor& type_desc, bool nullable,
-                                                                     long concat_rows_limit, long concat_bytes_limit) {
+                                                                    long concat_rows_limit, long concat_bytes_limit) {
     if (!should_use_view(type_desc.type)) {
         return {};
     }
-    ColumnPtr default_column = ColumnHelper::create_column(type_desc, nullable);
+    MutableColumnPtr default_column = ColumnHelper::create_column(type_desc, nullable);
     if (default_column->is_nullable()) {
         down_cast<NullableColumn*>(default_column.get())->append_default_not_null_value();
     } else {

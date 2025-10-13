@@ -355,7 +355,7 @@ ChunkUniquePtr SortedRun::clone_slice() const {
     }
 }
 
-std::pair<ChunkPtr, Columns> SortedRun::steal(bool steal_orderby, size_t size, size_t skipped_rows) {
+std::pair<ChunkPtr, MutableColumns> SortedRun::steal(bool steal_orderby, size_t size, size_t skipped_rows) {
     if (empty()) {
         return {};
     }
@@ -370,7 +370,7 @@ std::pair<ChunkPtr, Columns> SortedRun::steal(bool steal_orderby, size_t size, s
 
     if (size >= reserved_rows) {
         ChunkPtr res_chunk;
-        Columns res_orderby;
+        MutableColumns res_orderby;
         if (skipped_rows == 0 && range.first == 0 && range.second == chunk->num_rows()) {
             // No others reference this chunk
             res_chunk = chunk;
@@ -398,7 +398,7 @@ std::pair<ChunkPtr, Columns> SortedRun::steal(bool steal_orderby, size_t size, s
     } else {
         size_t required_rows = std::min(size, reserved_rows);
         ChunkPtr res_chunk = chunk->clone_empty(required_rows);
-        Columns res_orderby;
+        MutableColumns res_orderby;
         res_chunk->append(*chunk, range.first + skipped_rows, required_rows);
 
         if (steal_orderby) {

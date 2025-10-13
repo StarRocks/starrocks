@@ -178,10 +178,11 @@ public:
 
     Status do_visit(NullableColumn* column) {
         auto col = down_cast<NullableColumn*>(_column);
-        AppendWithMask data_appender(col->data_column().get(), _sel_mask, _selected_size);
-        RETURN_IF_ERROR(column->data_column()->accept_mutable(&data_appender));
-        AppendWithMask null_appender(col->null_column().get(), _sel_mask, _selected_size);
-        RETURN_IF_ERROR(column->null_column()->accept_mutable(&null_appender));
+        AppendWithMask data_appender(col->mutable_data_column(), _sel_mask, _selected_size);
+        RETURN_IF_ERROR(column->mutable_data_column()->accept_mutable(&data_appender));
+        auto null_col_ptr = col->null_column_mutable_ptr();
+        AppendWithMask null_appender(null_col_ptr.get(), _sel_mask, _selected_size);
+        RETURN_IF_ERROR(column->null_column_mutable_ptr()->accept_mutable(&null_appender));
         column->update_has_null();
         return Status::OK();
     }
@@ -475,7 +476,7 @@ Status SortedStreamingAggregator::_update_states(size_t chunk_size, bool is_upda
 }
 
 Status SortedStreamingAggregator::_get_agg_result_columns(size_t chunk_size, const Buffer<uint8_t>& selector,
-                                                          Columns& agg_result_columns) {
+                                                          MutableColumns& agg_result_columns) {
     SCOPED_THREAD_LOCAL_STATE_ALLOCATOR_SETTER(_allocator.get());
     TRY_CATCH_ALLOC_SCOPE_START()
     auto use_intermediate = _use_intermediate_as_output();
@@ -518,7 +519,7 @@ void SortedStreamingAggregator::_close_group_by(size_t chunk_size, const Filter&
 }
 
 Status SortedStreamingAggregator::_build_group_by_columns(size_t chunk_size, size_t selected_size,
-                                                          const Filter& selector, Columns& agg_group_by_columns) {
+                                                          const Filter& selector, MutableColumns& agg_group_by_columns) {
     SCOPED_TIMER(_agg_stat->agg_append_timer);
     if (_cmp_vector[0] != 0 && !_last_columns.empty() && !_last_columns.back()->empty()) {
         for (size_t i = 0; i < agg_group_by_columns.size(); ++i) {

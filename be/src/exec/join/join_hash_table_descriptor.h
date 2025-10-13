@@ -139,8 +139,8 @@ struct HashTableProbeState {
     std::optional<ImmBuffer<uint8_t>> null_array;
     ColumnPtr probe_key_column;
     const Columns* key_columns = nullptr;
-    ColumnPtr build_index_column;
-    ColumnPtr probe_index_column;
+    MutableColumnPtr build_index_column;
+    MutableColumnPtr probe_index_column;
     Buffer<uint32_t>& build_index;
     Buffer<uint32_t>& probe_index;
 

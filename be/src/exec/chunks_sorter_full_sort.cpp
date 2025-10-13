@@ -80,7 +80,7 @@ static void concat_chunks(ChunkPtr& dst_chunk, const std::vector<ChunkPtr>& src_
     dst_chunk = src_chunks.front()->clone_empty(num_rows);
     const auto num_columns = dst_chunk->num_columns();
     for (auto i = 0; i < num_columns; ++i) {
-        auto dst_col = dst_chunk->get_column_by_index(i);
+        auto dst_col = dst_chunk->get_mutable_column_by_index(i);
         auto* dst_data_col = ColumnHelper::get_data_column(dst_col.get());
         // Reserve memory room for bytes array in BinaryColumn here.
         if (dst_data_col->is_binary()) {

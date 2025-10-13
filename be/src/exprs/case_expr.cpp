@@ -362,15 +362,15 @@ private:
 
             // then_columns.size >= when_columns.size as else_column maybe exist.
             auto when_num = when_columns.size();
-            NullColumnPtr case_nulls = nullptr;
+            const NullColumn* case_nulls = nullptr;
             if (case_column->is_nullable()) {
-                case_nulls = down_cast<NullableColumn*>(case_column.get())->null_column();
+                case_nulls = down_cast<NullableColumn*>(case_column.get())->immutable_null_column();
             }
             auto case_data = ColumnHelper::get_data_column(case_column.get());
 
             for (auto row = 0; row < size; ++row) {
                 int i = 0;
-                while ((i < when_num) && ((case_nulls != nullptr && case_nulls->get_data()[row]) ||
+                while ((i < when_num) && ((case_nulls != nullptr && case_nulls->immutable_data()[row]) ||
                                           !when_columns[i]->equals(row, *case_data, row))) {
                     ++i;
                 }
@@ -582,7 +582,7 @@ private:
                         when_columns[i] = ColumnHelper::unpack_and_duplicate_const_column(size, when_columns[i]);
                     }
                     for (int i = 0; i < when_column_size; ++i) {
-                        ColumnHelper::merge_nullable_filter(when_columns[i].get());
+                        ColumnHelper::merge_nullable_filter(when_columns[i]->as_mutable_raw_ptr());
                     }
 
                     using ResultContainer = typename RunTimeColumnType<ResultType>::Container;

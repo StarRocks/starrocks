@@ -103,12 +103,12 @@ void NLJoinProber::_permute_probe_row(Chunk* dst, const ChunkPtr& build_chunk) {
     for (size_t i = 0; i < _col_types.size(); i++) {
         bool is_probe = i < _probe_column_count;
         SlotDescriptor* slot = _col_types[i];
-        ColumnPtr& dst_col = dst->get_column_by_slot_id(slot->id());
+        auto dst_col = dst->get_mutable_column_by_slot_id(slot->id());
         if (is_probe) {
-            ColumnPtr& src_col = _probe_chunk->get_column_by_slot_id(slot->id());
+            const ColumnPtr& src_col = _probe_chunk->get_column_by_slot_id(slot->id());
             dst_col->append_value_multiple_times(*src_col, _probe_row_current, cur_build_chunk_rows);
         } else {
-            ColumnPtr& src_col = build_chunk->get_column_by_slot_id(slot->id());
+            const ColumnPtr& src_col = build_chunk->get_column_by_slot_id(slot->id());
             dst_col->append(*src_col);
         }
     }

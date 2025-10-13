@@ -70,9 +70,8 @@ public:
         bool is_result_nullable = _agg_state_desc.is_result_nullable() || _arg_nullables[0];
         ASSIGN_OR_RETURN(ColumnPtr new_column, _convert_to_nullable_column(columns[0], is_result_nullable, true));
 
-        // TODO: use mutable ptr as result
         auto& ret_type = _agg_state_desc.get_return_type();
-        ColumnPtr result = ColumnHelper::create_column(ret_type, _agg_state_desc.is_result_nullable());
+        MutableColumnPtr result = ColumnHelper::create_column(ret_type, _agg_state_desc.is_result_nullable());
         auto chunk_size = columns[0]->size();
 
         // finalize agg states into result

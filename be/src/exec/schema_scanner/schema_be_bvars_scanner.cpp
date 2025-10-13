@@ -85,7 +85,7 @@ Status SchemaBeBvarsScanner::fill_chunk(ChunkPtr* chunk) {
     }
 
     if (slot_id_to_index_map.count(kSlotName) > 0) {
-        auto column = (*chunk)->get_column_by_slot_id(kSlotName);
+        auto column = (*chunk)->get_mutable_column_by_slot_id(kSlotName);
         if (_cur_idx == 0 && copy_size == _columns[0]->size() && column->size() == 0) {
             column->swap_column(*_columns[0]);
         } else {
@@ -94,7 +94,7 @@ Status SchemaBeBvarsScanner::fill_chunk(ChunkPtr* chunk) {
     }
 
     if (slot_id_to_index_map.count(kSlotDesc) > 0) {
-        auto column = (*chunk)->get_column_by_slot_id(kSlotDesc);
+        auto column = (*chunk)->get_mutable_column_by_slot_id(kSlotDesc);
         if (_cur_idx == 0 && copy_size == _columns[1]->size() && column->size() == 0) {
             column->swap_column(*_columns[1]);
         } else {

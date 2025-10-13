@@ -62,18 +62,18 @@ public:
 
         SCOPED_THREAD_LOCAL_AGG_STATE_ALLOCATOR_SETTER(&kDefaultAggStateMergeFunctionAllocator);
 
-        Columns new_columns;
+        MutableColumns new_columns;
         new_columns.reserve(columns.size());
         for (auto i = 0; i < columns.size(); i++) {
             bool is_result_nullable = _agg_state_desc.is_result_nullable() || _arg_nullables[i];
             ASSIGN_OR_RETURN(ColumnPtr new_column, _convert_to_nullable_column(columns[i], is_result_nullable, true));
-            new_columns.emplace_back(new_column);
+            new_columns.emplace_back(new_column->as_mutable_ptr());
         }
 
         auto chunk_size = columns[0]->size();
         auto align_size = _function->alignof_size();
         auto state_size = align_to(_function->size(), align_size);
-        auto result = ColumnHelper::create_column(_intermediate_type, _agg_state_desc.is_result_nullable());
+        MutableColumnPtr result = ColumnHelper::create_column(_intermediate_type, _agg_state_desc.is_result_nullable());
         // allocate the agg_state
         AlignedMemoryGuard guard(align_size, state_size);
         RETURN_IF_ERROR(guard.allocate());

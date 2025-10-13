@@ -172,7 +172,7 @@ void JoinHashMap<LT, CT, MT>::_probe_output(ChunkPtr* probe_chunk, ChunkPtr* chu
         SlotDescriptor* slot = hash_table_slot.slot;
         bool need_output = is_lazy ? hash_table_slot.need_lazy_materialize : hash_table_slot.need_output;
         if (need_output) {
-            auto& column = (*probe_chunk)->get_column_by_slot_id(slot->id());
+            auto column = (*probe_chunk)->get_mutable_column_by_slot_id(slot->id());
             if (!column->is_nullable()) {
                 _copy_probe_column(&column, chunk, slot, to_nullable);
             } else {
@@ -244,7 +244,7 @@ void JoinHashMap<LT, CT, MT>::_probe_null_output(ChunkPtr* chunk, size_t count) 
         SlotDescriptor* slot = hash_table_slot.slot;
         bool need_output = is_lazy ? hash_table_slot.need_lazy_materialize : hash_table_slot.need_output;
         if (need_output) {
-            ColumnPtr column = ColumnHelper::create_column(slot->type(), true);
+            MutableColumnPtr column = ColumnHelper::create_column(slot->type(), true);
             column->append_nulls(count);
             (*chunk)->append_column(std::move(column), slot->id());
         }
@@ -277,7 +277,7 @@ void JoinHashMap<LT, CT, MT>::_build_default_output(ChunkPtr* chunk, size_t coun
         auto hash_tablet_slot = _table_items->build_slots[i];
         SlotDescriptor* slot = hash_tablet_slot.slot;
         if (hash_tablet_slot.need_output) {
-            ColumnPtr column = ColumnHelper::create_column(slot->type(), true);
+            MutableColumnPtr column = ColumnHelper::create_column(slot->type(), true);
             column->append_nulls(count);
             (*chunk)->append_column(std::move(column), slot->id());
         }
@@ -285,43 +285,43 @@ void JoinHashMap<LT, CT, MT>::_build_default_output(ChunkPtr* chunk, size_t coun
 }
 
 template <LogicalType LT, JoinKeyConstructorType CT, JoinHashMapMethodType MT>
-void JoinHashMap<LT, CT, MT>::_copy_probe_column(ColumnPtr* src_column, ChunkPtr* chunk, const SlotDescriptor* slot,
+void JoinHashMap<LT, CT, MT>::_copy_probe_column(MutableColumnPtr* src_column, ChunkPtr* chunk, const SlotDescriptor* slot,
                                                  bool to_nullable) {
     if (_probe_state->match_flag == JoinMatchFlag::ALL_MATCH_ONE) {
         if (to_nullable) {
             ColumnPtr dest_column =
-                    NullableColumn::create((*src_column)->as_mutable_ptr(), NullColumn::create((*src_column)->size()));
+                    NullableColumn::create(std::move(*src_column), NullColumn::create((*src_column)->size()));
             (*chunk)->append_column(std::move(dest_column), slot->id());
         } else {
-            (*chunk)->append_column(*src_column, slot->id());
+            (*chunk)->append_column(std::move(*src_column), slot->id());
         }
     } else if (_probe_state->match_flag == JoinMatchFlag::MOST_MATCH_ONE) {
         if (to_nullable) {
             (*src_column)->filter(_probe_state->probe_match_filter, _probe_state->probe_row_count);
             ColumnPtr dest_column =
-                    NullableColumn::create((*src_column)->as_mutable_ptr(), NullColumn::create((*src_column)->size()));
+                    NullableColumn::create(std::move(*src_column), NullColumn::create((*src_column)->size()));
             (*chunk)->append_column(std::move(dest_column), slot->id());
         } else {
             (*src_column)->filter(_probe_state->probe_match_filter, _probe_state->probe_row_count);
-            (*chunk)->append_column(*src_column, slot->id());
+            (*chunk)->append_column(std::move(*src_column), slot->id());
         }
     } else {
-        ColumnPtr dest_column = ColumnHelper::create_column(slot->type(), to_nullable);
+        MutableColumnPtr dest_column = ColumnHelper::create_column(slot->type(), to_nullable);
         dest_column->append_selective(**src_column, _probe_state->probe_index.data(), 0, _probe_state->count);
         (*chunk)->append_column(std::move(dest_column), slot->id());
     }
 }
 
 template <LogicalType LT, JoinKeyConstructorType CT, JoinHashMapMethodType MT>
-void JoinHashMap<LT, CT, MT>::_copy_probe_nullable_column(ColumnPtr* src_column, ChunkPtr* chunk,
+void JoinHashMap<LT, CT, MT>::_copy_probe_nullable_column(MutableColumnPtr* src_column, ChunkPtr* chunk,
                                                           const SlotDescriptor* slot) {
     if (_probe_state->match_flag == JoinMatchFlag::ALL_MATCH_ONE) {
-        (*chunk)->append_column(*src_column, slot->id());
+        (*chunk)->append_column(std::move(*src_column), slot->id());
     } else if (_probe_state->match_flag == JoinMatchFlag::MOST_MATCH_ONE) {
         (*src_column)->filter(_probe_state->probe_match_filter, _probe_state->probe_row_count);
-        (*chunk)->append_column(*src_column, slot->id());
+        (*chunk)->append_column(std::move(*src_column), slot->id());
     } else {
-        ColumnPtr dest_column = ColumnHelper::create_column(slot->type(), true);
+        MutableColumnPtr dest_column = ColumnHelper::create_column(slot->type(), true);
         dest_column->append_selective(**src_column, _probe_state->probe_index.data(), 0, _probe_state->count);
         (*chunk)->append_column(std::move(dest_column), slot->id());
     }
@@ -361,7 +361,7 @@ void JoinHashMap<LT, CT, MT>::_copy_build_nullable_column(const ColumnPtr& src_c
     const auto* build_index = _probe_state->build_index.data();
 
     const auto num_new_nulls = SIMD::count_zero(build_index, num_rows);
-    ColumnPtr dest_column = src_column->clone_empty();
+    MutableColumnPtr dest_column = src_column->clone_empty();
     if (num_new_nulls == num_rows) {
         dest_column->append_nulls(num_rows);
     } else {
@@ -1507,7 +1507,7 @@ void JoinHashMap<LT, CT, MT>::_probe_from_ht_for_null_aware_anti_join_with_other
         } else if (_table_items->key_columns[0]->is_nullable()) {
             // when left table col value not hits in hash table needs match all null value rows in right table
             auto* nullable_column = ColumnHelper::as_raw_column<NullableColumn>(_table_items->key_columns[0]);
-            auto& null_array = nullable_column->null_column()->get_data();
+            auto& null_array = nullable_column->immutable_null_column_data();
             // TODO: optimize me
             for (size_t j = _probe_state->cur_nullaware_build_index; j < _table_items->row_count + 1; j++) {
                 if (null_array[j] == 1) {

@@ -42,7 +42,7 @@ void bitcompress_serialize(const Columns& columns, const std::vector<std::any>& 
  * deserialize column data from a bit-compressed format.
  * 
  */
-void bitcompress_deserialize(Columns& columns, const std::vector<std::any>& bases, const std::vector<int>& offsets,
+void bitcompress_deserialize(MutableColumns& columns, const std::vector<std::any>& bases, const std::vector<int>& offsets,
                              const std::vector<int>& used_bits, size_t num_rows, size_t fixed_key_size, void* buffer);
 
 } // namespace starrocks

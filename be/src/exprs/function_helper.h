@@ -127,11 +127,12 @@ inline void FunctionHelper::get_data_of_column<BinaryColumn, Slice>(const Column
         }                                                               \
         if (c0->has_null() || c1->has_null()) {                         \
             has_null = true;                                            \
-            null_flags = FunctionHelper::union_nullable_column(c0, c1)->as_mutable_ptr(); \
+            null_flags = FunctionHelper::union_nullable_column(c0, c1); \
         } else {                                                        \
-            null_flags = NullColumn::create();                          \
-            null_flags->reserve(c0->size());                            \
-            null_flags->append_default(c0->size());                     \
+            auto null_flags_mut = NullColumn::create();                 \
+            null_flags_mut->reserve(c0->size());                        \
+            null_flags_mut->append_default(c0->size());                 \
+            null_flags = std::move(null_flags_mut);                     \
         }                                                               \
         c0 = FunctionHelper::get_data_column_of_const(c0);              \
         c1 = FunctionHelper::get_data_column_of_const(c1);              \

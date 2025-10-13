@@ -630,7 +630,7 @@ Status OlapTableSink::_send_chunk(RuntimeState* state, Chunk* chunk, bool nonblo
                 _output_chunk = std::make_unique<Chunk>();
                 for (size_t i = 0; i < _output_expr_ctxs.size(); ++i) {
                     ASSIGN_OR_RETURN(ColumnPtr tmp, _output_expr_ctxs[i]->evaluate(chunk));
-                    ColumnPtr output_column = nullptr;
+                    MutableColumnPtr output_column = nullptr;
                     if (tmp->only_null()) {
                         // Only null column maybe lost type info
                         output_column = ColumnHelper::create_column(_output_tuple_desc->slots()[i]->type(), true);
@@ -790,15 +790,16 @@ Status OlapTableSink::_fill_auto_increment_id_internal(Chunk* chunk, SlotDescrip
         return Status::OK();
     }
 
-    ColumnPtr& data_col = NullableColumn::dynamic_pointer_cast(col)->data_column();
-    const auto null_datas = NullableColumn::dynamic_pointer_cast(col)->immutable_null_column_data();
+    auto nullable_col_mut = down_cast<NullableColumn*>(col->as_mutable_raw_ptr());
+    auto data_col_mut = nullable_col_mut->data_column_mutable_ptr();
+    const auto null_datas = nullable_col_mut->immutable_null_column_data();
     Filter filter(null_datas.begin(), null_datas.end());
 
     Filter init_filter(chunk->num_rows(), 0);
 
     if (_keys_type == TKeysType::PRIMARY_KEYS && _output_tuple_desc->slots().back()->col_name() == "__op") {
         size_t op_column_id = chunk->num_columns() - 1;
-        ColumnPtr& op_col = chunk->get_column_by_index(op_column_id);
+        const auto& op_col = chunk->get_column_by_index(op_column_id);
         auto* ops = reinterpret_cast<const uint8_t*>(op_col->raw_data());
         size_t row = chunk->num_rows();
 
@@ -819,9 +820,9 @@ Status OlapTableSink::_fill_auto_increment_id_internal(Chunk* chunk, SlotDescrip
     // will be deleteed and it is matter in this case.
     // Here we just set 0 value in this case.
     uint32 del_rows = SIMD::count_nonzero(init_filter);
+    auto* int64_col = down_cast<Int64Column*>(data_col_mut.get());
     if (del_rows != 0) {
-        RETURN_IF_ERROR((Int64Column::dynamic_pointer_cast(data_col))
-                                ->fill_range(std::vector<int64_t>(del_rows, 0), init_filter));
+        RETURN_IF_ERROR(int64_col->fill_range(std::vector<int64_t>(del_rows, 0), init_filter));
     }
 
     uint32_t null_rows = SIMD::count_nonzero(filter);
@@ -840,7 +841,7 @@ Status OlapTableSink::_fill_auto_increment_id_internal(Chunk* chunk, SlotDescrip
             // it will be allocate in DeltaWriter.
             ids.assign(null_rows, 0);
         }
-        RETURN_IF_ERROR((Int64Column::dynamic_pointer_cast(data_col))->fill_range(ids, filter));
+        RETURN_IF_ERROR(int64_col->fill_range(ids, filter));
         break;
     }
     default:
@@ -1064,7 +1065,7 @@ void OlapTableSink::_validate_data(RuntimeState* state, Chunk* chunk) {
             }
         }
 
-        Column* column = chunk->get_column_by_slot_id(desc->id()).get();
+        Column* column = chunk->get_mutable_column_by_slot_id(desc->id()).get();
         switch (desc->type().type) {
         case TYPE_CHAR:
         case TYPE_VARCHAR:
@@ -1145,7 +1146,7 @@ void OlapTableSink::_padding_char_column(Chunk* chunk) {
     size_t num_rows = chunk->num_rows();
     for (auto desc : _output_tuple_desc->slots()) {
         if (desc->type().type == TYPE_CHAR) {
-            Column* column = chunk->get_column_by_slot_id(desc->id()).get();
+            Column* column = chunk->get_mutable_column_by_slot_id(desc->id()).get();
             Column* data_column = ColumnHelper::get_data_column(column);
             auto* binary = down_cast<BinaryColumn*>(data_column);
             Offsets& offset = binary->get_offset();

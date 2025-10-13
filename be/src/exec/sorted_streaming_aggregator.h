@@ -44,14 +44,14 @@ private:
     // return selected_size (distinct num_rows)
     size_t _init_selector(Filter& selector, size_t chunk_size);
 
-    Status _get_agg_result_columns(size_t chunk_size, const Filter& selector, Columns& agg_result_columns);
+    Status _get_agg_result_columns(size_t chunk_size, const Filter& selector, MutableColumns& agg_result_columns);
     void _close_group_by(size_t chunk_size, const Filter& selector);
 
     Status _build_group_by_columns(size_t chunk_size, size_t selected_size, const Filter& selector,
-                                   Columns& agg_group_by_columns);
+                                   MutableColumns& agg_group_by_columns);
 
     AggDataPtr _last_state = nullptr;
-    Columns _last_columns;
+    MutableColumns _last_columns;
     std::vector<uint8_t> _cmp_vector;
     std::shared_ptr<StateAllocator> _streaming_state_allocator;
 };
