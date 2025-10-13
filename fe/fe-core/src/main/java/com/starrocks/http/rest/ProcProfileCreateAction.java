@@ -20,9 +20,9 @@ import com.starrocks.http.ActionController;
 import com.starrocks.http.BaseRequest;
 import com.starrocks.http.BaseResponse;
 import com.starrocks.http.IllegalArgException;
-import com.starrocks.http.rest.RestBaseResult;
 import com.starrocks.memory.ProcProfileCollector;
 import io.netty.handler.codec.http.HttpMethod;
+import io.netty.handler.codec.http.HttpResponseStatus;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -37,30 +37,30 @@ public class ProcProfileCreateAction extends RestBaseAction {
     }
 
     public static void registerAction(ActionController controller) throws IllegalArgException {
-        controller.registerHandler(HttpMethod.POST, "/api/v1/proc_profile/create", 
+        controller.registerHandler(HttpMethod.POST, "/api/v1/proc_profile/create",
                 new ProcProfileCreateAction(controller));
     }
 
     @Override
-    public void executeWithoutPassword(BaseRequest request, BaseResponse response) throws IllegalArgException {
+    public void executeWithoutPassword(BaseRequest request, BaseResponse response) {
         String profileType = request.getSingleParameter("type");
-        
+
         if (Strings.isNullOrEmpty(profileType)) {
             response.appendContent(new RestBaseResult("Missing 'type' parameter").toJson());
-            writeResponse(request, response);
+            writeResponse(request, response, HttpResponseStatus.BAD_REQUEST);
             return;
         }
 
         if (!profileType.equalsIgnoreCase("cpu") && !profileType.equalsIgnoreCase("memory")) {
             response.appendContent(new RestBaseResult("Invalid 'type' parameter. Must be 'cpu' or 'memory'").toJson());
-            writeResponse(request, response);
+            writeResponse(request, response, HttpResponseStatus.BAD_REQUEST);
             return;
         }
 
         try {
             // Create a new ProcProfileCollector instance for manual collection
             ProcProfileCollector collector = new ProcProfileCollector();
-            
+
             // Trigger profile collection asynchronously
             CompletableFuture<String> future = CompletableFuture.supplyAsync(() -> {
                 try {
@@ -79,16 +79,13 @@ public class ProcProfileCreateAction extends RestBaseAction {
 
             // Wait for completion with timeout
             String fileName = future.get(Config.proc_profile_collect_time_s + 10, TimeUnit.SECONDS);
-            
-            // Create custom response with filename
-            String responseJson = String.format("{\"status\":\"OK\",\"msg\":\"Profile collection completed successfully\",\"filename\":\"%s\"}", fileName);
-            response.appendContent(responseJson);
-            writeResponse(request, response);
-            
+            response.appendContent(fileName);
+            writeResponse(request, response, HttpResponseStatus.OK);
+
         } catch (Exception e) {
             LOG.error("Error creating {} profile", profileType, e);
             response.appendContent(new RestBaseResult("Failed to create profile: " + e.getMessage()).toJson());
-            writeResponse(request, response);
+            writeResponse(request, response, HttpResponseStatus.INTERNAL_SERVER_ERROR);
         }
     }
 }
