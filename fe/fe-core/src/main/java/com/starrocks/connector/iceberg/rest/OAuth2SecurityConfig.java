@@ -14,6 +14,7 @@
 
 package com.starrocks.connector.iceberg.rest;
 
+import com.starrocks.connector.exception.StarRocksConnectorException;
 import org.apache.iceberg.rest.auth.OAuth2Properties;
 
 import java.net.URI;
@@ -131,15 +132,18 @@ class OAuth2SecurityConfigBuilder {
             strSecurity = NONE.name();
         }
 
-        if (strSecurity.equals(NONE.name())) {
+        OAuth2SecurityConfig config = new OAuth2SecurityConfig();
+        if (strSecurity.equalsIgnoreCase(NONE.name())) {
             return new OAuth2SecurityConfig();
-        } else if (strSecurity.equals(JWT.name())) {
-            return new OAuth2SecurityConfig().setSecurity(JWT);
+        } else if (strSecurity.equalsIgnoreCase(JWT.name())) {
+            config.setSecurity(JWT);
+        } else if (strSecurity.equalsIgnoreCase(OAUTH2.name())) {
+            config = config.setSecurity(OAUTH2);
+        } else {
+            throw new StarRocksConnectorException("Invalid security: %s", strSecurity);
         }
 
-        OAuth2SecurityConfig config = new OAuth2SecurityConfig();
-        config = config.setSecurity(OAUTH2)
-                .setCredential(properties.get(OAuth2SecurityConfig.OAUTH2_CREDENTIAL))
+        config.setCredential(properties.get(OAuth2SecurityConfig.OAUTH2_CREDENTIAL))
                 .setScope(properties.get(OAuth2SecurityConfig.OAUTH2_SCOPE))
                 .setToken(properties.get(OAuth2SecurityConfig.OAUTH2_TOKEN))
                 .setAudience(properties.get(OAuth2SecurityConfig.OAUTH2_AUDIENCE))
