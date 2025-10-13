@@ -160,7 +160,7 @@ private:
 
     // scanner concurrency
     size_t _scanner_concurrency() const;
-    void _estimate_scan_and_output_row_bytes();
+    void _estimate_scan_and_output_row_bytes(const std::vector<SlotDescriptor*>& slots);
 
     StatusOr<bool> _could_tablet_internal_parallel(const std::vector<TScanRangeParams>& scan_ranges,
                                                    int32_t pipeline_dop, size_t num_total_scan_ranges,

@@ -1,0 +1,22 @@
+-- name: test_glm_topn
+create table t0 (
+	v1 bigint null,
+	v2 bigint null,
+	v3 bigint null
+) engine=olap
+duplicate key(v1)
+distributed by hash(v1) buckets 3
+properties(
+'replication_num'='1'
+);
+insert into t0 select generate_series,generate_series,generate_series%10 from table(generate_series(1, 10000));
+insert into t0 values (10001, null, null), (10002, null, null), (10003, null, null);
+set enable_global_late_materialization = true;
+select * from t0 order by v1 limit 10;
+select * from t0 order by v1 limit 100, 10;
+select * from t0 order by v1 desc limit 10;
+select * from t0 order by v1 desc limit 100,10;
+select v2 from t0 order by v1 limit 10;
+select v2 from t0 order by v1 limit 10, 10;
+select v2 from t0 order by v1 desc limit 10;
+select v2 from t0 order by v1 desc limit 10,10;

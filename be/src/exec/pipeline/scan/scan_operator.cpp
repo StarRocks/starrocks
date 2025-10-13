@@ -299,6 +299,7 @@ StatusOr<ChunkPtr> ScanOperator::pull_chunk(RuntimeState* state) {
         eval_runtime_bloom_filters(res.get());
         res->owner_info().set_owner_id(owner_id, is_eos);
     }
+    // LOG(INFO) << "pull_chunk, res: " << (res == nullptr ? "nullptr" : res->debug_columns());
 
     if (_scan_node->limit() != -1 && _op_pull_rows >= _scan_node->limit()) {
         _morsel_queue->set_reach_limit(true);

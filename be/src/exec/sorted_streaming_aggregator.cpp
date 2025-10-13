@@ -179,6 +179,10 @@ public:
         return Status::OK();
     }
 
+    Status do_visit(const RowIdColumn& column) {
+        return Status::NotSupported("Unsupported row id column in column wise comparator");
+    }
+
 private:
     const ColumnPtr& _first_column;
     std::vector<uint8_t>& _cmp_vector;
@@ -282,6 +286,9 @@ public:
         }
 
         return Status::OK();
+    }
+    Status do_visit(RowIdColumn* column) {
+        return Status::NotSupported("Unsupported row id column in column wise comparator");
     }
 
 private:

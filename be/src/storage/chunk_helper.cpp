@@ -23,6 +23,7 @@
 #include "column/column_visitor_adapter.h"
 #include "column/json_column.h"
 #include "column/map_column.h"
+#include "column/row_id_column.h"
 #include "column/schema.h"
 #include "column/struct_column.h"
 #include "column/type_traits.h"
@@ -828,6 +829,10 @@ public:
     }
 
     Status do_visit(const ConstColumn& column) { return Status::NotSupported("SegmentedColumnVisitor"); }
+
+    Status do_visit(const RowIdColumn& column) {
+        return Status::NotSupported("SegmentColumnVisitor not support row id column");
+    }
 
     ColumnPtr result() { return _result; }
 

@@ -385,6 +385,12 @@ public class IcebergScanNode extends ScanNode {
         if (scanRangeSource != null) {
             msg.hdfs_scan_node.setExtended_slot_ids(scanRangeSource.getExtendedColumnSlotIds());
         }
+        /*
+        for (SlotDescriptor slotDescriptor : desc.getSlots()) {
+            if (slotDescriptor.getColumn().getName().equalsIgnoreCase("_source_node_id")) {
+                msg.hdfs_scan_node.addToExtended_slot_ids(slotDescriptor.getId().asInt());
+            }
+        }*/
         msg.hdfs_scan_node.setTable_name(icebergTable.getName());
         HdfsScanNode.setScanOptimizeOptionToThrift(tHdfsScanNode, this);
         HdfsScanNode.setCloudConfigurationToThrift(tHdfsScanNode, cloudConfiguration);

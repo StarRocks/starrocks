@@ -16,6 +16,7 @@
 
 #include "column/column_visitor.h"
 #include "column/column_visitor_mutable.h"
+#include "column/row_id_column.h"
 
 namespace starrocks {
 
@@ -94,6 +95,7 @@ public:
     Status visit(const BinaryColumn& column) override { return _impl->do_visit(column); }
 
     Status visit(const LargeBinaryColumn& column) override { return _impl->do_visit(column); }
+    Status visit(const RowIdColumn& column) override { return _impl->do_visit(column); }
 
     Status visit(const VariantColumn& column) override { return _impl->do_visit(column); }
 

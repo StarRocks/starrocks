@@ -48,6 +48,8 @@ using std::chrono::steady_clock;
 using std::chrono::duration_cast;
 
 struct ConnectorScanOperatorMemShareArbitrator;
+struct GlobalLateMaterilizationCtx;
+class GlobalLateMaterilizationContextMgr;
 
 // The context for all fragment of one query in one BE
 class QueryContext : public std::enable_shared_from_this<QueryContext> {
@@ -299,6 +301,10 @@ public:
     ConnectorScanOperatorMemShareArbitrator* connector_scan_operator_mem_share_arbitrator() const {
         return _connector_scan_operator_mem_share_arbitrator;
     }
+    GlobalLateMaterilizationCtx* global_late_materialization_ctx() const { return _global_late_materialization_ctx; }
+    GlobalLateMaterilizationContextMgr* global_late_materialization_ctx_mgr() const {
+        return _global_late_materialization_ctx_mgr;
+    }
 
 public:
     static constexpr int DEFAULT_EXPIRE_SECONDS = 300;
@@ -392,6 +398,9 @@ private:
 
     int64_t _static_query_mem_limit = 0;
     ConnectorScanOperatorMemShareArbitrator* _connector_scan_operator_mem_share_arbitrator = nullptr;
+
+    GlobalLateMaterilizationCtx* _global_late_materialization_ctx = nullptr;
+    GlobalLateMaterilizationContextMgr* _global_late_materialization_ctx_mgr = nullptr;
 };
 
 // TODO: use brpc::TimerThread refactor QueryContext

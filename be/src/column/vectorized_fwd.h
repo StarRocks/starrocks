@@ -56,6 +56,7 @@ class MapColumn;
 class StructColumn;
 class NullableColumn;
 class ConstColumn;
+class RowIdColumn;
 
 template <typename T>
 class FixedLengthColumn;
