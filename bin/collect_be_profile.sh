@@ -20,12 +20,9 @@ DEFAULT_DURATION=10
 DEFAULT_BRPC_PORT=8060
 DEFAULT_CLEANUP_DAYS=1
 DEFAULT_CLEANUP_SIZE=2147483648  # 2GB in bytes
-DEFAULT_INTERVAL=3600  # 1 hour
+DEFAULT_INTERVAL=120   # 2 minutes
 
 # Global variables
-COLLECT_CPU=false
-COLLECT_CONTENTION=false
-COLLECT_BOTH=false
 DURATION=$DEFAULT_DURATION
 OUTPUT_DIR=""
 BRPC_PORT=$DEFAULT_BRPC_PORT
@@ -36,6 +33,8 @@ DAEMON_MODE=false
 INTERVAL=$DEFAULT_INTERVAL
 PID_FILE=""
 LOG_FILE=""
+PROFILING_TYPE="cpu"  # Default profiling type
+BE_CONF_PATH=""      # Custom be.conf path
 
 # Colors for output
 RED='\033[0;31m'
@@ -49,23 +48,23 @@ usage() {
     echo "Collect CPU and contention profiles from StarRocks BE BRPC server"
     echo ""
     echo "Options:"
-    echo "  --cpu                    Collect CPU profile (default)"
-    echo "  --contention             Collect contention profile"
-    echo "  --both                   Collect both CPU and contention profiles"
+    echo "  --profiling-type <type>  Profiling type: cpu, contention, or both (default: cpu)"
     echo "  --duration <seconds>     Profile duration (default: $DEFAULT_DURATION)"
     echo "  --output-dir <path>      Output directory (default: read from be.conf)"
+    echo "  --be-conf <path>         Path to be.conf file (default: \$STARROCKS_HOME/conf/be.conf)"
     echo "  --brpc-port <port>       BRPC port (default: $DEFAULT_BRPC_PORT)"
     echo "  --format <flame|pprof|both>  Output format (default: both)"
     echo "  --cleanup-days <days>    Delete files older than N days (default: $DEFAULT_CLEANUP_DAYS)"
     echo "  --cleanup-size <bytes>   Max total size to retain (default: 2GB)"
     echo "  --daemon                 Run continuously in background"
-    echo "  --interval <seconds>     Collection interval in daemon mode (default: $DEFAULT_INTERVAL)"
+    echo "  --interval <seconds>     Collection interval in daemon mode (default: $DEFAULT_INTERVAL seconds)"
     echo "  --help                   Show this help message"
     echo ""
     echo "Examples:"
-    echo "  $0 --cpu --duration 30"
-    echo "  $0 --both --daemon --interval 1800"
-    echo "  $0 --contention --format pprof"
+    echo "  $0 --profiling-type cpu --duration 30"
+    echo "  $0 --profiling-type both --daemon --interval 1800"
+    echo "  $0 --profiling-type contention --format pprof"
+    echo "  $0 --profiling-type contention --be-conf /custom/path/be.conf"
     exit 1
 }
 
@@ -87,9 +86,16 @@ read_config() {
         STARROCKS_HOME=$(dirname $(dirname $(readlink -f "$0")))
     fi
     
-    local be_conf="$STARROCKS_HOME/conf/be.conf"
+    # Use custom be.conf path if provided, otherwise use default
+    local be_conf
+    if [ -n "$BE_CONF_PATH" ]; then
+        be_conf="$BE_CONF_PATH"
+    else
+        be_conf="$STARROCKS_HOME/conf/be.conf"
+    fi
     
     if [ -f "$be_conf" ]; then
+        log "Reading configuration from: $be_conf"
         # Read sys_log_dir
         if [ -z "$OUTPUT_DIR" ]; then
             OUTPUT_DIR=$(grep "^sys_log_dir" "$be_conf" | cut -d'=' -f2 | tr -d ' ' | tr -d '"')
@@ -114,6 +120,10 @@ read_config() {
     OUTPUT_DIR="$OUTPUT_DIR/proc_profile"
     PID_FILE="$STARROCKS_HOME/bin/collect_be_profile.pid"
     LOG_FILE="$OUTPUT_DIR/../collect_be_profile.log"
+    
+    # Log configuration values
+    log "BRPC_PORT: $BRPC_PORT"
+    log "OUTPUT_DIR: $OUTPUT_DIR"
 }
 
 # Create output directory
@@ -140,72 +150,58 @@ get_timestamp() {
     date '+%Y%m%d-%H%M%S'
 }
 
-# Collect CPU profile
-collect_cpu_profile() {
+# Generic profile collection function
+collect_profile() {
+    local profile_type="$1"  # cpu or contention
     local timestamp=$(get_timestamp)
-    local base_name="cpu-profile-$timestamp"
+    local base_name="${profile_type}-profile-$timestamp"
     
-    log "Collecting CPU profile for ${DURATION} seconds..."
+    log "Collecting ${profile_type} profile for ${DURATION} seconds..."
+    
+    # Determine the correct endpoint based on profile type
+    local endpoint
+    if [ "$profile_type" = "cpu" ]; then
+        endpoint="profile"
+    elif [ "$profile_type" = "contention" ]; then
+        endpoint="contention"
+    else
+        log_error "Unknown profile type: $profile_type"
+        return 1
+    fi
     
     if [ "$FORMAT" = "flame" ] || [ "$FORMAT" = "both" ]; then
         local flame_file="$OUTPUT_DIR/${base_name}-flame.html"
         local flame_tar="$OUTPUT_DIR/${base_name}-flame.html.tar.gz"
+        local flame_url="http://localhost:$BRPC_PORT/pprof/${endpoint}?seconds=$DURATION&display_type=flame"
         
-        if curl -s "http://localhost:$BRPC_PORT/pprof/cpu?seconds=$DURATION&display_type=flame" > "$flame_file"; then
-            tar -czf "$flame_tar" -C "$OUTPUT_DIR" "$(basename "$flame_file")"
-            rm -f "$flame_file"
-            log "CPU flamegraph saved: $flame_tar"
-        else
-            log_error "Failed to collect CPU flamegraph"
-        fi
+        log "Executing curl command: curl -s \"$flame_url\" > \"$flame_file\""
+        curl -s "$flame_url" > "$flame_file"
+        tar -czf "$flame_tar" -C "$OUTPUT_DIR" "$(basename "$flame_file")"
+        rm -f "$flame_file"
+        log "${profile_type^} flamegraph saved: $flame_tar"
     fi
     
     if [ "$FORMAT" = "pprof" ] || [ "$FORMAT" = "both" ]; then
         local pprof_file="$OUTPUT_DIR/${base_name}-pprof"
         local pprof_tar="$OUTPUT_DIR/${base_name}-pprof.tar.gz"
+        local pprof_url="http://localhost:$BRPC_PORT/pprof/${endpoint}?seconds=$DURATION"
         
-        if curl -s "http://localhost:$BRPC_PORT/pprof/cpu?seconds=$DURATION" > "$pprof_file"; then
-            tar -czf "$pprof_tar" -C "$OUTPUT_DIR" "$(basename "$pprof_file")"
-            rm -f "$pprof_file"
-            log "CPU pprof saved: $pprof_tar"
-        else
-            log_error "Failed to collect CPU pprof"
-        fi
+        log "Executing curl command: curl -s \"$pprof_url\" > \"$pprof_file\""
+        curl -s "$pprof_url" > "$pprof_file"
+        tar -czf "$pprof_tar" -C "$OUTPUT_DIR" "$(basename "$pprof_file")"
+        rm -f "$pprof_file"
+        log "${profile_type^} pprof saved: $pprof_tar"
     fi
+}
+
+# Collect CPU profile
+collect_cpu_profile() {
+    collect_profile "cpu"
 }
 
 # Collect contention profile
 collect_contention_profile() {
-    local timestamp=$(get_timestamp)
-    local base_name="contention-profile-$timestamp"
-    
-    log "Collecting contention profile for ${DURATION} seconds..."
-    
-    if [ "$FORMAT" = "flame" ] || [ "$FORMAT" = "both" ]; then
-        local flame_file="$OUTPUT_DIR/${base_name}-flame.html"
-        local flame_tar="$OUTPUT_DIR/${base_name}-flame.html.tar.gz"
-        
-        if curl -s "http://localhost:$BRPC_PORT/pprof/contention?seconds=$DURATION&display_type=flame" > "$flame_file"; then
-            tar -czf "$flame_tar" -C "$OUTPUT_DIR" "$(basename "$flame_file")"
-            rm -f "$flame_file"
-            log "Contention flamegraph saved: $flame_tar"
-        else
-            log_error "Failed to collect contention flamegraph"
-        fi
-    fi
-    
-    if [ "$FORMAT" = "pprof" ] || [ "$FORMAT" = "both" ]; then
-        local pprof_file="$OUTPUT_DIR/${base_name}-pprof"
-        local pprof_tar="$OUTPUT_DIR/${base_name}-pprof.tar.gz"
-        
-        if curl -s "http://localhost:$BRPC_PORT/pprof/contention?seconds=$DURATION" > "$pprof_file"; then
-            tar -czf "$pprof_tar" -C "$OUTPUT_DIR" "$(basename "$pprof_file")"
-            rm -f "$pprof_file"
-            log "Contention pprof saved: $pprof_tar"
-        else
-            log_error "Failed to collect contention pprof"
-        fi
-    fi
+    collect_profile "contention"
 }
 
 # Cleanup old files
@@ -301,11 +297,11 @@ daemon_loop() {
         fi
         
         # Collect profiles
-        if [ "$COLLECT_CPU" = true ] || [ "$COLLECT_BOTH" = true ]; then
+        if [ "$PROFILING_TYPE" = "cpu" ] || [ "$PROFILING_TYPE" = "both" ]; then
             collect_cpu_profile
         fi
         
-        if [ "$COLLECT_CONTENTION" = true ] || [ "$COLLECT_BOTH" = true ]; then
+        if [ "$PROFILING_TYPE" = "contention" ] || [ "$PROFILING_TYPE" = "both" ]; then
             collect_contention_profile
         fi
         
@@ -328,18 +324,6 @@ cleanup_and_exit() {
 parse_args() {
     while [[ $# -gt 0 ]]; do
         case $1 in
-            --cpu)
-                COLLECT_CPU=true
-                shift
-                ;;
-            --contention)
-                COLLECT_CONTENTION=true
-                shift
-                ;;
-            --both)
-                COLLECT_BOTH=true
-                shift
-                ;;
             --duration)
                 DURATION="$2"
                 shift 2
@@ -362,6 +346,18 @@ parse_args() {
                 ;;
             --cleanup-size)
                 CLEANUP_SIZE="$2"
+                shift 2
+                ;;
+            --profiling-type)
+                PROFILING_TYPE="$2"
+                if [ "$PROFILING_TYPE" != "cpu" ] && [ "$PROFILING_TYPE" != "contention" ] && [ "$PROFILING_TYPE" != "both" ]; then
+                    log_error "Invalid profiling type: $PROFILING_TYPE. Must be 'cpu', 'contention', or 'both'"
+                    exit 1
+                fi
+                shift 2
+                ;;
+            --be-conf)
+                BE_CONF_PATH="$2"
                 shift 2
                 ;;
             --daemon)
@@ -387,10 +383,8 @@ parse_args() {
         esac
     done
     
-    # Set default collection type if none specified
-    if [ "$COLLECT_CPU" = false ] && [ "$COLLECT_CONTENTION" = false ] && [ "$COLLECT_BOTH" = false ]; then
-        COLLECT_CPU=true
-    fi
+    # Log the profiling configuration
+    log "Profiling type: $PROFILING_TYPE"
 }
 
 # Main execution
@@ -409,11 +403,11 @@ main() {
         # Single collection mode
         check_brpc_server
         
-        if [ "$COLLECT_CPU" = true ] || [ "$COLLECT_BOTH" = true ]; then
+        if [ "$PROFILING_TYPE" = "cpu" ] || [ "$PROFILING_TYPE" = "both" ]; then
             collect_cpu_profile
         fi
         
-        if [ "$COLLECT_CONTENTION" = true ] || [ "$COLLECT_BOTH" = true ]; then
+        if [ "$PROFILING_TYPE" = "contention" ] || [ "$PROFILING_TYPE" = "both" ]; then
             collect_contention_profile
         fi
         
