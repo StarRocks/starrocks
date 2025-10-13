@@ -81,7 +81,7 @@ ColumnPtr date_valid(const ColumnPtr& v1) {
         }
     } else if (v1->is_nullable()) {
         auto v = ColumnHelper::as_column<NullableColumn>(v1);
-        auto& nulls = v->null_column()->get_data();
+        auto& nulls = v->immutable_null_column_data();
         auto& values = ColumnHelper::cast_to_raw<Type>(v->data_column())->get_data();
 
         auto null_column = NullColumn::create();

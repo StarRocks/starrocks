@@ -32,7 +32,7 @@ public:
      * else return ptr
      * @param ptr 
      */
-    static inline const ColumnPtr& get_data_column_of_nullable(const ColumnPtr& ptr) {
+    static inline ColumnPtr get_data_column_of_nullable(const ColumnPtr& ptr) {
         if (ptr->is_nullable()) {
             return down_cast<const NullableColumn*>(ptr.get())->data_column();
         }
@@ -51,7 +51,7 @@ public:
      * else return ptr
      * @param ptr 
      */
-    static inline const ColumnPtr& get_data_column_of_const(const ColumnPtr& ptr) {
+    static inline ColumnPtr get_data_column_of_const(const ColumnPtr& ptr) {
         if (ptr->is_constant()) {
             return down_cast<const ConstColumn*>(ptr.get())->data_column();
         }
@@ -70,9 +70,9 @@ public:
     static NullColumn::MutablePtr union_nullable_column(const ColumnPtr& v1, const ColumnPtr& v2);
 
     static void union_produce_nullable_column(const ColumnPtr& v1, const ColumnPtr& v2,
-                                              NullColumnPtr* produce_null_column);
+                                              NullColumn::MutablePtr* produce_null_column);
 
-    static void union_produce_nullable_column(const ColumnPtr& v1, NullColumnPtr* produce_null_column);
+    static void union_produce_nullable_column(const ColumnPtr& v1, NullColumn::MutablePtr* produce_null_column);
 
     static NullColumn::MutablePtr union_null_column(const NullColumnPtr& v1, const NullColumnPtr& v2);
 

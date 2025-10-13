@@ -317,9 +317,7 @@ Status DataStreamSender::Channel::_send_current_chunk(bool eos) {
     RETURN_IF_ERROR(send_one_chunk(_chunk.get(), eos, &is_real_sent));
 
     // we only clear column data, because we need to reuse column schema
-    for (ColumnPtr& column : _chunk->columns()) {
-        column->resize(0);
-    }
+    _chunk->set_num_rows(0);
     return Status::OK();
 }
 

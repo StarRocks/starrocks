@@ -1665,13 +1665,8 @@ Status Aggregator::convert_hash_map_to_chunk(int32_t chunk_size, ChunkPtr* chunk
         if (read_index > 0) {
             {
                 SCOPED_TIMER(_agg_stat->group_by_append_timer);
-                // Convert MutableColumns to Columns for hashtable interface and explicitly call const overload
-                Columns group_by_cols_view(group_by_columns.size());
-                for (size_t i = 0; i < group_by_columns.size(); i++) {
-                    group_by_cols_view[i] = group_by_columns[i];
-                }
-                const typename HashMapWithKey::ResultVector& const_results = hash_map_with_key.results;
-                hash_map_with_key.insert_keys_to_columns(const_results, group_by_cols_view, read_index);
+                // Pass MutableColumns directly to hashtable interface
+                hash_map_with_key.insert_keys_to_columns(hash_map_with_key.results, group_by_columns, read_index);
             }
 
             {
@@ -1754,7 +1749,7 @@ void Aggregator::convert_hash_set_to_chunk(int32_t chunk_size, ChunkPtr* chunk) 
         auto end = hash_set.hash_set.end();
         const auto hash_set_size = _hash_set_variant.size();
         auto num_rows = std::min<size_t>(hash_set_size - _num_rows_processed, chunk_size);
-        Columns group_by_columns = _create_group_by_columns(num_rows);
+        MutableColumns group_by_columns = _create_group_by_columns(num_rows);
 
         // Computer group by columns and aggregate result column
         int32_t read_index = 0;
@@ -1797,11 +1792,11 @@ void Aggregator::convert_hash_set_to_chunk(int32_t chunk_size, ChunkPtr* chunk) 
         auto use_intermediate = _use_intermediate_as_output();
         if (!use_intermediate) {
             for (size_t i = 0; i < group_by_columns.size(); i++) {
-                result_chunk->append_column(group_by_columns[i], _output_tuple_desc->slots()[i]->id());
+                result_chunk->append_column(std::move(group_by_columns[i]), _output_tuple_desc->slots()[i]->id());
             }
         } else {
             for (size_t i = 0; i < group_by_columns.size(); i++) {
-                result_chunk->append_column(group_by_columns[i], _intermediate_tuple_desc->slots()[i]->id());
+                result_chunk->append_column(std::move(group_by_columns[i]), _intermediate_tuple_desc->slots()[i]->id());
             }
         }
         _num_rows_returned += read_index;

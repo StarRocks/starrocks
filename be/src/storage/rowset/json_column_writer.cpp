@@ -82,7 +82,7 @@ Status FlatJsonColumnWriter::append(const Column& column) {
     return Status::OK();
 }
 
-Status FlatJsonColumnWriter::_flat_column(Columns& json_datas) {
+Status FlatJsonColumnWriter::_flat_column(MutableColumns& json_datas) {
     // all json datas must full json
     JsonPathDeriver deriver;
     deriver.init_flat_json_config(_flat_json_config);

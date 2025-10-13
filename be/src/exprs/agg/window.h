@@ -81,7 +81,7 @@ class WindowFunction : public AggregateFunctionStateHelper<State> {
     }
 
     void convert_to_serialize_format(FunctionContext* ctx, const Columns& src, size_t chunk_size,
-                                     ColumnPtr* dst) const override {
+                                     MutableColumnPtr& dst) const override {
         DCHECK(false) << "Shouldn't call this method for window function!";
     }
 };

@@ -332,7 +332,7 @@ public:
     }
 
     ColumnPtr get_all_values() const {
-        ColumnPtr values = ColumnHelper::create_column(TypeDescriptor{Type}, true);
+        MutableColumnPtr values = ColumnHelper::create_column(TypeDescriptor{Type}, true);
         if constexpr (isSliceLT<Type>) {
             for (auto v : _hash_set) {
                 // v -> SliceWithHash
@@ -498,17 +498,17 @@ public:
             dest_size = 1;
         }
         BooleanColumn::MutablePtr res = BooleanColumn::create(dest_size, _is_not_in);
-        NullColumnPtr res_null = NullColumn::create(dest_size, DATUM_NULL);
+        NullColumn::MutablePtr res_null = NullColumn::create(dest_size, DATUM_NULL);
         auto& res_data = res->get_data();
         auto& res_null_data = res_null->get_data();
         for (auto i = 0; i < dest_size; ++i) {
             auto id_0 = is_const[0] ? 0 : i;
-            if (input_null[0] == nullptr || !input_null[0]->get_data()[id_0]) {
+            if (input_null[0] == nullptr || !input_null[0]->immutable_data()[id_0]) {
                 bool has_null = false;
                 for (auto j = 1; j < child_size; ++j) {
                     auto id = is_const[j] ? 0 : i;
                     // input[j] is null
-                    if (input_null[j] != nullptr && input_null[j]->get_data()[id]) {
+                    if (input_null[j] != nullptr && input_null[j]->immutable_data()[id]) {
                         has_null = true;
                         continue;
                     }

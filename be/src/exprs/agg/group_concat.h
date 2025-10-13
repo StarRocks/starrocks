@@ -203,9 +203,9 @@ public:
     }
 
     void convert_to_serialize_format(FunctionContext* ctx, const Columns& src, size_t chunk_size,
-                                     ColumnPtr* dst) const override {
+                                     MutableColumnPtr& dst) const override {
         if (src.size() > 1) {
-            auto* dst_column = down_cast<BinaryColumn*>((*dst).get());
+            auto* dst_column = down_cast<BinaryColumn*>(dst.get());
             Bytes& bytes = dst_column->get_bytes();
             const auto* column_value = down_cast<const BinaryColumn*>(src[0].get());
             if (!src[1]->is_constant()) {
@@ -253,7 +253,7 @@ public:
                 }
             }
         } else { //", "
-            auto* dst_column = down_cast<BinaryColumn*>((*dst).get());
+            auto* dst_column = down_cast<BinaryColumn*>(dst.get());
             Bytes& bytes = dst_column->get_bytes();
             const auto* column_value = down_cast<const BinaryColumn*>(src[0].get());
 

@@ -104,7 +104,7 @@ public:
     }
 
     void convert_to_serialize_format(FunctionContext* ctx, const Columns& src, size_t chunk_size,
-                                     ColumnPtr* dst) const override {
+                                     MutableColumnPtr& dst) const override {
         //Histogram aggregation function only support one stage Agg
         CHECK(false);
     }

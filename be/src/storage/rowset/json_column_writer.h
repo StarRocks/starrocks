@@ -61,7 +61,7 @@ protected:
     Status _write_flat_column();
 
 private:
-    Status _flat_column(Columns& json_datas);
+    Status _flat_column(MutableColumns& json_datas);
 
 protected:
     ColumnMetaPB* _json_meta;
@@ -73,7 +73,7 @@ protected:
     std::vector<LogicalType> _flat_types;
     Columns _flat_columns;
 
-    Columns _json_datas;
+    MutableColumns _json_datas;
     size_t _estimate_size = 0;
 
     bool _has_remain;

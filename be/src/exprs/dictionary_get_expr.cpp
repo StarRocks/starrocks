@@ -65,9 +65,9 @@ StatusOr<ColumnPtr> DictionaryGetExpr::evaluate_checked(ExprContext* context, Ch
             _dictionary_get_expr.null_if_not_exist ? null_column.get() : nullptr));
 
     // merge the value chunk into a single struct column and return
-    auto fields =
-            down_cast<StructColumn*>(down_cast<NullableColumn*>(nullable_struct_column.get())->data_column().get())
-                    ->fields_column();
+    auto* struct_col = down_cast<StructColumn*>(
+            down_cast<NullableColumn*>(nullable_struct_column.get())->mutable_data_column());
+    auto fields = struct_col->fields_column_mutable();
     for (size_t i = 0; i < value_chunk->columns().size(); ++i) {
         auto column = value_chunk->columns()[i];
         fields[i]->append(*column, 0, column->size());

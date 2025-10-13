@@ -263,11 +263,11 @@ public:
     }
 
     void convert_to_serialize_format(FunctionContext* ctx, const Columns& src, size_t chunk_size,
-                                     ColumnPtr* dst) const override {
+                                     MutableColumnPtr& dst) const override {
         if (chunk_size <= 0) {
             return;
         }
-        auto* dst_column = down_cast<BinaryColumn*>((*dst).get());
+        auto* dst_column = down_cast<BinaryColumn*>(dst.get());
         Bytes& bytes = dst_column->get_bytes();
         double rate = ColumnHelper::get_const_value<TYPE_DOUBLE>(src[1]);
         auto src_column = *down_cast<const InputColumnType*>(src[0].get());
@@ -385,11 +385,11 @@ public:
     }
 
     void convert_to_serialize_format(FunctionContext* ctx, const Columns& src, size_t chunk_size,
-                                     ColumnPtr* dst) const override {
+                                     MutableColumnPtr& dst) const override {
         if (chunk_size <= 0) {
             return;
         }
-        auto* dst_column = down_cast<BinaryColumn*>((*dst).get());
+        auto* dst_column = down_cast<BinaryColumn*>(dst.get());
         Bytes& bytes = dst_column->get_bytes();
         double rate = ColumnHelper::get_const_value<TYPE_DOUBLE>(src[1]);
 
@@ -660,7 +660,7 @@ public:
     }
 
     void convert_to_serialize_format(FunctionContext* ctx, const Columns& src, size_t chunk_size,
-                                     ColumnPtr* dst) const override {
+                                     MutableColumnPtr& dst) const override {
         size_t serialize_row = (sizeof(int) + sizeof(InputCppType) + sizeof(int64_t));
         size_t serialize_size = serialize_row * chunk_size;
 

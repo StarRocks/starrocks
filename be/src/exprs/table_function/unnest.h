@@ -34,7 +34,8 @@ public:
         if (state->get_columns().empty()) {
             return {};
         }
-        Column* arg0 = state->get_columns()[0].get();
+        auto arg0_mut = state->get_columns()[0]->as_mutable_ptr();
+        Column* arg0 = arg0_mut.get();
         auto* col_array = down_cast<ArrayColumn*>(ColumnHelper::get_data_column(arg0));
         state->set_processed_rows(arg0->size());
         Columns result;
@@ -42,7 +43,7 @@ public:
             auto offset_column = col_array->offsets_column();
             auto copy_count_column = UInt32Column::create();
             copy_count_column->append(0);
-            ColumnPtr unnested_array_elements = col_array->elements_column()->clone_empty();
+            MutableColumnPtr unnested_array_elements = col_array->elements_column()->clone_empty();
             uint32_t offset = 0;
             for (int row_idx = 0; row_idx < arg0->size(); ++row_idx) {
                 if (arg0->is_null(row_idx)) {

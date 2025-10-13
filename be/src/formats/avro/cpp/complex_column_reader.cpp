@@ -36,7 +36,7 @@ Status StructColumnReader::read_datum(const avro::GenericDatum& datum, Column* c
 
     for (size_t i = 0; i < _type_desc.children.size(); ++i) {
         const auto& field_name = _type_desc.field_names[i];
-        auto& field_column = struct_column->field_column(field_name);
+        auto field_column = struct_column->field_column_mutable(field_name);
 
         if (record.hasField(field_name)) {
             const auto& field = record.field(field_name);
@@ -55,8 +55,9 @@ Status ArrayColumnReader::read_datum(const avro::GenericDatum& datum, Column* co
     auto* element_reader = down_cast<NullableColumnReader*>(_element_reader.get());
 
     auto array_column = down_cast<ArrayColumn*>(column);
-    auto& elements_column = array_column->elements_column();
-    auto& offsets_column = array_column->offsets_column();
+    auto elements_column = array_column->elements_column_mutable_ptr();
+    auto offsets_column_mut = array_column->offsets_column_mutable_ptr();
+    auto* offsets_column = offsets_column_mut.get();
 
     const auto& array = datum.value<avro::GenericArray>();
     const auto& array_values = array.value();
@@ -78,11 +79,14 @@ Status MapColumnReader::read_datum(const avro::GenericDatum& datum, Column* colu
     auto* value_reader = down_cast<NullableColumnReader*>(_value_reader.get());
 
     auto map_column = down_cast<MapColumn*>(column);
-    auto keys_column = down_cast<NullableColumn*>(map_column->keys_column().get());
-    auto& keys_null_column = keys_column->null_column();
-    auto keys_data_column = down_cast<BinaryColumn*>(keys_column->data_column().get());
-    auto& values_column = map_column->values_column();
-    auto& offsets_column = map_column->offsets_column();
+    auto keys_column_mut = map_column->keys_column()->as_mutable_ptr();
+    auto keys_column = down_cast<NullableColumn*>(keys_column_mut.get());
+    auto keys_null_column = keys_column->null_column_mutable_ptr();
+    auto keys_data_column_mut = keys_column->data_column_mutable_ptr();
+    auto keys_data_column = down_cast<BinaryColumn*>(keys_data_column_mut.get());
+    auto values_column = map_column->values_column()->as_mutable_ptr();
+    auto offsets_column_mut = map_column->offsets_column()->as_mutable_ptr();
+    auto* offsets_column = down_cast<UInt32Column*>(offsets_column_mut.get());
 
     const auto& map = datum.value<avro::GenericMap>();
     const auto& map_values = map.value();

@@ -176,7 +176,7 @@ struct AggHashSetOfOneNumberKey : public AggHashSet<HashSet, AggHashSetOfOneNumb
         }
     }
 
-    void insert_keys_to_columns(const ResultVector& keys, Columns& key_columns, size_t chunk_size) {
+    void insert_keys_to_columns(const ResultVector& keys, MutableColumns& key_columns, size_t chunk_size) {
         auto* column = down_cast<ColumnType*>(key_columns[0].get());
         column->get_data().insert(column->get_data().end(), keys.begin(), keys.begin() + chunk_size);
     }
@@ -279,7 +279,7 @@ struct AggHashSetOfOneNullableNumberKey
         }
     }
 
-    void insert_keys_to_columns(ResultVector& keys, Columns& key_columns, size_t chunk_size) {
+    void insert_keys_to_columns(ResultVector& keys, MutableColumns& key_columns, size_t chunk_size) {
         auto* nullable_column = down_cast<NullableColumn*>(key_columns[0].get());
         auto* column = down_cast<ColumnType*>(nullable_column->mutable_data_column());
         column->get_data().insert(column->get_data().end(), keys.begin(), keys.begin() + chunk_size);
@@ -366,7 +366,7 @@ struct AggHashSetOfOneStringKey : public AggHashSet<HashSet, AggHashSetOfOneStri
         }
     }
 
-    void insert_keys_to_columns(ResultVector& keys, Columns& key_columns, size_t chunk_size) {
+    void insert_keys_to_columns(ResultVector& keys, MutableColumns& key_columns, size_t chunk_size) {
         auto* column = down_cast<BinaryColumn*>(key_columns[0].get());
         keys.resize(chunk_size);
         column->append_strings(keys.data(), keys.size());
@@ -481,7 +481,7 @@ struct AggHashSetOfOneNullableStringKey : public AggHashSet<HashSet, AggHashSetO
         (*not_founds)[row] = !this->hash_set.contains(key);
     }
 
-    void insert_keys_to_columns(ResultVector& keys, Columns& key_columns, size_t chunk_size) {
+    void insert_keys_to_columns(ResultVector& keys, MutableColumns& key_columns, size_t chunk_size) {
         DCHECK(key_columns[0]->is_nullable());
         auto* nullable_column = down_cast<NullableColumn*>(key_columns[0].get());
         auto* column = down_cast<BinaryColumn*>(nullable_column->mutable_data_column());
@@ -814,7 +814,7 @@ struct AggHashSetCompressedFixedSize : public AggHashSet<HashSet, AggHashSetComp
         }
     }
 
-    void insert_keys_to_columns(ResultVector& keys, Columns& key_columns, int32_t chunk_size) {
+    void insert_keys_to_columns(ResultVector& keys, MutableColumns& key_columns, int32_t chunk_size) {
         bitcompress_deserialize(key_columns, bases, offsets, used_bits, chunk_size, sizeof(FixedSizeSliceKey),
                                 keys.data());
     }

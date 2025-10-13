@@ -156,7 +156,7 @@ private:
     const BitShufflePageDecoder<Type>* _dict_decoder = nullptr;
     bool _parsed;
     EncodingTypePB _encoding_type;
-    ColumnPtr _vec_code_buf;
+    MutableColumnPtr _vec_code_buf;
 };
 
 } // namespace starrocks

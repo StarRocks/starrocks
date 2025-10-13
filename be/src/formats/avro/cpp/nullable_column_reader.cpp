@@ -52,10 +52,11 @@ Status NullableColumnReader::read_datum(const avro::GenericDatum& datum, Column*
     }
 
     auto nullable_column = down_cast<NullableColumn*>(column);
-    auto& data_column = nullable_column->data_column();
+    auto data_column = nullable_column->data_column_mutable_ptr();
     auto st = _base_reader->read_datum(datum, data_column.get());
     if (st.ok()) {
-        nullable_column->null_column()->append(0);
+        auto null_col_mut = nullable_column->null_column_mutable_ptr();
+        null_col_mut->append(0);
     } else if (st.is_data_quality_error() && _invalid_as_null) {
         nullable_column->append_nulls(1);
         return Status::OK();

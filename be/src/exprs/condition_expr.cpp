@@ -35,7 +35,7 @@ namespace starrocks {
 template <bool isConstC0, bool isConst1, LogicalType Type>
 struct SelectIfOP {
     static ColumnPtr eval(ColumnPtr& value0, ColumnPtr& value1, ColumnPtr& selector, const TypeDescriptor& type_desc) {
-        [[maybe_unused]] Filter& select_vec = ColumnHelper::merge_nullable_filter(selector.get());
+        [[maybe_unused]] Filter& select_vec = ColumnHelper::merge_nullable_filter(selector->as_mutable_raw_ptr());
         [[maybe_unused]] auto* input_data0 = ColumnHelper::get_data_column(value0.get());
         [[maybe_unused]] auto* input_data1 = ColumnHelper::get_data_column(value1.get());
 
@@ -131,7 +131,7 @@ private:
         }
 
         for (int row = 0; row < num_rows; ++row) {
-            if (null == nullptr || !null->get_data()[row]) { // not null
+            if (null == nullptr || !null->immutable_data()[row]) { // not null
                 res->append(*columns[0], row, 1);
             } else {
                 res->append(*columns[1], row, 1);
@@ -205,7 +205,7 @@ private:
             right_nulls = down_cast<NullableColumn*>(columns[1].get())->null_column();
         }
         for (int row = 0; row < num_rows; ++row) {
-            if ((right_nulls == nullptr || !right_nulls->get_data()[row]) &&
+            if ((right_nulls == nullptr || !right_nulls->immutable_data()[row]) &&
                 columns[0]->equals(row, *right_data, row, false) == 1) {
                 res->append_nulls(1);
             } else {
@@ -468,7 +468,7 @@ private:
             int col;
             for (col = 0; col < col_size; ++col) {
                 // if not null
-                if (nullColumns[col] == nullptr || !nullColumns[col]->get_data()[row]) {
+                if (nullColumns[col] == nullptr || !nullColumns[col]->immutable_data()[row]) {
                     res->append(*columns[col], row, 1);
                     break;
                 }

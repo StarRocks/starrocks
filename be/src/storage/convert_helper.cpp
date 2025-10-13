@@ -994,7 +994,7 @@ public:
     BitMapTypeConverter() = default;
     virtual ~BitMapTypeConverter() = default;
 
-    Status convert_materialized(ColumnPtr src_col, ColumnPtr dst_col, TypeInfo* src_type) const override {
+    Status convert_materialized(ColumnPtr src_col, MutableColumnPtr dst_col, TypeInfo* src_type) const override {
         for (size_t row_index = 0; row_index < src_col->size(); ++row_index) {
             Datum src_datum = src_col->get(row_index);
             Datum dst_datum;
@@ -1025,7 +1025,7 @@ public:
     HLLTypeConverter() = default;
     virtual ~HLLTypeConverter() = default;
 
-    Status convert_materialized(ColumnPtr src_col, ColumnPtr dst_col, TypeInfo* src_type) const override {
+    Status convert_materialized(ColumnPtr src_col, MutableColumnPtr dst_col, TypeInfo* src_type) const override {
         for (size_t row_index = 0; row_index < src_col->size(); ++row_index) {
             Datum src_datum = src_col->get(row_index);
             Datum dst_datum;
@@ -1053,7 +1053,7 @@ public:
     PercentileTypeConverter() = default;
     virtual ~PercentileTypeConverter() = default;
 
-    Status convert_materialized(ColumnPtr src_col, ColumnPtr dst_col, TypeInfo* src_type) const override {
+    Status convert_materialized(ColumnPtr src_col, MutableColumnPtr dst_col, TypeInfo* src_type) const override {
         for (size_t row_index = 0; row_index < src_col->size(); ++row_index) {
             Datum src_datum = src_col->get(row_index);
             Datum dst_datum;
@@ -1079,7 +1079,7 @@ public:
     DecimalToPercentileTypeConverter() = default;
     virtual ~DecimalToPercentileTypeConverter() = default;
 
-    Status convert_materialized(ColumnPtr src_col, ColumnPtr dst_col, TypeInfo* src_type) const override {
+    Status convert_materialized(ColumnPtr src_col, MutableColumnPtr dst_col, TypeInfo* src_type) const override {
         for (size_t row_index = 0; row_index < src_col->size(); ++row_index) {
             Datum src_datum = src_col->get(row_index);
             Datum dst_datum;
@@ -1106,7 +1106,7 @@ public:
     CountTypeConverter() = default;
     virtual ~CountTypeConverter() = default;
 
-    Status convert_materialized(ColumnPtr src_col, ColumnPtr dst_col, TypeInfo* src_type) const override {
+    Status convert_materialized(ColumnPtr src_col, MutableColumnPtr dst_col, TypeInfo* src_type) const override {
         for (size_t row_index = 0; row_index < src_col->size(); ++row_index) {
             Datum src_datum = src_col->get(row_index);
             Datum dst_datum;
@@ -1569,7 +1569,7 @@ public:
         using SrcColumnType = ColumnType<SrcType>;
         using DstColumnType = ColumnType<DstType>;
         // FIXME: precision and scale are lost.
-        ColumnPtr dst = DstColumnType::create();
+        MutableColumnPtr dst = DstColumnType::create();
         dst->reserve(src.size());
         if constexpr (is_directly_copyable<SrcType, DstType>) {
             if (!src.is_nullable() && !src.is_constant()) {
@@ -1581,13 +1581,13 @@ public:
                 std::swap(dst_column->get_data(), (typename DstColumnType::Container&)(src_column->get_data()));
                 return dst;
             } else if (src.is_nullable() && !dst->only_null()) {
-                dst = NullableColumn::create(dst, NullColumn::create());
+                dst = NullableColumn::create(std::move(dst), NullColumn::create());
                 auto* nullable_dst_column = down_cast<NullableColumn*>(dst.get());
                 auto* nullable_src_column = down_cast<NullableColumn*>(const_cast<Column*>(&src));
                 auto* dst_column = down_cast<DstColumnType*>(nullable_dst_column->data_column().get());
                 auto* src_column = down_cast<SrcColumnType*>(nullable_src_column->data_column().get());
-                auto& null_dst_column = nullable_dst_column->null_column();
-                auto& null_src_column = nullable_src_column->null_column();
+                auto null_dst_column = nullable_dst_column->null_column_mutable_ptr();
+                auto null_src_column = nullable_src_column->null_column_mutable_ptr();
                 // TODO (by satanson): unsafe abstraction leak
                 //  swap std::vector<DecimalV2Value> and std::vector<int128_t>
                 //  raw memory copy is more sound.

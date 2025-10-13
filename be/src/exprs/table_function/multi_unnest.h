@@ -38,13 +38,14 @@ public:
         long row_count = state->get_columns()[0]->size();
         state->set_processed_rows(row_count);
 
-        Columns unnested_array_list;
+        MutableColumns unnested_array_list;
         for (auto& col_idx : state->get_columns()) {
-            Column* column = col_idx.get();
+            auto col_mut = col_idx->as_mutable_ptr();
+            Column* column = col_mut.get();
 
             auto* col_array = down_cast<ArrayColumn*>(ColumnHelper::get_data_column(column));
-            ColumnPtr unnested_array_elements = col_array->elements_column()->clone_empty();
-            unnested_array_list.emplace_back(unnested_array_elements);
+            MutableColumnPtr unnested_array_elements = col_array->elements_column()->clone_empty();
+            unnested_array_list.emplace_back(std::move(unnested_array_elements));
         }
 
         auto copy_count_column = UInt32Column::create();
@@ -53,7 +54,8 @@ public:
         for (int row_idx = 0; row_idx < row_count; ++row_idx) {
             uint32_t max_length_array_size = 0;
             for (auto& col_idx : state->get_columns()) {
-                Column* column = col_idx.get();
+                auto col_mut = col_idx->as_mutable_ptr();
+                Column* column = col_mut.get();
                 if (column->is_null(row_idx)) {
                     // current row is null, ignore the offset.
                     continue;
@@ -76,12 +78,15 @@ public:
             }
 
             for (int col_idx = 0; col_idx < state->get_columns().size(); ++col_idx) {
-                Column* column = state->get_columns()[col_idx].get();
+                auto col_mut = state->get_columns()[col_idx]->as_mutable_ptr();
+                Column* column = col_mut.get();
                 auto* col_array = down_cast<ArrayColumn*>(ColumnHelper::get_data_column(column));
                 auto offset_column = col_array->offsets_column();
 
                 if (max_length_array_size == 0 && state->get_is_left_join()) {
-                    unnested_array_list[col_idx]->append_nulls(1);
+                    auto unnest_mut = unnested_array_list[col_idx]->as_mutable_ptr();
+                    unnest_mut->append_nulls(1);
+                    unnested_array_list[col_idx] = std::move(unnest_mut);
                 } else {
                     if (column->is_null(row_idx)) {
                         // current row is null, ignore element data.

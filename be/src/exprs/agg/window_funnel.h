@@ -549,8 +549,8 @@ public:
     }
 
     void convert_to_serialize_format(FunctionContext* ctx, const Columns& src, size_t chunk_size,
-                                     ColumnPtr* dst) const override {
-        auto* dst_column = down_cast<ArrayColumn*>((*dst).get());
+                                     MutableColumnPtr& dst) const override {
+        auto* dst_column = down_cast<ArrayColumn*>(dst.get());
         dst_column->reserve(chunk_size);
 
         const auto timestamp_column = down_cast<const TimeTypeColumn*>(src[1].get());

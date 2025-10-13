@@ -77,13 +77,13 @@ StatusOr<ColumnPtr> GinFunctions::tokenize(FunctionContext* context, const starr
 
     // Array Offset
     int offset = 0;
-    UInt32Column::Ptr array_offsets = UInt32Column::create();
+    UInt32Column::MutablePtr array_offsets = UInt32Column::create();
     array_offsets->reserve(num_rows + 1);
 
     // Array Binary
-    BinaryColumn::Ptr array_binary_column = BinaryColumn::create();
+    BinaryColumn::MutablePtr array_binary_column = BinaryColumn::create();
 
-    NullColumnPtr null_array = NullColumn::create();
+    NullColumn::MutablePtr null_array = NullColumn::create();
 
     for (int row = 0; row < num_rows; ++row) {
         array_offsets->append(offset);

@@ -163,7 +163,7 @@ inline StatusOr<ColumnPtr> HashFunctions::crc32_hash(FunctionContext* context, c
     const uint8_t* null_data = nullptr;
     if (is_nullable) {
         auto* null_column = ColumnHelper::as_raw_column<NullableColumn>(col);
-        null_data = null_column->null_column()->get_data().data();
+        null_data = null_column->immutable_null_column_data().data();
     }
 
     for (size_t row = 0; row < row_size; ++row) {

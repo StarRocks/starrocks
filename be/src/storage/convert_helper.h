@@ -55,7 +55,7 @@ public:
     MaterializeTypeConverter() = default;
     ~MaterializeTypeConverter() = default;
 
-    virtual Status convert_materialized(ColumnPtr src_col, ColumnPtr dst_col, TypeInfo* src_type) const = 0;
+    virtual Status convert_materialized(ColumnPtr src_col, MutableColumnPtr dst_col, TypeInfo* src_type) const = 0;
 };
 
 const MaterializeTypeConverter* get_materialized_converter(LogicalType from_type, MaterializeType to_type);

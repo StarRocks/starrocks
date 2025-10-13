@@ -116,7 +116,7 @@ public:
     }
 
     void convert_to_serialize_format(FunctionContext* ctx, const Columns& src, size_t chunk_size,
-                                     ColumnPtr* dst) const override {
+                                     MutableColumnPtr& dst) const override {
         // argument 0
         const auto* data_column = down_cast<const DoubleColumn*>(src[0].get());
         // argument 1
@@ -124,7 +124,7 @@ public:
         const auto* const_column = down_cast<const ConstColumn*>(src[1].get());
         double quantile = const_column->get(0).get_double();
         // result
-        BinaryColumn* result = down_cast<BinaryColumn*>((*dst).get());
+        BinaryColumn* result = down_cast<BinaryColumn*>(dst.get());
         Bytes& bytes = result->get_bytes();
         bytes.reserve(chunk_size * 20);
         result->get_offset().resize(chunk_size + 1);
@@ -191,14 +191,14 @@ public:
     }
 
     void convert_to_serialize_format(FunctionContext* ctx, const Columns& src, size_t chunk_size,
-                                     ColumnPtr* dst) const override {
+                                     MutableColumnPtr& dst) const override {
         // argument 0
         const auto* data_column = down_cast<const DoubleColumn*>(src[0].get());
         // argument 2
         DCHECK(src[2]->is_constant());
         double quantile = src[2]->get(0).get_double();
         // result
-        BinaryColumn* result = down_cast<BinaryColumn*>((*dst).get());
+        BinaryColumn* result = down_cast<BinaryColumn*>(dst.get());
         Bytes& bytes = result->get_bytes();
         bytes.reserve(chunk_size * 20);
         result->get_offset().resize(chunk_size + 1);

@@ -57,7 +57,7 @@ public:
     }
 
     void convert_to_serialize_format([[maybe_unused]] FunctionContext* ctx, const Columns& srcs, size_t chunk_size,
-                                     ColumnPtr* dst) const override {
+                                     MutableColumnPtr& dst) const override {
         DCHECK_EQ(1, srcs.size());
         *dst = srcs[0];
     }

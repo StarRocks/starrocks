@@ -29,15 +29,15 @@
 
 namespace starrocks {
 
-static void append_bigint(ColumnPtr& col, int64_t value) {
+static void append_bigint(MutableColumnPtr& col, int64_t value) {
     [[maybe_unused]] auto n = col->append_numbers(&value, sizeof(value));
     DCHECK_EQ(1, n);
 };
 
-static void fill_rowset_row(Columns& columns, const RowsetMetadataPB& rowset) {
+static void fill_rowset_row(MutableColumns& columns, const RowsetMetadataPB& rowset) {
     DCHECK_EQ(6, columns.size());
     if (UNLIKELY(!rowset.has_id())) {
-        columns[0] = NullableColumn::wrap_if_necessary(columns[0]);
+        columns[0] = Column::mutate(NullableColumn::wrap_if_necessary(columns[0]));
         columns[0]->append_nulls(1);
     } else {
         append_bigint(columns[0], rowset.id());
@@ -46,21 +46,21 @@ static void fill_rowset_row(Columns& columns, const RowsetMetadataPB& rowset) {
     append_bigint(columns[1], rowset.segments_size());
 
     if (UNLIKELY(!rowset.has_num_rows())) {
-        columns[2] = NullableColumn::wrap_if_necessary(columns[2]);
+        columns[2] = Column::mutate(NullableColumn::wrap_if_necessary(columns[2]));
         columns[2]->append_nulls(1);
     } else {
         append_bigint(columns[2], rowset.num_rows());
     }
 
     if (UNLIKELY(!rowset.has_data_size())) {
-        columns[3] = NullableColumn::wrap_if_necessary(columns[3]);
+        columns[3] = Column::mutate(NullableColumn::wrap_if_necessary(columns[3]));
         columns[3]->append_nulls(1);
     } else {
         append_bigint(columns[3], rowset.data_size());
     }
 
     if (UNLIKELY(!rowset.has_overlapped())) {
-        columns[4] = NullableColumn::wrap_if_necessary(columns[4]);
+        columns[4] = Column::mutate(NullableColumn::wrap_if_necessary(columns[4]));
         columns[4]->append_nulls(1);
     } else {
         columns[4]->append_datum(Datum(rowset.overlapped()));
@@ -100,14 +100,13 @@ std::pair<Columns, UInt32Column::Ptr> ListRowsets::process(RuntimeState* runtime
     auto num_rows = state->input_rows();
     auto row_offset = state->get_offset();
     auto offsets = UInt32Column::create();
-    auto result = Columns{
-            Int64Column::create(),                                    // id
-            Int64Column::create(),                                    // segments
-            Int64Column::create(),                                    // rows
-            Int64Column::create(),                                    // size
-            BooleanColumn::create(),                                  // overlapped
-            NullableColumn::wrap_if_necessary(BinaryColumn::create()) // delete_predicate
-    };
+    MutableColumns result;
+    result.push_back(Int64Column::create());                                    // id
+    result.push_back(Int64Column::create());                                    // segments
+    result.push_back(Int64Column::create());                                    // rows
+    result.push_back(Int64Column::create());                                    // size
+    result.push_back(BooleanColumn::create());                                  // overlapped
+    result.push_back(Column::mutate(NullableColumn::wrap_if_necessary(BinaryColumn::create()))); // delete_predicate
 
     while (result[0]->size() < max_column_size && curr_row < num_rows) {
         offsets->append_datum(Datum((uint32_t)result[0]->size()));
@@ -159,7 +158,11 @@ std::pair<Columns, UInt32Column::Ptr> ListRowsets::process(RuntimeState* runtime
     }
     offsets->append_datum(Datum((uint32_t)result[0]->size()));
 
-    return std::make_pair(std::move(result), std::move(offsets));
+    Columns result_cols(result.size());
+    for (size_t i = 0; i < result.size(); i++) {
+        result_cols[i] = std::move(result[i]);
+    }
+    return std::make_pair(std::move(result_cols), std::move(offsets));
 }
 
 } // namespace starrocks

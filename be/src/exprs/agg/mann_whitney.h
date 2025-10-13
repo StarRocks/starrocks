@@ -302,7 +302,7 @@ public:
     }
 
     void convert_to_serialize_format(FunctionContext* ctx, const Columns& src, size_t chunk_size,
-                                     ColumnPtr* dst) const override {
+                                     MutableColumnPtr& dst) const override {
         TestingAlternative alternative{TestingAlternative::TwoSided};
         int64_t continuity_correction = 1;
 

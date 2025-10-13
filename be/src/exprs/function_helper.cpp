@@ -45,7 +45,7 @@ NullColumn::MutablePtr FunctionHelper::union_nullable_column(const ColumnPtr& v1
 }
 
 void FunctionHelper::union_produce_nullable_column(const ColumnPtr& v1, const ColumnPtr& v2,
-                                                   NullColumnPtr* produce_null_column) {
+                                                   NullColumn::MutablePtr* produce_null_column) {
     auto* result = (*produce_null_column)->get_data().data();
 
     if (v1->has_null()) {
@@ -67,7 +67,7 @@ void FunctionHelper::union_produce_nullable_column(const ColumnPtr& v1, const Co
     }
 }
 
-void FunctionHelper::union_produce_nullable_column(const ColumnPtr& v1, NullColumnPtr* produce_null_column) {
+void FunctionHelper::union_produce_nullable_column(const ColumnPtr& v1, NullColumn::MutablePtr* produce_null_column) {
     auto* result = (*produce_null_column)->get_data().data();
 
     if (v1->has_null()) {

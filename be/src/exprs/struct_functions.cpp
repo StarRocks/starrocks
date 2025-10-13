@@ -20,10 +20,10 @@
 namespace starrocks {
 
 StatusOr<ColumnPtr> StructFunctions::new_struct(FunctionContext* context, const Columns& columns) {
-    ColumnPtr res = context->create_column(context->get_return_type(), false);
+    MutableColumnPtr res = context->create_column(context->get_return_type(), false);
 
     StructColumn* st = down_cast<StructColumn*>(res.get());
-    auto& fields = st->fields_column();
+    auto fields = st->fields_column_mutable();
 
     DCHECK_EQ(fields.size(), columns.size());
 

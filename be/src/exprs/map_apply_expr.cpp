@@ -73,9 +73,11 @@ StatusOr<ColumnPtr> MapApplyExpr::evaluate_checked(ExprContext* context, Chunk* 
             DCHECK(nullable != nullptr);
             data_column = nullable->data_column();
             // empty null map with non-empty elements
-            data_column->empty_null_in_complex_column(
+            auto data_mut = data_column->as_mutable_ptr();
+            data_mut->empty_null_in_complex_column(
                     nullable->null_column()->immutable_data(),
-                    down_cast<MapColumn*>(data_column.get())->offsets_column()->get_data());
+                    down_cast<MapColumn*>(data_mut.get())->offsets_column()->immutable_data());
+            data_column = std::move(data_mut);
             if (input_null_map) {
                 input_null_map = FunctionHelper::union_null_column(nullable->null_column(),
                                                                    std::move(input_null_map)); // merge null
@@ -98,7 +100,7 @@ StatusOr<ColumnPtr> MapApplyExpr::evaluate_checked(ExprContext* context, Chunk* 
         input_columns.push_back(cur_map->values_column());
     }
     // step 2: construct a new chunk to evaluate the lambda expression, output a map column without warping null info.
-    ColumnPtr column = nullptr;
+    MutableColumnPtr column = nullptr;
     if (input_map->keys_column()->empty()) { // map is empty
         column = ColumnHelper::create_column(type(), false);
     } else {
@@ -122,13 +124,16 @@ StatusOr<ColumnPtr> MapApplyExpr::evaluate_checked(ExprContext* context, Chunk* 
                                                          captured->get_name()));
             }
 
-            ASSIGN_OR_RETURN(auto replicated_col, captured->replicate(input_map->offsets_column()->get_data()));
+            auto captured_mut = captured->as_mutable_ptr();
+            auto offsets_mut = input_map->offsets_column()->as_mutable_ptr();
+            auto* offsets_col = down_cast<UInt32Column*>(offsets_mut.get());
+            ASSIGN_OR_RETURN(auto replicated_col, captured_mut->replicate(offsets_col->get_data()));
             cur_chunk->append_column(replicated_col, id);
         }
         // evaluate the lambda expression
         if (cur_chunk->num_rows() <= chunk->num_rows() * 8) {
-            ASSIGN_OR_RETURN(column, context->evaluate(_children[0], cur_chunk.get()));
-            column = ColumnHelper::align_return_type(std::move(column), type(), cur_chunk->num_rows(), false);
+            ASSIGN_OR_RETURN(auto tmp_column, context->evaluate(_children[0], cur_chunk.get()));
+            column = Column::mutate(ColumnHelper::align_return_type(std::move(tmp_column), type(), cur_chunk->num_rows(), false));
         } else { // split large chunks into small ones to avoid too large or various batch_size
             ChunkAccumulator accumulator(DEFAULT_CHUNK_SIZE);
             RETURN_IF_ERROR(accumulator.push(std::move(cur_chunk)));
@@ -137,7 +142,7 @@ StatusOr<ColumnPtr> MapApplyExpr::evaluate_checked(ExprContext* context, Chunk* 
                 ASSIGN_OR_RETURN(auto tmp_col, context->evaluate(_children[0], tmp_chunk.get()));
                 tmp_col = ColumnHelper::align_return_type(std::move(tmp_col), type(), tmp_chunk->num_rows(), false);
                 if (column == nullptr) {
-                    column = tmp_col;
+                    column = Column::mutate(std::move(tmp_col));
                 } else {
                     column->append(*tmp_col);
                 }
@@ -146,9 +151,9 @@ StatusOr<ColumnPtr> MapApplyExpr::evaluate_checked(ExprContext* context, Chunk* 
     }
     // attach offsets
     auto map_col = down_cast<MapColumn*>(column.get());
-    if (UNLIKELY(input_map->offsets_column()->get_data().back() < map_col->keys_column()->size())) {
+    if (UNLIKELY(input_map->offsets_column()->immutable_data().back() < map_col->keys_column()->size())) {
         return Status::InternalError(fmt::format("The max index of offsets {} < map->key column's size {}",
-                                                 input_map->offsets_column()->get_data().back(),
+                                                 input_map->offsets_column()->immutable_data().back(),
                                                  map_col->keys_column()->size()));
     }
 
@@ -156,7 +161,9 @@ StatusOr<ColumnPtr> MapApplyExpr::evaluate_checked(ExprContext* context, Chunk* 
                                      ColumnHelper::as_column<UInt32Column>(input_map->offsets_column()->clone()));
 
     if (_maybe_duplicated_keys && res_map->size() > 0) {
-        res_map->remove_duplicated_keys();
+        auto res_map_mut = res_map->as_mutable_ptr();
+        down_cast<MapColumn*>(res_map_mut.get())->remove_duplicated_keys();
+        res_map = std::move(res_map_mut);
     }
     // attach null info
     if (input_null_map != nullptr) {

@@ -66,7 +66,7 @@ static const RE2 SUBSTRING_RE(R"((?:\.\*)*([^\.\^\{\[\(\|\)\]\}\+\*\?\$\\]+)(?:\
 
 #define THROW_RUNTIME_ERROR_IF_EXCEED_LIMIT(col, func_name)                        \
     if (UNLIKELY(!col->capacity_limit_reached().ok())) {                           \
-        col->reset_column();                                                       \
+        col->as_mutable_raw_ptr()->reset_column();                                 \
         throw RuntimeException("binary column exceed 4G in function " #func_name); \
     }
 
@@ -526,8 +526,9 @@ ColumnPtr string_func_const(StringConstFuncType func, const Columns& columns, Ar
             }
             if (binary->is_constant()) {
                 auto* dst_const = down_cast<ConstColumn*>(binary.get());
-                dst_const->data_column()->assign(dst_const->size(), 0);
-                return NullableColumn::create(dst_const->data_column(), std::move(src_null));
+                auto data_mut = dst_const->data_column()->as_mutable_ptr();
+                data_mut->assign(dst_const->size(), 0);
+                return NullableColumn::create(std::move(data_mut), std::move(src_null));
             }
             if (binary->is_nullable()) {
                 auto* binary_nullable = down_cast<NullableColumn*>(binary.get());

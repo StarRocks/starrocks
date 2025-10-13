@@ -34,6 +34,9 @@ Status add_map_column(Column* column, const TypeDescriptor& type_desc, const std
         simdjson::ondemand::object obj = value->get_object();
         simdjson::ondemand::parser parser;
         size_t field_count = 0;
+        auto keys = map_column->keys_column_mutable_ptr();
+        auto values = map_column->values_column_mutable_ptr();
+        auto offsets = map_column->offsets_column_mutable_ptr();
         for (auto field : obj) {
             {
                 // This is a tricky way to transform a std::string to simdjson:ondemand:value
@@ -44,18 +47,18 @@ Status add_map_column(Column* column, const TypeDescriptor& type_desc, const std
                 simdjson::ondemand::object obj = doc.get_object();
                 simdjson::ondemand::value field_key = obj.find_field("dummy_key");
 
-                RETURN_IF_ERROR(add_nullable_column(map_column->keys_column().get(), type_desc.children[0], name,
+                RETURN_IF_ERROR(add_nullable_column(keys.get(), type_desc.children[0], name,
                                                     &field_key, true));
             }
 
             {
                 simdjson::ondemand::value field_value = field.value();
-                RETURN_IF_ERROR(add_nullable_column(map_column->values_column().get(), type_desc.children[1], name,
+                RETURN_IF_ERROR(add_nullable_column(values.get(), type_desc.children[1], name,
                                                     &field_value, true));
             }
             ++field_count;
         }
-        map_column->offsets_column()->append(map_column->offsets_column()->get_data().back() + field_count);
+        down_cast<UInt32Column*>(offsets.get())->append(down_cast<UInt32Column*>(offsets.get())->immutable_data().back() + field_count);
 
         return Status::OK();
     } catch (simdjson::simdjson_error& e) {

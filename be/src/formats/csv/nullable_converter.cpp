@@ -71,12 +71,14 @@ bool NullableConverter::read_string_for_adaptive_null_column(Column* column, Sli
 
 bool NullableConverter::read_string(Column* column, const Slice& s, const Options& options) const {
     auto* nullable = down_cast<NullableColumn*>(column);
-    auto* data = nullable->data_column().get();
+    auto data_mut = nullable->data_column_mutable_ptr();
+    auto* data = data_mut.get();
 
     if (s == "\\N") {
         return nullable->append_nulls(1);
     } else if (_base_converter->read_string(data, s, options)) {
-        nullable->null_column()->append(0);
+        auto null_mut = nullable->null_column_mutable_ptr();
+        null_mut->append(0);
         return true;
     } else if (options.invalid_field_as_null) {
         return nullable->append_nulls(1);
@@ -87,12 +89,14 @@ bool NullableConverter::read_string(Column* column, const Slice& s, const Option
 
 bool NullableConverter::read_quoted_string(Column* column, const Slice& s, const Options& options) const {
     auto* nullable = down_cast<NullableColumn*>(column);
-    auto* data = nullable->data_column().get();
+    auto data_mut = nullable->data_column_mutable_ptr();
+    auto* data = data_mut.get();
 
     if (s == "null") {
         return nullable->append_nulls(1);
     } else if (_base_converter->read_quoted_string(data, s, options)) {
-        nullable->null_column()->append(0);
+        auto null_mut = nullable->null_column_mutable_ptr();
+        null_mut->append(0);
         return true;
     } else if (options.invalid_field_as_null) {
         return nullable->append_nulls(1);

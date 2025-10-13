@@ -86,6 +86,12 @@ StatusOr<ColumnPtr> StringFunctions::str_to_map_v1(FunctionContext* context, con
     res_offsets->reserve(nullable_str->size() + 1);
     res_offsets->append(0);
     res_null->resize(column_size);
+    
+    auto offsets_mut = offsets->as_mutable_ptr();
+    auto* offsets_col = down_cast<UInt32Column*>(offsets_mut.get());
+    auto& offsets_data = offsets_col->get_data();
+    
+    auto& res_null_data = res_null->get_data();
 
     auto is_unique = [=](std::vector<Slice>& exist_slice, Slice&& s) {
         for (auto& tmp : exist_slice) {
@@ -102,14 +108,14 @@ StatusOr<ColumnPtr> StringFunctions::str_to_map_v1(FunctionContext* context, con
 
     for (auto i = 0; i < column_size; ++i) {
         // either null input results into null to keep consistent with split()
-        if ((nulls != nullptr && nulls->get_data()[i]) || delimiter_viewer.is_null(i)) {
-            res_null->get_data()[i] = 1;
+        if ((nulls != nullptr && nulls->immutable_data()[i]) || delimiter_viewer.is_null(i)) {
+            res_null_data[i] = 1;
             res_offsets->append(res_offsets->get_data().back());
             continue;
         }
-        res_null->get_data()[i] = 0;
+        res_null_data[i] = 0;
         // empty array return {"":NULL}
-        if (offsets->get_data()[i] == offsets->get_data()[i + 1]) {
+        if (offsets_data[i] == offsets_data[i + 1]) {
             keys_builder.append("");
             values_builder.append_null();
             res_offsets->append(res_offsets->get_data().back() + 1);
@@ -121,7 +127,7 @@ StatusOr<ColumnPtr> StringFunctions::str_to_map_v1(FunctionContext* context, con
         std::stack<Slice> tmp_keys, tmp_values;
 
         // reverse order to get the last win.
-        for (ssize_t off = offsets->get_data()[i + 1] - 1; off >= offsets->get_data()[i]; --off) {
+        for (ssize_t off = offsets_data[i + 1] - 1; off >= offsets_data[i]; --off) {
             Slice haystack = string_viewer.value(off);
             if (haystack.empty()) { // return {"":NULL}
                 if (is_unique(tmp_slice, Slice(""))) {

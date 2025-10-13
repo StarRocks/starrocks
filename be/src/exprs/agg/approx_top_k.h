@@ -339,10 +339,10 @@ public:
     }
 
     void convert_to_serialize_format(FunctionContext* ctx, const Columns& src, size_t chunk_size,
-                                     ColumnPtr* dst) const override {
+                                     MutableColumnPtr& dst) const override {
         const auto kv = get_k_and_counter_num(ctx);
-        DCHECK((*dst)->is_binary());
-        auto* dst_column = down_cast<BinaryColumn*>((*dst).get());
+        DCHECK(dst->is_binary());
+        auto* dst_column = down_cast<BinaryColumn*>(dst.get());
 
         if (src[0]->is_nullable()) {
             auto* src_nullable_column = down_cast<const NullableColumn*>(src[0].get());

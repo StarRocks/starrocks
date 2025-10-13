@@ -418,7 +418,7 @@ struct AggHashMapWithOneNumberKeyWithNullable
         }
     }
 
-    void insert_keys_to_columns(const ResultVector& keys, Columns& key_columns, size_t chunk_size) {
+    void insert_keys_to_columns(const ResultVector& keys, MutableColumns& key_columns, size_t chunk_size) {
         if constexpr (is_nullable) {
             auto* nullable_column = down_cast<NullableColumn*>(key_columns[0].get());
             auto* column = down_cast<ColumnType*>(nullable_column->mutable_data_column());

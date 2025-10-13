@@ -109,9 +109,9 @@ bool MapConverter::read_string(Column* column, const Slice& s, const Options& op
         return false;
     }
     auto* map = down_cast<MapColumn*>(column);
-    auto* offsets = map->offsets_column().get();
-    auto* keys = map->keys_column().get();
-    auto* values = map->values_column().get();
+    auto offsets = map->offsets_column_mutable_ptr();
+    auto keys = map->keys_column_mutable_ptr();
+    auto values = map->values_column_mutable_ptr();
     std::vector<Slice> key_fields, value_fields;
     if (!s.empty() && !split_map_key_value(s, key_fields, value_fields)) {
         return false;
@@ -135,13 +135,13 @@ bool MapConverter::read_string(Column* column, const Slice& s, const Options& op
     }
 
     for (auto i = 0; i < key_fields.size(); ++i) {
-        if (unique_keys[i] && !_key_converter->read_quoted_string(keys, key_fields[i], options)) {
+        if (unique_keys[i] && !_key_converter->read_quoted_string(keys.get(), key_fields[i], options)) {
             keys->resize(old_size);
             return false;
         }
     }
     for (auto i = 0; i < value_fields.size(); ++i) {
-        if (unique_keys[i] && !_value_converter->read_quoted_string(values, value_fields[i], options)) {
+        if (unique_keys[i] && !_value_converter->read_quoted_string(values.get(), value_fields[i], options)) {
             values->resize(old_size);
             return false;
         }
