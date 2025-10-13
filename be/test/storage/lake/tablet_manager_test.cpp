@@ -104,6 +104,26 @@ TEST_F(LakeTabletManagerTest, tablet_meta_write_and_read) {
 }
 
 // NOLINTNEXTLINE
+TEST_F(LakeTabletManagerTest, tablet_meta_read_corrupted_and_recover) {
+    starrocks::TabletMetadata metadata;
+    auto tablet_id = next_id();
+    metadata.set_id(tablet_id);
+    metadata.set_version(2);
+    auto rowset_meta_pb = metadata.add_rowsets();
+    rowset_meta_pb->set_id(2);
+    rowset_meta_pb->set_overlapped(false);
+    rowset_meta_pb->set_data_size(1024);
+    rowset_meta_pb->set_num_rows(5);
+    EXPECT_OK(_tablet_manager->put_tablet_metadata(metadata));
+    auto res = _tablet_manager->get_tablet_metadata(tablet_id, 2);
+    EXPECT_TRUE(res.ok());
+    TEST_ENABLE_ERROR_POINT("ProtobufFile::load::corruption", Status::Corruption("injected error"));
+    auto res = _tablet_manager->get_tablet_metadata(tablet_id, 2);
+    EXPECT_FALSE(res.ok());
+    TEST_DISABLE_ERROR_POINT("ProtobufFile::load::corruption");
+}
+
+// NOLINTNEXTLINE
 TEST_F(LakeTabletManagerTest, txnlog_write_and_read) {
     starrocks::TxnLog txnLog;
     auto tablet_id = next_id();
@@ -688,6 +708,15 @@ TEST_F(LakeTabletManagerTest, put_bundle_tablet_metadata) {
         TabletMetadataPtr metadata = std::move(res).value();
         ASSERT_EQ(metadata->schema().id(), 10);
         ASSERT_EQ(metadata->historical_schemas_size(), 2);
+    }
+
+    {
+        // inject corruption error
+        TEST_ENABLE_ERROR_POINT("TabletManager::parse_bundle_tablet_metadata::corruption",
+                                Status::Corruption("injected error"));
+        auto res = _tablet_manager->get_tablet_metadata(1, 2);
+        EXPECT_FALSE(res.ok());
+        TEST_DISABLE_ERROR_POINT("TabletManager::parse_bundle_tablet_metadata::corruption");
     }
 
     // multi thread read
