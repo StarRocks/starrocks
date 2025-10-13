@@ -18,12 +18,12 @@ import com.starrocks.sql.parser.NodePosition;
 
 import java.util.List;
 
-public class PartitionDef implements ParseNode {
+public class PartitionRef implements ParseNode {
     private final List<String> partitionNames;
     private final boolean isTemp;
     private final NodePosition pos;
 
-    public PartitionDef(List<String> partitionNames, boolean isTemp, NodePosition pos) {
+    public PartitionRef(List<String> partitionNames, boolean isTemp, NodePosition pos) {
         this.partitionNames = partitionNames;
         this.isTemp = isTemp;
         this.pos = pos;

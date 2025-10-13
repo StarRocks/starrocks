@@ -17,27 +17,27 @@ package com.starrocks.sql.ast;
 import com.starrocks.sql.parser.NodePosition;
 
 public class ShowDataDistributionStmt extends ShowStmt {
-    private final TableDef tableDef;
+    private final TableRef tableRef;
 
-    public ShowDataDistributionStmt(TableDef tblRef) {
+    public ShowDataDistributionStmt(TableRef tblRef) {
         this(tblRef, NodePosition.ZERO);
     }
 
-    public ShowDataDistributionStmt(TableDef tblRef, NodePosition pos) {
+    public ShowDataDistributionStmt(TableRef tblRef, NodePosition pos) {
         super(pos);
-        this.tableDef = tblRef;
+        this.tableRef = tblRef;
     }
 
     public String getDbName() {
-        return tableDef.getDbName();
+        return tableRef.getDbName();
     }
 
     public String getTblName() {
-        return tableDef.getTableName();
+        return tableRef.getTableName();
     }
 
-    public PartitionDef getPartitionDef() {
-        return tableDef.getPartitionDef();
+    public PartitionRef getPartitionDef() {
+        return tableRef.getPartitionDef();
     }
 
     @Override

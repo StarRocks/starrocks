@@ -50,8 +50,8 @@ import com.starrocks.server.RunMode;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.ast.AdminShowReplicaDistributionStmt;
 import com.starrocks.sql.ast.AdminShowReplicaStatusStmt;
-import com.starrocks.sql.ast.PartitionDef;
 import com.starrocks.sql.ast.PartitionNames;
+import com.starrocks.sql.ast.PartitionRef;
 import com.starrocks.sql.ast.expression.BinaryPredicate;
 import com.starrocks.sql.ast.expression.BinaryType;
 import com.starrocks.sql.ast.expression.Expr;
@@ -323,7 +323,7 @@ public class MetadataViewer {
     }
 
     public static List<List<String>> getDataDistribution(
-            String dbName, String tblName, PartitionDef partitionNames) throws DdlException {
+            String dbName, String tblName, PartitionRef partitionNames) throws DdlException {
 
         DecimalFormat df = new DecimalFormat("00.00 %");
         List<List<String>> result = Lists.newArrayList();

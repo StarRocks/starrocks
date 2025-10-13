@@ -20,14 +20,20 @@ package com.starrocks.sql.ast.expression;
 import com.starrocks.catalog.Table;
 
 /**
- * An actual table, such as OLAP table or a MySQL table.
- * BaseTableRef.
+ * Legacy base table reference class for actual tables (OLAP, MySQL, etc.).
+ * This class extends TableRefPersist and is used for metadata serialization
+ * and storage operations. Part of the legacy table reference hierarchy that
+ * is being migrated to the new AST-based TableRef class.
+ * <p>
+ * This class represents resolved table references with actual Table objects,
+ * containing the complex analysis state required for backward compatibility
+ * with existing serialization formats.
  */
-public class BaseTableRef extends TableRef {
+public class BaseTableRefPersist extends TableRefPersist {
 
     private Table table;
 
-    public BaseTableRef(TableRef ref, Table table, TableName tableName) {
+    public BaseTableRefPersist(TableRefPersist ref, Table table, TableName tableName) {
         super(ref);
         this.table = table;
         this.name = tableName;
@@ -38,14 +44,14 @@ public class BaseTableRef extends TableRef {
         aliases = new String[] {name.toString(), tableName.getNoClusterString(), table.getName()};
     }
 
-    protected BaseTableRef(BaseTableRef other) {
+    protected BaseTableRefPersist(BaseTableRefPersist other) {
         super(other);
         name = other.name;
         table = other.table;
     }
 
     @Override
-    public TableRef clone() {
-        return new BaseTableRef(this);
+    public TableRefPersist clone() {
+        return new BaseTableRefPersist(this);
     }
 }

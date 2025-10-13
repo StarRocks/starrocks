@@ -16,14 +16,14 @@ package com.starrocks.sql.ast;
 
 import com.starrocks.sql.parser.NodePosition;
 
-public class TableDef implements ParseNode {
+public class TableRef implements ParseNode {
     private final QualifiedName tableName;
-    private final PartitionDef partitionDef;
+    private final PartitionRef partitionRef;
     private final NodePosition pos;
 
-    public TableDef(QualifiedName tableName, PartitionDef partitionDef, NodePosition pos) {
+    public TableRef(QualifiedName tableName, PartitionRef partitionRef, NodePosition pos) {
         this.tableName = tableName;
-        this.partitionDef = partitionDef;
+        this.partitionRef = partitionRef;
         this.pos = pos;
     }
 
@@ -53,7 +53,7 @@ public class TableDef implements ParseNode {
         return tableName.getParts().get(tableName.getParts().size() - 1);
     }
 
-    public PartitionDef getPartitionDef() {
-        return partitionDef;
+    public PartitionRef getPartitionDef() {
+        return partitionRef;
     }
 }

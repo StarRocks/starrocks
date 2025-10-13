@@ -231,7 +231,7 @@ import com.starrocks.sql.ast.expression.Predicate;
 import com.starrocks.sql.ast.expression.SlotRef;
 import com.starrocks.sql.ast.expression.StringLiteral;
 import com.starrocks.sql.ast.expression.TableName;
-import com.starrocks.sql.ast.expression.TableRef;
+import com.starrocks.sql.ast.expression.TableRefPersist;
 import com.starrocks.sql.ast.group.ShowCreateGroupProviderStmt;
 import com.starrocks.sql.ast.group.ShowGroupProvidersStmt;
 import com.starrocks.sql.ast.integration.ShowCreateSecurityIntegrationStatement;
@@ -1920,7 +1920,7 @@ public class ShowExecutor {
                 BackupJob backupJob = (BackupJob) jobI;
 
                 // check privilege
-                List<TableRef> tableRefs = backupJob.getTableRef();
+                List<TableRefPersist> tableRefs = backupJob.getTableRef();
                 AtomicBoolean privilegeDeny = new AtomicBoolean(false);
                 tableRefs.forEach(tableRef -> {
                     TableName tableName = tableRef.getName();
