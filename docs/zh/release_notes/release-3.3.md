@@ -11,6 +11,30 @@ displayed_sidebar: docs
 
 :::
 
+## 3.3.19
+
+发布日期: 2025年10月14日
+
+### 问题修复
+
+修复了以下问题：
+
+- `UserProperty` 的优先级低于会话变量。 [#63173](https://github.com/StarRocks/starrocks/pull/63173?utm_source=chatgpt.com)
+- 当 Hive 基表被删除并重新创建时，可能导致物化视图刷新失败。 [#63072](https://github.com/StarRocks/starrocks/pull/63072?utm_source=chatgpt.com)
+- 聚合下推重写规则的问题。 [#63060](https://github.com/StarRocks/starrocks/pull/63060?utm_source=chatgpt.com)
+- JSON 的布尔值提取函数中 null 列与数据列不一致。 [#63054](https://github.com/StarRocks/starrocks/pull/63054?utm_source=chatgpt.com)
+- 获取 Delta Lake 格式表的分区列时的问题。 [#62953](https://github.com/StarRocks/starrocks/pull/62953?utm_source=chatgpt.com)
+- 存算分离集群中物化视图不支持 Colocation。 [#62941](https://github.com/StarRocks/starrocks/pull/62941?utm_source=chatgpt.com)
+- 基于视图的物化视图改写时 Projection 映射错误。 [#62918](https://github.com/StarRocks/starrocks/pull/62918?utm_source=chatgpt.com)
+- 当 Most Common Values (MCV) 包含单引号时，直方图统计中的 SQL 语法错误。 [#62853](https://github.com/StarRocks/starrocks/pull/62853?utm_source=chatgpt.com)
+- `KILL ANALYZE` 不生效。 [#62842](https://github.com/StarRocks/starrocks/pull/62842?utm_source=chatgpt.com)
+- CVE-2025-58056 漏洞。 [#62801](https://github.com/StarRocks/starrocks/pull/62801?utm_source=chatgpt.com)
+- 未指定数据库执行 `SHOW CREATE ROUTINE LOAD` 时返回错误结果的问题。 [#62745](https://github.com/StarRocks/starrocks/pull/62745?utm_source=chatgpt.com)
+- 在 `files()` 中错误跳过 CSV 表头导致数据丢失。 [#62719](https://github.com/StarRocks/starrocks/pull/62719)
+- 当复制与 Compaction 事务一起提交时的版本检查失败。 [#62663](https://github.com/StarRocks/starrocks/pull/62663?utm_source=chatgpt.com)
+- 在恢复任务失败后，由于未清除物化视图版本映射，跳过物化视图刷新。 [#62634](https://github.com/StarRocks/starrocks/pull/62634)
+- 物化视图分析器中区分大小写的分区列校验引发问题。 [#62598](https://github.com/StarRocks/starrocks/pull/62598)
+
 ## 3.3.18
 
 发布日期：2025 年 8 月 28 日
