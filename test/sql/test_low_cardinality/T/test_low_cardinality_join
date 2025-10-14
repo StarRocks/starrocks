@@ -66,6 +66,16 @@ FROM t1 JOIN t2 on t1.low1 <=> t2.low1;
 SELECT SUM(murmur_hash3_32(t1.low1)), SUM(murmur_hash3_32(t2.low1)), SUM(murmur_hash3_32(t1.low2)), SUM(murmur_hash3_32(t2.low2)), SUM(murmur_hash3_32(t1.low3)), SUM(murmur_hash3_32(t2.low3)), SUM(murmur_hash3_32(t1.str1)), SUM(murmur_hash3_32(t2.str1))
 FROM t1 JOIN t2 on t1.low1 <=> t2.low1 and t1.low2 <=> t2.low2 and t1.low3 <=> t2.low3;
 
+SELECT COUNT(1)
+FROM t1 
+    JOIN t2 on t1.low1 = t2.low1 and t2.k1 % 2 = 0
+    JOIN t2 t3 on t1.low2 = t3.low2;
+
+SELECT COUNT(1)
+FROM t1 
+    JOIN t2 on t1.low1 = t2.low1 and t2.k1 % 7 = 0
+    JOIN t2 t3 on t1.low2 = t3.low2;
+
 -- The number of words for low3 after merging exceeds 256.
 SELECT SUM(murmur_hash3_32(t1.low1)), SUM(murmur_hash3_32(t2.low1))
 FROM t1 

@@ -90,6 +90,20 @@ FROM t1 JOIN t2 on t1.low1 <=> t2.low1 and t1.low2 <=> t2.low2 and t1.low3 <=> t
 -- result:
 60392990004000	60392990004000	24476731138000	24476731138000	2568522362000	2568522362000	1327727187655	4737444027600
 -- !result
+SELECT COUNT(1)
+FROM t1 
+    JOIN t2 on t1.low1 = t2.low1 and t2.k1 % 2 = 0
+    JOIN t2 t3 on t1.low2 = t3.low2;
+-- result:
+2000000
+-- !result
+SELECT COUNT(1)
+FROM t1 
+    JOIN t2 on t1.low1 = t2.low1 and t2.k1 % 7 = 0
+    JOIN t2 t3 on t1.low2 = t3.low2;
+-- result:
+568000
+-- !result
 SELECT SUM(murmur_hash3_32(t1.low1)), SUM(murmur_hash3_32(t2.low1))
 FROM t1 
     JOIN t2 on t1.low1 <=> t2.low1
