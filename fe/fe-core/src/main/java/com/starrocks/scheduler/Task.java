@@ -224,11 +224,11 @@ public class Task implements Writable {
         this.postRun = postRun;
     }
 
-<<<<<<< HEAD
     public static Task read(DataInput in) throws IOException {
         String json = Text.readString(in);
         return GsonUtils.GSON.fromJson(json, Task.class);
-=======
+    }
+
     // unit: second
     public long getLastScheduleTime() {
         return lastScheduleTime;
@@ -247,7 +247,6 @@ public class Task implements Writable {
     // unit: second
     public void setNextScheduleTime(long nextScheduleTime) {
         this.nextScheduleTime = nextScheduleTime;
->>>>>>> ee133d0239 ([BugFix] Fix task fail to schedule if fe restarts frequently (#63966))
     }
 
     @Override
