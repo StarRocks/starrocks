@@ -173,6 +173,13 @@ public class ConstArrayFunctionFoldingTest extends PlanTestBase {
     }
 
     @Test
+    public void testNestedArraySum() throws Exception {
+        String sql = "select array_sum([1, array_sum([1, 2, 3]), 3]),array_sum([1, array_sum([1, 2, 3]), 3]);";
+        String plan = getFragmentPlan(sql);
+        assertCContains(plan, "<slot 3> : 10");
+    }
+
+    @Test
     public void test() throws Exception {
         String sql = "select\n" +
                 "array_sum([]),\n" +
