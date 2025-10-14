@@ -1,0 +1,214 @@
+-- name: test_low_cardinality_join
+CREATE TABLE __row_util_base (
+  k1 bigint NULL
+) ENGINE=OLAP
+DUPLICATE KEY(`k1`)
+DISTRIBUTED BY HASH(`k1`) BUCKETS 32
+PROPERTIES (
+    "replication_num" = "1"
+);
+-- result:
+-- !result
+insert into __row_util_base select generate_series from TABLE(generate_series(0, 10000 - 1));
+-- result:
+-- !result
+insert into __row_util_base select * from __row_util_base;-- 20000
+insert into __row_util_base select * from __row_util_base;-- 40000
+insert into __row_util_base select * from __row_util_base;-- 80000
+
+CREATE TABLE __row_util (
+  idx bigint NULL
+) ENGINE=OLAP
+DUPLICATE KEY(`idx`)
+DISTRIBUTED BY HASH(`idx`) BUCKETS 640
+PROPERTIES (
+    "replication_num" = "1"
+);
+-- result:
+-- !result
+insert into __row_util select row_number() over() as idx from __row_util_base;
+-- result:
+-- !result
+CREATE TABLE t1 (
+    k1 bigint NULL,
+    low1 string NULL,
+    low2 string NULL,
+    low3 string NULL,
+    str1 string NULL
+) ENGINE=OLAP
+DUPLICATE KEY(`k1`)
+DISTRIBUTED BY HASH(`k1`) BUCKETS 64
+PROPERTIES (
+    "replication_num" = "1"
+);
+-- result:
+-- !result
+insert into t1 select idx, concat('common-low1-', idx % 100), concat('common-low2-', idx % 200), concat('common-low3-', idx % 200), concat('common-str1-', idx) from __row_util;
+-- result:
+-- !result
+insert into t1 select idx, concat('t1-low1-', idx % 50), concat('t1-low2-', idx % 20), concat('t1-low3-', idx % 50), concat('t1-str1-', idx) from __row_util;
+-- result:
+-- !result
+insert into t1(k1) select 10000000;
+-- result:
+-- !result
+CREATE TABLE t2 (
+    k1 bigint NULL,
+    low1 string NULL,
+    low2 string NULL,
+    low3 string NULL,
+    str1 string NULL
+) ENGINE=OLAP
+DUPLICATE KEY(`k1`)
+DISTRIBUTED BY HASH(`k1`) BUCKETS 64
+PROPERTIES (
+    "replication_num" = "1"
+);
+-- result:
+-- !result
+insert into t2 select idx, concat('common-low1-', idx % 100), concat('common-low2-', idx % 200), concat('common-low3-', idx % 200), concat('common-str1-', idx) from __row_util where idx <= 1000;
+-- result:
+-- !result
+insert into t2 select idx + 1000, concat('t2-low1-', idx % 50), concat('t2-low2-', idx % 20), concat('t2-low3-', idx % 50), concat('t2-str1-', idx) from __row_util where idx <= 1000;
+-- result:
+-- !result
+insert into t2(k1) select 10000000;
+-- result:
+-- !result
+SELECT COUNT(DISTINCT t1.low1)
+FROM t1 JOIN t2 on t1.low1 = t2.low1;
+-- result:
+100
+-- !result
+SELECT SUM(murmur_hash3_32(t1.low1)), SUM(murmur_hash3_32(t2.low1)), SUM(murmur_hash3_32(t1.low2)), SUM(murmur_hash3_32(t2.low2)), SUM(murmur_hash3_32(t1.low3)), SUM(murmur_hash3_32(t2.low3)), SUM(murmur_hash3_32(t1.str1)), SUM(murmur_hash3_32(t2.str1))
+FROM t1 JOIN t2 on t1.low1 <=> t2.low1;
+-- result:
+120785980008000	120785980008000	48953462276000	48953462276000	5137044724000	5137044724000	2655454375310	9474888055200
+-- !result
+SELECT SUM(murmur_hash3_32(t1.low1)), SUM(murmur_hash3_32(t2.low1)), SUM(murmur_hash3_32(t1.low2)), SUM(murmur_hash3_32(t2.low2)), SUM(murmur_hash3_32(t1.low3)), SUM(murmur_hash3_32(t2.low3)), SUM(murmur_hash3_32(t1.str1)), SUM(murmur_hash3_32(t2.str1))
+FROM t1 JOIN t2 on t1.low1 <=> t2.low1 and t1.low2 <=> t2.low2 and t1.low3 <=> t2.low3;
+-- result:
+60392990004000	60392990004000	24476731138000	24476731138000	2568522362000	2568522362000	1327727187655	4737444027600
+-- !result
+SELECT SUM(murmur_hash3_32(t1.low1)), SUM(murmur_hash3_32(t2.low1))
+FROM t1 
+    JOIN t2 on t1.low1 <=> t2.low1
+    JOIN t2 t3 on t1.low2 <=> t3.low2
+    JOIN t2 t4 on t1.low3 <=> t4.low3;
+-- result:
+3019649500200000	3019649500200000
+-- !result
+SELECT SUM(murmur_hash3_32(t1.low1)), SUM(murmur_hash3_32(t2.low1))
+FROM t1 
+    JOIN t2 on t1.low1 = lower(t2.low1) 
+    JOIN t2 t3 on t1.low2 = t3.low2;
+-- result:
+603929900040000	603929900040000
+-- !result
+SELECT SUM(murmur_hash3_32(t1.low1)), SUM(murmur_hash3_32(t2.low1))
+FROM t1 
+    JOIN t2 on t1.low1 = t2.low1
+    JOIN t2 t3 on t1.low1 = lower(t3.low2);
+-- result:
+None	None
+-- !result
+SELECT SUM(murmur_hash3_32(t1.low1)), SUM(murmur_hash3_32(t2.low1))
+FROM t1 
+    JOIN t2 on t1.low1 = t2.low1
+    JOIN [shuffle] t2 t3 on t1.low1 = t3.low2;
+-- result:
+None	None
+-- !result
+SELECT SUM(murmur_hash3_32(t1.low1)), SUM(murmur_hash3_32(t2.low1))
+FROM t1 
+    JOIN t2 on t1.low1 = t2.low1
+    JOIN [shuffle] t2 t3 on t1.low2 = t3.low2;
+-- result:
+603929900040000	603929900040000
+-- !result
+SELECT SUM(murmur_hash3_32(t1.low1)), SUM(murmur_hash3_32(t2.low1))
+FROM t1 JOIN [colocate] t1 t2 on t1.k1 = t2.k1 and t1.low1 = t2.low1 and t2.k1 < 1000;
+-- result:
+86835453503	86835453503
+-- !result
+SELECT SUM(murmur_hash3_32(t1.low1)), SUM(murmur_hash3_32(t2.low1))
+FROM t1 JOIN [bucket] t1 t2 on t1.k1 = t2.k1 and t1.low1 = t2.low1 and t2.k1 < 1000;
+-- result:
+86835453503	86835453503
+-- !result
+with w1 as (select distinct low1, k1 from t1)
+SELECT SUM(murmur_hash3_32(t1.low1)), SUM(murmur_hash3_32(t2.low1))
+FROM w1 t1 JOIN [bucket] w1 t2 on t1.low1 = t2.low1 and t2.k1 < 1000;
+-- result:
+18080610935200	18080610935200
+-- !result
+set cbo_enable_low_cardinality_optimize_for_join = false;
+-- result:
+-- !result
+SELECT COUNT(DISTINCT t1.low1)
+FROM t1 JOIN t2 on t1.low1 = t2.low1;
+-- result:
+100
+-- !result
+SELECT SUM(murmur_hash3_32(t1.low1)), SUM(murmur_hash3_32(t2.low1)), SUM(murmur_hash3_32(t1.low2)), SUM(murmur_hash3_32(t2.low2)), SUM(murmur_hash3_32(t1.low3)), SUM(murmur_hash3_32(t2.low3)), SUM(murmur_hash3_32(t1.str1)), SUM(murmur_hash3_32(t2.str1))
+FROM t1 JOIN t2 on t1.low1 <=> t2.low1;
+-- result:
+120785980008000	120785980008000	48953462276000	48953462276000	5137044724000	5137044724000	2655454375310	9474888055200
+-- !result
+SELECT SUM(murmur_hash3_32(t1.low1)), SUM(murmur_hash3_32(t2.low1)), SUM(murmur_hash3_32(t1.low2)), SUM(murmur_hash3_32(t2.low2)), SUM(murmur_hash3_32(t1.low3)), SUM(murmur_hash3_32(t2.low3)), SUM(murmur_hash3_32(t1.str1)), SUM(murmur_hash3_32(t2.str1))
+FROM t1 JOIN t2 on t1.low1 <=> t2.low1 and t1.low2 <=> t2.low2 and t1.low3 <=> t2.low3;
+-- result:
+60392990004000	60392990004000	24476731138000	24476731138000	2568522362000	2568522362000	1327727187655	4737444027600
+-- !result
+SELECT SUM(murmur_hash3_32(t1.low1)), SUM(murmur_hash3_32(t2.low1))
+FROM t1 
+    JOIN t2 on t1.low1 <=> t2.low1
+    JOIN t2 t3 on t1.low2 <=> t3.low2
+    JOIN t2 t4 on t1.low3 <=> t4.low3;
+-- result:
+3019649500200000	3019649500200000
+-- !result
+SELECT SUM(murmur_hash3_32(t1.low1)), SUM(murmur_hash3_32(t2.low1))
+FROM t1 
+    JOIN t2 on t1.low1 = lower(t2.low1) 
+    JOIN t2 t3 on t1.low2 = t3.low2;
+-- result:
+603929900040000	603929900040000
+-- !result
+SELECT SUM(murmur_hash3_32(t1.low1)), SUM(murmur_hash3_32(t2.low1))
+FROM t1 
+    JOIN t2 on t1.low1 = t2.low1
+    JOIN t2 t3 on t1.low1 = lower(t3.low2);
+-- result:
+None	None
+-- !result
+SELECT SUM(murmur_hash3_32(t1.low1)), SUM(murmur_hash3_32(t2.low1))
+FROM t1 
+    JOIN t2 on t1.low1 = t2.low1
+    JOIN [shuffle] t2 t3 on t1.low1 = t3.low2;
+-- result:
+None	None
+-- !result
+SELECT SUM(murmur_hash3_32(t1.low1)), SUM(murmur_hash3_32(t2.low1))
+FROM t1 
+    JOIN t2 on t1.low1 = t2.low1
+    JOIN [shuffle] t2 t3 on t1.low2 = t3.low2;
+-- result:
+603929900040000	603929900040000
+-- !result
+SELECT SUM(murmur_hash3_32(t1.low1)), SUM(murmur_hash3_32(t2.low1))
+FROM t1 JOIN [colocate] t1 t2 on t1.k1 = t2.k1 and t1.low1 = t2.low1 and t2.k1 < 1000;
+-- result:
+86835453503	86835453503
+-- !result
+SELECT SUM(murmur_hash3_32(t1.low1)), SUM(murmur_hash3_32(t2.low1))
+FROM t1 JOIN [bucket] t1 t2 on t1.k1 = t2.k1 and t1.low1 = t2.low1 and t2.k1 < 1000;
+-- result:
+86835453503	86835453503
+-- !result
+with w1 as (select distinct low1, k1 from t1)
+SELECT SUM(murmur_hash3_32(t1.low1)), SUM(murmur_hash3_32(t2.low1))
+FROM w1 t1 JOIN [bucket] w1 t2 on t1.low1 = t2.low1 and t2.k1 < 1000;
+-- result:
+18080610935200	18080610935200
+-- !result
