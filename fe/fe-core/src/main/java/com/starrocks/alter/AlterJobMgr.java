@@ -251,8 +251,8 @@ public class AlterJobMgr {
             if (currentTask != null) {
                 TaskRunManager taskRunManager = taskManager.getTaskRunManager();
                 if (!taskRunManager.tryTaskRunLock()) {
-                    LOG.warn("skip clear pending and running task runs for inactive materialized view {}, " +
-                            "since get task run lock failed", materializedView.getName());
+                    throw new SemanticException("Failed to acquire task run lock when altering " +
+                            "mv status:" + materializedView.getName());
                 }
                 try {
                     taskRunManager.killTaskRun(currentTask.getId(), true);
