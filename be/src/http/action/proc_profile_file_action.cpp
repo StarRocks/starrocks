@@ -161,14 +161,20 @@ void ProcProfileFileAction::serve_pprof_as_flame(HttpRequest* req, const std::st
     LOG(INFO) << "ProcProfileFileAction: Converting pprof file to flame format: " << file_path;
 
     // Check if required tools are available
-    if (system("which pprof >/dev/null 2>&1") != 0) {
-        LOG(WARNING) << "ProcProfileFileAction: pprof tool not found, falling back to serving raw pprof file";
+    std::string pprof_path = config::flamegraph_tool_dir + "/pprof";
+    std::string stackcollapse_path = config::flamegraph_tool_dir + "/stackcollapse-go.pl";
+    std::string flamegraph_path = config::flamegraph_tool_dir + "/flamegraph.pl";
+
+    if (system(("test -f " + pprof_path + " >/dev/null 2>&1").c_str()) != 0) {
+        LOG(WARNING) << "ProcProfileFileAction: pprof tool not found at " << pprof_path
+                     << ", falling back to serving raw pprof file";
         serve_gz_file(req, file_path);
         return;
     }
 
-    if (system("test -f ~/FlameGraph/flamegraph.pl >/dev/null 2>&1") != 0) {
-        LOG(WARNING) << "ProcProfileFileAction: FlameGraph tools not found, falling back to serving raw pprof file";
+    if (system(("test -f " + flamegraph_path + " >/dev/null 2>&1").c_str()) != 0) {
+        LOG(WARNING) << "ProcProfileFileAction: FlameGraph tools not found at " << flamegraph_path
+                     << ", falling back to serving raw pprof file";
         serve_gz_file(req, file_path);
         return;
     }
@@ -241,12 +247,12 @@ bool ProcProfileFileAction::convert_pprof_to_flame(const std::string& pprof_file
             return false;
         }
 
+        std::string pprof_path = config::flamegraph_tool_dir + "/pprof";
+        std::string stackcollapse_path = config::flamegraph_tool_dir + "/stackcollapse-go.pl";
+        std::string flamegraph_path = config::flamegraph_tool_dir + "/flamegraph.pl";
         // Convert pprof to flame format using the command: pprof -raw cpu.pprof | stackcollapse-go.pl | flamegraph.pl > flame.svg
-        std::string pprof_cmd = "pprof -raw '" + temp_pprof +
-                                "' 2>/dev/null | "
-                                "~/FlameGraph/stackcollapse-go.pl 2>/dev/null | "
-                                "~/FlameGraph/flamegraph.pl > '" +
-                                temp_flame + "' 2>/dev/null";
+        std::string pprof_cmd = pprof_path + " -raw '" + temp_pprof + "' 2>/dev/null | " + stackcollapse_path +
+                                " 2>/dev/null | " + flamegraph_path + " > '" + temp_flame + "' 2>/dev/null";
 
         LOG(INFO) << "ProcProfileFileAction: Executing pprof conversion command";
         int pprof_result = system(pprof_cmd.c_str());
