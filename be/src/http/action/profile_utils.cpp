@@ -37,9 +37,9 @@ std::string ProfileUtils::extract_timestamp_from_filename(const std::string& fil
 }
 
 std::string ProfileUtils::get_profile_type(const std::string& filename) {
-    if (filename.starts_with("cpu-profile-")) {
+    if (filename.find("cpu-profile-") == 0) {
         return "CPU";
-    } else if (filename.starts_with("contention-profile-")) {
+    } else if (filename.find("contention-profile-") == 0) {
         return "Contention";
     } else {
         return "Unknown";
