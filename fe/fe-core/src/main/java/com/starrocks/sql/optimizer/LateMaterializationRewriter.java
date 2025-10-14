@@ -902,50 +902,6 @@ public class LateMaterializationRewriter {
         }
 
         @Override
-        public OptExpression visitPhysicalOlapScan(OptExpression optExpression, RewriteContext context) {
-            PhysicalOlapScanOperator scanOperator = (PhysicalOlapScanOperator) optExpression.getOp();
-            IdentifyOperator identifyOperator = new IdentifyOperator(scanOperator);
-            if (!collectorContext.needLookupSources.contains(identifyOperator)) {
-                return optExpression;
-            }
-
-            Set<ColumnRefOperator> columnRefOperators =
-                    collectorContext.fetchPositions.contains(identifyOperator, identifyOperator) ?
-                    collectorContext.fetchPositions.get(identifyOperator, identifyOperator) : new HashSet<>();
-
-            if (columnRefOperators.size() == scanOperator.getColRefToColumnMetaMap().size()) {
-                // all column need fetch, no need to rewrite
-                context.fetchedColumns.addAll(columnRefOperators);
-                return optExpression;
-            }
-
-            // modify output columns
-            Map<ColumnRefOperator, Column> newColumnRefMap =
-                    scanOperator.getColRefToColumnMetaMap().entrySet().stream()
-                            .filter(entry -> columnRefOperators.contains(entry.getKey()))
-                            .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
-            context.fetchedColumns.addAll(newColumnRefMap.keySet());
-            // generate row id column
-            Column rowIdColumn = new Column("ROW_ID", Type.ROW_ID, false);
-            ColumnRefOperator columnRefOperator = optimizerContext.getColumnRefFactory().create("ROW_ID", Type.ROW_ID, false);
-            newColumnRefMap.put(columnRefOperator, rowIdColumn);
-            context.rowIdColumns.put(identifyOperator, columnRefOperator);
-
-            LOG.info("rewrite PhysicalOlapScan, newColumnRefMap: " + newColumnRefMap.size());
-            // build a new optExpressions
-            PhysicalOlapScanOperator.Builder builder = PhysicalOlapScanOperator.builder().withOperator(scanOperator);
-            builder.setColRefToColumnMetaMap(newColumnRefMap);
-
-            OptExpression result = OptExpression.builder().with(optExpression).setOp(builder.build()).build();
-            LogicalProperty newProperty = new LogicalProperty(optExpression.getLogicalProperty());
-            newProperty.setOutputColumns(new ColumnRefSet(newColumnRefMap.keySet()));
-            result.setLogicalProperty(newProperty);
-            LOG.info("operator + " + result.getOp() +
-                    ", logical properties: " + result.getLogicalProperty().getOutputColumns());
-            return result;
-        }
-
-        @Override
         public OptExpression visitPhysicalIcebergScan(OptExpression optExpression, RewriteContext context) {
             PhysicalIcebergScanOperator scanOperator = (PhysicalIcebergScanOperator) optExpression.getOp();
             IdentifyOperator identifyOperator = new IdentifyOperator(scanOperator);

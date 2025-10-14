@@ -14,12 +14,7 @@
 
 package com.starrocks.planner;
 
-import com.starrocks.analysis.DescriptorTable;
 import com.starrocks.analysis.RowPositionDescriptor;
-import com.starrocks.analysis.SlotDescriptor;
-import com.starrocks.analysis.SlotId;
-import com.starrocks.analysis.TupleDescriptor;
-import com.starrocks.analysis.TupleId;
 import com.starrocks.catalog.Table;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.WarehouseManager;
@@ -29,8 +24,6 @@ import com.starrocks.thrift.TNodesInfo;
 import com.starrocks.thrift.TPlanNode;
 import com.starrocks.thrift.TPlanNodeType;
 import com.starrocks.warehouse.cngroup.ComputeResource;
-import software.amazon.awssdk.services.gamelift.model.Compute;
-import software.amazon.awssdk.services.lexruntimev2.model.Slot;
 
 import java.util.HashMap;
 import java.util.HashSet;
