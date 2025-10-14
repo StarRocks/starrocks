@@ -161,6 +161,7 @@ public class CompactionScheduler extends Daemon {
 
                 if (errorMsg != null) {
                     iterator.remove();
+                    compactionManager.removeFromStartupActiveCompactionTransactionMap(job.getTxnId());
                     job.finish();
                     history.offer(CompactionRecord.build(job, errorMsg));
                     compactionManager.enableCompactionAfter(partition, Config.lake_compaction_interval_ms_on_failure);
@@ -170,6 +171,7 @@ public class CompactionScheduler extends Daemon {
             }
             if (job.transactionHasCommitted() && job.waitTransactionVisible(50, TimeUnit.MILLISECONDS)) {
                 iterator.remove();
+                compactionManager.removeFromStartupActiveCompactionTransactionMap(job.getTxnId());
                 job.finish();
                 history.offer(CompactionRecord.build(job));
                 long cost = job.getFinishTs() - job.getStartTs();
