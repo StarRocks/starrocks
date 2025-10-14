@@ -27,6 +27,7 @@
 #include "util/failpoint/fail_point.h"
 #include "util/stack_util.h"
 #include "util/starrocks_metrics.h"
+#include "util/time_guard.h"
 
 namespace starrocks::pipeline {
 
@@ -117,7 +118,7 @@ void GlobalDriverExecutor::_worker_thread() {
         _metrics->driver_schedule_count.increment(1);
 
         SCOPED_SET_TRACE_INFO(driver->driver_id(), query_ctx->query_id(), fragment_ctx->fragment_instance_id());
-
+        DUMP_TRACE_IF_TIMEOUT(config::pipeline_process_timeout_guard_ms);
         SET_THREAD_LOCAL_QUERY_TRACE_CONTEXT(query_ctx->query_trace(), fragment_ctx->fragment_instance_id(), driver);
 
         // TODO(trueeyu): This writing is to ensure that MemTracker will not be destructed before the thread ends.

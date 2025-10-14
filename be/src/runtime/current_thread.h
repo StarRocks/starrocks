@@ -221,7 +221,7 @@ private:
     };
 
 public:
-    CurrentThread() { tls_is_thread_status_init = true; }
+    CurrentThread() : _lwp_id(syscall(SYS_gettid)) { tls_is_thread_status_init = true; }
     ~CurrentThread();
 
     void mem_tracker_ctx_shift() { _mem_cache_manager.commit(true); }
@@ -235,6 +235,7 @@ public:
     const starrocks::TUniqueId& fragment_instance_id() { return _fragment_instance_id; }
     void set_pipeline_driver_id(int32_t driver_id) { _driver_id = driver_id; }
     int32_t get_driver_id() const { return _driver_id; }
+    int32_t get_lwp_id() const { return _lwp_id; }
 
     void set_custom_coredump_msg(const std::string& custom_coredump_msg) { _custom_coredump_msg = custom_coredump_msg; }
 
@@ -347,6 +348,7 @@ private:
     TUniqueId _fragment_instance_id;
     std::string _custom_coredump_msg{};
     int32_t _driver_id = 0;
+    int32_t _lwp_id = 0;
     bool _check = true;
     bool _reserve_mod = false;
 };
