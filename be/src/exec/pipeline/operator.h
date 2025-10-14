@@ -56,7 +56,6 @@ public:
     virtual Status prepare(RuntimeState* state);
 
     // thread-safe operation in prepare can be moved into prepare_local_state
-    // this method will be called in pipeline_driver's first run
     virtual Status prepare_local_state(RuntimeState* state);
 
     // Notifies the operator that no more input chunk will be added.

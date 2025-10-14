@@ -336,6 +336,7 @@ public class Deployer {
             LOG.warn("deployFragmentsForSingleNode failed", e);
         }
 
+        // every fragment instance share the same future
         FakeDeployFuture sharedFakeFuture = new FakeDeployFuture(batchFuture);
         fragmentInstanceExecStates.forEach(
                 fragmentInstanceExecState -> {
@@ -373,13 +374,12 @@ public class Deployer {
             }
             try {
                 if (batchFuture.isDone()) {
-                    // 缓存结果，避免重复解析
                     getResult();
                     return true;
                 }
                 return false;
             } catch (Exception e) {
-                return true; // 有异常也算完成
+                return true;
             }
         }
 

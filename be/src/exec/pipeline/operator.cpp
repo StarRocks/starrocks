@@ -89,10 +89,10 @@ Status Operator::prepare_local_state(RuntimeState* state) {
     _finishing_timer = ADD_TIMER_WITH_THRESHOLD(_common_metrics, "SetFinishingTime", 1_ms);
     _finished_timer = ADD_TIMER_WITH_THRESHOLD(_common_metrics, "SetFinishedTime", 1_ms);
     _close_timer = ADD_TIMER_WITH_THRESHOLD(_common_metrics, "CloseTime", 1_ms);
-    _local_prepare_timer = ADD_TIMER_WITH_THRESHOLD(_common_metrics, "LocalPrepareTime", 0_ms);
+    _local_prepare_timer = ADD_TIMER_WITH_THRESHOLD(_common_metrics, "LocalPrepareTime", 1_ms);
     if (_global_prepare_time_ns > 1) {
-        _global_prepare_timer = ADD_TIMER_WITH_THRESHOLD(_common_metrics, "GlobalPrepareTime", 0_ms);
-        _global_prepare_timer->set(_global_prepare_time_ns);
+        _global_prepare_timer = ADD_TIMER_WITH_THRESHOLD(_common_metrics, "GlobalPrepareTime", 1_ms);
+        COUNTER_SET(_global_prepare_timer, _global_prepare_time_ns);
     }
     _push_chunk_num_counter = ADD_COUNTER(_common_metrics, "PushChunkNum", TUnit::UNIT);
     _push_row_num_counter = ADD_COUNTER(_common_metrics, "PushRowNum", TUnit::UNIT);
@@ -109,12 +109,11 @@ Status Operator::prepare_local_state(RuntimeState* state) {
 }
 
 void Operator::set_prepare_time(int64_t cost_ns) {
-    COUNTER_SET(_prepare_timer, cost_ns);
-    COUNTER_SET(_global_prepare_time_ns, cost_ns);
+    _global_prepare_time_ns = cost_ns;
 }
 
 void Operator::set_local_prepare_time(int64_t cost_ns) {
-    _local_prepare_timer->set(cost_ns);
+    COUNTER_SET(_local_prepare_timer, cost_ns);
 }
 
 void Operator::set_precondition_ready(RuntimeState* state) {
