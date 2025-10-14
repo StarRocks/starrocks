@@ -875,10 +875,19 @@ CONF_mInt32(tablet_max_pending_versions, "1000");
 // NOTE: it will be deleted.
 CONF_mBool(enable_bitmap_union_disk_format_with_set, "false");
 
-// pipeline poller timeout guard
+// pipeline poller timeout guard. Suggested Value: 500
 CONF_mInt64(pipeline_poller_timeout_guard_ms, "-1");
-// pipeline fragment prepare timeout guard
+// pipeline fragment prepare timeout guard. Suggested Value: 1000
 CONF_mInt64(pipeline_prepare_timeout_guard_ms, "-1");
+// pipeline process timeout guard. Suggested Value: 5000
+CONF_mInt64(pipeline_process_timeout_guard_ms, "-1");
+// pipeline scan timeout guard. Suggested Value: 10000
+CONF_mInt64(pipeline_scan_timeout_guard_ms, "-1");
+// pipeline runtime filter worker timeout guard. Suggested Value: 2000
+CONF_mInt64(pipeline_rf_worker_timeout_guard_ms, "-1");
+// pipeline datastream timeout guard. Suggested Value: 2000
+CONF_mInt64(pipeline_datastream_timeout_guard_ms, "-1");
+
 // whether to enable large column detection in the pipeline execution framework.
 CONF_mBool(pipeline_enable_large_column_checker, "false");
 
