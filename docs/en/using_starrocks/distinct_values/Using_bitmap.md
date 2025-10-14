@@ -36,12 +36,12 @@ Count `uv` grouping by `page`:
 
 ```sql
 select page, count(distinct user_id) as uv from table group by page;
+```
 
 |  page   |   uv  |
 | :---: | :---: |
 |   game  |  1   |
 |   shopping  |   2  |
-```
 
 ## Benefits of Count Distinct with Bitmap
 
