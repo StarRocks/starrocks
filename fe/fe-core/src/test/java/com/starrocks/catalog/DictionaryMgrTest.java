@@ -15,8 +15,10 @@
 package com.starrocks.catalog;
 
 import com.google.common.collect.Lists;
+import com.starrocks.common.util.TimeUtils;
 import com.starrocks.persist.DictionaryMgrInfo;
 import com.starrocks.proto.PProcessDictionaryCacheResult;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.NodeMgr;
 import com.starrocks.system.Backend;
@@ -24,12 +26,16 @@ import com.starrocks.system.ComputeNode;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.TNetworkAddress;
 import mockit.Expectations;
+import mockit.Mock;
+import mockit.MockUp;
 import mockit.Mocked;
+import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import java.util.Arrays;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -43,26 +49,34 @@ public class DictionaryMgrTest {
     @Mocked
     private SystemInfoService systemInfoService;
 
-    private List<Backend> backends = Arrays.asList(new Backend(1, "127.0.0.1", 1234));
-    private List<ComputeNode> computeNodes = Arrays.asList(new ComputeNode(2, "127.0.0.2", 1235));
-
-    @Mocked
-    private DictionaryMgr dictionaryMgr = new DictionaryMgr();
+    private Backend aliveBackend;
+    private Backend deadBackend;
+    private ComputeNode aliveComputeNode;
+    private ComputeNode deadComputeNode;
 
     @BeforeEach
     public void setUp() {
-        List<String> dictionaryKeys = Lists.newArrayList();
-        List<String> dictionaryValues = Lists.newArrayList();
-        dictionaryKeys.add("key");
-        dictionaryValues.add("value");
-        Dictionary dictionary =
-                    new Dictionary(1, "dict", "t", "default_catalog", "testDb", dictionaryKeys, dictionaryValues, null);
-        Map<Long, Dictionary> dictionariesMapById = new HashMap<>();
-        dictionariesMapById.put(1L, dictionary);
+        aliveBackend = new Backend(1, "backend-ok", 9050);
+        aliveBackend.setBrpcPort(8060);
+        aliveBackend.setAlive(true);
 
-        Map<TNetworkAddress, PProcessDictionaryCacheResult> resultMap = new HashMap<>();
-        resultMap.put(new TNetworkAddress("1", 2), new PProcessDictionaryCacheResult());
-        resultMap.put(new TNetworkAddress("2", 3), null);
+        deadBackend = new Backend(2, "backend-dead", 9051);
+        deadBackend.setBrpcPort(0);
+
+        aliveComputeNode = new ComputeNode(3, "compute-ok", 9052);
+        aliveComputeNode.setBrpcPort(9060);
+        aliveComputeNode.setAlive(true);
+
+        deadComputeNode = new ComputeNode(4, "compute-dead", 9053);
+        deadComputeNode.setBrpcPort(0);
+
+        final GlobalStateMgr mockedStateMgr = globalStateMgr;
+        new MockUp<GlobalStateMgr>() {
+            @Mock
+            public GlobalStateMgr getCurrentState() {
+                return mockedStateMgr;
+            }
+        };
 
         new Expectations() {
             {
@@ -70,58 +84,83 @@ public class DictionaryMgrTest {
                 minTimes = 0;
                 result = nodeMgr;
 
-                globalStateMgr.isReady();
-                minTimes = 0;
-                result = true;
-
-                GlobalStateMgr.getCurrentState();
-                minTimes = 0;
-                result = globalStateMgr;
-            }
-        };
-
-        new Expectations() {
-            {
                 nodeMgr.getClusterInfo();
                 minTimes = 0;
                 result = systemInfoService;
-            }
-        };
-
-        new Expectations() {
-            {
-                systemInfoService.getBackends();
-                minTimes = 0;
-                result = backends;
-
-                systemInfoService.getComputeNodes();
-                minTimes = 0;
-                result = computeNodes;
-            }
-        };
-
-        new Expectations() {
-            {
-                dictionaryMgr.getDictionaryStatistic(dictionary);
-                minTimes = 0;
-                result = resultMap;
-
-                dictionaryMgr.getDictionariesMapById();
-                minTimes = 0;
-                result = dictionariesMapById;
             }
         };
     }
 
     @Test
     public void testGetBeOrCn() throws Exception {
+        new Expectations() {
+            {
+                systemInfoService.getBackends();
+                result = Arrays.asList(aliveBackend, deadBackend);
+
+                systemInfoService.getComputeNodes();
+                result = Arrays.asList(aliveComputeNode, deadComputeNode);
+            }
+        };
+
         List<TNetworkAddress> nodes = Lists.newArrayList();
-        dictionaryMgr.fillBackendsOrComputeNodes(nodes);
+        DictionaryMgr.fillBackendsOrComputeNodes(nodes);
+
+        Assertions.assertEquals(2, nodes.size());
+        Assertions.assertTrue(nodes.stream().anyMatch(addr -> addr.getHostname().equals("backend-ok")));
+        Assertions.assertTrue(nodes.stream().anyMatch(addr -> addr.getHostname().equals("compute-ok")));
+        Assertions.assertFalse(nodes.stream().anyMatch(addr -> addr.getHostname().equals("backend-dead")));
+        Assertions.assertFalse(nodes.stream().anyMatch(addr -> addr.getHostname().equals("compute-dead")));
     }
 
     @Test
     public void testShowDictionary() throws Exception {
-        dictionaryMgr.getAllInfo("dict");
+        DictionaryMgr mgr = new DictionaryMgr();
+        List<String> dictionaryKeys = Lists.newArrayList("key");
+        List<String> dictionaryValues = Lists.newArrayList("value");
+        Dictionary dictionary = new Dictionary(1, "dict", "t", "default_catalog", "testDb",
+                dictionaryKeys, dictionaryValues, new HashMap<>());
+        dictionary.setLastSuccessVersion(System.currentTimeMillis());
+        mgr.addDictionary(dictionary);
+
+        ConnectContext context = ConnectContext.buildInner();
+        context.setThreadLocalInfo();
+
+        Map<TNetworkAddress, DictionaryMgr.DictionaryCacheNodeStatistic> stats = new LinkedHashMap<>();
+        PProcessDictionaryCacheResult availableResult = new PProcessDictionaryCacheResult();
+        availableResult.dictionaryMemoryUsage = 1024L;
+        stats.put(new TNetworkAddress("backend-ok", 8060),
+                new DictionaryMgr.DictionaryCacheNodeStatistic(availableResult, null));
+        stats.put(new TNetworkAddress("backend-offline", 8061),
+                new DictionaryMgr.DictionaryCacheNodeStatistic(null, "Unavailable"));
+
+        new MockUp<TimeUtils>() {
+            @Mock
+            public String longToTimeString(long timeStamp) {
+                return "mock-time";
+            }
+
+            @Mock
+            public String longToTimeString(long timeStamp, java.text.SimpleDateFormat dateFormat) {
+                return "mock-time";
+            }
+        };
+
+        new MockUp<DictionaryMgr>() {
+            @Mock
+            public Map<TNetworkAddress, DictionaryMgr.DictionaryCacheNodeStatistic> getDictionaryStatistic(
+                    Dictionary dict) {
+                return stats;
+            }
+        };
+
+        List<List<String>> info = mgr.getAllInfo(null);
+        Assertions.assertEquals(1, info.size());
+        String memoryInfo = info.get(0).get(info.get(0).size() - 1);
+        Assertions.assertTrue(memoryInfo.contains("backend-ok:8060"));
+        Assertions.assertTrue(memoryInfo.contains("1024"));
+        Assertions.assertTrue(memoryInfo.contains("backend-offline:8061"));
+        Assertions.assertTrue(memoryInfo.contains("Unavailable"));
     }
 
     @Test
@@ -146,6 +185,7 @@ public class DictionaryMgrTest {
 
         DictionaryMgrInfo dictionaryMgrInfo = new DictionaryMgrInfo(1, 1, dictionaries);
 
+        DictionaryMgr dictionaryMgr = new DictionaryMgr();
         dictionaryMgr.syncDictionaryMeta(dictionaries);
         dictionaryMgr.scheduleTasks();
         dictionaryMgr.replayModifyDictionaryMgr(dictionaryMgrInfo);
