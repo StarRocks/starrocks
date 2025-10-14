@@ -16,15 +16,12 @@ package com.starrocks.sql.ast;
 
 import com.starrocks.sql.parser.NodePosition;
 
-import static com.starrocks.common.util.Util.normalizeName;
-
 // Show create database statement
 //  Syntax:
 //      SHOW CREATE DATABASE db
 public class ShowCreateDbStmt extends ShowStmt {
 
-    private String catalog;
-    private String db;
+    private final String db;
 
     public ShowCreateDbStmt(String db) {
         this(db, NodePosition.ZERO);
@@ -32,23 +29,11 @@ public class ShowCreateDbStmt extends ShowStmt {
 
     public ShowCreateDbStmt(String db, NodePosition pos) {
         super(pos);
-        this.db = normalizeName(db);
-    }
-
-    public String getCatalogName() {
-        return this.catalog;
-    }
-
-    public void setCatalogName(String catalogName) {
-        this.catalog = normalizeName(catalogName);
+        this.db = db;
     }
 
     public String getDb() {
         return db;
-    }
-
-    public void setDb(String db) {
-        this.db = normalizeName(db);
     }
 
     @Override
@@ -58,6 +43,6 @@ public class ShowCreateDbStmt extends ShowStmt {
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return ((AstVisitorExtendInterface<R, C>) visitor).visitShowCreateDbStatement(this, context);
+        return visitor.visitShowCreateDbStatement(this, context);
     }
 }
