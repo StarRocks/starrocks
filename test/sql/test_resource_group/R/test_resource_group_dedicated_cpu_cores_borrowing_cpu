@@ -1,4 +1,4 @@
--- name: test_resource_group_exclusive_cpu_cores_borrowing_cpu
+-- name: test_resource_group_exclusive_cpu_cores_borrowing_cpu @sequential
 CREATE TABLE __row_util_base (
   k1 bigint NULL
 ) ENGINE=OLAP
