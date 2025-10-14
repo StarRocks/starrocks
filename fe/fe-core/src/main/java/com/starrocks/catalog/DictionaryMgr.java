@@ -23,6 +23,7 @@ import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.MetaNotFoundException;
+import com.starrocks.common.Pair;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.Status;
 import com.starrocks.common.ThreadPoolManager;
@@ -171,9 +172,9 @@ public class DictionaryMgr implements Writable, GsonPostProcessable {
         }
     }
 
-    public static boolean processDictionaryCacheInteranl(PProcessDictionaryCacheRequest request, String errMsg,
-                                                         List<TNetworkAddress> beNodes,
-                                                         List<PProcessDictionaryCacheResult> results) {
+    public static Pair<Boolean, String> processDictionaryCacheInteranl(PProcessDictionaryCacheRequest request,
+                                                                       List<TNetworkAddress> beNodes,
+                                                                       List<PProcessDictionaryCacheResult> results) {
         for (TNetworkAddress address : beNodes) {
             PProcessDictionaryCacheResult result = null;
             try {
@@ -182,19 +183,14 @@ public class DictionaryMgr implements Writable, GsonPostProcessable {
                 result = future.get();
             } catch (Exception e) {
                 LOG.warn(" processDictionaryCache failed in: " + address + " rpc error :" + e.getMessage());
-                if (errMsg != null) {
-                    errMsg = e.getMessage();
-                }
-                return true;
+                return new Pair<>(true, e.getMessage());
             }
 
             TStatusCode code = TStatusCode.findByValue(result.status.statusCode);
             if (code != TStatusCode.OK) {
                 LOG.warn(" processDictionaryCache failed in: " + address + " err msg " + result.status.errorMsgs);
-                if (errMsg != null) {
-                    errMsg = result.status.errorMsgs.size() == 0 ? "" : result.status.errorMsgs.get(0);
-                }
-                return true;
+                String errMsg = result.status.errorMsgs.size() == 0 ? "" : result.status.errorMsgs.get(0);
+                return new Pair<>(true, errMsg);
             }
 
             if (results != null) {
@@ -203,7 +199,7 @@ public class DictionaryMgr implements Writable, GsonPostProcessable {
         }
         LOG.info("finish processDictionaryCache dictionary id: {}, request type: {}",
                 request.dictId, request.txnId, request.type);
-        return false;
+        return new Pair<>(false, "");
     }
 
     public void createDictionary(CreateDictionaryStmt stmt, String catalogName, String dbName) throws DdlException {
@@ -291,7 +287,7 @@ public class DictionaryMgr implements Writable, GsonPostProcessable {
         List<TNetworkAddress> beNodes = Lists.newArrayList();
         fillBackendsOrComputeNodes(beNodes);
 
-        DictionaryMgr.processDictionaryCacheInteranl(request, null, beNodes, null);
+        DictionaryMgr.processDictionaryCacheInteranl(request, beNodes, null);
     }
 
     public void addDictionary(Dictionary dictionary) {
@@ -407,7 +403,7 @@ public class DictionaryMgr implements Writable, GsonPostProcessable {
         executor.submit(task);
     }
 
-    public Map<TNetworkAddress, PProcessDictionaryCacheResult> getDictionaryStatistic(Dictionary dictionary) {
+    public Pair<Map<TNetworkAddress, PProcessDictionaryCacheResult>, String> getDictionaryStatistic(Dictionary dictionary) {
         PProcessDictionaryCacheRequest request = new PProcessDictionaryCacheRequest();
         request.dictId = dictionary.getDictionaryId();
         request.type = PProcessDictionaryCacheRequestType.STATISTIC;
@@ -416,17 +412,18 @@ public class DictionaryMgr implements Writable, GsonPostProcessable {
         fillBackendsOrComputeNodes(beNodes);
 
         List<PProcessDictionaryCacheResult> results = Lists.newArrayList();
-        DictionaryMgr.processDictionaryCacheInteranl(request, null, beNodes, results);
+        Pair<Boolean, String> ret = DictionaryMgr.processDictionaryCacheInteranl(request, beNodes, results);
         Map<TNetworkAddress, PProcessDictionaryCacheResult> resultMap = new HashMap<>();
         if (results.size() < beNodes.size()) {
-            return resultMap;
+            Preconditions.checkState(ret.first);
+            return new Pair<>(null, ret.second);
         }
         Preconditions.checkState(results.size() == beNodes.size());
 
         for (int i = 0; i < results.size(); i++) {
             resultMap.put(beNodes.get(i), results.get(i));
         }
-        return resultMap;
+        return new Pair<>(resultMap, "");
     }
 
     public List<List<String>> getAllInfo(String dictionaryName) throws Exception {
@@ -441,7 +438,13 @@ public class DictionaryMgr implements Writable, GsonPostProcessable {
 
                 allInfo.add(dictionary.getInfo());
 
-                Map<TNetworkAddress, PProcessDictionaryCacheResult> resultMap = getDictionaryStatistic(dictionary);
+                Pair<Map<TNetworkAddress, PProcessDictionaryCacheResult>, String> ret = getDictionaryStatistic(dictionary);
+                Map<TNetworkAddress, PProcessDictionaryCacheResult> resultMap = ret.first;
+                String errMsg = ret.second;
+                if (resultMap == null) {
+                    allInfo.get(allInfo.size() - 1).add("Can not get memory info, errMsg: " + errMsg);
+                    continue;
+                }
 
                 String memoryUsage = "";
                 for (Map.Entry<TNetworkAddress, PProcessDictionaryCacheResult> result : resultMap.entrySet()) {
@@ -679,7 +682,9 @@ public class DictionaryMgr implements Writable, GsonPostProcessable {
             request.txnId = txnId;
             request.type = PProcessDictionaryCacheRequestType.BEGIN;
 
-            error = DictionaryMgr.processDictionaryCacheInteranl(request, errMsg, beNodes, null);
+            Pair<Boolean, String> ret = DictionaryMgr.processDictionaryCacheInteranl(request, beNodes, null);
+            error = ret.first;
+            errMsg = ret.second;
         }
 
         private void commit() {
@@ -696,7 +701,9 @@ public class DictionaryMgr implements Writable, GsonPostProcessable {
             request.txnId = txnId;
             request.type = PProcessDictionaryCacheRequestType.COMMIT;
 
-            error = DictionaryMgr.processDictionaryCacheInteranl(request, errMsg, beNodes, null);
+            Pair<Boolean, String> ret = DictionaryMgr.processDictionaryCacheInteranl(request, beNodes, null);
+            error = ret.first;
+            errMsg = ret.second;
         }
 
         private void finish(long dictionaryId) {
