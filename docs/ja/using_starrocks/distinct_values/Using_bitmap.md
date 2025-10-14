@@ -36,12 +36,12 @@ StarRocks は次の図に従ってデータを計算します。まず、`page` 
 
 ```sql
 select page, count(distinct user_id) as uv from table group by page;
+```
 
 |  page   |   uv  |
 | :---: | :---: |
 |   game  |  1   |
 |   shopping  |   2  |
-```
 
 ## ビットマップを使用した Count Distinct の利点
 
