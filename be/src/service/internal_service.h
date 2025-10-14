@@ -198,11 +198,6 @@ public:
                                   const PUpdateTransactionStateRequest* request,
                                   PUpdateTransactionStateResponse* response, google::protobuf::Closure* done) override;
 
-    void exec_single_node_plan_fragments(google::protobuf::RpcController* controller,
-                                         const PExecBatchPlanFragmentsRequest* request,
-                                         PExecBatchPlanFragmentsResult* result,
-                                         google::protobuf::Closure* done) override;
-
 private:
     void _transmit_chunk(::google::protobuf::RpcController* controller,
                          const ::starrocks::PTransmitChunkParams* request, ::starrocks::PTransmitChunkResult* response,

@@ -41,7 +41,6 @@ import com.starrocks.rpc.RpcException;
 import com.starrocks.thrift.TDescriptorTable;
 import com.starrocks.thrift.TExecBatchPlanFragmentsParams;
 import com.starrocks.thrift.TExecPlanFragmentParams;
-import com.starrocks.thrift.TExecSingleNodePlanFragmentsParams;
 import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.thrift.TQueryOptions;
 import com.starrocks.thrift.TStatusCode;
@@ -337,6 +336,7 @@ public class Deployer {
         }
 
         // every fragment instance share the same future
+        // if any problem occurs, the first call on this future will throw exception
         FakeDeployFuture sharedFakeFuture = new FakeDeployFuture(batchFuture);
         fragmentInstanceExecStates.forEach(
                 fragmentInstanceExecState -> {
@@ -351,7 +351,7 @@ public class Deployer {
 
     private static class FakeDeployFuture implements Future<PExecPlanFragmentResult> {
         private final Future<PExecBatchPlanFragmentsResult> batchFuture;
-        private volatile PExecPlanFragmentResult cachedResult = null;
+        private PExecPlanFragmentResult cachedResult = null;
 
         public FakeDeployFuture(Future<PExecBatchPlanFragmentsResult> batchFuture) {
             this.batchFuture = batchFuture;
@@ -369,23 +369,33 @@ public class Deployer {
 
         @Override
         public boolean isDone() {
-            if (cachedResult != null) {
-                return true;
-            }
-            try {
-                if (batchFuture.isDone()) {
-                    getResult();
-                    return true;
-                }
-                return false;
-            } catch (Exception e) {
-                return true;
-            }
+            return batchFuture.isDone();
         }
 
         @Override
         public PExecPlanFragmentResult get() throws InterruptedException, ExecutionException {
-            return getResult();
+            if (cachedResult != null) {
+                return cachedResult;
+            }
+
+            try {
+                PExecBatchPlanFragmentsResult batchResult = batchFuture.get();
+
+                PExecPlanFragmentResult singleResult = new PExecPlanFragmentResult();
+                singleResult.status = batchResult.status;
+
+                cachedResult = singleResult;
+
+                return cachedResult;
+
+            } catch (Exception e) {
+                // if any exception thrown, cache Status::OK since we only care about the first error
+                PExecPlanFragmentResult singleResult = new PExecPlanFragmentResult();
+                StatusPB statusPB = new StatusPB();
+                statusPB.statusCode = TStatusCode.OK.getValue();
+                singleResult.setStatus(statusPB);
+                throw e;
+            }
         }
 
         @Override
@@ -401,70 +411,25 @@ public class Deployer {
                 PExecPlanFragmentResult singleResult = new PExecPlanFragmentResult();
                 singleResult.status = batchResult.status;
 
-                if (batchResult.status.statusCode == 0) {
-                    cachedResult = singleResult;
-                } else {
-                    StatusPB errorStatus = new StatusPB();
-                    errorStatus.statusCode = batchResult.status.statusCode;
-                    if (batchResult.status.errorMsgs != null && !batchResult.status.errorMsgs.isEmpty()) {
-                        errorStatus.errorMsgs = batchResult.status.errorMsgs;
-                    } else {
-                        errorStatus.errorMsgs = new ArrayList<>();
-                        errorStatus.errorMsgs.add("Batch deployment failed");
-                    }
-                    singleResult.status = errorStatus;
-                    cachedResult = singleResult;
-                }
+                cachedResult = singleResult;
 
                 return cachedResult;
 
-            } catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
-                throw new ExecutionException("Batch deployment interrupted", e);
             } catch (Exception e) {
-                throw new ExecutionException("Batch deployment failed", e);
-            }
-        }
-
-        private PExecPlanFragmentResult getResult() throws ExecutionException {
-            if (cachedResult != null) {
-                return cachedResult;
-            }
-
-            try {
-                PExecBatchPlanFragmentsResult batchResult = batchFuture.get();
-
+                // if any exception thrown, cache Status::OK since we only care about the first error
                 PExecPlanFragmentResult singleResult = new PExecPlanFragmentResult();
-                singleResult.status = batchResult.status;
-
-                if (batchResult.status.statusCode == 0) {
-                    cachedResult = singleResult;
-                } else {
-                    StatusPB errorStatus = new StatusPB();
-                    errorStatus.statusCode = batchResult.status.statusCode;
-                    if (batchResult.status.errorMsgs != null && !batchResult.status.errorMsgs.isEmpty()) {
-                        errorStatus.errorMsgs = batchResult.status.errorMsgs;
-                    } else {
-                        errorStatus.errorMsgs = new ArrayList<>();
-                        errorStatus.errorMsgs.add("Batch deployment failed");
-                    }
-                    singleResult.status = errorStatus;
-                    cachedResult = singleResult;
-                }
-
-                return cachedResult;
-
-            } catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
-                throw new ExecutionException("Batch deployment interrupted", e);
-            } catch (Exception e) {
-                throw new ExecutionException("Batch deployment failed", e);
+                StatusPB statusPB = new StatusPB();
+                statusPB.statusCode = TStatusCode.OK.getValue();
+                singleResult.setStatus(statusPB);
+                throw e;
             }
         }
     }
 
     private Future<PExecBatchPlanFragmentsResult> execRemoteBatchFragmentsAsync(
             List<FragmentInstanceExecState> fragmentInstanceExecStateList) throws TException {
+
+        // 0.collect every instance's params as unique param per instance
         List<TExecPlanFragmentParams> requestsToDeploy = new ArrayList<>();
         fragmentInstanceExecStateList.forEach(
                 fragmentInstanceExecState -> requestsToDeploy.add(fragmentInstanceExecState.getRequestToDeploy()));
@@ -476,18 +441,16 @@ public class Deployer {
         // 1. create a common param only with desc table, it will prepare first
         TExecPlanFragmentParams commonParam = requestsToDeploy.get(0).deepCopy();
         commonParam.setDesc_tbl(jobSpec.getDescTable());
-        //        commonParam.setProtocol_version(requestsToDeploy.get(0).getProtocol_version());
+        commonParam.setFragment(null);
+        commonParam.setParams(null);
         tRequest.setCommon_param(commonParam);
 
         // 2. clear unique param's desc table, so fragment instances can prepare parallelly
         tRequest.getUnique_param_per_instance().forEach(instance -> instance.setDesc_tbl(emptyDescTable));
 
-        TExecSingleNodePlanFragmentsParams singleNodePlanFragmentsParams = new TExecSingleNodePlanFragmentsParams();
-        singleNodePlanFragmentsParams.setBatch_params(tRequest);
-        singleNodePlanFragmentsParams.setOnly_prepare(false);
-
+        // Todo: consider parallel serialize if this become bottleneck
         TSerializer serializer = AttachmentRequest.getSerializer(jobSpec.getPlanProtocol());
-        byte[] serializedRequest = serializer.serialize(singleNodePlanFragmentsParams);
+        byte[] serializedRequest = serializer.serialize(tRequest);
 
         try {
             return BackendServiceClient.getInstance()
@@ -518,8 +481,12 @@ public class Deployer {
                     StatusPB pStatus = new StatusPB();
                     pStatus.errorMsgs = new ArrayList<>();
                     pStatus.errorMsgs.add(e.getMessage());
-                    // use THRIFT_RPC_ERROR so that this BE will be added to the blacklist later.
-                    pStatus.statusCode = TStatusCode.THRIFT_RPC_ERROR.getValue();
+                    if (e instanceof RpcException) {
+                        // use THRIFT_RPC_ERROR so that this BE will be added to the blacklist later.
+                        pStatus.statusCode = TStatusCode.THRIFT_RPC_ERROR.getValue();
+                    } else {
+                        pStatus.statusCode = TStatusCode.INTERNAL_ERROR.getValue();
+                    }
                     result.status = pStatus;
                     return result;
                 }
