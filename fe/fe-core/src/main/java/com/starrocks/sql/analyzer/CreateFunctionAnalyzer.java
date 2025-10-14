@@ -26,13 +26,16 @@ import com.starrocks.common.Config;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.FeConstants;
+import com.starrocks.common.udf.UDFDownloader;
 import com.starrocks.common.util.UDFInternalClassLoader;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.CreateFunctionStmt;
 import com.starrocks.sql.ast.FunctionArgsDef;
 import com.starrocks.sql.ast.FunctionRef;
 import com.starrocks.sql.ast.HdfsURI;
 import com.starrocks.sql.ast.expression.TypeDef;
+import com.starrocks.storagevolume.StorageVolume;
 import com.starrocks.thrift.TFunctionBinaryType;
 import com.starrocks.type.ArrayType;
 import com.starrocks.type.MapType;
@@ -60,7 +63,12 @@ import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
 
+import static com.starrocks.common.Config.STARROCKS_HOME_DIR;
+
 public class CreateFunctionAnalyzer {
+
+    private String objectFile;
+
     public void analyze(CreateFunctionStmt stmt, ConnectContext context) {
         if (!Config.enable_udf) {
             throw new SemanticException(
@@ -90,6 +98,26 @@ public class CreateFunctionAnalyzer {
         TypeDefAnalyzer.analyze(returnType);
     }
 
+    private String getRealUrl(String url) {
+        if (url.contains("s3") || url.contains("hdfs")) {
+            return getJUdfUrl(url);
+        }
+        return url;
+    }
+
+    private String getJUdfUrl(String url) {
+        String fileName = url.substring(url.lastIndexOf("/") + 1);
+        StorageVolume sv = GlobalStateMgr.getCurrentState().getStorageVolumeMgr().getDefaultStorageVolume();
+        if (sv == null) {
+            ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR,
+                    "No default cloud storage volume. Please create a cloud storage volume and set it as default");
+        }
+        String targetPath = String.format("%s/%s", STARROCKS_HOME_DIR + "/plugins/java_udf", fileName);
+        String targetUrl = String.format("file://%s", targetPath);
+        UDFDownloader.download2Local(sv, url, targetPath);
+        return targetUrl;
+    }
+
     public String computeMd5(CreateFunctionStmt stmt) {
         String checksum = "";
         if (FeConstants.runningUnitTest) {
@@ -100,11 +128,11 @@ public class CreateFunctionAnalyzer {
 
         Map<String, String> properties = stmt.getProperties();
 
-        String objectFile = properties.get(CreateFunctionStmt.FILE_KEY);
+        objectFile = properties.get(CreateFunctionStmt.FILE_KEY);
         if (Strings.isNullOrEmpty(objectFile)) {
             ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR, "No 'object_file' in properties");
         }
-
+        objectFile = getRealUrl(objectFile);
         try {
             URL url = new URL(objectFile);
             URLConnection urlConnection = url.openConnection();
@@ -142,7 +170,6 @@ public class CreateFunctionAnalyzer {
             ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR,
                     "No '" + CreateFunctionStmt.SYMBOL_KEY + "' in properties");
         }
-        String objectFile = properties.get(CreateFunctionStmt.FILE_KEY);
 
         JavaUDFInternalClass handleClass = new JavaUDFInternalClass();
         JavaUDFInternalClass stateClass = new JavaUDFInternalClass();
