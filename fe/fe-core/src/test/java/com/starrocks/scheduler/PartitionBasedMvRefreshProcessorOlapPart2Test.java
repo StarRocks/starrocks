@@ -493,23 +493,15 @@ public class PartitionBasedMvRefreshProcessorOlapPart2Test extends MVTestBase {
                                 params.setTask_name(task.getName());
                                 TaskManager tm = GlobalStateMgr.getCurrentState().getTaskManager();
                                 List<TaskRunStatus> statuses = tm.getMatchedTaskRunStatus(params);
-<<<<<<< HEAD
-                                while (statuses.size() != 1) {
-                                    statuses = tm.getMatchedTaskRunStatus(params);
-                                    Thread.sleep(100);
-                                }
-                                Assertions.assertEquals(1, statuses.size());
-=======
                                 int i = 0;
-                                while (i++ < 300 && statuses.size() < 2) {
+                                while (i++ < 300 && statuses.size() != 1) {
                                     Thread.sleep(100);
                                     statuses = tm.getMatchedTaskRunStatus(params);
                                 }
-                                if (statuses.isEmpty()) {
+                                if (statuses.size() != 1) {
                                     LOG.warn("task run status: {}", statuses);
                                     return;
                                 }
->>>>>>> 9281abb6d7 ([UT] Fix unstable tests (#64015))
                                 TaskRunStatus status = statuses.get(0);
                                 // the priority for next refresh batch is 70 which is specified in executeOption
                                 Assertions.assertEquals(70, status.getPriority());
