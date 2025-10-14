@@ -33,13 +33,19 @@ import com.starrocks.transaction.DatabaseTransactionMgr;
 import com.starrocks.transaction.GlobalTransactionMgr;
 import com.starrocks.transaction.TabletCommitInfo;
 import com.starrocks.utframe.MockedWarehouseManager;
+import mockit.Expectations;
 import mockit.Mock;
 import mockit.MockUp;
 import mockit.Mocked;
 import org.junit.Assert;
 import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
 
+import java.lang.reflect.Field;
+import java.lang.reflect.Method;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
 
@@ -284,7 +290,7 @@ public class CompactionSchedulerTest {
         idField.setAccessible(true);
         idField.set(table, tableId);
         PhysicalPartition partition = new PhysicalPartition(3, "test_partition", 3, null);
-        CompactionJob job = new CompactionJob(db, table, partition, txnId, false, null, "");
+        CompactionJob job = new CompactionJob(db, table, partition, txnId, false);
         
         // Mock the job to simulate successful completion and transaction visibility
         new MockUp<CompactionJob>() {
@@ -392,7 +398,7 @@ public class CompactionSchedulerTest {
         idField.setAccessible(true);
         idField.set(table, tableId);
         PhysicalPartition partition = new PhysicalPartition(4, "test_partition", 4, null);
-        CompactionJob job = new CompactionJob(db, table, partition, txnId, false, null, "");
+        CompactionJob job = new CompactionJob(db, table, partition, txnId, false);
         
         // Mock the job to simulate failure (e.g., NONE_SUCCESS or PARTIAL_SUCCESS without allow partial)
         new MockUp<CompactionJob>() {
@@ -517,7 +523,7 @@ public class CompactionSchedulerTest {
         idField.setAccessible(true);
         idField.set(table, tableId);
         PhysicalPartition partition = new PhysicalPartition(5, "test_partition", 5, null);
-        CompactionJob job = new CompactionJob(db, table, partition, txnId, false, null, "");
+        CompactionJob job = new CompactionJob(db, table, partition, txnId, false);
         
         // Mock the job to simulate PARTIAL_SUCCESS without allowing partial success
         new MockUp<CompactionJob>() {
