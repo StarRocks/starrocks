@@ -173,8 +173,9 @@ public class InsertAnalyzer {
 
         if (table.isIcebergTable() || table.isHiveTable() || table.isPaimonTable()) {
             if (table.isHiveTable() && table.isUnPartitioned() &&
-                    HiveWriteUtils.isS3Url(table.getTableLocation()) && insertStmt.isOverwrite()) {
-                throw new SemanticException("Unsupported insert overwrite hive unpartitioned table with s3 location");
+                    HiveWriteUtils.isS3Url(table.getTableLocation()) && insertStmt.isOverwrite() &&
+                    !session.getSessionVariable().enableOverwriteUnpartitionedTableOnObjectStore()) {
+                throw new SemanticException("Overwriting unpartitioned tables on object storage is not supported");
             }
 
             if (table.isHiveTable() && ((HiveTable) table).getHiveTableType() != HiveTable.HiveTableType.MANAGED_TABLE &&

@@ -208,14 +208,18 @@ public class HiveCommitter {
         Path targetPath = pu.getTargetPath();
         remoteFilesCacheToRefresh.add(targetPath);
 
-        Path oldTableStagingPath = new Path(targetPath.getParent(), "_temp_" + targetPath.getName() + "_" +
-                ConnectContext.get().getQueryId().toString());
-        fileOps.renameDirectory(targetPath, oldTableStagingPath,
-                () -> renameDirTasksForAbort.add(new RenameDirectoryTask(oldTableStagingPath, targetPath)));
-        clearPathsForFinish.add(oldTableStagingPath);
-
-        fileOps.renameDirectory(writePath, targetPath,
-                () -> clearTasksForAbort.add(new DirectoryCleanUpTask(targetPath, true)));
+        if (pu.isS3Url()) {
+            String queryId = ConnectContext.get().getQueryId().toString();
+            fileOps.removeNotCurrentQueryFiles(targetPath, queryId);
+        } else {
+            Path oldTableStagingPath = new Path(targetPath.getParent(), "_temp_" + targetPath.getName() + "_" +
+                    ConnectContext.get().getQueryId().toString());
+            fileOps.renameDirectory(targetPath, oldTableStagingPath,
+                    () -> renameDirTasksForAbort.add(new RenameDirectoryTask(oldTableStagingPath, targetPath)));
+            clearPathsForFinish.add(oldTableStagingPath);
+            fileOps.renameDirectory(writePath, targetPath,
+                    () -> clearTasksForAbort.add(new DirectoryCleanUpTask(targetPath, true)));
+        }
 
         if (Config.update_statistics_after_insert) {
             UpdateStatisticsTask updateStatsTask = new UpdateStatisticsTask(table.getCatalogDBName(), table.getCatalogTableName(),
