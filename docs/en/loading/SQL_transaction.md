@@ -143,7 +143,8 @@ A transaction is associated with a single session. Multiple sessions cannot shar
 
 ## Usage notes
 
-- Currently, StarRocks supports INSERT, UPDATE, and DELETE statements in SQL transactions. UPDATE and DELETE are supported only in shared-data clusters from v4.0 onwards.
+- Currently, StarRocks supports SELECT, INSERT, UPDATE, and DELETE statements in SQL transactions. UPDATE and DELETE are supported only in shared-data clusters from v4.0 onwards.
+- SELECT statements against the tables whose data have been changed in the same transaction are not allowed.
 - Multiple INSERT statements against the same table within a transaction are supported only in shared-data clusters from v4.0 onwards.
 - Within a transaction, you can only define one UPDATE or DELETE statement against each table, and it must precede the INSERT statements.
 - Subsequent DML statements cannot read the uncommitted changes brought by preceding statements within the same transaction. For example, the target table of the preceding INSERT statement cannot be the source table of subsequent statements. Otherwise, the system returns an error.

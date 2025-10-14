@@ -143,7 +143,8 @@ import Beta from '../_assets/commonMarkdown/_beta.mdx'
 
 ## 使用说明
 
-- 目前，StarRocks 支持在 SQL 事务中执行 INSERT、UPDATE 和 DELETE 语句。UPDATE 和 DELETE 操作仅在 v4.0 及更高版本的存算分离集群中支持。
+- 目前，StarRocks 支持在 SQL 事务中执行 SELECT、INSERT、UPDATE 和 DELETE 语句。UPDATE 和 DELETE 操作仅在 v4.0 及更高版本的存算分离集群中支持。
+- 不允许对同一事务中数据已被修改的表执行 SELECT 语句。
 - 在同一事务内对同一表执行多个 INSERT 语句的操作仅在 v4.0 及更高版本的存算分离集群中支持。
 - 在单个事务内，每张表仅可定义一条 UPDATE 或 DELETE 语句，且必须位于 INSERT 语句之前。
 - 后续的 DML 语句无法读取同一事务中先前语句带来的未提交变更。例如，先前 INSERT 语句的目标表不能作为后续语句的源表，否则系统将返回错误。
