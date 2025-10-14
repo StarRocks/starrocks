@@ -1,4 +1,4 @@
--- name: test_resource_group_exclusive_cpu_cores_borrowing_cpu
+-- name: test_resource_group_exclusive_cpu_cores_borrowing_cpu @sequential
 -- Prepare data.
 
 CREATE TABLE __row_util_base (
@@ -98,7 +98,7 @@ DROP RESOURCE GROUP rgn1_${uuid0};
 DROP RESOURCE GROUP rgn2_${uuid0};
 
 
--- name: test_resource_exclusive_cpu_cores_no_borrowing_cpu
+-- name: test_resource_exclusive_cpu_cores_no_borrowing_cpu @sequential
 -- Prepare data.
 
 CREATE TABLE __row_util_base (
