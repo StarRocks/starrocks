@@ -26,7 +26,6 @@ DEFAULT_INTERVAL=120   # 2 minutes
 DURATION=$DEFAULT_DURATION
 OUTPUT_DIR=""
 BRPC_PORT=$DEFAULT_BRPC_PORT
-FORMAT="both"
 CLEANUP_DAYS=$DEFAULT_CLEANUP_DAYS
 CLEANUP_SIZE=$DEFAULT_CLEANUP_SIZE
 DAEMON_MODE=false
@@ -53,7 +52,6 @@ usage() {
     echo "  --output-dir <path>      Output directory (default: read from be.conf)"
     echo "  --be-conf <path>         Path to be.conf file (default: \$STARROCKS_HOME/conf/be.conf)"
     echo "  --brpc-port <port>       BRPC port (default: $DEFAULT_BRPC_PORT)"
-    echo "  --format <flame|pprof|both>  Output format (default: both)"
     echo "  --cleanup-days <days>    Delete files older than N days (default: $DEFAULT_CLEANUP_DAYS)"
     echo "  --cleanup-size <bytes>   Max total size to retain (default: 2GB)"
     echo "  --daemon                 Run continuously in background"
@@ -63,7 +61,7 @@ usage() {
     echo "Examples:"
     echo "  $0 --profiling-type cpu --duration 30"
     echo "  $0 --profiling-type both --daemon --interval 1800"
-    echo "  $0 --profiling-type contention --format pprof"
+    echo "  $0 --profiling-type contention"
     echo "  $0 --profiling-type contention --be-conf /custom/path/be.conf"
     exit 1
 }
@@ -169,29 +167,16 @@ collect_profile() {
         return 1
     fi
     
-    if [ "$FORMAT" = "flame" ] || [ "$FORMAT" = "both" ]; then
-        local flame_file="$OUTPUT_DIR/${base_name}-flame.html"
-        local flame_tar="$OUTPUT_DIR/${base_name}-flame.html.tar.gz"
-        local flame_url="http://localhost:$BRPC_PORT/pprof/${endpoint}?seconds=$DURATION&display_type=flame"
-        
-        log "Executing curl command: curl -s \"$flame_url\" > \"$flame_file\""
-        curl -s "$flame_url" > "$flame_file"
-        tar -czf "$flame_tar" -C "$OUTPUT_DIR" "$(basename "$flame_file")"
-        rm -f "$flame_file"
-        log "${profile_type^} flamegraph saved: $flame_tar"
-    fi
+    # Collect pprof format (default format from BE)
+    local pprof_file="$OUTPUT_DIR/${base_name}-pprof"
+    local pprof_tar="$OUTPUT_DIR/${base_name}-pprof.tar.gz"
+    local pprof_url="http://localhost:$BRPC_PORT/pprof/${endpoint}?seconds=$DURATION"
     
-    if [ "$FORMAT" = "pprof" ] || [ "$FORMAT" = "both" ]; then
-        local pprof_file="$OUTPUT_DIR/${base_name}-pprof"
-        local pprof_tar="$OUTPUT_DIR/${base_name}-pprof.tar.gz"
-        local pprof_url="http://localhost:$BRPC_PORT/pprof/${endpoint}?seconds=$DURATION"
-        
-        log "Executing curl command: curl -s \"$pprof_url\" > \"$pprof_file\""
-        curl -s "$pprof_url" > "$pprof_file"
-        tar -czf "$pprof_tar" -C "$OUTPUT_DIR" "$(basename "$pprof_file")"
-        rm -f "$pprof_file"
-        log "${profile_type^} pprof saved: $pprof_tar"
-    fi
+    log "Executing curl command: curl -s \"$pprof_url\" > \"$pprof_file\""
+    curl -s "$pprof_url" > "$pprof_file"
+    tar -czf "$pprof_tar" -C "$OUTPUT_DIR" "$(basename "$pprof_file")"
+    rm -f "$pprof_file"
+    log "${profile_type^} pprof saved: $pprof_tar"
 }
 
 # Collect CPU profile
@@ -334,10 +319,6 @@ parse_args() {
                 ;;
             --brpc-port)
                 BRPC_PORT="$2"
-                shift 2
-                ;;
-            --format)
-                FORMAT="$2"
                 shift 2
                 ;;
             --cleanup-days)
