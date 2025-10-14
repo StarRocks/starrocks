@@ -139,6 +139,9 @@ StatusOr<ChunkPtr> TableFunctionOperator::pull_chunk(RuntimeState* state) {
     }
 
     // Just return the chunk whether its full or not in order to keep the semantics of pipeline
+    for (const auto& column : output_columns) {
+        RETURN_IF_ERROR(column->capacity_limit_reached());
+    }
     return _build_chunk(output_columns);
 }
 
