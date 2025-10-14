@@ -23,7 +23,6 @@ import com.google.common.collect.Queues;
 import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.system.SystemTable;
 import com.starrocks.common.Config;
-import com.starrocks.common.DdlException;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.util.ThreadUtil;
 import com.starrocks.common.util.TimeUtils;
@@ -1181,9 +1180,9 @@ public class TaskManagerTest {
         task.setSource(Constants.TaskSource.MV);
         TaskSchedule schedule = new TaskSchedule();
         
-        long now = System.currentTimeMillis();
-        long startTime = now - 3600000; // 1 hour ago
-        long lastScheduleTime = now - 180000; // 3 minutes ago
+        long now = TimeUtils.getEpochSeconds();
+        long startTime = now - 3600; // 1 hour ago
+        long lastScheduleTime = now - 180; // 3 minutes ago
         
         schedule.setStartTime(startTime);
         schedule.setPeriod(60); // 1 minute period
@@ -1191,16 +1190,17 @@ public class TaskManagerTest {
         task.setSchedule(schedule);
         task.setType(Constants.TaskType.PERIODICAL);
         task.setState(Constants.TaskState.ACTIVE);
-        task.setLastScheduleTime(lastScheduleTime);
         task.setId(1L);
+        task.setLastScheduleTime(lastScheduleTime);
         
         // Mock executeTask to verify it's called
         final boolean[] executeTaskCalled = {false};
         TaskManager spyTaskManager = new TaskManager() {
             @Override
-            public void executeTask(String taskName) throws DdlException {
+            public SubmitResult executeTask(String taskName) {
                 executeTaskCalled[0] = true;
                 assertEquals("test_mv", taskName);
+                return new SubmitResult("xxxx", SubmitResult.SubmitStatus.SUBMITTED);
             }
         };
         
@@ -1219,11 +1219,11 @@ public class TaskManagerTest {
         Task task = new Task("test_mv");
         task.setSource(Constants.TaskSource.MV);
         TaskSchedule schedule = new TaskSchedule();
-        
-        long now = System.currentTimeMillis();
-        long startTime = now - 3600000; // 1 hour ago
-        long lastScheduleTime = now - 7200000; // 2 hours ago (before start time)
-        
+
+        long now = TimeUtils.getEpochSeconds();
+        long startTime = now - 3600; // 1 hour ago
+        long lastScheduleTime = now - 7200; // 2 hours ago (before start time)
+
         schedule.setStartTime(startTime);
         schedule.setPeriod(60);
         schedule.setTimeUnit(TimeUnit.SECONDS);
@@ -1232,19 +1232,20 @@ public class TaskManagerTest {
         task.setState(Constants.TaskState.ACTIVE);
         task.setLastScheduleTime(lastScheduleTime);
         task.setId(2L);
-        
+
         // Mock executeTask to verify it's NOT called
         final boolean[] executeTaskCalled = {false};
         TaskManager spyTaskManager = new TaskManager() {
             @Override
-            public void executeTask(String taskName) throws DdlException {
+            public SubmitResult executeTask(String taskName) {
                 executeTaskCalled[0] = true;
+                return new SubmitResult("xxxx", SubmitResult.SubmitStatus.SUBMITTED);
             }
         };
-        
+
         spyTaskManager.replayCreateTask(task);
         spyTaskManager.registerScheduler(task);
-        
+
         // Should not trigger immediately because lastScheduleTime is before taskStartTime
         Assertions.assertFalse(executeTaskCalled[0], "Task should not be executed immediately");
         Assertions.assertNotNull(spyTaskManager.getPeriodFutureMap().get(task.getId()));
@@ -1256,11 +1257,11 @@ public class TaskManagerTest {
         Task task = new Task("test_mv");
         task.setSource(Constants.TaskSource.MV);
         TaskSchedule schedule = new TaskSchedule();
-        
-        long now = System.currentTimeMillis();
-        long startTime = now - 3600000; // 1 hour ago
-        long lastScheduleTime = now - 30000; // 30 seconds ago
-        
+
+        long now = TimeUtils.getEpochSeconds();
+        long startTime = now - 3600; // 1 hour ago
+        long lastScheduleTime = now - 30; // 30 seconds ago
+
         schedule.setStartTime(startTime);
         schedule.setPeriod(60); // 1 minute period
         schedule.setTimeUnit(TimeUnit.SECONDS);
@@ -1269,19 +1270,20 @@ public class TaskManagerTest {
         task.setState(Constants.TaskState.ACTIVE);
         task.setLastScheduleTime(lastScheduleTime);
         task.setId(3L);
-        
+
         // Mock executeTask to verify it's NOT called
         final boolean[] executeTaskCalled = {false};
         TaskManager spyTaskManager = new TaskManager() {
             @Override
-            public void executeTask(String taskName) throws DdlException {
+            public SubmitResult executeTask(String taskName) {
                 executeTaskCalled[0] = true;
+                return new SubmitResult("xxxx", SubmitResult.SubmitStatus.SUBMITTED);
             }
         };
-        
+
         spyTaskManager.replayCreateTask(task);
         spyTaskManager.registerScheduler(task);
-        
+
         // Should not trigger immediately because lastScheduleTime + period is in the future
         Assertions.assertFalse(executeTaskCalled[0], "Task should not be executed immediately");
         Assertions.assertNotNull(spyTaskManager.getPeriodFutureMap().get(task.getId()));
@@ -1293,11 +1295,11 @@ public class TaskManagerTest {
         Task task = new Task("test_ctas");
         task.setSource(Constants.TaskSource.CTAS);
         TaskSchedule schedule = new TaskSchedule();
-        
-        long now = System.currentTimeMillis();
-        long startTime = now - 3600000; // 1 hour ago
-        long lastScheduleTime = now - 180000; // 3 minutes ago
-        
+
+        long now = TimeUtils.getEpochSeconds();
+        long startTime = now - 3600; // 1 hour ago
+        long lastScheduleTime = now - 180; // 3 minutes ago
+
         schedule.setStartTime(startTime);
         schedule.setPeriod(60); // 1 minute period
         schedule.setTimeUnit(TimeUnit.SECONDS);
@@ -1306,733 +1308,22 @@ public class TaskManagerTest {
         task.setState(Constants.TaskState.ACTIVE);
         task.setLastScheduleTime(lastScheduleTime);
         task.setId(4L);
-        
+
         // Mock executeTask to verify it's NOT called
         final boolean[] executeTaskCalled = {false};
         TaskManager spyTaskManager = new TaskManager() {
             @Override
-            public void executeTask(String taskName) throws DdlException {
+            public SubmitResult executeTask(String taskName) {
                 executeTaskCalled[0] = true;
+                return new SubmitResult("xxxx", SubmitResult.SubmitStatus.SUBMITTED);
             }
         };
-        
+
         spyTaskManager.replayCreateTask(task);
         spyTaskManager.registerScheduler(task);
-        
+
         // Should not trigger immediately because source is not MV
         Assertions.assertFalse(executeTaskCalled[0], "Non-MV task should not be executed immediately");
         Assertions.assertNotNull(spyTaskManager.getPeriodFutureMap().get(task.getId()));
-    }
-
-    @Test
-    public void testRegisterSchedulerWithMinutesTimeUnit() {
-        TaskManager taskManager = new TaskManager();
-        Task task = new Task("test_minutes");
-        TaskSchedule schedule = new TaskSchedule();
-        
-        long now = System.currentTimeMillis();
-        schedule.setStartTime(now);
-        schedule.setPeriod(5); // 5 minutes
-        schedule.setTimeUnit(TimeUnit.MINUTES);
-        task.setSchedule(schedule);
-        task.setType(Constants.TaskType.PERIODICAL);
-        task.setState(Constants.TaskState.ACTIVE);
-        task.setLastScheduleTime(-1);
-        task.setId(5L);
-        
-        taskManager.registerScheduler(task);
-        
-        long nextScheduleTime = task.getNextScheduleTime();
-        Assertions.assertTrue(nextScheduleTime > 0);
-        Assertions.assertNotNull(taskManager.getPeriodFutureMap().get(task.getId()));
-    }
-
-    @Test
-    public void testRegisterSchedulerWithHoursTimeUnit() {
-        TaskManager taskManager = new TaskManager();
-        Task task = new Task("test_hours");
-        TaskSchedule schedule = new TaskSchedule();
-        
-        long now = System.currentTimeMillis();
-        schedule.setStartTime(now);
-        schedule.setPeriod(2); // 2 hours
-        schedule.setTimeUnit(TimeUnit.HOURS);
-        task.setSchedule(schedule);
-        task.setType(Constants.TaskType.PERIODICAL);
-        task.setState(Constants.TaskState.ACTIVE);
-        task.setLastScheduleTime(-1);
-        task.setId(6L);
-        
-        taskManager.registerScheduler(task);
-        
-        long nextScheduleTime = task.getNextScheduleTime();
-        Assertions.assertTrue(nextScheduleTime > 0);
-        Assertions.assertNotNull(taskManager.getPeriodFutureMap().get(task.getId()));
-    }
-
-    @Test
-    public void testRegisterSchedulerWithDaysTimeUnit() {
-        TaskManager taskManager = new TaskManager();
-        Task task = new Task("test_days");
-        TaskSchedule schedule = new TaskSchedule();
-        
-        long now = System.currentTimeMillis();
-        schedule.setStartTime(now);
-        schedule.setPeriod(1); // 1 day
-        schedule.setTimeUnit(TimeUnit.DAYS);
-        task.setSchedule(schedule);
-        task.setType(Constants.TaskType.PERIODICAL);
-        task.setState(Constants.TaskState.ACTIVE);
-        task.setLastScheduleTime(-1);
-        task.setId(7L);
-        
-        taskManager.registerScheduler(task);
-        
-        long nextScheduleTime = task.getNextScheduleTime();
-        Assertions.assertTrue(nextScheduleTime > 0);
-        Assertions.assertNotNull(taskManager.getPeriodFutureMap().get(task.getId()));
-    }
-
-    @Test
-    public void testRegisterSchedulerNextScheduleTimeCalculation() {
-        TaskManager taskManager = new TaskManager();
-        Task task = new Task("test_calculation");
-        TaskSchedule schedule = new TaskSchedule();
-        
-        long now = System.currentTimeMillis();
-        schedule.setStartTime(now);
-        schedule.setPeriod(60);
-        schedule.setTimeUnit(TimeUnit.SECONDS);
-        task.setSchedule(schedule);
-        task.setType(Constants.TaskType.PERIODICAL);
-        task.setState(Constants.TaskState.ACTIVE);
-        task.setLastScheduleTime(-1);
-        task.setId(8L);
-        
-        taskManager.registerScheduler(task);
-        
-        long nextScheduleTime = task.getNextScheduleTime();
-        long currentTimeSeconds = System.currentTimeMillis() / 1000;
-        
-        // nextScheduleTime should be within reasonable range (0-60 seconds from now for a 60-second period)
-        Assertions.assertTrue(nextScheduleTime > currentTimeSeconds);
-        Assertions.assertTrue(nextScheduleTime <= currentTimeSeconds + 60);
-    }
-
-    @Test
-    public void testRegisterSchedulerExecuteTaskExceptionHandling() {
-        TaskManager taskManager = new TaskManager();
-        Task task = new Task("test_exception");
-        task.setSource(Constants.TaskSource.MV);
-        TaskSchedule schedule = new TaskSchedule();
-        
-        long now = System.currentTimeMillis();
-        long startTime = now - 3600000; // 1 hour ago
-        long lastScheduleTime = now - 180000; // 3 minutes ago
-        
-        schedule.setStartTime(startTime);
-        schedule.setPeriod(60);
-        schedule.setTimeUnit(TimeUnit.SECONDS);
-        task.setSchedule(schedule);
-        task.setType(Constants.TaskType.PERIODICAL);
-        task.setState(Constants.TaskState.ACTIVE);
-        task.setLastScheduleTime(lastScheduleTime);
-        task.setId(9L);
-        
-        // Mock executeTask to throw exception
-        TaskManager spyTaskManager = new TaskManager() {
-            @Override
-            public void executeTask(String taskName) throws DdlException {
-                throw new DdlException("Test exception");
-            }
-        };
-        
-        spyTaskManager.replayCreateTask(task);
-        
-        // Should not throw exception, should handle it gracefully
-        Assertions.assertDoesNotThrow(() -> spyTaskManager.registerScheduler(task));
-        
-        // Should still register the scheduler despite the exception
-        Assertions.assertNotNull(spyTaskManager.getPeriodFutureMap().get(task.getId()));
-    }
-
-    @Test
-    public void testRegisterSchedulerMultipleTasks() {
-        TaskManager taskManager = new TaskManager();
-        
-        // Register multiple tasks
-        for (int i = 0; i < 5; i++) {
-            Task task = new Task("test_task_" + i);
-            TaskSchedule schedule = new TaskSchedule();
-            
-            long now = System.currentTimeMillis();
-            schedule.setStartTime(now);
-            schedule.setPeriod(60 + i * 10); // Different periods
-            schedule.setTimeUnit(TimeUnit.SECONDS);
-            task.setSchedule(schedule);
-            task.setType(Constants.TaskType.PERIODICAL);
-            task.setState(Constants.TaskState.ACTIVE);
-            task.setLastScheduleTime(-1);
-            task.setId(10L + i);
-            
-            taskManager.registerScheduler(task);
-        }
-        
-        // All tasks should be registered
-        assertEquals(5, taskManager.getPeriodFutureMap().size());
-        
-        // Verify each task has a future
-        for (int i = 0; i < 5; i++) {
-            Assertions.assertNotNull(taskManager.getPeriodFutureMap().get(10L + i));
-        }
-    }
-
-    @Test
-    public void testRegisterSchedulerWithPipeSource() {
-        TaskManager taskManager = new TaskManager();
-        Task task = new Task("test_pipe");
-        task.setSource(Constants.TaskSource.PIPE);
-        TaskSchedule schedule = new TaskSchedule();
-        
-        long now = System.currentTimeMillis();
-        long startTime = now - 3600000;
-        long lastScheduleTime = now - 180000;
-        
-        schedule.setStartTime(startTime);
-        schedule.setPeriod(60);
-        schedule.setTimeUnit(TimeUnit.SECONDS);
-        task.setSchedule(schedule);
-        task.setType(Constants.TaskType.PERIODICAL);
-        task.setState(Constants.TaskState.ACTIVE);
-        task.setLastScheduleTime(lastScheduleTime);
-        task.setId(15L);
-        
-        final boolean[] executeTaskCalled = {false};
-        TaskManager spyTaskManager = new TaskManager() {
-            @Override
-            public void executeTask(String taskName) throws DdlException {
-                executeTaskCalled[0] = true;
-            }
-        };
-        
-        spyTaskManager.replayCreateTask(task);
-        spyTaskManager.registerScheduler(task);
-        
-        // PIPE source should not trigger immediately (only MV does)
-        Assertions.assertFalse(executeTaskCalled[0]);
-        Assertions.assertNotNull(spyTaskManager.getPeriodFutureMap().get(task.getId()));
-    }
-
-    @Test
-    public void testRegisterSchedulerWithInsertSource() {
-        TaskManager taskManager = new TaskManager();
-        Task task = new Task("test_insert");
-        task.setSource(Constants.TaskSource.INSERT);
-        TaskSchedule schedule = new TaskSchedule();
-        
-        long now = System.currentTimeMillis();
-        schedule.setStartTime(now);
-        schedule.setPeriod(120);
-        schedule.setTimeUnit(TimeUnit.SECONDS);
-        task.setSchedule(schedule);
-        task.setType(Constants.TaskType.PERIODICAL);
-        task.setState(Constants.TaskState.ACTIVE);
-        task.setLastScheduleTime(-1);
-        task.setId(16L);
-        
-        taskManager.registerScheduler(task);
-        
-        Assertions.assertNotNull(taskManager.getPeriodFutureMap().get(task.getId()));
-        Assertions.assertTrue(task.getNextScheduleTime() > 0);
-    }
-
-    @Test
-    public void testRegisterSchedulerWithDatacacheSelectSource() {
-        TaskManager taskManager = new TaskManager();
-        Task task = new Task("test_datacache");
-        task.setSource(Constants.TaskSource.DATACACHE_SELECT);
-        TaskSchedule schedule = new TaskSchedule();
-        
-        long now = System.currentTimeMillis();
-        schedule.setStartTime(now);
-        schedule.setPeriod(300);
-        schedule.setTimeUnit(TimeUnit.SECONDS);
-        task.setSchedule(schedule);
-        task.setType(Constants.TaskType.PERIODICAL);
-        task.setState(Constants.TaskState.ACTIVE);
-        task.setLastScheduleTime(-1);
-        task.setId(17L);
-        
-        taskManager.registerScheduler(task);
-        
-        Assertions.assertNotNull(taskManager.getPeriodFutureMap().get(task.getId()));
-        Assertions.assertTrue(task.getNextScheduleTime() > 0);
-    }
-
-    @Test
-    public void testRegisterSchedulerMVTaskImmediateTriggerBoundaryExactly() {
-        TaskManager taskManager = new TaskManager();
-        Task task = new Task("test_mv_boundary");
-        task.setSource(Constants.TaskSource.MV);
-        TaskSchedule schedule = new TaskSchedule();
-        
-        long now = System.currentTimeMillis();
-        long periodMs = 60000; // 1 minute in milliseconds
-        long startTime = now - 3600000; // 1 hour ago
-        long lastScheduleTime = now - periodMs - 1000; // exactly period + 1 second ago
-        
-        schedule.setStartTime(startTime);
-        schedule.setPeriod(60);
-        schedule.setTimeUnit(TimeUnit.SECONDS);
-        task.setSchedule(schedule);
-        task.setType(Constants.TaskType.PERIODICAL);
-        task.setState(Constants.TaskState.ACTIVE);
-        task.setLastScheduleTime(lastScheduleTime);
-        task.setId(18L);
-        
-        final boolean[] executeTaskCalled = {false};
-        TaskManager spyTaskManager = new TaskManager() {
-            @Override
-            public void executeTask(String taskName) throws DdlException {
-                executeTaskCalled[0] = true;
-            }
-        };
-        
-        spyTaskManager.replayCreateTask(task);
-        spyTaskManager.registerScheduler(task);
-        
-        // Should trigger immediately
-        Assertions.assertTrue(executeTaskCalled[0], "Task should be executed immediately at boundary");
-    }
-
-    @Test
-    public void testRegisterSchedulerMVTaskImmediateTriggerNotAtBoundary() {
-        TaskManager taskManager = new TaskManager();
-        Task task = new Task("test_mv_not_boundary");
-        task.setSource(Constants.TaskSource.MV);
-        TaskSchedule schedule = new TaskSchedule();
-        
-        long now = System.currentTimeMillis();
-        long periodMs = 60000; // 1 minute in milliseconds
-        long startTime = now - 3600000; // 1 hour ago
-        long lastScheduleTime = now - periodMs + 1000; // period - 1 second ago (not yet expired)
-        
-        schedule.setStartTime(startTime);
-        schedule.setPeriod(60);
-        schedule.setTimeUnit(TimeUnit.SECONDS);
-        task.setSchedule(schedule);
-        task.setType(Constants.TaskType.PERIODICAL);
-        task.setState(Constants.TaskState.ACTIVE);
-        task.setLastScheduleTime(lastScheduleTime);
-        task.setId(19L);
-        
-        final boolean[] executeTaskCalled = {false};
-        TaskManager spyTaskManager = new TaskManager() {
-            @Override
-            public void executeTask(String taskName) throws DdlException {
-                executeTaskCalled[0] = true;
-            }
-        };
-        
-        spyTaskManager.replayCreateTask(task);
-        spyTaskManager.registerScheduler(task);
-        
-        // Should NOT trigger immediately
-        Assertions.assertFalse(executeTaskCalled[0], "Task should not be executed before period expires");
-    }
-
-    @Test
-    public void testRegisterSchedulerWithVeryShortPeriod() {
-        TaskManager taskManager = new TaskManager();
-        Task task = new Task("test_short_period");
-        TaskSchedule schedule = new TaskSchedule();
-        
-        long now = System.currentTimeMillis();
-        schedule.setStartTime(now);
-        schedule.setPeriod(1); // 1 second
-        schedule.setTimeUnit(TimeUnit.SECONDS);
-        task.setSchedule(schedule);
-        task.setType(Constants.TaskType.PERIODICAL);
-        task.setState(Constants.TaskState.ACTIVE);
-        task.setLastScheduleTime(-1);
-        task.setId(20L);
-        
-        taskManager.registerScheduler(task);
-        
-        long nextScheduleTime = task.getNextScheduleTime();
-        Assertions.assertTrue(nextScheduleTime > 0);
-        Assertions.assertNotNull(taskManager.getPeriodFutureMap().get(task.getId()));
-    }
-
-    @Test
-    public void testRegisterSchedulerWithVeryLongPeriod() {
-        TaskManager taskManager = new TaskManager();
-        Task task = new Task("test_long_period");
-        TaskSchedule schedule = new TaskSchedule();
-        
-        long now = System.currentTimeMillis();
-        schedule.setStartTime(now);
-        schedule.setPeriod(7); // 7 days
-        schedule.setTimeUnit(TimeUnit.DAYS);
-        task.setSchedule(schedule);
-        task.setType(Constants.TaskType.PERIODICAL);
-        task.setState(Constants.TaskState.ACTIVE);
-        task.setLastScheduleTime(-1);
-        task.setId(21L);
-        
-        taskManager.registerScheduler(task);
-        
-        long nextScheduleTime = task.getNextScheduleTime();
-        Assertions.assertTrue(nextScheduleTime > 0);
-        Assertions.assertNotNull(taskManager.getPeriodFutureMap().get(task.getId()));
-    }
-
-    @Test
-    public void testRegisterSchedulerWithTaskProperties() {
-        TaskManager taskManager = new TaskManager();
-        Task task = new Task("test_with_properties");
-        TaskSchedule schedule = new TaskSchedule();
-        
-        Map<String, String> properties = Maps.newHashMap();
-        properties.put("key1", "value1");
-        properties.put("key2", "value2");
-        task.setProperties(properties);
-        
-        long now = System.currentTimeMillis();
-        schedule.setStartTime(now);
-        schedule.setPeriod(60);
-        schedule.setTimeUnit(TimeUnit.SECONDS);
-        task.setSchedule(schedule);
-        task.setType(Constants.TaskType.PERIODICAL);
-        task.setState(Constants.TaskState.ACTIVE);
-        task.setLastScheduleTime(-1);
-        task.setId(22L);
-        
-        taskManager.registerScheduler(task);
-        
-        Assertions.assertNotNull(taskManager.getPeriodFutureMap().get(task.getId()));
-        Assertions.assertEquals(properties, task.getProperties());
-    }
-
-    @Test
-    public void testRegisterSchedulerWithNullProperties() {
-        TaskManager taskManager = new TaskManager();
-        Task task = new Task("test_null_properties");
-        TaskSchedule schedule = new TaskSchedule();
-        
-        task.setProperties(null);
-        
-        long now = System.currentTimeMillis();
-        schedule.setStartTime(now);
-        schedule.setPeriod(60);
-        schedule.setTimeUnit(TimeUnit.SECONDS);
-        task.setSchedule(schedule);
-        task.setType(Constants.TaskType.PERIODICAL);
-        task.setState(Constants.TaskState.ACTIVE);
-        task.setLastScheduleTime(-1);
-        task.setId(23L);
-        
-        // Should not throw exception
-        Assertions.assertDoesNotThrow(() -> taskManager.registerScheduler(task));
-        Assertions.assertNotNull(taskManager.getPeriodFutureMap().get(task.getId()));
-    }
-
-    @Test
-    public void testRegisterSchedulerReRegistrationSameTask() {
-        TaskManager taskManager = new TaskManager();
-        Task task = new Task("test_reregister");
-        TaskSchedule schedule = new TaskSchedule();
-        
-        long now = System.currentTimeMillis();
-        schedule.setStartTime(now);
-        schedule.setPeriod(60);
-        schedule.setTimeUnit(TimeUnit.SECONDS);
-        task.setSchedule(schedule);
-        task.setType(Constants.TaskType.PERIODICAL);
-        task.setState(Constants.TaskState.ACTIVE);
-        task.setLastScheduleTime(-1);
-        task.setId(24L);
-        
-        // First registration
-        taskManager.registerScheduler(task);
-        ScheduledFuture<?> firstFuture = taskManager.getPeriodFutureMap().get(task.getId());
-        Assertions.assertNotNull(firstFuture);
-        
-        // Second registration (should replace the first one)
-        taskManager.registerScheduler(task);
-        ScheduledFuture<?> secondFuture = taskManager.getPeriodFutureMap().get(task.getId());
-        Assertions.assertNotNull(secondFuture);
-        
-        // Should have a future in the map
-        assertEquals(1, taskManager.getPeriodFutureMap().size());
-    }
-
-    @Test
-    public void testRegisterSchedulerMVTaskWithLastScheduleTimeEqualToStart() {
-        TaskManager taskManager = new TaskManager();
-        Task task = new Task("test_mv_equal_start");
-        task.setSource(Constants.TaskSource.MV);
-        TaskSchedule schedule = new TaskSchedule();
-        
-        long now = System.currentTimeMillis();
-        long startTime = now - 3600000; // 1 hour ago
-        long lastScheduleTime = startTime; // exactly at start time
-        
-        schedule.setStartTime(startTime);
-        schedule.setPeriod(60);
-        schedule.setTimeUnit(TimeUnit.SECONDS);
-        task.setSchedule(schedule);
-        task.setType(Constants.TaskType.PERIODICAL);
-        task.setState(Constants.TaskState.ACTIVE);
-        task.setLastScheduleTime(lastScheduleTime);
-        task.setId(25L);
-        
-        final boolean[] executeTaskCalled = {false};
-        TaskManager spyTaskManager = new TaskManager() {
-            @Override
-            public void executeTask(String taskName) throws DdlException {
-                executeTaskCalled[0] = true;
-            }
-        };
-        
-        spyTaskManager.replayCreateTask(task);
-        spyTaskManager.registerScheduler(task);
-        
-        // lastScheduleTime is not after taskStartTime, so should not trigger
-        Assertions.assertFalse(executeTaskCalled[0]);
-    }
-
-    @Test
-    public void testRegisterSchedulerMVTaskWithLastScheduleTimeJustAfterStart() {
-        TaskManager taskManager = new TaskManager();
-        Task task = new Task("test_mv_just_after_start");
-        task.setSource(Constants.TaskSource.MV);
-        TaskSchedule schedule = new TaskSchedule();
-        
-        long now = System.currentTimeMillis();
-        long startTime = now - 3600000; // 1 hour ago
-        long lastScheduleTime = startTime + 1000; // 1 second after start time
-        
-        schedule.setStartTime(startTime);
-        schedule.setPeriod(60);
-        schedule.setTimeUnit(TimeUnit.SECONDS);
-        task.setSchedule(schedule);
-        task.setType(Constants.TaskType.PERIODICAL);
-        task.setState(Constants.TaskState.ACTIVE);
-        task.setLastScheduleTime(lastScheduleTime);
-        task.setId(26L);
-        
-        final boolean[] executeTaskCalled = {false};
-        TaskManager spyTaskManager = new TaskManager() {
-            @Override
-            public void executeTask(String taskName) throws DdlException {
-                executeTaskCalled[0] = true;
-            }
-        };
-        
-        spyTaskManager.replayCreateTask(task);
-        spyTaskManager.registerScheduler(task);
-        
-        // lastScheduleTime is after taskStartTime and expired, should trigger
-        Assertions.assertTrue(executeTaskCalled[0]);
-    }
-
-    @Test
-    public void testRegisterSchedulerWithStartTimeInFuture() {
-        TaskManager taskManager = new TaskManager();
-        Task task = new Task("test_future_start");
-        TaskSchedule schedule = new TaskSchedule();
-        
-        long now = System.currentTimeMillis();
-        long futureStartTime = now + 3600000; // 1 hour in future
-        
-        schedule.setStartTime(futureStartTime);
-        schedule.setPeriod(60);
-        schedule.setTimeUnit(TimeUnit.SECONDS);
-        task.setSchedule(schedule);
-        task.setType(Constants.TaskType.PERIODICAL);
-        task.setState(Constants.TaskState.ACTIVE);
-        task.setLastScheduleTime(-1);
-        task.setId(27L);
-        
-        taskManager.registerScheduler(task);
-        
-        long nextScheduleTime = task.getNextScheduleTime();
-        long currentTimeSeconds = System.currentTimeMillis() / 1000;
-        
-        // nextScheduleTime should be in the future
-        Assertions.assertTrue(nextScheduleTime > currentTimeSeconds);
-        Assertions.assertNotNull(taskManager.getPeriodFutureMap().get(task.getId()));
-    }
-
-    @Test
-    public void testRegisterSchedulerLastScheduleTimeUpdatedOnImmediateTrigger() {
-        TaskManager taskManager = new TaskManager();
-        Task task = new Task("test_last_schedule_update");
-        task.setSource(Constants.TaskSource.MV);
-        TaskSchedule schedule = new TaskSchedule();
-        
-        long now = System.currentTimeMillis();
-        long startTime = now - 3600000; // 1 hour ago
-        long lastScheduleTime = now - 180000; // 3 minutes ago
-        long originalLastScheduleTime = lastScheduleTime;
-        
-        schedule.setStartTime(startTime);
-        schedule.setPeriod(60); // 1 minute period
-        schedule.setTimeUnit(TimeUnit.SECONDS);
-        task.setSchedule(schedule);
-        task.setType(Constants.TaskType.PERIODICAL);
-        task.setState(Constants.TaskState.ACTIVE);
-        task.setLastScheduleTime(lastScheduleTime);
-        task.setId(28L);
-        
-        TaskManager spyTaskManager = new TaskManager() {
-            @Override
-            public void executeTask(String taskName) throws DdlException {
-                // Do nothing
-            }
-        };
-        
-        spyTaskManager.replayCreateTask(task);
-        spyTaskManager.registerScheduler(task);
-        
-        // lastScheduleTime should be updated to current time
-        Assertions.assertTrue(task.getLastScheduleTime() > originalLastScheduleTime);
-        Assertions.assertTrue(task.getLastScheduleTime() >= now);
-    }
-
-    @Test
-    public void testRegisterSchedulerWithMillisecondsTimeUnit() {
-        TaskManager taskManager = new TaskManager();
-        Task task = new Task("test_milliseconds");
-        TaskSchedule schedule = new TaskSchedule();
-        
-        long now = System.currentTimeMillis();
-        schedule.setStartTime(now);
-        schedule.setPeriod(5000); // 5000 milliseconds = 5 seconds
-        schedule.setTimeUnit(TimeUnit.MILLISECONDS);
-        task.setSchedule(schedule);
-        task.setType(Constants.TaskType.PERIODICAL);
-        task.setState(Constants.TaskState.ACTIVE);
-        task.setLastScheduleTime(-1);
-        task.setId(29L);
-        
-        taskManager.registerScheduler(task);
-        
-        long nextScheduleTime = task.getNextScheduleTime();
-        Assertions.assertTrue(nextScheduleTime > 0);
-        Assertions.assertNotNull(taskManager.getPeriodFutureMap().get(task.getId()));
-    }
-
-    @Test
-    public void testRegisterSchedulerWithPausedTaskState() {
-        TaskManager taskManager = new TaskManager();
-        Task task = new Task("test_paused");
-        TaskSchedule schedule = new TaskSchedule();
-        
-        long now = System.currentTimeMillis();
-        schedule.setStartTime(now);
-        schedule.setPeriod(60);
-        schedule.setTimeUnit(TimeUnit.SECONDS);
-        task.setSchedule(schedule);
-        task.setType(Constants.TaskType.PERIODICAL);
-        task.setState(Constants.TaskState.PAUSE); // Paused state
-        task.setLastScheduleTime(-1);
-        task.setId(30L);
-        
-        // Should still register even if paused
-        taskManager.registerScheduler(task);
-        
-        Assertions.assertNotNull(taskManager.getPeriodFutureMap().get(task.getId()));
-    }
-
-    @Test
-    public void testRegisterSchedulerNextScheduleTimeInSeconds() {
-        TaskManager taskManager = new TaskManager();
-        Task task = new Task("test_next_schedule_seconds");
-        TaskSchedule schedule = new TaskSchedule();
-        
-        long nowMs = System.currentTimeMillis();
-        long nowSeconds = nowMs / 1000;
-        
-        schedule.setStartTime(nowMs);
-        schedule.setPeriod(120);
-        schedule.setTimeUnit(TimeUnit.SECONDS);
-        task.setSchedule(schedule);
-        task.setType(Constants.TaskType.PERIODICAL);
-        task.setState(Constants.TaskState.ACTIVE);
-        task.setLastScheduleTime(-1);
-        task.setId(31L);
-        
-        taskManager.registerScheduler(task);
-        
-        long nextScheduleTime = task.getNextScheduleTime();
-        
-        // nextScheduleTime should be in seconds, not milliseconds
-        Assertions.assertTrue(nextScheduleTime < nowMs); // Should be smaller than milliseconds
-        Assertions.assertTrue(nextScheduleTime > nowSeconds - 1); // Should be close to current time in seconds
-        Assertions.assertTrue(nextScheduleTime <= nowSeconds + 120); // Within the period
-    }
-
-    @Test
-    public void testRegisterSchedulerMVTaskMultipleConditionsForNoTrigger() {
-        TaskManager taskManager = new TaskManager();
-        Task task = new Task("test_mv_no_trigger_multi");
-        task.setSource(Constants.TaskSource.MV);
-        TaskSchedule schedule = new TaskSchedule();
-        
-        long now = System.currentTimeMillis();
-        long startTime = now - 3600000; // 1 hour ago
-        long lastScheduleTime = now - 90000; // 1.5 minutes ago
-        
-        schedule.setStartTime(startTime);
-        schedule.setPeriod(120); // 2 minute period (not expired yet)
-        schedule.setTimeUnit(TimeUnit.SECONDS);
-        task.setSchedule(schedule);
-        task.setType(Constants.TaskType.PERIODICAL);
-        task.setState(Constants.TaskState.ACTIVE);
-        task.setLastScheduleTime(lastScheduleTime);
-        task.setId(32L);
-        
-        final int[] executeTaskCallCount = {0};
-        TaskManager spyTaskManager = new TaskManager() {
-            @Override
-            public void executeTask(String taskName) throws DdlException {
-                executeTaskCallCount[0]++;
-            }
-        };
-        
-        spyTaskManager.replayCreateTask(task);
-        spyTaskManager.registerScheduler(task);
-        
-        // Should not trigger because period hasn't expired
-        assertEquals(0, executeTaskCallCount[0], "Task should not be executed");
-        Assertions.assertNotNull(spyTaskManager.getPeriodFutureMap().get(task.getId()));
-    }
-
-    @Test
-    public void testRegisterSchedulerVerifySchedulerIsActive() {
-        TaskManager taskManager = new TaskManager();
-        Task task = new Task("test_scheduler_active");
-        TaskSchedule schedule = new TaskSchedule();
-        
-        long now = System.currentTimeMillis();
-        schedule.setStartTime(now);
-        schedule.setPeriod(60);
-        schedule.setTimeUnit(TimeUnit.SECONDS);
-        task.setSchedule(schedule);
-        task.setType(Constants.TaskType.PERIODICAL);
-        task.setState(Constants.TaskState.ACTIVE);
-        task.setLastScheduleTime(-1);
-        task.setId(33L);
-        
-        taskManager.registerScheduler(task);
-        
-        ScheduledFuture<?> future = taskManager.getPeriodFutureMap().get(task.getId());
-        Assertions.assertNotNull(future);
-        
-        // Verify the future is not cancelled or done
-        Assertions.assertFalse(future.isCancelled(), "Scheduled future should not be cancelled");
-        Assertions.assertFalse(future.isDone(), "Scheduled future should not be done immediately");
     }
 }

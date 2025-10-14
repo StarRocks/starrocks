@@ -75,11 +75,11 @@ public class Task implements Writable {
     @SerializedName("createUserIdentity")
     private UserIdentity userIdentity;
 
-    // the last time this task is scheduled
+    // the last time this task is scheduled, unit: second
     @SerializedName("lastScheduleTime")
     private long lastScheduleTime = -1;
 
-    // the next time this task is to be scheduled
+    // the next time this task is to be scheduled, unit: second
     @SerializedName("nextScheduleTime")
     private long nextScheduleTime = -1;
 
@@ -219,18 +219,22 @@ public class Task implements Writable {
         this.postRun = postRun;
     }
 
+    // unit: second
     public long getLastScheduleTime() {
         return lastScheduleTime;
     }
 
+    // unit: second
     public void setLastScheduleTime(long lastScheduleTime) {
         this.lastScheduleTime = lastScheduleTime;
     }
 
+    // unit: second
     public long getNextScheduleTime() {
         return nextScheduleTime;
     }
 
+    // unit: second
     public void setNextScheduleTime(long nextScheduleTime) {
         this.nextScheduleTime = nextScheduleTime;
     }

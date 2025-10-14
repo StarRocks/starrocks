@@ -28,7 +28,6 @@ import com.starrocks.catalog.ScalarType;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.Pair;
-import com.starrocks.common.util.DateUtils;
 import com.starrocks.common.util.LogUtil;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.common.util.UUIDUtil;
@@ -293,7 +292,7 @@ public class TaskManager implements MemoryTrackable {
             return new SubmitResult(null, SubmitResult.SubmitStatus.FAILED);
         }
         // set the last schedule time
-        task.setLastScheduleTime(System.currentTimeMillis());
+        task.setLastScheduleTime(TimeUtils.getEpochSeconds());
         if (option.getIsSync()) {
             return executeTaskSync(task, option);
         } else {
@@ -561,7 +560,7 @@ public class TaskManager implements MemoryTrackable {
         LocalDateTime currentDateTime = LocalDateTime.now();
 
         LocalDateTime lastScheduleTime = null;
-        if (task.getLastScheduleTime() <= 0) {
+        if (task.getLastScheduleTime() > 0) {
             try {
                 lastScheduleTime = Utils.getDatetimeFromLong(task.getLastScheduleTime());
             } catch (Exception e) {
@@ -579,30 +578,27 @@ public class TaskManager implements MemoryTrackable {
             // if the last schedule time + period is before current time, trigger immediately
             LOG.info("After FE restarts, trigger periodical task immediately, task:{}, lastScheduleTime:{}, " +
                             "periodSeconds:{}, taskStartTime:{}, currentTime:{}", task.getName(),
-                    DateUtils.formatTimestampInSeconds(lastScheduleTime.toEpochSecond(ZoneOffset.UTC)), periodSeconds,
-                    DateUtils.formatTimestampInSeconds(taskStartTime.toEpochSecond(ZoneOffset.UTC)),
-                    DateUtils.formatTimestampInSeconds(currentDateTime.toEpochSecond(ZoneOffset.UTC)));
+                    lastScheduleTime, periodSeconds, taskStartTime, currentDateTime);
             try {
-                task.setLastScheduleTime(System.currentTimeMillis());
-                executeTask(task.getName());
+                task.setLastScheduleTime(TimeUtils.getEpochSeconds());
+                SubmitResult submitResult = executeTask(task.getName());
+                LOG.info("trigger periodical task immediately result: {}, task: {}", submitResult, task);
             } catch (Exception e) {
                 LOG.warn("failed to execute periodical task immediately: {}", task, e);
             }
         }
 
         long initialDelay = getInitialDelayTime(periodSeconds, taskStartTime, currentDateTime);
-        LOG.info("Register scheduler, task:{}, initialDelay:{}, periodSeconds:{}, taskStartTime:{}, currentTime:{}",
-                task.getName(), initialDelay, periodSeconds,
-                DateUtils.formatTimestampInSeconds(taskStartTime.toEpochSecond(ZoneOffset.UTC)),
-                DateUtils.formatTimestampInSeconds(currentDateTime.toEpochSecond(ZoneOffset.UTC)));
+        LOG.info("Register scheduler, task:{}, initialDelay:{}, periodSeconds:{}, startTime:{}, scheduleTime:{}",
+                task.getName(), initialDelay, periodSeconds, taskStartTime, currentDateTime);
         // set task's next schedule time
         task.setNextScheduleTime(currentDateTime.plusSeconds(initialDelay).toEpochSecond(ZoneOffset.UTC));
         ExecuteOption option = new ExecuteOption(Constants.TaskRunPriority.LOWEST.value(), true, task.getProperties());
         ScheduledFuture<?> future = periodScheduler.scheduleAtFixedRate(() -> {
             // ensure an execute task will not throw exception
             try {
-                task.setLastScheduleTime(System.currentTimeMillis());
-                task.setNextScheduleTime(System.currentTimeMillis() + periodSeconds);
+                task.setLastScheduleTime(TimeUtils.getEpochSeconds());
+                task.setNextScheduleTime(TimeUtils.getEpochSeconds() + periodSeconds);
                 executeTask(task.getName(), option);
             } catch (Throwable e) {
                 LOG.warn("failed to execute periodical task: {}", task, e);

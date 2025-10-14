@@ -22,7 +22,7 @@ import java.util.concurrent.TimeUnit;
 
 public class TaskSchedule {
 
-    // Measured in milliseconds, between the start time and midnight, January 1, 1970 UTC.
+    // Measured in seconds, between the start time and midnight, January 1, 1970 UTC.
     @SerializedName("startTime")
     private long startTime = 0;
 
