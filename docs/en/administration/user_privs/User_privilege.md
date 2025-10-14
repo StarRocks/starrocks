@@ -5,12 +5,7 @@ sidebar_position: 30
 
 # Manage user privileges
 
-<<<<<<< HEAD:docs/en/administration/user_privs/User_privilege.md
-import UserPrivilegeCase from '../../_assets/commonMarkdown/userPrivilegeCase.md'
-=======
-import UserPrivilegeCase from '../../../_assets/commonMarkdown/userPrivilegeCase.mdx'
-import GrantToGroup from '../../../_assets/commonMarkdown/grant_to_group.mdx'
->>>>>>> 4a0f07d790 ([Doc] rename snippets .md to .mdx (#63977)):docs/en/administration/user_privs/authorization/User_privilege.md
+import UserPrivilegeCase from '../../_assets/commonMarkdown/userPrivilegeCase.mdx'
 
 This topic describes how to manage users, roles, and privileges in StarRocks.
 
