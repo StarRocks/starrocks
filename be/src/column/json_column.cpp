@@ -176,7 +176,7 @@ LogicalType JsonColumn::get_flat_field_type(const std::string& path) const {
 }
 
 void JsonColumn::set_flat_columns(const std::vector<std::string>& paths, const std::vector<LogicalType>& types,
-                                  const Columns& flat_columns) {
+                                  const MutableColumns& flat_columns) {
     DCHECK_EQ(paths.size(), types.size());
     DCHECK(paths.size() == flat_columns.size() || paths.size() + 1 == flat_columns.size()); // may remain column
 
@@ -270,7 +270,7 @@ void JsonColumn::append_selective(const Column& src, const uint32_t* indexes, ui
     if (other_json->is_flat_json() && !is_flat_json()) {
         // only hit in AggregateIterator (Aggregate mode in storage)
         DCHECK_EQ(0, this->size());
-        Columns copy;
+        MutableColumns copy;
         copy.reserve(other_json->_flat_columns.size());
         for (const auto& col : other_json->_flat_columns) {
             copy.emplace_back(col->clone_empty());
@@ -352,7 +352,7 @@ void JsonColumn::append(const Column& src, size_t offset, size_t count) {
     if (other_json->is_flat_json() && !is_flat_json()) {
         // only hit in AggregateIterator (Aggregate mode in storage)
         DCHECK_EQ(0, this->size());
-        Columns copy;
+        MutableColumns copy;
         for (const auto& col : other_json->_flat_columns) {
             copy.emplace_back(col->clone_empty());
         }

@@ -876,7 +876,7 @@ const char* DeltaWriter::replica_state_name(ReplicaState state) {
     return "";
 }
 
-Status DeltaWriter::_fill_auto_increment_id(const Chunk& chunk) {
+Status DeltaWriter::_fill_auto_increment_id(Chunk& chunk) {
     // 1. get pk column from chunk
     vector<uint32_t> pk_columns;
     for (size_t i = 0; i < _tablet_schema->num_key_columns(); i++) {
@@ -918,8 +918,9 @@ Status DeltaWriter::_fill_auto_increment_id(const Chunk& chunk) {
     for (int i = 0; i < _vectorized_schema.num_fields(); i++) {
         const TabletColumn& tablet_column = _tablet_schema->column(i);
         if (tablet_column.is_auto_increment()) {
-            auto& column = chunk.get_column_by_index(i);
-            RETURN_IF_ERROR((Int64Column::dynamic_pointer_cast(column))->fill_range(ids, filter));
+            auto column = chunk.get_mutable_column_by_index(i);
+            auto* int64_column = down_cast<Int64Column*>(column.get());
+            RETURN_IF_ERROR(int64_column->fill_range(ids, filter));
             break;
         }
     }

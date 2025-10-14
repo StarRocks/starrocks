@@ -184,18 +184,18 @@ void BinlogReader::_append_meta_column(Chunk* output_chunk, int32_t num_rows, in
     // for duplicate key table, a chunk only contains rows from a segment, and they have same versions,
     // timestamps, and ops are INSERT
     if (_binlog_op_column_index > -1) {
-        ColumnPtr& column = output_chunk->get_column_by_index(_binlog_op_column_index);
+        auto column = output_chunk->get_mutable_column_by_index(_binlog_op_column_index);
         int8_t insert = 0;
         column->append_value_multiple_times(&insert, num_rows);
     }
 
     if (_binlog_version_column_index > -1) {
-        ColumnPtr& column = output_chunk->get_column_by_index(_binlog_version_column_index);
+        auto column = output_chunk->get_mutable_column_by_index(_binlog_version_column_index);
         column->append_value_multiple_times(&version, num_rows);
     }
 
     if (_binlog_seq_id_column_index > -1) {
-        ColumnPtr& column = output_chunk->get_column_by_index(_binlog_seq_id_column_index);
+        auto column = output_chunk->get_mutable_column_by_index(_binlog_seq_id_column_index);
         int64_t end_seq_id = start_seq_id + num_rows - 1;
         for (int64_t seq_id = start_seq_id; seq_id <= end_seq_id; seq_id++) {
             Datum datum(seq_id);
@@ -204,7 +204,7 @@ void BinlogReader::_append_meta_column(Chunk* output_chunk, int32_t num_rows, in
     }
 
     if (_binlog_timestamp_column_index > -1) {
-        ColumnPtr& column = output_chunk->get_column_by_index(_binlog_timestamp_column_index);
+        auto column = output_chunk->get_mutable_column_by_index(_binlog_timestamp_column_index);
         column->append_value_multiple_times(&timestamp, num_rows);
     }
 }

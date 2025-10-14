@@ -29,11 +29,11 @@ public:
     Status finish() override;
 
 private:
-    Status _compact_columns(Columns& json_datas);
+    Status _compact_columns(MutableColumns& json_datas);
 
-    Status _merge_columns(Columns& json_datas);
+    Status _merge_columns(MutableColumns& json_datas);
 
-    Status _flatten_columns(Columns& json_datas);
+    Status _flatten_columns(MutableColumns& json_datas);
 };
 
 class JsonColumnCompactor final : public ColumnWriter {

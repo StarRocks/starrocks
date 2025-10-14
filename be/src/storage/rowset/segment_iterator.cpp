@@ -152,7 +152,7 @@ private:
             size_t pruned_col_size = 0;
             size_t num_rows = chunk->num_rows();
             for (size_t i = 0; i < _column_iterators.size(); i++) {
-                ColumnPtr& col = chunk->get_column_by_index(i);
+                auto col = chunk->get_mutable_column_by_index(i);
                 if (_prune_column_after_index_filter && _prune_cols.count(i)) {
                     pruned_cols.push_back(i);
                     continue;
@@ -166,7 +166,7 @@ private:
                 may_has_del_row |= (col->delete_state() != DEL_NOT_SATISFIED);
             }
             for (size_t i : pruned_cols) {
-                ColumnPtr& col = chunk->get_column_by_index(i);
+                auto col = chunk->get_mutable_column_by_index(i);
                 // make sure each pruned column has the same size as the unpruneable one.
                 col->resize(pruned_col_size);
             }
@@ -1387,7 +1387,7 @@ Status SegmentIterator::_read_columns(const Schema& schema, Chunk* chunk, size_t
     bool may_has_del_row = chunk->delete_state() != DEL_NOT_SATISFIED;
     for (size_t i = 0; i < n; i++) {
         ColumnId cid = schema.field(i)->id();
-        ColumnPtr& column = chunk->get_column_by_index(i);
+        auto column = chunk->get_mutable_column_by_index(i);
         size_t nread = nrows;
         RETURN_IF_ERROR(_column_iterators[cid]->next_batch(&nread, column.get()));
         may_has_del_row = may_has_del_row | (column->delete_state() != DEL_NOT_SATISFIED);
@@ -1516,7 +1516,7 @@ Status SegmentIterator::_do_get_next(Chunk* result, vector<rowid_t>* rowid) {
             if (_column_iterators[cid] == nullptr) {
                 continue;
             }
-            ColumnPtr& col = chunk->get_column_by_index(column_index++);
+            auto col = chunk->get_mutable_column_by_index(column_index++);
             ASSIGN_OR_RETURN(auto vec, _column_iterators[cid]->get_io_range_vec(_scan_range, col.get()));
             for (auto e : vec) {
                 // if buf_size is 1MB, offset is 123, and size is 2MB
@@ -2114,8 +2114,8 @@ Status SegmentIterator::_decode_dict_codes(ScanContext* ctx) {
         if (!ctx->_is_dict_column[i] || ctx->_skip_dict_decode_indexes[i]) {
             ctx->_dict_chunk->get_column_by_index(i).swap(ctx->_read_chunk->get_column_by_index(i));
         } else {
-            ColumnPtr& dict_codes = ctx->_read_chunk->get_column_by_index(i);
-            ColumnPtr& dict_values = ctx->_dict_chunk->get_column_by_index(i);
+            auto dict_codes = ctx->_read_chunk->get_column_by_index(i);
+            auto dict_values = ctx->_dict_chunk->get_mutable_column_by_index(i);
             dict_values->resize(0);
 
             RETURN_IF_ERROR(_column_decoders[cid].decode_dict_codes(*dict_codes, dict_values.get()));
@@ -2170,7 +2170,7 @@ Status SegmentIterator::_finish_late_materialization(ScanContext* ctx) {
         for (size_t i = m - 1, j = start_pos; i < n; i++, j++) {
             const FieldPtr& f = _schema.field(i);
             const ColumnId cid = f->id();
-            ColumnPtr& col = ctx->_final_chunk->get_column_by_index(j);
+            auto col = ctx->_final_chunk->get_mutable_column_by_index(j);
             col->reserve(ordinals->size());
             col->resize(0);
 
@@ -2183,7 +2183,7 @@ Status SegmentIterator::_finish_late_materialization(ScanContext* ctx) {
     // fill subfield of early materialization columns
     for (size_t i = 0; i < ctx->_subfield_columns.size(); i++) {
         auto output_index = ctx->_subfield_columns[i];
-        ColumnPtr& col = ctx->_final_chunk->get_column_by_index(output_index);
+        auto col = ctx->_final_chunk->get_mutable_column_by_index(output_index);
         // FillSubfieldIterator
         RETURN_IF_ERROR(ctx->_subfield_iterators[i]->fetch_values_by_rowid(*ordinals, col.get()));
         DCHECK_EQ(ordinals->size(), col->size());
@@ -2212,8 +2212,8 @@ Status SegmentIterator::_encode_to_global_id(ScanContext* ctx) {
     for (size_t i = 0; i < num_columns; i++) {
         const FieldPtr& f = output_schema().field(i);
         const ColumnId cid = f->id();
-        ColumnPtr& col = ctx->_final_chunk->get_column_by_index(i);
-        ColumnPtr& dst = ctx->_adapt_global_dict_chunk->get_column_by_index(i);
+        auto col = ctx->_final_chunk->get_mutable_column_by_index(i);
+        auto dst = ctx->_adapt_global_dict_chunk->get_mutable_column_by_index(i);
         if (_column_decoders[cid].need_force_encode_to_global_id()) {
             RETURN_IF_ERROR(_column_decoders[cid].encode_to_global_id(col.get(), dst.get()));
         } else {

@@ -259,8 +259,8 @@ public:
             RETURN_IF_ERROR(_data_decoder->next_batch(count, column));
         } else {
             auto nc = down_cast<NullableColumn*>(column);
-            RETURN_IF_ERROR(_data_decoder->next_batch(count, nc->data_column().get()));
-            nc->null_column()->append_numbers(_null_flags.data() + _offset_in_page, *count);
+            RETURN_IF_ERROR(_data_decoder->next_batch(count, nc->mutable_data_column()));
+            nc->null_column_mutable_ptr()->append_numbers(_null_flags.data() + _offset_in_page, *count);
             nc->update_has_null();
         }
         _offset_in_page += *count;
@@ -275,13 +275,13 @@ public:
             _offset_in_page = range.end();
         } else {
             auto nc = down_cast<NullableColumn*>(column);
-            RETURN_IF_ERROR(_data_decoder->next_batch(range, nc->data_column().get()));
+            RETURN_IF_ERROR(_data_decoder->next_batch(range, nc->mutable_data_column()));
             SparseRangeIterator<> iter = range.new_iterator();
             size_t size = range.span_size();
             while (iter.has_more()) {
                 _offset_in_page = iter.begin();
                 Range<> r = iter.next(size);
-                nc->null_column()->append_numbers(_null_flags.data() + _offset_in_page, r.span_size());
+                nc->null_column_mutable_ptr()->append_numbers(_null_flags.data() + _offset_in_page, r.span_size());
                 _offset_in_page += r.span_size();
                 size -= r.span_size();
             }
@@ -295,8 +295,8 @@ public:
             RETURN_IF_ERROR(_data_decoder->next_dict_codes(count, column));
         } else {
             auto nc = down_cast<NullableColumn*>(column);
-            RETURN_IF_ERROR(_data_decoder->next_dict_codes(count, nc->data_column().get()));
-            (void)nc->null_column()->append_numbers(_null_flags.data() + _offset_in_page, *count);
+            RETURN_IF_ERROR(_data_decoder->next_dict_codes(count, nc->mutable_data_column()));
+            (void)nc->null_column_mutable_ptr()->append_numbers(_null_flags.data() + _offset_in_page, *count);
             nc->update_has_null();
         }
         _offset_in_page += *count;
@@ -312,13 +312,13 @@ public:
             _offset_in_page = range.end();
         } else {
             auto nc = down_cast<NullableColumn*>(column);
-            RETURN_IF_ERROR(_data_decoder->next_dict_codes(range, nc->data_column().get()));
+            RETURN_IF_ERROR(_data_decoder->next_dict_codes(range, nc->mutable_data_column()));
             SparseRangeIterator<> iter = range.new_iterator();
             size_t size = range.span_size();
             while (iter.has_more()) {
                 _offset_in_page = iter.begin();
                 Range<> r = iter.next(size);
-                nc->null_column()->append_numbers(_null_flags.data() + _offset_in_page, r.span_size());
+                nc->null_column_mutable_ptr()->append_numbers(_null_flags.data() + _offset_in_page, r.span_size());
                 _offset_in_page += r.span_size();
             }
             nc->update_has_null();

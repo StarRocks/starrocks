@@ -254,7 +254,7 @@ public:
 private:
     std::unique_ptr<ScalarColumnWriter> _scalar_column_writer;
     bool _is_speculated = false;
-    ColumnPtr _buf_column = nullptr;
+    MutableColumnPtr _buf_column = nullptr;
 };
 
 class DictColumnWriter final : public ColumnWriter {
@@ -297,7 +297,7 @@ public:
 private:
     std::unique_ptr<ScalarColumnWriter> _scalar_column_writer;
     bool _is_speculated = false;
-    ColumnPtr _buf_column = nullptr;
+    MutableColumnPtr _buf_column = nullptr;
 };
 
 StatusOr<std::unique_ptr<ColumnWriter>> ColumnWriter::create(const ColumnWriterOptions& opts,

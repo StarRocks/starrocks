@@ -183,7 +183,7 @@ Status JsonFlatColumnIterator::init(const ColumnIteratorOptions& opts) {
 
 template <typename FUNC>
 Status JsonFlatColumnIterator::_read(JsonColumn* json_column, FUNC read_fn) {
-    Columns columns;
+    MutableColumns columns;
     for (int i = 0; i < _source_column_modules.size(); i++) {
         columns.emplace_back(_source_column_modules[i]->clone_empty());
     }
@@ -193,11 +193,15 @@ Status JsonFlatColumnIterator::_read(JsonColumn* json_column, FUNC read_fn) {
     }
 
     if (_is_direct) {
-        json_column->set_flat_columns(_source_paths, _source_types, std::move(columns));
+        json_column->set_flat_columns(_source_paths, _source_types, columns);
     } else {
-        RETURN_IF_ERROR(transformer->trans(std::move(columns)));
+        Columns readonly_columns(columns.size());
+        for (size_t i = 0; i < columns.size(); i++) {
+            readonly_columns[i] = columns[i]->as_mutable_ptr();
+        }
+        RETURN_IF_ERROR(transformer->trans(std::move(readonly_columns)));
         auto result = transformer->mutable_result();
-        json_column->set_flat_columns(_target_paths, _target_types, std::move(result));
+        json_column->set_flat_columns(_target_paths, _target_types, result);
     }
     return Status::OK();
 }
@@ -403,7 +407,7 @@ Status JsonDynamicFlatIterator::_dynamic_flat(Column* output, FUNC read_fn) {
     // 2. flat
     _flattener->flatten(proxy.get());
     auto result = _flattener->mutable_result();
-    json_data->set_flat_columns(_target_paths, _target_types, std::move(result));
+    json_data->set_flat_columns(_target_paths, _target_types, result);
     output->check_or_die();
     return Status::OK();
 }
@@ -698,28 +702,28 @@ public:
 
     Status next_batch(size_t* n, Column* dst) override {
         _source_chunk.reset();
-        auto source_column = _source_chunk.get_column_by_index(0);
+        auto source_column = _source_chunk.get_mutable_column_by_index(0);
         RETURN_IF_ERROR(_parent->next_batch(n, source_column.get()));
         return do_extract(dst);
     }
 
     Status next_batch(const SparseRange<>& range, Column* dst) override {
         _source_chunk.reset();
-        auto source_column = _source_chunk.get_column_by_index(0);
+        auto source_column = _source_chunk.get_mutable_column_by_index(0);
         RETURN_IF_ERROR(_parent->next_batch(range, source_column.get()));
         return do_extract(dst);
     }
 
     Status fetch_values_by_rowid(const rowid_t* rowids, size_t size, Column* values) override {
         _source_chunk.reset();
-        auto source_column = _source_chunk.get_column_by_index(0);
+        auto source_column = _source_chunk.get_mutable_column_by_index(0);
         RETURN_IF_ERROR(_parent->fetch_values_by_rowid(rowids, size, source_column.get()));
         return do_extract(values);
     }
 
     StatusOr<std::vector<std::pair<int64_t, int64_t>>> get_io_range_vec(const SparseRange<>& range,
                                                                         Column* dst) override {
-        auto source_column = _source_chunk.get_column_by_index(0);
+        auto source_column = _source_chunk.get_mutable_column_by_index(0);
         return _parent->get_io_range_vec(range, source_column.get());
     }
 
@@ -765,10 +769,11 @@ private:
         VLOG_ROW << "JsonExtractIterator extract from: " << _source_chunk.get_column_by_index(0)->debug_string();
         VLOG_ROW << "JsonExtractIterator extract: " << result->debug_string();
         if ((target->is_nullable() == result->is_nullable()) && (target->size() == 0)) {
-            target->swap_column(*result);
+            auto result_mut = result->as_mutable_ptr();
+            target->swap_column(*result_mut);
         } else if (!target->is_nullable() && result->is_nullable()) {
             auto sz = result->size();
-            target->append(*(down_cast<NullableColumn*>(result.get())->data_column()), 0, sz);
+            target->append(*(down_cast<const NullableColumn*>(result.get())->data_column()), 0, sz);
         } else {
             target->append(*result, 0, result->size());
         }

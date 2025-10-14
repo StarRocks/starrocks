@@ -382,7 +382,8 @@ StatusOr<ChunkPtr> SortedStreamingAggregator::streaming_compute_distinct(size_t 
     size_t selected_size = _init_selector(selector, chunk_size);
     auto res_group_by_columns = _create_group_by_columns(chunk_size);
     RETURN_IF_ERROR(_build_group_by_columns(chunk_size, selected_size, selector, res_group_by_columns));
-    auto result_chunk = _build_output_chunk(res_group_by_columns, {}, false);
+    MutableColumns empty_agg_columns;
+    auto result_chunk = _build_output_chunk(res_group_by_columns, empty_agg_columns, false);
 
     // prepare for next
     for (size_t i = 0; i < _last_columns.size(); ++i) {

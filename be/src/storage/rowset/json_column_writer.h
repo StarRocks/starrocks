@@ -71,7 +71,7 @@ protected:
     std::vector<std::unique_ptr<ColumnWriter>> _flat_writers;
     std::vector<std::string> _flat_paths;
     std::vector<LogicalType> _flat_types;
-    Columns _flat_columns;
+    MutableColumns _flat_columns;
 
     MutableColumns _json_datas;
     size_t _estimate_size = 0;

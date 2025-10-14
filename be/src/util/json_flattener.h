@@ -194,7 +194,7 @@ public:
     // flatten without flat json, input must not flat json
     void flatten(const Column* json_column);
 
-    Columns mutable_result();
+    MutableColumns mutable_result();
 
 private:
     template <bool HAS_REMAIN>
@@ -210,7 +210,7 @@ private:
     std::vector<std::string> _dst_paths;
     std::shared_ptr<JsonFlatPath> _dst_root;
 
-    Columns _flat_columns;
+    MutableColumns _flat_columns;
     JsonColumn* _remain;
 };
 
@@ -259,7 +259,7 @@ private:
     std::vector<std::string> _level_paths;
     bool _output_nullable = false;
 
-    ColumnPtr _result;
+    MutableColumnPtr _result;
     JsonColumn* _json_result;
     NullColumn* _null_result;
 };
@@ -293,9 +293,7 @@ public:
 
     Status trans(const Columns& columns);
 
-    Columns& result() { return _dst_columns; }
-
-    Columns mutable_result();
+    MutableColumns mutable_result();
 
     std::vector<std::string> cast_paths() const;
 
@@ -338,7 +336,7 @@ private:
     bool _dst_remain = false;
     std::vector<std::string> _dst_paths;
     std::vector<LogicalType> _dst_types;
-    Columns _dst_columns;
+    MutableColumns _dst_columns;
 
     std::vector<std::string> _src_paths;
     std::vector<LogicalType> _src_types;

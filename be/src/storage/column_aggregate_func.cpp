@@ -202,8 +202,8 @@ public:
         _aggregate_column = agg;
 
         auto* n = down_cast<NullableColumn*>(agg);
-        _child->update_aggregate(n->data_column().get());
-        _null_child->update_aggregate(n->null_column().get());
+        _child->update_aggregate(n->mutable_data_column());
+        _null_child->update_aggregate(n->null_column_mutable_ptr().get());
 
         reset();
     }
@@ -218,7 +218,7 @@ public:
         _null_child->finalize();
 
         auto p = down_cast<NullableColumn*>(_aggregate_column);
-        p->set_has_null(SIMD::count_nonzero(p->null_column()->get_data()));
+        p->set_has_null(SIMD::count_nonzero(p->immutable_null_column_data()));
         _aggregate_column = nullptr;
     }
 

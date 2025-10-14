@@ -25,6 +25,7 @@ namespace starrocks {
 
 class MapColumn final : public CowFactory<ColumnFactory<Column, MapColumn>, MapColumn> {
     friend class CowFactory<ColumnFactory<Column, MapColumn>, MapColumn>;
+    friend class MapColumnIterator;
     using Base = CowFactory<ColumnFactory<Column, MapColumn>, MapColumn>;
 
 public:

@@ -95,7 +95,7 @@ Status ArrayColumnIterator::next_batch_null_offsets(size_t* n, UInt32Column* off
 Status ArrayColumnIterator::next_batch(size_t* n, Column* dst) {
     auto [array_column, nulls] = unpack_array_column(dst);
     size_t num_to_read = 0;
-    RETURN_IF_ERROR(next_batch_null_offsets(n, array_column->offsets_column().get(), nulls, &num_to_read));
+    RETURN_IF_ERROR(next_batch_null_offsets(n, array_column->offsets_column_mutable_ptr().get(), nulls, &num_to_read));
 
     if (_null_iterator != nullptr) {
         down_cast<NullableColumn*>(dst)->update_has_null();
@@ -103,13 +103,13 @@ Status ArrayColumnIterator::next_batch(size_t* n, Column* dst) {
 
     // 3. Read elements
     if (_access_values) {
-        RETURN_IF_ERROR(_element_iterator->next_batch(&num_to_read, array_column->elements_column().get()));
+        RETURN_IF_ERROR(_element_iterator->next_batch(&num_to_read, array_column->elements_column_mutable_ptr().get()));
     } else {
-        if (!array_column->elements_column()->is_constant()) {
-            array_column->elements_column()->append_default(1);
-            array_column->elements_column() = ConstColumn::create(array_column->elements_column(), num_to_read);
+        if (!array_column->_elements->is_constant()) {
+            array_column->_elements->append_default(1);
+            array_column->_elements = ConstColumn::create(array_column->_elements, num_to_read);
         } else {
-            array_column->elements_column()->append_default(num_to_read);
+            array_column->_elements->append_default(num_to_read);
         }
     }
 
@@ -172,7 +172,7 @@ Status ArrayColumnIterator::next_batch(const SparseRange<>& range, Column* dst) 
 
     SparseRange element_read_range;
     size_t read_rows = 0;
-    RETURN_IF_ERROR(next_batch_null_offsets(range, array_column->offsets_column().get(), null_column,
+    RETURN_IF_ERROR(next_batch_null_offsets(range, array_column->offsets_column_mutable_ptr().get(), null_column,
                                             &element_read_range, &read_rows));
 
     if (_null_iterator != nullptr) {
@@ -182,13 +182,13 @@ Status ArrayColumnIterator::next_batch(const SparseRange<>& range, Column* dst) 
     if (_access_values) {
         // if array column is nullable, element_read_range may be empty
         DCHECK(element_read_range.empty() || (element_read_range.begin() == _element_iterator->get_current_ordinal()));
-        RETURN_IF_ERROR(_element_iterator->next_batch(element_read_range, array_column->elements_column().get()));
+        RETURN_IF_ERROR(_element_iterator->next_batch(element_read_range, array_column->elements_column_mutable_ptr().get()));
     } else {
-        if (!array_column->elements_column()->is_constant()) {
-            array_column->elements_column()->append_default(1);
-            array_column->elements_column() = ConstColumn::create(array_column->elements_column(), read_rows);
+        if (!array_column->_elements->is_constant()) {
+            array_column->_elements->append_default(1);
+            array_column->_elements = ConstColumn::create(array_column->_elements, read_rows);
         } else {
-            array_column->elements_column()->append_default(read_rows);
+            array_column->_elements->append_default(read_rows);
         }
     }
 
@@ -211,9 +211,9 @@ Status ArrayColumnIterator::fetch_values_by_rowid(const rowid_t* rowids, size_t 
     // [1, 2, 3], [4, 5, 6]
     // In memory, it will be transformed to actual offset(0, 3, 6)
     // On disk, offset is stored as length array(3, 3)
-    auto* offsets = array_column->offsets_column().get();
+    auto offsets = array_column->offsets_column_mutable_ptr();
     offsets->reserve(offsets->size() + array_size.size());
-    size_t offset = offsets->get_data().back();
+    size_t offset = offsets->immutable_data().back();
     for (size_t i = 0; i < array_size.size(); ++i) {
         offset += array_size.get_data()[i];
         offsets->append(offset);
@@ -226,12 +226,12 @@ Status ArrayColumnIterator::fetch_values_by_rowid(const rowid_t* rowids, size_t 
             size_t element_ordinal = _array_size_iterator->element_ordinal();
             RETURN_IF_ERROR(_element_iterator->seek_to_ordinal(element_ordinal));
             size_t size_to_read = array_size.get_data()[i];
-            RETURN_IF_ERROR(_element_iterator->next_batch(&size_to_read, array_column->elements_column().get()));
+            RETURN_IF_ERROR(_element_iterator->next_batch(&size_to_read, array_column->elements_column_mutable_ptr().get()));
         }
     } else {
-        if (!array_column->elements_column()->is_constant()) {
-            array_column->elements_column()->append_default(1);
-            array_column->elements_column() = ConstColumn::create(array_column->elements_column());
+        if (!array_column->_elements->is_constant()) {
+            array_column->_elements->append_default(1);
+            array_column->_elements = ConstColumn::create(array_column->_elements);
         }
 
         size_t size_to_read = 0;
@@ -242,7 +242,7 @@ Status ArrayColumnIterator::fetch_values_by_rowid(const rowid_t* rowids, size_t 
             size_to_read += array_size.get_data()[i];
         }
 
-        array_column->elements_column()->append_default(size_to_read);
+        array_column->_elements->append_default(size_to_read);
     }
 
     return Status::OK();
@@ -281,13 +281,13 @@ Status ArrayColumnIterator::fetch_all_dict_words(std::vector<Slice>* words) cons
 Status ArrayColumnIterator::next_dict_codes(size_t* n, Column* dst) {
     auto [array_column, nulls] = unpack_array_column(dst);
     size_t num_to_read = 0;
-    RETURN_IF_ERROR(next_batch_null_offsets(n, array_column->offsets_column().get(), nulls, &num_to_read));
+    RETURN_IF_ERROR(next_batch_null_offsets(n, array_column->offsets_column_mutable_ptr().get(), nulls, &num_to_read));
 
     if (_null_iterator != nullptr) {
         down_cast<NullableColumn*>(dst)->update_has_null();
     }
 
-    RETURN_IF_ERROR(_element_iterator->next_dict_codes(&num_to_read, array_column->elements_column().get()));
+    RETURN_IF_ERROR(_element_iterator->next_dict_codes(&num_to_read, array_column->elements_column_mutable_ptr().get()));
     return Status::OK();
 }
 
@@ -298,7 +298,7 @@ Status ArrayColumnIterator::next_dict_codes(const SparseRange<>& range, Column* 
 
     SparseRange element_read_range;
     size_t read_rows = 0;
-    RETURN_IF_ERROR(next_batch_null_offsets(range, array_column->offsets_column().get(), null_column,
+    RETURN_IF_ERROR(next_batch_null_offsets(range, array_column->offsets_column_mutable_ptr().get(), null_column,
                                             &element_read_range, &read_rows));
 
     if (_null_iterator != nullptr) {
@@ -307,7 +307,7 @@ Status ArrayColumnIterator::next_dict_codes(const SparseRange<>& range, Column* 
 
     // if array column is nullable, element_read_range may be empty
     DCHECK(element_read_range.empty() || (element_read_range.begin() == _element_iterator->get_current_ordinal()));
-    RETURN_IF_ERROR(_element_iterator->next_dict_codes(element_read_range, array_column->elements_column().get()));
+    RETURN_IF_ERROR(_element_iterator->next_dict_codes(element_read_range, array_column->elements_column_mutable_ptr().get()));
 
     return Status::OK();
 }
@@ -325,9 +325,9 @@ Status ArrayColumnIterator::fetch_dict_codes_by_rowid(const rowid_t* rowids, siz
     array_size.reserve(size);
     RETURN_IF_ERROR(_array_size_iterator->fetch_values_by_rowid(rowids, size, &array_size));
 
-    auto* offsets = array_column->offsets_column().get();
+    auto offsets = array_column->offsets_column_mutable_ptr();
     offsets->reserve(offsets->size() + array_size.size());
-    size_t offset = offsets->get_data().back();
+    size_t offset = offsets->immutable_data().back();
     for (size_t i = 0; i < array_size.size(); ++i) {
         offset += array_size.get_data()[i];
         offsets->append(offset);
@@ -339,7 +339,7 @@ Status ArrayColumnIterator::fetch_dict_codes_by_rowid(const rowid_t* rowids, siz
         size_t element_ordinal = _array_size_iterator->element_ordinal();
         RETURN_IF_ERROR(_element_iterator->seek_to_ordinal(element_ordinal));
         size_t size_to_read = array_size.get_data()[i];
-        RETURN_IF_ERROR(_element_iterator->next_dict_codes(&size_to_read, array_column->elements_column().get()));
+        RETURN_IF_ERROR(_element_iterator->next_dict_codes(&size_to_read, array_column->elements_column_mutable_ptr().get()));
     }
 
     return Status::OK();
@@ -360,7 +360,7 @@ StatusOr<std::vector<std::pair<int64_t, int64_t>>> ArrayColumnIterator::get_io_r
     SparseRangeIterator<> iter = range.new_iterator();
     size_t to_read = range.span_size();
 
-    UInt32Column* offsets = array_column->offsets_column().get();
+    UInt32Column* offsets = array_column->offsets_column_mutable_ptr().get();
     // array column can be nested, range may be empty
     DCHECK(range.empty() || (range.begin() == _array_size_iterator->get_current_ordinal()));
     while (iter.has_more()) {

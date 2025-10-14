@@ -36,8 +36,8 @@ Status GlobalDictCodeColumnIterator::decode_dict_codes(const Column& codes, Colu
 Status GlobalDictCodeColumnIterator::decode_array_dict_codes(const Column& codes, Column* words) {
     auto* code_array = down_cast<const ArrayColumn*>(ColumnHelper::get_data_column(&codes));
     auto* words_array = down_cast<ArrayColumn*>(ColumnHelper::get_data_column(words));
-    words_array->offsets_column()->resize(0); // array offset set 0 default
-    words_array->offsets_column()->append(code_array->offsets(), 0, code_array->offsets().size());
+    words_array->offsets_column_mutable_ptr()->resize(0); // array offset set 0 default
+    words_array->offsets_column_mutable_ptr()->append(code_array->offsets(), 0, code_array->offsets().size());
 
     if (codes.is_nullable()) {
         DCHECK(words->is_nullable());
@@ -47,7 +47,7 @@ Status GlobalDictCodeColumnIterator::decode_array_dict_codes(const Column& codes
         words_null->set_has_null(code_null->has_null());
     }
 
-    return decode_string_dict_codes(*code_array->elements_column(), words_array->elements_column().get());
+    return decode_string_dict_codes(*code_array->elements_column(), words_array->elements_column_mutable_ptr().get());
 }
 
 Status GlobalDictCodeColumnIterator::decode_string_dict_codes(const Column& codes, Column* words) {

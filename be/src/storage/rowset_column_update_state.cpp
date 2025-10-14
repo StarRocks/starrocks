@@ -516,7 +516,7 @@ static std::pair<std::vector<uint32_t>, std::vector<uint32_t>> get_read_update_c
 
 Status RowsetColumnUpdateState::_fill_default_columns(const TabletSchemaCSPtr& tablet_schema,
                                                       const std::vector<uint32_t>& column_ids, const int64_t row_cnt,
-                                                      vector<ColumnPtr>* columns) {
+                                                      MutableColumns* columns) {
     for (auto i = 0; i < column_ids.size(); ++i) {
         const TabletColumn& tablet_column = tablet_schema->column(column_ids[i]);
 
@@ -625,12 +625,13 @@ Status RowsetColumnUpdateState::_insert_new_rows(const TabletSchemaCSPtr& tablet
             ASSIGN_OR_RETURN(auto writer, _prepare_segment_writer(rowset, tablet_schema, segid));
             RETURN_IF_ERROR(read_chunk_from_update_file(update_iterator, partial_chunk_ptr));
             for (uint32_t column_id : read_update_column_ids.second) {
-                chunk_ptr->get_column_by_id(column_id)->append_selective(
+                chunk_ptr->get_mutable_column_by_id(column_id)->append_selective(
                         *partial_chunk_ptr->get_column_by_id(column_id), _partial_update_states[upt_id].insert_rowids);
             }
             // fill default columns
+            auto mutable_cols = chunk_ptr->mutable_columns();
             RETURN_IF_ERROR(_fill_default_columns(tablet_schema, read_update_column_ids.first, chunk_ptr->num_rows(),
-                                                  &chunk_ptr->columns()));
+                                                  &mutable_cols));
             uint64_t segment_file_size = 0;
             uint64_t index_size = 0;
             uint64_t footer_position = 0;

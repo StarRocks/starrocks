@@ -35,6 +35,7 @@ namespace starrocks {
 ///         - offsets_column: (0, 0, 3, 6)
 class ArrayColumn final : public CowFactory<ColumnFactory<Column, ArrayColumn>, ArrayColumn> {
     friend class CowFactory<ColumnFactory<Column, ArrayColumn>, ArrayColumn>;
+    friend class ArrayColumnIterator;
     using Base = CowFactory<ColumnFactory<Column, ArrayColumn>, ArrayColumn>;
 
 public:

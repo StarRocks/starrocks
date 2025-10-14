@@ -144,7 +144,7 @@ public:
     bool has_remain() const { return _flat_columns.size() == (_flat_column_paths.size() + 1); }
 
     void set_flat_columns(const std::vector<std::string>& paths, const std::vector<LogicalType>& types,
-                          const Columns& flat_columns);
+                          const MutableColumns& flat_columns);
 
     bool is_equallity_schema(const Column* other) const;
 

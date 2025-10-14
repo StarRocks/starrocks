@@ -174,7 +174,7 @@ Status PushBrokerReader::_convert_chunk(const ChunkPtr& from, ChunkPtr* to) {
     size_t num_rows = from->num_rows();
     for (int i = 0; i < from->num_columns(); ++i) {
         auto from_col = from->get_column_by_index(i);
-        auto to_col = (*to)->get_column_by_index(i);
+        auto to_col = (*to)->get_mutable_column_by_index(i);
 
         const SlotDescriptor* slot_desc = _tuple_desc->slots().at(i);
         const TypeDescriptor& type_desc = slot_desc->type();

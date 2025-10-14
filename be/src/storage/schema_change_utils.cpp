@@ -324,14 +324,14 @@ bool ChunkChanger::change_chunk_v2(ChunkPtr& base_chunk, ChunkPtr& new_chunk, co
             VLOG(2) << "i=" << i << ", ref_column=" << ref_column << ", base_index=" << base_index
                     << ", ref_type=" << ref_type << ", new_type=" << new_type;
 
-            ColumnPtr& base_col = base_chunk->get_column_by_index(base_index);
-            ColumnPtr& new_col = new_chunk->get_column_by_index(i);
+            auto base_col = base_chunk->get_column_by_index(base_index);
+            auto new_col = new_chunk->get_mutable_column_by_index(i);
             if (new_type == ref_type && (!is_decimalv3_field_type(new_type) ||
                                          (reftype_precision == newtype_precision && reftype_scale == newtype_scale))) {
                 if (new_col->is_nullable() != base_col->is_nullable()) {
                     new_col->append(*base_col.get());
                 } else {
-                    new_col = base_col;
+                    new_chunk->update_column_by_index(base_col, i);
                 }
             } else if (ConvertTypeResolver::instance()->convert_type_exist(ref_type, new_type)) {
                 auto converter = get_type_converter(ref_type, new_type);
@@ -380,7 +380,7 @@ bool ChunkChanger::change_chunk_v2(ChunkPtr& base_chunk, ChunkPtr& new_chunk, co
             }
         } else {
             VLOG(2) << "no ref column: i=" << i << ", ref_column=" << ref_column;
-            ColumnPtr& new_col = new_chunk->get_column_by_index(i);
+            auto new_col = new_chunk->get_mutable_column_by_index(i);
             for (size_t row_index = 0; row_index < base_chunk->num_rows(); ++row_index) {
                 new_col->append_datum(_schema_mapping[i].default_value_datum);
             }
@@ -404,9 +404,9 @@ Status ChunkChanger::fill_generated_columns(ChunkPtr& new_chunk) {
         if (tmp->only_null()) {
             // Only null column maybe lost type info, we append null
             // for the chunk instead of swapping the tmp column.
-            NullableColumn::dynamic_pointer_cast(new_chunk->get_column_by_index(it.first))->reset_column();
-            NullableColumn::dynamic_pointer_cast(new_chunk->get_column_by_index(it.first))
-                    ->append_nulls(new_chunk->num_rows());
+            auto col = NullableColumn::dynamic_pointer_cast(new_chunk->get_mutable_column_by_index(it.first));
+            col->reset_column();
+            col->append_nulls(new_chunk->num_rows());
         } else if (tmp->is_nullable()) {
             new_chunk->get_column_by_index(it.first).swap(tmp);
         } else {
@@ -414,8 +414,8 @@ Status ChunkChanger::fill_generated_columns(ChunkPtr& new_chunk) {
             // it maybe a constant column or some other column type.
             // Unpack normal const column
             ColumnPtr output_column = ColumnHelper::unpack_and_duplicate_const_column(new_chunk->num_rows(), tmp);
-            NullableColumn::dynamic_pointer_cast(new_chunk->get_column_by_index(it.first))
-                    ->swap_by_data_column(output_column);
+            auto col = NullableColumn::dynamic_pointer_cast(new_chunk->get_mutable_column_by_index(it.first));
+            col->swap_by_data_column(output_column);
         }
     }
 
@@ -502,9 +502,9 @@ Status ChunkChanger::append_generated_columns(ChunkPtr& read_chunk, ChunkPtr& ne
         if (tmp->only_null()) {
             // Only null column maybe lost type info, we append null
             // for the chunk instead of swapping the tmp column.
-            NullableColumn::dynamic_pointer_cast(tmp_new_chunk->get_column_by_index(cid))->reset_column();
-            NullableColumn::dynamic_pointer_cast(tmp_new_chunk->get_column_by_index(cid))
-                    ->append_nulls(read_chunk->num_rows());
+            auto col = NullableColumn::dynamic_pointer_cast(tmp_new_chunk->get_mutable_column_by_index(cid));
+            col->reset_column();
+            col->append_nulls(read_chunk->num_rows());
         } else if (tmp->is_nullable()) {
             tmp_new_chunk->get_column_by_index(cid).swap(tmp);
         } else {
@@ -512,8 +512,8 @@ Status ChunkChanger::append_generated_columns(ChunkPtr& read_chunk, ChunkPtr& ne
             // it maybe a constant column or some other column type
             // Unpack normal const column
             ColumnPtr output_column = ColumnHelper::unpack_and_duplicate_const_column(read_chunk->num_rows(), tmp);
-            NullableColumn::dynamic_pointer_cast(tmp_new_chunk->get_column_by_index(cid))
-                    ->swap_by_data_column(output_column);
+            auto col = NullableColumn::dynamic_pointer_cast(tmp_new_chunk->get_mutable_column_by_index(cid));
+            col->swap_by_data_column(output_column);
         }
     }
 

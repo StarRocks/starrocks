@@ -365,7 +365,7 @@ public:
 
         ColumnPtr produce_null = PRODUCE_NULL_FN::template evaluate<LType, RType, TYPE_NULL>(data1, data2);
 
-        NullColumnPtr null_result = ColumnHelper::as_column<NullColumn>(produce_null);
+        NullColumn::MutablePtr null_result = ColumnHelper::as_column<NullColumn>(produce_null)->as_mutable_ptr();
         FunctionHelper::union_produce_nullable_column(v1, v2, &null_result);
 
         ColumnPtr data_result = FN::template evaluate<LType, RType, ResultType>(data1, data2);

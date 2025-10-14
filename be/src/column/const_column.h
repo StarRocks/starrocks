@@ -226,7 +226,7 @@ public:
     
     // External accessors
     ColumnPtr data_column() const { return _data; }
-    MutableColumnPtr data_column_ptr() { return _data->as_mutable_ptr(); }
+    MutableColumnPtr data_column_ptr() const { return _data->as_mutable_ptr(); }
 
     Datum get(size_t n __attribute__((unused))) const override { return _data->get(0); }
 

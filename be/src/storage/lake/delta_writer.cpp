@@ -173,7 +173,7 @@ public:
 private:
     Status reset_memtable();
 
-    Status fill_auto_increment_id(const Chunk& chunk);
+    Status fill_auto_increment_id(Chunk& chunk);
 
     Status init_tablet_schema();
 
@@ -739,7 +739,7 @@ StatusOr<TxnLogPtr> DeltaWriterImpl::finish_with_txnlog(DeltaWriterFinishMode mo
     return txn_log;
 }
 
-Status DeltaWriterImpl::fill_auto_increment_id(const Chunk& chunk) {
+Status DeltaWriterImpl::fill_auto_increment_id(Chunk& chunk) {
     ASSIGN_OR_RETURN(auto tablet, _tablet_manager->get_tablet(_tablet_id));
 
     // 1. get pk column from chunk
@@ -798,8 +798,9 @@ Status DeltaWriterImpl::fill_auto_increment_id(const Chunk& chunk) {
     for (int i = 0; i < _write_schema->num_columns(); i++) {
         const TabletColumn& tablet_column = _write_schema->column(i);
         if (tablet_column.is_auto_increment()) {
-            auto& column = chunk.get_column_by_index(i);
-            RETURN_IF_ERROR((Int64Column::dynamic_pointer_cast(column))->fill_range(ids, filter));
+            auto column = chunk.get_mutable_column_by_index(i);
+            auto* int64_column = down_cast<Int64Column*>(column.get());
+            RETURN_IF_ERROR(int64_column->fill_range(ids, filter));
             break;
         }
     }

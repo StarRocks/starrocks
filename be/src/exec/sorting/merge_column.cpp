@@ -303,7 +303,7 @@ SortedRun::SortedRun(const ChunkPtr& ichunk, const std::vector<ExprContext*>* ex
     if (!ichunk->is_empty()) {
         for (auto& expr : *exprs) {
             auto column = EVALUATE_NULL_IF_ERROR(expr, expr->root(), ichunk.get());
-            orderby.push_back(column);
+            orderby.push_back(column->as_mutable_ptr());
         }
     }
 }

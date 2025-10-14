@@ -321,7 +321,7 @@ ColumnPtr ArrayViewColumn::to_array_column() const {
 //  elements column: [1,2,3,4]
 //  offsets column: [0,2,2,3]
 //  length column:  [2,0,0,1]
-ColumnPtr ArrayViewColumn::from_array_column(const ColumnPtr& column) {
+MutableColumnPtr ArrayViewColumn::from_array_column(const MutableColumnPtr& column) {
     if (!column->is_array()) {
         throw std::runtime_error("input column must be an array column");
     }

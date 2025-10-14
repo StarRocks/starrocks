@@ -88,7 +88,7 @@ Status MapColumnIterator::next_batch(size_t* n, Column* dst) {
     // [1, 2, 3], [4, 5, 6]
     // In memory, it will be transformed to actual offset(0, 3, 6)
     // On disk, offset is stored as length array(3, 3)
-    auto* offsets = map_column->offsets_column().get();
+    auto* offsets = map_column->offsets_column_mutable_ptr().get();
     auto& data = offsets->get_data();
     size_t end_offset = data.back();
 
@@ -105,24 +105,24 @@ Status MapColumnIterator::next_batch(size_t* n, Column* dst) {
 
     // 3. Read elements
     if (_access_keys) {
-        RETURN_IF_ERROR(_keys->next_batch(&num_to_read, map_column->keys_column().get()));
+        RETURN_IF_ERROR(_keys->next_batch(&num_to_read, map_column->keys_column_mutable_ptr().get()));
     } else {
-        if (!map_column->keys_column()->is_constant()) {
-            map_column->keys_column()->append_default(1);
-            map_column->keys_column() = ConstColumn::create(map_column->keys_column(), num_to_read);
+        if (!map_column->_keys->is_constant()) {
+            map_column->_keys->append_default(1);
+            map_column->_keys = ConstColumn::create(map_column->_keys, num_to_read);
         } else {
-            map_column->keys_column()->append_default(num_to_read);
+            map_column->_keys->append_default(num_to_read);
         }
     }
 
     if (_access_values) {
-        RETURN_IF_ERROR(_values->next_batch(&num_to_read, map_column->values_column().get()));
+        RETURN_IF_ERROR(_values->next_batch(&num_to_read, map_column->values_column_mutable_ptr().get()));
     } else {
-        if (!map_column->values_column()->is_constant()) {
-            map_column->values_column()->append_default(1);
-            map_column->values_column() = ConstColumn::create(map_column->values_column(), num_to_read);
+        if (!map_column->_values->is_constant()) {
+            map_column->_values->append_default(1);
+            map_column->_values = ConstColumn::create(map_column->_values, num_to_read);
         } else {
-            map_column->values_column()->append_default(num_to_read);
+            map_column->_values->append_default(num_to_read);
         }
     }
 
@@ -156,24 +156,24 @@ Status MapColumnIterator::next_batch(const SparseRange<>& range, Column* dst) {
     // if array column is nullable, element_read_range may be empty
     DCHECK(element_read_range.empty() || (element_read_range.begin() == _keys->get_current_ordinal()));
     if (_access_keys) {
-        RETURN_IF_ERROR(_keys->next_batch(element_read_range, map_column->keys_column().get()));
+        RETURN_IF_ERROR(_keys->next_batch(element_read_range, map_column->keys_column_mutable_ptr().get()));
     } else {
-        if (!map_column->keys_column()->is_constant()) {
-            map_column->keys_column()->append_default(1);
-            map_column->keys_column() = ConstColumn::create(map_column->keys_column(), read_rows);
+        if (!map_column->_keys->is_constant()) {
+            map_column->_keys->append_default(1);
+            map_column->_keys = ConstColumn::create(map_column->_keys, read_rows);
         } else {
-            map_column->keys_column()->append_default(read_rows);
+            map_column->_keys->append_default(read_rows);
         }
     }
 
     if (_access_values) {
-        RETURN_IF_ERROR(_values->next_batch(element_read_range, map_column->values_column().get()));
+        RETURN_IF_ERROR(_values->next_batch(element_read_range, map_column->values_column_mutable_ptr().get()));
     } else {
-        if (!map_column->values_column()->is_constant()) {
-            map_column->values_column()->append_default(1);
-            map_column->values_column() = ConstColumn::create(map_column->values_column(), read_rows);
+        if (!map_column->_values->is_constant()) {
+            map_column->_values->append_default(1);
+            map_column->_values = ConstColumn::create(map_column->_values, read_rows);
         } else {
-            map_column->values_column()->append_default(read_rows);
+            map_column->_values->append_default(read_rows);
         }
     }
 
@@ -202,7 +202,7 @@ Status MapColumnIterator::fetch_values_by_rowid(const rowid_t* rowids, size_t si
     // [1, 2, 3], [4, 5, 6]
     // In memory, it will be transformed to actual offset(0, 3, 6)
     // On disk, offset is stored as length array(3, 3)
-    auto* offsets = map_column->offsets_column().get();
+    auto* offsets = map_column->offsets_column_mutable_ptr().get();
     offsets->reserve(offsets->size() + array_size.size());
     size_t offset = offsets->get_data().back();
     size_t start = offset;
@@ -219,30 +219,30 @@ Status MapColumnIterator::fetch_values_by_rowid(const rowid_t* rowids, size_t si
 
         RETURN_IF_ERROR(_keys->seek_to_ordinal(element_ordinal));
         if (_access_keys) {
-            RETURN_IF_ERROR(_keys->next_batch(&size_to_read, map_column->keys_column().get()));
+            RETURN_IF_ERROR(_keys->next_batch(&size_to_read, map_column->keys_column_mutable_ptr().get()));
         }
 
         RETURN_IF_ERROR(_values->seek_to_ordinal(element_ordinal));
         if (_access_values) {
-            RETURN_IF_ERROR(_values->next_batch(&size_to_read, map_column->values_column().get()));
+            RETURN_IF_ERROR(_values->next_batch(&size_to_read, map_column->values_column_mutable_ptr().get()));
         }
     }
 
     if (!_access_keys) {
-        if (!map_column->keys_column()->is_constant()) {
-            map_column->keys_column()->append_default(1);
-            map_column->keys_column() = ConstColumn::create(map_column->keys_column(), offset - start);
+        if (!map_column->_keys->is_constant()) {
+            map_column->_keys->append_default(1);
+            map_column->_keys = ConstColumn::create(map_column->_keys, offset - start);
         } else {
-            map_column->keys_column()->append_default(offset - start);
+            map_column->_keys->append_default(offset - start);
         }
     }
 
     if (!_access_values) {
-        if (!map_column->values_column()->is_constant()) {
-            map_column->values_column()->append_default(1);
-            map_column->values_column() = ConstColumn::create(map_column->values_column(), offset - start);
+        if (!map_column->_values->is_constant()) {
+            map_column->_values->append_default(1);
+            map_column->_values = ConstColumn::create(map_column->_values, offset - start);
         } else {
-            map_column->values_column()->append_default(offset - start);
+            map_column->_values->append_default(offset - start);
         }
     }
 
@@ -294,7 +294,7 @@ Status MapColumnIterator::get_element_range_vec(const SparseRange<>& range, MapC
         // [1, 2, 3], [4, 5, 6]
         // In memory, it will be transformed to actual offset(0, 3, 6)
         // On disk, offset is stored as length array(3, 3)
-        auto* offsets = map_column->offsets_column().get();
+        auto* offsets = map_column->offsets_column_mutable_ptr().get();
         auto& data = offsets->get_data();
         size_t end_offset = data.back();
 

@@ -50,7 +50,7 @@ struct MergeEntry {
     const T* pk_last = nullptr;
     const T* pk_start = nullptr;
     uint32_t rowset_seg_id = 0;
-    ColumnPtr chunk_pk_column;
+    MutableColumnPtr chunk_pk_column;
     ChunkPtr chunk;
     ChunkIteratorPtr segment_itr;
     std::unique_ptr<RowsetReleaseGuard> rowset_release_guard;
@@ -120,7 +120,7 @@ struct MergeEntry {
                                                                    chunk_pk_column.get()));
             } else {
                 // just use chunk's first column
-                chunk_pk_column = chunk->get_column_by_index(chunk->schema()->sort_key_idxes()[0]);
+                chunk_pk_column = chunk->get_mutable_column_by_index(chunk->schema()->sort_key_idxes()[0]);
             }
             DCHECK(chunk_pk_column->size() > 0);
             DCHECK(chunk_pk_column->size() == chunk->num_rows());

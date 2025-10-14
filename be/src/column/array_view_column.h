@@ -225,7 +225,7 @@ public:
 
     // build array_view column from array_column
     // if array_column is nullable, return Nullable(ArrayViewColumn), otherwise return ArrayViewColumn
-    static ColumnPtr from_array_column(const ColumnPtr& column);
+    static MutableColumnPtr from_array_column(const MutableColumnPtr& column);
     static ColumnPtr to_array_column(const ColumnPtr& column);
     ColumnPtr to_array_column() const;
 

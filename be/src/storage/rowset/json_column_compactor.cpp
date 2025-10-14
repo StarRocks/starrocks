@@ -40,7 +40,7 @@ Status FlatJsonColumnCompactor::append(const Column& column) {
     return Status::OK();
 }
 
-Status FlatJsonColumnCompactor::_compact_columns(Columns& json_datas) {
+Status FlatJsonColumnCompactor::_compact_columns(MutableColumns& json_datas) {
     // all json datas must full json
     JsonPathDeriver deriver;
     std::vector<const Column*> vc;
@@ -79,7 +79,7 @@ bool check_is_same_schema(const JsonColumn* one, const JsonColumn* two) {
     return false;
 }
 
-Status FlatJsonColumnCompactor::_merge_columns(Columns& json_datas) {
+Status FlatJsonColumnCompactor::_merge_columns(MutableColumns& json_datas) {
     VLOG(2) << "FlatJsonColumnCompactor merge_columns, json_datas: " << json_datas.size();
     _is_flat = false;
     _json_meta->mutable_json_meta()->set_has_remain(false);
@@ -111,7 +111,8 @@ Status FlatJsonColumnCompactor::_merge_columns(Columns& json_datas) {
             auto j = merger->merge(json_col->get_flat_fields_ptrs());
 
             if (col->is_nullable()) {
-                auto n = NullableColumn::create(j, null_col);
+                auto n_ptr = NullableColumn::create(j, null_col)->as_mutable_ptr();
+                auto* n = down_cast<NullableColumn*>(n_ptr.get());
                 n->set_has_null(col->has_null());
                 RETURN_IF_ERROR(_json_writer->append(*n));
             } else {
@@ -123,7 +124,7 @@ Status FlatJsonColumnCompactor::_merge_columns(Columns& json_datas) {
     return Status::OK();
 }
 
-Status FlatJsonColumnCompactor::_flatten_columns(Columns& json_datas) {
+Status FlatJsonColumnCompactor::_flatten_columns(MutableColumns& json_datas) {
     VLOG(2) << "FlatJsonColumnCompactor flatten_columns, json_datas: " << json_datas.size();
     _is_flat = true;
 
