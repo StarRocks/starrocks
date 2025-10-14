@@ -14,6 +14,9 @@
 
 #include "exec/pipeline/adaptive/event.h"
 
+#include <atomic>
+#include <condition_variable>
+#include <mutex>
 #include <utility>
 
 #include "exec/pipeline/pipeline.h"
@@ -21,6 +24,7 @@
 #include "exec/pipeline/pipeline_driver_executor.h"
 #include "exec/pipeline/source_operator.h"
 #include "exec/workgroup/work_group.h"
+#include "runtime/current_thread.h"
 #include "util/failpoint/fail_point.h"
 #include "util/priority_thread_pool.hpp"
 
@@ -97,47 +101,71 @@ void CollectStatsSourceInitializeEvent::process(RuntimeState* state) {
     }
 
     auto prepare_drivers = [state, &pipelines = _pipelines]() {
+        size_t total_driver_size = 0;
         for (const auto& pipeline : pipelines) {
             for (const auto& driver : pipeline->drivers()) {
                 FAIL_POINT_TRIGGER_RETURN(
                         collect_stats_source_initialize_prepare_failed,
                         Status::InternalError("injected collect_stats_source_initialize_prepare_failed"));
                 RETURN_IF_ERROR(driver->prepare(state));
+                total_driver_size++;
             }
         }
 
-        auto* prepare_thread_pool = state->fragment_ctx()->workgroup()->executors()->prepare_thread_pool();
+        auto* prepare_thread_pool = state->exec_env()->pipeline_prepare_pool();
         DCHECK(prepare_thread_pool != nullptr);
-        std::vector<std::future<Status>> futures;
-        futures.reserve(100);
 
         std::vector<DriverPtr> all_drivers;
-        all_drivers.reserve(100);
+        all_drivers.reserve(total_driver_size);
         for (const auto& pipeline : pipelines) {
             for (const auto& driver : pipeline->drivers()) {
                 all_drivers.emplace_back(driver);
             }
         }
 
-        if (!all_drivers.empty()) {
-            for (const auto& driver : all_drivers) {
-                auto task =
-                        std::make_shared<std::packaged_task<Status()>>([driver_ptr = driver, runtime_state = state]() {
-                            return driver_ptr->prepare_operators_local_state(runtime_state);
-                        });
+        if (all_drivers.empty()) {
+            return Status::OK();
+        }
 
-                auto submit_status = prepare_thread_pool->submit_func([task]() { (*task)(); });
+        // Prepare operators' local state in parallel way
+        std::mutex completion_mutex;
+        std::condition_variable completion_cv;
+        std::atomic<std::shared_ptr<Status>> first_error(nullptr);
 
-                if (!submit_status.ok()) {
-                    (*task)();
+        std::atomic<int> pending_tasks(static_cast<int>(all_drivers.size()));
+
+        for (auto& driver : all_drivers) {
+            auto task_fn = [&driver, runtime_state = state, &pending_tasks, &completion_mutex, &completion_cv,
+                            &first_error]() {
+                SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(runtime_state->instance_mem_tracker());
+                Status st = driver->prepare_operators_local_state(runtime_state);
+                if (!st.ok()) {
+                    auto error_ptr = std::make_shared<Status>(std::move(st));
+                    std::shared_ptr<Status> expected = nullptr;
+                    (void)first_error.compare_exchange_strong(expected, error_ptr);
                 }
 
-                futures.push_back(task->get_future());
-            }
+                if (pending_tasks.fetch_sub(1) == 1) {
+                    std::lock_guard<std::mutex> l(completion_mutex);
+                    completion_cv.notify_all();
+                }
+            };
 
-            for (auto& future : futures) {
-                RETURN_IF_ERROR(future.get());
+            bool submit_res = prepare_thread_pool->try_offer(task_fn);
+            if (!submit_res) {
+                task_fn();
             }
+        }
+
+        // Wait for all tasks to finish
+        {
+            std::unique_lock<std::mutex> lock(completion_mutex);
+            completion_cv.wait(lock, [&pending_tasks] { return pending_tasks.load() == 0; });
+        }
+
+        Status* error = first_error.load().get();
+        if (error != nullptr) {
+            return *error;
         }
 
         return Status::OK();
