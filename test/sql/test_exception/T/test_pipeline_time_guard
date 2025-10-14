@@ -1,0 +1,13 @@
+-- name: test_pipeline_time_guard @sequential
+
+update default_catalog.information_schema.be_configs set `value` = "1000" where name= "pipeline_prepare_timeout_guard_ms";
+update default_catalog.information_schema.be_configs set `value` = "5000" where name= "pipeline_process_timeout_guard_ms";
+update default_catalog.information_schema.be_configs set `value` = "10000" where name= "pipeline_scan_timeout_guard_ms";
+update default_catalog.information_schema.be_configs set `value` = "1000" where name= "pipeline_rf_worker_timeout_guard_ms";
+update default_catalog.information_schema.be_configs set `value` = "2000" where name= "pipeline_datastream_timeout_guard_ms";
+
+-- slow function in process
+select sleep(6);
+-- slow function in scan
+create table tmp as select 1 as a;
+select * from tmp where a != sleep(11);

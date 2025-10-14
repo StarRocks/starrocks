@@ -42,6 +42,7 @@
 #include "util/metrics.h"
 #include "util/thread.h"
 #include "util/time.h"
+#include "util/time_guard.h"
 
 namespace starrocks {
 
@@ -1123,6 +1124,7 @@ void RuntimeFilterWorker::execute() {
         if (!_queue.blocking_get(&ev)) {
             break;
         }
+        DUMP_TRACE_IF_TIMEOUT(config::pipeline_rf_worker_timeout_guard_ms);
 
         _metrics->update_event_nums(ev.type, -1);
         switch (ev.type) {
