@@ -249,6 +249,7 @@ private:
                                                      int64_t expected_gtid, const std::shared_ptr<FileSystem>& fs);
     StatusOr<TxnLogPtr> load_txn_log(const std::string& txn_log_location, bool fill_cache);
     StatusOr<CombinedTxnLogPtr> load_combined_txn_log(const std::string& path, bool fill_cache);
+    Status corrupted_tablet_meta_handler(const Status& s, const std::string& metadata_location);
 
 private:
     std::shared_ptr<LocationProvider> _location_provider;
